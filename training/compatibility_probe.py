@@ -68,6 +68,42 @@ def _run(argv: list[str]) -> str:
     return subprocess.run(argv, check=True, capture_output=True, text=True).stdout.strip()
 
 
+def validate_megatron_bridge_config(model_root: Path) -> dict[str, Any]:
+    """Prove that the pinned Transformers config resolves through Megatron Bridge."""
+    transformers = importlib.import_module("transformers")
+    bridge_module = importlib.import_module("megatron.bridge")
+    hf_config = transformers.AutoConfig.from_pretrained(
+        str(model_root),
+        local_files_only=True,
+        trust_remote_code=True,
+        qk_rope_head_dim=64,
+    )
+    bridge = bridge_module.AutoBridge.from_hf_config(hf_config)
+    provider = bridge.to_megatron_provider(load_weights=False)
+    fields = {
+        name: getattr(provider, name, None)
+        for name in (
+            "num_layers",
+            "hidden_size",
+            "num_attention_heads",
+            "num_moe_experts",
+            "moe_ffn_hidden_size",
+        )
+    }
+    if not fields["num_layers"] or not fields["hidden_size"]:
+        raise RuntimeError(f"Megatron provider is missing core topology: {fields}")
+    if not fields["num_moe_experts"]:
+        raise RuntimeError(f"Megatron provider did not preserve GLM MoE topology: {fields}")
+    return {
+        "hf_config_class": type(hf_config).__name__,
+        "hf_model_type": getattr(hf_config, "model_type", None),
+        "bridge_class": type(bridge).__name__,
+        "provider_class": type(provider).__name__,
+        "provider_topology": fields,
+        "qk_rope_head_dim": getattr(hf_config, "qk_rope_head_dim", None),
+    }
+
+
 def static_probe(model_root: Path) -> dict[str, Any]:
     lock = validate_checkpoint_lock(model_root)
     transformers = importlib.import_module("transformers")
@@ -91,6 +127,7 @@ def static_probe(model_root: Path) -> dict[str, Any]:
     )
     if not rendered or not token_ids:
         raise RuntimeError("tokenizer chat-template roundtrip produced empty output")
+    bridge_config = validate_megatron_bridge_config(model_root)
 
     cuda_count = torch.cuda.device_count()
     if not torch.cuda.is_available() or cuda_count != 8:
@@ -111,6 +148,7 @@ def static_probe(model_root: Path) -> dict[str, Any]:
             "chat_template_sha256": CHAT_TEMPLATE_SHA256,
             "rendered_template_sha256": "sha256:" + hashlib.sha256(rendered.encode()).hexdigest(),
             "roundtrip_token_count": len(token_ids),
+            "megatron_bridge": bridge_config,
         },
         "runtime": {
             "image_digest": os.environ.get("TRAINING_IMAGE_DIGEST"),
@@ -137,6 +175,7 @@ def static_probe(model_root: Path) -> dict[str, Any]:
             "checkpoint_lock": True,
             "framework_imports": True,
             "tokenizer_chat_template_roundtrip": True,
+            "megatron_bridge_config": True,
             "b300_identity": True,
         },
     }

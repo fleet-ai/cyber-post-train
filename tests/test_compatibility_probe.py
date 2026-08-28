@@ -1,6 +1,7 @@
 import hashlib
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -11,6 +12,7 @@ from training.compatibility_probe import (
     VERIFIED_SHARDS,
     WEIGHTS_MANIFEST_SHA256,
     validate_checkpoint_lock,
+    validate_megatron_bridge_config,
 )
 
 
@@ -55,3 +57,39 @@ def test_lock_validation_accepts_exact_identity(tmp_path: Path, monkeypatch):
         "sha256:" + hashlib.sha256(b"probe").hexdigest(),
     )
     assert validate_checkpoint_lock(root)["verified_bytes"] == 1
+
+
+def test_megatron_bridge_config_preserves_moe_topology(tmp_path: Path, monkeypatch):
+    class FakeAutoConfig:
+        @staticmethod
+        def from_pretrained(*args, **kwargs):
+            assert args == (str(tmp_path),)
+            assert kwargs["local_files_only"] is True
+            assert kwargs["qk_rope_head_dim"] == 64
+            return SimpleNamespace(model_type="glm_moe_dsa", qk_rope_head_dim=64)
+
+    class FakeBridge:
+        def to_megatron_provider(self, *, load_weights):
+            assert load_weights is False
+            return SimpleNamespace(
+                num_layers=78,
+                hidden_size=6144,
+                num_attention_heads=64,
+                num_moe_experts=256,
+                moe_ffn_hidden_size=2048,
+            )
+
+    class FakeAutoBridge:
+        @staticmethod
+        def from_hf_config(config):
+            assert config.model_type == "glm_moe_dsa"
+            return FakeBridge()
+
+    modules = {
+        "transformers": SimpleNamespace(AutoConfig=FakeAutoConfig),
+        "megatron.bridge": SimpleNamespace(AutoBridge=FakeAutoBridge),
+    }
+    monkeypatch.setattr(probe.importlib, "import_module", modules.__getitem__)
+    result = validate_megatron_bridge_config(tmp_path)
+    assert result["hf_model_type"] == "glm_moe_dsa"
+    assert result["provider_topology"]["num_moe_experts"] == 256
