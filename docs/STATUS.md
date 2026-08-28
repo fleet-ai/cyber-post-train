@@ -58,9 +58,9 @@
   project `fleeta-bic-prod` (`project-e04e4tz1bc00b2qxfzqsdx`). The main
   `fleetai-training` cluster exposes 192 B300 GPUs across 24 eight-GPU nodes;
   the `fleetai-training-dev` cluster has two one-GPU B300 nodes.
-- At the access check, active workloads requested 184/192 main-cluster GPUs
-  (166 training, 18 inference), leaving only one eight-GPU node free. Do not
-  bypass the existing Kueue policy or alter another owner's workload.
+- All Cyber Post Train workloads use the existing `training-lq` Kueue at
+  priority 0, cannot preempt peer workloads, and retain completed/failed jobs as
+  evidence. No other owner's workload has been modified or cancelled.
 - The exact base is `zai-org/GLM-5.2` commit `b4734de4facf877f85769a911abafc5283eab3d9`:
   282 BF16 shards (1,506,667,387,408 bytes), weight-manifest digest
   `sha256:72b917aa2a1664751f99c4f19b1f1b23acb5eff5cffef4ff5522caef767324d4`,
@@ -68,27 +68,40 @@
   `sha256:1858391a47cfc55e452754f8a11b2343037ca0926ddf973297f0cfd877827ad4`,
   and chat-template digest
   `sha256:172dc74a35e1752df75ecfb2b2cf9326d2852bb1379868ebeec9571654489679`.
-- `chris-cyber-glm52-stage-b4734de4` is running at Kueue priority 0. It first
-  verified the remote 282-shard manifest, then began resumable download into a
-  partial shared-filesystem path. It will hash every local shard and atomically
-  promote only after all bytes match. No GPU is requested.
+- `chris-cyber-glm52-stage-b4734de4` is running at Kueue priority 0. It verified
+  the remote 282-shard manifest, downloaded all 295 repository files into a
+  partial shared-filesystem path, and is hashing every local weight shard. It
+  will atomically promote only after all bytes match. No GPU is requested.
 - The official NeMo RL GLM-5.2 trainer is pinned to commit
   `63e620046c67f922c4a57dcb65d7e6fceb60f5d4`. The first image-builder manifest
   exposed a Docker-sidecar TLS/port mismatch before executing the build and
   exhausted its two attempts. The corrected priority-0 successor,
-  `chris-cyber-glm52-build-nemo-63e62004-v2`, is building from that exact source
-  and a digest-pinned NVIDIA base image. The failed job was retained as evidence;
-  no workload was cancelled or deleted.
+  `chris-cyber-glm52-build-nemo-63e62004-v2`, completed and published immutable
+  image digest
+  `sha256:aec56926a7f0db357c3ac1eaf1576f4113ec7ac1adfbacb29cbfe4d3a7955666`.
+  The failed job was retained as evidence; no workload was cancelled or deleted.
 - A staged compatibility probe now checks the promoted checkpoint lock,
   tokenizer/chat-template roundtrip, exact framework imports, eight B300 device
   identities, and NCCL all-reduce/all-to-all before the expensive model-load and
-  forward/backward test. None of these preliminary checks can mark the final
-  compatibility receipt green by itself.
+  forward/backward test. Its manifest passed server-side dry run and will enter
+  `training-lq` as `chris-cyber-glm52-preflight-b4734de4` immediately after
+  atomic checkpoint promotion. None of these preliminary checks can mark the
+  final compatibility receipt green by itself.
 - The missing Fleet checkpoint routing path is implemented in an isolated Theseus
   worktree: it sends `fleet/<run>-step-<n>` only to the authenticated
   `inference.flt.build` gateway and refuses both missing credentials and public
-  provider fallback. Its focused test suite has 64 passing tests. Review and
+  provider fallback. Its focused test suite has 64 passing tests and is open as
+  [Theseus PR #27754](https://github.com/fleet-ai/theseus/pull/27754). Review and
   deployment are still required before formal Fleet checkpoint evaluations.
+- The public implementation lives in the private Fleet repository
+  [fleet-ai/cyber-post-train](https://github.com/fleet-ai/cyber-post-train).
+  Git authoring uses `christopher@fleet.so` for this work.
+- The upstream GRPO recipe was validated on 64 eight-H100 nodes with TP2, PP8,
+  EP64 and CP8. The proposed one-node B300 topology is therefore an unproven
+  compatibility hypothesis, not a scaled-down claim. The next gate must exercise
+  HF-to-Megatron conversion, expert partitioning, LoRA attachment, optimizer
+  construction, BF16 forward/backward, and checkpoint save/resume on the exact
+  image and checkpoint before any SFT or RL launch.
 - Remaining gates are a green checkpoint compatibility receipt, pinned training
   and inference images, the exact evaluation harness manifest, and the Fleet
   reward-broker contract. The evaluation protocol fails closed unless all
