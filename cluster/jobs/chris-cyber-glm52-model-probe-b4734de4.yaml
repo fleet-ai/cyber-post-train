@@ -59,8 +59,11 @@ spec:
 
           test -d /mnt/sfs/cyber-post-train/compatibility/b4734de4/model-probe/checkpoints
 
+          uv run --frozen --extra mcore python examples/run_sft.py   --config /tmp/glm52-model-probe.yaml   sft.max_num_epochs=2
+          sft.max_num_steps=2
+
           jq -n   --arg image "$TRAINING_IMAGE_DIGEST"   --arg revision "$MODEL_REVISION"   --arg
-          config "sha256:$MODEL_PROBE_CONFIG_SHA256"   ''{schema:"glm52_model_probe_v1",status:"succeeded",image_digest:$image,model_revision:$revision,config_sha256:$config,checks:{hf_to_megatron:true,expert_parallel_8:true,lora_attached:true,bf16_forward_backward:true,optimizer_step:true,checkpoint_saved:true}}''   >
+          config "sha256:$MODEL_PROBE_CONFIG_SHA256"   ''{schema:"glm52_model_probe_v1",status:"succeeded",image_digest:$image,model_revision:$revision,config_sha256:$config,checks:{hf_to_megatron:true,expert_parallel_8:true,lora_attached:true,bf16_forward_backward:true,optimizer_step:true,checkpoint_saved:true,checkpoint_resumed:true}}''   >
           /mnt/sfs/cyber-post-train/compatibility/b4734de4/model-probe/receipt.json
 
           echo MODEL_PROBE_COMPLETE /mnt/sfs/cyber-post-train/compatibility/b4734de4/model-probe/receipt.json'

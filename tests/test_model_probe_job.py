@@ -18,7 +18,9 @@ def test_model_probe_is_queued_exact_and_exercises_training_path():
     container = pod["containers"][0]
     assert container["image"].endswith("@" + digest)
     assert container["resources"]["requests"]["nvidia.com/gpu"] == "8"
-    assert "examples/run_sft.py" in container["args"][0]
+    assert container["args"][0].count("examples/run_sft.py") == 2
+    assert "sft.max_num_epochs=2 sft.max_num_steps=2" in container["args"][0]
+    assert "checkpoint_resumed:true" in container["args"][0]
     assert "test -s /mnt/sfs/cyber-post-train/compatibility/b4734de4/nccl.json" in container[
         "args"
     ][0]

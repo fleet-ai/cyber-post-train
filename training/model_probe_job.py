@@ -157,7 +157,8 @@ def render_model_probe_job(image_digest: str) -> dict[str, Any]:
         '{schema:"glm52_model_probe_v1",status:"succeeded",'
         "image_digest:$image,model_revision:$revision,config_sha256:$config,"
         "checks:{hf_to_megatron:true,expert_parallel_8:true,lora_attached:true,"
-        "bf16_forward_backward:true,optimizer_step:true,checkpoint_saved:true}}"
+        "bf16_forward_backward:true,optimizer_step:true,checkpoint_saved:true,"
+        "checkpoint_resumed:true}}"
     )
     command = f"""
 test -s {RESULT_ROOT}/environment.json
@@ -168,6 +169,9 @@ printf '%s' "$MODEL_PROBE_DATA_B64" | base64 -d > /tmp/glm52-model-probe.jsonl
 printf '%s  %s\n' "$MODEL_PROBE_CONFIG_SHA256" /tmp/glm52-model-probe.yaml | sha256sum -c -
 uv run --frozen --extra mcore python examples/run_sft.py --config /tmp/glm52-model-probe.yaml
 test -d {PROBE_ROOT}/checkpoints
+uv run --frozen --extra mcore python examples/run_sft.py \
+  --config /tmp/glm52-model-probe.yaml \
+  sft.max_num_epochs=2 sft.max_num_steps=2
 jq -n \
   --arg image "$TRAINING_IMAGE_DIGEST" \
   --arg revision "$MODEL_REVISION" \
