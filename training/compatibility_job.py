@@ -47,10 +47,11 @@ install -d -m 0755 {RESULT_ROOT}
 printf '%s' "$PROBE_ARCHIVE_B64" | base64 -d > /tmp/cyber-post-train-probe.zip
 printf '%s  %s\n' "$PROBE_ARCHIVE_SHA256" /tmp/cyber-post-train-probe.zip | sha256sum -c -
 export PYTHONPATH=/tmp/cyber-post-train-probe.zip
-python -m training.compatibility_probe static \\
+uv run --frozen --extra mcore --extra vllm python -m training.compatibility_probe static \\
   --model-root {MODEL_ROOT} \\
   --output {RESULT_ROOT}/environment.json
-torchrun --standalone --nproc-per-node=8 -m training.compatibility_probe collective \\
+uv run --frozen --extra mcore --extra vllm torchrun \\
+  --standalone --nproc-per-node=8 -m training.compatibility_probe collective \\
   --output {RESULT_ROOT}/nccl.json
 echo PREFLIGHT_COMPLETE {RESULT_ROOT}
 """.strip()

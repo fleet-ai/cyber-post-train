@@ -19,6 +19,10 @@ def test_preflight_is_queued_exact_and_self_contained():
     container = pod["containers"][0]
     assert container["image"].endswith("@" + digest)
     assert container["resources"]["requests"]["nvidia.com/gpu"] == "8"
+    command = container["args"][0]
+    assert "uv run --frozen --extra mcore --extra vllm python" in command
+    assert "uv run --frozen --extra mcore --extra vllm torchrun" in command
+    assert "\npython -m training.compatibility_probe" not in command
     env = {item["name"]: item["value"] for item in container["env"]}
     archive = base64.b64decode(env["PROBE_ARCHIVE_B64"])
     assert hashlib.sha256(archive).hexdigest() == env["PROBE_ARCHIVE_SHA256"]
