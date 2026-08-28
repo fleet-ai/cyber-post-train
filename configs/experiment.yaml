@@ -1,0 +1,42 @@
+schema_version: cyber_post_train_experiment_v1
+experiment_id: glm52-fleet-blackbox-controlled-v1
+model:
+  repo: zai-org/GLM-5.2
+  revision: b4734de4facf877f85769a911abafc5283eab3d9
+  weights_manifest_sha256: sha256:72b917aa2a1664751f99c4f19b1f1b23acb5eff5cffef4ff5522caef767324d4
+  served_name: glm52-b4734de4
+  inference_base_url: PIN_SELF_HOSTED_ENDPOINT_AFTER_DEPLOYMENT
+  temperature: 0.6
+  top_p: 0.95
+  max_output_tokens: 32768
+data:
+  split_unit:
+    - application
+    - vulnerability_family
+    - task_lineage
+  external_benchmark_training_allowed: false
+evaluation:
+  primary: webexploitbench_level0_pass_at_1
+  rollouts_per_task: 3
+  report:
+    - pass_at_1
+    - pass_at_3
+    - steps_to_success
+    - tokens_to_success
+    - wall_time_to_success
+    - undesirable_behavior_rate
+training:
+  nemo_rl_revision: 63e620046c67f922c4a57dcb65d7e6fceb60f5d4
+  stages:
+    - sft
+    - verifiable_reward_rl
+  reward:
+    exploit_success: 1.0
+    invalid_submission: -0.1
+    forbidden_surface_access: -1.0
+    reward_tampering: -1.0
+reproducibility:
+  random_seeds: [17, 29, 43]
+  require_immutable_data_manifest: true
+  require_model_revision: true
+  allow_hosted_opaque_model_as_formal_control: false

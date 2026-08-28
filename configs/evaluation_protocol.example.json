@@ -1,0 +1,42 @@
+{
+  "schema": "cyber_prepost_eval_protocol_v1",
+  "model": {
+    "repo": "zai-org/GLM-5.2",
+    "base_checkpoint_revision": "b4734de4facf877f85769a911abafc5283eab3d9",
+    "weights_manifest_sha256": "sha256:72b917aa2a1664751f99c4f19b1f1b23acb5eff5cffef4ff5522caef767324d4",
+    "tokenizer_revision": "b4734de4facf877f85769a911abafc5283eab3d9",
+    "tokenizer_manifest_sha256": "sha256:1858391a47cfc55e452754f8a11b2343037ca0926ddf973297f0cfd877827ad4",
+    "chat_template_sha256": "sha256:172dc74a35e1752df75ecfb2b2cf9326d2852bb1379868ebeec9571654489679"
+  },
+  "serving": {
+    "image": "PIN_REGISTRY_IMAGE@sha256:...",
+    "engine_revision": "PIN_EXACT_ENGINE_COMMIT",
+    "precision": "bf16-for-both-arms-or-identical-fp8-export-for-both-arms",
+    "quantization_manifest_sha256": "PIN_IDENTICAL_RECIPE_OR_EXPLICIT_NO_QUANTIZATION_MANIFEST"
+  },
+  "harness": {
+    "image": "PIN_REGISTRY_IMAGE@sha256:...",
+    "source_revision": "PIN_EXACT_HARNESS_COMMIT",
+    "tool_schema_sha256": "PIN_HASH",
+    "system_prompt_sha256": "PIN_HASH"
+  },
+  "benchmark": {
+    "id": "PIN_BENCHMARK_AND_SPLIT",
+    "source_revision": "PIN_EXACT_BENCHMARK_COMMIT",
+    "task_manifest_sha256": "PIN_HASH",
+    "environment_manifest_sha256": "PIN_HASH",
+    "verifier_manifest_sha256": "PIN_HASH",
+    "prompt_manifest_sha256": "PIN_HASH"
+  },
+  "sampling": {
+    "temperature": 0.6,
+    "top_p": 0.95,
+    "max_output_tokens": 32768
+  },
+  "budgets": {
+    "max_agent_steps": 300,
+    "max_duration_minutes": 120
+  },
+  "random_seeds": [17, 29, 43],
+  "protocol_digest": "PIN_AFTER_ALL_FIELDS_ARE_FINAL"
+}

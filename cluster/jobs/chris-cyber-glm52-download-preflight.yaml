@@ -1,0 +1,74 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: chris-cyber-glm52-download-preflight
+  namespace: fleet-train-jobs
+  labels:
+    kueue.x-k8s.io/queue-name: training-lq
+    cyber-post-train.fleet.ai/owner: chris
+    cyber-post-train.fleet.ai/experiment: download-preflight-b4734de4
+spec:
+  suspend: true
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        cyber-post-train.fleet.ai/owner: chris
+        cyber-post-train.fleet.ai/experiment: download-preflight-b4734de4
+    spec:
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: ghcr-pull
+      containers:
+        - name: preflight
+          image: ghcr.io/fleet-ai/miles-fleet/trainer@sha256:98920a4e25fadc3f31fafc18eff072313386edf5b352a23d13f4bb2d9e5f0a4c
+          command: ["/bin/bash", "-ceu", "--"]
+          args:
+            - |
+              revision=b4734de4facf877f85769a911abafc5283eab3d9
+              required_bytes=1657334126148
+              echo "GLM52_DOWNLOAD_PREFLIGHT_V1"
+              available_bytes=$(df --output=avail -B1 /mnt/sfs | tail -1 | tr -d ' ')
+              echo "AVAILABLE_BYTES $available_bytes"
+              test "$available_bytes" -ge "$required_bytes"
+              probe=/mnt/sfs/models/.chris-cyber-glm52-write-probe
+              printf '%s\n' "$revision" > "$probe"
+              test "$(cat "$probe")" = "$revision"
+              rm "$probe"
+              test ! -e "/mnt/sfs/models/zai-org/GLM-5.2/$revision"
+              python - <<'PY'
+              import importlib.metadata
+              import json
+              import urllib.request
+
+              revision = "b4734de4facf877f85769a911abafc5283eab3d9"
+              for package in ("huggingface-hub", "hf-xet"):
+                  try:
+                      print("PACKAGE", package, importlib.metadata.version(package))
+                  except importlib.metadata.PackageNotFoundError:
+                      print("PACKAGE_MISSING", package)
+              url = f"https://huggingface.co/api/models/zai-org/GLM-5.2/revision/{revision}"
+              with urllib.request.urlopen(url, timeout=30) as response:
+                  metadata = json.load(response)
+              assert metadata["sha"] == revision
+              assert metadata["gated"] is False
+              assert metadata["private"] is False
+              print("REVISION_REACHABLE", metadata["sha"])
+              PY
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+              ephemeral-storage: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+              ephemeral-storage: 1Gi
+          volumeMounts:
+            - name: sfs
+              mountPath: /mnt/sfs
+      volumes:
+        - name: sfs
+          persistentVolumeClaim:
+            claimName: sfs-shared

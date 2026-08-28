@@ -1,0 +1,95 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: chris-cyber-glm52-build-nemo-63e62004-v2
+  namespace: fleet-train-jobs
+  labels:
+    kueue.x-k8s.io/queue-name: training-lq
+    cyber-post-train.fleet.ai/owner: chris
+    cyber-post-train.fleet.ai/experiment: build-nemo-63e62004-v2
+spec:
+  suspend: true
+  backoffLimit: 0
+  activeDeadlineSeconds: 259200
+  ttlSecondsAfterFinished: 604800
+  template:
+    metadata:
+      labels:
+        cyber-post-train.fleet.ai/owner: chris
+        cyber-post-train.fleet.ai/experiment: build-nemo-63e62004-v2
+    spec:
+      restartPolicy: Never
+      initContainers:
+        - name: dind
+          image: docker:27-dind@sha256:aa3df78ecf320f5fafdce71c659f1629e96e9de0968305fe1de670e0ca9176ce
+          restartPolicy: Always
+          env:
+            - name: DOCKER_TLS_CERTDIR
+              value: ""
+          securityContext:
+            privileged: true
+          resources:
+            requests:
+              cpu: "4"
+              memory: 12Gi
+              ephemeral-storage: 200Gi
+            limits:
+              cpu: "8"
+              memory: 20Gi
+              ephemeral-storage: 400Gi
+          volumeMounts:
+            - name: dind-storage
+              mountPath: /var/lib/docker
+      containers:
+        - name: build
+          image: docker:27-cli@sha256:851f91d241214e7c6db86513b270d58776379aacc5eb9c4a87e5b47115e3065c
+          envFrom:
+            - secretRef:
+                name: img-build-secrets
+          env:
+            - name: DOCKER_HOST
+              value: tcp://127.0.0.1:2375
+            - name: NEMO_RL_COMMIT
+              value: 63e620046c67f922c4a57dcb65d7e6fceb60f5d4
+            - name: BASE_IMAGE
+              value: nvcr.io/nvidia/cuda-dl-base@sha256:6ae12053998e865c0b7e2205833b35216f8c6c410c1ee860e98dbda45a5572e0
+            - name: IMAGE_REF
+              value: ghcr.io/fleet-ai/cyber-post-train-nemo-rl-glm52:63e62004
+          command: ["/bin/sh", "-ceu", "--"]
+          args:
+            - |
+              apk add --no-cache git >/dev/null
+              for attempt in $(seq 1 120); do
+                docker info >/dev/null 2>&1 && break
+                test "$attempt" -lt 120
+                sleep 2
+              done
+              echo "$GH_TOKEN" | docker login ghcr.io -u x --password-stdin >/dev/null
+              DOCKER_BUILDKIT=1 docker build \
+                --build-arg "NRL_GIT_REF=$NEMO_RL_COMMIT" \
+                --build-arg "NEMO_RL_COMMIT=$NEMO_RL_COMMIT" \
+                --build-arg "BASE_IMAGE=$BASE_IMAGE" \
+                --build-arg SKIP_SGLANG_BUILD=1 \
+                --build-arg SKIP_TRTLLM_BUILD=1 \
+                --build-arg CUSTOM_SETUP_FNAME= \
+                --label "org.opencontainers.image.revision=$NEMO_RL_COMMIT" \
+                --label "org.opencontainers.image.source=https://github.com/NVIDIA-NeMo/RL" \
+                -f docker/Dockerfile \
+                -t "$IMAGE_REF" \
+                "https://github.com/NVIDIA-NeMo/RL.git#$NEMO_RL_COMMIT"
+              docker push "$IMAGE_REF"
+              docker pull "$IMAGE_REF" >/dev/null
+              docker inspect --format 'IMAGE_DIGEST {{index .RepoDigests 0}}' "$IMAGE_REF"
+          resources:
+            requests:
+              cpu: "2"
+              memory: 4Gi
+              ephemeral-storage: 2Gi
+            limits:
+              cpu: "4"
+              memory: 8Gi
+              ephemeral-storage: 4Gi
+      volumes:
+        - name: dind-storage
+          emptyDir:
+            sizeLimit: 400Gi

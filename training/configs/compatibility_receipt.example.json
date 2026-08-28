@@ -1,0 +1,26 @@
+{
+  "schema": "glm52_training_compatibility_v1",
+  "model_revision": "b4734de4facf877f85769a911abafc5283eab3d9",
+  "tokenizer_revision": "b4734de4facf877f85769a911abafc5283eab3d9",
+  "chat_template_sha256": "sha256:172dc74a35e1752df75ecfb2b2cf9326d2852bb1379868ebeec9571654489679",
+  "training_image_digest": "PIN_BY_SHA256",
+  "framework_revision": "PIN_NEMO_RL_AND_MEGATRON_COMMITS",
+  "weights_manifest_sha256": "sha256:72b917aa2a1664751f99c4f19b1f1b23acb5eff5cffef4ff5522caef767324d4",
+  "inference_image_digest": "PIN_BY_SHA256",
+  "evaluation_protocol_digest": "PIN_RESOLVED_PROTOCOL_DIGEST",
+  "cluster_gpu_topology": null,
+  "framework_images": {
+    "nemo_rl": "PIN_BY_DIGEST",
+    "megatron_bridge": "PIN_BY_COMMIT"
+  },
+  "checks": {
+    "hf_checkpoint_load": false,
+    "tokenizer_chat_template_roundtrip": false,
+    "forward_backward_bf16": false,
+    "moe_expert_partition": false,
+    "lora_attach_and_optimizer_step": false,
+    "checkpoint_save_resume": false,
+    "inference_export_equivalence": false
+  },
+  "notes": "This deliberately failing example must be replaced by a receipt produced on the Nebius cluster."
+}

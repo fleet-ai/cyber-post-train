@@ -1,0 +1,29 @@
+{
+  "schema": "huggingface_model_lock_v1",
+  "repo": "zai-org/GLM-5.2",
+  "revision": "b4734de4facf877f85769a911abafc5283eab3d9",
+  "resolved_at": "2026-08-28",
+  "source_api": "https://huggingface.co/api/models/zai-org/GLM-5.2/tree/b4734de4facf877f85769a911abafc5283eab3d9?recursive=true&limit=1000",
+  "weights": {
+    "format": "safetensors",
+    "shards": 282,
+    "bytes": 1506667387408,
+    "manifest_definition": "sha256 of canonical compact JSON array sorted by path; each item is {path,size,sha256} and sha256 is the Hugging Face LFS object digest",
+    "manifest_sha256": "sha256:72b917aa2a1664751f99c4f19b1f1b23acb5eff5cffef4ff5522caef767324d4",
+    "index_sha256": "sha256:5fd47a926aefce0f2c917f42523e5e0f3c87e23e389e767c3681536a62f5cf5e"
+  },
+  "tokenizer": {
+    "manifest_definition": "sha256 of canonical compact JSON array in listed order; each item is {path,sha256}",
+    "files": [
+      {"path": "tokenizer.json", "sha256": "19e773648cb4e65de8660ea6365e10acca112d42a854923df93db4a6f333a82d"},
+      {"path": "tokenizer_config.json", "sha256": "98b1271574f41abf89427ae2dda030d94dc9478f0edc5a8bd240db213c6fd5fc"},
+      {"path": "chat_template.jinja", "sha256": "172dc74a35e1752df75ecfb2b2cf9326d2852bb1379868ebeec9571654489679"}
+    ],
+    "manifest_sha256": "sha256:1858391a47cfc55e452754f8a11b2343037ca0926ddf973297f0cfd877827ad4"
+  },
+  "configuration": {
+    "config_sha256": "sha256:185f93ee6d12548e16a847e279dc0c3c90b1524c970b0866b42fb545747d859a",
+    "generation_config_sha256": "sha256:ac76b43d8683d3b930126870fc8be73d8679308fe752fa1f381096d8354f6a55",
+    "chat_template_sha256": "sha256:172dc74a35e1752df75ecfb2b2cf9326d2852bb1379868ebeec9571654489679"
+  }
+}

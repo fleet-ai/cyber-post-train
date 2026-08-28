@@ -1,0 +1,79 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: chris-cyber-glm52-preflight-b4734de4
+  namespace: fleet-train-jobs
+  labels:
+    kueue.x-k8s.io/queue-name: training-lq
+    cyber-post-train.fleet.ai/owner: chris
+    cyber-post-train.fleet.ai/experiment: preflight-b4734de4
+  annotations:
+    cyber-post-train.fleet.ai/probe-archive-sha256: 6497ced97dd6565d5b7d36ff371f6f04b01de925074cebf059d0f52d5fadf1b2
+    cyber-post-train.fleet.ai/training-image-digest: sha256:aec56926a7f0db357c3ac1eaf1576f4113ec7ac1adfbacb29cbfe4d3a7955666
+spec:
+  suspend: true
+  backoffLimit: 0
+  activeDeadlineSeconds: 21600
+  ttlSecondsAfterFinished: 604800
+  template:
+    metadata:
+      labels:
+        kueue.x-k8s.io/queue-name: training-lq
+        cyber-post-train.fleet.ai/owner: chris
+        cyber-post-train.fleet.ai/experiment: preflight-b4734de4
+    spec:
+      restartPolicy: Never
+      nodeSelector:
+        workload: fleetai-training-ng-gpu
+      tolerations:
+      - key: workload
+        operator: Equal
+        value: fleetai-training-ng-gpu
+        effect: NoSchedule
+      containers:
+      - name: preflight
+        image: ghcr.io/fleet-ai/cyber-post-train-nemo-rl-glm52@sha256:aec56926a7f0db357c3ac1eaf1576f4113ec7ac1adfbacb29cbfe4d3a7955666
+        imagePullPolicy: IfNotPresent
+        command:
+        - /bin/bash
+        - -ceu
+        - --
+        args:
+        - "install -d -m 0755 /mnt/sfs/cyber-post-train/compatibility/b4734de4\nprintf\
+          \ '%s' \"$PROBE_ARCHIVE_B64\" | base64 -d > /tmp/cyber-post-train-probe.zip\n\
+          printf '%s  %s\n' \"$PROBE_ARCHIVE_SHA256\" /tmp/cyber-post-train-probe.zip\
+          \ | sha256sum -c -\nexport PYTHONPATH=/tmp/cyber-post-train-probe.zip\n\
+          python -m training.compatibility_probe static \\\n  --model-root /mnt/sfs/models/zai-org/GLM-5.2/b4734de4facf877f85769a911abafc5283eab3d9\
+          \ \\\n  --output /mnt/sfs/cyber-post-train/compatibility/b4734de4/environment.json\n\
+          torchrun --standalone --nproc-per-node=8 -m training.compatibility_probe\
+          \ collective \\\n  --output /mnt/sfs/cyber-post-train/compatibility/b4734de4/nccl.json\n\
+          echo PREFLIGHT_COMPLETE /mnt/sfs/cyber-post-train/compatibility/b4734de4"
+        env:
+        - name: PROBE_ARCHIVE_B64
+          value: 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
+        - name: PROBE_ARCHIVE_SHA256
+          value: 6497ced97dd6565d5b7d36ff371f6f04b01de925074cebf059d0f52d5fadf1b2
+        - name: TRAINING_IMAGE_DIGEST
+          value: sha256:aec56926a7f0db357c3ac1eaf1576f4113ec7ac1adfbacb29cbfe4d3a7955666
+        - name: NEMO_RL_COMMIT
+          value: 63e620046c67f922c4a57dcb65d7e6fceb60f5d4
+        - name: HF_HUB_OFFLINE
+          value: '1'
+        - name: TRANSFORMERS_OFFLINE
+          value: '1'
+        resources:
+          requests:
+            cpu: '96'
+            memory: 1200Gi
+            nvidia.com/gpu: '8'
+          limits:
+            cpu: '192'
+            memory: 2Ti
+            nvidia.com/gpu: '8'
+        volumeMounts:
+        - name: sfs
+          mountPath: /mnt/sfs
+      volumes:
+      - name: sfs
+        persistentVolumeClaim:
+          claimName: sfs-shared
