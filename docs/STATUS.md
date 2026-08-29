@@ -46,6 +46,12 @@
   `sha256:05c7928155f7d3d0c9d387164e559985c2498d0c40b32a2a0884f6c629fb0494`.
 - Trainer inputs contain 508 SFT-train trajectories, 33 SFT-dev, 46 SFT-test,
   56 matched preference pairs and 161 distinct online-RL prompts.
+- `chris-cyber-glm52-stage-data-05c79281` copied only those five trainer-input
+  files plus the manifest to cluster shared storage. The job verified the sealed
+  archive, every per-file digest and every row count, then atomically promoted
+  them under
+  `/mnt/sfs/cyber-post-train/data/05c7928155f7d3d0c9d387164e559985c2498d0c40b32a2a0884f6c629fb0494`.
+  Raw exports and the all-trajectory file were not transferred.
 - At task level, 58/160 have zero successful source trajectories, 46/160 have
   only successful trajectories, and 56/160 are mixed-outcome. The latter are
   the cleanest initial preference/learnability stratum; zero-success tasks are
