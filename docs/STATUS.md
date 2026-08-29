@@ -74,7 +74,7 @@
   `33239053918` failed harmlessly at checkout because Actions does not resolve an
   abbreviated SHA as a ref; no build step ran. Successor `33239112507` is active
   against the full exact Theseus commit
-  `95832de10d9459c769165a73635215139422bf72`; successor SFT and RL gates are
+  `95832de10d0106e0f9a586457525c80768522a38`; successor SFT and RL gates are
   required before either full request is submitted.
 - Hugging Face access to WebExploitBench is granted. All 15 official Level-0
   packs are digest-verified and pass the official non-inference CAGE checks.
