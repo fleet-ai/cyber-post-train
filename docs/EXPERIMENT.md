@@ -1,8 +1,8 @@
-# GLM-5.2 Fleet blackbox post-training experiment
+# Qwen3.6-27B Fleet blackbox post-training experiment
 
 ## Claim
 
-Post-training GLM-5.2 on execution-verified Fleet blackbox exploit trajectories
+Post-training Qwen3.6-27B on execution-verified Fleet blackbox exploit trajectories
 improves autonomous web exploitation on lineage-held-out Fleet tasks and a
 sealed external benchmark.
 

@@ -1,14 +1,12 @@
 schema_version: cyber_post_train_experiment_v1
-experiment_id: glm52-fleet-blackbox-controlled-v1
+experiment_id: qwen36-27b-fleet-blackbox-controlled-v1
 model:
-  repo: zai-org/GLM-5.2
-  revision: b4734de4facf877f85769a911abafc5283eab3d9
-  weights_manifest_sha256: sha256:72b917aa2a1664751f99c4f19b1f1b23acb5eff5cffef4ff5522caef767324d4
-  served_name: glm52-b4734de4
-  inference_base_url: PIN_SELF_HOSTED_ENDPOINT_AFTER_DEPLOYMENT
-  temperature: 0.6
-  top_p: 0.95
-  max_output_tokens: 32768
+  repo: Qwen/Qwen3.6-27B
+  revision: 6a9e13bd6fc8f0983b9b99948120bc37f49c13e9
+  weights_manifest_sha256: sha256:14ad10368de9b9e5974ff12a4b70ea7884194b58e670177bbac79daeb81f16b9
+  served_name: qwen3-6-27b-cyber-baseline
+  inference_base_url: https://inference.flt.build/v1
+  precision: bf16
 data:
   split_unit:
     - application
@@ -17,7 +15,7 @@ data:
   external_benchmark_training_allowed: false
 evaluation:
   primary: webexploitbench_level0_pass_at_1
-  rollouts_per_task: 3
+  rollouts_per_task: 1
   report:
     - pass_at_1
     - pass_at_3
@@ -26,7 +24,8 @@ evaluation:
     - wall_time_to_success
     - undesirable_behavior_rate
 training:
-  nemo_rl_revision: 63e620046c67f922c4a57dcb65d7e6fceb60f5d4
+  trainer_version_id: 6d4a7bbc-51a7-57ed-91eb-a449185ed8db
+  trainer_image_digest: sha256:231257749cd5e9f53e06dd61be7d357318a3869373faa5836ec9a958cf47e698
   stages:
     - sft
     - verifiable_reward_rl

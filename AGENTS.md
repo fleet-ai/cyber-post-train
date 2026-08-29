@@ -2,8 +2,11 @@
 
 ## Mission
 
-Measure whether post-training `glm-5.2-fp8` on Fleet's authorized blackbox
-cyber tasks improves exploitation capability on genuinely held-out tasks.
+Measure whether post-training the exact pinned open-weight model selected by
+the experiment protocol on Fleet's authorized blackbox cyber tasks improves
+exploitation capability on genuinely held-out tasks. The current primary model
+is `Qwen/Qwen3.6-27B`; model identity belongs in versioned experiment config,
+not in this repository-wide operating contract.
 
 ## Non-negotiable boundaries
 

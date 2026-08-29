@@ -13,9 +13,10 @@
   130 train / 10 dev / 20 test; no task lineage crosses a split.
 - The live Fleet Training API model catalog resolves the staged base as
   `qwen3.6-27b`. Every request renders through the server's single
-  preview/submit path into Kueue `training-lq`. The verifier-hydration trainer
-  `4f1c341e-36dd-5192-80ac-2d5820eb51d0` is Ready; the combined CUDA13 successor
-  is still gated on its standard one-L4 catalog smoke and is not yet usable.
+  preview/submit path into Kueue `training-lq`. Trainer
+  `6d4a7bbc-51a7-57ed-91eb-a449185ed8db` passed its standard one-L4 catalog
+  smoke, but the experiment gates below exposed two workload-specific defects;
+  it is superseded and must not be used for a full run.
 - Four retained SFT compatibility attempts progressively proved corpus staging,
   permissions, VLM-safe sequence parallelism, checkpoint loading, exact 508/33
   train/dev tokenization, and five pre-train eval batches. The latest,
@@ -33,29 +34,48 @@
   the v3 SFS promotion and all file hashes are recorded by completed CPU job
   `chris-cyber-qwen36-windowed-corpus-v3`. All 587 successful submission turns
   and all 587 final text turns are selected.
-- Theseus PR #27859 now produces corrected image
-  `chris-cyber-qwen-b300-cuda13-3fb68bb8` at digest
-  `sha256:398e65780c4bfe3314da2461702bc54564b15c925512884ec0e0bb628ad2023a`.
+- Theseus PRs #27859 and #27873 produced and registered the first short-tag
+  image `chris-qwen-b300-3fb68bb8` at digest
+  `sha256:231257749cd5e9f53e06dd61be7d357318a3869373faa5836ec9a958cf47e698`.
   Its build compiled CUDA runtime headers, CUB BlockReduce and device math for
-  `sm_103a` through `/usr/local/cuda/bin/nvcc`. The earlier CUDA image is
-  superseded and must not be used.
+  `sm_103a` through `/usr/local/cuda/bin/nvcc`; the catalog manifest also
+  includes the fail-closed verifier detail hydration path. It is now also
+  superseded: SkyRL's frozen `flash-linear-attention==0.5.1` failed during the
+  actual Qwen gated-delta backward despite passing the generic catalog smoke.
 - RL-from-base compatibility run `ft-run-ff78ae76` failed before rollout because
   the Fleet list endpoint omitted verifier source. Theseus PR #27850 adds a
-  fail-closed detail-endpoint hydration path. Replacement image
-  `chris-cyber-rl-verifier-fad569fd` is pinned at digest
-  `sha256:0a460fb7ede7a0d3a8f06b803fd45bb9143be347e2d74e0f490c4a3c4345b1ad`;
-  its variant registration merged without moving shared latest/golden, passed
-  the required one-L4 smoke, and returns HTTP 200 from the typed RL preview.
+  fail-closed detail-endpoint hydration path. That fix and the CUDA 13 B300
+  compiler fix are both present in the registered combined trainer image and
+  are exercised together by the new RL smoke.
 - The full one-epoch SFT request is frozen in
   `configs/runs/qwen36-27b-sft-full.json` but will not be submitted until the
   one-step compatibility arm proves checkpoint load, tokenizer/tool formatting,
-  BF16 backward, optimizer step, and checkpoint save.
+  BF16 backward, optimizer step, and checkpoint save. The one-step arm
+  `ft-run-30714d6e` was admitted through Kueue `training-cq`, loaded all 2,540
+  train and 165 dev windows with zero filtering, and completed the 21-batch
+  pre-train evaluation at `eval_loss=0.9582`. Its first forward/backward then
+  failed before the optimizer step in FLA's `prepare_wy_repr_bwd_kernel` Triton
+  autotuner with `CUDA: misaligned address`; no checkpoint was created.
 - The RL intent-to-treat split remains 130 train / 10 dev / 20 untouched test.
   One historical train version is archived and server-unrunnable, so an explicit
   signed as-treated request contains 129 train and 10 dev tasks. That exact
-  request passed the Training API preview with HTTP 200; it will not be submitted
-  until the verifier-aware trainer version is Ready and its two-task smoke is
-  green.
+  request passed the Training API preview with HTTP 200. Its two-task one-step
+  gate `ft-run-e1a5e2dc` was admitted through Kueue `training-cq` but failed
+  before actor allocation because the rendered mandatory tracker list included
+  MLflow while the Nebius MLflow application and Service are intentionally
+  disabled. It produced no steps or checkpoints. The full request remains
+  unsubmitted until a successor gate is green.
+- Theseus PR #27880 makes the tracker list an explicit deployment capability:
+  W&B remains mandatory on Nebius, while MLflow remains mandatory only on
+  clusters that actually deploy it. PR #27859 now installs exact
+  `flash-linear-attention==0.5.2` with no dependency changes, incorporating
+  upstream's Blackwell gated-delta backward restriction (FLA #913 / PR #1000),
+  and records that version in the trainer manifest. Initial image-build dispatch
+  `33239053918` failed harmlessly at checkout because Actions does not resolve an
+  abbreviated SHA as a ref; no build step ran. Successor `33239112507` is active
+  against the full exact Theseus commit
+  `95832de10d9459c769165a73635215139422bf72`; successor SFT and RL gates are
+  required before either full request is submitted.
 - Hugging Face access to WebExploitBench is granted. All 15 official Level-0
   packs are digest-verified and pass the official non-inference CAGE checks.
   The formal Qwen baseline pins the same model revision plus an exact SGLang

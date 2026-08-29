@@ -1,17 +1,17 @@
 {
   "schema": "cyber_prepost_eval_protocol_v1",
   "model": {
-    "repo": "zai-org/GLM-5.2",
-    "base_checkpoint_revision": "b4734de4facf877f85769a911abafc5283eab3d9",
-    "weights_manifest_sha256": "sha256:72b917aa2a1664751f99c4f19b1f1b23acb5eff5cffef4ff5522caef767324d4",
-    "tokenizer_revision": "b4734de4facf877f85769a911abafc5283eab3d9",
-    "tokenizer_manifest_sha256": "sha256:1858391a47cfc55e452754f8a11b2343037ca0926ddf973297f0cfd877827ad4",
-    "chat_template_sha256": "sha256:172dc74a35e1752df75ecfb2b2cf9326d2852bb1379868ebeec9571654489679"
+    "repo": "Qwen/Qwen3.6-27B",
+    "base_checkpoint_revision": "6a9e13bd6fc8f0983b9b99948120bc37f49c13e9",
+    "weights_manifest_sha256": "sha256:14ad10368de9b9e5974ff12a4b70ea7884194b58e670177bbac79daeb81f16b9",
+    "tokenizer_revision": "6a9e13bd6fc8f0983b9b99948120bc37f49c13e9",
+    "tokenizer_manifest_sha256": "sha256:27f02770d03b60343350ad948bf1065673968c60274f1e34f4afaed16940a1ea",
+    "chat_template_sha256": "sha256:e84f32a23fdda27689f868aa4a1a5621f41133e51a48d7f3efcbea2839574259"
   },
   "serving": {
-    "image": "PIN_REGISTRY_IMAGE@sha256:...",
-    "engine_revision": "PIN_EXACT_ENGINE_COMMIT",
-    "precision": "bf16-for-both-arms-or-identical-fp8-export-for-both-arms",
+    "image": "lmsysorg/sglang@sha256:febfb971c7352570fc445c466ebd6ffc9d896024958e544a60f2137fd85856b1",
+    "engine_revision": "PIN_EXACT_ENGINE_COMMIT_FROM_IMAGE_BUILD",
+    "precision": "bf16-weights-with-identical-fp8-e4m3-kv-cache-for-both-arms",
     "quantization_manifest_sha256": "PIN_IDENTICAL_RECIPE_OR_EXPLICIT_NO_QUANTIZATION_MANIFEST"
   },
   "harness": {

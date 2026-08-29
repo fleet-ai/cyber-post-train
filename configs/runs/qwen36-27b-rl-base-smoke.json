@@ -1,5 +1,5 @@
 {
-  "title": "Chris cyber Qwen3.6 27B RL-from-base compatibility smoke",
+  "title": "Chris cyber Qwen3.6 27B FLA052 W&B RL smoke v3",
   "node_pool": "fleetai-training-ng-gpu",
   "fleet_env": {
     "env_key": "cysec1-2-current-gen",
@@ -58,7 +58,7 @@
     "stop_after_evals": 2
   },
   "trainer": {
-    "trainer_version_id": "fc90b289-6e24-5919-807e-3905e4b045a2"
+    "trainer_version_id": "6d4a7bbc-51a7-57ed-91eb-a449185ed8db"
   },
   "rollout": {
     "harness": "native",

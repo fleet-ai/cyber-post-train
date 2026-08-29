@@ -2,7 +2,7 @@
 
 ## Causal question
 
-Does post-training the exact GLM-5.2 base checkpoint on authorized Fleet
+Does post-training the exact Qwen3.6-27B base checkpoint on authorized Fleet
 blackbox-exploit tasks improve performance on a frozen, external blackbox web
 exploitation benchmark?
 
@@ -36,6 +36,11 @@ and protocol. If evaluation uses FP8, export both arms with the same pinned
 quantization recipe and calibration set. If that cannot be proved, evaluate both
 in BF16. A hosted base model with undisclosed bytes is useful for plumbing but is
 not an admissible scientific control for a self-hosted intervention.
+
+The active base is `Qwen/Qwen3.6-27B` revision
+`6a9e13bd6fc8f0983b9b99948120bc37f49c13e9`. GLM-5.2 locks and cluster
+manifests are retained only as historical provenance from the superseded
+feasibility path; they are not interchangeable controls.
 
 ## Data and leakage
 
