@@ -67,23 +67,29 @@
   unsubmitted until a successor gate is green.
 - Theseus PR #27880 makes the tracker list an explicit deployment capability:
   W&B remains mandatory on Nebius, while MLflow remains mandatory only on
-  clusters that actually deploy it. PR #27859 now installs exact
+  clusters that actually deploy it. The live Nebius deployment is healthy with
+  all replicas on `TRAINING_API_TRACKING_BACKENDS=[wandb]`; a fresh server-side
+  preview renders exactly `trainer.logger=[wandb]`. PR #27859 installs exact
   `flash-linear-attention==0.5.2` with no dependency changes, incorporating
   upstream's Blackwell gated-delta backward restriction (FLA #913 / PR #1000),
-  and records that version in the trainer manifest. Initial image-build dispatch
-  `33239053918` failed harmlessly at checkout because Actions does not resolve an
-  abbreviated SHA as a ref; no build step ran. Successor `33239112507` is active
-  against the full exact Theseus commit
-  `95832de10d0106e0f9a586457525c80768522a38`; successor SFT and RL gates are
-  required before either full request is submitted.
+  and records that version in the trainer manifest. Build `33239675544` passed
+  from exact merge commit `4fd37536c49f4e81f40c7233bab997bd23589d26`,
+  producing image tag `4fd37536` at digest
+  `sha256:25e56db0367fa6fc83dcdb14b44d8b7dd7fde4af053b8a87861b942ef28bf75c`;
+  its build log proves FLA 0.5.2 and a clean trainer contract. Trainer-pin PR
+  #27889 and stale-variant cleanup PR #27888 are intentionally drafts with
+  auto-merge disabled pending explicit approval. Until the pin lands and its
+  standard smoke registers a new Ready trainer UUID, the successor SFT and RL
+  gates cannot be launched through the typed API and both full requests remain
+  unsubmitted.
 - Hugging Face access to WebExploitBench is granted. All 15 official Level-0
   packs are digest-verified and pass the official non-inference CAGE checks.
   The formal Qwen baseline pins the same model revision plus an exact SGLang
   serving contract. All 15 images built successfully and the frozen 15-trial
   pass@1 run `webexploit-qwen36-27b-base-6a9e13bd-l0-p1-v1` is active under
   protocol digest `cd67f337e42839deddc947ced45da56761a2fe4093a955e70059c3ee4bc06f3a`.
-  Its logs and scores remain sealed. No benchmark prompt, trace, or result enters
-  training.
+  Two trials are complete, one is running, and zero have failed; logs and scores
+  remain sealed. No benchmark prompt, trace, or result enters training.
 
 The GLM-5.2 work below is retained as historical provenance; it is no longer the
 selected primary experiment.
