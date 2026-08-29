@@ -86,8 +86,10 @@
   identities, and NCCL all-reduce/all-to-all before the expensive model-load and
   forward/backward test. `chris-cyber-glm52-preflight-b4734de4` is now waiting
   in `training-lq` at priority 0 with the required single-node topology request.
-  Kueue reports that all 24 B300 nodes are currently excluded by existing CPU,
-  memory or GPU reservations. It will admit the job automatically when one full
+  Its metadata-only/NCCL workload is right-sized to 16 CPU, 128 GiB and one
+  eight-GPU node; the later full-model test retains its 1.2 TiB request. Kueue
+  currently reports 23 nodes excluded by GPU reservations and the remaining
+  node by CPU reservations. It will admit the job automatically when one full
   node becomes available and cannot preempt peer workloads. None of these
   preliminary checks can mark the final compatibility receipt green by itself.
 - The missing Fleet checkpoint routing path is implemented in an isolated Theseus
@@ -97,8 +99,10 @@
   [Theseus PR #27754](https://github.com/fleet-ai/theseus/pull/27754). The PR
   passed the merge queue and landed as commit
   `f4f2a3e6002286e994a494f2fb168802fa171384`; its post-merge Orchestrator Deploy
-  workflow is queued behind existing deployment concurrency. Deployed behavior
-  still requires verification before formal Fleet checkpoint evaluations.
+  workflow completed, including checkpoint API/worker staging rollout and live
+  staging smoke tests. Production promotion steps were not part of that push
+  workflow, so canonical production behavior still requires verification before
+  formal Fleet checkpoint evaluations.
 - The public implementation lives in the private Fleet repository
   [fleet-ai/cyber-post-train](https://github.com/fleet-ai/cyber-post-train).
   Git authoring uses `christopher@fleet.so` for this work.
