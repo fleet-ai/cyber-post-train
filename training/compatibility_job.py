@@ -78,7 +78,12 @@ echo PREFLIGHT_COMPLETE {RESULT_ROOT}
             "activeDeadlineSeconds": 21600,
             "ttlSecondsAfterFinished": 604800,
             "template": {
-                "metadata": {"labels": {key: value for key, value in labels.items() if "/" in key}},
+                "metadata": {
+                    "labels": {key: value for key, value in labels.items() if "/" in key},
+                    "annotations": {
+                        "kueue.x-k8s.io/podset-required-topology": "kubernetes.io/hostname"
+                    },
+                },
                 "spec": {
                     "restartPolicy": "Never",
                     "nodeSelector": {"workload": "fleetai-training-ng-gpu"},

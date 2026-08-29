@@ -13,7 +13,11 @@ def test_model_probe_is_queued_exact_and_exercises_training_path():
     job = render_model_probe_job(digest)
     validate_training_manifest(job)
     assert job["spec"]["suspend"] is True
-    pod = job["spec"]["template"]["spec"]
+    template = job["spec"]["template"]
+    assert template["metadata"]["annotations"] == {
+        "kueue.x-k8s.io/podset-required-topology": "kubernetes.io/hostname"
+    }
+    pod = template["spec"]
     assert "priorityClassName" not in pod
     container = pod["containers"][0]
     assert container["image"].endswith("@" + digest)

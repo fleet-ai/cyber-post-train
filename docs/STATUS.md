@@ -68,10 +68,11 @@
   `sha256:1858391a47cfc55e452754f8a11b2343037ca0926ddf973297f0cfd877827ad4`,
   and chat-template digest
   `sha256:172dc74a35e1752df75ecfb2b2cf9326d2852bb1379868ebeec9571654489679`.
-- `chris-cyber-glm52-stage-b4734de4` is running at Kueue priority 0. It verified
-  the remote 282-shard manifest, downloaded all 295 repository files into a
-  partial shared-filesystem path, and is hashing every local weight shard. It
-  will atomically promote only after all bytes match. No GPU is requested.
+- `chris-cyber-glm52-stage-b4734de4` completed successfully. It verified the
+  remote 282-shard manifest, downloaded all 295 repository files, hashed all
+  1,506,667,387,408 weight bytes, wrote the immutable checkpoint lock, and
+  atomically promoted revision `b4734de4facf877f85769a911abafc5283eab3d9`.
+  The staging job requested no GPU.
 - The official NeMo RL GLM-5.2 trainer is pinned to commit
   `63e620046c67f922c4a57dcb65d7e6fceb60f5d4`. The first image-builder manifest
   exposed a Docker-sidecar TLS/port mismatch before executing the build and
@@ -83,16 +84,21 @@
 - A staged compatibility probe now checks the promoted checkpoint lock,
   tokenizer/chat-template roundtrip, exact framework imports, eight B300 device
   identities, and NCCL all-reduce/all-to-all before the expensive model-load and
-  forward/backward test. Its manifest passed server-side dry run and will enter
-  `training-lq` as `chris-cyber-glm52-preflight-b4734de4` immediately after
-  atomic checkpoint promotion. None of these preliminary checks can mark the
-  final compatibility receipt green by itself.
+  forward/backward test. `chris-cyber-glm52-preflight-b4734de4` is now waiting
+  in `training-lq` at priority 0 with the required single-node topology request.
+  Kueue reports that all 24 B300 nodes are currently excluded by existing CPU,
+  memory or GPU reservations. It will admit the job automatically when one full
+  node becomes available and cannot preempt peer workloads. None of these
+  preliminary checks can mark the final compatibility receipt green by itself.
 - The missing Fleet checkpoint routing path is implemented in an isolated Theseus
   worktree: it sends `fleet/<run>-step-<n>` only to the authenticated
   `inference.flt.build` gateway and refuses both missing credentials and public
   provider fallback. Its focused test suite has 64 passing tests and is open as
-  [Theseus PR #27754](https://github.com/fleet-ai/theseus/pull/27754). Review and
-  deployment are still required before formal Fleet checkpoint evaluations.
+  [Theseus PR #27754](https://github.com/fleet-ai/theseus/pull/27754). The PR
+  passed the merge queue and landed as commit
+  `f4f2a3e6002286e994a494f2fb168802fa171384`; its post-merge Orchestrator Deploy
+  workflow is queued behind existing deployment concurrency. Deployed behavior
+  still requires verification before formal Fleet checkpoint evaluations.
 - The public implementation lives in the private Fleet repository
   [fleet-ai/cyber-post-train](https://github.com/fleet-ai/cyber-post-train).
   Git authoring uses `christopher@fleet.so` for this work.
@@ -102,6 +108,11 @@
   HF-to-Megatron conversion, expert partitioning, LoRA attachment, optimizer
   construction, BF16 forward/backward, and checkpoint save/resume on the exact
   image and checkpoint before any SFT or RL launch.
+- That end-to-end gate is implemented as the still-unsubmitted
+  `chris-cyber-glm52-model-probe-b4734de4` job. It performs one real BF16 LoRA
+  optimizer step with EP8, saves weights and optimizer state, restarts the
+  official trainer, resumes the checkpoint, and executes a second step. It is
+  gated on successful preliminary preflight receipts.
 - Remaining gates are a green checkpoint compatibility receipt, pinned training
   and inference images, the exact evaluation harness manifest, and the Fleet
   reward-broker contract. The evaluation protocol fails closed unless all

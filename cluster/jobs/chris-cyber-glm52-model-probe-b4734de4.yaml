@@ -21,6 +21,8 @@ spec:
         kueue.x-k8s.io/queue-name: training-lq
         cyber-post-train.fleet.ai/owner: chris
         cyber-post-train.fleet.ai/experiment: model-probe-b4734de4
+      annotations:
+        kueue.x-k8s.io/podset-required-topology: kubernetes.io/hostname
     spec:
       restartPolicy: Never
       nodeSelector:
