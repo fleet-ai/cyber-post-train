@@ -23,6 +23,8 @@ def test_preflight_is_queued_exact_and_self_contained():
     container = pod["containers"][0]
     assert container["image"].endswith("@" + digest)
     assert container["resources"]["requests"]["nvidia.com/gpu"] == "8"
+    assert container["resources"]["requests"]["memory"] == "128Gi"
+    assert container["resources"]["limits"]["memory"] == "256Gi"
     command = container["args"][0]
     assert "uv run --frozen --extra mcore --extra vllm python" in command
     assert "uv run --frozen --extra mcore --extra vllm torchrun" in command

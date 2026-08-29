@@ -112,13 +112,13 @@ echo PREFLIGHT_COMPLETE {RESULT_ROOT}
                             ],
                             "resources": {
                                 "requests": {
-                                    "cpu": "96",
-                                    "memory": "1200Gi",
+                                    "cpu": "16",
+                                    "memory": "128Gi",
                                     "nvidia.com/gpu": "8",
                                 },
                                 "limits": {
-                                    "cpu": "192",
-                                    "memory": "2Ti",
+                                    "cpu": "32",
+                                    "memory": "256Gi",
                                     "nvidia.com/gpu": "8",
                                 },
                             },
