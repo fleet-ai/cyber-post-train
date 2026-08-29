@@ -86,6 +86,7 @@ echo PREFLIGHT_COMPLETE {RESULT_ROOT}
                 },
                 "spec": {
                     "restartPolicy": "Never",
+                    "imagePullSecrets": [{"name": "ghcr-pull"}],
                     "nodeSelector": {"workload": "fleetai-training-ng-gpu"},
                     "tolerations": [
                         {

@@ -19,6 +19,7 @@ def test_preflight_is_queued_exact_and_self_contained():
         "kueue.x-k8s.io/podset-required-topology": "kubernetes.io/hostname"
     }
     pod = template["spec"]
+    assert pod["imagePullSecrets"] == [{"name": "ghcr-pull"}]
     assert "priorityClassName" not in pod
     container = pod["containers"][0]
     assert container["image"].endswith("@" + digest)

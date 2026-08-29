@@ -211,6 +211,7 @@ echo MODEL_PROBE_COMPLETE {PROBE_ROOT}/receipt.json
                 },
                 "spec": {
                     "restartPolicy": "Never",
+                    "imagePullSecrets": [{"name": "ghcr-pull"}],
                     "nodeSelector": {"workload": "fleetai-training-ng-gpu"},
                     "tolerations": [
                         {

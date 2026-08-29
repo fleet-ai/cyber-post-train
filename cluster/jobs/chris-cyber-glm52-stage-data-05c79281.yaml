@@ -22,6 +22,8 @@ spec:
         cyber-post-train.fleet.ai/experiment: stage-data-05c79281
     spec:
       restartPolicy: Never
+      imagePullSecrets:
+        - name: ghcr-pull
       nodeSelector:
         workload: fleetai-training-ng-cpu
       tolerations:

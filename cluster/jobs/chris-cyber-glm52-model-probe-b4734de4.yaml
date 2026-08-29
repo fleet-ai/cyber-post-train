@@ -25,6 +25,8 @@ spec:
         kueue.x-k8s.io/podset-required-topology: kubernetes.io/hostname
     spec:
       restartPolicy: Never
+      imagePullSecrets:
+      - name: ghcr-pull
       nodeSelector:
         workload: fleetai-training-ng-gpu
       tolerations:
