@@ -1,0 +1,76 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: chris-cyber-qwen36-windowed-corpus-v2
+  namespace: fleet-train-jobs
+  labels:
+    kueue.x-k8s.io/queue-name: training-lq
+    cyber-post-train.fleet.ai/owner: chris
+    cyber-post-train.fleet.ai/experiment: qwen36-windowed-corpus-v2
+spec:
+  suspend: true
+  backoffLimit: 0
+  activeDeadlineSeconds: 3600
+  ttlSecondsAfterFinished: 604800
+  template:
+    metadata:
+      labels:
+        cyber-post-train.fleet.ai/owner: chris
+        cyber-post-train.fleet.ai/experiment: qwen36-windowed-corpus-v2
+    spec:
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: ghcr-pull
+      nodeSelector:
+        workload: fleetai-training-ng-cpu
+      tolerations:
+        - key: workload
+          operator: Equal
+          value: fleetai-training-ng-cpu
+          effect: NoSchedule
+      containers:
+        - name: stage
+          image: ghcr.io/fleet-ai/miles-fleet/trainer@sha256:98920a4e25fadc3f31fafc18eff072313386edf5b352a23d13f4bb2d9e5f0a4c
+          command: ["python", "-c"]
+          args:
+            - |
+              import runpy
+              import time
+              from pathlib import Path
+
+              ready = Path("/upload/READY")
+              deadline = time.monotonic() + 3300
+              while not ready.is_file():
+                  if time.monotonic() > deadline:
+                      raise TimeoutError("stage inputs were not uploaded before the deadline")
+                  time.sleep(2)
+              runpy.run_path("/upload/stage_corpus.py", run_name="__main__")
+          env:
+            - name: EXPECTED_MANIFEST_SHA256
+              value: eb70bae0f9ce5947aa4b960ede54ab839460fb509f3e41aff94d37eac79df58a
+            - name: EXPECTED_CORPUS_JOB_ID
+              value: chris-cyber-qwen36-windowed-v1
+            - name: EXPECTED_EMITTED_SESSIONS
+              value: "2935"
+            - name: RECEIPT_NAME
+              value: chris-cyber-qwen36-windowed-corpus-v2
+          resources:
+            requests:
+              cpu: "1"
+              memory: 2Gi
+              ephemeral-storage: 1Gi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+              ephemeral-storage: 2Gi
+          volumeMounts:
+            - name: upload
+              mountPath: /upload
+            - name: sfs
+              mountPath: /mnt/sfs
+      volumes:
+        - name: upload
+          emptyDir: {}
+        - name: sfs
+          persistentVolumeClaim:
+            claimName: sfs-shared

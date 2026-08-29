@@ -1,0 +1,77 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: chris-cyber-model-catalog-probe
+  namespace: fleet-train-jobs
+  labels:
+    kueue.x-k8s.io/queue-name: training-lq
+    cyber-post-train.fleet.ai/owner: chris
+    cyber-post-train.fleet.ai/experiment: model-catalog-probe
+    cyber-post-train.fleet.ai/model: model
+spec:
+  suspend: true
+  backoffLimit: 0
+  activeDeadlineSeconds: 600
+  ttlSecondsAfterFinished: 604800
+  template:
+    metadata:
+      labels:
+        kueue.x-k8s.io/queue-name: training-lq
+        cyber-post-train.fleet.ai/owner: chris
+        cyber-post-train.fleet.ai/experiment: model-catalog-probe
+        cyber-post-train.fleet.ai/model: model
+    spec:
+      restartPolicy: Never
+      imagePullSecrets:
+      - name: ghcr-pull
+      nodeSelector:
+        workload: fleetai-training-ng-cpu
+      tolerations:
+      - key: workload
+        operator: Equal
+        value: fleetai-training-ng-cpu
+        effect: NoSchedule
+      containers:
+      - name: probe
+        image: ghcr.io/fleet-ai/miles-fleet/trainer@sha256:98920a4e25fadc3f31fafc18eff072313386edf5b352a23d13f4bb2d9e5f0a4c
+        command: ["python", "-c"]
+        args:
+        - |
+          import json
+          import os
+          import urllib.request
+
+          base = "https://inference.flt.build"
+          headers = {"Authorization": "Bearer " + os.environ["FLEET_API_KEY"]}
+          for path in ("/v1/models", "/fleet/v1/model-catalog"):
+              request = urllib.request.Request(base + path, headers=headers)
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  payload = json.load(response)
+              rows = payload.get("data", payload.get("models", []))
+              safe = []
+              for row in rows:
+                  if isinstance(row, str):
+                      safe.append({"id": row})
+                      continue
+                  safe.append({
+                      key: row[key]
+                      for key in (
+                          "id", "model", "name", "owned_by", "context_length",
+                          "max_context_length", "capabilities", "status"
+                      )
+                      if key in row
+                  })
+              print(json.dumps({"endpoint": path, "models": safe}, sort_keys=True))
+        env:
+        - name: FLEET_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: fleet-api
+              key: FLEET_API_KEY
+        resources:
+          requests:
+            cpu: 200m
+            memory: 256Mi
+          limits:
+            cpu: "1"
+            memory: 1Gi

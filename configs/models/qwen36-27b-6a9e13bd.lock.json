@@ -1,0 +1,38 @@
+{
+  "schema": "huggingface_model_lock_v1",
+  "repo": "Qwen/Qwen3.6-27B",
+  "revision": "6a9e13bd6fc8f0983b9b99948120bc37f49c13e9",
+  "resolved_at": "2026-08-28",
+  "source_api": "https://huggingface.co/api/models/Qwen/Qwen3.6-27B/tree/6a9e13bd6fc8f0983b9b99948120bc37f49c13e9?recursive=true&limit=1000",
+  "weights": {
+    "format": "safetensors",
+    "shards": 15,
+    "bytes": 55563006400,
+    "parameters": 27781427952,
+    "manifest_definition": "sha256 of canonical compact JSON array sorted by path; each item is {path,size,sha256} and sha256 is the Hugging Face LFS object digest",
+    "manifest_sha256": "sha256:14ad10368de9b9e5974ff12a4b70ea7884194b58e670177bbac79daeb81f16b9",
+    "index_sha256": "sha256:a8ad2c26fb707ff8c245806315b03e3b4b74595528492423af5dae0ce39b4d9b"
+  },
+  "tokenizer": {
+    "files": [
+      {"path": "tokenizer.json", "sha256": "5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42"},
+      {"path": "tokenizer_config.json", "sha256": "5186f0defcd7f232382c7f0aebcd2252d073bb921ab240e407b7ae8745d2b29b"},
+      {"path": "chat_template.jinja", "sha256": "e84f32a23fdda27689f868aa4a1a5621f41133e51a48d7f3efcbea2839574259"},
+      {"path": "merges.txt", "sha256": "a9d356d7bdf1ef4949e3e748e95b8e10ad9d4e2e838eddc38a0a7b6b94d1db8d"},
+      {"path": "vocab.json", "sha256": "ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003"}
+    ]
+  },
+  "configuration": {
+    "config_sha256": "sha256:69db4eb7196bc8190813231b3018ca05d8c2e3abc7b1af19d55c157af44a9d9c",
+    "configuration_sha256": "sha256:2d4464e2ead06bc9bc718c781309ad1e7baded626d66e8dcdc8b469ba185faf0",
+    "generation_config_sha256": "sha256:e70c136c1b78ddc1fb0905bac8e733a4dc448d4f852a5dd75143fffc70be550e",
+    "preprocessor_config_sha256": "sha256:27225450ac9c6529872ee1924fcb0962ff5634834f817040f444118116f4e516",
+    "video_preprocessor_config_sha256": "sha256:7768af27c1fafa9cc9011c1dc20067e03f8915e03b63504550e11d5066986d13"
+  },
+  "selection": {
+    "reason": "Dense 27B pre-dates WebExploitBench, retains strong agentic performance, and avoids MoE router/log-probability confounds while fitting a single eight-B300 node.",
+    "license": "Apache-2.0",
+    "training_backend": "verl FSDP2 compatibility candidate",
+    "formal_baseline_requires_self_hosted_exact_revision": true
+  }
+}

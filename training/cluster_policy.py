@@ -10,9 +10,11 @@ EXPECTED_NAMESPACE = "fleet-train-jobs"
 EXPECTED_QUEUE = "training-lq"
 EXPECTED_CLUSTER_QUEUE = "training-cq"
 EXPECTED_CONTEXT = "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6"
-NAME_PATTERN = re.compile(r"^chris-cyber-glm52-[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$")
+NAME_PATTERN = re.compile(r"^chris-cyber-[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$")
+MODEL_SLUG = re.compile(r"^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$")
 OWNER_LABEL = "cyber-post-train.fleet.ai/owner"
 EXPERIMENT_LABEL = "cyber-post-train.fleet.ai/experiment"
+MODEL_LABEL = "cyber-post-train.fleet.ai/model"
 
 
 def _mapping(value: Any) -> Mapping[str, Any]:
@@ -44,7 +46,7 @@ def validate_training_manifest(manifest: Mapping[str, Any]) -> None:
     metadata = _mapping(manifest.get("metadata"))
     name = metadata.get("name")
     if not isinstance(name, str) or not NAME_PATTERN.fullmatch(name) or len(name) > 63:
-        errors.append("metadata.name must match chris-cyber-glm52-* and fit DNS-63")
+        errors.append("metadata.name must match chris-cyber-* and fit DNS-63")
     if metadata.get("namespace") != EXPECTED_NAMESPACE:
         errors.append(f"metadata.namespace must be {EXPECTED_NAMESPACE}")
     labels = _mapping(metadata.get("labels"))
@@ -54,6 +56,12 @@ def validate_training_manifest(manifest: Mapping[str, Any]) -> None:
         errors.append(f"metadata.labels[{OWNER_LABEL}] must be chris")
     if not labels.get(EXPERIMENT_LABEL):
         errors.append(f"metadata.labels[{EXPERIMENT_LABEL}] is required")
+    model = labels.get(MODEL_LABEL)
+    if model is not None:
+        if not isinstance(model, str) or not MODEL_SLUG.fullmatch(model):
+            errors.append(f"metadata.labels[{MODEL_LABEL}] must be a DNS label")
+        elif isinstance(name, str) and not name.startswith(f"chris-cyber-{model}-"):
+            errors.append(f"metadata.name must agree with metadata.labels[{MODEL_LABEL}]")
     for index, pod_spec in enumerate(_pod_specs(manifest)):
         if pod_spec.get("priorityClassName"):
             errors.append(f"pod spec {index} must not set priorityClassName")

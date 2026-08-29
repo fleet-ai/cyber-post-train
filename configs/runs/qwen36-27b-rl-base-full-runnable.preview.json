@@ -1,0 +1,14 @@
+{
+  "schema": "fleet_training_preview_receipt_v1",
+  "endpoint": "https://ft.flt.build/api/v1/rl/run/preview",
+  "checked_at": "2026-08-29T05:08:38.564936+00:00",
+  "submission_performed": false,
+  "http_status": 200,
+  "config_file_sha256": "sha256:06590b5cac692fdc14e5761bd25d40e808b91a6fd0ab14db054f12aab8d7858a",
+  "task_split_manifest_digest": "sha256:fb09668f8de77e6baee37dc1e3162a7617ca9a0a450da9ca53422c17bfbc942a",
+  "treatment_manifest_digest": "sha256:828261aca2623df71022fe2441e8baef0efeabbda5508611a6c5e4ee6d78b4d9",
+  "train_tasks": 129,
+  "dev_tasks": 10,
+  "result": "preview_accepted",
+  "server_detail": null
+}

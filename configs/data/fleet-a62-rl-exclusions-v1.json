@@ -1,0 +1,10 @@
+{
+  "schema": "fleet_rl_task_exclusions_v1",
+  "exclusions": [
+    {
+      "task_version_id": "f956619f-ab6d-4851-b45d-496a331f90c6",
+      "reason": "training_api_preview_422_no_longer_runnable",
+      "evidence": "configs/runs/qwen36-27b-rl-base-full.preview.json"
+    }
+  ]
+}

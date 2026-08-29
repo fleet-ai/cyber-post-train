@@ -1,0 +1,18 @@
+{
+  "schema": "fleet_rl_treatment_set_v1",
+  "intent_to_treat_manifest_digest": "sha256:fb09668f8de77e6baee37dc1e3162a7617ca9a0a450da9ca53422c17bfbc942a",
+  "counts": {
+    "intent_to_treat_train_tasks": 130,
+    "as_treated_train_tasks": 129,
+    "excluded_train_tasks": 1
+  },
+  "exclusions": [
+    {
+      "task_key": "cysec1-2-fentry-current-gen_single-atom-fentry-redaction-token-low-entropy__blackbox_ctf_v1",
+      "task_version_id": "f956619f-ab6d-4851-b45d-496a331f90c6",
+      "reason": "training_api_preview_422_no_longer_runnable",
+      "evidence": "configs/runs/qwen36-27b-rl-base-full.preview.json"
+    }
+  ],
+  "manifest_digest": "sha256:828261aca2623df71022fe2441e8baef0efeabbda5508611a6c5e4ee6d78b4d9"
+}

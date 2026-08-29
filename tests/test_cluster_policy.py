@@ -29,9 +29,27 @@ def rayjob():
     }
 
 
+def qwen_job():
+    manifest = rayjob()
+    manifest["kind"] = "Job"
+    manifest["metadata"]["name"] = "chris-cyber-qwen36-27b-poc-sft"
+    manifest["metadata"]["labels"]["cyber-post-train.fleet.ai/model"] = "qwen36-27b"
+    manifest["spec"] = {"template": {"spec": {"containers": []}}}
+    return manifest
+
+
 class ClusterPolicyTests(unittest.TestCase):
     def test_accepts_owned_queued_nonpreempting_workload(self):
         validate_training_manifest(rayjob())
+
+    def test_accepts_explicit_non_glm_model_label(self):
+        validate_training_manifest(qwen_job())
+
+    def test_rejects_model_label_name_mismatch(self):
+        manifest = qwen_job()
+        manifest["metadata"]["labels"]["cyber-post-train.fleet.ai/model"] = "other"
+        with self.assertRaisesRegex(ValueError, "must agree"):
+            validate_training_manifest(manifest)
 
     def test_rejects_queue_bypass(self):
         manifest = rayjob()

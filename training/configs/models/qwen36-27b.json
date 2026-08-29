@@ -1,0 +1,54 @@
+{
+  "schema": "cyber_post_train_model_adapter_v1",
+  "model": {
+    "slug": "qwen36-27b",
+    "id": "Qwen/Qwen3.6-27B",
+    "revision": "6a9e13bd6fc8f0983b9b99948120bc37f49c13e9",
+    "architecture": "qwen3_5",
+    "root": "/mnt/sfs/models/Qwen/Qwen3.6-27B/6a9e13bd6fc8f0983b9b99948120bc37f49c13e9",
+    "checkpoint_lock": "/mnt/sfs/models/Qwen/Qwen3.6-27B/6a9e13bd6fc8f0983b9b99948120bc37f49c13e9/.cyber-post-train-lock.json",
+    "weights_manifest_sha256": "sha256:14ad10368de9b9e5974ff12a4b70ea7884194b58e670177bbac79daeb81f16b9",
+    "compatibility_receipt": "/mnt/sfs/cyber-post-train/compatibility/qwen36-27b-6a9e13bd/receipt.json"
+  },
+  "runtime": {
+    "image": "ghcr.io/fleet-ai/miles-fleet/trainer@sha256:98920a4e25fadc3f31fafc18eff072313386edf5b352a23d13f4bb2d9e5f0a4c",
+    "python": "python",
+    "working_dir": "/workspace"
+  },
+  "stages": {
+    "driver_contract": "cyber_post_train_verl_fsdp2_driver_v1",
+    "sft_argv": [
+      "python",
+      "/opt/fleet/trainers/cyber_sft.py",
+      "--backend",
+      "verl-fsdp2",
+      "--model",
+      "{model_root}",
+      "--train",
+      "{sft_train}",
+      "--validation",
+      "{sft_dev}",
+      "--output",
+      "{checkpoint_dir}"
+    ],
+    "rl_argv": [
+      "python",
+      "/opt/fleet/trainers/cyber_grpo.py",
+      "--backend",
+      "verl-fsdp2",
+      "--model",
+      "{checkpoint_dir}",
+      "--prompts",
+      "{rl_prompts}",
+      "--reward-contract",
+      "{reward_contract}"
+    ]
+  },
+  "resources": {
+    "gpus": 8,
+    "cpu_request": "64",
+    "cpu_limit": "128",
+    "memory_request": "512Gi",
+    "memory_limit": "1024Gi"
+  }
+}

@@ -2,11 +2,10 @@
 
 Reproducible evaluation and post-training for execution-grounded blackbox cyber agents.
 
-The initial experiment targets GLM-5.2. Fleet currently exposes it to new
-tool-use jobs as `z-ai/glm-5.2` through Agent Runtime v1; the historical
-`fleet-glm/glm-5.2-fp8` runtime alias and direct gateway alias are retained only
-as provenance until routing is restored. The repository has four deliberately
-separate streams:
+The primary experiment targets the dense Apache-2.0
+`Qwen/Qwen3.6-27B` checkpoint at exact revision
+`6a9e13bd6fc8f0983b9b99948120bc37f49c13e9`. The repository has four
+deliberately separate streams:
 
 1. `evals/webexploitbench/` — evaluation-only WebExploitBench Level 0.
 2. `evals/fleet/` — held-out and full-corpus Fleet blackbox task evaluation.
@@ -34,13 +33,22 @@ cp .env.example .env
 Export credentials in the shell or use a local untracked `.env`; do not put them in
 commands, source files, logs or committed configuration.
 
-## Current model
+## Current model and execution backend
 
 ```text
-gateway: https://inference.flt.build
-gateway model: glm-5.2-fp8 (not routed as of 2026-08-28)
-Agent Runtime model: z-ai/glm-5.2
+model: Qwen/Qwen3.6-27B
+revision: 6a9e13bd6fc8f0983b9b99948120bc37f49c13e9
+weights: 27,781,427,952 parameters, 15 verified BF16 safetensor shards
+training: Fleet Training API, exact SkyRL trainer version selected in each run config
+formal evaluation: self-hosted exact checkpoint through a pinned SGLang serving contract
 ```
 
-Detailed launch commands live beside each evaluation and training implementation.
-Live launch state and external gates are recorded in `docs/STATUS.md`.
+Runnable SFT and RL requests live in `configs/runs/`. They keep the model,
+dataset filters, objective, trainer version, compute shape, and evaluation split
+explicit and independently replaceable. The server preview is always checked
+before submission; the resulting RayJobs enter `training-lq` through Kueue.
+
+The older GLM files are preserved as experiment provenance, not as the current
+model choice. Detailed launch commands live beside each evaluation and training
+implementation. Live launch state and external gates are recorded in
+`docs/STATUS.md`.

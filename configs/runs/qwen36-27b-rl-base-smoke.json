@@ -1,0 +1,74 @@
+{
+  "title": "Chris cyber Qwen3.6 27B RL-from-base compatibility smoke",
+  "node_pool": "fleetai-training-ng-gpu",
+  "fleet_env": {
+    "env_key": "cysec1-2-current-gen",
+    "env_version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+    "env_version": "v0.0.3",
+    "data_key": "commercial",
+    "data_version": "v0.0.9",
+    "env_variables": {},
+    "env_variable_deletions": [],
+    "max_concurrent_envs": 4
+  },
+  "tasks": {
+    "team_id": "a1025f0b-ad67-49fc-a023-51800ab43e84",
+    "selection_mode": "environment",
+    "task_keys": [
+      "cysec1-2-current-gen_blackbox-77cee38dfb144d51d3cd7eef__blackbox_ctf_v1",
+      "cysec1-2-current-gen_blackbox-39ffe1da3cfc461950ab1487__blackbox_ctf_v1"
+    ],
+    "task_versions": [],
+    "min_informative_fraction": 0.0
+  },
+  "max_concurrent_envs": 4,
+  "model": {
+    "staged_model": "qwen3.6-27b",
+    "precision": "bf16",
+    "engine_tensor_parallel_size": 4,
+    "max_context_length": 65536,
+    "max_prompt_length": 16384,
+    "max_generate_length": 2048,
+    "sequence_parallel_size": 1
+  },
+  "grpo": {
+    "group_size": 4,
+    "train_batch_size": 2,
+    "policy_mini_batch_size": 2,
+    "kl_coefficient": 0.001,
+    "kl_estimator": "k3",
+    "policy_loss_type": "regular",
+    "checkpoint_interval": 1,
+    "max_checkpoints_to_keep": 1,
+    "learning_rate": 0.000001,
+    "max_steps": 1,
+    "temperature": 1.0
+  },
+  "wandb": {
+    "enabled": true,
+    "entity": "thefleet",
+    "project": "cyber-post-train"
+  },
+  "eval": {
+    "task_keys": [],
+    "task_versions": [],
+    "interval": 5,
+    "before_train": false,
+    "samples_per_task": 1,
+    "stop_after_evals": 2
+  },
+  "trainer": {
+    "trainer_version_id": "fc90b289-6e24-5919-807e-3905e4b045a2"
+  },
+  "rollout": {
+    "harness": "native",
+    "mode": "tool-use",
+    "partial_verifier_scoring": false,
+    "pass_conversation_to_verifier": false,
+    "multi_app_aggregation_mode": "binary"
+  },
+  "async_training": false,
+  "gpus_per_worker": 8,
+  "num_workers": 1,
+  "serving_scaled_to_zero": true
+}

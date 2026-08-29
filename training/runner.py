@@ -56,6 +56,23 @@ def stage_argv(stage_name: str, env: Mapping[str, str]) -> list[str]:
     return argv
 
 
+def require_sft_stage_receipt(work_dir: Path, plan_digest: str) -> None:
+    """Reject online RL unless this exact plan has a valid successful SFT receipt."""
+    path = work_dir / "receipts" / "sft.json"
+    if not path.is_file():
+        raise ValueError("online_rl requires a successful SFT receipt")
+    receipt = _load(path)
+    unsigned = {key: value for key, value in receipt.items() if key != "receipt_digest"}
+    if (
+        receipt.get("schema") != "cyber_post_train_stage_receipt_v1"
+        or receipt.get("stage") != "sft"
+        or receipt.get("status") != "succeeded"
+        or receipt.get("plan_digest") != plan_digest
+        or receipt.get("receipt_digest") != digest_json(unsigned)
+    ):
+        raise ValueError("online_rl SFT receipt is invalid or belongs to another plan")
+
+
 def run_plan(
     plan_path: Path,
     work_dir: Path,
@@ -83,6 +100,8 @@ def run_plan(
         if receipt_path.exists() and _load(receipt_path).get("status") == "succeeded":
             outcomes.append({"stage": name, "status": "already_succeeded"})
             continue
+        if execute and name == "online_rl":
+            require_sft_stage_receipt(work_dir, str(plan_digest))
         argv = stage_argv(name, environment)
         public_argv = [str(item) for item in argv]
         if not execute:

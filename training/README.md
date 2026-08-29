@@ -1,18 +1,16 @@
-# GLM-5.2 cyber post-training stream
+# Modular cyber post-training stream
 
-This directory implements the reproducible boundary around training: read-only
+This directory implements a model-swappable reproducible boundary around training: read-only
 Fleet export, lossless tool-trajectory normalization, lineage/leakage tracking,
 SFT and preference materialization, online-RL prompts, reward composition, and
 a fail-closed model-compatibility/run-plan gate.
 
-It does **not** claim that a served FP8 endpoint is a trainable checkpoint.
-GLM-5.2's official BF16 checkpoint is the optimizer source; the exact revision
-is pinned at commit `b4734de4facf877f85769a911abafc5283eab3d9`.
-NVIDIA merged native GLM-5.2 Megatron/vLLM GRPO support in NeMo RL commit
-`63e620046c67f922c4a57dcb65d7e6fceb60f5d4`, including its required vLLM 0.25.1
-compatibility patch. That upstream recipe was validated at much larger H100
-topologies than our presently free capacity, so the compatibility receipt still
-requires an independent B300 topology proof before training.
+The current student is dense `Qwen/Qwen3.6-27B` at exact revision
+`6a9e13bd6fc8f0983b9b99948120bc37f49c13e9`. Model-specific checkpoint,
+tokenizer, topology and serving details live behind model adapters and run
+configs; the corpus, split, reward and evaluation contracts do not depend on
+Qwen. The earlier GLM-5.2 path remains historical provenance, not the current
+optimizer source.
 
 ## Data flow
 
@@ -69,6 +67,79 @@ is required so a typo cannot issue an unbounded historical export.
   Infrastructure failures and grader/reward hacking are always zeroed.
 - Keep WebExploitBench outside this pipeline. Its terms make it an evaluation
   holdout, not training or reward-design data.
+
+## Windowed SFT corpus
+
+Historical successful agent sessions are much longer than the 16,384-token SFT
+ceiling. Right-truncating whole sessions retained only 9.36% of assistant targets
+and no final-success turn in the 508-record training set. Build five
+assistant-ending windows per trajectory instead: the original task instruction
+is retained, recent contiguous context is maximized, the final success is always
+selected, and only the last assistant message receives loss.
+
+```bash
+uv run python -m training.stage_sft_corpus \
+  --trajectories data/processed/glm52-fleet-v2/trajectories.jsonl \
+  --output-root data/processed/qwen36-windowed-v4 \
+  --team-id a1025f0b-ad67-49fc-a023-51800ab43e84 \
+  --tokenizer Qwen/Qwen3.6-27B \
+  --tokenizer-revision 6a9e13bd6fc8f0983b9b99948120bc37f49c13e9 \
+  --window-max-tokens 14336 \
+  --targets-per-trajectory 5 \
+  --artifact-stem chris-cyber-fleet-a62dd51f-qwen36-windowed-v3 \
+  --corpus-job-id chris-cyber-qwen36-windowed-v2
+```
+
+The unique corpus job ID is intentional: the Fleet Training API uses it to
+select only these immutable windows even when older rows from the same source
+job remain on SFS. The stage manifest separately preserves the original Fleet
+job UUID and source trajectory digest.
+
+## Exact Fleet RL task split
+
+The task-first multi-environment RL request is built from a committed,
+secret-free split lock rather than mutable catalog `current` pointers. Create
+or audit that lock with the read-only task picker, then regenerate the typed
+request deterministically:
+
+```bash
+FLEET_TRAINING_API_TOKEN="$(gh auth token)" uv run python -m training rl-snapshot \
+  --trajectories data/processed/glm52-fleet-v2/trajectories.jsonl \
+  --dataset-manifest data/processed/glm52-fleet-v2/manifest.json \
+  --source-job-id a62dd51f-a52b-4941-8207-4679e4b25b51 \
+  --output configs/data/fleet-a62-task-split-v1.json
+
+uv run python -m training rl-config \
+  --task-split configs/data/fleet-a62-task-split-v1.json \
+  --template configs/runs/qwen36-27b-rl-base-full.template.json \
+  --output configs/runs/qwen36-27b-rl-base-full.json
+
+uv run python -m training rl-config \
+  --task-split configs/data/fleet-a62-task-split-v1.json \
+  --template configs/runs/qwen36-27b-rl-base-full.template.json \
+  --exclusions configs/data/fleet-a62-rl-exclusions-v1.json \
+  --treatment-receipt configs/data/fleet-a62-rl-treatment-v1.json \
+  --output configs/runs/qwen36-27b-rl-base-full-runnable.json
+```
+
+The lock binds 160 exact source-job task versions: 130 train, 10 dev, and 20
+untouched test. The runnable request contains only the 130 train and 10 dev
+bindings. Every runtime task has an empty `env_variables` object; prompts,
+verifiers, flags, credentials, image URLs, and catalog environment values are
+never copied into the repository. Preview/submit re-resolves the authoritative
+task and environment rows by UUID.
+
+As of 2026-08-29, 159 bindings resolve through the task picker. One archived
+train task (`f956619f-ab6d-4851-b45d-496a331f90c6`) is still bound from the
+exact source-job roster and exact environment catalog, but the server correctly
+refuses it as no longer runnable. The non-submitting preview receipt is
+`configs/runs/qwen36-27b-rl-base-full.preview.json`. The intent-to-treat arm
+remains frozen at 130 tasks. The separately named as-treated request contains
+129 runnable train tasks and ten dev tasks, records the sole exclusion and its
+evidence in `configs/data/fleet-a62-rl-treatment-v1.json`, and has a green HTTP
+200 server preview in
+`configs/runs/qwen36-27b-rl-base-full-runnable.preview.json`. Never describe
+that execution as 130/130, and never silently substitute a newer task version.
 
 The causal ablation is base, SFT-only, RL-from-base, and SFT→RL when compute
 allows. This separates tool-format adaptation from verifier-grounded capability

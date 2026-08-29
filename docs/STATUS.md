@@ -1,4 +1,72 @@
-# Execution status — 2026-08-28
+# Execution status — 2026-08-29
+
+## Current Qwen 3.6 27B experiment
+
+- Primary student: `Qwen/Qwen3.6-27B` at exact Hugging Face revision
+  `6a9e13bd6fc8f0983b9b99948120bc37f49c13e9` (dense 27B, Apache-2.0).
+  Fifteen BF16 safetensor shards totaling 55,563,006,400 bytes were downloaded,
+  hashed, and promoted on the training SFS. The canonical weight-manifest digest
+  is `sha256:14ad10368de9b9e5974ff12a4b70ea7884194b58e670177bbac79daeb81f16b9`.
+- The reproducible Fleet corpus remains job
+  `a62dd51f-a52b-4941-8207-4679e4b25b51`: 1,265 sessions over 160 exact task
+  lineages, including 587 verified successes. The deterministic task split is
+  130 train / 10 dev / 20 test; no task lineage crosses a split.
+- The live Fleet Training API model catalog resolves the staged base as
+  `qwen3.6-27b`. Every request renders through the server's single
+  preview/submit path into Kueue `training-lq`. The verifier-hydration trainer
+  `4f1c341e-36dd-5192-80ac-2d5820eb51d0` is Ready; the combined CUDA13 successor
+  is still gated on its standard one-L4 catalog smoke and is not yet usable.
+- Four retained SFT compatibility attempts progressively proved corpus staging,
+  permissions, VLM-safe sequence parallelism, checkpoint loading, exact 508/33
+  train/dev tokenization, and five pre-train eval batches. The latest,
+  `ft-run-6b01f3fd`, reached `eval_loss=0.6244` and the first BF16 backward, then
+  failed because CUDA 12.8 NVCC cannot compile TileLang's B300 `sm_103a` target.
+  A second audit then found that all 508 training records were right-truncated
+  at 16,384 tokens: only 2,567/27,438 assistant targets were fully retained and
+  zero final-success turns survived. No optimizer step or checkpoint has yet
+  been claimed.
+- The replacement SFT corpus selects five exact-token windows per verified
+  success, always including the final assistant turn. It contains 2,540 train,
+  165 dev and 230 untouched test windows, with median 11,573 and maximum 14,334
+  tokens and zero oversized exclusions. The API selector
+  `chris-cyber-qwen36-windowed-v2` prevents mixing historical unwindowed rows;
+  the v3 SFS promotion and all file hashes are recorded by completed CPU job
+  `chris-cyber-qwen36-windowed-corpus-v3`. All 587 successful submission turns
+  and all 587 final text turns are selected.
+- Theseus PR #27859 now produces corrected image
+  `chris-cyber-qwen-b300-cuda13-3fb68bb8` at digest
+  `sha256:398e65780c4bfe3314da2461702bc54564b15c925512884ec0e0bb628ad2023a`.
+  Its build compiled CUDA runtime headers, CUB BlockReduce and device math for
+  `sm_103a` through `/usr/local/cuda/bin/nvcc`. The earlier CUDA image is
+  superseded and must not be used.
+- RL-from-base compatibility run `ft-run-ff78ae76` failed before rollout because
+  the Fleet list endpoint omitted verifier source. Theseus PR #27850 adds a
+  fail-closed detail-endpoint hydration path. Replacement image
+  `chris-cyber-rl-verifier-fad569fd` is pinned at digest
+  `sha256:0a460fb7ede7a0d3a8f06b803fd45bb9143be347e2d74e0f490c4a3c4345b1ad`;
+  its variant registration merged without moving shared latest/golden, passed
+  the required one-L4 smoke, and returns HTTP 200 from the typed RL preview.
+- The full one-epoch SFT request is frozen in
+  `configs/runs/qwen36-27b-sft-full.json` but will not be submitted until the
+  one-step compatibility arm proves checkpoint load, tokenizer/tool formatting,
+  BF16 backward, optimizer step, and checkpoint save.
+- The RL intent-to-treat split remains 130 train / 10 dev / 20 untouched test.
+  One historical train version is archived and server-unrunnable, so an explicit
+  signed as-treated request contains 129 train and 10 dev tasks. That exact
+  request passed the Training API preview with HTTP 200; it will not be submitted
+  until the verifier-aware trainer version is Ready and its two-task smoke is
+  green.
+- Hugging Face access to WebExploitBench is granted. All 15 official Level-0
+  packs are digest-verified and pass the official non-inference CAGE checks.
+  The formal Qwen baseline pins the same model revision plus an exact SGLang
+  serving contract. All 15 images built successfully and the frozen 15-trial
+  pass@1 run `webexploit-qwen36-27b-base-6a9e13bd-l0-p1-v1` is active under
+  protocol digest `cd67f337e42839deddc947ced45da56761a2fe4093a955e70059c3ee4bc06f3a`.
+  Its logs and scores remain sealed. No benchmark prompt, trace, or result enters
+  training.
+
+The GLM-5.2 work below is retained as historical provenance; it is no longer the
+selected primary experiment.
 
 ## Fleet baseline
 
@@ -87,17 +155,16 @@
   image digest
   `sha256:aec56926a7f0db357c3ac1eaf1576f4113ec7ac1adfbacb29cbfe4d3a7955666`.
   The failed job was retained as evidence; no workload was cancelled or deleted.
-- A staged compatibility probe now checks the promoted checkpoint lock,
-  tokenizer/chat-template roundtrip, exact framework imports, eight B300 device
-  identities, and NCCL all-reduce/all-to-all before the expensive model-load and
-  forward/backward test. `chris-cyber-glm52-preflight-b4734de4` is now waiting
-  in `training-lq` at priority 0 with the required single-node topology request.
-  Its metadata-only/NCCL workload is right-sized to 16 CPU, 128 GiB and one
-  eight-GPU node; the later full-model test retains its 1.2 TiB request. Kueue
-  currently reports 23 nodes excluded by GPU reservations and the remaining
-  node by CPU reservations. It will admit the job automatically when one full
-  node becomes available and cannot preempt peer workloads. None of these
-  preliminary checks can mark the final compatibility receipt green by itself.
+- The staged compatibility probe was designed to check the promoted checkpoint
+  lock, tokenizer/chat-template roundtrip, exact framework imports, eight B300
+  device identities, and NCCL all-reduce/all-to-all before the expensive
+  model-load and forward/backward test. The priority-0, non-preempting
+  `chris-cyber-glm52-preflight-b4734de4` job was admitted on one eight-B300 node,
+  but failed during OCI container creation because the pinned image did not
+  contain `/bin/bash`. No probe code ran and no compatibility receipt was
+  produced. The GLM experiment is superseded by the Qwen3.6-27B path, so this
+  historical job is retained as negative infrastructure evidence rather than
+  retried.
 - The missing Fleet checkpoint routing path is implemented in an isolated Theseus
   worktree: it sends `fleet/<run>-step-<n>` only to the authenticated
   `inference.flt.build` gateway and refuses both missing credentials and public
