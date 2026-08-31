@@ -43,7 +43,7 @@ def test_study_state_binds_exact_model_and_terminal_base_receipts() -> None:
 def test_pending_work_never_claims_a_terminal_result() -> None:
     state = json.loads(STATE_PATH.read_text(encoding="utf-8"))
     pending = [
-        state["sft"]["export"],
+        state["sft"]["bf16_cast"],
         state["native_fleet_rl"]["full_run_successor"],
         state["verified_miles_rl"]["rank_safe_canary_03"],
         *state["paired_evaluation_protocols"].values(),

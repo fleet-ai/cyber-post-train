@@ -1,6 +1,6 @@
 {
   "schema": "cyber_post_sft_eval_plan_v1",
-  "status": "blocked_until_run_success_and_verified_hf_export",
+  "status": "blocked_until_verified_bf16_cast_and_live_serving",
   "run": {
     "name": "ft-run-574bd7b3",
     "rayjob_uid": "fe0256e7-ba30-470d-abd9-b148cd3cdbbd",
@@ -81,8 +81,32 @@
     "config_map_code_sha256": {
       "training/__init__.py": "sha256:c3152a4d34780d02afdf8ff066f6e7b7f3af5aa2db1cd827ad3aca0c52fd561b",
       "training/io.py": "sha256:7a0b734a4ab7fb8b702430094c58c72f19ac8fc7cc5e056eb8410267e6bfdfe3",
-      "training/post_sft_artifacts.py": "sha256:312f023c520f1f13d949f9a21a6286d338a6d591dbb29698ca76206c56b20bc5",
-      "training/post_sft_staging.py": "sha256:86ae57cba7297dbdab47297647098d31575d1a81704f6be8591a62fafd5842bc"
+      "training/post_sft_artifacts.py": "sha256:1404cb56615a5b4b827deca6642e13d79d5dc9e9a9aa5efaf7912b7b61cee124",
+      "training/post_sft_staging.py": "sha256:b79a906faa8086bbac40a529ab5e0f93895afa52ddb4e9033f96942145822b93"
+    }
+  },
+  "cast_execution": {
+    "schema": "cyber_sft_fp32_to_bf16_cast_execution_plan_v1",
+    "namespace": "fleet-train-jobs",
+    "job_name": "chris-cyber-qwen36-sft-bf16-cast-v1",
+    "config_map_name": "chris-cyber-qwen36-sft-bf16-cast-v1",
+    "service_account_name": "chris-cyber-qwen36-sft-bf16-cast-observer-v1",
+    "container_name": "cast",
+    "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train:q36-torchgdn-6db8d0c9@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "image_digest": "sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "command_sha256": "sha256:09925362ff4a665f02b1c73aee73fa750dd0e8427cc1c47a443ceddefb5b9a03",
+    "source_path": "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-v1/global_step_318/policy",
+    "destination_path": "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-bf16-v1/global_step_318/policy",
+    "policy": "deterministic_sorted_tensor_fp32_to_bf16_v1",
+    "source_dtype": "F32",
+    "destination_dtype": "BF16",
+    "max_shard_bytes": 2147483648,
+    "max_source_tensor_bytes": 8589934592,
+    "config_map_code_sha256": {
+      "training/__init__.py": "sha256:c3152a4d34780d02afdf8ff066f6e7b7f3af5aa2db1cd827ad3aca0c52fd561b",
+      "training/io.py": "sha256:7a0b734a4ab7fb8b702430094c58c72f19ac8fc7cc5e056eb8410267e6bfdfe3",
+      "training/post_sft_artifacts.py": "sha256:1404cb56615a5b4b827deca6642e13d79d5dc9e9a9aa5efaf7912b7b61cee124",
+      "training/post_sft_cast.py": "sha256:fc022d296e3064dc7138e647945cd1c6cee50d343e8098fa1feb7c876ffbf22b"
     }
   },
   "evidence_execution": {
@@ -145,7 +169,7 @@
         "evals/webexploitbench/post_sft_evidence.py": "sha256:9bb6272d88f81c8ff37fe06a362c77d6c21b96589a9ed65c80f4d28efa4578c6",
         "training/__init__.py": "sha256:c3152a4d34780d02afdf8ff066f6e7b7f3af5aa2db1cd827ad3aca0c52fd561b",
         "training/io.py": "sha256:7a0b734a4ab7fb8b702430094c58c72f19ac8fc7cc5e056eb8410267e6bfdfe3",
-        "training/post_sft_artifacts.py": "sha256:312f023c520f1f13d949f9a21a6286d338a6d591dbb29698ca76206c56b20bc5"
+        "training/post_sft_artifacts.py": "sha256:1404cb56615a5b4b827deca6642e13d79d5dc9e9a9aa5efaf7912b7b61cee124"
       }
     },
     "registration": {
@@ -207,6 +231,7 @@
     "source_checkpoint_root": "/mnt/sfs/checkpoints/ft-run-574bd7b3",
     "output_root": "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-v1",
     "expected_output_path": "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-v1/global_step_318/policy",
+    "bf16_cast_destination": "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-bf16-v1/global_step_318/policy",
     "inference_staging_destination": "/models/cyber-sft/ft-run-574bd7b3/step-318",
     "destination_preflight": {
       "observed_at": "2026-08-31T16:05:07Z",
@@ -249,6 +274,9 @@
     },
     "format": "huggingface_safetensors",
     "precision": "bf16",
+    "observed_raw_export_precision": "fp32",
+    "required_serving_precision": "bf16",
+    "precision_correction_policy": "deterministic_sorted_tensor_fp32_to_bf16_v1",
     "requires_same_world_size": 8,
     "requires_separate_inference_filesystem_staging": true
   },

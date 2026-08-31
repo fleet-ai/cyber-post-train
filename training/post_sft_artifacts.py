@@ -122,8 +122,13 @@ def _safetensor_layout(root: Path) -> tuple[dict[str, dict[str, Any]], list[str]
     return layout, shard_names
 
 
-def compare_safetensor_layout(base_root: Path, candidate_root: Path) -> dict[str, Any]:
-    """Prove every candidate tensor key, shape, and dtype agrees with the base architecture."""
+def compare_safetensor_layout(
+    base_root: Path,
+    candidate_root: Path,
+    *,
+    require_same_dtype: bool = True,
+) -> dict[str, Any]:
+    """Prove candidate keys/shapes, and optionally dtypes, agree with the base."""
 
     base, _ = _safetensor_layout(base_root.resolve(strict=True))
     candidate, _ = _safetensor_layout(candidate_root.resolve(strict=True))
@@ -136,25 +141,35 @@ def compare_safetensor_layout(base_root: Path, candidate_root: Path) -> dict[str
     }
     missing = sorted(set(base) - set(candidate))
     unexpected = sorted(set(candidate) - set(base))
-    mismatched = sorted(
+    shape_mismatched = sorted(
         key
         for key in set(base) & set(candidate)
-        if normalized_base[key] != normalized_candidate[key]
+        if normalized_base[key]["shape"] != normalized_candidate[key]["shape"]
     )
-    if missing or unexpected or mismatched:
+    dtype_mismatched = sorted(
+        key
+        for key in set(base) & set(candidate)
+        if normalized_base[key]["dtype"] != normalized_candidate[key]["dtype"]
+    )
+    if missing or unexpected or shape_mismatched or (require_same_dtype and dtype_mismatched):
         raise ValueError(
             "candidate safetensors layout differs from base: "
-            f"missing={len(missing)}, unexpected={len(unexpected)}, mismatched={len(mismatched)}"
+            f"missing={len(missing)}, unexpected={len(unexpected)}, "
+            f"shape_mismatched={len(shape_mismatched)}, "
+            f"dtype_mismatched={len(dtype_mismatched)}"
         )
     return {
-        "schema": "cyber_sft_safetensors_layout_equivalence_v1",
+        "schema": "cyber_sft_safetensors_layout_equivalence_v2",
         "tensor_count": len(candidate),
         "missing_key_count": 0,
         "unexpected_key_count": 0,
-        "shape_or_dtype_mismatch_count": 0,
+        "shape_mismatch_count": 0,
+        "dtype_mismatch_count": len(dtype_mismatched),
+        "dtype_match_required": require_same_dtype,
         "base_layout_sha256": digest_json(normalized_base),
         "candidate_layout_sha256": digest_json(normalized_candidate),
-        "all_keys_shapes_and_dtypes_match": True,
+        "all_keys_and_shapes_match": True,
+        "all_keys_shapes_and_dtypes_match": not dtype_mismatched,
     }
 
 
@@ -232,6 +247,7 @@ def inspect_hf_export(
     expected_parameter_count: int,
     expected_sidecar_sha256: dict[str, str] | None = None,
     require_base_sidecars: bool = True,
+    expected_dtype: str = "BF16",
 ) -> dict[str, Any]:
     """Hash all HF files and validate safetensors shapes without materializing tensors."""
 
@@ -250,9 +266,16 @@ def inspect_hf_export(
                 "sha256": sha256_file(path).removeprefix("sha256:"),
             }
         )
-    for key, row in layout.items():
-        if row["dtype"] != "BF16":
-            raise ValueError(f"non-BF16 tensor in HF export: {key}")
+    normalized_expected_dtype = expected_dtype.upper()
+    if normalized_expected_dtype not in {"BF16", "F32"}:
+        raise ValueError("expected dtype must be BF16 or F32")
+    observed_dtypes = sorted({str(row["dtype"]).upper() for row in layout.values()})
+    if observed_dtypes != [normalized_expected_dtype]:
+        raise ValueError(
+            "HF export tensor dtype differs from expectation: "
+            f"expected={normalized_expected_dtype}, observed={observed_dtypes}"
+        )
+    for row in layout.values():
         parameter_count += math.prod(row["shape"])
         tensor_count += 1
     if parameter_count != expected_parameter_count:
@@ -309,7 +332,7 @@ def inspect_hf_export(
         "schema": "cyber_sft_hf_output_inspection_v1",
         "root": str(resolved),
         "format": "safetensors",
-        "dtype": "bf16",
+        "dtype": normalized_expected_dtype.lower(),
         "shard_count": len(shard_names),
         "tensor_count": tensor_count,
         "parameter_count": parameter_count,
@@ -342,6 +365,7 @@ def main() -> None:
     hf.add_argument("--plan", type=Path, required=True)
     hf.add_argument("--output", type=Path, required=True)
     hf.add_argument("--allow-sidecar-drift", action="store_true")
+    hf.add_argument("--expected-dtype", choices=("BF16", "F32"), default="BF16")
     args = parser.parse_args()
     if args.command == "structural":
         result = structural_manifest(args.root)
@@ -358,6 +382,7 @@ def main() -> None:
             expected_parameter_count=int(model["parameter_count"]),
             expected_sidecar_sha256=model.get("runtime_sidecar_sha256"),
             require_base_sidecars=not args.allow_sidecar_drift,
+            expected_dtype=args.expected_dtype,
         )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")

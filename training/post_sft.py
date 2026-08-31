@@ -746,9 +746,32 @@ def validate_hf_export_receipt(
     if _text(conversion, "output_path") != expected_conversion_output:
         raise ValueError("HF conversion output path differs from the selected checkpoint")
 
+    correction = _mapping(export.get("precision_correction"), "export.precision_correction")
+    expected_cast_output = _text(expected_export_binding, "bf16_cast_destination")
+    if (
+        correction.get("schema") != "cyber_sft_fp32_to_bf16_precision_correction_v1"
+        or _text(correction, "source_path") != expected_conversion_output
+        or _text(correction, "destination_path") != expected_cast_output
+        or _text(correction, "source_dtype") != "F32"
+        or _text(correction, "destination_dtype") != "BF16"
+        or correction.get("policy") != "deterministic_sorted_tensor_fp32_to_bf16_v1"
+        or correction.get("exact_cast_bits_verified") is not True
+    ):
+        raise ValueError("HF export precision correction is incomplete or inconsistent")
+    if _sha256(correction, "destination_weights_manifest_sha256") != weights_manifest_sha256:
+        raise ValueError("precision correction output differs from final exported weights")
+    for field in (
+        "source_weights_manifest_sha256",
+        "cast_rows_sha256",
+        "source_layout_sha256",
+        "cast_receipt_sha256",
+        "cast_full_manifest_sha256",
+    ):
+        _sha256(correction, field)
+
     staging = _mapping(export.get("staging"), "export.staging")
-    if _text(staging, "source_path") != expected_conversion_output:
-        raise ValueError("inference staging source differs from the conversion output")
+    if _text(staging, "source_path") != expected_cast_output:
+        raise ValueError("inference staging source differs from the verified BF16 cast")
     if _text(staging, "destination_path") != source_path:
         raise ValueError("inference staging destination differs from the served source path")
     _digest_pinned_image(staging, "image")
@@ -773,6 +796,8 @@ def assemble_hf_export_receipt(
     export_request: Mapping[str, Any],
     export_run_observation: Mapping[str, Any],
     export_observation: Mapping[str, Any],
+    cast_receipt: Mapping[str, Any],
+    cast_full_manifest: Mapping[str, Any],
     stage_input: Mapping[str, Any],
     staging_receipt: Mapping[str, Any],
     *,
@@ -782,6 +807,7 @@ def assemble_hf_export_receipt(
     expected_export_binding: Mapping[str, Any],
     expected_runtime_sidecar_sha256: Mapping[str, str],
     expected_tokenizer_equivalence_evidence_sha256: str,
+    expected_cast_execution: Mapping[str, Any],
     expected_staging_image: str,
     expected_staging_command_sha256: str,
 ) -> dict[str, Any]:
@@ -1064,8 +1090,8 @@ def assemble_hf_export_receipt(
         raise ValueError("post-export inspection names an unexpected raw export path")
     if _text(raw_inspection, "format") != "safetensors":
         raise ValueError("raw export inspection did not verify safetensors")
-    if _text(raw_inspection, "dtype").lower() not in {"bf16", "bfloat16"}:
-        raise ValueError("raw export inspection did not verify BF16 weights")
+    if _text(raw_inspection, "dtype").lower() not in {"f32", "float32"}:
+        raise ValueError("raw export inspection did not verify the observed FP32 weights")
     for field in ("all_shards_present", "safetensors_load_passed", "parameter_count_matches"):
         if raw_inspection.get(field) is not True:
             raise ValueError(f"raw export verification {field} did not pass")
@@ -1073,22 +1099,175 @@ def assemble_hf_export_receipt(
     raw_files_sha256 = _sha256(raw_inspection, "files_manifest_sha256")
     if _sha256(export_observation, "raw_export_full_manifest_sha256") != raw_files_sha256:
         raise ValueError("post-export observation full manifest differs from its inspection")
+    raw_layout = _mapping(
+        export_observation.get("weight_layout_equivalence"), "raw weight layout evidence"
+    )
+    if (
+        raw_layout.get("schema") != "cyber_sft_safetensors_layout_equivalence_v2"
+        or raw_layout.get("all_keys_and_shapes_match") is not True
+        or raw_layout.get("dtype_match_required") is not False
+        or raw_layout.get("shape_mismatch_count") != 0
+        or raw_layout.get("missing_key_count") != 0
+        or raw_layout.get("unexpected_key_count") != 0
+        or raw_layout.get("dtype_mismatch_count") != raw_layout.get("tensor_count")
+    ):
+        raise ValueError("raw FP32 export layout does not match the frozen BF16 architecture")
+    _sha256(raw_layout, "base_layout_sha256")
+    raw_layout_sha256 = _sha256(raw_layout, "candidate_layout_sha256")
+    architecture = _mapping(
+        export_observation.get("model_config_architecture_equivalence"),
+        "raw model architecture evidence",
+    )
+    if architecture.get("all_architecture_and_vocab_fields_identical") is not True:
+        raise ValueError("raw export model architecture differs from the frozen base")
+    _sha256(architecture, "normalized_architecture_sha256")
+
+    if cast_receipt.get("schema") != "cyber_sft_fp32_to_bf16_cast_receipt_v1":
+        raise ValueError("unsupported FP32-to-BF16 cast receipt schema")
+    cast_receipt_sha256 = _validate_embedded_digest(cast_receipt, "cast_receipt_sha256")
+    cast_source = _mapping(cast_receipt.get("source"), "cast receipt source")
+    if (
+        _text(cast_source, "path") != expected_raw_path
+        or _sha256(cast_source, "observation_sha256") != export_observation_sha256
+        or _sha256(cast_source, "checkpoint_full_manifest_sha256")
+        != _selection_source_manifest(selection)
+        or _sha256(cast_source, "raw_full_manifest_sha256") != raw_files_sha256
+        or _sha256(cast_source, "raw_full_manifest_after_sha256") != raw_files_sha256
+        or cast_source.get("raw_source_stable_during_cast") is not True
+        or _sha256(cast_source, "raw_weights_manifest_sha256") != raw_weights_sha256
+        or _text(cast_source, "dtype") != "F32"
+    ):
+        raise ValueError("FP32-to-BF16 cast source differs from immutable export evidence")
+    cast_conversion = _mapping(cast_receipt.get("conversion"), "cast conversion proof")
+    if (
+        cast_conversion.get("schema") != "cyber_sft_fp32_to_bf16_cast_proof_v1"
+        or cast_conversion.get("policy") != "deterministic_sorted_tensor_fp32_to_bf16_v1"
+        or cast_conversion.get("source_dtype") != "F32"
+        or cast_conversion.get("destination_dtype") != "BF16"
+        or cast_conversion.get("all_source_values_finite") is not True
+        or cast_conversion.get("all_destination_bits_equal_direct_bf16_cast") is not True
+        or cast_conversion.get("parameter_count") != raw_inspection.get("parameter_count")
+    ):
+        raise ValueError("FP32-to-BF16 cast proof is incomplete or inconsistent")
+    if _sha256(cast_conversion, "source_layout_sha256") != raw_layout_sha256:
+        raise ValueError("cast source layout differs from the independently inspected raw export")
+    cast_rows_sha256 = _sha256(cast_conversion, "cast_rows_sha256")
+    cast_rows = cast_conversion.get("cast_rows")
+    if not isinstance(cast_rows, list) or digest_json(cast_rows) != cast_rows_sha256:
+        raise ValueError("FP32-to-BF16 per-tensor cast proof digest does not validate")
+    if (
+        len(cast_rows) != cast_conversion.get("tensor_count")
+        or sum(row.get("elements", 0) for row in cast_rows if isinstance(row, Mapping))
+        != cast_conversion.get("parameter_count")
+        or any(
+            not isinstance(row, Mapping)
+            or row.get("source_dtype") != "F32"
+            or row.get("destination_dtype") != "BF16"
+            or row.get("exact_cast_bits_verified") is not True
+            or not isinstance(row.get("key"), str)
+            or not isinstance(row.get("shape"), list)
+            or not row.get("shape")
+            or any(not isinstance(size, int) or size < 1 for size in row.get("shape", []))
+            or not isinstance(row.get("source_shard"), str)
+            or not isinstance(row.get("destination_shard"), str)
+            or not re.fullmatch(r"sha256:[0-9a-f]{64}", str(row.get("source_tensor_sha256")))
+            or not re.fullmatch(
+                r"sha256:[0-9a-f]{64}", str(row.get("destination_tensor_sha256"))
+            )
+            for row in cast_rows
+        )
+    ):
+        raise ValueError("FP32-to-BF16 per-tensor cast proof is incomplete")
+    if _mapping(cast_receipt.get("execution_plan"), "cast execution plan") != (
+        expected_cast_execution
+    ):
+        raise ValueError("FP32-to-BF16 cast execution plan differs from the frozen plan")
+    cast_runtime = _mapping(cast_receipt.get("execution"), "cast runtime execution")
+    if cast_runtime.get("schema") != "cyber_sft_fp32_to_bf16_cast_execution_v1":
+        raise ValueError("unsupported FP32-to-BF16 cast runtime schema")
+    for runtime_field, plan_field in (
+        ("image", "image"),
+        ("resolved_image_digest", "image_digest"),
+        ("command_sha256", "command_sha256"),
+        ("service_account_name", "service_account_name"),
+        ("container_name", "container_name"),
+    ):
+        if cast_runtime.get(runtime_field) != expected_cast_execution.get(plan_field):
+            raise ValueError(f"FP32-to-BF16 cast runtime {runtime_field} differs from plan")
+    if _sha256(cast_runtime, "cast_input_sha256") != _sha256(
+        cast_receipt, "cast_input_sha256"
+    ):
+        raise ValueError("FP32-to-BF16 cast runtime names a different cast input")
+    runtime_job = _mapping(cast_runtime.get("job"), "cast runtime Job")
+    runtime_pod = _mapping(cast_runtime.get("pod"), "cast runtime Pod")
+    runtime_config_map = _mapping(cast_runtime.get("config_map"), "cast runtime ConfigMap")
+    if (
+        _text(runtime_job, "namespace") != expected_cast_execution.get("namespace")
+        or _text(runtime_job, "name") != expected_cast_execution.get("job_name")
+        or _text(runtime_config_map, "name") != expected_cast_execution.get("config_map_name")
+        or runtime_config_map.get("immutable") is not True
+    ):
+        raise ValueError("FP32-to-BF16 cast runtime resources differ from plan")
+    for runtime_object in (runtime_job, runtime_pod, runtime_config_map):
+        _text(runtime_object, "uid")
+        _text(runtime_object, "resource_version")
+    _sha256(runtime_job, "spec_sha256")
+    _sha256(runtime_pod, "spec_sha256")
+    mounted = _mapping(runtime_config_map.get("mounted_file_sha256"), "cast mounted files")
+    for path, digest in _mapping(
+        expected_cast_execution.get("config_map_code_sha256"), "cast reviewed code"
+    ).items():
+        if mounted.get(path) != digest:
+            raise ValueError(f"FP32-to-BF16 cast mounted code differs for {path}")
+    cast_destination = _mapping(cast_receipt.get("destination"), "cast destination")
+    expected_cast_path = _text(expected_export_binding, "bf16_cast_destination")
+    cast_inspection = _mapping(cast_destination.get("inspection"), "cast output inspection")
+    if (
+        _text(cast_destination, "path") != expected_cast_path
+        or _text(cast_destination, "dtype") != "BF16"
+        or _text(cast_inspection, "root") != expected_cast_path
+        or _text(cast_inspection, "dtype").lower() not in {"bf16", "bfloat16"}
+    ):
+        raise ValueError("FP32-to-BF16 cast destination differs from the frozen plan")
+    cast_weights_sha256 = _sha256(cast_inspection, "weights_manifest_sha256")
+    cast_rows = cast_full_manifest.get("files")
+    if (
+        cast_full_manifest.get("schema") != "cyber_sft_full_file_manifest_v1"
+        or _text(cast_full_manifest, "root") != expected_cast_path
+        or not isinstance(cast_rows, list)
+    ):
+        raise ValueError("BF16 cast full manifest is malformed")
+    cast_full_manifest_sha256 = _sha256(cast_full_manifest, "manifest_sha256")
+    if digest_json(cast_rows) != cast_full_manifest_sha256:
+        raise ValueError("BF16 cast full manifest digest does not validate")
+    acceptance_rows = [
+        row
+        for row in cast_rows
+        if isinstance(row, Mapping) and row.get("path") == ".fleet-bf16-cast-acceptance.json"
+    ]
+    if len(acceptance_rows) != 1:
+        raise ValueError("BF16 cast full manifest does not contain one acceptance receipt")
+    payload_rows = [row for row in cast_rows if row not in acceptance_rows]
+    if _sha256(cast_destination, "payload_manifest_sha256") != digest_json(payload_rows):
+        raise ValueError("BF16 cast payload manifest differs from its receipt")
 
     if stage_input.get("schema") != "cyber_sft_inference_stage_input_v1":
         raise ValueError("unsupported inference stage input schema")
     stage_input_sha256 = _validate_embedded_digest(stage_input, "stage_input_sha256")
     stage_source = _mapping(stage_input.get("source"), "stage input source")
-    if _text(stage_source, "sfs_path") != expected_raw_path:
-        raise ValueError("inference stage input names an unexpected raw export path")
+    if _text(stage_source, "sfs_path") != expected_cast_path:
+        raise ValueError("inference stage input names an unexpected BF16 cast path")
     if _sha256(stage_source, "observation_sha256") != export_observation_sha256:
         raise ValueError("inference stage input names a different export observation")
-    if stage_source.get("raw_inspection") != raw_inspection:
-        raise ValueError("inference stage input raw inspection differs from the export evidence")
+    if _sha256(stage_source, "cast_receipt_sha256") != cast_receipt_sha256:
+        raise ValueError("inference stage input names a different BF16 cast receipt")
+    if stage_source.get("bf16_inspection") != cast_inspection:
+        raise ValueError("inference stage input BF16 inspection differs from cast evidence")
     stage_manifest = _mapping(
-        stage_source.get("raw_full_manifest"), "stage input raw full manifest"
+        stage_source.get("bf16_full_manifest"), "stage input BF16 full manifest"
     )
-    if _sha256(stage_manifest, "manifest_sha256") != raw_files_sha256:
-        raise ValueError("inference stage input raw manifest differs from the export evidence")
+    if _sha256(stage_manifest, "manifest_sha256") != cast_full_manifest_sha256:
+        raise ValueError("inference stage input BF16 manifest differs from cast evidence")
     stage_composition = _mapping(stage_input.get("composition"), "stage input composition")
     expected_composition = {
         "runtime_sidecar_sha256": dict(expected_runtime_sidecar_sha256),
@@ -1140,8 +1319,10 @@ def assemble_hf_export_receipt(
         raise ValueError("inference staging executed a different stage input")
     if _sha256(staging_receipt, "source_observation_sha256") != export_observation_sha256:
         raise ValueError("inference staging names a different export observation")
-    if _sha256(staging_receipt, "source_raw_manifest_sha256") != raw_files_sha256:
-        raise ValueError("inference staging names a different raw export manifest")
+    if _sha256(staging_receipt, "source_bf16_manifest_sha256") != cast_full_manifest_sha256:
+        raise ValueError("inference staging names a different BF16 cast manifest")
+    if _sha256(staging_receipt, "source_cast_receipt_sha256") != cast_receipt_sha256:
+        raise ValueError("inference staging names a different BF16 cast receipt")
     execution = _mapping(staging_receipt.get("execution"), "staging receipt execution")
     if execution.get("schema") != "cyber_sft_inference_stage_execution_v1":
         raise ValueError("unsupported inference staging execution schema")
@@ -1216,7 +1397,7 @@ def assemble_hf_export_receipt(
         raise ValueError("inference staging mounted bytes differ from the stage input")
     staged_composition = _mapping(staging_receipt.get("composition"), "staging receipt composition")
     if staged_composition.get("policy") != (
-        "raw_post_weights_and_index_plus_exact_base_runtime_sidecars_v1"
+        "verified_bf16_cast_weights_and_index_plus_exact_base_runtime_sidecars_v1"
     ):
         raise ValueError("unsupported inference bundle composition policy")
     if staged_composition.get("tokenizer_equivalence_evidence_sha256") != (
@@ -1226,8 +1407,8 @@ def assemble_hf_export_receipt(
     composed = _mapping(staged_composition.get("inspection"), "composed output inspection")
     if _text(composed, "root") != expected_destination:
         raise ValueError("composed output inspection names an unexpected destination")
-    if _sha256(composed, "weights_manifest_sha256") != raw_weights_sha256:
-        raise ValueError("composed output weights differ from the raw export")
+    if _sha256(composed, "weights_manifest_sha256") != cast_weights_sha256:
+        raise ValueError("composed output weights differ from the verified BF16 cast")
     if _sha256(composed, "tokenizer_manifest_sha256") != expected_tokenizer_manifest_sha256:
         raise ValueError("composed tokenizer differs from the frozen base tokenizer")
     if _sha256(composed, "chat_template_sha256") != expected_chat_template_sha256:
@@ -1269,7 +1450,7 @@ def assemble_hf_export_receipt(
             "format": "safetensors",
             "dtype": "bf16",
             "source_path": expected_destination,
-            "weights_manifest_sha256": raw_weights_sha256,
+            "weights_manifest_sha256": cast_weights_sha256,
             "files_manifest_sha256": _sha256(composed, "files_manifest_sha256"),
             "tokenizer_manifest_sha256": _sha256(composed, "tokenizer_manifest_sha256"),
             "chat_template_sha256": _sha256(composed, "chat_template_sha256"),
@@ -1289,13 +1470,31 @@ def assemble_hf_export_receipt(
             "destination_preflight": copy.deepcopy(
                 expected_export_binding["destination_preflight"]
             ),
+            "observed_raw_dtype": "F32",
+            "raw_weights_manifest_sha256": raw_weights_sha256,
+            "raw_full_manifest_sha256": raw_files_sha256,
+        },
+        "precision_correction": {
+            "schema": "cyber_sft_fp32_to_bf16_precision_correction_v1",
+            "source_path": expected_raw_path,
+            "destination_path": expected_cast_path,
+            "source_dtype": "F32",
+            "destination_dtype": "BF16",
+            "policy": cast_conversion["policy"],
+            "source_weights_manifest_sha256": raw_weights_sha256,
+            "destination_weights_manifest_sha256": cast_weights_sha256,
+            "cast_rows_sha256": _sha256(cast_conversion, "cast_rows_sha256"),
+            "source_layout_sha256": _sha256(cast_conversion, "source_layout_sha256"),
+            "cast_receipt_sha256": cast_receipt_sha256,
+            "cast_full_manifest_sha256": cast_full_manifest_sha256,
+            "exact_cast_bits_verified": True,
         },
         "staging": {
-            "source_path": expected_raw_path,
+            "source_path": expected_cast_path,
             "destination_path": expected_destination,
             "image": staging_image,
             "command_sha256": staging_command_sha256,
-            "source_manifest_sha256": raw_weights_sha256,
+            "source_manifest_sha256": cast_weights_sha256,
             "destination_manifest_sha256": _sha256(composed, "weights_manifest_sha256"),
             "byte_identical": True,
             "acceptance_manifest_sha256": staging_digest,
@@ -1308,6 +1507,8 @@ def assemble_hf_export_receipt(
         "evidence": {
             "export_run_observation_sha256": _sha256(export_run_observation, "observation_sha256"),
             "export_filesystem_observation_sha256": export_observation_sha256,
+            "bf16_cast_receipt_sha256": cast_receipt_sha256,
+            "bf16_cast_full_manifest_sha256": cast_full_manifest_sha256,
             "stage_input_sha256": stage_input_sha256,
             "staging_receipt_sha256": staging_digest,
         },

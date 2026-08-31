@@ -49,11 +49,12 @@ case "$MODE" in
     echo "create-only server dry-run passed; no resources created"
     ;;
   submit)
-    test "$#" = 3
+    test "$#" = 4
     observation=$2
-    raw_manifest=$3
+    cast_receipt=$3
+    cast_manifest=$4
     test "$(kubectl -n fleet-train-jobs get rayjob ft-run-29f2bedf -o jsonpath='{.status.jobStatus}')" = SUCCEEDED
-    test "$(kubectl -n fleet-train-jobs get job chris-cyber-qwen36-sft-evidence-v1 -o jsonpath='{.status.conditions[?(@.type=="Complete")].status}')" = True
+    test "$(kubectl -n fleet-train-jobs get job chris-cyber-qwen36-sft-bf16-cast-v1 -o jsonpath='{.status.conditions[?(@.type=="Complete")].status}')" = True
     require_all_absent
     PYTHONPATH="$ROOT" uv run python -m training.post_sft_staging validate-bundle \
       --plan "$PLAN" --root "$ROOT" >/dev/null
@@ -61,7 +62,8 @@ case "$MODE" in
     config_map=$(mktemp)
     trap 'rm -f "$stage_input" "$config_map"' EXIT
     PYTHONPATH="$ROOT" uv run python -m training.post_sft_staging build-input \
-      --plan "$PLAN" --observation "$observation" --raw-manifest "$raw_manifest" \
+      --plan "$PLAN" --observation "$observation" --cast-receipt "$cast_receipt" \
+      --cast-manifest "$cast_manifest" \
       --tokenizer-evidence "$TOKENIZER_EVIDENCE" --output "$stage_input"
     configmap "$stage_input" > "$config_map"
     kubectl create --dry-run=server -f "$config_map" >/dev/null
@@ -70,5 +72,5 @@ case "$MODE" in
     kubectl create -f "$config_map"
     kubectl create -f "$JOB"
     ;;
-  *) echo "usage: $0 [preview|submit OBSERVATION RAW_MANIFEST]" >&2; exit 2 ;;
+  *) echo "usage: $0 [preview|submit OBSERVATION CAST_RECEIPT CAST_MANIFEST]" >&2; exit 2 ;;
 esac
