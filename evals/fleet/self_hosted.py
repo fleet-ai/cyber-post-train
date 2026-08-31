@@ -332,7 +332,9 @@ def authoritative_route(config: dict[str, Any], kind: str) -> str:
     )
 
 
-def assert_authoritative_routes_deployed(client: httpx.Client, config: dict[str, Any]) -> None:
+def assert_authoritative_routes_deployed(
+    client: httpx.Client, config: dict[str, Any]
+) -> dict[str, Any]:
     openapi = _request(client, "GET", "/openapi.json")
     paths = openapi.get("paths") or {}
     expected = {
@@ -340,8 +342,29 @@ def assert_authoritative_routes_deployed(client: httpx.Client, config: dict[str,
         config["authority"]["scoring_route_template"],
     }
     missing = sorted(path for path in expected if path not in paths)
-    if missing:
-        raise RuntimeError("authoritative rollout-reward routes are not deployed")
+    if not missing:
+        return {"mode": "openapi", "routes": sorted(expected)}
+
+    # Canonical OpenAPI can lag the newly deployed public router. Exercise the
+    # report-only guard with a deliberately invalid task shape: the guard runs
+    # before hydration/provisioning, so a 422 proves routing without creating an
+    # instance or invoking a verifier. A 404 or any other response fails closed.
+    probe_prefix = "/v1/rollout-rewards/qwen-route-probe/versions/not-a-task-version"
+    results = {}
+    for kind, path, body in (
+        ("provisioning", probe_prefix + "/instances", {}),
+        ("scoring", probe_prefix, {"instance_id": "route-probe"}),
+    ):
+        response = client.post(f"{ORCHESTRATOR}{path}", json=body)
+        try:
+            response_body = response.json() if response.content else {}
+        except ValueError:
+            response_body = {}
+        detail = str(response_body.get("detail") or "")
+        results[kind] = response.status_code
+        if response.status_code != 422 or "report-only" not in detail:
+            raise RuntimeError("authoritative rollout-reward routes are not deployed")
+    return {"mode": "behavioral_report_only_guard", "statuses": results}
 
 
 def _docker(
@@ -461,7 +484,7 @@ def run(config: dict[str, Any], out_dir: Path, proxy_script: Path) -> dict[str, 
         }:
             raise RuntimeError("FLEET_API_KEY is not scoped to the Fleet team")
         task = load_and_verify_task(client, config)
-        assert_authoritative_routes_deployed(client, config)
+        authority_gate = assert_authoritative_routes_deployed(client, config)
         binding = {
             "schema_version": config["schema_version"],
             "run_id": config["run_id"],
@@ -470,6 +493,7 @@ def run(config: dict[str, Any], out_dir: Path, proxy_script: Path) -> dict[str, 
             "environment": config["environment"],
             "verifier": config["verifier"],
             "authority": config["authority"],
+            "authority_gate": authority_gate,
             "model": config["model"],
             "harness": config["harness"],
         }
@@ -724,7 +748,7 @@ def main() -> int:
             timeout=180,
         ) as client:
             task = load_and_verify_task(client, config)
-            assert_authoritative_routes_deployed(client, config)
+            authority_gate = assert_authoritative_routes_deployed(client, config)
             payload = build_instance_payload(config, task)
         print(
             json.dumps(
@@ -738,6 +762,7 @@ def main() -> int:
                     "verifier_version_id": config["verifier"]["version_id"],
                     "model_revision": config["model"]["revision"],
                     "harness_version": config["harness"]["version"],
+                    "authority_gate": authority_gate,
                     "mutations": 0,
                 },
                 sort_keys=True,

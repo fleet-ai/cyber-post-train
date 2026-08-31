@@ -28,7 +28,8 @@
   },
   "authority": {
     "contract_source_pr": "https://github.com/fleet-ai/theseus/pull/28252",
-    "contract_source_commit": "b3cea985e2bb9f862eaf37237c1b3efd2a0a64c7",
+    "contract_source_commit": "76a4bd262a63b05d7ac2b33cf1357072aea2dbd4",
+    "production_deploy_run": "https://github.com/fleet-ai/theseus/actions/runs/33359560100",
     "provisioning_route_template": "/v1/rollout-rewards/{task_key}/versions/{task_version_id}/instances",
     "scoring_route_template": "/v1/rollout-rewards/{task_key}/versions/{task_version_id}",
     "scoring_mode": "partial",
