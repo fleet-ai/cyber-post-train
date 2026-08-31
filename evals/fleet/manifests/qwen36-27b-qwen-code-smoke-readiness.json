@@ -1,0 +1,61 @@
+{
+  "schema_version": "fleet-qwen-code-smoke-readiness-v1",
+  "status": "blocked_by_runtime_support",
+  "measured_at": "2026-08-31T03:58:00Z",
+  "intended_treatment": "Evaluate the exact WebExploitBench baseline checkpoint with the exact official Qwen Code harness on one registered Fleet blackbox task before any scale-up.",
+  "model": {
+    "source": "Qwen/Qwen3.6-27B",
+    "revision": "6a9e13bd6fc8f0983b9b99948120bc37f49c13e9",
+    "tokenizer_revision": "sha256:27f02770d03b60343350ad948bf1065673968c60274f1e34f4afaed16940a1ea",
+    "chat_template_revision": "sha256:e84f32a23fdda27689f868aa4a1a5621f41133e51a48d7f3efcbea2839574259",
+    "gateway_origin": "https://inference.flt.build",
+    "gateway_served_id": "qwen3-6-27b-cyber-baseline",
+    "required_jobs_api_model": "qwen/qwen3-6-27b-cyber-baseline",
+    "jobs_api_model_binding_verified": false
+  },
+  "harness": {
+    "name": "qwen-code",
+    "official_repository": "https://github.com/QwenLM/qwen-code",
+    "version": "0.22.3",
+    "source_commit": "09825973e7d3c3fd07e17909c396aa62f48ce51f",
+    "lock_file": "evals/webexploitbench/harnesses/qwen-code-0.22.3.lock.json",
+    "lock_file_sha256": "sha256:a999c178493c0826cd8b75ce9950e99d11a57be59edf411fe0f8bef16224a825",
+    "reference_image": "cage/qwen-code@sha256:bb3c107f0f1c9fb73aec4efcf5ec3498405d06f1500ae38d94b3b27fa621359f",
+    "fleet_runtime_binding_verified": false
+  },
+  "fleet_smoke": {
+    "source_job_id": "a62dd51f-a52b-4941-8207-4679e4b25b51",
+    "task_key": "cysec1-2-current-gen_blackbox-9afe9e08da314948b573657e__blackbox_ctf_v1",
+    "pass_k": 1,
+    "batch_session_cap": 1,
+    "max_steps": 300,
+    "max_duration_minutes": 120,
+    "capture_db_diff": true,
+    "run_name": "chris-cyber-qwen36-27b-qwencode0223-smoke-v1"
+  },
+  "deployed_evidence": {
+    "orchestrator_openapi": "https://orchestrator.fleetai.com/openapi.json",
+    "harness_schema_sha256": "sha256:0fcd39e2ddcb3eae29d339fc5ee16cc3ba12aaee1730493631cb804afcf22196",
+    "advertised_harnesses": [
+      "codex",
+      "grok",
+      "grok-bot",
+      "claude_code",
+      "muse",
+      "antigravity",
+      "opencode"
+    ],
+    "qwen_code_advertised": false,
+    "theseus_origin_main_commit": "ceafd65d53b43839f485351b926ae07b7e1da9db",
+    "theseus_behavior": "qwen/* models default to opencode; an explicit qwen-code selection is rejected"
+  },
+  "launch_gates": [
+    "The deployed Jobs API must advertise and accept an exact official Qwen Code harness identifier.",
+    "The harness runtime must publish an immutable Qwen Code 0.22.3 source/image receipt.",
+    "The Jobs API model identifier must resolve to gateway served id qwen3-6-27b-cyber-baseline and checkpoint revision 6a9e13bd6fc8f0983b9b99948120bc37f49c13e9.",
+    "A dry-run must preserve the source task, verifier, environment, prompt, pass@k, step budget, duration budget, and database-diff capture settings."
+  ],
+  "blocked_launch_command": "uv run python -m evals.fleet.cli launch --runtime-model qwen/qwen3-6-27b-cyber-baseline --harness qwen-code --experiment qwen36-fleet-blackbox-qwen-code-v1 --gateway-model qwen3-6-27b-cyber-baseline --runtime-label qwen-code-0.22.3 --task-key cysec1-2-current-gen_blackbox-9afe9e08da314948b573657e__blackbox_ctf_v1 --pass-k 1 --batch-session-cap 1 --max-steps 300 --max-duration-minutes 120 --run-name chris-cyber-qwen36-27b-qwencode0223-smoke-v1 --submit",
+  "launch_policy": "Do not execute the blocked launch command until every launch gate is independently verified. Never substitute opencode or qwen/qwen3.6-27b, because either substitution changes the experimental treatment or checkpoint identity.",
+  "training_isolation": "Evaluation-only. Fleet held-out tasks and all external benchmark data, traces, outputs, metadata, and derived artifacts remain excluded from training."
+}
