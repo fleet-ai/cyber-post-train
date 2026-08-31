@@ -90,6 +90,7 @@ def render_export(
         _read(selection_path),
         expected_trainer_version_id=str(run["trainer_version_id"]),
         expected_trainer_image=str(run["trainer_image"]),
+        expected_export_binding=plan["export"],
     )
     atomic_write_json(request_output, receipt["request"], private=True)
     atomic_write_json(receipt_output, receipt, private=True)
@@ -117,9 +118,7 @@ def render(
     base_web_path, base_web = _planned_file(
         root, plan["webexploitbench"]["base_config"], "base WebExploitBench config"
     )
-    _, split = _planned_file(
-        root, plan["fleet"]["split_manifest"], "Fleet split manifest"
-    )
+    _, split = _planned_file(root, plan["fleet"]["split_manifest"], "Fleet split manifest")
     _, sft = _planned_file(root, plan["fleet"]["sft_config"], "SFT config")
 
     serving = derive_post_sft_registration(
@@ -128,6 +127,7 @@ def render(
         export,
         expected_tokenizer_manifest_sha256=str(model["tokenizer_manifest_sha256"]),
         expected_chat_template_sha256=str(model["chat_template_sha256"]),
+        expected_export_binding=plan["export"],
     )
     served_model_id = serving["registration"]["id"]
     post_web = derive_webexploit_config(
@@ -187,6 +187,7 @@ def render_external_benchmarks(
         export,
         expected_tokenizer_manifest_sha256=str(model["tokenizer_manifest_sha256"]),
         expected_chat_template_sha256=str(model["chat_template_sha256"]),
+        expected_export_binding=plan["export"],
     )
     web = derive_webexploit_config(
         base_web,
@@ -200,6 +201,7 @@ def render_external_benchmarks(
         export,
         serving,
         _read(control_image_path),
+        expected_export_binding=plan["export"],
     )
 
     output_dir.mkdir(parents=True, exist_ok=True)

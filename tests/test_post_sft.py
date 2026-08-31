@@ -23,6 +23,34 @@ IMAGE = "registry.example/trainer@sha256:" + "2" * 64
 ENTRYPOINT_SHA = "sha256:" + "3" * 64
 
 
+def _export_binding():
+    output_root = f"/mnt/sfs/exports/cyber-sft/{RUN}/step-318-v1"
+    return {
+        "strategy": "resume_final_checkpoint_with_zero_optimizer_steps_v1",
+        "source_run_name": RUN,
+        "source_global_step": 318,
+        "source_checkpoint_path": f"/mnt/sfs/checkpoints/{RUN}/global_step_318",
+        "output_root": output_root,
+        "expected_output_path": f"{output_root}/global_step_318/policy",
+        "destination_preflight": {
+            "observed_at": "2026-08-31T16:05:07Z",
+            "state": "absent",
+            "matching_rayjobs": [{"name": "ft-run-export", "uid": "export-uid"}],
+        },
+        "export_run": {
+            "name": "ft-run-export",
+            "run_id": "export-run-id",
+            "rayjob_uid": "export-uid",
+            "trainer_version_id": "trainer-version",
+            "trainer_image": IMAGE,
+            "resume_from": f"/mnt/sfs/checkpoints/{RUN}/global_step_318",
+            "num_steps": 318,
+            "hf_save_interval": 319,
+            "optimizer_steps_expected": 0,
+        },
+    }
+
+
 def _selection_inputs(status: str = "succeeded"):
     run = {
         "schema": "fleet_training_run_observation_v1",
@@ -86,24 +114,29 @@ def _export(selection):
             "dtype": "bfloat16",
             "source_path": "/models/cyber-sft/ft-run-574bd7b3/step-318",
             "weights_manifest_sha256": "sha256:" + "6" * 64,
+            "files_manifest_sha256": "sha256:" + "f" * 64,
             "tokenizer_manifest_sha256": "sha256:" + "7" * 64,
             "chat_template_sha256": "sha256:" + "8" * 64,
         },
         "conversion": {
             "image": IMAGE,
             "optimizer_steps": 0,
+            "run": {
+                "name": "ft-run-export",
+                "run_id": "export-run-id",
+                "rayjob_uid": "export-uid",
+                "trainer_version_id": "trainer-version",
+            },
+            "resume_from": f"/mnt/sfs/checkpoints/{RUN}/global_step_318",
+            "num_steps": 318,
+            "hf_save_interval": 319,
             "export_request_receipt_sha256": "sha256:" + "9" * 64,
             "command_sha256": "sha256:" + "a" * 64,
-            "output_path": (
-                "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/"
-                f"{selection['checkpoint']['uuid']}/global_step_318/policy"
-            ),
+            "output_path": _export_binding()["expected_output_path"],
+            "destination_preflight": _export_binding()["destination_preflight"],
         },
         "staging": {
-            "source_path": (
-                "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/"
-                f"{selection['checkpoint']['uuid']}/global_step_318/policy"
-            ),
+            "source_path": _export_binding()["expected_output_path"],
             "destination_path": "/models/cyber-sft/ft-run-574bd7b3/step-318",
             "image": "registry.example/stager@sha256:" + "b" * 64,
             "command_sha256": "sha256:" + "c" * 64,
@@ -186,6 +219,13 @@ def test_zero_step_export_request_preserves_recipe_and_cannot_mutate_source():
         selection,
         expected_trainer_version_id=str(sft["trainer"]["trainer_version_id"]),
         expected_trainer_image=IMAGE,
+        expected_export_binding={
+            **_export_binding(),
+            "export_run": {
+                **_export_binding()["export_run"],
+                "trainer_version_id": str(sft["trainer"]["trainer_version_id"]),
+            },
+        },
     )
     request = receipt["request"]
     assert receipt["submit"] is False
@@ -193,9 +233,7 @@ def test_zero_step_export_request_preserves_recipe_and_cannot_mutate_source():
     assert request["sft"]["num_epochs"] is None
     assert request["data"] == sft["data"]
     assert request["model"] == sft["model"]
-    assert f"resume_from=/mnt/sfs/checkpoints/{RUN}/global_step_318" in request["trainer"][
-        "args"
-    ]
+    assert f"resume_from=/mnt/sfs/checkpoints/{RUN}/global_step_318" in request["trainer"]["args"]
     assert "hf_save_interval=319" in request["trainer"]["args"]
     assert request["title"].startswith("Chris cyber zero-step HF export")
     assert "name" not in request
@@ -204,8 +242,7 @@ def test_zero_step_export_request_preserves_recipe_and_cannot_mutate_source():
 
 def test_post_sft_registration_preserves_runtime_and_precision():
     base = json.loads(
-        (ROOT / "evals/webexploitbench/serving/qwen36-27b-6a9e13bd-registration.json")
-        .read_text()
+        (ROOT / "evals/webexploitbench/serving/qwen36-27b-6a9e13bd-registration.json").read_text()
     )
     selection = _selection()
     export = _export(selection)
@@ -215,6 +252,7 @@ def test_post_sft_registration_preserves_runtime_and_precision():
         export,
         expected_tokenizer_manifest_sha256="sha256:" + "7" * 64,
         expected_chat_template_sha256="sha256:" + "8" * 64,
+        expected_export_binding=_export_binding(),
     )
     candidate = receipt["registration"]
     assert candidate["id"] == f"{RUN}-step-318"
@@ -236,8 +274,7 @@ def test_post_sft_registration_preserves_runtime_and_precision():
 
 def test_post_sft_registration_rejects_unproven_inference_staging():
     base = json.loads(
-        (ROOT / "evals/webexploitbench/serving/qwen36-27b-6a9e13bd-registration.json")
-        .read_text()
+        (ROOT / "evals/webexploitbench/serving/qwen36-27b-6a9e13bd-registration.json").read_text()
     )
     selection = _selection()
     export = _export(selection)
@@ -252,13 +289,89 @@ def test_post_sft_registration_rejects_unproven_inference_staging():
             export,
             expected_tokenizer_manifest_sha256="sha256:" + "7" * 64,
             expected_chat_template_sha256="sha256:" + "8" * 64,
+            expected_export_binding=_export_binding(),
+        )
+
+
+def test_export_binding_rejects_path_mismatch_and_destination_collision():
+    sft = json.loads((ROOT / "configs/runs/qwen36-27b-sft-full.json").read_text())
+    selection = _selection()
+    binding = _export_binding()
+    binding["expected_output_path"] = "/mnt/sfs/exports/wrong/global_step_318/policy"
+    with pytest.raises(ValueError, match="output path is inconsistent"):
+        build_zero_step_hf_export_request(
+            sft,
+            selection,
+            expected_trainer_version_id=str(sft["trainer"]["trainer_version_id"]),
+            expected_trainer_image=IMAGE,
+            expected_export_binding={
+                **binding,
+                "export_run": {
+                    **binding["export_run"],
+                    "trainer_version_id": str(sft["trainer"]["trainer_version_id"]),
+                },
+            },
+        )
+
+    binding = _export_binding()
+    binding["destination_preflight"]["matching_rayjobs"].append(
+        {"name": "ft-run-collision", "uid": "collision-uid"}
+    )
+    with pytest.raises(ValueError, match="uniquely assigned"):
+        build_zero_step_hf_export_request(
+            sft,
+            selection,
+            expected_trainer_version_id=str(sft["trainer"]["trainer_version_id"]),
+            expected_trainer_image=IMAGE,
+            expected_export_binding={
+                **binding,
+                "export_run": {
+                    **binding["export_run"],
+                    "trainer_version_id": str(sft["trainer"]["trainer_version_id"]),
+                },
+            },
+        )
+
+
+def test_export_receipt_rejects_wrong_run_identity_and_missing_output_hash():
+    base = json.loads(
+        (ROOT / "evals/webexploitbench/serving/qwen36-27b-6a9e13bd-registration.json").read_text()
+    )
+    selection = _selection()
+    export = _export(selection)
+    export["conversion"]["run"]["rayjob_uid"] = "wrong-uid"
+    export["export_receipt_sha256"] = digest_json(
+        {key: value for key, value in export.items() if key != "export_receipt_sha256"}
+    )
+    with pytest.raises(ValueError, match="rayjob_uid differs"):
+        derive_post_sft_registration(
+            base,
+            selection,
+            export,
+            expected_tokenizer_manifest_sha256="sha256:" + "7" * 64,
+            expected_chat_template_sha256="sha256:" + "8" * 64,
+            expected_export_binding=_export_binding(),
+        )
+
+    export = _export(selection)
+    del export["output"]["files_manifest_sha256"]
+    export["export_receipt_sha256"] = digest_json(
+        {key: value for key, value in export.items() if key != "export_receipt_sha256"}
+    )
+    with pytest.raises(ValueError, match="files_manifest_sha256"):
+        derive_post_sft_registration(
+            base,
+            selection,
+            export,
+            expected_tokenizer_manifest_sha256="sha256:" + "7" * 64,
+            expected_chat_template_sha256="sha256:" + "8" * 64,
+            expected_export_binding=_export_binding(),
         )
 
 
 def test_webexploit_config_changes_only_model_and_run_id():
     base = json.loads(
-        (ROOT / "evals/webexploitbench/configs/qwen36-27b-6a9e13bd-level0-full.json")
-        .read_text()
+        (ROOT / "evals/webexploitbench/configs/qwen36-27b-6a9e13bd-level0-full.json").read_text()
     )
     candidate = derive_webexploit_config(
         base,
@@ -290,8 +403,7 @@ def test_comparison_receipt_binds_all_four_handoffs():
     selection = _selection()
     export = _export(selection)
     base_registration = json.loads(
-        (ROOT / "evals/webexploitbench/serving/qwen36-27b-6a9e13bd-registration.json")
-        .read_text()
+        (ROOT / "evals/webexploitbench/serving/qwen36-27b-6a9e13bd-registration.json").read_text()
     )
     serving = derive_post_sft_registration(
         base_registration,
@@ -299,6 +411,7 @@ def test_comparison_receipt_binds_all_four_handoffs():
         export,
         expected_tokenizer_manifest_sha256="sha256:" + "7" * 64,
         expected_chat_template_sha256="sha256:" + "8" * 64,
+        expected_export_binding=_export_binding(),
     )
     split = json.loads((ROOT / "configs/data/fleet-a62-task-split-v1.json").read_text())
     sft = json.loads((ROOT / "configs/runs/qwen36-27b-sft-full.json").read_text())
