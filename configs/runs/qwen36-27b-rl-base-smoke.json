@@ -1,5 +1,5 @@
 {
-  "title": "Chris cyber Qwen3.6 27B multienv readiness RL smoke v5",
+  "title": "Chris cyber Qwen3.6 27B Torch-GDN RL one-step gate v1",
   "node_pool": "fleetai-training-ng-gpu",
   "fleet_env": {
     "env_key": "cysec1-2-current-gen",
@@ -58,14 +58,11 @@
     "stop_after_evals": 2
   },
   "trainer": {
-    "trainer_version_id": "0cbb43bd-9a36-5474-84d1-8846492dc413",
+    "trainer_version_id": "4b4dc57c-c7dc-5562-bbdd-9e1d6764ede0",
     "args": [
-      "trainer.remove_microbatch_padding=false"
-    ],
-    "env": {
-      "FLA_CACHE_MODE": "default",
-      "FLA_CONFIG_DIR": "/mnt/sfs/jobs/chris-q36-fla-b300-v1/fla-config-2166f41a"
-    }
+      "trainer.remove_microbatch_padding=false",
+      "trainer.policy.model_config_kwargs.fleet_force_qwen35_torch_gdn=true"
+    ]
   },
   "rollout": {
     "harness": "native",
