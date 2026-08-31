@@ -20,6 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 RUN = "ft-run-574bd7b3"
 CONFIG_SHA = "sha256:" + "1" * 64
 IMAGE = "registry.example/trainer@sha256:" + "2" * 64
+ENTRYPOINT_SHA = "sha256:" + "3" * 64
 
 
 def _selection_inputs(status: str = "succeeded"):
@@ -30,7 +31,7 @@ def _selection_inputs(status: str = "succeeded"):
         "rayjob_uid": "uid-1",
         "run_config_sha256": CONFIG_SHA,
         "trainer_image": IMAGE,
-        "entrypoint_sha256": "sha256:" + "3" * 64,
+        "entrypoint_sha256": ENTRYPOINT_SHA,
         "latest_checkpoint_step": 318,
     }
     checkpoints = [
@@ -69,6 +70,7 @@ def _selection():
         expected_run_config_sha256=CONFIG_SHA,
         expected_rayjob_uid="uid-1",
         expected_trainer_image=IMAGE,
+        expected_entrypoint_sha256=ENTRYPOINT_SHA,
     )
 
 
@@ -92,6 +94,23 @@ def _export(selection):
             "optimizer_steps": 0,
             "export_request_receipt_sha256": "sha256:" + "9" * 64,
             "command_sha256": "sha256:" + "a" * 64,
+            "output_path": (
+                "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/"
+                f"{selection['checkpoint']['uuid']}/global_step_318/policy"
+            ),
+        },
+        "staging": {
+            "source_path": (
+                "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/"
+                f"{selection['checkpoint']['uuid']}/global_step_318/policy"
+            ),
+            "destination_path": "/models/cyber-sft/ft-run-574bd7b3/step-318",
+            "image": "registry.example/stager@sha256:" + "b" * 64,
+            "command_sha256": "sha256:" + "c" * 64,
+            "source_manifest_sha256": "sha256:" + "6" * 64,
+            "destination_manifest_sha256": "sha256:" + "6" * 64,
+            "byte_identical": True,
+            "acceptance_manifest_sha256": "sha256:" + "d" * 64,
         },
         "verification": {
             "all_shards_present": True,
@@ -121,6 +140,7 @@ def test_checkpoint_selection_fails_before_success_or_with_two_promoted():
             expected_run_config_sha256=CONFIG_SHA,
             expected_rayjob_uid="uid-1",
             expected_trainer_image=IMAGE,
+            expected_entrypoint_sha256=ENTRYPOINT_SHA,
         )
     run["status"] = "succeeded"
     checkpoints[0]["is_promoted"] = True
@@ -132,6 +152,7 @@ def test_checkpoint_selection_fails_before_success_or_with_two_promoted():
             expected_run_config_sha256=CONFIG_SHA,
             expected_rayjob_uid="uid-1",
             expected_trainer_image=IMAGE,
+            expected_entrypoint_sha256=ENTRYPOINT_SHA,
         )
 
 
@@ -141,6 +162,20 @@ def test_selection_receipt_rejects_tampering():
     selection["checkpoint"]["step"] = 317
     with pytest.raises(ValueError, match="UUID does not match"):
         validate_selection_receipt(selection)
+
+
+def test_checkpoint_selection_rejects_unplanned_entrypoint():
+    run, checkpoints = _selection_inputs()
+    with pytest.raises(ValueError, match="entrypoint digest"):
+        freeze_final_promoted_checkpoint(
+            run,
+            checkpoints,
+            expected_run_name=RUN,
+            expected_run_config_sha256=CONFIG_SHA,
+            expected_rayjob_uid="uid-1",
+            expected_trainer_image=IMAGE,
+            expected_entrypoint_sha256="sha256:" + "f" * 64,
+        )
 
 
 def test_zero_step_export_request_preserves_recipe_and_cannot_mutate_source():
@@ -197,6 +232,27 @@ def test_post_sft_registration_preserves_runtime_and_precision():
         next((old for old, new in allowed.items() if arg == new), arg) for arg in new_args
     ]
     assert normalized == old_args
+
+
+def test_post_sft_registration_rejects_unproven_inference_staging():
+    base = json.loads(
+        (ROOT / "evals/webexploitbench/serving/qwen36-27b-6a9e13bd-registration.json")
+        .read_text()
+    )
+    selection = _selection()
+    export = _export(selection)
+    export["staging"]["destination_manifest_sha256"] = "sha256:" + "e" * 64
+    export["export_receipt_sha256"] = digest_json(
+        {key: value for key, value in export.items() if key != "export_receipt_sha256"}
+    )
+    with pytest.raises(ValueError, match="staging destination manifest"):
+        derive_post_sft_registration(
+            base,
+            selection,
+            export,
+            expected_tokenizer_manifest_sha256="sha256:" + "7" * 64,
+            expected_chat_template_sha256="sha256:" + "8" * 64,
+        )
 
 
 def test_webexploit_config_changes_only_model_and_run_id():

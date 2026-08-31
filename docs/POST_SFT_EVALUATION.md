@@ -22,6 +22,8 @@ archive. The checked-in plan is
   `3a56db536d8918cadad8961dc450e1210488742d2981bb53f5ca4347aabcad29`.
 - Trainer image:
   `fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4`.
+- RayJob entrypoint SHA-256 (exact string, without a trailing newline):
+  `sha256:f88435165af2bb65a41528aa7d82395431c234178289dba2c9b7fbe58a73024c`.
 - Base serving: SGLang image
   `lmsysorg/sglang@sha256:febfb971c7352570fc445c466ebd6ffc9d896024958e544a60f2137fd85856b1`,
   BF16, TP1. The live baseline reported engine version
@@ -55,8 +57,11 @@ A separate, queue-managed zero-optimizer-step export run must therefore:
 5. preserve the base tokenizer, configuration, and chat template without modification;
 6. hash every output file and verify all shards, the parameter count, and a clean `safetensors`
    load; and
-7. publish under an immutable `/models/.../<checkpoint-uuid>` path accepted by the inference
-   staging rail.
+7. copy that exact manifest into the separate inference filesystem under an immutable
+   `/models/.../<checkpoint-uuid>` path accepted by the staging rail, using a digest-pinned stager;
+   and
+8. prove the source and destination manifests are byte-identical and bind the generated
+   `.fleet-acceptance.json` manifest.
 
 The checked-in offline renderer creates this request without submitting it. The request writes its
 duplicate resumable checkpoint and HF export below a new run/output path; it never changes the
@@ -120,8 +125,9 @@ and require `resume_from=.../global_step_N` and `num_steps=N`. The run must repo
 steps. A post-export staging step is still needed because training SFS and the inference `/models`
 PVC are different filesystems.
 
-After that run emits a digested `cyber_sft_hf_export_v1` receipt, render all paired evaluation
-inputs:
+After the run and inference-staging rail emit one digested `cyber_sft_hf_export_v1` receipt, render
+all paired evaluation inputs. The receipt must separately identify the trainer conversion and the
+digest-pinned staging action; a model merely appearing under `/models` is not provenance.
 
 ```bash
 uv run python -m training.post_sft_cli render \
@@ -132,8 +138,9 @@ uv run python -m training.post_sft_cli render \
 ```
 
 The renderer fails unless the export is BF16 safetensors, its checkpoint and archive identities
-match the selected final checkpoint, its tokenizer/chat-template hashes match base, and its
-converter image and command are digest-bound. It produces:
+match the selected final checkpoint, its tokenizer/chat-template hashes match base, its converter
+image and command are digest-bound, and the inference destination manifest exactly equals the SFS
+export manifest. It produces:
 
 - a post-SFT inference registration cloned from the base SGLang contract;
 - a WebExploitBench config differing from base only in `model` and `run_id`;

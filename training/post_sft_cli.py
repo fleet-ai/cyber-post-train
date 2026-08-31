@@ -64,6 +64,7 @@ def freeze(
         expected_run_config_sha256=str(expected["config_sha256"]),
         expected_rayjob_uid=str(expected["rayjob_uid"]),
         expected_trainer_image=str(expected["trainer_image"]),
+        expected_entrypoint_sha256=str(expected["entrypoint_sha256"]),
     )
     atomic_write_json(output, receipt, private=True)
     typer.echo(str(output))

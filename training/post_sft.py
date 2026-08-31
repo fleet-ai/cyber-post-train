@@ -204,6 +204,7 @@ def freeze_final_promoted_checkpoint(
     expected_run_config_sha256: str,
     expected_rayjob_uid: str,
     expected_trainer_image: str,
+    expected_entrypoint_sha256: str,
 ) -> dict[str, Any]:
     """Select the one final promoted checkpoint after a successful run.
 
@@ -227,6 +228,8 @@ def freeze_final_promoted_checkpoint(
     if _digest_pinned_image(run, "trainer_image") != expected_trainer_image:
         raise ValueError("trainer image differs from the observed immutable image")
     entrypoint_sha256 = _sha256(run, "entrypoint_sha256")
+    if entrypoint_sha256 != expected_entrypoint_sha256:
+        raise ValueError("RayJob entrypoint digest differs from the predeclared run")
 
     matching = [row for row in checkpoints if row.get("run_name") == run_name]
     promoted = [row for row in matching if row.get("is_promoted") is True]
@@ -314,7 +317,7 @@ def validate_hf_export_receipt(
     source_path = _text(output, "source_path")
     if not source_path.startswith("/models/"):
         raise ValueError("HF export source_path must be below /models")
-    _sha256(output, "weights_manifest_sha256")
+    weights_manifest_sha256 = _sha256(output, "weights_manifest_sha256")
     if _sha256(output, "tokenizer_manifest_sha256") != expected_tokenizer_manifest_sha256:
         raise ValueError("HF export tokenizer differs from the base checkpoint")
     if _sha256(output, "chat_template_sha256") != expected_chat_template_sha256:
@@ -329,6 +332,29 @@ def validate_hf_export_receipt(
         raise ValueError("HF export run must execute zero optimizer steps")
     _sha256(conversion, "export_request_receipt_sha256")
     _sha256(conversion, "command_sha256")
+    run = _mapping(selection.get("run"), "selection.run")
+    step = checkpoint.get("step")
+    expected_conversion_output = (
+        f"/mnt/sfs/exports/cyber-sft/{_text(run, 'name')}/{_text(checkpoint, 'uuid')}"
+        f"/global_step_{step}/policy"
+    )
+    if _text(conversion, "output_path") != expected_conversion_output:
+        raise ValueError("HF conversion output path differs from the selected checkpoint")
+
+    staging = _mapping(export.get("staging"), "export.staging")
+    if _text(staging, "source_path") != expected_conversion_output:
+        raise ValueError("inference staging source differs from the conversion output")
+    if _text(staging, "destination_path") != source_path:
+        raise ValueError("inference staging destination differs from the served source path")
+    _digest_pinned_image(staging, "image")
+    _sha256(staging, "command_sha256")
+    if _sha256(staging, "source_manifest_sha256") != weights_manifest_sha256:
+        raise ValueError("staging source manifest differs from the exported weights")
+    if _sha256(staging, "destination_manifest_sha256") != weights_manifest_sha256:
+        raise ValueError("staging destination manifest differs from the exported weights")
+    if staging.get("byte_identical") is not True:
+        raise ValueError("inference staging did not prove byte-identical transfer")
+    _sha256(staging, "acceptance_manifest_sha256")
     verification = _mapping(export.get("verification"), "export.verification")
     for field in ("all_shards_present", "safetensors_load_passed", "parameter_count_matches"):
         if verification.get(field) is not True:

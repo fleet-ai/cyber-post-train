@@ -8,6 +8,7 @@
     "trainer_version_id": "4b4dc57c-c7dc-5562-bbdd-9e1d6764ede0",
     "trainer_image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
     "trainer_source_commit_from_tag": "6db8d0c9",
+    "entrypoint_sha256": "sha256:f88435165af2bb65a41528aa7d82395431c234178289dba2c9b7fbe58a73024c",
     "selection_policy": "final_promoted_checkpoint_after_successful_run_v1"
   },
   "base_model": {
@@ -70,6 +71,7 @@
     "Exactly one final checkpoint is complete, promoted, and durably archived with a verified archive manifest.",
     "A separate queued run using the exact trainer image resumes at the final step, executes zero optimizer steps, exports BF16 Hugging Face safetensors, and emits a verified manifest.",
     "The exported tokenizer and chat template are byte-identical to the base model.",
+    "A digest-pinned staging action copies the exact SFS export into inference /models, proves byte-identical source and destination manifests, and binds the acceptance manifest.",
     "The intervention is registered with the exact baseline SGLang image, precision, TP size, parsers, context, KV cache, and other runtime arguments.",
     "The registered endpoint passes model identity, tokenizer, structured tool-call, and deterministic logit smoke checks.",
     "Fleet evaluation uses a task group whose 20 members pin the exact eval_task_version_id values in the holdout receipt.",
