@@ -1,0 +1,234 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: chris-cyber-qwen36-sft-evidence-observer-v4
+  namespace: fleet-train-jobs
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: chris-cyber-qwen36-sft-evidence-observer-v4
+  namespace: fleet-train-jobs
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get]
+  - apiGroups: [""]
+    resources: [configmaps]
+    resourceNames: [chris-cyber-qwen36-sft-evidence-v4]
+    verbs: [get]
+  - apiGroups: [batch]
+    resources: [jobs]
+    resourceNames: [chris-cyber-qwen36-sft-evidence-v4]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: chris-cyber-qwen36-sft-evidence-observer-v4
+  namespace: fleet-train-jobs
+subjects:
+  - kind: ServiceAccount
+    name: chris-cyber-qwen36-sft-evidence-observer-v4
+    namespace: fleet-train-jobs
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: chris-cyber-qwen36-sft-evidence-observer-v4
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: chris-cyber-qwen36-sft-evidence-v4
+  namespace: fleet-train-jobs
+  labels:
+    kueue.x-k8s.io/queue-name: training-lq
+    cyber-post-train.fleet.ai/owner: chris
+    cyber-post-train.fleet.ai/experiment: qwen36-sft-evidence-v4
+    cyber-post-train.fleet.ai/model: qwen36
+spec:
+  suspend: true
+  backoffLimit: 0
+  activeDeadlineSeconds: 43200
+  ttlSecondsAfterFinished: 604800
+  template:
+    metadata:
+      labels:
+        cyber-post-train.fleet.ai/owner: chris
+        cyber-post-train.fleet.ai/experiment: qwen36-sft-evidence-v4
+        cyber-post-train.fleet.ai/model: qwen36
+    spec:
+      restartPolicy: Never
+      serviceAccountName: chris-cyber-qwen36-sft-evidence-observer-v4
+      nodeSelector: {workload: fleetai-training-ng-cpu}
+      tolerations:
+        - {key: workload, operator: Equal, value: fleetai-training-ng-cpu, effect: NoSchedule}
+      containers:
+        - name: evidence
+          image: 661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train:q36-torchgdn-6db8d0c9@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4
+          command: ["/bin/bash", "-ceu", "--"]
+          env:
+            - {name: PYTHONPATH, value: /bundle}
+            - name: POD_NAME
+              valueFrom: {fieldRef: {fieldPath: metadata.name}}
+            - name: POD_NAMESPACE
+              valueFrom: {fieldRef: {fieldPath: metadata.namespace}}
+            - name: POD_UID
+              valueFrom: {fieldRef: {fieldPath: metadata.uid}}
+            - name: JOB_UID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['batch.kubernetes.io/controller-uid']
+          args:
+            - |
+              source=/mnt/sfs/checkpoints/ft-run-574bd7b3/global_step_318
+              export_root=/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-v1/global_step_318/policy
+              base_root=/mnt/sfs/models/Qwen/Qwen3.6-27B/6a9e13bd6fc8f0983b9b99948120bc37f49c13e9
+              parent=/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/evidence/sfs-v4
+              partial="$parent/.partial"
+              final="$parent/receipt"
+              test -d "$source" && test -d "$export_root" && test -d "$base_root"
+              test -f "$source/.promoted" && test -f "$source/.milestone"
+              test "$(cat "$source/_shards_expected")" = 1
+              test "$(find "$source" -maxdepth 1 -name '.shard-*.done' | wc -l)" = 1
+              test "$(cat /mnt/sfs/checkpoints/ft-run-574bd7b3/latest_ckpt_global_step.txt)" = 318
+              test ! -e "$partial" && test ! -L "$partial"
+              test ! -e "$final" && test ! -L "$final"
+              mkdir -p "$partial"
+              structural_before=$(PYTHONPATH=/bundle python -c \
+                'from pathlib import Path; from training.post_sft_artifacts import structural_tsv_sha256; print(structural_tsv_sha256(Path("/mnt/sfs/checkpoints/ft-run-574bd7b3/global_step_318")))')
+              expected_structural=$(python -c \
+                'import json; print(json.load(open("/bundle/plan.json"))["source_checkpoint_evidence"]["structural_manifest_before_sha256"])')
+              latest_before=$(cat /mnt/sfs/checkpoints/ft-run-574bd7b3/latest_ckpt_global_step.txt)
+              test "$structural_before" = "$expected_structural"
+              test "$latest_before" = 318
+              PYTHONPATH=/bundle python -m training.post_sft_artifacts full "$source" \
+                --output "$partial/source-full-manifest.json"
+              PYTHONPATH=/bundle python -m training.post_sft_artifacts \
+                hf-exact-auxiliary-omission "$export_root" \
+                --base-root "$base_root" --plan /bundle/plan.json --allow-sidecar-drift \
+                --output "$partial/hf-output-inspection.json" \
+                --layout-output "$partial/weight-layout-exact-auxiliary-omission.json"
+              PYTHONPATH=/bundle python -m training.post_sft_artifacts full "$export_root" \
+                --output "$partial/raw-export-full-manifest.json"
+              PYTHONPATH=/bundle python -m training.post_sft_artifacts \
+                evidence-runtime-provenance --plan /bundle/plan.json \
+                --output "$partial/runtime-provenance.json"
+              structural_after=$(PYTHONPATH=/bundle python -c \
+                'from pathlib import Path; from training.post_sft_artifacts import structural_tsv_sha256; print(structural_tsv_sha256(Path("/mnt/sfs/checkpoints/ft-run-574bd7b3/global_step_318")))')
+              latest_after=$(cat /mnt/sfs/checkpoints/ft-run-574bd7b3/latest_ckpt_global_step.txt)
+              test "$structural_after" = "$structural_before"
+              test "$structural_after" = "$expected_structural"
+              test "$latest_after" = "$latest_before"
+              test "$latest_after" = 318
+              PYTHONPATH=/bundle python - "$base_root" "$export_root" "$partial" <<'PY'
+              import json
+              import pathlib
+              import sys
+
+              from training.post_sft_artifacts import compare_model_config_architecture
+              from training.tokenizer_equivalence import (
+                  compare_effective_tokenizers,
+                  compare_special_token_ids,
+                  compare_tokenizer_mappings,
+              )
+
+              base = pathlib.Path(sys.argv[1])
+              candidate = pathlib.Path(sys.argv[2])
+              output = pathlib.Path(sys.argv[3])
+              architecture = compare_model_config_architecture(
+                  base / "config.json", candidate / "config.json"
+              )
+              tokenizer = {
+                  "mapping": compare_tokenizer_mappings(
+                      base / "tokenizer.json",
+                      candidate / "tokenizer.json",
+                      base_tokenizer_config=base / "tokenizer_config.json",
+                  ),
+                  "effective_mapping": compare_effective_tokenizers(base, candidate),
+                  "special_tokens": compare_special_token_ids(
+                      base / "tokenizer_config.json", candidate / "tokenizer_config.json"
+                  ),
+              }
+              (output / "model-config-architecture-equivalence.json").write_text(
+                  json.dumps(architecture, indent=2, sort_keys=True) + "\n"
+              )
+              (output / "tokenizer-structural-equivalence.json").write_text(
+                  json.dumps(tokenizer, indent=2, sort_keys=True) + "\n"
+              )
+              PY
+              python - "$partial" "$structural_before" "$structural_after" <<'PY'
+              import hashlib
+              import json
+              import pathlib
+              import sys
+
+              root = pathlib.Path(sys.argv[1])
+              structural_before = sys.argv[2]
+              structural_after = sys.argv[3]
+              source = json.loads((root / "source-full-manifest.json").read_text())
+              output = json.loads((root / "hf-output-inspection.json").read_text())
+              raw_export = json.loads((root / "raw-export-full-manifest.json").read_text())
+              layout = json.loads(
+                  (root / "weight-layout-exact-auxiliary-omission.json").read_text()
+              )
+              architecture = json.loads(
+                  (root / "model-config-architecture-equivalence.json").read_text()
+              )
+              tokenizer = json.loads(
+                  (root / "tokenizer-structural-equivalence.json").read_text()
+              )
+              runtime = json.loads((root / "runtime-provenance.json").read_text())
+              plan = json.loads(pathlib.Path("/bundle/plan.json").read_text())
+              receipt = {
+                  "schema": "fleet_sft_sfs_checkpoint_observation_v1",
+                  "run_name": "ft-run-574bd7b3",
+                  "step": 318,
+                  "sfs_path": "/mnt/sfs/checkpoints/ft-run-574bd7b3/global_step_318",
+                  "api_checkpoint_rows": 0,
+                  "checkpoint_pipeline": plan["source_checkpoint_evidence"]["checkpoint_pipeline"],
+                  "structural_manifest_before_sha256": structural_before,
+                  "structural_manifest_after_sha256": structural_after,
+                  "full_file_manifest_sha256": source["manifest_sha256"],
+                  "full_manifest_file_count": source["file_count"],
+                  "full_manifest_total_bytes": source["total_bytes"],
+                  "markers": {"promoted": True, "milestone": True, "expected_shards": 1,
+                              "complete_shards": 1, "latest_step": 318},
+                  "output_inspection": output,
+                  "raw_export_full_manifest_sha256": raw_export["manifest_sha256"],
+                  "raw_export_file_count": raw_export["file_count"],
+                  "raw_export_total_bytes": raw_export["total_bytes"],
+                  "weight_layout_exact_auxiliary_omission": layout,
+                  "model_config_architecture_equivalence": architecture,
+                  "tokenizer_structural_equivalence": tokenizer,
+                  "execution": runtime,
+                  "no_speculative_decoding_proof": runtime[
+                      "no_speculative_decoding_proof"
+                  ],
+              }
+              encoded = json.dumps(receipt, sort_keys=True, separators=(",", ":")).encode()
+              receipt["observation_sha256"] = "sha256:" + hashlib.sha256(encoded).hexdigest()
+              (root / "observation.json").write_text(
+                  json.dumps(receipt, indent=2, sort_keys=True) + "\n"
+              )
+              PY
+              mv "$partial" "$final"
+          resources:
+            requests: {cpu: "2", memory: 16Gi}
+            limits: {cpu: "4", memory: 32Gi}
+          volumeMounts:
+            - {name: bundle, mountPath: /bundle, readOnly: true}
+            - {name: sfs, mountPath: /mnt/sfs}
+      volumes:
+        - name: bundle
+          configMap:
+            name: chris-cyber-qwen36-sft-evidence-v4
+            items:
+              - {key: training__init__.py, path: training/__init__.py}
+              - {key: training_io.py, path: training/io.py}
+              - {key: training_post_sft_artifacts.py, path: training/post_sft_artifacts.py}
+              - {key: training_tokenizer_equivalence.py, path: training/tokenizer_equivalence.py}
+              - {key: plan.json, path: plan.json}
+              - {key: base-registration.json, path: base-registration.json}
+        - name: sfs
+          persistentVolumeClaim: {claimName: sfs-shared}

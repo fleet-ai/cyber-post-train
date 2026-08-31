@@ -14,6 +14,7 @@ from training.post_sft import (
     freeze_final_promoted_checkpoint,
     normalize_zero_step_stored_config,
     render_zero_step_sft_command,
+    validate_hf_export_receipt,
 )
 from training.post_sft_cli import app
 from training.post_sft_export_observation import collect_zero_step_export_run_observation
@@ -30,9 +31,16 @@ CONFIG_SHA256 = "sha256:" + "6" * 64
 SOURCE_SHA256 = "sha256:" + "7" * 64
 RAW_WEIGHTS_SHA256 = "sha256:" + "8" * 64
 RAW_FILES_SHA256 = "sha256:" + "9" * 64
+STRUCTURAL_SHA256 = "sha256:" + "3" * 64
 CAST_WEIGHTS_SHA256 = "sha256:" + "0" * 64
 COMPOSED_FILES_SHA256 = "sha256:" + "a" * 64
 RAW_LAYOUT_SHA256 = digest_json({"weight": {"shape": [1], "dtype": "F32"}})
+BASE_LAYOUT_SHA256 = digest_json(
+    {
+        "mtp.fc.weight": {"shape": [1], "dtype": "BF16"},
+        "weight": {"shape": [1], "dtype": "BF16"},
+    }
+)
 SIDECARS = {"config.json": CONFIG_SHA256, "tokenizer.json": "sha256:" + "b" * 64}
 STAGING_CODE_SHA256 = {
     "training/__init__.py": "sha256:" + "c" * 64,
@@ -41,11 +49,78 @@ STAGING_CODE_SHA256 = {
     "training/post_sft_staging.py": "sha256:" + "f" * 64,
 }
 CAST_CODE_SHA256 = {"training/post_sft_cast.py": "sha256:" + "1" * 64}
+EVIDENCE_CODE_SHA256 = {"training/post_sft_artifacts.py": "sha256:" + "2" * 64}
+
+
+def _evidence_execution_plan():
+    return {
+        "schema": "cyber_sft_sfs_evidence_execution_plan_v1",
+        "namespace": "fleet-train-jobs",
+        "job_name": "chris-cyber-evidence-v4",
+        "config_map_name": "chris-cyber-evidence-v4",
+        "service_account_name": "chris-cyber-evidence-observer-v4",
+        "container_name": "evidence",
+        "image": "registry.example/evidence@sha256:" + "2" * 64,
+        "image_digest": "sha256:" + "2" * 64,
+        "command_sha256": "sha256:" + "3" * 64,
+        "registration_sha256": "sha256:" + "d" * 64,
+        "config_map_code_sha256": EVIDENCE_CODE_SHA256,
+    }
+
+
+def _no_speculative_proof():
+    return {
+        "schema": "cyber_post_sft_no_speculative_decoding_proof_v1",
+        "registration_sha256": "sha256:" + "d" * 64,
+        "runtime_args_sha256": "sha256:" + "4" * 64,
+        "prohibited_runtime_args": ["--speculative-algorithm"],
+        "prohibited_runtime_args_absent": True,
+        "no_speculative_or_draft_argument": True,
+    }
+
+
+def _evidence_runtime():
+    plan = _evidence_execution_plan()
+    return {
+        "schema": "cyber_sft_sfs_evidence_runtime_provenance_v1",
+        "image": plan["image"],
+        "image_id": "containerd://" + plan["image_digest"],
+        "resolved_image_digest": plan["image_digest"],
+        "command_sha256": plan["command_sha256"],
+        "service_account_name": plan["service_account_name"],
+        "container_name": plan["container_name"],
+        "plan_file_sha256": "sha256:" + "5" * 64,
+        "execution_plan_sha256": digest_json(plan),
+        "job": {
+            "namespace": plan["namespace"],
+            "name": plan["job_name"],
+            "uid": "evidence-job-uid",
+            "resource_version": "1",
+            "spec_sha256": "sha256:" + "6" * 64,
+        },
+        "pod": {
+            "namespace": plan["namespace"],
+            "name": "evidence-pod",
+            "uid": "evidence-pod-uid",
+            "resource_version": "2",
+            "spec_sha256": "sha256:" + "7" * 64,
+        },
+        "config_map": {
+            "namespace": plan["namespace"],
+            "name": plan["config_map_name"],
+            "uid": "evidence-config-uid",
+            "resource_version": "3",
+            "immutable": True,
+            "mounted_file_sha256": EVIDENCE_CODE_SHA256,
+            "registration_sha256": plan["registration_sha256"],
+        },
+        "no_speculative_decoding_proof": _no_speculative_proof(),
+    }
 
 
 def _cast_execution_plan():
     return {
-        "schema": "cyber_sft_fp32_to_bf16_cast_execution_plan_v1",
+        "schema": "cyber_sft_fp32_to_bf16_cast_execution_plan_v2",
         "namespace": "fleet-train-jobs",
         "job_name": "chris-cyber-cast-v1",
         "config_map_name": "chris-cyber-cast-v1",
@@ -54,6 +129,7 @@ def _cast_execution_plan():
         "image": "registry.example/caster@sha256:" + "1" * 64,
         "image_digest": "sha256:" + "1" * 64,
         "command_sha256": "sha256:" + "2" * 64,
+        "base_model_path": "/models/base-revision",
         "config_map_code_sha256": CAST_CODE_SHA256,
     }
 
@@ -169,7 +245,7 @@ def _binding():
         "output_root": output_root,
         "expected_output_path": f"{output_root}/global_step_318/policy",
         "bf16_cast_destination": (
-            f"/mnt/sfs/exports/cyber-sft/{RUN}/step-318-bf16-v1/global_step_318/policy"
+            f"/mnt/sfs/exports/cyber-sft/{RUN}/step-318-bf16-v2/global_step_318/policy"
         ),
         "inference_staging_destination": f"/models/cyber-sft/{RUN}/step-318",
         "destination_preflight": {
@@ -202,6 +278,26 @@ def _binding():
                 },
                 "trainer_defaults": {"command": None, "env": {}},
             },
+        },
+        "raw_export_auxiliary_head_omission": {
+            "schema": "cyber_sft_exact_auxiliary_head_omission_v1",
+            "role": "speculative_draft_heads",
+            "base_repository": "Qwen/Qwen3.6-27B",
+            "base_revision": "base-revision",
+            "base_weights_manifest_sha256": "sha256:" + "c" * 64,
+            "serving_inference_effect": "inert_without_speculative_decoding",
+            "serving_registration_sha256": "sha256:" + "d" * 64,
+            "prohibited_runtime_args": ["--speculative-algorithm"],
+            "restoration_policy": "copy_exact_frozen_base_bf16_tensor_bits",
+            "base_tensor_count": 2,
+            "base_parameter_count": 2,
+            "raw_export_tensor_count": 1,
+            "raw_export_parameter_count": 1,
+            "missing_tensor_count": 1,
+            "missing_parameter_count": 1,
+            "tensors": [
+                {"key": "mtp.fc.weight", "shape": [1], "dtype": "BF16", "elements": 1}
+            ],
         },
     }
 
@@ -471,6 +567,22 @@ def _artifacts():
         "format": "safetensors",
         "dtype": "f32",
         "parameter_count": 1,
+        "base_parameter_count": 2,
+        "omitted_parameter_count": 1,
+        "parameter_count_expectation": (
+            "declared_raw_export_after_exact_auxiliary_head_omission_v1"
+        ),
+        "exact_auxiliary_omission_sha256": digest_json(
+            [
+                {
+                    "key": "mtp.fc.weight",
+                    "shape": [1],
+                    "dtype": "BF16",
+                    "elements": 1,
+                    "base_shard": "base.safetensors",
+                }
+            ]
+        ),
         "weights_manifest_sha256": RAW_WEIGHTS_SHA256,
         "files_manifest_sha256": RAW_FILES_SHA256,
         "all_shards_present": True,
@@ -483,26 +595,53 @@ def _artifacts():
             "run_name": RUN,
             "step": 318,
             "sfs_path": f"/mnt/sfs/checkpoints/{RUN}/global_step_318",
+            "structural_manifest_before_sha256": STRUCTURAL_SHA256,
+            "structural_manifest_after_sha256": STRUCTURAL_SHA256,
+            "markers": {
+                "promoted": True,
+                "milestone": True,
+                "expected_shards": 1,
+                "complete_shards": 1,
+                "latest_step": 318,
+            },
             "full_file_manifest_sha256": SOURCE_SHA256,
             "output_inspection": raw_inspection,
             "raw_export_full_manifest_sha256": RAW_FILES_SHA256,
-            "weight_layout_equivalence": {
-                "schema": "cyber_sft_safetensors_layout_equivalence_v2",
-                "tensor_count": 1,
-                "missing_key_count": 0,
+            "weight_layout_exact_auxiliary_omission": {
+                "schema": "cyber_sft_safetensors_exact_auxiliary_omission_v1",
+                "base_tensor_count": 2,
+                "base_parameter_count": 2,
+                "raw_export_tensor_count": 1,
+                "raw_export_parameter_count": 1,
+                "missing_tensor_count": 1,
+                "missing_parameter_count": 1,
+                "missing_tensors": [
+                    {
+                        "key": "mtp.fc.weight",
+                        "shape": [1],
+                        "dtype": "BF16",
+                        "elements": 1,
+                        "base_shard": "base.safetensors",
+                    }
+                ],
+                "missing_tensors_sha256": raw_inspection[
+                    "exact_auxiliary_omission_sha256"
+                ],
                 "unexpected_key_count": 0,
                 "shape_mismatch_count": 0,
-                "dtype_mismatch_count": 1,
-                "dtype_match_required": False,
-                "base_layout_sha256": "sha256:" + "1" * 64,
+                "candidate_wrong_dtype_count": 0,
+                "base_layout_sha256": BASE_LAYOUT_SHA256,
                 "candidate_layout_sha256": RAW_LAYOUT_SHA256,
-                "all_keys_and_shapes_match": True,
-                "all_keys_shapes_and_dtypes_match": False,
+                "exact_allowlist_match": True,
+                "all_present_keys_and_shapes_match": True,
+                "parameter_arithmetic_closes": True,
             },
             "model_config_architecture_equivalence": {
                 "all_architecture_and_vocab_fields_identical": True,
                 "normalized_architecture_sha256": "sha256:" + "2" * 64,
             },
+            "execution": _evidence_runtime(),
+            "no_speculative_decoding_proof": _no_speculative_proof(),
         },
         "observation_sha256",
     )
@@ -514,7 +653,7 @@ def _artifacts():
         "root": _binding()["bf16_cast_destination"],
         "format": "safetensors",
         "dtype": "bf16",
-        "parameter_count": 1,
+        "parameter_count": 2,
         "weights_manifest_sha256": CAST_WEIGHTS_SHA256,
         "files_manifest_sha256": cast_payload_sha256,
         "all_shards_present": True,
@@ -523,6 +662,7 @@ def _artifacts():
     }
     cast_rows = [
         {
+            "kind": "trained_fp32_to_bf16",
             "key": "weight",
             "shape": [1],
             "elements": 1,
@@ -535,9 +675,25 @@ def _artifacts():
             "exact_cast_bits_verified": True,
         }
     ]
+    restoration_rows = [
+        {
+            "kind": "frozen_base_auxiliary_head_restoration",
+            "key": "mtp.fc.weight",
+            "shape": [1],
+            "elements": 1,
+            "source_dtype": "BF16",
+            "destination_dtype": "BF16",
+            "base_revision": "base-revision",
+            "base_shard": "base.safetensors",
+            "destination_shard": "model-00001-of-00001.safetensors",
+            "base_tensor_sha256": "sha256:" + "6" * 64,
+            "destination_tensor_sha256": "sha256:" + "6" * 64,
+            "exact_base_bits_verified": True,
+        }
+    ]
     cast_receipt = _sign(
         {
-            "schema": "cyber_sft_fp32_to_bf16_cast_receipt_v1",
+            "schema": "cyber_sft_fp32_to_bf16_cast_receipt_v2",
             "cast_input_sha256": "sha256:" + "1" * 64,
             "source": {
                 "path": _binding()["expected_output_path"],
@@ -549,18 +705,51 @@ def _artifacts():
                 "raw_weights_manifest_sha256": RAW_WEIGHTS_SHA256,
                 "dtype": "F32",
             },
+            "frozen_base_auxiliary_source": {
+                "path": "/models/base-revision",
+                "repository": "Qwen/Qwen3.6-27B",
+                "revision": "base-revision",
+                "weights_manifest_sha256": "sha256:" + "c" * 64,
+                "full_manifest_before_sha256": "sha256:" + "e" * 64,
+                "full_manifest_after_sha256": "sha256:" + "e" * 64,
+                "base_source_stable_during_cast": True,
+                "exact_omission_evidence_sha256": raw_inspection[
+                    "exact_auxiliary_omission_sha256"
+                ],
+                "role": "speculative_draft_heads",
+                "serving_inference_effect": "inert_without_speculative_decoding",
+                "serving_registration_sha256": "sha256:" + "d" * 64,
+                "speculative_decoding_enabled": False,
+                "restoration_semantics": (
+                    "frozen_base_auxiliary_head_restoration_not_trained_weights"
+                ),
+            },
             "conversion": {
-                "schema": "cyber_sft_fp32_to_bf16_cast_proof_v1",
-                "policy": "deterministic_sorted_tensor_fp32_to_bf16_v1",
+                "schema": "cyber_sft_fp32_to_bf16_cast_and_restore_proof_v2",
+                "policy": (
+                    "deterministic_trained_fp32_to_bf16_plus_frozen_base_mtp_restore_v1"
+                ),
                 "source_dtype": "F32",
                 "destination_dtype": "BF16",
-                "parameter_count": 1,
-                "tensor_count": 1,
+                "trained_parameter_count": 1,
+                "trained_tensor_count": 1,
+                "restored_auxiliary_parameter_count": 1,
+                "restored_auxiliary_tensor_count": 1,
+                "final_parameter_count": 2,
+                "final_tensor_count": 2,
                 "source_layout_sha256": RAW_LAYOUT_SHA256,
+                "final_layout_sha256": BASE_LAYOUT_SHA256,
+                "exact_omission_evidence_sha256": raw_inspection[
+                    "exact_auxiliary_omission_sha256"
+                ],
                 "cast_rows_sha256": digest_json(cast_rows),
                 "cast_rows": cast_rows,
+                "restoration_rows_sha256": digest_json(restoration_rows),
+                "restoration_rows": restoration_rows,
                 "all_source_values_finite": True,
                 "all_destination_bits_equal_direct_bf16_cast": True,
+                "all_restored_auxiliary_bits_equal_frozen_base": True,
+                "final_layout_exactly_matches_frozen_base": True,
             },
             "execution_plan": _cast_execution_plan(),
             "execution": _cast_runtime("sha256:" + "1" * 64),
@@ -568,6 +757,19 @@ def _artifacts():
                 "path": _binding()["bf16_cast_destination"],
                 "dtype": "BF16",
                 "inspection": cast_inspection,
+                "exact_base_layout_equivalence": {
+                    "schema": "cyber_sft_safetensors_layout_equivalence_v2",
+                    "tensor_count": 2,
+                    "missing_key_count": 0,
+                    "unexpected_key_count": 0,
+                    "shape_mismatch_count": 0,
+                    "dtype_mismatch_count": 0,
+                    "dtype_match_required": True,
+                    "base_layout_sha256": BASE_LAYOUT_SHA256,
+                    "candidate_layout_sha256": BASE_LAYOUT_SHA256,
+                    "all_keys_and_shapes_match": True,
+                    "all_keys_shapes_and_dtypes_match": True,
+                },
                 "payload_manifest_sha256": cast_payload_sha256,
             },
         },
@@ -598,6 +800,18 @@ def _artifacts():
                 "bf16_inspection": cast_inspection,
                 "observation_sha256": export_observation["observation_sha256"],
                 "cast_receipt_sha256": cast_receipt["cast_receipt_sha256"],
+                "trained_cast_rows_sha256": cast_receipt["conversion"][
+                    "cast_rows_sha256"
+                ],
+                "restoration_rows_sha256": cast_receipt["conversion"][
+                    "restoration_rows_sha256"
+                ],
+                "exact_auxiliary_omission_sha256": raw_inspection[
+                    "exact_auxiliary_omission_sha256"
+                ],
+                "restoration_semantics": (
+                    "frozen_base_auxiliary_head_restoration_not_trained_weights"
+                ),
             },
             "composition": {
                 "runtime_sidecar_sha256": SIDECARS,
@@ -636,8 +850,8 @@ def _artifacts():
             "execution": _stage_runtime_execution(stage_input),
             "composition": {
                 "policy": (
-                    "verified_bf16_cast_weights_and_index_plus_"
-                    "exact_base_runtime_sidecars_v1"
+                    "verified_trained_bf16_plus_frozen_base_auxiliary_heads_and_"
+                    "exact_base_runtime_sidecars_v2"
                 ),
                 "tokenizer_equivalence_evidence_sha256": "sha256:" + "0" * 64,
                 "inspection": composed,
@@ -679,6 +893,8 @@ def _assemble(artifacts):
         expected_runtime_sidecar_sha256=SIDECARS,
         expected_tokenizer_equivalence_evidence_sha256="sha256:" + "0" * 64,
         expected_cast_execution=_cast_execution_plan(),
+        expected_sfs_evidence_execution=_evidence_execution_plan(),
+        expected_source_structural_sha256=STRUCTURAL_SHA256,
         expected_staging_image=STAGING_IMAGE,
         expected_staging_command_sha256=STAGING_COMMAND_SHA256,
     )
@@ -719,6 +935,65 @@ def test_assembly_builds_and_self_validates_final_export_receipt():
         },
         "reported_optimizer_steps": 0,
     }
+
+
+@pytest.mark.parametrize(
+    "field",
+    ("base_weights_manifest_sha256", "serving_registration_sha256"),
+)
+def test_final_receipt_rejects_re_signed_frozen_omission_binding_tamper(field):
+    receipt = copy.deepcopy(_assemble(_artifacts()))
+    correction = receipt["precision_correction"]
+    correction[field] = "sha256:" + "f" * 64
+    correction["restoration_binding_sha256"] = digest_json(
+        {
+            "restoration_rows_sha256": correction["restoration_rows_sha256"],
+            "omission_policy_sha256": correction["omission_policy_sha256"],
+            "base_weights_manifest_sha256": correction[
+                "base_weights_manifest_sha256"
+            ],
+            "serving_registration_sha256": correction[
+                "serving_registration_sha256"
+            ],
+            "restored_auxiliary_tensors": correction[
+                "restored_auxiliary_tensors"
+            ],
+        }
+    )
+    receipt["export_receipt_sha256"] = digest_json(
+        {key: value for key, value in receipt.items() if key != "export_receipt_sha256"}
+    )
+    with pytest.raises(ValueError, match="precision correction"):
+        validate_hf_export_receipt(
+            receipt,
+            _artifacts()[0],
+            expected_tokenizer_manifest_sha256=TOKENIZER_SHA256,
+            expected_chat_template_sha256=CHAT_SHA256,
+            expected_config_sha256=CONFIG_SHA256,
+            expected_export_binding=_binding(),
+            expected_runtime_sidecar_sha256=SIDECARS,
+        )
+
+
+@pytest.mark.parametrize(
+    "field", ("restoration_rows_sha256", "exact_omission_evidence_sha256")
+)
+def test_final_receipt_rejects_re_signed_omission_evidence_digest_tamper(field):
+    receipt = copy.deepcopy(_assemble(_artifacts()))
+    receipt["precision_correction"][field] = "sha256:" + "f" * 64
+    receipt["export_receipt_sha256"] = digest_json(
+        {key: value for key, value in receipt.items() if key != "export_receipt_sha256"}
+    )
+    with pytest.raises(ValueError, match="precision correction"):
+        validate_hf_export_receipt(
+            receipt,
+            _artifacts()[0],
+            expected_tokenizer_manifest_sha256=TOKENIZER_SHA256,
+            expected_chat_template_sha256=CHAT_SHA256,
+            expected_config_sha256=CONFIG_SHA256,
+            expected_export_binding=_binding(),
+            expected_runtime_sidecar_sha256=SIDECARS,
+        )
 
 
 @pytest.mark.parametrize(
@@ -1019,10 +1294,16 @@ def test_assemble_export_cli_writes_the_only_validated_aggregate(tmp_path):
             "config_sha256": CONFIG_SHA256,
             "runtime_sidecar_sha256": SIDECARS,
             "tokenizer_equivalence_evidence": {"sha256": "sha256:" + "0" * 64},
-        },
-        "serving": {"engine_image": REAL_STAGING_IMAGE},
-        "cast_execution": _cast_execution_plan(),
-        "export": _binding(),
+            },
+            "serving": {"engine_image": REAL_STAGING_IMAGE},
+            "cast_execution": _cast_execution_plan(),
+            "evidence_execution": {
+                "sfs_export_inspector": _evidence_execution_plan()
+            },
+            "source_checkpoint_evidence": {
+                "structural_manifest_before_sha256": STRUCTURAL_SHA256
+            },
+            "export": _binding(),
     }
     names = (
         "selection",
@@ -1121,9 +1402,10 @@ def test_multi_output_preflight_rejects_files_directories_and_dangling_symlinks(
 
 
 def test_export_evidence_submission_is_create_only_and_immutable():
-    script = (
-        Path(__file__).resolve().parents[1]
-        / "evals/post_sft/scripts/submit_evidence.sh"
+    root = Path(__file__).resolve().parents[1]
+    script = (root / "evals/post_sft/scripts/submit_evidence_v4.sh").read_text()
+    manifest = (
+        root / "evals/post_sft/cluster/qwen36-sft-evidence-v4-job.yaml"
     ).read_text()
     assert "kubectl apply" not in script
     assert 'value["immutable"]=True' in script
@@ -1131,3 +1413,15 @@ def test_export_evidence_submission_is_create_only_and_immutable():
     assert 'kubectl create -f "$config_map"' in script
     assert 'kubectl create -f "$JOB"' in script
     assert script.count("require_absent") >= 3
+    assert "validate-evidence-bundle" in script
+    assert "structural_before=" in manifest
+    assert "structural_after=" in manifest
+    assert "latest_before=" in manifest
+    assert "latest_after=" in manifest
+    assert manifest.index("raw-export-full-manifest.json") < manifest.index(
+        "structural_after="
+    )
+    assert 'test "$structural_after" = "$structural_before"' in manifest
+    assert 'test "$latest_after" = "$latest_before"' in manifest
+    assert "runtime-provenance.json" in manifest
+    assert "serviceAccountName: chris-cyber-qwen36-sft-evidence-observer-v4" in manifest

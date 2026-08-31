@@ -134,7 +134,7 @@ full pass only after conversion has ended and at low priority because the source
 302 GB of model and optimizer state.
 
 The prepared normal-queue evidence job wraps both passes and the raw FP32 HF inspection without
-requesting a GPU. Preview it with `evals/post_sft/scripts/submit_evidence.sh preview`; the submit
+requesting a GPU. Preview v4 with `evals/post_sft/scripts/submit_evidence_v4.sh preview`; the submit
 mode refuses to proceed until `ft-run-29f2bedf` is `SUCCEEDED`, refuses an existing output/job
 collision, and submits suspended through `training-lq`. This evidence job must finish before the
 BF16 cast job is submitted, so the cast input is bound to the complete raw and source manifests.
@@ -146,10 +146,22 @@ hashing any model file: the pinned trainer image runs as UID 1000 and the root-o
 v2 successor moved the receipt under the UID-1000-owned export tree and proved that storage fix,
 but its isolated ConfigMap bundle used the repository's import-heavy `training/__init__.py` without
 including all of those unrelated modules. It therefore failed at Python import, again before
-reading any model file. Preserve v2 unchanged as well. The create-only v3 successor mounts a
-minimal package marker and writes to
-`/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/evidence/sfs-v3/receipt`. The checkpoint, raw export,
-image, queue, resources, and verification algorithms remain unchanged.
+reading any model file. Preserve v2 unchanged as well. The create-only v3 successor mounted a
+minimal package marker and read the complete source, but correctly failed when it compared the raw
+export's 27,356,728,560 parameters with the frozen base's 27,781,427,952 parameters. Immutable
+headers then proved the exact difference: no extra tensors or shape mismatches, and exactly 15
+enumerated `mtp.*` speculative-draft tensors absent (424,699,392 parameters). Preserve v3 and its
+incomplete `.partial` directory unchanged.
+
+The create-only v4 evidence job writes to
+`/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/evidence/sfs-v4/receipt`. Its model-specific gate accepts
+only those exact 15 names, shapes, BF16 base dtypes, and element counts. Any additional, missing,
+renamed, or reshaped tensor is fatal; generic parameter and layout validators remain strict. The
+matched SGLang registration contains no speculative-decoding or draft-model argument, so these MTP
+heads are inference-inert in both arms. The Job recomputes the checkpoint structure and latest-step
+pointer after all source/export scans and fails if either changed. Its receipt also binds the live
+Job and Pod UIDs/specs, resolved image digest, immutable ConfigMap identity, mounted code hashes,
+and a programmatic check of the exact hash-pinned serving registration's runtime arguments.
 
 ```bash
 uv run python -m training.post_sft_cli freeze-sfs \
@@ -201,8 +213,10 @@ index, then copy every runtime sidecar from exact base revision `6a9e13bd...`. B
 - require encode/decode parity over every rendered SFT training window, the ten lineage-held-out
   Fleet prompts, all 15 WebExploitBench prompts and harness protocol strings, all five ExploitGym
   Qwen Code traces, and explicit tool/control strings;
-- compare every raw post-training tensor key and shape with the exact base layout, explicitly
-  recording the expected FP32/BF16 dtype difference, then compare the cast BF16 layout exactly; and
+- compare every present raw post-training tensor key and shape with the exact base layout,
+  accepting only the enumerated 15-key MTP omission and recording the FP32/BF16 dtype difference;
+  cast all 1,184 trained tensors and restore those 15 frozen-base BF16 auxiliary tensors; then
+  compare the resulting 1,199-tensor BF16 layout exactly; and
 - require the final bundle's runtime sidecar hashes to equal the plan's base hashes and its weight
   and index hashes to equal the verified BF16 cast.
 
@@ -214,28 +228,34 @@ output file and weight shard, verifies that the index exactly names those shards
 raw export is uniformly FP32 while the cast and served outputs are uniformly BF16 with the base
 architecture's exact parameter count.
 
-The CPU cast rail is `evals/post_sft/scripts/submit_bf16_cast.sh`. Preview is non-mutating.
+The CPU cast rail is `evals/post_sft/scripts/submit_bf16_cast_v2.sh`. Preview is non-mutating.
 Submission accepts only the completed evidence Job's digest-bound observation and raw full
 manifest, validates the queue, and creates a suspended Job through `training-lq` using create-only
 ServiceAccount, Role, RoleBinding, immutable ConfigMap, and Job operations. Its destination is
-`/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-bf16-v1/global_step_318/policy`.
-The embedded `.fleet-bf16-cast-acceptance.json` contains the per-tensor cast proof; after atomic
+`/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-bf16-v2/global_step_318/policy`.
+The embedded `.fleet-bf16-cast-acceptance.json` proves 1,184 direct FP32→BF16 casts and 15
+bit-identical copies from the exact frozen base. The latter are explicitly **frozen base
+auxiliary-head restoration**, not trained weights. Before copying, the Job hashes the complete
+base directory and requires its safetensor-shard digest to equal the signed model lock; it hashes
+the complete base again after conversion and fails unless the two full manifests are identical.
+After atomic
 promotion the same Job publishes a separate terminal evidence directory containing that receipt,
 the full post-marker manifest, and a digest-bound `COMPLETE.json`. Merely finding the destination
-directory is not success.
+directory is not success. Every written weight shard, index, and copied sidecar is flushed before
+the directory-level atomic promotion.
 
 ```bash
-bash evals/post_sft/scripts/submit_bf16_cast.sh preview
+bash evals/post_sft/scripts/submit_bf16_cast_v2.sh preview
 
 # Only after the evidence Job is Complete and these are its exact immutable outputs:
-bash evals/post_sft/scripts/submit_bf16_cast.sh submit \
+bash evals/post_sft/scripts/submit_bf16_cast_v2.sh submit \
   /restricted/ft-run-574bd7b3-observation.json \
   /restricted/ft-run-574bd7b3-raw-export-full-manifest.json
 ```
 
 After the cast Job is Complete, retrieve `cast-receipt.json` and
 `cast-full-manifest.json` from
-`/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/evidence/bf16-cast-v1/receipt/`.
+`/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/evidence/bf16-cast-v2/receipt/`.
 The adjacent
 `COMPLETE.json` must bind both files. These two files are inputs to staging; the destination path
 or a successful Pod status alone is insufficient.

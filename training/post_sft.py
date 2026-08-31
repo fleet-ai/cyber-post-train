@@ -748,25 +748,130 @@ def validate_hf_export_receipt(
 
     correction = _mapping(export.get("precision_correction"), "export.precision_correction")
     expected_cast_output = _text(expected_export_binding, "bf16_cast_destination")
-    if (
-        correction.get("schema") != "cyber_sft_fp32_to_bf16_precision_correction_v1"
-        or _text(correction, "source_path") != expected_conversion_output
-        or _text(correction, "destination_path") != expected_cast_output
-        or _text(correction, "source_dtype") != "F32"
-        or _text(correction, "destination_dtype") != "BF16"
-        or correction.get("policy") != "deterministic_sorted_tensor_fp32_to_bf16_v1"
-        or correction.get("exact_cast_bits_verified") is not True
-    ):
-        raise ValueError("HF export precision correction is incomplete or inconsistent")
+    omission_value = expected_export_binding.get("raw_export_auxiliary_head_omission")
+    if omission_value is None:
+        if (
+            correction.get("schema") != "cyber_sft_fp32_to_bf16_precision_correction_v1"
+            or _text(correction, "source_path") != expected_conversion_output
+            or _text(correction, "destination_path") != expected_cast_output
+            or _text(correction, "source_dtype") != "F32"
+            or _text(correction, "destination_dtype") != "BF16"
+            or correction.get("policy") != "deterministic_sorted_tensor_fp32_to_bf16_v1"
+            or correction.get("exact_cast_bits_verified") is not True
+        ):
+            raise ValueError("legacy HF export precision correction is inconsistent")
+        correction_digest_fields = (
+            "source_weights_manifest_sha256",
+            "cast_rows_sha256",
+            "source_layout_sha256",
+            "cast_receipt_sha256",
+            "cast_full_manifest_sha256",
+        )
+    else:
+        omission = _mapping(
+            omission_value, "expected raw export auxiliary-head omission"
+        )
+        expected_omission_policy_sha256 = digest_json(omission)
+        expected_restored_tensors = omission.get("tensors")
+        restored_rows = correction.get("restoration_rows")
+        omission_rows = correction.get("exact_omission_tensors")
+        normalized_restored = [
+            {
+                "key": row.get("key"),
+                "shape": row.get("shape"),
+                "dtype": row.get("destination_dtype"),
+                "elements": row.get("elements"),
+            }
+            for row in restored_rows or []
+            if isinstance(row, Mapping)
+        ]
+        normalized_omission = [
+            {key: row.get(key) for key in ("key", "shape", "dtype", "elements")}
+            for row in omission_rows or []
+            if isinstance(row, Mapping)
+        ]
+        restoration_binding = {
+            "restoration_rows_sha256": correction.get("restoration_rows_sha256"),
+            "omission_policy_sha256": expected_omission_policy_sha256,
+            "base_weights_manifest_sha256": omission.get(
+                "base_weights_manifest_sha256"
+            ),
+            "serving_registration_sha256": omission.get(
+                "serving_registration_sha256"
+            ),
+            "restored_auxiliary_tensors": expected_restored_tensors,
+        }
+        if (
+            correction.get("schema")
+            != "cyber_sft_fp32_to_bf16_plus_auxiliary_restoration_v2"
+            or _text(correction, "source_path") != expected_conversion_output
+            or _text(correction, "destination_path") != expected_cast_output
+            or _text(correction, "source_dtype") != "F32"
+            or _text(correction, "destination_dtype") != "BF16"
+            or correction.get("policy")
+            != "deterministic_trained_fp32_to_bf16_plus_frozen_base_mtp_restore_v1"
+            or correction.get("exact_cast_bits_verified") is not True
+            or correction.get("exact_frozen_base_auxiliary_bits_verified") is not True
+            or correction.get("restoration_semantics")
+            != "frozen_base_auxiliary_head_restoration_not_trained_weights"
+            or correction.get("omission_policy_sha256")
+            != expected_omission_policy_sha256
+            or correction.get("base_weights_manifest_sha256")
+            != omission.get("base_weights_manifest_sha256")
+            or correction.get("serving_registration_sha256")
+            != omission.get("serving_registration_sha256")
+            or correction.get("restored_auxiliary_tensors")
+            != expected_restored_tensors
+            or not isinstance(restored_rows, list)
+            or digest_json(restored_rows) != correction.get("restoration_rows_sha256")
+            or normalized_restored != expected_restored_tensors
+            or any(
+                row.get("kind") != "frozen_base_auxiliary_head_restoration"
+                or row.get("source_dtype") != "BF16"
+                or row.get("destination_dtype") != "BF16"
+                or row.get("base_revision") != omission.get("base_revision")
+                or row.get("base_tensor_sha256")
+                != row.get("destination_tensor_sha256")
+                or not re.fullmatch(
+                    r"sha256:[0-9a-f]{64}", str(row.get("base_tensor_sha256"))
+                )
+                or row.get("exact_base_bits_verified") is not True
+                for row in restored_rows
+            )
+            or not isinstance(omission_rows, list)
+            or normalized_omission != expected_restored_tensors
+            or digest_json(omission_rows)
+            != correction.get("exact_omission_evidence_sha256")
+            or correction.get("restoration_binding_sha256")
+            != digest_json(restoration_binding)
+            or correction.get("frozen_base_full_manifest_before_sha256")
+            != correction.get("frozen_base_full_manifest_after_sha256")
+            or correction.get("trained_parameter_count")
+            != omission.get("raw_export_parameter_count")
+            or correction.get("restored_auxiliary_parameter_count")
+            != omission.get("missing_parameter_count")
+            or correction.get("final_parameter_count")
+            != omission.get("base_parameter_count")
+        ):
+            raise ValueError("HF export precision correction is incomplete or inconsistent")
+        correction_digest_fields = (
+            "source_weights_manifest_sha256",
+            "cast_rows_sha256",
+            "restoration_rows_sha256",
+            "restoration_binding_sha256",
+            "exact_omission_evidence_sha256",
+            "omission_policy_sha256",
+            "base_weights_manifest_sha256",
+            "serving_registration_sha256",
+            "frozen_base_full_manifest_before_sha256",
+            "frozen_base_full_manifest_after_sha256",
+            "source_layout_sha256",
+            "cast_receipt_sha256",
+            "cast_full_manifest_sha256",
+        )
     if _sha256(correction, "destination_weights_manifest_sha256") != weights_manifest_sha256:
         raise ValueError("precision correction output differs from final exported weights")
-    for field in (
-        "source_weights_manifest_sha256",
-        "cast_rows_sha256",
-        "source_layout_sha256",
-        "cast_receipt_sha256",
-        "cast_full_manifest_sha256",
-    ):
+    for field in correction_digest_fields:
         _sha256(correction, field)
 
     staging = _mapping(export.get("staging"), "export.staging")
@@ -808,6 +913,8 @@ def assemble_hf_export_receipt(
     expected_runtime_sidecar_sha256: Mapping[str, str],
     expected_tokenizer_equivalence_evidence_sha256: str,
     expected_cast_execution: Mapping[str, Any],
+    expected_sfs_evidence_execution: Mapping[str, Any],
+    expected_source_structural_sha256: str,
     expected_staging_image: str,
     expected_staging_command_sha256: str,
 ) -> dict[str, Any]:
@@ -1079,6 +1186,25 @@ def assemble_hf_export_receipt(
         raise ValueError("post-export observation names a different checkpoint step")
     if _text(export_observation, "sfs_path") != _text(checkpoint, "sfs_path"):
         raise ValueError("post-export observation names a different source checkpoint path")
+    structural_before = _sha256(
+        export_observation, "structural_manifest_before_sha256"
+    )
+    structural_after = _sha256(
+        export_observation, "structural_manifest_after_sha256"
+    )
+    expected_structural = expected_source_structural_sha256
+    _sha256({"expected": expected_structural}, "expected")
+    markers = _mapping(export_observation.get("markers"), "post-export source markers")
+    if (
+        structural_before != expected_structural
+        or structural_after != structural_before
+        or markers.get("promoted") is not True
+        or markers.get("milestone") is not True
+        or markers.get("expected_shards") != 1
+        or markers.get("complete_shards") != 1
+        or markers.get("latest_step") != checkpoint.get("step")
+    ):
+        raise ValueError("source checkpoint structure or latest pointer changed during evidence")
     if _sha256(export_observation, "full_file_manifest_sha256") != (
         _selection_source_manifest(selection)
     ):
@@ -1095,24 +1221,140 @@ def assemble_hf_export_receipt(
     for field in ("all_shards_present", "safetensors_load_passed", "parameter_count_matches"):
         if raw_inspection.get(field) is not True:
             raise ValueError(f"raw export verification {field} did not pass")
+    omission_policy = _mapping(
+        expected_export_binding.get("raw_export_auxiliary_head_omission"),
+        "expected raw export auxiliary-head omission",
+    )
+    evidence_execution = _mapping(
+        expected_sfs_evidence_execution, "SFS export evidence execution"
+    )
+    evidence_runtime = _mapping(
+        export_observation.get("execution"), "SFS export evidence runtime"
+    )
+    if (
+        evidence_runtime.get("schema")
+        != "cyber_sft_sfs_evidence_runtime_provenance_v1"
+        or evidence_runtime.get("image") != evidence_execution.get("image")
+        or evidence_runtime.get("resolved_image_digest")
+        != evidence_execution.get("image_digest")
+        or evidence_runtime.get("command_sha256")
+        != evidence_execution.get("command_sha256")
+        or evidence_runtime.get("service_account_name")
+        != evidence_execution.get("service_account_name")
+        or evidence_runtime.get("container_name")
+        != evidence_execution.get("container_name")
+        or evidence_runtime.get("execution_plan_sha256")
+        != digest_json(evidence_execution)
+    ):
+        raise ValueError("SFS export evidence runtime differs from the frozen plan")
+    _sha256(evidence_runtime, "plan_file_sha256")
+    runtime_job = _mapping(evidence_runtime.get("job"), "SFS evidence Job")
+    runtime_pod = _mapping(evidence_runtime.get("pod"), "SFS evidence Pod")
+    runtime_config_map = _mapping(
+        evidence_runtime.get("config_map"), "SFS evidence ConfigMap"
+    )
+    if (
+        runtime_job.get("namespace") != evidence_execution.get("namespace")
+        or runtime_job.get("name") != evidence_execution.get("job_name")
+        or runtime_config_map.get("name")
+        != evidence_execution.get("config_map_name")
+        or runtime_config_map.get("immutable") is not True
+    ):
+        raise ValueError("SFS export evidence resources differ from the frozen plan")
+    for runtime_object in (runtime_job, runtime_pod, runtime_config_map):
+        _text(runtime_object, "uid")
+        _text(runtime_object, "resource_version")
+    _sha256(runtime_job, "spec_sha256")
+    _sha256(runtime_pod, "spec_sha256")
+    mounted_evidence = _mapping(
+        runtime_config_map.get("mounted_file_sha256"), "SFS evidence mounted files"
+    )
+    for path, digest in _mapping(
+        evidence_execution.get("config_map_code_sha256"), "SFS reviewed evidence code"
+    ).items():
+        if mounted_evidence.get(path) != digest:
+            raise ValueError(f"SFS evidence mounted code differs for {path}")
+    if runtime_config_map.get("registration_sha256") != evidence_execution.get(
+        "registration_sha256"
+    ):
+        raise ValueError("SFS evidence mounted a different serving registration")
+    no_speculative = _mapping(
+        export_observation.get("no_speculative_decoding_proof"),
+        "no speculative decoding proof",
+    )
+    if (
+        no_speculative
+        != evidence_runtime.get("no_speculative_decoding_proof")
+        or no_speculative.get("schema")
+        != "cyber_post_sft_no_speculative_decoding_proof_v1"
+        or no_speculative.get("registration_sha256")
+        != omission_policy.get("serving_registration_sha256")
+        or no_speculative.get("prohibited_runtime_args")
+        != omission_policy.get("prohibited_runtime_args")
+        or no_speculative.get("prohibited_runtime_args_absent") is not True
+        or no_speculative.get("no_speculative_or_draft_argument") is not True
+    ):
+        raise ValueError("SFS evidence does not prove speculative decoding is disabled")
+    _sha256(no_speculative, "runtime_args_sha256")
+    if (
+        raw_inspection.get("parameter_count")
+        != omission_policy.get("raw_export_parameter_count")
+        or raw_inspection.get("base_parameter_count")
+        != omission_policy.get("base_parameter_count")
+        or raw_inspection.get("omitted_parameter_count")
+        != omission_policy.get("missing_parameter_count")
+        or raw_inspection.get("parameter_count_expectation")
+        != "declared_raw_export_after_exact_auxiliary_head_omission_v1"
+    ):
+        raise ValueError("raw export parameter counts do not match the exact omission policy")
     raw_weights_sha256 = _sha256(raw_inspection, "weights_manifest_sha256")
     raw_files_sha256 = _sha256(raw_inspection, "files_manifest_sha256")
     if _sha256(export_observation, "raw_export_full_manifest_sha256") != raw_files_sha256:
         raise ValueError("post-export observation full manifest differs from its inspection")
     raw_layout = _mapping(
-        export_observation.get("weight_layout_equivalence"), "raw weight layout evidence"
+        export_observation.get("weight_layout_exact_auxiliary_omission"),
+        "raw exact auxiliary-head omission evidence",
     )
+    declared_tensors = omission_policy.get("tensors")
+    observed_tensors = raw_layout.get("missing_tensors")
+    if not isinstance(declared_tensors, list) or not isinstance(observed_tensors, list):
+        raise ValueError("exact auxiliary-head omission tensor rows are missing")
+    normalized_observed_tensors = [
+        {key: row.get(key) for key in ("key", "shape", "dtype", "elements")}
+        for row in observed_tensors
+        if isinstance(row, Mapping)
+    ]
+    declared_by_key = {
+        row["key"]: row for row in declared_tensors if isinstance(row, Mapping)
+    }
     if (
-        raw_layout.get("schema") != "cyber_sft_safetensors_layout_equivalence_v2"
-        or raw_layout.get("all_keys_and_shapes_match") is not True
-        or raw_layout.get("dtype_match_required") is not False
+        raw_layout.get("schema")
+        != "cyber_sft_safetensors_exact_auxiliary_omission_v1"
+        or raw_layout.get("exact_allowlist_match") is not True
+        or raw_layout.get("all_present_keys_and_shapes_match") is not True
+        or raw_layout.get("parameter_arithmetic_closes") is not True
         or raw_layout.get("shape_mismatch_count") != 0
-        or raw_layout.get("missing_key_count") != 0
         or raw_layout.get("unexpected_key_count") != 0
-        or raw_layout.get("dtype_mismatch_count") != raw_layout.get("tensor_count")
+        or raw_layout.get("candidate_wrong_dtype_count") != 0
+        or raw_layout.get("missing_tensor_count") != omission_policy.get(
+            "missing_tensor_count"
+        )
+        or raw_layout.get("missing_parameter_count") != omission_policy.get(
+            "missing_parameter_count"
+        )
+        or raw_layout.get("raw_export_tensor_count") != omission_policy.get(
+            "raw_export_tensor_count"
+        )
+        or raw_layout.get("raw_export_parameter_count") != omission_policy.get(
+            "raw_export_parameter_count"
+        )
+        or normalized_observed_tensors != declared_tensors
     ):
-        raise ValueError("raw FP32 export layout does not match the frozen BF16 architecture")
+        raise ValueError("raw FP32 export differs from the exact frozen MTP omission")
     _sha256(raw_layout, "base_layout_sha256")
+    omission_evidence_sha256 = _sha256(raw_layout, "missing_tensors_sha256")
+    if raw_inspection.get("exact_auxiliary_omission_sha256") != omission_evidence_sha256:
+        raise ValueError("raw inspection names different auxiliary-head omission evidence")
     raw_layout_sha256 = _sha256(raw_layout, "candidate_layout_sha256")
     architecture = _mapping(
         export_observation.get("model_config_architecture_equivalence"),
@@ -1122,8 +1364,8 @@ def assemble_hf_export_receipt(
         raise ValueError("raw export model architecture differs from the frozen base")
     _sha256(architecture, "normalized_architecture_sha256")
 
-    if cast_receipt.get("schema") != "cyber_sft_fp32_to_bf16_cast_receipt_v1":
-        raise ValueError("unsupported FP32-to-BF16 cast receipt schema")
+    if cast_receipt.get("schema") != "cyber_sft_fp32_to_bf16_cast_receipt_v2":
+        raise ValueError("unsupported FP32-to-BF16 plus restoration receipt schema")
     cast_receipt_sha256 = _validate_embedded_digest(cast_receipt, "cast_receipt_sha256")
     cast_source = _mapping(cast_receipt.get("source"), "cast receipt source")
     if (
@@ -1138,17 +1380,63 @@ def assemble_hf_export_receipt(
         or _text(cast_source, "dtype") != "F32"
     ):
         raise ValueError("FP32-to-BF16 cast source differs from immutable export evidence")
+    cast_base = _mapping(
+        cast_receipt.get("frozen_base_auxiliary_source"),
+        "cast frozen base auxiliary source",
+    )
+    base_full_manifest_before_sha256 = _sha256(
+        cast_base, "full_manifest_before_sha256"
+    )
+    base_full_manifest_after_sha256 = _sha256(
+        cast_base, "full_manifest_after_sha256"
+    )
+    if (
+        _text(cast_base, "path")
+        != _text(expected_cast_execution, "base_model_path")
+        or _text(cast_base, "repository") != omission_policy.get("base_repository")
+        or _text(cast_base, "revision") != omission_policy.get("base_revision")
+        or _sha256(cast_base, "weights_manifest_sha256")
+        != omission_policy.get("base_weights_manifest_sha256")
+        or _sha256(cast_base, "exact_omission_evidence_sha256")
+        != omission_evidence_sha256
+        or cast_base.get("role") != "speculative_draft_heads"
+        or cast_base.get("serving_inference_effect")
+        != "inert_without_speculative_decoding"
+        or cast_base.get("speculative_decoding_enabled") is not False
+        or _sha256(cast_base, "serving_registration_sha256")
+        != omission_policy.get("serving_registration_sha256")
+        or cast_base.get("restoration_semantics")
+        != "frozen_base_auxiliary_head_restoration_not_trained_weights"
+        or cast_base.get("base_source_stable_during_cast") is not True
+        or base_full_manifest_before_sha256 != base_full_manifest_after_sha256
+    ):
+        raise ValueError("cast auxiliary-head source differs from the frozen base proof")
     cast_conversion = _mapping(cast_receipt.get("conversion"), "cast conversion proof")
     if (
-        cast_conversion.get("schema") != "cyber_sft_fp32_to_bf16_cast_proof_v1"
-        or cast_conversion.get("policy") != "deterministic_sorted_tensor_fp32_to_bf16_v1"
+        cast_conversion.get("schema")
+        != "cyber_sft_fp32_to_bf16_cast_and_restore_proof_v2"
+        or cast_conversion.get("policy")
+        != "deterministic_trained_fp32_to_bf16_plus_frozen_base_mtp_restore_v1"
         or cast_conversion.get("source_dtype") != "F32"
         or cast_conversion.get("destination_dtype") != "BF16"
         or cast_conversion.get("all_source_values_finite") is not True
         or cast_conversion.get("all_destination_bits_equal_direct_bf16_cast") is not True
-        or cast_conversion.get("parameter_count") != raw_inspection.get("parameter_count")
+        or cast_conversion.get("all_restored_auxiliary_bits_equal_frozen_base") is not True
+        or cast_conversion.get("final_layout_exactly_matches_frozen_base") is not True
+        or cast_conversion.get("trained_tensor_count")
+        != omission_policy.get("raw_export_tensor_count")
+        or cast_conversion.get("trained_parameter_count")
+        != raw_inspection.get("parameter_count")
+        or cast_conversion.get("restored_auxiliary_tensor_count")
+        != omission_policy.get("missing_tensor_count")
+        or cast_conversion.get("restored_auxiliary_parameter_count")
+        != omission_policy.get("missing_parameter_count")
+        or cast_conversion.get("final_tensor_count")
+        != omission_policy.get("base_tensor_count")
+        or cast_conversion.get("final_parameter_count")
+        != omission_policy.get("base_parameter_count")
     ):
-        raise ValueError("FP32-to-BF16 cast proof is incomplete or inconsistent")
+        raise ValueError("FP32-to-BF16 cast/restoration proof is incomplete or inconsistent")
     if _sha256(cast_conversion, "source_layout_sha256") != raw_layout_sha256:
         raise ValueError("cast source layout differs from the independently inspected raw export")
     cast_rows_sha256 = _sha256(cast_conversion, "cast_rows_sha256")
@@ -1156,11 +1444,12 @@ def assemble_hf_export_receipt(
     if not isinstance(cast_rows, list) or digest_json(cast_rows) != cast_rows_sha256:
         raise ValueError("FP32-to-BF16 per-tensor cast proof digest does not validate")
     if (
-        len(cast_rows) != cast_conversion.get("tensor_count")
+        len(cast_rows) != cast_conversion.get("trained_tensor_count")
         or sum(row.get("elements", 0) for row in cast_rows if isinstance(row, Mapping))
-        != cast_conversion.get("parameter_count")
+        != cast_conversion.get("trained_parameter_count")
         or any(
             not isinstance(row, Mapping)
+            or row.get("kind") != "trained_fp32_to_bf16"
             or row.get("source_dtype") != "F32"
             or row.get("destination_dtype") != "BF16"
             or row.get("exact_cast_bits_verified") is not True
@@ -1178,6 +1467,44 @@ def assemble_hf_export_receipt(
         )
     ):
         raise ValueError("FP32-to-BF16 per-tensor cast proof is incomplete")
+    restoration_rows_sha256 = _sha256(cast_conversion, "restoration_rows_sha256")
+    restoration_rows = cast_conversion.get("restoration_rows")
+    if (
+        not isinstance(restoration_rows, list)
+        or digest_json(restoration_rows) != restoration_rows_sha256
+        or len(restoration_rows) != omission_policy.get("missing_tensor_count")
+        or sum(
+            row.get("elements", 0)
+            for row in restoration_rows
+            if isinstance(row, Mapping)
+        )
+        != omission_policy.get("missing_parameter_count")
+        or [row.get("key") for row in restoration_rows if isinstance(row, Mapping)]
+        != [row["key"] for row in declared_tensors]
+        or any(
+            not isinstance(row, Mapping)
+            or row.get("kind") != "frozen_base_auxiliary_head_restoration"
+            or row.get("source_dtype") != "BF16"
+            or row.get("destination_dtype") != "BF16"
+            or row.get("shape") != declared_by_key.get(row.get("key"), {}).get("shape")
+            or row.get("elements")
+            != declared_by_key.get(row.get("key"), {}).get("elements")
+            or row.get("base_revision") != omission_policy.get("base_revision")
+            or not isinstance(row.get("base_shard"), str)
+            or not isinstance(row.get("destination_shard"), str)
+            or row.get("exact_base_bits_verified") is not True
+            or not re.fullmatch(
+                r"sha256:[0-9a-f]{64}", str(row.get("base_tensor_sha256"))
+            )
+            or row.get("destination_tensor_sha256") != row.get("base_tensor_sha256")
+            for row in restoration_rows
+        )
+    ):
+        raise ValueError("frozen-base auxiliary restoration proof is incomplete")
+    if _sha256(cast_conversion, "exact_omission_evidence_sha256") != (
+        omission_evidence_sha256
+    ):
+        raise ValueError("cast restoration names different exact omission evidence")
     if _mapping(cast_receipt.get("execution_plan"), "cast execution plan") != (
         expected_cast_execution
     ):
@@ -1229,6 +1556,27 @@ def assemble_hf_export_receipt(
         or _text(cast_inspection, "dtype").lower() not in {"bf16", "bfloat16"}
     ):
         raise ValueError("FP32-to-BF16 cast destination differs from the frozen plan")
+    final_layout = _mapping(
+        cast_destination.get("exact_base_layout_equivalence"),
+        "cast final base layout equivalence",
+    )
+    if (
+        final_layout.get("schema") != "cyber_sft_safetensors_layout_equivalence_v2"
+        or final_layout.get("tensor_count") != omission_policy.get("base_tensor_count")
+        or final_layout.get("missing_key_count") != 0
+        or final_layout.get("unexpected_key_count") != 0
+        or final_layout.get("shape_mismatch_count") != 0
+        or final_layout.get("dtype_mismatch_count") != 0
+        or final_layout.get("dtype_match_required") is not True
+        or final_layout.get("all_keys_shapes_and_dtypes_match") is not True
+        or _sha256(final_layout, "base_layout_sha256")
+        != _sha256(raw_layout, "base_layout_sha256")
+        or _sha256(final_layout, "candidate_layout_sha256")
+        != _sha256(raw_layout, "base_layout_sha256")
+        or _sha256(cast_conversion, "final_layout_sha256")
+        != _sha256(raw_layout, "base_layout_sha256")
+    ):
+        raise ValueError("restored BF16 output does not exactly match frozen base layout")
     cast_weights_sha256 = _sha256(cast_inspection, "weights_manifest_sha256")
     cast_rows = cast_full_manifest.get("files")
     if (
@@ -1261,6 +1609,16 @@ def assemble_hf_export_receipt(
         raise ValueError("inference stage input names a different export observation")
     if _sha256(stage_source, "cast_receipt_sha256") != cast_receipt_sha256:
         raise ValueError("inference stage input names a different BF16 cast receipt")
+    if (
+        _sha256(stage_source, "trained_cast_rows_sha256") != cast_rows_sha256
+        or _sha256(stage_source, "restoration_rows_sha256")
+        != restoration_rows_sha256
+        or _sha256(stage_source, "exact_auxiliary_omission_sha256")
+        != omission_evidence_sha256
+        or stage_source.get("restoration_semantics")
+        != "frozen_base_auxiliary_head_restoration_not_trained_weights"
+    ):
+        raise ValueError("inference stage input loses trained/restored weight provenance")
     if stage_source.get("bf16_inspection") != cast_inspection:
         raise ValueError("inference stage input BF16 inspection differs from cast evidence")
     stage_manifest = _mapping(
@@ -1397,7 +1755,8 @@ def assemble_hf_export_receipt(
         raise ValueError("inference staging mounted bytes differ from the stage input")
     staged_composition = _mapping(staging_receipt.get("composition"), "staging receipt composition")
     if staged_composition.get("policy") != (
-        "verified_bf16_cast_weights_and_index_plus_exact_base_runtime_sidecars_v1"
+        "verified_trained_bf16_plus_frozen_base_auxiliary_heads_and_"
+        "exact_base_runtime_sidecars_v2"
     ):
         raise ValueError("unsupported inference bundle composition policy")
     if staged_composition.get("tokenizer_equivalence_evidence_sha256") != (
@@ -1440,6 +1799,20 @@ def assemble_hf_export_receipt(
     ):
         raise ValueError("staging receipt does not prove atomic promotion to the frozen path")
 
+    omission_policy_sha256 = digest_json(omission_policy)
+    restoration_binding = {
+        "restoration_rows_sha256": _sha256(
+            cast_conversion, "restoration_rows_sha256"
+        ),
+        "omission_policy_sha256": omission_policy_sha256,
+        "base_weights_manifest_sha256": omission_policy[
+            "base_weights_manifest_sha256"
+        ],
+        "serving_registration_sha256": omission_policy[
+            "serving_registration_sha256"
+        ],
+        "restored_auxiliary_tensors": copy.deepcopy(declared_tensors),
+    }
     receipt = {
         "schema": "cyber_sft_hf_export_v1",
         "source_checkpoint": {
@@ -1475,7 +1848,7 @@ def assemble_hf_export_receipt(
             "raw_full_manifest_sha256": raw_files_sha256,
         },
         "precision_correction": {
-            "schema": "cyber_sft_fp32_to_bf16_precision_correction_v1",
+            "schema": "cyber_sft_fp32_to_bf16_plus_auxiliary_restoration_v2",
             "source_path": expected_raw_path,
             "destination_path": expected_cast_path,
             "source_dtype": "F32",
@@ -1484,10 +1857,40 @@ def assemble_hf_export_receipt(
             "source_weights_manifest_sha256": raw_weights_sha256,
             "destination_weights_manifest_sha256": cast_weights_sha256,
             "cast_rows_sha256": _sha256(cast_conversion, "cast_rows_sha256"),
+            "restoration_rows_sha256": _sha256(
+                cast_conversion, "restoration_rows_sha256"
+            ),
+            "restoration_rows": copy.deepcopy(restoration_rows),
+            "restoration_binding_sha256": digest_json(restoration_binding),
+            "exact_omission_evidence_sha256": omission_evidence_sha256,
+            "exact_omission_tensors": copy.deepcopy(observed_tensors),
+            "omission_policy_sha256": omission_policy_sha256,
+            "base_weights_manifest_sha256": omission_policy[
+                "base_weights_manifest_sha256"
+            ],
+            "serving_registration_sha256": omission_policy[
+                "serving_registration_sha256"
+            ],
+            "restored_auxiliary_tensors": copy.deepcopy(declared_tensors),
+            "frozen_base_full_manifest_before_sha256": (
+                base_full_manifest_before_sha256
+            ),
+            "frozen_base_full_manifest_after_sha256": (
+                base_full_manifest_after_sha256
+            ),
             "source_layout_sha256": _sha256(cast_conversion, "source_layout_sha256"),
             "cast_receipt_sha256": cast_receipt_sha256,
             "cast_full_manifest_sha256": cast_full_manifest_sha256,
             "exact_cast_bits_verified": True,
+            "exact_frozen_base_auxiliary_bits_verified": True,
+            "trained_parameter_count": cast_conversion["trained_parameter_count"],
+            "restored_auxiliary_parameter_count": cast_conversion[
+                "restored_auxiliary_parameter_count"
+            ],
+            "final_parameter_count": cast_conversion["final_parameter_count"],
+            "restoration_semantics": (
+                "frozen_base_auxiliary_head_restoration_not_trained_weights"
+            ),
         },
         "staging": {
             "source_path": expected_cast_path,

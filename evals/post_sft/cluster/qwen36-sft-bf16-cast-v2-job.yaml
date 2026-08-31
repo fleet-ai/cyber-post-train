@@ -1,0 +1,101 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: chris-cyber-qwen36-sft-bf16-cast-observer-v2
+  namespace: fleet-train-jobs
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: chris-cyber-qwen36-sft-bf16-cast-observer-v2
+  namespace: fleet-train-jobs
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get]
+  - apiGroups: [""]
+    resources: [configmaps]
+    resourceNames: [chris-cyber-qwen36-sft-bf16-cast-v2]
+    verbs: [get]
+  - apiGroups: [batch]
+    resources: [jobs]
+    resourceNames: [chris-cyber-qwen36-sft-bf16-cast-v2]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: chris-cyber-qwen36-sft-bf16-cast-observer-v2
+  namespace: fleet-train-jobs
+subjects:
+  - kind: ServiceAccount
+    name: chris-cyber-qwen36-sft-bf16-cast-observer-v2
+    namespace: fleet-train-jobs
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: chris-cyber-qwen36-sft-bf16-cast-observer-v2
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: chris-cyber-qwen36-sft-bf16-cast-v2
+  namespace: fleet-train-jobs
+  labels:
+    kueue.x-k8s.io/queue-name: training-lq
+    cyber-post-train.fleet.ai/owner: chris
+    cyber-post-train.fleet.ai/experiment: qwen36-sft-bf16-cast-v2
+    cyber-post-train.fleet.ai/model: qwen36
+spec:
+  suspend: true
+  backoffLimit: 0
+  activeDeadlineSeconds: 43200
+  ttlSecondsAfterFinished: 604800
+  template:
+    metadata:
+      labels:
+        kueue.x-k8s.io/queue-name: training-lq
+        cyber-post-train.fleet.ai/owner: chris
+        cyber-post-train.fleet.ai/experiment: qwen36-sft-bf16-cast-v2
+        cyber-post-train.fleet.ai/model: qwen36
+    spec:
+      restartPolicy: Never
+      serviceAccountName: chris-cyber-qwen36-sft-bf16-cast-observer-v2
+      nodeSelector: {workload: fleetai-training-ng-cpu}
+      tolerations:
+        - {key: workload, operator: Equal, value: fleetai-training-ng-cpu, effect: NoSchedule}
+      containers:
+        - name: cast
+          image: 661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train:q36-torchgdn-6db8d0c9@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4
+          command: ["python", "-m", "training.post_sft_cast", "execute"]
+          args: ["--input", "/bundle/cast-input.json"]
+          env:
+            - {name: PYTHONPATH, value: /bundle}
+            - name: POD_NAME
+              valueFrom: {fieldRef: {fieldPath: metadata.name}}
+            - name: POD_NAMESPACE
+              valueFrom: {fieldRef: {fieldPath: metadata.namespace}}
+            - name: POD_UID
+              valueFrom: {fieldRef: {fieldPath: metadata.uid}}
+            - name: JOB_UID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['batch.kubernetes.io/controller-uid']
+          resources:
+            requests: {cpu: "4", memory: 32Gi}
+            limits: {cpu: "8", memory: 64Gi}
+          volumeMounts:
+            - {name: bundle, mountPath: /bundle, readOnly: true}
+            - {name: sfs, mountPath: /mnt/sfs}
+      volumes:
+        - name: bundle
+          configMap:
+            name: chris-cyber-qwen36-sft-bf16-cast-v2
+            items:
+              - {key: training__init__.py, path: training/__init__.py}
+              - {key: training_io.py, path: training/io.py}
+              - {key: training_post_sft_artifacts.py, path: training/post_sft_artifacts.py}
+              - {key: training_post_sft_cast.py, path: training/post_sft_cast.py}
+              - {key: cast-input.json, path: cast-input.json}
+        - name: sfs
+          persistentVolumeClaim: {claimName: sfs-shared}
