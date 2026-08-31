@@ -73,7 +73,8 @@ def freeze(
 def render_export(
     plan_path: Annotated[Path, typer.Option("--plan")],
     selection_path: Annotated[Path, typer.Option("--selection")],
-    output: Annotated[Path, typer.Option()],
+    request_output: Annotated[Path, typer.Option("--request-output")],
+    receipt_output: Annotated[Path, typer.Option("--receipt-output")],
 ) -> None:
     """Render, but never submit, a zero-optimizer-step HF export request."""
 
@@ -87,8 +88,9 @@ def render_export(
         expected_trainer_version_id=str(run["trainer_version_id"]),
         expected_trainer_image=str(run["trainer_image"]),
     )
-    atomic_write_json(output, receipt, private=True)
-    typer.echo(str(output))
+    atomic_write_json(request_output, receipt["request"], private=True)
+    atomic_write_json(receipt_output, receipt, private=True)
+    typer.echo(str(receipt_output))
 
 
 @app.command()

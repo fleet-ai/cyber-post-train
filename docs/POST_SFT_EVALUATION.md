@@ -109,14 +109,16 @@ First render the review-only export request:
 uv run python -m training.post_sft_cli render-export \
   --plan configs/evaluation/qwen36-27b-ft-run-574bd7b3-post-sft.json \
   --selection /restricted/ft-run-574bd7b3-selection.json \
-  --output /restricted/ft-run-574bd7b3-export-request.json
+  --request-output /restricted/ft-run-574bd7b3-export-run-config.json \
+  --receipt-output /restricted/ft-run-574bd7b3-export-request-receipt.json
 ```
 
-This output is a `submit: false` review artifact, not a launch command. Submit only through the
-normal queued Training API after confirming the source path exists, the generated entrypoint has
-`resume_from=.../global_step_N` and `num_steps=N`, and the source run is terminal. The run must
-report zero optimizer steps. A post-export staging step is still needed because training SFS and
-the inference `/models` PVC are different filesystems.
+The receipt is a `submit: false` review artifact, and the separate run config is suitable for the
+repository's normal `training jobs-run` preview. Do not execute that preview until the source path
+exists and the source run is terminal. Before any execution, inspect the server-rendered entrypoint
+and require `resume_from=.../global_step_N` and `num_steps=N`. The run must report zero optimizer
+steps. A post-export staging step is still needed because training SFS and the inference `/models`
+PVC are different filesystems.
 
 After that run emits a digested `cyber_sft_hf_export_v1` receipt, render all paired evaluation
 inputs:
