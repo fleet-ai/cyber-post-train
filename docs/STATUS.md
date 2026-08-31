@@ -19,12 +19,13 @@
   BF16 forward/backward (48.52 s), optimizer step (10.07 s), full sharded
   checkpoint, and post-step evaluation. Its held-out loss moved from 0.9575 to
   0.9425 and the RayJob finished `SUCCEEDED`. Full one-epoch SFT
-  `ft-run-574bd7b3` is queued fairly in Kueue. RL compatibility run
-  `ft-run-16d0522e` is generating its first four Fleet-environment rollouts;
-  matched-policy/reference successor `ft-run-3a82f8cc` was admitted on a
-  separate 8×B300 worker so both sides of the KL comparison use the same Torch
-  operator path. Neither RL gate has yet earned an optimizer-step or checkpoint
-  claim.
+  `ft-run-574bd7b3` is now running on 8×B300 with durable checkpoints through
+  step 30; held-out loss has moved 0.9575 → 0.8502 → 0.7776 → 0.7365 at steps
+  0/10/20/30 with finite gradients. The earlier RL gates `ft-run-16d0522e` and
+  `ft-run-3a82f8cc` are scientifically invalid: all eight reward reconstructions
+  failed before optimizer learning because `_INLINED_SCORING_PROFILES` was not
+  defined in the trainer verifier process. They are retained only as operational
+  evidence and must never be counted as RL results.
 - The live Fleet Training API model catalog resolves the staged base as
   `qwen3.6-27b`. Typed runs now use the direct queue-aware Jobs API at
   `https://api.ft.flt.build`, which renders through the server's authoritative
@@ -121,9 +122,11 @@
   and zero checkpoints; its one recorded step and two metric rows are therefore
   infrastructure evidence, not a model result. The replacement configs disable
   microbatch padding explicitly. The environment-neutral readiness fix and
-  Torch-fallback model path are now under live test in `ft-run-16d0522e` and
-  matched-policy/reference `ft-run-3a82f8cc`. The full RL request remains
-  unsubmitted until a gate proves rollout, deterministic verifier reward,
+  Torch-fallback model path were mechanically exercised by `ft-run-16d0522e`
+  and `ft-run-3a82f8cc`, but those runs did not produce valid rewards. The next
+  RL gate remains unsubmitted until the authoritative task-bound reward path in
+  Theseus PR #28252 is merged, deployed, and present in a registered trainer
+  image; that gate must then prove rollout, deterministic verifier reward,
   optimizer step, and checkpoint save.
 - Theseus PR #27880 makes the tracker list an explicit deployment capability:
   W&B remains mandatory on Nebius, while MLflow remains mandatory only on
