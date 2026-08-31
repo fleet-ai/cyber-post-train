@@ -193,8 +193,9 @@ POST unless both conditions are proven. Tool proof must be returned by the live
 Train API preview as `task_tool_allowlist_evidence` with schema
 `fleet_rl_task_tool_allowlists_v1`, source
 `authoritative_task_version_metadata`, source field `metadata.tools`, an ordered
-binding for every exact train+eval `task_version_id`, a non-empty duplicate-free
-tool list per binding, and a canonical `bindings_sha256`. Caller-authored config
+binding for every exact train+eval `task_version_id`, exactly the two intended
+task-facing tools (`bash` and `submit_report`) per binding, and a canonical
+`bindings_sha256`. Caller-authored config
 cannot supply this proof. The current API does not emit it, so the successor is
 intentionally blocked until authoritative task metadata and preview support land.
 

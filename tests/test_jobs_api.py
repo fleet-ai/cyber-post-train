@@ -165,6 +165,15 @@ class JobsAPIClientTests(unittest.TestCase):
         self.assertTrue(any("non-empty" in item for item in blockers))
         self.assertTrue(any("does not exactly match" in item for item in blockers))
 
+    def test_paid_cyber_rl_rejects_any_tool_surface_beyond_bash_and_submit_report(self):
+        preview = _rl_preview()
+        preview["task_tool_allowlist_evidence"]["bindings"][0]["tools"].append("text_editor")
+        bindings = preview["task_tool_allowlist_evidence"]["bindings"]
+        preview["task_tool_allowlist_evidence"]["bindings_sha256"] = digest_json(bindings)
+        blockers = rl_paid_launch_blockers(_rl_config(), preview)
+        self.assertEqual(len(blockers), 1)
+        self.assertIn("exactly bash and submit_report", blockers[0])
+
     def test_no_eval_arm_requires_tools_only_for_exact_training_versions(self):
         config = _rl_config()
         config["eval"]["task_versions"] = []
