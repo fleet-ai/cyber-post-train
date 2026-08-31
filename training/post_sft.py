@@ -92,6 +92,9 @@ def validate_selection_receipt(selection: Mapping[str, Any]) -> str:
     if checkpoint.get("complete") is not True or checkpoint.get("promoted") is not True:
         raise ValueError("selected checkpoint must be complete and promoted")
     _sha256(checkpoint, "archive_manifest_sha256")
+    sfs_path = _text(checkpoint, "sfs_path")
+    if sfs_path != f"/mnt/sfs/checkpoints/{run_name}/global_step_{step}":
+        raise ValueError("selected checkpoint SFS path does not match run and step")
     _sha256(run, "run_config_sha256")
     _sha256(run, "entrypoint_sha256")
     _digest_pinned_image(run, "trainer_image")
@@ -145,7 +148,9 @@ def build_zero_step_hf_export_request(
     if collisions:
         raise ValueError("SFT trainer args already set export-owned keys: " + ", ".join(collisions))
 
-    source_path = f"/mnt/sfs/checkpoints/{source_run}/global_step_{step}"
+    source_path = _text(checkpoint, "sfs_path")
+    if checkpoint.get("sfs_available") is not True:
+        raise ValueError("selected checkpoint must be staged on SFS before rendering export")
     export_root = f"/mnt/sfs/exports/cyber-sft/{source_run}/{checkpoint_id}"
     request.pop("name", None)
     request["title"] = f"Chris cyber zero-step HF export of {source_run} step {step}"
@@ -239,6 +244,10 @@ def freeze_final_promoted_checkpoint(
     if not archive_uri.startswith("s3://"):
         raise ValueError("promoted checkpoint archive must be an s3 URI")
     archive_manifest_sha256 = _sha256(selected, "archive_manifest_sha256")
+    sfs_path = _text(selected, "sfs_path")
+    expected_sfs_path = f"/mnt/sfs/checkpoints/{run_name}/global_step_{step}"
+    if sfs_path != expected_sfs_path:
+        raise ValueError("promoted checkpoint has an unexpected SFS path")
 
     latest_step = run.get("latest_checkpoint_step")
     if latest_step != step:
@@ -262,6 +271,8 @@ def freeze_final_promoted_checkpoint(
             "fleet_model": f"fleet/{run_name}-step-{step}",
             "archive_uri": archive_uri,
             "archive_manifest_sha256": archive_manifest_sha256,
+            "sfs_path": sfs_path,
+            "sfs_available": selected.get("sfs_available") is True,
             "complete": True,
             "promoted": True,
         },

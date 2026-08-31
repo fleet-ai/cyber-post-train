@@ -41,6 +41,8 @@ def _selection_inputs(status: str = "succeeded"):
             "is_promoted": False,
             "s3_available": True,
             "s3_uri": "s3://bucket/run/310",
+            "sfs_path": f"/mnt/sfs/checkpoints/{RUN}/global_step_310",
+            "sfs_available": True,
             "archive_manifest_sha256": "sha256:" + "4" * 64,
         },
         {
@@ -50,6 +52,8 @@ def _selection_inputs(status: str = "succeeded"):
             "is_promoted": True,
             "s3_available": True,
             "s3_uri": "s3://bucket/run/318",
+            "sfs_path": f"/mnt/sfs/checkpoints/{RUN}/global_step_318",
+            "sfs_available": True,
             "archive_manifest_sha256": "sha256:" + "5" * 64,
         },
     ]
