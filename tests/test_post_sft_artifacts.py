@@ -5,6 +5,7 @@ import pytest
 
 from training.io import digest_json
 from training.post_sft_artifacts import (
+    compare_safetensor_layout,
     full_file_manifest,
     inspect_hf_export,
     structural_manifest,
@@ -95,3 +96,100 @@ def test_hf_inspection_binds_shards_tokenizer_config_and_parameter_count(
             expected_config_sha256=result["config_sha256"],
             expected_parameter_count=7,
         )
+
+
+def test_raw_hf_inspection_records_but_can_allow_sidecar_drift(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    class Slice:
+        def get_shape(self):
+            return [2, 3]
+
+        def get_dtype(self):
+            return "BF16"
+
+    class SafeFile:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return None
+
+        def __iter__(self):
+            return iter(["weight"])
+
+        def get_slice(self, _key):
+            return Slice()
+
+    import safetensors
+
+    monkeypatch.setattr(safetensors, "safe_open", lambda *_a, **_k: SafeFile())
+    (tmp_path / "model-00001-of-00001.safetensors").write_bytes(b"weights")
+    (tmp_path / "model.safetensors.index.json").write_text(
+        json.dumps({"weight_map": {"weight": "model-00001-of-00001.safetensors"}})
+    )
+    for name in ("chat_template.jinja", "tokenizer.json", "tokenizer_config.json"):
+        (tmp_path / name).write_text("trainer-sidecar")
+    (tmp_path / "config.json").write_text("trainer-config")
+    result = inspect_hf_export(
+        tmp_path,
+        expected_tokenizer_manifest_sha256="sha256:" + "a" * 64,
+        expected_chat_template_sha256="sha256:" + "b" * 64,
+        expected_config_sha256="sha256:" + "c" * 64,
+        expected_parameter_count=6,
+        expected_sidecar_sha256={"config.json": "sha256:" + "d" * 64},
+        require_base_sidecars=False,
+    )
+    assert result["base_sidecars_required"] is False
+    assert result["config_matches_base"] is False
+    assert result["sidecar_matches_base"] == {"config.json": False}
+
+
+def test_safetensor_layout_compares_keys_shapes_and_dtypes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    base = tmp_path / "base"
+    candidate = tmp_path / "candidate"
+    base.mkdir()
+    candidate.mkdir()
+    for root in (base, candidate):
+        (root / "model.safetensors").write_bytes(b"weights")
+        (root / "model.safetensors.index.json").write_text(
+            json.dumps({"weight_map": {"weight": "model.safetensors"}})
+        )
+
+    shapes = {str(base / "model.safetensors"): [2, 3], str(candidate / "model.safetensors"): [2, 3]}
+
+    class Slice:
+        def __init__(self, shape):
+            self.shape = shape
+
+        def get_shape(self):
+            return self.shape
+
+        def get_dtype(self):
+            return "BF16"
+
+    class SafeFile:
+        def __init__(self, name):
+            self.name = name
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return None
+
+        def __iter__(self):
+            return iter(["weight"])
+
+        def get_slice(self, _key):
+            return Slice(shapes[self.name])
+
+    import safetensors
+
+    monkeypatch.setattr(safetensors, "safe_open", lambda name, **_k: SafeFile(name))
+    assert compare_safetensor_layout(base, candidate)["all_keys_shapes_and_dtypes_match"]
+    shapes[str(candidate / "model.safetensors")] = [3, 2]
+    with pytest.raises(ValueError, match="layout differs"):
+        compare_safetensor_layout(base, candidate)

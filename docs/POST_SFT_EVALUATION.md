@@ -159,13 +159,32 @@ digest-pinned image, resume path, step/save settings, collision preflight, outpu
 file/weight/tokenizer/chat-template hashes. Any mismatch is a hard stop; do not reinterpret a
 different directory as this export.
 
-After the run and inference-staging rail emit one digested `cyber_sft_hf_export_v1` receipt, render
-all paired evaluation inputs. The receipt must separately identify the trainer conversion and the
-digest-pinned staging action; a model merely appearing under `/models` is not provenance.
-`python -m training.post_sft_artifacts hf <policy-dir> --plan <plan> --output <receipt>` hashes
-every output file and weight shard, verifies the index names exactly those shards, checks every
-safetensors tensor is BF16 with the base architecture's exact parameter count, and binds the
-tokenizer, chat template, and model configuration to the base checkpoint.
+The trainer's checkpoint sidecars are not byte-identical to the pinned base. Transformers 5
+rewrote `config.json`, `tokenizer.json`, and `tokenizer_config.json`: the effective 248,077-token
+mapping remains identical, but seven audio tokens moved from the base tokenizer config's added-token
+decoder into the serialized tokenizer JSON. Therefore the trainer output is preserved as an
+immutable **raw export**, and is never served directly. Inspect it with `--allow-sidecar-drift` to
+record every raw hash rather than disguising this known difference.
+
+The inference bundle is composed weights-only: copy the raw export's safetensors shards and index,
+then copy every runtime sidecar from exact base revision `6a9e13bd...`. Before accepting it:
+
+- compare every effective token→ID mapping and core special-token ID;
+- prove the seven serialization additions are contiguous, non-remapping, and already declared by
+  the base tokenizer config;
+- require encode/decode parity over every rendered SFT training window, the ten lineage-held-out
+  Fleet prompts, all 15 WebExploitBench prompts and harness protocol strings, all five ExploitGym
+  Qwen Code traces, and explicit tool/control strings;
+- compare every post-training tensor key, shape, and dtype with the exact base layout; and
+- require the final bundle's runtime sidecar hashes to equal the plan's base hashes and its weight
+  and index hashes to equal the raw export.
+
+Any corpus-relevant tokenizer difference is a hard stop. After these gates and inference staging
+emit one digested `cyber_sft_hf_export_v1` receipt, render all paired evaluation inputs. The receipt
+must separately identify raw trainer conversion, composition, and digest-pinned staging; a model
+merely appearing under `/models` is not provenance. `training.post_sft_artifacts` hashes every
+output file and weight shard, verifies that the index exactly names those shards, and checks every
+safetensors tensor is BF16 with the base architecture's exact parameter count.
 
 ```bash
 uv run python -m training.post_sft_cli render \

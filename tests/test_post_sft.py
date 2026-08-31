@@ -377,6 +377,29 @@ def test_post_sft_registration_rejects_unproven_inference_staging():
         )
 
 
+def test_post_sft_registration_requires_exact_composed_runtime_sidecars():
+    base = json.loads(
+        (ROOT / "evals/webexploitbench/serving/qwen36-27b-6a9e13bd-registration.json").read_text()
+    )
+    selection = _selection()
+    export = _export(selection)
+    export["output"]["sidecar_sha256"] = {"config.json": "sha256:" + "1" * 64}
+    export["export_receipt_sha256"] = digest_json(
+        {key: value for key, value in export.items() if key != "export_receipt_sha256"}
+    )
+    with pytest.raises(ValueError, match="runtime sidecars"):
+        derive_post_sft_registration(
+            base,
+            selection,
+            export,
+            expected_tokenizer_manifest_sha256="sha256:" + "7" * 64,
+            expected_chat_template_sha256="sha256:" + "8" * 64,
+            expected_config_sha256="sha256:" + "0" * 64,
+            expected_export_binding=_export_binding(),
+            expected_runtime_sidecar_sha256={"config.json": "sha256:" + "2" * 64},
+        )
+
+
 def test_export_binding_rejects_path_mismatch_and_destination_collision():
     sft = json.loads((ROOT / "configs/runs/qwen36-27b-sft-full.json").read_text())
     selection = _selection()

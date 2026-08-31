@@ -32,6 +32,7 @@ spec:
             - |
               source=/mnt/sfs/checkpoints/ft-run-574bd7b3/global_step_318
               export_root=/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-v1/global_step_318/policy
+              base_root=/mnt/sfs/models/Qwen/Qwen3.6-27B/6a9e13bd6fc8f0983b9b99948120bc37f49c13e9
               parent=/mnt/sfs/jobs/chris-cyber-qwen36-sft-evidence-v1
               partial="$parent/.partial"
               final="$parent/receipt"
@@ -50,7 +51,42 @@ spec:
               PYTHONPATH=/bundle python -m training.post_sft_artifacts full "$source" \
                 --output "$partial/source-full-manifest.json"
               PYTHONPATH=/bundle python -m training.post_sft_artifacts hf "$export_root" \
-                --plan /bundle/plan.json --output "$partial/hf-output-inspection.json"
+                --plan /bundle/plan.json --allow-sidecar-drift \
+                --output "$partial/hf-output-inspection.json"
+              PYTHONPATH=/bundle python - "$base_root" "$export_root" "$partial" <<'PY'
+              import json
+              import pathlib
+              import sys
+
+              from training.post_sft_artifacts import compare_safetensor_layout
+              from training.tokenizer_equivalence import (
+                  compare_effective_tokenizers,
+                  compare_special_token_ids,
+                  compare_tokenizer_mappings,
+              )
+
+              base = pathlib.Path(sys.argv[1])
+              candidate = pathlib.Path(sys.argv[2])
+              output = pathlib.Path(sys.argv[3])
+              layout = compare_safetensor_layout(base, candidate)
+              tokenizer = {
+                  "mapping": compare_tokenizer_mappings(
+                      base / "tokenizer.json",
+                      candidate / "tokenizer.json",
+                      base_tokenizer_config=base / "tokenizer_config.json",
+                  ),
+                  "effective_mapping": compare_effective_tokenizers(base, candidate),
+                  "special_tokens": compare_special_token_ids(
+                      base / "tokenizer_config.json", candidate / "tokenizer_config.json"
+                  ),
+              }
+              (output / "weight-layout-equivalence.json").write_text(
+                  json.dumps(layout, indent=2, sort_keys=True) + "\n"
+              )
+              (output / "tokenizer-structural-equivalence.json").write_text(
+                  json.dumps(tokenizer, indent=2, sort_keys=True) + "\n"
+              )
+              PY
               python - "$partial" "$post_structural" <<'PY'
               import hashlib
               import json
@@ -61,6 +97,10 @@ spec:
               structural = sys.argv[2]
               source = json.loads((root / "source-full-manifest.json").read_text())
               output = json.loads((root / "hf-output-inspection.json").read_text())
+              layout = json.loads((root / "weight-layout-equivalence.json").read_text())
+              tokenizer = json.loads(
+                  (root / "tokenizer-structural-equivalence.json").read_text()
+              )
               plan = json.loads(pathlib.Path("/bundle/plan.json").read_text())
               receipt = {
                   "schema": "fleet_sft_sfs_checkpoint_observation_v1",
@@ -77,6 +117,8 @@ spec:
                   "markers": {"promoted": True, "milestone": True, "expected_shards": 1,
                               "complete_shards": 1, "latest_step": 318},
                   "output_inspection": output,
+                  "weight_layout_equivalence": layout,
+                  "tokenizer_structural_equivalence": tokenizer,
               }
               encoded = json.dumps(receipt, sort_keys=True, separators=(",", ":")).encode()
               receipt["observation_sha256"] = "sha256:" + hashlib.sha256(encoded).hexdigest()
@@ -97,6 +139,7 @@ spec:
               - {key: training__init__.py, path: training/__init__.py}
               - {key: training_io.py, path: training/io.py}
               - {key: training_post_sft_artifacts.py, path: training/post_sft_artifacts.py}
+              - {key: training_tokenizer_equivalence.py, path: training/tokenizer_equivalence.py}
               - {key: plan.json, path: plan.json}
         - name: sfs
           persistentVolumeClaim: {claimName: sfs-shared}

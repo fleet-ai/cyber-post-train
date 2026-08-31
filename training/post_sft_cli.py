@@ -158,6 +158,7 @@ def render(
         expected_chat_template_sha256=str(model["chat_template_sha256"]),
         expected_config_sha256=str(model["config_sha256"]),
         expected_export_binding=plan["export"],
+        expected_runtime_sidecar_sha256=model["runtime_sidecar_sha256"],
     )
     served_model_id = serving["registration"]["id"]
     post_web = derive_webexploit_config(
@@ -219,6 +220,7 @@ def render_external_benchmarks(
         expected_chat_template_sha256=str(model["chat_template_sha256"]),
         expected_config_sha256=str(model["config_sha256"]),
         expected_export_binding=plan["export"],
+        expected_runtime_sidecar_sha256=model["runtime_sidecar_sha256"],
     )
     web = derive_webexploit_config(
         base_web,
