@@ -1,0 +1,53 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: chris-cyber-qwen36-sft-stage-574bd7b3-v1
+  namespace: inference
+  labels:
+    cyber-post-train.fleet.ai/owner: chris
+    cyber-post-train.fleet.ai/experiment: qwen36-sft-stage-574bd7b3-v1
+    cyber-post-train.fleet.ai/model: qwen36
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 21600
+  ttlSecondsAfterFinished: 604800
+  template:
+    metadata:
+      labels:
+        cyber-post-train.fleet.ai/owner: chris
+        cyber-post-train.fleet.ai/experiment: qwen36-sft-stage-574bd7b3-v1
+        cyber-post-train.fleet.ai/model: qwen36
+    spec:
+      restartPolicy: Never
+      nodeSelector: {workload: fleetai-training-ng-cpu}
+      tolerations:
+        - {key: workload, operator: Equal, value: fleetai-training-ng-cpu, effect: NoSchedule}
+      containers:
+        - name: stage
+          image: lmsysorg/sglang@sha256:febfb971c7352570fc445c466ebd6ffc9d896024958e544a60f2137fd85856b1
+          command: ["python3", "-m", "training.post_sft_staging", "execute"]
+          args: ["--input", "/bundle/stage-input.json", "--work-root", "/work/transfer"]
+          env:
+            - {name: PYTHONPATH, value: /bundle}
+            - {name: FILEBROWSER_USER, value: christopher@fleet.so}
+          resources:
+            requests: {cpu: "4", memory: 16Gi, ephemeral-storage: 96Gi}
+            limits: {cpu: "8", memory: 32Gi, ephemeral-storage: 128Gi}
+          volumeMounts:
+            - {name: bundle, mountPath: /bundle, readOnly: true}
+            - {name: models, mountPath: /models}
+            - {name: work, mountPath: /work}
+      volumes:
+        - name: bundle
+          configMap:
+            name: chris-cyber-qwen36-sft-stage-574bd7b3-v1
+            items:
+              - {key: training__init__.py, path: training/__init__.py}
+              - {key: training_io.py, path: training/io.py}
+              - {key: training_post_sft_artifacts.py, path: training/post_sft_artifacts.py}
+              - {key: training_post_sft_staging.py, path: training/post_sft_staging.py}
+              - {key: stage-input.json, path: stage-input.json}
+        - name: models
+          persistentVolumeClaim: {claimName: hf-cache-shared}
+        - name: work
+          emptyDir: {sizeLimit: 128Gi}

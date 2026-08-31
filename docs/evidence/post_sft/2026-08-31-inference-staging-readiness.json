@@ -1,0 +1,43 @@
+{
+  "schema": "cyber_sft_inference_staging_readiness_v1",
+  "status": "ready_but_blocked_on_export_and_evidence",
+  "observed_at": "2026-08-31T17:05:44Z",
+  "job": {
+    "name": "chris-cyber-qwen36-sft-stage-574bd7b3-v1",
+    "namespace": "inference",
+    "created": false,
+    "server_dry_run_passed": true,
+    "manifest_sha256": "sha256:e35aa39e66e04ab8ddefd7001abbbf51e71913f8b94da48f186a8dc6081999c8"
+  },
+  "implementation": {
+    "module_sha256": "sha256:3ab529058e36a1de4a26573796bf7e248862df3376451d1047517971d5bb66ff",
+    "submitter_sha256": "sha256:e285a2421baea4eb16f8354f44942d3249c3778cc5c7c5140c90b901453c0ea6"
+  },
+  "runtime": {
+    "image": "lmsysorg/sglang@sha256:febfb971c7352570fc445c466ebd6ffc9d896024958e544a60f2137fd85856b1",
+    "python_imports": {
+      "torch": "2.13.0+cu130",
+      "safetensors": "0.8.0",
+      "zipfile": "available"
+    },
+    "filebrowser_read_test": {
+      "source": "sfs",
+      "path_class": "non-secret checkpoint latest-step marker",
+      "http_status": 200,
+      "bytes": 3,
+      "sha256": "sha256:aae02129362d611717b6c00ad8d73bf820a0f6d88fca8e515cafe78d3a335965"
+    }
+  },
+  "destination_preflight": {
+    "path": "/models/cyber-sft/ft-run-574bd7b3/step-318-v1",
+    "state": "absent",
+    "matching_partial_prefix_count": 0
+  },
+  "gates": {
+    "export_rayjob_must_succeed": "ft-run-29f2bedf",
+    "evidence_job_must_succeed": "chris-cyber-qwen36-sft-evidence-v1",
+    "raw_per_file_manifest_required": true,
+    "destination_must_remain_absent": true,
+    "paid_or_scored_evaluation_launched": false
+  }
+}

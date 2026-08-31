@@ -94,7 +94,7 @@
       "output_root": "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-v1",
       "terminal_result": null
     },
-    "plan": {"path": "configs/evaluation/qwen36-27b-ft-run-574bd7b3-post-sft.json", "file_sha256": "sha256:fc8e02f48f12610a6fba3c61af8b23a900889dc763655fe3b0a475cfde711f07"}
+    "plan": {"path": "configs/evaluation/qwen36-27b-ft-run-574bd7b3-post-sft.json", "file_sha256": "sha256:7405b4415af854a6ffdf22c4569d97244ea2ff2c3d6129a6e38d06307b6bffd0"}
   },
   "native_fleet_rl": {
     "one_step_gate": {

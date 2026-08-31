@@ -673,6 +673,7 @@ def test_checked_in_plan_binds_current_files():
         ("web terminal", plan["webexploitbench"]["baseline_terminal_receipt"]),
         ("web protocol", plan["webexploitbench"]["baseline_protocol"]),
         ("web harness", plan["webexploitbench"]["harness_lock"]),
+        ("tokenizer equivalence", plan["base_model"]["tokenizer_equivalence_evidence"]),
         ("split", plan["fleet"]["split_manifest"]),
         ("sft", plan["fleet"]["sft_config"]),
     ):

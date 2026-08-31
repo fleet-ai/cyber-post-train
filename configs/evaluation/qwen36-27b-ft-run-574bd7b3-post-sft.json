@@ -39,6 +39,10 @@
     "chat_template_sha256": "sha256:e84f32a23fdda27689f868aa4a1a5621f41133e51a48d7f3efcbea2839574259",
     "config_sha256": "sha256:69db4eb7196bc8190813231b3018ca05d8c2e3abc7b1af19d55c157af44a9d9c",
     "parameter_count": 27781427952,
+    "tokenizer_equivalence_evidence": {
+      "path": "docs/evidence/post_sft/2026-08-31-tokenizer-equivalence.json",
+      "sha256": "sha256:3f2f72d77fda3d9e7a68cfa2ee16df031675e8f380266aa1a1eb98b00833b49e"
+    },
     "runtime_sidecar_sha256": {
       "chat_template.jinja": "sha256:e84f32a23fdda27689f868aa4a1a5621f41133e51a48d7f3efcbea2839574259",
       "config.json": "sha256:69db4eb7196bc8190813231b3018ca05d8c2e3abc7b1af19d55c157af44a9d9c",
