@@ -21,16 +21,95 @@ def _config() -> dict:
 
 def test_smoke_config_is_one_exact_eval_only_arm() -> None:
     config = _config()
-    assert config["run_id"] == "chris-cyber-qwen36-qwencode0223-fleet-smoke-v1"
+    assert config["run_id"] == "chris-cyber-qwen36-qwencode0223-fleet-smoke-v1-r1"
     assert config["model"]["revision"] == "6a9e13bd6fc8f0983b9b99948120bc37f49c13e9"
     assert config["harness"]["version"] == "0.22.3"
     assert config["harness"]["source_commit"] == "09825973e7d3c3fd07e17909c396aa62f48ce51f"
     assert config["execution"] == {
         "pass_k": 1,
         "max_concurrent": 1,
-        "network": "chris-qwen-fleet-smoke-v1",
+        "network": "chris-qwen-fleet-smoke-v1-r1",
         "training_data_eligible": False,
     }
+
+
+def test_request_retries_only_transient_idempotent_reads(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    responses = iter([503, 503, 200])
+    sleeps = []
+
+    class Client:
+        def request(self, method: str, url: str, **kwargs):
+            code = next(responses)
+            return type(
+                "Response",
+                (),
+                {"status_code": code, "json": lambda self: {"ok": True}},
+            )()
+
+    monkeypatch.setattr(self_hosted.time, "sleep", sleeps.append)
+    assert self_hosted._request(Client(), "GET", "/v1/read") == {"ok": True}
+    assert sleeps == [1, 2]
+
+
+def test_request_does_not_retry_mutating_requests(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = 0
+
+    class Client:
+        def request(self, method: str, url: str, **kwargs):
+            nonlocal calls
+            calls += 1
+            return type("Response", (), {"status_code": 503})()
+
+    monkeypatch.setattr(self_hosted.time, "sleep", lambda _: pytest.fail("must not sleep"))
+    with pytest.raises(RuntimeError, match="HTTP 503"):
+        self_hosted._request(Client(), "POST", "/v1/write")
+    assert calls == 1
+
+
+def test_task_receipt_uses_targeted_version_and_never_source_job_roster() -> None:
+    config = _config()
+    expected_route = f"/v1/tasks/{config['task']['key']}"
+    fixture = {
+        "key": config["task"]["key"],
+        "environment_id": config["environment"]["id"],
+        "version": config["environment"]["version"],
+        "data_id": config["environment"]["data_id"],
+        "data_version": config["environment"]["data_version"],
+        "prompt": "",
+        "env_variables": {},
+        "output_json_schema": None,
+        "verifier_id": config["verifier"]["id"],
+        "verifier": {
+            "verifier_version_id": config["verifier"]["version_id"],
+            "version": config["verifier"]["version"],
+            "sha256": config["verifier"]["sha256"],
+            "code": "",
+        },
+        "metadata": {
+            "runtime_seed_manifest": {
+                "content_sha256": config["environment"]["runtime_seed_content_sha256"]
+            }
+        },
+    }
+    config["task"]["prompt_sha256"] = self_hosted.sha256(b"")
+    config["task"]["env_variables_sha256"] = self_hosted.sha256(
+        self_hosted.canonical_json({})
+    )
+    config["task"]["output_json_schema_sha256"] = self_hosted.sha256(
+        self_hosted.canonical_json(None)
+    )
+    config["verifier"]["code_sha256"] = self_hosted.sha256(b"")
+
+    class Client:
+        def request(self, method: str, url: str, **kwargs):
+            assert method == "GET"
+            assert url.endswith(expected_route)
+            assert kwargs["params"] == {"version_id": config["task"]["version_id"]}
+            return type("Response", (), {"status_code": 200, "json": lambda self: fixture})()
+
+    assert self_hosted.load_and_verify_task(Client(), config) == fixture
 
 
 def test_build_instance_payload_preserves_exact_runtime_binding() -> None:

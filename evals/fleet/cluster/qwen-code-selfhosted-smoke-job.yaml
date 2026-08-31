@@ -1,7 +1,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: chris-cyber-qwen36-qcode-fleet-smoke-v1
+  name: chris-cyber-qwen36-qcode-fleet-smoke-v1-r1
   namespace: fleet-train-jobs
   labels:
     cyber-post-train.fleet.ai/experiment: qwen36-qwen-code-fleet-smoke-v1
@@ -117,7 +117,7 @@ spec:
       volumes:
         - name: bootstrap
           configMap:
-            name: chris-cyber-qwen36-qcode-fleet-smoke-v1
+            name: chris-cyber-qwen36-qcode-fleet-smoke-v1-r1
         - name: docker-data
           emptyDir:
             sizeLimit: 80Gi
