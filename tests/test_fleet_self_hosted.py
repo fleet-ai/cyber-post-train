@@ -234,6 +234,114 @@ def test_qwen_trace_normalization_preserves_calls_results_and_thinking() -> None
     assert messages[1]["tool_call_id"] == "c1"
 
 
+def test_session_trace_ingest_is_bounded_ordered_and_scores_only_final_chunk() -> None:
+    calls: list[dict] = []
+
+    class Client:
+        def request(self, method: str, url: str, **kwargs):
+            assert method == "POST"
+            assert url.endswith("/v1/sessions/ingest")
+            calls.append(kwargs["json"])
+            return type(
+                "Response",
+                (),
+                {"status_code": 200, "json": lambda self: {"session_id": "session-1"}},
+            )()
+
+    messages = [{"role": "tool", "content": str(index)} for index in range(65)]
+    receipt = self_hosted.ingest_session_trace(
+        Client(),
+        messages=messages,
+        config=_config(),
+        instance_id="instance-1",
+        score=0.25,
+        verifier_execution_id="verify-1",
+        metadata={"training_data_eligible": False},
+    )
+
+    assert [len(call["messages"]) for call in calls] == [32, 32, 1]
+    assert "session_id" not in calls[0]
+    assert calls[0]["instance_id"] == "instance-1"
+    assert "score" not in calls[0]
+    assert calls[1]["session_id"] == "session-1"
+    assert "score" not in calls[1]
+    assert calls[2]["session_id"] == "session-1"
+    assert calls[2]["score"] == 0.25
+    assert calls[2]["verifier_execution_id"] == "verify-1"
+    assert receipt == {
+        "status": "completed",
+        "session_id": "session-1",
+        "message_count": 65,
+        "chunks_completed": 3,
+        "chunk_count": 3,
+    }
+
+
+def test_session_trace_ingest_preserves_partial_receipt_without_mutation_retry() -> None:
+    calls = 0
+
+    class Client:
+        def request(self, method: str, url: str, **kwargs):
+            nonlocal calls
+            calls += 1
+            status = 200 if calls == 1 else 413
+            return type(
+                "Response",
+                (),
+                {
+                    "status_code": status,
+                    "json": lambda self: {"session_id": "session-1"},
+                },
+            )()
+
+    with pytest.raises(self_hosted.SessionIngestError) as caught:
+        self_hosted.ingest_session_trace(
+            Client(),
+            messages=[{"role": "tool", "content": "x"}] * 33,
+            config=_config(),
+            instance_id="instance-1",
+            score=0.0,
+            verifier_execution_id="verify-1",
+            metadata={},
+        )
+    assert calls == 2
+    assert caught.value.receipt == {
+        "status": "failed",
+        "session_id": "session-1",
+        "message_count": 33,
+        "chunks_completed": 1,
+        "chunk_count": 2,
+        "error_type": "RuntimeError",
+    }
+
+
+def test_session_trace_ingest_also_bounds_serialized_payload_bytes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payloads: list[dict] = []
+
+    class Client:
+        def request(self, method: str, url: str, **kwargs):
+            payloads.append(kwargs["json"])
+            return type(
+                "Response",
+                (),
+                {"status_code": 200, "json": lambda self: {"session_id": "session-1"}},
+            )()
+
+    monkeypatch.setattr(self_hosted, "SESSION_INGEST_CHUNK_BYTES", 90)
+    self_hosted.ingest_session_trace(
+        Client(),
+        messages=[{"role": "tool", "content": "x" * 20}] * 3,
+        config=_config(),
+        instance_id="instance-1",
+        score=0.0,
+        verifier_execution_id="verify-1",
+        metadata={},
+    )
+    assert [len(payload["messages"]) for payload in payloads] == [1, 1, 1]
+
+
 def test_docker_secret_is_in_environment_not_argv(monkeypatch: pytest.MonkeyPatch) -> None:
     observed: dict = {}
 
