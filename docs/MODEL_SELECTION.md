@@ -27,6 +27,25 @@ post-training experiment:
 The immutable local descriptor is
 `configs/models/qwen36-27b-6a9e13bd.lock.json`.
 
+## Live availability cross-check
+
+The Fleet Training API catalog was read on 2026-08-31. Of the smaller Qwen
+options, only `Qwen2.5-1.5B-Instruct` and `Qwen3.6-27B` were staged on the
+cluster. Qwen3.5 4B/9B, Qwen3 8B/30B-A3B, Qwen3.6 35B-A3B and GPT-OSS 20B were
+catalogued but not staged. The 1.5B checkpoint remains useful for plumbing
+tests, but its expected blackbox-exploitation floor risk is too high for the
+primary causal arm. Staging a nominally smaller model would therefore add a
+new checkpoint/backend qualification program without removing the primary
+scientific risk.
+
+Training-catalog availability is not Agent Runtime harness availability. The
+deployed Agent Runtime maps `qwen/...` models to the generic OpenCode harness;
+its explicit harness catalog contains no Qwen Code entry. The native Qwen
+provider route can also fall back to OpenRouter and does not attest the exact
+checkpoint digest. Consequently, neither path proves the required pair of
+`Qwen/Qwen3.6-27B@6a9e13bd...` and Qwen Code 0.22.3. Formal benchmark arms use
+the self-hosted immutable checkpoint and pinned harness instead.
+
 ## Alternatives considered
 
 | Candidate | Decision |
