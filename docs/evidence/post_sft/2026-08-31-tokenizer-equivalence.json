@@ -1,0 +1,118 @@
+{
+  "schema": "cyber_sft_tokenizer_equivalence_evidence_v1",
+  "status": "passed_pre_export_source_sidecar_observation",
+  "observed_at": "2026-08-31T16:51:54Z",
+  "checkpoint": {
+    "run": "ft-run-574bd7b3",
+    "global_step": 318,
+    "source_path": "/mnt/sfs/checkpoints/ft-run-574bd7b3/global_step_318/policy/huggingface",
+    "export_run": "ft-run-29f2bedf",
+    "export_state_at_observation": "Suspended"
+  },
+  "base": {
+    "repository": "Qwen/Qwen3.6-27B",
+    "revision": "6a9e13bd6fc8f0983b9b99948120bc37f49c13e9",
+    "config_sha256": "sha256:69db4eb7196bc8190813231b3018ca05d8c2e3abc7b1af19d55c157af44a9d9c",
+    "tokenizer_json_sha256": "sha256:5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42",
+    "tokenizer_config_sha256": "sha256:5186f0defcd7f232382c7f0aebcd2252d073bb921ab240e407b7ae8745d2b29b",
+    "chat_template_sha256": "sha256:e84f32a23fdda27689f868aa4a1a5621f41133e51a48d7f3efcbea2839574259"
+  },
+  "trainer_sidecars": {
+    "config_sha256": "sha256:58d10418c71d1fb051f633fb2477ddf302c902e02f1a535039c35e5ecbbe7108",
+    "tokenizer_json_sha256": "sha256:06b9509352d2af50381ab2247e083b80d32d5c0aba91c272ca9ff729b6a0e523",
+    "tokenizer_config_sha256": "sha256:792fa3f0cb88b111e54ef3134c873531008c4df471d108da17903426e308aa7b",
+    "chat_template_sha256": "sha256:e84f32a23fdda27689f868aa4a1a5621f41133e51a48d7f3efcbea2839574259",
+    "known_config_difference_paths": [
+      "dtype",
+      "pad_token_id",
+      "text_config.dtype",
+      "transformers_version",
+      "use_cache",
+      "vision_config.dtype",
+      "vision_config.model_type"
+    ],
+    "all_architecture_and_vocab_fields_identical": true,
+    "normalized_architecture_sha256": "sha256:638951b92b0abb111f70d213a6b6ca99ec12cfd02da024c4390f31da20b298ad"
+  },
+  "token_mapping": {
+    "effective_token_count": 248077,
+    "effective_mapping_sha256": "sha256:467543819daf0b32f85b6b8e9097aa1ac1675affa59836c26acbc4a22eb83f0f",
+    "effective_token_to_id_mapping_identical": true,
+    "effective_special_token_ids_identical": true,
+    "bos_token_id": null,
+    "eos_token_id": 248046,
+    "pad_token_id": 248044,
+    "unk_token_id": null,
+    "common_raw_mapping_sha256": "sha256:c42f63553e5dedd52954f5769ddcd3b727563f3eac7db6426cb19246ff7ea31d",
+    "seven_serialization_additions": {
+      "ids": [248070, 248071, 248072, 248073, 248074, 248075, 248076],
+      "append_only_contiguous": true,
+      "non_remapping": true,
+      "already_declared_by_base_tokenizer_config": true
+    }
+  },
+  "corpus_parity": {
+    "all_encode_parity": true,
+    "all_decode_parity": true,
+    "total_strings": 170225,
+    "total_tokens": 48468947,
+    "strata": [
+      {
+        "name": "complete_sft_training_corpus",
+        "string_count": 88926,
+        "token_count": 45365937,
+        "receipt_sha256": "sha256:f3fee703fd6c5f6dd7ec4ec288fb4f56e9d8f35e745a9d51dd7584fa1a4eaf30",
+        "rendered_window_count": 2540,
+        "selected_task_count": 86
+      },
+      {
+        "name": "fleet_lineage_held_out_dev_prompts",
+        "string_count": 10,
+        "token_count": 3403,
+        "receipt_sha256": "sha256:1de867b464352e249e31865dcc482b2b70c7b3318599d532ba0c63d748903c2e"
+      },
+      {
+        "name": "webexploitbench_15_prompts_templates_and_first_request_protocol",
+        "string_count": 11314,
+        "token_count": 532929,
+        "receipt_sha256": "sha256:15e9126f1c5f581ac1507d8ced6975a005a50b290047af05ae68e957f1e58406",
+        "cage_commit": "09a191c565230cebb8255899d622d23c7ddeff33",
+        "prompt_count": 15,
+        "harness_template_count": 4,
+        "protocol_request_count": 15
+      },
+      {
+        "name": "exploitgym_fixed_5_qwen_code_chats_and_protocol",
+        "string_count": 69933,
+        "token_count": 2564539,
+        "receipt_sha256": "sha256:70ae64f05c9c4ee72ef98cd8f5160dfdcaefafe2b9c584d55d11a4895648d20c",
+        "task_count": 5,
+        "control_image": "ghcr.io/fleet-ai/cyber-post-train-exploitgym-control@sha256:466027a5b270e822acbba676ccd775f443e7ed897fdf2d5a3f824f776141e7a0"
+      },
+      {
+        "name": "tool_call_and_control_strings",
+        "string_count": 42,
+        "token_count": 2139,
+        "receipt_sha256": "sha256:c51bc7211040f19da2cbfcdb9eefd3c4a6934472359eccb5e19dc149a5b65f7a"
+      }
+    ]
+  },
+  "training_corpus_files": {
+    "cysec1-2-current-fubspot-gen": "sha256:55769a4e15ab7660eedeadfcee55e4962719d914ea199964ebd3bf84ad31dc9e",
+    "cysec1-2-current-gen": "sha256:cec0bb2d88a415ec776753cf475284287c7371b2676587e5faec25ce111e97ec",
+    "cysec1-2-fakelook-gen": "sha256:a2dfef4c16bd5acbc52fd159a2d305fae50ed228e1219712bac4a0c35c8b0ba5",
+    "cysec1-2-fentry-current-gen": "sha256:74108c7cda0b90219246bde3ac9c43ac36fda4ed17b2f4a4710b0381d63c4f34",
+    "cysec1-2-fentry-gen": "sha256:787001511b491516677afb8ff03c7f523ee9f0518ca286d4fa23a3d43515e3b9",
+    "cysec1-2-fira-gen": "sha256:ab048990c3f18ede20cad9576d6726b84ae7d7650478c7c478bb6aedcd26d835",
+    "cysec1-2-fubspot-gen": "sha256:c8089590daa4781184a941bf673326812bee1f3ff09843f572ffb086e1163e49",
+    "cysec1-2-rops-gen": "sha256:e2ce6c410589f9479c6fa7032c2182db5dc06f361bd595d6a14a9b5414bbf5b2",
+    "scores": "sha256:e192736d5fd3ecc999de00bdd47abadaba2d3aaee47828fa2fc22693ff0c61db"
+  },
+  "acceptance": {
+    "raw_export_may_be_served_directly": false,
+    "composition_required": true,
+    "final_bundle_sidecars": "exact_base_revision_bytes",
+    "final_bundle_weights_and_index": "exact_post_sft_raw_export_bytes",
+    "repeat_all_checks_against_completed_export": true
+  }
+}
