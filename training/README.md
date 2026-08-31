@@ -170,6 +170,34 @@ The API renders the authoritative RayJob, submits it through Kueue, and exposes
 durable run status. Never place the bearer token in a config, receipt, command
 argument, or repository file.
 
+### Native RL successor safety gate
+
+The first full native run (`ft-run-0081ca94`) established two launch defects that
+must not be inherited by a successor:
+
+1. The current Train API maps `grpo.max_steps` to SkyRL `trainer.epochs`. With
+   129 rows and train batch size two, `max_steps: 130` rendered 130 complete
+   dataloader passes: 8,320 batches, not 130 steps. A successor request must carry
+   the explicit `trainer.max_training_steps=130` argument, and the live preview
+   must contain that exact argument. The historical runnable config is preserved
+   byte-for-byte as evidence; build successors from
+   `configs/runs/qwen36-27b-rl-successor.template.json`.
+2. The exact resolved runtime parquet had empty `tools` for all 129 train and all
+   ten dev task versions. Empty means “expose every environment tool”; the fira
+   schema alone is about 7,198 tokens, and the observed run remained 100%
+   truncated through its step-10 eval. Task names and prompts are not authority
+   for guessing a smaller list.
+
+`jobs-run` therefore reports `launch_blockers`, and `--execute` refuses a paid RL
+POST unless both conditions are proven. Tool proof must be returned by the live
+Train API preview as `task_tool_allowlist_evidence` with schema
+`fleet_rl_task_tool_allowlists_v1`, source
+`authoritative_task_version_metadata`, source field `metadata.tools`, an ordered
+binding for every exact train+eval `task_version_id`, a non-empty duplicate-free
+tool list per binding, and a canonical `bindings_sha256`. Caller-authored config
+cannot supply this proof. The current API does not emit it, so the successor is
+intentionally blocked until authoritative task metadata and preview support land.
+
 ## Exact pre/post identity
 
 `training.science` makes the evaluation protocol a hard input to the training

@@ -20,6 +20,7 @@ from .jobs_api import (
     TrainingJobsClient,
     concise_status,
     load_run_config,
+    rl_paid_launch_blockers,
     run_kind,
 )
 from .normalize import build_datasets
@@ -195,6 +196,7 @@ def _jobs_run(args: argparse.Namespace) -> int:
             return 0
         preview = client.preview(config)
         duplicates = client.runs_with_title(str(config["title"]))
+    launch_blockers = rl_paid_launch_blockers(config, preview)
     print(
         json.dumps(
             {
@@ -203,6 +205,7 @@ def _jobs_run(args: argparse.Namespace) -> int:
                 "title": config["title"],
                 "duplicate_names": [row.get("name") for row in duplicates],
                 "errors": preview.get("errors") or [],
+                "launch_blockers": launch_blockers,
                 "warnings": preview.get("warnings") or [],
             },
             indent=2,

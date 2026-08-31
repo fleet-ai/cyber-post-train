@@ -272,6 +272,28 @@ def test_runnable_qwen_rl_configs_pin_the_expected_trainer() -> None:
     )
 
 
+def test_successor_template_adds_true_step_cap_without_rewriting_historical_request() -> None:
+    root = Path(__file__).resolve().parents[1]
+    split = json.loads((root / "configs/data/fleet-a62-task-split-v1.json").read_text())
+    treatment = json.loads((root / "configs/data/fleet-a62-rl-treatment-v1.json").read_text())
+    historical = json.loads(
+        (root / "configs/runs/qwen36-27b-rl-base-full-runnable.json").read_text()
+    )
+    successor = json.loads(
+        (root / "configs/runs/qwen36-27b-rl-successor.template.json").read_text()
+    )
+    assert historical["grpo"]["max_steps"] == successor["grpo"]["max_steps"] == 130
+    assert "trainer.max_training_steps=130" not in historical["trainer"]["args"]
+    assert successor["trainer"]["args"].count("trainer.max_training_steps=130") == 1
+    assert successor["trainer"]["trainer_version_id"] == (
+        "4e800585-12d2-57aa-9a5d-9fb2927302eb"
+    )
+    built = build_full_rl_config(successor, split, treatment)
+    assert len(built["tasks"]["task_versions"]) == 129
+    assert len(built["eval"]["task_versions"]) == 10
+    assert built["trainer"]["args"].count("trainer.max_training_steps=130") == 1
+
+
 def test_authoritative_native_rl_gate_matches_frozen_two_task_receipt() -> None:
     root = Path(__file__).resolve().parents[1]
     config = json.loads(

@@ -1,0 +1,68 @@
+{
+  "title": "Chris cyber Qwen3.6 27B RL successor (true step cap; tool gate required)",
+  "node_pool": "fleetai-training-ng-gpu",
+  "fleet_env": null,
+  "tasks": {
+    "team_id": "a1025f0b-ad67-49fc-a023-51800ab43e84",
+    "selection_mode": "tasks",
+    "task_keys": [],
+    "task_versions": [],
+    "min_informative_fraction": 0.0
+  },
+  "max_concurrent_envs": 8,
+  "model": {
+    "staged_model": "qwen3.6-27b",
+    "precision": "bf16",
+    "engine_tensor_parallel_size": 4,
+    "max_context_length": 65536,
+    "max_prompt_length": 16384,
+    "max_generate_length": 2048,
+    "sequence_parallel_size": 1
+  },
+  "grpo": {
+    "group_size": 4,
+    "train_batch_size": 2,
+    "policy_mini_batch_size": 2,
+    "kl_coefficient": 0.001,
+    "kl_estimator": "k3",
+    "policy_loss_type": "regular",
+    "checkpoint_interval": 10,
+    "max_checkpoints_to_keep": 3,
+    "learning_rate": 0.000001,
+    "max_steps": 130,
+    "temperature": 1.0
+  },
+  "wandb": {
+    "enabled": true,
+    "entity": "thefleet",
+    "project": "cyber-post-train"
+  },
+  "eval": {
+    "task_keys": [],
+    "task_versions": [],
+    "interval": 10,
+    "before_train": true,
+    "samples_per_task": 1,
+    "stop_after_evals": 2
+  },
+  "trainer": {
+    "trainer_version_id": "4e800585-12d2-57aa-9a5d-9fb2927302eb",
+    "args": [
+      "trainer.max_training_steps=130",
+      "trainer.remove_microbatch_padding=false",
+      "trainer.policy.model_config_kwargs.fleet_force_qwen35_torch_gdn=true",
+      "trainer.ref.model_config_kwargs.fleet_force_qwen35_torch_gdn=true"
+    ]
+  },
+  "rollout": {
+    "harness": "native",
+    "mode": "tool-use",
+    "partial_verifier_scoring": false,
+    "pass_conversation_to_verifier": false,
+    "multi_app_aggregation_mode": "binary"
+  },
+  "async_training": false,
+  "gpus_per_worker": 8,
+  "num_workers": 1,
+  "serving_scaled_to_zero": true
+}
