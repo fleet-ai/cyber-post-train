@@ -53,6 +53,8 @@ spec:
               PYTHONPATH=/bundle python -m training.post_sft_artifacts hf "$export_root" \
                 --plan /bundle/plan.json --allow-sidecar-drift \
                 --output "$partial/hf-output-inspection.json"
+              PYTHONPATH=/bundle python -m training.post_sft_artifacts full "$export_root" \
+                --output "$partial/raw-export-full-manifest.json"
               PYTHONPATH=/bundle python - "$base_root" "$export_root" "$partial" <<'PY'
               import json
               import pathlib
@@ -106,6 +108,7 @@ spec:
               structural = sys.argv[2]
               source = json.loads((root / "source-full-manifest.json").read_text())
               output = json.loads((root / "hf-output-inspection.json").read_text())
+              raw_export = json.loads((root / "raw-export-full-manifest.json").read_text())
               layout = json.loads((root / "weight-layout-equivalence.json").read_text())
               architecture = json.loads(
                   (root / "model-config-architecture-equivalence.json").read_text()
@@ -129,6 +132,9 @@ spec:
                   "markers": {"promoted": True, "milestone": True, "expected_shards": 1,
                               "complete_shards": 1, "latest_step": 318},
                   "output_inspection": output,
+                  "raw_export_full_manifest_sha256": raw_export["manifest_sha256"],
+                  "raw_export_file_count": raw_export["file_count"],
+                  "raw_export_total_bytes": raw_export["total_bytes"],
                   "weight_layout_equivalence": layout,
                   "model_config_architecture_equivalence": architecture,
                   "tokenizer_structural_equivalence": tokenizer,

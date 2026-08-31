@@ -188,6 +188,15 @@ merely appearing under `/models` is not provenance. `training.post_sft_artifacts
 output file and weight shard, verifies that the index exactly names those shards, and checks every
 safetensors tensor is BF16 with the base architecture's exact parameter count.
 
+The CPU-only inference staging rail is
+`evals/post_sft/scripts/submit_inference_stage.sh`. Its preview performs server-side validation and
+creates nothing. Submission remains blocked until the exact export RayJob and evidence Job both
+succeed. It streams the raw export through the internal read-only filebrowser transport, verifies
+every path, size, and SHA-256, rejects symlinks and unsafe ZIP paths, composes post-training weights
+and index with the exact base runtime sidecars, and re-runs BF16/layout/parameter/hash inspection.
+Both the partial and final destinations must be absent. Only a fully verified partial directory is
+renamed atomically to the frozen final path; the job never overwrites or repairs an existing path.
+
 ```bash
 uv run python -m training.post_sft_cli render \
   --plan configs/evaluation/qwen36-27b-ft-run-574bd7b3-post-sft.json \

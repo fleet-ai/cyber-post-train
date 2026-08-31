@@ -99,7 +99,10 @@ def _safetensor_layout(root: Path) -> tuple[dict[str, dict[str, Any]], list[str]
     layout: dict[str, dict[str, Any]] = {}
     for name in shard_names:
         with safe_open(str(root / name), framework="pt", device="cpu") as shard:
-            for key in shard:
+            # Current safetensors exposes ``keys()`` but older test doubles and releases were
+            # iterable. Supporting both keeps the artifact verifier version-tolerant.
+            keys = shard.keys() if hasattr(shard, "keys") else iter(shard)
+            for key in keys:
                 if key in layout:
                     raise ValueError(f"duplicate tensor {key!r} in HF export")
                 tensor_slice = shard.get_slice(key)
