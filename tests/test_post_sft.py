@@ -120,6 +120,7 @@ def _export(selection):
             "files_manifest_sha256": "sha256:" + "f" * 64,
             "tokenizer_manifest_sha256": "sha256:" + "7" * 64,
             "chat_template_sha256": "sha256:" + "8" * 64,
+            "config_sha256": "sha256:" + "0" * 64,
         },
         "conversion": {
             "image": IMAGE,
@@ -333,6 +334,7 @@ def test_post_sft_registration_preserves_runtime_and_precision():
         export,
         expected_tokenizer_manifest_sha256="sha256:" + "7" * 64,
         expected_chat_template_sha256="sha256:" + "8" * 64,
+        expected_config_sha256="sha256:" + "0" * 64,
         expected_export_binding=_export_binding(),
     )
     candidate = receipt["registration"]
@@ -370,6 +372,7 @@ def test_post_sft_registration_rejects_unproven_inference_staging():
             export,
             expected_tokenizer_manifest_sha256="sha256:" + "7" * 64,
             expected_chat_template_sha256="sha256:" + "8" * 64,
+            expected_config_sha256="sha256:" + "0" * 64,
             expected_export_binding=_export_binding(),
         )
 
@@ -431,6 +434,7 @@ def test_export_receipt_rejects_wrong_run_identity_and_missing_output_hash():
             export,
             expected_tokenizer_manifest_sha256="sha256:" + "7" * 64,
             expected_chat_template_sha256="sha256:" + "8" * 64,
+            expected_config_sha256="sha256:" + "0" * 64,
             expected_export_binding=_export_binding(),
         )
 
@@ -446,6 +450,7 @@ def test_export_receipt_rejects_wrong_run_identity_and_missing_output_hash():
             export,
             expected_tokenizer_manifest_sha256="sha256:" + "7" * 64,
             expected_chat_template_sha256="sha256:" + "8" * 64,
+            expected_config_sha256="sha256:" + "0" * 64,
             expected_export_binding=_export_binding(),
         )
 
@@ -492,6 +497,7 @@ def test_comparison_receipt_binds_all_four_handoffs():
         export,
         expected_tokenizer_manifest_sha256="sha256:" + "7" * 64,
         expected_chat_template_sha256="sha256:" + "8" * 64,
+        expected_config_sha256="sha256:" + "0" * 64,
         expected_export_binding=_export_binding(),
     )
     split = json.loads((ROOT / "configs/data/fleet-a62-task-split-v1.json").read_text())

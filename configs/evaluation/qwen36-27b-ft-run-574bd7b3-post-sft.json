@@ -36,7 +36,9 @@
     "revision": "6a9e13bd6fc8f0983b9b99948120bc37f49c13e9",
     "weights_manifest_sha256": "sha256:14ad10368de9b9e5974ff12a4b70ea7884194b58e670177bbac79daeb81f16b9",
     "tokenizer_manifest_sha256": "sha256:27f02770d03b60343350ad948bf1065673968c60274f1e34f4afaed16940a1ea",
-    "chat_template_sha256": "sha256:e84f32a23fdda27689f868aa4a1a5621f41133e51a48d7f3efcbea2839574259"
+    "chat_template_sha256": "sha256:e84f32a23fdda27689f868aa4a1a5621f41133e51a48d7f3efcbea2839574259",
+    "config_sha256": "sha256:69db4eb7196bc8190813231b3018ca05d8c2e3abc7b1af19d55c157af44a9d9c",
+    "parameter_count": 27781427952
   },
   "serving": {
     "base_registration": {

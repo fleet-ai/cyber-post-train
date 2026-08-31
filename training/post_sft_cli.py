@@ -156,6 +156,7 @@ def render(
         export,
         expected_tokenizer_manifest_sha256=str(model["tokenizer_manifest_sha256"]),
         expected_chat_template_sha256=str(model["chat_template_sha256"]),
+        expected_config_sha256=str(model["config_sha256"]),
         expected_export_binding=plan["export"],
     )
     served_model_id = serving["registration"]["id"]
@@ -216,6 +217,7 @@ def render_external_benchmarks(
         export,
         expected_tokenizer_manifest_sha256=str(model["tokenizer_manifest_sha256"]),
         expected_chat_template_sha256=str(model["chat_template_sha256"]),
+        expected_config_sha256=str(model["config_sha256"]),
         expected_export_binding=plan["export"],
     )
     web = derive_webexploit_config(
