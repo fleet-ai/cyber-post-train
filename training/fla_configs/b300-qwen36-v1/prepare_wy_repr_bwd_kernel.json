@@ -1,0 +1,13 @@
+{
+  "kernel_name": "prepare_wy_repr_bwd_kernel",
+  "triton_version": "3.6.0",
+  "autotune_entries": null,
+  "default_config": {
+    "kwargs": {},
+    "num_warps": 2,
+    "num_stages": 4,
+    "num_ctas": 1,
+    "maxnreg": null,
+    "ir_override": null
+  }
+}

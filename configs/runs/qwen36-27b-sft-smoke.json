@@ -1,6 +1,6 @@
 {
   "kind": "sft",
-  "title": "Chris cyber Qwen3.6 27B FLA052 SFT one-step smoke v6",
+  "title": "Chris cyber Qwen3.6 27B pinned-FLA SFT one-step smoke v7",
   "data": {
     "job_ids": [
       "chris-cyber-qwen36-windowed-v2"
@@ -176,7 +176,11 @@
     "before_train": true
   },
   "trainer": {
-    "trainer_version_id": "6d4a7bbc-51a7-57ed-91eb-a449185ed8db"
+    "trainer_version_id": "b4a49402-5e7f-5f94-a5ff-980126d78390",
+    "env": {
+      "FLA_CACHE_MODE": "default",
+      "FLA_CONFIG_DIR": "/mnt/sfs/jobs/chris-q36-fla-b300-v1/fla-config-2166f41a"
+    }
   },
   "wandb": {
     "enabled": true,

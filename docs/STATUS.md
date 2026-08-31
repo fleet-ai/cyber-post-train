@@ -1,4 +1,4 @@
-# Execution status — 2026-08-29
+# Execution status — 2026-08-31
 
 ## Current Qwen 3.6 27B experiment
 
@@ -12,11 +12,13 @@
   lineages, including 587 verified successes. The deterministic task split is
   130 train / 10 dev / 20 test; no task lineage crosses a split.
 - The live Fleet Training API model catalog resolves the staged base as
-  `qwen3.6-27b`. Every request renders through the server's single
-  preview/submit path into Kueue `training-lq`. Trainer
-  `6d4a7bbc-51a7-57ed-91eb-a449185ed8db` passed its standard one-L4 catalog
-  smoke, but the experiment gates below exposed two workload-specific defects;
-  it is superseded and must not be used for a full run.
+  `qwen3.6-27b`. Typed runs now use the direct queue-aware Jobs API at
+  `https://api.ft.flt.build`, which renders through the server's authoritative
+  preview/submit path into Kueue `training-lq`. The selected immutable trainer
+  is the minimal fixed Ready successor at commit `37e76223`, version UUID
+  `b4a49402-5e7f-5f94-a5ff-980126d78390`; it includes CUDA 13 / `sm_103a`,
+  exact `flash-linear-attention==0.5.2`, verifier hydration, and the corrected
+  run-naming contract without importing hundreds of unrelated later commits.
 - Four retained SFT compatibility attempts progressively proved corpus staging,
   permissions, VLM-safe sequence parallelism, checkpoint loading, exact 508/33
   train/dev tokenization, and five pre-train eval batches. The latest,
@@ -48,14 +50,44 @@
   compiler fix are both present in the registered combined trainer image and
   are exercised together by the new RL smoke.
 - The full one-epoch SFT request is frozen in
-  `configs/runs/qwen36-27b-sft-full.json` but will not be submitted until the
+  `configs/runs/qwen36-27b-sft-full.json` but will not be submitted until a
   one-step compatibility arm proves checkpoint load, tokenizer/tool formatting,
-  BF16 backward, optimizer step, and checkpoint save. The one-step arm
+  BF16 backward, optimizer step, and checkpoint save. The older one-step arm
   `ft-run-30714d6e` was admitted through Kueue `training-cq`, loaded all 2,540
   train and 165 dev windows with zero filtering, and completed the 21-batch
   pre-train evaluation at `eval_loss=0.9582`. Its first forward/backward then
   failed before the optimizer step in FLA's `prepare_wy_repr_bwd_kernel` Triton
-  autotuner with `CUDA: misaligned address`; no checkpoint was created.
+  autotuner with `CUDA: misaligned address`; no checkpoint was created. Its
+  fixed successor `ft-run-1c54ba33` was submitted through the Jobs API with the
+  exact trainer above. It reproduced the same failure after loading all corpus
+  windows and completing pre-train evaluation at `eval_loss=0.9588`: the first
+  backward failed in FLA's `prepare_wy_repr_bwd_kernel` with a Triton
+  `CUDA: misaligned address`. It produced zero optimizer steps and zero
+  checkpoints. Its config digest is
+  `sha256:ff90aef21013b0ea68bbadf5be8df43dc08297d9a830ca7a9601663c36011440`.
+  A one-GPU, no-secret diagnostic job, `chris-q36-fla-b300-v1`, tested six
+  explicit Triton launch configurations against the exact Qwen gated-delta
+  tensor shape in the same trainer image. Each candidate runs in a fresh
+  process because a CUDA address fault poisons its process context. All six
+  candidates passed on an NVIDIA B300 with the exact FLA 0.5.2 / Torch 2.11 /
+  Triton 3.6 stack. This isolates the failure to unsafe autotuner benchmarking,
+  rather than the selected kernel invocation. Conservative config `2 warps / 4
+  stages` was content-hashed at
+  `sha256:2166f41ace1a98ec71e623afbb45406324a36a77c9dd13896c95246c605aa143`
+  and staged read-only by convention on SFS. Successor gate `ft-run-b786dd74`
+  injected that exact directory with FLA's `default` cache mode and proved the
+  override bypassed autotuning. It nevertheless failed on the selected kernel
+  invocation at the first backward with the same misaligned-address error,
+  after pre-evaluation at `eval_loss=0.9586`; it produced zero optimizer steps
+  and zero checkpoints. Source inspection then established that Qwen repeats
+  its 16 query/key heads threefold before calling FLA, so the earlier synthetic
+  probe's 16-head layout did not match the kernel's actual 48-head layout. The
+  one-GPU, no-secret corrective diagnostic `chris-q36-fla-h48-v2` exercised the
+  exact 48/48 head layout through queue `training-lq`. All six explicit launch
+  configurations failed with the same misaligned-address error. This falsifies
+  the earlier unsafe-autotuner hypothesis: the FLA 0.5.2 backward kernel itself
+  is incompatible with this exact Qwen/B300 layout. The full SFT request remains
+  locked pending a kernel-level repair or a proven alternate implementation.
 - The RL intent-to-treat split remains 130 train / 10 dev / 20 untouched test.
   One historical train version is archived and server-unrunnable, so an explicit
   signed as-treated request contains 129 train and 10 dev tasks. That exact
@@ -63,8 +95,19 @@
   gate `ft-run-e1a5e2dc` was admitted through Kueue `training-cq` but failed
   before actor allocation because the rendered mandatory tracker list included
   MLflow while the Nebius MLflow application and Service are intentionally
-  disabled. It produced no steps or checkpoints. The full request remains
-  unsubmitted until a successor gate is green.
+  disabled. It produced no steps or checkpoints. Fixed successor
+  `ft-run-c89da950` was submitted through the Jobs API with two exact training
+  tasks. It completed infrastructure/model initialization but all eight rollout
+  episodes failed internally because the rollout service used Fira's
+  `getAccessibleAtlasResources` readiness tool against unrelated environments.
+  The subsequent reference forward also hit SkyRL's VLM microbatch-padding
+  assertion. It produced zero valid training sessions, zero optimizer steps,
+  and zero checkpoints; its one recorded step and two metric rows are therefore
+  infrastructure evidence, not a model result. The replacement configs disable
+  microbatch padding explicitly, but no successor will launch until the
+  environment-neutral readiness fix is proven. The full request remains
+  unsubmitted until a gate proves rollout, deterministic verifier reward,
+  optimizer step, and checkpoint save.
 - Theseus PR #27880 makes the tracker list an explicit deployment capability:
   W&B remains mandatory on Nebius, while MLflow remains mandatory only on
   clusters that actually deploy it. The live Nebius deployment is healthy with
@@ -77,19 +120,19 @@
   producing image tag `4fd37536` at digest
   `sha256:25e56db0367fa6fc83dcdb14b44d8b7dd7fde4af053b8a87861b942ef28bf75c`;
   its build log proves FLA 0.5.2 and a clean trainer contract. Trainer-pin PR
-  #27889 and stale-variant cleanup PR #27888 are intentionally drafts with
-  auto-merge disabled pending explicit approval. Until the pin lands and its
-  standard smoke registers a new Ready trainer UUID, the successor SFT and RL
-  gates cannot be launched through the typed API and both full requests remain
-  unsubmitted.
+  #27889 closed without merge. Colleague changes subsequently registered the
+  fixed lineage; the experiment deliberately pins the earliest Ready successor,
+  `37e76223`, rather than mutable `latest`. Both successor gates are now live.
+  No full request will be submitted until its corresponding gate is green.
 - Hugging Face access to WebExploitBench is granted. All 15 official Level-0
   packs are digest-verified and pass the official non-inference CAGE checks.
   The formal Qwen baseline pins the same model revision plus an exact SGLang
   serving contract. All 15 images built successfully and the frozen 15-trial
-  pass@1 run `webexploit-qwen36-27b-base-6a9e13bd-l0-p1-v1` is active under
-  protocol digest `cd67f337e42839deddc947ced45da56761a2fe4093a955e70059c3ee4bc06f3a`.
-  Two trials are complete, one is running, and zero have failed; logs and scores
-  remain sealed. No benchmark prompt, trace, or result enters training.
+  pass@1 run `webexploit-qwen36-27b-base-6a9e13bd-l0-p1-v1` is terminal: 12
+  trials completed and three ended with separately recorded model,
+  target-availability, or execution-timeout outcomes. Logs and scores remain
+  sealed pending the predeclared adjudication and checkpoint/protocol freeze.
+  No benchmark prompt, trace, or result enters training.
 
 The GLM-5.2 work below is retained as historical provenance; it is no longer the
 selected primary experiment.
