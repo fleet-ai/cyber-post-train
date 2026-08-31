@@ -1,0 +1,60 @@
+{
+  "schema_version": "fleet-selfhosted-qwen-code-protocol-v1",
+  "run_id": "chris-cyber-qwen36-qwencode0223-fleet-smoke-v1",
+  "source_job_id": "a62dd51f-a52b-4941-8207-4679e4b25b51",
+  "task": {
+    "key": "cysec1-2-current-gen_blackbox-9afe9e08da314948b573657e__blackbox_ctf_v1",
+    "id": "65716472-8e11-4825-b2b7-3d584986f0ff",
+    "version_id": "dd8dd22e-75c0-4b93-8f8e-ea8a292d92bb",
+    "prompt_sha256": "sha256:61bcc61236247c7bda0146ca95767e6ec1e433c81d4ae29177c80ca6abef1fd3",
+    "env_variables_sha256": "sha256:89081d1eb848ed046925171e8cfa5ecd35d661c6562b639e722f170f467ff30f",
+    "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+  },
+  "environment": {
+    "id": "cysec1-2-current-gen",
+    "version": "v0.0.3",
+    "data_id": "commercial",
+    "data_version": "v0.0.9",
+    "runtime_seed_content_sha256": "372e7d9a2e705f944213a8fe1f24caf92f5f040b152fe16e263729a3a4999865",
+    "ttl_seconds": 10800
+  },
+  "verifier": {
+    "id": "d42d96e8-690c-45ef-bf86-f03b064ed3c5",
+    "version_id": "e380dd5d-121a-4c53-a866-74a4adf57706",
+    "version": 1,
+    "sha256": "fd4f7612e00c76913e7ab80572aaffd987483169c8502be99550ce305a3b5713",
+    "code_sha256": "sha256:e1d3e806a5c1de05189e3530341c44b4f0b651dc6572e209cdc75212f01336cd",
+    "function_name": "verify"
+  },
+  "authority": {
+    "contract_source_pr": "https://github.com/fleet-ai/theseus/pull/28252",
+    "contract_source_commit": "b3cea985e2bb9f862eaf37237c1b3efd2a0a64c7",
+    "provisioning_route_template": "/v1/rollout-rewards/{task_key}/versions/{task_version_id}/instances",
+    "scoring_route_template": "/v1/rollout-rewards/{task_key}/versions/{task_version_id}",
+    "scoring_mode": "partial",
+    "multi_app_aggregation_mode": "fractional"
+  },
+  "model": {
+    "repository": "Qwen/Qwen3.6-27B",
+    "revision": "6a9e13bd6fc8f0983b9b99948120bc37f49c13e9",
+    "served_id": "qwen3-6-27b-cyber-baseline",
+    "endpoint_origin": "https://inference.flt.build",
+    "tokenizer_revision": "sha256:27f02770d03b60343350ad948bf1065673968c60274f1e34f4afaed16940a1ea",
+    "chat_template_revision": "sha256:e84f32a23fdda27689f868aa4a1a5621f41133e51a48d7f3efcbea2839574259"
+  },
+  "harness": {
+    "name": "qwen_code",
+    "version": "0.22.3",
+    "source_commit": "09825973e7d3c3fd07e17909c396aa62f48ce51f",
+    "npm_tarball_sha1": "1529461d6c79c273b184849e6777e54ac98ae860",
+    "node_image": "docker.io/library/node@sha256:4d676821dff059fd00d277ee4261ef34ea712317fed0737c03941481b5760c96",
+    "max_model_requests": 300,
+    "timeout_seconds": 7200
+  },
+  "execution": {
+    "pass_k": 1,
+    "max_concurrent": 1,
+    "network": "chris-qwen-fleet-smoke-v1",
+    "training_data_eligible": false
+  }
+}

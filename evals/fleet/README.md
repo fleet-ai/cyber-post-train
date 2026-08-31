@@ -73,3 +73,36 @@ Review the emitted model, harness, task key, budgets, and idempotency key, then
 run the exact command with `--submit`. Do not scale past one task until its
 session reaches a terminal state, the verifier executes, and the provenance
 receipt confirms the expected harness and model revisions.
+
+### Self-hosted exact-harness canary
+
+`self_hosted.py` is the non-substituting route for the same official Qwen Code
+and exact gateway checkpoint. It provisions the exact registered task version,
+exposes only the task's Fleet MCP tools to the agent, and grades through the
+server-owned version-scoped rollout-reward authority. The agent container gets
+neither the Fleet API key nor the runner token; two fixed-upstream proxies hold
+those credentials outside the agent's network boundary.
+
+The scored path is intentionally fail-closed until the two routes specified by
+the config are visible in deployed OpenAPI. These are the contracts introduced
+by Theseus PR #28252: exact task-version provisioning injects server-owned cyber
+evidence, and exact task-version scoring validates all production bindings.
+The raw Qwen chat JSONL is the canonical trace. A normalized copy retaining
+assistant thinking, tool calls, and tool observations is supplied to scoring
+and Fleet trace ingestion. All artifacts are marked ineligible for training.
+
+```bash
+# Read-only task identity plus deployed-route gate; currently expected to fail
+# closed until PR #28252 is deployed.
+evals/fleet/scripts/submit_selfhosted_qwen_smoke.sh preview
+
+# After the route gate passes, create one suspended, queue-managed CPU canary.
+evals/fleet/scripts/submit_selfhosted_qwen_smoke.sh submit
+```
+
+The canary is one task, one session, and one model. Its Kubernetes Job is
+`chris-cyber-qwen36-qcode-fleet-smoke-v1`; it uses LocalQueue `training-lq`,
+never cancels another workload, and refuses to replace an existing Job or
+ConfigMap. Do not scale it until cleanup, raw trace, authoritative reward,
+session ingestion, model identity, and harness identity are all terminal and
+verified.
