@@ -496,6 +496,7 @@ def validate_hf_export_receipt(
     expected_chat_template_sha256: str,
     expected_config_sha256: str,
     expected_export_binding: Mapping[str, Any],
+    expected_runtime_sidecar_sha256: Mapping[str, str] | None = None,
 ) -> str:
     """Validate a serving-format export without trusting a directory name as identity."""
 
@@ -525,6 +526,10 @@ def validate_hf_export_receipt(
         raise ValueError("HF export chat template differs from the base checkpoint")
     if _sha256(output, "config_sha256") != expected_config_sha256:
         raise ValueError("HF export model configuration differs from the base checkpoint")
+    if expected_runtime_sidecar_sha256 is not None:
+        observed_sidecars = _mapping(output.get("sidecar_sha256"), "export.output.sidecar_sha256")
+        if dict(observed_sidecars) != dict(expected_runtime_sidecar_sha256):
+            raise ValueError("HF export runtime sidecars differ from the base checkpoint")
 
     conversion = _mapping(export.get("conversion"), "export.conversion")
     export_run, expected_conversion_output = _validate_export_binding(
@@ -594,6 +599,7 @@ def derive_post_sft_registration(
     expected_chat_template_sha256: str,
     expected_config_sha256: str,
     expected_export_binding: Mapping[str, Any],
+    expected_runtime_sidecar_sha256: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
     """Clone the baseline serving contract, changing only checkpoint identity and paths."""
 
@@ -604,6 +610,7 @@ def derive_post_sft_registration(
         expected_chat_template_sha256=expected_chat_template_sha256,
         expected_config_sha256=expected_config_sha256,
         expected_export_binding=expected_export_binding,
+        expected_runtime_sidecar_sha256=expected_runtime_sidecar_sha256,
     )
     base = copy.deepcopy(dict(base_registration))
     spec = _mapping(base.get("spec"), "base registration spec")

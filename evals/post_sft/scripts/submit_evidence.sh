@@ -17,6 +17,7 @@ configmap() {
     --from-file=training__init__.py="$ROOT/training/__init__.py" \
     --from-file=training_io.py="$ROOT/training/io.py" \
     --from-file=training_post_sft_artifacts.py="$ROOT/training/post_sft_artifacts.py" \
+    --from-file=training_tokenizer_equivalence.py="$ROOT/training/tokenizer_equivalence.py" \
     --from-file=plan.json="$PLAN" --dry-run=client -o yaml
 }
 
