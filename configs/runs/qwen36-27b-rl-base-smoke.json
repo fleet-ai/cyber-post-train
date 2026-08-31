@@ -1,5 +1,5 @@
 {
-  "title": "Chris cyber Qwen3.6 27B FLA052 W&B RL smoke v3",
+  "title": "Chris cyber Qwen3.6 27B pinned-FLA W&B RL smoke v4",
   "node_pool": "fleetai-training-ng-gpu",
   "fleet_env": {
     "env_key": "cysec1-2-current-gen",
