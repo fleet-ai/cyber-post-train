@@ -16,12 +16,14 @@ NAMESPACE = "fleet-train-jobs"
 QUEUE_NAME = "training-lq"
 DEFAULT_SERVICE_ACCOUNT = "default"
 SUBMITTER_IMAGE = "anyscale/ray:2.56.0-slim-py312"
+ANSI_ESCAPE_PATTERN = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 OPTIMIZER_EVENT_PATTERN = re.compile(
     r"Started:\s*['\"]optim_step['\"]|\boptimizer(?:_|\s+)step(?:s)?\b",
     re.IGNORECASE,
 )
 TERMINAL_SUCCESS_PATTERN = re.compile(
-    r"\bJob finished successfully\b|\bjobStatus\s*[=:]\s*SUCCEEDED\b|\brun succeeded\b",
+    r"\bJob finished successfully\b|\bjobStatus\s*[=:]\s*SUCCEEDED\b|\brun succeeded\b|"
+    r"\bJob\s+'[^'\r\n]+'\s+succeeded\b",
     re.IGNORECASE,
 )
 STEP_PATTERNS = (
@@ -323,15 +325,20 @@ def _log_zero_step_evidence(driver_log: bytes, entrypoint: str, resume_step: int
     if not driver_log:
         raise ValueError("driver log is empty")
     log_text = driver_log.decode("utf-8", errors="replace")
+    normalized_log_text = ANSI_ESCAPE_PATTERN.sub("", log_text)
     if entrypoint not in log_text:
         raise ValueError("driver log does not contain the exact RayJob entrypoint")
-    if not TERMINAL_SUCCESS_PATTERN.search(log_text):
+    if not TERMINAL_SUCCESS_PATTERN.search(normalized_log_text):
         raise ValueError("driver log does not contain a terminal success marker")
-    optimizer_events = list(OPTIMIZER_EVENT_PATTERN.finditer(log_text))
+    optimizer_events = list(OPTIMIZER_EVENT_PATTERN.finditer(normalized_log_text))
     if optimizer_events:
         raise ValueError("driver log records an optimizer event")
     observed_steps = sorted(
-        {int(match.group(1)) for pattern in STEP_PATTERNS for match in pattern.finditer(log_text)}
+        {
+            int(match.group(1))
+            for pattern in STEP_PATTERNS
+            for match in pattern.finditer(normalized_log_text)
+        }
     )
     later_steps = [step for step in observed_steps if step > resume_step]
     if later_steps:
