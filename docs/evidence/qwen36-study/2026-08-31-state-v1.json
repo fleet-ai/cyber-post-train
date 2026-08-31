@@ -111,7 +111,21 @@
       "destination_path": "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-bf16-v1/global_step_318/policy",
       "terminal_result": null
     },
-    "plan": {"path": "configs/evaluation/qwen36-27b-ft-run-574bd7b3-post-sft.json", "file_sha256": "sha256:a22934f1d72bbe7f6ffa900107695d1cfd63bf287ef3afbd5f2dbdbcf8523b40"}
+    "filesystem_evidence": {
+      "failed_attempt": {
+        "job_name": "chris-cyber-qwen36-sft-evidence-v1",
+        "job_uid": "777191dc-0d80-4453-a74b-609b58c6a848",
+        "status": "FAILED",
+        "model_bytes_inspected": false,
+        "failure": "UID 1000 could not create the receipt parent under root-owned /mnt/sfs/jobs"
+      },
+      "successor": {
+        "job_name": "chris-cyber-qwen36-sft-evidence-v2",
+        "status": "not_launched",
+        "receipt_path": "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/evidence/sfs-v2/receipt"
+      }
+    },
+    "plan": {"path": "configs/evaluation/qwen36-27b-ft-run-574bd7b3-post-sft.json", "file_sha256": "sha256:81909ee68c0ede0ffa63396966f9cbfce7bec3aee996aeb20bf77077b1987a8b"}
   },
   "native_fleet_rl": {
     "one_step_gate": {

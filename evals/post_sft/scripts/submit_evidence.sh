@@ -2,10 +2,10 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/../../.." && pwd)
-NAME=chris-cyber-qwen36-sft-evidence-v1
+NAME=chris-cyber-qwen36-sft-evidence-v2
 NAMESPACE=fleet-train-jobs
 EXPECTED_CONTEXT=nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6
-JOB="$ROOT/evals/post_sft/cluster/qwen36-sft-evidence-job.yaml"
+JOB="$ROOT/evals/post_sft/cluster/qwen36-sft-evidence-v2-job.yaml"
 PLAN="$ROOT/configs/evaluation/qwen36-27b-ft-run-574bd7b3-post-sft.json"
 MODE=${1:-preview}
 

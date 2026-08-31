@@ -67,7 +67,7 @@ case "$MODE" in
     observation=$2
     raw_manifest=$3
     test "$(kubectl -n "$NAMESPACE" get rayjob ft-run-29f2bedf -o jsonpath='{.status.jobStatus}')" = SUCCEEDED
-    test "$(kubectl -n "$NAMESPACE" get job chris-cyber-qwen36-sft-evidence-v1 -o jsonpath='{.status.conditions[?(@.type=="Complete")].status}')" = True
+    test "$(kubectl -n "$NAMESPACE" get job chris-cyber-qwen36-sft-evidence-v2 -o jsonpath='{.status.conditions[?(@.type=="Complete")].status}')" = True
     require_all_absent
     PYTHONPATH="$ROOT" uv run python -m training.post_sft_cast validate-bundle \
       --plan "$PLAN" --root "$ROOT" >/dev/null

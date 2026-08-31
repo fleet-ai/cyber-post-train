@@ -29,7 +29,9 @@ SOURCE_PATH = Path(
 DESTINATION_PATH = Path(
     "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-bf16-v1/global_step_318/policy"
 )
-EVIDENCE_DIR = Path("/mnt/sfs/jobs/chris-cyber-qwen36-sft-bf16-cast-v1/receipt")
+EVIDENCE_DIR = Path(
+    "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/evidence/bf16-cast-v1/receipt"
+)
 ACCEPTANCE_RECEIPT_NAME = ".fleet-bf16-cast-acceptance.json"
 DEFAULT_MAX_SHARD_BYTES = 2 * 1024**3
 DEFAULT_MAX_SOURCE_TENSOR_BYTES = 8 * 1024**3
