@@ -9,6 +9,7 @@ from typing import Annotated, Any
 import typer
 
 from evals.exploitgym.paired import derive_paired_protocol
+from evals.webexploitbench.paired import derive_post_sft_qwen_pair
 
 from .io import atomic_write_json, file_sha256
 from .post_sft import (
@@ -147,6 +148,19 @@ def render(
     base_web_path, base_web = _planned_file(
         root, plan["webexploitbench"]["base_config"], "base WebExploitBench config"
     )
+    baseline_terminal_path, _ = _planned_file(
+        root,
+        plan["webexploitbench"]["baseline_terminal_receipt"],
+        "baseline WebExploitBench terminal receipt",
+    )
+    baseline_protocol_path, _ = _planned_file(
+        root,
+        plan["webexploitbench"]["baseline_protocol"],
+        "baseline WebExploitBench protocol",
+    )
+    harness_lock_path, _ = _planned_file(
+        root, plan["webexploitbench"]["harness_lock"], "Qwen Code harness lock"
+    )
     _, split = _planned_file(root, plan["fleet"]["split_manifest"], "Fleet split manifest")
     _, sft = _planned_file(root, plan["fleet"]["sft_config"], "SFT config")
 
@@ -179,12 +193,33 @@ def render(
     ):
         atomic_write_json(path, value, private=True)
 
+    post_protocol, paired_identity = derive_post_sft_qwen_pair(
+        baseline_terminal_path=baseline_terminal_path,
+        baseline_protocol_path=baseline_protocol_path,
+        baseline_config_path=base_web_path,
+        post_config_path=post_web_out,
+        harness_lock_path=harness_lock_path,
+        base_registration=base_registration,
+        post_serving_receipt=serving,
+    )
+    atomic_write_json(
+        output_dir / "webexploitbench-post-sft-protocol.json",
+        post_protocol.to_dict(),
+        private=True,
+    )
+    atomic_write_json(
+        output_dir / "webexploitbench-paired-identity-receipt.json",
+        paired_identity,
+        private=True,
+    )
+
     comparison = build_post_sft_comparison_receipt(
         selection=selection,
         export=export,
         serving=serving,
         base_webexploit_config_sha256=file_sha256(base_web_path),
         post_webexploit_config_sha256=file_sha256(post_web_out),
+        webexploit_paired_identity=paired_identity,
         fleet_holdout=holdout,
     )
     atomic_write_json(output_dir / "comparison-receipt.json", comparison, private=True)
@@ -209,8 +244,21 @@ def render_external_benchmarks(
     _, base_registration = _planned_file(
         root, plan["serving"]["base_registration"], "base serving registration"
     )
-    _, base_web = _planned_file(
+    base_web_path, base_web = _planned_file(
         root, plan["webexploitbench"]["base_config"], "base WebExploitBench config"
+    )
+    baseline_terminal_path, _ = _planned_file(
+        root,
+        plan["webexploitbench"]["baseline_terminal_receipt"],
+        "baseline WebExploitBench terminal receipt",
+    )
+    baseline_protocol_path, _ = _planned_file(
+        root,
+        plan["webexploitbench"]["baseline_protocol"],
+        "baseline WebExploitBench protocol",
+    )
+    harness_lock_path, _ = _planned_file(
+        root, plan["webexploitbench"]["harness_lock"], "Qwen Code harness lock"
     )
     serving = derive_post_sft_registration(
         base_registration,
@@ -238,12 +286,32 @@ def render_external_benchmarks(
     )
 
     output_dir.mkdir(parents=True, exist_ok=True)
+    post_web_path = output_dir / "webexploitbench-post-sft-config.json"
     for path, value in (
         (output_dir / "serving-registration-receipt.json", serving),
-        (output_dir / "webexploitbench-post-sft-config.json", web),
+        (post_web_path, web),
         (output_dir / "exploitgym-paired-protocol.json", exploitgym),
     ):
         atomic_write_json(path, value, private=True)
+    post_protocol, paired_identity = derive_post_sft_qwen_pair(
+        baseline_terminal_path=baseline_terminal_path,
+        baseline_protocol_path=baseline_protocol_path,
+        baseline_config_path=base_web_path,
+        post_config_path=post_web_path,
+        harness_lock_path=harness_lock_path,
+        base_registration=base_registration,
+        post_serving_receipt=serving,
+    )
+    atomic_write_json(
+        output_dir / "webexploitbench-post-sft-protocol.json",
+        post_protocol.to_dict(),
+        private=True,
+    )
+    atomic_write_json(
+        output_dir / "webexploitbench-paired-identity-receipt.json",
+        paired_identity,
+        private=True,
+    )
     typer.echo(str(output_dir))
 
 

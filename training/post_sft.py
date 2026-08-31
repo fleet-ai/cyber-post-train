@@ -676,7 +676,8 @@ def derive_webexploit_config(
     """Create a paired post-SFT WebExploitBench config.
 
     The model id and run id are the only permitted changes.  In particular this preserves the
-    Claude Code harness, judge, prompt level, context windows, timeouts, pass@k, and concurrency.
+    exact Qwen Code 0.22.3 harness used by the canonical 10/110 baseline, plus its judge, prompt
+    level, context windows, timeouts, pass@k, and concurrency.
     """
 
     if not MODEL_ID_RE.fullmatch(served_model_id):
@@ -689,8 +690,8 @@ def derive_webexploit_config(
     changed = {key for key in base_config if base_config.get(key) != result.get(key)}
     if changed != {"model", "run_id"}:
         raise ValueError("WebExploitBench paired config changed uncontrolled fields")
-    if result.get("agent") != "claude_code":
-        raise ValueError("paired WebExploitBench evaluation must preserve Claude Code")
+    if result.get("agent") != "qwen_code" or result.get("agent_version") != "0.22.3":
+        raise ValueError("paired WebExploitBench evaluation must preserve Qwen Code 0.22.3")
     return result
 
 
@@ -763,6 +764,7 @@ def build_post_sft_comparison_receipt(
     serving: Mapping[str, Any],
     base_webexploit_config_sha256: str,
     post_webexploit_config_sha256: str,
+    webexploit_paired_identity: Mapping[str, Any],
     fleet_holdout: Mapping[str, Any],
 ) -> dict[str, Any]:
     """Assemble the immutable handoff shared by both paired evaluation suites."""
@@ -773,6 +775,20 @@ def build_post_sft_comparison_receipt(
     }.items():
         if not SHA256_RE.fullmatch(value):
             raise ValueError(f"{field} must be sha256:<64 hex>")
+    if webexploit_paired_identity.get("schema") != (
+        "webexploitbench_qwen_code_paired_identity_v1"
+    ):
+        raise ValueError("unsupported WebExploitBench paired identity schema")
+    paired_identity_sha256 = _sha256(
+        webexploit_paired_identity, "paired_identity_receipt_sha256"
+    )
+    paired_undigested = {
+        key: value
+        for key, value in webexploit_paired_identity.items()
+        if key != "paired_identity_receipt_sha256"
+    }
+    if digest_json(paired_undigested) != paired_identity_sha256:
+        raise ValueError("WebExploitBench paired identity receipt digest does not validate")
     receipt = {
         "schema": "cyber_post_sft_comparison_v1",
         "checkpoint_selection_sha256": _sha256(selection, "selection_receipt_sha256"),
@@ -782,6 +798,9 @@ def build_post_sft_comparison_receipt(
             "base_config_sha256": base_webexploit_config_sha256,
             "post_config_sha256": post_webexploit_config_sha256,
             "allowed_config_differences": ["model", "run_id"],
+            "paired_identity_receipt_sha256": paired_identity_sha256,
+            "harness": "qwen_code",
+            "harness_version": "0.22.3",
             "external_results_used_for_selection": False,
         },
         "fleet": {

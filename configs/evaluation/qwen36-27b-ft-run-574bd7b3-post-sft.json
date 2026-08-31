@@ -101,14 +101,29 @@
   },
   "webexploitbench": {
     "base_config": {
-      "path": "evals/webexploitbench/configs/qwen36-27b-6a9e13bd-level0-full.json",
-      "sha256": "sha256:f28f25cc6c8228be5762a326b893676f0b309ab9c162aced3332a5e5a538b46d"
+      "path": "evals/webexploitbench/configs/qwen36-27b-6a9e13bd-level0-qwen-code-full.json",
+      "sha256": "sha256:fa04c8fbfbbd62a91ef5b65ae0400aead6d6c357eca683ac7a43742806d76a1b"
     },
-    "post_run_id": "webexploit-q36-sft-574bd7b3-l0-p1-v1",
+    "baseline_terminal_receipt": {
+      "path": "evals/webexploitbench/manifests/qwen36-27b-qwen-code-l0-pass1-terminal.json",
+      "sha256": "sha256:448fe84ef27e1c9c1b67e6b6f6628872b4f500f8bd4c7b855092d558a81fe3a3"
+    },
+    "baseline_protocol": {
+      "path": "evals/webexploitbench/manifests/qwen36-27b-qwen-code-protocol-v3.json",
+      "sha256": "sha256:929ae5c351f80f1f06de182be972dcc0dd87f905fa711937b0b8c925a2268b51"
+    },
+    "harness_lock": {
+      "path": "evals/webexploitbench/harnesses/qwen-code-0.22.3.lock.json",
+      "sha256": "sha256:a999c178493c0826cd8b75ce9950e99d11a57be59edf411fe0f8bef16224a825"
+    },
+    "post_run_id": "webexploit-q36-sft-574bd7b3-qc0223-l0-p1-v1",
     "benchmark_repository_revision": "7f97d87fa8ab728260c0ba9b09b9c8f00bb82ad5",
     "cage_revision": "09a191c565230cebb8255899d622d23c7ddeff33",
     "cage_compat_patch_sha256": "sha256:a11474a74646c76afa55fc9ac86b6f2f58dc621df35b8c8a5974dc3a877c5c16",
-    "primary_harness": "claude_code",
+    "target_set_sha256": "sha256:f2311a88a4b7217ebe38c6a30bd4a91a8faac368753532ea313bdd883e9f0874",
+    "primary_harness": "qwen_code",
+    "primary_harness_version": "0.22.3",
+    "paired_identity_required": true,
     "external_results_must_remain_sealed_until_comparison_receipt": true
   },
   "fleet": {
@@ -133,6 +148,7 @@
     "A digest-pinned staging action copies the exact SFS export into inference /models, proves byte-identical source and destination manifests, and binds the acceptance manifest.",
     "The intervention is registered with the exact baseline SGLang image, precision, TP size, parsers, context, KV cache, and other runtime arguments.",
     "The registered endpoint passes model identity, tokenizer, structured tool-call, and deterministic logit smoke checks.",
+    "WebExploitBench validates the paired protocol identity against the canonical Qwen Code 0.22.3 terminal receipt, target set, budgets, CAGE/runtime image, prompt/verifier revisions, and serving runtime before launch.",
     "Fleet evaluation uses a task group whose 20 members pin the exact eval_task_version_id values in the holdout receipt.",
     "No WebExploitBench or Fleet test output is inspected before checkpoint, export, serving, and comparison receipts are frozen."
   ]

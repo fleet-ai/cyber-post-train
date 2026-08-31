@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from evals.webexploitbench.paired import derive_post_sft_qwen_pair
 from training.io import digest_json, file_sha256
 from training.post_sft import (
     build_fleet_test_holdout_receipt,
@@ -480,16 +481,138 @@ def test_export_receipt_rejects_wrong_run_identity_and_missing_output_hash():
 
 def test_webexploit_config_changes_only_model_and_run_id():
     base = json.loads(
-        (ROOT / "evals/webexploitbench/configs/qwen36-27b-6a9e13bd-level0-full.json").read_text()
+        (
+            ROOT
+            / "evals/webexploitbench/configs/qwen36-27b-6a9e13bd-level0-qwen-code-full.json"
+        ).read_text()
     )
     candidate = derive_webexploit_config(
         base,
         served_model_id=f"{RUN}-step-318",
-        run_id="webexploit-q36-sft-574bd7b3-l0-p1-v1",
+        run_id="webexploit-q36-sft-574bd7b3-qc0223-l0-p1-v1",
     )
     changed = {key for key in base if base[key] != candidate[key]}
     assert changed == {"model", "run_id"}
-    assert candidate["agent"] == "claude_code"
+    assert candidate["agent"] == "qwen_code"
+    assert candidate["agent_version"] == "0.22.3"
+
+
+def _post_serving_receipt():
+    selection = _selection()
+    export = _export(selection)
+    base_registration = json.loads(
+        (ROOT / "evals/webexploitbench/serving/qwen36-27b-6a9e13bd-registration.json").read_text()
+    )
+    serving = derive_post_sft_registration(
+        base_registration,
+        selection,
+        export,
+        expected_tokenizer_manifest_sha256="sha256:" + "7" * 64,
+        expected_chat_template_sha256="sha256:" + "8" * 64,
+        expected_config_sha256="sha256:" + "0" * 64,
+        expected_export_binding=_export_binding(),
+    )
+    return base_registration, serving
+
+
+def _paired_inputs(tmp_path):
+    base_config_path = (
+        ROOT / "evals/webexploitbench/configs/qwen36-27b-6a9e13bd-level0-qwen-code-full.json"
+    )
+    base = json.loads(base_config_path.read_text())
+    base_registration, serving = _post_serving_receipt()
+    post = derive_webexploit_config(
+        base,
+        served_model_id=serving["registration"]["id"],
+        run_id="webexploit-q36-sft-574bd7b3-qc0223-l0-p1-v1",
+    )
+    post_path = tmp_path / "post.json"
+    post_path.write_text(json.dumps(post, indent=2) + "\n")
+    return {
+        "baseline_terminal_path": ROOT
+        / "evals/webexploitbench/manifests/qwen36-27b-qwen-code-l0-pass1-terminal.json",
+        "baseline_protocol_path": ROOT
+        / "evals/webexploitbench/manifests/qwen36-27b-qwen-code-protocol-v3.json",
+        "baseline_config_path": base_config_path,
+        "post_config_path": post_path,
+        "harness_lock_path": ROOT
+        / "evals/webexploitbench/harnesses/qwen-code-0.22.3.lock.json",
+        "base_registration": base_registration,
+        "post_serving_receipt": serving,
+    }
+
+
+def test_webexploit_pair_binds_exact_qwen_code_baseline_and_runtime(tmp_path):
+    protocol, receipt = derive_post_sft_qwen_pair(**_paired_inputs(tmp_path))
+    assert protocol.agent == "qwen_code"
+    assert protocol.agent_version == "0.22.3"
+    assert receipt["controlled_identity"]["benchmark"]["target_count"] == 15
+    assert receipt["controlled_identity"]["benchmark"]["vulnerability_count"] == 110
+    assert receipt["controlled_identity"]["execution"]["budgets"] == {
+        "pass_k": 1,
+        "max_concurrent": 1,
+        "max_context_size": 262144,
+        "judge_max_context_size": 65536,
+        "request_timeout_seconds": 3600,
+        "trial_timeout_seconds": 7200,
+        "max_model_requests_per_target": 150,
+    }
+
+
+@pytest.mark.parametrize(
+    ("section", "field", "value", "message"),
+    [
+        ("harness", "version", "0.22.4", "harness version"),
+        ("harness", "image", "cage/qwen-code@sha256:" + "f" * 64, "harness image"),
+        ("harness", "cage_commit", "f" * 40, "CAGE commit"),
+        ("benchmark", "prompt_revision", "sha256:" + "f" * 64, "prompt revision"),
+        ("benchmark", "max_model_requests_per_target", 151, "execution budgets"),
+    ],
+)
+def test_webexploit_pair_rejects_terminal_protocol_drift(
+    tmp_path, section, field, value, message
+):
+    inputs = _paired_inputs(tmp_path)
+    terminal = json.loads(Path(inputs["baseline_terminal_path"]).read_text())
+    terminal[section][field] = value
+    terminal_path = tmp_path / "terminal.json"
+    terminal_path.write_text(json.dumps(terminal, indent=2) + "\n")
+    inputs["baseline_terminal_path"] = terminal_path
+    with pytest.raises(ValueError, match=message):
+        derive_post_sft_qwen_pair(**inputs)
+
+
+def test_webexploit_pair_rejects_target_set_drift(tmp_path):
+    inputs = _paired_inputs(tmp_path)
+    terminal = json.loads(Path(inputs["baseline_terminal_path"]).read_text())
+    terminal["targets"][0]["id"] = terminal["targets"][1]["id"]
+    terminal_path = tmp_path / "terminal.json"
+    terminal_path.write_text(json.dumps(terminal, indent=2) + "\n")
+    inputs["baseline_terminal_path"] = terminal_path
+    with pytest.raises(ValueError, match="target set"):
+        derive_post_sft_qwen_pair(**inputs)
+
+
+def test_webexploit_pair_rejects_serving_runtime_drift(tmp_path):
+    inputs = _paired_inputs(tmp_path)
+    serving = copy.deepcopy(inputs["post_serving_receipt"])
+    serving["registration"]["spec"]["runtime"]["args"][-1] = "--unpaired-runtime-flag"
+    serving["serving_receipt_sha256"] = digest_json(
+        {key: value for key, value in serving.items() if key != "serving_receipt_sha256"}
+    )
+    inputs["post_serving_receipt"] = serving
+    with pytest.raises(ValueError, match="runtime differs"):
+        derive_post_sft_qwen_pair(**inputs)
+
+
+def test_webexploit_pair_rejects_claude_code_or_extra_config_change(tmp_path):
+    inputs = _paired_inputs(tmp_path)
+    post = json.loads(Path(inputs["post_config_path"]).read_text())
+    post["agent"] = "claude_code"
+    post["agent_version"] = None
+    Path(inputs["post_config_path"]).write_text(json.dumps(post, indent=2) + "\n")
+    with pytest.raises(ValueError, match="differ only by model and run_id"):
+        derive_post_sft_qwen_pair(**inputs)
 
 
 def test_fleet_holdout_is_exact_and_has_no_training_leakage():
@@ -508,7 +631,7 @@ def test_fleet_holdout_is_exact_and_has_no_training_leakage():
         build_fleet_test_holdout_receipt(split, leaked)
 
 
-def test_comparison_receipt_binds_all_four_handoffs():
+def test_comparison_receipt_binds_all_four_handoffs(tmp_path):
     selection = _selection()
     export = _export(selection)
     base_registration = json.loads(
@@ -526,12 +649,14 @@ def test_comparison_receipt_binds_all_four_handoffs():
     split = json.loads((ROOT / "configs/data/fleet-a62-task-split-v1.json").read_text())
     sft = json.loads((ROOT / "configs/runs/qwen36-27b-sft-full.json").read_text())
     holdout = build_fleet_test_holdout_receipt(split, sft)
+    _, paired_identity = derive_post_sft_qwen_pair(**_paired_inputs(tmp_path))
     receipt = build_post_sft_comparison_receipt(
         selection=selection,
         export=export,
         serving=serving,
         base_webexploit_config_sha256="sha256:" + "b" * 64,
         post_webexploit_config_sha256="sha256:" + "c" * 64,
+        webexploit_paired_identity=paired_identity,
         fleet_holdout=holdout,
     )
     assert receipt["allowed_model_difference"] == "checkpoint_weights_only"
@@ -545,7 +670,13 @@ def test_checked_in_plan_binds_current_files():
     for section, binding in (
         ("serving", plan["serving"]["base_registration"]),
         ("webexploitbench", plan["webexploitbench"]["base_config"]),
+        ("web terminal", plan["webexploitbench"]["baseline_terminal_receipt"]),
+        ("web protocol", plan["webexploitbench"]["baseline_protocol"]),
+        ("web harness", plan["webexploitbench"]["harness_lock"]),
         ("split", plan["fleet"]["split_manifest"]),
         ("sft", plan["fleet"]["sft_config"]),
     ):
         assert file_sha256(ROOT / binding["path"]) == binding["sha256"], section
+    assert plan["webexploitbench"]["primary_harness"] == "qwen_code"
+    assert plan["webexploitbench"]["primary_harness_version"] == "0.22.3"
+    assert plan["webexploitbench"]["paired_identity_required"] is True

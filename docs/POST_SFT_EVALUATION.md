@@ -28,8 +28,10 @@ archive. The checked-in plan is
   `lmsysorg/sglang@sha256:febfb971c7352570fc445c466ebd6ffc9d896024958e544a60f2137fd85856b1`,
   BF16, TP1. The live baseline reported engine version
   `0.0.0.dev0+qwen38.27b.g561c8f3`.
-- Primary external harness: the same CAGE/Claude Code arm, judge, Level-0 prompt, pass@1,
-  context windows, budgets, and concurrency as the base run.
+- Primary external harness: exact Qwen Code 0.22.3 at source commit
+  `09825973e7d3c3fd07e17909c396aa62f48ce51f`, matching the canonical 10/110 baseline,
+  with the same CAGE image, judge, Level-0 prompt, pass@1, target set, context windows, budgets,
+  and concurrency.
 - Fleet holdout: the 20 exact `test` task-version IDs in
   `configs/data/fleet-a62-task-split-v1.json`. They have zero task-lineage overlap with the 130 SFT
   train tasks or 10 SFT development tasks.
@@ -201,8 +203,11 @@ export manifest. It produces:
 
 - a post-SFT inference registration cloned from the base SGLang contract;
 - a WebExploitBench config differing from base only in `model` and `run_id`;
+- a WebExploitBench protocol preserving exact Qwen Code 0.22.3 and a fail-closed paired-identity
+  receipt spanning the harness, CAGE/runtime image, prompt/verifier revisions, all 15 targets,
+  both request/time budgets, judge, tokenizer, and normalized serving runtime;
 - an exact, prompt-free 20-task Fleet holdout receipt; and
-- a comparison receipt binding all three artifacts.
+- a comparison receipt binding those artifacts.
 
 After one ExploitGym control image has also passed the independent immutable-image
 publication/readback rail, freeze both external benchmark inputs together:
@@ -246,7 +251,8 @@ prompt/logit smoke. A ready Pod or a model-list entry alone is not serving parit
 
 WebExploitBench remains evaluation-only and sealed. Do not inspect its base or post-SFT scores until
 the selection, export, serving, and comparison receipts are frozen. Run the rendered config through
-the existing CAGE path; do not use the separate Qwen Code harness arm for this primary comparison.
+the exact Qwen Code 0.22.3 CAGE path used by the canonical 10/110 baseline. If that exact protocol
+cannot be reproduced, do not compare against 10/110; run a newly matched base-plus-post pair.
 
 For Fleet, do not submit the 20 mutable task keys directly. Create one task group whose members pin
 the 20 exact `eval_task_version_id` values in the rendered holdout receipt, and inspect the rendered
@@ -257,11 +263,12 @@ must never be silently replaced with the current task version.
 
 ## Remaining blockers
 
-1. `ft-run-574bd7b3` must finish successfully and the final promoted archive must settle.
-2. The rendered zero-step export request must pass review, run through the queue using the exact
+1. The queued zero-step export request must run through the queue using the exact
    trainer image, report zero optimizer steps, and emit a verified HF export receipt.
-3. The exported model must be staged and registered through the inference control plane with the
+2. The exported model must be staged and registered through the inference control plane with the
    rendered parity contract, then pass live parity checks.
+3. The WebExploitBench Qwen Code 0.22.3 paired-identity receipt must validate against the live
+   post-SFT serving registration.
 4. An exact-version Fleet task group must be created from the 20-task receipt and dry-run through
    the deployed Jobs API.
 
