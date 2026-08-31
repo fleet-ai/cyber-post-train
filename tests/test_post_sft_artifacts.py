@@ -4,7 +4,12 @@ from pathlib import Path
 import pytest
 
 from training.io import digest_json
-from training.post_sft_artifacts import full_file_manifest, inspect_hf_export, structural_manifest
+from training.post_sft_artifacts import (
+    full_file_manifest,
+    inspect_hf_export,
+    structural_manifest,
+    structural_tsv_sha256,
+)
 
 
 def test_manifests_are_sorted_relative_and_content_sensitive(tmp_path: Path):
@@ -16,6 +21,7 @@ def test_manifests_are_sorted_relative_and_content_sensitive(tmp_path: Path):
     assert [row["path"] for row in structural["files"]] == ["nested/a", "z"]
     assert [row["path"] for row in full["files"]] == ["nested/a", "z"]
     assert full["total_bytes"] == 6
+    assert structural_tsv_sha256(tmp_path).startswith("sha256:")
     before = full["manifest_sha256"]
     (tmp_path / "z").write_bytes(b"changed")
     assert full_file_manifest(tmp_path)["manifest_sha256"] != before

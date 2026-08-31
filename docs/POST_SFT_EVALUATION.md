@@ -120,6 +120,11 @@ Use `python -m training.post_sft_artifacts structural|full` for those read-only 
 full pass only after conversion has ended and at low priority because the source contains roughly
 302 GB of model and optimizer state.
 
+The prepared normal-queue evidence job wraps both passes and the HF inspection without requesting
+a GPU. Preview it with `evals/post_sft/scripts/submit_evidence.sh preview`; the submit mode refuses
+to proceed until `ft-run-29f2bedf` is `SUCCEEDED`, refuses an existing output/job collision, and
+submits suspended through `training-lq`. Do not submit it while conversion is reading the source.
+
 ```bash
 uv run python -m training.post_sft_cli freeze-sfs \
   --plan configs/evaluation/qwen36-27b-ft-run-574bd7b3-post-sft.json \
