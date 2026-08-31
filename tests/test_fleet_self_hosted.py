@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+import httpx
 import pytest
 
-from evals.fleet import self_hosted
+from evals.fleet import fixed_proxy, self_hosted
 
 CONFIG_PATH = Path(
     "evals/fleet/configs/qwen36-27b-qwen-code-selfhosted-smoke-v1.json"
@@ -143,3 +146,39 @@ def test_docker_secret_is_in_environment_not_argv(monkeypatch: pytest.MonkeyPatc
     )
     assert "secret-value" not in observed["argv"]
     assert observed["env"]["FIXED_AUTH_VALUE"] == "secret-value"
+
+
+def test_fixed_proxy_enforces_path_size_and_request_count(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class Upstream(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:  # noqa: N802
+            self.send_response(200)
+            self.send_header("Content-Length", "2")
+            self.end_headers()
+            self.wfile.write(b"ok")
+
+        def log_message(self, format: str, *args: object) -> None:  # noqa: A003
+            return
+
+    upstream = ThreadingHTTPServer(("127.0.0.1", 0), Upstream)
+    upstream_thread = threading.Thread(target=upstream.serve_forever, daemon=True)
+    upstream_thread.start()
+    monkeypatch.setenv("FIXED_UPSTREAM", f"http://127.0.0.1:{upstream.server_port}")
+    monkeypatch.setenv("FIXED_ALLOWED_PATHS", "/allowed")
+    monkeypatch.setenv("FIXED_MAX_REQUESTS", "1")
+    monkeypatch.setenv("FIXED_MAX_REQUEST_BYTES", "4")
+    fixed_proxy.Handler.request_count = 0
+    proxy = ThreadingHTTPServer(("127.0.0.1", 0), fixed_proxy.Handler)
+    proxy_thread = threading.Thread(target=proxy.serve_forever, daemon=True)
+    proxy_thread.start()
+    base = f"http://127.0.0.1:{proxy.server_port}"
+    try:
+        assert httpx.get(base + "/healthz").status_code == 200
+        assert httpx.get(base + "/denied").status_code == 404
+        assert httpx.post(base + "/allowed", content=b"12345").status_code == 413
+        assert httpx.get(base + "/allowed").status_code == 200
+        assert httpx.get(base + "/allowed").status_code == 429
+    finally:
+        proxy.shutdown()
+        upstream.shutdown()
