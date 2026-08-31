@@ -2,8 +2,8 @@
 set -euo pipefail
 
 ROOT=${CYBER_ROOT:-/workspace/cyber-post-train}
-RUN_ID=chris-cyber-qwen36-qwencode0223-fleet-smoke-v1
-JOB_NAME=chris-cyber-qwen36-qcode-fleet-smoke-v1
+RUN_ID=chris-cyber-qwen36-qwencode0223-fleet-smoke-v1-r1
+JOB_NAME=chris-cyber-qwen36-qcode-fleet-smoke-v1-r1
 OUT_PARENT=${FLEET_EVAL_OUT_PARENT:-/mnt/sfs/jobs/$JOB_NAME}
 OUT_DIR=$OUT_PARENT/$RUN_ID
 CONFIG=$ROOT/evals/fleet/configs/qwen36-27b-qwen-code-selfhosted-smoke-v1.json

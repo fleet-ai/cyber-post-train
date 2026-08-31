@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/../../.." && pwd)
-NAME=chris-cyber-qwen36-qcode-fleet-smoke-v1
+NAME=chris-cyber-qwen36-qcode-fleet-smoke-v1-r1
 NAMESPACE=fleet-train-jobs
 EXPECTED_CONTEXT=nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6
 JOB=$ROOT/evals/fleet/cluster/qwen-code-selfhosted-smoke-job.yaml

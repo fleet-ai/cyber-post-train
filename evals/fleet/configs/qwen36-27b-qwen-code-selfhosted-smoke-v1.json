@@ -1,6 +1,12 @@
 {
   "schema_version": "fleet-selfhosted-qwen-code-protocol-v1",
-  "run_id": "chris-cyber-qwen36-qwencode0223-fleet-smoke-v1",
+  "run_id": "chris-cyber-qwen36-qwencode0223-fleet-smoke-v1-r1",
+  "retry_of": {
+    "job": "chris-cyber-qwen36-qcode-fleet-smoke-v1",
+    "job_uid": "6c48f683-273d-4bc3-b704-123927f204ee",
+    "classification": "infrastructure_terminal_before_instance_model_or_scoring",
+    "cause": "transient_roster_read_http_503"
+  },
   "source_job_id": "a62dd51f-a52b-4941-8207-4679e4b25b51",
   "task": {
     "key": "cysec1-2-current-gen_blackbox-9afe9e08da314948b573657e__blackbox_ctf_v1",
@@ -55,7 +61,7 @@
   "execution": {
     "pass_k": 1,
     "max_concurrent": 1,
-    "network": "chris-qwen-fleet-smoke-v1",
+    "network": "chris-qwen-fleet-smoke-v1-r1",
     "training_data_eligible": false
   }
 }

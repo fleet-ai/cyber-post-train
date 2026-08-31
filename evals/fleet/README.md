@@ -84,16 +84,16 @@ neither the Fleet API key nor the runner token; two fixed-upstream proxies hold
 those credentials outside the agent's network boundary.
 
 The scored path is intentionally fail-closed until the two routes specified by
-the config are visible in deployed OpenAPI. These are the contracts introduced
-by Theseus PR #28252: exact task-version provisioning injects server-owned cyber
-evidence, and exact task-version scoring validates all production bindings.
+the config are proven either by deployed OpenAPI or by their non-mutating
+report-only guards. These are the contracts introduced by Theseus PR #28252:
+exact task-version provisioning injects server-owned cyber evidence, and exact
+task-version scoring validates all production bindings.
 The raw Qwen chat JSONL is the canonical trace. A normalized copy retaining
 assistant thinking, tool calls, and tool observations is supplied to scoring
 and Fleet trace ingestion. All artifacts are marked ineligible for training.
 
 ```bash
-# Read-only task identity plus deployed-route gate; currently expected to fail
-# closed until PR #28252 is deployed.
+# Read-only task identity plus deployed-route gate.
 evals/fleet/scripts/submit_selfhosted_qwen_smoke.sh preview
 
 # After the route gate passes, create one suspended, queue-managed CPU canary.
@@ -101,8 +101,14 @@ evals/fleet/scripts/submit_selfhosted_qwen_smoke.sh submit
 ```
 
 The canary is one task, one session, and one model. Its Kubernetes Job is
-`chris-cyber-qwen36-qcode-fleet-smoke-v1`; it uses LocalQueue `training-lq`,
+`chris-cyber-qwen36-qcode-fleet-smoke-v1-r1`; it uses LocalQueue `training-lq`,
 never cancels another workload, and refuses to replace an existing Job or
-ConfigMap. Do not scale it until cleanup, raw trace, authoritative reward,
-session ingestion, model identity, and harness identity are all terminal and
-verified.
+ConfigMap. The `-r1` suffix preserves the original infrastructure-terminal
+attempt, which stopped on a transient legacy-roster HTTP 503 before instance
+creation, model launch, or scoring. The corrected runner treats that large
+source-job roster as provenance only: it checks the frozen task/version through
+the targeted task route, then the versioned create/score authorities hydrate and
+revalidate the exact pair. Idempotent Fleet reads have bounded transient
+retries; mutating requests never retry. Do not scale it until cleanup, raw trace,
+authoritative reward, session ingestion, model identity, and harness identity
+are all terminal and verified.

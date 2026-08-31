@@ -17,6 +17,8 @@ import httpx
 
 ORCHESTRATOR = "https://orchestrator.fleetai.com"
 FLEET_TEAM_ID = "a1025f0b-ad67-49fc-a023-51800ab43e84"
+TRANSIENT_READ_STATUS_CODES = {429, 502, 503, 504}
+MAX_READ_ATTEMPTS = 6
 
 
 def canonical_json(value: Any) -> bytes:
@@ -28,43 +30,23 @@ def sha256(value: bytes) -> str:
 
 
 def _request(client: httpx.Client, method: str, path: str, **kwargs: Any) -> Any:
-    response = client.request(method, f"{ORCHESTRATOR}{path}", **kwargs)
-    if response.status_code >= 400:
-        route = path.split("?")[0]
-        raise RuntimeError(f"Fleet {method} {route} failed with HTTP {response.status_code}")
-    return response.json()
+    attempts = MAX_READ_ATTEMPTS if method == "GET" else 1
+    for attempt in range(attempts):
+        response = client.request(method, f"{ORCHESTRATOR}{path}", **kwargs)
+        if response.status_code < 400:
+            return response.json()
+        if response.status_code not in TRANSIENT_READ_STATUS_CODES or attempt + 1 == attempts:
+            route = path.split("?")[0]
+            raise RuntimeError(f"Fleet {method} {route} failed with HTTP {response.status_code}")
+        time.sleep(2**attempt)
+    raise AssertionError("unreachable")
 
 
 def load_and_verify_task(client: httpx.Client, config: dict[str, Any]) -> dict[str, Any]:
     expected = config["task"]
-    roster = _request(client, "GET", f"/v1/sessions/job/{config['source_job_id']}")
-    groups = [
-        row
-        for row in roster.get("tasks", [])
-        if row.get("task", {}).get("key") == expected["key"]
-    ]
-    if len(groups) != 1:
-        raise RuntimeError("the source job does not contain exactly one copy of the pinned task")
-    roster_task = groups[0]["task"]
-    roster_checks = {
-        "id": groups[0].get("task_id"),
-        "version_id": roster_task.get("eval_task_version_id"),
-        "environment_id": roster_task.get("env_id"),
-        "environment_version": roster_task.get("version"),
-        "data_id": roster_task.get("data_id"),
-        "data_version": roster_task.get("data_version"),
-    }
-    expected_roster = {
-        "id": expected["id"],
-        "version_id": expected["version_id"],
-        "environment_id": config["environment"]["id"],
-        "environment_version": config["environment"]["version"],
-        "data_id": config["environment"]["data_id"],
-        "data_version": config["environment"]["data_version"],
-    }
-    if roster_checks != expected_roster:
-        raise RuntimeError("source-job task/environment/data binding drifted")
-
+    # The legacy source-job roster is large and is provenance only. Read the
+    # frozen task/version directly; the versioned provisioning and scoring
+    # authorities hydrate and revalidate this exact pair again server-side.
     task = _request(
         client,
         "GET",
