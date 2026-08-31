@@ -1,0 +1,39 @@
+{
+  "schema_version": "fleet-qwen-code-test20-plan-v1",
+  "campaign_id": "chris-cyber-q36-qcode-fleet-test20-base-v1",
+  "source_job_id": "a62dd51f-a52b-4941-8207-4679e4b25b51",
+  "split_manifest_digest": "sha256:fb09668f8de77e6baee37dc1e3162a7617ca9a0a450da9ca53422c17bfbc942a",
+  "task_count": 20,
+  "environment_ttl_seconds": 10800,
+  "authority": {
+    "contract_source_pr": "https://github.com/fleet-ai/theseus/pull/28252",
+    "contract_source_commit": "76a4bd262a63b05d7ac2b33cf1357072aea2dbd4",
+    "production_deploy_run": "https://github.com/fleet-ai/theseus/actions/runs/33359560100",
+    "provisioning_route_template": "/v1/rollout-rewards/{task_key}/versions/{task_version_id}/instances",
+    "scoring_route_template": "/v1/rollout-rewards/{task_key}/versions/{task_version_id}",
+    "scoring_mode": "partial",
+    "multi_app_aggregation_mode": "fractional"
+  },
+  "model": {
+    "repository": "Qwen/Qwen3.6-27B",
+    "revision": "6a9e13bd6fc8f0983b9b99948120bc37f49c13e9",
+    "served_id": "qwen3-6-27b-cyber-baseline",
+    "endpoint_origin": "https://inference.flt.build",
+    "tokenizer_revision": "sha256:27f02770d03b60343350ad948bf1065673968c60274f1e34f4afaed16940a1ea",
+    "chat_template_revision": "sha256:e84f32a23fdda27689f868aa4a1a5621f41133e51a48d7f3efcbea2839574259"
+  },
+  "harness": {
+    "name": "qwen_code",
+    "version": "0.22.3",
+    "source_commit": "09825973e7d3c3fd07e17909c396aa62f48ce51f",
+    "npm_tarball_sha1": "1529461d6c79c273b184849e6777e54ac98ae860",
+    "node_image": "docker.io/library/node@sha256:4d676821dff059fd00d277ee4261ef34ea712317fed0737c03941481b5760c96",
+    "max_model_requests": 300,
+    "timeout_seconds": 7200
+  },
+  "execution": {
+    "pass_k": 1,
+    "max_concurrent": 1,
+    "training_data_eligible": false
+  }
+}

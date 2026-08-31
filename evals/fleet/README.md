@@ -112,3 +112,27 @@ revalidate the exact pair. Idempotent Fleet reads have bounded transient
 retries; mutating requests never retry. Do not scale it until cleanup, raw trace,
 authoritative reward, session ingestion, model identity, and harness identity
 are all terminal and verified.
+
+### Sealed 20-task Qwen Code baseline
+
+`holdout.py` runs the exact untouched `test` rows from
+`configs/data/fleet-a62-task-split-v1.json` sequentially with the same model,
+Qwen Code, task-version provisioning, scorer, and per-task limits proven by the
+canary. The submit preflight resolves each immutable task version through its
+targeted route and freezes a prompt-free receipt into the Job's ConfigMap. The
+Job rechecks that receipt before creating an instance. It never reads the large
+legacy source-job roster and never copies prompt or verifier content into the
+receipt.
+
+```bash
+# Revalidate all 20 bindings and render the single queue-managed Job.
+evals/fleet/scripts/submit_selfhosted_qwen_test20.sh preview
+
+# Submit one CPU Job; tasks execute sequentially (max concurrency 1).
+evals/fleet/scripts/submit_selfhosted_qwen_test20.sh submit
+```
+
+The Job is `chris-cyber-qwen36-qcode-fleet-test20-base-v1`. It plans exactly
+20 pass@1 sessions, refuses replacement, records every exact task-version and
+runtime receipt, and keeps every artifact ineligible for training. A per-task
+infrastructure failure is recorded separately and does not become a model zero.

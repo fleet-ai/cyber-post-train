@@ -68,7 +68,6 @@ def load_and_verify_task(client: httpx.Client, config: dict[str, Any]) -> dict[s
         "verifier_version_id": verifier.get("verifier_version_id"),
         "verifier_version": verifier.get("version"),
         "verifier_sha256": verifier.get("sha256"),
-        "verifier_code_sha256": sha256((verifier.get("code") or "").encode()),
         "runtime_seed_content_sha256": (metadata.get("runtime_seed_manifest") or {}).get(
             "content_sha256"
         ),
@@ -86,9 +85,11 @@ def load_and_verify_task(client: httpx.Client, config: dict[str, Any]) -> dict[s
         "verifier_version_id": config["verifier"]["version_id"],
         "verifier_version": config["verifier"]["version"],
         "verifier_sha256": config["verifier"]["sha256"],
-        "verifier_code_sha256": config["verifier"]["code_sha256"],
         "runtime_seed_content_sha256": config["environment"]["runtime_seed_content_sha256"],
     }
+    if "code_sha256" in config["verifier"]:
+        actual["verifier_code_sha256"] = sha256((verifier.get("code") or "").encode())
+        wanted["verifier_code_sha256"] = config["verifier"]["code_sha256"]
     if actual != wanted:
         raise RuntimeError("exact task prompt/verifier/runtime-seed binding drifted")
     return task
@@ -456,7 +457,11 @@ def run(config: dict[str, Any], out_dir: Path, proxy_script: Path) -> dict[str, 
     model_proxy = f"qwen-model-proxy-{suffix}"
     mcp_proxy = f"qwen-mcp-proxy-{suffix}"
     qwen_agent = f"qwen-agent-{suffix}"
-    cleanup: dict[str, Any] = {"instance_closed": False, "containers_removed": False}
+    cleanup: dict[str, Any] = {
+        "instance_created": False,
+        "instance_closed": False,
+        "containers_removed": False,
+    }
     started_at = time.time()
     try:
         account = _request(client, "GET", "/v1/account")
@@ -492,6 +497,7 @@ def run(config: dict[str, Any], out_dir: Path, proxy_script: Path) -> dict[str, 
             )
         rollout_instance = response.json()
         instance_id = rollout_instance["instance_id"]
+        cleanup["instance_created"] = True
         instance = _request(client, "GET", f"/v1/env/instances/{instance_id}")
         if (
             instance.get("env_key") != config["environment"]["id"]
