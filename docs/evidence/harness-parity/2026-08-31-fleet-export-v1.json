@@ -1,0 +1,34 @@
+{
+  "as_treated_train": {"always_solved": 41, "mixed": 45, "never_solved": 43, "observed_task_keys": 129, "pass_rate": 0.4975514201762977, "passes": 508, "requested_task_keys": 129, "sessions": 1021},
+  "assistant_turns": {"max": 436, "median": 76, "min": 3, "p90_nearest_rank": 154},
+  "bash_tool_result_bytes": {"max": 524396.0, "median": 1313.0, "over_16000": 5393, "over_4000": 15051, "over_65536": 1826, "p90_nearest_rank": 14873.0, "p99_nearest_rank": 239733.0, "parsed": 56808, "unparsed": 376},
+  "context_compaction": {"algorithm_visible": false, "events": 111, "post_tokens_median": 4381.0, "pre_tokens_median": 244705.0, "sessions": 97},
+  "duration_seconds": {"max": 7033.057524, "median": 1396.66798, "min": 51.429328, "p90_nearest_rank": 3958.848012},
+  "launch_parameters": [
+    {"parameters": {"browser_tool_surface": "default", "codex_runtime": null, "context_management": null, "enable_final_answer_tool": true, "harness": "grok", "max_steps": 600, "mcp_port": 3003, "mode": "tool-use", "parallel_tool_calls": null, "tool_selection_mode": null, "tool_selection_top_k": null}, "sessions": 638},
+    {"parameters": {"browser_tool_surface": "default", "codex_runtime": null, "context_management": null, "enable_final_answer_tool": true, "harness": null, "max_steps": 600, "mcp_port": 3003, "mode": "tool-use", "parallel_tool_calls": null, "tool_selection_mode": null, "tool_selection_top_k": null}, "sessions": 627}
+  ],
+  "models": {
+    "gpt-5.6-sol": {"pass_rate": 0.4625199362041467, "passes": 290, "sessions": 627},
+    "grok-4.5": {"pass_rate": 0.6296296296296297, "passes": 34, "sessions": 54},
+    "grok-4.6": {"pass_rate": 0.4503424657534247, "passes": 263, "sessions": 584}
+  },
+  "pass_rate": 0.46403162055335967,
+  "passes": 587,
+  "privacy": {"assistant_or_tool_content_emitted": false, "prompt_bodies_emitted": false, "tool_arguments_emitted": false},
+  "records": 1265,
+  "schema": "fleet_harness_export_evidence_v1",
+  "session_steps": {"max": 482.0, "median": 79.0, "min": 5.0, "p90_nearest_rank": 163.0},
+  "source_export": {"sessions": 1265, "sha256": "sha256:160607dc4f4c53a4822b1dafccfbd8283ed773c113d8e61d3dfc8d3437ca59a9"},
+  "source_job_id": "a62dd51f-a52b-4941-8207-4679e4b25b51",
+  "system_prompts": [
+    {"character_length": 1035, "sessions": 596, "sha256": "sha256:2d673105d5d226a8c96226d0b1528f655c8da718cbfbf66a335e857d4c0a9e78"},
+    {"character_length": 1036, "sessions": 42, "sha256": "sha256:51ac2e7a4941dddd52b5c28fb6c023295f446a949cd5ff388f047daf2bc0284c"},
+    {"character_length": 1036, "sessions": 627, "sha256": "sha256:8512560b0706f8859774bfe8e93c2c86ecf6a6a4603fe59db004fd04fcc738d1"}
+  ],
+  "task_prompt_hydration": {"byte_equal_after_text_envelope_normalization": 1265, "mismatches": 0},
+  "task_tool_surfaces": [{"sessions": 1265, "tools": ["bash", "submit_report"]}],
+  "transcript_tool_calls": {"bash": 57184, "context_compaction": 111, "list_mcp_resource_templates": 17, "list_mcp_resources": 49, "read_mcp_resource": 4, "search_tool": 10095, "submit_report": 684, "use_tool": 50280},
+  "unique_task_keys": 160,
+  "unique_task_version_ids": 201
+}

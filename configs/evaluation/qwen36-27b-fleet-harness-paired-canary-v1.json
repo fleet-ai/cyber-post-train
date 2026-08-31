@@ -1,0 +1,100 @@
+{
+  "schema": "fleet_native_agent_runtime_paired_canary_plan_v1",
+  "status": "blocked_pre_submission",
+  "paid_submission_authorized": false,
+  "purpose": "Compare the frozen base checkpoint through Agent Runtime and native SkyRL on identical immutable Fleet tasks before any successor RL run.",
+  "model": {
+    "repo": "Qwen/Qwen3.6-27B",
+    "revision": "6a9e13bd6fc8f0983b9b99948120bc37f49c13e9",
+    "tokenizer_revision": "6a9e13bd6fc8f0983b9b99948120bc37f49c13e9",
+    "weights_manifest_sha256": "sha256:14ad10368de9b9e5974ff12a4b70ea7884194b58e670177bbac79daeb81f16b9"
+  },
+  "tasks": [
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-39ffe1da3cfc461950ab1487__blackbox_ctf_v1",
+      "task_version_id": "2c47ef51-29f9-4736-9916-18b748059cc6",
+      "task_version": "16",
+      "environment_version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+      "env_key": "cysec1-2-current-gen",
+      "env_version": "v0.0.3",
+      "data_key": "commercial",
+      "data_version": "v0.0.9",
+      "historical_frontier": {"passes": 5, "sessions": 8}
+    },
+    {
+      "task_key": "cysec1-2-fentry-current-gen_single-atom-fentry-unreleased-event-feed__blackbox_ctf_v1",
+      "task_version_id": "b90a33ad-c4b6-4ce6-9757-5009bc3b3b17",
+      "task_version": "4",
+      "environment_version_id": "b4a7b5ce-6a9a-47ce-9c4c-b23761bcfdcb",
+      "env_key": "cysec1-2-fentry-current-gen",
+      "env_version": "v0.0.168",
+      "data_key": "fentry-current-gen",
+      "data_version": "v0.0.1",
+      "historical_frontier": {"passes": 2, "sessions": 8}
+    },
+    {
+      "task_key": "cysec1-2-fubspot-gen_blackbox-2ebd26c8232330900497bf93__blackbox_ctf_v1",
+      "task_version_id": "11f420a0-65a4-4819-93f8-8a042c512da8",
+      "task_version": "8",
+      "environment_version_id": "a1532a5c-6ec9-45bd-899d-24c0fe3d1df5",
+      "env_key": "cysec1-2-fubspot-gen",
+      "env_version": "v0.0.3",
+      "data_key": "current-fubspot-gen",
+      "data_version": "v0.0.3",
+      "historical_frontier": {"passes": 6, "sessions": 8}
+    }
+  ],
+  "sampling_contract": {
+    "repetitions_per_task_per_arm": 4,
+    "temperature": 1.0,
+    "top_p": 1.0,
+    "max_tokens_per_turn": 2048,
+    "seed": "must_be_explicit_and_identical_if_both_backends_support_it",
+    "parallel_tool_calls": false
+  },
+  "conversation_contract": {
+    "required_task_tools": ["bash", "submit_report"],
+    "max_turns": 600,
+    "system_prompt_sha256": "sha256:8512560b0706f8859774bfe8e93c2c86ecf6a6a4603fe59db004fd04fcc738d1",
+    "system_prompt_character_length": 1036,
+    "system_prompt_utf8_bytes": 1038,
+    "system_prompt_path": "configs/evaluation/fleet-agent-runtime-system-prompt-v1.txt",
+    "task_prompt": "hydrate byte-identically from each exact task_version_id",
+    "verifier": "authoritative exact version-bound Fleet verifier",
+    "reward": "binary verifier score",
+    "tool_result_adapter_clip_chars": 16000
+  },
+  "arms": {
+    "agent_runtime": {
+      "max_steps": 600,
+      "context_compaction": "runtime_native_but_algorithm_opaque",
+      "tool_result_max_chars": 16000,
+      "model_route": "must_resolve_to_exact_frozen_checkpoint_before_launch"
+    },
+    "native_skyrl": {
+      "max_context_length": 65536,
+      "max_prompt_length": 16384,
+      "max_generate_length": 49152,
+      "rollout": {
+        "harness": "native",
+        "mode": "tool-use",
+        "max_turns": 600,
+        "max_tokens_per_turn": 2048,
+        "tool_result_max_chars": 16000,
+        "required_task_tools": ["bash", "submit_report"]
+      },
+      "context_compaction": "disabled_single_flat_trajectory"
+    }
+  },
+  "launch_blockers": [
+    "Build and register a trainer image containing the reviewed local Theseus changes.",
+    "Training API preview must prove metadata.tools is exactly the set {bash, submit_report} for every selected immutable task version.",
+    "Both arms must runtime-discover exactly two tool schemas and produce identical canonical and per-tool schema hashes.",
+    "A fixed one-call bash fixture must render to identical Qwen prompt token IDs through the first tool result in both arms; schema equality alone does not prove protocol equality.",
+    "Agent Runtime must prove that its model route resolves to the exact frozen checkpoint, tokenizer and chat template.",
+    "Both arms must expose and bind identical temperature, top_p, per-turn cap, seed behavior and parallel-tool setting.",
+    "Agent Runtime must prove the same 16000-character per-result observation cap; if it cannot, the arms are diagnostic rather than matched.",
+    "The Agent Runtime compaction algorithm is opaque and Qwen has a 65536-token context; therefore this canary compares the arms only through the native arm's first uncompacted context and must report any horizon censoring separately.",
+    "Root review and explicit paid-run approval are required."
+  ]
+}
