@@ -1,0 +1,26 @@
+{
+  "schema": "fleet_training_live_config_normalization_fixture_v1",
+  "source": "prompt-free FLEET_RUN_CONFIG metadata from immutable RayJob ft-run-29f2bedf",
+  "rayjob_uid": "51957fb6-c8c5-4e72-ab1b-8ec80e38e68b",
+  "run_name": "ft-run-29f2bedf",
+  "run_id": "29f2bedf-6aa5-488d-9647-830032612b49",
+  "title": "Chris cyber Qwen3.6 27B SFT final checkpoint zero-step HF export ft-run-574bd7b3-step318-v1",
+  "fleet_run_config_sha256": "sha256:6c1af8c2f1ba4d25c1c8e49a9e6db6d2038fbc5983e386bbcb40b0cec2721eef",
+  "server_normalization": {
+    "schema": "fleet_training_stored_config_normalization_v1",
+    "submitted_by_email": "chrisisaverted@users.noreply.github.com",
+    "node_pool": "fleetai-training-ng-gpu",
+    "data_defaults": {
+      "env_keys": null,
+      "models": null,
+      "session_ids": null,
+      "since": null,
+      "team_ids": ["a1025f0b-ad67-49fc-a023-51800ab43e84"],
+      "until": null
+    },
+    "trainer_defaults": {
+      "command": null,
+      "env": {}
+    }
+  }
+}

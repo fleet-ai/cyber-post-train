@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/../../.." && pwd)
 NAME=chris-cyber-qwen36-sft-stage-574bd7b3-v1
+OBSERVER=chris-cyber-qwen36-sft-stage-observer-v1
 NAMESPACE=inference
 EXPECTED_CONTEXT=nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6
 JOB="$ROOT/evals/post_sft/cluster/qwen36-sft-inference-stage-job.yaml"
@@ -19,14 +20,33 @@ configmap() {
     --from-file=training_io.py="$ROOT/training/io.py" \
     --from-file=training_post_sft_artifacts.py="$ROOT/training/post_sft_artifacts.py" \
     --from-file=training_post_sft_staging.py="$ROOT/training/post_sft_staging.py" \
-    --from-file=stage-input.json="$stage_input" --dry-run=client -o yaml
+    --from-file=stage-input.json="$stage_input" --dry-run=client -o json | \
+    python3 -c 'import json,sys; value=json.load(sys.stdin); value["immutable"]=True; json.dump(value,sys.stdout)'
+}
+
+require_all_absent() {
+  local resource name
+  while read -r resource name; do
+    if kubectl -n "$NAMESPACE" get "$resource" "$name" >/dev/null 2>&1; then
+      echo "Resource $NAMESPACE/$resource/$name already exists; refusing partial replacement" >&2
+      exit 1
+    fi
+  done <<EOF
+serviceaccount $OBSERVER
+role.rbac.authorization.k8s.io $OBSERVER
+rolebinding.rbac.authorization.k8s.io $OBSERVER
+configmap $NAME
+job.batch $NAME
+EOF
 }
 
 case "$MODE" in
   preview)
-    configmap "$PLAN" | kubectl apply --dry-run=server -f - >/dev/null
-    kubectl apply --dry-run=server -f "$JOB" >/dev/null
-    echo "server dry-run passed; no resources created"
+    PYTHONPATH="$ROOT" uv run python -m training.post_sft_staging validate-bundle \
+      --plan "$PLAN" --root "$ROOT" >/dev/null
+    configmap "$PLAN" | kubectl create --dry-run=server -f - >/dev/null
+    kubectl create --dry-run=server -f "$JOB" >/dev/null
+    echo "create-only server dry-run passed; no resources created"
     ;;
   submit)
     test "$#" = 3
@@ -34,17 +54,21 @@ case "$MODE" in
     raw_manifest=$3
     test "$(kubectl -n fleet-train-jobs get rayjob ft-run-29f2bedf -o jsonpath='{.status.jobStatus}')" = SUCCEEDED
     test "$(kubectl -n fleet-train-jobs get job chris-cyber-qwen36-sft-evidence-v1 -o jsonpath='{.status.conditions[?(@.type=="Complete")].status}')" = True
-    if kubectl -n "$NAMESPACE" get job "$NAME" >/dev/null 2>&1; then
-      echo "Job $NAMESPACE/$NAME already exists; refusing to replace it" >&2
-      exit 1
-    fi
+    require_all_absent
+    PYTHONPATH="$ROOT" uv run python -m training.post_sft_staging validate-bundle \
+      --plan "$PLAN" --root "$ROOT" >/dev/null
     stage_input=$(mktemp)
-    trap 'rm -f "$stage_input"' EXIT
+    config_map=$(mktemp)
+    trap 'rm -f "$stage_input" "$config_map"' EXIT
     PYTHONPATH="$ROOT" uv run python -m training.post_sft_staging build-input \
       --plan "$PLAN" --observation "$observation" --raw-manifest "$raw_manifest" \
       --tokenizer-evidence "$TOKENIZER_EVIDENCE" --output "$stage_input"
-    configmap "$stage_input" | kubectl apply -f -
-    kubectl apply -f "$JOB"
+    configmap "$stage_input" > "$config_map"
+    kubectl create --dry-run=server -f "$config_map" >/dev/null
+    kubectl create --dry-run=server -f "$JOB" >/dev/null
+    require_all_absent
+    kubectl create -f "$config_map"
+    kubectl create -f "$JOB"
     ;;
   *) echo "usage: $0 [preview|submit OBSERVATION RAW_MANIFEST]" >&2; exit 2 ;;
 esac

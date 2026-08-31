@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import json
+import os
+import tempfile
+from contextlib import suppress
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -11,8 +14,9 @@ import typer
 from evals.exploitgym.paired import derive_paired_protocol
 from evals.webexploitbench.paired import derive_post_sft_qwen_pair
 
-from .io import atomic_write_json, file_sha256
+from .io import file_sha256
 from .post_sft import (
+    assemble_hf_export_receipt,
     build_fleet_test_holdout_receipt,
     build_post_sft_comparison_receipt,
     build_zero_step_hf_export_request,
@@ -21,8 +25,39 @@ from .post_sft import (
     freeze_final_promoted_checkpoint,
     freeze_final_promoted_sfs_checkpoint,
 )
+from .post_sft_export_observation import collect_zero_step_export_run_observation
+from .post_sft_staging import STAGING_COMMAND_SHA256, STAGING_IMAGE
 
 app = typer.Typer(no_args_is_help=True, pretty_exceptions_enable=False)
+
+
+def _atomic_write_json_new(path: Path, value: Any) -> None:
+    """Publish one immutable JSON file without replacing any existing path or symlink."""
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if os.path.lexists(path):
+        raise ValueError(f"refusing to replace pre-existing output path: {path}")
+    fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent, text=True)
+    try:
+        os.fchmod(fd, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            json.dump(value, stream, indent=2, ensure_ascii=False)
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        try:
+            os.link(temporary, path)
+        except FileExistsError as exc:
+            raise ValueError(f"refusing to replace pre-existing output path: {path}") from exc
+    finally:
+        with suppress(FileNotFoundError):
+            os.unlink(temporary)
+
+
+def _require_outputs_absent(paths: list[Path]) -> None:
+    collisions = [str(path) for path in paths if os.path.lexists(path)]
+    if collisions:
+        raise ValueError("refusing pre-existing output path(s): " + ", ".join(collisions))
 
 
 def _read(path: Path) -> dict[str, Any]:
@@ -70,7 +105,7 @@ def freeze(
         expected_trainer_image=str(expected["trainer_image"]),
         expected_entrypoint_sha256=str(expected["entrypoint_sha256"]),
     )
-    atomic_write_json(output, receipt, private=True)
+    _atomic_write_json_new(output, receipt)
     typer.echo(str(output))
 
 
@@ -98,7 +133,7 @@ def freeze_sfs(
             plan["source_checkpoint_evidence"]["structural_manifest_before_sha256"]
         ),
     )
-    atomic_write_json(output, receipt, private=True)
+    _atomic_write_json_new(output, receipt)
     typer.echo(str(output))
 
 
@@ -122,9 +157,82 @@ def render_export(
         expected_trainer_image=str(run["trainer_image"]),
         expected_export_binding=plan["export"],
     )
-    atomic_write_json(request_output, receipt["request"], private=True)
-    atomic_write_json(receipt_output, receipt, private=True)
+    _require_outputs_absent([request_output, receipt_output])
+    _atomic_write_json_new(request_output, receipt["request"])
+    _atomic_write_json_new(receipt_output, receipt)
     typer.echo(str(receipt_output))
+
+
+@app.command("assemble-export")
+def assemble_export(
+    plan_path: Annotated[Path, typer.Option("--plan")],
+    selection_path: Annotated[Path, typer.Option("--selection")],
+    export_request_path: Annotated[Path, typer.Option("--export-request")],
+    export_run_observation_path: Annotated[Path, typer.Option("--export-run-observation")],
+    export_observation_path: Annotated[Path, typer.Option("--export-observation")],
+    stage_input_path: Annotated[Path, typer.Option("--stage-input")],
+    staging_receipt_path: Annotated[Path, typer.Option("--staging-receipt")],
+    output: Annotated[Path, typer.Option("--output")],
+) -> None:
+    """Assemble and validate the final immutable HF export receipt."""
+
+    if os.path.lexists(output):
+        raise ValueError(f"refusing to replace pre-existing output path: {output}")
+    plan = _plan(plan_path)
+    model = plan["base_model"]
+    export = plan["export"]
+    if plan["serving"]["engine_image"] != STAGING_IMAGE:
+        raise ValueError("staging image differs from the digest-pinned image in the plan")
+    receipt = assemble_hf_export_receipt(
+        _read(selection_path),
+        _read(export_request_path),
+        _read(export_run_observation_path),
+        _read(export_observation_path),
+        _read(stage_input_path),
+        _read(staging_receipt_path),
+        expected_tokenizer_manifest_sha256=str(model["tokenizer_manifest_sha256"]),
+        expected_chat_template_sha256=str(model["chat_template_sha256"]),
+        expected_config_sha256=str(model["config_sha256"]),
+        expected_export_binding=export,
+        expected_runtime_sidecar_sha256=model["runtime_sidecar_sha256"],
+        expected_tokenizer_equivalence_evidence_sha256=str(
+            model["tokenizer_equivalence_evidence"]["sha256"]
+        ),
+        expected_staging_image=STAGING_IMAGE,
+        expected_staging_command_sha256=STAGING_COMMAND_SHA256,
+    )
+    _atomic_write_json_new(output, receipt)
+    typer.echo(str(output))
+
+
+@app.command("collect-export-run")
+def collect_export_run(
+    export_request_path: Annotated[Path, typer.Option("--export-request")],
+    terminal_rayjob_path: Annotated[Path, typer.Option("--terminal-rayjob")],
+    runtime_raycluster_path: Annotated[Path, typer.Option("--runtime-raycluster")],
+    runtime_pod_path: Annotated[Path, typer.Option("--runtime-pod")],
+    submitter_job_path: Annotated[Path, typer.Option("--submitter-job")],
+    submitter_pod_path: Annotated[Path, typer.Option("--submitter-pod")],
+    api_run_path: Annotated[Path, typer.Option("--api-run")],
+    driver_log_path: Annotated[Path, typer.Option("--driver-log")],
+    output: Annotated[Path, typer.Option("--output")],
+) -> None:
+    """Build terminal export evidence from read-only Kubernetes/API observations."""
+
+    if os.path.lexists(output):
+        raise ValueError(f"refusing to replace pre-existing output path: {output}")
+    receipt = collect_zero_step_export_run_observation(
+        _read(export_request_path),
+        _read(terminal_rayjob_path),
+        _read(runtime_raycluster_path),
+        _read(runtime_pod_path),
+        _read(submitter_job_path),
+        _read(submitter_pod_path),
+        _read(api_run_path),
+        driver_log_path.read_bytes(),
+    )
+    _atomic_write_json_new(output, receipt)
+    typer.echo(str(output))
 
 
 @app.command()
@@ -182,16 +290,22 @@ def render(
     )
     holdout = build_fleet_test_holdout_receipt(split, sft)
 
-    output_dir.mkdir(parents=True, exist_ok=True)
     serving_out = output_dir / "serving-registration-receipt.json"
     post_web_out = output_dir / "webexploitbench-post-sft-config.json"
     holdout_out = output_dir / "fleet-test-holdout-receipt.json"
+    protocol_out = output_dir / "webexploitbench-post-sft-protocol.json"
+    paired_out = output_dir / "webexploitbench-paired-identity-receipt.json"
+    comparison_out = output_dir / "comparison-receipt.json"
+    _require_outputs_absent(
+        [serving_out, post_web_out, holdout_out, protocol_out, paired_out, comparison_out]
+    )
+    output_dir.mkdir(parents=True, exist_ok=True)
     for path, value in (
         (serving_out, serving),
         (post_web_out, post_web),
         (holdout_out, holdout),
     ):
-        atomic_write_json(path, value, private=True)
+        _atomic_write_json_new(path, value)
 
     post_protocol, paired_identity = derive_post_sft_qwen_pair(
         baseline_terminal_path=baseline_terminal_path,
@@ -202,16 +316,8 @@ def render(
         base_registration=base_registration,
         post_serving_receipt=serving,
     )
-    atomic_write_json(
-        output_dir / "webexploitbench-post-sft-protocol.json",
-        post_protocol.to_dict(),
-        private=True,
-    )
-    atomic_write_json(
-        output_dir / "webexploitbench-paired-identity-receipt.json",
-        paired_identity,
-        private=True,
-    )
+    _atomic_write_json_new(protocol_out, post_protocol.to_dict())
+    _atomic_write_json_new(paired_out, paired_identity)
 
     comparison = build_post_sft_comparison_receipt(
         selection=selection,
@@ -222,7 +328,7 @@ def render(
         webexploit_paired_identity=paired_identity,
         fleet_holdout=holdout,
     )
-    atomic_write_json(output_dir / "comparison-receipt.json", comparison, private=True)
+    _atomic_write_json_new(comparison_out, comparison)
     typer.echo(str(output_dir))
 
 
@@ -285,14 +391,21 @@ def render_external_benchmarks(
         expected_export_binding=plan["export"],
     )
 
-    output_dir.mkdir(parents=True, exist_ok=True)
     post_web_path = output_dir / "webexploitbench-post-sft-config.json"
+    serving_out = output_dir / "serving-registration-receipt.json"
+    exploitgym_out = output_dir / "exploitgym-paired-protocol.json"
+    protocol_out = output_dir / "webexploitbench-post-sft-protocol.json"
+    paired_out = output_dir / "webexploitbench-paired-identity-receipt.json"
+    _require_outputs_absent(
+        [serving_out, post_web_path, exploitgym_out, protocol_out, paired_out]
+    )
+    output_dir.mkdir(parents=True, exist_ok=True)
     for path, value in (
-        (output_dir / "serving-registration-receipt.json", serving),
+        (serving_out, serving),
         (post_web_path, web),
-        (output_dir / "exploitgym-paired-protocol.json", exploitgym),
+        (exploitgym_out, exploitgym),
     ):
-        atomic_write_json(path, value, private=True)
+        _atomic_write_json_new(path, value)
     post_protocol, paired_identity = derive_post_sft_qwen_pair(
         baseline_terminal_path=baseline_terminal_path,
         baseline_protocol_path=baseline_protocol_path,
@@ -302,16 +415,8 @@ def render_external_benchmarks(
         base_registration=base_registration,
         post_serving_receipt=serving,
     )
-    atomic_write_json(
-        output_dir / "webexploitbench-post-sft-protocol.json",
-        post_protocol.to_dict(),
-        private=True,
-    )
-    atomic_write_json(
-        output_dir / "webexploitbench-paired-identity-receipt.json",
-        paired_identity,
-        private=True,
-    )
+    _atomic_write_json_new(protocol_out, post_protocol.to_dict())
+    _atomic_write_json_new(paired_out, paired_identity)
     typer.echo(str(output_dir))
 
 

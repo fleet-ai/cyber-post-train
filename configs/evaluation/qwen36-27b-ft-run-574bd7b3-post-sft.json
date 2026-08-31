@@ -68,6 +68,136 @@
     "tensor_parallel_size": 1,
     "comparison_rule": "clone_base_registration_and_change_only_checkpoint_identity_and_paths"
   },
+  "staging_execution": {
+    "schema": "cyber_sft_inference_stage_execution_plan_v1",
+    "namespace": "inference",
+    "job_name": "chris-cyber-qwen36-sft-stage-574bd7b3-v1",
+    "config_map_name": "chris-cyber-qwen36-sft-stage-574bd7b3-v1",
+    "service_account_name": "chris-cyber-qwen36-sft-stage-observer-v1",
+    "container_name": "stage",
+    "image": "lmsysorg/sglang@sha256:febfb971c7352570fc445c466ebd6ffc9d896024958e544a60f2137fd85856b1",
+    "image_digest": "sha256:febfb971c7352570fc445c466ebd6ffc9d896024958e544a60f2137fd85856b1",
+    "command_sha256": "sha256:936f1e94b6971ff6b7b45c7173d79ff5c4b9d39f7a50f869fb39203bed9b9838",
+    "config_map_code_sha256": {
+      "training/__init__.py": "sha256:c3152a4d34780d02afdf8ff066f6e7b7f3af5aa2db1cd827ad3aca0c52fd561b",
+      "training/io.py": "sha256:7a0b734a4ab7fb8b702430094c58c72f19ac8fc7cc5e056eb8410267e6bfdfe3",
+      "training/post_sft_artifacts.py": "sha256:312f023c520f1f13d949f9a21a6286d338a6d591dbb29698ca76206c56b20bc5",
+      "training/post_sft_staging.py": "sha256:86ae57cba7297dbdab47297647098d31575d1a81704f6be8591a62fafd5842bc"
+    }
+  },
+  "evidence_execution": {
+    "base_artifact_inspector": {
+      "schema": "cyber_post_sft_kubernetes_evidence_contract_v1",
+      "job_labels": {
+        "cyber-post-train.fleet.ai/owner": "chris",
+        "cyber-post-train.fleet.ai/experiment": "qwen36-base-artifact-inspect-6a9e13bd-v1"
+      },
+      "pod_labels": {
+        "cyber-post-train.fleet.ai/owner": "chris",
+        "cyber-post-train.fleet.ai/experiment": "qwen36-base-artifact-inspect-6a9e13bd-v1"
+      },
+      "job": {
+        "backoffLimit": 0,
+        "activeDeadlineSeconds": 21600,
+        "ttlSecondsAfterFinished": 604800
+      },
+      "pod_spec": {
+        "restartPolicy": "Never",
+        "serviceAccountName": "chris-cyber-qwen36-base-artifact-observer-v1",
+        "nodeSelector": {"workload": "fleetai-training-ng-cpu"},
+        "tolerations": [
+          {"effect": "NoSchedule", "key": "workload", "operator": "Equal", "value": "fleetai-training-ng-cpu"}
+        ],
+        "container": {
+          "name": "inspect",
+          "image": "lmsysorg/sglang@sha256:febfb971c7352570fc445c466ebd6ffc9d896024958e544a60f2137fd85856b1",
+          "command": ["python3", "-m", "evals.webexploitbench.post_sft_evidence"],
+          "args": ["inspect-base-artifact", "--base-root", "/models/qwen3.6-27b/6a9e13bd6fc8f0983b9b99948120bc37f49c13e9", "--plan", "/bundle/post-sft-plan.json", "--output", "-"],
+          "env": [
+            {"name": "PYTHONPATH", "value": "/bundle"},
+            {"name": "POD_NAME", "valueFrom": {"fieldRef": {"apiVersion": "v1", "fieldPath": "metadata.name"}}},
+            {"name": "POD_NAMESPACE", "valueFrom": {"fieldRef": {"apiVersion": "v1", "fieldPath": "metadata.namespace"}}},
+            {"name": "POD_UID", "valueFrom": {"fieldRef": {"apiVersion": "v1", "fieldPath": "metadata.uid"}}},
+            {"name": "JOB_UID", "valueFrom": {"fieldRef": {"apiVersion": "v1", "fieldPath": "metadata.labels['batch.kubernetes.io/controller-uid']"}}}
+          ],
+          "resources": {"limits": {"cpu": "8", "memory": "32Gi"}, "requests": {"cpu": "4", "memory": "16Gi"}},
+          "volumeMounts": [
+            {"mountPath": "/bundle", "name": "bundle", "readOnly": true},
+            {"mountPath": "/models", "name": "models", "readOnly": true}
+          ]
+        },
+        "volumes": [
+          {"configMap": {"defaultMode": 420, "items": [
+            {"key": "evals__init__.py", "path": "evals/__init__.py"},
+            {"key": "evals_webexploitbench__init__.py", "path": "evals/webexploitbench/__init__.py"},
+            {"key": "post_sft_evidence.py", "path": "evals/webexploitbench/post_sft_evidence.py"},
+            {"key": "training__init__.py", "path": "training/__init__.py"},
+            {"key": "training_io.py", "path": "training/io.py"},
+            {"key": "training_post_sft_artifacts.py", "path": "training/post_sft_artifacts.py"},
+            {"key": "post-sft-plan.json", "path": "post-sft-plan.json"}
+          ], "name": "chris-cyber-qwen36-base-artifact-inspect-6a9e13bd-v1"}, "name": "bundle"},
+          {"name": "models", "persistentVolumeClaim": {"claimName": "hf-cache-shared", "readOnly": true}}
+        ]
+      },
+      "config_map_code_sha256": {
+        "evals/__init__.py": "sha256:d975601b8c65125381967ad8cf17dbc9b87ed383f7cf626791b288dc3132aa9b",
+        "evals/webexploitbench/__init__.py": "sha256:364a7569bf22697f0fe54558538e9e20780d5a8cd1721c9aaa4e3a996b795b1d",
+        "evals/webexploitbench/post_sft_evidence.py": "sha256:9bb6272d88f81c8ff37fe06a362c77d6c21b96589a9ed65c80f4d28efa4578c6",
+        "training/__init__.py": "sha256:c3152a4d34780d02afdf8ff066f6e7b7f3af5aa2db1cd827ad3aca0c52fd561b",
+        "training/io.py": "sha256:7a0b734a4ab7fb8b702430094c58c72f19ac8fc7cc5e056eb8410267e6bfdfe3",
+        "training/post_sft_artifacts.py": "sha256:312f023c520f1f13d949f9a21a6286d338a6d591dbb29698ca76206c56b20bc5"
+      }
+    },
+    "registration": {
+      "schema": "cyber_post_sft_kubernetes_evidence_contract_v1",
+      "job_labels": {
+        "kueue.x-k8s.io/queue-name": "training-lq",
+        "cyber-post-train.fleet.ai/owner": "chris",
+        "cyber-post-train.fleet.ai/experiment": "qwen36-sft-register-574bd7b3-v1",
+        "cyber-post-train.fleet.ai/model": "qwen36"
+      },
+      "pod_labels": {
+        "kueue.x-k8s.io/queue-name": "training-lq",
+        "cyber-post-train.fleet.ai/owner": "chris",
+        "cyber-post-train.fleet.ai/experiment": "qwen36-sft-register-574bd7b3-v1",
+        "cyber-post-train.fleet.ai/model": "qwen36"
+      },
+      "job": {"backoffLimit": 0, "activeDeadlineSeconds": 600, "ttlSecondsAfterFinished": 604800},
+      "pod_spec": {
+        "restartPolicy": "Never",
+        "serviceAccountName": "default",
+        "nodeSelector": {"workload": "fleetai-training-ng-cpu"},
+        "tolerations": [
+          {"effect": "NoSchedule", "key": "workload", "operator": "Equal", "value": "fleetai-training-ng-cpu"}
+        ],
+        "container": {
+          "name": "register",
+          "image": "ghcr.io/fleet-ai/miles-fleet/trainer@sha256:98920a4e25fadc3f31fafc18eff072313386edf5b352a23d13f4bb2d9e5f0a4c",
+          "command": ["python", "-m", "training.register_post_sft", "--receipt", "/bundle/serving-registration-receipt.json"],
+          "args": [],
+          "env": [
+            {"name": "PYTHONPATH", "value": "/bundle"},
+            {"name": "FLEET_API_KEY", "valueFrom": {"secretKeyRef": {"key": "FLEET_API_KEY", "name": "fleet-api"}}}
+          ],
+          "resources": {"limits": {"cpu": "1", "memory": "1Gi"}, "requests": {"cpu": "200m", "memory": "256Mi"}},
+          "volumeMounts": [{"mountPath": "/bundle", "name": "bundle", "readOnly": true}]
+        },
+        "volumes": [
+          {"configMap": {"defaultMode": 420, "items": [
+            {"key": "training__init__.py", "path": "training/__init__.py"},
+            {"key": "training_io.py", "path": "training/io.py"},
+            {"key": "training_register_post_sft.py", "path": "training/register_post_sft.py"},
+            {"key": "serving-registration-receipt.json", "path": "serving-registration-receipt.json"}
+          ], "name": "chris-cyber-qwen36-sft-register-574bd7b3-v1"}, "name": "bundle"}
+        ]
+      },
+      "config_map_code_sha256": {
+        "training/__init__.py": "sha256:c3152a4d34780d02afdf8ff066f6e7b7f3af5aa2db1cd827ad3aca0c52fd561b",
+        "training/io.py": "sha256:7a0b734a4ab7fb8b702430094c58c72f19ac8fc7cc5e056eb8410267e6bfdfe3",
+        "training/register_post_sft.py": "sha256:be8b23b3c18bc78afa26d07fc33c49aec640037d81ae7191a5b167e86a82cd81"
+      }
+    }
+  },
   "export": {
     "strategy": "resume_final_checkpoint_with_zero_optimizer_steps_v1",
     "skyrl_source_commit": "f5bc3b78dfddfb352870d5d7430cd226e5785838",
@@ -92,12 +222,30 @@
       "name": "ft-run-29f2bedf",
       "run_id": "29f2bedf-6aa5-488d-9647-830032612b49",
       "rayjob_uid": "51957fb6-c8c5-4e72-ab1b-8ec80e38e68b",
+      "title": "Chris cyber Qwen3.6 27B SFT final checkpoint zero-step HF export ft-run-574bd7b3-step318-v1",
       "trainer_version_id": "4b4dc57c-c7dc-5562-bbdd-9e1d6764ede0",
       "trainer_image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train:q36-torchgdn-6db8d0c9@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
       "resume_from": "/mnt/sfs/checkpoints/ft-run-574bd7b3/global_step_318",
       "num_steps": 318,
       "hf_save_interval": 319,
-      "optimizer_steps_expected": 0
+      "optimizer_steps_expected": 0,
+      "server_normalization": {
+        "schema": "fleet_training_stored_config_normalization_v1",
+        "submitted_by_email": "chrisisaverted@users.noreply.github.com",
+        "node_pool": "fleetai-training-ng-gpu",
+        "data_defaults": {
+          "env_keys": null,
+          "models": null,
+          "session_ids": null,
+          "since": null,
+          "team_ids": ["a1025f0b-ad67-49fc-a023-51800ab43e84"],
+          "until": null
+        },
+        "trainer_defaults": {
+          "command": null,
+          "env": {}
+        }
+      }
     },
     "format": "huggingface_safetensors",
     "precision": "bf16",
@@ -142,7 +290,8 @@
     },
     "test_tasks": 20,
     "exact_task_versions_required": true,
-    "primary_harness": "claude_code",
+    "primary_harness": "qwen_code",
+    "primary_harness_version": "0.22.3",
     "pass_k": 1
   },
   "gates": [

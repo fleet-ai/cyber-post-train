@@ -9,6 +9,8 @@ conditional on a reviewable immutable receipt.
 from __future__ import annotations
 
 import copy
+import hashlib
+import json
 import re
 import uuid
 from collections.abc import Mapping, Sequence
@@ -20,6 +22,14 @@ SHA256_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 IMAGE_RE = re.compile(r"^[^@\s]+@sha256:[0-9a-f]{64}$")
 MODEL_ID_RE = re.compile(r"^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$")
 CHECKPOINT_NAMESPACE = uuid.UUID("bc7f7c3f-38ba-5835-840d-ecb75c2d2f64")
+STAGING_CODE_PATHS = {
+    "training/__init__.py",
+    "training/io.py",
+    "training/post_sft_artifacts.py",
+    "training/post_sft_staging.py",
+}
+STAGING_ACCEPTANCE_RECEIPT = ".fleet-acceptance.json"
+STORED_CONFIG_NORMALIZATION_SCHEMA = "fleet_training_stored_config_normalization_v1"
 
 
 def _mapping(value: Any, field: str) -> Mapping[str, Any]:
@@ -62,6 +72,23 @@ def _validate_embedded_digest(value: Mapping[str, Any], field: str) -> str:
     if expected != actual:
         raise ValueError(f"{field} digest mismatch")
     return actual
+
+
+def _canonical_pretty_json_sha256(value: Mapping[str, Any]) -> str:
+    payload = (json.dumps(value, indent=2, sort_keys=True) + "\n").encode()
+    return "sha256:" + hashlib.sha256(payload).hexdigest()
+
+
+def _exact_sha256_map(value: Any, field: str, expected_paths: set[str]) -> dict[str, str]:
+    mapping = _mapping(value, field)
+    if set(mapping) != expected_paths:
+        raise ValueError(f"{field} paths differ from the exact expected set")
+    result: dict[str, str] = {}
+    for path, digest in mapping.items():
+        if not isinstance(digest, str) or not SHA256_RE.fullmatch(digest):
+            raise ValueError(f"{field} has an invalid SHA-256 for {path}")
+        result[str(path)] = digest
+    return result
 
 
 def checkpoint_uuid(run_name: str, step: int) -> str:
@@ -121,6 +148,80 @@ def _validate_export_binding(
     ):
         raise ValueError("export destination is assigned to a different RayJob")
     return export_run, expected_output_path
+
+
+def _validate_stored_config_normalization(
+    export_run: Mapping[str, Any],
+) -> Mapping[str, Any]:
+    normalization = _mapping(
+        export_run.get("server_normalization"), "export run server_normalization"
+    )
+    if normalization.get("schema") != STORED_CONFIG_NORMALIZATION_SCHEMA:
+        raise ValueError("unsupported stored-config normalization schema")
+    if _text(normalization, "node_pool") != "fleetai-training-ng-gpu":
+        raise ValueError("stored-config node pool differs from the immutable export job")
+    _text(normalization, "submitted_by_email")
+    data_defaults = _mapping(
+        normalization.get("data_defaults"), "stored-config data defaults"
+    )
+    expected_data_defaults = {
+        "env_keys": None,
+        "models": None,
+        "session_ids": None,
+        "since": None,
+        "team_ids": ["a1025f0b-ad67-49fc-a023-51800ab43e84"],
+        "until": None,
+    }
+    if dict(data_defaults) != expected_data_defaults:
+        raise ValueError("stored-config data normalization differs from the reviewed Fleet job")
+    trainer_defaults = _mapping(
+        normalization.get("trainer_defaults"), "stored-config trainer defaults"
+    )
+    if dict(trainer_defaults) != {"command": None, "env": {}}:
+        raise ValueError("stored-config trainer normalization differs from the reviewed Fleet job")
+    return normalization
+
+
+def normalize_zero_step_stored_config(
+    request: Mapping[str, Any], export_run: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Apply only the exact server-owned normalization observed on the immutable export job."""
+
+    normalization = _validate_stored_config_normalization(export_run)
+    result = copy.deepcopy(dict(request))
+    if result.get("title") != _text(export_run, "title"):
+        raise ValueError("zero-step export title differs from the immutable submitted job")
+    if any(field in result for field in ("name", "run_id", "submitted_by_email", "node_pool")):
+        raise ValueError("client export request contains server-owned identity fields")
+    result.update(
+        {
+            "name": _text(export_run, "name"),
+            "run_id": _text(export_run, "run_id"),
+            "submitted_by_email": _text(normalization, "submitted_by_email"),
+            "node_pool": _text(normalization, "node_pool"),
+        }
+    )
+    data = copy.deepcopy(dict(_mapping(result.get("data"), "zero-step request data")))
+    for field, value in _mapping(
+        normalization.get("data_defaults"), "stored-config data defaults"
+    ).items():
+        if field in data and data[field] != value:
+            raise ValueError(
+                f"client export data field {field} conflicts with server normalization"
+            )
+        data[field] = copy.deepcopy(value)
+    result["data"] = data
+    trainer = copy.deepcopy(dict(_mapping(result.get("trainer"), "zero-step request trainer")))
+    for field, value in _mapping(
+        normalization.get("trainer_defaults"), "stored-config trainer defaults"
+    ).items():
+        if field in trainer and trainer[field] != value:
+            raise ValueError(
+                f"client export trainer field {field} conflicts with server normalization"
+            )
+        trainer[field] = copy.deepcopy(value)
+    result["trainer"] = trainer
+    return result
 
 
 def validate_selection_receipt(selection: Mapping[str, Any]) -> str:
@@ -200,6 +301,70 @@ def _selection_source_manifest(selection: Mapping[str, Any]) -> str:
     return _sha256(checkpoint, "archive_manifest_sha256")
 
 
+def render_zero_step_sft_command(request: Mapping[str, Any], run_name: str) -> str:
+    """Render the exact Fleet Train SFT entrypoint owned by the frozen request.
+
+    This intentionally mirrors the deployed SFT command contract for the one pinned SkyRL
+    exporter.  The resulting digest is frozen before evidence collection and compared with the
+    RayJob's actual ``spec.entrypoint``; an arbitrary syntactically valid command is never enough.
+    """
+
+    if request.get("kind") != "sft":
+        raise ValueError("zero-step export request kind must be sft")
+    model = _mapping(request.get("model"), "zero-step request model")
+    if _text(model, "precision").lower() != "bf16":
+        raise ValueError("zero-step export request model precision must be exactly bf16")
+    staged_model = _text(model, "staged_model")
+    sft = _mapping(request.get("sft"), "zero-step request sft")
+    if _text(sft, "strategy") != "fsdp":
+        raise ValueError("zero-step export request strategy must be fsdp")
+    objective = _mapping(request.get("objective"), "zero-step request objective")
+    trainer = _mapping(request.get("trainer"), "zero-step request trainer")
+    trainer_args = trainer.get("args")
+    if not isinstance(trainer_args, list) or not all(
+        isinstance(value, str) and value for value in trainer_args
+    ):
+        raise ValueError("zero-step export trainer args must be non-empty strings")
+    wandb = _mapping(request.get("wandb"), "zero-step request wandb")
+    evaluation = _mapping(request.get("eval"), "zero-step request eval")
+    if evaluation.get("task_keys") != []:
+        raise ValueError("zero-step export command cannot include evaluation tasks")
+
+    overrides: dict[str, Any] = {
+        "strategy": sft.get("strategy"),
+        "model.path": f"/mnt/sfs/models/{staged_model}",
+        "max_length": objective.get("max_length"),
+        "train_on_what": objective.get("train_on_what"),
+        "batch_size": sft.get("batch_size"),
+        "micro_train_batch_size_per_gpu": sft.get("micro_train_batch_size_per_gpu"),
+        "optimizer_config.lr": sft.get("learning_rate"),
+        "ckpt_path": f"/mnt/sfs/checkpoints/{run_name}",
+        "ckpt_interval": sft.get("checkpoint_interval"),
+        "max_ckpts_to_keep": sft.get("max_checkpoints_to_keep"),
+        "logger": "wandb",
+        "project_name": wandb.get("project"),
+        "run_name": run_name,
+        "placement.num_nodes": request.get("num_workers"),
+        "placement.num_gpus_per_node": request.get("gpus_per_worker"),
+        "num_steps": sft.get("max_steps"),
+        "eval_before_train": False,
+        "eval_interval": 0,
+    }
+    if sft.get("sequence_parallel_size") is not None:
+        overrides["sequence_parallel_size"] = sft.get("sequence_parallel_size")
+
+    parts = ["python", "-m", "rl_rollout.sft_entrypoint"]
+    for key, value in sorted(overrides.items()):
+        if value is None:
+            raise ValueError(f"zero-step export request is missing command field {key}")
+        rendered = str(value).lower() if isinstance(value, bool) else str(value)
+        if any(character in rendered for character in " \t'\"$`\\;|&<>()"):
+            raise ValueError(f"zero-step export command field {key} contains shell metacharacters")
+        parts.append(f"{key}={rendered}")
+    parts.extend(trainer_args)
+    return " ".join(parts)
+
+
 def build_zero_step_hf_export_request(
     sft_config: Mapping[str, Any],
     selection: Mapping[str, Any],
@@ -223,7 +388,6 @@ def build_zero_step_hf_export_request(
     if _text(run, "trainer_image") != expected_trainer_image:
         raise ValueError("selection trainer image differs from the planned exporter image")
     step = checkpoint["step"]
-    source_run = _text(run, "name")
     checkpoint_id = _text(checkpoint, "uuid")
     export_run, expected_output_path = _validate_export_binding(expected_export_binding, selection)
     if _text(export_run, "trainer_version_id") != expected_trainer_version_id:
@@ -255,8 +419,10 @@ def build_zero_step_hf_export_request(
     if checkpoint.get("sfs_available") is not True:
         raise ValueError("selected checkpoint must be staged on SFS before rendering export")
     export_root = _text(expected_export_binding, "output_root")
+    _text(export_run, "title")
+    _validate_stored_config_normalization(export_run)
     request.pop("name", None)
-    request["title"] = f"Chris cyber zero-step HF export of {source_run} step {step}"
+    request["title"] = _text(export_run, "title")
     request["sft"]["num_epochs"] = None
     request["sft"]["max_steps"] = step
     request["eval"] = {"task_keys": [], "interval": 1, "before_train": False}
@@ -266,6 +432,17 @@ def build_zero_step_hf_export_request(
         f"hf_save_interval={step + 1}",
         f"export_path={export_root}",
     ]
+    expected_command = render_zero_step_sft_command(request, _text(export_run, "name"))
+    stored_config = normalize_zero_step_stored_config(request, export_run)
+    expected_execution = {
+        "request_config_sha256": digest_json(request),
+        "stored_config_sha256": digest_json(stored_config),
+        "kind": "sft",
+        "model_precision": "bf16",
+        "strategy": "fsdp",
+        "trainer_version_id": expected_trainer_version_id,
+        "command_sha256": digest_json({"entrypoint": expected_command}),
+    }
 
     receipt = {
         "schema": "cyber_sft_zero_step_export_request_v1",
@@ -286,6 +463,7 @@ def build_zero_step_hf_export_request(
             "image": expected_trainer_image,
             "skyrl_source_commit": "f5bc3b78dfddfb352870d5d7430cd226e5785838",
         },
+        "expected_execution": expected_execution,
         "export_run": copy.deepcopy(dict(export_run)),
         "destination_preflight": copy.deepcopy(expected_export_binding["destination_preflight"]),
         "proof_obligations": {
@@ -588,6 +766,563 @@ def validate_hf_export_receipt(
             raise ValueError(f"HF export verification {field} did not pass")
 
     return _validate_embedded_digest(export, "export_receipt_sha256")
+
+
+def assemble_hf_export_receipt(
+    selection: Mapping[str, Any],
+    export_request: Mapping[str, Any],
+    export_run_observation: Mapping[str, Any],
+    export_observation: Mapping[str, Any],
+    stage_input: Mapping[str, Any],
+    staging_receipt: Mapping[str, Any],
+    *,
+    expected_tokenizer_manifest_sha256: str,
+    expected_chat_template_sha256: str,
+    expected_config_sha256: str,
+    expected_export_binding: Mapping[str, Any],
+    expected_runtime_sidecar_sha256: Mapping[str, str],
+    expected_tokenizer_equivalence_evidence_sha256: str,
+    expected_staging_image: str,
+    expected_staging_command_sha256: str,
+) -> dict[str, Any]:
+    """Assemble the final export receipt from independently captured evidence.
+
+    This function performs no filesystem, Kubernetes, or Fleet API reads. Each input is an
+    immutable, digest-bound observation produced by an earlier gate. The function deliberately
+    reconstructs the public receipt instead of accepting an operator-authored aggregate.
+    """
+
+    validate_selection_receipt(selection)
+    checkpoint = _mapping(selection.get("checkpoint"), "selection.checkpoint")
+    selected_run = _mapping(selection.get("run"), "selection.run")
+    export_run, expected_raw_path = _validate_export_binding(expected_export_binding, selection)
+    expected_destination = _text(expected_export_binding, "inference_staging_destination")
+
+    if export_request.get("schema") != "cyber_sft_zero_step_export_request_v1":
+        raise ValueError("unsupported zero-step export request receipt schema")
+    request_digest = _validate_embedded_digest(export_request, "export_request_receipt_sha256")
+    if _sha256(export_request, "source_selection_sha256") != _sha256(
+        selection, "selection_receipt_sha256"
+    ):
+        raise ValueError("export request names a different checkpoint selection")
+    request_source = _mapping(
+        export_request.get("source_checkpoint"), "export request source_checkpoint"
+    )
+    if _text(request_source, "uuid") != _text(checkpoint, "uuid"):
+        raise ValueError("export request names a different checkpoint UUID")
+    if _sha256(request_source, "source_manifest_sha256") != _selection_source_manifest(selection):
+        raise ValueError("export request source manifest differs from the selection")
+    request_output = _mapping(
+        export_request.get("expected_output"), "export request expected_output"
+    )
+    if _text(request_output, "path") != expected_raw_path:
+        raise ValueError("export request expected output path differs from the frozen plan")
+    if _text(request_output, "format") != "huggingface_safetensors":
+        raise ValueError("export request must expect Hugging Face safetensors")
+    if _text(request_output, "dtype").lower() not in {"bf16", "bfloat16"}:
+        raise ValueError("export request must preserve BF16 weights")
+    if _mapping(export_request.get("export_run"), "export request export_run") != export_run:
+        raise ValueError("export request run identity differs from the frozen plan")
+    if export_request.get("destination_preflight") != expected_export_binding.get(
+        "destination_preflight"
+    ):
+        raise ValueError("export request destination preflight differs from the frozen plan")
+    if export_request.get("submit") is not False:
+        raise ValueError("export request receipt must remain a non-submitting review artifact")
+    rendered_request = _mapping(export_request.get("request"), "export request request")
+    expected_execution = _mapping(
+        export_request.get("expected_execution"), "export request expected_execution"
+    )
+    if expected_execution != {
+        "request_config_sha256": digest_json(rendered_request),
+        "stored_config_sha256": digest_json(
+            normalize_zero_step_stored_config(rendered_request, export_run)
+        ),
+        "kind": "sft",
+        "model_precision": "bf16",
+        "strategy": "fsdp",
+        "trainer_version_id": _text(export_run, "trainer_version_id"),
+        "command_sha256": digest_json(
+            {
+                "entrypoint": render_zero_step_sft_command(
+                    rendered_request, _text(export_run, "name")
+                )
+            }
+        ),
+    }:
+        raise ValueError("export request expected execution identity is not exact")
+    if rendered_request.get("kind") != expected_execution["kind"]:
+        raise ValueError("export request kind differs from expected execution")
+    rendered_model = _mapping(rendered_request.get("model"), "export request request.model")
+    if _text(rendered_model, "precision").lower() != expected_execution["model_precision"]:
+        raise ValueError("export request model precision differs from expected execution")
+    rendered_sft = _mapping(rendered_request.get("sft"), "export request request.sft")
+    if _text(rendered_sft, "strategy") != expected_execution["strategy"]:
+        raise ValueError("export request strategy differs from expected execution")
+    if (
+        rendered_sft.get("max_steps") != checkpoint.get("step")
+        or rendered_sft.get("num_epochs") is not None
+    ):
+        raise ValueError("export request does not encode the selected zero-step boundary")
+    rendered_eval = _mapping(rendered_request.get("eval"), "export request request.eval")
+    if rendered_eval.get("task_keys") != []:
+        raise ValueError("zero-step export request must not run evaluations")
+    rendered_trainer = _mapping(rendered_request.get("trainer"), "export request request.trainer")
+    if _text(rendered_trainer, "trainer_version_id") != expected_execution[
+        "trainer_version_id"
+    ]:
+        raise ValueError("export request trainer version differs from expected execution")
+    args = rendered_trainer.get("args")
+    if not isinstance(args, list) or not all(isinstance(item, str) for item in args):
+        raise ValueError("zero-step export trainer args must be an array of strings")
+    owned_args = {
+        "resume_from": _text(export_run, "resume_from"),
+        "hf_save_interval": str(export_run.get("hf_save_interval")),
+        "export_path": _text(expected_export_binding, "output_root"),
+    }
+    for key, expected in owned_args.items():
+        matches = [item.split("=", 1)[1] for item in args if item.startswith(key + "=")]
+        if matches != [expected]:
+            raise ValueError(f"zero-step export request has an invalid {key} argument")
+
+    if export_run_observation.get("schema") != "cyber_sft_zero_step_export_run_observation_v1":
+        raise ValueError("unsupported zero-step export run observation schema")
+    _validate_embedded_digest(export_run_observation, "observation_sha256")
+    if _text(export_run_observation, "terminal_status") != "SUCCEEDED":
+        raise ValueError("zero-step export run is not terminally SUCCEEDED")
+    observed_run = _mapping(export_run_observation.get("run"), "export run observation run")
+    for field in ("name", "run_id", "rayjob_uid", "trainer_version_id"):
+        if _text(observed_run, field) != _text(export_run, field):
+            raise ValueError(f"zero-step export run {field} differs from the frozen plan")
+    if _digest_pinned_image(export_run_observation, "trainer_image") != _text(
+        export_run, "trainer_image"
+    ):
+        raise ValueError("zero-step export trainer image differs from the frozen plan")
+    for field in ("resume_from", "num_steps", "hf_save_interval"):
+        if export_run_observation.get(field) != export_run.get(field):
+            raise ValueError(f"zero-step export {field} differs from the frozen plan")
+    if export_run_observation.get("optimizer_steps") != 0:
+        raise ValueError("zero-step export run executed optimizer steps")
+    if _sha256(export_run_observation, "export_request_receipt_sha256") != request_digest:
+        raise ValueError("export run observation names a different request receipt")
+    command_sha256 = _sha256(export_run_observation, "command_sha256")
+    if command_sha256 != expected_execution["command_sha256"]:
+        raise ValueError("zero-step export command differs from the exact expected command")
+    request_identity = _mapping(
+        export_run_observation.get("request_identity"), "export run request identity"
+    )
+    if dict(request_identity) != dict(expected_execution):
+        raise ValueError("export run request identity differs from the exact request")
+    rayjob_evidence = _mapping(
+        export_run_observation.get("rayjob"), "export run RayJob evidence"
+    )
+    if (
+        _text(rayjob_evidence, "uid") != _text(export_run, "rayjob_uid")
+        or _text(rayjob_evidence, "entrypoint")
+        != render_zero_step_sft_command(rendered_request, _text(export_run, "name"))
+        or _sha256(rayjob_evidence, "entrypoint_sha256") != command_sha256
+    ):
+        raise ValueError("export run RayJob evidence differs from the exact execution")
+    _sha256(rayjob_evidence, "spec_sha256")
+    if _text(rayjob_evidence, "queue") != "training-lq":
+        raise ValueError("export run RayJob used an unexpected queue")
+    execution_projection = _mapping(
+        rayjob_evidence.get("reviewed_execution_projection"),
+        "export run reviewed RayJob execution projection",
+    )
+    if _sha256(rayjob_evidence, "reviewed_execution_projection_sha256") != digest_json(
+        execution_projection
+    ):
+        raise ValueError("export run reviewed RayJob projection digest differs")
+    projected_head = _mapping(execution_projection.get("head"), "projected Ray head")
+    projected_worker = _mapping(execution_projection.get("worker"), "projected Ray worker")
+    projected_submitter = _mapping(
+        execution_projection.get("submitter"), "projected Ray submitter"
+    )
+    if (
+        projected_head.get("service_account_name") != "default"
+        or _text(projected_head, "image") != _text(export_run, "trainer_image")
+        or projected_head.get("command") is not None
+        or projected_head.get("args") is not None
+        or projected_head.get("resources")
+        != {
+            "requests": {"cpu": "2", "memory": "8Gi"},
+            "limits": {"cpu": "4", "memory": "16Gi"},
+        }
+    ):
+        raise ValueError("export run Ray head projection differs from reviewed policy")
+    if (
+        projected_worker.get("group_name") != "gpu-worker"
+        or projected_worker.get("replicas") != rendered_request.get("num_workers")
+        or projected_worker.get("min_replicas") != rendered_request.get("num_workers")
+        or projected_worker.get("max_replicas") != rendered_request.get("num_workers")
+        or projected_worker.get("service_account_name") != "default"
+        or _text(projected_worker, "image") != _text(export_run, "trainer_image")
+        or projected_worker.get("command") is not None
+        or projected_worker.get("args") is not None
+        or projected_worker.get("resources")
+        != {
+            "requests": {"cpu": "184", "memory": "2560Gi", "nvidia.com/gpu": "8"},
+            "limits": {"cpu": "184", "memory": "2560Gi", "nvidia.com/gpu": "8"},
+        }
+    ):
+        raise ValueError("export run Ray worker projection differs from reviewed policy")
+    if (
+        projected_submitter.get("service_account_name") != "default"
+        or _text(projected_submitter, "image") != "anyscale/ray:2.56.0-slim-py312"
+        or projected_submitter.get("command") is not None
+        or projected_submitter.get("args") is not None
+        or projected_submitter.get("resources")
+        != {
+            "requests": {"cpu": "200m", "ephemeral-storage": "2Gi", "memory": "512Mi"},
+            "limits": {"cpu": "1", "memory": "1Gi"},
+        }
+    ):
+        raise ValueError("export run Ray submitter projection differs from reviewed policy")
+    raycluster_evidence = _mapping(
+        export_run_observation.get("raycluster"), "export run RayCluster evidence"
+    )
+    if _text(raycluster_evidence, "name") != _text(rayjob_evidence, "cluster_name"):
+        raise ValueError("export run RayCluster identity differs from the RayJob")
+    _text(raycluster_evidence, "uid")
+    _sha256(raycluster_evidence, "spec_sha256")
+    pod_evidence = _mapping(export_run_observation.get("pod"), "export run Pod evidence")
+    _text(pod_evidence, "name")
+    _text(pod_evidence, "uid")
+    if _text(pod_evidence, "requested_image") != _text(export_run, "trainer_image"):
+        raise ValueError("export run Pod resolved image differs from the trainer image")
+    expected_image_digest = _text(export_run, "trainer_image").rsplit("@", 1)[-1]
+    if _text(pod_evidence, "resolved_image_digest") != expected_image_digest:
+        raise ValueError("export run Pod resolved image digest differs from the trainer image")
+    _text(pod_evidence, "resolved_image_id")
+    submitter_evidence = _mapping(
+        export_run_observation.get("submitter"), "export run submitter evidence"
+    )
+    if (
+        _text(submitter_evidence, "job_name") != _text(export_run, "name")
+        or _text(submitter_evidence, "container_name") != "ray-job-submitter"
+        or _text(submitter_evidence, "image") != "anyscale/ray:2.56.0-slim-py312"
+    ):
+        raise ValueError("export run submitter evidence differs from reviewed policy")
+    for field in ("job_uid", "pod_name", "pod_uid"):
+        _text(submitter_evidence, field)
+    _sha256(submitter_evidence, "job_spec_sha256")
+    _sha256(submitter_evidence, "command_sha256")
+    zero_step_evidence = _mapping(
+        export_run_observation.get("zero_step_evidence"), "zero-step execution evidence"
+    )
+    if (
+        zero_step_evidence.get("resume_global_step") != checkpoint.get("step")
+        or zero_step_evidence.get("configured_final_step") != checkpoint.get("step")
+        or zero_step_evidence.get("optimizer_step_events") != 0
+    ):
+        raise ValueError("export run immutable evidence does not prove zero optimizer steps")
+    logs = _mapping(zero_step_evidence.get("logs"), "zero-step log evidence")
+    metrics = _mapping(zero_step_evidence.get("metrics"), "zero-step metric evidence")
+    _sha256(logs, "sha256")
+    _sha256(metrics, "api_observation_sha256")
+    if (
+        logs.get("contains_exact_entrypoint") is not True
+        or logs.get("contains_terminal_success") is not True
+        or not isinstance(logs.get("bytes"), int)
+        or logs["bytes"] < 1
+        or logs.get("optimizer_events") != 0
+        or logs.get("steps_after_resume") != []
+        or not isinstance(logs.get("observed_steps"), list)
+        or any(
+            not isinstance(step, int) or step > checkpoint.get("step")
+            for step in logs.get("observed_steps", [])
+        )
+        or not isinstance(metrics.get("checked_step_fields"), Mapping)
+        or any(
+            not isinstance(value, (int, float)) or isinstance(value, bool)
+            for value in metrics.get("checked_step_fields", {}).values()
+        )
+        or metrics.get("reported_optimizer_steps") != 0
+    ):
+        raise ValueError("export run log/metric evidence does not prove zero optimizer steps")
+    if _text(export_run_observation, "output_path") != expected_raw_path:
+        raise ValueError("zero-step export run observed an unexpected output path")
+
+    if export_observation.get("schema") != "fleet_sft_sfs_checkpoint_observation_v1":
+        raise ValueError("unsupported post-export filesystem observation schema")
+    export_observation_sha256 = _validate_embedded_digest(export_observation, "observation_sha256")
+    if _text(export_observation, "run_name") != _text(selected_run, "name"):
+        raise ValueError("post-export observation names a different source run")
+    if export_observation.get("step") != checkpoint.get("step"):
+        raise ValueError("post-export observation names a different checkpoint step")
+    if _text(export_observation, "sfs_path") != _text(checkpoint, "sfs_path"):
+        raise ValueError("post-export observation names a different source checkpoint path")
+    if _sha256(export_observation, "full_file_manifest_sha256") != (
+        _selection_source_manifest(selection)
+    ):
+        raise ValueError("post-export source manifest differs from the selected checkpoint")
+    raw_inspection = _mapping(
+        export_observation.get("output_inspection"), "post-export output inspection"
+    )
+    if _text(raw_inspection, "root") != expected_raw_path:
+        raise ValueError("post-export inspection names an unexpected raw export path")
+    if _text(raw_inspection, "format") != "safetensors":
+        raise ValueError("raw export inspection did not verify safetensors")
+    if _text(raw_inspection, "dtype").lower() not in {"bf16", "bfloat16"}:
+        raise ValueError("raw export inspection did not verify BF16 weights")
+    for field in ("all_shards_present", "safetensors_load_passed", "parameter_count_matches"):
+        if raw_inspection.get(field) is not True:
+            raise ValueError(f"raw export verification {field} did not pass")
+    raw_weights_sha256 = _sha256(raw_inspection, "weights_manifest_sha256")
+    raw_files_sha256 = _sha256(raw_inspection, "files_manifest_sha256")
+    if _sha256(export_observation, "raw_export_full_manifest_sha256") != raw_files_sha256:
+        raise ValueError("post-export observation full manifest differs from its inspection")
+
+    if stage_input.get("schema") != "cyber_sft_inference_stage_input_v1":
+        raise ValueError("unsupported inference stage input schema")
+    stage_input_sha256 = _validate_embedded_digest(stage_input, "stage_input_sha256")
+    stage_source = _mapping(stage_input.get("source"), "stage input source")
+    if _text(stage_source, "sfs_path") != expected_raw_path:
+        raise ValueError("inference stage input names an unexpected raw export path")
+    if _sha256(stage_source, "observation_sha256") != export_observation_sha256:
+        raise ValueError("inference stage input names a different export observation")
+    if stage_source.get("raw_inspection") != raw_inspection:
+        raise ValueError("inference stage input raw inspection differs from the export evidence")
+    stage_manifest = _mapping(
+        stage_source.get("raw_full_manifest"), "stage input raw full manifest"
+    )
+    if _sha256(stage_manifest, "manifest_sha256") != raw_files_sha256:
+        raise ValueError("inference stage input raw manifest differs from the export evidence")
+    stage_composition = _mapping(stage_input.get("composition"), "stage input composition")
+    expected_composition = {
+        "runtime_sidecar_sha256": dict(expected_runtime_sidecar_sha256),
+        "expected_tokenizer_manifest_sha256": expected_tokenizer_manifest_sha256,
+        "expected_chat_template_sha256": expected_chat_template_sha256,
+        "expected_config_sha256": expected_config_sha256,
+        "tokenizer_equivalence_evidence_sha256": (
+            expected_tokenizer_equivalence_evidence_sha256
+        ),
+    }
+    for field, expected in expected_composition.items():
+        if stage_composition.get(field) != expected:
+            raise ValueError(f"inference stage composition {field} differs from the frozen plan")
+    stage_execution = _mapping(stage_input.get("execution"), "stage input execution")
+    if stage_execution.get("schema") != "cyber_sft_inference_stage_execution_plan_v1":
+        raise ValueError("unsupported inference stage execution plan schema")
+    for field in (
+        "namespace",
+        "job_name",
+        "config_map_name",
+        "service_account_name",
+        "container_name",
+    ):
+        _text(stage_execution, field)
+    planned_staging_image = _digest_pinned_image(stage_execution, "image")
+    if planned_staging_image != expected_staging_image:
+        raise ValueError("inference stage planned image differs from the frozen plan")
+    expected_image_digest = planned_staging_image.rsplit("@", 1)[1]
+    if _sha256(stage_execution, "image_digest") != expected_image_digest:
+        raise ValueError("inference stage planned image digest is inconsistent")
+    if _sha256(stage_execution, "command_sha256") != expected_staging_command_sha256:
+        raise ValueError("inference stage planned command differs from the frozen plan")
+    reviewed_code_sha256 = _exact_sha256_map(
+        stage_execution.get("config_map_code_sha256"),
+        "stage input reviewed staging code",
+        STAGING_CODE_PATHS,
+    )
+    stage_destination = _mapping(stage_input.get("destination"), "stage input destination")
+    if (
+        _text(stage_destination, "path") != expected_destination
+        or stage_destination.get("must_be_absent") is not True
+    ):
+        raise ValueError("inference stage destination differs from the collision-free plan")
+
+    if staging_receipt.get("schema") != "cyber_sft_inference_stage_receipt_v1":
+        raise ValueError("unsupported inference stage receipt schema")
+    staging_digest = _validate_embedded_digest(staging_receipt, "staging_receipt_sha256")
+    if _sha256(staging_receipt, "stage_input_sha256") != stage_input_sha256:
+        raise ValueError("inference staging executed a different stage input")
+    if _sha256(staging_receipt, "source_observation_sha256") != export_observation_sha256:
+        raise ValueError("inference staging names a different export observation")
+    if _sha256(staging_receipt, "source_raw_manifest_sha256") != raw_files_sha256:
+        raise ValueError("inference staging names a different raw export manifest")
+    execution = _mapping(staging_receipt.get("execution"), "staging receipt execution")
+    if execution.get("schema") != "cyber_sft_inference_stage_execution_v1":
+        raise ValueError("unsupported inference staging execution schema")
+    staging_image = _digest_pinned_image(execution, "image")
+    if staging_image != planned_staging_image:
+        raise ValueError("inference staging image differs from the frozen plan")
+    if _sha256(execution, "resolved_image_digest") != expected_image_digest:
+        raise ValueError("inference staging resolved image digest differs from the frozen plan")
+    image_id = _text(execution, "image_id")
+    image_id_match = re.fullmatch(
+        r"(?:[a-z][a-z0-9+.-]*://)?(?:[^@\s]+@)?(sha256:[0-9a-f]{64})", image_id
+    )
+    if image_id_match is None or image_id_match.group(1) != expected_image_digest:
+        raise ValueError("inference staging imageID is not the exact frozen digest")
+    staging_command_sha256 = _sha256(execution, "command_sha256")
+    if staging_command_sha256 != _sha256(stage_execution, "command_sha256"):
+        raise ValueError("inference staging command differs from the frozen plan")
+    if (
+        _text(execution, "service_account_name")
+        != _text(stage_execution, "service_account_name")
+        or _text(execution, "container_name") != _text(stage_execution, "container_name")
+    ):
+        raise ValueError("inference staging runtime identity differs from the stage input")
+    if _sha256(execution, "stage_input_sha256") != stage_input_sha256:
+        raise ValueError("inference staging provenance names a different stage input")
+    execution_job = _mapping(execution.get("job"), "staging execution Job")
+    execution_pod = _mapping(execution.get("pod"), "staging execution Pod")
+    execution_config_map = _mapping(
+        execution.get("config_map"), "staging execution ConfigMap"
+    )
+    if (
+        _text(execution_job, "namespace") != _text(stage_execution, "namespace")
+        or _text(execution_job, "name") != _text(stage_execution, "job_name")
+        or _text(execution_pod, "namespace") != _text(stage_execution, "namespace")
+        or _text(execution_config_map, "namespace") != _text(stage_execution, "namespace")
+        or _text(execution_config_map, "name")
+        != _text(stage_execution, "config_map_name")
+    ):
+        raise ValueError("inference staging runtime object names differ from the stage input")
+    for runtime_object, label in (
+        (execution_job, "Job"),
+        (execution_pod, "Pod"),
+        (execution_config_map, "ConfigMap"),
+    ):
+        _text(runtime_object, "uid")
+        _text(runtime_object, "resource_version")
+        if label != "ConfigMap":
+            _sha256(runtime_object, "spec_sha256")
+    _text(execution_pod, "name")
+    if execution_config_map.get("immutable") is not True:
+        raise ValueError("inference staging ConfigMap was not immutable")
+    if _exact_sha256_map(
+        execution_config_map.get("reviewed_code_sha256"),
+        "staging execution reviewed code",
+        STAGING_CODE_PATHS,
+    ) != reviewed_code_sha256:
+        raise ValueError("inference staging reviewed code differs from the stage input")
+    expected_stage_input_file_sha256 = _canonical_pretty_json_sha256(stage_input)
+    if _sha256(execution_config_map, "stage_input_file_sha256") != (
+        expected_stage_input_file_sha256
+    ):
+        raise ValueError("mounted stage-input bytes differ from the frozen stage input")
+    expected_mounted_sha256 = {
+        **reviewed_code_sha256,
+        "stage-input.json": expected_stage_input_file_sha256,
+    }
+    if _exact_sha256_map(
+        execution_config_map.get("mounted_file_sha256"),
+        "staging execution mounted files",
+        set(expected_mounted_sha256),
+    ) != expected_mounted_sha256:
+        raise ValueError("inference staging mounted bytes differ from the stage input")
+    staged_composition = _mapping(staging_receipt.get("composition"), "staging receipt composition")
+    if staged_composition.get("policy") != (
+        "raw_post_weights_and_index_plus_exact_base_runtime_sidecars_v1"
+    ):
+        raise ValueError("unsupported inference bundle composition policy")
+    if staged_composition.get("tokenizer_equivalence_evidence_sha256") != (
+        stage_composition.get("tokenizer_equivalence_evidence_sha256")
+    ):
+        raise ValueError("staging used different tokenizer-equivalence evidence")
+    composed = _mapping(staged_composition.get("inspection"), "composed output inspection")
+    if _text(composed, "root") != expected_destination:
+        raise ValueError("composed output inspection names an unexpected destination")
+    if _sha256(composed, "weights_manifest_sha256") != raw_weights_sha256:
+        raise ValueError("composed output weights differ from the raw export")
+    if _sha256(composed, "tokenizer_manifest_sha256") != expected_tokenizer_manifest_sha256:
+        raise ValueError("composed tokenizer differs from the frozen base tokenizer")
+    if _sha256(composed, "chat_template_sha256") != expected_chat_template_sha256:
+        raise ValueError("composed chat template differs from the frozen base template")
+    if _sha256(composed, "config_sha256") != expected_config_sha256:
+        raise ValueError("composed model config differs from the frozen base config")
+    if _mapping(composed.get("sidecar_sha256"), "composed sidecar hashes") != dict(
+        expected_runtime_sidecar_sha256
+    ):
+        raise ValueError("composed runtime sidecars differ from the frozen base files")
+    for field in ("all_shards_present", "safetensors_load_passed", "parameter_count_matches"):
+        if composed.get(field) is not True:
+            raise ValueError(f"composed output verification {field} did not pass")
+    staged_destination = _mapping(staging_receipt.get("destination"), "staging destination")
+    if (
+        _text(staged_destination, "path") != expected_destination
+        or _text(staged_destination, "acceptance_receipt_path")
+        != f"{expected_destination}/{STAGING_ACCEPTANCE_RECEIPT}"
+        or staged_destination.get("payload_manifest_excludes")
+        != [STAGING_ACCEPTANCE_RECEIPT]
+        or _sha256(staged_destination, "payload_manifest_sha256")
+        != _sha256(composed, "files_manifest_sha256")
+        or not isinstance(staged_destination.get("payload_file_count"), int)
+        or staged_destination["payload_file_count"] < 1
+        or not isinstance(staged_destination.get("payload_total_bytes"), int)
+        or staged_destination["payload_total_bytes"] < 1
+        or staged_destination.get("atomic_transaction") != "directory_rename_noreplace_v1"
+        or staged_destination.get("atomic_promotion") is not True
+    ):
+        raise ValueError("staging receipt does not prove atomic promotion to the frozen path")
+
+    receipt = {
+        "schema": "cyber_sft_hf_export_v1",
+        "source_checkpoint": {
+            "uuid": _text(checkpoint, "uuid"),
+            "source_manifest_sha256": _selection_source_manifest(selection),
+        },
+        "output": {
+            "format": "safetensors",
+            "dtype": "bf16",
+            "source_path": expected_destination,
+            "weights_manifest_sha256": raw_weights_sha256,
+            "files_manifest_sha256": _sha256(composed, "files_manifest_sha256"),
+            "tokenizer_manifest_sha256": _sha256(composed, "tokenizer_manifest_sha256"),
+            "chat_template_sha256": _sha256(composed, "chat_template_sha256"),
+            "config_sha256": _sha256(composed, "config_sha256"),
+            "sidecar_sha256": copy.deepcopy(dict(composed["sidecar_sha256"])),
+        },
+        "conversion": {
+            "image": _text(export_run_observation, "trainer_image"),
+            "optimizer_steps": 0,
+            "run": copy.deepcopy(dict(observed_run)),
+            "resume_from": export_run_observation.get("resume_from"),
+            "num_steps": export_run_observation.get("num_steps"),
+            "hf_save_interval": export_run_observation.get("hf_save_interval"),
+            "export_request_receipt_sha256": request_digest,
+            "command_sha256": command_sha256,
+            "output_path": expected_raw_path,
+            "destination_preflight": copy.deepcopy(
+                expected_export_binding["destination_preflight"]
+            ),
+        },
+        "staging": {
+            "source_path": expected_raw_path,
+            "destination_path": expected_destination,
+            "image": staging_image,
+            "command_sha256": staging_command_sha256,
+            "source_manifest_sha256": raw_weights_sha256,
+            "destination_manifest_sha256": _sha256(composed, "weights_manifest_sha256"),
+            "byte_identical": True,
+            "acceptance_manifest_sha256": staging_digest,
+        },
+        "verification": {
+            "all_shards_present": True,
+            "safetensors_load_passed": True,
+            "parameter_count_matches": True,
+        },
+        "evidence": {
+            "export_run_observation_sha256": _sha256(export_run_observation, "observation_sha256"),
+            "export_filesystem_observation_sha256": export_observation_sha256,
+            "stage_input_sha256": stage_input_sha256,
+            "staging_receipt_sha256": staging_digest,
+        },
+    }
+    signed = _with_digest(receipt, "export_receipt_sha256")
+    validate_hf_export_receipt(
+        signed,
+        selection,
+        expected_tokenizer_manifest_sha256=expected_tokenizer_manifest_sha256,
+        expected_chat_template_sha256=expected_chat_template_sha256,
+        expected_config_sha256=expected_config_sha256,
+        expected_export_binding=expected_export_binding,
+        expected_runtime_sidecar_sha256=expected_runtime_sidecar_sha256,
+    )
+    return signed
 
 
 def derive_post_sft_registration(
