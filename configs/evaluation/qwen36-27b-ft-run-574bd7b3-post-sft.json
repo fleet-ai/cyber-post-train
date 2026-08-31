@@ -11,6 +11,26 @@
     "entrypoint_sha256": "sha256:f88435165af2bb65a41528aa7d82395431c234178289dba2c9b7fbe58a73024c",
     "selection_policy": "final_promoted_checkpoint_after_successful_run_v1"
   },
+  "source_checkpoint_evidence": {
+    "mode": "sfs_two_leg_checkpoint_pipeline_disabled_v1",
+    "checkpoint_api_rows_expected": 0,
+    "checkpoint_pipeline": {
+      "argocd_application": "checkpoint-pipeline",
+      "application_uid": "090b3861-71b8-42f5-b1bb-59ce4d540c99",
+      "sync_revision": "f756bd98b001a3655b57c97fe7f8e4371d244dc1",
+      "helm_values_sha256": "sha256:3c5c124863dc59e23127988d014d7c84d80cf7468c744b4cb327fdfd48cc3a1b",
+      "apply": false,
+      "archive_enabled": false,
+      "observed_at": "2026-08-31T16:16:51Z"
+    },
+    "requires_promoted_milestone_and_complete_shard_markers": true,
+    "requires_latest_step_match": true,
+    "structural_manifest_before_observed_at": "2026-08-31T16:18:01Z",
+    "structural_manifest_before_sha256": "sha256:30be9ac024970485206e1447955d86d0f56b7f480bb60804b939afc1894b3f8b",
+    "structural_manifest_file_count": 37,
+    "requires_equal_pre_post_structural_manifests": true,
+    "requires_full_file_sha256_manifest_after_conversion": true
+  },
   "base_model": {
     "repository": "Qwen/Qwen3.6-27B",
     "revision": "6a9e13bd6fc8f0983b9b99948120bc37f49c13e9",

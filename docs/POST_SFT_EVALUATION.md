@@ -108,6 +108,23 @@ The promoted checkpoint row must also retain the API's exact `sfs_path` and `sfs
 If it has already been removed from SFS, stage the archived checkpoint through the normal API and
 recapture the row; the export renderer refuses to invent a path or proceed while it is unavailable.
 
+For `ft-run-574bd7b3`, the deployed checkpoint pipeline was explicitly dry-run-only
+(`apply: false`, archive disabled), so the successful run has an expected empty checkpoint API
+index even though its final SFS checkpoint is complete. The plan binds that exact Argo CD
+application UID, sync commit, and Helm-values digest. Use `freeze-sfs` only after proving the SFS
+checkpoint has `.promoted`, `.milestone`, every expected shard-completion marker, and the run's
+latest step. Its cheap path/size/mtime structural manifest must be identical before and after the
+conversion, and a serialized post-conversion pass must SHA-256 every checkpoint file. This is the
+second fail-closed selection leg; it is not permission to mutate the checkpoint index or archive.
+
+```bash
+uv run python -m training.post_sft_cli freeze-sfs \
+  --plan configs/evaluation/qwen36-27b-ft-run-574bd7b3-post-sft.json \
+  --run-observation /restricted/ft-run-574bd7b3-run.json \
+  --sfs-observation /restricted/ft-run-574bd7b3-sfs.json \
+  --output /restricted/ft-run-574bd7b3-selection.json
+```
+
 First render the review-only export request:
 
 ```bash

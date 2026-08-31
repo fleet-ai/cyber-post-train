@@ -13,6 +13,7 @@ from training.post_sft import (
     derive_post_sft_registration,
     derive_webexploit_config,
     freeze_final_promoted_checkpoint,
+    freeze_final_promoted_sfs_checkpoint,
     validate_selection_receipt,
 )
 
@@ -107,7 +108,9 @@ def _export(selection):
         "schema": "cyber_sft_hf_export_v1",
         "source_checkpoint": {
             "uuid": selection["checkpoint"]["uuid"],
-            "archive_manifest_sha256": selection["checkpoint"]["archive_manifest_sha256"],
+            "source_manifest_sha256": selection["checkpoint"].get(
+                "source_manifest_sha256", selection["checkpoint"].get("archive_manifest_sha256")
+            ),
         },
         "output": {
             "format": "safetensors",
@@ -195,6 +198,84 @@ def test_selection_receipt_rejects_tampering():
     selection["checkpoint"]["step"] = 317
     with pytest.raises(ValueError, match="UUID does not match"):
         validate_selection_receipt(selection)
+
+
+def test_sfs_checkpoint_selection_requires_two_leg_stability_and_full_hash():
+    run, _ = _selection_inputs()
+    pipeline = {
+        "argocd_application": "checkpoint-pipeline",
+        "application_uid": "app-uid",
+        "sync_revision": "a" * 40,
+        "helm_values_sha256": "sha256:" + "b" * 64,
+        "apply": False,
+        "archive_enabled": False,
+        "observed_at": "2026-08-31T16:16:51Z",
+    }
+    observation = {
+        "schema": "fleet_sft_sfs_checkpoint_observation_v1",
+        "run_name": RUN,
+        "step": 318,
+        "sfs_path": f"/mnt/sfs/checkpoints/{RUN}/global_step_318",
+        "api_checkpoint_rows": 0,
+        "checkpoint_pipeline": pipeline,
+        "markers": {
+            "promoted": True,
+            "milestone": True,
+            "expected_shards": 1,
+            "complete_shards": 1,
+            "latest_step": 318,
+        },
+        "structural_manifest_before_sha256": "sha256:" + "c" * 64,
+        "structural_manifest_after_sha256": "sha256:" + "c" * 64,
+        "full_file_manifest_sha256": "sha256:" + "d" * 64,
+        "full_manifest_file_count": 37,
+        "full_manifest_total_bytes": 302_000_000_000,
+    }
+    receipt = freeze_final_promoted_sfs_checkpoint(
+        run,
+        observation,
+        expected_run_name=RUN,
+        expected_run_config_sha256=CONFIG_SHA,
+        expected_rayjob_uid="uid-1",
+        expected_trainer_image=IMAGE,
+        expected_entrypoint_sha256=ENTRYPOINT_SHA,
+        expected_pipeline=pipeline,
+        expected_structural_manifest_before_sha256="sha256:" + "c" * 64,
+    )
+    assert receipt["schema"] == "cyber_sft_checkpoint_selection_v2"
+    assert receipt["checkpoint"]["source_manifest_kind"] == "sfs_sha256_all_files_v1"
+    assert validate_selection_receipt(receipt) == receipt["selection_receipt_sha256"]
+
+    changed = copy.deepcopy(observation)
+    changed["structural_manifest_after_sha256"] = "sha256:" + "e" * 64
+    with pytest.raises(ValueError, match="structure changed"):
+        freeze_final_promoted_sfs_checkpoint(
+            run,
+            changed,
+            expected_run_name=RUN,
+            expected_run_config_sha256=CONFIG_SHA,
+            expected_rayjob_uid="uid-1",
+            expected_trainer_image=IMAGE,
+            expected_entrypoint_sha256=ENTRYPOINT_SHA,
+            expected_pipeline=pipeline,
+            expected_structural_manifest_before_sha256="sha256:" + "c" * 64,
+        )
+
+    unindexed_without_explanation = copy.deepcopy(observation)
+    unindexed_without_explanation["checkpoint_pipeline"]["apply"] = True
+    expected = {**pipeline, "apply": True}
+    with pytest.raises(ValueError, match="empty API index is not explained"):
+        freeze_final_promoted_sfs_checkpoint(
+            run,
+            unindexed_without_explanation,
+            expected_run_name=RUN,
+            expected_run_config_sha256=CONFIG_SHA,
+            expected_rayjob_uid="uid-1",
+            expected_trainer_image=IMAGE,
+            expected_entrypoint_sha256=ENTRYPOINT_SHA,
+            expected_pipeline=expected,
+            expected_structural_manifest_before_sha256="sha256:" + "c" * 64,
+        )
 
 
 def test_checkpoint_selection_rejects_unplanned_entrypoint():

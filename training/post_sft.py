@@ -126,7 +126,8 @@ def _validate_export_binding(
 def validate_selection_receipt(selection: Mapping[str, Any]) -> str:
     """Validate the selected checkpoint's complete identity before any downstream render."""
 
-    if selection.get("schema") != "cyber_sft_checkpoint_selection_v1":
+    schema = selection.get("schema")
+    if schema not in {"cyber_sft_checkpoint_selection_v1", "cyber_sft_checkpoint_selection_v2"}:
         raise ValueError("unsupported checkpoint selection receipt schema")
     if selection.get("selection_policy") != "final_promoted_checkpoint_after_successful_run_v1":
         raise ValueError("unsupported checkpoint selection policy")
@@ -144,7 +145,45 @@ def validate_selection_receipt(selection: Mapping[str, Any]) -> str:
         raise ValueError("selected checkpoint Fleet model does not match run and step")
     if checkpoint.get("complete") is not True or checkpoint.get("promoted") is not True:
         raise ValueError("selected checkpoint must be complete and promoted")
-    _sha256(checkpoint, "archive_manifest_sha256")
+    if schema == "cyber_sft_checkpoint_selection_v1":
+        _sha256(checkpoint, "archive_manifest_sha256")
+    else:
+        _sha256(checkpoint, "source_manifest_sha256")
+        if checkpoint.get("source_manifest_kind") != "sfs_sha256_all_files_v1":
+            raise ValueError("SFS selection must hash every checkpoint file")
+        evidence = _mapping(checkpoint.get("sfs_evidence"), "selection.checkpoint.sfs_evidence")
+        if evidence.get("api_checkpoint_rows") != 0:
+            raise ValueError("SFS selection requires the observed empty checkpoint API index")
+        pipeline = _mapping(evidence.get("checkpoint_pipeline"), "checkpoint pipeline evidence")
+        _text(pipeline, "application_uid")
+        if not re.fullmatch(r"[0-9a-f]{40}", _text(pipeline, "sync_revision")):
+            raise ValueError("checkpoint pipeline revision must be an exact Git commit")
+        _sha256(pipeline, "helm_values_sha256")
+        _text(pipeline, "observed_at")
+        if pipeline.get("apply") is not False or pipeline.get("archive_enabled") is not False:
+            raise ValueError("empty API index is not explained by a disabled checkpoint pipeline")
+        markers = _mapping(evidence.get("markers"), "SFS checkpoint markers")
+        for field in ("promoted", "milestone"):
+            if markers.get(field) is not True:
+                raise ValueError(f"SFS checkpoint marker {field} is missing")
+        expected_shards = markers.get("expected_shards")
+        complete_shards = markers.get("complete_shards")
+        if not isinstance(expected_shards, int) or expected_shards < 1:
+            raise ValueError("SFS checkpoint expected_shards must be positive")
+        if complete_shards != expected_shards:
+            raise ValueError("SFS checkpoint shard completion markers are incomplete")
+        if markers.get("latest_step") != step:
+            raise ValueError("SFS checkpoint is not the run's latest step")
+        before = _sha256(evidence, "structural_manifest_before_sha256")
+        after = _sha256(evidence, "structural_manifest_after_sha256")
+        if before != after:
+            raise ValueError("SFS checkpoint structure changed during conversion")
+        file_count = evidence.get("full_manifest_file_count")
+        total_bytes = evidence.get("full_manifest_total_bytes")
+        if not isinstance(file_count, int) or file_count < 1:
+            raise ValueError("SFS full manifest file count must be positive")
+        if not isinstance(total_bytes, int) or total_bytes < 1:
+            raise ValueError("SFS full manifest byte count must be positive")
     sfs_path = _text(checkpoint, "sfs_path")
     if sfs_path != f"/mnt/sfs/checkpoints/{run_name}/global_step_{step}":
         raise ValueError("selected checkpoint SFS path does not match run and step")
@@ -152,6 +191,13 @@ def validate_selection_receipt(selection: Mapping[str, Any]) -> str:
     _sha256(run, "entrypoint_sha256")
     _digest_pinned_image(run, "trainer_image")
     return _validate_embedded_digest(selection, "selection_receipt_sha256")
+
+
+def _selection_source_manifest(selection: Mapping[str, Any]) -> str:
+    checkpoint = _mapping(selection.get("checkpoint"), "selection.checkpoint")
+    if selection.get("schema") == "cyber_sft_checkpoint_selection_v2":
+        return _sha256(checkpoint, "source_manifest_sha256")
+    return _sha256(checkpoint, "archive_manifest_sha256")
 
 
 def build_zero_step_hf_export_request(
@@ -228,7 +274,7 @@ def build_zero_step_hf_export_request(
         "source_checkpoint": {
             "path": source_path,
             "uuid": checkpoint_id,
-            "archive_manifest_sha256": _sha256(checkpoint, "archive_manifest_sha256"),
+            "source_manifest_sha256": _selection_source_manifest(selection),
         },
         "expected_output": {
             "path": expected_output_path,
@@ -347,6 +393,101 @@ def freeze_final_promoted_checkpoint(
     return _with_digest(receipt, "selection_receipt_sha256")
 
 
+def freeze_final_promoted_sfs_checkpoint(
+    run: Mapping[str, Any],
+    observation: Mapping[str, Any],
+    *,
+    expected_run_name: str,
+    expected_run_config_sha256: str,
+    expected_rayjob_uid: str,
+    expected_trainer_image: str,
+    expected_entrypoint_sha256: str,
+    expected_pipeline: Mapping[str, Any],
+    expected_structural_manifest_before_sha256: str,
+) -> dict[str, Any]:
+    """Freeze a full-hash SFS checkpoint when the deployed index/archive pipeline was disabled."""
+
+    if run.get("schema") != "fleet_training_run_observation_v1":
+        raise ValueError("unsupported run observation schema")
+    if _text(run, "run_name") != expected_run_name or _text(run, "status").lower() != "succeeded":
+        raise ValueError("training run identity/status does not match the successful planned run")
+    if _text(run, "rayjob_uid") != expected_rayjob_uid:
+        raise ValueError("RayJob UID differs from the predeclared run")
+    if _sha256(run, "run_config_sha256") != expected_run_config_sha256:
+        raise ValueError("training run config digest differs from the predeclared run")
+    if _digest_pinned_image(run, "trainer_image") != expected_trainer_image:
+        raise ValueError("trainer image differs from the observed immutable image")
+    if _sha256(run, "entrypoint_sha256") != expected_entrypoint_sha256:
+        raise ValueError("RayJob entrypoint digest differs from the predeclared run")
+    if observation.get("schema") != "fleet_sft_sfs_checkpoint_observation_v1":
+        raise ValueError("unsupported SFS checkpoint observation schema")
+    if _text(observation, "run_name") != expected_run_name:
+        raise ValueError("SFS checkpoint observation names a different run")
+    step = observation.get("step")
+    if not isinstance(step, int) or step < 1 or run.get("latest_checkpoint_step") != step:
+        raise ValueError("SFS checkpoint is not the run's final step")
+    expected_path = f"/mnt/sfs/checkpoints/{expected_run_name}/global_step_{step}"
+    if _text(observation, "sfs_path") != expected_path:
+        raise ValueError("SFS checkpoint observation has an unexpected path")
+    pipeline = _mapping(observation.get("checkpoint_pipeline"), "checkpoint pipeline observation")
+    for field in (
+        "argocd_application",
+        "application_uid",
+        "sync_revision",
+        "helm_values_sha256",
+        "apply",
+        "archive_enabled",
+        "observed_at",
+    ):
+        if pipeline.get(field) != expected_pipeline.get(field):
+            raise ValueError(f"checkpoint pipeline {field} differs from the frozen plan")
+    evidence = {
+        "api_checkpoint_rows": observation.get("api_checkpoint_rows"),
+        "checkpoint_pipeline": copy.deepcopy(dict(pipeline)),
+        "markers": copy.deepcopy(observation.get("markers")),
+        "structural_manifest_before_sha256": observation.get("structural_manifest_before_sha256"),
+        "structural_manifest_after_sha256": observation.get("structural_manifest_after_sha256"),
+        "full_manifest_file_count": observation.get("full_manifest_file_count"),
+        "full_manifest_total_bytes": observation.get("full_manifest_total_bytes"),
+    }
+    if _sha256(observation, "structural_manifest_before_sha256") != (
+        expected_structural_manifest_before_sha256
+    ):
+        raise ValueError("SFS pre-conversion structural manifest differs from the frozen plan")
+    receipt = {
+        "schema": "cyber_sft_checkpoint_selection_v2",
+        "selection_policy": "final_promoted_checkpoint_after_successful_run_v1",
+        "run": {
+            "name": expected_run_name,
+            "terminal_status": "succeeded",
+            "rayjob_uid": expected_rayjob_uid,
+            "run_config_sha256": expected_run_config_sha256,
+            "trainer_image": expected_trainer_image,
+            "entrypoint_sha256": expected_entrypoint_sha256,
+        },
+        "checkpoint": {
+            "step": step,
+            "uuid": checkpoint_uuid(expected_run_name, step),
+            "fleet_model": f"fleet/{expected_run_name}-step-{step}",
+            "source_manifest_sha256": _sha256(observation, "full_file_manifest_sha256"),
+            "source_manifest_kind": "sfs_sha256_all_files_v1",
+            "sfs_path": expected_path,
+            "sfs_available": True,
+            "complete": True,
+            "promoted": True,
+            "sfs_evidence": evidence,
+        },
+        "selection_excludes": [
+            "webexploitbench_results",
+            "fleet_test_results",
+            "intermediate_dev_loss_ranking",
+        ],
+    }
+    signed = _with_digest(receipt, "selection_receipt_sha256")
+    validate_selection_receipt(signed)
+    return signed
+
+
 def validate_hf_export_receipt(
     export: Mapping[str, Any],
     selection: Mapping[str, Any],
@@ -364,8 +505,8 @@ def validate_hf_export_receipt(
     source = _mapping(export.get("source_checkpoint"), "export.source_checkpoint")
     if _text(source, "uuid") != _text(checkpoint, "uuid"):
         raise ValueError("HF export came from a different checkpoint UUID")
-    if _sha256(source, "archive_manifest_sha256") != _sha256(checkpoint, "archive_manifest_sha256"):
-        raise ValueError("HF export archive manifest differs from the selected checkpoint")
+    if _sha256(source, "source_manifest_sha256") != _selection_source_manifest(selection):
+        raise ValueError("HF export source manifest differs from the selected checkpoint")
 
     output = _mapping(export.get("output"), "export.output")
     if _text(output, "format") != "safetensors":

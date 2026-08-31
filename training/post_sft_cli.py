@@ -18,6 +18,7 @@ from .post_sft import (
     derive_post_sft_registration,
     derive_webexploit_config,
     freeze_final_promoted_checkpoint,
+    freeze_final_promoted_sfs_checkpoint,
 )
 
 app = typer.Typer(no_args_is_help=True, pretty_exceptions_enable=False)
@@ -67,6 +68,34 @@ def freeze(
         expected_rayjob_uid=str(expected["rayjob_uid"]),
         expected_trainer_image=str(expected["trainer_image"]),
         expected_entrypoint_sha256=str(expected["entrypoint_sha256"]),
+    )
+    atomic_write_json(output, receipt, private=True)
+    typer.echo(str(output))
+
+
+@app.command("freeze-sfs")
+def freeze_sfs(
+    plan_path: Annotated[Path, typer.Option("--plan")],
+    run_observation: Annotated[Path, typer.Option()],
+    sfs_observation: Annotated[Path, typer.Option()],
+    output: Annotated[Path, typer.Option()],
+) -> None:
+    """Select the final promoted SFS checkpoint when the API index was intentionally disabled."""
+
+    plan = _plan(plan_path)
+    expected = plan["run"]
+    receipt = freeze_final_promoted_sfs_checkpoint(
+        _read(run_observation),
+        _read(sfs_observation),
+        expected_run_name=str(expected["name"]),
+        expected_run_config_sha256=str(expected["config_sha256"]),
+        expected_rayjob_uid=str(expected["rayjob_uid"]),
+        expected_trainer_image=str(expected["trainer_image"]),
+        expected_entrypoint_sha256=str(expected["entrypoint_sha256"]),
+        expected_pipeline=plan["source_checkpoint_evidence"]["checkpoint_pipeline"],
+        expected_structural_manifest_before_sha256=str(
+            plan["source_checkpoint_evidence"]["structural_manifest_before_sha256"]
+        ),
     )
     atomic_write_json(output, receipt, private=True)
     typer.echo(str(output))
