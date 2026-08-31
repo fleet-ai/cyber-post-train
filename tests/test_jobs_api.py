@@ -31,8 +31,8 @@ def _rl_config(*, cap: str | None = "130") -> dict:
 
 def _tool_evidence() -> dict:
     bindings = [
-        {"task_version_id": "train-version", "tools": ["submit_report", "bash"]},
-        {"task_version_id": "dev-version", "tools": ["submit_report", "bash"]},
+        {"task_version_id": "train-version", "tools": ["bash", "submit_report"]},
+        {"task_version_id": "dev-version", "tools": ["bash", "submit_report"]},
     ]
     return {
         "schema": RL_TOOL_EVIDENCE_SCHEMA,
@@ -172,7 +172,21 @@ class JobsAPIClientTests(unittest.TestCase):
         preview["task_tool_allowlist_evidence"]["bindings_sha256"] = digest_json(bindings)
         blockers = rl_paid_launch_blockers(_rl_config(), preview)
         self.assertEqual(len(blockers), 1)
-        self.assertIn("exactly bash and submit_report", blockers[0])
+        self.assertIn("exactly ordered", blockers[0])
+
+    def test_paid_cyber_rl_rejects_reversed_cyber_tool_order(self):
+        preview = _rl_preview()
+        preview["task_tool_allowlist_evidence"]["bindings"][0]["tools"] = [
+            "submit_report",
+            "bash",
+        ]
+        bindings = preview["task_tool_allowlist_evidence"]["bindings"]
+        preview["task_tool_allowlist_evidence"]["bindings_sha256"] = digest_json(bindings)
+
+        blockers = rl_paid_launch_blockers(_rl_config(), preview)
+
+        self.assertEqual(len(blockers), 1)
+        self.assertIn("exactly ordered", blockers[0])
 
     def test_no_eval_arm_requires_tools_only_for_exact_training_versions(self):
         config = _rl_config()
