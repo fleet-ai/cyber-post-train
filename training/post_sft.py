@@ -70,6 +70,59 @@ def checkpoint_uuid(run_name: str, step: int) -> str:
     return str(uuid.uuid5(CHECKPOINT_NAMESPACE, f"{run_name}/{step}"))
 
 
+def _validate_export_binding(
+    binding: Mapping[str, Any], selection: Mapping[str, Any]
+) -> tuple[Mapping[str, Any], str]:
+    """Bind the one predeclared zero-step export job and its collision-free destination."""
+
+    if binding.get("strategy") != "resume_final_checkpoint_with_zero_optimizer_steps_v1":
+        raise ValueError("unsupported export strategy")
+    run = _mapping(selection.get("run"), "selection.run")
+    checkpoint = _mapping(selection.get("checkpoint"), "selection.checkpoint")
+    source_run = _text(run, "name")
+    step = checkpoint.get("step")
+    source_path = _text(checkpoint, "sfs_path")
+    if _text(binding, "source_run_name") != source_run:
+        raise ValueError("export binding names a different source run")
+    if binding.get("source_global_step") != step:
+        raise ValueError("export binding names a different source global step")
+    if _text(binding, "source_checkpoint_path") != source_path:
+        raise ValueError("export binding names a different source checkpoint path")
+    output_root = _text(binding, "output_root")
+    expected_output_path = f"{output_root}/global_step_{step}/policy"
+    if _text(binding, "expected_output_path") != expected_output_path:
+        raise ValueError("export binding output path is inconsistent with its output root")
+
+    export_run = _mapping(binding.get("export_run"), "export binding export_run")
+    _text(export_run, "name")
+    _text(export_run, "run_id")
+    _text(export_run, "rayjob_uid")
+    _text(export_run, "trainer_version_id")
+    _digest_pinned_image(export_run, "trainer_image")
+    if _text(export_run, "resume_from") != source_path:
+        raise ValueError("export run does not resume from the selected checkpoint")
+    if export_run.get("num_steps") != step:
+        raise ValueError("export run num_steps must equal the selected resume step")
+    if export_run.get("hf_save_interval") != step + 1:
+        raise ValueError("export run save interval must be one past the selected step")
+    if export_run.get("optimizer_steps_expected") != 0:
+        raise ValueError("export run must predeclare zero optimizer steps")
+
+    preflight = _mapping(binding.get("destination_preflight"), "export destination preflight")
+    _text(preflight, "observed_at")
+    if preflight.get("state") != "absent":
+        raise ValueError("export destination was not proven absent before submission")
+    matches = preflight.get("matching_rayjobs")
+    if not isinstance(matches, list) or len(matches) != 1 or not isinstance(matches[0], Mapping):
+        raise ValueError("export destination must be uniquely assigned to one RayJob")
+    match = matches[0]
+    if _text(match, "name") != _text(export_run, "name") or _text(match, "uid") != _text(
+        export_run, "rayjob_uid"
+    ):
+        raise ValueError("export destination is assigned to a different RayJob")
+    return export_run, expected_output_path
+
+
 def validate_selection_receipt(selection: Mapping[str, Any]) -> str:
     """Validate the selected checkpoint's complete identity before any downstream render."""
 
@@ -107,6 +160,7 @@ def build_zero_step_hf_export_request(
     *,
     expected_trainer_version_id: str,
     expected_trainer_image: str,
+    expected_export_binding: Mapping[str, Any],
 ) -> dict[str, Any]:
     """Render a review-only SFT request that resumes at its terminal step and only exports.
 
@@ -125,6 +179,11 @@ def build_zero_step_hf_export_request(
     step = checkpoint["step"]
     source_run = _text(run, "name")
     checkpoint_id = _text(checkpoint, "uuid")
+    export_run, expected_output_path = _validate_export_binding(expected_export_binding, selection)
+    if _text(export_run, "trainer_version_id") != expected_trainer_version_id:
+        raise ValueError("export binding trainer version differs from the planned exporter")
+    if _text(export_run, "trainer_image") != expected_trainer_image:
+        raise ValueError("export binding trainer image differs from the planned exporter")
 
     request = copy.deepcopy(dict(sft_config))
     if request.get("kind") != "sft":
@@ -142,16 +201,14 @@ def build_zero_step_hf_export_request(
     if not isinstance(args, list) or not all(isinstance(item, str) for item in args):
         raise ValueError("SFT trainer args must be an array of strings")
     reserved = {"resume_from", "hf_save_interval", "export_path", "num_steps", "num_epochs"}
-    collisions = sorted(
-        item.split("=", 1)[0] for item in args if item.split("=", 1)[0] in reserved
-    )
+    collisions = sorted(item.split("=", 1)[0] for item in args if item.split("=", 1)[0] in reserved)
     if collisions:
         raise ValueError("SFT trainer args already set export-owned keys: " + ", ".join(collisions))
 
     source_path = _text(checkpoint, "sfs_path")
     if checkpoint.get("sfs_available") is not True:
         raise ValueError("selected checkpoint must be staged on SFS before rendering export")
-    export_root = f"/mnt/sfs/exports/cyber-sft/{source_run}/{checkpoint_id}"
+    export_root = _text(expected_export_binding, "output_root")
     request.pop("name", None)
     request["title"] = f"Chris cyber zero-step HF export of {source_run} step {step}"
     request["sft"]["num_epochs"] = None
@@ -174,7 +231,7 @@ def build_zero_step_hf_export_request(
             "archive_manifest_sha256": _sha256(checkpoint, "archive_manifest_sha256"),
         },
         "expected_output": {
-            "path": f"{export_root}/global_step_{step}/policy",
+            "path": expected_output_path,
             "format": "huggingface_safetensors",
             "dtype": "bf16",
         },
@@ -183,6 +240,8 @@ def build_zero_step_hf_export_request(
             "image": expected_trainer_image,
             "skyrl_source_commit": "f5bc3b78dfddfb352870d5d7430cd226e5785838",
         },
+        "export_run": copy.deepcopy(dict(export_run)),
+        "destination_preflight": copy.deepcopy(expected_export_binding["destination_preflight"]),
         "proof_obligations": {
             "source_checkpoint_present_before_submit": True,
             "rendered_entrypoint_resume_step_equals_num_steps": True,
@@ -294,6 +353,7 @@ def validate_hf_export_receipt(
     *,
     expected_tokenizer_manifest_sha256: str,
     expected_chat_template_sha256: str,
+    expected_export_binding: Mapping[str, Any],
 ) -> str:
     """Validate a serving-format export without trusting a directory name as identity."""
 
@@ -304,9 +364,7 @@ def validate_hf_export_receipt(
     source = _mapping(export.get("source_checkpoint"), "export.source_checkpoint")
     if _text(source, "uuid") != _text(checkpoint, "uuid"):
         raise ValueError("HF export came from a different checkpoint UUID")
-    if _sha256(source, "archive_manifest_sha256") != _sha256(
-        checkpoint, "archive_manifest_sha256"
-    ):
+    if _sha256(source, "archive_manifest_sha256") != _sha256(checkpoint, "archive_manifest_sha256"):
         raise ValueError("HF export archive manifest differs from the selected checkpoint")
 
     output = _mapping(export.get("output"), "export.output")
@@ -318,26 +376,46 @@ def validate_hf_export_receipt(
     if not source_path.startswith("/models/"):
         raise ValueError("HF export source_path must be below /models")
     weights_manifest_sha256 = _sha256(output, "weights_manifest_sha256")
+    _sha256(output, "files_manifest_sha256")
     if _sha256(output, "tokenizer_manifest_sha256") != expected_tokenizer_manifest_sha256:
         raise ValueError("HF export tokenizer differs from the base checkpoint")
     if _sha256(output, "chat_template_sha256") != expected_chat_template_sha256:
         raise ValueError("HF export chat template differs from the base checkpoint")
 
     conversion = _mapping(export.get("conversion"), "export.conversion")
+    export_run, expected_conversion_output = _validate_export_binding(
+        expected_export_binding, selection
+    )
     conversion_image = _digest_pinned_image(conversion, "image")
     selected_run = _mapping(selection.get("run"), "selection.run")
     if conversion_image != _text(selected_run, "trainer_image"):
         raise ValueError("HF export must use the selected run's exact trainer image")
     if conversion.get("optimizer_steps") != 0:
         raise ValueError("HF export run must execute zero optimizer steps")
+    observed_run = _mapping(conversion.get("run"), "export.conversion.run")
+    for observed_field, expected_field in (
+        ("name", "name"),
+        ("run_id", "run_id"),
+        ("rayjob_uid", "rayjob_uid"),
+        ("trainer_version_id", "trainer_version_id"),
+    ):
+        if _text(observed_run, observed_field) != _text(export_run, expected_field):
+            raise ValueError(f"HF export run {observed_field} differs from the predeclared job")
+    if conversion_image != _text(export_run, "trainer_image"):
+        raise ValueError("HF export image differs from the predeclared exporter image")
+    if _text(conversion, "resume_from") != _text(export_run, "resume_from"):
+        raise ValueError("HF export resume path differs from the predeclared source")
+    if conversion.get("num_steps") != export_run.get("num_steps"):
+        raise ValueError("HF export num_steps differs from the predeclared zero-step run")
+    if conversion.get("hf_save_interval") != export_run.get("hf_save_interval"):
+        raise ValueError("HF export save interval differs from the predeclared run")
+    destination_preflight = _mapping(
+        conversion.get("destination_preflight"), "export.conversion.destination_preflight"
+    )
+    if destination_preflight != expected_export_binding.get("destination_preflight"):
+        raise ValueError("HF export destination preflight differs from the frozen collision check")
     _sha256(conversion, "export_request_receipt_sha256")
     _sha256(conversion, "command_sha256")
-    run = _mapping(selection.get("run"), "selection.run")
-    step = checkpoint.get("step")
-    expected_conversion_output = (
-        f"/mnt/sfs/exports/cyber-sft/{_text(run, 'name')}/{_text(checkpoint, 'uuid')}"
-        f"/global_step_{step}/policy"
-    )
     if _text(conversion, "output_path") != expected_conversion_output:
         raise ValueError("HF conversion output path differs from the selected checkpoint")
 
@@ -370,6 +448,7 @@ def derive_post_sft_registration(
     *,
     expected_tokenizer_manifest_sha256: str,
     expected_chat_template_sha256: str,
+    expected_export_binding: Mapping[str, Any],
 ) -> dict[str, Any]:
     """Clone the baseline serving contract, changing only checkpoint identity and paths."""
 
@@ -378,6 +457,7 @@ def derive_post_sft_registration(
         selection,
         expected_tokenizer_manifest_sha256=expected_tokenizer_manifest_sha256,
         expected_chat_template_sha256=expected_chat_template_sha256,
+        expected_export_binding=expected_export_binding,
     )
     base = copy.deepcopy(dict(base_registration))
     spec = _mapping(base.get("spec"), "base registration spec")
@@ -472,8 +552,8 @@ def build_fleet_test_holdout_receipt(
     if not isinstance(tasks, list):
         raise ValueError("Fleet split manifest tasks must be an array")
     test_rows = [row for row in tasks if isinstance(row, Mapping) and row.get("split") == "test"]
-    expected_test = _mapping(split_manifest.get("counts"), "split counts").get("splits", {}).get(
-        "test"
+    expected_test = (
+        _mapping(split_manifest.get("counts"), "split counts").get("splits", {}).get("test")
     )
     if len(test_rows) != expected_test or len(test_rows) != 20:
         raise ValueError("Fleet test split must contain exactly the declared 20 tasks")

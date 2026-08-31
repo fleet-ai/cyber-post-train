@@ -125,6 +125,15 @@ and require `resume_from=.../global_step_N` and `num_steps=N`. The run must repo
 steps. A post-export staging step is still needed because training SFS and the inference `/models`
 PVC are different filesystems.
 
+For this study, the predeclared export is uniquely bound in the plan to RayJob
+`ft-run-29f2bedf` (UID `51957fb6-c8c5-4e72-ab1b-8ec80e38e68b`) and output root
+`/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-v1`. A read-only preflight at
+`2026-08-31T16:05:07Z` proved that destination absent and found exactly that one RayJob referring
+to it. The downstream receipt must repeat the exact run id, RayJob identity, trainer version and
+digest-pinned image, resume path, step/save settings, collision preflight, output path, and output
+file/weight/tokenizer/chat-template hashes. Any mismatch is a hard stop; do not reinterpret a
+different directory as this export.
+
 After the run and inference-staging rail emit one digested `cyber_sft_hf_export_v1` receipt, render
 all paired evaluation inputs. The receipt must separately identify the trainer conversion and the
 digest-pinned staging action; a model merely appearing under `/models` is not provenance.
