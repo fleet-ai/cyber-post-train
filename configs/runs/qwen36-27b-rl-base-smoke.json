@@ -58,7 +58,11 @@
     "stop_after_evals": 2
   },
   "trainer": {
-    "trainer_version_id": "b4a49402-5e7f-5f94-a5ff-980126d78390"
+    "trainer_version_id": "b4a49402-5e7f-5f94-a5ff-980126d78390",
+    "env": {
+      "FLA_CACHE_MODE": "default",
+      "FLA_CONFIG_DIR": "/mnt/sfs/jobs/chris-q36-fla-b300-v1/fla-config-2166f41a"
+    }
   },
   "rollout": {
     "harness": "native",

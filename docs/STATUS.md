@@ -65,12 +65,19 @@
   `CUDA: misaligned address`. It produced zero optimizer steps and zero
   checkpoints. Its config digest is
   `sha256:ff90aef21013b0ea68bbadf5be8df43dc08297d9a830ca7a9601663c36011440`.
-  A one-GPU, no-secret diagnostic job, `chris-q36-fla-b300-v1`, now tests six
+  A one-GPU, no-secret diagnostic job, `chris-q36-fla-b300-v1`, tested six
   explicit Triton launch configurations against the exact Qwen gated-delta
   tensor shape in the same trainer image. Each candidate runs in a fresh
-  process because a CUDA address fault poisons its process context. The probe
-  is queued normally through `training-lq`; it does not preempt or modify any
-  other workload. The full SFT request remains locked.
+  process because a CUDA address fault poisons its process context. All six
+  candidates passed on an NVIDIA B300 with the exact FLA 0.5.2 / Torch 2.11 /
+  Triton 3.6 stack. This isolates the failure to unsafe autotuner benchmarking,
+  rather than the selected kernel invocation. Conservative config `2 warps / 4
+  stages` is now content-hashed at
+  `sha256:2166f41ace1a98ec71e623afbb45406324a36a77c9dd13896c95246c605aa143`
+  and staged read-only by convention on SFS. Successor gate `ft-run-b786dd74`
+  injects that exact directory with FLA's `default` cache mode, bypassing
+  autotuning only for this kernel; it is initializing through `training-lq`.
+  The full SFT request remains locked.
 - The RL intent-to-treat split remains 130 train / 10 dev / 20 untouched test.
   One historical train version is archived and server-unrunnable, so an explicit
   signed as-treated request contains 129 train and 10 dev tasks. That exact
