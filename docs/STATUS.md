@@ -11,6 +11,17 @@
   `a62dd51f-a52b-4941-8207-4679e4b25b51`: 1,265 sessions over 160 exact task
   lineages, including 587 verified successes. The deterministic task split is
   130 train / 10 dev / 20 test; no task lineage crosses a split.
+- The opt-in Torch gated-delta trainer is Ready as version
+  `4b4dc57c-c7dc-5562-bbdd-9e1d6764ede0`, image
+  `q36-torchgdn-6db8d0c9` at digest
+  `sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4`.
+  SFT gate `ft-run-0b877f30` is the first exact Qwen3.6/B300 run to complete a
+  BF16 forward/backward (48.52 s), optimizer step (10.07 s), full sharded
+  checkpoint, and post-step evaluation. Its held-out loss moved from 0.9575 to
+  0.9425 and the RayJob finished `SUCCEEDED`. Full one-epoch SFT
+  `ft-run-574bd7b3` is queued. RL compatibility run `ft-run-16d0522e` is live;
+  matched-policy/reference successor `ft-run-3a82f8cc` is queued so both sides
+  of the KL comparison use the same Torch operator path.
 - The live Fleet Training API model catalog resolves the staged base as
   `qwen3.6-27b`. Typed runs now use the direct queue-aware Jobs API at
   `https://api.ft.flt.build`, which renders through the server's authoritative
