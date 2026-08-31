@@ -88,7 +88,7 @@
   },
   "launch_blockers": [
     "Build and register a trainer image containing the reviewed local Theseus changes.",
-    "Training API preview must prove metadata.tools is exactly the set {bash, submit_report} for every selected immutable task version.",
+    "Training API preview must prove metadata.tools is exactly the ordered list [bash, submit_report] for every selected immutable task version.",
     "Both arms must runtime-discover exactly two tool schemas and produce identical canonical and per-tool schema hashes.",
     "A fixed one-call bash fixture must render to identical Qwen prompt token IDs through the first tool result in both arms; schema equality alone does not prove protocol equality.",
     "Agent Runtime must prove that its model route resolves to the exact frozen checkpoint, tokenizer and chat template.",
