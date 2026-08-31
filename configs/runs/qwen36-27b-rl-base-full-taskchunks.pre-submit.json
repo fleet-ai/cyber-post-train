@@ -1,0 +1,101 @@
+{
+  "schema": "fleet_training_pre_submit_receipt_v1",
+  "checked_at": "2026-08-31T16:46:27.257584+00:00",
+  "submission_performed": false,
+  "config": {
+    "path": "configs/runs/qwen36-27b-rl-base-full-runnable.json",
+    "sha256": "sha256:70f303f5bb6892598c8e4867151fd176774c5e59d2f0998c6cdb291609b036ff",
+    "title": "Chris cyber Qwen3.6 27B q36-taskchunks authoritative RL-from-base full Fleet train split (129 runnable; 1 archived exclusion)",
+    "scientific_change_from_previous_request": "trainer.trainer_version_id only",
+    "operational_identity_change": "title changed from q36xml to q36-taskchunks so the duplicate-safe client does not collide with failed ft-run-786d4cef"
+  },
+  "trainer": {
+    "trainer_version_id": "4e800585-12d2-57aa-9a5d-9fb2927302eb",
+    "version": "q36-taskchunks-4a6b657c",
+    "catalog_status": "ready",
+    "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train:q36-taskchunks-4a6b657c",
+    "image_digest": "sha256:9fd1dec451d3dd6e427aa98faefc8a24da9de944b49a540897225c6b2ebd90e8",
+    "ray_version": "2.56.0",
+    "manifest_run_config_input": null,
+    "manifest_task_versions_input": "gzip-base64-env-chunks-v1",
+    "source_commit": "4a6b657c2f8fad496538875388facf7ee6ff8de0",
+    "registration_commit": "3d5390a289affad6a943dab2115afbee7693040a",
+    "registration_pr": "https://github.com/fleet-ai/theseus/pull/28293",
+    "build_workflow": "https://github.com/fleet-ai/theseus/actions/runs/33412986600",
+    "smoke_rayjob": "training-smoke-q36-taskchunks-4a6b657c",
+    "smoke_completed_at": "2026-08-31T16:33:19Z",
+    "smoke_result": "succeeded_with_one_optimizer_step"
+  },
+  "training_api": {
+    "source_commit": "4a6b657c2f8fad496538875388facf7ee6ff8de0",
+    "pin_commit": "f756bd98b001a3655b57c97fe7f8e4371d244dc1",
+    "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/training-api:4a6b657c",
+    "image_digest": "sha256:3dbe0b484cda9994fff88b49e8496605815cc2003d29491a31decd8783ae6a2a",
+    "deployment": "synced_healthy_6_of_6_ready_zero_restarts",
+    "service_health": "ok"
+  },
+  "bindings": {
+    "train_count": 129,
+    "dev_count": 10,
+    "train_task_version_ids_sha256": "sha256:1cd2c0e6dea71b1e46538850f7843fa792893725db1f17e1e5c2e4800e92903f",
+    "dev_task_version_ids_sha256": "sha256:5e4d9fb36daeafac2fbbde72bdd5ddf7db31eebfcde9b996485ef4daf50ed410",
+    "train_dev_ids_disjoint": true,
+    "rendered_identity_roundtrip": "exact",
+    "server_catalog_hydration": "139 bindings gained immutable image_url and task env_variables after identity resolution"
+  },
+  "preview": {
+    "endpoint": "https://api.ft.flt.build/v1/rl/run/preview",
+    "http_status": 200,
+    "errors": [],
+    "duplicate_names": [],
+    "provisional_name": "ft-run-8e592ae8",
+    "manifest_api_version": "ray.io/v1",
+    "manifest_kind": "RayJob",
+    "manifest_bytes": 419810,
+    "manifest_sha256": "sha256:e3ea526ea9f7e054779430d3fd6886a34d73ec3d91f53570bb07cb7a7fef8050",
+    "task_transport": "gzip-base64-env-chunks-v1",
+    "task_chunk_names": [
+      "FLEET_TASK_VERSIONS_GZIP_BASE64_000",
+      "FLEET_TASK_VERSIONS_GZIP_BASE64_001",
+      "FLEET_TASK_VERSIONS_GZIP_BASE64_002"
+    ],
+    "task_chunk_value_bytes": [61440, 61440, 5108],
+    "head_worker_chunks_identical": true,
+    "max_env_value_bytes": 61440,
+    "grpc_request_limit_bytes": 2097152,
+    "manifest_below_grpc_request_limit": true
+  },
+  "scheduler": {
+    "namespace": "fleet-train-jobs",
+    "queue": "training-lq",
+    "suspend_until_kueue_admission": true,
+    "priority_modified": false,
+    "num_workers": 1,
+    "gpus_per_worker": 8,
+    "node_pool": "fleetai-training-ng-gpu",
+    "worker_requests_and_limits": {
+      "cpu": "184",
+      "memory": "2560Gi",
+      "nvidia.com/gpu": 8
+    },
+    "head_requests": {
+      "cpu": "2",
+      "memory": "8Gi"
+    },
+    "head_limits": {
+      "cpu": "4",
+      "memory": "16Gi"
+    }
+  },
+  "science": {
+    "async_training": false,
+    "max_concurrent_envs": 8,
+    "group_size": 4,
+    "train_batch_size": 2,
+    "policy_mini_batch_size": 2,
+    "learning_rate": 1e-06,
+    "max_steps": 130,
+    "temperature": 1.0
+  },
+  "gate": "green"
+}

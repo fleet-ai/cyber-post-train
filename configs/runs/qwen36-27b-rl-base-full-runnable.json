@@ -1,5 +1,5 @@
 {
-  "title": "Chris cyber Qwen3.6 27B q36xml authoritative RL-from-base full Fleet train split (129 runnable; 1 archived exclusion)",
+  "title": "Chris cyber Qwen3.6 27B q36-taskchunks authoritative RL-from-base full Fleet train split (129 runnable; 1 archived exclusion)",
   "node_pool": "fleetai-training-ng-gpu",
   "fleet_env": null,
   "tasks": {
@@ -1716,7 +1716,7 @@
     "stop_after_evals": 2
   },
   "trainer": {
-    "trainer_version_id": "83f8d256-aea8-52d7-8711-080c56dbbc3a",
+    "trainer_version_id": "4e800585-12d2-57aa-9a5d-9fb2927302eb",
     "args": [
       "trainer.remove_microbatch_padding=false",
       "trainer.policy.model_config_kwargs.fleet_force_qwen35_torch_gdn=true",
