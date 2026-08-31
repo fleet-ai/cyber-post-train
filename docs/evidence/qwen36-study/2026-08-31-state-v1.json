@@ -103,14 +103,42 @@
       }
     },
     "bf16_cast": {
-      "job_name": "chris-cyber-qwen36-sft-bf16-cast-v2",
-      "status": "not_launched",
+      "status": "not_launched_successor_v3",
+      "failed_attempts": [
+        {
+          "job_name": "chris-cyber-qwen36-sft-bf16-cast-v2",
+          "job_uid": "2ee1035c-60a0-45bf-a136-ec6f6a97ad08",
+          "config_map_uid": "24e79bdc-c666-4667-8e4d-cbd140ebdae0",
+          "status": "FAILED",
+          "model_bytes_inspected": false,
+          "failure": "The first live Pod read briefly had no containerStatuses[].imageID; the immediate provenance gate failed before reading model bytes. The later terminal Pod reported the exact frozen digest.",
+          "resolved_terminal_image_digest": "sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+          "final_policy_destination_created": false,
+          "terminal_evidence_created": false,
+          "preserve_resources_and_empty_parent_directories": true
+        }
+      ],
+      "successor": {
+        "job_name": "chris-cyber-qwen36-sft-bf16-cast-v3",
+        "status": "not_launched",
+        "image_id_retry_policy": {
+          "maximum_observations": 12,
+          "seconds_between_empty_observations": 1.0,
+          "wrong_nonempty_digest": "fail_immediately"
+        },
+        "destination_path": "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-bf16-v3/global_step_318/policy",
+        "terminal_evidence_path": "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/evidence/bf16-cast-v3/receipt",
+        "read_only_preflight": {
+          "observed_at": "2026-08-31T23:25:17Z",
+          "destination_root": "absent_http_404",
+          "terminal_evidence_root": "absent_http_404"
+        }
+      },
       "source_dtype": "F32",
       "destination_dtype": "BF16",
       "policy": "deterministic_trained_fp32_to_bf16_plus_frozen_base_mtp_restore_v1",
       "trained_tensor_count": 1184,
       "restored_frozen_base_auxiliary_tensor_count": 15,
-      "destination_path": "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-bf16-v2/global_step_318/policy",
       "terminal_result": null
     },
     "filesystem_evidence": {
@@ -139,12 +167,15 @@
       ],
       "successor": {
         "job_name": "chris-cyber-qwen36-sft-evidence-v4",
-        "status": "not_launched",
+        "job_uid": "681d7835-beaf-4b9e-a0b2-bbb2e97aea3d",
+        "config_map_uid": "77683fed-4125-4c11-a269-efdc8ef6b9f6",
+        "status": "SUCCEEDED",
+        "completed_at": "2026-08-31T23:07:14Z",
         "offline_header_audit": "A later read-only comparison of finalized raw-export and frozen-base safetensor headers, separate from failed v3, identified exactly 15 absent mtp.* speculative-draft tensors with no extra key or shape mismatch.",
         "receipt_path": "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/evidence/sfs-v4/receipt"
       }
     },
-    "plan": {"path": "configs/evaluation/qwen36-27b-ft-run-574bd7b3-post-sft.json", "file_sha256": "sha256:93e1854f27591c15f342aec395c34c5c9e1cee675d2a7a42e1df1de3edeb5d7f"}
+    "plan": {"path": "configs/evaluation/qwen36-27b-ft-run-574bd7b3-post-sft.json", "file_sha256": "sha256:6d402333d5ca4e9af2cd9ecf108330e77f5f66ee8f885c265e4f45b033a1d779"}
   },
   "native_fleet_rl": {
     "one_step_gate": {

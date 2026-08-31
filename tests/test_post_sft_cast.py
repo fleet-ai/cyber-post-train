@@ -111,7 +111,7 @@ def _no_speculative(omission: dict) -> dict:
 
 def _execution(source: Path, destination: Path, base: Path | None = None) -> dict:
     return {
-        "schema": "cyber_sft_fp32_to_bf16_cast_execution_plan_v2",
+        "schema": "cyber_sft_fp32_to_bf16_cast_execution_plan_v3",
         "namespace": cast.NAMESPACE,
         "job_name": cast.JOB_NAME,
         "config_map_name": cast.CONFIG_MAP_NAME,
@@ -135,6 +135,8 @@ def _execution(source: Path, destination: Path, base: Path | None = None) -> dic
         "restored_auxiliary_parameter_count": cast.RESTORED_AUXILIARY_PARAMETER_COUNT,
         "final_tensor_count": cast.FINAL_TENSOR_COUNT,
         "final_parameter_count": cast.FINAL_PARAMETER_COUNT,
+        "image_id_max_attempts": cast.IMAGE_ID_MAX_ATTEMPTS,
+        "image_id_retry_seconds": cast.IMAGE_ID_RETRY_SECONDS,
         "config_map_code_sha256": {
             path: "sha256:" + f"{index + 1:x}" * 64
             for index, path in enumerate(cast.MOUNTED_CODE_FILES.values())
@@ -550,11 +552,71 @@ def test_cast_runtime_provenance_binds_live_job_pod_image_and_configmap(tmp_path
     monkeypatch.setattr(cast, "_kubernetes_get", get)
     receipt = cast._runtime_execution_provenance(value)
     assert receipt["resolved_image_digest"] == cast.CAST_IMAGE.rsplit("@", 1)[1]
+    assert receipt["image_id_observation_attempts"] == 1
     assert receipt["config_map"]["immutable"] is True
 
     config_map["immutable"] = False
     with pytest.raises(ValueError, match="mutable"):
         cast._runtime_execution_provenance(value)
+
+
+def test_cast_image_id_retries_only_while_empty(monkeypatch):
+    expected = "containerd://" + cast.CAST_IMAGE.rsplit("@", 1)[1]
+    empty = {"status": {"containerStatuses": [{"name": cast.CONTAINER_NAME}]}}
+    resolved = {
+        "status": {
+            "containerStatuses": [
+                {"name": cast.CONTAINER_NAME, "imageID": expected}
+            ]
+        }
+    }
+    reads = []
+    sleeps = []
+    monkeypatch.setattr(cast, "_kubernetes_get", lambda path: reads.append(path) or resolved)
+    monkeypatch.setattr(cast.time, "sleep", sleeps.append)
+
+    observed, image_id, attempts = cast._pod_with_resolved_image_id(empty, "/pod")
+
+    assert observed is resolved
+    assert image_id == expected
+    assert attempts == 2
+    assert reads == ["/pod"]
+    assert sleeps == [cast.IMAGE_ID_RETRY_SECONDS]
+
+
+def test_cast_image_id_empty_retry_exhaustion_is_bounded(monkeypatch):
+    empty = {"status": {"containerStatuses": [{"name": cast.CONTAINER_NAME}]}}
+    reads = []
+    sleeps = []
+    monkeypatch.setattr(cast, "IMAGE_ID_MAX_ATTEMPTS", 3)
+    monkeypatch.setattr(cast, "IMAGE_ID_RETRY_SECONDS", 0.25)
+    monkeypatch.setattr(cast, "_kubernetes_get", lambda path: reads.append(path) or empty)
+    monkeypatch.setattr(cast.time, "sleep", sleeps.append)
+
+    with pytest.raises(ValueError, match="remained empty after bounded retry"):
+        cast._pod_with_resolved_image_id(empty, "/pod")
+
+    assert reads == ["/pod", "/pod"]
+    assert sleeps == [0.25, 0.25]
+
+
+def test_cast_image_id_wrong_nonempty_digest_fails_without_retry(monkeypatch):
+    wrong = {
+        "status": {
+            "containerStatuses": [
+                {"name": cast.CONTAINER_NAME, "imageID": "containerd://sha256:" + "0" * 64}
+            ]
+        }
+    }
+    monkeypatch.setattr(
+        cast, "_kubernetes_get", lambda _path: pytest.fail("wrong imageID must not retry")
+    )
+    monkeypatch.setattr(
+        cast.time, "sleep", lambda _seconds: pytest.fail("wrong imageID must not sleep")
+    )
+
+    with pytest.raises(ValueError, match="differs from the frozen digest"):
+        cast._pod_with_resolved_image_id(wrong, "/pod")
 
 
 def test_cast_job_is_queued_cpu_only_digest_pinned_and_create_only():
@@ -565,7 +627,7 @@ def test_cast_job_is_queued_cpu_only_digest_pinned_and_create_only():
     assert cast.validate_local_cast_bundle(plan, root) == plan["cast_execution"][
         "config_map_code_sha256"
     ]
-    manifest_path = root / "evals/post_sft/cluster/qwen36-sft-bf16-cast-v2-job.yaml"
+    manifest_path = root / "evals/post_sft/cluster/qwen36-sft-bf16-cast-v3-job.yaml"
     documents = list(yaml.safe_load_all(manifest_path.read_text()))
     job = next(value for value in documents if value.get("kind") == "Job")
     assert job["metadata"]["name"] == cast.JOB_NAME
@@ -576,7 +638,7 @@ def test_cast_job_is_queued_cpu_only_digest_pinned_and_create_only():
     assert "nvidia.com/gpu" not in json.dumps(job)
     assert container["command"] == cast.CAST_COMMAND["command"]
     assert container["args"] == cast.CAST_COMMAND["args"]
-    script = (root / "evals/post_sft/scripts/submit_bf16_cast_v2.sh").read_text()
+    script = (root / "evals/post_sft/scripts/submit_bf16_cast_v3.sh").read_text()
     assert "kubectl apply" not in script
     assert "kubectl create --dry-run=server" in script
     assert "kubectl create -f" in script

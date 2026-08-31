@@ -9,9 +9,11 @@ import hashlib
 import json
 import math
 import os
+import re
 import shutil
 import ssl
 import sys
+import time
 import urllib.request
 from collections.abc import Mapping
 from pathlib import Path, PurePosixPath
@@ -33,7 +35,7 @@ SOURCE_PATH = Path(
     "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-v1/global_step_318/policy"
 )
 DESTINATION_PATH = Path(
-    "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-bf16-v2/global_step_318/policy"
+    "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-bf16-v3/global_step_318/policy"
 )
 BASE_MODEL_PATH = Path(
     "/mnt/sfs/models/Qwen/Qwen3.6-27B/6a9e13bd6fc8f0983b9b99948120bc37f49c13e9"
@@ -44,7 +46,7 @@ BASE_WEIGHTS_MANIFEST_SHA256 = (
     "sha256:14ad10368de9b9e5974ff12a4b70ea7884194b58e670177bbac79daeb81f16b9"
 )
 EVIDENCE_DIR = Path(
-    "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/evidence/bf16-cast-v2/receipt"
+    "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/evidence/bf16-cast-v3/receipt"
 )
 ACCEPTANCE_RECEIPT_NAME = ".fleet-bf16-cast-acceptance.json"
 DEFAULT_MAX_SHARD_BYTES = 2 * 1024**3
@@ -57,10 +59,12 @@ RESTORED_AUXILIARY_PARAMETER_COUNT = 424_699_392
 FINAL_TENSOR_COUNT = 1199
 FINAL_PARAMETER_COUNT = 27_781_427_952
 NAMESPACE = "fleet-train-jobs"
-JOB_NAME = "chris-cyber-qwen36-sft-bf16-cast-v2"
+JOB_NAME = "chris-cyber-qwen36-sft-bf16-cast-v3"
 CONFIG_MAP_NAME = JOB_NAME
-SERVICE_ACCOUNT_NAME = "chris-cyber-qwen36-sft-bf16-cast-observer-v2"
+SERVICE_ACCOUNT_NAME = "chris-cyber-qwen36-sft-bf16-cast-observer-v3"
 CONTAINER_NAME = "cast"
+IMAGE_ID_MAX_ATTEMPTS = 12
+IMAGE_ID_RETRY_SECONDS = 1.0
 CAST_IMAGE = (
     "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train:"
     "q36-torchgdn-6db8d0c9@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4"
@@ -82,6 +86,9 @@ LOCAL_CODE_FILES = {
     **MOUNTED_CODE_FILES,
     "training__init__.py": "evals/post_sft/runtime/training__init__.py",
 }
+IMAGE_ID_RE = re.compile(
+    r"^(?:[a-z][a-z0-9+.-]*://)?(?:[^@\s]+@)?(sha256:[0-9a-f]{64})$"
+)
 
 
 def _mapping(value: Any, field: str) -> Mapping[str, Any]:
@@ -125,6 +132,51 @@ def _kubernetes_get(path: str) -> dict[str, Any]:
     return value
 
 
+def _pod_with_resolved_image_id(
+    pod: dict[str, Any], pod_path: str
+) -> tuple[dict[str, Any], str, int]:
+    """Wait briefly only for Kubernetes to publish the already-running image identity."""
+
+    expected = CAST_IMAGE.rsplit("@", 1)[1]
+    for attempt in range(1, IMAGE_ID_MAX_ATTEMPTS + 1):
+        status_value = pod.get("status")
+        statuses = (
+            status_value.get("containerStatuses")
+            if isinstance(status_value, Mapping)
+            else None
+        )
+        status = (
+            next(
+                (
+                    row
+                    for row in statuses
+                    if isinstance(row, Mapping) and row.get("name") == CONTAINER_NAME
+                ),
+                None,
+            )
+            if isinstance(statuses, list)
+            else None
+        )
+        raw_image_id = status.get("imageID") if status is not None else None
+        if raw_image_id is None:
+            image_id = ""
+        elif isinstance(raw_image_id, str):
+            image_id = raw_image_id.strip()
+        else:
+            raise ValueError("resolved cast imageID differs from the frozen digest")
+        if image_id:
+            match = IMAGE_ID_RE.fullmatch(image_id)
+            resolved = match.group(1) if match is not None else None
+            if resolved != expected:
+                raise ValueError("resolved cast imageID differs from the frozen digest")
+            return pod, image_id, attempt
+        if attempt == IMAGE_ID_MAX_ATTEMPTS:
+            break
+        time.sleep(IMAGE_ID_RETRY_SECONDS)
+        pod = _kubernetes_get(pod_path)
+    raise ValueError("resolved cast imageID remained empty after bounded retry")
+
+
 def _runtime_execution_provenance(cast_input: Mapping[str, Any]) -> dict[str, Any]:
     """Bind the cast to exact live Job, Pod, imageID, ConfigMap, and mounted bytes."""
 
@@ -135,10 +187,14 @@ def _runtime_execution_provenance(cast_input: Mapping[str, Any]) -> dict[str, An
     job_uid = os.environ.get("JOB_UID", "").strip()
     if not all((namespace, pod_name, pod_uid, job_uid)) or namespace != NAMESPACE:
         raise ValueError("cast downward-API identity is missing or unexpected")
-    pod = _kubernetes_get(f"/api/v1/namespaces/{namespace}/pods/{pod_name}")
+    pod_path = f"/api/v1/namespaces/{namespace}/pods/{pod_name}"
+    pod = _kubernetes_get(pod_path)
     job = _kubernetes_get(f"/apis/batch/v1/namespaces/{namespace}/jobs/{JOB_NAME}")
     config_map = _kubernetes_get(
         f"/api/v1/namespaces/{namespace}/configmaps/{CONFIG_MAP_NAME}"
+    )
+    pod, image_id, image_id_observation_attempts = _pod_with_resolved_image_id(
+        pod, pod_path
     )
     pod_meta = _mapping(pod.get("metadata"), "Pod metadata")
     job_meta = _mapping(job.get("metadata"), "Job metadata")
@@ -198,17 +254,7 @@ def _runtime_execution_provenance(cast_input: Mapping[str, Any]) -> dict[str, An
     }
     if digest_json(command) != CAST_COMMAND_SHA256:
         raise ValueError("live cast command differs from the frozen command")
-    statuses = _mapping(pod.get("status"), "Pod status").get("containerStatuses")
-    if not isinstance(statuses, list):
-        raise ValueError("live cast Pod has no container status")
-    status = next(
-        (row for row in statuses if isinstance(row, Mapping) and row.get("name") == CONTAINER_NAME),
-        None,
-    )
-    image_id = str(status.get("imageID") if status else "")
     expected_image_digest = CAST_IMAGE.rsplit("@", 1)[1]
-    if expected_image_digest not in image_id:
-        raise ValueError("resolved cast imageID differs from the frozen digest")
     if (
         config_meta.get("name") != CONFIG_MAP_NAME
         or config_map.get("immutable") is not True
@@ -240,6 +286,7 @@ def _runtime_execution_provenance(cast_input: Mapping[str, Any]) -> dict[str, An
         "schema": "cyber_sft_fp32_to_bf16_cast_execution_v1",
         "image": CAST_IMAGE,
         "image_id": image_id,
+        "image_id_observation_attempts": image_id_observation_attempts,
         "resolved_image_digest": expected_image_digest,
         "command_sha256": CAST_COMMAND_SHA256,
         "service_account_name": SERVICE_ACCOUNT_NAME,
@@ -285,7 +332,7 @@ def _tensor_sha256(tensor: Any) -> str:
 def _validate_execution_plan(value: Any) -> Mapping[str, Any]:
     plan = _mapping(value, "cast execution plan")
     expected = {
-        "schema": "cyber_sft_fp32_to_bf16_cast_execution_plan_v2",
+        "schema": "cyber_sft_fp32_to_bf16_cast_execution_plan_v3",
         "namespace": NAMESPACE,
         "job_name": JOB_NAME,
         "config_map_name": CONFIG_MAP_NAME,
@@ -309,6 +356,8 @@ def _validate_execution_plan(value: Any) -> Mapping[str, Any]:
         "restored_auxiliary_parameter_count": RESTORED_AUXILIARY_PARAMETER_COUNT,
         "final_tensor_count": FINAL_TENSOR_COUNT,
         "final_parameter_count": FINAL_PARAMETER_COUNT,
+        "image_id_max_attempts": IMAGE_ID_MAX_ATTEMPTS,
+        "image_id_retry_seconds": IMAGE_ID_RETRY_SECONDS,
     }
     for field, expected_value in expected.items():
         if plan.get(field) != expected_value:

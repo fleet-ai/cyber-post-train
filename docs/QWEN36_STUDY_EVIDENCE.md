@@ -178,7 +178,11 @@ safetensor shards totalling 109,427,064,152 bytes; finalized headers prove the t
 not the requested BF16. The raw FP32 bytes remain immutable evidence and will not be relabelled or
 served.
 
-A reviewed, create-only CPU conversion rail targets a new SFS path. It will verify the complete
+A reviewed, create-only CPU conversion rail targets a new SFS path. The immutable v2 attempt
+failed before reading model bytes because Kubernetes briefly returned an empty resolved-image
+identity; its terminal Pod later showed the exact frozen digest. The v3 successor retries only
+that missing field for a bounded 12 observations and still fails immediately on any non-empty
+wrong identity. It will verify the complete
 raw manifest, cast all 1,184 trained tensors into bounded BF16 shards, restore the 15 missing MTP
 tensors bit-identically from the exact frozen BF16 base, and reopen all 1,199 outputs. Per-tensor
 hashes distinguish trained casts from **frozen base auxiliary-head restoration**. MTP is
@@ -186,7 +190,7 @@ inference-inert because the matched serving registration has no speculative-deco
 The rail binds source, base, destination, code, command, image, Job/Pod and immutable ConfigMap;
 the base's complete before/after manifests must match and its live weight digest must equal the
 signed model lock.
-Neither that cast Job nor any post-SFT evaluation has launched.
+No successful cast and no post-SFT evaluation has launched.
 
 Evidence: [`post-SFT plan`](POST_SFT_EVALUATION.md),
 [`tokenizer gate`](evidence/post_sft/2026-08-31-tokenizer-equivalence.md), and
