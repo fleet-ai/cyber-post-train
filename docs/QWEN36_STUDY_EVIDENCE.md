@@ -1,6 +1,6 @@
 # Qwen3.6-27B cyber post-training study — living evidence report
 
-Last evidence observation: **2026-08-31 20:23 UTC**. Machine-readable snapshot:
+Last evidence observation: **2026-08-31 20:32 UTC**. Machine-readable snapshot:
 [`2026-08-31-state-v1.json`](evidence/qwen36-study/2026-08-31-state-v1.json).
 
 This report distinguishes **terminal results**, **operational gates** that prove
@@ -19,7 +19,7 @@ nothing here treats a queued job as completed.
 | SFT | Training and raw export terminal; BF16 correction pending | `ft-run-574bd7b3` succeeded at step 318. Zero-step export `ft-run-29f2bedf` succeeded without an optimizer step but emitted FP32, so it is preserved and blocked from serving pending verified BF16 casting. |
 | Native Fleet RL gate | Operational terminal gate | `ft-run-98e50db3` completed real rollouts and one optimizer-path step, but every reward/advantage was zero and all episodes truncated. |
 | Native Fleet RL full | Pending | Chunked-binding successor `ft-run-0081ca94` is Suspended/Pending with 129 train and 10 dev versions. |
-| Verified Miles RL | Pending | Canary 02 proved two authoritative rollouts but failed before optimization. Rank-safe canary 03 is Suspended/Pending. |
+| Verified Miles RL | Terminal operational gate | Canary 03 completed 8/8 authoritative rollouts, one optimizer iteration, and a durable checkpoint. Its all-zero rewards and gradients prove plumbing, not learning. |
 | Post-training evals | Not launched | There are no post-SFT or post-RL benchmark results yet. |
 
 ## Scientific question and controls
@@ -217,7 +217,15 @@ Canary 03, `chris-cyber-qwen36-27b-capability-gate-03`, UID
 `c4aca116-2473-4fdd-bd37-6ac661ac4509`, corrects the shape to one prompt ×
 eight samples on eight ranks with image
 `ghcr.io/fleet-ai/miles-fleet/trainer@sha256:6cd059e8327018bc7e783f3bff939bd9ebcf243d81b66d6422951e89c9223b37`.
-It was **Suspended/Pending**; its terminal result is unknown.
+It **succeeded** with eight non-aborted authoritative rollouts, zero truncation,
+one zero-indexed optimizer iteration, and a 29-file, 324,638,613,984-byte
+checkpoint at `iter_0000001`. All rewards, advantages, returns, and gradient
+norm were zero, so this proves the rank-safe end-to-end path and durable save,
+not learning or model improvement. Exact per-episode verifier execution IDs
+were required by the fail-closed reward parser but were not retained in the
+aggregate logs; that evidence gap is explicit in the receipt.
+
+Evidence: [`terminal receipt`](evidence/qwen36-study/2026-08-31-miles-canary03-terminal-v1.json).
 
 Upstream evidence is in draft [`Miles PR #2`](https://github.com/fleet-ai/miles-fleet/pull/2).
 Commit `1dbf881e9` adds human-owner attribution for future scheduler displays and
@@ -248,7 +256,7 @@ Remaining gates, in order:
 3. Register with the same SGLang image/runtime and pass checkpoint, tokenizer, tool-call, and fixed-prompt/logit checks.
 4. Validate the WebExploitBench Qwen Code paired-identity receipt against the live post-SFT route.
 5. Launch paired WebExploitBench, ExploitGym, and Fleet test20 arms with symmetric failure classification.
-6. Let native full RL and Miles canary reach terminal states before any RL conclusion.
+6. Let native full RL reach a terminal state; treat the successful Miles canary as an operational gate only until a reward-bearing run demonstrates learning signal.
 7. Export and evaluate any terminal RL checkpoint only through the same parity gates.
 
 ## Evidence index and limits
