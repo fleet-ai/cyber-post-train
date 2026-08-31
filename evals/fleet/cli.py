@@ -18,6 +18,9 @@ from .client import (
 )
 from .events import append_event
 from .models import (
+    DEFAULT_EXPERIMENT,
+    DEFAULT_GATEWAY_MODEL,
+    DEFAULT_RUNTIME_LABEL,
     DEFAULT_RUNTIME_MODEL,
     DEFAULT_SMOKE_TASK_KEY,
     DEFAULT_SOURCE_JOB_ID,
@@ -60,6 +63,10 @@ def plan_command(
     max_steps: Annotated[int, typer.Option(min=1)] = 300,
     max_duration_minutes: Annotated[int, typer.Option(min=1)] = 120,
     runtime_model: Annotated[str, typer.Option()] = DEFAULT_RUNTIME_MODEL,
+    harness: Annotated[str | None, typer.Option()] = None,
+    experiment: Annotated[str, typer.Option()] = DEFAULT_EXPERIMENT,
+    gateway_model: Annotated[str, typer.Option()] = DEFAULT_GATEWAY_MODEL,
+    runtime_label: Annotated[str, typer.Option()] = DEFAULT_RUNTIME_LABEL,
     run_name: Annotated[str, typer.Option()] = "glm52-fleet-blackbox-baseline-v1",
 ) -> None:
     """Print a secret-free plan. This command never launches a job."""
@@ -78,6 +85,10 @@ def plan_command(
             keys,
             source_job_id=source_job_id,
             runtime_model=runtime_model,
+            harness=harness,
+            experiment=experiment,
+            gateway_model=gateway_model,
+            runtime_label=runtime_label,
             pass_k=pass_k,
             batch_session_cap=batch_session_cap,
             max_steps=max_steps,
@@ -106,6 +117,10 @@ def launch(
     max_steps: Annotated[int, typer.Option(min=1)] = 300,
     max_duration_minutes: Annotated[int, typer.Option(min=1)] = 120,
     runtime_model: Annotated[str, typer.Option()] = DEFAULT_RUNTIME_MODEL,
+    harness: Annotated[str | None, typer.Option()] = None,
+    experiment: Annotated[str, typer.Option()] = DEFAULT_EXPERIMENT,
+    gateway_model: Annotated[str, typer.Option()] = DEFAULT_GATEWAY_MODEL,
+    runtime_label: Annotated[str, typer.Option()] = DEFAULT_RUNTIME_LABEL,
     run_name: Annotated[str, typer.Option()] = "glm52-fleet-blackbox-smoke-v1",
     event_log: Annotated[Path, typer.Option()] = Path("runs/fleet/events.jsonl"),
 ) -> None:
@@ -126,6 +141,10 @@ def launch(
                 keys,
                 source_job_id=source_job_id,
                 runtime_model=runtime_model,
+                harness=harness,
+                experiment=experiment,
+                gateway_model=gateway_model,
+                runtime_label=runtime_label,
                 pass_k=pass_k,
                 batch_session_cap=batch_session_cap,
                 max_steps=max_steps,

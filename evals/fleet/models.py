@@ -13,6 +13,8 @@ OTS_PROJECT_ID = "63d6fda8-48c4-4726-9ec3-d1028f2c47f5"
 DEFAULT_SALES_PRODUCT_ID = "e4084858-f272-570f-82bc-a74e1ad60b2e"
 DEFAULT_SOURCE_JOB_ID = "a62dd51f-a52b-4941-8207-4679e4b25b51"
 DEFAULT_GATEWAY_MODEL = "glm-5.2-fp8"
+DEFAULT_EXPERIMENT = "glm52-fleet-blackbox-baseline-v1"
+DEFAULT_RUNTIME_LABEL = "fleet-agent-runtime-v1"
 # Historical Agent Runtime examples used ``fleet-glm/glm-5.2-fp8``. New
 # tool-use submissions advertise this canonical harness model identifier.
 DEFAULT_RUNTIME_MODEL = "z-ai/glm-5.2"
@@ -38,6 +40,11 @@ class JobBatch:
     max_steps: int
     max_duration_minutes: int
     run_name: str
+    source_job_id: str
+    harness: str | None = None
+    experiment: str = DEFAULT_EXPERIMENT
+    gateway_model: str = DEFAULT_GATEWAY_MODEL
+    runtime_label: str = DEFAULT_RUNTIME_LABEL
 
     @property
     def planned_sessions(self) -> int:
@@ -59,10 +66,22 @@ class JobBatch:
             "sales_product_id": DEFAULT_SALES_PRODUCT_ID,
             "task_keys": self.task_keys,
         }
+        # Preserve legacy GLM idempotency keys while binding every treatment
+        # selector for explicit alternate-harness arms.
+        if self.harness is not None:
+            logical_request.update(
+                {
+                    "harness": self.harness,
+                    "experiment": self.experiment,
+                    "gateway_model": self.gateway_model,
+                    "runtime_label": self.runtime_label,
+                    "source_job_id": self.source_job_id,
+                }
+            )
         return str(uuid5(NAMESPACE_URL, _canonical_json(logical_request)))
 
     def payload(self) -> dict[str, Any]:
-        return {
+        payload: dict[str, Any] = {
             "name": self.name,
             "task_keys": list(self.task_keys),
             "models": [self.runtime_model],
@@ -77,12 +96,15 @@ class JobBatch:
             "max_steps": self.max_steps,
             "max_duration_minutes": self.max_duration_minutes,
             "metadata": {
-                "experiment": "glm52-fleet-blackbox-baseline-v1",
-                "source_job_id": DEFAULT_SOURCE_JOB_ID,
-                "gateway_model": DEFAULT_GATEWAY_MODEL,
-                "runtime": "fleet-agent-runtime-v1",
+                "experiment": self.experiment,
+                "source_job_id": self.source_job_id,
+                "gateway_model": self.gateway_model,
+                "runtime": self.runtime_label,
             },
         }
+        if self.harness is not None:
+            payload["harness"] = self.harness
+        return payload
 
     def sanitized_dict(self) -> dict[str, Any]:
         payload = self.payload()
@@ -150,6 +172,10 @@ def build_plan(
     max_duration_minutes: int = 120,
     batch_session_cap: int = MAX_SESSIONS_PER_JOB,
     run_name: str = "glm52-fleet-blackbox-baseline-v1",
+    harness: str | None = None,
+    experiment: str = DEFAULT_EXPERIMENT,
+    gateway_model: str = DEFAULT_GATEWAY_MODEL,
+    runtime_label: str = DEFAULT_RUNTIME_LABEL,
 ) -> EvalPlan:
     keys = validate_task_keys(task_keys)
     if pass_k < 1:
@@ -169,6 +195,11 @@ def build_plan(
             max_steps=max_steps,
             max_duration_minutes=max_duration_minutes,
             run_name=run_name,
+            source_job_id=source_job_id,
+            harness=harness,
+            experiment=experiment,
+            gateway_model=gateway_model,
+            runtime_label=runtime_label,
         )
         for index, offset in enumerate(range(0, len(keys), tasks_per_batch), start=1)
     )
