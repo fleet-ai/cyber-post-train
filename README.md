@@ -50,8 +50,10 @@ before submission; the resulting RayJobs enter `training-lq` through Kueue.
 
 The older GLM files are preserved as experiment provenance, not as the current
 model choice. Detailed launch commands live beside each evaluation and training
-implementation. Live launch state and external gates are recorded in
-`docs/STATUS.md`.
+implementation. The evidence-first current state, terminal results, pending
+jobs, and remaining causal-comparison gates are indexed in
+`docs/QWEN36_STUDY_EVIDENCE.md`. `docs/STATUS.md` remains the chronological
+operational narrative and can contain superseded intermediate observations.
 
 The fail-closed checkpoint selection, export, serving-parity, and paired-evaluation
 handoff for the active SFT run is documented in `docs/POST_SFT_EVALUATION.md`.

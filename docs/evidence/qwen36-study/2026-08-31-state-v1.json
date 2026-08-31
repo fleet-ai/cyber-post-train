@@ -1,0 +1,190 @@
+{
+  "schema": "qwen36_cyber_post_train_state_observation_v1",
+  "observed_at": "2026-08-31T16:56:40Z",
+  "scope": "Prompt-free, secret-free evidence index. Live scheduler states are observations, not terminal claims.",
+  "model": {
+    "repository": "Qwen/Qwen3.6-27B",
+    "revision": "6a9e13bd6fc8f0983b9b99948120bc37f49c13e9",
+    "parameters": 27781427952,
+    "precision": "bf16",
+    "weight_shards": 15,
+    "weight_bytes": 55563006400,
+    "weights_manifest_sha256": "sha256:14ad10368de9b9e5974ff12a4b70ea7884194b58e670177bbac79daeb81f16b9",
+    "evidence": {"path": "configs/models/qwen36-27b-6a9e13bd.lock.json", "file_sha256": "sha256:45e0aab5eacbe9b887c13414f050b484f54fd97ce313aca363f51027d344ad59"}
+  },
+  "catalog_observations": {
+    "observed_at": "2026-08-31T16:44:00Z",
+    "inference_gateway_ready_ids": ["glm-5.3", "kimi-k3", "qwen3-6-27b-cyber-baseline", "qwen3-6-35b-a3b", "qwen3.8-27b", "qwen3.8-flash-next"],
+    "training_catalog_staged_small_models": ["Qwen2.5-1.5B-Instruct", "Qwen3.6-27B"],
+    "sources": ["GET https://inference.flt.build/v1/models", "GET https://inference.flt.build/fleet/v1/model-catalog", "GET https://api.ft.flt.build/v1/models"],
+    "interpretation": "Catalog presence is operational availability, not proof of exact checkpoint, tokenizer, harness, or training/evaluation parity."
+  },
+  "data": {
+    "source_job_id": "a62dd51f-a52b-4941-8207-4679e4b25b51",
+    "source_sessions": 1265,
+    "source_verified_successes": 587,
+    "task_lineages": 160,
+    "split": {"train": 130, "dev": 10, "test": 20, "membership_sha256": "sha256:fb09668f8de77e6baee37dc1e3162a7617ca9a0a450da9ca53422c17bfbc942a"},
+    "evidence": {"path": "configs/data/fleet-a62-task-split-v1.json", "file_sha256": "sha256:ab444cb664ffb4da351e4d33298cc052f848f2833487807bf984a753fa7c3b47"}
+  },
+  "base_evaluations": {
+    "webexploitbench_level0": {
+      "status": "terminal",
+      "harness": "qwen_code_0.22.3",
+      "targets": 15,
+      "vulnerabilities": 110,
+      "solved": 10,
+      "micro_pass_at_1": 0.09090909090909091,
+      "macro_target_mean": 0.0877,
+      "infrastructure_invalid_targets": 0,
+      "canonical_rule": "deterministic verifier positive AND pinned judge matched the answer to the same vulnerability",
+      "evidence": {"path": "evals/webexploitbench/manifests/qwen36-27b-qwen-code-l0-pass1-terminal.json", "file_sha256": "sha256:448fe84ef27e1c9c1b67e6b6f6628872b4f500f8bd4c7b855092d558a81fe3a3"}
+    },
+    "fleet_test20": {
+      "status": "terminal_reconciled",
+      "harness": "qwen_code_0.22.3",
+      "tasks": 20,
+      "solved": 1,
+      "pass_at_1": 0.05,
+      "primary_eval_infrastructure_invalid_tasks": 0,
+      "caveats": ["One valid zero had an optional post-score session-ingest failure and was not rerun.", "One valid zero has a digest-bound raw trace but partial normalized-transcript fidelity."],
+      "evidence": {"path": "evals/fleet/manifests/qwen36-27b-qwen-code-test20-base-v1-terminal.json", "file_sha256": "sha256:ad61f950d590a93b58e3ebc8e44f4eeb17aac57858a929f6bf546ad1bbbfc3b0"}
+    },
+    "exploitgym_pilot": {
+      "status": "terminal_descriptive_only",
+      "tasks": 5,
+      "valid_results": 5,
+      "solved": 0,
+      "mean_score": 0.0,
+      "infrastructure_invalid_tasks": 0,
+      "paired_control_eligible": false,
+      "caveat": "The pilot jobs used semantically equivalent but not bit-identical rebuilt control images; a paired study must rerun base against the independently verified OCI digest.",
+      "evidence": {"path": "docs/evidence/exploitgym/2026-08-31-qwen36-pilot-v1.json", "file_sha256": "sha256:62e6f2d06faf6116ef6e3a12202f2ad50853f6ec2b1741c49c5ef85e53acb0bd"}
+    }
+  },
+  "sft": {
+    "run": {
+      "name": "ft-run-574bd7b3",
+      "rayjob_uid": "fe0256e7-ba30-470d-abd9-b148cd3cdbbd",
+      "status": "SUCCEEDED",
+      "config_sha256": "sha256:3a56db536d8918cadad8961dc450e1210488742d2981bb53f5ca4347aabcad29",
+      "trainer_version_id": "4b4dc57c-c7dc-5562-bbdd-9e1d6764ede0",
+      "trainer_image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train:q36-torchgdn-6db8d0c9@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+      "optimizer_final_step": 318,
+      "checkpoint_path": "/mnt/sfs/checkpoints/ft-run-574bd7b3/global_step_318",
+      "checkpoint_api_rows": 0,
+      "checkpoint_api_note": "Expected because checkpoint application and archive were disabled; SFS two-leg evidence is required."
+    },
+    "as_treated_corpus": {"training_windows": 2540, "success_bearing_train_lineages": 86, "selection": "score-1 training-split trajectories only; no external benchmark or Fleet test examples"},
+    "pre_export_tokenizer_gate": {
+      "status": "passed_pre_export_source_sidecar_observation",
+      "effective_mapping_identical": true,
+      "encode_decode_parity_strings": 170225,
+      "encode_decode_parity_tokens": 48468947,
+      "raw_trainer_sidecars_may_be_served_directly": false,
+      "accepted_policy": "post-SFT weight shards plus byte-identical base-revision runtime sidecars",
+      "evidence": {"path": "docs/evidence/post_sft/2026-08-31-tokenizer-equivalence.json", "file_sha256": "sha256:3f2f72d77fda3d9e7a68cfa2ee16df031675e8f380266aa1a1eb98b00833b49e"}
+    },
+    "export": {
+      "name": "ft-run-29f2bedf",
+      "rayjob_uid": "51957fb6-c8c5-4e72-ab1b-8ec80e38e68b",
+      "observed_status": "Suspended",
+      "queue_state": "Pending",
+      "optimizer_steps_expected": 0,
+      "output_root": "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-v1",
+      "terminal_result": null
+    },
+    "plan": {"path": "configs/evaluation/qwen36-27b-ft-run-574bd7b3-post-sft.json", "file_sha256": "sha256:fc8e02f48f12610a6fba3c61af8b23a900889dc763655fe3b0a475cfde711f07"}
+  },
+  "native_fleet_rl": {
+    "one_step_gate": {
+      "name": "ft-run-98e50db3",
+      "rayjob_uid": "8948b28a-86ce-451d-b946-483de30bb7bc",
+      "status": "SUCCEEDED",
+      "trainer_version_id": "83f8d256-aea8-52d7-8711-080c56dbbc3a",
+      "trainer_image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train:q36xml-1a74092a@sha256:331ed4b062e4a7d0646309f404a6ec9bac737ff1c23ad16dc24abda0b39912a0",
+      "episodes_attempted": 8,
+      "environment_failure_rate": 0.0,
+      "tool_logs_posted": 115,
+      "optimizer_steps": 1,
+      "raw_reward_mean": 0.0,
+      "all_zero_group_fraction": 1.0,
+      "rollout_truncation_rate": 1.0,
+      "interpretation": "Operational gate only: real rollout, grading, telemetry and optimizer path passed; zero advantages and universal truncation provide no learning evidence."
+    },
+    "oversized_submission_attempt": {
+      "name": "ft-run-786d4cef",
+      "status": "failed_before_rayjob_creation",
+      "failure": "Kubernetes API gRPC ResourceExhausted: 3021030-byte message exceeded 2097152-byte maximum",
+      "gpu_consumed": false,
+      "terminal_result": null
+    },
+    "full_run_successor": {
+      "name": "ft-run-0081ca94",
+      "rayjob_uid": "2524ae84-b101-4c93-bb6b-335ee93a4f61",
+      "observed_status": "Suspended",
+      "queue_state": "Pending",
+      "trainer_version_id": "4e800585-12d2-57aa-9a5d-9fb2927302eb",
+      "trainer_image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train:q36-taskchunks-4a6b657c@sha256:9fd1dec451d3dd6e427aa98faefc8a24da9de944b49a540897225c6b2ebd90e8",
+      "train_task_versions": 129,
+      "dev_task_versions": 10,
+      "archived_train_exclusions": 1,
+      "max_steps": 130,
+      "terminal_result": null,
+      "pre_submit_evidence": {"path": "configs/runs/qwen36-27b-rl-base-full-taskchunks.pre-submit.json", "file_sha256": "sha256:7922588991d5869f9cfe44f3e0f08732e6d4defee294eb829ef0fe6cb4d6461c"}
+    }
+  },
+  "verified_miles_rl": {
+    "failed_canary_02": {
+      "name": "chris-cyber-qwen36-27b-capability-gate-02",
+      "rayjob_uid": "5cc52a6c-6bfa-4490-adfe-e17f77ae34a4",
+      "status": "FAILED",
+      "authoritative_rollouts_completed": 2,
+      "authoritative_rollouts_aborted": 0,
+      "raw_capability_reward": 0.0,
+      "optimizer_steps": 0,
+      "durable_checkpoint_present": false,
+      "failure": "global batch size 2 was smaller than FSDP data-parallel size 8",
+      "upstream_receipt": "fleet-ai/miles-fleet PR #2: examples/fleet/launch/capability-gate-failed-canary-02.receipt.json"
+    },
+    "rank_safe_canary_03": {
+      "name": "chris-cyber-qwen36-27b-capability-gate-03",
+      "rayjob_uid": "c4aca116-2473-4fdd-bd37-6ac661ac4509",
+      "observed_status": "Suspended",
+      "queue_state": "Pending",
+      "trainer_image": "ghcr.io/fleet-ai/miles-fleet/trainer@sha256:6cd059e8327018bc7e783f3bff939bd9ebcf243d81b66d6422951e89c9223b37",
+      "shape": "one prompt x eight samples on eight FSDP ranks",
+      "terminal_result": null,
+      "upstream_source_commit": "1dbf881e9"
+    }
+  },
+  "paired_evaluation_protocols": {
+    "webexploitbench": {
+      "status": "not_launched_waiting_for_verified_sft_export_serving_and_identity_validation",
+      "terminal_result": null,
+      "paired_harness": "qwen_code_0.22.3",
+      "paired_baseline_receipt_sha256": "sha256:448fe84ef27e1c9c1b67e6b6f6628872b4f500f8bd4c7b855092d558a81fe3a3",
+      "paired_protocol_sha256": "sha256:929ae5c351f80f1f06de182be972dcc0dd87f905fa711937b0b8c925a2268b51",
+      "prevented_mismatch": "An older plan named claude_code. It was corrected before launch to fail closed on exact Qwen Code 0.22.3 baseline identity."
+    },
+    "exploitgym": {
+      "status": "not_launched_waiting_for_verified_sft_export_and_serving",
+      "terminal_result": null,
+      "control_image": "ghcr.io/fleet-ai/cyber-post-train-exploitgym-control@sha256:466027a5b270e822acbba676ccd775f443e7ed897fdf2d5a3f824f776141e7a0",
+      "control_image_independently_verified": true,
+      "scored_jobs_launched_from_control_image_rail": 0,
+      "evidence": {"path": "docs/evidence/exploitgym/2026-08-31-control-image-v1.json", "file_sha256": "sha256:77b5c0e83fe25f07f8dcd94a220990ffbe88221709dbb66b60eae9bbe0f66d5d"}
+    },
+    "fleet_test20": {
+      "status": "not_launched_waiting_for_verified_sft_export_and_serving",
+      "terminal_result": null,
+      "required_control": "same 20 exact eval_task_version_id values, pass@1, harness, budgets, and authoritative version-bound scoring"
+    }
+  },
+  "known_evidence_limits": [
+    "Live Suspended/Pending observations can change after this timestamp; terminal receipts supersede this file.",
+    "The SFT checkpoint still requires the post-conversion full-file manifest.",
+    "Do not infer a durable native-RL intervention checkpoint from checkpoint-save timing alone.",
+    "No post-SFT or post-RL benchmark score exists in this observation."
+  ]
+}
