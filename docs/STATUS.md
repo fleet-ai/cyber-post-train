@@ -59,8 +59,18 @@
   failed before the optimizer step in FLA's `prepare_wy_repr_bwd_kernel` Triton
   autotuner with `CUDA: misaligned address`; no checkpoint was created. Its
   fixed successor `ft-run-1c54ba33` was submitted through the Jobs API with the
-  exact trainer above and is initializing. Its config digest is
+  exact trainer above. It reproduced the same failure after loading all corpus
+  windows and completing pre-train evaluation at `eval_loss=0.9588`: the first
+  backward failed in FLA's `prepare_wy_repr_bwd_kernel` with a Triton
+  `CUDA: misaligned address`. It produced zero optimizer steps and zero
+  checkpoints. Its config digest is
   `sha256:ff90aef21013b0ea68bbadf5be8df43dc08297d9a830ca7a9601663c36011440`.
+  A one-GPU, no-secret diagnostic job, `chris-q36-fla-b300-v1`, now tests six
+  explicit Triton launch configurations against the exact Qwen gated-delta
+  tensor shape in the same trainer image. Each candidate runs in a fresh
+  process because a CUDA address fault poisons its process context. The probe
+  is queued normally through `training-lq`; it does not preempt or modify any
+  other workload. The full SFT request remains locked.
 - The RL intent-to-treat split remains 130 train / 10 dev / 20 untouched test.
   One historical train version is archived and server-unrunnable, so an explicit
   signed as-treated request contains 129 train and 10 dev tasks. That exact
@@ -70,7 +80,7 @@
   MLflow while the Nebius MLflow application and Service are intentionally
   disabled. It produced no steps or checkpoints. Fixed successor
   `ft-run-c89da950` was submitted through the Jobs API with two exact training
-  tasks and is initializing. Its config digest is
+  tasks and is running. Its config digest is
   `sha256:b6db6560c74e9d23d9b758b78654bc9b28b028ca6d0d99d01eee002118bbe9a9`.
   The full request remains unsubmitted until that successor proves rollout,
   deterministic verifier reward, optimizer step, and checkpoint save.
