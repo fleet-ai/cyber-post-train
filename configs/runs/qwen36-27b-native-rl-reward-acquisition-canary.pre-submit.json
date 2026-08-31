@@ -128,6 +128,33 @@
     "evaluation_episodes": 0,
     "context_compaction": "disabled_single_flat_trajectory"
   },
+  "canary_outcome_contract": {
+    "b300_65k_feasibility": {
+      "acceptance_evidence": [
+        "both TP4 inference engines initialize with the requested 65,536-token context",
+        "all eight planned rollouts complete without CUDA OOM or invalid KV-cache sizing",
+        "the trainer reaches exactly one optimizer step"
+      ],
+      "failure_classification": "CUDA OOM, engine initialization failure, or invalid KV-cache sizing is an infrastructure/configuration failure",
+      "prohibited_claim_on_failure": "Do not claim an optimizer result or model incapability when feasibility fails before the optimizer step."
+    },
+    "reward_acquisition": {
+      "measurement": "Record all eight authoritative binary rewards and their exact verifier execution IDs.",
+      "zero_reward_interpretation": "Eight valid zero rewards is a measured canary result, not an infrastructure failure."
+    },
+    "optimizer_and_checkpoint": {
+      "acceptance_evidence": "Exactly one optimizer step and one retained checkpoint, both bound to the exact run UID and trainer image digest."
+    }
+  },
+  "diagnostic_protocol_differences": [
+    {
+      "id": "multiple_tool_calls_per_turn",
+      "status": "accepted_for_native_only_reward_acquisition_canary",
+      "current_behavior": "The native loop executes multiple parsed tool calls sequentially when a model emits them in one assistant turn.",
+      "required_observation": "Record the count of assistant turns containing zero, one, and more than one parsed tool call.",
+      "later_parity_gate": "An opt-in parallel_tool_calls=false contract remains required before claiming Agent Runtime harness parity."
+    }
+  ],
   "merged_control_bindings": [
     {
       "repository": "fleet-ai/theseus",
@@ -168,20 +195,8 @@
       "detail": "Measure each successor's hydrated prompt plus the complete ordered tool schemas and prove both fit the 16,384-token prompt budget without truncation."
     },
     {
-      "id": "b300_65k_feasibility",
-      "detail": "Prove the 65,536-token flat trajectory, TP4/two-engine colocated shape, and eight-rollout batch fit one 8xB300 worker without OOM or invalid KV-cache sizing."
-    },
-    {
       "id": "per_episode_verifier_identity",
       "detail": "Bind the exact authoritative verifier execution ID for every rollout and prove binary rewards originate from those exact successor task versions."
-    },
-    {
-      "id": "single_tool_call_semantics",
-      "detail": "Add and prove an opt-in parallel_tool_calls=false contract, including rejection semantics for a model turn containing more than one tool call."
-    },
-    {
-      "id": "explicit_paid_run_approval",
-      "detail": "Obtain explicit review and approval only after every preceding blocker is closed in immutable evidence."
     }
   ]
 }

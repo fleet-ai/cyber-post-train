@@ -127,13 +127,24 @@ def test_checked_in_canary_cannot_pass_the_current_paid_launch_gate() -> None:
 
 
 def test_canary_names_every_nonadministrative_launch_blocker() -> None:
-    blocker_ids = [row["id"] for row in _plan()["launch_blockers"]]
+    plan = _plan()
+    blocker_ids = [row["id"] for row in plan["launch_blockers"]]
     assert blocker_ids == [
         "trainer_catalog_readiness",
         "metadata_only_task_successors",
         "prompt_schema_token_preflight",
-        "b300_65k_feasibility",
         "per_episode_verifier_identity",
-        "single_tool_call_semantics",
-        "explicit_paid_run_approval",
     ]
+    assert "approval" not in json.dumps(plan["launch_blockers"]).lower()
+
+
+def test_feasibility_and_multi_call_semantics_are_measured_not_launch_blockers() -> None:
+    plan = _plan()
+    outcome = plan["canary_outcome_contract"]["b300_65k_feasibility"]
+    diagnostic = plan["diagnostic_protocol_differences"]
+
+    assert "infrastructure/configuration failure" in outcome["failure_classification"]
+    assert "Do not claim an optimizer result" in outcome["prohibited_claim_on_failure"]
+    assert [row["id"] for row in diagnostic] == ["multiple_tool_calls_per_turn"]
+    assert diagnostic[0]["status"] == "accepted_for_native_only_reward_acquisition_canary"
+    assert "Agent Runtime harness parity" in diagnostic[0]["later_parity_gate"]

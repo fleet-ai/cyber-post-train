@@ -1,6 +1,7 @@
 # Native Qwen3.6 reward-acquisition canary
 
 Status: **blocked pre-submission**. This note and its companion config do not authorize a paid run.
+That state reflects unresolved technical identity/preflight gates, not missing user authorization.
 
 The canary is deliberately smaller than the three-task Agent Runtime parity study. It asks one
 question first: can native Qwen acquire any authoritative binary reward across eight rollouts,
@@ -30,10 +31,15 @@ Merged Theseus PRs #28407 and #28433 provide the long-horizon controls and fail-
 execution boundary; #28441 pins the corresponding `2bc0ba51` trainer build. Merge status is not
 deployment evidence. Before launch, the exact trainer catalog row and image digest must be Ready;
 both task versions need exact metadata-only successors and authoritative preview evidence; prompt
-plus complete schema tokenization must fit; the 65k TP4/two-engine shape must be shown feasible on
-B300; each episode must bind its exact verifier execution; and opt-in one-tool-call-per-turn
-semantics must be implemented and proven.
+plus complete schema tokenization must fit; and each episode must bind its exact verifier execution.
 
 Until then, the request intentionally has no trainer UUID and no task-version bindings. The current
 paid-launch gate rejects it. Filling only those blanks is not sufficient: every structured blocker
-in the companion file must have immutable evidence and explicit approval.
+in the companion file must have immutable evidence.
+
+The canary itself measures whether the requested 65k TP4/two-engine shape fits on 8xB300. CUDA OOM,
+engine initialization failure, or invalid KV-cache sizing is an infrastructure/configuration
+failure and cannot support an optimizer or model-incapability claim. The native loop may execute
+multiple parsed calls from one assistant turn sequentially; this run records that frequency as a
+diagnostic. It remains a blocker for a later Agent Runtime parity claim, not for this native-only
+reward-acquisition measurement.
