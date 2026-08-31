@@ -21,7 +21,7 @@ archive. The checked-in plan is
 - Training config SHA-256:
   `3a56db536d8918cadad8961dc450e1210488742d2981bb53f5ca4347aabcad29`.
 - Trainer image:
-  `fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4`.
+  `fleet/skyrl-train:q36-torchgdn-6db8d0c9@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4`.
 - RayJob entrypoint SHA-256 (exact string, without a trailing newline):
   `sha256:f88435165af2bb65a41528aa7d82395431c234178289dba2c9b7fbe58a73024c`.
 - Base serving: SGLang image
