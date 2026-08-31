@@ -582,3 +582,6 @@ def test_cast_job_is_queued_cpu_only_digest_pinned_and_create_only():
     assert "kubectl create -f" in script
     assert 'value["immutable"]=True' in script
     assert "require_all_absent" in script
+    assert "temp_dir=$(mktemp -d)" in script
+    assert 'cast_input="$temp_dir/cast-input.json"' in script
+    assert "cast_input=$(mktemp)" not in script
