@@ -1,12 +1,12 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: chris-cyber-qwen36-sft-evidence-v2
+  name: chris-cyber-qwen36-sft-evidence-v3
   namespace: fleet-train-jobs
   labels:
     kueue.x-k8s.io/queue-name: training-lq
     cyber-post-train.fleet.ai/owner: chris
-    cyber-post-train.fleet.ai/experiment: qwen36-sft-evidence-v2
+    cyber-post-train.fleet.ai/experiment: qwen36-sft-evidence-v3
     cyber-post-train.fleet.ai/model: qwen36
 spec:
   suspend: true
@@ -17,7 +17,7 @@ spec:
     metadata:
       labels:
         cyber-post-train.fleet.ai/owner: chris
-        cyber-post-train.fleet.ai/experiment: qwen36-sft-evidence-v2
+        cyber-post-train.fleet.ai/experiment: qwen36-sft-evidence-v3
         cyber-post-train.fleet.ai/model: qwen36
     spec:
       restartPolicy: Never
@@ -36,7 +36,7 @@ spec:
               # v1 proved /mnt/sfs/jobs is root-owned and not writable by the
               # pinned trainer image's uid 1000. This sibling of the immutable
               # raw export is owned by the same uid and keeps evidence separate.
-              parent=/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/evidence/sfs-v2
+              parent=/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/evidence/sfs-v3
               partial="$parent/.partial"
               final="$parent/receipt"
               test -d "$source" && test -d "$export_root"
@@ -157,7 +157,7 @@ spec:
       volumes:
         - name: bundle
           configMap:
-            name: chris-cyber-qwen36-sft-evidence-v2
+            name: chris-cyber-qwen36-sft-evidence-v3
             items:
               - {key: training__init__.py, path: training/__init__.py}
               - {key: training_io.py, path: training/io.py}

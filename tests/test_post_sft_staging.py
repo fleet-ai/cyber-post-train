@@ -272,7 +272,7 @@ def test_reviewed_plan_binds_exact_local_configmap_code(tmp_path):
     assert observed == plan["staging_execution"]["config_map_code_sha256"]
 
     copy_root = tmp_path / "checkout"
-    for relative in staging.MOUNTED_CODE_FILES.values():
+    for relative in staging.LOCAL_CODE_FILES.values():
         destination = copy_root / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(root / relative, destination)

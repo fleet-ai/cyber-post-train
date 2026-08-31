@@ -79,10 +79,10 @@
     "image_digest": "sha256:febfb971c7352570fc445c466ebd6ffc9d896024958e544a60f2137fd85856b1",
     "command_sha256": "sha256:936f1e94b6971ff6b7b45c7173d79ff5c4b9d39f7a50f869fb39203bed9b9838",
     "config_map_code_sha256": {
-      "training/__init__.py": "sha256:c3152a4d34780d02afdf8ff066f6e7b7f3af5aa2db1cd827ad3aca0c52fd561b",
+      "training/__init__.py": "sha256:85464634e1b48ac40c22bd57bc60fb67241bac402311c31eca7027afb491de68",
       "training/io.py": "sha256:7a0b734a4ab7fb8b702430094c58c72f19ac8fc7cc5e056eb8410267e6bfdfe3",
       "training/post_sft_artifacts.py": "sha256:1404cb56615a5b4b827deca6642e13d79d5dc9e9a9aa5efaf7912b7b61cee124",
-      "training/post_sft_staging.py": "sha256:b79a906faa8086bbac40a529ab5e0f93895afa52ddb4e9033f96942145822b93"
+      "training/post_sft_staging.py": "sha256:b135485ba710b1bd181595d0614d9f7fd84d35b70266406d8cc9c67608acbe72"
     }
   },
   "cast_execution": {
@@ -103,10 +103,10 @@
     "max_shard_bytes": 2147483648,
     "max_source_tensor_bytes": 8589934592,
     "config_map_code_sha256": {
-      "training/__init__.py": "sha256:c3152a4d34780d02afdf8ff066f6e7b7f3af5aa2db1cd827ad3aca0c52fd561b",
+      "training/__init__.py": "sha256:85464634e1b48ac40c22bd57bc60fb67241bac402311c31eca7027afb491de68",
       "training/io.py": "sha256:7a0b734a4ab7fb8b702430094c58c72f19ac8fc7cc5e056eb8410267e6bfdfe3",
       "training/post_sft_artifacts.py": "sha256:1404cb56615a5b4b827deca6642e13d79d5dc9e9a9aa5efaf7912b7b61cee124",
-      "training/post_sft_cast.py": "sha256:96e4af383e78b31b591acaad4e12ded67e2c62010be5c57c665bcb640f7de4b2"
+      "training/post_sft_cast.py": "sha256:ceab3e82cb1560639e0774f6d000954e9b7ab9d22de587883caf53872a2d3cc3"
     }
   },
   "evidence_execution": {
@@ -167,7 +167,7 @@
         "evals/__init__.py": "sha256:d975601b8c65125381967ad8cf17dbc9b87ed383f7cf626791b288dc3132aa9b",
         "evals/webexploitbench/__init__.py": "sha256:364a7569bf22697f0fe54558538e9e20780d5a8cd1721c9aaa4e3a996b795b1d",
         "evals/webexploitbench/post_sft_evidence.py": "sha256:9bb6272d88f81c8ff37fe06a362c77d6c21b96589a9ed65c80f4d28efa4578c6",
-        "training/__init__.py": "sha256:c3152a4d34780d02afdf8ff066f6e7b7f3af5aa2db1cd827ad3aca0c52fd561b",
+        "training/__init__.py": "sha256:85464634e1b48ac40c22bd57bc60fb67241bac402311c31eca7027afb491de68",
         "training/io.py": "sha256:7a0b734a4ab7fb8b702430094c58c72f19ac8fc7cc5e056eb8410267e6bfdfe3",
         "training/post_sft_artifacts.py": "sha256:1404cb56615a5b4b827deca6642e13d79d5dc9e9a9aa5efaf7912b7b61cee124"
       }
@@ -216,7 +216,7 @@
         ]
       },
       "config_map_code_sha256": {
-        "training/__init__.py": "sha256:c3152a4d34780d02afdf8ff066f6e7b7f3af5aa2db1cd827ad3aca0c52fd561b",
+        "training/__init__.py": "sha256:85464634e1b48ac40c22bd57bc60fb67241bac402311c31eca7027afb491de68",
         "training/io.py": "sha256:7a0b734a4ab7fb8b702430094c58c72f19ac8fc7cc5e056eb8410267e6bfdfe3",
         "training/register_post_sft.py": "sha256:be8b23b3c18bc78afa26d07fc33c49aec640037d81ae7191a5b167e86a82cd81"
       }

@@ -143,9 +143,13 @@ The immutable first attempt, `chris-cyber-qwen36-sft-evidence-v1` (UID
 `777191dc-0d80-4453-a74b-609b58c6a848`), was admitted on 2026-08-31 but failed before reading or
 hashing any model file: the pinned trainer image runs as UID 1000 and the root-owned
 `/mnt/sfs/jobs` directory is not writable. Preserve that failed Job as evidence. The create-only
-successor is `chris-cyber-qwen36-sft-evidence-v2`; it writes under the UID-1000-owned export tree
-at `/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/evidence/sfs-v2/receipt`. The checkpoint, raw export,
-image, queue, resources, and verification code remain unchanged.
+v2 successor moved the receipt under the UID-1000-owned export tree and proved that storage fix,
+but its isolated ConfigMap bundle used the repository's import-heavy `training/__init__.py` without
+including all of those unrelated modules. It therefore failed at Python import, again before
+reading any model file. Preserve v2 unchanged as well. The create-only v3 successor mounts a
+minimal package marker and writes to
+`/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/evidence/sfs-v3/receipt`. The checkpoint, raw export,
+image, queue, resources, and verification algorithms remain unchanged.
 
 ```bash
 uv run python -m training.post_sft_cli freeze-sfs \

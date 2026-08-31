@@ -16,7 +16,7 @@ test "$(kubectl -n "$NAMESPACE" get localqueue training-lq -o jsonpath='{.status
 configmap() {
   local cast_input=$1
   kubectl -n "$NAMESPACE" create configmap "$NAME" \
-    --from-file=training__init__.py="$ROOT/training/__init__.py" \
+    --from-file=training__init__.py="$ROOT/evals/post_sft/runtime/training__init__.py" \
     --from-file=training_io.py="$ROOT/training/io.py" \
     --from-file=training_post_sft_artifacts.py="$ROOT/training/post_sft_artifacts.py" \
     --from-file=training_post_sft_cast.py="$ROOT/training/post_sft_cast.py" \
@@ -67,7 +67,7 @@ case "$MODE" in
     observation=$2
     raw_manifest=$3
     test "$(kubectl -n "$NAMESPACE" get rayjob ft-run-29f2bedf -o jsonpath='{.status.jobStatus}')" = SUCCEEDED
-    test "$(kubectl -n "$NAMESPACE" get job chris-cyber-qwen36-sft-evidence-v2 -o jsonpath='{.status.conditions[?(@.type=="Complete")].status}')" = True
+    test "$(kubectl -n "$NAMESPACE" get job chris-cyber-qwen36-sft-evidence-v3 -o jsonpath='{.status.conditions[?(@.type=="Complete")].status}')" = True
     require_all_absent
     PYTHONPATH="$ROOT" uv run python -m training.post_sft_cast validate-bundle \
       --plan "$PLAN" --root "$ROOT" >/dev/null

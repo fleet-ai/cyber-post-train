@@ -1135,7 +1135,9 @@ def _registration_job_observation(serving):
             },
             "immutable": True,
             "data": {
-                "training__init__.py": (ROOT / "training/__init__.py").read_text(),
+                "training__init__.py": (
+                    ROOT / "evals/post_sft/runtime/training__init__.py"
+                ).read_text(),
                 "training_io.py": (ROOT / "training/io.py").read_text(),
                 "training_register_post_sft.py": (
                     ROOT / "training/register_post_sft.py"
