@@ -1,0 +1,4 @@
+# This frozen patch reproduces the exact evaluated upstream runner blob,
+# including four space-only added lines. Treat it as binary evidence for
+# whitespace checking so cleanup cannot silently change the harness pin.
+evals/exploitgym/patches/exploitgym-qwen-code.patch -whitespace
