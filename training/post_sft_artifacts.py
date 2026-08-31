@@ -50,6 +50,17 @@ def structural_manifest(root: Path) -> dict[str, Any]:
     }
 
 
+def structural_tsv_sha256(root: Path) -> str:
+    """Reproduce the pre-conversion BusyBox stat receipt without reading payload bytes."""
+
+    resolved = root.resolve(strict=True)
+    rows = []
+    for path in sorted(item for item in resolved.rglob("*") if item.is_file()):
+        stat = path.stat()
+        rows.append(f"{path}\\t{stat.st_size}\\t{int(stat.st_mtime)}\n")
+    return "sha256:" + hashlib.sha256("".join(rows).encode()).hexdigest()
+
+
 def full_file_manifest(root: Path) -> dict[str, Any]:
     """Serialize hashing to one file at a time to limit pressure on shared SFS."""
 
@@ -142,7 +153,17 @@ def inspect_hf_export(
     if config_sha256 != expected_config_sha256:
         raise ValueError("HF export model config differs from the base checkpoint")
 
-    files = full_file_manifest(resolved)
+    weight_hashes = {row["path"]: row["sha256"] for row in weight_rows}
+    file_rows = []
+    for path in sorted(item for item in resolved.rglob("*") if item.is_file()):
+        relative = path.relative_to(resolved).as_posix()
+        file_rows.append(
+            {
+                "path": relative,
+                "size": path.stat().st_size,
+                "sha256": weight_hashes.get(relative) or sha256_file(path).removeprefix("sha256:"),
+            }
+        )
     return {
         "schema": "cyber_sft_hf_output_inspection_v1",
         "root": str(resolved),
@@ -152,7 +173,7 @@ def inspect_hf_export(
         "tensor_count": tensor_count,
         "parameter_count": parameter_count,
         "weights_manifest_sha256": digest_json(weight_rows),
-        "files_manifest_sha256": files["manifest_sha256"],
+        "files_manifest_sha256": digest_json(file_rows),
         "tokenizer_manifest_sha256": tokenizer_sha256,
         "chat_template_sha256": chat_sha256,
         "config_sha256": config_sha256,
