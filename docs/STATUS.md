@@ -1,4 +1,4 @@
-# Execution status — 2026-08-30
+# Execution status — 2026-08-31
 
 ## Current Qwen 3.6 27B experiment
 
@@ -72,12 +72,22 @@
   candidates passed on an NVIDIA B300 with the exact FLA 0.5.2 / Torch 2.11 /
   Triton 3.6 stack. This isolates the failure to unsafe autotuner benchmarking,
   rather than the selected kernel invocation. Conservative config `2 warps / 4
-  stages` is now content-hashed at
+  stages` was content-hashed at
   `sha256:2166f41ace1a98ec71e623afbb45406324a36a77c9dd13896c95246c605aa143`
   and staged read-only by convention on SFS. Successor gate `ft-run-b786dd74`
-  injects that exact directory with FLA's `default` cache mode, bypassing
-  autotuning only for this kernel; it is initializing through `training-lq`.
-  The full SFT request remains locked.
+  injected that exact directory with FLA's `default` cache mode and proved the
+  override bypassed autotuning. It nevertheless failed on the selected kernel
+  invocation at the first backward with the same misaligned-address error,
+  after pre-evaluation at `eval_loss=0.9586`; it produced zero optimizer steps
+  and zero checkpoints. Source inspection then established that Qwen repeats
+  its 16 query/key heads threefold before calling FLA, so the earlier synthetic
+  probe's 16-head layout did not match the kernel's actual 48-head layout. The
+  one-GPU, no-secret corrective diagnostic `chris-q36-fla-h48-v2` exercised the
+  exact 48/48 head layout through queue `training-lq`. All six explicit launch
+  configurations failed with the same misaligned-address error. This falsifies
+  the earlier unsafe-autotuner hypothesis: the FLA 0.5.2 backward kernel itself
+  is incompatible with this exact Qwen/B300 layout. The full SFT request remains
+  locked pending a kernel-level repair or a proven alternate implementation.
 - The RL intent-to-treat split remains 130 train / 10 dev / 20 untouched test.
   One historical train version is archived and server-unrunnable, so an explicit
   signed as-treated request contains 129 train and 10 dev tasks. That exact
@@ -87,10 +97,17 @@
   MLflow while the Nebius MLflow application and Service are intentionally
   disabled. It produced no steps or checkpoints. Fixed successor
   `ft-run-c89da950` was submitted through the Jobs API with two exact training
-  tasks and is running. Its config digest is
-  `sha256:b6db6560c74e9d23d9b758b78654bc9b28b028ca6d0d99d01eee002118bbe9a9`.
-  The full request remains unsubmitted until that successor proves rollout,
-  deterministic verifier reward, optimizer step, and checkpoint save.
+  tasks. It completed infrastructure/model initialization but all eight rollout
+  episodes failed internally because the rollout service used Fira's
+  `getAccessibleAtlasResources` readiness tool against unrelated environments.
+  The subsequent reference forward also hit SkyRL's VLM microbatch-padding
+  assertion. It produced zero valid training sessions, zero optimizer steps,
+  and zero checkpoints; its one recorded step and two metric rows are therefore
+  infrastructure evidence, not a model result. The replacement configs disable
+  microbatch padding explicitly, but no successor will launch until the
+  environment-neutral readiness fix is proven. The full request remains
+  unsubmitted until a gate proves rollout, deterministic verifier reward,
+  optimizer step, and checkpoint save.
 - Theseus PR #27880 makes the tracker list an explicit deployment capability:
   W&B remains mandatory on Nebius, while MLflow remains mandatory only on
   clusters that actually deploy it. The live Nebius deployment is healthy with

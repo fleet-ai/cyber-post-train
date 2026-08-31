@@ -22,7 +22,9 @@ import torch
 from fla.ops.gated_delta_rule import chunk_gated_delta_rule
 
 torch.manual_seed(20260830)
-B, T, H, HV, K, V = 1, 14336, 16, 48, 128, 128
+# Qwen declares 16 key heads but repeats query/key threefold before invoking
+# FLA, so the kernel itself receives 48 query, key and value heads.
+B, T, H, HV, K, V = 1, 14336, 48, 48, 128, 128
 q = torch.randn(B, T, H, K, device="cuda", dtype=torch.bfloat16, requires_grad=True)
 k = torch.randn(B, T, H, K, device="cuda", dtype=torch.bfloat16, requires_grad=True)
 v = torch.randn(B, T, HV, V, device="cuda", dtype=torch.bfloat16, requires_grad=True)
