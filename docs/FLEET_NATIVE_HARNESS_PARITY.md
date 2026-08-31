@@ -21,8 +21,8 @@ default for existing jobs:
 - configurable `max_turns` (1–600; historical native default 12);
 - a per-turn token cap separate from the total flat-trajectory token budget;
 - a configurable native adapter tool-result clip (historical default 4,000 characters);
-- a fail-closed task contract that requires every exact task version to declare exactly the set
-  `{bash, submit_report}` before any parquet is written;
+- a fail-closed task contract that requires every exact task version to declare the canonical
+  ordered list `[bash, submit_report]` before any parquet is written;
 - canonical tool-schema ordering matching the requested order rather than MCP discovery order.
 
 For a successor diagnostic, the proposed native shape uses the model's full 65,536-token context:
