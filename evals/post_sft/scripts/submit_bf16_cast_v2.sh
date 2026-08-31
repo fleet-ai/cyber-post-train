@@ -71,9 +71,10 @@ case "$MODE" in
     require_all_absent
     PYTHONPATH="$ROOT" uv run python -m training.post_sft_cast validate-bundle \
       --plan "$PLAN" --root "$ROOT" >/dev/null
-    cast_input=$(mktemp)
-    config_map=$(mktemp)
-    trap 'rm -f "$cast_input" "$config_map"' EXIT
+    temp_dir=$(mktemp -d)
+    cast_input="$temp_dir/cast-input.json"
+    config_map="$temp_dir/config-map.json"
+    trap 'rm -f "$cast_input" "$config_map"; rmdir "$temp_dir"' EXIT
     PYTHONPATH="$ROOT" uv run python -m training.post_sft_cast build-input \
       --plan "$PLAN" --observation "$observation" --raw-manifest "$raw_manifest" \
       --output "$cast_input"
