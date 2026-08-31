@@ -64,6 +64,27 @@ def _execution_plan(code_hashes: dict[str, str] | None = None) -> dict:
     }
 
 
+def _cast_receipt_and_manifest(
+    root: Path, inspection: dict, observation_sha256: str
+) -> tuple[dict, dict]:
+    payload = full_file_manifest(root)
+    receipt = {
+        "schema": "cyber_sft_fp32_to_bf16_cast_receipt_v1",
+        "source": {"observation_sha256": observation_sha256},
+        "destination": {
+            "path": str(root),
+            "dtype": "BF16",
+            "inspection": {**inspection, "root": str(root)},
+            "payload_manifest_sha256": payload["manifest_sha256"],
+        },
+    }
+    receipt["cast_receipt_sha256"] = digest_json(receipt)
+    (root / ".fleet-bf16-cast-acceptance.json").write_text(
+        json.dumps(receipt, indent=2, sort_keys=True) + "\n"
+    )
+    return receipt, full_file_manifest(root)
+
+
 def _fake_runtime_provenance(stage_input: dict) -> dict:
     execution = stage_input["execution"]
     stage_input_sha256 = stage_input["stage_input_sha256"]
@@ -144,12 +165,39 @@ def test_manifest_rejects_collision_and_path_traversal(tmp_path):
 
 
 def test_stage_input_binds_observation_manifest_and_tokenizer_evidence():
-    rows = [{"path": "model.safetensors", "size": 2, "sha256": "a" * 64}]
-    raw_manifest = {
+    cast_receipt = {
+        "schema": "cyber_sft_fp32_to_bf16_cast_receipt_v1",
+        "source": {"observation_sha256": "sha256:" + "1" * 64},
+        "destination": {
+            "path": "/cast",
+            "dtype": "BF16",
+            "inspection": {
+                "root": "/cast",
+                "dtype": "bf16",
+                "files_manifest_sha256": digest_json(
+                    [{"path": "model.safetensors", "size": 2, "sha256": "a" * 64}]
+                ),
+            },
+            "payload_manifest_sha256": digest_json(
+                [{"path": "model.safetensors", "size": 2, "sha256": "a" * 64}]
+            ),
+        },
+    }
+    cast_receipt["cast_receipt_sha256"] = digest_json(cast_receipt)
+    receipt_bytes = (json.dumps(cast_receipt, indent=2, sort_keys=True) + "\n").encode()
+    rows = [
+        {
+            "path": ".fleet-bf16-cast-acceptance.json",
+            "size": len(receipt_bytes),
+            "sha256": hashlib.sha256(receipt_bytes).hexdigest(),
+        },
+        {"path": "model.safetensors", "size": 2, "sha256": "a" * 64},
+    ]
+    cast_manifest = {
         "schema": "cyber_sft_full_file_manifest_v1",
-        "root": "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-v1/global_step_318/policy",
-        "file_count": 1,
-        "total_bytes": 2,
+        "root": "/cast",
+        "file_count": 2,
+        "total_bytes": 2 + len(receipt_bytes),
         "files": rows,
         "manifest_sha256": digest_json(rows),
     }
@@ -158,17 +206,25 @@ def test_stage_input_binds_observation_manifest_and_tokenizer_evidence():
         "run_name": "ft-run-574bd7b3",
         "step": 318,
         "output_inspection": {
-            "root": raw_manifest["root"],
-            "files_manifest_sha256": raw_manifest["manifest_sha256"],
+            "root": "/raw",
+            "dtype": "f32",
+            "files_manifest_sha256": "sha256:" + "9" * 64,
         },
-        "raw_export_full_manifest_sha256": raw_manifest["manifest_sha256"],
-        "raw_export_file_count": 1,
-        "raw_export_total_bytes": 2,
     }
     observation["observation_sha256"] = digest_json(observation)
+    cast_receipt["source"]["observation_sha256"] = observation["observation_sha256"]
+    cast_receipt["cast_receipt_sha256"] = digest_json(
+        {key: value for key, value in cast_receipt.items() if key != "cast_receipt_sha256"}
+    )
+    receipt_bytes = (json.dumps(cast_receipt, indent=2, sort_keys=True) + "\n").encode()
+    rows[0].update(size=len(receipt_bytes), sha256=hashlib.sha256(receipt_bytes).hexdigest())
+    cast_manifest.update(
+        total_bytes=2 + len(receipt_bytes),
+        manifest_sha256=digest_json(rows),
+    )
     evidence_sha = "sha256:" + "b" * 64
     plan = {
-        "export": {"expected_output_path": raw_manifest["root"]},
+        "cast_execution": {"destination_path": "/cast"},
         "staging_execution": _execution_plan(),
         "base_model": {
             "tokenizer_equivalence_evidence": {"sha256": evidence_sha},
@@ -180,23 +236,29 @@ def test_stage_input_binds_observation_manifest_and_tokenizer_evidence():
         },
     }
     result = staging.build_stage_input(
-        plan, observation, raw_manifest, tokenizer_evidence_sha256=evidence_sha
+        plan,
+        observation,
+        cast_receipt,
+        cast_manifest,
+        tokenizer_evidence_sha256=evidence_sha,
     )
-    assert result["source"]["raw_full_manifest"]["manifest_sha256"] == digest_json(rows)
+    assert result["source"]["bf16_full_manifest"]["manifest_sha256"] == digest_json(rows)
     assert result["stage_input_sha256"] == digest_json(
         {key: value for key, value in result.items() if key != "stage_input_sha256"}
     )
 
-    observation["raw_export_file_count"] = 2
-    observation["observation_sha256"] = digest_json(
-        {key: value for key, value in observation.items() if key != "observation_sha256"}
-    )
+    cast_manifest["files"][1]["sha256"] = "b" * 64
+    cast_manifest["manifest_sha256"] = digest_json(cast_manifest["files"])
     try:
         staging.build_stage_input(
-            plan, observation, raw_manifest, tokenizer_evidence_sha256=evidence_sha
+            plan,
+            observation,
+            cast_receipt,
+            cast_manifest,
+            tokenizer_evidence_sha256=evidence_sha,
         )
     except ValueError as exc:
-        assert "does not bind" in str(exc)
+        assert "payload manifest" in str(exc)
     else:
         raise AssertionError("observation/manifest mismatch unexpectedly passed")
 
@@ -236,7 +298,9 @@ def test_execute_stage_streams_verifies_composes_and_promotes_atomically(tmp_pat
         expected_parameter_count=1,
         expected_sidecar_sha256=sidecars,
     )
-    raw_manifest = full_file_manifest(raw)
+    cast_receipt, raw_manifest = _cast_receipt_and_manifest(
+        raw, raw_inspection, "sha256:" + "1" * 64
+    )
     archive = tmp_path / "source.zip"
     with zipfile.ZipFile(archive, "w") as bundle:
         for path in raw.iterdir():
@@ -259,9 +323,10 @@ def test_execute_stage_streams_verifies_composes_and_promotes_atomically(tmp_pat
         "schema": staging.STAGE_SCHEMA,
         "source": {
             "filebrowser_url": "http://filebrowser.invalid/download",
-            "raw_full_manifest": raw_manifest,
-            "raw_inspection": raw_inspection,
+            "bf16_full_manifest": raw_manifest,
+            "bf16_inspection": raw_inspection,
             "observation_sha256": "sha256:" + "1" * 64,
+            "cast_receipt_sha256": cast_receipt["cast_receipt_sha256"],
         },
         "composition": {
             "base_root": str(base),
@@ -274,7 +339,7 @@ def test_execute_stage_streams_verifies_composes_and_promotes_atomically(tmp_pat
         },
         "execution": _execution_plan(),
         "destination": {"path": str(final), "must_be_absent": True},
-        "raw_file_count": raw_manifest["file_count"],
+        "source_file_count": raw_manifest["file_count"],
     }
     stage_input["stage_input_sha256"] = digest_json(stage_input)
     monkeypatch.setattr(staging, "_runtime_execution_provenance", _fake_runtime_provenance)

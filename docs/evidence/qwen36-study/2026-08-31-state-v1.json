@@ -1,6 +1,6 @@
 {
   "schema": "qwen36_cyber_post_train_state_observation_v1",
-  "observed_at": "2026-08-31T16:56:40Z",
+  "observed_at": "2026-08-31T20:23:20Z",
   "scope": "Prompt-free, secret-free evidence index. Live scheduler states are observations, not terminal claims.",
   "model": {
     "repository": "Qwen/Qwen3.6-27B",
@@ -88,13 +88,30 @@
     "export": {
       "name": "ft-run-29f2bedf",
       "rayjob_uid": "51957fb6-c8c5-4e72-ab1b-8ec80e38e68b",
-      "observed_status": "Suspended",
-      "queue_state": "Pending",
+      "observed_status": "SUCCEEDED",
+      "queue_state": "Terminal",
       "optimizer_steps_expected": 0,
       "output_root": "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-v1",
+      "terminal_result": {
+        "status": "SUCCEEDED",
+        "optimizer_steps_observed": 0,
+        "raw_dtype": "F32",
+        "raw_safetensor_shards": 3,
+        "raw_safetensor_bytes": 109427064152,
+        "serving_eligible": false,
+        "reason": "Raw export is FP32; deterministic BF16 cast evidence is required before serving."
+      }
+    },
+    "bf16_cast": {
+      "job_name": "chris-cyber-qwen36-sft-bf16-cast-v1",
+      "status": "not_launched",
+      "source_dtype": "F32",
+      "destination_dtype": "BF16",
+      "policy": "deterministic_sorted_tensor_fp32_to_bf16_v1",
+      "destination_path": "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-bf16-v1/global_step_318/policy",
       "terminal_result": null
     },
-    "plan": {"path": "configs/evaluation/qwen36-27b-ft-run-574bd7b3-post-sft.json", "file_sha256": "sha256:32e1034e564a99062d7b909a6865c866ba1ce101d467480f9056499e83471613"}
+    "plan": {"path": "configs/evaluation/qwen36-27b-ft-run-574bd7b3-post-sft.json", "file_sha256": "sha256:a22934f1d72bbe7f6ffa900107695d1cfd63bf287ef3afbd5f2dbdbcf8523b40"}
   },
   "native_fleet_rl": {
     "one_step_gate": {

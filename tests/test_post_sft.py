@@ -64,6 +64,9 @@ def _export_binding():
         "source_checkpoint_path": f"/mnt/sfs/checkpoints/{RUN}/global_step_318",
         "output_root": output_root,
         "expected_output_path": f"{output_root}/global_step_318/policy",
+        "bf16_cast_destination": (
+            f"/mnt/sfs/exports/cyber-sft/{RUN}/step-318-bf16-v1/global_step_318/policy"
+        ),
         "inference_staging_destination": "/models/cyber-sft/ft-run-574bd7b3/step-318",
         "destination_preflight": {
             "observed_at": "2026-08-31T16:05:07Z",
@@ -194,9 +197,27 @@ def _export(selection):
             "command_sha256": "sha256:" + "a" * 64,
             "output_path": _export_binding()["expected_output_path"],
             "destination_preflight": _export_binding()["destination_preflight"],
+            "observed_raw_dtype": "F32",
+            "raw_weights_manifest_sha256": "sha256:" + "7" * 64,
+            "raw_full_manifest_sha256": "sha256:" + "8" * 64,
+        },
+        "precision_correction": {
+            "schema": "cyber_sft_fp32_to_bf16_precision_correction_v1",
+            "source_path": _export_binding()["expected_output_path"],
+            "destination_path": _export_binding()["bf16_cast_destination"],
+            "source_dtype": "F32",
+            "destination_dtype": "BF16",
+            "policy": "deterministic_sorted_tensor_fp32_to_bf16_v1",
+            "source_weights_manifest_sha256": "sha256:" + "7" * 64,
+            "destination_weights_manifest_sha256": "sha256:" + "6" * 64,
+            "cast_rows_sha256": "sha256:" + "8" * 64,
+            "source_layout_sha256": "sha256:" + "9" * 64,
+            "cast_receipt_sha256": "sha256:" + "a" * 64,
+            "cast_full_manifest_sha256": "sha256:" + "b" * 64,
+            "exact_cast_bits_verified": True,
         },
         "staging": {
-            "source_path": _export_binding()["expected_output_path"],
+            "source_path": _export_binding()["bf16_cast_destination"],
             "destination_path": "/models/cyber-sft/ft-run-574bd7b3/step-318",
             "image": "registry.example/stager@sha256:" + "b" * 64,
             "command_sha256": "sha256:" + "c" * 64,

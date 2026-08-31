@@ -48,21 +48,30 @@ SkyRL commit `f5bc3b78dfddfb352870d5d7430cd226e5785838`, it gathers the full FSD
 writes with `save_pretrained(..., safe_serialization=True)`, and saves the tokenizer and corrected
 model config. The active run left `hf_save_interval=0`, however, so it will not create that export.
 
-A separate, queue-managed zero-optimizer-step export run must therefore:
+A separate, queue-managed zero-optimizer-step export run was used to:
 
 1. consume the exact promoted checkpoint UUID and archive-manifest digest;
 2. use the exact same trainer image, model, FSDP strategy, and eight-GPU world size;
 3. set `resume_from` to the final `global_step_N`, `num_steps=N`, and
    `hf_save_interval=N+1`, which makes the pinned loop execute zero optimizer steps and take its
    final HF-export branch;
-4. consolidate only model weights into BF16 Hugging Face `safetensors`;
-5. preserve the base tokenizer, configuration, and chat template without modification;
-6. hash every output file and verify all shards, the parameter count, and a clean `safetensors`
-   load; and
-7. copy that exact manifest into the separate inference filesystem under an immutable
-   `/models/.../<checkpoint-uuid>` path accepted by the staging rail, using a digest-pinned stager;
-   and
-8. prove the source and destination manifests are byte-identical and bind the generated
+4. consolidate model weights into Hugging Face `safetensors`; and
+5. hash every output file and verify all shards, the parameter count, and a clean `safetensors`
+   load.
+
+The terminal export unexpectedly serialized all weights as FP32: three shards total
+109,427,064,152 bytes, and the finalized shard headers identify every tensor as `F32`. Those bytes
+are preserved as the immutable raw export. They are never relabelled BF16 and are never served.
+The reviewed corrective rail must therefore:
+
+6. run a separate CPU-only, queue-managed SFS transaction which verifies the full FP32 manifest;
+7. cast every tensor to BF16 in sorted-key, fixed-size shards and reopen every shard to prove its
+   raw BF16 bits equal a direct PyTorch FP32→BF16 cast;
+8. reject mixed dtypes, missing/extra/remapped tensors, shape drift, non-finite source values,
+   memory-bound violations, pre-existing outputs, and incomplete transactions;
+9. copy the verified BF16 weights into the inference filesystem under the immutable `/models/...`
+   path, composing them with exact base runtime sidecars; and
+10. prove the BF16 cast and inference source/destination manifests are byte-identical and bind the
    embedded `.fleet-acceptance.json` receipt while excluding that reserved path from the served
    payload manifest.
 
@@ -124,10 +133,11 @@ Use `python -m training.post_sft_artifacts structural|full` for those read-only 
 full pass only after conversion has ended and at low priority because the source contains roughly
 302 GB of model and optimizer state.
 
-The prepared normal-queue evidence job wraps both passes and the HF inspection without requesting
-a GPU. Preview it with `evals/post_sft/scripts/submit_evidence.sh preview`; the submit mode refuses
-to proceed until `ft-run-29f2bedf` is `SUCCEEDED`, refuses an existing output/job collision, and
-submits suspended through `training-lq`. Do not submit it while conversion is reading the source.
+The prepared normal-queue evidence job wraps both passes and the raw FP32 HF inspection without
+requesting a GPU. Preview it with `evals/post_sft/scripts/submit_evidence.sh preview`; the submit
+mode refuses to proceed until `ft-run-29f2bedf` is `SUCCEEDED`, refuses an existing output/job
+collision, and submits suspended through `training-lq`. This evidence job must finish before the
+BF16 cast job is submitted, so the cast input is bound to the complete raw and source manifests.
 
 ```bash
 uv run python -m training.post_sft_cli freeze-sfs \
@@ -170,8 +180,8 @@ decoder into the serialized tokenizer JSON. Therefore the trainer output is pres
 immutable **raw export**, and is never served directly. Inspect it with `--allow-sidecar-drift` to
 record every raw hash rather than disguising this known difference.
 
-The inference bundle is composed weights-only: copy the raw export's safetensors shards and index,
-then copy every runtime sidecar from exact base revision `6a9e13bd...`. Before accepting it:
+The inference bundle is composed weights-only: copy the verified BF16 cast's safetensors shards and
+index, then copy every runtime sidecar from exact base revision `6a9e13bd...`. Before accepting it:
 
 - compare every effective token→ID mapping and core special-token ID;
 - prove the seven serialization additions are contiguous, non-remapping, and already declared by
@@ -179,21 +189,48 @@ then copy every runtime sidecar from exact base revision `6a9e13bd...`. Before a
 - require encode/decode parity over every rendered SFT training window, the ten lineage-held-out
   Fleet prompts, all 15 WebExploitBench prompts and harness protocol strings, all five ExploitGym
   Qwen Code traces, and explicit tool/control strings;
-- compare every post-training tensor key, shape, and dtype with the exact base layout; and
+- compare every raw post-training tensor key and shape with the exact base layout, explicitly
+  recording the expected FP32/BF16 dtype difference, then compare the cast BF16 layout exactly; and
 - require the final bundle's runtime sidecar hashes to equal the plan's base hashes and its weight
-  and index hashes to equal the raw export.
+  and index hashes to equal the verified BF16 cast.
 
 Any corpus-relevant tokenizer difference is a hard stop. After these gates and inference staging
 emit one digested `cyber_sft_hf_export_v1` receipt, render all paired evaluation inputs. The receipt
 must separately identify raw trainer conversion, composition, and digest-pinned staging; a model
 merely appearing under `/models` is not provenance. `training.post_sft_artifacts` hashes every
-output file and weight shard, verifies that the index exactly names those shards, and checks every
-safetensors tensor is BF16 with the base architecture's exact parameter count.
+output file and weight shard, verifies that the index exactly names those shards, and checks the
+raw export is uniformly FP32 while the cast and served outputs are uniformly BF16 with the base
+architecture's exact parameter count.
+
+The CPU cast rail is `evals/post_sft/scripts/submit_bf16_cast.sh`. Preview is non-mutating.
+Submission accepts only the completed evidence Job's digest-bound observation and raw full
+manifest, validates the queue, and creates a suspended Job through `training-lq` using create-only
+ServiceAccount, Role, RoleBinding, immutable ConfigMap, and Job operations. Its destination is
+`/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-bf16-v1/global_step_318/policy`.
+The embedded `.fleet-bf16-cast-acceptance.json` contains the per-tensor cast proof; after atomic
+promotion the same Job publishes a separate terminal evidence directory containing that receipt,
+the full post-marker manifest, and a digest-bound `COMPLETE.json`. Merely finding the destination
+directory is not success.
+
+```bash
+bash evals/post_sft/scripts/submit_bf16_cast.sh preview
+
+# Only after the evidence Job is Complete and these are its exact immutable outputs:
+bash evals/post_sft/scripts/submit_bf16_cast.sh submit \
+  /restricted/ft-run-574bd7b3-observation.json \
+  /restricted/ft-run-574bd7b3-raw-export-full-manifest.json
+```
+
+After the cast Job is Complete, retrieve `cast-receipt.json` and
+`cast-full-manifest.json` from
+`/mnt/sfs/jobs/chris-cyber-qwen36-sft-bf16-cast-v1/receipt/`. The adjacent
+`COMPLETE.json` must bind both files. These two files are inputs to staging; the destination path
+or a successful Pod status alone is insufficient.
 
 The CPU-only inference staging rail is
 `evals/post_sft/scripts/submit_inference_stage.sh`. Its preview performs server-side validation and
-creates nothing. Submission remains blocked until the exact export RayJob and evidence Job both
-succeed. It streams the raw export through the internal read-only filebrowser transport, verifies
+creates nothing. Submission remains blocked until the exact BF16 cast Job succeeds. It streams
+the verified BF16 cast through the internal read-only filebrowser transport, verifies
 every path, size, and SHA-256, rejects symlinks and unsafe ZIP paths, composes post-training weights
 and index with the exact base runtime sidecars, and re-runs BF16/layout/parameter/hash inspection.
 The final model path must be absent or contain the exact already-committed transaction. The
@@ -208,6 +245,13 @@ matching payload is a completed idempotent recovery. A complete partial director
 receipt can be validated and promoted without downloading again. An incomplete/corrupt partial,
 an unaccepted final, or simultaneous partial and final paths is a hard stop requiring review; the
 rail never deletes or repairs those states automatically.
+
+```bash
+bash evals/post_sft/scripts/submit_inference_stage.sh submit \
+  /restricted/ft-run-574bd7b3-observation.json \
+  /restricted/ft-run-574bd7b3-bf16-cast-receipt.json \
+  /restricted/ft-run-574bd7b3-bf16-cast-full-manifest.json
+```
 
 The frozen plan records the reviewed SHA-256 map for every code file placed in the ConfigMap; the
 stage input copies that map and binds it with its own digest. The ConfigMap is immutable, and the
@@ -287,7 +331,8 @@ submitter log's parsed absence of optimizer events, and bounded API progress fie
 operator-authored `optimizer_steps: 0` assertion or empty metric array.
 
 The other inputs are produced directly by the existing gates: `observation.json` from the evidence
-Job, the exact `stage-input.json` stored in the staging ConfigMap, and the embedded
+Job, `cast-receipt.json` and `cast-full-manifest.json` from the cast terminal evidence directory,
+the exact `stage-input.json` stored in the staging ConfigMap, and the embedded
 `.fleet-acceptance.json` inside the atomically promoted inference directory. The assembler
 validates every embedded digest and cross-checks the checkpoint, run, paths, raw weights, composed
 weights, tokenizer, chat template, configuration, runtime sidecars, staging image, staging command,
@@ -300,6 +345,8 @@ uv run python -m training.post_sft_cli assemble-export \
   --export-request /restricted/ft-run-574bd7b3-export-request-receipt.json \
   --export-run-observation /restricted/ft-run-29f2bedf-terminal-observation.json \
   --export-observation /restricted/ft-run-574bd7b3-observation.json \
+  --cast-receipt /restricted/ft-run-574bd7b3-bf16-cast-receipt.json \
+  --cast-full-manifest /restricted/ft-run-574bd7b3-bf16-cast-full-manifest.json \
   --stage-input /restricted/ft-run-574bd7b3-stage-input.json \
   --staging-receipt /restricted/ft-run-574bd7b3-staging-acceptance.json \
   --output /restricted/ft-run-574bd7b3-hf-export.json

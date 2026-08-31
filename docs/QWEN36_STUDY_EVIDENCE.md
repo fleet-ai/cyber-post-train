@@ -1,6 +1,6 @@
 # Qwen3.6-27B cyber post-training study — living evidence report
 
-Last evidence observation: **2026-08-31 16:56 UTC**. Machine-readable snapshot:
+Last evidence observation: **2026-08-31 20:23 UTC**. Machine-readable snapshot:
 [`2026-08-31-state-v1.json`](evidence/qwen36-study/2026-08-31-state-v1.json).
 
 This report distinguishes **terminal results**, **operational gates** that prove
@@ -16,7 +16,7 @@ nothing here treats a queued job as completed.
 | WebExploitBench base | Terminal | 10/110 vulnerabilities: 9.09% micro pass@1, 0.0877 target-macro mean, 0 infrastructure-invalid targets. |
 | Fleet test20 base | Terminal, reconciled | 1/20 exact held-out task versions: 5.0% pass@1, 0 primary-evaluation infrastructure-invalid tasks. |
 | ExploitGym base pilot | Terminal, descriptive only | 0/5 valid outcomes. It is not a paired control because its two rebuilt harness images were not bit-identical. |
-| SFT | Training terminal; export pending | `ft-run-574bd7b3` succeeded at step 318. Zero-step Hugging Face export `ft-run-29f2bedf` remained Suspended/Pending. |
+| SFT | Training and raw export terminal; BF16 correction pending | `ft-run-574bd7b3` succeeded at step 318. Zero-step export `ft-run-29f2bedf` succeeded without an optimizer step but emitted FP32, so it is preserved and blocked from serving pending verified BF16 casting. |
 | Native Fleet RL gate | Operational terminal gate | `ft-run-98e50db3` completed real rollouts and one optimizer-path step, but every reward/advantage was zero and all episodes truncated. |
 | Native Fleet RL full | Pending | Chunked-binding successor `ft-run-0081ca94` is Suspended/Pending with 129 train and 10 dev versions. |
 | Verified Miles RL | Pending | Canary 02 proved two authoritative rollouts but failed before optimization. Rank-safe canary 03 is Suspended/Pending. |
@@ -139,7 +139,7 @@ No scored evaluation has launched from that rail.
 Evidence: [`pilot`](evidence/exploitgym/2026-08-31-qwen36-pilot-v1.json) and
 [`control image`](evidence/exploitgym/2026-08-31-control-image-v1.json).
 
-## SFT: training complete, export pending
+## SFT: training and raw export complete; BF16 correction pending
 
 `ft-run-574bd7b3` is **SUCCEEDED** under RayJob UID
 `fe0256e7-ba30-470d-abd9-b148cd3cdbbd`. It used config
@@ -151,7 +151,7 @@ The final selected source is `/mnt/sfs/checkpoints/ft-run-574bd7b3/global_step_3
 The checkpoint API has zero rows by design because checkpoint application and
 archive were disabled. The handoff instead requires SFS markers, unchanged
 pre/post structure, and a full file-by-file post-conversion manifest. Structural
-and source-sidecar evidence exists; the full export evidence does not.
+and source-sidecar evidence exists; the low-priority full source/raw manifest Job has not run.
 
 Raw trainer sidecars differ because of Transformers serialization and must not
 be served. Effective mapping and special IDs match, and exact encode/decode
@@ -160,9 +160,18 @@ must combine exact post-SFT weights with byte-identical base sidecars and repeat
 all checks.
 
 Export `ft-run-29f2bedf`, UID
-`51957fb6-c8c5-4e72-ab1b-8ec80e38e68b`, was **Suspended/Pending**. It is
-configured to resume step 318, execute zero optimizer steps, and emit BF16
-safetensors. It has no terminal result.
+`51957fb6-c8c5-4e72-ab1b-8ec80e38e68b`, is **SUCCEEDED**. Its terminal log proves it loaded and
+resumed `global_step_318`, had `num_steps=318`, immediately saved the final checkpoint and HF model
+at step 318, and never executed step 319 or an optimizer event. The raw export is three
+safetensor shards totalling 109,427,064,152 bytes; finalized headers prove the tensors are `F32`,
+not the requested BF16. The raw FP32 bytes remain immutable evidence and will not be relabelled or
+served.
+
+A reviewed, create-only CPU conversion rail targets a new SFS path. It will verify the complete
+raw manifest, cast sorted tensors into bounded BF16 shards, and reopen every tensor to prove exact
+bit equality with a direct FP32→BF16 cast. It binds the source checkpoint manifest, raw and
+destination manifests, parameter count, code, command, digest-pinned image, Kubernetes Job/Pod,
+and immutable ConfigMap. Neither that cast Job nor any post-SFT evaluation has launched.
 
 Evidence: [`post-SFT plan`](POST_SFT_EVALUATION.md),
 [`tokenizer gate`](evidence/post_sft/2026-08-31-tokenizer-equivalence.md), and
@@ -229,8 +238,8 @@ pass@1, harness, budgets, routes, and verifier bindings—not mutable task keys.
 
 Remaining gates, in order:
 
-1. Finish the zero-step SFT export without changing weights.
-2. Produce full source/export manifests and compose weights with exact base sidecars.
+1. Produce the full source and raw-FP32 export manifests.
+2. Run and verify the deterministic queued CPU FP32→BF16 cast, then stage those exact BF16 weights with exact base sidecars.
 3. Register with the same SGLang image/runtime and pass checkpoint, tokenizer, tool-call, and fixed-prompt/logit checks.
 4. Validate the WebExploitBench Qwen Code paired-identity receipt against the live post-SFT route.
 5. Launch paired WebExploitBench, ExploitGym, and Fleet test20 arms with symmetric failure classification.
@@ -256,7 +265,7 @@ Remaining gates, in order:
 `configs/experiment.yaml` is an early sketch whose trainer pin is superseded by
 per-run configs. Neither overrides the receipts above.
 
-Live queue observations are time-bound. SFT still lacks its full export and
+Live queue observations are time-bound. SFT still lacks its verified BF16 artifact and
 live-serving receipts. Native RL checkpoint durability must not be inferred
 from save timing. No post-SFT or post-RL benchmark score exists. No
 WebExploitBench prompt, application byte, answer, trace, output, or hidden

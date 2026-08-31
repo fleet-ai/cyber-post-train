@@ -30,7 +30,9 @@ CONFIG_SHA256 = "sha256:" + "6" * 64
 SOURCE_SHA256 = "sha256:" + "7" * 64
 RAW_WEIGHTS_SHA256 = "sha256:" + "8" * 64
 RAW_FILES_SHA256 = "sha256:" + "9" * 64
+CAST_WEIGHTS_SHA256 = "sha256:" + "0" * 64
 COMPOSED_FILES_SHA256 = "sha256:" + "a" * 64
+RAW_LAYOUT_SHA256 = digest_json({"weight": {"shape": [1], "dtype": "F32"}})
 SIDECARS = {"config.json": CONFIG_SHA256, "tokenizer.json": "sha256:" + "b" * 64}
 STAGING_CODE_SHA256 = {
     "training/__init__.py": "sha256:" + "c" * 64,
@@ -38,6 +40,58 @@ STAGING_CODE_SHA256 = {
     "training/post_sft_artifacts.py": "sha256:" + "e" * 64,
     "training/post_sft_staging.py": "sha256:" + "f" * 64,
 }
+CAST_CODE_SHA256 = {"training/post_sft_cast.py": "sha256:" + "1" * 64}
+
+
+def _cast_execution_plan():
+    return {
+        "schema": "cyber_sft_fp32_to_bf16_cast_execution_plan_v1",
+        "namespace": "fleet-train-jobs",
+        "job_name": "chris-cyber-cast-v1",
+        "config_map_name": "chris-cyber-cast-v1",
+        "service_account_name": "chris-cyber-cast-observer-v1",
+        "container_name": "cast",
+        "image": "registry.example/caster@sha256:" + "1" * 64,
+        "image_digest": "sha256:" + "1" * 64,
+        "command_sha256": "sha256:" + "2" * 64,
+        "config_map_code_sha256": CAST_CODE_SHA256,
+    }
+
+
+def _cast_runtime(cast_input_sha256):
+    plan = _cast_execution_plan()
+    return {
+        "schema": "cyber_sft_fp32_to_bf16_cast_execution_v1",
+        "image": plan["image"],
+        "image_id": "containerd://" + plan["image_digest"],
+        "resolved_image_digest": plan["image_digest"],
+        "command_sha256": plan["command_sha256"],
+        "service_account_name": plan["service_account_name"],
+        "container_name": plan["container_name"],
+        "cast_input_sha256": cast_input_sha256,
+        "job": {
+            "namespace": plan["namespace"],
+            "name": plan["job_name"],
+            "uid": "cast-job-uid",
+            "resource_version": "1",
+            "spec_sha256": "sha256:" + "3" * 64,
+        },
+        "pod": {
+            "namespace": plan["namespace"],
+            "name": "cast-pod",
+            "uid": "cast-pod-uid",
+            "resource_version": "2",
+            "spec_sha256": "sha256:" + "4" * 64,
+        },
+        "config_map": {
+            "namespace": plan["namespace"],
+            "name": plan["config_map_name"],
+            "uid": "cast-config-uid",
+            "resource_version": "3",
+            "immutable": True,
+            "mounted_file_sha256": CAST_CODE_SHA256,
+        },
+    }
 
 
 def _sign(value, field):
@@ -114,6 +168,9 @@ def _binding():
         "source_checkpoint_path": f"/mnt/sfs/checkpoints/{RUN}/global_step_318",
         "output_root": output_root,
         "expected_output_path": f"{output_root}/global_step_318/policy",
+        "bf16_cast_destination": (
+            f"/mnt/sfs/exports/cyber-sft/{RUN}/step-318-bf16-v1/global_step_318/policy"
+        ),
         "inference_staging_destination": f"/models/cyber-sft/{RUN}/step-318",
         "destination_preflight": {
             "observed_at": "2026-08-31T16:05:07Z",
@@ -412,7 +469,8 @@ def _artifacts():
     raw_inspection = {
         "root": _binding()["expected_output_path"],
         "format": "safetensors",
-        "dtype": "bf16",
+        "dtype": "f32",
+        "parameter_count": 1,
         "weights_manifest_sha256": RAW_WEIGHTS_SHA256,
         "files_manifest_sha256": RAW_FILES_SHA256,
         "all_shards_present": True,
@@ -428,25 +486,118 @@ def _artifacts():
             "full_file_manifest_sha256": SOURCE_SHA256,
             "output_inspection": raw_inspection,
             "raw_export_full_manifest_sha256": RAW_FILES_SHA256,
+            "weight_layout_equivalence": {
+                "schema": "cyber_sft_safetensors_layout_equivalence_v2",
+                "tensor_count": 1,
+                "missing_key_count": 0,
+                "unexpected_key_count": 0,
+                "shape_mismatch_count": 0,
+                "dtype_mismatch_count": 1,
+                "dtype_match_required": False,
+                "base_layout_sha256": "sha256:" + "1" * 64,
+                "candidate_layout_sha256": RAW_LAYOUT_SHA256,
+                "all_keys_and_shapes_match": True,
+                "all_keys_shapes_and_dtypes_match": False,
+            },
+            "model_config_architecture_equivalence": {
+                "all_architecture_and_vocab_fields_identical": True,
+                "normalized_architecture_sha256": "sha256:" + "2" * 64,
+            },
         },
         "observation_sha256",
     )
-    raw_full_manifest = {
+    cast_payload_rows = [
+        {"path": "model.safetensors", "size": 10, "sha256": "e" * 64}
+    ]
+    cast_payload_sha256 = digest_json(cast_payload_rows)
+    cast_inspection = {
+        "root": _binding()["bf16_cast_destination"],
+        "format": "safetensors",
+        "dtype": "bf16",
+        "parameter_count": 1,
+        "weights_manifest_sha256": CAST_WEIGHTS_SHA256,
+        "files_manifest_sha256": cast_payload_sha256,
+        "all_shards_present": True,
+        "safetensors_load_passed": True,
+        "parameter_count_matches": True,
+    }
+    cast_rows = [
+        {
+            "key": "weight",
+            "shape": [1],
+            "elements": 1,
+            "source_dtype": "F32",
+            "destination_dtype": "BF16",
+            "source_shard": "raw.safetensors",
+            "destination_shard": "model-00001-of-00001.safetensors",
+            "source_tensor_sha256": "sha256:" + "4" * 64,
+            "destination_tensor_sha256": "sha256:" + "5" * 64,
+            "exact_cast_bits_verified": True,
+        }
+    ]
+    cast_receipt = _sign(
+        {
+            "schema": "cyber_sft_fp32_to_bf16_cast_receipt_v1",
+            "cast_input_sha256": "sha256:" + "1" * 64,
+            "source": {
+                "path": _binding()["expected_output_path"],
+                "observation_sha256": export_observation["observation_sha256"],
+                "checkpoint_full_manifest_sha256": SOURCE_SHA256,
+                "raw_full_manifest_sha256": RAW_FILES_SHA256,
+                "raw_full_manifest_after_sha256": RAW_FILES_SHA256,
+                "raw_source_stable_during_cast": True,
+                "raw_weights_manifest_sha256": RAW_WEIGHTS_SHA256,
+                "dtype": "F32",
+            },
+            "conversion": {
+                "schema": "cyber_sft_fp32_to_bf16_cast_proof_v1",
+                "policy": "deterministic_sorted_tensor_fp32_to_bf16_v1",
+                "source_dtype": "F32",
+                "destination_dtype": "BF16",
+                "parameter_count": 1,
+                "tensor_count": 1,
+                "source_layout_sha256": RAW_LAYOUT_SHA256,
+                "cast_rows_sha256": digest_json(cast_rows),
+                "cast_rows": cast_rows,
+                "all_source_values_finite": True,
+                "all_destination_bits_equal_direct_bf16_cast": True,
+            },
+            "execution_plan": _cast_execution_plan(),
+            "execution": _cast_runtime("sha256:" + "1" * 64),
+            "destination": {
+                "path": _binding()["bf16_cast_destination"],
+                "dtype": "BF16",
+                "inspection": cast_inspection,
+                "payload_manifest_sha256": cast_payload_sha256,
+            },
+        },
+        "cast_receipt_sha256",
+    )
+    cast_manifest_rows = [
+        {
+            "path": ".fleet-bf16-cast-acceptance.json",
+            "size": 100,
+            "sha256": "d" * 64,
+        },
+        *cast_payload_rows,
+    ]
+    cast_full_manifest = {
         "schema": "cyber_sft_full_file_manifest_v1",
-        "root": _binding()["expected_output_path"],
-        "file_count": 1,
-        "total_bytes": 10,
-        "files": [{"path": "model.safetensors", "size": 10, "sha256": "f" * 64}],
-        "manifest_sha256": RAW_FILES_SHA256,
+        "root": _binding()["bf16_cast_destination"],
+        "file_count": 2,
+        "total_bytes": 110,
+        "files": cast_manifest_rows,
+        "manifest_sha256": digest_json(cast_manifest_rows),
     }
     stage_input = _sign(
         {
             "schema": "cyber_sft_inference_stage_input_v1",
             "source": {
-                "sfs_path": _binding()["expected_output_path"],
-                "raw_full_manifest": raw_full_manifest,
-                "raw_inspection": raw_inspection,
+                "sfs_path": _binding()["bf16_cast_destination"],
+                "bf16_full_manifest": cast_full_manifest,
+                "bf16_inspection": cast_inspection,
                 "observation_sha256": export_observation["observation_sha256"],
+                "cast_receipt_sha256": cast_receipt["cast_receipt_sha256"],
             },
             "composition": {
                 "runtime_sidecar_sha256": SIDECARS,
@@ -465,7 +616,7 @@ def _artifacts():
     )
     composed = {
         "root": _binding()["inference_staging_destination"],
-        "weights_manifest_sha256": RAW_WEIGHTS_SHA256,
+        "weights_manifest_sha256": CAST_WEIGHTS_SHA256,
         "files_manifest_sha256": COMPOSED_FILES_SHA256,
         "tokenizer_manifest_sha256": TOKENIZER_SHA256,
         "chat_template_sha256": CHAT_SHA256,
@@ -480,10 +631,14 @@ def _artifacts():
             "schema": "cyber_sft_inference_stage_receipt_v1",
             "stage_input_sha256": stage_input["stage_input_sha256"],
             "source_observation_sha256": export_observation["observation_sha256"],
-            "source_raw_manifest_sha256": RAW_FILES_SHA256,
+            "source_bf16_manifest_sha256": cast_full_manifest["manifest_sha256"],
+            "source_cast_receipt_sha256": cast_receipt["cast_receipt_sha256"],
             "execution": _stage_runtime_execution(stage_input),
             "composition": {
-                "policy": "raw_post_weights_and_index_plus_exact_base_runtime_sidecars_v1",
+                "policy": (
+                    "verified_bf16_cast_weights_and_index_plus_"
+                    "exact_base_runtime_sidecars_v1"
+                ),
                 "tokenizer_equivalence_evidence_sha256": "sha256:" + "0" * 64,
                 "inspection": composed,
             },
@@ -502,7 +657,16 @@ def _artifacts():
         },
         "staging_receipt_sha256",
     )
-    return selection, request, run_observation, export_observation, stage_input, staging_receipt
+    return (
+        selection,
+        request,
+        run_observation,
+        export_observation,
+        cast_receipt,
+        cast_full_manifest,
+        stage_input,
+        staging_receipt,
+    )
 
 
 def _assemble(artifacts):
@@ -514,6 +678,7 @@ def _assemble(artifacts):
         expected_export_binding=_binding(),
         expected_runtime_sidecar_sha256=SIDECARS,
         expected_tokenizer_equivalence_evidence_sha256="sha256:" + "0" * 64,
+        expected_cast_execution=_cast_execution_plan(),
         expected_staging_image=STAGING_IMAGE,
         expected_staging_command_sha256=STAGING_COMMAND_SHA256,
     )
@@ -523,7 +688,10 @@ def test_assembly_builds_and_self_validates_final_export_receipt():
     receipt = _assemble(_artifacts())
     assert receipt["schema"] == "cyber_sft_hf_export_v1"
     assert receipt["conversion"]["optimizer_steps"] == 0
-    assert receipt["output"]["weights_manifest_sha256"] == RAW_WEIGHTS_SHA256
+    assert receipt["output"]["weights_manifest_sha256"] == CAST_WEIGHTS_SHA256
+    assert receipt["precision_correction"]["source_weights_manifest_sha256"] == (
+        RAW_WEIGHTS_SHA256
+    )
     assert receipt["output"]["sidecar_sha256"] == SIDECARS
     assert receipt["staging"]["acceptance_manifest_sha256"].startswith("sha256:")
     assert receipt["export_receipt_sha256"] == digest_json(
@@ -558,16 +726,16 @@ def test_assembly_builds_and_self_validates_final_export_receipt():
     [
         (2, lambda value: value.__setitem__("optimizer_steps", 1), "executed optimizer steps"),
         (
-            5,
+            7,
             lambda value: value["execution"].__setitem__(
                 "image", "registry.example/wrong@sha256:" + "f" * 64
             ),
             "staging image differs",
         ),
         (
-            5,
-            lambda value: value["composition"]["inspection"].__setitem__(
-                "weights_manifest_sha256", "sha256:" + "0" * 64
+            7,
+                lambda value: value["composition"]["inspection"].__setitem__(
+                "weights_manifest_sha256", "sha256:" + "1" * 64
             ),
             "weights differ",
         ),
@@ -586,8 +754,22 @@ def test_assembly_fails_closed_on_zero_step_or_staging_mismatch(index, mutation,
 
 def test_assembly_rejects_tampered_embedded_receipt_before_field_use():
     artifacts = list(_artifacts())
-    artifacts[4]["destination"]["path"] = "/models/collision"
+    artifacts[6]["destination"]["path"] = "/models/collision"
     with pytest.raises(ValueError, match="stage_input_sha256 digest mismatch"):
+        _assemble(artifacts)
+
+
+def test_assembly_rejects_self_asserted_or_tampered_per_tensor_cast_proof():
+    artifacts = list(copy.deepcopy(_artifacts()))
+    cast_receipt = artifacts[4]
+    cast_receipt["conversion"]["cast_rows"][0]["exact_cast_bits_verified"] = False
+    cast_receipt["conversion"]["cast_rows_sha256"] = digest_json(
+        cast_receipt["conversion"]["cast_rows"]
+    )
+    cast_receipt["cast_receipt_sha256"] = digest_json(
+        {key: value for key, value in cast_receipt.items() if key != "cast_receipt_sha256"}
+    )
+    with pytest.raises(ValueError, match="per-tensor cast proof is incomplete"):
         _assemble(artifacts)
 
 
@@ -816,18 +998,18 @@ def test_export_collector_shell_keeps_bearer_token_out_of_argv_and_logs_exact_po
 
 def test_assemble_export_cli_writes_the_only_validated_aggregate(tmp_path):
     artifacts = list(_artifacts())
-    artifacts[4]["execution"] = _stage_execution_plan(
+    artifacts[6]["execution"] = _stage_execution_plan(
         REAL_STAGING_IMAGE, REAL_STAGING_COMMAND_SHA256
     )
-    artifacts[4]["stage_input_sha256"] = digest_json(
-        {key: value for key, value in artifacts[4].items() if key != "stage_input_sha256"}
+    artifacts[6]["stage_input_sha256"] = digest_json(
+        {key: value for key, value in artifacts[6].items() if key != "stage_input_sha256"}
     )
-    artifacts[5]["stage_input_sha256"] = artifacts[4]["stage_input_sha256"]
-    artifacts[5]["execution"] = _stage_runtime_execution(
-        artifacts[4], REAL_STAGING_IMAGE, REAL_STAGING_COMMAND_SHA256
+    artifacts[7]["stage_input_sha256"] = artifacts[6]["stage_input_sha256"]
+    artifacts[7]["execution"] = _stage_runtime_execution(
+        artifacts[6], REAL_STAGING_IMAGE, REAL_STAGING_COMMAND_SHA256
     )
-    artifacts[5]["staging_receipt_sha256"] = digest_json(
-        {key: value for key, value in artifacts[5].items() if key != "staging_receipt_sha256"}
+    artifacts[7]["staging_receipt_sha256"] = digest_json(
+        {key: value for key, value in artifacts[7].items() if key != "staging_receipt_sha256"}
     )
     plan = {
         "schema": "cyber_post_sft_eval_plan_v1",
@@ -839,6 +1021,7 @@ def test_assemble_export_cli_writes_the_only_validated_aggregate(tmp_path):
             "tokenizer_equivalence_evidence": {"sha256": "sha256:" + "0" * 64},
         },
         "serving": {"engine_image": REAL_STAGING_IMAGE},
+        "cast_execution": _cast_execution_plan(),
         "export": _binding(),
     }
     names = (
@@ -846,6 +1029,8 @@ def test_assemble_export_cli_writes_the_only_validated_aggregate(tmp_path):
         "export-request",
         "export-run-observation",
         "export-observation",
+        "cast-receipt",
+        "cast-full-manifest",
         "stage-input",
         "staging-receipt",
     )
@@ -870,6 +1055,10 @@ def test_assemble_export_cli_writes_the_only_validated_aggregate(tmp_path):
         str(paths["export-run-observation"]),
         "--export-observation",
         str(paths["export-observation"]),
+        "--cast-receipt",
+        str(paths["cast-receipt"]),
+        "--cast-full-manifest",
+        str(paths["cast-full-manifest"]),
         "--stage-input",
         str(paths["stage-input"]),
         "--staging-receipt",

@@ -170,6 +170,8 @@ def assemble_export(
     export_request_path: Annotated[Path, typer.Option("--export-request")],
     export_run_observation_path: Annotated[Path, typer.Option("--export-run-observation")],
     export_observation_path: Annotated[Path, typer.Option("--export-observation")],
+    cast_receipt_path: Annotated[Path, typer.Option("--cast-receipt")],
+    cast_full_manifest_path: Annotated[Path, typer.Option("--cast-full-manifest")],
     stage_input_path: Annotated[Path, typer.Option("--stage-input")],
     staging_receipt_path: Annotated[Path, typer.Option("--staging-receipt")],
     output: Annotated[Path, typer.Option("--output")],
@@ -188,6 +190,8 @@ def assemble_export(
         _read(export_request_path),
         _read(export_run_observation_path),
         _read(export_observation_path),
+        _read(cast_receipt_path),
+        _read(cast_full_manifest_path),
         _read(stage_input_path),
         _read(staging_receipt_path),
         expected_tokenizer_manifest_sha256=str(model["tokenizer_manifest_sha256"]),
@@ -198,6 +202,7 @@ def assemble_export(
         expected_tokenizer_equivalence_evidence_sha256=str(
             model["tokenizer_equivalence_evidence"]["sha256"]
         ),
+        expected_cast_execution=plan["cast_execution"],
         expected_staging_image=STAGING_IMAGE,
         expected_staging_command_sha256=STAGING_COMMAND_SHA256,
     )

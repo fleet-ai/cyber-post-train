@@ -52,6 +52,7 @@ spec:
                 --output "$partial/source-full-manifest.json"
               PYTHONPATH=/bundle python -m training.post_sft_artifacts hf "$export_root" \
                 --plan /bundle/plan.json --allow-sidecar-drift \
+                --expected-dtype F32 \
                 --output "$partial/hf-output-inspection.json"
               PYTHONPATH=/bundle python -m training.post_sft_artifacts full "$export_root" \
                 --output "$partial/raw-export-full-manifest.json"
@@ -73,7 +74,7 @@ spec:
               base = pathlib.Path(sys.argv[1])
               candidate = pathlib.Path(sys.argv[2])
               output = pathlib.Path(sys.argv[3])
-              layout = compare_safetensor_layout(base, candidate)
+              layout = compare_safetensor_layout(base, candidate, require_same_dtype=False)
               architecture = compare_model_config_architecture(
                   base / "config.json", candidate / "config.json"
               )

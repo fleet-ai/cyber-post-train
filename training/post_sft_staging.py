@@ -28,7 +28,7 @@ STAGE_SCHEMA = "cyber_sft_inference_stage_input_v1"
 RECEIPT_SCHEMA = "cyber_sft_inference_stage_receipt_v1"
 EXECUTION_SCHEMA = "cyber_sft_inference_stage_execution_v1"
 FILEBROWSER_ORIGIN = "http://filebrowser.fleet-train-data-plane.svc.cluster.local"
-EXPORT_SOURCE = "/exports/cyber-sft/ft-run-574bd7b3/step-318-v1/global_step_318/policy"
+EXPORT_SOURCE = "/exports/cyber-sft/ft-run-574bd7b3/step-318-bf16-v1/global_step_318/policy"
 DESTINATION = "/models/cyber-sft/ft-run-574bd7b3/step-318"
 BASE_ROOT = "/models/qwen3.6-27b/6a9e13bd6fc8f0983b9b99948120bc37f49c13e9"
 JOB_NAME = "chris-cyber-qwen36-sft-stage-574bd7b3-v1"
@@ -622,7 +622,8 @@ def compose_bundle(
 def build_stage_input(
     plan: Mapping[str, Any],
     observation: Mapping[str, Any],
-    raw_manifest: Mapping[str, Any],
+    cast_receipt: Mapping[str, Any],
+    cast_manifest: Mapping[str, Any],
     *,
     tokenizer_evidence_sha256: str,
 ) -> dict[str, Any]:
@@ -632,27 +633,45 @@ def build_stage_input(
         raise ValueError("unsupported post-export observation schema")
     if observation.get("run_name") != "ft-run-574bd7b3" or observation.get("step") != 318:
         raise ValueError("post-export observation names the wrong checkpoint")
-    inspection = observation.get("output_inspection")
-    if not isinstance(inspection, Mapping):
-        raise ValueError("post-export observation has no HF output inspection")
-    expected_source = plan["export"]["expected_output_path"]
-    if inspection.get("root") != expected_source:
-        raise ValueError("HF output inspection names an unexpected raw export path")
-    rows = _manifest_rows(raw_manifest)
-    if raw_manifest.get("root") != expected_source:
-        raise ValueError("raw export manifest names an unexpected source path")
-    if inspection.get("files_manifest_sha256") != raw_manifest.get("manifest_sha256"):
-        raise ValueError("raw export inspection and full manifest disagree")
-    if observation.get("raw_export_full_manifest_sha256") != raw_manifest.get(
-        "manifest_sha256"
-    ) or observation.get("raw_export_file_count") != raw_manifest.get("file_count"):
-        raise ValueError("checkpoint observation does not bind the supplied raw export manifest")
-    if observation.get("raw_export_total_bytes") != raw_manifest.get("total_bytes"):
-        raise ValueError("checkpoint observation raw export byte count differs")
+    raw_inspection = _mapping(observation.get("output_inspection"), "raw inspection")
+    if str(raw_inspection.get("dtype")).lower() != "f32":
+        raise ValueError("post-export observation did not prove raw F32 weights")
+    if cast_receipt.get("schema") != "cyber_sft_fp32_to_bf16_cast_receipt_v1":
+        raise ValueError("unsupported BF16 cast receipt schema")
+    cast_receipt_sha256 = cast_receipt.get("cast_receipt_sha256")
+    if digest_json(
+        {key: value for key, value in cast_receipt.items() if key != "cast_receipt_sha256"}
+    ) != cast_receipt_sha256:
+        raise ValueError("BF16 cast receipt digest does not validate")
+    cast_source = _mapping(cast_receipt.get("source"), "cast source")
+    observation_sha256 = observation.get("observation_sha256")
+    if cast_source.get("observation_sha256") != observation_sha256:
+        raise ValueError("BF16 cast receipt names a different raw export observation")
+    cast_destination = _mapping(cast_receipt.get("destination"), "cast destination")
+    inspection = _mapping(cast_destination.get("inspection"), "cast inspection")
+    expected_source = plan["cast_execution"]["destination_path"]
+    if cast_destination.get("path") != expected_source or inspection.get("root") != expected_source:
+        raise ValueError("BF16 cast receipt names an unexpected destination")
+    if str(inspection.get("dtype")).lower() not in {"bf16", "bfloat16"}:
+        raise ValueError("BF16 cast inspection has an unexpected dtype")
+    rows = _manifest_rows(cast_manifest)
+    if cast_manifest.get("root") != expected_source:
+        raise ValueError("BF16 cast manifest names an unexpected source path")
+    marker = ".fleet-bf16-cast-acceptance.json"
+    marker_rows = [row for row in rows if row["path"] == marker]
+    if len(marker_rows) != 1:
+        raise ValueError("BF16 cast manifest must contain one acceptance receipt")
+    receipt_file_sha256 = hashlib.sha256(
+        (json.dumps(cast_receipt, indent=2, sort_keys=True) + "\n").encode()
+    ).hexdigest()
+    if marker_rows[0]["sha256"] != receipt_file_sha256:
+        raise ValueError("BF16 cast manifest acceptance receipt bytes differ")
+    payload_rows = [row for row in rows if row["path"] != marker]
+    if cast_destination.get("payload_manifest_sha256") != digest_json(payload_rows):
+        raise ValueError("BF16 cast receipt does not bind the supplied payload manifest")
     evidence_binding = plan["base_model"]["tokenizer_equivalence_evidence"]
     if tokenizer_evidence_sha256 != evidence_binding.get("sha256"):
         raise ValueError("tokenizer equivalence evidence differs from the frozen plan")
-    observation_sha256 = observation.get("observation_sha256")
     if not isinstance(observation_sha256, str) or not observation_sha256.startswith("sha256:"):
         raise ValueError("post-export observation must be digest-bound")
     undigested = {key: value for key, value in observation.items() if key != "observation_sha256"}
@@ -667,9 +686,10 @@ def build_stage_input(
         "source": {
             "sfs_path": expected_source,
             "filebrowser_url": source_url,
-            "raw_full_manifest": dict(raw_manifest),
-            "raw_inspection": dict(inspection),
+            "bf16_full_manifest": dict(cast_manifest),
+            "bf16_inspection": dict(inspection),
             "observation_sha256": observation_sha256,
+            "cast_receipt_sha256": cast_receipt_sha256,
         },
         "composition": {
             "base_root": BASE_ROOT,
@@ -684,7 +704,7 @@ def build_stage_input(
         },
         "execution": execution_plan,
         "destination": {"path": DESTINATION, "must_be_absent": True},
-        "raw_file_count": len(rows),
+        "source_file_count": len(rows),
     }
     stage_input["stage_input_sha256"] = digest_json(stage_input)
     return stage_input
@@ -737,12 +757,16 @@ def execute_stage(stage_input: Mapping[str, Any], *, work_root: Path, forwarded_
     extracted = work_root / "raw-export"
     transport = _download_export(str(source.get("filebrowser_url")), archive, forwarded_user)
     raw_root = _safe_extract_zip(archive, extracted)
-    raw_manifest = _mapping(source.get("raw_full_manifest"), "raw full manifest")
+    raw_manifest = _mapping(source.get("bf16_full_manifest"), "BF16 full manifest")
     raw_verified = verify_full_manifest(raw_root, raw_manifest)
-    if raw_verified["manifest_sha256"] != source.get("raw_inspection", {}).get(
+    verified_rows = _manifest_rows(raw_manifest)
+    verified_payload_rows = [
+        row for row in verified_rows if row["path"] != ".fleet-bf16-cast-acceptance.json"
+    ]
+    if digest_json(verified_payload_rows) != source.get("bf16_inspection", {}).get(
         "files_manifest_sha256"
     ):
-        raise ValueError("downloaded raw export differs from its inspection receipt")
+        raise ValueError("downloaded BF16 cast export differs from its inspection receipt")
 
     compose_bundle(
         raw_root,
@@ -764,7 +788,7 @@ def execute_stage(stage_input: Mapping[str, Any], *, work_root: Path, forwarded_
     # The verified partial is promoted byte-for-byte below. Record the durable destination rather
     # than leaking the intentionally ephemeral pre-promotion directory into downstream receipts.
     composed["root"] = str(final)
-    raw_inspection = _mapping(source.get("raw_inspection"), "raw inspection")
+    raw_inspection = _mapping(source.get("bf16_inspection"), "BF16 inspection")
     if composed["weights_manifest_sha256"] != raw_inspection.get("weights_manifest_sha256"):
         raise ValueError("composed bundle weights differ from the raw export")
     payload = _payload_manifest(partial)
@@ -774,11 +798,12 @@ def execute_stage(stage_input: Mapping[str, Any], *, work_root: Path, forwarded_
         "schema": RECEIPT_SCHEMA,
         "stage_input_sha256": expected_input_sha256,
         "source_observation_sha256": source.get("observation_sha256"),
-        "source_raw_manifest_sha256": raw_verified["manifest_sha256"],
+        "source_bf16_manifest_sha256": raw_verified["manifest_sha256"],
+        "source_cast_receipt_sha256": source.get("cast_receipt_sha256"),
         "execution": execution,
         "transport": transport,
         "composition": {
-            "policy": "raw_post_weights_and_index_plus_exact_base_runtime_sidecars_v1",
+            "policy": "verified_bf16_cast_weights_and_index_plus_exact_base_runtime_sidecars_v1",
             "base_root": str(base_root),
             "tokenizer_equivalence_evidence_sha256": composition.get(
                 "tokenizer_equivalence_evidence_sha256"
@@ -825,7 +850,8 @@ def main() -> None:
     build = subparsers.add_parser("build-input")
     build.add_argument("--plan", type=Path, required=True)
     build.add_argument("--observation", type=Path, required=True)
-    build.add_argument("--raw-manifest", type=Path, required=True)
+    build.add_argument("--cast-receipt", type=Path, required=True)
+    build.add_argument("--cast-manifest", type=Path, required=True)
     build.add_argument("--tokenizer-evidence", type=Path, required=True)
     build.add_argument("--output", type=Path, required=True)
     validate_bundle = subparsers.add_parser("validate-bundle")
@@ -839,7 +865,8 @@ def main() -> None:
         result = build_stage_input(
             _read(args.plan),
             _read(args.observation),
-            _read(args.raw_manifest),
+            _read(args.cast_receipt),
+            _read(args.cast_manifest),
             tokenizer_evidence_sha256=file_sha256(args.tokenizer_evidence),
         )
         args.output.parent.mkdir(parents=True, exist_ok=True)
