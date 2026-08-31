@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -254,6 +255,74 @@ def test_runnable_qwen_rl_configs_pin_the_multienvironment_trainer() -> None:
             "trainer.ref.model_config_kwargs.fleet_force_qwen35_torch_gdn=true"
             in config["trainer"]["args"]
         ), relative
+
+
+def test_authoritative_native_rl_gate_matches_frozen_two_task_receipt() -> None:
+    root = Path(__file__).resolve().parents[1]
+    config = json.loads(
+        (root / "configs/runs/qwen36-27b-native-rl-authoritative-smoke.json").read_text()
+    )
+    receipt = json.loads(
+        (root / "configs/data/qwen36-27b-native-rl-two-task-gate-v1.json").read_text()
+    )
+    split = json.loads((root / "configs/data/fleet-a62-task-split-v1.json").read_text())
+    original_path = root / "configs/data/qwen36-27b-native-rl-smoke-selection-v1.json"
+
+    assert receipt["split_manifest_digest"] == split["manifest_digest"]
+    assert receipt["original_selection_file_sha256"] == (
+        f"sha256:{hashlib.sha256(original_path.read_bytes()).hexdigest()}"
+    )
+    split_by_version = {task["task_version_id"]: task for task in split["tasks"]}
+    identity_fields = (
+        "task_key",
+        "task_version_id",
+        "task_version",
+        "environment_version_id",
+        "env_key",
+        "env_version",
+        "data_key",
+        "data_version",
+    )
+    config_tasks = config["tasks"]["task_versions"]
+    assert len(config_tasks) == len(receipt["tasks"]) == 2
+    for configured, recorded in zip(config_tasks, receipt["tasks"], strict=True):
+        assert configured["env_variables"] == {}
+        assert configured["env_variable_deletions"] == []
+        frozen = split_by_version[configured["task_version_id"]]
+        assert frozen["split"] == "train"
+        for field in identity_fields:
+            assert configured[field] == recorded[field] == frozen[field]
+
+    assert config["trainer"]["trainer_version_id"] == receipt["trainer"]["trainer_version_id"]
+    assert config["grpo"]["group_size"] == 4
+    assert config["grpo"]["train_batch_size"] == 2
+    assert config["grpo"]["policy_mini_batch_size"] == 2
+    assert config["grpo"]["max_steps"] == 1
+    assert receipt["selection_policy"]["planned_rollouts"] == (
+        config["grpo"]["group_size"] * config["grpo"]["train_batch_size"]
+    )
+    assert config["gpus_per_worker"] == 8
+    assert config["rollout"] == {
+        "harness": "native",
+        "mode": "tool-use",
+        "partial_verifier_scoring": False,
+        "pass_conversation_to_verifier": False,
+        "multi_app_aggregation_mode": "binary",
+    }
+    assert config["eval"]["task_keys"] == []
+    assert config["eval"]["task_versions"] == []
+    assert "trainer.remove_microbatch_padding=false" in config["trainer"]["args"]
+    assert (
+        "trainer.policy.model_config_kwargs.fleet_force_qwen35_torch_gdn=true"
+        in config["trainer"]["args"]
+    )
+    assert (
+        "trainer.ref.model_config_kwargs.fleet_force_qwen35_torch_gdn=true"
+        in config["trainer"]["args"]
+    )
+    serialized = json.dumps({"config": config, "receipt": receipt}).lower()
+    assert "flag{" not in serialized
+    assert "sk_pw" not in serialized
 
 
 def test_qwen_sft_configs_pin_and_record_the_torch_gdn_fallback() -> None:
