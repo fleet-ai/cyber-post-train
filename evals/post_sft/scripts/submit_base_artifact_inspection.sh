@@ -16,7 +16,7 @@ configmap() {
     --from-file=evals__init__.py="$ROOT/evals/__init__.py" \
     --from-file=evals_webexploitbench__init__.py="$ROOT/evals/webexploitbench/__init__.py" \
     --from-file=post_sft_evidence.py="$ROOT/evals/webexploitbench/post_sft_evidence.py" \
-    --from-file=training__init__.py="$ROOT/training/__init__.py" \
+    --from-file=training__init__.py="$ROOT/evals/post_sft/runtime/training__init__.py" \
     --from-file=training_io.py="$ROOT/training/io.py" \
     --from-file=training_post_sft_artifacts.py="$ROOT/training/post_sft_artifacts.py" \
     --from-file=post-sft-plan.json="$PLAN" --dry-run=client -o json | \

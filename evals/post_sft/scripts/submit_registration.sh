@@ -15,7 +15,7 @@ test -s "$RECEIPT"
 
 configmap() {
   kubectl -n "$NAMESPACE" create configmap "$NAME" \
-    --from-file=training__init__.py="$ROOT/training/__init__.py" \
+    --from-file=training__init__.py="$ROOT/evals/post_sft/runtime/training__init__.py" \
     --from-file=training_io.py="$ROOT/training/io.py" \
     --from-file=training_register_post_sft.py="$ROOT/training/register_post_sft.py" \
     --from-file=serving-registration-receipt.json="$RECEIPT" --dry-run=client -o json | \

@@ -153,8 +153,10 @@ archive were disabled. The handoff instead requires SFS markers, unchanged
 pre/post structure, and a full file-by-file post-conversion manifest. Structural
 and source-sidecar evidence exists. The immutable v1 low-priority manifest Job was admitted but
 failed before inspecting any model bytes because its UID 1000 could not create an output under the
-root-owned `/mnt/sfs/jobs` directory. Its versioned v2 successor moves only the receipt location to
-the already UID-1000-owned export tree; the scientific inputs and checks are unchanged.
+root-owned `/mnt/sfs/jobs` directory. The v2 successor proved the writable export-tree location but
+failed during Python package import because the isolated bundle used the repository initializer
+without its transitive modules. The v3 successor uses a minimal package marker. The scientific
+inputs and verification algorithms are unchanged across these infrastructure-only corrections.
 
 Raw trainer sidecars differ because of Transformers serialization and must not
 be served. Effective mapping and special IDs match, and exact encode/decode

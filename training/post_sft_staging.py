@@ -42,6 +42,10 @@ MOUNTED_CODE_FILES = {
     "training_post_sft_artifacts.py": "training/post_sft_artifacts.py",
     "training_post_sft_staging.py": "training/post_sft_staging.py",
 }
+LOCAL_CODE_FILES = {
+    **MOUNTED_CODE_FILES,
+    "training__init__.py": "evals/post_sft/runtime/training__init__.py",
+}
 STAGE_INPUT_CONFIG_MAP_KEY = "stage-input.json"
 STAGE_INPUT_MOUNT_PATH = "stage-input.json"
 ACCEPTANCE_RECEIPT_NAME = ".fleet-acceptance.json"
@@ -117,14 +121,15 @@ def validate_local_staging_bundle(plan: Mapping[str, Any], root: Path) -> dict[s
     execution = _validate_staging_execution_plan(plan.get("staging_execution"))
     expected = execution["config_map_code_sha256"]
     observed: dict[str, str] = {}
-    for relative in MOUNTED_CODE_FILES.values():
-        path = root / relative
+    for key, mounted_relative in MOUNTED_CODE_FILES.items():
+        path = root / LOCAL_CODE_FILES[key]
         digest = file_sha256(path)
-        if digest != expected[relative]:
+        if digest != expected[mounted_relative]:
             raise ValueError(
-                f"local staging bundle differs from the reviewed digest for {relative}"
+                "local staging bundle differs from the reviewed digest for "
+                f"{mounted_relative}"
             )
-        observed[relative] = digest
+        observed[mounted_relative] = digest
     return observed
 
 

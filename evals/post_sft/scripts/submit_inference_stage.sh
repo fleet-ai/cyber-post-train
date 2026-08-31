@@ -16,7 +16,7 @@ test "$(kubectl config current-context)" = "$EXPECTED_CONTEXT"
 configmap() {
   local stage_input=$1
   kubectl -n "$NAMESPACE" create configmap "$NAME" \
-    --from-file=training__init__.py="$ROOT/training/__init__.py" \
+    --from-file=training__init__.py="$ROOT/evals/post_sft/runtime/training__init__.py" \
     --from-file=training_io.py="$ROOT/training/io.py" \
     --from-file=training_post_sft_artifacts.py="$ROOT/training/post_sft_artifacts.py" \
     --from-file=training_post_sft_staging.py="$ROOT/training/post_sft_staging.py" \

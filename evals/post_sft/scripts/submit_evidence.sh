@@ -2,10 +2,10 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/../../.." && pwd)
-NAME=chris-cyber-qwen36-sft-evidence-v2
+NAME=chris-cyber-qwen36-sft-evidence-v3
 NAMESPACE=fleet-train-jobs
 EXPECTED_CONTEXT=nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6
-JOB="$ROOT/evals/post_sft/cluster/qwen36-sft-evidence-v2-job.yaml"
+JOB="$ROOT/evals/post_sft/cluster/qwen36-sft-evidence-v3-job.yaml"
 PLAN="$ROOT/configs/evaluation/qwen36-27b-ft-run-574bd7b3-post-sft.json"
 MODE=${1:-preview}
 
@@ -14,7 +14,7 @@ test "$(kubectl -n "$NAMESPACE" get localqueue training-lq -o jsonpath='{.status
 
 configmap() {
   kubectl -n "$NAMESPACE" create configmap "$NAME" \
-    --from-file=training__init__.py="$ROOT/training/__init__.py" \
+    --from-file=training__init__.py="$ROOT/evals/post_sft/runtime/training__init__.py" \
     --from-file=training_io.py="$ROOT/training/io.py" \
     --from-file=training_post_sft_artifacts.py="$ROOT/training/post_sft_artifacts.py" \
     --from-file=training_tokenizer_equivalence.py="$ROOT/training/tokenizer_equivalence.py" \

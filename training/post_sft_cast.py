@@ -58,6 +58,10 @@ MOUNTED_CODE_FILES = {
     "training_post_sft_artifacts.py": "training/post_sft_artifacts.py",
     "training_post_sft_cast.py": "training/post_sft_cast.py",
 }
+LOCAL_CODE_FILES = {
+    **MOUNTED_CODE_FILES,
+    "training__init__.py": "evals/post_sft/runtime/training__init__.py",
+}
 
 
 def _mapping(value: Any, field: str) -> Mapping[str, Any]:
@@ -550,11 +554,13 @@ def validate_local_cast_bundle(plan: Mapping[str, Any], root: Path) -> dict[str,
     execution = _validate_execution_plan(plan.get("cast_execution"))
     expected = _mapping(execution.get("config_map_code_sha256"), "cast code hashes")
     observed: dict[str, str] = {}
-    for relative in MOUNTED_CODE_FILES.values():
-        digest = file_sha256(root / relative)
-        if digest != expected.get(relative):
-            raise ValueError(f"local cast bundle differs from reviewed digest for {relative}")
-        observed[relative] = digest
+    for key, mounted_relative in MOUNTED_CODE_FILES.items():
+        digest = file_sha256(root / LOCAL_CODE_FILES[key])
+        if digest != expected.get(mounted_relative):
+            raise ValueError(
+                f"local cast bundle differs from reviewed digest for {mounted_relative}"
+            )
+        observed[mounted_relative] = digest
     return observed
 
 

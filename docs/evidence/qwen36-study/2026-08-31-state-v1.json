@@ -112,20 +112,29 @@
       "terminal_result": null
     },
     "filesystem_evidence": {
-      "failed_attempt": {
-        "job_name": "chris-cyber-qwen36-sft-evidence-v1",
-        "job_uid": "777191dc-0d80-4453-a74b-609b58c6a848",
-        "status": "FAILED",
-        "model_bytes_inspected": false,
-        "failure": "UID 1000 could not create the receipt parent under root-owned /mnt/sfs/jobs"
-      },
+      "failed_attempts": [
+        {
+          "job_name": "chris-cyber-qwen36-sft-evidence-v1",
+          "job_uid": "777191dc-0d80-4453-a74b-609b58c6a848",
+          "status": "FAILED",
+          "model_bytes_inspected": false,
+          "failure": "UID 1000 could not create the receipt parent under root-owned /mnt/sfs/jobs"
+        },
+        {
+          "job_name": "chris-cyber-qwen36-sft-evidence-v2",
+          "job_uid": "b1151740-a622-40c1-b59c-f317f4b111bb",
+          "status": "FAILED",
+          "model_bytes_inspected": false,
+          "failure": "isolated ConfigMap bundle imported training.normalize through the repository package initializer, but did not mount that unrelated module"
+        }
+      ],
       "successor": {
-        "job_name": "chris-cyber-qwen36-sft-evidence-v2",
+        "job_name": "chris-cyber-qwen36-sft-evidence-v3",
         "status": "not_launched",
-        "receipt_path": "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/evidence/sfs-v2/receipt"
+        "receipt_path": "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/evidence/sfs-v3/receipt"
       }
     },
-    "plan": {"path": "configs/evaluation/qwen36-27b-ft-run-574bd7b3-post-sft.json", "file_sha256": "sha256:81909ee68c0ede0ffa63396966f9cbfce7bec3aee996aeb20bf77077b1987a8b"}
+    "plan": {"path": "configs/evaluation/qwen36-27b-ft-run-574bd7b3-post-sft.json", "file_sha256": "sha256:7ffc80141d84b556841baccf92b63044e1d664a710ab405160bf250bb2e1cbe3"}
   },
   "native_fleet_rl": {
     "one_step_gate": {
