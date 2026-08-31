@@ -144,8 +144,14 @@
   fixed lineage; the experiment deliberately pins the earliest Ready successor,
   `37e76223`, rather than mutable `latest`. Both successor gates are now live.
   No full request will be submitted until its corresponding gate is green.
-- Hugging Face access to WebExploitBench is granted. All 15 official Level-0
-  packs are digest-verified and pass the official non-inference CAGE checks.
+- Direct gated Hugging Face API access to WebExploitBench is not yet proven:
+  an exact-revision request currently returns HTTP 401, so an authenticated
+  browser session must not be reported as dataset approval. Independently, all
+  15 locally retained official Level-0 packs are digest-verified against
+  `AgentCyberRange/WebExploitBench@7f97d87fa8ab728260c0ba9b09b9c8f00bb82ad5`
+  and pass the official non-inference CAGE checks. The validated materialization
+  contains 54,798 files; its manifest SHA-256 is
+  `a646afe97bf00537e134b39fbf0c8be1bf31d88339a1ea67f8c8bf522e424ce6`.
   The formal Qwen baseline pins the same model revision plus an exact SGLang
   serving contract. All 15 images built successfully and the frozen 15-trial
   pass@1 run `webexploit-qwen36-27b-base-6a9e13bd-l0-p1-v1` is terminal: 12
@@ -177,9 +183,10 @@ selected primary experiment.
 
 ## WebExploitBench
 
-- Individual Hugging Face access request is pending author review.
-- The official public Level-0 subset, ComfyUI target and CAGE agent are built and
-  digest-pinned locally; no gated data was scraped or reconstructed.
+- Direct gated Hugging Face API access still returns HTTP 401. The exact
+  official 15-target materialization described above is nevertheless present,
+  digest-pinned, and valid; benchmark runs do not depend on a mutable Hub
+  checkout or reconstruct missing task content.
 - Direct Fleet inference currently does not route `glm-5.2-fp8`,
   `fleet-glm/glm-5.2-fp8` or `z-ai/glm-5.2`. The model remains available through
   Fleet Agent Runtime. A direct benchmark run therefore waits on gateway routing,
