@@ -51,3 +51,25 @@ Do not attach `required_key_capabilities: ["cyber"]` to this GLM route. The
 deployed capability tag is currently for the provider routes that hold a
 matching cyber key; the Fleet-hosted GLM Agent Runtime route is selected by its
 provider-qualified model name instead.
+
+## Official Qwen Code arm
+
+The intended Qwen arm must reuse the exact WebExploitBench checkpoint
+(`Qwen/Qwen3.6-27B` at
+`6a9e13bd6fc8f0983b9b99948120bc37f49c13e9`) and official Qwen Code
+`0.22.3`. It must not silently substitute Fleet Agent Runtime's current
+`opencode` fallback for `qwen/*` models.
+
+The readiness record is
+`manifests/qwen36-27b-qwen-code-smoke-readiness.json`. As of 2026-08-31, the
+deployed Jobs API advertises only `codex`, `grok`, `grok-bot`, `claude_code`,
+`muse`, `antigravity`, and `opencode`; latest Theseus `main` likewise maps
+Qwen to `opencode`. The one-session launch is therefore intentionally blocked
+until both the exact harness and checkpoint binding are deployed and readable.
+
+Once every recorded gate is proven, first render the one-session plan by
+removing `--submit` from `blocked_launch_command` in the readiness record.
+Review the emitted model, harness, task key, budgets, and idempotency key, then
+run the exact command with `--submit`. Do not scale past one task until its
+session reaches a terminal state, the verifier executes, and the provenance
+receipt confirms the expected harness and model revisions.

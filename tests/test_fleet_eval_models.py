@@ -5,6 +5,7 @@ import pytest
 from evals.fleet.models import (
     DEFAULT_RUNTIME_MODEL,
     DEFAULT_SALES_PRODUCT_ID,
+    DEFAULT_SOURCE_JOB_ID,
     MAX_SESSIONS_PER_JOB,
     build_plan,
     validate_task_keys,
@@ -43,6 +44,35 @@ def test_job_payload_selects_agent_runtime_without_legacy_harness_or_cyber_tag()
     assert "required_key_capabilities" not in payload
 
 
+def test_explicit_harness_and_provenance_are_bound_into_payload_and_idempotency() -> None:
+    kwargs = {
+        "runtime_model": "qwen/qwen3-6-27b-cyber-baseline",
+        "harness": "qwen-code",
+        "experiment": "qwen36-fleet-blackbox-qwen-code-v1",
+        "gateway_model": "qwen3-6-27b-cyber-baseline",
+        "runtime_label": "qwen-code-0.22.3",
+    }
+    batch = build_plan(_keys(1), **kwargs).batches[0]
+    payload = batch.payload()
+
+    assert payload["harness"] == "qwen-code"
+    assert payload["models"] == ["qwen/qwen3-6-27b-cyber-baseline"]
+    assert payload["metadata"] == {
+        "experiment": "qwen36-fleet-blackbox-qwen-code-v1",
+        "source_job_id": DEFAULT_SOURCE_JOB_ID,
+        "gateway_model": "qwen3-6-27b-cyber-baseline",
+        "runtime": "qwen-code-0.22.3",
+    }
+    native = build_plan(
+        _keys(1),
+        runtime_model=kwargs["runtime_model"],
+        experiment=kwargs["experiment"],
+        gateway_model=kwargs["gateway_model"],
+        runtime_label=kwargs["runtime_label"],
+    ).batches[0]
+    assert batch.idempotency_key != native.idempotency_key
+
+
 def test_idempotency_key_is_stable_and_request_sensitive() -> None:
     one = build_plan(_keys(1)).batches[0]
     again = build_plan(_keys(1)).batches[0]
@@ -50,6 +80,16 @@ def test_idempotency_key_is_stable_and_request_sensitive() -> None:
 
     assert one.idempotency_key == again.idempotency_key
     assert one.idempotency_key != different.idempotency_key
+
+
+def test_default_glm_idempotency_remains_backward_compatible() -> None:
+    task = "cysec1-2-current-gen_blackbox-9afe9e08da314948b573657e__blackbox_ctf_v1"
+    batch = build_plan(
+        [task],
+        run_name="glm52-fleet-blackbox-smoke-v1",
+    ).batches[0]
+
+    assert batch.idempotency_key == "77218cbb-547f-551e-8b77-4c5b7571e6a2"
 
 
 def test_rejects_non_cysec_task() -> None:
