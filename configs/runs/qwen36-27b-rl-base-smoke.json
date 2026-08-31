@@ -1,5 +1,5 @@
 {
-  "title": "Chris cyber Qwen3.6 27B Torch-GDN RL one-step gate v1",
+  "title": "Chris cyber Qwen3.6 27B Torch-GDN matched-policy-ref RL one-step gate v2",
   "node_pool": "fleetai-training-ng-gpu",
   "fleet_env": {
     "env_key": "cysec1-2-current-gen",
@@ -61,7 +61,8 @@
     "trainer_version_id": "4b4dc57c-c7dc-5562-bbdd-9e1d6764ede0",
     "args": [
       "trainer.remove_microbatch_padding=false",
-      "trainer.policy.model_config_kwargs.fleet_force_qwen35_torch_gdn=true"
+      "trainer.policy.model_config_kwargs.fleet_force_qwen35_torch_gdn=true",
+      "trainer.ref.model_config_kwargs.fleet_force_qwen35_torch_gdn=true"
     ]
   },
   "rollout": {

@@ -1719,7 +1719,8 @@
     "trainer_version_id": "4b4dc57c-c7dc-5562-bbdd-9e1d6764ede0",
     "args": [
       "trainer.remove_microbatch_padding=false",
-      "trainer.policy.model_config_kwargs.fleet_force_qwen35_torch_gdn=true"
+      "trainer.policy.model_config_kwargs.fleet_force_qwen35_torch_gdn=true",
+      "trainer.ref.model_config_kwargs.fleet_force_qwen35_torch_gdn=true"
     ]
   },
   "rollout": {

@@ -250,6 +250,10 @@ def test_runnable_qwen_rl_configs_pin_the_multienvironment_trainer() -> None:
             "trainer.policy.model_config_kwargs.fleet_force_qwen35_torch_gdn=true"
             in config["trainer"]["args"]
         ), relative
+        assert (
+            "trainer.ref.model_config_kwargs.fleet_force_qwen35_torch_gdn=true"
+            in config["trainer"]["args"]
+        ), relative
 
 
 def test_qwen_sft_configs_pin_and_record_the_torch_gdn_fallback() -> None:
