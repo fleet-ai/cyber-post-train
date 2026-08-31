@@ -1,0 +1,45 @@
+{
+  "schema_version": "training_job_invalid_receipt_v1",
+  "name": "ft-run-81361b26",
+  "run_id": "81361b26-5498-45b1-a79f-ad541b39d3f0",
+  "title": "Chris cyber Qwen3.6 27B authoritative native RL one-step gate 76a4bd26",
+  "status": "SUCCEEDED",
+  "scientific_valid": false,
+  "failure_class": "qwen36_attribute_xml_tool_calls_unparsed",
+  "model": {
+    "repository": "Qwen/Qwen3.6-27B",
+    "revision": "6a9e13bd6fc8f0983b9b99948120bc37f49c13e9"
+  },
+  "trainer": {
+    "commit": "76a4bd26",
+    "version_id": "885f2eaa-c28e-5102-950b-9070e181f561"
+  },
+  "config": {
+    "path": "configs/runs/qwen36-27b-native-rl-authoritative-smoke.json",
+    "sha256": "856e05a139298937e5ba4ea34fef52a1f110587f30f4643a838a80bd19718b1c"
+  },
+  "observations": {
+    "episodes": 8,
+    "optimizer_steps": 1,
+    "registered_checkpoints": 0,
+    "sfs_checkpoint_directories": 1,
+    "average_final_reward": 0.0,
+    "stop_reasons": {
+      "length": 8
+    },
+    "model_emitted_tool_names": {
+      "bash": 96,
+      "submit_report": 1
+    },
+    "tool_calls_dispatched_with_empty_name": 97
+  },
+  "corrective_action": {
+    "theseus_pr": "https://github.com/fleet-ai/theseus/pull/28264",
+    "source_commit": "1a74092a1cc7d56cd05a91ff7fbea31891c26970",
+    "trainer_image_tag": "q36xml-1a74092a",
+    "trainer_image_digest": "sha256:331ed4b062e4a7d0646309f404a6ec9bac737ff1c23ad16dc24abda0b39912a0",
+    "status": "built_and_awaiting_registered_smoke_verdict"
+  },
+  "disposition": "Never use this checkpoint as an RL result or as the source of the full 129-task run.",
+  "recorded_at": "2026-08-31T06:26:29Z"
+}
