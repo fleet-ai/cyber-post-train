@@ -19,6 +19,16 @@ ORCHESTRATOR = "https://orchestrator.fleetai.com"
 FLEET_TEAM_ID = "a1025f0b-ad67-49fc-a023-51800ab43e84"
 TRANSIENT_READ_STATUS_CODES = {429, 502, 503, 504}
 MAX_READ_ATTEMPTS = 6
+SESSION_INGEST_CHUNK_MESSAGES = 32
+SESSION_INGEST_CHUNK_BYTES = 512 * 1024
+
+
+class SessionIngestError(RuntimeError):
+    """A bounded trace ingest failed after zero or more recorded chunks."""
+
+    def __init__(self, receipt: dict[str, Any]) -> None:
+        super().__init__("Fleet session trace ingest did not complete")
+        self.receipt = receipt
 
 
 def canonical_json(value: Any) -> bytes:
@@ -306,6 +316,83 @@ def final_answer_from_conversation(messages: list[dict[str, Any]]) -> str:
         if message.get("role") == "assistant" and isinstance(content, str) and content:
             return content
     return ""
+
+
+def ingest_session_trace(
+    client: httpx.Client,
+    *,
+    messages: list[dict[str, Any]],
+    config: dict[str, Any],
+    instance_id: str,
+    score: float,
+    verifier_execution_id: str | None,
+    metadata: dict[str, Any],
+) -> dict[str, Any]:
+    """Ingest a full trace in bounded, ordered, non-retried mutations.
+
+    Qwen Code traces can contain hundreds of tool messages.  Sending the whole
+    trace as one request can exceed an ingress or request-processing limit even
+    though authoritative scoring already succeeded.  Create one session with
+    the first bounded chunk, append the remaining chunks in order, and only
+    attach the score to the final chunk.  Mutating requests remain single-shot.
+    """
+    if not messages:
+        raise ValueError("cannot ingest an empty session trace")
+    chunks: list[list[dict[str, Any]]] = []
+    for message in messages:
+        if len(canonical_json({"messages": [message]})) > SESSION_INGEST_CHUNK_BYTES:
+            raise ValueError("one session message exceeds the bounded ingest payload")
+        candidate = [*(chunks[-1] if chunks else []), message]
+        if chunks and (
+            len(candidate) > SESSION_INGEST_CHUNK_MESSAGES
+            or len(canonical_json({"messages": candidate})) > SESSION_INGEST_CHUNK_BYTES
+        ):
+            chunks.append([message])
+        elif chunks:
+            chunks[-1] = candidate
+        else:
+            chunks.append(candidate)
+    session_id: str | None = None
+    receipt: dict[str, Any] = {
+        "status": "in_progress",
+        "session_id": None,
+        "message_count": len(messages),
+        "chunks_completed": 0,
+        "chunk_count": len(chunks),
+    }
+    for index, chunk in enumerate(chunks):
+        payload: dict[str, Any] = {"messages": chunk}
+        if session_id is None:
+            payload.update(
+                {
+                    "model": f"qwen/{config['model']['served_id']}",
+                    "task_key": config["task"]["key"],
+                    "eval_task_version_id": config["task"]["version_id"],
+                    "instance_id": instance_id,
+                    "metadata": metadata,
+                }
+            )
+        else:
+            payload["session_id"] = session_id
+        if index + 1 == len(chunks):
+            payload["score"] = score
+            payload["verifier_execution_id"] = verifier_execution_id
+        try:
+            response = _request(client, "POST", "/v1/sessions/ingest", json=payload)
+        except Exception as exc:  # noqa: BLE001
+            receipt.update(status="failed", error_type=type(exc).__name__)
+            raise SessionIngestError(receipt) from exc
+        returned_id = response.get("session_id")
+        if not isinstance(returned_id, str) or not returned_id:
+            receipt.update(status="failed", error_type="MissingSessionId")
+            raise SessionIngestError(receipt)
+        if session_id is not None and returned_id != session_id:
+            receipt.update(status="failed", error_type="SessionIdChanged")
+            raise SessionIngestError(receipt)
+        session_id = returned_id
+        receipt.update(session_id=session_id, chunks_completed=index + 1)
+    receipt["status"] = "completed"
+    return receipt
 
 
 def authoritative_route(config: dict[str, Any], kind: str) -> str:
@@ -651,33 +738,38 @@ def run(config: dict[str, Any], out_dir: Path, proxy_script: Path) -> dict[str, 
         )
         (out_dir / "reward-result.json").write_bytes(canonical_json(reward_result) + b"\n")
         score = float(reward_result["reward"])
-        session = _request(
-            client,
-            "POST",
-            "/v1/sessions/ingest",
-            json={
-                "messages": messages,
-                "model": f"qwen/{config['model']['served_id']}",
-                "task_key": config["task"]["key"],
-                "eval_task_version_id": config["task"]["version_id"],
-                "instance_id": instance_id,
-                "score": score,
-                "verifier_execution_id": reward_result.get("verifier_execution_id"),
-                "metadata": {
-                    "self_hosted_harness": "qwen-code-0.22.3",
-                    "run_id": config["run_id"],
-                    "tool_catalog_sha256": tool_digest,
-                    "qwen_exit_code": result.returncode,
-                    "agent_termination": agent_termination,
-                    "trace_fidelity": trace_manifest["fidelity"],
-                    "canonical_trace_sha256": trace_digest,
-                    "training_data_eligible": False,
-                },
-            },
+        session_metadata = {
+            "self_hosted_harness": "qwen-code-0.22.3",
+            "run_id": config["run_id"],
+            "tool_catalog_sha256": tool_digest,
+            "qwen_exit_code": result.returncode,
+            "agent_termination": agent_termination,
+            "trace_fidelity": trace_manifest["fidelity"],
+            "canonical_trace_sha256": trace_digest,
+            "training_data_eligible": False,
+        }
+        try:
+            session_receipt = ingest_session_trace(
+                client,
+                messages=messages,
+                config=config,
+                instance_id=instance_id,
+                score=score,
+                verifier_execution_id=reward_result.get("verifier_execution_id"),
+                metadata=session_metadata,
+            )
+        except SessionIngestError as exc:
+            # Authoritative scoring is the primary experiment outcome.  Preserve
+            # that valid outcome even if the ancillary Fleet dashboard trace
+            # copy fails; the full canonical trace remains in this run bundle.
+            session_receipt = exc.receipt
+        (out_dir / "session-ingest.json").write_bytes(
+            canonical_json(session_receipt) + b"\n"
         )
         result_record = {
             "run_id": config["run_id"],
-            "session_id": session["session_id"],
+            "session_id": session_receipt.get("session_id"),
+            "session_ingest_status": session_receipt["status"],
             "score": score,
             "verifier_execution_id": reward_result.get("verifier_execution_id"),
             "qwen_exit_code": result.returncode,
