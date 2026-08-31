@@ -239,10 +239,33 @@ def test_qwen_rl_configs_disable_microbatch_padding_for_vision_inputs() -> None:
 
 def test_runnable_qwen_rl_configs_pin_the_multienvironment_trainer() -> None:
     root = Path(__file__).resolve().parents[1]
-    expected = "0cbb43bd-9a36-5474-84d1-8846492dc413"
+    expected = "4b4dc57c-c7dc-5562-bbdd-9e1d6764ede0"
     for relative in (
         "configs/runs/qwen36-27b-rl-base-full-runnable.json",
         "configs/runs/qwen36-27b-rl-base-smoke.json",
     ):
         config = json.loads((root / relative).read_text())
         assert config["trainer"]["trainer_version_id"] == expected, relative
+        assert (
+            "trainer.policy.model_config_kwargs.fleet_force_qwen35_torch_gdn=true"
+            in config["trainer"]["args"]
+        ), relative
+        assert (
+            "trainer.ref.model_config_kwargs.fleet_force_qwen35_torch_gdn=true"
+            in config["trainer"]["args"]
+        ), relative
+
+
+def test_qwen_sft_configs_pin_and_record_the_torch_gdn_fallback() -> None:
+    root = Path(__file__).resolve().parents[1]
+    expected = "4b4dc57c-c7dc-5562-bbdd-9e1d6764ede0"
+    for relative in (
+        "configs/runs/qwen36-27b-sft-smoke.json",
+        "configs/runs/qwen36-27b-sft-full.json",
+    ):
+        config = json.loads((root / relative).read_text())
+        assert config["trainer"]["trainer_version_id"] == expected, relative
+        assert config["trainer"]["args"] == [
+            "model_config_kwargs.fleet_force_qwen35_torch_gdn=true"
+        ], relative
+        assert "env" not in config["trainer"], relative

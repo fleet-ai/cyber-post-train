@@ -1,0 +1,43 @@
+{
+  "schema": "cyber_native_rl_smoke_selection_v1",
+  "model": {
+    "repository": "Qwen/Qwen3.6-27B",
+    "revision": "6a9e13bd6fc8f0983b9b99948120bc37f49c13e9"
+  },
+  "source_job_id": "a62dd51f-a52b-4941-8207-4679e4b25b51",
+  "split_manifest": "configs/data/fleet-a62-task-split-v1.json",
+  "split_manifest_digest": "sha256:fb09668f8de77e6baee37dc1e3162a7617ca9a0a450da9ca53422c17bfbc942a",
+  "selection_policy": {
+    "split": "train",
+    "projection": "blackbox_ctf_v1",
+    "criterion": "prefer an exact runnable task with historical nonzero and nonperfect outcomes so a four-sample GRPO gate can expose reward variance",
+    "planned_group_size": 4,
+    "planned_max_steps": 1
+  },
+  "task": {
+    "task_key": "cysec1-2-current-gen_blackbox-0708aea62e0d8ccf09331568__blackbox_ctf_v1",
+    "task_version_id": "54425601-6fd2-43d8-8cb9-e565b767676a",
+    "task_version": "8",
+    "environment_version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+    "env_key": "cysec1-2-current-gen",
+    "env_version": "v0.0.3",
+    "data_key": "commercial",
+    "data_version": "v0.0.9",
+    "env_variables": {},
+    "env_variable_deletions": []
+  },
+  "historical_evidence": {
+    "source": "data/raw/fleet-source-a62-v2.jsonl",
+    "source_manifest": "data/raw/fleet-source-a62-v2.jsonl.manifest.json",
+    "sessions": 8,
+    "nonzero_scores": 2,
+    "perfect_scores": 2,
+    "mean_score": 0.25
+  },
+  "launch_gates": [
+    "Theseus PR #28252 merged from a fully green rebased commit",
+    "the authoritative rollout instance and score routes are deployed",
+    "the trainer image containing the merged rl-rollout code has passed its smoke verdict and is registered ready",
+    "the Jobs API preview resolves this exact task and trainer without warnings that change the protocol"
+  ]
+}
