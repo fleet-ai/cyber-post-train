@@ -238,13 +238,17 @@ def test_qwen_rl_configs_disable_microbatch_padding_for_vision_inputs() -> None:
         assert expected in config["trainer"]["args"], relative
 
 
-def test_runnable_qwen_rl_configs_pin_the_multienvironment_trainer() -> None:
+def test_runnable_qwen_rl_configs_pin_the_expected_trainer() -> None:
     root = Path(__file__).resolve().parents[1]
-    expected = "4b4dc57c-c7dc-5562-bbdd-9e1d6764ede0"
-    for relative in (
-        "configs/runs/qwen36-27b-rl-base-full-runnable.json",
-        "configs/runs/qwen36-27b-rl-base-smoke.json",
-    ):
+    expected_by_config = {
+        "configs/runs/qwen36-27b-rl-base-full-runnable.json": (
+            "885f2eaa-c28e-5102-950b-9070e181f561"
+        ),
+        "configs/runs/qwen36-27b-rl-base-smoke.json": (
+            "4b4dc57c-c7dc-5562-bbdd-9e1d6764ede0"
+        ),
+    }
+    for relative, expected in expected_by_config.items():
         config = json.loads((root / relative).read_text())
         assert config["trainer"]["trainer_version_id"] == expected, relative
         assert (
@@ -255,6 +259,17 @@ def test_runnable_qwen_rl_configs_pin_the_multienvironment_trainer() -> None:
             "trainer.ref.model_config_kwargs.fleet_force_qwen35_torch_gdn=true"
             in config["trainer"]["args"]
         ), relative
+
+    full = json.loads(
+        (
+            root / "configs/runs/qwen36-27b-rl-base-full-runnable.json"
+        ).read_text()
+    )
+    assert len(full["tasks"]["task_versions"]) == 129
+    assert all(
+        row["task_key"].endswith("__blackbox_ctf_v1")
+        for row in full["tasks"]["task_versions"]
+    )
 
 
 def test_authoritative_native_rl_gate_matches_frozen_two_task_receipt() -> None:
