@@ -519,14 +519,17 @@ def run(config: dict[str, Any], out_dir: Path, proxy_script: Path) -> dict[str, 
         _docker(
             "run", "-d", "--name", model_proxy, "--network", "bridge",
             "-e", "FIXED_UPSTREAM", "-e", "FIXED_AUTH_HEADER", "-e", "FIXED_AUTH_VALUE",
-            "-e", "FIXED_PROXY_PORT", "-e", "FIXED_ALLOWED_PREFIX",
+            "-e", "FIXED_PROXY_PORT", "-e", "FIXED_ALLOWED_PATHS",
+            "-e", "FIXED_MAX_REQUESTS", "-e", "FIXED_MAX_REQUEST_BYTES",
             "-v", proxy_mount, proxy_image, "python", "/proxy.py",
             env={
                 "FIXED_UPSTREAM": config["model"]["endpoint_origin"],
                 "FIXED_AUTH_HEADER": "Authorization",
                 "FIXED_AUTH_VALUE": f"Bearer {api_key}",
                 "FIXED_PROXY_PORT": "8877",
-                "FIXED_ALLOWED_PREFIX": "/v1/",
+                "FIXED_ALLOWED_PATHS": "/v1/chat/completions,/v1/models",
+                "FIXED_MAX_REQUESTS": str(config["harness"]["max_model_requests"] + 30),
+                "FIXED_MAX_REQUEST_BYTES": "16777216",
             },
         )
         _docker("network", "connect", "--alias", "model-proxy", network, model_proxy)
@@ -534,14 +537,17 @@ def run(config: dict[str, Any], out_dir: Path, proxy_script: Path) -> dict[str, 
         _docker(
             "run", "-d", "--name", mcp_proxy, "--network", "bridge",
             "-e", "FIXED_UPSTREAM", "-e", "FIXED_AUTH_HEADER", "-e", "FIXED_AUTH_VALUE",
-            "-e", "FIXED_PROXY_PORT", "-e", "FIXED_ALLOWED_PREFIX",
+            "-e", "FIXED_PROXY_PORT", "-e", "FIXED_ALLOWED_PATHS",
+            "-e", "FIXED_MAX_REQUESTS", "-e", "FIXED_MAX_REQUEST_BYTES",
             "-v", proxy_mount, proxy_image, "python", "/proxy.py",
             env={
                 "FIXED_UPSTREAM": instance["urls"]["root"].rstrip("/"),
                 "FIXED_AUTH_HEADER": token_payload["header"],
                 "FIXED_AUTH_VALUE": token_payload["token"],
                 "FIXED_PROXY_PORT": "8090",
-                "FIXED_ALLOWED_PREFIX": "/mcp",
+                "FIXED_ALLOWED_PATHS": "/mcp",
+                "FIXED_MAX_REQUESTS": "4000",
+                "FIXED_MAX_REQUEST_BYTES": "16777216",
             },
         )
         _docker("network", "connect", "--alias", "fleet-mcp-proxy", network, mcp_proxy)

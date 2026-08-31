@@ -5,6 +5,7 @@ from __future__ import annotations
 import http.client
 import json
 import os
+import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit
@@ -23,6 +24,8 @@ _HOP_BY_HOP = {
 
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
+    request_count = 0
+    request_count_lock = threading.Lock()
 
     def do_GET(self) -> None:  # noqa: N802
         self._forward()
@@ -42,14 +45,31 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
+        bare_path = self.path.split("?", 1)[0]
+        allowed_paths = {
+            path for path in os.environ.get("FIXED_ALLOWED_PATHS", "").split(",") if path
+        }
         allowed_prefix = os.environ.get("FIXED_ALLOWED_PREFIX", "/")
-        if not self.path.startswith(allowed_prefix):
+        if (allowed_paths and bare_path not in allowed_paths) or (
+            not allowed_paths and not self.path.startswith(allowed_prefix)
+        ):
             self.send_error(404)
+            return
+        length = int(self.headers.get("content-length", "0"))
+        max_request_bytes = int(os.environ.get("FIXED_MAX_REQUEST_BYTES", "16777216"))
+        if length > max_request_bytes:
+            self.send_error(413)
+            return
+        max_requests = int(os.environ.get("FIXED_MAX_REQUESTS", "0"))
+        with self.request_count_lock:
+            type(self).request_count += 1
+            request_number = type(self).request_count
+        if max_requests and request_number > max_requests:
+            self.send_error(429)
             return
         upstream = urlsplit(os.environ["FIXED_UPSTREAM"])
         prefix = upstream.path.rstrip("/")
         path = f"{prefix}{self.path}"
-        length = int(self.headers.get("content-length", "0"))
         body = self.rfile.read(length) if length else None
         headers = {
             key: value
@@ -94,6 +114,7 @@ class Handler(BaseHTTPRequestHandler):
                         "method": self.command,
                         "path": self.path.split("?", 1)[0],
                         "request_bytes": len(body or b""),
+                        "request_number": request_number,
                         "response_bytes": response_bytes,
                         "status": status,
                     },
