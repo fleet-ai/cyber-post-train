@@ -60,7 +60,7 @@
   "trainer": {
     "trainer_version_id": "b4a49402-5e7f-5f94-a5ff-980126d78390",
     "args": [
-      "remove_microbatch_padding=false"
+      "trainer.remove_microbatch_padding=false"
     ],
     "env": {
       "FLA_CACHE_MODE": "default",
