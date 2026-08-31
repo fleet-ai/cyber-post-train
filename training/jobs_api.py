@@ -16,6 +16,7 @@ DEFAULT_BASE_URL = "https://api.ft.flt.build"
 SUPPORTED_KINDS = {"rl", "sft"}
 RL_TRUE_STEP_OVERRIDE = "trainer.max_training_steps"
 RL_TOOL_EVIDENCE_SCHEMA = "fleet_rl_task_tool_allowlists_v1"
+CYBER_RL_TASK_TOOLS = frozenset({"bash", "submit_report"})
 
 
 class JobsAPIError(ValueError):
@@ -189,6 +190,11 @@ def rl_paid_launch_blockers(config: dict[str, Any], preview: dict[str, Any]) -> 
         ):
             blockers.append(
                 f"task {task_version_id} needs a non-empty, duplicate-free metadata.tools list"
+            )
+        elif set(tools) != CYBER_RL_TASK_TOOLS:
+            blockers.append(
+                f"task {task_version_id} metadata.tools must expose exactly bash and "
+                f"submit_report, got {sorted(tools)!r}"
             )
     if observed_ids != expected_ids:
         blockers.append(
