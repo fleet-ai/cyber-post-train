@@ -139,6 +139,14 @@ mode refuses to proceed until `ft-run-29f2bedf` is `SUCCEEDED`, refuses an exist
 collision, and submits suspended through `training-lq`. This evidence job must finish before the
 BF16 cast job is submitted, so the cast input is bound to the complete raw and source manifests.
 
+The immutable first attempt, `chris-cyber-qwen36-sft-evidence-v1` (UID
+`777191dc-0d80-4453-a74b-609b58c6a848`), was admitted on 2026-08-31 but failed before reading or
+hashing any model file: the pinned trainer image runs as UID 1000 and the root-owned
+`/mnt/sfs/jobs` directory is not writable. Preserve that failed Job as evidence. The create-only
+successor is `chris-cyber-qwen36-sft-evidence-v2`; it writes under the UID-1000-owned export tree
+at `/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/evidence/sfs-v2/receipt`. The checkpoint, raw export,
+image, queue, resources, and verification code remain unchanged.
+
 ```bash
 uv run python -m training.post_sft_cli freeze-sfs \
   --plan configs/evaluation/qwen36-27b-ft-run-574bd7b3-post-sft.json \
@@ -223,7 +231,8 @@ bash evals/post_sft/scripts/submit_bf16_cast.sh submit \
 
 After the cast Job is Complete, retrieve `cast-receipt.json` and
 `cast-full-manifest.json` from
-`/mnt/sfs/jobs/chris-cyber-qwen36-sft-bf16-cast-v1/receipt/`. The adjacent
+`/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/evidence/bf16-cast-v1/receipt/`.
+The adjacent
 `COMPLETE.json` must bind both files. These two files are inputs to staging; the destination path
 or a successful Pod status alone is insufficient.
 

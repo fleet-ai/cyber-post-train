@@ -106,7 +106,7 @@
       "training/__init__.py": "sha256:c3152a4d34780d02afdf8ff066f6e7b7f3af5aa2db1cd827ad3aca0c52fd561b",
       "training/io.py": "sha256:7a0b734a4ab7fb8b702430094c58c72f19ac8fc7cc5e056eb8410267e6bfdfe3",
       "training/post_sft_artifacts.py": "sha256:1404cb56615a5b4b827deca6642e13d79d5dc9e9a9aa5efaf7912b7b61cee124",
-      "training/post_sft_cast.py": "sha256:fc022d296e3064dc7138e647945cd1c6cee50d343e8098fa1feb7c876ffbf22b"
+      "training/post_sft_cast.py": "sha256:96e4af383e78b31b591acaad4e12ded67e2c62010be5c57c665bcb640f7de4b2"
     }
   },
   "evidence_execution": {
