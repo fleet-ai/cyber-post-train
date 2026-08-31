@@ -1,6 +1,6 @@
 {
   "schema": "qwen36_cyber_post_train_state_observation_v1",
-  "observed_at": "2026-08-31T20:23:20Z",
+  "observed_at": "2026-08-31T20:32:49Z",
   "scope": "Prompt-free, secret-free evidence index. Live scheduler states are observations, not terminal claims.",
   "model": {
     "repository": "Qwen/Qwen3.6-27B",
@@ -190,12 +190,24 @@
     "rank_safe_canary_03": {
       "name": "chris-cyber-qwen36-27b-capability-gate-03",
       "rayjob_uid": "c4aca116-2473-4fdd-bd37-6ac661ac4509",
-      "observed_status": "Suspended",
-      "queue_state": "Pending",
+      "observed_status": "SUCCEEDED",
+      "queue_state": "Terminal",
       "trainer_image": "ghcr.io/fleet-ai/miles-fleet/trainer@sha256:6cd059e8327018bc7e783f3bff939bd9ebcf243d81b66d6422951e89c9223b37",
       "shape": "one prompt x eight samples on eight FSDP ranks",
-      "terminal_result": null,
-      "upstream_source_commit": "1dbf881e9"
+      "terminal_result": {
+        "status": "SUCCEEDED",
+        "authoritative_rollouts_completed": 8,
+        "authoritative_rollouts_aborted": 0,
+        "raw_capability_reward_mean": 0.0,
+        "rollout_truncation_rate": 0.0,
+        "optimizer_iterations_completed": 1,
+        "logged_zero_indexed_step": 0,
+        "gradient_norm": 0.0,
+        "durable_checkpoint_observed": true,
+        "learning_signal_present": false
+      },
+      "upstream_source_commit": "1dbf881e9",
+      "evidence": {"path": "docs/evidence/qwen36-study/2026-08-31-miles-canary03-terminal-v1.json", "file_sha256": "sha256:f37fa390b3f08adca55727cb9484437cab2e35a209202a42be641ff803700847"}
     }
   },
   "paired_evaluation_protocols": {
