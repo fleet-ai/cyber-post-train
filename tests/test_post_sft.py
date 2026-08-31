@@ -4,9 +4,33 @@ from pathlib import Path
 
 import pytest
 
+from evals.webexploitbench.config import ExperimentConfig
 from evals.webexploitbench.paired import (
+    assert_cage_run_root_available,
+    claim_cage_launch,
     derive_post_sft_qwen_pair,
     validate_paired_identity_for_launch,
+    validate_post_sft_launch_evidence,
+)
+from evals.webexploitbench.post_sft_evidence import (
+    ARTIFACT_COMMAND_SHA256,
+    ARTIFACT_CONFIG_MAP,
+    ARTIFACT_JOB,
+    ARTIFACT_NAMESPACE,
+    BASE_MODEL_ID,
+    BASE_MODEL_REPOSITORY,
+    BASE_MODEL_REVISION,
+    BASE_MODEL_ROOT,
+    BASE_NON_SERVING_SIDECARS,
+    REGISTRATION_IMAGE,
+    RUNTIME_IMAGE,
+    _artifact_projection,
+    _artifacts_from_receipts,
+    _atomic_write_json_new,
+    _read_tokenizer_probe,
+    _tool_request,
+    assemble_live_parity,
+    assemble_registration_completion,
 )
 from training.io import digest_json, file_sha256
 from training.post_sft import (
@@ -18,8 +42,10 @@ from training.post_sft import (
     derive_webexploit_config,
     freeze_final_promoted_checkpoint,
     freeze_final_promoted_sfs_checkpoint,
+    normalize_zero_step_stored_config,
     validate_selection_receipt,
 )
+from training.post_sft_export_observation import _validated_stored_config
 from training.register_post_sft import validate_registration_receipt
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -48,12 +74,27 @@ def _export_binding():
             "name": "ft-run-export",
             "run_id": "export-run-id",
             "rayjob_uid": "export-uid",
+            "title": "Chris cyber test zero-step export",
             "trainer_version_id": "trainer-version",
             "trainer_image": IMAGE,
             "resume_from": f"/mnt/sfs/checkpoints/{RUN}/global_step_318",
             "num_steps": 318,
             "hf_save_interval": 319,
             "optimizer_steps_expected": 0,
+            "server_normalization": {
+                "schema": "fleet_training_stored_config_normalization_v1",
+                "submitted_by_email": "scientist@example.com",
+                "node_pool": "fleetai-training-ng-gpu",
+                "data_defaults": {
+                    "env_keys": None,
+                    "models": None,
+                    "session_ids": None,
+                    "since": None,
+                    "team_ids": ["a1025f0b-ad67-49fc-a023-51800ab43e84"],
+                    "until": None,
+                },
+                "trainer_defaults": {"command": None, "env": {}},
+            },
         },
     }
 
@@ -124,9 +165,18 @@ def _export(selection):
             "source_path": "/models/cyber-sft/ft-run-574bd7b3/step-318",
             "weights_manifest_sha256": "sha256:" + "6" * 64,
             "files_manifest_sha256": "sha256:" + "f" * 64,
-            "tokenizer_manifest_sha256": "sha256:" + "7" * 64,
-            "chat_template_sha256": "sha256:" + "8" * 64,
-            "config_sha256": "sha256:" + "0" * 64,
+            "tokenizer_manifest_sha256": (
+                "sha256:27f02770d03b60343350ad948bf1065673968c60274f1e34f4afaed16940a1ea"
+            ),
+            "chat_template_sha256": (
+                "sha256:e84f32a23fdda27689f868aa4a1a5621f41133e51a48d7f3efcbea2839574259"
+            ),
+            "config_sha256": (
+                "sha256:69db4eb7196bc8190813231b3018ca05d8c2e3abc7b1af19d55c157af44a9d9c"
+            ),
+            "sidecar_sha256": json.loads(
+                (ROOT / "configs/evaluation/qwen36-27b-ft-run-574bd7b3-post-sft.json").read_text()
+            )["base_model"]["runtime_sidecar_sha256"],
         },
         "conversion": {
             "image": IMAGE,
@@ -323,9 +373,52 @@ def test_zero_step_export_request_preserves_recipe_and_cannot_mutate_source():
     assert request["model"] == sft["model"]
     assert f"resume_from=/mnt/sfs/checkpoints/{RUN}/global_step_318" in request["trainer"]["args"]
     assert "hf_save_interval=319" in request["trainer"]["args"]
-    assert request["title"].startswith("Chris cyber zero-step HF export")
+    assert request["title"] == "Chris cyber test zero-step export"
     assert "name" not in request
     assert receipt["expected_output"]["path"].endswith("/global_step_318/policy")
+
+
+def test_live_export_job_server_normalization_fixture_matches_frozen_plan():
+    fixture = json.loads(
+        (ROOT / "tests/fixtures/ft-run-29f2bedf-config-normalization.json").read_text()
+    )
+    plan = json.loads(
+        (ROOT / "configs/evaluation/qwen36-27b-ft-run-574bd7b3-post-sft.json").read_text()
+    )
+    export_run = plan["export"]["export_run"]
+    for field in ("name", "run_id", "rayjob_uid", "title"):
+        fixture_field = "run_name" if field == "name" else field
+        assert export_run[field] == fixture[fixture_field]
+    assert export_run["server_normalization"] == fixture["server_normalization"]
+
+    request = json.loads((ROOT / "configs/runs/qwen36-27b-sft-full.json").read_text())
+    request["title"] = export_run["title"]
+    request["sft"]["num_epochs"] = None
+    request["sft"]["max_steps"] = 318
+    request["eval"] = {"task_keys": [], "interval": 1, "before_train": False}
+    request["trainer"]["args"].extend(
+        [
+            "resume_from=/mnt/sfs/checkpoints/ft-run-574bd7b3/global_step_318",
+            "hf_save_interval=319",
+            "export_path=/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-v1",
+        ]
+    )
+    stored = normalize_zero_step_stored_config(request, export_run)
+    assert digest_json(stored) == fixture["fleet_run_config_sha256"]
+    assert _validated_stored_config(
+        request,
+        export_run,
+        stored,
+        "prompt-free live FLEET_RUN_CONFIG fixture",
+    ) == stored
+    assert stored["title"] == fixture["title"]
+    assert stored["node_pool"] == "fleetai-training-ng-gpu"
+    normalized_data = fixture["server_normalization"]["data_defaults"]
+    assert {key: stored["data"][key] for key in normalized_data} == normalized_data
+    assert {key: stored["trainer"][key] for key in ("command", "env")} == {
+        "command": None,
+        "env": {},
+    }
 
 
 def test_post_sft_registration_preserves_runtime_and_precision():
@@ -338,9 +431,9 @@ def test_post_sft_registration_preserves_runtime_and_precision():
         base,
         selection,
         export,
-        expected_tokenizer_manifest_sha256="sha256:" + "7" * 64,
-        expected_chat_template_sha256="sha256:" + "8" * 64,
-        expected_config_sha256="sha256:" + "0" * 64,
+        expected_tokenizer_manifest_sha256=export["output"]["tokenizer_manifest_sha256"],
+        expected_chat_template_sha256=export["output"]["chat_template_sha256"],
+        expected_config_sha256=export["output"]["config_sha256"],
         expected_export_binding=_export_binding(),
     )
     candidate = receipt["registration"]
@@ -376,9 +469,9 @@ def test_post_sft_registration_rejects_unproven_inference_staging():
             base,
             selection,
             export,
-            expected_tokenizer_manifest_sha256="sha256:" + "7" * 64,
-            expected_chat_template_sha256="sha256:" + "8" * 64,
-            expected_config_sha256="sha256:" + "0" * 64,
+            expected_tokenizer_manifest_sha256=export["output"]["tokenizer_manifest_sha256"],
+            expected_chat_template_sha256=export["output"]["chat_template_sha256"],
+            expected_config_sha256=export["output"]["config_sha256"],
             expected_export_binding=_export_binding(),
         )
 
@@ -398,9 +491,9 @@ def test_post_sft_registration_requires_exact_composed_runtime_sidecars():
             base,
             selection,
             export,
-            expected_tokenizer_manifest_sha256="sha256:" + "7" * 64,
-            expected_chat_template_sha256="sha256:" + "8" * 64,
-            expected_config_sha256="sha256:" + "0" * 64,
+            expected_tokenizer_manifest_sha256=export["output"]["tokenizer_manifest_sha256"],
+            expected_chat_template_sha256=export["output"]["chat_template_sha256"],
+            expected_config_sha256=export["output"]["config_sha256"],
             expected_export_binding=_export_binding(),
             expected_runtime_sidecar_sha256={"config.json": "sha256:" + "2" * 64},
         )
@@ -461,9 +554,9 @@ def test_export_receipt_rejects_wrong_run_identity_and_missing_output_hash():
             base,
             selection,
             export,
-            expected_tokenizer_manifest_sha256="sha256:" + "7" * 64,
-            expected_chat_template_sha256="sha256:" + "8" * 64,
-            expected_config_sha256="sha256:" + "0" * 64,
+            expected_tokenizer_manifest_sha256=export["output"]["tokenizer_manifest_sha256"],
+            expected_chat_template_sha256=export["output"]["chat_template_sha256"],
+            expected_config_sha256=export["output"]["config_sha256"],
             expected_export_binding=_export_binding(),
         )
 
@@ -477,9 +570,9 @@ def test_export_receipt_rejects_wrong_run_identity_and_missing_output_hash():
             base,
             selection,
             export,
-            expected_tokenizer_manifest_sha256="sha256:" + "7" * 64,
-            expected_chat_template_sha256="sha256:" + "8" * 64,
-            expected_config_sha256="sha256:" + "0" * 64,
+            expected_tokenizer_manifest_sha256=export["output"]["tokenizer_manifest_sha256"],
+            expected_chat_template_sha256=export["output"]["chat_template_sha256"],
+            expected_config_sha256=export["output"]["config_sha256"],
             expected_export_binding=_export_binding(),
         )
 
@@ -512,9 +605,10 @@ def _post_serving_receipt():
         base_registration,
         selection,
         export,
-        expected_tokenizer_manifest_sha256="sha256:" + "7" * 64,
-        expected_chat_template_sha256="sha256:" + "8" * 64,
-        expected_config_sha256="sha256:" + "0" * 64,
+        expected_tokenizer_manifest_sha256=export["output"]["tokenizer_manifest_sha256"],
+        expected_chat_template_sha256=export["output"]["chat_template_sha256"],
+        expected_config_sha256=export["output"]["config_sha256"],
+        expected_runtime_sidecar_sha256=export["output"]["sidecar_sha256"],
         expected_export_binding=_export_binding(),
     )
     return base_registration, serving
@@ -639,6 +733,811 @@ def test_webexploit_pair_rejects_claude_code_or_extra_config_change(tmp_path):
         derive_post_sft_qwen_pair(**inputs)
 
 
+def _post_sft_launch_evidence(paired_identity, post_registration):
+    base_registration = json.loads(
+        (ROOT / "evals/webexploitbench/serving/qwen36-27b-6a9e13bd-registration.json").read_text()
+    )
+    registration_job_spec = {"template": {"spec": {"restartPolicy": "Never"}}}
+    registration_job_status = {
+        "succeeded": 1,
+        "conditions": [{"type": "Complete", "status": "True"}],
+    }
+    registration_projection = json.loads(
+        (ROOT / "configs/evaluation/qwen36-27b-ft-run-574bd7b3-post-sft.json").read_text()
+    )["evidence_execution"]["registration"]["pod_spec"]
+    registration = {
+        "schema": "cyber_post_sft_registration_completion_v1",
+        "job": {
+            "namespace": "fleet-train-jobs",
+            "name": "chris-cyber-qwen36-sft-register-574bd7b3-v1",
+            "uid": "registration-job-uid",
+            "complete": True,
+            "succeeded": 1,
+            "failed": 0,
+            "spec": registration_job_spec,
+            "status": registration_job_status,
+            "spec_sha256": digest_json(registration_job_spec),
+            "status_sha256": digest_json(registration_job_status),
+            "reviewed_job_projection": copy.deepcopy(registration_projection),
+            "reviewed_job_projection_sha256": digest_json(registration_projection),
+            "pod": {
+                "name": "registration-pod",
+                "uid": "registration-pod-uid",
+                "image": REGISTRATION_IMAGE,
+                "image_id": REGISTRATION_IMAGE,
+                "reviewed_spec_projection": copy.deepcopy(registration_projection),
+                "reviewed_spec_projection_sha256": digest_json(registration_projection),
+            },
+            "config_map": {
+                "name": "chris-cyber-qwen36-sft-register-574bd7b3-v1",
+                "uid": "registration-config-uid",
+                "resource_version": "1",
+                "immutable": True,
+                "data_sha256": "sha256:" + "2" * 64,
+                "mounted_file_sha256": {"training/register_post_sft.py": "sha256:" + "3" * 64},
+                "serving_receipt_sha256": paired_identity["post_sft"][
+                    "serving_contract_sha256"
+                ],
+            },
+        },
+        "api_result": {
+            "id": paired_identity["post_sft"]["model"],
+            "phase": "pending",
+            "model_revision": paired_identity["post_sft"]["model_revision"],
+            "registration": copy.deepcopy(post_registration),
+            "registration_sha256": digest_json(post_registration),
+            "weights_manifest_sha256": "sha256:" + "6" * 64,
+        },
+        "source_receipts": {
+            "export_receipt_sha256": _export(_selection())["export_receipt_sha256"]
+        },
+    }
+    registration["registration_completion_sha256"] = digest_json(registration)
+    runtime_image = (
+        "lmsysorg/sglang@"
+        "sha256:febfb971c7352570fc445c466ebd6ffc9d896024958e544a60f2137fd85856b1"
+    )
+    server_info = {
+        "tokenizer_mode": "auto",
+        "tokenizer_backend": "huggingface",
+        "context_length": 262144,
+        "chat_template": "qwen-frozen-template",
+        "hf_chat_template_name": "default",
+        "completion_template": None,
+        "reasoning_parser": "qwen3",
+        "tool_call_parser": "qwen3_coder",
+        "sampling_defaults": {"temperature": 0.6},
+        "dtype": "auto",
+        "quantization": None,
+        "kv_cache_dtype": "fp8_e4m3",
+        "tp_size": 1,
+        "version": "0.0.0.dev0+qwen38.27b.g561c8f3",
+    }
+
+    def arm(section, serving_registration):
+        identity = paired_identity[section]
+        model_spec = serving_registration["spec"]["model"]
+        runtime = serving_registration["spec"]["runtime"]
+        cr_status = {
+            "phase": "ready",
+            "readyReplicas": 1,
+            "observedGeneration": 1,
+            "conditions": [{"type": "Ready", "status": "True"}],
+        }
+        return {
+            "inference_model": {
+                "id": identity["model"],
+                "uid": section + "-uid",
+                "generation": 1,
+                "observed_generation": 1,
+                "registration": copy.deepcopy(serving_registration),
+                "registration_sha256": digest_json(serving_registration),
+                "canonical_spec": copy.deepcopy(serving_registration["spec"]),
+                "canonical_status": cr_status,
+                "spec_sha256": digest_json(serving_registration["spec"]),
+                "status_sha256": digest_json(cr_status),
+                "model": {
+                    "source_path": model_spec["sourcePath"],
+                    "serving_path": model_spec["path"],
+                    "revision": model_spec["revision"],
+                    "precision": model_spec["precision"],
+                    "tensor_parallel_size": model_spec["tensorParallelSize"],
+                },
+                "runtime": {
+                    "engine": runtime["engine"],
+                    "image": runtime_image,
+                    "command_sha256": digest_json(runtime["command"]),
+                    "normalized_args_sha256": paired_identity["controlled_identity"][
+                        "serving_runtime"
+                    ]["normalized_registration_sha256"],
+                    "env_sha256": digest_json(runtime["env"]),
+                },
+                "placement_sha256": digest_json(serving_registration["spec"]["placement"]),
+                "scaling_sha256": digest_json(serving_registration["spec"]["scaling"]),
+                "status": "ready",
+                "ready_replicas": 1,
+            },
+            "model_info": {
+                "model_path": model_spec["path"],
+                "tokenizer_path": model_spec["path"],
+                "model_type": "qwen3_5",
+                "architectures": ["Qwen3_5ForConditionalGeneration"],
+                "weight_version": "default",
+            },
+            "server_info": {
+                **copy.deepcopy(server_info),
+                "model_path": model_spec["path"],
+                "tokenizer_path": model_spec["path"],
+                "served_model_name": identity["model"],
+                "revision": None,
+                "weight_version": "default",
+            },
+        }
+
+    export_receipt = _export(_selection())
+    base_artifacts = copy.deepcopy(_base_artifact_receipt()["artifact_identity"])
+    post_artifacts = copy.deepcopy(base_artifacts)
+    post_artifacts["weights_manifest_sha256"] = "sha256:" + "6" * 64
+    acceptance_sha256 = export_receipt["staging"]["acceptance_manifest_sha256"]
+    post_artifacts["excluded_non_serving_files"] = {
+        ".fleet-acceptance.json": {
+            "sha256": acceptance_sha256,
+            "reviewed_reason": (
+                "post-SFT atomic-staging acceptance receipt; never loaded by SGLang"
+            ),
+        }
+    }
+    post_artifacts["full_non_weight_manifest_sha256"] = digest_json(
+        [
+            {"path": name, "sha256": digest}
+            for name, digest in sorted(
+                post_artifacts["serving_non_weight_file_sha256"].items()
+            )
+        ] + [{"path": ".fleet-acceptance.json", "sha256": acceptance_sha256}]
+    )
+    live = {
+        "schema": "webexploitbench_post_sft_live_parity_v1",
+        "paired_identity_receipt_sha256": paired_identity[
+            "paired_identity_receipt_sha256"
+        ],
+        "registration_completion_sha256": registration[
+            "registration_completion_sha256"
+        ],
+        "arms": {
+            "base": arm("baseline", base_registration),
+            "post_sft": arm("post_sft", post_registration),
+        },
+        "artifact_identity": {
+            "base": base_artifacts,
+            "post_sft": post_artifacts,
+            "only_difference": "checkpoint_weights",
+        },
+        "artifact_evidence": {
+            "base_artifact_receipt_sha256": _base_artifact_receipt()[
+                "base_artifact_receipt_sha256"
+            ],
+            "base_execution": _base_artifact_receipt()["execution"],
+            "export_receipt_sha256": export_receipt["export_receipt_sha256"],
+        },
+        "probes": {
+            "tokenizer": {
+                "receipt_sha256": (
+                    "sha256:3f2f72d77fda3d9e7a68cfa2ee16df031675e8f380266aa1a1eb98b00833b49e"
+                ),
+                "base_passed": True,
+                "post_sft_passed": True,
+                "exact_encode_decode_match": True,
+            },
+            "tool_call": {
+                "request_sha256": "sha256:" + "b" * 64,
+                "base_revision": paired_identity["baseline"]["model_revision"],
+                "post_sft_revision": paired_identity["post_sft"]["model_revision"],
+                "base_passed": True,
+                "post_sft_passed": True,
+                "tool_name": "identity",
+                "argument_value": "parity",
+            },
+            "fixed_prompt_logits": {
+                "request_sha256": "sha256:" + "c" * 64,
+                "token_ids_sha256": "sha256:" + "d" * 64,
+                "base_revision": paired_identity["baseline"]["model_revision"],
+                "post_sft_revision": paired_identity["post_sft"]["model_revision"],
+                "base_passed": True,
+                "post_sft_passed": True,
+                "finite": True,
+                "deterministic": True,
+            },
+        },
+    }
+    live["live_parity_sha256"] = digest_json(live)
+    return registration, live
+
+
+def test_post_sft_launch_requires_registration_and_live_weights_only_parity(tmp_path):
+    inputs = _paired_inputs(tmp_path)
+    _, paired_identity = derive_post_sft_qwen_pair(**inputs)
+    registration, live = _post_sft_launch_evidence(
+        paired_identity, inputs["post_serving_receipt"]["registration"]
+    )
+    registration_sha256, live_sha256 = validate_post_sft_launch_evidence(
+        paired_identity, registration, live
+    )
+    assert registration_sha256 == registration["registration_completion_sha256"]
+    assert live_sha256 == live["live_parity_sha256"]
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        (lambda registration, live: registration["job"].update(complete=False), "complete"),
+        (
+            lambda registration, live: registration["job"]["spec"].update(
+                activeDeadlineSeconds=1
+            ),
+            "exact spec digest differs",
+        ),
+        (
+            lambda registration, live: live["arms"]["base"]["inference_model"][
+                "canonical_status"
+            ].update(readyReplicas=2),
+            "exact status digest differs",
+        ),
+        (
+            lambda registration, live: live["arms"]["post_sft"]["server_info"].update(
+                tool_call_parser="drifted"
+            ),
+            "server_info differs",
+        ),
+        (
+            lambda registration, live: live["artifact_identity"]["post_sft"].update(
+                non_weight_manifest_sha256="sha256:" + "e" * 64
+            ),
+            "non-weight artifact",
+        ),
+        (
+            lambda registration, live: live["probes"]["fixed_prompt_logits"].update(
+                finite=False
+            ),
+            "not finite and deterministic",
+        ),
+    ],
+)
+def test_post_sft_launch_evidence_fails_closed(tmp_path, mutation, message):
+    inputs = _paired_inputs(tmp_path)
+    _, paired_identity = derive_post_sft_qwen_pair(**inputs)
+    registration, live = _post_sft_launch_evidence(
+        paired_identity, inputs["post_serving_receipt"]["registration"]
+    )
+    mutation(registration, live)
+    registration["registration_completion_sha256"] = digest_json(
+        {
+            key: value
+            for key, value in registration.items()
+            if key != "registration_completion_sha256"
+        }
+    )
+    live["registration_completion_sha256"] = registration[
+        "registration_completion_sha256"
+    ]
+    live["live_parity_sha256"] = digest_json(
+        {key: value for key, value in live.items() if key != "live_parity_sha256"}
+    )
+    with pytest.raises(ValueError, match=message):
+        validate_post_sft_launch_evidence(paired_identity, registration, live)
+
+
+def test_post_sft_launch_refuses_preexisting_cage_run_root(tmp_path):
+    inputs = _paired_inputs(tmp_path)
+    config = ExperimentConfig.load(inputs["post_config_path"])
+    run_root = assert_cage_run_root_available(tmp_path, config)
+    run_root.mkdir(parents=True)
+    with pytest.raises(ValueError, match="CAGE run root already exists"):
+        assert_cage_run_root_available(tmp_path, config)
+
+
+def test_post_sft_launch_claim_is_atomic_and_persistent(tmp_path):
+    inputs = _paired_inputs(tmp_path)
+    config = ExperimentConfig.load(inputs["post_config_path"])
+    claim = claim_cage_launch(
+        tmp_path,
+        config,
+        protocol_sha256="sha256:" + "1" * 64,
+        paired_identity_sha256="sha256:" + "2" * 64,
+        registration_completion_sha256="sha256:" + "3" * 64,
+        live_parity_sha256="sha256:" + "4" * 64,
+    )
+    assert claim.is_file()
+    with pytest.raises(ValueError, match="launch claim already exists"):
+        claim_cage_launch(
+            tmp_path,
+            config,
+            protocol_sha256="sha256:" + "1" * 64,
+            paired_identity_sha256="sha256:" + "2" * 64,
+            registration_completion_sha256="sha256:" + "3" * 64,
+            live_parity_sha256="sha256:" + "4" * 64,
+        )
+
+
+def _registration_job_observation(serving):
+    job_uid = "registration-job-uid"
+    name = "chris-cyber-qwen36-sft-register-574bd7b3-v1"
+    contract = json.loads(
+        (ROOT / "configs/evaluation/qwen36-27b-ft-run-574bd7b3-post-sft.json").read_text()
+    )["evidence_execution"]["registration"]
+    pod_spec = copy.deepcopy(contract["pod_spec"])
+    container = pod_spec.pop("container")
+    pod_spec["containers"] = [container]
+    return {
+        "job": {
+            "metadata": {
+                "namespace": "fleet-train-jobs",
+                "name": name,
+                "uid": job_uid,
+                "labels": copy.deepcopy(contract["job_labels"]),
+            },
+            "spec": {
+                **contract["job"],
+                "suspend": False,
+                "template": {
+                    "metadata": {"labels": copy.deepcopy(contract["pod_labels"])},
+                    "spec": copy.deepcopy(pod_spec),
+                }
+            },
+            "status": {
+                "conditions": [{"type": "Complete", "status": "True"}],
+                "succeeded": 1,
+                "completionTime": "2026-08-31T23:59:59Z",
+            },
+        },
+        "pod": {
+            "metadata": {
+                "name": "registration-pod",
+                "uid": "registration-pod-uid",
+                "labels": copy.deepcopy(contract["pod_labels"]),
+                "ownerReferences": [
+                    {"kind": "Job", "name": name, "uid": job_uid, "controller": True}
+                ],
+            },
+            "spec": copy.deepcopy(pod_spec),
+            "status": {
+                "containerStatuses": [
+                    {"name": "register", "imageID": REGISTRATION_IMAGE}
+                ]
+            },
+        },
+        "config_map": {
+            "metadata": {
+                "namespace": "fleet-train-jobs",
+                "name": name,
+                "uid": "registration-config-uid",
+                "resourceVersion": "1",
+            },
+            "immutable": True,
+            "data": {
+                "training__init__.py": (ROOT / "training/__init__.py").read_text(),
+                "training_io.py": (ROOT / "training/io.py").read_text(),
+                "training_register_post_sft.py": (
+                    ROOT / "training/register_post_sft.py"
+                ).read_text(),
+                "serving-registration-receipt.json": json.dumps(serving),
+            },
+        },
+    }
+
+
+def _assembled_registration(paired_identity, serving):
+    export = _export(_selection())
+    return assemble_registration_completion(
+        paired_identity,
+        _registration_job_observation(serving),
+        {
+            "id": paired_identity["post_sft"]["model"],
+            "object": "inference.model",
+            "phase": "pending",
+            "registration": copy.deepcopy(serving["registration"]),
+        },
+        serving,
+        export,
+    )
+
+
+def _base_artifact_receipt():
+    plan_path = ROOT / "configs/evaluation/qwen36-27b-ft-run-574bd7b3-post-sft.json"
+    plan = json.loads(plan_path.read_text())
+    model = plan["base_model"]
+    contract = plan["evidence_execution"]["base_artifact_inspector"]
+    inspection = {
+        "schema": "cyber_sft_hf_output_inspection_v1",
+        "root": BASE_MODEL_ROOT,
+        "format": "safetensors",
+        "dtype": "bf16",
+        "all_shards_present": True,
+        "safetensors_load_passed": True,
+        "parameter_count_matches": True,
+        "weights_manifest_sha256": model["weights_manifest_sha256"],
+        "tokenizer_manifest_sha256": model["tokenizer_manifest_sha256"],
+        "chat_template_sha256": model["chat_template_sha256"],
+        "config_sha256": model["config_sha256"],
+        "sidecar_sha256": model["runtime_sidecar_sha256"],
+    }
+    inspection["sidecar_sha256"] = {
+        **inspection["sidecar_sha256"],
+        ".cyber-post-train-lock.json": "sha256:" + "a" * 64,
+        ".fleet-acceptance.json": "sha256:" + "b" * 64,
+        ".gitattributes": "sha256:" + "c" * 64,
+        "LICENSE": "sha256:" + "d" * 64,
+        "README.md": "sha256:" + "e" * 64,
+    }
+    artifacts = _artifact_projection(
+        inspection,
+        "base fixture",
+        allowed_non_serving_sidecars=BASE_NON_SERVING_SIDECARS,
+    )
+    receipt = {
+        "schema": "webexploitbench_base_artifact_inspection_v1",
+        "model": {
+            "id": BASE_MODEL_ID,
+            "repository": BASE_MODEL_REPOSITORY,
+            "revision": BASE_MODEL_REVISION,
+            "source_path": BASE_MODEL_ROOT,
+        },
+        "checkpoint_lock_sha256": "sha256:" + "9" * 64,
+        "inspection": inspection,
+        "artifact_identity": artifacts,
+        "execution": {
+            "job": {
+                "namespace": ARTIFACT_NAMESPACE,
+                "name": ARTIFACT_JOB,
+                "uid": "artifact-job-uid",
+                "spec": {
+                    "template": {
+                        "spec": {
+                            **{
+                                key: copy.deepcopy(value)
+                                for key, value in contract["pod_spec"].items()
+                                if key != "container"
+                            },
+                            "containers": [
+                                copy.deepcopy(contract["pod_spec"]["container"])
+                            ],
+                        }
+                    }
+                },
+            },
+            "pod": {
+                "name": "artifact-pod",
+                "uid": "artifact-pod-uid",
+                "reviewed_spec_projection": copy.deepcopy(contract["pod_spec"]),
+                "reviewed_spec_projection_sha256": digest_json(contract["pod_spec"]),
+            },
+            "image": RUNTIME_IMAGE,
+            "image_id": RUNTIME_IMAGE,
+            "command_sha256": ARTIFACT_COMMAND_SHA256,
+            "config_map": {
+                "name": ARTIFACT_CONFIG_MAP,
+                "uid": "artifact-config-uid",
+                "resource_version": "1",
+                "immutable": True,
+                "data_sha256": "sha256:" + "7" * 64,
+                "mounted_file_sha256": {
+                    **copy.deepcopy(contract["config_map_code_sha256"]),
+                    "post-sft-plan.json": file_sha256(plan_path),
+                },
+            },
+        },
+    }
+    job_spec = receipt["execution"]["job"]["spec"]
+    job_projection = copy.deepcopy(contract["pod_spec"])
+    receipt["execution"]["job"].update(
+        {
+            "spec_sha256": digest_json(job_spec),
+            "reviewed_spec_projection": job_projection,
+            "reviewed_spec_projection_sha256": digest_json(job_projection),
+        }
+    )
+    receipt["base_artifact_receipt_sha256"] = digest_json(receipt)
+    return receipt
+
+
+def _live_observations(paired_identity, expected_live, post_registration):
+    def response(model, token="parity"):
+        return {
+            "model": model,
+            "choices": [
+                {
+                    "logprobs": {
+                        "content": [
+                            {
+                                "token": token,
+                                "bytes": list(token.encode()),
+                                "logprob": -0.125,
+                            }
+                        ]
+                    }
+                }
+            ],
+        }
+
+    arms = {}
+    base_registration = json.loads(
+        (ROOT / "evals/webexploitbench/serving/qwen36-27b-6a9e13bd-registration.json").read_text()
+    )
+    for label, identity_key in (("base", "baseline"), ("post_sft", "post_sft")):
+        model = paired_identity[identity_key]["model"]
+        expected = expected_live["arms"][label]
+        serving_registration = base_registration if label == "base" else post_registration
+        live_spec = copy.deepcopy(serving_registration["spec"])
+        live_spec["capabilities"] = sorted(live_spec["capabilities"])
+        token = "base" if label == "base" else "post"
+        arms[label] = {
+            "inference_model": {
+                "metadata": {
+                    "name": model,
+                    "uid": label + "-uid",
+                    "generation": 1,
+                },
+                "spec": live_spec,
+                "status": {
+                    "phase": "ready",
+                    "readyReplicas": 1,
+                    "observedGeneration": 1,
+                    "conditions": [{"type": "Ready", "status": "True"}],
+                },
+            },
+            "model_info": copy.deepcopy(expected["model_info"]),
+            "server_info": copy.deepcopy(expected["server_info"]),
+            "tool_response": {
+                "model": model,
+                "choices": [
+                    {
+                        "message": {
+                            "tool_calls": [
+                                {
+                                    "function": {
+                                        "name": "identity",
+                                        "arguments": json.dumps({"value": "parity"}),
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                ],
+            },
+            "logit_responses": [response(model, token), response(model, token)],
+        }
+    return {"arms": arms}
+
+
+def test_production_evidence_builders_bind_job_export_and_live_routes(tmp_path):
+    inputs = _paired_inputs(tmp_path)
+    _, paired_identity = derive_post_sft_qwen_pair(**inputs)
+    registration = _assembled_registration(
+        paired_identity, inputs["post_serving_receipt"]
+    )
+    _, expected_live = _post_sft_launch_evidence(
+        paired_identity, inputs["post_serving_receipt"]["registration"]
+    )
+    live = assemble_live_parity(
+        paired_identity,
+        registration,
+        _live_observations(
+            paired_identity, expected_live, inputs["post_serving_receipt"]["registration"]
+        ),
+        inputs["base_registration"],
+        inputs["post_serving_receipt"],
+        _base_artifact_receipt(),
+        _export(_selection()),
+        expected_live["probes"]["tokenizer"],
+    )
+    assert registration["api_result"]["weights_manifest_sha256"] == "sha256:" + "6" * 64
+    assert registration["source_receipts"]["export_receipt_sha256"] == _export(
+        _selection()
+    )["export_receipt_sha256"]
+    assert live["artifact_identity"]["only_difference"] == "checkpoint_weights"
+    assert "parity" not in json.dumps(live["probes"]["fixed_prompt_logits"])
+    validate_post_sft_launch_evidence(paired_identity, registration, live)
+
+
+def test_base_artifact_receipt_is_digest_bound_and_names_runtime_provenance():
+    receipt = _base_artifact_receipt()
+    assert receipt["artifact_identity"]["weights_manifest_sha256"].startswith("sha256:")
+    assert receipt["execution"]["job"]["name"] == ARTIFACT_JOB
+    assert receipt["base_artifact_receipt_sha256"] == digest_json(
+        {key: value for key, value in receipt.items() if key != "base_artifact_receipt_sha256"}
+    )
+
+
+def test_web_evidence_outputs_are_no_clobber_including_dangling_symlinks(tmp_path):
+    output = tmp_path / "receipt.json"
+    _atomic_write_json_new(output, {"ready": True})
+    with pytest.raises(ValueError, match="pre-existing output"):
+        _atomic_write_json_new(output, {"ready": False})
+    dangling = tmp_path / "dangling.json"
+    dangling.symlink_to(tmp_path / "missing-target")
+    with pytest.raises(ValueError, match="pre-existing output"):
+        _atomic_write_json_new(dangling, {"ready": True})
+
+
+def test_tool_probe_disables_thinking_and_remains_bounded():
+    request = _tool_request("model")
+    assert request["chat_template_kwargs"] == {"enable_thinking": False}
+    assert request["temperature"] == 0
+    assert request["max_tokens"] == 128
+
+
+def test_live_builder_reads_only_the_exact_frozen_tokenizer_receipt(tmp_path):
+    source = ROOT / "docs/evidence/post_sft/2026-08-31-tokenizer-equivalence.json"
+    projection = _read_tokenizer_probe(str(source))
+    assert projection == {
+        "receipt_sha256": (
+            "sha256:3f2f72d77fda3d9e7a68cfa2ee16df031675e8f380266aa1a1eb98b00833b49e"
+        ),
+        "base_passed": True,
+        "post_sft_passed": True,
+        "exact_encode_decode_match": True,
+    }
+    changed = tmp_path / "tokenizer.json"
+    value = json.loads(source.read_text())
+    value["corpus_parity"]["all_decode_parity"] = False
+    changed.write_text(json.dumps(value))
+    with pytest.raises(ValueError, match="differs from the frozen receipt"):
+        _read_tokenizer_probe(str(changed))
+
+
+def test_registration_builder_rejects_incomplete_or_wrong_export(tmp_path):
+    inputs = _paired_inputs(tmp_path)
+    _, paired_identity = derive_post_sft_qwen_pair(**inputs)
+    job = _registration_job_observation(inputs["post_serving_receipt"])
+    job["job"]["status"]["conditions"] = [{"type": "Failed", "status": "True"}]
+    with pytest.raises(ValueError, match="not exclusively Complete"):
+        assemble_registration_completion(
+            paired_identity,
+            job,
+            {
+                "id": paired_identity["post_sft"]["model"],
+                "phase": "pending",
+                "registration": inputs["post_serving_receipt"]["registration"],
+            },
+            inputs["post_serving_receipt"],
+            _export(_selection()),
+        )
+
+    wrong_export = _export(_selection())
+    wrong_export["output"]["weights_manifest_sha256"] = "sha256:" + "e" * 64
+    wrong_export["export_receipt_sha256"] = digest_json(
+        {key: value for key, value in wrong_export.items() if key != "export_receipt_sha256"}
+    )
+    with pytest.raises(ValueError, match="does not bind the supplied export"):
+        assemble_registration_completion(
+            paired_identity,
+            _registration_job_observation(inputs["post_serving_receipt"]),
+            {
+                "id": paired_identity["post_sft"]["model"],
+                "phase": "pending",
+                "registration": inputs["post_serving_receipt"]["registration"],
+            },
+            inputs["post_serving_receipt"],
+            wrong_export,
+        )
+
+
+def test_registration_builder_rejects_unreviewed_workload_and_mutable_configmap(tmp_path):
+    inputs = _paired_inputs(tmp_path)
+    _, paired_identity = derive_post_sft_qwen_pair(**inputs)
+    serving = inputs["post_serving_receipt"]
+    api_result = {
+        "id": paired_identity["post_sft"]["model"],
+        "object": "inference.model",
+        "phase": "pending",
+        "registration": copy.deepcopy(serving["registration"]),
+    }
+    observation = _registration_job_observation(serving)
+    extra = {"name": "unreviewed", "image": "alpine:latest"}
+    observation["job"]["spec"]["template"]["spec"]["containers"].append(extra)
+    observation["pod"]["spec"]["containers"].append(extra)
+    with pytest.raises(ValueError, match="containers names differ"):
+        assemble_registration_completion(
+            paired_identity,
+            observation,
+            api_result,
+            serving,
+            _export(_selection()),
+        )
+
+    observation = _registration_job_observation(serving)
+    observation["config_map"]["immutable"] = False
+    with pytest.raises(ValueError, match="ConfigMap is not immutable"):
+        assemble_registration_completion(
+            paired_identity,
+            observation,
+            api_result,
+            serving,
+            _export(_selection()),
+        )
+
+
+def test_artifact_evidence_rejects_unexpected_sidecars_and_self_asserted_execution():
+    base = _base_artifact_receipt()
+    base["inspection"]["sidecar_sha256"]["runtime_override.json"] = "sha256:" + "1" * 64
+    with pytest.raises(ValueError, match="unexpected=.*runtime_override.json"):
+        _artifact_projection(
+            base["inspection"],
+            "adversarial base",
+            allowed_non_serving_sidecars=BASE_NON_SERVING_SIDECARS,
+        )
+
+    base = _base_artifact_receipt()
+    base["execution"]["config_map"]["mounted_file_sha256"] = {
+        "untrusted.py": "sha256:" + "0" * 64
+    }
+    base["base_artifact_receipt_sha256"] = digest_json(
+        {key: value for key, value in base.items() if key != "base_artifact_receipt_sha256"}
+    )
+    with pytest.raises(ValueError, match="mounted bytes differ from the frozen plan"):
+        _artifacts_from_receipts(base, _export(_selection()))
+
+
+def test_evidence_producer_scripts_use_immutable_configmaps_and_exact_pod_logs():
+    for relative in (
+        "evals/post_sft/scripts/submit_base_artifact_inspection.sh",
+        "evals/post_sft/scripts/submit_registration.sh",
+    ):
+        script = (ROOT / relative).read_text()
+        assert 'value["immutable"]=True' in script
+        assert "kubectl apply" not in script
+        assert "kubectl create --dry-run=server" in script
+        assert "kubectl create -f" in script
+    artifact_script = (
+        ROOT / "evals/post_sft/scripts/submit_base_artifact_inspection.sh"
+    ).read_text()
+    assert 'logs "pod/$pod"' in artifact_script
+
+def test_live_builder_rejects_changed_cr_spec_and_nondeterminism(tmp_path):
+    inputs = _paired_inputs(tmp_path)
+    _, paired_identity = derive_post_sft_qwen_pair(**inputs)
+    registration = _assembled_registration(
+        paired_identity, inputs["post_serving_receipt"]
+    )
+    _, expected_live = _post_sft_launch_evidence(
+        paired_identity, inputs["post_serving_receipt"]["registration"]
+    )
+    observations = _live_observations(
+        paired_identity, expected_live, inputs["post_serving_receipt"]["registration"]
+    )
+    observations["arms"]["base"]["inference_model"]["spec"]["runtime"]["args"].append(
+        "--drifted"
+    )
+    with pytest.raises(ValueError, match="spec differs"):
+        assemble_live_parity(
+            paired_identity,
+            registration,
+            observations,
+            inputs["base_registration"],
+            inputs["post_serving_receipt"],
+            _base_artifact_receipt(),
+            _export(_selection()),
+            expected_live["probes"]["tokenizer"],
+        )
+
+    observations = _live_observations(
+        paired_identity, expected_live, inputs["post_serving_receipt"]["registration"]
+    )
+    observations["arms"]["post_sft"]["logit_responses"][1]["choices"][0][
+        "logprobs"
+    ]["content"][0]["logprob"] = -0.5
+    with pytest.raises(ValueError, match="not deterministic"):
+        assemble_live_parity(
+            paired_identity,
+            registration,
+            observations,
+            inputs["base_registration"],
+            inputs["post_serving_receipt"],
+            _base_artifact_receipt(),
+            _export(_selection()),
+            expected_live["probes"]["tokenizer"],
+        )
+
+
 def test_fleet_holdout_is_exact_and_has_no_training_leakage():
     split = json.loads((ROOT / "configs/data/fleet-a62-task-split-v1.json").read_text())
     sft = json.loads((ROOT / "configs/runs/qwen36-27b-sft-full.json").read_text())
@@ -665,9 +1564,9 @@ def test_comparison_receipt_binds_all_four_handoffs(tmp_path):
         base_registration,
         selection,
         export,
-        expected_tokenizer_manifest_sha256="sha256:" + "7" * 64,
-        expected_chat_template_sha256="sha256:" + "8" * 64,
-        expected_config_sha256="sha256:" + "0" * 64,
+        expected_tokenizer_manifest_sha256=export["output"]["tokenizer_manifest_sha256"],
+        expected_chat_template_sha256=export["output"]["chat_template_sha256"],
+        expected_config_sha256=export["output"]["config_sha256"],
         expected_export_binding=_export_binding(),
     )
     split = json.loads((ROOT / "configs/data/fleet-a62-task-split-v1.json").read_text())

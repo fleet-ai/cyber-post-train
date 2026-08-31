@@ -63,7 +63,8 @@ A separate, queue-managed zero-optimizer-step export run must therefore:
    `/models/.../<checkpoint-uuid>` path accepted by the staging rail, using a digest-pinned stager;
    and
 8. prove the source and destination manifests are byte-identical and bind the generated
-   `.fleet-acceptance.json` manifest.
+   embedded `.fleet-acceptance.json` receipt while excluding that reserved path from the served
+   payload manifest.
 
 The checked-in offline renderer creates this request without submitting it. The request writes its
 duplicate resumable checkpoint and HF export below a new run/output path; it never changes the
@@ -75,7 +76,8 @@ state; it is not a CPU file-copy operation.
 ## Offline freeze and render flow
 
 These commands create local receipts only. They do not submit, register, stage, or evaluate
-anything.
+anything. Every receipt/config output is an atomic, no-replace publication; use a new reviewed
+path instead of overwriting any prior freeze or render artifact.
 
 Capture the terminal run detail and checkpoint inventory from the authenticated Training API into
 restricted local files. Add the SHA-256 of the exact S3 `_MANIFEST.json` body to the promoted
@@ -194,8 +196,121 @@ creates nothing. Submission remains blocked until the exact export RayJob and ev
 succeed. It streams the raw export through the internal read-only filebrowser transport, verifies
 every path, size, and SHA-256, rejects symlinks and unsafe ZIP paths, composes post-training weights
 and index with the exact base runtime sidecars, and re-runs BF16/layout/parameter/hash inspection.
-Both the partial and final destinations must be absent. Only a fully verified partial directory is
-renamed atomically to the frozen final path; the job never overwrites or repairs an existing path.
+The final model path must be absent or contain the exact already-committed transaction. The
+acceptance receipt is written at the reserved `.fleet-acceptance.json` path inside the verified
+partial directory. The receipt declares that one—and only that one—path excluded from the served
+payload manifest. The complete directory is then committed with one Linux `RENAME_NOREPLACE`;
+there is no second receipt promotion that can strand an unaccepted model. A destination that wins
+the race still causes a hard failure and is never replaced.
+
+Retries have three explicit states. An exact final directory with a valid embedded receipt and
+matching payload is a completed idempotent recovery. A complete partial directory with the exact
+receipt can be validated and promoted without downloading again. An incomplete/corrupt partial,
+an unaccepted final, or simultaneous partial and final paths is a hard stop requiring review; the
+rail never deletes or repairs those states automatically.
+
+The frozen plan records the reviewed SHA-256 map for every code file placed in the ConfigMap; the
+stage input copies that map and binds it with its own digest. The ConfigMap is immutable, and the
+submission rail uses create-only operations for the versioned ServiceAccount, Role, RoleBinding,
+ConfigMap, and Job. Any pre-existing object or concurrent creation fails without replacement. Both
+preview and submission use server-side create dry-runs.
+
+The staging receipt records runtime provenance obtained from the Kubernetes API: Job and Pod UIDs,
+resourceVersions and spec digests; the exact anchored container imageID; ConfigMap UID and
+resourceVersion; and SHA-256 for every mounted code file plus the canonical stage-input bytes. A
+read-only, staging-specific service account may read its fixed Job and ConfigMap and the running
+Pod; it has no mutation permissions. Kubernetes cannot grant `get` on the controller-generated Pod
+name before that name exists, so Pod `get` is the documented namespace-wide exception. Runtime
+still accepts only its downward-API Pod UID owned by the exact Job UID. The assembler validates all
+of this provenance against the stage input before accepting the staging receipt.
+
+Once staging completes, assemble the final receipt from the exact immutable inputs. Do not hand-edit
+the aggregate receipt. The read-only export observer has two phases because KubeRay removes trainer
+resources after a terminal run. While the export is admitted, capture its RayCluster, resolved head
+Pod, submitter Job, and exact submitter Pod. Their controller UIDs preserve the complete RayJob →
+RayCluster → head-Pod and RayJob → submitter-Job → submitter-Pod ownership chains:
+
+```bash
+bash evals/post_sft/scripts/collect_export_run_observation.sh runtime-core \
+  /restricted/ft-run-29f2bedf-runtime \
+  /restricted/ft-run-574bd7b3-export-request-receipt.json
+
+bash evals/post_sft/scripts/collect_export_run_observation.sh runtime-submitter \
+  /restricted/ft-run-29f2bedf-runtime \
+  /restricted/ft-run-574bd7b3-export-request-receipt.json
+```
+
+After the exact RayJob is `SUCCEEDED`, immediately capture the terminal RayJob, retained
+submitter/driver log, and Jobs API run/config/metrics record before controller cleanup:
+
+```bash
+FLEET_TRAINING_API_TOKEN="$FLEET_TRAINING_API_TOKEN" \
+  bash evals/post_sft/scripts/collect_export_run_observation.sh terminal-capture \
+  /restricted/ft-run-29f2bedf-runtime \
+  /restricted/ft-run-574bd7b3-export-request-receipt.json
+```
+
+Once the full checkpoint selection receipt is available, finalize the observation from those
+immutable terminal inputs and the earlier runtime snapshots:
+
+```bash
+bash evals/post_sft/scripts/collect_export_run_observation.sh terminal \
+  /restricted/ft-run-29f2bedf-runtime \
+  /restricted/ft-run-574bd7b3-export-request-receipt.json \
+  /restricted/ft-run-29f2bedf-terminal-observation.json
+```
+
+All four modes are read-only against Kubernetes and Fleet Train. Splitting terminal capture from
+receipt assembly allows the ephemeral controller objects and complete log to be frozen immediately,
+while the full source checkpoint manifest is produced later by the low-priority evidence job. The
+finalizer still requires the complete cryptographic selection and export-request receipts; the
+minimal identity file used for urgent runtime capture is not sufficient. The collector verifies the exact
+RayJob name and UID, terminal status, queue, entrypoint, head/worker/submitter images, commands,
+service accounts, replicas and resources, runtime ownership chain, and container-runtime-resolved
+image digest. The live API identity is its top-level `id` plus `config.run_id`. The plan explicitly
+freezes the server's stored-config normalization contract: `name`, `run_id`, submitter identity,
+node pool, Fleet team selection, nullable data filters, and trainer `command`/`env` defaults. The
+collector reconstructs that complete normalized value and requires the RayJob, runtime RayCluster,
+and Jobs API to carry it exactly; unreviewed fields or different defaults fail closed. Empty metric
+arrays are not zero-step proof. The complete exact-
+submitter log must contain the entrypoint and terminal-success marker; any optimizer event,
+`Step N:`, JSON step, current/latest/global step beyond the resume boundary, or nonzero API
+optimizer field is fatal. The bearer token is passed to curl through a mode-0600 temporary config
+file, never a process argument. Only log/API digests and parsed event summaries enter the receipt.
+
+The resulting `cyber_sft_zero_step_export_run_observation_v1` binds the exact predeclared run name,
+run id, RayJob UID, trainer version and image; `terminal_status: "SUCCEEDED"`; the exact resume path,
+`num_steps`, `hf_save_interval`, and output path; `optimizer_steps: 0`; and the zero-step
+export-request digest. Its embedded digest covers the full observation. The proof is the conjunction
+of the pinned image, actual command's equal resume/final boundary, terminal success, the complete
+submitter log's parsed absence of optimizer events, and bounded API progress fields—not an
+operator-authored `optimizer_steps: 0` assertion or empty metric array.
+
+The other inputs are produced directly by the existing gates: `observation.json` from the evidence
+Job, the exact `stage-input.json` stored in the staging ConfigMap, and the embedded
+`.fleet-acceptance.json` inside the atomically promoted inference directory. The assembler
+validates every embedded digest and cross-checks the checkpoint, run, paths, raw weights, composed
+weights, tokenizer, chat template, configuration, runtime sidecars, staging image, staging command,
+and zero-step result before it writes anything.
+
+```bash
+uv run python -m training.post_sft_cli assemble-export \
+  --plan configs/evaluation/qwen36-27b-ft-run-574bd7b3-post-sft.json \
+  --selection /restricted/ft-run-574bd7b3-selection.json \
+  --export-request /restricted/ft-run-574bd7b3-export-request-receipt.json \
+  --export-run-observation /restricted/ft-run-29f2bedf-terminal-observation.json \
+  --export-observation /restricted/ft-run-574bd7b3-observation.json \
+  --stage-input /restricted/ft-run-574bd7b3-stage-input.json \
+  --staging-receipt /restricted/ft-run-574bd7b3-staging-acceptance.json \
+  --output /restricted/ft-run-574bd7b3-hf-export.json
+```
+
+The command is offline and non-mutating except for its private, atomic output file. A missing,
+unsigned, stale, colliding, or cross-run input is a hard failure. Its output is the only
+`cyber_sft_hf_export_v1` receipt that should be passed to the downstream renderers.
+Its `--output` path is immutable publication: an existing file, directory, valid symlink, or broken
+symlink is refused. An atomic no-replace link closes the race between the initial collision check
+and publication, so a concurrently created path is never overwritten.
 
 After staging, `evals/post_sft/scripts/submit_registration.sh` validates the rendered serving
 receipt and submits one idempotent, priority-zero registration Job through `training-lq`. It refuses
@@ -257,9 +372,11 @@ including:
 - Qwen reasoning and tool parsers; and
 - the same non-preempting `fleet-serve-low` placement policy.
 
-Before evaluation, save the live catalog and `/server_info` projection and compare every controlled
-field with base. Also require a tokenizer identity check, structured tool-call smoke, and a fixed
-prompt/logit smoke. A ready Pod or a model-list entry alone is not serving parity.
+Before evaluation, capture the exact live Kubernetes `InferenceModel` UID, generation, full spec,
+observed generation, and Ready status for both arms. The complete live spec must equal the rendered
+registration, including source/serving paths, revision, image, command, arguments, environment,
+placement, and scaling. Also require `/model_info`, `/server_info`, tokenizer identity, structured
+tool-call, and fixed prompt/logit checks. A ready Pod or model-list entry alone is not parity.
 
 ## Evaluation and leakage gates
 
@@ -270,11 +387,96 @@ cannot be reproduced, do not compare against 10/110; run a newly matched base-pl
 The sole scored launch rail is `evals/webexploitbench/scripts/launch_post_sft_paired.sh`: it
 revalidates the digested paired identity against the exact config and protocol at the launch
 boundary, requires export/evidence/staging completion and a Ready post-SFT route, and passes that
-same receipt into the CAGE run gate. Its preview is non-mutating.
+same receipt into the CAGE run gate. Its preview is non-mutating. Both preview and submit also
+require two post-registration receipts:
+
+- `cyber_post_sft_registration_completion_v1` binds the exact completed registration Job and its
+  controller-owned Pod, resolved image digest, reviewed Job/Pod execution projections, immutable
+  ConfigMap UID/resourceVersion/content and frozen-plan code hashes, the API-returned full
+  registration spec, and the exported weight-manifest digest. Extra containers, init containers,
+  volumes, mounts, environment, resources, or storage bindings fail closed.
+- `webexploitbench_post_sft_live_parity_v1` binds that completion receipt and paired-identity
+  receipt to the two live Kubernetes serving objects plus `/model_info` and `/server_info`. It
+  requires the exact SGLang image/version, CR-declared BF16 TP1, complete controlled server fields,
+  byte-identical complete serving non-weight file manifests, the frozen tokenizer/config/template
+  hashes, successful
+  structured-tool calls on both revisions, and finite deterministic fixed-prompt logit probes.
+
+The only permitted serving-artifact difference is the weight-manifest digest. The full top-level
+non-weight file set is checked: unknown files fail closed. The base-only
+Base-only `.gitattributes`, `LICENSE`, `README.md`, and
+`.cyber-post-train-lock.json`, plus each arm's `.fleet-acceptance.json`, are explicitly recorded
+with hashes and reviewed non-serving reasons; no implicit exclusion is permitted. A Ready replica without
+these receipts is not launchable. Before any CAGE preparation or build, and again immediately at
+the paid `cage run` boundary, the rail refuses an existing run root at
+`examples/agent_pentest_bench/.cage_runs/qwen_code:local-openai-compatible:stateless/<run-id>`.
+Retries therefore need a newly reviewed run ID rather than appending to prior results.
+
+These receipts are built directly from production APIs, not edited or staged through raw response
+files. The registration collector reads the immutable Job, its sole retained Pod, immutable
+ConfigMap, and one-line API result in memory. It reads logs from that exact Pod name and rechecks its
+UID afterward rather than resolving logs through a Job selector. It recovers the weight-manifest
+digest from the exact export receipt.
+
+```bash
+uv run python -m evals.webexploitbench.post_sft_evidence capture-registration \
+  --paired-identity /restricted/webexploitbench-paired-identity-receipt.json \
+  --serving-receipt /restricted/serving-registration-receipt.json \
+  --export-receipt /restricted/ft-run-574bd7b3-hf-export.json \
+  --output /restricted/registration-completion.json
+```
+
+The command rejects any provenance, code, mounted receipt, full returned spec, model, revision, or
+completion mismatch. Its output is private, digest-bound, and published with atomic no-replace.
+
+The post-SFT artifact identity comes only from the already validated export/staging receipt. The
+base identity comes from one digest-pinned, read-only PVC inspector Job. Its reviewed execution
+contract and code hashes are external inputs frozen in the post-SFT plan; the producer cannot define
+its own expected values. It validates the historical checkpoint lock, hashes every shard and every
+top-level non-weight file, loads every safetensors header, and binds the exact Job/Pod/image,
+immutable ConfigMap, service account, and read-only PVC provenance. Preview and later collect it
+without replacing output:
+
+```bash
+bash evals/post_sft/scripts/submit_base_artifact_inspection.sh preview
+# Submit only after review; this is a CPU-only, read-only Job.
+bash evals/post_sft/scripts/submit_base_artifact_inspection.sh submit
+bash evals/post_sft/scripts/submit_base_artifact_inspection.sh collect \
+  /restricted/base-artifact-receipt.json
+```
+
+Use that receipt, the frozen tokenizer-equivalence receipt, exact registrations, and export receipt
+to capture both routes. The collector reads both live Kubernetes CRs itself:
+
+```bash
+FLEET_API_KEY="$FLEET_API_KEY" uv run python \
+  -m evals.webexploitbench.post_sft_evidence capture-live-parity \
+  --paired-identity /restricted/webexploitbench-paired-identity-receipt.json \
+  --registration-completion /restricted/registration-completion.json \
+  --base-registration evals/webexploitbench/serving/qwen36-27b-6a9e13bd-registration.json \
+  --serving-receipt /restricted/serving-registration-receipt.json \
+  --base-artifact-receipt /restricted/base-artifact-receipt.json \
+  --export-receipt /restricted/ft-run-574bd7b3-hf-export.json \
+  --tokenizer-probe docs/evidence/post_sft/2026-08-31-tokenizer-equivalence.json \
+  --output /restricted/webexploitbench-live-parity.json
+```
+
+The tool smoke disables thinking explicitly and is temperature-zero/bounded, matching the live
+Qwen/SGLang behavior. The fixed log-probability probe is repeated twice per arm. Raw response and
+reasoning text remain in memory only; the receipt contains projections and digests. There is no
+production CLI for persisting or replaying raw observations.
+
+Finally pass the two generated paths to `launch_post_sft_paired.sh` as arguments five and six.
+The launcher revalidates both producers' exact Job specs, controller-owned Pod UIDs/specs/resolved
+images, immutable ConfigMap UIDs/resourceVersions/content, and both live CR
+UID/generation/spec/status values before setup and again at the paid boundary. It then creates an
+atomic, persistent launch claim
+before CAGE can run, so concurrent launchers cannot both pass. A failed paid attempt requires a new
+reviewed run ID rather than reusing or appending to its run root.
 
 For Fleet, do not submit the 20 mutable task keys directly. Create one task group whose members pin
 the 20 exact `eval_task_version_id` values in the rendered holdout receipt, and inspect the rendered
-job before paid submission. Use `claude_code`, pass@1, the same budgets as base, and the exact
+job before paid submission. Use Qwen Code 0.22.3, pass@1, the same budgets as base, and the exact
 `fleet/<run>-step-<n>` model. Archive each resolved session's task-version, environment-version,
 data-version, verifier, model, harness, and job identities. Any mismatch invalidates that pair; it
 must never be silently replaced with the current task version.

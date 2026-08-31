@@ -27,6 +27,17 @@ def _mapping(value: Any, field: str) -> Mapping[str, Any]:
     return value
 
 
+def _canonical_spec(value: Mapping[str, Any]) -> dict[str, Any]:
+    result = json.loads(json.dumps(value))
+    capabilities = result.get("capabilities")
+    if not isinstance(capabilities, list) or not all(
+        isinstance(capability, str) for capability in capabilities
+    ):
+        raise ValueError("registration capabilities must be strings")
+    result["capabilities"] = sorted(capabilities)
+    return result
+
+
 def validate_registration_receipt(receipt: Mapping[str, Any]) -> dict[str, Any]:
     if receipt.get("schema") != "cyber_post_sft_serving_registration_v1":
         raise ValueError("unsupported post-SFT serving registration receipt")
@@ -96,12 +107,13 @@ def register(receipt: Mapping[str, Any], api_key: str) -> dict[str, Any]:
         "model"
     ]["revision"]:
         raise ValueError("registration API result differs from the submitted immutable identity")
+    if _canonical_spec(result_spec) != _canonical_spec(registration["spec"]):
+        raise ValueError("registration API returned a different full serving spec")
     return {
         "id": result.get("id"),
         "object": result.get("object"),
         "phase": result.get("status", {}).get("phase"),
-        "model_revision": result_model.get("revision"),
-        "serving_receipt_sha256": receipt.get("serving_receipt_sha256"),
+        "registration": {"id": result.get("id"), "spec": result_spec},
     }
 
 

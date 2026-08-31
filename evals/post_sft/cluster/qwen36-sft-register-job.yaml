@@ -16,6 +16,7 @@ spec:
   template:
     metadata:
       labels:
+        kueue.x-k8s.io/queue-name: training-lq
         cyber-post-train.fleet.ai/owner: chris
         cyber-post-train.fleet.ai/experiment: qwen36-sft-register-574bd7b3-v1
         cyber-post-train.fleet.ai/model: qwen36

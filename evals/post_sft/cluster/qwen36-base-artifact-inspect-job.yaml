@@ -1,53 +1,49 @@
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: chris-cyber-qwen36-sft-stage-observer-v1
+  name: chris-cyber-qwen36-base-artifact-observer-v1
   namespace: inference
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: chris-cyber-qwen36-sft-stage-observer-v1
+  name: chris-cyber-qwen36-base-artifact-observer-v1
   namespace: inference
 rules:
-  # The Job controller generates the Pod name after admission, so Kubernetes RBAC cannot place
-  # that name in resourceNames ahead of time. This is the only namespace-wide read permission;
-  # runtime still rejects every Pod except its downward-API UID owned by the exact Job UID.
   - apiGroups: [""]
     resources: [pods]
     verbs: [get]
   - apiGroups: [""]
     resources: [configmaps]
-    resourceNames: [chris-cyber-qwen36-sft-stage-574bd7b3-v1]
+    resourceNames: [chris-cyber-qwen36-base-artifact-inspect-6a9e13bd-v1]
     verbs: [get]
   - apiGroups: [batch]
     resources: [jobs]
-    resourceNames: [chris-cyber-qwen36-sft-stage-574bd7b3-v1]
+    resourceNames: [chris-cyber-qwen36-base-artifact-inspect-6a9e13bd-v1]
     verbs: [get]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: chris-cyber-qwen36-sft-stage-observer-v1
+  name: chris-cyber-qwen36-base-artifact-observer-v1
   namespace: inference
 subjects:
   - kind: ServiceAccount
-    name: chris-cyber-qwen36-sft-stage-observer-v1
+    name: chris-cyber-qwen36-base-artifact-observer-v1
     namespace: inference
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: chris-cyber-qwen36-sft-stage-observer-v1
+  name: chris-cyber-qwen36-base-artifact-observer-v1
 ---
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: chris-cyber-qwen36-sft-stage-574bd7b3-v1
+  name: chris-cyber-qwen36-base-artifact-inspect-6a9e13bd-v1
   namespace: inference
   labels:
     cyber-post-train.fleet.ai/owner: chris
-    cyber-post-train.fleet.ai/experiment: qwen36-sft-stage-574bd7b3-v1
-    cyber-post-train.fleet.ai/model: qwen36
+    cyber-post-train.fleet.ai/experiment: qwen36-base-artifact-inspect-6a9e13bd-v1
 spec:
   backoffLimit: 0
   activeDeadlineSeconds: 21600
@@ -56,22 +52,27 @@ spec:
     metadata:
       labels:
         cyber-post-train.fleet.ai/owner: chris
-        cyber-post-train.fleet.ai/experiment: qwen36-sft-stage-574bd7b3-v1
-        cyber-post-train.fleet.ai/model: qwen36
+        cyber-post-train.fleet.ai/experiment: qwen36-base-artifact-inspect-6a9e13bd-v1
     spec:
       restartPolicy: Never
-      serviceAccountName: chris-cyber-qwen36-sft-stage-observer-v1
+      serviceAccountName: chris-cyber-qwen36-base-artifact-observer-v1
       nodeSelector: {workload: fleetai-training-ng-cpu}
       tolerations:
         - {key: workload, operator: Equal, value: fleetai-training-ng-cpu, effect: NoSchedule}
       containers:
-        - name: stage
+        - name: inspect
           image: lmsysorg/sglang@sha256:febfb971c7352570fc445c466ebd6ffc9d896024958e544a60f2137fd85856b1
-          command: ["python3", "-m", "training.post_sft_staging", "execute"]
-          args: ["--input", "/bundle/stage-input.json", "--work-root", "/work/transfer"]
+          command: ["python3", "-m", "evals.webexploitbench.post_sft_evidence"]
+          args:
+            - inspect-base-artifact
+            - --base-root
+            - /models/qwen3.6-27b/6a9e13bd6fc8f0983b9b99948120bc37f49c13e9
+            - --plan
+            - /bundle/post-sft-plan.json
+            - --output
+            - "-"
           env:
             - {name: PYTHONPATH, value: /bundle}
-            - {name: FILEBROWSER_USER, value: christopher@fleet.so}
             - name: POD_NAME
               valueFrom: {fieldRef: {fieldPath: metadata.name}}
             - name: POD_NAMESPACE
@@ -83,23 +84,22 @@ spec:
                 fieldRef:
                   fieldPath: metadata.labels['batch.kubernetes.io/controller-uid']
           resources:
-            requests: {cpu: "4", memory: 16Gi, ephemeral-storage: 96Gi}
-            limits: {cpu: "8", memory: 32Gi, ephemeral-storage: 128Gi}
+            requests: {cpu: "4", memory: 16Gi}
+            limits: {cpu: "8", memory: 32Gi}
           volumeMounts:
             - {name: bundle, mountPath: /bundle, readOnly: true}
-            - {name: models, mountPath: /models}
-            - {name: work, mountPath: /work}
+            - {name: models, mountPath: /models, readOnly: true}
       volumes:
         - name: bundle
           configMap:
-            name: chris-cyber-qwen36-sft-stage-574bd7b3-v1
+            name: chris-cyber-qwen36-base-artifact-inspect-6a9e13bd-v1
             items:
+              - {key: evals__init__.py, path: evals/__init__.py}
+              - {key: evals_webexploitbench__init__.py, path: evals/webexploitbench/__init__.py}
+              - {key: post_sft_evidence.py, path: evals/webexploitbench/post_sft_evidence.py}
               - {key: training__init__.py, path: training/__init__.py}
               - {key: training_io.py, path: training/io.py}
               - {key: training_post_sft_artifacts.py, path: training/post_sft_artifacts.py}
-              - {key: training_post_sft_staging.py, path: training/post_sft_staging.py}
-              - {key: stage-input.json, path: stage-input.json}
+              - {key: post-sft-plan.json, path: post-sft-plan.json}
         - name: models
-          persistentVolumeClaim: {claimName: hf-cache-shared}
-        - name: work
-          emptyDir: {sizeLimit: 128Gi}
+          persistentVolumeClaim: {claimName: hf-cache-shared, readOnly: true}
