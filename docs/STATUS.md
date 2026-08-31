@@ -19,9 +19,12 @@
   BF16 forward/backward (48.52 s), optimizer step (10.07 s), full sharded
   checkpoint, and post-step evaluation. Its held-out loss moved from 0.9575 to
   0.9425 and the RayJob finished `SUCCEEDED`. Full one-epoch SFT
-  `ft-run-574bd7b3` is queued. RL compatibility run `ft-run-16d0522e` is live;
-  matched-policy/reference successor `ft-run-3a82f8cc` is queued so both sides
-  of the KL comparison use the same Torch operator path.
+  `ft-run-574bd7b3` is queued fairly in Kueue. RL compatibility run
+  `ft-run-16d0522e` is generating its first four Fleet-environment rollouts;
+  matched-policy/reference successor `ft-run-3a82f8cc` was admitted on a
+  separate 8×B300 worker so both sides of the KL comparison use the same Torch
+  operator path. Neither RL gate has yet earned an optimizer-step or checkpoint
+  claim.
 - The live Fleet Training API model catalog resolves the staged base as
   `qwen3.6-27b`. Typed runs now use the direct queue-aware Jobs API at
   `https://api.ft.flt.build`, which renders through the server's authoritative
@@ -37,8 +40,9 @@
   failed because CUDA 12.8 NVCC cannot compile TileLang's B300 `sm_103a` target.
   A second audit then found that all 508 training records were right-truncated
   at 16,384 tokens: only 2,567/27,438 assistant targets were fully retained and
-  zero final-success turns survived. No optimizer step or checkpoint has yet
-  been claimed.
+  zero final-success turns survived. Those superseded attempts produced no
+  optimizer step or checkpoint; the successful Torch-fallback gate described
+  above is the first run that did.
 - The replacement SFT corpus selects five exact-token windows per verified
   success, always including the final assistant turn. It contains 2,540 train,
   165 dev and 230 untouched test windows, with median 11,573 and maximum 14,334
@@ -61,9 +65,10 @@
   compiler fix are both present in the registered combined trainer image and
   are exercised together by the new RL smoke.
 - The full one-epoch SFT request is frozen in
-  `configs/runs/qwen36-27b-sft-full.json` but will not be submitted until a
-  one-step compatibility arm proves checkpoint load, tokenizer/tool formatting,
-  BF16 backward, optimizer step, and checkpoint save. The older one-step arm
+  `configs/runs/qwen36-27b-sft-full.json`. It was submitted only after the
+  one-step compatibility arm proved checkpoint load, tokenizer/tool formatting,
+  BF16 backward, optimizer step, and checkpoint save, and is now waiting in the
+  normal cluster queue as `ft-run-574bd7b3`. The older one-step arm
   `ft-run-30714d6e` was admitted through Kueue `training-cq`, loaded all 2,540
   train and 165 dev windows with zero filtering, and completed the 21-batch
   pre-train evaluation at `eval_loss=0.9582`. Its first forward/backward then
@@ -115,8 +120,9 @@
   assertion. It produced zero valid training sessions, zero optimizer steps,
   and zero checkpoints; its one recorded step and two metric rows are therefore
   infrastructure evidence, not a model result. The replacement configs disable
-  microbatch padding explicitly, but no successor will launch until the
-  environment-neutral readiness fix is proven. The full request remains
+  microbatch padding explicitly. The environment-neutral readiness fix and
+  Torch-fallback model path are now under live test in `ft-run-16d0522e` and
+  matched-policy/reference `ft-run-3a82f8cc`. The full RL request remains
   unsubmitted until a gate proves rollout, deterministic verifier reward,
   optimizer step, and checkpoint save.
 - Theseus PR #27880 makes the tracker list an explicit deployment capability:
