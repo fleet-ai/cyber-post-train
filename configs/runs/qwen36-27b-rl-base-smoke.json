@@ -1,5 +1,5 @@
 {
-  "title": "Chris cyber Qwen3.6 27B pinned-FLA W&B RL smoke v4",
+  "title": "Chris cyber Qwen3.6 27B multienv readiness RL smoke v5",
   "node_pool": "fleetai-training-ng-gpu",
   "fleet_env": {
     "env_key": "cysec1-2-current-gen",
@@ -58,7 +58,7 @@
     "stop_after_evals": 2
   },
   "trainer": {
-    "trainer_version_id": "b4a49402-5e7f-5f94-a5ff-980126d78390",
+    "trainer_version_id": "0cbb43bd-9a36-5474-84d1-8846492dc413",
     "args": [
       "trainer.remove_microbatch_padding=false"
     ],
