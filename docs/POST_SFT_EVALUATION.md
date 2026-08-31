@@ -147,6 +147,25 @@ export manifest. It produces:
 - an exact, prompt-free 20-task Fleet holdout receipt; and
 - a comparison receipt binding all three artifacts.
 
+After one ExploitGym control image has also passed the independent immutable-image
+publication/readback rail, freeze both external benchmark inputs together:
+
+```bash
+uv run python -m training.post_sft_cli render-external-benchmarks \
+  --plan configs/evaluation/qwen36-27b-ft-run-574bd7b3-post-sft.json \
+  --selection /restricted/ft-run-574bd7b3-selection.json \
+  --export /restricted/ft-run-574bd7b3-hf-export.json \
+  --control-image /restricted/exploitgym-control-image-receipt.json \
+  --output-dir /restricted/ft-run-574bd7b3-external-eval-handoff
+```
+
+The ExploitGym renderer reuses the exact frozen five tasks, Qwen Code 0.22.3,
+official dynamic-flag verifiers, firewall, pass@1, and time budget. It requires a
+single GHCR digest whose manifest, config, and layers were independently pulled
+on a second native AMD64 worker. It deterministically counterbalances base-first
+and post-SFT-first task pairs; the earlier 0/5 descriptive pilot is not treated
+as the byte-identical paired baseline.
+
 ## Serving parity gate
 
 Register only the rendered model ID (`ft-run-574bd7b3-step-<actual-final-step>`), so the Fleet

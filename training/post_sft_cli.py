@@ -8,6 +8,8 @@ from typing import Annotated, Any
 
 import typer
 
+from evals.exploitgym.paired import derive_paired_protocol
+
 from .io import atomic_write_json, file_sha256
 from .post_sft import (
     build_fleet_test_holdout_receipt,
@@ -155,6 +157,58 @@ def render(
         fleet_holdout=holdout,
     )
     atomic_write_json(output_dir / "comparison-receipt.json", comparison, private=True)
+    typer.echo(str(output_dir))
+
+
+@app.command("render-external-benchmarks")
+def render_external_benchmarks(
+    plan_path: Annotated[Path, typer.Option("--plan")],
+    selection_path: Annotated[Path, typer.Option("--selection")],
+    export_path: Annotated[Path, typer.Option("--export")],
+    control_image_path: Annotated[Path, typer.Option("--control-image")],
+    output_dir: Annotated[Path, typer.Option("--output-dir")],
+) -> None:
+    """Freeze WebExploitBench and ExploitGym inputs after export and staging."""
+
+    plan = _plan(plan_path)
+    root = plan_path.resolve().parents[2]
+    selection = _read(selection_path)
+    export = _read(export_path)
+    model = plan["base_model"]
+    _, base_registration = _planned_file(
+        root, plan["serving"]["base_registration"], "base serving registration"
+    )
+    _, base_web = _planned_file(
+        root, plan["webexploitbench"]["base_config"], "base WebExploitBench config"
+    )
+    serving = derive_post_sft_registration(
+        base_registration,
+        selection,
+        export,
+        expected_tokenizer_manifest_sha256=str(model["tokenizer_manifest_sha256"]),
+        expected_chat_template_sha256=str(model["chat_template_sha256"]),
+    )
+    web = derive_webexploit_config(
+        base_web,
+        served_model_id=str(serving["registration"]["id"]),
+        run_id=str(plan["webexploitbench"]["post_run_id"]),
+    )
+    base_exploitgym = _read(root / "evals/exploitgym/configs/qwen36-27b-v1-pilot.json")
+    exploitgym = derive_paired_protocol(
+        base_exploitgym,
+        selection,
+        export,
+        serving,
+        _read(control_image_path),
+    )
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    for path, value in (
+        (output_dir / "serving-registration-receipt.json", serving),
+        (output_dir / "webexploitbench-post-sft-config.json", web),
+        (output_dir / "exploitgym-paired-protocol.json", exploitgym),
+    ):
+        atomic_write_json(path, value, private=True)
     typer.echo(str(output_dir))
 
 
