@@ -17,11 +17,22 @@ class JobsAPIError(ValueError):
     """A request or response violated the safe launch contract."""
 
 
+def run_kind(config: dict[str, Any]) -> str:
+    explicit = config.get("kind")
+    if explicit in SUPPORTED_KINDS:
+        return str(explicit)
+    if explicit is not None:
+        raise JobsAPIError(f"run config kind must be one of {sorted(SUPPORTED_KINDS)}")
+    if "grpo" in config and "tasks" in config:
+        return "rl"
+    if "sft" in config and "data" in config:
+        return "sft"
+    raise JobsAPIError("could not infer RL or SFT run kind from config schema")
+
+
 def load_run_config(path: Path) -> dict[str, Any]:
     config = read_json(path)
-    kind = config.get("kind")
-    if kind not in SUPPORTED_KINDS:
-        raise JobsAPIError(f"run config kind must be one of {sorted(SUPPORTED_KINDS)}")
+    run_kind(config)
     title = config.get("title")
     if not isinstance(title, str) or not title.strip():
         raise JobsAPIError("run config requires a non-empty title")
@@ -71,9 +82,7 @@ class TrainingJobsClient:
             raise JobsAPIError(f"Jobs API {method} {path} returned non-JSON") from exc
 
     def preview(self, config: dict[str, Any]) -> dict[str, Any]:
-        kind = str(config.get("kind") or "")
-        if kind not in SUPPORTED_KINDS:
-            raise JobsAPIError(f"unsupported run kind {kind!r}")
+        kind = run_kind(config)
         value = self._json("POST", f"/v1/{kind}/run/preview", json=config)
         if not isinstance(value, dict):
             raise JobsAPIError("Jobs API preview returned a non-object")
@@ -89,7 +98,7 @@ class TrainingJobsClient:
         return [row for row in self.list_runs() if row.get("title") == title]
 
     def submit(self, config: dict[str, Any]) -> dict[str, Any]:
-        kind = str(config.get("kind") or "")
+        kind = run_kind(config)
         title = str(config.get("title") or "")
         duplicates = self.runs_with_title(title)
         if duplicates:

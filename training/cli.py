@@ -20,6 +20,7 @@ from .jobs_api import (
     TrainingJobsClient,
     concise_status,
     load_run_config,
+    run_kind,
 )
 from .normalize import build_datasets
 from .plan import create_run_plan
@@ -198,7 +199,7 @@ def _jobs_run(args: argparse.Namespace) -> int:
         json.dumps(
             {
                 "submitted": False,
-                "kind": config["kind"],
+                "kind": run_kind(config),
                 "title": config["title"],
                 "duplicate_names": [row.get("name") for row in duplicates],
                 "errors": preview.get("errors") or [],

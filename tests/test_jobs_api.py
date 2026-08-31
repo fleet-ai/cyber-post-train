@@ -5,7 +5,13 @@ from pathlib import Path
 
 import httpx
 
-from training.jobs_api import JobsAPIError, TrainingJobsClient, concise_status, load_run_config
+from training.jobs_api import (
+    JobsAPIError,
+    TrainingJobsClient,
+    concise_status,
+    load_run_config,
+    run_kind,
+)
 
 
 class JobsAPIClientTests(unittest.TestCase):
@@ -17,6 +23,11 @@ class JobsAPIClientTests(unittest.TestCase):
             path.write_text(json.dumps({"kind": "custom", "title": "Chris gate"}))
             with self.assertRaisesRegex(JobsAPIError, "kind"):
                 load_run_config(path)
+
+    def test_rl_kind_is_inferred_from_typed_schema_without_mutating_payload(self):
+        config = {"grpo": {}, "tasks": {}, "title": "Chris RL gate"}
+        self.assertEqual(run_kind(config), "rl")
+        self.assertNotIn("kind", config)
 
     def test_submit_previews_then_submits_without_serializing_bearer(self):
         seen: list[httpx.Request] = []
