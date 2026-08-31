@@ -340,6 +340,29 @@ def test_authoritative_native_rl_gate_matches_frozen_two_task_receipt() -> None:
     assert "sk_pw" not in serialized
 
 
+def test_qwenxml_corrected_gate_changes_only_trainer_identity() -> None:
+    root = Path(__file__).resolve().parents[1]
+    original = json.loads(
+        (root / "configs/runs/qwen36-27b-native-rl-authoritative-smoke.json").read_text()
+    )
+    corrected = json.loads(
+        (
+            root
+            / "configs/runs/qwen36-27b-native-rl-authoritative-smoke-q36xml.json"
+        ).read_text()
+    )
+
+    assert corrected["trainer"]["trainer_version_id"] == (
+        "83f8d256-aea8-52d7-8711-080c56dbbc3a"
+    )
+    assert corrected["title"].endswith("q36xml-1a74092a")
+    original.pop("title")
+    corrected.pop("title")
+    original["trainer"].pop("trainer_version_id")
+    corrected["trainer"].pop("trainer_version_id")
+    assert corrected == original
+
+
 def test_qwen_sft_configs_pin_and_record_the_torch_gdn_fallback() -> None:
     root = Path(__file__).resolve().parents[1]
     expected = "4b4dc57c-c7dc-5562-bbdd-9e1d6764ede0"
