@@ -221,3 +221,17 @@ def test_committed_full_config_is_exactly_reproducible() -> None:
     assert "flag{" not in serialized
     assert "planted_flag" not in serialized
     assert "sk_pw" not in serialized
+
+
+def test_qwen_rl_configs_disable_microbatch_padding_for_vision_inputs() -> None:
+    """Qwen3.6 presents vision inputs to SkyRL's reference forward, whose packed path refuses them."""
+    root = Path(__file__).resolve().parents[1]
+    expected = "trainer.remove_microbatch_padding=false"
+    for relative in (
+        "configs/runs/qwen36-27b-rl-base-full.template.json",
+        "configs/runs/qwen36-27b-rl-base-full.json",
+        "configs/runs/qwen36-27b-rl-base-full-runnable.json",
+        "configs/runs/qwen36-27b-rl-base-smoke.json",
+    ):
+        config = json.loads((root / relative).read_text())
+        assert expected in config["trainer"]["args"], relative
