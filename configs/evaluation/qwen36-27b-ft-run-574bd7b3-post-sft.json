@@ -77,6 +77,7 @@
     "source_checkpoint_root": "/mnt/sfs/checkpoints/ft-run-574bd7b3",
     "output_root": "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-v1",
     "expected_output_path": "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-v1/global_step_318/policy",
+    "inference_staging_destination": "/models/cyber-sft/ft-run-574bd7b3/step-318",
     "destination_preflight": {
       "observed_at": "2026-08-31T16:05:07Z",
       "state": "absent",

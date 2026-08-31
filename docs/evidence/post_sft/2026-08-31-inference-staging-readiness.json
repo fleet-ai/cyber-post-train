@@ -10,7 +10,7 @@
     "manifest_sha256": "sha256:e35aa39e66e04ab8ddefd7001abbbf51e71913f8b94da48f186a8dc6081999c8"
   },
   "implementation": {
-    "module_sha256": "sha256:3ab529058e36a1de4a26573796bf7e248862df3376451d1047517971d5bb66ff",
+    "module_sha256": "sha256:1f497e129c9acea5a942898e24bef9a864308aeb499cd5b57031c1bdffd730f9",
     "submitter_sha256": "sha256:e285a2421baea4eb16f8354f44942d3249c3778cc5c7c5140c90b901453c0ea6"
   },
   "runtime": {
@@ -29,7 +29,7 @@
     }
   },
   "destination_preflight": {
-    "path": "/models/cyber-sft/ft-run-574bd7b3/step-318-v1",
+    "path": "/models/cyber-sft/ft-run-574bd7b3/step-318",
     "state": "absent",
     "matching_partial_prefix_count": 0
   },

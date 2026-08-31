@@ -1,0 +1,48 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: chris-cyber-qwen36-sft-register-574bd7b3-v1
+  namespace: fleet-train-jobs
+  labels:
+    kueue.x-k8s.io/queue-name: training-lq
+    cyber-post-train.fleet.ai/owner: chris
+    cyber-post-train.fleet.ai/experiment: qwen36-sft-register-574bd7b3-v1
+    cyber-post-train.fleet.ai/model: qwen36
+spec:
+  suspend: true
+  backoffLimit: 0
+  activeDeadlineSeconds: 600
+  ttlSecondsAfterFinished: 604800
+  template:
+    metadata:
+      labels:
+        cyber-post-train.fleet.ai/owner: chris
+        cyber-post-train.fleet.ai/experiment: qwen36-sft-register-574bd7b3-v1
+        cyber-post-train.fleet.ai/model: qwen36
+    spec:
+      restartPolicy: Never
+      nodeSelector: {workload: fleetai-training-ng-cpu}
+      tolerations:
+        - {key: workload, operator: Equal, value: fleetai-training-ng-cpu, effect: NoSchedule}
+      containers:
+        - name: register
+          image: ghcr.io/fleet-ai/miles-fleet/trainer@sha256:98920a4e25fadc3f31fafc18eff072313386edf5b352a23d13f4bb2d9e5f0a4c
+          command: ["python", "-m", "training.register_post_sft", "--receipt", "/bundle/serving-registration-receipt.json"]
+          env:
+            - {name: PYTHONPATH, value: /bundle}
+            - name: FLEET_API_KEY
+              valueFrom: {secretKeyRef: {name: fleet-api, key: FLEET_API_KEY}}
+          resources:
+            requests: {cpu: 200m, memory: 256Mi}
+            limits: {cpu: "1", memory: 1Gi}
+          volumeMounts:
+            - {name: bundle, mountPath: /bundle, readOnly: true}
+      volumes:
+        - name: bundle
+          configMap:
+            name: chris-cyber-qwen36-sft-register-574bd7b3-v1
+            items:
+              - {key: training__init__.py, path: training/__init__.py}
+              - {key: training_io.py, path: training/io.py}
+              - {key: training_register_post_sft.py, path: training/register_post_sft.py}
+              - {key: serving-registration-receipt.json, path: serving-registration-receipt.json}

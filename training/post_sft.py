@@ -516,8 +516,8 @@ def validate_hf_export_receipt(
     if _text(output, "dtype").lower() not in {"bf16", "bfloat16"}:
         raise ValueError("HF export must preserve BF16 model weights")
     source_path = _text(output, "source_path")
-    if not source_path.startswith("/models/"):
-        raise ValueError("HF export source_path must be below /models")
+    if source_path != expected_export_binding.get("inference_staging_destination"):
+        raise ValueError("HF export source_path differs from the frozen inference destination")
     weights_manifest_sha256 = _sha256(output, "weights_manifest_sha256")
     _sha256(output, "files_manifest_sha256")
     if _sha256(output, "tokenizer_manifest_sha256") != expected_tokenizer_manifest_sha256:
