@@ -54,7 +54,7 @@ case "$MODE" in
     cast_receipt=$3
     cast_manifest=$4
     test "$(kubectl -n fleet-train-jobs get rayjob ft-run-29f2bedf -o jsonpath='{.status.jobStatus}')" = SUCCEEDED
-    test "$(kubectl -n fleet-train-jobs get job chris-cyber-qwen36-sft-bf16-cast-v2 -o jsonpath='{.status.conditions[?(@.type=="Complete")].status}')" = True
+    test "$(kubectl -n fleet-train-jobs get job chris-cyber-qwen36-sft-bf16-cast-v3 -o jsonpath='{.status.conditions[?(@.type=="Complete")].status}')" = True
     require_all_absent
     PYTHONPATH="$ROOT" uv run python -m training.post_sft_staging validate-bundle \
       --plan "$PLAN" --root "$ROOT" >/dev/null

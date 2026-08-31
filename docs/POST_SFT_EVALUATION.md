@@ -228,11 +228,22 @@ output file and weight shard, verifies that the index exactly names those shards
 raw export is uniformly FP32 while the cast and served outputs are uniformly BF16 with the base
 architecture's exact parameter count.
 
-The CPU cast rail is `evals/post_sft/scripts/submit_bf16_cast_v2.sh`. Preview is non-mutating.
+The first create-only cast attempt, `chris-cyber-qwen36-sft-bf16-cast-v2` (UID
+`2ee1035c-60a0-45bf-a136-ec6f6a97ad08`), failed before reading or casting model bytes. Kubernetes
+had not yet populated `containerStatuses[].imageID` when the process performed its immediate live
+provenance check; the terminal Pod later showed the exact expected digest
+`sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4`.
+Preserve the failed v2 Job, immutable ConfigMap, RBAC objects, empty destination parents, and logs.
+Its final `policy` destination and terminal evidence directory were never created.
+
+The create-only successor is `evals/post_sft/scripts/submit_bf16_cast_v3.sh`. Preview is
+non-mutating. V3 retries only while the image identity is absent, for at most 12 observations one
+second apart. The first non-empty identity must parse as an exact digest and equal the frozen image
+digest; a malformed or wrong non-empty identity fails immediately without another read.
 Submission accepts only the completed evidence Job's digest-bound observation and raw full
 manifest, validates the queue, and creates a suspended Job through `training-lq` using create-only
 ServiceAccount, Role, RoleBinding, immutable ConfigMap, and Job operations. Its destination is
-`/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-bf16-v2/global_step_318/policy`.
+`/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-bf16-v3/global_step_318/policy`.
 The embedded `.fleet-bf16-cast-acceptance.json` proves 1,184 direct FP32→BF16 casts and 15
 bit-identical copies from the exact frozen base. The latter are explicitly **frozen base
 auxiliary-head restoration**, not trained weights. Before copying, the Job hashes the complete
@@ -245,17 +256,17 @@ directory is not success. Every written weight shard, index, and copied sidecar 
 the directory-level atomic promotion.
 
 ```bash
-bash evals/post_sft/scripts/submit_bf16_cast_v2.sh preview
+bash evals/post_sft/scripts/submit_bf16_cast_v3.sh preview
 
 # Only after the evidence Job is Complete and these are its exact immutable outputs:
-bash evals/post_sft/scripts/submit_bf16_cast_v2.sh submit \
+bash evals/post_sft/scripts/submit_bf16_cast_v3.sh submit \
   /restricted/ft-run-574bd7b3-observation.json \
   /restricted/ft-run-574bd7b3-raw-export-full-manifest.json
 ```
 
 After the cast Job is Complete, retrieve `cast-receipt.json` and
 `cast-full-manifest.json` from
-`/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/evidence/bf16-cast-v2/receipt/`.
+`/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/evidence/bf16-cast-v3/receipt/`.
 The adjacent
 `COMPLETE.json` must bind both files. These two files are inputs to staging; the destination path
 or a successful Pod status alone is insufficient.
