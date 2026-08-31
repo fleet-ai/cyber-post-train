@@ -779,6 +779,18 @@ def test_export_observation_rejects_log_without_terminal_success_marker():
         collect_zero_step_export_run_observation(*values)
 
 
+def test_export_observation_accepts_exact_ray_cli_terminal_success_marker():
+    values = list(_collector_replay_inputs())
+    entrypoint = render_zero_step_sft_command(values[0]["request"], "ft-run-export")
+    values[7] = (
+        "submitted exact entrypoint: "
+        + entrypoint
+        + "\nSFT training complete!\n\x1b[32mJob 'ft-run-export-abcde' succeeded\x1b[39m\n"
+    ).encode()
+    receipt = collect_zero_step_export_run_observation(*values)
+    assert receipt["zero_step_evidence"]["optimizer_step_events"] == 0
+
+
 def test_export_collector_shell_keeps_bearer_token_out_of_argv_and_logs_exact_pod():
     script = (
         Path(__file__).resolve().parents[1]
