@@ -1,0 +1,62 @@
+{
+  "schema": "cyber_native_rl_two_task_gate_v1",
+  "model": {
+    "repository": "Qwen/Qwen3.6-27B",
+    "revision": "6a9e13bd6fc8f0983b9b99948120bc37f49c13e9"
+  },
+  "source_job_id": "a62dd51f-a52b-4941-8207-4679e4b25b51",
+  "split_manifest": "configs/data/fleet-a62-task-split-v1.json",
+  "split_manifest_digest": "sha256:fb09668f8de77e6baee37dc1e3162a7617ca9a0a450da9ca53422c17bfbc942a",
+  "original_selection": "configs/data/qwen36-27b-native-rl-smoke-selection-v1.json",
+  "original_selection_file_sha256": "sha256:0ce3fb431858d76129b9edc6c6d1569387d2b56f1ba6e7e6cc98fb2844692df4",
+  "selection_policy": {
+    "split": "train",
+    "projection": "blackbox_ctf_v1",
+    "criterion": "use two exact historically mid-band tasks so group_size=4 and train_batch_size=2 form one nonempty sample per each of eight GPUs",
+    "planned_group_size": 4,
+    "planned_train_batch_size": 2,
+    "planned_max_steps": 1,
+    "planned_rollouts": 8
+  },
+  "tasks": [
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-0708aea62e0d8ccf09331568__blackbox_ctf_v1",
+      "task_version_id": "54425601-6fd2-43d8-8cb9-e565b767676a",
+      "task_version": "8",
+      "environment_version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+      "env_key": "cysec1-2-current-gen",
+      "env_version": "v0.0.3",
+      "data_key": "commercial",
+      "data_version": "v0.0.9",
+      "historical_sessions": 8,
+      "historical_nonzero_scores": 2,
+      "historical_mean_score": 0.25
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-c17f94bad9b70de3dfa6f05c__blackbox_ctf_v1",
+      "task_version_id": "f31ebe83-0ff1-4660-bcba-59ffa4b82d5a",
+      "task_version": "12",
+      "environment_version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+      "env_key": "cysec1-2-current-gen",
+      "env_version": "v0.0.3",
+      "data_key": "commercial",
+      "data_version": "v0.0.9",
+      "verifier_id": "f7e0530d-4d17-4beb-a376-83a83ec6510f",
+      "historical_sessions": 8,
+      "historical_nonzero_scores": 3,
+      "historical_mean_score": 0.375
+    }
+  ],
+  "trainer": {
+    "version": "76a4bd26",
+    "trainer_version_id": "885f2eaa-c28e-5102-950b-9070e181f561",
+    "smoke_job": "training-smoke-76a4bd26",
+    "smoke_status": "SUCCEEDED"
+  },
+  "launch_gates": [
+    "the Jobs API preview resolves both exact task versions without changing their environment or data bindings",
+    "the production public API serves both exact rollout-reward routes from Theseus commit 76a4bd262a63b05d7ac2b33cf1357072aea2dbd4",
+    "the submitted job uses the same trainer_version_id recorded here and remains queue-managed",
+    "the first run is exactly one GRPO step and eight rollouts"
+  ]
+}
