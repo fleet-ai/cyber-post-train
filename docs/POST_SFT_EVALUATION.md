@@ -99,6 +99,10 @@ uv run python -m training.post_sft_cli freeze \
   --output /restricted/ft-run-574bd7b3-selection.json
 ```
 
+The promoted checkpoint row must also retain the API's exact `sfs_path` and `sfs_available` fields.
+If it has already been removed from SFS, stage the archived checkpoint through the normal API and
+recapture the row; the export renderer refuses to invent a path or proceed while it is unavailable.
+
 First render the review-only export request:
 
 ```bash
