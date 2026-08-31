@@ -116,6 +116,9 @@ checkpoint has `.promoted`, `.milestone`, every expected shard-completion marker
 latest step. Its cheap path/size/mtime structural manifest must be identical before and after the
 conversion, and a serialized post-conversion pass must SHA-256 every checkpoint file. This is the
 second fail-closed selection leg; it is not permission to mutate the checkpoint index or archive.
+Use `python -m training.post_sft_artifacts structural|full` for those read-only manifests. Run the
+full pass only after conversion has ended and at low priority because the source contains roughly
+302 GB of model and optimizer state.
 
 ```bash
 uv run python -m training.post_sft_cli freeze-sfs \
@@ -154,6 +157,10 @@ different directory as this export.
 After the run and inference-staging rail emit one digested `cyber_sft_hf_export_v1` receipt, render
 all paired evaluation inputs. The receipt must separately identify the trainer conversion and the
 digest-pinned staging action; a model merely appearing under `/models` is not provenance.
+`python -m training.post_sft_artifacts hf <policy-dir> --plan <plan> --output <receipt>` hashes
+every output file and weight shard, verifies the index names exactly those shards, checks every
+safetensors tensor is BF16 with the base architecture's exact parameter count, and binds the
+tokenizer, chat template, and model configuration to the base checkpoint.
 
 ```bash
 uv run python -m training.post_sft_cli render \
