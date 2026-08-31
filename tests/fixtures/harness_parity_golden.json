@@ -1,0 +1,23 @@
+{
+  "as_treated_train": {"always_solved": 1, "mixed": 0, "never_solved": 0, "observed_task_keys": 1, "pass_rate": 1.0, "passes": 1, "requested_task_keys": 1, "sessions": 1},
+  "assistant_turns": {"max": 1, "median": 1, "min": 1, "p90_nearest_rank": 1},
+  "bash_tool_result_bytes": {"max": 30.0, "median": 30.0, "over_16000": 0, "over_4000": 0, "over_65536": 0, "p90_nearest_rank": 30.0, "p99_nearest_rank": 30.0, "parsed": 1, "unparsed": 0},
+  "context_compaction": {"algorithm_visible": false, "events": 0, "post_tokens_median": null, "pre_tokens_median": null, "sessions": 0},
+  "duration_seconds": {"max": 10.0, "median": 10.0, "min": 10.0, "p90_nearest_rank": 10.0},
+  "launch_parameters": [{"parameters": {"max_steps": 600}, "sessions": 1}],
+  "models": {"model-a": {"pass_rate": 1.0, "passes": 1, "sessions": 1}},
+  "pass_rate": 1.0,
+  "passes": 1,
+  "privacy": {"assistant_or_tool_content_emitted": false, "prompt_bodies_emitted": false, "tool_arguments_emitted": false},
+  "records": 1,
+  "schema": "fleet_harness_export_evidence_v1",
+  "session_steps": {"max": 3.0, "median": 3.0, "min": 3.0, "p90_nearest_rank": 3.0},
+  "source_export": {"sessions": 1, "sha256": "sha256:fixture"},
+  "source_job_id": "job-1",
+  "system_prompts": [{"character_length": 30, "sessions": 1, "sha256": "sha256:5582b34153abb07e27f04d6185a4b9c090986ae03d945513ec403c5de5dcc6a3"}],
+  "task_prompt_hydration": {"byte_equal_after_text_envelope_normalization": 1, "mismatches": 0},
+  "task_tool_surfaces": [{"sessions": 1, "tools": ["bash", "submit_report"]}],
+  "transcript_tool_calls": {"bash": 1},
+  "unique_task_keys": 1,
+  "unique_task_version_ids": 1
+}
