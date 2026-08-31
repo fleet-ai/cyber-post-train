@@ -18,28 +18,48 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from .io import digest_json, file_sha256
-from .post_sft_artifacts import _safetensor_layout, full_file_manifest, inspect_hf_export
+from .post_sft_artifacts import (
+    _safetensor_layout,
+    compare_safetensor_layout,
+    compare_safetensor_layout_with_exact_auxiliary_omission,
+    full_file_manifest,
+    inspect_hf_export,
+)
 
-CAST_INPUT_SCHEMA = "cyber_sft_fp32_to_bf16_cast_input_v1"
-CAST_RECEIPT_SCHEMA = "cyber_sft_fp32_to_bf16_cast_receipt_v1"
-CAST_POLICY = "deterministic_sorted_tensor_fp32_to_bf16_v1"
+CAST_INPUT_SCHEMA = "cyber_sft_fp32_to_bf16_cast_input_v2"
+CAST_RECEIPT_SCHEMA = "cyber_sft_fp32_to_bf16_cast_receipt_v2"
+CAST_POLICY = "deterministic_trained_fp32_to_bf16_plus_frozen_base_mtp_restore_v1"
 SOURCE_PATH = Path(
     "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-v1/global_step_318/policy"
 )
 DESTINATION_PATH = Path(
-    "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-bf16-v1/global_step_318/policy"
+    "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-bf16-v2/global_step_318/policy"
+)
+BASE_MODEL_PATH = Path(
+    "/mnt/sfs/models/Qwen/Qwen3.6-27B/6a9e13bd6fc8f0983b9b99948120bc37f49c13e9"
+)
+BASE_MODEL_REPOSITORY = "Qwen/Qwen3.6-27B"
+BASE_MODEL_REVISION = "6a9e13bd6fc8f0983b9b99948120bc37f49c13e9"
+BASE_WEIGHTS_MANIFEST_SHA256 = (
+    "sha256:14ad10368de9b9e5974ff12a4b70ea7884194b58e670177bbac79daeb81f16b9"
 )
 EVIDENCE_DIR = Path(
-    "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/evidence/bf16-cast-v1/receipt"
+    "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/evidence/bf16-cast-v2/receipt"
 )
 ACCEPTANCE_RECEIPT_NAME = ".fleet-bf16-cast-acceptance.json"
 DEFAULT_MAX_SHARD_BYTES = 2 * 1024**3
 DEFAULT_MAX_SOURCE_TENSOR_BYTES = 8 * 1024**3
 HASH_CHUNK_BYTES = 8 * 1024**2
+TRAINED_TENSOR_COUNT = 1184
+TRAINED_PARAMETER_COUNT = 27_356_728_560
+RESTORED_AUXILIARY_TENSOR_COUNT = 15
+RESTORED_AUXILIARY_PARAMETER_COUNT = 424_699_392
+FINAL_TENSOR_COUNT = 1199
+FINAL_PARAMETER_COUNT = 27_781_427_952
 NAMESPACE = "fleet-train-jobs"
-JOB_NAME = "chris-cyber-qwen36-sft-bf16-cast-v1"
+JOB_NAME = "chris-cyber-qwen36-sft-bf16-cast-v2"
 CONFIG_MAP_NAME = JOB_NAME
-SERVICE_ACCOUNT_NAME = "chris-cyber-qwen36-sft-bf16-cast-observer-v1"
+SERVICE_ACCOUNT_NAME = "chris-cyber-qwen36-sft-bf16-cast-observer-v2"
 CONTAINER_NAME = "cast"
 CAST_IMAGE = (
     "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train:"
@@ -265,7 +285,7 @@ def _tensor_sha256(tensor: Any) -> str:
 def _validate_execution_plan(value: Any) -> Mapping[str, Any]:
     plan = _mapping(value, "cast execution plan")
     expected = {
-        "schema": "cyber_sft_fp32_to_bf16_cast_execution_plan_v1",
+        "schema": "cyber_sft_fp32_to_bf16_cast_execution_plan_v2",
         "namespace": NAMESPACE,
         "job_name": JOB_NAME,
         "config_map_name": CONFIG_MAP_NAME,
@@ -276,11 +296,19 @@ def _validate_execution_plan(value: Any) -> Mapping[str, Any]:
         "command_sha256": CAST_COMMAND_SHA256,
         "source_path": str(SOURCE_PATH),
         "destination_path": str(DESTINATION_PATH),
+        "base_model_path": str(BASE_MODEL_PATH),
+        "base_model_revision": BASE_MODEL_REVISION,
         "policy": CAST_POLICY,
         "source_dtype": "F32",
         "destination_dtype": "BF16",
         "max_shard_bytes": DEFAULT_MAX_SHARD_BYTES,
         "max_source_tensor_bytes": DEFAULT_MAX_SOURCE_TENSOR_BYTES,
+        "trained_tensor_count": TRAINED_TENSOR_COUNT,
+        "trained_parameter_count": TRAINED_PARAMETER_COUNT,
+        "restored_auxiliary_tensor_count": RESTORED_AUXILIARY_TENSOR_COUNT,
+        "restored_auxiliary_parameter_count": RESTORED_AUXILIARY_PARAMETER_COUNT,
+        "final_tensor_count": FINAL_TENSOR_COUNT,
+        "final_parameter_count": FINAL_PARAMETER_COUNT,
     }
     for field, expected_value in expected.items():
         if plan.get(field) != expected_value:
@@ -335,6 +363,11 @@ def _fsync_directory(path: Path) -> None:
         os.close(descriptor)
 
 
+def _fsync_file(path: Path) -> None:
+    with path.open("rb") as stream:
+        os.fsync(stream.fileno())
+
+
 def _copy_source_sidecars(source: Path, output: Path, shard_names: set[str]) -> dict[str, str]:
     """Preserve raw trainer sidecars as evidence; serving replaces them with frozen base files."""
 
@@ -349,6 +382,7 @@ def _copy_source_sidecars(source: Path, output: Path, shard_names: set[str]) -> 
         copied[path.name] = file_sha256(path)
         if file_sha256(output / path.name) != copied[path.name]:
             raise ValueError(f"copied raw sidecar differs for {path.name}")
+        _fsync_file(output / path.name)
     return copied
 
 
@@ -387,22 +421,30 @@ def _load_tensor(root: Path, shard_name: str, key: str) -> Any:
 
 def cast_fp32_export(
     source: Path,
+    base: Path,
     output: Path,
+    omission: Mapping[str, Any],
     *,
     max_shard_bytes: int = DEFAULT_MAX_SHARD_BYTES,
     max_source_tensor_bytes: int = DEFAULT_MAX_SOURCE_TENSOR_BYTES,
 ) -> dict[str, Any]:
-    """Cast one immutable FP32 export using fixed grouping and exact bit verification."""
+    """Cast trained tensors and restore only exact frozen-base auxiliary heads."""
 
     import torch
     from safetensors import safe_open
     from safetensors.torch import save_file
 
     source = source.resolve(strict=True)
+    base = base.resolve(strict=True)
+    omission_layout = compare_safetensor_layout_with_exact_auxiliary_omission(
+        base, source, omission
+    )
     if os.path.lexists(output):
         raise FileExistsError(f"refusing pre-existing cast output: {output}")
     output.mkdir(mode=0o700, parents=False)
     layout, source_shards = _safetensor_layout(source)
+    base_layout, _ = _safetensor_layout(base)
+    missing_keys = set(base_layout) - set(layout)
     wrong_dtype = sorted(key for key, row in layout.items() if row["dtype"] != "F32")
     if wrong_dtype:
         raise ValueError(f"raw export is not uniformly F32 ({len(wrong_dtype)} tensors differ)")
@@ -410,10 +452,17 @@ def cast_fp32_export(
         source_bytes = math.prod(row["shape"]) * 4
         if source_bytes > max_source_tensor_bytes:
             raise ValueError(f"source tensor {key} exceeds the fixed memory bound")
-    groups = _shard_groups(layout, max_shard_bytes)
+    for key in missing_keys:
+        row = base_layout[key]
+        if row["dtype"] != "BF16":
+            raise ValueError(f"frozen base auxiliary tensor is not BF16: {key}")
+        if math.prod(row["shape"]) * 2 > max_source_tensor_bytes:
+            raise ValueError(f"frozen base auxiliary tensor {key} exceeds the memory bound")
+    groups = _shard_groups(base_layout, max_shard_bytes)
     shard_count = len(groups)
     weight_map: dict[str, str] = {}
-    proof_rows: list[dict[str, Any]] = []
+    cast_rows: list[dict[str, Any]] = []
+    restoration_rows: list[dict[str, Any]] = []
     total_bf16_bytes = 0
     torch.set_num_threads(1)
 
@@ -422,24 +471,51 @@ def cast_fp32_export(
         tensors: dict[str, Any] = {}
         pending: dict[str, dict[str, Any]] = {}
         for key in keys:
-            row = layout[key]
-            source_tensor = _load_tensor(source, str(row["shard"]), key)
-            if source_tensor.dtype != torch.float32 or list(source_tensor.shape) != row["shape"]:
-                raise ValueError(f"materialized source tensor differs from header for {key}")
-            if not bool(torch.isfinite(source_tensor).all().item()):
-                raise ValueError(f"source tensor contains non-finite values: {key}")
-            destination_tensor = source_tensor.to(dtype=torch.bfloat16).contiguous()
-            pending[key] = {
-                "key": key,
-                "shape": list(row["shape"]),
-                "elements": source_tensor.numel(),
-                "source_dtype": "F32",
-                "destination_dtype": "BF16",
-                "source_shard": row["shard"],
-                "destination_shard": output_name,
-                "source_tensor_sha256": _tensor_sha256(source_tensor),
-                "destination_tensor_sha256": _tensor_sha256(destination_tensor),
-            }
+            if key in layout:
+                row = layout[key]
+                source_tensor = _load_tensor(source, str(row["shard"]), key)
+                if (
+                    source_tensor.dtype != torch.float32
+                    or list(source_tensor.shape) != row["shape"]
+                ):
+                    raise ValueError(f"materialized source tensor differs from header for {key}")
+                if not bool(torch.isfinite(source_tensor).all().item()):
+                    raise ValueError(f"source tensor contains non-finite values: {key}")
+                destination_tensor = source_tensor.to(dtype=torch.bfloat16).contiguous()
+                pending[key] = {
+                    "kind": "trained_fp32_to_bf16",
+                    "key": key,
+                    "shape": list(row["shape"]),
+                    "elements": source_tensor.numel(),
+                    "source_dtype": "F32",
+                    "destination_dtype": "BF16",
+                    "source_shard": row["shard"],
+                    "destination_shard": output_name,
+                    "source_tensor_sha256": _tensor_sha256(source_tensor),
+                    "destination_tensor_sha256": _tensor_sha256(destination_tensor),
+                }
+            else:
+                row = base_layout[key]
+                source_tensor = _load_tensor(base, str(row["shard"]), key)
+                if (
+                    source_tensor.dtype != torch.bfloat16
+                    or list(source_tensor.shape) != row["shape"]
+                ):
+                    raise ValueError(f"materialized frozen base tensor differs for {key}")
+                destination_tensor = source_tensor.contiguous()
+                pending[key] = {
+                    "kind": "frozen_base_auxiliary_head_restoration",
+                    "key": key,
+                    "shape": list(row["shape"]),
+                    "elements": source_tensor.numel(),
+                    "source_dtype": "BF16",
+                    "destination_dtype": "BF16",
+                    "base_revision": omission.get("base_revision"),
+                    "base_shard": row["shard"],
+                    "destination_shard": output_name,
+                    "base_tensor_sha256": _tensor_sha256(source_tensor),
+                    "destination_tensor_sha256": _tensor_sha256(destination_tensor),
+                }
             tensors[key] = destination_tensor
             weight_map[key] = output_name
             total_bf16_bytes += destination_tensor.numel() * destination_tensor.element_size()
@@ -451,20 +527,34 @@ def cast_fp32_export(
             if written_keys != sorted(keys):
                 raise ValueError(f"written shard key set differs for {output_name}")
             for key in sorted(keys):
-                row = layout[key]
-                source_tensor = _load_tensor(source, str(row["shard"]), key)
-                expected = source_tensor.to(dtype=torch.bfloat16).contiguous().view(torch.uint16)
+                row = base_layout[key]
+                if key in layout:
+                    source_row = layout[key]
+                    source_tensor = _load_tensor(source, str(source_row["shard"]), key)
+                    expected = (
+                        source_tensor.to(dtype=torch.bfloat16).contiguous().view(torch.uint16)
+                    )
+                else:
+                    source_tensor = _load_tensor(base, str(row["shard"]), key)
+                    expected = source_tensor.contiguous().view(torch.uint16)
                 actual_tensor = written.get_tensor(key)
                 if actual_tensor.dtype != torch.bfloat16:
                     raise ValueError(f"written tensor is not BF16: {key}")
                 actual = actual_tensor.contiguous().view(torch.uint16)
                 if not torch.equal(actual, expected):
-                    raise ValueError(f"written BF16 bits differ from direct cast: {key}")
+                    raise ValueError(f"written BF16 bits differ from the proven source: {key}")
                 actual_digest = _tensor_sha256(actual_tensor)
                 if actual_digest != pending[key]["destination_tensor_sha256"]:
                     raise ValueError(f"written tensor hash differs after reopen: {key}")
-                pending[key]["exact_cast_bits_verified"] = True
-                proof_rows.append(pending[key])
+                if key in layout:
+                    pending[key]["exact_cast_bits_verified"] = True
+                    cast_rows.append(pending[key])
+                else:
+                    if actual_digest != pending[key]["base_tensor_sha256"]:
+                        raise ValueError(f"restored auxiliary tensor hash differs from base: {key}")
+                    pending[key]["exact_base_bits_verified"] = True
+                    restoration_rows.append(pending[key])
+        _fsync_file(output / output_name)
 
     index = {
         "metadata": {"total_size": total_bf16_bytes},
@@ -473,13 +563,18 @@ def cast_fp32_export(
     (output / "model.safetensors.index.json").write_text(
         json.dumps(index, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
+    _fsync_file(output / "model.safetensors.index.json")
     sidecars = _copy_source_sidecars(source, output, set(source_shards))
-    normalized_layout = {
+    normalized_source_layout = {
         key: {"shape": layout[key]["shape"], "dtype": "F32"}
         for key in sorted(layout)
     }
+    normalized_final_layout = {
+        key: {"shape": base_layout[key]["shape"], "dtype": "BF16"}
+        for key in sorted(base_layout)
+    }
     return {
-        "schema": "cyber_sft_fp32_to_bf16_cast_proof_v1",
+        "schema": "cyber_sft_fp32_to_bf16_cast_and_restore_proof_v2",
         "policy": CAST_POLICY,
         "tensor_order": "unicode_codepoint_sorted_key_v1",
         "shard_policy": {
@@ -489,17 +584,31 @@ def cast_fp32_export(
         },
         "source_dtype": "F32",
         "destination_dtype": "BF16",
-        "tensor_count": len(proof_rows),
-        "parameter_count": sum(row["elements"] for row in proof_rows),
+        "trained_tensor_count": len(cast_rows),
+        "trained_parameter_count": sum(row["elements"] for row in cast_rows),
+        "restored_auxiliary_tensor_count": len(restoration_rows),
+        "restored_auxiliary_parameter_count": sum(
+            row["elements"] for row in restoration_rows
+        ),
+        "final_tensor_count": len(cast_rows) + len(restoration_rows),
+        "final_parameter_count": sum(row["elements"] for row in cast_rows)
+        + sum(row["elements"] for row in restoration_rows),
         "source_shard_count": len(source_shards),
         "destination_shard_count": shard_count,
         "destination_weight_bytes": total_bf16_bytes,
-        "source_layout_sha256": digest_json(normalized_layout),
-        "cast_rows_sha256": digest_json(proof_rows),
-        "cast_rows": proof_rows,
+        "source_layout_sha256": digest_json(normalized_source_layout),
+        "final_layout_sha256": digest_json(normalized_final_layout),
+        "exact_omission_evidence_sha256": omission_layout["missing_tensors_sha256"],
+        "exact_omission_tensors": omission_layout["missing_tensors"],
+        "cast_rows_sha256": digest_json(cast_rows),
+        "cast_rows": cast_rows,
+        "restoration_rows_sha256": digest_json(restoration_rows),
+        "restoration_rows": restoration_rows,
         "raw_sidecar_sha256": sidecars,
         "all_source_values_finite": True,
         "all_destination_bits_equal_direct_bf16_cast": True,
+        "all_restored_auxiliary_bits_equal_frozen_base": True,
+        "final_layout_exactly_matches_frozen_base": True,
     }
 
 
@@ -529,6 +638,53 @@ def build_cast_input(
         raise ValueError("raw manifest differs from the export observation")
     if inspection.get("files_manifest_sha256") != raw_manifest.get("manifest_sha256"):
         raise ValueError("raw inspection and full manifest differ")
+    omission = _mapping(
+        _mapping(plan.get("export"), "plan export").get(
+            "raw_export_auxiliary_head_omission"
+        ),
+        "raw export auxiliary-head omission",
+    )
+    observed_omission = _mapping(
+        observation.get("weight_layout_exact_auxiliary_omission"),
+        "observed exact auxiliary-head omission",
+    )
+    if observed_omission.get("schema") != (
+        "cyber_sft_safetensors_exact_auxiliary_omission_v1"
+    ) or observed_omission.get("exact_allowlist_match") is not True:
+        raise ValueError("export observation lacks exact auxiliary-head omission proof")
+    if observed_omission.get("raw_export_parameter_count") != inspection.get(
+        "parameter_count"
+    ):
+        raise ValueError("raw inspection parameter count differs from omission proof")
+    if observed_omission.get("missing_tensors_sha256") != inspection.get(
+        "exact_auxiliary_omission_sha256"
+    ):
+        raise ValueError("raw inspection and omission layout evidence differ")
+    base_model = _mapping(plan.get("base_model"), "base model")
+    speculative = _mapping(
+        _mapping(plan.get("serving"), "serving").get("speculative_decoding"),
+        "serving speculative decoding",
+    )
+    observed_no_speculative = _mapping(
+        observation.get("no_speculative_decoding_proof"),
+        "observed no-speculative-decoding proof",
+    )
+    if (
+        speculative.get("enabled") is not False
+        or speculative.get("proof")
+        != "exact_base_registration_contains_no_speculative_decoding_or_draft_model_argument"
+        or speculative.get("registration_sha256")
+        != omission.get("serving_registration_sha256")
+        or observed_no_speculative.get("schema")
+        != "cyber_post_sft_no_speculative_decoding_proof_v1"
+        or observed_no_speculative.get("registration_sha256")
+        != speculative.get("registration_sha256")
+        or observed_no_speculative.get("prohibited_runtime_args")
+        != speculative.get("prohibited_runtime_args")
+        or observed_no_speculative.get("prohibited_runtime_args_absent") is not True
+        or observed_no_speculative.get("no_speculative_or_draft_argument") is not True
+    ):
+        raise ValueError("matched serving does not prove speculative decoding is disabled")
     result = {
         "schema": CAST_INPUT_SCHEMA,
         "source": {
@@ -536,13 +692,24 @@ def build_cast_input(
             "observation_sha256": observation_digest,
             "raw_full_manifest": dict(raw_manifest),
             "raw_inspection": dict(inspection),
+            "exact_auxiliary_omission": dict(observed_omission),
             "source_checkpoint_full_manifest_sha256": observation.get(
                 "full_file_manifest_sha256"
             ),
         },
+        "frozen_base_auxiliary_source": {
+            "path": str(BASE_MODEL_PATH),
+            "repository": base_model.get("repository"),
+            "revision": base_model.get("revision"),
+            "weights_manifest_sha256": base_model.get("weights_manifest_sha256"),
+            "omission_policy": dict(omission),
+            "speculative_decoding": dict(speculative),
+            "no_speculative_decoding_proof": dict(observed_no_speculative),
+        },
         "destination": {"path": str(DESTINATION_PATH), "must_be_absent": True},
         "execution": dict(cast_plan),
-        "expected_parameter_count": plan["base_model"]["parameter_count"],
+        "expected_trained_parameter_count": omission.get("raw_export_parameter_count"),
+        "expected_final_parameter_count": base_model.get("parameter_count"),
     }
     result["cast_input_sha256"] = digest_json(result)
     return result
@@ -578,6 +745,22 @@ def _payload_manifest(root: Path) -> dict[str, Any]:
         "files": rows,
         "manifest_sha256": digest_json(rows),
     }
+
+
+def _weights_manifest_sha256(full_manifest: Mapping[str, Any]) -> str:
+    """Derive the frozen-lock weight digest from a full-file manifest."""
+
+    files = full_manifest.get("files")
+    if not isinstance(files, list):
+        raise ValueError("full manifest files must be a list")
+    rows = [
+        {"path": row["path"], "size": row["size"], "sha256": row["sha256"]}
+        for row in files
+        if isinstance(row, Mapping) and str(row.get("path", "")).endswith(".safetensors")
+    ]
+    if not rows:
+        raise ValueError("frozen base full manifest contains no safetensor shards")
+    return digest_json(rows)
 
 
 def _validate_committed(root: Path, expected_input_sha256: str) -> dict[str, Any]:
@@ -628,7 +811,7 @@ def _publish_terminal_evidence(
         receipt_file = file_sha256(root / "cast-receipt.json")
         manifest_file = file_sha256(root / "cast-full-manifest.json")
         if complete != {
-            "schema": "cyber_sft_fp32_to_bf16_cast_complete_v1",
+            "schema": "cyber_sft_fp32_to_bf16_cast_complete_v2",
             "status": "COMPLETE",
             "cast_input_sha256": expected_input_sha256,
             "cast_receipt_sha256": receipt["cast_receipt_sha256"],
@@ -657,7 +840,7 @@ def _publish_terminal_evidence(
     receipt_path.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n")
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
     complete: dict[str, Any] = {
-        "schema": "cyber_sft_fp32_to_bf16_cast_complete_v1",
+        "schema": "cyber_sft_fp32_to_bf16_cast_complete_v2",
         "status": "COMPLETE",
         "cast_input_sha256": expected_input_sha256,
         "cast_receipt_sha256": receipt["cast_receipt_sha256"],
@@ -687,14 +870,49 @@ def execute_cast(cast_input: Mapping[str, Any]) -> dict[str, Any]:
     ):
         raise ValueError("cast input digest does not validate")
     source_binding = _mapping(cast_input.get("source"), "source")
+    base_binding = _mapping(
+        cast_input.get("frozen_base_auxiliary_source"), "frozen base auxiliary source"
+    )
     destination_binding = _mapping(cast_input.get("destination"), "destination")
     execution = _validate_execution_plan(cast_input.get("execution"))
     source = Path(str(source_binding.get("path")))
+    base = Path(str(base_binding.get("path")))
     destination = Path(str(destination_binding.get("path")))
-    if source != SOURCE_PATH or destination != DESTINATION_PATH:
+    if source != SOURCE_PATH or base != BASE_MODEL_PATH or destination != DESTINATION_PATH:
         raise ValueError("cast paths differ from the reviewed transaction")
+    if (
+        base_binding.get("repository") != BASE_MODEL_REPOSITORY
+        or base_binding.get("revision") != BASE_MODEL_REVISION
+        or base_binding.get("weights_manifest_sha256") != BASE_WEIGHTS_MANIFEST_SHA256
+    ):
+        raise ValueError("frozen base auxiliary source identity differs from the reviewed model")
+    omission = _mapping(base_binding.get("omission_policy"), "omission policy")
+    speculative = _mapping(
+        base_binding.get("speculative_decoding"), "speculative decoding proof"
+    )
+    no_speculative = _mapping(
+        base_binding.get("no_speculative_decoding_proof"),
+        "runtime no-speculative-decoding proof",
+    )
+    if (
+        speculative.get("enabled") is not False
+        or speculative.get("registration_sha256")
+        != omission.get("serving_registration_sha256")
+        or no_speculative.get("registration_sha256")
+        != speculative.get("registration_sha256")
+        or no_speculative.get("prohibited_runtime_args_absent") is not True
+        or no_speculative.get("no_speculative_or_draft_argument") is not True
+    ):
+        raise ValueError("cast input does not bind disabled speculative decoding")
     if destination_binding.get("must_be_absent") is not True:
         raise ValueError("cast destination must be declared absent")
+    if (
+        cast_input.get("expected_trained_parameter_count")
+        != execution.get("trained_parameter_count")
+        or cast_input.get("expected_final_parameter_count")
+        != execution.get("final_parameter_count")
+    ):
+        raise ValueError("cast input counts differ from the reviewed execution plan")
     suffix = expected_input_sha256.removeprefix("sha256:")[:12]
     partial = destination.parent / f".partial-{destination.name}-{suffix}"
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -716,23 +934,38 @@ def execute_cast(cast_input: Mapping[str, Any]) -> dict[str, Any]:
     observed_manifest = full_file_manifest(source)
     if observed_manifest["manifest_sha256"] != expected_manifest.get("manifest_sha256"):
         raise ValueError("raw FP32 source bytes differ from the evidence manifest")
+    base_manifest_before = full_file_manifest(base)
+    if _weights_manifest_sha256(base_manifest_before) != base_binding.get(
+        "weights_manifest_sha256"
+    ):
+        raise ValueError("frozen base weight bytes differ from the signed model lock")
     proof = cast_fp32_export(
         source,
+        base,
         partial,
+        omission,
         max_shard_bytes=int(execution["max_shard_bytes"]),
         max_source_tensor_bytes=int(execution["max_source_tensor_bytes"]),
     )
-    if proof["parameter_count"] != cast_input.get("expected_parameter_count"):
-        raise ValueError("cast parameter count differs from the frozen architecture")
+    if proof["trained_parameter_count"] != cast_input.get(
+        "expected_trained_parameter_count"
+    ):
+        raise ValueError("cast trained parameter count differs from the raw export")
+    if proof["final_parameter_count"] != cast_input.get("expected_final_parameter_count"):
+        raise ValueError("cast final parameter count differs from the frozen architecture")
+    final_layout = compare_safetensor_layout(base, partial)
     source_after = full_file_manifest(source)
     if source_after["manifest_sha256"] != observed_manifest["manifest_sha256"]:
         raise ValueError("raw FP32 source changed during conversion")
+    base_manifest_after = full_file_manifest(base)
+    if base_manifest_after["manifest_sha256"] != base_manifest_before["manifest_sha256"]:
+        raise ValueError("frozen base bytes changed during auxiliary-head restoration")
     inspection = inspect_hf_export(
         partial,
         expected_tokenizer_manifest_sha256="sha256:" + "0" * 64,
         expected_chat_template_sha256="sha256:" + "0" * 64,
         expected_config_sha256="sha256:" + "0" * 64,
-        expected_parameter_count=int(cast_input["expected_parameter_count"]),
+        expected_parameter_count=int(cast_input["expected_final_parameter_count"]),
         require_base_sidecars=False,
         expected_dtype="BF16",
     )
@@ -754,6 +987,27 @@ def execute_cast(cast_input: Mapping[str, Any]) -> dict[str, Any]:
             ],
             "dtype": "F32",
         },
+        "frozen_base_auxiliary_source": {
+            "path": str(base),
+            "repository": base_binding.get("repository"),
+            "revision": base_binding.get("revision"),
+            "weights_manifest_sha256": base_binding.get("weights_manifest_sha256"),
+            "omission_policy_sha256": digest_json(omission),
+            "exact_auxiliary_omission_policy": dict(omission),
+            "full_manifest_before_sha256": base_manifest_before["manifest_sha256"],
+            "full_manifest_after_sha256": base_manifest_after["manifest_sha256"],
+            "base_source_stable_during_cast": True,
+            "exact_omission_evidence_sha256": proof[
+                "exact_omission_evidence_sha256"
+            ],
+            "role": "speculative_draft_heads",
+            "serving_inference_effect": "inert_without_speculative_decoding",
+            "serving_registration_sha256": omission.get(
+                "serving_registration_sha256"
+            ),
+            "speculative_decoding_enabled": False,
+            "restoration_semantics": "frozen_base_auxiliary_head_restoration_not_trained_weights",
+        },
         "conversion": proof,
         "execution_plan": dict(execution),
         "execution": runtime_execution,
@@ -761,6 +1015,7 @@ def execute_cast(cast_input: Mapping[str, Any]) -> dict[str, Any]:
             "path": str(destination),
             "dtype": "BF16",
             "inspection": {**inspection, "root": str(destination)},
+            "exact_base_layout_equivalence": final_layout,
             "payload_manifest_excludes": [ACCEPTANCE_RECEIPT_NAME],
             "payload_manifest_sha256": payload["manifest_sha256"],
             "payload_file_count": payload["file_count"],

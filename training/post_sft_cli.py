@@ -203,6 +203,12 @@ def assemble_export(
             model["tokenizer_equivalence_evidence"]["sha256"]
         ),
         expected_cast_execution=plan["cast_execution"],
+        expected_sfs_evidence_execution=plan["evidence_execution"][
+            "sfs_export_inspector"
+        ],
+        expected_source_structural_sha256=plan["source_checkpoint_evidence"][
+            "structural_manifest_before_sha256"
+        ],
         expected_staging_image=STAGING_IMAGE,
         expected_staging_command_sha256=STAGING_COMMAND_SHA256,
     )

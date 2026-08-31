@@ -2,16 +2,163 @@ import json
 from pathlib import Path
 
 import pytest
+import torch
+import yaml
+from safetensors.torch import save_file
 
+from training import post_sft_artifacts as artifacts
 from training.io import digest_json
 from training.post_sft_artifacts import (
+    QWEN36_EXACT_MTP_OMISSION_KEYS,
     compare_model_config_architecture,
     compare_safetensor_layout,
+    compare_safetensor_layout_with_exact_auxiliary_omission,
     full_file_manifest,
     inspect_hf_export,
+    prove_speculative_decoding_disabled,
     structural_manifest,
     structural_tsv_sha256,
 )
+
+
+def test_pinned_registration_programmatically_disables_speculative_decoding():
+    root = Path(__file__).resolve().parents[1]
+    plan = json.loads(
+        (root / "configs/evaluation/qwen36-27b-ft-run-574bd7b3-post-sft.json").read_text()
+    )
+    registration = json.loads(
+        (
+            root
+            / "evals/webexploitbench/serving/qwen36-27b-6a9e13bd-registration.json"
+        ).read_text()
+    )
+    proof = prove_speculative_decoding_disabled(registration, plan["serving"])
+    assert proof["prohibited_runtime_args_absent"] is True
+    tampered = json.loads(json.dumps(registration))
+    tampered["spec"]["runtime"]["args"].extend(
+        ["--speculative-algorithm", "EAGLE"]
+    )
+    with pytest.raises(ValueError, match="enables speculative"):
+        prove_speculative_decoding_disabled(tampered, plan["serving"])
+
+
+def test_sfs_evidence_runtime_binds_live_job_pod_image_and_immutable_bundle(
+    tmp_path, monkeypatch
+):
+    root = Path(__file__).resolve().parents[1]
+    plan_path = root / "configs/evaluation/qwen36-27b-ft-run-574bd7b3-post-sft.json"
+    plan = json.loads(plan_path.read_text())
+    contract = plan["evidence_execution"]["sfs_export_inspector"]
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    data = {}
+    for key, relative in artifacts.EVIDENCE_MOUNTED_CODE_FILES.items():
+        source = root / artifacts.EVIDENCE_LOCAL_CODE_FILES[key]
+        value = source.read_text()
+        data[key] = value
+        destination = bundle / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(value)
+    plan_text = plan_path.read_text()
+    registration_path = root / contract["registration_path"]
+    registration_text = registration_path.read_text()
+    data[artifacts.EVIDENCE_PLAN_MOUNT] = plan_text
+    data[artifacts.EVIDENCE_REGISTRATION_MOUNT] = registration_text
+    (bundle / artifacts.EVIDENCE_PLAN_MOUNT).write_text(plan_text)
+    (bundle / artifacts.EVIDENCE_REGISTRATION_MOUNT).write_text(registration_text)
+    monkeypatch.setattr(artifacts, "EVIDENCE_BUNDLE_ROOT", bundle)
+    monkeypatch.setenv("POD_NAMESPACE", contract["namespace"])
+    monkeypatch.setenv("POD_NAME", "evidence-pod")
+    monkeypatch.setenv("POD_UID", "pod-uid")
+    monkeypatch.setenv("JOB_UID", "job-uid")
+    job = {
+        "metadata": {
+            "name": contract["job_name"],
+            "uid": "job-uid",
+            "resourceVersion": "11",
+            "labels": contract["job_labels"],
+        },
+        "spec": {"suspend": True},
+    }
+    documents = list(
+        yaml.safe_load_all(
+            (
+                root / "evals/post_sft/cluster/qwen36-sft-evidence-v4-job.yaml"
+            ).read_text()
+        )
+    )
+    job_document = next(value for value in documents if value.get("kind") == "Job")
+    reviewed_container = job_document["spec"]["template"]["spec"]["containers"][0]
+    pod_spec = {
+        "serviceAccountName": contract["service_account_name"],
+        "nodeSelector": contract["node_selector"],
+        "containers": [
+            {
+                "name": contract["container_name"],
+                "image": contract["image"],
+                "resources": contract["resources"],
+                "command": reviewed_container["command"],
+                "args": reviewed_container["args"],
+            }
+        ],
+    }
+    pod = {
+        "metadata": {
+            "name": "evidence-pod",
+            "uid": "pod-uid",
+            "resourceVersion": "12",
+            "labels": contract["pod_labels"],
+            "ownerReferences": [
+                {
+                    "kind": "Job",
+                    "name": contract["job_name"],
+                    "uid": "job-uid",
+                }
+            ],
+        },
+        "spec": pod_spec,
+        "status": {
+            "containerStatuses": [
+                {
+                    "name": contract["container_name"],
+                    "imageID": "containerd://" + contract["image_digest"],
+                }
+            ]
+        },
+    }
+    config_map = {
+        "metadata": {
+            "name": contract["config_map_name"],
+            "uid": "config-uid",
+            "resourceVersion": "13",
+        },
+        "immutable": True,
+        "data": data,
+    }
+
+    def get(path):
+        if "/pods/" in path:
+            return pod
+        if "/jobs/" in path:
+            return job
+        return config_map
+
+    monkeypatch.setattr(artifacts, "_kubernetes_get", get)
+    result = artifacts.collect_sfs_evidence_runtime_provenance(plan)
+    assert result["job"]["uid"] == "job-uid"
+    assert result["config_map"]["immutable"] is True
+    assert result["no_speculative_decoding_proof"][
+        "no_speculative_or_draft_argument"
+    ] is True
+
+
+def _write_safetensors(root: Path, tensors: dict[str, torch.Tensor]) -> None:
+    root.mkdir()
+    name = "model-00001-of-00001.safetensors"
+    save_file(tensors, root / name)
+    (root / "model.safetensors.index.json").write_text(
+        json.dumps({"weight_map": {key: name for key in sorted(tensors)}})
+    )
 
 
 def test_manifests_are_sorted_relative_and_content_sensitive(tmp_path: Path):
@@ -224,3 +371,50 @@ def test_model_config_architecture_allows_only_declared_trainer_metadata(tmp_pat
     candidate.write_text(json.dumps(changed))
     with pytest.raises(ValueError, match="architectural"):
         compare_model_config_architecture(base, candidate)
+
+
+def test_exact_auxiliary_omission_accepts_only_all_15_frozen_mtp_tensors(tmp_path: Path):
+    base = tmp_path / "base"
+    candidate = tmp_path / "candidate"
+    base_tensors = {"weight": torch.ones(2, dtype=torch.bfloat16)}
+    base_tensors.update(
+        {key: torch.ones(1, dtype=torch.bfloat16) for key in QWEN36_EXACT_MTP_OMISSION_KEYS}
+    )
+    _write_safetensors(base, base_tensors)
+    _write_safetensors(candidate, {"weight": torch.ones(2, dtype=torch.float32)})
+    rows = [
+        {"key": key, "shape": [1], "dtype": "BF16", "elements": 1}
+        for key in QWEN36_EXACT_MTP_OMISSION_KEYS
+    ]
+    omission = {
+        "schema": "cyber_sft_exact_auxiliary_head_omission_v1",
+        "role": "speculative_draft_heads",
+        "serving_inference_effect": "inert_without_speculative_decoding",
+        "restoration_policy": "copy_exact_frozen_base_bf16_tensor_bits",
+        "base_tensor_count": 16,
+        "base_parameter_count": 17,
+        "raw_export_tensor_count": 1,
+        "raw_export_parameter_count": 2,
+        "missing_tensor_count": 15,
+        "missing_parameter_count": 15,
+        "tensors": rows,
+    }
+    result = compare_safetensor_layout_with_exact_auxiliary_omission(
+        base, candidate, omission
+    )
+    assert result["exact_allowlist_match"] is True
+    assert result["missing_parameter_count"] == 15
+
+    missing_row = json.loads(json.dumps(omission))
+    missing_row["tensors"].pop()
+    with pytest.raises(ValueError, match="exact frozen Qwen3.6 MTP set"):
+        compare_safetensor_layout_with_exact_auxiliary_omission(
+            base, candidate, missing_row
+        )
+
+    wrong_key_candidate = tmp_path / "wrong-key-candidate"
+    _write_safetensors(wrong_key_candidate, {"other": torch.ones(2, dtype=torch.float32)})
+    with pytest.raises(ValueError, match="missing keys differ"):
+        compare_safetensor_layout_with_exact_auxiliary_omission(
+            base, wrong_key_candidate, omission
+        )

@@ -155,8 +155,14 @@ and source-sidecar evidence exists. The immutable v1 low-priority manifest Job w
 failed before inspecting any model bytes because its UID 1000 could not create an output under the
 root-owned `/mnt/sfs/jobs` directory. The v2 successor proved the writable export-tree location but
 failed during Python package import because the isolated bundle used the repository initializer
-without its transitive modules. The v3 successor uses a minimal package marker. The scientific
-inputs and verification algorithms are unchanged across these infrastructure-only corrections.
+without its transitive modules. The v3 successor used a minimal package marker and reached model
+validation, where it correctly failed because the raw export has 27,356,728,560 parameters while
+the frozen base has 27,781,427,952. Header comparison proved exactly 15 missing `mtp.*` tensors,
+all speculative-draft heads, totalling 424,699,392 parameters, with no extra key or shape mismatch.
+The v4 successor accepts only those 15 enumerated names, shapes and counts and preserves all three
+failed attempts. The exact 15-key conclusion comes from the later read-only header comparison, not
+from v3 itself. V4 additionally proves the source structure/latest pointer stayed unchanged across
+the long scans and records exact live Job, Pod, resolved-image and immutable-ConfigMap provenance.
 
 Raw trainer sidecars differ because of Transformers serialization and must not
 be served. Effective mapping and special IDs match, and exact encode/decode
@@ -173,10 +179,14 @@ not the requested BF16. The raw FP32 bytes remain immutable evidence and will no
 served.
 
 A reviewed, create-only CPU conversion rail targets a new SFS path. It will verify the complete
-raw manifest, cast sorted tensors into bounded BF16 shards, and reopen every tensor to prove exact
-bit equality with a direct FP32→BF16 cast. It binds the source checkpoint manifest, raw and
-destination manifests, parameter count, code, command, digest-pinned image, Kubernetes Job/Pod,
-and immutable ConfigMap. Neither that cast Job nor any post-SFT evaluation has launched.
+raw manifest, cast all 1,184 trained tensors into bounded BF16 shards, restore the 15 missing MTP
+tensors bit-identically from the exact frozen BF16 base, and reopen all 1,199 outputs. Per-tensor
+hashes distinguish trained casts from **frozen base auxiliary-head restoration**. MTP is
+inference-inert because the matched serving registration has no speculative-decoding arguments.
+The rail binds source, base, destination, code, command, image, Job/Pod and immutable ConfigMap;
+the base's complete before/after manifests must match and its live weight digest must equal the
+signed model lock.
+Neither that cast Job nor any post-SFT evaluation has launched.
 
 Evidence: [`post-SFT plan`](POST_SFT_EVALUATION.md),
 [`tokenizer gate`](evidence/post_sft/2026-08-31-tokenizer-equivalence.md), and

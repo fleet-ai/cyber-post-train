@@ -38,6 +38,7 @@
     "tokenizer_manifest_sha256": "sha256:27f02770d03b60343350ad948bf1065673968c60274f1e34f4afaed16940a1ea",
     "chat_template_sha256": "sha256:e84f32a23fdda27689f868aa4a1a5621f41133e51a48d7f3efcbea2839574259",
     "config_sha256": "sha256:69db4eb7196bc8190813231b3018ca05d8c2e3abc7b1af19d55c157af44a9d9c",
+    "tensor_count": 1199,
     "parameter_count": 27781427952,
     "tokenizer_equivalence_evidence": {
       "path": "docs/evidence/post_sft/2026-08-31-tokenizer-equivalence.json",
@@ -66,6 +67,13 @@
     "live_engine_version": "0.0.0.dev0+qwen38.27b.g561c8f3",
     "precision": "bf16",
     "tensor_parallel_size": 1,
+    "speculative_decoding": {
+      "enabled": false,
+      "proof": "exact_base_registration_contains_no_speculative_decoding_or_draft_model_argument",
+      "prohibited_runtime_args": ["--speculative-algorithm", "--speculative-draft-model-path", "--speculative-num-steps"],
+      "registration_path": "evals/webexploitbench/serving/qwen36-27b-6a9e13bd-registration.json",
+      "registration_sha256": "sha256:fa3abc3a33dce0709206e74a1a178db5ed6ea8e47e0b0c91396b03e8e0177cd6"
+    },
     "comparison_rule": "clone_base_registration_and_change_only_checkpoint_identity_and_paths"
   },
   "staging_execution": {
@@ -81,35 +89,78 @@
     "config_map_code_sha256": {
       "training/__init__.py": "sha256:85464634e1b48ac40c22bd57bc60fb67241bac402311c31eca7027afb491de68",
       "training/io.py": "sha256:7a0b734a4ab7fb8b702430094c58c72f19ac8fc7cc5e056eb8410267e6bfdfe3",
-      "training/post_sft_artifacts.py": "sha256:1404cb56615a5b4b827deca6642e13d79d5dc9e9a9aa5efaf7912b7b61cee124",
-      "training/post_sft_staging.py": "sha256:b135485ba710b1bd181595d0614d9f7fd84d35b70266406d8cc9c67608acbe72"
+      "training/post_sft_artifacts.py": "sha256:c09555c61cb25ad5867cce80ed8bef0684734231b5708b1be892e75b9dd980eb",
+      "training/post_sft_staging.py": "sha256:04f82b71f951080e0954f1c89ae455c06b318dafc6dbe09fe8b03053db0154cd"
     }
   },
   "cast_execution": {
-    "schema": "cyber_sft_fp32_to_bf16_cast_execution_plan_v1",
+    "schema": "cyber_sft_fp32_to_bf16_cast_execution_plan_v2",
     "namespace": "fleet-train-jobs",
-    "job_name": "chris-cyber-qwen36-sft-bf16-cast-v1",
-    "config_map_name": "chris-cyber-qwen36-sft-bf16-cast-v1",
-    "service_account_name": "chris-cyber-qwen36-sft-bf16-cast-observer-v1",
+    "job_name": "chris-cyber-qwen36-sft-bf16-cast-v2",
+    "config_map_name": "chris-cyber-qwen36-sft-bf16-cast-v2",
+    "service_account_name": "chris-cyber-qwen36-sft-bf16-cast-observer-v2",
     "container_name": "cast",
     "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train:q36-torchgdn-6db8d0c9@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
     "image_digest": "sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
     "command_sha256": "sha256:09925362ff4a665f02b1c73aee73fa750dd0e8427cc1c47a443ceddefb5b9a03",
     "source_path": "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-v1/global_step_318/policy",
-    "destination_path": "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-bf16-v1/global_step_318/policy",
-    "policy": "deterministic_sorted_tensor_fp32_to_bf16_v1",
+    "destination_path": "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-bf16-v2/global_step_318/policy",
+    "base_model_path": "/mnt/sfs/models/Qwen/Qwen3.6-27B/6a9e13bd6fc8f0983b9b99948120bc37f49c13e9",
+    "base_model_revision": "6a9e13bd6fc8f0983b9b99948120bc37f49c13e9",
+    "policy": "deterministic_trained_fp32_to_bf16_plus_frozen_base_mtp_restore_v1",
     "source_dtype": "F32",
     "destination_dtype": "BF16",
     "max_shard_bytes": 2147483648,
     "max_source_tensor_bytes": 8589934592,
+    "trained_tensor_count": 1184,
+    "trained_parameter_count": 27356728560,
+    "restored_auxiliary_tensor_count": 15,
+    "restored_auxiliary_parameter_count": 424699392,
+    "final_tensor_count": 1199,
+    "final_parameter_count": 27781427952,
     "config_map_code_sha256": {
       "training/__init__.py": "sha256:85464634e1b48ac40c22bd57bc60fb67241bac402311c31eca7027afb491de68",
       "training/io.py": "sha256:7a0b734a4ab7fb8b702430094c58c72f19ac8fc7cc5e056eb8410267e6bfdfe3",
-      "training/post_sft_artifacts.py": "sha256:1404cb56615a5b4b827deca6642e13d79d5dc9e9a9aa5efaf7912b7b61cee124",
-      "training/post_sft_cast.py": "sha256:ceab3e82cb1560639e0774f6d000954e9b7ab9d22de587883caf53872a2d3cc3"
+      "training/post_sft_artifacts.py": "sha256:c09555c61cb25ad5867cce80ed8bef0684734231b5708b1be892e75b9dd980eb",
+      "training/post_sft_cast.py": "sha256:0da168feb029e3c083baa87e5e6acb18a1d6c530cd8dc7ddd5c0c2cedd674764"
     }
   },
   "evidence_execution": {
+    "sfs_export_inspector": {
+      "schema": "cyber_sft_sfs_evidence_execution_plan_v1",
+      "namespace": "fleet-train-jobs",
+      "job_name": "chris-cyber-qwen36-sft-evidence-v4",
+      "config_map_name": "chris-cyber-qwen36-sft-evidence-v4",
+      "service_account_name": "chris-cyber-qwen36-sft-evidence-observer-v4",
+      "container_name": "evidence",
+      "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train:q36-torchgdn-6db8d0c9@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+      "image_digest": "sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+      "command_sha256": "sha256:b5819a8212b4296e5c77a59e4eaa74a2085bac340b95b87ef6b2085ceba90901",
+      "job_labels": {
+        "kueue.x-k8s.io/queue-name": "training-lq",
+        "cyber-post-train.fleet.ai/owner": "chris",
+        "cyber-post-train.fleet.ai/experiment": "qwen36-sft-evidence-v4",
+        "cyber-post-train.fleet.ai/model": "qwen36"
+      },
+      "pod_labels": {
+        "cyber-post-train.fleet.ai/owner": "chris",
+        "cyber-post-train.fleet.ai/experiment": "qwen36-sft-evidence-v4",
+        "cyber-post-train.fleet.ai/model": "qwen36"
+      },
+      "node_selector": {"workload": "fleetai-training-ng-cpu"},
+      "resources": {
+        "requests": {"cpu": "2", "memory": "16Gi"},
+        "limits": {"cpu": "4", "memory": "32Gi"}
+      },
+      "registration_path": "evals/webexploitbench/serving/qwen36-27b-6a9e13bd-registration.json",
+      "registration_sha256": "sha256:fa3abc3a33dce0709206e74a1a178db5ed6ea8e47e0b0c91396b03e8e0177cd6",
+      "config_map_code_sha256": {
+        "training/__init__.py": "sha256:85464634e1b48ac40c22bd57bc60fb67241bac402311c31eca7027afb491de68",
+        "training/io.py": "sha256:7a0b734a4ab7fb8b702430094c58c72f19ac8fc7cc5e056eb8410267e6bfdfe3",
+        "training/post_sft_artifacts.py": "sha256:c09555c61cb25ad5867cce80ed8bef0684734231b5708b1be892e75b9dd980eb",
+        "training/tokenizer_equivalence.py": "sha256:3178a49479d5208d75396788f8865de0642c90a0208860a7d610394a13c7482a"
+      }
+    },
     "base_artifact_inspector": {
       "schema": "cyber_post_sft_kubernetes_evidence_contract_v1",
       "job_labels": {
@@ -169,7 +220,7 @@
         "evals/webexploitbench/post_sft_evidence.py": "sha256:9bb6272d88f81c8ff37fe06a362c77d6c21b96589a9ed65c80f4d28efa4578c6",
         "training/__init__.py": "sha256:85464634e1b48ac40c22bd57bc60fb67241bac402311c31eca7027afb491de68",
         "training/io.py": "sha256:7a0b734a4ab7fb8b702430094c58c72f19ac8fc7cc5e056eb8410267e6bfdfe3",
-        "training/post_sft_artifacts.py": "sha256:1404cb56615a5b4b827deca6642e13d79d5dc9e9a9aa5efaf7912b7b61cee124"
+        "training/post_sft_artifacts.py": "sha256:c09555c61cb25ad5867cce80ed8bef0684734231b5708b1be892e75b9dd980eb"
       }
     },
     "registration": {
@@ -231,7 +282,7 @@
     "source_checkpoint_root": "/mnt/sfs/checkpoints/ft-run-574bd7b3",
     "output_root": "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-v1",
     "expected_output_path": "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-v1/global_step_318/policy",
-    "bf16_cast_destination": "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-bf16-v1/global_step_318/policy",
+    "bf16_cast_destination": "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-bf16-v2/global_step_318/policy",
     "inference_staging_destination": "/models/cyber-sft/ft-run-574bd7b3/step-318",
     "destination_preflight": {
       "observed_at": "2026-08-31T16:05:07Z",
@@ -276,7 +327,41 @@
     "precision": "bf16",
     "observed_raw_export_precision": "fp32",
     "required_serving_precision": "bf16",
-    "precision_correction_policy": "deterministic_sorted_tensor_fp32_to_bf16_v1",
+    "precision_correction_policy": "deterministic_trained_fp32_to_bf16_plus_frozen_base_mtp_restore_v1",
+    "raw_export_auxiliary_head_omission": {
+      "schema": "cyber_sft_exact_auxiliary_head_omission_v1",
+      "role": "speculative_draft_heads",
+      "base_repository": "Qwen/Qwen3.6-27B",
+      "base_revision": "6a9e13bd6fc8f0983b9b99948120bc37f49c13e9",
+      "base_weights_manifest_sha256": "sha256:14ad10368de9b9e5974ff12a4b70ea7884194b58e670177bbac79daeb81f16b9",
+      "serving_inference_effect": "inert_without_speculative_decoding",
+      "serving_registration_sha256": "sha256:fa3abc3a33dce0709206e74a1a178db5ed6ea8e47e0b0c91396b03e8e0177cd6",
+      "prohibited_runtime_args": ["--speculative-algorithm", "--speculative-draft-model-path", "--speculative-num-steps"],
+      "restoration_policy": "copy_exact_frozen_base_bf16_tensor_bits",
+      "base_tensor_count": 1199,
+      "base_parameter_count": 27781427952,
+      "raw_export_tensor_count": 1184,
+      "raw_export_parameter_count": 27356728560,
+      "missing_tensor_count": 15,
+      "missing_parameter_count": 424699392,
+      "tensors": [
+        {"key": "mtp.fc.weight", "shape": [5120, 10240], "dtype": "BF16", "elements": 52428800},
+        {"key": "mtp.layers.0.input_layernorm.weight", "shape": [5120], "dtype": "BF16", "elements": 5120},
+        {"key": "mtp.layers.0.mlp.down_proj.weight", "shape": [5120, 17408], "dtype": "BF16", "elements": 89128960},
+        {"key": "mtp.layers.0.mlp.gate_proj.weight", "shape": [17408, 5120], "dtype": "BF16", "elements": 89128960},
+        {"key": "mtp.layers.0.mlp.up_proj.weight", "shape": [17408, 5120], "dtype": "BF16", "elements": 89128960},
+        {"key": "mtp.layers.0.post_attention_layernorm.weight", "shape": [5120], "dtype": "BF16", "elements": 5120},
+        {"key": "mtp.layers.0.self_attn.k_norm.weight", "shape": [256], "dtype": "BF16", "elements": 256},
+        {"key": "mtp.layers.0.self_attn.k_proj.weight", "shape": [1024, 5120], "dtype": "BF16", "elements": 5242880},
+        {"key": "mtp.layers.0.self_attn.o_proj.weight", "shape": [5120, 6144], "dtype": "BF16", "elements": 31457280},
+        {"key": "mtp.layers.0.self_attn.q_norm.weight", "shape": [256], "dtype": "BF16", "elements": 256},
+        {"key": "mtp.layers.0.self_attn.q_proj.weight", "shape": [12288, 5120], "dtype": "BF16", "elements": 62914560},
+        {"key": "mtp.layers.0.self_attn.v_proj.weight", "shape": [1024, 5120], "dtype": "BF16", "elements": 5242880},
+        {"key": "mtp.norm.weight", "shape": [5120], "dtype": "BF16", "elements": 5120},
+        {"key": "mtp.pre_fc_norm_embedding.weight", "shape": [5120], "dtype": "BF16", "elements": 5120},
+        {"key": "mtp.pre_fc_norm_hidden.weight", "shape": [5120], "dtype": "BF16", "elements": 5120}
+      ]
+    },
     "requires_same_world_size": 8,
     "requires_separate_inference_filesystem_staging": true
   },
@@ -325,9 +410,9 @@
   "gates": [
     "The named RayJob reaches SUCCEEDED without replacement or resume under a different UID.",
     "Exactly one final checkpoint is complete, promoted, and durably archived with a verified archive manifest.",
-    "A separate queued run using the exact trainer image resumes at the final step, executes zero optimizer steps, exports BF16 Hugging Face safetensors, and emits a verified manifest.",
+    "A separate queued run using the exact trainer image resumes at the final step, executes zero optimizer steps, preserves its observed FP32 Hugging Face safetensors, and emits a verified manifest with the exact 15-tensor MTP omission.",
     "The exported tokenizer and chat template are byte-identical to the base model.",
-    "A digest-pinned staging action copies the exact SFS export into inference /models, proves byte-identical source and destination manifests, and binds the acceptance manifest.",
+    "A digest-pinned CPU rail casts 1,184 trained tensors to BF16, restores exactly 15 frozen-base MTP tensors bit-identically, and staging copies that verified SFS artifact into inference /models with exact manifests.",
     "The intervention is registered with the exact baseline SGLang image, precision, TP size, parsers, context, KV cache, and other runtime arguments.",
     "The registered endpoint passes model identity, tokenizer, structured tool-call, and deterministic logit smoke checks.",
     "WebExploitBench validates the paired protocol identity against the canonical Qwen Code 0.22.3 terminal receipt, target set, budgets, CAGE/runtime image, prompt/verifier revisions, and serving runtime before launch.",

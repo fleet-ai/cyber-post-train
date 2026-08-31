@@ -10,7 +10,11 @@ from safetensors.torch import save_file
 
 from training import post_sft_cast as cast
 from training.io import digest_json
-from training.post_sft_artifacts import full_file_manifest, inspect_hf_export
+from training.post_sft_artifacts import (
+    QWEN36_EXACT_MTP_OMISSION_KEYS,
+    full_file_manifest,
+    inspect_hf_export_with_exact_auxiliary_omission,
+)
 
 
 def _fp32_export(root: Path, tensors: dict[str, torch.Tensor] | None = None) -> dict:
@@ -44,9 +48,70 @@ def _fp32_export(root: Path, tensors: dict[str, torch.Tensor] | None = None) -> 
     return tensors
 
 
-def _execution(source: Path, destination: Path) -> dict:
+def _bf16_base(root: Path, trained: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+    tensors = {key: value.to(torch.bfloat16) for key, value in trained.items()}
+    tensors.update(
+        {
+            key: torch.tensor([index + 0.5], dtype=torch.bfloat16)
+            for index, key in enumerate(QWEN36_EXACT_MTP_OMISSION_KEYS)
+        }
+    )
+    root.mkdir(parents=True)
+    save_file(tensors, root / "model-00001-of-00001.safetensors", metadata={"format": "pt"})
+    (root / "model.safetensors.index.json").write_text(
+        json.dumps(
+            {
+                "metadata": {"total_size": sum(t.numel() * 2 for t in tensors.values())},
+                "weight_map": {
+                    key: "model-00001-of-00001.safetensors" for key in sorted(tensors)
+                },
+            },
+            sort_keys=True,
+        )
+        + "\n"
+    )
+    return tensors
+
+
+def _omission(trained: dict[str, torch.Tensor]) -> dict:
+    trained_count = sum(value.numel() for value in trained.values())
+    rows = [
+        {"key": key, "shape": [1], "dtype": "BF16", "elements": 1}
+        for key in QWEN36_EXACT_MTP_OMISSION_KEYS
+    ]
     return {
-        "schema": "cyber_sft_fp32_to_bf16_cast_execution_plan_v1",
+        "schema": "cyber_sft_exact_auxiliary_head_omission_v1",
+        "role": "speculative_draft_heads",
+        "base_repository": "Qwen/Qwen3.6-27B",
+        "base_revision": "6a9e13bd6fc8f0983b9b99948120bc37f49c13e9",
+        "base_weights_manifest_sha256": "sha256:" + "a" * 64,
+        "serving_inference_effect": "inert_without_speculative_decoding",
+        "serving_registration_sha256": "sha256:" + "b" * 64,
+        "restoration_policy": "copy_exact_frozen_base_bf16_tensor_bits",
+        "base_tensor_count": len(trained) + len(rows),
+        "base_parameter_count": trained_count + len(rows),
+        "raw_export_tensor_count": len(trained),
+        "raw_export_parameter_count": trained_count,
+        "missing_tensor_count": len(rows),
+        "missing_parameter_count": len(rows),
+        "tensors": rows,
+    }
+
+
+def _no_speculative(omission: dict) -> dict:
+    return {
+        "schema": "cyber_post_sft_no_speculative_decoding_proof_v1",
+        "registration_sha256": omission["serving_registration_sha256"],
+        "runtime_args_sha256": "sha256:" + "c" * 64,
+        "prohibited_runtime_args": ["--speculative-algorithm"],
+        "prohibited_runtime_args_absent": True,
+        "no_speculative_or_draft_argument": True,
+    }
+
+
+def _execution(source: Path, destination: Path, base: Path | None = None) -> dict:
+    return {
+        "schema": "cyber_sft_fp32_to_bf16_cast_execution_plan_v2",
         "namespace": cast.NAMESPACE,
         "job_name": cast.JOB_NAME,
         "config_map_name": cast.CONFIG_MAP_NAME,
@@ -57,11 +122,19 @@ def _execution(source: Path, destination: Path) -> dict:
         "command_sha256": cast.CAST_COMMAND_SHA256,
         "source_path": str(source),
         "destination_path": str(destination),
+        "base_model_path": str(base or cast.BASE_MODEL_PATH),
+        "base_model_revision": "6a9e13bd6fc8f0983b9b99948120bc37f49c13e9",
         "policy": cast.CAST_POLICY,
         "source_dtype": "F32",
         "destination_dtype": "BF16",
         "max_shard_bytes": cast.DEFAULT_MAX_SHARD_BYTES,
         "max_source_tensor_bytes": cast.DEFAULT_MAX_SOURCE_TENSOR_BYTES,
+        "trained_tensor_count": cast.TRAINED_TENSOR_COUNT,
+        "trained_parameter_count": cast.TRAINED_PARAMETER_COUNT,
+        "restored_auxiliary_tensor_count": cast.RESTORED_AUXILIARY_TENSOR_COUNT,
+        "restored_auxiliary_parameter_count": cast.RESTORED_AUXILIARY_PARAMETER_COUNT,
+        "final_tensor_count": cast.FINAL_TENSOR_COUNT,
+        "final_parameter_count": cast.FINAL_PARAMETER_COUNT,
         "config_map_code_sha256": {
             path: "sha256:" + f"{index + 1:x}" * 64
             for index, path in enumerate(cast.MOUNTED_CODE_FILES.values())
@@ -69,21 +142,37 @@ def _execution(source: Path, destination: Path) -> dict:
     }
 
 
-def test_cast_is_deterministic_and_every_tensor_is_exact_direct_bf16(tmp_path: Path):
+def test_cast_is_deterministic_and_every_tensor_is_exact_direct_bf16(
+    tmp_path: Path, monkeypatch
+):
     source = tmp_path / "source"
     tensors = _fp32_export(source)
+    base = tmp_path / "base"
+    base_tensors = _bf16_base(base, tensors)
+    omission = _omission(tensors)
     first = tmp_path / "first"
     second = tmp_path / "second"
-    proof = cast.cast_fp32_export(source, first, max_shard_bytes=24)
-    repeated = cast.cast_fp32_export(source, second, max_shard_bytes=24)
+    synced = []
+    real_fsync_file = cast._fsync_file
+
+    def record_fsync(path):
+        synced.append(Path(path))
+        real_fsync_file(path)
+
+    monkeypatch.setattr(cast, "_fsync_file", record_fsync)
+    proof = cast.cast_fp32_export(source, base, first, omission, max_shard_bytes=128)
+    repeated = cast.cast_fp32_export(source, base, second, omission, max_shard_bytes=128)
 
     assert proof["all_destination_bits_equal_direct_bf16_cast"] is True
     assert proof["all_source_values_finite"] is True
     assert proof["cast_rows_sha256"] == repeated["cast_rows_sha256"]
-    assert proof["destination_shard_count"] == 2
+    assert proof["all_restored_auxiliary_bits_equal_frozen_base"] is True
+    assert proof["restored_auxiliary_tensor_count"] == 15
     assert full_file_manifest(first)["manifest_sha256"] == full_file_manifest(second)[
         "manifest_sha256"
     ]
+    assert set(first.iterdir()).issubset(set(synced))
+    assert set(second.iterdir()).issubset(set(synced))
     index = json.loads((first / "model.safetensors.index.json").read_text())
     for key, source_tensor in tensors.items():
         with safe_open(
@@ -95,60 +184,123 @@ def test_cast_is_deterministic_and_every_tensor_is_exact_direct_bf16(tmp_path: P
             actual.contiguous().view(torch.uint16),
             source_tensor.to(torch.bfloat16).contiguous().view(torch.uint16),
         )
+    for key in QWEN36_EXACT_MTP_OMISSION_KEYS:
+        with safe_open(
+            str(first / index["weight_map"][key]), framework="pt", device="cpu"
+        ) as handle:
+            actual = handle.get_tensor(key)
+        assert torch.equal(actual.view(torch.uint16), base_tensors[key].view(torch.uint16))
 
 
 def test_cast_fails_closed_on_nonfinite_mixed_dtype_and_memory_bound(tmp_path: Path):
     nonfinite = tmp_path / "nonfinite"
-    _fp32_export(nonfinite, {"weight": torch.tensor([float("nan")], dtype=torch.float32)})
+    trained = _fp32_export(
+        nonfinite, {"weight": torch.tensor([float("nan")], dtype=torch.float32)}
+    )
+    base = tmp_path / "nonfinite-base"
+    _bf16_base(base, trained)
     with pytest.raises(ValueError, match="non-finite"):
-        cast.cast_fp32_export(nonfinite, tmp_path / "nonfinite-out")
+        cast.cast_fp32_export(
+            nonfinite, base, tmp_path / "nonfinite-out", _omission(trained)
+        )
 
     mixed = tmp_path / "mixed"
-    _fp32_export(mixed, {"weight": torch.ones(1, dtype=torch.bfloat16)})
-    with pytest.raises(ValueError, match="uniformly F32"):
-        cast.cast_fp32_export(mixed, tmp_path / "mixed-out")
+    mixed_tensors = _fp32_export(mixed, {"weight": torch.ones(1, dtype=torch.bfloat16)})
+    mixed_base = tmp_path / "mixed-base"
+    _bf16_base(mixed_base, mixed_tensors)
+    with pytest.raises(ValueError, match="uniformly F32|trained tensors are not uniformly F32"):
+        cast.cast_fp32_export(
+            mixed, mixed_base, tmp_path / "mixed-out", _omission(mixed_tensors)
+        )
 
     bounded = tmp_path / "bounded"
-    _fp32_export(bounded, {"weight": torch.ones(8, dtype=torch.float32)})
+    bounded_tensors = _fp32_export(bounded, {"weight": torch.ones(8, dtype=torch.float32)})
+    bounded_base = tmp_path / "bounded-base"
+    _bf16_base(bounded_base, bounded_tensors)
     with pytest.raises(ValueError, match="memory bound"):
         cast.cast_fp32_export(
-            bounded, tmp_path / "bounded-out", max_source_tensor_bytes=16
+            bounded,
+            bounded_base,
+            tmp_path / "bounded-out",
+            _omission(bounded_tensors),
+            max_source_tensor_bytes=16,
         )
 
     dangling = tmp_path / "dangling"
     dangling.symlink_to(tmp_path / "missing")
     with pytest.raises(FileExistsError, match="pre-existing"):
-        cast.cast_fp32_export(bounded, dangling)
+        cast.cast_fp32_export(
+            bounded, bounded_base, dangling, _omission(bounded_tensors)
+        )
 
 
 def test_cast_input_binds_raw_fp32_observation_and_manifest(tmp_path: Path, monkeypatch):
     source = tmp_path / "source"
+    base = tmp_path / "base"
     destination = tmp_path / "destination"
     tensors = _fp32_export(source)
+    _bf16_base(base, tensors)
+    omission = _omission(tensors)
+    omission["base_weights_manifest_sha256"] = cast._weights_manifest_sha256(
+        full_file_manifest(base)
+    )
     monkeypatch.setattr(cast, "SOURCE_PATH", source)
+    monkeypatch.setattr(cast, "BASE_MODEL_PATH", base)
+    monkeypatch.setattr(cast, "BASE_MODEL_REPOSITORY", omission["base_repository"])
+    monkeypatch.setattr(cast, "BASE_MODEL_REVISION", omission["base_revision"])
+    monkeypatch.setattr(
+        cast, "BASE_WEIGHTS_MANIFEST_SHA256", omission["base_weights_manifest_sha256"]
+    )
     monkeypatch.setattr(cast, "DESTINATION_PATH", destination)
+    monkeypatch.setattr(cast, "TRAINED_TENSOR_COUNT", len(tensors))
+    monkeypatch.setattr(cast, "TRAINED_PARAMETER_COUNT", sum(t.numel() for t in tensors.values()))
+    monkeypatch.setattr(cast, "RESTORED_AUXILIARY_TENSOR_COUNT", 15)
+    monkeypatch.setattr(cast, "RESTORED_AUXILIARY_PARAMETER_COUNT", 15)
+    monkeypatch.setattr(cast, "FINAL_TENSOR_COUNT", len(tensors) + 15)
+    monkeypatch.setattr(
+        cast, "FINAL_PARAMETER_COUNT", sum(t.numel() for t in tensors.values()) + 15
+    )
     monkeypatch.setattr(cast, "EVIDENCE_DIR", tmp_path / "cast-evidence")
     manifest = full_file_manifest(source)
-    inspection = inspect_hf_export(
+    inspection, layout = inspect_hf_export_with_exact_auxiliary_omission(
         source,
+        base_root=base,
+        omission=omission,
         expected_tokenizer_manifest_sha256="sha256:" + "0" * 64,
         expected_chat_template_sha256="sha256:" + "0" * 64,
         expected_config_sha256="sha256:" + "0" * 64,
-        expected_parameter_count=sum(t.numel() for t in tensors.values()),
         require_base_sidecars=False,
-        expected_dtype="F32",
     )
     observation = {
         "schema": "fleet_sft_sfs_checkpoint_observation_v1",
         "output_inspection": inspection,
         "raw_export_full_manifest_sha256": manifest["manifest_sha256"],
         "full_file_manifest_sha256": "sha256:" + "1" * 64,
+        "weight_layout_exact_auxiliary_omission": layout,
+        "no_speculative_decoding_proof": _no_speculative(omission),
     }
     observation["observation_sha256"] = digest_json(observation)
-    execution = _execution(source, destination)
+    execution = _execution(source, destination, base)
     plan = {
         "cast_execution": execution,
-        "base_model": {"parameter_count": sum(t.numel() for t in tensors.values())},
+        "base_model": {
+            "repository": omission["base_repository"],
+            "revision": omission["base_revision"],
+            "weights_manifest_sha256": omission["base_weights_manifest_sha256"],
+            "parameter_count": omission["base_parameter_count"],
+        },
+        "export": {"raw_export_auxiliary_head_omission": omission},
+        "serving": {
+            "speculative_decoding": {
+                "enabled": False,
+                "proof": (
+                    "exact_base_registration_contains_no_speculative_decoding_or_"
+                    "draft_model_argument"
+                ),
+                "registration_sha256": omission["serving_registration_sha256"],
+                "prohibited_runtime_args": ["--speculative-algorithm"],
+            }
+        },
     }
     value = cast.build_cast_input(plan, observation, manifest)
     assert value["source"]["raw_inspection"]["dtype"] == "f32"
@@ -167,21 +319,40 @@ def test_execute_cast_is_atomic_recoverable_and_never_accepts_incomplete_output(
     tmp_path: Path, monkeypatch
 ):
     source = tmp_path / "source"
+    base = tmp_path / "base"
     destination = tmp_path / "destination"
     tensors = _fp32_export(source)
+    _bf16_base(base, tensors)
+    omission = _omission(tensors)
+    omission["base_weights_manifest_sha256"] = cast._weights_manifest_sha256(
+        full_file_manifest(base)
+    )
     monkeypatch.setattr(cast, "SOURCE_PATH", source)
+    monkeypatch.setattr(cast, "BASE_MODEL_PATH", base)
+    monkeypatch.setattr(cast, "BASE_MODEL_REPOSITORY", omission["base_repository"])
+    monkeypatch.setattr(cast, "BASE_MODEL_REVISION", omission["base_revision"])
+    monkeypatch.setattr(
+        cast, "BASE_WEIGHTS_MANIFEST_SHA256", omission["base_weights_manifest_sha256"]
+    )
     monkeypatch.setattr(cast, "DESTINATION_PATH", destination)
+    trained_parameters = sum(t.numel() for t in tensors.values())
+    monkeypatch.setattr(cast, "TRAINED_TENSOR_COUNT", len(tensors))
+    monkeypatch.setattr(cast, "TRAINED_PARAMETER_COUNT", trained_parameters)
+    monkeypatch.setattr(cast, "RESTORED_AUXILIARY_TENSOR_COUNT", 15)
+    monkeypatch.setattr(cast, "RESTORED_AUXILIARY_PARAMETER_COUNT", 15)
+    monkeypatch.setattr(cast, "FINAL_TENSOR_COUNT", len(tensors) + 15)
+    monkeypatch.setattr(cast, "FINAL_PARAMETER_COUNT", trained_parameters + 15)
     evidence_dir = tmp_path / "cast-evidence"
     monkeypatch.setattr(cast, "EVIDENCE_DIR", evidence_dir)
     manifest = full_file_manifest(source)
-    inspection = inspect_hf_export(
+    inspection, layout = inspect_hf_export_with_exact_auxiliary_omission(
         source,
+        base_root=base,
+        omission=omission,
         expected_tokenizer_manifest_sha256="sha256:" + "0" * 64,
         expected_chat_template_sha256="sha256:" + "0" * 64,
         expected_config_sha256="sha256:" + "0" * 64,
-        expected_parameter_count=sum(t.numel() for t in tensors.values()),
         require_base_sidecars=False,
-        expected_dtype="F32",
     )
     value = {
         "schema": cast.CAST_INPUT_SCHEMA,
@@ -191,10 +362,25 @@ def test_execute_cast_is_atomic_recoverable_and_never_accepts_incomplete_output(
             "source_checkpoint_full_manifest_sha256": "sha256:" + "2" * 64,
             "raw_full_manifest": manifest,
             "raw_inspection": inspection,
+            "exact_auxiliary_omission": layout,
+        },
+        "frozen_base_auxiliary_source": {
+            "path": str(base),
+            "repository": omission["base_repository"],
+            "revision": omission["base_revision"],
+            "weights_manifest_sha256": omission["base_weights_manifest_sha256"],
+            "omission_policy": omission,
+                "speculative_decoding": {
+                    "enabled": False,
+                    "registration_sha256": omission["serving_registration_sha256"],
+                    "prohibited_runtime_args": ["--speculative-algorithm"],
+                },
+                "no_speculative_decoding_proof": _no_speculative(omission),
         },
         "destination": {"path": str(destination), "must_be_absent": True},
-        "execution": _execution(source, destination),
-        "expected_parameter_count": sum(t.numel() for t in tensors.values()),
+        "execution": _execution(source, destination, base),
+        "expected_trained_parameter_count": trained_parameters,
+        "expected_final_parameter_count": trained_parameters + 15,
     }
     value["cast_input_sha256"] = digest_json(value)
     real_rename = cast._rename_noreplace
@@ -214,6 +400,21 @@ def test_execute_cast_is_atomic_recoverable_and_never_accepts_incomplete_output(
     )
     with pytest.raises(ValueError, match="max_shard_bytes differs"):
         cast.execute_cast(drifted)
+
+    wrong_base = json.loads(json.dumps(value))
+    wrong_base_digest = "sha256:" + "c" * 64
+    wrong_base["frozen_base_auxiliary_source"]["weights_manifest_sha256"] = (
+        wrong_base_digest
+    )
+    wrong_base["cast_input_sha256"] = digest_json(
+        {key: item for key, item in wrong_base.items() if key != "cast_input_sha256"}
+    )
+    monkeypatch.setattr(cast, "BASE_WEIGHTS_MANIFEST_SHA256", wrong_base_digest)
+    with pytest.raises(ValueError, match="signed model lock"):
+        cast.execute_cast(wrong_base)
+    monkeypatch.setattr(
+        cast, "BASE_WEIGHTS_MANIFEST_SHA256", omission["base_weights_manifest_sha256"]
+    )
 
     def crash(_source, _destination):
         raise OSError("crash before promotion")
@@ -364,7 +565,7 @@ def test_cast_job_is_queued_cpu_only_digest_pinned_and_create_only():
     assert cast.validate_local_cast_bundle(plan, root) == plan["cast_execution"][
         "config_map_code_sha256"
     ]
-    manifest_path = root / "evals/post_sft/cluster/qwen36-sft-bf16-cast-job.yaml"
+    manifest_path = root / "evals/post_sft/cluster/qwen36-sft-bf16-cast-v2-job.yaml"
     documents = list(yaml.safe_load_all(manifest_path.read_text()))
     job = next(value for value in documents if value.get("kind") == "Job")
     assert job["metadata"]["name"] == cast.JOB_NAME
@@ -375,7 +576,7 @@ def test_cast_job_is_queued_cpu_only_digest_pinned_and_create_only():
     assert "nvidia.com/gpu" not in json.dumps(job)
     assert container["command"] == cast.CAST_COMMAND["command"]
     assert container["args"] == cast.CAST_COMMAND["args"]
-    script = (root / "evals/post_sft/scripts/submit_bf16_cast.sh").read_text()
+    script = (root / "evals/post_sft/scripts/submit_bf16_cast_v2.sh").read_text()
     assert "kubectl apply" not in script
     assert "kubectl create --dry-run=server" in script
     assert "kubectl create -f" in script

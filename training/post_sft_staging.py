@@ -28,7 +28,7 @@ STAGE_SCHEMA = "cyber_sft_inference_stage_input_v1"
 RECEIPT_SCHEMA = "cyber_sft_inference_stage_receipt_v1"
 EXECUTION_SCHEMA = "cyber_sft_inference_stage_execution_v1"
 FILEBROWSER_ORIGIN = "http://filebrowser.fleet-train-data-plane.svc.cluster.local"
-EXPORT_SOURCE = "/exports/cyber-sft/ft-run-574bd7b3/step-318-bf16-v1/global_step_318/policy"
+EXPORT_SOURCE = "/exports/cyber-sft/ft-run-574bd7b3/step-318-bf16-v2/global_step_318/policy"
 DESTINATION = "/models/cyber-sft/ft-run-574bd7b3/step-318"
 BASE_ROOT = "/models/qwen3.6-27b/6a9e13bd6fc8f0983b9b99948120bc37f49c13e9"
 JOB_NAME = "chris-cyber-qwen36-sft-stage-574bd7b3-v1"
@@ -177,6 +177,11 @@ def _fsync_directory(path: Path) -> None:
         os.fsync(descriptor)
     finally:
         os.close(descriptor)
+
+
+def _fsync_file(path: Path) -> None:
+    with path.open("rb") as stream:
+        os.fsync(stream.fileno())
 
 
 def _kubernetes_get(path: str) -> dict[str, Any]:
@@ -613,6 +618,7 @@ def compose_bundle(
         if not source.is_file() or source.is_symlink():
             raise ValueError(f"raw export is missing regular weight file {name}")
         shutil.copyfile(source, output / name)
+        _fsync_file(output / name)
     for name, expected_sha256 in sorted(runtime_sidecars.items()):
         if PurePosixPath(name).name != name:
             raise ValueError("runtime sidecar names must be top-level files")
@@ -622,6 +628,7 @@ def compose_bundle(
         if file_sha256(source) != expected_sha256:
             raise ValueError(f"base runtime sidecar hash differs for {name}")
         shutil.copyfile(source, output / name)
+        _fsync_file(output / name)
 
 
 def build_stage_input(
@@ -641,7 +648,7 @@ def build_stage_input(
     raw_inspection = _mapping(observation.get("output_inspection"), "raw inspection")
     if str(raw_inspection.get("dtype")).lower() != "f32":
         raise ValueError("post-export observation did not prove raw F32 weights")
-    if cast_receipt.get("schema") != "cyber_sft_fp32_to_bf16_cast_receipt_v1":
+    if cast_receipt.get("schema") != "cyber_sft_fp32_to_bf16_cast_receipt_v2":
         raise ValueError("unsupported BF16 cast receipt schema")
     cast_receipt_sha256 = cast_receipt.get("cast_receipt_sha256")
     if digest_json(
@@ -659,6 +666,83 @@ def build_stage_input(
         raise ValueError("BF16 cast receipt names an unexpected destination")
     if str(inspection.get("dtype")).lower() not in {"bf16", "bfloat16"}:
         raise ValueError("BF16 cast inspection has an unexpected dtype")
+    omission = _mapping(
+        _mapping(plan.get("export"), "plan export").get(
+            "raw_export_auxiliary_head_omission"
+        ),
+        "exact auxiliary-head omission",
+    )
+    conversion = _mapping(cast_receipt.get("conversion"), "cast conversion")
+    base_source = _mapping(
+        cast_receipt.get("frozen_base_auxiliary_source"), "frozen base auxiliary source"
+    )
+    declared_tensors = omission.get("tensors")
+    restoration_rows = conversion.get("restoration_rows")
+    omission_rows = conversion.get("exact_omission_tensors")
+    if not isinstance(declared_tensors, list) or not isinstance(
+        restoration_rows, list
+    ) or not isinstance(omission_rows, list):
+        raise ValueError("BF16 cast lacks full omission/restoration rows")
+    normalized_restoration = [
+        {
+            "key": row.get("key"),
+            "shape": row.get("shape"),
+            "dtype": row.get("destination_dtype"),
+            "elements": row.get("elements"),
+        }
+        for row in restoration_rows
+        if isinstance(row, Mapping)
+    ]
+    normalized_omission = [
+        {key: row.get(key) for key in ("key", "shape", "dtype", "elements")}
+        for row in omission_rows
+        if isinstance(row, Mapping)
+    ]
+    if (
+        conversion.get("schema")
+        != "cyber_sft_fp32_to_bf16_cast_and_restore_proof_v2"
+        or conversion.get("trained_tensor_count") != omission.get("raw_export_tensor_count")
+        or conversion.get("trained_parameter_count")
+        != omission.get("raw_export_parameter_count")
+        or conversion.get("restored_auxiliary_tensor_count")
+        != omission.get("missing_tensor_count")
+        or conversion.get("restored_auxiliary_parameter_count")
+        != omission.get("missing_parameter_count")
+        or conversion.get("final_tensor_count") != omission.get("base_tensor_count")
+        or conversion.get("final_parameter_count") != omission.get("base_parameter_count")
+        or conversion.get("all_destination_bits_equal_direct_bf16_cast") is not True
+        or conversion.get("all_restored_auxiliary_bits_equal_frozen_base") is not True
+        or conversion.get("final_layout_exactly_matches_frozen_base") is not True
+        or base_source.get("revision") != omission.get("base_revision")
+        or base_source.get("weights_manifest_sha256")
+        != omission.get("base_weights_manifest_sha256")
+        or base_source.get("serving_registration_sha256")
+        != omission.get("serving_registration_sha256")
+        or base_source.get("omission_policy_sha256") != digest_json(omission)
+        or base_source.get("exact_auxiliary_omission_policy") != omission
+        or base_source.get("restoration_semantics")
+        != "frozen_base_auxiliary_head_restoration_not_trained_weights"
+        or digest_json(restoration_rows) != conversion.get("restoration_rows_sha256")
+        or normalized_restoration != declared_tensors
+        or any(
+            not isinstance(row, Mapping)
+            or row.get("kind") != "frozen_base_auxiliary_head_restoration"
+            or row.get("source_dtype") != "BF16"
+            or row.get("destination_dtype") != "BF16"
+            or row.get("base_revision") != omission.get("base_revision")
+            or row.get("base_tensor_sha256") != row.get("destination_tensor_sha256")
+            or not re.fullmatch(
+                r"sha256:[0-9a-f]{64}", str(row.get("base_tensor_sha256"))
+            )
+            or row.get("exact_base_bits_verified") is not True
+            for row in restoration_rows
+        )
+        or normalized_omission != declared_tensors
+        or digest_json(omission_rows) != conversion.get(
+            "exact_omission_evidence_sha256"
+        )
+    ):
+        raise ValueError("BF16 cast lacks exact trained/restored tensor provenance")
     rows = _manifest_rows(cast_manifest)
     if cast_manifest.get("root") != expected_source:
         raise ValueError("BF16 cast manifest names an unexpected source path")
@@ -695,6 +779,21 @@ def build_stage_input(
             "bf16_inspection": dict(inspection),
             "observation_sha256": observation_sha256,
             "cast_receipt_sha256": cast_receipt_sha256,
+            "trained_cast_rows_sha256": conversion.get("cast_rows_sha256"),
+            "restoration_rows_sha256": conversion.get("restoration_rows_sha256"),
+            "restoration_rows": list(restoration_rows),
+            "exact_auxiliary_omission_sha256": conversion.get(
+                "exact_omission_evidence_sha256"
+            ),
+            "exact_auxiliary_omission_tensors": list(omission_rows),
+            "omission_policy_sha256": digest_json(omission),
+            "base_weights_manifest_sha256": omission.get(
+                "base_weights_manifest_sha256"
+            ),
+            "serving_registration_sha256": omission.get(
+                "serving_registration_sha256"
+            ),
+            "restoration_semantics": base_source.get("restoration_semantics"),
         },
         "composition": {
             "base_root": BASE_ROOT,
@@ -808,7 +907,10 @@ def execute_stage(stage_input: Mapping[str, Any], *, work_root: Path, forwarded_
         "execution": execution,
         "transport": transport,
         "composition": {
-            "policy": "verified_bf16_cast_weights_and_index_plus_exact_base_runtime_sidecars_v1",
+            "policy": (
+                "verified_trained_bf16_plus_frozen_base_auxiliary_heads_and_"
+                "exact_base_runtime_sidecars_v2"
+            ),
             "base_root": str(base_root),
             "tokenizer_equivalence_evidence_sha256": composition.get(
                 "tokenizer_equivalence_evidence_sha256"

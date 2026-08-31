@@ -1,3 +1,4 @@
+import copy
 import hashlib
 import json
 import shutil
@@ -69,8 +70,30 @@ def _cast_receipt_and_manifest(
 ) -> tuple[dict, dict]:
     payload = full_file_manifest(root)
     receipt = {
-        "schema": "cyber_sft_fp32_to_bf16_cast_receipt_v1",
+        "schema": "cyber_sft_fp32_to_bf16_cast_receipt_v2",
         "source": {"observation_sha256": observation_sha256},
+        "frozen_base_auxiliary_source": {
+            "revision": "base-revision",
+            "weights_manifest_sha256": "sha256:" + "8" * 64,
+            "restoration_semantics": (
+                "frozen_base_auxiliary_head_restoration_not_trained_weights"
+            ),
+        },
+        "conversion": {
+            "schema": "cyber_sft_fp32_to_bf16_cast_and_restore_proof_v2",
+            "trained_tensor_count": 1,
+            "trained_parameter_count": 1,
+            "restored_auxiliary_tensor_count": 0,
+            "restored_auxiliary_parameter_count": 0,
+            "final_tensor_count": 1,
+            "final_parameter_count": 1,
+            "cast_rows_sha256": "sha256:" + "6" * 64,
+            "restoration_rows_sha256": "sha256:" + "7" * 64,
+            "exact_omission_evidence_sha256": "sha256:" + "5" * 64,
+            "all_destination_bits_equal_direct_bf16_cast": True,
+            "all_restored_auxiliary_bits_equal_frozen_base": True,
+            "final_layout_exactly_matches_frozen_base": True,
+        },
         "destination": {
             "path": str(root),
             "dtype": "BF16",
@@ -131,7 +154,7 @@ def _fake_runtime_provenance(stage_input: dict) -> dict:
     }
 
 
-def test_manifest_verification_and_weights_only_composition(tmp_path):
+def test_manifest_verification_and_weights_only_composition(tmp_path, monkeypatch):
     raw = tmp_path / "raw"
     base = tmp_path / "base"
     _hf_root(raw)
@@ -143,10 +166,19 @@ def test_manifest_verification_and_weights_only_composition(tmp_path):
     ]
 
     output = tmp_path / "composed"
+    synced = []
+    real_fsync_file = staging._fsync_file
+
+    def record_fsync(path):
+        synced.append(Path(path))
+        real_fsync_file(path)
+
+    monkeypatch.setattr(staging, "_fsync_file", record_fsync)
     staging.compose_bundle(raw, base, output, base_sidecars)
     assert file_sha256(output / "model.safetensors") == file_sha256(raw / "model.safetensors")
     assert file_sha256(output / "config.json") == base_sidecars["config.json"]
     assert file_sha256(output / "config.json") != file_sha256(raw / "config.json")
+    assert set(output.iterdir()) == set(synced)
 
 
 def test_manifest_rejects_collision_and_path_traversal(tmp_path):
@@ -165,9 +197,49 @@ def test_manifest_rejects_collision_and_path_traversal(tmp_path):
 
 
 def test_stage_input_binds_observation_manifest_and_tokenizer_evidence():
+    omission = {
+        "schema": "cyber_sft_exact_auxiliary_head_omission_v1",
+        "base_revision": "base-revision",
+        "base_weights_manifest_sha256": "sha256:" + "8" * 64,
+        "serving_registration_sha256": "sha256:" + "4" * 64,
+        "raw_export_tensor_count": 1,
+        "raw_export_parameter_count": 1,
+        "missing_tensor_count": 0,
+        "missing_parameter_count": 0,
+        "base_tensor_count": 1,
+        "base_parameter_count": 1,
+        "tensors": [],
+    }
     cast_receipt = {
-        "schema": "cyber_sft_fp32_to_bf16_cast_receipt_v1",
+        "schema": "cyber_sft_fp32_to_bf16_cast_receipt_v2",
         "source": {"observation_sha256": "sha256:" + "1" * 64},
+        "frozen_base_auxiliary_source": {
+            "revision": "base-revision",
+            "weights_manifest_sha256": "sha256:" + "8" * 64,
+            "serving_registration_sha256": "sha256:" + "4" * 64,
+            "omission_policy_sha256": digest_json(omission),
+            "exact_auxiliary_omission_policy": omission,
+            "restoration_semantics": (
+                "frozen_base_auxiliary_head_restoration_not_trained_weights"
+            ),
+        },
+        "conversion": {
+            "schema": "cyber_sft_fp32_to_bf16_cast_and_restore_proof_v2",
+            "trained_tensor_count": 1,
+            "trained_parameter_count": 1,
+            "restored_auxiliary_tensor_count": 0,
+            "restored_auxiliary_parameter_count": 0,
+            "final_tensor_count": 1,
+            "final_parameter_count": 1,
+            "cast_rows_sha256": "sha256:" + "6" * 64,
+            "restoration_rows_sha256": digest_json([]),
+            "restoration_rows": [],
+            "exact_omission_evidence_sha256": digest_json([]),
+            "exact_omission_tensors": [],
+            "all_destination_bits_equal_direct_bf16_cast": True,
+            "all_restored_auxiliary_bits_equal_frozen_base": True,
+            "final_layout_exactly_matches_frozen_base": True,
+        },
         "destination": {
             "path": "/cast",
             "dtype": "BF16",
@@ -234,6 +306,7 @@ def test_stage_input_binds_observation_manifest_and_tokenizer_evidence():
             "chat_template_sha256": "sha256:" + "e" * 64,
             "config_sha256": "sha256:" + "f" * 64,
         },
+        "export": {"raw_export_auxiliary_head_omission": omission},
     }
     result = staging.build_stage_input(
         plan,
@@ -246,6 +319,50 @@ def test_stage_input_binds_observation_manifest_and_tokenizer_evidence():
     assert result["stage_input_sha256"] == digest_json(
         {key: value for key, value in result.items() if key != "stage_input_sha256"}
     )
+
+    for mutate in (
+        lambda value: value["frozen_base_auxiliary_source"].__setitem__(
+            "serving_registration_sha256", "sha256:" + "3" * 64
+        ),
+        lambda value: value["conversion"].__setitem__(
+            "restoration_rows_sha256", "sha256:" + "2" * 64
+        ),
+        lambda value: value["conversion"].__setitem__(
+            "exact_omission_evidence_sha256", "sha256:" + "1" * 64
+        ),
+    ):
+        tampered_receipt = copy.deepcopy(cast_receipt)
+        tampered_manifest = copy.deepcopy(cast_manifest)
+        mutate(tampered_receipt)
+        tampered_receipt["cast_receipt_sha256"] = digest_json(
+            {
+                key: value
+                for key, value in tampered_receipt.items()
+                if key != "cast_receipt_sha256"
+            }
+        )
+        tampered_bytes = (
+            json.dumps(tampered_receipt, indent=2, sort_keys=True) + "\n"
+        ).encode()
+        tampered_manifest["files"][0].update(
+            size=len(tampered_bytes), sha256=hashlib.sha256(tampered_bytes).hexdigest()
+        )
+        tampered_manifest["total_bytes"] = 2 + len(tampered_bytes)
+        tampered_manifest["manifest_sha256"] = digest_json(
+            tampered_manifest["files"]
+        )
+        try:
+            staging.build_stage_input(
+                plan,
+                observation,
+                tampered_receipt,
+                tampered_manifest,
+                tokenizer_evidence_sha256=evidence_sha,
+            )
+        except ValueError as exc:
+            assert "exact trained/restored tensor provenance" in str(exc)
+        else:
+            raise AssertionError("re-signed cast provenance tamper unexpectedly passed")
 
     cast_manifest["files"][1]["sha256"] = "b" * 64
     cast_manifest["manifest_sha256"] = digest_json(cast_manifest["files"])

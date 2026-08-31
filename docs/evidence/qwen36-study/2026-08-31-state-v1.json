@@ -103,12 +103,14 @@
       }
     },
     "bf16_cast": {
-      "job_name": "chris-cyber-qwen36-sft-bf16-cast-v1",
+      "job_name": "chris-cyber-qwen36-sft-bf16-cast-v2",
       "status": "not_launched",
       "source_dtype": "F32",
       "destination_dtype": "BF16",
-      "policy": "deterministic_sorted_tensor_fp32_to_bf16_v1",
-      "destination_path": "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-bf16-v1/global_step_318/policy",
+      "policy": "deterministic_trained_fp32_to_bf16_plus_frozen_base_mtp_restore_v1",
+      "trained_tensor_count": 1184,
+      "restored_frozen_base_auxiliary_tensor_count": 15,
+      "destination_path": "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-bf16-v2/global_step_318/policy",
       "terminal_result": null
     },
     "filesystem_evidence": {
@@ -126,15 +128,23 @@
           "status": "FAILED",
           "model_bytes_inspected": false,
           "failure": "isolated ConfigMap bundle imported training.normalize through the repository package initializer, but did not mount that unrelated module"
+        },
+        {
+          "job_name": "chris-cyber-qwen36-sft-evidence-v3",
+          "job_uid": "ac777fac-d1a8-4ab7-bfea-0b9cecc12885",
+          "status": "FAILED",
+          "model_bytes_inspected": true,
+          "failure": "strict aggregate parameter-count gate found a 424699392-parameter shortfall; the Job did not identify the missing keys and no final receipt was promoted"
         }
       ],
       "successor": {
-        "job_name": "chris-cyber-qwen36-sft-evidence-v3",
+        "job_name": "chris-cyber-qwen36-sft-evidence-v4",
         "status": "not_launched",
-        "receipt_path": "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/evidence/sfs-v3/receipt"
+        "offline_header_audit": "A later read-only comparison of finalized raw-export and frozen-base safetensor headers, separate from failed v3, identified exactly 15 absent mtp.* speculative-draft tensors with no extra key or shape mismatch.",
+        "receipt_path": "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/evidence/sfs-v4/receipt"
       }
     },
-    "plan": {"path": "configs/evaluation/qwen36-27b-ft-run-574bd7b3-post-sft.json", "file_sha256": "sha256:7ffc80141d84b556841baccf92b63044e1d664a710ab405160bf250bb2e1cbe3"}
+    "plan": {"path": "configs/evaluation/qwen36-27b-ft-run-574bd7b3-post-sft.json", "file_sha256": "sha256:93e1854f27591c15f342aec395c34c5c9e1cee675d2a7a42e1df1de3edeb5d7f"}
   },
   "native_fleet_rl": {
     "one_step_gate": {
