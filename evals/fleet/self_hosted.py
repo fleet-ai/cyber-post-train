@@ -216,21 +216,23 @@ def extract_final_answer(path: Path) -> str:
     return final
 
 
-def load_qwen_chat_trace(qwen_home: Path) -> tuple[list[dict[str, Any]], Path]:
+def load_qwen_chat_trace(qwen_home: Path) -> tuple[list[dict[str, Any]], Path, int]:
     paths = sorted(qwen_home.glob("projects/*/chats/*.jsonl"))
     if len(paths) != 1:
         raise RuntimeError(f"expected exactly one Qwen Code chat trace, found {len(paths)}")
     events: list[dict[str, Any]] = []
+    malformed_line_count = 0
     for line in paths[0].read_text(errors="replace").splitlines():
         try:
             value = json.loads(line)
         except json.JSONDecodeError:
+            malformed_line_count += 1
             continue
         if isinstance(value, dict):
             events.append(value)
     if not events:
         raise RuntimeError("Qwen Code chat trace contained no JSON events")
-    return events, paths[0]
+    return events, paths[0], malformed_line_count
 
 
 def normalize_qwen_conversation(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -707,19 +709,26 @@ def run(config: dict[str, Any], out_dir: Path, proxy_script: Path) -> dict[str, 
             agent_termination = "execution_timeout"
             _docker("stop", "--time", "5", qwen_agent, check=False, capture=True, timeout=15)
             result = subprocess.CompletedProcess(args=["docker", "run"], returncode=124)
-        events, canonical_trace = load_qwen_chat_trace(qwen_home)
+        events, canonical_trace, malformed_line_count = load_qwen_chat_trace(qwen_home)
         messages = normalize_qwen_conversation(events)
         final_answer = final_answer_from_conversation(messages)
         if not final_answer and trace.exists():
             final_answer = extract_final_answer(trace)
         (out_dir / "final-answer.txt").write_text(final_answer)
         trace_digest = sha256(canonical_trace.read_bytes())
+        trace_fidelity = (
+            "full_qwen_chat_normalized_with_tool_calls_and_observations"
+            if malformed_line_count == 0
+            else "raw_qwen_chat_canonical_with_partial_valid_json_normalization"
+        )
         trace_manifest = {
             "canonical_trace": str(canonical_trace.relative_to(out_dir)),
             "canonical_trace_sha256": trace_digest,
             "qwen_event_count": len(events),
+            "qwen_raw_line_count": len(events) + malformed_line_count,
+            "qwen_malformed_line_count": malformed_line_count,
             "normalized_message_count": len(messages),
-            "fidelity": "full_qwen_chat_normalized_with_tool_calls_and_observations",
+            "fidelity": trace_fidelity,
         }
         (out_dir / "trace-manifest.json").write_bytes(canonical_json(trace_manifest) + b"\n")
         reward_result = _request(

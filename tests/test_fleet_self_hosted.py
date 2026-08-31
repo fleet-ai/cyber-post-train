@@ -152,6 +152,22 @@ def test_extract_final_answer_reads_last_qwen_result(tmp_path: Path) -> None:
     assert self_hosted.extract_final_answer(trace) == "final report"
 
 
+def test_qwen_trace_loader_counts_malformed_lines_without_losing_raw_trace(
+    tmp_path: Path,
+) -> None:
+    trace = tmp_path / "projects" / "workspace" / "chats" / "trace.jsonl"
+    trace.parent.mkdir(parents=True)
+    trace.write_text(
+        json.dumps({"type": "assistant", "message": {"parts": []}})
+        + "\n"
+        + "not-json\n"
+    )
+    events, canonical_trace, malformed = self_hosted.load_qwen_chat_trace(tmp_path)
+    assert len(events) == 1
+    assert canonical_trace == trace
+    assert malformed == 1
+
+
 def test_authority_paths_are_exact_task_version_routes() -> None:
     config = _config()
     prefix = (
