@@ -5,6 +5,7 @@ import pytest
 
 from training.io import digest_json
 from training.post_sft_artifacts import (
+    compare_model_config_architecture,
     compare_safetensor_layout,
     full_file_manifest,
     inspect_hf_export,
@@ -193,3 +194,33 @@ def test_safetensor_layout_compares_keys_shapes_and_dtypes(
     shapes[str(candidate / "model.safetensors")] = [3, 2]
     with pytest.raises(ValueError, match="layout differs"):
         compare_safetensor_layout(base, candidate)
+
+
+def test_model_config_architecture_allows_only_declared_trainer_metadata(tmp_path: Path):
+    base = tmp_path / "base.json"
+    candidate = tmp_path / "candidate.json"
+    base.write_text(
+        json.dumps(
+            {
+                "architectures": ["Qwen"],
+                "text_config": {"hidden_size": 64, "dtype": "bfloat16"},
+                "transformers_version": "4.57.1",
+            }
+        )
+    )
+    candidate.write_text(
+        json.dumps(
+            {
+                "architectures": ["Qwen"],
+                "text_config": {"hidden_size": 64, "dtype": "float32"},
+                "transformers_version": "5.8.0",
+            }
+        )
+    )
+    result = compare_model_config_architecture(base, candidate)
+    assert result["all_architecture_and_vocab_fields_identical"] is True
+    changed = json.loads(candidate.read_text())
+    changed["text_config"]["hidden_size"] = 128
+    candidate.write_text(json.dumps(changed))
+    with pytest.raises(ValueError, match="architectural"):
+        compare_model_config_architecture(base, candidate)

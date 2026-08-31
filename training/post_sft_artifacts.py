@@ -19,6 +19,65 @@ TOKENIZER_FILES = (
     "vocab.json",
 )
 
+ALLOWED_TRAINER_CONFIG_DRIFT = {
+    "dtype",
+    "pad_token_id",
+    "text_config.dtype",
+    "transformers_version",
+    "use_cache",
+    "vision_config.dtype",
+    "vision_config.model_type",
+}
+
+
+def _json_differences(base: Any, candidate: Any, prefix: str = "") -> list[dict[str, Any]]:
+    if isinstance(base, dict) and isinstance(candidate, dict):
+        rows = []
+        for key in sorted(set(base) | set(candidate)):
+            path = f"{prefix}.{key}" if prefix else key
+            rows.extend(_json_differences(base.get(key), candidate.get(key), path))
+        return rows
+    if base != candidate:
+        return [{"path": prefix, "base": base, "candidate": candidate}]
+    return []
+
+
+def compare_model_config_architecture(base_config: Path, candidate_config: Path) -> dict[str, Any]:
+    """Allow known trainer/runtime metadata rewrites but no architectural drift."""
+
+    base = json.loads(base_config.read_text(encoding="utf-8"))
+    candidate = json.loads(candidate_config.read_text(encoding="utf-8"))
+    differences = _json_differences(base, candidate)
+    unexpected = [row for row in differences if row["path"] not in ALLOWED_TRAINER_CONFIG_DRIFT]
+    if unexpected:
+        raise ValueError(
+            "candidate model config contains architectural or undeclared drift: "
+            + ", ".join(row["path"] for row in unexpected)
+        )
+    def without_allowed(document: dict[str, Any]) -> dict[str, Any]:
+        result = json.loads(json.dumps(document))
+        for dotted in ALLOWED_TRAINER_CONFIG_DRIFT:
+            parent: Any = result
+            parts = dotted.split(".")
+            for part in parts[:-1]:
+                parent = parent.get(part, {}) if isinstance(parent, dict) else {}
+            if isinstance(parent, dict):
+                parent.pop(parts[-1], None)
+        return result
+
+    normalized_base = without_allowed(base)
+    normalized_candidate = without_allowed(candidate)
+    if normalized_base != normalized_candidate:  # defensive: the diff check above should imply it
+        raise ValueError("normalized model architectures differ")
+    return {
+        "schema": "cyber_sft_model_config_architecture_equivalence_v1",
+        "all_architecture_and_vocab_fields_identical": True,
+        "allowed_trainer_metadata_differences": differences,
+        "base_config_sha256": sha256_file(base_config),
+        "candidate_config_sha256": sha256_file(candidate_config),
+        "normalized_architecture_sha256": digest_json(normalized_base),
+    }
+
 
 def _safetensor_layout(root: Path) -> tuple[dict[str, dict[str, Any]], list[str]]:
     try:

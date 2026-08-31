@@ -58,7 +58,10 @@ spec:
               import pathlib
               import sys
 
-              from training.post_sft_artifacts import compare_safetensor_layout
+              from training.post_sft_artifacts import (
+                  compare_model_config_architecture,
+                  compare_safetensor_layout,
+              )
               from training.tokenizer_equivalence import (
                   compare_effective_tokenizers,
                   compare_special_token_ids,
@@ -69,6 +72,9 @@ spec:
               candidate = pathlib.Path(sys.argv[2])
               output = pathlib.Path(sys.argv[3])
               layout = compare_safetensor_layout(base, candidate)
+              architecture = compare_model_config_architecture(
+                  base / "config.json", candidate / "config.json"
+              )
               tokenizer = {
                   "mapping": compare_tokenizer_mappings(
                       base / "tokenizer.json",
@@ -82,6 +88,9 @@ spec:
               }
               (output / "weight-layout-equivalence.json").write_text(
                   json.dumps(layout, indent=2, sort_keys=True) + "\n"
+              )
+              (output / "model-config-architecture-equivalence.json").write_text(
+                  json.dumps(architecture, indent=2, sort_keys=True) + "\n"
               )
               (output / "tokenizer-structural-equivalence.json").write_text(
                   json.dumps(tokenizer, indent=2, sort_keys=True) + "\n"
@@ -98,6 +107,9 @@ spec:
               source = json.loads((root / "source-full-manifest.json").read_text())
               output = json.loads((root / "hf-output-inspection.json").read_text())
               layout = json.loads((root / "weight-layout-equivalence.json").read_text())
+              architecture = json.loads(
+                  (root / "model-config-architecture-equivalence.json").read_text()
+              )
               tokenizer = json.loads(
                   (root / "tokenizer-structural-equivalence.json").read_text()
               )
@@ -118,6 +130,7 @@ spec:
                               "complete_shards": 1, "latest_step": 318},
                   "output_inspection": output,
                   "weight_layout_equivalence": layout,
+                  "model_config_architecture_equivalence": architecture,
                   "tokenizer_structural_equivalence": tokenizer,
               }
               encoded = json.dumps(receipt, sort_keys=True, separators=(",", ":")).encode()
