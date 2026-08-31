@@ -4,7 +4,10 @@ from pathlib import Path
 
 import pytest
 
-from evals.webexploitbench.paired import derive_post_sft_qwen_pair
+from evals.webexploitbench.paired import (
+    derive_post_sft_qwen_pair,
+    validate_paired_identity_for_launch,
+)
 from training.io import digest_json, file_sha256
 from training.post_sft import (
     build_fleet_test_holdout_receipt,
@@ -17,6 +20,7 @@ from training.post_sft import (
     freeze_final_promoted_sfs_checkpoint,
     validate_selection_receipt,
 )
+from training.register_post_sft import validate_registration_receipt
 
 ROOT = Path(__file__).resolve().parents[1]
 RUN = "ft-run-574bd7b3"
@@ -34,6 +38,7 @@ def _export_binding():
         "source_checkpoint_path": f"/mnt/sfs/checkpoints/{RUN}/global_step_318",
         "output_root": output_root,
         "expected_output_path": f"{output_root}/global_step_318/policy",
+        "inference_staging_destination": "/models/cyber-sft/ft-run-574bd7b3/step-318",
         "destination_preflight": {
             "observed_at": "2026-08-31T16:05:07Z",
             "state": "absent",
@@ -515,6 +520,15 @@ def _post_serving_receipt():
     return base_registration, serving
 
 
+def test_post_serving_receipt_is_accepted_by_registration_boundary():
+    _, serving = _post_serving_receipt()
+    registration = validate_registration_receipt(serving)
+    assert registration["id"] == "ft-run-574bd7b3-step-318"
+    assert registration["spec"]["model"]["sourcePath"] == (
+        "/models/cyber-sft/ft-run-574bd7b3/step-318"
+    )
+
+
 def _paired_inputs(tmp_path):
     base_config_path = (
         ROOT / "evals/webexploitbench/configs/qwen36-27b-6a9e13bd-level0-qwen-code-full.json"
@@ -543,7 +557,8 @@ def _paired_inputs(tmp_path):
 
 
 def test_webexploit_pair_binds_exact_qwen_code_baseline_and_runtime(tmp_path):
-    protocol, receipt = derive_post_sft_qwen_pair(**_paired_inputs(tmp_path))
+    inputs = _paired_inputs(tmp_path)
+    protocol, receipt = derive_post_sft_qwen_pair(**inputs)
     assert protocol.agent == "qwen_code"
     assert protocol.agent_version == "0.22.3"
     assert receipt["controlled_identity"]["benchmark"]["target_count"] == 15
@@ -557,6 +572,15 @@ def test_webexploit_pair_binds_exact_qwen_code_baseline_and_runtime(tmp_path):
         "trial_timeout_seconds": 7200,
         "max_model_requests_per_target": 150,
     }
+    assert (
+        validate_paired_identity_for_launch(receipt, protocol, inputs["post_config_path"])
+        == receipt["paired_identity_receipt_sha256"]
+    )
+
+    tampered = copy.deepcopy(receipt)
+    tampered["controlled_identity"]["harness"]["version"] = "0.22.4"
+    with pytest.raises(ValueError, match="receipt digest"):
+        validate_paired_identity_for_launch(tampered, protocol, inputs["post_config_path"])
 
 
 @pytest.mark.parametrize(

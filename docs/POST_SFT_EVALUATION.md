@@ -197,6 +197,11 @@ and index with the exact base runtime sidecars, and re-runs BF16/layout/paramete
 Both the partial and final destinations must be absent. Only a fully verified partial directory is
 renamed atomically to the frozen final path; the job never overwrites or repairs an existing path.
 
+After staging, `evals/post_sft/scripts/submit_registration.sh` validates the rendered serving
+receipt and submits one idempotent, priority-zero registration Job through `training-lq`. It refuses
+to create a replacement Job and is gated on the exact staging Job's completion. The post-SFT route
+must then become Ready and pass the live parity checks below.
+
 ```bash
 uv run python -m training.post_sft_cli render \
   --plan configs/evaluation/qwen36-27b-ft-run-574bd7b3-post-sft.json \
@@ -262,6 +267,10 @@ WebExploitBench remains evaluation-only and sealed. Do not inspect its base or p
 the selection, export, serving, and comparison receipts are frozen. Run the rendered config through
 the exact Qwen Code 0.22.3 CAGE path used by the canonical 10/110 baseline. If that exact protocol
 cannot be reproduced, do not compare against 10/110; run a newly matched base-plus-post pair.
+The sole scored launch rail is `evals/webexploitbench/scripts/launch_post_sft_paired.sh`: it
+revalidates the digested paired identity against the exact config and protocol at the launch
+boundary, requires export/evidence/staging completion and a Ready post-SFT route, and passes that
+same receipt into the CAGE run gate. Its preview is non-mutating.
 
 For Fleet, do not submit the 20 mutable task keys directly. Create one task group whose members pin
 the 20 exact `eval_task_version_id` values in the rendered holdout receipt, and inspect the rendered
