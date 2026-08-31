@@ -176,7 +176,7 @@
     "before_train": true
   },
   "trainer": {
-    "trainer_version_id": "6d4a7bbc-51a7-57ed-91eb-a449185ed8db"
+    "trainer_version_id": "b4a49402-5e7f-5f94-a5ff-980126d78390"
   },
   "wandb": {
     "enabled": true,

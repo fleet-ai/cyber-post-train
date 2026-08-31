@@ -148,6 +148,28 @@ frozen, a final all-data fit may be measured only on untouched external
 benchmarks. Training-distribution scores are reported separately and are never
 presented as generalization.
 
+## Nebius Jobs API
+
+Typed SFT and RL jobs use the queue-aware Fleet Jobs API at
+`https://api.ft.flt.build`; direct `kubectl` submission is retained only for
+historical custom manifests. Preview is the default, exact duplicate titles are
+reported, and submission requires `--execute`:
+
+```bash
+FLEET_TRAINING_API_TOKEN="$(gh auth token)" uv run python -m training jobs-run \
+  --config configs/runs/qwen36-27b-sft-full.json
+
+FLEET_TRAINING_API_TOKEN="$(gh auth token)" uv run python -m training jobs-run \
+  --config configs/runs/qwen36-27b-sft-full.json --execute
+
+FLEET_TRAINING_API_TOKEN="$(gh auth token)" uv run python -m training jobs-status \
+  ft-run-1c54ba33
+```
+
+The API renders the authoritative RayJob, submits it through Kueue, and exposes
+durable run status. Never place the bearer token in a config, receipt, command
+argument, or repository file.
+
 ## Exact pre/post identity
 
 `training.science` makes the evaluation protocol a hard input to the training

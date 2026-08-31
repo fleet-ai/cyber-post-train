@@ -354,7 +354,7 @@ def build_full_rl_config(
 class FleetTrainingTaskCatalog:
     """Read-only client for the training API's authoritative task picker."""
 
-    def __init__(self, bearer: str, *, base_url: str = "https://ft.flt.build/api"):
+    def __init__(self, bearer: str, *, base_url: str = "https://api.ft.flt.build"):
         if not bearer:
             raise ValueError("a Fleet Training API bearer is required")
         self._bearer = bearer
