@@ -235,3 +235,14 @@ def test_qwen_rl_configs_disable_microbatch_padding_for_vision_inputs() -> None:
     ):
         config = json.loads((root / relative).read_text())
         assert expected in config["trainer"]["args"], relative
+
+
+def test_runnable_qwen_rl_configs_pin_the_multienvironment_trainer() -> None:
+    root = Path(__file__).resolve().parents[1]
+    expected = "0cbb43bd-9a36-5474-84d1-8846492dc413"
+    for relative in (
+        "configs/runs/qwen36-27b-rl-base-full-runnable.json",
+        "configs/runs/qwen36-27b-rl-base-smoke.json",
+    ):
+        config = json.loads((root / relative).read_text())
+        assert config["trainer"]["trainer_version_id"] == expected, relative
