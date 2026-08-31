@@ -242,7 +242,7 @@ def test_runnable_qwen_rl_configs_pin_the_expected_trainer() -> None:
     root = Path(__file__).resolve().parents[1]
     expected_by_config = {
         "configs/runs/qwen36-27b-rl-base-full-runnable.json": (
-            "885f2eaa-c28e-5102-950b-9070e181f561"
+            "83f8d256-aea8-52d7-8711-080c56dbbc3a"
         ),
         "configs/runs/qwen36-27b-rl-base-smoke.json": (
             "4b4dc57c-c7dc-5562-bbdd-9e1d6764ede0"
