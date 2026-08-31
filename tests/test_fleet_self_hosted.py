@@ -84,6 +84,33 @@ def test_authority_paths_are_exact_task_version_routes() -> None:
     assert self_hosted.authoritative_route(config, "scoring") == prefix
 
 
+def test_authority_gate_accepts_exact_behavioral_guard_when_openapi_lags() -> None:
+    class Response:
+        status_code = 422
+        content = b"yes"
+
+        def json(self) -> dict:
+            return {"detail": "Authoritative RL rollout rewards support report-only tasks"}
+
+    class Client:
+        def request(self, method: str, url: str, **kwargs):
+            assert method == "GET"
+            return type(
+                "OpenAPIResponse",
+                (),
+                {"status_code": 200, "json": lambda self: {"paths": {}}},
+            )()
+
+        def post(self, url: str, **kwargs):
+            return Response()
+
+    result = self_hosted.assert_authoritative_routes_deployed(Client(), _config())
+    assert result == {
+        "mode": "behavioral_report_only_guard",
+        "statuses": {"provisioning": 422, "scoring": 422},
+    }
+
+
 def test_qwen_trace_normalization_preserves_calls_results_and_thinking() -> None:
     events = [
         {
