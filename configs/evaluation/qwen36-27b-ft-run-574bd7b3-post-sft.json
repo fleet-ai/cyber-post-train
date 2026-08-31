@@ -1,0 +1,78 @@
+{
+  "schema": "cyber_post_sft_eval_plan_v1",
+  "status": "blocked_until_run_success_and_verified_hf_export",
+  "run": {
+    "name": "ft-run-574bd7b3",
+    "rayjob_uid": "fe0256e7-ba30-470d-abd9-b148cd3cdbbd",
+    "config_sha256": "sha256:3a56db536d8918cadad8961dc450e1210488742d2981bb53f5ca4347aabcad29",
+    "trainer_version_id": "4b4dc57c-c7dc-5562-bbdd-9e1d6764ede0",
+    "trainer_image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "trainer_source_commit_from_tag": "6db8d0c9",
+    "selection_policy": "final_promoted_checkpoint_after_successful_run_v1"
+  },
+  "base_model": {
+    "repository": "Qwen/Qwen3.6-27B",
+    "revision": "6a9e13bd6fc8f0983b9b99948120bc37f49c13e9",
+    "weights_manifest_sha256": "sha256:14ad10368de9b9e5974ff12a4b70ea7884194b58e670177bbac79daeb81f16b9",
+    "tokenizer_manifest_sha256": "sha256:27f02770d03b60343350ad948bf1065673968c60274f1e34f4afaed16940a1ea",
+    "chat_template_sha256": "sha256:e84f32a23fdda27689f868aa4a1a5621f41133e51a48d7f3efcbea2839574259"
+  },
+  "serving": {
+    "base_registration": {
+      "path": "evals/webexploitbench/serving/qwen36-27b-6a9e13bd-registration.json",
+      "sha256": "sha256:fa3abc3a33dce0709206e74a1a178db5ed6ea8e47e0b0c91396b03e8e0177cd6"
+    },
+    "engine": "sglang",
+    "engine_image": "lmsysorg/sglang@sha256:febfb971c7352570fc445c466ebd6ffc9d896024958e544a60f2137fd85856b1",
+    "live_engine_version": "0.0.0.dev0+qwen38.27b.g561c8f3",
+    "precision": "bf16",
+    "tensor_parallel_size": 1,
+    "comparison_rule": "clone_base_registration_and_change_only_checkpoint_identity_and_paths"
+  },
+  "export": {
+    "strategy": "resume_final_checkpoint_with_zero_optimizer_steps_v1",
+    "skyrl_source_commit": "f5bc3b78dfddfb352870d5d7430cd226e5785838",
+    "source_checkpoint_root": "/mnt/sfs/checkpoints/ft-run-574bd7b3",
+    "output_root": "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3",
+    "format": "huggingface_safetensors",
+    "precision": "bf16",
+    "requires_same_world_size": 8,
+    "requires_separate_inference_filesystem_staging": true
+  },
+  "webexploitbench": {
+    "base_config": {
+      "path": "evals/webexploitbench/configs/qwen36-27b-6a9e13bd-level0-full.json",
+      "sha256": "sha256:f28f25cc6c8228be5762a326b893676f0b309ab9c162aced3332a5e5a538b46d"
+    },
+    "post_run_id": "webexploit-q36-sft-574bd7b3-l0-p1-v1",
+    "benchmark_repository_revision": "7f97d87fa8ab728260c0ba9b09b9c8f00bb82ad5",
+    "cage_revision": "09a191c565230cebb8255899d622d23c7ddeff33",
+    "cage_compat_patch_sha256": "sha256:a11474a74646c76afa55fc9ac86b6f2f58dc621df35b8c8a5974dc3a877c5c16",
+    "primary_harness": "claude_code",
+    "external_results_must_remain_sealed_until_comparison_receipt": true
+  },
+  "fleet": {
+    "split_manifest": {
+      "path": "configs/data/fleet-a62-task-split-v1.json",
+      "sha256": "sha256:ab444cb664ffb4da351e4d33298cc052f848f2833487807bf984a753fa7c3b47"
+    },
+    "sft_config": {
+      "path": "configs/runs/qwen36-27b-sft-full.json",
+      "sha256": "sha256:3a56db536d8918cadad8961dc450e1210488742d2981bb53f5ca4347aabcad29"
+    },
+    "test_tasks": 20,
+    "exact_task_versions_required": true,
+    "primary_harness": "claude_code",
+    "pass_k": 1
+  },
+  "gates": [
+    "The named RayJob reaches SUCCEEDED without replacement or resume under a different UID.",
+    "Exactly one final checkpoint is complete, promoted, and durably archived with a verified archive manifest.",
+    "A separate queued run using the exact trainer image resumes at the final step, executes zero optimizer steps, exports BF16 Hugging Face safetensors, and emits a verified manifest.",
+    "The exported tokenizer and chat template are byte-identical to the base model.",
+    "The intervention is registered with the exact baseline SGLang image, precision, TP size, parsers, context, KV cache, and other runtime arguments.",
+    "The registered endpoint passes model identity, tokenizer, structured tool-call, and deterministic logit smoke checks.",
+    "Fleet evaluation uses a task group whose 20 members pin the exact eval_task_version_id values in the holdout receipt.",
+    "No WebExploitBench or Fleet test output is inspected before checkpoint, export, serving, and comparison receipts are frozen."
+  ]
+}

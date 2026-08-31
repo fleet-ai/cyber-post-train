@@ -52,3 +52,6 @@ The older GLM files are preserved as experiment provenance, not as the current
 model choice. Detailed launch commands live beside each evaluation and training
 implementation. Live launch state and external gates are recorded in
 `docs/STATUS.md`.
+
+The fail-closed checkpoint selection, export, serving-parity, and paired-evaluation
+handoff for the active SFT run is documented in `docs/POST_SFT_EVALUATION.md`.
