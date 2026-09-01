@@ -1,0 +1,4 @@
+interface:
+  display_name: "Cyber Evaluation Parity"
+  short_description: "Run scientifically matched cyber evaluations"
+  default_prompt: "Use $cyber-eval-parity to design or run this matched cyber evaluation."

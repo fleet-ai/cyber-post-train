@@ -1,0 +1,4 @@
+interface:
+  display_name: "Cyber Run Evidence"
+  short_description: "Audit cyber jobs and preserve terminal evidence"
+  default_prompt: "Use $cyber-run-evidence to audit this cyber job and produce an evidence-backed status."

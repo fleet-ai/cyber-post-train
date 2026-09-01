@@ -1,0 +1,4 @@
+interface:
+  display_name: "Cyber Training Operator"
+  short_description: "Run cyber post-training safely and reproducibly"
+  default_prompt: "Use $cyber-train-operator to plan or operate this cyber post-training run."
