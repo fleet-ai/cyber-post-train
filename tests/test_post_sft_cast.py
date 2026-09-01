@@ -111,7 +111,7 @@ def _no_speculative(omission: dict) -> dict:
 
 def _execution(source: Path, destination: Path, base: Path | None = None) -> dict:
     return {
-        "schema": "cyber_sft_fp32_to_bf16_cast_execution_plan_v4",
+        "schema": "cyber_sft_fp32_to_bf16_cast_execution_plan_v5",
         "namespace": cast.NAMESPACE,
         "job_name": cast.JOB_NAME,
         "config_map_name": cast.CONFIG_MAP_NAME,
@@ -719,7 +719,7 @@ def test_cast_job_is_queued_cpu_only_digest_pinned_and_create_only():
     assert cast.validate_local_cast_bundle(plan, root) == plan["cast_execution"][
         "config_map_code_sha256"
     ]
-    manifest_path = root / "evals/post_sft/cluster/qwen36-sft-bf16-cast-v4-job.yaml"
+    manifest_path = root / "evals/post_sft/cluster/qwen36-sft-bf16-cast-v5-job.yaml"
     documents = list(yaml.safe_load_all(manifest_path.read_text()))
     job = next(value for value in documents if value.get("kind") == "Job")
     assert job["metadata"]["name"] == cast.JOB_NAME
@@ -730,7 +730,7 @@ def test_cast_job_is_queued_cpu_only_digest_pinned_and_create_only():
     assert "nvidia.com/gpu" not in json.dumps(job)
     assert container["command"] == cast.CAST_COMMAND["command"]
     assert container["args"] == cast.CAST_COMMAND["args"]
-    script = (root / "evals/post_sft/scripts/submit_bf16_cast_v4.sh").read_text()
+    script = (root / "evals/post_sft/scripts/submit_bf16_cast_v5.sh").read_text()
     assert "kubectl apply" not in script
     assert "kubectl create --dry-run=server" in script
     assert "kubectl create -f" in script
@@ -741,18 +741,37 @@ def test_cast_job_is_queued_cpu_only_digest_pinned_and_create_only():
     assert "cast_input=$(mktemp)" not in script
 
 
-def test_cast_v4_is_create_only_successor_and_v3_is_preserved():
+def test_cast_v5_is_create_only_successor_and_v3_v4_sources_are_preserved():
     root = Path(__file__).resolve().parents[1]
     v3_job = root / "evals/post_sft/cluster/qwen36-sft-bf16-cast-v3-job.yaml"
     v3_submitter = root / "evals/post_sft/scripts/submit_bf16_cast_v3.sh"
     v4_job = root / "evals/post_sft/cluster/qwen36-sft-bf16-cast-v4-job.yaml"
     v4_submitter = root / "evals/post_sft/scripts/submit_bf16_cast_v4.sh"
+    v5_job = root / "evals/post_sft/cluster/qwen36-sft-bf16-cast-v5-job.yaml"
+    v5_submitter = root / "evals/post_sft/scripts/submit_bf16_cast_v5.sh"
 
     assert v3_job.is_file() and v3_submitter.is_file()
     assert v4_job.is_file() and v4_submitter.is_file()
+    assert v5_job.is_file() and v5_submitter.is_file()
     assert "bf16-cast-v3" in v3_job.read_text()
     assert "bf16-cast-v4" in v4_job.read_text()
+    assert "bf16-cast-v5" in v5_job.read_text()
     assert Path(
         "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-bf16-v3/"
         "global_step_318/policy"
     ) != cast.DESTINATION_PATH
+    assert Path(
+        "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-bf16-v4/"
+        "global_step_318/policy"
+    ) != cast.DESTINATION_PATH
+
+
+def test_exact_lm_head_fits_v5_bound_but_not_v4_bound():
+    layout = {
+        "lm_head.weight": {"shape": [248_320, 5_120], "dtype": "BF16"},
+    }
+    with pytest.raises(ValueError, match="lm_head.weight exceeds"):
+        cast._shard_groups(layout, 2 * 1024**3)
+    assert cast._shard_groups(layout, cast.DEFAULT_MAX_SHARD_BYTES) == [
+        ["lm_head.weight"]
+    ]

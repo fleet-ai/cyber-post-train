@@ -245,8 +245,7 @@ scan reached unreadable Hugging Face client cache metadata under `.cache/hugging
 That metadata is not loaded for inference. V3 created neither its final `policy` destination nor
 terminal receipt; preserve its Job, ConfigMap, RBAC, logs, and empty parent directories.
 
-The reviewed create-only successor is `evals/post_sft/scripts/submit_bf16_cast_v4.sh`. Preview is
-non-mutating. V4 retains the v3 image-identity rule: retry only while the identity is absent, for at
+The create-only v4 successor retained the v3 image-identity rule: retry only while the identity is absent, for at
 most 12 observations one second apart, and fail immediately on a malformed or wrong non-empty
 identity. It replaces the whole-directory scan with a signed **exact inference artifact surface**:
 the locked 15 BF16 weight shards and index plus the ten exact sidecars required by serving. Five
@@ -261,12 +260,27 @@ cast producer, staging gate, and final export assembler. It requires exactly 15 
 names, the index, and ten sidecars; validates every row's path, size and hash type; recomputes file
 count, byte total, complete-row digest and shard-only digest; and requires the exact reviewed
 control/cache exclusions. A re-signed summary containing an extra, missing, duplicate, renamed, or
-hash-drifted artifact therefore cannot pass either downstream gate.
+hash-drifted artifact therefore cannot pass either downstream gate. V4 (Job UID
+`b2bd4d50-7f96-4181-8e5c-686c4a569fb2`, ConfigMap UID
+`782b1755-88d8-402c-99f5-f7b0496bc02f`, Pod UID
+`84da5447-f878-4681-8ce5-c54b8f88d26f`) proved those gates and the exact image digest, then
+failed closed before converting a tensor: the frozen 2 GiB destination-shard bound was smaller
+than `lm_head.weight`. At the exact frozen model shape, its BF16 payload is
+`248,320 × 5,120 × 2 = 2,542,796,800` bytes (2.3681640625 GiB). V4 created no final policy and no
+terminal receipt; its empty deterministic partial directory and all Kubernetes evidence remain
+preserved.
+
+The reviewed create-only v5 successor is
+`evals/post_sft/scripts/submit_bf16_cast_v5.sh`. Its only conversion-policy change is a 3 GiB
+maximum BF16 shard payload: the smallest whole-GiB bound above the exact header-derived largest
+tensor and still below the unchanged 8 GiB single-source-tensor memory bound. V5 uses new
+Kubernetes identities, destination, evidence path, and immutable input; it never retries, replaces,
+or mutates v4.
 
 Submission accepts only the completed evidence Job's digest-bound observation and raw full
 manifest, validates the queue, and creates a suspended Job through `training-lq` using create-only
 ServiceAccount, Role, RoleBinding, immutable ConfigMap, and Job operations. Its destination is
-`/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-bf16-v4/global_step_318/policy`.
+`/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-bf16-v5/global_step_318/policy`.
 The embedded `.fleet-bf16-cast-acceptance.json` proves 1,184 direct FP32→BF16 casts and 15
 bit-identical copies from the exact frozen base. The latter are explicitly **frozen base
 auxiliary-head restoration**, not trained weights. Before copying, the Job hashes the exact signed
@@ -279,17 +293,17 @@ directory is not success. Every written weight shard, index, and copied sidecar 
 the directory-level atomic promotion.
 
 ```bash
-bash evals/post_sft/scripts/submit_bf16_cast_v4.sh preview
+bash evals/post_sft/scripts/submit_bf16_cast_v5.sh preview
 
 # Only after the evidence Job is Complete and these are its exact immutable outputs:
-bash evals/post_sft/scripts/submit_bf16_cast_v4.sh submit \
+bash evals/post_sft/scripts/submit_bf16_cast_v5.sh submit \
   /restricted/ft-run-574bd7b3-observation.json \
   /restricted/ft-run-574bd7b3-raw-export-full-manifest.json
 ```
 
 After the cast Job is Complete, retrieve `cast-receipt.json` and
 `cast-full-manifest.json` from
-`/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/evidence/bf16-cast-v4/receipt/`.
+`/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/evidence/bf16-cast-v5/receipt/`.
 The adjacent
 `COMPLETE.json` must bind both files. These two files are inputs to staging; the destination path
 or a successful Pod status alone is insufficient.

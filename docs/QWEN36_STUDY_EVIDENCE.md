@@ -1,6 +1,6 @@
 # Qwen3.6-27B cyber post-training study — living evidence report
 
-Last evidence observation: **2026-08-31 20:32 UTC**. Machine-readable snapshot:
+Last evidence observation: **2026-09-01 00:20 UTC**. Machine-readable snapshot:
 [`2026-08-31-state-v1.json`](evidence/qwen36-study/2026-08-31-state-v1.json).
 
 This report distinguishes **terminal results**, **operational gates** that prove
@@ -184,7 +184,7 @@ identity; its terminal Pod later showed the exact frozen digest. V3 (UID
 `0c451efc-b0ac-44a0-a889-88d0ad56c390`) proved the bounded retry and exact image digest, then
 failed closed before casting when its whole-directory base scan reached unreadable, non-inference
 Hugging Face `.cache/` metadata. It created no final policy or terminal receipt and is preserved.
-V4 retains the fail-closed identity rule and signs only the exact inference surface: 15 locked base
+V4 retained the fail-closed identity rule and signed only the exact inference surface: 15 locked base
 shards plus index and ten exact serving sidecars. It explicitly excludes `.cache/` without
 traversal, records five reviewed non-model controls, rejects symlinks and all unknown top-level
 entries, and still fails on any unreadable required artifact. Its scoped before/after manifests
@@ -197,7 +197,12 @@ hashes distinguish trained casts from **frozen base auxiliary-head restoration**
 inference-inert because the matched serving registration has no speculative-decoding arguments.
 The rail binds source, base, destination, code, command, image, Job/Pod and immutable ConfigMap;
 the base's exact inference-surface before/after manifests must match and its live weights, index,
-and serving sidecars must equal the signed model lock and plan.
+and serving sidecars must equal the signed model lock and plan. V4 proved those checks and exact
+runtime provenance, then failed before conversion because its 2 GiB shard ceiling was below the
+exact 2,542,796,800-byte BF16 `lm_head.weight`. It produced neither final policy nor terminal
+receipt and remains preserved. The create-only v5 successor raises only that bound to 3 GiB—the
+smallest whole-GiB limit above the exact largest tensor—while retaining the 8 GiB source-tensor
+memory bound and using entirely new resource, destination and evidence identities.
 No successful cast and no post-SFT evaluation has launched.
 
 Evidence: [`post-SFT plan`](POST_SFT_EVALUATION.md),
