@@ -49,6 +49,7 @@ def test_v4_evidence_and_cast_modules_import_from_only_the_mounted_bundle(tmp_pa
     for name in (
         "io.py",
         "post_sft_artifacts.py",
+        "post_sft_base_surface.py",
         "post_sft_cast.py",
         "post_sft_staging.py",
         "tokenizer_equivalence.py",

@@ -111,7 +111,7 @@ def _no_speculative(omission: dict) -> dict:
 
 def _execution(source: Path, destination: Path, base: Path | None = None) -> dict:
     return {
-        "schema": "cyber_sft_fp32_to_bf16_cast_execution_plan_v3",
+        "schema": "cyber_sft_fp32_to_bf16_cast_execution_plan_v4",
         "namespace": cast.NAMESPACE,
         "job_name": cast.JOB_NAME,
         "config_map_name": cast.CONFIG_MAP_NAME,
@@ -137,11 +137,39 @@ def _execution(source: Path, destination: Path, base: Path | None = None) -> dic
         "final_parameter_count": cast.FINAL_PARAMETER_COUNT,
         "image_id_max_attempts": cast.IMAGE_ID_MAX_ATTEMPTS,
         "image_id_retry_seconds": cast.IMAGE_ID_RETRY_SECONDS,
+        "base_inference_artifact_surface": (
+            cast._expected_base_inference_artifact_surface()
+        ),
         "config_map_code_sha256": {
             path: "sha256:" + f"{index + 1:x}" * 64
             for index, path in enumerate(cast.MOUNTED_CODE_FILES.values())
         },
     }
+
+
+def _install_test_base_surface(monkeypatch, base: Path) -> dict:
+    """Bind production surface validation to a tiny, complete test checkpoint."""
+
+    sidecar_names = tuple(cast.BASE_RUNTIME_SIDECAR_SHA256)
+    for name in sidecar_names:
+        path = base / name
+        if not path.exists():
+            path.write_text(f"{name}\n")
+    (base / ".cache").mkdir(exist_ok=True)
+    index_sha256 = cast.file_sha256(base / "model.safetensors.index.json")
+    sidecars = {name: cast.file_sha256(base / name) for name in sidecar_names}
+    weights = cast._weights_manifest_sha256(full_file_manifest(base))
+    monkeypatch.setattr(cast, "BASE_WEIGHT_SHARD_COUNT", 1)
+    monkeypatch.setattr(cast, "BASE_INDEX_SHA256", index_sha256)
+    monkeypatch.setattr(cast, "BASE_RUNTIME_SIDECAR_SHA256", sidecars)
+    monkeypatch.setattr(cast, "BASE_NON_ARTIFACT_TOP_LEVEL_FILES", {})
+    monkeypatch.setattr(
+        cast,
+        "BASE_EXCLUDED_DIRECTORY_PREFIXES",
+        {".cache/": "test cache; not loaded by inference"},
+    )
+    monkeypatch.setattr(cast, "BASE_WEIGHTS_MANIFEST_SHA256", weights)
+    return cast._expected_base_inference_artifact_surface()
 
 
 def test_cast_is_deterministic_and_every_tensor_is_exact_direct_bf16(
@@ -236,6 +264,78 @@ def test_cast_fails_closed_on_nonfinite_mixed_dtype_and_memory_bound(tmp_path: P
         )
 
 
+def test_base_inference_surface_excludes_cache_without_reading_it(tmp_path, monkeypatch):
+    base = tmp_path / "base"
+    _bf16_base(base, {"weight": torch.ones(1, dtype=torch.float32)})
+    surface = _install_test_base_surface(monkeypatch, base)
+    cache_file = base / ".cache/huggingface/trees/control.json"
+    cache_file.parent.mkdir(parents=True)
+    cache_file.write_text("unreadable control metadata\n")
+    real_file_sha256 = cast.file_sha256
+
+    def reject_cache_reads(path):
+        if ".cache" in Path(path).parts:
+            raise AssertionError("excluded cache must never be read")
+        return real_file_sha256(path)
+
+    monkeypatch.setattr(cast, "file_sha256", reject_cache_reads)
+    manifest = cast._base_inference_artifact_manifest(base, surface)
+
+    assert manifest["excluded_non_artifact_directory_prefixes"] == [
+        {
+            "path_prefix": ".cache/",
+            "reviewed_reason": "test cache; not loaded by inference",
+        }
+    ]
+    assert all(not row["path"].startswith(".cache/") for row in manifest["files"])
+
+
+def test_base_inference_surface_fails_on_unreadable_required_artifact(
+    tmp_path, monkeypatch
+):
+    base = tmp_path / "base"
+    _bf16_base(base, {"weight": torch.ones(1, dtype=torch.float32)})
+    surface = _install_test_base_surface(monkeypatch, base)
+    real_file_sha256 = cast.file_sha256
+
+    def fail_required(path):
+        if Path(path).name == "config.json":
+            raise PermissionError("required artifact is unreadable")
+        return real_file_sha256(path)
+
+    monkeypatch.setattr(cast, "file_sha256", fail_required)
+    with pytest.raises(PermissionError, match="required artifact is unreadable"):
+        cast._base_inference_artifact_manifest(base, surface)
+
+
+@pytest.mark.parametrize("cache_kind", ("file", "symlink"))
+def test_base_inference_surface_rejects_invalid_cache_entry(
+    tmp_path, monkeypatch, cache_kind
+):
+    base = tmp_path / "base"
+    _bf16_base(base, {"weight": torch.ones(1, dtype=torch.float32)})
+    surface = _install_test_base_surface(monkeypatch, base)
+    cache = base / ".cache"
+    cache.rmdir()
+    if cache_kind == "file":
+        cache.write_text("not a directory\n")
+    else:
+        cache.symlink_to(tmp_path / "missing-cache")
+
+    with pytest.raises(ValueError, match="not a directory|prohibited symlink"):
+        cast._base_inference_artifact_manifest(base, surface)
+
+
+def test_base_inference_surface_rejects_unknown_artifact_drift(tmp_path, monkeypatch):
+    base = tmp_path / "base"
+    _bf16_base(base, {"weight": torch.ones(1, dtype=torch.float32)})
+    surface = _install_test_base_surface(monkeypatch, base)
+    (base / "adapter_model.safetensors").write_bytes(b"unexpected")
+
+    with pytest.raises(ValueError, match="unknown top-level entry"):
+        cast._base_inference_artifact_manifest(base, surface)
+
+
 def test_cast_input_binds_raw_fp32_observation_and_manifest(tmp_path: Path, monkeypatch):
     source = tmp_path / "source"
     base = tmp_path / "base"
@@ -243,16 +343,12 @@ def test_cast_input_binds_raw_fp32_observation_and_manifest(tmp_path: Path, monk
     tensors = _fp32_export(source)
     _bf16_base(base, tensors)
     omission = _omission(tensors)
-    omission["base_weights_manifest_sha256"] = cast._weights_manifest_sha256(
-        full_file_manifest(base)
-    )
+    surface = _install_test_base_surface(monkeypatch, base)
+    omission["base_weights_manifest_sha256"] = surface["weights_manifest_sha256"]
     monkeypatch.setattr(cast, "SOURCE_PATH", source)
     monkeypatch.setattr(cast, "BASE_MODEL_PATH", base)
     monkeypatch.setattr(cast, "BASE_MODEL_REPOSITORY", omission["base_repository"])
     monkeypatch.setattr(cast, "BASE_MODEL_REVISION", omission["base_revision"])
-    monkeypatch.setattr(
-        cast, "BASE_WEIGHTS_MANIFEST_SHA256", omission["base_weights_manifest_sha256"]
-    )
     monkeypatch.setattr(cast, "DESTINATION_PATH", destination)
     monkeypatch.setattr(cast, "TRAINED_TENSOR_COUNT", len(tensors))
     monkeypatch.setattr(cast, "TRAINED_PARAMETER_COUNT", sum(t.numel() for t in tensors.values()))
@@ -289,6 +385,8 @@ def test_cast_input_binds_raw_fp32_observation_and_manifest(tmp_path: Path, monk
             "repository": omission["base_repository"],
             "revision": omission["base_revision"],
             "weights_manifest_sha256": omission["base_weights_manifest_sha256"],
+            "weights_index_sha256": surface["index"]["sha256"],
+            "runtime_sidecar_sha256": surface["required_runtime_sidecar_sha256"],
             "parameter_count": omission["base_parameter_count"],
         },
         "export": {"raw_export_auxiliary_head_omission": omission},
@@ -326,16 +424,12 @@ def test_execute_cast_is_atomic_recoverable_and_never_accepts_incomplete_output(
     tensors = _fp32_export(source)
     _bf16_base(base, tensors)
     omission = _omission(tensors)
-    omission["base_weights_manifest_sha256"] = cast._weights_manifest_sha256(
-        full_file_manifest(base)
-    )
+    surface = _install_test_base_surface(monkeypatch, base)
+    omission["base_weights_manifest_sha256"] = surface["weights_manifest_sha256"]
     monkeypatch.setattr(cast, "SOURCE_PATH", source)
     monkeypatch.setattr(cast, "BASE_MODEL_PATH", base)
     monkeypatch.setattr(cast, "BASE_MODEL_REPOSITORY", omission["base_repository"])
     monkeypatch.setattr(cast, "BASE_MODEL_REVISION", omission["base_revision"])
-    monkeypatch.setattr(
-        cast, "BASE_WEIGHTS_MANIFEST_SHA256", omission["base_weights_manifest_sha256"]
-    )
     monkeypatch.setattr(cast, "DESTINATION_PATH", destination)
     trained_parameters = sum(t.numel() for t in tensors.values())
     monkeypatch.setattr(cast, "TRAINED_TENSOR_COUNT", len(tensors))
@@ -371,13 +465,14 @@ def test_execute_cast_is_atomic_recoverable_and_never_accepts_incomplete_output(
             "repository": omission["base_repository"],
             "revision": omission["base_revision"],
             "weights_manifest_sha256": omission["base_weights_manifest_sha256"],
+            "inference_artifact_surface": surface,
             "omission_policy": omission,
-                "speculative_decoding": {
-                    "enabled": False,
-                    "registration_sha256": omission["serving_registration_sha256"],
-                    "prohibited_runtime_args": ["--speculative-algorithm"],
-                },
-                "no_speculative_decoding_proof": _no_speculative(omission),
+            "speculative_decoding": {
+                "enabled": False,
+                "registration_sha256": omission["serving_registration_sha256"],
+                "prohibited_runtime_args": ["--speculative-algorithm"],
+            },
+            "no_speculative_decoding_proof": _no_speculative(omission),
         },
         "destination": {"path": str(destination), "must_be_absent": True},
         "execution": _execution(source, destination, base),
@@ -411,12 +506,8 @@ def test_execute_cast_is_atomic_recoverable_and_never_accepts_incomplete_output(
     wrong_base["cast_input_sha256"] = digest_json(
         {key: item for key, item in wrong_base.items() if key != "cast_input_sha256"}
     )
-    monkeypatch.setattr(cast, "BASE_WEIGHTS_MANIFEST_SHA256", wrong_base_digest)
-    with pytest.raises(ValueError, match="signed model lock"):
+    with pytest.raises(ValueError, match="frozen base auxiliary source identity"):
         cast.execute_cast(wrong_base)
-    monkeypatch.setattr(
-        cast, "BASE_WEIGHTS_MANIFEST_SHA256", omission["base_weights_manifest_sha256"]
-    )
 
     def crash(_source, _destination):
         raise OSError("crash before promotion")
@@ -455,13 +546,14 @@ def test_cast_runtime_provenance_binds_live_job_pod_image_and_configmap(tmp_path
         "training__init__.py": "# init\n",
         "training_io.py": "# io\n",
         "training_post_sft_artifacts.py": "# artifacts\n",
+        "training_post_sft_base_surface.py": "# base surface\n",
         "training_post_sft_cast.py": "# cast\n",
     }
     code_hashes = {
         relative: "sha256:" + hashlib.sha256(code_data[key].encode()).hexdigest()
         for key, relative in cast.MOUNTED_CODE_FILES.items()
     }
-    execution = _execution(cast.SOURCE_PATH, cast.DESTINATION_PATH)
+    execution = _execution(cast.SOURCE_PATH, cast.DESTINATION_PATH, cast.BASE_MODEL_PATH)
     execution["config_map_code_sha256"] = code_hashes
     value = {
         "schema": cast.CAST_INPUT_SCHEMA,
@@ -627,7 +719,7 @@ def test_cast_job_is_queued_cpu_only_digest_pinned_and_create_only():
     assert cast.validate_local_cast_bundle(plan, root) == plan["cast_execution"][
         "config_map_code_sha256"
     ]
-    manifest_path = root / "evals/post_sft/cluster/qwen36-sft-bf16-cast-v3-job.yaml"
+    manifest_path = root / "evals/post_sft/cluster/qwen36-sft-bf16-cast-v4-job.yaml"
     documents = list(yaml.safe_load_all(manifest_path.read_text()))
     job = next(value for value in documents if value.get("kind") == "Job")
     assert job["metadata"]["name"] == cast.JOB_NAME
@@ -638,7 +730,7 @@ def test_cast_job_is_queued_cpu_only_digest_pinned_and_create_only():
     assert "nvidia.com/gpu" not in json.dumps(job)
     assert container["command"] == cast.CAST_COMMAND["command"]
     assert container["args"] == cast.CAST_COMMAND["args"]
-    script = (root / "evals/post_sft/scripts/submit_bf16_cast_v3.sh").read_text()
+    script = (root / "evals/post_sft/scripts/submit_bf16_cast_v4.sh").read_text()
     assert "kubectl apply" not in script
     assert "kubectl create --dry-run=server" in script
     assert "kubectl create -f" in script
@@ -647,3 +739,20 @@ def test_cast_job_is_queued_cpu_only_digest_pinned_and_create_only():
     assert "temp_dir=$(mktemp -d)" in script
     assert 'cast_input="$temp_dir/cast-input.json"' in script
     assert "cast_input=$(mktemp)" not in script
+
+
+def test_cast_v4_is_create_only_successor_and_v3_is_preserved():
+    root = Path(__file__).resolve().parents[1]
+    v3_job = root / "evals/post_sft/cluster/qwen36-sft-bf16-cast-v3-job.yaml"
+    v3_submitter = root / "evals/post_sft/scripts/submit_bf16_cast_v3.sh"
+    v4_job = root / "evals/post_sft/cluster/qwen36-sft-bf16-cast-v4-job.yaml"
+    v4_submitter = root / "evals/post_sft/scripts/submit_bf16_cast_v4.sh"
+
+    assert v3_job.is_file() and v3_submitter.is_file()
+    assert v4_job.is_file() and v4_submitter.is_file()
+    assert "bf16-cast-v3" in v3_job.read_text()
+    assert "bf16-cast-v4" in v4_job.read_text()
+    assert Path(
+        "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-bf16-v3/"
+        "global_step_318/policy"
+    ) != cast.DESTINATION_PATH

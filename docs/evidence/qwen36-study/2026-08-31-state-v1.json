@@ -103,7 +103,7 @@
       }
     },
     "bf16_cast": {
-      "status": "not_launched_successor_v3",
+      "status": "not_launched_successor_v4",
       "failed_attempts": [
         {
           "job_name": "chris-cyber-qwen36-sft-bf16-cast-v2",
@@ -116,20 +116,41 @@
           "final_policy_destination_created": false,
           "terminal_evidence_created": false,
           "preserve_resources_and_empty_parent_directories": true
+        },
+        {
+          "job_name": "chris-cyber-qwen36-sft-bf16-cast-v3",
+          "job_uid": "0c451efc-b0ac-44a0-a889-88d0ad56c390",
+          "config_map_uid": "df2a0fe6-9854-45bf-817f-dd6712e41d4b",
+          "pod_uid": "9abca421-9017-497a-8080-4f727582b9db",
+          "status": "FAILED",
+          "model_bytes_inspected": false,
+          "failure": "The exact frozen image digest was proven after a bounded empty-imageID retry, then the whole-directory base manifest scan failed closed on unreadable non-inference Hugging Face client metadata under .cache/huggingface/trees/.",
+          "resolved_image_digest": "sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+          "final_policy_destination_created": false,
+          "terminal_evidence_created": false,
+          "preserve_resources_and_empty_parent_directories": true
         }
       ],
       "successor": {
-        "job_name": "chris-cyber-qwen36-sft-bf16-cast-v3",
+        "job_name": "chris-cyber-qwen36-sft-bf16-cast-v4",
         "status": "not_launched",
         "image_id_retry_policy": {
           "maximum_observations": 12,
           "seconds_between_empty_observations": 1.0,
           "wrong_nonempty_digest": "fail_immediately"
         },
-        "destination_path": "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-bf16-v3/global_step_318/policy",
-        "terminal_evidence_path": "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/evidence/bf16-cast-v3/receipt",
+        "destination_path": "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-bf16-v4/global_step_318/policy",
+        "terminal_evidence_path": "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/evidence/bf16-cast-v4/receipt",
+        "base_manifest_policy": {
+          "scope": "exact_inference_artifact_surface_v1",
+          "required": "15 locked weight shards, exact index, and ten serving sidecars",
+          "reviewed_non_artifacts": "five top-level repository/provenance files plus .cache/",
+          "cache_handling": "exclude .cache/ without traversal; reject a symlink or non-directory",
+          "unknown_top_level_entries": "reject",
+          "unreadable_required_artifacts": "fail"
+        },
         "read_only_preflight": {
-          "observed_at": "2026-08-31T23:25:17Z",
+          "observed_at": "2026-08-31T23:43:03Z",
           "destination_root": "absent_http_404",
           "terminal_evidence_root": "absent_http_404"
         }
@@ -175,7 +196,7 @@
         "receipt_path": "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/evidence/sfs-v4/receipt"
       }
     },
-    "plan": {"path": "configs/evaluation/qwen36-27b-ft-run-574bd7b3-post-sft.json", "file_sha256": "sha256:6d402333d5ca4e9af2cd9ecf108330e77f5f66ee8f885c265e4f45b033a1d779"}
+    "plan": {"path": "configs/evaluation/qwen36-27b-ft-run-574bd7b3-post-sft.json", "file_sha256": "sha256:f4d2e3d950a6dc3ff889abb53e1f9bed9c8a998b2d64309adea544f7ffd8ec41"}
   },
   "native_fleet_rl": {
     "one_step_gate": {
