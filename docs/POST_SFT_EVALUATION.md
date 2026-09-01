@@ -575,6 +575,14 @@ top-level non-weight file, loads every safetensors header, and binds the exact J
 immutable ConfigMap, service account, and read-only PVC provenance. Preview and later collect it
 without replacing output:
 
+The immutable v1 inspector was submitted before the admission-label fixture included the cluster's
+exact server-owned `topology.kubernetes.io/region=eu-west2` Pod label. Preserve v1 unchanged. The
+create-only v2 successor accepts only that exact region value (or its absence before admission),
+continues to reject every other unreviewed label, and uses the exact ECR trainer image already
+executed by the SFT evidence/cast rail rather than the failed cold Docker Hub pull. It records the
+full immutable execution provenance; the live serving runtime remains the separately pinned
+SGLang image.
+
 ```bash
 bash evals/post_sft/scripts/submit_base_artifact_inspection.sh preview
 # Submit only after review; this is a CPU-only, read-only Job.

@@ -15,6 +15,7 @@ from evals.webexploitbench.paired import (
 from evals.webexploitbench.post_sft_evidence import (
     ARTIFACT_COMMAND_SHA256,
     ARTIFACT_CONFIG_MAP,
+    ARTIFACT_IMAGE,
     ARTIFACT_JOB,
     ARTIFACT_NAMESPACE,
     BASE_MODEL_ID,
@@ -23,7 +24,6 @@ from evals.webexploitbench.post_sft_evidence import (
     BASE_MODEL_ROOT,
     BASE_NON_SERVING_SIDECARS,
     REGISTRATION_IMAGE,
-    RUNTIME_IMAGE,
     _artifact_projection,
     _artifacts_from_receipts,
     _atomic_write_json_new,
@@ -1164,6 +1164,71 @@ def _assembled_registration(paired_identity, serving):
     )
 
 
+def test_registration_accepts_only_the_exact_server_owned_region_label(tmp_path):
+    inputs = _paired_inputs(tmp_path)
+    _, paired_identity = derive_post_sft_qwen_pair(**inputs)
+    serving = inputs["post_serving_receipt"]
+    api_result = {
+        "id": paired_identity["post_sft"]["model"],
+        "object": "inference.model",
+        "phase": "pending",
+        "registration": copy.deepcopy(serving["registration"]),
+    }
+    observation = _registration_job_observation(serving)
+    observation["pod"]["metadata"]["labels"]["topology.kubernetes.io/region"] = (
+        "eu-west2"
+    )
+    observation["pod"]["spec"]["imagePullSecrets"] = [{"name": "ecr-pull"}]
+    observation["pod"]["spec"]["tolerations"].extend(
+        [
+            {
+                "effect": "NoExecute",
+                "key": "node.kubernetes.io/not-ready",
+                "operator": "Exists",
+                "tolerationSeconds": 300,
+            },
+            {
+                "effect": "NoExecute",
+                "key": "node.kubernetes.io/unreachable",
+                "operator": "Exists",
+                "tolerationSeconds": 300,
+            },
+        ]
+    )
+    assemble_registration_completion(
+        paired_identity,
+        observation,
+        api_result,
+        serving,
+        _export(_selection()),
+    )
+
+    observation["pod"]["metadata"]["labels"]["topology.kubernetes.io/region"] = (
+        "unexpected-region"
+    )
+    with pytest.raises(ValueError, match="server-owned label .* differs"):
+        assemble_registration_completion(
+            paired_identity,
+            observation,
+            api_result,
+            serving,
+            _export(_selection()),
+        )
+
+    observation["pod"]["metadata"]["labels"]["topology.kubernetes.io/region"] = (
+        "eu-west2"
+    )
+    observation["pod"]["spec"]["imagePullSecrets"] = [{"name": "unreviewed"}]
+    with pytest.raises(ValueError, match="execution spec differs"):
+        assemble_registration_completion(
+            paired_identity,
+            observation,
+            api_result,
+            serving,
+            _export(_selection()),
+        )
+
+
 def _base_artifact_receipt():
     plan_path = ROOT / "configs/evaluation/qwen36-27b-ft-run-574bd7b3-post-sft.json"
     plan = json.loads(plan_path.read_text())
@@ -1233,8 +1298,8 @@ def _base_artifact_receipt():
                 "reviewed_spec_projection": copy.deepcopy(contract["pod_spec"]),
                 "reviewed_spec_projection_sha256": digest_json(contract["pod_spec"]),
             },
-            "image": RUNTIME_IMAGE,
-            "image_id": RUNTIME_IMAGE,
+            "image": ARTIFACT_IMAGE,
+            "image_id": ARTIFACT_IMAGE,
             "command_sha256": ARTIFACT_COMMAND_SHA256,
             "config_map": {
                 "name": ARTIFACT_CONFIG_MAP,
