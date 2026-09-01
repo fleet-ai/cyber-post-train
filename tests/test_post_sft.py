@@ -135,8 +135,16 @@ def test_base_artifact_inspection_uses_only_validated_inference_surface(
             "model": BASE_MODEL_REPOSITORY,
             "revision": BASE_MODEL_REVISION,
             "resolved_path": str(root.resolve()),
-            "file_count": sum(1 for path in root.iterdir() if path.is_file()),
-            "total_bytes": sum(path.stat().st_size for path in root.iterdir() if path.is_file()),
+            "file_count": sum(
+                1
+                for path in root.iterdir()
+                if path.is_file() and path.name != ".fleet-acceptance.json"
+            ),
+            "total_bytes": sum(
+                path.stat().st_size
+                for path in root.iterdir()
+                if path.is_file() and path.name != ".fleet-acceptance.json"
+            ),
             "staging_partitions": 1,
             "weights_manifest_sha256": model["weights_manifest_sha256"],
         }
