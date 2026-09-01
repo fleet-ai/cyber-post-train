@@ -601,9 +601,13 @@ read-only inventory proves the two storage surfaces differ only in reviewed prov
 successor explicitly replaces the former with the latter in its copied surface contract; it does
 not add both or broaden any other path. It continues to reject unknown top-level entries and proves
 `.cache/` is the one reviewed non-serving directory without traversing it. Safetensor/header and
-full-file hashing operate on an ephemeral view of only the validated top-level files, and the
-receipt names the real model root. The post-SFT arm has its own independently hashed staging
-acceptance receipt. Preview still fails unless the named
+full-file hashing operate on an ephemeral view of only the validated top-level files. V8 completed
+that inspection, then failed safely because its final provenance collector retained the older
+hard-coded ConfigMap key list and did not recognize the two reviewed validator modules. Preserve v8
+unchanged. The create-only v9 successor uses one shared key-to-mount mapping for both exact-key and
+mounted-byte validation, with a regression test that requires the Job volume and verifier mapping
+to remain identical. The receipt names the real model root, and the post-SFT arm has its own
+independently hashed staging acceptance receipt. Preview still fails unless the named
 Secret exists with Docker registry credential type. Every other unreviewed execution field is
 rejected, and the live serving runtime remains the separately pinned SGLang image.
 
