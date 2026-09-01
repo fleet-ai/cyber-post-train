@@ -2,14 +2,20 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/../../.." && pwd)
-NAME=chris-cyber-qwen36-base-artifact-inspect-6a9e13bd-v2
+NAME=chris-cyber-qwen36-base-artifact-inspect-6a9e13bd-v3
 NAMESPACE=inference
 EXPECTED_CONTEXT=nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6
+PULL_SECRET=ecr-pull
 JOB="$ROOT/evals/post_sft/cluster/qwen36-base-artifact-inspect-job.yaml"
 PLAN="$ROOT/configs/evaluation/qwen36-27b-ft-run-574bd7b3-post-sft.json"
 MODE=${1:-preview}
 
 test "$(kubectl config current-context)" = "$EXPECTED_CONTEXT"
+
+require_pull_secret() {
+  test "$(kubectl -n "$NAMESPACE" get secret "$PULL_SECRET" -o jsonpath='{.type}')" = \
+    "kubernetes.io/dockerconfigjson"
+}
 
 configmap() {
   kubectl -n "$NAMESPACE" create configmap "$NAME" \
@@ -26,20 +32,22 @@ configmap() {
 owned_resources() {
   printf '%s\n' \
     "configmap/$NAME" \
-    "serviceaccount/chris-cyber-qwen36-base-artifact-observer-v2" \
-    "role.rbac.authorization.k8s.io/chris-cyber-qwen36-base-artifact-observer-v2" \
-    "rolebinding.rbac.authorization.k8s.io/chris-cyber-qwen36-base-artifact-observer-v2" \
+    "serviceaccount/chris-cyber-qwen36-base-artifact-observer-v3" \
+    "role.rbac.authorization.k8s.io/chris-cyber-qwen36-base-artifact-observer-v3" \
+    "rolebinding.rbac.authorization.k8s.io/chris-cyber-qwen36-base-artifact-observer-v3" \
     "job.batch/$NAME"
 }
 
 case "$MODE" in
   preview)
+    require_pull_secret
     configmap | kubectl create --dry-run=server -f - >/dev/null
     kubectl create --dry-run=server -f "$JOB" >/dev/null
     echo "create-only server dry-run passed; no resources created"
     ;;
   submit)
     test "$#" = 1
+    require_pull_secret
     while IFS= read -r resource; do
       if kubectl -n "$NAMESPACE" get "$resource" >/dev/null 2>&1; then
         echo "$resource already exists in $NAMESPACE; refusing partial reuse or replacement" >&2
