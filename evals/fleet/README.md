@@ -191,11 +191,14 @@ local attempt from permission to repeat it.
 tool arguments, responses, or final-answer content. It always sets
 `rerun_model=false`. Before allowing the existing trace to be scored, it
 requires a complete observation from the authoritative verifier store, bound to
-the exact run, instance, and evidence-run IDs. One existing verifier result is
-recovered; multiple or conflicting results are refused; a new score is eligible
-only when the complete lookup proves that no result exists and the exact
-instance is still running. Docker cleanup is similarly planned only for exact
-hash-derived container names and their single shared private network.
+the exact run, instance, evidence-run, task, and task-version IDs and protected
+by a self-digest. One existing verifier result is recovered; multiple or
+conflicting results are refused; a new score is eligible only when the complete
+lookup proves that no result exists and the exact instance is still running.
+Docker cleanup is similarly planned only from a self-digesting durable resource
+plan whose exact hash-derived containers and private network match a complete
+read-only resource snapshot. Legacy attempts without that resource plan refuse
+cleanup rather than inferring ownership from a snapshot.
 
 ```bash
 # Read-only and fail-closed without an authoritative observation.

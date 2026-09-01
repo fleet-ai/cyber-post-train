@@ -20,6 +20,8 @@ from evals.fleet import self_hosted
 OBSERVATION_SCHEMA = "fleet-selfhosted-authority-observation-v1"
 PLAN_SCHEMA = "fleet-selfhosted-reconcile-plan-v1"
 RESOURCE_SNAPSHOT_SCHEMA = "fleet-selfhosted-resource-snapshot-v1"
+RESOURCE_PLAN_SCHEMA = "fleet-selfhosted-resource-plan-v1"
+SCORING_INTENT_SCHEMA = "fleet-selfhosted-scoring-intent-v1"
 
 
 class ReconcileError(RuntimeError):
@@ -66,7 +68,9 @@ def _terminal_stream_receipt(attempt_dir: Path) -> dict[str, Any]:
     }
 
 
-def _conversation_receipt(attempt_dir: Path) -> dict[str, Any]:
+def _conversation_evidence(
+    attempt_dir: Path,
+) -> tuple[dict[str, Any], list[dict[str, Any]], str]:
     events, canonical_trace, malformed = self_hosted.load_qwen_chat_trace(attempt_dir / "qwen-home")
     if malformed:
         raise ReconcileError("Qwen chat contains malformed records")
@@ -86,13 +90,19 @@ def _conversation_receipt(attempt_dir: Path) -> dict[str, Any]:
             call_id = str(message.get("tool_call_id") or "")
             if call_id:
                 results.add(call_id)
-    return {
+    final_answer = self_hosted.final_answer_from_conversation(messages)
+    stream = attempt_dir / "agent-output" / "qwen-stream.jsonl"
+    if not final_answer and stream.exists():
+        final_answer = self_hosted.extract_final_answer(stream)
+    receipt = {
         "canonical_trace_sha256": self_hosted.sha256(canonical_trace.read_bytes()),
+        "final_answer_sha256": self_hosted.sha256(final_answer.encode()),
         "normalized_message_count": len(messages),
         "submit_report_call_count": len(calls),
         "submit_report_completed_count": len(calls & results),
         "submit_report_completed": bool(calls & results),
     }
+    return receipt, messages, final_answer
 
 
 def _validate_identity(
@@ -149,9 +159,39 @@ def _authority_results(
         return False, None, []
     if observation.get("schema_version") != OBSERVATION_SCHEMA:
         raise ReconcileError("unsupported authority observation schema")
+    expected_fields = {
+        "schema_version",
+        "source",
+        "lookup_complete",
+        "observed_at",
+        "run_id",
+        "instance_id",
+        "evidence_run_id",
+        "task_key",
+        "task_version_id",
+        "instance_status",
+        "verifier_results",
+        "observation_sha256",
+    }
+    if set(observation) != expected_fields:
+        raise ReconcileError("authority observation fields are incomplete or unknown")
+    unsigned = {key: value for key, value in observation.items() if key != "observation_sha256"}
+    if observation["observation_sha256"] != _digest(unsigned):
+        raise ReconcileError("authority observation self-digest mismatch")
     _validate_identity(observation, binding, runtime, label="authority observation")
+    expected_task = {
+        "task_key": binding["task"]["key"],
+        "task_version_id": binding["task"]["version_id"],
+    }
+    for field, wanted in expected_task.items():
+        if observation.get(field) != wanted:
+            raise ReconcileError(f"authority observation {field} drifted")
     if observation.get("source") != "authoritative_verifier_store":
         raise ReconcileError("authority observation is not from the verifier store")
+    if not isinstance(observation.get("observed_at"), str) or not observation["observed_at"]:
+        raise ReconcileError("authority observation lacks an observation time")
+    if observation.get("instance_status") not in {"running", "terminated"}:
+        raise ReconcileError("authority observation has an unknown instance status")
     complete = observation.get("lookup_complete") is True
     results = observation.get("verifier_results")
     if not complete or not isinstance(results, list):
@@ -174,24 +214,115 @@ def _authority_results(
     return True, str(observation.get("instance_status") or ""), validated
 
 
-def _cleanup_plan(binding: dict[str, Any], snapshot: dict[str, Any] | None) -> dict[str, Any]:
+def _resource_plan(
+    attempt_dir: Path, binding: dict[str, Any], runtime: dict[str, Any]
+) -> tuple[dict[str, Any], str]:
+    plan = _load_object(attempt_dir / "resource-plan.json")
+    expected_fields = {
+        "schema_version",
+        "run_id",
+        "instance_id",
+        "evidence_run_id",
+        "containers",
+        "network",
+        "resource_plan_sha256",
+    }
+    if set(plan) != expected_fields or plan.get("schema_version") != RESOURCE_PLAN_SCHEMA:
+        raise ReconcileError("resource plan schema or fields are invalid")
+    supplied_digest = plan["resource_plan_sha256"]
+    unsigned = {key: value for key, value in plan.items() if key != "resource_plan_sha256"}
+    if supplied_digest != _digest(unsigned):
+        raise ReconcileError("resource plan self-digest mismatch")
+    _validate_identity(plan, binding, runtime, label="resource plan")
     suffix = hashlib.sha256(binding["run_id"].encode()).hexdigest()[:8]
-    expected = {
+    expected_containers = {
         f"qwen-agent-{suffix}",
         f"qwen-model-proxy-{suffix}",
         f"qwen-mcp-proxy-{suffix}",
     }
+    containers = plan.get("containers")
+    if not isinstance(containers, list) or set(containers) != expected_containers:
+        raise ReconcileError("resource plan container identities drifted")
+    if len(containers) != len(expected_containers):
+        raise ReconcileError("resource plan contains duplicate containers")
+    network = plan.get("network")
+    if not isinstance(network, str) or not network or network == "bridge":
+        raise ReconcileError("resource plan network identity is invalid")
+    return plan, supplied_digest
+
+
+def _scoring_payload(
+    binding: dict[str, Any], runtime: dict[str, Any], messages: list[dict[str, Any]], final: str
+) -> dict[str, Any]:
+    authority = binding.get("authority")
+    if not isinstance(authority, dict):
+        raise ReconcileError("binding lacks authoritative scoring controls")
+    return {
+        "instance_id": runtime["instance_id"],
+        "final_answer": final,
+        "conversation": messages,
+        "scoring_mode": authority.get("scoring_mode"),
+        "multi_app_aggregation_mode": authority.get("multi_app_aggregation_mode"),
+    }
+
+
+def _scoring_intent(
+    attempt_dir: Path,
+    binding: dict[str, Any],
+    runtime: dict[str, Any],
+    scoring_payload: dict[str, Any],
+) -> bool:
+    path = attempt_dir / "scoring-intent.json"
+    if not path.exists():
+        return False
+    intent = _load_object(path)
+    expected_fields = {
+        "schema_version",
+        "run_id",
+        "instance_id",
+        "evidence_run_id",
+        "request_sha256",
+    }
+    if set(intent) != expected_fields or intent.get("schema_version") != SCORING_INTENT_SCHEMA:
+        raise ReconcileError("scoring intent schema or fields are invalid")
+    _validate_identity(intent, binding, runtime, label="scoring intent")
+    if intent.get("request_sha256") != self_hosted.sha256(
+        self_hosted.canonical_json(scoring_payload)
+    ):
+        raise ReconcileError("scoring intent request digest does not match the preserved trace")
+    return True
+
+
+def _cleanup_plan(
+    binding: dict[str, Any],
+    resource_plan: dict[str, Any],
+    resource_plan_sha256: str,
+    snapshot: dict[str, Any] | None,
+) -> dict[str, Any]:
+    expected = set(resource_plan["containers"])
+    planned_network = resource_plan["network"]
     if snapshot is None:
         return {"action": "needs_resource_snapshot", "targets": []}
     if snapshot.get("schema_version") != RESOURCE_SNAPSHOT_SCHEMA:
         raise ReconcileError("unsupported resource snapshot schema")
+    expected_fields = {
+        "schema_version",
+        "lookup_complete",
+        "run_id",
+        "resource_plan_sha256",
+        "containers",
+        "networks",
+    }
+    if set(snapshot) != expected_fields or snapshot.get("lookup_complete") is not True:
+        raise ReconcileError("resource snapshot fields are incomplete or unknown")
     if snapshot.get("run_id") != binding["run_id"]:
         raise ReconcileError("resource snapshot run identity drifted")
+    if snapshot.get("resource_plan_sha256") != resource_plan_sha256:
+        raise ReconcileError("resource snapshot is not bound to the durable resource plan")
     rows = snapshot.get("containers")
     if not isinstance(rows, list):
         raise ReconcileError("resource snapshot containers are malformed")
-    targets = []
-    networks: set[str] = set()
+    targets: list[str] = []
     for row in rows:
         if not isinstance(row, dict) or row.get("name") not in expected:
             raise ReconcileError("resource snapshot contains an unrelated container")
@@ -199,9 +330,17 @@ def _cleanup_plan(binding: dict[str, Any], snapshot: dict[str, Any] | None) -> d
         if not isinstance(names, list) or not all(isinstance(name, str) for name in names):
             raise ReconcileError("resource snapshot network bindings are malformed")
         targets.append(row["name"])
-        networks.update(name for name in names if name != "bridge")
-    if len(networks) > 1:
-        raise ReconcileError("interrupted attempt resolves to multiple private networks")
+        if planned_network not in names or any(
+            name not in {"bridge", planned_network} for name in names
+        ):
+            raise ReconcileError("resource snapshot proposes an unplanned network")
+    if len(targets) != len(set(targets)):
+        raise ReconcileError("resource snapshot contains duplicate containers")
+    networks = snapshot.get("networks")
+    if not isinstance(networks, list) or len(networks) != len(set(networks)):
+        raise ReconcileError("resource snapshot networks are malformed")
+    if any(name != planned_network for name in networks):
+        raise ReconcileError("resource snapshot proposes a peer network")
     return {
         "action": "cleanup_once" if targets or networks else "none",
         "targets": sorted(targets),
@@ -218,13 +357,15 @@ def build_plan(
     """Build a content-free plan; never contacts Fleet, Docker, or the model."""
     binding = _load_object(attempt_dir / "binding.json")
     runtime = _load_object(attempt_dir / "runtime-binding.json")
+    resources, resource_plan_sha256 = _resource_plan(attempt_dir, binding, runtime)
     stream = _terminal_stream_receipt(attempt_dir)
-    conversation = _conversation_receipt(attempt_dir)
+    conversation, messages, final_answer = _conversation_evidence(attempt_dir)
+    scoring_payload = _scoring_payload(binding, runtime, messages, final_answer)
+    scoring_intent_exists = _scoring_intent(attempt_dir, binding, runtime, scoring_payload)
     local = _local_reward(attempt_dir, binding, runtime)
     lookup_complete, instance_status, authoritative = _authority_results(
         authority_observation, binding, runtime
     )
-    scoring_intent_exists = (attempt_dir / "scoring-intent.json").exists()
 
     reasons: list[str] = []
     score_action = "refuse"
@@ -255,9 +396,10 @@ def build_plan(
         # empty authority lookup is the only evidence that makes another POST safe.
         score_action = "score_once_from_existing_trace"
 
-    cleanup = _cleanup_plan(binding, resource_snapshot)
-    if score_action == "refuse":
-        cleanup["blocked_until_score_reconciled"] = True
+    cleanup = _cleanup_plan(binding, resources, resource_plan_sha256, resource_snapshot)
+    if score_action in {"refuse", "score_once_from_existing_trace"}:
+        cleanup["eligible_action_after_score"] = cleanup["action"]
+        cleanup["action"] = "blocked_until_score_reconciled"
 
     unsigned: dict[str, Any] = {
         "schema_version": PLAN_SCHEMA,

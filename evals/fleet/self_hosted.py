@@ -629,17 +629,16 @@ def run(config: dict[str, Any], out_dir: Path, proxy_script: Path) -> dict[str, 
             + b"\n"
         )
 
-        write_json_once(
-            out_dir / "resource-plan.json",
-            {
-                "schema_version": "fleet-selfhosted-resource-plan-v1",
-                "run_id": config["run_id"],
-                "instance_id": instance_id,
-                "evidence_run_id": rollout_instance["evidence_run_id"],
-                "containers": [qwen_agent, model_proxy, mcp_proxy],
-                "network": network,
-            },
-        )
+        resource_plan = {
+            "schema_version": "fleet-selfhosted-resource-plan-v1",
+            "run_id": config["run_id"],
+            "instance_id": instance_id,
+            "evidence_run_id": rollout_instance["evidence_run_id"],
+            "containers": [qwen_agent, model_proxy, mcp_proxy],
+            "network": network,
+        }
+        resource_plan["resource_plan_sha256"] = sha256(canonical_json(resource_plan))
+        write_json_once(out_dir / "resource-plan.json", resource_plan)
 
         _docker("network", "create", "--internal", network)
         proxy_mount = f"{proxy_script.resolve()}:/proxy.py:ro"
