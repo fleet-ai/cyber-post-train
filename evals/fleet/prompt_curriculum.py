@@ -22,6 +22,7 @@ import re
 import sys
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -29,6 +30,8 @@ from evals.fleet import self_hosted
 
 PLAN_SCHEMA = "fleet-qwen-code-prompt-curriculum-plan-v1"
 DRY_RUN_SCHEMA = "fleet-qwen-code-prompt-curriculum-dry-run-v1"
+REVIEW_PLAN_SCHEMA = "fleet-qwen-code-prompt-curriculum-review-plan-v1"
+REQUEST_AUDIT_SCHEMA = "fleet-read-only-request-audit-v1"
 EXPECTED_SPLIT_SCHEMA = "fleet_rl_task_split_v1"
 EXPECTED_MODEL_REVISION = "6a9e13bd6fc8f0983b9b99948120bc37f49c13e9"
 EXPECTED_VARIANT_COUNT = 4
@@ -339,6 +342,29 @@ def build_task_group_payload(
         "campaign_id": plan["campaign_id"],
         "task_key": selected["task_key"],
         "source_task_version_id": selected["task_version_id"],
+        "exact_version_bindings": {
+            "task": {
+                "key": selected["task_key"],
+                "version": selected["task_version"],
+                "version_id": selected["task_version_id"],
+            },
+            "environment": {
+                "key": selected["env_key"],
+                "version": selected["env_version"],
+                "version_id": selected["environment_version_id"],
+            },
+            "data": {
+                "key": selected["data_key"],
+                "version": selected["data_version"],
+            },
+            "verifier": {
+                "id": live_binding["verifier_id"],
+                "version": live_binding["verifier_version"],
+                "version_id": live_binding["verifier_version_id"],
+                "sha256": live_binding["verifier_sha256"],
+            },
+            "runtime_seed_content_sha256": live_binding["runtime_seed_content_sha256"],
+        },
         "family": selected["family"],
         "task_group_name": payload["name"],
         "project_id": plan["project_id"],
@@ -347,6 +373,14 @@ def build_task_group_payload(
         "variant_prompt_sha256": {
             member["label"]: self_hosted.sha256(member["prompt"].encode()) for member in members
         },
+        "variant_ladder": [
+            {
+                "id": variant["id"],
+                "cue_ids": list(variant["cue_ids"]),
+                "prompt_sha256": self_hosted.sha256(member["prompt"].encode()),
+            }
+            for variant, member in zip(plan["variants"], members, strict=True)
+        ],
         "source_binding": live_binding,
         "registry_task_graph_source": registry_source,
         "non_prompt_task_spec_sha256": self_hosted.sha256(
@@ -357,6 +391,25 @@ def build_task_group_payload(
         ),
         "task_group_create_performed": False,
         "paid_job_submitted": False,
+        "prepared_payload_invariants": {
+            "scope": "pre_create_task_group_payload",
+            "member_override_fields": ["prompt"],
+            "environment_unchanged": True,
+            "runtime_seed_unchanged": True,
+            "data_unchanged": True,
+            "atoms_unchanged": True,
+            "verifier_unchanged": True,
+            "flags_unchanged": True,
+            "evidence": {
+                "exact_source_task_version_id": selected["task_version_id"],
+                "exact_task_graph_source": registry_source,
+                "source_binding": live_binding,
+                "non_prompt_task_spec_sha256": self_hosted.sha256(
+                    self_hosted.canonical_json(non_prompt_task)
+                ),
+            },
+            "created_member_hydration_pending": True,
+        },
         "post_create_gates": [
             "re-hydrate every created member version",
             "require exact source environment, data, runtime seed, verifier version, and schema",
@@ -368,17 +421,200 @@ def build_task_group_payload(
     return payload, receipt
 
 
-def _write_create_once(path: Path, value: dict[str, Any], mode: int = 0o600) -> None:
+def _expected_gets(selected: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {"method": "GET", "path": "/v1/account", "params": {}},
+        *[
+            {
+                "method": "GET",
+                "path": f"/v1/tasks/{row['task_key']}",
+                "params": {"version_id": row["task_version_id"]},
+            }
+            for row in selected
+        ],
+    ]
+
+
+class _PredeclaredGetClient:
+    """Allow exactly one ordered pass over a frozen set of safe GETs."""
+
+    def __init__(self, delegate: Any, expected: list[dict[str, Any]]) -> None:
+        self._delegate = delegate
+        self._expected = copy.deepcopy(expected)
+        self._observed: list[dict[str, Any]] = []
+
+    def request(self, method: str, url: str, **kwargs: Any) -> Any:
+        parsed = urlsplit(url)
+        if parsed.query or parsed.fragment:
+            raise RuntimeError("prompt-curriculum preparation attempted an undeclared request")
+        actual = {
+            "method": method,
+            "origin": f"{parsed.scheme}://{parsed.netloc}",
+            "path": parsed.path,
+            "params": copy.deepcopy(kwargs.get("params") or {}),
+        }
+        expected = (
+            {**self._expected[len(self._observed)], "origin": self_hosted.ORCHESTRATOR}
+            if len(self._observed) < len(self._expected)
+            else None
+        )
+        if actual != expected:
+            raise RuntimeError("prompt-curriculum preparation attempted an undeclared request")
+        if method != "GET":
+            raise RuntimeError("prompt-curriculum preparation attempted a mutation")
+        self._observed.append({key: actual[key] for key in ("method", "path", "params")})
+        return self._delegate.request(method, url, **kwargs)
+
+    def receipt(self) -> dict[str, Any]:
+        if self._observed != self._expected:
+            raise RuntimeError("prompt-curriculum preparation did not complete every declared GET")
+        receipt = {
+            "schema_version": REQUEST_AUDIT_SCHEMA,
+            "orchestrator_origin": self_hosted.ORCHESTRATOR,
+            "expected_request_count": len(self._expected),
+            "observed_request_count": len(self._observed),
+            "mutation_request_count": 0,
+            "requests": copy.deepcopy(self._observed),
+        }
+        receipt["request_audit_sha256"] = self_hosted.sha256(self_hosted.canonical_json(receipt))
+        return receipt
+
+
+def _hydrate_dry_run_material(
+    client: Any,
+    plan: dict[str, Any],
+    selected: list[dict[str, Any]],
+) -> tuple[list[tuple[dict[str, Any], dict[str, Any]]], dict[str, Any]]:
+    audited = _PredeclaredGetClient(client, _expected_gets(selected))
+    account = self_hosted._request(audited, "GET", "/v1/account")
+    if account.get("team_name") != "fleet" or account.get("team_id") not in {
+        None,
+        self_hosted.FLEET_TEAM_ID,
+    }:
+        raise RuntimeError("FLEET_API_KEY is not scoped to the Fleet team")
+
+    material = []
+    for row in selected:
+        task = self_hosted._request(
+            audited,
+            "GET",
+            f"/v1/tasks/{row['task_key']}",
+            params={"version_id": row["task_version_id"]},
+        )
+        material.append(build_task_group_payload(plan, row, task))
+    return material, audited.receipt()
+
+
+def build_review_plan(
+    plan: dict[str, Any],
+    receipts: list[dict[str, Any]],
+    request_audit: dict[str, Any],
+) -> dict[str, Any]:
+    if len(receipts) != len(plan["tasks"]):
+        raise ValueError("review plan task count does not match the frozen plan")
+    if request_audit.get("schema_version") != REQUEST_AUDIT_SCHEMA or request_audit.get(
+        "request_audit_sha256"
+    ) != _digest_without(request_audit, "request_audit_sha256"):
+        raise ValueError("review plan request audit is malformed")
+    if (
+        request_audit.get("requests") != _expected_gets(plan["tasks"])
+        or request_audit.get("orchestrator_origin") != self_hosted.ORCHESTRATOR
+        or request_audit.get("expected_request_count") != 3
+        or request_audit.get("observed_request_count") != 3
+        or request_audit.get("mutation_request_count") != 0
+    ):
+        raise ValueError("review plan request audit does not prove the exact GET-only contract")
+    for selected, receipt in zip(plan["tasks"], receipts, strict=True):
+        registry_source = receipt.get("registry_task_graph_source")
+        expected_exact_bindings = {
+            "task": {
+                "key": selected["task_key"],
+                "version": selected["task_version"],
+                "version_id": selected["task_version_id"],
+            },
+            "environment": {
+                "key": selected["env_key"],
+                "version": selected["env_version"],
+                "version_id": selected["environment_version_id"],
+            },
+            "data": {"key": selected["data_key"], "version": selected["data_version"]},
+            "verifier": {
+                "id": selected["source_receipt"]["verifier_id"],
+                "version": selected["source_receipt"]["verifier_version"],
+                "version_id": selected["source_receipt"]["verifier_version_id"],
+                "sha256": selected["source_receipt"]["verifier_sha256"],
+            },
+            "runtime_seed_content_sha256": selected["source_receipt"][
+                "runtime_seed_content_sha256"
+            ],
+        }
+        invariant = receipt.get("prepared_payload_invariants") or {}
+        if (
+            receipt.get("schema_version") != DRY_RUN_SCHEMA
+            or receipt.get("receipt_sha256") != _digest_without(receipt, "receipt_sha256")
+            or receipt.get("campaign_id") != plan["campaign_id"]
+            or receipt.get("task_key") != selected["task_key"]
+            or receipt.get("source_task_version_id") != selected["task_version_id"]
+            or receipt.get("variant_count") != EXPECTED_VARIANT_COUNT
+            or receipt.get("planned_sessions") != EXPECTED_VARIANT_COUNT
+            or receipt.get("task_group_create_performed") is not False
+            or receipt.get("paid_job_submitted") is not False
+            or receipt.get("source_binding") != selected["source_receipt"]
+            or receipt.get("exact_version_bindings") != expected_exact_bindings
+            or _exact_registry_source({"task_graph_source": registry_source}) != registry_source
+            or [
+                {"id": row.get("id"), "cue_ids": row.get("cue_ids")}
+                for row in receipt.get("variant_ladder") or []
+            ]
+            != plan["variants"]
+            or invariant.get("member_override_fields") != ["prompt"]
+            or invariant.get("scope") != "pre_create_task_group_payload"
+            or invariant.get("created_member_hydration_pending") is not True
+            or invariant.get("evidence")
+            != {
+                "exact_source_task_version_id": selected["task_version_id"],
+                "exact_task_graph_source": registry_source,
+                "source_binding": selected["source_receipt"],
+                "non_prompt_task_spec_sha256": receipt.get("non_prompt_task_spec_sha256"),
+            }
+            or any(
+                invariant.get(field) is not True
+                for field in (
+                    "environment_unchanged",
+                    "runtime_seed_unchanged",
+                    "data_unchanged",
+                    "atoms_unchanged",
+                    "verifier_unchanged",
+                    "flags_unchanged",
+                )
+            )
+        ):
+            raise ValueError("review plan contains a mismatched or malformed task receipt")
+    review = {
+        "schema_version": REVIEW_PLAN_SCHEMA,
+        "campaign_id": plan["campaign_id"],
+        "study_role": plan["study_role"],
+        "baseline_campaign": copy.deepcopy(plan["baseline_campaign"]),
+        "model": copy.deepcopy(plan["model"]),
+        "harness": copy.deepcopy(plan["harness"]),
+        "execution": copy.deepcopy(plan["execution"]),
+        "target_success_rate": copy.deepcopy(plan["target_success_rate"]),
+        "request_audit": copy.deepcopy(request_audit),
+        "tasks": copy.deepcopy(receipts),
+        "task_group_create_performed": False,
+        "paid_job_submitted": False,
+        "registry_source_published": False,
+        "pipeline_lane_touched": False,
+    }
+    review["review_plan_sha256"] = self_hosted.sha256(self_hosted.canonical_json(review))
+    return review
+
+
+def _write_create_once(path: Path, value: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     if path.exists():
         raise FileExistsError(f"refusing to replace existing dry-run artifact: {path}")
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, mode)
-    try:
-        with os.fdopen(fd, "wb") as handle:
-            handle.write(self_hosted.canonical_json(value) + b"\n")
-    except Exception:
-        path.unlink(missing_ok=True)
-        raise
+    self_hosted.write_json_once(path, value)
 
 
 def prepare_live_dry_runs(
@@ -387,25 +623,13 @@ def prepare_live_dry_runs(
     selected: list[dict[str, Any]],
     out_dir: Path,
 ) -> dict[str, Any]:
-    account = self_hosted._request(client, "GET", "/v1/account")
-    if account.get("team_name") != "fleet" or account.get("team_id") not in {
-        None,
-        self_hosted.FLEET_TEAM_ID,
-    }:
-        raise RuntimeError("FLEET_API_KEY is not scoped to the Fleet team")
+    material, request_audit = _hydrate_dry_run_material(client, plan, selected)
     if out_dir.exists():
         raise FileExistsError(f"refusing to reuse prompt-curriculum output directory: {out_dir}")
     out_dir.mkdir(parents=True, mode=0o700)
 
     receipts = []
-    for row in selected:
-        task = self_hosted._request(
-            client,
-            "GET",
-            f"/v1/tasks/{row['task_key']}",
-            params={"version_id": row["task_version_id"]},
-        )
-        payload, receipt = build_task_group_payload(plan, row, task)
+    for row, (payload, receipt) in zip(selected, material, strict=True):
         task_dir = out_dir / row["family"]
         _write_create_once(task_dir / "private-task-group-payload.json", payload)
         _write_create_once(task_dir / "dry-run-receipt.json", receipt)
@@ -418,6 +642,7 @@ def prepare_live_dry_runs(
         "planned_paid_sessions": sum(row["planned_sessions"] for row in receipts),
         "task_group_create_performed": False,
         "paid_job_submitted": False,
+        "request_audit": request_audit,
         "receipt_sha256s": [row["receipt_sha256"] for row in receipts],
     }
     summary["summary_sha256"] = self_hosted.sha256(self_hosted.canonical_json(summary))
@@ -425,9 +650,25 @@ def prepare_live_dry_runs(
     return summary
 
 
+def prepare_live_review_plan(
+    client: Any,
+    plan: dict[str, Any],
+    selected: list[dict[str, Any]],
+    out_dir: Path,
+) -> dict[str, Any]:
+    """Hydrate exact source tasks but persist no prompt-bearing payload."""
+    material, request_audit = _hydrate_dry_run_material(client, plan, selected)
+    review = build_review_plan(plan, [receipt for _, receipt in material], request_audit)
+    if out_dir.exists():
+        raise FileExistsError(f"refusing to reuse prompt-curriculum output directory: {out_dir}")
+    out_dir.mkdir(parents=True, mode=0o700)
+    _write_create_once(out_dir / "review-plan.json", review)
+    return review
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("command", choices=("validate", "prepare"))
+    parser.add_argument("command", choices=("validate", "prepare", "prepare-review"))
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--split", type=Path, required=True)
     parser.add_argument("--campaign-state", type=Path)
@@ -464,7 +705,10 @@ def main() -> int:
         headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
         timeout=180,
     ) as client:
-        summary = prepare_live_dry_runs(client, plan, selected, args.out_dir)
+        if args.command == "prepare-review":
+            summary = prepare_live_review_plan(client, plan, selected, args.out_dir)
+        else:
+            summary = prepare_live_dry_runs(client, plan, selected, args.out_dir)
     print(json.dumps(summary, sort_keys=True))
     return 0
 
