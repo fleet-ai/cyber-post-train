@@ -20,15 +20,15 @@ import json
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
-from uuid import NAMESPACE_URL, uuid5
+from uuid import NAMESPACE_URL, UUID, uuid5
 
 from evals.fleet import client as fleet_client
 from evals.fleet import prompt_curriculum, self_hosted
 from evals.fleet.models import DEFAULT_SALES_PRODUCT_ID
 
-CREATE_PREFLIGHT_SCHEMA = "fleet-qwen-code-prompt-curriculum-create-preflight-v1"
-CREATE_CLAIM_SCHEMA = "fleet-qwen-code-prompt-curriculum-create-claim-v1"
-HYDRATION_RECEIPT_SCHEMA = "fleet-qwen-code-prompt-curriculum-hydration-v1"
+CREATE_PREFLIGHT_SCHEMA = "fleet-qwen-code-prompt-curriculum-create-preflight-v2"
+CREATE_CLAIM_SCHEMA = "fleet-qwen-code-prompt-curriculum-create-claim-v2"
+HYDRATION_RECEIPT_SCHEMA = "fleet-qwen-code-prompt-curriculum-hydration-v2"
 JOB_INVENTORY_OBSERVATION_SCHEMA = "fleet-qwen-code-job-inventory-observation-v1"
 EXPECTED_RUNTIME_MODEL = "qwen/qwen3-6-27b-cyber-baseline"
 EXPECTED_HARNESS = "qwen-code"
@@ -67,6 +67,31 @@ def _digest_without(value: dict[str, Any], field: str) -> str:
     return self_hosted.sha256(
         self_hosted.canonical_json({key: item for key, item in value.items() if key != field})
     )
+
+
+def _canonical_uuid(value: Any, *, field: str) -> str:
+    if not isinstance(value, str):
+        raise ValueError(f"{field} must be a canonical UUID string")
+    try:
+        parsed = UUID(value)
+    except ValueError:
+        raise ValueError(f"{field} must be a canonical UUID string") from None
+    if str(parsed) != value:
+        raise ValueError(f"{field} must be a canonical UUID string")
+    return value
+
+
+def _require_exact_environment_version_id(
+    task: dict[str, Any], expected: Any, *, context: str
+) -> str:
+    expected_id = _canonical_uuid(expected, field="expected environment_version_id")
+    observed_id = _canonical_uuid(
+        task.get("environment_version_id"),
+        field=f"{context} environment_version_id",
+    )
+    if observed_id != expected_id:
+        raise ValueError(f"{context} environment_version_id changed from its frozen binding")
+    return observed_id
 
 
 def _validate_review_plan(
@@ -363,7 +388,7 @@ def build_create_preflight(
     plan: dict[str, Any],
     split: dict[str, Any],
     review: dict[str, Any],
-    live_material: list[tuple[dict[str, Any], dict[str, Any]]],
+    live_material: list[tuple[dict[str, Any], dict[str, Any], str]],
     job_inventory: list[dict[str, Any]],
     inventory_observation: dict[str, Any],
     request_audit: dict[str, Any],
@@ -425,13 +450,19 @@ def build_create_preflight(
     for selected, reviewed, material in zip(
         plan["tasks"], review["tasks"], live_material, strict=True
     ):
-        payload, live_receipt = material
+        payload, live_receipt, source_environment_version_id = material
         if live_receipt != reviewed:
             raise RuntimeError("live source task or private payload drifted from reviewed evidence")
         if self_hosted.sha256(self_hosted.canonical_json(payload)) != reviewed.get(
             "private_task_group_payload_sha256"
         ):
             raise RuntimeError("private task-group payload digest drifted")
+        expected_environment_version_id = _canonical_uuid(
+            reviewed["exact_version_bindings"]["environment"]["version_id"],
+            field="reviewed environment_version_id",
+        )
+        if source_environment_version_id != expected_environment_version_id:
+            raise RuntimeError("source task environment_version_id proof drifted")
         if len(payload.get("members") or []) != MAX_SPREAD_MEMBERS:
             raise ValueError("task group must contain exactly four prompt members")
         labels = tuple(member.get("label") for member in payload["members"])
@@ -457,6 +488,8 @@ def build_create_preflight(
                 "private_task_group_payload_sha256": reviewed["private_task_group_payload_sha256"],
                 "non_prompt_task_spec_sha256": reviewed["non_prompt_task_spec_sha256"],
                 "exact_version_bindings": copy.deepcopy(reviewed["exact_version_bindings"]),
+                "source_environment_version_id_verified": True,
+                "expected_member_environment_version_id": expected_environment_version_id,
                 "registry_task_graph_source": copy.deepcopy(reviewed["registry_task_graph_source"]),
                 "job_contract": job,
                 "pre_group_job_contract_sha256": pre_group_job_contract_sha256,
@@ -548,7 +581,13 @@ def prepare_live_create_preflight(
             f"/v1/tasks/{selected['task_key']}",
             params={"version_id": selected["task_version_id"]},
         )
-        material.append(prompt_curriculum.build_task_group_payload(plan, selected, task))
+        source_environment_version_id = _require_exact_environment_version_id(
+            task,
+            selected["environment_version_id"],
+            context=f"source task {selected['family']!r}",
+        )
+        payload, receipt = prompt_curriculum.build_task_group_payload(plan, selected, task)
+        material.append((payload, receipt, source_environment_version_id))
 
     inventory, observation = _read_job_inventory(audited)
     return build_create_preflight(
@@ -563,6 +602,7 @@ def _member_binding(task: dict[str, Any]) -> dict[str, Any]:
         "task_key": task.get("key"),
         "env_key": task.get("environment_id"),
         "env_version": task.get("version"),
+        "environment_version_id": task.get("environment_version_id"),
         "data_key": task.get("data_id"),
         "data_version": task.get("data_version"),
         "prompt_sha256": self_hosted.sha256((task.get("prompt") or "").encode()),
@@ -618,13 +658,26 @@ def validate_created_group(
 
     expected_source = reviewed["source_binding"]
     expected_prompt_hashes = reviewed["variant_prompt_sha256"]
+    expected_environment_version_id = _canonical_uuid(
+        reviewed["exact_version_bindings"]["environment"]["version_id"],
+        field="reviewed environment_version_id",
+    )
     hydrated = []
     for label in EXPECTED_LABELS:
         member = members_by_label[label]
         version_id = str(member["eval_task_version_id"])
         task = member_tasks[version_id]
+        observed_environment_version_id = _require_exact_environment_version_id(
+            task,
+            expected_environment_version_id,
+            context=f"created member {label!r}",
+        )
         binding = _member_binding(task)
-        expected = {**expected_source, "prompt_sha256": expected_prompt_hashes[label]}
+        expected = {
+            **expected_source,
+            "prompt_sha256": expected_prompt_hashes[label],
+            "environment_version_id": expected_environment_version_id,
+        }
         if binding != expected:
             raise ValueError(f"created member {label!r} changed a frozen task binding")
         if task.get("id") not in (None, member.get("eval_task_id")):
@@ -644,6 +697,7 @@ def validate_created_group(
                 "eval_task_id": str(member["eval_task_id"]),
                 "eval_task_version_id": version_id,
                 "prompt_sha256": binding["prompt_sha256"],
+                "environment_version_id": observed_environment_version_id,
             }
         )
 
@@ -656,14 +710,10 @@ def validate_created_group(
         "members": hydrated,
         "member_count": 4,
         "environment_key_and_version_label_unchanged": True,
-        "expected_environment_version_id": reviewed["exact_version_bindings"]["environment"][
-            "version_id"
-        ],
-        "environment_version_id_verified": False,
-        "environment_version_id_blocker": (
-            "the public task-version read omits environment_version_id; require an "
-            "authoritative server-side member-version receipt before launch"
-        ),
+        "expected_environment_version_id": expected_environment_version_id,
+        "environment_version_id_verified": True,
+        "environment_version_id_blocker": None,
+        "created_member_hydration_verified": True,
         "data_unchanged": True,
         "runtime_seed_unchanged": True,
         "atoms_unchanged": True,
@@ -671,6 +721,11 @@ def validate_created_group(
         "flags_unchanged": True,
         "non_prompt_task_spec_unchanged": True,
         "paid_job_submission_unblocked": False,
+        "remaining_paid_launch_blockers": [
+            "live_model_serving_parity",
+            "post_create_duplicate_job_recheck",
+            "idempotent_job_contract_hydration",
+        ],
     }
     receipt["hydration_sha256"] = self_hosted.sha256(self_hosted.canonical_json(receipt))
     return receipt

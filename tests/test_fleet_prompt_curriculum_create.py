@@ -36,6 +36,7 @@ def _live_task(selected: dict[str, Any]) -> dict[str, Any]:
         "prompt": prompt,
         "environment_id": selected["env_key"],
         "version": selected["env_version"],
+        "environment_version_id": selected["environment_version_id"],
         "data_id": selected["data_key"],
         "data_version": selected["data_version"],
         "verifier_id": receipt["verifier_id"],
@@ -100,7 +101,7 @@ def _fixture() -> tuple[
     dict[str, Any],
     dict[str, Any],
     dict[str, Any],
-    list[tuple[dict[str, Any], dict[str, Any]]],
+    list[tuple[dict[str, Any], dict[str, Any], str]],
     list[dict[str, Any]],
     dict[str, Any],
     dict[str, Any],
@@ -108,9 +109,10 @@ def _fixture() -> tuple[
     plan, split = _json(PLAN), _json(SPLIT)
     live_material = []
     for selected in plan["tasks"]:
-        live_material.append(
-            prompt_curriculum.build_task_group_payload(plan, selected, _live_task(selected))
+        payload, receipt = prompt_curriculum.build_task_group_payload(
+            plan, selected, _live_task(selected)
         )
+        live_material.append((payload, receipt, selected["environment_version_id"]))
     plan["plan_sha256"] = self_hosted.sha256(
         self_hosted.canonical_json(
             {key: value for key, value in plan.items() if key != "plan_sha256"}
@@ -137,7 +139,7 @@ def _fixture() -> tuple[
         )
     )
     review = prompt_curriculum.build_review_plan(
-        plan, [receipt for _, receipt in live_material], old_audit
+        plan, [receipt for _, receipt, _ in live_material], old_audit
     )
     inventory: list[dict[str, Any]] = []
     observation = _inventory_observation(inventory)
@@ -166,6 +168,12 @@ def test_create_preflight_is_exact_bounded_and_prompt_free() -> None:
     assert claim["paid_job_submissions"] == 0
     assert {group["family"] for group in claim["groups"]} == {"current", "fakelook"}
     assert all(group["job_contract"]["planned_sessions"] <= 6 for group in claim["groups"])
+    assert all(group["source_environment_version_id_verified"] for group in claim["groups"])
+    assert all(
+        group["expected_member_environment_version_id"]
+        == group["exact_version_bindings"]["environment"]["version_id"]
+        for group in claim["groups"]
+    )
     serialized = json.dumps(result)
     assert "Private current source prompt" not in serialized
     assert "Private fakelook source prompt" not in serialized
@@ -373,6 +381,39 @@ def test_live_preflight_executes_exact_source_gets_plus_complete_inventory() -> 
     assert result["request_audit"]["mutation_request_count"] == 0
 
 
+@pytest.mark.parametrize(
+    ("case", "value", "message"),
+    [
+        ("missing", None, "canonical UUID"),
+        ("null", None, "canonical UUID"),
+        ("bool", False, "canonical UUID"),
+        ("non-uuid", "not-a-uuid", "canonical UUID"),
+        (
+            "wrong",
+            "ffffffff-ffff-4fff-8fff-ffffffffffff",
+            "changed from its frozen binding",
+        ),
+    ],
+)
+def test_live_preflight_rejects_unproven_source_environment_version_id(
+    case: str, value: Any, message: str
+) -> None:
+    plan, split, review, _, _, _, _ = _fixture()
+    tasks = [_live_task(selected) for selected in plan["tasks"]]
+    if case == "missing":
+        tasks[0].pop("environment_version_id")
+    else:
+        tasks[0]["environment_version_id"] = value
+    delegate = _ReadOnlyDelegate(plan, tasks)
+
+    with pytest.raises(ValueError, match=message):
+        prompt_curriculum_create.prepare_live_create_preflight(delegate, plan, split, review)
+
+    assert len(delegate.calls) == 2
+    assert {method for method, _, _ in delegate.calls} == {"GET"}
+    assert not any(url.endswith("/v2/jobs") for _, url, _ in delegate.calls)
+
+
 def test_job_inventory_pages_until_reported_total_is_exhausted() -> None:
     plan = _json(PLAN)
     first = [{"id": f"job-{index}", "input": {}} for index in range(200)]
@@ -469,6 +510,8 @@ def test_created_group_hydration_proves_shared_task_and_all_frozen_bindings() ->
         receipt[field]
         for field in (
             "environment_key_and_version_label_unchanged",
+            "environment_version_id_verified",
+            "created_member_hydration_verified",
             "data_unchanged",
             "runtime_seed_unchanged",
             "atoms_unchanged",
@@ -477,12 +520,52 @@ def test_created_group_hydration_proves_shared_task_and_all_frozen_bindings() ->
             "non_prompt_task_spec_unchanged",
         )
     )
-    assert receipt["environment_version_id_verified"] is False
+    assert receipt["environment_version_id_blocker"] is None
     assert receipt["paid_job_submission_unblocked"] is False
     assert (
         receipt["expected_environment_version_id"]
         == reviewed["exact_version_bindings"]["environment"]["version_id"]
     )
+    assert {row["environment_version_id"] for row in receipt["members"]} == {
+        receipt["expected_environment_version_id"]
+    }
+
+
+@pytest.mark.parametrize(
+    ("case", "value", "message"),
+    [
+        ("missing", None, "canonical UUID"),
+        ("null", None, "canonical UUID"),
+        ("bool", True, "canonical UUID"),
+        ("non-uuid", "not-a-uuid", "canonical UUID"),
+        (
+            "wrong",
+            "ffffffff-ffff-4fff-8fff-ffffffffffff",
+            "changed from its frozen binding",
+        ),
+    ],
+)
+def test_created_group_hydration_rejects_unproven_environment_version_id(
+    case: str, value: Any, message: str
+) -> None:
+    reviewed, group, tasks = _created_group_fixture()
+    first_version_id = str(group["members"][0]["eval_task_version_id"])
+    if case == "missing":
+        tasks[first_version_id].pop("environment_version_id")
+    else:
+        tasks[first_version_id]["environment_version_id"] = value
+
+    with pytest.raises(ValueError, match=message):
+        prompt_curriculum_create.validate_created_group(reviewed, group, tasks)
+
+
+def test_created_group_hydration_rejects_mixed_environment_version_ids() -> None:
+    reviewed, group, tasks = _created_group_fixture()
+    second_version_id = str(group["members"][1]["eval_task_version_id"])
+    tasks[second_version_id]["environment_version_id"] = "ffffffff-ffff-4fff-8fff-ffffffffffff"
+
+    with pytest.raises(ValueError, match="changed from its frozen binding"):
+        prompt_curriculum_create.validate_created_group(reviewed, group, tasks)
 
 
 @pytest.mark.parametrize(
