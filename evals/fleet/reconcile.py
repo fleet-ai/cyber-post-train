@@ -282,9 +282,14 @@ def _scoring_intent(
         "instance_id",
         "evidence_run_id",
         "request_sha256",
+        "scoring_intent_sha256",
     }
     if set(intent) != expected_fields or intent.get("schema_version") != SCORING_INTENT_SCHEMA:
         raise ReconcileError("scoring intent schema or fields are invalid")
+    supplied_digest = intent["scoring_intent_sha256"]
+    unsigned = {key: value for key, value in intent.items() if key != "scoring_intent_sha256"}
+    if supplied_digest != _digest(unsigned):
+        raise ReconcileError("scoring intent self-digest mismatch")
     _validate_identity(intent, binding, runtime, label="scoring intent")
     if intent.get("request_sha256") != self_hosted.sha256(
         self_hosted.canonical_json(scoring_payload)

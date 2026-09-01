@@ -185,7 +185,9 @@ The self-hosted runner writes `resource-plan.json` before starting local
 containers and writes an exclusive, durable `scoring-intent.json` immediately
 before its one non-retried authoritative scoring request. If the controller is
 terminated outside Python, these intent receipts distinguish an unfinished
-local attempt from permission to repeat it.
+local attempt from permission to repeat it. Both the intent and its exact
+request digest are covered by the intent's own self-digest, and create-once
+publication syncs the file and its parent directory before returning.
 
 `reconcile.py` inspects an existing terminal Qwen trace without emitting prompt,
 tool arguments, responses, or final-answer content. It always sets

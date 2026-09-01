@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import stat
 from pathlib import Path
 
 import pytest
@@ -287,13 +288,16 @@ def _valid_scoring_intent(attempt: Path) -> dict:
         "scoring_mode": binding["authority"]["scoring_mode"],
         "multi_app_aggregation_mode": binding["authority"]["multi_app_aggregation_mode"],
     }
-    return {
-        "schema_version": reconcile.SCORING_INTENT_SCHEMA,
-        "run_id": binding["run_id"],
-        "instance_id": runtime["instance_id"],
-        "evidence_run_id": runtime["evidence_run_id"],
-        "request_sha256": self_hosted.sha256(self_hosted.canonical_json(payload)),
-    }
+    return _with_digest(
+        {
+            "schema_version": reconcile.SCORING_INTENT_SCHEMA,
+            "run_id": binding["run_id"],
+            "instance_id": runtime["instance_id"],
+            "evidence_run_id": runtime["evidence_run_id"],
+            "request_sha256": self_hosted.sha256(self_hosted.canonical_json(payload)),
+        },
+        "scoring_intent_sha256",
+    )
 
 
 def test_pending_score_blocks_cleanup(tmp_path: Path) -> None:
@@ -315,8 +319,26 @@ def test_scoring_intent_must_match_exact_preserved_request(tmp_path: Path) -> No
     attempt = _attempt(tmp_path)
     intent = _valid_scoring_intent(attempt)
     intent["request_sha256"] = "sha256:" + "0" * 64
+    intent.pop("scoring_intent_sha256")
+    _with_digest(intent, "scoring_intent_sha256")
     _write(attempt / "scoring-intent.json", intent)
     with pytest.raises(reconcile.ReconcileError, match="preserved trace"):
+        reconcile.build_plan(attempt)
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda value: value.__setitem__("instance_id", "forged-instance"),
+        lambda value: value.__setitem__("scoring_intent_sha256", "sha256:" + "0" * 64),
+    ],
+)
+def test_scoring_intent_rejects_forged_self_digest(tmp_path: Path, mutate) -> None:
+    attempt = _attempt(tmp_path)
+    intent = _valid_scoring_intent(attempt)
+    mutate(intent)
+    _write(attempt / "scoring-intent.json", intent)
+    with pytest.raises(reconcile.ReconcileError, match="self-digest"):
         reconcile.build_plan(attempt)
 
 
@@ -371,3 +393,20 @@ def test_write_json_once_is_an_exclusive_durable_claim(tmp_path: Path) -> None:
     with pytest.raises(FileExistsError):
         self_hosted.write_json_once(path, {"attempt": 2})
     assert json.loads(path.read_text()) == {"attempt": 1}
+
+
+def test_write_json_once_fsyncs_file_and_parent_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fsync_kinds = []
+    real_fsync = self_hosted.os.fsync
+
+    def observe_fsync(fd: int) -> None:
+        fsync_kinds.append(
+            "directory" if stat.S_ISDIR(self_hosted.os.fstat(fd).st_mode) else "file"
+        )
+        real_fsync(fd)
+
+    monkeypatch.setattr(self_hosted.os, "fsync", observe_fsync)
+    self_hosted.write_json_once(tmp_path / "intent.json", {"attempt": 1})
+    assert fsync_kinds == ["file", "directory"]

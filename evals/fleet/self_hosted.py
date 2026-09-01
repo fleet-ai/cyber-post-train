@@ -45,12 +45,19 @@ def write_json_once(path: Path, value: dict[str, Any]) -> None:
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
     fd = os.open(path, flags, 0o600)
     try:
-        with os.fdopen(fd, "wb", closefd=False) as handle:
+        with os.fdopen(fd, "wb") as handle:
+            fd = -1
             handle.write(payload)
             handle.flush()
             os.fsync(handle.fileno())
     finally:
-        os.close(fd)
+        if fd >= 0:
+            os.close(fd)
+    directory_fd = os.open(path.parent, os.O_RDONLY)
+    try:
+        os.fsync(directory_fd)
+    finally:
+        os.close(directory_fd)
 
 
 def _request(client: httpx.Client, method: str, path: str, **kwargs: Any) -> Any:
@@ -763,16 +770,17 @@ def run(config: dict[str, Any], out_dir: Path, proxy_script: Path) -> dict[str, 
             "scoring_mode": config["authority"]["scoring_mode"],
             "multi_app_aggregation_mode": config["authority"]["multi_app_aggregation_mode"],
         }
-        write_json_once(
-            out_dir / "scoring-intent.json",
-            {
-                "schema_version": "fleet-selfhosted-scoring-intent-v1",
-                "run_id": config["run_id"],
-                "instance_id": instance_id,
-                "evidence_run_id": rollout_instance["evidence_run_id"],
-                "request_sha256": sha256(canonical_json(scoring_payload)),
-            },
+        scoring_intent = {
+            "schema_version": "fleet-selfhosted-scoring-intent-v1",
+            "run_id": config["run_id"],
+            "instance_id": instance_id,
+            "evidence_run_id": rollout_instance["evidence_run_id"],
+            "request_sha256": sha256(canonical_json(scoring_payload)),
+        }
+        scoring_intent["scoring_intent_sha256"] = sha256(
+            canonical_json(scoring_intent)
         )
+        write_json_once(out_dir / "scoring-intent.json", scoring_intent)
         reward_result = _request(
             client,
             "POST",
