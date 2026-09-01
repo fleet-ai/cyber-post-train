@@ -42,6 +42,12 @@ def test_every_post_sft_bundle_uses_and_freezes_the_minimal_marker():
         assert '--from-file=training__init__.py="$ROOT/training/__init__.py"' not in script
 
 
+def test_frozen_plan_uses_one_authoritative_bf16_cast_destination():
+    plan = json.loads(PLAN.read_text())
+    destination = plan["export"]["bf16_cast_destination"]
+    assert destination == plan["cast_execution"]["destination_path"]
+
+
 def test_v4_evidence_and_cast_modules_import_from_only_the_mounted_bundle(tmp_path):
     package = tmp_path / "training"
     package.mkdir()
