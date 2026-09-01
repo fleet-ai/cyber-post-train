@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from evals.webexploitbench import post_sft_evidence as evidence
 from evals.webexploitbench.config import ExperimentConfig
 from evals.webexploitbench.paired import (
     assert_cage_run_root_available,
@@ -31,6 +32,7 @@ from evals.webexploitbench.post_sft_evidence import (
     _tool_request,
     assemble_live_parity,
     assemble_registration_completion,
+    inspect_base_artifact,
 )
 from training.io import digest_json, file_sha256
 from training.post_sft import (
@@ -53,6 +55,81 @@ RUN = "ft-run-574bd7b3"
 CONFIG_SHA = "sha256:" + "1" * 64
 IMAGE = "registry.example/trainer@sha256:" + "2" * 64
 ENTRYPOINT_SHA = "sha256:" + "3" * 64
+
+
+def test_base_artifact_inspection_uses_only_validated_inference_surface(
+    tmp_path, monkeypatch
+):
+    plan = json.loads(
+        (
+            ROOT / "configs/evaluation/qwen36-27b-ft-run-574bd7b3-post-sft.json"
+        ).read_text()
+    )
+    model = plan["base_model"]
+    root = tmp_path / "model"
+    root.mkdir()
+    lock = {
+        "schema": "cyber_post_train_checkpoint_lock_v1",
+        "repo": BASE_MODEL_REPOSITORY,
+        "revision": BASE_MODEL_REVISION,
+        "weights_manifest_sha256": model["weights_manifest_sha256"],
+        "verified_shards": 15,
+    }
+    (root / ".cyber-post-train-lock.json").write_text(json.dumps(lock))
+    control_names = set(BASE_NON_SERVING_SIDECARS)
+    runtime_names = set(model["runtime_sidecar_sha256"])
+    required_names = {"model.safetensors.index.json", "model-00001-of-00001.safetensors"}
+    for name in sorted(control_names | runtime_names | required_names):
+        path = root / name
+        if not path.exists():
+            path.write_text(name)
+    cache = root / ".cache/huggingface/trees"
+    cache.mkdir(parents=True)
+    (cache / "must-not-be-read.json").write_text("control metadata")
+    surface_manifest = {
+        "files": [{"path": name} for name in sorted(required_names | runtime_names)],
+        "excluded_non_artifact_files": [
+            {"path": name} for name in sorted(control_names)
+        ],
+    }
+
+    def validate_surface(observed_root, _surface):
+        assert observed_root == root.resolve()
+        return surface_manifest
+
+    def inspect_view(view, **_kwargs):
+        observed = {path.name for path in view.iterdir()}
+        assert observed == required_names | runtime_names | control_names
+        assert ".cache" not in observed
+        assert all(path.is_symlink() for path in view.iterdir())
+        sidecars = {
+            **model["runtime_sidecar_sha256"],
+            **{name: "sha256:" + "a" * 64 for name in control_names},
+        }
+        return {
+            "schema": "cyber_sft_hf_output_inspection_v1",
+            "root": str(view),
+            "format": "safetensors",
+            "dtype": "bf16",
+            "all_shards_present": True,
+            "safetensors_load_passed": True,
+            "parameter_count_matches": True,
+            "weights_manifest_sha256": model["weights_manifest_sha256"],
+            "tokenizer_manifest_sha256": model["tokenizer_manifest_sha256"],
+            "chat_template_sha256": model["chat_template_sha256"],
+            "config_sha256": model["config_sha256"],
+            "sidecar_sha256": sidecars,
+        }
+
+    monkeypatch.setattr(evidence, "BASE_MODEL_ROOT", str(root.resolve()))
+    monkeypatch.setattr(evidence, "_base_inference_artifact_manifest", validate_surface)
+    monkeypatch.setattr(evidence, "inspect_hf_export", inspect_view)
+    monkeypatch.setattr(evidence, "_artifact_execution_provenance", lambda _plan: {})
+
+    receipt = inspect_base_artifact(root, plan)
+
+    assert receipt["inspection"]["root"] == str(root.resolve())
+    assert receipt["inference_artifact_manifest"] == surface_manifest
 
 
 def _export_binding():
@@ -1251,7 +1328,7 @@ def _base_artifact_receipt():
     inspection["sidecar_sha256"] = {
         **inspection["sidecar_sha256"],
         ".cyber-post-train-lock.json": "sha256:" + "a" * 64,
-        ".fleet-acceptance.json": "sha256:" + "b" * 64,
+        "source-tree.json": "sha256:" + "b" * 64,
         ".gitattributes": "sha256:" + "c" * 64,
         "LICENSE": "sha256:" + "d" * 64,
         "README.md": "sha256:" + "e" * 64,

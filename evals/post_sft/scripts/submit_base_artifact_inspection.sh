@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/../../.." && pwd)
-NAME=chris-cyber-qwen36-base-artifact-inspect-6a9e13bd-v4
+NAME=chris-cyber-qwen36-base-artifact-inspect-6a9e13bd-v5
 NAMESPACE=inference
 EXPECTED_CONTEXT=nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6
 PULL_SECRET=ecr-pull
@@ -25,6 +25,8 @@ configmap() {
     --from-file=training__init__.py="$ROOT/evals/post_sft/runtime/training__init__.py" \
     --from-file=training_io.py="$ROOT/training/io.py" \
     --from-file=training_post_sft_artifacts.py="$ROOT/training/post_sft_artifacts.py" \
+    --from-file=training_post_sft_base_surface.py="$ROOT/training/post_sft_base_surface.py" \
+    --from-file=training_post_sft_cast.py="$ROOT/training/post_sft_cast.py" \
     --from-file=post-sft-plan.json="$PLAN" --dry-run=client -o json | \
     python3 -c 'import json,sys; value=json.load(sys.stdin); value["immutable"]=True; json.dump(value,sys.stdout)'
 }
@@ -32,9 +34,9 @@ configmap() {
 owned_resources() {
   printf '%s\n' \
     "configmap/$NAME" \
-    "serviceaccount/chris-cyber-qwen36-base-artifact-observer-v4" \
-    "role.rbac.authorization.k8s.io/chris-cyber-qwen36-base-artifact-observer-v4" \
-    "rolebinding.rbac.authorization.k8s.io/chris-cyber-qwen36-base-artifact-observer-v4" \
+    "serviceaccount/chris-cyber-qwen36-base-artifact-observer-v5" \
+    "role.rbac.authorization.k8s.io/chris-cyber-qwen36-base-artifact-observer-v5" \
+    "rolebinding.rbac.authorization.k8s.io/chris-cyber-qwen36-base-artifact-observer-v5" \
     "job.batch/$NAME"
 }
 

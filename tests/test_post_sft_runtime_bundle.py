@@ -68,10 +68,10 @@ def test_registration_v3_uses_the_proven_ecr_runtime_image():
     assert "imagePullSecrets:" not in manifest
 
 
-def test_base_artifact_inspector_v4_binds_ecr_auth_and_minimal_package():
+def test_base_artifact_inspector_v5_binds_ecr_auth_and_minimal_package():
     plan = json.loads(PLAN.read_text())
     pod = plan["evidence_execution"]["base_artifact_inspector"]["pod_spec"]
-    assert pod["serviceAccountName"].endswith("observer-v4")
+    assert pod["serviceAccountName"].endswith("observer-v5")
     assert pod["imagePullSecrets"] == [{"name": "ecr-pull"}]
     assert pod["container"]["image"].startswith(
         "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train:"
@@ -82,7 +82,7 @@ def test_base_artifact_inspector_v4_binds_ecr_auth_and_minimal_package():
         )
     )
     job = next(value for value in manifests if value["kind"] == "Job")
-    assert job["metadata"]["name"] == "chris-cyber-qwen36-base-artifact-inspect-6a9e13bd-v4"
+    assert job["metadata"]["name"] == "chris-cyber-qwen36-base-artifact-inspect-6a9e13bd-v5"
     assert job["spec"]["template"]["spec"]["imagePullSecrets"] == [
         {"name": "ecr-pull"}
     ]
@@ -92,6 +92,11 @@ def test_base_artifact_inspector_v4_binds_ecr_auth_and_minimal_package():
     assert "require_pull_secret" in submitter
     assert "kubernetes.io/dockerconfigjson" in submitter
     assert 'evals/post_sft/runtime/webexploitbench__init__.py' in submitter
+    assert (
+        'training_post_sft_base_surface.py="$ROOT/training/post_sft_base_surface.py"'
+        in submitter
+    )
+    assert 'training_post_sft_cast.py="$ROOT/training/post_sft_cast.py"' in submitter
     repository_initializer = (
         '--from-file=evals_webexploitbench__init__.py='
         '"$ROOT/evals/webexploitbench/__init__.py"'
@@ -111,7 +116,12 @@ def test_base_artifact_inspector_bundle_imports_without_repository_modules(tmp_p
     training = tmp_path / "training"
     training.mkdir()
     shutil.copyfile(MARKER, training / "__init__.py")
-    for name in ("io.py", "post_sft_artifacts.py"):
+    for name in (
+        "io.py",
+        "post_sft_artifacts.py",
+        "post_sft_base_surface.py",
+        "post_sft_cast.py",
+    ):
         shutil.copyfile(ROOT / "training" / name, training / name)
     result = subprocess.run(
         [sys.executable, "-m", "evals.webexploitbench.post_sft_evidence", "--help"],
