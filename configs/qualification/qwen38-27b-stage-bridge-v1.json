@@ -1,0 +1,130 @@
+{
+  "schema": "cyber_model_stage_bridge_plan_v1",
+  "status": "dry_run_only_unapproved",
+  "source": {
+    "repository": "Qwen/Qwen3.8-27B",
+    "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "source_api": "https://huggingface.co/api/models/Qwen/Qwen3.8-27B/tree/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0?recursive=true&limit=1000",
+    "weight_shards": 18,
+    "weight_bytes": 55563006776,
+    "weights_manifest_sha256": "sha256:06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352",
+    "tokenizer_manifest_sha256": "sha256:3938a9a8172f2738fed1be44efc11e2562059269d50d3721213f44802b53b4e1"
+  },
+  "model_lock_file": "configs/models/qwen38-27b-1d4bf0f2.lock.json",
+  "model_lock_file_sha256": "sha256:f3926fe675263b25dc79c2b3881a9c463d6b7931e9d61aeb777d15efc61e35ac",
+  "license_sha256": "sha256:bbedc3fda3305820b977265f01b8619d87570a6739de3a5582c3464840f1e57a",
+  "files": {
+    "LICENSE": "sha256:bbedc3fda3305820b977265f01b8619d87570a6739de3a5582c3464840f1e57a",
+    "chat_template.jinja": "sha256:c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+    "config.json": "sha256:191e0af232104ed8b65258cf3fb2b842e288008baca7633c11b82a1ac7203aab",
+    "generation_config.json": "sha256:e70c136c1b78ddc1fb0905bac8e733a4dc448d4f852a5dd75143fffc70be550e",
+    "merges.txt": "sha256:a9d356d7bdf1ef4949e3e748e95b8e10ad9d4e2e838eddc38a0a7b6b94d1db8d",
+    "model.safetensors.index.json": "sha256:77042094076611b69791a610065f28b7013b8c621795fa86ddccc8bac7d1b9df",
+    "preprocessor_config.json": "sha256:27225450ac9c6529872ee1924fcb0962ff5634834f817040f444118116f4e516",
+    "tokenizer.json": "sha256:0997f410c57a1f4e53b09e4be8f4a172d90edd9564368fb0847030937229b9f3",
+    "tokenizer_config.json": "sha256:b11349aafa7cdc6a320767cf7ceb29ed82f7eda5d65e8e0819e76f0ce947bf27",
+    "video_preprocessor_config.json": "sha256:7768af27c1fafa9cc9011c1dc20067e03f8915e03b63504550e11d5066986d13",
+    "vocab.json": "sha256:ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003"
+  },
+  "storage_topology": {
+    "observed_at": "2026-09-01T11:31:00Z",
+    "inference_claim": {
+      "namespace": "inference",
+      "name": "hf-cache-shared",
+      "uid": "04703d36-2cec-4146-a35c-36f457462012",
+      "volume_name": "pvc-04703d36-2cec-4146-a35c-36f457462012",
+      "pv_uid": "d6f4aae9-de43-4909-acc9-3abd8c0c719a",
+      "snapshot_sha256": "sha256:07f0f9d4fcd49458e8dd9173b7fa9b8b8320b220e0cb8975852d595fcbd40a7f",
+      "pv_snapshot_sha256": "sha256:35ac52b539333b07de183cbb0a3143f0d6b29bc1fc60f8c0d2e20fa664db3cf7",
+      "pv_claim_ref": {
+        "namespace": "inference",
+        "name": "hf-cache-shared",
+        "uid": "04703d36-2cec-4146-a35c-36f457462012"
+      }
+    },
+    "training_claim": {
+      "namespace": "fleet-train-jobs",
+      "name": "sfs-shared",
+      "uid": "34cb6b11-8766-4294-9f9e-332064ea17d5",
+      "volume_name": "sfs-shared-fleet-train-jobs",
+      "pv_uid": "fabf4936-1034-47ec-b07a-dd770e94fa23",
+      "snapshot_sha256": "sha256:a32d621b2a6fcb83a08e9f4329ca8ffe1f2fe3af96920cffd6be9f02a1b7f748",
+      "pv_snapshot_sha256": "sha256:38ef1f9a2c4411a9e195a2deeff7ee2d811b1657146902e2503b313b4c344a11",
+      "pv_claim_ref": {
+        "namespace": "fleet-train-jobs",
+        "name": "sfs-shared",
+        "uid": "34cb6b11-8766-4294-9f9e-332064ea17d5"
+      }
+    },
+    "claims_are_distinct": true,
+    "direct_cross_namespace_mount_supported": false,
+    "selected_bridge": "immutable_upstream_rematerialization",
+    "rationale": "Kubernetes PVC references are namespace scoped. Downloading the exact immutable upstream revision directly into training SFS and rehashing every allowlisted byte avoids a temporary cross-namespace service or object-store trust boundary."
+  },
+  "inference_identity": {
+    "namespace": "inference",
+    "name": "qwen3.8-27b",
+    "uid": "d06c0531-7181-41ad-a3fd-cd8e3e774ab9",
+    "source_path": "/models/qwen3.8-27b/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "precision": "bf16",
+    "status_at_observation": "ready"
+  },
+  "destination": {
+    "namespace": "fleet-train-jobs",
+    "claim": "sfs-shared",
+    "immutable_root": "/mnt/sfs/models/Qwen/Qwen3.8-27B/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "work_root": "/mnt/sfs/models/Qwen/Qwen3.8-27B/.transactions",
+    "atomic_transaction": "directory_rename_noreplace_v1",
+    "acceptance_sidecar": ".fleet-stage-receipt.json"
+  },
+  "execution": {
+    "job_name": "chris-cyber-qwen38-stage-bridge-1d4bf0f2-v1",
+    "config_map_name": "chris-cyber-qwen38-stage-bridge-1d4bf0f2-v1",
+    "namespace": "fleet-train-jobs",
+    "queue": "training-lq",
+    "suspend": true,
+    "image": "ghcr.io/fleet-ai/miles-fleet/trainer@sha256:98920a4e25fadc3f31fafc18eff072313386edf5b352a23d13f4bb2d9e5f0a4c",
+    "code_sha256": "sha256:476a0aea5b916c8cca507b0f8ff3f04636ccd999d9a7ff8abc3f5e5f66816144",
+    "job_manifest_sha256": "sha256:01531f5ebbefa11cd0448e3b35b328d02e6b2a0be30dbb5c9374d100b8fa23f4",
+    "command": [
+      "python",
+      "/bundle/model_stage_bridge.py",
+      "execute",
+      "--plan",
+      "/bundle/plan.json",
+      "--model-lock",
+      "/bundle/model-lock.json",
+      "--work-root",
+      "/mnt/sfs/models/Qwen/Qwen3.8-27B/.transactions"
+    ],
+    "resources": {
+      "cpu_request": "8",
+      "cpu_limit": "16",
+      "memory_request": "16Gi",
+      "memory_limit": "32Gi",
+      "ephemeral_storage_request": "20Gi",
+      "ephemeral_storage_limit": "40Gi",
+      "gpus": 0
+    }
+  },
+  "prerequisites": [
+    "explicit approval to perform the 55.6 GB model materialization",
+    "positive authoritative Qwen3.8 Fleet reward with valid cleanup",
+    "live training-lq Active condition",
+    "exact Job and ConfigMap names absent",
+    "immutable destination and transaction path absent, or destination receipt validates exactly",
+    "Hugging Face revision API returns the frozen 18-shard manifest",
+    "independent review of this plan, code, and server-side dry run"
+  ],
+  "forbidden_actions": [
+    "mount the inference PVC from fleet-train-jobs",
+    "create or rebind a PVC or PV",
+    "replace or merge into an existing destination",
+    "use a mutable model revision or tag",
+    "request GPUs",
+    "bypass Kueue",
+    "register a training catalog row before accepted staging"
+  ],
+  "plan_sha256": "sha256:ea3d7fd286f338861b98a48b75590ab8aad608c8290c4e3d1c443f9b98339967"
+}
