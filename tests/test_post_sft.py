@@ -122,9 +122,26 @@ def test_base_artifact_inspection_uses_only_validated_inference_surface(
         }
 
     monkeypatch.setattr(evidence, "BASE_MODEL_ROOT", str(root.resolve()))
-    monkeypatch.setattr(evidence, "_base_inference_artifact_manifest", validate_surface)
+    monkeypatch.setattr(
+        evidence.post_sft_cast, "_base_inference_artifact_manifest", validate_surface
+    )
     monkeypatch.setattr(evidence, "inspect_hf_export", inspect_view)
     monkeypatch.setattr(evidence, "_artifact_execution_provenance", lambda _plan: {})
+    def read_base_fixture(path):
+        if str(path).endswith(".cyber-post-train-lock.json"):
+            return lock
+        return {
+            "event": "stage_complete",
+            "model": BASE_MODEL_REPOSITORY,
+            "revision": BASE_MODEL_REVISION,
+            "resolved_path": str(root.resolve()),
+            "file_count": sum(1 for path in root.iterdir() if path.is_file()),
+            "total_bytes": sum(path.stat().st_size for path in root.iterdir() if path.is_file()),
+            "staging_partitions": 1,
+            "weights_manifest_sha256": model["weights_manifest_sha256"],
+        }
+
+    monkeypatch.setattr(evidence, "_read", read_base_fixture)
 
     receipt = inspect_base_artifact(root, plan)
 
@@ -1328,6 +1345,7 @@ def _base_artifact_receipt():
     inspection["sidecar_sha256"] = {
         **inspection["sidecar_sha256"],
         ".cyber-post-train-lock.json": "sha256:" + "a" * 64,
+        ".fleet-acceptance.json": "sha256:" + "f" * 64,
         "source-tree.json": "sha256:" + "b" * 64,
         ".gitattributes": "sha256:" + "c" * 64,
         "LICENSE": "sha256:" + "d" * 64,

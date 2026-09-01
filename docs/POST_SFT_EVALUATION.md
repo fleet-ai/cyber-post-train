@@ -587,15 +587,18 @@ initializer imported modules that were not part of the isolated evidence bundle.
 unchanged. The create-only v4 successor kept the authenticated image and mounted an import-free
 WebExploitBench package marker, then failed safely when its whole-tree digest reached unreadable
 Hugging Face client metadata under `.cache/`. Preserve v4 unchanged. The create-only v5 successor
-reuses the already reviewed cast-stage inference-surface validator: it rejects unknown top-level
-entries and proves `.cache/` is the one reviewed non-serving directory without traversing it. It
-then exposes only the exact validated top-level files through a temporary read-only symlink view
-for safetensor/header and full-file hashing. The view is ephemeral and the receipt names the real
-model root. V5 also corrects the base non-serving provenance allowlist to `source-tree.json`; the
-`.fleet-acceptance.json` receipt belongs only to the atomically staged post-SFT artifact. Preview
-still fails unless the named Secret exists with Docker registry credential type. Every other
-unreviewed execution field is rejected, and the live serving runtime remains the separately pinned
-SGLang image.
+reused the already reviewed cast-stage inference-surface validator and reached the live cache, then
+failed safely because that cache also carries the deterministic `.fleet-acceptance.json` written by
+the original base staging Job. Preserve v5 unchanged. The create-only v6 successor validates that
+receipt's exact schema, revision, weights, resolved path, staging count, and directory-wide file and
+byte counts. It then extends the closed-world surface by only that proven file, while still
+rejecting unknown top-level entries and proving `.cache/` is the one reviewed non-serving directory
+without traversing it. Safetensor/header and full-file hashing operate on an ephemeral view of only
+the validated top-level files, and the receipt names the real model root. The base provenance
+allowlist therefore contains both `source-tree.json` and `.fleet-acceptance.json`; the post-SFT arm
+has its own independently hashed staging acceptance receipt. Preview still fails unless the named
+Secret exists with Docker registry credential type. Every other unreviewed execution field is
+rejected, and the live serving runtime remains the separately pinned SGLang image.
 
 ```bash
 bash evals/post_sft/scripts/submit_base_artifact_inspection.sh preview
