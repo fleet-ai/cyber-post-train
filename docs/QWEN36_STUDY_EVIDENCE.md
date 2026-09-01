@@ -23,7 +23,7 @@ nothing here treats a queued job as completed.
 | Native Fleet RL gate | Operational terminal gate | `ft-run-98e50db3` completed real rollouts and one optimizer-path step, but every reward/advantage was zero and all episodes truncated. |
 | Native Fleet RL full | Pending | Chunked-binding successor `ft-run-0081ca94` is Suspended/Pending with 129 train and 10 dev versions. |
 | Verified Miles RL | Terminal operational gate | Canary 03 completed 8/8 authoritative rollouts, one optimizer iteration, and a durable checkpoint. Its all-zero rewards and gradients prove plumbing, not learning. |
-| Post-training evals | Web infrastructure-invalid; ExploitGym measured active | The first post-SFT Web arm is not a score and its orphan cleanup is terminal. At 13:41 UTC, the paired ExploitGym Job had one ready/running Pod with zero restarts; it had no accepted terminal result. |
+| Post-training evals | Web infrastructure-invalid; ExploitGym terminal failed | The first post-SFT Web arm is not a score and its orphan cleanup is terminal. The paired ExploitGym Job later failed with evaluator exit code 1 and zero restarts; sealed-safe state-receipt observation proves it was never accepted, so it is not a zero score. |
 
 The post-SFT serving-parity statement and current evaluation lifecycle above
 supersede the older pending language later in this living report. The exact
