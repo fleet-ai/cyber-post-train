@@ -8,6 +8,8 @@ from pathlib import Path
 
 import yaml
 
+from evals.webexploitbench.post_sft_evidence import ARTIFACT_CONFIG_MAP_FILES
+
 ROOT = Path(__file__).resolve().parents[1]
 MARKER = ROOT / "evals/post_sft/runtime/training__init__.py"
 WEB_MARKER = ROOT / "evals/post_sft/runtime/webexploitbench__init__.py"
@@ -68,10 +70,10 @@ def test_registration_v3_uses_the_proven_ecr_runtime_image():
     assert "imagePullSecrets:" not in manifest
 
 
-def test_base_artifact_inspector_v8_binds_ecr_auth_and_minimal_package():
+def test_base_artifact_inspector_v9_binds_ecr_auth_and_minimal_package():
     plan = json.loads(PLAN.read_text())
     pod = plan["evidence_execution"]["base_artifact_inspector"]["pod_spec"]
-    assert pod["serviceAccountName"].endswith("observer-v8")
+    assert pod["serviceAccountName"].endswith("observer-v9")
     assert pod["imagePullSecrets"] == [{"name": "ecr-pull"}]
     assert pod["container"]["image"].startswith(
         "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train:"
@@ -82,7 +84,7 @@ def test_base_artifact_inspector_v8_binds_ecr_auth_and_minimal_package():
         )
     )
     job = next(value for value in manifests if value["kind"] == "Job")
-    assert job["metadata"]["name"] == "chris-cyber-qwen36-base-artifact-inspect-6a9e13bd-v8"
+    assert job["metadata"]["name"] == "chris-cyber-qwen36-base-artifact-inspect-6a9e13bd-v9"
     assert job["spec"]["template"]["spec"]["imagePullSecrets"] == [
         {"name": "ecr-pull"}
     ]
@@ -97,6 +99,12 @@ def test_base_artifact_inspector_v8_binds_ecr_auth_and_minimal_package():
         in submitter
     )
     assert 'training_post_sft_cast.py="$ROOT/training/post_sft_cast.py"' in submitter
+    mounted_items = {
+        row["key"]: row["path"]
+        for row in job["spec"]["template"]["spec"]["volumes"][0]["configMap"]["items"]
+        if row["key"] != "post-sft-plan.json"
+    }
+    assert mounted_items == ARTIFACT_CONFIG_MAP_FILES
     repository_initializer = (
         '--from-file=evals_webexploitbench__init__.py='
         '"$ROOT/evals/webexploitbench/__init__.py"'
