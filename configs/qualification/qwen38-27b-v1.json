@@ -1,0 +1,197 @@
+{
+  "schema": "cyber_training_qualification_v1",
+  "status": "blocked_pre_submission",
+  "paid_training_authorized": false,
+  "model": {
+    "repository": "Qwen/Qwen3.8-27B",
+    "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "model_lock": "configs/models/qwen38-27b-1d4bf0f2.lock.json",
+    "model_adapter": "training/configs/models/qwen38-27b.json",
+    "architecture": "qwen3_5",
+    "license": "Apache-2.0",
+    "precision": "bf16",
+    "parameter_count": 27781427952,
+    "tensor_count": 1199,
+    "weight_shards": 18,
+    "serialized_weight_bytes": 55563006776,
+    "tensor_payload_bytes": 55562855904,
+    "weights_manifest_sha256": "sha256:06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352",
+    "weights_index_sha256": "sha256:77042094076611b69791a610065f28b7013b8c621795fa86ddccc8bac7d1b9df",
+    "tokenizer_manifest_sha256": "sha256:3938a9a8172f2738fed1be44efc11e2562059269d50d3721213f44802b53b4e1",
+    "chat_template_sha256": "sha256:c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+    "release_date": "2026-08-14",
+    "external_benchmark_temporal_status": "released_after_webexploitbench"
+  },
+  "training_catalog_observation": {
+    "authority": "https://api.ft.flt.build/v1/models",
+    "observed_at": "2026-09-01T06:39:09Z",
+    "canonical_response_sha256": "sha256:284f96b9789a155a3f113d5332bac2934c1fd2ae73a7627d493904355aed3ab3",
+    "staged_models": [
+      "qwen2.5-1.5b-instruct",
+      "qwen3.6-27b"
+    ],
+    "qwen38_catalog_row_present": false,
+    "qwen38_staged_model_present": false,
+    "sft_preview_http_status": 422,
+    "sft_preview_detail": "Unknown base model 'qwen3.8-27b'. Did you mean 'qwen3.6-27b'? Staged models: qwen2.5-1.5b-instruct, qwen3.6-27b. A model must be staged to /mnt/sfs/models by the model-stage chart and registered in the models table before a run can use it."
+  },
+  "model_staging": {
+    "status": "planned_not_submitted",
+    "immutable_stage_job": "cluster/jobs/chris-cyber-qwen38-stage-1d4bf0f2.yaml",
+    "canonical_link_job": "cluster/jobs/chris-cyber-qwen38-canonical-link.yaml",
+    "immutable_root": "/mnt/sfs/models/Qwen/Qwen3.8-27B/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "training_api_root": "/mnt/sfs/models/qwen3.8-27b",
+    "queue": "training-lq",
+    "accelerator_request": 0,
+    "stage_resources": {
+      "cpu_request": "8",
+      "cpu_limit": "16",
+      "memory_request": "16Gi",
+      "memory_limit": "32Gi"
+    },
+    "release_rule": "stage_job_succeeds_exact_lock_revalidates_canonical_link_points_only_to_immutable_root_and_catalog_row_records_qwen3.8-27b"
+  },
+  "data": {
+    "source_job_id": "a62dd51f-a52b-4941-8207-4679e4b25b51",
+    "split_lock": "configs/data/fleet-a62-task-split-v1.json",
+    "split_manifest_sha256": "sha256:fb09668f8de77e6baee37dc1e3162a7617ca9a0a450da9ca53422c17bfbc942a",
+    "train_lineages": 130,
+    "dev_lineages": 10,
+    "test_lineages": 20,
+    "sft_source": "verified_successes_only",
+    "requires_qwen38_retokenization": true,
+    "qwen38_corpus_job_id": "chris-cyber-qwen38-windowed-v1",
+    "qwen38_tokenizer_max_window_tokens": 14336,
+    "targets_per_trajectory": 5,
+    "prohibited": [
+      "reuse_qwen36_token_windows_without_qwen38_retokenization",
+      "external_benchmark_data_in_training_or_reward_design",
+      "test_lineage_in_training_or_recipe_selection"
+    ]
+  },
+  "sft": {
+    "capability_gate_config": "configs/runs/qwen38-27b-sft-capability-gate.template.json",
+    "full_config": "configs/runs/qwen38-27b-sft-full.template.json",
+    "candidate_trainer_version_id": "4b4dc57c-c7dc-5562-bbdd-9e1d6764ede0",
+    "candidate_trainer_image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train:q36-torchgdn-6db8d0c9@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "candidate_basis": "exact_qwen36_successful_torch_gdn_sft_image_same_qwen3_5_architecture",
+    "compatibility_status": "unproven_for_qwen38",
+    "full_run_release_rule": "one_step_gate_must_prove_forward_backward_optimizer_checkpoint_and_post_step_eval"
+  },
+  "rl": {
+    "reward_canary_config": "configs/runs/qwen38-27b-native-rl-reward-acquisition-canary.template.json",
+    "full_config_template": "configs/runs/qwen38-27b-rl-base-full.template.json",
+    "trainer_version_id": null,
+    "required_calibration_config": "evals/fleet/configs/qwen38-27b-qwen-code-reward-calibration-pass1-v1.json",
+    "required_calibration_outcome": "positive_authoritative_reward_with_valid_cleanup_on_non_test_fleet_tasks",
+    "required_task_tools": [
+      "bash",
+      "submit_report"
+    ],
+    "required_max_turns": 600,
+    "required_max_context_length": 65536,
+    "required_max_prompt_length": 16384,
+    "required_max_generate_length": 49152,
+    "required_tool_result_max_chars": 16000,
+    "full_run_release_rule": "reward_canary_must_prove_nonzero_authoritative_reward_exact_verifier_ids_one_optimizer_step_and_durable_checkpoint"
+  },
+  "topology": {
+    "accelerator": "NVIDIA B300",
+    "workers": 1,
+    "gpus_per_worker": 8,
+    "total_gpus": 8,
+    "sft": {
+      "strategy": "fsdp",
+      "sequence_parallel_size": 1,
+      "global_batch_size": 8,
+      "micro_batch_size_per_gpu": 1,
+      "model_state_lower_bound_bytes": {
+        "bf16_weights": 55562855904,
+        "bf16_gradients": 55562855904,
+        "fp32_adam_moments": 222251423616,
+        "optional_fp32_master_weights": 111125711808,
+        "total_with_master_weights": 444502847232,
+        "per_gpu_if_fully_sharded": 55562855904
+      },
+      "qualification_note": "The parameter-state arithmetic fits one eight-B300 node; activation, temporary gather, kernel and fragmentation headroom remain runtime gates."
+    },
+    "rl": {
+      "engine_tensor_parallel_size": 4,
+      "inference_engines": 2,
+      "group_size": 4,
+      "train_batch_size": 2,
+      "rollouts_per_optimizer_step": 8,
+      "qualification_note": "This is the rank-safe Qwen3.6 shape. Qwen3.8 KV-cache and collocation feasibility are not inferred; the one-step canary must measure them."
+    }
+  },
+  "checkpoint_handoff": {
+    "selection": "single_final_promoted_checkpoint_only",
+    "export": "resume_exact_final_checkpoint_at_final_step_and_prove_zero_optimizer_steps",
+    "precision": "inspect_actual_safetensor_headers_never_relabel_dtype",
+    "bf16_correction": "if_export_is_fp32_cast_deterministically_and_reopen_every_tensor_for_bit_equality",
+    "auxiliary_heads": "derive_exact_omission_against_qwen38_base_do_not_assume_qwen36_15_tensor_result",
+    "sidecars": "compose_post_weights_with_byte_identical_qwen38_base_runtime_sidecars",
+    "staging": "atomic_no_replace_to_new_inference_path_with_complete_source_and_destination_manifests",
+    "evidence": "bind_request_rayjob_pod_uid_requested_image_resolved_image_id_logs_optimizer_count_and_file_manifests"
+  },
+  "serving": {
+    "base_serving_lock": "evals/webexploitbench/serving/qwen38-27b-1d4bf0f2.lock.json",
+    "served_id": "qwen3.8-27b",
+    "inference_model_uid": "d06c0531-7181-41ad-a3fd-cd8e3e774ab9",
+    "canonical_spec_sha256": "sha256:13d242a5014c5d6a3f2d25a17d0181a4c4668de72ef4fc93c362ad702cb9a8ee",
+    "engine": "sglang",
+    "image": "lmsysorg/sglang@sha256:febfb971c7352570fc445c466ebd6ffc9d896024958e544a60f2137fd85856b1",
+    "precision": "bf16",
+    "tensor_parallel_size": 1,
+    "context_length": 262144,
+    "kv_cache_dtype": "fp8_e4m3",
+    "attention_backend": "trtllm_mha",
+    "reasoning_parser": "qwen3",
+    "tool_call_parser": "qwen3_coder",
+    "post_training_rule": "clone_exact_base_spec_and_change_only_model_id_checkpoint_path_and_checkpoint_identity",
+    "live_parity_gates": [
+      "ready_and_routed",
+      "exact_model_revision_and_weights_receipt",
+      "tokenizer_and_chat_template_identity",
+      "structured_bash_and_submit_report_tool_calls",
+      "fixed_prompt_logit_parity",
+      "no_unreviewed_speculative_decoding"
+    ]
+  },
+  "recommended_first_paid_run": {
+    "config": "configs/runs/qwen38-27b-sft-capability-gate.template.json",
+    "optimizer_steps": 1,
+    "gpus": 8,
+    "queue": "training-lq",
+    "launch_only_after": [
+      "qwen38_model_lock_and_serving_lock_merged",
+      "qwen38_catalog_row_registered_and_exact_revision_staged",
+      "qwen38_windowed_corpus_built_and_manifest_verified",
+      "exact_ready_trainer_version_and_image_digest_recorded",
+      "positive_qwen38_fleet_reward_calibration_terminal_receipt",
+      "server_preview_matches_model_data_step_resources_queue_and_output_bindings"
+    ]
+  },
+  "launch_blockers": [
+    {
+      "id": "training_catalog_and_staging",
+      "detail": "The Training API has no Qwen3.8 catalog row or staged_model and rejects preview with HTTP 422."
+    },
+    {
+      "id": "qwen38_corpus",
+      "detail": "The successful trajectories must be re-windowed with the exact Qwen3.8 tokenizer and chat template; Qwen3.6 token windows are not interchangeable."
+    },
+    {
+      "id": "sft_trainer_capability",
+      "detail": "The Qwen3.6 Torch-GDN image is a same-architecture candidate, not proof of Qwen3.8 backward, optimizer, checkpoint or export compatibility."
+    },
+    {
+      "id": "reward_calibration",
+      "detail": "No terminal positive Qwen3.8 authoritative Fleet reward calibration exists yet."
+    },
+    {
+      "id": "rl_trainer_and_evidence",
+      "detail": "No exact Ready long-horizon trainer is bound, and RL still requires per-episode authoritative verifier IDs plus prompt-and-schema fit."
+    }
+  ]
+}
