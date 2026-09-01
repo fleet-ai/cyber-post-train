@@ -45,12 +45,20 @@ Until Fleet adds server-side task-group idempotency or list-by-name lookup, an
 ambiguous task-group POST requires manual server-side reconciliation. It is not
 safe to infer that creation failed and retry.
 
-The current public task-version response exposes the environment key and
-version label but omits the concrete environment-version UUID. The hydration
-validator therefore remains launch-blocking even when every public field
-matches. It must not claim the environment is unchanged or unblock a paid job
-until a separate authoritative server-side member-version receipt proves the
-UUID for all four members.
+The exact task-version response contract includes the concrete
+`environment_version_id`. This consumer is deployment-gated: do not run it
+merely because the shared API change has merged. First prove against the
+deployed public endpoint that an exact `version_id` read returns the selected
+environment-version UUID and never a mutable parent fallback. The preflight
+then fails closed if either source response omits that field, returns a
+non-canonical UUID, or disagrees with the frozen review plan.
+
+After creation, hydrate all four exact member versions through the same public
+read. The hydration validator requires every member UUID to exactly equal the
+frozen source UUID; missing, malformed, mixed, or different UUIDs block the
+group. A successful hydration receipt closes only the created-member binding
+gate. Live model parity, a fresh duplicate-job check, and final idempotent job
+contract hydration remain separate paid-launch gates.
 
 Prompt-mode task-group creation also accepts a verifier lineage, not a concrete
 verifier-version ID. If the active verifier changes, creation can therefore
@@ -62,7 +70,8 @@ succeeded.
 ## Running the read-only preflight
 
 The output path must not already exist. The command reads the Fleet credential
-from the environment and never includes it in output.
+from the environment and never includes it in output. Run it only after the
+deployed task API behavior above has passed. It performs GET requests only.
 
 ```sh
 uv run python -m evals.fleet.prompt_curriculum_create \
