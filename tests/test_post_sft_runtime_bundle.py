@@ -48,6 +48,15 @@ def test_frozen_plan_uses_one_authoritative_bf16_cast_destination():
     assert destination == plan["cast_execution"]["destination_path"]
 
 
+def test_registration_v2_uses_the_reviewed_private_registry_pull_secret():
+    plan = json.loads(PLAN.read_text())
+    pod = plan["evidence_execution"]["registration"]["pod_spec"]
+    assert pod["imagePullSecrets"] == [{"name": "ghcr-pull"}]
+    manifest = (ROOT / "evals/post_sft/cluster/qwen36-sft-register-job.yaml").read_text()
+    assert "chris-cyber-qwen36-sft-register-574bd7b3-v2" in manifest
+    assert "imagePullSecrets:\n        - {name: ghcr-pull}" in manifest
+
+
 def test_v4_evidence_and_cast_modules_import_from_only_the_mounted_bundle(tmp_path):
     package = tmp_path / "training"
     package.mkdir()

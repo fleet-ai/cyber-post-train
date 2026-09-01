@@ -256,7 +256,7 @@
       "config_map_code_sha256": {
         "evals/__init__.py": "sha256:d975601b8c65125381967ad8cf17dbc9b87ed383f7cf626791b288dc3132aa9b",
         "evals/webexploitbench/__init__.py": "sha256:364a7569bf22697f0fe54558538e9e20780d5a8cd1721c9aaa4e3a996b795b1d",
-        "evals/webexploitbench/post_sft_evidence.py": "sha256:9bb6272d88f81c8ff37fe06a362c77d6c21b96589a9ed65c80f4d28efa4578c6",
+        "evals/webexploitbench/post_sft_evidence.py": "sha256:0bd6598a5fa087f37b3c4b6d593161b1fb78b99c49fd6a84455d7142931ff208",
         "training/__init__.py": "sha256:85464634e1b48ac40c22bd57bc60fb67241bac402311c31eca7027afb491de68",
         "training/io.py": "sha256:7a0b734a4ab7fb8b702430094c58c72f19ac8fc7cc5e056eb8410267e6bfdfe3",
         "training/post_sft_artifacts.py": "sha256:c09555c61cb25ad5867cce80ed8bef0684734231b5708b1be892e75b9dd980eb"
@@ -267,19 +267,20 @@
       "job_labels": {
         "kueue.x-k8s.io/queue-name": "training-lq",
         "cyber-post-train.fleet.ai/owner": "chris",
-        "cyber-post-train.fleet.ai/experiment": "qwen36-sft-register-574bd7b3-v1",
+        "cyber-post-train.fleet.ai/experiment": "qwen36-sft-register-574bd7b3-v2",
         "cyber-post-train.fleet.ai/model": "qwen36"
       },
       "pod_labels": {
         "kueue.x-k8s.io/queue-name": "training-lq",
         "cyber-post-train.fleet.ai/owner": "chris",
-        "cyber-post-train.fleet.ai/experiment": "qwen36-sft-register-574bd7b3-v1",
+        "cyber-post-train.fleet.ai/experiment": "qwen36-sft-register-574bd7b3-v2",
         "cyber-post-train.fleet.ai/model": "qwen36"
       },
       "job": {"backoffLimit": 0, "activeDeadlineSeconds": 600, "ttlSecondsAfterFinished": 604800},
       "pod_spec": {
         "restartPolicy": "Never",
         "serviceAccountName": "default",
+        "imagePullSecrets": [{"name": "ghcr-pull"}],
         "nodeSelector": {"workload": "fleetai-training-ng-cpu"},
         "tolerations": [
           {"effect": "NoSchedule", "key": "workload", "operator": "Equal", "value": "fleetai-training-ng-cpu"}
@@ -302,7 +303,7 @@
             {"key": "training_io.py", "path": "training/io.py"},
             {"key": "training_register_post_sft.py", "path": "training/register_post_sft.py"},
             {"key": "serving-registration-receipt.json", "path": "serving-registration-receipt.json"}
-          ], "name": "chris-cyber-qwen36-sft-register-574bd7b3-v1"}, "name": "bundle"}
+          ], "name": "chris-cyber-qwen36-sft-register-574bd7b3-v2"}, "name": "bundle"}
         ]
       },
       "config_map_code_sha256": {

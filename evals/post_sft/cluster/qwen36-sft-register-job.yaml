@@ -1,12 +1,12 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: chris-cyber-qwen36-sft-register-574bd7b3-v1
+  name: chris-cyber-qwen36-sft-register-574bd7b3-v2
   namespace: fleet-train-jobs
   labels:
     kueue.x-k8s.io/queue-name: training-lq
     cyber-post-train.fleet.ai/owner: chris
-    cyber-post-train.fleet.ai/experiment: qwen36-sft-register-574bd7b3-v1
+    cyber-post-train.fleet.ai/experiment: qwen36-sft-register-574bd7b3-v2
     cyber-post-train.fleet.ai/model: qwen36
 spec:
   suspend: true
@@ -18,10 +18,12 @@ spec:
       labels:
         kueue.x-k8s.io/queue-name: training-lq
         cyber-post-train.fleet.ai/owner: chris
-        cyber-post-train.fleet.ai/experiment: qwen36-sft-register-574bd7b3-v1
+        cyber-post-train.fleet.ai/experiment: qwen36-sft-register-574bd7b3-v2
         cyber-post-train.fleet.ai/model: qwen36
     spec:
       restartPolicy: Never
+      imagePullSecrets:
+        - {name: ghcr-pull}
       nodeSelector: {workload: fleetai-training-ng-cpu}
       tolerations:
         - {key: workload, operator: Equal, value: fleetai-training-ng-cpu, effect: NoSchedule}
@@ -41,7 +43,7 @@ spec:
       volumes:
         - name: bundle
           configMap:
-            name: chris-cyber-qwen36-sft-register-574bd7b3-v1
+            name: chris-cyber-qwen36-sft-register-574bd7b3-v2
             items:
               - {key: training__init__.py, path: training/__init__.py}
               - {key: training_io.py, path: training/io.py}
