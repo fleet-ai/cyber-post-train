@@ -1,0 +1,4 @@
+interface:
+  display_name: "Cyber Experiment Maintainer"
+  short_description: "Convert experiment lessons into durable safeguards"
+  default_prompt: "Use $cyber-experiment-maintainer to turn this experiment lesson into durable code, tests, and guidance."
