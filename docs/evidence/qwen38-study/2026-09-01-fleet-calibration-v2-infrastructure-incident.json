@@ -1,0 +1,39 @@
+{
+  "schema_version": "qwen38_fleet_calibration_incident_binding_v1",
+  "campaign_id": "chris-cyber-q38-qcode-reward-cal-p1-v2",
+  "classification": "terminal_infrastructure_interrupted",
+  "scientific_disposition": "descriptive_only_not_training_gate_evidence",
+  "source_sanitized_receipt": {
+    "receipt_id": "chris-cyber-q38-qcode-reward-cal-p1-v2-infrastructure-incident-v1",
+    "receipt_sha256": "sha256:8f7a5c7842e499cce5618b563aae848cf5ddac26c7f9b359f941d2aff4b0c111"
+  },
+  "outcome_accounting": {
+    "planned_attempts": 20,
+    "valid_scored_outcomes": 1,
+    "valid_zero_outcomes": 1,
+    "positive_reward_outcomes": 0,
+    "unresolved_attempts_excluded_from_outcomes": 3,
+    "never_launched_attempts": 16
+  },
+  "unresolved_attempts": {
+    "ordinals": [2, 3, 4],
+    "disposition": "excluded_pending_authorized_read_only_verifier_store_export"
+  },
+  "gates": {
+    "positive_reward_gate_satisfied": false,
+    "scientific_completion_claimed": false,
+    "cleanup_authorized": false,
+    "score_recovery_authorized": false,
+    "model_rerun_authorized": false,
+    "v3_submitted": false
+  },
+  "data_minimization": {
+    "prompts_included": false,
+    "traces_included": false,
+    "flags_included": false,
+    "verifier_contents_included": false,
+    "resource_identifiers_included": false,
+    "credentials_included": false
+  },
+  "binding_receipt_sha256": "sha256:9dc71533748f41857fd57195ae53b90bbee2b26fb78e745c3a6591f46b560210"
+}

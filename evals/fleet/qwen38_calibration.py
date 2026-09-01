@@ -31,6 +31,33 @@ EXPECTED_RELEASE_GATE = {
     "criterion": "positive_authoritative_reward_with_valid_cleanup_on_non_test_fleet_tasks",
     "minimum_score_exclusive": 0,
 }
+EXPECTED_PREDECESSOR_INCIDENT = {
+    "campaign_id": "chris-cyber-q38-qcode-reward-cal-p1-v2",
+    "classification": "terminal_infrastructure_interrupted",
+    "scientific_disposition": "descriptive_only_not_training_gate_evidence",
+    "incident_binding": {
+        "path": (
+            "docs/evidence/qwen38-study/"
+            "2026-09-01-fleet-calibration-v2-infrastructure-incident.json"
+        ),
+        "binding_receipt_sha256": (
+            "sha256:9dc71533748f41857fd57195ae53b90bbee2b26fb78e745c3a6591f46b560210"
+        ),
+        "source_sanitized_receipt_sha256": (
+            "sha256:8f7a5c7842e499cce5618b563aae848cf5ddac26c7f9b359f941d2aff4b0c111"
+        ),
+    },
+    "outcome_accounting": {
+        "valid_scored_outcomes": 1,
+        "valid_zero_outcomes": 1,
+        "positive_reward_outcomes": 0,
+        "unresolved_attempts_excluded_from_outcomes": 3,
+        "never_launched_attempts": 16,
+    },
+    "positive_reward_gate_satisfied": False,
+    "valid_scored_attempts_must_not_be_rerun": True,
+    "unresolved_attempts_must_remain_excluded": True,
+}
 EXPECTED_TOOL_NAMES = ["bash", "submit_report"]
 EXPECTED_TOOL_CATALOG_SHA256 = (
     "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a"
@@ -75,6 +102,8 @@ def validate_plan(plan: dict[str, Any], split: dict[str, Any]) -> list[dict[str,
             "calibration release gate must explicitly require positive authoritative reward "
             "with valid cleanup"
         )
+    if plan.get("supersedes_protocol") != EXPECTED_PREDECESSOR_INCIDENT:
+        raise ValueError("calibration predecessor incident binding drifted")
     if plan.get("execution") != {
         "pass_k": EXPECTED_PASS_K,
         "max_concurrent": 3,
@@ -101,9 +130,7 @@ def validate_plan(plan: dict[str, Any], split: dict[str, Any]) -> list[dict[str,
         if row.get("split") in {"train", "dev"}
     }
     sealed_test = {
-        row["task_version_id"]
-        for row in split.get("tasks", [])
-        if row.get("split") == "test"
+        row["task_version_id"] for row in split.get("tasks", []) if row.get("split") == "test"
     }
     selected = plan.get("tasks") or []
     if len(selected) != EXPECTED_TASK_COUNT:
@@ -327,6 +354,7 @@ def build_live_receipt(
         "authority": copy.deepcopy(plan["authority"]),
         "execution": copy.deepcopy(plan["execution"]),
         "release_gate": copy.deepcopy(plan["release_gate"]),
+        "supersedes_protocol": copy.deepcopy(plan["supersedes_protocol"]),
         "comparison": copy.deepcopy(plan["comparison"]),
         "known_non_parity": copy.deepcopy(plan["known_non_parity"]),
         "tasks": tasks,
@@ -346,6 +374,8 @@ def validate_frozen_receipt(receipt: dict[str, Any]) -> None:
         raise ValueError("frozen receipt must plan exactly 20 pass@1 sessions")
     if receipt.get("release_gate") != EXPECTED_RELEASE_GATE:
         raise ValueError("frozen receipt does not bind the positive-reward release gate")
+    if receipt.get("supersedes_protocol") != EXPECTED_PREDECESSOR_INCIDENT:
+        raise ValueError("frozen receipt does not bind the predecessor incident")
     tasks = receipt.get("tasks") or []
     if len(tasks) != EXPECTED_TASK_COUNT:
         raise ValueError("frozen receipt task rows are incomplete")
@@ -481,9 +511,7 @@ def run_campaign(
             "task_index": 1,
             "passed": canary_passed,
             "criterion": plan["release_gate"]["criterion"],
-            "minimum_score_exclusive": plan["release_gate"][
-                "minimum_score_exclusive"
-            ],
+            "minimum_score_exclusive": plan["release_gate"]["minimum_score_exclusive"],
             "observed_status": outcomes[0].get("status"),
             "observed_score": outcomes[0].get("score"),
             "cleanup_verified": outcomes[0].get("cleanup_verified") is True,

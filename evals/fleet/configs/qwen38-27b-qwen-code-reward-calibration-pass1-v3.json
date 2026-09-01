@@ -5,9 +5,23 @@
   "retry_of": null,
   "supersedes_protocol": {
     "campaign_id": "chris-cyber-q38-qcode-reward-cal-p1-v2",
-    "classification": "as_treated_descriptive_calibration",
-    "reason": "v2 released its remaining bank after an authoritative valid zero; the training qualification protocol requires positive authoritative reward with valid cleanup",
-    "valid_scored_attempts_must_not_be_rerun": true
+    "classification": "terminal_infrastructure_interrupted",
+    "scientific_disposition": "descriptive_only_not_training_gate_evidence",
+    "incident_binding": {
+      "path": "docs/evidence/qwen38-study/2026-09-01-fleet-calibration-v2-infrastructure-incident.json",
+      "binding_receipt_sha256": "sha256:9dc71533748f41857fd57195ae53b90bbee2b26fb78e745c3a6591f46b560210",
+      "source_sanitized_receipt_sha256": "sha256:8f7a5c7842e499cce5618b563aae848cf5ddac26c7f9b359f941d2aff4b0c111"
+    },
+    "outcome_accounting": {
+      "valid_scored_outcomes": 1,
+      "valid_zero_outcomes": 1,
+      "positive_reward_outcomes": 0,
+      "unresolved_attempts_excluded_from_outcomes": 3,
+      "never_launched_attempts": 16
+    },
+    "positive_reward_gate_satisfied": false,
+    "valid_scored_attempts_must_not_be_rerun": true,
+    "unresolved_attempts_must_remain_excluded": true
   },
   "release_gate": {
     "task_index": 1,

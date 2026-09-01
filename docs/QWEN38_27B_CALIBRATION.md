@@ -39,19 +39,30 @@ controllers; root/cluster execution retains the image's uid 1000 behavior.
 
 V2 was preregistered with an infrastructure-only canary gate: any authoritative
 model outcome, including a valid zero, released the remaining bank. Its first
-attempt returned an authoritative zero with verifier execution and complete
-cleanup, after which the controller began later waves exactly as its code said.
-That criterion conflicts with the subsequently merged Qwen3.8 training
-qualification protocol, which requires positive reward before releasing a
-larger calibration bank. V2 is therefore preserved as an as-treated descriptive
-calibration, not hidden or rerun and not eligible to satisfy the training gate.
-Stopping its controller would mutate live execution, so it was left untouched.
+attempt returned one authoritative valid zero with complete cleanup. The
+controller then launched attempts 2–4 before disappearing after those model
+processes terminated but before local postprocessing. Those three attempts are
+unresolved and excluded from outcomes pending an authorized read-only
+verifier-store export; no score or cleanup is inferred from missing local files.
+The remaining sixteen attempts never launched.
+
+V2 is classified `terminal_infrastructure_interrupted` and preserved only as a
+descriptive infrastructure incident. It is not scientifically complete, has no
+observed positive reward, and does not satisfy the training gate. Cleanup,
+score recovery, rerun, and V3 launch all remain unauthorized. The minimized
+incident binding is recorded in
+[`docs/evidence/qwen38-study/2026-09-01-fleet-calibration-v2-infrastructure-incident.json`](evidence/qwen38-study/2026-09-01-fleet-calibration-v2-infrastructure-incident.json),
+which pins sanitized source receipt digest
+`sha256:8f7a5c7842e499cce5618b563aae848cf5ddac26c7f9b359f941d2aff4b0c111`
+without prompts, traces, flags, verifier contents, credentials, or resource
+identifiers.
 
 V3 makes the positive-reward criterion an exact, required configuration field.
 Missing, altered, zero-valued, non-authoritative, or cleanup-incomplete outcomes
 all fail closed. Its twenty versions are disjoint from V2 so already valid
-pass@1 attempts cannot be silently repeated. V3 is a prepared create-only plan;
-this change does not launch it.
+pass@1 attempts cannot be silently repeated. Attempts 2–4 remain excluded rather
+than being interpreted as failures or model outcomes. V3 is a prepared
+create-only plan; this change does not launch it.
 
 ## What is and is not matched
 

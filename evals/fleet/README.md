@@ -270,8 +270,11 @@ This path uses the already queue-managed inference deployment and local
 linux/amd64 harness containers; it submits no training workload and never
 changes, reprioritizes, or cancels cluster jobs.
 
-The historical v2 plan used an infrastructure-only gate and released later
-tasks after a valid zero. It remains an as-treated descriptive campaign and is
-not a positive-reward qualification. V3 fails closed on zero, missing score,
-invalid cleanup, or any unrecognized gate criterion, and uses a disjoint
-non-test task bank so valid v2 attempts are not rerun.
+The historical v2 plan used an infrastructure-only gate and released attempts
+2–4 after one authoritative valid zero. It then terminated as an infrastructure
+incident: attempts 2–4 are unresolved and excluded pending authorized
+read-only verifier-store evidence, and sixteen attempts never launched. V2 is
+not scientifically complete and does not satisfy the positive-reward gate. Its
+minimized, resource-free incident binding is under `docs/evidence/qwen38-study/`.
+V3 fails closed on zero, missing score, invalid cleanup, or any unrecognized
+gate criterion and has not been submitted.

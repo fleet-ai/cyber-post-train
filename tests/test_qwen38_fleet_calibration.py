@@ -8,14 +8,13 @@ import pytest
 
 from evals.fleet import qwen38_calibration, self_hosted
 
-PLAN = Path(
-    "evals/fleet/configs/qwen38-27b-qwen-code-reward-calibration-pass1-v3.json"
-)
-V2_PLAN = Path(
-    "evals/fleet/configs/qwen38-27b-qwen-code-reward-calibration-pass1-v2.json"
-)
+PLAN = Path("evals/fleet/configs/qwen38-27b-qwen-code-reward-calibration-pass1-v3.json")
+V2_PLAN = Path("evals/fleet/configs/qwen38-27b-qwen-code-reward-calibration-pass1-v2.json")
 SPLIT = Path("configs/data/fleet-a62-task-split-v1.json")
 QUALIFICATION = Path("configs/qualification/qwen38-27b-v1.json")
+INCIDENT_BINDING = Path(
+    "docs/evidence/qwen38-study/2026-09-01-fleet-calibration-v2-infrastructure-incident.json"
+)
 
 
 def _json(path: Path) -> dict:
@@ -71,6 +70,44 @@ def test_calibration_gate_matches_training_qualification() -> None:
     rl_gate = qualification["rl"]
     assert rl_gate["required_calibration_config"] == PLAN.as_posix()
     assert rl_gate["required_calibration_outcome"] == plan["release_gate"]["criterion"]
+
+
+def test_v3_binds_minimized_terminal_incident_without_counting_unresolved_attempts() -> None:
+    plan = _json(PLAN)
+    binding = _json(INCIDENT_BINDING)
+    unsigned = {key: value for key, value in binding.items() if key != "binding_receipt_sha256"}
+    assert binding["binding_receipt_sha256"] == self_hosted.sha256(
+        self_hosted.canonical_json(unsigned)
+    )
+    assert plan["supersedes_protocol"] == qwen38_calibration.EXPECTED_PREDECESSOR_INCIDENT
+    assert plan["supersedes_protocol"]["incident_binding"] == {
+        "path": INCIDENT_BINDING.as_posix(),
+        "binding_receipt_sha256": binding["binding_receipt_sha256"],
+        "source_sanitized_receipt_sha256": binding["source_sanitized_receipt"]["receipt_sha256"],
+    }
+    assert binding["classification"] == "terminal_infrastructure_interrupted"
+    assert binding["scientific_disposition"] == ("descriptive_only_not_training_gate_evidence")
+    assert binding["outcome_accounting"] == {
+        "planned_attempts": 20,
+        "valid_scored_outcomes": 1,
+        "valid_zero_outcomes": 1,
+        "positive_reward_outcomes": 0,
+        "unresolved_attempts_excluded_from_outcomes": 3,
+        "never_launched_attempts": 16,
+    }
+    assert binding["unresolved_attempts"]["ordinals"] == [2, 3, 4]
+    assert binding["gates"]["positive_reward_gate_satisfied"] is False
+    assert binding["gates"]["scientific_completion_claimed"] is False
+    assert binding["gates"]["cleanup_authorized"] is False
+    assert binding["gates"]["v3_submitted"] is False
+    assert binding["data_minimization"] == {
+        "prompts_included": False,
+        "traces_included": False,
+        "flags_included": False,
+        "verifier_contents_included": False,
+        "resource_identifiers_included": False,
+        "credentials_included": False,
+    }
 
 
 @pytest.mark.parametrize(
@@ -173,6 +210,7 @@ def test_canary_failure_prevents_remaining_tasks(
         "task_count": 20,
         "planned_sessions": 20,
         "release_gate": copy.deepcopy(qwen38_calibration.EXPECTED_RELEASE_GATE),
+        "supersedes_protocol": copy.deepcopy(qwen38_calibration.EXPECTED_PREDECESSOR_INCIDENT),
         "tasks": tasks,
     }
     receipt["receipt_sha256"] = self_hosted.sha256(self_hosted.canonical_json(receipt))
@@ -218,6 +256,7 @@ def test_valid_zero_canary_blocks_remaining_tasks(
         "task_count": 20,
         "planned_sessions": 20,
         "release_gate": copy.deepcopy(qwen38_calibration.EXPECTED_RELEASE_GATE),
+        "supersedes_protocol": copy.deepcopy(qwen38_calibration.EXPECTED_PREDECESSOR_INCIDENT),
         "tasks": tasks,
     }
     receipt["receipt_sha256"] = self_hosted.sha256(self_hosted.canonical_json(receipt))
@@ -262,6 +301,7 @@ def test_positive_canary_releases_remaining_tasks(
         "task_count": 20,
         "planned_sessions": 20,
         "release_gate": copy.deepcopy(qwen38_calibration.EXPECTED_RELEASE_GATE),
+        "supersedes_protocol": copy.deepcopy(qwen38_calibration.EXPECTED_PREDECESSOR_INCIDENT),
         "tasks": tasks,
     }
     receipt["receipt_sha256"] = self_hosted.sha256(self_hosted.canonical_json(receipt))
