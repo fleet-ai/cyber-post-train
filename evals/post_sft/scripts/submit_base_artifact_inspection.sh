@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/../../.." && pwd)
-NAME=chris-cyber-qwen36-base-artifact-inspect-6a9e13bd-v7
+NAME=chris-cyber-qwen36-base-artifact-inspect-6a9e13bd-v8
 NAMESPACE=inference
 EXPECTED_CONTEXT=nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6
 PULL_SECRET=ecr-pull
@@ -34,9 +34,9 @@ configmap() {
 owned_resources() {
   printf '%s\n' \
     "configmap/$NAME" \
-    "serviceaccount/chris-cyber-qwen36-base-artifact-observer-v7" \
-    "role.rbac.authorization.k8s.io/chris-cyber-qwen36-base-artifact-observer-v7" \
-    "rolebinding.rbac.authorization.k8s.io/chris-cyber-qwen36-base-artifact-observer-v7" \
+    "serviceaccount/chris-cyber-qwen36-base-artifact-observer-v8" \
+    "role.rbac.authorization.k8s.io/chris-cyber-qwen36-base-artifact-observer-v8" \
+    "rolebinding.rbac.authorization.k8s.io/chris-cyber-qwen36-base-artifact-observer-v8" \
     "job.batch/$NAME"
 }
 

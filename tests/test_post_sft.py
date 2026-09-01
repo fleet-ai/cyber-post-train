@@ -1354,7 +1354,6 @@ def _base_artifact_receipt():
         **inspection["sidecar_sha256"],
         ".cyber-post-train-lock.json": "sha256:" + "a" * 64,
         ".fleet-acceptance.json": "sha256:" + "f" * 64,
-        "source-tree.json": "sha256:" + "b" * 64,
         ".gitattributes": "sha256:" + "c" * 64,
         "LICENSE": "sha256:" + "d" * 64,
         "README.md": "sha256:" + "e" * 64,

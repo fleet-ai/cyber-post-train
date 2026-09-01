@@ -594,13 +594,16 @@ receipt's identity but incorrectly compared its pre-publication count to a direc
 contained the receipt itself. Preserve v6 unchanged. A read-only observer proved the discrepancy is
 exactly one file and the receipt's own 385 bytes. The create-only v7 successor therefore validates
 the receipt's exact schema, revision, weights, resolved path, staging count, and self-excluding file
-and byte counts—the semantics of the original atomic writer. It then extends the closed-world
-surface by only that proven file, while still
-rejecting unknown top-level entries and proving `.cache/` is the one reviewed non-serving directory
-without traversing it. Safetensor/header and full-file hashing operate on an ephemeral view of only
-the validated top-level files, and the receipt names the real model root. The base provenance
-allowlist therefore contains both `source-tree.json` and `.fleet-acceptance.json`; the post-SFT arm
-has its own independently hashed staging acceptance receipt. Preview still fails unless the named
+and byte counts—the semantics of the original atomic writer—then failed safely because it also
+expected the SFS-only `source-tree.json` in the inference cache. Preserve v7 unchanged. The
+read-only inventory proves the two storage surfaces differ only in reviewed provenance: SFS carries
+`source-tree.json`, while the inference cache carries `.fleet-acceptance.json`. The create-only v8
+successor explicitly replaces the former with the latter in its copied surface contract; it does
+not add both or broaden any other path. It continues to reject unknown top-level entries and proves
+`.cache/` is the one reviewed non-serving directory without traversing it. Safetensor/header and
+full-file hashing operate on an ephemeral view of only the validated top-level files, and the
+receipt names the real model root. The post-SFT arm has its own independently hashed staging
+acceptance receipt. Preview still fails unless the named
 Secret exists with Docker registry credential type. Every other unreviewed execution field is
 rejected, and the live serving runtime remains the separately pinned SGLang image.
 
