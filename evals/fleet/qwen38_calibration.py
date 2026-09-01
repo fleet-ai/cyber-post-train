@@ -16,6 +16,7 @@ import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
 import httpx
 
@@ -29,7 +30,11 @@ EXPECTED_PASS_K = 1
 EXPECTED_RELEASE_GATE = {
     "task_index": 1,
     "criterion": "positive_authoritative_reward_with_valid_cleanup_on_non_test_fleet_tasks",
-    "minimum_score_exclusive": 0,
+    "required_outcome_status": "model_outcome",
+    "require_exact_canary_binding": True,
+    "required_verifier_execution_id": "nonzero_uuid",
+    "required_cleanup_verified": True,
+    "required_binary_score": 1,
 }
 EXPECTED_PREDECESSOR_INCIDENT = {
     "campaign_id": "chris-cyber-q38-qcode-reward-cal-p1-v2",
@@ -41,11 +46,18 @@ EXPECTED_PREDECESSOR_INCIDENT = {
             "2026-09-01-fleet-calibration-v2-infrastructure-incident.json"
         ),
         "binding_receipt_sha256": (
-            "sha256:9dc71533748f41857fd57195ae53b90bbee2b26fb78e745c3a6591f46b560210"
+            "sha256:6f5b609d139c87a015263feac5f099df1a83e002d3146e038a98087ec8f9a1ad"
         ),
-        "source_sanitized_receipt_sha256": (
+        "source_sanitized_receipt_raw_file_sha256": (
+            "sha256:5ca91ad5db8d951d545cd78a4ea06982941fced369c54c48b6593c00f401235a"
+        ),
+        "source_sanitized_receipt_embedded_sha256": (
             "sha256:8f7a5c7842e499cce5618b563aae848cf5ddac26c7f9b359f941d2aff4b0c111"
         ),
+        "source_sanitized_receipt_computed_canonical_sha256": (
+            "sha256:507e8faecc6c686ca90ff6196e7b03ba95acb66543bcfcb547473c1225ae1e58"
+        ),
+        "source_sanitized_receipt_embedded_digest_valid": False,
     },
     "outcome_accounting": {
         "valid_scored_outcomes": 1,
@@ -466,15 +478,30 @@ def can_release_remaining(plan: dict[str, Any], outcome: dict[str, Any]) -> bool
 
     if plan.get("release_gate") != EXPECTED_RELEASE_GATE:
         raise ValueError("unsupported or missing calibration release gate")
-    if outcome.get("status") != "model_outcome":
+    if outcome.get("status") != EXPECTED_RELEASE_GATE["required_outcome_status"]:
         return False
     if outcome.get("cleanup_verified") is not True:
+        return False
+    if outcome.get("index") != EXPECTED_RELEASE_GATE["task_index"]:
+        return False
+    selected = plan.get("tasks") or []
+    if not selected or any(
+        outcome.get(field) != selected[0].get(field) for field in ("task_key", "task_version_id")
+    ):
+        return False
+    verifier_execution_id = outcome.get("verifier_execution_id")
+    if not isinstance(verifier_execution_id, str):
+        return False
+    try:
+        if UUID(verifier_execution_id).int == 0:
+            return False
+    except ValueError:
         return False
     try:
         score = float(outcome["score"])
     except (KeyError, TypeError, ValueError):
         return False
-    return score > EXPECTED_RELEASE_GATE["minimum_score_exclusive"]
+    return score == float(EXPECTED_RELEASE_GATE["required_binary_score"])
 
 
 def run_campaign(
@@ -511,7 +538,8 @@ def run_campaign(
             "task_index": 1,
             "passed": canary_passed,
             "criterion": plan["release_gate"]["criterion"],
-            "minimum_score_exclusive": plan["release_gate"]["minimum_score_exclusive"],
+            "required_binary_score": plan["release_gate"]["required_binary_score"],
+            "verifier_execution_id": outcomes[0].get("verifier_execution_id"),
             "observed_status": outcomes[0].get("status"),
             "observed_score": outcomes[0].get("score"),
             "cleanup_verified": outcomes[0].get("cleanup_verified") is True,

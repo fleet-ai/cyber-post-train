@@ -83,7 +83,16 @@ def test_v3_binds_minimized_terminal_incident_without_counting_unresolved_attemp
     assert plan["supersedes_protocol"]["incident_binding"] == {
         "path": INCIDENT_BINDING.as_posix(),
         "binding_receipt_sha256": binding["binding_receipt_sha256"],
-        "source_sanitized_receipt_sha256": binding["source_sanitized_receipt"]["receipt_sha256"],
+        "source_sanitized_receipt_raw_file_sha256": binding["source_sanitized_receipt"][
+            "raw_file_sha256"
+        ],
+        "source_sanitized_receipt_embedded_sha256": binding["source_sanitized_receipt"][
+            "embedded_receipt_sha256"
+        ],
+        "source_sanitized_receipt_computed_canonical_sha256": binding["source_sanitized_receipt"][
+            "computed_canonical_sha256"
+        ],
+        "source_sanitized_receipt_embedded_digest_valid": False,
     }
     assert binding["classification"] == "terminal_infrastructure_interrupted"
     assert binding["scientific_disposition"] == ("descriptive_only_not_training_gate_evidence")
@@ -96,6 +105,13 @@ def test_v3_binds_minimized_terminal_incident_without_counting_unresolved_attemp
         "never_launched_attempts": 16,
     }
     assert binding["unresolved_attempts"]["ordinals"] == [2, 3, 4]
+    source = binding["source_sanitized_receipt"]
+    assert source["embedded_digest_valid"] is False
+    assert source["embedded_receipt_sha256"] != source["computed_canonical_sha256"]
+    assert source["raw_file_sha256"] not in {
+        source["embedded_receipt_sha256"],
+        source["computed_canonical_sha256"],
+    }
     assert binding["gates"]["positive_reward_gate_satisfied"] is False
     assert binding["gates"]["scientific_completion_claimed"] is False
     assert binding["gates"]["cleanup_authorized"] is False
@@ -121,6 +137,31 @@ def test_v3_binds_minimized_terminal_incident_without_counting_unresolved_attemp
 )
 def test_release_gate_fails_closed_without_all_positive_evidence(outcome: dict) -> None:
     assert qwen38_calibration.can_release_remaining(_json(PLAN), outcome) is False
+
+
+def test_release_gate_requires_exact_canary_and_authoritative_verifier_uuid() -> None:
+    plan = _json(PLAN)
+    canary = plan["tasks"][0]
+    positive = {
+        "index": 1,
+        "task_key": canary["task_key"],
+        "task_version_id": canary["task_version_id"],
+        "status": "model_outcome",
+        "cleanup_verified": True,
+        "score": 1.0,
+        "verifier_execution_id": "11111111-1111-4111-8111-111111111111",
+    }
+    assert qwen38_calibration.can_release_remaining(plan, positive) is True
+    for drift in (
+        {"index": 2},
+        {"task_version_id": "wrong"},
+        {"verifier_execution_id": None},
+        {"verifier_execution_id": "not-a-uuid"},
+        {"verifier_execution_id": "00000000-0000-0000-0000-000000000000"},
+        {"score": 0.5},
+    ):
+        candidate = {**positive, **drift}
+        assert qwen38_calibration.can_release_remaining(plan, candidate) is False
 
 
 def test_plan_rejects_a_sealed_test_version() -> None:
@@ -251,6 +292,8 @@ def test_valid_zero_canary_blocks_remaining_tasks(
         }
         for index in range(1, 21)
     ]
+    tasks[0]["task_key"] = plan["tasks"][0]["task_key"]
+    tasks[0]["task_version_id"] = plan["tasks"][0]["task_version_id"]
     receipt = {
         "schema_version": qwen38_calibration.RECEIPT_SCHEMA,
         "task_count": 20,
@@ -271,6 +314,7 @@ def test_valid_zero_canary_blocks_remaining_tasks(
             "status": "model_outcome",
             "cleanup_verified": True,
             "score": 0.0,
+            "verifier_execution_id": "11111111-1111-4111-8111-111111111111",
         }
 
     monkeypatch.setattr(qwen38_calibration, "_one_task", valid_zero)
@@ -296,6 +340,8 @@ def test_positive_canary_releases_remaining_tasks(
         }
         for index in range(1, 21)
     ]
+    tasks[0]["task_key"] = plan["tasks"][0]["task_key"]
+    tasks[0]["task_version_id"] = plan["tasks"][0]["task_version_id"]
     receipt = {
         "schema_version": qwen38_calibration.RECEIPT_SCHEMA,
         "task_count": 20,
@@ -316,6 +362,7 @@ def test_positive_canary_releases_remaining_tasks(
             "status": "model_outcome",
             "cleanup_verified": True,
             "score": 1.0,
+            "verifier_execution_id": "11111111-1111-4111-8111-111111111111",
         }
 
     monkeypatch.setattr(qwen38_calibration, "_one_task", positive)

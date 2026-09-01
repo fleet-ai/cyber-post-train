@@ -276,5 +276,6 @@ incident: attempts 2–4 are unresolved and excluded pending authorized
 read-only verifier-store evidence, and sixteen attempts never launched. V2 is
 not scientifically complete and does not satisfy the positive-reward gate. Its
 minimized, resource-free incident binding is under `docs/evidence/qwen38-study/`.
-V3 fails closed on zero, missing score, invalid cleanup, or any unrecognized
-gate criterion and has not been submitted.
+V3 fails closed on zero, missing score, invalid cleanup, missing verifier UUID,
+canary identity drift, or any unrecognized gate criterion and has not been
+submitted.

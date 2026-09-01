@@ -9,8 +9,11 @@
     "scientific_disposition": "descriptive_only_not_training_gate_evidence",
     "incident_binding": {
       "path": "docs/evidence/qwen38-study/2026-09-01-fleet-calibration-v2-infrastructure-incident.json",
-      "binding_receipt_sha256": "sha256:9dc71533748f41857fd57195ae53b90bbee2b26fb78e745c3a6591f46b560210",
-      "source_sanitized_receipt_sha256": "sha256:8f7a5c7842e499cce5618b563aae848cf5ddac26c7f9b359f941d2aff4b0c111"
+      "binding_receipt_sha256": "sha256:6f5b609d139c87a015263feac5f099df1a83e002d3146e038a98087ec8f9a1ad",
+      "source_sanitized_receipt_raw_file_sha256": "sha256:5ca91ad5db8d951d545cd78a4ea06982941fced369c54c48b6593c00f401235a",
+      "source_sanitized_receipt_embedded_sha256": "sha256:8f7a5c7842e499cce5618b563aae848cf5ddac26c7f9b359f941d2aff4b0c111",
+      "source_sanitized_receipt_computed_canonical_sha256": "sha256:507e8faecc6c686ca90ff6196e7b03ba95acb66543bcfcb547473c1225ae1e58",
+      "source_sanitized_receipt_embedded_digest_valid": false
     },
     "outcome_accounting": {
       "valid_scored_outcomes": 1,
@@ -26,7 +29,11 @@
   "release_gate": {
     "task_index": 1,
     "criterion": "positive_authoritative_reward_with_valid_cleanup_on_non_test_fleet_tasks",
-    "minimum_score_exclusive": 0
+    "required_outcome_status": "model_outcome",
+    "require_exact_canary_binding": true,
+    "required_verifier_execution_id": "nonzero_uuid",
+    "required_cleanup_verified": true,
+    "required_binary_score": 1
   },
   "source_job_id": "a62dd51f-a52b-4941-8207-4679e4b25b51",
   "split_manifest_digest": "sha256:fb09668f8de77e6baee37dc1e3162a7617ca9a0a450da9ca53422c17bfbc942a",

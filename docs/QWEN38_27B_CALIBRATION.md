@@ -52,17 +52,24 @@ observed positive reward, and does not satisfy the training gate. Cleanup,
 score recovery, rerun, and V3 launch all remain unauthorized. The minimized
 incident binding is recorded in
 [`docs/evidence/qwen38-study/2026-09-01-fleet-calibration-v2-infrastructure-incident.json`](evidence/qwen38-study/2026-09-01-fleet-calibration-v2-infrastructure-incident.json),
-which pins sanitized source receipt digest
-`sha256:8f7a5c7842e499cce5618b563aae848cf5ddac26c7f9b359f941d2aff4b0c111`
+which pins the exact sanitized source file bytes as
+`sha256:5ca91ad5db8d951d545cd78a4ea06982941fced369c54c48b6593c00f401235a`
 without prompts, traces, flags, verifier contents, credentials, or resource
-identifiers.
+identifiers. The source file's embedded digest
+`sha256:8f7a5c7842e499cce5618b563aae848cf5ddac26c7f9b359f941d2aff4b0c111`
+does not reproduce: canonicalizing the receipt without that field yields
+`sha256:507e8faecc6c686ca90ff6196e7b03ba95acb66543bcfcb547473c1225ae1e58`.
+The binding records that mismatch explicitly instead of treating the embedded
+value as validated.
 
 V3 makes the positive-reward criterion an exact, required configuration field.
 Missing, altered, zero-valued, non-authoritative, or cleanup-incomplete outcomes
-all fail closed. Its twenty versions are disjoint from V2 so already valid
-pass@1 attempts cannot be silently repeated. Attempts 2–4 remain excluded rather
-than being interpreted as failures or model outcomes. V3 is a prepared
-create-only plan; this change does not launch it.
+all fail closed. Release additionally requires the exact canary task binding, a
+nonzero verifier-execution UUID, and the exact positive value from the binary
+authority. Its twenty versions are disjoint from V2 so already valid pass@1
+attempts cannot be silently repeated. Attempts 2–4 remain excluded rather than
+being interpreted as failures or model outcomes. V3 is a prepared create-only
+plan; this change does not launch it.
 
 ## What is and is not matched
 
