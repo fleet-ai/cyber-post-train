@@ -210,6 +210,24 @@ def discover_tools(root_url: str, runner_header: str, runner_token: str) -> tupl
     return names, sha256(canonical_json(tools))
 
 
+def assert_required_task_tools(
+    config: dict[str, Any], tool_names: list[str], tool_catalog_sha256: str
+) -> None:
+    """Fail closed if a calibrated task exposes a different tool surface."""
+    required = (config.get("execution") or {}).get("required_task_tools")
+    if required is None:
+        return
+    if not isinstance(required, list) or not all(isinstance(name, str) for name in required):
+        raise RuntimeError("required task tools are malformed")
+    if len(required) != len(set(required)):
+        raise RuntimeError("required task tools contain duplicates")
+    if tool_names != required:
+        raise RuntimeError("runtime task tools do not match the exact required tool surface")
+    required_digest = (config.get("execution") or {}).get("required_task_tool_catalog_sha256")
+    if required_digest is not None and tool_catalog_sha256 != required_digest:
+        raise RuntimeError("runtime task tool schemas do not match the exact required catalog")
+
+
 def extract_final_answer(path: Path) -> str:
     final = ""
     for line in path.read_text(errors="replace").splitlines():
@@ -535,6 +553,7 @@ def runtime_preflight(
         tool_names, tool_digest = discover_tools(
             instance["urls"]["root"], token_payload["header"], token_payload["token"]
         )
+        assert_required_task_tools(config, tool_names, tool_digest)
         return {
             "instance_id": instance_id,
             "runtime_binding": actual,
@@ -620,6 +639,7 @@ def run(config: dict[str, Any], out_dir: Path, proxy_script: Path) -> dict[str, 
         tool_names, tool_digest = discover_tools(
             instance["urls"]["root"], token_payload["header"], token_payload["token"]
         )
+        assert_required_task_tools(config, tool_names, tool_digest)
         (out_dir / "runtime-binding.json").write_bytes(
             canonical_json(
                 {
@@ -702,7 +722,11 @@ def run(config: dict[str, Any], out_dir: Path, proxy_script: Path) -> dict[str, 
                         "name": config["model"]["served_id"],
                         "baseUrl": "http://model-proxy:8877/v1",
                         "envKey": "QWEN_CODE_API_KEY",
-                        "generationConfig": {"contextWindowSize": 262144},
+                        "generationConfig": {
+                            "contextWindowSize": config["harness"].get(
+                                "context_window_size", 262144
+                            )
+                        },
                     }
                 ]
             },
