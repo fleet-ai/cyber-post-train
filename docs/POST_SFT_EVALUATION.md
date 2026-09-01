@@ -445,6 +445,12 @@ receipt and submits one idempotent, priority-zero registration Job through `trai
 to create a replacement Job and is gated on the exact staging Job's completion. The post-SFT route
 must then become Ready and pass the live parity checks below.
 
+The immutable v1 registration Job was admitted but never ran its registration command: its Pod
+could not anonymously pull the private digest-pinned GHCR image. Preserve that Job, ConfigMap,
+Pod, and events unchanged. The create-only v2 successor uses the namespace's reviewed
+`ghcr-pull` image pull secret, matching the already-successful baseline registration jobs; all
+model, receipt, command, resource, queue, and image-digest bindings remain unchanged.
+
 ```bash
 uv run python -m training.post_sft_cli render \
   --plan configs/evaluation/qwen36-27b-ft-run-574bd7b3-post-sft.json \

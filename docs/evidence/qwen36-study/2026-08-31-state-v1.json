@@ -220,7 +220,7 @@
         "receipt_path": "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/evidence/sfs-v4/receipt"
       }
     },
-    "plan": {"path": "configs/evaluation/qwen36-27b-ft-run-574bd7b3-post-sft.json", "file_sha256": "sha256:399eb1a3e5ef98e9546480988ac6d6d20cfdc89db02f05198887fa2e7e0e424a"}
+    "plan": {"path": "configs/evaluation/qwen36-27b-ft-run-574bd7b3-post-sft.json", "file_sha256": "sha256:7bd5b14a7e6ee0a184e09e22e748c11e233ce5cbb7e773cb272983173db335a5"}
   },
   "native_fleet_rl": {
     "one_step_gate": {

@@ -770,7 +770,7 @@ def _post_sft_launch_evidence(paired_identity, post_registration):
         "schema": "cyber_post_sft_registration_completion_v1",
         "job": {
             "namespace": "fleet-train-jobs",
-            "name": "chris-cyber-qwen36-sft-register-574bd7b3-v1",
+            "name": "chris-cyber-qwen36-sft-register-574bd7b3-v2",
             "uid": "registration-job-uid",
             "complete": True,
             "succeeded": 1,
@@ -790,7 +790,7 @@ def _post_sft_launch_evidence(paired_identity, post_registration):
                 "reviewed_spec_projection_sha256": digest_json(registration_projection),
             },
             "config_map": {
-                "name": "chris-cyber-qwen36-sft-register-574bd7b3-v1",
+                "name": "chris-cyber-qwen36-sft-register-574bd7b3-v2",
                 "uid": "registration-config-uid",
                 "resource_version": "1",
                 "immutable": True,
@@ -1081,7 +1081,7 @@ def test_post_sft_launch_claim_is_atomic_and_persistent(tmp_path):
 
 def _registration_job_observation(serving):
     job_uid = "registration-job-uid"
-    name = "chris-cyber-qwen36-sft-register-574bd7b3-v1"
+    name = "chris-cyber-qwen36-sft-register-574bd7b3-v2"
     contract = json.loads(
         (ROOT / "configs/evaluation/qwen36-27b-ft-run-574bd7b3-post-sft.json").read_text()
     )["evidence_execution"]["registration"]
@@ -1459,6 +1459,20 @@ def test_registration_builder_rejects_unreviewed_workload_and_mutable_configmap(
     observation["job"]["spec"]["template"]["spec"]["containers"].append(extra)
     observation["pod"]["spec"]["containers"].append(extra)
     with pytest.raises(ValueError, match="containers names differ"):
+        assemble_registration_completion(
+            paired_identity,
+            observation,
+            api_result,
+            serving,
+            _export(_selection()),
+        )
+
+    observation = _registration_job_observation(serving)
+    observation["job"]["spec"]["template"]["spec"]["imagePullSecrets"] = [
+        {"name": "unreviewed"}
+    ]
+    observation["pod"]["spec"]["imagePullSecrets"] = [{"name": "unreviewed"}]
+    with pytest.raises(ValueError, match="execution spec differs"):
         assemble_registration_completion(
             paired_identity,
             observation,
