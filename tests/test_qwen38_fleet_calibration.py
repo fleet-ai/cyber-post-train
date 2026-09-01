@@ -9,9 +9,13 @@ import pytest
 from evals.fleet import qwen38_calibration, self_hosted
 
 PLAN = Path(
+    "evals/fleet/configs/qwen38-27b-qwen-code-reward-calibration-pass1-v3.json"
+)
+V2_PLAN = Path(
     "evals/fleet/configs/qwen38-27b-qwen-code-reward-calibration-pass1-v2.json"
 )
 SPLIT = Path("configs/data/fleet-a62-task-split-v1.json")
+QUALIFICATION = Path("configs/qualification/qwen38-27b-v1.json")
 
 
 def _json(path: Path) -> dict:
@@ -47,6 +51,39 @@ def test_plan_binds_qwen38_qwen_code_and_long_horizon() -> None:
         == qwen38_calibration.EXPECTED_TOOL_CATALOG_SHA256
     )
     assert plan["execution"]["pass_k"] == 1
+    assert plan["release_gate"] == qwen38_calibration.EXPECTED_RELEASE_GATE
+
+
+def test_v3_does_not_reuse_any_v2_valid_attempt_slot() -> None:
+    v2_ids = {row["task_version_id"] for row in _json(V2_PLAN)["tasks"]}
+    v3_ids = {row["task_version_id"] for row in _json(PLAN)["tasks"]}
+    assert v2_ids.isdisjoint(v3_ids)
+
+
+def test_legacy_plan_without_explicit_positive_gate_fails_closed() -> None:
+    with pytest.raises(ValueError, match="release gate"):
+        qwen38_calibration.validate_plan(_json(V2_PLAN), _json(SPLIT))
+
+
+def test_calibration_gate_matches_training_qualification() -> None:
+    plan = _json(PLAN)
+    qualification = _json(QUALIFICATION)
+    rl_gate = qualification["rl"]
+    assert rl_gate["required_calibration_config"] == PLAN.as_posix()
+    assert rl_gate["required_calibration_outcome"] == plan["release_gate"]["criterion"]
+
+
+@pytest.mark.parametrize(
+    "outcome",
+    [
+        {"status": "infrastructure_error", "score": 1.0, "cleanup_verified": True},
+        {"status": "model_outcome", "score": 1.0, "cleanup_verified": False},
+        {"status": "model_outcome", "cleanup_verified": True},
+        {"status": "model_outcome", "score": 0.0, "cleanup_verified": True},
+    ],
+)
+def test_release_gate_fails_closed_without_all_positive_evidence(outcome: dict) -> None:
+    assert qwen38_calibration.can_release_remaining(_json(PLAN), outcome) is False
 
 
 def test_plan_rejects_a_sealed_test_version() -> None:
@@ -135,6 +172,7 @@ def test_canary_failure_prevents_remaining_tasks(
         "schema_version": qwen38_calibration.RECEIPT_SCHEMA,
         "task_count": 20,
         "planned_sessions": 20,
+        "release_gate": copy.deepcopy(qwen38_calibration.EXPECTED_RELEASE_GATE),
         "tasks": tasks,
     }
     receipt["receipt_sha256"] = self_hosted.sha256(self_hosted.canonical_json(receipt))
@@ -161,7 +199,7 @@ def test_canary_failure_prevents_remaining_tasks(
     assert summary["model_outcomes"] == 0
 
 
-def test_valid_zero_canary_allows_remaining_tasks(
+def test_valid_zero_canary_blocks_remaining_tasks(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     plan = _json(PLAN)
@@ -179,6 +217,7 @@ def test_valid_zero_canary_allows_remaining_tasks(
         "schema_version": qwen38_calibration.RECEIPT_SCHEMA,
         "task_count": 20,
         "planned_sessions": 20,
+        "release_gate": copy.deepcopy(qwen38_calibration.EXPECTED_RELEASE_GATE),
         "tasks": tasks,
     }
     receipt["receipt_sha256"] = self_hosted.sha256(self_hosted.canonical_json(receipt))
@@ -191,6 +230,7 @@ def test_valid_zero_canary_allows_remaining_tasks(
             "task_key": row["task_key"],
             "task_version_id": row["task_version_id"],
             "status": "model_outcome",
+            "cleanup_verified": True,
             "score": 0.0,
         }
 
@@ -198,6 +238,50 @@ def test_valid_zero_canary_allows_remaining_tasks(
     summary = qwen38_calibration.run_campaign(
         plan, receipt, tmp_path / "run", Path("evals/fleet/fixed_proxy.py")
     )
+    assert summary["canary_gate"]["passed"] is False
+    assert summary["model_outcomes"] == 1
+    assert summary["successes"] == 0
+
+
+def test_positive_canary_releases_remaining_tasks(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    plan = _json(PLAN)
+    tasks = [
+        {
+            "index": index,
+            "family": "current",
+            "split": "train",
+            "task_key": f"task-{index}",
+            "task_version_id": f"version-{index}",
+        }
+        for index in range(1, 21)
+    ]
+    receipt = {
+        "schema_version": qwen38_calibration.RECEIPT_SCHEMA,
+        "task_count": 20,
+        "planned_sessions": 20,
+        "release_gate": copy.deepcopy(qwen38_calibration.EXPECTED_RELEASE_GATE),
+        "tasks": tasks,
+    }
+    receipt["receipt_sha256"] = self_hosted.sha256(self_hosted.canonical_json(receipt))
+
+    def positive(plan, row, out_dir, proxy_script):
+        return {
+            "index": row["index"],
+            "family": row["family"],
+            "split": row["split"],
+            "task_key": row["task_key"],
+            "task_version_id": row["task_version_id"],
+            "status": "model_outcome",
+            "cleanup_verified": True,
+            "score": 1.0,
+        }
+
+    monkeypatch.setattr(qwen38_calibration, "_one_task", positive)
+    summary = qwen38_calibration.run_campaign(
+        plan, receipt, tmp_path / "run", Path("evals/fleet/fixed_proxy.py")
+    )
     assert summary["canary_gate"]["passed"] is True
     assert summary["model_outcomes"] == 20
-    assert summary["successes"] == 0
+    assert summary["successes"] == 20

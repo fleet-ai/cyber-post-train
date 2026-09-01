@@ -262,10 +262,16 @@ receipt. Raw prompts and traces remain under the ignored private artifact root.
 evals/fleet/scripts/run_qwen38_reward_calibration_local.sh preview
 
 # Create the pass@1 campaign once. Task 1 is the low-cost canary; the other
-# nineteen launch only after a valid authoritative outcome and verified cleanup.
+# nineteen launch only after positive authoritative reward and verified cleanup.
 evals/fleet/scripts/run_qwen38_reward_calibration_local.sh run
 ```
 
 This path uses the already queue-managed inference deployment and local
 linux/amd64 harness containers; it submits no training workload and never
 changes, reprioritizes, or cancels cluster jobs.
+
+The historical v2 plan used an infrastructure-only gate and released later
+tasks after a valid zero. It remains an as-treated descriptive campaign and is
+not a positive-reward qualification. V3 fails closed on zero, missing score,
+invalid cleanup, or any unrecognized gate criterion, and uses a disjoint
+non-test task bank so valid v2 attempts are not rerun.

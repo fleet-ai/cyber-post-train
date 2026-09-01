@@ -26,8 +26,9 @@ post-training result.
 
 The gateway model path, catalog revision, server configuration, and synthetic
 structured-tool call must all agree before task execution. The first selected
-task is an in-protocol canary. A valid zero counts as a valid model outcome and
-opens the remaining calibration; an infrastructure error stops the campaign.
+task is an in-protocol canary. Only a positive authoritative reward with a
+verified cleanup receipt opens the remaining calibration. A valid zero or an
+infrastructure error leaves the remaining bank untouched.
 
 The create-only v1 canary stopped before agent execution or scoring because a
 non-root macOS controller cannot change Docker Desktop bind-mount ownership to
@@ -35,6 +36,22 @@ uid 1000. It verified the exact task runtime and tool-schema digest, then closed
 the environment and removed all containers. Commit `d29ced4` preserves that
 plan. V2 runs the container as the invoking uid/gid on non-root Docker Desktop
 controllers; root/cluster execution retains the image's uid 1000 behavior.
+
+V2 was preregistered with an infrastructure-only canary gate: any authoritative
+model outcome, including a valid zero, released the remaining bank. Its first
+attempt returned an authoritative zero with verifier execution and complete
+cleanup, after which the controller began later waves exactly as its code said.
+That criterion conflicts with the subsequently merged Qwen3.8 training
+qualification protocol, which requires positive reward before releasing a
+larger calibration bank. V2 is therefore preserved as an as-treated descriptive
+calibration, not hidden or rerun and not eligible to satisfy the training gate.
+Stopping its controller would mutate live execution, so it was left untouched.
+
+V3 makes the positive-reward criterion an exact, required configuration field.
+Missing, altered, zero-valued, non-authoritative, or cleanup-incomplete outcomes
+all fail closed. Its twenty versions are disjoint from V2 so already valid
+pass@1 attempts cannot be silently repeated. V3 is a prepared create-only plan;
+this change does not launch it.
 
 ## What is and is not matched
 
@@ -45,10 +62,10 @@ compaction implementation are not claimed to be byte-identical to the original
 Fleet Agent Runtime, so this run estimates reward acquisition under the Qwen
 Code 0.22.3 harness and does not directly estimate the native RL rollout rate.
 
-The selected versions are shared with the independently frozen Qwen3.6
-calibration. Once that campaign is terminal, attempt-1 outcomes may be compared
-by exact `task_version_id`. Infrastructure-invalid outcomes are not converted
-to zeros and valid pass@1 outcomes are never silently rerun.
+Qwen3.6 attempt-1 outcomes may be compared only where the independently frozen
+campaign has the exact same `task_version_id`. Missing matches remain missing
+comparison evidence. Infrastructure-invalid outcomes are not converted to zeros
+and valid pass@1 outcomes are never silently rerun.
 
 ## Launch boundary
 

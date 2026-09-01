@@ -1,7 +1,7 @@
 """Pass@1 Qwen3.8-27B reward calibration on exact non-test Fleet tasks.
 
 The first selected task is an in-protocol canary. The remaining nineteen tasks
-start only after that attempt produces an authoritative model outcome and a
+start only after that attempt produces a positive authoritative reward and a
 complete cleanup receipt. External benchmark and sealed Fleet test rows are
 never read by this runner.
 """
@@ -26,6 +26,11 @@ RECEIPT_SCHEMA = "fleet-qwen38-code-reward-calibration-receipt-v1"
 EXPECTED_SPLIT_SCHEMA = "fleet_rl_task_split_v1"
 EXPECTED_TASK_COUNT = 20
 EXPECTED_PASS_K = 1
+EXPECTED_RELEASE_GATE = {
+    "task_index": 1,
+    "criterion": "positive_authoritative_reward_with_valid_cleanup_on_non_test_fleet_tasks",
+    "minimum_score_exclusive": 0,
+}
 EXPECTED_TOOL_NAMES = ["bash", "submit_report"]
 EXPECTED_TOOL_CATALOG_SHA256 = (
     "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a"
@@ -65,6 +70,11 @@ def validate_plan(plan: dict[str, Any], split: dict[str, Any]) -> list[dict[str,
         raise ValueError("calibration source job does not match split provenance")
     if plan.get("study_role") != "reward_acquisition_model_calibration":
         raise ValueError("calibration study role drifted")
+    if plan.get("release_gate") != EXPECTED_RELEASE_GATE:
+        raise ValueError(
+            "calibration release gate must explicitly require positive authoritative reward "
+            "with valid cleanup"
+        )
     if plan.get("execution") != {
         "pass_k": EXPECTED_PASS_K,
         "max_concurrent": 3,
@@ -316,6 +326,7 @@ def build_live_receipt(
         "harness": copy.deepcopy(plan["harness"]),
         "authority": copy.deepcopy(plan["authority"]),
         "execution": copy.deepcopy(plan["execution"]),
+        "release_gate": copy.deepcopy(plan["release_gate"]),
         "comparison": copy.deepcopy(plan["comparison"]),
         "known_non_parity": copy.deepcopy(plan["known_non_parity"]),
         "tasks": tasks,
@@ -333,6 +344,8 @@ def validate_frozen_receipt(receipt: dict[str, Any]) -> None:
         raise ValueError("frozen receipt must contain exactly 20 tasks")
     if receipt.get("planned_sessions") != EXPECTED_TASK_COUNT:
         raise ValueError("frozen receipt must plan exactly 20 pass@1 sessions")
+    if receipt.get("release_gate") != EXPECTED_RELEASE_GATE:
+        raise ValueError("frozen receipt does not bind the positive-reward release gate")
     tasks = receipt.get("tasks") or []
     if len(tasks) != EXPECTED_TASK_COUNT:
         raise ValueError("frozen receipt task rows are incomplete")
@@ -393,6 +406,7 @@ def _one_task(
             "task_key": row["task_key"],
             "task_version_id": row["task_version_id"],
             "status": "model_outcome",
+            "cleanup_verified": True,
             **result,
         }
     except Exception as exc:  # noqa: BLE001
@@ -417,6 +431,22 @@ def _write_state(out_dir: Path, plan: dict[str, Any], outcomes: list[dict[str, A
     (out_dir / "campaign-state.json").write_bytes(self_hosted.canonical_json(value) + b"\n")
 
 
+def can_release_remaining(plan: dict[str, Any], outcome: dict[str, Any]) -> bool:
+    """Apply the preregistered canary gate without permissive fallbacks."""
+
+    if plan.get("release_gate") != EXPECTED_RELEASE_GATE:
+        raise ValueError("unsupported or missing calibration release gate")
+    if outcome.get("status") != "model_outcome":
+        return False
+    if outcome.get("cleanup_verified") is not True:
+        return False
+    try:
+        score = float(outcome["score"])
+    except (KeyError, TypeError, ValueError):
+        return False
+    return score > EXPECTED_RELEASE_GATE["minimum_score_exclusive"]
+
+
 def run_campaign(
     plan: dict[str, Any], receipt: dict[str, Any], out_dir: Path, proxy_script: Path
 ) -> dict[str, Any]:
@@ -425,7 +455,7 @@ def run_campaign(
     out_dir.chmod(0o700)
     outcomes = [_one_task(plan, receipt["tasks"][0], out_dir, proxy_script)]
     _write_state(out_dir, plan, outcomes)
-    canary_passed = outcomes[0]["status"] == "model_outcome"
+    canary_passed = can_release_remaining(plan, outcomes[0])
 
     if canary_passed:
         remaining = receipt["tasks"][1:]
@@ -450,7 +480,13 @@ def run_campaign(
         "canary_gate": {
             "task_index": 1,
             "passed": canary_passed,
-            "criterion": "authoritative_model_outcome_and_verified_cleanup",
+            "criterion": plan["release_gate"]["criterion"],
+            "minimum_score_exclusive": plan["release_gate"][
+                "minimum_score_exclusive"
+            ],
+            "observed_status": outcomes[0].get("status"),
+            "observed_score": outcomes[0].get("score"),
+            "cleanup_verified": outcomes[0].get("cleanup_verified") is True,
         },
         "model_outcomes": len(model_outcomes),
         "infrastructure_errors": len(outcomes) - len(model_outcomes),
