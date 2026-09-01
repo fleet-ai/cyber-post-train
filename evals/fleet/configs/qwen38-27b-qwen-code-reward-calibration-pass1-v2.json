@@ -1,7 +1,14 @@
 {
   "schema_version": "fleet-qwen38-code-reward-calibration-plan-v1",
-  "campaign_id": "chris-cyber-q38-qcode-reward-cal-p1-v1",
+  "campaign_id": "chris-cyber-q38-qcode-reward-cal-p1-v2",
   "study_role": "reward_acquisition_model_calibration",
+  "retry_of": {
+    "campaign_id": "chris-cyber-q38-qcode-reward-cal-p1-v1",
+    "source_commit": "d29ced471a7dccf88763c89bfc773680723c9004",
+    "classification": "infrastructure_terminal_before_agent_or_scoring",
+    "cause": "macos_controller_could_not_chown_docker_desktop_bind_mounts",
+    "cleanup_verified": true
+  },
   "source_job_id": "a62dd51f-a52b-4941-8207-4679e4b25b51",
   "split_manifest_digest": "sha256:fb09668f8de77e6baee37dc1e3162a7617ca9a0a450da9ca53422c17bfbc942a",
   "environment_ttl_seconds": 10800,

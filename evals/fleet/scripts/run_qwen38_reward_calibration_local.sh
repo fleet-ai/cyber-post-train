@@ -2,12 +2,12 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/../../.." && pwd)
-CAMPAIGN_ID=chris-cyber-q38-qcode-reward-cal-p1-v1
+CAMPAIGN_ID=chris-cyber-q38-qcode-reward-cal-p1-v2
 OUT_PARENT=${FLEET_EVAL_OUT_PARENT:-$ROOT/artifacts/qwen38-fleet-calibration}
 OUT_DIR=$OUT_PARENT/$CAMPAIGN_ID
-CONFIG=$ROOT/evals/fleet/configs/qwen38-27b-qwen-code-reward-calibration-pass1-v1.json
+CONFIG=$ROOT/evals/fleet/configs/qwen38-27b-qwen-code-reward-calibration-pass1-v2.json
 SPLIT=$ROOT/configs/data/fleet-a62-task-split-v1.json
-RECEIPT=$OUT_PARENT/qwen38-27b-qwen-code-reward-calibration-pass1-v1-receipt.json
+RECEIPT=$OUT_PARENT/qwen38-27b-qwen-code-reward-calibration-pass1-v2-receipt.json
 QWEN_IMAGE=chris/qwen-code:0.22.3-q38-cal-v1
 PROXY_IMAGE=ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
 
@@ -29,7 +29,7 @@ test "$(uname -m)" = arm64
 docker info >/dev/null
 mkdir -p "$OUT_PARENT"
 if test "$MODE" = preview; then
-  RECEIPT=$OUT_PARENT/qwen38-27b-qwen-code-reward-calibration-pass1-v1-preview-receipt.json
+  RECEIPT=$OUT_PARENT/qwen38-27b-qwen-code-reward-calibration-pass1-v2-preview-receipt.json
 fi
 test ! -e "$RECEIPT"
 if test "$MODE" = run; then

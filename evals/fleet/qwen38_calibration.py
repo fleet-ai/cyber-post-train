@@ -306,6 +306,7 @@ def build_live_receipt(
         "schema_version": RECEIPT_SCHEMA,
         "campaign_id": plan["campaign_id"],
         "study_role": plan["study_role"],
+        "retry_of": copy.deepcopy(plan.get("retry_of")),
         "source_job_id": plan["source_job_id"],
         "split_manifest_digest": split["manifest_digest"],
         "task_count": len(tasks),

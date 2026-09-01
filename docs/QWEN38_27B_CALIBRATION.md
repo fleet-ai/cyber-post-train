@@ -29,6 +29,13 @@ structured-tool call must all agree before task execution. The first selected
 task is an in-protocol canary. A valid zero counts as a valid model outcome and
 opens the remaining calibration; an infrastructure error stops the campaign.
 
+The create-only v1 canary stopped before agent execution or scoring because a
+non-root macOS controller cannot change Docker Desktop bind-mount ownership to
+uid 1000. It verified the exact task runtime and tool-schema digest, then closed
+the environment and removed all containers. Commit `d29ced4` preserves that
+plan. V2 runs the container as the invoking uid/gid on non-root Docker Desktop
+controllers; root/cluster execution retains the image's uid 1000 behavior.
+
 ## What is and is not matched
 
 The task versions, environments, data, prompts, runtime seeds, two-tool surface,
