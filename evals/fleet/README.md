@@ -100,6 +100,22 @@ Registry task-graph locator, and writes one private task-group payload plus a
 prompt-free hash receipt per task beneath an ignored, mode-0700 output root.
 Use a `results/` destination. Existing output is never replaced.
 
+For review, prefer `prepare-review`. It makes the same exact three predeclared
+GETs (Fleet account plus the two exact task versions), records a prompt-free
+request audit, and writes only `review-plan.json`. The plan contains prompt
+hashes and exact source bindings, never prompt bodies, traces, flags, or hidden
+task data. Its invariant block is scoped to the prepared pre-create payload;
+created members must still be re-hydrated and verified after any later approved
+task-group creation.
+
+```bash
+uv run python -m evals.fleet.prompt_curriculum prepare-review \
+  --config evals/fleet/configs/qwen36-27b-prompt-curriculum-pilot-v1.json \
+  --split configs/data/fleet-a62-task-split-v1.json \
+  --campaign-state /private/path/to/campaign-state.json \
+  --out-dir results/qwen36-prompt-curriculum-review-v1
+```
+
 ```bash
 uv run python -m evals.fleet.prompt_curriculum prepare \
   --config evals/fleet/configs/qwen36-27b-prompt-curriculum-pilot-v1.json \
