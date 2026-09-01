@@ -16,6 +16,7 @@ from evals.webexploitbench.paired import (
 from evals.webexploitbench.post_sft_evidence import (
     ARTIFACT_COMMAND_SHA256,
     ARTIFACT_CONFIG_MAP,
+    ARTIFACT_CONFIG_MAP_FILES,
     ARTIFACT_IMAGE,
     ARTIFACT_JOB,
     ARTIFACT_NAMESPACE,
@@ -1535,6 +1536,24 @@ def test_base_artifact_receipt_is_digest_bound_and_names_runtime_provenance():
     assert receipt["base_artifact_receipt_sha256"] == digest_json(
         {key: value for key, value in receipt.items() if key != "base_artifact_receipt_sha256"}
     )
+
+
+def test_base_artifact_config_map_files_match_the_frozen_execution_contract():
+    plan = json.loads(
+        (
+            ROOT / "configs/evaluation/qwen36-27b-ft-run-574bd7b3-post-sft.json"
+        ).read_text()
+    )
+    contract = plan["evidence_execution"]["base_artifact_inspector"]
+    assert set(ARTIFACT_CONFIG_MAP_FILES.values()) == set(
+        contract["config_map_code_sha256"]
+    )
+    assert set(ARTIFACT_CONFIG_MAP_FILES) | {"post-sft-plan.json"} == {
+        item["key"]
+        for volume in contract["pod_spec"]["volumes"]
+        if volume["name"] == "bundle"
+        for item in volume["configMap"]["items"]
+    }
 
 
 def test_web_evidence_outputs_are_no_clobber_including_dangling_symlinks(tmp_path):
