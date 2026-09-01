@@ -38,6 +38,7 @@ spec:
           args:
             - |
               import json
+              import hashlib
               import os
               from pathlib import Path
 
@@ -48,7 +49,27 @@ spec:
               assert lock["repo"] == "Qwen/Qwen3.8-27B"
               assert lock["revision"] == revision
               assert lock["weights_manifest_sha256"] == "sha256:06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352"
-              assert len(list(source.glob("*.safetensors"))) == 18
+              tree = json.loads((source / "source-tree.json").read_text())
+              assert tree["revision"] == revision
+              assert len(tree["shards"]) == 18
+              for shard in tree["shards"]:
+                  path = source / shard["path"]
+                  assert path.stat().st_size == shard["size"]
+                  with path.open("rb") as handle:
+                      assert hashlib.file_digest(handle, "sha256").hexdigest() == shard["sha256"]
+              for name, expected in lock["small_file_sha256"].items():
+                  with (source / name).open("rb") as handle:
+                      assert hashlib.file_digest(handle, "sha256").hexdigest() == expected
+              expected_paths = set(lock["small_file_sha256"]) | {
+                  item["path"] for item in tree["shards"]
+              }
+              expected_paths.update({"source-tree.json", ".cyber-post-train-lock.json"})
+              actual_paths = {
+                  str(path.relative_to(source))
+                  for path in source.rglob("*")
+                  if path.is_file() and ".cache" not in path.relative_to(source).parts
+              }
+              assert actual_paths == expected_paths
               if target.is_symlink():
                   assert target.resolve() == source.resolve()
               elif target.exists():

@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import hashlib
 import json
+import sys
+from types import SimpleNamespace
 
 import pyarrow.parquet as pq
 import pytest
 
-from training.stage_sft_corpus import build_sft_windows, build_stage
+from training.stage_sft_corpus import build_sft_windows, build_stage, verify_tokenizer_lock
 
 
 class _WordTokenizer:
@@ -14,6 +17,20 @@ class _WordTokenizer:
         return [0] * sum(
             2 + len(str(message.get("content") or "").split()) for message in conversation
         )
+
+
+class _Backend:
+    def to_str(self):
+        return '{"backend":"exact"}'
+
+
+class _LockedTokenizer(_WordTokenizer):
+    chat_template = "exact template"
+    backend_tokenizer = _Backend()
+    model_max_length = 262_144
+
+    def __len__(self):
+        return 248_077
 
 
 def _row(*, session_id: str = "s1", split: str = "train", task: str = "task-1") -> dict:
@@ -65,6 +82,47 @@ def test_build_stage_rejects_task_leakage(tmp_path):
             tmp_path,
             team_id="fleet-team",
             source_sha256="sha256:x",
+        )
+
+
+def test_build_stage_filters_splits_before_eligibility_and_tokenization(tmp_path):
+    manifest = build_stage(
+        [
+            _row(session_id="train-success", split="train", task="train-task"),
+            _row(session_id="dev-success", split="dev", task="dev-task"),
+            _row(session_id="test-success", split="test", task="test-task"),
+        ],
+        tmp_path,
+        team_id="fleet-team",
+        source_sha256="sha256:canonical-unfiltered-source",
+        tokenizer=_WordTokenizer(),
+        tokenizer_identity={"revision": "exact"},
+        window_max_tokens=30,
+        targets_per_trajectory=1,
+        include_splits=frozenset({"train"}),
+    )
+
+    assert manifest["source_trajectories_sha256"] == "sha256:canonical-unfiltered-source"
+    assert manifest["split_filter"] == {
+        "included": ["train"],
+        "excluded_source_rows": {"dev": 1, "test": 1},
+    }
+    assert manifest["task_counts"] == {"train": 1}
+    assert manifest["session_counts"] == {"train": 1}
+    assert manifest["windowing"]["window_counts"] == {"train": 1}
+    assert manifest["eligible_sessions"] == 1
+    assert manifest["emitted_sessions"] == 1
+
+
+@pytest.mark.parametrize("include_splits", [frozenset(), frozenset({"holdout"})])
+def test_build_stage_rejects_invalid_split_filters(tmp_path, include_splits):
+    with pytest.raises(ValueError, match="include_splits"):
+        build_stage(
+            [_row()],
+            tmp_path,
+            team_id="fleet-team",
+            source_sha256="sha256:x",
+            include_splits=include_splits,
         )
 
 
@@ -136,6 +194,7 @@ def test_build_stage_emits_scored_synthetic_windows(tmp_path):
         team_id="fleet-team",
         source_sha256="sha256:x",
         tokenizer=_WordTokenizer(),
+        tokenizer_identity={"revision": "exact"},
         window_max_tokens=30,
         targets_per_trajectory=1,
         artifact_stem="qwen-windowed-v1",
@@ -165,3 +224,65 @@ def test_build_stage_rejects_unsafe_artifact_stem(tmp_path):
             source_sha256="sha256:x",
             artifact_stem="../overwrite",
         )
+
+
+def test_build_stage_rejects_unbound_window_tokenizer(tmp_path):
+    with pytest.raises(ValueError, match="verified tokenizer_identity"):
+        build_stage(
+            [_row()],
+            tmp_path,
+            team_id="fleet-team",
+            source_sha256="sha256:x",
+            tokenizer=_WordTokenizer(),
+            window_max_tokens=30,
+        )
+
+
+def test_verify_tokenizer_lock_hashes_exact_revision_files(tmp_path, monkeypatch):
+    files = {
+        "chat_template.jinja": b"exact template",
+        "tokenizer.json": b'{"tokenizer":"exact"}',
+    }
+    for name, contents in files.items():
+        (tmp_path / name).write_bytes(contents)
+    lock = {
+        "schema": "huggingface_model_lock_v1",
+        "repo": "Qwen/exact",
+        "revision": "a" * 40,
+        "tokenizer": {
+            "manifest_sha256": "sha256:manifest",
+            "files": [
+                {
+                    "path": name,
+                    "sha256": hashlib.sha256(contents).hexdigest(),
+                }
+                for name, contents in files.items()
+            ],
+        },
+    }
+    lock_path = tmp_path / "model-lock.json"
+    lock_path.write_text(json.dumps(lock))
+
+    def fake_download(*, repo_id, filename, revision):
+        assert (repo_id, revision) == ("Qwen/exact", "a" * 40)
+        return str(tmp_path / filename)
+
+    monkeypatch.setitem(
+        sys.modules,
+        "huggingface_hub",
+        SimpleNamespace(hf_hub_download=fake_download),
+    )
+    identity = verify_tokenizer_lock(
+        tokenizer=_LockedTokenizer(),
+        tokenizer_repo="Qwen/exact",
+        tokenizer_revision="a" * 40,
+        model_lock_path=lock_path,
+    )
+
+    assert identity["revision"] == "a" * 40
+    assert identity["tokenizer_manifest_sha256"] == "sha256:manifest"
+    assert identity["chat_template_sha256"] == (
+        "sha256:" + hashlib.sha256(b"exact template").hexdigest()
+    )
+    assert identity["vocab_size"] == 248_077
+    assert len(identity["verified_files"]) == 2

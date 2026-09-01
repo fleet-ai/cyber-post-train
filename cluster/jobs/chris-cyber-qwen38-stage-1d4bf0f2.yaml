@@ -50,21 +50,16 @@ spec:
           parent=/mnt/sfs/models/Qwen/Qwen3.8-27B
           partial="$parent/.partial-$revision"
           final="$parent/$revision"
-          mkdir -p "$parent" "$partial"
+          mkdir -p "$parent"
+          candidate="$partial"
+          already_promoted=false
           if [[ -f "$final/.cyber-post-train-lock.json" ]]; then
-            python - "$final/.cyber-post-train-lock.json" "$revision" "$expected_manifest" <<'PY'
-          import json
-          import sys
-          lock = json.load(open(sys.argv[1]))
-          assert lock["revision"] == sys.argv[2]
-          assert lock["weights_manifest_sha256"] == "sha256:" + sys.argv[3]
-          assert lock["verified_shards"] == 18
-          print("CHECKPOINT_ALREADY_VERIFIED", sys.argv[2])
-          PY
-            exit 0
-          fi
-          test ! -e "$final"
-          python - "$revision" "$partial/source-tree.json" "$expected_manifest" <<'PY'
+            candidate="$final"
+            already_promoted=true
+          else
+            test ! -e "$final"
+            mkdir -p "$partial"
+            python - "$revision" "$partial/source-tree.json" "$expected_manifest" <<'PY'
           import hashlib
           import json
           import sys
@@ -86,8 +81,18 @@ spec:
               json.dump({"revision": revision, "shards": shards}, handle, sort_keys=True)
           print("REMOTE_MANIFEST_VERIFIED", len(shards), expected)
           PY
-          hf download "$repo" --revision "$revision" --local-dir "$partial" --max-workers 32
-          python - "$partial" "$revision" "$expected_manifest" <<'PY'
+            files=(
+              LICENSE chat_template.jinja config.json generation_config.json merges.txt
+              model.safetensors.index.json preprocessor_config.json tokenizer.json
+              tokenizer_config.json video_preprocessor_config.json vocab.json
+            )
+            for index in {1..18}; do
+              printf -v shard 'model-%05d-of-00018.safetensors' "$index"
+              files+=("$shard")
+            done
+            hf download "$repo" "${files[@]}" --revision "$revision" --local-dir "$partial" --max-workers 32
+          fi
+          python - "$candidate" "$revision" "$expected_manifest" "$already_promoted" <<'PY'
           import hashlib
           import json
           import os
@@ -96,7 +101,10 @@ spec:
           root = Path(sys.argv[1])
           revision = sys.argv[2]
           expected_manifest = sys.argv[3]
+          already_promoted = sys.argv[4] == "true"
           tree = json.loads((root / "source-tree.json").read_text())
+          assert tree["revision"] == revision
+          assert len(tree["shards"]) == 18
           for index, shard in enumerate(tree["shards"], 1):
               path = root / shard["path"]
               assert path.stat().st_size == shard["size"], shard["path"]
@@ -120,6 +128,16 @@ spec:
           for name, expected in small_files.items():
               with (root / name).open("rb") as handle:
                   assert hashlib.file_digest(handle, "sha256").hexdigest() == expected, name
+          expected_paths = set(small_files) | {item["path"] for item in tree["shards"]}
+          expected_paths.add("source-tree.json")
+          actual_paths = {
+              str(path.relative_to(root))
+              for path in root.rglob("*")
+              if path.is_file()
+              and ".cache" not in path.relative_to(root).parts
+              and path.name not in {".cyber-post-train-lock.json", ".cyber-post-train-lock.json.tmp"}
+          }
+          assert actual_paths == expected_paths, (actual_paths - expected_paths, expected_paths - actual_paths)
           lock = {
               "schema": "cyber_post_train_checkpoint_lock_v1",
               "repo": "Qwen/Qwen3.8-27B",
@@ -129,11 +147,19 @@ spec:
               "verified_bytes": sum(item["size"] for item in tree["shards"]),
               "small_file_sha256": small_files,
           }
-          temporary = root / ".cyber-post-train-lock.json.tmp"
-          temporary.write_text(json.dumps(lock, indent=2, sort_keys=True) + "\n")
-          os.replace(temporary, root / ".cyber-post-train-lock.json")
+          lock_path = root / ".cyber-post-train-lock.json"
+          if already_promoted:
+              assert json.loads(lock_path.read_text()) == lock
+          else:
+              temporary = root / ".cyber-post-train-lock.json.tmp"
+              temporary.write_text(json.dumps(lock, indent=2, sort_keys=True) + "\n")
+              os.replace(temporary, lock_path)
           print("LOCAL_CHECKPOINT_VERIFIED", revision)
           PY
+          if [[ "$already_promoted" == true ]]; then
+            echo "CHECKPOINT_ALREADY_VERIFIED $revision"
+            exit 0
+          fi
           mv "$partial" "$final"
           echo "CHECKPOINT_PROMOTED $final"
         resources:

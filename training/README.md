@@ -91,6 +91,7 @@ uv run python -m training.stage_sft_corpus \
   --team-id a1025f0b-ad67-49fc-a023-51800ab43e84 \
   --tokenizer Qwen/Qwen3.6-27B \
   --tokenizer-revision 6a9e13bd6fc8f0983b9b99948120bc37f49c13e9 \
+  --tokenizer-model-lock configs/models/qwen36-27b-6a9e13bd.lock.json \
   --window-max-tokens 14336 \
   --targets-per-trajectory 5 \
   --artifact-stem chris-cyber-fleet-a62dd51f-qwen36-windowed-v3 \

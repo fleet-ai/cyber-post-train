@@ -87,7 +87,7 @@ identity and compatibility fields.
 The Qwen3.6 token windows are not reusable. Qwen3.8's exact tokenizer config
 and chat template differ, and window boundaries and target coverage are
 tokenizer-dependent. Rebuild the same five assistant-ending windows per
-verified success under job id `chris-cyber-qwen38-windowed-v1`, then prove:
+verified success under job id `chris-cyber-qwen38-windowed-v2`, then prove:
 
 - 130/10/20 train/dev/test lineage identity is unchanged;
 - all verified-success final turns remain selected;
@@ -95,6 +95,17 @@ verified success under job id `chris-cyber-qwen38-windowed-v1`, then prove:
 - the staged corpus manifest binds the new tokenizer revision and hashes; and
 - no WebExploitBench, ExploitGym, Fleet test20, grader, or verifier source is
   present.
+
+The `v2` corpus name supersedes an unstaged local `v1` draft whose output
+manifest did not bind the tokenizer files. The builder now admits only the
+`train` split before eligibility or tokenization and verifies every tokenizer
+file against the exact model lock before writing any corpus output.
+
+The ignored local `v2` artifact is now built and verified: 508 successful train
+sessions from 86 train lineages produced 2,540 windows, with no oversized
+targets and a maximum of 14,335 tokens. Its manifest is
+`sha256:95a4f1293fe3d964e0b046754feb05fec268a15aa1623f87dfc30ea1282bbb80`.
+It has not been copied to SFS or registered with the Training API.
 
 ## SFT rail
 

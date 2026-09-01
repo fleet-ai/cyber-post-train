@@ -5,6 +5,7 @@ from pathlib import Path
 
 import yaml
 
+from training.io import digest_json, file_sha256
 from training.model_adapter import load_model_adapter
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -22,6 +23,7 @@ Q36_SFT_FULL = ROOT / "configs/runs/qwen36-27b-sft-full.json"
 SPLIT = ROOT / "configs/data/fleet-a62-task-split-v1.json"
 STAGE_JOB = ROOT / "cluster/jobs/chris-cyber-qwen38-stage-1d4bf0f2.yaml"
 LINK_JOB = ROOT / "cluster/jobs/chris-cyber-qwen38-canonical-link.yaml"
+READINESS = ROOT / "configs/qualification/qwen38-27b-readiness-2026-09-01-v2.json"
 
 
 def _read(path: Path) -> dict:
@@ -70,7 +72,7 @@ def test_live_catalog_observation_fail_closes_training() -> None:
     blocker_ids = [row["id"] for row in qualification["launch_blockers"]]
     assert blocker_ids == [
         "training_catalog_and_staging",
-        "qwen38_corpus",
+        "qwen38_corpus_staging",
         "sft_trainer_capability",
         "reward_calibration",
         "rl_trainer_and_evidence",
@@ -106,9 +108,14 @@ def test_model_staging_is_cpu_only_queue_safe_and_not_submitted() -> None:
     )
     assert 'assert len(shards) == 18' in stage_script
     assert '"verified_shards": 18' in stage_script
+    assert 'hf download "$repo" "${files[@]}"' in stage_script
+    assert "assert actual_paths == expected_paths" in stage_script
+    assert "assert json.loads(lock_path.read_text()) == lock" in stage_script
     assert 'mv "$partial" "$final"' in stage_script
     link_script = link["spec"]["template"]["spec"]["containers"][0]["args"][0]
     assert 'target = Path("/mnt/sfs/models/qwen3.8-27b")' in link_script
+    assert 'hashlib.file_digest(handle, "sha256")' in link_script
+    assert "assert actual_paths == expected_paths" in link_script
     assert "refusing to replace existing canonical path" in link_script
 
 
@@ -121,7 +128,7 @@ def test_qwen38_sft_templates_reuse_science_but_require_new_token_windows() -> N
         q38 = _read(q38_path)
 
         assert q38["title"].startswith("chris-cyber-qwen38-27b-")
-        assert q38["data"]["job_ids"] == ["chris-cyber-qwen38-windowed-v1"]
+        assert q38["data"]["job_ids"] == ["chris-cyber-qwen38-windowed-v2"]
         assert q38["model"] == {"staged_model": "qwen3.8-27b", "precision": "bf16"}
         assert q38["trainer"]["trainer_version_id"] is None
         assert q38["trainer"]["args"] == q36["trainer"]["args"]
@@ -132,6 +139,7 @@ def test_qwen38_sft_templates_reuse_science_but_require_new_token_windows() -> N
         assert q38["objective"] == q36["objective"]
         assert q38["sft"] == q36["sft"]
         assert q38["eval"] == q36["eval"]
+        assert q38["node_pool"] == "fleetai-training-ng-gpu"
         assert q38["gpus_per_worker"] == q36["gpus_per_worker"] == 8
         assert q38["num_workers"] == q36["num_workers"] == 1
 
@@ -230,3 +238,45 @@ def test_serving_is_exact_base_clone_with_live_parity_gates() -> None:
         "structured_bash_and_submit_report_tool_calls",
         "fixed_prompt_logit_parity",
     } <= set(serving["live_parity_gates"])
+
+
+def test_readiness_snapshot_is_self_digested_and_remains_fail_closed() -> None:
+    receipt = _read(READINESS)
+    embedded = receipt.pop("receipt_sha256")
+
+    assert embedded == digest_json(receipt)
+    assert receipt["status"] == "blocked_pre_submission"
+    assert receipt["paid_training_authorized"] is False
+    assert receipt["training_catalog"]["qwen38_row_present"] is False
+    assert receipt["reward_gate"]["satisfied"] is False
+    assert receipt["model"]["model_lock_sha256"] == file_sha256(MODEL_LOCK)
+    assert receipt["sft_corpus"]["included_splits"] == ["train"]
+    assert receipt["sft_corpus"]["all_corpus_tasks_in_exact_train_allowlist"] is True
+    assert receipt["sft_corpus"]["staged"] is False
+    assert receipt["sft_corpus"]["builder_sha256"] == file_sha256(
+        ROOT / "training/stage_sft_corpus.py"
+    )
+    assert receipt["recommended_first_paid_run"]["execute_authorized"] is False
+    assert receipt["recommended_first_paid_run"]["shape"] == {
+        "workers": 1,
+        "gpus_per_worker": 8,
+        "accelerator": "NVIDIA B300",
+        "node_pool": "fleetai-training-ng-gpu",
+        "queue": "training-lq",
+        "strategy": "fsdp",
+        "precision": "bf16",
+        "global_batch_size": 8,
+        "micro_batch_size_per_gpu": 1,
+        "optimizer_steps": 1,
+        "checkpoint_interval": 1,
+        "before_train_eval": True,
+        "post_step_eval": True,
+    }
+    assert receipt["staging_plan"]["stage_manifest_sha256"] == file_sha256(STAGE_JOB)
+    assert receipt["staging_plan"]["canonical_link_manifest_sha256"] == file_sha256(
+        LINK_JOB
+    )
+    assert receipt["recommended_first_paid_run"]["template_sha256"] == file_sha256(
+        Q38_SFT_GATE
+    )
+    assert all(value is False for value in receipt["mutation_attestation"].values())

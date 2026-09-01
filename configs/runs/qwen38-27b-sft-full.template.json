@@ -3,7 +3,7 @@
   "title": "chris-cyber-qwen38-27b-one-epoch-sft-v1",
   "data": {
     "job_ids": [
-      "chris-cyber-qwen38-windowed-v1"
+      "chris-cyber-qwen38-windowed-v2"
     ],
     "min_reward": 1.0,
     "exclude_multimodal": true,
@@ -186,6 +186,7 @@
     "entity": "thefleet",
     "project": "cyber-post-train"
   },
+  "node_pool": "fleetai-training-ng-gpu",
   "gpus_per_worker": 8,
   "num_workers": 1
 }
