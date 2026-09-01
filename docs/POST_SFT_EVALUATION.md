@@ -581,9 +581,13 @@ create-only v2 successor accepted only that exact region value and switched from
 Docker Hub pull to the ECR trainer image already executed by the SFT evidence/cast rail. Preserve
 v2 unchanged: its custom service account did not inherit the namespace default service account's
 pull secret, so it remained in `ImagePullBackOff` without executing the inspector. The create-only
-v3 successor binds the existing `ecr-pull` secret explicitly in both the reviewed execution
-contract and Job template, and preview fails unless that named Secret exists with Docker registry
-credential type. It continues to reject every other unreviewed execution field and records the
+v3 successor bound the existing `ecr-pull` secret explicitly and proved the exact ECR image could
+start, then failed before reading model bytes because the mounted WebExploitBench package
+initializer imported modules that were not part of the isolated evidence bundle. Preserve v3
+unchanged. The create-only v4 successor keeps the authenticated image and mounts an import-free
+WebExploitBench package marker, mirroring the already proven isolated `training` package pattern.
+Preview still fails unless the named Secret exists with Docker registry credential type. It
+continues to reject every other unreviewed execution field and records the
 full immutable execution provenance; the live serving runtime remains the separately pinned
 SGLang image.
 
