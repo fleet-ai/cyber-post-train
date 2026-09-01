@@ -39,6 +39,20 @@ def sha256(value: bytes) -> str:
     return "sha256:" + hashlib.sha256(value).hexdigest()
 
 
+def write_json_once(path: Path, value: dict[str, Any]) -> None:
+    """Durably claim a one-shot boundary before its external side effect."""
+    payload = canonical_json(value) + b"\n"
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    fd = os.open(path, flags, 0o600)
+    try:
+        with os.fdopen(fd, "wb", closefd=False) as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+    finally:
+        os.close(fd)
+
+
 def _request(client: httpx.Client, method: str, path: str, **kwargs: Any) -> Any:
     attempts = MAX_READ_ATTEMPTS if method == "GET" else 1
     for attempt in range(attempts):
@@ -615,6 +629,18 @@ def run(config: dict[str, Any], out_dir: Path, proxy_script: Path) -> dict[str, 
             + b"\n"
         )
 
+        write_json_once(
+            out_dir / "resource-plan.json",
+            {
+                "schema_version": "fleet-selfhosted-resource-plan-v1",
+                "run_id": config["run_id"],
+                "instance_id": instance_id,
+                "evidence_run_id": rollout_instance["evidence_run_id"],
+                "containers": [qwen_agent, model_proxy, mcp_proxy],
+                "network": network,
+            },
+        )
+
         _docker("network", "create", "--internal", network)
         proxy_mount = f"{proxy_script.resolve()}:/proxy.py:ro"
         _docker(
@@ -731,19 +757,28 @@ def run(config: dict[str, Any], out_dir: Path, proxy_script: Path) -> dict[str, 
             "fidelity": trace_fidelity,
         }
         (out_dir / "trace-manifest.json").write_bytes(canonical_json(trace_manifest) + b"\n")
+        scoring_payload = {
+            "instance_id": instance_id,
+            "final_answer": final_answer,
+            "conversation": messages,
+            "scoring_mode": config["authority"]["scoring_mode"],
+            "multi_app_aggregation_mode": config["authority"]["multi_app_aggregation_mode"],
+        }
+        write_json_once(
+            out_dir / "scoring-intent.json",
+            {
+                "schema_version": "fleet-selfhosted-scoring-intent-v1",
+                "run_id": config["run_id"],
+                "instance_id": instance_id,
+                "evidence_run_id": rollout_instance["evidence_run_id"],
+                "request_sha256": sha256(canonical_json(scoring_payload)),
+            },
+        )
         reward_result = _request(
             client,
             "POST",
             authoritative_route(config, "scoring"),
-            json={
-                "instance_id": instance_id,
-                "final_answer": final_answer,
-                "conversation": messages,
-                "scoring_mode": config["authority"]["scoring_mode"],
-                "multi_app_aggregation_mode": config["authority"][
-                    "multi_app_aggregation_mode"
-                ],
-            },
+            json=scoring_payload,
         )
         (out_dir / "reward-result.json").write_bytes(canonical_json(reward_result) + b"\n")
         score = float(reward_result["reward"])

@@ -178,3 +178,38 @@ The Job is `chris-cyber-qwen36-qcode-fleet-test20-base-v1`. It plans exactly
 20 pass@1 sessions, refuses replacement, records every exact task-version and
 runtime receipt, and keeps every artifact ineligible for training. A per-task
 infrastructure failure is recorded separately and does not become a model zero.
+
+### Interrupted-attempt reconciliation
+
+The self-hosted runner writes `resource-plan.json` before starting local
+containers and writes an exclusive, durable `scoring-intent.json` immediately
+before its one non-retried authoritative scoring request. If the controller is
+terminated outside Python, these intent receipts distinguish an unfinished
+local attempt from permission to repeat it.
+
+`reconcile.py` inspects an existing terminal Qwen trace without emitting prompt,
+tool arguments, responses, or final-answer content. It always sets
+`rerun_model=false`. Before allowing the existing trace to be scored, it
+requires a complete observation from the authoritative verifier store, bound to
+the exact run, instance, and evidence-run IDs. One existing verifier result is
+recovered; multiple or conflicting results are refused; a new score is eligible
+only when the complete lookup proves that no result exists and the exact
+instance is still running. Docker cleanup is similarly planned only for exact
+hash-derived container names and their single shared private network.
+
+```bash
+# Read-only and fail-closed without an authoritative observation.
+uv run python -m evals.fleet.reconcile path/to/interrupted-attempt
+
+# Still read-only: produce a reviewed score/cleanup plan from independently
+# collected evidence. This command never calls Fleet, Docker, or the model.
+uv run python -m evals.fleet.reconcile path/to/interrupted-attempt \
+  --authority-observation path/to/private-authority-observation.json \
+  --resource-snapshot path/to/private-resource-snapshot.json
+```
+
+The current public rollout-reward API has no read-by-evidence-run endpoint, so
+an operator must obtain the authority observation through an authorized
+read-only verifier-store export. Absence of a local `reward-result.json` is not
+proof that scoring never happened. Do not score, clean up, or advance campaign
+state while that lookup is absent or ambiguous.
