@@ -25,6 +25,9 @@ SPLIT = ROOT / "configs/data/fleet-a62-task-split-v1.json"
 STAGE_JOB = ROOT / "cluster/jobs/chris-cyber-qwen38-stage-1d4bf0f2.yaml"
 LINK_JOB = ROOT / "cluster/jobs/chris-cyber-qwen38-canonical-link.yaml"
 READINESS = ROOT / "configs/qualification/qwen38-27b-readiness-2026-09-01-v2.json"
+TRAINER_COMPATIBILITY = (
+    ROOT / "configs/qualification/qwen38-27b-trainer-compatibility-2026-09-01-v1.json"
+)
 EXPECTED_WEIGHT_MANIFEST = "06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352"
 EXPECTED_WEIGHT_BYTES = 55_563_006_776
 EXPECTED_SMALL_FILES = {
@@ -421,4 +424,41 @@ def test_readiness_snapshot_is_self_digested_and_remains_fail_closed() -> None:
     assert receipt["staging_plan"]["stage_manifest_sha256"] == file_sha256(STAGE_JOB)
     assert receipt["staging_plan"]["canonical_link_manifest_sha256"] == file_sha256(LINK_JOB)
     assert receipt["recommended_first_paid_run"]["template_sha256"] == file_sha256(Q38_SFT_GATE)
+    assert all(value is False for value in receipt["mutation_attestation"].values())
+
+
+def test_trainer_compatibility_receipt_distinguishes_static_fit_from_execution_proof() -> None:
+    receipt = _read(TRAINER_COMPATIBILITY)
+    embedded = receipt.pop("receipt_sha256")
+    readiness = _read(READINESS)
+
+    assert embedded == digest_json(receipt)
+    assert receipt["status"] == "blocked_unproven"
+    assert receipt["paid_training_authorized"] is False
+    assert receipt["model"]["model_lock_sha256"] == file_sha256(MODEL_LOCK)
+    serving_pvc = receipt["serving_observation"]["source_pvc"]
+    training = receipt["training_storage_observation"]
+    assert (serving_pvc["uid"], serving_pvc["storage_class"]) != (
+        training["pvc"]["uid"],
+        training["pvc"]["storage_class"],
+    )
+    assert training["candidate_paths_present"] is False
+    assert training["qwen38_directory_found_under_models_root"] is False
+    assert training["catalog_observation_receipt_sha256"] == readiness["receipt_sha256"]
+    assert receipt["static_model_compatibility"]["trainer_fallback_surface"] == {
+        "opt_in": "model_config_kwargs.fleet_force_qwen35_torch_gdn=true",
+        "accepted_text_model_type": "qwen3_5_text",
+        "requires_positive_linear_attention_count": True,
+        "requires_exact_replacement_count": True,
+        "preserves_parameter_identity": True,
+        "qwen38_matches_static_gate": True,
+    }
+    assert len(receipt["missing_execution_capabilities"]) == 9
+    assert receipt["shared_repo_change"] == {
+        "catalog_pr_prepared": False,
+        "reason": (
+            "The requested prerequisite is not met: serving bytes are on a different PVC and no "
+            "exact training-visible model path exists."
+        ),
+    }
     assert all(value is False for value in receipt["mutation_attestation"].values())

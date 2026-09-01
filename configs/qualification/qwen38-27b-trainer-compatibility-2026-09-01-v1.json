@@ -1,0 +1,146 @@
+{
+  "schema": "qwen38_trainer_compatibility_receipt_v1",
+  "observed_at": "2026-09-01T10:42:04Z",
+  "status": "blocked_unproven",
+  "paid_training_authorized": false,
+  "model": {
+    "repository": "Qwen/Qwen3.8-27B",
+    "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "model_lock_sha256": "sha256:f3926fe675263b25dc79c2b3881a9c463d6b7931e9d61aeb777d15efc61e35ac",
+    "weights_manifest_sha256": "sha256:06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352",
+    "serialized_weight_bytes": 55563006776,
+    "weight_shards": 18,
+    "config_sha256": "sha256:191e0af232104ed8b65258cf3fb2b842e288008baca7633c11b82a1ac7203aab"
+  },
+  "serving_observation": {
+    "authority": "Kubernetes InferenceModel inference/qwen3.8-27b",
+    "uid": "d06c0531-7181-41ad-a3fd-cd8e3e774ab9",
+    "resource_version": "1834558",
+    "generation": 1,
+    "observed_generation": 1,
+    "ready": true,
+    "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "source_path": "/models/qwen3.8-27b/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "node_local_runtime_path": "/scratch/models/qwen3.8-27b/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "source_pvc": {
+      "namespace": "inference",
+      "name": "hf-cache-shared",
+      "uid": "04703d36-2cec-4146-a35c-36f457462012",
+      "pv": "pvc-04703d36-2cec-4146-a35c-36f457462012",
+      "storage_class": "csi-mounted-fs-path-sc"
+    },
+    "canonical_spec_sha256": "sha256:153905d080a021077b3a33cfe563e49a95de97e3a736687c4503014334e3ed19",
+    "canonical_spec_definition": "sha256 of jq -S -c .spec from the live InferenceModel JSON"
+  },
+  "training_storage_observation": {
+    "authority": "read-only inspection through Chris-owned Pod UID 48c62e27-a86c-4b74-b88a-d3ceaa360443",
+    "mount_path": "/mnt/sfs",
+    "models_root": "/mnt/sfs/models",
+    "pvc": {
+      "namespace": "fleet-train-jobs",
+      "name": "sfs-shared",
+      "uid": "34cb6b11-8766-4294-9f9e-332064ea17d5",
+      "pv": "sfs-shared-fleet-train-jobs",
+      "storage_class": "sfs",
+      "host_path": "/mnt/data/fleet-train/sfs-shared"
+    },
+    "checked_candidate_paths": [
+      "/mnt/sfs/models/qwen3.8-27b",
+      "/mnt/sfs/models/Qwen/Qwen3.8-27B"
+    ],
+    "candidate_paths_present": false,
+    "qwen38_directory_found_under_models_root": false,
+    "catalog_observation_receipt": "configs/qualification/qwen38-27b-readiness-2026-09-01-v2.json",
+    "catalog_observation_receipt_sha256": "sha256:f4338f36f0d19a971d3c1d2a2a432ace9da23b9824a11b2cfa48310b7cf9d14d",
+    "catalog_qwen38_row_present_at_receipt_time": false,
+    "conclusion": "The serving artifact and training model root are different PVCs. No immutable Qwen3.8 training path exists, so a staged training catalog row would be false."
+  },
+  "trainer": {
+    "trainer_version_id": "4b4dc57c-c7dc-5562-bbdd-9e1d6764ede0",
+    "name": "SkyRL",
+    "version": "q36-torchgdn-6db8d0c9",
+    "catalog_status_at_readiness_receipt": "ready",
+    "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train:q36-torchgdn-6db8d0c9@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "image_digest": "sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "source_repository": "fleet-ai/theseus",
+    "source_commit": "6db8d0c99fc49fedc55d77a5d6c1a6a9d0c8b6e5",
+    "skyrl_repository": "https://github.com/NovaSky-AI/SkyRL",
+    "skyrl_revision": "f5bc3b78dfddfb352870d5d7430cd226e5785838",
+    "runtime_versions": {
+      "ray": "2.56.0",
+      "transformers": "5.8.0",
+      "flash_linear_attention": "0.5.2"
+    },
+    "declared_build_contract_capabilities": [
+      "rl",
+      "sft",
+      "fully_async",
+      "off_policy_correction",
+      "ray_gpu_monitor",
+      "vllm_prometheus",
+      "mlflow_tracking",
+      "importance_weight_diagnostics"
+    ],
+    "qwen36_execution_evidence": {
+      "run": "ft-run-574bd7b3",
+      "outcome": "succeeded",
+      "shape": "one worker with eight GPUs",
+      "same_trainer_version": true,
+      "same_image_digest": true
+    }
+  },
+  "static_model_compatibility": {
+    "qwen36_reference_revision": "6a9e13bd6fc8f0983b9b99948120bc37f49c13e9",
+    "qwen36_config_source": "/mnt/sfs/models/Qwen/Qwen3.6-27B/6a9e13bd6fc8f0983b9b99948120bc37f49c13e9/config.json",
+    "qwen38_config_source": "https://huggingface.co/Qwen/Qwen3.8-27B/resolve/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0/config.json",
+    "identical_architecture_surface": {
+      "architecture": "Qwen3_5ForConditionalGeneration",
+      "model_type": "qwen3_5",
+      "text_model_type": "qwen3_5_text",
+      "hidden_layers": 64,
+      "layer_pattern": "three linear_attention layers followed by one full_attention layer, repeated sixteen times",
+      "linear_attention_layers": 48,
+      "full_attention_layers": 16,
+      "hidden_size": 5120,
+      "intermediate_size": 17408,
+      "attention_heads": 24,
+      "key_value_heads": 4,
+      "head_dim": 256
+    },
+    "trainer_fallback_surface": {
+      "opt_in": "model_config_kwargs.fleet_force_qwen35_torch_gdn=true",
+      "accepted_text_model_type": "qwen3_5_text",
+      "requires_positive_linear_attention_count": true,
+      "requires_exact_replacement_count": true,
+      "preserves_parameter_identity": true,
+      "qwen38_matches_static_gate": true
+    },
+    "verdict": "Static architecture and loader compatibility is strong because Qwen3.8 exposes the same Qwen3.5 model class, dimensions and layer schedule that the image trained successfully for Qwen3.6. This is not execution proof."
+  },
+  "missing_execution_capabilities": [
+    "exact Qwen3.8 bytes available under an immutable /mnt/sfs/models path",
+    "Qwen3.8 AutoConfig and model construction inside the exact trainer image",
+    "Qwen3.8 tokenizer load and token-id compatibility inside the exact trainer image",
+    "finite BF16 forward loss on the intended Qwen3.8 corpus",
+    "finite Qwen3.8 gradients and one complete backward pass on B300",
+    "all 48 Qwen3.8 gated-delta modules replaced by the opt-in Torch fallback before FSDP wrapping",
+    "one FSDP optimizer step with no second step",
+    "before-train and post-step evaluation",
+    "complete durable checkpoint plus zero-step export compatibility"
+  ],
+  "release_rule": "Keep full SFT and RL blocked. After the independent positive reward gate, exact model staging and train-only corpus staging, submit only the frozen one-step 1x8 B300 SFT capability gate. Release full training only if every missing execution capability is proven in one mutually consistent terminal receipt.",
+  "shared_repo_change": {
+    "catalog_pr_prepared": false,
+    "reason": "The requested prerequisite is not met: serving bytes are on a different PVC and no exact training-visible model path exists."
+  },
+  "mutation_attestation": {
+    "cluster_resources_mutated": false,
+    "catalog_mutated": false,
+    "model_staged": false,
+    "corpus_staged": false,
+    "image_built_or_pushed": false,
+    "training_submitted": false,
+    "sealed_eval_data_queried": false
+  },
+  "receipt_sha256": "sha256:7fd4989a1301a8341c35f6e59085e7bae9262fc4c3feabf2fbb2c12b27a187e6"
+}
