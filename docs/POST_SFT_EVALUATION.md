@@ -584,11 +584,17 @@ pull secret, so it remained in `ImagePullBackOff` without executing the inspecto
 v3 successor bound the existing `ecr-pull` secret explicitly and proved the exact ECR image could
 start, then failed before reading model bytes because the mounted WebExploitBench package
 initializer imported modules that were not part of the isolated evidence bundle. Preserve v3
-unchanged. The create-only v4 successor keeps the authenticated image and mounts an import-free
-WebExploitBench package marker, mirroring the already proven isolated `training` package pattern.
-Preview still fails unless the named Secret exists with Docker registry credential type. It
-continues to reject every other unreviewed execution field and records the
-full immutable execution provenance; the live serving runtime remains the separately pinned
+unchanged. The create-only v4 successor kept the authenticated image and mounted an import-free
+WebExploitBench package marker, then failed safely when its whole-tree digest reached unreadable
+Hugging Face client metadata under `.cache/`. Preserve v4 unchanged. The create-only v5 successor
+reuses the already reviewed cast-stage inference-surface validator: it rejects unknown top-level
+entries and proves `.cache/` is the one reviewed non-serving directory without traversing it. It
+then exposes only the exact validated top-level files through a temporary read-only symlink view
+for safetensor/header and full-file hashing. The view is ephemeral and the receipt names the real
+model root. V5 also corrects the base non-serving provenance allowlist to `source-tree.json`; the
+`.fleet-acceptance.json` receipt belongs only to the atomically staged post-SFT artifact. Preview
+still fails unless the named Secret exists with Docker registry credential type. Every other
+unreviewed execution field is rejected, and the live serving runtime remains the separately pinned
 SGLang image.
 
 ```bash
