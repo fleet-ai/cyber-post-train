@@ -82,7 +82,7 @@
     "reward_canary_config": "configs/runs/qwen38-27b-native-rl-reward-acquisition-canary.template.json",
     "full_config_template": "configs/runs/qwen38-27b-rl-base-full.template.json",
     "trainer_version_id": null,
-    "required_calibration_config": "evals/fleet/configs/qwen38-27b-qwen-code-reward-calibration-pass1-v1.json",
+    "required_calibration_config": "evals/fleet/configs/qwen38-27b-qwen-code-reward-calibration-pass1-v3.json",
     "required_calibration_outcome": "positive_authoritative_reward_with_valid_cleanup_on_non_test_fleet_tasks",
     "required_task_tools": [
       "bash",

@@ -234,3 +234,48 @@ an operator must obtain the authority observation through an authorized
 read-only verifier-store export. Absence of a local `reward-result.json` is not
 proof that scoring never happened. Do not score, clean up, or advance campaign
 state while that lookup is absent or ambiguous.
+
+## Qwen3.8-27B reward calibration (non-test)
+
+`qwen38_calibration.py` measures whether the exact served Qwen3.8-27B revision
+can acquire binary verifier reward on twenty frozen `train`/`dev` task versions.
+It never selects the sealed test20 rows. The twenty versions are a strict subset
+of the independent Qwen3.6 calibration slate, so valid attempt-1 outcomes can be
+joined later by `task_version_id`; the runner never reads Qwen3.6 outcomes while
+executing Qwen3.8.
+
+The protocol pins Qwen Code 0.22.3, a 600-model-request ceiling, a 262,144-token
+context, Qwen Code's built-in compaction, exactly `bash` then `submit_report`,
+their exact schema-catalog digest, the version-scoped task runtime, and the
+authoritative deterministic verifier.
+This is the closest current Qwen Code match to the original Fleet sessions, but
+does not claim byte-identical Agent Runtime prompting or compaction.
+
+The live preflight requires the gateway catalog, `/model_info`, `/server_info`,
+and a structured-tool probe to agree on served id `qwen3.8-27b`, exact revision
+`1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0`, BF16, SGLang, TP=1, and a
+262,144-token context. It writes only task hashes and immutable bindings to the
+receipt. Raw prompts and traces remain under the ignored private artifact root.
+
+```bash
+# Read-only identity/task checks plus one tiny structured-tool probe.
+evals/fleet/scripts/run_qwen38_reward_calibration_local.sh preview
+
+# Create the pass@1 campaign once. Task 1 is the low-cost canary; the other
+# nineteen launch only after positive authoritative reward and verified cleanup.
+evals/fleet/scripts/run_qwen38_reward_calibration_local.sh run
+```
+
+This path uses the already queue-managed inference deployment and local
+linux/amd64 harness containers; it submits no training workload and never
+changes, reprioritizes, or cancels cluster jobs.
+
+The historical v2 plan used an infrastructure-only gate and released attempts
+2–4 after one authoritative valid zero. It then terminated as an infrastructure
+incident: attempts 2–4 are unresolved and excluded pending authorized
+read-only verifier-store evidence, and sixteen attempts never launched. V2 is
+not scientifically complete and does not satisfy the positive-reward gate. Its
+minimized, resource-free incident binding is under `docs/evidence/qwen38-study/`.
+V3 fails closed on zero, missing score, invalid cleanup, missing verifier UUID,
+canary identity drift, or any unrecognized gate criterion and has not been
+submitted.
