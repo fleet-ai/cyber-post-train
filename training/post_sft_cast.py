@@ -36,7 +36,7 @@ SOURCE_PATH = Path(
     "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-v1/global_step_318/policy"
 )
 DESTINATION_PATH = Path(
-    "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-bf16-v4/global_step_318/policy"
+    "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-bf16-v5/global_step_318/policy"
 )
 BASE_MODEL_PATH = Path(
     "/mnt/sfs/models/Qwen/Qwen3.6-27B/6a9e13bd6fc8f0983b9b99948120bc37f49c13e9"
@@ -81,10 +81,15 @@ BASE_EXCLUDED_DIRECTORY_PREFIXES = {
 }
 BASE_WEIGHT_SHARD_COUNT = 15
 EVIDENCE_DIR = Path(
-    "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/evidence/bf16-cast-v4/receipt"
+    "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/evidence/bf16-cast-v5/receipt"
 )
 ACCEPTANCE_RECEIPT_NAME = ".fleet-bf16-cast-acceptance.json"
-DEFAULT_MAX_SHARD_BYTES = 2 * 1024**3
+# The exact frozen checkpoint's largest BF16 tensor is lm_head.weight:
+# 248,320 * 5,120 * 2 = 2,542,796,800 bytes. V4's 2 GiB bound therefore
+# rejected the valid model before conversion. Three GiB is the smallest whole
+# GiB bound above that exact header-derived payload and remains bounded well
+# below the 8 GiB single-source-tensor limit.
+DEFAULT_MAX_SHARD_BYTES = 3 * 1024**3
 DEFAULT_MAX_SOURCE_TENSOR_BYTES = 8 * 1024**3
 HASH_CHUNK_BYTES = 8 * 1024**2
 TRAINED_TENSOR_COUNT = 1184
@@ -94,9 +99,9 @@ RESTORED_AUXILIARY_PARAMETER_COUNT = 424_699_392
 FINAL_TENSOR_COUNT = 1199
 FINAL_PARAMETER_COUNT = 27_781_427_952
 NAMESPACE = "fleet-train-jobs"
-JOB_NAME = "chris-cyber-qwen36-sft-bf16-cast-v4"
+JOB_NAME = "chris-cyber-qwen36-sft-bf16-cast-v5"
 CONFIG_MAP_NAME = JOB_NAME
-SERVICE_ACCOUNT_NAME = "chris-cyber-qwen36-sft-bf16-cast-observer-v4"
+SERVICE_ACCOUNT_NAME = "chris-cyber-qwen36-sft-bf16-cast-observer-v5"
 CONTAINER_NAME = "cast"
 IMAGE_ID_MAX_ATTEMPTS = 12
 IMAGE_ID_RETRY_SECONDS = 1.0
@@ -523,7 +528,7 @@ def _tensor_sha256(tensor: Any) -> str:
 def _validate_execution_plan(value: Any) -> Mapping[str, Any]:
     plan = _mapping(value, "cast execution plan")
     expected = {
-        "schema": "cyber_sft_fp32_to_bf16_cast_execution_plan_v4",
+        "schema": "cyber_sft_fp32_to_bf16_cast_execution_plan_v5",
         "namespace": NAMESPACE,
         "job_name": JOB_NAME,
         "config_map_name": CONFIG_MAP_NAME,

@@ -92,27 +92,27 @@
       "training/io.py": "sha256:7a0b734a4ab7fb8b702430094c58c72f19ac8fc7cc5e056eb8410267e6bfdfe3",
       "training/post_sft_artifacts.py": "sha256:c09555c61cb25ad5867cce80ed8bef0684734231b5708b1be892e75b9dd980eb",
       "training/post_sft_base_surface.py": "sha256:f2e82927348fe844ff685f6506e1799a53cb9ecfbe58d50c654f2b1ba70c4f4f",
-      "training/post_sft_staging.py": "sha256:bae8e3bbc95770e22958b863f39912b8340988581d1319ae43f54875d87d6dc0"
+      "training/post_sft_staging.py": "sha256:4467bd3fd47661b3cef01e47f7c40c32b0520d30e285f98a2f38651745948840"
     }
   },
   "cast_execution": {
-    "schema": "cyber_sft_fp32_to_bf16_cast_execution_plan_v4",
+    "schema": "cyber_sft_fp32_to_bf16_cast_execution_plan_v5",
     "namespace": "fleet-train-jobs",
-    "job_name": "chris-cyber-qwen36-sft-bf16-cast-v4",
-    "config_map_name": "chris-cyber-qwen36-sft-bf16-cast-v4",
-    "service_account_name": "chris-cyber-qwen36-sft-bf16-cast-observer-v4",
+    "job_name": "chris-cyber-qwen36-sft-bf16-cast-v5",
+    "config_map_name": "chris-cyber-qwen36-sft-bf16-cast-v5",
+    "service_account_name": "chris-cyber-qwen36-sft-bf16-cast-observer-v5",
     "container_name": "cast",
     "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train:q36-torchgdn-6db8d0c9@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
     "image_digest": "sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
     "command_sha256": "sha256:09925362ff4a665f02b1c73aee73fa750dd0e8427cc1c47a443ceddefb5b9a03",
     "source_path": "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-v1/global_step_318/policy",
-    "destination_path": "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-bf16-v4/global_step_318/policy",
+    "destination_path": "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-bf16-v5/global_step_318/policy",
     "base_model_path": "/mnt/sfs/models/Qwen/Qwen3.6-27B/6a9e13bd6fc8f0983b9b99948120bc37f49c13e9",
     "base_model_revision": "6a9e13bd6fc8f0983b9b99948120bc37f49c13e9",
     "policy": "deterministic_trained_fp32_to_bf16_plus_frozen_base_mtp_restore_v1",
     "source_dtype": "F32",
     "destination_dtype": "BF16",
-    "max_shard_bytes": 2147483648,
+    "max_shard_bytes": 3221225472,
     "max_source_tensor_bytes": 8589934592,
     "trained_tensor_count": 1184,
     "trained_parameter_count": 27356728560,
@@ -161,7 +161,7 @@
       "training/io.py": "sha256:7a0b734a4ab7fb8b702430094c58c72f19ac8fc7cc5e056eb8410267e6bfdfe3",
       "training/post_sft_artifacts.py": "sha256:c09555c61cb25ad5867cce80ed8bef0684734231b5708b1be892e75b9dd980eb",
       "training/post_sft_base_surface.py": "sha256:f2e82927348fe844ff685f6506e1799a53cb9ecfbe58d50c654f2b1ba70c4f4f",
-      "training/post_sft_cast.py": "sha256:82ee37ed11ca680cca644723c65ab705fd5d9121b0fe046dd0d81f466737d17d"
+      "training/post_sft_cast.py": "sha256:9c531664dbd85b03c2f62d5847f0691ebe193154f72386c5ff395c54a74a8fc0"
     }
   },
   "evidence_execution": {
