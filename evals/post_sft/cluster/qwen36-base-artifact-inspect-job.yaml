@@ -1,13 +1,13 @@
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: chris-cyber-qwen36-base-artifact-observer-v6
+  name: chris-cyber-qwen36-base-artifact-observer-v7
   namespace: inference
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: chris-cyber-qwen36-base-artifact-observer-v6
+  name: chris-cyber-qwen36-base-artifact-observer-v7
   namespace: inference
 rules:
   - apiGroups: [""]
@@ -15,35 +15,35 @@ rules:
     verbs: [get]
   - apiGroups: [""]
     resources: [configmaps]
-    resourceNames: [chris-cyber-qwen36-base-artifact-inspect-6a9e13bd-v6]
+    resourceNames: [chris-cyber-qwen36-base-artifact-inspect-6a9e13bd-v7]
     verbs: [get]
   - apiGroups: [batch]
     resources: [jobs]
-    resourceNames: [chris-cyber-qwen36-base-artifact-inspect-6a9e13bd-v6]
+    resourceNames: [chris-cyber-qwen36-base-artifact-inspect-6a9e13bd-v7]
     verbs: [get]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: chris-cyber-qwen36-base-artifact-observer-v6
+  name: chris-cyber-qwen36-base-artifact-observer-v7
   namespace: inference
 subjects:
   - kind: ServiceAccount
-    name: chris-cyber-qwen36-base-artifact-observer-v6
+    name: chris-cyber-qwen36-base-artifact-observer-v7
     namespace: inference
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: chris-cyber-qwen36-base-artifact-observer-v6
+  name: chris-cyber-qwen36-base-artifact-observer-v7
 ---
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: chris-cyber-qwen36-base-artifact-inspect-6a9e13bd-v6
+  name: chris-cyber-qwen36-base-artifact-inspect-6a9e13bd-v7
   namespace: inference
   labels:
     cyber-post-train.fleet.ai/owner: chris
-    cyber-post-train.fleet.ai/experiment: qwen36-base-artifact-inspect-6a9e13bd-v6
+    cyber-post-train.fleet.ai/experiment: qwen36-base-artifact-inspect-6a9e13bd-v7
 spec:
   backoffLimit: 0
   activeDeadlineSeconds: 21600
@@ -52,10 +52,10 @@ spec:
     metadata:
       labels:
         cyber-post-train.fleet.ai/owner: chris
-        cyber-post-train.fleet.ai/experiment: qwen36-base-artifact-inspect-6a9e13bd-v6
+        cyber-post-train.fleet.ai/experiment: qwen36-base-artifact-inspect-6a9e13bd-v7
     spec:
       restartPolicy: Never
-      serviceAccountName: chris-cyber-qwen36-base-artifact-observer-v6
+      serviceAccountName: chris-cyber-qwen36-base-artifact-observer-v7
       imagePullSecrets:
         - name: ecr-pull
       nodeSelector: {workload: fleetai-training-ng-cpu}
@@ -94,7 +94,7 @@ spec:
       volumes:
         - name: bundle
           configMap:
-            name: chris-cyber-qwen36-base-artifact-inspect-6a9e13bd-v6
+            name: chris-cyber-qwen36-base-artifact-inspect-6a9e13bd-v7
             items:
               - {key: evals__init__.py, path: evals/__init__.py}
               - {key: evals_webexploitbench__init__.py, path: evals/webexploitbench/__init__.py}

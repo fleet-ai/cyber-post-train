@@ -589,9 +589,13 @@ WebExploitBench package marker, then failed safely when its whole-tree digest re
 Hugging Face client metadata under `.cache/`. Preserve v4 unchanged. The create-only v5 successor
 reused the already reviewed cast-stage inference-surface validator and reached the live cache, then
 failed safely because that cache also carries the deterministic `.fleet-acceptance.json` written by
-the original base staging Job. Preserve v5 unchanged. The create-only v6 successor validates that
-receipt's exact schema, revision, weights, resolved path, staging count, and directory-wide file and
-byte counts. It then extends the closed-world surface by only that proven file, while still
+the original base staging Job. Preserve v5 unchanged. The create-only v6 successor validated that
+receipt's identity but incorrectly compared its pre-publication count to a directory that already
+contained the receipt itself. Preserve v6 unchanged. A read-only observer proved the discrepancy is
+exactly one file and the receipt's own 385 bytes. The create-only v7 successor therefore validates
+the receipt's exact schema, revision, weights, resolved path, staging count, and self-excluding file
+and byte counts—the semantics of the original atomic writer. It then extends the closed-world
+surface by only that proven file, while still
 rejecting unknown top-level entries and proving `.cache/` is the one reviewed non-serving directory
 without traversing it. Safetensor/header and full-file hashing operate on an ephemeral view of only
 the validated top-level files, and the receipt names the real model root. The base provenance
