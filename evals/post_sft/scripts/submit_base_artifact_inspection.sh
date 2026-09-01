@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/../../.." && pwd)
-NAME=chris-cyber-qwen36-base-artifact-inspect-6a9e13bd-v3
+NAME=chris-cyber-qwen36-base-artifact-inspect-6a9e13bd-v4
 NAMESPACE=inference
 EXPECTED_CONTEXT=nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6
 PULL_SECRET=ecr-pull
@@ -20,7 +20,7 @@ require_pull_secret() {
 configmap() {
   kubectl -n "$NAMESPACE" create configmap "$NAME" \
     --from-file=evals__init__.py="$ROOT/evals/__init__.py" \
-    --from-file=evals_webexploitbench__init__.py="$ROOT/evals/webexploitbench/__init__.py" \
+    --from-file=evals_webexploitbench__init__.py="$ROOT/evals/post_sft/runtime/webexploitbench__init__.py" \
     --from-file=post_sft_evidence.py="$ROOT/evals/webexploitbench/post_sft_evidence.py" \
     --from-file=training__init__.py="$ROOT/evals/post_sft/runtime/training__init__.py" \
     --from-file=training_io.py="$ROOT/training/io.py" \
@@ -32,9 +32,9 @@ configmap() {
 owned_resources() {
   printf '%s\n' \
     "configmap/$NAME" \
-    "serviceaccount/chris-cyber-qwen36-base-artifact-observer-v3" \
-    "role.rbac.authorization.k8s.io/chris-cyber-qwen36-base-artifact-observer-v3" \
-    "rolebinding.rbac.authorization.k8s.io/chris-cyber-qwen36-base-artifact-observer-v3" \
+    "serviceaccount/chris-cyber-qwen36-base-artifact-observer-v4" \
+    "role.rbac.authorization.k8s.io/chris-cyber-qwen36-base-artifact-observer-v4" \
+    "rolebinding.rbac.authorization.k8s.io/chris-cyber-qwen36-base-artifact-observer-v4" \
     "job.batch/$NAME"
 }
 

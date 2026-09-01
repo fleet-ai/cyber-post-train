@@ -10,11 +10,17 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 MARKER = ROOT / "evals/post_sft/runtime/training__init__.py"
+WEB_MARKER = ROOT / "evals/post_sft/runtime/webexploitbench__init__.py"
 PLAN = ROOT / "configs/evaluation/qwen36-27b-ft-run-574bd7b3-post-sft.json"
 
 
 def test_isolated_training_package_marker_has_no_transitive_imports():
     tree = ast.parse(MARKER.read_text())
+    assert not any(isinstance(node, (ast.Import, ast.ImportFrom)) for node in ast.walk(tree))
+
+
+def test_isolated_webexploitbench_package_marker_has_no_transitive_imports():
+    tree = ast.parse(WEB_MARKER.read_text())
     assert not any(isinstance(node, (ast.Import, ast.ImportFrom)) for node in ast.walk(tree))
 
 
@@ -62,10 +68,10 @@ def test_registration_v3_uses_the_proven_ecr_runtime_image():
     assert "imagePullSecrets:" not in manifest
 
 
-def test_base_artifact_inspector_v3_explicitly_binds_ecr_auth():
+def test_base_artifact_inspector_v4_binds_ecr_auth_and_minimal_package():
     plan = json.loads(PLAN.read_text())
     pod = plan["evidence_execution"]["base_artifact_inspector"]["pod_spec"]
-    assert pod["serviceAccountName"].endswith("observer-v3")
+    assert pod["serviceAccountName"].endswith("observer-v4")
     assert pod["imagePullSecrets"] == [{"name": "ecr-pull"}]
     assert pod["container"]["image"].startswith(
         "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train:"
@@ -76,7 +82,7 @@ def test_base_artifact_inspector_v3_explicitly_binds_ecr_auth():
         )
     )
     job = next(value for value in manifests if value["kind"] == "Job")
-    assert job["metadata"]["name"] == "chris-cyber-qwen36-base-artifact-inspect-6a9e13bd-v3"
+    assert job["metadata"]["name"] == "chris-cyber-qwen36-base-artifact-inspect-6a9e13bd-v4"
     assert job["spec"]["template"]["spec"]["imagePullSecrets"] == [
         {"name": "ecr-pull"}
     ]
@@ -85,6 +91,36 @@ def test_base_artifact_inspector_v3_explicitly_binds_ecr_auth():
     ).read_text()
     assert "require_pull_secret" in submitter
     assert "kubernetes.io/dockerconfigjson" in submitter
+    assert 'evals/post_sft/runtime/webexploitbench__init__.py' in submitter
+    repository_initializer = (
+        '--from-file=evals_webexploitbench__init__.py='
+        '"$ROOT/evals/webexploitbench/__init__.py"'
+    )
+    assert repository_initializer not in submitter
+
+
+def test_base_artifact_inspector_bundle_imports_without_repository_modules(tmp_path):
+    package = tmp_path / "evals" / "webexploitbench"
+    package.mkdir(parents=True)
+    shutil.copyfile(ROOT / "evals/__init__.py", tmp_path / "evals" / "__init__.py")
+    shutil.copyfile(WEB_MARKER, package / "__init__.py")
+    shutil.copyfile(
+        ROOT / "evals/webexploitbench/post_sft_evidence.py",
+        package / "post_sft_evidence.py",
+    )
+    training = tmp_path / "training"
+    training.mkdir()
+    shutil.copyfile(MARKER, training / "__init__.py")
+    for name in ("io.py", "post_sft_artifacts.py"):
+        shutil.copyfile(ROOT / "training" / name, training / name)
+    result = subprocess.run(
+        [sys.executable, "-m", "evals.webexploitbench.post_sft_evidence", "--help"],
+        cwd=tmp_path,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 def test_v4_evidence_and_cast_modules_import_from_only_the_mounted_bundle(tmp_path):
