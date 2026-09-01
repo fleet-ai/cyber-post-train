@@ -1162,6 +1162,20 @@ def test_post_sft_launch_refuses_preexisting_cage_run_root(tmp_path):
 def test_post_sft_launch_claim_is_atomic_and_persistent(tmp_path):
     inputs = _paired_inputs(tmp_path)
     config = ExperimentConfig.load(inputs["post_config_path"])
+    run_root = assert_cage_run_root_available(tmp_path, config)
+    runtime = {
+        "interpreter": "/cage/.venv/bin/python",
+        "console_script": "/cage/.venv/bin/cage",
+        "console_interpreter": "/cage/.venv/bin/python",
+        "prefix": "/cage/.venv",
+        "cage_module": "/cage/cage/__init__.py",
+        "registry_module": "/cage/cage/benchmarks/registry.py",
+        "repository_root": "/cage",
+        "project_file": "/cage/examples/agent_pentest_bench/default_web_exploit.yml",
+        "benchmark_root": "/cage/examples/agent_pentest_bench/datasets/web_exploit_bench",
+        "runs_root": str(run_root.parent.parent),
+        "claim_root": str(run_root),
+    }
     claim = claim_cage_launch(
         tmp_path,
         config,
@@ -1169,8 +1183,12 @@ def test_post_sft_launch_claim_is_atomic_and_persistent(tmp_path):
         paired_identity_sha256="sha256:" + "2" * 64,
         registration_completion_sha256="sha256:" + "3" * 64,
         live_parity_sha256="sha256:" + "4" * 64,
+        cage_runtime_identity=runtime,
     )
     assert claim.is_file()
+    claim_receipt = json.loads(claim.read_text())
+    assert claim_receipt["schema"] == "webexploitbench_paid_launch_claim_v2"
+    assert claim_receipt["cage_runtime_identity"] == runtime
     with pytest.raises(ValueError, match="launch claim already exists"):
         claim_cage_launch(
             tmp_path,
@@ -1179,6 +1197,32 @@ def test_post_sft_launch_claim_is_atomic_and_persistent(tmp_path):
             paired_identity_sha256="sha256:" + "2" * 64,
             registration_completion_sha256="sha256:" + "3" * 64,
             live_parity_sha256="sha256:" + "4" * 64,
+            cage_runtime_identity=runtime,
+        )
+
+    wrong_runtime = {**runtime, "claim_root": str(run_root.parent / "wrong")}
+    claim.unlink()
+    with pytest.raises(ValueError, match="does not bind the paid claim root"):
+        claim_cage_launch(
+            tmp_path,
+            config,
+            protocol_sha256="sha256:" + "1" * 64,
+            paired_identity_sha256="sha256:" + "2" * 64,
+            registration_completion_sha256="sha256:" + "3" * 64,
+            live_parity_sha256="sha256:" + "4" * 64,
+            cage_runtime_identity=wrong_runtime,
+        )
+
+    wrong_runtime = {**runtime, "runs_root": str(run_root.parent / "wrong")}
+    with pytest.raises(ValueError, match="does not bind the paid runs root"):
+        claim_cage_launch(
+            tmp_path,
+            config,
+            protocol_sha256="sha256:" + "1" * 64,
+            paired_identity_sha256="sha256:" + "2" * 64,
+            registration_completion_sha256="sha256:" + "3" * 64,
+            live_parity_sha256="sha256:" + "4" * 64,
+            cage_runtime_identity=wrong_runtime,
         )
 
 
