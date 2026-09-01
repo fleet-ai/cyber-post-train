@@ -1,0 +1,61 @@
+{
+  "schema": "fleet_training_preview_receipt_v1",
+  "observed_at": "2026-09-01T03:40:17Z",
+  "endpoint": "https://api.ft.flt.build/v1/rl/run/preview",
+  "submitted": false,
+  "http_status": 200,
+  "source_config": "configs/runs/qwen36-27b-native-rl-reward-acquisition-canary.pre-submit.json#run_request_template",
+  "source_config_canonical_sha256": "sha256:f9fd7340531af2ea78ce964d53fa87b08f34580e8b4f477fbd49781ed23434c7",
+  "provisional_run_name": "ft-run-6c559fa3",
+  "errors": [],
+  "warnings": [
+    "The preview run name is provisional; a real submission would mint a different ft-run name."
+  ],
+  "manifest": {
+    "sha256": "sha256:dc74408230a2ef9f35ec60e08ff3d98c22b0e8f04004982acd7d7345d77064c1",
+    "utf8_bytes": 61642,
+    "entrypoint_sha256": "sha256:f7f40e6b07f7bf766ae45cb3d6e1bcedf1021b81ccf6e049ab777b250b14898d",
+    "entrypoint_exact_assignments": {
+      "trainer.max_training_steps": "1",
+      "trainer.max_prompt_length": "16384",
+      "generator.sampling_params.max_generate_length": "49152",
+      "trainer.train_batch_size": "2"
+    },
+    "trainer_image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train:bb9cc39d",
+    "trainer_version_id": null
+  },
+  "task_tool_allowlist_evidence": {
+    "schema": "fleet_rl_task_tool_allowlists_v1",
+    "source": "authoritative_task_version_metadata",
+    "source_field": "metadata.tools",
+    "bindings": [
+      {
+        "task_version_id": "c99340e2-3801-5c3c-a50c-3b96cee4572f",
+        "tools": [
+          "bash",
+          "submit_report"
+        ]
+      },
+      {
+        "task_version_id": "ab5f2956-9fbb-54fb-afd8-67fe11402fa4",
+        "tools": [
+          "bash",
+          "submit_report"
+        ]
+      }
+    ],
+    "bindings_sha256": "sha256:5a8fa677c0938d8b9c16f6e9c4b8f9819375e2aaeeb3b6b4e3c42f3ab897d62f"
+  },
+  "prompt_schema_token_preflight": {
+    "status": "blocked",
+    "reason": "The Training API preview returns ordered tool names but neither hydrated task prompt bytes nor complete runtime tool schemas. No secure local Fleet task credential was available to materialize those private inputs, so no token-fit claim is made."
+  },
+  "scientific_interpretation": {
+    "authoritative_tool_gate": "passed",
+    "exact_one_step_render_gate": "passed",
+    "trainer_catalog_readiness": "not_proven",
+    "prompt_schema_token_fit": "not_proven",
+    "paid_launch_ready": false,
+    "paid_job_created": false
+  }
+}
