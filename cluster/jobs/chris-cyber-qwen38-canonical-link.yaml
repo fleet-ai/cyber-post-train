@@ -38,17 +38,77 @@ spec:
           args:
             - |
               import json
+              import hashlib
               import os
               from pathlib import Path
 
+              SMALL_FILES = {
+                  "LICENSE": "bbedc3fda3305820b977265f01b8619d87570a6739de3a5582c3464840f1e57a",
+                  "chat_template.jinja": "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+                  "config.json": "191e0af232104ed8b65258cf3fb2b842e288008baca7633c11b82a1ac7203aab",
+                  "generation_config.json": "e70c136c1b78ddc1fb0905bac8e733a4dc448d4f852a5dd75143fffc70be550e",
+                  "merges.txt": "a9d356d7bdf1ef4949e3e748e95b8e10ad9d4e2e838eddc38a0a7b6b94d1db8d",
+                  "model.safetensors.index.json": "77042094076611b69791a610065f28b7013b8c621795fa86ddccc8bac7d1b9df",
+                  "preprocessor_config.json": "27225450ac9c6529872ee1924fcb0962ff5634834f817040f444118116f4e516",
+                  "tokenizer.json": "0997f410c57a1f4e53b09e4be8f4a172d90edd9564368fb0847030937229b9f3",
+                  "tokenizer_config.json": "b11349aafa7cdc6a320767cf7ceb29ed82f7eda5d65e8e0819e76f0ce947bf27",
+                  "video_preprocessor_config.json": "7768af27c1fafa9cc9011c1dc20067e03f8915e03b63504550e11d5066986d13",
+                  "vocab.json": "ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003",
+              }
+
+              def verify_checkpoint(source, revision, expected_manifest, expected_bytes):
+                  tree = json.loads((source / "source-tree.json").read_text())
+                  assert set(tree) == {"revision", "shards"}
+                  assert tree["revision"] == revision
+                  assert len(tree["shards"]) == 18
+                  expected_names = [
+                      f"model-{index:05d}-of-00018.safetensors" for index in range(1, 19)
+                  ]
+                  assert [item["path"] for item in tree["shards"]] == expected_names
+                  assert all(
+                      set(item) == {"path", "size", "sha256"} for item in tree["shards"]
+                  )
+                  canonical = json.dumps(
+                      tree["shards"], sort_keys=True, separators=(",", ":")
+                  ).encode()
+                  assert hashlib.sha256(canonical).hexdigest() == expected_manifest
+                  assert sum(item["size"] for item in tree["shards"]) == expected_bytes
+                  for shard in tree["shards"]:
+                      path = source / shard["path"]
+                      assert path.stat().st_size == shard["size"]
+                      with path.open("rb") as handle:
+                          assert hashlib.file_digest(handle, "sha256").hexdigest() == shard["sha256"]
+                  for name, expected in SMALL_FILES.items():
+                      with (source / name).open("rb") as handle:
+                          assert hashlib.file_digest(handle, "sha256").hexdigest() == expected
+                  expected_lock = {
+                      "schema": "cyber_post_train_checkpoint_lock_v1",
+                      "repo": "Qwen/Qwen3.8-27B",
+                      "revision": revision,
+                      "weights_manifest_sha256": "sha256:" + expected_manifest,
+                      "verified_shards": 18,
+                      "verified_bytes": expected_bytes,
+                      "small_file_sha256": SMALL_FILES,
+                  }
+                  lock = json.loads((source / ".cyber-post-train-lock.json").read_text())
+                  assert lock == expected_lock
+                  expected_paths = set(SMALL_FILES) | {
+                      item["path"] for item in tree["shards"]
+                  }
+                  expected_paths.update({"source-tree.json", ".cyber-post-train-lock.json"})
+                  actual_paths = {
+                      str(path.relative_to(source))
+                      for path in source.rglob("*")
+                      if path.is_file() and ".cache" not in path.relative_to(source).parts
+                  }
+                  assert actual_paths == expected_paths
+
               revision = "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
+              expected_manifest = "06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352"
+              expected_bytes = 55563006776
               source = Path("/mnt/sfs/models/Qwen/Qwen3.8-27B") / revision
               target = Path("/mnt/sfs/models/qwen3.8-27b")
-              lock = json.loads((source / ".cyber-post-train-lock.json").read_text())
-              assert lock["repo"] == "Qwen/Qwen3.8-27B"
-              assert lock["revision"] == revision
-              assert lock["weights_manifest_sha256"] == "sha256:06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352"
-              assert len(list(source.glob("*.safetensors"))) == 18
+              verify_checkpoint(source, revision, expected_manifest, expected_bytes)
               if target.is_symlink():
                   assert target.resolve() == source.resolve()
               elif target.exists():

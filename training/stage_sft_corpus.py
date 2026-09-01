@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import hashlib
 import json
 import os
 import re
@@ -26,6 +27,7 @@ from typing import Any, Protocol
 from .io import atomic_write_json, file_sha256, iter_jsonl
 
 CORPUS_SCHEMA = "fleet_sft_corpus_stage_v1"
+VALID_SPLITS = frozenset({"train", "dev", "test"})
 
 
 class ChatTokenizer(Protocol):
@@ -96,6 +98,75 @@ def _chat_token_count(tokenizer: ChatTokenizer, messages: list[dict[str, Any]]) 
     if isinstance(encoded, Mapping):
         encoded = encoded["input_ids"]
     return len(encoded)
+
+
+def verify_tokenizer_lock(
+    *,
+    tokenizer: ChatTokenizer,
+    tokenizer_repo: str,
+    tokenizer_revision: str,
+    model_lock_path: Path,
+) -> dict[str, Any]:
+    """Verify exact tokenizer files at an immutable revision and return safe identity."""
+    from huggingface_hub import hf_hub_download
+
+    lock = json.loads(model_lock_path.read_text())
+    if lock.get("schema") != "huggingface_model_lock_v1":
+        raise ValueError("tokenizer model lock has unsupported schema")
+    if lock.get("repo") != tokenizer_repo or lock.get("revision") != tokenizer_revision:
+        raise ValueError("tokenizer model lock does not match requested repo and revision")
+    token_lock = lock.get("tokenizer")
+    files = token_lock.get("files") if isinstance(token_lock, Mapping) else None
+    if not isinstance(files, list) or not files:
+        raise ValueError("tokenizer model lock has no tokenizer files")
+
+    verified_files: list[dict[str, Any]] = []
+    for index, row in enumerate(files):
+        if not isinstance(row, Mapping):
+            raise ValueError(f"tokenizer model lock file {index} is not an object")
+        relative_path = row.get("path")
+        expected = row.get("sha256")
+        if not isinstance(relative_path, str) or not isinstance(expected, str):
+            raise ValueError(f"tokenizer model lock file {index} is incomplete")
+        local_path = Path(
+            hf_hub_download(
+                repo_id=tokenizer_repo,
+                filename=relative_path,
+                revision=tokenizer_revision,
+            )
+        )
+        actual = file_sha256(local_path)
+        if actual != f"sha256:{expected}":
+            raise ValueError(f"tokenizer file digest mismatch: {relative_path}")
+        verified_files.append({"path": relative_path, "sha256": actual})
+
+    chat_template = getattr(tokenizer, "chat_template", None)
+    if not isinstance(chat_template, str) or not chat_template:
+        raise ValueError("tokenizer has no chat template")
+    chat_template_sha256 = "sha256:" + hashlib.sha256(chat_template.encode()).hexdigest()
+    locked_chat = next(
+        (row["sha256"] for row in verified_files if row["path"] == "chat_template.jinja"),
+        None,
+    )
+    if locked_chat != chat_template_sha256:
+        raise ValueError("loaded tokenizer chat template does not match model lock")
+
+    backend = getattr(tokenizer, "backend_tokenizer", None)
+    if backend is None or not callable(getattr(backend, "to_str", None)):
+        raise ValueError("tokenizer has no serializable backend identity")
+    backend_sha256 = "sha256:" + hashlib.sha256(backend.to_str().encode()).hexdigest()
+    return {
+        "repo": tokenizer_repo,
+        "revision": tokenizer_revision,
+        "model_lock_sha256": file_sha256(model_lock_path),
+        "tokenizer_manifest_sha256": token_lock.get("manifest_sha256"),
+        "verified_files": verified_files,
+        "tokenizer_class": type(tokenizer).__name__,
+        "vocab_size": len(tokenizer),
+        "model_max_length": getattr(tokenizer, "model_max_length", None),
+        "chat_template_sha256": chat_template_sha256,
+        "backend_tokenizer_sha256": backend_sha256,
+    }
 
 
 def _evenly_spaced_assistant_positions(
@@ -221,6 +292,8 @@ def build_stage(
     targets_per_trajectory: int = 5,
     artifact_stem: str = "chris-cyber-fleet-a62dd51f",
     corpus_job_id: str | None = None,
+    include_splits: frozenset[str] | None = None,
+    tokenizer_identity: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Write corpus and score shards, returning a non-secret integrity manifest."""
     import pyarrow as pa
@@ -259,14 +332,31 @@ def build_stage(
     window_token_counts: list[int] = []
     oversized_targets = 0
     source_job_ids: set[str] = set()
+    excluded_rows_by_split: dict[str, int] = defaultdict(int)
 
     if (tokenizer is None) != (window_max_tokens == 0):
         raise ValueError("tokenizer and window_max_tokens must be provided together")
+    if tokenizer is not None and tokenizer_identity is None:
+        raise ValueError("windowed SFT requires a verified tokenizer_identity")
+    if tokenizer is None and tokenizer_identity is not None:
+        raise ValueError("tokenizer_identity requires a tokenizer")
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", artifact_stem):
         raise ValueError("artifact_stem must be a safe filename stem")
+    if include_splits is not None:
+        if not include_splits:
+            raise ValueError("include_splits must not be empty")
+        unknown_splits = include_splits - VALID_SPLITS
+        if unknown_splits:
+            raise ValueError(f"unsupported include_splits: {sorted(unknown_splits)}")
 
     for row in trajectories:
-        if row.get("schema") != "fleet_cyber_trajectory_v1" or not _eligible(row):
+        if row.get("schema") != "fleet_cyber_trajectory_v1":
+            continue
+        split = str(row.get("split") or "")
+        if include_splits is not None and split not in include_splits:
+            excluded_rows_by_split[split or "<missing>"] += 1
+            continue
+        if not _eligible(row):
             continue
         session_id = str(row.get("record_id") or "")
         task_key = _task_key(row)
@@ -274,11 +364,8 @@ def build_stage(
         source_job_id = str(source.get("job_id") or "")
         if source_job_id:
             source_job_ids.add(source_job_id)
-        environment = (
-            row.get("environment") if isinstance(row.get("environment"), Mapping) else {}
-        )
+        environment = row.get("environment") if isinstance(row.get("environment"), Mapping) else {}
         messages = row.get("messages")
-        split = str(row.get("split") or "")
         env_key = str(environment.get("env_key") or "")
         if not session_id or not task_key or not env_key or not isinstance(messages, list):
             raise ValueError(f"malformed eligible trajectory {session_id or '<missing-id>'}")
@@ -321,29 +408,31 @@ def build_stage(
             for position, message in enumerate(staged_messages):
                 role = str(message.get("role") or "")
                 tool_calls = message.get("tool_calls")
-                rows_by_env[env_key].append({
-                    "session_id": staged_session_id,
-                    "message_id": f"{session_id}:{position}",
-                    "position": position,
-                    "task_key": task_key,
-                    "model": str(source.get("model") or ""),
-                    "job_id": corpus_job_id or source_job_id,
-                    "attempt": 0,
-                    "status": str(row.get("outcome", {}).get("status") or "completed"),
-                    "team_id": team_id,
-                    "role": role,
-                    "content": _text(message.get("content")),
-                    "tool_calls": (
-                        json.dumps(tool_calls, ensure_ascii=False, sort_keys=True)
-                        if tool_calls
-                        else None
-                    ),
-                    "tool_call_id": _text(message.get("tool_call_id")),
-                    "tokens": None,
-                    "generated_tokens": None,
-                    "session_created_at": "",
-                    "message_created_at": "",
-                })
+                rows_by_env[env_key].append(
+                    {
+                        "session_id": staged_session_id,
+                        "message_id": f"{session_id}:{position}",
+                        "position": position,
+                        "task_key": task_key,
+                        "model": str(source.get("model") or ""),
+                        "job_id": corpus_job_id or source_job_id,
+                        "attempt": 0,
+                        "status": str(row.get("outcome", {}).get("status") or "completed"),
+                        "team_id": team_id,
+                        "role": role,
+                        "content": _text(message.get("content")),
+                        "tool_calls": (
+                            json.dumps(tool_calls, ensure_ascii=False, sort_keys=True)
+                            if tool_calls
+                            else None
+                        ),
+                        "tool_call_id": _text(message.get("tool_call_id")),
+                        "tokens": None,
+                        "generated_tokens": None,
+                        "session_created_at": "",
+                        "message_created_at": "",
+                    }
+                )
 
     if not source_sessions:
         raise ValueError("no SFT-eligible successful trajectories")
@@ -387,6 +476,11 @@ def build_stage(
         "source_job_ids": sorted(source_job_ids),
         "corpus_job_id": corpus_job_id,
         "team_id": team_id,
+        "split_filter": {
+            "included": sorted(include_splits) if include_splits is not None else None,
+            "excluded_source_rows": dict(sorted(excluded_rows_by_split.items())),
+        },
+        "tokenizer_identity": dict(tokenizer_identity) if tokenizer_identity is not None else None,
         "eligible_sessions": len(source_sessions),
         "emitted_sessions": len(emitted_sessions),
         "task_counts": {key: len(value) for key, value in sorted(tasks_by_split.items())},
@@ -421,13 +515,28 @@ def main() -> None:
     parser.add_argument("--team-id", required=True)
     parser.add_argument("--tokenizer", help="HF model id or local tokenizer path")
     parser.add_argument("--tokenizer-revision")
+    parser.add_argument(
+        "--tokenizer-model-lock",
+        type=Path,
+        help="model lock whose exact tokenizer files are verified before windowing",
+    )
     parser.add_argument("--window-max-tokens", type=int, default=0)
     parser.add_argument("--targets-per-trajectory", type=int, default=5)
     parser.add_argument("--artifact-stem", default="chris-cyber-fleet-a62dd51f")
     parser.add_argument("--corpus-job-id")
+    parser.add_argument(
+        "--include-split",
+        action="append",
+        choices=sorted(VALID_SPLITS),
+        dest="include_splits",
+        help="repeat to admit only named splits before eligibility or tokenization",
+    )
     args = parser.parse_args()
     tokenizer = None
+    tokenizer_identity = None
     if args.tokenizer:
+        if not args.tokenizer_revision or args.tokenizer_model_lock is None:
+            parser.error("--tokenizer requires --tokenizer-revision and --tokenizer-model-lock")
         from transformers import AutoTokenizer
 
         tokenizer = AutoTokenizer.from_pretrained(
@@ -435,6 +544,14 @@ def main() -> None:
             revision=args.tokenizer_revision,
             trust_remote_code=True,
         )
+        tokenizer_identity = verify_tokenizer_lock(
+            tokenizer=tokenizer,
+            tokenizer_repo=args.tokenizer,
+            tokenizer_revision=args.tokenizer_revision,
+            model_lock_path=args.tokenizer_model_lock,
+        )
+    elif args.tokenizer_revision or args.tokenizer_model_lock is not None:
+        parser.error("--tokenizer-revision/--tokenizer-model-lock require --tokenizer")
     manifest = build_stage(
         iter_jsonl(args.trajectories),
         args.output_root,
@@ -445,6 +562,8 @@ def main() -> None:
         targets_per_trajectory=args.targets_per_trajectory,
         artifact_stem=args.artifact_stem,
         corpus_job_id=args.corpus_job_id,
+        include_splits=(frozenset(args.include_splits) if args.include_splits else None),
+        tokenizer_identity=tokenizer_identity,
     )
     print(json.dumps(manifest, indent=2, sort_keys=True))
 

@@ -60,7 +60,12 @@
     "test_lineages": 20,
     "sft_source": "verified_successes_only",
     "requires_qwen38_retokenization": true,
-    "qwen38_corpus_job_id": "chris-cyber-qwen38-windowed-v1",
+    "qwen38_corpus_job_id": "chris-cyber-qwen38-windowed-v2",
+    "qwen38_corpus_status": "built_verified_local_not_staged",
+    "qwen38_corpus_manifest_sha256": "sha256:95a4f1293fe3d964e0b046754feb05fec268a15aa1623f87dfc30ea1282bbb80",
+    "qwen38_corpus_eligible_train_sessions": 508,
+    "qwen38_corpus_windows": 2540,
+    "qwen38_corpus_success_bearing_train_lineages": 86,
     "qwen38_tokenizer_max_window_tokens": 14336,
     "targets_per_trajectory": 5,
     "prohibited": [
@@ -163,6 +168,8 @@
     "optimizer_steps": 1,
     "gpus": 8,
     "queue": "training-lq",
+    "node_pool": "fleetai-training-ng-gpu",
+    "required_resource_flavor": "b300-training",
     "launch_only_after": [
       "qwen38_model_lock_and_serving_lock_merged",
       "qwen38_catalog_row_registered_and_exact_revision_staged",
@@ -178,8 +185,8 @@
       "detail": "The Training API has no Qwen3.8 catalog row or staged_model and rejects preview with HTTP 422."
     },
     {
-      "id": "qwen38_corpus",
-      "detail": "The successful trajectories must be re-windowed with the exact Qwen3.8 tokenizer and chat template; Qwen3.6 token windows are not interchangeable."
+      "id": "qwen38_corpus_staging",
+      "detail": "The verified train-only Qwen3.8 corpus exists only in ignored local storage; its exact manifest has not been staged under the create-only corpus job id."
     },
     {
       "id": "sft_trainer_capability",
