@@ -27,6 +27,7 @@ from .post_sft_artifacts import (
     full_file_manifest,
     inspect_hf_export,
 )
+from .post_sft_base_surface import validate_base_inference_artifact_manifest
 
 CAST_INPUT_SCHEMA = "cyber_sft_fp32_to_bf16_cast_input_v2"
 CAST_RECEIPT_SCHEMA = "cyber_sft_fp32_to_bf16_cast_receipt_v2"
@@ -35,7 +36,7 @@ SOURCE_PATH = Path(
     "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-v1/global_step_318/policy"
 )
 DESTINATION_PATH = Path(
-    "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-bf16-v3/global_step_318/policy"
+    "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-bf16-v4/global_step_318/policy"
 )
 BASE_MODEL_PATH = Path(
     "/mnt/sfs/models/Qwen/Qwen3.6-27B/6a9e13bd6fc8f0983b9b99948120bc37f49c13e9"
@@ -45,8 +46,42 @@ BASE_MODEL_REVISION = "6a9e13bd6fc8f0983b9b99948120bc37f49c13e9"
 BASE_WEIGHTS_MANIFEST_SHA256 = (
     "sha256:14ad10368de9b9e5974ff12a4b70ea7884194b58e670177bbac79daeb81f16b9"
 )
+BASE_INDEX_SHA256 = "sha256:a8ad2c26fb707ff8c245806315b03e3b4b74595528492423af5dae0ce39b4d9b"
+BASE_RUNTIME_SIDECAR_SHA256 = {
+    "chat_template.jinja": (
+        "sha256:e84f32a23fdda27689f868aa4a1a5621f41133e51a48d7f3efcbea2839574259"
+    ),
+    "config.json": "sha256:69db4eb7196bc8190813231b3018ca05d8c2e3abc7b1af19d55c157af44a9d9c",
+    "configuration.json": "sha256:2d4464e2ead06bc9bc718c781309ad1e7baded626d66e8dcdc8b469ba185faf0",
+    "generation_config.json": (
+        "sha256:e70c136c1b78ddc1fb0905bac8e733a4dc448d4f852a5dd75143fffc70be550e"
+    ),
+    "merges.txt": "sha256:a9d356d7bdf1ef4949e3e748e95b8e10ad9d4e2e838eddc38a0a7b6b94d1db8d",
+    "preprocessor_config.json": (
+        "sha256:27225450ac9c6529872ee1924fcb0962ff5634834f817040f444118116f4e516"
+    ),
+    "tokenizer.json": "sha256:5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42",
+    "tokenizer_config.json": (
+        "sha256:5186f0defcd7f232382c7f0aebcd2252d073bb921ab240e407b7ae8745d2b29b"
+    ),
+    "video_preprocessor_config.json": (
+        "sha256:7768af27c1fafa9cc9011c1dc20067e03f8915e03b63504550e11d5066986d13"
+    ),
+    "vocab.json": "sha256:ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003",
+}
+BASE_NON_ARTIFACT_TOP_LEVEL_FILES = {
+    ".cyber-post-train-lock.json": "checkpoint download provenance; not loaded by inference",
+    ".gitattributes": "Hugging Face repository metadata; not loaded by inference",
+    "LICENSE": "license text; not loaded by inference",
+    "README.md": "model documentation; not loaded by inference",
+    "source-tree.json": "checkpoint materialization provenance; not loaded by inference",
+}
+BASE_EXCLUDED_DIRECTORY_PREFIXES = {
+    ".cache/": "Hugging Face client cache/control metadata; not loaded by inference"
+}
+BASE_WEIGHT_SHARD_COUNT = 15
 EVIDENCE_DIR = Path(
-    "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/evidence/bf16-cast-v3/receipt"
+    "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/evidence/bf16-cast-v4/receipt"
 )
 ACCEPTANCE_RECEIPT_NAME = ".fleet-bf16-cast-acceptance.json"
 DEFAULT_MAX_SHARD_BYTES = 2 * 1024**3
@@ -59,9 +94,9 @@ RESTORED_AUXILIARY_PARAMETER_COUNT = 424_699_392
 FINAL_TENSOR_COUNT = 1199
 FINAL_PARAMETER_COUNT = 27_781_427_952
 NAMESPACE = "fleet-train-jobs"
-JOB_NAME = "chris-cyber-qwen36-sft-bf16-cast-v3"
+JOB_NAME = "chris-cyber-qwen36-sft-bf16-cast-v4"
 CONFIG_MAP_NAME = JOB_NAME
-SERVICE_ACCOUNT_NAME = "chris-cyber-qwen36-sft-bf16-cast-observer-v3"
+SERVICE_ACCOUNT_NAME = "chris-cyber-qwen36-sft-bf16-cast-observer-v4"
 CONTAINER_NAME = "cast"
 IMAGE_ID_MAX_ATTEMPTS = 12
 IMAGE_ID_RETRY_SECONDS = 1.0
@@ -80,6 +115,7 @@ MOUNTED_CODE_FILES = {
     "training__init__.py": "training/__init__.py",
     "training_io.py": "training/io.py",
     "training_post_sft_artifacts.py": "training/post_sft_artifacts.py",
+    "training_post_sft_base_surface.py": "training/post_sft_base_surface.py",
     "training_post_sft_cast.py": "training/post_sft_cast.py",
 }
 LOCAL_CODE_FILES = {
@@ -106,6 +142,161 @@ def _validate_digest(value: Any, field: str) -> str:
     ):
         raise ValueError(f"{field} must be a SHA-256 digest")
     return value
+
+
+def _expected_base_inference_artifact_surface() -> dict[str, Any]:
+    return {
+        "schema": "cyber_sft_base_inference_artifact_surface_v1",
+        "policy": "exact_top_level_inference_artifacts_with_reviewed_control_exclusions_v1",
+        "weight_shard_count": BASE_WEIGHT_SHARD_COUNT,
+        "weights_manifest_sha256": BASE_WEIGHTS_MANIFEST_SHA256,
+        "index": {
+            "path": "model.safetensors.index.json",
+            "sha256": BASE_INDEX_SHA256,
+        },
+        "required_runtime_sidecar_sha256": dict(BASE_RUNTIME_SIDECAR_SHA256),
+        "allowed_non_artifact_top_level_files": dict(
+            BASE_NON_ARTIFACT_TOP_LEVEL_FILES
+        ),
+        "excluded_non_artifact_directory_prefixes": dict(
+            BASE_EXCLUDED_DIRECTORY_PREFIXES
+        ),
+        "unknown_top_level_entries": "reject",
+        "symlinks": "reject",
+    }
+
+
+def _validate_base_inference_artifact_surface(value: Any) -> Mapping[str, Any]:
+    surface = _mapping(value, "base inference artifact surface")
+    if dict(surface) != _expected_base_inference_artifact_surface():
+        raise ValueError("base inference artifact surface differs from the frozen plan")
+    return surface
+
+
+def _base_inference_artifact_manifest(
+    root: Path, surface_value: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Hash only the exact serving surface; reject rather than ignore unknown artifacts."""
+
+    surface = _validate_base_inference_artifact_surface(surface_value)
+    if root.is_symlink():
+        raise ValueError("frozen base root is not a regular directory")
+    resolved = root.resolve(strict=True)
+    if not resolved.is_dir():
+        raise ValueError("frozen base root is not a regular directory")
+    index_binding = _mapping(surface.get("index"), "base artifact index")
+    index_name = str(index_binding.get("path"))
+    index_path = resolved / index_name
+    if index_path.is_symlink() or not index_path.is_file():
+        raise ValueError("frozen base index is missing or not a regular file")
+    if file_sha256(index_path) != index_binding.get("sha256"):
+        raise ValueError("frozen base index differs from the signed model lock")
+    try:
+        index = json.loads(index_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError("frozen base index is unreadable or invalid") from exc
+    weight_map = index.get("weight_map") if isinstance(index, Mapping) else None
+    if not isinstance(weight_map, Mapping) or not weight_map:
+        raise ValueError("frozen base index has no weight map")
+    if any(
+        not isinstance(key, str) or not isinstance(value, str)
+        for key, value in weight_map.items()
+    ):
+        raise ValueError("frozen base index has invalid weight-map entries")
+    shard_names = sorted(set(weight_map.values()))
+    expected_shards = [
+        f"model-{number:05d}-of-{BASE_WEIGHT_SHARD_COUNT:05d}.safetensors"
+        for number in range(1, BASE_WEIGHT_SHARD_COUNT + 1)
+    ]
+    if shard_names != expected_shards:
+        raise ValueError("frozen base index names an unexpected shard set")
+
+    sidecars = _mapping(
+        surface.get("required_runtime_sidecar_sha256"),
+        "base runtime sidecar hashes",
+    )
+    controls = _mapping(
+        surface.get("allowed_non_artifact_top_level_files"),
+        "base non-artifact files",
+    )
+    excluded_directories = _mapping(
+        surface.get("excluded_non_artifact_directory_prefixes"),
+        "base excluded directory prefixes",
+    )
+    required_names = set(shard_names) | set(sidecars) | {index_name}
+    allowed_names = required_names | set(controls) | {
+        prefix.removesuffix("/") for prefix in excluded_directories
+    }
+    excluded_files = []
+    excluded_prefixes = []
+    observed_names = set()
+    for path in sorted(resolved.iterdir(), key=lambda item: item.name):
+        observed_names.add(path.name)
+        if path.is_symlink():
+            raise ValueError(f"frozen base contains prohibited symlink {path.name}")
+        if path.name not in allowed_names:
+            raise ValueError(f"frozen base contains unknown top-level entry {path.name}")
+        directory_prefix = f"{path.name}/"
+        if directory_prefix in excluded_directories:
+            if not path.is_dir():
+                raise ValueError(f"excluded base prefix is not a directory: {directory_prefix}")
+            excluded_prefixes.append(
+                {
+                    "path_prefix": directory_prefix,
+                    "reviewed_reason": excluded_directories[directory_prefix],
+                }
+            )
+        elif path.name in controls:
+            if not path.is_file():
+                raise ValueError(f"excluded base control is not a file: {path.name}")
+            excluded_files.append(
+                {"path": path.name, "reviewed_reason": controls[path.name]}
+            )
+        elif not path.is_file():
+            raise ValueError(f"required base artifact is not a file: {path.name}")
+    missing = sorted(allowed_names - observed_names)
+    if missing:
+        raise ValueError(f"frozen base is missing required artifacts: {missing}")
+
+    rows = []
+    for name in sorted(required_names):
+        path = resolved / name
+        digest = file_sha256(path)
+        expected = (
+            index_binding.get("sha256")
+            if name == index_name
+            else sidecars.get(name)
+        )
+        if expected is not None and digest != expected:
+            raise ValueError(f"frozen base required artifact hash differs: {name}")
+        rows.append(
+            {
+                "path": name,
+                "size": path.stat().st_size,
+                "sha256": digest.removeprefix("sha256:"),
+            }
+        )
+    weight_rows = [row for row in rows if row["path"] in set(shard_names)]
+    if digest_json(weight_rows) != surface.get("weights_manifest_sha256"):
+        raise ValueError("frozen base weight bytes differ from the signed model lock")
+    manifest = {
+        "schema": "cyber_sft_base_inference_artifact_manifest_v1",
+        "root": str(resolved),
+        "surface_sha256": digest_json(surface),
+        "file_count": len(rows),
+        "total_bytes": sum(row["size"] for row in rows),
+        "files": rows,
+        "manifest_sha256": digest_json(rows),
+        "weights_manifest_sha256": digest_json(weight_rows),
+        "runtime_sidecar_sha256": dict(sidecars),
+        "excluded_non_artifact_files": excluded_files,
+        "excluded_non_artifact_directory_prefixes": excluded_prefixes,
+    }
+    return validate_base_inference_artifact_manifest(
+        manifest,
+        surface,
+        expected_root=str(resolved),
+    )
 
 
 def canonical_cast_input_bytes(value: Mapping[str, Any]) -> bytes:
@@ -332,7 +523,7 @@ def _tensor_sha256(tensor: Any) -> str:
 def _validate_execution_plan(value: Any) -> Mapping[str, Any]:
     plan = _mapping(value, "cast execution plan")
     expected = {
-        "schema": "cyber_sft_fp32_to_bf16_cast_execution_plan_v3",
+        "schema": "cyber_sft_fp32_to_bf16_cast_execution_plan_v4",
         "namespace": NAMESPACE,
         "job_name": JOB_NAME,
         "config_map_name": CONFIG_MAP_NAME,
@@ -358,6 +549,7 @@ def _validate_execution_plan(value: Any) -> Mapping[str, Any]:
         "final_parameter_count": FINAL_PARAMETER_COUNT,
         "image_id_max_attempts": IMAGE_ID_MAX_ATTEMPTS,
         "image_id_retry_seconds": IMAGE_ID_RETRY_SECONDS,
+        "base_inference_artifact_surface": _expected_base_inference_artifact_surface(),
     }
     for field, expected_value in expected.items():
         if plan.get(field) != expected_value:
@@ -710,6 +902,20 @@ def build_cast_input(
     ):
         raise ValueError("raw inspection and omission layout evidence differ")
     base_model = _mapping(plan.get("base_model"), "base model")
+    artifact_surface = _validate_base_inference_artifact_surface(
+        cast_plan.get("base_inference_artifact_surface")
+    )
+    if (
+        artifact_surface.get("weights_manifest_sha256")
+        != base_model.get("weights_manifest_sha256")
+        or _mapping(artifact_surface.get("index"), "base artifact index").get(
+            "sha256"
+        )
+        != base_model.get("weights_index_sha256")
+        or artifact_surface.get("required_runtime_sidecar_sha256")
+        != base_model.get("runtime_sidecar_sha256")
+    ):
+        raise ValueError("base inference artifact surface differs from the frozen base model")
     speculative = _mapping(
         _mapping(plan.get("serving"), "serving").get("speculative_decoding"),
         "serving speculative decoding",
@@ -751,6 +957,7 @@ def build_cast_input(
             "repository": base_model.get("repository"),
             "revision": base_model.get("revision"),
             "weights_manifest_sha256": base_model.get("weights_manifest_sha256"),
+            "inference_artifact_surface": dict(artifact_surface),
             "omission_policy": dict(omission),
             "speculative_decoding": dict(speculative),
             "no_speculative_decoding_proof": dict(observed_no_speculative),
@@ -935,6 +1142,11 @@ def execute_cast(cast_input: Mapping[str, Any]) -> dict[str, Any]:
         or base_binding.get("weights_manifest_sha256") != BASE_WEIGHTS_MANIFEST_SHA256
     ):
         raise ValueError("frozen base auxiliary source identity differs from the reviewed model")
+    artifact_surface = _validate_base_inference_artifact_surface(
+        base_binding.get("inference_artifact_surface")
+    )
+    if artifact_surface != execution.get("base_inference_artifact_surface"):
+        raise ValueError("cast input artifact surface differs from the execution plan")
     omission = _mapping(base_binding.get("omission_policy"), "omission policy")
     speculative = _mapping(
         base_binding.get("speculative_decoding"), "speculative decoding proof"
@@ -983,11 +1195,7 @@ def execute_cast(cast_input: Mapping[str, Any]) -> dict[str, Any]:
     observed_manifest = full_file_manifest(source)
     if observed_manifest["manifest_sha256"] != expected_manifest.get("manifest_sha256"):
         raise ValueError("raw FP32 source bytes differ from the evidence manifest")
-    base_manifest_before = full_file_manifest(base)
-    if _weights_manifest_sha256(base_manifest_before) != base_binding.get(
-        "weights_manifest_sha256"
-    ):
-        raise ValueError("frozen base weight bytes differ from the signed model lock")
+    base_manifest_before = _base_inference_artifact_manifest(base, artifact_surface)
     proof = cast_fp32_export(
         source,
         base,
@@ -1006,7 +1214,7 @@ def execute_cast(cast_input: Mapping[str, Any]) -> dict[str, Any]:
     source_after = full_file_manifest(source)
     if source_after["manifest_sha256"] != observed_manifest["manifest_sha256"]:
         raise ValueError("raw FP32 source changed during conversion")
-    base_manifest_after = full_file_manifest(base)
+    base_manifest_after = _base_inference_artifact_manifest(base, artifact_surface)
     if base_manifest_after["manifest_sha256"] != base_manifest_before["manifest_sha256"]:
         raise ValueError("frozen base bytes changed during auxiliary-head restoration")
     inspection = inspect_hf_export(
@@ -1041,6 +1249,11 @@ def execute_cast(cast_input: Mapping[str, Any]) -> dict[str, Any]:
             "repository": base_binding.get("repository"),
             "revision": base_binding.get("revision"),
             "weights_manifest_sha256": base_binding.get("weights_manifest_sha256"),
+            "inference_artifact_surface": dict(artifact_surface),
+            "inference_artifact_surface_sha256": digest_json(artifact_surface),
+            "inference_artifact_manifest_before": base_manifest_before,
+            "inference_artifact_manifest_after": base_manifest_after,
+            "manifest_scope": "exact_inference_artifact_surface_v1",
             "omission_policy_sha256": digest_json(omission),
             "exact_auxiliary_omission_policy": dict(omission),
             "full_manifest_before_sha256": base_manifest_before["manifest_sha256"],

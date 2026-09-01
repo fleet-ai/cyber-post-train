@@ -35,6 +35,7 @@
     "repository": "Qwen/Qwen3.6-27B",
     "revision": "6a9e13bd6fc8f0983b9b99948120bc37f49c13e9",
     "weights_manifest_sha256": "sha256:14ad10368de9b9e5974ff12a4b70ea7884194b58e670177bbac79daeb81f16b9",
+    "weights_index_sha256": "sha256:a8ad2c26fb707ff8c245806315b03e3b4b74595528492423af5dae0ce39b4d9b",
     "tokenizer_manifest_sha256": "sha256:27f02770d03b60343350ad948bf1065673968c60274f1e34f4afaed16940a1ea",
     "chat_template_sha256": "sha256:e84f32a23fdda27689f868aa4a1a5621f41133e51a48d7f3efcbea2839574259",
     "config_sha256": "sha256:69db4eb7196bc8190813231b3018ca05d8c2e3abc7b1af19d55c157af44a9d9c",
@@ -90,21 +91,22 @@
       "training/__init__.py": "sha256:85464634e1b48ac40c22bd57bc60fb67241bac402311c31eca7027afb491de68",
       "training/io.py": "sha256:7a0b734a4ab7fb8b702430094c58c72f19ac8fc7cc5e056eb8410267e6bfdfe3",
       "training/post_sft_artifacts.py": "sha256:c09555c61cb25ad5867cce80ed8bef0684734231b5708b1be892e75b9dd980eb",
-      "training/post_sft_staging.py": "sha256:f9309e8233a9c2a497abf8671ab8e0a62ab90393fab2e843f6112759c76343dd"
+      "training/post_sft_base_surface.py": "sha256:f2e82927348fe844ff685f6506e1799a53cb9ecfbe58d50c654f2b1ba70c4f4f",
+      "training/post_sft_staging.py": "sha256:bae8e3bbc95770e22958b863f39912b8340988581d1319ae43f54875d87d6dc0"
     }
   },
   "cast_execution": {
-    "schema": "cyber_sft_fp32_to_bf16_cast_execution_plan_v3",
+    "schema": "cyber_sft_fp32_to_bf16_cast_execution_plan_v4",
     "namespace": "fleet-train-jobs",
-    "job_name": "chris-cyber-qwen36-sft-bf16-cast-v3",
-    "config_map_name": "chris-cyber-qwen36-sft-bf16-cast-v3",
-    "service_account_name": "chris-cyber-qwen36-sft-bf16-cast-observer-v3",
+    "job_name": "chris-cyber-qwen36-sft-bf16-cast-v4",
+    "config_map_name": "chris-cyber-qwen36-sft-bf16-cast-v4",
+    "service_account_name": "chris-cyber-qwen36-sft-bf16-cast-observer-v4",
     "container_name": "cast",
     "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train:q36-torchgdn-6db8d0c9@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
     "image_digest": "sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
     "command_sha256": "sha256:09925362ff4a665f02b1c73aee73fa750dd0e8427cc1c47a443ceddefb5b9a03",
     "source_path": "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-v1/global_step_318/policy",
-    "destination_path": "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-bf16-v3/global_step_318/policy",
+    "destination_path": "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-bf16-v4/global_step_318/policy",
     "base_model_path": "/mnt/sfs/models/Qwen/Qwen3.6-27B/6a9e13bd6fc8f0983b9b99948120bc37f49c13e9",
     "base_model_revision": "6a9e13bd6fc8f0983b9b99948120bc37f49c13e9",
     "policy": "deterministic_trained_fp32_to_bf16_plus_frozen_base_mtp_restore_v1",
@@ -120,11 +122,46 @@
     "final_parameter_count": 27781427952,
     "image_id_max_attempts": 12,
     "image_id_retry_seconds": 1.0,
+    "base_inference_artifact_surface": {
+      "schema": "cyber_sft_base_inference_artifact_surface_v1",
+      "policy": "exact_top_level_inference_artifacts_with_reviewed_control_exclusions_v1",
+      "weight_shard_count": 15,
+      "weights_manifest_sha256": "sha256:14ad10368de9b9e5974ff12a4b70ea7884194b58e670177bbac79daeb81f16b9",
+      "index": {
+        "path": "model.safetensors.index.json",
+        "sha256": "sha256:a8ad2c26fb707ff8c245806315b03e3b4b74595528492423af5dae0ce39b4d9b"
+      },
+      "required_runtime_sidecar_sha256": {
+        "chat_template.jinja": "sha256:e84f32a23fdda27689f868aa4a1a5621f41133e51a48d7f3efcbea2839574259",
+        "config.json": "sha256:69db4eb7196bc8190813231b3018ca05d8c2e3abc7b1af19d55c157af44a9d9c",
+        "configuration.json": "sha256:2d4464e2ead06bc9bc718c781309ad1e7baded626d66e8dcdc8b469ba185faf0",
+        "generation_config.json": "sha256:e70c136c1b78ddc1fb0905bac8e733a4dc448d4f852a5dd75143fffc70be550e",
+        "merges.txt": "sha256:a9d356d7bdf1ef4949e3e748e95b8e10ad9d4e2e838eddc38a0a7b6b94d1db8d",
+        "preprocessor_config.json": "sha256:27225450ac9c6529872ee1924fcb0962ff5634834f817040f444118116f4e516",
+        "tokenizer.json": "sha256:5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42",
+        "tokenizer_config.json": "sha256:5186f0defcd7f232382c7f0aebcd2252d073bb921ab240e407b7ae8745d2b29b",
+        "video_preprocessor_config.json": "sha256:7768af27c1fafa9cc9011c1dc20067e03f8915e03b63504550e11d5066986d13",
+        "vocab.json": "sha256:ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003"
+      },
+      "allowed_non_artifact_top_level_files": {
+        ".cyber-post-train-lock.json": "checkpoint download provenance; not loaded by inference",
+        ".gitattributes": "Hugging Face repository metadata; not loaded by inference",
+        "LICENSE": "license text; not loaded by inference",
+        "README.md": "model documentation; not loaded by inference",
+        "source-tree.json": "checkpoint materialization provenance; not loaded by inference"
+      },
+      "excluded_non_artifact_directory_prefixes": {
+        ".cache/": "Hugging Face client cache/control metadata; not loaded by inference"
+      },
+      "unknown_top_level_entries": "reject",
+      "symlinks": "reject"
+    },
     "config_map_code_sha256": {
       "training/__init__.py": "sha256:85464634e1b48ac40c22bd57bc60fb67241bac402311c31eca7027afb491de68",
       "training/io.py": "sha256:7a0b734a4ab7fb8b702430094c58c72f19ac8fc7cc5e056eb8410267e6bfdfe3",
       "training/post_sft_artifacts.py": "sha256:c09555c61cb25ad5867cce80ed8bef0684734231b5708b1be892e75b9dd980eb",
-      "training/post_sft_cast.py": "sha256:bacbaa68e22cd57d0677761d2b6d3edac7902e530ba89307c5ede7d8f0fdde10"
+      "training/post_sft_base_surface.py": "sha256:f2e82927348fe844ff685f6506e1799a53cb9ecfbe58d50c654f2b1ba70c4f4f",
+      "training/post_sft_cast.py": "sha256:82ee37ed11ca680cca644723c65ab705fd5d9121b0fe046dd0d81f466737d17d"
     }
   },
   "evidence_execution": {
@@ -284,7 +321,7 @@
     "source_checkpoint_root": "/mnt/sfs/checkpoints/ft-run-574bd7b3",
     "output_root": "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-v1",
     "expected_output_path": "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-v1/global_step_318/policy",
-    "bf16_cast_destination": "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-bf16-v3/global_step_318/policy",
+    "bf16_cast_destination": "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-bf16-v4/global_step_318/policy",
     "inference_staging_destination": "/models/cyber-sft/ft-run-574bd7b3/step-318",
     "destination_preflight": {
       "observed_at": "2026-08-31T16:05:07Z",

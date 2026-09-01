@@ -17,6 +17,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from .io import digest_json
+from .post_sft_base_surface import validate_base_inference_artifact_manifest
 
 SHA256_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 IMAGE_RE = re.compile(r"^[^@\s]+@sha256:[0-9a-f]{64}$")
@@ -26,6 +27,7 @@ STAGING_CODE_PATHS = {
     "training/__init__.py",
     "training/io.py",
     "training/post_sft_artifacts.py",
+    "training/post_sft_base_surface.py",
     "training/post_sft_staging.py",
 }
 STAGING_ACCEPTANCE_RECEIPT = ".fleet-acceptance.json"
@@ -1390,6 +1392,32 @@ def assemble_hf_export_receipt(
     base_full_manifest_after_sha256 = _sha256(
         cast_base, "full_manifest_after_sha256"
     )
+    expected_artifact_surface = _mapping(
+        expected_cast_execution.get("base_inference_artifact_surface"),
+        "expected base inference artifact surface",
+    )
+    artifact_surface = _mapping(
+        cast_base.get("inference_artifact_surface"),
+        "cast base inference artifact surface",
+    )
+    artifact_manifest_before = _mapping(
+        cast_base.get("inference_artifact_manifest_before"),
+        "cast base inference artifact manifest before",
+    )
+    artifact_manifest_after = _mapping(
+        cast_base.get("inference_artifact_manifest_after"),
+        "cast base inference artifact manifest after",
+    )
+    validated_artifact_manifest_before = validate_base_inference_artifact_manifest(
+        artifact_manifest_before,
+        expected_artifact_surface,
+        expected_root=_text(expected_cast_execution, "base_model_path"),
+    )
+    validated_artifact_manifest_after = validate_base_inference_artifact_manifest(
+        artifact_manifest_after,
+        expected_artifact_surface,
+        expected_root=_text(expected_cast_execution, "base_model_path"),
+    )
     if (
         _text(cast_base, "path")
         != _text(expected_cast_execution, "base_model_path")
@@ -1409,6 +1437,14 @@ def assemble_hf_export_receipt(
         != "frozen_base_auxiliary_head_restoration_not_trained_weights"
         or cast_base.get("base_source_stable_during_cast") is not True
         or base_full_manifest_before_sha256 != base_full_manifest_after_sha256
+        or artifact_surface != expected_artifact_surface
+        or _sha256(cast_base, "inference_artifact_surface_sha256")
+        != digest_json(expected_artifact_surface)
+        or cast_base.get("manifest_scope")
+        != "exact_inference_artifact_surface_v1"
+        or validated_artifact_manifest_before != validated_artifact_manifest_after
+        or artifact_manifest_before.get("manifest_sha256")
+        != base_full_manifest_before_sha256
     ):
         raise ValueError("cast auxiliary-head source differs from the frozen base proof")
     cast_conversion = _mapping(cast_receipt.get("conversion"), "cast conversion proof")

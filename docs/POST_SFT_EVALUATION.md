@@ -236,19 +236,42 @@ provenance check; the terminal Pod later showed the exact expected digest
 Preserve the failed v2 Job, immutable ConfigMap, RBAC objects, empty destination parents, and logs.
 Its final `policy` destination and terminal evidence directory were never created.
 
-The create-only successor is `evals/post_sft/scripts/submit_bf16_cast_v3.sh`. Preview is
-non-mutating. V3 retries only while the image identity is absent, for at most 12 observations one
-second apart. The first non-empty identity must parse as an exact digest and equal the frozen image
-digest; a malformed or wrong non-empty identity fails immediately without another read.
+The create-only v3 successor, `chris-cyber-qwen36-sft-bf16-cast-v3` (UID
+`0c451efc-b0ac-44a0-a889-88d0ad56c390`, immutable ConfigMap UID
+`df2a0fe6-9854-45bf-817f-dd6712e41d4b`, Pod UID
+`9abca421-9017-497a-8080-4f727582b9db`), proved the bounded image-identity retry and resolved the
+exact frozen image digest. It then failed closed before casting because its whole-directory base
+scan reached unreadable Hugging Face client cache metadata under `.cache/huggingface/trees/`.
+That metadata is not loaded for inference. V3 created neither its final `policy` destination nor
+terminal receipt; preserve its Job, ConfigMap, RBAC, logs, and empty parent directories.
+
+The reviewed create-only successor is `evals/post_sft/scripts/submit_bf16_cast_v4.sh`. Preview is
+non-mutating. V4 retains the v3 image-identity rule: retry only while the identity is absent, for at
+most 12 observations one second apart, and fail immediately on a malformed or wrong non-empty
+identity. It replaces the whole-directory scan with a signed **exact inference artifact surface**:
+the locked 15 BF16 weight shards and index plus the ten exact sidecars required by serving. Five
+reviewed repository/provenance files are recorded as non-model controls, `.cache/` is explicitly
+excluded without traversal, every symlink is rejected, and any other top-level entry is rejected.
+An unreadable required artifact remains fatal. The receipt calls this scope
+`exact_inference_artifact_surface_v1`; its `inference_artifact_manifest_before/after` fields are the
+authority. Legacy `full_manifest_*` digest fields carry the same scoped digest only for downstream
+compatibility and must never be interpreted as a whole-directory manifest.
+One shared validator reconstructs the only legal row set from that signed surface and runs in the
+cast producer, staging gate, and final export assembler. It requires exactly 15 canonical shard
+names, the index, and ten sidecars; validates every row's path, size and hash type; recomputes file
+count, byte total, complete-row digest and shard-only digest; and requires the exact reviewed
+control/cache exclusions. A re-signed summary containing an extra, missing, duplicate, renamed, or
+hash-drifted artifact therefore cannot pass either downstream gate.
+
 Submission accepts only the completed evidence Job's digest-bound observation and raw full
 manifest, validates the queue, and creates a suspended Job through `training-lq` using create-only
 ServiceAccount, Role, RoleBinding, immutable ConfigMap, and Job operations. Its destination is
-`/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-bf16-v3/global_step_318/policy`.
+`/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-bf16-v4/global_step_318/policy`.
 The embedded `.fleet-bf16-cast-acceptance.json` proves 1,184 direct FP32→BF16 casts and 15
 bit-identical copies from the exact frozen base. The latter are explicitly **frozen base
-auxiliary-head restoration**, not trained weights. Before copying, the Job hashes the complete
-base directory and requires its safetensor-shard digest to equal the signed model lock; it hashes
-the complete base again after conversion and fails unless the two full manifests are identical.
+auxiliary-head restoration**, not trained weights. Before copying, the Job hashes the exact signed
+inference artifact surface and requires its shard/index/sidecar digests to equal the frozen plan;
+it repeats that scoped manifest after conversion and fails unless the two are identical.
 After atomic
 promotion the same Job publishes a separate terminal evidence directory containing that receipt,
 the full post-marker manifest, and a digest-bound `COMPLETE.json`. Merely finding the destination
@@ -256,17 +279,17 @@ directory is not success. Every written weight shard, index, and copied sidecar 
 the directory-level atomic promotion.
 
 ```bash
-bash evals/post_sft/scripts/submit_bf16_cast_v3.sh preview
+bash evals/post_sft/scripts/submit_bf16_cast_v4.sh preview
 
 # Only after the evidence Job is Complete and these are its exact immutable outputs:
-bash evals/post_sft/scripts/submit_bf16_cast_v3.sh submit \
+bash evals/post_sft/scripts/submit_bf16_cast_v4.sh submit \
   /restricted/ft-run-574bd7b3-observation.json \
   /restricted/ft-run-574bd7b3-raw-export-full-manifest.json
 ```
 
 After the cast Job is Complete, retrieve `cast-receipt.json` and
 `cast-full-manifest.json` from
-`/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/evidence/bf16-cast-v3/receipt/`.
+`/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/evidence/bf16-cast-v4/receipt/`.
 The adjacent
 `COMPLETE.json` must bind both files. These two files are inputs to staging; the destination path
 or a successful Pod status alone is insufficient.

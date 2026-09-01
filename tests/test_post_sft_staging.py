@@ -5,6 +5,7 @@ import shutil
 import zipfile
 from pathlib import Path
 
+import pytest
 import torch
 from safetensors.torch import save_file
 
@@ -63,6 +64,128 @@ def _execution_plan(code_hashes: dict[str, str] | None = None) -> dict:
         "command_sha256": staging.STAGING_COMMAND_SHA256,
         "config_map_code_sha256": code_hashes,
     }
+
+
+def _test_base_surface_and_manifest() -> tuple[dict, dict]:
+    sidecar_names = (
+        "chat_template.jinja",
+        "config.json",
+        "configuration.json",
+        "generation_config.json",
+        "merges.txt",
+        "preprocessor_config.json",
+        "tokenizer.json",
+        "tokenizer_config.json",
+        "video_preprocessor_config.json",
+        "vocab.json",
+    )
+    sidecars = {
+        name: "sha256:" + f"{index:x}" * 64
+        for index, name in enumerate(sidecar_names, start=1)
+    }
+    weight_rows = [
+        {
+            "path": f"model-{index:05d}-of-00015.safetensors",
+            "size": index,
+            "sha256": f"{index:x}" * 64,
+        }
+        for index in range(1, 16)
+    ]
+    index_row = {
+        "path": "model.safetensors.index.json",
+        "size": 3,
+        "sha256": "9" * 64,
+    }
+    sidecar_rows = [
+        {
+            "path": name,
+            "size": index + 20,
+            "sha256": digest.removeprefix("sha256:"),
+        }
+        for index, (name, digest) in enumerate(sidecars.items())
+    ]
+    rows = sorted(
+        [*weight_rows, index_row, *sidecar_rows], key=lambda row: row["path"]
+    )
+    surface = {
+        "schema": "cyber_sft_base_inference_artifact_surface_v1",
+        "policy": "exact_top_level_inference_artifacts_with_reviewed_control_exclusions_v1",
+        "weight_shard_count": 15,
+        "weights_manifest_sha256": digest_json(weight_rows),
+        "index": {
+            "path": "model.safetensors.index.json",
+            "sha256": "sha256:" + "9" * 64,
+        },
+        "required_runtime_sidecar_sha256": sidecars,
+        "allowed_non_artifact_top_level_files": {
+            "README.md": "test documentation; not loaded by inference"
+        },
+        "excluded_non_artifact_directory_prefixes": {
+            ".cache/": "test cache; not loaded by inference"
+        },
+        "unknown_top_level_entries": "reject",
+        "symlinks": "reject",
+    }
+    manifest = {
+        "schema": "cyber_sft_base_inference_artifact_manifest_v1",
+        "root": "/base",
+        "surface_sha256": digest_json(surface),
+        "file_count": len(rows),
+        "total_bytes": sum(row["size"] for row in rows),
+        "files": rows,
+        "manifest_sha256": digest_json(rows),
+        "weights_manifest_sha256": digest_json(weight_rows),
+        "runtime_sidecar_sha256": surface["required_runtime_sidecar_sha256"],
+        "excluded_non_artifact_files": [
+            {
+                "path": "README.md",
+                "reviewed_reason": "test documentation; not loaded by inference",
+            }
+        ],
+        "excluded_non_artifact_directory_prefixes": [
+            {
+                "path_prefix": ".cache/",
+                "reviewed_reason": "test cache; not loaded by inference",
+            }
+        ],
+    }
+    return surface, manifest
+
+
+def _tamper_base_artifact_manifest(manifest: dict, kind: str) -> None:
+    rows = manifest["files"]
+    if kind == "evil_path":
+        rows.append({"path": "evil.bin", "size": 1, "sha256": "1" * 64})
+    elif kind == "extra_path":
+        rows.append({"path": "unknown.txt", "size": 1, "sha256": "4" * 64})
+    elif kind == "missing_path":
+        rows.pop(0)
+    elif kind == "duplicate_path":
+        rows.append(copy.deepcopy(rows[0]))
+    elif kind == "changed_index_hash":
+        next(
+            row for row in rows if row["path"] == "model.safetensors.index.json"
+        )["sha256"] = "1" * 64
+    elif kind == "changed_sidecar_hash":
+        next(row for row in rows if row["path"] == "config.json")["sha256"] = "0" * 64
+    elif kind == "wrong_shard_aggregate":
+        next(row for row in rows if row["path"].endswith(".safetensors"))[
+            "sha256"
+        ] = "3" * 64
+    elif kind == "wrong_exclusions":
+        manifest["excluded_non_artifact_directory_prefixes"] = []
+    rows.sort(key=lambda row: row["path"])
+    manifest["file_count"] = len(rows)
+    manifest["total_bytes"] = sum(row["size"] for row in rows)
+    manifest["manifest_sha256"] = digest_json(rows)
+    if kind == "wrong_shard_aggregate":
+        manifest["weights_manifest_sha256"] = digest_json(
+            [row for row in rows if row["path"].endswith(".safetensors")]
+        )
+    if kind == "wrong_count":
+        manifest["file_count"] += 1
+    elif kind == "wrong_total":
+        manifest["total_bytes"] += 1
 
 
 def _cast_receipt_and_manifest(
@@ -197,10 +320,14 @@ def test_manifest_rejects_collision_and_path_traversal(tmp_path):
 
 
 def test_stage_input_binds_observation_manifest_and_tokenizer_evidence():
+    artifact_surface, artifact_manifest = _test_base_surface_and_manifest()
+    assert artifact_surface["weight_shard_count"] == 15
+    assert len(artifact_surface["required_runtime_sidecar_sha256"]) == 10
+    assert artifact_manifest["file_count"] == 26
     omission = {
         "schema": "cyber_sft_exact_auxiliary_head_omission_v1",
         "base_revision": "base-revision",
-        "base_weights_manifest_sha256": "sha256:" + "8" * 64,
+        "base_weights_manifest_sha256": artifact_surface["weights_manifest_sha256"],
         "serving_registration_sha256": "sha256:" + "4" * 64,
         "raw_export_tensor_count": 1,
         "raw_export_parameter_count": 1,
@@ -215,7 +342,12 @@ def test_stage_input_binds_observation_manifest_and_tokenizer_evidence():
         "source": {"observation_sha256": "sha256:" + "1" * 64},
         "frozen_base_auxiliary_source": {
             "revision": "base-revision",
-            "weights_manifest_sha256": "sha256:" + "8" * 64,
+            "weights_manifest_sha256": artifact_surface["weights_manifest_sha256"],
+            "inference_artifact_surface": artifact_surface,
+            "inference_artifact_surface_sha256": digest_json(artifact_surface),
+            "inference_artifact_manifest_before": artifact_manifest,
+            "inference_artifact_manifest_after": artifact_manifest,
+            "manifest_scope": "exact_inference_artifact_surface_v1",
             "serving_registration_sha256": "sha256:" + "4" * 64,
             "omission_policy_sha256": digest_json(omission),
             "exact_auxiliary_omission_policy": omission,
@@ -296,11 +428,17 @@ def test_stage_input_binds_observation_manifest_and_tokenizer_evidence():
     )
     evidence_sha = "sha256:" + "b" * 64
     plan = {
-        "cast_execution": {"destination_path": "/cast"},
+        "cast_execution": {
+            "destination_path": "/cast",
+            "base_model_path": "/base",
+            "base_inference_artifact_surface": artifact_surface,
+        },
         "staging_execution": _execution_plan(),
         "base_model": {
             "tokenizer_equivalence_evidence": {"sha256": evidence_sha},
-            "runtime_sidecar_sha256": {"config.json": "sha256:" + "c" * 64},
+            "runtime_sidecar_sha256": artifact_surface[
+                "required_runtime_sidecar_sha256"
+            ],
             "parameter_count": 1,
             "tokenizer_manifest_sha256": "sha256:" + "d" * 64,
             "chat_template_sha256": "sha256:" + "e" * 64,
@@ -363,6 +501,63 @@ def test_stage_input_binds_observation_manifest_and_tokenizer_evidence():
             assert "exact trained/restored tensor provenance" in str(exc)
         else:
             raise AssertionError("re-signed cast provenance tamper unexpectedly passed")
+
+    for kind in (
+        "evil_path",
+        "extra_path",
+        "missing_path",
+        "duplicate_path",
+        "changed_index_hash",
+        "changed_sidecar_hash",
+        "wrong_shard_aggregate",
+        "wrong_count",
+        "wrong_total",
+        "wrong_exclusions",
+    ):
+        tampered_receipt = copy.deepcopy(cast_receipt)
+        base_source = tampered_receipt["frozen_base_auxiliary_source"]
+        tampered_base_manifest = copy.deepcopy(
+            base_source["inference_artifact_manifest_before"]
+        )
+        _tamper_base_artifact_manifest(tampered_base_manifest, kind)
+        base_source["inference_artifact_manifest_before"] = tampered_base_manifest
+        base_source["inference_artifact_manifest_after"] = copy.deepcopy(
+            tampered_base_manifest
+        )
+        base_source["full_manifest_before_sha256"] = tampered_base_manifest[
+            "manifest_sha256"
+        ]
+        base_source["full_manifest_after_sha256"] = tampered_base_manifest[
+            "manifest_sha256"
+        ]
+        tampered_receipt["cast_receipt_sha256"] = digest_json(
+            {
+                key: value
+                for key, value in tampered_receipt.items()
+                if key != "cast_receipt_sha256"
+            }
+        )
+        tampered_bytes = (
+            json.dumps(tampered_receipt, indent=2, sort_keys=True) + "\n"
+        ).encode()
+        tampered_manifest = copy.deepcopy(cast_manifest)
+        tampered_manifest["files"][0].update(
+            size=len(tampered_bytes), sha256=hashlib.sha256(tampered_bytes).hexdigest()
+        )
+        tampered_manifest["total_bytes"] = sum(
+            row["size"] for row in tampered_manifest["files"]
+        )
+        tampered_manifest["manifest_sha256"] = digest_json(
+            tampered_manifest["files"]
+        )
+        with pytest.raises(ValueError, match="base inference artifact"):
+            staging.build_stage_input(
+                plan,
+                observation,
+                tampered_receipt,
+                tampered_manifest,
+                tokenizer_evidence_sha256=evidence_sha,
+            )
 
     cast_manifest["files"][1]["sha256"] = "b" * 64
     cast_manifest["manifest_sha256"] = digest_json(cast_manifest["files"])
@@ -566,6 +761,7 @@ def test_runtime_provenance_binds_live_kubernetes_and_configmap_bytes(tmp_path, 
         "training__init__.py": "# package\n",
         "training_io.py": "# io\n",
         "training_post_sft_artifacts.py": "# artifacts\n",
+        "training_post_sft_base_surface.py": "# base surface\n",
         "training_post_sft_staging.py": "# staging\n",
     }
     code_hashes = {

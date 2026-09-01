@@ -23,12 +23,13 @@ from typing import Any
 
 from .io import digest_json, file_sha256
 from .post_sft_artifacts import inspect_hf_export
+from .post_sft_base_surface import validate_base_inference_artifact_manifest
 
 STAGE_SCHEMA = "cyber_sft_inference_stage_input_v1"
 RECEIPT_SCHEMA = "cyber_sft_inference_stage_receipt_v1"
 EXECUTION_SCHEMA = "cyber_sft_inference_stage_execution_v1"
 FILEBROWSER_ORIGIN = "http://filebrowser.fleet-train-data-plane.svc.cluster.local"
-EXPORT_SOURCE = "/exports/cyber-sft/ft-run-574bd7b3/step-318-bf16-v3/global_step_318/policy"
+EXPORT_SOURCE = "/exports/cyber-sft/ft-run-574bd7b3/step-318-bf16-v4/global_step_318/policy"
 DESTINATION = "/models/cyber-sft/ft-run-574bd7b3/step-318"
 BASE_ROOT = "/models/qwen3.6-27b/6a9e13bd6fc8f0983b9b99948120bc37f49c13e9"
 JOB_NAME = "chris-cyber-qwen36-sft-stage-574bd7b3-v1"
@@ -40,6 +41,7 @@ MOUNTED_CODE_FILES = {
     "training__init__.py": "training/__init__.py",
     "training_io.py": "training/io.py",
     "training_post_sft_artifacts.py": "training/post_sft_artifacts.py",
+    "training_post_sft_base_surface.py": "training/post_sft_base_surface.py",
     "training_post_sft_staging.py": "training/post_sft_staging.py",
 }
 LOCAL_CODE_FILES = {
@@ -676,6 +678,29 @@ def build_stage_input(
     base_source = _mapping(
         cast_receipt.get("frozen_base_auxiliary_source"), "frozen base auxiliary source"
     )
+    cast_execution = _mapping(plan.get("cast_execution"), "cast execution plan")
+    artifact_surface = _mapping(
+        cast_execution.get("base_inference_artifact_surface"),
+        "planned base inference artifact surface",
+    )
+    manifest_before = _mapping(
+        base_source.get("inference_artifact_manifest_before"),
+        "base inference artifact manifest before",
+    )
+    manifest_after = _mapping(
+        base_source.get("inference_artifact_manifest_after"),
+        "base inference artifact manifest after",
+    )
+    validated_manifest_before = validate_base_inference_artifact_manifest(
+        manifest_before,
+        artifact_surface,
+        expected_root=str(cast_execution.get("base_model_path")),
+    )
+    validated_manifest_after = validate_base_inference_artifact_manifest(
+        manifest_after,
+        artifact_surface,
+        expected_root=str(cast_execution.get("base_model_path")),
+    )
     declared_tensors = omission.get("tensors")
     restoration_rows = conversion.get("restoration_rows")
     omission_rows = conversion.get("exact_omission_tensors")
@@ -718,6 +743,12 @@ def build_stage_input(
         != omission.get("base_weights_manifest_sha256")
         or base_source.get("serving_registration_sha256")
         != omission.get("serving_registration_sha256")
+        or base_source.get("inference_artifact_surface") != artifact_surface
+        or base_source.get("inference_artifact_surface_sha256")
+        != digest_json(artifact_surface)
+        or base_source.get("manifest_scope")
+        != "exact_inference_artifact_surface_v1"
+        or validated_manifest_before != validated_manifest_after
         or base_source.get("omission_policy_sha256") != digest_json(omission)
         or base_source.get("exact_auxiliary_omission_policy") != omission
         or base_source.get("restoration_semantics")
@@ -789,6 +820,10 @@ def build_stage_input(
             "omission_policy_sha256": digest_json(omission),
             "base_weights_manifest_sha256": omission.get(
                 "base_weights_manifest_sha256"
+            ),
+            "base_inference_artifact_surface_sha256": digest_json(artifact_surface),
+            "base_inference_artifact_manifest_sha256": manifest_before.get(
+                "manifest_sha256"
             ),
             "serving_registration_sha256": omission.get(
                 "serving_registration_sha256"

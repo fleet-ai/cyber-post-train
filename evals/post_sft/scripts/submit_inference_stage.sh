@@ -19,6 +19,7 @@ configmap() {
     --from-file=training__init__.py="$ROOT/evals/post_sft/runtime/training__init__.py" \
     --from-file=training_io.py="$ROOT/training/io.py" \
     --from-file=training_post_sft_artifacts.py="$ROOT/training/post_sft_artifacts.py" \
+    --from-file=training_post_sft_base_surface.py="$ROOT/training/post_sft_base_surface.py" \
     --from-file=training_post_sft_staging.py="$ROOT/training/post_sft_staging.py" \
     --from-file=stage-input.json="$stage_input" --dry-run=client -o json | \
     python3 -c 'import json,sys; value=json.load(sys.stdin); value["immutable"]=True; json.dump(value,sys.stdout)'
@@ -54,7 +55,7 @@ case "$MODE" in
     cast_receipt=$3
     cast_manifest=$4
     test "$(kubectl -n fleet-train-jobs get rayjob ft-run-29f2bedf -o jsonpath='{.status.jobStatus}')" = SUCCEEDED
-    test "$(kubectl -n fleet-train-jobs get job chris-cyber-qwen36-sft-bf16-cast-v3 -o jsonpath='{.status.conditions[?(@.type=="Complete")].status}')" = True
+    test "$(kubectl -n fleet-train-jobs get job chris-cyber-qwen36-sft-bf16-cast-v4 -o jsonpath='{.status.conditions[?(@.type=="Complete")].status}')" = True
     require_all_absent
     PYTHONPATH="$ROOT" uv run python -m training.post_sft_staging validate-bundle \
       --plan "$PLAN" --root "$ROOT" >/dev/null

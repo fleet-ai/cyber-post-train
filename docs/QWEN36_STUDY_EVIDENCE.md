@@ -180,16 +180,24 @@ served.
 
 A reviewed, create-only CPU conversion rail targets a new SFS path. The immutable v2 attempt
 failed before reading model bytes because Kubernetes briefly returned an empty resolved-image
-identity; its terminal Pod later showed the exact frozen digest. The v3 successor retries only
-that missing field for a bounded 12 observations and still fails immediately on any non-empty
-wrong identity. It will verify the complete
+identity; its terminal Pod later showed the exact frozen digest. V3 (UID
+`0c451efc-b0ac-44a0-a889-88d0ad56c390`) proved the bounded retry and exact image digest, then
+failed closed before casting when its whole-directory base scan reached unreadable, non-inference
+Hugging Face `.cache/` metadata. It created no final policy or terminal receipt and is preserved.
+V4 retains the fail-closed identity rule and signs only the exact inference surface: 15 locked base
+shards plus index and ten exact serving sidecars. It explicitly excludes `.cache/` without
+traversal, records five reviewed non-model controls, rejects symlinks and all unknown top-level
+entries, and still fails on any unreadable required artifact. Its scoped before/after manifests
+must match exactly. The producer, staging gate, and final assembler share one strict validator that
+reconstructs all 26 legal artifact rows and recomputes their counts, byte totals, per-file hashes,
+index/sidecar bindings, and 15-shard aggregate. It will verify the complete
 raw manifest, cast all 1,184 trained tensors into bounded BF16 shards, restore the 15 missing MTP
 tensors bit-identically from the exact frozen BF16 base, and reopen all 1,199 outputs. Per-tensor
 hashes distinguish trained casts from **frozen base auxiliary-head restoration**. MTP is
 inference-inert because the matched serving registration has no speculative-decoding arguments.
 The rail binds source, base, destination, code, command, image, Job/Pod and immutable ConfigMap;
-the base's complete before/after manifests must match and its live weight digest must equal the
-signed model lock.
+the base's exact inference-surface before/after manifests must match and its live weights, index,
+and serving sidecars must equal the signed model lock and plan.
 No successful cast and no post-SFT evaluation has launched.
 
 Evidence: [`post-SFT plan`](POST_SFT_EVALUATION.md),
