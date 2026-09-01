@@ -74,6 +74,48 @@ run the exact command with `--submit`. Do not scale past one task until its
 session reaches a terminal state, the verifier executes, and the provenance
 receipt confirms the expected harness and model revisions.
 
+### Train-only prompt-curriculum pilot
+
+`prompt_curriculum.py` prepares (but deliberately does not create or launch) a
+small reward-acquisition screen for Qwen3.6. The frozen v1 plan selects two
+different application families that each produced four valid, authoritative
+zero-reward outcomes in the training-only calibration snapshot. Each task gets
+one four-member task-group dry run: the exact source prompt plus three
+cumulative, generic process-cue levels. Runtime data, atoms, environment,
+verifier, flags, model, Qwen Code harness, and task-facing tools remain fixed.
+
+The offline gate proves the split and cited outcome identities without reading
+prompt or trace bodies:
+
+```bash
+uv run python -m evals.fleet.prompt_curriculum validate \
+  --config evals/fleet/configs/qwen36-27b-prompt-curriculum-pilot-v1.json \
+  --split configs/data/fleet-a62-task-split-v1.json \
+  --campaign-state /private/path/to/campaign-state.json
+```
+
+Live preparation additionally requires a Fleet-team credential. It performs
+read-only exact-version hydration, requires an integer-versioned Artifact
+Registry task-graph locator, and writes one private task-group payload plus a
+prompt-free hash receipt per task beneath an ignored, mode-0700 output root.
+Use a `results/` destination. Existing output is never replaced.
+
+```bash
+uv run python -m evals.fleet.prompt_curriculum prepare \
+  --config evals/fleet/configs/qwen36-27b-prompt-curriculum-pilot-v1.json \
+  --split configs/data/fleet-a62-task-split-v1.json \
+  --campaign-state /private/path/to/campaign-state.json \
+  --out-dir results/qwen36-prompt-curriculum-pilot-v1
+```
+
+This command makes no POST request. Before a later create-once task-group
+operation or paid run, reviewers must re-hydrate every created member and prove
+that its environment/data/runtime-seed/verifier bindings match the source,
+confirm no prior receipt already owns the exact signature, and repeat the Fleet
+team preflight. Each eventual job is exactly four `pass_k=1` sessions, below
+the six-session cap. The selection rule is the least revealing level whose
+measured Qwen success rate falls in the predeclared 20–70% interval.
+
 ### Self-hosted exact-harness canary
 
 `self_hosted.py` is the non-substituting route for the same official Qwen Code

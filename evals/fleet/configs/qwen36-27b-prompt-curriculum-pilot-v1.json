@@ -1,0 +1,134 @@
+{
+  "schema_version": "fleet-qwen-code-prompt-curriculum-plan-v1",
+  "campaign_id": "chris-cyber-q36-prompt-curriculum-pilot-v1",
+  "study_role": "train_only_prompt_reward_acquisition_screen",
+  "project_id": "63d6fda8-48c4-4726-9ec3-d1028f2c47f5",
+  "split_manifest_digest": "sha256:fb09668f8de77e6baee37dc1e3162a7617ca9a0a450da9ca53422c17bfbc942a",
+  "baseline_campaign": {
+    "campaign_id": "chris-cyber-q36-qcode-train-cal-k4-local-v1",
+    "receipt_sha256": "sha256:f4f3655645bfcca14bb623bd6b127fecd2aaab6f4b3e2ea8f2582b422d5ccc00",
+    "state_sha256": "sha256:1d0b09eb64eeee1b1f7d8f598dce717630738777163bb2b1f1c59918b1b83379",
+    "completed_attempts_at_snapshot": 32
+  },
+  "model": {
+    "repository": "Qwen/Qwen3.6-27B",
+    "revision": "6a9e13bd6fc8f0983b9b99948120bc37f49c13e9",
+    "served_id": "qwen3-6-27b-cyber-baseline",
+    "weights_manifest_sha256": "sha256:14ad10368de9b9e5974ff12a4b70ea7884194b58e670177bbac79daeb81f16b9",
+    "tokenizer_revision": "sha256:27f02770d03b60343350ad948bf1065673968c60274f1e34f4afaed16940a1ea",
+    "chat_template_revision": "sha256:e84f32a23fdda27689f868aa4a1a5621f41133e51a48d7f3efcbea2839574259"
+  },
+  "harness": {
+    "name": "qwen_code",
+    "version": "0.22.3",
+    "source_commit": "09825973e7d3c3fd07e17909c396aa62f48ce51f",
+    "max_model_requests": 600,
+    "timeout_seconds": 7200
+  },
+  "execution": {
+    "pass_k": 1,
+    "max_concurrent": 1,
+    "required_task_tools": [
+      "bash",
+      "submit_report"
+    ],
+    "training_data_eligible": false
+  },
+  "target_success_rate": {
+    "minimum": 0.2,
+    "maximum": 0.7,
+    "selection": "least_revealing_in_band"
+  },
+  "variants": [
+    {
+      "id": "level-0",
+      "cue_ids": []
+    },
+    {
+      "id": "level-1",
+      "cue_ids": [
+        "bounded-surface-map"
+      ]
+    },
+    {
+      "id": "level-2",
+      "cue_ids": [
+        "bounded-surface-map",
+        "boundary-comparison"
+      ]
+    },
+    {
+      "id": "level-3",
+      "cue_ids": [
+        "bounded-surface-map",
+        "boundary-comparison",
+        "evidence-to-report"
+      ]
+    }
+  ],
+  "tasks": [
+    {
+      "family": "current",
+      "task_key": "cysec1-2-current-gen_blackbox-251f25f9d3de08f3da6c9184__blackbox_ctf_v1",
+      "task_version_id": "25b185c5-6aee-479d-97ba-d94ed9df1f42",
+      "task_version": "6",
+      "environment_version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+      "env_key": "cysec1-2-current-gen",
+      "env_version": "v0.0.3",
+      "data_key": "commercial",
+      "data_version": "v0.0.9",
+      "baseline_evidence": {
+        "attempts": 4,
+        "positive_rewards": 0,
+        "classification": "valid_model_outcomes"
+      },
+      "source_receipt": {
+        "task_key": "cysec1-2-current-gen_blackbox-251f25f9d3de08f3da6c9184__blackbox_ctf_v1",
+        "env_key": "cysec1-2-current-gen",
+        "env_version": "v0.0.3",
+        "data_key": "commercial",
+        "data_version": "v0.0.9",
+        "prompt_sha256": "sha256:61bcc61236247c7bda0146ca95767e6ec1e433c81d4ae29177c80ca6abef1fd3",
+        "env_variables_sha256": "sha256:099f302d66fa4f0f66890968df0ae7c76a919905e58c2179f170acb788e97a73",
+        "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "runtime_seed_content_sha256": "2326cbaf5af71b7ca34543f2d331f0c3ae04771617d3d04c414065d63861af78",
+        "verifier_id": "ec403c0f-f687-46d4-9d1d-80c2de51a803",
+        "verifier_version_id": "f76e563f-330f-4b7d-84eb-7a33791a288f",
+        "verifier_version": 1,
+        "verifier_sha256": "40d57d336a53f81ecf20d0fea02b7864359a55a386cfc437713f58b9890500ef"
+      }
+    },
+    {
+      "family": "fakelook",
+      "task_key": "cysec1-2-fakelook-gen_blackbox-2bd5f9fdee284564d8ce5ea4__blackbox_ctf_v1",
+      "task_version_id": "25afa659-5e00-4c5a-9ad4-39779b59c5ef",
+      "task_version": "20",
+      "environment_version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+      "env_key": "cysec1-2-fakelook-gen",
+      "env_version": "v0.0.3",
+      "data_key": "fakelook-cyber-gen",
+      "data_version": "v0.0.2",
+      "baseline_evidence": {
+        "attempts": 4,
+        "positive_rewards": 0,
+        "classification": "valid_model_outcomes"
+      },
+      "source_receipt": {
+        "task_key": "cysec1-2-fakelook-gen_blackbox-2bd5f9fdee284564d8ce5ea4__blackbox_ctf_v1",
+        "env_key": "cysec1-2-fakelook-gen",
+        "env_version": "v0.0.3",
+        "data_key": "fakelook-cyber-gen",
+        "data_version": "v0.0.2",
+        "prompt_sha256": "sha256:399858ca5eacbef7d3a4079c8dd966419e87aa8e303fda34e1964528e05f1559",
+        "env_variables_sha256": "sha256:1544cabf6b73311485d4d9ea90447df092cbdf847913cbe9361fcbced1178beb",
+        "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "runtime_seed_content_sha256": "8bbcdf1ba88a948107f107295dad37eeb59e68ff8fcbf1e6f00c3c9dd33fdae0",
+        "verifier_id": "3e61bc15-e19b-43b1-abb6-4285ddd3ac36",
+        "verifier_version_id": "3e606747-2a59-4369-b97c-132868e0d4ac",
+        "verifier_version": 1,
+        "verifier_sha256": "3520b5218ee7b46cf7d1e910a0f59a593009ce95eef7c947ae1ecf6af6638a24"
+      }
+    }
+  ],
+  "plan_sha256": "sha256:d594eb1b0eb3251c0a13614870e8616316dda54cfd7fc59ac17da08b2a94bdaa"
+}
