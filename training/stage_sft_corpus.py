@@ -364,9 +364,7 @@ def build_stage(
         source_job_id = str(source.get("job_id") or "")
         if source_job_id:
             source_job_ids.add(source_job_id)
-        environment = (
-            row.get("environment") if isinstance(row.get("environment"), Mapping) else {}
-        )
+        environment = row.get("environment") if isinstance(row.get("environment"), Mapping) else {}
         messages = row.get("messages")
         env_key = str(environment.get("env_key") or "")
         if not session_id or not task_key or not env_key or not isinstance(messages, list):
@@ -410,29 +408,31 @@ def build_stage(
             for position, message in enumerate(staged_messages):
                 role = str(message.get("role") or "")
                 tool_calls = message.get("tool_calls")
-                rows_by_env[env_key].append({
-                    "session_id": staged_session_id,
-                    "message_id": f"{session_id}:{position}",
-                    "position": position,
-                    "task_key": task_key,
-                    "model": str(source.get("model") or ""),
-                    "job_id": corpus_job_id or source_job_id,
-                    "attempt": 0,
-                    "status": str(row.get("outcome", {}).get("status") or "completed"),
-                    "team_id": team_id,
-                    "role": role,
-                    "content": _text(message.get("content")),
-                    "tool_calls": (
-                        json.dumps(tool_calls, ensure_ascii=False, sort_keys=True)
-                        if tool_calls
-                        else None
-                    ),
-                    "tool_call_id": _text(message.get("tool_call_id")),
-                    "tokens": None,
-                    "generated_tokens": None,
-                    "session_created_at": "",
-                    "message_created_at": "",
-                })
+                rows_by_env[env_key].append(
+                    {
+                        "session_id": staged_session_id,
+                        "message_id": f"{session_id}:{position}",
+                        "position": position,
+                        "task_key": task_key,
+                        "model": str(source.get("model") or ""),
+                        "job_id": corpus_job_id or source_job_id,
+                        "attempt": 0,
+                        "status": str(row.get("outcome", {}).get("status") or "completed"),
+                        "team_id": team_id,
+                        "role": role,
+                        "content": _text(message.get("content")),
+                        "tool_calls": (
+                            json.dumps(tool_calls, ensure_ascii=False, sort_keys=True)
+                            if tool_calls
+                            else None
+                        ),
+                        "tool_call_id": _text(message.get("tool_call_id")),
+                        "tokens": None,
+                        "generated_tokens": None,
+                        "session_created_at": "",
+                        "message_created_at": "",
+                    }
+                )
 
     if not source_sessions:
         raise ValueError("no SFT-eligible successful trajectories")
@@ -536,9 +536,7 @@ def main() -> None:
     tokenizer_identity = None
     if args.tokenizer:
         if not args.tokenizer_revision or args.tokenizer_model_lock is None:
-            parser.error(
-                "--tokenizer requires --tokenizer-revision and --tokenizer-model-lock"
-            )
+            parser.error("--tokenizer requires --tokenizer-revision and --tokenizer-model-lock")
         from transformers import AutoTokenizer
 
         tokenizer = AutoTokenizer.from_pretrained(

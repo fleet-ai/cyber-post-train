@@ -44,10 +44,10 @@
   "staging_plan": {
     "stage_job_name": "chris-cyber-qwen38-stage-1d4bf0f2",
     "stage_job_present": false,
-    "stage_manifest_sha256": "sha256:60e9a99449437413febec987cb6ad614a857cec3e51350cb17d8e22486a2d40d",
+    "stage_manifest_sha256": "sha256:29613384ab6026ea17511d3aca23918e58c2420df180a42ce3a0ea19cb8a3ca2",
     "canonical_link_job_name": "chris-cyber-qwen38-canonical-link",
     "canonical_link_job_present": false,
-    "canonical_link_manifest_sha256": "sha256:dc93dfb42f1e844a9c6a8d7ee5311eade527a3c00e9b5cc0262764e6ed80e7a6",
+    "canonical_link_manifest_sha256": "sha256:367b2db18940f38a132a7c344e0ab00e5bcec33e03e46311b578f7802d3997bf",
     "duplicate_safety": [
       "fixed create-once Kubernetes names",
       "suspended queue-managed plans",
@@ -64,7 +64,7 @@
     "source_job_id": "a62dd51f-a52b-4941-8207-4679e4b25b51",
     "source_trajectories_sha256": "sha256:f5931f14182a8fa8fc41aae6435516f19dc2a5481215de57c95a46ea4b151c7d",
     "stage_manifest_sha256": "sha256:95a4f1293fe3d964e0b046754feb05fec268a15aa1623f87dfc30ea1282bbb80",
-    "builder_sha256": "sha256:1904e9b89ba32d21a0e6f7ee97565f9da3724cf1eff08ea46c25e6628f991cb4",
+    "builder_sha256": "sha256:f6a68697d6290c976ce0a62da4a053ebdcb4d214196c9b662553eec6a0339d6f",
     "included_splits": [
       "train"
     ],
@@ -212,5 +212,5 @@
     "external_benchmark_data_used": false,
     "sealed_benchmark_data_used": false
   },
-  "receipt_sha256": "sha256:164c951077abaff4d03e1a84a1968db8934813b92bad9fb7515c3625aaffc8e3"
+  "receipt_sha256": "sha256:f4338f36f0d19a971d3c1d2a2a432ace9da23b9824a11b2cfa48310b7cf9d14d"
 }

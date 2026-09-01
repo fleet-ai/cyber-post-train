@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import ast
+import hashlib
 import json
 from pathlib import Path
 
+import pytest
 import yaml
 
 from training.io import digest_json, file_sha256
@@ -14,9 +17,7 @@ MODEL_LOCK = ROOT / "configs/models/qwen38-27b-1d4bf0f2.lock.json"
 ADAPTER = ROOT / "training/configs/models/qwen38-27b.json"
 Q38_SFT_GATE = ROOT / "configs/runs/qwen38-27b-sft-capability-gate.template.json"
 Q38_SFT_FULL = ROOT / "configs/runs/qwen38-27b-sft-full.template.json"
-Q38_RL_CANARY = (
-    ROOT / "configs/runs/qwen38-27b-native-rl-reward-acquisition-canary.template.json"
-)
+Q38_RL_CANARY = ROOT / "configs/runs/qwen38-27b-native-rl-reward-acquisition-canary.template.json"
 Q38_RL_FULL = ROOT / "configs/runs/qwen38-27b-rl-base-full.template.json"
 Q36_SFT_GATE = ROOT / "configs/runs/qwen36-27b-sft-smoke.json"
 Q36_SFT_FULL = ROOT / "configs/runs/qwen36-27b-sft-full.json"
@@ -24,12 +25,101 @@ SPLIT = ROOT / "configs/data/fleet-a62-task-split-v1.json"
 STAGE_JOB = ROOT / "cluster/jobs/chris-cyber-qwen38-stage-1d4bf0f2.yaml"
 LINK_JOB = ROOT / "cluster/jobs/chris-cyber-qwen38-canonical-link.yaml"
 READINESS = ROOT / "configs/qualification/qwen38-27b-readiness-2026-09-01-v2.json"
+EXPECTED_WEIGHT_MANIFEST = "06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352"
+EXPECTED_WEIGHT_BYTES = 55_563_006_776
+EXPECTED_SMALL_FILES = {
+    "LICENSE": "bbedc3fda3305820b977265f01b8619d87570a6739de3a5582c3464840f1e57a",
+    "chat_template.jinja": "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+    "config.json": "191e0af232104ed8b65258cf3fb2b842e288008baca7633c11b82a1ac7203aab",
+    "generation_config.json": "e70c136c1b78ddc1fb0905bac8e733a4dc448d4f852a5dd75143fffc70be550e",
+    "merges.txt": "a9d356d7bdf1ef4949e3e748e95b8e10ad9d4e2e838eddc38a0a7b6b94d1db8d",
+    "model.safetensors.index.json": (
+        "77042094076611b69791a610065f28b7013b8c621795fa86ddccc8bac7d1b9df"
+    ),
+    "preprocessor_config.json": "27225450ac9c6529872ee1924fcb0962ff5634834f817040f444118116f4e516",
+    "tokenizer.json": "0997f410c57a1f4e53b09e4be8f4a172d90edd9564368fb0847030937229b9f3",
+    "tokenizer_config.json": "b11349aafa7cdc6a320767cf7ceb29ed82f7eda5d65e8e0819e76f0ce947bf27",
+    "video_preprocessor_config.json": (
+        "7768af27c1fafa9cc9011c1dc20067e03f8915e03b63504550e11d5066986d13"
+    ),
+    "vocab.json": "ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003",
+}
 
 
 def _read(path: Path) -> dict:
     value = json.loads(path.read_text())
     assert isinstance(value, dict)
     return value
+
+
+def _verification_namespace(script: str) -> dict:
+    tree = ast.parse(script)
+    selected = [
+        node
+        for node in tree.body
+        if isinstance(node, (ast.Import, ast.ImportFrom, ast.FunctionDef))
+        or (
+            isinstance(node, ast.Assign)
+            and any(
+                isinstance(target, ast.Name) and target.id == "SMALL_FILES"
+                for target in node.targets
+            )
+        )
+    ]
+    namespace: dict = {}
+    exec(compile(ast.Module(body=selected, type_ignores=[]), "<job-verifier>", "exec"), namespace)
+    return namespace
+
+
+def _stage_verifier_script() -> str:
+    script = yaml.safe_load(STAGE_JOB.read_text())["spec"]["template"]["spec"]["containers"][0][
+        "args"
+    ][0]
+    marker = (
+        'python - "$candidate" "$revision" "$expected_manifest" '
+        '"$expected_bytes" "$already_promoted" <<\'PY\'\n'
+    )
+    return script.split(marker, 1)[1].split("\nPY\n", 1)[0]
+
+
+def _link_verifier_script() -> str:
+    return yaml.safe_load(LINK_JOB.read_text())["spec"]["template"]["spec"]["containers"][0][
+        "args"
+    ][0]
+
+
+def _write_tiny_checkpoint(root: Path) -> tuple[str, int, dict[str, str]]:
+    shards = []
+    for index in range(1, 19):
+        name = f"model-{index:05d}-of-00018.safetensors"
+        payload = f"shard-{index}".encode()
+        (root / name).write_bytes(payload)
+        shards.append(
+            {"path": name, "size": len(payload), "sha256": hashlib.sha256(payload).hexdigest()}
+        )
+    sidecars = {"config.json": hashlib.sha256(b"config").hexdigest()}
+    (root / "config.json").write_bytes(b"config")
+    (root / "source-tree.json").write_text(
+        json.dumps({"revision": "test-revision", "shards": shards}, sort_keys=True)
+    )
+    canonical = json.dumps(shards, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(canonical).hexdigest(), sum(row["size"] for row in shards), sidecars
+
+
+def _write_tiny_lock(
+    root: Path, manifest: str, verified_bytes: int, sidecars: dict[str, str]
+) -> dict:
+    lock = {
+        "schema": "cyber_post_train_checkpoint_lock_v1",
+        "repo": "Qwen/Qwen3.8-27B",
+        "revision": "test-revision",
+        "weights_manifest_sha256": "sha256:" + manifest,
+        "verified_shards": 18,
+        "verified_bytes": verified_bytes,
+        "small_file_sha256": sidecars,
+    }
+    (root / ".cyber-post-train-lock.json").write_text(json.dumps(lock))
+    return lock
 
 
 def test_exact_model_lock_adapter_and_qualification_agree() -> None:
@@ -106,7 +196,10 @@ def test_model_staging_is_cpu_only_queue_safe_and_not_submitted() -> None:
         "expected_manifest=06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352"
         in stage_script
     )
-    assert 'assert len(shards) == 18' in stage_script
+    assert "expected_bytes=55563006776" in stage_script
+    assert "hashlib.sha256(canonical).hexdigest() == expected_manifest" in stage_script
+    assert '"verified_bytes": expected_bytes' in stage_script
+    assert "assert len(shards) == 18" in stage_script
     assert '"verified_shards": 18' in stage_script
     assert 'hf download "$repo" "${files[@]}"' in stage_script
     assert "assert actual_paths == expected_paths" in stage_script
@@ -115,8 +208,61 @@ def test_model_staging_is_cpu_only_queue_safe_and_not_submitted() -> None:
     link_script = link["spec"]["template"]["spec"]["containers"][0]["args"][0]
     assert 'target = Path("/mnt/sfs/models/qwen3.8-27b")' in link_script
     assert 'hashlib.file_digest(handle, "sha256")' in link_script
+    assert f'expected_manifest = "{EXPECTED_WEIGHT_MANIFEST}"' in link_script
+    assert f"expected_bytes = {EXPECTED_WEIGHT_BYTES}" in link_script
+    assert '"schema": "cyber_post_train_checkpoint_lock_v1"' in link_script
+    assert '"verified_shards": 18' in link_script
+    assert '"verified_bytes": expected_bytes' in link_script
+    assert "assert lock == expected_lock" in link_script
     assert "assert actual_paths == expected_paths" in link_script
     assert "refusing to replace existing canonical path" in link_script
+    assert _verification_namespace(_stage_verifier_script())["SMALL_FILES"] == EXPECTED_SMALL_FILES
+    assert _verification_namespace(link_script)["SMALL_FILES"] == EXPECTED_SMALL_FILES
+
+
+@pytest.mark.parametrize("script_factory", [_stage_verifier_script, _link_verifier_script])
+def test_staging_verifiers_reject_jointly_tampered_tree_and_lock(
+    script_factory, tmp_path: Path
+) -> None:
+    namespace = _verification_namespace(script_factory())
+    manifest, verified_bytes, sidecars = _write_tiny_checkpoint(tmp_path)
+    namespace["SMALL_FILES"] = sidecars
+    _write_tiny_lock(tmp_path, manifest, verified_bytes, sidecars)
+    namespace["verify_checkpoint"](tmp_path, "test-revision", manifest, verified_bytes)
+
+    shard = tmp_path / "model-00001-of-00018.safetensors"
+    shard.write_bytes(b"jointly-tampered-shard")
+    tree = json.loads((tmp_path / "source-tree.json").read_text())
+    tree["shards"][0]["size"] = shard.stat().st_size
+    tree["shards"][0]["sha256"] = hashlib.sha256(shard.read_bytes()).hexdigest()
+    (tmp_path / "source-tree.json").write_text(json.dumps(tree, sort_keys=True))
+    tampered_manifest = hashlib.sha256(
+        json.dumps(tree["shards"], sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    _write_tiny_lock(
+        tmp_path, tampered_manifest, sum(row["size"] for row in tree["shards"]), sidecars
+    )
+
+    with pytest.raises(AssertionError):
+        namespace["verify_checkpoint"](tmp_path, "test-revision", manifest, verified_bytes)
+
+
+@pytest.mark.parametrize("script_factory", [_stage_verifier_script, _link_verifier_script])
+def test_staging_verifiers_reject_jointly_tampered_sidecar_and_lock(
+    script_factory, tmp_path: Path
+) -> None:
+    namespace = _verification_namespace(script_factory())
+    manifest, verified_bytes, sidecars = _write_tiny_checkpoint(tmp_path)
+    namespace["SMALL_FILES"] = sidecars
+    _write_tiny_lock(tmp_path, manifest, verified_bytes, sidecars)
+    namespace["verify_checkpoint"](tmp_path, "test-revision", manifest, verified_bytes)
+
+    (tmp_path / "config.json").write_bytes(b"jointly-tampered-sidecar")
+    tampered_sidecars = {"config.json": hashlib.sha256(b"jointly-tampered-sidecar").hexdigest()}
+    _write_tiny_lock(tmp_path, manifest, verified_bytes, tampered_sidecars)
+
+    with pytest.raises(AssertionError):
+        namespace["verify_checkpoint"](tmp_path, "test-revision", manifest, verified_bytes)
 
 
 def test_qwen38_sft_templates_reuse_science_but_require_new_token_windows() -> None:
@@ -273,10 +419,6 @@ def test_readiness_snapshot_is_self_digested_and_remains_fail_closed() -> None:
         "post_step_eval": True,
     }
     assert receipt["staging_plan"]["stage_manifest_sha256"] == file_sha256(STAGE_JOB)
-    assert receipt["staging_plan"]["canonical_link_manifest_sha256"] == file_sha256(
-        LINK_JOB
-    )
-    assert receipt["recommended_first_paid_run"]["template_sha256"] == file_sha256(
-        Q38_SFT_GATE
-    )
+    assert receipt["staging_plan"]["canonical_link_manifest_sha256"] == file_sha256(LINK_JOB)
+    assert receipt["recommended_first_paid_run"]["template_sha256"] == file_sha256(Q38_SFT_GATE)
     assert all(value is False for value in receipt["mutation_attestation"].values())
