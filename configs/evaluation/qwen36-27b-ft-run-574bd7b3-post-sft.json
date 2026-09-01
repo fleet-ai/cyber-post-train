@@ -204,11 +204,11 @@
       "schema": "cyber_post_sft_kubernetes_evidence_contract_v1",
       "job_labels": {
         "cyber-post-train.fleet.ai/owner": "chris",
-        "cyber-post-train.fleet.ai/experiment": "qwen36-base-artifact-inspect-6a9e13bd-v1"
+        "cyber-post-train.fleet.ai/experiment": "qwen36-base-artifact-inspect-6a9e13bd-v2"
       },
       "pod_labels": {
         "cyber-post-train.fleet.ai/owner": "chris",
-        "cyber-post-train.fleet.ai/experiment": "qwen36-base-artifact-inspect-6a9e13bd-v1"
+        "cyber-post-train.fleet.ai/experiment": "qwen36-base-artifact-inspect-6a9e13bd-v2"
       },
       "job": {
         "backoffLimit": 0,
@@ -217,14 +217,14 @@
       },
       "pod_spec": {
         "restartPolicy": "Never",
-        "serviceAccountName": "chris-cyber-qwen36-base-artifact-observer-v1",
+        "serviceAccountName": "chris-cyber-qwen36-base-artifact-observer-v2",
         "nodeSelector": {"workload": "fleetai-training-ng-cpu"},
         "tolerations": [
           {"effect": "NoSchedule", "key": "workload", "operator": "Equal", "value": "fleetai-training-ng-cpu"}
         ],
         "container": {
           "name": "inspect",
-          "image": "lmsysorg/sglang@sha256:febfb971c7352570fc445c466ebd6ffc9d896024958e544a60f2137fd85856b1",
+          "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train:q36-torchgdn-6db8d0c9@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
           "command": ["python3", "-m", "evals.webexploitbench.post_sft_evidence"],
           "args": ["inspect-base-artifact", "--base-root", "/models/qwen3.6-27b/6a9e13bd6fc8f0983b9b99948120bc37f49c13e9", "--plan", "/bundle/post-sft-plan.json", "--output", "-"],
           "env": [
@@ -249,14 +249,14 @@
             {"key": "training_io.py", "path": "training/io.py"},
             {"key": "training_post_sft_artifacts.py", "path": "training/post_sft_artifacts.py"},
             {"key": "post-sft-plan.json", "path": "post-sft-plan.json"}
-          ], "name": "chris-cyber-qwen36-base-artifact-inspect-6a9e13bd-v1"}, "name": "bundle"},
+          ], "name": "chris-cyber-qwen36-base-artifact-inspect-6a9e13bd-v2"}, "name": "bundle"},
           {"name": "models", "persistentVolumeClaim": {"claimName": "hf-cache-shared", "readOnly": true}}
         ]
       },
       "config_map_code_sha256": {
         "evals/__init__.py": "sha256:d975601b8c65125381967ad8cf17dbc9b87ed383f7cf626791b288dc3132aa9b",
         "evals/webexploitbench/__init__.py": "sha256:364a7569bf22697f0fe54558538e9e20780d5a8cd1721c9aaa4e3a996b795b1d",
-        "evals/webexploitbench/post_sft_evidence.py": "sha256:4b8838c0211a2a8d8d29018fbd2ef1c35fb652119ea72f19fa1d3d32355bb22f",
+        "evals/webexploitbench/post_sft_evidence.py": "sha256:19dc8ae3f222b14f6f417a454c6200199d4fbefc5d4d13c007540ff1d3632a57",
         "training/__init__.py": "sha256:85464634e1b48ac40c22bd57bc60fb67241bac402311c31eca7027afb491de68",
         "training/io.py": "sha256:7a0b734a4ab7fb8b702430094c58c72f19ac8fc7cc5e056eb8410267e6bfdfe3",
         "training/post_sft_artifacts.py": "sha256:c09555c61cb25ad5867cce80ed8bef0684734231b5708b1be892e75b9dd980eb"
