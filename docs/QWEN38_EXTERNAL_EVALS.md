@@ -53,4 +53,50 @@ Review found that the model lock read a nonexistent Hugging Face `lfs.sha256`
 field instead of the authoritative `lfs.oid`, so the launch was stopped before
 any terminal task result. The corrected weight-manifest digest is
 `sha256:06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352`;
-the successor uses the new v2 config, protocol, and run id.
+the successor used the v2 config, protocol, and run id.
+
+The v2 controller was launched under a transient terminal session and later
+disappeared while all 15 trials were still `planned` at CAGE's unchanged host
+memory gate. It produced zero model calls, events, resources, or terminal
+outcomes and had no durable exit receipt, so its exact terminating signal or
+actor cannot be reconstructed. It is permanently preserved as interrupted and
+unscored by
+`docs/evidence/webexploitbench/2026-09-01-qwen38-v2-interrupted-unscored.json`.
+It must never be resumed, scored, or reused.
+
+The v3 recovery changes only the single-use `run_id`; its protocol changes only
+the resulting experiment-config digest. `launch-qwen-recovery` revalidates that
+identity, the byte-identical v2 evidence, CAGE checkout, and local harness image
+before creating a detached supervisor. Recovery evidence is create-only. The
+supervisor first acquires a permanent single-owner receipt, then writes separate
+start and exit receipts; even a zero process exit
+is classified as unscored process evidence until the normal sealed evaluation
+result path proves a scientific outcome.
+
+The launch claim seals a deterministic manifest of every Python source file in
+the WebExploitBench evaluator package, including the module entry point, CLI,
+monitor, and recovery implementation. The detached child recomputes the full
+manifest before starting CAGE. Owner, start, and exit receipts carry validated
+self-digests and form a digest chain back to the launch claim. Every create-only
+write is synced in file-then-parent-directory order; a sync failure is a launch
+failure, not a warning.
+
+Dry-run preparation is unpaid and creates nothing:
+
+```bash
+python -m evals.webexploitbench \
+  --config evals/webexploitbench/configs/qwen38-27b-1d4bf0f2-level0-qwen-code-full-v3.json \
+  launch-qwen-recovery \
+  --cage-dir evals/webexploitbench/.workbench/CAGE \
+  --predecessor-config evals/webexploitbench/configs/qwen38-27b-1d4bf0f2-level0-qwen-code-full-v2.json \
+  --predecessor-protocol evals/webexploitbench/manifests/qwen38-27b-qwen-code-protocol-v2.json \
+  --protocol-manifest evals/webexploitbench/manifests/qwen38-27b-qwen-code-protocol-v3.json \
+  --incident-receipt docs/evidence/webexploitbench/2026-09-01-qwen38-v2-interrupted-unscored.json
+```
+
+An authorized operator may add `--execute` only after reviewing the dry-run and
+ensuring `FLEET_API_KEY` is present in the process environment. The credential
+is inherited in memory; it is never accepted as an argument or written into a
+claim, command, log setup, or supervisor receipt. Existing v3 run or recovery
+paths, any v2 evidence drift, and any config/protocol/image drift all fail
+closed. Do not invoke CAGE's raw `--resume` path.
