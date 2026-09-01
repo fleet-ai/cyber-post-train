@@ -12,6 +12,13 @@ configs; the corpus, split, reward and evaluation contracts do not depend on
 Qwen. The earlier GLM-5.2 path remains historical provenance, not the current
 optimizer source.
 
+The parallel Qwen3.8-27B qualification track is documented in
+[`docs/QWEN38_TRAINING_QUALIFICATION.md`](../docs/QWEN38_TRAINING_QUALIFICATION.md).
+Its adapter and SFT/RL templates exercise this model-swappable boundary, but
+remain fail-closed while the exact checkpoint is absent from the Training API
+catalog, its tokenizer-specific corpus is unbuilt, and reward calibration is
+not terminal-positive. A template is not launch authorization.
+
 ## Data flow
 
 ```text

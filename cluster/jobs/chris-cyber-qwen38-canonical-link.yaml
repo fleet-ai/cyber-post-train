@@ -1,0 +1,74 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: chris-cyber-qwen38-canonical-link
+  namespace: fleet-train-jobs
+  labels:
+    kueue.x-k8s.io/queue-name: training-lq
+    cyber-post-train.fleet.ai/owner: chris
+    cyber-post-train.fleet.ai/experiment: canonical-link-1d4bf0f2
+    cyber-post-train.fleet.ai/model: qwen38
+  annotations:
+    cyber-post-train.fleet.ai/model-revision: 1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0
+spec:
+  suspend: true
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 604800
+  template:
+    metadata:
+      labels:
+        cyber-post-train.fleet.ai/owner: chris
+        cyber-post-train.fleet.ai/experiment: canonical-link-1d4bf0f2
+        cyber-post-train.fleet.ai/model: qwen38
+    spec:
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: ghcr-pull
+      nodeSelector:
+        workload: fleetai-training-ng-cpu
+      tolerations:
+        - key: workload
+          operator: Equal
+          value: fleetai-training-ng-cpu
+          effect: NoSchedule
+      containers:
+        - name: link
+          image: ghcr.io/fleet-ai/miles-fleet/trainer@sha256:98920a4e25fadc3f31fafc18eff072313386edf5b352a23d13f4bb2d9e5f0a4c
+          command: ["python", "-c"]
+          args:
+            - |
+              import json
+              import os
+              from pathlib import Path
+
+              revision = "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
+              source = Path("/mnt/sfs/models/Qwen/Qwen3.8-27B") / revision
+              target = Path("/mnt/sfs/models/qwen3.8-27b")
+              lock = json.loads((source / ".cyber-post-train-lock.json").read_text())
+              assert lock["repo"] == "Qwen/Qwen3.8-27B"
+              assert lock["revision"] == revision
+              assert lock["weights_manifest_sha256"] == "sha256:06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352"
+              assert len(list(source.glob("*.safetensors"))) == 18
+              if target.is_symlink():
+                  assert target.resolve() == source.resolve()
+              elif target.exists():
+                  raise RuntimeError(f"refusing to replace existing canonical path: {target}")
+              else:
+                  os.symlink(source, target)
+              assert (target / "config.json").is_file()
+              assert len(list(target.glob("*.safetensors"))) == 18
+              print("CANONICAL_MODEL_PATH_READY", target, "revision", revision)
+          resources:
+            requests:
+              cpu: "1"
+              memory: 2Gi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+          volumeMounts:
+            - name: sfs
+              mountPath: /mnt/sfs
+      volumes:
+        - name: sfs
+          persistentVolumeClaim:
+            claimName: sfs-shared
