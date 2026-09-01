@@ -68,9 +68,7 @@ def _live_task(selected: dict) -> dict:
     selected["source_receipt"].update(
         {
             "prompt_sha256": self_hosted.sha256(prompt.encode()),
-            "env_variables_sha256": self_hosted.sha256(
-                self_hosted.canonical_json(env_variables)
-            ),
+            "env_variables_sha256": self_hosted.sha256(self_hosted.canonical_json(env_variables)),
             "output_json_schema_sha256": self_hosted.sha256(
                 self_hosted.canonical_json(output_schema)
             ),
@@ -106,9 +104,7 @@ def test_plan_selects_only_completed_zero_reward_train_tasks() -> None:
     rows = prompt_curriculum.validate_plan(plan, split, state)
     assert len(rows) == 2
     assert {row["family"] for row in rows} == {"current", "fakelook"}
-    train_ids = {
-        row["task_version_id"] for row in split["tasks"] if row["split"] == "train"
-    }
+    train_ids = {row["task_version_id"] for row in split["tasks"] if row["split"] == "train"}
     assert {row["task_version_id"] for row in rows} <= train_ids
 
 
@@ -116,28 +112,63 @@ def test_plan_rejects_any_sealed_task_version() -> None:
     plan, split = _json(PLAN), _json(SPLIT)
     sealed = next(row for row in split["tasks"] if row["split"] == "test")
     plan["tasks"][0].update(
-        {key: sealed[key] for key in (
-            "task_key",
-            "task_version_id",
-            "task_version",
-            "environment_version_id",
-            "env_key",
-            "env_version",
-            "data_key",
-            "data_version",
-        )}
+        {
+            key: sealed[key]
+            for key in (
+                "task_key",
+                "task_version_id",
+                "task_version",
+                "environment_version_id",
+                "env_key",
+                "env_version",
+                "data_key",
+                "data_version",
+            )
+        }
     )
     _seal(plan)
     with pytest.raises(ValueError, match="sealed dev/test"):
         prompt_curriculum.validate_plan(plan, split)
 
 
+def test_v1_plan_requires_exactly_two_tasks() -> None:
+    plan, split = _json(PLAN), _json(SPLIT)
+    plan["tasks"] = plan["tasks"][:1]
+    _seal(plan)
+    with pytest.raises(ValueError, match="exactly two"):
+        prompt_curriculum.validate_plan(plan, split)
+
+
+@pytest.mark.parametrize("score", [pytest.param(None, id="null"), float("nan"), False, True])
+def test_campaign_score_must_be_finite_numeric_exact_zero(score) -> None:
+    plan, split = _json(PLAN), _json(SPLIT)
+    state = _campaign_state(plan)
+    state["outcomes"][0]["score"] = score
+    plan["baseline_campaign"]["state_sha256"] = self_hosted.sha256(
+        self_hosted.canonical_json(state)
+    )
+    _seal(plan)
+    with pytest.raises(ValueError, match="incomplete or nonzero"):
+        prompt_curriculum.validate_plan(plan, split, state)
+
+
+def test_campaign_score_field_is_required() -> None:
+    plan, split = _json(PLAN), _json(SPLIT)
+    state = _campaign_state(plan)
+    state["outcomes"][0].pop("score")
+    plan["baseline_campaign"]["state_sha256"] = self_hosted.sha256(
+        self_hosted.canonical_json(state)
+    )
+    _seal(plan)
+    with pytest.raises(ValueError, match="incomplete or nonzero"):
+        prompt_curriculum.validate_plan(plan, split, state)
+
+
 def test_generic_ladder_is_cumulative_and_contains_no_forbidden_material() -> None:
     plan = _json(PLAN)
     prompt_curriculum.validate_generic_cues()
     rendered = [
-        prompt_curriculum.render_variant("base", row["cue_ids"])
-        for row in plan["variants"]
+        prompt_curriculum.render_variant("base", row["cue_ids"]) for row in plan["variants"]
     ]
     assert rendered[0] == "base"
     assert len(set(rendered)) == 4
@@ -172,3 +203,42 @@ def test_create_once_writer_refuses_duplicate_artifact(tmp_path: Path) -> None:
     prompt_curriculum._write_create_once(path, {"first": True})
     with pytest.raises(FileExistsError, match="refusing to replace"):
         prompt_curriculum._write_create_once(path, {"second": True})
+
+
+def test_prepare_is_get_only_and_never_calls_post(tmp_path: Path) -> None:
+    plan = _json(PLAN)
+    selected = copy.deepcopy(plan["tasks"])
+    tasks = {}
+    for row in selected:
+        tasks[row["task_key"]] = _live_task(row)
+
+    methods = []
+
+    class Client:
+        def request(self, method: str, url: str, **kwargs):
+            methods.append(method)
+            if url.endswith("/v1/account"):
+                body = {
+                    "team_name": "fleet",
+                    "team_id": self_hosted.FLEET_TEAM_ID,
+                }
+            else:
+                key = next(key for key in tasks if url.endswith(f"/v1/tasks/{key}"))
+                assert kwargs["params"] == {
+                    "version_id": next(
+                        row["task_version_id"] for row in selected if row["task_key"] == key
+                    )
+                }
+                body = tasks[key]
+            return type(
+                "Response",
+                (),
+                {"status_code": 200, "json": lambda self: body},
+            )()
+
+    summary = prompt_curriculum.prepare_live_dry_runs(
+        Client(), plan, selected, tmp_path / "prepared"
+    )
+    assert methods == ["GET", "GET", "GET"]
+    assert summary["task_group_create_performed"] is False
+    assert summary["paid_job_submitted"] is False

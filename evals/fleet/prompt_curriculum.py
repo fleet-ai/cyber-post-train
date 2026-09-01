@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import math
 import os
 import re
 import sys
@@ -154,18 +155,14 @@ def validate_plan(
         raise ValueError("prompt-curriculum variant ids drifted")
 
     train = {
-        row["task_version_id"]: row
-        for row in split.get("tasks", [])
-        if row.get("split") == "train"
+        row["task_version_id"]: row for row in split.get("tasks", []) if row.get("split") == "train"
     }
     sealed = {
-        row["task_version_id"]
-        for row in split.get("tasks", [])
-        if row.get("split") != "train"
+        row["task_version_id"] for row in split.get("tasks", []) if row.get("split") != "train"
     }
     selected = plan.get("tasks") or []
-    if not 2 <= len(selected) <= 3:
-        raise ValueError("prompt-curriculum pilot must select two or three tasks")
+    if len(selected) != 2:
+        raise ValueError("prompt-curriculum v1 pilot must select exactly two tasks")
     version_ids = [row.get("task_version_id") for row in selected]
     if len(version_ids) != len(set(version_ids)):
         raise ValueError("prompt-curriculum task versions must be unique")
@@ -222,19 +219,28 @@ def _validate_campaign_state(
         raise ValueError("baseline campaign planned-session count drifted")
     outcomes = state.get("outcomes") or []
     for task in selected:
-        rows = [
-            row for row in outcomes if row.get("task_version_id") == task["task_version_id"]
-        ]
+        rows = [row for row in outcomes if row.get("task_version_id") == task["task_version_id"]]
         if len(rows) != EXPECTED_BASELINE_ATTEMPTS:
             raise ValueError("selected task does not have four completed baseline attempts")
         if {row.get("attempt") for row in rows} != {1, 2, 3, 4}:
             raise ValueError("selected task baseline attempt identities drifted")
+
+        def exact_zero_score(row: dict[str, Any]) -> bool:
+            score = row.get("score")
+            return (
+                "score" in row
+                and not isinstance(score, bool)
+                and isinstance(score, (int, float))
+                and math.isfinite(score)
+                and float(score) == 0.0
+            )
+
         if any(
             row.get("task_key") != task["task_key"]
             or row.get("status") != "model_outcome"
             or row.get("agent_termination") != "completed"
             or row.get("session_ingest_status") != "completed"
-            or float(row.get("score") or 0) != 0
+            or not exact_zero_score(row)
             or not row.get("session_id")
             or not row.get("verifier_execution_id")
             for row in rows
@@ -339,8 +345,7 @@ def build_task_group_payload(
         "variant_count": len(members),
         "planned_sessions": len(members),
         "variant_prompt_sha256": {
-            member["label"]: self_hosted.sha256(member["prompt"].encode())
-            for member in members
+            member["label"]: self_hosted.sha256(member["prompt"].encode()) for member in members
         },
         "source_binding": live_binding,
         "registry_task_graph_source": registry_source,
