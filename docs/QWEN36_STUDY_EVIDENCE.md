@@ -1,7 +1,10 @@
 # Qwen3.6-27B cyber post-training study — living evidence report
 
-Last evidence observation: **2026-09-01 00:20 UTC**. Machine-readable snapshot:
-[`2026-08-31-state-v1.json`](evidence/qwen36-study/2026-08-31-state-v1.json).
+Last consolidated evidence observation: **2026-09-01 13:41 UTC**. The earlier
+machine-readable snapshot remains
+[`2026-08-31-state-v1.json`](evidence/qwen36-study/2026-08-31-state-v1.json);
+the sanitized overnight delta is
+[`OVERNIGHT_OPERATIONAL_STATE_2026-09-01.md`](OVERNIGHT_OPERATIONAL_STATE_2026-09-01.md).
 
 This report distinguishes **terminal results**, **operational gates** that prove
 plumbing but not capability, and **pending work**. Scheduler state can change
@@ -16,11 +19,17 @@ nothing here treats a queued job as completed.
 | WebExploitBench base | Terminal | 10/110 vulnerabilities: 9.09% micro pass@1, 0.0877 target-macro mean, 0 infrastructure-invalid targets. |
 | Fleet test20 base | Terminal, reconciled | 1/20 exact held-out task versions: 5.0% pass@1, 0 primary-evaluation infrastructure-invalid tasks. |
 | ExploitGym base pilot | Terminal, descriptive only | 0/5 valid outcomes. It is not a paired control because its two rebuilt harness images were not bit-identical. |
-| SFT | Training and raw export terminal; BF16 correction pending | `ft-run-574bd7b3` succeeded at step 318. Zero-step export `ft-run-29f2bedf` succeeded without an optimizer step but emitted FP32, so it is preserved and blocked from serving pending verified BF16 casting. |
+| SFT | Training/export terminal; serving parity proven | `ft-run-574bd7b3` succeeded at step 318. The later post-SFT registration and Ready/live parity receipts are bound by sanitized evidence. This proves served-artifact parity, not benchmark capability. |
 | Native Fleet RL gate | Operational terminal gate | `ft-run-98e50db3` completed real rollouts and one optimizer-path step, but every reward/advantage was zero and all episodes truncated. |
 | Native Fleet RL full | Pending | Chunked-binding successor `ft-run-0081ca94` is Suspended/Pending with 129 train and 10 dev versions. |
 | Verified Miles RL | Terminal operational gate | Canary 03 completed 8/8 authoritative rollouts, one optimizer iteration, and a durable checkpoint. Its all-zero rewards and gradients prove plumbing, not learning. |
-| Post-training evals | Not launched | There are no post-SFT or post-RL benchmark results yet. |
+| Post-training evals | Web infrastructure-invalid; ExploitGym measured active | The first post-SFT Web arm is not a score and its orphan cleanup is terminal. At 13:41 UTC, the paired ExploitGym Job had one ready/running Pod with zero restarts; it had no accepted terminal result. |
+
+The post-SFT serving-parity statement and current evaluation lifecycle above
+supersede the older pending language later in this living report. The exact
+incident, cleanup, successor gates, and time-bound ExploitGym observation are
+indexed in the overnight handoff; no sealed score or trace was inspected to
+make this update.
 
 ## Scientific question and controls
 
@@ -134,12 +143,13 @@ Five tasks cannot estimate capability, and the two pilot jobs used semantically
 equivalent but not bit-identical rebuilt images. Future pairs now have one
 independently verified linux/amd64 image:
 `ghcr.io/fleet-ai/cyber-post-train-exploitgym-control@sha256:466027a5b270e822acbba676ccd775f443e7ed897fdf2d5a3f824f776141e7a0`.
-No scored evaluation has launched from that rail.
+The later paired run is now active under that immutable-image rail; it has no
+accepted terminal result yet.
 
 Evidence: [`pilot`](evidence/exploitgym/2026-08-31-qwen36-pilot-v1.json) and
 [`control image`](evidence/exploitgym/2026-08-31-control-image-v1.json).
 
-## SFT: training and raw export complete; BF16 correction pending
+## SFT: training/export and serving parity complete
 
 `ft-run-574bd7b3` is **SUCCEEDED** under RayJob UID
 `fe0256e7-ba30-470d-abd9-b148cd3cdbbd`. It used config
@@ -203,7 +213,11 @@ exact 2,542,796,800-byte BF16 `lm_head.weight`. It produced neither final policy
 receipt and remains preserved. The create-only v5 successor raises only that bound to 3 GiB—the
 smallest whole-GiB limit above the exact largest tensor—while retaining the 8 GiB source-tensor
 memory bound and using entirely new resource, destination and evidence identities.
-No successful cast and no post-SFT evaluation has launched.
+These paragraphs preserve the failed conversion attempts that led to the final
+artifact. Later sanitized evidence binds a completed registration receipt and
+Ready/live parity receipt for the post-SFT route. The detailed producer and
+staging evidence remains restricted; the committed incident receipt exposes
+only its validated digests. No accepted post-SFT benchmark result exists.
 
 Evidence: [`post-SFT plan`](POST_SFT_EVALUATION.md),
 [`tokenizer gate`](evidence/post_sft/2026-08-31-tokenizer-equivalence.md), and
@@ -266,25 +280,34 @@ been invalid. The mismatch was caught and corrected before launch. The current
 plan now binds the Qwen Code 0.22.3 config, harness lock, terminal baseline
 receipt, 15-target set, budgets, CAGE/runtime image, prompt/verifier revisions,
 judge, tokenizer, and serving runtime through a fail-closed identity check.
-**No post-SFT WebExploitBench evaluation has launched.**
+The v1 post-SFT run launched but became infrastructure-invalid after one
+completed and one orphaned trial; it is not a scored evaluation. Its exact-run
+orphan was cleaned up without inspecting scores or traces. V2 is preview-only
+and blocked on credential rotation plus explicit approval.
 
-ExploitGym's immutable-image defect is fixed, but its paired renderer still
-awaits the SFT export and serving parity. It freezes the same five tasks, Qwen
-Code 0.22.3, dynamic graders, firewall, pass@1, budget, and counterbalanced arm
-order. The descriptive 0/5 pilot is not silently reused as the base arm.
+ExploitGym's immutable-image defect and serving-parity gates are closed. Its
+paired Job was measured active with one ready/running, zero-restart Pod at
+13:41 UTC. It freezes the same five tasks, Qwen Code 0.22.3, dynamic graders,
+firewall, pass@1, budget, and counterbalanced arm order. The descriptive 0/5
+pilot is not silently reused as the base arm, and active state is not a result.
 
 Fleet post-SFT must use the same twenty exact `eval_task_version_id` values,
 pass@1, harness, budgets, routes, and verifier bindings—not mutable task keys.
 
 Remaining gates, in order:
 
-1. Produce the full source and raw-FP32 export manifests.
-2. Run and verify the deterministic queued CPU FP32→BF16 cast, then stage those exact BF16 weights with exact base sidecars.
-3. Register with the same SGLang image/runtime and pass checkpoint, tokenizer, tool-call, and fixed-prompt/logit checks.
-4. Validate the WebExploitBench Qwen Code paired-identity receipt against the live post-SFT route.
-5. Launch paired WebExploitBench, ExploitGym, and Fleet test20 arms with symmetric failure classification.
-6. Let native full RL reach a terminal state; treat the successful Miles canary as an operational gate only until a reward-bearing run demonstrates learning signal.
-7. Export and evaluate any terminal RL checkpoint only through the same parity gates.
+1. Preserve the active ExploitGym Job until UID-bound terminal and downstream
+   acceptance evidence exist; do not inspect sealed outputs or launch a duplicate.
+2. Rotate the exposed credential and obtain explicit approval before the
+   preview-only WebExploitBench v2 successor; rerun its absent-root and runtime
+   identity gates immediately before any launch.
+3. Launch Fleet test20 post-SFT only through the same exact task-version,
+   harness, budget, route, and verifier bindings.
+4. Resolve native RL terminal state separately; treat the successful Miles
+   canary as an operational gate only until a reward-bearing run demonstrates
+   learning signal.
+5. Export and evaluate any terminal RL checkpoint only through the same parity
+   gates.
 
 ## Evidence index and limits
 

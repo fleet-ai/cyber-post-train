@@ -5,6 +5,16 @@ pilot. It consumes the exact prompt-free review plan produced by the merged
 preparation workflow. It does not publish source, create a task group, submit a
 job, or touch a Pipeline Lane.
 
+## Current deployment gate
+
+Owned consumer gates from PRs #75 and #79 are merged. Shared Theseus PR
+[#28555](https://github.com/fleet-ai/theseus/pull/28555) remains an open draft,
+so creation is still blocked. A later merge is insufficient by itself: first
+prove against the deployed public API that an exact-version read returns only
+the selected environment-version UUID and performs no mutable-parent fallback,
+then rerun the GET-only preflight and exhaustive duplicate scan. No task group,
+Registry source, Pipeline Lane, or paid job has been authorized by this state.
+
 ## Frozen experiment shape
 
 - exactly two train-only task families: `current` and `fakelook`;
