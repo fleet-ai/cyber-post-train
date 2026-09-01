@@ -8,6 +8,17 @@ tests a stronger, newer 27B model on Fleet-owned, non-test blackbox tasks before
 any full training allocation. It is a model/harness calibration, not yet a
 post-training result.
 
+## Current operational state
+
+**Proven:** v2 is terminal as an infrastructure incident and descriptive only.
+It retained one authoritative valid-zero outcome, left three attempts unresolved,
+never launched sixteen attempts, and observed no positive reward. Therefore the
+positive-reward training gate remains closed. **Pending:** v3 is prepared but
+was not submitted; cleanup, score recovery, rerun, and launch remain
+unauthorized. See the sanitized
+[`overnight handoff`](OVERNIGHT_OPERATIONAL_STATE_2026-09-01.md) and incident
+binding linked below.
+
 ## Frozen identity and protocol
 
 - Served model: `qwen3.8-27b`.

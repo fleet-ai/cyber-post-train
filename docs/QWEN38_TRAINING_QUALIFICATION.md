@@ -5,6 +5,18 @@ This is the launch plan for repeating the Qwen3.6 cyber post-training study with
 machine-readable source of truth is
 [`configs/qualification/qwen38-27b-v1.json`](../configs/qualification/qwen38-27b-v1.json).
 
+## Current operational state
+
+**Proven:** the exact train-only corpus is locally verified, the Training API
+catalog has no Qwen3.8 row, serving and training storage are distinct, and the
+Ready trainer candidate has not demonstrated Qwen3.8 forward/backward,
+optimizer, checkpoint, or export compatibility. **Pending:** the 55.6 GB model
+rematerialization, corpus staging, catalog registration, positive reward gate,
+and one-step capability run. Draft PR
+[#78](https://github.com/fleet-ai/cyber-post-train/pull/78) remains an unmerged,
+dry-run-only staging bridge and requires explicit transfer approval. See the
+[`sanitized overnight handoff`](OVERNIGHT_OPERATIONAL_STATE_2026-09-01.md).
+
 ## Current decision
 
 Qwen3.8-27B is an appropriate second student because it is the same dense

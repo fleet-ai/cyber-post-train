@@ -2,6 +2,13 @@
 
 ## State
 
+**Current operational classification:** v2 is proven infrastructure-interrupted
+and unscored; all 15 trials remained planned and no model call occurred. V3 is
+a frozen, single-use successor with merged durability and runtime-root gates,
+but only unpaid preview is authorized. It has not launched. The time-stamped,
+sanitized consolidation is
+[`OVERNIGHT_OPERATIONAL_STATE_2026-09-01.md`](OVERNIGHT_OPERATIONAL_STATE_2026-09-01.md).
+
 The exact base is `Qwen/Qwen3.8-27B` at revision
 `1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0`. The Fleet route
 `qwen3.8-27b` was observed Ready 1/1 with BF16 weights, tensor parallelism 1,
@@ -94,8 +101,9 @@ python -m evals.webexploitbench \
   --incident-receipt docs/evidence/webexploitbench/2026-09-01-qwen38-v2-interrupted-unscored.json
 ```
 
-An authorized operator may add `--execute` only after reviewing the dry-run and
-ensuring `FLEET_API_KEY` is present in the process environment. The credential
+An authorized operator may add `--execute` only after explicit launch approval,
+reviewing the dry-run, and ensuring `FLEET_API_KEY` is present in the process
+environment. The credential
 is inherited in memory; it is never accepted as an argument or written into a
 claim, command, log setup, or supervisor receipt. Existing v3 run or recovery
 paths, any v2 evidence drift, and any config/protocol/image drift all fail
