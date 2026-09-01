@@ -47,3 +47,10 @@ run root with the pinned local harness image. ExploitGym remains prepared but
 unlaunched until a post-training checkpoint exists, so its two arms can be
 counterbalanced and run close in time under one final protocol. A successful
 probe is an operational gate, not a capability result.
+
+The first WebExploitBench launch root is preserved as interrupted and unscored.
+Review found that the model lock read a nonexistent Hugging Face `lfs.sha256`
+field instead of the authoritative `lfs.oid`, so the launch was stopped before
+any terminal task result. The corrected weight-manifest digest is
+`sha256:06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352`;
+the successor uses the new v2 config, protocol, and run id.

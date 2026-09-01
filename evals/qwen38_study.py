@@ -19,10 +19,10 @@ Q36_WEB_CONFIG = ROOT / (
     "evals/webexploitbench/configs/qwen36-27b-6a9e13bd-level0-qwen-code-full.json"
 )
 Q38_WEB_CONFIG = ROOT / (
-    "evals/webexploitbench/configs/qwen38-27b-1d4bf0f2-level0-qwen-code-full.json"
+    "evals/webexploitbench/configs/qwen38-27b-1d4bf0f2-level0-qwen-code-full-v2.json"
 )
 Q36_WEB_PROTOCOL = ROOT / "evals/webexploitbench/manifests/qwen36-27b-qwen-code-protocol-v3.json"
-Q38_WEB_PROTOCOL = ROOT / "evals/webexploitbench/manifests/qwen38-27b-qwen-code-protocol-v1.json"
+Q38_WEB_PROTOCOL = ROOT / "evals/webexploitbench/manifests/qwen38-27b-qwen-code-protocol-v2.json"
 MODEL_LOCK = ROOT / "configs/models/qwen38-27b-1d4bf0f2.lock.json"
 SERVING_LOCK = ROOT / "evals/webexploitbench/serving/qwen38-27b-1d4bf0f2.lock.json"
 Q36_EXPLOITGYM = ROOT / "evals/exploitgym/configs/qwen36-27b-v1-pilot.json"
@@ -31,6 +31,7 @@ CONTROL_IMAGE = ROOT / "docs/evidence/exploitgym/2026-08-31-control-image-v1.jso
 
 MODEL = "qwen3.8-27b"
 REVISION = "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
+WEIGHTS_MANIFEST = "sha256:06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352"
 
 
 def _load(path: Path) -> dict[str, Any]:
@@ -84,6 +85,8 @@ def validate_static_controls() -> dict[str, Any]:
     selection = model_lock.get("selection") or {}
     if selection.get("benchmark_temporal_status") != "released_after_webexploitbench":
         raise ValueError("Qwen3.8 temporal caveat is missing")
+    if (model_lock.get("weights") or {}).get("manifest_sha256") != WEIGHTS_MANIFEST:
+        raise ValueError("Qwen3.8 weight-manifest binding drifted")
     tokenizer = model_lock.get("tokenizer") or {}
     if candidate_protocol.tokenizer_revision != tokenizer.get("manifest_sha256"):
         raise ValueError("Qwen3.8 tokenizer binding drifted")

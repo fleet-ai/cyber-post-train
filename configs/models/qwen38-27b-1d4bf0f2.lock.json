@@ -9,7 +9,7 @@
     "shards": 18,
     "bytes": 55563006776,
     "manifest_definition": "sha256 of canonical compact JSON array sorted by path; each item is {path,size,sha256} and sha256 is the Hugging Face LFS object digest",
-    "manifest_sha256": "sha256:80adfc0b7351f7ada059b897f2fe1b727b484d64bfceba2ef8fa93e08ddcd612",
+    "manifest_sha256": "sha256:06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352",
     "index_sha256": "sha256:77042094076611b69791a610065f28b7013b8c621795fa86ddccc8bac7d1b9df"
   },
   "tokenizer": {
