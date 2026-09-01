@@ -447,9 +447,13 @@ must then become Ready and pass the live parity checks below.
 
 The immutable v1 registration Job was admitted but never ran its registration command: its Pod
 could not anonymously pull the private digest-pinned GHCR image. Preserve that Job, ConfigMap,
-Pod, and events unchanged. The create-only v2 successor uses the namespace's reviewed
-`ghcr-pull` image pull secret, matching the already-successful baseline registration jobs; all
-model, receipt, command, resource, queue, and image-digest bindings remain unchanged.
+Pod, and events unchanged. The create-only v2 successor used the namespace's reviewed
+`ghcr-pull` secret and authenticated successfully, but the large image did not finish pulling
+before the immutable ten-minute active deadline, so its command also never started. Preserve v2
+unchanged. The create-only v3 successor uses the exact ECR trainer image already executed by the
+SFT evidence and cast jobs and allows up to 30 minutes for a cold pull. The registration code is
+still the same immutable ConfigMap payload; no GPU is requested and every model, receipt, command,
+resource, queue, and image-digest binding remains explicit.
 
 ```bash
 uv run python -m training.post_sft_cli render \
