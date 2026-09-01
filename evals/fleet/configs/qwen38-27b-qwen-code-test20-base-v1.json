@@ -1,0 +1,80 @@
+{
+  "schema_version": "fleet-qwen-code-test20-plan-v1",
+  "campaign_id": "chris-cyber-q38-qcode-fleet-test20-base-v1",
+  "source_job_id": "a62dd51f-a52b-4941-8207-4679e4b25b51",
+  "split_manifest_digest": "sha256:fb09668f8de77e6baee37dc1e3162a7617ca9a0a450da9ca53422c17bfbc942a",
+  "task_count": 20,
+  "environment_ttl_seconds": 10800,
+  "resource_prefix": "q38qcode-test20-b1",
+  "launch_gate": {
+    "schema_version": "qwen38-fleet-holdout-release-gate-v1",
+    "campaign_id": "chris-cyber-q38-qcode-positive-gate-p1-v3",
+    "frozen_receipt_sha256": "sha256:2dabbd5eb0677c3e5b62f4a00f1979db07ab0e57c0b3ddeb6ff1222f021f8f0d",
+    "task_index": 1,
+    "task_version_id": "2c47ef51-29f9-4736-9916-18b748059cc6",
+    "required_outcome_status": "model_outcome",
+    "required_verifier_execution_id": "nonzero_uuid",
+    "required_cleanup_verified": true
+  },
+  "authority": {
+    "contract_source_pr": "https://github.com/fleet-ai/theseus/pull/28252",
+    "contract_source_commit": "76a4bd262a63b05d7ac2b33cf1357072aea2dbd4",
+    "production_deploy_run": "https://github.com/fleet-ai/theseus/actions/runs/33359560100",
+    "provisioning_route_template": "/v1/rollout-rewards/{task_key}/versions/{task_version_id}/instances",
+    "scoring_route_template": "/v1/rollout-rewards/{task_key}/versions/{task_version_id}",
+    "scoring_mode": "partial",
+    "multi_app_aggregation_mode": "fractional"
+  },
+  "model": {
+    "repository": "Qwen/Qwen3.8-27B",
+    "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "served_id": "qwen3.8-27b",
+    "endpoint_origin": "https://inference.flt.build",
+    "tokenizer_revision": "sha256:3938a9a8172f2738fed1be44efc11e2562059269d50d3721213f44802b53b4e1",
+    "chat_template_revision": "sha256:c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+    "live_identity": {
+      "catalog": {
+        "id": "qwen3.8-27b",
+        "model_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+        "engine": "sglang",
+        "precision": "bf16",
+        "tensor_parallel_size": 1,
+        "routed": true,
+        "status": "ready"
+      },
+      "model_info": {
+        "model_path": "/scratch/models/qwen3.8-27b/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+        "model_type": "qwen3_5",
+        "architectures": ["Qwen3_5ForConditionalGeneration"]
+      },
+      "server_info": {
+        "model_path": "/scratch/models/qwen3.8-27b/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+        "served_model_name": "qwen3.8-27b",
+        "context_length": 262144,
+        "tp_size": 1,
+        "quantization": null,
+        "kv_cache_dtype": "fp8_e4m3",
+        "reasoning_parser": "qwen3",
+        "tool_call_parser": "qwen3_coder"
+      }
+    }
+  },
+  "harness": {
+    "name": "qwen_code",
+    "version": "0.22.3",
+    "source_commit": "09825973e7d3c3fd07e17909c396aa62f48ce51f",
+    "npm_tarball_sha1": "1529461d6c79c273b184849e6777e54ac98ae860",
+    "node_image": "docker.io/library/node@sha256:4d676821dff059fd00d277ee4261ef34ea712317fed0737c03941481b5760c96",
+    "max_model_requests": 600,
+    "context_window_size": 262144,
+    "timeout_seconds": 10800,
+    "context_management": "qwen_code_0.22.3_builtin_compaction"
+  },
+  "execution": {
+    "pass_k": 1,
+    "max_concurrent": 1,
+    "training_data_eligible": false,
+    "required_task_tools": ["bash", "submit_report"],
+    "required_task_tool_catalog_sha256": "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a"
+  }
+}
