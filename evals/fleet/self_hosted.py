@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import subprocess
 import sys
@@ -18,6 +19,13 @@ import httpx
 
 ORCHESTRATOR = "https://orchestrator.fleetai.com"
 FLEET_TEAM_ID = "a1025f0b-ad67-49fc-a023-51800ab43e84"
+RUNTIME_EVIDENCE_ONLY_V3 = "runtime_evidence_only_v3"
+RUNTIME_EVIDENCE_ONLY_V3_SCORING_KEYS = (
+    "instance_id",
+    "multi_app_aggregation_mode",
+    "scoring_mode",
+)
+DIRECT_AUTHORITY_ATTESTATION_SCHEMA = "fleet-direct-authority-attestation-v1"
 TRANSIENT_READ_STATUS_CODES = {429, 502, 503, 504}
 MAX_READ_ATTEMPTS = 6
 SESSION_INGEST_CHUNK_MESSAGES = 32
@@ -451,12 +459,14 @@ def ingest_metadata_only_session(
     *,
     config: dict[str, Any],
     instance_id: str,
+    evidence_run_id: str,
     score: float,
     verifier_execution_id: str | None,
 ) -> dict[str, Any]:
     """Persist verifier-backed outcome metadata while storing zero model messages."""
-    if config["authority"].get("scoring_payload_mode") != "runtime_evidence_only_v3":
+    if config["authority"].get("scoring_payload_mode") != RUNTIME_EVIDENCE_ONLY_V3:
         raise ValueError("metadata-only session ingestion requires runtime-evidence-only v3")
+    evidence_run_id = _nonzero_uuid(evidence_run_id, "metadata-only session evidence-run ID")
     if not isinstance(verifier_execution_id, str) or not verifier_execution_id:
         raise ValueError("metadata-only session ingestion requires a verifier execution ID")
     payload = {
@@ -496,6 +506,7 @@ def ingest_metadata_only_session(
         "status": "completed",
         "mode": "metadata_only_runtime_evidence_v1",
         "session_id": str(parsed_session_id),
+        "evidence_run_id": evidence_run_id,
         "message_count": 0,
         "chunks_completed": 1,
         "chunk_count": 1,
@@ -518,6 +529,146 @@ def provisioning_request_id(config: dict[str, Any]) -> str:
     return str(uuid.uuid5(uuid.NAMESPACE_URL, f"fleet-qwen-provision:{config['run_id']}"))
 
 
+def _nonzero_uuid(value: Any, label: str) -> str:
+    try:
+        parsed = uuid.UUID(str(value))
+    except ValueError as exc:
+        raise RuntimeError(f"{label} is not a UUID") from exc
+    if parsed.int == 0:
+        raise RuntimeError(f"{label} is a zero UUID")
+    return str(parsed)
+
+
+def validate_rollout_instance_response(config: dict[str, Any], response: Any) -> tuple[str, str]:
+    """Bind provisioning output to the exact route inputs before agent execution."""
+    if not isinstance(response, dict):
+        raise RuntimeError("Fleet authoritative instance response is not an object")
+    if (
+        response.get("task_key") != config["task"]["key"]
+        or response.get("task_version_id") != config["task"]["version_id"]
+    ):
+        raise RuntimeError("Fleet authoritative instance response task binding drifted")
+    instance_id = _nonzero_uuid(response.get("instance_id"), "Fleet authoritative instance ID")
+    evidence_run_id = _nonzero_uuid(
+        response.get("evidence_run_id"), "Fleet authoritative evidence-run ID"
+    )
+    return instance_id, evidence_run_id
+
+
+def validate_scoring_payload(config: dict[str, Any], payload: Any) -> None:
+    """Reject hidden legacy content channels in the direct-authority v3 request."""
+    if not isinstance(payload, dict):
+        raise RuntimeError("Fleet scoring payload is not an object")
+    mode = config["authority"].get("scoring_payload_mode")
+    if mode != RUNTIME_EVIDENCE_ONLY_V3:
+        return
+    if tuple(sorted(payload)) != RUNTIME_EVIDENCE_ONLY_V3_SCORING_KEYS:
+        raise RuntimeError("runtime-evidence-only v3 scoring payload contains unsupported fields")
+
+
+def sanitize_authoritative_reward_response(
+    config: dict[str, Any],
+    response: Any,
+    *,
+    instance_id: str,
+    evidence_run_id: str,
+) -> dict[str, Any]:
+    """Validate v3 authority cross-links and retain only non-sensitive attestations."""
+    if not isinstance(response, dict):
+        raise RuntimeError("Fleet authoritative reward response is not an object")
+    expected = {
+        "task_key": config["task"]["key"],
+        "task_version_id": config["task"]["version_id"],
+        "instance_id": instance_id,
+    }
+    if any(response.get(field) != value for field, value in expected.items()):
+        raise RuntimeError("Fleet authoritative reward response binding drifted")
+    reward = response.get("reward")
+    if isinstance(reward, bool) or not isinstance(reward, (int, float)):
+        raise RuntimeError("Fleet authoritative reward is not numeric")
+    reward = float(reward)
+    if not (0.0 <= reward <= 1.0) or not math.isfinite(reward):
+        raise RuntimeError("Fleet authoritative reward is outside [0, 1]")
+    execution_id = _nonzero_uuid(
+        response.get("verifier_execution_id"),
+        "Fleet authoritative verifier execution ID",
+    )
+    sanitized = {
+        **expected,
+        "reward": reward,
+        "verifier_execution_id": execution_id,
+    }
+    if config["authority"].get("scoring_payload_mode") != RUNTIME_EVIDENCE_ONLY_V3:
+        return sanitized
+
+    structured = response.get("cyber_verification_result")
+    shadow = response.get("cyber_evidence")
+    if not isinstance(structured, dict) or not isinstance(shadow, dict):
+        raise RuntimeError("Fleet direct-authority attestation is missing")
+    structured_reward = structured.get("reward")
+    bindings = structured.get("bindings")
+    direct = shadow.get("direct_verifier")
+    required_contract = config["authority"].get("required_cyber_contract") or {}
+    if (
+        structured.get("schema_version") != "cyber_verification_result_v3"
+        or isinstance(structured_reward, bool)
+        or not isinstance(structured_reward, (int, float))
+        or float(structured_reward) != reward
+        or not isinstance(bindings, dict)
+        or bindings.get("task_version_id") != config["task"]["version_id"]
+        or shadow.get("mode") != "authoritative"
+        or shadow.get("status") != "authoritative"
+        or shadow.get("match") is not True
+        or shadow.get("production_execution_id") != execution_id
+        or not isinstance(direct, dict)
+        or direct.get("status") != "authoritative"
+        or direct.get("match") is not True
+        or direct.get("execution_id") != execution_id
+        or direct.get("verifier_contract_version") != required_contract.get("verifier_contract")
+        or direct.get("context_schema_version") != "cyber_verification_context_v1"
+    ):
+        raise RuntimeError("Fleet direct-authority attestation binding drifted")
+    sanitized["direct_authority_attestation"] = {
+        "schema_version": DIRECT_AUTHORITY_ATTESTATION_SCHEMA,
+        "context": {
+            "task_key": config["task"]["key"],
+            "task_version_id": config["task"]["version_id"],
+            "instance_id": instance_id,
+            "evidence_run_id": evidence_run_id,
+            "verifier_version_id": config["verifier"]["version_id"],
+            "scoring_payload_mode": RUNTIME_EVIDENCE_ONLY_V3,
+        },
+        "activity": {
+            "result_schema_version": structured["schema_version"],
+            "reward": reward,
+            "task_version_id": bindings["task_version_id"],
+            "verifier_execution_id": execution_id,
+        },
+        "shadow": {
+            "mode": shadow["mode"],
+            "status": shadow["status"],
+            "match": True,
+            "production_execution_id": execution_id,
+            "direct_verifier": {
+                "status": direct["status"],
+                "match": True,
+                "execution_id": execution_id,
+                "verifier_contract_version": direct["verifier_contract_version"],
+                "context_schema_version": direct["context_schema_version"],
+            },
+        },
+        "data_minimization": {
+            "components_included": False,
+            "diagnostics_included": False,
+            "evidence_payloads_included": False,
+            "prompts_included": False,
+            "traces_included": False,
+            "flags_included": False,
+        },
+    }
+    return sanitized
+
+
 def build_scoring_payload(
     config: dict[str, Any],
     *,
@@ -530,8 +681,9 @@ def build_scoring_payload(
         "scoring_mode": config["authority"]["scoring_mode"],
         "multi_app_aggregation_mode": config["authority"]["multi_app_aggregation_mode"],
     }
-    if config["authority"].get("scoring_payload_mode") != "runtime_evidence_only_v3":
+    if config["authority"].get("scoring_payload_mode") != RUNTIME_EVIDENCE_ONLY_V3:
         payload.update(final_answer=final_answer, conversation=messages)
+    validate_scoring_payload(config, payload)
     return payload
 
 
@@ -721,7 +873,7 @@ def run(
                 f"Fleet authoritative instance create failed with HTTP {response.status_code}"
             )
         rollout_instance = response.json()
-        instance_id = rollout_instance["instance_id"]
+        instance_id, evidence_run_id = validate_rollout_instance_response(config, rollout_instance)
         cleanup["instance_created"] = True
         instance = _request(client, "GET", f"/v1/env/instances/{instance_id}")
         if (
@@ -738,7 +890,7 @@ def run(
         assert_required_task_tools(config, tool_names, tool_digest)
         runtime_binding = {
             "instance_id": instance_id,
-            "evidence_run_id": rollout_instance["evidence_run_id"],
+            "evidence_run_id": evidence_run_id,
             "env_key": instance["env_key"],
             "environment_version": instance["version"],
             "data_key": instance["data_key"],
@@ -748,15 +900,13 @@ def run(
         }
         if config["environment"].get("version_id") is not None:
             runtime_binding["environment_version_id"] = config["environment"]["version_id"]
-        (out_dir / "runtime-binding.json").write_bytes(
-            canonical_json(runtime_binding) + b"\n"
-        )
+        (out_dir / "runtime-binding.json").write_bytes(canonical_json(runtime_binding) + b"\n")
 
         resource_plan = {
             "schema_version": "fleet-selfhosted-resource-plan-v1",
             "run_id": config["run_id"],
             "instance_id": instance_id,
-            "evidence_run_id": rollout_instance["evidence_run_id"],
+            "evidence_run_id": evidence_run_id,
             "containers": [qwen_agent, model_proxy, mcp_proxy],
             "network": network,
         }
@@ -766,11 +916,31 @@ def run(
         _docker("network", "create", "--internal", network)
         proxy_mount = f"{proxy_script.resolve()}:/proxy.py:ro"
         _docker(
-            "run", "-d", "--name", model_proxy, "--network", "bridge",
-            "-e", "FIXED_UPSTREAM", "-e", "FIXED_AUTH_HEADER", "-e", "FIXED_AUTH_VALUE",
-            "-e", "FIXED_PROXY_PORT", "-e", "FIXED_ALLOWED_PATHS",
-            "-e", "FIXED_MAX_REQUESTS", "-e", "FIXED_MAX_REQUEST_BYTES",
-            "-v", proxy_mount, proxy_image, "python", "/proxy.py",
+            "run",
+            "-d",
+            "--name",
+            model_proxy,
+            "--network",
+            "bridge",
+            "-e",
+            "FIXED_UPSTREAM",
+            "-e",
+            "FIXED_AUTH_HEADER",
+            "-e",
+            "FIXED_AUTH_VALUE",
+            "-e",
+            "FIXED_PROXY_PORT",
+            "-e",
+            "FIXED_ALLOWED_PATHS",
+            "-e",
+            "FIXED_MAX_REQUESTS",
+            "-e",
+            "FIXED_MAX_REQUEST_BYTES",
+            "-v",
+            proxy_mount,
+            proxy_image,
+            "python",
+            "/proxy.py",
             env={
                 "FIXED_UPSTREAM": config["model"]["endpoint_origin"],
                 "FIXED_AUTH_HEADER": "Authorization",
@@ -784,11 +954,31 @@ def run(
         _docker("network", "connect", "--alias", "model-proxy", network, model_proxy)
         wait_for_proxy(model_proxy, 8877)
         _docker(
-            "run", "-d", "--name", mcp_proxy, "--network", "bridge",
-            "-e", "FIXED_UPSTREAM", "-e", "FIXED_AUTH_HEADER", "-e", "FIXED_AUTH_VALUE",
-            "-e", "FIXED_PROXY_PORT", "-e", "FIXED_ALLOWED_PATHS",
-            "-e", "FIXED_MAX_REQUESTS", "-e", "FIXED_MAX_REQUEST_BYTES",
-            "-v", proxy_mount, proxy_image, "python", "/proxy.py",
+            "run",
+            "-d",
+            "--name",
+            mcp_proxy,
+            "--network",
+            "bridge",
+            "-e",
+            "FIXED_UPSTREAM",
+            "-e",
+            "FIXED_AUTH_HEADER",
+            "-e",
+            "FIXED_AUTH_VALUE",
+            "-e",
+            "FIXED_PROXY_PORT",
+            "-e",
+            "FIXED_ALLOWED_PATHS",
+            "-e",
+            "FIXED_MAX_REQUESTS",
+            "-e",
+            "FIXED_MAX_REQUEST_BYTES",
+            "-v",
+            proxy_mount,
+            proxy_image,
+            "python",
+            "/proxy.py",
             env={
                 "FIXED_UPSTREAM": instance["urls"]["root"].rstrip("/"),
                 "FIXED_AUTH_HEADER": token_payload["header"],
@@ -850,16 +1040,31 @@ def run(
         agent_termination = "completed"
         try:
             result = _docker(
-                "run", "--rm", "--name", qwen_agent, "--network", network,
+                "run",
+                "--rm",
+                "--name",
+                qwen_agent,
+                "--network",
+                network,
                 *agent_user_args,
-                "-e", "OPENAI_API_KEY=local-proxy-only",
-                "-e", "QWEN_CODE_API_KEY=local-proxy-only",
-                "-e", "OPENAI_BASE_URL=http://model-proxy:8877/v1",
-                "-e", f"OPENAI_MODEL={config['model']['served_id']}",
-                "-v", f"{agent_dir.resolve()}:/output",
-                "-v", f"{(out_dir / 'prompt.txt').resolve()}:/input/prompt.txt:ro",
-                "-v", f"{qwen_home.resolve()}:/home/node/.qwen",
-                qwen_image, "bash", "-lc", command,
+                "-e",
+                "OPENAI_API_KEY=local-proxy-only",
+                "-e",
+                "QWEN_CODE_API_KEY=local-proxy-only",
+                "-e",
+                "OPENAI_BASE_URL=http://model-proxy:8877/v1",
+                "-e",
+                f"OPENAI_MODEL={config['model']['served_id']}",
+                "-v",
+                f"{agent_dir.resolve()}:/output",
+                "-v",
+                f"{(out_dir / 'prompt.txt').resolve()}:/input/prompt.txt:ro",
+                "-v",
+                f"{qwen_home.resolve()}:/home/node/.qwen",
+                qwen_image,
+                "bash",
+                "-lc",
+                command,
                 check=False,
                 timeout=float(config["harness"]["timeout_seconds"]),
             )
@@ -901,29 +1106,36 @@ def run(
             "task_key": config["task"]["key"],
             "task_version_id": config["task"]["version_id"],
             "instance_id": instance_id,
-            "evidence_run_id": rollout_instance["evidence_run_id"],
+            "evidence_run_id": evidence_run_id,
+            "scoring_payload_mode": config["authority"].get("scoring_payload_mode"),
+            "request_keys": sorted(scoring_payload),
             "request_sha256": sha256(canonical_json(scoring_payload)),
         }
-        scoring_intent["scoring_intent_sha256"] = sha256(
-            canonical_json(scoring_intent)
-        )
+        scoring_intent["scoring_intent_sha256"] = sha256(canonical_json(scoring_intent))
         write_json_once(out_dir / "scoring-intent.json", scoring_intent)
         if safe_scoring_intent_sink is not None:
             safe_scoring_intent_sink(scoring_intent)
-        reward_result = _request(
+        reward_response = _request(
             client,
             "POST",
             authoritative_route(config, "scoring"),
             json=scoring_payload,
         )
+        reward_result = sanitize_authoritative_reward_response(
+            config,
+            reward_response,
+            instance_id=instance_id,
+            evidence_run_id=evidence_run_id,
+        )
         (out_dir / "reward-result.json").write_bytes(canonical_json(reward_result) + b"\n")
         score = float(reward_result["reward"])
         try:
-            if config["authority"].get("scoring_payload_mode") == "runtime_evidence_only_v3":
+            if config["authority"].get("scoring_payload_mode") == RUNTIME_EVIDENCE_ONLY_V3:
                 session_receipt = ingest_metadata_only_session(
                     client,
                     config=config,
                     instance_id=instance_id,
+                    evidence_run_id=evidence_run_id,
                     score=score,
                     verifier_execution_id=reward_result.get("verifier_execution_id"),
                 )
@@ -950,11 +1162,13 @@ def run(
             # Preserve the single-shot mutation receipt for terminal diagnosis;
             # callers still classify incomplete ingestion as infrastructure-invalid.
             session_receipt = exc.receipt
-        (out_dir / "session-ingest.json").write_bytes(
-            canonical_json(session_receipt) + b"\n"
-        )
+        (out_dir / "session-ingest.json").write_bytes(canonical_json(session_receipt) + b"\n")
         result_record = {
             "run_id": config["run_id"],
+            "task_key": config["task"]["key"],
+            "task_version_id": config["task"]["version_id"],
+            "instance_id": instance_id,
+            "evidence_run_id": evidence_run_id,
             "session_id": session_receipt.get("session_id"),
             "session_ingest_status": session_receipt["status"],
             "score": score,

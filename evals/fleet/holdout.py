@@ -29,6 +29,11 @@ TERMINAL_ACCEPTANCE_SCHEMA = "fleet-qwen-code-ranked50-run-acceptance-v1"
 EXPECTED_SPLIT_SCHEMA = "fleet_rl_task_split_v1"
 EXPECTED_TASK_COUNT = 20
 RANKED50_TASK_COUNT = 50
+EXPECTED_RANKED50_CYBER_CONTRACT = {
+    "submission_protocol": "2.0.0",
+    "evidence_schema": "1.0.0",
+    "verifier_contract": "3.0.0",
+}
 BASE_EXECUTION_CONTROLS = {
     "pass_k": 1,
     "training_data_eligible": False,
@@ -131,13 +136,22 @@ def _persist_sanitized_task_artifacts(
             "task_version_id",
             "instance_id",
             "evidence_run_id",
+            "scoring_payload_mode",
+            "request_keys",
             "request_sha256",
             "scoring_intent_sha256",
         ),
     )
     reward = _selected(
         raw["reward-result.json"],
-        ("instance_id", "task_key", "task_version_id", "reward", "verifier_execution_id"),
+        (
+            "instance_id",
+            "task_key",
+            "task_version_id",
+            "reward",
+            "verifier_execution_id",
+            "direct_authority_attestation",
+        ),
     )
     session = _selected(
         raw["session-ingest.json"],
@@ -153,12 +167,17 @@ def _persist_sanitized_task_artifacts(
             "task_key",
             "task_version_id",
             "instance_id",
+            "evidence_run_id",
         ),
     )
     minimized_result = _selected(
         result,
         (
             "run_id",
+            "task_key",
+            "task_version_id",
+            "instance_id",
+            "evidence_run_id",
             "session_id",
             "session_ingest_status",
             "score",
@@ -198,6 +217,7 @@ def _validate_first_task_gate(plan: dict[str, Any], rows: list[dict[str, Any]]) 
         return
     expected = {
         "task_index": 1,
+        "task_key": rows[0]["task_key"],
         "task_version_id": rows[0]["task_version_id"],
         "required_outcome_status": "model_outcome",
         "required_verifier_execution_id": "nonzero_uuid",
@@ -205,6 +225,8 @@ def _validate_first_task_gate(plan: dict[str, Any], rows: list[dict[str, Any]]) 
         "required_qwen_exit_code": 0,
         "required_session_ingest_status": "completed",
         "required_session_id": "nonzero_uuid",
+        "required_instance_id": "nonzero_uuid",
+        "required_evidence_run_id": "nonzero_uuid",
         "accept_zero": True,
     }
     if gate != expected:
@@ -234,13 +256,21 @@ def _first_task_gate_satisfied(plan: dict[str, Any], outcome: dict[str, Any]) ->
     if outcome.get("cleanup_verified") is not True:
         return False
     try:
-        _validate_authoritative_model_result(outcome)
+        _validate_authoritative_model_result(
+            outcome,
+            {
+                "task_key": gate["task_key"],
+                "task_version_id": gate["task_version_id"],
+            },
+        )
     except RuntimeError:
         return False
     return True
 
 
-def _validate_authoritative_model_result(result: Any) -> None:
+def _validate_authoritative_model_result(
+    result: Any, expected_task: dict[str, Any] | None = None
+) -> None:
     if not isinstance(result, dict):
         raise RuntimeError("task result is not an object")
     score = result.get("score")
@@ -258,12 +288,75 @@ def _validate_authoritative_model_result(result: Any) -> None:
         raise RuntimeError("authoritative task Qwen process did not exit cleanly")
     if result.get("session_ingest_status") != "completed":
         raise RuntimeError("authoritative task session ingestion is incomplete")
+    if expected_task is not None and (
+        result.get("task_key") != expected_task["task_key"]
+        or result.get("task_version_id") != expected_task["task_version_id"]
+    ):
+        raise RuntimeError("authoritative task identity cross-link drifted")
+    try:
+        instance_id = UUID(str(result.get("instance_id")))
+        evidence_run_id = UUID(str(result.get("evidence_run_id")))
+    except ValueError as exc:
+        raise RuntimeError("authoritative runtime identity is invalid") from exc
+    if instance_id.int == 0 or evidence_run_id.int == 0:
+        raise RuntimeError("authoritative runtime identity is zero")
     try:
         session_id = UUID(str(result.get("session_id")))
     except ValueError as exc:
         raise RuntimeError("authoritative task session ID is invalid") from exc
     if session_id.int == 0:
         raise RuntimeError("authoritative task session ID is zero")
+
+
+def _validate_direct_authority_attestation(
+    attestation: Any,
+    *,
+    config: dict[str, Any],
+    instance_id: str,
+    evidence_run_id: str,
+    verifier_execution_id: str,
+    score: float,
+) -> None:
+    expected = {
+        "schema_version": self_hosted.DIRECT_AUTHORITY_ATTESTATION_SCHEMA,
+        "context": {
+            "task_key": config["task"]["key"],
+            "task_version_id": config["task"]["version_id"],
+            "instance_id": instance_id,
+            "evidence_run_id": evidence_run_id,
+            "verifier_version_id": config["verifier"]["version_id"],
+            "scoring_payload_mode": self_hosted.RUNTIME_EVIDENCE_ONLY_V3,
+        },
+        "activity": {
+            "result_schema_version": "cyber_verification_result_v3",
+            "reward": float(score),
+            "task_version_id": config["task"]["version_id"],
+            "verifier_execution_id": verifier_execution_id,
+        },
+        "shadow": {
+            "mode": "authoritative",
+            "status": "authoritative",
+            "match": True,
+            "production_execution_id": verifier_execution_id,
+            "direct_verifier": {
+                "status": "authoritative",
+                "match": True,
+                "execution_id": verifier_execution_id,
+                "verifier_contract_version": EXPECTED_RANKED50_CYBER_CONTRACT["verifier_contract"],
+                "context_schema_version": "cyber_verification_context_v1",
+            },
+        },
+        "data_minimization": {
+            "components_included": False,
+            "diagnostics_included": False,
+            "evidence_payloads_included": False,
+            "prompts_included": False,
+            "traces_included": False,
+            "flags_included": False,
+        },
+    }
+    if attestation != expected:
+        raise RuntimeError("accepted direct-authority attestation drifted")
 
 
 def _safe_artifact_manifest(
@@ -319,8 +412,7 @@ def _safe_artifact_manifest(
         if {path.name for path in task_dir.iterdir()} != set(required):
             raise RuntimeError("accepted task directory contains a non-sanitized artifact")
         if (
-            provisioning.get("intent_sha256")
-            != _digest_without(provisioning, "intent_sha256")
+            provisioning.get("intent_sha256") != _digest_without(provisioning, "intent_sha256")
             or provisioning.get("run_id") != expected_config["run_id"]
             or provisioning.get("task_key") != expected_config["task"]["key"]
             or provisioning.get("task_version_id") != expected_config["task"]["version_id"]
@@ -336,6 +428,12 @@ def _safe_artifact_manifest(
             scoring, "scoring_intent_sha256"
         ):
             raise RuntimeError("accepted scoring intent digest is invalid")
+        if scoring.get(
+            "scoring_payload_mode"
+        ) != self_hosted.RUNTIME_EVIDENCE_ONLY_V3 or scoring.get("request_keys") != list(
+            self_hosted.RUNTIME_EVIDENCE_ONLY_V3_SCORING_KEYS
+        ):
+            raise RuntimeError("accepted scoring intent payload contract drifted")
         run_id = result.get("run_id")
         instance_id = runtime.get("instance_id")
         evidence_run_id = runtime.get("evidence_run_id")
@@ -369,13 +467,16 @@ def _safe_artifact_manifest(
             or scoring.get("instance_id") != instance_id
             or resource.get("evidence_run_id") != evidence_run_id
             or scoring.get("evidence_run_id") != evidence_run_id
+            or result.get("task_key") != expected_config["task"]["key"]
+            or result.get("task_version_id") != expected_config["task"]["version_id"]
+            or result.get("instance_id") != instance_id
+            or result.get("evidence_run_id") != evidence_run_id
         ):
             raise RuntimeError("accepted task artifact identity cross-link drifted")
         if (
             runtime.get("env_key") != expected_config["environment"]["id"]
             or runtime.get("environment_version") != expected_config["environment"]["version"]
-            or runtime.get("environment_version_id")
-            != expected_config["environment"]["version_id"]
+            or runtime.get("environment_version_id") != expected_config["environment"]["version_id"]
             or runtime.get("data_key") != expected_config["environment"]["data_id"]
             or runtime.get("data_version") != expected_config["environment"]["data_version"]
             or reward.get("instance_id") != instance_id
@@ -387,6 +488,14 @@ def _safe_artifact_manifest(
             or result.get("verifier_execution_id") != outcome["verifier_execution_id"]
         ):
             raise RuntimeError("accepted authoritative result cross-link drifted")
+        _validate_direct_authority_attestation(
+            reward.get("direct_authority_attestation"),
+            config=expected_config,
+            instance_id=instance_id,
+            evidence_run_id=evidence_run_id,
+            verifier_execution_id=outcome["verifier_execution_id"],
+            score=float(outcome["score"]),
+        )
         if (
             runtime.get("tool_names") != ["bash", "submit_report"]
             or runtime.get("tool_catalog_sha256")
@@ -406,6 +515,7 @@ def _safe_artifact_manifest(
             or session.get("task_key") != expected_config["task"]["key"]
             or session.get("task_version_id") != expected_config["task"]["version_id"]
             or session.get("instance_id") != instance_id
+            or session.get("evidence_run_id") != evidence_run_id
             or session.get("verifier_execution_id") != outcome["verifier_execution_id"]
             or float(session.get("score")) != float(outcome["score"])
         ):
@@ -495,9 +605,7 @@ def build_terminal_acceptance(
     runtime_images = load_json(Path(runtime_images_path))
     if runtime_images.get("schema_version") != "fleet-eval-runtime-images-v1":
         raise RuntimeError("ranked-50 runtime image receipt schema is unsupported")
-    if runtime_images.get("receipt_sha256") != _digest_without(
-        runtime_images, "receipt_sha256"
-    ):
+    if runtime_images.get("receipt_sha256") != _digest_without(runtime_images, "receipt_sha256"):
         raise RuntimeError("ranked-50 runtime image receipt digest mismatch")
     images = runtime_images.get("images") or {}
     expected_image_refs = {
@@ -528,9 +636,7 @@ def build_terminal_acceptance(
     }
     if not all(isinstance(value, str) and value for value in pod_identity.values()):
         raise RuntimeError("ranked-50 workload identity is incomplete")
-    artifact_manifest, accepted_outcomes = _safe_artifact_manifest(
-        out_dir, outcomes, plan, receipt
-    )
+    artifact_manifest, accepted_outcomes = _safe_artifact_manifest(out_dir, outcomes, plan, receipt)
     accepted = {
         "schema_version": TERMINAL_ACCEPTANCE_SCHEMA,
         "campaign_id": plan["campaign_id"],
@@ -541,13 +647,9 @@ def build_terminal_acceptance(
         "frozen_receipt_sha256": receipt["receipt_sha256"],
         "fleet_account": receipt["fleet_account"],
         "selection_sha256": plan["selection"]["selection_sha256"],
-        "prior_attempt_exclusions_sha256": plan["prior_attempt_exclusions"][
-            "receipt_sha256"
-        ],
+        "prior_attempt_exclusions_sha256": plan["prior_attempt_exclusions"]["receipt_sha256"],
         "duplicate_preflight_sha256": receipt["duplicate_preflight"]["proof_sha256"],
-        "wave_identity_observation_sha256s": [
-            row["observation_sha256"] for row in observations
-        ],
+        "wave_identity_observation_sha256s": [row["observation_sha256"] for row in observations],
         "runtime_images": runtime_images,
         "artifact_manifest": artifact_manifest,
         "outcomes": accepted_outcomes,
@@ -681,10 +783,7 @@ def validate_duplicate_preflight(
     for query in queries:
         if not isinstance(query.get("pages"), int) or query["pages"] <= 0:
             raise ValueError("Fleet duplicate-preflight page count is invalid")
-        if (
-            not isinstance(query.get("returned_sessions"), int)
-            or query["returned_sessions"] < 0
-        ):
+        if not isinstance(query.get("returned_sessions"), int) or query["returned_sessions"] < 0:
             raise ValueError("Fleet duplicate-preflight session count is invalid")
     expected_queries = [
         {
@@ -750,6 +849,10 @@ def validate_plan(plan: dict[str, Any], split: dict[str, Any]) -> list[dict[str,
             raise ValueError("ranked-50 plan lacks frozen selection evidence")
         if exclusions.get("treatment_identity") != qwen38_fleet50.treatment_identity(plan):
             raise ValueError("ranked-50 plan treatment differs from prior-attempt exclusions")
+        if (plan.get("authority") or {}).get(
+            "required_cyber_contract"
+        ) != EXPECTED_RANKED50_CYBER_CONTRACT:
+            raise ValueError("ranked-50 required cyber contract drifted")
         rows = qwen38_fleet50.validate_selection(selection, split, exclusions)
         privacy_gate = plan.get("privacy_gate") or {}
         metadata_authority = privacy_gate.get("metadata_only_session_ingestion_authority")
@@ -879,50 +982,52 @@ def live_model_identity(
                 "POST",
                 "/v1/chat/completions",
                 json={
-                "model": served_id,
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": (
-                            "For this protocol probe, call submit_report exactly once with "
-                            "an empty flags list and explanation identity probe."
-                        ),
-                    }
-                ],
-                "tools": [
-                    {
-                        "type": "function",
-                        "function": {
-                            "name": "bash",
-                            "description": "Run a shell command in an isolated challenge sandbox.",
-                            "parameters": {
-                                "type": "object",
-                                "properties": {"command": {"type": "string"}},
-                                "required": ["command"],
-                                "additionalProperties": False,
-                            },
-                        },
-                    },
-                    {
-                        "type": "function",
-                        "function": {
-                            "name": "submit_report",
-                            "description": "Submit recovered flags and an explanation.",
-                            "parameters": {
-                                "type": "object",
-                                "properties": {
-                                    "flags": {"type": "array", "items": {"type": "string"}},
-                                    "explanation": {"type": "string"},
+                    "model": served_id,
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": (
+                                "For this protocol probe, call submit_report exactly once with "
+                                "an empty flags list and explanation identity probe."
+                            ),
+                        }
+                    ],
+                    "tools": [
+                        {
+                            "type": "function",
+                            "function": {
+                                "name": "bash",
+                                "description": (
+                                    "Run a shell command in an isolated challenge sandbox."
+                                ),
+                                "parameters": {
+                                    "type": "object",
+                                    "properties": {"command": {"type": "string"}},
+                                    "required": ["command"],
+                                    "additionalProperties": False,
                                 },
-                                "required": ["flags", "explanation"],
-                                "additionalProperties": False,
                             },
                         },
-                    },
-                ],
-                "tool_choice": "auto",
-                "temperature": 0,
-                "max_tokens": 256,
+                        {
+                            "type": "function",
+                            "function": {
+                                "name": "submit_report",
+                                "description": "Submit recovered flags and an explanation.",
+                                "parameters": {
+                                    "type": "object",
+                                    "properties": {
+                                        "flags": {"type": "array", "items": {"type": "string"}},
+                                        "explanation": {"type": "string"},
+                                    },
+                                    "required": ["flags", "explanation"],
+                                    "additionalProperties": False,
+                                },
+                            },
+                        },
+                    ],
+                    "tool_choice": "auto",
+                    "temperature": 0,
+                    "max_tokens": 256,
                 },
             )
     identity = {
@@ -943,9 +1048,9 @@ def live_model_identity(
     ):
         raise RuntimeError("holdout structured-tool identity probe failed")
     identity["structured_tool_probe"] = {
-            "response_model": probe.get("model"),
-            "finish_reason": choices[0].get("finish_reason"),
-            "tool_names": call_names,
+        "response_model": probe.get("model"),
+        "finish_reason": choices[0].get("finish_reason"),
+        "tool_names": call_names,
     }
     return identity
 
@@ -966,9 +1071,7 @@ def _wave_model_identity_observation(plan: dict[str, Any], wave: int) -> dict[st
         "observed_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         "identity": identity,
     }
-    observation["observation_sha256"] = self_hosted.sha256(
-        self_hosted.canonical_json(observation)
-    )
+    observation["observation_sha256"] = self_hosted.sha256(self_hosted.canonical_json(observation))
     return observation
 
 
@@ -1034,10 +1137,7 @@ def build_live_receipt(
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     rows = validate_plan(plan, split)
     account = self_hosted._request(client, "GET", "/v1/account")
-    if (
-        account.get("team_name") != "fleet"
-        or account.get("team_id") != self_hosted.FLEET_TEAM_ID
-    ):
+    if account.get("team_name") != "fleet" or account.get("team_id") != self_hosted.FLEET_TEAM_ID:
         raise RuntimeError("FLEET_API_KEY is not scoped to the Fleet team")
     authority_gate = self_hosted.assert_authoritative_routes_deployed(client, plan)
     model_identity = live_model_identity(api_key, plan["model"]) if api_key else None
@@ -1051,13 +1151,8 @@ def build_live_receipt(
     tasks = [_task_receipt(client, row, index) for index, row in enumerate(rows, 1)]
     required_contract = plan["authority"].get("required_cyber_contract")
     if plan.get("schema_version") == RANKED50_SCHEMA and (
-        required_contract
-        != {
-            "submission_protocol": "2.0.0",
-            "evidence_schema": "1.0.0",
-            "verifier_contract": "3.0.0",
-        }
-        or plan["authority"].get("scoring_payload_mode") != "runtime_evidence_only_v3"
+        required_contract != EXPECTED_RANKED50_CYBER_CONTRACT
+        or plan["authority"].get("scoring_payload_mode") != self_hosted.RUNTIME_EVIDENCE_ONLY_V3
         or any(row.get("cyber_contract") != required_contract for row in tasks)
     ):
         raise RuntimeError("ranked-50 task is not exact Verifier Contract v3")
@@ -1120,8 +1215,9 @@ def validate_frozen_receipt(receipt: dict[str, Any]) -> None:
     if plan_schema == RANKED50_SCHEMA:
         required_contract = receipt.get("authority", {}).get("required_cyber_contract")
         if (
-            receipt.get("authority", {}).get("scoring_payload_mode")
-            != "runtime_evidence_only_v3"
+            required_contract != EXPECTED_RANKED50_CYBER_CONTRACT
+            or receipt.get("authority", {}).get("scoring_payload_mode")
+            != self_hosted.RUNTIME_EVIDENCE_ONLY_V3
             or any(row.get("cyber_contract") != required_contract for row in tasks)
         ):
             raise ValueError("frozen ranked-50 receipt is not exact Verifier Contract v3")
@@ -1216,6 +1312,8 @@ def run_campaign(
                     "task_version_id",
                     "instance_id",
                     "evidence_run_id",
+                    "scoring_payload_mode",
+                    "request_keys",
                     "request_sha256",
                     "scoring_intent_sha256",
                 ),
@@ -1238,7 +1336,13 @@ def run_campaign(
             )
             if not cleanup_verified:
                 raise RuntimeError("task cleanup receipt is incomplete")
-            _validate_authoritative_model_result(result)
+            _validate_authoritative_model_result(
+                result,
+                {
+                    "task_key": row["task_key"],
+                    "task_version_id": row["task_version_id"],
+                },
+            )
             _persist_sanitized_task_artifacts(scratch, task_out, config, result)
             return {
                 "index": row["index"],

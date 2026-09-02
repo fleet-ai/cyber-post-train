@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -10,9 +11,7 @@ import pytest
 
 from evals.fleet import fixed_proxy, self_hosted
 
-CONFIG_PATH = Path(
-    "evals/fleet/configs/qwen36-27b-qwen-code-selfhosted-smoke-v1.json"
-)
+CONFIG_PATH = Path("evals/fleet/configs/qwen36-27b-qwen-code-selfhosted-smoke-v1.json")
 
 
 def _config() -> dict:
@@ -94,9 +93,7 @@ def test_task_receipt_uses_targeted_version_and_never_source_job_roster() -> Non
         },
     }
     config["task"]["prompt_sha256"] = self_hosted.sha256(b"")
-    config["task"]["env_variables_sha256"] = self_hosted.sha256(
-        self_hosted.canonical_json({})
-    )
+    config["task"]["env_variables_sha256"] = self_hosted.sha256(self_hosted.canonical_json({}))
     config["task"]["output_json_schema_sha256"] = self_hosted.sha256(
         self_hosted.canonical_json(None)
     )
@@ -158,9 +155,7 @@ def test_qwen_trace_loader_counts_malformed_lines_without_losing_raw_trace(
     trace = tmp_path / "projects" / "workspace" / "chats" / "trace.jsonl"
     trace.parent.mkdir(parents=True)
     trace.write_text(
-        json.dumps({"type": "assistant", "message": {"parts": []}})
-        + "\n"
-        + "not-json\n"
+        json.dumps({"type": "assistant", "message": {"parts": []}}) + "\n" + "not-json\n"
     )
     events, canonical_trace, malformed = self_hosted.load_qwen_chat_trace(tmp_path)
     assert len(events) == 1
@@ -391,6 +386,7 @@ def test_metadata_only_session_ingest_persists_no_model_content() -> None:
         Client(),
         config=config,
         instance_id="instance-1",
+        evidence_run_id="77777777-7777-4777-8777-777777777777",
         score=0.25,
         verifier_execution_id=verifier_id,
     )
@@ -411,6 +407,7 @@ def test_metadata_only_session_ingest_persists_no_model_content() -> None:
         "status": "completed",
         "mode": "metadata_only_runtime_evidence_v1",
         "session_id": session_id,
+        "evidence_run_id": "77777777-7777-4777-8777-777777777777",
         "message_count": 0,
         "chunks_completed": 1,
         "chunk_count": 1,
@@ -425,6 +422,7 @@ def test_metadata_only_session_ingest_persists_no_model_content() -> None:
 @pytest.mark.parametrize(
     ("field", "replacement"),
     [
+        ("session_id", "00000000-0000-0000-0000-000000000000"),
         ("message_count", 1),
         ("score", 0.5),
         ("verifier_execution_id", "wrong"),
@@ -452,17 +450,152 @@ def test_metadata_only_session_ingest_rejects_response_drift(
 
     class Client:
         def request(self, method: str, url: str, **kwargs):
-            return type(
-                "Response", (), {"status_code": 200, "json": lambda self: response}
-            )()
+            return type("Response", (), {"status_code": 200, "json": lambda self: response})()
 
     with pytest.raises(RuntimeError, match="response"):
         self_hosted.ingest_metadata_only_session(
             Client(),
             config=config,
             instance_id="instance-1",
+            evidence_run_id="b9391407-8136-4562-b4d6-7ac57ef1efca",
             score=0.25,
             verifier_execution_id=verifier_id,
+        )
+
+
+def test_runtime_evidence_only_scoring_payload_has_exact_content_free_keys() -> None:
+    config = _config()
+    config["authority"]["scoring_payload_mode"] = self_hosted.RUNTIME_EVIDENCE_ONLY_V3
+    payload = self_hosted.build_scoring_payload(
+        config,
+        instance_id="instance-1",
+        final_answer="private final answer",
+        messages=[{"role": "tool", "content": "private tool output"}],
+    )
+    assert tuple(sorted(payload)) == self_hosted.RUNTIME_EVIDENCE_ONLY_V3_SCORING_KEYS
+    assert "conversation" not in payload
+    assert "final_answer" not in payload
+
+    payload["conversation"] = []
+    with pytest.raises(RuntimeError, match="unsupported fields"):
+        self_hosted.validate_scoring_payload(config, payload)
+
+
+@pytest.mark.parametrize(
+    ("field", "replacement"),
+    [
+        ("task_key", "wrong-task"),
+        ("task_version_id", "00000000-0000-4000-8000-000000000001"),
+        ("instance_id", "not-a-uuid"),
+        ("evidence_run_id", "00000000-0000-0000-0000-000000000000"),
+    ],
+)
+def test_rollout_instance_response_rejects_identity_drift(field: str, replacement: str) -> None:
+    config = _config()
+    response = {
+        "task_key": config["task"]["key"],
+        "task_version_id": config["task"]["version_id"],
+        "instance_id": "11111111-1111-4111-8111-111111111111",
+        "evidence_run_id": "22222222-2222-4222-8222-222222222222",
+    }
+    response[field] = replacement
+    with pytest.raises(RuntimeError):
+        self_hosted.validate_rollout_instance_response(config, response)
+
+
+def _authoritative_reward_response(config: dict) -> dict:
+    verifier_id = "33333333-3333-4333-8333-333333333333"
+    return {
+        "task_key": config["task"]["key"],
+        "task_version_id": config["task"]["version_id"],
+        "instance_id": "11111111-1111-4111-8111-111111111111",
+        "reward": 0.25,
+        "verifier_execution_id": verifier_id,
+        "cyber_verification_result": {
+            "schema_version": "cyber_verification_result_v3",
+            "reward": 0.25,
+            "components": {"private": "must not persist"},
+            "diagnostics": {"private": "must not persist"},
+            "bindings": {"task_version_id": config["task"]["version_id"]},
+        },
+        "cyber_evidence": {
+            "mode": "authoritative",
+            "status": "authoritative",
+            "match": True,
+            "production_execution_id": verifier_id,
+            "direct_verifier": {
+                "status": "authoritative",
+                "match": True,
+                "execution_id": verifier_id,
+                "verifier_contract_version": "3.0.0",
+                "context_schema_version": "cyber_verification_context_v1",
+            },
+            "private_evidence": "must not persist",
+        },
+    }
+
+
+def test_authoritative_reward_response_retains_only_sanitized_attestation() -> None:
+    config = _config()
+    config["authority"]["scoring_payload_mode"] = self_hosted.RUNTIME_EVIDENCE_ONLY_V3
+    config["authority"]["required_cyber_contract"] = {
+        "submission_protocol": "2.0.0",
+        "evidence_schema": "1.0.0",
+        "verifier_contract": "3.0.0",
+    }
+    response = _authoritative_reward_response(config)
+    sanitized = self_hosted.sanitize_authoritative_reward_response(
+        config,
+        response,
+        instance_id=response["instance_id"],
+        evidence_run_id="22222222-2222-4222-8222-222222222222",
+    )
+    encoded = json.dumps(sanitized)
+    assert "must not persist" not in encoded
+    assert "cyber_verification_result" not in sanitized
+    assert "cyber_evidence" not in sanitized
+    attestation = sanitized["direct_authority_attestation"]
+    assert attestation["context"]["task_version_id"] == config["task"]["version_id"]
+    assert attestation["context"]["verifier_version_id"] == config["verifier"]["version_id"]
+    assert attestation["shadow"]["production_execution_id"] == response["verifier_execution_id"]
+    assert all(value is False for value in attestation["data_minimization"].values())
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda value: value.__setitem__("task_version_id", "wrong"),
+        lambda value: value["cyber_verification_result"]["bindings"].__setitem__(
+            "task_version_id", "wrong"
+        ),
+        lambda value: value["cyber_evidence"].__setitem__("match", False),
+        lambda value: value["cyber_evidence"]["direct_verifier"].__setitem__(
+            "execution_id", "wrong"
+        ),
+        lambda value: value["cyber_evidence"]["direct_verifier"].__setitem__(
+            "verifier_contract_version", "3.1.0"
+        ),
+        lambda value: value["cyber_evidence"]["direct_verifier"].__setitem__(
+            "context_schema_version", "cyber_verification_context_v2"
+        ),
+    ],
+)
+def test_authoritative_reward_response_rejects_crosslink_drift(mutate) -> None:
+    config = _config()
+    config["authority"]["scoring_payload_mode"] = self_hosted.RUNTIME_EVIDENCE_ONLY_V3
+    config["authority"]["required_cyber_contract"] = {
+        "submission_protocol": "2.0.0",
+        "evidence_schema": "1.0.0",
+        "verifier_contract": "3.0.0",
+    }
+    response = copy.deepcopy(_authoritative_reward_response(config))
+    mutate(response)
+    with pytest.raises(RuntimeError, match="binding|attestation"):
+        self_hosted.sanitize_authoritative_reward_response(
+            config,
+            response,
+            instance_id="11111111-1111-4111-8111-111111111111",
+            evidence_run_id="22222222-2222-4222-8222-222222222222",
         )
 
 

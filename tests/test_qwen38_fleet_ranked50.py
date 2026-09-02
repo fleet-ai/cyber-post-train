@@ -25,13 +25,69 @@ COLLECT_PATH = Path("evals/fleet/scripts/collect_selfhosted_qwen38_ranked50.sh")
 ACCEPT_JOB_PATH = Path("evals/fleet/cluster/qwen38-ranked50-acceptance-job.yaml")
 
 
-def _successful_result(score: float = 0.0) -> dict:
+def _successful_result(score: float = 0.0, config: dict | None = None) -> dict:
+    task = (config or {}).get("task") or {
+        "key": "task-key",
+        "version_id": "99999999-9999-4999-8999-999999999999",
+    }
     return {
+        "task_key": task["key"],
+        "task_version_id": task["version_id"],
+        "instance_id": "11111111-1111-4111-8111-111111111111",
+        "evidence_run_id": "77777777-7777-4777-8777-777777777777",
         "score": score,
         "verifier_execution_id": "33333333-3333-4333-8333-333333333333",
         "qwen_exit_code": 0,
         "session_ingest_status": "completed",
         "session_id": "77777777-7777-4777-8777-777777777777",
+    }
+
+
+def _direct_attestation(
+    config: dict,
+    *,
+    instance_id: str,
+    evidence_run_id: str,
+    verifier_execution_id: str,
+    score: float,
+) -> dict:
+    return {
+        "schema_version": holdout.self_hosted.DIRECT_AUTHORITY_ATTESTATION_SCHEMA,
+        "context": {
+            "task_key": config["task"]["key"],
+            "task_version_id": config["task"]["version_id"],
+            "instance_id": instance_id,
+            "evidence_run_id": evidence_run_id,
+            "verifier_version_id": config["verifier"]["version_id"],
+            "scoring_payload_mode": holdout.self_hosted.RUNTIME_EVIDENCE_ONLY_V3,
+        },
+        "activity": {
+            "result_schema_version": "cyber_verification_result_v3",
+            "reward": score,
+            "task_version_id": config["task"]["version_id"],
+            "verifier_execution_id": verifier_execution_id,
+        },
+        "shadow": {
+            "mode": "authoritative",
+            "status": "authoritative",
+            "match": True,
+            "production_execution_id": verifier_execution_id,
+            "direct_verifier": {
+                "status": "authoritative",
+                "match": True,
+                "execution_id": verifier_execution_id,
+                "verifier_contract_version": "3.0.0",
+                "context_schema_version": "cyber_verification_context_v1",
+            },
+        },
+        "data_minimization": {
+            "components_included": False,
+            "diagnostics_included": False,
+            "evidence_payloads_included": False,
+            "prompts_included": False,
+            "traces_included": False,
+            "flags_included": False,
+        },
     }
 
 
@@ -75,9 +131,7 @@ def _source_acceptance_and_workload() -> tuple[dict, dict, dict, dict, dict]:
             "credentials_included": False,
         },
     }
-    acceptance["acceptance_sha256"] = qwen38_fleet50.digest_without(
-        acceptance, "acceptance_sha256"
-    )
+    acceptance["acceptance_sha256"] = qwen38_fleet50.digest_without(acceptance, "acceptance_sha256")
     job = list(yaml.safe_load_all(JOB_PATH.read_text()))[-1]
     job["metadata"]["uid"] = "55555555-5555-4555-8555-555555555555"
     job["spec"]["suspend"] = False
@@ -173,9 +227,7 @@ def _receipt(plan: dict) -> dict:
         "transcripts_read": False,
         "session_identifiers_persisted": False,
     }
-    duplicate_proof["proof_sha256"] = holdout._digest_without(
-        duplicate_proof, "proof_sha256"
-    )
+    duplicate_proof["proof_sha256"] = holdout._digest_without(duplicate_proof, "proof_sha256")
     receipt = {
         "schema_version": holdout.RECEIPT_SCHEMA,
         "plan_schema_version": holdout.RANKED50_SCHEMA,
@@ -202,9 +254,7 @@ def _mock_wave_identity(monkeypatch: pytest.MonkeyPatch) -> None:
             "observed_at": f"2026-09-02T00:{wave:02d}:00Z",
             "identity": plan["model"]["live_identity"],
         }
-        value["observation_sha256"] = holdout._digest_without(
-            value, "observation_sha256"
-        )
+        value["observation_sha256"] = holdout._digest_without(value, "observation_sha256")
         return value
 
     monkeypatch.setattr(holdout, "_wave_model_identity_observation", observation)
@@ -246,6 +296,46 @@ def test_ranked50_is_exact_easiest_first_train_dev_selection() -> None:
     )
 
 
+def test_ranked50_rejects_coordinated_v3_contract_drift() -> None:
+    split = _json(SPLIT_PATH)
+    plan = _json(PLAN_PATH)
+    drifted_contract = {
+        "submission_protocol": "2.0.0",
+        "evidence_schema": "1.0.0",
+        "verifier_contract": "3.1.0",
+    }
+    plan["authority"]["required_cyber_contract"] = drifted_contract
+    with pytest.raises(ValueError, match="required cyber contract drifted"):
+        holdout.validate_plan(plan, split)
+
+    receipt = _receipt(_json(PLAN_PATH))
+    receipt["authority"]["required_cyber_contract"] = drifted_contract
+    for row in receipt["tasks"]:
+        row["cyber_contract"] = drifted_contract
+    receipt["receipt_sha256"] = holdout._digest_without(receipt, "receipt_sha256")
+    with pytest.raises(ValueError, match="Verifier Contract v3"):
+        holdout.validate_frozen_receipt(receipt)
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda value: value.__setitem__("task_key", "wrong-task"),
+        lambda value: value.__setitem__("task_version_id", "00000000-0000-4000-8000-000000000001"),
+        lambda value: value.__setitem__("instance_id", "00000000-0000-0000-0000-000000000000"),
+        lambda value: value.__setitem__("evidence_run_id", "00000000-0000-0000-0000-000000000000"),
+        lambda value: value.__setitem__("session_id", "00000000-0000-0000-0000-000000000000"),
+    ],
+)
+def test_first_task_gate_rejects_runtime_crosslink_drift(mutate) -> None:
+    plan = _json(PLAN_PATH)
+    first = _successful_result(config=holdout.task_config(plan, _receipt(plan)["tasks"][0]))
+    first.update(index=1, status="model_outcome", cleanup_verified=True)
+    assert holdout._first_task_gate_satisfied(plan, first) is True
+    mutate(first)
+    assert holdout._first_task_gate_satisfied(plan, first) is False
+
+
 def test_historical_identity_uses_roster_version_and_rejects_key_or_schema_drift() -> None:
     record = {
         "export_schema": "fleet_session_export_v1",
@@ -275,6 +365,8 @@ def test_historical_identity_uses_roster_version_and_rejects_key_or_schema_drift
     drifted["export_schema"] = "unsupported"
     with pytest.raises(ValueError, match="schema is unsupported"):
         qwen38_fleet50.authoritative_task_identity(drifted)
+
+
 def test_historical_identity_uses_roster_version_not_stale_transcript_version() -> None:
     roster_version = "55555555-5555-4555-8555-555555555555"
     record = {
@@ -370,6 +462,7 @@ def test_ranked50_binds_exact_harness_tools_and_first_task_gate() -> None:
     assert plan["execution"]["training_data_eligible"] is False
     assert plan["first_task_release_gate"] == {
         "task_index": 1,
+        "task_key": plan["selection"]["tasks"][0]["task_key"],
         "task_version_id": plan["selection"]["tasks"][0]["task_version_id"],
         "required_outcome_status": "model_outcome",
         "required_verifier_execution_id": "nonzero_uuid",
@@ -377,6 +470,8 @@ def test_ranked50_binds_exact_harness_tools_and_first_task_gate() -> None:
         "required_qwen_exit_code": 0,
         "required_session_ingest_status": "completed",
         "required_session_id": "nonzero_uuid",
+        "required_instance_id": "nonzero_uuid",
+        "required_evidence_run_id": "nonzero_uuid",
         "accept_zero": True,
     }
     assert plan["credential_gate"]["rotation_not_before"] == "2026-09-01T23:39:05Z"
@@ -402,17 +497,15 @@ def test_valid_authoritative_first_outcome_releases_remaining(
     receipt = _receipt(plan)
     _mock_wave_identity(monkeypatch)
 
-    def successful_run(
-        config: dict, out_dir: Path, proxy_script: Path, **kwargs: object
-    ) -> dict:
-        del config, proxy_script, kwargs
+    def successful_run(config: dict, out_dir: Path, proxy_script: Path, **kwargs: object) -> dict:
+        del proxy_script, kwargs
         out_dir.mkdir(parents=True)
         (out_dir / "cleanup.json").write_text(
             json.dumps(
                 {"instance_created": True, "instance_closed": True, "containers_removed": True}
             )
         )
-        return _successful_result(score)
+        return _successful_result(score, config)
 
     monkeypatch.setattr(holdout.self_hosted, "run", successful_run)
     summary = holdout.run_campaign(plan, receipt, tmp_path / "campaign", Path("proxy.py"))
@@ -428,7 +521,7 @@ def test_first_outcome_without_verifier_uuid_does_not_release_remaining(
     _mock_wave_identity(monkeypatch)
 
     def invalid_run(config: dict, out_dir: Path, proxy_script: Path, **kwargs: object) -> dict:
-        del config, proxy_script, kwargs
+        del proxy_script, kwargs
         out_dir.mkdir(parents=True)
         (out_dir / "cleanup.json").write_text(
             json.dumps(
@@ -457,7 +550,7 @@ def test_post_gate_outcome_without_verifier_uuid_is_infrastructure_invalid(
         config: dict, out_dir: Path, proxy_script: Path, **kwargs: object
     ) -> dict:
         nonlocal calls
-        del config, proxy_script, kwargs
+        del proxy_script, kwargs
         with lock:
             calls += 1
             call = calls
@@ -468,7 +561,7 @@ def test_post_gate_outcome_without_verifier_uuid_is_infrastructure_invalid(
             )
         )
         return {
-            **_successful_result(),
+            **_successful_result(config=config),
             "verifier_execution_id": (
                 "33333333-3333-4333-8333-333333333333" if call == 1 else None
             ),
@@ -493,9 +586,7 @@ def test_ranked50_runs_first_alone_then_bounded_waves_of_three(
     max_active = 0
     started: list[int] = []
 
-    def successful_run(
-        config: dict, out_dir: Path, proxy_script: Path, **kwargs: object
-    ) -> dict:
+    def successful_run(config: dict, out_dir: Path, proxy_script: Path, **kwargs: object) -> dict:
         nonlocal active, max_active
         del proxy_script, kwargs
         index = int(config["run_id"].rsplit("-t", 1)[1].split("-", 1)[0])
@@ -514,7 +605,7 @@ def test_ranked50_runs_first_alone_then_bounded_waves_of_three(
         )
         with lock:
             active -= 1
-        return _successful_result()
+        return _successful_result(config=config)
 
     monkeypatch.setattr(holdout.self_hosted, "run", successful_run)
     summary = holdout.run_campaign(plan, receipt, tmp_path / "campaign", Path("proxy.py"))
@@ -538,11 +629,9 @@ def test_wave_identity_drift_stops_before_next_wave(
 
     calls = 0
 
-    def successful_run(
-        config: dict, out_dir: Path, proxy_script: Path, **kwargs: object
-    ) -> dict:
+    def successful_run(config: dict, out_dir: Path, proxy_script: Path, **kwargs: object) -> dict:
         nonlocal calls
-        del config, proxy_script, kwargs
+        del proxy_script, kwargs
         calls += 1
         out_dir.mkdir(parents=True)
         (out_dir / "cleanup.json").write_text(
@@ -550,7 +639,7 @@ def test_wave_identity_drift_stops_before_next_wave(
                 {"instance_created": True, "instance_closed": True, "containers_removed": True}
             )
         )
-        return _successful_result()
+        return _successful_result(config=config)
 
     monkeypatch.setattr(holdout, "_wave_model_identity_observation", observe)
     _mock_sanitizer(monkeypatch)
@@ -576,28 +665,26 @@ def test_terminal_acceptance_is_create_once_digest_bound_and_all_or_nothing(
         frozen = receipt["tasks"][index - 1]
         expected_config = holdout.task_config(plan, frozen)
         run_id = expected_config["run_id"]
-        instance_id = f"instance-{index}"
+        instance_id = f"11111111-1111-4111-8111-{index:012d}"
         evidence_run_id = "66666666-6666-4666-8666-666666666666"
         verifier_id = "33333333-3333-4333-8333-333333333333"
-        session_id = "77777777-7777-4777-8777-777777777777"
+        session_id = evidence_run_id
         resource = {
             "run_id": run_id,
             "instance_id": instance_id,
             "evidence_run_id": evidence_run_id,
         }
-        resource["resource_plan_sha256"] = holdout._digest_without(
-            resource, "resource_plan_sha256"
-        )
+        resource["resource_plan_sha256"] = holdout._digest_without(resource, "resource_plan_sha256")
         scoring = {
             "run_id": run_id,
             "task_key": expected_config["task"]["key"],
             "task_version_id": expected_config["task"]["version_id"],
             "instance_id": instance_id,
             "evidence_run_id": evidence_run_id,
+            "scoring_payload_mode": holdout.self_hosted.RUNTIME_EVIDENCE_ONLY_V3,
+            "request_keys": list(holdout.self_hosted.RUNTIME_EVIDENCE_ONLY_V3_SCORING_KEYS),
         }
-        scoring["scoring_intent_sha256"] = holdout._digest_without(
-            scoring, "scoring_intent_sha256"
-        )
+        scoring["scoring_intent_sha256"] = holdout._digest_without(scoring, "scoring_intent_sha256")
         provisioning = {
             "schema_version": "fleet-qwen-provisioning-intent-v1",
             "run_id": expected_config["run_id"],
@@ -608,9 +695,7 @@ def test_terminal_acceptance_is_create_once_digest_bound_and_all_or_nothing(
                 holdout.self_hosted.canonical_json({})
             ),
         }
-        provisioning["intent_sha256"] = holdout._digest_without(
-            provisioning, "intent_sha256"
-        )
+        provisioning["intent_sha256"] = holdout._digest_without(provisioning, "intent_sha256")
         artifacts = {
             "binding.json": {
                 "run_id": run_id,
@@ -626,6 +711,10 @@ def test_terminal_acceptance_is_create_once_digest_bound_and_all_or_nothing(
             "provisioning-intent.json": provisioning,
             "result.json": {
                 "run_id": run_id,
+                "task_key": row["task_key"],
+                "task_version_id": row["task_version_id"],
+                "instance_id": instance_id,
+                "evidence_run_id": evidence_run_id,
                 "session_id": session_id,
                 "score": 0.0,
                 "verifier_execution_id": verifier_id,
@@ -637,26 +726,32 @@ def test_terminal_acceptance_is_create_once_digest_bound_and_all_or_nothing(
                 "task_version_id": row["task_version_id"],
                 "reward": 0.0,
                 "verifier_execution_id": verifier_id,
+                "direct_authority_attestation": _direct_attestation(
+                    expected_config,
+                    instance_id=instance_id,
+                    evidence_run_id=evidence_run_id,
+                    verifier_execution_id=verifier_id,
+                    score=0.0,
+                ),
             },
             "resource-plan.json": resource,
             "runtime-binding.json": {
                 "instance_id": instance_id,
                 "evidence_run_id": evidence_run_id,
-                    "env_key": row["env_key"],
-                    "environment_version": row["env_version"],
-                    "environment_version_id": row["environment_version_id"],
-                    "data_key": row["data_key"],
+                "env_key": row["env_key"],
+                "environment_version": row["env_version"],
+                "environment_version_id": row["environment_version_id"],
+                "data_key": row["data_key"],
                 "data_version": row["data_version"],
                 "tool_names": ["bash", "submit_report"],
-                "tool_catalog_sha256": plan["execution"][
-                    "required_task_tool_catalog_sha256"
-                ],
+                "tool_catalog_sha256": plan["execution"]["required_task_tool_catalog_sha256"],
             },
             "scoring-intent.json": scoring,
             "session-ingest.json": {
                 "status": "completed",
                 "mode": "metadata_only_runtime_evidence_v1",
                 "session_id": session_id,
+                "evidence_run_id": evidence_run_id,
                 "message_count": 0,
                 "chunk_count": 1,
                 "chunks_completed": 1,
@@ -670,18 +765,20 @@ def test_terminal_acceptance_is_create_once_digest_bound_and_all_or_nothing(
         for name, value in artifacts.items():
             (task_dir / name).write_text(json.dumps(value) + "\n")
         outcomes.append(
-                {
+            {
                 "index": index,
                 "task_key": row["task_key"],
                 "task_version_id": row["task_version_id"],
                 "status": "model_outcome",
+                "instance_id": instance_id,
+                "evidence_run_id": evidence_run_id,
                 "score": 0.0,
-                    "verifier_execution_id": verifier_id,
-                    "cleanup_verified": True,
-                    "qwen_exit_code": 0,
-                    "session_ingest_status": "completed",
-                    "session_id": session_id,
-                }
+                "verifier_execution_id": verifier_id,
+                "cleanup_verified": True,
+                "qwen_exit_code": 0,
+                "session_ingest_status": "completed",
+                "session_id": session_id,
+            }
         )
     summary = {
         "model_outcomes": 50,
@@ -714,9 +811,7 @@ def test_terminal_acceptance_is_create_once_digest_bound_and_all_or_nothing(
             },
         },
     }
-    runtime_images["receipt_sha256"] = holdout._digest_without(
-        runtime_images, "receipt_sha256"
-    )
+    runtime_images["receipt_sha256"] = holdout._digest_without(runtime_images, "receipt_sha256")
     runtime_path = tmp_path / "runtime-images.json"
     runtime_path.write_text(json.dumps(runtime_images))
     monkeypatch.setenv("FLEET_EVAL_RUNTIME_IMAGES_RECEIPT", str(runtime_path))
@@ -728,9 +823,7 @@ def test_terminal_acceptance_is_create_once_digest_bound_and_all_or_nothing(
     accepted = holdout.build_terminal_acceptance(plan, receipt, summary, out_dir)
     assert accepted is not None
     assert accepted["accepted"] is True
-    assert accepted["acceptance_sha256"] == holdout._digest_without(
-        accepted, "acceptance_sha256"
-    )
+    assert accepted["acceptance_sha256"] == holdout._digest_without(accepted, "acceptance_sha256")
     holdout.self_hosted.write_json_once(out_dir / "ACCEPTED.json", accepted)
     qwen38_fleet50.validate_durable_run_tree(out_dir, accepted)
     with pytest.raises(FileExistsError):
@@ -886,15 +979,11 @@ def test_ranked50_rejects_selection_or_exclusion_drift() -> None:
 
 def test_final_acceptance_binds_terminal_job_pod_and_is_create_once(tmp_path: Path) -> None:
     source, job, pods, config_map, binding = _source_acceptance_and_workload()
-    final = qwen38_fleet50.build_final_acceptance(
-        source, job, pods, config_map, binding
-    )
+    final = qwen38_fleet50.build_final_acceptance(source, job, pods, config_map, binding)
     assert final["accepted"] is True
     assert final["source_job"]["uid"] == job["metadata"]["uid"]
     assert final["source_pod"]["evaluator_exit_code"] == 0
-    assert final["acceptance_sha256"] == qwen38_fleet50.digest_without(
-        final, "acceptance_sha256"
-    )
+    assert final["acceptance_sha256"] == qwen38_fleet50.digest_without(final, "acceptance_sha256")
     path = tmp_path / "FINAL_ACCEPTED.json"
     qwen38_fleet50.write_json_once(path, final)
     with pytest.raises(FileExistsError):
@@ -943,9 +1032,7 @@ def test_final_acceptance_rejects_workload_or_source_receipt_drift() -> None:
     changed_binding = copy.deepcopy(binding)
     changed_binding["configmap_uid"] = "99999999-9999-4999-8999-999999999999"
     with pytest.raises(ValueError):
-        qwen38_fleet50.build_final_acceptance(
-            source, job, pods, config_map, changed_binding
-        )
+        qwen38_fleet50.build_final_acceptance(source, job, pods, config_map, changed_binding)
 
 
 def test_acceptance_collector_is_create_only_context_bound_and_sfs_mounted() -> None:
@@ -984,9 +1071,7 @@ def test_campaign_persists_only_sanitized_receipts_and_removes_private_scratch(
     monkeypatch.setattr(holdout, "build_terminal_acceptance", lambda *_args: None)
     sentinel = "FLAG{private-do-not-persist} private prompt and tool trace"
 
-    def sensitive_run(
-        config: dict, out_dir: Path, proxy_script: Path, **kwargs: object
-    ) -> dict:
+    def sensitive_run(config: dict, out_dir: Path, proxy_script: Path, **kwargs: object) -> dict:
         del proxy_script, kwargs
         out_dir.mkdir(parents=True)
         instance_id = "instance-slug"
@@ -1000,9 +1085,7 @@ def test_campaign_persists_only_sanitized_receipts_and_removes_private_scratch(
             "evidence_run_id": evidence_run_id,
             "containers": [sentinel],
         }
-        resource["resource_plan_sha256"] = holdout._digest_without(
-            resource, "resource_plan_sha256"
-        )
+        resource["resource_plan_sha256"] = holdout._digest_without(resource, "resource_plan_sha256")
         scoring = {
             "schema_version": "fleet-selfhosted-scoring-intent-v1",
             "run_id": config["run_id"],
@@ -1012,9 +1095,7 @@ def test_campaign_persists_only_sanitized_receipts_and_removes_private_scratch(
             "evidence_run_id": evidence_run_id,
             "request_sha256": "sha256:" + "a" * 64,
         }
-        scoring["scoring_intent_sha256"] = holdout._digest_without(
-            scoring, "scoring_intent_sha256"
-        )
+        scoring["scoring_intent_sha256"] = holdout._digest_without(scoring, "scoring_intent_sha256")
         artifacts = {
             "binding.json": {"private": sentinel},
             "cleanup.json": {
@@ -1041,9 +1122,7 @@ def test_campaign_persists_only_sanitized_receipts_and_removes_private_scratch(
                 "data_key": config["environment"]["data_id"],
                 "data_version": config["environment"]["data_version"],
                 "tool_names": ["bash", "submit_report"],
-                "tool_catalog_sha256": config["execution"][
-                    "required_task_tool_catalog_sha256"
-                ],
+                "tool_catalog_sha256": config["execution"]["required_task_tool_catalog_sha256"],
             },
             "scoring-intent.json": scoring,
             "session-ingest.json": {
@@ -1068,7 +1147,7 @@ def test_campaign_persists_only_sanitized_receipts_and_removes_private_scratch(
         private_dir.mkdir()
         (private_dir / "qwen-stream.jsonl").write_text(sentinel)
         return {
-            **_successful_result(),
+            **_successful_result(config=config),
             "run_id": config["run_id"],
             "agent_termination": "completed",
             "elapsed_seconds": 1.0,
@@ -1102,9 +1181,7 @@ def test_campaign_failure_never_persists_private_scratch(
     monkeypatch.setattr(holdout, "build_terminal_acceptance", lambda *_args: None)
     sentinel = f"FLAG{{private-{failure_stage}}} private trace"
 
-    def failing_run(
-        config: dict, out_dir: Path, proxy_script: Path, **kwargs: object
-    ) -> dict:
+    def failing_run(config: dict, out_dir: Path, proxy_script: Path, **kwargs: object) -> dict:
         del proxy_script
         out_dir.mkdir(parents=True)
         (out_dir / "prompt.txt").write_text(sentinel)
@@ -1127,11 +1204,11 @@ def test_campaign_failure_never_persists_private_scratch(
             "task_version_id": config["task"]["version_id"],
             "instance_id": "instance-slug",
             "evidence_run_id": "66666666-6666-4666-8666-666666666666",
+            "scoring_payload_mode": holdout.self_hosted.RUNTIME_EVIDENCE_ONLY_V3,
+            "request_keys": list(holdout.self_hosted.RUNTIME_EVIDENCE_ONLY_V3_SCORING_KEYS),
             "request_sha256": "sha256:" + "a" * 64,
         }
-        intent["scoring_intent_sha256"] = holdout._digest_without(
-            intent, "scoring_intent_sha256"
-        )
+        intent["scoring_intent_sha256"] = holdout._digest_without(intent, "scoring_intent_sha256")
         sink = kwargs["safe_scoring_intent_sink"]
         assert callable(sink)
         sink(intent)

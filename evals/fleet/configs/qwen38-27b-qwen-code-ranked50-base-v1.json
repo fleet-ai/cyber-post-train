@@ -1095,6 +1095,7 @@
   },
   "first_task_release_gate": {
     "task_index": 1,
+    "task_key": "cysec1-2-current-fubspot-gen_single-atom-engagement-paging-scope-handle-use-after-release__blackbox_ctf_v1",
     "task_version_id": "9d37921b-5ec7-413f-be13-986b1c2d66e8",
     "required_outcome_status": "model_outcome",
     "required_verifier_execution_id": "nonzero_uuid",
@@ -1102,6 +1103,8 @@
     "required_qwen_exit_code": 0,
     "required_session_ingest_status": "completed",
     "required_session_id": "nonzero_uuid",
+    "required_instance_id": "nonzero_uuid",
+    "required_evidence_run_id": "nonzero_uuid",
     "accept_zero": true
   }
 }
