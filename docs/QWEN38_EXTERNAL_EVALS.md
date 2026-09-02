@@ -101,10 +101,41 @@ python -m evals.webexploitbench \
   --incident-receipt docs/evidence/webexploitbench/2026-09-01-qwen38-v2-interrupted-unscored.json
 ```
 
-An authorized operator may add `--execute` only after explicit launch approval,
-reviewing the dry-run, and ensuring `FLEET_API_KEY` is present in the process
-environment. The credential
-is inherited in memory; it is never accepted as an argument or written into a
-claim, command, log setup, or supervisor receipt. Existing v3 run or recovery
-paths, any v2 evidence drift, and any config/protocol/image drift all fail
-closed. Do not invoke CAGE's raw `--resume` path.
+The command above is a static preview and cannot execute. A credential-ready
+preview additionally supplies the same sanitized, self-digested rotation
+receipt used by the Qwen3.8 Fleet-50 launch:
+
+```bash
+python -m evals.webexploitbench \
+  --config evals/webexploitbench/configs/qwen38-27b-1d4bf0f2-level0-qwen-code-full-v3.json \
+  launch-qwen-recovery \
+  --cage-dir evals/webexploitbench/.workbench/CAGE \
+  --predecessor-config evals/webexploitbench/configs/qwen38-27b-1d4bf0f2-level0-qwen-code-full-v2.json \
+  --predecessor-protocol evals/webexploitbench/manifests/qwen38-27b-qwen-code-protocol-v2.json \
+  --protocol-manifest evals/webexploitbench/manifests/qwen38-27b-qwen-code-protocol-v3.json \
+  --incident-receipt docs/evidence/webexploitbench/2026-09-01-qwen38-v2-interrupted-unscored.json \
+  --credential-rotation-receipt /restricted/rotation-receipt.json
+```
+
+The bridge reads only the live Secret UID, resourceVersion, identity, and
+expected-key presence for preview. It requires an exact match to the receipt's
+post-rotation metadata and requires the confirmed rotation time to postdate
+`2026-09-01T23:39:05Z`. On an approved `--execute`, it rejects an ambient
+`FLEET_API_KEY`, atomically reads the same metadata plus the encoded value from
+`fleet-train-jobs/fleet-api`, and decodes the value only in process memory. The
+detached supervisor receives it through an explicit allowlisted environment;
+ambient cloud, source-control, Python-path, and other credential variables are
+not forwarded. The hidden supervisor entry point requires a random one-time
+parent capability, represented only by its digest in the launch claim and
+receipt chain. The CAGE child receives the Fleet
+key but not that supervisor capability. The execute function has no ambient-key
+fallback and refuses missing bound rotation evidence. The value is never
+accepted as an argument, printed, or written into a claim, command, log setup,
+or receipt; the durable launch claim binds the rotation receipt digest.
+
+An authorized operator may add `--execute` only after the credential owner has
+actually rotated the Secret, the reusable receipt validates, explicit launch
+approval is present, and the credential-ready preview has been reviewed.
+Existing v3 run or recovery paths, any Secret metadata drift, any v2 evidence
+drift, and any config/protocol/image drift all fail closed. Do not invoke CAGE's
+raw `--resume` path.
