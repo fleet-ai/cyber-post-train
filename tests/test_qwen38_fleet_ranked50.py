@@ -91,6 +91,137 @@ def _direct_attestation(
     }
 
 
+def _persisted_direct_evidence_fixture(tmp_path: Path) -> tuple[Path, dict, dict]:
+    plan = _json(PLAN_PATH)
+    config = holdout.task_config(plan, _receipt(plan)["tasks"][0])
+    task_dir = tmp_path / "task"
+    task_dir.mkdir()
+    instance_id = "11111111-1111-4111-8111-111111111111"
+    evidence_run_id = "77777777-7777-4777-8777-777777777777"
+    verifier_id = "33333333-3333-4333-8333-333333333333"
+    score = 0.25
+    payload = {
+        "instance_id": instance_id,
+        "multi_app_aggregation_mode": config["authority"]["multi_app_aggregation_mode"],
+        "scoring_mode": config["authority"]["scoring_mode"],
+    }
+    artifacts = {
+        "runtime-binding.json": {
+            "instance_id": instance_id,
+            "evidence_run_id": evidence_run_id,
+        },
+        "scoring-intent.json": {
+            "schema_version": "fleet-selfhosted-scoring-intent-v1",
+            "run_id": config["run_id"],
+            "task_key": config["task"]["key"],
+            "task_version_id": config["task"]["version_id"],
+            "instance_id": instance_id,
+            "evidence_run_id": evidence_run_id,
+            "scoring_payload_mode": holdout.self_hosted.RUNTIME_EVIDENCE_ONLY_V3,
+            "request_keys": list(holdout.self_hosted.RUNTIME_EVIDENCE_ONLY_V3_SCORING_KEYS),
+            "request_sha256": holdout.self_hosted.sha256(
+                holdout.self_hosted.canonical_json(payload)
+            ),
+        },
+        "reward-result.json": {
+            "task_key": config["task"]["key"],
+            "task_version_id": config["task"]["version_id"],
+            "instance_id": instance_id,
+            "reward": score,
+            "verifier_execution_id": verifier_id,
+            "direct_authority_attestation": _direct_attestation(
+                config,
+                instance_id=instance_id,
+                evidence_run_id=evidence_run_id,
+                verifier_execution_id=verifier_id,
+                score=score,
+            ),
+        },
+        "result.json": {
+            "run_id": config["run_id"],
+            "task_key": config["task"]["key"],
+            "task_version_id": config["task"]["version_id"],
+            "instance_id": instance_id,
+            "evidence_run_id": evidence_run_id,
+            "session_id": evidence_run_id,
+            "session_ingest_status": "completed",
+            "score": score,
+            "verifier_execution_id": verifier_id,
+            "qwen_exit_code": 0,
+        },
+        "session-ingest.json": {
+            "status": "completed",
+            "mode": "metadata_only_runtime_evidence_v1",
+            "success": True,
+            "evidence_only": True,
+            "trace_persisted": False,
+            "created_new_session": True,
+            "session_id": evidence_run_id,
+            "evidence_run_id": evidence_run_id,
+            "message_count": 0,
+            "chunks_completed": 1,
+            "chunk_count": 1,
+            "score": score,
+            "model": f"qwen/{config['model']['served_id']}",
+            "task_key": config["task"]["key"],
+            "task_version_id": config["task"]["version_id"],
+            "instance_id": instance_id,
+            "verifier_execution_id": verifier_id,
+        },
+    }
+    scoring = artifacts["scoring-intent.json"]
+    scoring["scoring_intent_sha256"] = holdout._digest_without(scoring, "scoring_intent_sha256")
+    for name, value in artifacts.items():
+        (task_dir / name).write_text(json.dumps(value))
+    return task_dir, config, artifacts["result.json"]
+
+
+def test_persisted_direct_evidence_task_accepts_exact_contract(tmp_path: Path) -> None:
+    task_dir, config, result = _persisted_direct_evidence_fixture(tmp_path)
+    holdout._validate_persisted_direct_evidence_task(task_dir, config, result)
+
+
+@pytest.mark.parametrize(
+    ("artifact", "field", "replacement"),
+    [
+        ("scoring-intent.json", "request_keys", ["conversation"]),
+        ("scoring-intent.json", "request_sha256", "sha256:" + "a" * 64),
+        ("session-ingest.json", "success", False),
+        ("session-ingest.json", "evidence_only", False),
+        ("session-ingest.json", "trace_persisted", True),
+        ("session-ingest.json", "created_new_session", "true"),
+        ("session-ingest.json", "model", "qwen/wrong"),
+        ("session-ingest.json", "task_key", "wrong"),
+        ("session-ingest.json", "task_version_id", "wrong"),
+        ("session-ingest.json", "instance_id", "wrong"),
+        ("session-ingest.json", "verifier_execution_id", "wrong"),
+        ("session-ingest.json", "score", 0.5),
+        ("session-ingest.json", "session_id", "88888888-8888-4888-8888-888888888888"),
+    ],
+)
+def test_persisted_direct_evidence_task_rejects_contract_drift(
+    tmp_path: Path, artifact: str, field: str, replacement: object
+) -> None:
+    task_dir, config, result = _persisted_direct_evidence_fixture(tmp_path)
+    value = json.loads((task_dir / artifact).read_text())
+    value[field] = replacement
+    if artifact == "scoring-intent.json":
+        value["scoring_intent_sha256"] = holdout._digest_without(value, "scoring_intent_sha256")
+    (task_dir / artifact).write_text(json.dumps(value))
+    with pytest.raises(RuntimeError):
+        holdout._validate_persisted_direct_evidence_task(task_dir, config, result)
+
+
+def test_persisted_direct_evidence_task_rejects_attestation_drift(tmp_path: Path) -> None:
+    task_dir, config, result = _persisted_direct_evidence_fixture(tmp_path)
+    path = task_dir / "reward-result.json"
+    reward = json.loads(path.read_text())
+    reward["direct_authority_attestation"]["shadow"]["match"] = False
+    path.write_text(json.dumps(reward))
+    with pytest.raises(RuntimeError, match="attestation"):
+        holdout._validate_persisted_direct_evidence_task(task_dir, config, result)
+
+
 def _source_acceptance_and_workload() -> tuple[dict, dict, dict, dict, dict]:
     artifact_manifest = {"files": []}
     artifact_manifest["manifest_sha256"] = qwen38_fleet50.digest_without(
@@ -270,6 +401,7 @@ def _mock_sanitizer(monkeypatch: pytest.MonkeyPatch) -> None:
         shutil.copyfile(scratch / "cleanup.json", task_out / "cleanup.json")
 
     monkeypatch.setattr(holdout, "_persist_sanitized_task_artifacts", persist)
+    monkeypatch.setattr(holdout, "_validate_persisted_direct_evidence_task", lambda *_args: None)
 
 
 def test_ranked50_is_exact_easiest_first_train_dev_selection() -> None:
@@ -324,7 +456,7 @@ def test_ranked50_rejects_coordinated_v3_contract_drift() -> None:
         lambda value: value.__setitem__("task_version_id", "00000000-0000-4000-8000-000000000001"),
         lambda value: value.__setitem__("instance_id", "00000000-0000-0000-0000-000000000000"),
         lambda value: value.__setitem__("evidence_run_id", "00000000-0000-0000-0000-000000000000"),
-        lambda value: value.__setitem__("session_id", "00000000-0000-0000-0000-000000000000"),
+        lambda value: value.__setitem__("session_id", "88888888-8888-4888-8888-888888888888"),
     ],
 )
 def test_first_task_gate_rejects_runtime_crosslink_drift(mutate) -> None:
@@ -472,6 +604,7 @@ def test_ranked50_binds_exact_harness_tools_and_first_task_gate() -> None:
         "required_session_id": "nonzero_uuid",
         "required_instance_id": "nonzero_uuid",
         "required_evidence_run_id": "nonzero_uuid",
+        "required_session_matches_evidence_run_id": True,
         "accept_zero": True,
     }
     assert plan["credential_gate"]["rotation_not_before"] == "2026-09-01T23:39:05Z"
@@ -532,6 +665,50 @@ def test_first_outcome_without_verifier_uuid_does_not_release_remaining(
 
     monkeypatch.setattr(holdout.self_hosted, "run", invalid_run)
     summary = holdout.run_campaign(plan, receipt, tmp_path / "campaign", Path("proxy.py"))
+    assert summary["model_outcomes"] == 0
+    assert summary["infrastructure_errors"] == 1
+    assert summary["first_task_release_gate_satisfied"] is False
+
+
+def test_first_persisted_evidence_drift_does_not_start_remaining_tasks(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    plan = _json(PLAN_PATH)
+    receipt = _receipt(plan)
+    exact_validator = holdout._validate_persisted_direct_evidence_task
+    _mock_wave_identity(monkeypatch)
+    monkeypatch.setattr(holdout, "_validate_persisted_direct_evidence_task", exact_validator)
+    fixture_root = tmp_path / "persisted-fixture"
+    fixture_root.mkdir()
+    fixture_dir, fixture_config, _fixture_result = _persisted_direct_evidence_fixture(fixture_root)
+    assert fixture_config["task"] == holdout.task_config(plan, receipt["tasks"][0])["task"]
+    session_path = fixture_dir / "session-ingest.json"
+    session = json.loads(session_path.read_text())
+    session["evidence_only"] = False
+    session_path.write_text(json.dumps(session))
+    calls = 0
+
+    def successful_run(config: dict, out_dir: Path, proxy_script: Path, **kwargs: object) -> dict:
+        nonlocal calls
+        del proxy_script, kwargs
+        calls += 1
+        out_dir.mkdir(parents=True)
+        (out_dir / "cleanup.json").write_text(
+            json.dumps(
+                {"instance_created": True, "instance_closed": True, "containers_removed": True}
+            )
+        )
+        return _successful_result(0.25, config=config)
+
+    def persist_mutated_evidence(scratch: Path, task_out: Path, config: dict, result: dict) -> None:
+        del scratch, config, result
+        for source in fixture_dir.iterdir():
+            shutil.copyfile(source, task_out / source.name)
+
+    monkeypatch.setattr(holdout.self_hosted, "run", successful_run)
+    monkeypatch.setattr(holdout, "_persist_sanitized_task_artifacts", persist_mutated_evidence)
+    summary = holdout.run_campaign(plan, receipt, tmp_path / "campaign", Path("proxy.py"))
+    assert calls == 1
     assert summary["model_outcomes"] == 0
     assert summary["infrastructure_errors"] == 1
     assert summary["first_task_release_gate_satisfied"] is False
@@ -676,6 +853,7 @@ def test_terminal_acceptance_is_create_once_digest_bound_and_all_or_nothing(
         }
         resource["resource_plan_sha256"] = holdout._digest_without(resource, "resource_plan_sha256")
         scoring = {
+            "schema_version": "fleet-selfhosted-scoring-intent-v1",
             "run_id": run_id,
             "task_key": expected_config["task"]["key"],
             "task_version_id": expected_config["task"]["version_id"],
@@ -683,6 +861,17 @@ def test_terminal_acceptance_is_create_once_digest_bound_and_all_or_nothing(
             "evidence_run_id": evidence_run_id,
             "scoring_payload_mode": holdout.self_hosted.RUNTIME_EVIDENCE_ONLY_V3,
             "request_keys": list(holdout.self_hosted.RUNTIME_EVIDENCE_ONLY_V3_SCORING_KEYS),
+            "request_sha256": holdout.self_hosted.sha256(
+                holdout.self_hosted.canonical_json(
+                    {
+                        "instance_id": instance_id,
+                        "multi_app_aggregation_mode": expected_config["authority"][
+                            "multi_app_aggregation_mode"
+                        ],
+                        "scoring_mode": expected_config["authority"]["scoring_mode"],
+                    }
+                )
+            ),
         }
         scoring["scoring_intent_sha256"] = holdout._digest_without(scoring, "scoring_intent_sha256")
         provisioning = {
@@ -716,6 +905,7 @@ def test_terminal_acceptance_is_create_once_digest_bound_and_all_or_nothing(
                 "instance_id": instance_id,
                 "evidence_run_id": evidence_run_id,
                 "session_id": session_id,
+                "session_ingest_status": "completed",
                 "score": 0.0,
                 "verifier_execution_id": verifier_id,
                 "qwen_exit_code": 0,
@@ -750,12 +940,17 @@ def test_terminal_acceptance_is_create_once_digest_bound_and_all_or_nothing(
             "session-ingest.json": {
                 "status": "completed",
                 "mode": "metadata_only_runtime_evidence_v1",
+                "success": True,
+                "evidence_only": True,
+                "trace_persisted": False,
+                "created_new_session": True,
                 "session_id": session_id,
                 "evidence_run_id": evidence_run_id,
                 "message_count": 0,
                 "chunk_count": 1,
                 "chunks_completed": 1,
                 "score": 0.0,
+                "model": f"qwen/{expected_config['model']['served_id']}",
                 "verifier_execution_id": verifier_id,
                 "task_key": row["task_key"],
                 "task_version_id": row["task_version_id"],
@@ -824,6 +1019,22 @@ def test_terminal_acceptance_is_create_once_digest_bound_and_all_or_nothing(
     assert accepted is not None
     assert accepted["accepted"] is True
     assert accepted["acceptance_sha256"] == holdout._digest_without(accepted, "acceptance_sha256")
+    first_scoring_path = out_dir / "task-01-artifact" / "scoring-intent.json"
+    exact_scoring_bytes = first_scoring_path.read_bytes()
+    exact_scoring = json.loads(exact_scoring_bytes)
+    for field, replacement in (
+        ("request_keys", ["conversation"]),
+        ("request_sha256", "sha256:" + "a" * 64),
+    ):
+        drifted_scoring = copy.deepcopy(exact_scoring)
+        drifted_scoring[field] = replacement
+        drifted_scoring["scoring_intent_sha256"] = holdout._digest_without(
+            drifted_scoring, "scoring_intent_sha256"
+        )
+        first_scoring_path.write_text(json.dumps(drifted_scoring))
+        with pytest.raises(RuntimeError, match="scoring request contract drifted"):
+            holdout.build_terminal_acceptance(plan, receipt, summary, out_dir)
+    first_scoring_path.write_bytes(exact_scoring_bytes)
     holdout.self_hosted.write_json_once(out_dir / "ACCEPTED.json", accepted)
     qwen38_fleet50.validate_durable_run_tree(out_dir, accepted)
     with pytest.raises(FileExistsError):

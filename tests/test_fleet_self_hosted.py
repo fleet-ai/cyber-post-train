@@ -371,13 +371,18 @@ def test_metadata_only_session_ingest_persists_no_model_content() -> None:
                 {
                     "status_code": 200,
                     "json": lambda self: {
+                        "success": True,
                         "session_id": session_id,
                         "message_count": 0,
+                        "created_new_session": True,
+                        "evidence_only": True,
+                        "trace_persisted": False,
                         "score": 0.25,
                         "verifier_execution_id": verifier_id,
                         "task_key": config["task"]["key"],
                         "eval_task_version_id": config["task"]["version_id"],
                         "instance_id": "instance-1",
+                        "model": f"qwen/{config['model']['served_id']}",
                     },
                 },
             )()
@@ -386,7 +391,7 @@ def test_metadata_only_session_ingest_persists_no_model_content() -> None:
         Client(),
         config=config,
         instance_id="instance-1",
-        evidence_run_id="77777777-7777-4777-8777-777777777777",
+        evidence_run_id=session_id,
         score=0.25,
         verifier_execution_id=verifier_id,
     )
@@ -406,12 +411,17 @@ def test_metadata_only_session_ingest_persists_no_model_content() -> None:
     assert receipt == {
         "status": "completed",
         "mode": "metadata_only_runtime_evidence_v1",
+        "success": True,
+        "evidence_only": True,
+        "trace_persisted": False,
+        "created_new_session": True,
         "session_id": session_id,
-        "evidence_run_id": "77777777-7777-4777-8777-777777777777",
+        "evidence_run_id": session_id,
         "message_count": 0,
         "chunks_completed": 1,
         "chunk_count": 1,
         "score": 0.25,
+        "model": f"qwen/{config['model']['served_id']}",
         "verifier_execution_id": verifier_id,
         "task_key": config["task"]["key"],
         "task_version_id": config["task"]["version_id"],
@@ -422,9 +432,18 @@ def test_metadata_only_session_ingest_persists_no_model_content() -> None:
 @pytest.mark.parametrize(
     ("field", "replacement"),
     [
-        ("session_id", "00000000-0000-0000-0000-000000000000"),
+        ("success", False),
+        ("success", 1),
+        ("session_id", "11111111-1111-4111-8111-111111111111"),
         ("message_count", 1),
+        ("created_new_session", "yes"),
+        ("evidence_only", False),
+        ("evidence_only", 1),
+        ("trace_persisted", True),
+        ("trace_persisted", 0),
+        ("message_count", False),
         ("score", 0.5),
+        ("model", "qwen/wrong"),
         ("verifier_execution_id", "wrong"),
         ("task_key", "wrong"),
         ("eval_task_version_id", "00000000-0000-0000-0000-000000000001"),
@@ -438,13 +457,18 @@ def test_metadata_only_session_ingest_rejects_response_drift(
     config["authority"]["scoring_payload_mode"] = "runtime_evidence_only_v3"
     verifier_id = "fcaa240d-e625-47d9-b2d3-042c33de27af"
     response = {
+        "success": True,
         "session_id": "b9391407-8136-4562-b4d6-7ac57ef1efca",
         "message_count": 0,
+        "created_new_session": False,
+        "evidence_only": True,
+        "trace_persisted": False,
         "score": 0.25,
         "verifier_execution_id": verifier_id,
         "task_key": config["task"]["key"],
         "eval_task_version_id": config["task"]["version_id"],
         "instance_id": "instance-1",
+        "model": f"qwen/{config['model']['served_id']}",
     }
     response[field] = replacement
 

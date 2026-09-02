@@ -486,6 +486,8 @@ def ingest_metadata_only_session(
         raise RuntimeError("metadata-only session response has an invalid session ID") from exc
     if parsed_session_id.int == 0:
         raise RuntimeError("metadata-only session response has a zero session ID")
+    if str(parsed_session_id) != evidence_run_id:
+        raise RuntimeError("metadata-only session response is not bound to the evidence-run ID")
     response_score = response.get("score")
     if isinstance(response_score, bool):
         raise RuntimeError("metadata-only session response score is invalid")
@@ -494,7 +496,11 @@ def ingest_metadata_only_session(
     except (TypeError, ValueError) as exc:
         raise RuntimeError("metadata-only session response score is invalid") from exc
     expected = {
+        "success": True,
+        "evidence_only": True,
+        "trace_persisted": False,
         "message_count": 0,
+        "model": f"qwen/{config['model']['served_id']}",
         "task_key": config["task"]["key"],
         "eval_task_version_id": config["task"]["version_id"],
         "instance_id": instance_id,
@@ -502,15 +508,28 @@ def ingest_metadata_only_session(
     }
     if any(response.get(key) != value for key, value in expected.items()) or exact_score != score:
         raise RuntimeError("metadata-only session response binding drifted")
+    if (
+        response.get("success") is not True
+        or response.get("evidence_only") is not True
+        or response.get("trace_persisted") is not False
+        or type(response.get("message_count")) is not int
+        or not isinstance(response.get("created_new_session"), bool)
+    ):
+        raise RuntimeError("metadata-only session response creation state is invalid")
     return {
         "status": "completed",
         "mode": "metadata_only_runtime_evidence_v1",
+        "success": True,
+        "evidence_only": True,
+        "trace_persisted": False,
+        "created_new_session": response["created_new_session"],
         "session_id": str(parsed_session_id),
         "evidence_run_id": evidence_run_id,
         "message_count": 0,
         "chunks_completed": 1,
         "chunk_count": 1,
         "score": exact_score,
+        "model": expected["model"],
         "verifier_execution_id": verifier_execution_id,
         "task_key": config["task"]["key"],
         "task_version_id": config["task"]["version_id"],

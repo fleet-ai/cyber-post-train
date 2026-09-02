@@ -158,11 +158,16 @@ def _persist_sanitized_task_artifacts(
         (
             "status",
             "mode",
+            "success",
+            "evidence_only",
+            "trace_persisted",
+            "created_new_session",
             "session_id",
             "message_count",
             "chunks_completed",
             "chunk_count",
             "score",
+            "model",
             "verifier_execution_id",
             "task_key",
             "task_version_id",
@@ -227,6 +232,7 @@ def _validate_first_task_gate(plan: dict[str, Any], rows: list[dict[str, Any]]) 
         "required_session_id": "nonzero_uuid",
         "required_instance_id": "nonzero_uuid",
         "required_evidence_run_id": "nonzero_uuid",
+        "required_session_matches_evidence_run_id": True,
         "accept_zero": True,
     }
     if gate != expected:
@@ -306,6 +312,8 @@ def _validate_authoritative_model_result(
         raise RuntimeError("authoritative task session ID is invalid") from exc
     if session_id.int == 0:
         raise RuntimeError("authoritative task session ID is zero")
+    if session_id != evidence_run_id:
+        raise RuntimeError("authoritative task session is not bound to its evidence run")
 
 
 def _validate_direct_authority_attestation(
@@ -359,6 +367,132 @@ def _validate_direct_authority_attestation(
         raise RuntimeError("accepted direct-authority attestation drifted")
 
 
+def _validate_persisted_direct_evidence_task(
+    task_dir: Path,
+    config: dict[str, Any],
+    result: dict[str, Any],
+) -> None:
+    """Fail closed on one sanitized v3 task before releasing another task."""
+    artifacts = {
+        name: load_json(task_dir / name)
+        for name in (
+            "runtime-binding.json",
+            "scoring-intent.json",
+            "reward-result.json",
+            "result.json",
+            "session-ingest.json",
+        )
+    }
+    runtime = artifacts["runtime-binding.json"]
+    scoring = artifacts["scoring-intent.json"]
+    reward = artifacts["reward-result.json"]
+    persisted_result = artifacts["result.json"]
+    session = artifacts["session-ingest.json"]
+    instance_id = runtime.get("instance_id")
+    evidence_run_id = runtime.get("evidence_run_id")
+    verifier_execution_id = result.get("verifier_execution_id")
+    score = result.get("score")
+
+    def score_matches(value: Any) -> bool:
+        if isinstance(value, bool):
+            return False
+        try:
+            observed = float(value)
+            expected = float(score)
+        except (TypeError, ValueError):
+            return False
+        return math.isfinite(observed) and observed == expected
+
+    for value, label in (
+        (instance_id, "persisted instance ID"),
+        (evidence_run_id, "persisted evidence-run ID"),
+        (verifier_execution_id, "persisted verifier execution ID"),
+    ):
+        try:
+            parsed = UUID(str(value))
+        except ValueError as exc:
+            raise RuntimeError(f"{label} is invalid") from exc
+        if parsed.int == 0:
+            raise RuntimeError(f"{label} is zero")
+    expected_payload = {
+        "instance_id": instance_id,
+        "multi_app_aggregation_mode": config["authority"]["multi_app_aggregation_mode"],
+        "scoring_mode": config["authority"]["scoring_mode"],
+    }
+    if (
+        scoring.get("schema_version") != "fleet-selfhosted-scoring-intent-v1"
+        or scoring.get("scoring_intent_sha256") != _digest_without(scoring, "scoring_intent_sha256")
+        or scoring.get("run_id") != config["run_id"]
+        or scoring.get("task_key") != config["task"]["key"]
+        or scoring.get("task_version_id") != config["task"]["version_id"]
+        or scoring.get("instance_id") != instance_id
+        or scoring.get("evidence_run_id") != evidence_run_id
+        or scoring.get("scoring_payload_mode") != self_hosted.RUNTIME_EVIDENCE_ONLY_V3
+        or scoring.get("request_keys") != list(self_hosted.RUNTIME_EVIDENCE_ONLY_V3_SCORING_KEYS)
+        or scoring.get("request_sha256")
+        != self_hosted.sha256(self_hosted.canonical_json(expected_payload))
+    ):
+        raise RuntimeError("persisted scoring request contract drifted")
+    exact_identity = {
+        "task_key": config["task"]["key"],
+        "task_version_id": config["task"]["version_id"],
+        "instance_id": instance_id,
+    }
+    if any(reward.get(key) != value for key, value in exact_identity.items()) or (
+        reward.get("verifier_execution_id") != verifier_execution_id
+        or not score_matches(reward.get("reward"))
+    ):
+        raise RuntimeError("persisted authoritative reward binding drifted")
+    _validate_direct_authority_attestation(
+        reward.get("direct_authority_attestation"),
+        config=config,
+        instance_id=instance_id,
+        evidence_run_id=evidence_run_id,
+        verifier_execution_id=verifier_execution_id,
+        score=float(score),
+    )
+    expected_result = {
+        "run_id": config["run_id"],
+        **exact_identity,
+        "evidence_run_id": evidence_run_id,
+        "session_id": evidence_run_id,
+        "session_ingest_status": "completed",
+        "verifier_execution_id": verifier_execution_id,
+        "qwen_exit_code": 0,
+    }
+    if any(
+        persisted_result.get(key) != value for key, value in expected_result.items()
+    ) or not score_matches(persisted_result.get("score")):
+        raise RuntimeError("persisted task result binding drifted")
+    expected_session = {
+        "status": "completed",
+        "mode": "metadata_only_runtime_evidence_v1",
+        "success": True,
+        "evidence_only": True,
+        "trace_persisted": False,
+        "session_id": evidence_run_id,
+        "evidence_run_id": evidence_run_id,
+        "message_count": 0,
+        "chunks_completed": 1,
+        "chunk_count": 1,
+        "model": f"qwen/{config['model']['served_id']}",
+        "verifier_execution_id": verifier_execution_id,
+        **exact_identity,
+    }
+    if (
+        any(session.get(key) != value for key, value in expected_session.items())
+        or not score_matches(session.get("score"))
+        or session.get("success") is not True
+        or session.get("evidence_only") is not True
+        or session.get("trace_persisted") is not False
+        or type(session.get("message_count")) is not int
+        or type(session.get("chunks_completed")) is not int
+        or type(session.get("chunk_count")) is not int
+        or not isinstance(session.get("created_new_session"), bool)
+    ):
+        raise RuntimeError("persisted metadata-only session binding drifted")
+
+
 def _safe_artifact_manifest(
     out_dir: Path,
     outcomes: list[dict[str, Any]],
@@ -409,6 +543,7 @@ def _safe_artifact_manifest(
         if frozen is None:
             raise RuntimeError("accepted task is absent from the frozen receipt")
         expected_config = task_config(plan, frozen)
+        _validate_persisted_direct_evidence_task(task_dir, expected_config, outcome)
         if {path.name for path in task_dir.iterdir()} != set(required):
             raise RuntimeError("accepted task directory contains a non-sanitized artifact")
         if (
@@ -428,12 +563,6 @@ def _safe_artifact_manifest(
             scoring, "scoring_intent_sha256"
         ):
             raise RuntimeError("accepted scoring intent digest is invalid")
-        if scoring.get(
-            "scoring_payload_mode"
-        ) != self_hosted.RUNTIME_EVIDENCE_ONLY_V3 or scoring.get("request_keys") != list(
-            self_hosted.RUNTIME_EVIDENCE_ONLY_V3_SCORING_KEYS
-        ):
-            raise RuntimeError("accepted scoring intent payload contract drifted")
         run_id = result.get("run_id")
         instance_id = runtime.get("instance_id")
         evidence_run_id = runtime.get("evidence_run_id")
@@ -488,14 +617,6 @@ def _safe_artifact_manifest(
             or result.get("verifier_execution_id") != outcome["verifier_execution_id"]
         ):
             raise RuntimeError("accepted authoritative result cross-link drifted")
-        _validate_direct_authority_attestation(
-            reward.get("direct_authority_attestation"),
-            config=expected_config,
-            instance_id=instance_id,
-            evidence_run_id=evidence_run_id,
-            verifier_execution_id=outcome["verifier_execution_id"],
-            score=float(outcome["score"]),
-        )
         if (
             runtime.get("tool_names") != ["bash", "submit_report"]
             or runtime.get("tool_catalog_sha256")
@@ -505,33 +626,6 @@ def _safe_artifact_manifest(
             or result.get("qwen_exit_code") != 0
         ):
             raise RuntimeError("accepted runtime or cleanup evidence is incomplete")
-        if session.get("status") != "completed":
-            raise RuntimeError("accepted session-ingest status is invalid")
-        if session.get("session_id") != result.get("session_id"):
-            raise RuntimeError("accepted session-ingest identity drifted")
-        if plan.get("schema_version") == RANKED50_SCHEMA and (
-            session.get("mode") != "metadata_only_runtime_evidence_v1"
-            or session.get("message_count") != 0
-            or session.get("task_key") != expected_config["task"]["key"]
-            or session.get("task_version_id") != expected_config["task"]["version_id"]
-            or session.get("instance_id") != instance_id
-            or session.get("evidence_run_id") != evidence_run_id
-            or session.get("verifier_execution_id") != outcome["verifier_execution_id"]
-            or float(session.get("score")) != float(outcome["score"])
-        ):
-            raise RuntimeError("accepted metadata-only session binding drifted")
-        if (
-            session.get("chunks_completed") != session.get("chunk_count")
-            or not isinstance(session.get("chunk_count"), int)
-            or session["chunk_count"] <= 0
-        ):
-            raise RuntimeError("accepted session-ingest chunk receipt is incomplete")
-        try:
-            session_id = UUID(str(session.get("session_id")))
-        except ValueError as exc:
-            raise RuntimeError("accepted session-ingest ID is invalid") from exc
-        if session_id.int == 0:
-            raise RuntimeError("accepted session-ingest ID is zero")
         accepted_outcomes.append(
             {
                 "index": outcome["index"],
@@ -863,15 +957,22 @@ def validate_plan(plan: dict[str, Any], split: dict[str, Any]) -> list[dict[str,
             or metadata_authority
             != {
                 "route": "/v1/sessions/ingest",
+                "contract_source_pr": "https://github.com/fleet-ai/theseus/pull/28932",
+                "contract_source_commit": "8fe26474ac64a0c1a30f60c23ffa1fc5577c7a28",
                 "request_message_count": 0,
                 "required_response_bindings": [
+                    "success",
                     "session_id",
                     "message_count",
+                    "created_new_session",
+                    "evidence_only",
+                    "trace_persisted",
                     "score",
                     "verifier_execution_id",
                     "task_key",
                     "eval_task_version_id",
                     "instance_id",
+                    "model",
                 ],
                 "deployed_openapi_sha256": None,
                 "behavioral_probe_receipt_sha256": None,
@@ -1344,6 +1445,8 @@ def run_campaign(
                 },
             )
             _persist_sanitized_task_artifacts(scratch, task_out, config, result)
+            if plan.get("schema_version") == RANKED50_SCHEMA:
+                _validate_persisted_direct_evidence_task(task_out, config, result)
             return {
                 "index": row["index"],
                 "task_key": row["task_key"],

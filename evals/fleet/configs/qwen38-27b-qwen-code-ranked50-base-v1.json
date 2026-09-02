@@ -13,15 +13,22 @@
     "full_trace_session_ingestion_forbidden": true,
     "metadata_only_session_ingestion_authority": {
       "route": "/v1/sessions/ingest",
+      "contract_source_pr": "https://github.com/fleet-ai/theseus/pull/28932",
+      "contract_source_commit": "8fe26474ac64a0c1a30f60c23ffa1fc5577c7a28",
       "request_message_count": 0,
       "required_response_bindings": [
+        "success",
         "session_id",
         "message_count",
+        "created_new_session",
+        "evidence_only",
+        "trace_persisted",
         "score",
         "verifier_execution_id",
         "task_key",
         "eval_task_version_id",
-        "instance_id"
+        "instance_id",
+        "model"
       ],
       "deployed_openapi_sha256": null,
       "behavioral_probe_receipt_sha256": null
@@ -1105,6 +1112,7 @@
     "required_session_id": "nonzero_uuid",
     "required_instance_id": "nonzero_uuid",
     "required_evidence_run_id": "nonzero_uuid",
+    "required_session_matches_evidence_run_id": true,
     "accept_zero": true
   }
 }
