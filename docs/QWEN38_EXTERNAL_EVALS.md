@@ -123,7 +123,13 @@ post-rotation metadata and requires the confirmed rotation time to postdate
 `2026-09-01T23:39:05Z`. On an approved `--execute`, it rejects an ambient
 `FLEET_API_KEY`, atomically reads the same metadata plus the encoded value from
 `fleet-train-jobs/fleet-api`, and decodes the value only in process memory. The
-detached supervisor inherits it through the environment. The value is never
+detached supervisor receives it through an explicit allowlisted environment;
+ambient cloud, source-control, Python-path, and other credential variables are
+not forwarded. The hidden supervisor entry point requires a random one-time
+parent capability, represented only by its digest in the launch claim and
+receipt chain. The CAGE child receives the Fleet
+key but not that supervisor capability. The execute function has no ambient-key
+fallback and refuses missing bound rotation evidence. The value is never
 accepted as an argument, printed, or written into a claim, command, log setup,
 or receipt; the durable launch claim binds the rotation receipt digest.
 
