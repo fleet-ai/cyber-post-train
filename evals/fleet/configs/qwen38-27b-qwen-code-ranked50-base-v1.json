@@ -11,8 +11,22 @@
   },
   "privacy_gate": {
     "full_trace_session_ingestion_forbidden": true,
-    "metadata_only_session_ingestion_authority": null,
-    "status": "blocked_pending_sanctioned_metadata_only_api"
+    "metadata_only_session_ingestion_authority": {
+      "route": "/v1/sessions/ingest",
+      "request_message_count": 0,
+      "required_response_bindings": [
+        "session_id",
+        "message_count",
+        "score",
+        "verifier_execution_id",
+        "task_key",
+        "eval_task_version_id",
+        "instance_id"
+      ],
+      "deployed_openapi_sha256": null,
+      "behavioral_probe_receipt_sha256": null
+    },
+    "status": "blocked_pending_deployed_metadata_only_behavioral_probe"
   },
   "duplicate_gate": {
     "known_local_attempts_excluded": 5,

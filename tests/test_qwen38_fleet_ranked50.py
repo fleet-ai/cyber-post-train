@@ -655,9 +655,16 @@ def test_terminal_acceptance_is_create_once_digest_bound_and_all_or_nothing(
             "scoring-intent.json": scoring,
             "session-ingest.json": {
                 "status": "completed",
+                "mode": "metadata_only_runtime_evidence_v1",
                 "session_id": session_id,
+                "message_count": 0,
                 "chunk_count": 1,
                 "chunks_completed": 1,
+                "score": 0.0,
+                "verifier_execution_id": verifier_id,
+                "task_key": row["task_key"],
+                "task_version_id": row["task_version_id"],
+                "instance_id": instance_id,
             },
         }
         for name, value in artifacts.items():
@@ -1041,10 +1048,16 @@ def test_campaign_persists_only_sanitized_receipts_and_removes_private_scratch(
             "scoring-intent.json": scoring,
             "session-ingest.json": {
                 "status": "completed",
+                "mode": "metadata_only_runtime_evidence_v1",
                 "session_id": session_id,
-                "message_count": 10,
+                "message_count": 0,
                 "chunks_completed": 1,
                 "chunk_count": 1,
+                "score": 0.0,
+                "verifier_execution_id": verifier_id,
+                "task_key": config["task"]["key"],
+                "task_version_id": config["task"]["version_id"],
+                "instance_id": instance_id,
             },
         }
         for name, value in artifacts.items():

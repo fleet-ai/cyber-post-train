@@ -446,6 +446,67 @@ def ingest_session_trace(
     return receipt
 
 
+def ingest_metadata_only_session(
+    client: httpx.Client,
+    *,
+    config: dict[str, Any],
+    instance_id: str,
+    score: float,
+    verifier_execution_id: str | None,
+) -> dict[str, Any]:
+    """Persist verifier-backed outcome metadata while storing zero model messages."""
+    if config["authority"].get("scoring_payload_mode") != "runtime_evidence_only_v3":
+        raise ValueError("metadata-only session ingestion requires runtime-evidence-only v3")
+    if not isinstance(verifier_execution_id, str) or not verifier_execution_id:
+        raise ValueError("metadata-only session ingestion requires a verifier execution ID")
+    payload = {
+        "messages": [],
+        "model": f"qwen/{config['model']['served_id']}",
+        "task_key": config["task"]["key"],
+        "eval_task_version_id": config["task"]["version_id"],
+        "instance_id": instance_id,
+        "score": score,
+        "verifier_execution_id": verifier_execution_id,
+    }
+    response = _request(client, "POST", "/v1/sessions/ingest", json=payload)
+    session_id = response.get("session_id")
+    try:
+        parsed_session_id = uuid.UUID(str(session_id))
+    except ValueError as exc:
+        raise RuntimeError("metadata-only session response has an invalid session ID") from exc
+    if parsed_session_id.int == 0:
+        raise RuntimeError("metadata-only session response has a zero session ID")
+    response_score = response.get("score")
+    if isinstance(response_score, bool):
+        raise RuntimeError("metadata-only session response score is invalid")
+    try:
+        exact_score = float(response_score)
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError("metadata-only session response score is invalid") from exc
+    expected = {
+        "message_count": 0,
+        "task_key": config["task"]["key"],
+        "eval_task_version_id": config["task"]["version_id"],
+        "instance_id": instance_id,
+        "verifier_execution_id": verifier_execution_id,
+    }
+    if any(response.get(key) != value for key, value in expected.items()) or exact_score != score:
+        raise RuntimeError("metadata-only session response binding drifted")
+    return {
+        "status": "completed",
+        "mode": "metadata_only_runtime_evidence_v1",
+        "session_id": str(parsed_session_id),
+        "message_count": 0,
+        "chunks_completed": 1,
+        "chunk_count": 1,
+        "score": exact_score,
+        "verifier_execution_id": verifier_execution_id,
+        "task_key": config["task"]["key"],
+        "task_version_id": config["task"]["version_id"],
+        "instance_id": instance_id,
+    }
+
+
 def authoritative_route(config: dict[str, Any], kind: str) -> str:
     template = config["authority"][f"{kind}_route_template"]
     return template.format(
@@ -857,30 +918,37 @@ def run(
         )
         (out_dir / "reward-result.json").write_bytes(canonical_json(reward_result) + b"\n")
         score = float(reward_result["reward"])
-        session_metadata = {
-            "self_hosted_harness": "qwen-code-0.22.3",
-            "run_id": config["run_id"],
-            "tool_catalog_sha256": tool_digest,
-            "qwen_exit_code": result.returncode,
-            "agent_termination": agent_termination,
-            "trace_fidelity": trace_manifest["fidelity"],
-            "canonical_trace_sha256": trace_digest,
-            "training_data_eligible": False,
-        }
         try:
-            session_receipt = ingest_session_trace(
-                client,
-                messages=messages,
-                config=config,
-                instance_id=instance_id,
-                score=score,
-                verifier_execution_id=reward_result.get("verifier_execution_id"),
-                metadata=session_metadata,
-            )
+            if config["authority"].get("scoring_payload_mode") == "runtime_evidence_only_v3":
+                session_receipt = ingest_metadata_only_session(
+                    client,
+                    config=config,
+                    instance_id=instance_id,
+                    score=score,
+                    verifier_execution_id=reward_result.get("verifier_execution_id"),
+                )
+            else:
+                session_receipt = ingest_session_trace(
+                    client,
+                    messages=messages,
+                    config=config,
+                    instance_id=instance_id,
+                    score=score,
+                    verifier_execution_id=reward_result.get("verifier_execution_id"),
+                    metadata={
+                        "self_hosted_harness": "qwen-code-0.22.3",
+                        "run_id": config["run_id"],
+                        "tool_catalog_sha256": tool_digest,
+                        "qwen_exit_code": result.returncode,
+                        "agent_termination": agent_termination,
+                        "trace_fidelity": trace_manifest["fidelity"],
+                        "canonical_trace_sha256": trace_digest,
+                        "training_data_eligible": False,
+                    },
+                )
         except SessionIngestError as exc:
-            # Authoritative scoring is the primary experiment outcome.  Preserve
-            # that valid outcome even if the ancillary Fleet dashboard trace
-            # copy fails; the full canonical trace remains in this run bundle.
+            # Preserve the single-shot mutation receipt for terminal diagnosis;
+            # callers still classify incomplete ingestion as infrastructure-invalid.
             session_receipt = exc.receipt
         (out_dir / "session-ingest.json").write_bytes(
             canonical_json(session_receipt) + b"\n"

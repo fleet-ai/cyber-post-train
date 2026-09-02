@@ -273,14 +273,16 @@ through the runner process environment. The value is never written to a
 ConfigMap, argument, log, or receipt. An existing Job, ConfigMap, RBAC object,
 or single-use output root is a hard refusal.
 
-Paid submission is also deliberately blocked until Fleet exposes and proves a
-sanctioned metadata-only session-ingestion authority. The current session route
-requires the full normalized private conversation, which would persist prompts,
-tool observations, answers, and possible flags. Local task execution already
-uses a per-task `emptyDir` scratch root and persists only minimized receipts to
-SFS, but that does not make full server-side trace ingestion acceptable. Do not
-remove this privacy gate or represent the ranked-50 plan as launch-ready until
-the metadata-only contract is deployed and tested.
+Paid submission is also deliberately blocked until deployed OpenAPI and a
+behavioral probe prove Fleet's zero-message session-ingestion contract. The
+ranked-50 client has a dedicated runtime-evidence-only path that submits
+`messages: []`, no trace metadata, and requires the response to echo the exact
+session, score, verifier, task-version, and instance bindings with
+`message_count: 0`. It never calls the full-trace ingestion path. Local task
+execution also uses a per-task `emptyDir` scratch root and persists only
+minimized receipts to SFS. Do not remove this privacy gate or represent the
+ranked-50 plan as launch-ready until the deployed contract is independently
+probed.
 
 The authoritative score path is separately constrained to Verifier Contract v3.
 Preflight requires every exact task version to expose the complete `2 / 1 / 3`

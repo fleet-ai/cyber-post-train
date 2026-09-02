@@ -141,7 +141,19 @@ def _persist_sanitized_task_artifacts(
     )
     session = _selected(
         raw["session-ingest.json"],
-        ("status", "session_id", "message_count", "chunks_completed", "chunk_count"),
+        (
+            "status",
+            "mode",
+            "session_id",
+            "message_count",
+            "chunks_completed",
+            "chunk_count",
+            "score",
+            "verifier_execution_id",
+            "task_key",
+            "task_version_id",
+            "instance_id",
+        ),
     )
     minimized_result = _selected(
         result,
@@ -388,6 +400,16 @@ def _safe_artifact_manifest(
             raise RuntimeError("accepted session-ingest status is invalid")
         if session.get("session_id") != result.get("session_id"):
             raise RuntimeError("accepted session-ingest identity drifted")
+        if plan.get("schema_version") == RANKED50_SCHEMA and (
+            session.get("mode") != "metadata_only_runtime_evidence_v1"
+            or session.get("message_count") != 0
+            or session.get("task_key") != expected_config["task"]["key"]
+            or session.get("task_version_id") != expected_config["task"]["version_id"]
+            or session.get("instance_id") != instance_id
+            or session.get("verifier_execution_id") != outcome["verifier_execution_id"]
+            or float(session.get("score")) != float(outcome["score"])
+        ):
+            raise RuntimeError("accepted metadata-only session binding drifted")
         if (
             session.get("chunks_completed") != session.get("chunk_count")
             or not isinstance(session.get("chunk_count"), int)
@@ -729,11 +751,29 @@ def validate_plan(plan: dict[str, Any], split: dict[str, Any]) -> list[dict[str,
         if exclusions.get("treatment_identity") != qwen38_fleet50.treatment_identity(plan):
             raise ValueError("ranked-50 plan treatment differs from prior-attempt exclusions")
         rows = qwen38_fleet50.validate_selection(selection, split, exclusions)
-        if plan.get("privacy_gate") != {
-            "full_trace_session_ingestion_forbidden": True,
-            "metadata_only_session_ingestion_authority": None,
-            "status": "blocked_pending_sanctioned_metadata_only_api",
-        }:
+        privacy_gate = plan.get("privacy_gate") or {}
+        metadata_authority = privacy_gate.get("metadata_only_session_ingestion_authority")
+        if (
+            privacy_gate.get("full_trace_session_ingestion_forbidden") is not True
+            or privacy_gate.get("status")
+            != "blocked_pending_deployed_metadata_only_behavioral_probe"
+            or metadata_authority
+            != {
+                "route": "/v1/sessions/ingest",
+                "request_message_count": 0,
+                "required_response_bindings": [
+                    "session_id",
+                    "message_count",
+                    "score",
+                    "verifier_execution_id",
+                    "task_key",
+                    "eval_task_version_id",
+                    "instance_id",
+                ],
+                "deployed_openapi_sha256": None,
+                "behavioral_probe_receipt_sha256": None,
+            }
+        ):
             raise ValueError("ranked-50 private-trace gate drifted")
         if plan.get("duplicate_gate") != {
             "known_local_attempts_excluded": 5,
@@ -1023,8 +1063,8 @@ def build_live_receipt(
         raise RuntimeError("ranked-50 task is not exact Verifier Contract v3")
     if plan.get("schema_version") == RANKED50_SCHEMA:
         raise RuntimeError(
-            "ranked-50 launch is blocked until a sanctioned metadata-only Fleet session "
-            "ingestion authority replaces full private-trace ingestion"
+            "ranked-50 launch is blocked until deployed OpenAPI and a behavioral probe prove "
+            "zero-message Fleet session ingestion"
         )
     receipt = {
         "schema_version": RECEIPT_SCHEMA,

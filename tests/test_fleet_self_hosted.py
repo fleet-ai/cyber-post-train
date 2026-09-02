@@ -358,6 +358,114 @@ def test_session_trace_ingest_also_bounds_serialized_payload_bytes(
     assert [len(payload["messages"]) for payload in payloads] == [1, 1, 1]
 
 
+def test_metadata_only_session_ingest_persists_no_model_content() -> None:
+    config = _config()
+    config["authority"]["scoring_payload_mode"] = "runtime_evidence_only_v3"
+    session_id = "b9391407-8136-4562-b4d6-7ac57ef1efca"
+    verifier_id = "fcaa240d-e625-47d9-b2d3-042c33de27af"
+    observed: dict = {}
+
+    class Client:
+        def request(self, method: str, url: str, **kwargs):
+            assert method == "POST"
+            assert url.endswith("/v1/sessions/ingest")
+            observed.update(kwargs["json"])
+            return type(
+                "Response",
+                (),
+                {
+                    "status_code": 200,
+                    "json": lambda self: {
+                        "session_id": session_id,
+                        "message_count": 0,
+                        "score": 0.25,
+                        "verifier_execution_id": verifier_id,
+                        "task_key": config["task"]["key"],
+                        "eval_task_version_id": config["task"]["version_id"],
+                        "instance_id": "instance-1",
+                    },
+                },
+            )()
+
+    receipt = self_hosted.ingest_metadata_only_session(
+        Client(),
+        config=config,
+        instance_id="instance-1",
+        score=0.25,
+        verifier_execution_id=verifier_id,
+    )
+
+    assert observed == {
+        "messages": [],
+        "model": f"qwen/{config['model']['served_id']}",
+        "task_key": config["task"]["key"],
+        "eval_task_version_id": config["task"]["version_id"],
+        "instance_id": "instance-1",
+        "score": 0.25,
+        "verifier_execution_id": verifier_id,
+    }
+    assert "metadata" not in observed
+    assert "conversation" not in observed
+    assert "final_answer" not in observed
+    assert receipt == {
+        "status": "completed",
+        "mode": "metadata_only_runtime_evidence_v1",
+        "session_id": session_id,
+        "message_count": 0,
+        "chunks_completed": 1,
+        "chunk_count": 1,
+        "score": 0.25,
+        "verifier_execution_id": verifier_id,
+        "task_key": config["task"]["key"],
+        "task_version_id": config["task"]["version_id"],
+        "instance_id": "instance-1",
+    }
+
+
+@pytest.mark.parametrize(
+    ("field", "replacement"),
+    [
+        ("message_count", 1),
+        ("score", 0.5),
+        ("verifier_execution_id", "wrong"),
+        ("task_key", "wrong"),
+        ("eval_task_version_id", "00000000-0000-0000-0000-000000000001"),
+        ("instance_id", "wrong"),
+    ],
+)
+def test_metadata_only_session_ingest_rejects_response_drift(
+    field: str, replacement: object
+) -> None:
+    config = _config()
+    config["authority"]["scoring_payload_mode"] = "runtime_evidence_only_v3"
+    verifier_id = "fcaa240d-e625-47d9-b2d3-042c33de27af"
+    response = {
+        "session_id": "b9391407-8136-4562-b4d6-7ac57ef1efca",
+        "message_count": 0,
+        "score": 0.25,
+        "verifier_execution_id": verifier_id,
+        "task_key": config["task"]["key"],
+        "eval_task_version_id": config["task"]["version_id"],
+        "instance_id": "instance-1",
+    }
+    response[field] = replacement
+
+    class Client:
+        def request(self, method: str, url: str, **kwargs):
+            return type(
+                "Response", (), {"status_code": 200, "json": lambda self: response}
+            )()
+
+    with pytest.raises(RuntimeError, match="response"):
+        self_hosted.ingest_metadata_only_session(
+            Client(),
+            config=config,
+            instance_id="instance-1",
+            score=0.25,
+            verifier_execution_id=verifier_id,
+        )
+
+
 def test_docker_secret_is_in_environment_not_argv(monkeypatch: pytest.MonkeyPatch) -> None:
     observed: dict = {}
 
