@@ -1,0 +1,233 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: chris-cyber-qwen38-qcode-fleet-ranked50-base-v1
+  namespace: fleet-train-jobs
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: chris-cyber-qwen38-qcode-fleet-ranked50-base-v1
+  namespace: fleet-train-jobs
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames: [fleet-api]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: chris-cyber-qwen38-qcode-fleet-ranked50-base-v1
+  namespace: fleet-train-jobs
+subjects:
+  - kind: ServiceAccount
+    name: chris-cyber-qwen38-qcode-fleet-ranked50-base-v1
+    namespace: fleet-train-jobs
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: chris-cyber-qwen38-qcode-fleet-ranked50-base-v1
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: chris-cyber-qwen38-qcode-fleet-ranked50-base-v1
+  namespace: fleet-train-jobs
+  labels:
+    cyber-post-train.fleet.ai/experiment: qwen38-qwen-code-fleet-ranked50-base-v1
+    cyber-post-train.fleet.ai/owner: chris
+    kueue.x-k8s.io/queue-name: training-lq
+spec:
+  activeDeadlineSeconds: 604800
+  backoffLimit: 0
+  suspend: true
+  ttlSecondsAfterFinished: 604800
+  template:
+    metadata:
+      labels:
+        cyber-post-train.fleet.ai/experiment: qwen38-qwen-code-fleet-ranked50-base-v1
+        cyber-post-train.fleet.ai/owner: chris
+    spec:
+      restartPolicy: Never
+      serviceAccountName: chris-cyber-qwen38-qcode-fleet-ranked50-base-v1
+      nodeSelector:
+        kubernetes.io/arch: amd64
+        workload: fleetai-training-ng-cpu
+      tolerations:
+        - key: workload
+          operator: Equal
+          value: fleetai-training-ng-cpu
+          effect: NoSchedule
+      imagePullSecrets:
+        - name: ghcr-pull
+      initContainers:
+        - name: dind
+          image: docker.io/library/docker@sha256:f649ef046008ca7f926a2571c32b0ac22e5c59eb61b959617f9acc2a4c638cf5
+          restartPolicy: Always
+          args:
+            - --host=unix:///var/run/docker.sock
+            - --host=tcp://0.0.0.0:2375
+            - --tls=false
+          readinessProbe:
+            tcpSocket:
+              port: 2375
+            initialDelaySeconds: 2
+            periodSeconds: 2
+          securityContext:
+            privileged: true
+          resources:
+            requests:
+              cpu: "1"
+              memory: 2Gi
+              ephemeral-storage: 20Gi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+              ephemeral-storage: 80Gi
+          volumeMounts:
+            - name: docker-socket
+              mountPath: /var/run
+            - name: docker-data
+              mountPath: /var/lib/docker
+            - name: workspace
+              mountPath: /workspace
+            - name: sfs
+              mountPath: /mnt/sfs
+      containers:
+        - name: evaluator
+          image: ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
+          command:
+            - /bin/bash
+            - -ceu
+            - --
+          args:
+            - |
+              apt-get update
+              apt-get install --yes --no-install-recommends \
+                docker.io=20.10.24+dfsg1-1+deb12u1+b6
+              rm -rf /var/lib/apt/lists/*
+              mkdir -p /workspace/bin
+              python - <<'PY'
+              import hashlib
+              import pathlib
+              import urllib.request
+
+              url = "https://dl.k8s.io/release/v1.35.6/bin/linux/amd64/kubectl"
+              expected = "5d11e2ba01ea68ffd053f56e27738e2b4330013ee67f7e46c6da6c585d3c9926"
+              destination = pathlib.Path("/workspace/bin/kubectl")
+              payload = urllib.request.urlopen(url, timeout=60).read()
+              if hashlib.sha256(payload).hexdigest() != expected:
+                  raise SystemExit("kubectl checksum mismatch")
+              destination.write_bytes(payload)
+              destination.chmod(0o500)
+              PY
+              export PATH=/workspace/bin:$PATH
+              root=/workspace/cyber-post-train
+              mkdir -p \
+                "$root/configs/data" \
+                "$root/docs/evidence/qwen38-study" \
+                "$root/evals/fleet/cluster" \
+                "$root/evals/fleet/configs" \
+                "$root/evals/fleet/receipts" \
+                "$root/evals/fleet/scripts"
+              touch "$root/evals/__init__.py" "$root/evals/fleet/__init__.py"
+              install -m 0644 /bootstrap/Dockerfile.qwen-code "$root/evals/fleet/Dockerfile.qwen-code"
+              install -m 0644 /bootstrap/credential_rotation.py "$root/evals/credential_rotation.py"
+              install -m 0644 /bootstrap/config.json \
+                "$root/evals/fleet/configs/qwen38-27b-qwen-code-ranked50-base-v1.json"
+              install -m 0644 /bootstrap/fixed_proxy.py "$root/evals/fleet/fixed_proxy.py"
+              install -m 0644 /bootstrap/holdout.py "$root/evals/fleet/holdout.py"
+              install -m 0644 /bootstrap/qwen38_fleet50.py \
+                "$root/evals/fleet/qwen38_fleet50.py"
+              install -m 0644 /bootstrap/self_hosted.py "$root/evals/fleet/self_hosted.py"
+              install -m 0644 /bootstrap/split.json \
+                "$root/configs/data/fleet-a62-task-split-v1.json"
+              install -m 0644 /bootstrap/v2-incident.json \
+                "$root/docs/evidence/qwen38-study/2026-09-01-fleet-calibration-v2-infrastructure-incident.json"
+              install -m 0644 /bootstrap/v3-terminal.json \
+                "$root/docs/evidence/qwen38-study/2026-09-01-fleet-calibration-v3-terminal-valid-zero.json"
+              install -m 0644 /bootstrap/v2-treatment-plan.json \
+                "$root/evals/fleet/configs/qwen38-27b-qwen-code-reward-calibration-pass1-v2.json"
+              install -m 0644 /bootstrap/v3-treatment-plan.json \
+                "$root/evals/fleet/configs/qwen38-27b-qwen-code-reward-calibration-pass1-v3.json"
+              install -m 0755 /bootstrap/run_selfhosted_qwen38_ranked50.sh \
+                "$root/evals/fleet/scripts/run_selfhosted_qwen38_ranked50.sh"
+              cd "$root"
+              exec python - <<'PY'
+              import json
+              import os
+
+              from evals.credential_rotation import (
+                  read_secret_snapshot_in_memory,
+                  validate_credential_rotation,
+              )
+
+              receipt = json.load(open("/bootstrap/credential-rotation-receipt.json"))
+              metadata, api_key = read_secret_snapshot_in_memory()
+              validate_credential_rotation(
+                  receipt,
+                  metadata,
+                  rotation_not_before="2026-09-01T23:39:05Z",
+              )
+              environment = dict(os.environ)
+              environment["FLEET_API_KEY"] = api_key
+              script = "/workspace/cyber-post-train/evals/fleet/scripts/run_selfhosted_qwen38_ranked50.sh"
+              os.execve(script, [script], environment)
+              PY
+          env:
+            - name: DOCKER_HOST
+              value: unix:///var/run/docker.sock
+            - name: DOCKER_TLS_CERTDIR
+              value: ""
+            - name: FLEET_EVAL_JOB_NAME
+              value: chris-cyber-qwen38-qcode-fleet-ranked50-base-v1
+            - name: FLEET_EVAL_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: FLEET_EVAL_POD_UID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.uid
+            - name: FLEET_EVAL_SCRATCH_ROOT
+              value: /scratch
+          resources:
+            requests:
+              cpu: "2"
+              memory: 4Gi
+              ephemeral-storage: 10Gi
+            limits:
+              cpu: "4"
+              memory: 8Gi
+              ephemeral-storage: 20Gi
+          volumeMounts:
+            - name: docker-socket
+              mountPath: /var/run
+            - name: bootstrap
+              mountPath: /bootstrap
+              readOnly: true
+            - name: workspace
+              mountPath: /workspace
+            - name: sfs
+              mountPath: /mnt/sfs
+            - name: scratch
+              mountPath: /scratch
+      volumes:
+        - name: bootstrap
+          configMap:
+            name: chris-cyber-qwen38-qcode-fleet-ranked50-base-v1
+        - name: docker-data
+          emptyDir:
+            sizeLimit: 80Gi
+        - name: docker-socket
+          emptyDir: {}
+        - name: workspace
+          emptyDir:
+            sizeLimit: 10Gi
+        - name: sfs
+          persistentVolumeClaim:
+            claimName: sfs-shared
+        - name: scratch
+          emptyDir:
+            sizeLimit: 20Gi

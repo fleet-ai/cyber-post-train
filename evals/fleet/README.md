@@ -221,6 +221,95 @@ The gate accepts a valid zero because it establishes harness/verifier execution;
 it does not reinterpret that zero as capability or release any V3 train/dev
 tasks. This protocol change does not itself authorize or submit the holdout Job.
 
+### Historical-frontier-ranked 50-task Qwen3.8 capability sweep
+
+The ranked-50 plan is a separate non-test capability baseline for the exact
+Qwen3.8/Qwen Code identity above. It selects 50 distinct immutable `train`/`dev`
+task versions from the frozen 160-task split and explicitly excludes all sealed
+test rows. Historical ease is derived only from prompt-free aggregates of the
+authorized 1,265-session Fleet source export: pass rate descending, then passes,
+sessions, task key, and task-version UUID. The frozen selection spans historical
+rates 1.0 through 0.75 (48 train, 2 dev) and binds its source export, split,
+exclusion receipt, and complete ordered task list by digest.
+This is a productivity-oriented capability-sweep ordering from historical
+frontier-model outcomes, not an unbiased or Qwen-specific difficulty estimate.
+
+Five prior Qwen3.8 attempts are excluded before ranking: both authoritative
+valid zeros and the three unresolved V2 attempts. Excluding unresolved versions
+is deliberately conservative because missing local output is not proof that the
+authoritative scorer never executed. The selector never reads or emits prompt,
+transcript, tool-output, or verifier-content fields.
+
+That five-row receipt is exhaustive only for the sanitized local campaign
+evidence currently available. The runtime `/v1/sessions` scan covers live,
+non-archived sessions and cannot prove absence of archived sessions or a scored
+attempt whose session ingestion failed. Paid submission therefore has a second
+fail-closed gate pending an authoritative scorer-side/all-history duplicate
+inventory. Do not describe the current proof as globally exhaustive.
+
+The create-only controller executes the easiest task alone. It releases the
+remaining 49 only after that task produces any authoritative model outcome,
+including zero, with a nonzero verifier-execution UUID and verified instance and
+container cleanup. Remaining tasks launch in easiest-first waves of at most
+three. Every task is pass@1, valid zeros are preserved, and outputs remain
+ineligible for training.
+
+```bash
+# Static selection and Kubernetes preview. This remains fail-closed until a
+# sanitized post-incident credential-rotation receipt is supplied.
+FLEET_CREDENTIAL_ROTATION_RECEIPT=/restricted/rotation-receipt.json \
+  evals/fleet/scripts/submit_selfhosted_qwen38_ranked50.sh preview
+
+# Paid launch only after review and explicit authorization.
+FLEET_CREDENTIAL_ROTATION_RECEIPT=/restricted/rotation-receipt.json \
+  evals/fleet/scripts/submit_selfhosted_qwen38_ranked50.sh submit
+```
+
+The submitter reads only the Secret's name, namespace, UID, resourceVersion,
+and presence of the expected data key. It never decodes the credential. The
+evaluator atomically reads the Secret metadata and value in memory at execution
+time, revalidates the same sanitized rotation receipt, and passes the value only
+through the runner process environment. The value is never written to a
+ConfigMap, argument, log, or receipt. An existing Job, ConfigMap, RBAC object,
+or single-use output root is a hard refusal.
+
+Paid submission is also deliberately blocked until Fleet exposes and proves a
+sanctioned metadata-only session-ingestion authority. The current session route
+requires the full normalized private conversation, which would persist prompts,
+tool observations, answers, and possible flags. Local task execution already
+uses a per-task `emptyDir` scratch root and persists only minimized receipts to
+SFS, but that does not make full server-side trace ingestion acceptable. Do not
+remove this privacy gate or represent the ranked-50 plan as launch-ready until
+the metadata-only contract is deployed and tested.
+
+The authoritative score path is separately constrained to Verifier Contract v3.
+Preflight requires every exact task version to expose the complete `2 / 1 / 3`
+cyber contract, and the score request contains only the instance ID and scoring
+modes—never `conversation` or `final_answer`. A legacy/v2 task fails before any
+task instance is created.
+
+The rotation proof is reusable by WebExploitBench and this Fleet run. Capture
+metadata before rotation, have the credential owner rotate the Secret, capture
+metadata after rotation, then build the self-digesting receipt. The capture
+script refuses an existing destination and emits no Secret value:
+
+```bash
+evals/fleet/scripts/capture_fleet_secret_metadata.sh /restricted/fleet-api.before.json
+# Credential owner rotates fleet-train-jobs/fleet-api out of band.
+evals/fleet/scripts/capture_fleet_secret_metadata.sh /restricted/fleet-api.after.json
+uv run python -m evals.fleet.qwen38_fleet50 credential-receipt \
+  --before-metadata /restricted/fleet-api.before.json \
+  --after-metadata /restricted/fleet-api.after.json \
+  --confirmed-by "$USER" \
+  --rotation-completed-at 2026-09-02T00:00:00Z \
+  --output /restricted/rotation-receipt.json
+```
+
+The builder requires the UID or resourceVersion to change and records only the
+before/after metadata, accountable confirmer, completion time, data-key
+presence, and receipt digest. The launcher re-reads live sanitized metadata and
+requires an exact match to the `after` record.
+
 ### Interrupted-attempt reconciliation
 
 The self-hosted runner writes `resource-plan.json` before starting local

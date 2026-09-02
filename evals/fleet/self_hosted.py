@@ -10,6 +10,7 @@ import subprocess
 import sys
 import time
 import uuid
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -117,7 +118,9 @@ def load_and_verify_task(client: httpx.Client, config: dict[str, Any]) -> dict[s
         "verifier_version": config["verifier"]["version"],
         "verifier_sha256": config["verifier"]["sha256"],
         "runtime_seed_content_sha256": config["environment"]["runtime_seed_content_sha256"],
+        "cyber_contract": config["task"].get("cyber_contract"),
     }
+    actual["cyber_contract"] = (task.get("metadata") or {}).get("cyber_contract")
     if "code_sha256" in config["verifier"]:
         actual["verifier_code_sha256"] = sha256((verifier.get("code") or "").encode())
         wanted["verifier_code_sha256"] = config["verifier"]["code_sha256"]
@@ -450,6 +453,27 @@ def authoritative_route(config: dict[str, Any], kind: str) -> str:
     )
 
 
+def provisioning_request_id(config: dict[str, Any]) -> str:
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"fleet-qwen-provision:{config['run_id']}"))
+
+
+def build_scoring_payload(
+    config: dict[str, Any],
+    *,
+    instance_id: str,
+    final_answer: str,
+    messages: list[dict[str, Any]],
+) -> dict[str, Any]:
+    payload = {
+        "instance_id": instance_id,
+        "scoring_mode": config["authority"]["scoring_mode"],
+        "multi_app_aggregation_mode": config["authority"]["multi_app_aggregation_mode"],
+    }
+    if config["authority"].get("scoring_payload_mode") != "runtime_evidence_only_v3":
+        payload.update(final_answer=final_answer, conversation=messages)
+    return payload
+
+
 def assert_authoritative_routes_deployed(
     client: httpx.Client, config: dict[str, Any]
 ) -> dict[str, Any]:
@@ -575,7 +599,13 @@ def runtime_preflight(
                 raise RuntimeError("runtime preflight delete did not return termination evidence")
 
 
-def run(config: dict[str, Any], out_dir: Path, proxy_script: Path) -> dict[str, Any]:
+def run(
+    config: dict[str, Any],
+    out_dir: Path,
+    proxy_script: Path,
+    *,
+    safe_scoring_intent_sink: Callable[[dict[str, Any]], None] | None = None,
+) -> dict[str, Any]:
     api_key = os.environ.get("FLEET_API_KEY")
     qwen_image = os.environ.get("QWEN_CODE_IMAGE")
     proxy_image = os.environ.get("FIXED_PROXY_IMAGE")
@@ -601,10 +631,7 @@ def run(config: dict[str, Any], out_dir: Path, proxy_script: Path) -> dict[str, 
     started_at = time.time()
     try:
         account = _request(client, "GET", "/v1/account")
-        if account.get("team_name") != "fleet" or account.get("team_id") not in {
-            None,
-            FLEET_TEAM_ID,
-        }:
+        if account.get("team_name") != "fleet" or account.get("team_id") != FLEET_TEAM_ID:
             raise RuntimeError("FLEET_API_KEY is not scoped to the Fleet team")
         task = load_and_verify_task(client, config)
         authority_gate = assert_authoritative_routes_deployed(client, config)
@@ -625,6 +652,7 @@ def run(config: dict[str, Any], out_dir: Path, proxy_script: Path) -> dict[str, 
 
         response = client.post(
             f"{ORCHESTRATOR}{authoritative_route(config, 'provisioning')}",
+            headers={"X-Request-ID": provisioning_request_id(config)},
             json={},
         )
         if response.status_code >= 400:
@@ -647,20 +675,20 @@ def run(config: dict[str, Any], out_dir: Path, proxy_script: Path) -> dict[str, 
             instance["urls"]["root"], token_payload["header"], token_payload["token"]
         )
         assert_required_task_tools(config, tool_names, tool_digest)
+        runtime_binding = {
+            "instance_id": instance_id,
+            "evidence_run_id": rollout_instance["evidence_run_id"],
+            "env_key": instance["env_key"],
+            "environment_version": instance["version"],
+            "data_key": instance["data_key"],
+            "data_version": instance["data_version"],
+            "tool_names": tool_names,
+            "tool_catalog_sha256": tool_digest,
+        }
+        if config["environment"].get("version_id") is not None:
+            runtime_binding["environment_version_id"] = config["environment"]["version_id"]
         (out_dir / "runtime-binding.json").write_bytes(
-            canonical_json(
-                {
-                    "instance_id": instance_id,
-                    "evidence_run_id": rollout_instance["evidence_run_id"],
-                    "env_key": instance["env_key"],
-                    "environment_version": instance["version"],
-                    "data_key": instance["data_key"],
-                    "data_version": instance["data_version"],
-                    "tool_names": tool_names,
-                    "tool_catalog_sha256": tool_digest,
-                }
-            )
-            + b"\n"
+            canonical_json(runtime_binding) + b"\n"
         )
 
         resource_plan = {
@@ -800,16 +828,17 @@ def run(config: dict[str, Any], out_dir: Path, proxy_script: Path) -> dict[str, 
             "fidelity": trace_fidelity,
         }
         (out_dir / "trace-manifest.json").write_bytes(canonical_json(trace_manifest) + b"\n")
-        scoring_payload = {
-            "instance_id": instance_id,
-            "final_answer": final_answer,
-            "conversation": messages,
-            "scoring_mode": config["authority"]["scoring_mode"],
-            "multi_app_aggregation_mode": config["authority"]["multi_app_aggregation_mode"],
-        }
+        scoring_payload = build_scoring_payload(
+            config,
+            instance_id=instance_id,
+            final_answer=final_answer,
+            messages=messages,
+        )
         scoring_intent = {
             "schema_version": "fleet-selfhosted-scoring-intent-v1",
             "run_id": config["run_id"],
+            "task_key": config["task"]["key"],
+            "task_version_id": config["task"]["version_id"],
             "instance_id": instance_id,
             "evidence_run_id": rollout_instance["evidence_run_id"],
             "request_sha256": sha256(canonical_json(scoring_payload)),
@@ -818,6 +847,8 @@ def run(config: dict[str, Any], out_dir: Path, proxy_script: Path) -> dict[str, 
             canonical_json(scoring_intent)
         )
         write_json_once(out_dir / "scoring-intent.json", scoring_intent)
+        if safe_scoring_intent_sink is not None:
+            safe_scoring_intent_sink(scoring_intent)
         reward_result = _request(
             client,
             "POST",
