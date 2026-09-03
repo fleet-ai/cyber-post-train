@@ -48,3 +48,51 @@ def test_full_plan_validator_requires_exact_pass4_arithmetic() -> None:
     broken["plan_sha256"] = self_hosted.digest_without(broken, "plan_sha256")
     with pytest.raises(ValueError, match="attempt count"):
         opencode_train_sweep_runner.validate_plan(broken)
+
+
+def test_infrastructure_successor_rekeys_every_attempt() -> None:
+    plan = {
+        "schema_version": opencode_train_sweep_runner.PLAN_SCHEMA,
+        "created_at": "2026-09-03T00:00:00Z",
+        "campaign_id": "chris-example-v1",
+        "task_count": 50,
+        "pass_k": 4,
+        "tasks": [{}] * 50,
+        "attempts": [
+            {
+                "ordinal": index,
+                "run_id": f"chris-example-v1-r{index:03d}",
+                "network": f"example-v1-r{index:03d}",
+            }
+            for index in range(1, 200)
+        ],
+        "execution": {
+            "max_concurrent": 1,
+            "required_task_tools": ["bash", "submit_report"],
+        },
+    }
+    plan["plan_sha256"] = self_hosted.digest_without(plan, "plan_sha256")
+    successor = opencode_train_sweep.build_infrastructure_successor(
+        plan,
+        generation="v2",
+        reason="dind_missing_shared_bind_mounts_pre_agent",
+    )
+    assert successor["campaign_id"] == "chris-example-v2"
+    assert successor["supersedes"]["plan_sha256"] == plan["plan_sha256"]
+    assert successor["supersedes"]["scored_sessions_created"] == 0
+    assert all("-v2-" in row["run_id"] for row in successor["attempts"])
+    assert all("-v2-" in row["network"] for row in successor["attempts"])
+    opencode_train_sweep_runner.validate_plan(successor)
+
+
+def test_full_cluster_jobs_share_bind_mount_sources_with_dind() -> None:
+    manifest = (
+        __import__("pathlib").Path(__file__).parents[1]
+        / "evals/fleet/cluster/opencode-train-sweep-full-jobs.yaml"
+    ).read_text()
+    documents = manifest.split("\n---\n")
+    assert len(documents) == 2
+    for document in documents:
+        dind = document.split("containers:", 1)[0]
+        assert "{name: workspace, mountPath: /workspace}" in dind
+        assert "{name: sfs, mountPath: /mnt/sfs}" in dind

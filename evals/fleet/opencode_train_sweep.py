@@ -466,6 +466,50 @@ def build_full_plan(
     return plan
 
 
+def build_infrastructure_successor(
+    original: dict[str, Any], *, generation: str, reason: str
+) -> dict[str, Any]:
+    """Re-key an unscored plan after a pre-agent infrastructure failure.
+
+    The caller must preserve the original output tree.  Runtime duplicate
+    inventory remains authoritative and will halt the successor if any model
+    session from the superseded plan was ingested.
+    """
+    from evals.fleet.opencode_train_sweep_runner import validate_plan
+
+    validate_plan(original)
+    if generation != "v2":
+        raise ValueError("only the reviewed v2 infrastructure successor is supported")
+    if reason != "dind_missing_shared_bind_mounts_pre_agent":
+        raise ValueError("unsupported infrastructure-successor reason")
+    old_campaign = str(original["campaign_id"])
+    if not old_campaign.endswith("-v1"):
+        raise ValueError("successor source campaign must end in -v1")
+    new_campaign = f"{old_campaign[:-3]}-{generation}"
+    successor = copy.deepcopy(original)
+    successor.pop("plan_sha256", None)
+    successor["created_at"] = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+    successor["campaign_id"] = new_campaign
+    successor["supersedes"] = {
+        "plan_sha256": original["plan_sha256"],
+        "campaign_id": old_campaign,
+        "reason": reason,
+        "model_rollouts_completed": 0,
+        "scored_sessions_created": 0,
+        "original_artifacts_preserved": True,
+    }
+    for attempt in successor["attempts"]:
+        run_id = str(attempt["run_id"])
+        network = str(attempt["network"])
+        if old_campaign not in run_id or "-v1-" not in network:
+            raise ValueError("source attempt identity does not match the v1 campaign")
+        attempt["run_id"] = run_id.replace(old_campaign, new_campaign, 1)
+        attempt["network"] = network.replace("-v1-", f"-{generation}-", 1)
+    successor["plan_sha256"] = digest_without(successor, "plan_sha256")
+    validate_plan(successor)
+    return successor
+
+
 def build_smoke_config(
     client: httpx.Client,
     selection: dict[str, Any],
@@ -563,14 +607,31 @@ def build_smoke_config(
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("command", choices=("select", "smoke-config", "full-plan"))
-    parser.add_argument("--split", type=Path, required=True)
+    parser.add_argument(
+        "command", choices=("select", "smoke-config", "full-plan", "successor-plan")
+    )
+    parser.add_argument("--split", type=Path)
     parser.add_argument("--selection", type=Path)
     parser.add_argument("--model", choices=sorted(MODELS))
     parser.add_argument("--attempt", type=int, default=1)
     parser.add_argument("--credit-session-id")
+    parser.add_argument("--original-plan", type=Path)
+    parser.add_argument("--generation", choices=("v2",))
+    parser.add_argument("--reason")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
+    if args.command == "successor-plan":
+        if not args.original_plan or not args.generation or not args.reason:
+            parser.error(
+                "successor-plan requires --original-plan, --generation, and --reason"
+            )
+        value = build_infrastructure_successor(
+            load_json(args.original_plan), generation=args.generation, reason=args.reason
+        )
+        self_hosted.write_json_once(args.output, value)
+        return 0
+    if not args.split:
+        parser.error(f"{args.command} requires --split")
     key = os.environ.get("FLEET_API_KEY")
     if not key:
         raise RuntimeError("FLEET_API_KEY is required")

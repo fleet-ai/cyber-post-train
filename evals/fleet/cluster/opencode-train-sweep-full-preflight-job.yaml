@@ -1,10 +1,10 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: chris-cyber-opencode-full-sfs-preflight-v1
+  name: chris-cyber-opencode-full-sfs-preflight-v2
   namespace: fleet-train-jobs
   labels:
-    cyber-post-train.fleet.ai/experiment: opencode-train-sweep-full-preflight-v1
+    cyber-post-train.fleet.ai/experiment: opencode-train-sweep-full-preflight-v2
     cyber-post-train.fleet.ai/owner: chris
     kueue.x-k8s.io/queue-name: training-lq
 spec:
@@ -14,7 +14,7 @@ spec:
   template:
     metadata:
       labels:
-        cyber-post-train.fleet.ai/experiment: opencode-train-sweep-full-preflight-v1
+        cyber-post-train.fleet.ai/experiment: opencode-train-sweep-full-preflight-v2
         cyber-post-train.fleet.ai/owner: chris
     spec:
       restartPolicy: Never
@@ -32,8 +32,8 @@ spec:
           command: ["/bin/sh", "-ceu", "--"]
           args:
             - |
-              test ! -e /mnt/sfs/jobs/chris-cyber-opencode-q38-train50-p4-v1
-              test ! -e /mnt/sfs/jobs/chris-cyber-opencode-glm53-train100-p4-v1
+              test ! -e /mnt/sfs/jobs/chris-cyber-opencode-q38-train50-p4-v2
+              test ! -e /mnt/sfs/jobs/chris-cyber-opencode-glm53-train100-p4-v2
           resources:
             requests: {cpu: 100m, memory: 128Mi}
             limits: {cpu: 200m, memory: 256Mi}
