@@ -1,4 +1,4 @@
-"""Self-hosted official Qwen Code runner for one exactly pinned Fleet task."""
+"""Self-hosted agent runner for one exactly pinned Fleet cyber task."""
 
 from __future__ import annotations
 
@@ -46,6 +46,16 @@ def canonical_json(value: Any) -> bytes:
 
 def sha256(value: bytes) -> str:
     return "sha256:" + hashlib.sha256(value).hexdigest()
+
+
+def session_model_identity(config: dict[str, Any]) -> str:
+    explicit = (config.get("model") or {}).get("session_model")
+    if isinstance(explicit, str) and explicit:
+        return explicit
+    served_id = config["model"]["served_id"]
+    if (config.get("harness") or {}).get("name") == "qwen_code":
+        return f"qwen/{served_id}"
+    return f"self-hosted/{served_id}"
 
 
 def write_json_once(path: Path, value: dict[str, Any]) -> None:
@@ -369,6 +379,117 @@ def normalize_qwen_conversation(events: list[dict[str, Any]]) -> list[dict[str, 
     return messages
 
 
+def load_opencode_trace(path: Path) -> tuple[list[dict[str, Any]], int]:
+    """Read OpenCode's documented JSON event stream without accepting prose lines."""
+    events: list[dict[str, Any]] = []
+    malformed_line_count = 0
+    for line in path.read_text(errors="replace").splitlines():
+        try:
+            value = json.loads(line)
+        except json.JSONDecodeError:
+            malformed_line_count += 1
+            continue
+        if isinstance(value, dict):
+            events.append(value)
+    if not events:
+        raise RuntimeError("OpenCode trace contained no JSON events")
+    return events, malformed_line_count
+
+
+def normalize_opencode_conversation(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Convert OpenCode JSON parts to Fleet's role/tool-call trace schema."""
+    messages: list[dict[str, Any]] = []
+    seen_text: set[str] = set()
+    seen_reasoning: set[str] = set()
+    seen_tools: set[str] = set()
+    pending_reasoning: list[str] = []
+    for event in events:
+        part = event.get("part")
+        if not isinstance(part, dict):
+            continue
+        part_type = str(part.get("type") or event.get("type") or "").lower()
+        message_id = str(part.get("messageID") or part.get("messageId") or "")
+        part_id = str(part.get("id") or message_id or len(messages))
+        timestamp = event.get("timestamp") or part.get("time")
+        if part_type in {"reasoning", "thinking"}:
+            text = part.get("text") or part.get("content")
+            if isinstance(text, str) and text and part_id not in seen_reasoning:
+                pending_reasoning.append(text)
+                seen_reasoning.add(part_id)
+            continue
+        if part_type == "text":
+            text = part.get("text") or part.get("content")
+            if isinstance(text, str) and text and part_id not in seen_text:
+                message: dict[str, Any] = {
+                    "role": "assistant",
+                    "content": text,
+                    "timestamp": timestamp,
+                }
+                if pending_reasoning:
+                    message["thinking"] = "\n".join(pending_reasoning)
+                    pending_reasoning.clear()
+                messages.append(message)
+                seen_text.add(part_id)
+            continue
+        if part_type not in {"tool", "tool-call", "tool_call", "tool-invocation"}:
+            continue
+        state = part.get("state") if isinstance(part.get("state"), dict) else {}
+        status = str(state.get("status") or "").lower()
+        if status not in {"completed", "error", "failed"}:
+            continue
+        call_id = str(part.get("toolCallId") or state.get("id") or part_id)
+        if call_id in seen_tools:
+            continue
+        name = str(
+            part.get("tool")
+            or part.get("name")
+            or part.get("toolName")
+            or state.get("name")
+            or "tool"
+        )
+        arguments = state.get(
+            "input", state.get("args", part.get("input", part.get("args", {})))
+        )
+        output = state.get(
+            "output",
+            state.get("result", state.get("error", part.get("output", part.get("result")))),
+        )
+        assistant: dict[str, Any] = {
+            "role": "assistant",
+            "content": None,
+            "timestamp": timestamp,
+            "tool_calls": [
+                {
+                    "id": call_id,
+                    "type": "function",
+                    "function": {
+                        "name": name,
+                        "arguments": json.dumps(arguments or {}, sort_keys=True, ensure_ascii=True),
+                    },
+                }
+            ],
+        }
+        if pending_reasoning:
+            assistant["thinking"] = "\n".join(pending_reasoning)
+            pending_reasoning.clear()
+        messages.append(assistant)
+        if not isinstance(output, str):
+            output = json.dumps(output, sort_keys=True, ensure_ascii=True)
+        messages.append(
+            {
+                "role": "tool",
+                "content": output,
+                "tool_call_id": call_id,
+                "timestamp": timestamp,
+                "metadata": {"opencode_tool_name": name, "is_error": status != "completed"},
+            }
+        )
+        seen_tools.add(call_id)
+    if not messages:
+        raise RuntimeError("OpenCode trace normalized to no messages")
+    return messages
+
+
 def final_answer_from_conversation(messages: list[dict[str, Any]]) -> str:
     for message in reversed(messages):
         content = message.get("content")
@@ -424,7 +545,7 @@ def ingest_session_trace(
         if session_id is None:
             payload.update(
                 {
-                    "model": f"qwen/{config['model']['served_id']}",
+                    "model": session_model_identity(config),
                     "task_key": config["task"]["key"],
                     "eval_task_version_id": config["task"]["version_id"],
                     "instance_id": instance_id,
@@ -471,7 +592,7 @@ def ingest_metadata_only_session(
         raise ValueError("metadata-only session ingestion requires a verifier execution ID")
     payload = {
         "messages": [],
-        "model": f"qwen/{config['model']['served_id']}",
+        "model": session_model_identity(config),
         "task_key": config["task"]["key"],
         "eval_task_version_id": config["task"]["version_id"],
         "instance_id": instance_id,
@@ -500,7 +621,7 @@ def ingest_metadata_only_session(
         "evidence_only": True,
         "trace_persisted": False,
         "message_count": 0,
-        "model": f"qwen/{config['model']['served_id']}",
+        "model": session_model_identity(config),
         "task_key": config["task"]["key"],
         "eval_task_version_id": config["task"]["version_id"],
         "instance_id": instance_id,
@@ -736,7 +857,14 @@ def assert_authoritative_routes_deployed(
             response_body = {}
         detail = str(response_body.get("detail") or "")
         results[kind] = response.status_code
-        if response.status_code != 422 or "report-only" not in detail:
+        supported_shape_guard = any(
+            marker in detail
+            for marker in (
+                "report-only",
+                "exact black-box capability tasks",
+            )
+        )
+        if response.status_code != 422 or not supported_shape_guard:
             raise RuntimeError("authoritative rollout-reward routes are not deployed")
     return {"mode": "behavioral_report_only_guard", "statuses": results}
 
@@ -839,10 +967,15 @@ def run(
     safe_scoring_intent_sink: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     api_key = os.environ.get("FLEET_API_KEY")
-    qwen_image = os.environ.get("QWEN_CODE_IMAGE")
+    harness_name = str(config.get("harness", {}).get("name") or "")
+    agent_image = os.environ.get("AGENT_HARNESS_IMAGE") or os.environ.get("QWEN_CODE_IMAGE")
     proxy_image = os.environ.get("FIXED_PROXY_IMAGE")
-    if not api_key or not qwen_image or not proxy_image:
-        raise RuntimeError("FLEET_API_KEY, QWEN_CODE_IMAGE, and FIXED_PROXY_IMAGE are required")
+    if harness_name not in {"qwen_code", "opencode"}:
+        raise RuntimeError("self-hosted harness must be qwen_code or opencode")
+    if not api_key or not agent_image or not proxy_image:
+        raise RuntimeError(
+            "FLEET_API_KEY, AGENT_HARNESS_IMAGE, and FIXED_PROXY_IMAGE are required"
+        )
     out_dir.mkdir(parents=True, exist_ok=False)
     out_dir.chmod(0o700)
     client = httpx.Client(
@@ -852,9 +985,9 @@ def run(
     instance_id = None
     network = config["execution"]["network"]
     suffix = hashlib.sha256(config["run_id"].encode()).hexdigest()[:8]
-    model_proxy = f"qwen-model-proxy-{suffix}"
-    mcp_proxy = f"qwen-mcp-proxy-{suffix}"
-    qwen_agent = f"qwen-agent-{suffix}"
+    model_proxy = f"agent-model-proxy-{suffix}"
+    mcp_proxy = f"agent-mcp-proxy-{suffix}"
+    agent_container = f"agent-runtime-{suffix}"
     cleanup: dict[str, Any] = {
         "instance_created": False,
         "instance_closed": False,
@@ -926,7 +1059,7 @@ def run(
             "run_id": config["run_id"],
             "instance_id": instance_id,
             "evidence_run_id": evidence_run_id,
-            "containers": [qwen_agent, model_proxy, mcp_proxy],
+            "containers": [agent_container, model_proxy, mcp_proxy],
             "network": network,
         }
         resource_plan["resource_plan_sha256"] = sha256(canonical_json(resource_plan))
@@ -1011,58 +1144,131 @@ def run(
         _docker("network", "connect", "--alias", "fleet-mcp-proxy", network, mcp_proxy)
         wait_for_proxy(mcp_proxy, 8090)
 
-        qwen_home = out_dir / "qwen-home"
-        qwen_home.mkdir(mode=0o700)
+        agent_home = out_dir / f"{harness_name}-home"
+        agent_home.mkdir(mode=0o700)
         agent_dir = out_dir / "agent-output"
         agent_dir.mkdir(mode=0o700)
-        settings = {
-            "security": {"auth": {"selectedType": "openai"}},
-            "telemetry": {"enabled": False},
-            "general": {"disableUpdateNag": True},
-            "model": {"name": config["model"]["served_id"]},
-            "modelProviders": {
-                "openai": [
-                    {
-                        "id": config["model"]["served_id"],
-                        "name": config["model"]["served_id"],
-                        "baseUrl": "http://model-proxy:8877/v1",
-                        "envKey": "QWEN_CODE_API_KEY",
-                        "generationConfig": {
-                            "contextWindowSize": config["harness"].get(
-                                "context_window_size", 262144
-                            )
+        if harness_name == "opencode":
+            config_dir = agent_home / ".config" / "opencode"
+            config_dir.mkdir(parents=True, mode=0o700)
+            plugin_path = config_dir / "fleet-disable-compaction-autocontinue.mjs"
+            plugin_path.write_text(
+                "export const DisableCompactionAutocontinue = async () => ({\n"
+                '  "experimental.compaction.autocontinue": async (_input, output) => '
+                "{ output.enabled = false; },\n"
+                "});\n"
+            )
+            model_id = config["model"]["served_id"]
+            settings = {
+                "$schema": "https://opencode.ai/config.json",
+                "plugin": [
+                    "file:///home/node/.config/opencode/fleet-disable-compaction-autocontinue.mjs"
+                ],
+                "provider": {
+                    "fleet-cluster": {
+                        "npm": "@ai-sdk/openai-compatible",
+                        "name": "Fleet cluster inference",
+                        "options": {
+                            "baseURL": "http://model-proxy:8877/v1",
+                            "apiKey": "local-proxy-only",
+                            "timeout": False,
+                            "chunkTimeout": 300000,
+                        },
+                        "models": {
+                            model_id: {
+                                "name": model_id,
+                                "reasoning": True,
+                                "tool_call": True,
+                                "interleaved": "reasoning_content",
+                                "limit": {
+                                    "context": int(config["harness"]["context_window_size"]),
+                                    "output": int(config["harness"]["max_output_tokens"]),
+                                },
+                            }
                         },
                     }
-                ]
-            },
-        }
-        settings_path = qwen_home / "settings.json"
+                },
+                "mcp": {
+                    "fleet": {
+                        "type": "remote",
+                        "url": "http://fleet-mcp-proxy:8090/mcp",
+                        "enabled": True,
+                    }
+                },
+                "permission": {"*": "deny", "fleet_*": "allow"},
+                "tools": {
+                    "bash": False,
+                    "edit": False,
+                    "read": False,
+                    "glob": False,
+                    "grep": False,
+                    "list": False,
+                    "task": False,
+                    "webfetch": False,
+                    "websearch": False,
+                    "skill": False,
+                },
+            }
+            settings_path = config_dir / "opencode.json"
+            trace = agent_dir / "opencode-stream.jsonl"
+            command = (
+                "opencode run --format json --thinking "
+                f"--model fleet-cluster/{model_id} --dir /workspace --auto -- "
+                '"$(</input/prompt.txt)" '
+                "> /output/opencode-stream.jsonl 2> /output/opencode-stderr.log"
+            )
+            home_mount = f"{agent_home.resolve()}:/home/node"
+        else:
+            settings = {
+                "security": {"auth": {"selectedType": "openai"}},
+                "telemetry": {"enabled": False},
+                "general": {"disableUpdateNag": True},
+                "model": {"name": config["model"]["served_id"]},
+                "modelProviders": {
+                    "openai": [
+                        {
+                            "id": config["model"]["served_id"],
+                            "name": config["model"]["served_id"],
+                            "baseUrl": "http://model-proxy:8877/v1",
+                            "envKey": "QWEN_CODE_API_KEY",
+                            "generationConfig": {
+                                "contextWindowSize": config["harness"].get(
+                                    "context_window_size", 262144
+                                )
+                            },
+                        }
+                    ]
+                },
+            }
+            settings_path = agent_home / "settings.json"
+            trace = agent_dir / "qwen-stream.jsonl"
+            command = (
+                "qwen mcp add fleet http://fleet-mcp-proxy:8090/mcp --transport http --trust "
+                ">/tmp/mcp-add.log 2>&1 && "
+                "qwen --yolo --output-format stream-json "
+                f"--max-session-turns {config['harness']['max_model_requests']} "
+                "< /input/prompt.txt > /output/qwen-stream.jsonl 2> /output/qwen-stderr.log"
+            )
+            home_mount = f"{agent_home.resolve()}:/home/node/.qwen"
         settings_path.write_bytes(canonical_json(settings) + b"\n")
         # The pinned Node image's non-root user is uid/gid 1000. Give the agent only
         # its isolated home and output directory, never controller receipts or secrets.
         agent_user_args = agent_container_user_args()
         if os.geteuid() == 0:
-            os.chown(qwen_home, 1000, 1000)
+            for directory in [agent_home, *agent_home.rglob("*")]:
+                os.chown(directory, 1000, 1000)
             os.chown(settings_path, 1000, 1000)
             os.chown(agent_dir, 1000, 1000)
         # Docker Desktop preserves host ownership on bind mounts. A non-root
         # controller therefore runs the agent as its own uid/gid rather than
         # attempting a privileged chown; the global qwen binary remains pinned.
-        trace = agent_dir / "qwen-stream.jsonl"
-        command = (
-            "qwen mcp add fleet http://fleet-mcp-proxy:8090/mcp --transport http --trust "
-            ">/tmp/mcp-add.log 2>&1 && "
-            "qwen --yolo --output-format stream-json "
-            f"--max-session-turns {config['harness']['max_model_requests']} "
-            "< /input/prompt.txt > /output/qwen-stream.jsonl 2> /output/qwen-stderr.log"
-        )
         agent_termination = "completed"
         try:
             result = _docker(
                 "run",
                 "--rm",
                 "--name",
-                qwen_agent,
+                agent_container,
                 "--network",
                 network,
                 *agent_user_args,
@@ -1079,8 +1285,8 @@ def run(
                 "-v",
                 f"{(out_dir / 'prompt.txt').resolve()}:/input/prompt.txt:ro",
                 "-v",
-                f"{qwen_home.resolve()}:/home/node/.qwen",
-                qwen_image,
+                home_mount,
+                agent_image,
                 "bash",
                 "-lc",
                 command,
@@ -1089,26 +1295,39 @@ def run(
             )
         except subprocess.TimeoutExpired:
             agent_termination = "execution_timeout"
-            _docker("stop", "--time", "5", qwen_agent, check=False, capture=True, timeout=15)
+            _docker(
+                "stop", "--time", "5", agent_container, check=False, capture=True, timeout=15
+            )
             result = subprocess.CompletedProcess(args=["docker", "run"], returncode=124)
-        events, canonical_trace, malformed_line_count = load_qwen_chat_trace(qwen_home)
-        messages = normalize_qwen_conversation(events)
+        if harness_name == "opencode":
+            canonical_trace = trace
+            events, malformed_line_count = load_opencode_trace(trace)
+            messages = normalize_opencode_conversation(events)
+            trace_fidelity = (
+                "full_opencode_json_normalized_with_tool_calls_and_observations"
+                if malformed_line_count == 0
+                else "raw_opencode_json_with_partial_valid_json_normalization"
+            )
+        else:
+            events, canonical_trace, malformed_line_count = load_qwen_chat_trace(agent_home)
+            messages = normalize_qwen_conversation(events)
+            trace_fidelity = (
+                "full_qwen_chat_normalized_with_tool_calls_and_observations"
+                if malformed_line_count == 0
+                else "raw_qwen_chat_canonical_with_partial_valid_json_normalization"
+            )
         final_answer = final_answer_from_conversation(messages)
         if not final_answer and trace.exists():
             final_answer = extract_final_answer(trace)
         (out_dir / "final-answer.txt").write_text(final_answer)
         trace_digest = sha256(canonical_trace.read_bytes())
-        trace_fidelity = (
-            "full_qwen_chat_normalized_with_tool_calls_and_observations"
-            if malformed_line_count == 0
-            else "raw_qwen_chat_canonical_with_partial_valid_json_normalization"
-        )
         trace_manifest = {
             "canonical_trace": str(canonical_trace.relative_to(out_dir)),
             "canonical_trace_sha256": trace_digest,
-            "qwen_event_count": len(events),
-            "qwen_raw_line_count": len(events) + malformed_line_count,
-            "qwen_malformed_line_count": malformed_line_count,
+            "harness": harness_name,
+            "event_count": len(events),
+            "raw_line_count": len(events) + malformed_line_count,
+            "malformed_line_count": malformed_line_count,
             "normalized_message_count": len(messages),
             "fidelity": trace_fidelity,
         }
@@ -1167,14 +1386,18 @@ def run(
                     score=score,
                     verifier_execution_id=reward_result.get("verifier_execution_id"),
                     metadata={
-                        "self_hosted_harness": "qwen-code-0.22.3",
+                        "self_hosted_harness": (
+                            f"{harness_name}-{config['harness']['version']}"
+                        ),
                         "run_id": config["run_id"],
                         "tool_catalog_sha256": tool_digest,
-                        "qwen_exit_code": result.returncode,
+                        "agent_exit_code": result.returncode,
                         "agent_termination": agent_termination,
                         "trace_fidelity": trace_manifest["fidelity"],
                         "canonical_trace_sha256": trace_digest,
-                        "training_data_eligible": False,
+                        "training_data_eligible": bool(
+                            config["execution"].get("training_data_eligible", False)
+                        ),
                     },
                 )
         except SessionIngestError as exc:
@@ -1192,10 +1415,13 @@ def run(
             "session_ingest_status": session_receipt["status"],
             "score": score,
             "verifier_execution_id": reward_result.get("verifier_execution_id"),
-            "qwen_exit_code": result.returncode,
+            "agent_exit_code": result.returncode,
+            "harness": harness_name,
             "agent_termination": agent_termination,
             "elapsed_seconds": round(time.time() - started_at, 3),
         }
+        if harness_name == "qwen_code":
+            result_record["qwen_exit_code"] = result.returncode
         (out_dir / "result.json").write_bytes(canonical_json(result_record) + b"\n")
         return result_record
     except BaseException as exc:
@@ -1212,7 +1438,7 @@ def run(
             )
         raise
     finally:
-        _docker("rm", "-f", qwen_agent, check=False, capture=True)
+        _docker("rm", "-f", agent_container, check=False, capture=True)
         for container in (model_proxy, mcp_proxy):
             logs = _docker("logs", container, check=False, capture=True)
             if out_dir.exists() and logs.stdout:

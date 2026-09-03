@@ -201,6 +201,35 @@ def test_authority_gate_accepts_exact_behavioral_guard_when_openapi_lags() -> No
     }
 
 
+def test_authority_gate_accepts_deployed_blackbox_shape_guard() -> None:
+    class Response:
+        status_code = 422
+        content = b"yes"
+
+        def json(self) -> dict:
+            return {
+                "detail": (
+                    "Authoritative RL rollout rewards currently support exact black-box "
+                    "capability tasks and their additive safety-evidence clones"
+                )
+            }
+
+    class Client:
+        def request(self, method: str, url: str, **kwargs):
+            assert method == "GET"
+            return type(
+                "OpenAPIResponse",
+                (),
+                {"status_code": 200, "json": lambda self: {"paths": {}}},
+            )()
+
+        def post(self, url: str, **kwargs):
+            return Response()
+
+    result = self_hosted.assert_authoritative_routes_deployed(Client(), _config())
+    assert result["statuses"] == {"provisioning": 422, "scoring": 422}
+
+
 def test_qwen_trace_normalization_preserves_calls_results_and_thinking() -> None:
     events = [
         {
@@ -243,6 +272,38 @@ def test_qwen_trace_normalization_preserves_calls_results_and_thinking() -> None
     assert messages[0]["tool_calls"][0]["id"] == "c1"
     assert messages[1]["role"] == "tool"
     assert messages[1]["tool_call_id"] == "c1"
+
+
+def test_opencode_trace_normalization_preserves_calls_results_and_thinking() -> None:
+    events = [
+        {
+            "type": "reasoning",
+            "part": {"type": "reasoning", "id": "r1", "text": "reason"},
+        },
+        {
+            "type": "tool",
+            "part": {
+                "type": "tool",
+                "id": "c1",
+                "tool": "fleet_bash",
+                "state": {
+                    "status": "completed",
+                    "input": {"cmd": "id"},
+                    "output": {"output": "uid=1000"},
+                },
+            },
+        },
+        {
+            "type": "text",
+            "part": {"type": "text", "id": "a1", "text": "done"},
+        },
+    ]
+    messages = self_hosted.normalize_opencode_conversation(events)
+    assert messages[0]["thinking"] == "reason"
+    assert messages[0]["tool_calls"][0]["function"]["name"] == "fleet_bash"
+    assert messages[1]["role"] == "tool"
+    assert messages[1]["tool_call_id"] == "c1"
+    assert messages[2]["content"] == "done"
 
 
 def test_session_trace_ingest_is_bounded_ordered_and_scores_only_final_chunk() -> None:
