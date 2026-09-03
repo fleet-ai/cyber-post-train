@@ -2,7 +2,8 @@
 set -euo pipefail
 
 ROOT=${CYBER_ROOT:-/workspace/cyber-post-train}
-JOB_NAME=chris-cyber-opencode-fleet-smokes-v1
+JOB_NAME=${SMOKE_JOB_NAME:-chris-cyber-opencode-fleet-smokes-v1}
+SMOKE_GENERATION=${SMOKE_GENERATION:-1}
 OUT_PARENT=${FLEET_EVAL_OUT_PARENT:-/mnt/sfs/jobs/$JOB_NAME}
 QWEN_OUT=$OUT_PARENT/qwen38-smoke
 GLM_OUT=$OUT_PARENT/glm53-smoke
@@ -37,12 +38,12 @@ export FIXED_PROXY_IMAGE=$PROXY_IMAGE
 runner=(uv run --no-project --with httpx==0.28.1 python -m evals.fleet.self_hosted run)
 
 "${runner[@]}" \
-  --config "$ROOT/evals/fleet/configs/qwen38-opencode-train-sweep-smoke-v1.json" \
+  --config "$ROOT/evals/fleet/configs/qwen38-opencode-train-sweep-smoke-v${SMOKE_GENERATION}.json" \
   --out-dir "$QWEN_OUT" \
   --proxy-script "$ROOT/evals/fleet/fixed_proxy.py" >/dev/null &
 qwen_pid=$!
 "${runner[@]}" \
-  --config "$ROOT/evals/fleet/configs/glm53-opencode-train-sweep-smoke-v1.json" \
+  --config "$ROOT/evals/fleet/configs/glm53-opencode-train-sweep-smoke-v${SMOKE_GENERATION}.json" \
   --out-dir "$GLM_OUT" \
   --proxy-script "$ROOT/evals/fleet/fixed_proxy.py" >/dev/null &
 glm_pid=$!

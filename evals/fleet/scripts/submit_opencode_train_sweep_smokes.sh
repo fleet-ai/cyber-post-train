@@ -2,18 +2,25 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/../../.." && pwd)
-NAME=chris-cyber-opencode-fleet-smokes-v1
-SECRET=chris-cyber-opencode-evals-v1
+GENERATION=${2:-v1}
+case "$GENERATION" in
+  v1) JOB_FILE=opencode-train-sweep-smokes-job.yaml ;;
+  v2) JOB_FILE=opencode-train-sweep-smokes-job-v2.yaml ;;
+  *) echo "generation must be v1 or v2" >&2; exit 2 ;;
+esac
+ATTEMPT=${GENERATION#v}
+NAME=chris-cyber-opencode-fleet-smokes-$GENERATION
+SECRET=chris-cyber-opencode-evals-$GENERATION
 NAMESPACE=fleet-train-jobs
 EXPECTED_CONTEXT=nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6
 KUBECTL=(kubectl --context "$EXPECTED_CONTEXT")
-JOB=$ROOT/evals/fleet/cluster/opencode-train-sweep-smokes-job.yaml
+JOB=$ROOT/evals/fleet/cluster/$JOB_FILE
 MODE=${1:-preview}
 PYTHON_BIN=$(command -v python3 || command -v python)
 
 case "$MODE" in
   preview|submit) ;;
-  *) echo "usage: $0 [preview|submit]" >&2; exit 2 ;;
+  *) echo "usage: $0 [preview|submit] [v1|v2]" >&2; exit 2 ;;
 esac
 
 test "$(kubectl config current-context)" = "$EXPECTED_CONTEXT"
@@ -26,8 +33,8 @@ configmap() {
     --from-file=Dockerfile.opencode="$ROOT/evals/fleet/Dockerfile.opencode" \
     --from-file=fixed_proxy.py="$ROOT/evals/fleet/fixed_proxy.py" \
     --from-file=self_hosted.py="$ROOT/evals/fleet/self_hosted.py" \
-    --from-file=qwen-config.json="$ROOT/evals/fleet/configs/qwen38-opencode-train-sweep-smoke-v1.json" \
-    --from-file=glm-config.json="$ROOT/evals/fleet/configs/glm53-opencode-train-sweep-smoke-v1.json" \
+    --from-file=qwen-config.json="$ROOT/evals/fleet/configs/qwen38-opencode-train-sweep-smoke-v${ATTEMPT}.json" \
+    --from-file=glm-config.json="$ROOT/evals/fleet/configs/glm53-opencode-train-sweep-smoke-v${ATTEMPT}.json" \
     --from-file=run-smokes.sh="$ROOT/evals/fleet/scripts/run_opencode_train_sweep_smokes.sh" \
     --dry-run=client -o json | jq '.immutable = true'
 }
@@ -35,7 +42,8 @@ configmap() {
 if test "$MODE" = preview; then
   configmap | "${KUBECTL[@]}" create --dry-run=server -f - >/dev/null
   "${KUBECTL[@]}" create --dry-run=server -f "$JOB" >/dev/null
-  jq -n '{ok:true,paid_smoke_sessions:2,models:["qwen3.8-27b","glm-5.3"],pass_k:1}'
+  jq -n --arg generation "$GENERATION" \
+    '{ok:true,generation:$generation,paid_smoke_sessions:2,models:["qwen3.8-27b","glm-5.3"],pass_k:1}'
   exit 0
 fi
 

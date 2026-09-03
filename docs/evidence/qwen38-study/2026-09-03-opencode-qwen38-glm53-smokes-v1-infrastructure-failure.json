@@ -1,0 +1,42 @@
+{
+  "schema_version": "fleet-opencode-smoke-infrastructure-failure-v1",
+  "job": {
+    "name": "chris-cyber-opencode-fleet-smokes-v1",
+    "namespace": "fleet-train-jobs",
+    "uid": "7f84b13a-062a-407b-8c28-7064926fce36",
+    "created_at": "2026-09-03T21:40:03Z",
+    "terminal_state": "Failed",
+    "terminal_reason": "BackoffLimitExceeded"
+  },
+  "pod": {
+    "uid": "6acdfdcd-a051-45fb-9955-38b1bc8bfe86",
+    "evaluator_exit_code": 1,
+    "evaluator_restart_count": 0
+  },
+  "scientific_classification": "infrastructure_invalid_unscored",
+  "agent_execution_started": false,
+  "verifier_execution_started": false,
+  "failure": {
+    "component": "self_hosted_rollout_instance_response_validation",
+    "reason": "Fleet production returned opaque DNS-safe instance identifiers while the client required UUID instance identifiers"
+  },
+  "cleanup": {
+    "exact_provisioned_instances_reconciled": 2,
+    "exact_provisioned_instances_closed": 2,
+    "termination_evidence_required": true,
+    "instance_identifiers_included": false
+  },
+  "successor_gate": {
+    "new_create_once_identity_required": true,
+    "accept_opaque_dns_safe_instance_identifiers": true,
+    "retain_uuid_requirement_for_evidence_session_and_verifier_identifiers": true,
+    "capture_instance_identifier_before_later_response_validation": true,
+    "regression_tests_required": true
+  },
+  "privacy": {
+    "scores_included": false,
+    "prompts_or_traces_included": false,
+    "task_identifiers_included": false,
+    "credentials_included": false
+  }
+}

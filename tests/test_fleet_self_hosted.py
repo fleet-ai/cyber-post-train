@@ -571,7 +571,7 @@ def test_runtime_evidence_only_scoring_payload_has_exact_content_free_keys() -> 
     [
         ("task_key", "wrong-task"),
         ("task_version_id", "00000000-0000-4000-8000-000000000001"),
-        ("instance_id", "not-a-uuid"),
+        ("instance_id", "../unsafe-instance"),
         ("evidence_run_id", "00000000-0000-0000-0000-000000000000"),
     ],
 )
@@ -585,6 +585,36 @@ def test_rollout_instance_response_rejects_identity_drift(field: str, replacemen
     }
     response[field] = replacement
     with pytest.raises(RuntimeError):
+        self_hosted.validate_rollout_instance_response(config, response)
+
+
+def test_rollout_instance_response_accepts_opaque_dns_safe_instance_id() -> None:
+    config = _config()
+    response = {
+        "task_key": config["task"]["key"],
+        "task_version_id": config["task"]["version_id"],
+        "instance_id": "rx7ruxhfwwpz",
+        "evidence_run_id": "22222222-2222-4222-8222-222222222222",
+    }
+    assert self_hosted.validate_rollout_instance_response(config, response) == (
+        "rx7ruxhfwwpz",
+        "22222222-2222-4222-8222-222222222222",
+    )
+
+
+@pytest.mark.parametrize(
+    "instance_id",
+    ("", "-leading", "trailing-", "UPPERCASE", "unsafe/path", "a" * 64),
+)
+def test_rollout_instance_response_rejects_unsafe_instance_id(instance_id: str) -> None:
+    config = _config()
+    response = {
+        "task_key": config["task"]["key"],
+        "task_version_id": config["task"]["version_id"],
+        "instance_id": instance_id,
+        "evidence_run_id": "22222222-2222-4222-8222-222222222222",
+    }
+    with pytest.raises(RuntimeError, match="DNS-safe identifier"):
         self_hosted.validate_rollout_instance_response(config, response)
 
 

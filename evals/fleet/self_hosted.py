@@ -7,6 +7,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import subprocess
 import sys
 import time
@@ -679,6 +680,15 @@ def _nonzero_uuid(value: Any, label: str) -> str:
     return str(parsed)
 
 
+def _instance_identifier(value: Any) -> str:
+    """Validate the opaque, DNS-safe identifier returned by Fleet environments."""
+    if not isinstance(value, str) or not re.fullmatch(
+        r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", value
+    ):
+        raise RuntimeError("Fleet authoritative instance ID is not a DNS-safe identifier")
+    return value
+
+
 def validate_rollout_instance_response(config: dict[str, Any], response: Any) -> tuple[str, str]:
     """Bind provisioning output to the exact route inputs before agent execution."""
     if not isinstance(response, dict):
@@ -688,7 +698,7 @@ def validate_rollout_instance_response(config: dict[str, Any], response: Any) ->
         or response.get("task_version_id") != config["task"]["version_id"]
     ):
         raise RuntimeError("Fleet authoritative instance response task binding drifted")
-    instance_id = _nonzero_uuid(response.get("instance_id"), "Fleet authoritative instance ID")
+    instance_id = _instance_identifier(response.get("instance_id"))
     evidence_run_id = _nonzero_uuid(
         response.get("evidence_run_id"), "Fleet authoritative evidence-run ID"
     )
@@ -1025,6 +1035,10 @@ def run(
                 f"Fleet authoritative instance create failed with HTTP {response.status_code}"
             )
         rollout_instance = response.json()
+        if isinstance(rollout_instance, dict):
+            # Bind this before validating any other response field so that a
+            # later contract failure cannot orphan an already-created instance.
+            instance_id = _instance_identifier(rollout_instance.get("instance_id"))
         instance_id, evidence_run_id = validate_rollout_instance_response(config, rollout_instance)
         cleanup["instance_created"] = True
         instance = _request(client, "GET", f"/v1/env/instances/{instance_id}")

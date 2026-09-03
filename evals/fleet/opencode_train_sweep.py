@@ -267,9 +267,14 @@ def build_smoke_config(
     selection: dict[str, Any],
     split: dict[str, Any],
     model_key: str,
+    attempt: int = 1,
 ) -> dict[str, Any]:
+    if attempt < 1:
+        raise ValueError("smoke attempt must be positive")
     model = copy.deepcopy(MODELS[model_key])
     tasks = validate_selection(selection, split)[: int(model.pop("task_count"))]
+    campaign_id = str(model.pop("campaign_id"))
+    resource_prefix = str(model.pop("resource_prefix"))
     row = holdout._task_receipt(client, tasks[0], 1)
     if row.get("cyber_contract") != AUTHORITY["required_cyber_contract"]:
         raise RuntimeError("smoke task is not exact Verifier Contract v3")
@@ -306,8 +311,8 @@ def build_smoke_config(
     key_digest = self_hosted.sha256(row["task_key"].encode()).split(":", 1)[1][:8]
     config = {
         "schema_version": "fleet-selfhosted-opencode-smoke-v1",
-        "run_id": f"{model['campaign_id']}-smoke-r1-{key_digest}",
-        "campaign_id": model["campaign_id"],
+        "run_id": f"{campaign_id}-smoke-r{attempt}-{key_digest}",
+        "campaign_id": campaign_id,
         "source_job_id": SOURCE_JOB_ID,
         "task": {
             "key": row["task_key"],
@@ -334,7 +339,7 @@ def build_smoke_config(
             "pass_k": 1,
             "planned_full_pass_k": 4,
             "max_concurrent": 1,
-            "network": f"{model['resource_prefix']}-smoke-{key_digest}",
+            "network": f"{resource_prefix}-smoke-r{attempt}-{key_digest}",
             "training_data_eligible": True,
             "required_task_tools": ["bash", "submit_report"],
             "required_task_tool_catalog_sha256": TOOL_CATALOG_SHA256,
@@ -345,6 +350,7 @@ def build_smoke_config(
             "live_model_identity": model_identity,
             "selection_sha256": selection["selection_sha256"],
             "selected_task_count": len(tasks),
+            "smoke_attempt": attempt,
         },
     }
     config["config_sha256"] = digest_without(config, "config_sha256")
@@ -357,6 +363,7 @@ def main() -> int:
     parser.add_argument("--split", type=Path, required=True)
     parser.add_argument("--selection", type=Path)
     parser.add_argument("--model", choices=sorted(MODELS))
+    parser.add_argument("--attempt", type=int, default=1)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     key = os.environ.get("FLEET_API_KEY")
@@ -372,7 +379,9 @@ def main() -> int:
         else:
             if not args.selection or not args.model:
                 parser.error("smoke-config requires --selection and --model")
-            value = build_smoke_config(client, load_json(args.selection), split, args.model)
+            value = build_smoke_config(
+                client, load_json(args.selection), split, args.model, args.attempt
+            )
     self_hosted.write_json_once(args.output, value)
     return 0
 
