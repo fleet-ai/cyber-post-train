@@ -13,6 +13,7 @@ import sys
 import time
 import uuid
 from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -41,12 +42,26 @@ class SessionIngestError(RuntimeError):
         self.receipt = receipt
 
 
+class FleetRequestError(RuntimeError):
+    """A Fleet request failed, retaining only non-sensitive routing facts."""
+
+    def __init__(self, method: str, route: str, status_code: int) -> None:
+        super().__init__(f"Fleet {method} {route} failed with HTTP {status_code}")
+        self.method = method
+        self.route = route
+        self.status_code = status_code
+
+
 def canonical_json(value: Any) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
 
 
 def sha256(value: bytes) -> str:
     return "sha256:" + hashlib.sha256(value).hexdigest()
+
+
+def digest_without(value: dict[str, Any], field: str) -> str:
+    return sha256(canonical_json({key: item for key, item in value.items() if key != field}))
 
 
 def session_model_identity(config: dict[str, Any]) -> str:
@@ -57,6 +72,11 @@ def session_model_identity(config: dict[str, Any]) -> str:
     if (config.get("harness") or {}).get("name") == "qwen_code":
         return f"qwen/{served_id}"
     return f"self-hosted/{served_id}"
+
+
+def persisted_session_model_identity(config: dict[str, Any]) -> str:
+    """Return the model identity Fleet persists after removing a provider prefix."""
+    return session_model_identity(config).split("/", 1)[-1]
 
 
 def write_json_once(path: Path, value: dict[str, Any]) -> None:
@@ -88,7 +108,7 @@ def _request(client: httpx.Client, method: str, path: str, **kwargs: Any) -> Any
             return response.json()
         if response.status_code not in TRANSIENT_READ_STATUS_CODES or attempt + 1 == attempts:
             route = path.split("?")[0]
-            raise RuntimeError(f"Fleet {method} {route} failed with HTTP {response.status_code}")
+            raise FleetRequestError(method, route, response.status_code)
         time.sleep(2**attempt)
     raise AssertionError("unreachable")
 
@@ -397,6 +417,52 @@ def load_opencode_trace(path: Path) -> tuple[list[dict[str, Any]], int]:
     return events, malformed_line_count
 
 
+def normalize_opencode_timestamp(value: Any) -> str | None:
+    """Normalize OpenCode 1.18.27 millisecond timestamps to Fleet ISO-8601 strings."""
+    if value is None:
+        return None
+    if isinstance(value, dict):
+        value = value.get("start") if value.get("start") is not None else value.get("end")
+        if value is None:
+            return None
+    if isinstance(value, str):
+        if not value:
+            return None
+        candidate = value[:-1] + "+00:00" if value.endswith("Z") else value
+        try:
+            datetime.fromisoformat(candidate)
+        except ValueError as exc:
+            raise ValueError("OpenCode timestamp string is not ISO-8601") from exc
+        return value
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError("OpenCode timestamp has an unsupported type")
+    if not math.isfinite(float(value)):
+        raise ValueError("OpenCode timestamp is not finite")
+    try:
+        timestamp = datetime.fromtimestamp(float(value) / 1000.0, tz=UTC)
+    except (OverflowError, OSError, ValueError) as exc:
+        raise ValueError("OpenCode timestamp is outside the supported range") from exc
+    return timestamp.isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+def validate_session_messages(messages: list[dict[str, Any]]) -> None:
+    """Fail before mutation when a normalized message violates Fleet's trace schema."""
+    if not messages:
+        raise ValueError("cannot ingest an empty session trace")
+    for message in messages:
+        if not isinstance(message, dict) or not isinstance(message.get("role"), str):
+            raise ValueError("session trace message requires a string role")
+        timestamp = message.get("timestamp")
+        if timestamp is not None and not isinstance(timestamp, str):
+            raise ValueError("session trace timestamp must be an ISO-8601 string")
+        if isinstance(timestamp, str):
+            candidate = timestamp[:-1] + "+00:00" if timestamp.endswith("Z") else timestamp
+            try:
+                datetime.fromisoformat(candidate)
+            except ValueError as exc:
+                raise ValueError("session trace timestamp must be ISO-8601") from exc
+
+
 def normalize_opencode_conversation(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Convert OpenCode JSON parts to Fleet's role/tool-call trace schema."""
     messages: list[dict[str, Any]] = []
@@ -411,7 +477,10 @@ def normalize_opencode_conversation(events: list[dict[str, Any]]) -> list[dict[s
         part_type = str(part.get("type") or event.get("type") or "").lower()
         message_id = str(part.get("messageID") or part.get("messageId") or "")
         part_id = str(part.get("id") or message_id or len(messages))
-        timestamp = event.get("timestamp") or part.get("time")
+        raw_timestamp = event.get("timestamp")
+        if raw_timestamp is None:
+            raw_timestamp = part.get("time")
+        timestamp = normalize_opencode_timestamp(raw_timestamp)
         if part_type in {"reasoning", "thinking"}:
             text = part.get("text") or part.get("content")
             if isinstance(text, str) and text and part_id not in seen_reasoning:
@@ -488,6 +557,7 @@ def normalize_opencode_conversation(events: list[dict[str, Any]]) -> list[dict[s
         seen_tools.add(call_id)
     if not messages:
         raise RuntimeError("OpenCode trace normalized to no messages")
+    validate_session_messages(messages)
     return messages
 
 
@@ -517,8 +587,7 @@ def ingest_session_trace(
     the first bounded chunk, append the remaining chunks in order, and only
     attach the score to the final chunk.  Mutating requests remain single-shot.
     """
-    if not messages:
-        raise ValueError("cannot ingest an empty session trace")
+    validate_session_messages(messages)
     chunks: list[list[dict[str, Any]]] = []
     for message in messages:
         if len(canonical_json({"messages": [message]})) > SESSION_INGEST_CHUNK_BYTES:
@@ -562,8 +631,23 @@ def ingest_session_trace(
             response = _request(client, "POST", "/v1/sessions/ingest", json=payload)
         except Exception as exc:  # noqa: BLE001
             receipt.update(status="failed", error_type=type(exc).__name__)
+            if isinstance(exc, FleetRequestError):
+                receipt.update(
+                    error_code="fleet_http_error",
+                    http_status=exc.status_code,
+                    method=exc.method,
+                    route=exc.route,
+                )
             raise SessionIngestError(receipt) from exc
         returned_id = response.get("session_id")
+        expected_creation_state = index == 0
+        if (
+            response.get("success") is not True
+            or response.get("message_count") != len(chunk)
+            or response.get("created_new_session") is not expected_creation_state
+        ):
+            receipt.update(status="failed", error_type="ResponseBindingDrift")
+            raise SessionIngestError(receipt)
         if not isinstance(returned_id, str) or not returned_id:
             receipt.update(status="failed", error_type="MissingSessionId")
             raise SessionIngestError(receipt)
@@ -1471,12 +1555,299 @@ def run(
         client.close()
 
 
+def _read_json_object(path: Path) -> dict[str, Any]:
+    if path.is_symlink() or not path.is_file():
+        raise RuntimeError(f"required recovery input is not a regular file: {path.name}")
+    value = json.loads(path.read_text())
+    if not isinstance(value, dict):
+        raise RuntimeError(f"required recovery input is not an object: {path.name}")
+    return value
+
+
+def _recovery_source(
+    config: dict[str, Any], source_dir: Path
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Validate immutable post-score source evidence without exposing its content."""
+    if source_dir.is_symlink() or not source_dir.is_dir():
+        raise RuntimeError("recovery source must be a real directory")
+    if config.get("config_sha256") != digest_without(config, "config_sha256"):
+        raise RuntimeError("recovery config digest mismatch")
+
+    binding = _read_json_object(source_dir / "binding.json")
+    result = _read_json_object(source_dir / "result.json")
+    reward = _read_json_object(source_dir / "reward-result.json")
+    runtime = _read_json_object(source_dir / "runtime-binding.json")
+    original_ingest = _read_json_object(source_dir / "session-ingest.json")
+    cleanup = _read_json_object(source_dir / "cleanup.json")
+    scoring_intent = _read_json_object(source_dir / "scoring-intent.json")
+    trace_manifest = _read_json_object(source_dir / "trace-manifest.json")
+
+    for field in ("run_id", "task", "environment", "verifier", "model", "harness"):
+        if binding.get(field) != config.get(field):
+            raise RuntimeError(f"recovery source binding drifted at {field}")
+    expected_result = {
+        "run_id": config["run_id"],
+        "task_key": config["task"]["key"],
+        "task_version_id": config["task"]["version_id"],
+        "harness": "opencode",
+        "agent_exit_code": 0,
+        "agent_termination": "completed",
+    }
+    if any(result.get(field) != value for field, value in expected_result.items()):
+        raise RuntimeError("recovery result identity or completion state drifted")
+    instance_id = _instance_identifier(result.get("instance_id"))
+    evidence_run_id = _nonzero_uuid(result.get("evidence_run_id"), "recovery evidence-run ID")
+    verifier_execution_id = _nonzero_uuid(
+        result.get("verifier_execution_id"), "recovery verifier execution ID"
+    )
+    if (
+        runtime.get("instance_id") != instance_id
+        or runtime.get("evidence_run_id") != evidence_run_id
+        or runtime.get("tool_names") != config["execution"]["required_task_tools"]
+        or runtime.get("tool_catalog_sha256")
+        != config["execution"]["required_task_tool_catalog_sha256"]
+    ):
+        raise RuntimeError("recovery runtime binding drifted")
+    if (
+        reward.get("task_key") != config["task"]["key"]
+        or reward.get("task_version_id") != config["task"]["version_id"]
+        or reward.get("instance_id") != instance_id
+        or reward.get("verifier_execution_id") != verifier_execution_id
+    ):
+        raise RuntimeError("recovery authoritative reward binding drifted")
+    score = reward.get("reward")
+    if (
+        isinstance(score, bool)
+        or not isinstance(score, (int, float))
+        or not math.isfinite(float(score))
+        or not 0.0 <= float(score) <= 1.0
+        or result.get("score") != score
+    ):
+        raise RuntimeError("recovery authoritative reward value drifted")
+    if original_ingest.get("status") != "failed" or any(
+        (
+            original_ingest.get("session_id") is not None,
+            original_ingest.get("chunks_completed") != 0,
+            result.get("session_id") is not None,
+            result.get("session_ingest_status") != "failed",
+        )
+    ):
+        raise RuntimeError("recovery is allowed only after a zero-chunk ingest failure")
+    if cleanup.get("instance_created") is not True or cleanup.get("instance_closed") is not True:
+        raise RuntimeError("recovery source instance cleanup is incomplete")
+    if cleanup.get("containers_removed") is not True:
+        raise RuntimeError("recovery source container cleanup is incomplete")
+    if scoring_intent.get("scoring_intent_sha256") != digest_without(
+        scoring_intent, "scoring_intent_sha256"
+    ):
+        raise RuntimeError("recovery scoring intent digest mismatch")
+    if any(
+        (
+            scoring_intent.get("run_id") != config["run_id"],
+            scoring_intent.get("task_key") != config["task"]["key"],
+            scoring_intent.get("task_version_id") != config["task"]["version_id"],
+            scoring_intent.get("instance_id") != instance_id,
+            scoring_intent.get("evidence_run_id") != evidence_run_id,
+        )
+    ):
+        raise RuntimeError("recovery scoring intent binding drifted")
+
+    trace_name = trace_manifest.get("canonical_trace")
+    if not isinstance(trace_name, str):
+        raise RuntimeError("recovery trace manifest lacks a canonical path")
+    relative_trace = Path(trace_name)
+    if relative_trace.is_absolute() or ".." in relative_trace.parts:
+        raise RuntimeError("recovery trace path escapes its source root")
+    trace_path = source_dir / relative_trace
+    if trace_path.is_symlink() or not trace_path.is_file():
+        raise RuntimeError("recovery canonical trace is not a regular file")
+    trace_digest = sha256(trace_path.read_bytes())
+    if trace_manifest.get("canonical_trace_sha256") != trace_digest:
+        raise RuntimeError("recovery canonical trace digest mismatch")
+    events, malformed_line_count = load_opencode_trace(trace_path)
+    messages = normalize_opencode_conversation(events)
+    if any(
+        (
+            trace_manifest.get("harness") != "opencode",
+            trace_manifest.get("event_count") != len(events),
+            trace_manifest.get("raw_line_count") != len(events) + malformed_line_count,
+            trace_manifest.get("malformed_line_count") != malformed_line_count,
+            trace_manifest.get("normalized_message_count") != len(messages),
+        )
+    ):
+        raise RuntimeError("recovery trace manifest counts drifted")
+
+    source = {
+        "instance_id": instance_id,
+        "evidence_run_id": evidence_run_id,
+        "verifier_execution_id": verifier_execution_id,
+        "score": float(score),
+        "trace_sha256": trace_digest,
+        "trace_fidelity": trace_manifest.get("fidelity"),
+        "tool_catalog_sha256": runtime["tool_catalog_sha256"],
+        "source_result_sha256": sha256((source_dir / "result.json").read_bytes()),
+        "source_reward_sha256": sha256((source_dir / "reward-result.json").read_bytes()),
+        "original_ingest_sha256": sha256((source_dir / "session-ingest.json").read_bytes()),
+    }
+    return messages, source
+
+
+def _task_sessions(client: httpx.Client, task_key: str) -> list[dict[str, Any]]:
+    sessions: list[dict[str, Any]] = []
+    offset = 0
+    while True:
+        response = _request(
+            client,
+            "GET",
+            "/v1/sessions",
+            params={"task_key": task_key, "limit": 500, "offset": offset},
+        )
+        page = response.get("sessions") or []
+        if not isinstance(page, list):
+            raise RuntimeError("Fleet session inventory returned an invalid page")
+        sessions.extend(row for row in page if isinstance(row, dict))
+        if response.get("has_more") is False:
+            return sessions
+        if not page:
+            raise RuntimeError("Fleet session inventory pagination made no progress")
+        offset += len(page)
+
+
+def _matching_recovery_sessions(
+    sessions: list[dict[str, Any]], config: dict[str, Any], verifier_execution_id: str
+) -> list[dict[str, Any]]:
+    persisted_model = persisted_session_model_identity(config)
+    return [
+        session
+        for session in sessions
+        if session.get("model") == persisted_model
+        and isinstance(session.get("verifier_execution"), dict)
+        and session["verifier_execution"].get("id") == verifier_execution_id
+    ]
+
+
+def recover_session_trace(
+    client: httpx.Client,
+    *,
+    config: dict[str, Any],
+    source_dir: Path,
+    out_dir: Path,
+) -> dict[str, Any]:
+    """Create one Fleet session from an immutable, post-score failed trace source."""
+    out_dir.mkdir(parents=True, exist_ok=False)
+    out_dir.chmod(0o700)
+    try:
+        account = _request(client, "GET", "/v1/account")
+        if account.get("team_name") != "fleet" or account.get("team_id") != FLEET_TEAM_ID:
+            raise RuntimeError("FLEET_API_KEY is not scoped to the Fleet team")
+        messages, source = _recovery_source(config, source_dir)
+        before = _task_sessions(client, config["task"]["key"])
+        if _matching_recovery_sessions(before, config, source["verifier_execution_id"]):
+            raise RuntimeError("equivalent verifier-backed Fleet session already exists")
+
+        intent = {
+            "schema_version": "fleet-opencode-session-recovery-intent-v1",
+            "run_id": config["run_id"],
+            "config_sha256": config["config_sha256"],
+            "session_model": session_model_identity(config),
+            "persisted_session_model": persisted_session_model_identity(config),
+            "task_key": config["task"]["key"],
+            "task_version_id": config["task"]["version_id"],
+            "instance_id": source["instance_id"],
+            "evidence_run_id": source["evidence_run_id"],
+            "verifier_execution_id": source["verifier_execution_id"],
+            "message_count": len(messages),
+            "canonical_trace_sha256": source["trace_sha256"],
+            "source_result_sha256": source["source_result_sha256"],
+            "source_reward_sha256": source["source_reward_sha256"],
+            "original_ingest_sha256": source["original_ingest_sha256"],
+            "preflight_equivalent_sessions": 0,
+            "scores_included": False,
+            "prompts_or_traces_included": False,
+        }
+        intent["intent_sha256"] = digest_without(intent, "intent_sha256")
+        write_json_once(out_dir / "RECOVERY-INTENT.json", intent)
+
+        try:
+            ingest = ingest_session_trace(
+                client,
+                messages=messages,
+                config=config,
+                instance_id=source["instance_id"],
+                score=source["score"],
+                verifier_execution_id=source["verifier_execution_id"],
+                metadata={
+                    "self_hosted_harness": f"opencode-{config['harness']['version']}",
+                    "run_id": config["run_id"],
+                    "tool_catalog_sha256": source["tool_catalog_sha256"],
+                    "agent_exit_code": 0,
+                    "agent_termination": "completed",
+                    "trace_fidelity": source["trace_fidelity"],
+                    "canonical_trace_sha256": source["trace_sha256"],
+                    "training_data_eligible": bool(
+                        config["execution"].get("training_data_eligible", False)
+                    ),
+                    "session_recovery": "post_score_timestamp_schema_v1",
+                },
+            )
+        except SessionIngestError as exc:
+            failed_ingest = {**exc.receipt, "scores_included": False}
+            write_json_once(out_dir / "session-ingest.json", failed_ingest)
+            raise
+        write_json_once(out_dir / "session-ingest.json", ingest)
+
+        after = _task_sessions(client, config["task"]["key"])
+        matches = _matching_recovery_sessions(after, config, source["verifier_execution_id"])
+        if len(matches) != 1 or matches[0].get("session_id") != ingest["session_id"]:
+            raise RuntimeError(
+                "recovered Fleet session did not reconcile by exact verifier identity"
+            )
+        if matches[0].get("status") != "completed":
+            raise RuntimeError("recovered Fleet session is not completed")
+        recovered = {
+            "schema_version": "fleet-opencode-session-recovered-v1",
+            "recovered": True,
+            "run_id": config["run_id"],
+            "session_id": ingest["session_id"],
+            "verifier_execution_id": source["verifier_execution_id"],
+            "message_count": len(messages),
+            "chunk_count": ingest["chunk_count"],
+            "canonical_trace_sha256": source["trace_sha256"],
+            "intent_sha256": intent["intent_sha256"],
+            "authoritative_score_attached": True,
+            "scores_included": False,
+            "prompts_or_traces_included": False,
+        }
+        recovered["receipt_sha256"] = digest_without(recovered, "receipt_sha256")
+        write_json_once(out_dir / "RECOVERED.json", recovered)
+        return recovered
+    except BaseException as exc:
+        failure_path = out_dir / "failure.json"
+        if not failure_path.exists():
+            failure: dict[str, Any] = {
+                "schema_version": "fleet-opencode-session-recovery-failure-v1",
+                "error_type": type(exc).__name__,
+                "scores_included": False,
+                "prompts_or_traces_included": False,
+            }
+            if isinstance(exc, FleetRequestError):
+                failure.update(
+                    http_status=exc.status_code, method=exc.method, route=exc.route
+                )
+            failure["receipt_sha256"] = digest_without(failure, "receipt_sha256")
+            write_json_once(failure_path, failure)
+        raise
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("command", choices=("preflight", "runtime-preflight", "run"))
+    parser.add_argument(
+        "command", choices=("preflight", "runtime-preflight", "run", "recover-session")
+    )
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--out-dir", type=Path)
     parser.add_argument("--proxy-script", type=Path)
+    parser.add_argument("--source-dir", type=Path)
     args = parser.parse_args()
     config = json.loads(args.config.read_text())
     key = os.environ.get("FLEET_API_KEY")
@@ -1518,6 +1889,29 @@ def main() -> int:
             result = runtime_preflight(client, config, task)
         result["cleanup_confirmed"] = True
         print(json.dumps(result, sort_keys=True))
+        return 0
+    if args.command == "recover-session":
+        if not args.source_dir or not args.out_dir:
+            parser.error("recover-session requires --source-dir and --out-dir")
+        with httpx.Client(
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+            timeout=1800,
+        ) as client:
+            recovered = recover_session_trace(
+                client, config=config, source_dir=args.source_dir, out_dir=args.out_dir
+            )
+        print(
+            json.dumps(
+                {
+                    "recovered": recovered["recovered"],
+                    "run_id": recovered["run_id"],
+                    "session_id": recovered["session_id"],
+                    "message_count": recovered["message_count"],
+                    "scores_included": False,
+                },
+                sort_keys=True,
+            )
+        )
         return 0
     if not args.out_dir or not args.proxy_script:
         parser.error("run requires --out-dir and --proxy-script")

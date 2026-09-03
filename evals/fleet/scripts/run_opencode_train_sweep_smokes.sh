@@ -60,26 +60,44 @@ test "$glm_rc" = 0
 python - "$QWEN_OUT" "$GLM_OUT" "$ACCEPTED" <<'PY'
 import hashlib
 import json
+import re
 import sys
 import uuid
 from pathlib import Path
 
 roots = [Path(sys.argv[1]), Path(sys.argv[2])]
 summary = []
+
+
+def require(condition, message):
+    if not condition:
+        raise RuntimeError(message)
+
+
 for root in roots:
     result = json.loads((root / "result.json").read_text())
     cleanup = json.loads((root / "cleanup.json").read_text())
     ingest = json.loads((root / "session-ingest.json").read_text())
-    assert result["agent_exit_code"] == 0
-    assert result["agent_termination"] == "completed"
-    assert result["session_ingest_status"] == "completed"
-    assert cleanup == {
+    require(result["agent_exit_code"] == 0, f"{root.name}: agent exit was nonzero")
+    require(
+        result["agent_termination"] == "completed",
+        f"{root.name}: agent did not terminate normally",
+    )
+    require(
+        result["session_ingest_status"] == "completed",
+        f"{root.name}: session ingest did not complete; inspect session-ingest.json",
+    )
+    require(cleanup == {
         "instance_created": True,
         "instance_closed": True,
         "containers_removed": True,
-    }
-    assert ingest["status"] == "completed"
-    uuid.UUID(result["instance_id"])
+    }, f"{root.name}: cleanup evidence is incomplete")
+    require(ingest["status"] == "completed", f"{root.name}: ingest receipt is incomplete")
+    require(
+        isinstance(result["instance_id"], str)
+        and re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", result["instance_id"]),
+        f"{root.name}: instance ID is not DNS-safe",
+    )
     uuid.UUID(result["evidence_run_id"])
     uuid.UUID(result["verifier_execution_id"])
     uuid.UUID(result["session_id"])

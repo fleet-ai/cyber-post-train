@@ -352,6 +352,30 @@ read-only verifier-store export. Absence of a local `reward-result.json` is not
 proof that scoring never happened. Do not score, clean up, or advance campaign
 state while that lookup is absent or ambiguous.
 
+### Post-score OpenCode session recovery
+
+OpenCode 1.18.27 emits JSON event timestamps as integer milliseconds, while
+Fleet trace ingestion requires ISO-8601 strings. `self_hosted.py` normalizes
+that boundary and validates every message before the first ingest mutation.
+Fleet HTTP failures retain only their method, route, and status in the safe
+receipt so schema failures do not collapse into an unactionable exception type.
+
+The v2 Qwen3.8/GLM5.3 smoke recovery reuses only immutable traces whose agent,
+authoritative verifier, cleanup, trace digest, and zero-completed-chunk failure
+all reconcile. It does not start an agent, model request, task instance, or
+verifier. Before writing, it proves there is no session with the same persisted
+model and authoritative verifier-execution ID; it then claims a create-once
+intent, ingests once, and verifies the resulting completed session through the
+public session inventory. The original failed output root is never modified.
+
+```bash
+# Server-side validation only; no session mutation.
+evals/fleet/scripts/submit_opencode_session_recovery.sh preview
+
+# One create-once recovery Job; zero model rollouts.
+evals/fleet/scripts/submit_opencode_session_recovery.sh submit
+```
+
 ## Qwen3.8-27B reward calibration (non-test)
 
 `qwen38_calibration.py` measures whether the exact served Qwen3.8-27B revision

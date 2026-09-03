@@ -12,10 +12,131 @@ import pytest
 from evals.fleet import fixed_proxy, self_hosted
 
 CONFIG_PATH = Path("evals/fleet/configs/qwen36-27b-qwen-code-selfhosted-smoke-v1.json")
+OPENCODE_CONFIG_PATH = Path("evals/fleet/configs/qwen38-opencode-train-sweep-smoke-v2.json")
 
 
 def _config() -> dict:
     return json.loads(CONFIG_PATH.read_text())
+
+
+def _write_json(path: Path, value: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(self_hosted.canonical_json(value) + b"\n")
+
+
+def _recovery_source_fixture(tmp_path: Path) -> tuple[dict, Path, str]:
+    config = json.loads(OPENCODE_CONFIG_PATH.read_text())
+    source = tmp_path / "source"
+    trace = source / "agent-output" / "opencode-stream.jsonl"
+    trace.parent.mkdir(parents=True)
+    trace.write_text(
+        json.dumps(
+            {
+                "type": "text",
+                "timestamp": 1781623587086,
+                "part": {"type": "text", "id": "a1", "text": "done"},
+            }
+        )
+        + "\n"
+    )
+    instance_id = "rx7ruxhfwwpz"
+    evidence_run_id = "22222222-2222-4222-8222-222222222222"
+    verifier_execution_id = "33333333-3333-4333-8333-333333333333"
+    score = 0.5
+    _write_json(
+        source / "binding.json",
+        {
+            **{
+                key: config[key]
+                for key in ("run_id", "task", "environment", "verifier", "model", "harness")
+            },
+            "authority": config["authority"],
+        },
+    )
+    _write_json(
+        source / "result.json",
+        {
+            "run_id": config["run_id"],
+            "task_key": config["task"]["key"],
+            "task_version_id": config["task"]["version_id"],
+            "instance_id": instance_id,
+            "evidence_run_id": evidence_run_id,
+            "session_id": None,
+            "session_ingest_status": "failed",
+            "score": score,
+            "verifier_execution_id": verifier_execution_id,
+            "agent_exit_code": 0,
+            "harness": "opencode",
+            "agent_termination": "completed",
+        },
+    )
+    _write_json(
+        source / "reward-result.json",
+        {
+            "task_key": config["task"]["key"],
+            "task_version_id": config["task"]["version_id"],
+            "instance_id": instance_id,
+            "reward": score,
+            "verifier_execution_id": verifier_execution_id,
+        },
+    )
+    _write_json(
+        source / "runtime-binding.json",
+        {
+            "instance_id": instance_id,
+            "evidence_run_id": evidence_run_id,
+            "tool_names": config["execution"]["required_task_tools"],
+            "tool_catalog_sha256": config["execution"]["required_task_tool_catalog_sha256"],
+        },
+    )
+    _write_json(
+        source / "session-ingest.json",
+        {
+            "status": "failed",
+            "session_id": None,
+            "message_count": 1,
+            "chunks_completed": 0,
+            "chunk_count": 1,
+            "error_type": "RuntimeError",
+        },
+    )
+    _write_json(
+        source / "cleanup.json",
+        {
+            "instance_created": True,
+            "instance_closed": True,
+            "containers_removed": True,
+        },
+    )
+    intent = {
+        "schema_version": "fleet-selfhosted-scoring-intent-v1",
+        "run_id": config["run_id"],
+        "task_key": config["task"]["key"],
+        "task_version_id": config["task"]["version_id"],
+        "instance_id": instance_id,
+        "evidence_run_id": evidence_run_id,
+        "scoring_payload_mode": None,
+        "request_keys": ["conversation", "final_answer", "instance_id"],
+        "request_sha256": "sha256:" + "0" * 64,
+    }
+    intent["scoring_intent_sha256"] = self_hosted.digest_without(
+        intent, "scoring_intent_sha256"
+    )
+    _write_json(source / "scoring-intent.json", intent)
+    _write_json(
+        source / "trace-manifest.json",
+        {
+            "canonical_trace": "agent-output/opencode-stream.jsonl",
+            "canonical_trace_sha256": self_hosted.sha256(trace.read_bytes()),
+            "harness": "opencode",
+            "event_count": 1,
+            "raw_line_count": 1,
+            "malformed_line_count": 0,
+            "normalized_message_count": 1,
+            "fidelity": "full_opencode_json_normalized_with_tool_calls_and_observations",
+        },
+    )
+    return config, source, verifier_execution_id
 
 
 def test_smoke_config_is_one_exact_eval_only_arm() -> None:
@@ -306,6 +427,46 @@ def test_opencode_trace_normalization_preserves_calls_results_and_thinking() -> 
     assert messages[2]["content"] == "done"
 
 
+def test_opencode_trace_normalizes_v11827_millisecond_timestamps_for_fleet() -> None:
+    messages = self_hosted.normalize_opencode_conversation(
+        [
+            {
+                "type": "text",
+                "timestamp": 1781623587086,
+                "part": {"type": "text", "id": "a1", "text": "done"},
+            }
+        ]
+    )
+    assert messages[0]["timestamp"] == "2026-06-16T15:26:27.086Z"
+    self_hosted.validate_session_messages(messages)
+
+
+def test_opencode_trace_normalizes_part_time_start_and_rejects_invalid_values() -> None:
+    messages = self_hosted.normalize_opencode_conversation(
+        [
+            {
+                "type": "text",
+                "part": {
+                    "type": "text",
+                    "id": "a1",
+                    "text": "done",
+                    "time": {"start": 1781623587086, "end": 1781623587999},
+                },
+            }
+        ]
+    )
+    assert messages[0]["timestamp"] == "2026-06-16T15:26:27.086Z"
+    with pytest.raises(ValueError, match="unsupported type"):
+        self_hosted.normalize_opencode_timestamp([1781623587086])
+
+
+def test_session_message_validation_rejects_numeric_timestamp_before_mutation() -> None:
+    with pytest.raises(ValueError, match="ISO-8601 string"):
+        self_hosted.validate_session_messages(
+            [{"role": "assistant", "content": "done", "timestamp": 1781623587086}]
+        )
+
+
 def test_session_trace_ingest_is_bounded_ordered_and_scores_only_final_chunk() -> None:
     calls: list[dict] = []
 
@@ -317,7 +478,15 @@ def test_session_trace_ingest_is_bounded_ordered_and_scores_only_final_chunk() -
             return type(
                 "Response",
                 (),
-                {"status_code": 200, "json": lambda self: {"session_id": "session-1"}},
+                {
+                    "status_code": 200,
+                    "json": lambda self: {
+                        "success": True,
+                        "session_id": "session-1",
+                        "message_count": len(kwargs["json"]["messages"]),
+                        "created_new_session": "session_id" not in kwargs["json"],
+                    },
+                },
             )()
 
     messages = [{"role": "tool", "content": str(index)} for index in range(65)]
@@ -362,7 +531,12 @@ def test_session_trace_ingest_preserves_partial_receipt_without_mutation_retry()
                 (),
                 {
                     "status_code": status,
-                    "json": lambda self: {"session_id": "session-1"},
+                    "json": lambda self: {
+                        "success": True,
+                        "session_id": "session-1",
+                        "message_count": len(kwargs["json"]["messages"]),
+                        "created_new_session": "session_id" not in kwargs["json"],
+                    },
                 },
             )()
 
@@ -383,7 +557,11 @@ def test_session_trace_ingest_preserves_partial_receipt_without_mutation_retry()
         "message_count": 33,
         "chunks_completed": 1,
         "chunk_count": 2,
-        "error_type": "RuntimeError",
+        "error_type": "FleetRequestError",
+        "error_code": "fleet_http_error",
+        "http_status": 413,
+        "method": "POST",
+        "route": "/v1/sessions/ingest",
     }
 
 
@@ -398,7 +576,15 @@ def test_session_trace_ingest_also_bounds_serialized_payload_bytes(
             return type(
                 "Response",
                 (),
-                {"status_code": 200, "json": lambda self: {"session_id": "session-1"}},
+                {
+                    "status_code": 200,
+                    "json": lambda self: {
+                        "success": True,
+                        "session_id": "session-1",
+                        "message_count": len(kwargs["json"]["messages"]),
+                        "created_new_session": "session_id" not in kwargs["json"],
+                    },
+                },
             )()
 
     monkeypatch.setattr(self_hosted, "SESSION_INGEST_CHUNK_BYTES", 90)
@@ -412,6 +598,124 @@ def test_session_trace_ingest_also_bounds_serialized_payload_bytes(
         metadata={},
     )
     assert [len(payload["messages"]) for payload in payloads] == [1, 1, 1]
+
+
+def test_recover_session_trace_reuses_scored_source_without_model_rerun(tmp_path: Path) -> None:
+    config, source, verifier_execution_id = _recovery_source_fixture(tmp_path)
+    session_id = "44444444-4444-4444-8444-444444444444"
+    post_payloads: list[dict] = []
+    inventory_reads = 0
+
+    class Client:
+        def request(self, method: str, url: str, **kwargs):
+            nonlocal inventory_reads
+            if method == "GET" and url.endswith("/v1/account"):
+                payload = {"team_name": "fleet", "team_id": self_hosted.FLEET_TEAM_ID}
+            elif method == "GET" and url.endswith("/v1/sessions"):
+                inventory_reads += 1
+                sessions = []
+                if inventory_reads == 1:
+                    sessions.append(
+                        {
+                            "session_id": "old",
+                            "model": "qwen3.8-27b",
+                            "status": "completed",
+                            "verifier_execution": {
+                                "id": "55555555-5555-4555-8555-555555555555"
+                            },
+                        }
+                    )
+                else:
+                    sessions.append(
+                        {
+                            "session_id": session_id,
+                            "model": "qwen3.8-27b",
+                            "status": "completed",
+                            "verifier_execution": {"id": verifier_execution_id},
+                        }
+                    )
+                payload = {"sessions": sessions, "has_more": False}
+            elif method == "POST" and url.endswith("/v1/sessions/ingest"):
+                post_payloads.append(kwargs["json"])
+                payload = {
+                    "success": True,
+                    "session_id": session_id,
+                    "message_count": len(kwargs["json"]["messages"]),
+                    "created_new_session": True,
+                }
+            else:
+                raise AssertionError((method, url))
+            return type("Response", (), {"status_code": 200, "json": lambda self: payload})()
+
+    recovered = self_hosted.recover_session_trace(
+        Client(), config=config, source_dir=source, out_dir=tmp_path / "recovery"
+    )
+    assert recovered["recovered"] is True
+    assert recovered["session_id"] == session_id
+    assert len(post_payloads) == 1
+    assert post_payloads[0]["messages"][0]["timestamp"] == "2026-06-16T15:26:27.086Z"
+    assert post_payloads[0]["verifier_execution_id"] == verifier_execution_id
+    assert post_payloads[0]["model"] == config["model"]["session_model"]
+    assert (tmp_path / "recovery" / "RECOVERY-INTENT.json").exists()
+    assert (tmp_path / "recovery" / "RECOVERED.json").exists()
+
+
+def test_recover_session_trace_blocks_existing_verifier_backed_duplicate(
+    tmp_path: Path,
+) -> None:
+    config, source, verifier_execution_id = _recovery_source_fixture(tmp_path)
+
+    class Client:
+        def request(self, method: str, url: str, **kwargs):
+            if method == "GET" and url.endswith("/v1/account"):
+                payload = {"team_name": "fleet", "team_id": self_hosted.FLEET_TEAM_ID}
+            elif method == "GET" and url.endswith("/v1/sessions"):
+                payload = {
+                    "sessions": [
+                        {
+                            "session_id": "existing",
+                            "model": "qwen3.8-27b",
+                            "status": "completed",
+                            "verifier_execution": {"id": verifier_execution_id},
+                        }
+                    ],
+                    "has_more": False,
+                }
+            else:
+                pytest.fail("duplicate preflight must not mutate Fleet")
+            return type("Response", (), {"status_code": 200, "json": lambda self: payload})()
+
+    out = tmp_path / "recovery"
+    with pytest.raises(RuntimeError, match="already exists"):
+        self_hosted.recover_session_trace(
+            Client(), config=config, source_dir=source, out_dir=out
+        )
+    assert not (out / "RECOVERY-INTENT.json").exists()
+    assert (out / "failure.json").exists()
+
+
+def test_recover_session_trace_requires_zero_completed_original_chunks(tmp_path: Path) -> None:
+    config, source, _ = _recovery_source_fixture(tmp_path)
+    ingest = json.loads((source / "session-ingest.json").read_text())
+    ingest["chunks_completed"] = 1
+    _write_json(source / "session-ingest.json", ingest)
+    with pytest.raises(RuntimeError, match="zero-chunk"):
+        self_hosted._recovery_source(config, source)
+
+
+def test_opencode_session_recovery_job_is_create_once_cpu_only_and_no_rerun() -> None:
+    manifest = Path("evals/fleet/cluster/opencode-session-recovery-job.yaml").read_text()
+    runner = Path("evals/fleet/scripts/run_opencode_session_recovery.sh").read_text()
+    submitter = Path("evals/fleet/scripts/submit_opencode_session_recovery.sh").read_text()
+    assert "backoffLimit: 0" in manifest
+    assert "workload: fleetai-training-ng-cpu" in manifest
+    assert "chris-cyber-opencode-evals-v2" in manifest
+    assert "docker" not in manifest.lower()
+    assert "recover-session" in runner
+    assert 'test ! -e "$OUT_ROOT"' in runner
+    assert "opencode run" not in runner
+    assert "model_rollouts:0" in submitter
+    assert "refusing to replace it" in submitter
 
 
 def test_metadata_only_session_ingest_persists_no_model_content() -> None:
