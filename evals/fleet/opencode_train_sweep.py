@@ -6,6 +6,8 @@ import argparse
 import copy
 import json
 import os
+from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -14,7 +16,9 @@ import httpx
 from evals.fleet import holdout, self_hosted
 
 SOURCE_JOB_ID = "a62dd51f-a52b-4941-8207-4679e4b25b51"
-SELECTION_SCHEMA = "fleet-opencode-easiest-train100-selection-v1"
+SELECTION_SCHEMA = "fleet-opencode-easiest-train100-selection-v2"
+LEGACY_SELECTION_SCHEMA = "fleet-opencode-easiest-train100-selection-v1"
+FULL_PLAN_SCHEMA = "fleet-selfhosted-opencode-pass4-plan-v1"
 HARNESS = {
     "name": "opencode",
     "version": "1.18.27",
@@ -155,7 +159,26 @@ def build_selection(client: httpx.Client, split: dict[str, Any]) -> dict[str, An
             row["task_version_id"],
         )
     )
-    selected = ranked[:100]
+    eligible: list[dict[str, Any]] = []
+    excluded: list[dict[str, Any]] = []
+    for historical_rank, row in enumerate(ranked, 1):
+        task = holdout._task_receipt(client, row, historical_rank)
+        reasons = []
+        if task.get("cyber_contract") != AUTHORITY["required_cyber_contract"]:
+            reasons.append("not_verifier_contract_v3")
+        if int(task.get("runtime_seed_file_count") or 0) < 1:
+            reasons.append("missing_runtime_seed_overlay")
+        if reasons:
+            excluded.append(
+                {
+                    "historical_rank": historical_rank,
+                    "task_version_id": row["task_version_id"],
+                    "reasons": reasons,
+                }
+            )
+            continue
+        eligible.append({**row, "historical_rank": historical_rank})
+    selected = eligible[:100]
     if len(selected) != 100:
         raise RuntimeError("fewer than 100 train tasks have complete historical evidence")
     for rank, row in enumerate(selected, 1):
@@ -178,6 +201,12 @@ def build_selection(client: httpx.Client, split: dict[str, Any]) -> dict[str, An
         "selected_count": 100,
         "shared_qwen_glm_prefix_count": 50,
         "prior_qwen_task_versions_excluded": len(PRIOR_QWEN_TASK_VERSION_IDS),
+        "self_hosted_eligibility": {
+            "required_cyber_contract": AUTHORITY["required_cyber_contract"],
+            "runtime_seed_overlay_required": True,
+            "excluded_count": len(excluded),
+            "excluded": excluded,
+        },
         "tasks": selected,
         "privacy": {
             "prompts_included": False,
@@ -195,7 +224,7 @@ def build_selection(client: httpx.Client, split: dict[str, Any]) -> dict[str, An
 
 
 def validate_selection(selection: dict[str, Any], split: dict[str, Any]) -> list[dict[str, Any]]:
-    if selection.get("schema_version") != SELECTION_SCHEMA:
+    if selection.get("schema_version") not in {SELECTION_SCHEMA, LEGACY_SELECTION_SCHEMA}:
         raise ValueError("unsupported sweep selection schema")
     if selection.get("selection_sha256") != digest_without(selection, "selection_sha256"):
         raise ValueError("sweep selection digest mismatch")
@@ -217,6 +246,7 @@ def validate_selection(selection: dict[str, Any], split: dict[str, Any]) -> list
 def duplicate_preflight(
     client: httpx.Client, rows: list[dict[str, Any]], session_model: str
 ) -> dict[str, Any]:
+    persisted_model = session_model.split("/", 1)[-1]
     observations = []
     for row in rows:
         offset = 0
@@ -233,7 +263,7 @@ def duplicate_preflight(
             sessions = payload.get("sessions") or []
             pages += 1
             scanned += len(sessions)
-            exact += sum(1 for session in sessions if session.get("model") == session_model)
+            exact += sum(1 for session in sessions if session.get("model") == persisted_model)
             if payload.get("has_more") is False:
                 break
             if not sessions:
@@ -254,12 +284,186 @@ def duplicate_preflight(
         "route": "/v1/sessions?task_key=<task-lineage-key>",
         "scope": "team_non_archived_sessions",
         "session_model": session_model,
+        "persisted_session_model": persisted_model,
         "queries": observations,
         "transcripts_read": False,
         "session_ids_persisted": False,
     }
     receipt["receipt_sha256"] = digest_without(receipt, "receipt_sha256")
     return receipt
+
+
+def _session_inventory(client: httpx.Client, task_keys: set[str]) -> list[dict[str, Any]]:
+    sessions: list[dict[str, Any]] = []
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        for page in pool.map(
+            lambda task_key: self_hosted._task_sessions(client, task_key), sorted(task_keys)
+        ):
+            sessions.extend(page)
+    return sessions
+
+
+def build_full_plan(
+    client: httpx.Client,
+    selection: dict[str, Any],
+    split: dict[str, Any],
+    model_key: str,
+    credit_session_id: str,
+) -> dict[str, Any]:
+    """Freeze one exact pass@4 plan while crediting the accepted smoke once."""
+    if selection.get("schema_version") != SELECTION_SCHEMA:
+        raise ValueError("full pass@4 requires the self-hosted-eligible selection schema")
+    model = copy.deepcopy(MODELS[model_key])
+    task_count = int(model.pop("task_count"))
+    campaign_id = str(model.pop("campaign_id"))
+    resource_prefix = str(model.pop("resource_prefix"))
+    selected = validate_selection(selection, split)[:task_count]
+    tasks = [holdout._task_receipt(client, row, rank) for rank, row in enumerate(selected, 1)]
+    if any(row.get("cyber_contract") != AUTHORITY["required_cyber_contract"] for row in tasks):
+        raise RuntimeError("full-plan task is not exact Verifier Contract v3")
+
+    account = self_hosted._request(client, "GET", "/v1/account")
+    if account.get("team_id") != self_hosted.FLEET_TEAM_ID or account.get("team_name") != "fleet":
+        raise RuntimeError("FLEET_API_KEY is not scoped to the Fleet team")
+    self_hosted.assert_authoritative_routes_deployed(client, {"authority": AUTHORITY})
+    model_identity = holdout.live_model_identity(
+        os.environ["FLEET_API_KEY"],
+        {
+            **model,
+            "live_identity": {
+                "catalog": {
+                    "id": model["served_id"],
+                    "model_revision": model["revision"],
+                    "routed": True,
+                    "status": "ready",
+                },
+                "model_info": {
+                    "model_path": f"/scratch/models/{model['served_id']}/{model['revision']}"
+                },
+                "server_info": {
+                    "model_path": f"/scratch/models/{model['served_id']}/{model['revision']}",
+                    "served_model_name": model["served_id"],
+                    "context_length": HARNESS["context_window_size"],
+                },
+            },
+        },
+    )
+
+    selected_keys = {row["task_key"] for row in tasks}
+    persisted_model = model["session_model"].split("/", 1)[-1]
+    inventory = [
+        row
+        for row in _session_inventory(client, selected_keys)
+        if row.get("task_key") in selected_keys and row.get("model") == persisted_model
+    ]
+    credits = [row for row in inventory if row.get("session_id") == credit_session_id]
+    if len(credits) != 1:
+        raise RuntimeError("accepted smoke session is absent or duplicated")
+    credit = credits[0]
+    verifier_execution = credit.get("verifier_execution") or {}
+    if (
+        credit.get("task_key") != tasks[0]["task_key"]
+        or credit.get("status") != "completed"
+        or not isinstance(verifier_execution.get("id"), str)
+        or not verifier_execution.get("id")
+    ):
+        raise RuntimeError("accepted smoke session does not bind the first selected task")
+
+    baseline_by_task: dict[str, list[str]] = {row["task_key"]: [] for row in tasks}
+    for session in inventory:
+        session_id = session.get("session_id")
+        if isinstance(session_id, str) and session_id:
+            baseline_by_task[session["task_key"]].append(session_id)
+    for session_ids in baseline_by_task.values():
+        session_ids.sort()
+
+    task_rows: list[dict[str, Any]] = []
+    attempts: list[dict[str, Any]] = []
+    for rank, row in enumerate(tasks, 1):
+        task_rows.append(
+            {
+                "rank": rank,
+                "task": {
+                    "key": row["task_key"],
+                    "version_id": row["task_version_id"],
+                    "prompt_sha256": row["prompt_sha256"],
+                    "env_variables_sha256": row["env_variables_sha256"],
+                    "output_json_schema_sha256": row["output_json_schema_sha256"],
+                    "cyber_contract": row["cyber_contract"],
+                },
+                "environment": {
+                    "id": row["env_key"],
+                    "version": row["env_version"],
+                    "version_id": row["environment_version_id"],
+                    "data_id": row["data_key"],
+                    "data_version": row["data_version"],
+                    "runtime_seed_content_sha256": row["runtime_seed_content_sha256"],
+                    "ttl_seconds": 32400,
+                },
+                "verifier": row["verifier"],
+                "baseline_session_ids": baseline_by_task[row["task_key"]],
+            }
+        )
+        first_attempt = 2 if rank == 1 else 1
+        for attempt in range(first_attempt, 5):
+            key_digest = self_hosted.sha256(row["task_key"].encode()).split(":", 1)[1][:8]
+            attempts.append(
+                {
+                    "ordinal": len(attempts) + 1,
+                    "rank": rank,
+                    "attempt": attempt,
+                    "run_id": f"{campaign_id}-r{rank:03d}-a{attempt}-{key_digest}",
+                    "network": f"{resource_prefix}-r{rank:03d}-a{attempt}-{key_digest}",
+                }
+            )
+
+    expected_new_sessions = task_count * 4 - 1
+    if len(attempts) != expected_new_sessions:
+        raise RuntimeError("full-plan pass@4 arithmetic drifted")
+    plan = {
+        "schema_version": FULL_PLAN_SCHEMA,
+        "created_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        "campaign_id": campaign_id,
+        "source_job_id": SOURCE_JOB_ID,
+        "selection_sha256": selection["selection_sha256"],
+        "task_count": task_count,
+        "pass_k": 4,
+        "credited_smoke": {
+            "rank": 1,
+            "attempt": 1,
+            "session_id": credit_session_id,
+            "verifier_execution_id": verifier_execution["id"],
+        },
+        "new_session_count": expected_new_sessions,
+        "total_session_count": task_count * 4,
+        "model": model,
+        "harness": copy.deepcopy(HARNESS),
+        "authority": copy.deepcopy(AUTHORITY),
+        "execution": {
+            "max_concurrent": 1,
+            "retry_policy": "never_repeat_valid_outcome;halt_on_incomplete_attempt",
+            "training_data_eligible": True,
+            "required_task_tools": ["bash", "submit_report"],
+            "required_task_tool_catalog_sha256": TOOL_CATALOG_SHA256,
+        },
+        "preflight": {
+            "fleet_account": {"team_name": account["team_name"], "team_id": account["team_id"]},
+            "live_model_identity": model_identity,
+            "inventory_route": "/v1/sessions",
+            "inventory_session_count": len(inventory),
+            "unknown_sessions_at_launch": 0,
+        },
+        "tasks": task_rows,
+        "attempts": attempts,
+        "privacy": {
+            "prompts_included": False,
+            "transcripts_included": False,
+            "scores_included": False,
+            "credentials_included": False,
+        },
+    }
+    plan["plan_sha256"] = digest_without(plan, "plan_sha256")
+    return plan
 
 
 def build_smoke_config(
@@ -359,11 +563,12 @@ def build_smoke_config(
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("command", choices=("select", "smoke-config"))
+    parser.add_argument("command", choices=("select", "smoke-config", "full-plan"))
     parser.add_argument("--split", type=Path, required=True)
     parser.add_argument("--selection", type=Path)
     parser.add_argument("--model", choices=sorted(MODELS))
     parser.add_argument("--attempt", type=int, default=1)
+    parser.add_argument("--credit-session-id")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     key = os.environ.get("FLEET_API_KEY")
@@ -376,11 +581,23 @@ def main() -> int:
     ) as client:
         if args.command == "select":
             value = build_selection(client, split)
-        else:
+        elif args.command == "smoke-config":
             if not args.selection or not args.model:
                 parser.error("smoke-config requires --selection and --model")
             value = build_smoke_config(
                 client, load_json(args.selection), split, args.model, args.attempt
+            )
+        else:
+            if not args.selection or not args.model or not args.credit_session_id:
+                parser.error(
+                    "full-plan requires --selection, --model, and --credit-session-id"
+                )
+            value = build_full_plan(
+                client,
+                load_json(args.selection),
+                split,
+                args.model,
+                args.credit_session_id,
             )
     self_hosted.write_json_once(args.output, value)
     return 0
