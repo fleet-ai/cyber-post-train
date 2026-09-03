@@ -717,6 +717,14 @@ def test_opencode_session_recovery_job_is_create_once_cpu_only_and_no_rerun() ->
     assert "model_rollouts:0" in submitter
     assert "refusing to replace it" in submitter
 
+    collector = Path(
+        "evals/fleet/cluster/opencode-session-recovery-collector-job.yaml"
+    ).read_text()
+    assert "readOnly: true" in collector
+    assert "ACCEPTED.json" in collector
+    assert "digest_valid" in collector
+    assert "FLEET_API_KEY" not in collector
+
 
 def test_metadata_only_session_ingest_persists_no_model_content() -> None:
     config = _config()
