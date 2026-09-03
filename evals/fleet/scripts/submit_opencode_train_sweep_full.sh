@@ -5,15 +5,15 @@ ROOT=$(cd "$(dirname "$0")/../../.." && pwd)
 MODE=${1:-preview}
 NAMESPACE=fleet-train-jobs
 EXPECTED_CONTEXT=nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6
-CONFIGMAP=chris-cyber-opencode-train-sweep-full-v2
+CONFIGMAP=chris-cyber-opencode-train-sweep-full-v3
 SECRET=chris-cyber-opencode-evals-v2
-QWEN_JOB=chris-cyber-opencode-q38-train50-p4-v2
-GLM_JOB=chris-cyber-opencode-glm53-train100-p4-v2
+QWEN_JOB=chris-cyber-opencode-q38-train50-p4-v3
+GLM_JOB=chris-cyber-opencode-glm53-train100-p4-v3
 JOB_FILE=$ROOT/evals/fleet/cluster/opencode-train-sweep-full-jobs.yaml
-PREFLIGHT_JOB=chris-cyber-opencode-full-sfs-preflight-v2
+PREFLIGHT_JOB=chris-cyber-opencode-full-sfs-preflight-v3
 PREFLIGHT_FILE=$ROOT/evals/fleet/cluster/opencode-train-sweep-full-preflight-job.yaml
-QWEN_PLAN=$ROOT/evals/fleet/configs/qwen38-opencode-train50-pass4-v2.json
-GLM_PLAN=$ROOT/evals/fleet/configs/glm53-opencode-train100-pass4-v2.json
+QWEN_PLAN=$ROOT/evals/fleet/configs/qwen38-opencode-train50-pass4-v3.json
+GLM_PLAN=$ROOT/evals/fleet/configs/glm53-opencode-train100-pass4-v3.json
 KUBECTL=(kubectl --context "$EXPECTED_CONTEXT")
 
 case "$MODE" in
@@ -49,8 +49,8 @@ configmap() {
     --from-file=fixed_proxy.py="$ROOT/evals/fleet/fixed_proxy.py" \
     --from-file=self_hosted.py="$ROOT/evals/fleet/self_hosted.py" \
     --from-file=runner.py="$ROOT/evals/fleet/opencode_train_sweep_runner.py" \
-    --from-file=qwen-plan-v2.json="$QWEN_PLAN" \
-    --from-file=glm-plan-v2.json="$GLM_PLAN" \
+    --from-file=qwen-plan-v3.json="$QWEN_PLAN" \
+    --from-file=glm-plan-v3.json="$GLM_PLAN" \
     --from-file=run-full.sh="$ROOT/evals/fleet/scripts/run_opencode_train_sweep_full.sh" \
     --dry-run=client -o json | jq '.immutable = true'
 }

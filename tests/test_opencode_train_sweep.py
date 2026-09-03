@@ -96,3 +96,19 @@ def test_full_cluster_jobs_share_bind_mount_sources_with_dind() -> None:
         dind = document.split("containers:", 1)[0]
         assert "{name: workspace, mountPath: /workspace}" in dind
         assert "{name: sfs, mountPath: /mnt/sfs}" in dind
+
+
+def test_full_cluster_plan_keys_match_bootstrap_and_runtime() -> None:
+    manifest = (
+        __import__("pathlib").Path(__file__).parents[1]
+        / "evals/fleet/cluster/opencode-train-sweep-full-jobs.yaml"
+    ).read_text()
+    submitter = (
+        __import__("pathlib").Path(__file__).parents[1]
+        / "evals/fleet/scripts/submit_opencode_train_sweep_full.sh"
+    ).read_text()
+    for model in ("qwen", "glm"):
+        key = f"{model}-plan-v3.json"
+        assert f"--from-file={key}=" in submitter
+        assert f'/bootstrap/{key} "$root/evals/fleet/configs/{key}"' in manifest
+        assert f"value: {key}" in manifest

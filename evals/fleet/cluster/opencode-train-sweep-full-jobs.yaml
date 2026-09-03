@@ -1,10 +1,10 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: chris-cyber-opencode-q38-train50-p4-v2
+  name: chris-cyber-opencode-q38-train50-p4-v3
   namespace: fleet-train-jobs
   labels:
-    cyber-post-train.fleet.ai/experiment: opencode-q38-train50-p4-v2
+    cyber-post-train.fleet.ai/experiment: opencode-q38-train50-p4-v3
     cyber-post-train.fleet.ai/owner: chris
     kueue.x-k8s.io/queue-name: training-lq
 spec:
@@ -14,7 +14,7 @@ spec:
   template:
     metadata:
       labels:
-        cyber-post-train.fleet.ai/experiment: opencode-q38-train50-p4-v2
+        cyber-post-train.fleet.ai/experiment: opencode-q38-train50-p4-v3
         cyber-post-train.fleet.ai/owner: chris
     spec:
       restartPolicy: Never
@@ -59,15 +59,15 @@ spec:
               install -m 0644 /bootstrap/fixed_proxy.py "$root/evals/fleet/fixed_proxy.py"
               install -m 0644 /bootstrap/self_hosted.py "$root/evals/fleet/self_hosted.py"
               install -m 0644 /bootstrap/runner.py "$root/evals/fleet/opencode_train_sweep_runner.py"
-              install -m 0644 /bootstrap/qwen-plan.json "$root/evals/fleet/configs/qwen-plan.json"
+              install -m 0644 /bootstrap/qwen-plan-v3.json "$root/evals/fleet/configs/qwen-plan-v3.json"
               install -m 0755 /bootstrap/run-full.sh "$root/evals/fleet/scripts/run-full.sh"
               cd "$root"
               exec "$root/evals/fleet/scripts/run-full.sh"
           env:
             - {name: DOCKER_HOST, value: "unix:///var/run/docker.sock"}
             - {name: DOCKER_TLS_CERTDIR, value: ""}
-            - {name: FULL_JOB_NAME, value: chris-cyber-opencode-q38-train50-p4-v2}
-            - {name: FULL_PLAN_FILE, value: qwen-plan-v2.json}
+            - {name: FULL_JOB_NAME, value: chris-cyber-opencode-q38-train50-p4-v3}
+            - {name: FULL_PLAN_FILE, value: qwen-plan-v3.json}
             - name: FLEET_API_KEY
               valueFrom:
                 secretKeyRef: {name: chris-cyber-opencode-evals-v2, key: FLEET_API_KEY}
@@ -80,7 +80,7 @@ spec:
             - {name: workspace, mountPath: /workspace}
             - {name: sfs, mountPath: /mnt/sfs}
       volumes:
-        - {name: bootstrap, configMap: {name: chris-cyber-opencode-train-sweep-full-v2}}
+        - {name: bootstrap, configMap: {name: chris-cyber-opencode-train-sweep-full-v3}}
         - {name: docker-data, emptyDir: {sizeLimit: 40Gi}}
         - {name: docker-socket, emptyDir: {}}
         - {name: workspace, emptyDir: {sizeLimit: 5Gi}}
@@ -89,10 +89,10 @@ spec:
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: chris-cyber-opencode-glm53-train100-p4-v2
+  name: chris-cyber-opencode-glm53-train100-p4-v3
   namespace: fleet-train-jobs
   labels:
-    cyber-post-train.fleet.ai/experiment: opencode-glm53-train100-p4-v2
+    cyber-post-train.fleet.ai/experiment: opencode-glm53-train100-p4-v3
     cyber-post-train.fleet.ai/owner: chris
     kueue.x-k8s.io/queue-name: training-lq
 spec:
@@ -102,7 +102,7 @@ spec:
   template:
     metadata:
       labels:
-        cyber-post-train.fleet.ai/experiment: opencode-glm53-train100-p4-v2
+        cyber-post-train.fleet.ai/experiment: opencode-glm53-train100-p4-v3
         cyber-post-train.fleet.ai/owner: chris
     spec:
       restartPolicy: Never
@@ -147,15 +147,15 @@ spec:
               install -m 0644 /bootstrap/fixed_proxy.py "$root/evals/fleet/fixed_proxy.py"
               install -m 0644 /bootstrap/self_hosted.py "$root/evals/fleet/self_hosted.py"
               install -m 0644 /bootstrap/runner.py "$root/evals/fleet/opencode_train_sweep_runner.py"
-              install -m 0644 /bootstrap/glm-plan.json "$root/evals/fleet/configs/glm-plan.json"
+              install -m 0644 /bootstrap/glm-plan-v3.json "$root/evals/fleet/configs/glm-plan-v3.json"
               install -m 0755 /bootstrap/run-full.sh "$root/evals/fleet/scripts/run-full.sh"
               cd "$root"
               exec "$root/evals/fleet/scripts/run-full.sh"
           env:
             - {name: DOCKER_HOST, value: "unix:///var/run/docker.sock"}
             - {name: DOCKER_TLS_CERTDIR, value: ""}
-            - {name: FULL_JOB_NAME, value: chris-cyber-opencode-glm53-train100-p4-v2}
-            - {name: FULL_PLAN_FILE, value: glm-plan-v2.json}
+            - {name: FULL_JOB_NAME, value: chris-cyber-opencode-glm53-train100-p4-v3}
+            - {name: FULL_PLAN_FILE, value: glm-plan-v3.json}
             - name: FLEET_API_KEY
               valueFrom:
                 secretKeyRef: {name: chris-cyber-opencode-evals-v2, key: FLEET_API_KEY}
@@ -168,7 +168,7 @@ spec:
             - {name: workspace, mountPath: /workspace}
             - {name: sfs, mountPath: /mnt/sfs}
       volumes:
-        - {name: bootstrap, configMap: {name: chris-cyber-opencode-train-sweep-full-v2}}
+        - {name: bootstrap, configMap: {name: chris-cyber-opencode-train-sweep-full-v3}}
         - {name: docker-data, emptyDir: {sizeLimit: 40Gi}}
         - {name: docker-socket, emptyDir: {}}
         - {name: workspace, emptyDir: {sizeLimit: 5Gi}}

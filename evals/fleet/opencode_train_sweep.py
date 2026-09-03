@@ -478,14 +478,21 @@ def build_infrastructure_successor(
     from evals.fleet.opencode_train_sweep_runner import validate_plan
 
     validate_plan(original)
-    if generation != "v2":
-        raise ValueError("only the reviewed v2 infrastructure successor is supported")
-    if reason != "dind_missing_shared_bind_mounts_pre_agent":
+    if generation not in {"v2", "v3"}:
+        raise ValueError("unsupported infrastructure-successor generation")
+    allowed_reasons = {
+        "dind_missing_shared_bind_mounts_pre_agent",
+        "bootstrap_plan_key_mismatch_pre_runner",
+    }
+    if reason not in allowed_reasons:
         raise ValueError("unsupported infrastructure-successor reason")
     old_campaign = str(original["campaign_id"])
-    if not old_campaign.endswith("-v1"):
-        raise ValueError("successor source campaign must end in -v1")
-    new_campaign = f"{old_campaign[:-3]}-{generation}"
+    old_generation = old_campaign.rsplit("-", 1)[-1]
+    if old_generation not in {"v1", "v2"}:
+        raise ValueError("successor source campaign has an unsupported generation")
+    if int(generation[1:]) != int(old_generation[1:]) + 1:
+        raise ValueError("successor generation must increment exactly once")
+    new_campaign = f"{old_campaign.rsplit('-', 1)[0]}-{generation}"
     successor = copy.deepcopy(original)
     successor.pop("plan_sha256", None)
     successor["created_at"] = datetime.now(UTC).isoformat().replace("+00:00", "Z")
@@ -501,10 +508,12 @@ def build_infrastructure_successor(
     for attempt in successor["attempts"]:
         run_id = str(attempt["run_id"])
         network = str(attempt["network"])
-        if old_campaign not in run_id or "-v1-" not in network:
-            raise ValueError("source attempt identity does not match the v1 campaign")
+        if old_campaign not in run_id or f"-{old_generation}-" not in network:
+            raise ValueError("source attempt identity does not match its campaign")
         attempt["run_id"] = run_id.replace(old_campaign, new_campaign, 1)
-        attempt["network"] = network.replace("-v1-", f"-{generation}-", 1)
+        attempt["network"] = network.replace(
+            f"-{old_generation}-", f"-{generation}-", 1
+        )
     successor["plan_sha256"] = digest_without(successor, "plan_sha256")
     validate_plan(successor)
     return successor
@@ -616,7 +625,7 @@ def main() -> int:
     parser.add_argument("--attempt", type=int, default=1)
     parser.add_argument("--credit-session-id")
     parser.add_argument("--original-plan", type=Path)
-    parser.add_argument("--generation", choices=("v2",))
+    parser.add_argument("--generation", choices=("v2", "v3"))
     parser.add_argument("--reason")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
