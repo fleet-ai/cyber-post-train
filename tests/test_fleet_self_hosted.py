@@ -726,6 +726,26 @@ def test_opencode_session_recovery_job_is_create_once_cpu_only_and_no_rerun() ->
     assert "FLEET_API_KEY" not in collector
 
 
+def test_opencode_v2_session_recovery_receipt_is_self_digesting_and_private() -> None:
+    path = Path(
+        "docs/evidence/qwen38-study/"
+        "2026-09-03-opencode-qwen38-glm53-smokes-v2-session-recovered.json"
+    )
+    receipt = json.loads(path.read_text())
+    assert receipt["receipt_sha256"] == self_hosted.digest_without(
+        receipt, "receipt_sha256"
+    )
+    assert receipt["recovery_job"]["model_rollouts"] == 0
+    assert receipt["acceptance_job"]["accepted_session_count"] == 2
+    assert receipt["privacy"] == {
+        "scores_included": False,
+        "prompts_or_traces_included": False,
+        "session_ids_included": False,
+        "task_identifiers_included": False,
+        "credentials_included": False,
+    }
+
+
 def test_metadata_only_session_ingest_persists_no_model_content() -> None:
     config = _config()
     config["authority"]["scoring_payload_mode"] = "runtime_evidence_only_v3"

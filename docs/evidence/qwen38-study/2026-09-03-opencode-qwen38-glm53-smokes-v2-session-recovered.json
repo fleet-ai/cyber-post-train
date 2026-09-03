@@ -1,0 +1,92 @@
+{
+  "schema_version": "fleet-opencode-smoke-session-recovery-v1",
+  "source_job": {
+    "name": "chris-cyber-opencode-fleet-smokes-v2",
+    "namespace": "fleet-train-jobs",
+    "uid": "c19e3698-5a07-45c8-94dc-6dbda0e85b57",
+    "pod_uid": "c12baa22-2ba9-444b-bfa9-d1633592c1a3",
+    "created_at": "2026-09-03T21:48:23Z",
+    "failed_at": "2026-09-03T22:17:20Z",
+    "terminal_reason": "BackoffLimitExceeded",
+    "evaluator_exit_code": 1,
+    "evaluator_restart_count": 0
+  },
+  "root_cause": {
+    "component": "opencode_to_fleet_trace_adapter",
+    "failure": "OpenCode 1.18.27 integer-millisecond timestamps were sent to Fleet's ISO-8601 string timestamp field",
+    "delivery_boundary": "first_trace_ingest_chunk",
+    "session_rows_created_before_recovery": 0,
+    "model_or_verifier_rerun_required": false
+  },
+  "source_outcomes": {
+    "agent_completed_count": 2,
+    "authoritative_verifier_execution_count": 2,
+    "cleanup_completed_count": 2,
+    "original_trace_ingest_completed_count": 0,
+    "models": [
+      {
+        "served_id": "qwen3.8-27b",
+        "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+        "config_sha256": "sha256:b542fc63e80ee6fe96b35ab85588a2978ea90dd731e339f62d1c6ad36d7a2dfe"
+      },
+      {
+        "served_id": "glm-5.3",
+        "revision": "30333038ada1f1dacb294a93270305a890b50c14",
+        "config_sha256": "sha256:c03d50fd56f3d3d04ac5d2c8fdcea62008744fc8a709a3511166671a53b3aa68"
+      }
+    ],
+    "harness": "opencode-1.18.27"
+  },
+  "durable_fix": {
+    "pull_request": 89,
+    "timestamp_and_recovery_commit": "d259faa",
+    "acceptance_commit": "f23ce1a",
+    "message_schema_validation": true,
+    "safe_http_failure_receipts": true,
+    "zero_chunk_only_recovery": true,
+    "verifier_execution_duplicate_gate": true,
+    "create_once_recovery_intent": true
+  },
+  "recovery_job": {
+    "name": "chris-cyber-opencode-fleet-smokes-v2-session-recovery-v1",
+    "namespace": "fleet-train-jobs",
+    "uid": "dd693b50-5449-4173-b988-8bcfe33e8494",
+    "pod_uid": "7d5d1534-1d35-420a-bce6-788b702dca08",
+    "created_at": "2026-09-03T22:55:52Z",
+    "completed_at": "2026-09-03T22:56:39Z",
+    "exit_code": 0,
+    "restart_count": 0,
+    "model_rollouts": 0,
+    "session_recoveries": 2
+  },
+  "acceptance_job": {
+    "name": "chris-cyber-opencode-fleet-smokes-v2-session-recovery-accept-v1",
+    "namespace": "fleet-train-jobs",
+    "uid": "2039c39d-0262-4291-95b9-7564b7a75ed6",
+    "pod_uid": "93b6327f-155d-49de-be18-234747184ab8",
+    "created_at": "2026-09-03T22:57:31Z",
+    "completed_at": "2026-09-03T22:57:35Z",
+    "exit_code": 0,
+    "restart_count": 0,
+    "digest_valid": true,
+    "accepted_session_count": 2
+  },
+  "classification": {
+    "source_controller": "infrastructure_invalid_post_score_trace_delivery",
+    "recovered_records": "valid_verifier_backed_smoke_outcomes",
+    "full_pass_at_4_launched": false
+  },
+  "artifacts": {
+    "source_root": "/mnt/sfs/jobs/chris-cyber-opencode-fleet-smokes-v2",
+    "recovery_root": "/mnt/sfs/jobs/chris-cyber-opencode-fleet-smokes-v2-session-recovery-v1",
+    "acceptance_file": "ACCEPTED.json"
+  },
+  "privacy": {
+    "scores_included": false,
+    "prompts_or_traces_included": false,
+    "session_ids_included": false,
+    "task_identifiers_included": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:817600a2785e8b274050fe29bc89cc42ec8cb27d67b25d58fcd43737c7f958d5"
+}
