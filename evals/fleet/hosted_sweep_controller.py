@@ -111,6 +111,9 @@ GLM_HTTP500_SUCCESSOR_CAMPAIGN = (
 GLM_HTTP500_HOSTED_PRIMARY_CAMPAIGN = (
     "chris-cyber-glm53-opencode11827-hosted-primary46-p4-v12"
 )
+GLM_DEDICATED_B_V5_CAMPAIGN = (
+    "chris-cyber-glm53-opencode11827-dedicated-b-v5-successor27-p4-v2"
+)
 EXPECTED_INCLUDED_TASK_COUNTS.update(
     {
         "qwen38_remainder": 48,
@@ -131,6 +134,7 @@ EXPECTED_INCLUDED_TASK_COUNTS.update(
         "qwen38_http500_successor": 49,
         "glm53_http500_successor": 73,
         "glm53_http500_hosted_primary": 46,
+        "glm53_dedicated_b_v5": 27,
     }
 )
 SCHEDULE = [
@@ -465,6 +469,45 @@ def validate_glm_http500_scoring_release(
         or any(value is not False for value in privacy.values())
     ):
         raise ValueError("GLM HTTP500 scoring release does not bind this plan")
+
+
+def validate_dedicated_a_stop_tombstone(receipt: dict[str, Any]) -> None:
+    """Reject a zero-execution classification when a nonempty agent stream exists."""
+    stopped = receipt.get("stopped_controller") or {}
+    attempt = receipt.get("source4_attempt4") or {}
+    fence = receipt.get("source4_task_fence") or {}
+    later = receipt.get("later_task_claim_audit") or {}
+    if (
+        receipt.get("schema_version")
+        != "fleet-glm53-dedicated-a-controller-stop-tombstone-v2"
+        or receipt.get("receipt_sha256") != digest_without(receipt, "receipt_sha256")
+        or (receipt.get("supersedes") or {}).get("receipt_sha256")
+        != "sha256:9ef664c9a2abcdb99137d4b1a648b39b5134c3985ec48897716b92fb107e4e1d"
+        or stopped.get("job_absent_after_delete") is not True
+        or stopped.get("pod_absent_after_delete") is not True
+        or stopped.get("sfs_preserved") is not True
+        or attempt.get("opencode_stream_present") is not True
+        or int(attempt.get("opencode_stream_bytes") or 0) <= 0
+        or attempt.get("agent_execution_started") is not True
+        or attempt.get("agent_execution_completed") is not False
+        or attempt.get("scientific_classification")
+        != "infrastructure_incomplete_mid_agent_pre_scoring_session_verifier"
+        or any(
+            attempt.get(field) is not False
+            for field in (
+                "result_present",
+                "reward_result_present",
+                "verifier_execution_present",
+                "session_ingest_present",
+                "accepted_or_noncreditable_receipt_present",
+            )
+        )
+        or fence.get("whole_task_fenced") is not True
+        or fence.get("must_not_repeat_any_source4_cell") is not True
+        or later.get("source6_claim_present") is not False
+        or later.get("later_task_claimed") is not False
+    ):
+        raise ValueError("dedicated A stop tombstone classification drifted")
 
 
 def build_remainder_plan(
@@ -1298,9 +1341,8 @@ def build_glm53_hosted_reassigned_b_plan(
 def _hydrated_replacement_tasks(
     supplement: dict[str, Any], hydration: dict[str, Any], first_rank: int
 ) -> list[dict[str, Any]]:
-    assigned = {
-        int(row["replacement_rank"]): row for row in supplement["replacements"]
-    }
+    replacement_rows = supplement.get("replacements") or [supplement["replacement"]]
+    assigned = {int(row["replacement_rank"]): row for row in replacement_rows}
     hydrated = {
         int(row["replacement_rank"]): row for row in hydration["tasks"]
     }
@@ -1614,6 +1656,124 @@ def build_glm_http500_hosted_primary_plan(
     return plan
 
 
+def build_glm_dedicated_b_v5_plan(
+    predecessor_plan: dict[str, Any],
+    tombstone: dict[str, Any],
+    supplement: dict[str, Any],
+    hydration: dict[str, Any],
+    parity: dict[str, Any],
+) -> dict[str, Any]:
+    """Build the non-launchable dedicated B successor on serving generation v5."""
+    validate_plan(predecessor_plan)
+    if (
+        predecessor_plan.get("shard_key") != "glm53_dedicated_b"
+        or predecessor_plan.get("plan_sha256")
+        != "sha256:008386c1bbc6d82229f2afdb85e074a0d5e717853dc7cab5b720ef13271e9cb5"
+        or tombstone.get("receipt_sha256") != digest_without(tombstone, "receipt_sha256")
+        or tombstone.get("receipt_sha256")
+        != "sha256:7cf5483e07e4053d7807d599b738e0555ade3b728ea20ae2356186592bd7c355"
+        or supplement.get("receipt_sha256")
+        != "sha256:731ba0583f43a7cc56f16cbf8c71ab98ca39642ff7091e21763f8561bf9d587a"
+        or supplement.get("receipt_sha256")
+        != digest_without(supplement, "receipt_sha256")
+        or hydration.get("receipt_sha256")
+        != "sha256:4397e1a849245ac13535d4afe9682148afcdecd8e525130a59b7147637746b46"
+        or hydration.get("receipt_sha256") != digest_without(hydration, "receipt_sha256")
+        or hydration.get("selection_supplement_receipt_sha256")
+        != supplement["receipt_sha256"]
+        or parity.get("receipt_sha256")
+        != "sha256:4eba7bbbe3ce13bbce61b13b8a2898278407e518611e25625e3688d4219f722d"
+        or parity.get("receipt_sha256") != digest_without(parity, "receipt_sha256")
+        or parity.get("classification") != "operational-gate-passed"
+        or (parity.get("outcome_integrity") or {}).get("scored_sessions") != 0
+        or (parity.get("content_blind_probe") or {}).get("health") is not True
+        or (parity.get("runtime") or {}).get("priority_class") != "fleet-train-high"
+    ):
+        raise ValueError("dedicated B v5 source evidence drifted")
+    source_tasks = {
+        int(row["source_rank"]): copy.deepcopy(row)
+        for row in predecessor_plan["tasks"]
+    }
+    selected = [*range(56, 101, 2), 101, 103, 105]
+    tasks = []
+    for source_rank in selected:
+        row = source_tasks[source_rank]
+        row["rank"] = len(tasks) + 1
+        tasks.append(row)
+    tasks.extend(_hydrated_replacement_tasks(supplement, hydration, len(tasks) + 1))
+    model = copy.deepcopy(predecessor_plan["model"])
+    service_name = parity["network"]["service_name"]
+    model["endpoint_origin"] = (
+        f"http://{service_name}.fleet-train-jobs.svc.cluster.local:8000"
+    )
+    treatment = {
+        "kind": "dedicated_inference_endpoint_v1",
+        "replica": "B",
+        "serving_generation": "v5",
+        "endpoint_origin": model["endpoint_origin"],
+        "service_name": service_name,
+        "service_uid": parity["network"]["service_uid"],
+        "api_run_id": parity["api_run"]["run_id"],
+        "ray_job_uid": parity["controllers"]["ray_job_uid"],
+        "ray_cluster_uid": parity["controllers"]["ray_cluster_uid"],
+        "head_pod_uid": parity["runtime"]["head_pod_uid"],
+        "runtime_image_digest": parity["image"]["resolved_image_id"],
+        "serving_config_sha256": parity["immutable_config"]["sha256"],
+        "forced_stop_tombstone_receipt_sha256": tombstone["receipt_sha256"],
+        "selection_supplement_receipt_sha256": supplement["receipt_sha256"],
+        "hydration_receipt_sha256": hydration["receipt_sha256"],
+        "parity_receipt_sha256": parity["receipt_sha256"],
+        "served_id": model["served_id"],
+        "model_revision": model["revision"],
+        "session_model": model["session_model"],
+        "harness": copy.deepcopy(predecessor_plan["harness"]),
+        "required_task_tools": predecessor_plan["execution"]["required_task_tools"],
+        "required_task_tool_catalog_sha256": predecessor_plan["execution"][
+            "required_task_tool_catalog_sha256"
+        ],
+    }
+    plan = {
+        "schema_version": PLAN_SCHEMA,
+        "shard_key": "glm53_dedicated_b_v5",
+        "campaign_id": GLM_DEDICATED_B_V5_CAMPAIGN,
+        "source_job_id": predecessor_plan["source_job_id"],
+        "source": {
+            "predecessor_plan_sha256": predecessor_plan["plan_sha256"],
+            "forced_stop_tombstone_receipt_sha256": tombstone["receipt_sha256"],
+            "selection_supplement_receipt_sha256": supplement["receipt_sha256"],
+            "hydration_receipt_sha256": hydration["receipt_sha256"],
+            "parity_receipt_sha256": parity["receipt_sha256"],
+        },
+        "treatment_block": treatment,
+        "model": model,
+        "harness": copy.deepcopy(predecessor_plan["harness"]),
+        "authority": copy.deepcopy(predecessor_plan["authority"]),
+        "task_count": 27,
+        "pass_k": 4,
+        "total_session_count": 108,
+        "credited_sessions": [],
+        "new_session_count": 108,
+        "fenced_source_ranks": [1, 2, 3, 5, 7, 9, 11, 54, 106],
+        "hosted_source_ranks": [*range(13, 100, 2), 108, 109],
+        "dedicated_a_reserved_source_ranks": [*range(6, 53, 2), 102, 104],
+        "dedicated_a_pending_replacement_ranks": [110],
+        "execution": {
+            **copy.deepcopy(predecessor_plan["execution"]),
+            "launch_authorized": False,
+            "required_priority_class": "fleet-train-high",
+            "required_recovery_gate": "fleet_scoring_api_http500_recovery_v1",
+        },
+        "tasks": tasks,
+        "attempts": _fresh_attempts(
+            tasks, GLM_DEDICATED_B_V5_CAMPAIGN, "glm53-dedicated-b-v5"
+        ),
+        "privacy": copy.deepcopy(predecessor_plan["privacy"]),
+    }
+    plan["plan_sha256"] = digest_without(plan, "plan_sha256")
+    validate_plan(plan)
+    return plan
+
+
 def _validate_source_plan(plan: dict[str, Any]) -> None:
     if plan.get("schema_version") == legacy.PLAN_SCHEMA:
         legacy.validate_plan(plan)
@@ -1867,7 +2027,8 @@ def validate_plan(plan: dict[str, Any]) -> None:
     execution = plan.get("execution") or {}
     expected_inventory_policy = (
         "immutable_plan_claim_and_endpoint_uid_v1"
-        if shard_key in {"glm53_dedicated_a", "glm53_dedicated_b"}
+        if shard_key
+        in {"glm53_dedicated_a", "glm53_dedicated_b", "glm53_dedicated_b_v5"}
         else "conservative_no_same_model_session_for_task_key_v1"
         if shard_key in {
             "glm53_clean",
@@ -1900,6 +2061,44 @@ def validate_plan(plan: dict[str, Any]) -> None:
         or execution.get("inventory_policy") != expected_inventory_policy
     ):
         raise ValueError("hosted shard execution policy drifted")
+    if shard_key == "glm53_dedicated_b_v5":
+        treatment = plan.get("treatment_block") or {}
+        source = plan.get("source") or {}
+        selected = {int(row["source_rank"]) for row in tasks}
+        if (
+            selected != {*range(56, 101, 2), 101, 103, 105, 107}
+            or set(plan.get("fenced_source_ranks") or [])
+            != {1, 2, 3, 5, 7, 9, 11, 54, 106}
+            or set(plan.get("hosted_source_ranks") or [])
+            != {*range(13, 100, 2), 108, 109}
+            or set(plan.get("dedicated_a_reserved_source_ranks") or [])
+            != {*range(6, 53, 2), 102, 104}
+            or plan.get("dedicated_a_pending_replacement_ranks") != [110]
+            or treatment.get("kind") != "dedicated_inference_endpoint_v1"
+            or treatment.get("replica") != "B"
+            or treatment.get("serving_generation") != "v5"
+            or treatment.get("model_revision") != plan["model"].get("revision")
+            or treatment.get("endpoint_origin") != plan["model"].get("endpoint_origin")
+            or treatment.get("forced_stop_tombstone_receipt_sha256")
+            != source.get("forced_stop_tombstone_receipt_sha256")
+            or treatment.get("selection_supplement_receipt_sha256")
+            != source.get("selection_supplement_receipt_sha256")
+            or treatment.get("hydration_receipt_sha256")
+            != source.get("hydration_receipt_sha256")
+            or treatment.get("parity_receipt_sha256")
+            != source.get("parity_receipt_sha256")
+            or not treatment.get("service_uid")
+            or not treatment.get("ray_job_uid")
+            or not treatment.get("ray_cluster_uid")
+            or not treatment.get("head_pod_uid")
+            or execution.get("launch_authorized") is not False
+            or execution.get("required_priority_class") != "fleet-train-high"
+            or execution.get("required_recovery_gate")
+            != "fleet_scoring_api_http500_recovery_v1"
+        ):
+            raise ValueError("dedicated B v5 partition or binding drifted")
+        return
+
     if shard_key in {"glm53_dedicated_a", "glm53_dedicated_b"}:
         treatment = plan.get("treatment_block") or {}
         replica = "A" if shard_key.endswith("_a") else "B"
@@ -2753,6 +2952,13 @@ def main() -> int:
     dedicated_b.add_argument("--hydration", type=Path, required=True)
     dedicated_b.add_argument("--canary", type=Path, required=True)
     dedicated_b.add_argument("--output", type=Path, required=True)
+    dedicated_b_v5 = sub.add_parser("build-dedicated-b-v5")
+    dedicated_b_v5.add_argument("--predecessor-plan", type=Path, required=True)
+    dedicated_b_v5.add_argument("--tombstone", type=Path, required=True)
+    dedicated_b_v5.add_argument("--supplement", type=Path, required=True)
+    dedicated_b_v5.add_argument("--hydration", type=Path, required=True)
+    dedicated_b_v5.add_argument("--parity", type=Path, required=True)
+    dedicated_b_v5.add_argument("--output", type=Path, required=True)
     qwen_replacements = sub.add_parser("build-qwen-replacements")
     qwen_replacements.add_argument("--source-plan", type=Path, required=True)
     qwen_replacements.add_argument("--hosted-plan", type=Path, required=True)
@@ -2838,6 +3044,16 @@ def main() -> int:
             load_object(args.hydration),
             load_object(args.canary),
             replica="B",
+        )
+        self_hosted.write_json_once(args.output, value)
+        return 0
+    if args.command == "build-dedicated-b-v5":
+        value = build_glm_dedicated_b_v5_plan(
+            load_object(args.predecessor_plan),
+            load_object(args.tombstone),
+            load_object(args.supplement),
+            load_object(args.hydration),
+            load_object(args.parity),
         )
         self_hosted.write_json_once(args.output, value)
         return 0

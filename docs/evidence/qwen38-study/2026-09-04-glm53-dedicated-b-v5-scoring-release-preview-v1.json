@@ -1,0 +1,58 @@
+{
+  "schema_version": "fleet-glm53-dedicated-b-v5-scoring-release-preview-v1",
+  "append_only": true,
+  "plan": {
+    "path": "evals/fleet/configs/glm53-opencode-dedicated-b-v5-successor27-pass4-v2.json",
+    "file_sha256": "sha256:c31bf95656694693bdb205aa0ad51103b54d878f108d4f409a31d533f446ba31",
+    "plan_sha256": "sha256:b3436ff09a6f382dac12029dbd9bea2270ccf52ab7c945f07464e715590305b8",
+    "task_count": 27,
+    "pass_k": 4,
+    "cell_count": 108,
+    "source_ranks": [
+      56, 58, 60, 62, 64, 66, 68, 70, 72, 74, 76, 78, 80, 82, 84, 86,
+      88, 90, 92, 94, 96, 98, 100, 101, 103, 105, 107
+    ]
+  },
+  "gates": {
+    "forced_stop_tombstone_receipt_sha256": "sha256:7cf5483e07e4053d7807d599b738e0555ade3b728ea20ae2356186592bd7c355",
+    "selection_supplement_receipt_sha256": "sha256:731ba0583f43a7cc56f16cbf8c71ab98ca39642ff7091e21763f8561bf9d587a",
+    "hydration_receipt_sha256": "sha256:4397e1a849245ac13535d4afe9682148afcdecd8e525130a59b7147637746b46",
+    "parity_receipt_sha256": "sha256:4eba7bbbe3ce13bbce61b13b8a2898278407e518611e25625e3688d4219f722d",
+    "scoring_recovery_receipt_sha256": "sha256:708d635968e073d27153d3d9f13ae5fa7b4784349cc9e8e3928f0fbafeade132",
+    "source54_fenced": true,
+    "source56_fresh_run_id_required": true,
+    "exact_treatment_gate_required": true,
+    "duplicate_gate_required": true,
+    "overlap_gate_required": true,
+    "fresh_create_once_identity_required": true
+  },
+  "treatment": {
+    "kind": "dedicated_inference_endpoint_v1",
+    "replica": "B",
+    "serving_generation": "v5",
+    "service_uid": "14ae906a-60ef-4a02-b6bf-814a00c2c89f",
+    "ray_job_uid": "2bbfd34a-d74a-4497-ab28-48cada0c9753",
+    "ray_cluster_uid": "f7f7ae34-6a79-482a-b771-4639b786f66a",
+    "head_pod_uid": "bfeb4c6a-9e4a-4f14-adb2-3f516dd25fdb",
+    "model_revision": "30333038ada1f1dacb294a93270305a890b50c14"
+  },
+  "scheduling": {
+    "required_priority_class": "fleet-train-high",
+    "true_non_preemptible_available": false,
+    "priority_class_is_not_preemption_immunity": true,
+    "workers": 1
+  },
+  "authorization": {
+    "status": "awaiting_exact_root_authorization",
+    "scored_launch_authorized": false,
+    "preflight_authorized": false,
+    "must_not_repeat": true
+  },
+  "privacy": {
+    "scores_included": false,
+    "prompts_or_traces_included": false,
+    "task_content_included": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:d8d51249e922cf35cf193e380ca7e06e918c8a804aca3dd6edcb6c16ca9f2ded"
+}

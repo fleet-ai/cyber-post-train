@@ -59,6 +59,9 @@ GLM_HOSTED_REPLACEMENT_RELEASE = Path(
 DEDICATED_B_STOP_TOMBSTONE = Path(
     "docs/evidence/qwen38-study/2026-09-04-glm53-dedicated-b-forced-stop-tombstone-v1.json"
 )
+DEDICATED_A_STOP_TOMBSTONE_V2 = Path(
+    "docs/evidence/qwen38-study/2026-09-04-glm53-dedicated-a-controller-stop-tombstone-v2.json"
+)
 DEDICATED_B_R107_HYDRATION = Path(
     "docs/evidence/qwen38-study/2026-09-04-glm53-dedicated-b-r107-hydration-v1.json"
 )
@@ -94,6 +97,9 @@ GLM_HTTP500_HOSTED_PRIMARY_PLAN = Path(
 )
 GLM_HTTP500_SCORING_RELEASE = Path(
     "docs/evidence/qwen38-study/2026-09-04-glm53-http500-hosted-primary-scoring-release-v1.json"
+)
+GLM_DEDICATED_B_V5_PLAN = Path(
+    "evals/fleet/configs/glm53-opencode-dedicated-b-v5-successor27-pass4-v2.json"
 )
 FROZEN_SPLIT = Path("configs/data/fleet-a62-task-split-v1.json")
 FROZEN_SELECTION = Path(
@@ -1044,6 +1050,18 @@ def test_dedicated_b_stop_tombstone_preserves_zero_execution_boundary() -> None:
     ))
 
 
+def test_dedicated_a_stop_tombstone_cannot_hide_nonempty_agent_stream() -> None:
+    receipt = hosted.load_object(DEDICATED_A_STOP_TOMBSTONE_V2)
+    hosted.validate_dedicated_a_stop_tombstone(receipt)
+    tampered = json.loads(json.dumps(receipt))
+    tampered["source4_attempt4"]["agent_execution_started"] = False
+    tampered["receipt_sha256"] = self_hosted.digest_without(
+        tampered, "receipt_sha256"
+    )
+    with pytest.raises(ValueError, match="classification drifted"):
+        hosted.validate_dedicated_a_stop_tombstone(tampered)
+
+
 def test_glm_r107_hydration_requires_tombstone_bound_supplement(monkeypatch) -> None:
     supplement = hosted.load_object(REPLACEMENT_SUPPLEMENT_V2)
     row = supplement["replacement"]
@@ -1311,6 +1329,36 @@ def test_glm_http500_primary_requires_exact_scoring_release() -> None:
     )
     with pytest.raises(ValueError, match="does not bind"):
         hosted.validate_glm_http500_scoring_release(plan, tampered)
+
+
+def test_glm_dedicated_b_v5_plan_binds_fresh_serving_and_fences_source54() -> None:
+    plan = hosted.build_glm_dedicated_b_v5_plan(
+        hosted.load_object(DEDICATED_B_PLAN),
+        hosted.load_object(DEDICATED_B_STOP_TOMBSTONE),
+        hosted.load_object(REPLACEMENT_SUPPLEMENT_V2),
+        hosted.load_object(DEDICATED_B_R107_HYDRATION),
+        hosted.load_object(
+            Path(
+                "docs/evidence/qwen38-study/"
+                "2026-09-04-glm53-dedicated-replica-b-v5-pass.json"
+            )
+        ),
+    )
+    assert plan == hosted.load_object(GLM_DEDICATED_B_V5_PLAN)
+    hosted.validate_plan(plan)
+    assert [row["source_rank"] for row in plan["tasks"]] == [
+        *range(56, 101, 2),
+        101,
+        103,
+        105,
+        107,
+    ]
+    assert 54 in plan["fenced_source_ranks"]
+    assert plan["task_count"] == 27
+    assert plan["new_session_count"] == 108
+    assert plan["treatment_block"]["serving_generation"] == "v5"
+    assert plan["execution"]["required_priority_class"] == "fleet-train-high"
+    assert plan["execution"]["launch_authorized"] is False
 
 
 def test_qwen_http500_supplement_selects_unused_r54_r55_and_restores_200_cells() -> None:
