@@ -35,6 +35,213 @@ SCIENTIFIC_MAPPING_RELEASE_PREVIEW_SCHEMA = (
 )
 HIGH_PRIORITY_CLASS = "fleet-train-high"
 
+EVIDENCE_ROOT = Path("docs/evidence/qwen38-study")
+REPLACEMENT_SELECTION_EVIDENCE = {
+    "sha256:77666813ed33cea95d1d21d31383d9deab2d596a97dfe8d7caee4139c80374b9": (
+        EVIDENCE_ROOT / "2026-09-04-opencode-replacement-selection-lock-v1.json"
+    ),
+    "sha256:7ad740c7b8a13178a2e090623d3f0c4786d52d29143e740fd3649392acbf5276": (
+        EVIDENCE_ROOT / "2026-09-04-qwen38-replacement-selection-supplement-v2.json"
+    ),
+    "sha256:56406bb32541babc0189e089f339d6a7668b24cb86b1fd8587b60a3cfc57b24c": (
+        EVIDENCE_ROOT / "2026-09-04-qwen38-replacement-selection-supplement-v3.json"
+    ),
+    "sha256:731ba0583f43a7cc56f16cbf8c71ab98ca39642ff7091e21763f8561bf9d587a": (
+        EVIDENCE_ROOT / "2026-09-04-opencode-replacement-selection-supplement-v2.json"
+    ),
+    "sha256:a08c2c41f782f9b41e95575a75071e2a3c2fe8916a5db13bc095614dacb92b63": (
+        EVIDENCE_ROOT / "2026-09-04-opencode-replacement-selection-supplement-v3.json"
+    ),
+    "sha256:3ccf7fdace01bc2a3e6245d26f65d6069fa5327d4a5ac7515640c7d59092e534": (
+        EVIDENCE_ROOT / "2026-09-04-opencode-replacement-selection-supplement-v4.json"
+    ),
+    "sha256:e8b6c3f993c4e5b76f823acc0bbda4c210a7dbd4526c1adb093c0535bbb4c00d": (
+        EVIDENCE_ROOT / "2026-09-04-opencode-replacement-selection-supplement-v5.json"
+    ),
+    "sha256:5ee4ec1da3248d1823b9a3b90c903b6414091e1762262c55f7b3e4462d0cebf8": (
+        EVIDENCE_ROOT / "2026-09-04-opencode-replacement-selection-supplement-v6.json"
+    ),
+    "sha256:3faf062cd63315708c5468ab396fb4a7591c7266c297bb946e0ada904409c2c0": (
+        EVIDENCE_ROOT / "2026-09-04-opencode-replacement-selection-supplement-v7.json"
+    ),
+}
+
+# These are the reviewed scientific substitutions, not values inferred from the
+# mutable mapping under validation. The task identity is checked against both
+# the executable component and the append-only selection evidence.
+EXPECTED_REPLACEMENT_MAPPINGS = (
+    (
+        "qwen3.8-27b",
+        "qwen-hosted-primary49",
+        1,
+        55,
+        51,
+        "sha256:7ad740c7b8a13178a2e090623d3f0c4786d52d29143e740fd3649392acbf5276",
+        "cysec1-2-fira-gen_blackbox-322896ad3182769453b9944a__blackbox_ctf_v1",
+        "8e5c7c45-7259-420d-ba12-0381465d864e",
+    ),
+    (
+        "qwen3.8-27b",
+        "qwen-hosted-primary49",
+        2,
+        52,
+        None,
+        "sha256:77666813ed33cea95d1d21d31383d9deab2d596a97dfe8d7caee4139c80374b9",
+        "cysec1-2-fentry-gen_blackbox-ce65143165164b6f99df040c__blackbox_ctf_v1",
+        "fa04ef0d-3341-4b5f-8a13-d2955feaadc1",
+    ),
+    (
+        "qwen3.8-27b",
+        "qwen-hosted-primary49",
+        3,
+        53,
+        None,
+        "sha256:77666813ed33cea95d1d21d31383d9deab2d596a97dfe8d7caee4139c80374b9",
+        "cysec1-2-current-gen_blackbox-58a4ac6886feda0738f2feb8__blackbox_ctf_v1",
+        "e33aaed0-491b-46e8-8891-55d99c80ef56",
+    ),
+    (
+        "qwen3.8-27b",
+        "qwen-hosted-primary49",
+        5,
+        54,
+        None,
+        "sha256:7ad740c7b8a13178a2e090623d3f0c4786d52d29143e740fd3649392acbf5276",
+        "cysec1-2-current-gen_blackbox-9afe9e08da314948b573657e__blackbox_ctf_v1",
+        "dd8dd22e-75c0-4b93-8f8e-ea8a292d92bb",
+    ),
+    (
+        "qwen3.8-27b",
+        "qwen-hosted-primary49",
+        10,
+        56,
+        None,
+        "sha256:56406bb32541babc0189e089f339d6a7668b24cb86b1fd8587b60a3cfc57b24c",
+        "cysec1-2-fira-gen_blackbox-f1d8a0c49352bdf40faf015f__blackbox_ctf_v1",
+        "33527414-ced7-4005-9c5a-eb9c211a32da",
+    ),
+    (
+        "glm-5.3",
+        "glm-dedicated-b-v5-primary27",
+        1,
+        101,
+        None,
+        "sha256:77666813ed33cea95d1d21d31383d9deab2d596a97dfe8d7caee4139c80374b9",
+        "cysec1-2-fira-gen_blackbox-2ed54399f3d59827d41ac651__blackbox_ctf_v1",
+        "c0d14c8f-5f33-4957-8e38-af075bbf3df9",
+    ),
+    (
+        "glm-5.3",
+        "glm-dedicated-a-v5-primary27",
+        2,
+        102,
+        None,
+        "sha256:77666813ed33cea95d1d21d31383d9deab2d596a97dfe8d7caee4139c80374b9",
+        "cysec1-2-fira-gen_blackbox-369f0925ba4f2ea1208a70a1__blackbox_ctf_v1",
+        "3ffeac73-fff8-49d8-b156-e726275edc2f",
+    ),
+    (
+        "glm-5.3",
+        "glm-dedicated-b-v5-primary27",
+        3,
+        103,
+        None,
+        "sha256:77666813ed33cea95d1d21d31383d9deab2d596a97dfe8d7caee4139c80374b9",
+        "cysec1-2-fira-gen_blackbox-3deedc8f50c562ae91ac4705__blackbox_ctf_v1",
+        "7e1fc9f6-7717-49bf-aee5-c09686dca297",
+    ),
+    (
+        "glm-5.3",
+        "glm-dedicated-a-v5-primary27",
+        4,
+        110,
+        None,
+        "sha256:3ccf7fdace01bc2a3e6245d26f65d6069fa5327d4a5ac7515640c7d59092e534",
+        "cysec1-2-fubspot-gen_blackbox-93cb7e23e9a08abe2d6d7a52__blackbox_ctf_v1",
+        "b2f61fae-a07b-42c7-92ec-eeb4fa2064b6",
+    ),
+    (
+        "glm-5.3",
+        "glm-dedicated-a-v5-primary27",
+        5,
+        104,
+        None,
+        "sha256:77666813ed33cea95d1d21d31383d9deab2d596a97dfe8d7caee4139c80374b9",
+        "cysec1-2-fira-gen_blackbox-5f29f46b3a70e5d9a6ea59dd__blackbox_ctf_v1",
+        "62ed9ac8-478d-45a2-a09b-6750f5946d97",
+    ),
+    (
+        "glm-5.3",
+        "glm-dedicated-a-v5-primary27",
+        6,
+        112,
+        None,
+        "sha256:5ee4ec1da3248d1823b9a3b90c903b6414091e1762262c55f7b3e4462d0cebf8",
+        "cysec1-2-fubspot-gen_blackbox-b81e6f9c36fc6ce74306eec6__blackbox_ctf_v1",
+        "24030b60-cb61-4366-a3be-b3b808cad8ba",
+    ),
+    (
+        "glm-5.3",
+        "glm-dedicated-b-v5-primary27",
+        7,
+        105,
+        None,
+        "sha256:77666813ed33cea95d1d21d31383d9deab2d596a97dfe8d7caee4139c80374b9",
+        "cysec1-2-fubspot-gen_blackbox-00e30c972b2d4f6553104548__blackbox_ctf_v1",
+        "611014e8-6787-43a0-87a1-5c70fb69e3e1",
+    ),
+    (
+        "glm-5.3",
+        "glm-hosted-primary46",
+        9,
+        109,
+        106,
+        "sha256:a08c2c41f782f9b41e95575a75071e2a3c2fe8916a5db13bc095614dacb92b63",
+        "cysec1-2-fubspot-gen_blackbox-61a50f7fd0c9d7945083bded__blackbox_ctf_v1",
+        "61ff6681-c1e6-44cc-814c-02c43edce687",
+    ),
+    (
+        "glm-5.3",
+        "glm-hosted-primary46",
+        11,
+        108,
+        None,
+        "sha256:a08c2c41f782f9b41e95575a75071e2a3c2fe8916a5db13bc095614dacb92b63",
+        "cysec1-2-fubspot-gen_blackbox-5eeef7376c8837272737ff41__blackbox_ctf_v1",
+        "be398179-b809-441f-85d0-b981c64faf43",
+    ),
+    (
+        "glm-5.3",
+        "glm-dedicated-a-v5-primary27",
+        14,
+        113,
+        None,
+        "sha256:5ee4ec1da3248d1823b9a3b90c903b6414091e1762262c55f7b3e4462d0cebf8",
+        "cysec1-2-fubspot-gen_blackbox-c892d22e16a0042cd5a8b57a__blackbox_ctf_v1",
+        "21baee36-dc26-4dcd-983e-ae58a665dfa9",
+    ),
+    (
+        "glm-5.3",
+        "glm-dedicated-b-v5-primary27",
+        54,
+        107,
+        None,
+        "sha256:731ba0583f43a7cc56f16cbf8c71ab98ca39642ff7091e21763f8561bf9d587a",
+        "cysec1-2-fubspot-gen_blackbox-5ea795caa1e5d79bfb98ec82__blackbox_ctf_v1",
+        "b6f2349e-fcb1-4a18-9c8d-3278d3f72991",
+    ),
+    (
+        "glm-5.3",
+        "glm-dedicated-b-v5-primary27",
+        56,
+        114,
+        111,
+        "sha256:3faf062cd63315708c5468ab396fb4a7591c7266c297bb946e0ada904409c2c0",
+        "cysec1-2-fubspot-gen_blackbox-d096d72a3734e3b85fde5c28__blackbox_ctf_v1",
+        "66051718-314a-4dad-86ab-c7b9b72fa514",
+    ),
+)
+
 
 def canonical_json(value: Any) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
@@ -48,10 +255,22 @@ def digest_without(value: dict[str, Any], field: str) -> str:
     return sha256(canonical_json({key: item for key, item in value.items() if key != field}))
 
 
+def _reject_duplicate_json_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    value: dict[str, Any] = {}
+    for key, item in pairs:
+        if key in value:
+            raise ValueError(f"duplicate JSON object key: {key}")
+        value[key] = item
+    return value
+
+
 def read_object(path: Path) -> dict[str, Any]:
     if path.is_symlink() or not path.is_file():
         raise RuntimeError(f"required input is not a regular file: {path}")
-    value = json.loads(path.read_text())
+    try:
+        value = json.loads(path.read_text(), object_pairs_hook=_reject_duplicate_json_keys)
+    except (json.JSONDecodeError, ValueError) as exc:
+        raise RuntimeError(f"required input is not strict JSON: {path}: {exc}") from exc
     if not isinstance(value, dict):
         raise RuntimeError(f"required input is not an object: {path}")
     return value
@@ -132,13 +351,9 @@ def validate_campaign(campaign: dict[str, Any]) -> None:
                 raise ValueError("campaign component lacks an immutable plan digest")
             fragment_cells.extend(_fragment_cells(fragment, row))
         expected_cells = {
-            (int(rank), attempt)
-            for rank in row["source_ranks"]
-            for attempt in range(1, 5)
+            (int(rank), attempt) for rank in row["source_ranks"] for attempt in range(1, 5)
         }
-        if set(fragment_cells) != expected_cells or len(fragment_cells) != len(
-            set(fragment_cells)
-        ):
+        if set(fragment_cells) != expected_cells or len(fragment_cells) != len(set(fragment_cells)):
             raise ValueError("campaign execution fragments do not exactly partition component")
 
 
@@ -167,6 +382,175 @@ def _mapping_selector_cells(selector: dict[str, Any]) -> set[tuple[int, int]]:
             raise ValueError("mapping cell selector is invalid")
         result.update((rank, int(attempt)) for attempt in attempts)
     return result
+
+
+def _replacement_rows(evidence: dict[str, Any]) -> dict[int, dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for model_field in ("qwen38", "glm53"):
+        model_block = evidence.get(model_field)
+        if isinstance(model_block, dict):
+            rows.extend(model_block.get("tasks") or [])
+    listed = evidence.get("replacements")
+    if isinstance(listed, list):
+        rows.extend(listed)
+    single = evidence.get("replacement")
+    if isinstance(single, dict):
+        rows.append(single)
+    result = {int(row.get("replacement_rank") or 0): row for row in rows}
+    if 0 in result or len(result) != len(rows):
+        raise ValueError("replacement selection evidence has invalid or duplicate ranks")
+    return result
+
+
+def _read_self_digested_receipt(path: Path, expected_digest: str) -> dict[str, Any]:
+    evidence = read_object(path)
+    if evidence.get("receipt_sha256") != expected_digest or evidence.get(
+        "receipt_sha256"
+    ) != digest_without(evidence, "receipt_sha256"):
+        raise ValueError("scientific mapping evidence digest drifted")
+    return evidence
+
+
+def _validate_replacement_evidence(actual: tuple[tuple[Any, ...], ...], *, root: Path) -> None:
+    if actual != EXPECTED_REPLACEMENT_MAPPINGS:
+        raise ValueError("scientific replacement mapping drifted from reviewed substitutions")
+    loaded = {
+        digest: _read_self_digested_receipt(root / path, digest)
+        for digest, path in REPLACEMENT_SELECTION_EVIDENCE.items()
+    }
+    for row in EXPECTED_REPLACEMENT_MAPPINGS:
+        replacement_rank, receipt_digest, task_key, task_version_id = (
+            int(row[3]),
+            str(row[5]),
+            str(row[6]),
+            str(row[7]),
+        )
+        selected = _replacement_rows(loaded[receipt_digest]).get(replacement_rank)
+        if (
+            selected is None
+            or selected.get("task_key") != task_key
+            or selected.get("task_version_id") != task_version_id
+        ):
+            raise ValueError("replacement selection evidence task identity drifted")
+
+    lock = loaded["sha256:77666813ed33cea95d1d21d31383d9deab2d596a97dfe8d7caee4139c80374b9"]
+    if lock.get("qwen38", {}).get("fenced_original_source_ranks") != [1, 2, 3] or lock.get(
+        "glm53", {}
+    ).get("fenced_original_source_ranks") != [1, 2, 3, 5, 7]:
+        raise ValueError("replacement selection lock fence drifted")
+    qwen_supplement = loaded[
+        "sha256:7ad740c7b8a13178a2e090623d3f0c4786d52d29143e740fd3649392acbf5276"
+    ]
+    if {
+        int(row.get("source_rank") or 0)
+        for row in qwen_supplement.get("fenced_tasks") or []
+        if row.get("whole_task_fenced") is True
+    } != {5, 51}:
+        raise ValueError("qwen replacement supplement fence drifted")
+    qwen_r56 = loaded["sha256:56406bb32541babc0189e089f339d6a7668b24cb86b1fd8587b60a3cfc57b24c"]
+    if qwen_r56.get("source6_fence", {}).get("source_rank") != 6:
+        raise ValueError("qwen r56 predecessor evidence drifted")
+    glm_r107 = loaded["sha256:731ba0583f43a7cc56f16cbf8c71ab98ca39642ff7091e21763f8561bf9d587a"]
+    if glm_r107.get("predecessor_attrition", {}).get("fenced_source_rank") != 54:
+        raise ValueError("glm r107 predecessor evidence drifted")
+    glm_r108_r109 = loaded[
+        "sha256:a08c2c41f782f9b41e95575a75071e2a3c2fe8916a5db13bc095614dacb92b63"
+    ]
+    if {
+        int(row.get("source_rank") or 0)
+        for row in glm_r108_r109.get("fenced_tasks") or []
+        if row.get("whole_task_fenced") is True
+    } != {11, 106}:
+        raise ValueError("glm r108/r109 predecessor evidence drifted")
+    glm_r110 = loaded["sha256:3ccf7fdace01bc2a3e6245d26f65d6069fa5327d4a5ac7515640c7d59092e534"]
+    if glm_r110.get("fenced_source4", {}).get("source_rank") != 4:
+        raise ValueError("glm r110 predecessor evidence drifted")
+    glm_r111 = loaded["sha256:e8b6c3f993c4e5b76f823acc0bbda4c210a7dbd4526c1adb093c0535bbb4c00d"]
+    if glm_r111.get("source13_fence", {}).get("source_rank") != 13:
+        raise ValueError("glm r111 selection predecessor evidence drifted")
+    glm_r112_r113 = loaded[
+        "sha256:5ee4ec1da3248d1823b9a3b90c903b6414091e1762262c55f7b3e4462d0cebf8"
+    ]
+    if {
+        (int(row.get("source_rank") or 0), int(row.get("replacement_rank") or 0))
+        for row in glm_r112_r113.get("attrition_sources") or []
+    } != {(6, 112), (14, 113)}:
+        raise ValueError("glm r112/r113 predecessor evidence drifted")
+    glm_r114 = loaded[
+        "sha256:3faf062cd63315708c5468ab396fb4a7591c7266c297bb946e0ada904409c2c0"
+    ]
+    if (
+        glm_r114.get("r111_attrition", {}).get("replaced_original_source_rank")
+        != 56
+        or glm_r114.get("r111_attrition", {}).get(
+            "all_attempts_permanently_fenced"
+        )
+        != [1, 2, 3, 4]
+        or glm_r114.get("r111_attrition", {})
+        .get("attempt1", {})
+        .get("retry_allowed")
+        is not False
+        or glm_r114.get("replacement", {}).get("replaces_source_rank") != 56
+        or glm_r114.get("replacement", {}).get("supersedes_replacement_rank") != 111
+        or glm_r114.get("mapping_gate", {}).get("executable_universe_reseal_allowed")
+        is not False
+    ):
+        raise ValueError("glm r114 predecessor or held mapping evidence drifted")
+
+
+def _validate_inline_task_authority(
+    *, receipt_digest: str, rows: list[dict[str, Any]], root: Path
+) -> None:
+    paths = {
+        "sha256:1ebba23918ef3357f6430261841eca2163b632a1d4d67430ae2465e023e719ed": (
+            EVIDENCE_ROOT / "2026-09-04-glm53-dedicated-a-r112-r113-hydration-v1.json"
+        ),
+        "sha256:ba6327ce5ca006c48b4cec33ed93179c0fc9c32a0b2bda8ec0a023272ac1758d": (
+            EVIDENCE_ROOT / "2026-09-04-glm53-r111-hydration-v1.json"
+        ),
+        "sha256:3faf062cd63315708c5468ab396fb4a7591c7266c297bb946e0ada904409c2c0": (
+            EVIDENCE_ROOT / "2026-09-04-opencode-replacement-selection-supplement-v7.json"
+        ),
+    }
+    path = paths.get(receipt_digest)
+    if path is None:
+        raise ValueError("inline scientific task uses an unreviewed authority receipt")
+    evidence = _read_self_digested_receipt(root / path, receipt_digest)
+    privacy = evidence.get("privacy") or {}
+    if (
+        evidence.get("scores_read", privacy.get("scores_read")) is not False
+        or evidence.get("task_content_retained", privacy.get("task_content_retained"))
+        is not False
+    ):
+        raise ValueError("inline task authority privacy contract drifted")
+    if isinstance(evidence.get("replacement"), dict):
+        selected = evidence["replacement"]
+        hydrated = {
+            (
+                int(selected.get("replacement_rank") or 0),
+                selected.get("task_key"),
+                selected.get("task_version_id"),
+            )
+        }
+    else:
+        hydrated = {
+            (
+                int(row.get("replacement_rank") or 0),
+                row.get("task", {}).get("key"),
+                row.get("task", {}).get("version_id"),
+            )
+            for row in evidence.get("tasks") or []
+        }
+    expected = {
+        (
+            int(row.get("source_rank") or 0),
+            row.get("task", {}).get("key"),
+            row.get("task", {}).get("version_id"),
+        )
+        for row in rows
+    }
+    if hydrated != expected:
+        raise ValueError("inline scientific task authority identity drifted")
 
 
 def validate_scientific_mapping(
@@ -232,10 +616,9 @@ def validate_scientific_mapping(
             if kind == "plan":
                 path = root / str(source.get("repo_plan_path") or "")
                 plan = read_object(path)
-                if (
-                    plan.get("plan_sha256") != source.get("plan_sha256")
-                    or plan.get("plan_sha256") != digest_without(plan, "plan_sha256")
-                ):
+                if plan.get("plan_sha256") != source.get("plan_sha256") or plan.get(
+                    "plan_sha256"
+                ) != digest_without(plan, "plan_sha256"):
                     raise ValueError("scientific task-source plan drifted")
                 plan_tasks = {int(row["source_rank"]): row for row in plan.get("tasks") or []}
                 selected = {int(rank) for rank in source.get("source_ranks") or []}
@@ -247,6 +630,7 @@ def validate_scientific_mapping(
                 if not isinstance(receipt, str) or not receipt.startswith("sha256:"):
                     raise ValueError("inline scientific task lacks immutable authority")
                 rows = source.get("tasks") or []
+                _validate_inline_task_authority(receipt_digest=receipt, rows=rows, root=root)
             else:
                 raise ValueError("scientific task-source kind is invalid")
             for row in rows:
@@ -307,9 +691,7 @@ def validate_scientific_mapping(
                     )
                 ):
                     raise ValueError("resolved attempt ownership plan drifted")
-                plan_tasks = {
-                    int(row["source_rank"]): row for row in plan.get("tasks") or []
-                }
+                plan_tasks = {int(row["source_rank"]): row for row in plan.get("tasks") or []}
                 plan_attempts = {
                     (int(row["source_rank"]), int(row["attempt"])): row
                     for row in plan.get("attempts") or []
@@ -326,8 +708,7 @@ def validate_scientific_mapping(
                         != scientific_task.get("task", {}).get("key")
                         or task.get("task", {}).get("version_id")
                         != scientific_task.get("task", {}).get("version_id")
-                        or plan.get("model", {}).get("served_id")
-                        not in {None, model}
+                        or plan.get("model", {}).get("served_id") not in {None, model}
                         or not isinstance(attempt_row := plan_attempts[(rank, attempt)], dict)
                         or not isinstance(attempt_row.get("run_id"), str)
                         or not attempt_row["run_id"]
@@ -379,6 +760,10 @@ def validate_scientific_mapping(
     if len(replacement_targets) != len(set(replacement_targets)):
         raise ValueError("scientific replacement target duplicated")
     primary = {(row["model"], row["component_id"], row["source_rank"]) for row in scientific}
+    scientific_by_rank = {
+        (row["model"], row["component_id"], row["source_rank"]): row for row in scientific
+    }
+    reviewed_replacements: list[tuple[Any, ...]] = []
     for row, target in zip(replacements, replacement_targets, strict=True):
         if (
             target not in primary
@@ -388,6 +773,58 @@ def validate_scientific_mapping(
             or (row["model"], row["component_id"], int(row["excluded_source_rank"])) in primary
         ):
             raise ValueError("scientific replacement mapping is invalid")
+        selected = scientific_by_rank[target]
+        reviewed_replacements.append(
+            (
+                row["model"],
+                row["component_id"],
+                int(row["excluded_source_rank"]),
+                int(row["replacement_source_rank"]),
+                row.get("supersedes_replacement_source_rank"),
+                row["selection_receipt_sha256"],
+                selected["task_key"],
+                selected["task_version_id"],
+            )
+        )
+    _validate_replacement_evidence(tuple(reviewed_replacements), root=root)
+    qwen_reassignment = _read_self_digested_receipt(
+        root / EVIDENCE_ROOT / "2026-09-04-qwen38-source10-r56-reassignment-v1.json",
+        "sha256:a7eac5c3445d69b196488c8d6648fbbaa326fcf6f1a150ffd55833d505b9c75c",
+    )
+    if (
+        qwen_reassignment.get("source10_exclusion", {}).get(
+            "whole_task_excluded_from_primary_estimator"
+        )
+        is not True
+        or qwen_reassignment.get("replacement", {}).get("replacement_rank") != 56
+        or qwen_reassignment.get("replacement", {}).get("task_version_id")
+        != "33527414-ced7-4005-9c5a-eb9c211a32da"
+        or qwen_reassignment.get("prior_r56_assignment_supersession", {}).get(
+            "selection_supplement_receipt_sha256"
+        )
+        != "sha256:56406bb32541babc0189e089f339d6a7668b24cb86b1fd8587b60a3cfc57b24c"
+        or qwen_reassignment.get("prior_r56_assignment_supersession", {}).get(
+            "source6_primary_task_restored_at_pass4"
+        )
+        is not True
+    ):
+        raise ValueError("qwen r56 supersession evidence drifted")
+    qwen_r56_hydration = _read_self_digested_receipt(
+        root / EVIDENCE_ROOT / "2026-09-04-qwen38-r56-hydration-v1.json",
+        "sha256:4d059348e1c00eed04aef8b6a700a0b44921cfe0f6e6be0e8e55e08316886f79",
+    )
+    qwen_r56_tasks = qwen_r56_hydration.get("tasks") or []
+    if (
+        qwen_r56_hydration.get("scores_read") is not False
+        or qwen_r56_hydration.get("task_content_retained") is not False
+        or len(qwen_r56_tasks) != 1
+        or qwen_r56_tasks[0].get("replacement_rank") != 56
+        or qwen_r56_tasks[0].get("task", {}).get("key")
+        != "cysec1-2-fira-gen_blackbox-f1d8a0c49352bdf40faf015f__blackbox_ctf_v1"
+        or qwen_r56_tasks[0].get("task", {}).get("version_id")
+        != "33527414-ced7-4005-9c5a-eb9c211a32da"
+    ):
+        raise ValueError("qwen r56 hydration authority drifted")
     policy = mapping.get("legacy_import_semantics") or {}
     if policy != {
         "accepted_or_reconciled": "import_terminal_accepted_never_repeat",
@@ -412,13 +849,31 @@ def validate_scientific_mapping(
         ]
     ):
         raise ValueError("held scientific mapping is not an exact executable universe")
+    if release_status == "blocked_pending_execution_fragment_binding" and mapping.get(
+        "blocked_requirements"
+    ) != [
+        "bind exact r114 hydration and dedicated-b-v5 pass-at-4 execution plan",
+        "seal exhaustive score-blind legacy import after all active claims are reconciled",
+        "independent audit before ledger initialization or supervisor deployment",
+    ]:
+        raise ValueError("blocked scientific mapping requirements drifted")
     source_run_ids = [row["source_run_id"] for row in executable]
     if len(source_run_ids) != len(set(source_run_ids)):
         raise ValueError("scientific executable source run identity duplicated")
     executable_digest = (
-        sha256(canonical_json(sorted(executable, key=lambda row: (
-            row["model"], row["component_id"], row["source_rank"], row["attempt"]
-        ))))
+        sha256(
+            canonical_json(
+                sorted(
+                    executable,
+                    key=lambda row: (
+                        row["model"],
+                        row["component_id"],
+                        row["source_rank"],
+                        row["attempt"],
+                    ),
+                )
+            )
+        )
         if not unresolved
         else None
     )
@@ -439,13 +894,14 @@ def validate_scientific_mapping_release_preview(
     """Validate the held 600-cell execution/import release without authorizing it."""
 
     summary = validate_scientific_mapping(mapping, root=root)
+    if summary["unresolved_cells"] or summary["executable_cells"] != 600:
+        raise ValueError("scientific mapping release is blocked by unresolved execution cells")
     if (
         preview.get("schema_version") != SCIENTIFIC_MAPPING_RELEASE_PREVIEW_SCHEMA
         or preview.get("receipt_sha256") != digest_without(preview, "receipt_sha256")
         or preview.get("status") != "HELD"
         or preview.get("mapping_sha256") != mapping["mapping_sha256"]
-        or preview.get("executable_universe_sha256")
-        != summary["executable_universe_sha256"]
+        or preview.get("executable_universe_sha256") != summary["executable_universe_sha256"]
         or preview.get("task_count") != 150
         or preview.get("cell_count") != 600
         or preview.get("model_cells") != {"qwen3.8-27b": 200, "glm-5.3": 400}
@@ -464,8 +920,20 @@ def validate_scientific_mapping_release_preview(
         }
         or preview.get("evidence_bindings")
         != {
-            "replacement_selection_receipt_sha256s": sorted(
-                {row["selection_receipt_sha256"] for row in mapping["replacement_mappings"]}
+            "replacement_selection_receipts": [
+                {"path": str(path), "receipt_sha256": digest}
+                for digest, path in sorted(
+                    REPLACEMENT_SELECTION_EVIDENCE.items(), key=lambda row: str(row[1])
+                )
+            ],
+            "qwen_r56_hydration_receipt_sha256": (
+                "sha256:4d059348e1c00eed04aef8b6a700a0b44921cfe0f6e6be0e8e55e08316886f79"
+            ),
+            "qwen_r56_supersession_receipt_sha256": (
+                "sha256:a7eac5c3445d69b196488c8d6648fbbaa326fcf6f1a150ffd55833d505b9c75c"
+            ),
+            "dedicated_b_r114_selection_receipt_sha256": (
+                "sha256:3faf062cd63315708c5468ab396fb4a7591c7266c297bb946e0ada904409c2c0"
             ),
             "dedicated_tail_unused_inventory_receipt_sha256": (
                 "sha256:378e8476ad89e2331b9c7382c790d4f2ba6858a674967a35fcf6bc4390d23426"
@@ -503,31 +971,39 @@ def validate_scientific_mapping_release_preview(
         raise ValueError("scientific mapping release fragment binding drifted")
     for path, field in (
         (
+            root / "docs/evidence/qwen38-study/2026-09-04-qwen38-r56-hydration-v1.json",
+            "qwen_r56_hydration_receipt_sha256",
+        ),
+        (
+            root / "docs/evidence/qwen38-study/2026-09-04-qwen38-source10-r56-reassignment-v1.json",
+            "qwen_r56_supersession_receipt_sha256",
+        ),
+        (
             root
             / "docs/evidence/qwen38-study/"
+            "2026-09-04-opencode-replacement-selection-supplement-v7.json",
+            "dedicated_b_r114_selection_receipt_sha256",
+        ),
+        (
+            root / "docs/evidence/qwen38-study/"
             "2026-09-04-glm53-dedicated-v5-tail-unused-inventory-v1.json",
             "dedicated_tail_unused_inventory_receipt_sha256",
         ),
         (
-            root
-            / "docs/evidence/qwen38-study/"
+            root / "docs/evidence/qwen38-study/"
             "2026-09-04-glm53-dedicated-a-r112-r113-hydration-v1.json",
             "dedicated_a_r112_r113_hydration_receipt_sha256",
         ),
         (
-            root
-            / "docs/evidence/qwen38-study/"
+            root / "docs/evidence/qwen38-study/"
             "2026-09-04-glm53-dedicated-a-source6-attempt4-pre-model-tombstone-v1.json",
             "dedicated_a_source6_tombstone_receipt_sha256",
         ),
     ):
         evidence = read_object(path)
-        if (
-            evidence.get("receipt_sha256")
-            != preview["evidence_bindings"][field]
-            or evidence.get("receipt_sha256")
-            != digest_without(evidence, "receipt_sha256")
-        ):
+        if evidence.get("receipt_sha256") != preview["evidence_bindings"][field] or evidence.get(
+            "receipt_sha256"
+        ) != digest_without(evidence, "receipt_sha256"):
             raise ValueError("scientific mapping release evidence drifted")
     return summary
 
@@ -540,9 +1016,7 @@ def _plan_path(component: dict[str, Any], cluster: bool) -> Path:
     return Path(path)
 
 
-def _fragment_cells(
-    fragment: dict[str, Any], component: dict[str, Any]
-) -> list[tuple[int, int]]:
+def _fragment_cells(fragment: dict[str, Any], component: dict[str, Any]) -> list[tuple[int, int]]:
     selected = fragment.get("cells")
     if selected is None:
         ranks = fragment.get("source_ranks", component.get("source_ranks"))
@@ -587,9 +1061,7 @@ def build_universe(campaign: dict[str, Any], *, cluster: bool) -> dict[str, Any]
                 if int(task["source_rank"]) in selected
             }
             if set(tasks) != selected:
-                raise ValueError(
-                    f"component source-rank selection drifted for {component['id']}"
-                )
+                raise ValueError(f"component source-rank selection drifted for {component['id']}")
             attempts = [
                 attempt
                 for attempt in plan.get("attempts") or []
@@ -598,14 +1070,12 @@ def build_universe(campaign: dict[str, Any], *, cluster: bool) -> dict[str, Any]
             actual_cells = {
                 (int(attempt["source_rank"]), int(attempt["attempt"]))
                 for attempt in attempts
-                if (int(attempt["source_rank"]), int(attempt["attempt"]))
-                in selected_cells
+                if (int(attempt["source_rank"]), int(attempt["attempt"])) in selected_cells
             }
             attempts = [
                 attempt
                 for attempt in attempts
-                if (int(attempt["source_rank"]), int(attempt["attempt"]))
-                in selected_cells
+                if (int(attempt["source_rank"]), int(attempt["attempt"])) in selected_cells
             ]
             if actual_cells != selected_cells or len(attempts) != len(selected_cells):
                 raise ValueError(
@@ -696,11 +1166,7 @@ def _universe_index(ledger_root: Path) -> tuple[dict[str, Any], dict[str, dict[s
 
 def _evidence_digest(evidence: dict[str, Any]) -> str:
     field = next(
-        (
-            name
-            for name in ("receipt_sha256", "event_sha256", "claim_sha256")
-            if name in evidence
-        ),
+        (name for name in ("receipt_sha256", "event_sha256", "claim_sha256") if name in evidence),
         None,
     )
     if field is None or evidence[field] != digest_without(evidence, field):
@@ -708,9 +1174,7 @@ def _evidence_digest(evidence: dict[str, Any]) -> str:
     return str(evidence[field])
 
 
-def _validate_import_entry(
-    cell: dict[str, Any], entry: dict[str, Any]
-) -> dict[str, Any]:
+def _validate_import_entry(cell: dict[str, Any], entry: dict[str, Any]) -> dict[str, Any]:
     state = entry.get("state")
     if state not in {"claimed", "accepted", "quarantined"}:
         raise ValueError("legacy import state is invalid")
@@ -899,9 +1363,9 @@ def record_outcome(
             "event_sha256": sha256(
                 canonical_json(
                     {
-                        "import_sha256": read_object(
-                            ledger_root / "IMPORT_COMPLETE.json"
-                        )["import_sha256"],
+                        "import_sha256": read_object(ledger_root / "IMPORT_COMPLETE.json")[
+                            "import_sha256"
+                        ],
                         "cell_id": cell_id,
                         "run_id": imported["run_id"],
                     }
@@ -1230,9 +1694,7 @@ def main() -> int:
     elif args.command == "register-worker":
         result = register_worker(args.ledger_root, read_object(args.registration))
     elif args.command == "import-legacy":
-        result = import_legacy_evidence(
-            args.ledger_root, read_object(args.manifest)
-        )
+        result = import_legacy_evidence(args.ledger_root, read_object(args.manifest))
     elif args.command == "claim":
         result = claim_cell(
             args.ledger_root,

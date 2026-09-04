@@ -2,7 +2,7 @@
   "schema_version": "fleet-score-blind-scientific-mapping-v2",
   "mapping_id": "q38-glm53-primary-pass4-scientific-v2",
   "supersedes_campaign_sha256": "sha256:6b8b06c6d75488addab5eb099c6d7a9f25e37b45a38323bc4b271489b89d02c1",
-  "release_status": "held_pending_legacy_import_and_final_audit",
+  "release_status": "blocked_pending_execution_fragment_binding",
   "launch_authorized": false,
   "ledger_initialization_authorized": false,
   "expected": {
@@ -226,7 +226,6 @@
           "state": "resolved",
           "plan_sha256": "sha256:7e68219632d040fac4eb7f5d51b2d4315d32119495c039dc7209d519ef048982",
           "repo_plan_path": "evals/fleet/configs/glm53-opencode-dedicated-a-v5-tail-pass4-v1.json",
-          "repo_plan_path": "evals/fleet/configs/glm53-opencode-dedicated-a-v5-tail-pass4-v1.json",
           "source_ranks": [36, 38, 40, 42, 44, 46, 48, 50, 52, 102, 104, 110]
         }
       ]
@@ -248,18 +247,18 @@
         },
         {
           "kind": "inline",
-          "authority_receipt_sha256": "sha256:ba6327ce5ca006c48b4cec33ed93179c0fc9c32a0b2bda8ec0a023272ac1758d",
+          "authority_receipt_sha256": "sha256:3faf062cd63315708c5468ab396fb4a7591c7266c297bb946e0ada904409c2c0",
           "tasks": [
-            {"source_rank": 111, "task": {"key": "cysec1-2-fubspot-gen_blackbox-ad1382907e9e22ee2e6cf3f1__blackbox_ctf_v1", "version_id": "032b6acc-13bc-4a9f-a57f-e3cd932988d4"}}
+            {"source_rank": 114, "task": {"key": "cysec1-2-fubspot-gen_blackbox-d096d72a3734e3b85fde5c28__blackbox_ctf_v1", "version_id": "66051718-314a-4dad-86ab-c7b9b72fa514"}}
           ]
         }
       ],
       "attempt_ownership": [
         {
-          "state": "resolved",
-          "plan_sha256": "sha256:46ff144a7d6dd6f6cc111f3d3bd4881e3ce507ff1813fcc756297b00ed7759db",
-          "repo_plan_path": "evals/fleet/configs/glm53-opencode-dedicated-b-v5-r111-replacement-pass4-v1.json",
-          "source_ranks": [111]
+          "state": "unresolved",
+          "plan_sha256": null,
+          "blocked_reason": "r114_requires_immutable_hydration_and_dedicated_b_v5_attempt_plan_binding",
+          "source_ranks": [114]
         },
         {
           "state": "resolved",
@@ -270,7 +269,6 @@
         {
           "state": "resolved",
           "plan_sha256": "sha256:1746eb1e7038420b84e0546f023f8cba439f1bf5099b82b283a1fa07b2c17c9f",
-          "repo_plan_path": "evals/fleet/configs/glm53-opencode-dedicated-b-v5-tail-pass4-v1.json",
           "repo_plan_path": "evals/fleet/configs/glm53-opencode-dedicated-b-v5-tail-pass4-v1.json",
           "source_ranks": [82, 84, 86, 88, 90, 92, 94, 96, 98, 100, 101, 103, 105, 107]
         }
@@ -294,7 +292,7 @@
     {"model": "glm-5.3", "component_id": "glm-hosted-primary46", "excluded_source_rank": 11, "replacement_source_rank": 108, "selection_receipt_sha256": "sha256:a08c2c41f782f9b41e95575a75071e2a3c2fe8916a5db13bc095614dacb92b63"},
     {"model": "glm-5.3", "component_id": "glm-dedicated-a-v5-primary27", "excluded_source_rank": 14, "replacement_source_rank": 113, "selection_receipt_sha256": "sha256:5ee4ec1da3248d1823b9a3b90c903b6414091e1762262c55f7b3e4462d0cebf8"},
     {"model": "glm-5.3", "component_id": "glm-dedicated-b-v5-primary27", "excluded_source_rank": 54, "replacement_source_rank": 107, "selection_receipt_sha256": "sha256:731ba0583f43a7cc56f16cbf8c71ab98ca39642ff7091e21763f8561bf9d587a"},
-    {"model": "glm-5.3", "component_id": "glm-dedicated-b-v5-primary27", "excluded_source_rank": 56, "replacement_source_rank": 111, "selection_receipt_sha256": "sha256:e8b6c3f993c4e5b76f823acc0bbda4c210a7dbd4526c1adb093c0535bbb4c00d"}
+    {"model": "glm-5.3", "component_id": "glm-dedicated-b-v5-primary27", "excluded_source_rank": 56, "replacement_source_rank": 114, "supersedes_replacement_source_rank": 111, "selection_receipt_sha256": "sha256:3faf062cd63315708c5468ab396fb4a7591c7266c297bb946e0ada904409c2c0"}
   ],
   "legacy_import_semantics": {
     "accepted_or_reconciled": "import_terminal_accepted_never_repeat",
@@ -304,8 +302,9 @@
     "scores_or_content_read": false
   },
   "blocked_requirements": [
+    "bind exact r114 hydration and dedicated-b-v5 pass-at-4 execution plan",
     "seal exhaustive score-blind legacy import after all active claims are reconciled",
     "independent audit before ledger initialization or supervisor deployment"
   ],
-  "mapping_sha256": "sha256:e9a9b4e81394d4f7b9928f72b5dafdcb3dfdabc83751d89b977f5dfac1c9a0e1"
+  "mapping_sha256": "sha256:de30c778e4337c79dea921b7463aa74760da59f972c928927c4359e828f1f009"
 }

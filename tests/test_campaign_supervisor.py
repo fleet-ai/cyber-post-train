@@ -11,16 +11,12 @@ import yaml
 from evals.fleet import campaign_supervisor as supervisor
 
 CAMPAIGN = Path("evals/fleet/configs/q38-glm53-primary-campaign-v1.json")
-SCIENTIFIC_MAPPING = Path(
-    "evals/fleet/configs/q38-glm53-primary-scientific-mapping-v2.json"
-)
+SCIENTIFIC_MAPPING = Path("evals/fleet/configs/q38-glm53-primary-scientific-mapping-v2.json")
 SCIENTIFIC_MAPPING_RELEASE_PREVIEW = Path(
     "docs/evidence/qwen38-study/"
     "2026-09-04-primary-600-cell-executable-universe-import-release-preview-v1.json"
 )
-SUPERVISOR_MANIFEST = Path(
-    "evals/fleet/cluster/q38-glm53-campaign-supervisor-v1.yaml"
-)
+SUPERVISOR_MANIFEST = Path("evals/fleet/cluster/q38-glm53-campaign-supervisor-v1.yaml")
 WORKER_UID = "11111111-1111-4111-8111-111111111111"
 
 
@@ -47,9 +43,7 @@ def _ledger(tmp_path: Path) -> tuple[Path, dict, dict]:
         "scores_included": False,
         "prompts_or_traces_included": False,
     }
-    import_manifest["import_sha256"] = supervisor.digest_without(
-        import_manifest, "import_sha256"
-    )
+    import_manifest["import_sha256"] = supervisor.digest_without(import_manifest, "import_sha256")
     supervisor.import_legacy_evidence(root, import_manifest)
     qwen = next(
         cell for cell in universe["cells"] if cell["component_id"] == "qwen-hosted-v8-primary49"
@@ -106,19 +100,17 @@ def test_checked_in_campaign_cannot_initialize_before_replacements_are_bound(
         supervisor.initialize_ledger(campaign, tmp_path / "ledger", cluster=False)
 
 
-def test_held_v2_scientific_mapping_is_exact_and_executable_but_not_released() -> None:
+def test_held_v2_scientific_mapping_is_exact_but_r114_execution_is_unresolved() -> None:
     mapping = supervisor.read_object(SCIENTIFIC_MAPPING)
     summary = supervisor.validate_scientific_mapping(mapping)
     assert summary == {
         "tasks": 150,
         "cells": 600,
         "model_cells": {"glm-5.3": 400, "qwen3.8-27b": 200},
-        "unresolved_cells": 0,
-        "unresolved_components": [],
-        "executable_cells": 600,
-        "executable_universe_sha256": (
-            "sha256:17d1fa8734e5b3e16c902ea35ba7bcd0eacdb7f7f834f311b1f5c0777a7bb559"
-        ),
+        "unresolved_cells": 4,
+        "unresolved_components": ["glm-dedicated-b-v5-primary27"],
+        "executable_cells": 596,
+        "executable_universe_sha256": None,
     }
     assert mapping["launch_authorized"] is False
     assert mapping["ledger_initialization_authorized"] is False
@@ -143,7 +135,7 @@ def test_held_v2_scientific_mapping_is_exact_and_executable_but_not_released() -
         ("glm-5.3", 11): 108,
         ("glm-5.3", 14): 113,
         ("glm-5.3", 54): 107,
-        ("glm-5.3", 56): 111,
+        ("glm-5.3", 56): 114,
     }
 
 
@@ -160,8 +152,8 @@ def test_blocked_v2_mapping_status_command_is_read_only(capsys, monkeypatch) -> 
     assert supervisor.main() == 0
     snapshot = json.loads(capsys.readouterr().out)
     assert snapshot["cells"] == 600
-    assert snapshot["unresolved_cells"] == 0
-    assert snapshot["executable_cells"] == 600
+    assert snapshot["unresolved_cells"] == 4
+    assert snapshot["executable_cells"] == 596
     assert snapshot["launch_authorized"] is False
     assert snapshot["scores_read"] is False
 
@@ -174,17 +166,13 @@ def test_blocked_v2_mapping_status_command_is_read_only(capsys, monkeypatch) -> 
             "must remain blocked",
         ),
         (
-            lambda mapping: mapping["components"][3]["scientific_task_sources"][1][
-                "tasks"
-            ][0]["task"].__setitem__(
-                "version_id", "21baee36-dc26-4dcd-983e-ae58a665dfa9"
-            ),
-            "attempt task identity",
+            lambda mapping: mapping["components"][3]["scientific_task_sources"][1]["tasks"][0][
+                "task"
+            ].__setitem__("version_id", "21baee36-dc26-4dcd-983e-ae58a665dfa9"),
+            "inline scientific task authority identity",
         ),
         (
-            lambda mapping: mapping["components"][3]["attempt_ownership"][-1][
-                "source_ranks"
-            ].pop(),
+            lambda mapping: mapping["components"][3]["attempt_ownership"][-1]["source_ranks"].pop(),
             "attempt ownership has gaps",
         ),
         (
@@ -207,9 +195,7 @@ def test_blocked_v2_mapping_status_command_is_read_only(capsys, monkeypatch) -> 
         ),
     ],
 )
-def test_blocked_v2_scientific_mapping_tampering_fails_closed(
-    mutation, match: str
-) -> None:
+def test_blocked_v2_scientific_mapping_tampering_fails_closed(mutation, match: str) -> None:
     mapping = supervisor.read_object(SCIENTIFIC_MAPPING)
     mutation(mapping)
     mapping["mapping_sha256"] = supervisor.digest_without(mapping, "mapping_sha256")
@@ -217,19 +203,92 @@ def test_blocked_v2_scientific_mapping_tampering_fails_closed(
         supervisor.validate_scientific_mapping(mapping)
 
 
-def test_600_cell_executable_universe_import_release_is_held() -> None:
+def test_prior_600_cell_release_preview_is_superseded_by_r111_attrition() -> None:
     mapping = supervisor.read_object(SCIENTIFIC_MAPPING)
     preview = supervisor.read_object(SCIENTIFIC_MAPPING_RELEASE_PREVIEW)
-    summary = supervisor.validate_scientific_mapping_release_preview(preview, mapping)
-    assert summary["executable_cells"] == 600
-    assert summary["unresolved_cells"] == 0
-    assert preview["status"] == "HELD"
-    assert preview["authorization"] == {
-        "launch_authorized": False,
-        "ledger_initialization_authorized": False,
-        "supervisor_deployment_authorized": False,
-    }
-    assert preview["legacy_import"]["complete"] is False
+    with pytest.raises(ValueError, match="blocked by unresolved execution cells"):
+        supervisor.validate_scientific_mapping_release_preview(preview, mapping)
+
+
+def test_campaign_json_reader_rejects_duplicate_keys(tmp_path: Path) -> None:
+    duplicate = tmp_path / "duplicate.json"
+    duplicate.write_text('{"repo_plan_path":"one","repo_plan_path":"two"}')
+    with pytest.raises(RuntimeError, match="duplicate JSON object key: repo_plan_path"):
+        supervisor.read_object(duplicate)
+
+
+def test_scientific_mapping_rejects_wrong_excluded_rank() -> None:
+    mapping = supervisor.read_object(SCIENTIFIC_MAPPING)
+    mapping["replacement_mappings"][0]["excluded_source_rank"] = 2
+    mapping["mapping_sha256"] = supervisor.digest_without(mapping, "mapping_sha256")
+    with pytest.raises(ValueError, match="reviewed substitutions"):
+        supervisor.validate_scientific_mapping(mapping)
+
+
+def test_scientific_mapping_rejects_fake_selection_receipt(tmp_path: Path, monkeypatch) -> None:
+    mapping = supervisor.read_object(SCIENTIFIC_MAPPING)
+    fake = tmp_path / "fake-selection.json"
+    fake.write_text(
+        json.dumps(
+            {
+                "receipt_sha256": (
+                    "sha256:77666813ed33cea95d1d21d31383d9deab2d596a97dfe8d7caee4139c80374b9"
+                ),
+                "qwen38": {"fenced_original_source_ranks": [1, 2, 3], "tasks": []},
+            }
+        )
+    )
+    evidence = dict(supervisor.REPLACEMENT_SELECTION_EVIDENCE)
+    digest = "sha256:77666813ed33cea95d1d21d31383d9deab2d596a97dfe8d7caee4139c80374b9"
+    evidence[digest] = fake
+    monkeypatch.setattr(supervisor, "REPLACEMENT_SELECTION_EVIDENCE", evidence)
+    with pytest.raises(ValueError, match="evidence digest drifted"):
+        supervisor.validate_scientific_mapping(mapping)
+
+
+def test_scientific_mapping_rejects_wrong_inline_authority() -> None:
+    mapping = supervisor.read_object(SCIENTIFIC_MAPPING)
+    mapping["components"][3]["scientific_task_sources"][1]["authority_receipt_sha256"] = (
+        "sha256:" + "0" * 64
+    )
+    mapping["mapping_sha256"] = supervisor.digest_without(mapping, "mapping_sha256")
+    with pytest.raises(ValueError, match="unreviewed authority receipt"):
+        supervisor.validate_scientific_mapping(mapping)
+
+
+@pytest.mark.parametrize(
+    "filename,mutation,match",
+    [
+        (
+            "2026-09-04-qwen38-r56-hydration-v1.json",
+            lambda row: row["tasks"][0]["task"].__setitem__("version_id", "wrong"),
+            "evidence digest drifted",
+        ),
+        (
+            "2026-09-04-qwen38-source10-r56-reassignment-v1.json",
+            lambda row: row["source10_exclusion"].__setitem__(
+                "whole_task_excluded_from_primary_estimator", False
+            ),
+            "evidence digest drifted",
+        ),
+    ],
+)
+def test_scientific_mapping_rejects_hydration_or_supersession_tamper(
+    filename: str, mutation, match: str, monkeypatch
+) -> None:
+    mapping = supervisor.read_object(SCIENTIFIC_MAPPING)
+    original_read = supervisor.read_object
+
+    def tampered_read(path: Path) -> dict:
+        row = original_read(path)
+        if path.name == filename:
+            row = copy.deepcopy(row)
+            mutation(row)
+        return row
+
+    monkeypatch.setattr(supervisor, "read_object", tampered_read)
+    with pytest.raises(ValueError, match=match):
+        supervisor.validate_scientific_mapping(mapping)
 
 
 def test_600_cell_release_preview_rejects_fragment_or_authorization_drift() -> None:
@@ -241,9 +300,7 @@ def test_600_cell_release_preview_rejects_fragment_or_authorization_drift() -> N
     ):
         drifted = copy.deepcopy(preview)
         mutation(drifted)
-        drifted["receipt_sha256"] = supervisor.digest_without(
-            drifted, "receipt_sha256"
-        )
+        drifted["receipt_sha256"] = supervisor.digest_without(drifted, "receipt_sha256")
         with pytest.raises(ValueError, match="release"):
             supervisor.validate_scientific_mapping_release_preview(drifted, mapping)
 
@@ -276,15 +333,11 @@ def test_execution_fragments_must_exactly_partition_component() -> None:
         {**shared, "source_ranks": ranks[:24]},
         {**shared, "source_ranks": ranks[24:]},
     ]
-    campaign["campaign_sha256"] = supervisor.digest_without(
-        campaign, "campaign_sha256"
-    )
+    campaign["campaign_sha256"] = supervisor.digest_without(campaign, "campaign_sha256")
     assert supervisor.build_universe(campaign, cluster=False)["cell_count"] == 600
 
     component["execution_fragments"][1]["source_ranks"].append(ranks[0])
-    campaign["campaign_sha256"] = supervisor.digest_without(
-        campaign, "campaign_sha256"
-    )
+    campaign["campaign_sha256"] = supervisor.digest_without(campaign, "campaign_sha256")
     with pytest.raises(ValueError, match="exactly partition"):
         supervisor.validate_campaign(campaign)
 
@@ -303,16 +356,13 @@ def test_execution_fragments_can_split_one_task_at_attempt_boundaries() -> None:
         {**shared, "cells": [{"source_rank": ranks[0], "attempts": [3, 4]}]},
         {**shared, "source_ranks": ranks[1:]},
     ]
-    campaign["campaign_sha256"] = supervisor.digest_without(
-        campaign, "campaign_sha256"
-    )
+    campaign["campaign_sha256"] = supervisor.digest_without(campaign, "campaign_sha256")
     universe = supervisor.build_universe(campaign, cluster=False)
     assert universe["cell_count"] == 600
     cells = [
         row
         for row in universe["cells"]
-        if row["component_id"] == component["id"]
-        and row["source_rank"] == ranks[0]
+        if row["component_id"] == component["id"] and row["source_rank"] == ranks[0]
     ]
     assert [row["attempt"] for row in cells] == [1, 2, 3, 4]
 
@@ -381,9 +431,7 @@ def test_legacy_import_is_exact_atomic_and_prevents_reclaim(tmp_path: Path) -> N
         "scores_included": False,
         "prompts_or_traces_included": False,
     }
-    evidence["receipt_sha256"] = supervisor.digest_without(
-        evidence, "receipt_sha256"
-    )
+    evidence["receipt_sha256"] = supervisor.digest_without(evidence, "receipt_sha256")
     evidence_path = tmp_path / "accepted.json"
     evidence_path.write_text(json.dumps(evidence))
     entry = {
@@ -410,15 +458,12 @@ def test_legacy_import_is_exact_atomic_and_prevents_reclaim(tmp_path: Path) -> N
         "scores_included": False,
         "prompts_or_traces_included": False,
     }
-    manifest["import_sha256"] = supervisor.digest_without(
-        manifest, "import_sha256"
-    )
+    manifest["import_sha256"] = supervisor.digest_without(manifest, "import_sha256")
     supervisor.import_legacy_evidence(root, manifest)
     block = next(
         row
         for row in supervisor.status(root)["blocks"]
-        if row["model"] == "qwen3.8-27b"
-        and row["serving_block"] == "qwen-hosted-no-autocontinue"
+        if row["model"] == "qwen3.8-27b" and row["serving_block"] == "qwen-hosted-no-autocontinue"
     )
     assert block["accepted"] == 1
     with pytest.raises(RuntimeError, match="legacy inventory"):
@@ -480,9 +525,7 @@ def test_imported_active_claim_can_terminalize_without_reclaim(tmp_path: Path) -
         "scores_included": False,
         "prompts_or_traces_included": False,
     }
-    manifest["import_sha256"] = supervisor.digest_without(
-        manifest, "import_sha256"
-    )
+    manifest["import_sha256"] = supervisor.digest_without(manifest, "import_sha256")
     supervisor.import_legacy_evidence(root, manifest)
 
     accepted = {
@@ -493,9 +536,7 @@ def test_imported_active_claim_can_terminalize_without_reclaim(tmp_path: Path) -
         "scores_included": False,
         "prompts_or_traces_included": False,
     }
-    accepted["receipt_sha256"] = supervisor.digest_without(
-        accepted, "receipt_sha256"
-    )
+    accepted["receipt_sha256"] = supervisor.digest_without(accepted, "receipt_sha256")
     accepted_path = tmp_path / "accepted-after-import.json"
     accepted_path.write_text(json.dumps(accepted))
     supervisor.record_outcome(
@@ -507,8 +548,7 @@ def test_imported_active_claim_can_terminalize_without_reclaim(tmp_path: Path) -
     block = next(
         row
         for row in supervisor.status(root)["blocks"]
-        if row["model"] == cell["model"]
-        and row["serving_block"] == cell["serving_block"]
+        if row["model"] == cell["model"] and row["serving_block"] == cell["serving_block"]
     )
     assert block["accepted"] == 1
     assert block["claimed"] == 0
@@ -689,13 +729,12 @@ def test_cluster_supervisor_is_read_only_high_priority_and_held() -> None:
         "Deployment",
     ]
     role = documents[1]
-    assert role["rules"] == [
-        {"apiGroups": ["batch"], "resources": ["jobs"], "verbs": ["get"]}
-    ]
+    assert role["rules"] == [{"apiGroups": ["batch"], "resources": ["jobs"], "verbs": ["get"]}]
     deployment = documents[3]
-    assert deployment["metadata"]["annotations"][
-        "cyber-post-train.fleet.ai/launch-authorized"
-    ] == "false"
+    assert (
+        deployment["metadata"]["annotations"]["cyber-post-train.fleet.ai/launch-authorized"]
+        == "false"
+    )
     pod = deployment["spec"]["template"]["spec"]
     assert pod["priorityClassName"] == "fleet-train-high"
     command = pod["containers"][0]["args"][0]
