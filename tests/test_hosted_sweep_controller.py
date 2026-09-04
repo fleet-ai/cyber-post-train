@@ -124,6 +124,10 @@ GLM_DEDICATED_A_EXIT1_GAP_PLAN = Path(
     "evals/fleet/configs/"
     "glm53-opencode-dedicated-a-v5-source6-attempt4-gap-pass4-v1.json"
 )
+GLM_DEDICATED_A_EXIT1_GAP_RELEASE = Path(
+    "docs/evidence/qwen38-study/"
+    "2026-09-04-glm53-dedicated-a-source6-attempt4-gap-scoring-release-v1.json"
+)
 QWEN_ATTRITION_REPLACEMENT_PLAN = Path(
     "evals/fleet/configs/qwen38-opencode-hosted-attrition-r56-pass4-v1.json"
 )
@@ -2534,3 +2538,22 @@ def test_dedicated_a_exit1_reconciliation_fails_closed(
         hosted.validate_dedicated_a_completed_exit1_reconciliation(
             receipt, predecessor
         )
+
+
+def test_dedicated_a_exit1_gap_release_is_exact_and_fail_closed() -> None:
+    plan = hosted.load_object(GLM_DEDICATED_A_EXIT1_GAP_PLAN)
+    release = hosted.load_object(GLM_DEDICATED_A_EXIT1_GAP_RELEASE)
+    hosted.validate_dedicated_a_completed_exit1_gap_release(plan, release)
+    for section, field, value in (
+        ("authorization", "create_once", False),
+        ("gates", "source6_attempt4_zero_history_required", False),
+        ("scheduling", "required_priority_class", "fleet-infra-quiet"),
+        ("scheduling", "priority_class_is_not_preemption_immunity", False),
+    ):
+        tampered = hosted.load_object(GLM_DEDICATED_A_EXIT1_GAP_RELEASE)
+        tampered[section][field] = value
+        tampered["receipt_sha256"] = self_hosted.digest_without(
+            tampered, "receipt_sha256"
+        )
+        with pytest.raises(ValueError, match="release does not bind"):
+            hosted.validate_dedicated_a_completed_exit1_gap_release(plan, tampered)

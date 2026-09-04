@@ -1,0 +1,81 @@
+{
+  "schema_version": "fleet-dedicated-a-completed-exit1-gap-scoring-release-v1",
+  "append_only": true,
+  "supersedes": null,
+  "plan": {
+    "plan_sha256": "sha256:14b799389571e82765ce83373a5d88fc37adb8c4a36b414366f699b75ef4da27",
+    "task_count": 1,
+    "credited_cell_count": 3,
+    "new_cell_count": 1,
+    "pass_k": 4,
+    "attempt_cells": [[6, 4]]
+  },
+  "gates": {
+    "reconciliation_receipt_sha256": "sha256:f53f54a0c77cb213f5245442e96b5a8e41fe2095855176fda204b7c440eb7027",
+    "predecessor_job_uid": "87e2ca85-d684-4d87-9f05-f4399b7906d0",
+    "predecessor_pod_uid": "083a29e3-7d0e-4cbb-9447-62373772080d",
+    "exact_treatment_gate_required": true,
+    "duplicate_gate_required": true,
+    "overlap_gate_required": true,
+    "authoritative_session_requery_required": true,
+    "source6_attempt4_zero_history_required": true,
+    "credited_cells_must_not_repeat": true,
+    "fresh_create_once_identity_required": true,
+    "primary_denominator_completion_gate_required": true
+  },
+  "treatment": {
+    "api_run_id": "98c32208-a3e5-46b0-a32d-ab50033b576f",
+    "corrected_stop_tombstone_receipt_sha256": "sha256:9bf6683d80c2dd517e371709a1aa2db0a13e1f4089a09a8296941c6df7054b79",
+    "endpoint_origin": "http://ft-run-98c32208-5gpb2-head-svc.fleet-train-jobs.svc.cluster.local:8000",
+    "harness": {
+      "context_management": "opencode_1.18.27_native_compaction_no_autocontinue",
+      "context_window_size": 262144,
+      "max_model_requests": 600,
+      "max_output_tokens": 32768,
+      "name": "opencode",
+      "provider_adapter": "@ai-sdk/openai-compatible",
+      "release_asset_sha256": "sha256:4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702",
+      "timeout_seconds": 28800,
+      "version": "1.18.27"
+    },
+    "head_pod_uid": "3f37ab91-4afa-4e4d-8f29-a3eeda70a774",
+    "hydration_receipt_sha256": "sha256:5b52c2f54865434685ab30b10246b83a738b6fb9288cfcfbce0dcab9805377f7",
+    "kind": "dedicated_inference_endpoint_v1",
+    "model_revision": "30333038ada1f1dacb294a93270305a890b50c14",
+    "parity_receipt_sha256": "sha256:9aa92ac211f102939dc24e03af5c93766b94b0ccf5ce887df1ac80415adf73bc",
+    "ray_cluster_uid": "5107d72e-ae6a-4582-a490-55b349421d06",
+    "ray_job_uid": "ef7cb0f2-84d4-4017-ae31-bf34ebb70d0d",
+    "replica": "A",
+    "required_task_tool_catalog_sha256": "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a",
+    "required_task_tools": ["bash", "submit_report"],
+    "runtime_image_digest": "ghcr.io/fleet-ai/cyber-post-train-glm53-runtime@sha256:ec93ba50613fd13fb4c0b0a9105767ab18209a1e0108dab0923aad694c0206ec",
+    "selection_supplement_receipt_sha256": "sha256:3ccf7fdace01bc2a3e6245d26f65d6069fa5327d4a5ac7515640c7d59092e534",
+    "served_id": "glm-5.3",
+    "service_name": "ft-run-98c32208-5gpb2-head-svc",
+    "service_uid": "2c0e64de-c4a0-4f70-ae07-d15b1adad0b3",
+    "serving_config_sha256": "sha256:7815bf97cb23df73332c011cd86140bd0d87ab35ca1db4582a3452f8841d5875",
+    "serving_generation": "v5",
+    "session_model": "fleet-cluster-opencode-1.18.27/glm-5.3"
+  },
+  "scheduling": {
+    "required_priority_class": "fleet-train-high",
+    "workers": 1,
+    "true_non_preemptible_available": false,
+    "priority_class_is_not_preemption_immunity": true
+  },
+  "authorization": {
+    "timestamp_utc": "2026-09-04T08:45:29Z",
+    "author": "/root",
+    "statement": "I authorize the create-once scored launch of dedicated GLM A v5 gap plan sha256:14b799389571e82765ce83373a5d88fc37adb8c4a36b414366f699b75ef4da27 after exact reconciliation, treatment, duplicate, overlap, and preflight gates pass. It runs only source6 attempt4, uses fleet-train-high, credits source6 attempts1-3 without repeating them, and must not repeat any scored cell.",
+    "scored_launch_authorized": true,
+    "create_once": true,
+    "must_not_repeat": true
+  },
+  "privacy": {
+    "scores_read": false,
+    "prompts_or_traces_read": false,
+    "task_content_included": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:c68338aef4799008e482ac733e739bd2b0c50fbf81f8ccf027e4a7ab7edf74af"
+}
