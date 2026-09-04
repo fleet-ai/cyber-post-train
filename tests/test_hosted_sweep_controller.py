@@ -95,6 +95,25 @@ def test_glm_clean_shard_defers_all_rank1_history_and_fenced_rank2() -> None:
     )
 
 
+def test_glm_hosted_odd_shard_is_disjoint_from_dedicated_even_shard() -> None:
+    plan = hosted.build_plan(
+        hosted.load_object(
+            Path("evals/fleet/configs/glm53-opencode-train100-pass4-v4.json")
+        ),
+        hosted.load_object(SOURCE),
+        "glm53_hosted_odd",
+    )
+    hosted.validate_plan(plan)
+    assert plan["task_count"] == 49
+    assert plan["new_session_count"] == 196
+    assert plan["credited_sessions"] == []
+    assert {row["source_rank"] for row in plan["tasks"]} == set(range(3, 100, 2))
+    assert {row["source_rank"] for row in plan["excluded_tasks"]} == {1, 2}
+    assert {row["source_rank"] for row in plan["reserved_tasks"]} == set(
+        range(4, 101, 2)
+    )
+
+
 def test_plan_rejects_partial_or_duplicate_cells() -> None:
     plan = hosted.load_object(
         Path("evals/fleet/configs/qwen38-opencode-hosted-complete49-pass4-v5.json")

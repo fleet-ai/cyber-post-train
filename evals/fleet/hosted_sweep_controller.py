@@ -23,11 +23,38 @@ CAMPAIGNS = {
     "qwen38": "chris-cyber-q38-opencode11827-hosted-complete49-p4-v5",
     "glm53": "chris-cyber-glm53-opencode11827-hosted-complete99-p4-v5",
     "glm53_clean": "chris-cyber-glm53-opencode11827-hosted-complete98-p4-v6",
+    "glm53_hosted_odd": "chris-cyber-glm53-opencode11827-hosted-odd49-p4-v7",
 }
-SOURCE_MODEL_KEYS = {"qwen38": "qwen38", "glm53": "glm53", "glm53_clean": "glm53"}
-EXPECTED_SOURCE_TASK_COUNTS = {"qwen38": 50, "glm53": 100, "glm53_clean": 100}
-EXPECTED_INCLUDED_TASK_COUNTS = {"qwen38": 49, "glm53": 99, "glm53_clean": 98}
-ADDITIONAL_DEFERRED_SOURCE_RANKS = {"qwen38": set(), "glm53": set(), "glm53_clean": {1}}
+SOURCE_MODEL_KEYS = {
+    "qwen38": "qwen38",
+    "glm53": "glm53",
+    "glm53_clean": "glm53",
+    "glm53_hosted_odd": "glm53",
+}
+EXPECTED_SOURCE_TASK_COUNTS = {
+    "qwen38": 50,
+    "glm53": 100,
+    "glm53_clean": 100,
+    "glm53_hosted_odd": 100,
+}
+EXPECTED_INCLUDED_TASK_COUNTS = {
+    "qwen38": 49,
+    "glm53": 99,
+    "glm53_clean": 98,
+    "glm53_hosted_odd": 49,
+}
+ADDITIONAL_DEFERRED_SOURCE_RANKS = {
+    "qwen38": set(),
+    "glm53": set(),
+    "glm53_clean": {1},
+    "glm53_hosted_odd": {1},
+}
+RESERVED_SOURCE_RANKS = {
+    "qwen38": set(),
+    "glm53": set(),
+    "glm53_clean": set(),
+    "glm53_hosted_odd": set(range(4, 101, 2)),
+}
 SCHEDULE = [
     {
         "accepted_outcomes_at_least": 0,
@@ -95,7 +122,10 @@ def build_plan(
     deferred = ADDITIONAL_DEFERRED_SOURCE_RANKS[model_key]
     if deferred & evidence_excluded:
         raise ValueError("deferred source tasks overlap fenced source tasks")
-    excluded = evidence_excluded | deferred
+    reserved = RESERVED_SOURCE_RANKS[model_key]
+    if reserved & (evidence_excluded | deferred):
+        raise ValueError("reserved source tasks overlap fenced source tasks")
+    excluded = evidence_excluded | deferred | reserved
     if (
         blocked.get("agent_exit_code") != 1
         or blocked.get("session_ingest_completed") is not True
@@ -168,7 +198,9 @@ def build_plan(
                         f"{campaign}-sr{source_rank:03d}-a{attempt_number}-{key_digest}"
                     ),
                     "network": (
-                        f"{model_key}-hosted-v5-sr{source_rank:03d}-a{attempt_number}-{key_digest}"
+                        f"{model_key}-hosted-"
+                        f"{'v7' if model_key == 'glm53_hosted_odd' else 'v5'}-"
+                        f"sr{source_rank:03d}-a{attempt_number}-{key_digest}"
                     ),
                 }
             )
@@ -239,7 +271,7 @@ def build_plan(
             "credentials_included": False,
         },
     }
-    if model_key == "glm53_clean":
+    if model_key in {"glm53_clean", "glm53_hosted_odd"}:
         plan["shard_key"] = model_key
         plan["execution"]["inventory_policy"] = (
             "conservative_no_same_model_session_for_task_key_v1"
@@ -256,6 +288,16 @@ def build_plan(
                 "credited": False,
             }
         )
+    if reserved:
+        plan["reserved_tasks"] = [
+            {
+                "source_rank": source_rank,
+                "task_key": source_tasks[source_rank]["task"]["key"],
+                "task_version_id": source_tasks[source_rank]["task"]["version_id"],
+                "reserved_treatment_block": "dedicated_inference_endpoint_v1",
+            }
+            for source_rank in sorted(reserved)
+        ]
     plan["plan_sha256"] = digest_without(plan, "plan_sha256")
     validate_plan(plan)
     return plan
@@ -298,7 +340,7 @@ def validate_plan(plan: dict[str, Any]) -> None:
     execution = plan.get("execution") or {}
     expected_inventory_policy = (
         "conservative_no_same_model_session_for_task_key_v1"
-        if shard_key == "glm53_clean"
+        if shard_key in {"glm53_clean", "glm53_hosted_odd"}
         else None
     )
     if (
@@ -310,7 +352,7 @@ def validate_plan(plan: dict[str, Any]) -> None:
     ):
         raise ValueError("hosted shard execution policy drifted")
     excluded = plan.get("excluded_tasks") or []
-    expected_excluded = 2 if shard_key == "glm53_clean" else 1
+    expected_excluded = 2 if shard_key in {"glm53_clean", "glm53_hosted_odd"} else 1
     if len(excluded) != expected_excluded or any(
         row.get("retry_allowed") is not False for row in excluded
     ):
@@ -318,6 +360,17 @@ def validate_plan(plan: dict[str, Any]) -> None:
     included_keys = {row["task"]["key"] for row in tasks}
     if any(row["task_key"] in included_keys for row in excluded):
         raise ValueError("fenced task leaked into hosted shard")
+    reserved = plan.get("reserved_tasks") or []
+    expected_reserved = 49 if shard_key == "glm53_hosted_odd" else 0
+    if (
+        len(reserved) != expected_reserved
+        or any(row["task_key"] in included_keys for row in reserved)
+        or any(
+            row.get("reserved_treatment_block") != "dedicated_inference_endpoint_v1"
+            for row in reserved
+        )
+    ):
+        raise ValueError("hosted shard reserved-task policy drifted")
 
 
 def _client(key: str) -> httpx.Client:
