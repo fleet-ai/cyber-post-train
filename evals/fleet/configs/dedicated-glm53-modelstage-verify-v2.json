@@ -1,0 +1,28 @@
+{
+  "title": "chris-cyber-evalstage-verify-glm53-q38-v2",
+  "image": "docker.io/radixark/miles@sha256:0c218363e4f4ffa8b98a7a9d357f88eb92780f0b2337099d436557dbbdb7279e",
+  "command": "python3 - <<'PY'\nimport hashlib\nimport json\nimport os\nfrom pathlib import Path\n\nmodels = [\n    {\"name\": \"qwen3.8-27b-1d4bf0f2\", \"source\": \"Qwen/Qwen3.8-27B\", \"revision\": \"1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0\"},\n    {\"name\": \"glm-5.3-30333038\", \"source\": \"zai-org/GLM-5.3\", \"revision\": \"30333038ada1f1dacb294a93270305a890b50c14\"}\n]\nreceipt = {\"schema_version\": \"cyber-dedicated-eval-model-stage-v1\", \"models\": []}\nfor model in models:\n    root = Path(\"/mnt/sfs/models\") / model[\"name\"]\n    expected_marker = f'{model[\"source\"]}@{model[\"revision\"]}'\n    marker = (root / \".stage-complete\").read_text().strip()\n    if marker != expected_marker:\n        raise SystemExit(f'stage marker mismatch for {model[\"name\"]}')\n    index_path = root / \"model.safetensors.index.json\"\n    index_bytes = index_path.read_bytes()\n    index = json.loads(index_bytes)\n    shards = sorted(set(index.get(\"weight_map\", {}).values()))\n    if not shards:\n        raise SystemExit(f'no indexed shards for {model[\"name\"]}')\n    shard_sizes = {}\n    for shard in shards:\n        path = root / shard\n        size = path.stat().st_size\n        if size <= 0:\n            raise SystemExit(f'empty shard for {model[\"name\"]}: {shard}')\n        shard_sizes[shard] = size\n    small_files = {}\n    for filename in (\"config.json\", \"generation_config.json\", \"tokenizer_config.json\", \"chat_template.jinja\"):\n        path = root / filename\n        if path.is_file():\n            small_files[filename] = hashlib.sha256(path.read_bytes()).hexdigest()\n    receipt[\"models\"].append({\n        **model,\n        \"stage_marker_sha256\": hashlib.sha256(marker.encode()).hexdigest(),\n        \"weights_index_sha256\": hashlib.sha256(index_bytes).hexdigest(),\n        \"indexed_shard_count\": len(shards),\n        \"indexed_weight_bytes\": sum(shard_sizes.values()),\n        \"indexed_shard_sizes_sha256\": hashlib.sha256(json.dumps(shard_sizes, sort_keys=True, separators=(\",\", \":\")).encode()).hexdigest(),\n        \"small_file_sha256\": small_files\n    })\nrun_dir = Path(os.environ[\"RUN_DIR\"])\nrun_dir.mkdir(parents=True, exist_ok=True)\ntmp = run_dir / \"STAGED.json.tmp\"\nfinal = run_dir / \"STAGED.json\"\nif final.exists():\n    raise SystemExit(\"refusing to replace an existing stage receipt\")\ntmp.write_text(json.dumps(receipt, indent=2, sort_keys=True) + \"\\n\")\nos.replace(tmp, final)\nprint(json.dumps({\"staged\": True, \"model_count\": len(receipt[\"models\"])}))\nPY",
+  "workers": 1,
+  "gpus_per_worker": 1,
+  "priority_class": "fleet-infra-quiet",
+  "resources": {
+    "cpu_request": "8",
+    "cpu_limit": "16",
+    "memory_request": "32Gi",
+    "memory_limit": "64Gi"
+  },
+  "run_dir": "/mnt/sfs/jobs/chris-cyber-evalstage-verify-glm53-q38-v2",
+  "secrets": [],
+  "models": [
+    {
+      "name": "qwen3.8-27b-1d4bf0f2",
+      "hf": "Qwen/Qwen3.8-27B",
+      "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
+    },
+    {
+      "name": "glm-5.3-30333038",
+      "hf": "zai-org/GLM-5.3",
+      "revision": "30333038ada1f1dacb294a93270305a890b50c14"
+    }
+  ]
+}
