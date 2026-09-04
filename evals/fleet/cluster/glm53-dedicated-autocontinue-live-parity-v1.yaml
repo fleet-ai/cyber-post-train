@@ -108,14 +108,21 @@ spec:
                   {"type": "function", "function": {"name": "bash", "description": "Run a shell command.", "parameters": {"type": "object", "properties": {"command": {"type": "string"}}, "required": ["command"], "additionalProperties": False}}},
                   {"type": "function", "function": {"name": "submit_report", "description": "Submit the final report.", "parameters": {"type": "object", "properties": {"report": {"type": "string"}}, "required": ["report"], "additionalProperties": False}}},
               ]
-              payload = {
-                  "model": "glm-5.3",
-                  "messages": [{"role": "user", "content": "Call submit_report exactly once with a brief benign status. Do not call bash."}],
-                  "tools": tool_schemas,
-                  "tool_choice": "required",
-                  "temperature": 0,
-                  "max_tokens": 128,
-              }
+              def tool_payload(name):
+                  if name == "bash":
+                      instruction = "Call bash exactly once with the benign command true. Do not call submit_report."
+                  elif name == "submit_report":
+                      instruction = "Call submit_report exactly once with a brief benign status. Do not call bash."
+                  else:
+                      raise RuntimeError("unsupported parity tool")
+                  return {
+                      "model": "glm-5.3",
+                      "messages": [{"role": "user", "content": instruction}],
+                      "tools": tool_schemas,
+                      "tool_choice": {"type": "function", "function": {"name": name}},
+                      "temperature": 0,
+                      "max_tokens": 128,
+                  }
 
               if OUT.exists():
                   raise RuntimeError("single-use parity output root already exists")
@@ -132,20 +139,23 @@ spec:
                   assert info.get("model_path") == info.get("tokenizer_path") == "/mnt/sfs/models/glm-5.3-30333038"
                   assert server.get("model_path") == server.get("tokenizer_path") == "/mnt/sfs/models/glm-5.3-30333038"
                   assert server.get("context_length") == 262144 and server.get("tp_size") == server.get("dp_size") == 8
-                  completion_status, completion = request(replica["base"], "POST", "/v1/chat/completions", payload)
-                  assert completion_status == 200
-                  choices = completion.get("choices") or []
-                  assert len(choices) == 1
-                  choice = choices[0]
-                  assert completion.get("model") == "glm-5.3"
-                  calls = (choice.get("message") or {}).get("tool_calls") or []
                   selected = []
-                  for call in calls:
-                      function = call.get("function") or {}
-                      selected.append(function.get("name"))
+                  finish_reasons = []
+                  for tool_name in ["bash", "submit_report"]:
+                      completion_status, completion = request(replica["base"], "POST", "/v1/chat/completions", tool_payload(tool_name))
+                      assert completion_status == 200 and completion.get("model") == "glm-5.3"
+                      choices = completion.get("choices") or []
+                      assert len(choices) == 1
+                      choice = choices[0]
+                      calls = (choice.get("message") or {}).get("tool_calls") or []
+                      assert len(calls) == 1
+                      function = (calls[0].get("function") or {})
                       arguments = json.loads(function.get("arguments") or "")
-                      assert isinstance(arguments, dict)
-                  assert selected == ["submit_report"] and choice.get("finish_reason") == "tool_calls"
+                      assert isinstance(arguments, dict) and function.get("name") == tool_name
+                      assert choice.get("finish_reason") == "tool_calls"
+                      selected.append(tool_name)
+                      finish_reasons.append("tool_calls")
+                  assert selected == ["bash", "submit_report"]
                   receipt = {
                       "schema_version": "fleet-glm53-dedicated-autocontinue-live-parity-replica-v1",
                       "replica": replica["replica"],
@@ -156,8 +166,8 @@ spec:
                       "opencode_version": "1.18.27", "context_management": CONTEXT_POLICY,
                       "settings_canonical_sha256": SETTINGS_CANONICAL, "settings_file_sha256": SETTINGS_FILE,
                       "structured_tool_schema_names": ["bash", "submit_report"],
-                      "selected_tool_names": selected, "finish_reason": "tool_calls", "tool_arguments_valid_json": True,
-                      "non_scored_model_requests": 1, "fleet_api_contacted": False, "task_instance_created": False,
+                      "selected_tool_names": selected, "finish_reasons": finish_reasons, "tool_arguments_valid_json": True,
+                      "non_scored_model_requests": 2, "fleet_api_contacted": False, "task_instance_created": False,
                       "scoring_executed": False, "verifier_executed": False, "response_content_included": False,
                       "tool_arguments_included": False, "prompts_or_traces_included": False, "scores_included": False,
                   }
@@ -170,14 +180,15 @@ spec:
                   "runtime_image": RUNTIME_IMAGE, "model_revision": MODEL_REVISION, "context_length": 262144,
                   "opencode_version": "1.18.27", "context_management": CONTEXT_POLICY,
                   "settings_canonical_sha256": SETTINGS_CANONICAL, "settings_file_sha256": SETTINGS_FILE,
-                  "structured_tool_schema_names": ["bash", "submit_report"], "non_scored_model_requests": 2,
+                  "structured_tool_schema_names": ["bash", "submit_report"], "selected_tool_names_per_replica": ["bash", "submit_report"],
+                  "non_scored_model_requests": 4,
                   "fleet_api_contacted": False, "task_instance_created": False, "scoring_executed": False,
                   "verifier_executed": False, "prompts_or_traces_included": False, "scores_included": False,
                   "classification": "operational_gate_passed_no_capability_claim",
               }
               terminal["receipt_sha256"] = digest_without(terminal, "receipt_sha256")
               write_once(OUT / "TERMINAL.json", terminal)
-              print(json.dumps({"ok": True, "replicas": 2, "non_scored_model_requests": 2, "receipt_sha256": terminal["receipt_sha256"]}, sort_keys=True))
+              print(json.dumps({"ok": True, "replicas": 2, "non_scored_model_requests": 4, "receipt_sha256": terminal["receipt_sha256"]}, sort_keys=True))
           resources:
             requests: {cpu: 100m, memory: 128Mi, ephemeral-storage: 128Mi}
             limits: {cpu: 500m, memory: 512Mi, ephemeral-storage: 512Mi}
