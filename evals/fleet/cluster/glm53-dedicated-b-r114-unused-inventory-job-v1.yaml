@@ -1,0 +1,202 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: chris-cyber-glm53-r114-unused-inventory-v1
+  namespace: fleet-train-jobs
+  labels:
+    cyber-post-train.fleet.ai/experiment: glm53-r114-unused-inventory-v1
+    cyber-post-train.fleet.ai/owner: chris
+    kueue.x-k8s.io/queue-name: training-lq
+spec:
+  activeDeadlineSeconds: 900
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 604800
+  template:
+    metadata:
+      labels:
+        cyber-post-train.fleet.ai/experiment: glm53-r114-unused-inventory-v1
+        cyber-post-train.fleet.ai/owner: chris
+    spec:
+      restartPolicy: Never
+      priorityClassName: fleet-train-high
+      nodeSelector:
+        kubernetes.io/arch: amd64
+        workload: fleetai-training-ng-cpu
+      tolerations:
+        - key: workload
+          operator: Equal
+          value: fleetai-training-ng-cpu
+          effect: NoSchedule
+      containers:
+        - name: observer
+          image: ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
+          command: ["python", "-c"]
+          args:
+            - |
+              import datetime
+              import hashlib
+              import json
+              import os
+              import pathlib
+              import urllib.parse
+              import urllib.request
+
+              BASE = "https://orchestrator.fleetai.com"
+              TEAM_ID = "a1025f0b-ad67-49fc-a023-51800ab43e84"
+              TASK_KEY = "cysec1-2-fubspot-gen_blackbox-d096d72a3734e3b85fde5c28__blackbox_ctf_v1"
+              TASK_VERSION_ID = "66051718-314a-4dad-86ab-c7b9b72fa514"
+              MODEL = "glm-5.3"
+              KEY = os.environ["FLEET_API_KEY"]
+
+              def canonical(value):
+                  return json.dumps(
+                      value, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+                  ).encode()
+
+              def digest_without(value, field):
+                  body = {key: item for key, item in value.items() if key != field}
+                  return "sha256:" + hashlib.sha256(canonical(body)).hexdigest()
+
+              def get(route, params=None):
+                  url = BASE + route
+                  if params:
+                      url += "?" + urllib.parse.urlencode(params)
+                  request = urllib.request.Request(
+                      url,
+                      headers={
+                          "Authorization": "Bearer " + KEY,
+                          "Accept": "application/json",
+                      },
+                  )
+                  with urllib.request.urlopen(request, timeout=180) as response:
+                      assert response.status == 200
+                      return json.load(response)
+
+              account = get("/v1/account")
+              assert account.get("team_name") == "fleet"
+              assert account.get("team_id") == TEAM_ID
+
+              offset = 0
+              pages = 0
+              total_rows = 0
+              session_ids = set()
+              exact_model_rows = 0
+              exact_model_version_rows = 0
+              final_has_more = None
+              while True:
+                  page = get(
+                      "/v1/sessions",
+                      {"task_key": TASK_KEY, "limit": 500, "offset": offset},
+                  )
+                  rows = page.get("sessions")
+                  assert isinstance(rows, list)
+                  pages += 1
+                  total_rows += len(rows)
+                  for row in rows:
+                      session_id = row.get("session_id")
+                      assert isinstance(session_id, str) and session_id
+                      assert session_id not in session_ids
+                      session_ids.add(session_id)
+                      if row.get("model") != MODEL:
+                          continue
+                      exact_model_rows += 1
+                      projected_version = row.get("eval_task_version_id") or row.get(
+                          "task_version_id"
+                      )
+                      if projected_version == TASK_VERSION_ID:
+                          exact_model_version_rows += 1
+                  final_has_more = page.get("has_more")
+                  if final_has_more is False:
+                      break
+                  assert rows
+                  offset += len(rows)
+
+              # Zero same-model rows is deliberately stronger than trying to infer
+              # treatment identity from optional public metadata projections.
+              assert exact_model_rows == 0
+              assert exact_model_version_rows == 0
+              receipt = {
+                  "schema_version": "fleet-score-blind-unused-inventory-api-observation-v1",
+                  "observed_at": datetime.datetime.now(datetime.UTC).isoformat().replace(
+                      "+00:00", "Z"
+                  ),
+                  "observer": {
+                      "job_name": os.environ["JOB_NAME"],
+                      "pod_name": os.environ["POD_NAME"],
+                      "pod_uid": os.environ["POD_UID"],
+                      "priority_class": "fleet-train-high",
+                  },
+                  "authority": {
+                      "base": BASE,
+                      "account_route": "/v1/account",
+                      "team_name": "fleet",
+                      "team_id": TEAM_ID,
+                  },
+                  "query": {
+                      "route": "/v1/sessions",
+                      "task_key": TASK_KEY,
+                      "task_version_id": TASK_VERSION_ID,
+                      "model": MODEL,
+                      "limit": 500,
+                      "pages": pages,
+                      "rows_scanned": total_rows,
+                      "unique_session_ids": len(session_ids),
+                      "final_has_more": final_has_more,
+                      "pagination_exhausted": final_has_more is False,
+                      "exact_model_rows": exact_model_rows,
+                      "exact_model_and_projected_version_rows": exact_model_version_rows,
+                      "exact_current_treatment_rows": 0,
+                      "zero_same_model_rows_is_stronger_than_metadata_projection": True,
+                  },
+                  "privacy": {
+                      "credentials_included": False,
+                      "session_ids_included": False,
+                      "session_messages_read": False,
+                      "scores_read": False,
+                      "prompts_or_traces_read": False,
+                      "response_bodies_persisted": False,
+                  },
+              }
+              receipt["receipt_sha256"] = digest_without(receipt, "receipt_sha256")
+              out = pathlib.Path(
+                  "/mnt/sfs/jobs/chris-cyber-glm53-r114-unused-inventory-v1"
+              )
+              os.mkdir(out, 0o700)
+              path = out / "API-OBSERVATION.json"
+              fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+              with os.fdopen(fd, "wb") as handle:
+                  handle.write(canonical(receipt) + b"\n")
+              print(json.dumps({
+                  "ok": True,
+                  "receipt_sha256": receipt["receipt_sha256"],
+                  "pages": pages,
+                  "rows_scanned": total_rows,
+                  "exact_model_rows": exact_model_rows,
+                  "exact_current_treatment_rows": 0,
+              }, sort_keys=True))
+          env:
+            - name: FLEET_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: chris-cyber-opencode-evals-v2
+                  key: FLEET_API_KEY
+            - name: JOB_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: "metadata.labels['job-name']"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_UID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.uid
+          resources:
+            requests: {cpu: 100m, memory: 128Mi, ephemeral-storage: 128Mi}
+            limits: {cpu: 250m, memory: 256Mi, ephemeral-storage: 256Mi}
+          volumeMounts:
+            - {name: sfs, mountPath: /mnt/sfs}
+      volumes:
+        - name: sfs
+          persistentVolumeClaim: {claimName: sfs-shared}
