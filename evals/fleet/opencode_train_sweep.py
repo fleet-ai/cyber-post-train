@@ -31,7 +31,8 @@ HARNESS = {
     "context_window_size": 262144,
     "max_output_tokens": 32768,
     "timeout_seconds": 28800,
-    "context_management": "opencode_1.18.27_native_compaction_no_autocontinue",
+    "context_management": self_hosted.OPENCODE_CONTEXT_MANAGEMENT,
+    "compaction_headroom_tokens": 20000,
 }
 MODELS = {
     "qwen38": {
@@ -310,8 +311,18 @@ def build_full_plan(
     split: dict[str, Any],
     model_key: str,
     credit_session_id: str,
+    *,
+    credit_result: dict[str, Any],
 ) -> dict[str, Any]:
     """Freeze one exact pass@4 plan while crediting the accepted smoke once."""
+    if (
+        credit_result.get("harness_config") != HARNESS
+        or credit_result.get("session_id") != credit_session_id
+        or credit_result.get("agent_exit_code") != 0
+        or credit_result.get("agent_termination") != "completed"
+        or credit_result.get("session_ingest_status") != "completed"
+    ):
+        raise ValueError("full-plan requires a completed smoke result with the same harness policy")
     if selection.get("schema_version") != SELECTION_SCHEMA:
         raise ValueError("full pass@4 requires the self-hosted-eligible selection schema")
     model = copy.deepcopy(MODELS[model_key])
@@ -367,6 +378,9 @@ def build_full_plan(
         or credit.get("status") != "completed"
         or not isinstance(verifier_execution.get("id"), str)
         or not verifier_execution.get("id")
+        or credit_result.get("task_key") != tasks[0]["task_key"]
+        or credit_result.get("task_version_id") != tasks[0]["task_version_id"]
+        or credit_result.get("verifier_execution_id") != verifier_execution["id"]
     ):
         raise RuntimeError("accepted smoke session does not bind the first selected task")
 
@@ -434,6 +448,7 @@ def build_full_plan(
             "attempt": 1,
             "session_id": credit_session_id,
             "verifier_execution_id": verifier_execution["id"],
+            "result_sha256": self_hosted.sha256(self_hosted.canonical_json(credit_result)),
         },
         "new_session_count": expected_new_sessions,
         "total_session_count": task_count * 4,
@@ -782,6 +797,7 @@ def main() -> int:
     parser.add_argument("--model", choices=sorted(MODELS))
     parser.add_argument("--attempt", type=int, default=1)
     parser.add_argument("--credit-session-id")
+    parser.add_argument("--credit-result", type=Path)
     parser.add_argument("--original-plan", type=Path)
     parser.add_argument("--generation", choices=("v2", "v3"))
     parser.add_argument("--reason")
@@ -835,9 +851,15 @@ def main() -> int:
                 client, load_json(args.selection), split, args.model, args.attempt
             )
         else:
-            if not args.selection or not args.model or not args.credit_session_id:
+            if (
+                not args.selection
+                or not args.model
+                or not args.credit_session_id
+                or not args.credit_result
+            ):
                 parser.error(
-                    "full-plan requires --selection, --model, and --credit-session-id"
+                    "full-plan requires --selection, --model, --credit-session-id, "
+                    "and --credit-result"
                 )
             value = build_full_plan(
                 client,
@@ -845,6 +867,7 @@ def main() -> int:
                 split,
                 args.model,
                 args.credit_session_id,
+                credit_result=load_json(args.credit_result),
             )
     self_hosted.write_json_once(args.output, value)
     return 0
