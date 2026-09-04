@@ -71,6 +71,9 @@ DEDICATED_CAMPAIGNS = {
 QWEN_REPLACEMENT_CAMPAIGN = (
     "chris-cyber-q38-opencode11827-hosted-replacements3-p4-v1"
 )
+GLM_HOSTED_REPLACEMENT_CAMPAIGN = (
+    "chris-cyber-glm53-opencode11827-hosted-replacement-r106-p4-v1"
+)
 EXPECTED_INCLUDED_TASK_COUNTS.update(
     {
         "qwen38_remainder": 48,
@@ -84,6 +87,7 @@ EXPECTED_INCLUDED_TASK_COUNTS.update(
     {"glm53_dedicated_a": 27, "glm53_dedicated_b": 27}
 )
 EXPECTED_INCLUDED_TASK_COUNTS.update({"qwen38_replacements": 3})
+EXPECTED_INCLUDED_TASK_COUNTS.update({"glm53_hosted_replacement": 1})
 SCHEDULE = [
     {
         "accepted_outcomes_at_least": 0,
@@ -365,12 +369,30 @@ def build_remainder_plan(
 def hydrate_glm53_replacements(
     assignment: dict[str, Any], key: str
 ) -> dict[str, Any]:
-    """Hydrate the five locked replacement tasks without retaining task content."""
-    glm = assignment.get("glm53") or {}
-    rows = glm.get("tasks") or []
+    """Hydrate locked GLM replacements without retaining task content."""
     if assignment.get("receipt_sha256") != digest_without(assignment, "receipt_sha256"):
         raise ValueError("replacement assignment receipt digest mismatch")
-    if [int(row.get("replacement_rank") or 0) for row in rows] != list(range(101, 106)):
+    if assignment.get("schema_version") == "fleet-opencode-replacement-selection-supplement-v1":
+        row = assignment.get("replacement") or {}
+        rows = [row]
+        expected_ranks = [106]
+        if (
+            assignment.get("append_only") is not True
+            or row.get("serving_block") != "hosted"
+            or row.get("scored_launch_authorized") is not False
+            or (row.get("hydration_gate") or {}).get("status")
+            != "required_not_satisfied"
+        ):
+            raise ValueError("hosted replacement supplement drifted")
+        receipt_schema = "fleet-glm53-hosted-replacement-hydration-v1"
+        receipt_source_field = "selection_supplement_receipt_sha256"
+    else:
+        glm = assignment.get("glm53") or {}
+        rows = glm.get("tasks") or []
+        expected_ranks = list(range(101, 106))
+        receipt_schema = "fleet-glm53-replacement-hydration-v1"
+        receipt_source_field = "assignment_receipt_sha256"
+    if [int(row.get("replacement_rank") or 0) for row in rows] != expected_ranks:
         raise ValueError("replacement assignment ranks drifted")
     with _client(key) as client:
         account = self_hosted._request(client, "GET", "/v1/account")
@@ -449,8 +471,8 @@ def hydrate_glm53_replacements(
                 }
             )
     receipt = {
-        "schema_version": "fleet-glm53-replacement-hydration-v1",
-        "assignment_receipt_sha256": assignment["receipt_sha256"],
+        "schema_version": receipt_schema,
+        receipt_source_field: assignment["receipt_sha256"],
         "fleet_team_id": self_hosted.FLEET_TEAM_ID,
         "tasks_hydrated": len(hydrated),
         "tasks": hydrated,
@@ -767,6 +789,108 @@ def build_qwen_replacement_plan(
     return plan
 
 
+def build_glm53_hosted_replacement_plan(
+    hosted_plan: dict[str, Any],
+    supplement: dict[str, Any],
+    hydration: dict[str, Any],
+) -> dict[str, Any]:
+    """Build the separately locked hosted r106 pass@4 treatment block."""
+    validate_plan(hosted_plan)
+    replacement = supplement.get("replacement") or {}
+    if (
+        hosted_plan.get("shard_key") != "glm53_remainder3"
+        or [int(row["source_rank"]) for row in hosted_plan["tasks"]]
+        != list(range(11, 100, 2))
+        or supplement.get("schema_version")
+        != "fleet-opencode-replacement-selection-supplement-v1"
+        or supplement.get("receipt_sha256")
+        != digest_without(supplement, "receipt_sha256")
+        or replacement.get("replacement_rank") != 106
+        or replacement.get("serving_block") != "hosted"
+        or replacement.get("model_revision") != hosted_plan["model"]["revision"]
+        or hydration.get("schema_version")
+        != "fleet-glm53-hosted-replacement-hydration-v1"
+        or hydration.get("receipt_sha256")
+        != digest_without(hydration, "receipt_sha256")
+        or hydration.get("selection_supplement_receipt_sha256")
+        != supplement["receipt_sha256"]
+        or hydration.get("fleet_team_id") != self_hosted.FLEET_TEAM_ID
+        or hydration.get("tasks_hydrated") != 1
+        or hydration.get("scores_read") is not False
+        or hydration.get("task_content_retained") is not False
+        or hydration.get("prompts_or_traces_included") is not False
+    ):
+        raise ValueError("hosted r106 source or hydration drifted")
+    hydrated = (hydration.get("tasks") or [None])[0]
+    if not isinstance(hydrated, dict) or int(hydrated.get("replacement_rank") or 0) != 106:
+        raise ValueError("hosted r106 hydration task drifted")
+    task = {
+        "rank": 1,
+        "source_rank": 106,
+        "task": copy.deepcopy(hydrated["task"]),
+        "environment": copy.deepcopy(hydrated["environment"]),
+        "verifier": copy.deepcopy(hydrated["verifier"]),
+    }
+    expected_binding = {
+        "task_key": task["task"].get("key"),
+        "task_version_id": task["task"].get("version_id"),
+        "env_key": task["environment"].get("id"),
+        "env_version": task["environment"].get("version"),
+        "environment_version_id": task["environment"].get("version_id"),
+        "data_key": task["environment"].get("data_id"),
+        "data_version": task["environment"].get("data_version"),
+    }
+    if expected_binding != {field: replacement[field] for field in expected_binding}:
+        raise ValueError("hosted r106 exact task binding drifted")
+    key_digest = self_hosted.sha256(task["task"]["key"].encode()).split(":", 1)[1][:8]
+    attempts = [
+        {
+            "ordinal": attempt,
+            "rank": 1,
+            "source_rank": 106,
+            "attempt": attempt,
+            "run_id": (
+                f"{GLM_HOSTED_REPLACEMENT_CAMPAIGN}-sr106-a{attempt}-{key_digest}"
+            ),
+            "network": f"glm53-hosted-replacement-sr106-a{attempt}-{key_digest}",
+        }
+        for attempt in range(1, 5)
+    ]
+    plan = {
+        "schema_version": PLAN_SCHEMA,
+        "shard_key": "glm53_hosted_replacement",
+        "campaign_id": GLM_HOSTED_REPLACEMENT_CAMPAIGN,
+        "source_job_id": hosted_plan["source_job_id"],
+        "source": {
+            "hosted_plan_sha256": hosted_plan["plan_sha256"],
+            "selection_supplement_receipt_sha256": supplement["receipt_sha256"],
+            "hydration_receipt_sha256": hydration["receipt_sha256"],
+        },
+        "treatment_block": copy.deepcopy(hosted_plan["treatment_block"]),
+        "model": copy.deepcopy(hosted_plan["model"]),
+        "harness": copy.deepcopy(hosted_plan["harness"]),
+        "authority": copy.deepcopy(hosted_plan["authority"]),
+        "task_count": 1,
+        "pass_k": 4,
+        "total_session_count": 4,
+        "credited_sessions": [],
+        "new_session_count": 4,
+        "fenced_source_ranks": [1, 2, 3, 5, 7, 9],
+        "existing_hosted_source_ranks": list(range(11, 100, 2)),
+        "reserved_source_ranks": [*range(4, 101, 2), *range(101, 106)],
+        "execution": {
+            **copy.deepcopy(hosted_plan["execution"]),
+            "inventory_policy": "conservative_no_same_model_session_for_task_key_v1",
+        },
+        "tasks": [task],
+        "attempts": attempts,
+        "privacy": copy.deepcopy(hosted_plan["privacy"]),
+    }
+    plan["plan_sha256"] = digest_without(plan, "plan_sha256")
+    validate_plan(plan)
+    return plan
+
+
 def _validate_source_plan(plan: dict[str, Any]) -> None:
     if plan.get("schema_version") == legacy.PLAN_SCHEMA:
         legacy.validate_plan(plan)
@@ -1028,6 +1152,7 @@ def validate_plan(plan: dict[str, Any]) -> None:
             "glm53_remainder",
             "glm53_remainder2",
             "glm53_remainder3",
+            "glm53_hosted_replacement",
         }
         else (
             "plan_identity_plus_authoritative_receipt_v1"
@@ -1101,6 +1226,28 @@ def validate_plan(plan: dict[str, Any]) -> None:
             != plan["model"].get("revision")
         ):
             raise ValueError("Qwen replacement partition or binding drifted")
+        return
+
+    if shard_key == "glm53_hosted_replacement":
+        treatment = plan.get("treatment_block") or {}
+        selected = {int(row["source_rank"]) for row in tasks}
+        fenced = set(plan.get("fenced_source_ranks") or [])
+        hosted = set(plan.get("existing_hosted_source_ranks") or [])
+        reserved = set(plan.get("reserved_source_ranks") or [])
+        if (
+            selected != {106}
+            or fenced != {1, 2, 3, 5, 7, 9}
+            or hosted != set(range(11, 100, 2))
+            or reserved != {*range(4, 101, 2), *range(101, 106)}
+            or selected & (fenced | hosted | reserved)
+            or len(selected | fenced | hosted | reserved) != 106
+            or treatment.get("kind") != "hosted_inference_endpoint_v1"
+            or treatment.get("model_revision") != plan["model"].get("revision")
+            or (plan.get("source") or {}).get("hydration_receipt_sha256") is None
+            or (plan.get("source") or {}).get("selection_supplement_receipt_sha256")
+            is None
+        ):
+            raise ValueError("GLM hosted replacement partition or binding drifted")
         return
 
     excluded = plan.get("excluded_tasks") or []
@@ -1732,6 +1879,9 @@ def main() -> int:
     hydrate = sub.add_parser("hydrate-replacements")
     hydrate.add_argument("--assignment", type=Path, required=True)
     hydrate.add_argument("--output", type=Path, required=True)
+    hydrate_hosted = sub.add_parser("hydrate-hosted-replacement")
+    hydrate_hosted.add_argument("--supplement", type=Path, required=True)
+    hydrate_hosted.add_argument("--output", type=Path, required=True)
     dedicated = sub.add_parser("build-dedicated-a")
     dedicated.add_argument("--source-plan", type=Path, required=True)
     dedicated.add_argument("--assignment", type=Path, required=True)
@@ -1749,6 +1899,11 @@ def main() -> int:
     qwen_replacements.add_argument("--hosted-plan", type=Path, required=True)
     qwen_replacements.add_argument("--assignment", type=Path, required=True)
     qwen_replacements.add_argument("--output", type=Path, required=True)
+    glm_hosted_replacement = sub.add_parser("build-glm-hosted-replacement")
+    glm_hosted_replacement.add_argument("--hosted-plan", type=Path, required=True)
+    glm_hosted_replacement.add_argument("--supplement", type=Path, required=True)
+    glm_hosted_replacement.add_argument("--hydration", type=Path, required=True)
+    glm_hosted_replacement.add_argument("--output", type=Path, required=True)
     validate = sub.add_parser("validate")
     validate.add_argument("--plan", type=Path, required=True)
     preflight = sub.add_parser("preflight")
@@ -1777,6 +1932,13 @@ def main() -> int:
         value = hydrate_glm53_replacements(load_object(args.assignment), key)
         self_hosted.write_json_once(args.output, value)
         return 0
+    if args.command == "hydrate-hosted-replacement":
+        key = os.environ.get("FLEET_API_KEY")
+        if not key:
+            raise RuntimeError("FLEET_API_KEY is required")
+        value = hydrate_glm53_replacements(load_object(args.supplement), key)
+        self_hosted.write_json_once(args.output, value)
+        return 0
     if args.command == "build-dedicated-a":
         value = build_dedicated_a_plan(
             load_object(args.source_plan),
@@ -1801,6 +1963,14 @@ def main() -> int:
             load_object(args.source_plan),
             load_object(args.hosted_plan),
             load_object(args.assignment),
+        )
+        self_hosted.write_json_once(args.output, value)
+        return 0
+    if args.command == "build-glm-hosted-replacement":
+        value = build_glm53_hosted_replacement_plan(
+            load_object(args.hosted_plan),
+            load_object(args.supplement),
+            load_object(args.hydration),
         )
         self_hosted.write_json_once(args.output, value)
         return 0

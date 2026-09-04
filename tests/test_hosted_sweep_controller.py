@@ -766,3 +766,72 @@ def test_glm_r106_supplement_replays_frozen_order_and_restores_denominator() -> 
     assert estimator["pairwise_disjoint"] is True
     assert replacement["hydration_gate"]["required_before_paid_launch"] is True
     assert replacement["scored_launch_authorized"] is False
+
+
+def test_glm_r106_hydration_and_hosted_plan_are_exact(monkeypatch) -> None:
+    supplement = hosted.load_object(REPLACEMENT_SUPPLEMENT)
+    row = supplement["replacement"]
+    task_response = {
+        "key": row["task_key"],
+        "environment_id": row["env_key"],
+        "version": row["env_version"],
+        "data_id": row["data_key"],
+        "data_version": row["data_version"],
+        "prompt": "sealed",
+        "env_variables": {"sealed": True},
+        "output_json_schema": {"type": "object"},
+        "verifier_id": "verifier-106",
+        "verifier": {
+            "verifier_version_id": "verifier-version-106",
+            "version": 1,
+            "sha256": "sha256:verifier-106",
+            "function_name": "verify",
+        },
+        "metadata": {
+            "cyber_contract": {
+                "evidence_schema": "1.0.0",
+                "submission_protocol": "2.0.0",
+                "verifier_contract": "3.0.0",
+            },
+            "runtime_seed_manifest": {
+                "content_sha256": "sha256:seed-106",
+                "files": [{"target_path": "sealed"}],
+            },
+        },
+    }
+
+    class Client:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+    def request(_client, _method, path, **_kwargs):
+        if path == "/v1/account":
+            return {"team_name": "fleet", "team_id": self_hosted.FLEET_TEAM_ID}
+        return task_response
+
+    monkeypatch.setattr(hosted, "_client", lambda _key: Client())
+    monkeypatch.setattr(self_hosted, "_request", request)
+    hydration = hosted.hydrate_glm53_replacements(supplement, "secret")
+    assert hydration["schema_version"] == "fleet-glm53-hosted-replacement-hydration-v1"
+    assert hydration["selection_supplement_receipt_sha256"] == supplement["receipt_sha256"]
+    assert hydration["tasks_hydrated"] == 1
+    assert hydration["tasks"][0]["replacement_rank"] == 106
+
+    plan = hosted.build_glm53_hosted_replacement_plan(
+        hosted.load_object(
+            Path("evals/fleet/configs/glm53-opencode-hosted-odd45-pass4-v10.json")
+        ),
+        supplement,
+        hydration,
+    )
+    hosted.validate_plan(plan)
+    assert plan["task_count"] == 1
+    assert plan["new_session_count"] == 4
+    assert plan["tasks"][0]["source_rank"] == 106
+    assert plan["existing_hosted_source_ranks"] == list(range(11, 100, 2))
+    assert plan["execution"]["inventory_policy"] == (
+        "conservative_no_same_model_session_for_task_key_v1"
+    )
