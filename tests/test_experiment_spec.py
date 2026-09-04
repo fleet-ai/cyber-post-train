@@ -8,7 +8,13 @@ import yaml
 from typer.testing import CliRunner
 
 from cyber_post_train.cli import app
-from cyber_post_train.spec import compile_plan, file_digest, load_locked_spec, lock_spec
+from cyber_post_train.spec import (
+    build_source_spec,
+    compile_plan,
+    file_digest,
+    load_locked_spec,
+    lock_spec,
+)
 
 
 def _components(root: Path) -> dict[str, dict[str, str]]:
@@ -113,3 +119,63 @@ def test_cli_lock_is_create_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 
     assert first.exit_code == 0
     assert second.exit_code != 0
+
+
+def test_build_source_spec_selects_components_by_adapter() -> None:
+    evaluation = build_source_spec(
+        experiment_id="qwen38-fleet-p4-v1",
+        adapter="fleet",
+        component_paths={
+            "model": "configs/components/model.json",
+            "serving": "configs/components/serving.json",
+            "harness": "configs/components/harness.json",
+            "dataset": "configs/components/dataset.json",
+            "protocol": "configs/components/protocol.json",
+            "trainer": None,
+        },
+        backend="fleet",
+        output_root="output/qwen38-fleet-p4-v1",
+        max_concurrency=2,
+        serving_block="hosted",
+    )
+    assert evaluation["kind"] == "evaluation"
+    assert set(evaluation["components"]) == {
+        "model",
+        "serving",
+        "harness",
+        "dataset",
+        "protocol",
+    }
+
+
+def test_cli_init_is_create_once(tmp_path: Path) -> None:
+    output = tmp_path / "experiment.yaml"
+    args = [
+        "experiment",
+        "init",
+        "qwen38-fleet-p4-v1",
+        "--output",
+        str(output),
+        "--adapter",
+        "fleet",
+        "--model",
+        "configs/components/model.json",
+        "--serving",
+        "configs/components/serving.json",
+        "--harness",
+        "configs/components/harness.json",
+        "--dataset",
+        "configs/components/dataset.json",
+        "--protocol",
+        "configs/components/protocol.json",
+        "--serving-block",
+        "hosted",
+    ]
+    first = CliRunner().invoke(app, args)
+    second = CliRunner().invoke(app, args)
+
+    assert first.exit_code == 0
+    assert second.exit_code != 0
+    value = yaml.safe_load(output.read_text())
+    assert value["adapter"] == "fleet"
+    assert value["execution"]["serving_block"] == "hosted"

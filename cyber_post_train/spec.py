@@ -29,6 +29,58 @@ REQUIRED_COMPONENTS = {
 }
 
 
+def build_source_spec(
+    *,
+    experiment_id: str,
+    adapter: str,
+    component_paths: dict[str, str | None],
+    backend: str,
+    output_root: str,
+    max_concurrency: int,
+    serving_block: str | None,
+) -> dict[str, Any]:
+    """Build a small unlocked composition without resolving mutable bytes."""
+
+    kind = ADAPTER_KIND.get(adapter)
+    if kind is None:
+        raise ValueError(f"unsupported adapter: {adapter}")
+    required = REQUIRED_COMPONENTS[kind]
+    missing = sorted(name for name in required if not component_paths.get(name))
+    if missing:
+        raise ValueError("missing component paths: " + ", ".join(missing))
+    components = {
+        name: {"path": str(component_paths[name])}
+        for name in sorted(required)
+    }
+    execution: dict[str, Any] = {
+        "backend": backend,
+        "output_root": output_root,
+        "max_concurrency": max_concurrency,
+    }
+    if serving_block is not None:
+        execution["serving_block"] = serving_block
+    value = {
+        "schema": "cyber_experiment_spec_v1",
+        "experiment_id": experiment_id,
+        "kind": kind,
+        "adapter": adapter,
+        "components": components,
+        "execution": execution,
+    }
+    # The unlocked form intentionally lacks digests, so validate the fields that
+    # do not depend on locking here and leave full validation to `lock`.
+    if not EXPERIMENT_ID_RE.fullmatch(experiment_id):
+        raise ValueError("experiment_id must be a lowercase hyphenated identifier")
+    if kind == "evaluation" and serving_block is None:
+        raise ValueError("evaluation execution requires an explicit serving_block")
+    if max_concurrency < 1:
+        raise ValueError("max_concurrency must be at least 1")
+    safe_relative_path(output_root)
+    if not PurePosixPath(output_root).parts or PurePosixPath(output_root).parts[0] != "output":
+        raise ValueError("execution.output_root must be under output/")
+    return value
+
+
 def canonical_digest(value: object) -> str:
     payload = json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
     return "sha256:" + hashlib.sha256(payload).hexdigest()

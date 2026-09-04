@@ -57,6 +57,17 @@ cyber-post-train evidence      # reconcile and verify immutable receipts
 Examples of the intended workflow:
 
 ```bash
+uv run cyber-post-train experiment init qwen38-fleet-p4-v1 \
+  --adapter fleet \
+  --model configs/components/qwen38-27b.json \
+  --serving configs/components/qwen38-hosted.json \
+  --harness configs/components/opencode-1.18.27.json \
+  --dataset configs/components/fleet-train50.json \
+  --protocol configs/components/pass4.json \
+  --serving-block hosted \
+  --output configs/experiments/qwen38-fleet-p4-v1.yaml
+uv run cyber-post-train experiment lock configs/experiments/qwen38-fleet-p4-v1.yaml \
+  --output configs/experiments/qwen38-fleet-p4-v1.locked.yaml
 uv run cyber-post-train experiment validate configs/experiments/qwen38-fleet-p4.yaml
 uv run cyber-post-train eval preview configs/experiments/qwen38-fleet-p4.yaml
 uv run cyber-post-train eval launch configs/experiments/qwen38-fleet-p4.yaml --execute

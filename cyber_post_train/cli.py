@@ -12,7 +12,7 @@ from rich.console import Console
 from rich.table import Table
 
 from .catalog import CATALOG, catalog_dict, doctor
-from .spec import compile_plan, load_locked_spec, lock_spec, write_new
+from .spec import build_source_spec, compile_plan, load_locked_spec, lock_spec, write_new
 
 app = typer.Typer(
     name="cyber-post-train",
@@ -23,6 +23,51 @@ app = typer.Typer(
 console = Console()
 experiment_app = typer.Typer(no_args_is_help=True, help="Lock, validate, and compile experiments.")
 app.add_typer(experiment_app, name="experiment")
+
+
+@experiment_app.command("init")
+def experiment_init(
+    experiment_id: str,
+    output: Annotated[Path, typer.Option("--output")],
+    adapter: Annotated[
+        str,
+        typer.Option(help="fleet, webexploitbench, exploitgym, fleet-sft, or fleet-rl"),
+    ],
+    model: Annotated[Path, typer.Option("--model")],
+    dataset: Annotated[Path, typer.Option("--dataset")],
+    protocol: Annotated[Path, typer.Option("--protocol")],
+    serving: Annotated[Path | None, typer.Option("--serving")] = None,
+    harness: Annotated[Path | None, typer.Option("--harness")] = None,
+    trainer: Annotated[Path | None, typer.Option("--trainer")] = None,
+    backend: Annotated[str, typer.Option("--backend")] = "fleet",
+    output_root: Annotated[Path | None, typer.Option("--output-root")] = None,
+    max_concurrency: Annotated[int, typer.Option("--max-concurrency", min=1)] = 1,
+    serving_block: Annotated[
+        str | None,
+        typer.Option("--serving-block", help="hosted, dedicated, or matched-self-hosted"),
+    ] = None,
+) -> None:
+    """Create a minimal, editable experiment composition without overwriting files."""
+
+    components = {
+        "model": str(model),
+        "dataset": str(dataset),
+        "protocol": str(protocol),
+        "serving": str(serving) if serving else None,
+        "harness": str(harness) if harness else None,
+        "trainer": str(trainer) if trainer else None,
+    }
+    value = build_source_spec(
+        experiment_id=experiment_id,
+        adapter=adapter,
+        component_paths=components,
+        backend=backend,
+        output_root=str(output_root or Path("output") / experiment_id),
+        max_concurrency=max_concurrency,
+        serving_block=serving_block,
+    )
+    write_new(output, yaml.safe_dump(value, sort_keys=False))
+    typer.echo(str(output))
 
 
 @app.command("catalog")
