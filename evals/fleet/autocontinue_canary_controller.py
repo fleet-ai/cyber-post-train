@@ -22,6 +22,7 @@ from evals.fleet import endpoint_lease, self_hosted
 from evals.fleet import hosted_sweep_controller as hosted
 
 CAMPAIGN_SHA = "sha256:63946f224a33eb0d2c2a6fdba34358ebf9ca379e5f0f156cd137c95a9b98097e"
+CAMPAIGN_FILE_SHA = "sha256:1dfcc6d9ddbd19ef5ff46b5d6308d62526db4d1a0ccf05c5fa3b10b176910f34"
 FLOCK_GATE_SHA = "sha256:e9f34d35ac3c9e60d2698ebc1685374b98f13e41ac305df0609fb051f35c416c"
 HOSTED_HEALTH_SHA = "sha256:d81a01ffe1087d7d85fe511bc9c978461ba3e24a2c15675871cfb8668c49bd85"
 DEDICATED_PARITY_SHA = "sha256:07e733b4b161ed7c36113fc3688f04a42938d93a499b1bcc10c7cd21342900df"
@@ -29,8 +30,8 @@ TASK_INVENTORY_SHA = "sha256:c71604d22b1d52a7091727b957e0f56f2e8e270e461c844fb57
 TASK_INVENTORY_EXECUTION_SHA = (
     "sha256:b4c175db0d04746e16fa9314edb093f7306e859545cd95972694e461b7f82fcb"
 )
-PREAUTH_TIMESTAMP = "2026-09-04T20:47:35Z"
-PRE_MANIFEST_SHA = "sha256:45f4d0942e6d4485b35be4d0e3ebccdaa825bef5ceec377ba5f983cdd7e499d6"
+V1_PREFLIGHT_FAILURE_SHA = "sha256:c07804a36065a68cc821b0c57e7989f7e9caa077142969046b4bff913a592ee4"
+PRE_MANIFEST_SHA = "sha256:979071556343cfa23373a94742fefa684a9d9e0e39ecbe1f2bea05c58dce998a"
 SCORED_MANIFEST_SHA = "sha256:1217666a0bfe5ab4d9aec0191213a3f1af8967f053b046922de656ed4a953be2"
 SELF_HOSTED_SHA = "sha256:16df432b5fde55112924d6106e6c03f09817846f1344ba0fe100dcf785c33d8b"
 RUNNER_SHA = "sha256:b1f9c5028f65b0d7772538e3ce075310dc6c7a46b3de58d0196bc474e74e9e9d"
@@ -58,6 +59,8 @@ EXPECTED = {
             "sha256:1328f6eb97861443b712625d9038a924de9c220c146667565dd4c5bb73a6d8f8"
         ),
         "preflight_configmap": "chris-q38-ac-canary1-pre-v1",
+        "preflight_configmap_v2": "chris-q38-ac-canary1-pre-v2",
+        "preflight_job_v2": "chris-q38-ac-canary1-v2-preflight",
         "scored_configmap": "chris-q38-ac-canary1-run-v2",
         "plan_path": "evals/fleet/configs/qwen38-opencode-autocontinue-canary1-v1.json",
         "plan_file_sha256": (
@@ -93,6 +96,8 @@ EXPECTED = {
             "sha256:84a1ca763a297bd8badb184391a02c82d57069b9a211ecef4f5e53dd79e20e20"
         ),
         "preflight_configmap": "chris-glm53-ac-canary1-pre-v1",
+        "preflight_configmap_v2": "chris-glm53-ac-canary1-pre-v2",
+        "preflight_job_v2": "chris-glm53-ac-canary1-v2-preflight",
         "scored_configmap": "chris-glm53-ac-canary1-run-v2",
         "plan_path": "evals/fleet/configs/glm53-opencode-autocontinue-canary1-v1.json",
         "plan_file_sha256": (
@@ -162,20 +167,247 @@ def _is_utc_timestamp(value: object) -> bool:
     return parsed.tzinfo is not None and parsed.utcoffset() == UTC.utcoffset(parsed)
 
 
-def validate_compatibility(receipt: dict[str, Any], root: Path) -> None:
+def validate_v1_preflight_failure(receipt: dict[str, Any]) -> None:
+    expected_preflights = [
+        {
+            "model": "qwen3.8-27b",
+            "configmap": {
+                "name": "chris-q38-ac-canary1-pre-v1",
+                "uid": "41a2555c-fa9c-4bea-be18-2eb55aff21ef",
+                "created_at_utc": "2026-09-04T21:12:03Z",
+                "immutable": True,
+            },
+            "job": {
+                "name": "chris-q38-ac-canary1-v1-preflight",
+                "uid": "0602fd25-840c-4c4a-9dbd-b62ce5ceea75",
+                "created_at_utc": "2026-09-04T21:12:07Z",
+                "started_at_utc": "2026-09-04T21:12:08Z",
+                "failed_at_utc": "2026-09-04T21:12:14Z",
+                "reason": "BackoffLimitExceeded",
+                "succeeded": 0,
+                "failed": 1,
+            },
+            "pod": {
+                "name": "chris-q38-ac-canary1-v1-preflight-9t74n",
+                "uid": "b949d555-730f-41be-b6d6-c5f00259e086",
+                "owner_job_name": "chris-q38-ac-canary1-v1-preflight",
+                "owner_job_uid": "0602fd25-840c-4c4a-9dbd-b62ce5ceea75",
+                "owner_is_controller": True,
+                "phase": "Failed",
+                "exit_code": 1,
+                "reason": "Error",
+                "restart_count": 0,
+                "started_at_utc": "2026-09-04T21:12:08Z",
+                "finished_at_utc": "2026-09-04T21:12:12Z",
+            },
+        },
+        {
+            "model": "glm-5.3",
+            "configmap": {
+                "name": "chris-glm53-ac-canary1-pre-v1",
+                "uid": "7b23aae0-dff8-4e35-b794-f99df68e0ed7",
+                "created_at_utc": "2026-09-04T21:12:06Z",
+                "immutable": True,
+            },
+            "job": {
+                "name": "chris-glm53-ac-canary1-v1-preflight",
+                "uid": "bb909f75-e7d3-4746-9689-0e81af9bd306",
+                "created_at_utc": "2026-09-04T21:12:08Z",
+                "started_at_utc": "2026-09-04T21:12:08Z",
+                "failed_at_utc": "2026-09-04T21:12:15Z",
+                "reason": "BackoffLimitExceeded",
+                "succeeded": 0,
+                "failed": 1,
+            },
+            "pod": {
+                "name": "chris-glm53-ac-canary1-v1-preflight-tgkbb",
+                "uid": "999eb81f-d3d1-435a-850d-a6c15cc81b51",
+                "owner_job_name": "chris-glm53-ac-canary1-v1-preflight",
+                "owner_job_uid": "bb909f75-e7d3-4746-9689-0e81af9bd306",
+                "owner_is_controller": True,
+                "phase": "Failed",
+                "exit_code": 1,
+                "reason": "Error",
+                "restart_count": 0,
+                "started_at_utc": "2026-09-04T21:12:09Z",
+                "finished_at_utc": "2026-09-04T21:12:12Z",
+            },
+        },
+    ]
+    expected_absence = {
+        "observed_at_utc": "2026-09-04T21:24:30Z",
+        "observer_pod_name": "ft-run-98c32208-5gpb2-head-7qxwc",
+        "observer_pod_uid": "3f37ab91-4afa-4e4d-8f29-a3eeda70a774",
+        "exact_scored_jobs_present": 0,
+        "exact_scored_configmaps_present": 0,
+        "exact_v2_preflight_jobs_present": 0,
+        "exact_v2_preflight_configmaps_present": 0,
+        "sfs_roots_present": 0,
+        "global_cell_claims_present": 0,
+        "checked_sfs_roots": [
+            "/mnt/sfs/jobs/chris-q38-ac-canary1-v1-preflight",
+            "/mnt/sfs/jobs/chris-glm53-ac-canary1-v1-preflight",
+            "/mnt/sfs/jobs/chris-q38-ac-canary1-v2-preflight",
+            "/mnt/sfs/jobs/chris-glm53-ac-canary1-v2-preflight",
+            "/mnt/sfs/jobs/chris-q38-ac-canary1-v1",
+            "/mnt/sfs/jobs/chris-glm53-ac-canary1-v1",
+        ],
+        "checked_global_cell_claims": [
+            "/mnt/sfs/cell-claims/opencode11827-autocontinue-primary-v1/"
+            "d9a8b7af84dde45ed8ef0a4ad6b744827608427c5ced6528c04544dd7f8c813d.json",
+            "/mnt/sfs/cell-claims/opencode11827-autocontinue-primary-v1/"
+            "29b5a7875caa52f4d90544a6ede30dbefd5f723659674816a704cf994153872c.json",
+        ],
+    }
+    if (
+        set(receipt)
+        != {
+            "schema_version",
+            "append_only",
+            "status",
+            "recorded_at_utc",
+            "phase_b_commit",
+            "package_commit",
+            "campaign_sha256",
+            "preflight_manifest_sha256",
+            "controller_sha256",
+            "intent_configmap",
+            "scheduling",
+            "image",
+            "terminal_preflights",
+            "sanitized_diagnosis",
+            "required_successor",
+            "absence_observation",
+            "privacy",
+            "receipt_sha256",
+        }
+        or receipt.get("schema_version")
+        != "fleet-opencode-autocontinue-canary-preflight-bootstrap-failure-v1"
+        or receipt.get("append_only") is not True
+        or receipt.get("status") != "TERMINAL_INFRASTRUCTURE_FAILURE"
+        or receipt.get("recorded_at_utc") != "2026-09-04T21:14:37Z"
+        or receipt.get("phase_b_commit") != "c5eee8f6e9d500d41e0718c4b7c631034c3334ad"
+        or receipt.get("package_commit") != "fdad6c80bcbfa999cd98e6f3194040bd1d85d679"
+        or receipt.get("campaign_sha256") != CAMPAIGN_SHA
+        or receipt.get("preflight_manifest_sha256")
+        != "sha256:45f4d0942e6d4485b35be4d0e3ebccdaa825bef5ceec377ba5f983cdd7e499d6"
+        or receipt.get("controller_sha256")
+        != "sha256:f023dffd60f4594ff60a6388b6ca653c24e56ebb760dc8ecdf8afcc6d7ee04f9"
+        or receipt.get("intent_configmap")
+        != {
+            "name": "chris-ac-canary1-preflight-submit-v1",
+            "uid": "b0701452-d347-4581-9498-cd96d7f2cd0e",
+            "created_at_utc": "2026-09-04T21:12:00Z",
+            "immutable": True,
+        }
+        or receipt.get("scheduling")
+        != {
+            "priority_class": PRIORITY,
+            "priority_value": 10000,
+            "preemption_policy": "PreemptLowerPriority",
+            "queue": "training-lq",
+            "priority_class_is_not_preemption_immunity": True,
+        }
+        or receipt.get("image")
+        != {
+            "requested": (
+                "ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:"
+                "9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7"
+            ),
+            "resolved": (
+                "ghcr.io/astral-sh/uv@sha256:"
+                "9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7"
+            ),
+        }
+        or receipt.get("terminal_preflights") != expected_preflights
+        or receipt.get("sanitized_diagnosis")
+        != {
+            "classification": "deterministic_bootstrap_validation_failure_before_api",
+            "logs_read": False,
+            "source_ordering_proof": True,
+            "bootstrap_installed_campaign_json": False,
+            "bootstrap_installed_plan_at_repo_expected_path": False,
+            "bootstrap_installed_scored_manifest": False,
+            "validator_first_missing_dependency": "immutable_campaign_json",
+            "validator_would_also_require_unshipped_plan_and_scored_manifest": True,
+            "fleet_api_called": False,
+            "model_called": False,
+            "verifier_called": False,
+            "session_created": False,
+            "scored_job_created": False,
+            "scored_configmap_created": False,
+            "cell_claim_created": False,
+            "retry_same_identity_allowed": False,
+        }
+        or receipt.get("required_successor")
+        != {
+            "fresh_create_once_configmaps_jobs_and_sfs_roots": True,
+            "read_only_preflight_only": True,
+            "must_not_package_scored_execution_payload": True,
+            "must_validate_only_shipped_bytes_or_exact_caller_bound_constants": True,
+            "v1_objects_are_terminal_and_must_not_be_mutated": True,
+        }
+        or receipt.get("absence_observation") != expected_absence
+        or receipt.get("privacy")
+        != {
+            "credentials_included": False,
+            "logs_read": False,
+            "prompts_or_traces_included": False,
+            "scores_included": False,
+        }
+        or receipt.get("receipt_sha256") != V1_PREFLIGHT_FAILURE_SHA
+        or receipt.get("receipt_sha256") != digest_without(receipt, "receipt_sha256")
+    ):
+        raise ValueError("v1 canary preflight failure receipt is not authoritative")
+
+
+def validate_compatibility(
+    receipt: dict[str, Any], root: Path, *, allow_missing_campaign: bool = False
+) -> None:
+    failure_path = (
+        root
+        / "docs/evidence/qwen38-study/"
+        "2026-09-04-opencode-autocontinue-canary-preflight-v1-bootstrap-failure.json"
+    )
+    if not failure_path.is_file():
+        raise ValueError("v1 canary preflight failure receipt is missing")
+    validate_v1_preflight_failure(load_object(failure_path))
     compatibility = receipt.get("compatibility") or {}
     gates = receipt.get("gates") or {}
     overlay = receipt.get("allowed_append_only_overlay") or {}
+    campaign_path = (
+        root / "evals/fleet/configs/q38-glm53-opencode-autocontinue-primary-campaign-v1.json"
+    )
+    campaign_file_matches = campaign_path.exists() and _sha(campaign_path) == CAMPAIGN_FILE_SHA
     if (
         receipt.get("schema_version")
-        != "fleet-opencode-autocontinue-canary-controller-compatibility-v1"
+        != "fleet-opencode-autocontinue-canary-controller-compatibility-v2"
         or receipt.get("append_only") is not True
         or receipt.get("status") != "HELD_COMPATIBLE"
+        or receipt.get("supersedes")
+        != {
+            "path": (
+                "docs/evidence/qwen38-study/"
+                "2026-09-04-opencode-autocontinue-canary-controller-compatibility-v1.json"
+            ),
+            "receipt_sha256": (
+                "sha256:a0ded706002accbbf482dfcba58d840b6ba7666f6af225a2207cfbcdbe5adc3c"
+            ),
+        }
         or receipt.get("campaign_sha256") != CAMPAIGN_SHA
-        or receipt.get("immutable_campaign_file_sha256")
-        != _sha(
-            root / "evals/fleet/configs/q38-glm53-opencode-autocontinue-primary-campaign-v1.json"
+        or receipt.get("immutable_campaign_file_sha256") != CAMPAIGN_FILE_SHA
+        or (
+            not campaign_file_matches
+            and not (allow_missing_campaign and not campaign_path.exists())
         )
+        or receipt.get("bootstrap_contract")
+        != {
+            "campaign_file_may_be_absent_during_read_only_preflight": True,
+            "plan_raw_sha256_is_caller_bound": True,
+            "scored_manifest_is_not_packaged_or_required": True,
+            "compatibility_and_all_executable_dependencies_are_hash_validated": True,
+            "v1_bootstrap_failure_receipt_sha256": V1_PREFLIGHT_FAILURE_SHA,
+        }
         or receipt.get("receipt_sha256") != digest_without(receipt, "receipt_sha256")
         or receipt.get("frozen_controller")
         != {
@@ -241,12 +473,12 @@ def validate_compatibility(receipt: dict[str, Any], root: Path) -> None:
         raise ValueError("canary controller compatibility receipt is not authoritative")
 
 
-def _compatibility(root: Path) -> dict[str, Any]:
+def _compatibility(root: Path, *, allow_missing_campaign: bool = False) -> dict[str, Any]:
     receipt = load_object(
         root / "docs/evidence/qwen38-study/"
-        "2026-09-04-opencode-autocontinue-canary-controller-compatibility-v1.json"
+        "2026-09-04-opencode-autocontinue-canary-controller-compatibility-v2.json"
     )
-    validate_compatibility(receipt, root)
+    validate_compatibility(receipt, root, allow_missing_campaign=allow_missing_campaign)
     return receipt
 
 
@@ -402,7 +634,15 @@ def _validate_final_preflight_evidence(
         "preflight_authorization_receipt_path",
         "preflight_authorization_receipt_sha256",
     )
-    validate_preflight_authorization(preauth, plan, root, package_commit)
+    validate_preflight_authorization(
+        preauth,
+        plan,
+        root,
+        package_commit,
+        preauth.get("implementation", {}).get("plan_file_sha256"),
+        preauth.get("authorized_at_utc"),
+        preauth.get("authorization", {}).get("statement"),
+    )
     preflight = _bound_receipt(root, evidence, "preflight_receipt_path", "preflight_receipt_sha256")
     observed = _bound_receipt(
         root,
@@ -460,7 +700,7 @@ def _validate_final_preflight_evidence(
         or observed.get("status") != "PASSED"
         or observed.get("plan_sha256") != plan["plan_sha256"]
         or observed.get("preflight_receipt_sha256") != preflight["receipt_sha256"]
-        or observed_job.get("name") != plan["preflight_job_name"]
+        or observed_job.get("name") != expected["preflight_job_v2"]
         or observed_job.get("uid") != preflight.get("job_uid")
         or observed_job.get("succeeded") != 1
         or observed_job.get("failed") != 0
@@ -476,7 +716,7 @@ def _validate_final_preflight_evidence(
         or observed_pod.get("restart_count") != 0
         or not isinstance(observed_pod.get("finished_at"), str)
         or not observed_pod.get("finished_at")
-        or observed_configmap.get("name") != expected["preflight_configmap"]
+        or observed_configmap.get("name") != expected["preflight_configmap_v2"]
         or not _is_uuid(observed_configmap.get("uid"))
         or observed_configmap.get("immutable") is not True
         or observed.get("scored_job_created") is not False
@@ -614,7 +854,7 @@ def validate_release(release: dict[str, Any], plan: dict[str, Any], root: Path) 
         or implementation.get("frozen_controller_sha256")
         != _sha(root / "evals/fleet/hosted_sweep_controller.py")
         or implementation.get("preflight_manifest_sha256")
-        != _sha(root / "evals/fleet/cluster/opencode-autocontinue-canary-preflights-v1.yaml")
+        != _sha(root / "evals/fleet/cluster/opencode-autocontinue-canary-preflights-v2.yaml")
         or implementation.get("scored_manifest_sha256")
         != _sha(root / "evals/fleet/cluster/opencode-autocontinue-canary-scored-v2.yaml")
         or implementation.get("launcher_sha256")
@@ -642,13 +882,23 @@ def validate_release(release: dict[str, Any], plan: dict[str, Any], root: Path) 
 
 
 def validate_preflight_authorization(
-    release: dict[str, Any], plan: dict[str, Any], root: Path, package_commit: str
+    release: dict[str, Any],
+    plan: dict[str, Any],
+    root: Path,
+    package_commit: str,
+    plan_file_sha256: str,
+    authorized_at_utc: str,
+    authorization_statement: str,
 ) -> None:
     validate_plan(plan)
     if not _is_git_commit(package_commit):
         raise ValueError("canary preflight authorization package commit is invalid")
+    if plan_file_sha256 != EXPECTED[plan["shard_key"]]["plan_file_sha256"]:
+        raise ValueError("canary preflight plan file digest is invalid")
+    if not _is_utc_timestamp(authorized_at_utc) or not authorization_statement:
+        raise ValueError("canary preflight root authorization is invalid")
     expected = EXPECTED[plan["shard_key"]]
-    compatibility = _compatibility(root)
+    compatibility = _compatibility(root, allow_missing_campaign=True)
     expected_evidence = {
         "task_inventory_receipt_sha256": TASK_INVENTORY_SHA,
         "task_inventory_execution_sha256": TASK_INVENTORY_EXECUTION_SHA,
@@ -656,12 +906,13 @@ def validate_preflight_authorization(
         "hosted_health_receipt_sha256": HOSTED_HEALTH_SHA,
         "shared_pvc_flock_receipt_sha256": FLOCK_GATE_SHA,
         "controller_compatibility_receipt_sha256": compatibility["receipt_sha256"],
+        "v1_bootstrap_failure_receipt_sha256": V1_PREFLIGHT_FAILURE_SHA,
         "fresh_duplicate_inventory_receipt_sha256": None,
     }
     expected_implementation = {
         "package_commit": package_commit,
         "plan_sha256": plan["plan_sha256"],
-        "plan_file_sha256": expected["plan_file_sha256"],
+        "plan_file_sha256": plan_file_sha256,
         "controller_sha256": _sha(root / "evals/fleet/autocontinue_canary_controller.py"),
         "frozen_controller_sha256": _sha(root / "evals/fleet/hosted_sweep_controller.py"),
         "self_hosted_sha256": SELF_HOSTED_SHA,
@@ -669,10 +920,9 @@ def validate_preflight_authorization(
         "endpoint_lease_sha256": ENDPOINT_LEASE_SHA,
         "compatibility_file_sha256": _sha(
             root / "docs/evidence/qwen38-study/"
-            "2026-09-04-opencode-autocontinue-canary-controller-compatibility-v1.json"
+            "2026-09-04-opencode-autocontinue-canary-controller-compatibility-v2.json"
         ),
         "preflight_manifest_sha256": PRE_MANIFEST_SHA,
-        "scored_manifest_sha256": SCORED_MANIFEST_SHA,
     }
     if (
         set(release)
@@ -694,10 +944,10 @@ def validate_preflight_authorization(
         }
         or release.get("receipt_sha256") != digest_without(release, "receipt_sha256")
         or release.get("schema_version")
-        != "fleet-opencode-autocontinue-canary-preflight-authorization-v1"
+        != "fleet-opencode-autocontinue-canary-preflight-authorization-v2"
         or release.get("append_only") is not True
         or release.get("status") != "PREFLIGHT_AUTHORIZED"
-        or release.get("authorized_at_utc") != PREAUTH_TIMESTAMP
+        or release.get("authorized_at_utc") != authorized_at_utc
         or not _is_utc_timestamp(release.get("authorized_at_utc"))
         or release.get("package_commit") != package_commit
         or release.get("campaign_sha256") != CAMPAIGN_SHA
@@ -710,29 +960,26 @@ def validate_preflight_authorization(
         }
         or release.get("preflight_identity")
         != {
-            "configmap_name": expected["preflight_configmap"],
-            "job_name": plan["preflight_job_name"],
-            "sfs_root": f"/mnt/sfs/jobs/{plan['preflight_job_name']}",
+            "configmap_name": expected["preflight_configmap_v2"],
+            "job_name": expected["preflight_job_v2"],
+            "sfs_root": f"/mnt/sfs/jobs/{expected['preflight_job_v2']}",
             "scored_configmap_name": expected["scored_configmap"],
             "scored_job_name": plan["scored_job_name"],
             "scored_job_created": False,
         }
         or release.get("evidence") != expected_evidence
         or release.get("implementation") != expected_implementation
-        or _sha(root / expected["plan_path"]) != expected["plan_file_sha256"]
         or _sha(root / "evals/fleet/self_hosted.py") != SELF_HOSTED_SHA
         or _sha(root / "evals/fleet/opencode_train_sweep_runner.py") != RUNNER_SHA
         or _sha(root / "evals/fleet/endpoint_lease.py") != ENDPOINT_LEASE_SHA
-        or _sha(root / "evals/fleet/cluster/opencode-autocontinue-canary-preflights-v1.yaml")
+        or _sha(root / "evals/fleet/cluster/opencode-autocontinue-canary-preflights-v2.yaml")
         != PRE_MANIFEST_SHA
-        or _sha(root / "evals/fleet/cluster/opencode-autocontinue-canary-scored-v2.yaml")
-        != SCORED_MANIFEST_SHA
         or release.get("authorization")
         != {
             "preflight_authorized": True,
             "launch_authorized": False,
             "author": "/root",
-            "statement": expected["preflight_statement"],
+            "statement": authorization_statement,
         }
         or release.get("privacy")
         != {
@@ -912,8 +1159,19 @@ def preflight(
     key: str,
     repo: Path,
     package_commit: str,
+    plan_file_sha256: str,
+    authorized_at_utc: str,
+    authorization_statement: str,
 ) -> dict[str, Any]:
-    validate_preflight_authorization(release, plan, repo, package_commit)
+    validate_preflight_authorization(
+        release,
+        plan,
+        repo,
+        package_commit,
+        plan_file_sha256,
+        authorized_at_utc,
+        authorization_statement,
+    )
     roots = hosted._validate_plan_identity_absence(plan, root)
     with hosted._client(key) as client:
         account = self_hosted._request(client, "GET", "/v1/account")
@@ -1132,6 +1390,9 @@ def main() -> int:
     pre.add_argument("--out-dir", type=Path, required=True)
     pre.add_argument("--repo", type=Path, required=True)
     pre.add_argument("--package-commit", required=True)
+    pre.add_argument("--plan-file-sha256", required=True)
+    pre.add_argument("--authorized-at-utc", required=True)
+    pre.add_argument("--authorization-statement", required=True)
     execute = sub.add_parser("run")
     execute.add_argument("--plan", type=Path, required=True)
     execute.add_argument("--release", type=Path, required=True)
@@ -1154,7 +1415,19 @@ def main() -> int:
         key = os.environ.get("FLEET_API_KEY")
         if not key:
             raise RuntimeError("FLEET_API_KEY is required")
-        receipt = preflight(plan, release, args.out_dir, key, args.repo, args.package_commit)
+        if _sha(args.plan) != args.plan_file_sha256:
+            raise RuntimeError("canary preflight loaded plan digest drifted")
+        receipt = preflight(
+            plan,
+            release,
+            args.out_dir,
+            key,
+            args.repo,
+            args.package_commit,
+            args.plan_file_sha256,
+            args.authorized_at_utc,
+            args.authorization_statement,
+        )
         args.out.parent.mkdir(mode=0o700, parents=True, exist_ok=False)
         self_hosted.write_json_once(args.out, receipt)
         return 0

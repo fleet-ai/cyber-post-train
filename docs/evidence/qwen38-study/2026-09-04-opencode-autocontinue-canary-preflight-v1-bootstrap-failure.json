@@ -1,0 +1,149 @@
+{
+  "schema_version": "fleet-opencode-autocontinue-canary-preflight-bootstrap-failure-v1",
+  "append_only": true,
+  "status": "TERMINAL_INFRASTRUCTURE_FAILURE",
+  "recorded_at_utc": "2026-09-04T21:14:37Z",
+  "phase_b_commit": "c5eee8f6e9d500d41e0718c4b7c631034c3334ad",
+  "package_commit": "fdad6c80bcbfa999cd98e6f3194040bd1d85d679",
+  "campaign_sha256": "sha256:63946f224a33eb0d2c2a6fdba34358ebf9ca379e5f0f156cd137c95a9b98097e",
+  "preflight_manifest_sha256": "sha256:45f4d0942e6d4485b35be4d0e3ebccdaa825bef5ceec377ba5f983cdd7e499d6",
+  "controller_sha256": "sha256:f023dffd60f4594ff60a6388b6ca653c24e56ebb760dc8ecdf8afcc6d7ee04f9",
+  "intent_configmap": {
+    "name": "chris-ac-canary1-preflight-submit-v1",
+    "uid": "b0701452-d347-4581-9498-cd96d7f2cd0e",
+    "created_at_utc": "2026-09-04T21:12:00Z",
+    "immutable": true
+  },
+  "scheduling": {
+    "priority_class": "fleet-train-high",
+    "priority_value": 10000,
+    "preemption_policy": "PreemptLowerPriority",
+    "queue": "training-lq",
+    "priority_class_is_not_preemption_immunity": true
+  },
+  "image": {
+    "requested": "ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7",
+    "resolved": "ghcr.io/astral-sh/uv@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7"
+  },
+  "terminal_preflights": [
+    {
+      "model": "qwen3.8-27b",
+      "configmap": {
+        "name": "chris-q38-ac-canary1-pre-v1",
+        "uid": "41a2555c-fa9c-4bea-be18-2eb55aff21ef",
+        "created_at_utc": "2026-09-04T21:12:03Z",
+        "immutable": true
+      },
+      "job": {
+        "name": "chris-q38-ac-canary1-v1-preflight",
+        "uid": "0602fd25-840c-4c4a-9dbd-b62ce5ceea75",
+        "created_at_utc": "2026-09-04T21:12:07Z",
+        "started_at_utc": "2026-09-04T21:12:08Z",
+        "failed_at_utc": "2026-09-04T21:12:14Z",
+        "reason": "BackoffLimitExceeded",
+        "succeeded": 0,
+        "failed": 1
+      },
+      "pod": {
+        "name": "chris-q38-ac-canary1-v1-preflight-9t74n",
+        "uid": "b949d555-730f-41be-b6d6-c5f00259e086",
+        "owner_job_name": "chris-q38-ac-canary1-v1-preflight",
+        "owner_job_uid": "0602fd25-840c-4c4a-9dbd-b62ce5ceea75",
+        "owner_is_controller": true,
+        "phase": "Failed",
+        "exit_code": 1,
+        "reason": "Error",
+        "restart_count": 0,
+        "started_at_utc": "2026-09-04T21:12:08Z",
+        "finished_at_utc": "2026-09-04T21:12:12Z"
+      }
+    },
+    {
+      "model": "glm-5.3",
+      "configmap": {
+        "name": "chris-glm53-ac-canary1-pre-v1",
+        "uid": "7b23aae0-dff8-4e35-b794-f99df68e0ed7",
+        "created_at_utc": "2026-09-04T21:12:06Z",
+        "immutable": true
+      },
+      "job": {
+        "name": "chris-glm53-ac-canary1-v1-preflight",
+        "uid": "bb909f75-e7d3-4746-9689-0e81af9bd306",
+        "created_at_utc": "2026-09-04T21:12:08Z",
+        "started_at_utc": "2026-09-04T21:12:08Z",
+        "failed_at_utc": "2026-09-04T21:12:15Z",
+        "reason": "BackoffLimitExceeded",
+        "succeeded": 0,
+        "failed": 1
+      },
+      "pod": {
+        "name": "chris-glm53-ac-canary1-v1-preflight-tgkbb",
+        "uid": "999eb81f-d3d1-435a-850d-a6c15cc81b51",
+        "owner_job_name": "chris-glm53-ac-canary1-v1-preflight",
+        "owner_job_uid": "bb909f75-e7d3-4746-9689-0e81af9bd306",
+        "owner_is_controller": true,
+        "phase": "Failed",
+        "exit_code": 1,
+        "reason": "Error",
+        "restart_count": 0,
+        "started_at_utc": "2026-09-04T21:12:09Z",
+        "finished_at_utc": "2026-09-04T21:12:12Z"
+      }
+    }
+  ],
+  "sanitized_diagnosis": {
+    "classification": "deterministic_bootstrap_validation_failure_before_api",
+    "logs_read": false,
+    "source_ordering_proof": true,
+    "bootstrap_installed_campaign_json": false,
+    "bootstrap_installed_plan_at_repo_expected_path": false,
+    "bootstrap_installed_scored_manifest": false,
+    "validator_first_missing_dependency": "immutable_campaign_json",
+    "validator_would_also_require_unshipped_plan_and_scored_manifest": true,
+    "fleet_api_called": false,
+    "model_called": false,
+    "verifier_called": false,
+    "session_created": false,
+    "scored_job_created": false,
+    "scored_configmap_created": false,
+    "cell_claim_created": false,
+    "retry_same_identity_allowed": false
+  },
+  "required_successor": {
+    "fresh_create_once_configmaps_jobs_and_sfs_roots": true,
+    "read_only_preflight_only": true,
+    "must_not_package_scored_execution_payload": true,
+    "must_validate_only_shipped_bytes_or_exact_caller_bound_constants": true,
+    "v1_objects_are_terminal_and_must_not_be_mutated": true
+  },
+  "absence_observation": {
+    "observed_at_utc": "2026-09-04T21:24:30Z",
+    "observer_pod_name": "ft-run-98c32208-5gpb2-head-7qxwc",
+    "observer_pod_uid": "3f37ab91-4afa-4e4d-8f29-a3eeda70a774",
+    "exact_scored_jobs_present": 0,
+    "exact_scored_configmaps_present": 0,
+    "exact_v2_preflight_jobs_present": 0,
+    "exact_v2_preflight_configmaps_present": 0,
+    "sfs_roots_present": 0,
+    "global_cell_claims_present": 0,
+    "checked_sfs_roots": [
+      "/mnt/sfs/jobs/chris-q38-ac-canary1-v1-preflight",
+      "/mnt/sfs/jobs/chris-glm53-ac-canary1-v1-preflight",
+      "/mnt/sfs/jobs/chris-q38-ac-canary1-v2-preflight",
+      "/mnt/sfs/jobs/chris-glm53-ac-canary1-v2-preflight",
+      "/mnt/sfs/jobs/chris-q38-ac-canary1-v1",
+      "/mnt/sfs/jobs/chris-glm53-ac-canary1-v1"
+    ],
+    "checked_global_cell_claims": [
+      "/mnt/sfs/cell-claims/opencode11827-autocontinue-primary-v1/d9a8b7af84dde45ed8ef0a4ad6b744827608427c5ced6528c04544dd7f8c813d.json",
+      "/mnt/sfs/cell-claims/opencode11827-autocontinue-primary-v1/29b5a7875caa52f4d90544a6ede30dbefd5f723659674816a704cf994153872c.json"
+    ]
+  },
+  "privacy": {
+    "credentials_included": false,
+    "logs_read": false,
+    "prompts_or_traces_included": false,
+    "scores_included": false
+  },
+  "receipt_sha256": "sha256:c07804a36065a68cc821b0c57e7989f7e9caa077142969046b4bff913a592ee4"
+}

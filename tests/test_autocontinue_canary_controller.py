@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import json
 import multiprocessing
+import shutil
 from pathlib import Path
 
 import pytest
@@ -28,6 +29,7 @@ G_PREAUTH = (
     "2026-09-04-glm53-autocontinue-canary-preflight-authorization-v1.json"
 )
 PRE_MANIFEST = ROOT / "evals/fleet/cluster/opencode-autocontinue-canary-preflights-v1.yaml"
+PRE_MANIFEST_V2 = ROOT / "evals/fleet/cluster/opencode-autocontinue-canary-preflights-v2.yaml"
 SCORED_MANIFEST = ROOT / "evals/fleet/cluster/opencode-autocontinue-canary-scored-v2.yaml"
 BASE_PACKAGE_COMMIT = "25fe5bfe45cd91bc9e877af2982bbacd4e94c2d2"
 PREFLIGHT_PACKAGE_COMMIT = "fdad6c80bcbfa999cd98e6f3194040bd1d85d679"
@@ -95,18 +97,28 @@ def test_held_release_cannot_preflight_or_run_scored_work(
     release = canary.load_object(release_path)
     canary.validate_held_release(release, plan)
     with pytest.raises(ValueError, match="preflight authorization"):
-        canary.preflight(plan, release, tmp_path / "absent", "unused", ROOT, BASE_PACKAGE_COMMIT)
+        canary.preflight(
+            plan,
+            release,
+            tmp_path / "absent",
+            "unused",
+            ROOT,
+            BASE_PACKAGE_COMMIT,
+            canary.EXPECTED[plan["shard_key"]]["plan_file_sha256"],
+            "2026-09-04T20:47:35Z",
+            "held receipt cannot authorize",
+        )
     with pytest.raises(ValueError, match="not authoritative"):
         canary.run(plan, release, tmp_path / "absent", tmp_path / "proxy.py", ROOT)
     assert not (tmp_path / "absent").exists()
 
 
-def test_frozen_campaign_controller_is_unchanged_and_compatibility_receipt_is_exact() -> None:
+def test_frozen_campaign_controller_is_unchanged_and_v2_compatibility_is_exact() -> None:
     frozen = ROOT / "evals/fleet/hosted_sweep_controller.py"
     compatibility_path = ROOT / "docs/evidence/qwen38-study"
     compatibility = canary.load_object(
         compatibility_path
-        / "2026-09-04-opencode-autocontinue-canary-controller-compatibility-v1.json"
+        / "2026-09-04-opencode-autocontinue-canary-controller-compatibility-v2.json"
     )
     assert canary._sha(frozen) == (
         "sha256:e14670e40d2b1fbe4896e4b6dfb2902f121b81c8103efea3a74a11fed496809a"
@@ -123,7 +135,146 @@ def test_frozen_campaign_controller_is_unchanged_and_compatibility_receipt_is_ex
         canary.validate_compatibility(changed, ROOT)
 
 
-@pytest.mark.parametrize("manifest", [PRE_MANIFEST, SCORED_MANIFEST])
+def test_v1_preflight_failure_incident_is_sanitized_and_terminal() -> None:
+    incident = canary.load_object(
+        ROOT
+        / "docs/evidence/qwen38-study/"
+        "2026-09-04-opencode-autocontinue-canary-preflight-v1-bootstrap-failure.json"
+    )
+    assert incident["receipt_sha256"] == canary.V1_PREFLIGHT_FAILURE_SHA
+    assert incident["receipt_sha256"] == canary.digest_without(incident, "receipt_sha256")
+    assert incident["status"] == "TERMINAL_INFRASTRUCTURE_FAILURE"
+    assert len(incident["terminal_preflights"]) == 2
+    assert all(row["pod"]["restart_count"] == 0 for row in incident["terminal_preflights"])
+    diagnosis = incident["sanitized_diagnosis"]
+    assert diagnosis["classification"] == "deterministic_bootstrap_validation_failure_before_api"
+    assert diagnosis["fleet_api_called"] is False
+    assert diagnosis["model_called"] is False
+    assert diagnosis["verifier_called"] is False
+    assert diagnosis["session_created"] is False
+    assert diagnosis["cell_claim_created"] is False
+    assert diagnosis["scored_job_created"] is False
+    assert incident["privacy"] == {
+        "logs_read": False,
+        "credentials_included": False,
+        "prompts_or_traces_included": False,
+        "scores_included": False,
+    }
+    canary.validate_v1_preflight_failure(incident)
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda value: value["intent_configmap"].__setitem__("uid", "wrong"),
+        lambda value: value["scheduling"].__setitem__("priority_class", "wrong"),
+        lambda value: value["scheduling"].__setitem__("preemption_policy", "Never"),
+        lambda value: value["image"].__setitem__("resolved", "wrong"),
+        lambda value: value["terminal_preflights"][0]["configmap"].__setitem__(
+            "created_at_utc", "wrong"
+        ),
+        lambda value: value["terminal_preflights"][0]["job"].__setitem__(
+            "reason", "Complete"
+        ),
+        lambda value: value["terminal_preflights"][0]["pod"].__setitem__(
+            "owner_job_uid", "wrong"
+        ),
+        lambda value: value["terminal_preflights"][1]["pod"].__setitem__(
+            "restart_count", 1
+        ),
+        lambda value: value["sanitized_diagnosis"].__setitem__("fleet_api_called", True),
+        lambda value: value["absence_observation"].__setitem__(
+            "global_cell_claims_present", 1
+        ),
+        lambda value: value["absence_observation"]["checked_sfs_roots"].pop(),
+        lambda value: value["privacy"].__setitem__("logs_read", True),
+        lambda value: value.__setitem__("unknown", True),
+    ],
+)
+def test_v1_preflight_failure_resealed_tampering_is_rejected(mutate) -> None:
+    incident = copy.deepcopy(
+        canary.load_object(
+            ROOT
+            / "docs/evidence/qwen38-study/"
+            "2026-09-04-opencode-autocontinue-canary-preflight-v1-bootstrap-failure.json"
+        )
+    )
+    mutate(incident)
+    incident["receipt_sha256"] = canary.digest_without(incident, "receipt_sha256")
+    with pytest.raises(ValueError, match="failure receipt"):
+        canary.validate_v1_preflight_failure(incident)
+
+
+@pytest.mark.parametrize("plan_path", [Q_PLAN, G_PLAN])
+def test_v2_preflight_bootstrap_validates_without_unshipped_scored_files(
+    plan_path: Path, tmp_path: Path
+) -> None:
+    plan = canary.load_object(plan_path)
+    shipped = (
+        "evals/fleet/autocontinue_canary_controller.py",
+        "evals/fleet/hosted_sweep_controller.py",
+        "evals/fleet/self_hosted.py",
+        "evals/fleet/opencode_train_sweep_runner.py",
+        "evals/fleet/endpoint_lease.py",
+        "evals/fleet/cluster/opencode-autocontinue-canary-preflights-v2.yaml",
+        "docs/evidence/qwen38-study/"
+        "2026-09-04-opencode-autocontinue-canary-controller-compatibility-v2.json",
+        "docs/evidence/qwen38-study/"
+        "2026-09-04-opencode-autocontinue-canary-preflight-v1-bootstrap-failure.json",
+    )
+    for relative in shipped:
+        destination = tmp_path / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(ROOT / relative, destination)
+    assert not (
+        tmp_path
+        / "evals/fleet/configs/q38-glm53-opencode-autocontinue-primary-campaign-v1.json"
+    ).exists()
+    assert not (tmp_path / canary.EXPECTED[plan["shard_key"]]["plan_path"]).exists()
+    assert not (
+        tmp_path / "evals/fleet/cluster/opencode-autocontinue-canary-scored-v2.yaml"
+    ).exists()
+    authorization = _synthetic_preflight_authorization(plan)
+    canary.validate_preflight_authorization(
+        authorization,
+        plan,
+        tmp_path,
+        BASE_PACKAGE_COMMIT,
+        canary.EXPECTED[plan["shard_key"]]["plan_file_sha256"],
+        "2026-09-04T20:47:35Z",
+        "synthetic exact preflight authorization",
+    )
+
+
+def test_v2_compatibility_rejects_wrong_present_campaign(tmp_path: Path) -> None:
+    compatibility = canary.load_object(
+        ROOT
+        / "docs/evidence/qwen38-study/"
+        "2026-09-04-opencode-autocontinue-canary-controller-compatibility-v2.json"
+    )
+    campaign = (
+        tmp_path
+        / "evals/fleet/configs/q38-glm53-opencode-autocontinue-primary-campaign-v1.json"
+    )
+    campaign.parent.mkdir(parents=True)
+    campaign.write_text("{}\n")
+    incident = (
+        tmp_path
+        / "docs/evidence/qwen38-study/"
+        "2026-09-04-opencode-autocontinue-canary-preflight-v1-bootstrap-failure.json"
+    )
+    incident.parent.mkdir(parents=True)
+    shutil.copyfile(
+        ROOT
+        / "docs/evidence/qwen38-study/"
+        "2026-09-04-opencode-autocontinue-canary-preflight-v1-bootstrap-failure.json",
+        incident,
+    )
+    with pytest.raises(ValueError, match="compatibility"):
+        canary.validate_compatibility(compatibility, tmp_path, allow_missing_campaign=True)
+
+
+@pytest.mark.parametrize("manifest", [PRE_MANIFEST, PRE_MANIFEST_V2, SCORED_MANIFEST])
 def test_held_manifests_have_two_create_once_high_priority_jobs(manifest: Path) -> None:
     docs = list(yaml.safe_load_all(manifest.read_text()))
     assert len(docs) == 2
@@ -145,9 +296,10 @@ def test_held_manifests_have_two_create_once_high_priority_jobs(manifest: Path) 
         doc["spec"]["template"]["spec"]["volumes"][0]["configMap"]["name"] for doc in docs
     }
     assert len(configmaps) == 2
-    if manifest == PRE_MANIFEST:
+    if manifest in {PRE_MANIFEST, PRE_MANIFEST_V2}:
         assert all(name.endswith("-preflight") for name in names)
-        assert all("-pre-v1" in name for name in configmaps)
+        expected_version = "-pre-v2" if manifest == PRE_MANIFEST_V2 else "-pre-v1"
+        assert all(expected_version in name for name in configmaps)
         for doc in docs:
             container = doc["spec"]["template"]["spec"]["containers"][0]
             by_name = {row["name"]: row for row in container["env"]}
@@ -155,6 +307,14 @@ def test_held_manifests_have_two_create_once_high_priority_jobs(manifest: Path) 
             assert package_source["name"] in configmaps
             assert package_source["key"] == "package_commit"
             assert '--package-commit "$PACKAGE_COMMIT"' in container["args"][0]
+            if manifest == PRE_MANIFEST_V2:
+                for name, key in (
+                    ("PLAN_FILE_SHA256", "plan_file_sha256"),
+                    ("AUTHORIZED_AT_UTC", "authorized_at_utc"),
+                    ("AUTHORIZATION_STATEMENT", "authorization_statement"),
+                ):
+                    assert by_name[name]["valueFrom"]["configMapKeyRef"]["key"] == key
+                assert "scored-manifest" not in container["args"][0]
     else:
         assert all(not name.endswith("-preflight") for name in names)
         assert all("-run-v2" in name for name in configmaps)
@@ -172,11 +332,11 @@ def _synthetic_preflight_authorization(plan: dict) -> dict:
     expected = canary.EXPECTED[plan["shard_key"]]
     compatibility_path = (
         ROOT / "docs/evidence/qwen38-study/"
-        "2026-09-04-opencode-autocontinue-canary-controller-compatibility-v1.json"
+        "2026-09-04-opencode-autocontinue-canary-controller-compatibility-v2.json"
     )
     compatibility = canary.load_object(compatibility_path)
     authorization = {
-        "schema_version": "fleet-opencode-autocontinue-canary-preflight-authorization-v1",
+        "schema_version": "fleet-opencode-autocontinue-canary-preflight-authorization-v2",
         "append_only": True,
         "status": "PREFLIGHT_AUTHORIZED",
         "authorized_at_utc": "2026-09-04T20:47:35Z",
@@ -189,9 +349,9 @@ def _synthetic_preflight_authorization(plan: dict) -> dict:
             "task_version_id": plan["tasks"][0]["task"]["version_id"],
         },
         "preflight_identity": {
-            "configmap_name": expected["preflight_configmap"],
-            "job_name": plan["preflight_job_name"],
-            "sfs_root": f"/mnt/sfs/jobs/{plan['preflight_job_name']}",
+            "configmap_name": expected["preflight_configmap_v2"],
+            "job_name": expected["preflight_job_v2"],
+            "sfs_root": f"/mnt/sfs/jobs/{expected['preflight_job_v2']}",
             "scored_configmap_name": expected["scored_configmap"],
             "scored_job_name": plan["scored_job_name"],
             "scored_job_created": False,
@@ -203,6 +363,7 @@ def _synthetic_preflight_authorization(plan: dict) -> dict:
             "hosted_health_receipt_sha256": canary.HOSTED_HEALTH_SHA,
             "shared_pvc_flock_receipt_sha256": canary.FLOCK_GATE_SHA,
             "controller_compatibility_receipt_sha256": compatibility["receipt_sha256"],
+            "v1_bootstrap_failure_receipt_sha256": canary.V1_PREFLIGHT_FAILURE_SHA,
             "fresh_duplicate_inventory_receipt_sha256": None,
         },
         "implementation": {
@@ -220,13 +381,12 @@ def _synthetic_preflight_authorization(plan: dict) -> dict:
             "endpoint_lease_sha256": canary.ENDPOINT_LEASE_SHA,
             "compatibility_file_sha256": canary._sha(compatibility_path),
             "preflight_manifest_sha256": canary.PRE_MANIFEST_SHA,
-            "scored_manifest_sha256": canary.SCORED_MANIFEST_SHA,
         },
         "authorization": {
             "preflight_authorized": True,
             "launch_authorized": False,
             "author": "/root",
-            "statement": expected["preflight_statement"],
+            "statement": "synthetic exact preflight authorization",
         },
         "privacy": {
             "credentials_included": False,
@@ -268,9 +428,6 @@ def _synthetic_preflight_authorization(plan: dict) -> dict:
         lambda value: value["implementation"].__setitem__(
             "preflight_manifest_sha256", "sha256:" + "0" * 64
         ),
-        lambda value: value["implementation"].__setitem__(
-            "scored_manifest_sha256", "sha256:" + "0" * 64
-        ),
         lambda value: value.__setitem__("unknown_authority", True),
     ],
 )
@@ -279,27 +436,47 @@ def test_resealed_stage_a_preflight_authorization_tampering_is_rejected(
 ) -> None:
     plan = canary.load_object(plan_path)
     authorization = _synthetic_preflight_authorization(plan)
-    canary.validate_preflight_authorization(authorization, plan, ROOT, BASE_PACKAGE_COMMIT)
+    canary.validate_preflight_authorization(
+        authorization,
+        plan,
+        ROOT,
+        BASE_PACKAGE_COMMIT,
+        canary.EXPECTED[plan["shard_key"]]["plan_file_sha256"],
+        "2026-09-04T20:47:35Z",
+        "synthetic exact preflight authorization",
+    )
     mutate(authorization)
     authorization["receipt_sha256"] = canary.digest_without(authorization, "receipt_sha256")
     with pytest.raises(ValueError, match="preflight authorization"):
-        canary.validate_preflight_authorization(authorization, plan, ROOT, BASE_PACKAGE_COMMIT)
+        canary.validate_preflight_authorization(
+            authorization,
+            plan,
+            ROOT,
+            BASE_PACKAGE_COMMIT,
+            canary.EXPECTED[plan["shard_key"]]["plan_file_sha256"],
+            "2026-09-04T20:47:35Z",
+            "synthetic exact preflight authorization",
+        )
 
 
 @pytest.mark.parametrize(
     ("plan_path", "authorization_path"), [(Q_PLAN, Q_PREAUTH), (G_PLAN, G_PREAUTH)]
 )
-def test_phase_b_preflight_authorization_binds_exact_phase_a2_commit(
+def test_v1_preflight_authorization_is_retired_after_terminal_bootstrap_failure(
     plan_path: Path, authorization_path: Path
 ) -> None:
     plan = canary.load_object(plan_path)
     authorization = canary.load_object(authorization_path)
-    canary.validate_preflight_authorization(authorization, plan, ROOT, PREFLIGHT_PACKAGE_COMMIT)
-    assert authorization["package_commit"] == PREFLIGHT_PACKAGE_COMMIT
-    assert authorization["implementation"]["package_commit"] == PREFLIGHT_PACKAGE_COMMIT
-    assert authorization["authorization"]["preflight_authorized"] is True
-    assert authorization["authorization"]["launch_authorized"] is False
-    assert authorization["preflight_identity"]["scored_job_created"] is False
+    with pytest.raises(ValueError, match="preflight authorization"):
+        canary.validate_preflight_authorization(
+            authorization,
+            plan,
+            ROOT,
+            PREFLIGHT_PACKAGE_COMMIT,
+            canary.EXPECTED[plan["shard_key"]]["plan_file_sha256"],
+            authorization["authorized_at_utc"],
+            authorization["authorization"]["statement"],
+        )
 
 
 def test_phase_b_submitter_pins_intent_and_packages_preflight_only() -> None:
@@ -497,7 +674,7 @@ def _synthetic_final_release(plan: dict) -> dict:
             "shared_pvc_flock_receipt_sha256": canary.FLOCK_GATE_SHA,
             "controller_compatibility_receipt_sha256": canary.load_object(
                 ROOT / "docs/evidence/qwen38-study/"
-                "2026-09-04-opencode-autocontinue-canary-controller-compatibility-v1.json"
+                "2026-09-04-opencode-autocontinue-canary-controller-compatibility-v2.json"
             )["receipt_sha256"],
         },
         "implementation": {
@@ -509,7 +686,7 @@ def _synthetic_final_release(plan: dict) -> dict:
             "frozen_controller_sha256": canary._sha(
                 ROOT / "evals/fleet/hosted_sweep_controller.py"
             ),
-            "preflight_manifest_sha256": canary._sha(PRE_MANIFEST),
+            "preflight_manifest_sha256": canary._sha(PRE_MANIFEST_V2),
             "scored_manifest_sha256": canary._sha(SCORED_MANIFEST),
             "launcher_sha256": canary._sha(
                 ROOT / "evals/fleet/scripts/submit_opencode_autocontinue_canaries_v1.sh"
@@ -601,7 +778,7 @@ def _synthetic_preflight_evidence(tmp_path: Path, plan: dict) -> dict:
             "plan_sha256": plan["plan_sha256"],
             "preflight_receipt_sha256": preflight["receipt_sha256"],
             "job": {
-                "name": plan["preflight_job_name"],
+                "name": canary.EXPECTED[plan["shard_key"]]["preflight_job_v2"],
                 "uid": preflight["job_uid"],
                 "succeeded": 1,
                 "failed": 0,
@@ -618,7 +795,7 @@ def _synthetic_preflight_evidence(tmp_path: Path, plan: dict) -> dict:
                 "finished_at": "2026-09-04T20:01:00Z",
             },
             "configmap": {
-                "name": canary.EXPECTED[plan["shard_key"]]["preflight_configmap"],
+                "name": canary.EXPECTED[plan["shard_key"]]["preflight_configmap_v2"],
                 "uid": "33333333-3333-4333-8333-333333333333",
                 "immutable": True,
             },
