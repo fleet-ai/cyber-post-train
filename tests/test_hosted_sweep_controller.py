@@ -132,8 +132,19 @@ GLM_HOSTED_V12_EXIT1_GAP_RELEASE = Path(
     "docs/evidence/qwen38-study/"
     "2026-09-04-glm53-hosted-v12-exit1-gap-scoring-release-v1.json"
 )
+GLM_HOSTED_V12_EXIT1_GAP_RELEASE_V2 = Path(
+    "docs/evidence/qwen38-study/"
+    "2026-09-04-glm53-hosted-v12-exit1-gap-scoring-release-v2.json"
+)
 GLM_HOSTED_V12_EXIT1_GAP_MANIFEST = Path(
     "evals/fleet/cluster/opencode-glm53-hosted-v12-exit1-gap-v13.yaml"
+)
+GLM_HOSTED_V12_EXIT1_GAP_MANIFEST_V2 = Path(
+    "evals/fleet/cluster/opencode-glm53-hosted-v12-exit1-gap-v13-v2.yaml"
+)
+GLM_HOSTED_V12_EXIT1_GAP_PREFLIGHT_FAILURE = Path(
+    "docs/evidence/qwen38-study/"
+    "2026-09-04-glm53-hosted-v12-exit1-gap-preflight-v1-failure.json"
 )
 GLM_DEDICATED_A_EXIT1_GAP_PLAN = Path(
     "evals/fleet/configs/"
@@ -622,6 +633,56 @@ def test_gap_credit_seal_rejects_wrong_identity(field: str, value: object) -> No
     )
     credit[field] = value
     assert hosted._sealed_gap_credit(plan, credit) is False
+
+
+def test_glm_v12_gap_sealed_credits_allow_only_omitted_public_projections(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    plan = hosted.load_object(GLM_HOSTED_V12_EXIT1_GAP_PLAN)
+
+    class Client:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+    root = tmp_path / "empty-root"
+    root.mkdir()
+    monkeypatch.setattr(hosted, "_client", lambda _key: Client())
+    for task in plan["tasks"]:
+        credits = [
+            row
+            for row in plan["credited_sessions"]
+            if row["rank"] == task["rank"]
+        ]
+        rows = [
+            {
+                "session_id": row["session_id"],
+                "status": "completed",
+                "model": plan["model"]["served_id"],
+                "verifier_execution": {"id": row["verifier_execution_id"]},
+            }
+            for row in credits
+        ]
+        monkeypatch.setattr(
+            self_hosted, "_task_sessions", lambda _client, _key, rows=rows: rows
+        )
+        assert hosted._validate_inventory_for_task(
+            plan, root, task, "key"
+        ) == len(rows)
+
+        rows[0]["task_version_id"] = "contradictory-version"
+        with pytest.raises(RuntimeError, match="not authoritative"):
+            hosted._validate_inventory_for_task(plan, root, task, "key")
+        rows[0].pop("task_version_id")
+
+        original = credits[0]["source_receipt_sha256"]
+        credits[0]["source_receipt_sha256"] = "sha256:unsealed"
+        with pytest.raises(RuntimeError, match="not authoritative"):
+            hosted._validate_inventory_for_task(plan, root, task, "key")
+        credits[0]["source_receipt_sha256"] = original
+
 
 def test_generated_plans_are_reproducible() -> None:
     source = hosted.load_object(SOURCE)
@@ -2660,6 +2721,22 @@ def test_glm_hosted_v12_exit1_gap_release_and_manifest_are_exact() -> None:
     )
     with pytest.raises(ValueError, match="release drifted"):
         hosted.validate_glm_hosted_v12_exit1_gap_release(plan, tampered)
+
+    tombstone = hosted.load_object(GLM_HOSTED_V12_EXIT1_GAP_PREFLIGHT_FAILURE)
+    hosted.validate_glm_hosted_v12_gap_preflight_failure(tombstone)
+    release_v2 = hosted.load_object(GLM_HOSTED_V12_EXIT1_GAP_RELEASE_V2)
+    hosted.validate_glm_hosted_v12_exit1_gap_release_v2(
+        plan, release_v2, tombstone
+    )
+    replacement_documents = list(
+        yaml.safe_load_all(GLM_HOSTED_V12_EXIT1_GAP_MANIFEST_V2.read_text())
+    )
+    assert len(replacement_documents) == 2
+    assert all(
+        document["spec"]["template"]["spec"]["priorityClassName"]
+        == "fleet-train-high"
+        for document in replacement_documents
+    )
 
 
 def test_qwen_source10_reassignment_and_r56_plan_are_exact_and_held() -> None:

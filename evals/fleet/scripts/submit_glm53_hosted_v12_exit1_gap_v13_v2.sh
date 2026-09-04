@@ -5,12 +5,13 @@ ROOT=$(cd "$(dirname "$0")/../../.." && pwd)
 MODE=${1:-preview}
 NAMESPACE=fleet-train-jobs
 CONTEXT=nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6
-CONFIG=chris-cyber-glm53-hosted-gap-g19g21g25g29-p4-v13
-JOB=chris-cyber-glm53-opencode11827-hosted-gap-g19g21g25g29-p4-v13
+CONFIG=chris-cyber-glm53-gap-19212529-v13-v2
+JOB=chris-cyber-glm53-gap-19212529-v13-v2
 PREFLIGHT=${CONFIG}-preflight
 PLAN=$ROOT/evals/fleet/configs/glm53-opencode-hosted-v12-exit1-gap4-pass4-v13.json
-RELEASE=$ROOT/docs/evidence/qwen38-study/2026-09-04-glm53-hosted-v12-exit1-gap-scoring-release-v1.json
-MANIFEST=$ROOT/evals/fleet/cluster/opencode-glm53-hosted-v12-exit1-gap-v13.yaml
+RELEASE=$ROOT/docs/evidence/qwen38-study/2026-09-04-glm53-hosted-v12-exit1-gap-scoring-release-v2.json
+TOMBSTONE=$ROOT/docs/evidence/qwen38-study/2026-09-04-glm53-hosted-v12-exit1-gap-preflight-v1-failure.json
+MANIFEST=$ROOT/evals/fleet/cluster/opencode-glm53-hosted-v12-exit1-gap-v13-v2.yaml
 PREDECESSOR=chris-cyber-glm53-opencode11827-hosted-primary46-p4-v12
 PREDECESSOR_UID=0e25db24-8700-478f-8862-d1210511393c
 PREDECESSOR_POD=chris-cyber-glm53-opencode11827-hosted-primary46-p4-v12-6qnjj
@@ -20,18 +21,21 @@ KUBECTL=(kubectl --context "$CONTEXT")
 case "$MODE" in preview|submit) ;; *) exit 2 ;; esac
 test "$(kubectl config current-context)" = "$CONTEXT"
 
-uv run python - "$PLAN" "$RELEASE" <<'PY'
+uv run python - "$PLAN" "$RELEASE" "$TOMBSTONE" <<'PY'
 import sys
 from pathlib import Path
 from evals.fleet.hosted_sweep_controller import (
     load_object,
-    validate_glm_hosted_v12_exit1_gap_release,
+    validate_glm_hosted_v12_exit1_gap_release_v2,
+    validate_glm_hosted_v12_gap_preflight_failure,
     validate_plan,
 )
 plan = load_object(Path(sys.argv[1]))
 release = load_object(Path(sys.argv[2]))
 validate_plan(plan)
-validate_glm_hosted_v12_exit1_gap_release(plan, release)
+tombstone = load_object(Path(sys.argv[3]))
+validate_glm_hosted_v12_gap_preflight_failure(tombstone)
+validate_glm_hosted_v12_exit1_gap_release_v2(plan, release, tombstone)
 assert plan["task_count"] == 4
 assert plan["new_session_count"] == 11
 assert len(plan["credited_sessions"]) == 5

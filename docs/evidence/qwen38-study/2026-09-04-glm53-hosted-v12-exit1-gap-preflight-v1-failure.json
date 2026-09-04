@@ -1,0 +1,50 @@
+{
+  "schema_version": "fleet-glm53-hosted-v12-exit1-gap-preflight-failure-v1",
+  "recorded_at": "2026-09-04T18:16:54Z",
+  "append_only": true,
+  "plan_sha256": "sha256:6eec0a43e7aebf57bc273ad938da703e46c6875f32257b6352158fbc9282e828",
+  "release_receipt_sha256": "sha256:b67d91963e64f0124fa5c5a6eccb7747122a88da8364a42cf14bbb067807a19d",
+  "configmap": {
+    "name": "chris-cyber-glm53-hosted-gap-g19g21g25g29-p4-v13",
+    "uid": "c06951d2-163c-403a-99f8-c18b589606f2",
+    "immutable": true
+  },
+  "preflight_job": {
+    "name": "chris-cyber-glm53-hosted-gap-g19g21g25g29-p4-v13-preflight",
+    "uid": "e995d2ab-4975-4cb9-a6bb-f649c3d430e7",
+    "pod_uid": "daea6330-a329-4d40-ba1b-141b4cd9c85c",
+    "exit_code": 1,
+    "restart_count": 0,
+    "reason": "BackoffLimitExceeded",
+    "failed_at": "2026-09-04T18:16:54Z"
+  },
+  "failure": {
+    "stage": "read_only_authoritative_credit_inventory",
+    "sanitized_error": "hosted credited session is not authoritative",
+    "cause": "new sealed reconciliation credits were not in the exact omitted-public-projection allowlist",
+    "scored_model_or_verifier_execution": false,
+    "task_claim_created": false,
+    "session_created": false
+  },
+  "absence": {
+    "scored_job_name": "chris-cyber-glm53-opencode11827-hosted-gap-g19g21g25g29-p4-v13",
+    "scored_job_absent": true,
+    "scored_sfs_root_absent": true,
+    "scored_claim_count": 0,
+    "scored_attempt_count": 0
+  },
+  "successor_gate": {
+    "reuse_failed_configmap_or_preflight_identity": false,
+    "fresh_configmap_preflight_and_scored_job_identity_required": true,
+    "exact_plan_and_release_may_remain_unchanged": true,
+    "exact_sealed_credit_fix_required": true,
+    "fresh_full_duplicate_inventory_required": true
+  },
+  "privacy": {
+    "scores_read": false,
+    "prompts_or_traces_read": false,
+    "task_content_included": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:f2ce5aca88c99e7effc532408c7e01810c6a70b334f42d6427c17afc4070311f"
+}

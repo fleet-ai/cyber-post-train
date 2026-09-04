@@ -3568,6 +3568,89 @@ def validate_glm_hosted_v12_exit1_gap_release(
         raise ValueError("hosted GLM v12 gap release drifted")
 
 
+def validate_glm_hosted_v12_gap_preflight_failure(receipt: dict[str, Any]) -> None:
+    """Validate the exact zero-scored failed v1 preflight tombstone."""
+    failure = receipt.get("failure") or {}
+    absence = receipt.get("absence") or {}
+    successor = receipt.get("successor_gate") or {}
+    privacy = receipt.get("privacy") or {}
+    if (
+        receipt.get("schema_version")
+        != "fleet-glm53-hosted-v12-exit1-gap-preflight-failure-v1"
+        or receipt.get("append_only") is not True
+        or receipt.get("receipt_sha256")
+        != "sha256:f2ce5aca88c99e7effc532408c7e01810c6a70b334f42d6427c17afc4070311f"
+        or receipt.get("receipt_sha256") != digest_without(receipt, "receipt_sha256")
+        or (receipt.get("preflight_job") or {}).get("uid")
+        != "e995d2ab-4975-4cb9-a6bb-f649c3d430e7"
+        or (receipt.get("preflight_job") or {}).get("pod_uid")
+        != "daea6330-a329-4d40-ba1b-141b4cd9c85c"
+        or (receipt.get("configmap") or {}).get("uid")
+        != "c06951d2-163c-403a-99f8-c18b589606f2"
+        or failure.get("scored_model_or_verifier_execution") is not False
+        or failure.get("task_claim_created") is not False
+        or failure.get("session_created") is not False
+        or absence.get("scored_job_absent") is not True
+        or absence.get("scored_sfs_root_absent") is not True
+        or absence.get("scored_claim_count") != 0
+        or absence.get("scored_attempt_count") != 0
+        or successor.get("reuse_failed_configmap_or_preflight_identity") is not False
+        or successor.get("fresh_configmap_preflight_and_scored_job_identity_required")
+        is not True
+        or successor.get("exact_sealed_credit_fix_required") is not True
+        or successor.get("fresh_full_duplicate_inventory_required") is not True
+        or any(value is not False for value in privacy.values())
+    ):
+        raise ValueError("hosted GLM v12 gap preflight tombstone drifted")
+
+
+def validate_glm_hosted_v12_exit1_gap_release_v2(
+    plan: dict[str, Any], release: dict[str, Any], tombstone: dict[str, Any]
+) -> None:
+    """Validate fresh v2 identities and explicit post-failure authorization."""
+    validate_plan(plan)
+    validate_glm_hosted_v12_gap_preflight_failure(tombstone)
+    identities = release.get("fresh_identities") or {}
+    gates = release.get("launch_gates") or {}
+    authorization = release.get("authorization") or {}
+    privacy = release.get("privacy") or {}
+    if (
+        release.get("schema_version")
+        != "fleet-glm53-hosted-v12-exit1-gap-scoring-release-v2"
+        or release.get("append_only") is not True
+        or release.get("receipt_sha256")
+        != "sha256:d0e1ddad801ddd6a1bead38219db0dfea1fe4065b127d20b6d2efc9c1993a942"
+        or release.get("receipt_sha256") != digest_without(release, "receipt_sha256")
+        or release.get("plan_sha256") != plan["plan_sha256"]
+        or release.get("failed_preflight_tombstone_receipt_sha256")
+        != tombstone["receipt_sha256"]
+        or identities
+        != {
+            "configmap": "chris-cyber-glm53-gap-19212529-v13-v2",
+            "preflight_job": "chris-cyber-glm53-gap-19212529-v13-v2-preflight",
+            "scored_job": "chris-cyber-glm53-gap-19212529-v13-v2",
+            "scored_sfs_root": "/mnt/sfs/jobs/chris-cyber-glm53-gap-19212529-v13-v2",
+            "all_absent_before_create": True,
+        }
+        or gates.get("existing_v12_healthy_required") is not True
+        or gates.get("hosted_glm_stream_count_before_create") != 1
+        or gates.get("hosted_glm_stream_count_after_create") != 2
+        or gates.get("all_11_cells_unclaimed_inactive_unscored_absent_required")
+        is not True
+        or gates.get("fresh_preflight_success_required") is not True
+        or gates.get("required_priority_class") != "fleet-train-high"
+        or gates.get("exact_v12_no_autocontinue_treatment_required") is not True
+        or gates.get("corrected_per_cell_quarantine_required") is not True
+        or gates.get("create_once") is not True
+        or gates.get("must_not_repeat") is not True
+        or authorization.get("timestamp_utc") != "2026-09-04T18:22:05Z"
+        or authorization.get("author") != "/root"
+        or authorization.get("scored_launch_authorized") is not True
+        or any(value is not False for value in privacy.values())
+    ):
+        raise ValueError("hosted GLM v12 gap v2 release drifted")
+
+
 def build_dedicated_a_completed_exit1_gap_plan(
     predecessor: dict[str, Any], reconciliation: dict[str, Any]
 ) -> dict[str, Any]:
@@ -5102,10 +5185,37 @@ def _sealed_gap_credit(plan: dict[str, Any], receipt: dict[str, Any]) -> bool:
                 DEDICATED_A_COMPLETED_EXIT1_RECONCILIATION_DIGEST,
             ),
         },
+        "glm53_hosted_v12_exit1_gap": {
+            (19, 1): (
+                "RECONCILED_ACCEPTED",
+                "sha256:6dced67ad8a5360ac98c6297ee9bd40c608e0543fd4f2153648bbf8f3e795b26",
+            ),
+            (21, 1): (
+                "ACCEPTED",
+                "sha256:1b505efe5b49690524c9d9bc3d3fcc82856888d1364f5e3923fcfcfbb67579be",
+            ),
+            (21, 2): (
+                "RECONCILED_ACCEPTED",
+                "sha256:6dced67ad8a5360ac98c6297ee9bd40c608e0543fd4f2153648bbf8f3e795b26",
+            ),
+            (25, 1): (
+                "RECONCILED_ACCEPTED",
+                "sha256:6dced67ad8a5360ac98c6297ee9bd40c608e0543fd4f2153648bbf8f3e795b26",
+            ),
+            (29, 1): (
+                "RECONCILED_ACCEPTED",
+                "sha256:6dced67ad8a5360ac98c6297ee9bd40c608e0543fd4f2153648bbf8f3e795b26",
+            ),
+        },
     }
     expected = sealed.get(str(shard), {}).get(cell)
     return bool(
         expected is not None
+        and (
+            shard != "glm53_hosted_v12_exit1_gap"
+            or plan.get("plan_sha256")
+            == "sha256:6eec0a43e7aebf57bc273ad938da703e46c6875f32257b6352158fbc9282e828"
+        )
         and receipt.get("classification") == expected[0]
         and receipt.get("source_receipt_sha256") == expected[1]
     )
