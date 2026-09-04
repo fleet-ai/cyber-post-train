@@ -1,0 +1,40 @@
+{
+  "title": "chris-cyber-evalserve-glm53-tp8-b-v4",
+  "image": "ghcr.io/fleet-ai/cyber-post-train-glm53-runtime@sha256:ec93ba50613fd13fb4c0b0a9105767ab18209a1e0108dab0923aad694c0206ec",
+  "command": "python3 -m sglang.launch_server --model-path /mnt/sfs/models/glm-5.3-30333038 --served-model-name glm-5.3 --host 0.0.0.0 --port 8000 --trust-remote-code --tp-size 8 --dp-size 8 --ep-size 8 --enable-dp-attention --context-length 262144 --quantization fp8 --kv-cache-dtype bfloat16 --mem-fraction-static 0.85 --attention-backend dsa --dsa-prefill-backend trtllm --dsa-decode-backend trtllm --moe-a2a-backend deepep --speculative-algorithm EAGLE --speculative-draft-model-path /mnt/sfs/models/glm-5.3-30333038 --speculative-num-steps 1 --speculative-eagle-topk 1 --speculative-num-draft-tokens 2 --reasoning-parser glm45 --tool-call-parser glm47 --enable-metrics --enable-mfu-metrics --enable-metrics-for-all-schedulers",
+  "workers": 1,
+  "gpus_per_worker": 8,
+  "privileged": true,
+  "priority_class": "fleet-infra-quiet",
+  "resources": {
+    "cpu_request": "96",
+    "cpu_limit": "192",
+    "memory_request": "1Ti",
+    "memory_limit": "2Ti"
+  },
+  "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-glm53-tp8-b-v4",
+  "secrets": [],
+  "image_pull_secrets": ["ghcr-pull"],
+  "env": {
+    "HF_HUB_OFFLINE": "1",
+    "TRANSFORMERS_OFFLINE": "1",
+    "NVSHMEM_REMOTE_TRANSPORT": "none"
+  },
+  "ports": [
+    {
+      "name": "http",
+      "container_port": 8000
+    },
+    {
+      "name": "dashboard",
+      "container_port": 8265
+    }
+  ],
+  "models": [
+    {
+      "name": "glm-5.3-30333038",
+      "hf": "zai-org/GLM-5.3",
+      "revision": "30333038ada1f1dacb294a93270305a890b50c14"
+    }
+  ]
+}
