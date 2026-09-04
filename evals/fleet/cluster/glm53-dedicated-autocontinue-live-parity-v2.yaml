@@ -1,0 +1,153 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: chris-cyber-glm53-dedicated-autocontinue-parity-v2
+  namespace: fleet-train-jobs
+  labels:
+    cyber-post-train.fleet.ai/experiment: glm53-dedicated-autocontinue-parity-v2
+    cyber-post-train.fleet.ai/owner: chris
+    kueue.x-k8s.io/queue-name: training-lq
+spec:
+  activeDeadlineSeconds: 900
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 604800
+  template:
+    metadata:
+      labels:
+        cyber-post-train.fleet.ai/experiment: glm53-dedicated-autocontinue-parity-v2
+        cyber-post-train.fleet.ai/owner: chris
+    spec:
+      restartPolicy: Never
+      priorityClassName: fleet-train-high
+      nodeSelector: {kubernetes.io/arch: amd64, workload: fleetai-training-ng-cpu}
+      tolerations:
+        - {key: workload, operator: Equal, value: fleetai-training-ng-cpu, effect: NoSchedule}
+      containers:
+        - name: parity
+          image: ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
+          command: ["python", "-c"]
+          args:
+            - |
+              import hashlib, json, os, pathlib, urllib.error, urllib.request
+
+              OUT = pathlib.Path("/mnt/sfs/jobs/chris-cyber-glm53-dedicated-autocontinue-parity-v2")
+              JOB_UID, POD_UID = os.environ["JOB_UID"], os.environ["POD_UID"]
+              CAMPAIGN_PATH = "evals/fleet/configs/q38-glm53-opencode-autocontinue-primary-campaign-v1.json"
+              CAMPAIGN_SHA256 = "sha256:63946f224a33eb0d2c2a6fdba34358ebf9ca379e5f0f156cd137c95a9b98097e"
+              V1_TOMBSTONE = "sha256:8386d9a730abc459f8ef6a21dab67a413ff24b8fe0cae00201e2280bf27cfa73"
+              MODEL_REVISION = "30333038ada1f1dacb294a93270305a890b50c14"
+              RUNTIME_IMAGE = "ghcr.io/fleet-ai/cyber-post-train-glm53-runtime@sha256:ec93ba50613fd13fb4c0b0a9105767ab18209a1e0108dab0923aad694c0206ec"
+              CONTEXT_POLICY = "opencode_1.18.27_native_compaction_autocontinue_v1"
+              SETTINGS_CANONICAL = "sha256:9614806454c86784e54fde31a8acc3f51adda11593fad3e762142cd04a4010f2"
+              SETTINGS_FILE = "sha256:84a1ca763a297bd8badb184391a02c82d57069b9a211ecef4f5e53dd79e20e20"
+              REPLICAS = [
+                  {"replica": "A", "base": "http://ft-run-98c32208-5gpb2-head-svc:8000", "ray_job_uid": "ef7cb0f2-84d4-4017-ae31-bf34ebb70d0d", "ray_cluster_uid": "5107d72e-ae6a-4582-a490-55b349421d06", "service_uid": "2c0e64de-c4a0-4f70-ae07-d15b1adad0b3", "head_pod_uid": "3f37ab91-4afa-4e4d-8f29-a3eeda70a774"},
+                  {"replica": "B", "base": "http://ft-run-9e92209d-pppzg-head-svc:8000", "ray_job_uid": "2bbfd34a-d74a-4497-ab28-48cada0c9753", "ray_cluster_uid": "f7f7ae34-6a79-482a-b771-4639b786f66a", "service_uid": "14ae906a-60ef-4a02-b6bf-814a00c2c89f", "head_pod_uid": "bfeb4c6a-9e4a-4f14-adb2-3f516dd25fdb"},
+              ]
+
+              def canonical(value):
+                  return json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
+
+              def digest_without(value, field):
+                  return "sha256:" + hashlib.sha256(canonical({k: v for k, v in value.items() if k != field})).hexdigest()
+
+              def write_once(path, value):
+                  fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                  with os.fdopen(fd, "wb") as handle:
+                      handle.write(canonical(value) + b"\n")
+
+              def request(base, method, route, payload=None):
+                  req = urllib.request.Request(base + route, method=method, data=canonical(payload) if payload is not None else None, headers={"Accept": "application/json", "Content-Type": "application/json"})
+                  try:
+                      with urllib.request.urlopen(req, timeout=300) as response:
+                          raw = response.read()
+                          return response.status, json.loads(raw) if raw else {}
+                  except urllib.error.HTTPError as exc:
+                      raise RuntimeError("non-scored serving probe request failed") from exc
+
+              tools = [
+                  {"type": "function", "function": {"name": "bash", "description": "Run a shell command.", "parameters": {"type": "object", "properties": {"command": {"type": "string"}}, "required": ["command"], "additionalProperties": False}}},
+                  {"type": "function", "function": {"name": "submit_report", "description": "Submit the final report.", "parameters": {"type": "object", "properties": {"report": {"type": "string"}}, "required": ["report"], "additionalProperties": False}}},
+              ]
+
+              def payload(name):
+                  instruction = "Call bash exactly once with a benign command. Do not call submit_report." if name == "bash" else "Call submit_report exactly once with a brief benign status. Do not call bash."
+                  return {"model": "glm-5.3", "messages": [{"role": "user", "content": instruction}], "tools": tools, "tool_choice": {"type": "function", "function": {"name": name}}, "temperature": 0, "max_tokens": 128}
+
+              if OUT.exists():
+                  raise RuntimeError("single-use parity output root already exists")
+              os.mkdir(OUT, 0o700)
+              os.mkdir(OUT / "replicas", 0o700)
+              receipts = []
+              for replica in REPLICAS:
+                  statuses = []
+                  status, _ = request(replica["base"], "GET", "/health"); statuses.append(status)
+                  status, models = request(replica["base"], "GET", "/v1/models"); statuses.append(status)
+                  status, info = request(replica["base"], "GET", "/get_model_info"); statuses.append(status)
+                  status, server = request(replica["base"], "GET", "/get_server_info"); statuses.append(status)
+                  assert statuses == [200, 200, 200, 200]
+                  assert [row.get("id") for row in models.get("data", [])] == ["glm-5.3"]
+                  assert info.get("model_path") == info.get("tokenizer_path") == "/mnt/sfs/models/glm-5.3-30333038"
+                  assert server.get("model_path") == server.get("tokenizer_path") == "/mnt/sfs/models/glm-5.3-30333038"
+                  assert server.get("context_length") == 262144 and server.get("tp_size") == server.get("dp_size") == 8
+                  selected = []
+                  for tool_name in ["bash", "submit_report"]:
+                      status, completion = request(replica["base"], "POST", "/v1/chat/completions", payload(tool_name))
+                      assert status == 200 and completion.get("model") == "glm-5.3"
+                      choices = completion.get("choices") or []
+                      assert len(choices) == 1 and choices[0].get("finish_reason") == "tool_calls"
+                      calls = (choices[0].get("message") or {}).get("tool_calls") or []
+                      assert len(calls) == 1
+                      function = calls[0].get("function") or {}
+                      arguments = json.loads(function.get("arguments") or "")
+                      assert function.get("name") == tool_name and isinstance(arguments, dict)
+                      if tool_name == "bash":
+                          assert set(arguments) == {"command"} and isinstance(arguments["command"], str)
+                      else:
+                          assert set(arguments) == {"report"} and isinstance(arguments["report"], str) and arguments["report"]
+                      selected.append(tool_name)
+                  receipt = {
+                      "schema_version": "fleet-glm53-dedicated-autocontinue-live-parity-replica-v2",
+                      "probe_job_uid": JOB_UID, "probe_pod_uid": POD_UID, "v1_failure_tombstone_receipt_sha256": V1_TOMBSTONE,
+                      "campaign_path": CAMPAIGN_PATH, "campaign_sha256": CAMPAIGN_SHA256,
+                      "replica": replica["replica"], "ray_job_uid": replica["ray_job_uid"], "ray_cluster_uid": replica["ray_cluster_uid"], "service_uid": replica["service_uid"], "head_pod_uid": replica["head_pod_uid"],
+                      "runtime_image": RUNTIME_IMAGE, "model_revision": MODEL_REVISION, "model_revision_provenance": "immutable_dedicated_v5_config_bound_to_exact_runtime_uids_and_image",
+                      "served_model": "glm-5.3", "context_length": 262144, "tp_size": 8, "dp_size": 8,
+                      "opencode_version": "1.18.27", "context_management": CONTEXT_POLICY, "settings_canonical_sha256": SETTINGS_CANONICAL, "settings_file_sha256": SETTINGS_FILE,
+                      "structured_tool_schema_names": ["bash", "submit_report"], "selected_tool_names": selected,
+                      "exact_argument_schema_keys_and_types_valid": True, "tool_arguments_valid_json": True, "non_scored_model_requests": 2,
+                      "tool_execution_performed": False, "fleet_api_contacted": False, "task_instance_created": False, "scoring_executed": False, "verifier_executed": False,
+                      "response_content_included": False, "tool_arguments_included": False, "prompts_or_traces_included": False, "scores_included": False,
+                  }
+                  receipt["receipt_sha256"] = digest_without(receipt, "receipt_sha256")
+                  write_once(OUT / "replicas" / (replica["replica"] + ".json"), receipt)
+                  receipts.append(receipt)
+              terminal = {
+                  "schema_version": "fleet-glm53-dedicated-autocontinue-live-parity-terminal-v2",
+                  "probe_job_uid": JOB_UID, "probe_pod_uid": POD_UID, "v1_failure_tombstone_receipt_sha256": V1_TOMBSTONE,
+                  "campaign_path": CAMPAIGN_PATH, "campaign_sha256": CAMPAIGN_SHA256,
+                  "replicas": 2, "replica_receipt_sha256s": [row["receipt_sha256"] for row in receipts],
+                  "runtime_image": RUNTIME_IMAGE, "model_revision": MODEL_REVISION, "model_revision_provenance": "immutable_dedicated_v5_configs_bound_to_exact_runtime_uids_and_image", "context_length": 262144,
+                  "opencode_version": "1.18.27", "context_management": CONTEXT_POLICY, "settings_canonical_sha256": SETTINGS_CANONICAL, "settings_file_sha256": SETTINGS_FILE,
+                  "structured_tool_schema_names": ["bash", "submit_report"], "selected_tool_names_per_replica": ["bash", "submit_report"], "non_scored_model_requests": 4,
+                  "exact_argument_schema_keys_and_types_valid": True, "tool_execution_performed": False, "fleet_api_contacted": False, "task_instance_created": False, "scoring_executed": False, "verifier_executed": False,
+                  "prompts_or_traces_included": False, "tool_arguments_included": False, "scores_included": False, "classification": "operational_gate_passed_no_capability_claim",
+              }
+              terminal["receipt_sha256"] = digest_without(terminal, "receipt_sha256")
+              write_once(OUT / "TERMINAL.json", terminal)
+              print(json.dumps({"ok": True, "replicas": 2, "non_scored_model_requests": 4, "receipt_sha256": terminal["receipt_sha256"]}, sort_keys=True))
+          env:
+            - name: JOB_UID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['batch.kubernetes.io/controller-uid']
+            - name: POD_UID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.uid
+          resources:
+            requests: {cpu: 100m, memory: 128Mi, ephemeral-storage: 128Mi}
+            limits: {cpu: 500m, memory: 512Mi, ephemeral-storage: 512Mi}
+          volumeMounts: [{name: sfs, mountPath: /mnt/sfs}]
+      volumes:
+        - {name: sfs, persistentVolumeClaim: {claimName: sfs-shared}}
