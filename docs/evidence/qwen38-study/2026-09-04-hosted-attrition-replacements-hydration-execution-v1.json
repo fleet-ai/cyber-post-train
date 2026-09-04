@@ -1,0 +1,52 @@
+{
+  "schema_version": "fleet-hosted-attrition-replacements-hydration-execution-v1",
+  "append_only": true,
+  "controller_commit": "e08005c",
+  "namespace": "fleet-train-jobs",
+  "priority_class": "fleet-train-high",
+  "is_true_preemption_immunity": false,
+  "executions": [
+    {
+      "model_block": "qwen_hosted_v8_replacement",
+      "replacement_rank": 56,
+      "selection_supplement_receipt_sha256": "sha256:56406bb32541babc0189e089f339d6a7668b24cb86b1fd8587b60a3cfc57b24c",
+      "job_uid": "8f06e0a8-acd4-43bc-b51f-7ae7ae1a8f3f",
+      "pod_uid": "a56e4baf-c766-4923-a142-5dc615bb8489",
+      "config_map_uid": "56f210ac-9565-4e41-b976-4b81aa42297f",
+      "exit_code": 0,
+      "restart_count": 0,
+      "finished_at": "2026-09-04T07:08:32Z",
+      "sfs_file_sha256": "sha256:a08aacad3147abbd6c0aad373cd2d5bf2b100532ca156cb1a8fb0afad005b1d8",
+      "repo_file_sha256": "sha256:a08aacad3147abbd6c0aad373cd2d5bf2b100532ca156cb1a8fb0afad005b1d8",
+      "hydration_receipt_sha256": "sha256:4d059348e1c00eed04aef8b6a700a0b44921cfe0f6e6be0e8e55e08316886f79"
+    },
+    {
+      "model_block": "glm_hosted_v12_replacement",
+      "replacement_rank": 111,
+      "selection_supplement_receipt_sha256": "sha256:e8b6c3f993c4e5b76f823acc0bbda4c210a7dbd4526c1adb093c0535bbb4c00d",
+      "job_uid": "af3a92dd-b44d-42a3-8dac-81715673abf4",
+      "pod_uid": "ac1f1611-6359-4600-a41c-89b4008f5cb4",
+      "config_map_uid": "eb840893-10e3-41d3-9324-0f30de7df6f9",
+      "exit_code": 0,
+      "restart_count": 0,
+      "finished_at": "2026-09-04T07:08:32Z",
+      "sfs_file_sha256": "sha256:77a6a41eebbbf86afa0365924a42c9a90b186905a1a381b8fd05a758db10e47e",
+      "repo_file_sha256": "sha256:77a6a41eebbbf86afa0365924a42c9a90b186905a1a381b8fd05a758db10e47e",
+      "hydration_receipt_sha256": "sha256:ba6327ce5ca006c48b4cec33ed93179c0fc9c32a0b2bda8ec0a023272ac1758d"
+    }
+  ],
+  "scientific_controls": {
+    "read_only_metadata_hydration": true,
+    "model_inference_called": false,
+    "scoring_called": false,
+    "scored_launch_authorized": false,
+    "same_hosted_treatment_required": true
+  },
+  "privacy": {
+    "scores_included": false,
+    "prompts_or_traces_included": false,
+    "task_content_included": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:6d73f98200fa93623555cbb31d07c1f1420f64de8929184c13a87276b1df965d"
+}

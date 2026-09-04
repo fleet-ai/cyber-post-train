@@ -140,6 +140,12 @@ GLM_DEDICATED_B_V5_CAMPAIGN = (
 GLM_DEDICATED_A_V5_CAMPAIGN = (
     "chris-cyber-glm53-opencode11827-dedicated-a-v5-successor27-p4-v2"
 )
+QWEN_ATTRITION_REPLACEMENT_CAMPAIGN = (
+    "chris-cyber-q38-opencode11827-hosted-replacement-r56-p4-v1"
+)
+GLM_ATTRITION_REPLACEMENT_CAMPAIGN = (
+    "chris-cyber-glm53-opencode11827-hosted-replacement-r111-p4-v1"
+)
 EXPECTED_INCLUDED_TASK_COUNTS.update(
     {
         "qwen38_remainder": 48,
@@ -162,6 +168,8 @@ EXPECTED_INCLUDED_TASK_COUNTS.update(
         "glm53_http500_hosted_primary": 46,
         "glm53_dedicated_b_v5": 27,
         "glm53_dedicated_a_v5": 27,
+        "qwen38_attrition_replacement": 1,
+        "glm53_attrition_replacement": 1,
     }
 )
 SCHEDULE = [
@@ -2119,6 +2127,116 @@ def build_glm_dedicated_a_v5_plan(
     return plan
 
 
+def build_hosted_attrition_replacement_plan(
+    predecessor_plan: dict[str, Any],
+    supplement: dict[str, Any],
+    hydration: dict[str, Any],
+) -> dict[str, Any]:
+    """Build a preview-only one-task replacement for a noncreditable task fence."""
+    validate_plan(predecessor_plan)
+    is_qwen = supplement.get("schema_version") == (
+        "fleet-qwen38-replacement-selection-supplement-v3"
+    )
+    expected = {
+        True: {
+            "predecessor": (
+                "sha256:8d6df6af63b308d648fb0c7ea9115f90"
+                "b16de1d7e57b0968dda8fc8fd4a20c81"
+            ),
+            "supplement": "sha256:56406bb32541babc0189e089f339d6a7668b24cb86b1fd8587b60a3cfc57b24c",
+            "hydration": "sha256:4d059348e1c00eed04aef8b6a700a0b44921cfe0f6e6be0e8e55e08316886f79",
+            "rank": 56,
+            "fenced": 6,
+            "fence_key": "source6_fence",
+            "shard": "qwen38_attrition_replacement",
+            "campaign": QWEN_ATTRITION_REPLACEMENT_CAMPAIGN,
+            "network_prefix": "qwen38-hosted-r56",
+            "primary_tasks": 50,
+            "primary_cells": 200,
+        },
+        False: {
+            "predecessor": (
+                "sha256:8b0deafa9f51b75a0715be56b417454e"
+                "96665b5342d4c346d5cda32dc24c8279"
+            ),
+            "supplement": "sha256:e8b6c3f993c4e5b76f823acc0bbda4c210a7dbd4526c1adb093c0535bbb4c00d",
+            "hydration": "sha256:ba6327ce5ca006c48b4cec33ed93179c0fc9c32a0b2bda8ec0a023272ac1758d",
+            "rank": 111,
+            "fenced": 13,
+            "fence_key": "source13_fence",
+            "shard": "glm53_attrition_replacement",
+            "campaign": GLM_ATTRITION_REPLACEMENT_CAMPAIGN,
+            "network_prefix": "glm53-hosted-r111",
+            "primary_tasks": 100,
+            "primary_cells": 400,
+        },
+    }[is_qwen]
+    fence = supplement.get(expected["fence_key"]) or {}
+    row = supplement.get("replacement") or {}
+    if (
+        predecessor_plan.get("plan_sha256") != expected["predecessor"]
+        or supplement.get("receipt_sha256") != expected["supplement"]
+        or supplement.get("receipt_sha256")
+        != digest_without(supplement, "receipt_sha256")
+        or hydration.get("receipt_sha256") != expected["hydration"]
+        or hydration.get("receipt_sha256") != digest_without(hydration, "receipt_sha256")
+        or hydration.get("selection_supplement_receipt_sha256")
+        != supplement["receipt_sha256"]
+        or int(row.get("replacement_rank") or 0) != expected["rank"]
+        or int(fence.get("source_rank") or 0) != expected["fenced"]
+        or fence.get("plan_sha256") != predecessor_plan["plan_sha256"]
+        or fence.get("whole_task_fenced") is not True
+        or (fence.get("noncreditable_attempt") or {}).get("retry_allowed") is not False
+    ):
+        raise ValueError("hosted attrition replacement evidence drifted")
+    tasks = _hydrated_replacement_tasks(supplement, hydration, 1)
+    plan = {
+        "schema_version": PLAN_SCHEMA,
+        "shard_key": expected["shard"],
+        "campaign_id": expected["campaign"],
+        "source_job_id": predecessor_plan["source_job_id"],
+        "source": {
+            "predecessor_plan_sha256": predecessor_plan["plan_sha256"],
+            "selection_supplement_receipt_sha256": supplement["receipt_sha256"],
+            "hydration_receipt_sha256": hydration["receipt_sha256"],
+            "fenced_source_rank": expected["fenced"],
+            "accepted_attrition_receipt_sha256": fence["accepted_attempt"][
+                "receipt_sha256"
+            ],
+            "noncreditable_receipt_sha256": fence["noncreditable_attempt"][
+                "receipt_sha256"
+            ],
+        },
+        "treatment_block": copy.deepcopy(predecessor_plan["treatment_block"]),
+        "model": copy.deepcopy(predecessor_plan["model"]),
+        "harness": copy.deepcopy(predecessor_plan["harness"]),
+        "authority": copy.deepcopy(predecessor_plan["authority"]),
+        "task_count": 1,
+        "pass_k": 4,
+        "total_session_count": 4,
+        "credited_sessions": [],
+        "new_session_count": 4,
+        "fenced_source_ranks": sorted(
+            {*predecessor_plan.get("fenced_source_ranks", []), expected["fenced"]}
+        ),
+        "primary_estimator_task_count": expected["primary_tasks"],
+        "primary_estimator_cell_count": expected["primary_cells"],
+        "execution": {
+            **copy.deepcopy(predecessor_plan["execution"]),
+            "launch_authorized": False,
+            "required_priority_class": "fleet-train-high",
+        },
+        "tasks": tasks,
+        "attempts": _fresh_attempts(
+            tasks, expected["campaign"], expected["network_prefix"]
+        ),
+        "privacy": copy.deepcopy(predecessor_plan["privacy"]),
+    }
+    plan["plan_sha256"] = digest_without(plan, "plan_sha256")
+    validate_plan(plan)
+    return plan
+
+
 def _validate_source_plan(plan: dict[str, Any]) -> None:
     if plan.get("schema_version") == legacy.PLAN_SCHEMA:
         legacy.validate_plan(plan)
@@ -2390,6 +2508,7 @@ def validate_plan(plan: dict[str, Any]) -> None:
             "glm53_hosted_reassigned_b",
             "glm53_http500_successor",
             "glm53_http500_hosted_primary",
+            "glm53_attrition_replacement",
         }
         else (
             "plan_identity_plus_authoritative_receipt_v1"
@@ -2399,6 +2518,7 @@ def validate_plan(plan: dict[str, Any]) -> None:
                 "qwen38_remainder2",
                 "qwen38_replacements",
                 "qwen38_http500_successor",
+                "qwen38_attrition_replacement",
             }
             else None
         )
@@ -2411,6 +2531,35 @@ def validate_plan(plan: dict[str, Any]) -> None:
         or execution.get("inventory_policy") != expected_inventory_policy
     ):
         raise ValueError("hosted shard execution policy drifted")
+    if shard_key in {"qwen38_attrition_replacement", "glm53_attrition_replacement"}:
+        is_qwen = shard_key.startswith("qwen38")
+        source = plan.get("source") or {}
+        treatment = plan.get("treatment_block") or {}
+        expected_rank = 56 if is_qwen else 111
+        expected_fence = 6 if is_qwen else 13
+        expected_revision = (
+            "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
+            if is_qwen
+            else "30333038ada1f1dacb294a93270305a890b50c14"
+        )
+        if (
+            [int(row["source_rank"]) for row in tasks] != [expected_rank]
+            or source.get("fenced_source_rank") != expected_fence
+            or not source.get("accepted_attrition_receipt_sha256")
+            or not source.get("noncreditable_receipt_sha256")
+            or treatment.get("kind") != "hosted_inference_endpoint_v1"
+            or treatment.get("endpoint_origin") != "https://inference.flt.build"
+            or treatment.get("model_revision") != expected_revision
+            or treatment.get("model_revision") != plan["model"].get("revision")
+            or treatment.get("harness") != plan.get("harness")
+            or treatment.get("required_task_tools") != ["bash", "submit_report"]
+            or plan.get("primary_estimator_task_count") != (50 if is_qwen else 100)
+            or plan.get("primary_estimator_cell_count") != (200 if is_qwen else 400)
+            or execution.get("launch_authorized") is not False
+            or execution.get("required_priority_class") != "fleet-train-high"
+        ):
+            raise ValueError("hosted attrition replacement binding drifted")
+        return
     if shard_key in {"glm53_dedicated_a_v5", "glm53_dedicated_b_v5"}:
         treatment = plan.get("treatment_block") or {}
         source = plan.get("source") or {}
@@ -3340,6 +3489,11 @@ def main() -> int:
     dedicated_a_v5.add_argument("--hydration", type=Path, required=True)
     dedicated_a_v5.add_argument("--parity", type=Path, required=True)
     dedicated_a_v5.add_argument("--output", type=Path, required=True)
+    attrition_replacement = sub.add_parser("build-hosted-attrition-replacement")
+    attrition_replacement.add_argument("--predecessor-plan", type=Path, required=True)
+    attrition_replacement.add_argument("--supplement", type=Path, required=True)
+    attrition_replacement.add_argument("--hydration", type=Path, required=True)
+    attrition_replacement.add_argument("--output", type=Path, required=True)
     qwen_replacements = sub.add_parser("build-qwen-replacements")
     qwen_replacements.add_argument("--source-plan", type=Path, required=True)
     qwen_replacements.add_argument("--hosted-plan", type=Path, required=True)
@@ -3445,6 +3599,14 @@ def main() -> int:
             load_object(args.supplement),
             load_object(args.hydration),
             load_object(args.parity),
+        )
+        self_hosted.write_json_once(args.output, value)
+        return 0
+    if args.command == "build-hosted-attrition-replacement":
+        value = build_hosted_attrition_replacement_plan(
+            load_object(args.predecessor_plan),
+            load_object(args.supplement),
+            load_object(args.hydration),
         )
         self_hosted.write_json_once(args.output, value)
         return 0

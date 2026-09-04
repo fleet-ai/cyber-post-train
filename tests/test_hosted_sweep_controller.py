@@ -116,6 +116,12 @@ GLM_DEDICATED_A_V5_PLAN = Path(
 GLM_DEDICATED_A_V5_RELEASE = Path(
     "docs/evidence/qwen38-study/2026-09-04-glm53-dedicated-a-v5-scoring-release-v1.json"
 )
+QWEN_ATTRITION_REPLACEMENT_PLAN = Path(
+    "evals/fleet/configs/qwen38-opencode-hosted-attrition-r56-pass4-v1.json"
+)
+GLM_ATTRITION_REPLACEMENT_PLAN = Path(
+    "evals/fleet/configs/glm53-opencode-hosted-attrition-r111-pass4-v1.json"
+)
 GLM_DEDICATED_B_V5_RELEASE = Path(
     "docs/evidence/qwen38-study/2026-09-04-glm53-dedicated-b-v5-scoring-release-v1.json"
 )
@@ -1453,6 +1459,52 @@ def test_glm_dedicated_a_v5_requires_exact_root_scoring_release() -> None:
     )
     with pytest.raises(ValueError, match="does not bind"):
         hosted.validate_glm_dedicated_a_v5_scoring_release(plan, tampered)
+
+
+@pytest.mark.parametrize(
+    ("predecessor", "supplement", "hydration", "plan_path", "source_rank"),
+    [
+        (
+            QWEN_HTTP500_SUCCESSOR_PLAN,
+            QWEN_SOURCE6_REPLACEMENT_SUPPLEMENT,
+            Path(
+                "docs/evidence/qwen38-study/2026-09-04-qwen38-r56-hydration-v1.json"
+            ),
+            QWEN_ATTRITION_REPLACEMENT_PLAN,
+            56,
+        ),
+        (
+            GLM_HTTP500_HOSTED_PRIMARY_PLAN,
+            GLM_SOURCE13_REPLACEMENT_SUPPLEMENT,
+            Path(
+                "docs/evidence/qwen38-study/2026-09-04-glm53-r111-hydration-v1.json"
+            ),
+            GLM_ATTRITION_REPLACEMENT_PLAN,
+            111,
+        ),
+    ],
+)
+def test_hosted_attrition_replacement_plan_is_same_treatment_and_preview_only(
+    predecessor: Path,
+    supplement: Path,
+    hydration: Path,
+    plan_path: Path,
+    source_rank: int,
+) -> None:
+    original = hosted.load_object(predecessor)
+    plan = hosted.build_hosted_attrition_replacement_plan(
+        original,
+        hosted.load_object(supplement),
+        hosted.load_object(hydration),
+    )
+    assert plan == hosted.load_object(plan_path)
+    hosted.validate_plan(plan)
+    assert plan["treatment_block"] == original["treatment_block"]
+    assert [row["source_rank"] for row in plan["tasks"]] == [source_rank]
+    assert plan["task_count"] == 1
+    assert plan["new_session_count"] == 4
+    assert plan["execution"]["required_priority_class"] == "fleet-train-high"
+    assert plan["execution"]["launch_authorized"] is False
 
 
 def test_qwen_http500_supplement_selects_unused_r54_r55_and_restores_200_cells() -> None:
