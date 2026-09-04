@@ -1,0 +1,124 @@
+{
+  "schema_version": "fleet-glm53-dedicated-autocontinue-live-parity-pass-v2",
+  "recorded_at": "2026-09-04T20:12:37Z",
+  "classification": "operational_gate_passed_no_capability_claim",
+  "campaign": {
+    "path": "evals/fleet/configs/q38-glm53-opencode-autocontinue-primary-campaign-v1.json",
+    "campaign_sha256": "sha256:63946f224a33eb0d2c2a6fdba34358ebf9ca379e5f0f156cd137c95a9b98097e",
+    "campaign_validator_passed": true,
+    "launch_authorized_by_campaign": false,
+    "parity_probe_separately_authorized": true
+  },
+  "bound_evidence": {
+    "v1_failure_tombstone_receipt_sha256": "sha256:8386d9a730abc459f8ef6a21dab67a413ff24b8fe0cae00201e2280bf27cfa73",
+    "autocontinue_implementation_audit_receipt_sha256": "sha256:9382954ff8c6a26a5cc6f777a2520d9803dbdcedfa4759544cd718b873196094",
+    "endpoint_flock_release_gate_receipt_sha256": "sha256:e9f34d35ac3c9e60d2698ebc1685374b98f13e41ac305df0609fb051f35c416c"
+  },
+  "implementation": {
+    "source_commit": "ecc37051d0c621c8cbc850a4b0b35f27bba2bb4e",
+    "manifest_path": "evals/fleet/cluster/glm53-dedicated-autocontinue-live-parity-v2.yaml",
+    "manifest_sha256": "sha256:82dc1944a5dc069d28c0f249f9c4738ffcf6278a5a60f77d130718e339ab7931",
+    "submit_script_path": "evals/fleet/scripts/submit_glm53_dedicated_autocontinue_parity_v2.sh",
+    "submit_script_sha256": "sha256:06969fc8a4e1f3992ac51a962fc765d9ea6980249e1cf7da60f755720fa2c070",
+    "server_dry_run_passed": true,
+    "create_once": true,
+    "backoff_limit": 0,
+    "priority_class": "fleet-train-high"
+  },
+  "probe_job": {
+    "name": "chris-cyber-glm53-dedicated-autocontinue-parity-v2",
+    "uid": "91442f7a-c4b1-4809-8af2-f7bf262659df",
+    "created_at": "2026-09-04T20:11:50Z",
+    "completed_at": "2026-09-04T20:11:59Z",
+    "succeeded": 1,
+    "failed": 0
+  },
+  "probe_pod": {
+    "name": "chris-cyber-glm53-dedicated-autocontinue-parity-v2-kmk2k",
+    "uid": "25fd3e98-df6a-4cad-afa7-81fa5b87d5cf",
+    "phase": "Succeeded",
+    "restart_count": 0,
+    "exit_code": 0,
+    "started_at": "2026-09-04T20:11:51Z",
+    "finished_at": "2026-09-04T20:11:56Z",
+    "downward_job_uid_matched": true,
+    "downward_pod_uid_matched": true
+  },
+  "serving": {
+    "runtime_image": "ghcr.io/fleet-ai/cyber-post-train-glm53-runtime@sha256:ec93ba50613fd13fb4c0b0a9105767ab18209a1e0108dab0923aad694c0206ec",
+    "model": "glm-5.3",
+    "model_source": "zai-org/GLM-5.3",
+    "model_revision": "30333038ada1f1dacb294a93270305a890b50c14",
+    "model_revision_provenance": "immutable_dedicated_v5_configs_bound_to_exact_runtime_uids_and_image; live endpoints independently exposed the staged model-path prefix",
+    "model_path": "/mnt/sfs/models/glm-5.3-30333038",
+    "context_length": 262144,
+    "tp_size": 8,
+    "dp_size": 8,
+    "replicas": {
+      "a": {
+        "serving_config_sha256": "sha256:7815bf97cb23df73332c011cd86140bd0d87ab35ca1db4582a3452f8841d5875",
+        "ray_job_uid": "ef7cb0f2-84d4-4017-ae31-bf34ebb70d0d",
+        "ray_cluster_uid": "5107d72e-ae6a-4582-a490-55b349421d06",
+        "service_uid": "2c0e64de-c4a0-4f70-ae07-d15b1adad0b3",
+        "head_pod_uid": "3f37ab91-4afa-4e4d-8f29-a3eeda70a774",
+        "head_ready_after_probe": true,
+        "head_restart_count_after_probe": 0,
+        "health_http_status_after_probe": 200,
+        "resolved_image_id_matched": true
+      },
+      "b": {
+        "serving_config_sha256": "sha256:f93b2f73d9d42fa16e72a9e1f9af638623fe514550602359b9d6a3906021967e",
+        "ray_job_uid": "2bbfd34a-d74a-4497-ab28-48cada0c9753",
+        "ray_cluster_uid": "f7f7ae34-6a79-482a-b771-4639b786f66a",
+        "service_uid": "14ae906a-60ef-4a02-b6bf-814a00c2c89f",
+        "head_pod_uid": "bfeb4c6a-9e4a-4f14-adb2-3f516dd25fdb",
+        "head_ready_after_probe": true,
+        "head_restart_count_after_probe": 0,
+        "health_http_status_after_probe": 200,
+        "resolved_image_id_matched": true
+      }
+    }
+  },
+  "opencode_treatment": {
+    "version": "1.18.27",
+    "context_management": "opencode_1.18.27_native_compaction_autocontinue_v1",
+    "compaction_auto": true,
+    "compaction_reserved_tokens": 20000,
+    "context_window_tokens": 262144,
+    "input_limit_tokens": 229376,
+    "max_output_tokens": 32768,
+    "settings_canonical_sha256": "sha256:9614806454c86784e54fde31a8acc3f51adda11593fad3e762142cd04a4010f2",
+    "settings_file_sha256": "sha256:84a1ca763a297bd8badb184391a02c82d57069b9a211ecef4f5e53dd79e20e20",
+    "disable_autocontinue_plugin_present": false
+  },
+  "probe": {
+    "replica_receipts": 2,
+    "replica_receipts_digest_valid": 2,
+    "terminal_receipt_sha256": "sha256:06a11d0288a73e665d8ae6118bcd328c5677723f9120b2eeb40e8cfa8bf7daa6",
+    "structured_tool_schema_names": ["bash", "submit_report"],
+    "selected_tool_names_per_replica": ["bash", "submit_report"],
+    "exact_argument_schema_keys_and_types_valid": true,
+    "non_scored_model_requests": 4,
+    "tool_execution_performed": false,
+    "response_content_included": false,
+    "tool_arguments_included": false
+  },
+  "outcome_integrity": {
+    "fleet_api_contacted": false,
+    "task_instance_created": false,
+    "session_created": false,
+    "scoring_executed": false,
+    "verifier_executed": false,
+    "capability_claim_allowed": false,
+    "dedicated_a_and_b_uid_bound_autocontinue_parity_passed": true
+  },
+  "privacy": {
+    "credentials_included": false,
+    "task_prompts_or_traces_included": false,
+    "tool_argument_values_included": false,
+    "response_content_included": false,
+    "flags_included": false,
+    "scores_included": false
+  },
+  "receipt_sha256": "sha256:07e733b4b161ed7c36113fc3688f04a42938d93a499b1bcc10c7cd21342900df"
+}
