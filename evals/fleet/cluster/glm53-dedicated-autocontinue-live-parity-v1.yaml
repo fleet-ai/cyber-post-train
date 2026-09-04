@@ -33,6 +33,8 @@ spec:
               OUT = pathlib.Path("/mnt/sfs/jobs/chris-cyber-glm53-dedicated-autocontinue-parity-v1")
               JOB_UID = os.environ["JOB_UID"]
               POD_UID = os.environ["POD_UID"]
+              CAMPAIGN_PATH = "evals/fleet/configs/q38-glm53-opencode-autocontinue-primary-campaign-v1.json"
+              CAMPAIGN_SHA256 = "sha256:1f4b63897fa8f954b2ea9ccb2532d65329737d959e74ef68fd8238d2532ee971"
               MODEL_REVISION = "30333038ada1f1dacb294a93270305a890b50c14"
               RUNTIME_IMAGE = "ghcr.io/fleet-ai/cyber-post-train-glm53-runtime@sha256:ec93ba50613fd13fb4c0b0a9105767ab18209a1e0108dab0923aad694c0206ec"
               CONTEXT_POLICY = "opencode_1.18.27_native_compaction_autocontinue_v1"
@@ -165,10 +167,12 @@ spec:
                   receipt = {
                       "schema_version": "fleet-glm53-dedicated-autocontinue-live-parity-replica-v1",
                       "probe_job_uid": JOB_UID, "probe_pod_uid": POD_UID,
+                      "campaign_path": CAMPAIGN_PATH, "campaign_sha256": CAMPAIGN_SHA256,
                       "replica": replica["replica"],
                       "ray_job_uid": replica["ray_job_uid"], "ray_cluster_uid": replica["ray_cluster_uid"],
                       "service_uid": replica["service_uid"], "head_pod_uid": replica["head_pod_uid"],
                       "runtime_image": RUNTIME_IMAGE, "model_revision": MODEL_REVISION,
+                      "model_revision_provenance": "immutable_dedicated_v5_config_bound_to_exact_runtime_uids_and_image",
                       "served_model": "glm-5.3", "context_length": 262144, "tp_size": 8, "dp_size": 8,
                       "opencode_version": "1.18.27", "context_management": CONTEXT_POLICY,
                       "settings_canonical_sha256": SETTINGS_CANONICAL, "settings_file_sha256": SETTINGS_FILE,
@@ -184,8 +188,11 @@ spec:
               terminal = {
                   "schema_version": "fleet-glm53-dedicated-autocontinue-live-parity-terminal-v1",
                   "probe_job_uid": JOB_UID, "probe_pod_uid": POD_UID,
+                  "campaign_path": CAMPAIGN_PATH, "campaign_sha256": CAMPAIGN_SHA256,
                   "replicas": 2, "replica_receipt_sha256s": [row["receipt_sha256"] for row in receipts],
-                  "runtime_image": RUNTIME_IMAGE, "model_revision": MODEL_REVISION, "context_length": 262144,
+                  "runtime_image": RUNTIME_IMAGE, "model_revision": MODEL_REVISION,
+                  "model_revision_provenance": "immutable_dedicated_v5_configs_bound_to_exact_runtime_uids_and_image",
+                  "context_length": 262144,
                   "opencode_version": "1.18.27", "context_management": CONTEXT_POLICY,
                   "settings_canonical_sha256": SETTINGS_CANONICAL, "settings_file_sha256": SETTINGS_FILE,
                   "structured_tool_schema_names": ["bash", "submit_report"], "selected_tool_names_per_replica": ["bash", "submit_report"],

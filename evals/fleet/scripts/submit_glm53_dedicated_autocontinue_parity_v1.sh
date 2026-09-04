@@ -10,13 +10,19 @@ fi
 ROOT=$(git rev-parse --show-toplevel)
 NS=fleet-train-jobs
 MANIFEST="$ROOT/evals/fleet/cluster/glm53-dedicated-autocontinue-live-parity-v1.yaml"
-MANIFEST_SHA256=fb4086b611bde1dff88438164bcac81f9ca71ff84ccdd1b76b4c00c04cfc520e
+MANIFEST_SHA256=044efb07c19ef3f405fa63be7614fba67f1f56e9447f681a38c979d99ce807d8
+CAMPAIGN="$ROOT/evals/fleet/configs/q38-glm53-opencode-autocontinue-primary-campaign-v1.json"
+CAMPAIGN_SHA256=sha256:1f4b63897fa8f954b2ea9ccb2532d65329737d959e74ef68fd8238d2532ee971
+RELEASE="$ROOT/docs/evidence/qwen38-study/2026-09-04-opencode-autocontinue-primary-campaign-release-preview-v1.json"
 JOB=chris-cyber-glm53-dedicated-autocontinue-parity-v1
 OUT=/mnt/sfs/jobs/chris-cyber-glm53-dedicated-autocontinue-parity-v1
 IMAGE=ghcr.io/fleet-ai/cyber-post-train-glm53-runtime@sha256:ec93ba50613fd13fb4c0b0a9105767ab18209a1e0108dab0923aad694c0206ec
 
 actual_manifest_sha256=$(sha256sum "$MANIFEST" | awk '{print $1}')
 test "$actual_manifest_sha256" = "$MANIFEST_SHA256"
+actual_campaign_sha256=$(uv run python -c 'import json,sys; print(json.load(open(sys.argv[1]))["campaign_sha256"])' "$CAMPAIGN")
+test "$actual_campaign_sha256" = "$CAMPAIGN_SHA256"
+uv run python -m evals.fleet.autocontinue_campaign --campaign "$CAMPAIGN" --release "$RELEASE" >/dev/null
 
 require_uid() {
   local kind=$1 name=$2 expected=$3
