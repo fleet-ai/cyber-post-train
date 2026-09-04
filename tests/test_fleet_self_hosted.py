@@ -129,6 +129,28 @@ def test_partial_session_observers_are_read_only_create_once_high_priority() -> 
             config, "config_sha256"
         )
 
+    successor_manifests = {
+        "evals/fleet/cluster/opencode-glm53-a-source14-a1-partial-observer-v2.yaml": (
+            "observe-partial-session",
+            "chris-cyber-glm53-a-source14-a1-partial-observer-v2",
+        ),
+        "evals/fleet/cluster/opencode-qwen38-source10-a3-partial-diagnostic-v2.yaml": (
+            "diagnose-partial-session",
+            "chris-cyber-q38-source10-a3-partial-diagnostic-v2",
+        ),
+    }
+    for path, (command_name, expected_name) in successor_manifests.items():
+        document = yaml.safe_load(Path(path).read_text())
+        pod = document["spec"]["template"]["spec"]
+        command = pod["containers"][0]["args"][0]
+        assert document["metadata"]["name"] == expected_name
+        assert document["spec"]["backoffLimit"] == 0
+        assert pod["priorityClassName"] == "fleet-train-high"
+        assert command_name in command
+        assert "resume-partial-session" not in command
+        assert "opencode run" not in command
+        assert "docker" not in command
+
 
 def _recovery_source_fixture(tmp_path: Path) -> tuple[dict, Path, str]:
     config = json.loads(OPENCODE_CONFIG_PATH.read_text())
@@ -980,6 +1002,59 @@ def test_resume_partial_session_trace_rejects_prefix_count_drift(tmp_path: Path)
         )
     assert posts == 0
     assert not (tmp_path / "observe" / "OBSERVED.json").exists()
+
+
+def test_partial_prefix_mismatch_diagnostic_emits_only_shapes_and_digests(
+    tmp_path: Path,
+) -> None:
+    config, source, _, session_id = _partial_recovery_source_fixture(tmp_path)
+    chunks, _ = self_hosted._partial_recovery_source(config, source)
+    prefix = [message for chunk in chunks[:1] for message in chunk]
+    drifted = copy.deepcopy(prefix)
+    drifted[0]["content"] = "private server-only value"
+
+    class Client:
+        def request(self, method: str, url: str, **kwargs):
+            if method == "GET" and url.endswith("/v1/account"):
+                payload = {"team_name": "fleet", "team_id": self_hosted.FLEET_TEAM_ID}
+            elif method == "GET" and url.endswith("/v1/sessions"):
+                payload = {
+                    "sessions": [
+                        {
+                            "session_id": session_id,
+                            "model": "qwen3.8-27b",
+                            "status": "in_progress",
+                            "verifier_execution": None,
+                        }
+                    ],
+                    "has_more": False,
+                }
+            elif method == "GET" and url.endswith(f"/{session_id}/transcript"):
+                payload = {
+                    "harness": {},
+                    "instance": {},
+                    "task": {},
+                    "transcript": drifted,
+                    "verifier_execution": None,
+                }
+            else:
+                pytest.fail("diagnostic must be read-only")
+            return type("Response", (), {"status_code": 200, "json": lambda self: payload})()
+
+    receipt = self_hosted.diagnose_partial_session_prefix_mismatch(
+        Client(), config=config, source_dir=source, out_dir=tmp_path / "diagnostic"
+    )
+    assert receipt["resume_allowed"] is False
+    assert receipt["first_mismatch_index"] == 0
+    assert receipt["server_prefix_message_count"] == len(prefix)
+    assert receipt["server_message_shape"]["keys"] == sorted(drifted[0])
+    assert receipt["server_message_sha256"] != receipt["local_message_sha256"]
+    assert receipt["receipt_sha256"] == self_hosted.digest_without(
+        receipt, "receipt_sha256"
+    )
+    encoded = json.dumps(receipt)
+    assert "private server-only value" not in encoded
+    assert "done" not in encoded
 
 
 def test_resume_partial_session_trace_rejects_source_drift_after_observer(

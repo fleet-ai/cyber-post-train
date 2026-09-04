@@ -2022,6 +2022,9 @@ def observe_partial_session_resume(
         comparison = _inspect_partial_session_prefix(
             client, config=config, chunks=chunks, source=source
         )
+        rebound_chunks, rebound_source = _partial_recovery_source(config, source_dir)
+        if canonical_json(rebound_chunks) != canonical_json(chunks) or rebound_source != source:
+            raise RuntimeError("partial recovery source drifted during observation")
         receipt = {
             "schema_version": "fleet-opencode-partial-session-prefix-observer-v1",
             "observed": True,
@@ -2042,6 +2045,7 @@ def observe_partial_session_resume(
             "source_reward_sha256": source["source_reward_sha256"],
             "original_ingest_sha256": source["original_ingest_sha256"],
             "comparison": comparison,
+            "source_rebound_after_observation": True,
             "transcript_read_in_memory_only": True,
             "transcript_persisted_or_emitted": False,
             "scores_included": False,
@@ -2054,6 +2058,132 @@ def observe_partial_session_resume(
         failure = {
             "schema_version": "fleet-opencode-partial-session-prefix-observer-failure-v1",
             "error_type": type(exc).__name__,
+            "scores_included": False,
+            "prompts_or_traces_included": False,
+        }
+        if isinstance(exc, FleetRequestError):
+            failure.update(http_status=exc.status_code, method=exc.method, route=exc.route)
+        failure["receipt_sha256"] = digest_without(failure, "receipt_sha256")
+        write_json_once(out_dir / "failure.json", failure)
+        raise
+
+
+def diagnose_partial_session_prefix_mismatch(
+    client: httpx.Client,
+    *,
+    config: dict[str, Any],
+    source_dir: Path,
+    out_dir: Path,
+) -> dict[str, Any]:
+    """Seal only structural/digest evidence for a mismatched private prefix."""
+    out_dir.mkdir(parents=True, exist_ok=False)
+    out_dir.chmod(0o700)
+    try:
+        account = _request(client, "GET", "/v1/account")
+        if account.get("team_name") != "fleet" or account.get("team_id") != FLEET_TEAM_ID:
+            raise RuntimeError("FLEET_API_KEY is not scoped to the Fleet team")
+        chunks, source = _partial_recovery_source(config, source_dir)
+        rows = _task_sessions(client, config["task"]["key"])
+        matches = [row for row in rows if row.get("session_id") == source["session_id"]]
+        row = matches[0] if len(matches) == 1 else None
+        if (
+            row is None
+            or row.get("status") != "in_progress"
+            or row.get("model") != persisted_session_model_identity(config)
+            or row.get("verifier_execution") is not None
+        ):
+            raise RuntimeError("partial diagnostic session inventory is not authoritative")
+        response = _request(
+            client, "GET", f"/v1/sessions/{source['session_id']}/transcript"
+        )
+        transcript = response.get("transcript")
+        expected_keys = ["harness", "instance", "task", "transcript", "verifier_execution"]
+        if sorted(response) != expected_keys or not isinstance(transcript, list):
+            raise RuntimeError("partial diagnostic transcript schema drifted")
+        local_prefix = [
+            message
+            for chunk in chunks[: source["chunks_completed"]]
+            for message in chunk
+        ]
+        if len(transcript) != len(local_prefix):
+            raise RuntimeError("partial diagnostic transcript count drifted")
+
+        first_mismatch_index: int | None = None
+        for index, (local_message, server_message) in enumerate(
+            zip(local_prefix, transcript, strict=True)
+        ):
+            if canonical_json(local_message) != canonical_json(server_message):
+                first_mismatch_index = index
+                break
+        if first_mismatch_index is None:
+            raise RuntimeError("partial diagnostic expected a canonical mismatch")
+
+        def safe_shape(value: Any) -> dict[str, Any]:
+            if not isinstance(value, dict):
+                return {"container_type": type(value).__name__}
+            role = value.get("role")
+            return {
+                "container_type": "dict",
+                "keys": sorted(str(key) for key in value),
+                "field_types": {
+                    str(key): type(value[key]).__name__
+                    for key in sorted(value, key=str)
+                },
+                "role": role if role in {"system", "user", "assistant", "tool"} else None,
+            }
+
+        local_message = local_prefix[first_mismatch_index]
+        server_message = transcript[first_mismatch_index]
+        local_bytes = canonical_json(local_prefix)
+        server_bytes = canonical_json(transcript)
+        rebound_chunks, rebound_source = _partial_recovery_source(config, source_dir)
+        if canonical_json(rebound_chunks) != canonical_json(chunks) or rebound_source != source:
+            raise RuntimeError("partial diagnostic source drifted during observation")
+        receipt = {
+            "schema_version": "fleet-opencode-partial-session-prefix-mismatch-v1",
+            "diagnostic_only": True,
+            "resume_allowed": False,
+            "run_id": config["run_id"],
+            "config_sha256": config["config_sha256"],
+            "task_version_id": config["task"]["version_id"],
+            "session_id": source["session_id"],
+            "verifier_execution_id": source["verifier_execution_id"],
+            "server_prefix_message_count": len(transcript),
+            "local_prefix_message_count": len(local_prefix),
+            "first_mismatch_index": first_mismatch_index,
+            "prefix_bytes_equal": False,
+            "server_prefix_sha256": sha256(server_bytes),
+            "local_prefix_sha256": sha256(local_bytes),
+            "server_message_sha256": sha256(canonical_json(server_message)),
+            "local_message_sha256": sha256(canonical_json(local_message)),
+            "server_message_shape": safe_shape(server_message),
+            "local_message_shape": safe_shape(local_message),
+            "source_trace_manifest_sha256": sha256(
+                (source_dir / "trace-manifest.json").read_bytes()
+            ),
+            "canonical_trace_sha256": source["trace_sha256"],
+            "source_result_sha256": source["source_result_sha256"],
+            "source_reward_sha256": source["source_reward_sha256"],
+            "original_ingest_sha256": source["original_ingest_sha256"],
+            "source_rebound_after_observation": True,
+            "transcript_route": "/v1/sessions/{session_id}/transcript",
+            "transcript_response_schema_keys": expected_keys,
+            "transcript_read_in_memory_only": True,
+            "transcript_persisted_or_emitted": False,
+            "content_or_tool_arguments_included": False,
+            "scores_included": False,
+            "prompts_or_traces_included": False,
+        }
+        receipt["receipt_sha256"] = digest_without(receipt, "receipt_sha256")
+        del transcript, response, local_prefix, local_message, server_message
+        del local_bytes, server_bytes
+        write_json_once(out_dir / "MISMATCH.json", receipt)
+        return receipt
+    except BaseException as exc:
+        failure = {
+            "schema_version": "fleet-opencode-partial-session-prefix-diagnostic-failure-v1",
+            "error_type": type(exc).__name__,
+            "content_or_tool_arguments_included": False,
             "scores_included": False,
             "prompts_or_traces_included": False,
         }
@@ -2362,6 +2492,7 @@ def main() -> int:
             "run",
             "recover-session",
             "observe-partial-session",
+            "diagnose-partial-session",
             "resume-partial-session",
         ),
     )
@@ -2435,7 +2566,11 @@ def main() -> int:
             )
         )
         return 0
-    if args.command in {"observe-partial-session", "resume-partial-session"}:
+    if args.command in {
+        "observe-partial-session",
+        "diagnose-partial-session",
+        "resume-partial-session",
+    }:
         if not args.source_dir or not args.out_dir:
             parser.error(f"{args.command} requires --source-dir and --out-dir")
         with httpx.Client(
@@ -2466,6 +2601,32 @@ def main() -> int:
                     )
                 )
                 return 0
+            if args.command == "diagnose-partial-session":
+                diagnostic = diagnose_partial_session_prefix_mismatch(
+                    client, config=config, source_dir=args.source_dir, out_dir=args.out_dir
+                )
+                print(
+                    json.dumps(
+                        {
+                            "diagnostic_only": diagnostic["diagnostic_only"],
+                            "resume_allowed": diagnostic["resume_allowed"],
+                            "run_id": diagnostic["run_id"],
+                            "session_id": diagnostic["session_id"],
+                            "message_count": diagnostic[
+                                "server_prefix_message_count"
+                            ],
+                            "first_mismatch_index": diagnostic[
+                                "first_mismatch_index"
+                            ],
+                            "receipt_sha256": diagnostic["receipt_sha256"],
+                            "content_or_tool_arguments_included": False,
+                            "scores_included": False,
+                            "prompts_or_traces_included": False,
+                        },
+                        sort_keys=True,
+                    )
+                )
+                return 3
             if not args.observer_receipt:
                 parser.error("resume-partial-session requires --observer-receipt")
             observer = _read_json_object(args.observer_receipt)
