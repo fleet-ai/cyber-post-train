@@ -6,10 +6,14 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
+import yaml
 
 from evals.fleet import campaign_supervisor as supervisor
 
 CAMPAIGN = Path("evals/fleet/configs/q38-glm53-primary-campaign-v1.json")
+SUPERVISOR_MANIFEST = Path(
+    "evals/fleet/cluster/q38-glm53-campaign-supervisor-v1.yaml"
+)
 WORKER_UID = "11111111-1111-4111-8111-111111111111"
 
 
@@ -26,6 +30,20 @@ def _ledger(tmp_path: Path) -> tuple[Path, dict, dict]:
     campaign = _released_fixture_campaign()
     root = tmp_path / "ledger"
     universe = supervisor.initialize_ledger(campaign, root, cluster=False)
+    import_manifest = {
+        "schema_version": supervisor.LEGACY_IMPORT_SCHEMA,
+        "campaign_sha256": universe["campaign_sha256"],
+        "universe_sha256": universe["universe_sha256"],
+        "complete_inventory": True,
+        "observed_cell_count": 0,
+        "entries": [],
+        "scores_included": False,
+        "prompts_or_traces_included": False,
+    }
+    import_manifest["import_sha256"] = supervisor.digest_without(
+        import_manifest, "import_sha256"
+    )
+    supervisor.import_legacy_evidence(root, import_manifest)
     qwen = next(
         cell for cell in universe["cells"] if cell["component_id"] == "qwen-hosted-v8-primary49"
     )
@@ -96,6 +114,32 @@ def test_campaign_rejects_capacity_or_plan_drift() -> None:
         supervisor.build_universe(drifted, cluster=False)
 
 
+def test_execution_fragments_must_exactly_partition_component() -> None:
+    campaign = _released_fixture_campaign()
+    component = campaign["components"][1]
+    ranks = component["source_ranks"]
+    shared = {
+        "repo_plan_path": component["repo_plan_path"],
+        "cluster_plan_path": component["cluster_plan_path"],
+        "plan_sha256": component["plan_sha256"],
+    }
+    component["execution_fragments"] = [
+        {**shared, "source_ranks": ranks[:24]},
+        {**shared, "source_ranks": ranks[24:]},
+    ]
+    campaign["campaign_sha256"] = supervisor.digest_without(
+        campaign, "campaign_sha256"
+    )
+    assert supervisor.build_universe(campaign, cluster=False)["cell_count"] == 600
+
+    component["execution_fragments"][1]["source_ranks"].append(ranks[0])
+    campaign["campaign_sha256"] = supervisor.digest_without(
+        campaign, "campaign_sha256"
+    )
+    with pytest.raises(ValueError, match="exactly partition"):
+        supervisor.validate_campaign(campaign)
+
+
 def test_atomic_claim_allows_exactly_one_controller(tmp_path: Path) -> None:
     root, universe, _ = _ledger(tmp_path)
     cell = next(
@@ -118,6 +162,179 @@ def test_atomic_claim_allows_exactly_one_controller(tmp_path: Path) -> None:
     assert len(successes) == 1
     assert len(failures) == 1
     assert isinstance(failures[0], FileExistsError)
+
+
+def test_claim_is_blocked_until_authoritative_legacy_inventory_is_sealed(
+    tmp_path: Path,
+) -> None:
+    campaign = _released_fixture_campaign()
+    root = tmp_path / "ledger"
+    universe = supervisor.initialize_ledger(campaign, root, cluster=False)
+    cell = universe["cells"][0]
+    with pytest.raises(RuntimeError, match="legacy inventory is not sealed"):
+        supervisor.claim_cell(
+            root,
+            cell_id=cell["cell_id"],
+            worker_name="absent",
+            worker_uid=WORKER_UID,
+            run_id=cell["source_run_id"],
+        )
+
+
+def test_legacy_import_is_exact_atomic_and_prevents_reclaim(tmp_path: Path) -> None:
+    campaign = _released_fixture_campaign()
+    root = tmp_path / "ledger"
+    universe = supervisor.initialize_ledger(campaign, root, cluster=False)
+    cell = next(
+        row
+        for row in universe["cells"]
+        if row["component_id"] == "qwen-hosted-v8-primary49"
+        and row["source_rank"] == 11
+        and row["attempt"] == 1
+    )
+    evidence = {
+        "schema_version": "fleet-hosted-opencode-attempt-accepted-v1",
+        "accepted": True,
+        "credited": True,
+        "plan_sha256": cell["source_plan_sha256"],
+        "run_id": cell["source_run_id"],
+        "task_version_id": cell["task_version_id"],
+        "source_rank": cell["source_rank"],
+        "attempt": cell["attempt"],
+        "scores_included": False,
+        "prompts_or_traces_included": False,
+    }
+    evidence["receipt_sha256"] = supervisor.digest_without(
+        evidence, "receipt_sha256"
+    )
+    evidence_path = tmp_path / "accepted.json"
+    evidence_path.write_text(json.dumps(evidence))
+    entry = {
+        "cell_id": cell["cell_id"],
+        "state": "accepted",
+        "worker_name": "legacy-qwen-worker",
+        "worker_uid": WORKER_UID,
+        "component_id": cell["component_id"],
+        "source_plan_sha256": cell["source_plan_sha256"],
+        "run_id": cell["source_run_id"],
+        "task_version_id": cell["task_version_id"],
+        "source_rank": cell["source_rank"],
+        "attempt": cell["attempt"],
+        "evidence_path": str(evidence_path),
+        "evidence_sha256": evidence["receipt_sha256"],
+    }
+    manifest = {
+        "schema_version": supervisor.LEGACY_IMPORT_SCHEMA,
+        "campaign_sha256": universe["campaign_sha256"],
+        "universe_sha256": universe["universe_sha256"],
+        "complete_inventory": True,
+        "observed_cell_count": 1,
+        "entries": [entry],
+        "scores_included": False,
+        "prompts_or_traces_included": False,
+    }
+    manifest["import_sha256"] = supervisor.digest_without(
+        manifest, "import_sha256"
+    )
+    supervisor.import_legacy_evidence(root, manifest)
+    block = next(
+        row
+        for row in supervisor.status(root)["blocks"]
+        if row["model"] == "qwen3.8-27b"
+        and row["serving_block"] == "qwen-hosted-no-autocontinue"
+    )
+    assert block["accepted"] == 1
+    with pytest.raises(RuntimeError, match="legacy inventory"):
+        supervisor.claim_cell(
+            root,
+            cell_id=cell["cell_id"],
+            worker_name="legacy-qwen-worker",
+            worker_uid=WORKER_UID,
+            run_id=cell["source_run_id"],
+        )
+    with pytest.raises(FileExistsError):
+        supervisor.import_legacy_evidence(root, manifest)
+
+    tampered = copy.deepcopy(manifest)
+    tampered["entries"][0]["task_version_id"] = "wrong"
+    tampered["import_sha256"] = supervisor.digest_without(tampered, "import_sha256")
+    other_root = tmp_path / "other-ledger"
+    supervisor.initialize_ledger(campaign, other_root, cluster=False)
+    with pytest.raises(ValueError, match="cell binding drifted"):
+        supervisor.import_legacy_evidence(other_root, tampered)
+
+
+def test_imported_active_claim_can_terminalize_without_reclaim(tmp_path: Path) -> None:
+    campaign = _released_fixture_campaign()
+    root = tmp_path / "ledger"
+    universe = supervisor.initialize_ledger(campaign, root, cluster=False)
+    cell = universe["cells"][0]
+    claim = {
+        "schema_version": "fleet-hosted-opencode-attempt-claim-v1",
+        "plan_sha256": cell["source_plan_sha256"],
+        "run_id": cell["source_run_id"],
+        "source_rank": cell["source_rank"],
+        "attempt": cell["attempt"],
+    }
+    claim["claim_sha256"] = supervisor.digest_without(claim, "claim_sha256")
+    claim_path = tmp_path / "claim.json"
+    claim_path.write_text(json.dumps(claim))
+    entry = {
+        "cell_id": cell["cell_id"],
+        "state": "claimed",
+        "worker_name": "legacy-active-worker",
+        "worker_uid": WORKER_UID,
+        "component_id": cell["component_id"],
+        "source_plan_sha256": cell["source_plan_sha256"],
+        "run_id": cell["source_run_id"],
+        "task_version_id": cell["task_version_id"],
+        "source_rank": cell["source_rank"],
+        "attempt": cell["attempt"],
+        "evidence_path": str(claim_path),
+        "evidence_sha256": claim["claim_sha256"],
+    }
+    manifest = {
+        "schema_version": supervisor.LEGACY_IMPORT_SCHEMA,
+        "campaign_sha256": universe["campaign_sha256"],
+        "universe_sha256": universe["universe_sha256"],
+        "complete_inventory": True,
+        "observed_cell_count": 1,
+        "entries": [entry],
+        "scores_included": False,
+        "prompts_or_traces_included": False,
+    }
+    manifest["import_sha256"] = supervisor.digest_without(
+        manifest, "import_sha256"
+    )
+    supervisor.import_legacy_evidence(root, manifest)
+
+    accepted = {
+        "accepted": True,
+        "credited": True,
+        "task_version_id": cell["task_version_id"],
+        "attempt": cell["attempt"],
+        "scores_included": False,
+        "prompts_or_traces_included": False,
+    }
+    accepted["receipt_sha256"] = supervisor.digest_without(
+        accepted, "receipt_sha256"
+    )
+    accepted_path = tmp_path / "accepted-after-import.json"
+    accepted_path.write_text(json.dumps(accepted))
+    supervisor.record_outcome(
+        root,
+        cell_id=cell["cell_id"],
+        kind="accepted",
+        evidence_path=accepted_path,
+    )
+    block = next(
+        row
+        for row in supervisor.status(root)["blocks"]
+        if row["model"] == cell["model"]
+        and row["serving_block"] == cell["serving_block"]
+    )
+    assert block["accepted"] == 1
+    assert block["claimed"] == 0
 
 
 def test_claim_rejects_foreign_partition_and_run_namespace(tmp_path: Path) -> None:
@@ -284,3 +501,27 @@ def test_heartbeat_fails_closed_on_uid_or_priority_drift(tmp_path: Path) -> None
         )
     with pytest.raises(RuntimeError, match="priority drifted"):
         supervisor.heartbeat_once(root, Kube(WORKER_UID, "fleet-infra-quiet"))  # type: ignore[arg-type]
+
+
+def test_cluster_supervisor_is_read_only_high_priority_and_held() -> None:
+    documents = list(yaml.safe_load_all(SUPERVISOR_MANIFEST.read_text()))
+    assert [document["kind"] for document in documents] == [
+        "ServiceAccount",
+        "Role",
+        "RoleBinding",
+        "Deployment",
+    ]
+    role = documents[1]
+    assert role["rules"] == [
+        {"apiGroups": ["batch"], "resources": ["jobs"], "verbs": ["get"]}
+    ]
+    deployment = documents[3]
+    assert deployment["metadata"]["annotations"][
+        "cyber-post-train.fleet.ai/launch-authorized"
+    ] == "false"
+    pod = deployment["spec"]["template"]["spec"]
+    assert pod["priorityClassName"] == "fleet-train-high"
+    command = pod["containers"][0]["args"][0]
+    assert "campaign_supervisor status" in command
+    assert "campaign_supervisor watch" in command
+    assert "FLEET_API_KEY" not in SUPERVISOR_MANIFEST.read_text()

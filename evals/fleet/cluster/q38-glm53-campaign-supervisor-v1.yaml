@@ -1,0 +1,89 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: chris-cyber-campaign-supervisor-v1
+  namespace: fleet-train-jobs
+  annotations:
+    cyber-post-train.fleet.ai/launch-authorized: "false"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: chris-cyber-campaign-supervisor-v1
+  namespace: fleet-train-jobs
+rules:
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: chris-cyber-campaign-supervisor-v1
+  namespace: fleet-train-jobs
+subjects:
+  - kind: ServiceAccount
+    name: chris-cyber-campaign-supervisor-v1
+    namespace: fleet-train-jobs
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: chris-cyber-campaign-supervisor-v1
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chris-cyber-q38-glm53-campaign-supervisor-v1
+  namespace: fleet-train-jobs
+  annotations:
+    cyber-post-train.fleet.ai/launch-authorized: "false"
+  labels:
+    cyber-post-train.fleet.ai/experiment: q38-glm53-primary-pass4-v1
+    cyber-post-train.fleet.ai/owner: chris
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels:
+      app: chris-cyber-q38-glm53-campaign-supervisor-v1
+  template:
+    metadata:
+      labels:
+        app: chris-cyber-q38-glm53-campaign-supervisor-v1
+        cyber-post-train.fleet.ai/experiment: q38-glm53-primary-pass4-v1
+        cyber-post-train.fleet.ai/owner: chris
+    spec:
+      serviceAccountName: chris-cyber-campaign-supervisor-v1
+      automountServiceAccountToken: true
+      restartPolicy: Always
+      priorityClassName: fleet-train-high
+      nodeSelector: {kubernetes.io/arch: amd64, workload: fleetai-training-ng-cpu}
+      tolerations:
+        - {key: workload, operator: Equal, value: fleetai-training-ng-cpu, effect: NoSchedule}
+      containers:
+        - name: supervisor
+          image: ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
+          command: ["/bin/bash", "-ceu", "--"]
+          args:
+            - |
+              root=/workspace/cyber-post-train
+              mkdir -p "$root/evals/fleet"
+              touch "$root/evals/__init__.py" "$root/evals/fleet/__init__.py"
+              install -m 0444 /bootstrap/campaign_supervisor.py "$root/evals/fleet/campaign_supervisor.py"
+              cd "$root"
+              ledger=/mnt/sfs/jobs/chris-cyber-q38-glm53-primary-campaign-v1-ledger
+              python3 -m evals.fleet.campaign_supervisor status --ledger-root "$ledger" --format json >/dev/null
+              exec python3 -m evals.fleet.campaign_supervisor watch --ledger-root "$ledger" --interval-seconds 30
+          resources:
+            requests: {cpu: 50m, memory: 128Mi}
+            limits: {cpu: 250m, memory: 256Mi}
+          volumeMounts:
+            - {name: bootstrap, mountPath: /bootstrap, readOnly: true}
+            - {name: workspace, mountPath: /workspace}
+            - {name: sfs, mountPath: /mnt/sfs}
+      volumes:
+        - name: bootstrap
+          configMap:
+            name: chris-cyber-q38-glm53-campaign-supervisor-v1
+        - {name: workspace, emptyDir: {sizeLimit: 256Mi}}
+        - {name: sfs, persistentVolumeClaim: {claimName: sfs-shared}}

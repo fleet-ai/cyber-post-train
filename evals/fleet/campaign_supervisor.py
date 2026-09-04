@@ -28,6 +28,7 @@ UNIVERSE_SCHEMA = "fleet-score-blind-cell-universe-v1"
 LEDGER_EVENT_SCHEMA = "fleet-score-blind-cell-event-v1"
 WORKER_SCHEMA = "fleet-score-blind-worker-registration-v1"
 HEARTBEAT_SCHEMA = "fleet-score-blind-campaign-heartbeat-v1"
+LEGACY_IMPORT_SCHEMA = "fleet-score-blind-legacy-import-v1"
 HIGH_PRIORITY_CLASS = "fleet-train-high"
 
 
@@ -115,9 +116,25 @@ def validate_campaign(campaign: dict[str, Any]) -> None:
             raise ValueError("campaign component is not fleet-train-high")
         if not isinstance(row.get("source_ranks"), list) or not row["source_ranks"]:
             raise ValueError("campaign component lacks an explicit source-rank partition")
-        digest = row.get("plan_sha256")
-        if not isinstance(digest, str) or not digest.startswith("sha256:"):
-            raise ValueError("campaign component lacks an immutable plan digest")
+        fragments = row.get("execution_fragments")
+        if fragments is None:
+            fragments = [row]
+        if not isinstance(fragments, list) or not fragments:
+            raise ValueError("campaign component lacks execution fragments")
+        fragment_ranks: list[int] = []
+        for fragment in fragments:
+            digest = fragment.get("plan_sha256")
+            ranks = fragment.get("source_ranks", row.get("source_ranks"))
+            if not isinstance(digest, str) or not digest.startswith("sha256:"):
+                raise ValueError("campaign component lacks an immutable plan digest")
+            if not isinstance(ranks, list) or not ranks:
+                raise ValueError("campaign execution fragment lacks source ranks")
+            fragment_ranks.extend(int(rank) for rank in ranks)
+        selected = [int(rank) for rank in row["source_ranks"]]
+        if sorted(fragment_ranks) != sorted(selected) or len(fragment_ranks) != len(
+            set(fragment_ranks)
+        ):
+            raise ValueError("campaign execution fragments do not exactly partition component")
 
 
 def _plan_path(component: dict[str, Any], cluster: bool) -> Path:
@@ -133,50 +150,64 @@ def build_universe(campaign: dict[str, Any], *, cluster: bool) -> dict[str, Any]
     cells: list[dict[str, Any]] = []
     component_counts: dict[str, int] = {}
     for component in campaign["components"]:
-        plan = read_object(_plan_path(component, cluster))
-        if plan.get("plan_sha256") != component["plan_sha256"]:
-            raise ValueError(f"plan digest binding drifted for {component['id']}")
-        if plan.get("plan_sha256") != digest_without(plan, "plan_sha256"):
-            raise ValueError(f"plan self-digest drifted for {component['id']}")
-        selected = {int(rank) for rank in component["source_ranks"]}
-        tasks = {
-            int(task["source_rank"]): task
-            for task in plan.get("tasks") or []
-            if int(task["source_rank"]) in selected
-        }
-        if set(tasks) != selected:
-            raise ValueError(f"component source-rank selection drifted for {component['id']}")
-        attempts = [
-            attempt
-            for attempt in plan.get("attempts") or []
-            if int(attempt["source_rank"]) in selected
-        ]
-        expected_cells = {(rank, attempt) for rank in selected for attempt in range(1, 5)}
-        actual_cells = {
-            (int(attempt["source_rank"]), int(attempt["attempt"])) for attempt in attempts
-        }
-        if actual_cells != expected_cells or len(attempts) != len(expected_cells):
-            raise ValueError(f"component is not an exact pass@4 Cartesian block: {component['id']}")
-        for attempt in attempts:
-            source_rank = int(attempt["source_rank"])
-            task = tasks[source_rank]
-            material = {
-                "model": component["model"],
-                "serving_block": component["serving_block"],
-                "task_version_id": task["task"]["version_id"],
-                "attempt": int(attempt["attempt"]),
+        component_cell_count = 0
+        fragments = component.get("execution_fragments") or [component]
+        for fragment in fragments:
+            plan = read_object(_plan_path(fragment, cluster))
+            if plan.get("plan_sha256") != fragment["plan_sha256"]:
+                raise ValueError(f"plan digest binding drifted for {component['id']}")
+            if plan.get("plan_sha256") != digest_without(plan, "plan_sha256"):
+                raise ValueError(f"plan self-digest drifted for {component['id']}")
+            selected = {
+                int(rank)
+                for rank in fragment.get("source_ranks", component["source_ranks"])
             }
-            cell = {
-                "cell_id": sha256(canonical_json(material)),
-                **material,
-                "task_key": task["task"]["key"],
-                "source_rank": source_rank,
-                "component_id": component["id"],
-                "source_plan_sha256": component["plan_sha256"],
-                "source_run_id": attempt["run_id"],
+            tasks = {
+                int(task["source_rank"]): task
+                for task in plan.get("tasks") or []
+                if int(task["source_rank"]) in selected
             }
-            cells.append(cell)
-        component_counts[component["id"]] = len(attempts)
+            if set(tasks) != selected:
+                raise ValueError(
+                    f"component source-rank selection drifted for {component['id']}"
+                )
+            attempts = [
+                attempt
+                for attempt in plan.get("attempts") or []
+                if int(attempt["source_rank"]) in selected
+            ]
+            expected_cells = {
+                (rank, attempt) for rank in selected for attempt in range(1, 5)
+            }
+            actual_cells = {
+                (int(attempt["source_rank"]), int(attempt["attempt"]))
+                for attempt in attempts
+            }
+            if actual_cells != expected_cells or len(attempts) != len(expected_cells):
+                raise ValueError(
+                    f"component is not an exact pass@4 Cartesian block: {component['id']}"
+                )
+            for attempt in attempts:
+                source_rank = int(attempt["source_rank"])
+                task = tasks[source_rank]
+                material = {
+                    "model": component["model"],
+                    "serving_block": component["serving_block"],
+                    "task_version_id": task["task"]["version_id"],
+                    "attempt": int(attempt["attempt"]),
+                }
+                cell = {
+                    "cell_id": sha256(canonical_json(material)),
+                    **material,
+                    "task_key": task["task"]["key"],
+                    "source_rank": source_rank,
+                    "component_id": component["id"],
+                    "source_plan_sha256": fragment["plan_sha256"],
+                    "source_run_id": attempt["run_id"],
+                }
+                cells.append(cell)
+            component_cell_count += len(attempts)
+        component_counts[component["id"]] = component_cell_count
     cell_ids = [cell["cell_id"] for cell in cells]
     scientific_keys = [(cell["model"], cell["task_version_id"], cell["attempt"]) for cell in cells]
     if len(cell_ids) != len(set(cell_ids)) or len(scientific_keys) != len(set(scientific_keys)):
@@ -212,7 +243,14 @@ def initialize_ledger(
 ) -> dict[str, Any]:
     universe = build_universe(campaign, cluster=cluster)
     ledger_root.mkdir(parents=True, exist_ok=False, mode=0o700)
-    for name in ("claims", "accepted", "quarantine", "workers", "heartbeats", "restart-events"):
+    for name in (
+        "claims",
+        "accepted",
+        "quarantine",
+        "workers",
+        "heartbeats",
+        "restart-events",
+    ):
         (ledger_root / name).mkdir(mode=0o700)
     write_once(ledger_root / "CAMPAIGN.json", campaign)
     write_once(ledger_root / "UNIVERSE.json", universe)
@@ -232,6 +270,141 @@ def _universe_index(ledger_root: Path) -> tuple[dict[str, Any], dict[str, dict[s
     return universe, index
 
 
+def _evidence_digest(evidence: dict[str, Any]) -> str:
+    field = next(
+        (
+            name
+            for name in ("receipt_sha256", "event_sha256", "claim_sha256")
+            if name in evidence
+        ),
+        None,
+    )
+    if field is None or evidence[field] != digest_without(evidence, field):
+        raise ValueError("legacy evidence is not self-digested")
+    return str(evidence[field])
+
+
+def _validate_import_entry(
+    cell: dict[str, Any], entry: dict[str, Any]
+) -> dict[str, Any]:
+    state = entry.get("state")
+    if state not in {"claimed", "accepted", "quarantined"}:
+        raise ValueError("legacy import state is invalid")
+    exact = {
+        "task_version_id": cell["task_version_id"],
+        "attempt": cell["attempt"],
+        "source_rank": cell["source_rank"],
+        "component_id": cell["component_id"],
+        "source_plan_sha256": cell["source_plan_sha256"],
+        "run_id": cell["source_run_id"],
+    }
+    if any(entry.get(field) != value for field, value in exact.items()):
+        raise ValueError("legacy import cell binding drifted")
+    _uuidish(entry.get("worker_uid"))
+    if not isinstance(entry.get("worker_name"), str) or not entry["worker_name"]:
+        raise ValueError("legacy import worker identity is invalid")
+    evidence_path = Path(str(entry.get("evidence_path") or ""))
+    evidence = read_object(evidence_path)
+    if (
+        evidence.get("scores_included") is True
+        or evidence.get("prompts_or_traces_included") is True
+        or "score" in evidence
+        or "reward" in evidence
+        or (
+            state != "claimed"
+            and (
+                evidence.get("scores_included") is not False
+                or evidence.get("prompts_or_traces_included") is not False
+            )
+        )
+    ):
+        raise ValueError("legacy evidence is not score/content blind")
+    evidence_digest = _evidence_digest(evidence)
+    if entry.get("evidence_sha256") != evidence_digest:
+        raise ValueError("legacy import evidence digest drifted")
+    for field, value in (
+        ("plan_sha256", cell["source_plan_sha256"]),
+        ("run_id", cell["source_run_id"]),
+        ("task_version_id", cell["task_version_id"]),
+        ("attempt", cell["attempt"]),
+        ("source_rank", cell["source_rank"]),
+    ):
+        if evidence.get(field) not in {None, value}:
+            raise ValueError(f"legacy evidence contradicts {field}")
+    if state == "accepted" and not (
+        evidence.get("accepted") is True
+        or evidence.get("credited") is True
+        or evidence.get("classification") == "RECONCILED_ACCEPTED"
+    ):
+        raise ValueError("legacy accepted evidence lacks authoritative credit")
+    if state == "quarantined" and evidence.get("retry_allowed") is not False:
+        raise ValueError("legacy quarantine does not forbid retry")
+    if state == "claimed" and evidence.get("run_id") != cell["source_run_id"]:
+        raise ValueError("legacy claim evidence lacks the exact run identity")
+    return evidence
+
+
+def import_legacy_evidence(ledger_root: Path, manifest: dict[str, Any]) -> dict[str, Any]:
+    """Seal the exhaustive pre-ledger inventory without replaying any cell.
+
+    The manifest is the only imported-state file.  All entries and their source
+    receipts are validated before the O_EXCL seal is written, so a crash cannot
+    leave a partially imported set that looks complete.
+    """
+
+    universe, index = _universe_index(ledger_root)
+    if (
+        manifest.get("schema_version") != LEGACY_IMPORT_SCHEMA
+        or manifest.get("import_sha256") != digest_without(manifest, "import_sha256")
+        or manifest.get("campaign_sha256") != universe["campaign_sha256"]
+        or manifest.get("universe_sha256") != universe["universe_sha256"]
+        or manifest.get("complete_inventory") is not True
+        or manifest.get("scores_included") is not False
+        or manifest.get("prompts_or_traces_included") is not False
+    ):
+        raise ValueError("legacy import manifest is not an exact complete inventory")
+    entries = manifest.get("entries") or []
+    if not isinstance(entries, list):
+        raise ValueError("legacy import entries must be a list")
+    cell_ids = [entry.get("cell_id") for entry in entries]
+    if len(cell_ids) != len(set(cell_ids)):
+        raise ValueError("legacy import cells duplicated")
+    if manifest.get("observed_cell_count") != len(entries):
+        raise ValueError("legacy import observed count drifted")
+    for entry in entries:
+        cell = index.get(entry.get("cell_id"))
+        if cell is None:
+            raise ValueError("legacy import cell is outside the frozen universe")
+        _validate_import_entry(cell, entry)
+    write_once(ledger_root / "IMPORT_COMPLETE.json", manifest)
+    return manifest
+
+
+def _imported_entries(ledger_root: Path) -> dict[str, dict[str, Any]]:
+    path = ledger_root / "IMPORT_COMPLETE.json"
+    if not path.exists():
+        raise RuntimeError("authoritative legacy inventory is not sealed")
+    manifest = read_object(path)
+    universe, index = _universe_index(ledger_root)
+    if (
+        manifest.get("schema_version") != LEGACY_IMPORT_SCHEMA
+        or manifest.get("import_sha256") != digest_without(manifest, "import_sha256")
+        or manifest.get("campaign_sha256") != universe["campaign_sha256"]
+        or manifest.get("universe_sha256") != universe["universe_sha256"]
+        or manifest.get("complete_inventory") is not True
+        or manifest.get("scores_included") is not False
+        or manifest.get("prompts_or_traces_included") is not False
+    ):
+        raise RuntimeError("authoritative legacy inventory seal drifted")
+    entries = manifest.get("entries") or []
+    result = {str(entry["cell_id"]): entry for entry in entries}
+    if len(result) != len(entries):
+        raise RuntimeError("authoritative legacy inventory duplicated")
+    if set(result) - set(index):
+        raise RuntimeError("authoritative legacy inventory contains foreign cells")
+    return result
+
+
 def claim_cell(
     ledger_root: Path,
     *,
@@ -241,9 +414,12 @@ def claim_cell(
     run_id: str,
 ) -> dict[str, Any]:
     universe, index = _universe_index(ledger_root)
+    imported = _imported_entries(ledger_root)
     cell = index.get(cell_id)
     if cell is None:
         raise ValueError("cell is outside the frozen 600-cell universe")
+    if cell_id in imported:
+        raise RuntimeError("cell already exists in the authoritative legacy inventory")
     worker = read_object(ledger_root / "workers" / f"{worker_name}.json")
     if worker.get("worker_uid") != _uuidish(worker_uid):
         raise ValueError("cell claimant does not match the registered worker UID")
@@ -288,7 +464,28 @@ def record_outcome(
     cell = index.get(cell_id)
     if cell is None:
         raise ValueError("outcome cell is outside the universe")
-    claim = read_object(ledger_root / "claims" / f"{cell_id}.json")
+    claim_path = ledger_root / "claims" / f"{cell_id}.json"
+    if claim_path.exists():
+        claim = read_object(claim_path)
+    else:
+        imported = _imported_entries(ledger_root).get(cell_id)
+        if imported is None or imported.get("state") != "claimed":
+            raise RuntimeError("outcome lacks an authoritative claim")
+        claim = {
+            "event_sha256": sha256(
+                canonical_json(
+                    {
+                        "import_sha256": read_object(
+                            ledger_root / "IMPORT_COMPLETE.json"
+                        )["import_sha256"],
+                        "cell_id": cell_id,
+                        "run_id": imported["run_id"],
+                    }
+                )
+            ),
+            "worker_name": imported["worker_name"],
+            "worker_uid": imported["worker_uid"],
+        }
     evidence = read_object(evidence_path)
     if (
         evidence.get("scores_included") is not False
@@ -379,9 +576,22 @@ def register_worker(ledger_root: Path, registration: dict[str, Any]) -> dict[str
 
 def status(ledger_root: Path) -> dict[str, Any]:
     universe, index = _universe_index(ledger_root)
+    imported = _imported_entries(ledger_root)
     claims = {path.stem for path in (ledger_root / "claims").glob("*.json")}
     accepted = {path.stem for path in (ledger_root / "accepted").glob("*.json")}
     quarantined = {path.stem for path in (ledger_root / "quarantine").glob("*.json")}
+    imported_claims = {
+        cell_id for cell_id, entry in imported.items() if entry["state"] == "claimed"
+    }
+    imported_accepted = {
+        cell_id for cell_id, entry in imported.items() if entry["state"] == "accepted"
+    }
+    imported_quarantined = {
+        cell_id for cell_id, entry in imported.items() if entry["state"] == "quarantined"
+    }
+    claims |= imported_claims
+    accepted |= imported_accepted
+    quarantined |= imported_quarantined
     if (accepted & quarantined) or not (claims | accepted | quarantined) <= set(index):
         raise RuntimeError("ledger contains contradictory or foreign cells")
     rows: dict[tuple[str, str], Counter[str]] = defaultdict(Counter)
@@ -542,6 +752,9 @@ def main() -> int:
     register = sub.add_parser("register-worker")
     register.add_argument("--ledger-root", type=Path, required=True)
     register.add_argument("--registration", type=Path, required=True)
+    import_legacy = sub.add_parser("import-legacy")
+    import_legacy.add_argument("--ledger-root", type=Path, required=True)
+    import_legacy.add_argument("--manifest", type=Path, required=True)
     claim = sub.add_parser("claim")
     claim.add_argument("--ledger-root", type=Path, required=True)
     claim.add_argument("--cell-id", required=True)
@@ -579,6 +792,10 @@ def main() -> int:
             return 0
     elif args.command == "register-worker":
         result = register_worker(args.ledger_root, read_object(args.registration))
+    elif args.command == "import-legacy":
+        result = import_legacy_evidence(
+            args.ledger_root, read_object(args.manifest)
+        )
     elif args.command == "claim":
         result = claim_cell(
             args.ledger_root,
