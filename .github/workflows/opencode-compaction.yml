@@ -1,0 +1,45 @@
+name: OpenCode compaction regression
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/opencode-compaction.yml'
+      - 'evals/fleet/**'
+      - 'tests/test_opencode_compaction.py'
+      - 'tests/test_fleet_self_hosted.py'
+      - 'tests/test_opencode_train_sweep.py'
+      - 'tests/test_agent_assets.py'
+      - 'skills/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compaction:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.11.6'
+      - run: uv sync --locked --extra dev --python 3.12
+      - name: Install the pinned OpenCode release
+        shell: bash
+        run: |
+          curl --fail --location --silent --show-error \
+            https://github.com/anomalyco/opencode/releases/download/v1.18.27/opencode-linux-x64.tar.gz \
+            --output "$RUNNER_TEMP/opencode.tar.gz"
+          printf '%s  %s\n' \
+            4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702 \
+            "$RUNNER_TEMP/opencode.tar.gz" | sha256sum --check --strict
+          tar --extract --gzip --file "$RUNNER_TEMP/opencode.tar.gz" \
+            --directory "$RUNNER_TEMP" opencode
+          printf 'OPENCODE_TEST_BINARY=%s/opencode\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
+      - name: Lint and test the runner with real OpenCode
+        run: |
+          uv run ruff check .
+          uv run pytest tests/test_opencode_compaction.py tests/test_fleet_self_hosted.py tests/test_opencode_train_sweep.py tests/test_agent_assets.py

@@ -32,6 +32,7 @@ TRANSIENT_READ_STATUS_CODES = {429, 502, 503, 504}
 MAX_READ_ATTEMPTS = 6
 SESSION_INGEST_CHUNK_MESSAGES = 32
 SESSION_INGEST_CHUNK_BYTES = 512 * 1024
+OPENCODE_CONTEXT_MANAGEMENT = "opencode_1.18.27_native_compaction_autocontinue_v1"
 
 
 class SessionIngestError(RuntimeError):
@@ -1053,6 +1054,68 @@ def runtime_preflight(
                 raise RuntimeError("runtime preflight delete did not return termination evidence")
 
 
+def opencode_settings(config: dict[str, Any]) -> dict[str, Any]:
+    """Render the declared compaction treatment before any episode side effect."""
+    harness = config["harness"]
+    if (
+        harness.get("name") != "opencode"
+        or harness.get("version") != "1.18.27"
+        or harness.get("context_management") != OPENCODE_CONTEXT_MANAGEMENT
+    ):
+        raise ValueError("OpenCode requires a new plan declaring the autocontinue context policy")
+    fields = ("context_window_size", "max_output_tokens", "compaction_headroom_tokens")
+    if any(type(harness.get(field)) is not int or harness[field] <= 0 for field in fields):
+        raise ValueError(
+            "OpenCode context, output and compaction headroom must be positive integers"
+        )
+    context, output, headroom = (harness[field] for field in fields)
+    if output + headroom >= context:
+        raise ValueError("OpenCode output and compaction headroom must leave room for input")
+    model_id = config["model"]["served_id"]
+    return {
+        "$schema": "https://opencode.ai/config.json",
+        "compaction": {"auto": True, "reserved": headroom},
+        "provider": {
+            "fleet-cluster": {
+                "npm": "@ai-sdk/openai-compatible",
+                "name": "Fleet cluster inference",
+                "options": {
+                    "baseURL": "http://model-proxy:8877/v1",
+                    "apiKey": "local-proxy-only",
+                    "timeout": False,
+                    "chunkTimeout": 300000,
+                },
+                "models": {
+                    model_id: {
+                        "name": model_id,
+                        "reasoning": True,
+                        "tool_call": True,
+                        "interleaved": "reasoning_content",
+                        # v1.18.27 honors compaction.reserved only with limit.input.
+                        # Reserve the full output allowance plus room for new tool results.
+                        "limit": {"context": context, "input": context - output, "output": output},
+                    }
+                },
+            }
+        },
+        "mcp": {
+            "fleet": {
+                "type": "remote",
+                "url": "http://fleet-mcp-proxy:8090/mcp",
+                "enabled": True,
+            }
+        },
+        "permission": {"*": "deny", "fleet_*": "allow"},
+        "tools": {
+            name: False
+            for name in (
+                "bash", "edit", "read", "glob", "grep", "list", "task", "webfetch",
+                "websearch", "skill",
+            )
+        },
+    }
+
+
 def run(
     config: dict[str, Any],
     out_dir: Path,
@@ -1066,6 +1129,7 @@ def run(
     proxy_image = os.environ.get("FIXED_PROXY_IMAGE")
     if harness_name not in {"qwen_code", "opencode"}:
         raise RuntimeError("self-hosted harness must be qwen_code or opencode")
+    settings = opencode_settings(config) if harness_name == "opencode" else None
     if not api_key or not agent_image or not proxy_image:
         raise RuntimeError(
             "FLEET_API_KEY, AGENT_HARNESS_IMAGE, and FIXED_PROXY_IMAGE are required"
@@ -1249,64 +1313,7 @@ def run(
         if harness_name == "opencode":
             config_dir = agent_home / ".config" / "opencode"
             config_dir.mkdir(parents=True, mode=0o700)
-            plugin_path = config_dir / "fleet-disable-compaction-autocontinue.mjs"
-            plugin_path.write_text(
-                "export const DisableCompactionAutocontinue = async () => ({\n"
-                '  "experimental.compaction.autocontinue": async (_input, output) => '
-                "{ output.enabled = false; },\n"
-                "});\n"
-            )
             model_id = config["model"]["served_id"]
-            settings = {
-                "$schema": "https://opencode.ai/config.json",
-                "plugin": [
-                    "file:///home/node/.config/opencode/fleet-disable-compaction-autocontinue.mjs"
-                ],
-                "provider": {
-                    "fleet-cluster": {
-                        "npm": "@ai-sdk/openai-compatible",
-                        "name": "Fleet cluster inference",
-                        "options": {
-                            "baseURL": "http://model-proxy:8877/v1",
-                            "apiKey": "local-proxy-only",
-                            "timeout": False,
-                            "chunkTimeout": 300000,
-                        },
-                        "models": {
-                            model_id: {
-                                "name": model_id,
-                                "reasoning": True,
-                                "tool_call": True,
-                                "interleaved": "reasoning_content",
-                                "limit": {
-                                    "context": int(config["harness"]["context_window_size"]),
-                                    "output": int(config["harness"]["max_output_tokens"]),
-                                },
-                            }
-                        },
-                    }
-                },
-                "mcp": {
-                    "fleet": {
-                        "type": "remote",
-                        "url": "http://fleet-mcp-proxy:8090/mcp",
-                        "enabled": True,
-                    }
-                },
-                "permission": {"*": "deny", "fleet_*": "allow"},
-                "tools": {
-                    "bash": False,
-                    "edit": False,
-                    "read": False,
-                    "glob": False,
-                    "grep": False,
-                    "list": False,
-                    "task": False,
-                    "webfetch": False,
-                    "websearch": False,
-                    "skill": False,
-                },
-            }
             settings_path = config_dir / "opencode.json"
             trace = agent_dir / "opencode-stream.jsonl"
             command = (
@@ -1515,6 +1522,7 @@ def run(
             "verifier_execution_id": reward_result.get("verifier_execution_id"),
             "agent_exit_code": result.returncode,
             "harness": harness_name,
+            "harness_config": config["harness"],
             "agent_termination": agent_termination,
             "elapsed_seconds": round(time.time() - started_at, 3),
         }

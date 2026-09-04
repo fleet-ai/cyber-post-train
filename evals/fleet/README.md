@@ -352,6 +352,52 @@ read-only verifier-store export. Absence of a local `reward-result.json` is not
 proof that scoring never happened. Do not score, clean up, or advance campaign
 state while that lookup is absent or ambiguous.
 
+### OpenCode context management
+
+New OpenCode 1.18.27 plans declare
+`opencode_1.18.27_native_compaction_autocontinue_v1` and
+`compaction_headroom_tokens: 20000`. The runner keeps native automatic
+compaction and continuation enabled. The previous plugin disabled continuation,
+so a long episode could compact successfully and then exit without resuming.
+
+The generated model input limit is `context_window_size - max_output_tokens`.
+OpenCode subtracts `compaction.reserved` from that limit before deciding to
+compact. With the current 262,144-token context and 32,768-token output allowance,
+compaction starts at 209,376 reported tokens, leaving another 20,000 tokens for
+new tool results. In this pinned version, setting `reserved` without an explicit
+input limit has no effect. The headroom is a buffer, not a guarantee against an
+arbitrarily large next tool result.
+
+Historical plans and receipts remain unchanged. The runner rejects the previous
+context-policy identity before creating an output directory, contacting Fleet,
+or starting Docker. Prepare a newly identified plan with the new harness policy;
+do not silently reuse a frozen plan or rerun an already-scored outcome. Historical
+trace recovery remains available because it does not execute the harness.
+
+The `full-plan` command also requires `--credit-result` pointing to the smoke's
+`result.json`. Its recorded harness must exactly match the new plan, and its task,
+session and verifier must match the live credit. Old-policy results cannot be
+credited into a new-policy evaluation.
+
+The submission scripts package `self_hosted.py` into create-only ConfigMaps;
+merging code does not change existing Jobs. A subsequent authorized launch must
+package the merged source and the new plan into a new ConfigMap/Job. This change
+requires no SGLang image update or serving configuration change.
+
+Run the local regression against a verified OpenCode 1.18.27 executable:
+
+```bash
+OPENCODE_TEST_BINARY=/absolute/path/to/opencode \
+  uv run pytest tests/test_opencode_compaction.py
+```
+
+It uses local fake model/MCP servers and the real OpenCode process. The negative
+control restores the old plugin and proves the episode stops after summarization;
+the fixed configuration must issue another agent request and finish. No Fleet
+instance, model inference service, or scored evaluation is used.
+The `OpenCode compaction regression` workflow runs this test with the checksummed
+Linux release on pull requests.
+
 ### Post-score OpenCode session recovery
 
 OpenCode 1.18.27 emits JSON event timestamps as integer milliseconds, while
