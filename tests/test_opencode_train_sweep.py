@@ -262,7 +262,7 @@ def test_uid_bound_drain_closes_claim_gate(tmp_path: Path, monkeypatch: pytest.M
         "campaign_id": plan["campaign_id"],
         "target_job_uid": "job-uid",
         "target_pod_uid": "pod-uid",
-        "reason": "operator_protocol_change",
+        "reason": "protocol_change",
     }
     request["request_sha256"] = self_hosted.digest_without(request, "request_sha256")
     (tmp_path / "DRAIN-REQUEST.json").write_text(json.dumps(request))
@@ -288,6 +288,7 @@ def test_drain_rejects_stale_pod_target(tmp_path: Path, monkeypatch: pytest.Monk
         "campaign_id": plan["campaign_id"],
         "target_job_uid": "job-uid",
         "target_pod_uid": "old-pod-uid",
+        "reason": "protocol_change",
     }
     request["request_sha256"] = self_hosted.digest_without(request, "request_sha256")
     (tmp_path / "DRAIN-REQUEST.json").write_text(json.dumps(request))
@@ -310,7 +311,7 @@ def test_drain_writer_serializes_request_with_claim_gate(tmp_path: Path) -> None
         root=root,
         target_job_uid="job-uid",
         target_pod_uid="pod-uid",
-        reason="operator_protocol_change",
+        reason="protocol_change",
     )
 
     assert request["request_sha256"] == self_hosted.digest_without(request, "request_sha256")
@@ -321,5 +322,63 @@ def test_drain_writer_serializes_request_with_claim_gate(tmp_path: Path) -> None
             root=root,
             target_job_uid="job-uid",
             target_pod_uid="pod-uid",
-            reason="duplicate",
+            reason="protocol_change",
         )
+
+
+def test_terminal_acceptance_yields_to_existing_drain(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    plan = {"campaign_id": "campaign-v1"}
+    plan["plan_sha256"] = self_hosted.digest_without(plan, "plan_sha256")
+    (tmp_path / "claims").mkdir()
+    (tmp_path / "attempts").mkdir()
+    monkeypatch.setenv("JOB_UID", "job-uid")
+    monkeypatch.setenv("POD_UID", "pod-uid")
+    request = {
+        "schema_version": opencode_train_sweep_runner.DRAIN_REQUEST_SCHEMA,
+        "plan_sha256": plan["plan_sha256"],
+        "campaign_id": plan["campaign_id"],
+        "target_job_uid": "job-uid",
+        "target_pod_uid": "pod-uid",
+        "reason": "protocol_change",
+    }
+    request["request_sha256"] = self_hosted.digest_without(request, "request_sha256")
+    (tmp_path / "DRAIN-REQUEST.json").write_text(json.dumps(request))
+    final = {"accepted": True, "receipt_sha256": "sha256:final"}
+
+    result = opencode_train_sweep_runner._write_accepted_or_drained(plan, tmp_path, final)
+
+    assert result["schema_version"] == opencode_train_sweep_runner.DRAINED_SCHEMA
+    assert result["completed_claim_receipts"] == []
+    assert (tmp_path / "DRAINED.json").is_file()
+    assert not (tmp_path / "ACCEPTED.json").exists()
+
+
+def test_attempt_wave_drain_waits_for_already_started_attempt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    completed: list[int] = []
+    request = {"request_sha256": "sha256:drain"}
+
+    def fake_attempt(_plan, _task, item, _root, _proxy, _key):
+        rank = int(item["rank"])
+        if rank == 2:
+            raise opencode_train_sweep_runner.DrainRequested(request)
+        time.sleep(0.03)
+        completed.append(rank)
+        return {}
+
+    monkeypatch.setattr(opencode_train_sweep_runner, "_run_parallel_attempt", fake_attempt)
+    observed = opencode_train_sweep_runner._run_attempt_wave(
+        {},
+        {1: {}, 2: {}, 3: {}},
+        [{"rank": 1}, {"rank": 2}, {"rank": 3}],
+        Path("/unused"),
+        Path("/unused"),
+        "unused",
+        2,
+    )
+
+    assert observed == request
+    assert completed == [1]

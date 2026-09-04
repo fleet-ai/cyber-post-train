@@ -20,6 +20,11 @@ PLAN_SCHEMA = "fleet-selfhosted-opencode-pass4-plan-v1"
 PARALLEL_PLAN_SCHEMA = "fleet-selfhosted-opencode-pass4-parallel-plan-v1"
 DRAIN_REQUEST_SCHEMA = "fleet-selfhosted-opencode-pass4-drain-request-v1"
 DRAINED_SCHEMA = "fleet-selfhosted-opencode-pass4-drained-v1"
+ALLOWED_DRAIN_REASONS = {
+    "capacity_rebalance",
+    "operator_maintenance",
+    "protocol_change",
+}
 _CLAIM_GATE = threading.Lock()
 
 
@@ -47,6 +52,7 @@ def _load_drain_request(plan: dict[str, Any], root: Path) -> dict[str, Any] | No
         or request.get("request_sha256") != _digest_without(request, "request_sha256")
         or request.get("plan_sha256") != plan.get("plan_sha256")
         or request.get("campaign_id") != plan.get("campaign_id")
+        or request.get("reason") not in ALLOWED_DRAIN_REASONS
     ):
         raise RuntimeError("campaign drain request binding or digest drifted")
     job_uid = os.environ.get("JOB_UID")
@@ -71,7 +77,36 @@ def _claim_or_raise_drained(
         self_hosted.write_json_once(claim_path, claim)
 
 
-def _write_drained(plan: dict[str, Any], root: Path, request: dict[str, Any]) -> dict[str, Any]:
+def _drain_completed_claims(plan: dict[str, Any], root: Path) -> list[dict[str, Any]]:
+    claims: dict[str, dict[str, Any]] = {}
+    for path in sorted((root / "claims").glob("*.json")):
+        claim = json.loads(path.read_text())
+        run_id = claim.get("run_id")
+        if (
+            claim.get("claim_sha256") != _digest_without(claim, "claim_sha256")
+            or claim.get("plan_sha256") != plan["plan_sha256"]
+            or not isinstance(run_id, str)
+            or run_id in claims
+        ):
+            raise RuntimeError("campaign drain claim evidence drifted")
+        claims[run_id] = claim
+    accepted = _accepted_attempts(root)
+    if set(claims) != set(accepted):
+        raise RuntimeError("campaign drain reached terminalization with unresolved claims")
+    return [
+        {
+            "run_id": run_id,
+            "claim_sha256": claims[run_id]["claim_sha256"],
+            "acceptance_receipt_sha256": accepted[run_id]["receipt_sha256"],
+        }
+        for run_id in sorted(claims)
+    ]
+
+
+def _write_drained_unlocked(
+    plan: dict[str, Any], root: Path, request: dict[str, Any]
+) -> dict[str, Any]:
+    completed_claims = _drain_completed_claims(plan, root)
     receipt = {
         "schema_version": DRAINED_SCHEMA,
         "plan_sha256": plan["plan_sha256"],
@@ -80,6 +115,10 @@ def _write_drained(plan: dict[str, Any], root: Path, request: dict[str, Any]) ->
         "job_uid": os.environ["JOB_UID"],
         "pod_uid": os.environ["POD_UID"],
         "accepted_new_sessions": len(_accepted_attempts(root)),
+        "completed_claim_receipts": completed_claims,
+        "completed_claim_receipts_sha256": self_hosted.sha256(
+            self_hosted.canonical_json(completed_claims)
+        ),
         "attempt_claim_gate_closed": True,
         "in_flight_attempts_completed_before_exit": True,
         "scores_included": False,
@@ -88,6 +127,31 @@ def _write_drained(plan: dict[str, Any], root: Path, request: dict[str, Any]) ->
     receipt["receipt_sha256"] = _digest_without(receipt, "receipt_sha256")
     self_hosted.write_json_once(root / "DRAINED.json", receipt)
     return receipt
+
+
+def _write_drained(plan: dict[str, Any], root: Path, request: dict[str, Any]) -> dict[str, Any]:
+    gate_path = root / ".attempt-claim-gate.lock"
+    with _CLAIM_GATE, gate_path.open("a+b") as gate:
+        fcntl.flock(gate.fileno(), fcntl.LOCK_EX)
+        current = _load_drain_request(plan, root)
+        if current is None or current.get("request_sha256") != request.get("request_sha256"):
+            raise RuntimeError("campaign drain request changed before terminalization")
+        if (root / "ACCEPTED.json").exists():
+            raise RuntimeError("campaign was accepted before drain terminalization")
+        return _write_drained_unlocked(plan, root, current)
+
+
+def _write_accepted_or_drained(
+    plan: dict[str, Any], root: Path, final: dict[str, Any]
+) -> dict[str, Any]:
+    gate_path = root / ".attempt-claim-gate.lock"
+    with _CLAIM_GATE, gate_path.open("a+b") as gate:
+        fcntl.flock(gate.fileno(), fcntl.LOCK_EX)
+        request = _load_drain_request(plan, root)
+        if request is not None:
+            return _write_drained_unlocked(plan, root, request)
+        self_hosted.write_json_once(root / "ACCEPTED.json", final)
+        return final
 
 
 def validate_plan(plan: dict[str, Any]) -> None:
@@ -341,6 +405,31 @@ def _validate_prior_accepted(
                 raise RuntimeError("prior accepted session is not authoritative")
 
 
+def _attempt_claim(
+    plan: dict[str, Any], config: dict[str, Any], item: dict[str, Any]
+) -> dict[str, Any]:
+    claim = {
+        "schema_version": "fleet-selfhosted-opencode-pass4-attempt-claim-v1",
+        "plan_sha256": plan["plan_sha256"],
+        "campaign_id": plan["campaign_id"],
+        "run_id": item["run_id"],
+        "network": item["network"],
+        "rank": int(item["rank"]),
+        "attempt": int(item["attempt"]),
+        "task_key": config["task"]["key"],
+        "task_version_id": config["task"]["version_id"],
+        "config_sha256": config["config_sha256"],
+        "model_revision": config["model"]["revision"],
+        "session_model": config["model"]["session_model"],
+        "harness_version": config["harness"]["version"],
+        "harness_asset_sha256": config["harness"]["release_asset_sha256"],
+        "verifier_id": config["verifier"]["id"],
+        "verifier_version_id": config["verifier"]["version_id"],
+    }
+    claim["claim_sha256"] = _digest_without(claim, "claim_sha256")
+    return claim
+
+
 def _run_parallel_attempt(
     plan: dict[str, Any],
     task_row: dict[str, Any],
@@ -368,25 +457,7 @@ def _run_parallel_attempt(
     out_dir = root / "attempts" / item["run_id"]
     if out_dir.exists():
         raise RuntimeError("parallel planned attempt output already exists; refusing duplicate")
-    claim = {
-        "schema_version": "fleet-selfhosted-opencode-pass4-attempt-claim-v1",
-        "plan_sha256": plan["plan_sha256"],
-        "campaign_id": plan["campaign_id"],
-        "run_id": item["run_id"],
-        "network": item["network"],
-        "rank": int(item["rank"]),
-        "attempt": int(item["attempt"]),
-        "task_key": config["task"]["key"],
-        "task_version_id": config["task"]["version_id"],
-        "config_sha256": config["config_sha256"],
-        "model_revision": config["model"]["revision"],
-        "session_model": config["model"]["session_model"],
-        "harness_version": config["harness"]["version"],
-        "harness_asset_sha256": config["harness"]["release_asset_sha256"],
-        "verifier_id": config["verifier"]["id"],
-        "verifier_version_id": config["verifier"]["version_id"],
-    }
-    claim["claim_sha256"] = _digest_without(claim, "claim_sha256")
+    claim = _attempt_claim(plan, config, item)
     claims_dir = root / "claims"
     claims_dir.mkdir(exist_ok=True)
     _claim_or_raise_drained(
@@ -618,8 +689,7 @@ def run_parallel_plan(plan: dict[str, Any], root: Path, proxy_script: Path) -> d
     }:
         raise RuntimeError("parallel terminal Cartesian pass@4 evidence drifted")
     final["receipt_sha256"] = _digest_without(final, "receipt_sha256")
-    self_hosted.write_json_once(root / "ACCEPTED.json", final)
-    return final
+    return _write_accepted_or_drained(plan, root, final)
 
 
 def run_plan(plan: dict[str, Any], root: Path, proxy_script: Path) -> dict[str, Any]:
@@ -627,6 +697,7 @@ def run_plan(plan: dict[str, Any], root: Path, proxy_script: Path) -> dict[str, 
     root.mkdir(parents=True, exist_ok=False)
     root.chmod(0o700)
     (root / "attempts").mkdir(mode=0o700)
+    (root / "claims").mkdir(mode=0o700)
     self_hosted.write_json_once(root / "PLAN.json", plan)
     key = os.environ.get("FLEET_API_KEY")
     if not key:
@@ -668,11 +739,24 @@ def run_plan(plan: dict[str, Any], root: Path, proxy_script: Path) -> dict[str, 
             out_dir = root / "attempts" / item["run_id"]
             if out_dir.exists():
                 raise RuntimeError("planned attempt output already exists; refusing duplicate")
-            request = _load_drain_request(plan, root)
-            if request is not None:
-                return _write_drained(plan, root, request)
+            claim = _attempt_claim(plan, config, item)
+            try:
+                _claim_or_raise_drained(
+                    plan,
+                    root,
+                    root / "claims" / f"{item['run_id']}.json",
+                    claim,
+                )
+            except DrainRequested as exc:
+                return _write_drained(plan, root, exc.request)
             self_hosted.run(config, out_dir, proxy_script)
-            _accept_attempt(out_dir, config)
+            _accept_attempt(
+                out_dir,
+                config,
+                rank=int(item["rank"]),
+                attempt_number=int(item["attempt"]),
+                claim_sha256=claim["claim_sha256"],
+            )
             progress = {
                 "schema_version": "fleet-selfhosted-opencode-pass4-progress-v1",
                 "plan_sha256": plan["plan_sha256"],
@@ -698,8 +782,7 @@ def run_plan(plan: dict[str, Any], root: Path, proxy_script: Path) -> dict[str, 
     if final["accepted_new_sessions"] != plan["new_session_count"]:
         raise RuntimeError("terminal accepted-session count drifted")
     final["receipt_sha256"] = _digest_without(final, "receipt_sha256")
-    self_hosted.write_json_once(root / "ACCEPTED.json", final)
-    return final
+    return _write_accepted_or_drained(plan, root, final)
 
 
 def main() -> int:

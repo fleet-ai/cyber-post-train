@@ -10,7 +10,10 @@ from pathlib import Path
 from typing import Any
 
 from evals.fleet import self_hosted
-from evals.fleet.opencode_train_sweep_runner import DRAIN_REQUEST_SCHEMA
+from evals.fleet.opencode_train_sweep_runner import (
+    ALLOWED_DRAIN_REASONS,
+    DRAIN_REQUEST_SCHEMA,
+)
 
 
 def load_object(path: Path) -> dict[str, Any]:
@@ -33,7 +36,7 @@ def request_drain(
     frozen = load_object(root / "PLAN.json")
     if plan.get("plan_sha256") != self_hosted.digest_without(plan, "plan_sha256") or frozen != plan:
         raise RuntimeError("campaign drain plan binding drifted")
-    if not target_job_uid or not target_pod_uid or not reason:
+    if not target_job_uid or not target_pod_uid or reason not in ALLOWED_DRAIN_REASONS:
         raise ValueError("campaign drain requires exact Job/Pod UIDs and a reason")
 
     request = {
