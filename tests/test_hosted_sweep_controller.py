@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import uuid
 from pathlib import Path
 
 import pytest
@@ -210,6 +211,103 @@ def test_remainder_shards_exclude_every_partially_touched_task(
     assert plan["new_session_count"] == tasks * 4
     assert {row["source_rank"] for row in plan["tasks"]} == source_ranks
     assert {row["source_rank"] for row in plan["excluded_tasks"]} == excluded
+
+
+def _bound_accepted_root(plan: dict, tmp_path: Path) -> tuple[Path, dict]:
+    root = tmp_path / "job"
+    (root / "attempts").mkdir(parents=True)
+    (root / "claims").mkdir()
+    (root / "PLAN.json").write_text(json.dumps(plan))
+    item = plan["attempts"][0]
+    claim = {
+        "plan_sha256": plan["plan_sha256"],
+        "run_id": item["run_id"],
+        "rank": item["rank"],
+        "attempt": item["attempt"],
+        "config_sha256": "sha256:config",
+    }
+    claim["claim_sha256"] = self_hosted.digest_without(claim, "claim_sha256")
+    (root / "claims" / f"{item['run_id']}.json").write_text(json.dumps(claim))
+    receipt = {
+        "run_id": item["run_id"],
+        "session_id": str(uuid.uuid4()),
+        "verifier_execution_id": str(uuid.uuid4()),
+        "config_sha256": claim["config_sha256"],
+        "claim_sha256": claim["claim_sha256"],
+    }
+    receipt["receipt_sha256"] = self_hosted.digest_without(receipt, "receipt_sha256")
+    attempt = root / "attempts" / item["run_id"]
+    attempt.mkdir()
+    (attempt / "ACCEPTED.json").write_text(json.dumps(receipt))
+    return root, receipt
+
+
+def test_local_bound_accepted_receipt_survives_missing_public_metadata(
+    monkeypatch, tmp_path: Path
+) -> None:
+    plan = hosted.load_object(
+        Path("evals/fleet/configs/qwen38-opencode-hosted-complete47-pass4-v7.json")
+    )
+    root, receipt = _bound_accepted_root(plan, tmp_path)
+    task = plan["tasks"][0]
+    rows = [{
+        "session_id": receipt["session_id"],
+        "status": "completed",
+        "model": "qwen3.8-27b",
+        "verifier_execution": {"id": receipt["verifier_execution_id"]},
+    }]
+
+    class Client:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+    monkeypatch.setattr(hosted, "_client", lambda _key: Client())
+    monkeypatch.setattr(self_hosted, "_task_sessions", lambda _client, _key: rows)
+    assert hosted._validate_inventory_for_task(plan, root, task, "key") == 1
+
+
+def test_invalid_or_unbound_accepted_receipt_is_rejected(tmp_path: Path) -> None:
+    plan = hosted.load_object(
+        Path("evals/fleet/configs/qwen38-opencode-hosted-complete47-pass4-v7.json")
+    )
+    root, receipt = _bound_accepted_root(plan, tmp_path)
+    receipt["receipt_sha256"] = "sha256:invalid"
+    item = plan["attempts"][0]
+    path = root / "attempts" / item["run_id"] / "ACCEPTED.json"
+    path.write_text(json.dumps(receipt))
+    with pytest.raises(RuntimeError, match="digest mismatch"):
+        hosted._accepted(plan, root)
+
+
+def test_unbound_public_session_row_cannot_become_accepted(
+    monkeypatch, tmp_path: Path
+) -> None:
+    plan = hosted.load_object(
+        Path("evals/fleet/configs/qwen38-opencode-hosted-complete47-pass4-v7.json")
+    )
+    root = tmp_path / "job"
+    (root / "attempts").mkdir(parents=True)
+    (root / "claims").mkdir()
+    row = {
+        "session_id": str(uuid.uuid4()),
+        "status": "completed",
+        "model": "qwen3.8-27b",
+        "verifier_execution": {"id": str(uuid.uuid4())},
+    }
+
+    class Client:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+    monkeypatch.setattr(hosted, "_client", lambda _key: Client())
+    monkeypatch.setattr(self_hosted, "_task_sessions", lambda _client, _key: [row])
+    assert hosted._validate_inventory_for_task(plan, root, plan["tasks"][0], "key") == 0
 
 
 def test_generated_plans_are_reproducible() -> None:

@@ -59,8 +59,17 @@ RESERVED_SOURCE_RANKS = {
 REMAINDER_CAMPAIGNS = {
     "qwen38_remainder": "chris-cyber-q38-opencode11827-hosted-complete48-p4-v6",
     "glm53_remainder": "chris-cyber-glm53-opencode11827-hosted-odd47-p4-v8",
+    "qwen38_remainder2": "chris-cyber-q38-opencode11827-hosted-complete47-p4-v7",
+    "glm53_remainder2": "chris-cyber-glm53-opencode11827-hosted-odd46-p4-v9",
 }
-EXPECTED_INCLUDED_TASK_COUNTS.update({"qwen38_remainder": 48, "glm53_remainder": 47})
+EXPECTED_INCLUDED_TASK_COUNTS.update(
+    {
+        "qwen38_remainder": 48,
+        "glm53_remainder": 47,
+        "qwen38_remainder2": 47,
+        "glm53_remainder2": 46,
+    }
+)
 SCHEDULE = [
     {
         "accepted_outcomes_at_least": 0,
@@ -121,7 +130,13 @@ def build_remainder_plan(
     ):
         raise ValueError("hosted remainder predecessor is not terminal-bound")
     excluded_source_ranks = {int(rank) for rank in evidence["excluded_source_ranks"]}
-    expected_excluded = {2} if model_key == "qwen38_remainder" else {3, 5}
+    expected_excluded_by_model = {
+        "qwen38_remainder": {2},
+        "glm53_remainder": {3, 5},
+        "qwen38_remainder2": {3},
+        "glm53_remainder2": {7},
+    }
+    expected_excluded = expected_excluded_by_model[model_key]
     if excluded_source_ranks != expected_excluded:
         raise ValueError("hosted remainder excluded-task boundary drifted")
     for outcome in evidence["outcomes"]:
@@ -197,7 +212,7 @@ def build_remainder_plan(
             **predecessor["execution"],
             "inventory_policy": (
                 "plan_identity_plus_authoritative_receipt_v1"
-                if model_key == "qwen38_remainder"
+                if model_key.startswith("qwen38_")
                 else "conservative_no_same_model_session_for_task_key_v1"
             ),
         },
@@ -465,10 +480,11 @@ def validate_plan(plan: dict[str, Any]) -> None:
     execution = plan.get("execution") or {}
     expected_inventory_policy = (
         "conservative_no_same_model_session_for_task_key_v1"
-        if shard_key in {"glm53_clean", "glm53_hosted_odd", "glm53_remainder"}
+        if shard_key
+        in {"glm53_clean", "glm53_hosted_odd", "glm53_remainder", "glm53_remainder2"}
         else (
             "plan_identity_plus_authoritative_receipt_v1"
-            if shard_key == "qwen38_remainder"
+            if shard_key in {"qwen38_remainder", "qwen38_remainder2"}
             else None
         )
     )
@@ -494,7 +510,11 @@ def validate_plan(plan: dict[str, Any]) -> None:
     if any(row["task_key"] in included_keys for row in excluded):
         raise ValueError("fenced task leaked into hosted shard")
     reserved = plan.get("reserved_tasks") or []
-    expected_reserved = 49 if shard_key in {"glm53_hosted_odd", "glm53_remainder"} else 0
+    expected_reserved = (
+        49
+        if shard_key in {"glm53_hosted_odd", "glm53_remainder", "glm53_remainder2"}
+        else 0
+    )
     if (
         len(reserved) != expected_reserved
         or any(row["task_key"] in included_keys for row in reserved)
@@ -535,12 +555,31 @@ def _credits_for_rank(plan: dict[str, Any], rank: int) -> list[dict[str, Any]]:
     return [row for row in plan["credited_sessions"] if int(row["rank"]) == rank]
 
 
-def _accepted(root: Path) -> dict[str, dict[str, Any]]:
+def _accepted(plan: dict[str, Any], root: Path) -> dict[str, dict[str, Any]]:
     rows = {}
-    for path in (root / "attempts").glob("*/ACCEPTED.json"):
+    paths = list((root / "attempts").glob("*/ACCEPTED.json"))
+    if paths:
+        persisted_plan = load_object(root / "PLAN.json")
+        if persisted_plan.get("plan_sha256") != plan["plan_sha256"]:
+            raise RuntimeError("hosted accepted root is not plan-bound")
+    plan_attempts = {row["run_id"]: row for row in plan["attempts"]}
+    for path in paths:
         row = load_object(path)
         if row.get("receipt_sha256") != digest_without(row, "receipt_sha256"):
             raise RuntimeError("hosted accepted receipt digest mismatch")
+        claim = load_object(root / "claims" / f"{row['run_id']}.json")
+        planned = plan_attempts.get(row["run_id"])
+        if (
+            planned is None
+            or claim.get("claim_sha256") != digest_without(claim, "claim_sha256")
+            or claim.get("plan_sha256") != plan["plan_sha256"]
+            or claim.get("run_id") != row["run_id"]
+            or claim.get("claim_sha256") != row.get("claim_sha256")
+            or claim.get("config_sha256") != row.get("config_sha256")
+            or int(claim.get("rank") or 0) != int(planned["rank"])
+            or int(claim.get("attempt") or 0) != int(planned["attempt"])
+        ):
+            raise RuntimeError("hosted accepted receipt is not claim-bound")
         if row["run_id"] in rows:
             raise RuntimeError("hosted accepted run identity duplicated")
         rows[row["run_id"]] = row
@@ -550,7 +589,7 @@ def _accepted(root: Path) -> dict[str, dict[str, Any]]:
 def _allowed_sessions(plan: dict[str, Any], root: Path, rank: int) -> set[str]:
     allowed = {row["session_id"] for row in _credits_for_rank(plan, rank)}
     attempt_rank = {row["run_id"]: int(row["rank"]) for row in plan["attempts"]}
-    for run_id, row in _accepted(root).items():
+    for run_id, row in _accepted(plan, root).items():
         if attempt_rank.get(run_id) == rank:
             allowed.add(row["session_id"])
     return allowed
@@ -567,7 +606,7 @@ def _validate_inventory_for_task(
     }
     accepted_by_run = {
         run_id: row
-        for run_id, row in _accepted(root).items()
+        for run_id, row in _accepted(plan, root).items()
         if run_id in planned_run_ids
     }
     for row in all_rows:
@@ -612,24 +651,30 @@ def _validate_inventory_for_task(
     if observed != allowed:
         raise RuntimeError("hosted exact-treatment session inventory drifted")
     by_id = {row.get("session_id"): row for row in rows}
-    receipts = [*_credits_for_rank(plan, rank)]
+    credits = [*_credits_for_rank(plan, rank)]
+    local_accepted = _accepted(plan, root)
+    receipts = [*credits]
     attempt_rank = {row["run_id"]: int(row["rank"]) for row in plan["attempts"]}
     receipts.extend(
         row
-        for run_id, row in _accepted(root).items()
+        for run_id, row in local_accepted.items()
         if attempt_rank.get(run_id) == rank
     )
     for receipt in receipts:
         row = by_id.get(receipt["session_id"])
         verifier = (row or {}).get("verifier_execution") or {}
+        local_receipt = receipt.get("run_id") in local_accepted
         if (
             row is None
             or row.get("status") != "completed"
             or verifier.get("id") != receipt["verifier_execution_id"]
             or (
-                row.get("eval_task_version_id") or row.get("task_version_id")
+                not local_receipt
+                and (
+                    row.get("eval_task_version_id") or row.get("task_version_id")
+                )
+                != task["task"]["version_id"]
             )
-            != task["task"]["version_id"]
         ):
             raise RuntimeError("hosted credited session is not authoritative")
     return len(rows)

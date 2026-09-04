@@ -1,0 +1,50 @@
+{
+  "schema_version": "hosted-opencode-remainder-source-v1",
+  "recorded_at": "2026-09-04T03:24:00Z",
+  "runs": {
+    "qwen38": {
+      "predecessor_plan_sha256": "sha256:7aba480a5e02b48dfbbf72123b38ccb13affd4043377a732163b7cc7e68edfed",
+      "job_name": "chris-cyber-q38-opencode11827-hosted-complete48-p4-v6",
+      "job_uid": "4817908e-fbea-4d4b-9677-d4e4e1c2bb29",
+      "pod_uid": "26655d21-6162-4657-8c50-e469f4c178f0",
+      "terminal_at": "2026-09-04T03:22:57Z",
+      "active_attempts": 0,
+      "excluded_source_ranks": [3],
+      "outcomes": [{
+        "source_rank": 3,
+        "attempt": 1,
+        "classification": "accepted",
+        "receipt_sha256": "sha256:19b0deb26839db04d2f71239c6bf2e34d4e98eb0623a10d2e6472562c2f85d94",
+        "verifier_backed": true,
+        "session_ingest_completed": true,
+        "cleanup_completed": true,
+        "retry_allowed": false
+      }],
+      "terminal_reason": "public_session_list_task_version_projection_omitted_after_accepted_receipt",
+      "unstarted_attempts_in_excluded_task": [2, 3, 4]
+    },
+    "glm53": {
+      "predecessor_plan_sha256": "sha256:40c423332638e5ae6f714eea7d12411c44fd56141a1c39612156cd78af56d20d",
+      "job_name": "chris-cyber-glm53-opencode11827-hosted-odd47-p4-v8",
+      "job_uid": "47f53744-a1d8-4d2b-9c08-07fd1de320ef",
+      "pod_uid": "82d1d316-ddff-43c9-9356-2de53d85f1cf",
+      "terminal_at": "2026-09-04T03:07:27Z",
+      "active_attempts": 0,
+      "excluded_source_ranks": [7],
+      "outcomes": [{
+        "source_rank": 7,
+        "attempt": 1,
+        "classification": "infrastructure_incomplete_unscored",
+        "task_claim_sha256": "sha256:657d190b5a1cbb2abdab158cb66cac505ab83741bb44befcc8083ce27435b415",
+        "model_requests": 0,
+        "retry_allowed": false
+      }],
+      "terminal_reason": "opencode_trace_normalized_to_no_messages",
+      "unstarted_attempts_in_excluded_task": [2, 3, 4]
+    }
+  },
+  "scores_read": false,
+  "prompts_or_traces_read": false,
+  "credentials_included": false,
+  "receipt_sha256": "sha256:6fac3b7ddd2269877744b500a87c3746b776225480feef6463f5bf4e35485223"
+}

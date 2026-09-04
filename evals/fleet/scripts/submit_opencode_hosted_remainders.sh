@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/../../.." && pwd)
 MODE=${1:-preview}
 TARGET=${2:-both}
+GENERATION=${3:-v1}
 NAMESPACE=fleet-train-jobs
 CONTEXT=nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6
 SECRET=chris-cyber-opencode-evals-v2
@@ -17,8 +18,20 @@ G_PREFLIGHT=chris-cyber-glm53-hosted-odd47-p4-v8-preflight
 Q_CONFIG=chris-cyber-q38-hosted-complete48-p4-v6
 G_CONFIG=chris-cyber-glm53-hosted-odd47-p4-v8
 
+if test "$GENERATION" = v2; then
+  Q_PLAN=$ROOT/evals/fleet/configs/qwen38-opencode-hosted-complete47-pass4-v7.json
+  G_PLAN=$ROOT/evals/fleet/configs/glm53-opencode-hosted-odd46-pass4-v9.json
+  Q_JOB=chris-cyber-q38-opencode11827-hosted-complete47-p4-v7
+  G_JOB=chris-cyber-glm53-opencode11827-hosted-odd46-p4-v9
+  Q_PREFLIGHT=chris-cyber-q38-hosted47-p4-v7-preflight
+  G_PREFLIGHT=chris-cyber-glm53-hosted-odd46-p4-v9-preflight
+  Q_CONFIG=chris-cyber-q38-hosted-complete47-p4-v7
+  G_CONFIG=chris-cyber-glm53-hosted-odd46-p4-v9
+fi
+
 case "$MODE" in preview|submit) ;; *) exit 2 ;; esac
 case "$TARGET" in qwen|glm|both) ;; *) exit 2 ;; esac
+case "$GENERATION" in v1|v2) ;; *) exit 2 ;; esac
 test "$(kubectl config current-context)" = "$CONTEXT"
 test "$("${KUBECTL[@]}" -n "$NAMESPACE" get localqueue training-lq \
   -o jsonpath='{.status.conditions[?(@.type=="Active")].status}')" = True
@@ -31,10 +44,16 @@ import sys
 from pathlib import Path
 from evals.fleet.hosted_sweep_controller import validate_plan
 
-expected = ((48, 192, set(range(3, 51))), (47, 188, set(range(7, 100, 2))))
-for path, (tasks, sessions, source_ranks) in zip(sys.argv[1:], expected, strict=True):
+expected = {
+    "qwen38_remainder": (48, 192, set(range(3, 51))),
+    "glm53_remainder": (47, 188, set(range(7, 100, 2))),
+    "qwen38_remainder2": (47, 188, set(range(4, 51))),
+    "glm53_remainder2": (46, 184, set(range(9, 100, 2))),
+}
+for path in sys.argv[1:]:
     plan = json.loads(Path(path).read_text())
     validate_plan(plan)
+    tasks, sessions, source_ranks = expected[plan["shard_key"]]
     if (plan["task_count"], plan["new_session_count"]) != (tasks, sessions):
         raise RuntimeError("hosted remainder arithmetic drifted")
     if {row["source_rank"] for row in plan["tasks"]} != source_ranks:
@@ -53,21 +72,35 @@ set_model() {
 
 render_job() {
   if test "$1" = qwen; then
+    replacement=complete48-p4-v6
+    test "$GENERATION" = v1 || replacement=complete47-p4-v7
     awk '/^---$/{exit} {print}' "$ROOT/evals/fleet/cluster/opencode-hosted-successor-jobs-v5.yaml" |
-      sed -e 's/complete49-p4-v5/complete48-p4-v6/g'
+      sed -e "s/complete49-p4-v5/$replacement/g" |
+      awk '{if ($0 == "      restartPolicy: Never") print "      priorityClassName: fleet-infra-quiet"; print}'
   else
-    sed -e 's/odd49-p4-v7/odd47-p4-v8/g' \
-      "$ROOT/evals/fleet/cluster/opencode-glm53-hosted-odd-job-v7.yaml"
+    replacement=odd47-p4-v8
+    test "$GENERATION" = v1 || replacement=odd46-p4-v9
+    sed -e "s/odd49-p4-v7/$replacement/g" \
+      "$ROOT/evals/fleet/cluster/opencode-glm53-hosted-odd-job-v7.yaml" |
+      awk '{if ($0 == "      restartPolicy: Never") print "      priorityClassName: fleet-infra-quiet"; print}'
   fi
 }
 
 render_preflight() {
   if test "$1" = qwen; then
+    replacement=complete48-p4-v6
+    preflight_token=q38-hosted48-p4-v6-preflight
+    if test "$GENERATION" = v2; then
+      replacement=complete47-p4-v7
+      preflight_token=q38-hosted47-p4-v7-preflight
+    fi
     awk '/^---$/{exit} {print}' "$ROOT/evals/fleet/cluster/opencode-hosted-successor-preflight-v5.yaml" |
-      sed -e 's/q38-hosted49-p4-v5-preflight/q38-hosted48-p4-v6-preflight/g' \
-        -e 's/complete49-p4-v5/complete48-p4-v6/g'
+      sed -e "s/q38-hosted49-p4-v5-preflight/$preflight_token/g" \
+        -e "s/complete49-p4-v5/$replacement/g"
   else
-    sed -e 's/odd49-p4-v7/odd47-p4-v8/g' \
+    replacement=odd47-p4-v8
+    test "$GENERATION" = v1 || replacement=odd46-p4-v9
+    sed -e "s/odd49-p4-v7/$replacement/g" \
       "$ROOT/evals/fleet/cluster/opencode-glm53-hosted-odd-preflight-v7.yaml"
   fi
 }
