@@ -1,0 +1,38 @@
+{
+  "schema_version": "fleet-scoring-api-recovery-v1",
+  "incident_receipt_sha256": "sha256:043c01e05e9118a080bd642a5da6f7c22c279781bc0c97803330091e55fdb27e",
+  "recovery_observed_at": "2026-09-04T05:45:40Z",
+  "recovery_source": {
+    "job_name": "chris-cyber-glm53-opencode11827-dedicated-a-even27-p4-v1",
+    "job_uid": "aa9a79a9-37dd-4910-a094-a172d058749b",
+    "pod_name": "chris-cyber-glm53-opencode11827-dedicated-a-even27-p4-v1-hzvsb",
+    "pod_uid": "b26a37e3-0a15-4c1e-96a9-d065de50ba59",
+    "plan_sha256": "sha256:4f8d4fcf50af8abccf3b9d272a18755f9be0bc862a66fe25bba691bee8a22208",
+    "source_rank": 4,
+    "attempt": 3
+  },
+  "evidence": {
+    "reward_result_present": true,
+    "reward_result_file_sha256": "sha256:bd7a41731142591d7ad860f2eb0120f6aa7025eb3c281a0ee2af91f8a7a4f1c7",
+    "session_ingest_present": true,
+    "session_ingest_file_sha256": "sha256:133353a31d9af1dd1b978d076138d219b5b9a6c6f347144a44cc680798d7784e",
+    "accepted_present": true,
+    "accepted_file_sha256": "sha256:360c30ecbebf5026d09eacf63f2ba423a4deaad8488fbb93e9771887d47c5fe3",
+    "accepted_receipt_sha256": "sha256:b487681c374d62bcbe987b95bb3628322c5d0ca2941f9e379483978b51f33b4b",
+    "verifier_backed": true,
+    "controller_running_after_accept": true,
+    "pod_restart_count": 0
+  },
+  "conclusion": {
+    "fleet_rollout_reward_route_recovered_after_http500_incident": true,
+    "recovery_is_score_blind": true,
+    "recovery_does_not_replace_duplicate_or_overlap_preflight": true
+  },
+  "privacy": {
+    "scores_included": false,
+    "prompts_or_traces_included": false,
+    "task_content_included": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:708d635968e073d27153d3d9f13ae5fa7b4784349cc9e8e3928f0fbafeade132"
+}

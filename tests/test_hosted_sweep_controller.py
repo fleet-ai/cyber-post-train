@@ -83,8 +83,14 @@ GLM_HTTP500_HYDRATION = Path(
 QWEN_HTTP500_SUCCESSOR_PLAN = Path(
     "evals/fleet/configs/qwen38-opencode-hosted-http500-successor49-pass4-v8.json"
 )
+QWEN_HTTP500_SCORING_RELEASE = Path(
+    "docs/evidence/qwen38-study/2026-09-04-qwen38-http500-successor-scoring-release-v1.json"
+)
 GLM_HTTP500_SUCCESSOR_PLAN = Path(
     "evals/fleet/configs/glm53-opencode-hosted-http500-successor73-pass4-v11.json"
+)
+GLM_HTTP500_HOSTED_PRIMARY_PLAN = Path(
+    "evals/fleet/configs/glm53-opencode-hosted-http500-primary46-pass4-v12.json"
 )
 FROZEN_SPLIT = Path("configs/data/fleet-a62-task-split-v1.json")
 FROZEN_SELECTION = Path(
@@ -1229,6 +1235,21 @@ def test_qwen_http500_successor_is_exactly_50_tasks_with_prior_complete() -> Non
     assert plan["execution"]["required_priority_class"] == "fleet-train-high"
 
 
+def test_qwen_http500_successor_requires_exact_scoring_release() -> None:
+    plan = hosted.load_object(QWEN_HTTP500_SUCCESSOR_PLAN)
+    release = hosted.load_object(QWEN_HTTP500_SCORING_RELEASE)
+    hosted.validate_qwen_http500_scoring_release(plan, release)
+    with pytest.raises(ValueError, match="release is required"):
+        hosted.validate_qwen_http500_scoring_release(plan, None)
+    tampered = json.loads(json.dumps(release))
+    tampered["authorization"]["must_not_repeat"] = False
+    tampered["receipt_sha256"] = self_hosted.digest_without(
+        tampered, "receipt_sha256"
+    )
+    with pytest.raises(ValueError, match="does not bind"):
+        hosted.validate_qwen_http500_scoring_release(plan, tampered)
+
+
 def test_glm_http500_hosted_successor_is_exactly_73_plus_dedicated_a() -> None:
     plan = hosted.build_glm_http500_successor_plan(
         hosted.load_object(
@@ -1257,6 +1278,21 @@ def test_glm_http500_hosted_successor_is_exactly_73_plus_dedicated_a() -> None:
     }
     assert plan["execution"]["launch_authorized"] is False
     assert plan["execution"]["required_priority_class"] == "fleet-train-high"
+
+
+def test_glm_http500_primary_splits_out_the_dedicated_b_partition() -> None:
+    combined = hosted.load_object(GLM_HTTP500_SUCCESSOR_PLAN)
+    plan = hosted.build_glm_http500_hosted_primary_plan(combined)
+    assert plan == hosted.load_object(GLM_HTTP500_HOSTED_PRIMARY_PLAN)
+    hosted.validate_plan(plan)
+    selected = {row["source_rank"] for row in plan["tasks"]}
+    assert selected == {*range(13, 100, 2), 108, 109}
+    assert plan["task_count"] == 46
+    assert plan["new_session_count"] == 184
+    assert plan["dedicated_a_task_count"] == 27
+    assert plan["dedicated_b_task_count"] == 27
+    assert plan["primary_estimator_task_count"] == 100
+    assert plan["execution"]["launch_authorized"] is False
 
 
 def test_qwen_http500_supplement_selects_unused_r54_r55_and_restores_200_cells() -> None:

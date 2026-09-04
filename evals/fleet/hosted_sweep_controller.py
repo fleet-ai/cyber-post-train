@@ -24,6 +24,17 @@ DEDICATED_SCORING_RELEASE_SCHEMA = "fleet-cyber-glm53-dedicated-scoring-release-
 HOSTED_REPLACEMENT_SCORING_RELEASE_SCHEMA = (
     "fleet-glm53-hosted-replacement-scoring-release-v1"
 )
+QWEN_HTTP500_SCORING_RELEASE_SCHEMA = (
+    "fleet-qwen38-http500-successor-scoring-release-v1"
+)
+QWEN_HTTP500_AUTH_STATEMENT = (
+    "I authorize the create-once scored launch of Qwen successor plan "
+    "sha256:8d6df6af63b308d648fb0c7ea9115f90b16de1d7e57b0968dda8fc8fd4a20c81 "
+    "after append-only scoring-recovery, hydration, exact-treatment, duplicate, and "
+    "overlap gates pass. It contains exactly the remaining 49 complete primary "
+    "tasks/196 cells, uses fleet-train-high, retains prior completed source4 for "
+    "50/200, and must not repeat any fenced or accepted cell."
+)
 CAMPAIGNS = {
     "qwen38": "chris-cyber-q38-opencode11827-hosted-complete49-p4-v5",
     "glm53": "chris-cyber-glm53-opencode11827-hosted-complete99-p4-v5",
@@ -86,6 +97,9 @@ QWEN_HTTP500_SUCCESSOR_CAMPAIGN = (
 GLM_HTTP500_SUCCESSOR_CAMPAIGN = (
     "chris-cyber-glm53-opencode11827-hosted-successor73-p4-v11"
 )
+GLM_HTTP500_HOSTED_PRIMARY_CAMPAIGN = (
+    "chris-cyber-glm53-opencode11827-hosted-primary46-p4-v12"
+)
 EXPECTED_INCLUDED_TASK_COUNTS.update(
     {
         "qwen38_remainder": 48,
@@ -102,7 +116,11 @@ EXPECTED_INCLUDED_TASK_COUNTS.update({"qwen38_replacements": 3})
 EXPECTED_INCLUDED_TASK_COUNTS.update({"glm53_hosted_replacement": 1})
 EXPECTED_INCLUDED_TASK_COUNTS.update({"glm53_hosted_reassigned_b": 27})
 EXPECTED_INCLUDED_TASK_COUNTS.update(
-    {"qwen38_http500_successor": 49, "glm53_http500_successor": 73}
+    {
+        "qwen38_http500_successor": 49,
+        "glm53_http500_successor": 73,
+        "glm53_http500_hosted_primary": 46,
+    }
 )
 SCHEDULE = [
     {
@@ -325,6 +343,61 @@ def validate_hosted_replacement_scoring_release(
             uuid.UUID(str(hydration.get(field)))
         except ValueError as exc:
             raise ValueError("hosted replacement hydration has an invalid UID") from exc
+
+
+def validate_qwen_http500_scoring_release(
+    plan: dict[str, Any], release: dict[str, Any] | None
+) -> None:
+    """Fail closed until the exact recovery-bound Qwen release is supplied."""
+    if plan.get("shard_key") != "qwen38_http500_successor":
+        return
+    if not isinstance(release, dict):
+        raise ValueError("Qwen HTTP500 successor scoring release is required")
+    source = plan.get("source") or {}
+    plan_evidence = release.get("plan") or {}
+    gates = release.get("gates") or {}
+    scheduling = release.get("scheduling") or {}
+    authorization = release.get("authorization") or {}
+    privacy = release.get("privacy") or {}
+    if (
+        release.get("schema_version") != QWEN_HTTP500_SCORING_RELEASE_SCHEMA
+        or release.get("receipt_sha256") != digest_without(release, "receipt_sha256")
+        or plan_evidence.get("plan_sha256") != plan["plan_sha256"]
+        or plan_evidence.get("new_task_count") != 49
+        or plan_evidence.get("new_cell_count") != 196
+        or plan_evidence.get("retained_complete_task_count") != 1
+        or plan_evidence.get("primary_task_count") != 50
+        or plan_evidence.get("primary_cell_count") != 200
+        or gates.get("incident_receipt_sha256")
+        != source.get("incident_receipt_sha256")
+        or gates.get("selection_supplement_receipt_sha256")
+        != source.get("selection_supplement_receipt_sha256")
+        or gates.get("hydration_receipt_sha256")
+        != source.get("hydration_receipt_sha256")
+        or gates.get("hydration_execution_receipt_sha256")
+        != "sha256:00660b55b4aa3c5b02f796b29e424acb45caaf4e6da432b203d237b01710f1ec"
+        or gates.get("scoring_recovery_receipt_sha256")
+        != "sha256:708d635968e073d27153d3d9f13ae5fa7b4784349cc9e8e3928f0fbafeade132"
+        or not all(
+            gates.get(field) is True
+            for field in (
+                "exact_treatment_gate_required",
+                "duplicate_gate_required",
+                "overlap_gate_required",
+                "fresh_create_once_identity_required",
+            )
+        )
+        or scheduling.get("required_priority_class") != "fleet-train-high"
+        or scheduling.get("true_non_preemptible_available") is not False
+        or scheduling.get("priority_class_is_not_preemption_immunity") is not True
+        or authorization.get("timestamp_utc") != "2026-09-04T05:46:25Z"
+        or authorization.get("author") != "/root"
+        or authorization.get("statement") != QWEN_HTTP500_AUTH_STATEMENT
+        or authorization.get("scored_launch_authorized") is not True
+        or authorization.get("must_not_repeat") is not True
+        or any(value is not False for value in privacy.values())
+    ):
+        raise ValueError("Qwen HTTP500 scoring release does not bind this plan")
 
 
 def build_remainder_plan(
@@ -1401,6 +1474,79 @@ def build_glm_http500_successor_plan(
     return plan
 
 
+def build_glm_http500_hosted_primary_plan(
+    combined_hosted_plan: dict[str, Any],
+) -> dict[str, Any]:
+    """Split the hosted primary stream from the separately reserved B block."""
+    validate_plan(combined_hosted_plan)
+    if (
+        combined_hosted_plan.get("shard_key") != "glm53_http500_successor"
+        or combined_hosted_plan.get("plan_sha256")
+        != "sha256:d5f0d14e88f45b339a91a03b263c769a4f0be56fb7b700b353ee04effbcb5822"
+    ):
+        raise ValueError("GLM combined hosted successor plan drifted")
+    selected = {*range(13, 100, 2), 108, 109}
+    tasks = [
+        copy.deepcopy(row)
+        for row in combined_hosted_plan["tasks"]
+        if int(row["source_rank"]) in selected
+    ]
+    for index, row in enumerate(tasks, 1):
+        row["rank"] = index
+    treatment = copy.deepcopy(combined_hosted_plan["treatment_block"])
+    treatment["serving_block"] = "hosted-primary-after-scoring-outage-v1"
+    plan = {
+        "schema_version": PLAN_SCHEMA,
+        "shard_key": "glm53_http500_hosted_primary",
+        "campaign_id": GLM_HTTP500_HOSTED_PRIMARY_CAMPAIGN,
+        "source_job_id": combined_hosted_plan["source_job_id"],
+        "source": {
+            "combined_hosted_plan_sha256": combined_hosted_plan["plan_sha256"],
+            **copy.deepcopy(combined_hosted_plan["source"]),
+        },
+        "treatment_block": treatment,
+        "model": copy.deepcopy(combined_hosted_plan["model"]),
+        "harness": copy.deepcopy(combined_hosted_plan["harness"]),
+        "authority": copy.deepcopy(combined_hosted_plan["authority"]),
+        "task_count": 46,
+        "pass_k": 4,
+        "total_session_count": 184,
+        "credited_sessions": [],
+        "new_session_count": 184,
+        "dedicated_a_task_count": 27,
+        "dedicated_b_task_count": 27,
+        "primary_estimator_task_count": 100,
+        "primary_estimator_cell_count": 400,
+        "fenced_source_ranks": [1, 2, 3, 5, 7, 9, 11, 54, 106],
+        "dedicated_a_source_ranks": [*range(4, 53, 2), 102, 104],
+        "dedicated_b_source_ranks": [
+            *range(56, 101, 2),
+            101,
+            103,
+            105,
+            107,
+        ],
+        "execution": {
+            **copy.deepcopy(combined_hosted_plan["execution"]),
+            "launch_authorized": False,
+            "required_priority_class": "fleet-train-high",
+            "required_recovery_gate": "fleet_scoring_api_http500_recovery_v1",
+            "third_hosted_stream_authorized": False,
+            "dedicated_b_route_authorization_required": True,
+        },
+        "tasks": tasks,
+        "attempts": _fresh_attempts(
+            tasks,
+            GLM_HTTP500_HOSTED_PRIMARY_CAMPAIGN,
+            "glm53-hosted-primary",
+        ),
+        "privacy": copy.deepcopy(combined_hosted_plan["privacy"]),
+    }
+    plan["plan_sha256"] = digest_without(plan, "plan_sha256")
+    validate_plan(plan)
+    return plan
+
+
 def _validate_source_plan(plan: dict[str, Any]) -> None:
     if plan.get("schema_version") == legacy.PLAN_SCHEMA:
         legacy.validate_plan(plan)
@@ -1665,6 +1811,7 @@ def validate_plan(plan: dict[str, Any]) -> None:
             "glm53_hosted_replacement",
             "glm53_hosted_reassigned_b",
             "glm53_http500_successor",
+            "glm53_http500_hosted_primary",
         }
         else (
             "plan_identity_plus_authoritative_receipt_v1"
@@ -1857,6 +2004,36 @@ def validate_plan(plan: dict[str, Any]) -> None:
             or execution.get("third_hosted_stream_authorized") is not False
         ):
             raise ValueError("GLM HTTP500 successor partition or binding drifted")
+        return
+
+    if shard_key == "glm53_http500_hosted_primary":
+        treatment = plan.get("treatment_block") or {}
+        selected = {int(row["source_rank"]) for row in tasks}
+        dedicated_a = set(plan.get("dedicated_a_source_ranks") or [])
+        dedicated_b = set(plan.get("dedicated_b_source_ranks") or [])
+        if (
+            selected != {*range(13, 100, 2), 108, 109}
+            or dedicated_a != {*range(4, 53, 2), 102, 104}
+            or dedicated_b != {*range(56, 101, 2), 101, 103, 105, 107}
+            or selected & (dedicated_a | dedicated_b)
+            or dedicated_a & dedicated_b
+            or len(selected | dedicated_a | dedicated_b) != 100
+            or plan.get("dedicated_a_task_count") != 27
+            or plan.get("dedicated_b_task_count") != 27
+            or plan.get("primary_estimator_task_count") != 100
+            or plan.get("primary_estimator_cell_count") != 400
+            or treatment.get("kind") != "hosted_inference_endpoint_v1"
+            or treatment.get("serving_block")
+            != "hosted-primary-after-scoring-outage-v1"
+            or treatment.get("model_revision") != plan["model"].get("revision")
+            or execution.get("launch_authorized") is not False
+            or execution.get("required_priority_class") != "fleet-train-high"
+            or execution.get("required_recovery_gate")
+            != "fleet_scoring_api_http500_recovery_v1"
+            or execution.get("third_hosted_stream_authorized") is not False
+            or execution.get("dedicated_b_route_authorization_required") is not True
+        ):
+            raise ValueError("GLM hosted primary partition or binding drifted")
         return
 
     excluded = plan.get("excluded_tasks") or []
@@ -2297,6 +2474,7 @@ def preflight_plan(
     validate_plan(plan)
     validate_dedicated_scoring_release(plan, release)
     validate_hosted_replacement_scoring_release(plan, release)
+    validate_qwen_http500_scoring_release(plan, release)
     roots_reconciled = _validate_plan_identity_absence(plan, root)
     with _client(key) as client:
         account = self_hosted._request(client, "GET", "/v1/account")
@@ -2353,6 +2531,7 @@ def run_plan(
     validate_plan(plan)
     validate_dedicated_scoring_release(plan, release)
     validate_hosted_replacement_scoring_release(plan, release)
+    validate_qwen_http500_scoring_release(plan, release)
     key = os.environ.get("FLEET_API_KEY")
     if not key:
         raise RuntimeError("FLEET_API_KEY is required")
@@ -2536,6 +2715,9 @@ def main() -> int:
     glm_http500.add_argument("--supplement", type=Path, required=True)
     glm_http500.add_argument("--hydration", type=Path, required=True)
     glm_http500.add_argument("--output", type=Path, required=True)
+    glm_http500_primary = sub.add_parser("build-glm-http500-hosted-primary")
+    glm_http500_primary.add_argument("--combined-plan", type=Path, required=True)
+    glm_http500_primary.add_argument("--output", type=Path, required=True)
     validate = sub.add_parser("validate")
     validate.add_argument("--plan", type=Path, required=True)
     preflight = sub.add_parser("preflight")
@@ -2633,6 +2815,12 @@ def main() -> int:
             load_object(args.incident),
             load_object(args.supplement),
             load_object(args.hydration),
+        )
+        self_hosted.write_json_once(args.output, value)
+        return 0
+    if args.command == "build-glm-http500-hosted-primary":
+        value = build_glm_http500_hosted_primary_plan(
+            load_object(args.combined_plan)
         )
         self_hosted.write_json_once(args.output, value)
         return 0
