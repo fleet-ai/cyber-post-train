@@ -2194,6 +2194,115 @@ def diagnose_partial_session_prefix_mismatch(
         raise
 
 
+def diagnose_partial_session_timestamp_projection(
+    client: httpx.Client,
+    *,
+    config: dict[str, Any],
+    source_dir: Path,
+    out_dir: Path,
+) -> dict[str, Any]:
+    """Test only exact top-level timestamp omission across a persisted prefix."""
+    out_dir.mkdir(parents=True, exist_ok=False)
+    out_dir.chmod(0o700)
+    try:
+        account = _request(client, "GET", "/v1/account")
+        if account.get("team_name") != "fleet" or account.get("team_id") != FLEET_TEAM_ID:
+            raise RuntimeError("FLEET_API_KEY is not scoped to the Fleet team")
+        chunks, source = _partial_recovery_source(config, source_dir)
+        rows = _task_sessions(client, config["task"]["key"])
+        matches = [row for row in rows if row.get("session_id") == source["session_id"]]
+        row = matches[0] if len(matches) == 1 else None
+        if (
+            row is None
+            or row.get("status") != "in_progress"
+            or row.get("model") != persisted_session_model_identity(config)
+            or row.get("verifier_execution") is not None
+        ):
+            raise RuntimeError("timestamp projection session inventory is not authoritative")
+        response = _request(
+            client, "GET", f"/v1/sessions/{source['session_id']}/transcript"
+        )
+        transcript = response.get("transcript")
+        expected_keys = ["harness", "instance", "task", "transcript", "verifier_execution"]
+        local_prefix = [
+            message
+            for chunk in chunks[: source["chunks_completed"]]
+            for message in chunk
+        ]
+        if (
+            sorted(response) != expected_keys
+            or not isinstance(transcript, list)
+            or len(transcript) != len(local_prefix)
+            or len(transcript) != source["persisted_prefix_message_count"]
+            or any(not isinstance(message, dict) for message in local_prefix)
+        ):
+            raise RuntimeError("timestamp projection transcript shape drifted")
+        projected_local = [
+            {key: value for key, value in message.items() if key != "timestamp"}
+            for message in local_prefix
+        ]
+        mismatch_count = sum(
+            canonical_json(local) != canonical_json(server)
+            for local, server in zip(projected_local, transcript, strict=True)
+        )
+        local_bytes = canonical_json(projected_local)
+        server_bytes = canonical_json(transcript)
+        rebound_chunks, rebound_source = _partial_recovery_source(config, source_dir)
+        if canonical_json(rebound_chunks) != canonical_json(chunks) or rebound_source != source:
+            raise RuntimeError("timestamp projection source drifted during observation")
+        receipt = {
+            "schema_version": "fleet-opencode-partial-session-timestamp-projection-v1",
+            "diagnostic_only": True,
+            "resume_allowed": False,
+            "projection": "omit_top_level_timestamp_only",
+            "run_id": config["run_id"],
+            "config_sha256": config["config_sha256"],
+            "task_version_id": config["task"]["version_id"],
+            "session_id": source["session_id"],
+            "verifier_execution_id": source["verifier_execution_id"],
+            "server_prefix_message_count": len(transcript),
+            "local_prefix_message_count": len(local_prefix),
+            "timestamp_fields_removed": sum(
+                "timestamp" in message for message in local_prefix
+            ),
+            "structural_mismatch_count_after_projection": mismatch_count,
+            "projection_bytes_equal": local_bytes == server_bytes,
+            "server_prefix_sha256": sha256(server_bytes),
+            "projected_local_prefix_sha256": sha256(local_bytes),
+            "source_trace_manifest_sha256": sha256(
+                (source_dir / "trace-manifest.json").read_bytes()
+            ),
+            "canonical_trace_sha256": source["trace_sha256"],
+            "source_result_sha256": source["source_result_sha256"],
+            "source_reward_sha256": source["source_reward_sha256"],
+            "original_ingest_sha256": source["original_ingest_sha256"],
+            "source_rebound_after_observation": True,
+            "transcript_route": "/v1/sessions/{session_id}/transcript",
+            "transcript_read_in_memory_only": True,
+            "transcript_persisted_or_emitted": False,
+            "content_or_tool_arguments_included": False,
+            "scores_included": False,
+            "prompts_or_traces_included": False,
+        }
+        receipt["receipt_sha256"] = digest_without(receipt, "receipt_sha256")
+        del transcript, response, local_prefix, projected_local, local_bytes, server_bytes
+        write_json_once(out_dir / "PROJECTION.json", receipt)
+        return receipt
+    except BaseException as exc:
+        failure = {
+            "schema_version": "fleet-opencode-partial-session-projection-failure-v1",
+            "error_type": type(exc).__name__,
+            "content_or_tool_arguments_included": False,
+            "scores_included": False,
+            "prompts_or_traces_included": False,
+        }
+        if isinstance(exc, FleetRequestError):
+            failure.update(http_status=exc.status_code, method=exc.method, route=exc.route)
+        failure["receipt_sha256"] = digest_without(failure, "receipt_sha256")
+        write_json_once(out_dir / "failure.json", failure)
+        raise
+
+
 def resume_partial_session_trace(
     client: httpx.Client,
     *,
@@ -2493,6 +2602,7 @@ def main() -> int:
             "recover-session",
             "observe-partial-session",
             "diagnose-partial-session",
+            "diagnose-timestamp-projection",
             "resume-partial-session",
         ),
     )
@@ -2569,6 +2679,7 @@ def main() -> int:
     if args.command in {
         "observe-partial-session",
         "diagnose-partial-session",
+        "diagnose-timestamp-projection",
         "resume-partial-session",
     }:
         if not args.source_dir or not args.out_dir:
@@ -2627,6 +2738,36 @@ def main() -> int:
                     )
                 )
                 return 3
+            if args.command == "diagnose-timestamp-projection":
+                diagnostic = diagnose_partial_session_timestamp_projection(
+                    client, config=config, source_dir=args.source_dir, out_dir=args.out_dir
+                )
+                print(
+                    json.dumps(
+                        {
+                            "diagnostic_only": diagnostic["diagnostic_only"],
+                            "resume_allowed": diagnostic["resume_allowed"],
+                            "run_id": diagnostic["run_id"],
+                            "session_id": diagnostic["session_id"],
+                            "message_count": diagnostic[
+                                "server_prefix_message_count"
+                            ],
+                            "projection": diagnostic["projection"],
+                            "projection_bytes_equal": diagnostic[
+                                "projection_bytes_equal"
+                            ],
+                            "structural_mismatch_count_after_projection": diagnostic[
+                                "structural_mismatch_count_after_projection"
+                            ],
+                            "receipt_sha256": diagnostic["receipt_sha256"],
+                            "content_or_tool_arguments_included": False,
+                            "scores_included": False,
+                            "prompts_or_traces_included": False,
+                        },
+                        sort_keys=True,
+                    )
+                )
+                return 0 if diagnostic["projection_bytes_equal"] else 3
             if not args.observer_receipt:
                 parser.error("resume-partial-session requires --observer-receipt")
             observer = _read_json_object(args.observer_receipt)

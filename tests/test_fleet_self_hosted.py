@@ -151,6 +151,24 @@ def test_partial_session_observers_are_read_only_create_once_high_priority() -> 
         assert "opencode run" not in command
         assert "docker" not in command
 
+    projection_documents = list(
+        yaml.safe_load_all(
+            Path(
+                "evals/fleet/cluster/opencode-partial-session-timestamp-projection-v3.yaml"
+            ).read_text()
+        )
+    )
+    assert len(projection_documents) == 2
+    for document in projection_documents:
+        pod = document["spec"]["template"]["spec"]
+        command = pod["containers"][0]["args"][0]
+        assert document["spec"]["backoffLimit"] == 0
+        assert pod["priorityClassName"] == "fleet-train-high"
+        assert "diagnose-timestamp-projection" in command
+        assert "resume-partial-session" not in command
+        assert "opencode run" not in command
+        assert "docker" not in command
+
 
 def _recovery_source_fixture(tmp_path: Path) -> tuple[dict, Path, str]:
     config = json.loads(OPENCODE_CONFIG_PATH.read_text())
@@ -1055,6 +1073,58 @@ def test_partial_prefix_mismatch_diagnostic_emits_only_shapes_and_digests(
     encoded = json.dumps(receipt)
     assert "private server-only value" not in encoded
     assert "done" not in encoded
+
+
+def test_partial_timestamp_projection_requires_exact_full_prefix_equality(
+    tmp_path: Path,
+) -> None:
+    config, source, _, session_id = _partial_recovery_source_fixture(tmp_path)
+    chunks, _ = self_hosted._partial_recovery_source(config, source)
+    prefix = [message for chunk in chunks[:1] for message in chunk]
+    projected = [
+        {key: value for key, value in message.items() if key != "timestamp"}
+        for message in prefix
+    ]
+
+    class Client:
+        def request(self, method: str, url: str, **kwargs):
+            if method == "GET" and url.endswith("/v1/account"):
+                payload = {"team_name": "fleet", "team_id": self_hosted.FLEET_TEAM_ID}
+            elif method == "GET" and url.endswith("/v1/sessions"):
+                payload = {
+                    "sessions": [
+                        {
+                            "session_id": session_id,
+                            "model": "qwen3.8-27b",
+                            "status": "in_progress",
+                            "verifier_execution": None,
+                        }
+                    ],
+                    "has_more": False,
+                }
+            elif method == "GET" and url.endswith(f"/{session_id}/transcript"):
+                payload = {
+                    "harness": {},
+                    "instance": {},
+                    "task": {},
+                    "transcript": projected,
+                    "verifier_execution": None,
+                }
+            else:
+                pytest.fail("timestamp projection diagnostic must be read-only")
+            return type("Response", (), {"status_code": 200, "json": lambda self: payload})()
+
+    receipt = self_hosted.diagnose_partial_session_timestamp_projection(
+        Client(), config=config, source_dir=source, out_dir=tmp_path / "projection"
+    )
+    assert receipt["projection"] == "omit_top_level_timestamp_only"
+    assert receipt["projection_bytes_equal"] is True
+    assert receipt["structural_mismatch_count_after_projection"] == 0
+    assert receipt["server_prefix_sha256"] == receipt["projected_local_prefix_sha256"]
+    assert receipt["resume_allowed"] is False
+    assert receipt["receipt_sha256"] == self_hosted.digest_without(
+        receipt, "receipt_sha256"
+    )
 
 
 def test_resume_partial_session_trace_rejects_source_drift_after_observer(
