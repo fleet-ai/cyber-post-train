@@ -1,6 +1,7 @@
 {
   "schema_version": "fleet-opencode-replacement-selection-lock-v1",
   "recorded_at": "2026-09-04T03:30:00Z",
+  "amended_at": "2026-09-04T03:36:00Z",
   "source": {
     "job_id": "a62dd51f-a52b-4941-8207-4679e4b25b51",
     "split": {
@@ -113,9 +114,42 @@
     "pass_k": 4,
     "primary_estimator_task_count": 100,
     "replacement_rule": "continue_the_reproduced_locked_eligible_order_at_ranks_101_through_105_and_run_all_four_attempts_per_task",
+    "dedicated_block_assignment": {
+      "rule": "assign_replacements_in_rank_order_round_robin_beginning_with_the_smaller_24_task_original_block",
+      "hosted": {
+        "original_source_ranks": "odd_9_through_99",
+        "replacement_ranks": [],
+        "task_count": 46,
+        "cell_count": 184,
+        "plan_sha256": "sha256:7fa9cb527083defd0197caccf7fb87634cfd2f22932afcf0d51a33f97be703f1"
+      },
+      "dedicated_a": {
+        "original_source_ranks": "even_4_through_52",
+        "replacement_ranks": [102, 104],
+        "task_count": 27,
+        "cell_count": 108,
+        "serving_config": "evals/fleet/configs/dedicated-glm53-tp8-a-v4.json",
+        "serving_config_sha256": "sha256:13afc10a2c889ae4d77f57beb2218ad875479aa97204ce0e3ccaf268c27a639c",
+        "serving_run": "ft-run-99d69710",
+        "serving_ray_job_uid": "558b9810-86d2-4417-8f54-2cab51bc9b09"
+      },
+      "dedicated_b": {
+        "original_source_ranks": "even_54_through_100",
+        "replacement_ranks": [101, 103, 105],
+        "task_count": 27,
+        "cell_count": 108,
+        "serving_config": "evals/fleet/configs/dedicated-glm53-tp8-b-v4.json",
+        "serving_config_sha256": "sha256:853635c8fdcf8ead0a6bf0efffbe197dac0a137c75470c8ac81e6767057c385d",
+        "serving_run": "ft-run-65595541",
+        "serving_ray_job_uid": "80578ad6-8b2a-4572-82ee-2b2d25aba58f"
+      },
+      "total_task_count": 100,
+      "total_cell_count": 400
+    },
     "tasks": [
       {
         "replacement_rank": 101,
+        "serving_block": "dedicated_b",
         "historical_rank": 109,
         "task_key": "cysec1-2-fira-gen_blackbox-2ed54399f3d59827d41ac651__blackbox_ctf_v1",
         "task_version_id": "c0d14c8f-5f33-4957-8e38-af075bbf3df9",
@@ -129,6 +163,7 @@
       },
       {
         "replacement_rank": 102,
+        "serving_block": "dedicated_a",
         "historical_rank": 110,
         "task_key": "cysec1-2-fira-gen_blackbox-369f0925ba4f2ea1208a70a1__blackbox_ctf_v1",
         "task_version_id": "3ffeac73-fff8-49d8-b156-e726275edc2f",
@@ -142,6 +177,7 @@
       },
       {
         "replacement_rank": 103,
+        "serving_block": "dedicated_b",
         "historical_rank": 111,
         "task_key": "cysec1-2-fira-gen_blackbox-3deedc8f50c562ae91ac4705__blackbox_ctf_v1",
         "task_version_id": "7e1fc9f6-7717-49bf-aee5-c09686dca297",
@@ -155,6 +191,7 @@
       },
       {
         "replacement_rank": 104,
+        "serving_block": "dedicated_a",
         "historical_rank": 112,
         "task_key": "cysec1-2-fira-gen_blackbox-5f29f46b3a70e5d9a6ea59dd__blackbox_ctf_v1",
         "task_version_id": "62ed9ac8-478d-45a2-a09b-6750f5946d97",
@@ -168,6 +205,7 @@
       },
       {
         "replacement_rank": 105,
+        "serving_block": "dedicated_b",
         "historical_rank": 113,
         "task_key": "cysec1-2-fubspot-gen_blackbox-00e30c972b2d4f6553104548__blackbox_ctf_v1",
         "task_version_id": "611014e8-6787-43a0-87a1-5c70fb69e3e1",
@@ -189,7 +227,8 @@
         "nonempty_runtime_seed_manifest",
         "complete_verifier_receipt",
         "fleet_team_authority"
-      ]
+      ],
+      "blocks_released_for_scoring": []
     }
   },
   "overlap_audit": {
@@ -222,5 +261,5 @@
     "flags_read_or_included": false,
     "credentials_included": false
   },
-  "receipt_sha256": "sha256:ea3da83f8f30265f2f99cac6b7f7ae8f30240febd80ef2f8f968465aade9970a"
+  "receipt_sha256": "sha256:77666813ed33cea95d1d21d31383d9deab2d596a97dfe8d7caee4139c80374b9"
 }

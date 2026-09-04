@@ -397,6 +397,13 @@ def test_replacement_selection_lock_is_exact_disjoint_and_fail_closed() -> None:
     assert glm["replacement_task_count"] * glm["pass_k"] == 20
     assert [row["replacement_rank"] for row in glm["tasks"]] == list(range(101, 106))
     assert [row["historical_rank"] for row in glm["tasks"]] == list(range(109, 114))
+    assert [row["serving_block"] for row in glm["tasks"]] == [
+        "dedicated_b",
+        "dedicated_a",
+        "dedicated_b",
+        "dedicated_a",
+        "dedicated_b",
+    ]
     selected_ids = {row["task_version_id"] for row in selection["tasks"]}
     split_by_version = {row["task_version_id"]: row for row in split["tasks"]}
     runnable = hosted.load_object(
@@ -412,17 +419,37 @@ def test_replacement_selection_lock_is_exact_disjoint_and_fail_closed() -> None:
         assert source["split"] == "train"
         for field in binding_fields[1:]:
             assert row[field] == source[field]
-    assert glm["hydration_gate"] == {
-        "status": "required_not_satisfied",
-        "required_before_paid_launch": True,
-        "checks": [
-            "exact_frozen_task_and_environment_binding",
-            "cyber_contract_v3",
-            "nonempty_runtime_seed_manifest",
-            "complete_verifier_receipt",
-            "fleet_team_authority",
-        ],
-    }
+    assert glm["hydration_gate"]["status"] == "required_not_satisfied"
+    assert glm["hydration_gate"]["required_before_paid_launch"] is True
+    assert glm["hydration_gate"]["blocks_released_for_scoring"] == []
+    assert glm["hydration_gate"]["checks"] == [
+        "exact_frozen_task_and_environment_binding",
+        "cyber_contract_v3",
+        "nonempty_runtime_seed_manifest",
+        "complete_verifier_receipt",
+        "fleet_team_authority",
+    ]
+
+    blocks = glm["dedicated_block_assignment"]
+    assert blocks["rule"] == (
+        "assign_replacements_in_rank_order_round_robin_beginning_with_the_smaller_24_task_original_block"
+    )
+    assert blocks["hosted"]["task_count"] == 46
+    assert blocks["hosted"]["cell_count"] == 184
+    assert blocks["dedicated_a"]["replacement_ranks"] == [102, 104]
+    assert blocks["dedicated_a"]["task_count"] == 27
+    assert blocks["dedicated_a"]["cell_count"] == 108
+    assert blocks["dedicated_b"]["replacement_ranks"] == [101, 103, 105]
+    assert blocks["dedicated_b"]["task_count"] == 27
+    assert blocks["dedicated_b"]["cell_count"] == 108
+    assert blocks["total_task_count"] == 100
+    assert blocks["total_cell_count"] == 400
+    assert sum(block["task_count"] for block in (
+        blocks["hosted"], blocks["dedicated_a"], blocks["dedicated_b"]
+    )) == 100
+    assert sum(block["cell_count"] for block in (
+        blocks["hosted"], blocks["dedicated_a"], blocks["dedicated_b"]
+    )) == 400
 
     qwen_ids = {row["task_version_id"] for row in qwen["tasks"]}
     glm_ids = {row["task_version_id"] for row in glm["tasks"]}
