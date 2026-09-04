@@ -1,0 +1,160 @@
+{
+  "schema_version": "fleet-opencode-replacement-selection-supplement-v1",
+  "supplement_id": "glm53-hosted-source9-replacement-r106-v1",
+  "recorded_at": "2026-09-04T04:47:08Z",
+  "append_only": true,
+  "parent_selection_lock": {
+    "path": "docs/evidence/qwen38-study/2026-09-04-opencode-replacement-selection-lock-v1.json",
+    "file_sha256": "sha256:f940afb729ce8e9870aebeaf18c60841dee3bb88e47d09f6587c99ef45443249",
+    "receipt_sha256": "sha256:77666813ed33cea95d1d21d31383d9deab2d596a97dfe8d7caee4139c80374b9",
+    "rewritten": false
+  },
+  "frozen_selection_authority": {
+    "source_job_id": "a62dd51f-a52b-4941-8207-4679e4b25b51",
+    "split": {
+      "path": "configs/data/fleet-a62-task-split-v1.json",
+      "file_sha256": "sha256:ab444cb664ffb4da351e4d33298cc052f848f2833487807bf984a753fa7c3b47",
+      "manifest_digest": "sha256:fb09668f8de77e6baee37dc1e3162a7617ca9a0a450da9ca53422c17bfbc942a"
+    },
+    "locked_selection": {
+      "path": "evals/fleet/configs/opencode-easiest-train100-selection-v2.json",
+      "file_sha256": "sha256:9f5e83123cfe7d8a3f4cc0b791ac1dc9032a3d5faf5eba2a431c7246069255df",
+      "selection_sha256": "sha256:38bd544c74f4e45cb67b271849d657f49e356ccf41f97acca9fb6cd7eb7f56b8"
+    },
+    "runnable_inventory": {
+      "path": "configs/runs/qwen36-27b-rl-base-full-runnable.json",
+      "file_sha256": "sha256:70f303f5bb6892598c8e4867151fd176774c5e59d2f0998c6cdb291609b036ff"
+    },
+    "ranking_implementation": {
+      "path": "evals/fleet/opencode_train_sweep.py",
+      "file_sha256": "sha256:d93f8ea6b6794076d768629036d6f7c9c972530d4891031e07da949d4bd7b2b7"
+    },
+    "source_job_statistics_response_sha256": "sha256:72a6abfe437f4212746e3741113a5897e8cf7d53940975bf6da12db1dbb88387",
+    "mutable_live_statistics_used": false
+  },
+  "selection_replay": {
+    "score_blind": true,
+    "rule": "from_the_frozen_train_runnable_inventory_remove_the_locked_top100_the_five_prior_qwen_exclusions_and_the_eight_recorded_self_hosted_ineligible_versions_then_continue_the_locked_task_key_and_version_tiebreak_order",
+    "locked_prefix_reproduced": [
+      {
+        "replacement_rank": 101,
+        "task_version_id": "c0d14c8f-5f33-4957-8e38-af075bbf3df9"
+      },
+      {
+        "replacement_rank": 102,
+        "task_version_id": "3ffeac73-fff8-49d8-b156-e726275edc2f"
+      },
+      {
+        "replacement_rank": 103,
+        "task_version_id": "7e1fc9f6-7717-49bf-aee5-c09686dca297"
+      },
+      {
+        "replacement_rank": 104,
+        "task_version_id": "62ed9ac8-478d-45a2-a09b-6750f5946d97"
+      },
+      {
+        "replacement_rank": 105,
+        "task_version_id": "611014e8-6787-43a0-87a1-5c70fb69e3e1"
+      }
+    ],
+    "prior_qwen_exclusion_count": 5,
+    "self_hosted_ineligible_count": 8,
+    "next_historical_rank": 114,
+    "next_replacement_rank": 106
+  },
+  "predecessor_attrition": {
+    "source_path": "docs/evidence/qwen38-study/2026-09-04-hosted-opencode-remainder-source-v3.json",
+    "source_file_sha256": "sha256:4a64c8de5897b998a3964eaebe222b3ad8e39d51cba33dfc18df9da37a3b5a42",
+    "source_receipt_sha256": "sha256:09a819abd51f8ecda21d6a29dd1e700228fadb8548b8d57b37eb873a5c33d02d",
+    "predecessor_plan_sha256": "sha256:7fa9cb527083defd0197caccf7fb87634cfd2f22932afcf0d51a33f97be703f1",
+    "job_uid": "6f34dd40-b330-423b-9d9e-76f71cf75c90",
+    "pod_uid": "81ba03f2-3212-43ec-b37b-0069e57ce8a0",
+    "terminal_at": "2026-09-04T04:39:55Z",
+    "fenced_source_rank": 9,
+    "accepted_attempts": [1],
+    "infrastructure_incomplete_attempts": [2],
+    "unstarted_attempts": [3, 4],
+    "cause": "session_ingest_http_500_after_partial_chunk_upload",
+    "agent_exit_code": 0,
+    "cleanup_completed": true,
+    "retry_allowed": false,
+    "primary_estimator_excludes_entire_task": true
+  },
+  "replacement": {
+    "replacement_rank": 106,
+    "historical_rank": 114,
+    "serving_block": "hosted",
+    "task_key": "cysec1-2-fubspot-gen_blackbox-3837aa990d0f0c5b58a71144__blackbox_ctf_v1",
+    "task_version_id": "32d32c35-52f1-43a1-8d3d-3faaf01aa6a5",
+    "task_version": "10",
+    "environment_version_id": "a1532a5c-6ec9-45bd-899d-24c0fe3d1df5",
+    "env_key": "cysec1-2-fubspot-gen",
+    "env_version": "v0.0.3",
+    "data_key": "current-fubspot-gen",
+    "data_version": "v0.0.3",
+    "split": "train",
+    "pass_k": 4,
+    "model_revision": "30333038ada1f1dacb294a93270305a890b50c14",
+    "treatment_source_plan_sha256": "sha256:7fa9cb527083defd0197caccf7fb87634cfd2f22932afcf0d51a33f97be703f1",
+    "hydration_gate": {
+      "status": "required_not_satisfied",
+      "required_before_paid_launch": true,
+      "checks": [
+        "exact_frozen_task_and_environment_binding",
+        "cyber_contract_v3",
+        "nonempty_runtime_seed_manifest",
+        "complete_verifier_receipt",
+        "fleet_team_authority"
+      ]
+    },
+    "scored_launch_authorized": false
+  },
+  "current_experiment_overlap_audit": {
+    "observed_at": "2026-09-04T04:46:00Z",
+    "plan_paths_checked": [
+      "evals/fleet/configs/glm53-opencode-hosted-odd45-pass4-v10.json",
+      "evals/fleet/configs/glm53-opencode-hosted-odd46-pass4-v9.json",
+      "evals/fleet/configs/glm53-opencode-dedicated-a-even27-pass4-v1.json",
+      "evals/fleet/configs/glm53-opencode-dedicated-b-even27-pass4-v1.json",
+      "evals/fleet/configs/qwen38-opencode-hosted-complete47-pass4-v7.json",
+      "evals/fleet/configs/qwen38-opencode-hosted-replacements3-pass4-v1.json"
+    ],
+    "plans_containing_task_version": 0,
+    "sfs_roots_checked": 6,
+    "sfs_files_containing_task_version": 0,
+    "current_plan_claims": 0,
+    "current_plan_accepted_receipts": 0,
+    "current_plan_noncreditable_receipts": 0,
+    "launcher_owner_confirmation": "no_r106_artifacts_or_claims_created",
+    "public_api_treatment_identity_authoritative": false,
+    "older_same_model_rows_classification": "unrelated_or_unclassified_not_current_plan_claims",
+    "unused_for_current_experiment": true
+  },
+  "revised_primary_estimator": {
+    "hosted_untouched_original_source_ranks": "odd_11_through_99",
+    "hosted_untouched_original_task_count": 45,
+    "hosted_untouched_original_cell_count": 180,
+    "dedicated_a_task_count": 27,
+    "dedicated_a_cell_count": 108,
+    "dedicated_b_task_count": 27,
+    "dedicated_b_cell_count": 108,
+    "hosted_replacement_ranks": [106],
+    "hosted_replacement_task_count": 1,
+    "hosted_replacement_cell_count": 4,
+    "unique_task_count": 100,
+    "pass_k": 4,
+    "cell_count": 400,
+    "pairwise_disjoint": true,
+    "partially_accepted_sessions_outside_estimator": 3,
+    "formal_accept_count_if_primary_completes": 403
+  },
+  "privacy": {
+    "scores_read": false,
+    "scores_included": false,
+    "prompts_included": false,
+    "traces_included": false,
+    "flags_included": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:e0234fb53b771dde81475dd2cae0f1c60c051ee61e4ebaf7198e52e7111c5ed2"
+}

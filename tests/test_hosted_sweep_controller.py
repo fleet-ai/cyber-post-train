@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from evals.fleet import hosted_sweep_controller as hosted
+from evals.fleet import opencode_train_sweep as sweep
 from evals.fleet import self_hosted
 
 SOURCE = Path(
@@ -36,6 +37,16 @@ QWEN_REPLACEMENT_PLAN = Path(
 )
 DEDICATED_SCORING_RELEASE = Path(
     "docs/evidence/qwen38-study/2026-09-04-glm53-dedicated-scoring-release-v1.json"
+)
+REPLACEMENT_SUPPLEMENT = Path(
+    "docs/evidence/qwen38-study/2026-09-04-opencode-replacement-selection-supplement-v1.json"
+)
+FROZEN_SPLIT = Path("configs/data/fleet-a62-task-split-v1.json")
+FROZEN_SELECTION = Path(
+    "evals/fleet/configs/opencode-easiest-train100-selection-v2.json"
+)
+FROZEN_RUNNABLE_INVENTORY = Path(
+    "configs/runs/qwen36-27b-rl-base-full-runnable.json"
 )
 
 
@@ -670,3 +681,88 @@ def test_qwen_replacement_plan_is_exact_and_disjoint_from_v7() -> None:
     }
     assert replacement_cells.isdisjoint(v7_cells)
     assert plan["treatment_block"] == v7["treatment_block"]
+
+
+def test_glm_r106_supplement_replays_frozen_order_and_restores_denominator() -> None:
+    supplement = hosted.load_object(REPLACEMENT_SUPPLEMENT)
+    assert supplement["receipt_sha256"] == self_hosted.digest_without(
+        supplement, "receipt_sha256"
+    )
+
+    parent = hosted.load_object(REPLACEMENT_LOCK)
+    assert parent["receipt_sha256"] == supplement["parent_selection_lock"][
+        "receipt_sha256"
+    ]
+    assert hashlib.sha256(REPLACEMENT_LOCK.read_bytes()).hexdigest() == supplement[
+        "parent_selection_lock"
+    ]["file_sha256"].removeprefix("sha256:")
+
+    selection = hosted.load_object(FROZEN_SELECTION)
+    split = hosted.load_object(FROZEN_SPLIT)
+    runnable = hosted.load_object(FROZEN_RUNNABLE_INVENTORY)
+    selected = {row["task_version_id"] for row in selection["tasks"]}
+    train = {
+        row["task_version_id"]
+        for row in split["tasks"]
+        if row["split"] == "train"
+    }
+    ineligible = {
+        row["task_version_id"]
+        for row in selection["self_hosted_eligibility"]["excluded"]
+    }
+    remaining = [
+        row
+        for row in runnable["tasks"]["task_versions"]
+        if row["task_version_id"]
+        in train - selected - sweep.PRIOR_QWEN_TASK_VERSION_IDS - ineligible
+    ]
+    remaining.sort(key=lambda row: (row["task_key"], row["task_version_id"]))
+    locked_prefix = [
+        row["task_version_id"]
+        for row in parent["glm53"]["tasks"]
+    ]
+    assert [row["task_version_id"] for row in remaining[:5]] == locked_prefix
+    replacement = supplement["replacement"]
+    assert remaining[5]["task_version_id"] == replacement["task_version_id"]
+    assert replacement["replacement_rank"] == 106
+    assert replacement["historical_rank"] == 114
+    assert replacement["serving_block"] == "hosted"
+
+    split_row = next(
+        row
+        for row in split["tasks"]
+        if row["task_version_id"] == replacement["task_version_id"]
+    )
+    for field in (
+        "task_key",
+        "task_version_id",
+        "task_version",
+        "environment_version_id",
+        "env_key",
+        "env_version",
+        "data_key",
+        "data_version",
+        "split",
+    ):
+        assert replacement[field] == split_row[field]
+
+    current_plans = [
+        Path("evals/fleet/configs/glm53-opencode-hosted-odd45-pass4-v10.json"),
+        Path("evals/fleet/configs/glm53-opencode-hosted-odd46-pass4-v9.json"),
+        DEDICATED_A_PLAN,
+        DEDICATED_B_PLAN,
+        Path("evals/fleet/configs/qwen38-opencode-hosted-complete47-pass4-v7.json"),
+        QWEN_REPLACEMENT_PLAN,
+    ]
+    for path in current_plans:
+        plan = hosted.load_object(path)
+        assert replacement["task_version_id"] not in {
+            row["task"]["version_id"] for row in plan["tasks"]
+        }
+
+    estimator = supplement["revised_primary_estimator"]
+    assert estimator["unique_task_count"] == 45 + 27 + 27 + 1 == 100
+    assert estimator["cell_count"] == 180 + 108 + 108 + 4 == 400
+    assert estimator["pairwise_disjoint"] is True
+    assert replacement["hydration_gate"]["required_before_paid_launch"] is True
+    assert replacement["scored_launch_authorized"] is False
