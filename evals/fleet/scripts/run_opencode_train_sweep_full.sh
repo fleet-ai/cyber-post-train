@@ -35,4 +35,5 @@ exec uv run --no-project --with httpx==0.28.1 python \
   -m evals.fleet.opencode_train_sweep_runner \
   --plan "$ROOT/evals/fleet/configs/$PLAN_FILE" \
   --out-dir "$OUT_PARENT" \
-  --proxy-script "$ROOT/evals/fleet/fixed_proxy.py"
+  --proxy-script "$ROOT/evals/fleet/fixed_proxy.py" \
+  --parallel

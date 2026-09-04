@@ -1,10 +1,10 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: chris-cyber-opencode-q38-train50-p4-v3
+  name: chris-cyber-opencode-q38-train50-p4-v4
   namespace: fleet-train-jobs
   labels:
-    cyber-post-train.fleet.ai/experiment: opencode-q38-train50-p4-v3
+    cyber-post-train.fleet.ai/experiment: opencode-q38-train50-p4-v4
     cyber-post-train.fleet.ai/owner: chris
     kueue.x-k8s.io/queue-name: training-lq
 spec:
@@ -14,7 +14,7 @@ spec:
   template:
     metadata:
       labels:
-        cyber-post-train.fleet.ai/experiment: opencode-q38-train50-p4-v3
+        cyber-post-train.fleet.ai/experiment: opencode-q38-train50-p4-v4
         cyber-post-train.fleet.ai/owner: chris
     spec:
       restartPolicy: Never
@@ -37,8 +37,8 @@ spec:
             periodSeconds: 2
           securityContext: {privileged: true}
           resources:
-            requests: {cpu: "1", memory: 2Gi, ephemeral-storage: 20Gi}
-            limits: {cpu: "2", memory: 4Gi, ephemeral-storage: 40Gi}
+            requests: {cpu: 750m, memory: 2Gi, ephemeral-storage: 20Gi}
+            limits: {cpu: "4", memory: 8Gi, ephemeral-storage: 40Gi}
           volumeMounts:
             - {name: docker-socket, mountPath: /var/run}
             - {name: docker-data, mountPath: /var/lib/docker}
@@ -59,28 +59,28 @@ spec:
               install -m 0644 /bootstrap/fixed_proxy.py "$root/evals/fleet/fixed_proxy.py"
               install -m 0644 /bootstrap/self_hosted.py "$root/evals/fleet/self_hosted.py"
               install -m 0644 /bootstrap/runner.py "$root/evals/fleet/opencode_train_sweep_runner.py"
-              install -m 0644 /bootstrap/qwen-plan-v3.json "$root/evals/fleet/configs/qwen-plan-v3.json"
+              install -m 0644 /bootstrap/qwen-plan-v4.json "$root/evals/fleet/configs/qwen-plan-v4.json"
               install -m 0755 /bootstrap/run-full.sh "$root/evals/fleet/scripts/run-full.sh"
               cd "$root"
               exec "$root/evals/fleet/scripts/run-full.sh"
           env:
             - {name: DOCKER_HOST, value: "unix:///var/run/docker.sock"}
             - {name: DOCKER_TLS_CERTDIR, value: ""}
-            - {name: FULL_JOB_NAME, value: chris-cyber-opencode-q38-train50-p4-v3}
-            - {name: FULL_PLAN_FILE, value: qwen-plan-v3.json}
+            - {name: FULL_JOB_NAME, value: chris-cyber-opencode-q38-train50-p4-v4}
+            - {name: FULL_PLAN_FILE, value: qwen-plan-v4.json}
             - name: FLEET_API_KEY
               valueFrom:
                 secretKeyRef: {name: chris-cyber-opencode-evals-v2, key: FLEET_API_KEY}
           resources:
-            requests: {cpu: "2", memory: 4Gi, ephemeral-storage: 10Gi}
-            limits: {cpu: "4", memory: 8Gi, ephemeral-storage: 20Gi}
+            requests: {cpu: 250m, memory: 1Gi, ephemeral-storage: 5Gi}
+            limits: {cpu: "2", memory: 4Gi, ephemeral-storage: 20Gi}
           volumeMounts:
             - {name: docker-socket, mountPath: /var/run}
             - {name: bootstrap, mountPath: /bootstrap, readOnly: true}
             - {name: workspace, mountPath: /workspace}
             - {name: sfs, mountPath: /mnt/sfs}
       volumes:
-        - {name: bootstrap, configMap: {name: chris-cyber-opencode-train-sweep-full-v3}}
+        - {name: bootstrap, configMap: {name: chris-cyber-opencode-train-sweep-full-v4-qwen}}
         - {name: docker-data, emptyDir: {sizeLimit: 40Gi}}
         - {name: docker-socket, emptyDir: {}}
         - {name: workspace, emptyDir: {sizeLimit: 5Gi}}
@@ -89,10 +89,10 @@ spec:
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: chris-cyber-opencode-glm53-train100-p4-v3
+  name: chris-cyber-opencode-glm53-train100-p4-v4
   namespace: fleet-train-jobs
   labels:
-    cyber-post-train.fleet.ai/experiment: opencode-glm53-train100-p4-v3
+    cyber-post-train.fleet.ai/experiment: opencode-glm53-train100-p4-v4
     cyber-post-train.fleet.ai/owner: chris
     kueue.x-k8s.io/queue-name: training-lq
 spec:
@@ -102,7 +102,7 @@ spec:
   template:
     metadata:
       labels:
-        cyber-post-train.fleet.ai/experiment: opencode-glm53-train100-p4-v3
+        cyber-post-train.fleet.ai/experiment: opencode-glm53-train100-p4-v4
         cyber-post-train.fleet.ai/owner: chris
     spec:
       restartPolicy: Never
@@ -125,8 +125,8 @@ spec:
             periodSeconds: 2
           securityContext: {privileged: true}
           resources:
-            requests: {cpu: "1", memory: 2Gi, ephemeral-storage: 20Gi}
-            limits: {cpu: "2", memory: 4Gi, ephemeral-storage: 40Gi}
+            requests: {cpu: 750m, memory: 2Gi, ephemeral-storage: 20Gi}
+            limits: {cpu: "4", memory: 8Gi, ephemeral-storage: 40Gi}
           volumeMounts:
             - {name: docker-socket, mountPath: /var/run}
             - {name: docker-data, mountPath: /var/lib/docker}
@@ -147,28 +147,28 @@ spec:
               install -m 0644 /bootstrap/fixed_proxy.py "$root/evals/fleet/fixed_proxy.py"
               install -m 0644 /bootstrap/self_hosted.py "$root/evals/fleet/self_hosted.py"
               install -m 0644 /bootstrap/runner.py "$root/evals/fleet/opencode_train_sweep_runner.py"
-              install -m 0644 /bootstrap/glm-plan-v3.json "$root/evals/fleet/configs/glm-plan-v3.json"
+              install -m 0644 /bootstrap/glm-plan-v4.json "$root/evals/fleet/configs/glm-plan-v4.json"
               install -m 0755 /bootstrap/run-full.sh "$root/evals/fleet/scripts/run-full.sh"
               cd "$root"
               exec "$root/evals/fleet/scripts/run-full.sh"
           env:
             - {name: DOCKER_HOST, value: "unix:///var/run/docker.sock"}
             - {name: DOCKER_TLS_CERTDIR, value: ""}
-            - {name: FULL_JOB_NAME, value: chris-cyber-opencode-glm53-train100-p4-v3}
-            - {name: FULL_PLAN_FILE, value: glm-plan-v3.json}
+            - {name: FULL_JOB_NAME, value: chris-cyber-opencode-glm53-train100-p4-v4}
+            - {name: FULL_PLAN_FILE, value: glm-plan-v4.json}
             - name: FLEET_API_KEY
               valueFrom:
                 secretKeyRef: {name: chris-cyber-opencode-evals-v2, key: FLEET_API_KEY}
           resources:
-            requests: {cpu: "2", memory: 4Gi, ephemeral-storage: 10Gi}
-            limits: {cpu: "4", memory: 8Gi, ephemeral-storage: 20Gi}
+            requests: {cpu: 250m, memory: 1Gi, ephemeral-storage: 5Gi}
+            limits: {cpu: "2", memory: 4Gi, ephemeral-storage: 20Gi}
           volumeMounts:
             - {name: docker-socket, mountPath: /var/run}
             - {name: bootstrap, mountPath: /bootstrap, readOnly: true}
             - {name: workspace, mountPath: /workspace}
             - {name: sfs, mountPath: /mnt/sfs}
       volumes:
-        - {name: bootstrap, configMap: {name: chris-cyber-opencode-train-sweep-full-v3}}
+        - {name: bootstrap, configMap: {name: chris-cyber-opencode-train-sweep-full-v4-glm}}
         - {name: docker-data, emptyDir: {sizeLimit: 40Gi}}
         - {name: docker-socket, emptyDir: {}}
         - {name: workspace, emptyDir: {sizeLimit: 5Gi}}

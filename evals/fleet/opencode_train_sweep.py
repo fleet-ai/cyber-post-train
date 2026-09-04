@@ -19,6 +19,7 @@ SOURCE_JOB_ID = "a62dd51f-a52b-4941-8207-4679e4b25b51"
 SELECTION_SCHEMA = "fleet-opencode-easiest-train100-selection-v2"
 LEGACY_SELECTION_SCHEMA = "fleet-opencode-easiest-train100-selection-v1"
 FULL_PLAN_SCHEMA = "fleet-selfhosted-opencode-pass4-plan-v1"
+PARALLEL_PLAN_SCHEMA = "fleet-selfhosted-opencode-pass4-parallel-plan-v1"
 HARNESS = {
     "name": "opencode",
     "version": "1.18.27",
@@ -519,6 +520,138 @@ def build_infrastructure_successor(
     return successor
 
 
+def build_parallel_successor(
+    original: dict[str, Any],
+    *,
+    accepted_receipts: list[dict[str, Any]],
+    source_state: dict[str, Any],
+) -> dict[str, Any]:
+    """Freeze a v4 concurrent successor from a fully fenced v3 campaign."""
+    from evals.fleet.opencode_train_sweep_runner import (
+        validate_parallel_plan,
+        validate_plan,
+    )
+
+    validate_plan(original)
+    old_campaign = str(original["campaign_id"])
+    if not old_campaign.endswith("-v3"):
+        raise ValueError("parallel successor requires an exact v3 source campaign")
+    if source_state.get("receipt_sha256") != digest_without(source_state, "receipt_sha256"):
+        raise ValueError("parallel successor source-state digest mismatch")
+    if (
+        source_state.get("campaign_id") != old_campaign
+        or source_state.get("quiesced") is not True
+        or int(source_state.get("unresolved_attempts") or 0) != 0
+        or source_state.get("original_artifacts_preserved") is not True
+    ):
+        raise ValueError("parallel successor source campaign is not safely fenced")
+    attempts_by_run = {row["run_id"]: row for row in original["attempts"]}
+    if len(attempts_by_run) != len(original["attempts"]):
+        raise ValueError("parallel successor source attempt identities are not unique")
+    accepted_by_run: dict[str, dict[str, Any]] = {}
+    for receipt in accepted_receipts:
+        if receipt.get("receipt_sha256") != digest_without(receipt, "receipt_sha256"):
+            raise ValueError("parallel successor accepted receipt digest mismatch")
+        run_id = receipt.get("run_id")
+        attempt = attempts_by_run.get(run_id)
+        if (
+            attempt is None
+            or run_id in accepted_by_run
+            or receipt.get("accepted") is not True
+            or receipt.get("cleanup_completed") is not True
+            or not isinstance(receipt.get("session_id"), str)
+            or not isinstance(receipt.get("verifier_execution_id"), str)
+        ):
+            raise ValueError("parallel successor accepted receipt is not authoritative")
+        accepted_by_run[run_id] = receipt
+    if len(accepted_by_run) != int(source_state.get("accepted_attempts") or 0):
+        raise ValueError("parallel successor accepted receipt count drifted")
+
+    new_campaign = f"{old_campaign[:-3]}-v4"
+    successor = copy.deepcopy(original)
+    successor.pop("plan_sha256", None)
+    successor["schema_version"] = PARALLEL_PLAN_SCHEMA
+    successor["created_at"] = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+    successor["campaign_id"] = new_campaign
+    prior = []
+    for run_id, receipt in sorted(
+        accepted_by_run.items(), key=lambda pair: int(attempts_by_run[pair[0]]["ordinal"])
+    ):
+        attempt = attempts_by_run[run_id]
+        prior.append(
+            {
+                "rank": int(attempt["rank"]),
+                "attempt": int(attempt["attempt"]),
+                "session_id": receipt["session_id"],
+                "verifier_execution_id": receipt["verifier_execution_id"],
+                "source_run_id": run_id,
+                "source_receipt_sha256": receipt["receipt_sha256"],
+            }
+        )
+    successor["prior_accepted"] = prior
+    remaining = []
+    old_network_generation = "-v3-"
+    for source in original["attempts"]:
+        if source["run_id"] in accepted_by_run:
+            continue
+        row = copy.deepcopy(source)
+        if old_campaign not in row["run_id"] or old_network_generation not in row["network"]:
+            raise ValueError("parallel successor source attempt identity drifted")
+        row["run_id"] = row["run_id"].replace(old_campaign, new_campaign, 1)
+        row["network"] = row["network"].replace(old_network_generation, "-v4-", 1)
+        row["ordinal"] = len(remaining) + 1
+        remaining.append(row)
+    successor["attempts"] = remaining
+    successor["new_session_count"] = len(remaining)
+    for credit in prior:
+        task = successor["tasks"][int(credit["rank"]) - 1]
+        if credit["session_id"] not in task["baseline_session_ids"]:
+            task["baseline_session_ids"].append(credit["session_id"])
+            task["baseline_session_ids"].sort()
+    if not any(
+        marker in new_campaign
+        for marker in (
+            "q38-opencode11827-fleet-train50",
+            "glm53-opencode11827-fleet-train100",
+        )
+    ):
+        raise ValueError("parallel successor campaign is not a supported cohort member")
+    successor["execution"] = {
+        **{
+            key: value
+            for key, value in original["execution"].items()
+            if key != "max_concurrent"
+        },
+        "retry_policy": "never_repeat_valid_outcome;halt_on_claim_or_incomplete_attempt",
+        "concurrency_schedule": {
+            "max_concurrent": 2,
+            "infrastructure_valid_sessions_before_continuation": 4,
+            "decision_inputs": [
+                "accepted_outcome",
+                "completed_session_ingest",
+                "valid_verifier_execution_id",
+                "complete_cleanup",
+            ],
+            "score_blind": True,
+            "capacity_basis": "shared_endpoint_compute_hot_first_step_1_to_2",
+        },
+    }
+    successor["supersedes"] = {
+        "plan_sha256": original["plan_sha256"],
+        "campaign_id": old_campaign,
+        "reason": "user_authorized_score_blind_throughput_successor",
+        "accepted_attempts_credited": len(prior),
+        "unresolved_attempts": 0,
+        "source_state_receipt_sha256": source_state["receipt_sha256"],
+        "source_job_uid": source_state["job_uid"],
+        "source_pod_uid": source_state.get("pod_uid"),
+        "original_artifacts_preserved": True,
+    }
+    successor["plan_sha256"] = digest_without(successor, "plan_sha256")
+    validate_parallel_plan(successor)
+    return successor
+
+
 def build_smoke_config(
     client: httpx.Client,
     selection: dict[str, Any],
@@ -617,7 +750,14 @@ def build_smoke_config(
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "command", choices=("select", "smoke-config", "full-plan", "successor-plan")
+        "command",
+        choices=(
+            "select",
+            "smoke-config",
+            "full-plan",
+            "successor-plan",
+            "parallel-successor-plan",
+        ),
     )
     parser.add_argument("--split", type=Path)
     parser.add_argument("--selection", type=Path)
@@ -627,6 +767,8 @@ def main() -> int:
     parser.add_argument("--original-plan", type=Path)
     parser.add_argument("--generation", choices=("v2", "v3"))
     parser.add_argument("--reason")
+    parser.add_argument("--accepted-dir", type=Path)
+    parser.add_argument("--source-state", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     if args.command == "successor-plan":
@@ -636,6 +778,22 @@ def main() -> int:
             )
         value = build_infrastructure_successor(
             load_json(args.original_plan), generation=args.generation, reason=args.reason
+        )
+        self_hosted.write_json_once(args.output, value)
+        return 0
+    if args.command == "parallel-successor-plan":
+        if not args.original_plan or not args.accepted_dir or not args.source_state:
+            parser.error(
+                "parallel-successor-plan requires --original-plan, --accepted-dir, "
+                "and --source-state"
+            )
+        receipts = [
+            load_json(path) for path in sorted(args.accepted_dir.glob("*.ACCEPTED.json"))
+        ]
+        value = build_parallel_successor(
+            load_json(args.original_plan),
+            accepted_receipts=receipts,
+            source_state=load_json(args.source_state),
         )
         self_hosted.write_json_once(args.output, value)
         return 0

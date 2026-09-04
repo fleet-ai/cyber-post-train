@@ -1,11 +1,29 @@
 from __future__ import annotations
 
 import json
+import threading
+import time
+from pathlib import Path
 
 import httpx
 import pytest
 
 from evals.fleet import opencode_train_sweep, opencode_train_sweep_runner, self_hosted
+
+
+def _source_state(plan: dict, accepted: int) -> dict:
+    value = {
+        "schema_version": "fleet-selfhosted-opencode-v3-fenced-state-v1",
+        "campaign_id": plan["campaign_id"],
+        "job_uid": "job-uid",
+        "pod_uid": "pod-uid",
+        "quiesced": True,
+        "accepted_attempts": accepted,
+        "unresolved_attempts": 0,
+        "original_artifacts_preserved": True,
+    }
+    value["receipt_sha256"] = self_hosted.digest_without(value, "receipt_sha256")
+    return value
 
 
 def test_duplicate_preflight_normalizes_persisted_model(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -108,7 +126,115 @@ def test_full_cluster_plan_keys_match_bootstrap_and_runtime() -> None:
         / "evals/fleet/scripts/submit_opencode_train_sweep_full.sh"
     ).read_text()
     for model in ("qwen", "glm"):
-        key = f"{model}-plan-v3.json"
-        assert f"--from-file={key}=" in submitter
+        key = f"{model}-plan-v4.json"
+        assert f"plan_key={key}" in submitter
         assert f'/bootstrap/{key} "$root/evals/fleet/configs/{key}"' in manifest
         assert f"value: {key}" in manifest
+    assert '--from-file="$plan_key=$plan_path"' in submitter
+    assert "requests: {cpu: 750m, memory: 2Gi" in manifest
+    assert "requests: {cpu: 250m, memory: 1Gi" in manifest
+    assert "--parallel" in (
+        Path(__file__).parents[1]
+        / "evals/fleet/scripts/run_opencode_train_sweep_full.sh"
+    ).read_text()
+
+
+def test_parallel_successor_preserves_exact_cartesian_cells() -> None:
+    path = (
+        Path(__file__).parents[1]
+        / "evals/fleet/configs/qwen38-opencode-train50-pass4-v3.json"
+    )
+    original = json.loads(path.read_text())
+    source_attempt = original["attempts"][0]
+    receipt = {
+        "schema_version": "fleet-selfhosted-opencode-pass4-attempt-accepted-v1",
+        "accepted": True,
+        "run_id": source_attempt["run_id"],
+        "session_id": "session-v3-r1-a2",
+        "verifier_execution_id": "verifier-v3-r1-a2",
+        "cleanup_completed": True,
+    }
+    receipt["receipt_sha256"] = self_hosted.digest_without(receipt, "receipt_sha256")
+    successor = opencode_train_sweep.build_parallel_successor(
+        original,
+        accepted_receipts=[receipt],
+        source_state=_source_state(original, 1),
+    )
+    assert successor["campaign_id"].endswith("-v4")
+    assert successor["new_session_count"] == 198
+    assert successor["prior_accepted"][0]["attempt"] == 2
+    assert all("-v4-" in row["network"] for row in successor["attempts"])
+    opencode_train_sweep_runner.validate_parallel_plan(successor)
+
+    broken = json.loads(json.dumps(successor))
+    broken["attempts"][0]["attempt"] = 4
+    broken["plan_sha256"] = self_hosted.digest_without(broken, "plan_sha256")
+    with pytest.raises(ValueError, match="Cartesian"):
+        opencode_train_sweep_runner.validate_parallel_plan(broken)
+
+
+def test_parallel_task_groups_never_overlap_one_task(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    active = 0
+    maximum = 0
+    active_ranks: set[int] = set()
+    lock = threading.Lock()
+
+    def fake_attempt(_plan, _task, item, _root, _proxy, _key):
+        nonlocal active, maximum
+        rank = int(item["rank"])
+        with lock:
+            assert rank not in active_ranks
+            active_ranks.add(rank)
+            active += 1
+            maximum = max(maximum, active)
+        time.sleep(0.01)
+        with lock:
+            active -= 1
+            active_ranks.remove(rank)
+        return {}
+
+    monkeypatch.setattr(opencode_train_sweep_runner, "_run_parallel_attempt", fake_attempt)
+    groups = [
+        [{"rank": rank, "attempt": attempt} for attempt in (1, 2, 3, 4)]
+        for rank in range(1, 9)
+    ]
+    opencode_train_sweep_runner._run_task_groups(
+        {},
+        {rank: {} for rank in range(1, 9)},
+        groups,
+        Path("/unused"),
+        Path("/unused"),
+        "unused",
+        4,
+    )
+    assert maximum == 4
+
+
+def test_parallel_canary_stops_new_claims_after_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    started: list[int] = []
+    lock = threading.Lock()
+
+    def fake_attempt(_plan, _task, item, _root, _proxy, _key):
+        with lock:
+            started.append(int(item["rank"]))
+        if int(item["rank"]) == 1:
+            raise RuntimeError("infrastructure failure")
+        time.sleep(0.03)
+        return {}
+
+    monkeypatch.setattr(opencode_train_sweep_runner, "_run_parallel_attempt", fake_attempt)
+    with pytest.raises(RuntimeError, match="infrastructure failure"):
+        opencode_train_sweep_runner._run_attempt_wave(
+            {},
+            {rank: {} for rank in range(1, 5)},
+            [{"rank": rank} for rank in range(1, 5)],
+            Path("/unused"),
+            Path("/unused"),
+            "unused",
+            2,
+        )
+    assert set(started) == {1, 2}
