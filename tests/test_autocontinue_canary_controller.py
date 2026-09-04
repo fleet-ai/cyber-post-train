@@ -3,13 +3,16 @@ from __future__ import annotations
 import copy
 import json
 import multiprocessing
+import os
 import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
 import yaml
 
 from evals.fleet import autocontinue_canary_controller as canary
+from evals.fleet import scored_manifest_authorization as manifest_authorization
 
 ROOT = Path(__file__).parents[1]
 Q_PLAN = ROOT / "evals/fleet/configs/qwen38-opencode-autocontinue-canary1-v1.json"
@@ -346,9 +349,86 @@ def test_submitter_is_fail_closed_until_hosted_final_package_and_live_route() ->
     assert "chris-ac-canary1-hosted-scored-submit-v1" in text
     assert 'git show "$PACKAGE_COMMIT:$path"' in text
     assert "autocontinue-canary-hosted-scoring-release-v3.json" in text
+    assert "evals.fleet.scored_manifest_authorization" in text
+    assert "evals/fleet/scored_manifest_authorization.py" in text
+    assert "yq " not in text
     assert "--dry-run=server" in text
     assert 'test ! -e "/mnt/sfs/' not in text
     assert "kubectl apply" not in text
+
+
+def test_scored_manifest_authorization_is_exact_and_fail_closed(tmp_path: Path) -> None:
+    expected = ("chris-q38-ac-canary1-v1", "chris-glm53-ac-canary1-v1")
+    manifest_authorization.validate_scored_manifest(SCORED_MANIFEST, expected)
+
+    documents = list(yaml.safe_load_all(SCORED_MANIFEST.read_text()))
+    documents[0]["metadata"]["annotations"][
+        manifest_authorization.LAUNCH_AUTHORIZED
+    ] = "false"
+    unauthorized = tmp_path / "unauthorized.yaml"
+    unauthorized.write_text(yaml.safe_dump_all(documents))
+    with pytest.raises(ValueError, match="unauthorized"):
+        manifest_authorization.validate_scored_manifest(unauthorized, expected)
+
+
+def test_manifest_validator_command_failure_prevents_all_cluster_calls(tmp_path: Path) -> None:
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    uv_calls = tmp_path / "uv-calls.txt"
+    kubectl_calls = tmp_path / "kubectl-calls.txt"
+
+    fake_git = fake_bin / "git"
+    fake_git.write_text(
+        "#!/bin/sh\n"
+        'if [ "$1 $2" = "rev-parse --show-toplevel" ]; then\n'
+        '  printf "%s\\n" "$TEST_REPO_ROOT"\n'
+        "  exit 0\n"
+        "fi\n"
+        "exit 97\n"
+    )
+    fake_uv = fake_bin / "uv"
+    fake_uv.write_text(
+        "#!/bin/sh\n"
+        'printf "%s\\n" "$*" >> "$TEST_UV_CALLS"\n'
+        'case "$*" in\n'
+        '  *"evals.fleet.scored_manifest_authorization"*) exit 86 ;;\n'
+        "esac\n"
+        "exit 0\n"
+    )
+    fake_kubectl = fake_bin / "kubectl"
+    fake_kubectl.write_text(
+        "#!/bin/sh\n"
+        'printf "%s\\n" "$*" >> "$TEST_KUBECTL_CALLS"\n'
+        "exit 0\n"
+    )
+    for executable in (fake_git, fake_uv, fake_kubectl):
+        executable.chmod(0o755)
+
+    environment = dict(os.environ)
+    environment.update(
+        {
+            "PATH": f"{fake_bin}:{environment['PATH']}",
+            "TEST_REPO_ROOT": str(ROOT),
+            "TEST_UV_CALLS": str(uv_calls),
+            "TEST_KUBECTL_CALLS": str(kubectl_calls),
+        }
+    )
+    result = subprocess.run(
+        [
+            "bash",
+            str(ROOT / "evals/fleet/scripts/submit_opencode_autocontinue_canaries_v1.sh"),
+            "submit",
+        ],
+        cwd=ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 86
+    assert "evals.fleet.scored_manifest_authorization" in uv_calls.read_text()
+    assert not kubectl_calls.exists()
 
 
 def test_scored_manifest_packages_hosted_route_gate_before_claim() -> None:

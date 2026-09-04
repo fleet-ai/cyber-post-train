@@ -43,6 +43,10 @@ PY
 
 phase_c evals/fleet/configs/qwen38-opencode-autocontinue-canary1-v1.json
 phase_c evals/fleet/configs/glm53-opencode-autocontinue-canary1-v1.json
+uv run python -m evals.fleet.scored_manifest_authorization \
+  --manifest "$MANIFEST" \
+  --expected-job "$Q_JOB" \
+  --expected-job "$G_JOB" >/dev/null
 kubectl -n "$NS" create --dry-run=server -f "$MANIFEST" -o name >/dev/null
 for name in "$Q_CM" "$G_CM" "$INTENT"; do
   test -z "$(kubectl -n "$NS" get configmap "$name" --ignore-not-found -o name)"
@@ -65,7 +69,6 @@ for pair in "$Q_PLAN:$Q_RELEASE" "$G_PLAN:$G_RELEASE"; do
     --plan "$plan" --release "$release" --repo "$ROOT" \
     --package-commit "$(jq -er '.implementation.package_commit' "$release")" >/dev/null
 done
-test -z "$(yq -r 'select(.kind == "Job") | select(.metadata.annotations."cyber-post-train.fleet.ai/launch-authorized" != "true") | .metadata.name' "$MANIFEST")"
 
 PACKAGE_COMMIT=$(jq -er '.implementation.package_commit' "$Q_RELEASE")
 test "$PACKAGE_COMMIT" = "$(jq -er '.implementation.package_commit' "$G_RELEASE")"
@@ -73,6 +76,7 @@ for path in \
   evals/fleet/autocontinue_canary_controller.py \
   evals/fleet/autocontinue_canary_hosted_release.py \
   evals/fleet/autocontinue_canary_hosted_runtime.py \
+  evals/fleet/scored_manifest_authorization.py \
   evals/fleet/autocontinue_hosted_health.py \
   evals/fleet/hosted_sweep_controller.py \
   evals/fleet/self_hosted.py \
