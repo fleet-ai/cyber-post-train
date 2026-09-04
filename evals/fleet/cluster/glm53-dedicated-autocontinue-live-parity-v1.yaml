@@ -34,7 +34,7 @@ spec:
               JOB_UID = os.environ["JOB_UID"]
               POD_UID = os.environ["POD_UID"]
               CAMPAIGN_PATH = "evals/fleet/configs/q38-glm53-opencode-autocontinue-primary-campaign-v1.json"
-              CAMPAIGN_SHA256 = "sha256:1f4b63897fa8f954b2ea9ccb2532d65329737d959e74ef68fd8238d2532ee971"
+              CAMPAIGN_SHA256 = "sha256:63946f224a33eb0d2c2a6fdba34358ebf9ca379e5f0f156cd137c95a9b98097e"
               MODEL_REVISION = "30333038ada1f1dacb294a93270305a890b50c14"
               RUNTIME_IMAGE = "ghcr.io/fleet-ai/cyber-post-train-glm53-runtime@sha256:ec93ba50613fd13fb4c0b0a9105767ab18209a1e0108dab0923aad694c0206ec"
               CONTEXT_POLICY = "opencode_1.18.27_native_compaction_autocontinue_v1"

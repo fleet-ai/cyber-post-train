@@ -10,9 +10,9 @@ fi
 ROOT=$(git rev-parse --show-toplevel)
 NS=fleet-train-jobs
 MANIFEST="$ROOT/evals/fleet/cluster/glm53-dedicated-autocontinue-live-parity-v1.yaml"
-MANIFEST_SHA256=044efb07c19ef3f405fa63be7614fba67f1f56e9447f681a38c979d99ce807d8
+MANIFEST_SHA256=77a2c4feaf88f41089ae206850f6fcdcb0432e83ad08939fb0247c9bd2441bea
 CAMPAIGN="$ROOT/evals/fleet/configs/q38-glm53-opencode-autocontinue-primary-campaign-v1.json"
-CAMPAIGN_SHA256=sha256:1f4b63897fa8f954b2ea9ccb2532d65329737d959e74ef68fd8238d2532ee971
+CAMPAIGN_SHA256=sha256:63946f224a33eb0d2c2a6fdba34358ebf9ca379e5f0f156cd137c95a9b98097e
 RELEASE="$ROOT/docs/evidence/qwen38-study/2026-09-04-opencode-autocontinue-primary-campaign-release-preview-v1.json"
 JOB=chris-cyber-glm53-dedicated-autocontinue-parity-v1
 OUT=/mnt/sfs/jobs/chris-cyber-glm53-dedicated-autocontinue-parity-v1
