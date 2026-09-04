@@ -293,10 +293,18 @@ def test_held_manifests_have_two_create_once_high_priority_jobs(manifest: Path) 
         assert doc["kind"] == "Job"
         assert doc["spec"]["backoffLimit"] == 0
         assert doc["spec"]["template"]["spec"]["priorityClassName"] == "fleet-train-high"
-        assert doc["metadata"]["annotations"] == {
-            "cyber-post-train.fleet.ai/preview-only": "true",
-            "cyber-post-train.fleet.ai/launch-authorized": "false",
-        }
+        expected_annotations = (
+            {
+                "cyber-post-train.fleet.ai/preview-only": "false",
+                "cyber-post-train.fleet.ai/launch-authorized": "true",
+            }
+            if manifest == SCORED_MANIFEST
+            else {
+                "cyber-post-train.fleet.ai/preview-only": "true",
+                "cyber-post-train.fleet.ai/launch-authorized": "false",
+            }
+        )
+        assert doc["metadata"]["annotations"] == expected_annotations
         env = doc["spec"]["template"]["spec"]["containers"][0]["env"]
         by_name = {row["name"]: row for row in env}
         assert "controller-uid" in by_name["JOB_UID"]["valueFrom"]["fieldRef"]["fieldPath"]
