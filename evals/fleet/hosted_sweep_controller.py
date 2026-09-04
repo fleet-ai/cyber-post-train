@@ -62,6 +62,9 @@ REMAINDER_CAMPAIGNS = {
     "qwen38_remainder2": "chris-cyber-q38-opencode11827-hosted-complete47-p4-v7",
     "glm53_remainder2": "chris-cyber-glm53-opencode11827-hosted-odd46-p4-v9",
 }
+DEDICATED_CAMPAIGNS = {
+    "glm53_dedicated_a": "chris-cyber-glm53-opencode11827-dedicated-a-even27-p4-v1",
+}
 EXPECTED_INCLUDED_TASK_COUNTS.update(
     {
         "qwen38_remainder": 48,
@@ -70,6 +73,7 @@ EXPECTED_INCLUDED_TASK_COUNTS.update(
         "glm53_remainder2": 46,
     }
 )
+EXPECTED_INCLUDED_TASK_COUNTS.update({"glm53_dedicated_a": 27})
 SCHEDULE = [
     {
         "accepted_outcomes_at_least": 0,
@@ -222,6 +226,284 @@ def build_remainder_plan(
     }
     if predecessor.get("reserved_tasks"):
         plan["reserved_tasks"] = predecessor["reserved_tasks"]
+    plan["plan_sha256"] = digest_without(plan, "plan_sha256")
+    validate_plan(plan)
+    return plan
+
+
+def hydrate_glm53_replacements(
+    assignment: dict[str, Any], key: str
+) -> dict[str, Any]:
+    """Hydrate the five locked replacement tasks without retaining task content."""
+    glm = assignment.get("glm53") or {}
+    rows = glm.get("tasks") or []
+    if assignment.get("receipt_sha256") != digest_without(assignment, "receipt_sha256"):
+        raise ValueError("replacement assignment receipt digest mismatch")
+    if [int(row.get("replacement_rank") or 0) for row in rows] != list(range(101, 106)):
+        raise ValueError("replacement assignment ranks drifted")
+    with _client(key) as client:
+        account = self_hosted._request(client, "GET", "/v1/account")
+        if (
+            account.get("team_name") != "fleet"
+            or account.get("team_id") != self_hosted.FLEET_TEAM_ID
+        ):
+            raise RuntimeError("FLEET_API_KEY is not scoped to the Fleet team")
+        hydrated = []
+        for row in rows:
+            task = self_hosted._request(
+                client,
+                "GET",
+                f"/v1/tasks/{row['task_key']}",
+                params={"version_id": row["task_version_id"]},
+            )
+            metadata = task.get("metadata") or {}
+            verifier = task.get("verifier") or {}
+            runtime_seed = metadata.get("runtime_seed_manifest") or {}
+            actual_binding = {
+                "task_key": task.get("key"),
+                "env_key": task.get("environment_id"),
+                "env_version": task.get("version"),
+                "data_key": task.get("data_id"),
+                "data_version": task.get("data_version"),
+            }
+            expected_binding = {field: row[field] for field in actual_binding}
+            if actual_binding != expected_binding:
+                raise RuntimeError("replacement exact task binding drifted")
+            cyber_contract = metadata.get("cyber_contract")
+            if cyber_contract != {
+                "evidence_schema": "1.0.0",
+                "submission_protocol": "2.0.0",
+                "verifier_contract": "3.0.0",
+            }:
+                raise RuntimeError("replacement cyber contract drifted")
+            verifier_receipt = {
+                "id": task.get("verifier_id"),
+                "version_id": verifier.get("verifier_version_id"),
+                "version": verifier.get("version"),
+                "sha256": verifier.get("sha256"),
+                "function_name": verifier.get("function_name") or "verify",
+            }
+            if any(value in (None, "") for value in verifier_receipt.values()):
+                raise RuntimeError("replacement verifier receipt is incomplete")
+            if not runtime_seed.get("content_sha256") or not runtime_seed.get("files"):
+                raise RuntimeError("replacement runtime seed manifest is incomplete")
+            hydrated.append(
+                {
+                    "replacement_rank": int(row["replacement_rank"]),
+                    "task": {
+                        "key": row["task_key"],
+                        "version_id": row["task_version_id"],
+                        "prompt_sha256": self_hosted.sha256(
+                            (task.get("prompt") or "").encode()
+                        ),
+                        "env_variables_sha256": self_hosted.sha256(
+                            self_hosted.canonical_json(task.get("env_variables") or {})
+                        ),
+                        "output_json_schema_sha256": self_hosted.sha256(
+                            self_hosted.canonical_json(task.get("output_json_schema"))
+                        ),
+                        "cyber_contract": cyber_contract,
+                    },
+                    "environment": {
+                        "id": row["env_key"],
+                        "version": row["env_version"],
+                        "version_id": row["environment_version_id"],
+                        "data_id": row["data_key"],
+                        "data_version": row["data_version"],
+                        "runtime_seed_content_sha256": runtime_seed["content_sha256"],
+                        "ttl_seconds": 32400,
+                    },
+                    "verifier": verifier_receipt,
+                    "runtime_seed_file_count": len(runtime_seed["files"]),
+                }
+            )
+    receipt = {
+        "schema_version": "fleet-glm53-replacement-hydration-v1",
+        "assignment_receipt_sha256": assignment["receipt_sha256"],
+        "fleet_team_id": self_hosted.FLEET_TEAM_ID,
+        "tasks_hydrated": len(hydrated),
+        "tasks": hydrated,
+        "scores_read": False,
+        "task_content_retained": False,
+        "prompts_or_traces_included": False,
+    }
+    receipt["receipt_sha256"] = digest_without(receipt, "receipt_sha256")
+    return receipt
+
+
+def build_dedicated_a_plan(
+    source_plan: dict[str, Any],
+    assignment: dict[str, Any],
+    hydration: dict[str, Any],
+    canary: dict[str, Any],
+) -> dict[str, Any]:
+    """Build replica-A's immutable complete-task shard."""
+    _validate_source_plan(source_plan)
+    if int(source_plan.get("task_count") or 0) != 100:
+        raise ValueError("dedicated source plan task count drifted")
+    if assignment.get("receipt_sha256") != digest_without(assignment, "receipt_sha256"):
+        raise ValueError("replacement assignment receipt digest mismatch")
+    if (
+        hydration.get("receipt_sha256")
+        != digest_without(hydration, "receipt_sha256")
+        or hydration.get("assignment_receipt_sha256") != assignment["receipt_sha256"]
+        or hydration.get("tasks_hydrated") != 5
+    ):
+        raise ValueError("replacement hydration receipt drifted")
+    assigned_rows = {
+        int(row["replacement_rank"]): row for row in assignment["glm53"]["tasks"]
+    }
+    hydrated_rows = {
+        int(row["replacement_rank"]): row for row in hydration["tasks"]
+    }
+    if set(assigned_rows) != set(range(101, 106)) or set(hydrated_rows) != set(
+        range(101, 106)
+    ):
+        raise ValueError("replacement hydration ranks drifted")
+    for rank, row in hydrated_rows.items():
+        assigned = assigned_rows[rank]
+        if (
+            row["task"].get("key") != assigned["task_key"]
+            or row["task"].get("version_id") != assigned["task_version_id"]
+            or row["environment"].get("id") != assigned["env_key"]
+            or row["environment"].get("version") != assigned["env_version"]
+            or row["environment"].get("version_id")
+            != assigned["environment_version_id"]
+            or row["environment"].get("data_id") != assigned["data_key"]
+            or row["environment"].get("data_version") != assigned["data_version"]
+            or int(row.get("runtime_seed_file_count") or 0) < 1
+        ):
+            raise ValueError("replacement hydrated task binding drifted")
+    blocks = assignment["glm53"]["dedicated_block_assignment"]
+    if (
+        blocks["dedicated_a"].get("replacement_ranks") != [102, 104]
+        or blocks["dedicated_b"].get("replacement_ranks") != [101, 103, 105]
+        or blocks["hosted"].get("plan_sha256")
+        != "sha256:7fa9cb527083defd0197caccf7fb87634cfd2f22932afcf0d51a33f97be703f1"
+    ):
+        raise ValueError("dedicated replacement block assignment drifted")
+    if (
+        canary.get("classification") != "operational-gate-passed"
+        or (canary.get("outcome_integrity") or {}).get("scored_sessions") != 0
+        or (canary.get("network") or {}).get("health_http_status") != 200
+        or (canary.get("model") or {}).get("revision")
+        != source_plan["model"]["revision"]
+        or (canary.get("controllers") or {}).get("ray_job_uid")
+        != blocks["dedicated_a"]["serving_ray_job_uid"]
+        or (canary.get("immutable_config") or {}).get("sha256")
+        != blocks["dedicated_a"]["serving_config_sha256"]
+    ):
+        raise ValueError("dedicated replica A canary is not admissible")
+
+    original_by_rank = {int(row["rank"]): row for row in source_plan["tasks"]}
+    hydrated_by_rank = {
+        int(row["replacement_rank"]): row for row in hydration["tasks"]
+    }
+    selected_source_ranks = [*range(4, 53, 2), 102, 104]
+    tasks = []
+    for source_rank in selected_source_ranks:
+        if source_rank <= 100:
+            task = copy.deepcopy(original_by_rank[source_rank])
+        else:
+            row = hydrated_by_rank[source_rank]
+            task = {
+                "task": copy.deepcopy(row["task"]),
+                "environment": copy.deepcopy(row["environment"]),
+                "verifier": copy.deepcopy(row["verifier"]),
+            }
+        task["rank"] = len(tasks) + 1
+        task["source_rank"] = source_rank
+        task.pop("baseline_session_ids", None)
+        tasks.append(task)
+
+    campaign = DEDICATED_CAMPAIGNS["glm53_dedicated_a"]
+    attempts = []
+    for task in tasks:
+        source_rank = int(task["source_rank"])
+        key_digest = self_hosted.sha256(task["task"]["key"].encode()).split(":", 1)[1][:8]
+        for attempt in range(1, 5):
+            attempts.append(
+                {
+                    "ordinal": len(attempts) + 1,
+                    "rank": int(task["rank"]),
+                    "source_rank": source_rank,
+                    "attempt": attempt,
+                    "run_id": f"{campaign}-sr{source_rank:03d}-a{attempt}-{key_digest}",
+                    "network": f"glm53-dedicated-a-sr{source_rank:03d}-a{attempt}-{key_digest}",
+                }
+            )
+
+    model = copy.deepcopy(source_plan["model"])
+    service_name = canary["network"]["service_name"]
+    model["endpoint_origin"] = (
+        f"http://{service_name}.fleet-train-jobs.svc.cluster.local:8000"
+    )
+    treatment = {
+        "kind": "dedicated_inference_endpoint_v1",
+        "replica": "A",
+        "endpoint_origin": model["endpoint_origin"],
+        "service_name": service_name,
+        "service_uid": canary["network"]["service_uid"],
+        "api_run_id": canary["api_run"]["run_id"],
+        "ray_job_uid": canary["controllers"]["ray_job_uid"],
+        "ray_cluster_uid": canary["controllers"]["ray_cluster_uid"],
+        "serving_config_sha256": canary["immutable_config"]["sha256"],
+        "served_id": model["served_id"],
+        "model_revision": model["revision"],
+        "session_model": model["session_model"],
+        "harness": source_plan["harness"],
+        "required_task_tools": source_plan["execution"]["required_task_tools"],
+        "required_task_tool_catalog_sha256": source_plan["execution"][
+            "required_task_tool_catalog_sha256"
+        ],
+    }
+    plan = {
+        "schema_version": PLAN_SCHEMA,
+        "shard_key": "glm53_dedicated_a",
+        "campaign_id": campaign,
+        "source_job_id": source_plan["source_job_id"],
+        "source": {
+            "source_plan_sha256": source_plan["plan_sha256"],
+            "assignment_receipt_sha256": assignment["receipt_sha256"],
+            "hydration_receipt_sha256": hydration["receipt_sha256"],
+            "canary_evidence_sha256": self_hosted.sha256(
+                self_hosted.canonical_json(canary)
+            ),
+        },
+        "treatment_block": treatment,
+        "model": model,
+        "harness": source_plan["harness"],
+        "authority": source_plan["authority"],
+        "task_count": len(tasks),
+        "pass_k": 4,
+        "total_session_count": len(tasks) * 4,
+        "credited_sessions": [],
+        "new_session_count": len(attempts),
+        "fenced_source_ranks": [1, 2, 3, 5, 7],
+        "hosted_source_ranks": list(range(9, 100, 2)),
+        "reserved_source_ranks": [*range(54, 101, 2), 101, 103, 105],
+        "execution": {
+            "task_partition": "complete_task_boundary",
+            "same_task_max_inflight": 1,
+            "retry_policy": "never_repeat_any_verifier_backed_outcome",
+            "future_nonzero_exit_policy": "fence_task_and_continue_other_tasks",
+            "training_data_eligible": True,
+            "required_task_tools": source_plan["execution"]["required_task_tools"],
+            "required_task_tool_catalog_sha256": source_plan["execution"][
+                "required_task_tool_catalog_sha256"
+            ],
+            "inventory_policy": "immutable_plan_claim_and_endpoint_uid_v1",
+            "score_blind_concurrency_schedule": SCHEDULE,
+        },
+        "tasks": tasks,
+        "attempts": attempts,
+        "privacy": {
+            "scores_included": False,
+            "prompts_included": False,
+            "transcripts_included": False,
+            "credentials_included": False,
+        },
+    }
     plan["plan_sha256"] = digest_without(plan, "plan_sha256")
     validate_plan(plan)
     return plan
@@ -479,9 +761,15 @@ def validate_plan(plan: dict[str, Any]) -> None:
         raise ValueError("hosted shard run identities drifted")
     execution = plan.get("execution") or {}
     expected_inventory_policy = (
-        "conservative_no_same_model_session_for_task_key_v1"
-        if shard_key
-        in {"glm53_clean", "glm53_hosted_odd", "glm53_remainder", "glm53_remainder2"}
+        "immutable_plan_claim_and_endpoint_uid_v1"
+        if shard_key == "glm53_dedicated_a"
+        else "conservative_no_same_model_session_for_task_key_v1"
+        if shard_key in {
+            "glm53_clean",
+            "glm53_hosted_odd",
+            "glm53_remainder",
+            "glm53_remainder2",
+        }
         else (
             "plan_identity_plus_authoritative_receipt_v1"
             if shard_key in {"qwen38_remainder", "qwen38_remainder2"}
@@ -496,6 +784,32 @@ def validate_plan(plan: dict[str, Any]) -> None:
         or execution.get("inventory_policy") != expected_inventory_policy
     ):
         raise ValueError("hosted shard execution policy drifted")
+    if shard_key == "glm53_dedicated_a":
+        treatment = plan.get("treatment_block") or {}
+        expected_a = [*range(4, 53, 2), 102, 104]
+        observed_a = [int(row["source_rank"]) for row in tasks]
+        if (
+            observed_a != expected_a
+            or plan.get("fenced_source_ranks") != [1, 2, 3, 5, 7]
+            or plan.get("hosted_source_ranks") != list(range(9, 100, 2))
+            or plan.get("reserved_source_ranks")
+            != [*range(54, 101, 2), 101, 103, 105]
+            or treatment.get("kind") != "dedicated_inference_endpoint_v1"
+            or treatment.get("replica") != "A"
+            or not treatment.get("service_uid")
+            or not treatment.get("ray_cluster_uid")
+            or treatment.get("endpoint_origin") != plan["model"].get("endpoint_origin")
+            or treatment.get("model_revision") != plan["model"].get("revision")
+            or set(expected_a)
+            & (
+                set(plan["fenced_source_ranks"])
+                | set(plan["hosted_source_ranks"])
+                | set(plan["reserved_source_ranks"])
+            )
+        ):
+            raise ValueError("dedicated replica A partition or binding drifted")
+        return
+
     excluded = plan.get("excluded_tasks") or []
     expected_excluded = (
         2
@@ -642,6 +956,13 @@ def _validate_inventory_for_task(
                 if row.get("session_id") in allowed
                 and row.get("session_id") not in exact_ids
             )
+    elif policy == "immutable_plan_claim_and_endpoint_uid_v1":
+        # The public session projection omits endpoint UID/treatment metadata.
+        # For a canary-bound dedicated endpoint, only a local, digest-valid,
+        # plan/claim-bound receipt can authorize an exact cell. Unbound public
+        # rows remain visible to the run-id collision check above but cannot be
+        # classified as this treatment.
+        rows = [row for row in all_rows if row.get("session_id") in allowed]
     elif policy == "conservative_no_same_model_session_for_task_key_v1":
         model = self_hosted.persisted_session_model_identity(plan)
         rows = [row for row in all_rows if row.get("model") == model]
@@ -1097,6 +1418,15 @@ def main() -> int:
     remainder.add_argument("--source-state", type=Path, required=True)
     remainder.add_argument("--model", choices=sorted(REMAINDER_CAMPAIGNS), required=True)
     remainder.add_argument("--output", type=Path, required=True)
+    hydrate = sub.add_parser("hydrate-replacements")
+    hydrate.add_argument("--assignment", type=Path, required=True)
+    hydrate.add_argument("--output", type=Path, required=True)
+    dedicated = sub.add_parser("build-dedicated-a")
+    dedicated.add_argument("--source-plan", type=Path, required=True)
+    dedicated.add_argument("--assignment", type=Path, required=True)
+    dedicated.add_argument("--hydration", type=Path, required=True)
+    dedicated.add_argument("--canary", type=Path, required=True)
+    dedicated.add_argument("--output", type=Path, required=True)
     validate = sub.add_parser("validate")
     validate.add_argument("--plan", type=Path, required=True)
     preflight = sub.add_parser("preflight")
@@ -1115,6 +1445,22 @@ def main() -> int:
         return 0
     if args.command == "validate":
         validate_plan(load_object(args.plan))
+        return 0
+    if args.command == "hydrate-replacements":
+        key = os.environ.get("FLEET_API_KEY")
+        if not key:
+            raise RuntimeError("FLEET_API_KEY is required")
+        value = hydrate_glm53_replacements(load_object(args.assignment), key)
+        self_hosted.write_json_once(args.output, value)
+        return 0
+    if args.command == "build-dedicated-a":
+        value = build_dedicated_a_plan(
+            load_object(args.source_plan),
+            load_object(args.assignment),
+            load_object(args.hydration),
+            load_object(args.canary),
+        )
+        self_hosted.write_json_once(args.output, value)
         return 0
     if args.command == "build-remainder":
         value = build_remainder_plan(

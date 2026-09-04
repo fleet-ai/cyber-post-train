@@ -459,3 +459,77 @@ def test_replacement_selection_lock_is_exact_disjoint_and_fail_closed() -> None:
     assert receipt["overlap_audit"]["candidate_noncreditable_receipts"] == 0
     assert receipt["denominator_policy"]["qwen_primary_sessions"] == 50 * 4
     assert receipt["denominator_policy"]["glm_primary_sessions"] == 100 * 4
+
+
+def test_dedicated_a_plan_is_exactly_partitioned_and_endpoint_bound(
+    monkeypatch,
+) -> None:
+    assignment = hosted.load_object(REPLACEMENT_LOCK)
+    by_key = {}
+    for row in assignment["glm53"]["tasks"]:
+        by_key[row["task_key"]] = {
+            "key": row["task_key"],
+            "environment_id": row["env_key"],
+            "version": row["env_version"],
+            "data_id": row["data_key"],
+            "data_version": row["data_version"],
+            "prompt": "sealed",
+            "env_variables": {"sealed": True},
+            "output_json_schema": {"type": "object"},
+            "verifier_id": f"verifier-{row['replacement_rank']}",
+            "verifier": {
+                "verifier_version_id": f"verifier-version-{row['replacement_rank']}",
+                "version": 1,
+                "sha256": f"sha256:verifier-{row['replacement_rank']}",
+                "function_name": "verify",
+            },
+            "metadata": {
+                "cyber_contract": {
+                    "evidence_schema": "1.0.0",
+                    "submission_protocol": "2.0.0",
+                    "verifier_contract": "3.0.0",
+                },
+                "runtime_seed_manifest": {
+                    "content_sha256": f"sha256:seed-{row['replacement_rank']}",
+                    "files": [{"target_path": "sealed"}],
+                },
+            },
+        }
+
+    class Client:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+    def request(_client, _method, path, **_kwargs):
+        if path == "/v1/account":
+            return {"team_name": "fleet", "team_id": self_hosted.FLEET_TEAM_ID}
+        return by_key[path.removeprefix("/v1/tasks/")]
+
+    monkeypatch.setattr(hosted, "_client", lambda _key: Client())
+    monkeypatch.setattr(self_hosted, "_request", request)
+    hydration = hosted.hydrate_glm53_replacements(assignment, "secret")
+    canary = hosted.load_object(
+        Path(
+            "docs/evidence/qwen38-study/2026-09-03-glm53-dedicated-canary-v4-pass.json"
+        )
+    )
+    source = hosted.load_object(
+        Path("evals/fleet/configs/glm53-opencode-train100-pass4-v4.json")
+    )
+    plan = hosted.build_dedicated_a_plan(source, assignment, hydration, canary)
+    hosted.validate_plan(plan)
+    assert plan["task_count"] == 27
+    assert plan["new_session_count"] == 108
+    assert [row["source_rank"] for row in plan["tasks"]] == [
+        *range(4, 53, 2),
+        102,
+        104,
+    ]
+    assert plan["reserved_source_ranks"] == [*range(54, 101, 2), 101, 103, 105]
+    assert plan["treatment_block"]["service_uid"] == canary["network"]["service_uid"]
+    assert plan["execution"]["inventory_policy"] == (
+        "immutable_plan_claim_and_endpoint_uid_v1"
+    )
