@@ -1,20 +1,18 @@
 {
   "schema_version": "fleet-opencode-autocontinue-primary-release-preview-v1",
   "status": "HELD",
-  "campaign_sha256": "sha256:9df46502affc3ae892ead22fd13fa05e3e9f2950700f9ac67d76588bc29a6d96",
+  "campaign_sha256": "sha256:ff82e4f7fb4b6b9daecba09d72c2a3ab6f48008150cce37654b5ab7999b48eb2",
   "task_identity_sha256": "sha256:c4eca5c58aa7e43eaf85ffb94179a57dbaa320a54a5e530c71795a1467e50fc7",
   "canary_launch_authorized": false,
   "bulk_launch_authorized": false,
   "cluster_objects_created": false,
   "remaining_runtime_gates": [
-    "legacy_interrupted_environment_cleanup_terminal",
     "r114_immutable_hydration_and_execution_binding",
     "fresh_fleet_task_version_environment_verifier_inventory",
     "hosted_endpoint_health",
     "dedicated_a_and_b_uid_bound_autocontinue_parity",
-    "uid_plan_bound_drain_gate_in_hosted_controller",
     "qwen_and_glm_one_cell_canary_authorization_and_acceptance",
-    "atomic_endpoint_leases_and_fresh_duplicate_preflights",
+    "shared_pvc_cross_pod_flock_preflight_and_fresh_duplicate_preflights",
     "append_only_bulk_release_authorization"
   ],
   "privacy": {
@@ -22,5 +20,5 @@
     "prompts_or_traces_included": false,
     "credentials_included": false
   },
-  "receipt_sha256": "sha256:e92b958600c8877167739f218168e2766efe72c45bddfb55ceb850a4a5e08115"
+  "receipt_sha256": "sha256:f7f29a89ae87c2695f5c2775bc56451908e8d3352d63c8103fff0960585b8e86"
 }

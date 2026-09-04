@@ -57,6 +57,41 @@ EXPECTED_MODELS = {
     },
 }
 
+EXPECTED_CONTROLLER_RUNTIME = {
+    "pod_template_path": (
+        "evals/fleet/cluster/opencode-autocontinue-controller-pod-template-v1.yaml"
+    ),
+    "pod_template_sha256": (
+        "sha256:6eadc791dada1c41543266db9c9446906e08377aad19c066f03ce4c10c5c140a"
+    ),
+    "job_uid_field_path": "metadata.labels['batch.kubernetes.io/controller-uid']",
+    "pod_uid_field_path": "metadata.uid",
+    "endpoint_lease_module_sha256": (
+        "sha256:1df60ee13be8c6057113dbebadf9020343649e175b5de38aea41706748987019"
+    ),
+    "hosted_controller_module_sha256": (
+        "sha256:703a6af21e6cda2ff28f7ce8e24458a691cf18075108b714b8d79b96f47d1695"
+    ),
+    "endpoint_lease_root": ("/mnt/sfs/endpoint-leases/opencode11827-autocontinue-primary-v1"),
+    "endpoint_stream_caps": {
+        "qwen-hosted-autocontinue-v1": 2,
+        "glm-hosted-autocontinue-v1": 2,
+        "glm-dedicated-a-v5-autocontinue-v1": 2,
+        "glm-dedicated-b-v5-autocontinue-v1": 2,
+    },
+    "flock_preflight_manifest_path": (
+        "evals/fleet/cluster/opencode-autocontinue-endpoint-flock-preflight-v1.yaml"
+    ),
+    "flock_preflight_manifest_sha256": (
+        "sha256:f6630dfa58d116b468c1933979a6a5a3f4575ef13cb31f1ce70b08bd2fdf0dce"
+    ),
+    "flock_preflight_module_sha256": (
+        "sha256:dc012e6cdaf34f8297d48d43a483c1af2b2099f637403fc93d9ea45946d18088"
+    ),
+    "shared_pvc_cross_pod_flock_preflight_passed": False,
+    "shared_pvc_cross_pod_flock_preflight_receipt_sha256": None,
+}
+
 EXPECTED_COMPONENT_RANKS = {
     "qwen-hosted-retained-source4": {4},
     "qwen-hosted-primary49": {6, 7, 8, 9, *range(11, 51), 52, 53, 54, 55, 56},
@@ -438,6 +473,26 @@ def validate_campaign(campaign: dict[str, Any], *, root: Path = Path(".")) -> di
         ):
             raise ValueError("dedicated UID-bound parity gate drifted")
 
+    controller_runtime = campaign.get("controller_runtime") or {}
+    if controller_runtime != EXPECTED_CONTROLLER_RUNTIME:
+        raise ValueError("controller runtime packaging drifted")
+    for path_key, digest_key in (
+        ("pod_template_path", "pod_template_sha256"),
+        ("flock_preflight_manifest_path", "flock_preflight_manifest_sha256"),
+    ):
+        path = root / controller_runtime[path_key]
+        if self_hosted.sha256(path.read_bytes()) != controller_runtime[digest_key]:
+            raise ValueError("controller runtime file digest drifted")
+    if (
+        self_hosted.sha256((root / "evals/fleet/endpoint_lease.py").read_bytes())
+        != controller_runtime["endpoint_lease_module_sha256"]
+        or self_hosted.sha256((root / "evals/fleet/hosted_sweep_controller.py").read_bytes())
+        != controller_runtime["hosted_controller_module_sha256"]
+        or self_hosted.sha256((root / "evals/fleet/endpoint_lease_preflight.py").read_bytes())
+        != controller_runtime["flock_preflight_module_sha256"]
+    ):
+        raise ValueError("controller runtime module digest drifted")
+
     gates = campaign.get("gates") or {}
     drain = gates.get("drain_protocol") or {}
     if (
@@ -449,11 +504,13 @@ def validate_campaign(campaign: dict[str, Any], *, root: Path = Path(".")) -> di
         != ["treatment", "model", "task_version_id", "attempt"]
         or gates.get("maximum_streams_per_endpoint") != 2
         or gates.get("atomic_endpoint_lease_required") is not True
+        or gates.get("atomic_endpoint_lease_controller_implemented") is not True
+        or gates.get("downward_api_uid_packaging_implemented") is not True
         or drain.get("schema_version") != "fleet-selfhosted-opencode-pass4-drain-request-v1"
         or drain.get("checked_before_every_task_claim") is not True
         or drain.get("checked_before_every_attempt_claim") is not True
         or drain.get("uid_and_plan_bound") is not True
-        or drain.get("controller_implementation_gate_passed") is not False
+        or drain.get("controller_implementation_gate_passed") is not True
     ):
         raise ValueError("campaign safety gates drifted")
     privacy = campaign.get("privacy") or {}
@@ -490,14 +547,12 @@ def validate_release_preview(
         or release.get("cluster_objects_created") is not False
         or release.get("remaining_runtime_gates")
         != [
-            "legacy_interrupted_environment_cleanup_terminal",
             "r114_immutable_hydration_and_execution_binding",
             "fresh_fleet_task_version_environment_verifier_inventory",
             "hosted_endpoint_health",
             "dedicated_a_and_b_uid_bound_autocontinue_parity",
-            "uid_plan_bound_drain_gate_in_hosted_controller",
             "qwen_and_glm_one_cell_canary_authorization_and_acceptance",
-            "atomic_endpoint_leases_and_fresh_duplicate_preflights",
+            "shared_pvc_cross_pod_flock_preflight_and_fresh_duplicate_preflights",
             "append_only_bulk_release_authorization",
         ]
         or release.get("privacy") != campaign["privacy"]

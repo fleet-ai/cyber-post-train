@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import fcntl
 import json
 import os
 import threading
@@ -277,6 +278,7 @@ SCHEDULE = [
         "headroom_gate": "fixed_at_launch_no_automatic_widening",
     },
 ]
+_HOSTED_CLAIM_GATE = threading.Lock()
 
 
 def _emit(event: str, **fields: Any) -> None:
@@ -5130,6 +5132,156 @@ def _accepted(plan: dict[str, Any], root: Path) -> dict[str, dict[str, Any]]:
     return rows
 
 
+def _claim_or_raise_drained(
+    plan: dict[str, Any], root: Path, claim_path: Path, claim: dict[str, Any]
+) -> None:
+    """Atomically serialize every hosted claim against the shared drain writer."""
+
+    gate_path = root / ".attempt-claim-gate.lock"
+    with _HOSTED_CLAIM_GATE, gate_path.open("a+b") as gate:
+        fcntl.flock(gate.fileno(), fcntl.LOCK_EX)
+        request = legacy._load_drain_request(plan, root)
+        if request is not None:
+            raise legacy.DrainRequested(request)
+        self_hosted.write_json_once(claim_path, claim)
+
+
+def _claim_task_and_first_attempt_or_raise_drained(
+    plan: dict[str, Any],
+    root: Path,
+    task_claim_path: Path,
+    task_claim: dict[str, Any],
+    attempt_claim_path: Path,
+    attempt_claim: dict[str, Any],
+) -> None:
+    """Create task ownership and its first attempt in one drain critical section."""
+
+    gate_path = root / ".attempt-claim-gate.lock"
+    with _HOSTED_CLAIM_GATE, gate_path.open("a+b") as gate:
+        fcntl.flock(gate.fileno(), fcntl.LOCK_EX)
+        request = legacy._load_drain_request(plan, root)
+        if request is not None:
+            raise legacy.DrainRequested(request)
+        self_hosted.write_json_once(task_claim_path, task_claim)
+        self_hosted.write_json_once(attempt_claim_path, attempt_claim)
+
+
+def _hosted_completed_claims(
+    plan: dict[str, Any], root: Path
+) -> list[dict[str, Any]]:
+    """Require exact one-to-one claim/acceptance evidence before DRAINED."""
+
+    planned = {row["run_id"]: row for row in plan["attempts"]}
+    tasks = {int(row["rank"]): row for row in plan["tasks"]}
+    claims: dict[str, dict[str, Any]] = {}
+    for path in sorted((root / "claims").glob("*.json")):
+        claim = load_object(path)
+        run_id = claim.get("run_id")
+        item = planned.get(run_id)
+        task = tasks.get(int(claim.get("rank") or 0))
+        if (
+            not isinstance(run_id, str)
+            or run_id in claims
+            or item is None
+            or task is None
+            or claim.get("claim_sha256") != digest_without(claim, "claim_sha256")
+            or claim.get("plan_sha256") != plan["plan_sha256"]
+            or int(claim.get("rank") or 0) != int(item["rank"])
+            or int(claim.get("source_rank") or 0) != int(item["source_rank"])
+            or int(claim.get("attempt") or 0) != int(item["attempt"])
+            or claim.get("network") != item["network"]
+            or claim.get("task_key") != task["task"]["key"]
+            or claim.get("task_version_id") != task["task"]["version_id"]
+        ):
+            raise RuntimeError("hosted drain claim evidence drifted")
+        claims[run_id] = claim
+
+    accepted = _accepted(plan, root)
+    if set(claims) != set(accepted):
+        raise RuntimeError("hosted drain reached terminalization with unresolved claims")
+    completed = []
+    for run_id in sorted(claims):
+        claim = claims[run_id]
+        receipt = accepted[run_id]
+        if (
+            receipt.get("claim_sha256") != claim["claim_sha256"]
+            or receipt.get("config_sha256") != claim.get("config_sha256")
+            or int(receipt.get("rank") or 0) != int(claim["rank"])
+            or int(receipt.get("source_rank") or 0) != int(claim["source_rank"])
+            or int(receipt.get("attempt") or 0) != int(claim["attempt"])
+            or receipt.get("task_key") != claim["task_key"]
+            or receipt.get("task_version_id") != claim["task_version_id"]
+        ):
+            raise RuntimeError("hosted drain acceptance is not bound to its exact claim")
+        completed.append(
+            {
+                "run_id": run_id,
+                "rank": int(claim["rank"]),
+                "source_rank": int(claim["source_rank"]),
+                "attempt": int(claim["attempt"]),
+                "claim_sha256": claim["claim_sha256"],
+                "acceptance_receipt_sha256": receipt["receipt_sha256"],
+            }
+        )
+    return completed
+
+
+def _write_hosted_drained_unlocked(
+    plan: dict[str, Any], root: Path, request: dict[str, Any]
+) -> dict[str, Any]:
+    completed = _hosted_completed_claims(plan, root)
+    receipt = {
+        "schema_version": "fleet-hosted-opencode-drained-v1",
+        "plan_sha256": plan["plan_sha256"],
+        "campaign_id": plan["campaign_id"],
+        "drain_request_sha256": request["request_sha256"],
+        "job_uid": os.environ["JOB_UID"],
+        "pod_uid": os.environ["POD_UID"],
+        "claimed_attempts": len(completed),
+        "accepted_attempts": len(completed),
+        "claim_acceptance_identity_exact": True,
+        "completed_claim_receipts": completed,
+        "completed_claim_receipts_sha256": self_hosted.sha256(
+            self_hosted.canonical_json(completed)
+        ),
+        "task_and_attempt_claim_gate_closed": True,
+        "in_flight_attempts_completed_before_exit": True,
+        "scores_included": False,
+        "prompts_or_traces_included": False,
+    }
+    receipt["receipt_sha256"] = digest_without(receipt, "receipt_sha256")
+    self_hosted.write_json_once(root / "DRAINED.json", receipt)
+    return receipt
+
+
+def _write_hosted_terminal_or_drained(
+    plan: dict[str, Any],
+    root: Path,
+    terminal: dict[str, Any] | None,
+    observed_request: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Serialize DRAINED against normal terminalization on the claim gate."""
+
+    gate_path = root / ".attempt-claim-gate.lock"
+    with _HOSTED_CLAIM_GATE, gate_path.open("a+b") as gate:
+        fcntl.flock(gate.fileno(), fcntl.LOCK_EX)
+        request = legacy._load_drain_request(plan, root)
+        if request is not None:
+            if observed_request is not None and request.get(
+                "request_sha256"
+            ) != observed_request.get("request_sha256"):
+                raise RuntimeError("hosted drain request changed before terminalization")
+            if (root / "TERMINAL.json").exists():
+                raise RuntimeError("hosted campaign terminalized before drain")
+            return _write_hosted_drained_unlocked(plan, root, request)
+        if observed_request is not None:
+            raise RuntimeError("hosted drain request disappeared before terminalization")
+        if terminal is None:
+            raise RuntimeError("hosted terminal payload is absent")
+        self_hosted.write_json_once(root / "TERMINAL.json", terminal)
+        return terminal
+
+
 def _allowed_sessions(plan: dict[str, Any], root: Path, rank: int) -> set[str]:
     allowed = {row["session_id"] for row in _credits_for_rank(plan, rank)}
     attempt_rank = {row["run_id"]: int(row["rank"]) for row in plan["attempts"]}
@@ -5583,17 +5735,8 @@ def _run_task(
         "run_ids": [item["run_id"] for item in items],
     }
     task_claim["claim_sha256"] = digest_without(task_claim, "claim_sha256")
-    self_hosted.write_json_once(root / "task-claims" / f"rank-{rank:03d}.json", task_claim)
-    _emit(
-        "task_claimed",
-        plan_sha256=plan["plan_sha256"],
-        rank=rank,
-        source_rank=int(task["source_rank"]),
-        attempts=[int(item["attempt"]) for item in items],
-        claim_sha256=task_claim["claim_sha256"],
-    )
     accepted_count = 0
-    for item in items:
+    for item_index, item in enumerate(items):
         _validate_inventory_for_task(plan, root, task, key)
         config = _attempt_config(plan, task, item)
         claim = {
@@ -5605,10 +5748,31 @@ def _run_task(
             "source_rank": int(item["source_rank"]),
             "attempt": int(item["attempt"]),
             "network": item["network"],
+            "task_key": task["task"]["key"],
+            "task_version_id": task["task"]["version_id"],
             "config_sha256": config["config_sha256"],
         }
         claim["claim_sha256"] = digest_without(claim, "claim_sha256")
-        self_hosted.write_json_once(root / "claims" / f"{item['run_id']}.json", claim)
+        attempt_claim_path = root / "claims" / f"{item['run_id']}.json"
+        if item_index == 0:
+            _claim_task_and_first_attempt_or_raise_drained(
+                plan,
+                root,
+                root / "task-claims" / f"rank-{rank:03d}.json",
+                task_claim,
+                attempt_claim_path,
+                claim,
+            )
+            _emit(
+                "task_claimed",
+                plan_sha256=plan["plan_sha256"],
+                rank=rank,
+                source_rank=int(task["source_rank"]),
+                attempts=[int(planned["attempt"]) for planned in items],
+                claim_sha256=task_claim["claim_sha256"],
+            )
+        else:
+            _claim_or_raise_drained(plan, root, attempt_claim_path, claim)
         out_dir = root / "attempts" / item["run_id"]
         try:
             self_hosted.run(config, out_dir, proxy)
@@ -5793,7 +5957,7 @@ def preflight_plan(
     return receipt
 
 
-def run_plan(
+def _run_plan_with_held_lease(
     plan: dict[str, Any],
     root: Path,
     proxy: Path,
@@ -5872,6 +6036,7 @@ def run_plan(
     quarantined_tasks = 0
     last_cap = 1
     infrastructure_failure: Exception | None = None
+    drain_request: dict[str, Any] | None = None
     with ThreadPoolExecutor(max_workers=max(stage["workers"] for stage in SCHEDULE)) as pool:
         def submit_until_cap() -> None:
             nonlocal last_cap
@@ -5894,7 +6059,11 @@ def run_plan(
                 ramp["receipt_sha256"] = digest_without(ramp, "receipt_sha256")
                 self_hosted.write_json_once(root / "ramps" / f"workers-{cap}.json", ramp)
                 last_cap = cap
-            while len(active) < cap and infrastructure_failure is None:
+            while (
+                len(active) < cap
+                and infrastructure_failure is None
+                and drain_request is None
+            ):
                 try:
                     task, items = next(pending)
                 except StopIteration:
@@ -5916,11 +6085,27 @@ def run_plan(
                         quarantined_tasks += 1
                     else:
                         fenced_tasks += 1
+                except legacy.DrainRequested as exc:
+                    request = exc.request
+                    if (
+                        drain_request is not None
+                        and request.get("request_sha256")
+                        != drain_request.get("request_sha256")
+                    ):
+                        infrastructure_failure = RuntimeError(
+                            "hosted workers observed different drain requests"
+                        )
+                    else:
+                        drain_request = request
                 except Exception as exc:  # noqa: BLE001
                     infrastructure_failure = exc
             submit_until_cap()
     if infrastructure_failure is not None:
         raise infrastructure_failure
+    if drain_request is not None:
+        return _write_hosted_terminal_or_drained(
+            plan, root, terminal=None, observed_request=drain_request
+        )
 
     terminal = {
         "schema_version": "fleet-hosted-opencode-collection-terminal-v1",
@@ -5937,8 +6122,38 @@ def run_plan(
     if complete_tasks + fenced_tasks + quarantined_tasks != int(plan["task_count"]):
         raise RuntimeError("hosted task terminal accounting drifted")
     terminal["receipt_sha256"] = digest_without(terminal, "receipt_sha256")
-    self_hosted.write_json_once(root / "TERMINAL.json", terminal)
-    return terminal
+    return _write_hosted_terminal_or_drained(plan, root, terminal=terminal)
+
+
+def run_plan(
+    plan: dict[str, Any],
+    root: Path,
+    proxy: Path,
+    release: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Run one plan while holding its optional endpoint stream slot."""
+
+    lease_config = (plan.get("execution") or {}).get("endpoint_lease")
+    if lease_config is None:
+        return _run_plan_with_held_lease(plan, root, proxy, release)
+    if not isinstance(lease_config, dict):
+        raise ValueError("hosted endpoint lease configuration is invalid")
+    expected_keys = {"lease_root", "endpoint_key", "maximum_streams"}
+    if set(lease_config) != expected_keys:
+        raise ValueError("hosted endpoint lease configuration drifted")
+    lease_root = Path(str(lease_config.get("lease_root") or ""))
+    if not lease_root.is_absolute():
+        raise ValueError("hosted endpoint lease root must be absolute")
+    # Legacy frozen manifests package only this controller module. Import the
+    # lease implementation only for new plans that explicitly bind it.
+    from evals.fleet import endpoint_lease
+
+    with endpoint_lease.acquire_endpoint_lease(
+        lease_root=lease_root,
+        endpoint_key=str(lease_config.get("endpoint_key") or ""),
+        maximum_streams=lease_config.get("maximum_streams"),
+    ):
+        return _run_plan_with_held_lease(plan, root, proxy, release)
 
 
 def main() -> int:

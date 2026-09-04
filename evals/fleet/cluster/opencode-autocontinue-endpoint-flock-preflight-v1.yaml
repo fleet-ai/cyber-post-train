@@ -1,0 +1,83 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: chris-opencode11827-ac-flock-holder-v1
+  namespace: fleet-train-jobs
+  annotations:
+    cyber-post-train.fleet.ai/launch-authorized: "false"
+spec:
+  activeDeadlineSeconds: 900
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        cyber-post-train.fleet.ai/experiment: opencode11827-ac-flock-preflight-v1
+        cyber-post-train.fleet.ai/owner: chris
+        kueue.x-k8s.io/queue-name: training-lq
+    spec:
+      restartPolicy: Never
+      priorityClassName: fleet-train-high
+      containers:
+        - name: holder
+          image: ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
+          command: ["python", "/bootstrap/endpoint_lease_preflight.py", "hold", "--root", "/mnt/sfs/endpoint-leases/preflight-opencode11827-autocontinue-v1"]
+          env:
+            - name: JOB_UID
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: "metadata.labels['batch.kubernetes.io/controller-uid']"
+            - name: POD_UID
+              valueFrom:
+                fieldRef: {apiVersion: v1, fieldPath: metadata.uid}
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {cpu: 100m, memory: 128Mi}
+          volumeMounts:
+            - {name: bootstrap, mountPath: /bootstrap, readOnly: true}
+            - {name: sfs, mountPath: /mnt/sfs}
+      volumes:
+        - {name: bootstrap, configMap: {name: chris-opencode11827-ac-flock-preflight-v1}}
+        - {name: sfs, persistentVolumeClaim: {claimName: sfs-shared}}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: chris-opencode11827-ac-flock-prober-v1
+  namespace: fleet-train-jobs
+  annotations:
+    cyber-post-train.fleet.ai/launch-authorized: "false"
+spec:
+  activeDeadlineSeconds: 900
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        cyber-post-train.fleet.ai/experiment: opencode11827-ac-flock-preflight-v1
+        cyber-post-train.fleet.ai/owner: chris
+        kueue.x-k8s.io/queue-name: training-lq
+    spec:
+      restartPolicy: Never
+      priorityClassName: fleet-train-high
+      containers:
+        - name: prober
+          image: ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
+          command: ["python", "/bootstrap/endpoint_lease_preflight.py", "probe", "--root", "/mnt/sfs/endpoint-leases/preflight-opencode11827-autocontinue-v1"]
+          env:
+            - name: JOB_UID
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: "metadata.labels['batch.kubernetes.io/controller-uid']"
+            - name: POD_UID
+              valueFrom:
+                fieldRef: {apiVersion: v1, fieldPath: metadata.uid}
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {cpu: 100m, memory: 128Mi}
+          volumeMounts:
+            - {name: bootstrap, mountPath: /bootstrap, readOnly: true}
+            - {name: sfs, mountPath: /mnt/sfs}
+      volumes:
+        - {name: bootstrap, configMap: {name: chris-opencode11827-ac-flock-preflight-v1}}
+        - {name: sfs, persistentVolumeClaim: {claimName: sfs-shared}}

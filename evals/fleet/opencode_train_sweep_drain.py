@@ -55,7 +55,10 @@ def request_drain(
     gate_path = root / ".attempt-claim-gate.lock"
     with gate_path.open("a+b") as gate:
         fcntl.flock(gate.fileno(), fcntl.LOCK_EX)
-        if (root / "ACCEPTED.json").exists() or (root / "DRAINED.json").exists():
+        if any(
+            (root / name).exists()
+            for name in ("ACCEPTED.json", "DRAINED.json", "TERMINAL.json")
+        ):
             raise RuntimeError("campaign is already terminal")
         self_hosted.write_json_once(root / "DRAIN-REQUEST.json", request)
     return request

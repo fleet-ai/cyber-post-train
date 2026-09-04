@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: PodTemplate
+metadata:
+  name: chris-opencode11827-autocontinue-controller-v1
+  namespace: fleet-train-jobs
+  annotations:
+    cyber-post-train.fleet.ai/preview-only: "true"
+    cyber-post-train.fleet.ai/launch-authorized: "false"
+template:
+  metadata:
+    labels:
+      cyber-post-train.fleet.ai/experiment: opencode11827-autocontinue-primary-v1
+      cyber-post-train.fleet.ai/owner: chris
+      kueue.x-k8s.io/queue-name: training-lq
+  spec:
+    restartPolicy: Never
+    priorityClassName: fleet-train-high
+    containers:
+      - name: controller
+        image: ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
+        command: ["/bin/false"]
+        env:
+          - name: JOB_UID
+            valueFrom:
+              fieldRef:
+                apiVersion: v1
+                fieldPath: "metadata.labels['batch.kubernetes.io/controller-uid']"
+          - name: POD_UID
+            valueFrom:
+              fieldRef:
+                apiVersion: v1
+                fieldPath: metadata.uid
+        resources:
+          requests: {cpu: 100m, memory: 128Mi}
+          limits: {cpu: 250m, memory: 256Mi}
+        volumeMounts:
+          - {name: sfs, mountPath: /mnt/sfs}
+    volumes:
+      - name: sfs
+        persistentVolumeClaim: {claimName: sfs-shared}
