@@ -39,6 +39,7 @@ CELL_CLAIM_ROOT = "/mnt/sfs/cell-claims/opencode11827-autocontinue-primary-v1"
 
 EXPECTED = {
     "qwen38_autocontinue_canary": {
+        "plan_sha256": "sha256:5b2c5c2792de233d70cc4cb5d1c2b5482807c3745090939bcb426227089ff3b3",
         "campaign_id": "chris-q38-ac-canary1-v1",
         "source_rank": 4,
         "attempt": 1,
@@ -65,6 +66,7 @@ EXPECTED = {
         ),
     },
     "glm53_autocontinue_canary": {
+        "plan_sha256": "sha256:6bfc06e5ede3a572f03d74e810dc26006bdbf5134b841ca12565cdf13c02ca93",
         "campaign_id": "chris-glm53-ac-canary1-v1",
         "source_rank": 13,
         "attempt": 1,
@@ -117,6 +119,16 @@ def _is_uuid(value: object) -> bool:
     except (TypeError, ValueError, AttributeError):
         return False
     return True
+
+
+def _is_utc_timestamp(value: object) -> bool:
+    if not isinstance(value, str) or not value:
+        return False
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return parsed.tzinfo is not None and parsed.utcoffset() == UTC.utcoffset(parsed)
 
 
 def validate_compatibility(receipt: dict[str, Any], root: Path) -> None:
@@ -341,6 +353,10 @@ def _validate_final_preflight_evidence(
         or preflight.get("fleet_team_id") != self_hosted.FLEET_TEAM_ID
         or preflight.get("current_plan_run_and_claim_identities_absent") is not True
         or preflight.get("output_root_absent") is not True
+        or not isinstance(preflight.get("sfs_job_roots_reconciled"), int)
+        or isinstance(preflight.get("sfs_job_roots_reconciled"), bool)
+        or preflight.get("sfs_job_roots_reconciled") < 0
+        or preflight.get("exact_treatment_sessions_reconciled") != 0
         or not _is_uuid(preflight.get("job_uid"))
         or not _is_uuid(preflight.get("pod_uid"))
         or preflight.get("scores_read") is not False
@@ -389,6 +405,8 @@ def validate_plan(plan: dict[str, Any]) -> None:
     expected = EXPECTED.get(plan.get("shard_key"))
     if expected is None:
         raise ValueError("canary shard identity drifted")
+    if plan.get("plan_sha256") != expected["plan_sha256"]:
+        raise ValueError("canary approved plan digest drifted")
     tasks = plan.get("tasks") or []
     attempts = plan.get("attempts") or []
     model = plan.get("model") or {}
@@ -616,8 +634,8 @@ def validate_terminal(
         or terminal.get("campaign_sha256") != CAMPAIGN_SHA
         or terminal.get("controller_compatibility_receipt_sha256") != compatibility_sha
         or terminal.get("release_receipt_sha256") != release.get("receipt_sha256")
-        or not isinstance(terminal.get("job_uid"), str)
-        or not isinstance(terminal.get("pod_uid"), str)
+        or not _is_uuid(terminal.get("job_uid"))
+        or not _is_uuid(terminal.get("pod_uid"))
         or terminal.get("source_rank") != plan["tasks"][0]["source_rank"]
         or terminal.get("attempt") != 1
         or terminal.get("task_version_id") != plan["tasks"][0]["task"]["version_id"]
@@ -640,7 +658,7 @@ def validate_terminal(
         or terminal.get("endpoint_lease") != plan["execution"]["endpoint_lease"]
         or not _is_sha256(terminal.get("attempt_config_sha256"))
         or not _is_sha256(terminal.get("claim_sha256"))
-        or not isinstance(terminal.get("terminal_at_utc"), str)
+        or not _is_utc_timestamp(terminal.get("terminal_at_utc"))
         or accepted == quarantined
         or terminal.get("credited") is not accepted
         or terminal.get("exact_cell_count") != 1

@@ -59,6 +59,9 @@ def test_one_cell_canary_plan_is_exact_and_legacy_credit_free(path: Path) -> Non
         lambda value: value["source"].__setitem__(
             "scientific_mapping_sha256", "sha256:" + "0" * 64
         ),
+        lambda value: value.__setitem__("canary_acceptance_required_before_bulk", False),
+        lambda value: value["privacy"].__setitem__("scores_included", True),
+        lambda value: value.__setitem__("unknown_authority", {"accepted": True}),
         lambda value: value["execution"]["endpoint_lease"].__setitem__("maximum_streams", 1),
         lambda value: value["execution"].__setitem__(
             "required_priority_class", "fleet-infra-quiet"
@@ -348,6 +351,8 @@ def _synthetic_preflight_evidence(tmp_path: Path, plan: dict) -> dict:
             "fleet_team_id": canary.self_hosted.FLEET_TEAM_ID,
             "current_plan_run_and_claim_identities_absent": True,
             "output_root_absent": True,
+            "sfs_job_roots_reconciled": 61,
+            "exact_treatment_sessions_reconciled": 0,
             "job_uid": "11111111-1111-4111-8111-111111111111",
             "pod_uid": "22222222-2222-4222-8222-222222222222",
             "scores_read": False,
@@ -581,3 +586,44 @@ def test_terminal_and_post_exit_require_exact_uid_lease_and_success() -> None:
     observer["receipt_sha256"] = canary.digest_without(observer, "receipt_sha256")
     with pytest.raises(ValueError, match="post-exit"):
         canary.validate_post_exit(observer, terminal, plan, release)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("job_uid", "not-a-uuid"), ("pod_uid", ""), ("terminal_at_utc", "")],
+)
+def test_terminal_rejects_invalid_uid_or_timestamp(field: str, value: str) -> None:
+    plan = canary.load_object(Q_PLAN)
+    release = _synthetic_final_release(plan)
+    terminal = _synthetic_terminal(plan, release)
+    terminal[field] = value
+    terminal["receipt_sha256"] = canary.digest_without(terminal, "receipt_sha256")
+    with pytest.raises(ValueError, match="terminal"):
+        canary.validate_terminal(terminal, plan, release)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("sfs_job_roots_reconciled", None), ("exact_treatment_sessions_reconciled", 1)],
+)
+def test_final_preflight_evidence_requires_reconciliation_outputs(
+    field: str, value: object, tmp_path: Path, monkeypatch
+) -> None:
+    plan = canary.load_object(Q_PLAN)
+    evidence = _synthetic_preflight_evidence(tmp_path, plan)
+    preflight_path = tmp_path / "preflight.json"
+    preflight = canary.load_object(preflight_path)
+    if value is None:
+        preflight.pop(field)
+    else:
+        preflight[field] = value
+    _write_receipt(preflight_path, preflight)
+    evidence["preflight_receipt_sha256"] = preflight["receipt_sha256"]
+    observed_path = tmp_path / "observed.json"
+    observed = canary.load_object(observed_path)
+    observed["preflight_receipt_sha256"] = preflight["receipt_sha256"]
+    _write_receipt(observed_path, observed)
+    evidence["preflight_post_exit_receipt_sha256"] = observed["receipt_sha256"]
+    monkeypatch.setattr(canary, "validate_preflight_authorization", lambda *_: None)
+    with pytest.raises(ValueError, match="not authoritative"):
+        canary._validate_final_preflight_evidence(evidence, plan, tmp_path)
