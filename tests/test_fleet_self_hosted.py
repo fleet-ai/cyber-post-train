@@ -24,6 +24,77 @@ def _write_json(path: Path, value: dict) -> None:
     path.write_bytes(self_hosted.canonical_json(value) + b"\n")
 
 
+def test_opencode_settings_preserve_frozen_no_autocontinue_treatment() -> None:
+    config = json.loads(
+        Path(
+            "evals/fleet/configs/qwen38-opencode-hosted-http500-successor49-pass4-v8.json"
+        ).read_text()
+    )
+    settings = self_hosted.opencode_settings(config)
+    model = settings["provider"]["fleet-cluster"]["models"]["qwen3.8-27b"]
+    assert settings["plugin"] == [
+        "file:///home/node/.config/opencode/fleet-disable-compaction-autocontinue.mjs"
+    ]
+    assert "compaction" not in settings
+    assert model["limit"] == {"context": 262144, "output": 32768}
+    assert "compaction_headroom_tokens" not in config["harness"]
+    assert self_hosted.OPENCODE_NO_AUTOCONTINUE_PLUGIN == (
+        "export const DisableCompactionAutocontinue = async () => ({\n"
+        '  "experimental.compaction.autocontinue": async (_input, output) => '
+        "{ output.enabled = false; },\n"
+        "});\n"
+    )
+    assert self_hosted.sha256(self_hosted.canonical_json(settings)) == (
+        "sha256:fa7464a2a043b1e02febbabc70b1fce4278ec31a4d0968e4318677cae1f36e24"
+    )
+    assert self_hosted.sha256(self_hosted.OPENCODE_NO_AUTOCONTINUE_PLUGIN.encode()) == (
+        "sha256:3542f8fe30d270bec6ee8e832081da8169fd78b667647ecd119425b1961a7a28"
+    )
+
+
+def test_opencode_settings_render_new_autocontinue_policy_separately() -> None:
+    config = json.loads(OPENCODE_CONFIG_PATH.read_text())
+    config["harness"].update(
+        {
+            "context_management": self_hosted.OPENCODE_CONTEXT_MANAGEMENT,
+            "compaction_headroom_tokens": 8192,
+        }
+    )
+    settings = self_hosted.opencode_settings(config)
+    model = settings["provider"]["fleet-cluster"]["models"][config["model"]["served_id"]]
+    assert settings["compaction"] == {"auto": True, "reserved": 8192}
+    assert "plugin" not in settings
+    assert model["limit"] == {
+        "context": config["harness"]["context_window_size"],
+        "input": (
+            config["harness"]["context_window_size"]
+            - config["harness"]["max_output_tokens"]
+        ),
+        "output": config["harness"]["max_output_tokens"],
+    }
+
+
+@pytest.mark.parametrize(
+    "policy,headroom",
+    [
+        ("unknown", None),
+        (self_hosted.OPENCODE_CONTEXT_MANAGEMENT, None),
+        (self_hosted.OPENCODE_NO_AUTOCONTINUE_CONTEXT_MANAGEMENT, 8192),
+    ],
+)
+def test_opencode_settings_fail_closed_on_context_policy_drift(
+    policy: str, headroom: int | None
+) -> None:
+    config = json.loads(OPENCODE_CONFIG_PATH.read_text())
+    config["harness"]["context_management"] = policy
+    if headroom is None:
+        config["harness"].pop("compaction_headroom_tokens", None)
+    else:
+        config["harness"]["compaction_headroom_tokens"] = headroom
+    with pytest.raises(ValueError, match="context policy|headroom"):
+        self_hosted.opencode_settings(config)
+
+
 def _recovery_source_fixture(tmp_path: Path) -> tuple[dict, Path, str]:
     config = json.loads(OPENCODE_CONFIG_PATH.read_text())
     source = tmp_path / "source"
@@ -137,6 +208,54 @@ def _recovery_source_fixture(tmp_path: Path) -> tuple[dict, Path, str]:
         },
     )
     return config, source, verifier_execution_id
+
+
+def _partial_recovery_source_fixture(tmp_path: Path) -> tuple[dict, Path, str, str]:
+    config, source, verifier_execution_id = _recovery_source_fixture(tmp_path)
+    session_id = "44444444-4444-4444-8444-444444444444"
+    trace = source / "agent-output" / "opencode-stream.jsonl"
+    events = [
+        {
+            "type": "text",
+            "timestamp": 1781623587086 + index,
+            "part": {"type": "text", "id": f"a{index}", "text": "done"},
+        }
+        for index in range(65)
+    ]
+    trace.write_text("".join(json.dumps(event) + "\n" for event in events))
+    result = json.loads((source / "result.json").read_text())
+    result["session_id"] = session_id
+    result["agent_exit_code"] = 1
+    _write_json(source / "result.json", result)
+    _write_json(
+        source / "session-ingest.json",
+        {
+            "status": "failed",
+            "session_id": session_id,
+            "message_count": 65,
+            "chunks_completed": 1,
+            "chunk_count": 3,
+            "error_type": "FleetRequestError",
+            "error_code": "fleet_http_error",
+            "http_status": 500,
+            "method": "POST",
+            "route": "/v1/sessions/ingest",
+        },
+    )
+    _write_json(
+        source / "trace-manifest.json",
+        {
+            "canonical_trace": "agent-output/opencode-stream.jsonl",
+            "canonical_trace_sha256": self_hosted.sha256(trace.read_bytes()),
+            "harness": "opencode",
+            "event_count": 65,
+            "raw_line_count": 65,
+            "malformed_line_count": 0,
+            "normalized_message_count": 65,
+            "fidelity": "full_opencode_json_normalized_with_tool_calls_and_observations",
+        },
+    )
+    return config, source, verifier_execution_id, session_id
 
 
 def test_smoke_config_is_one_exact_eval_only_arm() -> None:
@@ -701,6 +820,299 @@ def test_recover_session_trace_requires_zero_completed_original_chunks(tmp_path:
     _write_json(source / "session-ingest.json", ingest)
     with pytest.raises(RuntimeError, match="zero-chunk"):
         self_hosted._recovery_source(config, source)
+
+
+def test_resume_partial_session_trace_appends_only_missing_suffix(tmp_path: Path) -> None:
+    config, source, verifier_execution_id, session_id = _partial_recovery_source_fixture(
+        tmp_path
+    )
+    post_payloads: list[dict] = []
+    inventory_reads = 0
+    transcript_reads = 0
+    chunks, _ = self_hosted._partial_recovery_source(config, source)
+    prefix = [message for chunk in chunks[:1] for message in chunk]
+    complete = [message for chunk in chunks for message in chunk]
+
+    class Client:
+        def request(self, method: str, url: str, **kwargs):
+            nonlocal inventory_reads, transcript_reads
+            if method == "GET" and url.endswith("/v1/account"):
+                payload = {"team_name": "fleet", "team_id": self_hosted.FLEET_TEAM_ID}
+            elif method == "GET" and url.endswith("/v1/sessions"):
+                inventory_reads += 1
+                payload = {
+                    "sessions": [
+                        {
+                            "session_id": session_id,
+                            "model": "qwen3.8-27b",
+                            "status": "in_progress" if inventory_reads < 3 else "completed",
+                            "verifier_execution": (
+                                None
+                                if inventory_reads < 3
+                                else {"id": verifier_execution_id}
+                            ),
+                        }
+                    ],
+                    "has_more": False,
+                }
+            elif method == "GET" and url.endswith(f"/{session_id}/transcript"):
+                transcript_reads += 1
+                payload = {
+                    "harness": {},
+                    "instance": {},
+                    "task": {},
+                    "transcript": prefix if transcript_reads < 3 else complete,
+                    "verifier_execution": None,
+                }
+            elif method == "POST" and url.endswith("/v1/sessions/ingest"):
+                post_payloads.append(kwargs["json"])
+                payload = {
+                    "success": True,
+                    "session_id": session_id,
+                    "message_count": len(kwargs["json"]["messages"]),
+                    "created_new_session": False,
+                }
+            else:
+                raise AssertionError((method, url))
+            return type("Response", (), {"status_code": 200, "json": lambda self: payload})()
+
+    client = Client()
+    observed = self_hosted.observe_partial_session_resume(
+        client, config=config, source_dir=source, out_dir=tmp_path / "observe"
+    )
+    resumed = self_hosted.resume_partial_session_trace(
+        client,
+        config=config,
+        source_dir=source,
+        out_dir=tmp_path / "resume",
+        observer_receipt=observed,
+    )
+    assert resumed["resumed"] is True
+    assert resumed["session_id"] == session_id
+    assert resumed["chunks_completed_before"] == 1
+    assert resumed["chunks_appended"] == 2
+    assert [len(payload["messages"]) for payload in post_payloads] == [32, 1]
+    assert all(payload["session_id"] == session_id for payload in post_payloads)
+    assert all("model" not in payload for payload in post_payloads)
+    assert "score" not in post_payloads[0]
+    assert post_payloads[1]["verifier_execution_id"] == verifier_execution_id
+    intent = json.loads((tmp_path / "resume" / "RESUME-INTENT.json").read_text())
+    assert intent["persisted_prefix_message_count"] == 32
+    assert intent["model_or_verifier_replayed"] is False
+    assert "transcript" not in intent
+    assert "done" not in (tmp_path / "observe" / "OBSERVED.json").read_text()
+
+
+def test_resume_partial_session_trace_rejects_prefix_count_drift(tmp_path: Path) -> None:
+    config, source, _, session_id = _partial_recovery_source_fixture(tmp_path)
+    posts = 0
+
+    class Client:
+        def request(self, method: str, url: str, **kwargs):
+            nonlocal posts
+            if method == "GET" and url.endswith("/v1/account"):
+                payload = {"team_name": "fleet", "team_id": self_hosted.FLEET_TEAM_ID}
+            elif method == "GET" and url.endswith("/v1/sessions"):
+                payload = {
+                    "sessions": [
+                        {
+                            "session_id": session_id,
+                            "model": "qwen3.8-27b",
+                            "status": "in_progress",
+                            "verifier_execution": None,
+                        }
+                    ],
+                    "has_more": False,
+                }
+            elif method == "GET" and url.endswith(f"/{session_id}/transcript"):
+                payload = {
+                    "harness": {},
+                    "instance": {},
+                    "task": {},
+                    "transcript": [{}] * 31,
+                    "verifier_execution": None,
+                }
+            elif method == "POST":
+                posts += 1
+                raise AssertionError("prefix drift must fail before mutation")
+            else:
+                raise AssertionError((method, url))
+            return type("Response", (), {"status_code": 200, "json": lambda self: payload})()
+
+    with pytest.raises(RuntimeError, match="prefix drifted"):
+        self_hosted.observe_partial_session_resume(
+            Client(), config=config, source_dir=source, out_dir=tmp_path / "observe"
+        )
+    assert posts == 0
+    assert not (tmp_path / "observe" / "OBSERVED.json").exists()
+
+
+def test_resume_partial_session_trace_rejects_source_drift_after_observer(
+    tmp_path: Path,
+) -> None:
+    config, source, verifier_execution_id, session_id = _partial_recovery_source_fixture(
+        tmp_path
+    )
+    chunks, _ = self_hosted._partial_recovery_source(config, source)
+    prefix = [message for chunk in chunks[:1] for message in chunk]
+    posts = 0
+
+    class Client:
+        def request(self, method: str, url: str, **kwargs):
+            nonlocal posts
+            if method == "GET" and url.endswith("/v1/account"):
+                payload = {"team_name": "fleet", "team_id": self_hosted.FLEET_TEAM_ID}
+            elif method == "GET" and url.endswith("/v1/sessions"):
+                payload = {
+                    "sessions": [
+                        {
+                            "session_id": session_id,
+                            "model": "qwen3.8-27b",
+                            "status": "in_progress",
+                            "verifier_execution": None,
+                        }
+                    ],
+                    "has_more": False,
+                }
+            elif method == "GET" and url.endswith(f"/{session_id}/transcript"):
+                payload = {
+                    "harness": {},
+                    "instance": {},
+                    "task": {},
+                    "transcript": prefix,
+                    "verifier_execution": None,
+                }
+            elif method == "POST":
+                posts += 1
+                raise AssertionError("source drift must fail before mutation")
+            else:
+                raise AssertionError((method, url))
+            return type("Response", (), {"status_code": 200, "json": lambda self: payload})()
+
+    client = Client()
+    observed = self_hosted.observe_partial_session_resume(
+        client, config=config, source_dir=source, out_dir=tmp_path / "observe"
+    )
+    reward = source / "reward-result.json"
+    reward.write_bytes(reward.read_bytes() + b" ")
+    with pytest.raises(RuntimeError, match="observer receipt is not authoritative"):
+        self_hosted.resume_partial_session_trace(
+            client,
+            config=config,
+            source_dir=source,
+            out_dir=tmp_path / "resume",
+            observer_receipt=observed,
+        )
+    assert posts == 0
+
+
+def test_resume_partial_session_trace_rejects_same_length_final_content_drift(
+    tmp_path: Path,
+) -> None:
+    config, source, verifier_execution_id, session_id = _partial_recovery_source_fixture(
+        tmp_path
+    )
+    chunks, _ = self_hosted._partial_recovery_source(config, source)
+    prefix = [message for chunk in chunks[:1] for message in chunk]
+    complete = [message for chunk in chunks for message in chunk]
+    drifted = copy.deepcopy(complete)
+    drifted[-1]["content"] = "different"
+    inventory_reads = 0
+    transcript_reads = 0
+
+    class Client:
+        def request(self, method: str, url: str, **kwargs):
+            nonlocal inventory_reads, transcript_reads
+            if method == "GET" and url.endswith("/v1/account"):
+                payload = {"team_name": "fleet", "team_id": self_hosted.FLEET_TEAM_ID}
+            elif method == "GET" and url.endswith("/v1/sessions"):
+                inventory_reads += 1
+                payload = {
+                    "sessions": [
+                        {
+                            "session_id": session_id,
+                            "model": "qwen3.8-27b",
+                            "status": "in_progress" if inventory_reads < 3 else "completed",
+                            "verifier_execution": (
+                                None
+                                if inventory_reads < 3
+                                else {"id": verifier_execution_id}
+                            ),
+                        }
+                    ],
+                    "has_more": False,
+                }
+            elif method == "GET" and url.endswith(f"/{session_id}/transcript"):
+                transcript_reads += 1
+                payload = {
+                    "harness": {},
+                    "instance": {},
+                    "task": {},
+                    "transcript": prefix if transcript_reads < 3 else drifted,
+                    "verifier_execution": None,
+                }
+            elif method == "POST" and url.endswith("/v1/sessions/ingest"):
+                payload = {
+                    "success": True,
+                    "session_id": session_id,
+                    "message_count": len(kwargs["json"]["messages"]),
+                    "created_new_session": False,
+                }
+            else:
+                raise AssertionError((method, url))
+            return type("Response", (), {"status_code": 200, "json": lambda self: payload})()
+
+    client = Client()
+    observed = self_hosted.observe_partial_session_resume(
+        client, config=config, source_dir=source, out_dir=tmp_path / "observe"
+    )
+    with pytest.raises(RuntimeError, match="did not reconcile authoritatively"):
+        self_hosted.resume_partial_session_trace(
+            client,
+            config=config,
+            source_dir=source,
+            out_dir=tmp_path / "resume",
+            observer_receipt=observed,
+        )
+
+
+@pytest.mark.parametrize(
+    ("status", "model", "verifier"),
+    [
+        ("completed", "qwen3.8-27b", None),
+        ("in_progress", "wrong-model", None),
+        ("in_progress", "qwen3.8-27b", {"id": "already-scored"}),
+    ],
+)
+def test_resume_partial_session_trace_rejects_non_authoritative_inventory(
+    tmp_path: Path, status: str, model: str, verifier: dict | None
+) -> None:
+    config, source, _, session_id = _partial_recovery_source_fixture(tmp_path)
+
+    class Client:
+        def request(self, method: str, url: str, **kwargs):
+            if method == "GET" and url.endswith("/v1/account"):
+                payload = {"team_name": "fleet", "team_id": self_hosted.FLEET_TEAM_ID}
+            elif method == "GET" and url.endswith("/v1/sessions"):
+                payload = {
+                    "sessions": [
+                        {
+                            "session_id": session_id,
+                            "model": model,
+                            "status": status,
+                            "verifier_execution": verifier,
+                        }
+                    ],
+                    "has_more": False,
+                }
+            else:
+                pytest.fail("invalid inventory must fail before transcript or mutation")
+            return type("Response", (), {"status_code": 200, "json": lambda self: payload})()
+
+    with pytest.raises(RuntimeError, match="inventory is not authoritative"):
+        self_hosted.observe_partial_session_resume(
+            Client(), config=config, source_dir=source, out_dir=tmp_path / "observe"
+        )
 
 
 def test_opencode_session_recovery_job_is_create_once_cpu_only_and_no_rerun() -> None:

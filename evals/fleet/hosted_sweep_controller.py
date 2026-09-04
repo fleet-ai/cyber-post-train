@@ -198,6 +198,17 @@ GLM_ATTRITION_REPLACEMENT_CAMPAIGN = (
 QWEN_COMPLETED_EXIT1_GAP_CAMPAIGN = (
     "chris-cyber-q38-opencode11827-hosted-gap-q6q7-p4-v2"
 )
+QWEN_POST_PARTIAL_TAIL_CAMPAIGNS = {
+    "qwen38_post_partial_tail_a": (
+        "chris-cyber-q38-opencode11827-hosted-tail-a22-p4-v9"
+    ),
+    "qwen38_post_partial_tail_b": (
+        "chris-cyber-q38-opencode11827-hosted-tail-b22-p4-v9"
+    ),
+}
+QWEN_POST_PARTIAL_INCIDENT_DIGEST = (
+    "sha256:bf34f05d3dff0de55b0f7aeff948b3b6c793dfa64adb298d4ae7e16d42666056"
+)
 GLM_COMPLETED_EXIT1_GAP_CAMPAIGN = (
     "chris-cyber-glm53-opencode11827-hosted-gap-g13g15-p4-v2"
 )
@@ -228,6 +239,8 @@ EXPECTED_INCLUDED_TASK_COUNTS.update(
         "qwen38_completed_exit1_gap": 2,
         "glm53_completed_exit1_gap": 2,
         "glm53_dedicated_a_completed_exit1_gap": 1,
+        "qwen38_post_partial_tail_a": 22,
+        "qwen38_post_partial_tail_b": 22,
     }
 )
 SCHEDULE = [
@@ -3453,6 +3466,143 @@ def build_plan(
     return plan
 
 
+def build_qwen_post_partial_tail_plans(
+    predecessor: dict[str, Any], incident: dict[str, Any]
+) -> dict[str, dict[str, Any]]:
+    """Split only the untouched Qwen v8 tail into two disjoint whole-task shards."""
+    validate_plan(predecessor)
+    if (
+        predecessor.get("shard_key") != "qwen38_http500_successor"
+        or predecessor.get("plan_sha256")
+        != "sha256:8d6df6af63b308d648fb0c7ea9115f90b16de1d7e57b0968dda8fc8fd4a20c81"
+        or incident.get("schema_version")
+        != "fleet-qwen38-v8-partial-ingest-terminal-v1"
+        or incident.get("receipt_sha256") != QWEN_POST_PARTIAL_INCIDENT_DIGEST
+        or incident.get("receipt_sha256") != digest_without(incident, "receipt_sha256")
+        or (incident.get("controller") or {}).get("job_uid")
+        != "84727b82-5187-425b-ba4b-9598f46691c4"
+        or (incident.get("controller") or {}).get("pod_uid")
+        != "42df9b32-60c2-45aa-8ce3-ba850b82b909"
+        or (incident.get("classification") or {}).get(
+            "same_session_suffix_resume_pending"
+        )
+        is not True
+        or (incident.get("classification") or {}).get("replacement_selection_allowed")
+        is not False
+    ):
+        raise ValueError("Qwen post-partial predecessor evidence drifted")
+    predecessor_tasks = {
+        int(row["source_rank"]): row for row in predecessor.get("tasks") or []
+    }
+    predecessor_attempts = {
+        (int(row["source_rank"]), int(row["attempt"])): row
+        for row in predecessor.get("attempts") or []
+    }
+    partitions = {
+        "qwen38_post_partial_tail_a": list(range(11, 33)),
+        "qwen38_post_partial_tail_b": [*range(33, 51), 52, 53, 54, 55],
+    }
+    plans: dict[str, dict[str, Any]] = {}
+    for shard_key, source_ranks in partitions.items():
+        campaign = QWEN_POST_PARTIAL_TAIL_CAMPAIGNS[shard_key]
+        tasks: list[dict[str, Any]] = []
+        attempts: list[dict[str, Any]] = []
+        ordinal = 0
+        for rank, source_rank in enumerate(source_ranks, 1):
+            source_task = copy.deepcopy(predecessor_tasks[source_rank])
+            source_task["rank"] = rank
+            tasks.append(source_task)
+            for attempt in range(1, 5):
+                ordinal += 1
+                old = predecessor_attempts[(source_rank, attempt)]
+                suffix = str(old["run_id"]).rsplit("-", 1)[-1]
+                attempts.append(
+                    {
+                        "ordinal": ordinal,
+                        "rank": rank,
+                        "source_rank": source_rank,
+                        "attempt": attempt,
+                        "run_id": (
+                            f"{campaign}-sr{source_rank:03d}-a{attempt}-{suffix}"
+                        ),
+                        "network": (
+                            f"q38-tail-{shard_key[-1]}-sr{source_rank:03d}"
+                            f"-a{attempt}-{suffix}"
+                        ),
+                    }
+                )
+        execution = copy.deepcopy(predecessor["execution"])
+        execution.update(
+            {
+                "inventory_policy": "plan_identity_plus_authoritative_receipt_v1",
+                "launch_authorized": False,
+                "required_priority_class": "fleet-train-high",
+                "max_hosted_streams_for_model": 2,
+                "pairwise_tail_task_and_cell_disjointness_required": True,
+                "source10_recovery_and_attempt4_gap_required": True,
+                "future_nonzero_exit_policy": (
+                    "credit_only_if_reward_ingest_cleanup_and_authoritative_session_match"
+                ),
+            }
+        )
+        plan = {
+            "schema_version": PLAN_SCHEMA,
+            "shard_key": shard_key,
+            "campaign_id": campaign,
+            "source_job_id": predecessor["source_job_id"],
+            "pass_k": 4,
+            "task_count": 22,
+            "new_session_count": 88,
+            "total_session_count": 88,
+            "source": {
+                "predecessor_plan_sha256": predecessor["plan_sha256"],
+                "predecessor_job_uid": incident["controller"]["job_uid"],
+                "predecessor_pod_uid": incident["controller"]["pod_uid"],
+                "predecessor_terminal_at": incident["controller"]["finished_at"],
+                "partial_ingest_incident_receipt_sha256": incident["receipt_sha256"],
+                "source10_attempt3_session_id": incident["attempt_evidence"][
+                    "session_id"
+                ],
+                "source10_attempt3_verifier_execution_id": incident[
+                    "attempt_evidence"
+                ]["verifier_execution_id"],
+                "source10_attempt4_unstarted": True,
+                "peer_tail_shard": (
+                    "qwen38_post_partial_tail_b"
+                    if shard_key.endswith("_a")
+                    else "qwen38_post_partial_tail_a"
+                ),
+            },
+            "authority": copy.deepcopy(predecessor["authority"]),
+            "model": copy.deepcopy(predecessor["model"]),
+            "harness": copy.deepcopy(predecessor["harness"]),
+            "execution": execution,
+            "treatment_block": copy.deepcopy(predecessor["treatment_block"]),
+            "privacy": copy.deepcopy(predecessor["privacy"]),
+            "tasks": tasks,
+            "attempts": attempts,
+            "credited_sessions": [],
+            "deferred_source_ranks": [10],
+            "held_unused_replacement_ranks": [56],
+            "primary_denominator": {"tasks": 50, "cells": 200},
+            "primary_denominator_restored_only_after_source10_recovery_and_gap": True,
+        }
+        plan["plan_sha256"] = digest_without(plan, "plan_sha256")
+        validate_plan(plan)
+        plans[shard_key] = plan
+    left = {
+        (int(row["source_rank"]), int(row["attempt"]))
+        for row in plans["qwen38_post_partial_tail_a"]["attempts"]
+    }
+    right = {
+        (int(row["source_rank"]), int(row["attempt"]))
+        for row in plans["qwen38_post_partial_tail_b"]["attempts"]
+    }
+    if left & right or len(left | right) != 176:
+        raise ValueError("Qwen post-partial tail shards overlap")
+    return plans
+
+
 def validate_plan(plan: dict[str, Any]) -> None:
     if plan.get("schema_version") != PLAN_SCHEMA:
         raise ValueError("unsupported hosted shard plan schema")
@@ -3524,6 +3674,8 @@ def validate_plan(plan: dict[str, Any]) -> None:
                 "qwen38_http500_successor",
                 "qwen38_attrition_replacement",
                 "qwen38_completed_exit1_gap",
+                "qwen38_post_partial_tail_a",
+                "qwen38_post_partial_tail_b",
             }
             else None
         )
@@ -3536,6 +3688,52 @@ def validate_plan(plan: dict[str, Any]) -> None:
         or execution.get("inventory_policy") != expected_inventory_policy
     ):
         raise ValueError("hosted shard execution policy drifted")
+    if shard_key in QWEN_POST_PARTIAL_TAIL_CAMPAIGNS:
+        is_a = shard_key.endswith("_a")
+        expected_sources = list(range(11, 33)) if is_a else [*range(33, 51), 52, 53, 54, 55]
+        source = plan.get("source") or {}
+        treatment = plan.get("treatment_block") or {}
+        if (
+            plan.get("campaign_id") != QWEN_POST_PARTIAL_TAIL_CAMPAIGNS[shard_key]
+            or [int(row["source_rank"]) for row in tasks] != expected_sources
+            or credits
+            or len(attempts) != 88
+            or source.get("predecessor_plan_sha256")
+            != "sha256:8d6df6af63b308d648fb0c7ea9115f90b16de1d7e57b0968dda8fc8fd4a20c81"
+            or source.get("predecessor_job_uid")
+            != "84727b82-5187-425b-ba4b-9598f46691c4"
+            or source.get("predecessor_pod_uid")
+            != "42df9b32-60c2-45aa-8ce3-ba850b82b909"
+            or source.get("partial_ingest_incident_receipt_sha256")
+            != QWEN_POST_PARTIAL_INCIDENT_DIGEST
+            or source.get("source10_attempt3_session_id")
+            != "579cc47e-3b00-4868-894b-8def06761b1e"
+            or source.get("peer_tail_shard")
+            != ("qwen38_post_partial_tail_b" if is_a else "qwen38_post_partial_tail_a")
+            or plan.get("deferred_source_ranks") != [10]
+            or plan.get("held_unused_replacement_ranks") != [56]
+            or treatment.get("kind") != "hosted_inference_endpoint_v1"
+            or treatment.get("model_revision") != plan["model"]["revision"]
+            or treatment.get("endpoint_origin") != plan["model"]["endpoint_origin"]
+            or treatment.get("served_id") != plan["model"]["served_id"]
+            or treatment.get("session_model") != plan["model"]["session_model"]
+            or treatment.get("harness") != plan["harness"]
+            or treatment.get("required_task_tools") != ["bash", "submit_report"]
+            or treatment.get("required_task_tool_catalog_sha256")
+            != execution["required_task_tool_catalog_sha256"]
+            or execution.get("required_priority_class") != "fleet-train-high"
+            or execution.get("launch_authorized") is not False
+            or execution.get("max_hosted_streams_for_model") != 2
+            or execution.get("future_nonzero_exit_policy")
+            != "credit_only_if_reward_ingest_cleanup_and_authoritative_session_match"
+            or plan.get("primary_denominator") != {"tasks": 50, "cells": 200}
+            or plan.get(
+                "primary_denominator_restored_only_after_source10_recovery_and_gap"
+            )
+            is not True
+        ):
+            raise ValueError("Qwen post-partial untouched tail binding drifted")
+        return
     if shard_key in {"qwen38_completed_exit1_gap", "glm53_completed_exit1_gap"}:
         is_qwen = shard_key.startswith("qwen38")
         expected_source_ranks = [6, 7] if is_qwen else [13, 15]
@@ -4848,6 +5046,11 @@ def main() -> int:
     qwen_http500.add_argument("--supplement", type=Path, required=True)
     qwen_http500.add_argument("--hydration", type=Path, required=True)
     qwen_http500.add_argument("--output", type=Path, required=True)
+    qwen_post_partial = sub.add_parser("build-qwen-post-partial-tails")
+    qwen_post_partial.add_argument("--predecessor-plan", type=Path, required=True)
+    qwen_post_partial.add_argument("--incident", type=Path, required=True)
+    qwen_post_partial.add_argument("--output-a", type=Path, required=True)
+    qwen_post_partial.add_argument("--output-b", type=Path, required=True)
     glm_http500 = sub.add_parser("build-glm-http500-successor")
     glm_http500.add_argument("--original-plan", type=Path, required=True)
     glm_http500.add_argument("--reassigned-b-plan", type=Path, required=True)
@@ -4982,6 +5185,17 @@ def main() -> int:
             load_object(args.hydration),
         )
         self_hosted.write_json_once(args.output, value)
+        return 0
+    if args.command == "build-qwen-post-partial-tails":
+        value = build_qwen_post_partial_tail_plans(
+            load_object(args.predecessor_plan), load_object(args.incident)
+        )
+        self_hosted.write_json_once(
+            args.output_a, value["qwen38_post_partial_tail_a"]
+        )
+        self_hosted.write_json_once(
+            args.output_b, value["qwen38_post_partial_tail_b"]
+        )
         return 0
     if args.command == "build-glm-http500-successor":
         value = build_glm_http500_successor_plan(

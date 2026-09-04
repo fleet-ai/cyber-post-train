@@ -33,6 +33,15 @@ MAX_READ_ATTEMPTS = 6
 SESSION_INGEST_CHUNK_MESSAGES = 32
 SESSION_INGEST_CHUNK_BYTES = 512 * 1024
 OPENCODE_CONTEXT_MANAGEMENT = "opencode_1.18.27_native_compaction_autocontinue_v1"
+OPENCODE_NO_AUTOCONTINUE_CONTEXT_MANAGEMENT = (
+    "opencode_1.18.27_native_compaction_no_autocontinue"
+)
+OPENCODE_NO_AUTOCONTINUE_PLUGIN = (
+    "export const DisableCompactionAutocontinue = async () => ({\n"
+    '  "experimental.compaction.autocontinue": async (_input, output) => '
+    "{ output.enabled = false; },\n"
+    "});\n"
+)
 
 
 class SessionIngestError(RuntimeError):
@@ -588,6 +597,23 @@ def ingest_session_trace(
     the first bounded chunk, append the remaining chunks in order, and only
     attach the score to the final chunk.  Mutating requests remain single-shot.
     """
+    chunks = _session_message_chunks(messages)
+    return _append_session_chunks(
+        client,
+        chunks=chunks,
+        start_index=0,
+        session_id=None,
+        config=config,
+        instance_id=instance_id,
+        score=score,
+        verifier_execution_id=verifier_execution_id,
+        metadata=metadata,
+        total_message_count=len(messages),
+    )
+
+
+def _session_message_chunks(messages: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
+    """Return the one canonical chunking used by initial and resumed ingestion."""
     validate_session_messages(messages)
     chunks: list[list[dict[str, Any]]] = []
     for message in messages:
@@ -603,15 +629,36 @@ def ingest_session_trace(
             chunks[-1] = candidate
         else:
             chunks.append(candidate)
-    session_id: str | None = None
+    return chunks
+
+
+def _append_session_chunks(
+    client: httpx.Client,
+    *,
+    chunks: list[list[dict[str, Any]]],
+    start_index: int,
+    session_id: str | None,
+    config: dict[str, Any],
+    instance_id: str,
+    score: float,
+    verifier_execution_id: str | None,
+    metadata: dict[str, Any],
+    total_message_count: int,
+) -> dict[str, Any]:
+    """Append a deterministic suffix once; mutating requests are never retried."""
+    if not chunks or not 0 <= start_index < len(chunks):
+        raise ValueError("session ingest start index is outside canonical chunks")
+    if (start_index == 0) != (session_id is None):
+        raise ValueError("session ingest resume identity does not match start index")
     receipt: dict[str, Any] = {
         "status": "in_progress",
-        "session_id": None,
-        "message_count": len(messages),
-        "chunks_completed": 0,
+        "session_id": session_id,
+        "message_count": total_message_count,
+        "chunks_completed": start_index,
         "chunk_count": len(chunks),
     }
-    for index, chunk in enumerate(chunks):
+    for index in range(start_index, len(chunks)):
+        chunk = chunks[index]
         payload: dict[str, Any] = {"messages": chunk}
         if session_id is None:
             payload.update(
@@ -1057,24 +1104,31 @@ def runtime_preflight(
 def opencode_settings(config: dict[str, Any]) -> dict[str, Any]:
     """Render the declared compaction treatment before any episode side effect."""
     harness = config["harness"]
-    if (
-        harness.get("name") != "opencode"
-        or harness.get("version") != "1.18.27"
-        or harness.get("context_management") != OPENCODE_CONTEXT_MANAGEMENT
-    ):
-        raise ValueError("OpenCode requires a new plan declaring the autocontinue context policy")
-    fields = ("context_window_size", "max_output_tokens", "compaction_headroom_tokens")
+    if harness.get("name") != "opencode" or harness.get("version") != "1.18.27":
+        raise ValueError("OpenCode requires the exact supported harness version")
+    policy = harness.get("context_management")
+    if policy not in {
+        OPENCODE_CONTEXT_MANAGEMENT,
+        OPENCODE_NO_AUTOCONTINUE_CONTEXT_MANAGEMENT,
+    }:
+        raise ValueError("OpenCode requires an explicitly supported context policy")
+    fields = ("context_window_size", "max_output_tokens")
     if any(type(harness.get(field)) is not int or harness[field] <= 0 for field in fields):
-        raise ValueError(
-            "OpenCode context, output and compaction headroom must be positive integers"
-        )
-    context, output, headroom = (harness[field] for field in fields)
-    if output + headroom >= context:
-        raise ValueError("OpenCode output and compaction headroom must leave room for input")
+        raise ValueError("OpenCode context and output limits must be positive integers")
+    context, output = (harness[field] for field in fields)
+    if output >= context:
+        raise ValueError("OpenCode output limit must leave room for input")
+    headroom = harness.get("compaction_headroom_tokens")
+    if policy == OPENCODE_CONTEXT_MANAGEMENT:
+        if type(headroom) is not int or headroom <= 0:
+            raise ValueError("OpenCode autocontinue headroom must be a positive integer")
+        if output + headroom >= context:
+            raise ValueError("OpenCode output and compaction headroom must leave room for input")
+    elif headroom is not None:
+        raise ValueError("OpenCode no-autocontinue treatment forbids compaction headroom")
     model_id = config["model"]["served_id"]
-    return {
+    settings = {
         "$schema": "https://opencode.ai/config.json",
-        "compaction": {"auto": True, "reserved": headroom},
         "provider": {
             "fleet-cluster": {
                 "npm": "@ai-sdk/openai-compatible",
@@ -1091,9 +1145,7 @@ def opencode_settings(config: dict[str, Any]) -> dict[str, Any]:
                         "reasoning": True,
                         "tool_call": True,
                         "interleaved": "reasoning_content",
-                        # v1.18.27 honors compaction.reserved only with limit.input.
-                        # Reserve the full output allowance plus room for new tool results.
-                        "limit": {"context": context, "input": context - output, "output": output},
+                        "limit": {"context": context, "output": output},
                     }
                 },
             }
@@ -1114,6 +1166,17 @@ def opencode_settings(config: dict[str, Any]) -> dict[str, Any]:
             )
         },
     }
+    if policy == OPENCODE_CONTEXT_MANAGEMENT:
+        settings["compaction"] = {"auto": True, "reserved": headroom}
+        # v1.18.27 honors compaction.reserved only with limit.input.
+        settings["provider"]["fleet-cluster"]["models"][model_id]["limit"][
+            "input"
+        ] = context - output
+    else:
+        settings["plugin"] = [
+            "file:///home/node/.config/opencode/fleet-disable-compaction-autocontinue.mjs"
+        ]
+    return settings
 
 
 def run(
@@ -1313,6 +1376,12 @@ def run(
         if harness_name == "opencode":
             config_dir = agent_home / ".config" / "opencode"
             config_dir.mkdir(parents=True, mode=0o700)
+            if (
+                config["harness"]["context_management"]
+                == OPENCODE_NO_AUTOCONTINUE_CONTEXT_MANAGEMENT
+            ):
+                plugin_path = config_dir / "fleet-disable-compaction-autocontinue.mjs"
+                plugin_path.write_text(OPENCODE_NO_AUTOCONTINUE_PLUGIN)
             model_id = config["model"]["served_id"]
             settings_path = config_dir / "opencode.json"
             trace = agent_dir / "opencode-stream.jsonl"
@@ -1734,6 +1803,442 @@ def _matching_recovery_sessions(
     ]
 
 
+def _partial_recovery_source(
+    config: dict[str, Any], source_dir: Path
+) -> tuple[list[list[dict[str, Any]]], dict[str, Any]]:
+    """Validate an immutable scored attempt whose session has a persisted prefix."""
+    if source_dir.is_symlink() or not source_dir.is_dir():
+        raise RuntimeError("partial recovery source must be a real directory")
+    if config.get("config_sha256") != digest_without(config, "config_sha256"):
+        raise RuntimeError("partial recovery config digest mismatch")
+    binding = _read_json_object(source_dir / "binding.json")
+    result = _read_json_object(source_dir / "result.json")
+    reward = _read_json_object(source_dir / "reward-result.json")
+    runtime = _read_json_object(source_dir / "runtime-binding.json")
+    original_ingest = _read_json_object(source_dir / "session-ingest.json")
+    cleanup = _read_json_object(source_dir / "cleanup.json")
+    scoring_intent = _read_json_object(source_dir / "scoring-intent.json")
+    trace_manifest = _read_json_object(source_dir / "trace-manifest.json")
+    for field in ("run_id", "task", "environment", "verifier", "model", "harness"):
+        if binding.get(field) != config.get(field):
+            raise RuntimeError(f"partial recovery source binding drifted at {field}")
+    if any(
+        (
+            result.get("run_id") != config["run_id"],
+            result.get("task_key") != config["task"]["key"],
+            result.get("task_version_id") != config["task"]["version_id"],
+            result.get("harness") != "opencode",
+            result.get("agent_termination") != "completed",
+            result.get("session_ingest_status") != "failed",
+        )
+    ):
+        raise RuntimeError("partial recovery result identity or state drifted")
+    instance_id = _instance_identifier(result.get("instance_id"))
+    evidence_run_id = _nonzero_uuid(
+        result.get("evidence_run_id"), "partial recovery evidence-run ID"
+    )
+    verifier_execution_id = _nonzero_uuid(
+        result.get("verifier_execution_id"), "partial recovery verifier execution ID"
+    )
+    session_id = _nonzero_uuid(result.get("session_id"), "partial recovery session ID")
+    if (
+        runtime.get("instance_id") != instance_id
+        or runtime.get("evidence_run_id") != evidence_run_id
+        or runtime.get("tool_names") != config["execution"]["required_task_tools"]
+        or runtime.get("tool_catalog_sha256")
+        != config["execution"]["required_task_tool_catalog_sha256"]
+    ):
+        raise RuntimeError("partial recovery runtime binding drifted")
+    if any(
+        (
+            reward.get("task_key") != config["task"]["key"],
+            reward.get("task_version_id") != config["task"]["version_id"],
+            reward.get("instance_id") != instance_id,
+            reward.get("verifier_execution_id") != verifier_execution_id,
+        )
+    ):
+        raise RuntimeError("partial recovery reward binding drifted")
+    score = reward.get("reward")
+    if (
+        isinstance(score, bool)
+        or not isinstance(score, (int, float))
+        or not math.isfinite(float(score))
+        or not 0.0 <= float(score) <= 1.0
+        or result.get("score") != score
+    ):
+        raise RuntimeError("partial recovery reward value drifted")
+    completed = original_ingest.get("chunks_completed")
+    count = original_ingest.get("chunk_count")
+    if (
+        original_ingest.get("status") != "failed"
+        or original_ingest.get("session_id") != session_id
+        or type(completed) is not int
+        or type(count) is not int
+        or not 0 < completed < count
+    ):
+        raise RuntimeError("partial recovery original ingest state drifted")
+    if cleanup != {
+        "instance_created": True,
+        "instance_closed": True,
+        "containers_removed": True,
+    }:
+        raise RuntimeError("partial recovery source cleanup is incomplete")
+    if scoring_intent.get("scoring_intent_sha256") != digest_without(
+        scoring_intent, "scoring_intent_sha256"
+    ) or any(
+        (
+            scoring_intent.get("run_id") != config["run_id"],
+            scoring_intent.get("task_key") != config["task"]["key"],
+            scoring_intent.get("task_version_id") != config["task"]["version_id"],
+            scoring_intent.get("instance_id") != instance_id,
+            scoring_intent.get("evidence_run_id") != evidence_run_id,
+        )
+    ):
+        raise RuntimeError("partial recovery scoring intent drifted")
+    trace_name = trace_manifest.get("canonical_trace")
+    if not isinstance(trace_name, str):
+        raise RuntimeError("partial recovery trace manifest lacks a canonical path")
+    relative_trace = Path(trace_name)
+    if relative_trace.is_absolute() or ".." in relative_trace.parts:
+        raise RuntimeError("partial recovery trace path escapes its source root")
+    trace_path = source_dir / relative_trace
+    if trace_path.is_symlink() or not trace_path.is_file():
+        raise RuntimeError("partial recovery canonical trace is not a regular file")
+    trace_digest = sha256(trace_path.read_bytes())
+    if trace_manifest.get("canonical_trace_sha256") != trace_digest:
+        raise RuntimeError("partial recovery trace digest mismatch")
+    events, malformed_line_count = load_opencode_trace(trace_path)
+    messages = normalize_opencode_conversation(events)
+    chunks = _session_message_chunks(messages)
+    if any(
+        (
+            trace_manifest.get("harness") != "opencode",
+            trace_manifest.get("event_count") != len(events),
+            trace_manifest.get("raw_line_count") != len(events) + malformed_line_count,
+            trace_manifest.get("normalized_message_count") != len(messages),
+            len(chunks) != count,
+        )
+    ):
+        raise RuntimeError("partial recovery trace or chunk shape drifted")
+    return chunks, {
+        "session_id": session_id,
+        "instance_id": instance_id,
+        "evidence_run_id": evidence_run_id,
+        "verifier_execution_id": verifier_execution_id,
+        "score": float(score),
+        "chunks_completed": completed,
+        "chunk_count": count,
+        "message_count": len(messages),
+        "persisted_prefix_message_count": sum(len(chunk) for chunk in chunks[:completed]),
+        "local_prefix_sha256": sha256(
+            canonical_json(
+                [message for chunk in chunks[:completed] for message in chunk]
+            )
+        ),
+        "trace_sha256": trace_digest,
+        "trace_fidelity": trace_manifest.get("fidelity"),
+        "tool_catalog_sha256": runtime["tool_catalog_sha256"],
+        "source_result_sha256": sha256((source_dir / "result.json").read_bytes()),
+        "source_reward_sha256": sha256((source_dir / "reward-result.json").read_bytes()),
+        "original_ingest_sha256": sha256(
+            (source_dir / "session-ingest.json").read_bytes()
+        ),
+    }
+
+
+def _inspect_partial_session_prefix(
+    client: httpx.Client,
+    *,
+    config: dict[str, Any],
+    chunks: list[list[dict[str, Any]]],
+    source: dict[str, Any],
+) -> dict[str, Any]:
+    """Compare a private server prefix in memory and return only sanitized facts."""
+    rows = _task_sessions(client, config["task"]["key"])
+    matches = [row for row in rows if row.get("session_id") == source["session_id"]]
+    row = matches[0] if len(matches) == 1 else None
+    if (
+        row is None
+        or row.get("status") != "in_progress"
+        or row.get("model") != persisted_session_model_identity(config)
+        or row.get("verifier_execution") is not None
+    ):
+        raise RuntimeError("partial recovery session inventory is not authoritative")
+    response = _request(
+        client, "GET", f"/v1/sessions/{source['session_id']}/transcript"
+    )
+    transcript = response.get("transcript")
+    expected_keys = ["harness", "instance", "task", "transcript", "verifier_execution"]
+    local_prefix = [
+        message
+        for chunk in chunks[: source["chunks_completed"]]
+        for message in chunk
+    ]
+    if sorted(response) != expected_keys or not isinstance(transcript, list):
+        raise RuntimeError("partial recovery transcript schema drifted")
+    server_bytes = canonical_json(transcript)
+    local_bytes = canonical_json(local_prefix)
+    sanitized = {
+        "session_id": source["session_id"],
+        "model": row["model"],
+        "status": row["status"],
+        "verifier_projected": False,
+        "server_prefix_message_count": len(transcript),
+        "local_prefix_message_count": len(local_prefix),
+        "prefix_bytes_equal": server_bytes == local_bytes,
+        "server_prefix_sha256": sha256(server_bytes),
+        "local_prefix_sha256": sha256(local_bytes),
+        "transcript_route": "/v1/sessions/{session_id}/transcript",
+        "transcript_response_schema_keys": expected_keys,
+    }
+    del transcript, response, local_prefix, server_bytes, local_bytes
+    if (
+        sanitized["server_prefix_message_count"]
+        != source["persisted_prefix_message_count"]
+        or sanitized["local_prefix_message_count"]
+        != source["persisted_prefix_message_count"]
+        or sanitized["prefix_bytes_equal"] is not True
+        or sanitized["server_prefix_sha256"] != source["local_prefix_sha256"]
+    ):
+        raise RuntimeError("partial recovery persisted transcript prefix drifted")
+    return sanitized
+
+
+def observe_partial_session_resume(
+    client: httpx.Client,
+    *,
+    config: dict[str, Any],
+    source_dir: Path,
+    out_dir: Path,
+) -> dict[str, Any]:
+    """Seal a content-free receipt for a private, in-memory prefix comparison."""
+    out_dir.mkdir(parents=True, exist_ok=False)
+    out_dir.chmod(0o700)
+    try:
+        account = _request(client, "GET", "/v1/account")
+        if account.get("team_name") != "fleet" or account.get("team_id") != FLEET_TEAM_ID:
+            raise RuntimeError("FLEET_API_KEY is not scoped to the Fleet team")
+        chunks, source = _partial_recovery_source(config, source_dir)
+        comparison = _inspect_partial_session_prefix(
+            client, config=config, chunks=chunks, source=source
+        )
+        receipt = {
+            "schema_version": "fleet-opencode-partial-session-prefix-observer-v1",
+            "observed": True,
+            "run_id": config["run_id"],
+            "config_sha256": config["config_sha256"],
+            "task_key": config["task"]["key"],
+            "task_version_id": config["task"]["version_id"],
+            "session_id": source["session_id"],
+            "verifier_execution_id": source["verifier_execution_id"],
+            "message_count": source["message_count"],
+            "chunk_count": source["chunk_count"],
+            "chunks_completed_before": source["chunks_completed"],
+            "source_trace_manifest_sha256": sha256(
+                (source_dir / "trace-manifest.json").read_bytes()
+            ),
+            "canonical_trace_sha256": source["trace_sha256"],
+            "source_result_sha256": source["source_result_sha256"],
+            "source_reward_sha256": source["source_reward_sha256"],
+            "original_ingest_sha256": source["original_ingest_sha256"],
+            "comparison": comparison,
+            "transcript_read_in_memory_only": True,
+            "transcript_persisted_or_emitted": False,
+            "scores_included": False,
+            "prompts_or_traces_included": False,
+        }
+        receipt["receipt_sha256"] = digest_without(receipt, "receipt_sha256")
+        write_json_once(out_dir / "OBSERVED.json", receipt)
+        return receipt
+    except BaseException as exc:
+        failure = {
+            "schema_version": "fleet-opencode-partial-session-prefix-observer-failure-v1",
+            "error_type": type(exc).__name__,
+            "scores_included": False,
+            "prompts_or_traces_included": False,
+        }
+        if isinstance(exc, FleetRequestError):
+            failure.update(http_status=exc.status_code, method=exc.method, route=exc.route)
+        failure["receipt_sha256"] = digest_without(failure, "receipt_sha256")
+        write_json_once(out_dir / "failure.json", failure)
+        raise
+
+
+def resume_partial_session_trace(
+    client: httpx.Client,
+    *,
+    config: dict[str, Any],
+    source_dir: Path,
+    out_dir: Path,
+    observer_receipt: dict[str, Any],
+) -> dict[str, Any]:
+    """Append only the missing suffix of one uniquely bound in-progress session."""
+    out_dir.mkdir(parents=True, exist_ok=False)
+    out_dir.chmod(0o700)
+    try:
+        account = _request(client, "GET", "/v1/account")
+        if account.get("team_name") != "fleet" or account.get("team_id") != FLEET_TEAM_ID:
+            raise RuntimeError("FLEET_API_KEY is not scoped to the Fleet team")
+        chunks, source = _partial_recovery_source(config, source_dir)
+        observed_comparison = observer_receipt.get("comparison") or {}
+        if (
+            observer_receipt.get("schema_version")
+            != "fleet-opencode-partial-session-prefix-observer-v1"
+            or observer_receipt.get("receipt_sha256")
+            != digest_without(observer_receipt, "receipt_sha256")
+            or observer_receipt.get("config_sha256") != config["config_sha256"]
+            or observer_receipt.get("run_id") != config["run_id"]
+            or observer_receipt.get("session_id") != source["session_id"]
+            or observer_receipt.get("verifier_execution_id")
+            != source["verifier_execution_id"]
+            or observer_receipt.get("message_count") != source["message_count"]
+            or observer_receipt.get("chunk_count") != source["chunk_count"]
+            or observer_receipt.get("chunks_completed_before")
+            != source["chunks_completed"]
+            or observer_receipt.get("source_trace_manifest_sha256")
+            != sha256((source_dir / "trace-manifest.json").read_bytes())
+            or observer_receipt.get("canonical_trace_sha256")
+            != source["trace_sha256"]
+            or observer_receipt.get("source_result_sha256")
+            != source["source_result_sha256"]
+            or observer_receipt.get("source_reward_sha256")
+            != source["source_reward_sha256"]
+            or observer_receipt.get("original_ingest_sha256")
+            != source["original_ingest_sha256"]
+            or observed_comparison.get("prefix_bytes_equal") is not True
+            or observer_receipt.get("transcript_persisted_or_emitted") is not False
+            or observer_receipt.get("scores_included") is not False
+            or observer_receipt.get("prompts_or_traces_included") is not False
+        ):
+            raise RuntimeError("partial recovery observer receipt is not authoritative")
+        comparison = _inspect_partial_session_prefix(
+            client, config=config, chunks=chunks, source=source
+        )
+        if comparison != observed_comparison:
+            raise RuntimeError("partial recovery live prefix differs from sealed observer")
+        intent = {
+            "schema_version": "fleet-opencode-partial-session-resume-intent-v1",
+            "run_id": config["run_id"],
+            "config_sha256": config["config_sha256"],
+            "session_id": source["session_id"],
+            "session_model": session_model_identity(config),
+            "persisted_session_model": persisted_session_model_identity(config),
+            "task_key": config["task"]["key"],
+            "task_version_id": config["task"]["version_id"],
+            "verifier_execution_id": source["verifier_execution_id"],
+            "message_count": source["message_count"],
+            "chunk_count": source["chunk_count"],
+            "chunks_completed_before": source["chunks_completed"],
+            "persisted_prefix_message_count": comparison[
+                "server_prefix_message_count"
+            ],
+            "transcript_route": "/v1/sessions/{session_id}/transcript",
+            "transcript_response_schema_keys": comparison[
+                "transcript_response_schema_keys"
+            ],
+            "server_prefix_sha256": comparison["server_prefix_sha256"],
+            "local_prefix_sha256": comparison["local_prefix_sha256"],
+            "observer_receipt_sha256": observer_receipt["receipt_sha256"],
+            "session_status_before": "in_progress",
+            "verifier_projected_before": False,
+            "canonical_trace_sha256": source["trace_sha256"],
+            "source_result_sha256": source["source_result_sha256"],
+            "source_reward_sha256": source["source_reward_sha256"],
+            "original_ingest_sha256": source["original_ingest_sha256"],
+            "model_or_verifier_replayed": False,
+            "scores_included": False,
+            "prompts_or_traces_included": False,
+        }
+        intent["intent_sha256"] = digest_without(intent, "intent_sha256")
+        write_json_once(out_dir / "RESUME-INTENT.json", intent)
+        try:
+            ingest = _append_session_chunks(
+                client,
+                chunks=chunks,
+                start_index=source["chunks_completed"],
+                session_id=source["session_id"],
+                config=config,
+                instance_id=source["instance_id"],
+                score=source["score"],
+                verifier_execution_id=source["verifier_execution_id"],
+                metadata={},
+                total_message_count=source["message_count"],
+            )
+        except SessionIngestError as exc:
+            write_json_once(
+                out_dir / "session-ingest.json", {**exc.receipt, "scores_included": False}
+            )
+            raise
+        write_json_once(out_dir / "session-ingest.json", ingest)
+        after_rows = _task_sessions(client, config["task"]["key"])
+        after = [row for row in after_rows if row.get("session_id") == source["session_id"]]
+        authoritative = after[0] if len(after) == 1 else None
+        verifier = (authoritative or {}).get("verifier_execution") or {}
+        final_response = _request(
+            client, "GET", f"/v1/sessions/{source['session_id']}/transcript"
+        )
+        final_transcript = final_response.get("transcript")
+        final_expected = [message for chunk in chunks for message in chunk]
+        final_server_bytes = (
+            canonical_json(final_transcript) if isinstance(final_transcript, list) else b""
+        )
+        final_local_bytes = canonical_json(final_expected)
+        if (
+            authoritative is None
+            or authoritative.get("status") != "completed"
+            or authoritative.get("model") != persisted_session_model_identity(config)
+            or verifier.get("id") != source["verifier_execution_id"]
+            or sorted(final_response)
+            != ["harness", "instance", "task", "transcript", "verifier_execution"]
+            or not isinstance(final_transcript, list)
+            or len(final_transcript) != source["message_count"]
+            or final_server_bytes != final_local_bytes
+        ):
+            raise RuntimeError("resumed session did not reconcile authoritatively")
+        final_count = len(final_transcript)
+        final_server_sha256 = sha256(final_server_bytes)
+        final_local_sha256 = sha256(final_local_bytes)
+        del final_transcript, final_response, final_expected
+        del final_server_bytes, final_local_bytes
+        recovered = {
+            "schema_version": "fleet-opencode-partial-session-resumed-v1",
+            "resumed": True,
+            "run_id": config["run_id"],
+            "session_id": source["session_id"],
+            "verifier_execution_id": source["verifier_execution_id"],
+            "message_count": final_count,
+            "chunk_count": source["chunk_count"],
+            "chunks_completed_before": source["chunks_completed"],
+            "chunks_appended": source["chunk_count"] - source["chunks_completed"],
+            "intent_sha256": intent["intent_sha256"],
+            "authoritative_status": "completed",
+            "full_transcript_bytes_equal": True,
+            "server_full_transcript_sha256": final_server_sha256,
+            "local_full_transcript_sha256": final_local_sha256,
+            "same_session_id_preserved": True,
+            "model_or_verifier_replayed": False,
+            "scores_included": False,
+            "prompts_or_traces_included": False,
+        }
+        recovered["receipt_sha256"] = digest_without(recovered, "receipt_sha256")
+        write_json_once(out_dir / "RESUMED.json", recovered)
+        return recovered
+    except BaseException as exc:
+        failure_path = out_dir / "failure.json"
+        if not failure_path.exists():
+            failure: dict[str, Any] = {
+                "schema_version": "fleet-opencode-partial-session-resume-failure-v1",
+                "error_type": type(exc).__name__,
+                "scores_included": False,
+                "prompts_or_traces_included": False,
+            }
+            if isinstance(exc, FleetRequestError):
+                failure.update(http_status=exc.status_code, method=exc.method, route=exc.route)
+            failure["receipt_sha256"] = digest_without(failure, "receipt_sha256")
+            write_json_once(failure_path, failure)
+        raise
+
+
 def recover_session_trace(
     client: httpx.Client,
     *,
@@ -1850,12 +2355,21 @@ def recover_session_trace(
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "command", choices=("preflight", "runtime-preflight", "run", "recover-session")
+        "command",
+        choices=(
+            "preflight",
+            "runtime-preflight",
+            "run",
+            "recover-session",
+            "observe-partial-session",
+            "resume-partial-session",
+        ),
     )
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--out-dir", type=Path)
     parser.add_argument("--proxy-script", type=Path)
     parser.add_argument("--source-dir", type=Path)
+    parser.add_argument("--observer-receipt", type=Path)
     args = parser.parse_args()
     config = json.loads(args.config.read_text())
     key = os.environ.get("FLEET_API_KEY")
@@ -1916,6 +2430,62 @@ def main() -> int:
                     "session_id": recovered["session_id"],
                     "message_count": recovered["message_count"],
                     "scores_included": False,
+                },
+                sort_keys=True,
+            )
+        )
+        return 0
+    if args.command in {"observe-partial-session", "resume-partial-session"}:
+        if not args.source_dir or not args.out_dir:
+            parser.error(f"{args.command} requires --source-dir and --out-dir")
+        with httpx.Client(
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+            timeout=1800,
+        ) as client:
+            if args.command == "observe-partial-session":
+                observed = observe_partial_session_resume(
+                    client, config=config, source_dir=args.source_dir, out_dir=args.out_dir
+                )
+                print(
+                    json.dumps(
+                        {
+                            "observed": observed["observed"],
+                            "run_id": observed["run_id"],
+                            "session_id": observed["session_id"],
+                            "persisted_prefix_message_count": observed["comparison"][
+                                "server_prefix_message_count"
+                            ],
+                            "prefix_bytes_equal": observed["comparison"][
+                                "prefix_bytes_equal"
+                            ],
+                            "receipt_sha256": observed["receipt_sha256"],
+                            "scores_included": False,
+                            "prompts_or_traces_included": False,
+                        },
+                        sort_keys=True,
+                    )
+                )
+                return 0
+            if not args.observer_receipt:
+                parser.error("resume-partial-session requires --observer-receipt")
+            observer = _read_json_object(args.observer_receipt)
+            resumed = resume_partial_session_trace(
+                client,
+                config=config,
+                source_dir=args.source_dir,
+                out_dir=args.out_dir,
+                observer_receipt=observer,
+            )
+        print(
+            json.dumps(
+                {
+                    "resumed": resumed["resumed"],
+                    "run_id": resumed["run_id"],
+                    "session_id": resumed["session_id"],
+                    "message_count": resumed["message_count"],
+                    "receipt_sha256": resumed["receipt_sha256"],
+                    "scores_included": False,
+                    "prompts_or_traces_included": False,
                 },
                 sort_keys=True,
             )

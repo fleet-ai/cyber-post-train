@@ -132,6 +132,16 @@ TASK_BOUNDARY_CONCURRENCY_CUTOVER_PROPOSAL = Path(
     "docs/evidence/qwen38-study/"
     "2026-09-04-task-boundary-concurrency-cutover-proposal-v1.json"
 )
+QWEN_POST_PARTIAL_INCIDENT = Path(
+    "docs/evidence/qwen38-study/"
+    "2026-09-04-qwen38-v8-source10-partial-ingest-terminal-v1.json"
+)
+QWEN_POST_PARTIAL_TAIL_A = Path(
+    "evals/fleet/configs/qwen38-opencode-hosted-post-partial-tail-a22-pass4-v9.json"
+)
+QWEN_POST_PARTIAL_TAIL_B = Path(
+    "evals/fleet/configs/qwen38-opencode-hosted-post-partial-tail-b22-pass4-v9.json"
+)
 QWEN_ATTRITION_REPLACEMENT_PLAN = Path(
     "evals/fleet/configs/qwen38-opencode-hosted-attrition-r56-pass4-v1.json"
 )
@@ -2584,3 +2594,54 @@ def test_task_boundary_concurrency_cutover_is_no_launch_and_fail_closed() -> Non
         )
         with pytest.raises(ValueError, match="cutover proposal drifted"):
             hosted.validate_task_boundary_concurrency_cutover_proposal(tampered)
+
+
+def test_qwen_post_partial_incident_and_tail_shards_are_exact_and_disjoint() -> None:
+    predecessor = hosted.load_object(QWEN_HTTP500_SUCCESSOR_PLAN)
+    incident = hosted.load_object(QWEN_POST_PARTIAL_INCIDENT)
+    assert incident["receipt_sha256"] == self_hosted.digest_without(
+        incident, "receipt_sha256"
+    )
+    assert incident["classification"] == {
+        "state": "infrastructure_incomplete_partial_session_ingest",
+        "model_or_verifier_replay_allowed": False,
+        "same_session_suffix_resume_pending": True,
+        "replacement_selection_allowed": False,
+        "source10_attempt4_unstarted": True,
+        "source10_primary_task_complete": False,
+    }
+    built = hosted.build_qwen_post_partial_tail_plans(predecessor, incident)
+    stored = {
+        "qwen38_post_partial_tail_a": hosted.load_object(QWEN_POST_PARTIAL_TAIL_A),
+        "qwen38_post_partial_tail_b": hosted.load_object(QWEN_POST_PARTIAL_TAIL_B),
+    }
+    assert built == stored
+    expected = {
+        "qwen38_post_partial_tail_a": set(range(11, 33)),
+        "qwen38_post_partial_tail_b": {*range(33, 51), 52, 53, 54, 55},
+    }
+    all_cells: set[tuple[int, int]] = set()
+    old_run_ids = {row["run_id"] for row in predecessor["attempts"]}
+    for shard, plan in stored.items():
+        hosted.validate_plan(plan)
+        assert {row["source_rank"] for row in plan["tasks"]} == expected[shard]
+        assert plan["treatment_block"] == predecessor["treatment_block"]
+        assert plan["execution"]["required_priority_class"] == "fleet-train-high"
+        assert plan["execution"]["launch_authorized"] is False
+        assert plan["deferred_source_ranks"] == [10]
+        assert plan["held_unused_replacement_ranks"] == [56]
+        cells = {(row["source_rank"], row["attempt"]) for row in plan["attempts"]}
+        assert len(cells) == 88
+        assert not all_cells & cells
+        all_cells |= cells
+        assert not old_run_ids & {row["run_id"] for row in plan["attempts"]}
+    assert len(all_cells) == 176
+
+
+def test_qwen_post_partial_tail_builder_rejects_unsealed_incident() -> None:
+    predecessor = hosted.load_object(QWEN_HTTP500_SUCCESSOR_PLAN)
+    incident = hosted.load_object(QWEN_POST_PARTIAL_INCIDENT)
+    incident["classification"]["replacement_selection_allowed"] = True
+    incident["receipt_sha256"] = self_hosted.digest_without(incident, "receipt_sha256")
+    with pytest.raises(ValueError, match="predecessor evidence drifted"):
+        hosted.build_qwen_post_partial_tail_plans(predecessor, incident)
