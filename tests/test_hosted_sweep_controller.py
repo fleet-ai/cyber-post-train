@@ -92,6 +92,9 @@ GLM_HTTP500_SUCCESSOR_PLAN = Path(
 GLM_HTTP500_HOSTED_PRIMARY_PLAN = Path(
     "evals/fleet/configs/glm53-opencode-hosted-http500-primary46-pass4-v12.json"
 )
+GLM_HTTP500_SCORING_RELEASE = Path(
+    "docs/evidence/qwen38-study/2026-09-04-glm53-http500-hosted-primary-scoring-release-v1.json"
+)
 FROZEN_SPLIT = Path("configs/data/fleet-a62-task-split-v1.json")
 FROZEN_SELECTION = Path(
     "evals/fleet/configs/opencode-easiest-train100-selection-v2.json"
@@ -1293,6 +1296,21 @@ def test_glm_http500_primary_splits_out_the_dedicated_b_partition() -> None:
     assert plan["dedicated_b_task_count"] == 27
     assert plan["primary_estimator_task_count"] == 100
     assert plan["execution"]["launch_authorized"] is False
+
+
+def test_glm_http500_primary_requires_exact_scoring_release() -> None:
+    plan = hosted.load_object(GLM_HTTP500_HOSTED_PRIMARY_PLAN)
+    release = hosted.load_object(GLM_HTTP500_SCORING_RELEASE)
+    hosted.validate_glm_http500_scoring_release(plan, release)
+    with pytest.raises(ValueError, match="release is required"):
+        hosted.validate_glm_http500_scoring_release(plan, None)
+    tampered = json.loads(json.dumps(release))
+    tampered["authorization"]["must_not_repeat"] = False
+    tampered["receipt_sha256"] = self_hosted.digest_without(
+        tampered, "receipt_sha256"
+    )
+    with pytest.raises(ValueError, match="does not bind"):
+        hosted.validate_glm_http500_scoring_release(plan, tampered)
 
 
 def test_qwen_http500_supplement_selects_unused_r54_r55_and_restores_200_cells() -> None:

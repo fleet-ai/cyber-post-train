@@ -27,6 +27,9 @@ HOSTED_REPLACEMENT_SCORING_RELEASE_SCHEMA = (
 QWEN_HTTP500_SCORING_RELEASE_SCHEMA = (
     "fleet-qwen38-http500-successor-scoring-release-v1"
 )
+GLM_HTTP500_SCORING_RELEASE_SCHEMA = (
+    "fleet-glm53-http500-hosted-primary-scoring-release-v1"
+)
 QWEN_HTTP500_AUTH_STATEMENT = (
     "I authorize the create-once scored launch of Qwen successor plan "
     "sha256:8d6df6af63b308d648fb0c7ea9115f90b16de1d7e57b0968dda8fc8fd4a20c81 "
@@ -34,6 +37,14 @@ QWEN_HTTP500_AUTH_STATEMENT = (
     "overlap gates pass. It contains exactly the remaining 49 complete primary "
     "tasks/196 cells, uses fleet-train-high, retains prior completed source4 for "
     "50/200, and must not repeat any fenced or accepted cell."
+)
+GLM_HTTP500_AUTH_STATEMENT = (
+    "I authorize the create-once scored launch of hosted GLM plan "
+    "sha256:8b0deafa9f51b75a0715be56b417454e96665b5342d4c346d5cda32dc24c8279 "
+    "after append-only scoring-recovery, hydration, exact-treatment, duplicate, and "
+    "overlap gates pass. It contains exactly 46 complete primary tasks/184 cells, "
+    "uses fleet-train-high, is disjoint from dedicated A and B, and must not repeat "
+    "any fenced or accepted cell."
 )
 CAMPAIGNS = {
     "qwen38": "chris-cyber-q38-opencode11827-hosted-complete49-p4-v5",
@@ -398,6 +409,62 @@ def validate_qwen_http500_scoring_release(
         or any(value is not False for value in privacy.values())
     ):
         raise ValueError("Qwen HTTP500 scoring release does not bind this plan")
+
+
+def validate_glm_http500_scoring_release(
+    plan: dict[str, Any], release: dict[str, Any] | None
+) -> None:
+    """Fail closed until the exact recovery-bound hosted GLM release is supplied."""
+    if plan.get("shard_key") != "glm53_http500_hosted_primary":
+        return
+    if not isinstance(release, dict):
+        raise ValueError("GLM HTTP500 hosted scoring release is required")
+    source = plan.get("source") or {}
+    plan_evidence = release.get("plan") or {}
+    gates = release.get("gates") or {}
+    scheduling = release.get("scheduling") or {}
+    authorization = release.get("authorization") or {}
+    privacy = release.get("privacy") or {}
+    if (
+        release.get("schema_version") != GLM_HTTP500_SCORING_RELEASE_SCHEMA
+        or release.get("receipt_sha256") != digest_without(release, "receipt_sha256")
+        or plan_evidence.get("plan_sha256") != plan["plan_sha256"]
+        or plan_evidence.get("hosted_task_count") != 46
+        or plan_evidence.get("hosted_cell_count") != 184
+        or plan_evidence.get("dedicated_a_task_count") != 27
+        or plan_evidence.get("dedicated_b_task_count") != 27
+        or plan_evidence.get("primary_task_count") != 100
+        or plan_evidence.get("primary_cell_count") != 400
+        or gates.get("incident_receipt_sha256")
+        != source.get("incident_receipt_sha256")
+        or gates.get("selection_supplement_receipt_sha256")
+        != source.get("selection_supplement_receipt_sha256")
+        or gates.get("hydration_receipt_sha256")
+        != source.get("hydration_receipt_sha256")
+        or gates.get("hydration_execution_receipt_sha256")
+        != "sha256:00660b55b4aa3c5b02f796b29e424acb45caaf4e6da432b203d237b01710f1ec"
+        or gates.get("scoring_recovery_receipt_sha256")
+        != "sha256:708d635968e073d27153d3d9f13ae5fa7b4784349cc9e8e3928f0fbafeade132"
+        or not all(
+            gates.get(field) is True
+            for field in (
+                "exact_treatment_gate_required",
+                "duplicate_gate_required",
+                "overlap_gate_required",
+                "fresh_create_once_identity_required",
+            )
+        )
+        or scheduling.get("required_priority_class") != "fleet-train-high"
+        or scheduling.get("true_non_preemptible_available") is not False
+        or scheduling.get("priority_class_is_not_preemption_immunity") is not True
+        or authorization.get("timestamp_utc") != "2026-09-04T05:53:30Z"
+        or authorization.get("author") != "/root"
+        or authorization.get("statement") != GLM_HTTP500_AUTH_STATEMENT
+        or authorization.get("scored_launch_authorized") is not True
+        or authorization.get("must_not_repeat") is not True
+        or any(value is not False for value in privacy.values())
+    ):
+        raise ValueError("GLM HTTP500 scoring release does not bind this plan")
 
 
 def build_remainder_plan(
@@ -2475,6 +2542,7 @@ def preflight_plan(
     validate_dedicated_scoring_release(plan, release)
     validate_hosted_replacement_scoring_release(plan, release)
     validate_qwen_http500_scoring_release(plan, release)
+    validate_glm_http500_scoring_release(plan, release)
     roots_reconciled = _validate_plan_identity_absence(plan, root)
     with _client(key) as client:
         account = self_hosted._request(client, "GET", "/v1/account")
@@ -2532,6 +2600,7 @@ def run_plan(
     validate_dedicated_scoring_release(plan, release)
     validate_hosted_replacement_scoring_release(plan, release)
     validate_qwen_http500_scoring_release(plan, release)
+    validate_glm_http500_scoring_release(plan, release)
     key = os.environ.get("FLEET_API_KEY")
     if not key:
         raise RuntimeError("FLEET_API_KEY is required")
