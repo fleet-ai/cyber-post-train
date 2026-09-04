@@ -1,7 +1,7 @@
 {
   "schema_version": "fleet-opencode-autocontinue-primary-release-preview-v1",
   "status": "HELD",
-  "campaign_sha256": "sha256:0c05bbef61b074a4fb1bc0e68aaece379f532b53b4470ded7e972ef38bdbc267",
+  "campaign_sha256": "sha256:1f4b63897fa8f954b2ea9ccb2532d65329737d959e74ef68fd8238d2532ee971",
   "task_identity_sha256": "sha256:c4eca5c58aa7e43eaf85ffb94179a57dbaa320a54a5e530c71795a1467e50fc7",
   "canary_launch_authorized": false,
   "bulk_launch_authorized": false,
@@ -19,5 +19,5 @@
     "prompts_or_traces_included": false,
     "credentials_included": false
   },
-  "receipt_sha256": "sha256:4e0adc2190acccbf4ee51f302fc06477a825ba638a10c2289b06a672acdd65bf"
+  "receipt_sha256": "sha256:9560adb5059ccf5c2b80adb4f6040ba1d768d5dfd3ba6651a775b24fc80d9ce3"
 }

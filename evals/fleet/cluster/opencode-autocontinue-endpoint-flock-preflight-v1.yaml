@@ -4,7 +4,7 @@ metadata:
   name: chris-opencode11827-ac-flock-holder-v1
   namespace: fleet-train-jobs
   annotations:
-    cyber-post-train.fleet.ai/launch-authorized: "false"
+    cyber-post-train.fleet.ai/scored-launch-authorized: "false"
 spec:
   activeDeadlineSeconds: 900
   backoffLimit: 0
@@ -46,7 +46,7 @@ metadata:
   name: chris-opencode11827-ac-flock-prober-v1
   namespace: fleet-train-jobs
   annotations:
-    cyber-post-train.fleet.ai/launch-authorized: "false"
+    cyber-post-train.fleet.ai/scored-launch-authorized: "false"
 spec:
   activeDeadlineSeconds: 900
   backoffLimit: 0

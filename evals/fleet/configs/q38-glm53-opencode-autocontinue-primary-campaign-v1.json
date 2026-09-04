@@ -253,7 +253,7 @@
       "glm-dedicated-b-v5-autocontinue-v1": 2
     },
     "flock_preflight_manifest_path": "evals/fleet/cluster/opencode-autocontinue-endpoint-flock-preflight-v1.yaml",
-    "flock_preflight_manifest_sha256": "sha256:f6630dfa58d116b468c1933979a6a5a3f4575ef13cb31f1ce70b08bd2fdf0dce",
+    "flock_preflight_manifest_sha256": "sha256:d9fa9ed9b1c144977d4132e1a4b2929a1037400b7aec3fab62e047c0d825a7ce",
     "flock_preflight_module_sha256": "sha256:dc012e6cdaf34f8297d48d43a483c1af2b2099f637403fc93d9ea45946d18088",
     "shared_pvc_cross_pod_flock_preflight_passed": false,
     "shared_pvc_cross_pod_flock_preflight_receipt_sha256": null
@@ -294,5 +294,5 @@
     "prompts_or_traces_included": false,
     "credentials_included": false
   },
-  "campaign_sha256": "sha256:0c05bbef61b074a4fb1bc0e68aaece379f532b53b4470ded7e972ef38bdbc267"
+  "campaign_sha256": "sha256:1f4b63897fa8f954b2ea9ccb2532d65329737d959e74ef68fd8238d2532ee971"
 }

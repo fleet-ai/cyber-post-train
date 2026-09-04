@@ -44,7 +44,7 @@ def test_flock_preflight_is_two_pod_high_priority_and_held() -> None:
     ]
     for job in jobs:
         assert job["metadata"]["annotations"] == {
-            "cyber-post-train.fleet.ai/launch-authorized": "false"
+            "cyber-post-train.fleet.ai/scored-launch-authorized": "false"
         }
         assert job["spec"]["backoffLimit"] == 0
         spec = job["spec"]["template"]["spec"]

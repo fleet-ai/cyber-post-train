@@ -83,7 +83,7 @@ EXPECTED_CONTROLLER_RUNTIME = {
         "evals/fleet/cluster/opencode-autocontinue-endpoint-flock-preflight-v1.yaml"
     ),
     "flock_preflight_manifest_sha256": (
-        "sha256:f6630dfa58d116b468c1933979a6a5a3f4575ef13cb31f1ce70b08bd2fdf0dce"
+        "sha256:d9fa9ed9b1c144977d4132e1a4b2929a1037400b7aec3fab62e047c0d825a7ce"
     ),
     "flock_preflight_module_sha256": (
         "sha256:dc012e6cdaf34f8297d48d43a483c1af2b2099f637403fc93d9ea45946d18088"
