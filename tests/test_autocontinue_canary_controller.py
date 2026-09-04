@@ -42,6 +42,14 @@ G_PREAUTH_V2 = (
     ROOT / "docs/evidence/qwen38-study/"
     "2026-09-04-glm53-autocontinue-canary-preflight-authorization-v2.json"
 )
+Q_PREAUTH_V3 = (
+    ROOT / "docs/evidence/qwen38-study/"
+    "2026-09-04-qwen38-autocontinue-canary-preflight-authorization-v3.json"
+)
+G_PREAUTH_V3 = (
+    ROOT / "docs/evidence/qwen38-study/"
+    "2026-09-04-glm53-autocontinue-canary-preflight-authorization-v3.json"
+)
 PRE_MANIFEST = ROOT / "evals/fleet/cluster/opencode-autocontinue-canary-preflights-v1.yaml"
 PRE_MANIFEST_V2 = ROOT / "evals/fleet/cluster/opencode-autocontinue-canary-preflights-v2.yaml"
 SCORED_MANIFEST = ROOT / "evals/fleet/cluster/opencode-autocontinue-canary-scored-v2.yaml"
@@ -66,6 +74,7 @@ G_HELD_V2 = (
 BASE_PACKAGE_COMMIT = "25fe5bfe45cd91bc9e877af2982bbacd4e94c2d2"
 PREFLIGHT_PACKAGE_COMMIT = "fdad6c80bcbfa999cd98e6f3194040bd1d85d679"
 PREFLIGHT_V2_PACKAGE_COMMIT = "9c93095f60d627c239fe2d01f35efd918f328fe6"
+PREFLIGHT_V3_PACKAGE_COMMIT = "f2c32e4571fddfa43770249f323e1843fc205f95"
 
 
 def _cell_claim_worker(plan_path: str, claim_root: str, queue) -> None:
@@ -701,6 +710,75 @@ def test_v2_submitter_pins_phase_a3_and_is_create_once_preflight_only() -> None:
         'test ! -e "/mnt/sfs/',
     ):
         assert forbidden not in text
+
+
+@pytest.mark.parametrize(
+    ("plan_path", "authorization_path"),
+    [(Q_PLAN_V2, Q_PREAUTH_V3), (G_PLAN_V2, G_PREAUTH_V3)],
+)
+def test_v3_preflight_authorization_binds_phase_a_successor_package(
+    plan_path: Path, authorization_path: Path
+) -> None:
+    plan = canary.load_object(plan_path)
+    authorization = canary.load_object(authorization_path)
+    assert authorization["receipt_sha256"] == canary.digest_without(
+        authorization, "receipt_sha256"
+    )
+    canary.validate_preflight_authorization(
+        authorization,
+        plan,
+        ROOT,
+        PREFLIGHT_V3_PACKAGE_COMMIT,
+        canary.EXPECTED[plan["shard_key"]]["plan_file_sha256"],
+        "2026-09-04T22:26:36Z",
+        authorization["authorization"]["statement"],
+    )
+    assert authorization["authorization"]["launch_authorized"] is False
+    assert authorization["preflight_identity"]["scored_job_created"] is False
+
+
+def test_v3_submitter_is_create_once_and_packages_only_preflight_dependencies() -> None:
+    path = (
+        ROOT / "evals/fleet/scripts/submit_opencode_autocontinue_canary_preflights_v3.sh"
+    )
+    text = path.read_text()
+    required = (
+        f"PACKAGE_COMMIT={PREFLIGHT_V3_PACKAGE_COMMIT}",
+        "Q_AUTH_RAW=1059c755a352b5f2320b540094ba7f4e5cc575b7b6ff5af4ca68a601b0f4f80c",
+        "G_AUTH_RAW=de0d7aec69f8471c5e3b35797de5f7dda723a70b90c97407c8aeb9c21c31f69e",
+        "Q_AUTH_SELF=sha256:2ccba714a6885ff8de4cd13f7a7857df2ccdf75bd8a258be04969e502d1ccf10",
+        "G_AUTH_SELF=sha256:f5766496049bfe8e649e95b2ef450263b461c03b803a7b39b0da8bca63b3ea5c",
+        '--from-file=campaign.json="$CAMPAIGN"',
+        '--from-file=compatibility.json="$COMPATIBILITY"',
+        '--from-file=scored-v1-incident.json="$INCIDENT"',
+        'git show "$PACKAGE_COMMIT:$relative" | cmp - "$file"',
+        "CREATE_ONCE_INTENT",
+        "manual_reconciliation_required",
+        '"scored_objects_created":0',
+    )
+    for value in required:
+        assert value in text
+    validation = text.index("validate_preflight_authorization(")
+    intent = text.index("stage=create-intent")
+    assert validation < intent
+    assert intent < text.index("stage=create-qwen-configmap")
+    assert text.index("stage=create-qwen-configmap") < text.index(
+        "stage=create-glm-configmap"
+    )
+    assert text.index("stage=create-glm-configmap") < text.index(
+        "stage=create-preflight-jobs"
+    )
+    for forbidden in (
+        "--from-file=scored-manifest.yaml",
+        "--from-file=manifest_authorization.py",
+        "--from-file=submit.sh",
+        "--from-file=run.sh",
+        "--from-file=Dockerfile.opencode",
+        "kubectl apply",
+        'test ! -e "/mnt/sfs/',
+    ):
+        assert forbidden not in text
+    assert path.stat().st_mode & 0o111
 
 
 def test_preflight_stage_has_no_scored_execution_payload() -> None:
