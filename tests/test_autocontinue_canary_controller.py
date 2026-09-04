@@ -28,11 +28,20 @@ G_PREAUTH = (
     ROOT / "docs/evidence/qwen38-study/"
     "2026-09-04-glm53-autocontinue-canary-preflight-authorization-v1.json"
 )
+Q_PREAUTH_V2 = (
+    ROOT / "docs/evidence/qwen38-study/"
+    "2026-09-04-qwen38-autocontinue-canary-preflight-authorization-v2.json"
+)
+G_PREAUTH_V2 = (
+    ROOT / "docs/evidence/qwen38-study/"
+    "2026-09-04-glm53-autocontinue-canary-preflight-authorization-v2.json"
+)
 PRE_MANIFEST = ROOT / "evals/fleet/cluster/opencode-autocontinue-canary-preflights-v1.yaml"
 PRE_MANIFEST_V2 = ROOT / "evals/fleet/cluster/opencode-autocontinue-canary-preflights-v2.yaml"
 SCORED_MANIFEST = ROOT / "evals/fleet/cluster/opencode-autocontinue-canary-scored-v2.yaml"
 BASE_PACKAGE_COMMIT = "25fe5bfe45cd91bc9e877af2982bbacd4e94c2d2"
 PREFLIGHT_PACKAGE_COMMIT = "fdad6c80bcbfa999cd98e6f3194040bd1d85d679"
+PREFLIGHT_V2_PACKAGE_COMMIT = "9c93095f60d627c239fe2d01f35efd918f328fe6"
 
 
 def _cell_claim_worker(plan_path: str, claim_root: str, queue) -> None:
@@ -507,6 +516,75 @@ def test_phase_b_submitter_pins_intent_and_packages_preflight_only() -> None:
         "--from-file=run.sh",
         "--from-file=Dockerfile.opencode",
         "--from-file=fixed_proxy.py",
+        'test ! -e "/mnt/sfs/',
+    ):
+        assert forbidden not in text
+
+
+@pytest.mark.parametrize(
+    ("plan_path", "authorization_path"),
+    [(Q_PLAN, Q_PREAUTH_V2), (G_PLAN, G_PREAUTH_V2)],
+)
+def test_v2_preflight_authorization_is_exact_and_read_only(
+    plan_path: Path, authorization_path: Path
+) -> None:
+    plan = canary.load_object(plan_path)
+    authorization = canary.load_object(authorization_path)
+    assert authorization["receipt_sha256"] == canary.digest_without(
+        authorization, "receipt_sha256"
+    )
+    canary.validate_preflight_authorization(
+        authorization,
+        plan,
+        ROOT,
+        PREFLIGHT_V2_PACKAGE_COMMIT,
+        canary.EXPECTED[plan["shard_key"]]["plan_file_sha256"],
+        "2026-09-04T21:31:11Z",
+        authorization["authorization"]["statement"],
+    )
+    assert authorization["authorization"]["launch_authorized"] is False
+    assert authorization["preflight_identity"]["scored_job_created"] is False
+
+
+def test_v2_submitter_pins_phase_a3_and_is_create_once_preflight_only() -> None:
+    text = (
+        ROOT / "evals/fleet/scripts/submit_opencode_autocontinue_canary_preflights_v2.sh"
+    ).read_text()
+    required = (
+        f"PACKAGE_COMMIT={PREFLIGHT_V2_PACKAGE_COMMIT}",
+        "Q_AUTH_RAW=ad4171eec459d4925f5f12b97a3040ac3fa30e65b434bf2592a8ee43c9070249",
+        "G_AUTH_RAW=7e037f0d8436ad04e66056718d7dc94d1bb5f00f57b477aebedec3c193ae06cf",
+        "Q_AUTH_SELF=sha256:d1b764cd8f96bbe5d36a62956ea32931066740c8c77b8ac60c5474c7209f3720",
+        "G_AUTH_SELF=sha256:a7cef96859a38ace334d5edbef22ffa1d87ed74d5c1d216857945035bf07f530",
+        'git show "$PACKAGE_COMMIT:$relative" | cmp - "$file"',
+        'authorization.get("receipt_sha256") != sys.argv[8]',
+        '--from-literal=plan_file_sha256="sha256:$plan_raw"',
+        '--from-literal=authorized_at_utc="$AUTHORIZED_AT_UTC"',
+        '--from-literal=authorization_statement="$statement"',
+        '--from-file=v1-incident.json="$INCIDENT"',
+        "CREATE_ONCE_INTENT",
+        "manual_reconciliation_required",
+        '"scored_objects_created":0',
+    )
+    for value in required:
+        assert value in text
+    validation = text.index("validate_preflight_authorization(")
+    intent = text.index("stage=create-intent")
+    assert validation < intent
+    assert text.index('test "$(sha256sum "$Q_AUTH"') < intent
+    assert text.index('test "$(sha256sum "$G_AUTH"') < intent
+    assert intent < text.index("stage=create-qwen-configmap")
+    assert text.index("stage=create-qwen-configmap") < text.index(
+        "stage=create-glm-configmap"
+    )
+    assert text.index("stage=create-glm-configmap") < text.index(
+        "stage=create-preflight-jobs"
+    )
+    for forbidden in (
+        "--from-file=scored-manifest.yaml",
+        "--from-file=proxy.py",
+        "--from-file=Dockerfile",
+        "kubectl apply",
         'test ! -e "/mnt/sfs/',
     ):
         assert forbidden not in text
