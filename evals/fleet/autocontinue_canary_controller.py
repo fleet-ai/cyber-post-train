@@ -8,6 +8,7 @@ primitives and adds canary-specific plan, release, and terminal accounting.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import fcntl
 import json
 import os
@@ -219,15 +220,42 @@ def _compatibility(root: Path) -> dict[str, Any]:
     return receipt
 
 
+def _open_directory_nofollow(path: Path) -> int:
+    """Create/open every directory component without following a symlink."""
+    if any(part == ".." for part in path.parts):
+        raise RuntimeError("global canary cell-claim root is unsafe")
+    directory_flags = os.O_RDONLY | os.O_DIRECTORY
+    if hasattr(os, "O_NOFOLLOW"):
+        directory_flags |= os.O_NOFOLLOW
+    current_fd = os.open("/" if path.is_absolute() else ".", directory_flags)
+    parts = path.parts[1:] if path.is_absolute() else path.parts
+    try:
+        for part in parts:
+            if part in {"", "."}:
+                continue
+            with contextlib.suppress(FileExistsError):
+                os.mkdir(part, mode=0o700, dir_fd=current_fd)
+            try:
+                next_fd = os.open(part, directory_flags, dir_fd=current_fd)
+            except OSError as exc:
+                raise RuntimeError("global canary cell-claim root is unsafe") from exc
+            if not stat.S_ISDIR(os.fstat(next_fd).st_mode):
+                os.close(next_fd)
+                raise RuntimeError("global canary cell-claim root is unsafe")
+            os.close(current_fd)
+            current_fd = next_fd
+        return current_fd
+    except Exception:
+        os.close(current_fd)
+        raise
+
+
 def claim_global_cell(plan: dict[str, Any], claim_root: Path | None = None) -> dict[str, Any]:
     """Permanently claim one corrected-treatment cell before any paid side effect."""
     validate_plan(plan)
     if not _is_uuid(os.environ.get("JOB_UID")) or not _is_uuid(os.environ.get("POD_UID")):
         raise RuntimeError("global canary cell claim requires downward API UIDs")
     root = claim_root or Path(CELL_CLAIM_ROOT)
-    if root.exists() and (root.is_symlink() or not root.is_dir()):
-        raise RuntimeError("global canary cell-claim root is unsafe")
-    root.mkdir(mode=0o700, parents=True, exist_ok=True)
     task = plan["tasks"][0]
     item = plan["attempts"][0]
     identity = {
@@ -238,45 +266,61 @@ def claim_global_cell(plan: dict[str, Any], claim_root: Path | None = None) -> d
         "attempt": int(item["attempt"]),
     }
     identity_sha = self_hosted.sha256(self_hosted.canonical_json(identity))
-    path = root / f"{identity_sha.removeprefix('sha256:')}.json"
-    lock_path = root / ".claim.lock"
-    flags = os.O_RDWR | os.O_CREAT
+    claim_name = f"{identity_sha.removeprefix('sha256:')}.json"
+    root_fd = _open_directory_nofollow(root)
+    lock_flags = os.O_RDWR | os.O_CREAT
     if hasattr(os, "O_NOFOLLOW"):
-        flags |= os.O_NOFOLLOW
-    fd = os.open(lock_path, flags, 0o600)
-    with os.fdopen(fd, "a+b") as lock:
-        if not stat.S_ISREG(os.fstat(lock.fileno()).st_mode):
-            raise RuntimeError("global canary cell-claim lock is not regular")
-        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
-        if os.path.lexists(path):
-            if path.is_symlink() or not path.is_file():
-                raise RuntimeError("global canary cell-claim path is unsafe")
-            raise RuntimeError("corrected-treatment canary cell is already claimed")
-        receipt = {
-            "schema_version": "fleet-opencode-autocontinue-global-cell-claim-v1",
-            "identity": identity,
-            "identity_sha256": identity_sha,
-            "campaign_sha256": CAMPAIGN_SHA,
-            "plan_sha256": plan["plan_sha256"],
-            "run_id": item["run_id"],
-            "job_uid": os.environ["JOB_UID"],
-            "pod_uid": os.environ["POD_UID"],
-            "claimed_at_utc": datetime.now(UTC).isoformat(),
-            "immutable": True,
-            "retry_allowed": False,
-            "scores_included": False,
-            "prompts_or_traces_included": False,
-        }
-        receipt["receipt_sha256"] = digest_without(receipt, "receipt_sha256")
-        self_hosted.write_json_once(path, receipt)
-        with path.open("rb") as stored:
-            os.fsync(stored.fileno())
-        directory_fd = os.open(root, os.O_RDONLY)
-        try:
-            os.fsync(directory_fd)
-        finally:
-            os.close(directory_fd)
-        return receipt
+        lock_flags |= os.O_NOFOLLOW
+    try:
+        lock_fd = os.open(".claim.lock", lock_flags, 0o600, dir_fd=root_fd)
+        with os.fdopen(lock_fd, "a+b") as lock:
+            if not stat.S_ISREG(os.fstat(lock.fileno()).st_mode):
+                raise RuntimeError("global canary cell-claim lock is not regular")
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+            try:
+                existing = os.stat(claim_name, dir_fd=root_fd, follow_symlinks=False)
+            except FileNotFoundError:
+                existing = None
+            if existing is not None:
+                if not stat.S_ISREG(existing.st_mode):
+                    raise RuntimeError("global canary cell-claim path is unsafe")
+                raise RuntimeError("corrected-treatment canary cell is already claimed")
+            receipt = {
+                "schema_version": "fleet-opencode-autocontinue-global-cell-claim-v1",
+                "identity": identity,
+                "identity_sha256": identity_sha,
+                "campaign_sha256": CAMPAIGN_SHA,
+                "plan_sha256": plan["plan_sha256"],
+                "run_id": item["run_id"],
+                "job_uid": os.environ["JOB_UID"],
+                "pod_uid": os.environ["POD_UID"],
+                "claimed_at_utc": datetime.now(UTC).isoformat(),
+                "immutable": True,
+                "retry_allowed": False,
+                "scores_included": False,
+                "prompts_or_traces_included": False,
+            }
+            receipt["receipt_sha256"] = digest_without(receipt, "receipt_sha256")
+            claim_flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+            if hasattr(os, "O_NOFOLLOW"):
+                claim_flags |= os.O_NOFOLLOW
+            claim_fd = os.open(claim_name, claim_flags, 0o600, dir_fd=root_fd)
+            try:
+                if not stat.S_ISREG(os.fstat(claim_fd).st_mode):
+                    raise RuntimeError("global canary cell-claim path is unsafe")
+                payload = self_hosted.canonical_json(receipt) + b"\n"
+                with os.fdopen(claim_fd, "wb") as stored:
+                    claim_fd = -1
+                    stored.write(payload)
+                    stored.flush()
+                    os.fsync(stored.fileno())
+            finally:
+                if claim_fd >= 0:
+                    os.close(claim_fd)
+            os.fsync(root_fd)
+            return receipt
+    finally:
+        os.close(root_fd)
 
 
 def _bound_receipt(

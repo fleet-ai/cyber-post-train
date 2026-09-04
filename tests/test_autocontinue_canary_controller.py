@@ -228,6 +228,11 @@ def test_global_cell_claim_rejects_symlink_root_and_lock(tmp_path: Path, monkeyp
     linked.symlink_to(target, target_is_directory=True)
     with pytest.raises(RuntimeError, match="root is unsafe"):
         canary.claim_global_cell(plan, linked)
+    parent_link = tmp_path / "parent-link"
+    parent_link.symlink_to(target, target_is_directory=True)
+    with pytest.raises(RuntimeError, match="root is unsafe"):
+        canary.claim_global_cell(plan, parent_link / "claims")
+    assert not (target / "claims").exists()
     root = tmp_path / "claims"
     root.mkdir()
     (root / ".claim.lock").symlink_to(tmp_path / "missing")
