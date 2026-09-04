@@ -64,6 +64,7 @@ REMAINDER_CAMPAIGNS = {
 }
 DEDICATED_CAMPAIGNS = {
     "glm53_dedicated_a": "chris-cyber-glm53-opencode11827-dedicated-a-even27-p4-v1",
+    "glm53_dedicated_b": "chris-cyber-glm53-opencode11827-dedicated-b-even27-p4-v1",
 }
 EXPECTED_INCLUDED_TASK_COUNTS.update(
     {
@@ -73,7 +74,9 @@ EXPECTED_INCLUDED_TASK_COUNTS.update(
         "glm53_remainder2": 46,
     }
 )
-EXPECTED_INCLUDED_TASK_COUNTS.update({"glm53_dedicated_a": 27})
+EXPECTED_INCLUDED_TASK_COUNTS.update(
+    {"glm53_dedicated_a": 27, "glm53_dedicated_b": 27}
+)
 SCHEDULE = [
     {
         "accepted_outcomes_at_least": 0,
@@ -336,8 +339,13 @@ def build_dedicated_a_plan(
     assignment: dict[str, Any],
     hydration: dict[str, Any],
     canary: dict[str, Any],
+    replica: str = "A",
 ) -> dict[str, Any]:
-    """Build replica-A's immutable complete-task shard."""
+    """Build one dedicated replica's immutable complete-task shard."""
+    if replica not in {"A", "B"}:
+        raise ValueError("unsupported dedicated replica")
+    replica_key = replica.lower()
+    shard_key = f"glm53_dedicated_{replica_key}"
     _validate_source_plan(source_plan)
     if int(source_plan.get("task_count") or 0) != 100:
         raise ValueError("dedicated source plan task count drifted")
@@ -389,9 +397,9 @@ def build_dedicated_a_plan(
         or (canary.get("model") or {}).get("revision")
         != source_plan["model"]["revision"]
         or (canary.get("controllers") or {}).get("ray_job_uid")
-        != blocks["dedicated_a"]["serving_ray_job_uid"]
+        != blocks[f"dedicated_{replica_key}"]["serving_ray_job_uid"]
         or (canary.get("immutable_config") or {}).get("sha256")
-        != blocks["dedicated_a"]["serving_config_sha256"]
+        != blocks[f"dedicated_{replica_key}"]["serving_config_sha256"]
     ):
         raise ValueError("dedicated replica A canary is not admissible")
 
@@ -399,7 +407,11 @@ def build_dedicated_a_plan(
     hydrated_by_rank = {
         int(row["replacement_rank"]): row for row in hydration["tasks"]
     }
-    selected_source_ranks = [*range(4, 53, 2), 102, 104]
+    selected_source_ranks = (
+        [*range(4, 53, 2), 102, 104]
+        if replica == "A"
+        else [*range(54, 101, 2), 101, 103, 105]
+    )
     tasks = []
     for source_rank in selected_source_ranks:
         if source_rank <= 100:
@@ -416,7 +428,7 @@ def build_dedicated_a_plan(
         task.pop("baseline_session_ids", None)
         tasks.append(task)
 
-    campaign = DEDICATED_CAMPAIGNS["glm53_dedicated_a"]
+    campaign = DEDICATED_CAMPAIGNS[shard_key]
     attempts = []
     for task in tasks:
         source_rank = int(task["source_rank"])
@@ -429,7 +441,10 @@ def build_dedicated_a_plan(
                     "source_rank": source_rank,
                     "attempt": attempt,
                     "run_id": f"{campaign}-sr{source_rank:03d}-a{attempt}-{key_digest}",
-                    "network": f"glm53-dedicated-a-sr{source_rank:03d}-a{attempt}-{key_digest}",
+                    "network": (
+                        f"glm53-dedicated-{replica_key}-"
+                        f"sr{source_rank:03d}-a{attempt}-{key_digest}"
+                    ),
                 }
             )
 
@@ -440,7 +455,7 @@ def build_dedicated_a_plan(
     )
     treatment = {
         "kind": "dedicated_inference_endpoint_v1",
-        "replica": "A",
+        "replica": replica,
         "endpoint_origin": model["endpoint_origin"],
         "service_name": service_name,
         "service_uid": canary["network"]["service_uid"],
@@ -466,7 +481,7 @@ def build_dedicated_a_plan(
     }
     plan = {
         "schema_version": PLAN_SCHEMA,
-        "shard_key": "glm53_dedicated_a",
+        "shard_key": shard_key,
         "campaign_id": campaign,
         "source_job_id": source_plan["source_job_id"],
         "source": {
@@ -488,7 +503,11 @@ def build_dedicated_a_plan(
         "new_session_count": len(attempts),
         "fenced_source_ranks": [1, 2, 3, 5, 7],
         "hosted_source_ranks": list(range(9, 100, 2)),
-        "reserved_source_ranks": [*range(54, 101, 2), 101, 103, 105],
+        "reserved_source_ranks": (
+            [*range(54, 101, 2), 101, 103, 105]
+            if replica == "A"
+            else [*range(4, 53, 2), 102, 104]
+        ),
         "execution": {
             "task_partition": "complete_task_boundary",
             "same_task_max_inflight": 1,
@@ -769,7 +788,7 @@ def validate_plan(plan: dict[str, Any]) -> None:
     execution = plan.get("execution") or {}
     expected_inventory_policy = (
         "immutable_plan_claim_and_endpoint_uid_v1"
-        if shard_key == "glm53_dedicated_a"
+        if shard_key in {"glm53_dedicated_a", "glm53_dedicated_b"}
         else "conservative_no_same_model_session_for_task_key_v1"
         if shard_key in {
             "glm53_clean",
@@ -791,18 +810,28 @@ def validate_plan(plan: dict[str, Any]) -> None:
         or execution.get("inventory_policy") != expected_inventory_policy
     ):
         raise ValueError("hosted shard execution policy drifted")
-    if shard_key == "glm53_dedicated_a":
+    if shard_key in {"glm53_dedicated_a", "glm53_dedicated_b"}:
         treatment = plan.get("treatment_block") or {}
-        expected_a = [*range(4, 53, 2), 102, 104]
-        observed_a = [int(row["source_rank"]) for row in tasks]
+        replica = "A" if shard_key.endswith("_a") else "B"
+        expected_selected = (
+            [*range(4, 53, 2), 102, 104]
+            if replica == "A"
+            else [*range(54, 101, 2), 101, 103, 105]
+        )
+        expected_reserved = (
+            [*range(54, 101, 2), 101, 103, 105]
+            if replica == "A"
+            else [*range(4, 53, 2), 102, 104]
+        )
+        observed_selected = [int(row["source_rank"]) for row in tasks]
         if (
-            observed_a != expected_a
+            observed_selected != expected_selected
             or plan.get("fenced_source_ranks") != [1, 2, 3, 5, 7]
             or plan.get("hosted_source_ranks") != list(range(9, 100, 2))
             or plan.get("reserved_source_ranks")
-            != [*range(54, 101, 2), 101, 103, 105]
+            != expected_reserved
             or treatment.get("kind") != "dedicated_inference_endpoint_v1"
-            or treatment.get("replica") != "A"
+            or treatment.get("replica") != replica
             or not treatment.get("service_uid")
             or not treatment.get("ray_cluster_uid")
             or not treatment.get("head_pod_uid")
@@ -817,14 +846,14 @@ def validate_plan(plan: dict[str, Any]) -> None:
             != plan["source"].get("canary_evidence_sha256")
             or treatment.get("endpoint_origin") != plan["model"].get("endpoint_origin")
             or treatment.get("model_revision") != plan["model"].get("revision")
-            or set(expected_a)
+            or set(expected_selected)
             & (
                 set(plan["fenced_source_ranks"])
                 | set(plan["hosted_source_ranks"])
                 | set(plan["reserved_source_ranks"])
             )
         ):
-            raise ValueError("dedicated replica A partition or binding drifted")
+            raise ValueError("dedicated replica partition or binding drifted")
         return
 
     excluded = plan.get("excluded_tasks") or []
@@ -1444,6 +1473,12 @@ def main() -> int:
     dedicated.add_argument("--hydration", type=Path, required=True)
     dedicated.add_argument("--canary", type=Path, required=True)
     dedicated.add_argument("--output", type=Path, required=True)
+    dedicated_b = sub.add_parser("build-dedicated-b")
+    dedicated_b.add_argument("--source-plan", type=Path, required=True)
+    dedicated_b.add_argument("--assignment", type=Path, required=True)
+    dedicated_b.add_argument("--hydration", type=Path, required=True)
+    dedicated_b.add_argument("--canary", type=Path, required=True)
+    dedicated_b.add_argument("--output", type=Path, required=True)
     validate = sub.add_parser("validate")
     validate.add_argument("--plan", type=Path, required=True)
     preflight = sub.add_parser("preflight")
@@ -1476,6 +1511,16 @@ def main() -> int:
             load_object(args.assignment),
             load_object(args.hydration),
             load_object(args.canary),
+        )
+        self_hosted.write_json_once(args.output, value)
+        return 0
+    if args.command == "build-dedicated-b":
+        value = build_dedicated_a_plan(
+            load_object(args.source_plan),
+            load_object(args.assignment),
+            load_object(args.hydration),
+            load_object(args.canary),
+            replica="B",
         )
         self_hosted.write_json_once(args.output, value)
         return 0

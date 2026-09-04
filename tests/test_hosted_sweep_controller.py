@@ -25,6 +25,9 @@ HYDRATION_JOB_V2 = Path(
 DEDICATED_A_PLAN = Path(
     "evals/fleet/configs/glm53-opencode-dedicated-a-even27-pass4-v1.json"
 )
+DEDICATED_B_PLAN = Path(
+    "evals/fleet/configs/glm53-opencode-dedicated-b-even27-pass4-v1.json"
+)
 
 
 @pytest.mark.parametrize(
@@ -555,3 +558,29 @@ def test_committed_dedicated_a_plan_is_digest_valid() -> None:
     assert plan["plan_sha256"] == (
         "sha256:4f8d4fcf50af8abccf3b9d272a18755f9be0bc862a66fe25bba691bee8a22208"
     )
+
+
+def test_committed_dedicated_b_plan_is_disjoint_and_digest_valid() -> None:
+    plan = hosted.load_object(DEDICATED_B_PLAN)
+    hosted.validate_plan(plan)
+    assert plan["plan_sha256"] == (
+        "sha256:008386c1bbc6d82229f2afdb85e074a0d5e717853dc7cab5b720ef13271e9cb5"
+    )
+    assert [row["source_rank"] for row in plan["tasks"]] == [
+        *range(54, 101, 2),
+        101,
+        103,
+        105,
+    ]
+    a = hosted.load_object(DEDICATED_A_PLAN)
+    a_cells = {
+        (row["task"]["version_id"], attempt)
+        for row in a["tasks"]
+        for attempt in range(1, 5)
+    }
+    b_cells = {
+        (row["task"]["version_id"], attempt)
+        for row in plan["tasks"]
+        for attempt in range(1, 5)
+    }
+    assert a_cells.isdisjoint(b_cells)
