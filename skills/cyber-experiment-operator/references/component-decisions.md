@@ -65,6 +65,12 @@ If acceptance failures dominate, fix that contract before adding model concurren
 increase throughput by weakening duplicate checks, verifier evidence, cleanup, task tools,
 or complete-task partitioning.
 
+For experiment-owned dedicated GPU capacity, also predeclare and enforce the consumer-aware
+loading, warmup, handoff, drain, release, and create-once successor lifecycle in
+[`docs/GPU_RESOURCE_LIFECYCLE.md`](../../../docs/GPU_RESOURCE_LIFECYCLE.md). Do not keep a
+dedicated server warm while its consumer is absent or a blocker is being repaired off-node.
+Shared and hosted endpoints are outside that release policy.
+
 ## Training progression
 
 SFT requires a proven exact corpus, staged model bytes, trainer compatibility, and a

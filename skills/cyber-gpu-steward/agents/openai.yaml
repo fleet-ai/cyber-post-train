@@ -1,0 +1,6 @@
+interface:
+  display_name: "Cyber GPU Steward"
+  short_description: "Release idle dedicated GPUs without losing evidence"
+  default_prompt: "Use $cyber-gpu-steward to reconcile consumers, drain evidence safely, and release or replace owned dedicated GPU capacity."
+policy:
+  allow_implicit_invocation: true
