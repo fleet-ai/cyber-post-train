@@ -2003,3 +2003,254 @@ def test_glm_source13_fence_selects_r111_and_restores_400_cells() -> None:
     assert supplement["future_submission_gate"]["required_priority_class"] == (
         "fleet-train-high"
     )
+
+
+def test_completed_ingested_exit1_is_a_creditable_pass_at_k_observation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    task_version_id = str(uuid.uuid4())
+    session_id = str(uuid.uuid4())
+    verifier_execution_id = str(uuid.uuid4())
+    instance_id = str(uuid.uuid4())
+    result = {
+        "run_id": "run-1",
+        "task_key": "task-1",
+        "task_version_id": task_version_id,
+        "instance_id": instance_id,
+        "agent_termination": "completed",
+        "agent_exit_code": 1,
+        "session_ingest_status": "completed",
+        "session_id": session_id,
+        "verifier_execution_id": verifier_execution_id,
+    }
+    (tmp_path / "result.json").write_text(json.dumps(result))
+    (tmp_path / "reward-result.json").write_text(
+        json.dumps(
+            {
+                "task_key": "task-1",
+                "task_version_id": task_version_id,
+                "instance_id": instance_id,
+                "verifier_execution_id": verifier_execution_id,
+                "reward": 0,
+            }
+        )
+    )
+    (tmp_path / "session-ingest.json").write_text(
+        json.dumps({"status": "completed", "session_id": session_id})
+    )
+    (tmp_path / "cleanup.json").write_text(
+        json.dumps(
+            {
+                "instance_created": True,
+                "instance_closed": True,
+                "containers_removed": True,
+            }
+        )
+    )
+    config = {
+        "run_id": "run-1",
+        "task": {"key": "task-1", "version_id": task_version_id},
+        "model": {"session_model": "fleet-cluster-opencode-1.18.27/test-model"},
+        "config_sha256": "sha256:" + "1" * 64,
+    }
+    item = {"rank": 1, "source_rank": 7, "attempt": 1}
+    monkeypatch.setattr(
+        self_hosted,
+        "_task_sessions",
+        lambda _client, _task_key: [
+            {
+                "session_id": session_id,
+                "status": "completed",
+                "model": "test-model",
+                "verifier_execution": {"id": verifier_execution_id},
+                "metadata": {},
+            }
+        ],
+    )
+
+    receipt = hosted._classify_result(
+        tmp_path, config, item, "sha256:" + "2" * 64, "test-key"
+    )
+
+    assert receipt["accepted"] is True
+    assert receipt["credited"] is True
+    assert receipt["agent_exit_code"] == 1
+    assert receipt["agent_process_exit_success"] is False
+    assert receipt["schema_version"] == "fleet-hosted-opencode-attempt-accepted-v1"
+    assert (tmp_path / "ACCEPTED.json").exists()
+    assert not (tmp_path / "NONCREDITABLE.json").exists()
+
+
+def test_exit1_without_authoritative_ingest_remains_infrastructure_incomplete(
+    tmp_path: Path,
+) -> None:
+    task_version_id = str(uuid.uuid4())
+    session_id = str(uuid.uuid4())
+    verifier_execution_id = str(uuid.uuid4())
+    instance_id = str(uuid.uuid4())
+    (tmp_path / "result.json").write_text(
+        json.dumps(
+            {
+                "run_id": "run-1",
+                "task_key": "task-1",
+                "task_version_id": task_version_id,
+                "instance_id": instance_id,
+                "agent_termination": "completed",
+                "agent_exit_code": 1,
+                "session_ingest_status": "failed",
+                "session_id": session_id,
+                "verifier_execution_id": verifier_execution_id,
+            }
+        )
+    )
+    (tmp_path / "reward-result.json").write_text(
+        json.dumps(
+            {
+                "task_key": "task-1",
+                "task_version_id": task_version_id,
+                "instance_id": instance_id,
+                "verifier_execution_id": verifier_execution_id,
+                "reward": 0,
+            }
+        )
+    )
+    (tmp_path / "session-ingest.json").write_text(
+        json.dumps({"status": "failed", "session_id": session_id})
+    )
+    (tmp_path / "cleanup.json").write_text(
+        json.dumps(
+            {
+                "instance_created": True,
+                "instance_closed": True,
+                "containers_removed": True,
+            }
+        )
+    )
+    config = {
+        "run_id": "run-1",
+        "task": {"key": "task-1", "version_id": task_version_id},
+        "config_sha256": "sha256:" + "1" * 64,
+    }
+
+    with pytest.raises(RuntimeError, match="infrastructure-incomplete"):
+        hosted._classify_result(
+            tmp_path,
+            config,
+            {"rank": 1, "source_rank": 7, "attempt": 1},
+            "sha256:" + "2" * 64,
+            "test-key",
+        )
+
+
+@pytest.mark.parametrize("reward_state", ["missing", "verifier_mismatch"])
+def test_exit1_reward_evidence_must_exist_and_match_verifier(
+    tmp_path: Path,
+    reward_state: str,
+) -> None:
+    task_version_id = str(uuid.uuid4())
+    session_id = str(uuid.uuid4())
+    verifier_execution_id = str(uuid.uuid4())
+    instance_id = str(uuid.uuid4())
+    (tmp_path / "result.json").write_text(
+        json.dumps(
+            {
+                "run_id": "run-1",
+                "task_key": "task-1",
+                "task_version_id": task_version_id,
+                "instance_id": instance_id,
+                "agent_termination": "completed",
+                "agent_exit_code": 1,
+                "session_ingest_status": "completed",
+                "session_id": session_id,
+                "verifier_execution_id": verifier_execution_id,
+            }
+        )
+    )
+    if reward_state != "missing":
+        (tmp_path / "reward-result.json").write_text(
+            json.dumps(
+                {
+                    "task_key": "task-1",
+                    "task_version_id": task_version_id,
+                    "instance_id": instance_id,
+                    "verifier_execution_id": str(uuid.uuid4()),
+                    "reward": 0,
+                }
+            )
+        )
+    (tmp_path / "session-ingest.json").write_text(
+        json.dumps({"status": "completed", "session_id": session_id})
+    )
+    (tmp_path / "cleanup.json").write_text(
+        json.dumps(
+            {
+                "instance_created": True,
+                "instance_closed": True,
+                "containers_removed": True,
+            }
+        )
+    )
+    config = {
+        "run_id": "run-1",
+        "task": {"key": "task-1", "version_id": task_version_id},
+        "config_sha256": "sha256:" + "1" * 64,
+    }
+
+    with pytest.raises((FileNotFoundError, RuntimeError, ValueError)):
+        hosted._classify_result(
+            tmp_path,
+            config,
+            {"rank": 1, "source_rank": 7, "attempt": 1},
+            "sha256:" + "2" * 64,
+            "test-key",
+        )
+
+
+def test_completed_exit1_reconciliation_is_exact_plan_bound_and_score_blind() -> None:
+    receipt_path = Path(
+        "docs/evidence/qwen38-study/"
+        "2026-09-04-completed-exit1-reconciliation-v1.json"
+    )
+    qwen_plan = hosted.load_object(
+        Path(
+            "evals/fleet/configs/"
+            "qwen38-opencode-hosted-http500-successor49-pass4-v8.json"
+        )
+    )
+    glm_plan = hosted.load_object(
+        Path(
+            "evals/fleet/configs/"
+            "glm53-opencode-hosted-http500-primary46-pass4-v12.json"
+        )
+    )
+    receipt = hosted.load_object(receipt_path)
+
+    hosted.validate_completed_exit1_reconciliation(receipt, qwen_plan, glm_plan)
+    assert {
+        (row["model_block"], row["source_rank"], row["attempt"])
+        for row in receipt["reconciled_cells"]
+    } == {
+        ("qwen_hosted_v8", 6, 2),
+        ("qwen_hosted_v8", 7, 1),
+        ("glm_hosted_v12", 13, 2),
+        ("glm_hosted_v12", 15, 1),
+    }
+    assert all(
+        row["reconciled_outcome"] == "RECONCILED_ACCEPTED"
+        for row in receipt["reconciled_cells"]
+    )
+    assert receipt["primary_denominators_after_gap_completion"]["qwen"]["cells"] == 200
+    assert receipt["primary_denominators_after_gap_completion"]["glm"]["cells"] == 400
+    assert receipt["privacy"]["scores_read"] is False
+    assert receipt["privacy"]["prompts_or_traces_read"] is False
+
+    tampered = json.loads(json.dumps(receipt))
+    tampered["reconciled_cells"][0]["evidence"]["reward_result_present"] = False
+    tampered["receipt_sha256"] = self_hosted.digest_without(
+        tampered, "receipt_sha256"
+    )
+    with pytest.raises(ValueError, match="not fully scored"):
+        hosted.validate_completed_exit1_reconciliation(
+            tampered, qwen_plan, glm_plan
+        )

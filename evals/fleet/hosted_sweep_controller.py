@@ -7,6 +7,7 @@ import copy
 import json
 import os
 import threading
+import time
 import uuid
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from pathlib import Path
@@ -2237,6 +2238,261 @@ def build_hosted_attrition_replacement_plan(
     return plan
 
 
+def validate_completed_exit1_reconciliation(
+    receipt: dict[str, Any],
+    qwen_plan: dict[str, Any],
+    glm_plan: dict[str, Any],
+) -> None:
+    """Validate the reviewed, score-blind classification of completed exit-1 cells."""
+    validate_plan(qwen_plan)
+    validate_plan(glm_plan)
+    if (
+        receipt.get("schema_version")
+        != "fleet-completed-exit1-reconciliation-v1"
+        or receipt.get("append_only") is not True
+        or receipt.get("receipt_sha256")
+        != digest_without(receipt, "receipt_sha256")
+    ):
+        raise ValueError("completed exit-1 reconciliation receipt drifted")
+
+    methodology = receipt.get("methodology") or {}
+    required = set(methodology.get("required_all") or [])
+    excluded = set(methodology.get("exclude_if_any") or [])
+    if (
+        methodology.get("outcome_unit") != "authoritative_scored_session"
+        or methodology.get("process_exit_role")
+        != "diagnostic_only_after_all_required_scoring_evidence_exists"
+        or methodology.get("selection_bias_control")
+        != "retain_original_task_and_complete_only_unstarted_attempt_indices"
+        or methodology.get("original_noncreditable_receipts_mutated") is not False
+        or required
+        != {
+            "immutable_plan_claim_and_config_binding",
+            "agent_termination_completed",
+            "reward_result_present",
+            "reward_result_verifier_matches_result",
+            "authoritative_session_unique_completed",
+            "authoritative_session_verifier_matches_result",
+            "session_ingest_completed",
+            "instance_cleanup_completed",
+            "no_stderr_or_proxy_transport_error_signal",
+            "no_independent_uid_time_overlap_infrastructure_incident",
+        }
+        or excluded
+        != {
+            "reward_result_missing",
+            "verifier_execution_missing",
+            "authoritative_session_missing_or_incomplete",
+            "session_ingest_incomplete",
+            "cleanup_incomplete",
+            "scoring_http_failure",
+            "endpoint_or_control_plane_preemption_overlaps_attempt",
+            "model_or_harness_transport_failure",
+        }
+    ):
+        raise ValueError("completed exit-1 methodology drifted")
+
+    plans = {
+        "qwen_hosted_v8": qwen_plan,
+        "glm_hosted_v12": glm_plan,
+    }
+    expected_cells = {
+        ("qwen_hosted_v8", 6, 2),
+        ("qwen_hosted_v8", 7, 1),
+        ("glm_hosted_v12", 13, 2),
+        ("glm_hosted_v12", 15, 1),
+    }
+    cells = receipt.get("reconciled_cells") or []
+    observed_cells = {
+        (
+            row.get("model_block"),
+            int(row.get("source_rank") or 0),
+            int(row.get("attempt") or 0),
+        )
+        for row in cells
+    }
+    if len(cells) != 4 or observed_cells != expected_cells:
+        raise ValueError("completed exit-1 cell set drifted")
+
+    run_ids: set[str] = set()
+    session_ids: set[str] = set()
+    verifier_ids: set[str] = set()
+    for row in cells:
+        plan = plans[row["model_block"]]
+        if row.get("plan_sha256") != plan["plan_sha256"]:
+            raise ValueError("reconciled cell plan binding drifted")
+        planned = next(
+            (
+                item
+                for item in plan["attempts"]
+                if int(item["source_rank"]) == int(row["source_rank"])
+                and int(item["attempt"]) == int(row["attempt"])
+            ),
+            None,
+        )
+        task = next(
+            (
+                item
+                for item in plan["tasks"]
+                if int(item["source_rank"]) == int(row["source_rank"])
+            ),
+            None,
+        )
+        if (
+            planned is None
+            or task is None
+            or row.get("run_id") != planned["run_id"]
+            or int(row.get("rank") or 0) != int(planned["rank"])
+            or row.get("task_key") != task["task"]["key"]
+            or row.get("task_version_id") != task["task"]["version_id"]
+        ):
+            raise ValueError("reconciled cell is not plan-bound")
+        evidence = row.get("evidence") or {}
+        if (
+            evidence.get("agent_exit_code") != 1
+            or evidence.get("agent_termination_completed") is not True
+            or evidence.get("reward_result_present") is not True
+            or evidence.get("reward_result_verifier_matches") is not True
+            or evidence.get("authoritative_session_match_count") != 1
+            or evidence.get("authoritative_session_status") != "completed"
+            or evidence.get("authoritative_session_verifier_matches") is not True
+            or evidence.get("session_ingest_completed") is not True
+            or evidence.get("cleanup_completed") is not True
+            or evidence.get("stderr_file_count") != 0
+            or evidence.get("proxy_http_5xx_token_count") != 0
+            or evidence.get("proxy_transport_error_token_count") != 0
+            or evidence.get("independent_infrastructure_incident") is not False
+            or evidence.get("agent_exit_code_was_only_prior_rejection") is not True
+            or row.get("reconciled_outcome") != "RECONCILED_ACCEPTED"
+            or row.get("counts_as_primary_cell") is not True
+        ):
+            raise ValueError("reconciled cell is not fully scored and operationally complete")
+        digest_fields = [
+            "claim_sha256",
+            "config_sha256",
+            "original_noncreditable_receipt_sha256",
+            "original_noncreditable_file_sha256",
+            "original_task_fence_receipt_sha256",
+            "original_task_fence_file_sha256",
+            "result_file_sha256",
+            "reward_result_file_sha256",
+            "session_ingest_file_sha256",
+            "cleanup_file_sha256",
+        ]
+        if any(
+            not isinstance(row.get(field), str)
+            or not row[field].startswith("sha256:")
+            or len(row[field]) != 71
+            for field in digest_fields
+        ):
+            raise ValueError("reconciled cell evidence digest drifted")
+        try:
+            uuid.UUID(str(row.get("session_id")))
+            uuid.UUID(str(row.get("verifier_execution_id")))
+            uuid.UUID(str(row.get("job_uid")))
+            uuid.UUID(str(row.get("pod_uid")))
+        except ValueError as exc:
+            raise ValueError("reconciled cell UID evidence drifted") from exc
+        run_ids.add(row["run_id"])
+        session_ids.add(row["session_id"])
+        verifier_ids.add(row["verifier_execution_id"])
+    if len(run_ids) != 4 or len(session_ids) != 4 or len(verifier_ids) != 4:
+        raise ValueError("reconciled cell identity duplicated")
+
+    gaps = receipt.get("same_task_gap_completion") or []
+    expected_gaps = {
+        ("qwen_hosted_v8", 6): ([1], [2], [3, 4]),
+        ("qwen_hosted_v8", 7): ([], [1], [2, 3, 4]),
+        ("glm_hosted_v12", 13): ([1], [2], [3, 4]),
+        ("glm_hosted_v12", 15): ([], [1], [2, 3, 4]),
+    }
+    observed_gaps = {
+        (row.get("model_block"), int(row.get("source_rank") or 0)): (
+            row.get("already_accepted_attempts"),
+            row.get("reconciled_accepted_attempts"),
+            row.get("missing_attempts"),
+        )
+        for row in gaps
+    }
+    if observed_gaps != expected_gaps:
+        raise ValueError("completed exit-1 gap set drifted")
+
+    comparators = receipt.get("comparators") or {}
+    if (
+        (comparators.get("hosted_http500_incident") or {}).get("receipt_sha256")
+        != "sha256:043c01e05e9118a080bd642a5da6f7c22c279781bc0c97803330091e55fdb27e"
+        or (comparators.get("hosted_http500_incident") or {}).get(
+            "classification"
+        )
+        != "EXCLUDED_INFRASTRUCTURE_INCOMPLETE"
+        or (comparators.get("dedicated_a_preemption") or {}).get("receipt_sha256")
+        != "sha256:9bf6683d80c2dd517e371709a1aa2db0a13e1f4089a09a8296941c6df7054b79"
+        or (comparators.get("dedicated_a_preemption") or {}).get(
+            "classification"
+        )
+        != "EXCLUDED_INFRASTRUCTURE_INCOMPLETE"
+        or (comparators.get("dedicated_b_source54_attempt3") or {}).get(
+            "receipt_sha256"
+        )
+        != "sha256:7cf5483e07e4053d7807d599b738e0555ade3b728ea20ae2356186592bd7c355"
+        or (comparators.get("dedicated_b_source54_attempt3") or {}).get(
+            "classification"
+        )
+        != "TERMINAL_ATTRITION_ONLY_NOT_PRIMARY_TASK"
+    ):
+        raise ValueError("completed exit-1 comparator classification drifted")
+    replacements = receipt.get("replacement_artifacts") or []
+    if len(replacements) != 2 or any(
+        row.get("status") != "HELD_UNUSED_SUPERSEDED_IF_RECONCILIATION_RATIFIED"
+        or row.get("scored_claims") != 0
+        for row in replacements
+    ):
+        raise ValueError("completed exit-1 replacement hold drifted")
+    denominators = receipt.get("primary_denominators_after_gap_completion") or {}
+    if denominators.get("qwen") != {
+        "retained_complete_source4_tasks": 1,
+        "original_v8_tasks": 49,
+        "replacement_tasks": 0,
+        "tasks": 50,
+        "cells": 200,
+        "affected_missing_cells": 5,
+    } or denominators.get("glm") != {
+        "hosted_original_v12_tasks": 46,
+        "dedicated_a_tasks": 27,
+        "dedicated_b_tasks": 27,
+        "replacement_tasks_for_current_exit1_cells": 0,
+        "tasks": 100,
+        "cells": 400,
+        "affected_missing_cells": 5,
+    }:
+        raise ValueError("completed exit-1 denominator drifted")
+    release = receipt.get("release_gate") or {}
+    if (
+        release.get("review_status")
+        != "methodology_reviewed_pending_root_scoring_release"
+        or release.get("scored_launch_authorized") is not False
+        or release.get("future_gap_plan_must_credit_exact_reconciled_sessions")
+        is not True
+        or release.get("future_gap_plan_must_run_only_missing_attempt_indices")
+        is not True
+        or release.get("future_gap_plan_must_preserve_exact_predecessor_treatment")
+        is not True
+        or release.get("replacement_addons_must_not_launch") is not True
+    ):
+        raise ValueError("completed exit-1 release gate drifted")
+    privacy = receipt.get("privacy") or {}
+    if any(
+        privacy.get(field) is not False
+        for field in (
+            "scores_read",
+            "prompts_or_traces_read",
+            "task_content_included",
+            "credentials_included",
+        )
+    ):
+        raise ValueError("completed exit-1 reconciliation privacy drifted")
+
+
 def _validate_source_plan(plan: dict[str, Any]) -> None:
     if plan.get("schema_version") == legacy.PLAN_SCHEMA:
         legacy.validate_plan(plan)
@@ -3049,9 +3305,14 @@ def _attempt_config(
 
 
 def _classify_result(
-    out_dir: Path, config: dict[str, Any], item: dict[str, Any], claim_sha256: str
+    out_dir: Path,
+    config: dict[str, Any],
+    item: dict[str, Any],
+    claim_sha256: str,
+    key: str,
 ) -> dict[str, Any]:
     result = load_object(out_dir / "result.json")
+    reward = load_object(out_dir / "reward-result.json")
     ingest = load_object(out_dir / "session-ingest.json")
     cleanup = load_object(out_dir / "cleanup.json")
     verifier_id = result.get("verifier_execution_id")
@@ -3063,19 +3324,72 @@ def _classify_result(
     operationally_terminal = all(
         (
             result.get("run_id") == config["run_id"],
+            result.get("task_key") == config["task"]["key"],
+            result.get("task_version_id") == config["task"]["version_id"],
             result.get("agent_termination") == "completed",
             result.get("session_ingest_status") == "completed",
             ingest.get("status") == "completed",
+            ingest.get("session_id") == result.get("session_id"),
+            reward.get("task_key") == config["task"]["key"],
+            reward.get("task_version_id") == config["task"]["version_id"],
+            reward.get("verifier_execution_id") == verifier_id,
+            reward.get("instance_id") == result.get("instance_id"),
+            isinstance(reward.get("reward"), (int, float)),
+            not isinstance(reward.get("reward"), bool),
             cleanup == {
                 "instance_created": True,
                 "instance_closed": True,
                 "containers_removed": True,
             },
+            not any(
+                path.is_file()
+                and path.suffix == ".json"
+                and (
+                    "infrastructure" in path.name.lower()
+                    or "incident" in path.name.lower()
+                )
+                for path in out_dir.iterdir()
+            ),
         )
     )
     if not operationally_terminal:
         raise RuntimeError("hosted attempt is infrastructure-incomplete")
-    accepted = result.get("agent_exit_code") == 0
+    authoritative_rows: list[dict[str, Any]] = []
+    for attempt in range(12):
+        with _client(key) as client:
+            rows = self_hosted._task_sessions(client, config["task"]["key"])
+        authoritative_rows = [
+            row for row in rows if row.get("session_id") == result["session_id"]
+        ]
+        if authoritative_rows:
+            break
+        if attempt < 11:
+            time.sleep(5)
+    authoritative = authoritative_rows[0] if len(authoritative_rows) == 1 else None
+    authoritative_verifier = (authoritative or {}).get("verifier_execution") or {}
+    projected_version = (authoritative or {}).get("eval_task_version_id") or (
+        authoritative or {}
+    ).get("task_version_id")
+    projected_run_id = ((authoritative or {}).get("metadata") or {}).get("run_id")
+    if (
+        authoritative is None
+        or authoritative.get("status") != "completed"
+        or authoritative.get("model")
+        != self_hosted.persisted_session_model_identity(config)
+        or authoritative_verifier.get("id") != verifier_id
+        or (
+            projected_version is not None
+            and projected_version != config["task"]["version_id"]
+        )
+        or (projected_run_id is not None and projected_run_id != config["run_id"])
+    ):
+        raise RuntimeError("hosted attempt lacks authoritative scored session")
+    # A completed, ingested verifier execution is an observed eval outcome.
+    # The OpenCode process exit code describes the agent runtime, not whether
+    # the scored session belongs in the pass@k denominator.  Conditioning
+    # creditability on exit code would discard valid failures and bias the
+    # estimator toward successful agent processes.
+    accepted = True
     row = {
         "schema_version": (
             "fleet-hosted-opencode-attempt-accepted-v1"
@@ -3094,6 +3408,7 @@ def _classify_result(
         "session_id": result["session_id"],
         "verifier_execution_id": verifier_id,
         "agent_exit_code": result.get("agent_exit_code"),
+        "agent_process_exit_success": result.get("agent_exit_code") == 0,
         "config_sha256": config["config_sha256"],
         "claim_sha256": claim_sha256,
         "cleanup_completed": True,
@@ -3154,7 +3469,9 @@ def _run_task(
         self_hosted.write_json_once(root / "claims" / f"{item['run_id']}.json", claim)
         out_dir = root / "attempts" / item["run_id"]
         self_hosted.run(config, out_dir, proxy)
-        outcome = _classify_result(out_dir, config, item, claim["claim_sha256"])
+        outcome = _classify_result(
+            out_dir, config, item, claim["claim_sha256"], key
+        )
         if not outcome["accepted"]:
             task_receipt = {
                 "schema_version": "fleet-hosted-opencode-task-fenced-v1",
