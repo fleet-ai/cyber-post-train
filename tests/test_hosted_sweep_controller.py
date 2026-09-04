@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import uuid
 from pathlib import Path
@@ -14,6 +15,9 @@ SOURCE = Path(
 )
 REMAINDER_SOURCE = Path(
     "docs/evidence/qwen38-study/2026-09-04-hosted-opencode-remainder-source-v1.json"
+)
+REPLACEMENT_LOCK = Path(
+    "docs/evidence/qwen38-study/2026-09-04-opencode-replacement-selection-lock-v1.json"
 )
 
 
@@ -329,3 +333,102 @@ def test_generated_plans_are_reproducible() -> None:
             hosted.load_object(Path("evals/fleet/configs") / source_name), source, model
         )
         assert json.dumps(actual, sort_keys=True) == json.dumps(expected, sort_keys=True)
+
+
+def test_replacement_selection_lock_is_exact_disjoint_and_fail_closed() -> None:
+    receipt = hosted.load_object(REPLACEMENT_LOCK)
+    assert receipt["receipt_sha256"] == self_hosted.digest_without(
+        receipt, "receipt_sha256"
+    )
+
+    split_path = Path(receipt["source"]["split"]["path"])
+    selection_path = Path(receipt["source"]["locked_selection"]["path"])
+    split = hosted.load_object(split_path)
+    selection = hosted.load_object(selection_path)
+    assert "sha256:" + hashlib.sha256(split_path.read_bytes()).hexdigest() == (
+        receipt["source"]["split"]["file_sha256"]
+    )
+    assert "sha256:" + hashlib.sha256(selection_path.read_bytes()).hexdigest() == (
+        receipt["source"]["locked_selection"]["file_sha256"]
+    )
+    assert split["manifest_digest"] == receipt["source"]["split"]["manifest_digest"]
+    assert selection["selection_sha256"] == receipt["source"]["locked_selection"][
+        "selection_sha256"
+    ]
+    assert selection["ranking"] == receipt["source"]["ranking"]
+
+    qwen = receipt["qwen38"]
+    assert qwen["fenced_original_source_ranks"] == [1, 2, 3]
+    assert qwen["intact_original_task_count"] + qwen["replacement_task_count"] == 50
+    assert qwen["replacement_task_count"] * qwen["pass_k"] == 12
+    selected_qwen = [row for row in selection["tasks"] if 51 <= row["rank"] <= 53]
+    assert [row["replacement_rank"] for row in qwen["tasks"]] == [51, 52, 53]
+    binding_fields = (
+        "historical_rank",
+        "task_key",
+        "task_version_id",
+        "task_version",
+        "environment_version_id",
+        "env_key",
+        "env_version",
+        "data_key",
+        "data_version",
+        "split",
+    )
+    assert [
+        {field: row[field] for field in binding_fields} for row in qwen["tasks"]
+    ] == [{field: row[field] for field in binding_fields} for row in selected_qwen]
+
+    hydrated = hosted.load_object(
+        Path("evals/fleet/configs/glm53-opencode-train100-pass4-v4.json")
+    )
+    hydrated_by_rank = {row["rank"]: row for row in hydrated["tasks"]}
+    for row in qwen["tasks"]:
+        source = hydrated_by_rank[row["replacement_rank"]]
+        assert source["task"]["version_id"] == row["task_version_id"]
+        assert source["task"]["cyber_contract"] == row["cyber_contract"]
+        assert source["environment"]["runtime_seed_content_sha256"] == row[
+            "runtime_seed_content_sha256"
+        ]
+
+    glm = receipt["glm53"]
+    assert glm["fenced_original_source_ranks"] == [1, 2, 3, 5, 7]
+    assert glm["intact_original_task_count"] + glm["replacement_task_count"] == 100
+    assert glm["replacement_task_count"] * glm["pass_k"] == 20
+    assert [row["replacement_rank"] for row in glm["tasks"]] == list(range(101, 106))
+    assert [row["historical_rank"] for row in glm["tasks"]] == list(range(109, 114))
+    selected_ids = {row["task_version_id"] for row in selection["tasks"]}
+    split_by_version = {row["task_version_id"]: row for row in split["tasks"]}
+    runnable = hosted.load_object(
+        Path("configs/runs/qwen36-27b-rl-base-full-runnable.json")
+    )
+    runnable_ids = {
+        row["task_version_id"] for row in runnable["tasks"]["task_versions"]
+    }
+    for row in glm["tasks"]:
+        assert row["task_version_id"] not in selected_ids
+        assert row["task_version_id"] in runnable_ids
+        source = split_by_version[row["task_version_id"]]
+        assert source["split"] == "train"
+        for field in binding_fields[1:]:
+            assert row[field] == source[field]
+    assert glm["hydration_gate"] == {
+        "status": "required_not_satisfied",
+        "required_before_paid_launch": True,
+        "checks": [
+            "exact_frozen_task_and_environment_binding",
+            "cyber_contract_v3",
+            "nonempty_runtime_seed_manifest",
+            "complete_verifier_receipt",
+            "fleet_team_authority",
+        ],
+    }
+
+    qwen_ids = {row["task_version_id"] for row in qwen["tasks"]}
+    glm_ids = {row["task_version_id"] for row in glm["tasks"]}
+    assert qwen_ids.isdisjoint(glm_ids)
+    assert receipt["overlap_audit"]["candidate_claims"] == 0
+    assert receipt["overlap_audit"]["candidate_accepted_receipts"] == 0
+    assert receipt["overlap_audit"]["candidate_noncreditable_receipts"] == 0
+    assert receipt["denominator_policy"]["qwen_primary_sessions"] == 50 * 4
+    assert receipt["denominator_policy"]["glm_primary_sessions"] == 100 * 4
