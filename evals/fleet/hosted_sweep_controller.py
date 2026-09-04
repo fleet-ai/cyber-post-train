@@ -868,6 +868,62 @@ def validate_dedicated_a_completed_exit1_gap_release(
         raise ValueError("dedicated A completed exit-1 gap release does not bind plan")
 
 
+def validate_task_boundary_concurrency_cutover_proposal(
+    proposal: dict[str, Any],
+) -> None:
+    """Validate the no-launch design for future whole-task concurrency cutovers."""
+    finding = proposal.get("current_controller_finding") or {}
+    gates = proposal.get("required_cutover_gates") or {}
+    successor = proposal.get("successor_partition_contract") or {}
+    implementation = proposal.get("future_controller_change") or {}
+    release = proposal.get("release") or {}
+    privacy = proposal.get("privacy") or {}
+    if (
+        proposal.get("schema_version")
+        != "fleet-task-boundary-concurrency-cutover-proposal-v1"
+        or proposal.get("append_only") is not True
+        or proposal.get("receipt_sha256")
+        != digest_without(proposal, "receipt_sha256")
+        or finding.get("task_claim_scope") != "whole_task"
+        or finding.get("same_task_max_inflight") != 1
+        or finding.get("next_task_claim_is_immediate_after_terminal") is not True
+        or finding.get("stop_after_current_task_barrier_supported") is not False
+        or finding.get("cross_plan_lease_supported") is not False
+        or finding.get("safe_live_tail_shard_while_predecessor_active") is not False
+        or finding.get("temporal_distance_to_tail_is_safety_evidence") is not False
+        or gates.get("predecessor_terminal_or_sealed_stop_tombstone_required")
+        is not True
+        or gates.get("stopped_pod_absence_required") is not True
+        or gates.get("last_claimed_task_exactly_enumerated") is not True
+        or gates.get("next_task_zero_execution_required") is not True
+        or gates.get("all_prior_claims_and_sessions_reconciled") is not True
+        or gates.get("api_sfs_k8s_duplicate_inventory_required") is not True
+        or successor.get("complete_task_boundaries_only") is not True
+        or successor.get("pairwise_task_disjointness_required") is not True
+        or successor.get("pairwise_cell_disjointness_required") is not True
+        or successor.get("strictly_after_last_claimed_source_task") is not True
+        or successor.get("exact_predecessor_treatment_required") is not True
+        or successor.get("fresh_plan_run_and_root_identities_required") is not True
+        or successor.get("create_once") is not True
+        or successor.get("workers_per_shard") != 1
+        or successor.get("required_priority_class") != "fleet-train-high"
+        or successor.get("priority_class_is_not_preemption_immunity") is not True
+        or implementation.get("new_plans_only") is not True
+        or implementation.get("active_jobs_must_not_be_mutated") is not True
+        or implementation.get("barrier_receipt_written_before_next_task_claim")
+        is not True
+        or implementation.get("barrier_receipt_binds_plan_job_pod_and_last_task")
+        is not True
+        or implementation.get("successor_preflight_requires_barrier_and_pod_absence")
+        is not True
+        or release.get("concrete_successor_tasks_selected") is not False
+        or release.get("cluster_objects_created") is not False
+        or release.get("scored_launch_authorized") is not False
+        or any(value is not False for value in privacy.values())
+    ):
+        raise ValueError("task-boundary concurrency cutover proposal drifted")
+
+
 def validate_dedicated_a_stop_tombstone(receipt: dict[str, Any]) -> None:
     """Reject a zero-execution classification when a nonempty agent stream exists."""
     stopped = receipt.get("stopped_controller") or {}

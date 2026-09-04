@@ -1,0 +1,52 @@
+{
+  "schema_version": "fleet-task-boundary-concurrency-cutover-proposal-v1",
+  "append_only": true,
+  "current_controller_finding": {
+    "task_claim_scope": "whole_task",
+    "same_task_max_inflight": 1,
+    "next_task_claim_is_immediate_after_terminal": true,
+    "stop_after_current_task_barrier_supported": false,
+    "cross_plan_lease_supported": false,
+    "safe_live_tail_shard_while_predecessor_active": false,
+    "temporal_distance_to_tail_is_safety_evidence": false
+  },
+  "required_cutover_gates": {
+    "predecessor_terminal_or_sealed_stop_tombstone_required": true,
+    "stopped_pod_absence_required": true,
+    "last_claimed_task_exactly_enumerated": true,
+    "next_task_zero_execution_required": true,
+    "all_prior_claims_and_sessions_reconciled": true,
+    "api_sfs_k8s_duplicate_inventory_required": true
+  },
+  "successor_partition_contract": {
+    "complete_task_boundaries_only": true,
+    "pairwise_task_disjointness_required": true,
+    "pairwise_cell_disjointness_required": true,
+    "strictly_after_last_claimed_source_task": true,
+    "exact_predecessor_treatment_required": true,
+    "fresh_plan_run_and_root_identities_required": true,
+    "create_once": true,
+    "workers_per_shard": 1,
+    "required_priority_class": "fleet-train-high",
+    "priority_class_is_not_preemption_immunity": true
+  },
+  "future_controller_change": {
+    "new_plans_only": true,
+    "active_jobs_must_not_be_mutated": true,
+    "barrier_receipt_written_before_next_task_claim": true,
+    "barrier_receipt_binds_plan_job_pod_and_last_task": true,
+    "successor_preflight_requires_barrier_and_pod_absence": true
+  },
+  "release": {
+    "concrete_successor_tasks_selected": false,
+    "cluster_objects_created": false,
+    "scored_launch_authorized": false
+  },
+  "privacy": {
+    "scores_read": false,
+    "prompts_or_traces_read": false,
+    "task_content_included": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:3d73492f9b9443f47946b355f48a72b93b30434b0cfd98a799311ad8c188cd6b"
+}

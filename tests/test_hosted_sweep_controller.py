@@ -128,6 +128,10 @@ GLM_DEDICATED_A_EXIT1_GAP_RELEASE = Path(
     "docs/evidence/qwen38-study/"
     "2026-09-04-glm53-dedicated-a-source6-attempt4-gap-scoring-release-v1.json"
 )
+TASK_BOUNDARY_CONCURRENCY_CUTOVER_PROPOSAL = Path(
+    "docs/evidence/qwen38-study/"
+    "2026-09-04-task-boundary-concurrency-cutover-proposal-v1.json"
+)
 QWEN_ATTRITION_REPLACEMENT_PLAN = Path(
     "evals/fleet/configs/qwen38-opencode-hosted-attrition-r56-pass4-v1.json"
 )
@@ -2557,3 +2561,26 @@ def test_dedicated_a_exit1_gap_release_is_exact_and_fail_closed() -> None:
         )
         with pytest.raises(ValueError, match="release does not bind"):
             hosted.validate_dedicated_a_completed_exit1_gap_release(plan, tampered)
+
+
+def test_task_boundary_concurrency_cutover_is_no_launch_and_fail_closed() -> None:
+    proposal = hosted.load_object(TASK_BOUNDARY_CONCURRENCY_CUTOVER_PROPOSAL)
+    hosted.validate_task_boundary_concurrency_cutover_proposal(proposal)
+    assert proposal["current_controller_finding"][
+        "safe_live_tail_shard_while_predecessor_active"
+    ] is False
+    assert proposal["release"]["concrete_successor_tasks_selected"] is False
+    assert proposal["release"]["scored_launch_authorized"] is False
+    for section, field, value in (
+        ("required_cutover_gates", "stopped_pod_absence_required", False),
+        ("successor_partition_contract", "pairwise_task_disjointness_required", False),
+        ("successor_partition_contract", "workers_per_shard", 2),
+        ("release", "scored_launch_authorized", True),
+    ):
+        tampered = hosted.load_object(TASK_BOUNDARY_CONCURRENCY_CUTOVER_PROPOSAL)
+        tampered[section][field] = value
+        tampered["receipt_sha256"] = self_hosted.digest_without(
+            tampered, "receipt_sha256"
+        )
+        with pytest.raises(ValueError, match="cutover proposal drifted"):
+            hosted.validate_task_boundary_concurrency_cutover_proposal(tampered)
