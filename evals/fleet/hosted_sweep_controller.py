@@ -428,6 +428,22 @@ def _validate_inventory_for_task(
 ) -> int:
     with _client(key) as client:
         all_rows = self_hosted._task_sessions(client, task["task"]["key"])
+    rank = int(task["rank"])
+    planned_run_ids = {
+        row["run_id"] for row in plan["attempts"] if int(row["rank"]) == rank
+    }
+    accepted_by_run = {
+        run_id: row
+        for run_id, row in _accepted(root).items()
+        if run_id in planned_run_ids
+    }
+    for row in all_rows:
+        run_id = (row.get("metadata") or {}).get("run_id")
+        accepted = accepted_by_run.get(run_id)
+        if run_id in planned_run_ids and (
+            accepted is None or row.get("session_id") != accepted["session_id"]
+        ):
+            raise RuntimeError("hosted current-plan API run identity already exists")
     policy = plan["execution"].get(
         "inventory_policy", "exact_hosted_treatment_metadata_v1"
     )
@@ -447,17 +463,17 @@ def _validate_inventory_for_task(
         rows = [row for row in all_rows if row.get("model") == model]
     else:
         raise RuntimeError("hosted inventory policy drifted")
-    allowed = _allowed_sessions(plan, root, int(task["rank"]))
+    allowed = _allowed_sessions(plan, root, rank)
     observed = {row.get("session_id") for row in rows if isinstance(row.get("session_id"), str)}
     if observed != allowed:
         raise RuntimeError("hosted exact-treatment session inventory drifted")
     by_id = {row.get("session_id"): row for row in rows}
-    receipts = [*_credits_for_rank(plan, int(task["rank"]))]
+    receipts = [*_credits_for_rank(plan, rank)]
     attempt_rank = {row["run_id"]: int(row["rank"]) for row in plan["attempts"]}
     receipts.extend(
         row
         for run_id, row in _accepted(root).items()
-        if attempt_rank.get(run_id) == int(task["rank"])
+        if attempt_rank.get(run_id) == rank
     )
     for receipt in receipts:
         row = by_id.get(receipt["session_id"])
@@ -466,6 +482,10 @@ def _validate_inventory_for_task(
             row is None
             or row.get("status") != "completed"
             or verifier.get("id") != receipt["verifier_execution_id"]
+            or (
+                row.get("eval_task_version_id") or row.get("task_version_id")
+            )
+            != task["task"]["version_id"]
         ):
             raise RuntimeError("hosted credited session is not authoritative")
     return len(rows)
@@ -675,10 +695,37 @@ def _worker_cap(accepted: int) -> int:
     return cap
 
 
-def preflight_plan(plan: dict[str, Any], root: Path, key: str) -> dict[str, Any]:
-    validate_plan(plan)
+def _validate_plan_identity_absence(plan: dict[str, Any], root: Path) -> int:
+    """Prove no current-plan run identity or claim exists anywhere on shared storage."""
     if root.exists():
         raise RuntimeError("hosted shard output root already exists")
+    parent = root.parent
+    if parent.is_symlink() or not parent.is_dir():
+        raise RuntimeError("hosted shared job root is not an authoritative directory")
+    planned = {row["run_id"] for row in plan["attempts"]}
+    roots_reconciled = 0
+    for job_root in parent.iterdir():
+        if job_root.is_symlink():
+            raise RuntimeError("hosted shared job root contains a symlink")
+        if not job_root.is_dir():
+            continue
+        roots_reconciled += 1
+        for run_id in planned:
+            if (job_root / "claims" / f"{run_id}.json").exists() or (
+                job_root / "attempts" / run_id
+            ).exists():
+                raise RuntimeError("hosted current-plan run identity already exists")
+        for claim_path in (job_root / "task-claims").glob("*.json"):
+            claim = load_object(claim_path)
+            run_ids = claim.get("run_ids") or []
+            if not isinstance(run_ids, list) or any(run_id in planned for run_id in run_ids):
+                raise RuntimeError("hosted current-plan task claim already exists")
+    return roots_reconciled
+
+
+def preflight_plan(plan: dict[str, Any], root: Path, key: str) -> dict[str, Any]:
+    validate_plan(plan)
+    roots_reconciled = _validate_plan_identity_absence(plan, root)
     with _client(key) as client:
         account = self_hosted._request(client, "GET", "/v1/account")
     if (
@@ -714,6 +761,10 @@ def preflight_plan(plan: dict[str, Any], root: Path, key: str) -> dict[str, Any]
         "exact_treatment_sessions_reconciled": sum(inventory_counts.values()),
         "active_source_attempts": 0,
         "output_root_absent": True,
+        "sfs_job_roots_reconciled": roots_reconciled,
+        "current_plan_run_and_claim_identities_absent": True,
+        "public_list_treatment_metadata_authoritative": False,
+        "empty_exact_treatment_set_used_as_sole_proof": False,
         "scores_read": False,
         "prompts_or_traces_read": False,
     }
@@ -726,6 +777,7 @@ def run_plan(plan: dict[str, Any], root: Path, proxy: Path) -> dict[str, Any]:
     key = os.environ.get("FLEET_API_KEY")
     if not key:
         raise RuntimeError("FLEET_API_KEY is required")
+    roots_reconciled = _validate_plan_identity_absence(plan, root)
     root.mkdir(parents=True, exist_ok=False)
     root.chmod(0o700)
     for name in ("attempts", "claims", "task-claims", "task-results", "ramps"):
@@ -751,6 +803,10 @@ def run_plan(plan: dict[str, Any], root: Path, proxy: Path) -> dict[str, Any]:
         "tasks_reconciled": len(inventory_counts),
         "exact_treatment_sessions_reconciled": sum(inventory_counts.values()),
         "active_source_attempts": 0,
+        "sfs_job_roots_reconciled": roots_reconciled,
+        "current_plan_run_and_claim_identities_absent": True,
+        "public_list_treatment_metadata_authoritative": False,
+        "empty_exact_treatment_set_used_as_sole_proof": False,
         "scores_read": False,
         "prompts_or_traces_read": False,
     }

@@ -158,6 +158,19 @@ def test_exact_treatment_inventory_requires_harness_and_tool_digest(monkeypatch)
     assert [row["session_id"] for row in exact] == ["exact"]
 
 
+def test_preflight_rejects_current_plan_claim_in_any_sfs_job_root(tmp_path: Path) -> None:
+    plan = hosted.load_object(
+        Path("evals/fleet/configs/glm53-opencode-hosted-odd49-pass4-v7.json")
+    )
+    jobs = tmp_path / "jobs"
+    other = jobs / "older-controller" / "claims"
+    other.mkdir(parents=True)
+    run_id = plan["attempts"][0]["run_id"]
+    (other / f"{run_id}.json").write_text("{}")
+    with pytest.raises(RuntimeError, match="run identity already exists"):
+        hosted._validate_plan_identity_absence(plan, jobs / plan["campaign_id"])
+
+
 def test_generated_plans_are_reproducible() -> None:
     source = hosted.load_object(SOURCE)
     for model, source_name, generated_name in (
