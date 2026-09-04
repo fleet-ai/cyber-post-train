@@ -122,6 +122,18 @@ QWEN_ATTRITION_REPLACEMENT_PLAN = Path(
 GLM_ATTRITION_REPLACEMENT_PLAN = Path(
     "evals/fleet/configs/glm53-opencode-hosted-attrition-r111-pass4-v1.json"
 )
+COMPLETED_EXIT1_RECONCILIATION = Path(
+    "docs/evidence/qwen38-study/2026-09-04-completed-exit1-reconciliation-v1.json"
+)
+COMPLETED_EXIT1_GAP_SOURCE = Path(
+    "docs/evidence/qwen38-study/2026-09-04-completed-exit1-gap-source-v1.json"
+)
+QWEN_COMPLETED_EXIT1_GAP_PLAN = Path(
+    "evals/fleet/configs/qwen38-opencode-hosted-completed-exit1-gap-pass4-v1.json"
+)
+GLM_COMPLETED_EXIT1_GAP_PLAN = Path(
+    "evals/fleet/configs/glm53-opencode-hosted-completed-exit1-gap-pass4-v1.json"
+)
 GLM_DEDICATED_B_V5_RELEASE = Path(
     "docs/evidence/qwen38-study/2026-09-04-glm53-dedicated-b-v5-scoring-release-v1.json"
 )
@@ -2204,6 +2216,72 @@ def test_exit1_reward_evidence_must_exist_and_match_verifier(
             {"rank": 1, "source_rank": 7, "attempt": 1},
             "sha256:" + "2" * 64,
             "test-key",
+        )
+
+
+@pytest.mark.parametrize(
+    ("model_block", "plan_path", "expected_attempts", "expected_credits"),
+    [
+        (
+            "qwen_hosted_v8",
+            QWEN_COMPLETED_EXIT1_GAP_PLAN,
+            {(6, 3), (6, 4), (7, 2), (7, 3), (7, 4)},
+            {(6, 1), (6, 2), (7, 1)},
+        ),
+        (
+            "glm_hosted_v12",
+            GLM_COMPLETED_EXIT1_GAP_PLAN,
+            {(13, 3), (13, 4), (15, 2), (15, 3), (15, 4)},
+            {(13, 1), (13, 2), (15, 1)},
+        ),
+    ],
+)
+def test_completed_exit1_gap_plan_runs_only_missing_attempts(
+    model_block: str,
+    plan_path: Path,
+    expected_attempts: set[tuple[int, int]],
+    expected_credits: set[tuple[int, int]],
+) -> None:
+    qwen = hosted.load_object(QWEN_HTTP500_SUCCESSOR_PLAN)
+    glm = hosted.load_object(GLM_HTTP500_HOSTED_PRIMARY_PLAN)
+    reconciliation = hosted.load_object(COMPLETED_EXIT1_RECONCILIATION)
+    source = hosted.load_object(COMPLETED_EXIT1_GAP_SOURCE)
+    plan = hosted.build_completed_exit1_gap_plan(
+        qwen, glm, reconciliation, source, model_block
+    )
+
+    assert plan == hosted.load_object(plan_path)
+    assert {
+        (int(row["source_rank"]), int(row["attempt"]))
+        for row in plan["attempts"]
+    } == expected_attempts
+    assert {
+        (int(row["source_rank"]), int(row["attempt"]))
+        for row in plan["credited_sessions"]
+    } == expected_credits
+    assert plan["new_session_count"] == 5
+    assert plan["total_session_count"] == 8
+    assert plan["treatment_block"] == (
+        qwen["treatment_block"]
+        if model_block == "qwen_hosted_v8"
+        else glm["treatment_block"]
+    )
+    assert plan["execution"]["required_priority_class"] == "fleet-train-high"
+    assert plan["execution"]["launch_authorized"] is False
+
+
+def test_completed_exit1_gap_source_rejects_any_replacement_claim() -> None:
+    source = hosted.load_object(COMPLETED_EXIT1_GAP_SOURCE)
+    source["replacement_addons_scored_claims"] = 1
+    source["receipt_sha256"] = self_hosted.digest_without(source, "receipt_sha256")
+
+    with pytest.raises(ValueError, match="gap source drifted"):
+        hosted.build_completed_exit1_gap_plan(
+            hosted.load_object(QWEN_HTTP500_SUCCESSOR_PLAN),
+            hosted.load_object(GLM_HTTP500_HOSTED_PRIMARY_PLAN),
+            hosted.load_object(COMPLETED_EXIT1_RECONCILIATION),
+            source,
+            "qwen_hosted_v8",
         )
 
 

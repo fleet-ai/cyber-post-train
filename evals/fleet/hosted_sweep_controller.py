@@ -147,6 +147,12 @@ QWEN_ATTRITION_REPLACEMENT_CAMPAIGN = (
 GLM_ATTRITION_REPLACEMENT_CAMPAIGN = (
     "chris-cyber-glm53-opencode11827-hosted-replacement-r111-p4-v1"
 )
+QWEN_COMPLETED_EXIT1_GAP_CAMPAIGN = (
+    "chris-cyber-q38-opencode11827-hosted-gap-q6q7-p4-v1"
+)
+GLM_COMPLETED_EXIT1_GAP_CAMPAIGN = (
+    "chris-cyber-glm53-opencode11827-hosted-gap-g13g15-p4-v1"
+)
 EXPECTED_INCLUDED_TASK_COUNTS.update(
     {
         "qwen38_remainder": 48,
@@ -171,6 +177,8 @@ EXPECTED_INCLUDED_TASK_COUNTS.update(
         "glm53_dedicated_a_v5": 27,
         "qwen38_attrition_replacement": 1,
         "glm53_attrition_replacement": 1,
+        "qwen38_completed_exit1_gap": 2,
+        "glm53_completed_exit1_gap": 2,
     }
 )
 SCHEDULE = [
@@ -2493,6 +2501,227 @@ def validate_completed_exit1_reconciliation(
         raise ValueError("completed exit-1 reconciliation privacy drifted")
 
 
+def build_completed_exit1_gap_plan(
+    qwen_plan: dict[str, Any],
+    glm_plan: dict[str, Any],
+    reconciliation: dict[str, Any],
+    source: dict[str, Any],
+    model_block: str,
+) -> dict[str, Any]:
+    """Build a create-once, same-task plan for only skipped exit-1 gaps."""
+    validate_completed_exit1_reconciliation(reconciliation, qwen_plan, glm_plan)
+    if (
+        source.get("schema_version") != "fleet-completed-exit1-gap-source-v1"
+        or source.get("receipt_sha256") != digest_without(source, "receipt_sha256")
+        or source.get("reconciliation_receipt_sha256")
+        != reconciliation["receipt_sha256"]
+        or source.get("scores_read") is not False
+        or source.get("prompts_or_traces_read") is not False
+        or source.get("replacement_addons_scored_claims") != 0
+        or source.get("primary_denominators")
+        != {"qwen": {"tasks": 50, "cells": 200}, "glm": {"tasks": 100, "cells": 400}}
+        or source.get("primary_denominator_restored_only_after_all_gap_tasks_pass4")
+        is not True
+    ):
+        raise ValueError("completed exit-1 gap source drifted")
+    settings = {
+        "qwen_hosted_v8": {
+            "plan": qwen_plan,
+            "shard": "qwen38_completed_exit1_gap",
+            "campaign": QWEN_COMPLETED_EXIT1_GAP_CAMPAIGN,
+            "source_ranks": [6, 7],
+            "network": "qwen38-hosted-gap-v1",
+            "accepted_cell": (6, 1),
+            "accepted_receipt_sha256": (
+                "sha256:c6b1dea26588f2511d8dd5b7463e9be23de1f3723f7586f8a692e262ebc2c76a"
+            ),
+            "held_replacement": 56,
+            "primary_denominator": {"tasks": 50, "cells": 200},
+        },
+        "glm_hosted_v12": {
+            "plan": glm_plan,
+            "shard": "glm53_completed_exit1_gap",
+            "campaign": GLM_COMPLETED_EXIT1_GAP_CAMPAIGN,
+            "source_ranks": [13, 15],
+            "network": "glm53-hosted-gap-v1",
+            "accepted_cell": (13, 1),
+            "accepted_receipt_sha256": (
+                "sha256:1c6e404b9edca1a8ab78303c8137a4cac55eb3bfa6c94db1a473ac9512425637"
+            ),
+            "held_replacement": 111,
+            "primary_denominator": {"tasks": 100, "cells": 400},
+        },
+    }
+    if model_block not in settings:
+        raise ValueError("unsupported completed exit-1 model block")
+    selected = settings[model_block]
+    predecessor = selected["plan"]
+    source_job = (source.get("source_jobs") or {}).get(model_block) or {}
+    if (
+        source_job.get("plan_sha256") != predecessor["plan_sha256"]
+        or not source_job.get("job_uid")
+        or not source_job.get("pod_uid")
+    ):
+        raise ValueError("completed exit-1 source job binding drifted")
+    try:
+        uuid.UUID(source_job["job_uid"])
+        uuid.UUID(source_job["pod_uid"])
+    except ValueError as exc:
+        raise ValueError("completed exit-1 source job UID drifted") from exc
+
+    task_by_source = {
+        int(task["source_rank"]): task for task in predecessor["tasks"]
+    }
+    tasks: list[dict[str, Any]] = []
+    for source_rank in selected["source_ranks"]:
+        task = copy.deepcopy(task_by_source[source_rank])
+        task["rank"] = len(tasks) + 1
+        tasks.append(task)
+
+    accepted_rows = [
+        row
+        for row in source.get("accepted_cells") or []
+        if row.get("model_block") == model_block
+    ]
+    if len(accepted_rows) != 1:
+        raise ValueError("completed exit-1 accepted source cell drifted")
+    accepted = accepted_rows[0]
+    accepted_receipt = accepted.get("receipt") or {}
+    source_rank, attempt = selected["accepted_cell"]
+    predecessor_attempt = next(
+        row
+        for row in predecessor["attempts"]
+        if int(row["source_rank"]) == source_rank
+        and int(row["attempt"]) == attempt
+    )
+    if (
+        accepted.get("source_rank") != source_rank
+        or accepted.get("attempt") != attempt
+        or accepted_receipt.get("receipt_sha256")
+        != digest_without(accepted_receipt, "receipt_sha256")
+        or accepted_receipt.get("receipt_sha256")
+        != selected["accepted_receipt_sha256"]
+        or accepted_receipt.get("run_id") != predecessor_attempt["run_id"]
+        or accepted_receipt.get("source_rank") != source_rank
+        or accepted_receipt.get("attempt") != attempt
+        or accepted_receipt.get("task_version_id")
+        != task_by_source[source_rank]["task"]["version_id"]
+        or accepted_receipt.get("accepted") is not True
+        or accepted_receipt.get("credited") is not True
+    ):
+        raise ValueError("completed exit-1 accepted receipt drifted")
+    try:
+        uuid.UUID(accepted_receipt["session_id"])
+        uuid.UUID(accepted_receipt["verifier_execution_id"])
+    except (KeyError, ValueError) as exc:
+        raise ValueError("completed exit-1 accepted receipt UUID drifted") from exc
+
+    reconciled_rows = [
+        row
+        for row in reconciliation["reconciled_cells"]
+        if row["model_block"] == model_block
+    ]
+    rank_by_source = {int(task["source_rank"]): int(task["rank"]) for task in tasks}
+    credits = [
+        {
+            "rank": rank_by_source[source_rank],
+            "source_rank": source_rank,
+            "attempt": attempt,
+            "session_id": accepted_receipt["session_id"],
+            "verifier_execution_id": accepted_receipt["verifier_execution_id"],
+            "source_run_id": accepted_receipt["run_id"],
+            "source_receipt_sha256": accepted_receipt["receipt_sha256"],
+            "classification": "ACCEPTED",
+        }
+    ]
+    for row in reconciled_rows:
+        credits.append(
+            {
+                "rank": rank_by_source[int(row["source_rank"])],
+                "source_rank": int(row["source_rank"]),
+                "attempt": int(row["attempt"]),
+                "session_id": row["session_id"],
+                "verifier_execution_id": row["verifier_execution_id"],
+                "source_run_id": row["run_id"],
+                "source_receipt_sha256": reconciliation["receipt_sha256"],
+                "classification": "RECONCILED_ACCEPTED",
+            }
+        )
+    credits.sort(key=lambda row: (int(row["rank"]), int(row["attempt"])))
+    credited_cells = {(int(row["rank"]), int(row["attempt"])) for row in credits}
+    attempts: list[dict[str, Any]] = []
+    for task in tasks:
+        key_digest = self_hosted.sha256(task["task"]["key"].encode()).split(":", 1)[
+            1
+        ][:8]
+        for gap_attempt in range(1, 5):
+            if (int(task["rank"]), gap_attempt) in credited_cells:
+                continue
+            attempts.append(
+                {
+                    "ordinal": len(attempts) + 1,
+                    "rank": int(task["rank"]),
+                    "source_rank": int(task["source_rank"]),
+                    "attempt": gap_attempt,
+                    "run_id": (
+                        f"{selected['campaign']}-sr{int(task['source_rank']):03d}"
+                        f"-a{gap_attempt}-{key_digest}"
+                    ),
+                    "network": (
+                        f"{selected['network']}-sr{int(task['source_rank']):03d}"
+                        f"-a{gap_attempt}-{key_digest}"
+                    ),
+                }
+            )
+    plan = {
+        "schema_version": PLAN_SCHEMA,
+        "shard_key": selected["shard"],
+        "campaign_id": selected["campaign"],
+        "source_job_id": predecessor["source_job_id"],
+        "source": {
+            "predecessor_plan_sha256": predecessor["plan_sha256"],
+            "reconciliation_receipt_sha256": reconciliation["receipt_sha256"],
+            "gap_source_receipt_sha256": source["receipt_sha256"],
+            "source_job_name": source_job["job_name"],
+            "source_job_uid": source_job["job_uid"],
+            "source_pod_uid": source_job["pod_uid"],
+            "held_unused_replacement_rank": selected["held_replacement"],
+        },
+        "treatment_block": copy.deepcopy(predecessor["treatment_block"]),
+        "model": copy.deepcopy(predecessor["model"]),
+        "harness": copy.deepcopy(predecessor["harness"]),
+        "authority": copy.deepcopy(predecessor["authority"]),
+        "task_count": 2,
+        "pass_k": 4,
+        "total_session_count": 8,
+        "credited_sessions": credits,
+        "new_session_count": len(attempts),
+        "primary_denominator": selected["primary_denominator"],
+        "primary_denominator_restored_only_after_all_gap_tasks_pass4": True,
+        "excluded_tasks": [],
+        "execution": {
+            **copy.deepcopy(predecessor["execution"]),
+            "inventory_policy": (
+                "plan_identity_plus_authoritative_receipt_v1"
+                if model_block == "qwen_hosted_v8"
+                else "conservative_no_same_model_session_for_task_key_v1"
+            ),
+            "retry_policy": "never_repeat_any_authoritative_scored_outcome",
+            "future_nonzero_exit_policy": (
+                "credit_only_if_reward_ingest_cleanup_and_authoritative_session_match"
+            ),
+            "required_priority_class": "fleet-train-high",
+            "launch_authorized": False,
+        },
+        "tasks": tasks,
+        "attempts": attempts,
+        "privacy": copy.deepcopy(predecessor["privacy"]),
+    }
+    plan["plan_sha256"] = digest_without(plan, "plan_sha256")
+    validate_plan(plan)
+    return plan
+
+
 def _validate_source_plan(plan: dict[str, Any]) -> None:
     if plan.get("schema_version") == legacy.PLAN_SCHEMA:
         legacy.validate_plan(plan)
@@ -2765,6 +2994,7 @@ def validate_plan(plan: dict[str, Any]) -> None:
             "glm53_http500_successor",
             "glm53_http500_hosted_primary",
             "glm53_attrition_replacement",
+            "glm53_completed_exit1_gap",
         }
         else (
             "plan_identity_plus_authoritative_receipt_v1"
@@ -2775,6 +3005,7 @@ def validate_plan(plan: dict[str, Any]) -> None:
                 "qwen38_replacements",
                 "qwen38_http500_successor",
                 "qwen38_attrition_replacement",
+                "qwen38_completed_exit1_gap",
             }
             else None
         )
@@ -2787,6 +3018,88 @@ def validate_plan(plan: dict[str, Any]) -> None:
         or execution.get("inventory_policy") != expected_inventory_policy
     ):
         raise ValueError("hosted shard execution policy drifted")
+    if shard_key in {"qwen38_completed_exit1_gap", "glm53_completed_exit1_gap"}:
+        is_qwen = shard_key.startswith("qwen38")
+        expected_source_ranks = [6, 7] if is_qwen else [13, 15]
+        expected_new_cells = (
+            {(6, 3), (6, 4), (7, 2), (7, 3), (7, 4)}
+            if is_qwen
+            else {(13, 3), (13, 4), (15, 2), (15, 3), (15, 4)}
+        )
+        expected_credit_cells = (
+            {(6, 1), (6, 2), (7, 1)}
+            if is_qwen
+            else {(13, 1), (13, 2), (15, 1)}
+        )
+        expected_accepted_receipt = (
+            "sha256:c6b1dea26588f2511d8dd5b7463e9be23de1f3723f7586f8a692e262ebc2c76a"
+            if is_qwen
+            else "sha256:1c6e404b9edca1a8ab78303c8137a4cac55eb3bfa6c94db1a473ac9512425637"
+        )
+        expected_primary = {"tasks": 50, "cells": 200} if is_qwen else {
+            "tasks": 100,
+            "cells": 400,
+        }
+        source = plan.get("source") or {}
+        if (
+            [int(row["source_rank"]) for row in tasks] != expected_source_ranks
+            or {(int(row["source_rank"]), int(row["attempt"])) for row in attempts}
+            != expected_new_cells
+            or {(int(row["source_rank"]), int(row["attempt"])) for row in credits}
+            != expected_credit_cells
+            or len(attempts) != 5
+            or len(credits) != 3
+            or len(
+                [
+                    row
+                    for row in credits
+                    if row.get("classification") == "ACCEPTED"
+                    and row.get("source_receipt_sha256")
+                    == expected_accepted_receipt
+                ]
+            )
+            != 1
+            or len(
+                [
+                    row
+                    for row in credits
+                    if row.get("classification") == "RECONCILED_ACCEPTED"
+                    and row.get("source_receipt_sha256")
+                    == "sha256:5435c0a25b3be1872c1aae09fd88858c5251272e164ab8eb49ab66b4c5a4ca0e"
+                ]
+            )
+            != 2
+            or source.get("reconciliation_receipt_sha256")
+            != "sha256:5435c0a25b3be1872c1aae09fd88858c5251272e164ab8eb49ab66b4c5a4ca0e"
+            or source.get("held_unused_replacement_rank") != (56 if is_qwen else 111)
+            or plan.get("primary_denominator") != expected_primary
+            or plan.get("primary_denominator_restored_only_after_all_gap_tasks_pass4")
+            is not True
+            or execution.get("required_priority_class") != "fleet-train-high"
+            or execution.get("launch_authorized") is not False
+            or execution.get("retry_policy")
+            != "never_repeat_any_authoritative_scored_outcome"
+            or execution.get("future_nonzero_exit_policy")
+            != "credit_only_if_reward_ingest_cleanup_and_authoritative_session_match"
+            or plan.get("treatment_block")
+            != (
+                plan.get("treatment_block")
+                | {
+                    "kind": "hosted_inference_endpoint_v1",
+                    "model_revision": plan["model"]["revision"],
+                    "endpoint_origin": plan["model"]["endpoint_origin"],
+                    "served_id": plan["model"]["served_id"],
+                    "session_model": plan["model"]["session_model"],
+                    "harness": plan["harness"],
+                    "required_task_tools": ["bash", "submit_report"],
+                    "required_task_tool_catalog_sha256": execution[
+                        "required_task_tool_catalog_sha256"
+                    ],
+                }
+            )
+        ):
+            raise ValueError("completed exit-1 gap binding drifted")
+        return
     if shard_key in {"qwen38_attrition_replacement", "glm53_attrition_replacement"}:
         is_qwen = shard_key.startswith("qwen38")
         source = plan.get("source") or {}
