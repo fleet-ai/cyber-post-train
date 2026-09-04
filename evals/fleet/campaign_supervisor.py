@@ -30,6 +30,9 @@ WORKER_SCHEMA = "fleet-score-blind-worker-registration-v1"
 HEARTBEAT_SCHEMA = "fleet-score-blind-campaign-heartbeat-v1"
 LEGACY_IMPORT_SCHEMA = "fleet-score-blind-legacy-import-v1"
 SCIENTIFIC_MAPPING_SCHEMA = "fleet-score-blind-scientific-mapping-v2"
+SCIENTIFIC_MAPPING_RELEASE_PREVIEW_SCHEMA = (
+    "fleet-score-blind-scientific-mapping-release-preview-v1"
+)
 HIGH_PRIORITY_CLASS = "fleet-train-high"
 
 
@@ -180,8 +183,13 @@ def validate_scientific_mapping(
         raise ValueError("unsupported scientific mapping schema")
     if mapping.get("mapping_sha256") != digest_without(mapping, "mapping_sha256"):
         raise ValueError("scientific mapping digest mismatch")
+    release_status = mapping.get("release_status")
     if (
-        mapping.get("release_status") != "blocked_pending_execution_fragment_binding"
+        release_status
+        not in {
+            "blocked_pending_execution_fragment_binding",
+            "held_pending_legacy_import_and_final_audit",
+        }
         or mapping.get("launch_authorized") is not False
         or mapping.get("ledger_initialization_authorized") is not False
     ):
@@ -206,6 +214,7 @@ def validate_scientific_mapping(
         raise ValueError("scientific mapping component set drifted")
     scientific: list[dict[str, Any]] = []
     unresolved: set[tuple[str, int, int]] = set()
+    executable: list[dict[str, Any]] = []
     for component in components:
         component_id = component["id"]
         model, expected_tasks, nodes, gpus = expected_components[component_id]
@@ -267,6 +276,76 @@ def validate_scientific_mapping(
                     "plan_sha256"
                 ].startswith("sha256:"):
                     raise ValueError("resolved attempt ownership lacks plan binding")
+                plan_path = root / str(binding.get("repo_plan_path") or "")
+                try:
+                    plan = read_object(plan_path)
+                except RuntimeError as exc:
+                    raise ValueError("resolved attempt ownership plan missing") from exc
+                if (
+                    plan.get("plan_sha256") != binding["plan_sha256"]
+                    or plan.get("plan_sha256") != digest_without(plan, "plan_sha256")
+                    or plan.get("harness", {}).get("context_management")
+                    != "opencode_1.18.27_native_compaction_no_autocontinue"
+                    or plan.get("treatment_block", {}).get("kind")
+                    != (
+                        "dedicated_inference_endpoint_v1"
+                        if component_id.startswith("glm-dedicated-")
+                        else "hosted_inference_endpoint_v1"
+                    )
+                    or (
+                        component_id.startswith("glm-dedicated-a-")
+                        and plan.get("treatment_block", {}).get("replica") != "A"
+                    )
+                    or (
+                        component_id.startswith("glm-dedicated-b-")
+                        and plan.get("treatment_block", {}).get("replica") != "B"
+                    )
+                    or (
+                        component_id != "qwen-hosted-retained-source4"
+                        and plan.get("execution", {}).get("required_priority_class")
+                        != HIGH_PRIORITY_CLASS
+                    )
+                ):
+                    raise ValueError("resolved attempt ownership plan drifted")
+                plan_tasks = {
+                    int(row["source_rank"]): row for row in plan.get("tasks") or []
+                }
+                plan_attempts = {
+                    (int(row["source_rank"]), int(row["attempt"])): row
+                    for row in plan.get("attempts") or []
+                }
+                if not cells <= set(plan_attempts):
+                    raise ValueError("resolved attempt ownership cells drifted")
+                for rank, attempt in sorted(cells):
+                    task = plan_tasks.get(rank)
+                    scientific_task = task_rows.get(rank)
+                    if (
+                        task is None
+                        or scientific_task is None
+                        or task.get("task", {}).get("key")
+                        != scientific_task.get("task", {}).get("key")
+                        or task.get("task", {}).get("version_id")
+                        != scientific_task.get("task", {}).get("version_id")
+                        or plan.get("model", {}).get("served_id")
+                        not in {None, model}
+                        or not isinstance(attempt_row := plan_attempts[(rank, attempt)], dict)
+                        or not isinstance(attempt_row.get("run_id"), str)
+                        or not attempt_row["run_id"]
+                    ):
+                        raise ValueError("resolved attempt task identity drifted")
+                    executable.append(
+                        {
+                            "model": model,
+                            "serving_block": component["serving_block"],
+                            "component_id": component_id,
+                            "source_rank": rank,
+                            "task_key": task["task"]["key"],
+                            "task_version_id": task["task"]["version_id"],
+                            "attempt": attempt,
+                            "source_plan_sha256": binding["plan_sha256"],
+                            "source_run_id": attempt_row["run_id"],
+                        }
+                    )
             elif state == "unresolved":
                 if binding.get("plan_sha256") is not None or not binding.get("blocked_reason"):
                     raise ValueError("unresolved attempt ownership is not fail closed")
@@ -318,13 +397,139 @@ def validate_scientific_mapping(
         "scores_or_content_read": False,
     }:
         raise ValueError("legacy import semantics drifted")
+    executable_identities = [
+        (row["model"], row["task_version_id"], row["attempt"]) for row in executable
+    ]
+    if len(executable_identities) != len(set(executable_identities)):
+        raise ValueError("scientific executable cell identity duplicated")
+    if release_status == "held_pending_legacy_import_and_final_audit" and (
+        unresolved
+        or len(executable) != mapping["expected"]["total_cells"]
+        or mapping.get("blocked_requirements")
+        != [
+            "seal exhaustive score-blind legacy import after all active claims are reconciled",
+            "independent audit before ledger initialization or supervisor deployment",
+        ]
+    ):
+        raise ValueError("held scientific mapping is not an exact executable universe")
+    source_run_ids = [row["source_run_id"] for row in executable]
+    if len(source_run_ids) != len(set(source_run_ids)):
+        raise ValueError("scientific executable source run identity duplicated")
+    executable_digest = (
+        sha256(canonical_json(sorted(executable, key=lambda row: (
+            row["model"], row["component_id"], row["source_rank"], row["attempt"]
+        ))))
+        if not unresolved
+        else None
+    )
     return {
         "tasks": len(scientific),
         "cells": len(scientific) * 4,
         "model_cells": dict(sorted((key, value * 4) for key, value in counts.items())),
         "unresolved_cells": len(unresolved),
         "unresolved_components": sorted({row[0] for row in unresolved}),
+        "executable_cells": len(executable),
+        "executable_universe_sha256": executable_digest,
     }
+
+
+def validate_scientific_mapping_release_preview(
+    preview: dict[str, Any], mapping: dict[str, Any], *, root: Path = Path(".")
+) -> dict[str, Any]:
+    """Validate the held 600-cell execution/import release without authorizing it."""
+
+    summary = validate_scientific_mapping(mapping, root=root)
+    if (
+        preview.get("schema_version") != SCIENTIFIC_MAPPING_RELEASE_PREVIEW_SCHEMA
+        or preview.get("receipt_sha256") != digest_without(preview, "receipt_sha256")
+        or preview.get("status") != "HELD"
+        or preview.get("mapping_sha256") != mapping["mapping_sha256"]
+        or preview.get("executable_universe_sha256")
+        != summary["executable_universe_sha256"]
+        or preview.get("task_count") != 150
+        or preview.get("cell_count") != 600
+        or preview.get("model_cells") != {"qwen3.8-27b": 200, "glm-5.3": 400}
+        or preview.get("authorization")
+        != {
+            "launch_authorized": False,
+            "ledger_initialization_authorized": False,
+            "supervisor_deployment_authorized": False,
+        }
+        or preview.get("legacy_import")
+        != {
+            "complete": False,
+            "manifest_sha256": None,
+            "required_before_ledger_initialization": True,
+            "must_reconcile_all_active_and_terminal_legacy_cells": True,
+        }
+        or preview.get("evidence_bindings")
+        != {
+            "replacement_selection_receipt_sha256s": sorted(
+                {row["selection_receipt_sha256"] for row in mapping["replacement_mappings"]}
+            ),
+            "dedicated_tail_unused_inventory_receipt_sha256": (
+                "sha256:378e8476ad89e2331b9c7382c790d4f2ba6858a674967a35fcf6bc4390d23426"
+            ),
+            "dedicated_a_r112_r113_hydration_receipt_sha256": (
+                "sha256:1ebba23918ef3357f6430261841eca2163b632a1d4d67430ae2465e023e719ed"
+            ),
+            "dedicated_a_source6_tombstone_receipt_sha256": (
+                "sha256:5e3e877811953c1dd25f8aef547fed1677bcefed90d5de190853b27cdc744e70"
+            ),
+        }
+        or preview.get("privacy")
+        != {
+            "scores_read": False,
+            "prompts_or_traces_read": False,
+            "flags_read": False,
+            "credentials_included": False,
+        }
+    ):
+        raise ValueError("scientific mapping release preview drifted")
+    expected_fragments = []
+    for component in mapping["components"]:
+        for binding in component["attempt_ownership"]:
+            cells = sorted(_mapping_selector_cells(binding))
+            expected_fragments.append(
+                {
+                    "component_id": component["id"],
+                    "repo_plan_path": binding["repo_plan_path"],
+                    "plan_sha256": binding["plan_sha256"],
+                    "selector_sha256": sha256(canonical_json(cells)),
+                    "cell_count": len(cells),
+                }
+            )
+    if preview.get("execution_fragments") != expected_fragments:
+        raise ValueError("scientific mapping release fragment binding drifted")
+    for path, field in (
+        (
+            root
+            / "docs/evidence/qwen38-study/"
+            "2026-09-04-glm53-dedicated-v5-tail-unused-inventory-v1.json",
+            "dedicated_tail_unused_inventory_receipt_sha256",
+        ),
+        (
+            root
+            / "docs/evidence/qwen38-study/"
+            "2026-09-04-glm53-dedicated-a-r112-r113-hydration-v1.json",
+            "dedicated_a_r112_r113_hydration_receipt_sha256",
+        ),
+        (
+            root
+            / "docs/evidence/qwen38-study/"
+            "2026-09-04-glm53-dedicated-a-source6-attempt4-pre-model-tombstone-v1.json",
+            "dedicated_a_source6_tombstone_receipt_sha256",
+        ),
+    ):
+        evidence = read_object(path)
+        if (
+            evidence.get("receipt_sha256")
+            != preview["evidence_bindings"][field]
+            or evidence.get("receipt_sha256")
+            != digest_without(evidence, "receipt_sha256")
+        ):
+            raise ValueError("scientific mapping release evidence drifted")
+    return summary
 
 
 def _plan_path(component: dict[str, Any], cluster: bool) -> Path:

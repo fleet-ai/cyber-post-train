@@ -14,6 +14,10 @@ CAMPAIGN = Path("evals/fleet/configs/q38-glm53-primary-campaign-v1.json")
 SCIENTIFIC_MAPPING = Path(
     "evals/fleet/configs/q38-glm53-primary-scientific-mapping-v2.json"
 )
+SCIENTIFIC_MAPPING_RELEASE_PREVIEW = Path(
+    "docs/evidence/qwen38-study/"
+    "2026-09-04-primary-600-cell-executable-universe-import-release-preview-v1.json"
+)
 SUPERVISOR_MANIFEST = Path(
     "evals/fleet/cluster/q38-glm53-campaign-supervisor-v1.yaml"
 )
@@ -102,18 +106,19 @@ def test_checked_in_campaign_cannot_initialize_before_replacements_are_bound(
         supervisor.initialize_ledger(campaign, tmp_path / "ledger", cluster=False)
 
 
-def test_blocked_v2_scientific_mapping_is_exact_but_not_executable() -> None:
+def test_held_v2_scientific_mapping_is_exact_and_executable_but_not_released() -> None:
     mapping = supervisor.read_object(SCIENTIFIC_MAPPING)
     summary = supervisor.validate_scientific_mapping(mapping)
     assert summary == {
         "tasks": 150,
         "cells": 600,
         "model_cells": {"glm-5.3": 400, "qwen3.8-27b": 200},
-        "unresolved_cells": 104,
-        "unresolved_components": [
-            "glm-dedicated-a-v5-primary27",
-            "glm-dedicated-b-v5-primary27",
-        ],
+        "unresolved_cells": 0,
+        "unresolved_components": [],
+        "executable_cells": 600,
+        "executable_universe_sha256": (
+            "sha256:17d1fa8734e5b3e16c902ea35ba7bcd0eacdb7f7f834f311b1f5c0777a7bb559"
+        ),
     }
     assert mapping["launch_authorized"] is False
     assert mapping["ledger_initialization_authorized"] is False
@@ -155,7 +160,8 @@ def test_blocked_v2_mapping_status_command_is_read_only(capsys, monkeypatch) -> 
     assert supervisor.main() == 0
     snapshot = json.loads(capsys.readouterr().out)
     assert snapshot["cells"] == 600
-    assert snapshot["unresolved_cells"] == 104
+    assert snapshot["unresolved_cells"] == 0
+    assert snapshot["executable_cells"] == 600
     assert snapshot["launch_authorized"] is False
     assert snapshot["scores_read"] is False
 
@@ -173,13 +179,19 @@ def test_blocked_v2_mapping_status_command_is_read_only(capsys, monkeypatch) -> 
             ][0]["task"].__setitem__(
                 "version_id", "21baee36-dc26-4dcd-983e-ae58a665dfa9"
             ),
-            "model/task identity",
+            "attempt task identity",
         ),
         (
             lambda mapping: mapping["components"][3]["attempt_ownership"][-1][
                 "source_ranks"
             ].pop(),
             "attempt ownership has gaps",
+        ),
+        (
+            lambda mapping: mapping["components"][3]["attempt_ownership"][-1].__setitem__(
+                "repo_plan_path", "evals/fleet/configs/does-not-exist.json"
+            ),
+            "attempt ownership plan missing",
         ),
         (
             lambda mapping: mapping["replacement_mappings"][0].__setitem__(
@@ -203,6 +215,37 @@ def test_blocked_v2_scientific_mapping_tampering_fails_closed(
     mapping["mapping_sha256"] = supervisor.digest_without(mapping, "mapping_sha256")
     with pytest.raises(ValueError, match=match):
         supervisor.validate_scientific_mapping(mapping)
+
+
+def test_600_cell_executable_universe_import_release_is_held() -> None:
+    mapping = supervisor.read_object(SCIENTIFIC_MAPPING)
+    preview = supervisor.read_object(SCIENTIFIC_MAPPING_RELEASE_PREVIEW)
+    summary = supervisor.validate_scientific_mapping_release_preview(preview, mapping)
+    assert summary["executable_cells"] == 600
+    assert summary["unresolved_cells"] == 0
+    assert preview["status"] == "HELD"
+    assert preview["authorization"] == {
+        "launch_authorized": False,
+        "ledger_initialization_authorized": False,
+        "supervisor_deployment_authorized": False,
+    }
+    assert preview["legacy_import"]["complete"] is False
+
+
+def test_600_cell_release_preview_rejects_fragment_or_authorization_drift() -> None:
+    mapping = supervisor.read_object(SCIENTIFIC_MAPPING)
+    preview = supervisor.read_object(SCIENTIFIC_MAPPING_RELEASE_PREVIEW)
+    for mutation in (
+        lambda row: row["execution_fragments"][0].__setitem__("cell_count", 3),
+        lambda row: row["authorization"].__setitem__("launch_authorized", True),
+    ):
+        drifted = copy.deepcopy(preview)
+        mutation(drifted)
+        drifted["receipt_sha256"] = supervisor.digest_without(
+            drifted, "receipt_sha256"
+        )
+        with pytest.raises(ValueError, match="release"):
+            supervisor.validate_scientific_mapping_release_preview(drifted, mapping)
 
 
 def test_campaign_rejects_capacity_or_plan_drift() -> None:
