@@ -1,0 +1,73 @@
+{
+  "schema_version": "cyber-dedicated-eval-capacity-launch-v1",
+  "captured_at": "2026-09-04T01:08:34Z",
+  "authorization": {
+    "purpose": "increase Fleet cyber evaluation throughput with dedicated cluster inference",
+    "maximum_nodes": 2,
+    "maximum_gpus": 16
+  },
+  "allocation": {
+    "qwen": "continue using the existing exact Qwen3.8-27B hosted endpoint",
+    "glm": "two additional exact GLM-5.3 TP8 serving replicas after staging",
+    "basis": "GLM is the measured makespan bottleneck and Qwen already has substantially higher hosted generation throughput"
+  },
+  "courtesy_controls": {
+    "jobs_api": "https://api.ft.flt.build/v1/runs",
+    "namespace": "fleet-train-jobs",
+    "queue": "training-lq",
+    "priority_class": "fleet-infra-quiet",
+    "preemption": false,
+    "peer_mutation": false,
+    "staging_gpu_count": 1,
+    "staging_and_serving_overlap": false
+  },
+  "model_stage": {
+    "title": "chris-cyber-evalstage-glm53-q38-v1",
+    "api_name": "ft-run-f466d620",
+    "rayjob_uid": "03f882b1-921b-49b4-a435-acac577fabba",
+    "workload_name": "rayjob-ft-run-f466d620-3ee06",
+    "workload_uid": "c7c3de5d-6478-430f-bd60-701b3bfb2af1",
+    "pod_name": "ft-run-f466d620-hvngd-head-ntv4x",
+    "pod_uid": "20ea12c8-b393-4501-b18b-01e6ef6c9976",
+    "run_dir": "/mnt/sfs/jobs/chris-cyber-evalstage-glm53-q38-v1",
+    "payload_sha256": "sha256:c9a68096e269ead129bee6afc94063e5b19e8516a3eeb1e60e16c9fd83e71d0a",
+    "state": "admitted_initializing",
+    "models": [
+      {
+        "repository": "Qwen/Qwen3.8-27B",
+        "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+        "target": "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2"
+      },
+      {
+        "repository": "zai-org/GLM-5.3",
+        "revision": "30333038ada1f1dacb294a93270305a890b50c14",
+        "target": "/mnt/sfs/models/glm-5.3-30333038"
+      }
+    ]
+  },
+  "serving_previews": [
+    {
+      "title": "chris-cyber-evalserve-glm53-tp8-a-v1",
+      "payload_sha256": "sha256:883d5091a51bfa5102ff9451967b19ff57aa8d6068dd8a20a6c75918acd50e7c",
+      "gpus": 8,
+      "submitted": false
+    },
+    {
+      "title": "chris-cyber-evalserve-glm53-tp8-b-v1",
+      "payload_sha256": "sha256:6b38953cfb40494c1ca2dc1b926d2b6db65d32dfa774382e47f9c1a111923704",
+      "gpus": 8,
+      "submitted": false
+    }
+  ],
+  "scientific_handoff": {
+    "scored_rollouts_started_on_dedicated_servers": 0,
+    "release_gates": [
+      "digest-valid model-stage receipt",
+      "both serving Jobs Ready with exact image and runtime arguments",
+      "model identity and context parity",
+      "structured bash and submit_report behavioral parity",
+      "remaining attempts partitioned at complete task boundaries",
+      "duplicate preflight against accepted and active session IDs"
+    ]
+  }
+}
