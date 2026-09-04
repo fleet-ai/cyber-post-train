@@ -146,8 +146,13 @@ def validate_live_route(
         raise ValueError("live hosted route receipt is not authoritative or fresh")
 
 
-def validate_hosted_release(release: dict[str, Any], plan: dict[str, Any], root: Path) -> None:
-    canary.validate_release(release, plan, root)
+def validate_hosted_release(
+    release: dict[str, Any],
+    plan: dict[str, Any],
+    root: Path,
+    expected_package_commit: str,
+) -> None:
+    canary.validate_plan(plan)
     phase_c.validate_preflight_bundle(plan, root)
     bundle = phase_c.BUNDLES[plan["shard_key"]]
     expected_evidence = {
@@ -180,8 +185,51 @@ def validate_hosted_release(release: dict[str, Any], plan: dict[str, Any], root:
         "runtime_does_not_rely_on_launcher_receipt_freshness": True,
         "runtime_maximum_route_age_seconds": 30,
     }
+    expected_implementation = {
+        "package_commit": expected_package_commit,
+        "plan_sha256": plan["plan_sha256"],
+        "controller_sha256": canary._sha(root / "evals/fleet/autocontinue_canary_controller.py"),
+        "frozen_controller_sha256": canary._sha(root / "evals/fleet/hosted_sweep_controller.py"),
+        "phase_c_validator_sha256": canary._sha(
+            root / "evals/fleet/autocontinue_canary_hosted_release.py"
+        ),
+        "hosted_runtime_sha256": canary._sha(
+            root / "evals/fleet/autocontinue_canary_hosted_runtime.py"
+        ),
+        "hosted_health_sha256": canary._sha(root / "evals/fleet/autocontinue_hosted_health.py"),
+        "self_hosted_sha256": canary._sha(root / "evals/fleet/self_hosted.py"),
+        "runner_sha256": canary._sha(root / "evals/fleet/opencode_train_sweep_runner.py"),
+        "endpoint_lease_sha256": canary._sha(root / "evals/fleet/endpoint_lease.py"),
+        "fixed_proxy_sha256": canary._sha(root / "evals/fleet/fixed_proxy.py"),
+        "dockerfile_sha256": canary._sha(root / "evals/fleet/Dockerfile.opencode"),
+        "campaign_file_sha256": canary._sha(
+            root / "evals/fleet/configs/q38-glm53-opencode-autocontinue-primary-campaign-v1.json"
+        ),
+        "compatibility_file_sha256": canary._sha(
+            root / "docs/evidence/qwen38-study/"
+            "2026-09-04-opencode-autocontinue-canary-controller-compatibility-v2.json"
+        ),
+        "preflight_manifest_sha256": canary._sha(
+            root / "evals/fleet/cluster/opencode-autocontinue-canary-preflights-v2.yaml"
+        ),
+        "scored_manifest_sha256": canary._sha(
+            root / "evals/fleet/cluster/opencode-autocontinue-canary-scored-v2.yaml"
+        ),
+        "run_script_sha256": canary._sha(
+            root / "evals/fleet/scripts/run_opencode_autocontinue_canary.sh"
+        ),
+        "launcher_sha256": canary._sha(
+            root / "evals/fleet/scripts/submit_opencode_autocontinue_canaries_v1.sh"
+        ),
+    }
+    expected_cell = {
+        "source_rank": plan["tasks"][0]["source_rank"],
+        "attempt": 1,
+        "task_version_id": plan["tasks"][0]["task"]["version_id"],
+    }
     if (
-        set(release)
+        not canary._is_git_commit(expected_package_commit)
+        or set(release)
         != {
             "schema_version",
             "append_only",
@@ -198,12 +246,38 @@ def validate_hosted_release(release: dict[str, Any], plan: dict[str, Any], root:
             "privacy",
             "receipt_sha256",
         }
+        or release.get("schema_version") != canary.RELEASE_SCHEMA
+        or release.get("append_only") is not True
+        or release.get("status") != "RELEASED"
+        or not canary._is_utc_timestamp(release.get("released_at_utc"))
+        or release.get("campaign_sha256") != canary.CAMPAIGN_SHA
+        or release.get("plan_sha256") != plan["plan_sha256"]
+        or release.get("cell") != expected_cell
         or release.get("evidence") != expected_evidence
         or release.get("hosted_only_route") != expected_route
-        or release.get("implementation", {}).get("hosted_runtime_sha256")
-        != canary._sha(root / "evals/fleet/autocontinue_canary_hosted_runtime.py")
-        or release.get("implementation", {}).get("phase_c_validator_sha256")
-        != canary._sha(root / "evals/fleet/autocontinue_canary_hosted_release.py")
+        or release.get("implementation") != expected_implementation
+        or release.get("authorization")
+        != {
+            "launch_authorized": True,
+            "create_once": True,
+            "required_priority_class": canary.PRIORITY,
+            "author": "/root",
+            "authorized_at_utc": release.get("authorization", {}).get("authorized_at_utc"),
+            "statement": release.get("authorization", {}).get("statement"),
+        }
+        or not canary._is_utc_timestamp(release.get("authorization", {}).get("authorized_at_utc"))
+        or not isinstance(release.get("authorization", {}).get("statement"), str)
+        or not release.get("authorization", {}).get("statement")
+        or release.get("terminal_contract")
+        != {
+            "downward_job_uid_required": True,
+            "downward_pod_uid_required": True,
+            "post_exit_k8s_observer_required": True,
+            "terminal_schema_version": canary.TERMINAL_SCHEMA,
+            "post_exit_schema_version": canary.POST_EXIT_SCHEMA,
+        }
+        or release.get("privacy") != phase_c.PRIVACY
+        or release.get("receipt_sha256") != canary.digest_without(release, "receipt_sha256")
     ):
         raise ValueError("hosted-only canary scoring release is not authoritative")
 
@@ -215,8 +289,9 @@ def run_hosted(
     root: Path,
     proxy: Path,
     repo: Path,
+    package_commit: str,
 ) -> dict[str, Any]:
-    validate_hosted_release(release, plan, repo)
+    validate_hosted_release(release, plan, repo, package_commit)
     validate_live_route(
         launch_route,
         caller=LAUNCHER_CALLER,
@@ -337,6 +412,7 @@ def main() -> int:
     final.add_argument("--plan", type=Path, required=True)
     final.add_argument("--release", type=Path, required=True)
     final.add_argument("--repo", type=Path, required=True)
+    final.add_argument("--package-commit", required=True)
     execute = sub.add_parser("run-hosted")
     execute.add_argument("--plan", type=Path, required=True)
     execute.add_argument("--release", type=Path, required=True)
@@ -344,6 +420,7 @@ def main() -> int:
     execute.add_argument("--out-dir", type=Path, required=True)
     execute.add_argument("--proxy", type=Path, required=True)
     execute.add_argument("--repo", type=Path, required=True)
+    execute.add_argument("--package-commit", required=True)
     args = parser.parse_args()
     if args.command == "observe-route":
         receipt = observe_live_route(os.environ["FLEET_API_KEY"], caller=LAUNCHER_CALLER)
@@ -360,7 +437,7 @@ def main() -> int:
     plan = canary.load_object(args.plan)
     release = canary.load_object(args.release)
     if args.command == "validate-release":
-        validate_hosted_release(release, plan, args.repo)
+        validate_hosted_release(release, plan, args.repo, args.package_commit)
         return 0
     terminal = run_hosted(
         plan,
@@ -369,6 +446,7 @@ def main() -> int:
         args.out_dir,
         args.proxy,
         args.repo,
+        args.package_commit,
     )
     print(terminal["receipt_sha256"])
     return 0

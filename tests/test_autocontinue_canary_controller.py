@@ -361,6 +361,9 @@ def test_scored_manifest_packages_hosted_route_gate_before_claim() -> None:
             item["name"]: item for item in doc["spec"]["template"]["spec"]["containers"][0]["env"]
         }
         assert env["LAUNCH_ROUTE_FILE"]["value"] == "launch-route.json"
+        assert env["PACKAGE_COMMIT"]["valueFrom"]["configMapKeyRef"]["key"] == (
+            "package_commit"
+        )
 
 
 def _synthetic_preflight_authorization(plan: dict) -> dict:

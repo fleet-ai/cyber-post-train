@@ -74,6 +74,7 @@ spec:
             - {name: HOSTED_PLAN_FILE, value: plan.json}
             - {name: SCORING_RELEASE_FILE, value: release.json}
             - {name: LAUNCH_ROUTE_FILE, value: launch-route.json}
+            - {name: PACKAGE_COMMIT, valueFrom: {configMapKeyRef: {name: chris-q38-ac-canary1-run-v2, key: package_commit}}}
             - {name: JOB_UID, valueFrom: {fieldRef: {apiVersion: v1, fieldPath: "metadata.labels['batch.kubernetes.io/controller-uid']"}}}
             - {name: POD_UID, valueFrom: {fieldRef: {apiVersion: v1, fieldPath: metadata.uid}}}
             - {name: FLEET_API_KEY, valueFrom: {secretKeyRef: {name: chris-cyber-opencode-evals-v2, key: FLEET_API_KEY}}}
@@ -162,6 +163,7 @@ spec:
             - {name: HOSTED_PLAN_FILE, value: plan.json}
             - {name: SCORING_RELEASE_FILE, value: release.json}
             - {name: LAUNCH_ROUTE_FILE, value: launch-route.json}
+            - {name: PACKAGE_COMMIT, valueFrom: {configMapKeyRef: {name: chris-glm53-ac-canary1-run-v2, key: package_commit}}}
             - {name: JOB_UID, valueFrom: {fieldRef: {apiVersion: v1, fieldPath: "metadata.labels['batch.kubernetes.io/controller-uid']"}}}
             - {name: POD_UID, valueFrom: {fieldRef: {apiVersion: v1, fieldPath: metadata.uid}}}
             - {name: FLEET_API_KEY, valueFrom: {secretKeyRef: {name: chris-cyber-opencode-evals-v2, key: FLEET_API_KEY}}}

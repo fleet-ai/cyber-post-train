@@ -167,6 +167,7 @@ def test_runtime_route_failure_prevents_permanent_claim(monkeypatch, tmp_path: P
             tmp_path / "out",
             tmp_path / "proxy.py",
             ROOT,
+            "16e25f1f127dcf76018a223ad8ac57e2117f83d7",
         )
     assert called is False
     assert lease_entered is True
@@ -175,9 +176,7 @@ def test_runtime_route_failure_prevents_permanent_claim(monkeypatch, tmp_path: P
 
 
 def test_runtime_live_route_check_is_under_lease_and_before_all_claims() -> None:
-    source = (
-        ROOT / "evals/fleet/autocontinue_canary_hosted_runtime.py"
-    ).read_text()
+    source = (ROOT / "evals/fleet/autocontinue_canary_hosted_runtime.py").read_text()
     run = source.split("def run_hosted(", 1)[1].split("def main()", 1)[0]
     lease = run.index("acquire_endpoint_lease")
     route = run.index("runtime_route = observe_live_route")
@@ -228,6 +227,7 @@ def test_runtime_route_observer_failures_leave_all_claims_and_execution_untouche
             tmp_path / "out",
             tmp_path / "proxy.py",
             ROOT,
+            "16e25f1f127dcf76018a223ad8ac57e2117f83d7",
         )
     assert entered is True
     assert forbidden_calls == []
@@ -269,7 +269,7 @@ def _release(plan: dict) -> dict:
             "controller_compatibility_receipt_sha256": compatibility["receipt_sha256"],
         },
         "implementation": {
-            "package_commit": "9c93095f60d627c239fe2d01f35efd918f328fe6",
+            "package_commit": "16e25f1f127dcf76018a223ad8ac57e2117f83d7",
             "plan_sha256": plan["plan_sha256"],
             "controller_sha256": canary._sha(
                 ROOT / "evals/fleet/autocontinue_canary_controller.py"
@@ -277,20 +277,37 @@ def _release(plan: dict) -> dict:
             "frozen_controller_sha256": canary._sha(
                 ROOT / "evals/fleet/hosted_sweep_controller.py"
             ),
+            "phase_c_validator_sha256": canary._sha(
+                ROOT / "evals/fleet/autocontinue_canary_hosted_release.py"
+            ),
+            "hosted_runtime_sha256": canary._sha(
+                ROOT / "evals/fleet/autocontinue_canary_hosted_runtime.py"
+            ),
+            "hosted_health_sha256": canary._sha(ROOT / "evals/fleet/autocontinue_hosted_health.py"),
+            "self_hosted_sha256": canary._sha(ROOT / "evals/fleet/self_hosted.py"),
+            "runner_sha256": canary._sha(ROOT / "evals/fleet/opencode_train_sweep_runner.py"),
+            "endpoint_lease_sha256": canary._sha(ROOT / "evals/fleet/endpoint_lease.py"),
+            "fixed_proxy_sha256": canary._sha(ROOT / "evals/fleet/fixed_proxy.py"),
+            "dockerfile_sha256": canary._sha(ROOT / "evals/fleet/Dockerfile.opencode"),
+            "campaign_file_sha256": canary._sha(
+                ROOT
+                / "evals/fleet/configs/q38-glm53-opencode-autocontinue-primary-campaign-v1.json"
+            ),
+            "compatibility_file_sha256": canary._sha(
+                ROOT / "docs/evidence/qwen38-study/"
+                "2026-09-04-opencode-autocontinue-canary-controller-compatibility-v2.json"
+            ),
             "preflight_manifest_sha256": canary._sha(
                 ROOT / "evals/fleet/cluster/opencode-autocontinue-canary-preflights-v2.yaml"
             ),
             "scored_manifest_sha256": canary._sha(
                 ROOT / "evals/fleet/cluster/opencode-autocontinue-canary-scored-v2.yaml"
             ),
+            "run_script_sha256": canary._sha(
+                ROOT / "evals/fleet/scripts/run_opencode_autocontinue_canary.sh"
+            ),
             "launcher_sha256": canary._sha(
                 ROOT / "evals/fleet/scripts/submit_opencode_autocontinue_canaries_v1.sh"
-            ),
-            "hosted_runtime_sha256": canary._sha(
-                ROOT / "evals/fleet/autocontinue_canary_hosted_runtime.py"
-            ),
-            "phase_c_validator_sha256": canary._sha(
-                ROOT / "evals/fleet/autocontinue_canary_hosted_release.py"
             ),
         },
         "authorization": {
@@ -298,6 +315,7 @@ def _release(plan: dict) -> dict:
             "create_once": True,
             "required_priority_class": "fleet-train-high",
             "author": "/root",
+            "authorized_at_utc": "2026-09-04T21:45:00Z",
             "statement": "future exact hosted-only authorization",
         },
         "terminal_contract": {
@@ -324,14 +342,69 @@ def _release(plan: dict) -> dict:
     return release
 
 
-def test_hosted_release_semantics_layer_is_exact(monkeypatch) -> None:
-    plan = canary.load_object(Q_PLAN)
+@pytest.mark.parametrize(
+    "plan_path",
+    [
+        Q_PLAN,
+        ROOT / "evals/fleet/configs/glm53-opencode-autocontinue-canary1-v1.json",
+    ],
+)
+def test_hosted_release_real_chain_is_exact(plan_path: Path) -> None:
+    plan = canary.load_object(plan_path)
     release = _release(plan)
-    monkeypatch.setattr(canary, "validate_release", lambda *_: None)
-    monkeypatch.setattr(phase_c, "validate_preflight_bundle", lambda *_: None)
-    runtime.validate_hosted_release(release, plan, ROOT)
+    runtime.validate_hosted_release(release, plan, ROOT, "16e25f1f127dcf76018a223ad8ac57e2117f83d7")
     changed = copy.deepcopy(release)
     changed["hosted_only_route"]["dedicated_recreation_authorized"] = True
     changed["receipt_sha256"] = canary.digest_without(changed, "receipt_sha256")
     with pytest.raises(ValueError, match="hosted-only"):
-        runtime.validate_hosted_release(changed, plan, ROOT)
+        runtime.validate_hosted_release(
+            changed, plan, ROOT, "16e25f1f127dcf76018a223ad8ac57e2117f83d7"
+        )
+
+
+def test_hosted_release_separates_preflight_and_final_package_commits() -> None:
+    plan = canary.load_object(Q_PLAN)
+    release = _release(plan)
+    # The immutable Phase-C preauth remains bound to Phase-A3, while the final
+    # implementation package is caller-bound independently.
+    runtime.validate_hosted_release(release, plan, ROOT, "16e25f1f127dcf76018a223ad8ac57e2117f83d7")
+    with pytest.raises(ValueError, match="hosted-only"):
+        runtime.validate_hosted_release(
+            release, plan, ROOT, "9c93095f60d627c239fe2d01f35efd918f328fe6"
+        )
+
+
+def test_hosted_release_rejects_wrong_phase_a3_preflight_commit(monkeypatch) -> None:
+    plan = canary.load_object(Q_PLAN)
+    release = _release(plan)
+    monkeypatch.setattr(phase_c, "PACKAGE_COMMIT", "16e25f1f127dcf76018a223ad8ac57e2117f83d7")
+    with pytest.raises(ValueError, match="preflight authorization"):
+        runtime.validate_hosted_release(
+            release, plan, ROOT, "16e25f1f127dcf76018a223ad8ac57e2117f83d7"
+        )
+
+
+def test_hosted_release_rejects_relocated_phase_c_reconciliation(monkeypatch) -> None:
+    plan = canary.load_object(Q_PLAN)
+    release = _release(plan)
+    bundle = phase_c.BUNDLES[plan["shard_key"]]
+    paths = {
+        bundle["preauth_path"]: canary.load_object(ROOT / bundle["preauth_path"]),
+        bundle["preflight_path"]: canary.load_object(ROOT / bundle["preflight_path"]),
+        bundle["post_exit_path"]: canary.load_object(ROOT / bundle["post_exit_path"]),
+        bundle["duplicate_path"]: canary.load_object(ROOT / bundle["duplicate_path"]),
+        phase_c.ROUTE_PATH: canary.load_object(ROOT / phase_c.ROUTE_PATH),
+    }
+    changed = copy.deepcopy(paths[bundle["post_exit_path"]])
+    changed["scored_job_created"] = changed["reconciliation"].pop("scored_job_created")
+    changed["scored_sfs_root_absent"] = changed["reconciliation"].pop("scored_sfs_root_absent")
+    changed["receipt_sha256"] = canary.digest_without(changed, "receipt_sha256")
+
+    def load(_root: Path, path: str, _sha: str):
+        return changed if path == bundle["post_exit_path"] else paths[path]
+
+    monkeypatch.setattr(phase_c, "_load_exact", load)
+    with pytest.raises(ValueError, match="preflight bundle"):
+        runtime.validate_hosted_release(
+            release, plan, ROOT, "16e25f1f127dcf76018a223ad8ac57e2117f83d7"
+        )

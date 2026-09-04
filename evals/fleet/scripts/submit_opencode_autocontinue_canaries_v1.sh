@@ -62,7 +62,8 @@ for pair in "$Q_PLAN:$Q_RELEASE" "$G_PLAN:$G_RELEASE"; do
   plan=${pair%%:*}
   release=${pair#*:}
   uv run python -m evals.fleet.autocontinue_canary_hosted_runtime validate-release \
-    --plan "$plan" --release "$release" --repo "$ROOT" >/dev/null
+    --plan "$plan" --release "$release" --repo "$ROOT" \
+    --package-commit "$(jq -er '.implementation.package_commit' "$release")" >/dev/null
 done
 test -z "$(yq -r 'select(.kind == "Job") | select(.metadata.annotations."cyber-post-train.fleet.ai/launch-authorized" != "true") | .metadata.name' "$MANIFEST")"
 
@@ -108,6 +109,7 @@ kubectl -n "$NS" create configmap "$INTENT" \
 create_scored_cm() {
   local cm=$1 plan=$2 release=$3 preauth=$4 preflight=$5 post_exit=$6 duplicate=$7
   kubectl -n "$NS" create configmap "$cm" \
+    --from-literal=package_commit="$PACKAGE_COMMIT" \
     --from-file=plan.json="$plan" \
     --from-file=release.json="$release" \
     --from-file=launch-route.json="$route_file" \
