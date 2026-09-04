@@ -1,0 +1,55 @@
+{
+  "schema_version": "fleet-glm53-dedicated-a-r110-hydration-execution-v1",
+  "append_only": true,
+  "controller_commit": "9f56abf",
+  "namespace": "fleet-train-jobs",
+  "priority": {
+    "priority_class": "fleet-train-high",
+    "value": 10000,
+    "preemption_policy": "PreemptLowerPriority",
+    "is_true_preemption_immunity": false
+  },
+  "selection_supplement": {
+    "path": "docs/evidence/qwen38-study/2026-09-04-opencode-replacement-selection-supplement-v4.json",
+    "receipt_sha256": "sha256:3ccf7fdace01bc2a3e6245d26f65d6069fa5327d4a5ac7515640c7d59092e534"
+  },
+  "job": {
+    "name": "chris-cyber-glm53-ded-a-r110-hydration-v1",
+    "uid": "ece91028-1f2a-4fa4-99c0-3748247fcc3c",
+    "succeeded": 1
+  },
+  "pod": {
+    "name": "chris-cyber-glm53-ded-a-r110-hydration-v1-bg94b",
+    "uid": "6e430910-27b1-4456-bc02-4fb708f4dc1d",
+    "exit_code": 0,
+    "restart_count": 0,
+    "finished_at": "2026-09-04T06:11:45Z"
+  },
+  "config_map": {
+    "name": "chris-cyber-glm53-ded-a-r110-hydration-v1",
+    "uid": "5cb0a278-d58c-43db-b4f5-ce302f16ca5a",
+    "immutable": true
+  },
+  "hydration": {
+    "path": "docs/evidence/qwen38-study/2026-09-04-glm53-dedicated-a-r110-hydration-v1.json",
+    "sfs_file_sha256": "sha256:d892626baab59405243aef6f70aba82c7238b8845b02840daef58bb9ece15758",
+    "repo_file_sha256": "sha256:d892626baab59405243aef6f70aba82c7238b8845b02840daef58bb9ece15758",
+    "receipt_sha256": "sha256:5b52c2f54865434685ab30b10246b83a738b6fb9288cfcfbce0dcab9805377f7",
+    "replacement_rank": 110,
+    "task_count": 1
+  },
+  "scientific_controls": {
+    "read_only_metadata_hydration": true,
+    "model_inference_called": false,
+    "scoring_called": false,
+    "scored_launch_authorized": false,
+    "fresh_a_serving_parity_still_required": true
+  },
+  "privacy": {
+    "scores_included": false,
+    "prompts_or_traces_included": false,
+    "task_content_included": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:c66ab7213392e56770f047f76798871cd9c647bb3cdf8d314a322f37950c3d30"
+}
