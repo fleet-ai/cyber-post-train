@@ -21,6 +21,9 @@ PLAN_SCHEMA = "fleet-hosted-opencode-task-boundary-shard-v1"
 SOURCE_SCHEMA = "opencode-hosted-successor-source-v1"
 REMAINDER_SOURCE_SCHEMA = "hosted-opencode-remainder-source-v1"
 DEDICATED_SCORING_RELEASE_SCHEMA = "fleet-cyber-glm53-dedicated-scoring-release-v1"
+HOSTED_REPLACEMENT_SCORING_RELEASE_SCHEMA = (
+    "fleet-glm53-hosted-replacement-scoring-release-v1"
+)
 CAMPAIGNS = {
     "qwen38": "chris-cyber-q38-opencode11827-hosted-complete49-p4-v5",
     "glm53": "chris-cyber-glm53-opencode11827-hosted-complete99-p4-v5",
@@ -246,6 +249,69 @@ def validate_dedicated_scoring_release(
         )
     ):
         raise ValueError("dedicated scoring release arithmetic or privacy drifted")
+
+
+def validate_hosted_replacement_scoring_release(
+    plan: dict[str, Any], release: dict[str, Any] | None
+) -> None:
+    """Require an append-only hydration and scoring release for hosted r106."""
+    if plan.get("shard_key") != "glm53_hosted_replacement":
+        return
+    if not isinstance(release, dict):
+        raise ValueError("hosted replacement scoring release receipt is required")
+    source = plan.get("source") or {}
+    supplement = release.get("selection_supplement") or {}
+    hydration = release.get("hydration") or {}
+    plan_evidence = release.get("plan") or {}
+    treatment = release.get("treatment") or {}
+    estimator = release.get("primary_estimator") or {}
+    authorization = release.get("authorization") or {}
+    privacy = release.get("privacy") or {}
+    if (
+        release.get("schema_version") != HOSTED_REPLACEMENT_SCORING_RELEASE_SCHEMA
+        or release.get("receipt_sha256") != digest_without(release, "receipt_sha256")
+        or release.get("append_only") is not True
+        or release.get("supersedes") is not None
+        or supplement.get("receipt_sha256")
+        != source.get("selection_supplement_receipt_sha256")
+        or supplement.get("rewritten") is not False
+        or hydration.get("receipt_sha256") != source.get("hydration_receipt_sha256")
+        or hydration.get("passed") is not True
+        or hydration.get("exit_code") != 0
+        or hydration.get("restart_count") != 0
+        or hydration.get("model_or_scoring_calls") is not False
+        or plan_evidence.get("plan_sha256") != plan["plan_sha256"]
+        or plan_evidence.get("source_ranks") != [106]
+        or plan_evidence.get("task_count") != 1
+        or plan_evidence.get("pass_k") != 4
+        or plan_evidence.get("cell_count") != 4
+        or plan_evidence.get("workers") != 1
+        or treatment.get("kind") != "hosted_inference_endpoint_v1"
+        or treatment.get("endpoint_origin") != plan["model"]["endpoint_origin"]
+        or treatment.get("served_id") != plan["model"]["served_id"]
+        or treatment.get("model_revision") != plan["model"]["revision"]
+        or treatment.get("required_task_tools")
+        != plan["execution"]["required_task_tools"]
+        or treatment.get("required_task_tool_catalog_sha256")
+        != plan["execution"]["required_task_tool_catalog_sha256"]
+        or estimator.get("unique_task_count") != 100
+        or estimator.get("pass_k") != 4
+        or estimator.get("cell_count") != 400
+        or estimator.get("pairwise_disjoint") is not True
+        or authorization.get("author") != "/root"
+        or authorization.get("timestamp_utc") != release.get("created_at")
+        or authorization.get("scored_launch_authorized") is not True
+        or authorization.get("create_once") is not True
+        or authorization.get("must_not_repeat") is not True
+        or plan["plan_sha256"] not in str(authorization.get("statement") or "")
+        or any(value is not False for value in privacy.values())
+    ):
+        raise ValueError("hosted replacement scoring release does not bind this plan")
+    for field in ("job_uid", "pod_uid"):
+        try:
+            uuid.UUID(str(hydration.get(field)))
+        except ValueError as exc:
+            raise ValueError("hosted replacement hydration has an invalid UID") from exc
 
 
 def build_remainder_plan(
@@ -1687,6 +1753,7 @@ def preflight_plan(
 ) -> dict[str, Any]:
     validate_plan(plan)
     validate_dedicated_scoring_release(plan, release)
+    validate_hosted_replacement_scoring_release(plan, release)
     roots_reconciled = _validate_plan_identity_absence(plan, root)
     with _client(key) as client:
         account = self_hosted._request(client, "GET", "/v1/account")
@@ -1742,6 +1809,7 @@ def run_plan(
 ) -> dict[str, Any]:
     validate_plan(plan)
     validate_dedicated_scoring_release(plan, release)
+    validate_hosted_replacement_scoring_release(plan, release)
     key = os.environ.get("FLEET_API_KEY")
     if not key:
         raise RuntimeError("FLEET_API_KEY is required")

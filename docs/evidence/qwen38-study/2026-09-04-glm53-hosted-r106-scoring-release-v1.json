@@ -1,0 +1,71 @@
+{
+  "schema_version": "fleet-glm53-hosted-replacement-scoring-release-v1",
+  "created_at": "2026-09-04T04:53:17Z",
+  "append_only": true,
+  "supersedes": null,
+  "selection_supplement": {
+    "path": "docs/evidence/qwen38-study/2026-09-04-opencode-replacement-selection-supplement-v1.json",
+    "file_sha256": "sha256:5bce28b1f5f12bb8c6a19243cc9abfbf8a9a5ab3ea8f5f2d957670360811b829",
+    "receipt_sha256": "sha256:e0234fb53b771dde81475dd2cae0f1c60c051ee61e4ebaf7198e52e7111c5ed2",
+    "rewritten": false
+  },
+  "hydration": {
+    "path": "docs/evidence/qwen38-study/2026-09-04-glm53-hosted-r106-hydration-v1.json",
+    "file_sha256": "sha256:8e4bd6938ec794f8863e6b45da29da1297149f789f91d2d2b5e89a545fe11720",
+    "receipt_sha256": "sha256:1cd6a19161fd767cbbc1f1ae1d60af6a231cb931cfd19f42a9c51c601969913c",
+    "job_name": "chris-cyber-glm53-hosted-r106-hydration-v1",
+    "job_uid": "8f2a90bf-4da4-4066-a570-eb9b1ade0bdf",
+    "pod_uid": "39707674-557b-46f4-a163-c80f7bd99206",
+    "completed_at": "2026-09-04T04:51:43Z",
+    "exit_code": 0,
+    "restart_count": 0,
+    "passed": true,
+    "model_or_scoring_calls": false
+  },
+  "plan": {
+    "path": "evals/fleet/configs/glm53-opencode-hosted-replacement-r106-pass4-v1.json",
+    "file_sha256": "sha256:de9f8313508a9b19e31c2000e99a797df768a835c7175b4fbd53296cbcaf76c4",
+    "plan_sha256": "sha256:8d86219998687ac76365c7530a24f60b6a8702bddb03d90b4ed7a2c6e288edce",
+    "source_ranks": [106],
+    "task_count": 1,
+    "pass_k": 4,
+    "cell_count": 4,
+    "workers": 1
+  },
+  "treatment": {
+    "kind": "hosted_inference_endpoint_v1",
+    "endpoint_origin": "https://inference.flt.build",
+    "served_id": "glm-5.3",
+    "model_revision": "30333038ada1f1dacb294a93270305a890b50c14",
+    "harness": "opencode-1.18.27",
+    "context_management": "opencode_1.18.27_native_compaction_no_autocontinue",
+    "required_task_tools": ["bash", "submit_report"],
+    "required_task_tool_catalog_sha256": "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a"
+  },
+  "primary_estimator": {
+    "hosted_untouched_original_task_count": 45,
+    "hosted_replacement_task_count": 1,
+    "dedicated_a_task_count": 27,
+    "dedicated_b_task_count": 27,
+    "unique_task_count": 100,
+    "pass_k": 4,
+    "cell_count": 400,
+    "pairwise_disjoint": true
+  },
+  "authorization": {
+    "author": "/root",
+    "timestamp_utc": "2026-09-04T04:53:17Z",
+    "scored_launch_authorized": true,
+    "create_once": true,
+    "must_not_repeat": true,
+    "statement": "I authorize the create-once scored launch of the hosted GLM replacement plan sha256:8d86219998687ac76365c7530a24f60b6a8702bddb03d90b4ed7a2c6e288edce after its exact score-blind selection, live hydration, treatment-parity, duplicate, and overlap gates pass. It contains only replacement rank 106 at pass@4, is disjoint from hosted v10 and dedicated A/B, restores the primary denominator to exactly 100 complete tasks/400 cells, and must not be repeated."
+  },
+  "privacy": {
+    "scores_read": false,
+    "prompts_included": false,
+    "traces_included": false,
+    "flags_included": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:4efaf7386277ccec23689426654372480d4eaf2eb7f98ba2b62dcee8ea343902"
+}

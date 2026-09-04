@@ -41,6 +41,15 @@ DEDICATED_SCORING_RELEASE = Path(
 REPLACEMENT_SUPPLEMENT = Path(
     "docs/evidence/qwen38-study/2026-09-04-opencode-replacement-selection-supplement-v1.json"
 )
+GLM_HOSTED_REPLACEMENT_HYDRATION = Path(
+    "docs/evidence/qwen38-study/2026-09-04-glm53-hosted-r106-hydration-v1.json"
+)
+GLM_HOSTED_REPLACEMENT_PLAN = Path(
+    "evals/fleet/configs/glm53-opencode-hosted-replacement-r106-pass4-v1.json"
+)
+GLM_HOSTED_REPLACEMENT_RELEASE = Path(
+    "docs/evidence/qwen38-study/2026-09-04-glm53-hosted-r106-scoring-release-v1.json"
+)
 FROZEN_SPLIT = Path("configs/data/fleet-a62-task-split-v1.json")
 FROZEN_SELECTION = Path(
     "evals/fleet/configs/opencode-easiest-train100-selection-v2.json"
@@ -835,3 +844,20 @@ def test_glm_r106_hydration_and_hosted_plan_are_exact(monkeypatch) -> None:
     assert plan["execution"]["inventory_policy"] == (
         "conservative_no_same_model_session_for_task_key_v1"
     )
+
+
+def test_committed_glm_r106_plan_requires_exact_scoring_release() -> None:
+    hydration = hosted.load_object(GLM_HOSTED_REPLACEMENT_HYDRATION)
+    plan = hosted.load_object(GLM_HOSTED_REPLACEMENT_PLAN)
+    release = hosted.load_object(GLM_HOSTED_REPLACEMENT_RELEASE)
+    assert hydration["receipt_sha256"] == self_hosted.digest_without(
+        hydration, "receipt_sha256"
+    )
+    hosted.validate_plan(plan)
+    hosted.validate_hosted_replacement_scoring_release(plan, release)
+    with pytest.raises(ValueError, match="release receipt is required"):
+        hosted.validate_hosted_replacement_scoring_release(plan, None)
+    tampered = json.loads(json.dumps(release))
+    tampered["authorization"]["must_not_repeat"] = False
+    with pytest.raises(ValueError, match="does not bind"):
+        hosted.validate_hosted_replacement_scoring_release(plan, tampered)
