@@ -165,10 +165,10 @@ GLM_ATTRITION_REPLACEMENT_CAMPAIGN = (
     "chris-cyber-glm53-opencode11827-hosted-replacement-r111-p4-v1"
 )
 QWEN_COMPLETED_EXIT1_GAP_CAMPAIGN = (
-    "chris-cyber-q38-opencode11827-hosted-gap-q6q7-p4-v1"
+    "chris-cyber-q38-opencode11827-hosted-gap-q6q7-p4-v2"
 )
 GLM_COMPLETED_EXIT1_GAP_CAMPAIGN = (
-    "chris-cyber-glm53-opencode11827-hosted-gap-g13g15-p4-v1"
+    "chris-cyber-glm53-opencode11827-hosted-gap-g13g15-p4-v2"
 )
 EXPECTED_INCLUDED_TASK_COUNTS.update(
     {
@@ -2621,7 +2621,7 @@ def build_completed_exit1_gap_plan(
             "shard": "qwen38_completed_exit1_gap",
             "campaign": QWEN_COMPLETED_EXIT1_GAP_CAMPAIGN,
             "source_ranks": [6, 7],
-            "network": "qwen38-hosted-gap-v1",
+            "network": "qwen38-hosted-gap-v2",
             "accepted_cell": (6, 1),
             "accepted_receipt_sha256": (
                 "sha256:c6b1dea26588f2511d8dd5b7463e9be23de1f3723f7586f8a692e262ebc2c76a"
@@ -2634,7 +2634,7 @@ def build_completed_exit1_gap_plan(
             "shard": "glm53_completed_exit1_gap",
             "campaign": GLM_COMPLETED_EXIT1_GAP_CAMPAIGN,
             "source_ranks": [13, 15],
-            "network": "glm53-hosted-gap-v1",
+            "network": "glm53-hosted-gap-v2",
             "accepted_cell": (13, 1),
             "accepted_receipt_sha256": (
                 "sha256:1c6e404b9edca1a8ab78303c8137a4cac55eb3bfa6c94db1a473ac9512425637"
@@ -2808,6 +2808,10 @@ def build_completed_exit1_gap_plan(
         "attempts": attempts,
         "privacy": copy.deepcopy(predecessor["privacy"]),
     }
+    if model_block == "qwen_hosted_v8":
+        plan["source"]["preflight_v1_failure_receipt_sha256"] = (
+            "sha256:9b294a1f55059f3ba12670b060caf86ed42d33a84eb4b462e29f05f521aa3b8b"
+        )
     plan["plan_sha256"] = digest_without(plan, "plan_sha256")
     validate_plan(plan)
     return plan
@@ -3140,6 +3144,18 @@ def validate_plan(plan: dict[str, Any]) -> None:
             != expected_credit_cells
             or len(attempts) != 5
             or len(credits) != 3
+            or plan.get("campaign_id")
+            not in (
+                {
+                    QWEN_COMPLETED_EXIT1_GAP_CAMPAIGN,
+                    "chris-cyber-q38-opencode11827-hosted-gap-q6q7-p4-v1",
+                }
+                if is_qwen
+                else {
+                    GLM_COMPLETED_EXIT1_GAP_CAMPAIGN,
+                    "chris-cyber-glm53-opencode11827-hosted-gap-g13g15-p4-v1",
+                }
+            )
             or len(
                 [
                     row
@@ -3163,6 +3179,12 @@ def validate_plan(plan: dict[str, Any]) -> None:
             or source.get("reconciliation_receipt_sha256")
             != "sha256:5435c0a25b3be1872c1aae09fd88858c5251272e164ab8eb49ab66b4c5a4ca0e"
             or source.get("held_unused_replacement_rank") != (56 if is_qwen else 111)
+            or (
+                is_qwen
+                and plan.get("campaign_id") == QWEN_COMPLETED_EXIT1_GAP_CAMPAIGN
+                and source.get("preflight_v1_failure_receipt_sha256")
+                != "sha256:9b294a1f55059f3ba12670b060caf86ed42d33a84eb4b462e29f05f521aa3b8b"
+            )
             or plan.get("primary_denominator") != expected_primary
             or plan.get("primary_denominator_restored_only_after_all_gap_tasks_pass4")
             is not True
@@ -3586,6 +3608,40 @@ def _allowed_sessions(plan: dict[str, Any], root: Path, rank: int) -> set[str]:
     return allowed
 
 
+def _sealed_gap_credit(plan: dict[str, Any], receipt: dict[str, Any]) -> bool:
+    shard = plan.get("shard_key")
+    cell = (int(receipt.get("source_rank") or 0), int(receipt.get("attempt") or 0))
+    accepted_cell = (6, 1) if shard == "qwen38_completed_exit1_gap" else (13, 1)
+    accepted_digest = (
+        "sha256:c6b1dea26588f2511d8dd5b7463e9be23de1f3723f7586f8a692e262ebc2c76a"
+        if shard == "qwen38_completed_exit1_gap"
+        else "sha256:1c6e404b9edca1a8ab78303c8137a4cac55eb3bfa6c94db1a473ac9512425637"
+    )
+    reconciled_cells = (
+        {(6, 2), (7, 1)}
+        if shard == "qwen38_completed_exit1_gap"
+        else {(13, 2), (15, 1)}
+    )
+    reconciliation_digest = (
+        "sha256:5435c0a25b3be1872c1aae09fd88858c5251272e164ab8eb49ab66b4c5a4ca0e"
+    )
+    return bool(
+        shard in {"qwen38_completed_exit1_gap", "glm53_completed_exit1_gap"}
+        and (
+            (
+                cell == accepted_cell
+                and receipt.get("classification") == "ACCEPTED"
+                and receipt.get("source_receipt_sha256") == accepted_digest
+            )
+            or (
+                cell in reconciled_cells
+                and receipt.get("classification") == "RECONCILED_ACCEPTED"
+                and receipt.get("source_receipt_sha256") == reconciliation_digest
+            )
+        )
+    )
+
+
 def _validate_inventory_for_task(
     plan: dict[str, Any], root: Path, task: dict[str, Any], key: str
 ) -> int:
@@ -3648,7 +3704,6 @@ def _validate_inventory_for_task(
     observed = {row.get("session_id") for row in rows if isinstance(row.get("session_id"), str)}
     if observed != allowed:
         raise RuntimeError("hosted exact-treatment session inventory drifted")
-    by_id = {row.get("session_id"): row for row in rows}
     credits = [*_credits_for_rank(plan, rank)]
     local_accepted = _accepted(plan, root)
     receipts = [*credits]
@@ -3659,19 +3714,40 @@ def _validate_inventory_for_task(
         if attempt_rank.get(run_id) == rank
     )
     for receipt in receipts:
-        row = by_id.get(receipt["session_id"])
+        matching_rows = [
+            row for row in rows if row.get("session_id") == receipt["session_id"]
+        ]
+        row = matching_rows[0] if len(matching_rows) == 1 else None
         verifier = (row or {}).get("verifier_execution") or {}
         local_receipt = receipt.get("run_id") in local_accepted
+        sealed_gap_credit = _sealed_gap_credit(plan, receipt)
+        projected_version = (row or {}).get("eval_task_version_id") or (
+            row or {}
+        ).get("task_version_id")
+        projected_run_id = ((row or {}).get("metadata") or {}).get("run_id")
         if (
             row is None
             or row.get("status") != "completed"
             or verifier.get("id") != receipt["verifier_execution_id"]
             or (
+                sealed_gap_credit
+                and row.get("model")
+                != self_hosted.persisted_session_model_identity(plan)
+            )
+            or (
                 not local_receipt
-                and (
-                    row.get("eval_task_version_id") or row.get("task_version_id")
-                )
-                != task["task"]["version_id"]
+                and not sealed_gap_credit
+                and projected_version != task["task"]["version_id"]
+            )
+            or (
+                sealed_gap_credit
+                and projected_version is not None
+                and projected_version != task["task"]["version_id"]
+            )
+            or (
+                sealed_gap_credit
+                and projected_run_id is not None
+                and projected_run_id != receipt["source_run_id"]
             )
         ):
             raise RuntimeError("hosted credited session is not authoritative")

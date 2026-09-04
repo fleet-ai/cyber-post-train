@@ -129,9 +129,15 @@ COMPLETED_EXIT1_GAP_SOURCE = Path(
     "docs/evidence/qwen38-study/2026-09-04-completed-exit1-gap-source-v1.json"
 )
 QWEN_COMPLETED_EXIT1_GAP_PLAN = Path(
-    "evals/fleet/configs/qwen38-opencode-hosted-completed-exit1-gap-pass4-v1.json"
+    "evals/fleet/configs/qwen38-opencode-hosted-completed-exit1-gap-pass4-v2.json"
 )
 GLM_COMPLETED_EXIT1_GAP_PLAN = Path(
+    "evals/fleet/configs/glm53-opencode-hosted-completed-exit1-gap-pass4-v2.json"
+)
+QWEN_COMPLETED_EXIT1_GAP_PLAN_V1 = Path(
+    "evals/fleet/configs/qwen38-opencode-hosted-completed-exit1-gap-pass4-v1.json"
+)
+GLM_COMPLETED_EXIT1_GAP_PLAN_V1 = Path(
     "evals/fleet/configs/glm53-opencode-hosted-completed-exit1-gap-pass4-v1.json"
 )
 QWEN_COMPLETED_EXIT1_GAP_RELEASE = Path(
@@ -464,6 +470,99 @@ def test_unbound_public_session_row_cannot_become_accepted(
     monkeypatch.setattr(self_hosted, "_task_sessions", lambda _client, _key: [row])
     assert hosted._validate_inventory_for_task(plan, root, plan["tasks"][0], "key") == 0
 
+
+@pytest.mark.parametrize(
+    "plan_path", [QWEN_COMPLETED_EXIT1_GAP_PLAN, GLM_COMPLETED_EXIT1_GAP_PLAN]
+)
+def test_sealed_gap_credits_survive_omitted_public_run_and_version(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    plan_path: Path,
+) -> None:
+    plan = hosted.load_object(plan_path)
+    task = plan["tasks"][0]
+    credits = [row for row in plan["credited_sessions"] if row["rank"] == 1]
+    rows = [
+        {
+            "session_id": row["session_id"],
+            "status": "completed",
+            "model": plan["model"]["served_id"],
+            "verifier_execution": {"id": row["verifier_execution_id"]},
+        }
+        for row in credits
+    ]
+
+    class Client:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+    root = tmp_path / "empty-root"
+    root.mkdir()
+    monkeypatch.setattr(hosted, "_client", lambda _key: Client())
+    monkeypatch.setattr(self_hosted, "_task_sessions", lambda _client, _key: rows)
+    assert hosted._validate_inventory_for_task(plan, root, task, "key") == len(rows)
+
+
+def test_gap_credit_rejects_present_version_mismatch_and_unsealed_credit(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    plan = hosted.load_object(QWEN_COMPLETED_EXIT1_GAP_PLAN)
+    task = plan["tasks"][0]
+    credits = [row for row in plan["credited_sessions"] if row["rank"] == 1]
+    rows = [
+        {
+            "session_id": row["session_id"],
+            "status": "completed",
+            "model": plan["model"]["served_id"],
+            "task_version_id": "contradictory-version",
+            "verifier_execution": {"id": row["verifier_execution_id"]},
+        }
+        for row in credits
+    ]
+
+    class Client:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+    root = tmp_path / "empty-root"
+    root.mkdir()
+    monkeypatch.setattr(hosted, "_client", lambda _key: Client())
+    monkeypatch.setattr(self_hosted, "_task_sessions", lambda _client, _key: rows)
+    with pytest.raises(RuntimeError, match="not authoritative"):
+        hosted._validate_inventory_for_task(plan, root, task, "key")
+
+    for row in rows:
+        row.pop("task_version_id")
+    plan["credited_sessions"][0]["source_receipt_sha256"] = "sha256:unsealed"
+    with pytest.raises(RuntimeError, match="not authoritative"):
+        hosted._validate_inventory_for_task(plan, root, task, "key")
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("classification", "UNSEALED"),
+        ("source_rank", 56),
+        ("attempt", 4),
+        ("source_receipt_sha256", "sha256:unsealed"),
+    ],
+)
+def test_gap_credit_seal_rejects_wrong_identity(field: str, value: object) -> None:
+    plan = hosted.load_object(QWEN_COMPLETED_EXIT1_GAP_PLAN)
+    credit = next(
+        row
+        for row in plan["credited_sessions"]
+        if row["source_rank"] == 6 and row["attempt"] == 1
+    )
+    credit[field] = value
+    assert hosted._sealed_gap_credit(plan, credit) is False
 
 def test_generated_plans_are_reproducible() -> None:
     source = hosted.load_object(SOURCE)
@@ -2294,8 +2393,8 @@ def test_completed_exit1_gap_source_rejects_any_replacement_claim() -> None:
 @pytest.mark.parametrize(
     ("plan_path", "release_path"),
     [
-        (QWEN_COMPLETED_EXIT1_GAP_PLAN, QWEN_COMPLETED_EXIT1_GAP_RELEASE),
-        (GLM_COMPLETED_EXIT1_GAP_PLAN, GLM_COMPLETED_EXIT1_GAP_RELEASE),
+        (QWEN_COMPLETED_EXIT1_GAP_PLAN_V1, QWEN_COMPLETED_EXIT1_GAP_RELEASE),
+        (GLM_COMPLETED_EXIT1_GAP_PLAN_V1, GLM_COMPLETED_EXIT1_GAP_RELEASE),
     ],
 )
 def test_completed_exit1_gap_release_binds_cells_and_concurrency(
