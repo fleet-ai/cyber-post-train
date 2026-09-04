@@ -20,6 +20,7 @@ from evals.fleet import self_hosted
 PLAN_SCHEMA = "fleet-hosted-opencode-task-boundary-shard-v1"
 SOURCE_SCHEMA = "opencode-hosted-successor-source-v1"
 REMAINDER_SOURCE_SCHEMA = "hosted-opencode-remainder-source-v1"
+DEDICATED_SCORING_RELEASE_SCHEMA = "fleet-cyber-glm53-dedicated-scoring-release-v1"
 CAMPAIGNS = {
     "qwen38": "chris-cyber-q38-opencode11827-hosted-complete49-p4-v5",
     "glm53": "chris-cyber-glm53-opencode11827-hosted-complete99-p4-v5",
@@ -118,6 +119,123 @@ def validate_remainder_source(value: dict[str, Any]) -> None:
         raise ValueError("hosted remainder source digest mismatch")
     if value.get("scores_read") is not False or value.get("prompts_or_traces_read") is not False:
         raise ValueError("hosted remainder source crossed the sealed-content boundary")
+
+
+def _dedicated_replica(plan: dict[str, Any]) -> str | None:
+    campaigns = {**CAMPAIGNS, **REMAINDER_CAMPAIGNS, **DEDICATED_CAMPAIGNS}
+    campaign_to_shard = {value: key for key, value in campaigns.items()}
+    shard_key = plan.get("shard_key") or campaign_to_shard.get(plan.get("campaign_id"))
+    if shard_key == "glm53_dedicated_a":
+        return "A"
+    if shard_key == "glm53_dedicated_b":
+        return "B"
+    return None
+
+
+def validate_dedicated_scoring_release(
+    plan: dict[str, Any], release: dict[str, Any] | None
+) -> None:
+    """Require the append-only, score-blind release for dedicated GLM scoring."""
+    replica = _dedicated_replica(plan)
+    if replica is None:
+        return
+    if not isinstance(release, dict):
+        raise ValueError("dedicated scoring release receipt is required")
+    if (
+        release.get("schema_version") != DEDICATED_SCORING_RELEASE_SCHEMA
+        or release.get("receipt_sha256") != digest_without(release, "receipt_sha256")
+        or release.get("append_only") is not True
+        or release.get("supersedes") is not None
+    ):
+        raise ValueError("dedicated scoring release receipt is invalid")
+
+    source = plan.get("source") or {}
+    selection = release.get("selection_lock") or {}
+    hydration = release.get("hydration") or {}
+    replicas = release.get("replicas") or {}
+    row = replicas.get(replica) or {}
+    plan_evidence = row.get("plan") or {}
+    parity = row.get("parity") or {}
+    preflight = row.get("preflight") or {}
+    launch = row.get("scored_launch") or {}
+    authorization = release.get("authorization") or {}
+    selected = [int(task["source_rank"]) for task in plan.get("tasks") or []]
+    if (
+        selection.get("receipt_sha256") != source.get("assignment_receipt_sha256")
+        or selection.get("rewritten") is not False
+        or hydration.get("receipt_sha256") != source.get("hydration_receipt_sha256")
+        or hydration.get("passed") is not True
+        or plan_evidence.get("plan_sha256") != plan.get("plan_sha256")
+        or plan_evidence.get("task_count") != plan.get("task_count")
+        or plan_evidence.get("session_count") != plan.get("total_session_count")
+        or plan_evidence.get("source_ranks") != selected
+        or parity.get("receipt_sha256") != source.get("canary_evidence_sha256")
+        or parity.get("passed") is not True
+        or preflight.get("plan_sha256") != plan.get("plan_sha256")
+        or preflight.get("passed") is not True
+        or preflight.get("exit_code") != 0
+        or preflight.get("restart_count") != 0
+        or not str(preflight.get("receipt_sha256") or "").startswith("sha256:")
+        or launch.get("create_once") is not True
+        or launch.get("must_not_repeat") is not True
+        or authorization.get("timestamp_utc") != release.get("created_at")
+        or release.get("created_at") != "2026-09-04T03:53:09Z"
+        or authorization.get("author") != "/root"
+        or plan.get("plan_sha256") not in (authorization.get("authorized_plan_sha256") or [])
+        or plan.get("plan_sha256") not in str(authorization.get("statement") or "")
+        or "must not be repeated" not in str(authorization.get("statement") or "")
+    ):
+        raise ValueError("dedicated scoring release does not bind this plan")
+    for evidence in (preflight, launch):
+        for field in ("job_uid", "pod_uid"):
+            try:
+                uuid.UUID(str(evidence.get(field)))
+            except ValueError as exc:
+                raise ValueError("dedicated scoring release has an invalid UID") from exc
+
+    a = set((replicas.get("A") or {}).get("plan", {}).get("source_ranks") or [])
+    b = set((replicas.get("B") or {}).get("plan", {}).get("source_ranks") or [])
+    hosted = set(range(9, 100, 2))
+    primary = release.get("primary_estimator") or {}
+    conditions = release.get("release_conditions") or {}
+    privacy = release.get("privacy") or {}
+    if (
+        a != {*range(4, 53, 2), 102, 104}
+        or b != {*range(54, 101, 2), 101, 103, 105}
+        or a & b
+        or a & hosted
+        or b & hosted
+        or len(a | b | hosted) != 100
+        or primary.get("unique_task_count") != 100
+        or primary.get("pass_k") != 4
+        or primary.get("session_count") != 400
+        or primary.get("pairwise_disjoint") is not True
+        or conditions.get("release_granted") is not True
+        or not all(
+            conditions.get(field) is True
+            for field in (
+                "hydration_passed",
+                "both_parity_gates_passed",
+                "both_preflights_passed",
+                "current_plan_identities_absent_at_preflight",
+                "serving_blocks_explicit",
+                "task_blocks_pairwise_disjoint",
+                "primary_estimator_is_exactly_100_tasks_pass4",
+                "scored_launches_are_create_once",
+            )
+        )
+        or any(
+            privacy.get(field) is not False
+            for field in (
+                "scores_read",
+                "prompts_included",
+                "traces_included",
+                "flags_included",
+                "credentials_included",
+            )
+        )
+    ):
+        raise ValueError("dedicated scoring release arithmetic or privacy drifted")
 
 
 def build_remainder_plan(
@@ -1279,8 +1397,14 @@ def _validate_plan_identity_absence(plan: dict[str, Any], root: Path) -> int:
     return roots_reconciled
 
 
-def preflight_plan(plan: dict[str, Any], root: Path, key: str) -> dict[str, Any]:
+def preflight_plan(
+    plan: dict[str, Any],
+    root: Path,
+    key: str,
+    release: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     validate_plan(plan)
+    validate_dedicated_scoring_release(plan, release)
     roots_reconciled = _validate_plan_identity_absence(plan, root)
     with _client(key) as client:
         account = self_hosted._request(client, "GET", "/v1/account")
@@ -1328,8 +1452,14 @@ def preflight_plan(plan: dict[str, Any], root: Path, key: str) -> dict[str, Any]
     return receipt
 
 
-def run_plan(plan: dict[str, Any], root: Path, proxy: Path) -> dict[str, Any]:
+def run_plan(
+    plan: dict[str, Any],
+    root: Path,
+    proxy: Path,
+    release: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     validate_plan(plan)
+    validate_dedicated_scoring_release(plan, release)
     key = os.environ.get("FLEET_API_KEY")
     if not key:
         raise RuntimeError("FLEET_API_KEY is required")
@@ -1484,10 +1614,12 @@ def main() -> int:
     preflight = sub.add_parser("preflight")
     preflight.add_argument("--plan", type=Path, required=True)
     preflight.add_argument("--out-dir", type=Path, required=True)
+    preflight.add_argument("--release-receipt", type=Path)
     run = sub.add_parser("run")
     run.add_argument("--plan", type=Path, required=True)
     run.add_argument("--out-dir", type=Path, required=True)
     run.add_argument("--proxy-script", type=Path, required=True)
+    run.add_argument("--release-receipt", type=Path)
     args = parser.parse_args()
     if args.command == "build":
         value = build_plan(
@@ -1536,10 +1668,12 @@ def main() -> int:
         key = os.environ.get("FLEET_API_KEY")
         if not key:
             raise RuntimeError("FLEET_API_KEY is required")
-        result = preflight_plan(load_object(args.plan), args.out_dir, key)
+        release = load_object(args.release_receipt) if args.release_receipt else None
+        result = preflight_plan(load_object(args.plan), args.out_dir, key, release)
         print(json.dumps(result, sort_keys=True))
         return 0
-    result = run_plan(load_object(args.plan), args.out_dir, args.proxy_script)
+    release = load_object(args.release_receipt) if args.release_receipt else None
+    result = run_plan(load_object(args.plan), args.out_dir, args.proxy_script, release)
     print(json.dumps(result, sort_keys=True))
     return 0
 

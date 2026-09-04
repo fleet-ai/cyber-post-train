@@ -1,0 +1,143 @@
+{
+  "schema_version": "fleet-cyber-glm53-dedicated-scoring-release-v1",
+  "release_id": "glm53-opencode11827-dedicated-primary-400-v1",
+  "created_at": "2026-09-04T03:53:09Z",
+  "append_only": true,
+  "supersedes": null,
+  "selection_lock": {
+    "path": "docs/evidence/qwen38-study/2026-09-04-opencode-replacement-selection-lock-v1.json",
+    "receipt_sha256": "sha256:77666813ed33cea95d1d21d31383d9deab2d596a97dfe8d7caee4139c80374b9",
+    "rewritten": false
+  },
+  "hydration": {
+    "job_name": "chris-cyber-glm53-replacement-hydration-v2",
+    "job_uid": "aee12427-bb8a-454c-b213-4f2c10e1e0f3",
+    "pod_uid": "86c63852-79e1-4ba4-9f87-d1768083b917",
+    "sfs_path": "/mnt/sfs/jobs/chris-cyber-glm53-replacement-hydration-v2/HYDRATION.json",
+    "file_sha256": "sha256:9feb621d0ef45760cd76208d14d6e13fff91b0b6387146ec4d5f4aec2dcef2f4",
+    "receipt_sha256": "sha256:0a57d6dab640b68156fe093feff109fd90b79a286fc736f7580188d8875b2175",
+    "passed": true
+  },
+  "replicas": {
+    "A": {
+      "parity": {
+        "path": "docs/evidence/qwen38-study/2026-09-03-glm53-dedicated-canary-v4-pass.json",
+        "file_sha256": "sha256:ab9ea1202f3d590025263abcd85d3041be74e6018f1f3ac57db5d807245c9d80",
+        "receipt_sha256": "sha256:5921d3c53ce23a7577b2f3a70aadf2ee8148e8aa899a6628fe55df8d532edf99",
+        "passed": true
+      },
+      "plan": {
+        "path": "evals/fleet/configs/glm53-opencode-dedicated-a-even27-pass4-v1.json",
+        "plan_sha256": "sha256:4f8d4fcf50af8abccf3b9d272a18755f9be0bc862a66fe25bba691bee8a22208",
+        "task_count": 27,
+        "session_count": 108,
+        "source_ranks": [4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 44, 46, 48, 50, 52, 102, 104]
+      },
+      "preflight": {
+        "job_name": "chris-cyber-glm53-dedicated-a-even27-p4-v1-preflight",
+        "job_uid": "2f1d50dc-99b4-4643-99c8-bef07c3420e0",
+        "pod_uid": "98116f3b-cb5a-452a-a61e-fbb54b796bed",
+        "started_at": "2026-09-04T03:42:57Z",
+        "completed_at": "2026-09-04T03:44:19Z",
+        "plan_sha256": "sha256:4f8d4fcf50af8abccf3b9d272a18755f9be0bc862a66fe25bba691bee8a22208",
+        "receipt_sha256": "sha256:d68149fef52e16547d5fca547ba151470b76820bb9aed674f032b5f088439776",
+        "exit_code": 0,
+        "restart_count": 0,
+        "passed": true
+      },
+      "scored_launch": {
+        "job_name": "chris-cyber-glm53-opencode11827-dedicated-a-even27-p4-v1",
+        "job_uid": "aa9a79a9-37dd-4910-a094-a172d058749b",
+        "pod_uid": "b26a37e3-0a15-4c1e-96a9-d065de50ba59",
+        "created_at": "2026-09-04T03:44:48Z",
+        "create_once": true,
+        "must_not_repeat": true
+      }
+    },
+    "B": {
+      "parity": {
+        "path": "docs/evidence/qwen38-study/2026-09-03-glm53-dedicated-replica-b-v4-pass.json",
+        "file_sha256": "sha256:81a5f947be2fcad325f5b4d22a3718e9700baa955eaec7445ad2df52d2cd11eb",
+        "receipt_sha256": "sha256:4a3b5964f71175ad7e1db88f34093d1054044bb0144c0cb85912f2a7c6302009",
+        "passed": true
+      },
+      "plan": {
+        "path": "evals/fleet/configs/glm53-opencode-dedicated-b-even27-pass4-v1.json",
+        "plan_sha256": "sha256:008386c1bbc6d82229f2afdb85e074a0d5e717853dc7cab5b720ef13271e9cb5",
+        "task_count": 27,
+        "session_count": 108,
+        "source_ranks": [54, 56, 58, 60, 62, 64, 66, 68, 70, 72, 74, 76, 78, 80, 82, 84, 86, 88, 90, 92, 94, 96, 98, 100, 101, 103, 105]
+      },
+      "preflight": {
+        "job_name": "chris-cyber-glm53-dedicated-b-even27-p4-v1-preflight",
+        "job_uid": "45c3f137-de18-4097-88d6-2b53cb39b9fd",
+        "pod_uid": "cf181738-0bab-4482-a06a-62c9dc4853fb",
+        "started_at": "2026-09-04T03:48:46Z",
+        "completed_at": "2026-09-04T03:50:14Z",
+        "plan_sha256": "sha256:008386c1bbc6d82229f2afdb85e074a0d5e717853dc7cab5b720ef13271e9cb5",
+        "receipt_sha256": "sha256:6da63ce11cbcf5bad3fa6ba0f5344de00e6a392073f6395a9c3715dba92cea03",
+        "exit_code": 0,
+        "restart_count": 0,
+        "passed": true
+      },
+      "scored_launch": {
+        "job_name": "chris-cyber-glm53-opencode11827-dedicated-b-even27-p4-v1",
+        "job_uid": "b2ac0628-fc9e-442c-964b-52a4aeb3865e",
+        "pod_uid": "bc461b3c-dbdd-42ef-824e-146c47f0d6ec",
+        "created_at": "2026-09-04T03:50:46Z",
+        "create_once": true,
+        "must_not_repeat": true
+      }
+    }
+  },
+  "authorization": {
+    "timestamp_utc": "2026-09-04T03:53:09Z",
+    "author": "/root",
+    "authorized_plan_sha256": [
+      "sha256:4f8d4fcf50af8abccf3b9d272a18755f9be0bc862a66fe25bba691bee8a22208",
+      "sha256:008386c1bbc6d82229f2afdb85e074a0d5e717853dc7cab5b720ef13271e9cb5"
+    ],
+    "statement": "I ratify the create-once scored launches of dedicated GLM replica A plan sha256:4f8d4fcf50af8abccf3b9d272a18755f9be0bc862a66fe25bba691bee8a22208 and replica B plan sha256:008386c1bbc6d82229f2afdb85e074a0d5e717853dc7cab5b720ef13271e9cb5 after their exact hydration, parity, duplicate, overlap, and preflight gates passed. These launches are authorized by the active user goal, use disjoint complete-task blocks, and must not be repeated."
+  },
+  "primary_estimator": {
+    "hosted": {
+      "source_ranks": "odd source ranks 9..99",
+      "task_count": 46,
+      "session_count": 184
+    },
+    "dedicated_a": {
+      "task_count": 27,
+      "session_count": 108
+    },
+    "dedicated_b": {
+      "task_count": 27,
+      "session_count": 108
+    },
+    "fenced_source_ranks": [1, 2, 3, 5, 7],
+    "pairwise_disjoint": true,
+    "unique_task_count": 100,
+    "pass_k": 4,
+    "session_count": 400,
+    "prior_partial_formal_accepts_excluded_from_estimator": 2,
+    "formal_accept_count_if_primary_completes": 402
+  },
+  "release_conditions": {
+    "hydration_passed": true,
+    "both_parity_gates_passed": true,
+    "both_preflights_passed": true,
+    "current_plan_identities_absent_at_preflight": true,
+    "serving_blocks_explicit": true,
+    "task_blocks_pairwise_disjoint": true,
+    "primary_estimator_is_exactly_100_tasks_pass4": true,
+    "scored_launches_are_create_once": true,
+    "release_granted": true
+  },
+  "privacy": {
+    "scores_read": false,
+    "prompts_included": false,
+    "traces_included": false,
+    "flags_included": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:a4bf59af01762be6d803f7d00951cc638e3c2648ab8602c4814814b16fcade0d"
+}

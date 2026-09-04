@@ -31,8 +31,15 @@ docker pull --platform linux/amd64 "$PROXY_IMAGE"
 
 export AGENT_HARNESS_IMAGE=$AGENT_IMAGE
 export FIXED_PROXY_IMAGE=$PROXY_IMAGE
+release_args=()
+if [[ -n ${SCORING_RELEASE_FILE:-} ]]; then
+  release_args=(
+    --release-receipt "$ROOT/evals/fleet/configs/$SCORING_RELEASE_FILE"
+  )
+fi
 exec uv run --no-project --with httpx==0.28.1 python \
   -m evals.fleet.hosted_sweep_controller run \
   --plan "$ROOT/evals/fleet/configs/$PLAN_FILE" \
   --out-dir "$OUT_ROOT" \
-  --proxy-script "$ROOT/evals/fleet/fixed_proxy.py"
+  --proxy-script "$ROOT/evals/fleet/fixed_proxy.py" \
+  "${release_args[@]}"

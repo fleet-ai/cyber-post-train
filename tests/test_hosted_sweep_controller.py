@@ -28,6 +28,9 @@ DEDICATED_A_PLAN = Path(
 DEDICATED_B_PLAN = Path(
     "evals/fleet/configs/glm53-opencode-dedicated-b-even27-pass4-v1.json"
 )
+DEDICATED_SCORING_RELEASE = Path(
+    "docs/evidence/qwen38-study/2026-09-04-glm53-dedicated-scoring-release-v1.json"
+)
 
 
 @pytest.mark.parametrize(
@@ -558,6 +561,39 @@ def test_committed_dedicated_a_plan_is_digest_valid() -> None:
     assert plan["plan_sha256"] == (
         "sha256:4f8d4fcf50af8abccf3b9d272a18755f9be0bc862a66fe25bba691bee8a22208"
     )
+
+
+def test_dedicated_scoring_release_binds_both_disjoint_plans() -> None:
+    release = hosted.load_object(DEDICATED_SCORING_RELEASE)
+    assert release["receipt_sha256"] == self_hosted.digest_without(
+        release, "receipt_sha256"
+    )
+    hosted.validate_dedicated_scoring_release(
+        hosted.load_object(DEDICATED_A_PLAN), release
+    )
+    hosted.validate_dedicated_scoring_release(
+        hosted.load_object(DEDICATED_B_PLAN), release
+    )
+    assert release["primary_estimator"]["session_count"] == 400
+
+
+@pytest.mark.parametrize("plan_path", [DEDICATED_A_PLAN, DEDICATED_B_PLAN])
+def test_dedicated_preflight_requires_scoring_release(
+    plan_path: Path, tmp_path: Path
+) -> None:
+    with pytest.raises(ValueError, match="release receipt is required"):
+        hosted.preflight_plan(
+            hosted.load_object(plan_path), tmp_path / "unused-root", "not-used"
+        )
+
+
+def test_dedicated_scoring_release_rejects_overlap() -> None:
+    plan = hosted.load_object(DEDICATED_B_PLAN)
+    release = hosted.load_object(DEDICATED_SCORING_RELEASE)
+    release["replicas"]["B"]["plan"]["source_ranks"][0] = 9
+    release["receipt_sha256"] = self_hosted.digest_without(release, "receipt_sha256")
+    with pytest.raises(ValueError, match="bind this plan|arithmetic"):
+        hosted.validate_dedicated_scoring_release(plan, release)
 
 
 def test_committed_dedicated_b_plan_is_disjoint_and_digest_valid() -> None:
