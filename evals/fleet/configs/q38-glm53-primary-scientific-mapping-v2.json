@@ -1,0 +1,295 @@
+{
+  "schema_version": "fleet-score-blind-scientific-mapping-v2",
+  "mapping_id": "q38-glm53-primary-pass4-scientific-v2",
+  "supersedes_campaign_sha256": "sha256:6b8b06c6d75488addab5eb099c6d7a9f25e37b45a38323bc4b271489b89d02c1",
+  "release_status": "blocked_pending_execution_fragment_binding",
+  "launch_authorized": false,
+  "ledger_initialization_authorized": false,
+  "expected": {
+    "models": {"qwen3.8-27b": 200, "glm-5.3": 400},
+    "total_tasks": 150,
+    "total_cells": 600,
+    "dedicated_nodes": 2,
+    "dedicated_gpus": 16
+  },
+  "components": [
+    {
+      "id": "qwen-hosted-retained-source4",
+      "model": "qwen3.8-27b",
+      "serving_block": "qwen-hosted-no-autocontinue",
+      "priority_class": "fleet-train-high",
+      "dedicated_nodes": 0,
+      "dedicated_gpus": 0,
+      "owned_attempts_per_task": [1, 2, 3, 4],
+      "scientific_task_sources": [
+        {
+          "kind": "plan",
+          "repo_plan_path": "evals/fleet/configs/qwen38-opencode-hosted-complete47-pass4-v7.json",
+          "plan_sha256": "sha256:f367d5148b035e29f57e5a29633609c4dbc8876d94c2795a79ff1ff25dad2ee2",
+          "source_ranks": [4]
+        }
+      ],
+      "attempt_ownership": [
+        {
+          "state": "resolved",
+          "plan_sha256": "sha256:f367d5148b035e29f57e5a29633609c4dbc8876d94c2795a79ff1ff25dad2ee2",
+          "source_ranks": [4]
+        }
+      ]
+    },
+    {
+      "id": "qwen-hosted-primary49",
+      "model": "qwen3.8-27b",
+      "serving_block": "qwen-hosted-no-autocontinue",
+      "priority_class": "fleet-train-high",
+      "dedicated_nodes": 0,
+      "dedicated_gpus": 0,
+      "owned_attempts_per_task": [1, 2, 3, 4],
+      "scientific_task_sources": [
+        {
+          "kind": "plan",
+          "repo_plan_path": "evals/fleet/configs/qwen38-opencode-hosted-http500-successor49-pass4-v8.json",
+          "plan_sha256": "sha256:8d6df6af63b308d648fb0c7ea9115f90b16de1d7e57b0968dda8fc8fd4a20c81",
+          "source_ranks": [6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 52, 53, 54, 55]
+        },
+        {
+          "kind": "plan",
+          "repo_plan_path": "evals/fleet/configs/qwen38-opencode-hosted-source10-r56-pass4-v2.json",
+          "plan_sha256": "sha256:caa9d99e9bc4ffa30a6a7f0abd2f99c84dbad0a7593f46a03ea894ea85fb9037",
+          "source_ranks": [56]
+        }
+      ],
+      "attempt_ownership": [
+        {
+          "state": "resolved",
+          "plan_sha256": "sha256:8d6df6af63b308d648fb0c7ea9115f90b16de1d7e57b0968dda8fc8fd4a20c81",
+          "cells": [
+            {"source_rank": 6, "attempts": [1, 2]},
+            {"source_rank": 7, "attempts": [1]},
+            {"source_rank": 8, "attempts": [1, 2, 3, 4]},
+            {"source_rank": 9, "attempts": [1, 2, 3, 4]}
+          ]
+        },
+        {
+          "state": "resolved",
+          "plan_sha256": "sha256:2a86babdce4914e85bd2261b15cc5e2b476bf2f34dd224c2d76b9b8af5caeabc",
+          "cells": [
+            {"source_rank": 6, "attempts": [3, 4]},
+            {"source_rank": 7, "attempts": [2, 3, 4]}
+          ]
+        },
+        {
+          "state": "resolved",
+          "plan_sha256": "sha256:ce973c3842be767e46c79422dce8395932d81626b29e6e34c4b9bf05d89eda9e",
+          "source_ranks": [11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32]
+        },
+        {
+          "state": "resolved",
+          "plan_sha256": "sha256:410324cc8a68c8d45746814c3882dc1c07e9182ce0c89a626eb5dfb045370131",
+          "source_ranks": [33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 52, 53, 54, 55]
+        },
+        {
+          "state": "resolved",
+          "plan_sha256": "sha256:caa9d99e9bc4ffa30a6a7f0abd2f99c84dbad0a7593f46a03ea894ea85fb9037",
+          "source_ranks": [56]
+        }
+      ]
+    },
+    {
+      "id": "glm-hosted-primary46",
+      "model": "glm-5.3",
+      "serving_block": "glm-hosted-primary",
+      "priority_class": "fleet-train-high",
+      "dedicated_nodes": 0,
+      "dedicated_gpus": 0,
+      "owned_attempts_per_task": [1, 2, 3, 4],
+      "scientific_task_sources": [
+        {
+          "kind": "plan",
+          "repo_plan_path": "evals/fleet/configs/glm53-opencode-hosted-http500-primary46-pass4-v12.json",
+          "plan_sha256": "sha256:8b0deafa9f51b75a0715be56b417454e96665b5342d4c346d5cda32dc24c8279",
+          "source_ranks": [13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35, 37, 39, 41, 43, 45, 47, 49, 51, 53, 55, 57, 59, 61, 63, 65, 67, 69, 71, 73, 75, 77, 79, 81, 83, 85, 87, 89, 91, 93, 95, 97, 99, 108, 109]
+        }
+      ],
+      "attempt_ownership": [
+        {
+          "state": "resolved",
+          "plan_sha256": "sha256:8b0deafa9f51b75a0715be56b417454e96665b5342d4c346d5cda32dc24c8279",
+          "source_ranks": [17, 23, 27, 31, 33, 35, 37, 39, 41, 43, 45, 47, 49, 51, 53, 55, 57, 59, 61, 63, 65, 67, 69, 71, 73, 75, 77, 79, 81, 83, 85, 87, 89, 91, 93, 95, 97, 99, 108, 109]
+        },
+        {
+          "state": "resolved",
+          "plan_sha256": "sha256:8b0deafa9f51b75a0715be56b417454e96665b5342d4c346d5cda32dc24c8279",
+          "cells": [
+            {"source_rank": 13, "attempts": [1, 2]},
+            {"source_rank": 15, "attempts": [1]},
+            {"source_rank": 19, "attempts": [1]},
+            {"source_rank": 21, "attempts": [1, 2]},
+            {"source_rank": 25, "attempts": [1]},
+            {"source_rank": 29, "attempts": [1]}
+          ]
+        },
+        {
+          "state": "resolved",
+          "plan_sha256": "sha256:6cc8e9cb7b7f6fbb7fd7a0ca97b9d434e410e2d6cffcc6d9cc9a41cd586532c0",
+          "cells": [
+            {"source_rank": 13, "attempts": [3, 4]},
+            {"source_rank": 15, "attempts": [2, 3, 4]}
+          ]
+        },
+        {
+          "state": "resolved",
+          "plan_sha256": "sha256:6eec0a43e7aebf57bc273ad938da703e46c6875f32257b6352158fbc9282e828",
+          "cells": [
+            {"source_rank": 19, "attempts": [2, 3, 4]},
+            {"source_rank": 21, "attempts": [3, 4]},
+            {"source_rank": 25, "attempts": [2, 3, 4]},
+            {"source_rank": 29, "attempts": [2, 3, 4]}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "glm-dedicated-a-v5-primary27",
+      "model": "glm-5.3",
+      "serving_block": "glm-dedicated-a-v5",
+      "priority_class": "fleet-train-high",
+      "dedicated_nodes": 1,
+      "dedicated_gpus": 8,
+      "owned_attempts_per_task": [1, 2, 3, 4],
+      "scientific_task_sources": [
+        {
+          "kind": "plan",
+          "repo_plan_path": "evals/fleet/configs/glm53-opencode-dedicated-a-v5-successor27-pass4-v2.json",
+          "plan_sha256": "sha256:e1f37476700beb16ccb3978f61a162a59e16501334d316417cd0718a94c2ef68",
+          "source_ranks": [8, 10, 12, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 44, 46, 48, 50, 52, 102, 104, 110]
+        },
+        {
+          "kind": "inline",
+          "authority_receipt_sha256": "sha256:1ebba23918ef3357f6430261841eca2163b632a1d4d67430ae2465e023e719ed",
+          "tasks": [
+            {"source_rank": 112, "task": {"key": "cysec1-2-fubspot-gen_blackbox-b81e6f9c36fc6ce74306eec6__blackbox_ctf_v1", "version_id": "24030b60-cb61-4366-a3be-b3b808cad8ba"}},
+            {"source_rank": 113, "task": {"key": "cysec1-2-fubspot-gen_blackbox-c892d22e16a0042cd5a8b57a__blackbox_ctf_v1", "version_id": "21baee36-dc26-4dcd-983e-ae58a665dfa9"}}
+          ]
+        }
+      ],
+      "attempt_ownership": [
+        {
+          "state": "resolved",
+          "plan_sha256": "sha256:e1f37476700beb16ccb3978f61a162a59e16501334d316417cd0718a94c2ef68",
+          "cells": [
+            {"source_rank": 8, "attempts": [1]},
+            {"source_rank": 10, "attempts": [1]},
+            {"source_rank": 12, "attempts": [1, 2, 3]}
+          ]
+        },
+        {
+          "state": "resolved",
+          "plan_sha256": "sha256:d2b0016bd53d78a2e2c3e865c502bb6dd37d13a7103f714c38c9ff99f0f73075",
+          "cells": [
+            {"source_rank": 8, "attempts": [2, 3, 4]},
+            {"source_rank": 10, "attempts": [2, 3, 4]},
+            {"source_rank": 12, "attempts": [4]}
+          ]
+        },
+        {
+          "state": "resolved",
+          "plan_sha256": "sha256:c553335ec62e7c996ee0a1e336dc4c4acf4840dbc695391b015a6beeb726a4f9",
+          "source_ranks": [16, 18, 20, 22, 24, 26, 28, 30, 32, 34]
+        },
+        {
+          "state": "resolved",
+          "plan_sha256": "sha256:3b154459447fecfac89156f73c5a3dc34040f003a35ae478a82dd7e25d8c452b",
+          "source_ranks": [112]
+        },
+        {
+          "state": "resolved",
+          "plan_sha256": "sha256:11c5b0a6da0bcf3947f36bf4cc1796c115d775a7dbfa81dbbd2cc5a8f2b8ac26",
+          "source_ranks": [113]
+        },
+        {
+          "state": "unresolved",
+          "plan_sha256": null,
+          "blocked_reason": "fresh dedicated-A tail successor plan and run identities not yet authored",
+          "source_ranks": [36, 38, 40, 42, 44, 46, 48, 50, 52, 102, 104, 110]
+        }
+      ]
+    },
+    {
+      "id": "glm-dedicated-b-v5-primary27",
+      "model": "glm-5.3",
+      "serving_block": "glm-dedicated-b-v5",
+      "priority_class": "fleet-train-high",
+      "dedicated_nodes": 1,
+      "dedicated_gpus": 8,
+      "owned_attempts_per_task": [1, 2, 3, 4],
+      "scientific_task_sources": [
+        {
+          "kind": "plan",
+          "repo_plan_path": "evals/fleet/configs/glm53-opencode-dedicated-b-v5-successor27-pass4-v2.json",
+          "plan_sha256": "sha256:b3436ff09a6f382dac12029dbd9bea2270ccf52ab7c945f07464e715590305b8",
+          "source_ranks": [58, 60, 62, 64, 66, 68, 70, 72, 74, 76, 78, 80, 82, 84, 86, 88, 90, 92, 94, 96, 98, 100, 101, 103, 105, 107]
+        },
+        {
+          "kind": "inline",
+          "authority_receipt_sha256": "sha256:ba6327ce5ca006c48b4cec33ed93179c0fc9c32a0b2bda8ec0a023272ac1758d",
+          "tasks": [
+            {"source_rank": 111, "task": {"key": "cysec1-2-fubspot-gen_blackbox-ad1382907e9e22ee2e6cf3f1__blackbox_ctf_v1", "version_id": "032b6acc-13bc-4a9f-a57f-e3cd932988d4"}}
+          ]
+        }
+      ],
+      "attempt_ownership": [
+        {
+          "state": "resolved",
+          "plan_sha256": "sha256:46ff144a7d6dd6f6cc111f3d3bd4881e3ce507ff1813fcc756297b00ed7759db",
+          "source_ranks": [111]
+        },
+        {
+          "state": "resolved",
+          "plan_sha256": "sha256:4f7db0f60b33a7162fb2bb57c958102b27d01b07d562a13d57e4b367246065b7",
+          "source_ranks": [58, 60, 62, 64, 66, 68, 70, 72, 74, 76, 78, 80]
+        },
+        {
+          "state": "unresolved",
+          "plan_sha256": null,
+          "blocked_reason": "fresh dedicated-B tail successor plan and run identities not yet authored",
+          "source_ranks": [82, 84, 86, 88, 90, 92, 94, 96, 98, 100, 101, 103, 105, 107]
+        }
+      ]
+    }
+  ],
+  "replacement_mappings": [
+    {"model": "qwen3.8-27b", "component_id": "qwen-hosted-primary49", "excluded_source_rank": 1, "replacement_source_rank": 55, "supersedes_replacement_source_rank": 51, "selection_receipt_sha256": "sha256:7ad740c7b8a13178a2e090623d3f0c4786d52d29143e740fd3649392acbf5276"},
+    {"model": "qwen3.8-27b", "component_id": "qwen-hosted-primary49", "excluded_source_rank": 2, "replacement_source_rank": 52, "selection_receipt_sha256": "sha256:77666813ed33cea95d1d21d31383d9deab2d596a97dfe8d7caee4139c80374b9"},
+    {"model": "qwen3.8-27b", "component_id": "qwen-hosted-primary49", "excluded_source_rank": 3, "replacement_source_rank": 53, "selection_receipt_sha256": "sha256:77666813ed33cea95d1d21d31383d9deab2d596a97dfe8d7caee4139c80374b9"},
+    {"model": "qwen3.8-27b", "component_id": "qwen-hosted-primary49", "excluded_source_rank": 5, "replacement_source_rank": 54, "selection_receipt_sha256": "sha256:7ad740c7b8a13178a2e090623d3f0c4786d52d29143e740fd3649392acbf5276"},
+    {"model": "qwen3.8-27b", "component_id": "qwen-hosted-primary49", "excluded_source_rank": 10, "replacement_source_rank": 56, "selection_receipt_sha256": "sha256:56406bb32541babc0189e089f339d6a7668b24cb86b1fd8587b60a3cfc57b24c"},
+    {"model": "glm-5.3", "component_id": "glm-dedicated-b-v5-primary27", "excluded_source_rank": 1, "replacement_source_rank": 101, "selection_receipt_sha256": "sha256:77666813ed33cea95d1d21d31383d9deab2d596a97dfe8d7caee4139c80374b9"},
+    {"model": "glm-5.3", "component_id": "glm-dedicated-a-v5-primary27", "excluded_source_rank": 2, "replacement_source_rank": 102, "selection_receipt_sha256": "sha256:77666813ed33cea95d1d21d31383d9deab2d596a97dfe8d7caee4139c80374b9"},
+    {"model": "glm-5.3", "component_id": "glm-dedicated-b-v5-primary27", "excluded_source_rank": 3, "replacement_source_rank": 103, "selection_receipt_sha256": "sha256:77666813ed33cea95d1d21d31383d9deab2d596a97dfe8d7caee4139c80374b9"},
+    {"model": "glm-5.3", "component_id": "glm-dedicated-a-v5-primary27", "excluded_source_rank": 4, "replacement_source_rank": 110, "selection_receipt_sha256": "sha256:3ccf7fdace01bc2a3e6245d26f65d6069fa5327d4a5ac7515640c7d59092e534"},
+    {"model": "glm-5.3", "component_id": "glm-dedicated-a-v5-primary27", "excluded_source_rank": 5, "replacement_source_rank": 104, "selection_receipt_sha256": "sha256:77666813ed33cea95d1d21d31383d9deab2d596a97dfe8d7caee4139c80374b9"},
+    {"model": "glm-5.3", "component_id": "glm-dedicated-a-v5-primary27", "excluded_source_rank": 6, "replacement_source_rank": 112, "selection_receipt_sha256": "sha256:5ee4ec1da3248d1823b9a3b90c903b6414091e1762262c55f7b3e4462d0cebf8"},
+    {"model": "glm-5.3", "component_id": "glm-dedicated-b-v5-primary27", "excluded_source_rank": 7, "replacement_source_rank": 105, "selection_receipt_sha256": "sha256:77666813ed33cea95d1d21d31383d9deab2d596a97dfe8d7caee4139c80374b9"},
+    {"model": "glm-5.3", "component_id": "glm-hosted-primary46", "excluded_source_rank": 9, "replacement_source_rank": 109, "supersedes_replacement_source_rank": 106, "selection_receipt_sha256": "sha256:a08c2c41f782f9b41e95575a75071e2a3c2fe8916a5db13bc095614dacb92b63"},
+    {"model": "glm-5.3", "component_id": "glm-hosted-primary46", "excluded_source_rank": 11, "replacement_source_rank": 108, "selection_receipt_sha256": "sha256:a08c2c41f782f9b41e95575a75071e2a3c2fe8916a5db13bc095614dacb92b63"},
+    {"model": "glm-5.3", "component_id": "glm-dedicated-a-v5-primary27", "excluded_source_rank": 14, "replacement_source_rank": 113, "selection_receipt_sha256": "sha256:5ee4ec1da3248d1823b9a3b90c903b6414091e1762262c55f7b3e4462d0cebf8"},
+    {"model": "glm-5.3", "component_id": "glm-dedicated-b-v5-primary27", "excluded_source_rank": 54, "replacement_source_rank": 107, "selection_receipt_sha256": "sha256:731ba0583f43a7cc56f16cbf8c71ab98ca39642ff7091e21763f8561bf9d587a"},
+    {"model": "glm-5.3", "component_id": "glm-dedicated-b-v5-primary27", "excluded_source_rank": 56, "replacement_source_rank": 111, "selection_receipt_sha256": "sha256:e8b6c3f993c4e5b76f823acc0bbda4c210a7dbd4526c1adb093c0535bbb4c00d"}
+  ],
+  "legacy_import_semantics": {
+    "accepted_or_reconciled": "import_terminal_accepted_never_repeat",
+    "active_claim": "import_claimed_same_run_may_terminalize_without_reclaim",
+    "excluded_attrition": "append_only_nonprimary_never_repeat",
+    "unclaimed": "admit_only_after_exhaustive_api_sfs_kubernetes_zero_inventory",
+    "scores_or_content_read": false
+  },
+  "blocked_requirements": [
+    "author fresh dedicated-A tail plan for source36..52 plus r102,r104,r110",
+    "author fresh dedicated-B tail plan for source82..100 plus r101,r103,r105,r107",
+    "replace unresolved attempt ownership with exact immutable plan and run identities",
+    "seal exhaustive score-blind legacy import after all active claims are reconciled",
+    "independent audit before ledger initialization or supervisor deployment"
+  ],
+  "mapping_sha256": "sha256:389bf16b7b48cae7593c2abe255180873888d4d4ef12de38a6acef4b1bc8a9b9"
+}

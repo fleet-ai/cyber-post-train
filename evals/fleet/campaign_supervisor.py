@@ -29,6 +29,7 @@ LEDGER_EVENT_SCHEMA = "fleet-score-blind-cell-event-v1"
 WORKER_SCHEMA = "fleet-score-blind-worker-registration-v1"
 HEARTBEAT_SCHEMA = "fleet-score-blind-campaign-heartbeat-v1"
 LEGACY_IMPORT_SCHEMA = "fleet-score-blind-legacy-import-v1"
+SCIENTIFIC_MAPPING_SCHEMA = "fleet-score-blind-scientific-mapping-v2"
 HIGH_PRIORITY_CLASS = "fleet-train-high"
 
 
@@ -136,6 +137,194 @@ def validate_campaign(campaign: dict[str, Any]) -> None:
             set(fragment_cells)
         ):
             raise ValueError("campaign execution fragments do not exactly partition component")
+
+
+def _mapping_selector_cells(selector: dict[str, Any]) -> set[tuple[int, int]]:
+    ranks = selector.get("source_ranks")
+    cells = selector.get("cells")
+    if (ranks is None) == (cells is None):
+        raise ValueError("mapping selector must declare source_ranks xor cells")
+    if ranks is not None:
+        if not isinstance(ranks, list) or not ranks or len(ranks) != len(set(ranks)):
+            raise ValueError("mapping source-rank selector is invalid")
+        return {(int(rank), attempt) for rank in ranks for attempt in range(1, 5)}
+    if not isinstance(cells, list) or not cells:
+        raise ValueError("mapping cell selector is invalid")
+    result: set[tuple[int, int]] = set()
+    for row in cells:
+        attempts = row.get("attempts")
+        rank = int(row.get("source_rank") or 0)
+        if (
+            rank <= 0
+            or not isinstance(attempts, list)
+            or not attempts
+            or len(attempts) != len(set(attempts))
+            or any(int(attempt) not in range(1, 5) for attempt in attempts)
+        ):
+            raise ValueError("mapping cell selector is invalid")
+        result.update((rank, int(attempt)) for attempt in attempts)
+    return result
+
+
+def validate_scientific_mapping(
+    mapping: dict[str, Any], *, root: Path = Path(".")
+) -> dict[str, Any]:
+    """Validate a blocked, score-blind denominator before executable release.
+
+    This contract deliberately permits unresolved execution bindings, but it
+    still resolves every scientific task identity and all four attempt slots.
+    It therefore cannot initialize a ledger or authorize a workload.
+    """
+
+    if mapping.get("schema_version") != SCIENTIFIC_MAPPING_SCHEMA:
+        raise ValueError("unsupported scientific mapping schema")
+    if mapping.get("mapping_sha256") != digest_without(mapping, "mapping_sha256"):
+        raise ValueError("scientific mapping digest mismatch")
+    if (
+        mapping.get("release_status") != "blocked_pending_execution_fragment_binding"
+        or mapping.get("launch_authorized") is not False
+        or mapping.get("ledger_initialization_authorized") is not False
+    ):
+        raise ValueError("scientific mapping must remain blocked")
+    if mapping.get("expected") != {
+        "models": {"qwen3.8-27b": 200, "glm-5.3": 400},
+        "total_tasks": 150,
+        "total_cells": 600,
+        "dedicated_nodes": 2,
+        "dedicated_gpus": 16,
+    }:
+        raise ValueError("scientific mapping denominator drifted")
+    components = mapping.get("components") or []
+    expected_components = {
+        "qwen-hosted-retained-source4": ("qwen3.8-27b", 1, 0, 0),
+        "qwen-hosted-primary49": ("qwen3.8-27b", 49, 0, 0),
+        "glm-hosted-primary46": ("glm-5.3", 46, 0, 0),
+        "glm-dedicated-a-v5-primary27": ("glm-5.3", 27, 1, 8),
+        "glm-dedicated-b-v5-primary27": ("glm-5.3", 27, 1, 8),
+    }
+    if {row.get("id") for row in components} != set(expected_components):
+        raise ValueError("scientific mapping component set drifted")
+    scientific: list[dict[str, Any]] = []
+    unresolved: set[tuple[str, int, int]] = set()
+    for component in components:
+        component_id = component["id"]
+        model, expected_tasks, nodes, gpus = expected_components[component_id]
+        if (
+            component.get("model") != model
+            or component.get("priority_class") != HIGH_PRIORITY_CLASS
+            or component.get("dedicated_nodes") != nodes
+            or component.get("dedicated_gpus") != gpus
+            or component.get("owned_attempts_per_task") != [1, 2, 3, 4]
+        ):
+            raise ValueError("scientific mapping component treatment drifted")
+        task_rows: dict[int, dict[str, Any]] = {}
+        for source in component.get("scientific_task_sources") or []:
+            kind = source.get("kind")
+            if kind == "plan":
+                path = root / str(source.get("repo_plan_path") or "")
+                plan = read_object(path)
+                if (
+                    plan.get("plan_sha256") != source.get("plan_sha256")
+                    or plan.get("plan_sha256") != digest_without(plan, "plan_sha256")
+                ):
+                    raise ValueError("scientific task-source plan drifted")
+                plan_tasks = {int(row["source_rank"]): row for row in plan.get("tasks") or []}
+                selected = {int(rank) for rank in source.get("source_ranks") or []}
+                if not selected or not selected <= set(plan_tasks):
+                    raise ValueError("scientific task-source ranks drifted")
+                rows = [plan_tasks[rank] for rank in selected]
+            elif kind == "inline":
+                receipt = source.get("authority_receipt_sha256")
+                if not isinstance(receipt, str) or not receipt.startswith("sha256:"):
+                    raise ValueError("inline scientific task lacks immutable authority")
+                rows = source.get("tasks") or []
+            else:
+                raise ValueError("scientific task-source kind is invalid")
+            for row in rows:
+                rank = int(row.get("source_rank") or 0)
+                task = row.get("task") or {}
+                if (
+                    rank <= 0
+                    or rank in task_rows
+                    or not isinstance(task.get("key"), str)
+                    or not task["key"]
+                    or not isinstance(task.get("version_id"), str)
+                    or not task["version_id"]
+                ):
+                    raise ValueError("scientific task identity is invalid or duplicated")
+                task_rows[rank] = row
+        if len(task_rows) != expected_tasks:
+            raise ValueError("scientific mapping component task count drifted")
+        expected_cells = {(rank, attempt) for rank in task_rows for attempt in range(1, 5)}
+        owned_cells: set[tuple[int, int]] = set()
+        for binding in component.get("attempt_ownership") or []:
+            cells = _mapping_selector_cells(binding)
+            if owned_cells & cells:
+                raise ValueError("scientific mapping attempt ownership overlaps")
+            state = binding.get("state")
+            if state == "resolved":
+                if not isinstance(binding.get("plan_sha256"), str) or not binding[
+                    "plan_sha256"
+                ].startswith("sha256:"):
+                    raise ValueError("resolved attempt ownership lacks plan binding")
+            elif state == "unresolved":
+                if binding.get("plan_sha256") is not None or not binding.get("blocked_reason"):
+                    raise ValueError("unresolved attempt ownership is not fail closed")
+                unresolved.update((component_id, rank, attempt) for rank, attempt in cells)
+            else:
+                raise ValueError("attempt ownership state is invalid")
+            owned_cells |= cells
+        if owned_cells != expected_cells:
+            raise ValueError("scientific mapping attempt ownership has gaps")
+        scientific.extend(
+            {
+                "model": model,
+                "component_id": component_id,
+                "source_rank": rank,
+                "task_key": row["task"]["key"],
+                "task_version_id": row["task"]["version_id"],
+            }
+            for rank, row in task_rows.items()
+        )
+    identities = [(row["model"], row["task_version_id"]) for row in scientific]
+    if len(identities) != len(set(identities)):
+        raise ValueError("scientific mapping repeats a model/task identity")
+    counts = Counter(row["model"] for row in scientific)
+    if {key: value * 4 for key, value in counts.items()} != mapping["expected"]["models"]:
+        raise ValueError("scientific mapping model count drifted")
+    replacements = mapping.get("replacement_mappings") or []
+    replacement_targets = [
+        (row.get("model"), row.get("component_id"), int(row.get("replacement_source_rank") or 0))
+        for row in replacements
+    ]
+    if len(replacement_targets) != len(set(replacement_targets)):
+        raise ValueError("scientific replacement target duplicated")
+    primary = {(row["model"], row["component_id"], row["source_rank"]) for row in scientific}
+    for row, target in zip(replacements, replacement_targets, strict=True):
+        if (
+            target not in primary
+            or not isinstance(row.get("selection_receipt_sha256"), str)
+            or not row["selection_receipt_sha256"].startswith("sha256:")
+            or int(row.get("excluded_source_rank") or 0) <= 0
+            or (row["model"], row["component_id"], int(row["excluded_source_rank"])) in primary
+        ):
+            raise ValueError("scientific replacement mapping is invalid")
+    policy = mapping.get("legacy_import_semantics") or {}
+    if policy != {
+        "accepted_or_reconciled": "import_terminal_accepted_never_repeat",
+        "active_claim": "import_claimed_same_run_may_terminalize_without_reclaim",
+        "excluded_attrition": "append_only_nonprimary_never_repeat",
+        "unclaimed": "admit_only_after_exhaustive_api_sfs_kubernetes_zero_inventory",
+        "scores_or_content_read": False,
+    }:
+        raise ValueError("legacy import semantics drifted")
+    return {
+        "tasks": len(scientific),
+        "cells": len(scientific) * 4,
+        "model_cells": dict(sorted((key, value * 4) for key, value in counts.items())),
+        "unresolved_cells": len(unresolved),
+        "unresolved_components": sorted({row[0] for row in unresolved}),
+    }
 
 
 def _plan_path(component: dict[str, Any], cluster: bool) -> Path:
@@ -776,6 +965,8 @@ def main() -> int:
     init.add_argument("--campaign", type=Path, required=True)
     init.add_argument("--ledger-root", type=Path, required=True)
     init.add_argument("--cluster-plans", action="store_true")
+    mapping_status = sub.add_parser("mapping-status")
+    mapping_status.add_argument("--mapping", type=Path, required=True)
     show = sub.add_parser("status")
     show.add_argument("--ledger-root", type=Path, required=True)
     show.add_argument("--format", choices=("json", "table"), default="table")
@@ -814,6 +1005,17 @@ def main() -> int:
             "component_counts": universe["component_counts"],
             "scores_included": False,
             "prompts_or_traces_included": False,
+        }
+    elif args.command == "mapping-status":
+        mapping = read_object(args.mapping)
+        result = {
+            "mapping_sha256": mapping["mapping_sha256"],
+            "release_status": mapping["release_status"],
+            **validate_scientific_mapping(mapping),
+            "launch_authorized": False,
+            "ledger_initialization_authorized": False,
+            "scores_read": False,
+            "prompts_or_traces_read": False,
         }
     elif args.command == "status":
         result = status(args.ledger_root)

@@ -11,6 +11,9 @@ import yaml
 from evals.fleet import campaign_supervisor as supervisor
 
 CAMPAIGN = Path("evals/fleet/configs/q38-glm53-primary-campaign-v1.json")
+SCIENTIFIC_MAPPING = Path(
+    "evals/fleet/configs/q38-glm53-primary-scientific-mapping-v2.json"
+)
 SUPERVISOR_MANIFEST = Path(
     "evals/fleet/cluster/q38-glm53-campaign-supervisor-v1.yaml"
 )
@@ -97,6 +100,109 @@ def test_checked_in_campaign_cannot_initialize_before_replacements_are_bound(
     campaign = supervisor.read_object(CAMPAIGN)
     with pytest.raises(ValueError, match="blocked pending"):
         supervisor.initialize_ledger(campaign, tmp_path / "ledger", cluster=False)
+
+
+def test_blocked_v2_scientific_mapping_is_exact_but_not_executable() -> None:
+    mapping = supervisor.read_object(SCIENTIFIC_MAPPING)
+    summary = supervisor.validate_scientific_mapping(mapping)
+    assert summary == {
+        "tasks": 150,
+        "cells": 600,
+        "model_cells": {"glm-5.3": 400, "qwen3.8-27b": 200},
+        "unresolved_cells": 104,
+        "unresolved_components": [
+            "glm-dedicated-a-v5-primary27",
+            "glm-dedicated-b-v5-primary27",
+        ],
+    }
+    assert mapping["launch_authorized"] is False
+    assert mapping["ledger_initialization_authorized"] is False
+    replacements = {
+        (row["model"], row["excluded_source_rank"]): row["replacement_source_rank"]
+        for row in mapping["replacement_mappings"]
+    }
+    assert replacements == {
+        ("qwen3.8-27b", 1): 55,
+        ("qwen3.8-27b", 2): 52,
+        ("qwen3.8-27b", 3): 53,
+        ("qwen3.8-27b", 5): 54,
+        ("qwen3.8-27b", 10): 56,
+        ("glm-5.3", 1): 101,
+        ("glm-5.3", 2): 102,
+        ("glm-5.3", 3): 103,
+        ("glm-5.3", 4): 110,
+        ("glm-5.3", 5): 104,
+        ("glm-5.3", 6): 112,
+        ("glm-5.3", 7): 105,
+        ("glm-5.3", 9): 109,
+        ("glm-5.3", 11): 108,
+        ("glm-5.3", 14): 113,
+        ("glm-5.3", 54): 107,
+        ("glm-5.3", 56): 111,
+    }
+
+
+def test_blocked_v2_mapping_status_command_is_read_only(capsys, monkeypatch) -> None:
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "campaign_supervisor",
+            "mapping-status",
+            "--mapping",
+            str(SCIENTIFIC_MAPPING),
+        ],
+    )
+    assert supervisor.main() == 0
+    snapshot = json.loads(capsys.readouterr().out)
+    assert snapshot["cells"] == 600
+    assert snapshot["unresolved_cells"] == 104
+    assert snapshot["launch_authorized"] is False
+    assert snapshot["scores_read"] is False
+
+
+@pytest.mark.parametrize(
+    "mutation,match",
+    [
+        (
+            lambda mapping: mapping.__setitem__("launch_authorized", True),
+            "must remain blocked",
+        ),
+        (
+            lambda mapping: mapping["components"][3]["scientific_task_sources"][1][
+                "tasks"
+            ][0]["task"].__setitem__(
+                "version_id", "21baee36-dc26-4dcd-983e-ae58a665dfa9"
+            ),
+            "model/task identity",
+        ),
+        (
+            lambda mapping: mapping["components"][3]["attempt_ownership"][-1][
+                "source_ranks"
+            ].pop(),
+            "attempt ownership has gaps",
+        ),
+        (
+            lambda mapping: mapping["replacement_mappings"][0].__setitem__(
+                "replacement_source_rank", 999
+            ),
+            "replacement mapping is invalid",
+        ),
+        (
+            lambda mapping: mapping["legacy_import_semantics"].__setitem__(
+                "active_claim", "reclaim"
+            ),
+            "import semantics drifted",
+        ),
+    ],
+)
+def test_blocked_v2_scientific_mapping_tampering_fails_closed(
+    mutation, match: str
+) -> None:
+    mapping = supervisor.read_object(SCIENTIFIC_MAPPING)
+    mutation(mapping)
+    mapping["mapping_sha256"] = supervisor.digest_without(mapping, "mapping_sha256")
+    with pytest.raises(ValueError, match=match):
+        supervisor.validate_scientific_mapping(mapping)
 
 
 def test_campaign_rejects_capacity_or_plan_drift() -> None:
