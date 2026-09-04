@@ -1,0 +1,26 @@
+{
+  "schema_version": "fleet-opencode-autocontinue-primary-release-preview-v1",
+  "status": "HELD",
+  "campaign_sha256": "sha256:9df46502affc3ae892ead22fd13fa05e3e9f2950700f9ac67d76588bc29a6d96",
+  "task_identity_sha256": "sha256:c4eca5c58aa7e43eaf85ffb94179a57dbaa320a54a5e530c71795a1467e50fc7",
+  "canary_launch_authorized": false,
+  "bulk_launch_authorized": false,
+  "cluster_objects_created": false,
+  "remaining_runtime_gates": [
+    "legacy_interrupted_environment_cleanup_terminal",
+    "r114_immutable_hydration_and_execution_binding",
+    "fresh_fleet_task_version_environment_verifier_inventory",
+    "hosted_endpoint_health",
+    "dedicated_a_and_b_uid_bound_autocontinue_parity",
+    "uid_plan_bound_drain_gate_in_hosted_controller",
+    "qwen_and_glm_one_cell_canary_authorization_and_acceptance",
+    "atomic_endpoint_leases_and_fresh_duplicate_preflights",
+    "append_only_bulk_release_authorization"
+  ],
+  "privacy": {
+    "scores_read": false,
+    "prompts_or_traces_included": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:e92b958600c8877167739f218168e2766efe72c45bddfb55ceb850a4a5e08115"
+}
