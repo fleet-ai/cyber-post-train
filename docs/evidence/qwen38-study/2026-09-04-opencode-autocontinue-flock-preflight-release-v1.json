@@ -4,6 +4,7 @@
   "authorized_by": "/root",
   "recorded_at": "2026-09-04T19:57:39Z",
   "campaign_sha256": "sha256:1f4b63897fa8f954b2ea9ccb2532d65329737d959e74ef68fd8238d2532ee971",
+  "campaign_file_sha256": "sha256:8e4632f3233abe2ab16f44bc348147d2bef8980b4897e7beb8bef1cac17e5df0",
   "manifest_sha256": "sha256:d9fa9ed9b1c144977d4132e1a4b2929a1037400b7aec3fab62e047c0d825a7ce",
   "source_sha256": "sha256:dc012e6cdaf34f8297d48d43a483c1af2b2099f637403fc93d9ea45946d18088",
   "configmap_name": "chris-opencode11827-ac-flock-preflight-v1",
@@ -26,5 +27,5 @@
     "prompts_or_traces_included": false,
     "scores_included": false
   },
-  "receipt_sha256": "sha256:5df8d27032d45918c0340b181af6c259e6787163c9370ef64dda8d8a7c84a337"
+  "receipt_sha256": "sha256:e86949ed2fd2a81bc5b8e4c5a0f1366d97843c4fbd4dd16423b8d8944fd98146"
 }

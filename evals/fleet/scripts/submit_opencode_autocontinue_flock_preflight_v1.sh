@@ -12,8 +12,11 @@ NS=fleet-train-jobs
 MANIFEST="$ROOT/evals/fleet/cluster/opencode-autocontinue-endpoint-flock-preflight-v1.yaml"
 SOURCE="$ROOT/evals/fleet/endpoint_lease_preflight.py"
 RELEASE="$ROOT/docs/evidence/qwen38-study/2026-09-04-opencode-autocontinue-flock-preflight-release-v1.json"
+CAMPAIGN="$ROOT/evals/fleet/configs/q38-glm53-opencode-autocontinue-primary-campaign-v1.json"
+CAMPAIGN_RELEASE="$ROOT/docs/evidence/qwen38-study/2026-09-04-opencode-autocontinue-primary-campaign-release-preview-v1.json"
 MANIFEST_SHA=d9fa9ed9b1c144977d4132e1a4b2929a1037400b7aec3fab62e047c0d825a7ce
 SOURCE_SHA=dc012e6cdaf34f8297d48d43a483c1af2b2099f637403fc93d9ea45946d18088
+CAMPAIGN_FILE_SHA=8e4632f3233abe2ab16f44bc348147d2bef8980b4897e7beb8bef1cac17e5df0
 CONFIGMAP=chris-opencode11827-ac-flock-preflight-v1
 HOLDER=chris-opencode11827-ac-flock-holder-v1
 PROBER=chris-opencode11827-ac-flock-prober-v1
@@ -23,6 +26,9 @@ A_HEAD_UID=3f37ab91-4afa-4e4d-8f29-a3eeda70a774
 
 test "$(sha256sum "$MANIFEST" | awk '{print $1}')" = "$MANIFEST_SHA"
 test "$(sha256sum "$SOURCE" | awk '{print $1}')" = "$SOURCE_SHA"
+test "$(sha256sum "$CAMPAIGN" | awk '{print $1}')" = "$CAMPAIGN_FILE_SHA"
+uv run python -m evals.fleet.autocontinue_campaign \
+  --campaign "$CAMPAIGN" --release "$CAMPAIGN_RELEASE" >/dev/null
 uv run python -m evals.fleet.autocontinue_flock_release --release "$RELEASE" >/dev/null
 
 test "$(kubectl -n "$NS" get pod "$A_HEAD" -o jsonpath='{.metadata.uid}')" = "$A_HEAD_UID"

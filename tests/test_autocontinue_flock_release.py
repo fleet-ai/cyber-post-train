@@ -26,6 +26,7 @@ def test_flock_preflight_release_is_exact_and_non_scored() -> None:
     "field",
     [
         "campaign_sha256",
+        "campaign_file_sha256",
         "manifest_sha256",
         "source_sha256",
         "job_creation_order",

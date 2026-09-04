@@ -11,6 +11,7 @@ from evals.fleet import self_hosted
 
 SCHEMA = "fleet-opencode-autocontinue-flock-preflight-release-v1"
 CAMPAIGN_SHA256 = "sha256:1f4b63897fa8f954b2ea9ccb2532d65329737d959e74ef68fd8238d2532ee971"
+CAMPAIGN_FILE_SHA256 = "sha256:8e4632f3233abe2ab16f44bc348147d2bef8980b4897e7beb8bef1cac17e5df0"
 MANIFEST_SHA256 = "sha256:d9fa9ed9b1c144977d4132e1a4b2929a1037400b7aec3fab62e047c0d825a7ce"
 SOURCE_SHA256 = "sha256:dc012e6cdaf34f8297d48d43a483c1af2b2099f637403fc93d9ea45946d18088"
 EXPECTED_JOBS = [
@@ -34,6 +35,7 @@ def validate_release(release: dict[str, Any]) -> None:
         or release.get("append_only") is not True
         or release.get("authorized_by") != "/root"
         or release.get("campaign_sha256") != CAMPAIGN_SHA256
+        or release.get("campaign_file_sha256") != CAMPAIGN_FILE_SHA256
         or release.get("manifest_sha256") != MANIFEST_SHA256
         or release.get("source_sha256") != SOURCE_SHA256
         or release.get("configmap_name")
