@@ -44,17 +44,28 @@ spec:
               root=/workspace/cyber-post-train
               mkdir -p "$root/evals/fleet/configs" "$root/evals/fleet/cluster" "$root/evals/fleet/scripts" "$root/docs/evidence/qwen38-study"
               touch "$root/evals/__init__.py" "$root/evals/fleet/__init__.py"
-              for file in self_hosted.py runner.py controller.py canary_controller.py endpoint_lease.py fixed_proxy.py Dockerfile.opencode; do install -m 0644 "/bootstrap/$file" "$root/evals/fleet/$file"; done
+              for file in self_hosted.py runner.py controller.py canary_controller.py hosted_release.py hosted_runtime.py hosted_health.py endpoint_lease.py fixed_proxy.py Dockerfile.opencode; do install -m 0644 "/bootstrap/$file" "$root/evals/fleet/$file"; done
               mv "$root/evals/fleet/runner.py" "$root/evals/fleet/opencode_train_sweep_runner.py"
               mv "$root/evals/fleet/controller.py" "$root/evals/fleet/hosted_sweep_controller.py"
               mv "$root/evals/fleet/canary_controller.py" "$root/evals/fleet/autocontinue_canary_controller.py"
+              mv "$root/evals/fleet/hosted_release.py" "$root/evals/fleet/autocontinue_canary_hosted_release.py"
+              mv "$root/evals/fleet/hosted_runtime.py" "$root/evals/fleet/autocontinue_canary_hosted_runtime.py"
+              mv "$root/evals/fleet/hosted_health.py" "$root/evals/fleet/autocontinue_hosted_health.py"
               install -m 0644 /bootstrap/plan.json "$root/evals/fleet/configs/plan.json"
               install -m 0644 /bootstrap/release.json "$root/evals/fleet/configs/release.json"
-              install -m 0644 /bootstrap/preflight-manifest.yaml "$root/evals/fleet/cluster/opencode-autocontinue-canary-preflights-v1.yaml"
+              install -m 0644 /bootstrap/launch-route.json "$root/evals/fleet/configs/launch-route.json"
+              install -m 0644 /bootstrap/campaign.json "$root/evals/fleet/configs/q38-glm53-opencode-autocontinue-primary-campaign-v1.json"
+              install -m 0644 /bootstrap/preflight-manifest.yaml "$root/evals/fleet/cluster/opencode-autocontinue-canary-preflights-v2.yaml"
               install -m 0644 /bootstrap/scored-manifest.yaml "$root/evals/fleet/cluster/opencode-autocontinue-canary-scored-v2.yaml"
               install -m 0755 /bootstrap/run.sh "$root/evals/fleet/scripts/run.sh"
               install -m 0755 /bootstrap/submit.sh "$root/evals/fleet/scripts/submit_opencode_autocontinue_canaries_v1.sh"
-              install -m 0644 /bootstrap/compatibility.json "$root/docs/evidence/qwen38-study/2026-09-04-opencode-autocontinue-canary-controller-compatibility-v1.json"
+              install -m 0644 /bootstrap/compatibility.json "$root/docs/evidence/qwen38-study/2026-09-04-opencode-autocontinue-canary-controller-compatibility-v2.json"
+              install -m 0644 /bootstrap/v1-incident.json "$root/docs/evidence/qwen38-study/2026-09-04-opencode-autocontinue-canary-preflight-v1-bootstrap-failure.json"
+              install -m 0644 /bootstrap/phase-c-route.json "$root/docs/evidence/qwen38-study/2026-09-04-opencode-autocontinue-hosted-only-route-v1.json"
+              install -m 0644 /bootstrap/preauth.json "$root/docs/evidence/qwen38-study/2026-09-04-qwen38-autocontinue-canary-preflight-authorization-v2.json"
+              install -m 0644 /bootstrap/preflight.json "$root/docs/evidence/qwen38-study/2026-09-04-qwen38-autocontinue-canary-preflight-v2-pass.json"
+              install -m 0644 /bootstrap/post-exit.json "$root/docs/evidence/qwen38-study/2026-09-04-qwen38-autocontinue-canary-preflight-v2-post-exit.json"
+              install -m 0644 /bootstrap/duplicate.json "$root/docs/evidence/qwen38-study/2026-09-04-qwen38-autocontinue-canary-duplicate-inventory-v2.json"
               cd "$root" && exec "$root/evals/fleet/scripts/run.sh"
           env:
             - {name: DOCKER_HOST, value: "unix:///var/run/docker.sock"}
@@ -62,6 +73,7 @@ spec:
             - {name: HOSTED_JOB_NAME, value: chris-q38-ac-canary1-v1}
             - {name: HOSTED_PLAN_FILE, value: plan.json}
             - {name: SCORING_RELEASE_FILE, value: release.json}
+            - {name: LAUNCH_ROUTE_FILE, value: launch-route.json}
             - {name: JOB_UID, valueFrom: {fieldRef: {apiVersion: v1, fieldPath: "metadata.labels['batch.kubernetes.io/controller-uid']"}}}
             - {name: POD_UID, valueFrom: {fieldRef: {apiVersion: v1, fieldPath: metadata.uid}}}
             - {name: FLEET_API_KEY, valueFrom: {secretKeyRef: {name: chris-cyber-opencode-evals-v2, key: FLEET_API_KEY}}}
@@ -120,17 +132,28 @@ spec:
               root=/workspace/cyber-post-train
               mkdir -p "$root/evals/fleet/configs" "$root/evals/fleet/cluster" "$root/evals/fleet/scripts" "$root/docs/evidence/qwen38-study"
               touch "$root/evals/__init__.py" "$root/evals/fleet/__init__.py"
-              for file in self_hosted.py runner.py controller.py canary_controller.py endpoint_lease.py fixed_proxy.py Dockerfile.opencode; do install -m 0644 "/bootstrap/$file" "$root/evals/fleet/$file"; done
+              for file in self_hosted.py runner.py controller.py canary_controller.py hosted_release.py hosted_runtime.py hosted_health.py endpoint_lease.py fixed_proxy.py Dockerfile.opencode; do install -m 0644 "/bootstrap/$file" "$root/evals/fleet/$file"; done
               mv "$root/evals/fleet/runner.py" "$root/evals/fleet/opencode_train_sweep_runner.py"
               mv "$root/evals/fleet/controller.py" "$root/evals/fleet/hosted_sweep_controller.py"
               mv "$root/evals/fleet/canary_controller.py" "$root/evals/fleet/autocontinue_canary_controller.py"
+              mv "$root/evals/fleet/hosted_release.py" "$root/evals/fleet/autocontinue_canary_hosted_release.py"
+              mv "$root/evals/fleet/hosted_runtime.py" "$root/evals/fleet/autocontinue_canary_hosted_runtime.py"
+              mv "$root/evals/fleet/hosted_health.py" "$root/evals/fleet/autocontinue_hosted_health.py"
               install -m 0644 /bootstrap/plan.json "$root/evals/fleet/configs/plan.json"
               install -m 0644 /bootstrap/release.json "$root/evals/fleet/configs/release.json"
-              install -m 0644 /bootstrap/preflight-manifest.yaml "$root/evals/fleet/cluster/opencode-autocontinue-canary-preflights-v1.yaml"
+              install -m 0644 /bootstrap/launch-route.json "$root/evals/fleet/configs/launch-route.json"
+              install -m 0644 /bootstrap/campaign.json "$root/evals/fleet/configs/q38-glm53-opencode-autocontinue-primary-campaign-v1.json"
+              install -m 0644 /bootstrap/preflight-manifest.yaml "$root/evals/fleet/cluster/opencode-autocontinue-canary-preflights-v2.yaml"
               install -m 0644 /bootstrap/scored-manifest.yaml "$root/evals/fleet/cluster/opencode-autocontinue-canary-scored-v2.yaml"
               install -m 0755 /bootstrap/run.sh "$root/evals/fleet/scripts/run.sh"
               install -m 0755 /bootstrap/submit.sh "$root/evals/fleet/scripts/submit_opencode_autocontinue_canaries_v1.sh"
-              install -m 0644 /bootstrap/compatibility.json "$root/docs/evidence/qwen38-study/2026-09-04-opencode-autocontinue-canary-controller-compatibility-v1.json"
+              install -m 0644 /bootstrap/compatibility.json "$root/docs/evidence/qwen38-study/2026-09-04-opencode-autocontinue-canary-controller-compatibility-v2.json"
+              install -m 0644 /bootstrap/v1-incident.json "$root/docs/evidence/qwen38-study/2026-09-04-opencode-autocontinue-canary-preflight-v1-bootstrap-failure.json"
+              install -m 0644 /bootstrap/phase-c-route.json "$root/docs/evidence/qwen38-study/2026-09-04-opencode-autocontinue-hosted-only-route-v1.json"
+              install -m 0644 /bootstrap/preauth.json "$root/docs/evidence/qwen38-study/2026-09-04-glm53-autocontinue-canary-preflight-authorization-v2.json"
+              install -m 0644 /bootstrap/preflight.json "$root/docs/evidence/qwen38-study/2026-09-04-glm53-autocontinue-canary-preflight-v2-pass.json"
+              install -m 0644 /bootstrap/post-exit.json "$root/docs/evidence/qwen38-study/2026-09-04-glm53-autocontinue-canary-preflight-v2-post-exit.json"
+              install -m 0644 /bootstrap/duplicate.json "$root/docs/evidence/qwen38-study/2026-09-04-glm53-autocontinue-canary-duplicate-inventory-v2.json"
               cd "$root" && exec "$root/evals/fleet/scripts/run.sh"
           env:
             - {name: DOCKER_HOST, value: "unix:///var/run/docker.sock"}
@@ -138,6 +161,7 @@ spec:
             - {name: HOSTED_JOB_NAME, value: chris-glm53-ac-canary1-v1}
             - {name: HOSTED_PLAN_FILE, value: plan.json}
             - {name: SCORING_RELEASE_FILE, value: release.json}
+            - {name: LAUNCH_ROUTE_FILE, value: launch-route.json}
             - {name: JOB_UID, valueFrom: {fieldRef: {apiVersion: v1, fieldPath: "metadata.labels['batch.kubernetes.io/controller-uid']"}}}
             - {name: POD_UID, valueFrom: {fieldRef: {apiVersion: v1, fieldPath: metadata.uid}}}
             - {name: FLEET_API_KEY, valueFrom: {secretKeyRef: {name: chris-cyber-opencode-evals-v2, key: FLEET_API_KEY}}}

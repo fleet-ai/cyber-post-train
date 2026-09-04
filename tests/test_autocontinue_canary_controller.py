@@ -329,12 +329,38 @@ def test_held_manifests_have_two_create_once_high_priority_jobs(manifest: Path) 
         assert all("-run-v2" in name for name in configmaps)
 
 
-def test_submitter_is_preview_only_until_append_only_final_package() -> None:
+def test_submitter_is_fail_closed_until_hosted_final_package_and_live_route() -> None:
     text = (ROOT / "evals/fleet/scripts/submit_opencode_autocontinue_canaries_v1.sh").read_text()
-    assert "final scored submission requires a separately reviewed v2 manifest" in text
     assert "validate-release" in text
+    assert "observe-route" in text
+    assert "validate-route" in text
+    assert "--maximum-age-seconds 120" in text
+    assert "chris-ac-canary1-hosted-scored-submit-v1" in text
+    assert 'git show "$PACKAGE_COMMIT:$path"' in text
+    assert "autocontinue-canary-hosted-scoring-release-v3.json" in text
     assert "--dry-run=server" in text
     assert 'test ! -e "/mnt/sfs/' not in text
+    assert "kubectl apply" not in text
+
+
+def test_scored_manifest_packages_hosted_route_gate_before_claim() -> None:
+    text = SCORED_MANIFEST.read_text()
+    for required in (
+        "hosted_release.py",
+        "hosted_runtime.py",
+        "hosted_health.py",
+        "launch-route.json",
+        "autocontinue_canary_hosted_runtime.py",
+        "opencode-autocontinue-canary-preflights-v2.yaml",
+        "controller-compatibility-v2.json",
+        "preflight-v1-bootstrap-failure.json",
+    ):
+        assert required in text
+    for doc in yaml.safe_load_all(text):
+        env = {
+            item["name"]: item for item in doc["spec"]["template"]["spec"]["containers"][0]["env"]
+        }
+        assert env["LAUNCH_ROUTE_FILE"]["value"] == "launch-route.json"
 
 
 def _synthetic_preflight_authorization(plan: dict) -> dict:
@@ -593,7 +619,7 @@ def test_v2_submitter_pins_phase_a3_and_is_create_once_preflight_only() -> None:
 def test_preflight_stage_has_no_scored_execution_payload() -> None:
     manifest_text = PRE_MANIFEST.read_text()
     submitter_text = (
-        ROOT / "evals/fleet/scripts/submit_opencode_autocontinue_canaries_v1.sh"
+        ROOT / "evals/fleet/scripts/submit_opencode_autocontinue_canary_preflights_v2.sh"
     ).read_text()
     for forbidden in (
         "/bootstrap/scored-manifest.yaml",

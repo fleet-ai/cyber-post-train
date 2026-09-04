@@ -5,6 +5,7 @@ ROOT=${CYBER_ROOT:-/workspace/cyber-post-train}
 JOB_NAME=${HOSTED_JOB_NAME:?HOSTED_JOB_NAME is required}
 PLAN_FILE=${HOSTED_PLAN_FILE:?HOSTED_PLAN_FILE is required}
 RELEASE_FILE=${SCORING_RELEASE_FILE:?SCORING_RELEASE_FILE is required}
+LAUNCH_ROUTE_FILE=${LAUNCH_ROUTE_FILE:?LAUNCH_ROUTE_FILE is required}
 OUT_ROOT=${FLEET_EVAL_OUT_ROOT:-/mnt/sfs/jobs/$JOB_NAME}
 AGENT_IMAGE=chris/opencode:1.18.27-cyber-v1
 PROXY_IMAGE=ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
@@ -30,9 +31,10 @@ docker pull --platform linux/amd64 "$PROXY_IMAGE"
 export AGENT_HARNESS_IMAGE=$AGENT_IMAGE
 export FIXED_PROXY_IMAGE=$PROXY_IMAGE
 exec uv run --no-project --with httpx==0.28.1 python \
-  -m evals.fleet.autocontinue_canary_controller run \
+  -m evals.fleet.autocontinue_canary_hosted_runtime run-hosted \
   --plan "$ROOT/evals/fleet/configs/$PLAN_FILE" \
   --release "$ROOT/evals/fleet/configs/$RELEASE_FILE" \
+  --launch-route "$ROOT/evals/fleet/configs/$LAUNCH_ROUTE_FILE" \
   --out-dir "$OUT_ROOT" \
   --proxy "$ROOT/evals/fleet/fixed_proxy.py" \
   --repo "$ROOT"
