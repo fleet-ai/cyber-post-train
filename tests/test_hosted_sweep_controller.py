@@ -1139,13 +1139,19 @@ def test_glm_r107_hydration_requires_tombstone_bound_supplement(monkeypatch) -> 
             "fleet-glm53-hosted-replacement-hydration-v2",
             [108, 109],
         ),
+        (
+            GLM_DEDICATED_A_PREEMPTION_SUPPLEMENT,
+            "fleet-glm53-dedicated-a-replacement-hydration-v1",
+            [110],
+        ),
     ],
 )
 def test_http500_replacement_hydration_is_metadata_only(
     monkeypatch, supplement_path: Path, expected_schema: str, expected_ranks: list[int]
 ) -> None:
     supplement = hosted.load_object(supplement_path)
-    by_key = {row["task_key"]: row for row in supplement["replacements"]}
+    rows = supplement.get("replacements") or [supplement["replacement"]]
+    by_key = {row["task_key"]: row for row in rows}
 
     class Client:
         def __enter__(self):

@@ -748,6 +748,24 @@ def hydrate_glm53_replacements(
             raise ValueError("GLM HTTP500 replacement supplement drifted")
         receipt_schema = "fleet-glm53-hosted-replacement-hydration-v2"
         receipt_source_field = "selection_supplement_receipt_sha256"
+    elif supplement_schema == "fleet-opencode-replacement-selection-supplement-v4":
+        row = assignment.get("replacement") or {}
+        rows = [row]
+        expected_ranks = [110]
+        stop = assignment.get("controller_stop_evidence") or {}
+        if (
+            assignment.get("append_only") is not True
+            or row.get("serving_block") != "dedicated_a_successor"
+            or row.get("scored_launch_authorized") is not False
+            or (row.get("hydration_gate") or {}).get("status")
+            != "required_not_satisfied"
+            or stop.get("tombstone_receipt_sha256")
+            != "sha256:9bf6683d80c2dd517e371709a1aa2db0a13e1f4089a09a8296941c6df7054b79"
+            or stop.get("corrected_tombstone_binds_nonempty_agent_stream") is not True
+        ):
+            raise ValueError("dedicated A replacement supplement drifted")
+        receipt_schema = "fleet-glm53-dedicated-a-replacement-hydration-v1"
+        receipt_source_field = "selection_supplement_receipt_sha256"
     elif supplement_schema in {
         "fleet-opencode-replacement-selection-supplement-v1",
         "fleet-opencode-replacement-selection-supplement-v2",
