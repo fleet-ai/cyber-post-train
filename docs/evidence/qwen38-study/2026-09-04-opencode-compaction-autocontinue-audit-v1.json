@@ -1,0 +1,215 @@
+{
+  "schema_version": "fleet-opencode-compaction-autocontinue-audit-v1",
+  "observed_at": "2026-09-04T19:38:06Z",
+  "cutoff_utc": "2026-09-04T19:10:00Z",
+  "audit_scope": "score-blind protocol implementation, non-scored smoke, and privacy-safe historical metadata",
+  "repository_provenance": {
+    "pull_request_url": "https://github.com/fleet-ai/cyber-post-train/pull/91",
+    "pull_request_title": "Fix OpenCode compaction continuation and context headroom",
+    "pull_request_author": "omar-fleet",
+    "pull_request_head_commit": "28123f28cdef99d7374f4def6cf729838f44ce06",
+    "merge_commit": "0bc8dbc0cf7c50554277d4bcc27dc3bc1683a93a",
+    "merged_at": "2026-09-04T08:51:26Z",
+    "merged_base_branch": "codex/q38-fleet50-base-v1",
+    "audited_experiment_head": "433d0278ddac7a8465928d758822222c2763f21b",
+    "origin_main_at_audit": "6071f7f8f78eb7133c68fbede8d2362cba884c17",
+    "origin_main_contains_merge_commit": false,
+    "finding": "The correction is present on the experiment branch but not in current origin/main."
+  },
+  "upstream_opencode": {
+    "repository": "https://github.com/anomalyco/opencode",
+    "tag": "v1.18.27",
+    "commit": "4b7e19e315cca414121ba1d61523fef74bb3ae8b",
+    "linux_x64_asset_sha256": "sha256:4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702",
+    "source_sha256": {
+      "packages/opencode/src/session/overflow.ts": "sha256:fa0d52e8a59b737e8129d6473f9f6416567cd765c6068f854e4ea0dd3d351d10",
+      "packages/opencode/src/session/compaction.ts": "sha256:8d478570a7e4ad32b746030d4f86a1c673949b1e2259bd716b3885d99283289a",
+      "packages/opencode/src/session/prompt.ts": "sha256:f0c5bc64c0f0e966693d4a57f7ede1e9d6e188b396152f04b55303dc75b9b768"
+    }
+  },
+  "fixed_treatment": {
+    "policy_name": "opencode_1.18.27_native_compaction_autocontinue_v1",
+    "context_window_tokens": 262144,
+    "max_output_tokens": 32768,
+    "explicit_input_limit_tokens": 229376,
+    "compaction_auto": true,
+    "compaction_reserved_tokens": 20000,
+    "effective_compaction_threshold_tokens": 209376,
+    "autocontinue_disable_plugin_present": false,
+    "rendered_settings_sha256": {
+      "qwen3.8-27b": "sha256:1328f6eb97861443b712625d9038a924de9c220c146667565dd4c5bb73a6d8f8",
+      "glm-5.3": "sha256:84a1ca763a297bd8badb184391a02c82d57069b9a211ecef4f5e53dd79e20e20"
+    },
+    "continuation_semantics": {
+      "overflow_count": "tokens.total when nonzero, otherwise input + output + cache.read + cache.write",
+      "trigger": "overflow_count >= max(0, explicit_input_limit - compaction_reserved)",
+      "post_summary_gate": "result == continue and compaction.auto == true",
+      "post_summary_action": "experimental.compaction.autocontinue defaults enabled, creates a synthetic user continuation message, and the session loop continues"
+    },
+    "caps": {
+      "native_opencode_finite_agent_step_cap": null,
+      "declared_model_request_budget": 600,
+      "proxy_hard_request_cap": 630,
+      "proxy_cap_derivation": "declared model request budget plus 30 compaction/tool headroom requests",
+      "wall_timeout_seconds": 28800,
+      "finding": "Do not describe 600 as a native OpenCode step cap; agent.steps is unset and therefore infinite in OpenCode."
+    }
+  },
+  "code_identity": {
+    "pull_request_merge_files_sha256": {
+      "evals/fleet/opencode_train_sweep.py": "sha256:5040c0452b3d71314e441198a6be18ec23ce4d45507eafe5a8923f1ff672b795",
+      "evals/fleet/self_hosted.py": "sha256:270d15ed7fbca35ccbb1ff7fdcc48464c8536019bf9583575b771af8a63e27f2",
+      "tests/test_opencode_compaction.py": "sha256:8314d8688aba4b606072a525403c50ddcc2cd06b90360f6f3b6213f6d9b70dbe"
+    },
+    "audited_experiment_head_files_sha256": {
+      "evals/fleet/opencode_train_sweep.py": "sha256:5040c0452b3d71314e441198a6be18ec23ce4d45507eafe5a8923f1ff672b795",
+      "evals/fleet/self_hosted.py": "sha256:16df432b5fde55112924d6106e6c03f09817846f1344ba0fe100dcf785c33d8b",
+      "tests/test_opencode_compaction.py": "sha256:4453ee59ec9769f016babba7172367dc54a62daab5a6ac48d06a1643bb725eb2"
+    }
+  },
+  "score_free_smoke": {
+    "design": {
+      "uses_exact_opencode_1_18_27_binary": true,
+      "model_endpoint": "local inert fake model",
+      "tool_endpoint": "local inert fake MCP tool",
+      "fleet_api_contacted": false,
+      "challenge_instance_created": false,
+      "verifier_executed": false,
+      "scoring_executed": false,
+      "first_agent_request": "reports 210000 prompt tokens and requests the inert tool",
+      "second_request": "native compaction request with no agent tools",
+      "fixed_treatment_required_outcome": "a third tool-bearing model request occurs in the same session",
+      "negative_control_required_outcome": "the historical disable-autocontinue plugin stops after the compaction request"
+    },
+    "merge_ci": {
+      "check_run_url": "https://github.com/fleet-ai/cyber-post-train/actions/runs/33855462869/job/100967617217",
+      "started_at": "2026-09-04T08:51:36Z",
+      "completed_at": "2026-09-04T08:52:01Z",
+      "conclusion": "success"
+    },
+    "supplemental_operator_attestation": {
+      "author": "/root",
+      "recorded_at": "2026-09-04T19:38:06Z",
+      "platform": "linux/amd64",
+      "dockerfile": "evals/fleet/Dockerfile.opencode",
+      "opencode_asset_sha256": "sha256:4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702",
+      "test_file": "tests/test_opencode_compaction.py",
+      "tests_passed": 27,
+      "fixed_case_made_resumed_tool_bearing_request": true,
+      "negative_old_plugin_case_stopped_after_compaction": true,
+      "secrets_included": false
+    }
+  },
+  "historical_claim_audit": {
+    "scope_policy": "opencode_1.18.27_native_compaction_no_autocontinue",
+    "exact_cutoff": "2026-09-04T19:10:00Z",
+    "accepted_marker_inventory_sha256": "sha256:03dc7a302ea11184c3739a1362184c70eaea0f87e20c6669cfcee46172430881",
+    "accepted_plus_reconciled_inventory_sha256": "sha256:55348ac3ba4e283b6f5477c8871182d9350849c41658c72ab029a1516ad7b0c5",
+    "old_policy_structural_metadata_sha256": "sha256:af34819d48e8aee621fcc135f834b2da958fdee3e1d57bf852bf0cdd1b48c78e",
+    "raw_authoritative_accepted_markers": {
+      "qwen3.8-27b": 26,
+      "glm-5.3": 37,
+      "total": 63,
+      "accepted_smoke_markers_already_included": {
+        "qwen3.8-27b": 1,
+        "glm-5.3": 1
+      }
+    },
+    "append_only_reconciled_completed_exit1": {
+      "qwen3.8-27b": 2,
+      "glm-5.3": 7,
+      "total": 9,
+      "receipts": [
+        {
+          "path": "docs/evidence/qwen38-study/2026-09-04-completed-exit1-reconciliation-v1.json",
+          "receipt_sha256": "sha256:5435c0a25b3be1872c1aae09fd88858c5251272e164ab8eb49ab66b4c5a4ca0e"
+        },
+        {
+          "path": "docs/evidence/qwen38-study/2026-09-04-glm53-dedicated-a-source6-attempt3-reconciliation-v1.json",
+          "receipt_sha256": "sha256:f53f54a0c77cb213f5245442e96b5a8e41fe2095855176fda204b7c440eb7027"
+        },
+        {
+          "path": "docs/evidence/qwen38-study/2026-09-04-glm53-hosted-v12-exit1-reconciliation-v2.json",
+          "receipt_sha256": "sha256:6dced67ad8a5360ac98c6297ee9bd40c608e0543fd4f2153648bbf8f3e795b26"
+        }
+      ]
+    },
+    "unique_accepted_or_reconciled": {
+      "qwen3.8-27b": 28,
+      "glm-5.3": 44,
+      "total": 72
+    },
+    "reported_74_explanation": {
+      "reported": {
+        "qwen3.8-27b": 29,
+        "glm-5.3": 45,
+        "total": 74
+      },
+      "finding": "The reported numbers add one smoke per model to accepted-marker counts that already contain those two smoke markers, double-counting both.",
+      "a_later_common_cutoff_reproduces_reported_per_model_counts": false
+    },
+    "compaction": {
+      "unique_accepted_or_reconciled": {
+        "qwen3.8-27b": 1,
+        "glm-5.3": 22,
+        "total": 23
+      },
+      "reported": {
+        "qwen3.8-27b": 2,
+        "glm-5.3": 22,
+        "total": 24
+      },
+      "reported_scope_explanation": "The reported Qwen count is reproduced only by adding source10 attempt3, an infrastructure-incomplete partial-ingest attempt, to the accepted/reconciled sample. The reported GLM count excludes six other compacted infrastructure/attrition attempts.",
+      "all_reported_24_resumed_after_summary": 0,
+      "all_reported_24_had_no_later_agent_model_request": true,
+      "max_reported_input_tokens_in_unique_accepted_or_reconciled": {
+        "qwen3.8-27b": 229694,
+        "glm-5.3": 230126
+      },
+      "all_observed_old_policy_attempt_directories_at_cutoff": {
+        "qwen3.8-27b": 36,
+        "glm-5.3": 70
+      },
+      "compaction_triggers_across_all_observed_old_policy_attempt_directories": {
+        "qwen3.8-27b": 3,
+        "glm-5.3": 28,
+        "total": 31
+      }
+    },
+    "hard_limit": {
+      "context_window_tokens": 262144,
+      "attempts_reaching_context_window": 0,
+      "proxy_http_429_attempts": 0,
+      "max_proxy_request_number": {
+        "qwen3.8-27b": 230,
+        "glm-5.3": 358
+      },
+      "finding": "The hard-limit claim is supported. Reported input can exceed the old 229376 compaction threshold because overflow is evaluated after a completed turn and compaction happens before the next agent request."
+    }
+  },
+  "scientific_disposition": {
+    "old_no_autocontinue_block": "exploratory_only",
+    "old_results_pool_with_fixed_treatment": false,
+    "new_scored_launch_authorized": false,
+    "fixed_treatment_score_free_smoke_required_before_scoring": true,
+    "fixed_treatment_score_free_smoke_passed": true
+  },
+  "privacy": {
+    "prompts_read_or_included": false,
+    "message_or_part_content_read_or_included": false,
+    "tool_arguments_read_or_included": false,
+    "scores_read_or_included": false,
+    "flags_read_or_included": false,
+    "traces_read_or_included": false,
+    "selected_metadata_only": [
+      "model",
+      "run and task-version identifiers",
+      "marker existence, timestamp, and digest",
+      "part type and summary flag",
+      "finish and error presence",
+      "token counters",
+      "request number, method, path, status, byte counts, and timing"
+    ]
+  },
+  "receipt_sha256": "sha256:9382954ff8c6a26a5cc6f777a2520d9803dbdcedfa4759544cd718b873196094"
+}
