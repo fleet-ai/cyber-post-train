@@ -1,0 +1,62 @@
+{
+  "schema_version": "fleet-glm53-hosted-v12-exit1-gap-scoring-release-v1",
+  "created_at": "2026-09-04T18:13:35Z",
+  "append_only": true,
+  "plan": {
+    "path": "evals/fleet/configs/glm53-opencode-hosted-v12-exit1-gap4-pass4-v13.json",
+    "plan_sha256": "sha256:6eec0a43e7aebf57bc273ad938da703e46c6875f32257b6352158fbc9282e828",
+    "task_count": 4,
+    "credited_cell_count": 5,
+    "new_cell_count": 11,
+    "pass_k": 4
+  },
+  "gates": {
+    "reconciliation_receipt_sha256": "sha256:6dced67ad8a5360ac98c6297ee9bd40c608e0543fd4f2153648bbf8f3e795b26",
+    "accepted_source21_attempt1_receipt_sha256": "sha256:1b505efe5b49690524c9d9bc3d3fcc82856888d1364f5e3923fcfcfbb67579be",
+    "fresh_api_kubernetes_sfs_inventory_required": true,
+    "all_11_cells_unclaimed_inactive_unscored_absent_required": true,
+    "existing_v12_job_uid": "0e25db24-8700-478f-8862-d1210511393c",
+    "existing_v12_pod_uid": "3a04238e-497e-4d21-a8d9-f33c50085879",
+    "existing_v12_healthy_required": true,
+    "credited_cells_must_not_repeat": true,
+    "held_unused_replacement_rank": 111,
+    "corrected_per_cell_quarantine_required": true,
+    "primary_denominator_completion_gate_required": true
+  },
+  "treatment": {
+    "kind": "hosted_inference_endpoint_v1",
+    "endpoint_origin": "https://inference.flt.build",
+    "served_id": "glm-5.3",
+    "model_revision": "30333038ada1f1dacb294a93270305a890b50c14",
+    "session_model": "fleet-cluster-opencode-1.18.27/glm-5.3",
+    "context_management": "opencode_1.18.27_native_compaction_no_autocontinue",
+    "required_task_tools": ["bash", "submit_report"],
+    "required_task_tool_catalog_sha256": "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a"
+  },
+  "concurrency": {
+    "authorized_hosted_glm_streams": 2,
+    "third_hosted_glm_stream_authorized": false,
+    "stop_adding_on_regression": true
+  },
+  "scheduling": {
+    "required_priority_class": "fleet-train-high",
+    "workers": 1,
+    "true_non_preemptible_available": false,
+    "priority_class_is_not_preemption_immunity": true
+  },
+  "authorization": {
+    "timestamp_utc": "2026-09-04T18:13:35Z",
+    "author": "/root",
+    "statement": "I authorize create-once launch of the independently GREEN hosted GLM exact 11-cell gap plan sha256:6eec0a43e7aebf57bc273ad938da703e46c6875f32257b6352158fbc9282e828 as the second hosted GLM stream, provided an immediate fresh API/Kubernetes/SFS inventory proves all 11 cells remain unclaimed, inactive, unscored, and absent; the existing v12 hosted GLM stream remains healthy; and total hosted GLM streams will be exactly 2.",
+    "scored_launch_authorized": true,
+    "create_once": true,
+    "must_not_repeat": true
+  },
+  "privacy": {
+    "scores_read": false,
+    "prompts_or_traces_read": false,
+    "task_content_included": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:b67d91963e64f0124fa5c5a6eccb7747122a88da8364a42cf14bbb067807a19d"
+}

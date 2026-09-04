@@ -125,6 +125,16 @@ GLM_HOSTED_V12_EXIT1_RECONCILIATION = Path(
     "docs/evidence/qwen38-study/"
     "2026-09-04-glm53-hosted-v12-exit1-reconciliation-v2.json"
 )
+GLM_HOSTED_V12_EXIT1_GAP_PLAN = Path(
+    "evals/fleet/configs/glm53-opencode-hosted-v12-exit1-gap4-pass4-v13.json"
+)
+GLM_HOSTED_V12_EXIT1_GAP_RELEASE = Path(
+    "docs/evidence/qwen38-study/"
+    "2026-09-04-glm53-hosted-v12-exit1-gap-scoring-release-v1.json"
+)
+GLM_HOSTED_V12_EXIT1_GAP_MANIFEST = Path(
+    "evals/fleet/cluster/opencode-glm53-hosted-v12-exit1-gap-v13.yaml"
+)
 GLM_DEDICATED_A_EXIT1_GAP_PLAN = Path(
     "evals/fleet/configs/"
     "glm53-opencode-dedicated-a-v5-source6-attempt4-gap-pass4-v1.json"
@@ -155,6 +165,12 @@ QWEN_POST_PARTIAL_TAIL_MANIFEST = Path(
 )
 QWEN_ATTRITION_REPLACEMENT_PLAN = Path(
     "evals/fleet/configs/qwen38-opencode-hosted-attrition-r56-pass4-v1.json"
+)
+QWEN_SOURCE10_R56_REASSIGNMENT = Path(
+    "docs/evidence/qwen38-study/2026-09-04-qwen38-source10-r56-reassignment-v1.json"
+)
+QWEN_SOURCE10_R56_REPLACEMENT_PLAN = Path(
+    "evals/fleet/configs/qwen38-opencode-hosted-source10-r56-pass4-v2.json"
 )
 GLM_ATTRITION_REPLACEMENT_PLAN = Path(
     "evals/fleet/configs/glm53-opencode-hosted-attrition-r111-pass4-v1.json"
@@ -2601,6 +2617,81 @@ def test_glm_hosted_v12_exit1_reconciliation_rejects_incomplete_evidence(
         hosted.validate_glm_hosted_v12_completed_exit1_reconciliation(
             receipt, predecessor
         )
+
+
+def test_glm_hosted_v12_exit1_gap_is_exact_and_not_launchable() -> None:
+    predecessor = hosted.load_object(GLM_HTTP500_HOSTED_PRIMARY_PLAN)
+    reconciliation = hosted.load_object(GLM_HOSTED_V12_EXIT1_RECONCILIATION)
+    plan = hosted.build_glm_hosted_v12_completed_exit1_gap_plan(
+        predecessor, reconciliation
+    )
+    assert plan == hosted.load_object(GLM_HOSTED_V12_EXIT1_GAP_PLAN)
+    assert plan["treatment_block"] == predecessor["treatment_block"]
+    assert {
+        (row["source_rank"], row["attempt"])
+        for row in plan["attempts"]
+    } == {
+        (19, 2), (19, 3), (19, 4), (21, 3), (21, 4),
+        (25, 2), (25, 3), (25, 4), (29, 2), (29, 3), (29, 4),
+    }
+    assert len(plan["credited_sessions"]) == 5
+    assert plan["execution"]["required_priority_class"] == "fleet-train-high"
+    assert plan["execution"]["launch_authorized"] is False
+    assert plan["execution"]["second_hosted_stream_authorized"] is False
+    assert plan["held_unused_replacement_ranks"] == [111]
+
+
+def test_glm_hosted_v12_exit1_gap_release_and_manifest_are_exact() -> None:
+    plan = hosted.load_object(GLM_HOSTED_V12_EXIT1_GAP_PLAN)
+    release = hosted.load_object(GLM_HOSTED_V12_EXIT1_GAP_RELEASE)
+    hosted.validate_glm_hosted_v12_exit1_gap_release(plan, release)
+    documents = list(yaml.safe_load_all(GLM_HOSTED_V12_EXIT1_GAP_MANIFEST.read_text()))
+    assert len(documents) == 2
+    assert all(
+        document["spec"]["template"]["spec"]["priorityClassName"]
+        == "fleet-train-high"
+        for document in documents
+    )
+    assert all(document["spec"]["backoffLimit"] == 0 for document in documents)
+    tampered = json.loads(json.dumps(release))
+    tampered["authorization"]["create_once"] = False
+    tampered["receipt_sha256"] = self_hosted.digest_without(
+        tampered, "receipt_sha256"
+    )
+    with pytest.raises(ValueError, match="release drifted"):
+        hosted.validate_glm_hosted_v12_exit1_gap_release(plan, tampered)
+
+
+def test_qwen_source10_reassignment_and_r56_plan_are_exact_and_held() -> None:
+    predecessor = hosted.load_object(QWEN_HTTP500_SUCCESSOR_PLAN)
+    supplement = hosted.load_object(QWEN_SOURCE6_REPLACEMENT_SUPPLEMENT)
+    hydration = hosted.load_object(
+        Path(
+            "docs/evidence/qwen38-study/"
+            "2026-09-04-qwen38-r56-hydration-v1.json"
+        )
+    )
+    reassignment = hosted.load_object(QWEN_SOURCE10_R56_REASSIGNMENT)
+    hosted.validate_qwen_source10_r56_reassignment(reassignment)
+    plan = hosted.build_qwen_source10_attrition_replacement_plan(
+        predecessor, supplement, hydration, reassignment
+    )
+    assert plan == hosted.load_object(QWEN_SOURCE10_R56_REPLACEMENT_PLAN)
+    assert [row["source_rank"] for row in plan["tasks"]] == [56]
+    assert [(row["source_rank"], row["attempt"]) for row in plan["attempts"]] == [
+        (56, 1), (56, 2), (56, 3), (56, 4)
+    ]
+    assert plan["treatment_block"] == predecessor["treatment_block"]
+    assert plan["execution"]["launch_authorized"] is False
+    assert plan["execution"]["third_hosted_stream_authorized"] is False
+
+    tampered = json.loads(json.dumps(reassignment))
+    tampered["source10_exclusion"]["attempt3"]["same_session_resume_allowed"] = True
+    tampered["receipt_sha256"] = self_hosted.digest_without(
+        tampered, "receipt_sha256"
+    )
+    with pytest.raises(ValueError, match="reassignment drifted"):
+        hosted.validate_qwen_source10_r56_reassignment(tampered)
 
 
 @pytest.mark.parametrize(

@@ -211,6 +211,9 @@ GLM_DEDICATED_A_V5_CAMPAIGN = (
 QWEN_ATTRITION_REPLACEMENT_CAMPAIGN = (
     "chris-cyber-q38-opencode11827-hosted-replacement-r56-p4-v1"
 )
+QWEN_SOURCE10_ATTRITION_REPLACEMENT_CAMPAIGN = (
+    "chris-cyber-q38-opencode11827-hosted-replacement-r56-p4-v2"
+)
 GLM_ATTRITION_REPLACEMENT_CAMPAIGN = (
     "chris-cyber-glm53-opencode11827-hosted-replacement-r111-p4-v1"
 )
@@ -231,6 +234,9 @@ QWEN_POST_PARTIAL_INCIDENT_DIGEST = (
 GLM_COMPLETED_EXIT1_GAP_CAMPAIGN = (
     "chris-cyber-glm53-opencode11827-hosted-gap-g13g15-p4-v2"
 )
+GLM_HOSTED_V12_EXIT1_GAP_CAMPAIGN = (
+    "chris-cyber-glm53-opencode11827-hosted-gap-g19g21g25g29-p4-v13"
+)
 EXPECTED_INCLUDED_TASK_COUNTS.update(
     {
         "qwen38_remainder": 48,
@@ -243,6 +249,8 @@ EXPECTED_INCLUDED_TASK_COUNTS.update(
 EXPECTED_INCLUDED_TASK_COUNTS.update(
     {"glm53_dedicated_a": 27, "glm53_dedicated_b": 27}
 )
+EXPECTED_INCLUDED_TASK_COUNTS.update({"glm53_hosted_v12_exit1_gap": 4})
+EXPECTED_INCLUDED_TASK_COUNTS.update({"qwen38_source10_attrition_replacement": 1})
 EXPECTED_INCLUDED_TASK_COUNTS.update({"qwen38_replacements": 3})
 EXPECTED_INCLUDED_TASK_COUNTS.update({"glm53_hosted_replacement": 1})
 EXPECTED_INCLUDED_TASK_COUNTS.update({"glm53_hosted_reassigned_b": 27})
@@ -2612,6 +2620,152 @@ def build_hosted_attrition_replacement_plan(
     return plan
 
 
+def validate_qwen_source10_r56_reassignment(receipt: dict[str, Any]) -> None:
+    """Validate the append-only source10 exclusion and held-r56 reassignment."""
+    source = receipt.get("source10_exclusion") or {}
+    supersession = receipt.get("prior_r56_assignment_supersession") or {}
+    replacement = receipt.get("replacement") or {}
+    estimator = receipt.get("primary_estimator") or {}
+    gate = receipt.get("launch_gate") or {}
+    privacy = receipt.get("privacy") or {}
+    accepted = source.get("accepted_attempts") or []
+    if (
+        receipt.get("schema_version") != "fleet-qwen38-source10-r56-reassignment-v1"
+        or receipt.get("append_only") is not True
+        or receipt.get("receipt_sha256")
+        != "sha256:a7eac5c3445d69b196488c8d6648fbbaa326fcf6f1a150ffd55833d505b9c75c"
+        or receipt.get("receipt_sha256") != digest_without(receipt, "receipt_sha256")
+        or source.get("partial_ingest_incident_receipt_sha256")
+        != QWEN_POST_PARTIAL_INCIDENT_DIGEST
+        or source.get("timestamp_projection_receipt_sha256")
+        != "sha256:0f410eec3384a0871b623f02e6a62dddfd00a465d74195ed90e98b9e34005fde"
+        or source.get("task_version_id")
+        != "53d2f089-6502-4208-9795-d6ba7277fa9a"
+        or [(row.get("attempt"), row.get("receipt_sha256")) for row in accepted]
+        != [
+            (1, "sha256:ca6861b55d21980b48b622277d53f454b26e04ffc17642c991b526d79edd4f13"),
+            (2, "sha256:6411dd333b83891d531764f4c4b66453c08279c2cb98c7fa842f7ae0a56e6ac5"),
+        ]
+        or (source.get("attempt3") or {}).get("classification")
+        != "EXCLUDED_INFRASTRUCTURE_INCOMPLETE_PARTIAL_INGEST"
+        or (source.get("attempt3") or {}).get("model_or_verifier_replay_allowed")
+        is not False
+        or (source.get("attempt3") or {}).get("same_session_resume_allowed") is not False
+        or (source.get("attempt3") or {}).get("persisted_prefix_message_count") != 320
+        or (source.get("attempt3") or {}).get("timestamp_projection_mismatch_count")
+        != 107
+        or source.get("whole_task_excluded_from_primary_estimator") is not True
+        or source.get("attempts_must_never_repeat") != [1, 2, 3]
+        or source.get("attempt4_must_never_start") is not True
+        or supersession.get("prior_supplement_rewritten") is not False
+        or supersession.get("source6_reconciliation_receipt_sha256")
+        != "sha256:5435c0a25b3be1872c1aae09fd88858c5251272e164ab8eb49ab66b4c5a4ca0e"
+        or supersession.get("source6_primary_task_restored_at_pass4") is not True
+        or supersession.get("r56_scored_claims_under_prior_assignment") != 0
+        or replacement.get("replacement_rank") != 56
+        or replacement.get("task_version_id")
+        != "33527414-ced7-4005-9c5a-eb9c211a32da"
+        or replacement.get("hydration_receipt_sha256")
+        != "sha256:4d059348e1c00eed04aef8b6a700a0b44921cfe0f6e6be0e8e55e08316886f79"
+        or replacement.get("whole_task_attempts") != [1, 2, 3, 4]
+        or replacement.get("current_same_treatment_claims") != 0
+        or replacement.get("reassigned_to_replace_source10") is not True
+        or estimator != {
+            "retained_complete_source4_tasks": 1,
+            "completed_or_planned_original_tasks_other_than_source10": 48,
+            "replacement_tasks": 1,
+            "tasks": 50,
+            "cells": 200,
+            "restored_only_after_r56_pass4": True,
+        }
+        or gate.get("scored_launch_authorized") is not False
+        or gate.get("required_priority_class") != "fleet-train-high"
+        or gate.get("max_qwen_hosted_streams") != 2
+        or gate.get("must_not_launch_while_two_qwen_streams_are_active") is not True
+        or any(value is not False for value in privacy.values())
+    ):
+        raise ValueError("Qwen source10 r56 reassignment drifted")
+
+
+def build_qwen_source10_attrition_replacement_plan(
+    predecessor: dict[str, Any],
+    supplement: dict[str, Any],
+    hydration: dict[str, Any],
+    reassignment: dict[str, Any],
+) -> dict[str, Any]:
+    """Build a non-launchable exact-treatment r56 replacement for source10."""
+    validate_plan(predecessor)
+    validate_qwen_source10_r56_reassignment(reassignment)
+    if (
+        predecessor.get("plan_sha256")
+        != "sha256:8d6df6af63b308d648fb0c7ea9115f90b16de1d7e57b0968dda8fc8fd4a20c81"
+        or supplement.get("receipt_sha256")
+        != reassignment["prior_r56_assignment_supersession"][
+            "selection_supplement_receipt_sha256"
+        ]
+        or supplement.get("receipt_sha256")
+        != digest_without(supplement, "receipt_sha256")
+        or hydration.get("receipt_sha256")
+        != reassignment["replacement"]["hydration_receipt_sha256"]
+        or hydration.get("receipt_sha256") != digest_without(hydration, "receipt_sha256")
+    ):
+        raise ValueError("Qwen source10 r56 source evidence drifted")
+    tasks = _hydrated_replacement_tasks(supplement, hydration, 1)
+    execution = copy.deepcopy(predecessor["execution"])
+    execution.update(
+        {
+            "inventory_policy": "plan_identity_plus_authoritative_receipt_v1",
+            "retry_policy": "never_repeat_any_authoritative_scored_outcome",
+            "future_nonzero_exit_policy": (
+                "credit_only_if_reward_ingest_cleanup_and_authoritative_session_match"
+            ),
+            "required_priority_class": "fleet-train-high",
+            "launch_authorized": False,
+            "third_hosted_stream_authorized": False,
+        }
+    )
+    plan = {
+        "schema_version": PLAN_SCHEMA,
+        "shard_key": "qwen38_source10_attrition_replacement",
+        "campaign_id": QWEN_SOURCE10_ATTRITION_REPLACEMENT_CAMPAIGN,
+        "source_job_id": predecessor["source_job_id"],
+        "source": {
+            "predecessor_plan_sha256": predecessor["plan_sha256"],
+            "reassignment_receipt_sha256": reassignment["receipt_sha256"],
+            "partial_ingest_incident_receipt_sha256": (
+                reassignment["source10_exclusion"][
+                    "partial_ingest_incident_receipt_sha256"
+                ]
+            ),
+            "selection_supplement_receipt_sha256": supplement["receipt_sha256"],
+            "hydration_receipt_sha256": hydration["receipt_sha256"],
+            "excluded_source_rank": 10,
+        },
+        "treatment_block": copy.deepcopy(predecessor["treatment_block"]),
+        "model": copy.deepcopy(predecessor["model"]),
+        "harness": copy.deepcopy(predecessor["harness"]),
+        "authority": copy.deepcopy(predecessor["authority"]),
+        "task_count": 1,
+        "pass_k": 4,
+        "total_session_count": 4,
+        "credited_sessions": [],
+        "new_session_count": 4,
+        "primary_denominator": {"tasks": 50, "cells": 200},
+        "primary_denominator_restored_only_after_r56_pass4": True,
+        "execution": execution,
+        "tasks": tasks,
+        "attempts": _fresh_attempts(
+            tasks,
+            QWEN_SOURCE10_ATTRITION_REPLACEMENT_CAMPAIGN,
+            "qwen38-hosted-source10-r56",
+        ),
+        "privacy": copy.deepcopy(predecessor["privacy"]),
+    }
+    plan["plan_sha256"] = digest_without(plan, "plan_sha256")
+    validate_plan(plan)
+    return plan
+
+
 def validate_completed_exit1_reconciliation(
     receipt: dict[str, Any],
     qwen_plan: dict[str, Any],
@@ -3226,6 +3380,192 @@ def validate_glm_hosted_v12_completed_exit1_reconciliation(
         raise ValueError("hosted GLM reconciled cell set drifted")
     if len(run_ids) != 4 or len(session_ids) != 4 or len(verifier_ids) != 4:
         raise ValueError("hosted GLM reconciled cell identity duplicated")
+
+
+def build_glm_hosted_v12_completed_exit1_gap_plan(
+    predecessor: dict[str, Any], reconciliation: dict[str, Any]
+) -> dict[str, Any]:
+    """Build the exact 11-cell hosted continuation for four reconciled tasks."""
+    validate_glm_hosted_v12_completed_exit1_reconciliation(
+        reconciliation, predecessor
+    )
+    source_ranks = [19, 21, 25, 29]
+    tasks = [
+        copy.deepcopy(
+            next(
+                row
+                for row in predecessor["tasks"]
+                if int(row["source_rank"]) == source_rank
+            )
+        )
+        for source_rank in source_ranks
+    ]
+    for rank, task in enumerate(tasks, 1):
+        task["rank"] = rank
+
+    accepted = {
+        "rank": 2,
+        "source_rank": 21,
+        "attempt": 1,
+        "session_id": "5b199d40-1971-4598-8c17-ee6dd2a13f08",
+        "verifier_execution_id": "0515f1c2-0e3e-42c1-bfcd-c6c1cca9d2e9",
+        "source_run_id": (
+            "chris-cyber-glm53-opencode11827-hosted-primary46-p4-v12-"
+            "sr021-a1-5c1aff2c"
+        ),
+        "source_receipt_sha256": (
+            "sha256:1b505efe5b49690524c9d9bc3d3fcc82856888d1364f5e3923fcfcfbb67579be"
+        ),
+        "classification": "ACCEPTED",
+    }
+    rank_by_source = {source_rank: rank for rank, source_rank in enumerate(source_ranks, 1)}
+    credits = [accepted]
+    for row in sorted(
+        reconciliation["reconciled_cells"],
+        key=lambda item: (int(item["source_rank"]), int(item["attempt"])),
+    ):
+        credits.append(
+            {
+                "rank": rank_by_source[int(row["source_rank"])],
+                "source_rank": int(row["source_rank"]),
+                "attempt": int(row["attempt"]),
+                "session_id": row["session_id"],
+                "verifier_execution_id": row["verifier_execution_id"],
+                "source_run_id": row["run_id"],
+                "source_receipt_sha256": reconciliation["receipt_sha256"],
+                "classification": "RECONCILED_ACCEPTED",
+            }
+        )
+
+    missing = {
+        (int(source_rank), int(attempt))
+        for source_rank, attempt in reconciliation["gap_completion"][
+            "new_cells_if_frozen_now"
+        ]
+    }
+    attempts = []
+    for ordinal, (source_rank, attempt) in enumerate(sorted(missing), 1):
+        task = tasks[rank_by_source[source_rank] - 1]
+        key_digest = self_hosted.sha256(task["task"]["key"].encode()).split(
+            ":", 1
+        )[1][:8]
+        attempts.append(
+            {
+                "ordinal": ordinal,
+                "rank": rank_by_source[source_rank],
+                "source_rank": source_rank,
+                "attempt": attempt,
+                "run_id": (
+                    f"{GLM_HOSTED_V12_EXIT1_GAP_CAMPAIGN}-"
+                    f"sr{source_rank:03d}-a{attempt}-{key_digest}"
+                ),
+                "network": (
+                    f"glm53-hosted-v12-gap-sr{source_rank:03d}-"
+                    f"a{attempt}-{key_digest}"
+                ),
+            }
+        )
+    execution = copy.deepcopy(predecessor["execution"])
+    execution.update(
+        {
+            "inventory_policy": "conservative_no_same_model_session_for_task_key_v1",
+            "retry_policy": "never_repeat_any_authoritative_scored_outcome",
+            "future_nonzero_exit_policy": (
+                "credit_only_if_reward_ingest_cleanup_and_authoritative_session_match"
+            ),
+            "required_priority_class": "fleet-train-high",
+            "launch_authorized": False,
+            "second_hosted_stream_authorized": False,
+        }
+    )
+    plan = {
+        "schema_version": PLAN_SCHEMA,
+        "shard_key": "glm53_hosted_v12_exit1_gap",
+        "campaign_id": GLM_HOSTED_V12_EXIT1_GAP_CAMPAIGN,
+        "source_job_id": predecessor["source_job_id"],
+        "source": {
+            "predecessor_plan_sha256": predecessor["plan_sha256"],
+            "predecessor_job_uid": reconciliation["source"]["job_uid"],
+            "predecessor_pod_uid": reconciliation["source"]["pod_uid"],
+            "reconciliation_receipt_sha256": reconciliation["receipt_sha256"],
+            "accepted_source21_attempt1_receipt_sha256": accepted[
+                "source_receipt_sha256"
+            ],
+            "fresh_live_inventory_required_immediately_before_create": True,
+        },
+        "treatment_block": copy.deepcopy(predecessor["treatment_block"]),
+        "model": copy.deepcopy(predecessor["model"]),
+        "harness": copy.deepcopy(predecessor["harness"]),
+        "authority": copy.deepcopy(predecessor["authority"]),
+        "task_count": 4,
+        "pass_k": 4,
+        "total_session_count": 16,
+        "credited_sessions": credits,
+        "new_session_count": 11,
+        "primary_denominator": {"tasks": 100, "cells": 400},
+        "primary_denominator_restored_only_after_all_gap_tasks_pass4": True,
+        "held_unused_replacement_ranks": [111],
+        "execution": execution,
+        "tasks": tasks,
+        "attempts": attempts,
+        "privacy": {
+            "scores_included": False,
+            "prompts_included": False,
+            "transcripts_included": False,
+            "credentials_included": False,
+        },
+    }
+    plan["plan_sha256"] = digest_without(plan, "plan_sha256")
+    validate_plan(plan)
+    return plan
+
+
+def validate_glm_hosted_v12_exit1_gap_release(
+    plan: dict[str, Any], release: dict[str, Any]
+) -> None:
+    """Validate the exact authorized high-priority 11-cell gap release."""
+    validate_plan(plan)
+    gates = release.get("gates") or {}
+    concurrency = release.get("concurrency") or {}
+    scheduling = release.get("scheduling") or {}
+    authorization = release.get("authorization") or {}
+    privacy = release.get("privacy") or {}
+    if (
+        release.get("schema_version")
+        != "fleet-glm53-hosted-v12-exit1-gap-scoring-release-v1"
+        or release.get("append_only") is not True
+        or release.get("receipt_sha256")
+        != "sha256:b67d91963e64f0124fa5c5a6eccb7747122a88da8364a42cf14bbb067807a19d"
+        or release.get("receipt_sha256") != digest_without(release, "receipt_sha256")
+        or (release.get("plan") or {}).get("plan_sha256") != plan["plan_sha256"]
+        or (release.get("plan") or {}).get("new_cell_count") != 11
+        or (release.get("plan") or {}).get("credited_cell_count") != 5
+        or gates.get("reconciliation_receipt_sha256")
+        != plan["source"]["reconciliation_receipt_sha256"]
+        or gates.get("fresh_api_kubernetes_sfs_inventory_required") is not True
+        or gates.get("all_11_cells_unclaimed_inactive_unscored_absent_required")
+        is not True
+        or gates.get("existing_v12_job_uid")
+        != plan["source"]["predecessor_job_uid"]
+        or gates.get("existing_v12_pod_uid")
+        != plan["source"]["predecessor_pod_uid"]
+        or gates.get("existing_v12_healthy_required") is not True
+        or gates.get("credited_cells_must_not_repeat") is not True
+        or gates.get("held_unused_replacement_rank") != 111
+        or gates.get("corrected_per_cell_quarantine_required") is not True
+        or concurrency.get("authorized_hosted_glm_streams") != 2
+        or concurrency.get("third_hosted_glm_stream_authorized") is not False
+        or scheduling.get("required_priority_class") != "fleet-train-high"
+        or scheduling.get("workers") != 1
+        or scheduling.get("priority_class_is_not_preemption_immunity") is not True
+        or authorization.get("timestamp_utc") != "2026-09-04T18:13:35Z"
+        or authorization.get("author") != "/root"
+        or authorization.get("scored_launch_authorized") is not True
+        or authorization.get("create_once") is not True
+        or authorization.get("must_not_repeat") is not True
+        or any(value is not False for value in privacy.values())
+    ):
+        raise ValueError("hosted GLM v12 gap release drifted")
 
 
 def build_dedicated_a_completed_exit1_gap_plan(
@@ -3965,6 +4305,7 @@ def validate_plan(plan: dict[str, Any]) -> None:
             "glm53_http500_hosted_primary",
             "glm53_attrition_replacement",
             "glm53_completed_exit1_gap",
+            "glm53_hosted_v12_exit1_gap",
         }
         else (
             "plan_identity_plus_authoritative_receipt_v1"
@@ -3978,6 +4319,7 @@ def validate_plan(plan: dict[str, Any]) -> None:
                 "qwen38_completed_exit1_gap",
                 "qwen38_post_partial_tail_a",
                 "qwen38_post_partial_tail_b",
+                "qwen38_source10_attrition_replacement",
             }
             else None
         )
@@ -4505,6 +4847,108 @@ def validate_plan(plan: dict[str, Any]) -> None:
             or execution.get("dedicated_b_route_authorization_required") is not True
         ):
             raise ValueError("GLM hosted primary partition or binding drifted")
+        return
+
+    if shard_key == "glm53_hosted_v12_exit1_gap":
+        expected_new = {
+            (19, 2), (19, 3), (19, 4), (21, 3), (21, 4),
+            (25, 2), (25, 3), (25, 4), (29, 2), (29, 3), (29, 4),
+        }
+        expected_credits = {
+            (19, 1, "RECONCILED_ACCEPTED"),
+            (21, 1, "ACCEPTED"),
+            (21, 2, "RECONCILED_ACCEPTED"),
+            (25, 1, "RECONCILED_ACCEPTED"),
+            (29, 1, "RECONCILED_ACCEPTED"),
+        }
+        source = plan.get("source") or {}
+        treatment = plan.get("treatment_block") or {}
+        if (
+            plan.get("campaign_id") != GLM_HOSTED_V12_EXIT1_GAP_CAMPAIGN
+            or [int(row["source_rank"]) for row in tasks] != [19, 21, 25, 29]
+            or {
+                (int(row["source_rank"]), int(row["attempt"]))
+                for row in attempts
+            }
+            != expected_new
+            or {
+                (
+                    int(row["source_rank"]),
+                    int(row["attempt"]),
+                    row["classification"],
+                )
+                for row in credits
+            }
+            != expected_credits
+            or source.get("predecessor_plan_sha256")
+            != "sha256:8b0deafa9f51b75a0715be56b417454e96665b5342d4c346d5cda32dc24c8279"
+            or source.get("predecessor_job_uid")
+            != "0e25db24-8700-478f-8862-d1210511393c"
+            or source.get("predecessor_pod_uid")
+            != "3a04238e-497e-4d21-a8d9-f33c50085879"
+            or source.get("reconciliation_receipt_sha256")
+            != "sha256:6dced67ad8a5360ac98c6297ee9bd40c608e0543fd4f2153648bbf8f3e795b26"
+            or source.get("accepted_source21_attempt1_receipt_sha256")
+            != "sha256:1b505efe5b49690524c9d9bc3d3fcc82856888d1364f5e3923fcfcfbb67579be"
+            or source.get("fresh_live_inventory_required_immediately_before_create")
+            is not True
+            or plan.get("primary_denominator") != {"tasks": 100, "cells": 400}
+            or plan.get(
+                "primary_denominator_restored_only_after_all_gap_tasks_pass4"
+            )
+            is not True
+            or plan.get("held_unused_replacement_ranks") != [111]
+            or treatment.get("kind") != "hosted_inference_endpoint_v1"
+            or treatment.get("model_revision") != plan["model"].get("revision")
+            or treatment.get("endpoint_origin") != plan["model"].get("endpoint_origin")
+            or treatment.get("served_id") != plan["model"].get("served_id")
+            or treatment.get("session_model") != plan["model"].get("session_model")
+            or treatment.get("harness") != plan["harness"]
+            or execution.get("launch_authorized") is not False
+            or execution.get("second_hosted_stream_authorized") is not False
+            or execution.get("required_priority_class") != "fleet-train-high"
+            or execution.get("retry_policy")
+            != "never_repeat_any_authoritative_scored_outcome"
+            or execution.get("future_nonzero_exit_policy")
+            != "credit_only_if_reward_ingest_cleanup_and_authoritative_session_match"
+        ):
+            raise ValueError("hosted GLM v12 gap plan drifted")
+        return
+
+    if shard_key == "qwen38_source10_attrition_replacement":
+        source = plan.get("source") or {}
+        treatment = plan.get("treatment_block") or {}
+        if (
+            plan.get("campaign_id")
+            != QWEN_SOURCE10_ATTRITION_REPLACEMENT_CAMPAIGN
+            or [int(row["source_rank"]) for row in tasks] != [56]
+            or credits
+            or len(attempts) != 4
+            or source.get("predecessor_plan_sha256")
+            != "sha256:8d6df6af63b308d648fb0c7ea9115f90b16de1d7e57b0968dda8fc8fd4a20c81"
+            or source.get("reassignment_receipt_sha256")
+            != "sha256:a7eac5c3445d69b196488c8d6648fbbaa326fcf6f1a150ffd55833d505b9c75c"
+            or source.get("partial_ingest_incident_receipt_sha256")
+            != QWEN_POST_PARTIAL_INCIDENT_DIGEST
+            or source.get("excluded_source_rank") != 10
+            or plan.get("primary_denominator") != {"tasks": 50, "cells": 200}
+            or plan.get("primary_denominator_restored_only_after_r56_pass4")
+            is not True
+            or treatment.get("kind") != "hosted_inference_endpoint_v1"
+            or treatment.get("model_revision") != plan["model"].get("revision")
+            or treatment.get("endpoint_origin") != plan["model"].get("endpoint_origin")
+            or treatment.get("served_id") != plan["model"].get("served_id")
+            or treatment.get("session_model") != plan["model"].get("session_model")
+            or treatment.get("harness") != plan["harness"]
+            or execution.get("launch_authorized") is not False
+            or execution.get("third_hosted_stream_authorized") is not False
+            or execution.get("required_priority_class") != "fleet-train-high"
+            or execution.get("retry_policy")
+            != "never_repeat_any_authoritative_scored_outcome"
+            or execution.get("future_nonzero_exit_policy")
+            != "credit_only_if_reward_ingest_cleanup_and_authoritative_session_match"
+        ):
+            raise ValueError("Qwen source10 attrition replacement plan drifted")
         return
 
     excluded = plan.get("excluded_tasks") or []

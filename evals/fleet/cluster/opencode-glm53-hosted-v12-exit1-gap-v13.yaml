@@ -1,0 +1,154 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: chris-cyber-glm53-hosted-gap-g19g21g25g29-p4-v13-preflight
+  namespace: fleet-train-jobs
+  labels:
+    cyber-post-train.fleet.ai/experiment: glm53-hosted-gap-g13g15-p4-v2-preflight
+    cyber-post-train.fleet.ai/owner: chris
+    kueue.x-k8s.io/queue-name: training-lq
+spec:
+  activeDeadlineSeconds: 900
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 604800
+  template:
+    metadata:
+      labels:
+        cyber-post-train.fleet.ai/experiment: glm53-hosted-gap-g13g15-p4-v2-preflight
+        cyber-post-train.fleet.ai/owner: chris
+    spec:
+      restartPolicy: Never
+      priorityClassName: fleet-train-high
+      nodeSelector:
+        kubernetes.io/arch: amd64
+        workload: fleetai-training-ng-cpu
+      tolerations:
+        - key: workload
+          operator: Equal
+          value: fleetai-training-ng-cpu
+          effect: NoSchedule
+      containers:
+        - name: preflight
+          image: ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
+          command: ["/bin/bash", "-ceu", "--"]
+          args:
+            - |
+              root=/workspace/cyber-post-train
+              mkdir -p "$root/evals/fleet"
+              touch "$root/evals/__init__.py" "$root/evals/fleet/__init__.py"
+              install -m 0644 /bootstrap/self_hosted.py "$root/evals/fleet/self_hosted.py"
+              install -m 0644 /bootstrap/runner.py "$root/evals/fleet/opencode_train_sweep_runner.py"
+              install -m 0644 /bootstrap/controller.py "$root/evals/fleet/hosted_sweep_controller.py"
+              cd "$root"
+              exec uv run --no-project --with httpx==0.28.1 python \
+                -m evals.fleet.hosted_sweep_controller preflight \
+                --plan /bootstrap/plan.json \
+                --out-dir /mnt/sfs/jobs/chris-cyber-glm53-opencode11827-hosted-gap-g19g21g25g29-p4-v13 \
+                --release-receipt /bootstrap/release.json
+          env:
+            - name: FLEET_API_KEY
+              valueFrom:
+                secretKeyRef: {name: chris-cyber-opencode-evals-v2, key: FLEET_API_KEY}
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {cpu: 250m, memory: 512Mi}
+          volumeMounts:
+            - {name: bootstrap, mountPath: /bootstrap, readOnly: true}
+            - {name: workspace, mountPath: /workspace}
+            - {name: sfs, mountPath: /mnt/sfs, readOnly: true}
+      volumes:
+        - {name: bootstrap, configMap: {name: chris-cyber-glm53-hosted-gap-g19g21g25g29-p4-v13}}
+        - {name: workspace, emptyDir: {sizeLimit: 1Gi}}
+        - {name: sfs, persistentVolumeClaim: {claimName: sfs-shared}}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: chris-cyber-glm53-opencode11827-hosted-gap-g19g21g25g29-p4-v13
+  namespace: fleet-train-jobs
+  labels:
+    cyber-post-train.fleet.ai/experiment: glm53-hosted-gap-g13g15-p4-v2
+    cyber-post-train.fleet.ai/owner: chris
+    kueue.x-k8s.io/queue-name: training-lq
+spec:
+  activeDeadlineSeconds: 2592000
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 604800
+  template:
+    metadata:
+      labels:
+        cyber-post-train.fleet.ai/experiment: glm53-hosted-gap-g13g15-p4-v2
+        cyber-post-train.fleet.ai/owner: chris
+    spec:
+      restartPolicy: Never
+      priorityClassName: fleet-train-high
+      nodeSelector:
+        kubernetes.io/arch: amd64
+        workload: fleetai-training-ng-cpu
+      tolerations:
+        - key: workload
+          operator: Equal
+          value: fleetai-training-ng-cpu
+          effect: NoSchedule
+      initContainers:
+        - name: dind
+          image: docker.io/library/docker@sha256:f649ef046008ca7f926a2571c32b0ac22e5c59eb61b959617f9acc2a4c638cf5
+          restartPolicy: Always
+          args: ["--host=unix:///var/run/docker.sock", "--host=tcp://0.0.0.0:2375", "--tls=false"]
+          readinessProbe:
+            tcpSocket: {port: 2375}
+            initialDelaySeconds: 2
+            periodSeconds: 2
+          securityContext: {privileged: true}
+          resources:
+            requests: {cpu: 500m, memory: 2Gi, ephemeral-storage: 20Gi}
+            limits: {cpu: "2", memory: 4Gi, ephemeral-storage: 40Gi}
+          volumeMounts:
+            - {name: docker-socket, mountPath: /var/run}
+            - {name: docker-data, mountPath: /var/lib/docker}
+            - {name: workspace, mountPath: /workspace}
+            - {name: sfs, mountPath: /mnt/sfs}
+      containers:
+        - name: evaluator
+          image: ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
+          command: ["/bin/bash", "-ceu", "--"]
+          args:
+            - |
+              apt-get update
+              apt-get install --yes --no-install-recommends docker.io=20.10.24+dfsg1-1+deb12u1+b6
+              root=/workspace/cyber-post-train
+              mkdir -p "$root/evals/fleet/configs" "$root/evals/fleet/scripts"
+              touch "$root/evals/__init__.py" "$root/evals/fleet/__init__.py"
+              install -m 0644 /bootstrap/Dockerfile.opencode "$root/evals/fleet/Dockerfile.opencode"
+              install -m 0644 /bootstrap/fixed_proxy.py "$root/evals/fleet/fixed_proxy.py"
+              install -m 0644 /bootstrap/self_hosted.py "$root/evals/fleet/self_hosted.py"
+              install -m 0644 /bootstrap/runner.py "$root/evals/fleet/opencode_train_sweep_runner.py"
+              install -m 0644 /bootstrap/controller.py "$root/evals/fleet/hosted_sweep_controller.py"
+              install -m 0644 /bootstrap/plan.json "$root/evals/fleet/configs/plan.json"
+              install -m 0644 /bootstrap/release.json "$root/evals/fleet/configs/release.json"
+              install -m 0755 /bootstrap/run.sh "$root/evals/fleet/scripts/run.sh"
+              cd "$root"
+              exec "$root/evals/fleet/scripts/run.sh"
+          env:
+            - {name: DOCKER_HOST, value: "unix:///var/run/docker.sock"}
+            - {name: DOCKER_TLS_CERTDIR, value: ""}
+            - {name: HOSTED_JOB_NAME, value: chris-cyber-glm53-opencode11827-hosted-gap-g19g21g25g29-p4-v13}
+            - {name: HOSTED_PLAN_FILE, value: plan.json}
+            - {name: SCORING_RELEASE_FILE, value: release.json}
+            - name: FLEET_API_KEY
+              valueFrom:
+                secretKeyRef: {name: chris-cyber-opencode-evals-v2, key: FLEET_API_KEY}
+          resources:
+            requests: {cpu: 100m, memory: 512Mi, ephemeral-storage: 5Gi}
+            limits: {cpu: "1", memory: 2Gi, ephemeral-storage: 20Gi}
+          volumeMounts:
+            - {name: docker-socket, mountPath: /var/run}
+            - {name: bootstrap, mountPath: /bootstrap, readOnly: true}
+            - {name: workspace, mountPath: /workspace}
+            - {name: sfs, mountPath: /mnt/sfs}
+      volumes:
+        - {name: bootstrap, configMap: {name: chris-cyber-glm53-hosted-gap-g19g21g25g29-p4-v13}}
+        - {name: docker-data, emptyDir: {sizeLimit: 40Gi}}
+        - {name: docker-socket, emptyDir: {}}
+        - {name: workspace, emptyDir: {sizeLimit: 5Gi}}
+        - {name: sfs, persistentVolumeClaim: {claimName: sfs-shared}}

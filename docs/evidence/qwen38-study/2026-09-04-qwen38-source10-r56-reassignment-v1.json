@@ -1,0 +1,89 @@
+{
+  "schema_version": "fleet-qwen38-source10-r56-reassignment-v1",
+  "recorded_at": "2026-09-04T18:09:22Z",
+  "append_only": true,
+  "source10_exclusion": {
+    "predecessor_plan_sha256": "sha256:8d6df6af63b308d648fb0c7ea9115f90b16de1d7e57b0968dda8fc8fd4a20c81",
+    "partial_ingest_incident_receipt_sha256": "sha256:bf34f05d3dff0de55b0f7aeff948b3b6c793dfa64adb298d4ae7e16d42666056",
+    "timestamp_projection_receipt_sha256": "sha256:0f410eec3384a0871b623f02e6a62dddfd00a465d74195ed90e98b9e34005fde",
+    "timestamp_projection_job_uid": "76beec19-2deb-4a2e-b56a-f999876bdb2f",
+    "timestamp_projection_pod_uid": "c856be1b-f917-4efc-8a28-a9902e14c893",
+    "task_version_id": "53d2f089-6502-4208-9795-d6ba7277fa9a",
+    "accepted_attempts": [
+      {
+        "attempt": 1,
+        "session_id": "af1b5eca-ec1d-4ed3-8a45-705e763a30a9",
+        "verifier_execution_id": "d5340d05-337d-4f67-9c54-940afd7869a7",
+        "receipt_sha256": "sha256:ca6861b55d21980b48b622277d53f454b26e04ffc17642c991b526d79edd4f13"
+      },
+      {
+        "attempt": 2,
+        "session_id": "4ca1fc0e-fe7a-4f7f-9e82-c2d8a274373a",
+        "verifier_execution_id": "6504b03d-621c-4637-ab0f-2c7cdc04c211",
+        "receipt_sha256": "sha256:6411dd333b83891d531764f4c4b66453c08279c2cb98c7fa842f7ae0a56e6ac5"
+      }
+    ],
+    "attempt3": {
+      "session_id": "579cc47e-3b00-4868-894b-8def06761b1e",
+      "verifier_execution_id": "f4b61f8b-e087-4f8b-9bef-57859f367e03",
+      "classification": "EXCLUDED_INFRASTRUCTURE_INCOMPLETE_PARTIAL_INGEST",
+      "model_or_verifier_replay_allowed": false,
+      "same_session_resume_allowed": false,
+      "persisted_prefix_message_count": 320,
+      "timestamp_projection_mismatch_count": 107
+    },
+    "attempt4": {
+      "started": false,
+      "allowed_to_launch": false
+    },
+    "whole_task_excluded_from_primary_estimator": true,
+    "attempts_must_never_repeat": [1, 2, 3],
+    "attempt4_must_never_start": true
+  },
+  "prior_r56_assignment_supersession": {
+    "selection_supplement_receipt_sha256": "sha256:56406bb32541babc0189e089f339d6a7668b24cb86b1fd8587b60a3cfc57b24c",
+    "prior_assignment_reason": "source6_whole_task_fence",
+    "prior_supplement_rewritten": false,
+    "source6_reconciliation_receipt_sha256": "sha256:5435c0a25b3be1872c1aae09fd88858c5251272e164ab8eb49ab66b4c5a4ca0e",
+    "source6_gap_attempt3_accepted_receipt_sha256": "sha256:2e076ea5bee2a7b38f7801e64943995702ba789d2b6a258696c0dccc44a9eee4",
+    "source6_gap_attempt4_accepted_receipt_sha256": "sha256:d1a7db810fc7344b78d3e08137a4be185342260f19b0d8e5a833a4ca0b3344a1",
+    "source6_primary_task_restored_at_pass4": true,
+    "r56_scored_claims_under_prior_assignment": 0
+  },
+  "replacement": {
+    "replacement_rank": 56,
+    "task_version_id": "33527414-ced7-4005-9c5a-eb9c211a32da",
+    "hydration_receipt_sha256": "sha256:4d059348e1c00eed04aef8b6a700a0b44921cfe0f6e6be0e8e55e08316886f79",
+    "same_qwen_v8_hosted_treatment_required": true,
+    "whole_task_attempts": [1, 2, 3, 4],
+    "current_same_treatment_claims": 0,
+    "score_blind_frozen_selection_preserved": true,
+    "reassigned_to_replace_source10": true
+  },
+  "primary_estimator": {
+    "retained_complete_source4_tasks": 1,
+    "completed_or_planned_original_tasks_other_than_source10": 48,
+    "replacement_tasks": 1,
+    "tasks": 50,
+    "cells": 200,
+    "restored_only_after_r56_pass4": true
+  },
+  "launch_gate": {
+    "scored_launch_authorized": false,
+    "fresh_create_once_plan_and_root_required": true,
+    "exact_api_kubernetes_sfs_unused_audit_required": true,
+    "required_priority_class": "fleet-train-high",
+    "max_qwen_hosted_streams": 2,
+    "must_not_launch_while_two_qwen_streams_are_active": true,
+    "corrected_per_cell_quarantine_semantics_required": true
+  },
+  "privacy": {
+    "scores_included": false,
+    "prompts_included": false,
+    "traces_included": false,
+    "transcripts_included": false,
+    "flags_included": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:a7eac5c3445d69b196488c8d6648fbbaa326fcf6f1a150ffd55833d505b9c75c"
+}
