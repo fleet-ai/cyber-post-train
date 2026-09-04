@@ -1,0 +1,119 @@
+{
+  "schema_version": "fleet-cyber-glm53-dedicated-serving-canary-v1",
+  "observed_at": "2026-09-04T06:45:18Z",
+  "classification": "operational-gate-passed",
+  "api_run": {
+    "name": "ft-run-98c32208",
+    "run_id": "98c32208-a3e5-46b0-a32d-ab50033b576f",
+    "status": "RUNNING",
+    "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-glm53-tp8-a-v5"
+  },
+  "immutable_config": {
+    "path": "evals/fleet/configs/dedicated-glm53-tp8-a-v5.json",
+    "commit": "f316076a674aa165305a73dce0b8de05dd69231e",
+    "sha256": "sha256:7815bf97cb23df73332c011cd86140bd0d87ab35ca1db4582a3452f8841d5875",
+    "preview_manifest_sha256": "sha256:7605e05400a19c6df3ecd8d7033c0f8b63313e36ceec42a43acf2ec440119b8a",
+    "entrypoint_sha256": "sha256:1ac006a84f76a17fe48fc006b02b4fd30840e1cadc40f779ef204c5175035884",
+    "rendered_entrypoint_matches": true
+  },
+  "corrected_source4_fence": {
+    "path": "docs/evidence/qwen38-study/2026-09-04-glm53-dedicated-a-controller-stop-tombstone-v2.json",
+    "commit": "8a0235a8c8ea4d9cd9c210991fbcf403427ce115",
+    "file_sha256": "sha256:43937f19994a03c4e9de10f96d073fddf2fc5fe4a545d89f75e72391473f73ad",
+    "receipt_sha256": "sha256:9bf6683d80c2dd517e371709a1aa2db0a13e1f4089a09a8296941c6df7054b79",
+    "classification": "infrastructure_incomplete_mid_agent_pre_scoring_session_verifier",
+    "source4_must_not_repeat": true
+  },
+  "controllers": {
+    "ray_job_uid": "ef7cb0f2-84d4-4017-ae31-bf34ebb70d0d",
+    "workload_name": "rayjob-ft-run-98c32208-f6a62",
+    "workload_uid": "00ba5cf3-ba6c-4ff3-a060-0d56df777c2c",
+    "workload_admitted_at": "2026-09-04T06:32:48Z",
+    "ray_cluster_name": "ft-run-98c32208-5gpb2",
+    "ray_cluster_uid": "5107d72e-ae6a-4582-a490-55b349421d06",
+    "submitter_job_uid": "2f1e3ca5-47d6-4250-8450-7af9daa874ab",
+    "submitter_pod_uid": "a250a126-7eb6-4291-91c0-91f5ec52639a"
+  },
+  "runtime": {
+    "head_pod_name": "ft-run-98c32208-5gpb2-head-7qxwc",
+    "head_pod_uid": "3f37ab91-4afa-4e4d-8f29-a3eeda70a774",
+    "head_pod_node": "computeinstance-e04r0z7gp25s85eyb0",
+    "head_pod_restarts": 0,
+    "gpu_count": 8,
+    "worker_group_count": 0,
+    "priority_class": "fleet-train-high",
+    "priority_value": 10000,
+    "preemption_policy": "PreemptLowerPriority",
+    "non_preemptible": false,
+    "privileged": true,
+    "seccomp_profile": "Unconfined",
+    "secret_env_from_count": 0,
+    "run_root_file_count": 0,
+    "run_root_byte_count": 0
+  },
+  "image": {
+    "requested": "ghcr.io/fleet-ai/cyber-post-train-glm53-runtime@sha256:ec93ba50613fd13fb4c0b0a9105767ab18209a1e0108dab0923aad694c0206ec",
+    "resolved_image_id": "ghcr.io/fleet-ai/cyber-post-train-glm53-runtime@sha256:ec93ba50613fd13fb4c0b0a9105767ab18209a1e0108dab0923aad694c0206ec",
+    "private_pull_succeeded": true,
+    "image_pull_secret": "ghcr-pull",
+    "image_pull_secret_uid": "74911d64-d540-4eba-bea6-f3c10cffa670"
+  },
+  "model": {
+    "served_name": "glm-5.3",
+    "source": "zai-org/GLM-5.3",
+    "revision": "30333038ada1f1dacb294a93270305a890b50c14",
+    "live_path": "/mnt/sfs/models/glm-5.3-30333038",
+    "context_length": 262144,
+    "base_and_draft_identity_match": true
+  },
+  "network": {
+    "service_name": "ft-run-98c32208-5gpb2-head-svc",
+    "service_uid": "2c0e64de-c4a0-4f70-ae07-d15b1adad0b3",
+    "health_first_observed_200_at": "2026-09-04T06:42:38Z",
+    "health_dwell_last_observed_200_at": "2026-09-04T06:44:49Z",
+    "health_dwell_restart_count": 0,
+    "ports": {
+      "http": 8000,
+      "dashboard": 8265,
+      "metrics": 8080
+    }
+  },
+  "content_blind_probe": {
+    "schema": "fleet_cyber_glm53_serving_probe_v1",
+    "health": true,
+    "served_model": "glm-5.3",
+    "context_length": 262144,
+    "structured_tool_schema_names": [
+      "bash",
+      "submit_report"
+    ],
+    "selected_tool_names": [
+      "submit_report"
+    ],
+    "finish_reason": "tool_calls",
+    "tool_arguments_valid_json": true,
+    "response_content_included": false,
+    "tool_arguments_included": false,
+    "sanitized_probe_sha256": "sha256:d0e8d004aee6a5eca0ee5315d1db0a00cee42d104cb1cf2b34eab97e0cdab491"
+  },
+  "outcome_integrity": {
+    "non_scored_model_requests": 1,
+    "scored_controller_launched": false,
+    "scored_sessions": 0,
+    "verifier_executions": 0,
+    "capability_score_claim_allowed": false,
+    "scores_read": false,
+    "prompts_or_task_traces_read": false
+  },
+  "capacity": {
+    "replica_b_healthy": true,
+    "replica_b_head_pod_uid": "bfeb4c6a-9e4a-4f14-adb2-3f516dd25fdb",
+    "replica_b_node": "computeinstance-e04q707wzj5z9c6a2r",
+    "healthy_replicas": 2,
+    "dedicated_nodes": 2,
+    "dedicated_gpus": 16,
+    "maximum_respected": true,
+    "eviction_immunity_claimed": false
+  },
+  "receipt_sha256": "sha256:9aa92ac211f102939dc24e03af5c93766b94b0ccf5ce887df1ac80415adf73bc"
+}
