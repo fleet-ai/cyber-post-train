@@ -121,18 +121,19 @@ def validate_campaign(campaign: dict[str, Any]) -> None:
             fragments = [row]
         if not isinstance(fragments, list) or not fragments:
             raise ValueError("campaign component lacks execution fragments")
-        fragment_ranks: list[int] = []
+        fragment_cells: list[tuple[int, int]] = []
         for fragment in fragments:
             digest = fragment.get("plan_sha256")
-            ranks = fragment.get("source_ranks", row.get("source_ranks"))
             if not isinstance(digest, str) or not digest.startswith("sha256:"):
                 raise ValueError("campaign component lacks an immutable plan digest")
-            if not isinstance(ranks, list) or not ranks:
-                raise ValueError("campaign execution fragment lacks source ranks")
-            fragment_ranks.extend(int(rank) for rank in ranks)
-        selected = [int(rank) for rank in row["source_ranks"]]
-        if sorted(fragment_ranks) != sorted(selected) or len(fragment_ranks) != len(
-            set(fragment_ranks)
+            fragment_cells.extend(_fragment_cells(fragment, row))
+        expected_cells = {
+            (int(rank), attempt)
+            for rank in row["source_ranks"]
+            for attempt in range(1, 5)
+        }
+        if set(fragment_cells) != expected_cells or len(fragment_cells) != len(
+            set(fragment_cells)
         ):
             raise ValueError("campaign execution fragments do not exactly partition component")
 
@@ -143,6 +144,32 @@ def _plan_path(component: dict[str, Any], cluster: bool) -> Path:
     if not isinstance(path, str) or not path:
         raise ValueError(f"component lacks {field}")
     return Path(path)
+
+
+def _fragment_cells(
+    fragment: dict[str, Any], component: dict[str, Any]
+) -> list[tuple[int, int]]:
+    selected = fragment.get("cells")
+    if selected is None:
+        ranks = fragment.get("source_ranks", component.get("source_ranks"))
+        if not isinstance(ranks, list) or not ranks:
+            raise ValueError("campaign execution fragment lacks source ranks or cells")
+        return [(int(rank), attempt) for rank in ranks for attempt in range(1, 5)]
+    if not isinstance(selected, list) or not selected:
+        raise ValueError("campaign execution fragment cells are invalid")
+    cells: list[tuple[int, int]] = []
+    for row in selected:
+        rank = int(row.get("source_rank") or 0)
+        attempts = row.get("attempts")
+        if (
+            rank <= 0
+            or not isinstance(attempts, list)
+            or not attempts
+            or any(int(attempt) not in range(1, 5) for attempt in attempts)
+        ):
+            raise ValueError("campaign execution fragment cell selector is invalid")
+        cells.extend((rank, int(attempt)) for attempt in attempts)
+    return cells
 
 
 def build_universe(campaign: dict[str, Any], *, cluster: bool) -> dict[str, Any]:
@@ -158,10 +185,8 @@ def build_universe(campaign: dict[str, Any], *, cluster: bool) -> dict[str, Any]
                 raise ValueError(f"plan digest binding drifted for {component['id']}")
             if plan.get("plan_sha256") != digest_without(plan, "plan_sha256"):
                 raise ValueError(f"plan self-digest drifted for {component['id']}")
-            selected = {
-                int(rank)
-                for rank in fragment.get("source_ranks", component["source_ranks"])
-            }
+            selected_cells = set(_fragment_cells(fragment, component))
+            selected = {rank for rank, _ in selected_cells}
             tasks = {
                 int(task["source_rank"]): task
                 for task in plan.get("tasks") or []
@@ -176,14 +201,19 @@ def build_universe(campaign: dict[str, Any], *, cluster: bool) -> dict[str, Any]
                 for attempt in plan.get("attempts") or []
                 if int(attempt["source_rank"]) in selected
             ]
-            expected_cells = {
-                (rank, attempt) for rank in selected for attempt in range(1, 5)
-            }
             actual_cells = {
                 (int(attempt["source_rank"]), int(attempt["attempt"]))
                 for attempt in attempts
+                if (int(attempt["source_rank"]), int(attempt["attempt"]))
+                in selected_cells
             }
-            if actual_cells != expected_cells or len(attempts) != len(expected_cells):
+            attempts = [
+                attempt
+                for attempt in attempts
+                if (int(attempt["source_rank"]), int(attempt["attempt"]))
+                in selected_cells
+            ]
+            if actual_cells != selected_cells or len(attempts) != len(selected_cells):
                 raise ValueError(
                     f"component is not an exact pass@4 Cartesian block: {component['id']}"
                 )

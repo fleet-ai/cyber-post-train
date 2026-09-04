@@ -140,6 +140,34 @@ def test_execution_fragments_must_exactly_partition_component() -> None:
         supervisor.validate_campaign(campaign)
 
 
+def test_execution_fragments_can_split_one_task_at_attempt_boundaries() -> None:
+    campaign = _released_fixture_campaign()
+    component = campaign["components"][1]
+    ranks = component["source_ranks"]
+    shared = {
+        "repo_plan_path": component["repo_plan_path"],
+        "cluster_plan_path": component["cluster_plan_path"],
+        "plan_sha256": component["plan_sha256"],
+    }
+    component["execution_fragments"] = [
+        {**shared, "cells": [{"source_rank": ranks[0], "attempts": [1, 2]}]},
+        {**shared, "cells": [{"source_rank": ranks[0], "attempts": [3, 4]}]},
+        {**shared, "source_ranks": ranks[1:]},
+    ]
+    campaign["campaign_sha256"] = supervisor.digest_without(
+        campaign, "campaign_sha256"
+    )
+    universe = supervisor.build_universe(campaign, cluster=False)
+    assert universe["cell_count"] == 600
+    cells = [
+        row
+        for row in universe["cells"]
+        if row["component_id"] == component["id"]
+        and row["source_rank"] == ranks[0]
+    ]
+    assert [row["attempt"] for row in cells] == [1, 2, 3, 4]
+
+
 def test_atomic_claim_allows_exactly_one_controller(tmp_path: Path) -> None:
     root, universe, _ = _ledger(tmp_path)
     cell = next(
