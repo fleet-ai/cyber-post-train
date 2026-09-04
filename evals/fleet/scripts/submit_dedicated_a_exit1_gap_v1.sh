@@ -47,10 +47,19 @@ if len(plan["credited_sessions"]) != 3 or plan["total_session_count"] != 4:
 PY
 assert_live_partition() {
   test "$("${KUBECTL[@]}" -n "$NAMESPACE" get job "$PREDECESSOR" -o jsonpath='{.metadata.uid}')" = "$PREDECESSOR_UID"
-  test "$("${KUBECTL[@]}" -n "$NAMESPACE" get job "$PREDECESSOR" -o jsonpath='{.status.active}')" = 1
+  test "$("${KUBECTL[@]}" -n "$NAMESPACE" get job "$PREDECESSOR" -o jsonpath='{.status.failed}')" = 1
+  test "$("${KUBECTL[@]}" -n "$NAMESPACE" get job "$PREDECESSOR" -o jsonpath='{.status.active}')" != 1
+  predecessor_pods=$("${KUBECTL[@]}" -n "$NAMESPACE" get pods -l "job-name=$PREDECESSOR" -o json)
+  test "$(jq -r --arg uid "$(jq -r '.source.predecessor_pod_uid' "$PLAN")" \
+    '[.items[] | select(.metadata.uid == $uid and (.status.phase == "Failed" or .status.phase == "Succeeded"))] | length' \
+    <<<"$predecessor_pods")" = 1
+  test "$(jq -r '[.items[] | select(.status.phase == "Pending" or .status.phase == "Running")] | length' \
+    <<<"$predecessor_pods")" = 0
   test "$("${KUBECTL[@]}" -n "$NAMESPACE" get pod "$HEAD_POD" -o jsonpath='{.metadata.uid}')" = "$HEAD_POD_UID"
   test "$("${KUBECTL[@]}" -n "$NAMESPACE" get pod "$HEAD_POD" -o jsonpath='{.status.containerStatuses[0].ready}')" = true
   test "$("${KUBECTL[@]}" -n "$NAMESPACE" get pod "$HEAD_POD" -o jsonpath='{.status.containerStatuses[0].restartCount}')" = 0
+  test "$("${KUBECTL[@]}" -n "$NAMESPACE" exec "$HEAD_POD" -c ray-head -- sh -c \
+    'curl --silent --output /dev/null --write-out "%{http_code}" http://127.0.0.1:8000/health')" = 200
   test "$("${KUBECTL[@]}" -n "$NAMESPACE" get rayjob.ray.io "$RAY_JOB" -o jsonpath='{.metadata.uid}')" = "$RAY_JOB_UID"
   test "$("${KUBECTL[@]}" -n "$NAMESPACE" get raycluster.ray.io "$RAY_CLUSTER" -o jsonpath='{.metadata.uid}')" = "$RAY_CLUSTER_UID"
   test "$("${KUBECTL[@]}" -n "$NAMESPACE" get service "$SERVICE" -o jsonpath='{.metadata.uid}')" = "$SERVICE_UID"
