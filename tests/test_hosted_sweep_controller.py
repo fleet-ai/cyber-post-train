@@ -19,6 +19,9 @@ REMAINDER_SOURCE = Path(
 REPLACEMENT_LOCK = Path(
     "docs/evidence/qwen38-study/2026-09-04-opencode-replacement-selection-lock-v1.json"
 )
+HYDRATION_JOB_V2 = Path(
+    "evals/fleet/cluster/glm53-dedicated-a-hydration-job-v2.yaml"
+)
 
 
 @pytest.mark.parametrize(
@@ -533,3 +536,11 @@ def test_dedicated_a_plan_is_exactly_partitioned_and_endpoint_bound(
     assert plan["execution"]["inventory_policy"] == (
         "immutable_plan_claim_and_endpoint_uid_v1"
     )
+
+
+def test_hydration_job_bootstraps_every_controller_import() -> None:
+    manifest = HYDRATION_JOB_V2.read_text()
+    assert "/bootstrap/self_hosted.py" in manifest
+    assert "/bootstrap/runner.py" in manifest
+    assert "opencode_train_sweep_runner.py" in manifest
+    assert "/bootstrap/controller.py" in manifest
