@@ -1,0 +1,56 @@
+{
+  "schema_version": "fleet-opencode-autocontinue-canary-controller-compatibility-v3",
+  "append_only": true,
+  "status": "HELD_COMPATIBLE",
+  "supersedes": {
+    "path": "docs/evidence/qwen38-study/2026-09-04-opencode-autocontinue-canary-controller-compatibility-v2.json",
+    "receipt_sha256": "sha256:7851d18a8176abb08aebcb857960380f7f8a59bb854c51437e4010f169c82b6a"
+  },
+  "campaign_sha256": "sha256:63946f224a33eb0d2c2a6fdba34358ebf9ca379e5f0f156cd137c95a9b98097e",
+  "immutable_campaign_file_sha256": "sha256:1dfcc6d9ddbd19ef5ff46b5d6308d62526db4d1a0ccf05c5fa3b10b176910f34",
+  "scored_v1_failure": {
+    "path": "docs/evidence/qwen38-study/2026-09-04-opencode-autocontinue-canary-scored-v1-bootstrap-failure.json",
+    "receipt_sha256": "sha256:b30930aeb12cbe4d8ab5ef91a1608ec672e2536576168b50639318b866e30423"
+  },
+  "implementation": {
+    "frozen_controller_path": "evals/fleet/hosted_sweep_controller.py",
+    "frozen_controller_sha256": "sha256:e14670e40d2b1fbe4896e4b6dfb2902f121b81c8103efea3a74a11fed496809a",
+    "canary_controller_path": "evals/fleet/autocontinue_canary_controller.py",
+    "canary_controller_sha256": "sha256:605a695e818f8598274d9d64111868ecc1b092514c7ea725437de0cff7585260",
+    "scored_manifest_authorization_path": "evals/fleet/scored_manifest_authorization.py",
+    "scored_manifest_authorization_sha256": "sha256:8a576d38be80bd9d77e7ef587a5e2b13f7f8ab00940ed96fa1f2d4b470bf8b7e"
+  },
+  "successor_plans": {
+    "qwen": {
+      "path": "evals/fleet/configs/qwen38-opencode-autocontinue-canary1-v2.json",
+      "plan_sha256": "sha256:726320dd5e161e28becd22d7bb6e31f1627f36a3c7291c0dabb53f94626b3c2d",
+      "file_sha256": "sha256:fa0f5f0f7b762d3050fab6b1c9335c6af4737a56b77c3bc96ea00c77f84d754c"
+    },
+    "glm": {
+      "path": "evals/fleet/configs/glm53-opencode-autocontinue-canary1-v2.json",
+      "plan_sha256": "sha256:9654b0f2e9cfbe5690a77ce83bc63e7e537a43597479686fc093db7d6533959a",
+      "file_sha256": "sha256:7096622e3b8dcaa04b8b8f286822db6564d89866a0df7e06c30ec3998b3d28bf"
+    }
+  },
+  "bootstrap_contract": {
+    "preflight_manifest_path": "evals/fleet/cluster/opencode-autocontinue-canary-preflights-v3.yaml",
+    "preflight_manifest_sha256": "sha256:44262e7dad2329219480f9e52b19064fab3c59d67f9c174fd11e7e058beb4f12",
+    "scored_manifest_path": "evals/fleet/cluster/opencode-autocontinue-canary-scored-v3.yaml",
+    "scored_manifest_sha256": "sha256:f7402d99d575a1f1ce8f4c6073de0fe6decd58a289d013f375bb27519ea2fb22",
+    "canonical_run_path": "/workspace/cyber-post-train/evals/fleet/scripts/run_opencode_autocontinue_canary.sh",
+    "canonical_submit_path": "/workspace/cyber-post-train/evals/fleet/scripts/submit_opencode_autocontinue_canaries_v2.sh",
+    "rendered_reconstruction_tested": true,
+    "preflight_packages_no_scored_execution_payload": true
+  },
+  "authorization": {
+    "preflight_authorized": false,
+    "scored_launch_authorized": false,
+    "bulk_launch_authorized": false
+  },
+  "privacy": {
+    "credentials_included": false,
+    "prompts_or_traces_included": false,
+    "scores_included": false
+  },
+  "receipt_sha256": "sha256:b3920547030db509de25f3a04559d9f4173866b81b02efa0957812b35cf06ba2"
+}
