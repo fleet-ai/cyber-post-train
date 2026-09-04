@@ -15,6 +15,7 @@ Read this file before acting. Then select only the skill matching the work and r
 | Diagnose a job or assemble status/terminal evidence | [`cyber-run-evidence`](skills/cyber-run-evidence/SKILL.md) |
 | Convert a lesson into code, tests, docs, or agent guidance | [`cyber-experiment-maintainer`](skills/cyber-experiment-maintainer/SKILL.md) |
 | Compose or change a model × harness × data × benchmark experiment | [`cyber-experiment-operator`](skills/cyber-experiment-operator/SKILL.md) |
+| Observe, drain, release, or replace experiment-owned dedicated GPU capacity | [`cyber-gpu-steward`](skills/cyber-gpu-steward/SKILL.md) |
 
 For current experiment state, read `docs/QWEN36_STUDY_EVIDENCE.md`. For scientific controls, read `docs/SCIENTIFIC_PROTOCOL.md`. Chronological status notes and early example configs are context, not authority.
 
@@ -45,6 +46,7 @@ Mutable names, tags, catalog `current` pointers, a Ready Pod, or a dashboard lab
 - Default mutating or paid operations to preview. Recheck duplicates, exact identity, cost/session count, queue, and stop conditions immediately before execution.
 - Use meaningful `chris-cyber-*` ownership names, normal queues, and default priority. Never bypass admission, unsuspend manually, cancel, preempt, or change peer workloads.
 - Do not mutate an immutable failed Job to retry it. Preserve it and create a reviewed successor only when authorized.
+- An experiment-owned dedicated GPU serving or evaluation allocation needs an observed useful rollout consumer or a bounded, predeclared loading, warmup, or handoff exception. When neither holds, stop new claims, preserve in-flight evidence, release the owned allocation through its supported lifecycle, diagnose off-node, and create a fresh successor only after its gates pass. This does not apply to shared or hosted endpoints and never authorizes peer-workload mutation. Follow [`docs/GPU_RESOURCE_LIFECYCLE.md`](docs/GPU_RESOURCE_LIFECYCLE.md).
 - Merge authority follows the user's current instruction and repository ownership. Historical approval is not permanent authorization for a new shared-repository merge or deployment.
 
 ## Scientific interpretation

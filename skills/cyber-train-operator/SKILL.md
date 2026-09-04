@@ -21,6 +21,7 @@ Read [references/gates.md](references/gates.md) before submitting training, expo
 - Prefer the typed Fleet Jobs API and repository CLIs. Preview is the default; submission requires an explicit execute path and a duplicate-title check.
 - Use the configured namespace, normal queue, default priority, and a meaningful `chris-cyber-*` name. Never bypass admission, unsuspend manually, preempt, cancel, or modify another owner's workload.
 - Resolve images to immutable digests and record both the requested image and runtime `imageID`. A tag, Ready Pod, or catalog row alone is insufficient evidence.
+- For experiment-owned dedicated GPU serving, freeze consumer-liveness and lifecycle bounds before launch and follow [`docs/GPU_RESOURCE_LIFECYCLE.md`](../../docs/GPU_RESOURCE_LIFECYCLE.md). Drain and release idle owned capacity while diagnosing off-node; never apply that policy to shared or hosted endpoints.
 - Keep credentials in environment or workload-secret injection. Never print, serialize, commit, or pass them as command arguments.
 - Treat every retry as a new decision. Reuse only when the producer explicitly implements idempotent, create-only semantics and proves the existing artifact is identical.
 
