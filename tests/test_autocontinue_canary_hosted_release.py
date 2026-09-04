@@ -243,10 +243,20 @@ def test_successor_preflight_authorization_rejects_semantic_drift(monkeypatch) -
     ],
 )
 def test_successor_held_release_is_exact_and_rejects_all_resealed_drift(
-    plan_path: Path, release_path: Path
+    plan_path: Path, release_path: Path, monkeypatch
 ) -> None:
     plan = canary.load_object(plan_path)
     original = canary.load_object(release_path)
+    real_sha = canary._sha
+
+    def historical_sha(path: Path) -> str:
+        if path.name == "opencode-autocontinue-canary-successor-scored-v4.yaml":
+            return original["implementation"]["scored_manifest_sha256"]
+        if path.name == "submit_opencode_autocontinue_canaries_v2.sh":
+            return original["implementation"]["launcher_sha256"]
+        return real_sha(path)
+
+    monkeypatch.setattr(canary, "_sha", historical_sha)
     hosted_release.validate_successor_held_release(original, plan, ROOT)
     assert original["authorization"]["launch_authorized"] is False
     assert original["route"]["dedicated_serving_state"] == "USER_STOPPED_UNAVAILABLE"

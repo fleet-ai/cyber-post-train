@@ -393,28 +393,91 @@ def test_scored_manifest_authorization_is_exact_and_fail_closed(tmp_path: Path) 
     with pytest.raises(ValueError, match="unauthorized"):
         manifest_authorization.validate_scored_manifest(unauthorized, expected)
 
-def test_successor_held_submitter_cannot_submit_scored_work() -> None:
+def test_successor_submitter_is_release_and_inventory_gated() -> None:
     path = ROOT / "evals/fleet/scripts/submit_opencode_autocontinue_canaries_v2.sh"
     text = path.read_text()
     assert path.stat().st_mode & 0o111
-    assert 'if [[ "$MODE" != preview ]]' in text
-    assert "--held" in text
+    assert 'if [[ "$MODE" != preview && "$MODE" != submit ]]' in text
+    assert "test -f \"$Q_RELEASE\" && test -f \"$G_RELEASE\"" in text
     assert "autocontinue_successor_manifest_authorization" in text
+    assert "validate-release" in text
+    assert "observe-route" in text
+    assert "validate-route" in text
+    assert "_validate_inventory_for_task" in text
+    assert "SFS_OBSERVER_UID" in text
+    assert "git show \"$PACKAGE_COMMIT:$path\"" in text
     assert "--dry-run=server" in text
     assert "kubectl apply" not in text
-    assert "kubectl create -f" not in text
     assert 'test ! -e "/mnt/sfs/' not in text
     assert '"scored_launch_authorized":false' in text
+    assert text.index("validate-release") < text.index("observe-route")
+    assert text.index("observe-route") < text.index("_validate_inventory_for_task")
+    assert text.index("_validate_inventory_for_task") < text.index("create configmap \"$INTENT\"")
+    assert text.index("SFS_OBSERVER_UID") < text.index("create configmap \"$INTENT\"")
+    assert text.rindex("validate-route") < text.rindex('create -f "$MANIFEST"')
 
 
-def test_successor_scored_manifest_is_exactly_held() -> None:
-    expected = ("chris-q38-ac-canary1-v2", "chris-glm53-ac-canary1-v2")
-    successor_manifest_authorization.validate_scored_manifest(
-        SUCCESSOR_SCORED_MANIFEST, expected, launch_authorized=False
+def test_successor_submitter_missing_releases_cannot_create_objects(
+    tmp_path: Path,
+) -> None:
+    release_paths = [
+        ROOT
+        / "docs/evidence/qwen38-study/"
+        "2026-09-04-qwen38-autocontinue-canary-successor-hosted-scoring-release-v4.json",
+        ROOT
+        / "docs/evidence/qwen38-study/"
+        "2026-09-04-glm53-autocontinue-canary-successor-hosted-scoring-release-v4.json",
+    ]
+    assert not any(path.exists() for path in release_paths)
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    calls = tmp_path / "kubectl-calls"
+    (fake_bin / "git").write_text(
+        "#!/bin/sh\n"
+        'if [ "$1 $2" = "rev-parse --show-toplevel" ]; then '\
+        'printf "%s\\n" "$TEST_ROOT"; exit 0; fi\n'
+        "exit 97\n"
     )
+    (fake_bin / "uv").write_text("#!/bin/sh\nexit 0\n")
+    (fake_bin / "kubectl").write_text(
+        "#!/bin/sh\n"
+        'printf "%s\\n" "$*" >> "$TEST_CALLS"\n'
+        "exit 0\n"
+    )
+    for path in fake_bin.iterdir():
+        path.chmod(0o755)
+    environment = dict(os.environ)
+    environment.update(
+        {
+            "PATH": f"{fake_bin}:{environment['PATH']}",
+            "TEST_ROOT": str(ROOT),
+            "TEST_CALLS": str(calls),
+        }
+    )
+    result = subprocess.run(
+        [
+            "bash",
+            str(ROOT / "evals/fleet/scripts/submit_opencode_autocontinue_canaries_v2.sh"),
+            "submit",
+        ],
+        cwd=ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode != 0
+    observed = calls.read_text().splitlines()
+    assert all("create configmap" not in row for row in observed)
+    assert all(not ("create -f" in row and "--dry-run=server" not in row) for row in observed)
+
+
+def test_successor_scored_manifest_is_exactly_executable() -> None:
+    expected = ("chris-q38-ac-canary1-v2", "chris-glm53-ac-canary1-v2")
+    successor_manifest_authorization.validate_scored_manifest(SUCCESSOR_SCORED_MANIFEST, expected)
     with pytest.raises(ValueError, match="unauthorized"):
         successor_manifest_authorization.validate_scored_manifest(
-            SUCCESSOR_SCORED_MANIFEST, expected
+            SUCCESSOR_SCORED_MANIFEST, expected, launch_authorized=False
         )
 
     documents = list(yaml.safe_load_all(SUCCESSOR_SCORED_MANIFEST.read_text()))

@@ -3,7 +3,7 @@ kind: Job
 metadata:
   name: chris-q38-ac-canary1-v2
   namespace: fleet-train-jobs
-  annotations: {cyber-post-train.fleet.ai/preview-only: "true", cyber-post-train.fleet.ai/launch-authorized: "false"}
+  annotations: {cyber-post-train.fleet.ai/preview-only: "false", cyber-post-train.fleet.ai/launch-authorized: "true"}
 spec:
   activeDeadlineSeconds: 43200
   backoffLimit: 0
@@ -92,7 +92,7 @@ kind: Job
 metadata:
   name: chris-glm53-ac-canary1-v2
   namespace: fleet-train-jobs
-  annotations: {cyber-post-train.fleet.ai/preview-only: "true", cyber-post-train.fleet.ai/launch-authorized: "false"}
+  annotations: {cyber-post-train.fleet.ai/preview-only: "false", cyber-post-train.fleet.ai/launch-authorized: "true"}
 spec:
   activeDeadlineSeconds: 43200
   backoffLimit: 0
