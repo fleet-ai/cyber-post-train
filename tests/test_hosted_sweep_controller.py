@@ -1078,6 +1078,79 @@ def test_glm_r107_hydration_requires_tombstone_bound_supplement(monkeypatch) -> 
         hosted.hydrate_glm53_replacements(tampered, "secret")
 
 
+@pytest.mark.parametrize(
+    ("supplement_path", "expected_schema", "expected_ranks"),
+    [
+        (
+            QWEN_HTTP500_REPLACEMENT_SUPPLEMENT,
+            "fleet-qwen38-hosted-replacement-hydration-v2",
+            [54, 55],
+        ),
+        (
+            GLM_HTTP500_REPLACEMENT_SUPPLEMENT,
+            "fleet-glm53-hosted-replacement-hydration-v2",
+            [108, 109],
+        ),
+    ],
+)
+def test_http500_replacement_hydration_is_metadata_only(
+    monkeypatch, supplement_path: Path, expected_schema: str, expected_ranks: list[int]
+) -> None:
+    supplement = hosted.load_object(supplement_path)
+    by_key = {row["task_key"]: row for row in supplement["replacements"]}
+
+    class Client:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+    def request(_client, _method, path, **_kwargs):
+        if path == "/v1/account":
+            return {"team_name": "fleet", "team_id": self_hosted.FLEET_TEAM_ID}
+        row = by_key[path.removeprefix("/v1/tasks/")]
+        return {
+            "key": row["task_key"],
+            "environment_id": row["env_key"],
+            "version": row["env_version"],
+            "data_id": row["data_key"],
+            "data_version": row["data_version"],
+            "prompt": "sealed",
+            "env_variables": {"sealed": True},
+            "output_json_schema": {"type": "object"},
+            "verifier_id": f"verifier-{row['replacement_rank']}",
+            "verifier": {
+                "verifier_version_id": f"verifier-version-{row['replacement_rank']}",
+                "version": 1,
+                "sha256": f"sha256:verifier-{row['replacement_rank']}",
+                "function_name": "verify",
+            },
+            "metadata": {
+                "cyber_contract": {
+                    "evidence_schema": "1.0.0",
+                    "submission_protocol": "2.0.0",
+                    "verifier_contract": "3.0.0",
+                },
+                "runtime_seed_manifest": {
+                    "content_sha256": f"sha256:seed-{row['replacement_rank']}",
+                    "files": [{"target_path": "sealed"}],
+                },
+            },
+        }
+
+    monkeypatch.setattr(hosted, "_client", lambda _key: Client())
+    monkeypatch.setattr(self_hosted, "_request", request)
+    hydration = hosted.hydrate_glm53_replacements(supplement, "secret")
+    assert hydration["schema_version"] == expected_schema
+    assert hydration["selection_supplement_receipt_sha256"] == supplement[
+        "receipt_sha256"
+    ]
+    assert [row["replacement_rank"] for row in hydration["tasks"]] == expected_ranks
+    assert hydration["scores_read"] is False
+    assert hydration["task_content_retained"] is False
+
+
 def test_glm_hosted_reassigned_b_plan_is_preview_only_and_disjoint() -> None:
     dedicated = hosted.load_object(DEDICATED_B_PLAN)
     hosted_plan = hosted.load_object(

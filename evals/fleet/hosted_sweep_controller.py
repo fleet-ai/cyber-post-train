@@ -443,7 +443,33 @@ def hydrate_glm53_replacements(
     if assignment.get("receipt_sha256") != digest_without(assignment, "receipt_sha256"):
         raise ValueError("replacement assignment receipt digest mismatch")
     supplement_schema = assignment.get("schema_version")
-    if supplement_schema in {
+    if supplement_schema == "fleet-qwen38-replacement-selection-supplement-v2":
+        rows = assignment.get("replacements") or []
+        expected_ranks = [54, 55]
+        if (
+            assignment.get("append_only") is not True
+            or (assignment.get("hydration_gate") or {}).get("status")
+            != "required_not_satisfied"
+            or any(row.get("serving_block") != "hosted_qwen_successor" for row in rows)
+        ):
+            raise ValueError("Qwen replacement supplement drifted")
+        receipt_schema = "fleet-qwen38-hosted-replacement-hydration-v2"
+        receipt_source_field = "selection_supplement_receipt_sha256"
+    elif supplement_schema == "fleet-opencode-replacement-selection-supplement-v3":
+        rows = assignment.get("replacements") or []
+        expected_ranks = [108, 109]
+        if (
+            assignment.get("append_only") is not True
+            or (assignment.get("hydration_gate") or {}).get("status")
+            != "required_not_satisfied"
+            or any(row.get("serving_block") != "hosted_glm_successor" for row in rows)
+            or (assignment.get("prior_supplement") or {}).get("receipt_sha256")
+            != "sha256:731ba0583f43a7cc56f16cbf8c71ab98ca39642ff7091e21763f8561bf9d587a"
+        ):
+            raise ValueError("GLM HTTP500 replacement supplement drifted")
+        receipt_schema = "fleet-glm53-hosted-replacement-hydration-v2"
+        receipt_source_field = "selection_supplement_receipt_sha256"
+    elif supplement_schema in {
         "fleet-opencode-replacement-selection-supplement-v1",
         "fleet-opencode-replacement-selection-supplement-v2",
     }:
