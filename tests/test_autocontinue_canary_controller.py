@@ -19,9 +19,18 @@ Q_HELD = (
 G_HELD = (
     ROOT / "docs/evidence/qwen38-study/2026-09-04-glm53-autocontinue-canary-held-release-v1.json"
 )
+Q_PREAUTH = (
+    ROOT / "docs/evidence/qwen38-study/"
+    "2026-09-04-qwen38-autocontinue-canary-preflight-authorization-v1.json"
+)
+G_PREAUTH = (
+    ROOT / "docs/evidence/qwen38-study/"
+    "2026-09-04-glm53-autocontinue-canary-preflight-authorization-v1.json"
+)
 PRE_MANIFEST = ROOT / "evals/fleet/cluster/opencode-autocontinue-canary-preflights-v1.yaml"
 SCORED_MANIFEST = ROOT / "evals/fleet/cluster/opencode-autocontinue-canary-scored-v2.yaml"
 BASE_PACKAGE_COMMIT = "25fe5bfe45cd91bc9e877af2982bbacd4e94c2d2"
+PREFLIGHT_PACKAGE_COMMIT = "fdad6c80bcbfa999cd98e6f3194040bd1d85d679"
 
 
 def _cell_claim_worker(plan_path: str, claim_root: str, queue) -> None:
@@ -275,6 +284,55 @@ def test_resealed_stage_a_preflight_authorization_tampering_is_rejected(
     authorization["receipt_sha256"] = canary.digest_without(authorization, "receipt_sha256")
     with pytest.raises(ValueError, match="preflight authorization"):
         canary.validate_preflight_authorization(authorization, plan, ROOT, BASE_PACKAGE_COMMIT)
+
+
+@pytest.mark.parametrize(
+    ("plan_path", "authorization_path"), [(Q_PLAN, Q_PREAUTH), (G_PLAN, G_PREAUTH)]
+)
+def test_phase_b_preflight_authorization_binds_exact_phase_a2_commit(
+    plan_path: Path, authorization_path: Path
+) -> None:
+    plan = canary.load_object(plan_path)
+    authorization = canary.load_object(authorization_path)
+    canary.validate_preflight_authorization(authorization, plan, ROOT, PREFLIGHT_PACKAGE_COMMIT)
+    assert authorization["package_commit"] == PREFLIGHT_PACKAGE_COMMIT
+    assert authorization["implementation"]["package_commit"] == PREFLIGHT_PACKAGE_COMMIT
+    assert authorization["authorization"]["preflight_authorized"] is True
+    assert authorization["authorization"]["launch_authorized"] is False
+    assert authorization["preflight_identity"]["scored_job_created"] is False
+
+
+def test_phase_b_submitter_pins_intent_and_packages_preflight_only() -> None:
+    text = (
+        ROOT / "evals/fleet/scripts/submit_opencode_autocontinue_canary_preflights_v1.sh"
+    ).read_text()
+    for required in (
+        f"PACKAGE_COMMIT={PREFLIGHT_PACKAGE_COMMIT}",
+        "Q_AUTH_RAW=45acad27d6389d0da90491090d9adcae5455952473aac27d8fc302f7096e0f3d",
+        "G_AUTH_RAW=8ecbfeb079a3ed0241e81835e8e1180674ba132a14645a279f602722427cb4bd",
+        "Q_AUTH_SELF=sha256:9f8eae90f2d59a1c1a39f94d38adbd345eaa5006cd73d2eec850701a32e59b59",
+        "G_AUTH_SELF=sha256:8870a2ff27c6b22a70a28e2c58add13e459754dbe12480ba9786feb7f4654ab4",
+        'git show "$PACKAGE_COMMIT:$relative" | cmp - "$file"',
+        'authorization.get("receipt_sha256") != sys.argv[5]',
+        '--from-literal=package_commit="$PACKAGE_COMMIT"',
+        "CREATE_ONCE_INTENT",
+        "manual_reconciliation_required",
+        '"scored_objects_created":0',
+    ):
+        assert required in text
+    intent_position = text.index("stage=create-intent")
+    assert intent_position < text.index("stage=create-qwen-configmap")
+    assert text.index("stage=create-qwen-configmap") < text.index("stage=create-glm-configmap")
+    assert text.index("stage=create-glm-configmap") < text.index("stage=create-preflight-jobs")
+    for forbidden in (
+        "--from-file=scored-manifest.yaml",
+        "--from-file=submit.sh",
+        "--from-file=run.sh",
+        "--from-file=Dockerfile.opencode",
+        "--from-file=fixed_proxy.py",
+        'test ! -e "/mnt/sfs/',
+    ):
+        assert forbidden not in text
 
 
 def test_preflight_stage_has_no_scored_execution_payload() -> None:
