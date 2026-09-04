@@ -1,0 +1,19 @@
+{
+  "schema_version": "fleet-opencode-autocontinue-canary-duplicate-inventory-v1",
+  "append_only": true,
+  "status": "PASSED",
+  "observed_at_utc": "2026-09-04T21:39:55Z",
+  "fleet_team_id": "a1025f0b-ad67-49fc-a023-51800ab43e84",
+  "pagination_exhausted": true,
+  "plan_sha256": "sha256:6bfc06e5ede3a572f03d74e810dc26006bdbf5134b841ca12565cdf13c02ca93",
+  "cell": {"source_rank": 13, "attempt": 1, "task_version_id": "9375a9b9-04e5-4f6f-ad47-286121278992"},
+  "source_preflight_receipt_sha256": "sha256:e66c09c09953c1220d8752f5ba43419e2ed0d934c075eea1bf156c47911879ba",
+  "post_exit_receipt_sha256": "sha256:b22d011cf592786382e0ae2f729fe709673ab211b970ce9ff19b25d79bfa80a5",
+  "exact_treatment_session_rows": 0,
+  "current_plan_run_rows": 0,
+  "active_attempts": 0,
+  "global_cell_claim_absent": true,
+  "job_pod_and_sfs_identities_absent": true,
+  "privacy": {"credentials_included": false, "prompts_or_traces_included": false, "scores_included": false},
+  "receipt_sha256": "sha256:57f84d6bf2ec923d825322038017241a6633e9a4932a5ebf904a9f0c9c1627de"
+}

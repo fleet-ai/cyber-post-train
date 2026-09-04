@@ -1,0 +1,67 @@
+{
+  "schema_version": "fleet-opencode-autocontinue-canary-preflight-post-exit-v1",
+  "append_only": true,
+  "status": "PASSED",
+  "observed_at_utc": "2026-09-04T21:39:55Z",
+  "campaign_sha256": "sha256:63946f224a33eb0d2c2a6fdba34358ebf9ca379e5f0f156cd137c95a9b98097e",
+  "plan_sha256": "sha256:6bfc06e5ede3a572f03d74e810dc26006bdbf5134b841ca12565cdf13c02ca93",
+  "preflight_authorization_receipt_sha256": "sha256:a7cef96859a38ace334d5edbef22ffa1d87ed74d5c1d216857945035bf07f530",
+  "preflight_receipt_sha256": "sha256:e66c09c09953c1220d8752f5ba43419e2ed0d934c075eea1bf156c47911879ba",
+  "preflight_sfs_file_sha256": "sha256:219c7ae02c461af77a588de03ddc263b7f6caecdcd74f7763aa2083df16fc432",
+  "hosted_only_route_receipt_sha256": "sha256:d3a285c09f0abb1f66d6ab692193f5ad16c3cd1e432be87f134ae89977d5d00c",
+  "job": {
+    "name": "chris-glm53-ac-canary1-v2-preflight",
+    "uid": "a50d1348-2c66-4b7b-bccc-210d98ad3721",
+    "created_at_utc": "2026-09-04T21:37:00Z",
+    "completion_time": "2026-09-04T21:37:20Z",
+    "completion_reason": "CompletionsReached",
+    "succeeded": 1,
+    "failed": 0,
+    "priority_class": "fleet-train-high",
+    "priority_value": 10000,
+    "preemption_policy": "PreemptLowerPriority",
+    "queue": "training-lq"
+  },
+  "pod": {
+    "name": "chris-glm53-ac-canary1-v2-preflight-wvrxr",
+    "uid": "e15d615f-099f-4cfe-89f7-a75aab32b4b9",
+    "owner_job_name": "chris-glm53-ac-canary1-v2-preflight",
+    "owner_job_uid": "a50d1348-2c66-4b7b-bccc-210d98ad3721",
+    "owner_is_controller": true,
+    "phase": "Succeeded",
+    "exit_code": 0,
+    "restart_count": 0,
+    "started_at": "2026-09-04T21:37:00Z",
+    "finished_at": "2026-09-04T21:37:18Z",
+    "requested_image": "ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7",
+    "resolved_image": "ghcr.io/astral-sh/uv@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7"
+  },
+  "configmap": {
+    "name": "chris-glm53-ac-canary1-pre-v2",
+    "uid": "f7e47004-2077-4721-9202-88255c2cbdfd",
+    "created_at_utc": "2026-09-04T21:36:58Z",
+    "immutable": true
+  },
+  "intent_configmap": {
+    "name": "chris-ac-canary1-preflight-submit-v2",
+    "uid": "9d20fa32-10c0-4e31-a0e8-18113d869e45",
+    "created_at_utc": "2026-09-04T21:36:52Z",
+    "immutable": true
+  },
+  "reconciliation": {
+    "fleet_team_id": "a1025f0b-ad67-49fc-a023-51800ab43e84",
+    "current_plan_run_and_claim_identities_absent": true,
+    "exact_treatment_sessions_reconciled": 0,
+    "sfs_job_roots_reconciled": 99,
+    "scored_job_created": false,
+    "scored_configmap_created": false,
+    "scored_sfs_root_absent": true,
+    "global_cell_claim_absent": true
+  },
+  "privacy": {
+    "credentials_included": false,
+    "prompts_or_traces_included": false,
+    "scores_included": false
+  },
+  "receipt_sha256": "sha256:b22d011cf592786382e0ae2f729fe709673ab211b970ce9ff19b25d79bfa80a5"
+}
