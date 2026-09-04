@@ -1,0 +1,23 @@
+{
+  "schema_version": "fleet-opencode-autocontinue-canary-held-release-v1",
+  "append_only": true,
+  "status": "HELD",
+  "campaign_sha256": "sha256:63946f224a33eb0d2c2a6fdba34358ebf9ca379e5f0f156cd137c95a9b98097e",
+  "plan_sha256": "sha256:6bfc06e5ede3a572f03d74e810dc26006bdbf5134b841ca12565cdf13c02ca93",
+  "cell": {"source_rank": 13, "attempt": 1, "task_version_id": "9375a9b9-04e5-4f6f-ad47-286121278992"},
+  "evidence": {
+    "task_inventory_receipt_sha256": "sha256:c71604d22b1d52a7091727b957e0f56f2e8e270e461c844fb57d48b392d831c5",
+    "task_inventory_execution_sha256": "sha256:b4c175db0d04746e16fa9314edb093f7306e859545cd95972694e461b7f82fcb",
+    "dedicated_parity_receipt_sha256": "sha256:07e733b4b161ed7c36113fc3688f04a42938d93a499b1bcc10c7cd21342900df",
+    "hosted_health_receipt_sha256": "sha256:d81a01ffe1087d7d85fe511bc9c978461ba3e24a2c15675871cfb8668c49bd85",
+    "shared_pvc_flock_receipt_sha256": "sha256:e9f34d35ac3c9e60d2698ebc1685374b98f13e41ac305df0609fb051f35c416c",
+    "controller_compatibility_receipt_sha256": "sha256:d33339b1cd59c151cdb9d1fea0a68fdc69658272de43247d7cf43ef2b51e618a",
+    "fresh_duplicate_inventory_receipt_sha256": null
+  },
+  "implementation": {"controller_sha256": "sha256:752edb9ddbc6cc968aaf99530bb17866f1a931a60b3aba9a39efc4b52cca0290", "frozen_controller_sha256": "sha256:e14670e40d2b1fbe4896e4b6dfb2902f121b81c8103efea3a74a11fed496809a", "preflight_manifest_sha256": "sha256:82922a77035da65a3495aabc3281370d2e556a881873aca2655f947231e48112", "scored_manifest_sha256": "sha256:1217666a0bfe5ab4d9aec0191213a3f1af8967f053b046922de656ed4a953be2", "launcher_sha256": "sha256:92665e9bf9592abfe7af88893cd4e2b09db4b630f4e63126bcebf64fb37810eb"},
+  "remaining_gates": ["successful_uid_bound_preflight", "fresh_exact_cell_duplicate_inventory", "root_scored_launch_authorization", "final_released_receipt", "final_v2_manifest_and_configmap_binding"],
+  "authorization": {"author": null, "preflight_authorized": false, "launch_authorized": false, "create_once": true, "required_priority_class": "fleet-train-high", "statement": null},
+  "terminal_contract": {"terminal_schema_version": "fleet-opencode-autocontinue-canary-terminal-v2", "post_exit_schema_version": "fleet-opencode-autocontinue-canary-post-exit-v1", "downward_job_uid_required": true, "downward_pod_uid_required": true, "post_exit_k8s_observer_required": true, "bulk_release_granted": false},
+  "privacy": {"credentials_included": false, "prompts_or_traces_included": false, "scores_included": false},
+  "receipt_sha256": "sha256:67e765455e989eb3d0908c046c327dbf5896527e7283381562d6cb4e2b92a956"
+}

@@ -1,0 +1,109 @@
+{
+  "schema_version": "fleet-hosted-opencode-task-boundary-shard-v1",
+  "shard_key": "qwen38_autocontinue_canary",
+  "campaign_id": "chris-q38-ac-canary1-v1",
+  "source_job_id": "chris-q38-ac-canary1-v1",
+  "serving_block": "qwen-hosted-autocontinue-v1",
+  "preflight_job_name": "chris-q38-ac-canary1-v1-preflight",
+  "scored_job_name": "chris-q38-ac-canary1-v1",
+  "sfs_root": "chris-q38-ac-canary1-v1",
+  "plan_sha256": "sha256:5b2c5c2792de233d70cc4cb5d1c2b5482807c3745090939bcb426227089ff3b3",
+  "source": {
+    "campaign_sha256": "sha256:63946f224a33eb0d2c2a6fdba34358ebf9ca379e5f0f156cd137c95a9b98097e",
+    "scientific_mapping_sha256": "sha256:de30c778e4337c79dea921b7463aa74760da59f972c928927c4359e828f1f009",
+    "flock_release_gate_receipt_sha256": "sha256:e9f34d35ac3c9e60d2698ebc1685374b98f13e41ac305df0609fb051f35c416c",
+    "hosted_health_receipt_sha256": "sha256:d81a01ffe1087d7d85fe511bc9c978461ba3e24a2c15675871cfb8668c49bd85",
+    "fresh_inventory_receipt_sha256": null,
+    "dedicated_parity_receipt_sha256": null
+  },
+  "model": {
+    "endpoint_origin": "https://inference.flt.build",
+    "repository": "Qwen/Qwen3.8-27B",
+    "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "served_id": "qwen3.8-27b",
+    "session_model": "fleet-cluster-opencode-1.18.27/qwen3.8-27b-opencode11827-autocontinue-v1"
+  },
+  "harness": {
+    "name": "opencode",
+    "version": "1.18.27",
+    "release_asset_sha256": "sha256:4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702",
+    "provider_adapter": "@ai-sdk/openai-compatible",
+    "context_management": "opencode_1.18.27_native_compaction_autocontinue_v1",
+    "context_window_size": 262144,
+    "max_model_requests": 600,
+    "max_output_tokens": 32768,
+    "timeout_seconds": 28800,
+    "settings_canonical_sha256": "sha256:0458cabed67de9e2001661e61707fb16d91669774add3adbf4c97dd559fb5531",
+    "settings_file_sha256": "sha256:1328f6eb97861443b712625d9038a924de9c220c146667565dd4c5bb73a6d8f8"
+  },
+  "treatment_block": {
+    "kind": "hosted_inference_endpoint_v1",
+    "serving_block": "qwen-hosted-autocontinue-v1",
+    "campaign_sha256": "sha256:63946f224a33eb0d2c2a6fdba34358ebf9ca379e5f0f156cd137c95a9b98097e",
+    "endpoint_origin": "https://inference.flt.build",
+    "served_id": "qwen3.8-27b",
+    "model_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "session_model": "fleet-cluster-opencode-1.18.27/qwen3.8-27b-opencode11827-autocontinue-v1",
+    "harness": {
+      "name": "opencode",
+      "version": "1.18.27",
+      "release_asset_sha256": "sha256:4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702",
+      "provider_adapter": "@ai-sdk/openai-compatible",
+      "context_management": "opencode_1.18.27_native_compaction_autocontinue_v1",
+      "context_window_size": 262144,
+      "max_model_requests": 600,
+      "max_output_tokens": 32768,
+      "timeout_seconds": 28800,
+      "settings_canonical_sha256": "sha256:0458cabed67de9e2001661e61707fb16d91669774add3adbf4c97dd559fb5531",
+      "settings_file_sha256": "sha256:1328f6eb97861443b712625d9038a924de9c220c146667565dd4c5bb73a6d8f8"
+    },
+    "required_task_tools": ["bash", "submit_report"],
+    "required_task_tool_catalog_sha256": "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a"
+  },
+  "authority": {
+    "multi_app_aggregation_mode": "fractional",
+    "provisioning_route_template": "/v1/rollout-rewards/{task_key}/versions/{task_version_id}/instances",
+    "scoring_mode": "partial",
+    "scoring_route_template": "/v1/rollout-rewards/{task_key}/versions/{task_version_id}",
+    "required_cyber_contract": {
+      "evidence_schema": "1.0.0",
+      "submission_protocol": "2.0.0",
+      "verifier_contract": "3.0.0"
+    }
+  },
+  "task_count": 1,
+  "pass_k": 4,
+  "total_session_count": 1,
+  "new_session_count": 1,
+  "credited_sessions": [],
+  "legacy_credited_sessions": 0,
+  "canary_acceptance_required_before_bulk": true,
+  "execution": {
+    "task_partition": "explicit_one_cell_canary",
+    "same_task_max_inflight": 1,
+    "retry_policy": "never_repeat_any_verifier_backed_outcome",
+    "future_nonzero_exit_policy": "credit_only_if_reward_ingest_cleanup_and_authoritative_session_match",
+    "infrastructure_failure_policy": "quarantine_only_exact_cell_no_automatic_retry",
+    "training_data_eligible": true,
+    "required_task_tools": ["bash", "submit_report"],
+    "required_task_tool_catalog_sha256": "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a",
+    "score_blind_concurrency_schedule": [{"accepted_outcomes_at_least": 0, "workers": 1, "headroom_gate": "fixed_at_launch_no_automatic_widening"}],
+    "inventory_policy": "conservative_no_same_model_session_for_task_key_v1",
+    "required_priority_class": "fleet-train-high",
+    "launch_authorized": false,
+    "endpoint_lease": {
+      "lease_root": "/mnt/sfs/endpoint-leases/opencode11827-autocontinue-primary-v1",
+      "endpoint_key": "qwen-hosted-autocontinue-v1",
+      "maximum_streams": 2
+    }
+  },
+  "tasks": [{
+    "rank": 1,
+    "source_rank": 4,
+    "environment": {"id": "cysec1-2-current-gen", "version": "v0.0.3", "version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22", "data_id": "commercial", "data_version": "v0.0.9", "runtime_seed_content_sha256": "c828dd0e888f2557c50079f334195527421138761269427cb21840033da1fac7", "ttl_seconds": 32400},
+    "task": {"key": "cysec1-2-current-gen_blackbox-8b929ebef54fb6207d898e95__blackbox_ctf_v1", "version_id": "02dd4e3f-d85d-4bf8-9976-eae2f102384d", "prompt_sha256": "sha256:61bcc61236247c7bda0146ca95767e6ec1e433c81d4ae29177c80ca6abef1fd3", "env_variables_sha256": "sha256:6bfd9646daf45cd3480837cd4a566f37d36b7dae07989e1e69f979f42f51a608", "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b", "cyber_contract": {"evidence_schema": "1.0.0", "submission_protocol": "2.0.0", "verifier_contract": "3.0.0"}},
+    "verifier": {"id": "01c289b3-e348-4314-8324-03d1d9c91942", "version": 1, "version_id": "e9624e43-c545-4e9f-8da9-eff5bca84252", "function_name": "verify", "sha256": "94e5ccfb3e3dd74eaebaeef458dd6825b0d8aec75cd58ca3990c5f719a1dfcd0"}
+  }],
+  "attempts": [{"rank": 1, "source_rank": 4, "attempt": 1, "ordinal": 1, "run_id": "chris-q38-ac-canary1-v1-sr004-a1-02dd4e3f", "network": "q38-ac-canary1-v1-sr004-a1-02dd4e3f"}],
+  "privacy": {"credentials_included": false, "prompts_included": false, "scores_included": false, "transcripts_included": false}
+}

@@ -1,0 +1,91 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: chris-q38-ac-canary1-v1-preflight
+  namespace: fleet-train-jobs
+  annotations: {cyber-post-train.fleet.ai/preview-only: "true", cyber-post-train.fleet.ai/launch-authorized: "false"}
+spec:
+  activeDeadlineSeconds: 900
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 604800
+  template:
+    metadata:
+      labels: {cyber-post-train.fleet.ai/experiment: q38-ac-canary1-pre-v1, cyber-post-train.fleet.ai/owner: chris, kueue.x-k8s.io/queue-name: training-lq}
+    spec:
+      restartPolicy: Never
+      priorityClassName: fleet-train-high
+      nodeSelector: {kubernetes.io/arch: amd64, workload: fleetai-training-ng-cpu}
+      tolerations: [{key: workload, operator: Equal, value: fleetai-training-ng-cpu, effect: NoSchedule}]
+      containers:
+        - name: preflight
+          image: ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
+          command: ["/bin/bash", "-ceu", "--"]
+          args:
+            - |
+              root=/workspace/cyber-post-train
+              mkdir -p "$root/evals/fleet/cluster" "$root/docs/evidence/qwen38-study"
+              touch "$root/evals/__init__.py" "$root/evals/fleet/__init__.py"
+              for file in self_hosted.py runner.py controller.py canary_controller.py endpoint_lease.py; do install -m 0644 "/bootstrap/$file" "$root/evals/fleet/$file"; done
+              mv "$root/evals/fleet/runner.py" "$root/evals/fleet/opencode_train_sweep_runner.py"
+              mv "$root/evals/fleet/controller.py" "$root/evals/fleet/hosted_sweep_controller.py"
+              mv "$root/evals/fleet/canary_controller.py" "$root/evals/fleet/autocontinue_canary_controller.py"
+              install -m 0644 /bootstrap/preflight-manifest.yaml "$root/evals/fleet/cluster/opencode-autocontinue-canary-preflights-v1.yaml"
+              install -m 0644 /bootstrap/compatibility.json "$root/docs/evidence/qwen38-study/2026-09-04-opencode-autocontinue-canary-controller-compatibility-v1.json"
+              cd "$root"
+              exec uv run --no-project --with httpx==0.28.1 python -m evals.fleet.autocontinue_canary_controller preflight --plan /bootstrap/plan.json --release /bootstrap/release.json --out /mnt/sfs/jobs/chris-q38-ac-canary1-v1-preflight/PREFLIGHT.json --out-dir /mnt/sfs/jobs/chris-q38-ac-canary1-v1 --repo "$root"
+          env:
+            - {name: JOB_UID, valueFrom: {fieldRef: {apiVersion: v1, fieldPath: "metadata.labels['batch.kubernetes.io/controller-uid']"}}}
+            - {name: POD_UID, valueFrom: {fieldRef: {apiVersion: v1, fieldPath: metadata.uid}}}
+            - {name: FLEET_API_KEY, valueFrom: {secretKeyRef: {name: chris-cyber-opencode-evals-v2, key: FLEET_API_KEY}}}
+          resources: {requests: {cpu: 100m, memory: 256Mi}, limits: {cpu: 250m, memory: 512Mi}}
+          volumeMounts: [{name: bootstrap, mountPath: /bootstrap, readOnly: true}, {name: workspace, mountPath: /workspace}, {name: sfs, mountPath: /mnt/sfs}]
+      volumes:
+        - {name: bootstrap, configMap: {name: chris-q38-ac-canary1-pre-v1}}
+        - {name: workspace, emptyDir: {sizeLimit: 1Gi}}
+        - {name: sfs, persistentVolumeClaim: {claimName: sfs-shared}}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: chris-glm53-ac-canary1-v1-preflight
+  namespace: fleet-train-jobs
+  annotations: {cyber-post-train.fleet.ai/preview-only: "true", cyber-post-train.fleet.ai/launch-authorized: "false"}
+spec:
+  activeDeadlineSeconds: 900
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 604800
+  template:
+    metadata:
+      labels: {cyber-post-train.fleet.ai/experiment: glm53-ac-canary1-pre-v1, cyber-post-train.fleet.ai/owner: chris, kueue.x-k8s.io/queue-name: training-lq}
+    spec:
+      restartPolicy: Never
+      priorityClassName: fleet-train-high
+      nodeSelector: {kubernetes.io/arch: amd64, workload: fleetai-training-ng-cpu}
+      tolerations: [{key: workload, operator: Equal, value: fleetai-training-ng-cpu, effect: NoSchedule}]
+      containers:
+        - name: preflight
+          image: ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
+          command: ["/bin/bash", "-ceu", "--"]
+          args:
+            - |
+              root=/workspace/cyber-post-train
+              mkdir -p "$root/evals/fleet/cluster" "$root/docs/evidence/qwen38-study"
+              touch "$root/evals/__init__.py" "$root/evals/fleet/__init__.py"
+              for file in self_hosted.py runner.py controller.py canary_controller.py endpoint_lease.py; do install -m 0644 "/bootstrap/$file" "$root/evals/fleet/$file"; done
+              mv "$root/evals/fleet/runner.py" "$root/evals/fleet/opencode_train_sweep_runner.py"
+              mv "$root/evals/fleet/controller.py" "$root/evals/fleet/hosted_sweep_controller.py"
+              mv "$root/evals/fleet/canary_controller.py" "$root/evals/fleet/autocontinue_canary_controller.py"
+              install -m 0644 /bootstrap/preflight-manifest.yaml "$root/evals/fleet/cluster/opencode-autocontinue-canary-preflights-v1.yaml"
+              install -m 0644 /bootstrap/compatibility.json "$root/docs/evidence/qwen38-study/2026-09-04-opencode-autocontinue-canary-controller-compatibility-v1.json"
+              cd "$root"
+              exec uv run --no-project --with httpx==0.28.1 python -m evals.fleet.autocontinue_canary_controller preflight --plan /bootstrap/plan.json --release /bootstrap/release.json --out /mnt/sfs/jobs/chris-glm53-ac-canary1-v1-preflight/PREFLIGHT.json --out-dir /mnt/sfs/jobs/chris-glm53-ac-canary1-v1 --repo "$root"
+          env:
+            - {name: JOB_UID, valueFrom: {fieldRef: {apiVersion: v1, fieldPath: "metadata.labels['batch.kubernetes.io/controller-uid']"}}}
+            - {name: POD_UID, valueFrom: {fieldRef: {apiVersion: v1, fieldPath: metadata.uid}}}
+            - {name: FLEET_API_KEY, valueFrom: {secretKeyRef: {name: chris-cyber-opencode-evals-v2, key: FLEET_API_KEY}}}
+          resources: {requests: {cpu: 100m, memory: 256Mi}, limits: {cpu: 250m, memory: 512Mi}}
+          volumeMounts: [{name: bootstrap, mountPath: /bootstrap, readOnly: true}, {name: workspace, mountPath: /workspace}, {name: sfs, mountPath: /mnt/sfs}]
+      volumes:
+        - {name: bootstrap, configMap: {name: chris-glm53-ac-canary1-pre-v1}}
+        - {name: workspace, emptyDir: {sizeLimit: 1Gi}}
+        - {name: sfs, persistentVolumeClaim: {claimName: sfs-shared}}
