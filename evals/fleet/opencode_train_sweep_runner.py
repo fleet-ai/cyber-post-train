@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import fcntl
 import json
 import os
 import queue
@@ -17,10 +18,76 @@ from evals.fleet import self_hosted
 
 PLAN_SCHEMA = "fleet-selfhosted-opencode-pass4-plan-v1"
 PARALLEL_PLAN_SCHEMA = "fleet-selfhosted-opencode-pass4-parallel-plan-v1"
+DRAIN_REQUEST_SCHEMA = "fleet-selfhosted-opencode-pass4-drain-request-v1"
+DRAINED_SCHEMA = "fleet-selfhosted-opencode-pass4-drained-v1"
+_CLAIM_GATE = threading.Lock()
+
+
+class DrainRequested(RuntimeError):
+    """A UID-bound operator request closed the attempt-claim gate."""
+
+    def __init__(self, request: dict[str, Any]) -> None:
+        super().__init__("campaign drain requested")
+        self.request = request
 
 
 def _digest_without(value: dict[str, Any], field: str) -> str:
     return self_hosted.digest_without(value, field)
+
+
+def _load_drain_request(plan: dict[str, Any], root: Path) -> dict[str, Any] | None:
+    path = root / "DRAIN-REQUEST.json"
+    if not path.exists():
+        return None
+    if path.is_symlink() or not path.is_file():
+        raise RuntimeError("campaign drain request is not a safe regular file")
+    request = json.loads(path.read_text())
+    if (
+        request.get("schema_version") != DRAIN_REQUEST_SCHEMA
+        or request.get("request_sha256") != _digest_without(request, "request_sha256")
+        or request.get("plan_sha256") != plan.get("plan_sha256")
+        or request.get("campaign_id") != plan.get("campaign_id")
+    ):
+        raise RuntimeError("campaign drain request binding or digest drifted")
+    job_uid = os.environ.get("JOB_UID")
+    pod_uid = os.environ.get("POD_UID")
+    if not job_uid or not pod_uid:
+        raise RuntimeError("campaign drain request cannot be verified without Job/Pod UIDs")
+    if request.get("target_job_uid") != job_uid or request.get("target_pod_uid") != pod_uid:
+        raise RuntimeError("campaign drain request targets a different Job or Pod")
+    return request
+
+
+def _claim_or_raise_drained(
+    plan: dict[str, Any], root: Path, claim_path: Path, claim: dict[str, Any]
+) -> None:
+    """Serialize a claim against an external drain writer on the shared filesystem."""
+    gate_path = root / ".attempt-claim-gate.lock"
+    with _CLAIM_GATE, gate_path.open("a+b") as gate:
+        fcntl.flock(gate.fileno(), fcntl.LOCK_EX)
+        request = _load_drain_request(plan, root)
+        if request is not None:
+            raise DrainRequested(request)
+        self_hosted.write_json_once(claim_path, claim)
+
+
+def _write_drained(plan: dict[str, Any], root: Path, request: dict[str, Any]) -> dict[str, Any]:
+    receipt = {
+        "schema_version": DRAINED_SCHEMA,
+        "plan_sha256": plan["plan_sha256"],
+        "campaign_id": plan["campaign_id"],
+        "drain_request_sha256": request["request_sha256"],
+        "job_uid": os.environ["JOB_UID"],
+        "pod_uid": os.environ["POD_UID"],
+        "accepted_new_sessions": len(_accepted_attempts(root)),
+        "attempt_claim_gate_closed": True,
+        "in_flight_attempts_completed_before_exit": True,
+        "scores_included": False,
+        "prompts_or_traces_included": False,
+    }
+    receipt["receipt_sha256"] = _digest_without(receipt, "receipt_sha256")
+    self_hosted.write_json_once(root / "DRAINED.json", receipt)
+    return receipt
 
 
 def validate_plan(plan: dict[str, Any]) -> None:
@@ -72,25 +139,15 @@ def validate_parallel_plan(plan: dict[str, Any]) -> None:
     credited = plan.get("credited_smoke") or {}
     cells = [
         (int(credited.get("rank") or 0), int(credited.get("attempt") or 0)),
-        *[
-            (int(row.get("rank") or 0), int(row.get("attempt") or 0))
-            for row in prior
-        ],
-        *[
-            (int(row.get("rank") or 0), int(row.get("attempt") or 0))
-            for row in attempts
-        ],
+        *[(int(row.get("rank") or 0), int(row.get("attempt") or 0)) for row in prior],
+        *[(int(row.get("rank") or 0), int(row.get("attempt") or 0)) for row in attempts],
     ]
     expected_cells = {
-        (rank, attempt)
-        for rank in range(1, task_count + 1)
-        for attempt in range(1, 5)
+        (rank, attempt) for rank in range(1, task_count + 1) for attempt in range(1, 5)
     }
     if len(cells) != len(set(cells)) or set(cells) != expected_cells:
         raise ValueError("parallel full-plan Cartesian pass@4 cells drifted")
-    if [int(row.get("ordinal") or 0) for row in attempts] != list(
-        range(1, len(attempts) + 1)
-    ):
+    if [int(row.get("ordinal") or 0) for row in attempts] != list(range(1, len(attempts) + 1)):
         raise ValueError("parallel full-plan attempt ordinals drifted")
     prior_sessions = [row.get("session_id") for row in prior]
     prior_verifiers = [row.get("verifier_execution_id") for row in prior]
@@ -243,9 +300,7 @@ def _parallel_allowed_sessions(
     allowed = set()
     if int(plan["credited_smoke"]["rank"]) == rank:
         allowed.add(plan["credited_smoke"]["session_id"])
-    allowed.update(
-        row["session_id"] for row in plan["prior_accepted"] if int(row["rank"]) == rank
-    )
+    allowed.update(row["session_id"] for row in plan["prior_accepted"] if int(row["rank"]) == rank)
     attempt_by_run = {row["run_id"]: row for row in plan["attempts"]}
     for receipt in _accepted_attempts(root).values():
         attempt = attempt_by_run.get(receipt["run_id"])
@@ -334,7 +389,12 @@ def _run_parallel_attempt(
     claim["claim_sha256"] = _digest_without(claim, "claim_sha256")
     claims_dir = root / "claims"
     claims_dir.mkdir(exist_ok=True)
-    self_hosted.write_json_once(claims_dir / f"{item['run_id']}.json", claim)
+    _claim_or_raise_drained(
+        plan,
+        root,
+        claims_dir / f"{item['run_id']}.json",
+        claim,
+    )
     self_hosted.run(config, out_dir, proxy_script)
     receipt = _accept_attempt(
         out_dir,
@@ -368,7 +428,7 @@ def _run_attempt_wave(
     proxy_script: Path,
     key: str,
     max_workers: int,
-) -> None:
+) -> dict[str, Any] | None:
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         remaining = iter(items)
         active: set[Future[dict[str, Any]]] = set()
@@ -394,19 +454,23 @@ def _run_attempt_wave(
         for _ in range(min(max_workers, len(items))):
             submit_next()
         failure: Exception | None = None
+        drain_request: dict[str, Any] | None = None
         while active:
             done, active = wait(active, return_when=FIRST_COMPLETED)
             for future in done:
                 try:
                     future.result()
+                except DrainRequested as exc:
+                    drain_request = exc.request
                 except Exception as exc:
                     failure = exc
-            if failure is None:
+            if failure is None and drain_request is None:
                 for _ in range(len(done)):
                     if not submit_next():
                         break
         if failure is not None:
             raise failure
+        return drain_request
 
 
 def _run_task_groups(
@@ -417,12 +481,13 @@ def _run_task_groups(
     proxy_script: Path,
     key: str,
     max_workers: int,
-) -> None:
+) -> dict[str, Any] | None:
     work: queue.Queue[list[dict[str, Any]]] = queue.Queue()
     for group in groups:
         work.put(group)
     stop = threading.Event()
     failures: list[Exception] = []
+    drain_requests: list[dict[str, Any]] = []
     failure_lock = threading.Lock()
 
     def worker() -> None:
@@ -443,6 +508,11 @@ def _run_task_groups(
                         proxy_script,
                         key,
                     )
+            except DrainRequested as exc:
+                with failure_lock:
+                    drain_requests.append(exc.request)
+                stop.set()
+                return
             except Exception as exc:
                 with failure_lock:
                     failures.append(exc)
@@ -457,11 +527,15 @@ def _run_task_groups(
             future.result()
     if failures:
         raise failures[0]
+    if drain_requests:
+        first = drain_requests[0]
+        if any(row.get("request_sha256") != first.get("request_sha256") for row in drain_requests):
+            raise RuntimeError("conflicting campaign drain requests observed")
+        return first
+    return None
 
 
-def run_parallel_plan(
-    plan: dict[str, Any], root: Path, proxy_script: Path
-) -> dict[str, Any]:
+def run_parallel_plan(plan: dict[str, Any], root: Path, proxy_script: Path) -> dict[str, Any]:
     validate_parallel_plan(plan)
     root.mkdir(parents=True, exist_ok=False)
     root.chmod(0o700)
@@ -493,7 +567,7 @@ def run_parallel_plan(
         if len(wave) == int(schedule["infrastructure_valid_sessions_before_continuation"]):
             break
         wave.append(by_rank[rank].pop(0))
-    _run_attempt_wave(
+    drain_request = _run_attempt_wave(
         plan,
         task_by_rank,
         wave,
@@ -502,10 +576,12 @@ def run_parallel_plan(
         key,
         int(schedule["max_concurrent"]),
     )
+    if drain_request is not None:
+        return _write_drained(plan, root, drain_request)
     if len(_accepted_attempts(root)) != len(wave):
         raise RuntimeError("score-blind concurrency ramp gate did not reconcile")
     groups = [group for _, group in sorted(by_rank.items()) if group]
-    _run_task_groups(
+    drain_request = _run_task_groups(
         plan,
         task_by_rank,
         groups,
@@ -514,6 +590,8 @@ def run_parallel_plan(
         key,
         int(schedule["max_concurrent"]),
     )
+    if drain_request is not None:
+        return _write_drained(plan, root, drain_request)
     accepted_new = len(_accepted_attempts(root))
     final = {
         "schema_version": "fleet-selfhosted-opencode-pass4-parallel-accepted-v1",
@@ -531,19 +609,12 @@ def run_parallel_plan(
     if final["total_sessions"] != plan["total_session_count"]:
         raise RuntimeError("parallel terminal total-session count drifted")
     accepted_cells = {
-        (int(row["rank"]), int(row["attempt"]))
-        for row in _accepted_attempts(root).values()
+        (int(row["rank"]), int(row["attempt"])) for row in _accepted_attempts(root).values()
     }
-    prior_cells = {
-        (int(row["rank"]), int(row["attempt"])) for row in plan["prior_accepted"]
-    }
-    credited_cell = {
-        (int(plan["credited_smoke"]["rank"]), int(plan["credited_smoke"]["attempt"]))
-    }
+    prior_cells = {(int(row["rank"]), int(row["attempt"])) for row in plan["prior_accepted"]}
+    credited_cell = {(int(plan["credited_smoke"]["rank"]), int(plan["credited_smoke"]["attempt"]))}
     if accepted_cells | prior_cells | credited_cell != {
-        (rank, attempt)
-        for rank in range(1, int(plan["task_count"]) + 1)
-        for attempt in range(1, 5)
+        (rank, attempt) for rank in range(1, int(plan["task_count"]) + 1) for attempt in range(1, 5)
     }:
         raise RuntimeError("parallel terminal Cartesian pass@4 evidence drifted")
     final["receipt_sha256"] = _digest_without(final, "receipt_sha256")
@@ -597,6 +668,9 @@ def run_plan(plan: dict[str, Any], root: Path, proxy_script: Path) -> dict[str, 
             out_dir = root / "attempts" / item["run_id"]
             if out_dir.exists():
                 raise RuntimeError("planned attempt output already exists; refusing duplicate")
+            request = _load_drain_request(plan, root)
+            if request is not None:
+                return _write_drained(plan, root, request)
             self_hosted.run(config, out_dir, proxy_script)
             _accept_attempt(out_dir, config)
             progress = {
@@ -610,9 +684,7 @@ def run_plan(plan: dict[str, Any], root: Path, proxy_script: Path) -> dict[str, 
             progress["receipt_sha256"] = _digest_without(progress, "receipt_sha256")
             progress_dir = root / "progress"
             progress_dir.mkdir(exist_ok=True)
-            self_hosted.write_json_once(
-                progress_dir / f"{item['ordinal']:04d}.json", progress
-            )
+            self_hosted.write_json_once(progress_dir / f"{item['ordinal']:04d}.json", progress)
     final = {
         "schema_version": "fleet-selfhosted-opencode-pass4-accepted-v1",
         "accepted": True,

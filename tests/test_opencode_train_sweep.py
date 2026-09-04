@@ -8,7 +8,12 @@ from pathlib import Path
 import httpx
 import pytest
 
-from evals.fleet import opencode_train_sweep, opencode_train_sweep_runner, self_hosted
+from evals.fleet import (
+    opencode_train_sweep,
+    opencode_train_sweep_drain,
+    opencode_train_sweep_runner,
+    self_hosted,
+)
 
 
 def _source_state(plan: dict, accepted: int) -> dict:
@@ -138,17 +143,16 @@ def test_full_cluster_plan_keys_match_bootstrap_and_runtime() -> None:
     assert '--from-file="$plan_key=$plan_path"' in submitter
     assert "requests: {cpu: 750m, memory: 2Gi" in manifest
     assert "requests: {cpu: 250m, memory: 1Gi" in manifest
-    assert "--parallel" in (
-        Path(__file__).parents[1]
-        / "evals/fleet/scripts/run_opencode_train_sweep_full.sh"
-    ).read_text()
+    assert (
+        "--parallel"
+        in (
+            Path(__file__).parents[1] / "evals/fleet/scripts/run_opencode_train_sweep_full.sh"
+        ).read_text()
+    )
 
 
 def test_parallel_successor_preserves_exact_cartesian_cells() -> None:
-    path = (
-        Path(__file__).parents[1]
-        / "evals/fleet/configs/qwen38-opencode-train50-pass4-v3.json"
-    )
+    path = Path(__file__).parents[1] / "evals/fleet/configs/qwen38-opencode-train50-pass4-v3.json"
     original = json.loads(path.read_text())
     source_attempt = original["attempts"][0]
     receipt = {
@@ -179,9 +183,7 @@ def test_parallel_successor_preserves_exact_cartesian_cells() -> None:
 
     broken_total = json.loads(json.dumps(successor))
     broken_total["total_session_count"] = 401
-    broken_total["plan_sha256"] = self_hosted.digest_without(
-        broken_total, "plan_sha256"
-    )
+    broken_total["plan_sha256"] = self_hosted.digest_without(broken_total, "plan_sha256")
     with pytest.raises(ValueError, match="total-session"):
         opencode_train_sweep_runner.validate_parallel_plan(broken_total)
 
@@ -210,8 +212,7 @@ def test_parallel_task_groups_never_overlap_one_task(
 
     monkeypatch.setattr(opencode_train_sweep_runner, "_run_parallel_attempt", fake_attempt)
     groups = [
-        [{"rank": rank, "attempt": attempt} for attempt in (1, 2, 3, 4)]
-        for rank in range(1, 9)
+        [{"rank": rank, "attempt": attempt} for attempt in (1, 2, 3, 4)] for rank in range(1, 9)
     ]
     opencode_train_sweep_runner._run_task_groups(
         {},
@@ -251,3 +252,74 @@ def test_parallel_canary_stops_new_claims_after_failure(
             2,
         )
     assert set(started) == {1, 2}
+
+
+def test_uid_bound_drain_closes_claim_gate(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    plan = {"plan_sha256": "sha256:plan", "campaign_id": "campaign-v1"}
+    request = {
+        "schema_version": opencode_train_sweep_runner.DRAIN_REQUEST_SCHEMA,
+        "plan_sha256": plan["plan_sha256"],
+        "campaign_id": plan["campaign_id"],
+        "target_job_uid": "job-uid",
+        "target_pod_uid": "pod-uid",
+        "reason": "operator_protocol_change",
+    }
+    request["request_sha256"] = self_hosted.digest_without(request, "request_sha256")
+    (tmp_path / "DRAIN-REQUEST.json").write_text(json.dumps(request))
+    (tmp_path / "claims").mkdir()
+    monkeypatch.setenv("JOB_UID", "job-uid")
+    monkeypatch.setenv("POD_UID", "pod-uid")
+
+    claim_path = tmp_path / "claims" / "attempt.json"
+    with pytest.raises(opencode_train_sweep_runner.DrainRequested) as raised:
+        opencode_train_sweep_runner._claim_or_raise_drained(
+            plan, tmp_path, claim_path, {"claim": True}
+        )
+
+    assert raised.value.request["request_sha256"] == request["request_sha256"]
+    assert not claim_path.exists()
+
+
+def test_drain_rejects_stale_pod_target(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    plan = {"plan_sha256": "sha256:plan", "campaign_id": "campaign-v1"}
+    request = {
+        "schema_version": opencode_train_sweep_runner.DRAIN_REQUEST_SCHEMA,
+        "plan_sha256": plan["plan_sha256"],
+        "campaign_id": plan["campaign_id"],
+        "target_job_uid": "job-uid",
+        "target_pod_uid": "old-pod-uid",
+    }
+    request["request_sha256"] = self_hosted.digest_without(request, "request_sha256")
+    (tmp_path / "DRAIN-REQUEST.json").write_text(json.dumps(request))
+    monkeypatch.setenv("JOB_UID", "job-uid")
+    monkeypatch.setenv("POD_UID", "new-pod-uid")
+
+    with pytest.raises(RuntimeError, match="different Job or Pod"):
+        opencode_train_sweep_runner._load_drain_request(plan, tmp_path)
+
+
+def test_drain_writer_serializes_request_with_claim_gate(tmp_path: Path) -> None:
+    plan = {"campaign_id": "campaign-v1", "tasks": [], "attempts": []}
+    plan["plan_sha256"] = self_hosted.digest_without(plan, "plan_sha256")
+    root = tmp_path / "campaign"
+    root.mkdir()
+    (root / "PLAN.json").write_text(json.dumps(plan))
+
+    request = opencode_train_sweep_drain.request_drain(
+        plan=plan,
+        root=root,
+        target_job_uid="job-uid",
+        target_pod_uid="pod-uid",
+        reason="operator_protocol_change",
+    )
+
+    assert request["request_sha256"] == self_hosted.digest_without(request, "request_sha256")
+    assert json.loads((root / "DRAIN-REQUEST.json").read_text()) == request
+    with pytest.raises(FileExistsError):
+        opencode_train_sweep_drain.request_drain(
+            plan=plan,
+            root=root,
+            target_job_uid="job-uid",
+            target_pod_uid="pod-uid",
+            reason="duplicate",
+        )
