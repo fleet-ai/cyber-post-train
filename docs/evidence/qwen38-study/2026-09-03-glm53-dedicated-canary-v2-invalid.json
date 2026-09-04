@@ -1,0 +1,77 @@
+{
+  "schema_version": "fleet-cyber-glm53-dedicated-canary-invalid-v1",
+  "observed_at": "2026-09-04T03:04:37Z",
+  "classification": "infrastructure-invalid",
+  "api_run": {
+    "name": "ft-run-a37679c2",
+    "status": "Initializing",
+    "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-glm53-tp8-a-v2"
+  },
+  "ray_job": {
+    "name": "ft-run-a37679c2",
+    "uid": "5f10bd67-c165-4b97-abfc-69d7b5ab2ff8",
+    "generation": 5,
+    "deployment_status": "Initializing",
+    "job_status": null
+  },
+  "workload": {
+    "name": "rayjob-ft-run-a37679c2-c9018",
+    "uid": "c330ba0f-b45b-407b-bde5-8912b576b058",
+    "admitted": true,
+    "gpu_request": 8
+  },
+  "last_cluster": {
+    "name": "ft-run-a37679c2-bs7k2",
+    "uid": "0115024d-6fbb-4bbb-a14e-259c085dc4c2",
+    "head_service_uid": "9c61b5cc-ff8e-4e45-bc02-e9265fedb145",
+    "head_pod_name": "ft-run-a37679c2-bs7k2-head-c6gcv",
+    "head_pod_uid": "7b434f4d-fc9d-4469-b9ad-4109812c293f",
+    "head_pod_restarts": 0
+  },
+  "image": {
+    "requested": "ghcr.io/fleet-ai/cyber-post-train-glm53-runtime@sha256:ec93ba50613fd13fb4c0b0a9105767ab18209a1e0108dab0923aad694c0206ec",
+    "resolved_image_id": "ghcr.io/fleet-ai/cyber-post-train-glm53-runtime@sha256:ec93ba50613fd13fb4c0b0a9105767ab18209a1e0108dab0923aad694c0206ec",
+    "private_pull_succeeded": true
+  },
+  "failure": {
+    "signature": "kuberay_dashboard_port_not_found",
+    "rendered_head_ports": [
+      {
+        "name": "http",
+        "container_port": 8000
+      }
+    ],
+    "submitter_job_count": 0,
+    "sglang_health_ready": false,
+    "run_root_file_count": 0,
+    "run_root_byte_count": 0
+  },
+  "outcome_integrity": {
+    "model_requests": 0,
+    "scored_sessions": 0,
+    "verifier_executions": 0,
+    "capability_claim_allowed": false,
+    "scores_read": false,
+    "prompts_or_traces_read": false
+  },
+  "replacement": {
+    "config": "evals/fleet/configs/dedicated-glm53-tp8-a-v3.json",
+    "config_sha256": "sha256:2e4c25426077de140629322e1b90733297b68c54a786108d09dbf67fc38a4082",
+    "fix": "add_named_dashboard_port_8265",
+    "launched": false
+  },
+  "deletion": {
+    "authorized": true,
+    "completed": true,
+    "completed_at": "2026-09-04T03:05:18Z",
+    "api_delete_http_status": 204,
+    "api_readback_http_status": 404,
+    "ray_job_absent": true,
+    "ray_cluster_absent": true,
+    "workload_absent": true,
+    "pod_absent": true,
+    "service_absent": true,
+    "recoverability": "RayJob_and_owned_ephemeral_cluster_objects_are_not_recoverable_after_deletion;_sanitized_UID_bound_evidence_and_empty_SFS_run_root_are_preserved"
+  },
+  "receipt_sha256": "sha256:826a76ab30e201dfdeb296f85e618ca24506237ddc0d4f46b2d6f2ea886e54c5"
+}
