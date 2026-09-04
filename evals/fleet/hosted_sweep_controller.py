@@ -87,6 +87,17 @@ COMPLETED_EXIT1_GAP_AUTH_STATEMENT = (
     "adding concurrency on any regression. Run only the five never-started cells per "
     "model; never repeat credited cells or launch r56/r111."
 )
+COMPLETED_EXIT1_GAP_V2_AUTH_STATEMENT = (
+    "I authorize create-once scored launches of Qwen gap plan "
+    "sha256:2a86babdce4914e85bd2261b15cc5e2b476bf2f34dd224c2d76b9b8af5caeabc "
+    "and hosted GLM gap plan "
+    "sha256:6cc8e9cb7b7f6fbb7fd7a0ca97b9d434e410e2d6cffcc6d9cc9a41cd586532c0 "
+    "after exact reconciliation, treatment, sealed-credit, duplicate, overlap, "
+    "and preflight gates pass. These fresh v2 campaigns run only five never-started "
+    "cells per model, use fleet-train-high, raise concurrency only to two streams "
+    "per model endpoint, preserve Q50/200 and G100/400, must not repeat any credited "
+    "cell, and must not launch r56/r111."
+)
 CAMPAIGNS = {
     "qwen38": "chris-cyber-q38-opencode11827-hosted-complete49-p4-v5",
     "glm53": "chris-cyber-glm53-opencode11827-hosted-complete99-p4-v5",
@@ -701,6 +712,18 @@ def validate_completed_exit1_gap_scoring_release(
     privacy = release.get("privacy") or {}
     source = plan.get("source") or {}
     is_qwen = plan["shard_key"].startswith("qwen38")
+    is_v2 = plan.get("campaign_id") in {
+        QWEN_COMPLETED_EXIT1_GAP_CAMPAIGN,
+        GLM_COMPLETED_EXIT1_GAP_CAMPAIGN,
+    }
+    expected_timestamp = (
+        "2026-09-04T07:38:44Z" if is_v2 else "2026-09-04T07:30:30Z"
+    )
+    expected_statement = (
+        COMPLETED_EXIT1_GAP_V2_AUTH_STATEMENT
+        if is_v2
+        else COMPLETED_EXIT1_GAP_AUTH_STATEMENT
+    )
     expected_attempts = (
         [[6, 3], [6, 4], [7, 2], [7, 3], [7, 4]]
         if is_qwen
@@ -724,6 +747,13 @@ def validate_completed_exit1_gap_scoring_release(
         != source.get("gap_source_receipt_sha256")
         or gates.get("held_unused_replacement_rank")
         != source.get("held_unused_replacement_rank")
+        or (is_v2 and gates.get("sealed_credit_gate_required") is not True)
+        or (
+            is_v2
+            and is_qwen
+            and gates.get("preflight_v1_failure_receipt_sha256")
+            != source.get("preflight_v1_failure_receipt_sha256")
+        )
         or not all(
             gates.get(field) is True
             for field in (
@@ -744,9 +774,9 @@ def validate_completed_exit1_gap_scoring_release(
         or scheduling.get("workers") != 1
         or scheduling.get("true_non_preemptible_available") is not False
         or scheduling.get("priority_class_is_not_preemption_immunity") is not True
-        or authorization.get("timestamp_utc") != "2026-09-04T07:30:30Z"
+        or authorization.get("timestamp_utc") != expected_timestamp
         or authorization.get("author") != "/root"
-        or authorization.get("statement") != COMPLETED_EXIT1_GAP_AUTH_STATEMENT
+        or authorization.get("statement") != expected_statement
         or authorization.get("scored_launch_authorized") is not True
         or authorization.get("create_once") is not True
         or authorization.get("must_not_repeat") is not True

@@ -1,0 +1,100 @@
+{
+  "schema_version": "fleet-completed-exit1-gap-scoring-release-v1",
+  "created_at": "2026-09-04T07:38:44Z",
+  "append_only": true,
+  "supersedes": null,
+  "plan": {
+    "path": "evals/fleet/configs/qwen38-opencode-hosted-completed-exit1-gap-pass4-v2.json",
+    "plan_sha256": "sha256:2a86babdce4914e85bd2261b15cc5e2b476bf2f34dd224c2d76b9b8af5caeabc",
+    "task_count": 2,
+    "credited_cell_count": 3,
+    "new_cell_count": 5,
+    "pass_k": 4,
+    "attempt_cells": [
+      [
+        6,
+        3
+      ],
+      [
+        6,
+        4
+      ],
+      [
+        7,
+        2
+      ],
+      [
+        7,
+        3
+      ],
+      [
+        7,
+        4
+      ]
+    ]
+  },
+  "gates": {
+    "reconciliation_receipt_sha256": "sha256:5435c0a25b3be1872c1aae09fd88858c5251272e164ab8eb49ab66b4c5a4ca0e",
+    "gap_source_receipt_sha256": "sha256:30338f0561867bda8ab8b10cd2601b3a1ce0c60ad27d7fd55f9a7ad87d4b46a2",
+    "held_unused_replacement_rank": 56,
+    "sealed_credit_gate_required": true,
+    "exact_treatment_gate_required": true,
+    "duplicate_gate_required": true,
+    "overlap_gate_required": true,
+    "fresh_create_once_identity_required": true,
+    "credited_cells_must_not_repeat": true,
+    "primary_denominator_completion_gate_required": true,
+    "preflight_v1_failure_receipt_sha256": "sha256:9b294a1f55059f3ba12670b060caf86ed42d33a84eb4b462e29f05f521aa3b8b"
+  },
+  "treatment": {
+    "endpoint_origin": "https://inference.flt.build",
+    "harness": {
+      "context_management": "opencode_1.18.27_native_compaction_no_autocontinue",
+      "context_window_size": 262144,
+      "max_model_requests": 600,
+      "max_output_tokens": 32768,
+      "name": "opencode",
+      "provider_adapter": "@ai-sdk/openai-compatible",
+      "release_asset_sha256": "sha256:4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702",
+      "timeout_seconds": 28800,
+      "version": "1.18.27"
+    },
+    "kind": "hosted_inference_endpoint_v1",
+    "model_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "required_task_tool_catalog_sha256": "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a",
+    "required_task_tools": [
+      "bash",
+      "submit_report"
+    ],
+    "served_id": "qwen3.8-27b",
+    "session_model": "fleet-cluster-opencode-1.18.27/qwen3.8-27b"
+  },
+  "concurrency": {
+    "authorized_hosted_streams_per_model_endpoint": 2,
+    "authorized_hosted_streams_total": 4,
+    "authorized_scored_controllers_total": 6,
+    "third_hosted_stream_per_endpoint_authorized": false,
+    "stop_adding_on_regression": true
+  },
+  "scheduling": {
+    "required_priority_class": "fleet-train-high",
+    "workers": 1,
+    "true_non_preemptible_available": false,
+    "priority_class_is_not_preemption_immunity": true
+  },
+  "authorization": {
+    "timestamp_utc": "2026-09-04T07:38:44Z",
+    "author": "/root",
+    "statement": "I authorize create-once scored launches of Qwen gap plan sha256:2a86babdce4914e85bd2261b15cc5e2b476bf2f34dd224c2d76b9b8af5caeabc and hosted GLM gap plan sha256:6cc8e9cb7b7f6fbb7fd7a0ca97b9d434e410e2d6cffcc6d9cc9a41cd586532c0 after exact reconciliation, treatment, sealed-credit, duplicate, overlap, and preflight gates pass. These fresh v2 campaigns run only five never-started cells per model, use fleet-train-high, raise concurrency only to two streams per model endpoint, preserve Q50/200 and G100/400, must not repeat any credited cell, and must not launch r56/r111.",
+    "scored_launch_authorized": true,
+    "create_once": true,
+    "must_not_repeat": true
+  },
+  "privacy": {
+    "scores_read": false,
+    "prompts_or_traces_read": false,
+    "task_content_included": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:a6a30398e7696aba038b53c4257a6e2caf4c439dee5de45ea6c99e704ef7d709"
+}

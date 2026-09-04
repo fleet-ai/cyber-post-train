@@ -146,6 +146,12 @@ QWEN_COMPLETED_EXIT1_GAP_RELEASE = Path(
 GLM_COMPLETED_EXIT1_GAP_RELEASE = Path(
     "docs/evidence/qwen38-study/2026-09-04-glm53-completed-exit1-gap-scoring-release-v1.json"
 )
+QWEN_COMPLETED_EXIT1_GAP_RELEASE_V2 = Path(
+    "docs/evidence/qwen38-study/2026-09-04-qwen38-completed-exit1-gap-scoring-release-v2.json"
+)
+GLM_COMPLETED_EXIT1_GAP_RELEASE_V2 = Path(
+    "docs/evidence/qwen38-study/2026-09-04-glm53-completed-exit1-gap-scoring-release-v2.json"
+)
 GLM_DEDICATED_B_V5_RELEASE = Path(
     "docs/evidence/qwen38-study/2026-09-04-glm53-dedicated-b-v5-scoring-release-v1.json"
 )
@@ -2395,6 +2401,8 @@ def test_completed_exit1_gap_source_rejects_any_replacement_claim() -> None:
     [
         (QWEN_COMPLETED_EXIT1_GAP_PLAN_V1, QWEN_COMPLETED_EXIT1_GAP_RELEASE),
         (GLM_COMPLETED_EXIT1_GAP_PLAN_V1, GLM_COMPLETED_EXIT1_GAP_RELEASE),
+        (QWEN_COMPLETED_EXIT1_GAP_PLAN, QWEN_COMPLETED_EXIT1_GAP_RELEASE_V2),
+        (GLM_COMPLETED_EXIT1_GAP_PLAN, GLM_COMPLETED_EXIT1_GAP_RELEASE_V2),
     ],
 )
 def test_completed_exit1_gap_release_binds_cells_and_concurrency(
