@@ -279,6 +279,15 @@ SCHEDULE = [
     },
 ]
 _HOSTED_CLAIM_GATE = threading.Lock()
+AUTOCONTINUE_LEASE_ROOT = (
+    "/mnt/sfs/endpoint-leases/opencode11827-autocontinue-primary-v1"
+)
+AUTOCONTINUE_SERVING_BLOCKS = {
+    "qwen-hosted-autocontinue-v1",
+    "glm-hosted-autocontinue-v1",
+    "glm-dedicated-a-v5-autocontinue-v1",
+    "glm-dedicated-b-v5-autocontinue-v1",
+}
 
 
 def _emit(event: str, **fields: Any) -> None:
@@ -4330,11 +4339,34 @@ def build_qwen_post_partial_tail_plans(
     return plans
 
 
+def _validate_endpoint_lease_binding(plan: dict[str, Any]) -> None:
+    execution = plan.get("execution") or {}
+    lease = execution.get("endpoint_lease")
+    corrected_treatment = (
+        (plan.get("harness") or {}).get("context_management")
+        == self_hosted.OPENCODE_CONTEXT_MANAGEMENT
+    )
+    if not corrected_treatment:
+        if lease is not None:
+            raise ValueError("legacy hosted plan cannot bind a new endpoint lease")
+        return
+    serving_block = plan.get("serving_block")
+    if serving_block not in AUTOCONTINUE_SERVING_BLOCKS:
+        raise ValueError("autocontinue plan serving block is not exact")
+    if lease != {
+        "lease_root": AUTOCONTINUE_LEASE_ROOT,
+        "endpoint_key": serving_block,
+        "maximum_streams": 2,
+    }:
+        raise ValueError("autocontinue endpoint lease binding drifted")
+
+
 def validate_plan(plan: dict[str, Any]) -> None:
     if plan.get("schema_version") != PLAN_SCHEMA:
         raise ValueError("unsupported hosted shard plan schema")
     if plan.get("plan_sha256") != digest_without(plan, "plan_sha256"):
         raise ValueError("hosted shard plan digest mismatch")
+    _validate_endpoint_lease_binding(plan)
     campaign_to_shard = {
         value: key for key, value in {**CAMPAIGNS, **REMAINDER_CAMPAIGNS}.items()
     }
@@ -5203,8 +5235,24 @@ def _hosted_completed_claims(
     for run_id in sorted(claims):
         claim = claims[run_id]
         receipt = accepted[run_id]
+        try:
+            uuid.UUID(str(receipt.get("session_id")))
+            uuid.UUID(str(receipt.get("verifier_execution_id")))
+        except ValueError as exc:
+            raise RuntimeError(
+                "hosted drain acceptance is not authoritative"
+            ) from exc
         if (
-            receipt.get("claim_sha256") != claim["claim_sha256"]
+            receipt.get("schema_version")
+            != "fleet-hosted-opencode-attempt-accepted-v1"
+            or receipt.get("accepted") is not True
+            or receipt.get("credited") is not True
+            or receipt.get("retry_allowed") is not False
+            or receipt.get("session_ingest_completed") is not True
+            or receipt.get("cleanup_completed") is not True
+            or receipt.get("scores_included") is not False
+            or receipt.get("prompts_or_traces_included") is not False
+            or receipt.get("claim_sha256") != claim["claim_sha256"]
             or receipt.get("config_sha256") != claim.get("config_sha256")
             or int(receipt.get("rank") or 0) != int(claim["rank"])
             or int(receipt.get("source_rank") or 0) != int(claim["source_rank"])
@@ -5212,7 +5260,9 @@ def _hosted_completed_claims(
             or receipt.get("task_key") != claim["task_key"]
             or receipt.get("task_version_id") != claim["task_version_id"]
         ):
-            raise RuntimeError("hosted drain acceptance is not bound to its exact claim")
+            raise RuntimeError(
+                "hosted drain acceptance is not authoritative and is not bound to its exact claim"
+            )
         completed.append(
             {
                 "run_id": run_id,

@@ -108,6 +108,13 @@ def _accepted_drain_root(tmp_path: Path) -> tuple[dict, Path, dict]:
         "task_version_id": "version-1",
         "config_sha256": "sha256:config",
         "claim_sha256": claim["claim_sha256"],
+        "retry_allowed": False,
+        "session_id": "3c5ef315-214f-42cc-b75d-d5acb3749d91",
+        "verifier_execution_id": "337da203-f686-4833-9df5-66db86d4b6bf",
+        "session_ingest_completed": True,
+        "cleanup_completed": True,
+        "scores_included": False,
+        "prompts_or_traces_included": False,
     }
     accepted["receipt_sha256"] = self_hosted.digest_without(accepted, "receipt_sha256")
     (attempt / "ACCEPTED.json").write_text(json.dumps(accepted))
@@ -142,6 +149,89 @@ def test_hosted_drained_receipt_requires_exact_claim_acceptance_identity(
     (root / "attempts" / "run-1" / "ACCEPTED.json").write_text(json.dumps(accepted))
     with pytest.raises(RuntimeError, match="not bound to its exact claim"):
         hosted._write_hosted_drained_unlocked(plan, root, request)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("schema_version", "changed"),
+        ("accepted", False),
+        ("credited", False),
+        ("session_ingest_completed", False),
+        ("cleanup_completed", False),
+        ("session_id", "not-a-uuid"),
+        ("verifier_execution_id", "not-a-uuid"),
+    ],
+)
+def test_hosted_drained_receipt_rejects_non_authoritative_acceptance(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    field: str,
+    value: object,
+) -> None:
+    plan, root, accepted = _accepted_drain_root(tmp_path)
+    accepted.update(
+        {
+            "retry_allowed": False,
+            "session_id": "3c5ef315-214f-42cc-b75d-d5acb3749d91",
+            "verifier_execution_id": "337da203-f686-4833-9df5-66db86d4b6bf",
+            "session_ingest_completed": True,
+            "cleanup_completed": True,
+            "scores_included": False,
+            "prompts_or_traces_included": False,
+        }
+    )
+    accepted[field] = value
+    accepted["receipt_sha256"] = self_hosted.digest_without(
+        accepted, "receipt_sha256"
+    )
+    (root / "attempts" / "run-1" / "ACCEPTED.json").write_text(
+        json.dumps(accepted)
+    )
+    monkeypatch.setenv("JOB_UID", "job-uid")
+    monkeypatch.setenv("POD_UID", "pod-uid")
+    with pytest.raises(RuntimeError, match="not authoritative"):
+        hosted._write_hosted_drained_unlocked(plan, root, _drain_request(plan))
+
+
+def test_endpoint_lease_is_exact_treatment_and_serving_block_bound() -> None:
+    base = {
+        "harness": {
+            "context_management": self_hosted.OPENCODE_CONTEXT_MANAGEMENT,
+        },
+        "serving_block": "qwen-hosted-autocontinue-v1",
+        "execution": {
+            "endpoint_lease": {
+                "lease_root": hosted.AUTOCONTINUE_LEASE_ROOT,
+                "endpoint_key": "qwen-hosted-autocontinue-v1",
+                "maximum_streams": 2,
+            }
+        },
+    }
+    hosted._validate_endpoint_lease_binding(base)
+    for mutate in (
+        lambda plan: plan["execution"].pop("endpoint_lease"),
+        lambda plan: plan["execution"]["endpoint_lease"].__setitem__(
+            "lease_root", "/mnt/sfs/arbitrary"
+        ),
+        lambda plan: plan["execution"]["endpoint_lease"].__setitem__(
+            "endpoint_key", "glm-hosted-autocontinue-v1"
+        ),
+        lambda plan: plan["execution"]["endpoint_lease"].__setitem__(
+            "maximum_streams", 1
+        ),
+        lambda plan: plan.__setitem__("serving_block", "arbitrary"),
+    ):
+        changed = json.loads(json.dumps(base))
+        mutate(changed)
+        with pytest.raises(ValueError, match="serving block|lease binding"):
+            hosted._validate_endpoint_lease_binding(changed)
+    legacy = json.loads(json.dumps(base))
+    legacy["harness"]["context_management"] = (
+        "opencode_1.18.27_native_compaction_no_autocontinue"
+    )
+    with pytest.raises(ValueError, match="legacy hosted plan"):
+        hosted._validate_endpoint_lease_binding(legacy)
 
 
 def test_hosted_scheduler_submits_no_task_after_drain(

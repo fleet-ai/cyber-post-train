@@ -70,7 +70,7 @@ EXPECTED_CONTROLLER_RUNTIME = {
         "sha256:1df60ee13be8c6057113dbebadf9020343649e175b5de38aea41706748987019"
     ),
     "hosted_controller_module_sha256": (
-        "sha256:703a6af21e6cda2ff28f7ce8e24458a691cf18075108b714b8d79b96f47d1695"
+        "sha256:e14670e40d2b1fbe4896e4b6dfb2902f121b81c8103efea3a74a11fed496809a"
     ),
     "endpoint_lease_root": ("/mnt/sfs/endpoint-leases/opencode11827-autocontinue-primary-v1"),
     "endpoint_stream_caps": {
