@@ -52,6 +52,25 @@ DEDICATED_A_COMPLETED_EXIT1_GAP_CAMPAIGN = (
 DEDICATED_A_COMPLETED_EXIT1_GAP_RELEASE_SCHEMA = (
     "fleet-dedicated-a-completed-exit1-gap-scoring-release-v1"
 )
+QWEN_POST_PARTIAL_TAIL_RELEASE_SCHEMA = (
+    "fleet-qwen38-post-partial-tail-scoring-release-v1"
+)
+QWEN_POST_PARTIAL_TAIL_AUTH_STATEMENT = (
+    "I authorize create-once launch of the independently audited Qwen3.8 hosted "
+    "untouched-tail shards with exact rebuilt plans A "
+    "sha256:ce973c3842be767e46c79422dce8395932d81626b29e6e34c4b9bf05d89eda9e "
+    "(sources11..32, 88 cells) and B "
+    "sha256:410324cc8a68c8d45746814c3882dc1c07e9182ce0c89a626eb5dfb045370131 "
+    "(sources33..50 plus52..55, 88 cells), only after exact releases/manifests "
+    "are committed, each create-once preflight exclusively succeeds, and fresh "
+    "exhaustive API/Kubernetes/SFS checks prove no planned run/cell is accepted, "
+    "claimed, active, or present. Preserve the exact v8 Qwen revision, "
+    "OpenCode1.18.27 frozen no-autocontinue bytes, task/environment/verifier/tool "
+    "identities, corrected verifier-backed exit1 credit policy, and "
+    "fleet-train-high. Exclude source10 and r56. Use at most two Qwen hosted "
+    "streams; never repeat any claimed/scored/ingested/accepted/reconciled/active "
+    "cell."
+)
 DEDICATED_A_COMPLETED_EXIT1_GAP_AUTH_STATEMENT = (
     "I authorize the create-once scored launch of dedicated GLM A v5 gap plan "
     "sha256:14b799389571e82765ce83373a5d88fc37adb8c4a36b414366f699b75ef4da27 "
@@ -519,6 +538,80 @@ def validate_qwen_http500_scoring_release(
         or any(value is not False for value in privacy.values())
     ):
         raise ValueError("Qwen HTTP500 scoring release does not bind this plan")
+
+
+def validate_qwen_post_partial_tail_release(
+    plan: dict[str, Any], release: dict[str, Any] | None
+) -> None:
+    """Bind both disjoint Qwen tail shards to one exact create-once release."""
+    if plan.get("shard_key") not in QWEN_POST_PARTIAL_TAIL_CAMPAIGNS:
+        return
+    if not isinstance(release, dict):
+        raise ValueError("Qwen post-partial tail scoring release is required")
+    plans = release.get("plans") or {}
+    gates = release.get("gates") or {}
+    renderer = release.get("frozen_no_autocontinue_renderer") or {}
+    scheduling = release.get("scheduling") or {}
+    authorization = release.get("authorization") or {}
+    privacy = release.get("privacy") or {}
+    expected_plans = {
+        "qwen38_post_partial_tail_a": {
+            "plan_sha256": (
+                "sha256:ce973c3842be767e46c79422dce8395932d81626b29e6e34c4b9bf05d89eda9e"
+            ),
+            "source_ranks": list(range(11, 33)),
+            "task_count": 22,
+            "cell_count": 88,
+        },
+        "qwen38_post_partial_tail_b": {
+            "plan_sha256": (
+                "sha256:410324cc8a68c8d45746814c3882dc1c07e9182ce0c89a626eb5dfb045370131"
+            ),
+            "source_ranks": [*range(33, 51), 52, 53, 54, 55],
+            "task_count": 22,
+            "cell_count": 88,
+        },
+    }
+    if (
+        release.get("schema_version") != QWEN_POST_PARTIAL_TAIL_RELEASE_SCHEMA
+        or release.get("append_only") is not True
+        or release.get("authorized_at") != "2026-09-04T17:39:39Z"
+        or release.get("receipt_sha256") != digest_without(release, "receipt_sha256")
+        or plans != expected_plans
+        or plans.get(plan["shard_key"], {}).get("plan_sha256")
+        != plan["plan_sha256"]
+        or gates.get("partial_ingest_incident_receipt_sha256")
+        != QWEN_POST_PARTIAL_INCIDENT_DIGEST
+        or gates.get("pairwise_task_and_cell_overlap") != 0
+        or gates.get("source10_and_r56_excluded") is not True
+        or gates.get("each_preflight_must_succeed_exclusively") is not True
+        or gates.get("fresh_api_kubernetes_sfs_duplicate_check_required") is not True
+        or gates.get("current_plan_identity_absence_required") is not True
+        or gates.get("corrected_exit1_credit_policy_required")
+        != "credit_only_if_reward_ingest_cleanup_and_authoritative_session_match"
+        or renderer.get("context_management")
+        != self_hosted.OPENCODE_NO_AUTOCONTINUE_CONTEXT_MANAGEMENT
+        or renderer.get("settings_canonical_sha256")
+        != "sha256:fa7464a2a043b1e02febbabc70b1fce4278ec31a4d0968e4318677cae1f36e24"
+        or renderer.get("settings_file_sha256_with_newline")
+        != "sha256:2af2db821b685da8029f8d5765e1ce34c92c87df4a9f14315f56fb22ef6a90ed"
+        or renderer.get("plugin_sha256")
+        != "sha256:3542f8fe30d270bec6ee8e832081da8169fd78b667647ecd119425b1961a7a28"
+        or renderer.get("matches_predecessor_v8_runtime_bytes") is not True
+        or scheduling.get("required_priority_class") != "fleet-train-high"
+        or scheduling.get("workers_per_shard") != 1
+        or scheduling.get("maximum_qwen_hosted_streams") != 2
+        or scheduling.get("true_non_preemptible_available") is not False
+        or scheduling.get("priority_class_is_not_preemption_immunity") is not True
+        or authorization.get("timestamp_utc") != "2026-09-04T17:39:39Z"
+        or authorization.get("author") != "/root"
+        or authorization.get("statement") != QWEN_POST_PARTIAL_TAIL_AUTH_STATEMENT
+        or authorization.get("scored_launch_authorized") is not True
+        or authorization.get("create_once") is not True
+        or authorization.get("must_not_repeat") is not True
+        or any(value is not False for value in privacy.values())
+    ):
+        raise ValueError("Qwen post-partial tail release does not bind this plan")
 
 
 def validate_glm_http500_scoring_release(
@@ -4780,6 +4873,7 @@ def preflight_plan(
     validate_dedicated_scoring_release(plan, release)
     validate_hosted_replacement_scoring_release(plan, release)
     validate_qwen_http500_scoring_release(plan, release)
+    validate_qwen_post_partial_tail_release(plan, release)
     validate_glm_http500_scoring_release(plan, release)
     validate_glm_dedicated_b_v5_scoring_release(plan, release)
     validate_glm_dedicated_a_v5_scoring_release(plan, release)
@@ -4842,6 +4936,7 @@ def run_plan(
     validate_dedicated_scoring_release(plan, release)
     validate_hosted_replacement_scoring_release(plan, release)
     validate_qwen_http500_scoring_release(plan, release)
+    validate_qwen_post_partial_tail_release(plan, release)
     validate_glm_http500_scoring_release(plan, release)
     validate_glm_dedicated_b_v5_scoring_release(plan, release)
     validate_glm_dedicated_a_v5_scoring_release(plan, release)

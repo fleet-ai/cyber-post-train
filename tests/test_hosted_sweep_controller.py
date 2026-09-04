@@ -6,6 +6,7 @@ import uuid
 from pathlib import Path
 
 import pytest
+import yaml
 
 from evals.fleet import hosted_sweep_controller as hosted
 from evals.fleet import opencode_train_sweep as sweep
@@ -141,6 +142,12 @@ QWEN_POST_PARTIAL_TAIL_A = Path(
 )
 QWEN_POST_PARTIAL_TAIL_B = Path(
     "evals/fleet/configs/qwen38-opencode-hosted-post-partial-tail-b22-pass4-v9.json"
+)
+QWEN_POST_PARTIAL_TAIL_RELEASE = Path(
+    "docs/evidence/qwen38-study/2026-09-04-qwen38-post-partial-tail-scoring-release-v1.json"
+)
+QWEN_POST_PARTIAL_TAIL_MANIFEST = Path(
+    "evals/fleet/cluster/opencode-qwen38-hosted-post-partial-tail-v9.yaml"
 )
 QWEN_ATTRITION_REPLACEMENT_PLAN = Path(
     "evals/fleet/configs/qwen38-opencode-hosted-attrition-r56-pass4-v1.json"
@@ -2645,3 +2652,38 @@ def test_qwen_post_partial_tail_builder_rejects_unsealed_incident() -> None:
     incident["receipt_sha256"] = self_hosted.digest_without(incident, "receipt_sha256")
     with pytest.raises(ValueError, match="predecessor evidence drifted"):
         hosted.build_qwen_post_partial_tail_plans(predecessor, incident)
+
+
+def test_qwen_post_partial_tail_release_and_full_manifest_are_fail_closed() -> None:
+    release = hosted.load_object(QWEN_POST_PARTIAL_TAIL_RELEASE)
+    plans = [
+        hosted.load_object(QWEN_POST_PARTIAL_TAIL_A),
+        hosted.load_object(QWEN_POST_PARTIAL_TAIL_B),
+    ]
+    for plan in plans:
+        hosted.validate_qwen_post_partial_tail_release(plan, release)
+        with pytest.raises(ValueError, match="release is required"):
+            hosted.validate_qwen_post_partial_tail_release(plan, None)
+    tampered = json.loads(json.dumps(release))
+    tampered["scheduling"]["priority_class_is_not_preemption_immunity"] = False
+    tampered["receipt_sha256"] = self_hosted.digest_without(
+        tampered, "receipt_sha256"
+    )
+    with pytest.raises(ValueError, match="does not bind"):
+        hosted.validate_qwen_post_partial_tail_release(plans[0], tampered)
+
+    documents = list(yaml.safe_load_all(QWEN_POST_PARTIAL_TAIL_MANIFEST.read_text()))
+    assert len(documents) == 4
+    names = [document["metadata"]["name"] for document in documents]
+    assert names == [
+        "chris-cyber-q38-hosted-tail-a22-p4-v9-preflight",
+        "chris-cyber-q38-hosted-tail-b22-p4-v9-preflight",
+        "chris-cyber-q38-opencode11827-hosted-tail-a22-p4-v9",
+        "chris-cyber-q38-opencode11827-hosted-tail-b22-p4-v9",
+    ]
+    assert all(
+        document["spec"]["template"]["spec"]["priorityClassName"]
+        == "fleet-train-high"
+        for document in documents
+    )
+    assert all(document["spec"]["backoffLimit"] == 0 for document in documents)

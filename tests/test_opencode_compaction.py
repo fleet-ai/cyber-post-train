@@ -40,7 +40,7 @@ def test_compaction_budget_leaves_output_and_tool_headroom() -> None:
 def test_invalid_compaction_budget_is_rejected(field: str, value: object) -> None:
     config = _config()
     config["harness"][field] = value
-    with pytest.raises(ValueError, match="positive integers"):
+    with pytest.raises(ValueError, match="positive integer"):
         self_hosted.opencode_settings(config)
 
 
@@ -53,12 +53,25 @@ def test_compaction_reserve_cannot_consume_the_context() -> None:
         self_hosted.opencode_settings(config)
 
 
-def test_historical_treatment_is_rejected_before_launch(tmp_path: Path) -> None:
+def test_historical_treatment_renders_frozen_no_autocontinue_settings() -> None:
     config = _config()
     config["harness"]["context_management"] = "opencode_1.18.27_native_compaction_no_autocontinue"
+    config["harness"].pop("compaction_headroom_tokens", None)
+    settings = self_hosted.opencode_settings(config)
+    assert settings.get("compaction") is None
+    assert settings["plugin"] == [
+        "file:///home/node/.config/opencode/fleet-disable-compaction-autocontinue.mjs"
+    ]
+    assert settings["provider"]["fleet-cluster"]["models"]["compaction-test"][
+        "limit"
+    ] == {"context": 262144, "output": 32768}
+
+
+def test_unsupported_treatment_is_rejected_before_launch(tmp_path: Path) -> None:
+    config = _config()
+    config["harness"]["context_management"] = "unsupported"
     output = tmp_path / "attempt"
-    # No credentials, Docker or network mocks: validation must precede all of them.
-    with pytest.raises(ValueError, match="new plan"):
+    with pytest.raises(ValueError, match="explicitly supported"):
         self_hosted.run(config, output, tmp_path / "proxy.py")
     assert not output.exists()
 
