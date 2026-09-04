@@ -8,11 +8,15 @@ from pathlib import Path
 
 import httpx
 import pytest
+import yaml
 
 from evals.fleet import fixed_proxy, self_hosted
 
 CONFIG_PATH = Path("evals/fleet/configs/qwen36-27b-qwen-code-selfhosted-smoke-v1.json")
 OPENCODE_CONFIG_PATH = Path("evals/fleet/configs/qwen38-opencode-train-sweep-smoke-v2.json")
+PARTIAL_OBSERVER_MANIFEST = Path(
+    "evals/fleet/cluster/opencode-partial-session-observers-v1.yaml"
+)
 
 
 def _config() -> dict:
@@ -93,6 +97,37 @@ def test_opencode_settings_fail_closed_on_context_policy_drift(
         config["harness"]["compaction_headroom_tokens"] = headroom
     with pytest.raises(ValueError, match="context policy|headroom"):
         self_hosted.opencode_settings(config)
+
+
+def test_partial_session_observers_are_read_only_create_once_high_priority() -> None:
+    documents = list(yaml.safe_load_all(PARTIAL_OBSERVER_MANIFEST.read_text()))
+    assert len(documents) == 2
+    expected = {
+        "chris-cyber-q38-source10-a3-partial-observer-v1": (
+            "qwen38-v8-source10-attempt3-partial-resume.json",
+            "sha256:833af87ee84a576145240c26f305d70b0faa7c605c8d32015fdc928d77d43dcb",
+        ),
+        "chris-cyber-glm53-a-source14-a1-partial-observer-v1": (
+            "glm53-a-v5-source14-attempt1-partial-resume.json",
+            "sha256:544485eadeae80770947b58657df50d34e506541d97c81db159167dd9ba9ec2a",
+        ),
+    }
+    for document in documents:
+        name = document["metadata"]["name"]
+        config_name, config_digest = expected[name]
+        pod = document["spec"]["template"]["spec"]
+        command = pod["containers"][0]["args"][0]
+        assert document["spec"]["backoffLimit"] == 0
+        assert pod["priorityClassName"] == "fleet-train-high"
+        assert "observe-partial-session" in command
+        assert "resume-partial-session" not in command
+        assert "opencode run" not in command
+        assert "docker" not in command
+        config = json.loads(Path(f"evals/fleet/configs/{config_name}").read_text())
+        assert config["config_sha256"] == config_digest
+        assert config["config_sha256"] == self_hosted.digest_without(
+            config, "config_sha256"
+        )
 
 
 def _recovery_source_fixture(tmp_path: Path) -> tuple[dict, Path, str]:
