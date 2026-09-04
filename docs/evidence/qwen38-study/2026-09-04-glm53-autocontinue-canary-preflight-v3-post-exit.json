@@ -1,0 +1,78 @@
+{
+  "schema_version": "fleet-opencode-autocontinue-canary-successor-preflight-post-exit-v1",
+  "append_only": true,
+  "status": "PASSED",
+  "observed_at_utc": "2026-09-04T22:57:09Z",
+  "package_commit": "f2c32e4571fddfa43770249f323e1843fc205f95",
+  "campaign_sha256": "sha256:63946f224a33eb0d2c2a6fdba34358ebf9ca379e5f0f156cd137c95a9b98097e",
+  "plan_sha256": "sha256:9654b0f2e9cfbe5690a77ce83bc63e7e537a43597479686fc093db7d6533959a",
+  "preflight_authorization_receipt_sha256": "sha256:f5766496049bfe8e649e95b2ef450263b461c03b803a7b39b0da8bca63b3ea5c",
+  "preflight_receipt_sha256": "sha256:b32da5b2ce836440e2b845f3f960cb77cceaf19a5c6e555ed6418e12c7889603",
+  "preflight_sfs_file_sha256": "sha256:1a515e446f1c40385b2fd71d2f5e8277024d037315df47da57ce0b7c5cadee8b",
+  "job": {
+    "name": "chris-glm53-ac-canary1-v3-preflight",
+    "uid": "978d013d-95b6-4455-9aac-e406a306f02a",
+    "created_at_utc": "2026-09-04T22:55:01Z",
+    "completion_time": "2026-09-04T22:55:19Z",
+    "completion_reason": "CompletionsReached",
+    "succeeded": 1,
+    "failed": 0,
+    "priority_class": "fleet-train-high",
+    "priority_value": 10000,
+    "preemption_policy": "PreemptLowerPriority",
+    "queue": "training-lq"
+  },
+  "pod": {
+    "name": "chris-glm53-ac-canary1-v3-preflight-nmxz8",
+    "uid": "0bb25778-5bbe-4c59-aafc-9b2f9e039e5e",
+    "owner_job_name": "chris-glm53-ac-canary1-v3-preflight",
+    "owner_job_uid": "978d013d-95b6-4455-9aac-e406a306f02a",
+    "owner_is_controller": true,
+    "phase": "Succeeded",
+    "exit_code": 0,
+    "restart_count": 0,
+    "started_at": "2026-09-04T22:55:02Z",
+    "finished_at": "2026-09-04T22:55:17Z",
+    "requested_image": "ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7",
+    "resolved_image": "ghcr.io/astral-sh/uv@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7"
+  },
+  "configmap": {
+    "name": "chris-glm53-ac-canary1-pre-v3",
+    "uid": "cba581f2-45ab-4985-8802-22dab5eea894",
+    "created_at_utc": "2026-09-04T22:55:00Z",
+    "immutable": true
+  },
+  "intent_configmap": {
+    "name": "chris-ac-canary1-preflight-submit-v3",
+    "uid": "3fbc419d-f55e-4117-9a44-38ceb6fb724e",
+    "created_at_utc": "2026-09-04T22:54:54Z",
+    "immutable": true
+  },
+  "reconciliation": {
+    "fleet_team_id": "a1025f0b-ad67-49fc-a023-51800ab43e84",
+    "current_plan_run_and_claim_identities_absent": true,
+    "exact_treatment_sessions_reconciled": 0,
+    "sfs_job_roots_reconciled": 101,
+    "scored_job_created": false,
+    "scored_configmap_created": false,
+    "scored_sfs_root_absent": true,
+    "global_cell_claim_absent": true,
+    "global_claim_json_count": 0,
+    "sfs_observer_pod_name": "allie-dev",
+    "sfs_observer_pod_uid": "73dabe56-60f8-4879-be9f-365196c502e3",
+    "sfs_mount_path": "/shared"
+  },
+  "hosted_only": {
+    "dedicated_serving_state": "USER_STOPPED_UNAVAILABLE",
+    "dedicated_recreation_authorized": false,
+    "fresh_authenticated_models_get_required_before_scored_create": true,
+    "fresh_authenticated_models_get_required_before_global_claim": true
+  },
+  "privacy": {
+    "credentials_included": false,
+    "prompts_or_traces_included": false,
+    "scores_included": false,
+    "logs_read": false
+  },
+  "receipt_sha256": "sha256:858aae67031f22ef42628891ff32224e14ed99d0303a4ed59207d24d869bfe26"
+}

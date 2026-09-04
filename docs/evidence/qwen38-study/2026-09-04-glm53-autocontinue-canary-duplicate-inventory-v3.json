@@ -1,0 +1,33 @@
+{
+  "schema_version": "fleet-opencode-autocontinue-canary-successor-duplicate-inventory-v1",
+  "append_only": true,
+  "status": "PASSED",
+  "observed_at_utc": "2026-09-04T22:57:09Z",
+  "fleet_team_id": "a1025f0b-ad67-49fc-a023-51800ab43e84",
+  "pagination_exhausted_by_uid_bound_preflight": true,
+  "plan_sha256": "sha256:9654b0f2e9cfbe5690a77ce83bc63e7e537a43597479686fc093db7d6533959a",
+  "cell": {
+    "source_rank": 13,
+    "attempt": 1,
+    "task_version_id": "9375a9b9-04e5-4f6f-ad47-286121278992"
+  },
+  "source_preflight_receipt_sha256": "sha256:b32da5b2ce836440e2b845f3f960cb77cceaf19a5c6e555ed6418e12c7889603",
+  "post_exit_receipt_sha256": "sha256:858aae67031f22ef42628891ff32224e14ed99d0303a4ed59207d24d869bfe26",
+  "exact_treatment_session_rows": 0,
+  "current_plan_run_rows": 0,
+  "active_attempts": 0,
+  "global_cell_claim_absent": true,
+  "global_claim_json_count": 0,
+  "scored_job_name": "chris-glm53-ac-canary1-v2",
+  "scored_configmap_name": "chris-glm53-ac-canary1-run-v3",
+  "scored_sfs_root": "/shared/jobs/chris-glm53-ac-canary1-v2",
+  "job_pod_configmap_and_sfs_identities_absent": true,
+  "dedicated_serving_state": "USER_STOPPED_UNAVAILABLE",
+  "privacy": {
+    "credentials_included": false,
+    "prompts_or_traces_included": false,
+    "scores_included": false,
+    "logs_read": false
+  },
+  "receipt_sha256": "sha256:e4d215278d56b070c59c3eb7af946747280eb93ae93898b5b1e1b7f0a552d9d1"
+}

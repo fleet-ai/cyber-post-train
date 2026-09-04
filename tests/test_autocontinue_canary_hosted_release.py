@@ -11,6 +11,8 @@ from evals.fleet import autocontinue_canary_hosted_release as hosted_release
 ROOT = Path(__file__).parents[1]
 Q_PLAN = ROOT / "evals/fleet/configs/qwen38-opencode-autocontinue-canary1-v1.json"
 G_PLAN = ROOT / "evals/fleet/configs/glm53-opencode-autocontinue-canary1-v1.json"
+Q_SUCCESSOR_PLAN = ROOT / "evals/fleet/configs/qwen38-opencode-autocontinue-canary1-v2.json"
+G_SUCCESSOR_PLAN = ROOT / "evals/fleet/configs/glm53-opencode-autocontinue-canary1-v2.json"
 
 
 def _leaf_paths(value, prefix=()):
@@ -33,6 +35,10 @@ def _change_leaf(value, path):
         parent[path[-1]] = old + 1
     elif isinstance(old, str):
         parent[path[-1]] = f"{old}-tampered"
+    elif old is None:
+        parent[path[-1]] = "unexpected"
+    elif isinstance(old, list):
+        parent[path[-1]] = [*old, "unexpected"]
     else:  # pragma: no cover - evidence is intentionally scalar-only at leaves
         raise AssertionError(f"unsupported evidence leaf type: {type(old)}")
 
@@ -186,3 +192,78 @@ def test_hosted_only_bundle_rejects_every_resealed_leaf_and_unknown_key(
         monkeypatch.setattr(hosted_release, "_load_exact", fake_load)
         with pytest.raises(ValueError, match="preflight bundle"):
             hosted_release.validate_preflight_bundle(plan, ROOT)
+
+
+@pytest.mark.parametrize("plan_path", [Q_SUCCESSOR_PLAN, G_SUCCESSOR_PLAN])
+def test_successor_preflight_bundle_is_exact_and_does_not_reinterpret_phase_a(
+    plan_path: Path,
+) -> None:
+    plan = canary.load_object(plan_path)
+    evidence = hosted_release.validate_preflight_bundle(plan, ROOT)
+    assert evidence["route"] is None
+    assert evidence["preflight"]["sfs_job_roots_reconciled"] == 101
+    assert evidence["post_exit"]["reconciliation"]["sfs_mount_path"] == "/shared"
+    assert evidence["duplicate"]["exact_treatment_session_rows"] == 0
+
+
+def test_successor_preflight_authorization_rejects_semantic_drift(monkeypatch) -> None:
+    plan = canary.load_object(Q_SUCCESSOR_PLAN)
+    bundle = hosted_release.BUNDLES[plan["shard_key"]]
+    original = canary.load_object(ROOT / bundle["preauth_path"])
+    changed = copy.deepcopy(original)
+    changed["authorization"]["launch_authorized"] = True
+    changed["receipt_sha256"] = canary.digest_without(changed, "receipt_sha256")
+    real_load = hosted_release._load_exact
+
+    def load(root: Path, path: str, receipt_sha: str):
+        if path == bundle["preauth_path"]:
+            return changed
+        return real_load(root, path, receipt_sha)
+
+    monkeypatch.setattr(hosted_release, "_load_exact", load)
+    with pytest.raises(ValueError, match="preflight authorization"):
+        hosted_release.validate_preflight_bundle(plan, ROOT)
+
+
+@pytest.mark.parametrize(
+    ("plan_path", "release_path"),
+    [
+        (
+            Q_SUCCESSOR_PLAN,
+            ROOT
+            / "docs/evidence/qwen38-study/"
+            "2026-09-04-qwen38-autocontinue-canary-successor-held-release-v3.json",
+        ),
+        (
+            G_SUCCESSOR_PLAN,
+            ROOT
+            / "docs/evidence/qwen38-study/"
+            "2026-09-04-glm53-autocontinue-canary-successor-held-release-v3.json",
+        ),
+    ],
+)
+def test_successor_held_release_is_exact_and_rejects_all_resealed_drift(
+    plan_path: Path, release_path: Path
+) -> None:
+    plan = canary.load_object(plan_path)
+    original = canary.load_object(release_path)
+    hosted_release.validate_successor_held_release(original, plan, ROOT)
+    assert original["authorization"]["launch_authorized"] is False
+    assert original["route"]["dedicated_serving_state"] == "USER_STOPPED_UNAVAILABLE"
+
+    candidates = []
+    for path in _leaf_paths(
+        {key: value for key, value in original.items() if key != "receipt_sha256"}
+    ):
+        changed = copy.deepcopy(original)
+        _change_leaf(changed, path)
+        changed["receipt_sha256"] = canary.digest_without(changed, "receipt_sha256")
+        candidates.append(changed)
+    changed = copy.deepcopy(original)
+    changed["unknown_authority"] = True
+    changed["receipt_sha256"] = canary.digest_without(changed, "receipt_sha256")
+    candidates.append(changed)
+
+    for changed in candidates:
+        with pytest.raises(ValueError, match="held release"):
+            hosted_release.validate_successor_held_release(changed, plan, ROOT)

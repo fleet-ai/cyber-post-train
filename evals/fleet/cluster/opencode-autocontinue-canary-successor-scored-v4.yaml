@@ -1,0 +1,177 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: chris-q38-ac-canary1-v2
+  namespace: fleet-train-jobs
+  annotations: {cyber-post-train.fleet.ai/preview-only: "true", cyber-post-train.fleet.ai/launch-authorized: "false"}
+spec:
+  activeDeadlineSeconds: 43200
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 604800
+  template:
+    metadata:
+      labels: {cyber-post-train.fleet.ai/experiment: q38-ac-canary1-run-v3, cyber-post-train.fleet.ai/owner: chris, kueue.x-k8s.io/queue-name: training-lq}
+    spec:
+      restartPolicy: Never
+      priorityClassName: fleet-train-high
+      nodeSelector: {kubernetes.io/arch: amd64, workload: fleetai-training-ng-cpu}
+      tolerations: [{key: workload, operator: Equal, value: fleetai-training-ng-cpu, effect: NoSchedule}]
+      initContainers:
+        - name: dind
+          image: docker.io/library/docker@sha256:f649ef046008ca7f926a2571c32b0ac22e5c59eb61b959617f9acc2a4c638cf5
+          restartPolicy: Always
+          args: ["--host=unix:///var/run/docker.sock", "--host=tcp://0.0.0.0:2375", "--tls=false"]
+          readinessProbe:
+            tcpSocket: {port: 2375}
+            initialDelaySeconds: 2
+            periodSeconds: 2
+          securityContext: {privileged: true}
+          resources:
+            requests: {cpu: 500m, memory: 2Gi, ephemeral-storage: 20Gi}
+            limits: {cpu: "2", memory: 4Gi, ephemeral-storage: 40Gi}
+          volumeMounts:
+            - {name: docker-socket, mountPath: /var/run}
+            - {name: docker-data, mountPath: /var/lib/docker}
+            - {name: workspace, mountPath: /workspace}
+            - {name: sfs, mountPath: /mnt/sfs}
+      containers:
+        - name: evaluator
+          image: ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
+          command: ["/bin/bash", "-ceu", "--"]
+          args:
+            - |
+              apt-get update && apt-get install --yes --no-install-recommends docker.io=20.10.24+dfsg1-1+deb12u1+b6
+              root=/workspace/cyber-post-train
+              mkdir -p "$root/evals/fleet/configs" "$root/evals/fleet/cluster" "$root/evals/fleet/scripts" "$root/docs/evidence/qwen38-study"
+              touch "$root/evals/__init__.py" "$root/evals/fleet/__init__.py"
+              for file in self_hosted.py runner.py controller.py canary_controller.py hosted_release.py hosted_runtime.py hosted_health.py endpoint_lease.py fixed_proxy.py Dockerfile.opencode; do install -m 0644 "/bootstrap/$file" "$root/evals/fleet/$file"; done
+              mv "$root/evals/fleet/runner.py" "$root/evals/fleet/opencode_train_sweep_runner.py"
+              mv "$root/evals/fleet/controller.py" "$root/evals/fleet/hosted_sweep_controller.py"
+              mv "$root/evals/fleet/canary_controller.py" "$root/evals/fleet/autocontinue_canary_controller.py"
+              mv "$root/evals/fleet/hosted_release.py" "$root/evals/fleet/autocontinue_canary_hosted_release.py"
+              mv "$root/evals/fleet/hosted_runtime.py" "$root/evals/fleet/autocontinue_canary_hosted_runtime.py"
+              mv "$root/evals/fleet/hosted_health.py" "$root/evals/fleet/autocontinue_hosted_health.py"
+              install -m 0644 /bootstrap/manifest_authorization.py "$root/evals/fleet/autocontinue_successor_manifest_authorization.py"
+              install -m 0644 /bootstrap/plan.json "$root/evals/fleet/configs/plan.json"
+              install -m 0644 /bootstrap/release.json "$root/evals/fleet/configs/release.json"
+              install -m 0644 /bootstrap/launch-route.json "$root/evals/fleet/configs/launch-route.json"
+              install -m 0644 /bootstrap/campaign.json "$root/evals/fleet/configs/q38-glm53-opencode-autocontinue-primary-campaign-v1.json"
+              install -m 0644 /bootstrap/preflight-manifest.yaml "$root/evals/fleet/cluster/opencode-autocontinue-canary-preflights-v3.yaml"
+              install -m 0644 /bootstrap/scored-manifest.yaml "$root/evals/fleet/cluster/opencode-autocontinue-canary-successor-scored-v4.yaml"
+              install -m 0755 /bootstrap/run.sh "$root/evals/fleet/scripts/run_opencode_autocontinue_canary.sh"
+              install -m 0755 /bootstrap/submit.sh "$root/evals/fleet/scripts/submit_opencode_autocontinue_canaries_v2.sh"
+              install -m 0644 /bootstrap/compatibility.json "$root/docs/evidence/qwen38-study/2026-09-04-opencode-autocontinue-canary-controller-compatibility-v3.json"
+              install -m 0644 /bootstrap/scored-v1-incident.json "$root/docs/evidence/qwen38-study/2026-09-04-opencode-autocontinue-canary-scored-v1-bootstrap-failure.json"
+              install -m 0644 /bootstrap/preauth.json "$root/docs/evidence/qwen38-study/2026-09-04-qwen38-autocontinue-canary-preflight-authorization-v3.json"
+              install -m 0644 /bootstrap/preflight.json "$root/docs/evidence/qwen38-study/2026-09-04-qwen38-autocontinue-canary-preflight-v3-pass.json"
+              install -m 0644 /bootstrap/post-exit.json "$root/docs/evidence/qwen38-study/2026-09-04-qwen38-autocontinue-canary-preflight-v3-post-exit.json"
+              install -m 0644 /bootstrap/duplicate.json "$root/docs/evidence/qwen38-study/2026-09-04-qwen38-autocontinue-canary-duplicate-inventory-v3.json"
+              cd "$root" && exec "$root/evals/fleet/scripts/run_opencode_autocontinue_canary.sh"
+          env:
+            - {name: DOCKER_HOST, value: "unix:///var/run/docker.sock"}
+            - {name: DOCKER_TLS_CERTDIR, value: ""}
+            - {name: HOSTED_JOB_NAME, value: chris-q38-ac-canary1-v2}
+            - {name: HOSTED_PLAN_FILE, value: plan.json}
+            - {name: SCORING_RELEASE_FILE, value: release.json}
+            - {name: LAUNCH_ROUTE_FILE, value: launch-route.json}
+            - {name: PACKAGE_COMMIT, valueFrom: {configMapKeyRef: {name: chris-q38-ac-canary1-run-v3, key: package_commit}}}
+            - {name: JOB_UID, valueFrom: {fieldRef: {apiVersion: v1, fieldPath: "metadata.labels['batch.kubernetes.io/controller-uid']"}}}
+            - {name: POD_UID, valueFrom: {fieldRef: {apiVersion: v1, fieldPath: metadata.uid}}}
+            - {name: FLEET_API_KEY, valueFrom: {secretKeyRef: {name: chris-cyber-opencode-evals-v2, key: FLEET_API_KEY}}}
+          resources: {requests: {cpu: 100m, memory: 512Mi, ephemeral-storage: 5Gi}, limits: {cpu: "1", memory: 2Gi, ephemeral-storage: 20Gi}}
+          volumeMounts: [{name: docker-socket, mountPath: /var/run}, {name: bootstrap, mountPath: /bootstrap, readOnly: true}, {name: workspace, mountPath: /workspace}, {name: sfs, mountPath: /mnt/sfs}]
+      volumes:
+        - {name: bootstrap, configMap: {name: chris-q38-ac-canary1-run-v3}}
+        - {name: docker-data, emptyDir: {sizeLimit: 40Gi}}
+        - {name: docker-socket, emptyDir: {}}
+        - {name: workspace, emptyDir: {sizeLimit: 5Gi}}
+        - {name: sfs, persistentVolumeClaim: {claimName: sfs-shared}}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: chris-glm53-ac-canary1-v2
+  namespace: fleet-train-jobs
+  annotations: {cyber-post-train.fleet.ai/preview-only: "true", cyber-post-train.fleet.ai/launch-authorized: "false"}
+spec:
+  activeDeadlineSeconds: 43200
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 604800
+  template:
+    metadata:
+      labels: {cyber-post-train.fleet.ai/experiment: glm53-ac-canary1-run-v3, cyber-post-train.fleet.ai/owner: chris, kueue.x-k8s.io/queue-name: training-lq}
+    spec:
+      restartPolicy: Never
+      priorityClassName: fleet-train-high
+      nodeSelector: {kubernetes.io/arch: amd64, workload: fleetai-training-ng-cpu}
+      tolerations: [{key: workload, operator: Equal, value: fleetai-training-ng-cpu, effect: NoSchedule}]
+      initContainers:
+        - name: dind
+          image: docker.io/library/docker@sha256:f649ef046008ca7f926a2571c32b0ac22e5c59eb61b959617f9acc2a4c638cf5
+          restartPolicy: Always
+          args: ["--host=unix:///var/run/docker.sock", "--host=tcp://0.0.0.0:2375", "--tls=false"]
+          readinessProbe:
+            tcpSocket: {port: 2375}
+            initialDelaySeconds: 2
+            periodSeconds: 2
+          securityContext: {privileged: true}
+          resources:
+            requests: {cpu: 500m, memory: 2Gi, ephemeral-storage: 20Gi}
+            limits: {cpu: "2", memory: 4Gi, ephemeral-storage: 40Gi}
+          volumeMounts:
+            - {name: docker-socket, mountPath: /var/run}
+            - {name: docker-data, mountPath: /var/lib/docker}
+            - {name: workspace, mountPath: /workspace}
+            - {name: sfs, mountPath: /mnt/sfs}
+      containers:
+        - name: evaluator
+          image: ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
+          command: ["/bin/bash", "-ceu", "--"]
+          args:
+            - |
+              apt-get update && apt-get install --yes --no-install-recommends docker.io=20.10.24+dfsg1-1+deb12u1+b6
+              root=/workspace/cyber-post-train
+              mkdir -p "$root/evals/fleet/configs" "$root/evals/fleet/cluster" "$root/evals/fleet/scripts" "$root/docs/evidence/qwen38-study"
+              touch "$root/evals/__init__.py" "$root/evals/fleet/__init__.py"
+              for file in self_hosted.py runner.py controller.py canary_controller.py hosted_release.py hosted_runtime.py hosted_health.py endpoint_lease.py fixed_proxy.py Dockerfile.opencode; do install -m 0644 "/bootstrap/$file" "$root/evals/fleet/$file"; done
+              mv "$root/evals/fleet/runner.py" "$root/evals/fleet/opencode_train_sweep_runner.py"
+              mv "$root/evals/fleet/controller.py" "$root/evals/fleet/hosted_sweep_controller.py"
+              mv "$root/evals/fleet/canary_controller.py" "$root/evals/fleet/autocontinue_canary_controller.py"
+              mv "$root/evals/fleet/hosted_release.py" "$root/evals/fleet/autocontinue_canary_hosted_release.py"
+              mv "$root/evals/fleet/hosted_runtime.py" "$root/evals/fleet/autocontinue_canary_hosted_runtime.py"
+              mv "$root/evals/fleet/hosted_health.py" "$root/evals/fleet/autocontinue_hosted_health.py"
+              install -m 0644 /bootstrap/manifest_authorization.py "$root/evals/fleet/autocontinue_successor_manifest_authorization.py"
+              install -m 0644 /bootstrap/plan.json "$root/evals/fleet/configs/plan.json"
+              install -m 0644 /bootstrap/release.json "$root/evals/fleet/configs/release.json"
+              install -m 0644 /bootstrap/launch-route.json "$root/evals/fleet/configs/launch-route.json"
+              install -m 0644 /bootstrap/campaign.json "$root/evals/fleet/configs/q38-glm53-opencode-autocontinue-primary-campaign-v1.json"
+              install -m 0644 /bootstrap/preflight-manifest.yaml "$root/evals/fleet/cluster/opencode-autocontinue-canary-preflights-v3.yaml"
+              install -m 0644 /bootstrap/scored-manifest.yaml "$root/evals/fleet/cluster/opencode-autocontinue-canary-successor-scored-v4.yaml"
+              install -m 0755 /bootstrap/run.sh "$root/evals/fleet/scripts/run_opencode_autocontinue_canary.sh"
+              install -m 0755 /bootstrap/submit.sh "$root/evals/fleet/scripts/submit_opencode_autocontinue_canaries_v2.sh"
+              install -m 0644 /bootstrap/compatibility.json "$root/docs/evidence/qwen38-study/2026-09-04-opencode-autocontinue-canary-controller-compatibility-v3.json"
+              install -m 0644 /bootstrap/scored-v1-incident.json "$root/docs/evidence/qwen38-study/2026-09-04-opencode-autocontinue-canary-scored-v1-bootstrap-failure.json"
+              install -m 0644 /bootstrap/preauth.json "$root/docs/evidence/qwen38-study/2026-09-04-glm53-autocontinue-canary-preflight-authorization-v3.json"
+              install -m 0644 /bootstrap/preflight.json "$root/docs/evidence/qwen38-study/2026-09-04-glm53-autocontinue-canary-preflight-v3-pass.json"
+              install -m 0644 /bootstrap/post-exit.json "$root/docs/evidence/qwen38-study/2026-09-04-glm53-autocontinue-canary-preflight-v3-post-exit.json"
+              install -m 0644 /bootstrap/duplicate.json "$root/docs/evidence/qwen38-study/2026-09-04-glm53-autocontinue-canary-duplicate-inventory-v3.json"
+              cd "$root" && exec "$root/evals/fleet/scripts/run_opencode_autocontinue_canary.sh"
+          env:
+            - {name: DOCKER_HOST, value: "unix:///var/run/docker.sock"}
+            - {name: DOCKER_TLS_CERTDIR, value: ""}
+            - {name: HOSTED_JOB_NAME, value: chris-glm53-ac-canary1-v2}
+            - {name: HOSTED_PLAN_FILE, value: plan.json}
+            - {name: SCORING_RELEASE_FILE, value: release.json}
+            - {name: LAUNCH_ROUTE_FILE, value: launch-route.json}
+            - {name: PACKAGE_COMMIT, valueFrom: {configMapKeyRef: {name: chris-glm53-ac-canary1-run-v3, key: package_commit}}}
+            - {name: JOB_UID, valueFrom: {fieldRef: {apiVersion: v1, fieldPath: "metadata.labels['batch.kubernetes.io/controller-uid']"}}}
+            - {name: POD_UID, valueFrom: {fieldRef: {apiVersion: v1, fieldPath: metadata.uid}}}
+            - {name: FLEET_API_KEY, valueFrom: {secretKeyRef: {name: chris-cyber-opencode-evals-v2, key: FLEET_API_KEY}}}
+          resources: {requests: {cpu: 100m, memory: 512Mi, ephemeral-storage: 5Gi}, limits: {cpu: "1", memory: 2Gi, ephemeral-storage: 20Gi}}
+          volumeMounts: [{name: docker-socket, mountPath: /var/run}, {name: bootstrap, mountPath: /bootstrap, readOnly: true}, {name: workspace, mountPath: /workspace}, {name: sfs, mountPath: /mnt/sfs}]
+      volumes:
+        - {name: bootstrap, configMap: {name: chris-glm53-ac-canary1-run-v3}}
+        - {name: docker-data, emptyDir: {sizeLimit: 40Gi}}
+        - {name: docker-socket, emptyDir: {}}
+        - {name: workspace, emptyDir: {sizeLimit: 5Gi}}
+        - {name: sfs, persistentVolumeClaim: {claimName: sfs-shared}}

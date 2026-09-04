@@ -1,0 +1,33 @@
+{
+  "schema_version": "fleet-opencode-autocontinue-canary-successor-duplicate-inventory-v1",
+  "append_only": true,
+  "status": "PASSED",
+  "observed_at_utc": "2026-09-04T22:57:09Z",
+  "fleet_team_id": "a1025f0b-ad67-49fc-a023-51800ab43e84",
+  "pagination_exhausted_by_uid_bound_preflight": true,
+  "plan_sha256": "sha256:726320dd5e161e28becd22d7bb6e31f1627f36a3c7291c0dabb53f94626b3c2d",
+  "cell": {
+    "source_rank": 4,
+    "attempt": 1,
+    "task_version_id": "02dd4e3f-d85d-4bf8-9976-eae2f102384d"
+  },
+  "source_preflight_receipt_sha256": "sha256:8feaa88ebe0aadf11ff08346023b9d756b89ebc2701b08a9f6d709fbf23c4fe3",
+  "post_exit_receipt_sha256": "sha256:42d9e194b2934f6705d68d498b703a4daa9087e6f05671e058ad575726a420d2",
+  "exact_treatment_session_rows": 0,
+  "current_plan_run_rows": 0,
+  "active_attempts": 0,
+  "global_cell_claim_absent": true,
+  "global_claim_json_count": 0,
+  "scored_job_name": "chris-q38-ac-canary1-v2",
+  "scored_configmap_name": "chris-q38-ac-canary1-run-v3",
+  "scored_sfs_root": "/shared/jobs/chris-q38-ac-canary1-v2",
+  "job_pod_configmap_and_sfs_identities_absent": true,
+  "dedicated_serving_state": "USER_STOPPED_UNAVAILABLE",
+  "privacy": {
+    "credentials_included": false,
+    "prompts_or_traces_included": false,
+    "scores_included": false,
+    "logs_read": false
+  },
+  "receipt_sha256": "sha256:662c822282d33d376a0ab1755c6970dc27801caa5e6e92d1d438732a50276be2"
+}

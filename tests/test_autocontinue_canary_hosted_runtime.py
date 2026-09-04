@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import shutil
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -14,6 +15,8 @@ from evals.fleet import autocontinue_hosted_health as health
 
 ROOT = Path(__file__).parents[1]
 Q_PLAN = ROOT / "evals/fleet/configs/qwen38-opencode-autocontinue-canary1-v1.json"
+Q_SUCCESSOR_PLAN = ROOT / "evals/fleet/configs/qwen38-opencode-autocontinue-canary1-v2.json"
+G_SUCCESSOR_PLAN = ROOT / "evals/fleet/configs/glm53-opencode-autocontinue-canary1-v2.json"
 
 
 class _Response:
@@ -234,9 +237,38 @@ def test_runtime_route_observer_failures_leave_all_claims_and_execution_untouche
     assert not (tmp_path / "out").exists()
 
 
-def _release(plan: dict) -> dict:
+def _release(plan: dict, root: Path = ROOT) -> dict:
     bundle = phase_c.BUNDLES[plan["shard_key"]]
-    compatibility = canary._compatibility(ROOT)
+    successor = bundle.get("successor") is True
+    compatibility_sha = (
+        bundle["compatibility_sha"]
+        if successor
+        else canary._compatibility(root)["receipt_sha256"]
+    )
+    evidence = {
+        "fresh_inventory_receipt_sha256": canary.TASK_INVENTORY_SHA,
+        "fresh_inventory_execution_sha256": canary.TASK_INVENTORY_EXECUTION_SHA,
+        "fresh_duplicate_inventory_receipt_path": bundle["duplicate_path"],
+        "fresh_duplicate_inventory_receipt_sha256": bundle["duplicate_sha"],
+        "preflight_authorization_receipt_path": bundle["preauth_path"],
+        "preflight_authorization_receipt_sha256": bundle["preauth_sha"],
+        "preflight_receipt_path": bundle["preflight_path"],
+        "preflight_receipt_sha256": bundle["preflight_sha"],
+        "preflight_post_exit_receipt_path": bundle["post_exit_path"],
+        "preflight_post_exit_receipt_sha256": bundle["post_exit_sha"],
+        "dedicated_parity_receipt_sha256": canary.DEDICATED_PARITY_SHA,
+        "dedicated_parity_role": "historical_compatibility_only_not_live_route_authority",
+        "hosted_health_receipt_sha256": canary.HOSTED_HEALTH_SHA,
+        "shared_pvc_flock_receipt_sha256": canary.FLOCK_GATE_SHA,
+        "controller_compatibility_receipt_sha256": compatibility_sha,
+    }
+    if not successor:
+        evidence.update(
+            {
+                "hosted_only_route_receipt_path": phase_c.ROUTE_PATH,
+                "hosted_only_route_receipt_sha256": phase_c.ROUTE_SHA,
+            }
+        )
     release = {
         "schema_version": canary.RELEASE_SCHEMA,
         "append_only": True,
@@ -249,65 +281,70 @@ def _release(plan: dict) -> dict:
             "attempt": 1,
             "task_version_id": plan["tasks"][0]["task"]["version_id"],
         },
-        "evidence": {
-            "fresh_inventory_receipt_sha256": canary.TASK_INVENTORY_SHA,
-            "fresh_inventory_execution_sha256": canary.TASK_INVENTORY_EXECUTION_SHA,
-            "fresh_duplicate_inventory_receipt_path": bundle["duplicate_path"],
-            "fresh_duplicate_inventory_receipt_sha256": bundle["duplicate_sha"],
-            "preflight_authorization_receipt_path": bundle["preauth_path"],
-            "preflight_authorization_receipt_sha256": bundle["preauth_sha"],
-            "preflight_receipt_path": bundle["preflight_path"],
-            "preflight_receipt_sha256": bundle["preflight_sha"],
-            "preflight_post_exit_receipt_path": bundle["post_exit_path"],
-            "preflight_post_exit_receipt_sha256": bundle["post_exit_sha"],
-            "dedicated_parity_receipt_sha256": canary.DEDICATED_PARITY_SHA,
-            "dedicated_parity_role": "historical_compatibility_only_not_live_route_authority",
-            "hosted_health_receipt_sha256": canary.HOSTED_HEALTH_SHA,
-            "hosted_only_route_receipt_path": phase_c.ROUTE_PATH,
-            "hosted_only_route_receipt_sha256": phase_c.ROUTE_SHA,
-            "shared_pvc_flock_receipt_sha256": canary.FLOCK_GATE_SHA,
-            "controller_compatibility_receipt_sha256": compatibility["receipt_sha256"],
-        },
+        "evidence": evidence,
         "implementation": {
             "package_commit": "16e25f1f127dcf76018a223ad8ac57e2117f83d7",
             "plan_sha256": plan["plan_sha256"],
             "controller_sha256": canary._sha(
-                ROOT / "evals/fleet/autocontinue_canary_controller.py"
+                root / "evals/fleet/autocontinue_canary_controller.py"
             ),
             "frozen_controller_sha256": canary._sha(
-                ROOT / "evals/fleet/hosted_sweep_controller.py"
+                root / "evals/fleet/hosted_sweep_controller.py"
             ),
             "phase_c_validator_sha256": canary._sha(
-                ROOT / "evals/fleet/autocontinue_canary_hosted_release.py"
+                root / "evals/fleet/autocontinue_canary_hosted_release.py"
             ),
             "hosted_runtime_sha256": canary._sha(
-                ROOT / "evals/fleet/autocontinue_canary_hosted_runtime.py"
+                root / "evals/fleet/autocontinue_canary_hosted_runtime.py"
             ),
-            "hosted_health_sha256": canary._sha(ROOT / "evals/fleet/autocontinue_hosted_health.py"),
-            "self_hosted_sha256": canary._sha(ROOT / "evals/fleet/self_hosted.py"),
-            "runner_sha256": canary._sha(ROOT / "evals/fleet/opencode_train_sweep_runner.py"),
-            "endpoint_lease_sha256": canary._sha(ROOT / "evals/fleet/endpoint_lease.py"),
-            "fixed_proxy_sha256": canary._sha(ROOT / "evals/fleet/fixed_proxy.py"),
-            "dockerfile_sha256": canary._sha(ROOT / "evals/fleet/Dockerfile.opencode"),
+            "hosted_health_sha256": canary._sha(root / "evals/fleet/autocontinue_hosted_health.py"),
+            "self_hosted_sha256": canary._sha(root / "evals/fleet/self_hosted.py"),
+            "runner_sha256": canary._sha(root / "evals/fleet/opencode_train_sweep_runner.py"),
+            "endpoint_lease_sha256": canary._sha(root / "evals/fleet/endpoint_lease.py"),
+            "fixed_proxy_sha256": canary._sha(root / "evals/fleet/fixed_proxy.py"),
+            "dockerfile_sha256": canary._sha(root / "evals/fleet/Dockerfile.opencode"),
             "campaign_file_sha256": canary._sha(
-                ROOT
+                root
                 / "evals/fleet/configs/q38-glm53-opencode-autocontinue-primary-campaign-v1.json"
             ),
             "compatibility_file_sha256": canary._sha(
-                ROOT / "docs/evidence/qwen38-study/"
-                "2026-09-04-opencode-autocontinue-canary-controller-compatibility-v2.json"
+                root
+                / "docs/evidence/qwen38-study/"
+                / (
+                    "2026-09-04-opencode-autocontinue-canary-controller-compatibility-v3.json"
+                    if successor
+                    else "2026-09-04-opencode-autocontinue-canary-controller-compatibility-v2.json"
+                )
             ),
             "preflight_manifest_sha256": canary._sha(
-                ROOT / "evals/fleet/cluster/opencode-autocontinue-canary-preflights-v2.yaml"
+                root
+                / "evals/fleet/cluster/"
+                / (
+                    "opencode-autocontinue-canary-preflights-v3.yaml"
+                    if successor
+                    else "opencode-autocontinue-canary-preflights-v2.yaml"
+                )
             ),
             "scored_manifest_sha256": canary._sha(
-                ROOT / "evals/fleet/cluster/opencode-autocontinue-canary-scored-v2.yaml"
+                root
+                / "evals/fleet/cluster/"
+                / (
+                    "opencode-autocontinue-canary-successor-scored-v4.yaml"
+                    if successor
+                    else "opencode-autocontinue-canary-scored-v2.yaml"
+                )
             ),
             "run_script_sha256": canary._sha(
-                ROOT / "evals/fleet/scripts/run_opencode_autocontinue_canary.sh"
+                root / "evals/fleet/scripts/run_opencode_autocontinue_canary.sh"
             ),
             "launcher_sha256": canary._sha(
-                ROOT / "evals/fleet/scripts/submit_opencode_autocontinue_canaries_v1.sh"
+                root
+                / "evals/fleet/scripts/"
+                / (
+                    "submit_opencode_autocontinue_canaries_v2.sh"
+                    if successor
+                    else "submit_opencode_autocontinue_canaries_v1.sh"
+                )
             ),
         },
         "authorization": {
@@ -338,6 +375,10 @@ def _release(plan: dict) -> dict:
         },
         "privacy": phase_c.PRIVACY,
     }
+    if successor:
+        release["implementation"]["manifest_authorization_sha256"] = canary._sha(
+            root / "evals/fleet/autocontinue_successor_manifest_authorization.py"
+        )
     release["receipt_sha256"] = canary.digest_without(release, "receipt_sha256")
     return release
 
@@ -359,6 +400,119 @@ def test_hosted_release_real_chain_is_exact(plan_path: Path) -> None:
     with pytest.raises(ValueError, match="hosted-only"):
         runtime.validate_hosted_release(
             changed, plan, ROOT, "16e25f1f127dcf76018a223ad8ac57e2117f83d7"
+        )
+
+
+@pytest.mark.parametrize("plan_path", [Q_SUCCESSOR_PLAN, G_SUCCESSOR_PLAN])
+def test_successor_hosted_release_real_chain_is_executable(plan_path: Path) -> None:
+    plan = canary.load_object(plan_path)
+    release = _release(plan)
+    runtime.validate_hosted_release(
+        release, plan, ROOT, "16e25f1f127dcf76018a223ad8ac57e2117f83d7"
+    )
+
+
+@pytest.mark.parametrize("plan_path", [Q_SUCCESSOR_PLAN, G_SUCCESSOR_PLAN])
+def test_rendered_successor_workspace_validates_release_and_requires_canonical_paths(
+    plan_path: Path, tmp_path: Path
+) -> None:
+    plan = canary.load_object(plan_path)
+    bundle = phase_c.BUNDLES[plan["shard_key"]]
+    reconstructed = tmp_path / plan["shard_key"] / "workspace/cyber-post-train"
+    common = {
+        "evals/fleet/autocontinue_canary_controller.py": (
+            ROOT / "evals/fleet/autocontinue_canary_controller.py"
+        ),
+        "evals/fleet/hosted_sweep_controller.py": (
+            ROOT / "evals/fleet/hosted_sweep_controller.py"
+        ),
+        "evals/fleet/autocontinue_canary_hosted_release.py": (
+            ROOT / "evals/fleet/autocontinue_canary_hosted_release.py"
+        ),
+        "evals/fleet/autocontinue_canary_hosted_runtime.py": (
+            ROOT / "evals/fleet/autocontinue_canary_hosted_runtime.py"
+        ),
+        "evals/fleet/autocontinue_hosted_health.py": (
+            ROOT / "evals/fleet/autocontinue_hosted_health.py"
+        ),
+        "evals/fleet/autocontinue_successor_manifest_authorization.py": (
+            ROOT / "evals/fleet/autocontinue_successor_manifest_authorization.py"
+        ),
+        "evals/fleet/self_hosted.py": ROOT / "evals/fleet/self_hosted.py",
+        "evals/fleet/opencode_train_sweep_runner.py": (
+            ROOT / "evals/fleet/opencode_train_sweep_runner.py"
+        ),
+        "evals/fleet/endpoint_lease.py": ROOT / "evals/fleet/endpoint_lease.py",
+        "evals/fleet/fixed_proxy.py": ROOT / "evals/fleet/fixed_proxy.py",
+        "evals/fleet/Dockerfile.opencode": ROOT / "evals/fleet/Dockerfile.opencode",
+        "evals/fleet/configs/q38-glm53-opencode-autocontinue-primary-campaign-v1.json": (
+            ROOT
+            / "evals/fleet/configs/q38-glm53-opencode-autocontinue-primary-campaign-v1.json"
+        ),
+        "evals/fleet/cluster/opencode-autocontinue-canary-preflights-v3.yaml": (
+            ROOT / "evals/fleet/cluster/opencode-autocontinue-canary-preflights-v3.yaml"
+        ),
+        "evals/fleet/cluster/opencode-autocontinue-canary-successor-scored-v4.yaml": (
+            ROOT
+            / "evals/fleet/cluster/opencode-autocontinue-canary-successor-scored-v4.yaml"
+        ),
+        "evals/fleet/scripts/run_opencode_autocontinue_canary.sh": (
+            ROOT / "evals/fleet/scripts/run_opencode_autocontinue_canary.sh"
+        ),
+        "evals/fleet/scripts/submit_opencode_autocontinue_canaries_v2.sh": (
+            ROOT / "evals/fleet/scripts/submit_opencode_autocontinue_canaries_v2.sh"
+        ),
+        (
+            "docs/evidence/qwen38-study/"
+            "2026-09-04-opencode-autocontinue-canary-controller-compatibility-v3.json"
+        ): (
+            ROOT
+            / "docs/evidence/qwen38-study/"
+            "2026-09-04-opencode-autocontinue-canary-controller-compatibility-v3.json"
+        ),
+    }
+    for evidence_key in ("preauth_path", "preflight_path", "post_exit_path", "duplicate_path"):
+        relative = bundle[evidence_key]
+        common[relative] = ROOT / relative
+    for relative, source in common.items():
+        destination = reconstructed / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, destination)
+
+    release = _release(plan, reconstructed)
+    runtime.validate_hosted_release(
+        release,
+        plan,
+        reconstructed,
+        "16e25f1f127dcf76018a223ad8ac57e2117f83d7",
+    )
+
+    scored = (
+        reconstructed
+        / "evals/fleet/cluster/opencode-autocontinue-canary-successor-scored-v4.yaml"
+    )
+    scored.rename(scored.with_name("opencode-autocontinue-canary-scored-v3.yaml"))
+    with pytest.raises(FileNotFoundError):
+        runtime.validate_hosted_release(
+            release,
+            plan,
+            reconstructed,
+            "16e25f1f127dcf76018a223ad8ac57e2117f83d7",
+        )
+    scored.with_name("opencode-autocontinue-canary-scored-v3.yaml").rename(scored)
+
+    manifest_authorization = (
+        reconstructed / "evals/fleet/autocontinue_successor_manifest_authorization.py"
+    )
+    manifest_authorization.rename(
+        manifest_authorization.with_name("scored_manifest_authorization.py")
+    )
+    with pytest.raises(FileNotFoundError):
+        runtime.validate_hosted_release(
+            release,
+            plan,
+            reconstructed,
+            "16e25f1f127dcf76018a223ad8ac57e2117f83d7",
         )
 
 

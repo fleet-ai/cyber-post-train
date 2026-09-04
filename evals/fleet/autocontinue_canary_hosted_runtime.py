@@ -16,6 +16,7 @@ from evals.fleet import self_hosted
 ROUTE_SCHEMA = "fleet-opencode-autocontinue-canary-live-hosted-route-v1"
 EXPECTED_MODELS = ("qwen3.8-27b", "glm-5.3")
 SCORED_JOBS = ("chris-q38-ac-canary1-v1", "chris-glm53-ac-canary1-v1")
+SUCCESSOR_SCORED_JOBS = ("chris-q38-ac-canary1-v2", "chris-glm53-ac-canary1-v2")
 LAUNCHER_CALLER = "scored_launcher_precreate"
 RUNTIME_CALLER = "scored_runtime_preclaim"
 PRIVACY = {
@@ -41,6 +42,7 @@ def observe_live_route(
     pod_uid: str | None = None,
     opener: Any = None,
     now: datetime | None = None,
+    candidate_scored_job_names: tuple[str, ...] = SCORED_JOBS,
 ) -> dict[str, Any]:
     if caller not in {LAUNCHER_CALLER, RUNTIME_CALLER}:
         raise ValueError("live hosted route caller is invalid")
@@ -80,7 +82,7 @@ def observe_live_route(
         "runtime": {
             "job_uid": job_uid,
             "pod_uid": pod_uid,
-            "candidate_scored_job_names": list(SCORED_JOBS),
+            "candidate_scored_job_names": list(candidate_scored_job_names),
         },
         "request_counts": {
             "fleet_account_get": 1,
@@ -102,6 +104,7 @@ def validate_live_route(
     now: datetime | None = None,
     job_uid: str | None = None,
     pod_uid: str | None = None,
+    candidate_scored_job_names: tuple[str, ...] = SCORED_JOBS,
 ) -> None:
     observed = _utc(str(receipt.get("observed_at_utc")))
     current = now or datetime.now(UTC)
@@ -127,7 +130,7 @@ def validate_live_route(
         "runtime": {
             "job_uid": job_uid,
             "pod_uid": pod_uid,
-            "candidate_scored_job_names": list(SCORED_JOBS),
+            "candidate_scored_job_names": list(candidate_scored_job_names),
         },
         "request_counts": {
             "fleet_account_get": 1,
@@ -155,6 +158,7 @@ def validate_hosted_release(
     canary.validate_plan(plan)
     phase_c.validate_preflight_bundle(plan, root)
     bundle = phase_c.BUNDLES[plan["shard_key"]]
+    successor = bundle.get("successor") is True
     expected_evidence = {
         "fresh_inventory_receipt_sha256": canary.TASK_INVENTORY_SHA,
         "fresh_inventory_execution_sha256": canary.TASK_INVENTORY_EXECUTION_SHA,
@@ -169,11 +173,20 @@ def validate_hosted_release(
         "dedicated_parity_receipt_sha256": canary.DEDICATED_PARITY_SHA,
         "dedicated_parity_role": "historical_compatibility_only_not_live_route_authority",
         "hosted_health_receipt_sha256": canary.HOSTED_HEALTH_SHA,
-        "hosted_only_route_receipt_path": phase_c.ROUTE_PATH,
-        "hosted_only_route_receipt_sha256": phase_c.ROUTE_SHA,
         "shared_pvc_flock_receipt_sha256": canary.FLOCK_GATE_SHA,
-        "controller_compatibility_receipt_sha256": canary._compatibility(root)["receipt_sha256"],
+        "controller_compatibility_receipt_sha256": (
+            bundle["compatibility_sha"]
+            if successor
+            else canary._compatibility(root)["receipt_sha256"]
+        ),
     }
+    if not successor:
+        expected_evidence.update(
+            {
+                "hosted_only_route_receipt_path": phase_c.ROUTE_PATH,
+                "hosted_only_route_receipt_sha256": phase_c.ROUTE_SHA,
+            }
+        )
     expected_route = {
         "serving_route": "HOSTED_ONLY",
         "dedicated_serving_state": "USER_STOPPED_UNAVAILABLE",
@@ -206,22 +219,49 @@ def validate_hosted_release(
             root / "evals/fleet/configs/q38-glm53-opencode-autocontinue-primary-campaign-v1.json"
         ),
         "compatibility_file_sha256": canary._sha(
-            root / "docs/evidence/qwen38-study/"
-            "2026-09-04-opencode-autocontinue-canary-controller-compatibility-v2.json"
+            root
+            / "docs/evidence/qwen38-study/"
+            / (
+                "2026-09-04-opencode-autocontinue-canary-controller-compatibility-v3.json"
+                if successor
+                else "2026-09-04-opencode-autocontinue-canary-controller-compatibility-v2.json"
+            )
         ),
         "preflight_manifest_sha256": canary._sha(
-            root / "evals/fleet/cluster/opencode-autocontinue-canary-preflights-v2.yaml"
+            root
+            / "evals/fleet/cluster/"
+            / (
+                "opencode-autocontinue-canary-preflights-v3.yaml"
+                if successor
+                else "opencode-autocontinue-canary-preflights-v2.yaml"
+            )
         ),
         "scored_manifest_sha256": canary._sha(
-            root / "evals/fleet/cluster/opencode-autocontinue-canary-scored-v2.yaml"
+            root
+            / "evals/fleet/cluster/"
+            / (
+                "opencode-autocontinue-canary-successor-scored-v4.yaml"
+                if successor
+                else "opencode-autocontinue-canary-scored-v2.yaml"
+            )
         ),
         "run_script_sha256": canary._sha(
             root / "evals/fleet/scripts/run_opencode_autocontinue_canary.sh"
         ),
         "launcher_sha256": canary._sha(
-            root / "evals/fleet/scripts/submit_opencode_autocontinue_canaries_v1.sh"
+            root
+            / "evals/fleet/scripts/"
+            / (
+                "submit_opencode_autocontinue_canaries_v2.sh"
+                if successor
+                else "submit_opencode_autocontinue_canaries_v1.sh"
+            )
         ),
     }
+    if successor:
+        expected_implementation["manifest_authorization_sha256"] = canary._sha(
+            root / "evals/fleet/autocontinue_successor_manifest_authorization.py"
+        )
     expected_cell = {
         "source_rank": plan["tasks"][0]["source_rank"],
         "attempt": 1,
@@ -292,10 +332,12 @@ def run_hosted(
     package_commit: str,
 ) -> dict[str, Any]:
     validate_hosted_release(release, plan, repo, package_commit)
+    candidate_jobs = SUCCESSOR_SCORED_JOBS if plan["shard_key"].endswith("_v2") else SCORED_JOBS
     validate_live_route(
         launch_route,
         caller=LAUNCHER_CALLER,
         maximum_age_seconds=None,
+        candidate_scored_job_names=candidate_jobs,
     )
     key = os.environ.get("FLEET_API_KEY")
     if not key:
@@ -313,6 +355,7 @@ def run_hosted(
             caller=RUNTIME_CALLER,
             job_uid=os.environ.get("JOB_UID"),
             pod_uid=os.environ.get("POD_UID"),
+            candidate_scored_job_names=candidate_jobs,
         )
         validate_live_route(
             runtime_route,
@@ -320,6 +363,7 @@ def run_hosted(
             maximum_age_seconds=30,
             job_uid=os.environ.get("JOB_UID"),
             pod_uid=os.environ.get("POD_UID"),
+            candidate_scored_job_names=candidate_jobs,
         )
         canary.hosted._validate_plan_identity_absence(plan, root)
         with canary.hosted._client(key) as client:
@@ -405,9 +449,11 @@ def main() -> int:
     sub = parser.add_subparsers(dest="command", required=True)
     observe = sub.add_parser("observe-route")
     observe.add_argument("--out", type=Path, required=True)
+    observe.add_argument("--expected-job", action="append")
     validate = sub.add_parser("validate-route")
     validate.add_argument("--receipt", type=Path, required=True)
     validate.add_argument("--maximum-age-seconds", type=int, required=True)
+    validate.add_argument("--expected-job", action="append")
     final = sub.add_parser("validate-release")
     final.add_argument("--plan", type=Path, required=True)
     final.add_argument("--release", type=Path, required=True)
@@ -423,7 +469,12 @@ def main() -> int:
     execute.add_argument("--package-commit", required=True)
     args = parser.parse_args()
     if args.command == "observe-route":
-        receipt = observe_live_route(os.environ["FLEET_API_KEY"], caller=LAUNCHER_CALLER)
+        candidate_jobs = tuple(args.expected_job or SCORED_JOBS)
+        receipt = observe_live_route(
+            os.environ["FLEET_API_KEY"],
+            caller=LAUNCHER_CALLER,
+            candidate_scored_job_names=candidate_jobs,
+        )
         self_hosted.write_json_once(args.out, receipt)
         print("hosted route gate passed")
         return 0
@@ -432,6 +483,7 @@ def main() -> int:
             canary.load_object(args.receipt),
             caller=LAUNCHER_CALLER,
             maximum_age_seconds=args.maximum_age_seconds,
+            candidate_scored_job_names=tuple(args.expected_job or SCORED_JOBS),
         )
         return 0
     plan = canary.load_object(args.plan)

@@ -13,6 +13,9 @@ import pytest
 import yaml
 
 from evals.fleet import autocontinue_canary_controller as canary
+from evals.fleet import (
+    autocontinue_successor_manifest_authorization as successor_manifest_authorization,
+)
 from evals.fleet import scored_manifest_authorization as manifest_authorization
 
 ROOT = Path(__file__).parents[1]
@@ -55,6 +58,9 @@ PRE_MANIFEST_V2 = ROOT / "evals/fleet/cluster/opencode-autocontinue-canary-prefl
 SCORED_MANIFEST = ROOT / "evals/fleet/cluster/opencode-autocontinue-canary-scored-v2.yaml"
 PRE_MANIFEST_V3 = ROOT / "evals/fleet/cluster/opencode-autocontinue-canary-preflights-v3.yaml"
 SCORED_MANIFEST_V3 = ROOT / "evals/fleet/cluster/opencode-autocontinue-canary-scored-v3.yaml"
+SUCCESSOR_SCORED_MANIFEST = (
+    ROOT / "evals/fleet/cluster/opencode-autocontinue-canary-successor-scored-v4.yaml"
+)
 SCORED_V1_FAILURE = (
     ROOT / "docs/evidence/qwen38-study/"
     "2026-09-04-opencode-autocontinue-canary-scored-v1-bootstrap-failure.json"
@@ -386,6 +392,63 @@ def test_scored_manifest_authorization_is_exact_and_fail_closed(tmp_path: Path) 
     unauthorized.write_text(yaml.safe_dump_all(documents))
     with pytest.raises(ValueError, match="unauthorized"):
         manifest_authorization.validate_scored_manifest(unauthorized, expected)
+
+def test_successor_held_submitter_cannot_submit_scored_work() -> None:
+    path = ROOT / "evals/fleet/scripts/submit_opencode_autocontinue_canaries_v2.sh"
+    text = path.read_text()
+    assert path.stat().st_mode & 0o111
+    assert 'if [[ "$MODE" != preview ]]' in text
+    assert "--held" in text
+    assert "autocontinue_successor_manifest_authorization" in text
+    assert "--dry-run=server" in text
+    assert "kubectl apply" not in text
+    assert "kubectl create -f" not in text
+    assert 'test ! -e "/mnt/sfs/' not in text
+    assert '"scored_launch_authorized":false' in text
+
+
+def test_successor_scored_manifest_is_exactly_held() -> None:
+    expected = ("chris-q38-ac-canary1-v2", "chris-glm53-ac-canary1-v2")
+    successor_manifest_authorization.validate_scored_manifest(
+        SUCCESSOR_SCORED_MANIFEST, expected, launch_authorized=False
+    )
+    with pytest.raises(ValueError, match="unauthorized"):
+        successor_manifest_authorization.validate_scored_manifest(
+            SUCCESSOR_SCORED_MANIFEST, expected
+        )
+
+    documents = list(yaml.safe_load_all(SUCCESSOR_SCORED_MANIFEST.read_text()))
+    assert len(documents) == 2
+    for document in documents:
+        spec = document["spec"]["template"]["spec"]
+        assert spec["priorityClassName"] == "fleet-train-high"
+        evaluator = spec["containers"][0]
+        script = evaluator["args"][0]
+        assert (
+            'install -m 0755 /bootstrap/run.sh '
+            '"$root/evals/fleet/scripts/run_opencode_autocontinue_canary.sh"'
+        ) in script
+        assert (
+            'exec "$root/evals/fleet/scripts/run_opencode_autocontinue_canary.sh"'
+            in script
+        )
+        for required in (
+            "preflight-authorization-v3.json",
+            "preflight-v3-pass.json",
+            "preflight-v3-post-exit.json",
+            "duplicate-inventory-v3.json",
+            "controller-compatibility-v3.json",
+            "scored-v1-bootstrap-failure.json",
+        ):
+            assert required in script
+        assert "hosted-only-route-v1.json" not in script
+        mounts = {row["name"]: row["mountPath"] for row in evaluator["volumeMounts"]}
+        dind_mounts = {
+            row["name"]: row["mountPath"]
+            for row in spec["initContainers"][0]["volumeMounts"]
+        }
+        assert mounts["workspace"] == dind_mounts["workspace"] == "/workspace"
+        assert mounts["sfs"] == dind_mounts["sfs"] == "/mnt/sfs"
 
 
 def test_manifest_validator_command_failure_prevents_all_cluster_calls(tmp_path: Path) -> None:
