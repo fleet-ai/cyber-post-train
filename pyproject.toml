@@ -11,6 +11,13 @@ dependencies = [
   "typer>=0.16,<1",
 ]
 
+[project.scripts]
+cyber-post-train = "cyber_post_train.cli:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project.optional-dependencies]
 dev = [
   "pytest>=9.0.3,<10",

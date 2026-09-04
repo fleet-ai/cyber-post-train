@@ -14,6 +14,7 @@ Read this file before acting. Then select only the skill matching the work and r
 | Design, launch, or interpret matched evaluations | [`cyber-eval-parity`](skills/cyber-eval-parity/SKILL.md) |
 | Diagnose a job or assemble status/terminal evidence | [`cyber-run-evidence`](skills/cyber-run-evidence/SKILL.md) |
 | Convert a lesson into code, tests, docs, or agent guidance | [`cyber-experiment-maintainer`](skills/cyber-experiment-maintainer/SKILL.md) |
+| Compose or change a model × harness × data × benchmark experiment | [`cyber-experiment-operator`](skills/cyber-experiment-operator/SKILL.md) |
 
 For current experiment state, read `docs/QWEN36_STUDY_EVIDENCE.md`. For scientific controls, read `docs/SCIENTIFIC_PROTOCOL.md`. Chronological status notes and early example configs are context, not authority.
 
