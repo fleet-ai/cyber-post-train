@@ -29,6 +29,14 @@ HOLDER_JOB_UID = "87894cba-0f94-4e28-a1f9-9e21bdd748ec"
 HOLDER_POD_UID = "6316321c-08f7-4cc1-8e02-c3d899513cdc"
 PROBER_JOB_UID = "fc9f51d6-03f6-4520-8819-cbfb61b93796"
 PROBER_POD_UID = "5cdd6532-d1c6-4bde-bdc7-067f39924c97"
+RELEASE_GATE_SCHEMA = "fleet-opencode-autocontinue-flock-release-gate-v1"
+SEALED_TERMINAL_EVIDENCE_SHA256 = (
+    "sha256:1975ac508b8ddab44b552dbdce630a0fd2dfb89531ceb77f8bdb386d2dca59c9"
+)
+SEALED_TERMINAL_EVIDENCE_PATH = (
+    "docs/evidence/qwen38-study/"
+    "2026-09-04-opencode-autocontinue-flock-preflight-terminal-v1.json"
+)
 
 
 def load_object(path: Path) -> dict[str, Any]:
@@ -165,6 +173,62 @@ def validate_terminal_evidence(evidence: dict[str, Any]) -> None:
         }
     ):
         raise ValueError("flock preflight terminal evidence drifted")
+
+
+def validate_release_gate(gate_evidence: dict[str, Any]) -> None:
+    campaign = gate_evidence.get("campaign")
+    terminal = gate_evidence.get("terminal_evidence")
+    uids = gate_evidence.get("uid_bindings")
+    gate = gate_evidence.get("gate")
+    if (
+        gate_evidence.get("schema_version") != RELEASE_GATE_SCHEMA
+        or gate_evidence.get("append_only") is not True
+        or gate_evidence.get("receipt_sha256")
+        != self_hosted.digest_without(gate_evidence, "receipt_sha256")
+        or not isinstance(campaign, dict)
+        or campaign.get("path")
+        != "evals/fleet/configs/q38-glm53-opencode-autocontinue-primary-campaign-v1.json"
+        or campaign.get("campaign_sha256") != CAMPAIGN_SHA256
+        or campaign.get("file_sha256") != CAMPAIGN_FILE_SHA256
+        or campaign.get("immutable_bytes_unchanged") is not True
+        or campaign.get("canary_launch_authorized") is not False
+        or campaign.get("bulk_launch_authorized") is not False
+        or not isinstance(terminal, dict)
+        or terminal.get("path") != SEALED_TERMINAL_EVIDENCE_PATH
+        or terminal.get("receipt_sha256") != SEALED_TERMINAL_EVIDENCE_SHA256
+        or terminal.get("file_sha256")
+        != "sha256:0d6497dad8e3ff49fc095d903e3ab2afeaec1928f35b7eb8b097521b9e20b485"
+        or terminal.get("live_terminal_receipt_sha256") != TERMINAL_RECEIPT_SHA256
+        or terminal.get("live_terminal_file_sha256") != TERMINAL_FILE_SHA256
+        or uids
+        != {
+            "configmap_uid": "9e253557-f650-4ae6-abd1-48e4d6d3b3c7",
+            "holder_job_uid": HOLDER_JOB_UID,
+            "holder_pod_uid": HOLDER_POD_UID,
+            "prober_job_uid": PROBER_JOB_UID,
+            "prober_pod_uid": PROBER_POD_UID,
+        }
+        or gate
+        != {
+            "shared_pvc_cross_pod_flock_preflight_passed": True,
+            "contention_excluded_second_pod": True,
+            "slot_reacquired_after_release": True,
+            "endpoint_lease_capacity": 2,
+            "model_or_fleet_api_calls": 0,
+            "scored_sessions_created": 0,
+            "permits_scored_launch": False,
+            "requires_separate_canary_authorization": True,
+            "requires_separate_bulk_authorization": True,
+        }
+        or gate_evidence.get("privacy")
+        != {
+            "credentials_included": False,
+            "prompts_or_traces_included": False,
+            "scores_included": False,
+            "task_content_included": False,
+        }
+    ):
+        raise ValueError("flock release gate evidence drifted")
 
 
 def main() -> int:

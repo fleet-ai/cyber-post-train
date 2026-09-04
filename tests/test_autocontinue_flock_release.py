@@ -17,6 +17,10 @@ TERMINAL = Path(
     "docs/evidence/qwen38-study/"
     "2026-09-04-opencode-autocontinue-flock-preflight-terminal-v1.json"
 )
+RELEASE_GATE = Path(
+    "docs/evidence/qwen38-study/"
+    "2026-09-04-opencode-autocontinue-flock-release-gate-v1.json"
+)
 
 
 def test_flock_preflight_release_is_exact_and_non_scored() -> None:
@@ -91,3 +95,36 @@ def test_flock_preflight_terminal_rejects_resealed_tampering(
     )
     with pytest.raises(ValueError, match="terminal evidence drifted"):
         release_validator.validate_terminal_evidence(tampered)
+
+
+def test_flock_release_gate_is_append_only_and_does_not_authorize_scoring() -> None:
+    gate = release_validator.load_object(RELEASE_GATE)
+    release_validator.validate_release_gate(gate)
+    assert gate["gate"]["shared_pvc_cross_pod_flock_preflight_passed"]
+    assert gate["gate"]["permits_scored_launch"] is False
+    assert gate["campaign"]["canary_launch_authorized"] is False
+    assert gate["campaign"]["bulk_launch_authorized"] is False
+
+
+@pytest.mark.parametrize(
+    ("section", "field", "changed"),
+    [
+        ("campaign", "campaign_sha256", "sha256:" + "0" * 64),
+        ("campaign", "immutable_bytes_unchanged", False),
+        ("terminal_evidence", "receipt_sha256", "sha256:" + "0" * 64),
+        ("uid_bindings", "prober_job_uid", "0" * 36),
+        ("gate", "contention_excluded_second_pod", False),
+        ("gate", "permits_scored_launch", True),
+    ],
+)
+def test_flock_release_gate_rejects_resealed_tampering(
+    section: str, field: str, changed: object
+) -> None:
+    gate = release_validator.load_object(RELEASE_GATE)
+    tampered = deepcopy(gate)
+    tampered[section][field] = changed
+    tampered["receipt_sha256"] = self_hosted.digest_without(
+        tampered, "receipt_sha256"
+    )
+    with pytest.raises(ValueError, match="release gate evidence drifted"):
+        release_validator.validate_release_gate(tampered)

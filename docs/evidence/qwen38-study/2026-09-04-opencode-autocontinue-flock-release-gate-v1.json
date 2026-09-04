@@ -1,0 +1,45 @@
+{
+  "schema_version": "fleet-opencode-autocontinue-flock-release-gate-v1",
+  "append_only": true,
+  "recorded_at": "2026-09-04T20:09:54Z",
+  "campaign": {
+    "path": "evals/fleet/configs/q38-glm53-opencode-autocontinue-primary-campaign-v1.json",
+    "campaign_sha256": "sha256:63946f224a33eb0d2c2a6fdba34358ebf9ca379e5f0f156cd137c95a9b98097e",
+    "file_sha256": "sha256:1dfcc6d9ddbd19ef5ff46b5d6308d62526db4d1a0ccf05c5fa3b10b176910f34",
+    "immutable_bytes_unchanged": true,
+    "canary_launch_authorized": false,
+    "bulk_launch_authorized": false
+  },
+  "terminal_evidence": {
+    "path": "docs/evidence/qwen38-study/2026-09-04-opencode-autocontinue-flock-preflight-terminal-v1.json",
+    "receipt_sha256": "sha256:1975ac508b8ddab44b552dbdce630a0fd2dfb89531ceb77f8bdb386d2dca59c9",
+    "file_sha256": "sha256:0d6497dad8e3ff49fc095d903e3ab2afeaec1928f35b7eb8b097521b9e20b485",
+    "live_terminal_receipt_sha256": "sha256:cf9a955fcd35111b39ea3ccbcd8987e541cdd5628d0251e81828c0640e8d050d",
+    "live_terminal_file_sha256": "sha256:a5d1fb641ad0d16cdff37a279ffec41e2e1578f63adfee3889a2e77ace900b8d"
+  },
+  "uid_bindings": {
+    "configmap_uid": "9e253557-f650-4ae6-abd1-48e4d6d3b3c7",
+    "holder_job_uid": "87894cba-0f94-4e28-a1f9-9e21bdd748ec",
+    "holder_pod_uid": "6316321c-08f7-4cc1-8e02-c3d899513cdc",
+    "prober_job_uid": "fc9f51d6-03f6-4520-8819-cbfb61b93796",
+    "prober_pod_uid": "5cdd6532-d1c6-4bde-bdc7-067f39924c97"
+  },
+  "gate": {
+    "shared_pvc_cross_pod_flock_preflight_passed": true,
+    "contention_excluded_second_pod": true,
+    "slot_reacquired_after_release": true,
+    "endpoint_lease_capacity": 2,
+    "model_or_fleet_api_calls": 0,
+    "scored_sessions_created": 0,
+    "permits_scored_launch": false,
+    "requires_separate_canary_authorization": true,
+    "requires_separate_bulk_authorization": true
+  },
+  "privacy": {
+    "credentials_included": false,
+    "prompts_or_traces_included": false,
+    "scores_included": false,
+    "task_content_included": false
+  },
+  "receipt_sha256": "sha256:e9f34d35ac3c9e60d2698ebc1685374b98f13e41ac305df0609fb051f35c416c"
+}
