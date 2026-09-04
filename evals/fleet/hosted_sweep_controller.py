@@ -37,6 +37,9 @@ GLM_DEDICATED_B_V5_SCORING_RELEASE_SCHEMA = (
 GLM_DEDICATED_A_V5_SCORING_RELEASE_SCHEMA = (
     "fleet-glm53-dedicated-a-v5-scoring-release-v1"
 )
+COMPLETED_EXIT1_GAP_SCORING_RELEASE_SCHEMA = (
+    "fleet-completed-exit1-gap-scoring-release-v1"
+)
 QWEN_HTTP500_AUTH_STATEMENT = (
     "I authorize the create-once scored launch of Qwen successor plan "
     "sha256:8d6df6af63b308d648fb0c7ea9115f90b16de1d7e57b0968dda8fc8fd4a20c81 "
@@ -69,6 +72,20 @@ GLM_DEDICATED_A_V5_AUTH_STATEMENT = (
     "and overlap gates pass. It contains exactly 27 complete primary tasks/108 cells, "
     "uses fleet-train-high, binds A v5 runtime identities, excludes fenced source4, "
     "and must not repeat any scored cell."
+)
+COMPLETED_EXIT1_GAP_AUTH_STATEMENT = (
+    "I authorize create-once scored launches of Qwen gap plan "
+    "sha256:43ef5b8e649ccd88b2f77216f9ca4ec6dea73edddff972321f89ba6d8a48c4b1 "
+    "and hosted GLM gap plan "
+    "sha256:f67e1b02040bd795d336d27a42c8f3ea8752d66c1618f623ebe0ba87e152a0ac "
+    "after exact reconciliation, treatment, duplicate, overlap, and preflight "
+    "gates pass. This raises hosted concurrency from one to two streams per model "
+    "endpoint (four hosted streams total; six scored controllers including dedicated "
+    "A/B), not three on either endpoint. Prior Qwen concurrency2 was healthy; prior "
+    "GLM common failure was control-plane HTTP500, not inference pressure. Use "
+    "fleet-train-high, monitor score-blind latency/5xx/transport/restarts, and stop "
+    "adding concurrency on any regression. Run only the five never-started cells per "
+    "model; never repeat credited cells or launch r56/r111."
 )
 CAMPAIGNS = {
     "qwen38": "chris-cyber-q38-opencode11827-hosted-complete49-p4-v5",
@@ -662,6 +679,80 @@ def validate_glm_dedicated_a_v5_scoring_release(
         or any(value is not False for value in privacy.values())
     ):
         raise ValueError("GLM dedicated A v5 scoring release does not bind this plan")
+
+
+def validate_completed_exit1_gap_scoring_release(
+    plan: dict[str, Any], release: dict[str, Any] | None
+) -> None:
+    """Fail closed until exact gap cells and concurrency are authorized."""
+    if plan.get("shard_key") not in {
+        "qwen38_completed_exit1_gap",
+        "glm53_completed_exit1_gap",
+    }:
+        return
+    if not isinstance(release, dict):
+        raise ValueError("completed exit-1 gap scoring release is required")
+    plan_evidence = release.get("plan") or {}
+    gates = release.get("gates") or {}
+    concurrency = release.get("concurrency") or {}
+    treatment = release.get("treatment") or {}
+    scheduling = release.get("scheduling") or {}
+    authorization = release.get("authorization") or {}
+    privacy = release.get("privacy") or {}
+    source = plan.get("source") or {}
+    is_qwen = plan["shard_key"].startswith("qwen38")
+    expected_attempts = (
+        [[6, 3], [6, 4], [7, 2], [7, 3], [7, 4]]
+        if is_qwen
+        else [[13, 3], [13, 4], [15, 2], [15, 3], [15, 4]]
+    )
+    if (
+        release.get("schema_version") != COMPLETED_EXIT1_GAP_SCORING_RELEASE_SCHEMA
+        or release.get("receipt_sha256") != digest_without(release, "receipt_sha256")
+        or release.get("append_only") is not True
+        or release.get("supersedes") is not None
+        or plan_evidence.get("plan_sha256") != plan["plan_sha256"]
+        or plan_evidence.get("task_count") != 2
+        or plan_evidence.get("credited_cell_count") != 3
+        or plan_evidence.get("new_cell_count") != 5
+        or plan_evidence.get("pass_k") != 4
+        or plan_evidence.get("attempt_cells") != expected_attempts
+        or treatment != plan.get("treatment_block")
+        or gates.get("reconciliation_receipt_sha256")
+        != source.get("reconciliation_receipt_sha256")
+        or gates.get("gap_source_receipt_sha256")
+        != source.get("gap_source_receipt_sha256")
+        or gates.get("held_unused_replacement_rank")
+        != source.get("held_unused_replacement_rank")
+        or not all(
+            gates.get(field) is True
+            for field in (
+                "exact_treatment_gate_required",
+                "duplicate_gate_required",
+                "overlap_gate_required",
+                "fresh_create_once_identity_required",
+                "credited_cells_must_not_repeat",
+                "primary_denominator_completion_gate_required",
+            )
+        )
+        or concurrency.get("authorized_hosted_streams_per_model_endpoint") != 2
+        or concurrency.get("authorized_hosted_streams_total") != 4
+        or concurrency.get("authorized_scored_controllers_total") != 6
+        or concurrency.get("third_hosted_stream_per_endpoint_authorized") is not False
+        or concurrency.get("stop_adding_on_regression") is not True
+        or scheduling.get("required_priority_class") != "fleet-train-high"
+        or scheduling.get("workers") != 1
+        or scheduling.get("true_non_preemptible_available") is not False
+        or scheduling.get("priority_class_is_not_preemption_immunity") is not True
+        or authorization.get("timestamp_utc") != "2026-09-04T07:30:30Z"
+        or authorization.get("author") != "/root"
+        or authorization.get("statement") != COMPLETED_EXIT1_GAP_AUTH_STATEMENT
+        or authorization.get("scored_launch_authorized") is not True
+        or authorization.get("create_once") is not True
+        or authorization.get("must_not_repeat") is not True
+        or any(value is not False for value in privacy.values())
+    ):
+        raise ValueError("completed exit-1 gap scoring release does not bind this plan")
 
 
 def validate_dedicated_a_stop_tombstone(receipt: dict[str, Any]) -> None:
@@ -3893,6 +3984,7 @@ def preflight_plan(
     validate_glm_http500_scoring_release(plan, release)
     validate_glm_dedicated_b_v5_scoring_release(plan, release)
     validate_glm_dedicated_a_v5_scoring_release(plan, release)
+    validate_completed_exit1_gap_scoring_release(plan, release)
     roots_reconciled = _validate_plan_identity_absence(plan, root)
     with _client(key) as client:
         account = self_hosted._request(client, "GET", "/v1/account")
@@ -3953,6 +4045,7 @@ def run_plan(
     validate_glm_http500_scoring_release(plan, release)
     validate_glm_dedicated_b_v5_scoring_release(plan, release)
     validate_glm_dedicated_a_v5_scoring_release(plan, release)
+    validate_completed_exit1_gap_scoring_release(plan, release)
     key = os.environ.get("FLEET_API_KEY")
     if not key:
         raise RuntimeError("FLEET_API_KEY is required")

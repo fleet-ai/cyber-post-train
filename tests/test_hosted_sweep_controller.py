@@ -134,6 +134,12 @@ QWEN_COMPLETED_EXIT1_GAP_PLAN = Path(
 GLM_COMPLETED_EXIT1_GAP_PLAN = Path(
     "evals/fleet/configs/glm53-opencode-hosted-completed-exit1-gap-pass4-v1.json"
 )
+QWEN_COMPLETED_EXIT1_GAP_RELEASE = Path(
+    "docs/evidence/qwen38-study/2026-09-04-qwen38-completed-exit1-gap-scoring-release-v1.json"
+)
+GLM_COMPLETED_EXIT1_GAP_RELEASE = Path(
+    "docs/evidence/qwen38-study/2026-09-04-glm53-completed-exit1-gap-scoring-release-v1.json"
+)
 GLM_DEDICATED_B_V5_RELEASE = Path(
     "docs/evidence/qwen38-study/2026-09-04-glm53-dedicated-b-v5-scoring-release-v1.json"
 )
@@ -2283,6 +2289,41 @@ def test_completed_exit1_gap_source_rejects_any_replacement_claim() -> None:
             source,
             "qwen_hosted_v8",
         )
+
+
+@pytest.mark.parametrize(
+    ("plan_path", "release_path"),
+    [
+        (QWEN_COMPLETED_EXIT1_GAP_PLAN, QWEN_COMPLETED_EXIT1_GAP_RELEASE),
+        (GLM_COMPLETED_EXIT1_GAP_PLAN, GLM_COMPLETED_EXIT1_GAP_RELEASE),
+    ],
+)
+def test_completed_exit1_gap_release_binds_cells_and_concurrency(
+    plan_path: Path,
+    release_path: Path,
+) -> None:
+    plan = hosted.load_object(plan_path)
+    release = hosted.load_object(release_path)
+    hosted.validate_completed_exit1_gap_scoring_release(plan, release)
+
+    release["concurrency"]["authorized_hosted_streams_per_model_endpoint"] = 3
+    release["receipt_sha256"] = self_hosted.digest_without(
+        release, "receipt_sha256"
+    )
+    with pytest.raises(ValueError, match="does not bind"):
+        hosted.validate_completed_exit1_gap_scoring_release(plan, release)
+
+    for section, field, value in (
+        ("authorization", "create_once", False),
+        ("scheduling", "priority_class_is_not_preemption_immunity", False),
+    ):
+        tampered = hosted.load_object(release_path)
+        tampered[section][field] = value
+        tampered["receipt_sha256"] = self_hosted.digest_without(
+            tampered, "receipt_sha256"
+        )
+        with pytest.raises(ValueError, match="does not bind"):
+            hosted.validate_completed_exit1_gap_scoring_release(plan, tampered)
 
 
 def test_completed_exit1_reconciliation_is_exact_plan_bound_and_score_blind() -> None:
