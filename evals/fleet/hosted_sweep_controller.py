@@ -447,7 +447,14 @@ def build_dedicated_a_plan(
         "api_run_id": canary["api_run"]["run_id"],
         "ray_job_uid": canary["controllers"]["ray_job_uid"],
         "ray_cluster_uid": canary["controllers"]["ray_cluster_uid"],
+        "head_pod_uid": canary["runtime"]["head_pod_uid"],
+        "runtime_image_digest": canary["image"]["resolved_image_id"],
         "serving_config_sha256": canary["immutable_config"]["sha256"],
+        "assignment_receipt_sha256": assignment["receipt_sha256"],
+        "hydration_receipt_sha256": hydration["receipt_sha256"],
+        "parity_receipt_sha256": self_hosted.sha256(
+            self_hosted.canonical_json(canary)
+        ),
         "served_id": model["served_id"],
         "model_revision": model["revision"],
         "session_model": model["session_model"],
@@ -798,6 +805,16 @@ def validate_plan(plan: dict[str, Any]) -> None:
             or treatment.get("replica") != "A"
             or not treatment.get("service_uid")
             or not treatment.get("ray_cluster_uid")
+            or not treatment.get("head_pod_uid")
+            or not str(treatment.get("runtime_image_digest") or "").startswith(
+                "ghcr.io/fleet-ai/cyber-post-train-glm53-runtime@sha256:"
+            )
+            or treatment.get("assignment_receipt_sha256")
+            != plan["source"].get("assignment_receipt_sha256")
+            or treatment.get("hydration_receipt_sha256")
+            != plan["source"].get("hydration_receipt_sha256")
+            or treatment.get("parity_receipt_sha256")
+            != plan["source"].get("canary_evidence_sha256")
             or treatment.get("endpoint_origin") != plan["model"].get("endpoint_origin")
             or treatment.get("model_revision") != plan["model"].get("revision")
             or set(expected_a)

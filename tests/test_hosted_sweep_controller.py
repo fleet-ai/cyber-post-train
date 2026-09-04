@@ -22,6 +22,9 @@ REPLACEMENT_LOCK = Path(
 HYDRATION_JOB_V2 = Path(
     "evals/fleet/cluster/glm53-dedicated-a-hydration-job-v2.yaml"
 )
+DEDICATED_A_PLAN = Path(
+    "evals/fleet/configs/glm53-opencode-dedicated-a-even27-pass4-v1.json"
+)
 
 
 @pytest.mark.parametrize(
@@ -544,3 +547,11 @@ def test_hydration_job_bootstraps_every_controller_import() -> None:
     assert "/bootstrap/runner.py" in manifest
     assert "opencode_train_sweep_runner.py" in manifest
     assert "/bootstrap/controller.py" in manifest
+
+
+def test_committed_dedicated_a_plan_is_digest_valid() -> None:
+    plan = hosted.load_object(DEDICATED_A_PLAN)
+    hosted.validate_plan(plan)
+    assert plan["plan_sha256"] == (
+        "sha256:4f8d4fcf50af8abccf3b9d272a18755f9be0bc862a66fe25bba691bee8a22208"
+    )
