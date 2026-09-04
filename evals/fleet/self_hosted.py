@@ -1242,8 +1242,8 @@ def run(
             json={},
         )
         if response.status_code >= 400:
-            raise RuntimeError(
-                f"Fleet authoritative instance create failed with HTTP {response.status_code}"
+            raise FleetRequestError(
+                "POST", authoritative_route(config, "provisioning"), response.status_code
             )
         rollout_instance = response.json()
         if isinstance(rollout_instance, dict):

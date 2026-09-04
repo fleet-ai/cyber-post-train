@@ -2687,3 +2687,165 @@ def test_qwen_post_partial_tail_release_and_full_manifest_are_fail_closed() -> N
         for document in documents
     )
     assert all(document["spec"]["backoffLimit"] == 0 for document in documents)
+
+
+def test_run_task_quarantines_transport_failure_and_fences_only_current_task(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "root"
+    for name in ("attempts", "claims", "task-claims", "task-results", "quarantine"):
+        (root / name).mkdir(parents=True, exist_ok=True)
+    plan = {"plan_sha256": "sha256:" + "1" * 64}
+    task = {
+        "rank": 1,
+        "source_rank": 11,
+        "task": {"key": "task", "version_id": "version"},
+    }
+    items = [
+        {
+            "rank": 1,
+            "source_rank": 11,
+            "attempt": attempt,
+            "run_id": f"run-{attempt}",
+            "network": f"network-{attempt}",
+        }
+        for attempt in range(1, 5)
+    ]
+    monkeypatch.setattr(hosted, "_validate_inventory_for_task", lambda *args: 0)
+    monkeypatch.setattr(
+        hosted,
+        "_attempt_config",
+        lambda *_args: {"config_sha256": "sha256:" + "2" * 64},
+    )
+
+    def fail_transport(*_args, **_kwargs):
+        raise self_hosted.FleetRequestError("POST", "/v1/rollout-rewards", 500)
+
+    monkeypatch.setattr(self_hosted, "run", fail_transport)
+    result = hosted._run_task(plan, task, items, root, tmp_path / "proxy.py", "key")
+    assert result == {"complete": False, "accepted": 0, "quarantined": True}
+    receipt = hosted.load_object(root / "quarantine" / "run-1.json")
+    assert receipt["classification"] == "infrastructure_incomplete"
+    assert receipt["remaining_task_attempts_not_started"] == [2, 3, 4]
+    assert receipt["unrelated_tasks_may_continue"] is True
+    assert receipt["retry_allowed"] is False
+    assert receipt["receipt_sha256"] == hosted.digest_without(
+        receipt, "receipt_sha256"
+    )
+    assert not (root / "claims" / "run-2.json").exists()
+
+
+@pytest.mark.parametrize("fatal", [RuntimeError("identity drift"), SystemExit(7)])
+def test_run_task_preserves_invariant_and_process_control_failures(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fatal: BaseException
+) -> None:
+    root = tmp_path / "root"
+    for name in ("attempts", "claims", "task-claims", "task-results", "quarantine"):
+        (root / name).mkdir(parents=True, exist_ok=True)
+    plan = {"plan_sha256": "sha256:" + "1" * 64}
+    task = {
+        "rank": 1,
+        "source_rank": 11,
+        "task": {"key": "task", "version_id": "version"},
+    }
+    item = {
+        "rank": 1,
+        "source_rank": 11,
+        "attempt": 1,
+        "run_id": "run-1",
+        "network": "network-1",
+    }
+    monkeypatch.setattr(hosted, "_validate_inventory_for_task", lambda *args: 0)
+    monkeypatch.setattr(
+        hosted,
+        "_attempt_config",
+        lambda *_args: {"config_sha256": "sha256:" + "2" * 64},
+    )
+
+    def fail_fatally(*_args, **_kwargs):
+        raise fatal
+
+    monkeypatch.setattr(self_hosted, "run", fail_fatally)
+    with pytest.raises(type(fatal)):
+        hosted._run_task(plan, task, [item], root, tmp_path / "proxy.py", "key")
+    assert not list((root / "quarantine").glob("*.json"))
+
+
+def test_run_plan_continues_unrelated_queue_after_task_quarantine(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    plan = {
+        "plan_sha256": "sha256:" + "1" * 64,
+        "task_count": 2,
+        "tasks": [
+            {
+                "rank": rank,
+                "source_rank": 10 + rank,
+                "task": {"key": f"task-{rank}", "version_id": f"version-{rank}"},
+            }
+            for rank in (1, 2)
+        ],
+        "attempts": [
+            {
+                "rank": rank,
+                "source_rank": 10 + rank,
+                "attempt": attempt,
+                "run_id": f"run-{rank}-{attempt}",
+                "network": f"network-{rank}-{attempt}",
+            }
+            for rank in (1, 2)
+            for attempt in range(1, 5)
+        ],
+        "credited_sessions": [],
+    }
+    monkeypatch.setattr(hosted, "validate_plan", lambda _plan: None)
+    for name in (
+        "validate_dedicated_scoring_release",
+        "validate_hosted_replacement_scoring_release",
+        "validate_qwen_http500_scoring_release",
+        "validate_qwen_post_partial_tail_release",
+        "validate_glm_http500_scoring_release",
+        "validate_glm_dedicated_b_v5_scoring_release",
+        "validate_glm_dedicated_a_v5_scoring_release",
+        "validate_completed_exit1_gap_scoring_release",
+        "validate_dedicated_a_completed_exit1_gap_release",
+    ):
+        monkeypatch.setattr(hosted, name, lambda *_args: None)
+    monkeypatch.setattr(hosted, "_validate_plan_identity_absence", lambda *_args: 0)
+    monkeypatch.setattr(hosted, "_validate_inventory_for_task", lambda *_args: 0)
+    monkeypatch.setattr(
+        self_hosted,
+        "_request",
+        lambda *_args, **_kwargs: {
+            "team_name": "fleet",
+            "team_id": self_hosted.FLEET_TEAM_ID,
+        },
+    )
+
+    class Client:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    monkeypatch.setattr(hosted, "_client", lambda _key: Client())
+    monkeypatch.setenv("FLEET_API_KEY", "test")
+    seen: list[int] = []
+
+    def run_task(_plan, task, *_args):
+        seen.append(task["rank"])
+        return (
+            {"complete": False, "accepted": 0, "quarantined": True}
+            if task["rank"] == 1
+            else {"complete": True, "accepted": 4, "quarantined": False}
+        )
+
+    monkeypatch.setattr(hosted, "_run_task", run_task)
+    terminal = hosted.run_plan(
+        plan, tmp_path / "ledger", tmp_path / "proxy.py", release={}
+    )
+    assert seen == [1, 2]
+    assert terminal["pass4_complete_tasks"] == 1
+    assert terminal["quarantined_infrastructure_tasks"] == 1
+    assert terminal["accepted_new_outcomes"] == 4

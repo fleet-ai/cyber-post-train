@@ -4718,6 +4718,89 @@ def _classify_result(
     return row
 
 
+def _has_sanitized_infrastructure_failure(out_dir: Path) -> bool:
+    """Recognize only durable transport/ingest evidence, never an error string."""
+    try:
+        ingest_path = out_dir / "session-ingest.json"
+        if ingest_path.is_file():
+            ingest = load_object(ingest_path)
+            if ingest.get("status") == "failed" and (
+                ingest.get("error_code") == "fleet_http_error"
+                or ingest.get("error_type") in {"FleetRequestError", "ResponseBindingDrift"}
+            ):
+                return True
+        result_path = out_dir / "result.json"
+        if result_path.is_file():
+            result = load_object(result_path)
+            if result.get("session_ingest_status") == "failed":
+                return True
+    except (OSError, ValueError, RuntimeError, json.JSONDecodeError):
+        return False
+    return False
+
+
+def _quarantine_infrastructure_cell(
+    *,
+    plan: dict[str, Any],
+    task: dict[str, Any],
+    item: dict[str, Any],
+    claim_sha256: str,
+    root: Path,
+    error_type: str,
+    accepted_count: int,
+    remaining_attempts: list[int],
+) -> dict[str, Any]:
+    """Append an immutable quarantine and fence only its current task."""
+    receipt = {
+        "schema_version": "fleet-hosted-opencode-cell-quarantine-v1",
+        "plan_sha256": plan["plan_sha256"],
+        "run_id": item["run_id"],
+        "rank": int(task["rank"]),
+        "source_rank": int(task["source_rank"]),
+        "attempt": int(item["attempt"]),
+        "task_key": task["task"]["key"],
+        "task_version_id": task["task"]["version_id"],
+        "claim_sha256": claim_sha256,
+        "classification": "infrastructure_incomplete",
+        "error_type": error_type,
+        "accepted_outcomes_before_quarantine": accepted_count,
+        "remaining_task_attempts_not_started": remaining_attempts,
+        "task_fenced": True,
+        "unrelated_tasks_may_continue": True,
+        "retry_allowed": False,
+        "scores_included": False,
+        "prompts_or_traces_included": False,
+    }
+    receipt["receipt_sha256"] = digest_without(receipt, "receipt_sha256")
+    self_hosted.write_json_once(
+        root / "quarantine" / f"{item['run_id']}.json", receipt
+    )
+    task_receipt = {
+        "schema_version": "fleet-hosted-opencode-task-quarantined-v1",
+        "plan_sha256": plan["plan_sha256"],
+        "rank": int(task["rank"]),
+        "source_rank": int(task["source_rank"]),
+        "accepted_new_outcomes": accepted_count,
+        "quarantine_receipt_sha256": receipt["receipt_sha256"],
+        "remaining_cells_not_started": remaining_attempts,
+        "retry_allowed": False,
+        "scores_included": False,
+        "prompts_or_traces_included": False,
+    }
+    task_receipt["receipt_sha256"] = digest_without(task_receipt, "receipt_sha256")
+    self_hosted.write_json_once(
+        root / "task-results" / f"rank-{int(task['rank']):03d}.json", task_receipt
+    )
+    _emit(
+        "cell_quarantined_infrastructure",
+        rank=int(task["rank"]),
+        source_rank=int(task["source_rank"]),
+        attempt=int(item["attempt"]),
+        receipt_sha256=receipt["receipt_sha256"],
+    )
+    return {"complete": False, "accepted": accepted_count, "quarantined": True}
+
+
 def _run_task(
     plan: dict[str, Any],
     task: dict[str, Any],
@@ -4764,10 +4847,31 @@ def _run_task(
         claim["claim_sha256"] = digest_without(claim, "claim_sha256")
         self_hosted.write_json_once(root / "claims" / f"{item['run_id']}.json", claim)
         out_dir = root / "attempts" / item["run_id"]
-        self_hosted.run(config, out_dir, proxy)
-        outcome = _classify_result(
-            out_dir, config, item, claim["claim_sha256"], key
-        )
+        try:
+            self_hosted.run(config, out_dir, proxy)
+            outcome = _classify_result(
+                out_dir, config, item, claim["claim_sha256"], key
+            )
+        except Exception as exc:  # noqa: BLE001
+            quarantinable = isinstance(
+                exc, (self_hosted.FleetRequestError, self_hosted.SessionIngestError)
+            ) or _has_sanitized_infrastructure_failure(out_dir)
+            if not quarantinable:
+                raise
+            return _quarantine_infrastructure_cell(
+                plan=plan,
+                task=task,
+                item=item,
+                claim_sha256=claim["claim_sha256"],
+                root=root,
+                error_type=type(exc).__name__,
+                accepted_count=accepted_count,
+                remaining_attempts=[
+                    int(next_item["attempt"])
+                    for next_item in items
+                    if int(next_item["attempt"]) > int(item["attempt"])
+                ],
+            )
         if not outcome["accepted"]:
             task_receipt = {
                 "schema_version": "fleet-hosted-opencode-task-fenced-v1",
@@ -4795,7 +4899,7 @@ def _run_task(
                 attempt=int(item["attempt"]),
                 receipt_sha256=outcome["receipt_sha256"],
             )
-            return {"complete": False, "accepted": accepted_count}
+            return {"complete": False, "accepted": accepted_count, "quarantined": False}
         accepted_count += 1
         _emit(
             "attempt_accepted",
@@ -4824,7 +4928,7 @@ def _run_task(
         source_rank=int(task["source_rank"]),
         receipt_sha256=task_receipt["receipt_sha256"],
     )
-    return {"complete": True, "accepted": accepted_count}
+    return {"complete": True, "accepted": accepted_count, "quarantined": False}
 
 
 def _worker_cap(accepted: int) -> int:
@@ -4948,7 +5052,14 @@ def run_plan(
     roots_reconciled = _validate_plan_identity_absence(plan, root)
     root.mkdir(parents=True, exist_ok=False)
     root.chmod(0o700)
-    for name in ("attempts", "claims", "task-claims", "task-results", "ramps"):
+    for name in (
+        "attempts",
+        "claims",
+        "task-claims",
+        "task-results",
+        "quarantine",
+        "ramps",
+    ):
         (root / name).mkdir(mode=0o700)
     self_hosted.write_json_once(root / "PLAN.json", plan)
     with _client(key) as client:
@@ -4995,6 +5106,7 @@ def run_plan(
     accepted_count = 0
     complete_tasks = 0
     fenced_tasks = 0
+    quarantined_tasks = 0
     last_cap = 1
     infrastructure_failure: Exception | None = None
     with ThreadPoolExecutor(max_workers=max(stage["workers"] for stage in SCHEDULE)) as pool:
@@ -5037,6 +5149,8 @@ def run_plan(
                     accepted_count += int(result["accepted"])
                     if result["complete"]:
                         complete_tasks += 1
+                    elif result.get("quarantined"):
+                        quarantined_tasks += 1
                     else:
                         fenced_tasks += 1
                 except Exception as exc:  # noqa: BLE001
@@ -5051,12 +5165,13 @@ def run_plan(
         "planned_tasks": int(plan["task_count"]),
         "pass4_complete_tasks": complete_tasks,
         "fenced_noncreditable_tasks": fenced_tasks,
+        "quarantined_infrastructure_tasks": quarantined_tasks,
         "accepted_new_outcomes": accepted_count,
         "credited_prior_outcomes": len(plan["credited_sessions"]),
         "scores_included": False,
         "prompts_or_traces_included": False,
     }
-    if complete_tasks + fenced_tasks != int(plan["task_count"]):
+    if complete_tasks + fenced_tasks + quarantined_tasks != int(plan["task_count"]):
         raise RuntimeError("hosted task terminal accounting drifted")
     terminal["receipt_sha256"] = digest_without(terminal, "receipt_sha256")
     self_hosted.write_json_once(root / "TERMINAL.json", terminal)
