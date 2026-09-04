@@ -258,6 +258,19 @@
     "shared_pvc_cross_pod_flock_preflight_passed": false,
     "shared_pvc_cross_pod_flock_preflight_receipt_sha256": null
   },
+  "hosted_runtime_gate": {
+    "path": "docs/evidence/qwen38-study/2026-09-04-opencode-autocontinue-hosted-health-v1.json",
+    "file_sha256": "sha256:d4bc8d2ef1395c9178f2b5e7a29edefddec42e90fb4e532cf733dc97cc838f5c",
+    "receipt_sha256": "sha256:d81a01ffe1087d7d85fe511bc9c978461ba3e24a2c15675871cfb8668c49bd85",
+    "qualified_campaign_sha256": "sha256:9df46502affc3ae892ead22fd13fa05e3e9f2950700f9ac67d76588bc29a6d96",
+    "fleet_team_verified": true,
+    "qwen_route_available": true,
+    "glm_route_available": true,
+    "hosted_context_length_observable": false,
+    "hosted_262144_context_claimed_from_live_api": false,
+    "static_renderer_context_binding_retained": true,
+    "passed": true
+  },
   "gates": {
     "zero_legacy_credit": true,
     "one_new_treatment_canary_cell_per_model": true,
@@ -281,5 +294,5 @@
     "prompts_or_traces_included": false,
     "credentials_included": false
   },
-  "campaign_sha256": "sha256:ff82e4f7fb4b6b9daecba09d72c2a3ab6f48008150cce37654b5ab7999b48eb2"
+  "campaign_sha256": "sha256:0c05bbef61b074a4fb1bc0e68aaece379f532b53b4470ded7e972ef38bdbc267"
 }

@@ -92,6 +92,30 @@ EXPECTED_CONTROLLER_RUNTIME = {
     "shared_pvc_cross_pod_flock_preflight_receipt_sha256": None,
 }
 
+HOSTED_HEALTH_PATH = (
+    "docs/evidence/qwen38-study/"
+    "2026-09-04-opencode-autocontinue-hosted-health-v1.json"
+)
+EXPECTED_HOSTED_HEALTH = {
+    "path": HOSTED_HEALTH_PATH,
+    "file_sha256": (
+        "sha256:d4bc8d2ef1395c9178f2b5e7a29edefddec42e90fb4e532cf733dc97cc838f5c"
+    ),
+    "receipt_sha256": (
+        "sha256:d81a01ffe1087d7d85fe511bc9c978461ba3e24a2c15675871cfb8668c49bd85"
+    ),
+    "qualified_campaign_sha256": (
+        "sha256:9df46502affc3ae892ead22fd13fa05e3e9f2950700f9ac67d76588bc29a6d96"
+    ),
+    "fleet_team_verified": True,
+    "qwen_route_available": True,
+    "glm_route_available": True,
+    "hosted_context_length_observable": False,
+    "hosted_262144_context_claimed_from_live_api": False,
+    "static_renderer_context_binding_retained": True,
+    "passed": True,
+}
+
 EXPECTED_COMPONENT_RANKS = {
     "qwen-hosted-retained-source4": {4},
     "qwen-hosted-primary49": {6, 7, 8, 9, *range(11, 51), 52, 53, 54, 55, 56},
@@ -493,6 +517,53 @@ def validate_campaign(campaign: dict[str, Any], *, root: Path = Path(".")) -> di
     ):
         raise ValueError("controller runtime module digest drifted")
 
+    hosted_health_ref = campaign.get("hosted_runtime_gate") or {}
+    if hosted_health_ref != EXPECTED_HOSTED_HEALTH:
+        raise ValueError("hosted runtime gate binding drifted")
+    hosted_health_path = root / hosted_health_ref["path"]
+    if self_hosted.sha256(hosted_health_path.read_bytes()) != hosted_health_ref[
+        "file_sha256"
+    ]:
+        raise ValueError("hosted runtime gate file drifted")
+    hosted_health = load_object(hosted_health_path)
+    models = (hosted_health.get("hosted_inference") or {}).get("models") or {}
+    if (
+        hosted_health.get("receipt_sha256") != hosted_health_ref["receipt_sha256"]
+        or hosted_health.get("receipt_sha256")
+        != digest_without(hosted_health, "receipt_sha256")
+        or hosted_health.get("campaign_sha256")
+        != hosted_health_ref["qualified_campaign_sha256"]
+        or hosted_health.get("status") != "PASSED"
+        or hosted_health.get("fleet_account")
+        != {
+            "authenticated_get_succeeded": True,
+            "team_id": self_hosted.FLEET_TEAM_ID,
+            "team_name": "fleet",
+        }
+        or hosted_health.get("hosted_inference", {}).get("origin")
+        != "https://inference.flt.build"
+        or any(
+            models.get(model)
+            != {
+                "available": True,
+                "context_length": None,
+                "context_length_observable": False,
+            }
+            for model in ("qwen3.8-27b", "glm-5.3")
+        )
+        or hosted_health.get("request_counts")
+        != {
+            "chat_completions": 0,
+            "fleet_account_get": 1,
+            "fleet_task_or_scoring": 0,
+            "hosted_models_get": 1,
+        }
+        or hosted_health.get("scores_read_or_included") is not False
+        or hosted_health.get("prompts_traces_flags_or_tool_arguments_read_or_included")
+        is not False
+    ):
+        raise ValueError("hosted runtime qualification drifted")
+
     gates = campaign.get("gates") or {}
     drain = gates.get("drain_protocol") or {}
     if (
@@ -549,7 +620,6 @@ def validate_release_preview(
         != [
             "r114_immutable_hydration_and_execution_binding",
             "fresh_fleet_task_version_environment_verifier_inventory",
-            "hosted_endpoint_health",
             "dedicated_a_and_b_uid_bound_autocontinue_parity",
             "qwen_and_glm_one_cell_canary_authorization_and_acceptance",
             "shared_pvc_cross_pod_flock_preflight_and_fresh_duplicate_preflights",
