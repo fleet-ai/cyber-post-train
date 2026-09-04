@@ -1,0 +1,85 @@
+{
+  "schema_version": "fleet-hosted-http500-replacements-hydration-execution-v1",
+  "controller_commit": "ab2740d",
+  "namespace": "fleet-train-jobs",
+  "priority": {
+    "priority_class": "fleet-train-high",
+    "value": 10000,
+    "preemption_policy": "PreemptLowerPriority",
+    "is_true_preemption_immunity": false
+  },
+  "executions": [
+    {
+      "model_block": "qwen_hosted_successor",
+      "selection_supplement_receipt_sha256": "sha256:7ad740c7b8a13178a2e090623d3f0c4786d52d29143e740fd3649392acbf5276",
+      "job": {
+        "name": "chris-cyber-q38-r54-r55-hydration-v1",
+        "uid": "f95a4dab-8d1d-4c8d-af6c-4f276de164dd",
+        "succeeded": 1
+      },
+      "pod": {
+        "name": "chris-cyber-q38-r54-r55-hydration-v1-hvn54",
+        "uid": "b76b5c1c-2474-4bc1-b8b4-7d79c8c2b18b",
+        "exit_code": 0,
+        "restart_count": 0,
+        "finished_at": "2026-09-04T05:34:18Z"
+      },
+      "config_map": {
+        "name": "chris-cyber-q38-r54-r55-hydration-v1",
+        "uid": "bc986e34-6c8f-4521-8dc4-5e35b73f7ad9",
+        "immutable": true
+      },
+      "hydration": {
+        "path": "docs/evidence/qwen38-study/2026-09-04-qwen38-r54-r55-hydration-v1.json",
+        "sfs_file_sha256": "sha256:06a52f111953bc7e3ec3751c0608e9c3a2103f3f30417b93b193df96aa961f77",
+        "repo_file_sha256": "sha256:95cc2c34db36fe93442e17e30c8bfc10522f43497dd8d69778adb4276f258c72",
+        "receipt_sha256": "sha256:484d01ff787ba0c646cb1da3d9ecaced214d47461c7ac91cef7e2378ee90b4af",
+        "replacement_ranks": [54, 55],
+        "task_count": 2
+      }
+    },
+    {
+      "model_block": "glm_hosted_successor",
+      "selection_supplement_receipt_sha256": "sha256:a08c2c41f782f9b41e95575a75071e2a3c2fe8916a5db13bc095614dacb92b63",
+      "job": {
+        "name": "chris-cyber-glm53-r108-r109-hydration-v1",
+        "uid": "9661c3dd-cb31-4620-968e-4ecb50c04994",
+        "succeeded": 1
+      },
+      "pod": {
+        "name": "chris-cyber-glm53-r108-r109-hydration-v1-z568w",
+        "uid": "b0583de5-9496-4b56-91f5-44113a5b3879",
+        "exit_code": 0,
+        "restart_count": 0,
+        "finished_at": "2026-09-04T05:34:19Z"
+      },
+      "config_map": {
+        "name": "chris-cyber-glm53-r108-r109-hydration-v1",
+        "uid": "e18c91c8-672b-4921-9f78-755df518f18d",
+        "immutable": true
+      },
+      "hydration": {
+        "path": "docs/evidence/qwen38-study/2026-09-04-glm53-r108-r109-hydration-v1.json",
+        "sfs_file_sha256": "sha256:c2e95e5300f79a5e880e1b77938e6f1b23b25064ad6163c5c470f2d51af6ab36",
+        "repo_file_sha256": "sha256:4e3910ae610b4c6778ea5dacd59ba8919fb2ac807d1ecd01ddf6df839ba1d498",
+        "receipt_sha256": "sha256:14ae43d7eb9627664527209723f8b6a39af345589fb92af9c931d865fa9c71b2",
+        "replacement_ranks": [108, 109],
+        "task_count": 2
+      }
+    }
+  ],
+  "scientific_controls": {
+    "read_only_metadata_hydration": true,
+    "model_inference_called": false,
+    "scoring_called": false,
+    "scored_launch_authorized": false,
+    "fleet_scoring_api_recovery_still_required": true
+  },
+  "privacy": {
+    "scores_included": false,
+    "prompts_or_traces_included": false,
+    "task_content_included": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:00660b55b4aa3c5b02f796b29e424acb45caaf4e6da432b203d237b01710f1ec"
+}

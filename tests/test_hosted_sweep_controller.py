@@ -71,6 +71,21 @@ QWEN_HTTP500_REPLACEMENT_SUPPLEMENT = Path(
 GLM_HTTP500_REPLACEMENT_SUPPLEMENT = Path(
     "docs/evidence/qwen38-study/2026-09-04-opencode-replacement-selection-supplement-v3.json"
 )
+HOSTED_HTTP500_INCIDENT = Path(
+    "docs/evidence/qwen38-study/2026-09-04-hosted-scoring-api-common-mode-http500-incident-v1.json"
+)
+QWEN_HTTP500_HYDRATION = Path(
+    "docs/evidence/qwen38-study/2026-09-04-qwen38-r54-r55-hydration-v1.json"
+)
+GLM_HTTP500_HYDRATION = Path(
+    "docs/evidence/qwen38-study/2026-09-04-glm53-r108-r109-hydration-v1.json"
+)
+QWEN_HTTP500_SUCCESSOR_PLAN = Path(
+    "evals/fleet/configs/qwen38-opencode-hosted-http500-successor49-pass4-v8.json"
+)
+GLM_HTTP500_SUCCESSOR_PLAN = Path(
+    "evals/fleet/configs/glm53-opencode-hosted-http500-successor73-pass4-v11.json"
+)
 FROZEN_SPLIT = Path("configs/data/fleet-a62-task-split-v1.json")
 FROZEN_SELECTION = Path(
     "evals/fleet/configs/opencode-easiest-train100-selection-v2.json"
@@ -1185,6 +1200,63 @@ def test_glm_hosted_reassigned_b_plan_is_preview_only_and_disjoint() -> None:
     new_source56 = next(row for row in plan["attempts"] if row["source_rank"] == 56)
     assert new_source56["run_id"] != old_source56["run_id"]
     assert new_source56["network"] != old_source56["network"]
+
+
+def test_qwen_http500_successor_is_exactly_50_tasks_with_prior_complete() -> None:
+    plan = hosted.build_qwen_http500_successor_plan(
+        hosted.load_object(
+            Path("evals/fleet/configs/qwen38-opencode-hosted-complete47-pass4-v7.json")
+        ),
+        hosted.load_object(QWEN_REPLACEMENT_PLAN),
+        hosted.load_object(HOSTED_HTTP500_INCIDENT),
+        hosted.load_object(QWEN_HTTP500_REPLACEMENT_SUPPLEMENT),
+        hosted.load_object(QWEN_HTTP500_HYDRATION),
+    )
+    assert plan == hosted.load_object(QWEN_HTTP500_SUCCESSOR_PLAN)
+    hosted.validate_plan(plan)
+    assert plan["task_count"] == 49
+    assert plan["new_session_count"] == 196
+    assert plan["prior_complete_source_ranks"] == [4]
+    assert plan["primary_estimator_task_count"] == 50
+    assert {row["source_rank"] for row in plan["tasks"]} == {
+        *range(6, 51),
+        52,
+        53,
+        54,
+        55,
+    }
+    assert plan["execution"]["launch_authorized"] is False
+    assert plan["execution"]["required_priority_class"] == "fleet-train-high"
+
+
+def test_glm_http500_hosted_successor_is_exactly_73_plus_dedicated_a() -> None:
+    plan = hosted.build_glm_http500_successor_plan(
+        hosted.load_object(
+            Path("evals/fleet/configs/glm53-opencode-hosted-odd45-pass4-v10.json")
+        ),
+        hosted.load_object(GLM_HOSTED_REASSIGNED_B_PLAN),
+        hosted.load_object(HOSTED_HTTP500_INCIDENT),
+        hosted.load_object(GLM_HTTP500_REPLACEMENT_SUPPLEMENT),
+        hosted.load_object(GLM_HTTP500_HYDRATION),
+    )
+    assert plan == hosted.load_object(GLM_HTTP500_SUCCESSOR_PLAN)
+    hosted.validate_plan(plan)
+    assert plan["task_count"] == 73
+    assert plan["new_session_count"] == 292
+    assert plan["dedicated_a_task_count"] == 27
+    assert plan["primary_estimator_task_count"] == 100
+    assert {row["source_rank"] for row in plan["tasks"]} == {
+        *range(13, 100, 2),
+        *range(56, 101, 2),
+        101,
+        103,
+        105,
+        107,
+        108,
+        109,
+    }
+    assert plan["execution"]["launch_authorized"] is False
+    assert plan["execution"]["required_priority_class"] == "fleet-train-high"
 
 
 def test_qwen_http500_supplement_selects_unused_r54_r55_and_restores_200_cells() -> None:

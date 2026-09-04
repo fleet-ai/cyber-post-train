@@ -80,6 +80,12 @@ GLM_HOSTED_REPLACEMENT_CAMPAIGN = (
 GLM_HOSTED_REASSIGNED_B_CAMPAIGN = (
     "chris-cyber-glm53-opencode11827-hosted-reassigned-b27-p4-v1"
 )
+QWEN_HTTP500_SUCCESSOR_CAMPAIGN = (
+    "chris-cyber-q38-opencode11827-hosted-successor49-p4-v8"
+)
+GLM_HTTP500_SUCCESSOR_CAMPAIGN = (
+    "chris-cyber-glm53-opencode11827-hosted-successor73-p4-v11"
+)
 EXPECTED_INCLUDED_TASK_COUNTS.update(
     {
         "qwen38_remainder": 48,
@@ -95,6 +101,9 @@ EXPECTED_INCLUDED_TASK_COUNTS.update(
 EXPECTED_INCLUDED_TASK_COUNTS.update({"qwen38_replacements": 3})
 EXPECTED_INCLUDED_TASK_COUNTS.update({"glm53_hosted_replacement": 1})
 EXPECTED_INCLUDED_TASK_COUNTS.update({"glm53_hosted_reassigned_b": 27})
+EXPECTED_INCLUDED_TASK_COUNTS.update(
+    {"qwen38_http500_successor": 49, "glm53_http500_successor": 73}
+)
 SCHEDULE = [
     {
         "accepted_outcomes_at_least": 0,
@@ -1146,6 +1155,252 @@ def build_glm53_hosted_reassigned_b_plan(
     return plan
 
 
+def _hydrated_replacement_tasks(
+    supplement: dict[str, Any], hydration: dict[str, Any], first_rank: int
+) -> list[dict[str, Any]]:
+    assigned = {
+        int(row["replacement_rank"]): row for row in supplement["replacements"]
+    }
+    hydrated = {
+        int(row["replacement_rank"]): row for row in hydration["tasks"]
+    }
+    if set(assigned) != set(hydrated):
+        raise ValueError("HTTP500 replacement hydration ranks drifted")
+    tasks = []
+    for rank in sorted(assigned):
+        source = assigned[rank]
+        row = hydrated[rank]
+        binding = {
+            "task_key": row["task"].get("key"),
+            "task_version_id": row["task"].get("version_id"),
+            "env_key": row["environment"].get("id"),
+            "env_version": row["environment"].get("version"),
+            "environment_version_id": row["environment"].get("version_id"),
+            "data_key": row["environment"].get("data_id"),
+            "data_version": row["environment"].get("data_version"),
+        }
+        if binding != {field: source[field] for field in binding}:
+            raise ValueError("HTTP500 replacement exact binding drifted")
+        tasks.append(
+            {
+                "rank": first_rank + len(tasks),
+                "source_rank": rank,
+                "task": copy.deepcopy(row["task"]),
+                "environment": copy.deepcopy(row["environment"]),
+                "verifier": copy.deepcopy(row["verifier"]),
+            }
+        )
+    return tasks
+
+
+def _fresh_attempts(
+    tasks: list[dict[str, Any]], campaign: str, network: str
+) -> list[dict[str, Any]]:
+    attempts = []
+    for task in tasks:
+        source_rank = int(task["source_rank"])
+        key_digest = self_hosted.sha256(task["task"]["key"].encode()).split(":", 1)[1][
+            :8
+        ]
+        for attempt in range(1, 5):
+            attempts.append(
+                {
+                    "ordinal": len(attempts) + 1,
+                    "rank": int(task["rank"]),
+                    "source_rank": source_rank,
+                    "attempt": attempt,
+                    "run_id": (
+                        f"{campaign}-sr{source_rank:03d}-a{attempt}-{key_digest}"
+                    ),
+                    "network": (
+                        f"{network}-sr{source_rank:03d}-a{attempt}-{key_digest}"
+                    ),
+                }
+            )
+    return attempts
+
+
+def build_qwen_http500_successor_plan(
+    original_plan: dict[str, Any],
+    replacement_plan: dict[str, Any],
+    incident: dict[str, Any],
+    supplement: dict[str, Any],
+    hydration: dict[str, Any],
+) -> dict[str, Any]:
+    """Build the non-launchable Qwen post-HTTP500 complete-task successor."""
+    validate_plan(original_plan)
+    validate_plan(replacement_plan)
+    if (
+        original_plan.get("plan_sha256")
+        != "sha256:f367d5148b035e29f57e5a29633609c4dbc8876d94c2795a79ff1ff25dad2ee2"
+        or replacement_plan.get("plan_sha256")
+        != "sha256:9f879c054e770c120f2d4b77750475f402ba067873fbb93d0e356b062168841d"
+        or incident.get("receipt_sha256") != digest_without(incident, "receipt_sha256")
+        or incident.get("receipt_sha256")
+        != "sha256:043c01e05e9118a080bd642a5da6f7c22c279781bc0c97803330091e55fdb27e"
+        or supplement.get("schema_version")
+        != "fleet-qwen38-replacement-selection-supplement-v2"
+        or supplement.get("receipt_sha256")
+        != "sha256:7ad740c7b8a13178a2e090623d3f0c4786d52d29143e740fd3649392acbf5276"
+        or supplement.get("receipt_sha256")
+        != digest_without(supplement, "receipt_sha256")
+        or hydration.get("schema_version")
+        != "fleet-qwen38-hosted-replacement-hydration-v2"
+        or hydration.get("receipt_sha256") != digest_without(hydration, "receipt_sha256")
+        or hydration.get("selection_supplement_receipt_sha256")
+        != supplement["receipt_sha256"]
+        or hydration.get("tasks_hydrated") != 2
+    ):
+        raise ValueError("Qwen HTTP500 successor evidence drifted")
+    original = [
+        copy.deepcopy(row)
+        for row in original_plan["tasks"]
+        if 6 <= int(row["source_rank"]) <= 50
+    ]
+    replacements = [
+        copy.deepcopy(row)
+        for row in replacement_plan["tasks"]
+        if int(row["source_rank"]) in {52, 53}
+    ]
+    tasks = [*original, *replacements]
+    for index, row in enumerate(tasks, 1):
+        row["rank"] = index
+    tasks.extend(_hydrated_replacement_tasks(supplement, hydration, len(tasks) + 1))
+    plan = {
+        "schema_version": PLAN_SCHEMA,
+        "shard_key": "qwen38_http500_successor",
+        "campaign_id": QWEN_HTTP500_SUCCESSOR_CAMPAIGN,
+        "source_job_id": original_plan["source_job_id"],
+        "source": {
+            "original_plan_sha256": original_plan["plan_sha256"],
+            "replacement_plan_sha256": replacement_plan["plan_sha256"],
+            "incident_receipt_sha256": incident["receipt_sha256"],
+            "selection_supplement_receipt_sha256": supplement["receipt_sha256"],
+            "hydration_receipt_sha256": hydration["receipt_sha256"],
+        },
+        "treatment_block": copy.deepcopy(original_plan["treatment_block"]),
+        "model": copy.deepcopy(original_plan["model"]),
+        "harness": copy.deepcopy(original_plan["harness"]),
+        "authority": copy.deepcopy(original_plan["authority"]),
+        "task_count": 49,
+        "pass_k": 4,
+        "total_session_count": 196,
+        "credited_sessions": [],
+        "new_session_count": 196,
+        "prior_complete_source_ranks": [4],
+        "prior_accepted_session_count": 4,
+        "primary_estimator_task_count": 50,
+        "primary_estimator_cell_count": 200,
+        "fenced_source_ranks": [1, 2, 3, 5, 51],
+        "execution": {
+            **copy.deepcopy(original_plan["execution"]),
+            "inventory_policy": "plan_identity_plus_authoritative_receipt_v1",
+            "launch_authorized": False,
+            "required_priority_class": "fleet-train-high",
+            "required_recovery_gate": "fleet_scoring_api_http500_recovery_v1",
+            "third_hosted_stream_authorized": False,
+        },
+        "tasks": tasks,
+        "attempts": _fresh_attempts(
+            tasks, QWEN_HTTP500_SUCCESSOR_CAMPAIGN, "qwen38-hosted-successor"
+        ),
+        "privacy": copy.deepcopy(original_plan["privacy"]),
+    }
+    plan["plan_sha256"] = digest_without(plan, "plan_sha256")
+    validate_plan(plan)
+    return plan
+
+
+def build_glm_http500_successor_plan(
+    original_plan: dict[str, Any],
+    reassigned_b_plan: dict[str, Any],
+    incident: dict[str, Any],
+    supplement: dict[str, Any],
+    hydration: dict[str, Any],
+) -> dict[str, Any]:
+    """Build the non-launchable 73-task hosted GLM successor."""
+    validate_plan(original_plan)
+    validate_plan(reassigned_b_plan)
+    if (
+        original_plan.get("plan_sha256")
+        != "sha256:ee31a410a8dcf955e97a3f5ee2d26717e0cdda1d07257e30760d62a25666df8e"
+        or reassigned_b_plan.get("plan_sha256")
+        != "sha256:729f63116093c40626bb5446bbcea23ea4eb4d3417a441c4dff472ae8f3fe0ed"
+        or incident.get("receipt_sha256") != digest_without(incident, "receipt_sha256")
+        or incident.get("receipt_sha256")
+        != "sha256:043c01e05e9118a080bd642a5da6f7c22c279781bc0c97803330091e55fdb27e"
+        or supplement.get("schema_version")
+        != "fleet-opencode-replacement-selection-supplement-v3"
+        or supplement.get("receipt_sha256")
+        != "sha256:a08c2c41f782f9b41e95575a75071e2a3c2fe8916a5db13bc095614dacb92b63"
+        or supplement.get("receipt_sha256")
+        != digest_without(supplement, "receipt_sha256")
+        or hydration.get("schema_version")
+        != "fleet-glm53-hosted-replacement-hydration-v2"
+        or hydration.get("receipt_sha256") != digest_without(hydration, "receipt_sha256")
+        or hydration.get("selection_supplement_receipt_sha256")
+        != supplement["receipt_sha256"]
+        or hydration.get("tasks_hydrated") != 2
+        or original_plan["model"] != reassigned_b_plan["model"]
+        or original_plan["harness"] != reassigned_b_plan["harness"]
+    ):
+        raise ValueError("GLM HTTP500 successor evidence drifted")
+    original = [
+        copy.deepcopy(row)
+        for row in original_plan["tasks"]
+        if 13 <= int(row["source_rank"]) <= 99
+    ]
+    tasks = [*original, *copy.deepcopy(reassigned_b_plan["tasks"])]
+    for index, row in enumerate(tasks, 1):
+        row["rank"] = index
+    tasks.extend(_hydrated_replacement_tasks(supplement, hydration, len(tasks) + 1))
+    treatment = copy.deepcopy(original_plan["treatment_block"])
+    treatment["serving_block"] = "hosted-successor-after-scoring-outage-v1"
+    plan = {
+        "schema_version": PLAN_SCHEMA,
+        "shard_key": "glm53_http500_successor",
+        "campaign_id": GLM_HTTP500_SUCCESSOR_CAMPAIGN,
+        "source_job_id": original_plan["source_job_id"],
+        "source": {
+            "original_plan_sha256": original_plan["plan_sha256"],
+            "hosted_reassigned_b_plan_sha256": reassigned_b_plan["plan_sha256"],
+            "incident_receipt_sha256": incident["receipt_sha256"],
+            "selection_supplement_receipt_sha256": supplement["receipt_sha256"],
+            "hydration_receipt_sha256": hydration["receipt_sha256"],
+        },
+        "treatment_block": treatment,
+        "model": copy.deepcopy(original_plan["model"]),
+        "harness": copy.deepcopy(original_plan["harness"]),
+        "authority": copy.deepcopy(original_plan["authority"]),
+        "task_count": 73,
+        "pass_k": 4,
+        "total_session_count": 292,
+        "credited_sessions": [],
+        "new_session_count": 292,
+        "dedicated_a_task_count": 27,
+        "primary_estimator_task_count": 100,
+        "primary_estimator_cell_count": 400,
+        "fenced_source_ranks": [1, 2, 3, 5, 7, 9, 11, 54, 106],
+        "dedicated_a_source_ranks": [*range(4, 53, 2), 102, 104],
+        "execution": {
+            **copy.deepcopy(original_plan["execution"]),
+            "inventory_policy": "conservative_no_same_model_session_for_task_key_v1",
+            "launch_authorized": False,
+            "required_priority_class": "fleet-train-high",
+            "required_recovery_gate": "fleet_scoring_api_http500_recovery_v1",
+            "third_hosted_stream_authorized": False,
+        },
+        "tasks": tasks,
+        "attempts": _fresh_attempts(
+            tasks, GLM_HTTP500_SUCCESSOR_CAMPAIGN, "glm53-hosted-successor"
+        ),
+        "privacy": copy.deepcopy(original_plan["privacy"]),
+    }
+    plan["plan_sha256"] = digest_without(plan, "plan_sha256")
+    validate_plan(plan)
+    return plan
+
+
 def _validate_source_plan(plan: dict[str, Any]) -> None:
     if plan.get("schema_version") == legacy.PLAN_SCHEMA:
         legacy.validate_plan(plan)
@@ -1409,11 +1664,17 @@ def validate_plan(plan: dict[str, Any]) -> None:
             "glm53_remainder3",
             "glm53_hosted_replacement",
             "glm53_hosted_reassigned_b",
+            "glm53_http500_successor",
         }
         else (
             "plan_identity_plus_authoritative_receipt_v1"
             if shard_key
-            in {"qwen38_remainder", "qwen38_remainder2", "qwen38_replacements"}
+            in {
+                "qwen38_remainder",
+                "qwen38_remainder2",
+                "qwen38_replacements",
+                "qwen38_http500_successor",
+            }
             else None
         )
     )
@@ -1537,6 +1798,65 @@ def validate_plan(plan: dict[str, Any]) -> None:
             != "hosted_glm_concurrency2_health_overlap_v1"
         ):
             raise ValueError("GLM hosted B reassignment partition or binding drifted")
+        return
+
+    if shard_key == "qwen38_http500_successor":
+        treatment = plan.get("treatment_block") or {}
+        selected = {int(row["source_rank"]) for row in tasks}
+        expected_selected = {*range(6, 51), 52, 53, 54, 55}
+        if (
+            selected != expected_selected
+            or plan.get("prior_complete_source_ranks") != [4]
+            or plan.get("prior_accepted_session_count") != 4
+            or plan.get("primary_estimator_task_count") != 50
+            or plan.get("primary_estimator_cell_count") != 200
+            or set(plan.get("fenced_source_ranks") or []) != {1, 2, 3, 5, 51}
+            or treatment.get("kind") != "hosted_inference_endpoint_v1"
+            or treatment.get("model_revision") != plan["model"].get("revision")
+            or execution.get("launch_authorized") is not False
+            or execution.get("required_priority_class") != "fleet-train-high"
+            or execution.get("required_recovery_gate")
+            != "fleet_scoring_api_http500_recovery_v1"
+            or execution.get("third_hosted_stream_authorized") is not False
+        ):
+            raise ValueError("Qwen HTTP500 successor partition or binding drifted")
+        return
+
+    if shard_key == "glm53_http500_successor":
+        treatment = plan.get("treatment_block") or {}
+        selected = {int(row["source_rank"]) for row in tasks}
+        dedicated_a = set(plan.get("dedicated_a_source_ranks") or [])
+        expected_selected = {
+            *range(13, 100, 2),
+            *range(56, 101, 2),
+            101,
+            103,
+            105,
+            107,
+            108,
+            109,
+        }
+        if (
+            selected != expected_selected
+            or dedicated_a != {*range(4, 53, 2), 102, 104}
+            or selected & dedicated_a
+            or len(selected | dedicated_a) != 100
+            or plan.get("dedicated_a_task_count") != 27
+            or plan.get("primary_estimator_task_count") != 100
+            or plan.get("primary_estimator_cell_count") != 400
+            or set(plan.get("fenced_source_ranks") or [])
+            != {1, 2, 3, 5, 7, 9, 11, 54, 106}
+            or treatment.get("kind") != "hosted_inference_endpoint_v1"
+            or treatment.get("serving_block")
+            != "hosted-successor-after-scoring-outage-v1"
+            or treatment.get("model_revision") != plan["model"].get("revision")
+            or execution.get("launch_authorized") is not False
+            or execution.get("required_priority_class") != "fleet-train-high"
+            or execution.get("required_recovery_gate")
+            != "fleet_scoring_api_http500_recovery_v1"
+            or execution.get("third_hosted_stream_authorized") is not False
+        ):
+            raise ValueError("GLM HTTP500 successor partition or binding drifted")
         return
 
     excluded = plan.get("excluded_tasks") or []
@@ -2202,6 +2522,20 @@ def main() -> int:
     glm_hosted_reassigned_b.add_argument("--supplement", type=Path, required=True)
     glm_hosted_reassigned_b.add_argument("--hydration", type=Path, required=True)
     glm_hosted_reassigned_b.add_argument("--output", type=Path, required=True)
+    qwen_http500 = sub.add_parser("build-qwen-http500-successor")
+    qwen_http500.add_argument("--original-plan", type=Path, required=True)
+    qwen_http500.add_argument("--replacement-plan", type=Path, required=True)
+    qwen_http500.add_argument("--incident", type=Path, required=True)
+    qwen_http500.add_argument("--supplement", type=Path, required=True)
+    qwen_http500.add_argument("--hydration", type=Path, required=True)
+    qwen_http500.add_argument("--output", type=Path, required=True)
+    glm_http500 = sub.add_parser("build-glm-http500-successor")
+    glm_http500.add_argument("--original-plan", type=Path, required=True)
+    glm_http500.add_argument("--reassigned-b-plan", type=Path, required=True)
+    glm_http500.add_argument("--incident", type=Path, required=True)
+    glm_http500.add_argument("--supplement", type=Path, required=True)
+    glm_http500.add_argument("--hydration", type=Path, required=True)
+    glm_http500.add_argument("--output", type=Path, required=True)
     validate = sub.add_parser("validate")
     validate.add_argument("--plan", type=Path, required=True)
     preflight = sub.add_parser("preflight")
@@ -2277,6 +2611,26 @@ def main() -> int:
             load_object(args.dedicated_plan),
             load_object(args.hosted_plan),
             load_object(args.tombstone),
+            load_object(args.supplement),
+            load_object(args.hydration),
+        )
+        self_hosted.write_json_once(args.output, value)
+        return 0
+    if args.command == "build-qwen-http500-successor":
+        value = build_qwen_http500_successor_plan(
+            load_object(args.original_plan),
+            load_object(args.replacement_plan),
+            load_object(args.incident),
+            load_object(args.supplement),
+            load_object(args.hydration),
+        )
+        self_hosted.write_json_once(args.output, value)
+        return 0
+    if args.command == "build-glm-http500-successor":
+        value = build_glm_http500_successor_plan(
+            load_object(args.original_plan),
+            load_object(args.reassigned_b_plan),
+            load_object(args.incident),
             load_object(args.supplement),
             load_object(args.hydration),
         )

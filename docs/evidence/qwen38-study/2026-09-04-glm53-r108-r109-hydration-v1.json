@@ -1,0 +1,76 @@
+{
+  "fleet_team_id": "a1025f0b-ad67-49fc-a023-51800ab43e84",
+  "prompts_or_traces_included": false,
+  "receipt_sha256": "sha256:14ae43d7eb9627664527209723f8b6a39af345589fb92af9c931d865fa9c71b2",
+  "schema_version": "fleet-glm53-hosted-replacement-hydration-v2",
+  "scores_read": false,
+  "selection_supplement_receipt_sha256": "sha256:a08c2c41f782f9b41e95575a75071e2a3c2fe8916a5db13bc095614dacb92b63",
+  "task_content_retained": false,
+  "tasks": [
+    {
+      "environment": {
+        "data_id": "current-fubspot-gen",
+        "data_version": "v0.0.3",
+        "id": "cysec1-2-fubspot-gen",
+        "runtime_seed_content_sha256": "b2936c6f20de465b6f0a530a6752a64acb423e94da0d8cb11e57376acae4323e",
+        "ttl_seconds": 32400,
+        "version": "v0.0.3",
+        "version_id": "a1532a5c-6ec9-45bd-899d-24c0fe3d1df5"
+      },
+      "replacement_rank": 108,
+      "runtime_seed_file_count": 3,
+      "task": {
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
+        "env_variables_sha256": "sha256:46871765dd33ec95135b0abaa462906edf97339bcb56ac78f1067a9e72be1990",
+        "key": "cysec1-2-fubspot-gen_blackbox-5eeef7376c8837272737ff41__blackbox_ctf_v1",
+        "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "prompt_sha256": "sha256:df30ebf38ac1c7fac4952f9153806b0e3352dd54303662bf495f5973b0bbe1c6",
+        "version_id": "be398179-b809-441f-85d0-b981c64faf43"
+      },
+      "verifier": {
+        "function_name": "verify",
+        "id": "fa560518-2f4d-4702-a801-cebac0c37ad2",
+        "sha256": "32119f8cf652727b9ea196802bd33db7de226afa8d4e46ff3cd1919d8557bb95",
+        "version": 1,
+        "version_id": "21441036-d469-4cad-b946-74f3d37db36c"
+      }
+    },
+    {
+      "environment": {
+        "data_id": "current-fubspot-gen",
+        "data_version": "v0.0.3",
+        "id": "cysec1-2-fubspot-gen",
+        "runtime_seed_content_sha256": "f5828c8643c02cc1b854ed5f038c0423492f732910e070bea7c1ce4fa4f2ae8c",
+        "ttl_seconds": 32400,
+        "version": "v0.0.3",
+        "version_id": "a1532a5c-6ec9-45bd-899d-24c0fe3d1df5"
+      },
+      "replacement_rank": 109,
+      "runtime_seed_file_count": 3,
+      "task": {
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
+        "env_variables_sha256": "sha256:28f1a64bcabad3572497437283b5e98a12068c07163cbf403083d02393fd95cb",
+        "key": "cysec1-2-fubspot-gen_blackbox-61a50f7fd0c9d7945083bded__blackbox_ctf_v1",
+        "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "prompt_sha256": "sha256:df30ebf38ac1c7fac4952f9153806b0e3352dd54303662bf495f5973b0bbe1c6",
+        "version_id": "61ff6681-c1e6-44cc-814c-02c43edce687"
+      },
+      "verifier": {
+        "function_name": "verify",
+        "id": "2b979b58-440d-44dc-9029-34bf51666c1d",
+        "sha256": "52dd9f3a1add7d6e8c6926a83396d8ff4ee24d399edb9f051bc360557267414c",
+        "version": 1,
+        "version_id": "c06fae30-76e0-4dbc-b123-75347b918139"
+      }
+    }
+  ],
+  "tasks_hydrated": 2
+}
