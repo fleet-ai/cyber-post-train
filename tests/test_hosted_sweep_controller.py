@@ -121,6 +121,10 @@ GLM_DEDICATED_A_EXIT1_RECONCILIATION = Path(
     "docs/evidence/qwen38-study/"
     "2026-09-04-glm53-dedicated-a-source6-attempt3-reconciliation-v1.json"
 )
+GLM_HOSTED_V12_EXIT1_RECONCILIATION = Path(
+    "docs/evidence/qwen38-study/"
+    "2026-09-04-glm53-hosted-v12-exit1-reconciliation-v2.json"
+)
 GLM_DEDICATED_A_EXIT1_GAP_PLAN = Path(
     "evals/fleet/configs/"
     "glm53-opencode-dedicated-a-v5-source6-attempt4-gap-pass4-v1.json"
@@ -2535,6 +2539,68 @@ def test_dedicated_a_exit1_reconciliation_and_gap_are_exact() -> None:
     assert plan["treatment_block"] == predecessor["treatment_block"]
     assert plan["execution"]["required_priority_class"] == "fleet-train-high"
     assert plan["execution"]["launch_authorized"] is False
+
+
+def test_glm_hosted_v12_exit1_reconciliation_is_exact_and_fail_closed() -> None:
+    receipt = hosted.load_object(GLM_HOSTED_V12_EXIT1_RECONCILIATION)
+    predecessor = hosted.load_object(GLM_HTTP500_HOSTED_PRIMARY_PLAN)
+    hosted.validate_glm_hosted_v12_completed_exit1_reconciliation(
+        receipt, predecessor
+    )
+    assert {
+        (row["source_rank"], row["attempt"])
+        for row in receipt["reconciled_cells"]
+    } == {(19, 1), (21, 2), (25, 1), (29, 1)}
+    assert receipt["gap_completion"]["new_cell_count"] == 11
+
+    tampered = json.loads(json.dumps(receipt))
+    tampered["reconciled_cells"][0]["session_id"] = str(uuid.uuid4())
+    tampered["receipt_sha256"] = self_hosted.digest_without(
+        tampered, "receipt_sha256"
+    )
+    with pytest.raises(ValueError, match="reconciliation drifted|binding drifted"):
+        hosted.validate_glm_hosted_v12_completed_exit1_reconciliation(
+            tampered, predecessor
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "bad_value"),
+    [
+        ("agent_exit_code", 0),
+        ("agent_termination_completed", False),
+        ("reward_numeric_present", False),
+        ("reward_result_task_version_matches", False),
+        ("reward_result_verifier_matches_result", False),
+        ("authoritative_session_match_count", 2),
+        ("authoritative_session_status", "in_progress"),
+        ("authoritative_session_model", "other"),
+        ("authoritative_session_verifier_matches", False),
+        ("session_ingest_status", "failed"),
+        ("session_ingest_all_chunks", False),
+        ("cleanup_completed", False),
+        ("stderr_bytes", 1),
+        ("proxy_http_5xx_token_count", 1),
+        ("proxy_transport_error_token_count", 1),
+        ("independent_infrastructure_incident", True),
+        ("endpoint_or_controller_preemption_overlap", True),
+        ("agent_exit_code_was_only_prior_rejection", False),
+        ("counts_as_primary_cell", False),
+    ],
+)
+def test_glm_hosted_v12_exit1_reconciliation_rejects_incomplete_evidence(
+    field: str, bad_value: object
+) -> None:
+    receipt = hosted.load_object(GLM_HOSTED_V12_EXIT1_RECONCILIATION)
+    predecessor = hosted.load_object(GLM_HTTP500_HOSTED_PRIMARY_PLAN)
+    receipt["reconciled_cells"][0]["evidence"][field] = bad_value
+    receipt["receipt_sha256"] = self_hosted.digest_without(
+        receipt, "receipt_sha256"
+    )
+    with pytest.raises(ValueError, match="reconciliation drifted|fully scored"):
+        hosted.validate_glm_hosted_v12_completed_exit1_reconciliation(
+            receipt, predecessor
+        )
 
 
 @pytest.mark.parametrize(

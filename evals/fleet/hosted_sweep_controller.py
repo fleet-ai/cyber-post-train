@@ -3019,6 +3019,215 @@ def validate_dedicated_a_completed_exit1_reconciliation(
         raise ValueError("dedicated A completed exit-1 reconciliation drifted")
 
 
+def validate_glm_hosted_v12_completed_exit1_reconciliation(
+    receipt: dict[str, Any], predecessor: dict[str, Any]
+) -> None:
+    """Validate the four exact completed hosted-GLM exit-1 outcomes."""
+    validate_plan(predecessor)
+    source = receipt.get("source") or {}
+    methodology = receipt.get("methodology") or {}
+    privacy = receipt.get("privacy") or {}
+    gaps = receipt.get("gap_completion") or {}
+    expected = {
+        (19, 1): {
+            "session_id": "9a3da45e-e95b-4489-a889-885e38b04b55",
+            "verifier_execution_id": "3d267228-bbd8-488f-a02a-70e26d8c07d7",
+            "claim_sha256": (
+                "sha256:6180f0a173bcd24a15fb574832654b4b50e363b3672f7791ab1eb034dd859115"
+            ),
+            "config_sha256": (
+                "sha256:b30f2d0fd777895eb0c02f8351c406e131a3e5d54abead71e7eff31f89d2ae85"
+            ),
+            "original_noncreditable_receipt_sha256": (
+                "sha256:a35b2a4d5657ac2aaeb4efe31a623a514c4350405e67fa1c6330b4c37b731e62"
+            ),
+        },
+        (21, 2): {
+            "session_id": "d2c5c7b3-a0d5-40b3-8815-996673f34b08",
+            "verifier_execution_id": "1d2725fe-5971-47cc-8d58-3b4736a0a26e",
+            "claim_sha256": (
+                "sha256:73aca0ddfaf0f6ba343b09f23541f0d76927fc41d6c567b5fe413b3779d2f822"
+            ),
+            "config_sha256": (
+                "sha256:55f1e6a256f40ae0990da6ee36403d6f1a445115cc5f6b89a33e198f8e4edf75"
+            ),
+            "original_noncreditable_receipt_sha256": (
+                "sha256:2865ae201d961af923bc0310176a2945fa2c20a5298ad98bb09bfe18f71c54cd"
+            ),
+        },
+        (25, 1): {
+            "session_id": "935c15ac-1631-4d48-8c9b-97e544314fe1",
+            "verifier_execution_id": "7a9555f3-c45f-4c9a-b7c0-0dad5aeebaac",
+            "claim_sha256": (
+                "sha256:64159e46cb2769445f47bbfc02dcb981be7485eb5e383a985d019c080c707ac9"
+            ),
+            "config_sha256": (
+                "sha256:4d87f0a71d2882545c6f5b7d4840de1e79b65d1547b467e424eaadad614dcdd6"
+            ),
+            "original_noncreditable_receipt_sha256": (
+                "sha256:88ee241d93e99f71c14c7b1c63e26c098580798a0bbeecd1b48ccc31cac7da4a"
+            ),
+        },
+        (29, 1): {
+            "session_id": "c52d8649-e1ea-4335-983d-7d10d6a2935f",
+            "verifier_execution_id": "2392999d-47af-4b71-9c91-bb1cccfec34a",
+            "claim_sha256": (
+                "sha256:74849b66b8eca8c9f40570adda3eca13dd9a987ccb99bbb8b807e05768a40b11"
+            ),
+            "config_sha256": (
+                "sha256:a1081a80d4aaecbeb3d16b348e470fb506d9fadb392fdcbede4e20dffd0e98d7"
+            ),
+            "original_noncreditable_receipt_sha256": (
+                "sha256:20722046e7a9533a456b011302ae61d3e16f1c4e8a751de63b8be541952586eb"
+            ),
+        },
+    }
+    expected_gaps = [
+        [19, 2], [19, 3], [19, 4], [21, 3], [21, 4], [25, 2],
+        [25, 3], [25, 4], [29, 2], [29, 3], [29, 4],
+    ]
+    if (
+        receipt.get("schema_version")
+        != "fleet-glm53-hosted-v12-completed-exit1-reconciliation-v2"
+        or receipt.get("append_only") is not True
+        or receipt.get("receipt_sha256")
+        != "sha256:6dced67ad8a5360ac98c6297ee9bd40c608e0543fd4f2153648bbf8f3e795b26"
+        or receipt.get("receipt_sha256")
+        != digest_without(receipt, "receipt_sha256")
+        or predecessor.get("plan_sha256")
+        != "sha256:8b0deafa9f51b75a0715be56b417454e96665b5342d4c346d5cda32dc24c8279"
+        or source
+        != {
+            "plan_sha256": predecessor["plan_sha256"],
+            "job_uid": "0e25db24-8700-478f-8862-d1210511393c",
+            "pod_uid": "3a04238e-497e-4d21-a8d9-f33c50085879",
+            "prior_reconciliation_receipt_sha256": (
+                "sha256:5435c0a25b3be1872c1aae09fd88858c5251272e164ab8eb49ab66b4c5a4ca0e"
+            ),
+        }
+        or methodology.get("outcome_unit") != "authoritative_scored_session"
+        or methodology.get("process_exit_role")
+        != "diagnostic_only_after_all_required_scoring_evidence_exists"
+        or methodology.get("selection_bias_control")
+        != "retain_original_task_and_complete_only_unstarted_attempt_indices"
+        or methodology.get("original_noncreditable_receipts_mutated") is not False
+        or set(methodology.get("required_all") or [])
+        != {
+            "immutable_plan_claim_config_task_version_binding",
+            "agent_exit1_and_termination_completed",
+            "reward_result_numeric_and_verifier_matches_result",
+            "authoritative_session_unique_completed_model_and_verifier_match",
+            "session_ingest_completed_all_chunks",
+            "instance_cleanup_completed",
+            "stderr_empty",
+            "no_independent_infrastructure_incident",
+        }
+        or set(methodology.get("exclude_if_any") or [])
+        != {
+            "reward_result_missing_or_non_numeric",
+            "reward_or_result_verifier_mismatch",
+            "reward_task_version_mismatch",
+            "authoritative_session_missing_duplicate_or_incomplete",
+            "authoritative_session_model_or_verifier_mismatch",
+            "session_ingest_incomplete",
+            "cleanup_incomplete",
+            "stderr_or_proxy_transport_error_signal",
+            "independent_infrastructure_or_preemption_incident",
+        }
+        or gaps.get("new_cells_if_frozen_now") != expected_gaps
+        or gaps.get("new_cell_count") != 11
+        or gaps.get("freeze_only_after_live_inventory") is not True
+        or any(privacy.get(key) is not False for key in (
+            "scores_included", "prompts_included", "transcripts_included",
+            "flags_included", "credentials_included",
+        ))
+    ):
+        raise ValueError("hosted GLM completed exit-1 reconciliation drifted")
+
+    cells = receipt.get("reconciled_cells") or []
+    if len(cells) != len(expected):
+        raise ValueError("hosted GLM reconciled cell count drifted")
+    observed: set[tuple[int, int]] = set()
+    run_ids: set[str] = set()
+    session_ids: set[str] = set()
+    verifier_ids: set[str] = set()
+    for row in cells:
+        key = (int(row.get("source_rank") or 0), int(row.get("attempt") or 0))
+        if key not in expected or key in observed:
+            raise ValueError("hosted GLM reconciled cell identity drifted")
+        observed.add(key)
+        planned = next(
+            (item for item in predecessor["attempts"]
+             if int(item["source_rank"]) == key[0]
+             and int(item["attempt"]) == key[1]),
+            None,
+        )
+        task = next(
+            (item for item in predecessor["tasks"]
+             if int(item["source_rank"]) == key[0]),
+            None,
+        )
+        exact = expected[key]
+        if (
+            planned is None
+            or task is None
+            or row.get("run_id") != planned["run_id"]
+            or row.get("task_version_id") != task["task"]["version_id"]
+            or any(row.get(field) != value for field, value in exact.items())
+            or row.get("reconciled_outcome") != "RECONCILED_ACCEPTED"
+        ):
+            raise ValueError("hosted GLM reconciled cell binding drifted")
+        evidence = row.get("evidence") or {}
+        if (
+            row.get("job_uid") != source["job_uid"]
+            or row.get("pod_uid") != source["pod_uid"]
+            or evidence.get("agent_exit_code") != 1
+            or evidence.get("agent_termination_completed") is not True
+            or evidence.get("reward_numeric_present") is not True
+            or evidence.get("reward_result_task_version_matches") is not True
+            or evidence.get("reward_result_verifier_matches_result") is not True
+            or evidence.get("authoritative_session_match_count") != 1
+            or evidence.get("authoritative_session_status") != "completed"
+            or evidence.get("authoritative_session_model") != "glm-5.3"
+            or evidence.get("authoritative_session_verifier_matches") is not True
+            or evidence.get("session_ingest_status") != "completed"
+            or evidence.get("session_ingest_all_chunks") is not True
+            or evidence.get("cleanup_completed") is not True
+            or evidence.get("stderr_bytes") != 0
+            or evidence.get("proxy_http_5xx_token_count") != 0
+            or evidence.get("proxy_transport_error_token_count") != 0
+            or evidence.get("independent_infrastructure_incident") is not False
+            or evidence.get("endpoint_or_controller_preemption_overlap") is not False
+            or evidence.get("agent_exit_code_was_only_prior_rejection") is not True
+            or evidence.get("counts_as_primary_cell") is not True
+        ):
+            raise ValueError("hosted GLM reconciled cell is not fully scored")
+        file_digests = row.get("file_sha256") or {}
+        if set(file_digests) != {"result", "reward_result", "session_ingest", "cleanup"}:
+            raise ValueError("hosted GLM reconciled evidence set drifted")
+        if any(
+            not isinstance(value, str)
+            or not value.startswith("sha256:")
+            or len(value) != 71
+            for value in file_digests.values()
+        ):
+            raise ValueError("hosted GLM reconciled evidence digest drifted")
+        try:
+            uuid.UUID(row["session_id"])
+            uuid.UUID(row["verifier_execution_id"])
+            uuid.UUID(row["job_uid"])
+            uuid.UUID(row["pod_uid"])
+        except (KeyError, ValueError) as exc:
+            raise ValueError("hosted GLM reconciled UID evidence drifted") from exc
+        run_ids.add(row["run_id"])
+        session_ids.add(row["session_id"])
+        verifier_ids.add(row["verifier_execution_id"])
+    if observed != set(expected):
+        raise ValueError("hosted GLM reconciled cell set drifted")
+    if len(run_ids) != 4 or len(session_ids) != 4 or len(verifier_ids) != 4:
+        raise ValueError("hosted GLM reconciled cell identity duplicated")
+
+
 def build_dedicated_a_completed_exit1_gap_plan(
     predecessor: dict[str, Any], reconciliation: dict[str, Any]
 ) -> dict[str, Any]:
