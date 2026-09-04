@@ -85,3 +85,19 @@ def test_expected_digest_tamper_rejected() -> None:
     tampered["split_counts"]["train"] = 149
     with pytest.raises(inventory.GateError, match="expected_inventory_digest_mismatch"):
         inventory.observe(tampered, "unused", job_uid="job", pod_uid="pod")
+
+
+def test_projected_configmap_symlink_is_narrowly_accepted(tmp_path: Path) -> None:
+    generation = tmp_path / "..2026_09_04"
+    generation.mkdir()
+    target = generation / "expected.json"
+    target.write_text('{"safe":true}')
+    projected = tmp_path / "expected.json"
+    projected.symlink_to(Path(generation.name) / target.name)
+    assert inventory.load_configmap_json(projected) == {"safe": True}
+    outside = tmp_path.parent / "outside-inventory.json"
+    outside.write_text('{"safe":false}')
+    projected.unlink()
+    projected.symlink_to(outside)
+    with pytest.raises(inventory.GateError, match="expected_file_absent_or_unsafe"):
+        inventory.load_configmap_json(projected)

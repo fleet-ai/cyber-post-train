@@ -74,6 +74,24 @@ def load_json(path: Path) -> dict[str, Any]:
     return value
 
 
+def load_configmap_json(path: Path) -> dict[str, Any]:
+    """Load one projected ConfigMap key without accepting an external symlink."""
+    try:
+        resolved = path.resolve(strict=True)
+        mount_root = path.parent.resolve(strict=True)
+    except OSError as exc:
+        raise GateError("expected_file_absent_or_unsafe") from exc
+    if not resolved.is_file() or not resolved.is_relative_to(mount_root):
+        raise GateError("expected_file_absent_or_unsafe")
+    try:
+        value = json.loads(resolved.read_text(), object_pairs_hook=_pairs)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise GateError("expected_file_invalid_json") from exc
+    if not isinstance(value, dict):
+        raise GateError("expected_file_invalid_shape")
+    return value
+
+
 def write_once(path: Path, value: dict[str, Any]) -> None:
     payload = canonical_json(value) + b"\n"
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -474,7 +492,7 @@ def main() -> int:
     args.out_dir.mkdir(parents=True, exist_ok=False, mode=0o700)
     try:
         receipt = observe(
-            load_json(args.expected),
+            load_configmap_json(args.expected),
             os.environ["FLEET_API_KEY"],
             job_uid=os.environ["JOB_UID"],
             pod_uid=os.environ["POD_UID"],
