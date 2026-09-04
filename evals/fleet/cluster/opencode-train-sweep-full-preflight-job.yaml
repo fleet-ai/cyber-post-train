@@ -1,10 +1,10 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: chris-cyber-opencode-full-sfs-preflight-v4
+  name: chris-cyber-opencode-q38-sfs-preflight-v4
   namespace: fleet-train-jobs
   labels:
-    cyber-post-train.fleet.ai/experiment: opencode-train-sweep-full-preflight-v4
+    cyber-post-train.fleet.ai/experiment: opencode-q38-sfs-preflight-v4
     cyber-post-train.fleet.ai/owner: chris
     kueue.x-k8s.io/queue-name: training-lq
 spec:
@@ -14,7 +14,7 @@ spec:
   template:
     metadata:
       labels:
-        cyber-post-train.fleet.ai/experiment: opencode-train-sweep-full-preflight-v4
+        cyber-post-train.fleet.ai/experiment: opencode-q38-sfs-preflight-v4
         cyber-post-train.fleet.ai/owner: chris
     spec:
       restartPolicy: Never
@@ -33,6 +33,48 @@ spec:
           args:
             - |
               test ! -e /mnt/sfs/jobs/chris-cyber-opencode-q38-train50-p4-v4
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {cpu: 200m, memory: 256Mi}
+          volumeMounts:
+            - {name: sfs, mountPath: /mnt/sfs}
+      volumes:
+        - {name: sfs, persistentVolumeClaim: {claimName: sfs-shared}}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: chris-cyber-opencode-glm53-sfs-preflight-v4
+  namespace: fleet-train-jobs
+  labels:
+    cyber-post-train.fleet.ai/experiment: opencode-glm53-sfs-preflight-v4
+    cyber-post-train.fleet.ai/owner: chris
+    kueue.x-k8s.io/queue-name: training-lq
+spec:
+  activeDeadlineSeconds: 600
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 604800
+  template:
+    metadata:
+      labels:
+        cyber-post-train.fleet.ai/experiment: opencode-glm53-sfs-preflight-v4
+        cyber-post-train.fleet.ai/owner: chris
+    spec:
+      restartPolicy: Never
+      nodeSelector:
+        kubernetes.io/arch: amd64
+        workload: fleetai-training-ng-cpu
+      tolerations:
+        - key: workload
+          operator: Equal
+          value: fleetai-training-ng-cpu
+          effect: NoSchedule
+      containers:
+        - name: preflight
+          image: ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
+          command: ["/bin/sh", "-ceu", "--"]
+          args:
+            - |
               test ! -e /mnt/sfs/jobs/chris-cyber-opencode-glm53-train100-p4-v4
           resources:
             requests: {cpu: 100m, memory: 128Mi}

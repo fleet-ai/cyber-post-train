@@ -526,20 +526,27 @@ def build_parallel_successor(
     accepted_receipts: list[dict[str, Any]],
     source_state: dict[str, Any],
 ) -> dict[str, Any]:
-    """Freeze a v4 concurrent successor from a fully fenced v3 campaign."""
+    """Freeze the next concurrent successor from a fully fenced campaign."""
     from evals.fleet.opencode_train_sweep_runner import (
         validate_parallel_plan,
         validate_plan,
     )
 
-    validate_plan(original)
+    if original.get("schema_version") == FULL_PLAN_SCHEMA:
+        validate_plan(original)
+    elif original.get("schema_version") == PARALLEL_PLAN_SCHEMA:
+        validate_parallel_plan(original)
+    else:
+        raise ValueError("parallel successor source plan schema is unsupported")
     old_campaign = str(original["campaign_id"])
-    if not old_campaign.endswith("-v3"):
-        raise ValueError("parallel successor requires an exact v3 source campaign")
+    old_generation = old_campaign.rsplit("-", 1)[-1]
+    if old_generation not in {"v3", "v4"}:
+        raise ValueError("parallel successor requires an exact v3 or v4 source campaign")
     if source_state.get("receipt_sha256") != digest_without(source_state, "receipt_sha256"):
         raise ValueError("parallel successor source-state digest mismatch")
     if (
         source_state.get("campaign_id") != old_campaign
+        or source_state.get("plan_sha256") != original["plan_sha256"]
         or source_state.get("quiesced") is not True
         or int(source_state.get("unresolved_attempts") or 0) != 0
         or source_state.get("original_artifacts_preserved") is not True
@@ -566,14 +573,23 @@ def build_parallel_successor(
         accepted_by_run[run_id] = receipt
     if len(accepted_by_run) != int(source_state.get("accepted_attempts") or 0):
         raise ValueError("parallel successor accepted receipt count drifted")
+    accepted_count = len(accepted_by_run)
+    if (
+        int(source_state.get("model_rollouts_started") or 0) != accepted_count
+        or int(source_state.get("scored_sessions_created") or 0) != accepted_count
+        or int(source_state.get("attempt_directories") or 0) != accepted_count
+        or bool(source_state.get("sfs_root_created")) != bool(accepted_count)
+    ):
+        raise ValueError("parallel successor source accounting is incomplete")
 
-    new_campaign = f"{old_campaign[:-3]}-v4"
+    new_generation = f"v{int(old_generation[1:]) + 1}"
+    new_campaign = f"{old_campaign.rsplit('-', 1)[0]}-{new_generation}"
     successor = copy.deepcopy(original)
     successor.pop("plan_sha256", None)
     successor["schema_version"] = PARALLEL_PLAN_SCHEMA
     successor["created_at"] = datetime.now(UTC).isoformat().replace("+00:00", "Z")
     successor["campaign_id"] = new_campaign
-    prior = []
+    prior = copy.deepcopy(original.get("prior_accepted") or [])
     for run_id, receipt in sorted(
         accepted_by_run.items(), key=lambda pair: int(attempts_by_run[pair[0]]["ordinal"])
     ):
@@ -590,15 +606,17 @@ def build_parallel_successor(
         )
     successor["prior_accepted"] = prior
     remaining = []
-    old_network_generation = "-v3-"
     for source in original["attempts"]:
         if source["run_id"] in accepted_by_run:
             continue
         row = copy.deepcopy(source)
+        old_network_generation = f"-{old_generation}-"
         if old_campaign not in row["run_id"] or old_network_generation not in row["network"]:
             raise ValueError("parallel successor source attempt identity drifted")
         row["run_id"] = row["run_id"].replace(old_campaign, new_campaign, 1)
-        row["network"] = row["network"].replace(old_network_generation, "-v4-", 1)
+        row["network"] = row["network"].replace(
+            old_network_generation, f"-{new_generation}-", 1
+        )
         row["ordinal"] = len(remaining) + 1
         remaining.append(row)
     successor["attempts"] = remaining
@@ -788,7 +806,8 @@ def main() -> int:
                 "and --source-state"
             )
         receipts = [
-            load_json(path) for path in sorted(args.accepted_dir.glob("*.ACCEPTED.json"))
+            load_json(path)
+            for path in sorted(args.accepted_dir.glob("attempts/*/ACCEPTED.json"))
         ]
         value = build_parallel_successor(
             load_json(args.original_plan),

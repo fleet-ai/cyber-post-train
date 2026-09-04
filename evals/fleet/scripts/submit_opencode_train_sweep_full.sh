@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/../../.." && pwd)
 MODE=${1:-preview}
-TARGET=${2:-both}
+TARGET=${2:-glm}
 NAMESPACE=fleet-train-jobs
 EXPECTED_CONTEXT=nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6
 QWEN_CONFIGMAP=chris-cyber-opencode-train-sweep-full-v4-qwen
@@ -12,7 +12,8 @@ SECRET=chris-cyber-opencode-evals-v2
 QWEN_JOB=chris-cyber-opencode-q38-train50-p4-v4
 GLM_JOB=chris-cyber-opencode-glm53-train100-p4-v4
 JOB_FILE=$ROOT/evals/fleet/cluster/opencode-train-sweep-full-jobs.yaml
-PREFLIGHT_JOB=chris-cyber-opencode-full-sfs-preflight-v4
+QWEN_PREFLIGHT_JOB=chris-cyber-opencode-q38-sfs-preflight-v4
+GLM_PREFLIGHT_JOB=chris-cyber-opencode-glm53-sfs-preflight-v4
 PREFLIGHT_FILE=$ROOT/evals/fleet/cluster/opencode-train-sweep-full-preflight-job.yaml
 QWEN_PLAN=$ROOT/evals/fleet/configs/qwen38-opencode-train50-pass4-v4.json
 GLM_PLAN=$ROOT/evals/fleet/configs/glm53-opencode-train100-pass4-v4.json
@@ -90,17 +91,26 @@ configmap() {
 
 selected_jobs=()
 selected_configmaps=()
+selected_preflights=()
 if test "$TARGET" = qwen || test "$TARGET" = both; then
   selected_jobs+=("$QWEN_JOB")
   selected_configmaps+=("$QWEN_CONFIGMAP")
+  selected_preflights+=("$QWEN_PREFLIGHT_JOB")
 fi
 if test "$TARGET" = glm || test "$TARGET" = both; then
   selected_jobs+=("$GLM_JOB")
   selected_configmaps+=("$GLM_CONFIGMAP")
+  selected_preflights+=("$GLM_PREFLIGHT_JOB")
 fi
 for job in "${selected_jobs[@]}"; do
   if "${KUBECTL[@]}" -n "$NAMESPACE" get job "$job" >/dev/null 2>&1; then
     echo "Job $NAMESPACE/$job already exists; refusing duplicate" >&2
+    exit 1
+  fi
+done
+for job in "${selected_preflights[@]}"; do
+  if "${KUBECTL[@]}" -n "$NAMESPACE" get job "$job" >/dev/null 2>&1; then
+    echo "Preflight Job $NAMESPACE/$job already exists; refusing stale reuse" >&2
     exit 1
   fi
 done
@@ -117,6 +127,13 @@ job_document() {
     awk 'found{print} /^---$/{found=1}' "$JOB_FILE"
   fi
 }
+preflight_document() {
+  if test "$1" = qwen; then
+    awk '/^---$/{exit} {print}' "$PREFLIGHT_FILE"
+  else
+    awk 'found{print} /^---$/{found=1}' "$PREFLIGHT_FILE"
+  fi
+}
 if test "$MODE" = preview; then
   if test "$TARGET" = qwen || test "$TARGET" = both; then
     configmap qwen | "${KUBECTL[@]}" create --dry-run=server -f - >/dev/null
@@ -126,21 +143,27 @@ if test "$MODE" = preview; then
     configmap glm | "${KUBECTL[@]}" create --dry-run=server -f - >/dev/null
     job_document glm | "${KUBECTL[@]}" create --dry-run=server -f - >/dev/null
   fi
-  "${KUBECTL[@]}" create --dry-run=server -f "$PREFLIGHT_FILE" >/dev/null
+  if test "$TARGET" = qwen || test "$TARGET" = both; then
+    preflight_document qwen | "${KUBECTL[@]}" create --dry-run=server -f - >/dev/null
+  fi
+  if test "$TARGET" = glm || test "$TARGET" = both; then
+    preflight_document glm | "${KUBECTL[@]}" create --dry-run=server -f - >/dev/null
+  fi
   jq -n --arg target "$TARGET" '{ok:true,target:$target}'
   exit 0
 fi
 
-if ! "${KUBECTL[@]}" -n "$NAMESPACE" get job "$PREFLIGHT_JOB" >/dev/null 2>&1; then
-  "${KUBECTL[@]}" create -f "$PREFLIGHT_FILE" >/dev/null
-fi
-"${KUBECTL[@]}" -n "$NAMESPACE" wait --for=condition=complete \
-  --timeout=600s "job/$PREFLIGHT_JOB" >/dev/null
 if test "$TARGET" = qwen || test "$TARGET" = both; then
+  preflight_document qwen | "${KUBECTL[@]}" create -f - >/dev/null
+  "${KUBECTL[@]}" -n "$NAMESPACE" wait --for=condition=complete \
+    --timeout=600s "job/$QWEN_PREFLIGHT_JOB" >/dev/null
   configmap qwen | "${KUBECTL[@]}" create -f - >/dev/null
   job_document qwen | "${KUBECTL[@]}" create -f - >/dev/null
 fi
 if test "$TARGET" = glm || test "$TARGET" = both; then
+  preflight_document glm | "${KUBECTL[@]}" create -f - >/dev/null
+  "${KUBECTL[@]}" -n "$NAMESPACE" wait --for=condition=complete \
+    --timeout=600s "job/$GLM_PREFLIGHT_JOB" >/dev/null
   configmap glm | "${KUBECTL[@]}" create -f - >/dev/null
   job_document glm | "${KUBECTL[@]}" create -f - >/dev/null
 fi

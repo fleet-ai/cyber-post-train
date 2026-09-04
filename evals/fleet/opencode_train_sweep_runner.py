@@ -61,6 +61,8 @@ def validate_parallel_plan(plan: dict[str, Any]) -> None:
     prior = plan.get("prior_accepted") or []
     if len(attempts) != int(plan.get("new_session_count") or -1):
         raise ValueError("parallel full-plan new-session count drifted")
+    if int(plan.get("total_session_count") or 0) != task_count * 4:
+        raise ValueError("parallel full-plan total-session count drifted")
     if 1 + len(prior) + len(attempts) != task_count * 4:
         raise ValueError("parallel full-plan pass@4 accounting drifted")
     run_ids = [row.get("run_id") for row in attempts]
@@ -136,15 +138,12 @@ def _accepted_attempts(root: Path) -> dict[str, dict[str, Any]]:
 def _inventory_for_task(
     client: httpx.Client,
     task_key: str,
-    task_version_id: str,
     persisted_model: str,
 ) -> list[dict[str, Any]]:
     return [
         row
         for row in self_hosted._task_sessions(client, task_key)
         if row.get("model") == persisted_model
-        and (row.get("eval_task_version_id") or row.get("task_version_id"))
-        == task_version_id
     ]
 
 
@@ -241,7 +240,9 @@ def _parallel_allowed_sessions(
     plan: dict[str, Any], task_row: dict[str, Any], root: Path
 ) -> set[str]:
     rank = int(task_row["rank"])
-    allowed = set(task_row["baseline_session_ids"])
+    allowed = set()
+    if int(plan["credited_smoke"]["rank"]) == rank:
+        allowed.add(plan["credited_smoke"]["session_id"])
     allowed.update(
         row["session_id"] for row in plan["prior_accepted"] if int(row["rank"]) == rank
     )
@@ -260,6 +261,8 @@ def _validate_prior_accepted(
 ) -> None:
     persisted_model = self_hosted.persisted_session_model_identity(plan)
     by_rank: dict[int, list[dict[str, Any]]] = {}
+    smoke = plan["credited_smoke"]
+    by_rank.setdefault(int(smoke["rank"]), []).append(smoke)
     for row in plan["prior_accepted"]:
         by_rank.setdefault(int(row["rank"]), []).append(row)
     for rank, credited in by_rank.items():
@@ -269,7 +272,6 @@ def _validate_prior_accepted(
             for row in _inventory_for_task(
                 client,
                 task_row["task"]["key"],
-                task_row["task"]["version_id"],
                 persisted_model,
             )
         }
@@ -297,7 +299,6 @@ def _run_parallel_attempt(
         observed = _inventory_for_task(
             client,
             task_row["task"]["key"],
-            task_row["task"]["version_id"],
             persisted_model,
         )
     allowed = _parallel_allowed_sessions(plan, task_row, root)
@@ -583,7 +584,6 @@ def run_plan(plan: dict[str, Any], root: Path, proxy_script: Path) -> dict[str, 
             observed = _inventory_for_task(
                 client,
                 task_row["task"]["key"],
-                task_row["task"]["version_id"],
                 persisted_model,
             )
             unknown = {

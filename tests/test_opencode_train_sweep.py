@@ -15,11 +15,16 @@ def _source_state(plan: dict, accepted: int) -> dict:
     value = {
         "schema_version": "fleet-selfhosted-opencode-v3-fenced-state-v1",
         "campaign_id": plan["campaign_id"],
+        "plan_sha256": plan["plan_sha256"],
         "job_uid": "job-uid",
         "pod_uid": "pod-uid",
         "quiesced": True,
         "accepted_attempts": accepted,
         "unresolved_attempts": 0,
+        "attempt_directories": accepted,
+        "model_rollouts_started": accepted,
+        "scored_sessions_created": accepted,
+        "sfs_root_created": bool(accepted),
         "original_artifacts_preserved": True,
     }
     value["receipt_sha256"] = self_hosted.digest_without(value, "receipt_sha256")
@@ -171,6 +176,14 @@ def test_parallel_successor_preserves_exact_cartesian_cells() -> None:
     broken["plan_sha256"] = self_hosted.digest_without(broken, "plan_sha256")
     with pytest.raises(ValueError, match="Cartesian"):
         opencode_train_sweep_runner.validate_parallel_plan(broken)
+
+    broken_total = json.loads(json.dumps(successor))
+    broken_total["total_session_count"] = 401
+    broken_total["plan_sha256"] = self_hosted.digest_without(
+        broken_total, "plan_sha256"
+    )
+    with pytest.raises(ValueError, match="total-session"):
+        opencode_train_sweep_runner.validate_parallel_plan(broken_total)
 
 
 def test_parallel_task_groups_never_overlap_one_task(
