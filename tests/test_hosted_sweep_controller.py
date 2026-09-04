@@ -28,6 +28,9 @@ DEDICATED_A_PLAN = Path(
 DEDICATED_B_PLAN = Path(
     "evals/fleet/configs/glm53-opencode-dedicated-b-even27-pass4-v1.json"
 )
+QWEN_REPLACEMENT_PLAN = Path(
+    "evals/fleet/configs/qwen38-opencode-hosted-replacements3-pass4-v1.json"
+)
 DEDICATED_SCORING_RELEASE = Path(
     "docs/evidence/qwen38-study/2026-09-04-glm53-dedicated-scoring-release-v1.json"
 )
@@ -620,3 +623,27 @@ def test_committed_dedicated_b_plan_is_disjoint_and_digest_valid() -> None:
         for attempt in range(1, 5)
     }
     assert a_cells.isdisjoint(b_cells)
+
+
+def test_qwen_replacement_plan_is_exact_and_disjoint_from_v7() -> None:
+    plan = hosted.load_object(QWEN_REPLACEMENT_PLAN)
+    hosted.validate_plan(plan)
+    assert plan["plan_sha256"] == (
+        "sha256:9f879c054e770c120f2d4b77750475f402ba067873fbb93d0e356b062168841d"
+    )
+    assert [row["source_rank"] for row in plan["tasks"]] == [51, 52, 53]
+    v7 = hosted.load_object(
+        Path("evals/fleet/configs/qwen38-opencode-hosted-complete47-pass4-v7.json")
+    )
+    replacement_cells = {
+        (row["task"]["version_id"], attempt)
+        for row in plan["tasks"]
+        for attempt in range(1, 5)
+    }
+    v7_cells = {
+        (row["task"]["version_id"], attempt)
+        for row in v7["tasks"]
+        for attempt in range(1, 5)
+    }
+    assert replacement_cells.isdisjoint(v7_cells)
+    assert plan["treatment_block"] == v7["treatment_block"]

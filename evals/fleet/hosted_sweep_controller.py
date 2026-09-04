@@ -67,6 +67,9 @@ DEDICATED_CAMPAIGNS = {
     "glm53_dedicated_a": "chris-cyber-glm53-opencode11827-dedicated-a-even27-p4-v1",
     "glm53_dedicated_b": "chris-cyber-glm53-opencode11827-dedicated-b-even27-p4-v1",
 }
+QWEN_REPLACEMENT_CAMPAIGN = (
+    "chris-cyber-q38-opencode11827-hosted-replacements3-p4-v1"
+)
 EXPECTED_INCLUDED_TASK_COUNTS.update(
     {
         "qwen38_remainder": 48,
@@ -78,6 +81,7 @@ EXPECTED_INCLUDED_TASK_COUNTS.update(
 EXPECTED_INCLUDED_TASK_COUNTS.update(
     {"glm53_dedicated_a": 27, "glm53_dedicated_b": 27}
 )
+EXPECTED_INCLUDED_TASK_COUNTS.update({"qwen38_replacements": 3})
 SCHEDULE = [
     {
         "accepted_outcomes_at_least": 0,
@@ -653,6 +657,110 @@ def build_dedicated_a_plan(
     return plan
 
 
+def build_qwen_replacement_plan(
+    source_plan: dict[str, Any],
+    hosted_plan: dict[str, Any],
+    assignment: dict[str, Any],
+) -> dict[str, Any]:
+    """Build Qwen's three locked complete-task replacement cells."""
+    _validate_source_plan(source_plan)
+    validate_plan(hosted_plan)
+    if (
+        source_plan.get("plan_sha256")
+        != "sha256:63bf008198170f4e55153c2307560560befe231f2fa11186acebf3e01e3ac50f"
+        or hosted_plan.get("plan_sha256")
+        != "sha256:f367d5148b035e29f57e5a29633609c4dbc8876d94c2795a79ff1ff25dad2ee2"
+        or assignment.get("receipt_sha256")
+        != digest_without(assignment, "receipt_sha256")
+    ):
+        raise ValueError("Qwen replacement source identity drifted")
+    qwen = assignment.get("qwen38") or {}
+    if qwen.get("hydration_gate") != {
+        "status": "satisfied_by_existing_exact_task_receipts",
+        "source_plan_sha256": source_plan["plan_sha256"],
+    }:
+        raise ValueError("Qwen replacement hydration gate is not satisfied")
+    locked = {int(row["replacement_rank"]): row for row in qwen.get("tasks") or []}
+    if set(locked) != {51, 52, 53}:
+        raise ValueError("Qwen replacement ranks drifted")
+    source_tasks = {int(row["rank"]): row for row in source_plan["tasks"]}
+    tasks = []
+    for source_rank in (51, 52, 53):
+        task = copy.deepcopy(source_tasks[source_rank])
+        expected = locked[source_rank]
+        if (
+            task["task"].get("key") != expected["task_key"]
+            or task["task"].get("version_id") != expected["task_version_id"]
+            or task["task"].get("cyber_contract") != expected["cyber_contract"]
+            or task["environment"].get("id") != expected["env_key"]
+            or task["environment"].get("version") != expected["env_version"]
+            or task["environment"].get("version_id")
+            != expected["environment_version_id"]
+            or task["environment"].get("data_id") != expected["data_key"]
+            or task["environment"].get("data_version") != expected["data_version"]
+            or task["environment"].get("runtime_seed_content_sha256")
+            != expected["runtime_seed_content_sha256"]
+        ):
+            raise ValueError("Qwen replacement exact task receipt drifted")
+        task["rank"] = len(tasks) + 1
+        task["source_rank"] = source_rank
+        task.pop("baseline_session_ids", None)
+        tasks.append(task)
+    attempts = []
+    for task in tasks:
+        source_rank = int(task["source_rank"])
+        key_digest = self_hosted.sha256(task["task"]["key"].encode()).split(":", 1)[1][:8]
+        for attempt in range(1, 5):
+            attempts.append(
+                {
+                    "ordinal": len(attempts) + 1,
+                    "rank": int(task["rank"]),
+                    "source_rank": source_rank,
+                    "attempt": attempt,
+                    "run_id": (
+                        f"{QWEN_REPLACEMENT_CAMPAIGN}-"
+                        f"sr{source_rank:03d}-a{attempt}-{key_digest}"
+                    ),
+                    "network": (
+                        f"qwen38-hosted-replacement-"
+                        f"sr{source_rank:03d}-a{attempt}-{key_digest}"
+                    ),
+                }
+            )
+    plan = {
+        "schema_version": PLAN_SCHEMA,
+        "shard_key": "qwen38_replacements",
+        "campaign_id": QWEN_REPLACEMENT_CAMPAIGN,
+        "source_job_id": source_plan["source_job_id"],
+        "source": {
+            "source_plan_sha256": source_plan["plan_sha256"],
+            "hosted_plan_sha256": hosted_plan["plan_sha256"],
+            "assignment_receipt_sha256": assignment["receipt_sha256"],
+        },
+        "treatment_block": copy.deepcopy(hosted_plan["treatment_block"]),
+        "model": copy.deepcopy(hosted_plan["model"]),
+        "harness": copy.deepcopy(hosted_plan["harness"]),
+        "authority": copy.deepcopy(hosted_plan["authority"]),
+        "task_count": 3,
+        "pass_k": 4,
+        "total_session_count": 12,
+        "credited_sessions": [],
+        "new_session_count": 12,
+        "fenced_source_ranks": [1, 2, 3],
+        "existing_hosted_source_ranks": list(range(4, 51)),
+        "execution": {
+            **copy.deepcopy(hosted_plan["execution"]),
+            "inventory_policy": "plan_identity_plus_authoritative_receipt_v1",
+        },
+        "tasks": tasks,
+        "attempts": attempts,
+        "privacy": copy.deepcopy(hosted_plan["privacy"]),
+    }
+    plan["plan_sha256"] = digest_without(plan, "plan_sha256")
+    validate_plan(plan)
+    return plan
+
+
 def _validate_source_plan(plan: dict[str, Any]) -> None:
     if plan.get("schema_version") == legacy.PLAN_SCHEMA:
         legacy.validate_plan(plan)
@@ -916,7 +1024,8 @@ def validate_plan(plan: dict[str, Any]) -> None:
         }
         else (
             "plan_identity_plus_authoritative_receipt_v1"
-            if shard_key in {"qwen38_remainder", "qwen38_remainder2"}
+            if shard_key
+            in {"qwen38_remainder", "qwen38_remainder2", "qwen38_replacements"}
             else None
         )
     )
@@ -972,6 +1081,19 @@ def validate_plan(plan: dict[str, Any]) -> None:
             )
         ):
             raise ValueError("dedicated replica partition or binding drifted")
+        return
+
+    if shard_key == "qwen38_replacements":
+        if (
+            [int(row["source_rank"]) for row in tasks] != [51, 52, 53]
+            or plan.get("fenced_source_ranks") != [1, 2, 3]
+            or plan.get("existing_hosted_source_ranks") != list(range(4, 51))
+            or (plan.get("treatment_block") or {}).get("kind")
+            != "hosted_inference_endpoint_v1"
+            or (plan.get("treatment_block") or {}).get("model_revision")
+            != plan["model"].get("revision")
+        ):
+            raise ValueError("Qwen replacement partition or binding drifted")
         return
 
     excluded = plan.get("excluded_tasks") or []
@@ -1609,6 +1731,11 @@ def main() -> int:
     dedicated_b.add_argument("--hydration", type=Path, required=True)
     dedicated_b.add_argument("--canary", type=Path, required=True)
     dedicated_b.add_argument("--output", type=Path, required=True)
+    qwen_replacements = sub.add_parser("build-qwen-replacements")
+    qwen_replacements.add_argument("--source-plan", type=Path, required=True)
+    qwen_replacements.add_argument("--hosted-plan", type=Path, required=True)
+    qwen_replacements.add_argument("--assignment", type=Path, required=True)
+    qwen_replacements.add_argument("--output", type=Path, required=True)
     validate = sub.add_parser("validate")
     validate.add_argument("--plan", type=Path, required=True)
     preflight = sub.add_parser("preflight")
@@ -1653,6 +1780,14 @@ def main() -> int:
             load_object(args.hydration),
             load_object(args.canary),
             replica="B",
+        )
+        self_hosted.write_json_once(args.output, value)
+        return 0
+    if args.command == "build-qwen-replacements":
+        value = build_qwen_replacement_plan(
+            load_object(args.source_plan),
+            load_object(args.hosted_plan),
+            load_object(args.assignment),
         )
         self_hosted.write_json_once(args.output, value)
         return 0
