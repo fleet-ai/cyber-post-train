@@ -11,13 +11,13 @@
     "dedicated_parity_receipt_sha256": "sha256:07e733b4b161ed7c36113fc3688f04a42938d93a499b1bcc10c7cd21342900df",
     "hosted_health_receipt_sha256": "sha256:d81a01ffe1087d7d85fe511bc9c978461ba3e24a2c15675871cfb8668c49bd85",
     "shared_pvc_flock_receipt_sha256": "sha256:e9f34d35ac3c9e60d2698ebc1685374b98f13e41ac305df0609fb051f35c416c",
-    "controller_compatibility_receipt_sha256": "sha256:af359022ed0ac0da314b35a1a7dfd0d5bc7199fba7cdc7e15bb337de58df5508",
+    "controller_compatibility_receipt_sha256": "sha256:a0ded706002accbbf482dfcba58d840b6ba7666f6af225a2207cfbcdbe5adc3c",
     "fresh_duplicate_inventory_receipt_sha256": null
   },
-  "implementation": {"controller_sha256": "sha256:a099013da08d537de57f6e695a5fcf0cc27ae30b0735a9d08da49caf91370091", "frozen_controller_sha256": "sha256:e14670e40d2b1fbe4896e4b6dfb2902f121b81c8103efea3a74a11fed496809a", "preflight_manifest_sha256": "sha256:82922a77035da65a3495aabc3281370d2e556a881873aca2655f947231e48112", "scored_manifest_sha256": "sha256:1217666a0bfe5ab4d9aec0191213a3f1af8967f053b046922de656ed4a953be2", "launcher_sha256": "sha256:92665e9bf9592abfe7af88893cd4e2b09db4b630f4e63126bcebf64fb37810eb"},
+  "implementation": {"controller_sha256": "sha256:f023dffd60f4594ff60a6388b6ca653c24e56ebb760dc8ecdf8afcc6d7ee04f9", "frozen_controller_sha256": "sha256:e14670e40d2b1fbe4896e4b6dfb2902f121b81c8103efea3a74a11fed496809a", "preflight_manifest_sha256": "sha256:45f4d0942e6d4485b35be4d0e3ebccdaa825bef5ceec377ba5f983cdd7e499d6", "scored_manifest_sha256": "sha256:1217666a0bfe5ab4d9aec0191213a3f1af8967f053b046922de656ed4a953be2", "launcher_sha256": "sha256:92665e9bf9592abfe7af88893cd4e2b09db4b630f4e63126bcebf64fb37810eb"},
   "remaining_gates": ["successful_uid_bound_preflight", "fresh_exact_cell_duplicate_inventory", "root_scored_launch_authorization", "final_released_receipt", "final_v2_manifest_and_configmap_binding"],
   "authorization": {"author": null, "preflight_authorized": false, "launch_authorized": false, "create_once": true, "required_priority_class": "fleet-train-high", "statement": null},
   "terminal_contract": {"terminal_schema_version": "fleet-opencode-autocontinue-canary-terminal-v2", "post_exit_schema_version": "fleet-opencode-autocontinue-canary-post-exit-v1", "downward_job_uid_required": true, "downward_pod_uid_required": true, "post_exit_k8s_observer_required": true, "bulk_release_granted": false},
   "privacy": {"credentials_included": false, "prompts_or_traces_included": false, "scores_included": false},
-  "receipt_sha256": "sha256:a43de44f684359d6e42e533ccc13166a19a0e0bfba164da4ac0cf1a3c4edd48c"
+  "receipt_sha256": "sha256:87797b08408f591fdb6b150204f768428233b0de8ca197c9f8263f909e76ccca"
 }

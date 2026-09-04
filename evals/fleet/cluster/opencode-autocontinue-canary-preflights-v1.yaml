@@ -32,10 +32,11 @@ spec:
               install -m 0644 /bootstrap/preflight-manifest.yaml "$root/evals/fleet/cluster/opencode-autocontinue-canary-preflights-v1.yaml"
               install -m 0644 /bootstrap/compatibility.json "$root/docs/evidence/qwen38-study/2026-09-04-opencode-autocontinue-canary-controller-compatibility-v1.json"
               cd "$root"
-              exec uv run --no-project --with httpx==0.28.1 python -m evals.fleet.autocontinue_canary_controller preflight --plan /bootstrap/plan.json --release /bootstrap/release.json --out /mnt/sfs/jobs/chris-q38-ac-canary1-v1-preflight/PREFLIGHT.json --out-dir /mnt/sfs/jobs/chris-q38-ac-canary1-v1 --repo "$root"
+              exec uv run --no-project --with httpx==0.28.1 python -m evals.fleet.autocontinue_canary_controller preflight --plan /bootstrap/plan.json --release /bootstrap/release.json --out /mnt/sfs/jobs/chris-q38-ac-canary1-v1-preflight/PREFLIGHT.json --out-dir /mnt/sfs/jobs/chris-q38-ac-canary1-v1 --repo "$root" --package-commit "$PACKAGE_COMMIT"
           env:
             - {name: JOB_UID, valueFrom: {fieldRef: {apiVersion: v1, fieldPath: "metadata.labels['batch.kubernetes.io/controller-uid']"}}}
             - {name: POD_UID, valueFrom: {fieldRef: {apiVersion: v1, fieldPath: metadata.uid}}}
+            - {name: PACKAGE_COMMIT, valueFrom: {configMapKeyRef: {name: chris-q38-ac-canary1-pre-v1, key: package_commit}}}
             - {name: FLEET_API_KEY, valueFrom: {secretKeyRef: {name: chris-cyber-opencode-evals-v2, key: FLEET_API_KEY}}}
           resources: {requests: {cpu: 100m, memory: 256Mi}, limits: {cpu: 250m, memory: 512Mi}}
           volumeMounts: [{name: bootstrap, mountPath: /bootstrap, readOnly: true}, {name: workspace, mountPath: /workspace}, {name: sfs, mountPath: /mnt/sfs}]
@@ -78,10 +79,11 @@ spec:
               install -m 0644 /bootstrap/preflight-manifest.yaml "$root/evals/fleet/cluster/opencode-autocontinue-canary-preflights-v1.yaml"
               install -m 0644 /bootstrap/compatibility.json "$root/docs/evidence/qwen38-study/2026-09-04-opencode-autocontinue-canary-controller-compatibility-v1.json"
               cd "$root"
-              exec uv run --no-project --with httpx==0.28.1 python -m evals.fleet.autocontinue_canary_controller preflight --plan /bootstrap/plan.json --release /bootstrap/release.json --out /mnt/sfs/jobs/chris-glm53-ac-canary1-v1-preflight/PREFLIGHT.json --out-dir /mnt/sfs/jobs/chris-glm53-ac-canary1-v1 --repo "$root"
+              exec uv run --no-project --with httpx==0.28.1 python -m evals.fleet.autocontinue_canary_controller preflight --plan /bootstrap/plan.json --release /bootstrap/release.json --out /mnt/sfs/jobs/chris-glm53-ac-canary1-v1-preflight/PREFLIGHT.json --out-dir /mnt/sfs/jobs/chris-glm53-ac-canary1-v1 --repo "$root" --package-commit "$PACKAGE_COMMIT"
           env:
             - {name: JOB_UID, valueFrom: {fieldRef: {apiVersion: v1, fieldPath: "metadata.labels['batch.kubernetes.io/controller-uid']"}}}
             - {name: POD_UID, valueFrom: {fieldRef: {apiVersion: v1, fieldPath: metadata.uid}}}
+            - {name: PACKAGE_COMMIT, valueFrom: {configMapKeyRef: {name: chris-glm53-ac-canary1-pre-v1, key: package_commit}}}
             - {name: FLEET_API_KEY, valueFrom: {secretKeyRef: {name: chris-cyber-opencode-evals-v2, key: FLEET_API_KEY}}}
           resources: {requests: {cpu: 100m, memory: 256Mi}, limits: {cpu: 250m, memory: 512Mi}}
           volumeMounts: [{name: bootstrap, mountPath: /bootstrap, readOnly: true}, {name: workspace, mountPath: /workspace}, {name: sfs, mountPath: /mnt/sfs}]

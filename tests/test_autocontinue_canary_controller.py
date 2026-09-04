@@ -139,6 +139,13 @@ def test_held_manifests_have_two_create_once_high_priority_jobs(manifest: Path) 
     if manifest == PRE_MANIFEST:
         assert all(name.endswith("-preflight") for name in names)
         assert all("-pre-v1" in name for name in configmaps)
+        for doc in docs:
+            container = doc["spec"]["template"]["spec"]["containers"][0]
+            by_name = {row["name"]: row for row in container["env"]}
+            package_source = by_name["PACKAGE_COMMIT"]["valueFrom"]["configMapKeyRef"]
+            assert package_source["name"] in configmaps
+            assert package_source["key"] == "package_commit"
+            assert '--package-commit "$PACKAGE_COMMIT"' in container["args"][0]
     else:
         assert all(not name.endswith("-preflight") for name in names)
         assert all("-run-v2" in name for name in configmaps)
@@ -335,6 +342,50 @@ def test_global_cell_claim_allows_exactly_one_concurrent_process(tmp_path: Path)
     outcomes = sorted(queue.get(timeout=1)[0] for _ in processes)
     assert outcomes == ["claimed", "rejected"]
     assert len(list((tmp_path / "claims").glob("*.json"))) == 1
+
+
+def test_global_cell_claim_first_use_is_stable_under_concurrent_stress(tmp_path: Path) -> None:
+    context = multiprocessing.get_context("fork")
+    for round_number in range(12):
+        claim_root = tmp_path / f"claims-{round_number}"
+        queue = context.Queue()
+        processes = [
+            context.Process(
+                target=_cell_claim_worker,
+                args=(str(Q_PLAN), str(claim_root), queue),
+            )
+            for _ in range(6)
+        ]
+        for process in processes:
+            process.start()
+        for process in processes:
+            process.join(10)
+            assert process.exitcode == 0
+        outcomes = sorted(queue.get(timeout=1)[0] for _ in processes)
+        assert outcomes == ["claimed", "rejected", "rejected", "rejected", "rejected", "rejected"]
+        assert len(list(claim_root.glob("*.json"))) == 1
+
+
+def test_claim_lock_retries_transient_first_create_visibility(tmp_path: Path, monkeypatch) -> None:
+    root_fd = canary._open_directory_nofollow(tmp_path / "claims")
+    original_open = canary.os.open
+    attempts = 0
+
+    def transient_open(path, flags, mode=0o777, *, dir_fd=None):
+        nonlocal attempts
+        if path == ".claim.lock" and attempts == 0:
+            attempts += 1
+            raise FileNotFoundError(path)
+        return original_open(path, flags, mode, dir_fd=dir_fd)
+
+    monkeypatch.setattr(canary.os, "open", transient_open)
+    try:
+        lock_fd = canary._open_claim_lock(root_fd)
+        assert attempts == 1
+        assert canary.stat.S_ISREG(canary.os.fstat(lock_fd).st_mode)
+        canary.os.close(lock_fd)
+    finally:
+        canary.os.close(root_fd)
 
 
 def test_global_cell_claim_rejects_symlink_root_and_lock(tmp_path: Path, monkeypatch) -> None:

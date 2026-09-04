@@ -8,11 +8,11 @@ primitives and adds canary-specific plan, release, and terminal accounting.
 from __future__ import annotations
 
 import argparse
-import contextlib
 import fcntl
 import json
 import os
 import stat
+import time
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -30,7 +30,7 @@ TASK_INVENTORY_EXECUTION_SHA = (
     "sha256:b4c175db0d04746e16fa9314edb093f7306e859545cd95972694e461b7f82fcb"
 )
 PREAUTH_TIMESTAMP = "2026-09-04T20:47:35Z"
-PRE_MANIFEST_SHA = "sha256:82922a77035da65a3495aabc3281370d2e556a881873aca2655f947231e48112"
+PRE_MANIFEST_SHA = "sha256:45f4d0942e6d4485b35be4d0e3ebccdaa825bef5ceec377ba5f983cdd7e499d6"
 SCORED_MANIFEST_SHA = "sha256:1217666a0bfe5ab4d9aec0191213a3f1af8967f053b046922de656ed4a953be2"
 SELF_HOSTED_SHA = "sha256:16df432b5fde55112924d6106e6c03f09817846f1344ba0fe100dcf785c33d8b"
 RUNNER_SHA = "sha256:b1f9c5028f65b0d7772538e3ce075310dc6c7a46b3de58d0196bc474e74e9e9d"
@@ -263,8 +263,14 @@ def _open_directory_nofollow(path: Path) -> int:
         for part in parts:
             if part in {"", "."}:
                 continue
-            with contextlib.suppress(FileExistsError):
+            created = False
+            try:
                 os.mkdir(part, mode=0o700, dir_fd=current_fd)
+                created = True
+            except FileExistsError:
+                pass
+            if created:
+                os.fsync(current_fd)
             try:
                 next_fd = os.open(part, directory_flags, dir_fd=current_fd)
             except OSError as exc:
@@ -278,6 +284,23 @@ def _open_directory_nofollow(path: Path) -> int:
     except Exception:
         os.close(current_fd)
         raise
+
+
+def _open_claim_lock(root_fd: int) -> int:
+    """Open the permanent root lock, tolerating only transient create visibility."""
+    lock_flags = os.O_RDWR | os.O_CREAT
+    if hasattr(os, "O_NOFOLLOW"):
+        lock_flags |= os.O_NOFOLLOW
+    last_error: FileNotFoundError | None = None
+    for _ in range(32):
+        try:
+            return os.open(".claim.lock", lock_flags, 0o600, dir_fd=root_fd)
+        except FileNotFoundError as exc:
+            last_error = exc
+            if not stat.S_ISDIR(os.fstat(root_fd).st_mode):
+                raise RuntimeError("global canary cell-claim root is unsafe") from exc
+            time.sleep(0.001)
+    raise RuntimeError("global canary cell-claim lock could not be created") from last_error
 
 
 def claim_global_cell(plan: dict[str, Any], claim_root: Path | None = None) -> dict[str, Any]:
@@ -298,11 +321,8 @@ def claim_global_cell(plan: dict[str, Any], claim_root: Path | None = None) -> d
     identity_sha = self_hosted.sha256(self_hosted.canonical_json(identity))
     claim_name = f"{identity_sha.removeprefix('sha256:')}.json"
     root_fd = _open_directory_nofollow(root)
-    lock_flags = os.O_RDWR | os.O_CREAT
-    if hasattr(os, "O_NOFOLLOW"):
-        lock_flags |= os.O_NOFOLLOW
     try:
-        lock_fd = os.open(".claim.lock", lock_flags, 0o600, dir_fd=root_fd)
+        lock_fd = _open_claim_lock(root_fd)
         with os.fdopen(lock_fd, "a+b") as lock:
             if not stat.S_ISREG(os.fstat(lock.fileno()).st_mode):
                 raise RuntimeError("global canary cell-claim lock is not regular")

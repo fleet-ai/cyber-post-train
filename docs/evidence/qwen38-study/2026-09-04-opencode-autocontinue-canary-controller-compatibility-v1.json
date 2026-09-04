@@ -11,7 +11,7 @@
   },
   "canary_controller": {
     "path": "evals/fleet/autocontinue_canary_controller.py",
-    "sha256": "sha256:a099013da08d537de57f6e695a5fcf0cc27ae30b0735a9d08da49caf91370091",
+    "sha256": "sha256:f023dffd60f4594ff60a6388b6ca653c24e56ebb760dc8ecdf8afcc6d7ee04f9",
     "scope": "two_exact_one_cell_canaries_only",
     "imports_frozen_inventory_attempt_and_classification_primitives": true
   },
@@ -50,5 +50,5 @@
     "prompts_or_traces_included": false,
     "scores_included": false
   },
-  "receipt_sha256": "sha256:af359022ed0ac0da314b35a1a7dfd0d5bc7199fba7cdc7e15bb337de58df5508"
+  "receipt_sha256": "sha256:a0ded706002accbbf482dfcba58d840b6ba7666f6af225a2207cfbcdbe5adc3c"
 }
