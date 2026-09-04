@@ -1,0 +1,58 @@
+{
+  "schema_version": "hosted-opencode-remainder-source-v1",
+  "recorded_at": "2026-09-04T04:41:00Z",
+  "runs": {
+    "glm53": {
+      "predecessor_plan_sha256": "sha256:7fa9cb527083defd0197caccf7fb87634cfd2f22932afcf0d51a33f97be703f1",
+      "job_name": "chris-cyber-glm53-opencode11827-hosted-odd46-p4-v9",
+      "job_uid": "6f34dd40-b330-423b-9d9e-76f71cf75c90",
+      "pod_uid": "81ba03f2-3212-43ec-b37b-0069e57ce8a0",
+      "terminal_at": "2026-09-04T04:39:55Z",
+      "active_attempts": 0,
+      "excluded_source_ranks": [
+        9
+      ],
+      "outcomes": [
+        {
+          "source_rank": 9,
+          "attempt": 1,
+          "classification": "accepted",
+          "receipt_sha256": "sha256:653b70027517c5aa83ca5a09ddd039eae46b463f5bf6a914eece51b3097d3c02",
+          "verifier_backed": true,
+          "session_ingest_completed": true,
+          "cleanup_completed": true,
+          "retry_allowed": false
+        },
+        {
+          "source_rank": 9,
+          "attempt": 2,
+          "classification": "infrastructure_incomplete_post_verifier",
+          "agent_termination": "completed",
+          "agent_exit_code": 0,
+          "verifier_backed": true,
+          "session_ingest_completed": false,
+          "session_ingest_http_status": 500,
+          "session_ingest_error_code": "fleet_http_error",
+          "session_ingest_chunks_completed": 4,
+          "session_ingest_chunk_count": 18,
+          "cleanup_completed": true,
+          "result_sha256": "sha256:4bfd9e90f1701385c7492cdce1cf5062105bd6e58b7f4deb1b4dccdb2c4511c0",
+          "session_ingest_sha256": "sha256:b817b53e89b33b4341204b5f7da7d9433116e6ca402a36c8bd1384d70a00df17",
+          "cleanup_sha256": "sha256:a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+          "trace_manifest_sha256": "sha256:1866d1ec308d2797c6757e93429649ca13c8a782688de8ba7773fce21dbd49bf",
+          "reward_result_sha256": "sha256:e862d22da0d145d581116c50c62585353cd0e98cd5295113eb1dd95121ca7a41",
+          "retry_allowed": false
+        }
+      ],
+      "terminal_reason": "session_ingest_http_500_after_partial_chunk_upload",
+      "unstarted_attempts_in_excluded_task": [
+        3,
+        4
+      ]
+    }
+  },
+  "scores_read": false,
+  "prompts_or_traces_read": false,
+  "credentials_included": false,
+  "receipt_sha256": "sha256:09a819abd51f8ecda21d6a29dd1e700228fadb8548b8d57b37eb873a5c33d02d"
+}

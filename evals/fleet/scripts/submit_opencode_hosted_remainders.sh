@@ -28,10 +28,20 @@ if test "$GENERATION" = v2; then
   Q_CONFIG=chris-cyber-q38-hosted-complete47-p4-v7
   G_CONFIG=chris-cyber-glm53-hosted-odd46-p4-v9
 fi
+if test "$GENERATION" = v3; then
+  Q_PLAN=$ROOT/evals/fleet/configs/qwen38-opencode-hosted-complete47-pass4-v7.json
+  G_PLAN=$ROOT/evals/fleet/configs/glm53-opencode-hosted-odd45-pass4-v10.json
+  Q_JOB=chris-cyber-q38-opencode11827-hosted-complete47-p4-v7
+  G_JOB=chris-cyber-glm53-opencode11827-hosted-odd45-p4-v10
+  Q_PREFLIGHT=chris-cyber-q38-hosted47-p4-v7-preflight
+  G_PREFLIGHT=chris-cyber-glm53-hosted-odd45-p4-v10-preflight
+  Q_CONFIG=chris-cyber-q38-hosted-complete47-p4-v7
+  G_CONFIG=chris-cyber-glm53-hosted-odd45-p4-v10
+fi
 
 case "$MODE" in preview|submit) ;; *) exit 2 ;; esac
 case "$TARGET" in qwen|glm|both) ;; *) exit 2 ;; esac
-case "$GENERATION" in v1|v2) ;; *) exit 2 ;; esac
+case "$GENERATION" in v1|v2|v3) ;; *) exit 2 ;; esac
 test "$(kubectl config current-context)" = "$CONTEXT"
 test "$("${KUBECTL[@]}" -n "$NAMESPACE" get localqueue training-lq \
   -o jsonpath='{.status.conditions[?(@.type=="Active")].status}')" = True
@@ -49,6 +59,7 @@ expected = {
     "glm53_remainder": (47, 188, set(range(7, 100, 2))),
     "qwen38_remainder2": (47, 188, set(range(4, 51))),
     "glm53_remainder2": (46, 184, set(range(9, 100, 2))),
+    "glm53_remainder3": (45, 180, set(range(11, 100, 2))),
 }
 for path in sys.argv[1:]:
     plan = json.loads(Path(path).read_text())
@@ -66,7 +77,7 @@ set_model() {
     peer_pattern='(opencode.*q38|q38.*opencode)'
   else
     plan=$G_PLAN; job=$G_JOB; preflight=$G_PREFLIGHT; config=$G_CONFIG
-    peer_pattern='(opencode.*glm53|glm53.*opencode)'
+    peer_pattern='(opencode.*glm53.*hosted|glm53.*opencode.*hosted)'
   fi
 }
 
@@ -80,6 +91,7 @@ render_job() {
   else
     replacement=odd47-p4-v8
     test "$GENERATION" = v1 || replacement=odd46-p4-v9
+    test "$GENERATION" != v3 || replacement=odd45-p4-v10
     sed -e "s/odd49-p4-v7/$replacement/g" \
       "$ROOT/evals/fleet/cluster/opencode-glm53-hosted-odd-job-v7.yaml" |
       awk '{if ($0 == "      restartPolicy: Never") print "      priorityClassName: fleet-infra-quiet"; print}'
@@ -100,6 +112,7 @@ render_preflight() {
   else
     replacement=odd47-p4-v8
     test "$GENERATION" = v1 || replacement=odd46-p4-v9
+    test "$GENERATION" != v3 || replacement=odd45-p4-v10
     sed -e "s/odd49-p4-v7/$replacement/g" \
       "$ROOT/evals/fleet/cluster/opencode-glm53-hosted-odd-preflight-v7.yaml"
   fi

@@ -16,6 +16,9 @@ SOURCE = Path(
 REMAINDER_SOURCE = Path(
     "docs/evidence/qwen38-study/2026-09-04-hosted-opencode-remainder-source-v1.json"
 )
+REMAINDER_SOURCE_V3 = Path(
+    "docs/evidence/qwen38-study/2026-09-04-hosted-opencode-remainder-source-v3.json"
+)
 REPLACEMENT_LOCK = Path(
     "docs/evidence/qwen38-study/2026-09-04-opencode-replacement-selection-lock-v1.json"
 )
@@ -230,6 +233,26 @@ def test_remainder_shards_exclude_every_partially_touched_task(
     assert plan["new_session_count"] == tasks * 4
     assert {row["source_rank"] for row in plan["tasks"]} == source_ranks
     assert {row["source_rank"] for row in plan["excluded_tasks"]} == excluded
+
+
+def test_glm_third_remainder_fences_ingest_incomplete_task_and_preserves_history() -> None:
+    source = hosted.load_object(REMAINDER_SOURCE_V3)
+    plan = hosted.build_remainder_plan(
+        hosted.load_object(
+            Path("evals/fleet/configs/glm53-opencode-hosted-odd46-pass4-v9.json")
+        ),
+        source,
+        "glm53_remainder3",
+    )
+    hosted.validate_plan(plan)
+    assert plan["task_count"] == 45
+    assert plan["new_session_count"] == 180
+    assert [row["source_rank"] for row in plan["tasks"]] == list(range(11, 100, 2))
+    assert [row["source_rank"] for row in plan["excluded_tasks"]] == [9]
+    assert [row["source_rank"] for row in plan["upstream_excluded_tasks"]] == [3, 5, 7]
+    outcomes = source["runs"]["glm53"]["outcomes"]
+    assert [row["attempt"] for row in outcomes] == [1, 2]
+    assert all(row["retry_allowed"] is False for row in outcomes)
 
 
 def _bound_accepted_root(plan: dict, tmp_path: Path) -> tuple[Path, dict]:

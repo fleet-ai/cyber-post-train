@@ -62,6 +62,7 @@ REMAINDER_CAMPAIGNS = {
     "glm53_remainder": "chris-cyber-glm53-opencode11827-hosted-odd47-p4-v8",
     "qwen38_remainder2": "chris-cyber-q38-opencode11827-hosted-complete47-p4-v7",
     "glm53_remainder2": "chris-cyber-glm53-opencode11827-hosted-odd46-p4-v9",
+    "glm53_remainder3": "chris-cyber-glm53-opencode11827-hosted-odd45-p4-v10",
 }
 DEDICATED_CAMPAIGNS = {
     "glm53_dedicated_a": "chris-cyber-glm53-opencode11827-dedicated-a-even27-p4-v1",
@@ -76,6 +77,7 @@ EXPECTED_INCLUDED_TASK_COUNTS.update(
         "glm53_remainder": 47,
         "qwen38_remainder2": 47,
         "glm53_remainder2": 46,
+        "glm53_remainder3": 45,
     }
 )
 EXPECTED_INCLUDED_TASK_COUNTS.update(
@@ -264,6 +266,7 @@ def build_remainder_plan(
         "glm53_remainder": {3, 5},
         "qwen38_remainder2": {3},
         "glm53_remainder2": {7},
+        "glm53_remainder3": {9},
     }
     expected_excluded = expected_excluded_by_model[model_key]
     if excluded_source_ranks != expected_excluded:
@@ -335,7 +338,10 @@ def build_remainder_plan(
         "total_session_count": len(tasks) * 4,
         "credited_sessions": [],
         "new_session_count": len(attempts),
-        "upstream_excluded_tasks": predecessor["excluded_tasks"],
+        "upstream_excluded_tasks": [
+            *(predecessor.get("upstream_excluded_tasks") or []),
+            *predecessor["excluded_tasks"],
+        ],
         "excluded_tasks": excluded_tasks,
         "execution": {
             **predecessor["execution"],
@@ -1021,6 +1027,7 @@ def validate_plan(plan: dict[str, Any]) -> None:
             "glm53_hosted_odd",
             "glm53_remainder",
             "glm53_remainder2",
+            "glm53_remainder3",
         }
         else (
             "plan_identity_plus_authoritative_receipt_v1"
@@ -1112,7 +1119,13 @@ def validate_plan(plan: dict[str, Any]) -> None:
     reserved = plan.get("reserved_tasks") or []
     expected_reserved = (
         49
-        if shard_key in {"glm53_hosted_odd", "glm53_remainder", "glm53_remainder2"}
+        if shard_key
+        in {
+            "glm53_hosted_odd",
+            "glm53_remainder",
+            "glm53_remainder2",
+            "glm53_remainder3",
+        }
         else 0
     )
     if (
