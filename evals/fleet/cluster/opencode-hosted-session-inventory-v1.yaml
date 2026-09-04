@@ -1,0 +1,127 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: chris-cyber-opencode-hosted-session-inventory-v1
+  namespace: fleet-train-jobs
+  labels:
+    cyber-post-train.fleet.ai/experiment: opencode-hosted-session-inventory-v1
+    cyber-post-train.fleet.ai/owner: chris
+    kueue.x-k8s.io/queue-name: training-lq
+spec:
+  activeDeadlineSeconds: 1800
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 604800
+  template:
+    metadata:
+      labels:
+        cyber-post-train.fleet.ai/experiment: opencode-hosted-session-inventory-v1
+        cyber-post-train.fleet.ai/owner: chris
+    spec:
+      restartPolicy: Never
+      nodeSelector:
+        kubernetes.io/arch: amd64
+        workload: fleetai-training-ng-cpu
+      tolerations:
+        - key: workload
+          operator: Equal
+          value: fleetai-training-ng-cpu
+          effect: NoSchedule
+      containers:
+        - name: observer
+          image: ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
+          command: ["python", "-c"]
+          args:
+            - |
+              import json
+              import os
+              import urllib.parse
+              import urllib.request
+              from pathlib import Path
+
+              BASE = "https://orchestrator.fleetai.com"
+              TEAM = "a1025f0b-ad67-49fc-a023-51800ab43e84"
+              KEY = os.environ["FLEET_API_KEY"]
+
+              def get(route, params=None):
+                  url = BASE + route
+                  if params:
+                      url += "?" + urllib.parse.urlencode(params)
+                  request = urllib.request.Request(
+                      url,
+                      headers={"Authorization": "Bearer " + KEY, "Accept": "application/json"},
+                  )
+                  with urllib.request.urlopen(request, timeout=1800) as response:
+                      return json.load(response)
+
+              account = get("/v1/account")
+              assert account.get("team_name") == "fleet"
+              assert account.get("team_id") == TEAM
+              output = []
+              for plan_path in sorted(Path("/plans").glob("*.json")):
+                  plan = json.loads(plan_path.read_text())
+                  persisted_model = plan["model"]["session_model"].split("/", 1)[-1]
+                  rows = []
+                  for task in plan["tasks"]:
+                      offset = 0
+                      while True:
+                          page = get("/v1/sessions", {
+                              "task_key": task["task"]["key"],
+                              "limit": 500,
+                              "offset": offset,
+                          })
+                          sessions = page.get("sessions") or []
+                          for session in sessions:
+                              if session.get("model") != persisted_model:
+                                  continue
+                              metadata = session.get("metadata") or {}
+                              verifier = session.get("verifier_execution") or {}
+                              rows.append({
+                                  "rank": task["rank"],
+                                  "task_key": task["task"]["key"],
+                                  "planned_task_version_id": task["task"]["version_id"],
+                                  "session_id": session.get("session_id"),
+                                  "status": session.get("status"),
+                                  "model": session.get("model"),
+                                  "session_task_version_id": session.get("eval_task_version_id") or session.get("task_version_id"),
+                                  "verifier_execution_id": verifier.get("id"),
+                                  "self_hosted_harness": metadata.get("self_hosted_harness"),
+                                  "run_id": metadata.get("run_id"),
+                                  "tool_catalog_sha256": metadata.get("tool_catalog_sha256"),
+                                  "training_data_eligible": metadata.get("training_data_eligible"),
+                              })
+                          if page.get("has_more") is False:
+                              break
+                          assert sessions
+                          offset += len(sessions)
+                  output.append({
+                      "plan_file": plan_path.name,
+                      "plan_sha256": plan["plan_sha256"],
+                      "persisted_model": persisted_model,
+                      "matching_session_count": len(rows),
+                      "sessions": rows,
+                  })
+              print(json.dumps({
+                  "schema_version": "opencode-hosted-session-inventory-v1",
+                  "team_id": TEAM,
+                  "plans": output,
+                  "session_messages_read": False,
+                  "score_values_included": False,
+                  "prompts_or_traces_included": False,
+              }, sort_keys=True))
+          env:
+            - name: FLEET_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: chris-cyber-opencode-evals-v2
+                  key: FLEET_API_KEY
+          resources:
+            requests: {cpu: 100m, memory: 128Mi, ephemeral-storage: 128Mi}
+            limits: {cpu: 500m, memory: 512Mi, ephemeral-storage: 512Mi}
+          volumeMounts:
+            - name: plans
+              mountPath: /plans
+              readOnly: true
+      volumes:
+        - name: plans
+          configMap:
+            name: chris-cyber-opencode-hosted-session-inventory-v1

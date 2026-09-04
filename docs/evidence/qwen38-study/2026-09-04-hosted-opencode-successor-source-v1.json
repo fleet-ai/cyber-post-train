@@ -1,0 +1,85 @@
+{
+  "schema_version": "opencode-hosted-successor-source-v1",
+  "observer_job_uid": "eb86bd7a-6613-47f9-ae81-4d3d61095880",
+  "scores_read": false,
+  "prompts_or_traces_read": false,
+  "runs": {
+    "qwen38": {
+      "source_job_name": "chris-cyber-opencode-q38-train50-p4-v3",
+      "source_job_uid": "015924e1-a261-4bb0-979b-735c77ee7f19",
+      "source_pod_uid": "3d2613d0-04cf-46d1-afcc-d7314649f68c",
+      "source_plan_sha256": "sha256:5008722538944430d07fe1c212a57c3a14bc6a91894b7fc61e19ebc5b09e7740",
+      "source_terminal": true,
+      "source_active_attempts": 0,
+      "credited_smoke": {
+        "source_rank": 1,
+        "attempt": 1,
+        "session_id": "addcb422-35d9-4585-9631-6e708513cd43",
+        "verifier_execution_id": "7b59246e-f7f0-4cd3-a4ba-0eabcca2873c"
+      },
+      "accepted": [
+        {
+          "source_rank": 1,
+          "attempt": 2,
+          "run_id": "chris-cyber-q38-opencode11827-fleet-train50-p4-v3-r001-a2-7ce3a32f",
+          "session_id": "738b5859-fd8d-4c72-b65b-5e1f19ef5a91",
+          "verifier_execution_id": "105bf921-560a-4531-8858-a0880b0a9a56"
+        }
+      ],
+      "fenced_noncreditable": [
+        {
+          "source_rank": 1,
+          "attempt": 3,
+          "run_id": "chris-cyber-q38-opencode11827-fleet-train50-p4-v3-r001-a3-7ce3a32f",
+          "session_id": "2edac95c-4cf2-499f-a46c-7156e89cccb2",
+          "verifier_execution_id": "1014e6df-bd27-439b-b5ff-885ad4504a29",
+          "agent_exit_code": 1,
+          "session_ingest_completed": true,
+          "cleanup_completed": true,
+          "retry_allowed": false,
+          "credited": false
+        }
+      ],
+      "excluded_source_ranks": [1]
+    },
+    "glm53": {
+      "source_job_name": "chris-cyber-opencode-glm53-train100-p4-v4",
+      "source_job_uid": "68344505-4d47-4055-b068-56f9620cc2aa",
+      "source_pod_uid": "a4c15e07-990e-47ce-abf5-d848622093a5",
+      "source_plan_sha256": "sha256:63bf008198170f4e55153c2307560560befe231f2fa11186acebf3e01e3ac50f",
+      "source_terminal": true,
+      "source_active_attempts": 0,
+      "credited_smoke": {
+        "source_rank": 1,
+        "attempt": 1,
+        "session_id": "9be0c93f-a311-4fd1-a639-a83772b6e6e6",
+        "verifier_execution_id": "fa27be05-9899-46f5-9155-f104606813c8"
+      },
+      "accepted": [
+        {
+          "source_rank": 1,
+          "attempt": 2,
+          "run_id": "chris-cyber-glm53-opencode11827-fleet-train100-p4-v4-r001-a2-7ce3a32f",
+          "session_id": "131a1a1b-d93b-49be-971c-e28dcf074296",
+          "verifier_execution_id": "6ff69df2-eaa7-45de-ba55-35b423dc66a9"
+        }
+      ],
+      "fenced_noncreditable": [
+        {
+          "source_rank": 2,
+          "attempt": 1,
+          "run_id": "chris-cyber-glm53-opencode11827-fleet-train100-p4-v4-r002-a1-04bd32ee",
+          "session_id": "b3f6c0c0-1f5b-4de8-b7d1-1b0110ae4775",
+          "verifier_execution_id": "716ebd33-cd5b-4c96-a1d6-66b0d1371a66",
+          "agent_exit_code": 1,
+          "session_ingest_completed": true,
+          "cleanup_completed": true,
+          "retry_allowed": false,
+          "credited": false
+        }
+      ],
+      "excluded_source_ranks": [2]
+    }
+  },
+  "receipt_sha256": "sha256:6e3436e1ed3992e3f23a58d7bafc75254cf7110e633fa3ce56110a97de354ff7"
+}

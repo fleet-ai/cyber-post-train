@@ -1,0 +1,118 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: chris-cyber-opencode-hosted-sweep-state-v1
+  namespace: fleet-train-jobs
+  labels:
+    cyber-post-train.fleet.ai/experiment: opencode-hosted-sweep-state-v1
+    cyber-post-train.fleet.ai/owner: chris
+    kueue.x-k8s.io/queue-name: training-lq
+spec:
+  activeDeadlineSeconds: 900
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 604800
+  template:
+    metadata:
+      labels:
+        cyber-post-train.fleet.ai/experiment: opencode-hosted-sweep-state-v1
+        cyber-post-train.fleet.ai/owner: chris
+    spec:
+      restartPolicy: Never
+      nodeSelector:
+        kubernetes.io/arch: amd64
+        workload: fleetai-training-ng-cpu
+      tolerations:
+        - key: workload
+          operator: Equal
+          value: fleetai-training-ng-cpu
+          effect: NoSchedule
+      containers:
+        - name: observer
+          image: ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
+          command: ["python", "-c"]
+          args:
+            - |
+              import hashlib
+              import json
+              from pathlib import Path
+
+              ROOTS = (
+                  Path("/jobs/chris-cyber-opencode-q38-train50-p4-v3"),
+                  Path("/jobs/chris-cyber-opencode-glm53-train100-p4-v4"),
+              )
+
+              def load(path):
+                  value = json.loads(path.read_text())
+                  assert isinstance(value, dict)
+                  return value
+
+              def digest_without(value, field):
+                  body = {key: item for key, item in value.items() if key != field}
+                  raw = json.dumps(body, sort_keys=True, separators=(",", ":")).encode()
+                  return "sha256:" + hashlib.sha256(raw).hexdigest()
+
+              rows = []
+              for root in ROOTS:
+                  plan = load(root / "PLAN.json")
+                  assert plan["plan_sha256"] == digest_without(plan, "plan_sha256")
+                  attempts = {item["run_id"]: item for item in plan["attempts"]}
+                  claims = {}
+                  for path in sorted((root / "claims").glob("*.json")) if (root / "claims").exists() else ():
+                      claim = load(path)
+                      assert claim["claim_sha256"] == digest_without(claim, "claim_sha256")
+                      assert claim["run_id"] in attempts
+                      claims[claim["run_id"]] = claim
+                  artifact_rows = []
+                  for path in sorted((root / "attempts").iterdir()) if (root / "attempts").exists() else ():
+                      if not path.is_dir():
+                          continue
+                      result = load(path / "result.json") if (path / "result.json").exists() else {}
+                      ingest = load(path / "session-ingest.json") if (path / "session-ingest.json").exists() else {}
+                      cleanup = load(path / "cleanup.json") if (path / "cleanup.json").exists() else {}
+                      accepted = load(path / "ACCEPTED.json") if (path / "ACCEPTED.json").exists() else None
+                      if accepted is not None:
+                          assert accepted["receipt_sha256"] == digest_without(accepted, "receipt_sha256")
+                      item = attempts[path.name]
+                      artifact_rows.append({
+                          "run_id": path.name,
+                          "ordinal": item["ordinal"],
+                          "rank": item["rank"],
+                          "attempt": item["attempt"],
+                          "claimed": path.name in claims,
+                          "accepted": accepted is not None and accepted.get("accepted") is True,
+                          "agent_exit_code": result.get("agent_exit_code"),
+                          "agent_termination": result.get("agent_termination"),
+                          "session_id": result.get("session_id") or ingest.get("session_id"),
+                          "session_ingest_status": result.get("session_ingest_status") or ingest.get("status"),
+                          "verifier_execution_id": result.get("verifier_execution_id"),
+                          "cleanup": cleanup,
+                          "scoring_intent_present": (path / "scoring-intent.json").is_file(),
+                          "reward_result_present": (path / "reward-result.json").is_file(),
+                          "prompt_or_trace_content_included": False,
+                          "score_value_included": False,
+                      })
+                  rows.append({
+                      "root": root.name,
+                      "plan_sha256": plan["plan_sha256"],
+                      "campaign_id": plan["campaign_id"],
+                      "planned_attempts": len(attempts),
+                      "claim_count": len(claims),
+                      "artifact_count": len(artifact_rows),
+                      "artifacts": artifact_rows,
+                      "prompt_or_trace_content_included": False,
+                      "score_value_included": False,
+                  })
+              print(json.dumps({"schema_version": "opencode-hosted-sweep-state-v1", "runs": rows}, sort_keys=True))
+          resources:
+            requests: {cpu: 100m, memory: 128Mi, ephemeral-storage: 128Mi}
+            limits: {cpu: 500m, memory: 512Mi, ephemeral-storage: 512Mi}
+          volumeMounts:
+            - name: jobs
+              mountPath: /jobs
+              subPath: jobs
+              readOnly: true
+      volumes:
+        - name: jobs
+          persistentVolumeClaim:
+            claimName: sfs-shared
+            readOnly: true
