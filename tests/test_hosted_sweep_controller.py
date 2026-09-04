@@ -50,6 +50,9 @@ GLM_HOSTED_REPLACEMENT_PLAN = Path(
 GLM_HOSTED_REPLACEMENT_RELEASE = Path(
     "docs/evidence/qwen38-study/2026-09-04-glm53-hosted-r106-scoring-release-v1.json"
 )
+DEDICATED_B_STOP_TOMBSTONE = Path(
+    "docs/evidence/qwen38-study/2026-09-04-glm53-dedicated-b-forced-stop-tombstone-v1.json"
+)
 FROZEN_SPLIT = Path("configs/data/fleet-a62-task-split-v1.json")
 FROZEN_SELECTION = Path(
     "evals/fleet/configs/opencode-easiest-train100-selection-v2.json"
@@ -861,3 +864,29 @@ def test_committed_glm_r106_plan_requires_exact_scoring_release() -> None:
     tampered["authorization"]["must_not_repeat"] = False
     with pytest.raises(ValueError, match="does not bind"):
         hosted.validate_hosted_replacement_scoring_release(plan, tampered)
+
+
+def test_dedicated_b_stop_tombstone_preserves_zero_execution_boundary() -> None:
+    tombstone = hosted.load_object(DEDICATED_B_STOP_TOMBSTONE)
+    assert tombstone["receipt_sha256"] == self_hosted.digest_without(
+        tombstone, "receipt_sha256"
+    )
+    assert tombstone["fenced_source54"]["whole_task_fenced"] is True
+    aborted = tombstone["source56_aborted_before_execution"]
+    assert aborted["opencode_stream_bytes"] == 0
+    assert aborted["old_run_id_session_matches"] == 0
+    assert aborted["old_run_id_verifier_matches"] == 0
+    assert aborted["scored_or_terminal_cell"] is False
+    assert aborted["eligible_under_fresh_plan"] is True
+    assert aborted["old_run_ids_reusable"] is False
+    successor = tombstone["successor_gate"]
+    assert successor["task_count"] == 27
+    assert successor["cell_count"] == 108
+    assert all(successor[field] is True for field in (
+        "required_old_job_absent",
+        "required_old_pod_absent",
+        "required_tombstone_digest",
+        "required_new_serving_uids",
+        "required_new_parity_receipt",
+        "required_new_r107_lock_and_hydration",
+    ))

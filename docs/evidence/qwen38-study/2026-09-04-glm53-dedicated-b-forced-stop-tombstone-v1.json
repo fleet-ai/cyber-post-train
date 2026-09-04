@@ -1,0 +1,88 @@
+{
+  "schema_version": "fleet-glm53-dedicated-b-forced-stop-tombstone-v1",
+  "recorded_at": "2026-09-04T05:20:54Z",
+  "append_only": true,
+  "stopped_controller": {
+    "job_name": "chris-cyber-glm53-opencode11827-dedicated-b-even27-p4-v1",
+    "job_uid": "b2ac0628-fc9e-442c-964b-52a4aeb3865e",
+    "pod_uid": "bc461b3c-dbdd-42ef-824e-146c47f0d6ec",
+    "foreground_deleted": true,
+    "job_absent_after_delete": true,
+    "pod_absent_after_delete": true,
+    "sfs_root_preserved": true,
+    "serving_resources_mutated": false,
+    "peer_resources_mutated": false
+  },
+  "serving_loss": {
+    "observed_at": "2026-09-04T05:13:50Z",
+    "old_service_uid": "2357a332-2ef4-4a24-9d05-4bc92198edd8",
+    "old_ray_job_uid": "80578ad6-8b2a-4572-82ee-2b2d25aba58f",
+    "old_ray_cluster_uid": "673e0e12-57dc-4069-a226-85e5ed422c78",
+    "old_head_pod_uid": "aa0a0a0c-ee57-4f05-b630-0f0293d41e82",
+    "service_present": false,
+    "ray_cluster_present": false,
+    "head_pod_present": false,
+    "ray_job_object_present": true
+  },
+  "fenced_source54": {
+    "task_claim_sha256": "sha256:783c5359ea9d8f59c4329370454a389d7ddeb056755ee79983a8a2045002df0d",
+    "accepted_attempts": [1, 2],
+    "accepted_receipt_sha256": [
+      "sha256:ab488018e72267fa5628aaa81b051dd1fb89be90a21a7c4bbcd0d3ee77c3bc87",
+      "sha256:36489d1f078f15bec58e9e0892283f647f89596c1152419161574053c256df3a"
+    ],
+    "noncreditable_attempt": 3,
+    "noncreditable_receipt_sha256": "sha256:6257cdfda5c3e29de25438b59d8bb68ce5226fef48626c90bde2efbefd070f2f",
+    "verifier_backed": true,
+    "agent_exit_code": 1,
+    "cleanup_completed": true,
+    "retry_allowed": false,
+    "whole_task_fenced": true,
+    "primary_estimator_included": false
+  },
+  "source56_aborted_before_execution": {
+    "task_claim_sha256": "sha256:5c1d9ab05cd29c2edc0b7b0dde1910becea330c7af23a1a85f141b2f95383005",
+    "attempt": 1,
+    "attempt_claim_sha256": "sha256:70036c6ba8a225b0077ee687e991f4ae79f597a028c4ccd879e54734b52e7316",
+    "old_run_id": "chris-cyber-glm53-opencode11827-dedicated-b-even27-p4-v1-sr056-a1-33e6ff18",
+    "opencode_stream_bytes": 0,
+    "opencode_stderr_bytes": 0,
+    "model_proxy_log_present": false,
+    "mcp_proxy_log_present": false,
+    "final_answer_present": false,
+    "result_present": false,
+    "reward_result_present": false,
+    "trace_manifest_present": false,
+    "session_ingest_present": false,
+    "accepted_receipt_present": false,
+    "noncreditable_receipt_present": false,
+    "cleanup_receipt_present": false,
+    "public_task_session_rows_observed": 21,
+    "old_run_id_session_matches": 0,
+    "old_run_id_verifier_matches": 0,
+    "classification": "infrastructure_aborted_before_model_or_verifier",
+    "scored_or_terminal_cell": false,
+    "eligible_under_fresh_plan": true,
+    "old_run_ids_reusable": false
+  },
+  "successor_gate": {
+    "required_old_job_absent": true,
+    "required_old_pod_absent": true,
+    "required_tombstone_digest": true,
+    "required_new_serving_uids": true,
+    "required_new_parity_receipt": true,
+    "required_new_r107_lock_and_hydration": true,
+    "source_ranks": "even_56_through_100_plus_101_103_105_107",
+    "task_count": 27,
+    "pass_k": 4,
+    "cell_count": 108
+  },
+  "privacy": {
+    "scores_read": false,
+    "prompts_included": false,
+    "traces_included": false,
+    "flags_included": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:7cf5483e07e4053d7807d599b738e0555ade3b728ea20ae2356186592bd7c355"
+}
