@@ -1,0 +1,85 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: chris-cyber-glm53-publish-receipt-observer-v1
+  namespace: fleet-train-jobs
+  labels:
+    cyber-post-train.fleet.ai/experiment: glm53-publish-receipt-observer-v1
+    cyber-post-train.fleet.ai/owner: chris
+    kueue.x-k8s.io/queue-name: training-lq
+spec:
+  activeDeadlineSeconds: 900
+  backoffLimit: 0
+  suspend: true
+  ttlSecondsAfterFinished: 604800
+  template:
+    metadata:
+      labels:
+        cyber-post-train.fleet.ai/experiment: glm53-publish-receipt-observer-v1
+        cyber-post-train.fleet.ai/owner: chris
+    spec:
+      priorityClassName: fleet-infra-quiet
+      restartPolicy: Never
+      nodeSelector:
+        kubernetes.io/arch: amd64
+        workload: fleetai-training-ng-cpu
+      tolerations:
+        - key: workload
+          operator: Equal
+          value: fleetai-training-ng-cpu
+          effect: NoSchedule
+      containers:
+        - name: observer
+          image: ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
+          command: ["python3", "-c"]
+          args:
+            - |
+              import hashlib
+              import json
+              from pathlib import Path
+
+              root = Path("/mnt/sfs/jobs/chris-cyber-glm53-sglang-ray-publish-v2")
+              receipt_path = root / "PUBLISHED.json"
+              payload = receipt_path.read_bytes()
+              digest = hashlib.sha256(payload).hexdigest()
+              sidecar = (root / "PUBLISHED.json.sha256").read_text().strip()
+              if sidecar != f"{digest}  PUBLISHED.json":
+                  raise SystemExit("PUBLISHED receipt sidecar mismatch")
+              receipt = json.loads(payload)
+              expected = {
+                  "schema": "fleet_cyber_glm53_sglang_ray_image_v1",
+                  "image": "ghcr.io/fleet-ai/cyber-post-train-glm53-runtime@sha256:ec93ba50613fd13fb4c0b0a9105767ab18209a1e0108dab0923aad694c0206ec",
+                  "platform": {"architecture": "amd64", "os": "linux"},
+                  "base_image": "lmsysorg/sglang@sha256:9e148f5ac788e856a06166bd6347a831831eb9fcfab4d1770874823a7c29a1a1",
+                  "ray_version": "2.56.0",
+                  "dockerfile_sha256": "sha256:0357680ddedc047a3128039e81798a3fef8c55efb03cc6aa508947acd4aa2c38",
+              }
+              for key, value in expected.items():
+                  if receipt.get(key) != value:
+                      raise SystemExit(f"PUBLISHED receipt mismatch: {key}")
+              if set(receipt) != set(expected) | {"publisher_node"}:
+                  raise SystemExit("PUBLISHED receipt key set mismatch")
+              if not (root / "manifest.json").is_file() or not (root / "image.json").is_file():
+                  raise SystemExit("publisher inspection artifact missing")
+              print(json.dumps({
+                  "schema": "fleet_cyber_glm53_publish_receipt_observation_v1",
+                  "published_sha256": "sha256:" + digest,
+                  "image": receipt["image"],
+                  "platform": receipt["platform"],
+                  "base_image": receipt["base_image"],
+                  "ray_version": receipt["ray_version"],
+                  "dockerfile_sha256": receipt["dockerfile_sha256"],
+                  "artifacts_present": ["PUBLISHED.json", "PUBLISHED.json.sha256", "image.json", "manifest.json"],
+              }, sort_keys=True))
+          resources:
+            requests: {cpu: "100m", memory: 128Mi}
+            limits: {cpu: "500m", memory: 512Mi}
+          volumeMounts:
+            - name: sfs
+              mountPath: /mnt/sfs
+              readOnly: true
+      volumes:
+        - name: sfs
+          persistentVolumeClaim:
+            claimName: sfs-shared
+            readOnly: true
