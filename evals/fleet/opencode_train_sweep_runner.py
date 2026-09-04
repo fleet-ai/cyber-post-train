@@ -93,6 +93,17 @@ def _drain_completed_claims(plan: dict[str, Any], root: Path) -> list[dict[str, 
     accepted = _accepted_attempts(root)
     if set(claims) != set(accepted):
         raise RuntimeError("campaign drain reached terminalization with unresolved claims")
+    for run_id, claim in claims.items():
+        receipt = accepted[run_id]
+        if (
+            receipt.get("claim_sha256") != claim["claim_sha256"]
+            or receipt.get("config_sha256") != claim.get("config_sha256")
+            or int(receipt.get("rank") or 0) != int(claim.get("rank") or 0)
+            or int(receipt.get("attempt") or 0) != int(claim.get("attempt") or 0)
+            or receipt.get("task_key") != claim.get("task_key")
+            or receipt.get("task_version_id") != claim.get("task_version_id")
+        ):
+            raise RuntimeError("campaign drain acceptance is not bound to its exact claim")
     return [
         {
             "run_id": run_id,

@@ -382,3 +382,39 @@ def test_attempt_wave_drain_waits_for_already_started_attempt(
 
     assert observed == request
     assert completed == [1]
+
+
+def test_drain_rejects_acceptance_rebound_to_different_claim(tmp_path: Path) -> None:
+    plan = {"campaign_id": "campaign-v1"}
+    plan["plan_sha256"] = self_hosted.digest_without(plan, "plan_sha256")
+    claims = tmp_path / "claims"
+    attempts = tmp_path / "attempts"
+    claims.mkdir()
+    attempts.mkdir()
+    claim = {
+        "plan_sha256": plan["plan_sha256"],
+        "run_id": "run-1",
+        "config_sha256": "sha256:config",
+        "rank": 1,
+        "attempt": 2,
+        "task_key": "task-1",
+        "task_version_id": "version-1",
+    }
+    claim["claim_sha256"] = self_hosted.digest_without(claim, "claim_sha256")
+    (claims / "run-1.json").write_text(json.dumps(claim))
+    attempt = attempts / "run-1"
+    attempt.mkdir()
+    receipt = {
+        "run_id": "run-1",
+        "config_sha256": claim["config_sha256"],
+        "claim_sha256": "sha256:different-claim",
+        "rank": 1,
+        "attempt": 2,
+        "task_key": "task-1",
+        "task_version_id": "version-1",
+    }
+    receipt["receipt_sha256"] = self_hosted.digest_without(receipt, "receipt_sha256")
+    (attempt / "ACCEPTED.json").write_text(json.dumps(receipt))
+
+    with pytest.raises(RuntimeError, match="not bound to its exact claim"):
+        opencode_train_sweep_runner._drain_completed_claims(plan, tmp_path)
