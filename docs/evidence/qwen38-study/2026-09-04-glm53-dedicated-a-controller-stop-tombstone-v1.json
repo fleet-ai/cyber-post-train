@@ -1,0 +1,78 @@
+{
+  "schema_version": "fleet-glm53-dedicated-a-controller-stop-tombstone-v1",
+  "observed_at": "2026-09-04T05:57:37Z",
+  "authorization": {
+    "author": "/root",
+    "scope": "delete_only_exact_stale_dedicated_a_scored_controller",
+    "preserve_sfs": true,
+    "do_not_touch_serving_or_other_controllers": true
+  },
+  "stopped_controller": {
+    "job_name": "chris-cyber-glm53-opencode11827-dedicated-a-even27-p4-v1",
+    "job_uid": "aa9a79a9-37dd-4910-a094-a172d058749b",
+    "pod_name": "chris-cyber-glm53-opencode11827-dedicated-a-even27-p4-v1-hzvsb",
+    "pod_uid": "b26a37e3-0a15-4c1e-96a9-d065de50ba59",
+    "plan_sha256": "sha256:4f8d4fcf50af8abccf3b9d272a18755f9be0bc862a66fe25bba691bee8a22208",
+    "foreground_delete_requested": true,
+    "termination_observed_at": "2026-09-04T05:56:50Z",
+    "job_absent_after_delete": true,
+    "pod_absent_after_delete": true,
+    "sfs_preserved": true,
+    "serving_mutated": false
+  },
+  "source4": {
+    "task_claim_sha256": "sha256:6cd82335bad5f434e6de49df0b2f421e7129c9790852094614825f1bdde3f157",
+    "accepted_attempts": [
+      {
+        "attempt": 1,
+        "receipt_sha256": "sha256:eb08468d8fe9331d4fe5075ba4b29d4ad962ed0f1cc18caf778c50fc383a2a9d"
+      },
+      {
+        "attempt": 2,
+        "receipt_sha256": "sha256:0e6cdf4d283dafd7fbfb13dc3767356fc1c8674b4dedb7940060d4a7b8318a11"
+      },
+      {
+        "attempt": 3,
+        "receipt_sha256": "sha256:b487681c374d62bcbe987b95bb3628322c5d0ca2941f9e379483978b51f33b4b"
+      }
+    ],
+    "attempt4": {
+      "attempt_claim_sha256": "sha256:d23ef95943d03994ab21f36697dcc734add0d8c016e08ecefc9d176c54e3f1e6",
+      "binding_present": true,
+      "resource_plan_present": true,
+      "runtime_binding_present": true,
+      "agent_output_present": false,
+      "model_proxy_activity_present": false,
+      "reward_result_present": false,
+      "verifier_execution_present": false,
+      "session_ingest_present": false,
+      "accepted_or_noncreditable_receipt_present": false,
+      "api_planned_run_id_matches": 0,
+      "api_verifier_matches": 0,
+      "scored_or_terminal_cell": false
+    },
+    "whole_task_fenced": true,
+    "retry_allowed": false,
+    "accepted_sessions_outside_successor_estimator": 3
+  },
+  "later_task_claim_audit": {
+    "task_claim_files": ["rank-001.json"],
+    "rank2_claim_present": false,
+    "source6_claim_present": false,
+    "later_task_claimed": false
+  },
+  "successor_gate": {
+    "new_create_once_controller_required": true,
+    "source4_must_not_repeat": true,
+    "r110_lock_and_hydration_required": true,
+    "exact_serving_binding_and_duplicate_preflight_required": true,
+    "scored_launch_authorized": false
+  },
+  "privacy": {
+    "scores_included": false,
+    "prompts_or_traces_included": false,
+    "task_content_included": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:9ef664c9a2abcdb99137d4b1a648b39b5134c3985ec48897716b92fb107e4e1d"
+}
