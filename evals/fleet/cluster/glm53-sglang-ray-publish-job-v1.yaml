@@ -1,0 +1,169 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: chris-cyber-glm53-sglang-ray-publish-v1
+  namespace: fleet-train-jobs
+immutable: true
+data:
+  Dockerfile.glm53: |
+    # syntax=docker/dockerfile:1.7
+    FROM lmsysorg/sglang@sha256:9e148f5ac788e856a06166bd6347a831831eb9fcfab4d1770874823a7c29a1a1
+
+    ARG RAY_VERSION=2.56.0
+
+    LABEL org.opencontainers.image.title="Fleet cyber GLM5.3 SGLang + Ray runtime"
+    LABEL org.opencontainers.image.description="Exact GLM5.3 serving image extended only with the Jobs API Ray startup dependency"
+    LABEL fleet.cyber.base-image="lmsysorg/sglang@sha256:9e148f5ac788e856a06166bd6347a831831eb9fcfab4d1770874823a7c29a1a1"
+    LABEL fleet.cyber.ray-version="2.56.0"
+
+    RUN python3 -m pip install --no-cache-dir "ray[default]==${RAY_VERSION}" \
+        && python3 - <<'PY'
+    import importlib.metadata
+    import sglang
+    import torch
+
+    assert importlib.metadata.version("ray") == "2.56.0"
+    assert sglang is not None
+    assert torch.cuda.is_available() or torch.version.cuda is not None
+    PY
+  publish.sh: |
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    : "${GH_TOKEN:?GH_TOKEN must be injected through the cluster secret}"
+    : "${NODE_NAME:?NODE_NAME must be provided by the downward API}"
+
+    out=/mnt/sfs/jobs/chris-cyber-glm53-sglang-ray-publish-v1
+    image=ghcr.io/fleet-ai/cyber-post-train-glm53-runtime:sglang-ray256-20260904-v1
+    mkdir -p "$out"
+    test ! -e "$out/PUBLISHED.json"
+
+    for _ in $(seq 1 180); do
+      docker info >/dev/null 2>&1 && break
+      sleep 1
+    done
+    docker info >/dev/null
+    printf '%s' "$GH_TOKEN" | docker login ghcr.io --username x-access-token --password-stdin >/dev/null
+    docker build --platform linux/amd64 --pull \
+      --file /bootstrap/Dockerfile.glm53 \
+      --tag "$image" /bootstrap
+    docker push "$image"
+
+    repo_digest=$(docker image inspect "$image" --format '{{range .RepoDigests}}{{println .}}{{end}}' \
+      | awk '/^ghcr.io\/fleet-ai\/cyber-post-train-glm53-runtime@sha256:/{print; exit}')
+    case "$repo_digest" in
+      ghcr.io/fleet-ai/cyber-post-train-glm53-runtime@sha256:????????????????????????????????????????????????????????????????) ;;
+      *) echo "push did not return the expected immutable GHCR digest" >&2; exit 1 ;;
+    esac
+    docker manifest inspect "$repo_digest" >"$out/manifest.json"
+    docker image inspect "$image" >"$out/image.json"
+
+    python3 - "$out" "$repo_digest" "$NODE_NAME" <<'PY'
+    import hashlib
+    import json
+    import pathlib
+    import sys
+
+    out = pathlib.Path(sys.argv[1])
+    repo_digest = sys.argv[2]
+    node = sys.argv[3]
+    dockerfile = pathlib.Path("/bootstrap/Dockerfile.glm53")
+    inspect = json.loads((out / "image.json").read_text())[0]
+    config = inspect["Config"]
+    expected_labels = {
+        "fleet.cyber.base-image": "lmsysorg/sglang@sha256:9e148f5ac788e856a06166bd6347a831831eb9fcfab4d1770874823a7c29a1a1",
+        "fleet.cyber.ray-version": "2.56.0",
+    }
+    for key, expected in expected_labels.items():
+        if config["Labels"].get(key) != expected:
+            raise SystemExit(f"missing expected image label: {key}")
+    receipt = {
+        "schema": "fleet_cyber_glm53_sglang_ray_image_v1",
+        "image": repo_digest,
+        "platform": {"architecture": inspect["Architecture"], "os": inspect["Os"]},
+        "base_image": expected_labels["fleet.cyber.base-image"],
+        "ray_version": expected_labels["fleet.cyber.ray-version"],
+        "dockerfile_sha256": "sha256:" + hashlib.sha256(dockerfile.read_bytes()).hexdigest(),
+        "publisher_node": node,
+    }
+    payload = json.dumps(receipt, indent=2, sort_keys=True) + "\n"
+    published = out / "PUBLISHED.json"
+    published.write_text(payload)
+    (out / "PUBLISHED.json.sha256").write_text(hashlib.sha256(payload.encode()).hexdigest() + "  PUBLISHED.json\n")
+    PY
+    docker logout ghcr.io >/dev/null
+    echo "$repo_digest"
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: chris-cyber-glm53-sglang-ray-publish-v1
+  namespace: fleet-train-jobs
+  labels:
+    cyber-post-train.fleet.ai/experiment: glm53-sglang-ray-publish-v1
+    cyber-post-train.fleet.ai/owner: chris
+    kueue.x-k8s.io/queue-name: training-lq
+spec:
+  activeDeadlineSeconds: 10800
+  backoffLimit: 0
+  suspend: true
+  ttlSecondsAfterFinished: 604800
+  template:
+    metadata:
+      labels:
+        cyber-post-train.fleet.ai/experiment: glm53-sglang-ray-publish-v1
+        cyber-post-train.fleet.ai/owner: chris
+    spec:
+      priorityClassName: fleet-infra-quiet
+      restartPolicy: Never
+      nodeSelector:
+        kubernetes.io/arch: amd64
+        workload: fleetai-training-ng-cpu
+      tolerations:
+        - key: workload
+          operator: Equal
+          value: fleetai-training-ng-cpu
+          effect: NoSchedule
+      imagePullSecrets:
+        - name: ghcr-pull
+      initContainers:
+        - name: dind
+          image: docker.io/library/docker@sha256:f649ef046008ca7f926a2571c32b0ac22e5c59eb61b959617f9acc2a4c638cf5
+          restartPolicy: Always
+          args: ["--host=unix:///var/run/docker.sock", "--tls=false"]
+          securityContext:
+            privileged: true
+          readinessProbe:
+            exec:
+              command: ["docker", "info"]
+            periodSeconds: 2
+          resources:
+            requests: {cpu: "1", memory: 2Gi, ephemeral-storage: 20Gi}
+            limits: {cpu: "2", memory: 4Gi, ephemeral-storage: 100Gi}
+          volumeMounts:
+            - {name: docker-socket, mountPath: /var/run}
+            - {name: docker-data, mountPath: /var/lib/docker}
+      containers:
+        - name: publisher
+          image: ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
+          command: ["/bin/bash", "/bootstrap/publish.sh"]
+          env:
+            - {name: DOCKER_HOST, value: "unix:///var/run/docker.sock"}
+            - name: GH_TOKEN
+              valueFrom:
+                secretKeyRef: {name: img-build-secrets, key: GH_TOKEN}
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef: {fieldPath: spec.nodeName}
+          resources:
+            requests: {cpu: "2", memory: 4Gi, ephemeral-storage: 10Gi}
+            limits: {cpu: "4", memory: 8Gi, ephemeral-storage: 20Gi}
+          volumeMounts:
+            - {name: docker-socket, mountPath: /var/run}
+            - {name: bootstrap, mountPath: /bootstrap, readOnly: true}
+            - {name: sfs, mountPath: /mnt/sfs}
+      volumes:
+        - {name: bootstrap, configMap: {name: chris-cyber-glm53-sglang-ray-publish-v1, defaultMode: 0555}}
+        - {name: docker-data, emptyDir: {sizeLimit: 100Gi}}
+        - {name: docker-socket, emptyDir: {}}
+        - {name: sfs, persistentVolumeClaim: {claimName: sfs-shared}}
