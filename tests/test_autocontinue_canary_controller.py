@@ -420,11 +420,13 @@ def test_successor_submitter_is_release_and_inventory_gated() -> None:
 def test_successor_submitter_missing_releases_cannot_create_objects(
     tmp_path: Path,
 ) -> None:
+    test_root = tmp_path / "repo"
+    test_root.mkdir()
     release_paths = [
-        ROOT
+        test_root
         / "docs/evidence/qwen38-study/"
         "2026-09-04-qwen38-autocontinue-canary-successor-hosted-scoring-release-v4.json",
-        ROOT
+        test_root
         / "docs/evidence/qwen38-study/"
         "2026-09-04-glm53-autocontinue-canary-successor-hosted-scoring-release-v4.json",
     ]
@@ -450,7 +452,7 @@ def test_successor_submitter_missing_releases_cannot_create_objects(
     environment.update(
         {
             "PATH": f"{fake_bin}:{environment['PATH']}",
-            "TEST_ROOT": str(ROOT),
+            "TEST_ROOT": str(test_root),
             "TEST_CALLS": str(calls),
         }
     )
