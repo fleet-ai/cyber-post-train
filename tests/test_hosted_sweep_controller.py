@@ -44,6 +44,9 @@ REPLACEMENT_SUPPLEMENT = Path(
 REPLACEMENT_SUPPLEMENT_V2 = Path(
     "docs/evidence/qwen38-study/2026-09-04-opencode-replacement-selection-supplement-v2.json"
 )
+REPLACEMENT_SUPPLEMENT_V2 = Path(
+    "docs/evidence/qwen38-study/2026-09-04-opencode-replacement-selection-supplement-v2.json"
+)
 GLM_HOSTED_REPLACEMENT_HYDRATION = Path(
     "docs/evidence/qwen38-study/2026-09-04-glm53-hosted-r106-hydration-v1.json"
 )
@@ -1003,3 +1006,61 @@ def test_dedicated_b_stop_tombstone_preserves_zero_execution_boundary() -> None:
         "required_new_parity_receipt",
         "required_new_r107_lock_and_hydration",
     ))
+
+
+def test_glm_r107_hydration_requires_tombstone_bound_supplement(monkeypatch) -> None:
+    supplement = hosted.load_object(REPLACEMENT_SUPPLEMENT_V2)
+    row = supplement["replacement"]
+    task_response = {
+        "key": row["task_key"],
+        "environment_id": row["env_key"],
+        "version": row["env_version"],
+        "data_id": row["data_key"],
+        "data_version": row["data_version"],
+        "prompt": "sealed",
+        "env_variables": {"sealed": True},
+        "output_json_schema": {"type": "object"},
+        "verifier_id": "verifier-107",
+        "verifier": {
+            "verifier_version_id": "verifier-version-107",
+            "version": 1,
+            "sha256": "sha256:verifier-107",
+            "function_name": "verify",
+        },
+        "metadata": {
+            "cyber_contract": {
+                "evidence_schema": "1.0.0",
+                "submission_protocol": "2.0.0",
+                "verifier_contract": "3.0.0",
+            },
+            "runtime_seed_manifest": {
+                "content_sha256": "sha256:seed-107",
+                "files": [{"target_path": "sealed"}],
+            },
+        },
+    }
+
+    class Client:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+    def request(_client, _method, path, **_kwargs):
+        if path == "/v1/account":
+            return {"team_name": "fleet", "team_id": self_hosted.FLEET_TEAM_ID}
+        return task_response
+
+    monkeypatch.setattr(hosted, "_client", lambda _key: Client())
+    monkeypatch.setattr(self_hosted, "_request", request)
+    hydration = hosted.hydrate_glm53_replacements(supplement, "secret")
+    assert hydration["schema_version"] == (
+        "fleet-glm53-dedicated-b-replacement-hydration-v1"
+    )
+    assert hydration["tasks"][0]["replacement_rank"] == 107
+    tampered = json.loads(json.dumps(supplement))
+    tampered["forced_stop_tombstone"]["receipt_sha256"] = "sha256:wrong"
+    tampered["receipt_sha256"] = self_hosted.digest_without(tampered, "receipt_sha256")
+    with pytest.raises(ValueError, match="stop tombstone drifted"):
+        hosted.hydrate_glm53_replacements(tampered, "secret")

@@ -438,19 +438,36 @@ def hydrate_glm53_replacements(
     """Hydrate locked GLM replacements without retaining task content."""
     if assignment.get("receipt_sha256") != digest_without(assignment, "receipt_sha256"):
         raise ValueError("replacement assignment receipt digest mismatch")
-    if assignment.get("schema_version") == "fleet-opencode-replacement-selection-supplement-v1":
+    supplement_schema = assignment.get("schema_version")
+    if supplement_schema in {
+        "fleet-opencode-replacement-selection-supplement-v1",
+        "fleet-opencode-replacement-selection-supplement-v2",
+    }:
         row = assignment.get("replacement") or {}
         rows = [row]
-        expected_ranks = [106]
+        expected_rank = 106 if supplement_schema.endswith("v1") else 107
+        expected_serving_block = (
+            "hosted" if expected_rank == 106 else "dedicated_b_successor"
+        )
+        expected_ranks = [expected_rank]
         if (
             assignment.get("append_only") is not True
-            or row.get("serving_block") != "hosted"
+            or row.get("serving_block") != expected_serving_block
             or row.get("scored_launch_authorized") is not False
             or (row.get("hydration_gate") or {}).get("status")
             != "required_not_satisfied"
         ):
-            raise ValueError("hosted replacement supplement drifted")
-        receipt_schema = "fleet-glm53-hosted-replacement-hydration-v1"
+            raise ValueError("replacement supplement drifted")
+        if expected_rank == 107 and (
+            (assignment.get("forced_stop_tombstone") or {}).get("receipt_sha256")
+            != "sha256:7cf5483e07e4053d7807d599b738e0555ade3b728ea20ae2356186592bd7c355"
+        ):
+            raise ValueError("dedicated B stop tombstone drifted")
+        receipt_schema = (
+            "fleet-glm53-hosted-replacement-hydration-v1"
+            if expected_rank == 106
+            else "fleet-glm53-dedicated-b-replacement-hydration-v1"
+        )
         receipt_source_field = "selection_supplement_receipt_sha256"
     else:
         glm = assignment.get("glm53") or {}
