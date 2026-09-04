@@ -41,6 +41,9 @@ DEDICATED_SCORING_RELEASE = Path(
 REPLACEMENT_SUPPLEMENT = Path(
     "docs/evidence/qwen38-study/2026-09-04-opencode-replacement-selection-supplement-v1.json"
 )
+REPLACEMENT_SUPPLEMENT_V2 = Path(
+    "docs/evidence/qwen38-study/2026-09-04-opencode-replacement-selection-supplement-v2.json"
+)
 GLM_HOSTED_REPLACEMENT_HYDRATION = Path(
     "docs/evidence/qwen38-study/2026-09-04-glm53-hosted-r106-hydration-v1.json"
 )
@@ -864,6 +867,116 @@ def test_committed_glm_r106_plan_requires_exact_scoring_release() -> None:
     tampered["authorization"]["must_not_repeat"] = False
     with pytest.raises(ValueError, match="does not bind"):
         hosted.validate_hosted_replacement_scoring_release(plan, tampered)
+
+
+def test_glm_r107_supplement_replays_order_and_tombstones_aborted_source56() -> None:
+    supplement = hosted.load_object(REPLACEMENT_SUPPLEMENT_V2)
+    assert supplement["receipt_sha256"] == self_hosted.digest_without(
+        supplement, "receipt_sha256"
+    )
+    assert supplement["prior_supplement"]["receipt_sha256"] == hosted.load_object(
+        REPLACEMENT_SUPPLEMENT
+    )["receipt_sha256"]
+    assert hashlib.sha256(REPLACEMENT_SUPPLEMENT.read_bytes()).hexdigest() == supplement[
+        "prior_supplement"
+    ]["file_sha256"].removeprefix("sha256:")
+
+    selection = hosted.load_object(FROZEN_SELECTION)
+    split = hosted.load_object(FROZEN_SPLIT)
+    runnable = hosted.load_object(FROZEN_RUNNABLE_INVENTORY)
+    selected = {row["task_version_id"] for row in selection["tasks"]}
+    train = {
+        row["task_version_id"]
+        for row in split["tasks"]
+        if row["split"] == "train"
+    }
+    ineligible = {
+        row["task_version_id"]
+        for row in selection["self_hosted_eligibility"]["excluded"]
+    }
+    remaining = [
+        row
+        for row in runnable["tasks"]["task_versions"]
+        if row["task_version_id"]
+        in train - selected - sweep.PRIOR_QWEN_TASK_VERSION_IDS - ineligible
+    ]
+    remaining.sort(key=lambda row: (row["task_key"], row["task_version_id"]))
+    replayed_prefix = [
+        row["task_version_id"]
+        for row in supplement["selection_replay"]["locked_prefix_reproduced"]
+    ]
+    assert [row["task_version_id"] for row in remaining[:6]] == replayed_prefix
+    replacement = supplement["replacement"]
+    assert remaining[6]["task_version_id"] == replacement["task_version_id"]
+    assert replacement["replacement_rank"] == 107
+    assert replacement["historical_rank"] == 115
+    assert replacement["serving_block"] == "dedicated_b_successor"
+
+    split_row = next(
+        row
+        for row in split["tasks"]
+        if row["task_version_id"] == replacement["task_version_id"]
+    )
+    for field in (
+        "task_key",
+        "task_version_id",
+        "task_version",
+        "environment_version_id",
+        "env_key",
+        "env_version",
+        "data_key",
+        "data_version",
+        "split",
+    ):
+        assert replacement[field] == split_row[field]
+
+    aborted = supplement["aborted_successor_claim"]
+    assert aborted["source_rank"] == 56
+    assert aborted["stream_bytes"] == aborted["stderr_bytes"] == 0
+    assert all(
+        aborted[field] is False
+        for field in (
+            "proxy_result_present",
+            "reward_result_present",
+            "trace_manifest_present",
+            "session_ingest_present",
+            "verifier_execution_present",
+            "accepted_or_noncreditable_receipt_present",
+        )
+    )
+    assert aborted["planned_run_id_api_matches"] == 0
+    assert aborted["eligible_fresh_under_new_plan_and_treatment"] is True
+    assert aborted["old_plan_cell_must_not_resume"] is True
+    tombstone_evidence = supplement["forced_stop_tombstone"]
+    tombstone_path = Path(tombstone_evidence["path"])
+    tombstone = hosted.load_object(tombstone_path)
+    assert tombstone["receipt_sha256"] == tombstone_evidence["receipt_sha256"]
+    assert hashlib.sha256(tombstone_path.read_bytes()).hexdigest() == tombstone_evidence[
+        "file_sha256"
+    ].removeprefix("sha256:")
+    assert tombstone["fenced_source54"]["whole_task_fenced"] is True
+    assert tombstone["source56_aborted_before_execution"]["scored_or_terminal_cell"] is False
+    assert tombstone["source56_aborted_before_execution"]["eligible_under_fresh_plan"] is True
+
+    lifecycle = supplement["preemption_and_readmission"]
+    assert lifecycle["ray_job_identity_continuity_is_not_runtime_treatment_continuity"]
+    assert lifecycle["old_runtime"]["ray_cluster_uid"] != lifecycle[
+        "readmitted_runtime"
+    ]["ray_cluster_uid"]
+    assert lifecycle["old_runtime"]["head_pod_uid"] != lifecycle[
+        "readmitted_runtime"
+    ]["head_pod_uid"]
+    assert lifecycle["old_runtime"]["service_uid"] != lifecycle[
+        "readmitted_runtime"
+    ]["service_uid"]
+    assert lifecycle["fresh_health_and_non_scored_parity_required"] is True
+
+    estimator = supplement["revised_primary_estimator"]
+    assert estimator["dedicated_b_task_count"] == 23 + 3 + 1 == 27
+    assert estimator["unique_task_count"] == 46 + 27 + 27 == 100
+    assert estimator["cell_count"] == 184 + 108 + 108 == 400
+    assert replacement["hydration_gate"]["required_before_paid_launch"] is True
+    assert replacement["scored_launch_authorized"] is False
 
 
 def test_dedicated_b_stop_tombstone_preserves_zero_execution_boundary() -> None:
