@@ -22,9 +22,12 @@ SOURCE_SCHEMA = "opencode-hosted-successor-source-v1"
 CAMPAIGNS = {
     "qwen38": "chris-cyber-q38-opencode11827-hosted-complete49-p4-v5",
     "glm53": "chris-cyber-glm53-opencode11827-hosted-complete99-p4-v5",
+    "glm53_clean": "chris-cyber-glm53-opencode11827-hosted-complete98-p4-v6",
 }
-EXPECTED_SOURCE_TASK_COUNTS = {"qwen38": 50, "glm53": 100}
-EXPECTED_INCLUDED_TASK_COUNTS = {"qwen38": 49, "glm53": 99}
+SOURCE_MODEL_KEYS = {"qwen38": "qwen38", "glm53": "glm53", "glm53_clean": "glm53"}
+EXPECTED_SOURCE_TASK_COUNTS = {"qwen38": 50, "glm53": 100, "glm53_clean": 100}
+EXPECTED_INCLUDED_TASK_COUNTS = {"qwen38": 49, "glm53": 99, "glm53_clean": 98}
+ADDITIONAL_DEFERRED_SOURCE_RANKS = {"qwen38": set(), "glm53": set(), "glm53_clean": {1}}
 SCHEDULE = [
     {
         "accepted_outcomes_at_least": 0,
@@ -75,7 +78,7 @@ def build_plan(
     _validate_source_plan(source_plan)
     if model_key not in CAMPAIGNS:
         raise ValueError("unsupported hosted model shard")
-    evidence = source["runs"][model_key]
+    evidence = source["runs"][SOURCE_MODEL_KEYS[model_key]]
     if (
         evidence.get("source_plan_sha256") != source_plan["plan_sha256"]
         or evidence.get("source_terminal") is not True
@@ -85,10 +88,14 @@ def build_plan(
         raise ValueError("hosted predecessor is not exactly fenced")
     if int(source_plan["task_count"]) != EXPECTED_SOURCE_TASK_COUNTS[model_key]:
         raise ValueError("hosted predecessor task count drifted")
-    excluded = {int(rank) for rank in evidence["excluded_source_ranks"]}
+    evidence_excluded = {int(rank) for rank in evidence["excluded_source_ranks"]}
     blocked = evidence["fenced_noncreditable"][0]
-    if excluded != {int(blocked["source_rank"])}:
+    if evidence_excluded != {int(blocked["source_rank"])}:
         raise ValueError("fenced cell must exclude its complete source task")
+    deferred = ADDITIONAL_DEFERRED_SOURCE_RANKS[model_key]
+    if deferred & evidence_excluded:
+        raise ValueError("deferred source tasks overlap fenced source tasks")
+    excluded = evidence_excluded | deferred
     if (
         blocked.get("agent_exit_code") != 1
         or blocked.get("session_ingest_completed") is not True
@@ -232,6 +239,23 @@ def build_plan(
             "credentials_included": False,
         },
     }
+    if model_key == "glm53_clean":
+        plan["shard_key"] = model_key
+        plan["execution"]["inventory_policy"] = (
+            "conservative_no_same_model_session_for_task_key_v1"
+        )
+    for source_rank in sorted(deferred):
+        task = source_tasks[source_rank]
+        plan["excluded_tasks"].append(
+            {
+                "source_rank": source_rank,
+                "task_key": task["task"]["key"],
+                "task_version_id": task["task"]["version_id"],
+                "reason": "retained_history_requires_authoritative_metadata_projection",
+                "retry_allowed": False,
+                "credited": False,
+            }
+        )
     plan["plan_sha256"] = digest_without(plan, "plan_sha256")
     validate_plan(plan)
     return plan
@@ -242,8 +266,14 @@ def validate_plan(plan: dict[str, Any]) -> None:
         raise ValueError("unsupported hosted shard plan schema")
     if plan.get("plan_sha256") != digest_without(plan, "plan_sha256"):
         raise ValueError("hosted shard plan digest mismatch")
+    campaign_to_shard = {value: key for key, value in CAMPAIGNS.items()}
+    shard_key = plan.get("shard_key") or campaign_to_shard.get(plan.get("campaign_id"))
     task_count = int(plan.get("task_count") or 0)
-    if task_count not in EXPECTED_INCLUDED_TASK_COUNTS.values() or plan.get("pass_k") != 4:
+    if (
+        shard_key not in EXPECTED_INCLUDED_TASK_COUNTS
+        or task_count != EXPECTED_INCLUDED_TASK_COUNTS[shard_key]
+        or plan.get("pass_k") != 4
+    ):
         raise ValueError("hosted shard task/pass shape drifted")
     tasks = plan.get("tasks") or []
     if [row.get("rank") for row in tasks] != list(range(1, task_count + 1)):
@@ -266,18 +296,27 @@ def validate_plan(plan: dict[str, Any]) -> None:
     if len({row["run_id"] for row in attempts}) != len(attempts):
         raise ValueError("hosted shard run identities drifted")
     execution = plan.get("execution") or {}
+    expected_inventory_policy = (
+        "conservative_no_same_model_session_for_task_key_v1"
+        if shard_key == "glm53_clean"
+        else None
+    )
     if (
         execution.get("task_partition") != "complete_task_boundary"
         or execution.get("same_task_max_inflight") != 1
         or execution.get("score_blind_concurrency_schedule") != SCHEDULE
         or execution.get("required_task_tools") != ["bash", "submit_report"]
+        or execution.get("inventory_policy") != expected_inventory_policy
     ):
         raise ValueError("hosted shard execution policy drifted")
     excluded = plan.get("excluded_tasks") or []
-    if len(excluded) != 1 or excluded[0].get("retry_allowed") is not False:
+    expected_excluded = 2 if shard_key == "glm53_clean" else 1
+    if len(excluded) != expected_excluded or any(
+        row.get("retry_allowed") is not False for row in excluded
+    ):
         raise ValueError("hosted shard fenced-task policy drifted")
     included_keys = {row["task"]["key"] for row in tasks}
-    if excluded[0]["task_key"] in included_keys:
+    if any(row["task_key"] in included_keys for row in excluded):
         raise ValueError("fenced task leaked into hosted shard")
 
 
@@ -335,19 +374,45 @@ def _validate_inventory_for_task(
     plan: dict[str, Any], root: Path, task: dict[str, Any], key: str
 ) -> int:
     with _client(key) as client:
-        rows = _exact_treatment_sessions(client, plan, task["task"]["key"])
+        all_rows = self_hosted._task_sessions(client, task["task"]["key"])
+    policy = plan["execution"].get(
+        "inventory_policy", "exact_hosted_treatment_metadata_v1"
+    )
+    if policy == "exact_hosted_treatment_metadata_v1":
+        model = self_hosted.persisted_session_model_identity(plan)
+        harness = f"opencode-{plan['harness']['version']}"
+        tool_digest = plan["execution"]["required_task_tool_catalog_sha256"]
+        rows = [
+            row
+            for row in all_rows
+            if row.get("model") == model
+            and (row.get("metadata") or {}).get("self_hosted_harness") == harness
+            and (row.get("metadata") or {}).get("tool_catalog_sha256") == tool_digest
+        ]
+    elif policy == "conservative_no_same_model_session_for_task_key_v1":
+        model = self_hosted.persisted_session_model_identity(plan)
+        rows = [row for row in all_rows if row.get("model") == model]
+    else:
+        raise RuntimeError("hosted inventory policy drifted")
     allowed = _allowed_sessions(plan, root, int(task["rank"]))
     observed = {row.get("session_id") for row in rows if isinstance(row.get("session_id"), str)}
     if observed != allowed:
         raise RuntimeError("hosted exact-treatment session inventory drifted")
     by_id = {row.get("session_id"): row for row in rows}
-    for credit in _credits_for_rank(plan, int(task["rank"])):
-        row = by_id.get(credit["session_id"])
+    receipts = [*_credits_for_rank(plan, int(task["rank"]))]
+    attempt_rank = {row["run_id"]: int(row["rank"]) for row in plan["attempts"]}
+    receipts.extend(
+        row
+        for run_id, row in _accepted(root).items()
+        if attempt_rank.get(run_id) == int(task["rank"])
+    )
+    for receipt in receipts:
+        row = by_id.get(receipt["session_id"])
         verifier = (row or {}).get("verifier_execution") or {}
         if (
             row is None
             or row.get("status") != "completed"
-            or verifier.get("id") != credit["verifier_execution_id"]
+            or verifier.get("id") != receipt["verifier_execution_id"]
         ):
             raise RuntimeError("hosted credited session is not authoritative")
     return len(rows)

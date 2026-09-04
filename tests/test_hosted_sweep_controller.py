@@ -76,6 +76,25 @@ def test_source_fence_cannot_be_retried_or_credited() -> None:
         )
 
 
+def test_glm_clean_shard_defers_all_rank1_history_and_fenced_rank2() -> None:
+    plan = hosted.build_plan(
+        hosted.load_object(
+            Path("evals/fleet/configs/glm53-opencode-train100-pass4-v4.json")
+        ),
+        hosted.load_object(SOURCE),
+        "glm53_clean",
+    )
+    hosted.validate_plan(plan)
+    assert plan["task_count"] == 98
+    assert plan["new_session_count"] == 392
+    assert plan["credited_sessions"] == []
+    assert {row["source_rank"] for row in plan["tasks"]} == set(range(3, 101))
+    assert {row["source_rank"] for row in plan["excluded_tasks"]} == {1, 2}
+    assert plan["execution"]["inventory_policy"] == (
+        "conservative_no_same_model_session_for_task_key_v1"
+    )
+
+
 def test_plan_rejects_partial_or_duplicate_cells() -> None:
     plan = hosted.load_object(
         Path("evals/fleet/configs/qwen38-opencode-hosted-complete49-pass4-v5.json")
