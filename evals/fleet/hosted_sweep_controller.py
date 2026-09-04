@@ -30,6 +30,9 @@ QWEN_HTTP500_SCORING_RELEASE_SCHEMA = (
 GLM_HTTP500_SCORING_RELEASE_SCHEMA = (
     "fleet-glm53-http500-hosted-primary-scoring-release-v1"
 )
+GLM_DEDICATED_B_V5_SCORING_RELEASE_SCHEMA = (
+    "fleet-glm53-dedicated-b-v5-scoring-release-v1"
+)
 QWEN_HTTP500_AUTH_STATEMENT = (
     "I authorize the create-once scored launch of Qwen successor plan "
     "sha256:8d6df6af63b308d648fb0c7ea9115f90b16de1d7e57b0968dda8fc8fd4a20c81 "
@@ -45,6 +48,15 @@ GLM_HTTP500_AUTH_STATEMENT = (
     "overlap gates pass. It contains exactly 46 complete primary tasks/184 cells, "
     "uses fleet-train-high, is disjoint from dedicated A and B, and must not repeat "
     "any fenced or accepted cell."
+)
+GLM_DEDICATED_B_V5_AUTH_STATEMENT = (
+    "I authorize the create-once scored launch of dedicated GLM B v5 successor "
+    "plan sha256:b3436ff09a6f382dac12029dbd9bea2270ccf52ab7c945f07464e715590305b8 "
+    "after exact parity, scoring-recovery, hydration, corrected attrition, duplicate, "
+    "and overlap gates pass. It contains exactly 27 complete primary tasks/108 cells, "
+    "uses fleet-train-high, binds B v5 runtime identities, excludes fenced source54, "
+    "reuses source56 only under its proven zero-execution tombstone, and must not "
+    "repeat any scored cell."
 )
 CAMPAIGNS = {
     "qwen38": "chris-cyber-q38-opencode11827-hosted-complete49-p4-v5",
@@ -469,6 +481,81 @@ def validate_glm_http500_scoring_release(
         or any(value is not False for value in privacy.values())
     ):
         raise ValueError("GLM HTTP500 scoring release does not bind this plan")
+
+
+def validate_glm_dedicated_b_v5_scoring_release(
+    plan: dict[str, Any], release: dict[str, Any] | None
+) -> None:
+    """Fail closed until the exact B v5 release and root authorization are supplied."""
+    if plan.get("shard_key") != "glm53_dedicated_b_v5":
+        return
+    if not isinstance(release, dict):
+        raise ValueError("GLM dedicated B v5 scoring release is required")
+    source = plan.get("source") or {}
+    treatment = plan.get("treatment_block") or {}
+    plan_evidence = release.get("plan") or {}
+    gates = release.get("gates") or {}
+    release_treatment = release.get("treatment") or {}
+    scheduling = release.get("scheduling") or {}
+    authorization = release.get("authorization") or {}
+    privacy = release.get("privacy") or {}
+    if (
+        release.get("schema_version") != GLM_DEDICATED_B_V5_SCORING_RELEASE_SCHEMA
+        or release.get("receipt_sha256") != digest_without(release, "receipt_sha256")
+        or release.get("append_only") is not True
+        or release.get("supersedes") is not None
+        or plan_evidence.get("plan_sha256") != plan["plan_sha256"]
+        or plan_evidence.get("task_count") != 27
+        or plan_evidence.get("pass_k") != 4
+        or plan_evidence.get("cell_count") != 108
+        or plan_evidence.get("source_ranks")
+        != [int(row["source_rank"]) for row in plan["tasks"]]
+        or gates.get("forced_stop_tombstone_receipt_sha256")
+        != source.get("forced_stop_tombstone_receipt_sha256")
+        or gates.get("selection_supplement_receipt_sha256")
+        != source.get("selection_supplement_receipt_sha256")
+        or gates.get("hydration_receipt_sha256")
+        != source.get("hydration_receipt_sha256")
+        or gates.get("parity_receipt_sha256")
+        != source.get("parity_receipt_sha256")
+        or gates.get("scoring_recovery_receipt_sha256")
+        != "sha256:708d635968e073d27153d3d9f13ae5fa7b4784349cc9e8e3928f0fbafeade132"
+        or gates.get("source54_fenced") is not True
+        or gates.get("source56_zero_execution_reuse_proven") is not True
+        or not all(
+            gates.get(field) is True
+            for field in (
+                "exact_treatment_gate_required",
+                "duplicate_gate_required",
+                "overlap_gate_required",
+                "fresh_create_once_identity_required",
+            )
+        )
+        or any(
+            release_treatment.get(field) != treatment.get(field)
+            for field in (
+                "kind",
+                "replica",
+                "serving_generation",
+                "service_uid",
+                "ray_job_uid",
+                "ray_cluster_uid",
+                "head_pod_uid",
+                "model_revision",
+            )
+        )
+        or scheduling.get("required_priority_class") != "fleet-train-high"
+        or scheduling.get("true_non_preemptible_available") is not False
+        or scheduling.get("priority_class_is_not_preemption_immunity") is not True
+        or scheduling.get("workers") != 1
+        or authorization.get("timestamp_utc") != "2026-09-04T06:04:38Z"
+        or authorization.get("author") != "/root"
+        or authorization.get("statement") != GLM_DEDICATED_B_V5_AUTH_STATEMENT
+        or authorization.get("scored_launch_authorized") is not True
+        or authorization.get("must_not_repeat") is not True
+        or any(value is not False for value in privacy.values())
+    ):
+        raise ValueError("GLM dedicated B v5 scoring release does not bind this plan")
 
 
 def validate_dedicated_a_stop_tombstone(receipt: dict[str, Any]) -> None:
@@ -2742,6 +2829,7 @@ def preflight_plan(
     validate_hosted_replacement_scoring_release(plan, release)
     validate_qwen_http500_scoring_release(plan, release)
     validate_glm_http500_scoring_release(plan, release)
+    validate_glm_dedicated_b_v5_scoring_release(plan, release)
     roots_reconciled = _validate_plan_identity_absence(plan, root)
     with _client(key) as client:
         account = self_hosted._request(client, "GET", "/v1/account")
@@ -2800,6 +2888,7 @@ def run_plan(
     validate_hosted_replacement_scoring_release(plan, release)
     validate_qwen_http500_scoring_release(plan, release)
     validate_glm_http500_scoring_release(plan, release)
+    validate_glm_dedicated_b_v5_scoring_release(plan, release)
     key = os.environ.get("FLEET_API_KEY")
     if not key:
         raise RuntimeError("FLEET_API_KEY is required")
