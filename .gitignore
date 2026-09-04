@@ -7,11 +7,16 @@
 __pycache__/
 .pytest_cache/
 .ruff_cache/
+.coverage
+build/
+dist/
+*.egg-info/
 *.py[cod]
 *.log
 artifacts/
 checkpoints/
 data/raw/
 data/processed/
+output/
 results/
 wandb/

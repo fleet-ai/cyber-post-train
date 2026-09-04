@@ -44,9 +44,19 @@ uv run cyber-post-train doctor
 uv run cyber-post-train catalog
 ```
 
-The facade currently provides inventory and local diagnostics. Existing evaluator and
-trainer commands remain authoritative while their preview/launch/status/accept paths are
-migrated behind the facade.
+The facade currently provides inventory, local diagnostics, create-once experiment
+scaffolding, component locking, validation, and deterministic plan compilation:
+
+```bash
+uv run cyber-post-train experiment init --help
+uv run cyber-post-train experiment lock --help
+uv run cyber-post-train experiment validate --help
+uv run cyber-post-train experiment compile --help
+```
+
+Existing evaluator and trainer commands remain authoritative for live
+preview/launch/status/accept operations while those paths are migrated behind the facade.
+The facade never claims to launch an adapter that has not completed that migration.
 
 ## Experiment identity and execution backends
 
