@@ -11,6 +11,9 @@ from evals.fleet import self_hosted
 SOURCE = Path(
     "docs/evidence/qwen38-study/2026-09-04-hosted-opencode-successor-source-v1.json"
 )
+REMAINDER_SOURCE = Path(
+    "docs/evidence/qwen38-study/2026-09-04-hosted-opencode-remainder-source-v1.json"
+)
 
 
 @pytest.mark.parametrize(
@@ -169,6 +172,44 @@ def test_preflight_rejects_current_plan_claim_in_any_sfs_job_root(tmp_path: Path
     (other / f"{run_id}.json").write_text("{}")
     with pytest.raises(RuntimeError, match="run identity already exists"):
         hosted._validate_plan_identity_absence(plan, jobs / plan["campaign_id"])
+
+
+@pytest.mark.parametrize(
+    ("model", "predecessor", "tasks", "source_ranks", "excluded"),
+    [
+        (
+            "qwen38_remainder",
+            "qwen38-opencode-hosted-complete49-pass4-v5.json",
+            48,
+            set(range(3, 51)),
+            {2},
+        ),
+        (
+            "glm53_remainder",
+            "glm53-opencode-hosted-odd49-pass4-v7.json",
+            47,
+            set(range(7, 100, 2)),
+            {3, 5},
+        ),
+    ],
+)
+def test_remainder_shards_exclude_every_partially_touched_task(
+    model: str,
+    predecessor: str,
+    tasks: int,
+    source_ranks: set[int],
+    excluded: set[int],
+) -> None:
+    plan = hosted.build_remainder_plan(
+        hosted.load_object(Path("evals/fleet/configs") / predecessor),
+        hosted.load_object(REMAINDER_SOURCE),
+        model,
+    )
+    hosted.validate_plan(plan)
+    assert plan["task_count"] == tasks
+    assert plan["new_session_count"] == tasks * 4
+    assert {row["source_rank"] for row in plan["tasks"]} == source_ranks
+    assert {row["source_rank"] for row in plan["excluded_tasks"]} == excluded
 
 
 def test_generated_plans_are_reproducible() -> None:

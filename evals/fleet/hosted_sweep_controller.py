@@ -19,6 +19,7 @@ from evals.fleet import self_hosted
 
 PLAN_SCHEMA = "fleet-hosted-opencode-task-boundary-shard-v1"
 SOURCE_SCHEMA = "opencode-hosted-successor-source-v1"
+REMAINDER_SOURCE_SCHEMA = "hosted-opencode-remainder-source-v1"
 CAMPAIGNS = {
     "qwen38": "chris-cyber-q38-opencode11827-hosted-complete49-p4-v5",
     "glm53": "chris-cyber-glm53-opencode11827-hosted-complete99-p4-v5",
@@ -55,6 +56,11 @@ RESERVED_SOURCE_RANKS = {
     "glm53_clean": set(),
     "glm53_hosted_odd": set(range(4, 101, 2)),
 }
+REMAINDER_CAMPAIGNS = {
+    "qwen38_remainder": "chris-cyber-q38-opencode11827-hosted-complete48-p4-v6",
+    "glm53_remainder": "chris-cyber-glm53-opencode11827-hosted-odd47-p4-v8",
+}
+EXPECTED_INCLUDED_TASK_COUNTS.update({"qwen38_remainder": 48, "glm53_remainder": 47})
 SCHEDULE = [
     {
         "accepted_outcomes_at_least": 0,
@@ -87,6 +93,123 @@ def validate_source(value: dict[str, Any]) -> None:
         raise ValueError("hosted successor source digest mismatch")
     if value.get("scores_read") is not False or value.get("prompts_or_traces_read") is not False:
         raise ValueError("hosted successor source crossed the sealed-content boundary")
+
+
+def validate_remainder_source(value: dict[str, Any]) -> None:
+    if value.get("schema_version") != REMAINDER_SOURCE_SCHEMA:
+        raise ValueError("unsupported hosted remainder source schema")
+    if value.get("receipt_sha256") != digest_without(value, "receipt_sha256"):
+        raise ValueError("hosted remainder source digest mismatch")
+    if value.get("scores_read") is not False or value.get("prompts_or_traces_read") is not False:
+        raise ValueError("hosted remainder source crossed the sealed-content boundary")
+
+
+def build_remainder_plan(
+    predecessor: dict[str, Any], source: dict[str, Any], model_key: str
+) -> dict[str, Any]:
+    validate_plan(predecessor)
+    validate_remainder_source(source)
+    if model_key not in REMAINDER_CAMPAIGNS:
+        raise ValueError("unsupported hosted remainder shard")
+    source_key = model_key.split("_", 1)[0]
+    evidence = source["runs"][source_key]
+    if (
+        evidence.get("predecessor_plan_sha256") != predecessor["plan_sha256"]
+        or evidence.get("active_attempts") != 0
+        or not evidence.get("job_uid")
+        or not evidence.get("pod_uid")
+    ):
+        raise ValueError("hosted remainder predecessor is not terminal-bound")
+    excluded_source_ranks = {int(rank) for rank in evidence["excluded_source_ranks"]}
+    expected_excluded = {2} if model_key == "qwen38_remainder" else {3, 5}
+    if excluded_source_ranks != expected_excluded:
+        raise ValueError("hosted remainder excluded-task boundary drifted")
+    for outcome in evidence["outcomes"]:
+        if int(outcome["source_rank"]) not in excluded_source_ranks:
+            raise ValueError("hosted remainder outcome escaped excluded task")
+        if outcome.get("retry_allowed") is not False:
+            raise ValueError("hosted remainder outcome became retryable")
+
+    tasks = []
+    for source_task in predecessor["tasks"]:
+        source_rank = int(source_task["source_rank"])
+        if source_rank in excluded_source_ranks:
+            continue
+        task = copy.deepcopy(source_task)
+        task["rank"] = len(tasks) + 1
+        tasks.append(task)
+    if len(tasks) != EXPECTED_INCLUDED_TASK_COUNTS[model_key]:
+        raise ValueError("hosted remainder included-task count drifted")
+
+    campaign = REMAINDER_CAMPAIGNS[model_key]
+    attempts = []
+    for task in tasks:
+        rank = int(task["rank"])
+        source_rank = int(task["source_rank"])
+        key_digest = self_hosted.sha256(task["task"]["key"].encode()).split(":", 1)[1][:8]
+        for attempt_number in range(1, 5):
+            attempts.append(
+                {
+                    "ordinal": len(attempts) + 1,
+                    "rank": rank,
+                    "source_rank": source_rank,
+                    "attempt": attempt_number,
+                    "run_id": f"{campaign}-sr{source_rank:03d}-a{attempt_number}-{key_digest}",
+                    "network": f"{model_key}-sr{source_rank:03d}-a{attempt_number}-{key_digest}",
+                }
+            )
+    predecessor_tasks = {int(row["source_rank"]): row for row in predecessor["tasks"]}
+    excluded_tasks = [
+        {
+            "source_rank": source_rank,
+            "task_key": predecessor_tasks[source_rank]["task"]["key"],
+            "task_version_id": predecessor_tasks[source_rank]["task"]["version_id"],
+            "reason": "predecessor_task_partially_touched_and_fenced",
+            "retry_allowed": False,
+            "credited": False,
+        }
+        for source_rank in sorted(excluded_source_ranks)
+    ]
+    plan = {
+        "schema_version": PLAN_SCHEMA,
+        "shard_key": model_key,
+        "campaign_id": campaign,
+        "source_job_id": predecessor["source_job_id"],
+        "source": {
+            "predecessor_plan_sha256": predecessor["plan_sha256"],
+            "source_state_receipt_sha256": source["receipt_sha256"],
+            "source_job_name": evidence["job_name"],
+            "source_job_uid": evidence["job_uid"],
+            "source_pod_uid": evidence["pod_uid"],
+        },
+        "treatment_block": predecessor["treatment_block"],
+        "model": predecessor["model"],
+        "harness": predecessor["harness"],
+        "authority": predecessor["authority"],
+        "task_count": len(tasks),
+        "pass_k": 4,
+        "total_session_count": len(tasks) * 4,
+        "credited_sessions": [],
+        "new_session_count": len(attempts),
+        "upstream_excluded_tasks": predecessor["excluded_tasks"],
+        "excluded_tasks": excluded_tasks,
+        "execution": {
+            **predecessor["execution"],
+            "inventory_policy": (
+                "plan_identity_plus_authoritative_receipt_v1"
+                if model_key == "qwen38_remainder"
+                else "conservative_no_same_model_session_for_task_key_v1"
+            ),
+        },
+        "tasks": tasks,
+        "attempts": attempts,
+        "privacy": predecessor["privacy"],
+    }
+    if predecessor.get("reserved_tasks"):
+        plan["reserved_tasks"] = predecessor["reserved_tasks"]
+    plan["plan_sha256"] = digest_without(plan, "plan_sha256")
+    validate_plan(plan)
+    return plan
 
 
 def _validate_source_plan(plan: dict[str, Any]) -> None:
@@ -308,7 +431,9 @@ def validate_plan(plan: dict[str, Any]) -> None:
         raise ValueError("unsupported hosted shard plan schema")
     if plan.get("plan_sha256") != digest_without(plan, "plan_sha256"):
         raise ValueError("hosted shard plan digest mismatch")
-    campaign_to_shard = {value: key for key, value in CAMPAIGNS.items()}
+    campaign_to_shard = {
+        value: key for key, value in {**CAMPAIGNS, **REMAINDER_CAMPAIGNS}.items()
+    }
     shard_key = plan.get("shard_key") or campaign_to_shard.get(plan.get("campaign_id"))
     task_count = int(plan.get("task_count") or 0)
     if (
@@ -340,8 +465,12 @@ def validate_plan(plan: dict[str, Any]) -> None:
     execution = plan.get("execution") or {}
     expected_inventory_policy = (
         "conservative_no_same_model_session_for_task_key_v1"
-        if shard_key in {"glm53_clean", "glm53_hosted_odd"}
-        else None
+        if shard_key in {"glm53_clean", "glm53_hosted_odd", "glm53_remainder"}
+        else (
+            "plan_identity_plus_authoritative_receipt_v1"
+            if shard_key == "qwen38_remainder"
+            else None
+        )
     )
     if (
         execution.get("task_partition") != "complete_task_boundary"
@@ -352,7 +481,11 @@ def validate_plan(plan: dict[str, Any]) -> None:
     ):
         raise ValueError("hosted shard execution policy drifted")
     excluded = plan.get("excluded_tasks") or []
-    expected_excluded = 2 if shard_key in {"glm53_clean", "glm53_hosted_odd"} else 1
+    expected_excluded = (
+        2
+        if shard_key in {"glm53_clean", "glm53_hosted_odd", "glm53_remainder"}
+        else 1
+    )
     if len(excluded) != expected_excluded or any(
         row.get("retry_allowed") is not False for row in excluded
     ):
@@ -361,7 +494,7 @@ def validate_plan(plan: dict[str, Any]) -> None:
     if any(row["task_key"] in included_keys for row in excluded):
         raise ValueError("fenced task leaked into hosted shard")
     reserved = plan.get("reserved_tasks") or []
-    expected_reserved = 49 if shard_key == "glm53_hosted_odd" else 0
+    expected_reserved = 49 if shard_key in {"glm53_hosted_odd", "glm53_remainder"} else 0
     if (
         len(reserved) != expected_reserved
         or any(row["task_key"] in included_keys for row in reserved)
@@ -447,7 +580,11 @@ def _validate_inventory_for_task(
     policy = plan["execution"].get(
         "inventory_policy", "exact_hosted_treatment_metadata_v1"
     )
-    if policy == "exact_hosted_treatment_metadata_v1":
+    allowed = _allowed_sessions(plan, root, rank)
+    if policy in {
+        "exact_hosted_treatment_metadata_v1",
+        "plan_identity_plus_authoritative_receipt_v1",
+    }:
         model = self_hosted.persisted_session_model_identity(plan)
         harness = f"opencode-{plan['harness']['version']}"
         tool_digest = plan["execution"]["required_task_tool_catalog_sha256"]
@@ -458,12 +595,19 @@ def _validate_inventory_for_task(
             and (row.get("metadata") or {}).get("self_hosted_harness") == harness
             and (row.get("metadata") or {}).get("tool_catalog_sha256") == tool_digest
         ]
+        if policy == "plan_identity_plus_authoritative_receipt_v1":
+            exact_ids = {row.get("session_id") for row in rows}
+            rows.extend(
+                row
+                for row in all_rows
+                if row.get("session_id") in allowed
+                and row.get("session_id") not in exact_ids
+            )
     elif policy == "conservative_no_same_model_session_for_task_key_v1":
         model = self_hosted.persisted_session_model_identity(plan)
         rows = [row for row in all_rows if row.get("model") == model]
     else:
         raise RuntimeError("hosted inventory policy drifted")
-    allowed = _allowed_sessions(plan, root, rank)
     observed = {row.get("session_id") for row in rows if isinstance(row.get("session_id"), str)}
     if observed != allowed:
         raise RuntimeError("hosted exact-treatment session inventory drifted")
@@ -903,6 +1047,11 @@ def main() -> int:
     build.add_argument("--source-state", type=Path, required=True)
     build.add_argument("--model", choices=sorted(CAMPAIGNS), required=True)
     build.add_argument("--output", type=Path, required=True)
+    remainder = sub.add_parser("build-remainder")
+    remainder.add_argument("--predecessor-plan", type=Path, required=True)
+    remainder.add_argument("--source-state", type=Path, required=True)
+    remainder.add_argument("--model", choices=sorted(REMAINDER_CAMPAIGNS), required=True)
+    remainder.add_argument("--output", type=Path, required=True)
     validate = sub.add_parser("validate")
     validate.add_argument("--plan", type=Path, required=True)
     preflight = sub.add_parser("preflight")
@@ -921,6 +1070,14 @@ def main() -> int:
         return 0
     if args.command == "validate":
         validate_plan(load_object(args.plan))
+        return 0
+    if args.command == "build-remainder":
+        value = build_remainder_plan(
+            load_object(args.predecessor_plan),
+            load_object(args.source_state),
+            args.model,
+        )
+        self_hosted.write_json_once(args.output, value)
         return 0
     if args.command == "preflight":
         key = os.environ.get("FLEET_API_KEY")

@@ -1,0 +1,64 @@
+{
+  "schema_version": "hosted-opencode-remainder-source-v1",
+  "recorded_at": "2026-09-04T02:55:00Z",
+  "runs": {
+    "qwen38": {
+      "predecessor_plan_sha256": "sha256:bdc9dafe1356b8f5f04591a8b21644c0209a2b87ce2913684195c81f5f858e68",
+      "job_name": "chris-cyber-q38-opencode11827-hosted-complete49-p4-v5",
+      "job_uid": "f7efdb4c-5589-4602-adf6-6786f0dd24d6",
+      "pod_uid": "daee98a0-c24e-46dd-825d-c7017850b1d9",
+      "terminal_at": "2026-09-04T02:40:51Z",
+      "active_attempts": 0,
+      "excluded_source_ranks": [2],
+      "outcomes": [
+        {
+          "source_rank": 2,
+          "attempt": 1,
+          "classification": "accepted",
+          "receipt_sha256": "sha256:8366dae8c690b9be4368e258cafaaf27366c61aeec1bccbced5c1f960e17eb33",
+          "verifier_backed": true,
+          "session_ingest_completed": true,
+          "cleanup_completed": true,
+          "retry_allowed": false
+        }
+      ],
+      "terminal_reason": "public_session_list_treatment_metadata_omitted_after_accepted_receipt",
+      "unstarted_attempts_in_excluded_task": [2, 3, 4]
+    },
+    "glm53": {
+      "predecessor_plan_sha256": "sha256:1a8a6888c6f533304ab9af71d5867d321801460ff9a1166ee2aa41860f7784f6",
+      "job_name": "chris-cyber-glm53-opencode11827-hosted-odd49-p4-v7",
+      "job_uid": "1d55df7e-1a98-4237-b010-0561b5389413",
+      "pod_uid": "0ac25936-597c-4c27-9fc2-28450f4c0bee",
+      "terminal_at": "2026-09-04T02:54:14Z",
+      "active_attempts": 0,
+      "excluded_source_ranks": [3, 5],
+      "outcomes": [
+        {
+          "source_rank": 3,
+          "attempt": 1,
+          "classification": "noncreditable",
+          "receipt_sha256": "sha256:187699ac41cb2c7190ae44bfb8ed6885ac00eb2710603032a3162088910790c7",
+          "verifier_backed": true,
+          "session_ingest_completed": true,
+          "cleanup_completed": true,
+          "retry_allowed": false
+        },
+        {
+          "source_rank": 5,
+          "attempt": 1,
+          "classification": "infrastructure_incomplete_unscored",
+          "task_claim_sha256": "sha256:f26570ce6fef0fe4149e7440a0e3fe8bbe350e068d37ec0c39d4d207a3d800d7",
+          "model_requests": 0,
+          "retry_allowed": false
+        }
+      ],
+      "terminal_reason": "opencode_trace_normalized_to_no_messages",
+      "unstarted_attempts_in_excluded_tasks": {"3": [2, 3, 4], "5": [2, 3, 4]}
+    }
+  },
+  "scores_read": false,
+  "prompts_or_traces_read": false,
+  "credentials_included": false,
+  "receipt_sha256": "sha256:ffdd6a35f4d00615bf5c6b210a23029ff1ea59dd61b2120fb8df97bed922727d"
+}
