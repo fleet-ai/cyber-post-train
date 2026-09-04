@@ -65,6 +65,12 @@ DEDICATED_B_R107_HYDRATION = Path(
 GLM_HOSTED_REASSIGNED_B_PLAN = Path(
     "evals/fleet/configs/glm53-opencode-hosted-reassigned-b27-pass4-v1.json"
 )
+QWEN_HTTP500_REPLACEMENT_SUPPLEMENT = Path(
+    "docs/evidence/qwen38-study/2026-09-04-qwen38-replacement-selection-supplement-v2.json"
+)
+GLM_HTTP500_REPLACEMENT_SUPPLEMENT = Path(
+    "docs/evidence/qwen38-study/2026-09-04-opencode-replacement-selection-supplement-v3.json"
+)
 FROZEN_SPLIT = Path("configs/data/fleet-a62-task-split-v1.json")
 FROZEN_SELECTION = Path(
     "evals/fleet/configs/opencode-easiest-train100-selection-v2.json"
@@ -1106,3 +1112,190 @@ def test_glm_hosted_reassigned_b_plan_is_preview_only_and_disjoint() -> None:
     new_source56 = next(row for row in plan["attempts"] if row["source_rank"] == 56)
     assert new_source56["run_id"] != old_source56["run_id"]
     assert new_source56["network"] != old_source56["network"]
+
+
+def test_qwen_http500_supplement_selects_unused_r54_r55_and_restores_200_cells() -> None:
+    supplement = hosted.load_object(QWEN_HTTP500_REPLACEMENT_SUPPLEMENT)
+    assert supplement["receipt_sha256"] == self_hosted.digest_without(
+        supplement, "receipt_sha256"
+    )
+
+    selection = hosted.load_object(FROZEN_SELECTION)
+    fields = (
+        "task_key",
+        "task_version_id",
+        "task_version",
+        "environment_version_id",
+        "env_key",
+        "env_version",
+        "data_key",
+        "data_version",
+        "split",
+    )
+    for replacement in supplement["replacements"]:
+        selected = selection["tasks"][replacement["replacement_rank"] - 1]
+        assert selected["rank"] == replacement["replacement_rank"]
+        assert selected["historical_rank"] == replacement["historical_rank"]
+        assert all(replacement[field] == selected[field] for field in fields)
+
+    v7 = hosted.load_object(
+        Path("evals/fleet/configs/qwen38-opencode-hosted-complete47-pass4-v7.json")
+    )
+    prior_replacements = hosted.load_object(QWEN_REPLACEMENT_PLAN)
+    replacement_ids = {
+        row["task_version_id"] for row in supplement["replacements"]
+    }
+    current_ids = {
+        row["task"]["version_id"] for row in [*v7["tasks"], *prior_replacements["tasks"]]
+    }
+    assert replacement_ids.isdisjoint(current_ids)
+
+    primary_ids = {
+        row["task"]["version_id"]
+        for row in v7["tasks"]
+        if row["source_rank"] != 5
+    }
+    primary_ids.update(
+        row["task"]["version_id"]
+        for row in prior_replacements["tasks"]
+        if row["source_rank"] != 51
+    )
+    primary_ids.update(replacement_ids)
+    assert len(primary_ids) == 46 + 2 + 2 == 50
+    estimator = supplement["revised_primary_estimator"]
+    assert estimator["unique_task_count"] == 50
+    assert estimator["pass_k"] == 4
+    assert estimator["cell_count"] == 200
+
+    failure = supplement["common_infrastructure_failure"]
+    assert failure["http_status"] == 500
+    assert failure["agent_output_present"] is True
+    assert failure["scoring_intent_present"] is True
+    assert failure["cleanup_instance_closed"] is True
+    assert failure["verifier_execution_present"] is False
+    assert failure["reward_result_present"] is False
+    assert failure["session_ingest_present"] is False
+    assert failure["retry_same_output"] is False
+    assert {row["source_rank"] for row in supplement["fenced_tasks"]} == {5, 51}
+    assert all(row["whole_task_fenced"] for row in supplement["fenced_tasks"])
+
+    assert supplement["hydration_gate"]["required_before_paid_launch"] is True
+    assert supplement["concurrency"]["third_hosted_stream_authorized"] is False
+    scheduling = supplement["future_submission_gate"]
+    assert scheduling["required_priority_class"] == "fleet-train-high"
+    assert scheduling["rejected_priority_class"] == "fleet-infra-quiet"
+    assert scheduling["true_non_preemptible_available"] is False
+    assert scheduling["higher_priority_may_preempt_lower_priority"] is True
+
+
+def test_glm_http500_supplement_selects_unused_r108_r109_and_restores_400_cells() -> None:
+    supplement = hosted.load_object(GLM_HTTP500_REPLACEMENT_SUPPLEMENT)
+    assert supplement["receipt_sha256"] == self_hosted.digest_without(
+        supplement, "receipt_sha256"
+    )
+    prior_path = Path(supplement["prior_supplement"]["path"])
+    prior = hosted.load_object(prior_path)
+    assert supplement["prior_supplement"]["receipt_sha256"] == prior["receipt_sha256"]
+    assert hashlib.sha256(prior_path.read_bytes()).hexdigest() == supplement[
+        "prior_supplement"
+    ]["file_sha256"].removeprefix("sha256:")
+
+    selection = hosted.load_object(FROZEN_SELECTION)
+    split = hosted.load_object(FROZEN_SPLIT)
+    runnable = hosted.load_object(FROZEN_RUNNABLE_INVENTORY)
+    selected = {row["task_version_id"] for row in selection["tasks"]}
+    train = {
+        row["task_version_id"]
+        for row in split["tasks"]
+        if row["split"] == "train"
+    }
+    ineligible = {
+        row["task_version_id"]
+        for row in selection["self_hosted_eligibility"]["excluded"]
+    }
+    remaining = [
+        row
+        for row in runnable["tasks"]["task_versions"]
+        if row["task_version_id"]
+        in train - selected - sweep.PRIOR_QWEN_TASK_VERSION_IDS - ineligible
+    ]
+    remaining.sort(key=lambda row: (row["task_key"], row["task_version_id"]))
+    assert [row["task_version_id"] for row in remaining[7:9]] == [
+        row["task_version_id"] for row in supplement["replacements"]
+    ]
+    assert [row["replacement_rank"] for row in supplement["replacements"]] == [108, 109]
+    assert [row["historical_rank"] for row in supplement["replacements"]] == [116, 117]
+
+    fields = (
+        "task_key",
+        "task_version_id",
+        "task_version",
+        "environment_version_id",
+        "env_key",
+        "env_version",
+        "data_key",
+        "data_version",
+        "split",
+    )
+    for replacement in supplement["replacements"]:
+        split_row = next(
+            row
+            for row in split["tasks"]
+            if row["task_version_id"] == replacement["task_version_id"]
+        )
+        assert all(replacement[field] == split_row[field] for field in fields)
+
+    hosted_original = hosted.load_object(
+        Path("evals/fleet/configs/glm53-opencode-hosted-odd45-pass4-v10.json")
+    )
+    dedicated_a = hosted.load_object(DEDICATED_A_PLAN)
+    reassigned_b = hosted.load_object(GLM_HOSTED_REASSIGNED_B_PLAN)
+    blocks = [
+        {
+            row["task"]["version_id"]
+            for row in hosted_original["tasks"]
+            if row["source_rank"] != 11
+        },
+        {row["task"]["version_id"] for row in dedicated_a["tasks"]},
+        {row["task"]["version_id"] for row in reassigned_b["tasks"]},
+        {row["task_version_id"] for row in supplement["replacements"]},
+    ]
+    assert [len(block) for block in blocks] == [44, 27, 27, 2]
+    for index, block in enumerate(blocks):
+        assert all(block.isdisjoint(other) for other in blocks[index + 1 :])
+    assert len(set().union(*blocks)) == 100
+    fenced_r106 = hosted.load_object(GLM_HOSTED_REPLACEMENT_PLAN)["tasks"][0]["task"][
+        "version_id"
+    ]
+    assert fenced_r106 not in set().union(*blocks)
+
+    estimator = supplement["revised_primary_estimator"]
+    assert estimator["hosted_task_count"] == 44 + 27 + 2 == 73
+    assert estimator["hosted_cell_count"] == 292
+    assert estimator["dedicated_a_task_count"] == 27
+    assert estimator["dedicated_a_cell_count"] == 108
+    assert estimator["unique_task_count"] == 100
+    assert estimator["cell_count"] == 400
+    treatment = supplement["treatment_reassignment"]
+    assert treatment["preview_plan_launch_authorized"] is False
+    assert treatment["must_be_rebuilt_to_include_r108_r109_and_exclude_fenced_r106"] is True
+
+    failure = supplement["common_infrastructure_failure"]
+    assert failure["http_status"] == 500
+    assert failure["agent_output_present"] is True
+    assert failure["scoring_intent_present"] is True
+    assert failure["cleanup_containers_removed"] is True
+    assert failure["verifier_execution_present"] is False
+    assert failure["reward_result_present"] is False
+    assert failure["session_ingest_present"] is False
+    assert failure["retry_same_output"] is False
+    assert {row["source_rank"] for row in supplement["fenced_tasks"]} == {11, 106}
+    assert all(row["whole_task_fenced"] for row in supplement["fenced_tasks"])
+
+    assert supplement["hydration_gate"]["required_before_paid_launch"] is True
+    assert supplement["concurrency"]["third_hosted_stream_authorized"] is False
+    scheduling = supplement["future_submission_gate"]
+    assert scheduling["required_priority_class"] == "fleet-train-high"
+    assert scheduling["rejected_priority_class"] == "fleet-infra-quiet"
+    assert scheduling["true_non_preemptible_available"] is False
+    assert scheduling["higher_priority_may_preempt_lower_priority"] is True

@@ -1,0 +1,152 @@
+{
+  "schema_version": "fleet-qwen38-replacement-selection-supplement-v2",
+  "supplement_id": "qwen38-hosted-http500-replacements-r54-r55-v1",
+  "recorded_at": "2026-09-04T05:29:35Z",
+  "append_only": true,
+  "parent_selection_lock": {
+    "path": "docs/evidence/qwen38-study/2026-09-04-opencode-replacement-selection-lock-v1.json",
+    "receipt_sha256": "sha256:77666813ed33cea95d1d21d31383d9deab2d596a97dfe8d7caee4139c80374b9",
+    "rewritten": false
+  },
+  "frozen_selection": {
+    "path": "evals/fleet/configs/opencode-easiest-train100-selection-v2.json",
+    "file_sha256": "sha256:9f5e83123cfe7d8a3f4cc0b791ac1dc9032a3d5faf5eba2a431c7246069255df",
+    "selection_sha256": "sha256:38bd544c74f4e45cb67b271849d657f49e356ccf41f97acca9fb6cd7eb7f56b8",
+    "split_path": "configs/data/fleet-a62-task-split-v1.json",
+    "split_file_sha256": "sha256:ab444cb664ffb4da351e4d33298cc052f848f2833487807bf984a753fa7c3b47",
+    "selection_rule": "take_locked_selection_ranks_54_and_55_in_order_after_fencing_original_source5_and_replacement_rank51",
+    "mutable_live_statistics_used": false
+  },
+  "common_infrastructure_failure": {
+    "classification": "infrastructure_incomplete_post_agent_pre_verifier",
+    "failure_window_utc": ["2026-09-04T05:26:21Z", "2026-09-04T05:26:23Z"],
+    "fleet_route": "POST_/v1/rollout-rewards/{task_key}/versions/{task_version_id}",
+    "http_status": 500,
+    "error_type": "FleetRequestError",
+    "agent_output_present": true,
+    "model_proxy_activity_present": true,
+    "trace_manifest_present": true,
+    "scoring_intent_present": true,
+    "cleanup_instance_closed": true,
+    "cleanup_containers_removed": true,
+    "reward_result_present": false,
+    "verifier_execution_present": false,
+    "session_ingest_present": false,
+    "accepted_receipt_present": false,
+    "noncreditable_receipt_present": false,
+    "retry_same_output": false
+  },
+  "fenced_tasks": [
+    {
+      "source_plan_path": "evals/fleet/configs/qwen38-opencode-hosted-complete47-pass4-v7.json",
+      "source_plan_file_sha256": "sha256:8a1528838c57818ae737b897bd96ef8b703898d042fe72491cc1a8a122e17852",
+      "source_plan_sha256": "sha256:f367d5148b035e29f57e5a29633609c4dbc8876d94c2795a79ff1ff25dad2ee2",
+      "job_uid": "5a76cb37-e8c1-4566-a1ca-e087da1236b4",
+      "pod_uid": "c3767e16-2111-4699-a0fe-315e039bfea6",
+      "source_rank": 5,
+      "attempt": 1,
+      "run_id": "chris-cyber-q38-opencode11827-hosted-complete47-p4-v7-sr005-a1-8d450d79",
+      "task_claim_sha256": "sha256:fc20495c13a435e860a0f2fca9d51f6b66c06bd61c4d146dd44b0abf9df0ac0a",
+      "attempt_claim_sha256": "sha256:2b8f69613651c875511383a289fcb107a6d91e9dfc276315fa7a3da8840fbaa3",
+      "failure_file_sha256": "sha256:0fa698f392afc8c025f4984787d77dec137f70a6853446c94145131ca7fe178f",
+      "cleanup_file_sha256": "sha256:a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+      "trace_manifest_file_sha256": "sha256:3985f96eae4a6519a003bcd5b86532ec776b0b4a48468fd15cd846f36b9255f2",
+      "scoring_intent_file_sha256": "sha256:f582bcabb5173803468084c0782a36df56a1c059b3fd6d72555103f0056030ea",
+      "formal_credit": 0,
+      "whole_task_fenced": true
+    },
+    {
+      "source_plan_path": "evals/fleet/configs/qwen38-opencode-hosted-replacements3-pass4-v1.json",
+      "source_plan_file_sha256": "sha256:b421b1e2bf25508eee017702f39ecb5d9cbe78eca6fa271c3f91c816f1d07896",
+      "source_plan_sha256": "sha256:9f879c054e770c120f2d4b77750475f402ba067873fbb93d0e356b062168841d",
+      "job_uid": "4ee454bd-8ec0-49aa-a5cc-c64dd05c5e26",
+      "pod_uid": "1c941c59-f33b-41cd-aabe-2c25a412327a",
+      "source_rank": 51,
+      "attempt": 2,
+      "run_id": "chris-cyber-q38-opencode11827-hosted-replacements3-p4-v1-sr051-a2-a234d107",
+      "task_claim_sha256": "sha256:50c6689da9e3b295c302515915017f759f2ecf91e20cabf2f9c962c1205c2d7b",
+      "attempt_claim_sha256": "sha256:78053c60364fe1f133e1610aa9e58b593c06b1ee5e8bfcd11ffe96ba17e2ff15",
+      "accepted_attempts": [{"attempt": 1, "receipt_sha256": "sha256:1dca144c5831d4dc5e2c8d07b150c617a29ea5b9b3c4e4d7f8b5f81076c52981"}],
+      "failure_file_sha256": "sha256:12a8b7836e206ef449a36ad18388be553de3548f8f4d6c0181f1455308bd70f2",
+      "cleanup_file_sha256": "sha256:a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+      "trace_manifest_file_sha256": "sha256:c920f744700333d2b3bf08ed33ed93c3ac03072f92154628d1d37966e6c1da1c",
+      "scoring_intent_file_sha256": "sha256:67584575a216ad76e635f1d0d531f213693f6d59fe639177ceee6997164599d2",
+      "formal_credit": 1,
+      "formal_credit_is_attrition_only": true,
+      "whole_task_fenced": true
+    }
+  ],
+  "replacements": [
+    {
+      "replacement_rank": 54,
+      "historical_rank": 59,
+      "serving_block": "hosted_qwen_successor",
+      "task_key": "cysec1-2-current-gen_blackbox-9afe9e08da314948b573657e__blackbox_ctf_v1",
+      "task_version_id": "dd8dd22e-75c0-4b93-8f8e-ea8a292d92bb",
+      "task_version": "8",
+      "environment_version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+      "env_key": "cysec1-2-current-gen",
+      "env_version": "v0.0.3",
+      "data_key": "commercial",
+      "data_version": "v0.0.9",
+      "split": "train"
+    },
+    {
+      "replacement_rank": 55,
+      "historical_rank": 60,
+      "serving_block": "hosted_qwen_successor",
+      "task_key": "cysec1-2-fira-gen_blackbox-322896ad3182769453b9944a__blackbox_ctf_v1",
+      "task_version_id": "8e5c7c45-7259-420d-ba12-0381465d864e",
+      "task_version": "8",
+      "environment_version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+      "env_key": "cysec1-2-fira-gen",
+      "env_version": "v0.0.3",
+      "data_key": "cultivacore",
+      "data_version": "v0.0.61",
+      "split": "train"
+    }
+  ],
+  "hydration_gate": {
+    "status": "required_not_satisfied",
+    "required_before_paid_launch": true,
+    "fleet_scoring_api_health_required": true
+  },
+  "overlap_audit": {
+    "current_sfs_files_containing_replacement_versions": 0,
+    "current_experiment_claims": 0,
+    "older_plan_definitions_containing_versions_are_not_current_cells": true,
+    "unused_for_current_experiment": true
+  },
+  "revised_primary_estimator": {
+    "intact_original_source_ranks": "source_4_and_6_through_50",
+    "intact_original_task_count": 46,
+    "intact_replacement_ranks": [52, 53, 54, 55],
+    "replacement_task_count": 4,
+    "unique_task_count": 50,
+    "pass_k": 4,
+    "cell_count": 200,
+    "partially_accepted_sessions_outside_estimator": 5,
+    "formal_accept_count_if_primary_completes": 205
+  },
+  "concurrency": {
+    "hosted_launches_blocked": true,
+    "third_hosted_stream_authorized": false,
+    "reason": "common_fleet_scoring_http500_requires_health_recovery_and_fresh_preflight"
+  },
+  "future_submission_gate": {
+    "required_priority_class": "fleet-train-high",
+    "rejected_priority_class": "fleet-infra-quiet",
+    "true_non_preemptible_available": false,
+    "higher_priority_may_preempt_lower_priority": true,
+    "existing_jobs_mutated": false
+  },
+  "privacy": {
+    "scores_read": false,
+    "scores_included": false,
+    "prompts_included": false,
+    "traces_included": false,
+    "flags_included": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:7ad740c7b8a13178a2e090623d3f0c4786d52d29143e740fd3649392acbf5276"
+}
