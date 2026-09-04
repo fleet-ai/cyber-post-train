@@ -40,6 +40,15 @@ GLM_DEDICATED_A_V5_SCORING_RELEASE_SCHEMA = (
 COMPLETED_EXIT1_GAP_SCORING_RELEASE_SCHEMA = (
     "fleet-completed-exit1-gap-scoring-release-v1"
 )
+DEDICATED_A_COMPLETED_EXIT1_RECONCILIATION_SCHEMA = (
+    "fleet-dedicated-a-completed-exit1-reconciliation-v1"
+)
+DEDICATED_A_COMPLETED_EXIT1_RECONCILIATION_DIGEST = (
+    "sha256:f53f54a0c77cb213f5245442e96b5a8e41fe2095855176fda204b7c440eb7027"
+)
+DEDICATED_A_COMPLETED_EXIT1_GAP_CAMPAIGN = (
+    "chris-cyber-glm53-opencode11827-dedicated-a-v5-gap-s6a4-p4-v1"
+)
 QWEN_HTTP500_AUTH_STATEMENT = (
     "I authorize the create-once scored launch of Qwen successor plan "
     "sha256:8d6df6af63b308d648fb0c7ea9115f90b16de1d7e57b0968dda8fc8fd4a20c81 "
@@ -207,6 +216,7 @@ EXPECTED_INCLUDED_TASK_COUNTS.update(
         "glm53_attrition_replacement": 1,
         "qwen38_completed_exit1_gap": 2,
         "glm53_completed_exit1_gap": 2,
+        "glm53_dedicated_a_completed_exit1_gap": 1,
     }
 )
 SCHEDULE = [
@@ -2622,6 +2632,259 @@ def validate_completed_exit1_reconciliation(
         raise ValueError("completed exit-1 reconciliation privacy drifted")
 
 
+def validate_dedicated_a_completed_exit1_reconciliation(
+    receipt: dict[str, Any], predecessor: dict[str, Any]
+) -> None:
+    """Validate the exact fully scored dedicated-A source6/a3 correction."""
+    validate_plan(predecessor)
+    source = receipt.get("source") or {}
+    result = receipt.get("authoritative_result") or {}
+    api = receipt.get("authoritative_api") or {}
+    exclusions = receipt.get("infrastructure_exclusions") or {}
+    decision = receipt.get("decision") or {}
+    privacy = receipt.get("privacy") or {}
+    accepted = receipt.get("already_accepted") or []
+    task = next(
+        (row for row in predecessor["tasks"] if int(row["source_rank"]) == 6),
+        None,
+    )
+    attempt = next(
+        (
+            row
+            for row in predecessor["attempts"]
+            if int(row["source_rank"]) == 6 and int(row["attempt"]) == 3
+        ),
+        None,
+    )
+    expected_accepted = {
+        (
+            1,
+            "chris-cyber-glm53-opencode11827-dedicated-a-v5-successor27-p4-v2-sr006-a1-51fc6fa0",
+            "c8c012fa-e92b-45bd-9151-f35c16eea629",
+            "b5a92b99-3042-46ff-ad7e-141b66246c82",
+            "sha256:76dbba0ccfd6fe4190c532712d25df48b76107067b3b01096589cc18a48ad537",
+        ),
+        (
+            2,
+            "chris-cyber-glm53-opencode11827-dedicated-a-v5-successor27-p4-v2-sr006-a2-51fc6fa0",
+            "f77b673a-9a5f-4ca9-8ecd-4860b0ed9387",
+            "3a81ee58-95b4-4eab-904c-5f7cbd5ce06c",
+            "sha256:5bcf23b2f9ec5625cc089acba25d89d3bc0590d5e4321f489031c0b217290790",
+        ),
+    }
+    observed_accepted = {
+        (
+            int(row.get("attempt") or 0),
+            row.get("run_id"),
+            row.get("session_id"),
+            row.get("verifier_execution_id"),
+            row.get("receipt_sha256"),
+        )
+        for row in accepted
+        if int(row.get("source_rank") or 0) == 6
+    }
+    digest_fields = (
+        "claim_sha256",
+        "claim_file_sha256",
+        "config_sha256",
+        "original_noncreditable_receipt_sha256",
+        "original_noncreditable_file_sha256",
+        "original_task_fence_receipt_sha256",
+        "original_task_fence_file_sha256",
+    )
+    result_digest_fields = (
+        "result_file_sha256",
+        "reward_result_file_sha256",
+        "session_ingest_file_sha256",
+        "cleanup_file_sha256",
+    )
+    if (
+        task is None
+        or attempt is None
+        or receipt.get("schema_version")
+        != DEDICATED_A_COMPLETED_EXIT1_RECONCILIATION_SCHEMA
+        or receipt.get("append_only") is not True
+        or receipt.get("receipt_sha256")
+        != digest_without(receipt, "receipt_sha256")
+        or receipt.get("receipt_sha256")
+        != DEDICATED_A_COMPLETED_EXIT1_RECONCILIATION_DIGEST
+        or receipt.get("classification") != "RECONCILED_ACCEPTED"
+        or receipt.get("counts_as_primary_cell") is not True
+        or source.get("plan_sha256") != predecessor["plan_sha256"]
+        or source.get("job_uid")
+        != "87e2ca85-d684-4d87-9f05-f4399b7906d0"
+        or source.get("pod_uid")
+        != "083a29e3-7d0e-4cbb-9447-62373772080d"
+        or (
+            int(source.get("rank") or 0),
+            int(source.get("source_rank") or 0),
+            int(source.get("attempt") or 0),
+        )
+        != (1, 6, 3)
+        or source.get("run_id") != attempt["run_id"]
+        or source.get("task_key") != task["task"]["key"]
+        or source.get("task_version_id") != task["task"]["version_id"]
+        or source.get("claim_sha256")
+        != "sha256:602dd3290a2b6f6b89cde41271d4c9f9aec0489851eb581e5a00220440235f8c"
+        or source.get("original_noncreditable_receipt_sha256")
+        != "sha256:570a9440d8c54752c66de32345b85bc475bd6e3a0826816ce36c66adfd8717dc"
+        or source.get("original_task_fence_receipt_sha256")
+        != "sha256:258b88f6e78c9b8ce7f0aa52326454cea0ed54bb8ba827612a1372b38e83c065"
+        or any(
+            not isinstance(source.get(field), str)
+            or not source[field].startswith("sha256:")
+            or len(source[field]) != 71
+            for field in digest_fields
+        )
+        or any(
+            not isinstance(result.get(field), str)
+            or not result[field].startswith("sha256:")
+            or len(result[field]) != 71
+            for field in result_digest_fields
+        )
+        or result.get("session_id")
+        != "bdfa0c8b-6b40-4820-8d34-69c20fc2e686"
+        or result.get("verifier_execution_id")
+        != "b461aa17-3c60-44b4-bfc0-43b308b674f6"
+        or result.get("agent_exit_code") != 1
+        or result.get("agent_termination") != "completed"
+        or result.get("reward_numeric_present") is not True
+        or result.get("reward_result_verifier_matches_result") is not True
+        or result.get("reward_result_task_version_matches_result") is not True
+        or result.get("session_ingest_status") != "completed"
+        or result.get("session_ingest_chunks_complete") is not True
+        or result.get("cleanup_completed") is not True
+        or api.get("session_match_count") != 1
+        or api.get("status") != "completed"
+        or api.get("model") != "glm-5.3"
+        or api.get("verifier_execution_id") != result.get("verifier_execution_id")
+        or api.get("task_version_projection_omitted") is not True
+        or api.get("run_id_projection_omitted") is not True
+        or api.get("present_projection_contradiction") is not False
+        or exclusions
+        != {
+            "stderr_bytes": 0,
+            "proxy_http_5xx_token_count": 0,
+            "proxy_transport_error_token_count": 0,
+            "independent_infrastructure_incident": False,
+            "endpoint_or_controller_preemption_overlap": False,
+        }
+        or decision.get("agent_exit_code_was_only_prior_rejection") is not True
+        or decision.get("original_receipts_mutated") is not False
+        or decision.get("source6_attempt3_must_not_repeat") is not True
+        or decision.get("source6_attempt4_was_never_started") is not True
+        or decision.get("gap_plan_may_run_only_source6_attempt4") is not True
+        or decision.get("same_dedicated_a_v5_treatment_required") is not True
+        or decision.get("fresh_create_once_identity_required") is not True
+        or decision.get("scored_gap_launch_authorized") is not False
+        or observed_accepted != expected_accepted
+        or len(accepted) != 2
+        or any(value is not False for value in privacy.values())
+    ):
+        raise ValueError("dedicated A completed exit-1 reconciliation drifted")
+
+
+def build_dedicated_a_completed_exit1_gap_plan(
+    predecessor: dict[str, Any], reconciliation: dict[str, Any]
+) -> dict[str, Any]:
+    """Build the exact source6/a4-only continuation under dedicated-A v5."""
+    validate_dedicated_a_completed_exit1_reconciliation(reconciliation, predecessor)
+    task = copy.deepcopy(
+        next(row for row in predecessor["tasks"] if int(row["source_rank"]) == 6)
+    )
+    task["rank"] = 1
+    accepted = sorted(reconciliation["already_accepted"], key=lambda row: row["attempt"])
+    credits = [
+        {
+            "rank": 1,
+            "source_rank": 6,
+            "attempt": int(row["attempt"]),
+            "session_id": row["session_id"],
+            "verifier_execution_id": row["verifier_execution_id"],
+            "source_run_id": row["run_id"],
+            "source_receipt_sha256": row["receipt_sha256"],
+            "classification": "ACCEPTED",
+        }
+        for row in accepted
+    ]
+    source = reconciliation["source"]
+    result = reconciliation["authoritative_result"]
+    credits.append(
+        {
+            "rank": 1,
+            "source_rank": 6,
+            "attempt": 3,
+            "session_id": result["session_id"],
+            "verifier_execution_id": result["verifier_execution_id"],
+            "source_run_id": source["run_id"],
+            "source_receipt_sha256": reconciliation["receipt_sha256"],
+            "classification": "RECONCILED_ACCEPTED",
+        }
+    )
+    key_digest = self_hosted.sha256(task["task"]["key"].encode()).split(":", 1)[1][:8]
+    attempt = {
+        "ordinal": 1,
+        "rank": 1,
+        "source_rank": 6,
+        "attempt": 4,
+        "run_id": f"{DEDICATED_A_COMPLETED_EXIT1_GAP_CAMPAIGN}-sr006-a4-{key_digest}",
+        "network": f"glm53-dedicated-a-v5-gap-sr006-a4-{key_digest}",
+    }
+    execution = copy.deepcopy(predecessor["execution"])
+    execution.update(
+        {
+            "inventory_policy": "immutable_plan_claim_and_endpoint_uid_v1",
+            "retry_policy": "never_repeat_any_authoritative_scored_outcome",
+            "future_nonzero_exit_policy": (
+                "credit_only_if_reward_ingest_cleanup_and_authoritative_session_match"
+            ),
+            "required_priority_class": "fleet-train-high",
+            "launch_authorized": False,
+        }
+    )
+    plan = {
+        "schema_version": PLAN_SCHEMA,
+        "shard_key": "glm53_dedicated_a_completed_exit1_gap",
+        "campaign_id": DEDICATED_A_COMPLETED_EXIT1_GAP_CAMPAIGN,
+        "source_job_id": predecessor["source_job_id"],
+        "source": {
+            "predecessor_plan_sha256": predecessor["plan_sha256"],
+            "predecessor_job_uid": source["job_uid"],
+            "predecessor_pod_uid": source["pod_uid"],
+            "reconciliation_receipt_sha256": reconciliation["receipt_sha256"],
+            "original_noncreditable_receipt_sha256": source[
+                "original_noncreditable_receipt_sha256"
+            ],
+            "original_task_fence_receipt_sha256": source[
+                "original_task_fence_receipt_sha256"
+            ],
+        },
+        "treatment_block": copy.deepcopy(predecessor["treatment_block"]),
+        "model": copy.deepcopy(predecessor["model"]),
+        "harness": copy.deepcopy(predecessor["harness"]),
+        "authority": copy.deepcopy(predecessor["authority"]),
+        "task_count": 1,
+        "pass_k": 4,
+        "total_session_count": 4,
+        "credited_sessions": credits,
+        "new_session_count": 1,
+        "primary_denominator": {"tasks": 100, "cells": 400},
+        "primary_denominator_restored_only_after_gap_task_pass4": True,
+        "execution": execution,
+        "tasks": [task],
+        "attempts": [attempt],
+        "privacy": {
+            "scores_included": False,
+            "prompts_included": False,
+            "transcripts_included": False,
+            "credentials_included": False,
+        },
+    }
+    plan["plan_sha256"] = digest_without(plan, "plan_sha256")
+    validate_plan(plan)
+    return plan
+
+
 def build_completed_exit1_gap_plan(
     qwen_plan: dict[str, Any],
     glm_plan: dict[str, Any],
@@ -3106,6 +3369,7 @@ def validate_plan(plan: dict[str, Any]) -> None:
             "glm53_dedicated_b",
             "glm53_dedicated_b_v5",
             "glm53_dedicated_a_v5",
+            "glm53_dedicated_a_completed_exit1_gap",
         }
         else "conservative_no_same_model_session_for_task_key_v1"
         if shard_key in {
@@ -3242,6 +3506,87 @@ def validate_plan(plan: dict[str, Any]) -> None:
             )
         ):
             raise ValueError("completed exit-1 gap binding drifted")
+        return
+    if shard_key == "glm53_dedicated_a_completed_exit1_gap":
+        source = plan.get("source") or {}
+        treatment = plan.get("treatment_block") or {}
+        expected_credits = {
+            (
+                6,
+                1,
+                "ACCEPTED",
+                "sha256:76dbba0ccfd6fe4190c532712d25df48b76107067b3b01096589cc18a48ad537",
+            ),
+            (
+                6,
+                2,
+                "ACCEPTED",
+                "sha256:5bcf23b2f9ec5625cc089acba25d89d3bc0590d5e4321f489031c0b217290790",
+            ),
+            (
+                6,
+                3,
+                "RECONCILED_ACCEPTED",
+                DEDICATED_A_COMPLETED_EXIT1_RECONCILIATION_DIGEST,
+            ),
+        }
+        observed_credits = {
+            (
+                int(row["source_rank"]),
+                int(row["attempt"]),
+                row.get("classification"),
+                row.get("source_receipt_sha256"),
+            )
+            for row in credits
+        }
+        if (
+            plan.get("campaign_id") != DEDICATED_A_COMPLETED_EXIT1_GAP_CAMPAIGN
+            or [int(row["source_rank"]) for row in tasks] != [6]
+            or {(int(row["source_rank"]), int(row["attempt"])) for row in attempts}
+            != {(6, 4)}
+            or observed_credits != expected_credits
+            or len(credits) != 3
+            or len(attempts) != 1
+            or source.get("predecessor_plan_sha256")
+            != "sha256:e1f37476700beb16ccb3978f61a162a59e16501334d316417cd0718a94c2ef68"
+            or source.get("predecessor_job_uid")
+            != "87e2ca85-d684-4d87-9f05-f4399b7906d0"
+            or source.get("predecessor_pod_uid")
+            != "083a29e3-7d0e-4cbb-9447-62373772080d"
+            or source.get("reconciliation_receipt_sha256")
+            != DEDICATED_A_COMPLETED_EXIT1_RECONCILIATION_DIGEST
+            or source.get("original_noncreditable_receipt_sha256")
+            != "sha256:570a9440d8c54752c66de32345b85bc475bd6e3a0826816ce36c66adfd8717dc"
+            or source.get("original_task_fence_receipt_sha256")
+            != "sha256:258b88f6e78c9b8ce7f0aa52326454cea0ed54bb8ba827612a1372b38e83c065"
+            or treatment.get("kind") != "dedicated_inference_endpoint_v1"
+            or treatment.get("replica") != "A"
+            or treatment.get("serving_generation") != "v5"
+            or treatment.get("ray_job_uid")
+            != "ef7cb0f2-84d4-4017-ae31-bf34ebb70d0d"
+            or treatment.get("ray_cluster_uid")
+            != "5107d72e-ae6a-4582-a490-55b349421d06"
+            or treatment.get("service_uid")
+            != "2c0e64de-c4a0-4f70-ae07-d15b1adad0b3"
+            or treatment.get("head_pod_uid")
+            != "3f37ab91-4afa-4e4d-8f29-a3eeda70a774"
+            or treatment.get("endpoint_origin") != plan["model"]["endpoint_origin"]
+            or treatment.get("model_revision") != plan["model"]["revision"]
+            or treatment.get("served_id") != plan["model"]["served_id"]
+            or treatment.get("session_model") != plan["model"]["session_model"]
+            or treatment.get("harness") != plan["harness"]
+            or treatment.get("required_task_tools") != ["bash", "submit_report"]
+            or plan.get("primary_denominator") != {"tasks": 100, "cells": 400}
+            or plan.get("primary_denominator_restored_only_after_gap_task_pass4")
+            is not True
+            or execution.get("required_priority_class") != "fleet-train-high"
+            or execution.get("launch_authorized") is not False
+            or execution.get("retry_policy")
+            != "never_repeat_any_authoritative_scored_outcome"
+            or execution.get("future_nonzero_exit_policy")
+            != "credit_only_if_reward_ingest_cleanup_and_authoritative_session_match"
+        ):
+            raise ValueError("dedicated A completed exit-1 gap binding drifted")
         return
     if shard_key in {"qwen38_attrition_replacement", "glm53_attrition_replacement"}:
         is_qwen = shard_key.startswith("qwen38")
@@ -3641,34 +3986,55 @@ def _allowed_sessions(plan: dict[str, Any], root: Path, rank: int) -> set[str]:
 def _sealed_gap_credit(plan: dict[str, Any], receipt: dict[str, Any]) -> bool:
     shard = plan.get("shard_key")
     cell = (int(receipt.get("source_rank") or 0), int(receipt.get("attempt") or 0))
-    accepted_cell = (6, 1) if shard == "qwen38_completed_exit1_gap" else (13, 1)
-    accepted_digest = (
-        "sha256:c6b1dea26588f2511d8dd5b7463e9be23de1f3723f7586f8a692e262ebc2c76a"
-        if shard == "qwen38_completed_exit1_gap"
-        else "sha256:1c6e404b9edca1a8ab78303c8137a4cac55eb3bfa6c94db1a473ac9512425637"
-    )
-    reconciled_cells = (
-        {(6, 2), (7, 1)}
-        if shard == "qwen38_completed_exit1_gap"
-        else {(13, 2), (15, 1)}
-    )
-    reconciliation_digest = (
-        "sha256:5435c0a25b3be1872c1aae09fd88858c5251272e164ab8eb49ab66b4c5a4ca0e"
-    )
+    sealed: dict[str, dict[tuple[int, int], tuple[str, str]]] = {
+        "qwen38_completed_exit1_gap": {
+            (6, 1): (
+                "ACCEPTED",
+                "sha256:c6b1dea26588f2511d8dd5b7463e9be23de1f3723f7586f8a692e262ebc2c76a",
+            ),
+            (6, 2): (
+                "RECONCILED_ACCEPTED",
+                "sha256:5435c0a25b3be1872c1aae09fd88858c5251272e164ab8eb49ab66b4c5a4ca0e",
+            ),
+            (7, 1): (
+                "RECONCILED_ACCEPTED",
+                "sha256:5435c0a25b3be1872c1aae09fd88858c5251272e164ab8eb49ab66b4c5a4ca0e",
+            ),
+        },
+        "glm53_completed_exit1_gap": {
+            (13, 1): (
+                "ACCEPTED",
+                "sha256:1c6e404b9edca1a8ab78303c8137a4cac55eb3bfa6c94db1a473ac9512425637",
+            ),
+            (13, 2): (
+                "RECONCILED_ACCEPTED",
+                "sha256:5435c0a25b3be1872c1aae09fd88858c5251272e164ab8eb49ab66b4c5a4ca0e",
+            ),
+            (15, 1): (
+                "RECONCILED_ACCEPTED",
+                "sha256:5435c0a25b3be1872c1aae09fd88858c5251272e164ab8eb49ab66b4c5a4ca0e",
+            ),
+        },
+        "glm53_dedicated_a_completed_exit1_gap": {
+            (6, 1): (
+                "ACCEPTED",
+                "sha256:76dbba0ccfd6fe4190c532712d25df48b76107067b3b01096589cc18a48ad537",
+            ),
+            (6, 2): (
+                "ACCEPTED",
+                "sha256:5bcf23b2f9ec5625cc089acba25d89d3bc0590d5e4321f489031c0b217290790",
+            ),
+            (6, 3): (
+                "RECONCILED_ACCEPTED",
+                DEDICATED_A_COMPLETED_EXIT1_RECONCILIATION_DIGEST,
+            ),
+        },
+    }
+    expected = sealed.get(str(shard), {}).get(cell)
     return bool(
-        shard in {"qwen38_completed_exit1_gap", "glm53_completed_exit1_gap"}
-        and (
-            (
-                cell == accepted_cell
-                and receipt.get("classification") == "ACCEPTED"
-                and receipt.get("source_receipt_sha256") == accepted_digest
-            )
-            or (
-                cell in reconciled_cells
-                and receipt.get("classification") == "RECONCILED_ACCEPTED"
-                and receipt.get("source_receipt_sha256") == reconciliation_digest
-            )
-        )
+        expected is not None
+        and receipt.get("classification") == expected[0]
+        and receipt.get("source_receipt_sha256") == expected[1]
     )
 
 
@@ -4318,6 +4684,10 @@ def main() -> int:
     dedicated_a_v5.add_argument("--hydration", type=Path, required=True)
     dedicated_a_v5.add_argument("--parity", type=Path, required=True)
     dedicated_a_v5.add_argument("--output", type=Path, required=True)
+    dedicated_a_gap = sub.add_parser("build-dedicated-a-exit1-gap")
+    dedicated_a_gap.add_argument("--predecessor-plan", type=Path, required=True)
+    dedicated_a_gap.add_argument("--reconciliation", type=Path, required=True)
+    dedicated_a_gap.add_argument("--output", type=Path, required=True)
     attrition_replacement = sub.add_parser("build-hosted-attrition-replacement")
     attrition_replacement.add_argument("--predecessor-plan", type=Path, required=True)
     attrition_replacement.add_argument("--supplement", type=Path, required=True)
@@ -4428,6 +4798,13 @@ def main() -> int:
             load_object(args.supplement),
             load_object(args.hydration),
             load_object(args.parity),
+        )
+        self_hosted.write_json_once(args.output, value)
+        return 0
+    if args.command == "build-dedicated-a-exit1-gap":
+        value = build_dedicated_a_completed_exit1_gap_plan(
+            load_object(args.predecessor_plan),
+            load_object(args.reconciliation),
         )
         self_hosted.write_json_once(args.output, value)
         return 0

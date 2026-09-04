@@ -1,0 +1,92 @@
+{
+  "schema_version": "fleet-dedicated-a-completed-exit1-reconciliation-v1",
+  "append_only": true,
+  "timestamp_utc": "2026-09-04T08:41:29Z",
+  "classification": "RECONCILED_ACCEPTED",
+  "counts_as_primary_cell": true,
+  "source": {
+    "plan_sha256": "sha256:e1f37476700beb16ccb3978f61a162a59e16501334d316417cd0718a94c2ef68",
+    "job_uid": "87e2ca85-d684-4d87-9f05-f4399b7906d0",
+    "pod_uid": "083a29e3-7d0e-4cbb-9447-62373772080d",
+    "rank": 1,
+    "source_rank": 6,
+    "attempt": 3,
+    "run_id": "chris-cyber-glm53-opencode11827-dedicated-a-v5-successor27-p4-v2-sr006-a3-51fc6fa0",
+    "task_key": "cysec1-2-current-gen_blackbox-9d641429faef16a05bff575e__blackbox_ctf_v1",
+    "task_version_id": "2f2681bf-c1f7-4056-b6e4-cb2e5058f027",
+    "claim_sha256": "sha256:602dd3290a2b6f6b89cde41271d4c9f9aec0489851eb581e5a00220440235f8c",
+    "claim_file_sha256": "sha256:e3256a6f8ff54446bf2cee1770948741ca0eabbb49c6a125eaa2070b1dc99f13",
+    "config_sha256": "sha256:ae851b0fdfb9835d21843a673079dbc820be03ba779b65bcba9c07779267b44f",
+    "original_noncreditable_receipt_sha256": "sha256:570a9440d8c54752c66de32345b85bc475bd6e3a0826816ce36c66adfd8717dc",
+    "original_noncreditable_file_sha256": "sha256:e30bd3af7a07de61ba1c2d122f730158c761f6a5441278579d9068e5a218340f",
+    "original_task_fence_receipt_sha256": "sha256:258b88f6e78c9b8ce7f0aa52326454cea0ed54bb8ba827612a1372b38e83c065",
+    "original_task_fence_file_sha256": "sha256:b61b3d0a502eacc09f2b7255c656cd8b7857dce052148448c2b9cad80b2b3424"
+  },
+  "authoritative_result": {
+    "session_id": "bdfa0c8b-6b40-4820-8d34-69c20fc2e686",
+    "verifier_execution_id": "b461aa17-3c60-44b4-bfc0-43b308b674f6",
+    "agent_exit_code": 1,
+    "agent_termination": "completed",
+    "result_file_sha256": "sha256:235047cfc5247c258c0e8e32e35b286c6b0079ae6b6878008e3facb1e357bee2",
+    "reward_result_file_sha256": "sha256:91ec52ef9f956d51663da5029b7f227c36b3d59a90d98c85eff5dc1f9e6f8493",
+    "session_ingest_file_sha256": "sha256:d9672a96522d2669dc969655eef7dce38e72034f5fdc5e946868609ea1d115b2",
+    "cleanup_file_sha256": "sha256:a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+    "reward_numeric_present": true,
+    "reward_result_verifier_matches_result": true,
+    "reward_result_task_version_matches_result": true,
+    "session_ingest_status": "completed",
+    "session_ingest_chunks_complete": true,
+    "cleanup_completed": true
+  },
+  "already_accepted": [
+    {
+      "source_rank": 6,
+      "attempt": 1,
+      "run_id": "chris-cyber-glm53-opencode11827-dedicated-a-v5-successor27-p4-v2-sr006-a1-51fc6fa0",
+      "session_id": "c8c012fa-e92b-45bd-9151-f35c16eea629",
+      "verifier_execution_id": "b5a92b99-3042-46ff-ad7e-141b66246c82",
+      "receipt_sha256": "sha256:76dbba0ccfd6fe4190c532712d25df48b76107067b3b01096589cc18a48ad537"
+    },
+    {
+      "source_rank": 6,
+      "attempt": 2,
+      "run_id": "chris-cyber-glm53-opencode11827-dedicated-a-v5-successor27-p4-v2-sr006-a2-51fc6fa0",
+      "session_id": "f77b673a-9a5f-4ca9-8ecd-4860b0ed9387",
+      "verifier_execution_id": "3a81ee58-95b4-4eab-904c-5f7cbd5ce06c",
+      "receipt_sha256": "sha256:5bcf23b2f9ec5625cc089acba25d89d3bc0590d5e4321f489031c0b217290790"
+    }
+  ],
+  "authoritative_api": {
+    "session_match_count": 1,
+    "status": "completed",
+    "model": "glm-5.3",
+    "verifier_execution_id": "b461aa17-3c60-44b4-bfc0-43b308b674f6",
+    "task_version_projection_omitted": true,
+    "run_id_projection_omitted": true,
+    "present_projection_contradiction": false
+  },
+  "infrastructure_exclusions": {
+    "stderr_bytes": 0,
+    "proxy_http_5xx_token_count": 0,
+    "proxy_transport_error_token_count": 0,
+    "independent_infrastructure_incident": false,
+    "endpoint_or_controller_preemption_overlap": false
+  },
+  "decision": {
+    "agent_exit_code_was_only_prior_rejection": true,
+    "original_receipts_mutated": false,
+    "source6_attempt3_must_not_repeat": true,
+    "source6_attempt4_was_never_started": true,
+    "gap_plan_may_run_only_source6_attempt4": true,
+    "same_dedicated_a_v5_treatment_required": true,
+    "fresh_create_once_identity_required": true,
+    "scored_gap_launch_authorized": false
+  },
+  "privacy": {
+    "scores_read": false,
+    "prompts_or_traces_read": false,
+    "task_content_included": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:f53f54a0c77cb213f5245442e96b5a8e41fe2095855176fda204b7c440eb7027"
+}

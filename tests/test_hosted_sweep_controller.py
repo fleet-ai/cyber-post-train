@@ -116,6 +116,14 @@ GLM_DEDICATED_A_V5_PLAN = Path(
 GLM_DEDICATED_A_V5_RELEASE = Path(
     "docs/evidence/qwen38-study/2026-09-04-glm53-dedicated-a-v5-scoring-release-v1.json"
 )
+GLM_DEDICATED_A_EXIT1_RECONCILIATION = Path(
+    "docs/evidence/qwen38-study/"
+    "2026-09-04-glm53-dedicated-a-source6-attempt3-reconciliation-v1.json"
+)
+GLM_DEDICATED_A_EXIT1_GAP_PLAN = Path(
+    "evals/fleet/configs/"
+    "glm53-opencode-dedicated-a-v5-source6-attempt4-gap-pass4-v1.json"
+)
 QWEN_ATTRITION_REPLACEMENT_PLAN = Path(
     "evals/fleet/configs/qwen38-opencode-hosted-attrition-r56-pass4-v1.json"
 )
@@ -2479,4 +2487,50 @@ def test_completed_exit1_reconciliation_is_exact_plan_bound_and_score_blind() ->
     with pytest.raises(ValueError, match="not fully scored"):
         hosted.validate_completed_exit1_reconciliation(
             tampered, qwen_plan, glm_plan
+        )
+
+
+def test_dedicated_a_exit1_reconciliation_and_gap_are_exact() -> None:
+    predecessor = hosted.load_object(GLM_DEDICATED_A_V5_PLAN)
+    receipt = hosted.load_object(GLM_DEDICATED_A_EXIT1_RECONCILIATION)
+    hosted.validate_dedicated_a_completed_exit1_reconciliation(receipt, predecessor)
+    plan = hosted.build_dedicated_a_completed_exit1_gap_plan(predecessor, receipt)
+    assert plan == hosted.load_object(GLM_DEDICATED_A_EXIT1_GAP_PLAN)
+    assert {
+        (row["source_rank"], row["attempt"], row["classification"])
+        for row in plan["credited_sessions"]
+    } == {
+        (6, 1, "ACCEPTED"),
+        (6, 2, "ACCEPTED"),
+        (6, 3, "RECONCILED_ACCEPTED"),
+    }
+    assert [(row["source_rank"], row["attempt"]) for row in plan["attempts"]] == [
+        (6, 4)
+    ]
+    assert plan["treatment_block"] == predecessor["treatment_block"]
+    assert plan["execution"]["required_priority_class"] == "fleet-train-high"
+    assert plan["execution"]["launch_authorized"] is False
+
+
+@pytest.mark.parametrize(
+    ("section", "field", "value"),
+    [
+        ("authoritative_result", "reward_numeric_present", False),
+        ("authoritative_result", "reward_result_verifier_matches_result", False),
+        ("authoritative_api", "session_match_count", 0),
+        ("authoritative_api", "verifier_execution_id", str(uuid.uuid4())),
+        ("infrastructure_exclusions", "proxy_http_5xx_token_count", 1),
+        ("decision", "source6_attempt4_was_never_started", False),
+    ],
+)
+def test_dedicated_a_exit1_reconciliation_fails_closed(
+    section: str, field: str, value: object
+) -> None:
+    predecessor = hosted.load_object(GLM_DEDICATED_A_V5_PLAN)
+    receipt = hosted.load_object(GLM_DEDICATED_A_EXIT1_RECONCILIATION)
+    receipt[section][field] = value
+    receipt["receipt_sha256"] = self_hosted.digest_without(receipt, "receipt_sha256")
+    with pytest.raises(ValueError, match="reconciliation drifted"):
+        hosted.validate_dedicated_a_completed_exit1_reconciliation(
+            receipt, predecessor
         )
