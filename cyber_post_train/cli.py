@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
+from typing import Annotated
 
 import typer
+import yaml
 from rich.console import Console
 from rich.table import Table
 
 from .catalog import CATALOG, catalog_dict, doctor
+from .spec import compile_plan, load_locked_spec, lock_spec, write_new
 
 app = typer.Typer(
     name="cyber-post-train",
@@ -17,6 +21,8 @@ app = typer.Typer(
     help="Compose and operate reproducible cyber evaluations and post-training experiments.",
 )
 console = Console()
+experiment_app = typer.Typer(no_args_is_help=True, help="Lock, validate, and compile experiments.")
+app.add_typer(experiment_app, name="experiment")
 
 
 @app.command("catalog")
@@ -59,6 +65,38 @@ def doctor_command(
             console.print(f"[{color}]{result}[/] {name}")
     if not receipt["ok"]:
         raise typer.Exit(2)
+
+
+@experiment_app.command("lock")
+def experiment_lock(
+    source: Path,
+    output: Annotated[Path, typer.Option("--output")],
+) -> None:
+    """Resolve component digests and create a locked experiment spec."""
+
+    locked = lock_spec(source)
+    write_new(output, yaml.safe_dump(locked, sort_keys=False))
+    typer.echo(str(output))
+
+
+@experiment_app.command("validate")
+def experiment_validate(spec: Path) -> None:
+    """Validate a locked experiment and every referenced component digest."""
+
+    value = load_locked_spec(spec)
+    typer.echo(json.dumps({"ok": True, "experiment_id": value.experiment_id}, sort_keys=True))
+
+
+@experiment_app.command("compile")
+def experiment_compile(
+    spec: Path,
+    output: Annotated[Path, typer.Option("--output")],
+) -> None:
+    """Create an immutable backend-neutral launch plan."""
+
+    plan = compile_plan(spec)
+    write_new(output, json.dumps(plan, indent=2, sort_keys=True) + "\n")
+    typer.echo(json.dumps({"output": str(output), "plan_sha256": plan["plan_sha256"]}))
 
 
 if __name__ == "__main__":
