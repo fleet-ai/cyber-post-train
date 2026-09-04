@@ -77,6 +77,12 @@ GLM_HTTP500_REPLACEMENT_SUPPLEMENT = Path(
 GLM_DEDICATED_A_PREEMPTION_SUPPLEMENT = Path(
     "docs/evidence/qwen38-study/2026-09-04-opencode-replacement-selection-supplement-v4.json"
 )
+QWEN_SOURCE6_REPLACEMENT_SUPPLEMENT = Path(
+    "docs/evidence/qwen38-study/2026-09-04-qwen38-replacement-selection-supplement-v3.json"
+)
+GLM_SOURCE13_REPLACEMENT_SUPPLEMENT = Path(
+    "docs/evidence/qwen38-study/2026-09-04-opencode-replacement-selection-supplement-v5.json"
+)
 HOSTED_HTTP500_INCIDENT = Path(
     "docs/evidence/qwen38-study/2026-09-04-hosted-scoring-api-common-mode-http500-incident-v1.json"
 )
@@ -1755,3 +1761,183 @@ def test_glm_dedicated_a_preemption_selects_unused_r110_and_restores_400_cells()
     assert scheduling["fresh_a_non_scored_parity_required"] is True
     assert scheduling["true_non_preemptible_available"] is False
     assert scheduling["higher_priority_may_preempt_lower_priority"] is True
+
+
+def test_qwen_source6_fence_selects_r56_and_restores_200_cells() -> None:
+    supplement = hosted.load_object(QWEN_SOURCE6_REPLACEMENT_SUPPLEMENT)
+    assert supplement["receipt_sha256"] == self_hosted.digest_without(
+        supplement, "receipt_sha256"
+    )
+    prior_path = Path(supplement["prior_supplement"]["path"])
+    prior = hosted.load_object(prior_path)
+    assert supplement["prior_supplement"]["receipt_sha256"] == prior[
+        "receipt_sha256"
+    ]
+    assert hashlib.sha256(prior_path.read_bytes()).hexdigest() == supplement[
+        "prior_supplement"
+    ]["file_sha256"].removeprefix("sha256:")
+
+    replacement = supplement["replacement"]
+    selected = hosted.load_object(FROZEN_SELECTION)["tasks"][55]
+    fields = (
+        "task_key",
+        "task_version_id",
+        "task_version",
+        "environment_version_id",
+        "env_key",
+        "env_version",
+        "data_key",
+        "data_version",
+        "split",
+    )
+    assert replacement["replacement_rank"] == selected["rank"] == 56
+    assert replacement["historical_rank"] == selected["historical_rank"] == 61
+    assert all(replacement[field] == selected[field] for field in fields)
+
+    fence = supplement["source6_fence"]
+    assert fence["whole_task_fenced"] is True
+    assert fence["accepted_attempt"]["attempt"] == 1
+    assert fence["accepted_attempt"]["attrition_only"] is True
+    assert fence["noncreditable_attempt"]["attempt"] == 2
+    assert fence["noncreditable_attempt"]["agent_exit_code"] == 1
+    assert fence["noncreditable_attempt"]["session_ingest_completed"] is True
+    assert fence["noncreditable_attempt"]["verifier_execution_present"] is True
+    assert fence["noncreditable_attempt"]["retry_allowed"] is False
+    assert fence["attempts_3_and_4_launched"] is False
+    assert fence["controller_advanced_to_source7"] is True
+
+    successor = hosted.load_object(QWEN_HTTP500_SUCCESSOR_PLAN)
+    retained = hosted.load_object(
+        Path("evals/fleet/configs/qwen38-opencode-hosted-complete47-pass4-v7.json")
+    )
+    primary_ids = {
+        row["task"]["version_id"]
+        for row in successor["tasks"]
+        if row["source_rank"] != 6
+    }
+    primary_ids.add(
+        next(
+            row["task"]["version_id"]
+            for row in retained["tasks"]
+            if row["source_rank"] == 4
+        )
+    )
+    assert replacement["task_version_id"] not in primary_ids
+    primary_ids.add(replacement["task_version_id"])
+    assert len(primary_ids) == 50
+    overlap = supplement["overlap_audit"]
+    assert overlap["same_qwen_plan_or_claim_references"] == 0
+    assert overlap["cross_model_glm_references_present"] is True
+    assert overlap["cross_model_references_are_not_same_treatment_cells"] is True
+    assert overlap["unused_for_current_qwen_experiment"] is True
+
+    estimator = supplement["revised_primary_estimator"]
+    assert estimator["retained_complete_source4_task_count"] == 1
+    assert estimator["current_v8_intact_task_count_after_source6_fence"] == 48
+    assert estimator["unique_task_count"] == 50
+    assert estimator["cell_count"] == 200
+    assert estimator["partially_accepted_sessions_outside_estimator"] == 6
+    assert estimator["formal_accept_count_if_primary_completes"] == 206
+    assert replacement["scored_launch_authorized"] is False
+    assert supplement["future_submission_gate"]["required_priority_class"] == (
+        "fleet-train-high"
+    )
+
+
+def test_glm_source13_fence_selects_r111_and_restores_400_cells() -> None:
+    supplement = hosted.load_object(GLM_SOURCE13_REPLACEMENT_SUPPLEMENT)
+    assert supplement["receipt_sha256"] == self_hosted.digest_without(
+        supplement, "receipt_sha256"
+    )
+    prior_path = Path(supplement["prior_supplement"]["path"])
+    prior = hosted.load_object(prior_path)
+    assert supplement["prior_supplement"]["receipt_sha256"] == prior[
+        "receipt_sha256"
+    ]
+    assert hashlib.sha256(prior_path.read_bytes()).hexdigest() == supplement[
+        "prior_supplement"
+    ]["file_sha256"].removeprefix("sha256:")
+
+    selection = hosted.load_object(FROZEN_SELECTION)
+    split = hosted.load_object(FROZEN_SPLIT)
+    runnable = hosted.load_object(FROZEN_RUNNABLE_INVENTORY)
+    selected = {row["task_version_id"] for row in selection["tasks"]}
+    train = {
+        row["task_version_id"]
+        for row in split["tasks"]
+        if row["split"] == "train"
+    }
+    ineligible = {
+        row["task_version_id"]
+        for row in selection["self_hosted_eligibility"]["excluded"]
+    }
+    remaining = [
+        row
+        for row in runnable["tasks"]["task_versions"]
+        if row["task_version_id"]
+        in train - selected - sweep.PRIOR_QWEN_TASK_VERSION_IDS - ineligible
+    ]
+    remaining.sort(key=lambda row: (row["task_key"], row["task_version_id"]))
+    replacement = supplement["replacement"]
+    assert remaining[10]["task_version_id"] == replacement["task_version_id"]
+    assert replacement["replacement_rank"] == 111
+    assert replacement["historical_rank"] == 119
+    split_row = next(
+        row
+        for row in split["tasks"]
+        if row["task_version_id"] == replacement["task_version_id"]
+    )
+    fields = (
+        "task_key",
+        "task_version_id",
+        "task_version",
+        "environment_version_id",
+        "env_key",
+        "env_version",
+        "data_key",
+        "data_version",
+        "split",
+    )
+    assert all(replacement[field] == split_row[field] for field in fields)
+
+    fence = supplement["source13_fence"]
+    assert fence["whole_task_fenced"] is True
+    assert fence["accepted_attempt"]["attempt"] == 1
+    assert fence["accepted_attempt"]["attrition_only"] is True
+    assert fence["noncreditable_attempt"]["attempt"] == 2
+    assert fence["noncreditable_attempt"]["agent_exit_code"] == 1
+    assert fence["noncreditable_attempt"]["session_ingest_completed"] is True
+    assert fence["noncreditable_attempt"]["verifier_execution_present"] is True
+    assert fence["noncreditable_attempt"]["retry_allowed"] is False
+    assert fence["attempts_3_and_4_launched"] is False
+    assert fence["controller_advanced_to_source15"] is True
+
+    hosted_primary = hosted.load_object(GLM_HTTP500_HOSTED_PRIMARY_PLAN)
+    dedicated_a = hosted.load_object(GLM_DEDICATED_A_V5_PLAN)
+    dedicated_b = hosted.load_object(GLM_DEDICATED_B_V5_PLAN)
+    blocks = [
+        {
+            row["task"]["version_id"]
+            for row in hosted_primary["tasks"]
+            if row["source_rank"] != 13
+        }
+        | {replacement["task_version_id"]},
+        {row["task"]["version_id"] for row in dedicated_a["tasks"]},
+        {row["task"]["version_id"] for row in dedicated_b["tasks"]},
+    ]
+    assert [len(block) for block in blocks] == [46, 27, 27]
+    for index, block in enumerate(blocks):
+        assert all(block.isdisjoint(other) for other in blocks[index + 1 :])
+    assert len(set().union(*blocks)) == 100
+
+    estimator = supplement["revised_primary_estimator"]
+    assert estimator["hosted_v12_intact_task_count_after_source13_fence"] == 45
+    assert estimator["hosted_task_count"] == 46
+    assert estimator["unique_task_count"] == 100
+    assert estimator["cell_count"] == 400
+    assert estimator["partially_accepted_sessions_outside_estimator"] == 9
+    assert estimator["formal_accept_count_if_primary_completes"] == 409
+    assert replacement["scored_launch_authorized"] is False
+    assert supplement["future_submission_gate"]["required_priority_class"] == (
+        "fleet-train-high"
+    )
