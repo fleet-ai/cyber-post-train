@@ -29,6 +29,12 @@ TASK_INVENTORY_SHA = "sha256:c71604d22b1d52a7091727b957e0f56f2e8e270e461c844fb57
 TASK_INVENTORY_EXECUTION_SHA = (
     "sha256:b4c175db0d04746e16fa9314edb093f7306e859545cd95972694e461b7f82fcb"
 )
+PREAUTH_TIMESTAMP = "2026-09-04T20:47:35Z"
+PRE_MANIFEST_SHA = "sha256:82922a77035da65a3495aabc3281370d2e556a881873aca2655f947231e48112"
+SCORED_MANIFEST_SHA = "sha256:1217666a0bfe5ab4d9aec0191213a3f1af8967f053b046922de656ed4a953be2"
+SELF_HOSTED_SHA = "sha256:16df432b5fde55112924d6106e6c03f09817846f1344ba0fe100dcf785c33d8b"
+RUNNER_SHA = "sha256:b1f9c5028f65b0d7772538e3ce075310dc6c7a46b3de58d0196bc474e74e9e9d"
+ENDPOINT_LEASE_SHA = "sha256:1df60ee13be8c6057113dbebadf9020343649e175b5de38aea41706748987019"
 LEASE_ROOT = "/mnt/sfs/endpoint-leases/opencode11827-autocontinue-primary-v1"
 CONTEXT = "opencode_1.18.27_native_compaction_autocontinue_v1"
 PRIORITY = "fleet-train-high"
@@ -53,6 +59,14 @@ EXPECTED = {
         ),
         "preflight_configmap": "chris-q38-ac-canary1-pre-v1",
         "scored_configmap": "chris-q38-ac-canary1-run-v2",
+        "plan_path": "evals/fleet/configs/qwen38-opencode-autocontinue-canary1-v1.json",
+        "plan_file_sha256": (
+            "sha256:28d3e45ae8ef317506d5414af89f4d3f7f38e3ed3762eccbe57cca3a45728ebc"
+        ),
+        "preflight_statement": (
+            "I authorize the create-once read-only Qwen corrected-treatment canary preflight "
+            "only; no scored Job or scored ConfigMap may be created."
+        ),
         "model_sha256": "sha256:bdda482324e070f7051533d2a2f3e7e6c2883a02f70ba0212bf6d390ee61a584",
         "harness_sha256": "sha256:a8b47884934b2ffc24af836f0f5d8d889992ce68066da6c0774196f56b92508a",
         "treatment_sha256": (
@@ -80,6 +94,14 @@ EXPECTED = {
         ),
         "preflight_configmap": "chris-glm53-ac-canary1-pre-v1",
         "scored_configmap": "chris-glm53-ac-canary1-run-v2",
+        "plan_path": "evals/fleet/configs/glm53-opencode-autocontinue-canary1-v1.json",
+        "plan_file_sha256": (
+            "sha256:2eada8438613465f8d9422836e9a6cce76f5a6eefbdc31635939b6ff3fd958c8"
+        ),
+        "preflight_statement": (
+            "I authorize the create-once read-only GLM corrected-treatment canary preflight "
+            "only; no scored Job or scored ConfigMap may be created."
+        ),
         "model_sha256": "sha256:c7df17e25b5a04484012a02b9adf219f7e2c5abe6a6995eba68fedda687cd2e6",
         "harness_sha256": "sha256:807859e731b15f7c7e977eb45a0679c6a56f1c4c3dcb6ecae43f1e0c34c71099",
         "treatment_sha256": (
@@ -112,6 +134,14 @@ def _is_sha256(value: object) -> bool:
     if not isinstance(value, str) or not value.startswith("sha256:") or len(value) != 71:
         return False
     return all(character in "0123456789abcdef" for character in value[7:])
+
+
+def _is_git_commit(value: object) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == 40
+        and all(character in "0123456789abcdef" for character in value)
+    )
 
 
 def _is_uuid(value: object) -> bool:
@@ -338,7 +368,7 @@ def _bound_receipt(
 
 
 def _validate_final_preflight_evidence(
-    evidence: dict[str, Any], plan: dict[str, Any], root: Path
+    evidence: dict[str, Any], plan: dict[str, Any], root: Path, package_commit: str
 ) -> None:
     duplicate = _bound_receipt(
         root,
@@ -352,7 +382,7 @@ def _validate_final_preflight_evidence(
         "preflight_authorization_receipt_path",
         "preflight_authorization_receipt_sha256",
     )
-    validate_preflight_authorization(preauth, plan, root)
+    validate_preflight_authorization(preauth, plan, root, package_commit)
     preflight = _bound_receipt(root, evidence, "preflight_receipt_path", "preflight_receipt_sha256")
     observed = _bound_receipt(
         root,
@@ -535,7 +565,10 @@ def validate_release(release: dict[str, Any], plan: dict[str, Any], root: Path) 
     terminal = release.get("terminal_contract") or {}
     compatibility = _compatibility(root)
     compatibility_sha = compatibility["receipt_sha256"]
-    _validate_final_preflight_evidence(evidence, plan, root)
+    package_commit = implementation.get("package_commit")
+    if not _is_git_commit(package_commit):
+        raise ValueError("canary scoring release package commit is not authoritative")
+    _validate_final_preflight_evidence(evidence, plan, root, package_commit)
     if (
         release.get("campaign_sha256") != CAMPAIGN_SHA
         or release.get("plan_sha256") != plan["plan_sha256"]
@@ -589,18 +622,64 @@ def validate_release(release: dict[str, Any], plan: dict[str, Any], root: Path) 
 
 
 def validate_preflight_authorization(
-    release: dict[str, Any], plan: dict[str, Any], root: Path
+    release: dict[str, Any], plan: dict[str, Any], root: Path, package_commit: str
 ) -> None:
     validate_plan(plan)
-    evidence = release.get("evidence") or {}
-    implementation = release.get("implementation") or {}
+    if not _is_git_commit(package_commit):
+        raise ValueError("canary preflight authorization package commit is invalid")
+    expected = EXPECTED[plan["shard_key"]]
     compatibility = _compatibility(root)
+    expected_evidence = {
+        "task_inventory_receipt_sha256": TASK_INVENTORY_SHA,
+        "task_inventory_execution_sha256": TASK_INVENTORY_EXECUTION_SHA,
+        "dedicated_parity_receipt_sha256": DEDICATED_PARITY_SHA,
+        "hosted_health_receipt_sha256": HOSTED_HEALTH_SHA,
+        "shared_pvc_flock_receipt_sha256": FLOCK_GATE_SHA,
+        "controller_compatibility_receipt_sha256": compatibility["receipt_sha256"],
+        "fresh_duplicate_inventory_receipt_sha256": None,
+    }
+    expected_implementation = {
+        "package_commit": package_commit,
+        "plan_sha256": plan["plan_sha256"],
+        "plan_file_sha256": expected["plan_file_sha256"],
+        "controller_sha256": _sha(root / "evals/fleet/autocontinue_canary_controller.py"),
+        "frozen_controller_sha256": _sha(root / "evals/fleet/hosted_sweep_controller.py"),
+        "self_hosted_sha256": SELF_HOSTED_SHA,
+        "runner_sha256": RUNNER_SHA,
+        "endpoint_lease_sha256": ENDPOINT_LEASE_SHA,
+        "compatibility_file_sha256": _sha(
+            root / "docs/evidence/qwen38-study/"
+            "2026-09-04-opencode-autocontinue-canary-controller-compatibility-v1.json"
+        ),
+        "preflight_manifest_sha256": PRE_MANIFEST_SHA,
+        "scored_manifest_sha256": SCORED_MANIFEST_SHA,
+    }
     if (
-        release.get("schema_version")
+        set(release)
+        != {
+            "schema_version",
+            "append_only",
+            "status",
+            "authorized_at_utc",
+            "package_commit",
+            "campaign_sha256",
+            "plan_sha256",
+            "cell",
+            "preflight_identity",
+            "evidence",
+            "implementation",
+            "authorization",
+            "privacy",
+            "receipt_sha256",
+        }
+        or release.get("receipt_sha256") != digest_without(release, "receipt_sha256")
+        or release.get("schema_version")
         != "fleet-opencode-autocontinue-canary-preflight-authorization-v1"
         or release.get("append_only") is not True
         or release.get("status") != "PREFLIGHT_AUTHORIZED"
-        or not isinstance(release.get("authorized_at_utc"), str)
+        or release.get("authorized_at_utc") != PREAUTH_TIMESTAMP
+        or not _is_utc_timestamp(release.get("authorized_at_utc"))
+        or release.get("package_commit") != package_commit
         or release.get("campaign_sha256") != CAMPAIGN_SHA
         or release.get("plan_sha256") != plan["plan_sha256"]
         or release.get("cell")
@@ -611,40 +690,36 @@ def validate_preflight_authorization(
         }
         or release.get("preflight_identity")
         != {
-            "configmap_name": EXPECTED[plan["shard_key"]]["preflight_configmap"],
+            "configmap_name": expected["preflight_configmap"],
             "job_name": plan["preflight_job_name"],
             "sfs_root": f"/mnt/sfs/jobs/{plan['preflight_job_name']}",
-            "scored_configmap_name": EXPECTED[plan["shard_key"]]["scored_configmap"],
+            "scored_configmap_name": expected["scored_configmap"],
             "scored_job_name": plan["scored_job_name"],
             "scored_job_created": False,
         }
-        or evidence.get("task_inventory_receipt_sha256") != TASK_INVENTORY_SHA
-        or evidence.get("task_inventory_execution_sha256") != TASK_INVENTORY_EXECUTION_SHA
-        or evidence.get("dedicated_parity_receipt_sha256") != DEDICATED_PARITY_SHA
-        or evidence.get("hosted_health_receipt_sha256") != HOSTED_HEALTH_SHA
-        or evidence.get("shared_pvc_flock_receipt_sha256") != FLOCK_GATE_SHA
-        or evidence.get("controller_compatibility_receipt_sha256")
-        != compatibility["receipt_sha256"]
-        or evidence.get("fresh_duplicate_inventory_receipt_sha256") is not None
-        or implementation.get("plan_sha256") != plan["plan_sha256"]
-        or implementation.get("controller_sha256")
-        != _sha(root / "evals/fleet/autocontinue_canary_controller.py")
-        or implementation.get("frozen_controller_sha256")
-        != _sha(root / "evals/fleet/hosted_sweep_controller.py")
-        or implementation.get("preflight_manifest_sha256")
-        != _sha(root / "evals/fleet/cluster/opencode-autocontinue-canary-preflights-v1.yaml")
-        or release.get("authorization", {}).get("preflight_authorized") is not True
-        or release.get("authorization", {}).get("launch_authorized") is not False
-        or release.get("authorization", {}).get("author") != "/root"
-        or not isinstance(release.get("authorization", {}).get("statement"), str)
-        or not release.get("authorization", {}).get("statement")
+        or release.get("evidence") != expected_evidence
+        or release.get("implementation") != expected_implementation
+        or _sha(root / expected["plan_path"]) != expected["plan_file_sha256"]
+        or _sha(root / "evals/fleet/self_hosted.py") != SELF_HOSTED_SHA
+        or _sha(root / "evals/fleet/opencode_train_sweep_runner.py") != RUNNER_SHA
+        or _sha(root / "evals/fleet/endpoint_lease.py") != ENDPOINT_LEASE_SHA
+        or _sha(root / "evals/fleet/cluster/opencode-autocontinue-canary-preflights-v1.yaml")
+        != PRE_MANIFEST_SHA
+        or _sha(root / "evals/fleet/cluster/opencode-autocontinue-canary-scored-v2.yaml")
+        != SCORED_MANIFEST_SHA
+        or release.get("authorization")
+        != {
+            "preflight_authorized": True,
+            "launch_authorized": False,
+            "author": "/root",
+            "statement": expected["preflight_statement"],
+        }
         or release.get("privacy")
         != {
             "credentials_included": False,
             "prompts_or_traces_included": False,
             "scores_included": False,
         }
-        or release.get("receipt_sha256") != digest_without(release, "receipt_sha256")
     ):
         raise ValueError("canary preflight authorization drifted")
 
@@ -811,9 +886,14 @@ def validate_post_exit(
 
 
 def preflight(
-    plan: dict[str, Any], release: dict[str, Any], root: Path, key: str, repo: Path
+    plan: dict[str, Any],
+    release: dict[str, Any],
+    root: Path,
+    key: str,
+    repo: Path,
+    package_commit: str,
 ) -> dict[str, Any]:
-    validate_preflight_authorization(release, plan, repo)
+    validate_preflight_authorization(release, plan, repo, package_commit)
     roots = hosted._validate_plan_identity_absence(plan, root)
     with hosted._client(key) as client:
         account = self_hosted._request(client, "GET", "/v1/account")
@@ -1031,6 +1111,7 @@ def main() -> int:
     pre.add_argument("--out", type=Path, required=True)
     pre.add_argument("--out-dir", type=Path, required=True)
     pre.add_argument("--repo", type=Path, required=True)
+    pre.add_argument("--package-commit", required=True)
     execute = sub.add_parser("run")
     execute.add_argument("--plan", type=Path, required=True)
     execute.add_argument("--release", type=Path, required=True)
@@ -1053,7 +1134,7 @@ def main() -> int:
         key = os.environ.get("FLEET_API_KEY")
         if not key:
             raise RuntimeError("FLEET_API_KEY is required")
-        receipt = preflight(plan, release, args.out_dir, key, args.repo)
+        receipt = preflight(plan, release, args.out_dir, key, args.repo, args.package_commit)
         args.out.parent.mkdir(mode=0o700, parents=True, exist_ok=False)
         self_hosted.write_json_once(args.out, receipt)
         return 0
