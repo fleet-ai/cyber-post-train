@@ -1156,6 +1156,16 @@ def test_glm_r107_hydration_requires_tombstone_bound_supplement(monkeypatch) -> 
             "fleet-glm53-dedicated-a-replacement-hydration-v1",
             [110],
         ),
+        (
+            QWEN_SOURCE6_REPLACEMENT_SUPPLEMENT,
+            "fleet-qwen38-hosted-replacement-hydration-v3",
+            [56],
+        ),
+        (
+            GLM_SOURCE13_REPLACEMENT_SUPPLEMENT,
+            "fleet-glm53-hosted-replacement-hydration-v3",
+            [111],
+        ),
     ],
 )
 def test_http500_replacement_hydration_is_metadata_only(

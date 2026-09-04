@@ -856,6 +856,38 @@ def hydrate_glm53_replacements(
         receipt_schema = "fleet-glm53-dedicated-a-replacement-hydration-v1"
         receipt_source_field = "selection_supplement_receipt_sha256"
     elif supplement_schema in {
+        "fleet-qwen38-replacement-selection-supplement-v3",
+        "fleet-opencode-replacement-selection-supplement-v5",
+    }:
+        row = assignment.get("replacement") or {}
+        rows = [row]
+        is_qwen = supplement_schema.startswith("fleet-qwen38")
+        expected_rank = 56 if is_qwen else 111
+        expected_ranks = [expected_rank]
+        fence = assignment.get("source6_fence" if is_qwen else "source13_fence") or {}
+        if (
+            assignment.get("append_only") is not True
+            or row.get("serving_block")
+            != (
+                "hosted_qwen_successor_replacement"
+                if is_qwen
+                else "hosted_glm_successor_replacement"
+            )
+            or row.get("scored_launch_authorized") is not False
+            or (row.get("hydration_gate") or {}).get("status")
+            != "required_not_satisfied"
+            or fence.get("whole_task_fenced") is not True
+            or (fence.get("noncreditable_attempt") or {}).get("retry_allowed")
+            is not False
+        ):
+            raise ValueError("hosted noncreditable replacement supplement drifted")
+        receipt_schema = (
+            "fleet-qwen38-hosted-replacement-hydration-v3"
+            if is_qwen
+            else "fleet-glm53-hosted-replacement-hydration-v3"
+        )
+        receipt_source_field = "selection_supplement_receipt_sha256"
+    elif supplement_schema in {
         "fleet-opencode-replacement-selection-supplement-v1",
         "fleet-opencode-replacement-selection-supplement-v2",
     }:
