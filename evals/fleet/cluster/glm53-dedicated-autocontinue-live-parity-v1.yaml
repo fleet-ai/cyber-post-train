@@ -31,6 +31,8 @@ spec:
               import hashlib, json, os, pathlib, urllib.error, urllib.request
 
               OUT = pathlib.Path("/mnt/sfs/jobs/chris-cyber-glm53-dedicated-autocontinue-parity-v1")
+              JOB_UID = os.environ["JOB_UID"]
+              POD_UID = os.environ["POD_UID"]
               MODEL_REVISION = "30333038ada1f1dacb294a93270305a890b50c14"
               RUNTIME_IMAGE = "ghcr.io/fleet-ai/cyber-post-train-glm53-runtime@sha256:ec93ba50613fd13fb4c0b0a9105767ab18209a1e0108dab0923aad694c0206ec"
               CONTEXT_POLICY = "opencode_1.18.27_native_compaction_autocontinue_v1"
@@ -152,12 +154,17 @@ spec:
                       function = (calls[0].get("function") or {})
                       arguments = json.loads(function.get("arguments") or "")
                       assert isinstance(arguments, dict) and function.get("name") == tool_name
+                      if tool_name == "bash":
+                          assert arguments == {"command": "true"}
+                      else:
+                          assert set(arguments) == {"report"} and isinstance(arguments["report"], str) and arguments["report"]
                       assert choice.get("finish_reason") == "tool_calls"
                       selected.append(tool_name)
                       finish_reasons.append("tool_calls")
                   assert selected == ["bash", "submit_report"]
                   receipt = {
                       "schema_version": "fleet-glm53-dedicated-autocontinue-live-parity-replica-v1",
+                      "probe_job_uid": JOB_UID, "probe_pod_uid": POD_UID,
                       "replica": replica["replica"],
                       "ray_job_uid": replica["ray_job_uid"], "ray_cluster_uid": replica["ray_cluster_uid"],
                       "service_uid": replica["service_uid"], "head_pod_uid": replica["head_pod_uid"],
@@ -176,6 +183,7 @@ spec:
                   receipts.append(receipt)
               terminal = {
                   "schema_version": "fleet-glm53-dedicated-autocontinue-live-parity-terminal-v1",
+                  "probe_job_uid": JOB_UID, "probe_pod_uid": POD_UID,
                   "replicas": 2, "replica_receipt_sha256s": [row["receipt_sha256"] for row in receipts],
                   "runtime_image": RUNTIME_IMAGE, "model_revision": MODEL_REVISION, "context_length": 262144,
                   "opencode_version": "1.18.27", "context_management": CONTEXT_POLICY,
@@ -189,6 +197,15 @@ spec:
               terminal["receipt_sha256"] = digest_without(terminal, "receipt_sha256")
               write_once(OUT / "TERMINAL.json", terminal)
               print(json.dumps({"ok": True, "replicas": 2, "non_scored_model_requests": 4, "receipt_sha256": terminal["receipt_sha256"]}, sort_keys=True))
+          env:
+            - name: JOB_UID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['batch.kubernetes.io/controller-uid']
+            - name: POD_UID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.uid
           resources:
             requests: {cpu: 100m, memory: 128Mi, ephemeral-storage: 128Mi}
             limits: {cpu: 500m, memory: 512Mi, ephemeral-storage: 512Mi}

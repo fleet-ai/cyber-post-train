@@ -10,7 +10,7 @@ fi
 ROOT=$(git rev-parse --show-toplevel)
 NS=fleet-train-jobs
 MANIFEST="$ROOT/evals/fleet/cluster/glm53-dedicated-autocontinue-live-parity-v1.yaml"
-MANIFEST_SHA256=7dcfc7211829e040aea9759954b0ee246a40684da2738b539dc1ab65a735e077
+MANIFEST_SHA256=fb4086b611bde1dff88438164bcac81f9ca71ff84ccdd1b76b4c00c04cfc520e
 JOB=chris-cyber-glm53-dedicated-autocontinue-parity-v1
 OUT=/mnt/sfs/jobs/chris-cyber-glm53-dedicated-autocontinue-parity-v1
 IMAGE=ghcr.io/fleet-ai/cyber-post-train-glm53-runtime@sha256:ec93ba50613fd13fb4c0b0a9105767ab18209a1e0108dab0923aad694c0206ec
