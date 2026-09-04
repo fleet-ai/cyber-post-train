@@ -1,0 +1,38 @@
+{
+  "schema_version": "fleet-opencode-autocontinue-bulk-controller-compatibility-v1",
+  "status": "PASSED",
+  "campaign_sha256": "sha256:63946f224a33eb0d2c2a6fdba34358ebf9ca379e5f0f156cd137c95a9b98097e",
+  "scientific_mapping_sha256": "sha256:de30c778e4337c79dea921b7463aa74760da59f972c928927c4359e828f1f009",
+  "task_identity_sha256": "sha256:c4eca5c58aa7e43eaf85ffb94179a57dbaa320a54a5e530c71795a1467e50fc7",
+  "implementation": {
+    "bulk_controller_path": "evals/fleet/autocontinue_bulk_controller.py",
+    "bulk_controller_sha256": "sha256:a60615f989c56caa6c6e81ef936b84c309d43b78aeb09475f1c303d5a124cd79",
+    "frozen_controller_path": "evals/fleet/hosted_sweep_controller.py",
+    "frozen_controller_sha256": "sha256:e14670e40d2b1fbe4896e4b6dfb2902f121b81c8103efea3a74a11fed496809a"
+  },
+  "coverage": {
+    "all_eight_campaign_partitions": true,
+    "qwen_new_cells": 199,
+    "glm_new_cells": 399,
+    "legacy_credit": 0,
+    "complete_task_boundaries": true,
+    "canary_credit_only_after_authoritative_post_exit_observer": true,
+    "endpoint_maximum_streams": 2,
+    "global_atomic_corrected_treatment_cell_claim": true,
+    "preflight_and_scored_configmaps_distinct": true,
+    "uid_bound_preflight_post_exit_observer_required": true,
+    "required_tools": [
+      "bash",
+      "submit_report"
+    ],
+    "context_management": "opencode_1.18.27_native_compaction_autocontinue_v1",
+    "offline_tamper_tests_passed": true
+  },
+  "launch_performed": false,
+  "privacy": {
+    "credentials_included": false,
+    "prompts_or_traces_included": false,
+    "scores_included": false
+  },
+  "receipt_sha256": "sha256:c98f6e7e8ef7453f7ebbed9375c5124d608e1abc1229b0fb552a8d2b5ee37aaf"
+}

@@ -1,0 +1,26 @@
+{
+  "schema_version": "fleet-opencode-autocontinue-bulk-held-authorization-v1",
+  "status": "HELD",
+  "campaign_sha256": "sha256:63946f224a33eb0d2c2a6fdba34358ebf9ca379e5f0f156cd137c95a9b98097e",
+  "package_sha256": "sha256:e5aa3e3d0ae9485e141c551d5761bdfa4f4a8d53f4a982c45ce0ca6b4ca1eaa8",
+  "launch_authorized": false,
+  "gates": {
+    "qwen_canary_authoritative_post_exit_acceptance": false,
+    "glm_canary_authoritative_post_exit_acceptance": false,
+    "append_only_bulk_authorization": false,
+    "fresh_inventory_receipt_sha256": "sha256:c71604d22b1d52a7091727b957e0f56f2e8e270e461c844fb57d48b392d831c5",
+    "dedicated_parity_receipt_sha256": "sha256:07e733b4b161ed7c36113fc3688f04a42938d93a499b1bcc10c7cd21342900df",
+    "bulk_controller_compatibility_receipt_sha256": "sha256:c98f6e7e8ef7453f7ebbed9375c5124d608e1abc1229b0fb552a8d2b5ee37aaf"
+  },
+  "planned_new_sessions": {
+    "qwen3.8-27b": 199,
+    "glm-5.3": 399
+  },
+  "legacy_credit": 0,
+  "privacy": {
+    "credentials_included": false,
+    "prompts_or_traces_included": false,
+    "scores_included": false
+  },
+  "receipt_sha256": "sha256:c7626180287f51d9c2c1bc21b73fe72123d8ca4ba13dcc5117dac4dc500b3c96"
+}

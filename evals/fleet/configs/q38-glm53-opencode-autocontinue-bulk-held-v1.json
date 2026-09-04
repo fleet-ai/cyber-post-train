@@ -1,0 +1,164 @@
+{
+  "schema_version": "fleet-opencode-autocontinue-bulk-held-package-v1",
+  "status": "HELD",
+  "launch_authorized": false,
+  "campaign_path": "evals/fleet/configs/q38-glm53-opencode-autocontinue-primary-campaign-v1.json",
+  "campaign_sha256": "sha256:63946f224a33eb0d2c2a6fdba34358ebf9ca379e5f0f156cd137c95a9b98097e",
+  "scientific_mapping_sha256": "sha256:de30c778e4337c79dea921b7463aa74760da59f972c928927c4359e828f1f009",
+  "task_identity_sha256": "sha256:c4eca5c58aa7e43eaf85ffb94179a57dbaa320a54a5e530c71795a1467e50fc7",
+  "legacy_credit": 0,
+  "evidence": {
+    "inventory_expected": {
+      "path": "evals/fleet/configs/q38-glm53-opencode-autocontinue-task-inventory-v1.json",
+      "sha256": "sha256:2af86c5626001e44a6d3b540ec40c7efbe681781d495bf23c11b4e1352e7f82f"
+    },
+    "inventory_terminal": {
+      "path": "docs/evidence/qwen38-study/2026-09-04-opencode-autocontinue-task-inventory-v2-terminal.json",
+      "sha256": "sha256:c71604d22b1d52a7091727b957e0f56f2e8e270e461c844fb57d48b392d831c5"
+    },
+    "dedicated_parity": {
+      "path": "docs/evidence/qwen38-study/2026-09-04-glm53-dedicated-autocontinue-parity-v2-pass.json",
+      "sha256": "sha256:07e733b4b161ed7c36113fc3688f04a42938d93a499b1bcc10c7cd21342900df"
+    },
+    "hosted_health": {
+      "path": "docs/evidence/qwen38-study/2026-09-04-opencode-autocontinue-hosted-health-v1.json",
+      "sha256": "sha256:d81a01ffe1087d7d85fe511bc9c978461ba3e24a2c15675871cfb8668c49bd85"
+    },
+    "shared_pvc_flock": {
+      "path": "docs/evidence/qwen38-study/2026-09-04-opencode-autocontinue-flock-release-gate-v1.json",
+      "sha256": "sha256:e9f34d35ac3c9e60d2698ebc1685374b98f13e41ac305df0609fb051f35c416c"
+    },
+    "bulk_controller_compatibility": {
+      "path": "docs/evidence/qwen38-study/2026-09-04-opencode-autocontinue-bulk-controller-compatibility-v1.json",
+      "sha256": "sha256:c98f6e7e8ef7453f7ebbed9375c5124d608e1abc1229b0fb552a8d2b5ee37aaf"
+    }
+  },
+  "partitions": {
+    "qwen-hosted-a99": {
+      "model": "qwen3.8-27b",
+      "serving_block": "qwen-hosted-autocontinue-v1",
+      "planned_task_count": 25,
+      "planned_cell_count": 99,
+      "scored_job_name": "chris-q38-ac-hosted-a99-v1",
+      "preflight_job_name": "chris-q38-ac-hosted-a99-v1-preflight",
+      "preflight_configmap_name": "chris-q38-ac-hosted-a99-v1-preflight-cm",
+      "scored_configmap_name": "chris-q38-ac-hosted-a99-v1-scored-cm",
+      "sfs_root": "chris-q38-ac-hosted-a99-v1",
+      "endpoint_maximum_streams": 2,
+      "required_priority_class": "fleet-train-high",
+      "create_once": true,
+      "launch_authorized": false
+    },
+    "qwen-hosted-b100": {
+      "model": "qwen3.8-27b",
+      "serving_block": "qwen-hosted-autocontinue-v1",
+      "planned_task_count": 25,
+      "planned_cell_count": 100,
+      "scored_job_name": "chris-q38-ac-hosted-b100-v1",
+      "preflight_job_name": "chris-q38-ac-hosted-b100-v1-preflight",
+      "preflight_configmap_name": "chris-q38-ac-hosted-b100-v1-preflight-cm",
+      "scored_configmap_name": "chris-q38-ac-hosted-b100-v1-scored-cm",
+      "sfs_root": "chris-q38-ac-hosted-b100-v1",
+      "endpoint_maximum_streams": 2,
+      "required_priority_class": "fleet-train-high",
+      "create_once": true,
+      "launch_authorized": false
+    },
+    "glm-hosted-a91": {
+      "model": "glm-5.3",
+      "serving_block": "glm-hosted-autocontinue-v1",
+      "planned_task_count": 23,
+      "planned_cell_count": 91,
+      "scored_job_name": "chris-glm53-ac-hosted-a91-v1",
+      "preflight_job_name": "chris-glm53-ac-hosted-a91-v1-preflight",
+      "preflight_configmap_name": "chris-glm53-ac-hosted-a91-v1-preflight-cm",
+      "scored_configmap_name": "chris-glm53-ac-hosted-a91-v1-scored-cm",
+      "sfs_root": "chris-glm53-ac-hosted-a91-v1",
+      "endpoint_maximum_streams": 2,
+      "required_priority_class": "fleet-train-high",
+      "create_once": true,
+      "launch_authorized": false
+    },
+    "glm-hosted-b92": {
+      "model": "glm-5.3",
+      "serving_block": "glm-hosted-autocontinue-v1",
+      "planned_task_count": 23,
+      "planned_cell_count": 92,
+      "scored_job_name": "chris-glm53-ac-hosted-b92-v1",
+      "preflight_job_name": "chris-glm53-ac-hosted-b92-v1-preflight",
+      "preflight_configmap_name": "chris-glm53-ac-hosted-b92-v1-preflight-cm",
+      "scored_configmap_name": "chris-glm53-ac-hosted-b92-v1-scored-cm",
+      "sfs_root": "chris-glm53-ac-hosted-b92-v1",
+      "endpoint_maximum_streams": 2,
+      "required_priority_class": "fleet-train-high",
+      "create_once": true,
+      "launch_authorized": false
+    },
+    "glm-dedicated-a52": {
+      "model": "glm-5.3",
+      "serving_block": "glm-dedicated-a-v5-autocontinue-v1",
+      "planned_task_count": 13,
+      "planned_cell_count": 52,
+      "scored_job_name": "chris-glm53-ac-ded-a52-v1",
+      "preflight_job_name": "chris-glm53-ac-ded-a52-v1-preflight",
+      "preflight_configmap_name": "chris-glm53-ac-ded-a52-v1-preflight-cm",
+      "scored_configmap_name": "chris-glm53-ac-ded-a52-v1-scored-cm",
+      "sfs_root": "chris-glm53-ac-ded-a52-v1",
+      "endpoint_maximum_streams": 2,
+      "required_priority_class": "fleet-train-high",
+      "create_once": true,
+      "launch_authorized": false
+    },
+    "glm-dedicated-a56": {
+      "model": "glm-5.3",
+      "serving_block": "glm-dedicated-a-v5-autocontinue-v1",
+      "planned_task_count": 14,
+      "planned_cell_count": 56,
+      "scored_job_name": "chris-glm53-ac-ded-a56-v1",
+      "preflight_job_name": "chris-glm53-ac-ded-a56-v1-preflight",
+      "preflight_configmap_name": "chris-glm53-ac-ded-a56-v1-preflight-cm",
+      "scored_configmap_name": "chris-glm53-ac-ded-a56-v1-scored-cm",
+      "sfs_root": "chris-glm53-ac-ded-a56-v1",
+      "endpoint_maximum_streams": 2,
+      "required_priority_class": "fleet-train-high",
+      "create_once": true,
+      "launch_authorized": false
+    },
+    "glm-dedicated-b52": {
+      "model": "glm-5.3",
+      "serving_block": "glm-dedicated-b-v5-autocontinue-v1",
+      "planned_task_count": 13,
+      "planned_cell_count": 52,
+      "scored_job_name": "chris-glm53-ac-ded-b52-v1",
+      "preflight_job_name": "chris-glm53-ac-ded-b52-v1-preflight",
+      "preflight_configmap_name": "chris-glm53-ac-ded-b52-v1-preflight-cm",
+      "scored_configmap_name": "chris-glm53-ac-ded-b52-v1-scored-cm",
+      "sfs_root": "chris-glm53-ac-ded-b52-v1",
+      "endpoint_maximum_streams": 2,
+      "required_priority_class": "fleet-train-high",
+      "create_once": true,
+      "launch_authorized": false
+    },
+    "glm-dedicated-b56": {
+      "model": "glm-5.3",
+      "serving_block": "glm-dedicated-b-v5-autocontinue-v1",
+      "planned_task_count": 14,
+      "planned_cell_count": 56,
+      "scored_job_name": "chris-glm53-ac-ded-b56-v1",
+      "preflight_job_name": "chris-glm53-ac-ded-b56-v1-preflight",
+      "preflight_configmap_name": "chris-glm53-ac-ded-b56-v1-preflight-cm",
+      "scored_configmap_name": "chris-glm53-ac-ded-b56-v1-scored-cm",
+      "sfs_root": "chris-glm53-ac-ded-b56-v1",
+      "endpoint_maximum_streams": 2,
+      "required_priority_class": "fleet-train-high",
+      "create_once": true,
+      "launch_authorized": false
+    }
+  },
+  "privacy": {
+    "credentials_included": false,
+    "prompts_or_traces_included": false,
+    "scores_included": false
+  },
+  "package_sha256": "sha256:e5aa3e3d0ae9485e141c551d5761bdfa4f4a8d53f4a982c45ce0ca6b4ca1eaa8"
+}
