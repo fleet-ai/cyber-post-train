@@ -36,6 +36,18 @@ cp .env.example .env
 Export credentials in the shell or use a local untracked `.env`; do not put them in
 commands, source files, logs or committed configuration.
 
+Check the local installation and inspect the supported adapter lifecycle without any
+credentials or network access:
+
+```bash
+uv run cyber-post-train doctor
+uv run cyber-post-train catalog
+```
+
+The facade currently provides inventory and local diagnostics. Existing evaluator and
+trainer commands remain authoritative while their preview/launch/status/accept paths are
+migrated behind the facade.
+
 ## Experiment identity and execution backends
 
 ```text
