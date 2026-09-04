@@ -1,0 +1,71 @@
+{
+  "schema_version": "fleet-glm53-dedicated-autocontinue-parity-failure-tombstone-v1",
+  "recorded_at": "2026-09-04T20:06:10Z",
+  "classification": "non_scored_parity_probe_protocol_invalid",
+  "campaign": {
+    "path": "evals/fleet/configs/q38-glm53-opencode-autocontinue-primary-campaign-v1.json",
+    "campaign_sha256": "sha256:63946f224a33eb0d2c2a6fdba34358ebf9ca379e5f0f156cd137c95a9b98097e"
+  },
+  "manifest": {
+    "path": "evals/fleet/cluster/glm53-dedicated-autocontinue-live-parity-v1.yaml",
+    "commit": "bf885b4642d0ab26db8ee1cd88d46bfd60544925",
+    "sha256": "sha256:77a2c4feaf88f41089ae206850f6fcdcb0432e83ad08939fb0247c9bd2441bea"
+  },
+  "job": {
+    "name": "chris-cyber-glm53-dedicated-autocontinue-parity-v1",
+    "uid": "9b2d01a0-e1ef-4947-a558-eacbe58f046d",
+    "created_at": "2026-09-04T20:05:23Z",
+    "failed_at": "2026-09-04T20:05:28Z",
+    "failed": true,
+    "reason": "BackoffLimitExceeded"
+  },
+  "pod": {
+    "name": "chris-cyber-glm53-dedicated-autocontinue-parity-v1-6428x",
+    "uid": "2826699c-f94d-44e3-b5ae-73368d0f50a3",
+    "phase": "Failed",
+    "restart_count": 0,
+    "exit_code": 1,
+    "started_at": "2026-09-04T20:05:24Z",
+    "finished_at": "2026-09-04T20:05:26Z"
+  },
+  "sanitized_failure": {
+    "exception_type": "AssertionError",
+    "embedded_python_line": 130,
+    "failed_predicate": "bash tool arguments equal the exact benign command true",
+    "tool_name_and_json_shape_validated_before_failure": true,
+    "tool_argument_values_included": false,
+    "response_content_included": false,
+    "sanitized_log_sha256": "sha256:737b1a4ad8b76baf3b1511802466470aeac4916668a6d68867b0ffd63f54a207",
+    "root_cause": "the model-facing request forced the bash tool name but did not constrain its command argument to the exact predeclared benign value"
+  },
+  "sfs": {
+    "root": "/mnt/sfs/jobs/chris-cyber-glm53-dedicated-autocontinue-parity-v1",
+    "root_present": true,
+    "replica_receipts": 0,
+    "terminal_receipt_present": false
+  },
+  "outcome": {
+    "non_scored_model_requests_completed": 1,
+    "fleet_api_contacted": false,
+    "task_instance_created": false,
+    "scoring_executed": false,
+    "verifier_executed": false,
+    "session_created": false,
+    "parity_passed": false,
+    "v1_retry_allowed": false,
+    "fresh_successor_identity_required": true
+  },
+  "serving_after_failure": {
+    "a": {"head_pod_uid": "3f37ab91-4afa-4e4d-8f29-a3eeda70a774", "ready": true, "restart_count": 0, "health_http_status": 200},
+    "b": {"head_pod_uid": "bfeb4c6a-9e4a-4f14-adb2-3f516dd25fdb", "ready": true, "restart_count": 0, "health_http_status": 200}
+  },
+  "privacy": {
+    "prompts_or_task_traces_included": false,
+    "tool_argument_values_included": false,
+    "response_content_included": false,
+    "flags_included": false,
+    "scores_included": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:8386d9a730abc459f8ef6a21dab67a413ff24b8fe0cae00201e2280bf27cfa73"
+}
