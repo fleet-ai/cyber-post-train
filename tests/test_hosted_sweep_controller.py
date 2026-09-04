@@ -59,6 +59,12 @@ GLM_HOSTED_REPLACEMENT_RELEASE = Path(
 DEDICATED_B_STOP_TOMBSTONE = Path(
     "docs/evidence/qwen38-study/2026-09-04-glm53-dedicated-b-forced-stop-tombstone-v1.json"
 )
+DEDICATED_B_R107_HYDRATION = Path(
+    "docs/evidence/qwen38-study/2026-09-04-glm53-dedicated-b-r107-hydration-v1.json"
+)
+GLM_HOSTED_REASSIGNED_B_PLAN = Path(
+    "evals/fleet/configs/glm53-opencode-hosted-reassigned-b27-pass4-v1.json"
+)
 FROZEN_SPLIT = Path("configs/data/fleet-a62-task-split-v1.json")
 FROZEN_SELECTION = Path(
     "evals/fleet/configs/opencode-easiest-train100-selection-v2.json"
@@ -1064,3 +1070,39 @@ def test_glm_r107_hydration_requires_tombstone_bound_supplement(monkeypatch) -> 
     tampered["receipt_sha256"] = self_hosted.digest_without(tampered, "receipt_sha256")
     with pytest.raises(ValueError, match="stop tombstone drifted"):
         hosted.hydrate_glm53_replacements(tampered, "secret")
+
+
+def test_glm_hosted_reassigned_b_plan_is_preview_only_and_disjoint() -> None:
+    dedicated = hosted.load_object(DEDICATED_B_PLAN)
+    hosted_plan = hosted.load_object(
+        Path("evals/fleet/configs/glm53-opencode-hosted-odd45-pass4-v10.json")
+    )
+    tombstone = hosted.load_object(DEDICATED_B_STOP_TOMBSTONE)
+    plan = hosted.build_glm53_hosted_reassigned_b_plan(
+        dedicated,
+        hosted_plan,
+        tombstone,
+        hosted.load_object(REPLACEMENT_SUPPLEMENT_V2),
+        hosted.load_object(DEDICATED_B_R107_HYDRATION),
+    )
+    assert plan == hosted.load_object(GLM_HOSTED_REASSIGNED_B_PLAN)
+    hosted.validate_plan(plan)
+    assert plan["task_count"] == 27
+    assert plan["total_session_count"] == plan["new_session_count"] == 108
+    assert [row["source_rank"] for row in plan["tasks"]] == [
+        *range(56, 101, 2),
+        101,
+        103,
+        105,
+        107,
+    ]
+    assert plan["treatment_block"]["serving_block"] == (
+        "hosted-reassigned-after-dedicated-preemption"
+    )
+    assert plan["execution"]["launch_authorized"] is False
+    old_source56 = next(
+        row for row in dedicated["attempts"] if row["source_rank"] == 56
+    )
+    new_source56 = next(row for row in plan["attempts"] if row["source_rank"] == 56)
+    assert new_source56["run_id"] != old_source56["run_id"]
+    assert new_source56["network"] != old_source56["network"]

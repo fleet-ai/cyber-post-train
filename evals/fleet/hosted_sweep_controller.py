@@ -77,6 +77,9 @@ QWEN_REPLACEMENT_CAMPAIGN = (
 GLM_HOSTED_REPLACEMENT_CAMPAIGN = (
     "chris-cyber-glm53-opencode11827-hosted-replacement-r106-p4-v1"
 )
+GLM_HOSTED_REASSIGNED_B_CAMPAIGN = (
+    "chris-cyber-glm53-opencode11827-hosted-reassigned-b27-p4-v1"
+)
 EXPECTED_INCLUDED_TASK_COUNTS.update(
     {
         "qwen38_remainder": 48,
@@ -91,6 +94,7 @@ EXPECTED_INCLUDED_TASK_COUNTS.update(
 )
 EXPECTED_INCLUDED_TASK_COUNTS.update({"qwen38_replacements": 3})
 EXPECTED_INCLUDED_TASK_COUNTS.update({"glm53_hosted_replacement": 1})
+EXPECTED_INCLUDED_TASK_COUNTS.update({"glm53_hosted_reassigned_b": 27})
 SCHEDULE = [
     {
         "accepted_outcomes_at_least": 0,
@@ -974,6 +978,148 @@ def build_glm53_hosted_replacement_plan(
     return plan
 
 
+def build_glm53_hosted_reassigned_b_plan(
+    dedicated_plan: dict[str, Any],
+    hosted_plan: dict[str, Any],
+    tombstone: dict[str, Any],
+    supplement: dict[str, Any],
+    hydration: dict[str, Any],
+) -> dict[str, Any]:
+    """Build preview-only B reassignment on the exact hosted treatment."""
+    validate_plan(dedicated_plan)
+    validate_plan(hosted_plan)
+    replacement = supplement.get("replacement") or {}
+    stopped = tombstone.get("stopped_controller") or {}
+    aborted = tombstone.get("source56_aborted_before_execution") or {}
+    if (
+        dedicated_plan.get("shard_key") != "glm53_dedicated_b"
+        or dedicated_plan.get("plan_sha256")
+        != "sha256:008386c1bbc6d82229f2afdb85e074a0d5e717853dc7cab5b720ef13271e9cb5"
+        or hosted_plan.get("shard_key") != "glm53_remainder3"
+        or tombstone.get("receipt_sha256") != digest_without(tombstone, "receipt_sha256")
+        or tombstone.get("receipt_sha256")
+        != "sha256:7cf5483e07e4053d7807d599b738e0555ade3b728ea20ae2356186592bd7c355"
+        or stopped.get("job_absent_after_delete") is not True
+        or stopped.get("pod_absent_after_delete") is not True
+        or aborted.get("scored_or_terminal_cell") is not False
+        or aborted.get("eligible_under_fresh_plan") is not True
+        or aborted.get("old_run_ids_reusable") is not False
+        or supplement.get("schema_version")
+        != "fleet-opencode-replacement-selection-supplement-v2"
+        or supplement.get("receipt_sha256")
+        != digest_without(supplement, "receipt_sha256")
+        or (supplement.get("forced_stop_tombstone") or {}).get("receipt_sha256")
+        != tombstone["receipt_sha256"]
+        or replacement.get("replacement_rank") != 107
+        or replacement.get("serving_block") != "dedicated_b_successor"
+        or replacement.get("scored_launch_authorized") is not False
+        or hydration.get("schema_version")
+        != "fleet-glm53-dedicated-b-replacement-hydration-v1"
+        or hydration.get("receipt_sha256")
+        != digest_without(hydration, "receipt_sha256")
+        or hydration.get("selection_supplement_receipt_sha256")
+        != supplement["receipt_sha256"]
+        or hydration.get("fleet_team_id") != self_hosted.FLEET_TEAM_ID
+        or hydration.get("tasks_hydrated") != 1
+    ):
+        raise ValueError("hosted B reassignment source evidence drifted")
+
+    source_tasks = {int(row["source_rank"]): row for row in dedicated_plan["tasks"]}
+    selected_ranks = [*range(56, 101, 2), 101, 103, 105]
+    if set(source_tasks) != {54, *selected_ranks}:
+        raise ValueError("dedicated B predecessor partition drifted")
+    tasks = []
+    for source_rank in selected_ranks:
+        task = copy.deepcopy(source_tasks[source_rank])
+        task["rank"] = len(tasks) + 1
+        task["source_rank"] = source_rank
+        tasks.append(task)
+    hydrated = (hydration.get("tasks") or [None])[0]
+    if not isinstance(hydrated, dict) or int(hydrated.get("replacement_rank") or 0) != 107:
+        raise ValueError("hosted B r107 hydration task drifted")
+    replacement_task = {
+        "rank": len(tasks) + 1,
+        "source_rank": 107,
+        "task": copy.deepcopy(hydrated["task"]),
+        "environment": copy.deepcopy(hydrated["environment"]),
+        "verifier": copy.deepcopy(hydrated["verifier"]),
+    }
+    expected_binding = {
+        "task_key": replacement_task["task"].get("key"),
+        "task_version_id": replacement_task["task"].get("version_id"),
+        "env_key": replacement_task["environment"].get("id"),
+        "env_version": replacement_task["environment"].get("version"),
+        "environment_version_id": replacement_task["environment"].get("version_id"),
+        "data_key": replacement_task["environment"].get("data_id"),
+        "data_version": replacement_task["environment"].get("data_version"),
+    }
+    if expected_binding != {field: replacement[field] for field in expected_binding}:
+        raise ValueError("hosted B r107 exact task binding drifted")
+    tasks.append(replacement_task)
+
+    attempts = []
+    for task in tasks:
+        source_rank = int(task["source_rank"])
+        key_digest = self_hosted.sha256(task["task"]["key"].encode()).split(":", 1)[1][:8]
+        for attempt in range(1, 5):
+            attempts.append(
+                {
+                    "ordinal": len(attempts) + 1,
+                    "rank": int(task["rank"]),
+                    "source_rank": source_rank,
+                    "attempt": attempt,
+                    "run_id": (
+                        f"{GLM_HOSTED_REASSIGNED_B_CAMPAIGN}-"
+                        f"sr{source_rank:03d}-a{attempt}-{key_digest}"
+                    ),
+                    "network": (
+                        f"glm53-hosted-reassigned-b-"
+                        f"sr{source_rank:03d}-a{attempt}-{key_digest}"
+                    ),
+                }
+            )
+    treatment = copy.deepcopy(hosted_plan["treatment_block"])
+    treatment["serving_block"] = "hosted-reassigned-after-dedicated-preemption"
+    plan = {
+        "schema_version": PLAN_SCHEMA,
+        "shard_key": "glm53_hosted_reassigned_b",
+        "campaign_id": GLM_HOSTED_REASSIGNED_B_CAMPAIGN,
+        "source_job_id": hosted_plan["source_job_id"],
+        "source": {
+            "dedicated_predecessor_plan_sha256": dedicated_plan["plan_sha256"],
+            "hosted_treatment_plan_sha256": hosted_plan["plan_sha256"],
+            "forced_stop_tombstone_receipt_sha256": tombstone["receipt_sha256"],
+            "selection_supplement_receipt_sha256": supplement["receipt_sha256"],
+            "hydration_receipt_sha256": hydration["receipt_sha256"],
+        },
+        "treatment_block": treatment,
+        "model": copy.deepcopy(hosted_plan["model"]),
+        "harness": copy.deepcopy(hosted_plan["harness"]),
+        "authority": copy.deepcopy(hosted_plan["authority"]),
+        "task_count": 27,
+        "pass_k": 4,
+        "total_session_count": 108,
+        "credited_sessions": [],
+        "new_session_count": 108,
+        "fenced_source_ranks": [1, 2, 3, 5, 7, 9, 54],
+        "existing_hosted_source_ranks": [*range(11, 100, 2), 106],
+        "dedicated_a_source_ranks": [*range(4, 53, 2), 102, 104],
+        "source56_tombstone_attempt_claim_sha256": aborted["attempt_claim_sha256"],
+        "execution": {
+            **copy.deepcopy(hosted_plan["execution"]),
+            "inventory_policy": "conservative_no_same_model_session_for_task_key_v1",
+            "launch_authorized": False,
+            "required_concurrency_gate": "hosted_glm_concurrency2_health_overlap_v1",
+        },
+        "tasks": tasks,
+        "attempts": attempts,
+        "privacy": copy.deepcopy(hosted_plan["privacy"]),
+    }
+    plan["plan_sha256"] = digest_without(plan, "plan_sha256")
+    validate_plan(plan)
+    return plan
+
+
 def _validate_source_plan(plan: dict[str, Any]) -> None:
     if plan.get("schema_version") == legacy.PLAN_SCHEMA:
         legacy.validate_plan(plan)
@@ -1236,6 +1382,7 @@ def validate_plan(plan: dict[str, Any]) -> None:
             "glm53_remainder2",
             "glm53_remainder3",
             "glm53_hosted_replacement",
+            "glm53_hosted_reassigned_b",
         }
         else (
             "plan_identity_plus_authoritative_receipt_v1"
@@ -1331,6 +1478,39 @@ def validate_plan(plan: dict[str, Any]) -> None:
             is None
         ):
             raise ValueError("GLM hosted replacement partition or binding drifted")
+        return
+
+    if shard_key == "glm53_hosted_reassigned_b":
+        treatment = plan.get("treatment_block") or {}
+        source = plan.get("source") or {}
+        selected = {int(row["source_rank"]) for row in tasks}
+        fenced = set(plan.get("fenced_source_ranks") or [])
+        hosted = set(plan.get("existing_hosted_source_ranks") or [])
+        dedicated_a = set(plan.get("dedicated_a_source_ranks") or [])
+        expected_selected = {*range(56, 101, 2), 101, 103, 105, 107}
+        expected_fenced = {1, 2, 3, 5, 7, 9, 54}
+        expected_hosted = {*range(11, 100, 2), 106}
+        expected_dedicated_a = {*range(4, 53, 2), 102, 104}
+        if (
+            selected != expected_selected
+            or fenced != expected_fenced
+            or hosted != expected_hosted
+            or dedicated_a != expected_dedicated_a
+            or selected & (fenced | hosted | dedicated_a)
+            or len(selected | fenced | hosted | dedicated_a) != 107
+            or treatment.get("kind") != "hosted_inference_endpoint_v1"
+            or treatment.get("serving_block")
+            != "hosted-reassigned-after-dedicated-preemption"
+            or treatment.get("model_revision") != plan["model"].get("revision")
+            or source.get("forced_stop_tombstone_receipt_sha256") is None
+            or source.get("selection_supplement_receipt_sha256") is None
+            or source.get("hydration_receipt_sha256") is None
+            or plan.get("source56_tombstone_attempt_claim_sha256") is None
+            or execution.get("launch_authorized") is not False
+            or execution.get("required_concurrency_gate")
+            != "hosted_glm_concurrency2_health_overlap_v1"
+        ):
+            raise ValueError("GLM hosted B reassignment partition or binding drifted")
         return
 
     excluded = plan.get("excluded_tasks") or []
@@ -1989,6 +2169,13 @@ def main() -> int:
     glm_hosted_replacement.add_argument("--supplement", type=Path, required=True)
     glm_hosted_replacement.add_argument("--hydration", type=Path, required=True)
     glm_hosted_replacement.add_argument("--output", type=Path, required=True)
+    glm_hosted_reassigned_b = sub.add_parser("build-glm-hosted-reassigned-b")
+    glm_hosted_reassigned_b.add_argument("--dedicated-plan", type=Path, required=True)
+    glm_hosted_reassigned_b.add_argument("--hosted-plan", type=Path, required=True)
+    glm_hosted_reassigned_b.add_argument("--tombstone", type=Path, required=True)
+    glm_hosted_reassigned_b.add_argument("--supplement", type=Path, required=True)
+    glm_hosted_reassigned_b.add_argument("--hydration", type=Path, required=True)
+    glm_hosted_reassigned_b.add_argument("--output", type=Path, required=True)
     validate = sub.add_parser("validate")
     validate.add_argument("--plan", type=Path, required=True)
     preflight = sub.add_parser("preflight")
@@ -2054,6 +2241,16 @@ def main() -> int:
     if args.command == "build-glm-hosted-replacement":
         value = build_glm53_hosted_replacement_plan(
             load_object(args.hosted_plan),
+            load_object(args.supplement),
+            load_object(args.hydration),
+        )
+        self_hosted.write_json_once(args.output, value)
+        return 0
+    if args.command == "build-glm-hosted-reassigned-b":
+        value = build_glm53_hosted_reassigned_b_plan(
+            load_object(args.dedicated_plan),
+            load_object(args.hosted_plan),
+            load_object(args.tombstone),
             load_object(args.supplement),
             load_object(args.hydration),
         )
