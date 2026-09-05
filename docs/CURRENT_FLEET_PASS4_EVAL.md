@@ -134,7 +134,11 @@ controller, or an ingested session is not by itself a valid model outcome.
 
 Dedicated serving has a hard ceiling of two nodes and 16 GPUs. Select the
 highest live priority class whose deployed preemption policy is `Never`; never
-infer nonpreemption from a class name. A server must not reserve idle GPUs.
+infer nonpreemption from a class name. That setting governs the Kubernetes Pod
+scheduler only: Kueue may still preempt and later readmit the Workload. Bind the
+exact Workload, RayCluster, Pod, and Service UIDs, inspect the complete Workload
+condition history, and invalidate the route after any preemption or identity
+rotation. A server must not reserve idle GPUs.
 Model loading is productive startup. After the server is Ready, require useful
 GPU work or a fresh controller heartbeat. If neither remains fresh for 600
 seconds, terminate the server through the supported Jobs API, record the

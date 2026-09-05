@@ -35,6 +35,7 @@ The check is GET-only. It must prove that the deployed `POST /v1/runs` request b
 
 - A general `/v1/runs` worker currently requests at least one GPU; do not use it for a controller that only calls a remote endpoint when laptop or queued CPU execution is sufficient.
 - Never claim both highest cluster priority and non-preemption without checking the live PriorityClass behavior. Choose the highest class whose deployed preemption policy actually satisfies the user's instruction; preserve any tradeoff explicitly.
+- `preemptionPolicy: Never` covers Kubernetes Pod scheduling only. It does not protect a Kueue Workload from ClusterQueue quota preemption. Monitor the exact Workload UID and its complete condition history. On any `Preempted`, preemption-backed `Requeued`, or `Evicted` transition, treat every recreated RayCluster, Pod, and Service as a new unqualified endpoint, stop assigning work, preserve sanitized evidence, and release it through the Jobs API.
 - Monitor startup, readiness, GPU utilization, traffic heartbeats, and controller health. If an admitted server has no useful GPU work for the user-approved idle window, terminate it through the supported API and preserve a terminal receipt before creating a corrected successor.
 - Never cancel, reprioritize, or mutate peer workloads.
 

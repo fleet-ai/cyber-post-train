@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from evals.fleet.priority_preemption_guard import (
+    require_no_kueue_preemption,
     select_highest_nonpreempting,
     validate_pod_priority_policy,
 )
@@ -93,3 +94,53 @@ def test_highest_nonpreempting_class_must_be_unique() -> None:
     ]
     with pytest.raises(ValueError, match="ambiguous"):
         select_highest_nonpreempting(rows)
+
+
+def test_kueue_continuity_accepts_same_uid_without_preemption() -> None:
+    require_no_kueue_preemption(
+        {
+            "metadata": {"uid": "workload-uid"},
+            "status": {
+                "conditions": [
+                    {
+                        "type": "Admitted",
+                        "status": "True",
+                        "reason": "Admitted",
+                        "message": "The workload is admitted",
+                    }
+                ]
+            },
+        },
+        expected_uid="workload-uid",
+    )
+
+
+def test_kueue_continuity_rejects_readmitted_preempted_workload() -> None:
+    workload = {
+        "metadata": {"uid": "workload-uid"},
+        "status": {
+            "conditions": [
+                {
+                    "type": "Admitted",
+                    "status": "True",
+                    "reason": "Admitted",
+                    "message": "The workload is admitted",
+                },
+                {
+                    "type": "Evicted",
+                    "status": "False",
+                    "reason": "QuotaReserved",
+                    "message": "Previously: Preempted to accommodate a workload",
+                },
+            ]
+        },
+    }
+    with pytest.raises(RuntimeError, match="preempted or evicted"):
+        require_no_kueue_preemption(workload, expected_uid="workload-uid")
+
+
+def test_kueue_continuity_rejects_uid_rotation() -> None:
+    with pytest.raises(ValueError, match="UID changed"):
+        require_no_kueue_preemption(
+            {"metadata": {"uid": "new"}, "status": {}}, expected_uid="old"
+        )

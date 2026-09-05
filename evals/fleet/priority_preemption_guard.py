@@ -1,4 +1,10 @@
-"""Fail closed when a rendered Pod contradicts its PriorityClass policy."""
+"""Fail closed on Pod-policy drift or Kueue workload preemption.
+
+``preemptionPolicy: Never`` is a Kubernetes scheduler property. It prevents a
+Pod from preempting lower-priority Pods; it does not make a Kueue Workload
+immune to quota preemption. Long-running GPU operators must therefore check
+both layers and preserve the exact Workload UID.
+"""
 
 from __future__ import annotations
 
@@ -57,6 +63,34 @@ def select_highest_nonpreempting(
         if allowed_names is None
         else "live_cluster_intersect_jobs_api",
     }
+
+
+def require_no_kueue_preemption(
+    workload: dict[str, Any], *, expected_uid: str
+) -> None:
+    """Reject a UID-bound Workload that Kueue has ever preempted or requeued.
+
+    Kueue retains historical preemption text after a workload is readmitted.
+    Checking only the current ``Admitted=True`` condition would therefore let a
+    recreated RayCluster masquerade as the original serving endpoint.
+    """
+    metadata = workload.get("metadata") or {}
+    if metadata.get("uid") != expected_uid:
+        raise ValueError("Kueue Workload UID changed")
+    conditions = (workload.get("status") or {}).get("conditions") or []
+    if not isinstance(conditions, list) or not all(
+        isinstance(condition, dict) for condition in conditions
+    ):
+        raise ValueError("Kueue Workload conditions are invalid")
+    for condition in conditions:
+        condition_type = str(condition.get("type") or "").lower()
+        reason = str(condition.get("reason") or "").lower()
+        message = str(condition.get("message") or "").lower()
+        if "preempt" in reason or "preempt" in message or (
+            condition_type in {"preempted", "requeued", "evicted"}
+            and condition.get("status") == "True"
+        ):
+            raise RuntimeError("Kueue Workload was preempted or evicted")
 
 
 def main() -> int:
