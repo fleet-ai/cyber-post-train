@@ -29,6 +29,10 @@ CONTROLLERS = {
         "configmap_name": "chris-q38-ac-exact100-g19-b192-run-v1",
     },
 }
+PLAN_PATHS = {
+    controller: f"evals/fleet/configs/qwen-hosted-generation19-{controller}.json"
+    for controller in CONTROLLERS
+}
 
 
 def build_plans(inventory: dict[str, Any], root: Path) -> dict[str, dict[str, Any]]:
@@ -140,3 +144,18 @@ def validate(plans: dict[str, dict[str, Any]]) -> None:
     expected = {(rank, attempt) for rank in ALLOWED_RANKS for attempt in range(1, 5)}
     if identities != expected or set(rank_owners) & {2, 3, 4, 5}:
         raise ValueError("Generation-19 whole-task coverage drifted")
+
+
+def validate_all(root: Path) -> dict[str, dict[str, Any]]:
+    plans = {controller: g17.load(root / path) for controller, path in PLAN_PATHS.items()}
+    validate(plans)
+    return plans
+
+
+def build_runtime_plan(
+    controller: str, inventory_receipt: dict[str, Any], root: Path
+) -> dict[str, Any]:
+    plan = validate_all(root)[controller]
+    if plan["inventory_receipt"] != inventory_receipt:
+        raise ValueError("Generation-19 inventory projection drifted")
+    return plan

@@ -23,3 +23,12 @@ def test_plan_builder_requires_live_inventory_fixture() -> None:
     assert (
         ROOT / "evals/fleet/configs/q38-glm53-exact-easiest100-pass4-campaign-v1.json"
     ).is_file()
+
+
+def test_committed_plans_are_held_and_exact() -> None:
+    plans = g19.validate_all(ROOT)
+    assert {key: len(plan["attempts"]) for key, plan in plans.items()} == {
+        "qwen-a": 192,
+        "qwen-b": 192,
+    }
+    assert all(plan["launch_authorized"] is False for plan in plans.values())

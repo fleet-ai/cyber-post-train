@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+import yaml
 
 from evals.fleet import glm53_dedicated_v8_live as shared
 from evals.fleet import priority_preemption_guard as priority_guard
@@ -24,6 +25,55 @@ ALLOWED_ACTIVE_DEDICATED_PEERS = {
         "gpus": 8,
     },
 }
+
+
+def _preview_identity(manifest_yaml: str, payload: dict[str, Any]) -> dict[str, Any]:
+    manifests = [row for row in yaml.safe_load_all(manifest_yaml) if isinstance(row, dict)]
+    if len(manifests) != 1 or manifests[0].get("kind") != "RayJob":
+        raise RuntimeError("Jobs API preview did not render exactly one RayJob")
+    rayjob = manifests[0]
+    spec = rayjob.get("spec") or {}
+    head = ((spec.get("rayClusterSpec") or {}).get("headGroupSpec") or {}).get("template") or {}
+    pod = head.get("spec") or {}
+    containers = pod.get("containers") or []
+    if len(containers) != 1:
+        raise RuntimeError("Jobs API preview rendered an unexpected GPU container shape")
+    container = containers[0]
+    security_context = container.get("securityContext") or {}
+    privileged = security_context.get("privileged", False)
+    if type(privileged) is not bool:
+        raise RuntimeError("Jobs API rendered an invalid privileged field")
+    env = {row.get("name"): row.get("value") for row in container.get("env") or []}
+    resources = container.get("resources") or {}
+    gpu_request = (resources.get("requests") or {}).get("nvidia.com/gpu")
+    gpu_limit = (resources.get("limits") or {}).get("nvidia.com/gpu")
+    actual = {
+        "image": container.get("image"),
+        "priority_class": pod.get("priorityClassName"),
+        "privileged": privileged,
+        "privileged_field_present": "privileged" in security_context,
+        "run_dir": env.get("RUN_DIR"),
+        "gpus": gpu_request if gpu_request == gpu_limit else None,
+        "image_pull_secrets": [row.get("name") for row in pod.get("imagePullSecrets") or []],
+        "queue": (rayjob.get("metadata", {}).get("labels") or {}).get("kueue.x-k8s.io/queue-name"),
+        "suspended_for_admission": spec.get("suspend"),
+        "command_sha256": self_hosted.sha256(str(spec.get("entrypoint") or "").encode()),
+    }
+    expected = {
+        "image": payload["image"],
+        "priority_class": v3.PRIORITY_CLASS,
+        "privileged": False,
+        "privileged_field_present": False,
+        "run_dir": payload["run_dir"],
+        "gpus": 1,
+        "image_pull_secrets": ["ghcr-pull"],
+        "queue": "training-lq",
+        "suspended_for_admission": True,
+        "command_sha256": self_hosted.sha256(payload["command"].encode()),
+    }
+    if actual != expected:
+        raise RuntimeError("Jobs API rendered Qwen v3 identity drifted")
+    return actual
 
 
 def _project_shape(rows: list[dict[str, Any]]) -> dict[str, Any]:
@@ -78,7 +128,7 @@ def live_gate(root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
         project_shape = _project_shape(runs)
         preview = client.post("/v1/runs/preview", json=payload)
         preview.raise_for_status()
-        rendered = v1_live._preview_identity(preview.json()["manifest_yaml"], payload)
+        rendered = _preview_identity(preview.json()["manifest_yaml"], payload)
 
     inventory = json.loads(
         shared._kubectl(

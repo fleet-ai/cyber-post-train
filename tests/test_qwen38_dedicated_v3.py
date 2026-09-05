@@ -1,10 +1,12 @@
 from pathlib import Path
 
 import pytest
+import yaml
 
 from evals.fleet import qwen38_dedicated_v2 as v2
 from evals.fleet import qwen38_dedicated_v3 as v3
 from evals.fleet import qwen38_dedicated_v3_live as live
+from evals.fleet import self_hosted
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -52,3 +54,38 @@ def test_v3_rejects_exact_duplicate_and_identity_drift() -> None:
     value["run_dir"] = v2.RUN_DIR
     with pytest.raises(ValueError, match="identity drifted"):
         v3.validate(value, ROOT)
+
+
+def test_preview_treats_omitted_kubernetes_privileged_as_false() -> None:
+    payload = v3.payload(v3.spec(ROOT), ROOT)
+    manifest = {
+        "kind": "RayJob",
+        "metadata": {"labels": {"kueue.x-k8s.io/queue-name": "training-lq"}},
+        "spec": {
+            "suspend": True,
+            "entrypoint": payload["command"],
+            "rayClusterSpec": {
+                "headGroupSpec": {
+                    "template": {
+                        "spec": {
+                            "imagePullSecrets": [{"name": "ghcr-pull"}],
+                            "priorityClassName": "fleet-infra-quiet",
+                            "containers": [
+                                {
+                                    "image": payload["image"],
+                                    "env": [{"name": "RUN_DIR", "value": payload["run_dir"]}],
+                                    "resources": {
+                                        "requests": {"nvidia.com/gpu": 1},
+                                        "limits": {"nvidia.com/gpu": 1},
+                                    },
+                                }
+                            ],
+                        }
+                    }
+                }
+            },
+        },
+    }
+    rendered = live._preview_identity(yaml.safe_dump(manifest), payload)
+    assert rendered["privileged"] is False
+    assert rendered["command_sha256"] == self_hosted.sha256(payload["command"].encode())
