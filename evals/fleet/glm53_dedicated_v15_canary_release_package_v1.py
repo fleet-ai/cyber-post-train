@@ -22,6 +22,9 @@ def render(root: Path, parity: Path, binding: Path, service_origin: str) -> dict
     if package["package_sha256"] != "sha256:e26bb6dc20e87b56fb9ed8d746e631d8f8c969bfe2717c7ab4d100975afdda3c":
         raise ValueError("dedicated v15 pre-admitted controller package drifted")
     data = copy.deepcopy(base.render(root)["objects"]["items"][0]["data"])
+    data["dedicated_runtime.py"] = (
+        root / "evals/fleet/glm53_dedicated_v14_scored_canary_runtime_v1.py"
+    ).read_text()
     data["release.py"] = (root / "evals/fleet/glm53_dedicated_v15_canary_release_v1.py").read_text()
     data["run.sh"] = (
         root / "evals/fleet/scripts/run_glm53_dedicated_v15_canary_release_v1.sh"
@@ -29,6 +32,17 @@ def render(root: Path, parity: Path, binding: Path, service_origin: str) -> dict
     data["controller-package.json"] = self_hosted.canonical_json(preview).decode()
     data["parity.json"] = parity.read_text()
     data["binding.json"] = binding.read_text()
+    run_script = data["run.sh"]
+    for name in (
+        "self_hosted.py", "runner.py", "endpoint_lease.py", "predecessor.py",
+        "engine.py", "universe.py", "crypto.py", "inventory.py", "hosted_bulk.py",
+        "hosted_bulk_runtime.py", "hosted_release.py", "dedicated_canary.py",
+        "dedicated_runtime.py", "release.py", "campaign.json", "selection.json",
+        "glm-template.json", "qwen-template.json", "bulk-qwen-a.json",
+        "bulk-qwen-b.json", "bulk-glm-a.json", "bulk-glm-b.json",
+    ):
+        if f"{name}:" not in run_script and f"/bootstrap/{name}" not in run_script:
+            raise ValueError(f"dedicated v15 release runtime closure omits {name}")
     configmap = {
         "apiVersion": "v1",
         "kind": "ConfigMap",

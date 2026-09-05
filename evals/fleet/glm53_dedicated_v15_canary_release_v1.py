@@ -18,7 +18,7 @@ from evals.fleet import hosted_glm_exact_bulk_v1 as source
 from evals.fleet import self_hosted
 
 SCHEMA = runtime.RELEASE_SCHEMA
-JOB_NAME = "chris-glm53-dedicated-v15-r051-release-v1"
+JOB_NAME = "chris-glm53-dedicated-v15-r051-release-v2"
 CONFIGMAP_NAME = JOB_NAME + "-run"
 OUTPUT = Path("/mnt/sfs/jobs") / JOB_NAME / "RELEASE.json"
 
