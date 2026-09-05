@@ -1,0 +1,60 @@
+{
+  "schema_version": "fleet-hosted-qwen-c4-addon-terminal-v1",
+  "status": "FAILED_NON_SCORED",
+  "classification": "protocol_adapter_finish_reason_mismatch",
+  "observed_at_utc": "2026-09-05T21:54:00Z",
+  "package": {
+    "commit": "dd1b4aea5d488f1425eeafd1c2cffd015eeac6a3",
+    "sha256": "sha256:0a24453b81e934506255a4650cabeca0aec3cecc35d77161b8da95dc72459eb9"
+  },
+  "kubernetes": {
+    "namespace": "fleet-train-jobs",
+    "job_name": "chris-cyber-hosted-q38-c4-addon-v1",
+    "job_uid": "21b96eca-db01-4bad-acfc-e8a37240428f",
+    "pod_name": "chris-cyber-hosted-q38-c4-addon-v1-qcx2h",
+    "pod_uid": "c440001e-b3a5-46b4-9372-8b41f83f36b7",
+    "configmap_uid": "6b01dd25-0cb4-4e84-96ee-147c9c6f20a5",
+    "workload_uid": "9423b861-2c7c-4710-a5c6-15124c6e2b58",
+    "job_created_at_utc": "2026-09-05T21:51:58Z",
+    "pod_started_at_utc": "2026-09-05T21:51:59Z",
+    "pod_finished_at_utc": "2026-09-05T21:52:04Z",
+    "pod_exit_code": 1,
+    "pod_restarts": 0,
+    "job_terminal_reason": "BackoffLimitExceeded"
+  },
+  "source_terminal": {
+    "path": "/mnt/sfs/jobs/chris-cyber-hosted-q38-c4-addon-v1/TERMINAL.json",
+    "file_sha256": "sha256:724530a7dbea8da6319300a072c7d306a18ae43ef9a3679bc0263fdcb1327fa9",
+    "receipt_sha256": "sha256:e305e4c3106573f353e37f889f15e522119d0e40d70443564349b46cbe258a1f",
+    "failure_code": "completion_finish_reason_mismatch"
+  },
+  "scientific_effect": {
+    "task_instance_calls": 0,
+    "session_calls": 0,
+    "scoring_calls": 0,
+    "verifier_calls": 0,
+    "scored_rollouts_created": 0,
+    "capacity_gate_passed": false,
+    "scored_c4_successor_authorized": false
+  },
+  "postcondition": {
+    "endpoint_slots": ["busy", "busy", "free", "free"],
+    "addon_slots_released": true,
+    "g19_a_accepted_count": 3,
+    "g19_b_accepted_count": 1,
+    "g19_controllers_unchanged": true
+  },
+  "root_cause": {
+    "known_boundary": "the hosted adapter returned a completion finish reason outside the qualifier's single accepted marker",
+    "response_body_persisted": false,
+    "deterministic_prevention": "validate the exact forced tool call and argument schema first, then accept the provider-compatible stop marker as semantically terminal without relaxing the tool contract",
+    "automatic_retry_allowed": false
+  },
+  "privacy": {
+    "credentials_included": false,
+    "request_or_response_bodies_included": false,
+    "tool_arguments_included": false,
+    "prompts_traces_flags_or_scores_included": false
+  },
+  "receipt_sha256": "sha256:4fe45d0331b70149611666a2b0113819b6ed256cb2b4831c4a582e79db01b9b5"
+}

@@ -136,3 +136,23 @@ def test_controller_uid_or_restart_drift_fails_closed(
             identity_checker=lambda _key: {},
             lease_root=tmp_path,
         )
+
+
+def test_provider_stop_marker_is_accepted_only_with_exact_forced_tool_call() -> None:
+    value = {
+        "model": addon.MODEL,
+        "choices": [
+            {
+                "finish_reason": "stop",
+                "message": {
+                    "tool_calls": [
+                        {"function": {"name": "bash", "arguments": '{"command":"true"}'}}
+                    ]
+                },
+            }
+        ],
+    }
+    addon.validate_addon_completion(value, model=addon.MODEL, tool_name="bash")
+    value["choices"][0]["message"]["tool_calls"] = []
+    with pytest.raises(addon.AddonQualificationError, match="tool_call_count_mismatch"):
+        addon.validate_addon_completion(value, model=addon.MODEL, tool_name="bash")

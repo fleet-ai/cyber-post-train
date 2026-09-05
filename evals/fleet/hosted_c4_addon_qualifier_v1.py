@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import os
 import ssl
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -47,6 +48,77 @@ class AddonQualificationError(RuntimeError):
     def __init__(self, code: str) -> None:
         super().__init__(code)
         self.code = code
+
+
+def validate_addon_completion(value: dict[str, Any], *, model: str, tool_name: str) -> None:
+    """Accept provider terminal markers only after the exact forced call validates."""
+
+    if value.get("model") != model:
+        raise AddonQualificationError("completion_model_identity_mismatch")
+    choices = value.get("choices")
+    if not isinstance(choices, list) or len(choices) != 1 or not isinstance(choices[0], dict):
+        raise AddonQualificationError("completion_choice_shape_mismatch")
+    choice = choices[0]
+    message = choice.get("message")
+    calls = message.get("tool_calls") if isinstance(message, dict) else None
+    if not isinstance(calls, list) or len(calls) != 1 or not isinstance(calls[0], dict):
+        raise AddonQualificationError("completion_tool_call_count_mismatch")
+    function = calls[0].get("function")
+    if not isinstance(function, dict) or function.get("name") != tool_name:
+        raise AddonQualificationError("completion_tool_name_mismatch")
+    arguments = function.get("arguments")
+    if not isinstance(arguments, str):
+        raise AddonQualificationError("completion_tool_arguments_invalid")
+    parsed = probe._load_json(  # noqa: SLF001
+        arguments.encode(), code="completion_tool_arguments_invalid"
+    )
+    if tool_name == "bash":
+        if set(parsed) != {"command"} or not isinstance(parsed["command"], str):
+            raise AddonQualificationError("completion_bash_arguments_mismatch")
+    elif (
+        set(parsed) != {"flags", "explanation"}
+        or not isinstance(parsed["flags"], list)
+        or any(not isinstance(item, str) for item in parsed["flags"])
+        or not isinstance(parsed["explanation"], str)
+    ):
+        raise AddonQualificationError("completion_submit_report_arguments_mismatch")
+    if choice.get("finish_reason") not in {"tool_calls", "stop"}:
+        raise AddonQualificationError("completion_finish_reason_mismatch")
+
+
+def post_addon_completion(model: str, tool_name: str, api_key: str) -> float:
+    body = probe.canonical_json(probe._request_payload(model, tool_name))  # noqa: SLF001
+    request = urllib.request.Request(
+        probe.COMPLETIONS_URL,
+        method="POST",
+        data=body,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+        },
+    )
+    started = time.monotonic()
+    try:
+        with urllib.request.urlopen(request, timeout=probe.REQUEST_TIMEOUT_SECONDS) as response:
+            if response.status != 200:
+                raise AddonQualificationError("completion_http_status")
+            raw = response.read(4 * 1024 * 1024 + 1)
+    except AddonQualificationError:
+        raise
+    except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError) as exc:
+        raise AddonQualificationError("completion_request_failed") from exc
+    elapsed = time.monotonic() - started
+    if len(raw) > 4 * 1024 * 1024:
+        raise AddonQualificationError("completion_response_too_large")
+    validate_addon_completion(
+        probe._load_json(raw, code="completion_invalid_json"),  # noqa: SLF001
+        model=model,
+        tool_name=tool_name,
+    )
+    if elapsed > probe.MAX_REQUEST_LATENCY_SECONDS:
+        raise AddonQualificationError("completion_request_latency_exceeded")
+    return elapsed
 
 
 class InClusterReader:
@@ -140,7 +212,7 @@ def run(
     out_dir: Path,
     *,
     reader: Any | None = None,
-    caller: probe.CompletionCaller = probe.post_completion,
+    caller: probe.CompletionCaller = post_addon_completion,
     identity_checker: Any = validate_qwen_identity,
     lease_root: Path = LEASE_ROOT,
 ) -> dict[str, Any]:
