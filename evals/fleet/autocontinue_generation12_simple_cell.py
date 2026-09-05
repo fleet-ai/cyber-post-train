@@ -186,7 +186,7 @@ def validate(spec: dict[str, Any], repo: Path) -> None:
                 "create_once": True,
                 "fleet_team_id": TEAM,
                 "preemption_policy": "Never",
-                "priority_class": "fleet-serve-low",
+                "priority_class": "fleet-train-high",
                 "secret_name": "chris-cyber-opencode-evals-v2",
                 "secret_uid": SECRET_UID,
             },

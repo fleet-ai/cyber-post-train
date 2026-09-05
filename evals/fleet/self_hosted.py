@@ -148,12 +148,7 @@ def load_and_verify_task(client: httpx.Client, config: dict[str, Any]) -> dict[s
         f"/v1/tasks/{expected['key']}",
         params={"version_id": expected["version_id"]},
     )
-    live_task_id = _nonzero_uuid(task.get("id"), "Fleet task ID")
-    configured_task_id = expected.get("id")
-    if configured_task_id is not None and live_task_id != _nonzero_uuid(
-        configured_task_id, "configured Fleet task ID"
-    ):
-        raise RuntimeError("exact Fleet task ID drifted")
+    _validate_task_identifiers(task, expected)
     verifier = task.get("verifier") or {}
     metadata = task.get("metadata") or {}
     actual = {
@@ -830,6 +825,33 @@ def _nonzero_uuid(value: Any, label: str) -> str:
     if parsed.int == 0:
         raise RuntimeError(f"{label} is a zero UUID")
     return str(parsed)
+
+
+def _validate_task_identifiers(
+    task: dict[str, Any], expected: dict[str, Any]
+) -> tuple[str | None, str]:
+    """Validate deployed version identity and optional legacy task identity."""
+    live_version_id = _nonzero_uuid(
+        task.get("eval_task_version_id"), "Fleet task version ID"
+    )
+    expected_version_id = _nonzero_uuid(
+        expected.get("version_id"), "configured Fleet task version ID"
+    )
+    if live_version_id != expected_version_id:
+        raise RuntimeError("exact Fleet task version ID drifted")
+
+    configured_task_id = expected.get("id")
+    live_task_id_value = task.get("id")
+    if configured_task_id is not None and live_task_id_value is None:
+        raise RuntimeError("configured Fleet task ID is absent from live task")
+    live_task_id = None
+    if live_task_id_value is not None:
+        live_task_id = _nonzero_uuid(live_task_id_value, "Fleet task ID")
+    if configured_task_id is not None and live_task_id != _nonzero_uuid(
+        configured_task_id, "configured Fleet task ID"
+    ):
+        raise RuntimeError("exact Fleet task ID drifted")
+    return live_task_id, live_version_id
 
 
 def _instance_identifier(value: Any) -> str:

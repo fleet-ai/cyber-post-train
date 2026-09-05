@@ -96,7 +96,7 @@ def test_g12_uses_exact_accepted_v2_bootstrap(model: str) -> None:
         in evaluator["args"][0]
     )
     assert pod["preemptionPolicy"] == "Never"
-    assert pod["priorityClassName"] == "fleet-serve-low"
+    assert pod["priorityClassName"] == "fleet-train-high"
 
 
 def test_model_treatments_differ_only_as_expected() -> None:

@@ -84,7 +84,7 @@ def derive_spec(root: Path, model: str) -> dict[str, Any]:
             "create_once": True,
             "fleet_team_id": runtime.TEAM,
             "preemption_policy": "Never",
-            "priority_class": "fleet-serve-low",
+            "priority_class": "fleet-train-high",
             "secret_name": "chris-cyber-opencode-evals-v2",
             "secret_uid": runtime.SECRET_UID,
         },

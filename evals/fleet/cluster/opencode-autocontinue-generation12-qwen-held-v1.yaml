@@ -22,7 +22,7 @@ spec:
         cyber-post-train.fleet.ai/owner: chris
     spec:
       restartPolicy: Never
-      priorityClassName: fleet-serve-low
+      priorityClassName: fleet-train-high
       preemptionPolicy: Never
       nodeSelector:
         kubernetes.io/arch: amd64

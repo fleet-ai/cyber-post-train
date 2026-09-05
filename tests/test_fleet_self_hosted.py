@@ -384,9 +384,10 @@ def test_request_does_not_retry_mutating_requests(monkeypatch: pytest.MonkeyPatc
 
 def test_task_receipt_uses_targeted_version_and_never_source_job_roster() -> None:
     config = _config()
+    del config["task"]["id"]
     expected_route = f"/v1/tasks/{config['task']['key']}"
     fixture = {
-        "id": config["task"]["id"],
+        "eval_task_version_id": config["task"]["version_id"],
         "key": config["task"]["key"],
         "environment_id": config["environment"]["id"],
         "version": config["environment"]["version"],
@@ -424,6 +425,67 @@ def test_task_receipt_uses_targeted_version_and_never_source_job_roster() -> Non
 
     assert "version_id" not in fixture
     assert self_hosted.load_and_verify_task(Client(), config) == fixture
+
+
+def test_task_identifiers_accept_exact_version_without_legacy_id() -> None:
+    config = _config()
+    del config["task"]["id"]
+    assert self_hosted._validate_task_identifiers(
+        {"eval_task_version_id": config["task"]["version_id"]}, config["task"]
+    ) == (None, config["task"]["version_id"])
+
+
+def test_task_identifiers_accept_matching_legacy_id_when_present() -> None:
+    config = _config()
+    assert self_hosted._validate_task_identifiers(
+        {
+            "id": config["task"]["id"],
+            "eval_task_version_id": config["task"]["version_id"],
+        },
+        config["task"],
+    ) == (config["task"]["id"], config["task"]["version_id"])
+
+
+@pytest.mark.parametrize(
+    "version_id",
+    (
+        None,
+        "",
+        "unsafe",
+        "00000000-0000-0000-0000-000000000000",
+        "11111111-1111-4111-8111-111111111111",
+    ),
+)
+def test_task_identifiers_reject_missing_invalid_zero_or_drifted_version(
+    version_id: str | None,
+) -> None:
+    config = _config()
+    del config["task"]["id"]
+    with pytest.raises(RuntimeError, match="task version ID"):
+        self_hosted._validate_task_identifiers(
+            {"eval_task_version_id": version_id}, config["task"]
+        )
+
+
+def test_task_identifiers_reject_configured_legacy_id_absent_live() -> None:
+    config = _config()
+    with pytest.raises(RuntimeError, match="configured Fleet task ID is absent"):
+        self_hosted._validate_task_identifiers(
+            {"eval_task_version_id": config["task"]["version_id"]}, config["task"]
+        )
+
+
+def test_task_identifiers_reject_invalid_live_legacy_id() -> None:
+    config = _config()
+    del config["task"]["id"]
+    with pytest.raises(RuntimeError, match="Fleet task ID is not a UUID"):
+        self_hosted._validate_task_identifiers(
+            {
+                "id": "unsafe",
+                "eval_task_version_id": config["task"]["version_id"],
+            },
+            config["task"],
+        )
 
 
 def test_build_instance_payload_preserves_exact_runtime_binding() -> None:
