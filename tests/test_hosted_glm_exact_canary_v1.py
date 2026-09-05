@@ -23,6 +23,7 @@ def test_package_is_small_create_once_nonpreempting_cpu_job() -> None:
     assert rendered["configmap_json_bytes"] < 900_000
     configmap, job = rendered["objects"]["items"]
     assert configmap["metadata"]["name"] == canary.CONFIGMAP_NAME
+    assert configmap["immutable"] is True
     assert job["metadata"]["name"] == canary.JOB_NAME
     assert job["spec"]["backoffLimit"] == 0
     pod = job["spec"]["template"]["spec"]

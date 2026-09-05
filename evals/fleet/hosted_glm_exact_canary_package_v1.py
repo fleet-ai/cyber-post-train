@@ -49,6 +49,7 @@ def render(root: Path) -> dict[str, Any]:
         "apiVersion": "v1",
         "kind": "ConfigMap",
         "metadata": {"name": canary.CONFIGMAP_NAME, "namespace": "fleet-train-jobs"},
+        "immutable": True,
         "data": data,
     }
     job = yaml.safe_load(
