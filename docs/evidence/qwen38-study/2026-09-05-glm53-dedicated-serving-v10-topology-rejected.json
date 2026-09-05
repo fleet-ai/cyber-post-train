@@ -1,0 +1,65 @@
+{
+  "api_run_id": "ft-run-3b7e0767",
+  "classification": "infrastructure-invalid",
+  "credentials_included": false,
+  "gpu_allocation": {
+    "allocated": false,
+    "model_load_started": false,
+    "pod_created": false,
+    "useful_gpu_seconds": 0
+  },
+  "jobs_api_contract": {
+    "absent_or_null_topology_fields_render_preferred_topology": true,
+    "disable_mode_available": false,
+    "rendered_head_annotation": {
+      "kueue.x-k8s.io/podset-preferred-topology": "topology.nebius.com/tier-1"
+    },
+    "supported_topology_modes": [
+      "preferred",
+      "required"
+    ]
+  },
+  "kubernetes": {
+    "namespace": "fleet-train-jobs",
+    "rayjob_uid": "5392be89-fb07-49be-b984-21575ce8d372",
+    "workload_name": "rayjob-ft-run-3b7e0767-5d987",
+    "workload_uid": "d0ff961c-8d97-4caf-9a10-91d414f45aa4"
+  },
+  "last_observed_at_utc": "2026-09-05T18:40:34Z",
+  "post_release": {
+    "api_get_status": 404,
+    "delete_http_status": 204,
+    "jobs_api_run_absent": true,
+    "kubernetes_object_count": 0,
+    "sfs_run_dir_absent": true
+  },
+  "prompts_traces_flags_or_scores_included": false,
+  "queue": {
+    "cluster_queue": "training-cq",
+    "cluster_queue_uid": "a0871515-e979-4292-a994-51b987e4016c",
+    "local_queue": "training-lq",
+    "local_queue_uid": "585e1a29-300a-438c-bb2f-268ca57e0f56",
+    "rejection_message": "couldn't assign flavors to pod set head: Flavor \"b300-unconstrained\" does not support TopologyAwareScheduling, Flavor \"cpu-head\" does not support TopologyAwareScheduling",
+    "resource_flavors": [
+      {
+        "name": "b300-unconstrained",
+        "topology_name": null,
+        "uid": "0d936da8-dd7c-4a6e-973a-1e57dd5c625b"
+      },
+      {
+        "name": "cpu-head",
+        "topology_name": null,
+        "uid": "5afd198c-be92-40fe-844e-c8c2c37c3b63"
+      }
+    ]
+  },
+  "receipt_sha256": "sha256:c7ac4bba2aab5c075078cc13e87ede6062944a5cc5ed518d03073558d82b151a",
+  "request_sha256": "sha256:e38f7a9e7315de0a254692a162d1be657e8faa1b4a16c677ee52f8143adcfd27",
+  "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-glm53-tp8-a-v10",
+  "schema_version": "fleet-glm53-dedicated-serving-v10-topology-rejected-v1",
+  "scored_tasks_launched": 0,
+  "status": "TOPOLOGY_CONTRACT_REJECTED_RELEASED",
+  "submission_receipt_sha256": "sha256:fa6d0f7bbeeb74daba49a79176a8ab113e1fedb1256ad98a7a7af938d0e74ae0",
+  "title": "chris-cyber-evalserve-glm53-tp8-a-v10",
+  "unblock_condition": "The Jobs API must render no topology request for this run, or every ResourceFlavor Kueue may select for the pod set must advertise compatible topology support."
+}
