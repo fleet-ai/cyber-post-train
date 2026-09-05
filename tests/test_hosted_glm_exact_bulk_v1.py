@@ -1,3 +1,5 @@
+import subprocess
+import sys
 from pathlib import Path
 
 from evals.fleet import hosted_glm_exact_bulk_package_v1 as package
@@ -75,3 +77,27 @@ def test_held_package_is_immutable_and_never_launch_authorized() -> None:
         assert pod["priorityClassName"] == "fleet-serve-low"
         assert pod["preemptionPolicy"] == "Never"
         assert pod["volumes"][0]["configMap"]["name"] == package.CONFIGMAP_NAME
+
+
+def test_exact_bundle_imports_in_isolated_tree(tmp_path: Path) -> None:
+    configmap = package.render(ROOT)["objects"]["items"][0]
+    for name, relative in package.INSTALL_PATHS.items():
+        target = tmp_path / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(configmap["data"][name])
+    (tmp_path / "evals/__init__.py").touch()
+    (tmp_path / "evals/fleet/__init__.py").touch()
+    code = (
+        "import sys; from pathlib import Path; "
+        f"sys.path.insert(0, {str(tmp_path)!r}); "
+        "from evals.fleet import hosted_glm_exact_bulk_runtime_v1; "
+        "from evals.fleet import hosted_glm_exact_bulk_v1 as b; "
+        f"b.validate_all(Path({str(tmp_path)!r}))"
+    )
+    completed = subprocess.run(
+        [sys.executable, "-I", "-c", code],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode == 0, completed.stderr
