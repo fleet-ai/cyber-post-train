@@ -86,3 +86,47 @@ def test_rank97_release_requires_complete_fresh_four_cell_transfer(
     path.write_text(json.dumps(release))
     with pytest.raises(RuntimeError, match="release receipt drifted"):
         lane._released_plans(ROOT)
+
+
+def test_observer_and_writer_share_canonical_claim_mount(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    claim_root = tmp_path / "cell-execution-claims" / "opencode11827-autocontinue-v1"
+    claim_root.mkdir(parents=True)
+    monkeypatch.setattr(lane.legacy, "CLAIM_ROOT", claim_root)
+    plan = lane.build_plan(ROOT, 1)
+    assert lane._require_canonical_claim_mount() == claim_root
+    assert lane._claim_path(plan) == claim_root / (
+        plan["item"]["execution_id"].removeprefix("sha256:") + ".json"
+    )
+    assert lane._claim_path(plan, claim_root) == lane._claim_path(plan)
+
+    monkeypatch.setattr(lane.legacy, "CLAIM_ROOT", tmp_path / "not-mounted")
+    with pytest.raises(RuntimeError, match="canonical SFS claim root is not mounted"):
+        lane._require_canonical_claim_mount()
+
+
+def test_complete_package_reaches_model_boundary_only_after_four_claims(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    plans = [lane.build_plan(ROOT, attempt) for attempt in (1, 2, 3, 4)]
+    for plan in plans:
+        plan["output_root"] = str(tmp_path / f"attempt-{plan['item']['attempt']}")
+    claim_root = tmp_path / "claims"
+    claim_root.mkdir()
+    bundle_root = tmp_path / "bundle"
+    monkeypatch.setattr(lane.legacy, "CLAIM_ROOT", claim_root)
+    monkeypatch.setattr(lane, "BUNDLE_ROOT", bundle_root)
+    monkeypatch.setattr(lane, "_validate_parity", lambda _root: {})
+    monkeypatch.setattr(lane, "_released_plans", lambda _root: plans)
+    monkeypatch.setattr(lane.legacy, "_live_checks", lambda _plan, _key: None)
+    monkeypatch.setenv("JOB_UID", "11111111-1111-4111-8111-111111111111")
+    monkeypatch.setenv("POD_UID", "22222222-2222-4222-8222-222222222222")
+
+    prepared, claims = lane._prepare_before_model_calls(ROOT, "test-key")
+
+    assert prepared == plans
+    assert set(claims) == {1, 2, 3, 4}
+    assert len(list(claim_root.glob("*.json"))) == 4
+    assert (bundle_root / "RESERVATION.json").is_file()
+    assert not any(Path(plan["output_root"]).exists() for plan in plans)

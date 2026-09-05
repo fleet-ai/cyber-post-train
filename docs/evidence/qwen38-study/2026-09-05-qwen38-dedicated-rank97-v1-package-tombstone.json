@@ -1,0 +1,19 @@
+{
+  "bundle_root_created": false,
+  "canonical_claims_created": 0,
+  "controller_job_uid": "d80f0f87-ccd5-4aaa-9a88-7ac17a9bc848",
+  "controller_pod_uid": "e33086fd-1499-4482-be84-e4ac679eb27d",
+  "failure_class": "packaged_selection_input_omitted",
+  "model_call_started": false,
+  "pod_exit_code": 1,
+  "pod_restarts": 0,
+  "prompts_traces_flags_or_scores_included": false,
+  "receipt_sha256": "sha256:d0340be970c0dd2e07459dfbd4a8bac24e299eb2d3968fff9b6ea5028b840e96",
+  "retry_allowed_only_with_fresh_controller_and_run_ids": true,
+  "schema_version": "fleet-qwen38-dedicated-rank97-package-tombstone-v1",
+  "scored_session_created": false,
+  "status": "RETRY_SAFE_INFRA_FAILURE",
+  "successor_package_commit": "5e40d25",
+  "task_instance_created": false,
+  "verifier_started": false
+}

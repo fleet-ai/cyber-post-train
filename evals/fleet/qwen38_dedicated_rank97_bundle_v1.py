@@ -165,9 +165,18 @@ def _released_plans(root: Path) -> list[dict[str, Any]]:
     return plans
 
 
-def _claim_path(plan: dict[str, Any]) -> Path:
+def _claim_path(plan: dict[str, Any], claim_root: Path | None = None) -> Path:
     execution_id = plan["item"]["execution_id"].removeprefix("sha256:")
-    return legacy.CLAIM_ROOT / f"{execution_id}.json"
+    return (claim_root or legacy.CLAIM_ROOT) / f"{execution_id}.json"
+
+
+def _require_canonical_claim_mount(claim_root: Path | None = None) -> Path:
+    """Fail closed when an observer cannot see the writer's canonical SFS root."""
+
+    root = claim_root or legacy.CLAIM_ROOT
+    if root.is_symlink() or not root.is_dir():
+        raise RuntimeError("canonical SFS claim root is not mounted")
+    return root
 
 
 def _rollback_created_claims(
@@ -242,12 +251,14 @@ def _run_one(
             watcher.join(timeout=5)
 
 
-def run(root: Path, proxy: Path) -> None:
-    key = os.environ.get("FLEET_API_KEY")
-    if not key:
-        raise RuntimeError("FLEET_API_KEY is required")
+def _prepare_before_model_calls(
+    root: Path, key: str
+) -> tuple[list[dict[str, Any]], dict[int, dict[str, Any]]]:
+    """Execute every immutable gate and reserve the four cells before model traffic."""
+
     _validate_parity(root)
     plans = _released_plans(root)
+    _require_canonical_claim_mount()
     if BUNDLE_ROOT.exists():
         raise RuntimeError("rank97 bundle output root already exists")
     for plan in plans:
@@ -273,6 +284,14 @@ def run(root: Path, proxy: Path) -> None:
             }
         ),
     )
+    return plans, claims
+
+
+def run(root: Path, proxy: Path) -> None:
+    key = os.environ.get("FLEET_API_KEY")
+    if not key:
+        raise RuntimeError("FLEET_API_KEY is required")
+    plans, claims = _prepare_before_model_calls(root, key)
     for plan in plans:
         _run_one(root, proxy, plan, claims[plan["item"]["attempt"]])
 
