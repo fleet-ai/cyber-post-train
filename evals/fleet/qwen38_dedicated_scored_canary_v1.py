@@ -103,10 +103,21 @@ def _claim(plan: dict[str, Any], job_uid: str, pod_uid: str) -> dict[str, Any]:
     return receipt
 
 
-def build_plan(root: Path, attempt: int = 1) -> dict[str, Any]:
+def build_plan(
+    root: Path,
+    attempt: int = 1,
+    *,
+    selection_rank: int = 2,
+    execution_generation: int = 1,
+    run_id_override: str | None = None,
+    expected_cell_id: str | None = None,
+    expected_execution_id: str | None = None,
+    expected_task_version_id: str | None = None,
+) -> dict[str, Any]:
     if attempt not in EXPECTED_IDENTITIES:
-        raise ValueError("dedicated rank-2 attempt must be 1 through 4")
-    run_id = RUN_ID if attempt == 1 else (
+        raise ValueError("dedicated attempt must be 1 through 4")
+    run_id = run_id_override or (
+        RUN_ID if attempt == 1 else
         f"chris-cyber-q38-opencode11827-ded-tp1-r002-a{attempt}-v1"
     )
     campaign = exact.read_object(root / CAMPAIGN)
@@ -115,23 +126,31 @@ def build_plan(root: Path, attempt: int = 1) -> dict[str, Any]:
         row
         for row in universe["cells"]
         if row["model"] == "qwen3.8-27b"
-        and row["selection_rank"] == 2
+        and row["selection_rank"] == selection_rank
         and row["attempt"] == attempt
     ]
     if len(selected) != 1:
         raise ValueError("dedicated canary cell is not unique")
     cell = selected[0]
-    execution = exact.execution_for(cell["cell_id"], 1)
-    expected_cell_id, expected_execution_id = EXPECTED_IDENTITIES[attempt]
+    execution = exact.execution_for(cell["cell_id"], execution_generation)
+    if selection_rank == 2 and execution_generation == 1:
+        default_cell_id, default_execution_id = EXPECTED_IDENTITIES[attempt]
+        expected_cell_id = expected_cell_id or default_cell_id
+        expected_execution_id = expected_execution_id or default_execution_id
+        expected_task_version_id = (
+            expected_task_version_id or "09a3fea6-f691-4841-9218-d04459041a1f"
+        )
+    if not all((expected_cell_id, expected_execution_id, expected_task_version_id)):
+        raise ValueError("non-default dedicated selection requires exact expected identities")
     if (
         cell["cell_id"] != expected_cell_id
         or execution["execution_id"] != expected_execution_id
-        or cell["task_version_id"] != "09a3fea6-f691-4841-9218-d04459041a1f"
+        or cell["task_version_id"] != expected_task_version_id
     ):
         raise ValueError("dedicated canary statistical identity drifted")
 
     source = _load(root / SOURCE)
-    tasks = [row for row in source["tasks"] if row["rank"] == 2]
+    tasks = [row for row in source["tasks"] if row["rank"] == selection_rank]
     if len(tasks) != 1 or tasks[0]["task"]["version_id"] != cell["task_version_id"]:
         raise ValueError("dedicated canary task hydration drifted")
     task = tasks[0]
@@ -186,9 +205,9 @@ def build_plan(root: Path, attempt: int = 1) -> dict[str, Any]:
     item = {
         "cell_id": cell["cell_id"],
         "execution_id": execution["execution_id"],
-        "execution_generation": 1,
+        "execution_generation": execution_generation,
         "run_id": run_id,
-        "selection_rank": 2,
+        "selection_rank": selection_rank,
         "attempt": attempt,
         "task_version_id": cell["task_version_id"],
     }
