@@ -11,7 +11,7 @@ from evals.fleet import autocontinue_generation10_joint_preparer_v1 as generatio
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_joint_g10_package_is_held_and_glm_requires_exact_tombstone() -> None:
+def test_joint_g10_package_is_held_after_both_exact_tombstones() -> None:
     generation10.assert_route_gate_implementation()
     generation10.assert_optimized_runtime_implementation(ROOT)
     package = generation10.prepare(ROOT)
@@ -22,10 +22,9 @@ def test_joint_g10_package_is_held_and_glm_requires_exact_tombstone() -> None:
     assert package["models"]["qwen3.8-27b"]["status"] == (
         "HELD_RELEASE_AND_DUPLICATE_PREFLIGHT_REQUIRED"
     )
-    assert package["models"]["glm-5.3"] == {
-        "status": "HELD_PREINSTANCE_TOMBSTONE_REQUIRED",
-        "tombstone_path": generation10.MODELS["glm-5.3"]["tombstone"],
-    }
+    assert package["models"]["glm-5.3"]["status"] == (
+        "HELD_RELEASE_AND_DUPLICATE_PREFLIGHT_REQUIRED"
+    )
     qwen = package["models"]["qwen3.8-27b"]
     assert qwen["spec"]["execution"]["execution_generation"] == 10
     assert qwen["plan"]["execution"]["launch_authorized"] is False
@@ -54,6 +53,25 @@ def test_g10_fresh_identities_do_not_reuse_g7_g8_or_qwen_g9() -> None:
                 package["models"][model]["spec"]["execution"]["execution_id"]
                 == row["g10_execution_id"]
             )
+
+
+def test_qwen_successor_prepares_without_glm_tombstone(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    joint = generation10.prepare(ROOT)
+    glm = dict(generation10.MODELS["glm-5.3"])
+    glm["tombstone"] = "definitely/absent/glm-tombstone.json"
+    monkeypatch.setitem(generation10.MODELS, "glm-5.3", glm)
+    qwen = generation10.prepare_model(ROOT, "qwen3.8-27b")
+    assert qwen == joint["models"]["qwen3.8-27b"]
+    assert qwen["status"] == "HELD_RELEASE_AND_DUPLICATE_PREFLIGHT_REQUIRED"
+    assert qwen["spec"]["model"] == "qwen3.8-27b"
+    assert qwen["plan"]["model"]["served_id"] == "qwen3.8-27b"
+
+
+def test_per_model_preparation_rejects_unknown_model() -> None:
+    with pytest.raises(ValueError, match="model selection"):
+        generation10.prepare_model(ROOT, "other")
 
 
 def test_corrected_authority_diagnosis_supersedes_openapi_only_false_negative() -> None:

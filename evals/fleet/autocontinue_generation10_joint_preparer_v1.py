@@ -55,7 +55,7 @@ MODELS: dict[str, dict[str, Any]] = {
             "sha256:88b1f006fdd8e8cf9ba8212e75caf260ff7d6e963e94ad431f79483dcf4b008f"
         ),
         "g10_execution_id": (
-            "sha256:883071ccd7ce04147e5213b43c43954ead7ad2e9fea69c2803e5b4b4c83e08b9"
+            "sha256:84df092e1904306b308326188609a520f9ffd870a45fad26f65ad1eb60f3aa0b"
         ),
         "g8_spec": "evals/fleet/configs/q38-opencode-autocontinue-canary-generation8-v1.json",
         "g8_plan": (
@@ -80,7 +80,7 @@ MODELS: dict[str, dict[str, Any]] = {
             "sha256:a8b2f9b65f55c3c1f6cccc8189a5fece1023dd6cb238a02391766c28b3ba3bb8"
         ),
         "g10_execution_id": (
-            "sha256:de0a1826ebd0f6d08634dd06c263e5f9640da06353ec1b08dcc72df2ad98ffb1"
+            "sha256:fa6623334f96957d0879a97d3d08f1fae226719f080043e274d067a73f0fe0e2"
         ),
         "g8_spec": ("evals/fleet/configs/glm53-opencode-autocontinue-canary-generation8-v1.json"),
         "g8_plan": (
@@ -232,6 +232,7 @@ def load_static(root: Path) -> dict[str, dict[str, Any]]:
     for model, row in MODELS.items():
         spec = read_canonical(root / row["g8_spec"])
         plan = read_canonical(root / row["g8_plan"])
+        expected_g10 = generation8.generation7.exact.execution_for(row["cell_id"], 10)
         if (
             spec.get("model") != model
             or spec.get("execution", {}).get("execution_id") != row["g8_execution_id"]
@@ -244,19 +245,28 @@ def load_static(root: Path) -> dict[str, dict[str, Any]]:
             or plan.get("execution", {}).get("required_priority_class") != "fleet-serve-low"
             or plan.get("task_count") != 1
             or plan.get("new_session_count") != 1
+            or expected_g10.get("execution_id") != row["g10_execution_id"]
         ):
             raise ValueError(f"{model} frozen G8 treatment drifted")
         loaded[model] = {"spec": spec, "plan": plan}
     return loaded
 
 
-def prepare(root: Path) -> dict[str, Any]:
+def prepare(root: Path, selected_models: tuple[str, ...] | None = None) -> dict[str, Any]:
     """Return a sealed-safe held package; never create files or external objects."""
+    selected = tuple(MODELS) if selected_models is None else selected_models
+    if (
+        not selected
+        or len(selected) != len(set(selected))
+        or any(model not in MODELS for model in selected)
+    ):
+        raise ValueError("Generation-10 model selection is invalid")
     static = load_static(root)
     diagnosis = read_canonical(root / DIAGNOSIS_PATH)
     validate_authority_diagnosis(diagnosis)
     models: dict[str, Any] = {}
-    for model, row in MODELS.items():
+    for model in selected:
+        row = MODELS[model]
         path = root / row["tombstone"]
         if not path.is_file() or path.is_symlink():
             models[model] = {
@@ -370,6 +380,11 @@ def prepare(root: Path) -> dict[str, Any]:
     return body
 
 
+def prepare_model(root: Path, model: str) -> dict[str, Any]:
+    """Prepare one model without inspecting the other model's tombstone."""
+    return prepare(root, (model,))["models"][model]
+
+
 def assert_route_gate_implementation() -> None:
     """Pin the repair semantics without making a network request."""
     source = Path(self_hosted.__file__).read_text()
@@ -430,8 +445,9 @@ def validate_held_receipt(root: Path, package: Mapping[str, Any]) -> None:
         or value.get("models", {}).get("glm-5.3")
         != {
             "status": glm["status"],
-            "tombstone_path": MODELS["glm-5.3"]["tombstone"],
-            "execution_id": MODELS["glm-5.3"]["g10_execution_id"],
+            "execution_id": glm["spec"]["execution"]["execution_id"],
+            "spec_sha256": glm["spec"]["generation10_spec_sha256"],
+            "plan_sha256": glm["plan"]["plan_sha256"],
         }
         or value.get("required_optimized_runtime")
         != {

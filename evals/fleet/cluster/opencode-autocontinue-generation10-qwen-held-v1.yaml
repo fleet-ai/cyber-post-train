@@ -1,0 +1,99 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: chris-q38-ac-r004-a1-g10-v1
+  namespace: fleet-train-jobs
+  annotations:
+    cyber-post-train.fleet.ai/preview-only: "true"
+    cyber-post-train.fleet.ai/launch-authorized: "false"
+    cyber-post-train.fleet.ai/package-layout: generation10-qwen-split-v1
+    cyber-post-train.fleet.ai/create-once: "true"
+    cyber-post-train.fleet.ai/secret-uid: e0febd8e-94a2-46b0-a0bf-dd6b3154187b
+    cyber-post-train.fleet.ai/fleet-team-id: a1025f0b-ad67-49fc-a023-51800ab43e84
+spec:
+  activeDeadlineSeconds: 43200
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 604800
+  template:
+    metadata:
+      labels:
+        cyber-post-train.fleet.ai/experiment: q38-ac-r004-a1-g10-v1
+        cyber-post-train.fleet.ai/owner: chris
+        kueue.x-k8s.io/queue-name: training-lq
+      annotations:
+        cyber-post-train.fleet.ai/secret-uid: e0febd8e-94a2-46b0-a0bf-dd6b3154187b
+        cyber-post-train.fleet.ai/fleet-team-id: a1025f0b-ad67-49fc-a023-51800ab43e84
+    spec:
+      restartPolicy: Never
+      priorityClassName: fleet-serve-low
+      preemptionPolicy: Never
+      nodeSelector: {kubernetes.io/arch: amd64, workload: fleetai-training-ng-cpu}
+      tolerations:
+        - {key: workload, operator: Equal, value: fleetai-training-ng-cpu, effect: NoSchedule}
+      initContainers:
+        - name: docker-cli
+          image: &docker-image docker.io/library/docker@sha256:f649ef046008ca7f926a2571c32b0ac22e5c59eb61b959617f9acc2a4c638cf5
+          command: ["/bin/sh", "-ec"]
+          args:
+            - >-
+              install -D -m 0755 /usr/local/bin/docker /cli/bin/docker;
+              install -D -m 0755 /usr/local/libexec/docker/cli-plugins/docker-buildx /cli/plugins/docker-buildx;
+              test "$(sha256sum /cli/bin/docker | awk '{print $1}')" = 242c7a8de606afba2acada7c7af00d77f92c3601678b2f3a60911b49a892c722;
+              test "$(sha256sum /cli/plugins/docker-buildx | awk '{print $1}')" = 8c38f60308a895fa570f1410e453c5de11aafd65a99fa99965d96d24b6225a78
+          resources:
+            requests: {cpu: 10m, memory: 32Mi, ephemeral-storage: 32Mi}
+            limits: {cpu: 100m, memory: 128Mi, ephemeral-storage: 128Mi}
+          volumeMounts: [{name: docker-cli, mountPath: /cli}]
+        - name: dind
+          image: *docker-image
+          restartPolicy: Always
+          args: ["--host=unix:///var/run/docker.sock", "--host=tcp://0.0.0.0:2375", "--tls=false"]
+          readinessProbe: {tcpSocket: {port: 2375}, initialDelaySeconds: 2, periodSeconds: 2}
+          securityContext: {privileged: true}
+          resources:
+            requests: {cpu: 500m, memory: 2Gi, ephemeral-storage: 20Gi}
+            limits: {cpu: "2", memory: 4Gi, ephemeral-storage: 40Gi}
+          volumeMounts:
+            - {name: docker-socket, mountPath: /var/run}
+            - {name: docker-data, mountPath: /var/lib/docker}
+            - {name: workspace, mountPath: /workspace}
+            - {name: sfs, mountPath: /mnt/sfs}
+      containers:
+        - name: evaluator
+          image: ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
+          command: ["/bin/bash", "/bootstrap/run-g10-qwen-v1.sh"]
+          env:
+            - {name: PATH, value: "/docker-cli/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"}
+            - {name: DOCKER_CONFIG, value: "/workspace/docker-config"}
+            - {name: DOCKER_HOST, value: "unix:///var/run/docker.sock"}
+            - {name: DOCKER_TLS_CERTDIR, value: ""}
+            - {name: GENERATION10_JOB_NAME, value: chris-q38-ac-r004-a1-g10-v1}
+            - {name: GENERATION10_SECRET_UID, value: e0febd8e-94a2-46b0-a0bf-dd6b3154187b}
+            - {name: GENERATION10_PACKAGE_AGGREGATE_SHA256, valueFrom: {configMapKeyRef: {name: chris-q38-ac-r004-a1-g10-v1-run-v1, key: package_aggregate_sha256}}}
+            - {name: GENERATION10_RELEASE_FILE_SHA256, valueFrom: {configMapKeyRef: {name: chris-q38-ac-r004-a1-g10-v1-run-v1, key: release_file_sha256}}}
+            - {name: GENERATION10_DUPLICATE_PREFLIGHT_FILE_SHA256, valueFrom: {configMapKeyRef: {name: chris-q38-ac-r004-a1-g10-v1-run-v1, key: duplicate_preflight_file_sha256}}}
+            - {name: GENERATION10_PACKAGE_COMMIT, valueFrom: {configMapKeyRef: {name: chris-q38-ac-r004-a1-g10-v1-run-v1, key: package_commit}}}
+            - {name: JOB_UID, valueFrom: {fieldRef: {apiVersion: v1, fieldPath: "metadata.labels['batch.kubernetes.io/controller-uid']"}}}
+            - {name: POD_UID, valueFrom: {fieldRef: {apiVersion: v1, fieldPath: metadata.uid}}}
+            - {name: FLEET_API_KEY, valueFrom: {secretKeyRef: {name: chris-cyber-opencode-evals-v2, key: FLEET_API_KEY}}}
+          resources:
+            requests: {cpu: 100m, memory: 512Mi, ephemeral-storage: 5Gi}
+            limits: {cpu: "1", memory: 2Gi, ephemeral-storage: 20Gi}
+          volumeMounts:
+            - {name: docker-cli, mountPath: /docker-cli, readOnly: true}
+            - {name: docker-socket, mountPath: /var/run}
+            - {name: bootstrap, mountPath: /bootstrap, readOnly: true}
+            - {name: workspace, mountPath: /workspace}
+            - {name: sfs, mountPath: /mnt/sfs}
+      volumes:
+        - name: bootstrap
+          projected:
+            sources:
+              - configMap: {name: chris-q38-ac-g10-runtime-core-a-v1}
+              - configMap: {name: chris-q38-ac-g10-runtime-core-b-v1}
+              - configMap: {name: chris-q38-ac-r004-a1-g10-v1-run-v1}
+        - {name: docker-cli, emptyDir: {sizeLimit: 256Mi}}
+        - {name: docker-data, emptyDir: {sizeLimit: 40Gi}}
+        - {name: docker-socket, emptyDir: {}}
+        - {name: workspace, emptyDir: {sizeLimit: 5Gi}}
+        - {name: sfs, persistentVolumeClaim: {claimName: sfs-shared}}
