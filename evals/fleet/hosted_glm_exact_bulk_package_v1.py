@@ -10,6 +10,7 @@ from typing import Any
 
 import yaml
 
+from evals.fleet import hosted_glm_exact_bulk_runtime_v1 as runtime
 from evals.fleet import hosted_glm_exact_bulk_v1 as bulk
 from evals.fleet import hosted_glm_exact_canary_package_v1 as canary_package
 from evals.fleet import self_hosted
@@ -50,13 +51,15 @@ INSTALL_PATHS = {
 }
 
 
-def _job(template: dict[str, Any], controller: str) -> dict[str, Any]:
+def _job(template: dict[str, Any], controller: str, *, authorized: bool) -> dict[str, Any]:
     job = copy.deepcopy(template)
     source = bulk.CONTROLLERS[controller]
     name = source["job_name"]
     job["metadata"]["name"] = name
     job["metadata"]["labels"]["cyber-post-train.fleet.ai/experiment"] = name
-    job["metadata"]["annotations"]["cyber-post-train.fleet.ai/launch-authorized"] = "false"
+    job["metadata"]["annotations"]["cyber-post-train.fleet.ai/launch-authorized"] = str(
+        authorized
+    ).lower()
     pod = job["spec"]["template"]
     pod["metadata"]["labels"]["cyber-post-train.fleet.ai/experiment"] = name
     env = pod["spec"]["containers"][0]["env"]
@@ -66,8 +69,25 @@ def _job(template: dict[str, Any], controller: str) -> dict[str, Any]:
     return job
 
 
-def render(root: Path) -> dict[str, Any]:
-    bulk.validate_all(root)
+def render(
+    root: Path,
+    *,
+    canary_accepted: Path | None = None,
+    canary_terminal: Path | None = None,
+    release_receipt: Path | None = None,
+) -> dict[str, Any]:
+    plans = bulk.validate_all(root)
+    evidence = (canary_accepted, canary_terminal, release_receipt)
+    authorized = any(path is not None for path in evidence)
+    if authorized:
+        if any(path is None for path in evidence):
+            raise ValueError("bulk authorization requires canary and release receipts")
+        accepted = bulk.load(canary_accepted)  # type: ignore[arg-type]
+        terminal = bulk.load(canary_terminal)  # type: ignore[arg-type]
+        release = bulk.load(release_receipt)  # type: ignore[arg-type]
+        runtime.validate_canary_receipts(accepted, terminal)
+        first = next(iter(plans.values()))
+        runtime.validate_release_receipt({**first, "repo_root": str(root)}, release, terminal)
     data = {}
     for name, relative in PATHS.items():
         path = root / relative
@@ -88,7 +108,7 @@ def render(root: Path) -> dict[str, Any]:
     template = yaml.safe_load(
         (root / "evals/fleet/cluster/hosted-glm-exact-r001-a1-canary-v1.yaml").read_text()
     )
-    jobs = [_job(template, controller) for controller in bulk.CONTROLLERS]
+    jobs = [_job(template, controller, authorized=authorized) for controller in bulk.CONTROLLERS]
     objects = {"apiVersion": "v1", "kind": "List", "items": [configmap, *jobs]}
     encoded = self_hosted.canonical_json(objects)
     if len(json.dumps(configmap).encode()) >= 900_000:
@@ -96,8 +116,8 @@ def render(root: Path) -> dict[str, Any]:
     return {
         "objects": objects,
         "package_sha256": self_hosted.sha256(encoded),
-        "launch_authorized": False,
-        "reason": "requires_validated_canary_and_fresh_release_receipt",
+        "launch_authorized": authorized,
+        "reason": None if authorized else "requires_validated_canary_and_fresh_release_receipt",
     }
 
 
@@ -106,8 +126,16 @@ def main() -> int:
     parser.add_argument("command", choices=("preview", "render"))
     parser.add_argument("--repo", type=Path, default=Path.cwd())
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--canary-accepted", type=Path)
+    parser.add_argument("--canary-terminal", type=Path)
+    parser.add_argument("--release-receipt", type=Path)
     args = parser.parse_args()
-    package = render(args.repo.resolve())
+    package = render(
+        args.repo.resolve(),
+        canary_accepted=args.canary_accepted,
+        canary_terminal=args.canary_terminal,
+        release_receipt=args.release_receipt,
+    )
     if args.command == "preview":
         print(
             json.dumps(

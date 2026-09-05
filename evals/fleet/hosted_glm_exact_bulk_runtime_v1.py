@@ -52,6 +52,13 @@ def validate_canary_receipts(accepted: dict[str, Any], terminal: dict[str, Any])
 def validate_release(plan: dict[str, Any]) -> None:
     _, terminal = _canary_gate()
     release = bulk.load(RELEASE_PATH)
+    validate_release_receipt(plan, release, terminal)
+
+
+def validate_release_receipt(
+    plan: dict[str, Any], release: dict[str, Any], terminal: dict[str, Any]
+) -> None:
+    """Validate a copied sanitized release receipt against frozen plans."""
     all_plans = bulk.validate_all(Path(plan["repo_root"]))
     plan_shas = {name: value["plan_sha256"] for name, value in all_plans.items()}
     execution_ids = sorted(

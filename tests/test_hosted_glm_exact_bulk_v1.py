@@ -81,6 +81,17 @@ def test_held_package_is_immutable_and_never_launch_authorized() -> None:
         assert pod["volumes"][0]["configMap"]["name"] == package.CONFIGMAP_NAME
 
 
+def test_bulk_package_rejects_partial_authorization(tmp_path: Path) -> None:
+    receipt = tmp_path / "receipt.json"
+    receipt.write_text("{}")
+    try:
+        package.render(ROOT, release_receipt=receipt)
+    except ValueError as exc:
+        assert "canary and release receipts" in str(exc)
+    else:
+        raise AssertionError("partial bulk authorization must fail closed")
+
+
 def test_exact_bundle_imports_in_isolated_tree(tmp_path: Path) -> None:
     configmap = package.render(ROOT)["objects"]["items"][0]
     for name, relative in package.INSTALL_PATHS.items():
