@@ -321,3 +321,50 @@ def test_endpoint_stream_leases_are_atomic_and_reusable(tmp_path: Path) -> None:
     ) as replacement:
         assert replacement.slot == 1
     lease2.close()
+
+
+def test_two_slot_addon_reserves_only_slots_three_and_four(tmp_path: Path) -> None:
+    first = endpoint_lease.acquire_endpoint_lease(
+        lease_root=tmp_path, endpoint_key="hosted-qwen", maximum_streams=2
+    )
+    second = endpoint_lease.acquire_endpoint_lease(
+        lease_root=tmp_path, endpoint_key="hosted-qwen", maximum_streams=2
+    )
+    with endpoint_lease.acquire_endpoint_leases(
+        lease_root=tmp_path,
+        endpoint_key="hosted-qwen",
+        maximum_streams=4,
+        count=2,
+    ) as addon:
+        assert addon.slots == [3, 4]
+        with pytest.raises(RuntimeError, match="cap is already full"):
+            endpoint_lease.acquire_endpoint_lease(
+                lease_root=tmp_path,
+                endpoint_key="hosted-qwen",
+                maximum_streams=4,
+            )
+    first.close()
+    second.close()
+
+
+def test_multi_slot_reservation_releases_partial_acquisition(tmp_path: Path) -> None:
+    holders = [
+        endpoint_lease.acquire_endpoint_lease(
+            lease_root=tmp_path, endpoint_key="hosted-qwen", maximum_streams=4
+        )
+        for _ in range(3)
+    ]
+    with pytest.raises(RuntimeError, match="cap is already full"):
+        endpoint_lease.acquire_endpoint_leases(
+            lease_root=tmp_path,
+            endpoint_key="hosted-qwen",
+            maximum_streams=4,
+            count=2,
+        )
+    holders[0].close()
+    with endpoint_lease.acquire_endpoint_lease(
+        lease_root=tmp_path, endpoint_key="hosted-qwen", maximum_streams=4
+    ) as replacement:
+        assert replacement.slot == 1
+    for holder in holders[1:]:
+        holder.close()

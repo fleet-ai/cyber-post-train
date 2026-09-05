@@ -34,6 +34,27 @@ class EndpointLease:
         self.close()
 
 
+@dataclass
+class EndpointLeaseSet:
+    """Several endpoint slots acquired as one all-or-nothing reservation."""
+
+    leases: list[EndpointLease]
+
+    @property
+    def slots(self) -> list[int]:
+        return [lease.slot for lease in self.leases]
+
+    def close(self) -> None:
+        for lease in reversed(self.leases):
+            lease.close()
+
+    def __enter__(self) -> EndpointLeaseSet:
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        self.close()
+
+
 def acquire_endpoint_lease(
     *, lease_root: Path, endpoint_key: str, maximum_streams: int
 ) -> EndpointLease:
@@ -41,8 +62,8 @@ def acquire_endpoint_lease(
 
     if not LEASE_KEY.fullmatch(endpoint_key):
         raise ValueError("endpoint lease key is invalid")
-    if type(maximum_streams) is not int or maximum_streams not in {1, 2}:
-        raise ValueError("endpoint stream limit must be one or two")
+    if type(maximum_streams) is not int or maximum_streams not in {1, 2, 3, 4}:
+        raise ValueError("endpoint stream limit must be between one and four")
     if lease_root.exists() and (lease_root.is_symlink() or not lease_root.is_dir()):
         raise RuntimeError("endpoint lease root is unsafe")
     lease_root.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -70,3 +91,27 @@ def acquire_endpoint_lease(
             continue
         return EndpointLease(endpoint_key, slot, path, handle)
     raise RuntimeError("endpoint stream cap is already full")
+
+
+def acquire_endpoint_leases(
+    *, lease_root: Path, endpoint_key: str, maximum_streams: int, count: int
+) -> EndpointLeaseSet:
+    """Acquire several slots or release every partial acquisition before failing."""
+
+    if type(count) is not int or count < 1 or count > maximum_streams:
+        raise ValueError("endpoint lease count is invalid")
+    acquired: list[EndpointLease] = []
+    try:
+        for _ in range(count):
+            acquired.append(
+                acquire_endpoint_lease(
+                    lease_root=lease_root,
+                    endpoint_key=endpoint_key,
+                    maximum_streams=maximum_streams,
+                )
+            )
+    except Exception:
+        for lease in reversed(acquired):
+            lease.close()
+        raise
+    return EndpointLeaseSet(acquired)
