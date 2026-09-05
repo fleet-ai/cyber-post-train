@@ -22,8 +22,30 @@ PATHS = {
     "bulk_runtime.py": "evals/fleet/exact_pass4_bulk_runtime_v3.py",
     "universe.py": "evals/fleet/exact_pass4_universe.py",
     "crypto.py": "evals/fleet/exact_pass4_crypto.py",
+    "inventory.py": "evals/fleet/exact_pass4_task_inventory.py",
     "canary.py": "evals/fleet/hosted_glm_exact_canary_v1.py",
     "run.sh": "evals/fleet/scripts/run_hosted_glm_exact_canary_v1.sh",
+    "campaign.json": "evals/fleet/configs/q38-glm53-exact-easiest100-pass4-campaign-v1.json",
+    "selection.json": "evals/fleet/configs/opencode-easiest-train100-selection-v2.json",
+    "glm-template.json": "evals/fleet/configs/glm53-opencode-autocontinue-canary1-v1.json",
+    "qwen-template.json": "evals/fleet/configs/qwen38-opencode-autocontinue-canary1-v1.json",
+    "bulk-qwen-a.json": "evals/fleet/configs/exact-pass4-bulk-qwen-a-v3.json",
+    "bulk-qwen-b.json": "evals/fleet/configs/exact-pass4-bulk-qwen-b-v3.json",
+    "bulk-glm-a.json": "evals/fleet/configs/exact-pass4-bulk-glm-a-v3.json",
+    "bulk-glm-b.json": "evals/fleet/configs/exact-pass4-bulk-glm-b-v3.json",
+    "parity.json": str(canary.PARITY_PATH),
+}
+INSTALL_PATHS = {
+    "self_hosted.py": "evals/fleet/self_hosted.py",
+    "runner.py": "evals/fleet/opencode_train_sweep_runner.py",
+    "endpoint_lease.py": "evals/fleet/endpoint_lease.py",
+    "bulk.py": "evals/fleet/exact_pass4_bulk_v3.py",
+    "bulk_runtime.py": "evals/fleet/exact_pass4_bulk_runtime_v3.py",
+    "universe.py": "evals/fleet/exact_pass4_universe.py",
+    "crypto.py": "evals/fleet/exact_pass4_crypto.py",
+    "inventory.py": "evals/fleet/exact_pass4_task_inventory.py",
+    "canary.py": "evals/fleet/hosted_glm_exact_canary_v1.py",
+    "fixed_proxy.py": "evals/fleet/fixed_proxy.py",
     "campaign.json": "evals/fleet/configs/q38-glm53-exact-easiest100-pass4-campaign-v1.json",
     "selection.json": "evals/fleet/configs/opencode-easiest-train100-selection-v2.json",
     "glm-template.json": "evals/fleet/configs/glm53-opencode-autocontinue-canary1-v1.json",
@@ -45,6 +67,10 @@ def render(root: Path) -> dict[str, Any]:
         if path.is_symlink() or not path.is_file():
             raise ValueError(f"unsafe package source: {relative}")
         data[name] = path.read_text()
+    run_script = data["run.sh"]
+    for name, target in INSTALL_PATHS.items():
+        if f"/bootstrap/{name}" not in run_script or target not in run_script:
+            raise ValueError(f"packaged runtime install closure omits {name}")
     configmap = {
         "apiVersion": "v1",
         "kind": "ConfigMap",
