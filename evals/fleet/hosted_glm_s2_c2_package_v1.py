@@ -16,13 +16,20 @@ from evals.fleet import hosted_glm_s2_c2_runtime_v1 as runtime
 from evals.fleet import self_hosted
 
 
-def render(root: Path, *, release_receipt: Path | None = None) -> dict[str, Any]:
+def render(
+    root: Path,
+    *,
+    release_receipt: Path | None = None,
+    inventory_receipt: Path | None = None,
+) -> dict[str, Any]:
     c2.validate_all(root)
-    authorized = release_receipt is not None
+    authorized = release_receipt is not None or inventory_receipt is not None
     if authorized:
-        inventory = c2.load(runtime.bulk_runtime.INVENTORY_PATH)
+        if release_receipt is None or inventory_receipt is None:
+            raise ValueError("GLM c2 authorization requires release and inventory receipts")
+        inventory = c2.load(inventory_receipt)
         plan = c2.build_runtime_plan(c2.CONTROLLER, inventory, root)
-        runtime.validate_release_receipt(plan, c2.load(release_receipt))  # type: ignore[arg-type]
+        runtime.validate_release_receipt(plan, c2.load(release_receipt))
     rendered = base.render(root)
     configmap, template = copy.deepcopy(rendered["objects"]["items"][:2])
     configmap["metadata"]["name"] = c2.CONFIGMAP_NAME
@@ -62,8 +69,13 @@ def main() -> int:
     parser.add_argument("command", choices=("preview", "render"))
     parser.add_argument("--repo", type=Path, default=Path.cwd())
     parser.add_argument("--release-receipt", type=Path)
+    parser.add_argument("--inventory-receipt", type=Path)
     args = parser.parse_args()
-    value = render(args.repo.resolve(), release_receipt=args.release_receipt)
+    value = render(
+        args.repo.resolve(),
+        release_receipt=args.release_receipt,
+        inventory_receipt=args.inventory_receipt,
+    )
     if args.command == "preview":
         print(json.dumps({key: item for key, item in value.items() if key != "objects"}))
     else:
