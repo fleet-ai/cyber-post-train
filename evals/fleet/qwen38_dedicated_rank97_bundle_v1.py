@@ -62,7 +62,7 @@ RUN_IDS = {
 def _binding():
     replacements = {
         "CONTROLLER": CONTROLLER,
-        "SOURCE": Path("evals/fleet/configs/qwen-hosted-generation19-qwen-a-v3.json"),
+        "SOURCE": Path("evals/fleet/configs/qwen-hosted-generation19-qwen-a-v4.json"),
         "SERVICE_ORIGIN": SERVICE_ORIGIN,
         "SERVICE_UID": SERVICE_UID,
         "RAYJOB_UID": RAYJOB_UID,
@@ -149,7 +149,7 @@ def _released_plans(root: Path) -> list[dict[str, Any]]:
         or release.get("cell_ids") != [EXPECTED_IDENTITIES[index][0] for index in (1, 2, 3, 4)]
         or release.get("execution_ids") != [EXPECTED_IDENTITIES[index][1] for index in (1, 2, 3, 4)]
         or release.get("serving_block") != SERVING_BLOCK
-        or release.get("prior_owner") != "qwen-a-generation19-v3"
+        or release.get("prior_owner") != "qwen-a-generation19-v4"
         or release.get("single_job_four_claim_reservation_required") is not True
         or release.get("fresh_global_ledger_clear") is not True
         or release.get("fresh_authoritative_sessions_clear") is not True
