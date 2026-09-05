@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 from collections import defaultdict
 from datetime import UTC, datetime
@@ -33,7 +34,10 @@ def _stage(output: Path, ordinal: int, name: str) -> None:
 
 def run(plan_path: Path, output: Path) -> dict[str, Any]:
     _stage(output, 1, "started")
-    payload = bulk.load(plan_path)
+    raw = plan_path.read_bytes()
+    payload = json.loads(raw)
+    if not isinstance(payload, dict) or raw != self_hosted.canonical_json(payload) + b"\n":
+        raise RuntimeError("Generation-16 preflight envelope drifted")
     plans = payload.get("plans")
     if not isinstance(plans, list) or len(plans) != 2:
         raise RuntimeError("Generation-16 preflight plan envelope drifted")
