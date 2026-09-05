@@ -26,8 +26,9 @@ MAX_OWNED_EVAL_NODES = 2
 MAX_OWNED_EVAL_GPUS = 16
 
 
-def _validate_prepared(raw: bytes) -> dict[str, Any]:
-    if self_hosted.sha256(raw) != v15.PRE_ADMISSION["file_sha256"]:
+def _validate_prepared(raw: bytes, package: Any = v15) -> dict[str, Any]:
+    admission = package.PRE_ADMISSION
+    if self_hosted.sha256(raw) != admission["file_sha256"]:
         raise RuntimeError("v15 pre-admission receipt file digest drifted")
     try:
         receipt = json.loads(raw)
@@ -37,9 +38,9 @@ def _validate_prepared(raw: bytes) -> dict[str, Any]:
         "schema_version": "fleet-glm53-dedicated-v14-scored-canary-preflight-v1",
         "status": "CLEAR_HELD",
         "launch_authorized": False,
-        "controller_package_sha256": v15.PRE_ADMISSION["controller_package_sha256"],
-        "held_plan_sha256": v15.PRE_ADMISSION["held_plan_sha256"],
-        "selection_rank": v15.PRE_ADMISSION["selection_rank"],
+        "controller_package_sha256": admission["controller_package_sha256"],
+        "held_plan_sha256": admission["held_plan_sha256"],
+        "selection_rank": admission["selection_rank"],
         "all_four_rank_cells_unstarted": True,
         "fleet_session_collisions": 0,
         "global_claim_collisions": 0,
@@ -55,7 +56,7 @@ def _validate_prepared(raw: bytes) -> dict[str, Any]:
     if any(receipt.get(key) != value for key, value in required.items()):
         raise RuntimeError("v15 pre-admission receipt fields drifted")
     if (
-        receipt.get("receipt_sha256") != v15.PRE_ADMISSION["receipt_sha256"]
+        receipt.get("receipt_sha256") != admission["receipt_sha256"]
         or receipt.get("receipt_sha256")
         != self_hosted.digest_without(receipt, "receipt_sha256")
     ):
@@ -85,8 +86,8 @@ def _validate_prepared(raw: bytes) -> dict[str, Any]:
     return receipt
 
 
-def _read_prepared() -> tuple[bytes, dict[str, Any]]:
-    observer_path = shared._observer_sfs_path(v15.PRE_ADMISSION["receipt_path"])
+def _read_prepared(package: Any = v15) -> tuple[bytes, dict[str, Any]]:
+    observer_path = shared._observer_sfs_path(package.PRE_ADMISSION["receipt_path"])
     completed = subprocess.run(
         [
             "kubectl",
@@ -101,7 +102,7 @@ def _read_prepared() -> tuple[bytes, dict[str, Any]]:
         check=True,
         capture_output=True,
     )
-    return completed.stdout, _validate_prepared(completed.stdout)
+    return completed.stdout, _validate_prepared(completed.stdout, package)
 
 
 def _live_rows(client: httpx.Client, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -126,14 +127,19 @@ def _live_rows(client: httpx.Client, rows: list[dict[str, Any]]) -> list[dict[st
     return live
 
 
-def _project_shape(rows: list[dict[str, Any]]) -> dict[str, Any]:
+def _project_shape(
+    rows: list[dict[str, Any]],
+    *,
+    target_run_dir: str = v15.RUN_DIR,
+    allowed: dict[str, dict[str, int]] = ALLOWED_ACTIVE_EVAL_SERVERS,
+) -> dict[str, Any]:
     peers = []
     nodes, gpus = 1, 8
     for row in rows:
         run_dir = row["run_dir"]
-        if run_dir == v15.RUN_DIR:
+        if run_dir == target_run_dir:
             raise RuntimeError("GLM v15 Jobs API identity already exists")
-        shape = ALLOWED_ACTIVE_EVAL_SERVERS.get(run_dir)
+        shape = allowed.get(run_dir)
         if shape is None:
             raise RuntimeError("unknown active owned eval server")
         nodes += shape["nodes"]
@@ -150,17 +156,23 @@ def _project_shape(rows: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def live_gate(root: Path) -> dict[str, Any]:
-    raw_prepared, prepared = _read_prepared()
-    gate = generic.live_gate(root, v15)
-    payload = v15.payload(v15.spec(root), root)
+def live_gate(
+    root: Path,
+    package: Any = v15,
+    allowed: dict[str, dict[str, int]] = ALLOWED_ACTIVE_EVAL_SERVERS,
+) -> dict[str, Any]:
+    raw_prepared, prepared = _read_prepared(package)
+    gate = generic.live_gate(root, package)
+    payload = package.payload(package.spec(root), root)
     with httpx.Client(
         base_url=shared.BASE_URL,
         headers={"Authorization": f"Bearer {shared._token()}", "Accept": "application/json"},
         timeout=60,
     ) as client:
         rows = shared._runs(client)
-        project_shape = _project_shape(_live_rows(client, rows))
+        project_shape = _project_shape(
+            _live_rows(client, rows), target_run_dir=package.RUN_DIR, allowed=allowed
+        )
         preview = client.post("/v1/runs/preview", json=payload)
         preview.raise_for_status()
         manifest_yaml = preview.json()["manifest_yaml"]
@@ -185,7 +197,7 @@ def live_gate(root: Path) -> dict[str, Any]:
         manifest_yaml, nodes, pods, flavor
     )
     gate["pre_admission"] = {
-        "path": v15.PRE_ADMISSION["receipt_path"],
+        "path": package.PRE_ADMISSION["receipt_path"],
         "file_sha256": self_hosted.sha256(raw_prepared),
         "receipt_sha256": prepared["receipt_sha256"],
         "controller_package_sha256": prepared["controller_package_sha256"],

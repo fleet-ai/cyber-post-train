@@ -10,6 +10,7 @@ from evals.fleet import glm53_dedicated_v15 as v15
 from evals.fleet import glm53_dedicated_v15_canary_heartbeat_v1 as heartbeat
 from evals.fleet import glm53_dedicated_v15_canary_release_package_v1 as release_package
 from evals.fleet import glm53_dedicated_v15_live as live
+from evals.fleet import glm53_dedicated_v16 as v16
 from evals.fleet import self_hosted
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -177,3 +178,15 @@ def test_projected_configmap_evidence_is_copied_to_regular_files(tmp_path: Path)
     assert "install -m 0600 /evidence/release.json" in canary_script
     assert "install -m 0600 /bootstrap/parity.json" in release_script
     assert '--controller-package "$EVIDENCE_DIR/controller-package.json"' in release_script
+
+
+def test_v16_preserves_v15_runtime_and_binds_corrected_preflight() -> None:
+    old = v15.payload(v15.spec(ROOT), ROOT)
+    new = v16.payload(v16.spec(ROOT), ROOT)
+    for field in set(old) - {"title", "run_dir", "env"}:
+        assert new[field] == old[field]
+    assert new["title"] == v16.TITLE
+    assert new["run_dir"] == v16.RUN_DIR
+    assert new["env"] == {**old["env"], "GLM53_RUN_DIR": v16.RUN_DIR}
+    assert v16.PRE_ADMISSION["receipt_sha256"].endswith("5f9339d")
+    assert v16.PRE_ADMISSION["controller_package_sha256"] == release_package.CONTROLLER_PACKAGE_SHA256
