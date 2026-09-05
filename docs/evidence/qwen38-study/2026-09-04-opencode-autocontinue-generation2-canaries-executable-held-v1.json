@@ -1,0 +1,50 @@
+{
+  "schema_version": "fleet-opencode-autocontinue-generation2-canary-executable-held-release-v1",
+  "append_only": true,
+  "status": "HELD",
+  "observed_at_utc": "2026-09-05T05:30:00Z",
+  "supersedes_contract_held_receipt": {
+    "path": "docs/evidence/qwen38-study/2026-09-04-opencode-autocontinue-generation2-canaries-held-v3.json",
+    "receipt_sha256": "sha256:010a541d9c9f7f24a28b94e5a315364d01d550e2fad96f9facd01ca7b9ac0b9e"
+  },
+  "generation2_spec_sha256s": [
+    "sha256:9d8201974794edd3bad379721cf9c9e0e9ae0b978221d223d8165730302e737c",
+    "sha256:f4b9f990da87ac46da30a26d3c00a8d023b82ddf2251964343cc55eff309d938"
+  ],
+  "rendered_plan_sha256s": [
+    "sha256:1c98863eb54921e338020954e2395da0ecc085a6300c7fb60b97142ec0e949da",
+    "sha256:7b1bfaf18158e224595b4d31c2a56b064f3c78c848284558f070a28889b2a5c3"
+  ],
+  "jobs": [
+    "chris-q38-ac-r004-a1-g2-v1",
+    "chris-glm53-ac-r013-a1-g2-v1"
+  ],
+  "execution_generation": 2,
+  "statistical_cells": 2,
+  "implementation": {
+    "contract_module_path": "evals/fleet/autocontinue_generation2_canary_v3.py",
+    "contract_module_sha256": "sha256:6d71a53a991710fa7f6e7173cfad7cc1ced0271e7efe5d2c97f990572b2befd8",
+    "runtime_module_path": "evals/fleet/autocontinue_generation2_runtime_v3.py",
+    "runtime_module_sha256": "sha256:e3a8d256a349f7d03748888b077ac05a42f72f80fad34ffe306340dc6a8594a6",
+    "manifest_path": "evals/fleet/cluster/opencode-autocontinue-generation2-canaries-v3.yaml",
+    "manifest_sha256": "sha256:2e25b5bf70cc3361024efd906052a57ffd078d26336e70247e2ca3e67cc270e3",
+    "run_path": "evals/fleet/scripts/run_opencode_autocontinue_generation2_canary_v3.sh",
+    "run_sha256": "sha256:4e549a078b83df8f3dc619a744cf3af3f925ca894122b11d2a6d4be8fe24a551",
+    "submit_path": "evals/fleet/scripts/submit_opencode_autocontinue_generation2_canaries_v3.sh",
+    "submit_sha256": "sha256:7afe70a0f5eb1b2e507e4d126958af60d7a3df4cc797e42c99afd5fd8b4123fc"
+  },
+  "launch_authorized": false,
+  "bulk_release_authorized": false,
+  "dedicated_serving_authorized": false,
+  "remaining_gates": [
+    "independent_executable_package_audit",
+    "fresh_hosted_route_and_duplicate_inventory",
+    "append_only_model_specific_scoring_releases",
+    "explicit_root_launch_authorization"
+  ],
+  "privacy": {
+    "prompts_traces_flags_or_scores_included": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:d578ae2b30a78221846993394dedf12781477c5f16afd889225270945738788b"
+}
