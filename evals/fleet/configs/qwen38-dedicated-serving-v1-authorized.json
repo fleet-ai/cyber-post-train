@@ -30,7 +30,7 @@
     "cpu_limit": "96",
     "memory_request": "256Gi",
     "memory_limit": "768Gi",
-    "privileged": true,
+    "privileged": false,
     "priority_class": "fleet-infra-quiet",
     "preemption_policy": "Never"
   },
@@ -40,6 +40,7 @@
     "exact_live_context_length": 262144,
     "exact_live_tensor_parallel_size": 1,
     "exact_live_gpu_count": 1,
+    "exact_live_privileged": false,
     "serialized_weight_bytes": 55563006776,
     "kv_cache_dtype": "fp8_e4m3"
   },

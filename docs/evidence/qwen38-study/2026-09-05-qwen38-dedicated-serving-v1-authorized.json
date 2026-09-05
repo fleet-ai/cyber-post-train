@@ -21,6 +21,7 @@
     "live_state": "Ready",
     "live_tensor_parallel_size": 1,
     "live_gpu_count": 1,
+    "live_privileged": false,
     "live_context_length": 262144,
     "runtime_image": "ghcr.io/fleet-ai/cyber-post-train-glm53-runtime@sha256:ec93ba50613fd13fb4c0b0a9105767ab18209a1e0108dab0923aad694c0206ec",
     "runtime_sglang_version": "0.5.18",
@@ -43,19 +44,19 @@
     "gpus": 1,
     "priority_class": "fleet-infra-quiet",
     "preemption_policy": "Never",
-    "privileged": true
+    "privileged": false
   },
   "file_sha256": {
-    "evals/fleet/configs/qwen38-dedicated-serving-v1-authorized.json": "sha256:45bdd77a574b96703fe4f874c7e8cf6c946940974ae022de6750d3b0b45a535e",
-    "evals/fleet/qwen38_dedicated_v1.py": "sha256:263bab437a110d7969b90965ede8d9be89de8c46507ca045703edb4ce24d9bef",
-    "evals/fleet/qwen38_dedicated_v1_live.py": "sha256:29b14452ddd868d8817e1340fbb6f896f5fe6ed79278d8764381e22c5b7cead7",
+    "evals/fleet/configs/qwen38-dedicated-serving-v1-authorized.json": "sha256:19fd77c26e43d4ae509fe133020997a57541186d5836b2adf80135f33c7b6932",
+    "evals/fleet/qwen38_dedicated_v1.py": "sha256:9e585c1d8ae9f91135993720cf1366a5521b99834cbf31c22213f41888b60c05",
+    "evals/fleet/qwen38_dedicated_v1_live.py": "sha256:39012475a954a17fa9e536107c87f3dfa6dcb40f7abb72b276e4b7f136b39a8a",
     "evals/fleet/scripts/qwen38_dedicated_lifecycle_v1.sh": "sha256:e41e47e88179dda48fc00f4ffeed4c6e5bf98d5e83ad7ccbda4fd2c5cecfbc88",
     "evals/fleet/scripts/submit_qwen38_dedicated_v1.sh": "sha256:48fbda18b4a2b72098a7aff192a80cccc50ecf0d7210aa6e1d32ba81abd8c299",
-    "tests/test_qwen38_dedicated_v1.py": "sha256:c90a90d1b126ebc8bc5e50315e2fab1beb5addb3cee01f971c5221308898bf80"
+    "tests/test_qwen38_dedicated_v1.py": "sha256:47074d2bdda495f85212ff2da3da6bfaf7db57a9ad5441b4d105443bc869e177"
   },
   "privacy": {
     "credentials_included": false,
     "prompts_traces_flags_or_scores_included": false
   },
-  "receipt_sha256": "sha256:e2a4846973005dc0a3eb3ddf40d92d22186959d4384917f2f5a84ed83a6fbda1"
+  "receipt_sha256": "sha256:e8ee0514cfff3b70a084e87cf7ac850e3b9a2e42574aedddffcc0216b19f3a90"
 }

@@ -15,7 +15,7 @@ def test_qwen_v1_is_one_non_scored_tp1_canary() -> None:
     assert request["workers"] == 1
     assert request["gpus_per_worker"] == 1
     assert request["priority_class"] == "fleet-infra-quiet"
-    assert request["privileged"] is True
+    assert request["privileged"] is False
 
 
 def test_qwen_v1_matches_live_tp1_context_and_tool_runtime() -> None:
@@ -23,6 +23,7 @@ def test_qwen_v1_matches_live_tp1_context_and_tool_runtime() -> None:
     command = v1.payload(value, ROOT)["command"]
     assert value["shape_basis"]["exact_live_tensor_parallel_size"] == 1
     assert value["shape_basis"]["exact_live_context_length"] == 262144
+    assert value["shape_basis"]["exact_live_privileged"] is False
     assert "--tp-size 1" in command
     assert "--context-length 262144" in command
     assert "--kv-cache-dtype fp8_e4m3" in command

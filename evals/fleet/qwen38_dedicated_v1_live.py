@@ -87,7 +87,7 @@ def _preview_identity(manifest_yaml: str, payload: dict[str, Any]) -> dict[str, 
     expected = {
         "image": payload["image"],
         "priority_class": "fleet-infra-quiet",
-        "privileged": True,
+        "privileged": False,
         "run_dir": payload["run_dir"],
         "gpus": 1,
         "image_pull_secrets": ["ghcr-pull"],

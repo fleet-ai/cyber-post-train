@@ -111,7 +111,7 @@ def validate(value: dict[str, Any], root: Path) -> None:
         "cpu_limit": "96",
         "memory_request": "256Gi",
         "memory_limit": "768Gi",
-        "privileged": True,
+        "privileged": False,
         "priority_class": "fleet-infra-quiet",
         "preemption_policy": "Never",
     }:
@@ -125,6 +125,7 @@ def validate(value: dict[str, Any], root: Path) -> None:
             "exact_live_context_length": 262144,
             "exact_live_tensor_parallel_size": 1,
             "exact_live_gpu_count": 1,
+            "exact_live_privileged": False,
             "serialized_weight_bytes": 55563006776,
             "kv_cache_dtype": "fp8_e4m3",
         }.items()
@@ -165,7 +166,7 @@ def payload(value: dict[str, Any], root: Path) -> dict[str, Any]:
             "memory_limit": "768Gi",
         },
         "priority_class": "fleet-infra-quiet",
-        "privileged": True,
+        "privileged": False,
         "run_dir": RUN_DIR,
         "title": TITLE,
     }
