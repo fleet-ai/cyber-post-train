@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from evals.fleet import hosted_glm_exact_bulk_package_v1 as package
 from evals.fleet import hosted_glm_exact_bulk_runtime_v1 as runtime
 from evals.fleet import hosted_glm_exact_bulk_v1 as bulk
 from evals.fleet import self_hosted
@@ -57,3 +58,20 @@ def test_runtime_hydration_preserves_static_cells() -> None:
     plans = bulk.validate_all(ROOT)
     assert self_hosted.sha256(self_hosted.canonical_json(sorted(plans))).startswith("sha256:")
     assert inventory["receipt_sha256"].startswith("sha256:")
+
+
+def test_held_package_is_immutable_and_never_launch_authorized() -> None:
+    rendered = package.render(ROOT)
+    assert rendered["launch_authorized"] is False
+    configmap, *jobs = rendered["objects"]["items"]
+    assert configmap["immutable"] is True
+    assert len(jobs) == 4
+    assert len({job["metadata"]["name"] for job in jobs}) == 4
+    for job in jobs:
+        assert (
+            job["metadata"]["annotations"]["cyber-post-train.fleet.ai/launch-authorized"] == "false"
+        )
+        pod = job["spec"]["template"]["spec"]
+        assert pod["priorityClassName"] == "fleet-serve-low"
+        assert pod["preemptionPolicy"] == "Never"
+        assert pod["volumes"][0]["configMap"]["name"] == package.CONFIGMAP_NAME

@@ -27,7 +27,7 @@ CONTROLLERS = {
     f"glm-hosted-s{stream}": {
         "model": "glm-5.3",
         "job_name": f"chris-glm53-exact100-hosted-s{stream}-v1",
-        "configmap_name": f"chris-glm53-exact100-hosted-s{stream}-v1-run",
+        "configmap_name": "chris-glm53-exact100-hosted-bulk-v1-run",
         "serving_block": "glm-hosted-autocontinue-v1",
         "task_ranks": list(range(first, last + 1)),
     }
