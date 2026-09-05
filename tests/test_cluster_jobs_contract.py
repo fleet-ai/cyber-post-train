@@ -5,7 +5,6 @@ from pathlib import Path
 
 import pytest
 
-
 _SCRIPT = (
     Path(__file__).parents[1]
     / "skills"

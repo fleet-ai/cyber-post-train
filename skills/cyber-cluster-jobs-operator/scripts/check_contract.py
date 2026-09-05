@@ -10,7 +10,6 @@ import urllib.error
 import urllib.request
 from typing import Any
 
-
 DEFAULT_BASE_URL = "https://api.ft.flt.build"
 EXPECTED_FIELDS = {
     "image",
