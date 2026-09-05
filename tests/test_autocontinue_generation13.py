@@ -29,6 +29,8 @@ def test_exact_spec_and_package(model: str) -> None:
     cm, job = built["objects"]["items"]
     assert cm["metadata"]["name"] == runtime.EXPECTED[model]["configmap_name"]
     assert job["metadata"]["name"] == runtime.EXPECTED[model]["job_name"]
+    assert job["metadata"]["annotations"]["cyber-post-train.fleet.ai/preview-only"] == "false"
+    assert job["metadata"]["annotations"]["cyber-post-train.fleet.ai/launch-authorized"] == "true"
     assert set(cm["data"]) == {
         "Dockerfile.opencode",
         "fixed_proxy.py",

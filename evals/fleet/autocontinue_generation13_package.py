@@ -1,4 +1,4 @@
-"""Render held G13 Qwen/GLM ConfigMap+Job packages without launching them."""
+"""Render authorized G13 Qwen/GLM ConfigMap+Job packages."""
 
 from __future__ import annotations
 
@@ -151,8 +151,8 @@ def main() -> int:
         print(
             json.dumps(
                 {
-                    "status": "HELD",
-                    "launch_authorized": False,
+                    "status": "READY",
+                    "launch_authorized": True,
                     "objects_created": False,
                     "model": args.model,
                     "package_sha256": built["package_sha256"],

@@ -8,8 +8,8 @@ metadata:
     cyber-post-train.fleet.ai/owner: chris
     kueue.x-k8s.io/queue-name: training-lq
   annotations:
-    cyber-post-train.fleet.ai/preview-only: "true"
-    cyber-post-train.fleet.ai/launch-authorized: "false"
+    cyber-post-train.fleet.ai/preview-only: "false"
+    cyber-post-train.fleet.ai/launch-authorized: "true"
     cyber-post-train.fleet.ai/create-once: "true"
 spec:
   activeDeadlineSeconds: 43200
