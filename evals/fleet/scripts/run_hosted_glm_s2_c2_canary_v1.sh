@@ -16,7 +16,7 @@ for binding in \
   crypto.py:exact_pass4_crypto.py \
   inventory.py:exact_pass4_task_inventory.py \
   bulk.py:hosted_glm_exact_bulk_v1.py \
-  base_runtime.py:hosted_glm_exact_bulk_runtime_v1.py \
+  bulk_runtime.py:hosted_glm_exact_bulk_runtime_v1.py \
   original_release.py:hosted_glm_exact_bulk_release_v1.py \
   c2.py:hosted_glm_s2_c2_canary_v1.py \
   c2_release.py:hosted_glm_s2_c2_release_v1.py \

@@ -29,6 +29,15 @@ def test_c2_scored_package_is_held_without_release() -> None:
     assert configmap["immutable"] is True
     assert job["metadata"]["annotations"]["cyber-post-train.fleet.ai/launch-authorized"] == "false"
     assert job["spec"]["template"]["spec"]["preemptionPolicy"] == "Never"
+    required = {
+        line.strip().rstrip("\\").strip().split(":", 1)[0]
+        for line in configmap["data"]["run.sh"].splitlines()
+        if ":" in line
+        and line.strip().rstrip("\\").strip().split(":", 1)[0].endswith(
+            (".py", ".json")
+        )
+    }
+    assert required <= set(configmap["data"])
 
 
 def test_c2_release_observer_is_also_held_until_s1_accepts() -> None:

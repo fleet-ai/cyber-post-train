@@ -11,7 +11,7 @@ from evals.fleet import self_hosted
 
 SCHEMA = "fleet-hosted-glm-s2-c2-canary-plan-v1"
 CONTROLLER = "glm-hosted-s2"
-JOB_NAME = "chris-glm53-exact100-hosted-s2-c2-canary-v1"
+JOB_NAME = "chris-glm53-exact100-hosted-s2-c2-canary-v2"
 CONFIGMAP_NAME = JOB_NAME + "-run"
 SFS_ROOT = Path("/mnt/sfs/jobs") / JOB_NAME
 S1_ROOT = Path("/mnt/sfs/jobs/chris-glm53-exact100-hosted-s1-v1")
