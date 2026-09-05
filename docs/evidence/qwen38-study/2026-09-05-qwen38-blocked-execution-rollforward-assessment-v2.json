@@ -1,0 +1,87 @@
+{
+  "base_assessment": {
+    "path": "docs/evidence/qwen38-study/2026-09-05-qwen38-blocked-execution-rollforward-assessment-v1.json",
+    "receipt_sha256": "sha256:40c2c6a91be6b57164ebc46b5283c2bd1d8d684b69ab5dfad9421e961a787cec"
+  },
+  "campaign_id": "chris-cyber-q38-glm53-exact-easiest100-pass4-v1",
+  "launch_authorized": false,
+  "objects_created": false,
+  "observed_at_utc": "2026-09-05T23:34:29Z",
+  "privacy": {
+    "credentials_included": false,
+    "prompts_traces_flags_read": false,
+    "scores_read": false
+  },
+  "receipt_sha256": "sha256:0790cdd45f1f734f7002127dec95a6bbb1a6fe56d6d7c5e11a3536ae8f2d369b",
+  "resulting_counts": {
+    "eligible": 7,
+    "ineligible": 2,
+    "total": 9
+  },
+  "schema_version": "fleet-execution-generation-rollforward-assessment-v2",
+  "session_absence_observer": {
+    "file_sha256": "sha256:b124b440527a8e99dd5ad8125e2051c34c53b8ed7a3548a762dddefac5b5ef14",
+    "path": "docs/evidence/qwen38-study/2026-09-05-qwen38-rank97-tail-session-absence-v1.json",
+    "receipt_sha256": "sha256:c7b810a3d48a3447eb67cbb0bf61f4e2a97d1e105d614ac0e030fadff027ac3a"
+  },
+  "statistical_accounting": {
+    "execution_generation_excluded_from_statistical_identity": true,
+    "maximum_accepted_generations_per_cell": 1,
+    "one_statistical_cell_per_model_task_attempt": true,
+    "prior_claims_and_incidents_remain_append_only": true
+  },
+  "status": "HELD_REVIEWED",
+  "upgraded_cells": [
+    {
+      "attempt": 2,
+      "cell_id": "sha256:160c68de576263202b614038ded2140e6bcf72435a2086fc7af6da6a3a19ba78",
+      "prior_claim_file_sha256": "sha256:3dd97ba48e988ad5318eb6d544688e7acc56d67fd86a0217b9f3db2f219b6746",
+      "prior_claim_path": "/mnt/sfs/cell-execution-claims/opencode11827-autocontinue-v1/dc6722e3954e719722491a2734a5b138f672b4a59dff4a6b6b38051b0a418c36.json",
+      "prior_claim_receipt_sha256": "sha256:c229c13fd734ed6ab9850a90c0bc2766fffdee0683d108e09077c065ad131c82",
+      "prior_execution_generation": 19,
+      "prior_execution_id": "sha256:dc6722e3954e719722491a2734a5b138f672b4a59dff4a6b6b38051b0a418c36",
+      "proof_upgrade": {
+        "all_other_v1_zero_side_effect_proofs_preserved": true,
+        "authoritative_sessions_absent": true,
+        "observer_receipt_sha256": "sha256:c7b810a3d48a3447eb67cbb0bf61f4e2a97d1e105d614ac0e030fadff027ac3a"
+      },
+      "selection_rank": 97,
+      "successor_execution_generation": 20,
+      "successor_execution_id": "sha256:f7d423e61ee13ee5d9ff8b097cf1dc318f9de54dca96bfc426475741f537d9e1"
+    },
+    {
+      "attempt": 3,
+      "cell_id": "sha256:209f2350068810f475a61771b588a2ec4ed8aaa99b82197e037eaca57f929413",
+      "prior_claim_file_sha256": "sha256:273445918c03f5d325981e115a138815e3e6db48b42abf50cc9700ec3324c982",
+      "prior_claim_path": "/mnt/sfs/cell-execution-claims/opencode11827-autocontinue-v1/d1e51b4814866658a73a791333798e8fddd05e0fa9b8fe9d20075e07aba4d86c.json",
+      "prior_claim_receipt_sha256": "sha256:1bf32ccf75fd5aa30f21c55cd867513d8d65403454f6298ce52c1833040ecc4c",
+      "prior_execution_generation": 19,
+      "prior_execution_id": "sha256:d1e51b4814866658a73a791333798e8fddd05e0fa9b8fe9d20075e07aba4d86c",
+      "proof_upgrade": {
+        "all_other_v1_zero_side_effect_proofs_preserved": true,
+        "authoritative_sessions_absent": true,
+        "observer_receipt_sha256": "sha256:c7b810a3d48a3447eb67cbb0bf61f4e2a97d1e105d614ac0e030fadff027ac3a"
+      },
+      "selection_rank": 97,
+      "successor_execution_generation": 20,
+      "successor_execution_id": "sha256:1a01ee77126b1ccf0652c666be213fec69a1b3ece78b4c880b758c30ea11002b"
+    },
+    {
+      "attempt": 4,
+      "cell_id": "sha256:0652b1bc6305c8d1ff4cc4184390d69f67ee2a365551ba59408377dddf333869",
+      "prior_claim_file_sha256": "sha256:429f01e3d613183d47707028c7aff68f03b417aa8485d96333428899d78b5a55",
+      "prior_claim_path": "/mnt/sfs/cell-execution-claims/opencode11827-autocontinue-v1/ed052dc0f396e72602a4f4d55e7c12036f57cd801c41b4d7079f046e7c62c4bf.json",
+      "prior_claim_receipt_sha256": "sha256:62f13a5024c5940b920033e3395e24902f6ccbc885bac511074d32ed6e676b20",
+      "prior_execution_generation": 19,
+      "prior_execution_id": "sha256:ed052dc0f396e72602a4f4d55e7c12036f57cd801c41b4d7079f046e7c62c4bf",
+      "proof_upgrade": {
+        "all_other_v1_zero_side_effect_proofs_preserved": true,
+        "authoritative_sessions_absent": true,
+        "observer_receipt_sha256": "sha256:c7b810a3d48a3447eb67cbb0bf61f4e2a97d1e105d614ac0e030fadff027ac3a"
+      },
+      "selection_rank": 97,
+      "successor_execution_generation": 20,
+      "successor_execution_id": "sha256:4d605c1d9c1b633239df38affbf5a72cc0012d0b73ca23013d4dab8787aece39"
+    }
+  ]
+}
