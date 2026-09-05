@@ -118,6 +118,17 @@ def test_release_observer_is_held_create_once_cpu_job() -> None:
     assert pod["preemptionPolicy"] == "Never"
 
 
+def test_release_observer_rejects_partial_authorization(tmp_path: Path) -> None:
+    accepted = tmp_path / "ACCEPTED.json"
+    accepted.write_text("{}")
+    try:
+        release_package.render(ROOT, canary_accepted=accepted)
+    except ValueError as exc:
+        assert "both canary receipts" in str(exc)
+    else:
+        raise AssertionError("partial release authorization must fail closed")
+
+
 def test_release_bundle_imports_in_isolated_tree(tmp_path: Path) -> None:
     configmap = release_package.render(ROOT)["objects"]["items"][0]
     for name, relative in release_package.INSTALL_PATHS.items():

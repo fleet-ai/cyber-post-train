@@ -18,6 +18,12 @@ RELEASE_SCHEMA = "fleet-hosted-glm-exact-bulk-release-v1"
 def _canary_gate() -> tuple[dict[str, Any], dict[str, Any]]:
     accepted = bulk.load(bulk.CANARY_ROOT / "ACCEPTED.json")
     terminal = bulk.load(bulk.CANARY_ROOT / "TERMINAL.json")
+    validate_canary_receipts(accepted, terminal)
+    return accepted, terminal
+
+
+def validate_canary_receipts(accepted: dict[str, Any], terminal: dict[str, Any]) -> None:
+    """Validate copied sanitized receipts without weakening the live SFS gate."""
     if any(
         (
             accepted.get("schema_version") != "fleet-exact-pass4-bulk-cell-accepted-v3",
@@ -41,7 +47,6 @@ def _canary_gate() -> tuple[dict[str, Any], dict[str, Any]]:
         )
     ):
         raise RuntimeError("hosted GLM canary acceptance gate drifted")
-    return accepted, terminal
 
 
 def validate_release(plan: dict[str, Any]) -> None:

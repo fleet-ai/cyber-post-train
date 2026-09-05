@@ -10,6 +10,7 @@ from typing import Any
 import yaml
 
 from evals.fleet import hosted_glm_exact_bulk_package_v1 as bulk_package
+from evals.fleet import hosted_glm_exact_bulk_runtime_v1 as bulk_runtime
 from evals.fleet import self_hosted
 
 JOB_NAME = "chris-glm53-exact100-hosted-bulk-v1-release"
@@ -29,7 +30,17 @@ INSTALL_PATHS = {
 }
 
 
-def render(root: Path) -> dict[str, Any]:
+def render(
+    root: Path, *, canary_accepted: Path | None = None, canary_terminal: Path | None = None
+) -> dict[str, Any]:
+    authorized = canary_accepted is not None or canary_terminal is not None
+    if authorized:
+        if canary_accepted is None or canary_terminal is None:
+            raise ValueError("release authorization requires both canary receipts")
+        bulk_runtime.validate_canary_receipts(
+            bulk_package.bulk.load(canary_accepted),
+            bulk_package.bulk.load(canary_terminal),
+        )
     data = {}
     for name, relative in PATHS.items():
         path = root / relative
@@ -60,7 +71,7 @@ def render(root: Path) -> dict[str, Any]:
             },
             "annotations": {
                 "cyber-post-train.fleet.ai/create-once": "true",
-                "cyber-post-train.fleet.ai/launch-authorized": "false",
+                "cyber-post-train.fleet.ai/launch-authorized": str(authorized).lower(),
             },
         },
         "spec": {
@@ -148,7 +159,7 @@ def render(root: Path) -> dict[str, Any]:
     return {
         "objects": objects,
         "package_sha256": self_hosted.sha256(self_hosted.canonical_json(objects)),
-        "launch_authorized": False,
+        "launch_authorized": authorized,
     }
 
 
@@ -157,8 +168,14 @@ def main() -> int:
     parser.add_argument("command", choices=("preview", "render"))
     parser.add_argument("--repo", type=Path, default=Path.cwd())
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--canary-accepted", type=Path)
+    parser.add_argument("--canary-terminal", type=Path)
     args = parser.parse_args()
-    value = render(args.repo.resolve())
+    value = render(
+        args.repo.resolve(),
+        canary_accepted=args.canary_accepted,
+        canary_terminal=args.canary_terminal,
+    )
     if args.command == "preview":
         print(json.dumps({key: item for key, item in value.items() if key != "objects"}))
         return 0
