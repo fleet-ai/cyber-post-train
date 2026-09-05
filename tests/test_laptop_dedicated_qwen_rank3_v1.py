@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from evals.fleet import exact_pass4_crypto as crypto
+from evals.fleet import hosted_concurrency4_qualification_v1 as tools
 from evals.fleet import laptop_dedicated_qwen_rank3_v1 as lane
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -36,9 +37,7 @@ def _objects() -> tuple[dict, dict, dict]:
             "uid": lane.SERVICE_UID,
         },
         "spec": {
-            "ports": [
-                {"name": "serve", "port": lane.SERVICE_PORT, "targetPort": lane.SERVICE_PORT}
-            ]
+            "ports": [{"name": "serve", "port": lane.SERVICE_PORT, "targetPort": lane.SERVICE_PORT}]
         },
     }
     return rayjob, pod, service
@@ -157,6 +156,176 @@ def test_local_stream_persists_only_aggregate_protocol_facts(
     assert receipt["response_content_persisted"] is False
     assert receipt["task_instance_session_verifier_scoring_mutations"] == 0
     assert not ({"messages", "choices", "tool_calls", "arguments"} & set(receipt))
+
+
+def test_corrected_payload_is_byte_identical_to_frozen_treatment_catalog() -> None:
+    exact_tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "bash",
+                "description": "Run a shell command in an isolated challenge sandbox.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"command": {"type": "string"}},
+                    "required": ["command"],
+                    "additionalProperties": False,
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "submit_report",
+                "description": "Submit recovered flags and an explanation.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "flags": {"type": "array", "items": {"type": "string"}},
+                        "explanation": {"type": "string"},
+                    },
+                    "required": ["flags", "explanation"],
+                    "additionalProperties": False,
+                },
+            },
+        },
+    ]
+    instructions = {
+        "bash": "Call bash exactly once with a benign command. Do not call submit_report.",
+        "submit_report": (
+            "Call submit_report exactly once with an empty flags list and a brief benign "
+            "availability statement. Do not call bash."
+        ),
+    }
+    for tool_name in ("bash", "submit_report"):
+        expected = {
+            "model": lane.SERVED_ID,
+            "messages": [{"role": "user", "content": instructions[tool_name]}],
+            "tools": exact_tools,
+            "tool_choice": {"type": "function", "function": {"name": tool_name}},
+            "temperature": 0,
+            "max_tokens": 128,
+            "stream": False,
+        }
+        actual = lane.exact_request_payload(tool_name)
+        assert tools.canonical_json(actual) == tools.canonical_json(expected)
+        assert tools.canonical_json(actual) == tools.canonical_json(
+            tools._request_payload(lane.SERVED_ID, tool_name)
+        )
+        assert tools.sha256(tools.canonical_json(actual)) == lane.FROZEN_REQUEST_SHA256[tool_name]
+    assert tools.sha256(tools.canonical_json(exact_tools)) == lane.FROZEN_TOOL_CATALOG_SHA256
+
+
+def test_corrected_stream_attempts_both_tools_after_first_failure() -> None:
+    seen: list[str] = []
+
+    def caller(_origin: str, tool_name: str) -> float:
+        seen.append(tool_name)
+        if tool_name == "bash":
+            raise lane.DedicatedLaptopError("completion_finish_reason_mismatch")
+        return 1.0
+
+    receipt = lane.run_corrected_local_stream("http://127.0.0.1:28527", caller=caller)
+    assert seen == ["bash", "submit_report"]
+    assert receipt["requests_started"] == 2
+    assert receipt["requests_succeeded"] == 1
+    assert receipt["protocol_valid_requests"] == 1
+    assert receipt["passed"] is False
+    assert receipt["outcomes"] == [
+        {
+            "tool": "bash",
+            "request_payload_sha256": lane.FROZEN_REQUEST_SHA256["bash"],
+            "request_started": True,
+            "protocol_valid": False,
+            "result": "FAILED",
+            "error_class": "completion_finish_reason_mismatch",
+        },
+        {
+            "tool": "submit_report",
+            "request_payload_sha256": lane.FROZEN_REQUEST_SHA256["submit_report"],
+            "request_started": True,
+            "protocol_valid": True,
+            "result": "PASSED",
+            "error_class": None,
+        },
+    ]
+    assert receipt["receipt_sha256"] == crypto.digest_without(receipt, "receipt_sha256")
+
+
+def _corrected_stream() -> dict:
+    def caller(_origin: str, tool_name: str) -> float:
+        if tool_name == "submit_report":
+            raise lane.DedicatedLaptopError("completion_finish_reason_mismatch")
+        return 1.0
+
+    return lane.run_corrected_local_stream("http://127.0.0.1:28527", caller=caller)
+
+
+def test_corrected_terminal_is_append_only_failure_and_never_authorizes_scoring() -> None:
+    receipt = lane.corrected_terminal_receipt(
+        live_gate=lane.validate_live_objects(*_objects()),
+        stream=_corrected_stream(),
+        local_port=28527,
+    )
+    assert receipt["status"] == "FAILED"
+    assert receipt["classification"] == "NON_SCORED_EXACT_CATALOG_PARITY_BLOCKER"
+    assert receipt["outcomes"][0]["result"] == "PASSED"
+    assert receipt["outcomes"][1]["error_class"] == "completion_finish_reason_mismatch"
+    assert receipt["prior_parity_invalidation"] == {
+        "receipt_sha256": lane.INVALIDATED_PARITY_SHA256,
+        "historical_receipt_preserved": True,
+        "valid_for_exact_treatment_catalog": False,
+        "reason": "tool_catalog_schema_and_stream_field_mismatch",
+    }
+    assert receipt["model_roster"] == {
+        "http_status": 200,
+        "served_id": lane.SERVED_ID,
+        "exactly_once": True,
+    }
+    assert receipt["cluster_concurrency_stream"] == {
+        "job_uid": lane.CLUSTER_STREAM_JOB_UID,
+        "pod_uid": lane.CLUSTER_STREAM_POD_UID,
+        "terminal_phase": "Failed",
+        "process_exit_code": 1,
+        "pod_restarts": 0,
+        "exact_catalog_receipt_created": False,
+        "valid_for_concurrency2_qualification": False,
+    }
+    assert receipt["server_release"] == {
+        "jobs_api_delete_http_status": 204,
+        "runtime_kubernetes_objects_absent": True,
+        "released_after_parity_failure": True,
+    }
+    assert receipt["request_summary"] == {
+        "benchmark_requests": 0,
+        "content_free_chat_completion_calls": 2,
+        "model_started_scored_cells": 0,
+        "task_instance_session_verifier_or_scoring_mutations": 0,
+    }
+    assert receipt["scored_launch_authorized"] is False
+    assert receipt["receipt_sha256"] == crypto.digest_without(receipt, "receipt_sha256")
+
+    def keys(value: object) -> set[str]:
+        if isinstance(value, dict):
+            return set(value) | {key for item in value.values() for key in keys(item)}
+        if isinstance(value, list):
+            return {key for item in value for key in keys(item)}
+        return set()
+
+    assert not ({"messages", "choices", "tool_calls", "arguments", "model_output"} & keys(receipt))
+    assert "FLEET_API_KEY" not in json.dumps(receipt)
+
+
+def test_corrected_terminal_rejects_tampered_structural_outcome() -> None:
+    stream = _corrected_stream()
+    stream["outcomes"][1]["error_class"] = "raw provider response"
+    stream["receipt_sha256"] = crypto.digest_without(stream, "receipt_sha256")
+    with pytest.raises(lane.DedicatedLaptopError, match="corrected_outcomes_invalid"):
+        lane.corrected_terminal_receipt(
+            live_gate=lane.validate_live_objects(*_objects()),
+            stream=stream,
+            local_port=28527,
+        )
 
 
 def test_two_stream_qualification_requires_one_cluster_and_one_local() -> None:

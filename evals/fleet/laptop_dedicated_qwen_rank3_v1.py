@@ -26,6 +26,40 @@ from evals.fleet import laptop_opencode_lane_v1 as laptop
 SCHEMA = "fleet-laptop-dedicated-qwen-rank3-held-v1"
 STREAM_SCHEMA = "fleet-dedicated-qwen-concurrency2-stream-v1"
 QUALIFICATION_SCHEMA = "fleet-dedicated-qwen-concurrency2-qualification-v1"
+CORRECTED_STREAM_SCHEMA = "fleet-dedicated-qwen-exact-catalog-stream-v1"
+CORRECTED_TERMINAL_SCHEMA = "fleet-dedicated-qwen-exact-catalog-terminal-v1"
+
+# This receipt remains immutable historical evidence, but it cannot establish
+# treatment parity because its synthetic requests used a different tool
+# catalog.  A corrected receipt records this invalidation append-only.
+INVALIDATED_PARITY_SHA256 = (
+    "sha256:89e05f5633137c3f8287299d1100e15613f0ed2ad55bfe94fd837b1ba3da6e14"
+)
+CLUSTER_STREAM_JOB_UID = "9820a83f-df23-40a6-b3f5-5aadd86bf368"
+CLUSTER_STREAM_POD_UID = "55ca9ab7-59c4-4235-b6af-15f23a0021c4"
+FROZEN_TOOL_CATALOG_SHA256 = (
+    "sha256:9960b2e350c79ab994d42f2741afeec29bf2c312b5b98a07af32a929f01aae46"
+)
+FROZEN_REQUEST_SHA256 = {
+    "bash": "sha256:c9fbd0310d0860e4a28e722d0f575c581b95e2b7abc647e17062ba98d6d7b1d4",
+    "submit_report": ("sha256:8cf57921443f9c974c347e6db08bddb8ce3aa63a0594a893b97e94e3f1a2fcb1"),
+}
+STABLE_COMPLETION_ERRORS = frozenset(
+    {
+        "completion_http_status",
+        "completion_request_failed",
+        "completion_too_large",
+        "completion_invalid",
+        "completion_model_identity_mismatch",
+        "completion_choice_shape_mismatch",
+        "completion_finish_reason_mismatch",
+        "completion_tool_call_count_mismatch",
+        "completion_tool_name_mismatch",
+        "completion_tool_arguments_invalid",
+        "completion_bash_arguments_mismatch",
+        "completion_submit_report_arguments_mismatch",
+    }
+)
 
 NAMESPACE = "fleet-train-jobs"
 API_RUN_ID = "ft-run-75891e80"
@@ -102,9 +136,10 @@ def validate_live_objects(
     rayjob: Mapping[str, Any], pod: Mapping[str, Any], service: Mapping[str, Any]
 ) -> dict[str, Any]:
     """Require the fresh identities and a ready, restart-free route."""
-    if rayjob.get("metadata", {}).get("name") != RAYJOB_NAME or _uuid(
-        rayjob.get("metadata", {}).get("uid"), "rayjob_uid"
-    ) != RAYJOB_UID:
+    if (
+        rayjob.get("metadata", {}).get("name") != RAYJOB_NAME
+        or _uuid(rayjob.get("metadata", {}).get("uid"), "rayjob_uid") != RAYJOB_UID
+    ):
         raise DedicatedLaptopError("rayjob_identity_drift")
     status = rayjob.get("status", {})
     if status.get("jobDeploymentStatus") != "Running" or status.get("jobStatus") not in {
@@ -116,9 +151,10 @@ def validate_live_objects(
     if cluster.get("state") != "ready":
         raise DedicatedLaptopError("ray_cluster_not_ready")
 
-    if pod.get("metadata", {}).get("name") != HEAD_POD_NAME or _uuid(
-        pod.get("metadata", {}).get("uid"), "head_pod_uid"
-    ) != HEAD_POD_UID:
+    if (
+        pod.get("metadata", {}).get("name") != HEAD_POD_NAME
+        or _uuid(pod.get("metadata", {}).get("uid"), "head_pod_uid") != HEAD_POD_UID
+    ):
         raise DedicatedLaptopError("head_pod_identity_drift")
     if pod.get("status", {}).get("phase") != "Running" or not _condition_true(pod, "Ready"):
         raise DedicatedLaptopError("head_pod_not_ready")
@@ -159,6 +195,7 @@ def validate_live_objects(
 
 def validate_live_with_runner(runner: Runner) -> dict[str, Any]:
     """Read only the three exact Kubernetes objects, then validate them."""
+
     def get(kind: str, name: str) -> dict[str, Any]:
         raw = runner(["kubectl", "-n", NAMESPACE, "get", kind, name, "-o", "json"])
         value = json.loads(raw)
@@ -287,9 +324,224 @@ def post_completion(origin: str, tool_name: str) -> float:
     return elapsed
 
 
-def run_local_stream(
+def exact_request_payload(tool_name: str) -> dict[str, Any]:
+    """Return only the byte-frozen treatment tool request for one tool."""
+    if tool_name not in ("bash", "submit_report"):
+        raise DedicatedLaptopError("unsupported_exact_catalog_tool")
+    payload = tools._request_payload(SERVED_ID, tool_name)
+    encoded = tools.canonical_json(payload)
+    if tools.sha256(encoded) != FROZEN_REQUEST_SHA256[tool_name]:
+        raise DedicatedLaptopError("exact_request_payload_drift")
+    if tools.sha256(tools.canonical_json(payload["tools"])) != FROZEN_TOOL_CATALOG_SHA256:
+        raise DedicatedLaptopError("exact_tool_catalog_drift")
+    return payload
+
+
+def exact_request_contract() -> dict[str, Any]:
+    """Describe the frozen request structurally without prompt or output content."""
+    payloads = [exact_request_payload(name) for name in ("bash", "submit_report")]
+    return {
+        "model": SERVED_ID,
+        "tool_order": ["bash", "submit_report"],
+        "tool_catalog_sha256": FROZEN_TOOL_CATALOG_SHA256,
+        "request_payload_sha256": {
+            name: FROZEN_REQUEST_SHA256[name] for name in ("bash", "submit_report")
+        },
+        "tool_choice_mode": "forced_function",
+        "temperature": 0,
+        "max_tokens": 128,
+        "stream": False,
+        "messages_per_request": [len(payload["messages"]) for payload in payloads],
+    }
+
+
+def run_corrected_local_stream(
     origin: str, *, caller: CompletionCaller | None = None
 ) -> dict[str, Any]:
+    """Attempt both exact-catalog tools sequentially and persist no response content.
+
+    A structural failure in the first request never suppresses the second.  The
+    resulting receipt records only stable protocol status and error classes.
+    """
+    if caller is None:
+        caller = post_completion
+    outcomes: list[dict[str, Any]] = []
+    for tool_name in ("bash", "submit_report"):
+        # Validate the bytes immediately before each request.
+        exact_request_payload(tool_name)
+        try:
+            caller(origin, tool_name)
+        except DedicatedLaptopError as exc:
+            outcomes.append(
+                {
+                    "tool": tool_name,
+                    "request_payload_sha256": FROZEN_REQUEST_SHA256[tool_name],
+                    "request_started": True,
+                    "protocol_valid": False,
+                    "result": "FAILED",
+                    "error_class": str(exc),
+                }
+            )
+        else:
+            outcomes.append(
+                {
+                    "tool": tool_name,
+                    "request_payload_sha256": FROZEN_REQUEST_SHA256[tool_name],
+                    "request_started": True,
+                    "protocol_valid": True,
+                    "result": "PASSED",
+                    "error_class": None,
+                }
+            )
+    passed = all(row["protocol_valid"] for row in outcomes)
+    body = {
+        "schema_version": CORRECTED_STREAM_SCHEMA,
+        "lane": "local_port_forward",
+        "server_binding": server_binding(),
+        "non_scored": True,
+        "generic_non_benchmark": True,
+        "exact_request_contract": exact_request_contract(),
+        "outcomes": outcomes,
+        "requests_started": 2,
+        "requests_succeeded": sum(row["result"] == "PASSED" for row in outcomes),
+        "protocol_valid_requests": sum(row["protocol_valid"] for row in outcomes),
+        "passed": passed,
+        "response_content_persisted": False,
+        "tool_arguments_persisted": False,
+        "task_instance_session_verifier_scoring_mutations": 0,
+        "privacy": {
+            "credentials_included": False,
+            "prompts_traces_flags_scores_or_model_outputs_included": False,
+        },
+    }
+    body["receipt_sha256"] = crypto.digest_without(body, "receipt_sha256")
+    return body
+
+
+def _validate_corrected_outcomes(stream: Mapping[str, Any]) -> bool:
+    outcomes = stream.get("outcomes")
+    if not isinstance(outcomes, list) or len(outcomes) != 2:
+        raise DedicatedLaptopError("corrected_outcomes_invalid")
+    for expected_tool, row in zip(("bash", "submit_report"), outcomes, strict=True):
+        if not isinstance(row, Mapping):
+            raise DedicatedLaptopError("corrected_outcomes_invalid")
+        passed = row.get("result") == "PASSED"
+        if (
+            row.get("tool") != expected_tool
+            or row.get("request_payload_sha256") != FROZEN_REQUEST_SHA256[expected_tool]
+            or row.get("request_started") is not True
+            or row.get("protocol_valid") is not passed
+            or row.get("result") not in {"PASSED", "FAILED"}
+        ):
+            raise DedicatedLaptopError("corrected_outcomes_invalid")
+        error_class = row.get("error_class")
+        if (passed and error_class is not None) or (
+            not passed and error_class not in STABLE_COMPLETION_ERRORS
+        ):
+            raise DedicatedLaptopError("corrected_outcomes_invalid")
+    succeeded = sum(row["result"] == "PASSED" for row in outcomes)
+    protocol_valid = sum(bool(row["protocol_valid"]) for row in outcomes)
+    passed = succeeded == 2 and protocol_valid == 2
+    if (
+        stream.get("requests_succeeded") != succeeded
+        or stream.get("protocol_valid_requests") != protocol_valid
+        or stream.get("passed") is not passed
+    ):
+        raise DedicatedLaptopError("corrected_outcome_counts_invalid")
+    return passed
+
+
+def corrected_terminal_receipt(
+    *,
+    live_gate: Mapping[str, Any],
+    stream: Mapping[str, Any],
+    local_port: int,
+) -> dict[str, Any]:
+    """Freeze a pass/fail terminal receipt and invalidate the old parity claim."""
+    port_forward_argv(local_port)
+    if live_gate != {
+        "rayjob_uid": RAYJOB_UID,
+        "head_pod_uid": HEAD_POD_UID,
+        "service_uid": SERVICE_UID,
+        "head_pod_restarts": 0,
+        "ready": True,
+    }:
+        raise DedicatedLaptopError("corrected_live_gate_invalid")
+    value = dict(stream)
+    if (
+        value.get("schema_version") != CORRECTED_STREAM_SCHEMA
+        or value.get("receipt_sha256") != crypto.digest_without(value, "receipt_sha256")
+        or value.get("exact_request_contract") != exact_request_contract()
+        or value.get("requests_started") != 2
+        or value.get("task_instance_session_verifier_scoring_mutations") != 0
+        or value.get("response_content_persisted") is not False
+        or value.get("tool_arguments_persisted") is not False
+    ):
+        raise DedicatedLaptopError("corrected_stream_invalid")
+    passed = _validate_corrected_outcomes(value)
+    body = {
+        "schema_version": CORRECTED_TERMINAL_SCHEMA,
+        "status": "PASSED_NON_SCORED" if passed else "FAILED",
+        "classification": (
+            "EXACT_CATALOG_NON_SCORED_PARITY"
+            if passed
+            else "NON_SCORED_EXACT_CATALOG_PARITY_BLOCKER"
+        ),
+        "terminal": True,
+        "server_binding": server_binding(),
+        "live_gate": dict(live_gate),
+        "route": {
+            "kind": "uid_bound_local_port_forward",
+            "local_port": local_port,
+            "service_uid": SERVICE_UID,
+        },
+        "model_roster": {
+            "http_status": 200,
+            "served_id": SERVED_ID,
+            "exactly_once": True,
+        },
+        "source_stream_receipt_sha256": value["receipt_sha256"],
+        "exact_request_contract": exact_request_contract(),
+        "outcomes": value["outcomes"],
+        "prior_parity_invalidation": {
+            "receipt_sha256": INVALIDATED_PARITY_SHA256,
+            "historical_receipt_preserved": True,
+            "valid_for_exact_treatment_catalog": False,
+            "reason": "tool_catalog_schema_and_stream_field_mismatch",
+        },
+        "cluster_concurrency_stream": {
+            "job_uid": CLUSTER_STREAM_JOB_UID,
+            "pod_uid": CLUSTER_STREAM_POD_UID,
+            "terminal_phase": "Failed",
+            "process_exit_code": 1,
+            "pod_restarts": 0,
+            "exact_catalog_receipt_created": False,
+            "valid_for_concurrency2_qualification": False,
+        },
+        "server_release": {
+            "jobs_api_delete_http_status": 204,
+            "runtime_kubernetes_objects_absent": True,
+            "released_after_parity_failure": True,
+        },
+        "request_summary": {
+            "benchmark_requests": 0,
+            "content_free_chat_completion_calls": 2,
+            "model_started_scored_cells": 0,
+            "task_instance_session_verifier_or_scoring_mutations": 0,
+        },
+        "scored_launch_authorized": False,
+        "privacy": {
+            "credentials_included": False,
+            "response_content_included": False,
+            "tool_arguments_included": False,
+            "prompts_traces_flags_scores_or_model_outputs_included": False,
+        },
+    }
+    body["receipt_sha256"] = crypto.digest_without(body, "receipt_sha256")
+    return body
+
+
+def run_local_stream(origin: str, *, caller: CompletionCaller | None = None) -> dict[str, Any]:
     """Run two generic non-benchmark tool calls; never persist their content."""
     if caller is None:
         caller = post_completion
