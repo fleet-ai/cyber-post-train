@@ -1,0 +1,23 @@
+{
+  "schema_version": "fleet-opencode-autocontinue-generation2-canary-spec-v2",
+  "model": "glm-5.3",
+  "statistical_cell": {
+    "cell_id": "sha256:905051f141077d3aa5086c1f5dc6ad015d5ee6173a1ea7515025805cf9a24b41",
+    "selection_rank": 13,
+    "attempt": 1,
+    "task_version_id": "9375a9b9-04e5-4f6f-ad47-286121278992"
+  },
+  "execution": {
+    "schema_version": "fleet-statistical-cell-execution-v1",
+    "cell_id": "sha256:905051f141077d3aa5086c1f5dc6ad015d5ee6173a1ea7515025805cf9a24b41",
+    "execution_generation": 2,
+    "execution_id": "sha256:db5c16dfac428436d4b70dd68ac65b5d1f835937cd4a620839ec9c9a0f4bac5f"
+  },
+  "predecessor_generation2_spec": {
+    "path": "evals/fleet/configs/glm53-opencode-autocontinue-canary-generation2-v1.json",
+    "generation2_spec_sha256": "sha256:c36aa17721eede5a3cb59852256ba9339f848f181399bff9dcf1fa5012c9192c"
+  },
+  "rendered_plan_sha256": "sha256:7b1bfaf18158e224595b4d31c2a56b064f3c78c848284558f070a28889b2a5c3",
+  "launch_authorized": false,
+  "generation2_spec_sha256": "sha256:f4b9f990da87ac46da30a26d3c00a8d023b82ddf2251964343cc55eff309d938"
+}

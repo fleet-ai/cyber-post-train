@@ -1,0 +1,168 @@
+apiVersion: v1
+kind: List
+items:
+  - &canary
+    apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: chris-q38-ac-r004-a1-g2-v1
+      namespace: fleet-train-jobs
+      annotations: &held
+        cyber-post-train.fleet.ai/preview-only: "true"
+        cyber-post-train.fleet.ai/launch-authorized: "false"
+    spec:
+      activeDeadlineSeconds: 43200
+      backoffLimit: 0
+      ttlSecondsAfterFinished: 604800
+      template:
+        metadata:
+          labels:
+            cyber-post-train.fleet.ai/experiment: q38-ac-r004-a1-g2-v2
+            cyber-post-train.fleet.ai/owner: chris
+            kueue.x-k8s.io/queue-name: training-lq
+        spec:
+          restartPolicy: Never
+          priorityClassName: fleet-train-high
+          preemptionPolicy: Never
+          nodeSelector: {kubernetes.io/arch: amd64, workload: fleetai-training-ng-cpu}
+          tolerations:
+            - {key: workload, operator: Equal, value: fleetai-training-ng-cpu, effect: NoSchedule}
+          initContainers:
+            - name: dind
+              image: docker.io/library/docker@sha256:f649ef046008ca7f926a2571c32b0ac22e5c59eb61b959617f9acc2a4c638cf5
+              restartPolicy: Always
+              args: ["--host=unix:///var/run/docker.sock", "--host=tcp://0.0.0.0:2375", "--tls=false"]
+              readinessProbe: {tcpSocket: {port: 2375}, initialDelaySeconds: 2, periodSeconds: 2}
+              securityContext: {privileged: true}
+              resources:
+                requests: {cpu: 500m, memory: 2Gi, ephemeral-storage: 20Gi}
+                limits: {cpu: "2", memory: 4Gi, ephemeral-storage: 40Gi}
+              volumeMounts: &dind-mounts
+                - {name: docker-socket, mountPath: /var/run}
+                - {name: docker-data, mountPath: /var/lib/docker}
+                - {name: workspace, mountPath: /workspace}
+                - {name: sfs, mountPath: /mnt/sfs}
+          containers:
+            - name: evaluator
+              image: ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
+              command: ["/bin/bash", "-ceu", "--"]
+              args: &bootstrap
+                - |
+                  apt-get update && apt-get install --yes --no-install-recommends docker.io=20.10.24+dfsg1-1+deb12u1+b6
+                  root=/workspace/cyber-post-train
+                  mkdir -p "$root/evals/fleet/configs" "$root/evals/fleet/scripts" "$root/docs/evidence/qwen38-study"
+                  touch "$root/evals/__init__.py" "$root/evals/fleet/__init__.py"
+                  for source in self_hosted.py runner.py controller.py canary_controller.py hosted_release.py hosted_runtime.py hosted_health.py endpoint_lease.py fixed_proxy.py exact_universe.py generation2_v1.py generation2_v2.py Dockerfile.opencode; do
+                    case "$source" in
+                      runner.py) target=opencode_train_sweep_runner.py ;;
+                      controller.py) target=hosted_sweep_controller.py ;;
+                      canary_controller.py) target=autocontinue_canary_controller.py ;;
+                      hosted_release.py) target=autocontinue_canary_hosted_release.py ;;
+                      hosted_runtime.py) target=autocontinue_canary_hosted_runtime.py ;;
+                      hosted_health.py) target=autocontinue_hosted_health.py ;;
+                      exact_universe.py) target=exact_pass4_universe.py ;;
+                      generation2_v1.py) target=autocontinue_generation2_canary.py ;;
+                      generation2_v2.py) target=autocontinue_generation2_canary_v2.py ;;
+                      *) target=$source ;;
+                    esac
+                    install -m 0644 "/bootstrap/$source" "$root/evals/fleet/$target"
+                  done
+                  install -m 0644 /bootstrap/spec.json "$root/evals/fleet/configs/generation2-spec.json"
+                  install -m 0644 /bootstrap/v1-spec.json "$root/evals/fleet/configs/$GENERATION2_V1_SPEC_FILE"
+                  install -m 0644 /bootstrap/predecessor-plan.json "$root/evals/fleet/configs/$GENERATION2_PREDECESSOR_FILE"
+                  install -m 0644 /bootstrap/campaign.json "$root/evals/fleet/configs/q38-glm53-exact-easiest100-pass4-campaign-v1.json"
+                  install -m 0644 /bootstrap/selection.json "$root/evals/fleet/configs/opencode-easiest-train100-selection-v2.json"
+                  install -m 0644 /bootstrap/incident.json "$root/docs/evidence/qwen38-study/2026-09-04-opencode-autocontinue-canary-v2-pre-model-failure.json"
+                  install -m 0644 /bootstrap/tombstones.json "$root/docs/evidence/qwen38-study/2026-09-04-opencode-autocontinue-canary-generation1-tombstones-v1.json"
+                  install -m 0644 /bootstrap/release.json "$root/evals/fleet/configs/generation2-release.json"
+                  install -m 0644 /bootstrap/launch-route.json "$root/evals/fleet/configs/generation2-launch-route.json"
+                  install -m 0755 /bootstrap/run.sh "$root/evals/fleet/scripts/run_opencode_autocontinue_generation2_canary_v2.sh"
+                  cd "$root" && exec "$root/evals/fleet/scripts/run_opencode_autocontinue_generation2_canary_v2.sh"
+              env:
+                - {name: DOCKER_HOST, value: "unix:///var/run/docker.sock"}
+                - {name: DOCKER_TLS_CERTDIR, value: ""}
+                - {name: GENERATION2_JOB_NAME, value: chris-q38-ac-r004-a1-g2-v1}
+                - {name: GENERATION2_SPEC_FILE, value: generation2-spec.json}
+                - {name: GENERATION2_V1_SPEC_FILE, value: qwen38-opencode-autocontinue-canary-generation2-v1.json}
+                - {name: GENERATION2_PREDECESSOR_FILE, value: qwen38-opencode-autocontinue-canary1-v2.json}
+                - {name: GENERATION2_RELEASE_FILE, value: generation2-release.json}
+                - {name: GENERATION2_LAUNCH_ROUTE_FILE, value: generation2-launch-route.json}
+                - {name: PACKAGE_COMMIT, valueFrom: {configMapKeyRef: {name: chris-q38-ac-r004-a1-g2-run-v1, key: package_commit}}}
+                - {name: JOB_UID, valueFrom: {fieldRef: {apiVersion: v1, fieldPath: "metadata.labels['batch.kubernetes.io/controller-uid']"}}}
+                - {name: POD_UID, valueFrom: {fieldRef: {apiVersion: v1, fieldPath: metadata.uid}}}
+                - {name: FLEET_API_KEY, valueFrom: {secretKeyRef: {name: chris-cyber-opencode-evals-v2, key: FLEET_API_KEY}}}
+              resources:
+                requests: {cpu: 100m, memory: 512Mi, ephemeral-storage: 5Gi}
+                limits: {cpu: "1", memory: 2Gi, ephemeral-storage: 20Gi}
+              volumeMounts: &evaluator-mounts
+                - {name: docker-socket, mountPath: /var/run}
+                - {name: bootstrap, mountPath: /bootstrap, readOnly: true}
+                - {name: workspace, mountPath: /workspace}
+                - {name: sfs, mountPath: /mnt/sfs}
+          volumes:
+            - {name: bootstrap, configMap: {name: chris-q38-ac-r004-a1-g2-run-v1}}
+            - {name: docker-data, emptyDir: {sizeLimit: 40Gi}}
+            - {name: docker-socket, emptyDir: {}}
+            - {name: workspace, emptyDir: {sizeLimit: 5Gi}}
+            - {name: sfs, persistentVolumeClaim: {claimName: sfs-shared}}
+  - <<: *canary
+    metadata:
+      name: chris-glm53-ac-r013-a1-g2-v1
+      namespace: fleet-train-jobs
+      annotations: *held
+    spec:
+      activeDeadlineSeconds: 43200
+      backoffLimit: 0
+      ttlSecondsAfterFinished: 604800
+      template:
+        metadata:
+          labels:
+            cyber-post-train.fleet.ai/experiment: glm53-ac-r013-a1-g2-v2
+            cyber-post-train.fleet.ai/owner: chris
+            kueue.x-k8s.io/queue-name: training-lq
+        spec:
+          restartPolicy: Never
+          priorityClassName: fleet-train-high
+          preemptionPolicy: Never
+          nodeSelector: {kubernetes.io/arch: amd64, workload: fleetai-training-ng-cpu}
+          tolerations:
+            - {key: workload, operator: Equal, value: fleetai-training-ng-cpu, effect: NoSchedule}
+          initContainers:
+            - name: dind
+              image: docker.io/library/docker@sha256:f649ef046008ca7f926a2571c32b0ac22e5c59eb61b959617f9acc2a4c638cf5
+              restartPolicy: Always
+              args: ["--host=unix:///var/run/docker.sock", "--host=tcp://0.0.0.0:2375", "--tls=false"]
+              readinessProbe: {tcpSocket: {port: 2375}, initialDelaySeconds: 2, periodSeconds: 2}
+              securityContext: {privileged: true}
+              resources:
+                requests: {cpu: 500m, memory: 2Gi, ephemeral-storage: 20Gi}
+                limits: {cpu: "2", memory: 4Gi, ephemeral-storage: 40Gi}
+              volumeMounts: *dind-mounts
+          containers:
+            - name: evaluator
+              image: ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
+              command: ["/bin/bash", "-ceu", "--"]
+              args: *bootstrap
+              env:
+                - {name: DOCKER_HOST, value: "unix:///var/run/docker.sock"}
+                - {name: DOCKER_TLS_CERTDIR, value: ""}
+                - {name: GENERATION2_JOB_NAME, value: chris-glm53-ac-r013-a1-g2-v1}
+                - {name: GENERATION2_SPEC_FILE, value: generation2-spec.json}
+                - {name: GENERATION2_V1_SPEC_FILE, value: glm53-opencode-autocontinue-canary-generation2-v1.json}
+                - {name: GENERATION2_PREDECESSOR_FILE, value: glm53-opencode-autocontinue-canary1-v2.json}
+                - {name: GENERATION2_RELEASE_FILE, value: generation2-release.json}
+                - {name: GENERATION2_LAUNCH_ROUTE_FILE, value: generation2-launch-route.json}
+                - {name: PACKAGE_COMMIT, valueFrom: {configMapKeyRef: {name: chris-glm53-ac-r013-a1-g2-run-v1, key: package_commit}}}
+                - {name: JOB_UID, valueFrom: {fieldRef: {apiVersion: v1, fieldPath: "metadata.labels['batch.kubernetes.io/controller-uid']"}}}
+                - {name: POD_UID, valueFrom: {fieldRef: {apiVersion: v1, fieldPath: metadata.uid}}}
+                - {name: FLEET_API_KEY, valueFrom: {secretKeyRef: {name: chris-cyber-opencode-evals-v2, key: FLEET_API_KEY}}}
+              resources:
+                requests: {cpu: 100m, memory: 512Mi, ephemeral-storage: 5Gi}
+                limits: {cpu: "1", memory: 2Gi, ephemeral-storage: 20Gi}
+              volumeMounts: *evaluator-mounts
+          volumes:
+            - {name: bootstrap, configMap: {name: chris-glm53-ac-r013-a1-g2-run-v1}}
+            - {name: docker-data, emptyDir: {sizeLimit: 40Gi}}
+            - {name: docker-socket, emptyDir: {}}
+            - {name: workspace, emptyDir: {sizeLimit: 5Gi}}
+            - {name: sfs, persistentVolumeClaim: {claimName: sfs-shared}}
