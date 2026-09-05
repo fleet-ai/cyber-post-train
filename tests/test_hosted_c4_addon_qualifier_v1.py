@@ -156,3 +156,29 @@ def test_provider_stop_marker_is_accepted_only_with_exact_forced_tool_call() -> 
     value["choices"][0]["message"]["tool_calls"] = []
     with pytest.raises(addon.AddonQualificationError, match="tool_call_count_mismatch"):
         addon.validate_addon_completion(value, model=addon.MODEL, tool_name="bash")
+
+
+def test_submit_report_argument_drift_reproduces_v2_terminal_failure() -> None:
+    value = {
+        "model": addon.MODEL,
+        "choices": [
+            {
+                "finish_reason": "stop",
+                "message": {
+                    "tool_calls": [
+                        {
+                            "function": {
+                                "name": "submit_report",
+                                "arguments": '{"explanation":"available"}',
+                            }
+                        }
+                    ]
+                },
+            }
+        ],
+    }
+    with pytest.raises(
+        addon.AddonQualificationError,
+        match="completion_submit_report_arguments_mismatch",
+    ):
+        addon.validate_addon_completion(value, model=addon.MODEL, tool_name="submit_report")
