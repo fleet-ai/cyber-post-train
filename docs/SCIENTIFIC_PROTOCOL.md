@@ -2,16 +2,19 @@
 
 ## Causal question
 
-Does post-training the exact Qwen3.6-27B base checkpoint on authorized Fleet
-blackbox-exploit tasks improve performance on a frozen, external blackbox web
-exploitation benchmark?
+For each exact target checkpoint, does post-training on authorized Fleet
+blackbox-exploit tasks improve performance on frozen external blackbox cyber
+benchmarks? The active targets are Qwen3.8-27B and GLM-5.3. Analyze them as two
+separate model studies; do not treat their rollouts or training seeds as one
+pooled intervention.
 
 ## Experimental arms
 
-Use at least three arms: unchanged base, SFT-only, and SFT→online-RL. Add
-RL-from-base when compute permits. Every arm starts from the same immutable base
-checkpoint manifest. Run multiple training seeds; do not treat evaluation
-rollouts from one trained checkpoint as independent training replicates.
+For each target model, use at least three arms: unchanged base, SFT-only, and
+SFT→online-RL. Add RL-from-base when compute permits. Every arm for that model
+starts from the same immutable base checkpoint manifest. Run multiple training
+seeds; do not treat evaluation rollouts from one trained checkpoint as
+independent training replicates or pool seeds across model families.
 
 The planned sequence is SFT followed by online verifier-reward RL, not a choice
 between them. SFT is the low-variance interface/domain adaptation stage and may
@@ -37,10 +40,16 @@ quantization recipe and calibration set. If that cannot be proved, evaluate both
 in BF16. A hosted base model with undisclosed bytes is useful for plumbing but is
 not an admissible scientific control for a self-hosted intervention.
 
-The active base is `Qwen/Qwen3.6-27B` revision
-`6a9e13bd6fc8f0983b9b99948120bc37f49c13e9`. GLM-5.2 locks and cluster
-manifests are retained only as historical provenance from the superseded
-feasibility path; they are not interchangeable controls.
+The active base checkpoints are:
+
+- `Qwen/Qwen3.8-27B` revision
+  `1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0`;
+- `zai-org/GLM-5.3` revision
+  `30333038ada1f1dacb294a93270305a890b50c14`.
+
+Qwen3.6 and GLM-5.2 locks, reports, and cluster manifests are retained only as
+historical provenance from superseded feasibility work. They are not active
+bases and are not interchangeable controls for either current model.
 
 ## Data and leakage
 
