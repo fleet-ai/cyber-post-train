@@ -20,6 +20,8 @@ from typing import Any
 from evals.fleet import exact_pass4_bulk_runtime_v3 as bulk_runtime
 from evals.fleet import exact_pass4_bulk_v3 as bulk
 from evals.fleet import exact_pass4_universe as exact
+from evals.fleet import qwen38_dedicated_scored_canary_v1 as qwen_dedicated
+from evals.fleet import qwen_bulk_generation16 as qwen_generation16
 from evals.fleet import self_hosted
 
 DEFAULT_CAMPAIGN = Path("evals/fleet/configs/q38-glm53-exact-easiest100-pass4-campaign-v1.json")
@@ -28,10 +30,12 @@ GENERATION7_TERMINAL_SCHEMA = "fleet-opencode-autocontinue-generation7-terminal-
 GENERATION7_CLAIM_SCHEMA = "fleet-statistical-cell-execution-claim-v9"
 GENERATION15_TERMINAL_SCHEMA = "fleet-opencode-generation15-simple-terminal-v1"
 GENERATION15_CLAIM_SCHEMA = "fleet-statistical-cell-execution-claim-v15"
+DEDICATED_QWEN_ACCEPTED_SCHEMA = "fleet-qwen38-dedicated-tp1-cell-accepted-v1"
 ACCEPTED_SCHEMAS = {
     "fleet-exact-pass4-bulk-cell-accepted-v3",
     GENERATION7_TERMINAL_SCHEMA,
     GENERATION15_TERMINAL_SCHEMA,
+    DEDICATED_QWEN_ACCEPTED_SCHEMA,
 }
 CLAIM_SCHEMAS = {
     bulk_runtime.CLAIM_SCHEMA,
@@ -211,6 +215,30 @@ GENERATION15_CLAIM_FIELDS = {
     "scores_included",
     "receipt_sha256",
 }
+DEDICATED_QWEN_ACCEPTED_FIELDS = {
+    "schema_version",
+    "accepted",
+    "credited",
+    "retry_allowed",
+    "serving_block",
+    "cell_id",
+    "execution_id",
+    "run_id",
+    "selection_rank",
+    "attempt",
+    "task_version_id",
+    "session_id",
+    "verifier_execution_id",
+    "agent_exit_code",
+    "agent_process_exit_success",
+    "claim_sha256",
+    "config_sha256",
+    "cleanup_completed",
+    "session_ingest_completed",
+    "scores_included",
+    "prompts_or_traces_included",
+    "receipt_sha256",
+}
 
 
 class LedgerError(RuntimeError):
@@ -232,6 +260,8 @@ class Authority:
     repo_root: Path
     cells: dict[str, dict[str, Any]]
     bulk_items: dict[tuple[str, str], tuple[dict[str, Any], dict[str, Any]]]
+    qwen_generation16_items: dict[tuple[str, str], tuple[dict[str, Any], dict[str, Any]]]
+    dedicated_qwen_items: dict[tuple[str, str], tuple[dict[str, Any], dict[str, Any]]]
     generation7: dict[tuple[str, str], dict[str, Any]]
     generation15: dict[tuple[str, str], dict[str, Any]]
 
@@ -296,12 +326,31 @@ def _build_authority(repo_root: Path, campaign_path: Path) -> Authority:
                 raise LedgerError("bulk execution authority is duplicated")
             bulk_items[key] = (plan, item)
 
+    qwen_generation16_items: dict[tuple[str, str], tuple[dict[str, Any], dict[str, Any]]] = {}
+    for plan in qwen_generation16.validate_all(repo_root).values():
+        if plan.get("treatment") != exact.EXPECTED_TREATMENT:
+            raise LedgerError("Qwen generation-16 plan treatment drifted from the exact universe")
+        for item in plan["attempts"]:
+            key = (item["cell_id"], item["execution_id"])
+            if key in qwen_generation16_items:
+                raise LedgerError("Qwen generation-16 execution authority is duplicated")
+            qwen_generation16_items[key] = (plan, item)
+
+    dedicated_plan = qwen_dedicated.build_plan(repo_root)
+    dedicated_item = dedicated_plan["item"]
+    dedicated_key = (dedicated_item["cell_id"], dedicated_item["execution_id"])
+    if dedicated_plan.get("treatment") != exact.EXPECTED_TREATMENT:
+        raise LedgerError("dedicated Qwen plan treatment drifted from the exact universe")
+    dedicated_qwen_items = {dedicated_key: (dedicated_plan, dedicated_item)}
+
     generation7_items = _validated_fixed_bindings(cells, GENERATION7_BINDINGS, 7)
     generation15_items = _validated_fixed_bindings(cells, GENERATION15_BINDINGS, 15)
     return Authority(
         repo_root=repo_root,
         cells=cells,
         bulk_items=bulk_items,
+        qwen_generation16_items=qwen_generation16_items,
+        dedicated_qwen_items=dedicated_qwen_items,
         generation7=generation7_items,
         generation15=generation15_items,
     )
@@ -379,10 +428,12 @@ def _accepted_bulk(value: dict[str, Any], path: Path, authority: Authority) -> E
         optional={BULK_ACCEPTED_OPTIONAL_PROJECTION_FIELD},
     )
     key = (value.get("cell_id"), value.get("execution_id"))
-    pair = authority.bulk_items.get(key)
+    pair = authority.qwen_generation16_items.get(key) or authority.bulk_items.get(key)
     if pair is None:
         raise LedgerError(f"bulk acceptance is absent from the exact frozen plans: {path}")
     plan, item = pair
+    if value.get("controller") != plan["controller"]:
+        raise LedgerError(f"bulk acceptance controller contradicts exact authority: {path}")
     generation = item["execution_generation"]
     cell, _ = _require_cell_execution(authority, *key, generation, path)
     try:
@@ -516,6 +567,54 @@ def _accepted_generation15(value: dict[str, Any], path: Path, authority: Authori
     return Evidence("accepted", cell["cell_id"], key[1], generation, value["receipt_sha256"], path)
 
 
+def _accepted_dedicated_qwen(value: dict[str, Any], path: Path, authority: Authority) -> Evidence:
+    _require_exact_fields(value, DEDICATED_QWEN_ACCEPTED_FIELDS, path)
+    key = (value.get("cell_id"), value.get("execution_id"))
+    pair = authority.dedicated_qwen_items.get(key)
+    if pair is None:
+        raise LedgerError(f"dedicated Qwen acceptance lacks exact plan authority: {path}")
+    plan, item = pair
+    cell, generation = _require_cell_execution(authority, *key, item["execution_generation"], path)
+    config = plan["config"]
+    expected = {
+        "serving_block": config["serving"]["serving_block"],
+        "cell_id": item["cell_id"],
+        "execution_id": item["execution_id"],
+        "run_id": item["run_id"],
+        "selection_rank": item["selection_rank"],
+        "attempt": item["attempt"],
+        "task_version_id": item["task_version_id"],
+        "config_sha256": config["config_sha256"],
+    }
+    if any(value.get(field) != expected_value for field, expected_value in expected.items()):
+        raise LedgerError(f"dedicated Qwen acceptance identity or treatment drifted: {path}")
+    if any(
+        (
+            value.get("accepted") is not True,
+            value.get("credited") is not True,
+            value.get("retry_allowed") is not False,
+            value.get("cleanup_completed") is not True,
+            value.get("session_ingest_completed") is not True,
+            value.get("scores_included") is not False,
+            value.get("prompts_or_traces_included") is not False,
+            type(value.get("agent_exit_code")) is not int,
+            value.get("agent_process_exit_success") is not (value.get("agent_exit_code") == 0),
+        )
+    ):
+        raise LedgerError(f"dedicated Qwen acceptance is not authoritative: {path}")
+    _require_sha256(value.get("claim_sha256"), "claim sha256", path)
+    _require_uuid(value.get("session_id"), "session id", path)
+    _require_uuid(value.get("verifier_execution_id"), "verifier execution id", path)
+    return Evidence(
+        "accepted",
+        cell["cell_id"],
+        item["execution_id"],
+        generation,
+        value["receipt_sha256"],
+        path,
+    )
+
+
 def accepted_evidence(path: Path, authority: Authority) -> Evidence:
     value = load_receipt(path)
     schema = value.get("schema_version")
@@ -523,6 +622,8 @@ def accepted_evidence(path: Path, authority: Authority) -> Evidence:
         raise LedgerError(f"unsupported acceptance receipt schema at {path}: {schema!r}")
     if schema == "fleet-exact-pass4-bulk-cell-accepted-v3":
         return _accepted_bulk(value, path, authority)
+    if schema == DEDICATED_QWEN_ACCEPTED_SCHEMA:
+        return _accepted_dedicated_qwen(value, path, authority)
     if schema == GENERATION7_TERMINAL_SCHEMA:
         return _accepted_generation7(value, path, authority)
     return _accepted_generation15(value, path, authority)
@@ -531,10 +632,12 @@ def accepted_evidence(path: Path, authority: Authority) -> Evidence:
 def _claim_bulk(value: dict[str, Any], path: Path, authority: Authority) -> Evidence:
     _require_exact_fields(value, BULK_CLAIM_FIELDS, path)
     key = (value.get("cell_id"), value.get("execution_id"))
-    pair = authority.bulk_items.get(key)
+    pair = authority.qwen_generation16_items.get(key) or authority.bulk_items.get(key)
     if pair is None:
         raise LedgerError(f"bulk claim is absent from exact frozen plans: {path}")
     plan, item = pair
+    if value.get("controller") != plan["controller"]:
+        raise LedgerError(f"bulk claim controller contradicts exact authority: {path}")
     cell, generation = _require_cell_execution(
         authority, *key, value.get("execution_generation"), path
     )
@@ -562,6 +665,45 @@ def _claim_bulk(value: dict[str, Any], path: Path, authority: Authority) -> Evid
         )
     ):
         raise LedgerError(f"bulk claim is not immutable score-blind authority: {path}")
+    _require_uuid(value.get("job_uid"), "job uid", path)
+    _require_uuid(value.get("pod_uid"), "pod uid", path)
+    return Evidence("", cell["cell_id"], key[1], generation, value["receipt_sha256"], path)
+
+
+def _claim_dedicated_qwen(value: dict[str, Any], path: Path, authority: Authority) -> Evidence:
+    _require_exact_fields(value, BULK_CLAIM_FIELDS, path)
+    key = (value.get("cell_id"), value.get("execution_id"))
+    pair = authority.dedicated_qwen_items.get(key)
+    if pair is None:
+        raise LedgerError(f"dedicated Qwen claim lacks exact plan authority: {path}")
+    plan, item = pair
+    cell, generation = _require_cell_execution(
+        authority, *key, value.get("execution_generation"), path
+    )
+    _require_canonical_claim_filename(path, value)
+    expected = {
+        "plan_sha256": plan["plan_sha256"],
+        "controller": plan["controller"],
+        "cell_id": item["cell_id"],
+        "execution_id": item["execution_id"],
+        "execution_generation": item["execution_generation"],
+        "run_id": item["run_id"],
+        "selection_rank": item["selection_rank"],
+        "attempt": item["attempt"],
+    }
+    if any(value.get(field) != expected_value for field, expected_value in expected.items()):
+        raise LedgerError(f"dedicated Qwen claim identity or treatment drifted: {path}")
+    if any(
+        (
+            value.get("immutable") is not True,
+            value.get("automatic_retry") is not False,
+            value.get("model_call_started_when_claim_written") is not False,
+            value.get("scores_included") is not False,
+            value.get("prompts_or_traces_included") is not False,
+            bulk_runtime.ISO_UTC_RE.fullmatch(str(value.get("claimed_at_utc"))) is None,
+        )
+    ):
+        raise LedgerError(f"dedicated Qwen claim is not immutable score-blind authority: {path}")
     _require_uuid(value.get("job_uid"), "job uid", path)
     _require_uuid(value.get("pod_uid"), "pod uid", path)
     return Evidence("", cell["cell_id"], key[1], generation, value["receipt_sha256"], path)
@@ -630,7 +772,10 @@ def claim_evidence(path: Path, authority: Authority, *, active: bool) -> Evidenc
     if schema not in CLAIM_SCHEMAS:
         raise LedgerError(f"unsupported claim receipt schema at {path}: {schema!r}")
     if schema == bulk_runtime.CLAIM_SCHEMA:
-        evidence = _claim_bulk(value, path, authority)
+        if value.get("controller") == qwen_dedicated.CONTROLLER:
+            evidence = _claim_dedicated_qwen(value, path, authority)
+        else:
+            evidence = _claim_bulk(value, path, authority)
     elif schema == GENERATION7_CLAIM_SCHEMA:
         evidence = _claim_generation7(value, path, authority)
     else:

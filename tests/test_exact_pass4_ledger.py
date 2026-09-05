@@ -10,6 +10,7 @@ import pytest
 from evals.fleet import exact_pass4_bulk_runtime_v3 as runtime
 from evals.fleet import exact_pass4_ledger as ledger
 from evals.fleet import exact_pass4_universe as exact
+from evals.fleet import qwen38_dedicated_scored_canary_v1 as qwen_dedicated
 from evals.fleet import self_hosted
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -99,6 +100,60 @@ def _tombstone(cell: dict, generation: int = 1) -> dict:
         "authoritative_outcome_created": False,
         "retry_allowed": True,
         "evidence_receipt_sha256": "sha256:" + "b" * 64,
+    }
+    value["receipt_sha256"] = self_hosted.digest_without(value, "receipt_sha256")
+    return value
+
+
+def _dedicated_qwen_claim(authority: ledger.Authority) -> dict:
+    plan, item = next(iter(authority.dedicated_qwen_items.values()))
+    value = {
+        "schema_version": qwen_dedicated.CLAIM_SCHEMA,
+        "plan_sha256": plan["plan_sha256"],
+        "controller": plan["controller"],
+        "cell_id": item["cell_id"],
+        "execution_id": item["execution_id"],
+        "execution_generation": item["execution_generation"],
+        "run_id": item["run_id"],
+        "selection_rank": item["selection_rank"],
+        "attempt": item["attempt"],
+        "job_uid": str(uuid.uuid4()),
+        "pod_uid": str(uuid.uuid4()),
+        "claimed_at_utc": "2026-09-05T12:00:00Z",
+        "immutable": True,
+        "automatic_retry": False,
+        "model_call_started_when_claim_written": False,
+        "scores_included": False,
+        "prompts_or_traces_included": False,
+    }
+    value["receipt_sha256"] = self_hosted.digest_without(value, "receipt_sha256")
+    return value
+
+
+def _dedicated_qwen_accepted(authority: ledger.Authority) -> dict:
+    plan, item = next(iter(authority.dedicated_qwen_items.values()))
+    value = {
+        "schema_version": qwen_dedicated.ACCEPTED_SCHEMA,
+        "accepted": True,
+        "credited": True,
+        "retry_allowed": False,
+        "serving_block": plan["config"]["serving"]["serving_block"],
+        "cell_id": item["cell_id"],
+        "execution_id": item["execution_id"],
+        "run_id": item["run_id"],
+        "selection_rank": item["selection_rank"],
+        "attempt": item["attempt"],
+        "task_version_id": item["task_version_id"],
+        "session_id": str(uuid.uuid4()),
+        "verifier_execution_id": str(uuid.uuid4()),
+        "agent_exit_code": 0,
+        "agent_process_exit_success": True,
+        "claim_sha256": "sha256:" + "a" * 64,
+        "config_sha256": plan["config"]["config_sha256"],
+        "cleanup_completed": True,
+        "session_ingest_completed": True,
+        "scores_included": False,
+        "prompts_or_traces_included": False,
     }
     value["receipt_sha256"] = self_hosted.digest_without(value, "receipt_sha256")
     return value
@@ -287,6 +342,69 @@ def test_fixed_historical_adapters_remain_score_blind(
     )
     assert result["models"]["qwen3.8-27b"]["accepted"] == 1
     assert result["models"]["glm-5.3"]["active"] == 1
+
+
+def test_generation16_hosted_claim_uses_its_exact_successor_plan(
+    tmp_path: Path, authority: ledger.Authority
+) -> None:
+    plan, item = next(iter(authority.qwen_generation16_items.values()))
+    root = tmp_path / "claims"
+    value = runtime.claim_cell(
+        plan,
+        item,
+        claim_root=root,
+        job_uid="11111111-1111-4111-8111-111111111111",
+        pod_uid="22222222-2222-4222-8222-222222222222",
+    )
+    assert value is not None
+    path = root / f"{item['execution_id'].removeprefix('sha256:')}.json"
+    evidence = ledger.claim_evidence(path, authority, active=True)
+    assert evidence.cell_id == item["cell_id"]
+    assert evidence.execution_generation == 16
+
+
+def test_dedicated_qwen_claim_and_acceptance_are_strict_score_blind_adapters(
+    tmp_path: Path, authority: ledger.Authority
+) -> None:
+    claim = _dedicated_qwen_claim(authority)
+    claim_path = _write(
+        tmp_path / "claims" / f"{claim['execution_id'].removeprefix('sha256:')}.json",
+        claim,
+    )
+    active = ledger.claim_evidence(claim_path, authority, active=True)
+    active_result = ledger.reconcile(
+        authority,
+        accepted=[],
+        active_claims=[active],
+        blocked_claims=[],
+        tombstones=[],
+    )
+    assert active_result["models"]["qwen3.8-27b"]["active"] == 1
+
+    accepted_path = _write(
+        tmp_path / "accepted" / "ACCEPTED.json",
+        _dedicated_qwen_accepted(authority),
+    )
+    accepted = ledger.accepted_evidence(accepted_path, authority)
+    accepted_result = ledger.reconcile(
+        authority,
+        accepted=[accepted],
+        active_claims=[],
+        blocked_claims=[],
+        tombstones=[],
+    )
+    assert accepted_result["models"]["qwen3.8-27b"]["accepted"] == 1
+
+
+def test_dedicated_qwen_adapter_rejects_serving_block_drift(
+    tmp_path: Path, authority: ledger.Authority
+) -> None:
+    value = _dedicated_qwen_accepted(authority)
+    value["serving_block"] = "hosted"
+    value["receipt_sha256"] = self_hosted.digest_without(value, "receipt_sha256")
+    path = _write(tmp_path / "ACCEPTED.json", value)
+    with pytest.raises(ledger.LedgerError, match="treatment drifted"):
+        ledger.accepted_evidence(path, authority)
 
 
 def test_historical_adapter_rejects_fixed_spec_drift(
