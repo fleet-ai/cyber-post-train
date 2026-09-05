@@ -1,0 +1,9 @@
+{
+  "api_run_id": "ft-run-e741525c",
+  "context_length": 262144,
+  "head_pod_uid": "eeb0eee1-9a2c-4262-8c03-4c1bf65ef9be",
+  "model_revision": "30333038ada1f1dacb294a93270305a890b50c14",
+  "rayjob_uid": "4d7c724c-0ac3-4701-bf50-5e4cfd497eb5",
+  "served_id": "glm-5.3",
+  "service_uid": "d16abb4f-2b09-44bc-a381-ed17facdfefe"
+}
