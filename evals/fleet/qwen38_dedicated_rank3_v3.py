@@ -103,12 +103,16 @@ def build_plan(root: Path, attempt: int) -> dict[str, Any]:
     return plan
 
 
-def _released_plan(root: Path, attempt: int) -> dict[str, Any]:
+def _released_plan(
+    root: Path, attempt: int, *, release_path: Path | None = None
+) -> dict[str, Any]:
     plan = build_plan(root, attempt)
-    raw_path = os.environ.get("QWEN_RANK3_RELEASE_PATH")
-    if not raw_path:
-        raise RuntimeError("dedicated Qwen rank3 release receipt is required")
-    release = json.loads(Path(raw_path).read_text())
+    if release_path is None:
+        raw_path = os.environ.get("QWEN_RANK3_RELEASE_PATH")
+        if not raw_path:
+            raise RuntimeError("dedicated Qwen rank3 release receipt is required")
+        release_path = Path(raw_path)
+    release = json.loads(release_path.read_text())
     if (
         release.get("receipt_sha256") != self_hosted.digest_without(release, "receipt_sha256")
         or release.get("schema_version") != "fleet-qwen38-dedicated-rank3-release-v1"

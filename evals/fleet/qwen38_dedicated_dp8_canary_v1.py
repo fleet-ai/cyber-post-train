@@ -88,11 +88,13 @@ def build_plan(root: Path) -> dict[str, Any]:
     return plan
 
 
-def _release(root: Path) -> dict[str, Any]:
-    raw = os.environ.get("QWEN_DP8_RELEASE_PATH")
-    if not raw:
-        raise RuntimeError("dedicated Qwen DP8 release receipt is required")
-    value = json.loads(Path(raw).read_text())
+def _release(root: Path, *, release_path: Path | None = None) -> dict[str, Any]:
+    if release_path is None:
+        raw = os.environ.get("QWEN_DP8_RELEASE_PATH")
+        if not raw:
+            raise RuntimeError("dedicated Qwen DP8 release receipt is required")
+        release_path = Path(raw)
+    value = json.loads(release_path.read_text())
     if (
         value.get("receipt_sha256") != self_hosted.digest_without(value, "receipt_sha256")
         or value.get("schema_version") != RELEASE_SCHEMA
@@ -140,9 +142,9 @@ def _validate_parity(root: Path) -> dict[str, Any]:
     return value
 
 
-def released_plan(root: Path) -> dict[str, Any]:
+def released_plan(root: Path, *, release_path: Path | None = None) -> dict[str, Any]:
     plan = build_plan(root)
-    release = _release(root)
+    release = _release(root, release_path=release_path)
     plan["launch_authorized"] = True
     plan["release_receipt_sha256"] = release["receipt_sha256"]
     plan["plan_sha256"] = self_hosted.digest_without(plan, "plan_sha256")

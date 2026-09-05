@@ -22,6 +22,8 @@ from evals.fleet import exact_pass4_bulk_v3 as bulk
 from evals.fleet import exact_pass4_universe as exact
 from evals.fleet import hosted_glm_exact_bulk_v1 as hosted_glm_bulk
 from evals.fleet import qwen38_dedicated_rank2_v3 as qwen_dedicated_v3
+from evals.fleet import qwen38_dedicated_rank3_v3 as qwen_dedicated_rank3
+from evals.fleet import qwen38_dedicated_dp8_canary_v1 as qwen_dedicated_dp8
 from evals.fleet import qwen38_dedicated_scored_canary_v1 as qwen_dedicated
 from evals.fleet import qwen_bulk_generation16 as qwen_generation16
 from evals.fleet import qwen_hosted_generation18 as qwen_generation18
@@ -30,6 +32,15 @@ from evals.fleet import self_hosted
 
 DEFAULT_CAMPAIGN = Path("evals/fleet/configs/q38-glm53-exact-easiest100-pass4-campaign-v1.json")
 EVIDENCE_MANIFEST_SCHEMA = "fleet-exact-pass4-ledger-evidence-manifest-v1"
+HOSTED_GLM_INVENTORY_PATH = Path(
+    "/mnt/sfs/jobs/chris-cyber-exact100-pass4-inventory-v2/TERMINAL.json"
+)
+HOSTED_GLM_INVENTORY_FILE_SHA256 = (
+    "sha256:8bc50021e520a3afbefe8e4062fdb4e1a0a6afa66a5dab53c92a78296f561890"
+)
+HOSTED_GLM_INVENTORY_RECEIPT_SHA256 = (
+    "sha256:bf7fae379833aca5c914e1a2761ab608a805ee6f2424c714c3ef060e318fb9d3"
+)
 EVIDENCE_MANIFEST_KINDS = {
     "accepted",
     "active_claim",
@@ -445,6 +456,10 @@ class Authority:
     hosted_glm_bulk_items: dict[tuple[str, str], tuple[dict[str, Any], dict[str, Any]]]
     dedicated_qwen_items: dict[tuple[str, str], tuple[dict[str, Any], dict[str, Any]]]
     dedicated_qwen_v3_items: dict[tuple[str, str], tuple[dict[str, Any], dict[str, Any]]]
+    dedicated_qwen_rank3_items: dict[
+        tuple[str, str], tuple[dict[str, Any], dict[str, Any]]
+    ]
+    dedicated_qwen_dp8_items: dict[tuple[str, str], tuple[dict[str, Any], dict[str, Any]]]
     generation7: dict[tuple[str, str], dict[str, Any]]
     generation15: dict[tuple[str, str], dict[str, Any]]
 
@@ -551,7 +566,21 @@ def _build_authority(repo_root: Path, campaign_path: Path) -> Authority:
             qwen_generation19_v4_items[key] = (plan, item)
 
     hosted_glm_bulk_items: dict[tuple[str, str], tuple[dict[str, Any], dict[str, Any]]] = {}
-    for plan in hosted_glm_bulk.validate_all(repo_root).values():
+    hosted_glm_plans = hosted_glm_bulk.validate_all(repo_root)
+    if HOSTED_GLM_INVENTORY_PATH.is_file():
+        if (
+            self_hosted.sha256(HOSTED_GLM_INVENTORY_PATH.read_bytes())
+            != HOSTED_GLM_INVENTORY_FILE_SHA256
+        ):
+            raise LedgerError("hosted GLM runtime inventory file digest drifted")
+        inventory = load_receipt(HOSTED_GLM_INVENTORY_PATH)
+        if inventory.get("receipt_sha256") != HOSTED_GLM_INVENTORY_RECEIPT_SHA256:
+            raise LedgerError("hosted GLM runtime inventory receipt digest drifted")
+        hosted_glm_plans = {
+            controller: hosted_glm_bulk.build_runtime_plan(controller, inventory, repo_root)
+            for controller in hosted_glm_bulk.CONTROLLERS
+        }
+    for plan in hosted_glm_plans.values():
         if plan.get("treatment") != exact.EXPECTED_TREATMENT:
             raise LedgerError("hosted GLM bulk treatment drifted from the exact universe")
         for item in plan["attempts"]:
@@ -609,6 +638,39 @@ def _build_authority(repo_root: Path, campaign_path: Path) -> Authority:
             raise LedgerError("dedicated Qwen v3 execution authority is duplicated")
         dedicated_qwen_v3_items[key] = (dedicated_qwen_v3_plan, dedicated_qwen_v3_item)
 
+    dedicated_qwen_rank3_items: dict[
+        tuple[str, str], tuple[dict[str, Any], dict[str, Any]]
+    ] = {}
+    for attempt in sorted(qwen_dedicated_rank3.EXPECTED_IDENTITIES):
+        plan = qwen_dedicated_rank3._released_plan(  # noqa: SLF001
+            repo_root,
+            attempt,
+            release_path=(
+                repo_root
+                / "docs/evidence/qwen38-study/2026-09-05-qwen38-dedicated-rank3-g21-b-v2-release-v3.json"
+            ),
+        )
+        item = plan["item"]
+        key = (item["cell_id"], item["execution_id"])
+        if key in dedicated_qwen_rank3_items:
+            raise LedgerError("dedicated Qwen rank-3 execution authority is duplicated")
+        dedicated_qwen_rank3_items[key] = (plan, item)
+
+    dedicated_qwen_dp8_plan = qwen_dedicated_dp8.released_plan(
+        repo_root,
+        release_path=(
+            repo_root
+            / "docs/evidence/qwen38-study/2026-09-05-qwen38-dedicated-dp8-r004-a2-g22-release-v1.json"
+        ),
+    )
+    dedicated_qwen_dp8_item = dedicated_qwen_dp8_plan["item"]
+    dedicated_qwen_dp8_items = {
+        (
+            dedicated_qwen_dp8_item["cell_id"],
+            dedicated_qwen_dp8_item["execution_id"],
+        ): (dedicated_qwen_dp8_plan, dedicated_qwen_dp8_item)
+    }
+
     generation7_items = _validated_fixed_bindings(cells, GENERATION7_BINDINGS, 7)
     generation15_items = _validated_fixed_bindings(cells, GENERATION15_BINDINGS, 15)
     return Authority(
@@ -621,6 +683,8 @@ def _build_authority(repo_root: Path, campaign_path: Path) -> Authority:
         hosted_glm_bulk_items=hosted_glm_bulk_items,
         dedicated_qwen_items=dedicated_qwen_items,
         dedicated_qwen_v3_items=dedicated_qwen_v3_items,
+        dedicated_qwen_rank3_items=dedicated_qwen_rank3_items,
+        dedicated_qwen_dp8_items=dedicated_qwen_dp8_items,
         generation7=generation7_items,
         generation15=generation15_items,
     )
@@ -934,13 +998,26 @@ def _accepted_dedicated_qwen(value: dict[str, Any], path: Path, authority: Autho
     key = (value.get("cell_id"), value.get("execution_id"))
     candidates = [
         pair
-        for mapping in (authority.dedicated_qwen_items, authority.dedicated_qwen_v3_items)
+        for mapping in (
+            authority.dedicated_qwen_items,
+            authority.dedicated_qwen_v3_items,
+            authority.dedicated_qwen_rank3_items,
+            authority.dedicated_qwen_dp8_items,
+        )
         if (pair := mapping.get(key)) is not None
         and pair[0]["config"]["serving"]["serving_block"] == value.get("serving_block")
     ]
     pair = candidates[0] if len(candidates) == 1 else None
     if pair is None:
-        if key in authority.dedicated_qwen_items or key in authority.dedicated_qwen_v3_items:
+        if any(
+            key in mapping
+            for mapping in (
+                authority.dedicated_qwen_items,
+                authority.dedicated_qwen_v3_items,
+                authority.dedicated_qwen_rank3_items,
+                authority.dedicated_qwen_dp8_items,
+            )
+        ):
             raise LedgerError(f"dedicated Qwen acceptance identity or treatment drifted: {path}")
         raise LedgerError(f"dedicated Qwen acceptance lacks exact plan authority: {path}")
     plan, item = pair
@@ -1234,7 +1311,12 @@ def _claim_dedicated_qwen(value: dict[str, Any], path: Path, authority: Authorit
     key = (value.get("cell_id"), value.get("execution_id"))
     candidates = [
         pair
-        for mapping in (authority.dedicated_qwen_items, authority.dedicated_qwen_v3_items)
+        for mapping in (
+            authority.dedicated_qwen_items,
+            authority.dedicated_qwen_v3_items,
+            authority.dedicated_qwen_rank3_items,
+            authority.dedicated_qwen_dp8_items,
+        )
         if (pair := mapping.get(key)) is not None
         and pair[0]["controller"] == value.get("controller")
     ]
@@ -1343,6 +1425,8 @@ def claim_evidence(path: Path, authority: Authority, *, active: bool) -> Evidenc
         if value.get("controller") in {
             qwen_dedicated.CONTROLLER,
             qwen_dedicated_v3.CONTROLLER,
+            qwen_dedicated_rank3.CONTROLLER,
+            qwen_dedicated_dp8.CONTROLLER,
         }:
             evidence = _claim_dedicated_qwen(value, path, authority)
         else:
