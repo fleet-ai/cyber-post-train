@@ -13,7 +13,7 @@ def _write(path: Path, value: dict) -> str:
     return chain._file_sha256(path)
 
 
-def _fixture(tmp_path: Path, monkeypatch) -> tuple[Path, Path, Path, str]:
+def _fixture(tmp_path: Path, monkeypatch) -> tuple[Path, Path, Path, Path, str, str]:
     mount = tmp_path / "mnt/sfs"
     monkeypatch.setenv("SFS_MOUNT_ROOT", str(mount))
     output = mount / "jobs/run"
@@ -64,16 +64,43 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[Path, Path, Path, str]:
     }
     source["receipt_sha256"] = self_hosted.digest_without(source, "receipt_sha256")
     source_path = tmp_path / "source.json"
-    _write(source_path, source)
-    return source_path, output, claim_path, source["receipt_sha256"]
+    source_file_sha = _write(source_path, source)
+    correction = {
+        "source_file_sha256": source_file_sha,
+        "source_claimed_receipt_sha256": source["receipt_sha256"],
+        "source_actual_canonical_receipt_sha256": self_hosted.digest_without(
+            source, "receipt_sha256"
+        ),
+        "source_evidence_authoritative_after_raw_file_binding": True,
+        "accepted_or_credited_by_this_receipt": False,
+    }
+    correction["receipt_sha256"] = self_hosted.digest_without(correction, "receipt_sha256")
+    correction_path = tmp_path / "correction.json"
+    _write(correction_path, correction)
+    return (
+        source_path,
+        correction_path,
+        output,
+        claim_path,
+        source["receipt_sha256"],
+        correction["receipt_sha256"],
+    )
 
 
 def test_source_chain_behaviorally_validates_every_named_file(tmp_path: Path, monkeypatch):
-    source, output, claim, digest = _fixture(tmp_path, monkeypatch)
-    observed, plan, observed_claim, file_digests = chain.validate_source_chain(
-        source, output, claim, expected_source_digest=digest
+    source, correction, output, claim, source_digest, correction_digest = _fixture(
+        tmp_path, monkeypatch
     )
-    assert observed["receipt_sha256"] == digest
+    observed, fixed, plan, observed_claim, file_digests = chain.validate_source_chain(
+        source,
+        correction,
+        output,
+        claim,
+        expected_source_digest=source_digest,
+        expected_correction_digest=correction_digest,
+    )
+    assert observed["receipt_sha256"] == source_digest
+    assert fixed["receipt_sha256"] == correction_digest
     assert plan["item"]["run_id"] == "run"
     assert observed_claim["run_id"] == "run"
     assert set(file_digests) == {
@@ -97,31 +124,61 @@ def test_source_chain_behaviorally_validates_every_named_file(tmp_path: Path, mo
     ],
 )
 def test_source_chain_rejects_artifact_tampering(tmp_path: Path, monkeypatch, relative: str):
-    source, output, claim, digest = _fixture(tmp_path, monkeypatch)
+    source, correction, output, claim, source_digest, correction_digest = _fixture(
+        tmp_path, monkeypatch
+    )
     (output / relative).write_text("{}\n")
     with pytest.raises(RuntimeError, match="byte digest mismatch"):
-        chain.validate_source_chain(source, output, claim, expected_source_digest=digest)
+        chain.validate_source_chain(
+            source,
+            correction,
+            output,
+            claim,
+            expected_source_digest=source_digest,
+            expected_correction_digest=correction_digest,
+        )
 
 
 def test_source_chain_rejects_claim_tampering(tmp_path: Path, monkeypatch):
-    source, output, claim, digest = _fixture(tmp_path, monkeypatch)
+    source, correction, output, claim, source_digest, correction_digest = _fixture(
+        tmp_path, monkeypatch
+    )
     claim.write_text("{}\n")
     with pytest.raises(RuntimeError, match="byte digest mismatch"):
-        chain.validate_source_chain(source, output, claim, expected_source_digest=digest)
+        chain.validate_source_chain(
+            source,
+            correction,
+            output,
+            claim,
+            expected_source_digest=source_digest,
+            expected_correction_digest=correction_digest,
+        )
 
 
 def test_source_chain_rejects_source_receipt_tampering(tmp_path: Path, monkeypatch):
-    source, output, claim, digest = _fixture(tmp_path, monkeypatch)
+    source, correction, output, claim, source_digest, correction_digest = _fixture(
+        tmp_path, monkeypatch
+    )
     body = json.loads(source.read_text())
     body["cell"]["attempt"] = 2
     source.write_text(json.dumps(body))
-    with pytest.raises(RuntimeError, match="self-digest mismatch"):
-        chain.validate_source_chain(source, output, claim, expected_source_digest=digest)
+    with pytest.raises(RuntimeError, match="digest correction does not bind"):
+        chain.validate_source_chain(
+            source,
+            correction,
+            output,
+            claim,
+            expected_source_digest=source_digest,
+            expected_correction_digest=correction_digest,
+        )
 
 
 def test_validate_acceptance_writes_sufficient_create_once_envelope(tmp_path: Path, monkeypatch):
-    source_path, output, claim_path, source_digest = _fixture(tmp_path, monkeypatch)
+    source_path, correction_path, output, claim_path, source_digest, correction_digest = _fixture(
+        tmp_path, monkeypatch
+    )
     monkeypatch.setattr(chain, "SOURCE_TERMINAL_SHA256", source_digest)
+    monkeypatch.setattr(chain, "SOURCE_CORRECTION_SHA256", correction_digest)
     plan = json.loads((output / "PLAN.json").read_text())
     claim = json.loads(claim_path.read_text())
     item = plan["item"]
@@ -157,6 +214,7 @@ def test_validate_acceptance_writes_sufficient_create_once_envelope(tmp_path: Pa
     monkeypatch.setattr(chain.canary, "_classify", lambda *_args: current)
     receipt = chain.validate_acceptance(
         source_path,
+        correction_path,
         output,
         claim_path,
         "key",

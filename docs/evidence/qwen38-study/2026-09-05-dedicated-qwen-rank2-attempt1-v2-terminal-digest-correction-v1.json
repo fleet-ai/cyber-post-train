@@ -1,0 +1,17 @@
+{
+  "schema_version": "fleet-qwen38-dedicated-terminal-digest-correction-v1",
+  "status": "CORRECTED",
+  "source_commit": "40483b1e026bd7a14bd35c08fdbb9bf0d09d5dc0",
+  "source_path": "docs/evidence/qwen38-study/2026-09-05-dedicated-qwen-rank2-attempt1-v2-terminal.json",
+  "source_file_sha256": "sha256:96217745a617b36e32ebf9d8612db812ece235021f5b62279eaf18671c4f1cdd",
+  "source_claimed_receipt_sha256": "sha256:68fa8b63d14d26e8bb7f48f4bd103eafb5ac0165545c72e3d1765d7609aeb746",
+  "source_actual_canonical_receipt_sha256": "sha256:161f822c67b3dda33964f1883981dd0a6997cbe3f09aa3e1a8611aa94cb0be84",
+  "reason": "source receipt was deterministically amended after its self-digest was calculated",
+  "source_evidence_authoritative_after_raw_file_binding": true,
+  "accepted_or_credited_by_this_receipt": false,
+  "privacy": {
+    "credentials_included": false,
+    "prompts_traces_flags_or_scores_included": false
+  },
+  "receipt_sha256": "sha256:d756b797be1c493fcc7ed630e75787a0dad9b14c592f93e0ca6183ab5ae707f2"
+}

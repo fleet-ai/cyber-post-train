@@ -13,6 +13,7 @@ from evals.fleet import qwen38_dedicated_scored_canary_v1 as canary
 from evals.fleet import self_hosted
 
 SOURCE_TERMINAL_SHA256 = "sha256:68fa8b63d14d26e8bb7f48f4bd103eafb5ac0165545c72e3d1765d7609aeb746"
+SOURCE_CORRECTION_SHA256 = "sha256:d756b797be1c493fcc7ed630e75787a0dad9b14c592f93e0ca6183ab5ae707f2"
 OUTPUT_ROOT = Path("/mnt/sfs/jobs/chris-cyber-q38-opencode11827-ded-tp1-r002-a1-v2")
 CLAIM_PATH = Path(
     "/mnt/sfs/cell-execution-claims/opencode11827-autocontinue-v1/"
@@ -42,14 +43,27 @@ def _require_self_digest(receipt: dict[str, Any], expected: str | None = None) -
 
 def validate_source_chain(
     source_receipt_path: Path,
+    correction_receipt_path: Path,
     output: Path,
     claim_path: Path,
     *,
     expected_source_digest: str,
-) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, str]]:
+    expected_correction_digest: str,
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any], dict[str, str]]:
     """Validate reviewed terminal evidence and every named immutable input."""
     source = _load(source_receipt_path)
-    _require_self_digest(source, expected_source_digest)
+    correction = _load(correction_receipt_path)
+    _require_self_digest(correction, expected_correction_digest)
+    if (
+        _file_sha256(source_receipt_path) != correction.get("source_file_sha256")
+        or source.get("receipt_sha256") != correction.get("source_claimed_receipt_sha256")
+        or self_hosted.digest_without(source, "receipt_sha256")
+        != correction.get("source_actual_canonical_receipt_sha256")
+        or source.get("receipt_sha256") != expected_source_digest
+        or correction.get("source_evidence_authoritative_after_raw_file_binding") is not True
+        or correction.get("accepted_or_credited_by_this_receipt") is not False
+    ):
+        raise RuntimeError("source terminal digest correction does not bind reviewed evidence")
     evidence = source.get("evidence")
     if not isinstance(evidence, dict):
         raise RuntimeError("source terminal evidence is absent")
@@ -101,11 +115,12 @@ def validate_source_chain(
         )
     ):
         raise RuntimeError("source local completion differs from stored result")
-    return source, plan, claim, observed
+    return source, correction, plan, claim, observed
 
 
 def validate_acceptance(
     source_receipt_path: Path,
+    correction_receipt_path: Path,
     output: Path,
     claim_path: Path,
     key: str,
@@ -118,11 +133,13 @@ def validate_acceptance(
     validated_path = output / "ACCEPTED_VALIDATED.json"
     if validated_path.exists():
         raise RuntimeError("dedicated Qwen acceptance chain already validated")
-    source, plan, claim, artifact_digests = validate_source_chain(
+    source, correction, plan, claim, artifact_digests = validate_source_chain(
         source_receipt_path,
+        correction_receipt_path,
         output,
         claim_path,
         expected_source_digest=SOURCE_TERMINAL_SHA256,
+        expected_correction_digest=SOURCE_CORRECTION_SHA256,
     )
     accepted, terminal = _load(output / "ACCEPTED.json"), _load(output / "TERMINAL.json")
     accepted_digest = _require_self_digest(accepted)
@@ -164,7 +181,11 @@ def validate_acceptance(
         "claim_receipt_sha256": claim["receipt_sha256"],
         "artifact_file_sha256": artifact_digests,
         "all_artifact_byte_digests_matched": True,
-        "source_terminal_receipt_sha256": source["receipt_sha256"],
+        "source_terminal_receipt_sha256": correction["receipt_sha256"],
+        "source_terminal_stale_claim_sha256": source["receipt_sha256"],
+        "source_terminal_actual_canonical_sha256": correction[
+            "source_actual_canonical_receipt_sha256"
+        ],
         "accepted_receipt_sha256": accepted_digest,
         "acceptance_terminal_receipt_sha256": terminal_digest,
         "collector_job_uid": terminal["collector_job_uid"],
@@ -188,6 +209,7 @@ def main() -> int:
         raise RuntimeError("FLEET_API_KEY is required")
     receipt = validate_acceptance(
         Path(os.environ.get("SOURCE_TERMINAL_RECEIPT", "/bootstrap/source-terminal.json")),
+        Path(os.environ.get("SOURCE_CORRECTION_RECEIPT", "/bootstrap/source-correction.json")),
         Path(os.environ.get("OUTPUT_ROOT", str(OUTPUT_ROOT))),
         Path(os.environ.get("CLAIM_PATH", str(CLAIM_PATH))),
         key,
