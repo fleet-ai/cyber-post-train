@@ -53,6 +53,10 @@ EXPECTED_CELLS = [
     "sha256:ffb5b0fb6a3eb702b78c75aca66446eb39668d0949bc92b4628ad77c2102bcae",
     "sha256:47e1093f8b03d4179d334a4feac13aba526c5c36f8eb98bc29a681d27aa68e36",
 ]
+GLOBAL_CLAIM_ROOT = "/mnt/sfs/cell-execution-claims/opencode11827-autocontinue-v1"
+HOSTED_LEASE_ROOT = "/mnt/sfs/endpoint-leases/opencode11827-autocontinue-primary-v1"
+HOSTED_ENDPOINT_KEY = "qwen-hosted-autocontinue-v1"
+HOSTED_MAXIMUM_STREAMS = 2
 
 
 class QualificationError(RuntimeError):
@@ -177,13 +181,24 @@ def held_plan(repo_root: Path) -> dict[str, Any]:
             "attempt_order": [1, 2, 3, 4],
             "maximum_concurrent_attempts": 1,
             "automatic_retry": False,
+            "global_claim_root": GLOBAL_CLAIM_ROOT,
+            "endpoint_lease": {
+                "lease_root": HOSTED_LEASE_ROOT,
+                "endpoint_key": HOSTED_ENDPOINT_KEY,
+                "maximum_streams": HOSTED_MAXIMUM_STREAMS,
+            },
         },
         "required_before_first_scored_create": [
-            "digest_valid_laptop_qualification_receipt",
+            "digest_valid_actual_opencode_laptop_parity_receipt",
             "immutable_hosted_successor_exclusion_for_all_four_cells",
             "fresh_global_ledger_all_four_cells_unaccepted_unclaimed_inactive",
             "fresh_authoritative_session_inventory_has_no_matching_session",
-            "globally_visible_create_once_claim_or_equivalent_atomic_reservation",
+            "fresh_kubernetes_job_and_pod_inventory_has_no_matching_execution",
+            "canonical_sfs_output_and_claim_roots_are_mounted_and_collision_free",
+            "canonical_sfs_endpoint_lease_slot_held_for_entire_model_stream",
+            "globally_visible_create_once_claim_written_before_first_model_call",
+            "hosted_stream_is_not_third_stream_above_qualified_cap_two",
+            "attempt_one_is_accepted_before_attempts_two_through_four",
         ],
         "glm_hosted_laptop_lane": {
             "authorized": False,

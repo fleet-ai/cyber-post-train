@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import copy
+import json
+from pathlib import Path
 
 import pytest
 
@@ -8,6 +10,12 @@ from evals.fleet import exact_pass4_universe as exact
 from evals.fleet import opencode_actual_harness_parity_v1 as parity
 from evals.fleet import production_blackbox_tool_catalog_v1 as production_tools
 from evals.fleet import self_hosted
+
+ROOT = Path(__file__).resolve().parents[1]
+LAPTOP_QWEN_RECEIPT = ROOT / (
+    "docs/evidence/qwen38-study/"
+    "2026-09-05-qwen38-laptop-hosted-actual-opencode-parity-v2.json"
+)
 
 
 def test_treatment_is_exact_for_both_models() -> None:
@@ -127,3 +135,58 @@ def test_rendered_settings_preserve_exact_runtime_and_only_repoint_transport() -
     }
     assert settings["permission"] == {"*": "deny", "fleet_*": "allow"}
     assert all(value is False for value in settings["tools"].values())
+
+
+def test_local_image_inspection_requires_exact_immutable_amd64_image(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observed = {
+        "Id": parity.IMAGE_ID,
+        "Os": "linux",
+        "Architecture": "amd64",
+        "Config": {"User": "node", "WorkingDir": "/workspace"},
+    }
+
+    class Result:
+        returncode = 0
+        stdout = parity.json.dumps(observed)
+
+    monkeypatch.setattr(parity.subprocess, "run", lambda *_args, **_kwargs: Result())
+    assert parity.inspect_local_image() == {
+        "image": parity.IMAGE,
+        "image_id": parity.IMAGE_ID,
+        "os": "linux",
+        "architecture": "amd64",
+        "user": "node",
+        "working_dir": "/workspace",
+    }
+
+    observed["Architecture"] = "arm64"
+    Result.stdout = parity.json.dumps(observed)
+    with pytest.raises(parity.ActualHarnessParityError, match="opencode_image_identity_drift"):
+        parity.inspect_local_image()
+
+
+def test_committed_laptop_qwen_parity_receipt_is_digest_valid_and_non_scored() -> None:
+    receipt = json.loads(LAPTOP_QWEN_RECEIPT.read_text())
+    assert receipt["schema_version"] == parity.SCHEMA
+    assert receipt["status"] == "PASSED_NON_SCORED"
+    assert receipt["classification"] == "ACTUAL_HARNESS_PARITY"
+    assert receipt["execution"] == {
+        "final_marker_observed": True,
+        "harness_exit_code": 0,
+        "model_requests": 4,
+        "scored_launch_authorized": False,
+        "task_instance_session_verifier_scoring_calls": 0,
+    }
+    assert receipt["harness"]["observed_image"] == {
+        "architecture": "amd64",
+        "image": parity.IMAGE,
+        "image_id": parity.IMAGE_ID,
+        "os": "linux",
+        "user": "node",
+        "working_dir": "/workspace",
+    }
+    assert receipt["receipt_sha256"] == self_hosted.digest_without(
+        receipt, "receipt_sha256"
+    )

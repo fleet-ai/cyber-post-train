@@ -17,7 +17,20 @@ from typing import Any
 SECRET_NAME = "chris-cyber-opencode-evals-v2"
 SECRET_NAMESPACE = "fleet-train-jobs"
 SECRET_KEY = "FLEET_API_KEY"
-MODULE = "evals.fleet.laptop_opencode_lane_v1"
+QUALIFICATION_MODULE = "evals.fleet.laptop_opencode_lane_v1"
+ACTUAL_PARITY_MODULE = "evals.fleet.opencode_actual_harness_parity_v1"
+ACTIONS = {
+    "qualification": {
+        "module": QUALIFICATION_MODULE,
+        "argv": (),
+        "expected_status": "QUALIFIED_NON_SCORED",
+    },
+    "qwen-hosted-actual-parity": {
+        "module": ACTUAL_PARITY_MODULE,
+        "argv": ("--model", "qwen3.8-27b"),
+        "expected_status": "PASSED_NON_SCORED",
+    },
+}
 
 
 class SecretLaunchError(RuntimeError):
@@ -48,8 +61,16 @@ def _assert_not_leaked(secret: bytes, encoded: bytes, payload: bytes, where: str
         raise SecretLaunchError(f"credential_leaked_to_{where}")
 
 
-def launch(out: Path, *, runner: Runner = _run) -> dict[str, Any]:
+def launch(
+    out: Path,
+    *,
+    action: str = "qualification",
+    runner: Runner = _run,
+) -> dict[str, Any]:
     """Inject the decoded key into exactly one child process environment."""
+    selected = ACTIONS.get(action)
+    if selected is None:
+        raise SecretLaunchError("secret_launcher_action_not_allowed")
     if out.exists() or out.is_symlink():
         raise SecretLaunchError("qualification_output_already_exists")
     secret_argv = [
@@ -71,7 +92,14 @@ def launch(out: Path, *, runner: Runner = _run) -> dict[str, Any]:
         value = secret.decode("utf-8")
     except UnicodeDecodeError as exc:
         raise SecretLaunchError("cluster_secret_key_invalid_utf8") from exc
-    child_argv = [sys.executable, "-m", MODULE, "--out", str(out)]
+    child_argv = [
+        sys.executable,
+        "-m",
+        str(selected["module"]),
+        *selected["argv"],
+        "--out",
+        str(out),
+    ]
     if value in "\x00".join(child_argv):
         raise SecretLaunchError("credential_in_child_argv")
     env = os.environ.copy()
@@ -98,10 +126,11 @@ def launch(out: Path, *, runner: Runner = _run) -> dict[str, Any]:
         receipt = json.loads(raw_receipt)
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise SecretLaunchError("qualification_receipt_invalid") from exc
-    if receipt.get("status") != "QUALIFIED_NON_SCORED":
+    if receipt.get("status") != selected["expected_status"]:
         raise SecretLaunchError("qualification_receipt_not_passed")
     return {
-        "status": "QUALIFIED_NON_SCORED",
+        "status": receipt["status"],
+        "action": action,
         "receipt_path": str(out),
         "receipt_sha256": receipt.get("receipt_sha256"),
         "credential_source": {
@@ -120,8 +149,9 @@ def launch(out: Path, *, runner: Runner = _run) -> dict[str, Any]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--action", choices=sorted(ACTIONS), default="qualification")
     args = parser.parse_args()
-    result = launch(args.out)
+    result = launch(args.out, action=args.action)
     print(json.dumps(result, sort_keys=True, separators=(",", ":")))
     return 0
 

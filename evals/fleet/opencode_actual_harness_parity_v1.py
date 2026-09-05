@@ -45,6 +45,41 @@ class ActualHarnessParityError(RuntimeError):
     """Stable content-free parity failure."""
 
 
+def inspect_local_image() -> dict[str, Any]:
+    """Bind the image tag to the observed immutable local amd64 image."""
+    completed = subprocess.run(
+        ["docker", "image", "inspect", IMAGE, "--format", "{{json .}}"],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    if completed.returncode != 0:
+        raise ActualHarnessParityError("opencode_image_inspect_failed")
+    try:
+        value = json.loads(completed.stdout)
+    except json.JSONDecodeError as exc:
+        raise ActualHarnessParityError("opencode_image_inspect_invalid") from exc
+    config = value.get("Config") if isinstance(value, dict) else None
+    if (
+        not isinstance(config, dict)
+        or value.get("Id") != IMAGE_ID
+        or value.get("Os") != "linux"
+        or value.get("Architecture") != "amd64"
+        or config.get("User") != "node"
+        or config.get("WorkingDir") != "/workspace"
+    ):
+        raise ActualHarnessParityError("opencode_image_identity_drift")
+    return {
+        "image": IMAGE,
+        "image_id": value["Id"],
+        "os": value["Os"],
+        "architecture": value["Architecture"],
+        "user": config["User"],
+        "working_dir": config["WorkingDir"],
+    }
+
+
 def mcp_tools() -> list[dict[str, Any]]:
     return production_tools.load(REPO_ROOT)
 
@@ -349,6 +384,7 @@ def run(
     upstream_origin: str = HOSTED_ORIGIN,
     server_binding: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
+    observed_image = inspect_local_image()
     is_hosted = upstream_origin.rstrip("/") == HOSTED_ORIGIN
     if is_hosted and not api_key:
         raise ActualHarnessParityError("fleet_credential_absent")
@@ -463,8 +499,9 @@ def run(
         },
         "harness": {
             **config["harness"],
-            "image": IMAGE,
-            "image_id": IMAGE_ID,
+            "image": observed_image["image"],
+            "image_id": observed_image["image_id"],
+            "observed_image": observed_image,
             "settings_sha256": crypto.sha256(self_hosted.canonical_json(settings)),
         },
         "tool_contract": {

@@ -16,6 +16,10 @@ TERMINAL_RECEIPT = ROOT / (
     "docs/evidence/qwen38-study/"
     "2026-09-05-qwen38-laptop-rank3-tool-parity-terminal-v1.json"
 )
+GLOBAL_COORDINATION_HOLD = ROOT / (
+    "docs/evidence/qwen38-study/"
+    "2026-09-05-qwen38-laptop-rank3-held-global-coordination-v1.json"
+)
 
 
 def _runner(argv: list[str] | tuple[str, ...]) -> str:
@@ -53,8 +57,18 @@ def test_held_plan_reserves_one_complete_sequential_task() -> None:
         "attempt_order": [1, 2, 3, 4],
         "maximum_concurrent_attempts": 1,
         "automatic_retry": False,
+        "global_claim_root": lane.GLOBAL_CLAIM_ROOT,
+        "endpoint_lease": {
+            "lease_root": lane.HOSTED_LEASE_ROOT,
+            "endpoint_key": lane.HOSTED_ENDPOINT_KEY,
+            "maximum_streams": 2,
+        },
     }
-    assert len(plan["required_before_first_scored_create"]) == 5
+    assert len(plan["required_before_first_scored_create"]) == 10
+    assert plan["required_before_first_scored_create"][-2:] == [
+        "hosted_stream_is_not_third_stream_above_qualified_cap_two",
+        "attempt_one_is_accepted_before_attempts_two_through_four",
+    ]
     assert plan["glm_hosted_laptop_lane"]["authorized"] is False
 
 
@@ -119,6 +133,25 @@ def test_plan_digest_covers_launch_gates() -> None:
     changed = copy.deepcopy(original)
     changed["required_before_first_scored_create"].pop()
     assert lane.crypto.digest_without(changed, "plan_sha256") != original["plan_sha256"]
+
+
+def test_global_coordination_hold_is_digest_valid_and_non_scored() -> None:
+    receipt = json.loads(GLOBAL_COORDINATION_HOLD.read_text())
+    assert receipt["status"] == "HELD_NON_SCORED"
+    assert receipt["decision"] == "DO_NOT_SCORE"
+    assert receipt["held_partition"] == {
+        "attempts": [1, 2, 3, 4],
+        "model": "qwen3.8-27b",
+        "selection_rank": 3,
+        "start_only_attempt_one_after_release": True,
+        "whole_task": True,
+    }
+    assert receipt["blockers"]["canonical_sfs_claim_root_mounted"] is False
+    assert receipt["blockers"]["safe_atomic_global_claim_available"] is False
+    assert receipt["request_summary"]["scored_sessions_created"] == 0
+    assert receipt["receipt_sha256"] == lane.crypto.digest_without(
+        receipt, "receipt_sha256"
+    )
 
 
 class _NetworkClient:
@@ -229,6 +262,49 @@ def test_secret_launcher_keeps_key_out_of_argv_output_and_receipt(tmp_path: Path
     assert secret not in rendered and encoded not in rendered
     assert result["credential_in_argv"] is False
     assert len(calls) == 2
+
+
+def test_secret_launcher_runs_only_allowlisted_actual_qwen_parity(tmp_path: Path) -> None:
+    secret = b"inert-test-secret-value"
+    encoded = base64.b64encode(secret)
+    out = tmp_path / "parity.json"
+    child_argv: list[str] = []
+
+    def runner(argv: list[str], **kwargs: object) -> subprocess.CompletedProcess[bytes]:
+        if argv[0] == "kubectl":
+            return subprocess.CompletedProcess(argv, 0, encoded, b"")
+        child_argv.extend(argv)
+        env = kwargs["env"]
+        assert isinstance(env, dict)
+        assert env["FLEET_API_KEY"] == secret.decode()
+        out.write_text(
+            json.dumps({"status": "PASSED_NON_SCORED", "receipt_sha256": "sha256:x"})
+        )
+        return subprocess.CompletedProcess(argv, 0, b"", b"")
+
+    result = secret_launcher.launch(
+        out, action="qwen-hosted-actual-parity", runner=runner
+    )
+    assert child_argv == [
+        secret_launcher.sys.executable,
+        "-m",
+        secret_launcher.ACTUAL_PARITY_MODULE,
+        "--model",
+        "qwen3.8-27b",
+        "--out",
+        str(out),
+    ]
+    assert result["status"] == "PASSED_NON_SCORED"
+    assert result["action"] == "qwen-hosted-actual-parity"
+
+
+def test_secret_launcher_rejects_unlisted_action_without_reading_secret(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(
+        secret_launcher.SecretLaunchError, match="secret_launcher_action_not_allowed"
+    ):
+        secret_launcher.launch(tmp_path / "unused.json", action="arbitrary-module")
 
 
 def test_secret_launcher_fails_before_child_when_key_absent(tmp_path: Path) -> None:

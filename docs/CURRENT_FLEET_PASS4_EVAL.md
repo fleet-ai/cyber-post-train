@@ -174,6 +174,30 @@ claims: a preserved claim behind an accepted result is history, not active
 work. The ledger rejects malformed digests, duplicate or contradictory states,
 treatment drift, and any input containing prompt, trace, flag, or score fields.
 
+## Laptop controller boundary
+
+A laptop may run the exact OpenCode image for non-scored transport, image, and
+tool-catalog parity. It is not automatically a poolable scored controller. The
+current create-once claims and hosted endpoint stream leases are coordinated on
+the cluster's shared SFS mount; a laptop that cannot mount those exact roots
+must fail closed before creating a task instance or making a scored model call.
+
+The future unblocking interface is a small remote atomic coordinator in the
+same trust and storage domain as the cluster controllers. It must provide:
+
+1. one transaction that reconciles the proposed cell against the global
+   ledger, authoritative session inventory, Kubernetes objects, output roots,
+   and canonical claim namespace;
+2. atomic create-once claim creation bound to the exact execution identity;
+3. acquire, continuously hold, and release operations over the existing hosted
+   endpoint lease namespace, including the qualified two-stream ceiling; and
+4. sanitized, digest-valid receipts for every decision without prompts,
+   traces, flags, scores, model output, or credentials.
+
+Until that reviewed interface exists, do not substitute local files, laptop
+locks, or a check-then-create sequence. A laptop lane remains diagnostic or an
+unstarted failover partition.
+
 ## Evidence and privacy
 
 Persist model/task/treatment bindings, stable cell and execution identities,
