@@ -12,8 +12,10 @@ from evals.fleet import glm53_dedicated_v7 as v7
 from evals.fleet import glm53_dedicated_v8 as v8
 
 SPEC_PATH = "evals/fleet/configs/glm53-dedicated-serving-v11-authorized.json"
+VERSION = "v11"
 TITLE = "chris-cyber-evalserve-glm53-tp8-a-v11"
 RUN_DIR = "/mnt/sfs/jobs/chris-cyber-evalserve-glm53-tp8-a-v11"
+PRIORITY_CLASS = "fleet-infra-quiet"
 TOPOLOGY_MODE = "required"
 TOPOLOGY_LEVEL = "topology.nebius.com/tier-1"
 QUEUE = "training-lq"
@@ -68,7 +70,7 @@ def validate(value: dict[str, Any], root: Path) -> None:
         "memory_request": "1Ti",
         "memory_limit": "2Ti",
         "privileged": True,
-        "priority_class": "fleet-infra-quiet",
+        "priority_class": PRIORITY_CLASS,
         "preemption_policy": "Never",
     }:
         raise ValueError("v11 resource policy drifted")

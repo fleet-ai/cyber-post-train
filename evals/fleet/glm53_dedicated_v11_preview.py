@@ -15,6 +15,7 @@ import yaml
 from evals.fleet import glm53_dedicated_v8_live as shared
 from evals.fleet import glm53_dedicated_v11 as v11
 from evals.fleet import jobs_api_topology_guard as topology
+from evals.fleet import priority_preemption_guard as priority_guard
 from evals.fleet import self_hosted
 
 
@@ -37,7 +38,9 @@ def require_contract(openapi: dict[str, Any]) -> None:
         raise RuntimeError("review the newly exposed queue or flavor selector before using it")
 
 
-def preview_identity(manifest_yaml: str, payload: dict[str, Any]) -> dict[str, Any]:
+def preview_identity(
+    manifest_yaml: str, payload: dict[str, Any], package: Any = v11
+) -> dict[str, Any]:
     manifests = [row for row in yaml.safe_load_all(manifest_yaml) if isinstance(row, dict)]
     if len(manifests) != 1 or manifests[0].get("kind") != "RayJob":
         raise RuntimeError("Jobs API preview did not render exactly one RayJob")
@@ -57,15 +60,15 @@ def preview_identity(manifest_yaml: str, payload: dict[str, Any]) -> dict[str, A
     resources = container.get("resources") or {}
     expected = {
         "image": payload["image"],
-        "priority_class": "fleet-infra-quiet",
+        "priority_class": package.PRIORITY_CLASS,
         "privileged": True,
         "run_dir": payload["run_dir"],
         "gpus": 8,
         "image_pull_secrets": ["ghcr-pull"],
-        "queue": v11.QUEUE,
+        "queue": package.QUEUE,
         "suspended_for_admission": True,
-        "topology_mode": v11.TOPOLOGY_MODE,
-        "topology_level": v11.TOPOLOGY_LEVEL,
+        "topology_mode": package.TOPOLOGY_MODE,
+        "topology_level": package.TOPOLOGY_LEVEL,
         "command_sha256": self_hosted.sha256(payload["command"].encode()),
     }
     gpu_request = (resources.get("requests") or {}).get("nvidia.com/gpu")
@@ -100,9 +103,9 @@ def _get_json(kind: str, name: str | None = None) -> dict[str, Any]:
     return json.loads(shared._kubectl(*args))
 
 
-def live_gate(root: Path) -> dict[str, Any]:
-    value = v11.spec(root)
-    payload = v11.payload(value, root)
+def live_gate(root: Path, package: Any = v11) -> dict[str, Any]:
+    value = package.spec(root)
+    payload = package.payload(value, root)
     token = shared._token()
     headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
     with httpx.Client(base_url=shared.BASE_URL, headers=headers, timeout=60) as client:
@@ -114,14 +117,14 @@ def live_gate(root: Path) -> dict[str, Any]:
         openapi.raise_for_status()
         require_contract(openapi.json())
         runs = shared._runs(client)
-        title_matches = sum(row.get("title") == v11.TITLE for row in runs)
-        run_dir_matches = sum(row.get("run_dir") == v11.RUN_DIR for row in runs)
+        title_matches = sum(row.get("title") == package.TITLE for row in runs)
+        run_dir_matches = sum(row.get("run_dir") == package.RUN_DIR for row in runs)
         preview = client.post("/v1/runs/preview", json=payload)
         preview.raise_for_status()
         manifest_yaml = preview.json()["manifest_yaml"]
-        rendered = preview_identity(manifest_yaml, payload)
+        rendered = preview_identity(manifest_yaml, payload, package)
 
-    local_queue = _get_json("localqueue.kueue.x-k8s.io", v11.QUEUE)
+    local_queue = _get_json("localqueue.kueue.x-k8s.io", package.QUEUE)
     cluster_queue_name = local_queue["spec"]["clusterQueue"]
     cluster_queue = json.loads(
         subprocess.run(
@@ -155,8 +158,8 @@ def live_gate(root: Path) -> dict[str, Any]:
         cluster_queue,
         flavors,
         topologies,
-        expected_queue=v11.QUEUE,
-        expected_level=v11.TOPOLOGY_LEVEL,
+        expected_queue=package.QUEUE,
+        expected_level=package.TOPOLOGY_LEVEL,
         expected_podsets=("head",),
     )
     if [row["name"] for row in topology_gate["eligible_flavors"]] != ["b300-training"]:
@@ -171,8 +174,8 @@ def live_gate(root: Path) -> dict[str, Any]:
         )
     )
     serialized = json.dumps(inventory, sort_keys=True)
-    kubernetes_matches = int(v11.TITLE in serialized) + int(v11.RUN_DIR in serialized)
-    observer_run_dir = shared._observer_sfs_path(v11.RUN_DIR)
+    kubernetes_matches = int(package.TITLE in serialized) + int(package.RUN_DIR in serialized)
+    observer_run_dir = shared._observer_sfs_path(package.RUN_DIR)
     absent = subprocess.run(
         [
             "kubectl",
@@ -189,29 +192,33 @@ def live_gate(root: Path) -> dict[str, Any]:
         check=False,
         capture_output=True,
     )
-    priority = json.loads(
+    priority_classes = json.loads(
         subprocess.run(
-            ["kubectl", "get", "priorityclass", "fleet-infra-quiet", "-o", "json"],
+            ["kubectl", "get", "priorityclasses.scheduling.k8s.io", "-o", "json"],
             check=True,
             capture_output=True,
             text=True,
         ).stdout
+    )
+    selected_priority = priority_guard.select_highest_nonpreempting(
+        priority_classes.get("items") or []
     )
     if (
         title_matches
         or run_dir_matches
         or kubernetes_matches
         or absent.returncode != 0
-        or priority.get("preemptionPolicy") != "Never"
+        or selected_priority["name"] != package.PRIORITY_CLASS
     ):
         raise RuntimeError("v11 create-once or nonpreemption gate failed")
     body = {
-        "schema_version": "fleet-glm53-dedicated-serving-v11-preview-receipt-v1",
+        "schema_version": f"fleet-glm53-dedicated-serving-{package.VERSION}-preview-receipt-v1",
         "status": "PASSED_PREVIEW_ONLY",
         "observed_at_utc": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         "request_sha256": self_hosted.sha256(self_hosted.canonical_json(payload)),
         "rendered": rendered,
         "topology_gate": topology_gate,
+        "selected_priority": selected_priority,
         "jobs_api_title_matches": title_matches,
         "jobs_api_run_dir_matches": run_dir_matches,
         "kubernetes_identity_matches": kubernetes_matches,

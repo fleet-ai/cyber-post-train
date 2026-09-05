@@ -28,6 +28,31 @@ def validate_pod_priority_policy(
         raise ValueError("rendered Pod preemptionPolicy contradicts its PriorityClass")
 
 
+def select_highest_nonpreempting(priority_classes: list[dict[str, Any]]) -> dict[str, Any]:
+    """Select the highest live class whose policy prevents this Pod preempting peers."""
+    eligible = [
+        row
+        for row in priority_classes
+        if isinstance(row, dict)
+        and row.get("preemptionPolicy") == "Never"
+        and isinstance((row.get("metadata") or {}).get("name"), str)
+        and type(row.get("value")) is int
+    ]
+    if not eligible:
+        raise ValueError("no live nonpreempting PriorityClass is available")
+    top = max(row["value"] for row in eligible)
+    winners = [row for row in eligible if row["value"] == top]
+    if len(winners) != 1:
+        raise ValueError("highest nonpreempting PriorityClass is ambiguous")
+    row = winners[0]
+    return {
+        "name": row["metadata"]["name"],
+        "uid": str((row.get("metadata") or {}).get("uid") or ""),
+        "value": row["value"],
+        "preemption_policy": "Never",
+    }
+
+
 def main() -> int:
     rendered = json.load(sys.stdin)
     raw_live = os.environ.get("PRIORITY_CLASS_POLICIES_JSON")
