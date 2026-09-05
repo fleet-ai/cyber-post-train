@@ -254,6 +254,8 @@ def test_successor_held_release_is_exact_and_rejects_all_resealed_drift(
             return original["implementation"]["scored_manifest_sha256"]
         if path.name == "submit_opencode_autocontinue_canaries_v2.sh":
             return original["implementation"]["launcher_sha256"]
+        if path.name == "run_opencode_autocontinue_canary.sh":
+            return original["implementation"]["run_script_sha256"]
         return real_sha(path)
 
     monkeypatch.setattr(canary, "_sha", historical_sha)

@@ -1,0 +1,91 @@
+{
+  "schema_version": "fleet-opencode-autocontinue-canary-pre-model-failure-v1",
+  "append_only": true,
+  "status": "INFRASTRUCTURE_INVALID_PRE_MODEL",
+  "observed_at_utc": "2026-09-05T02:24:00Z",
+  "campaign_sha256": "sha256:63946f224a33eb0d2c2a6fdba34358ebf9ca379e5f0f156cd137c95a9b98097e",
+  "failure_class": "deterministic_plan_renderer_rejection",
+  "sanitized_reason": "OpenCode autocontinue plan omitted the required positive compaction_headroom_tokens field",
+  "scientific_disposition": {
+    "statistical_cells_consumed": 0,
+    "valid_rollouts": 0,
+    "retry_requires_fresh_execution_generation": true,
+    "reuse_old_run_or_job_identity": false,
+    "preserve_old_claims": true
+  },
+  "models": [
+    {
+      "served_id": "qwen3.8-27b",
+      "task_version_id": "02dd4e3f-d85d-4bf8-9976-eae2f102384d",
+      "attempt": 1,
+      "execution_generation": 1,
+      "plan_sha256": "sha256:726320dd5e161e28becd22d7bb6e31f1627f36a3c7291c0dabb53f94626b3c2d",
+      "run_id": "chris-q38-ac-canary1-v2-sr004-a1-02dd4e3f",
+      "job": {
+        "name": "chris-q38-ac-canary1-v2",
+        "uid": "226bf66e-363c-47a6-84bd-afd8d380ab48",
+        "created_at_utc": "2026-09-04T23:26:24Z",
+        "failed_at_utc": "2026-09-04T23:28:00Z",
+        "reason": "BackoffLimitExceeded"
+      },
+      "pod": {
+        "name": "chris-q38-ac-canary1-v2-249mz",
+        "uid": "e3ff23b9-98ee-41f8-bb6f-61ef6bf9f41b",
+        "exit_code": 1,
+        "restart_count": 0
+      },
+      "local_claim_sha256": "sha256:c1b14e4562fa192e02b1f5880f2999abbaca59bd62aa90c07371c0b98e0c59be",
+      "global_claim_receipt_sha256": "sha256:f0a38836835a2993cae6c2bea21a927f3b9349ff28b1959cda08dab79819ca15",
+      "attempt_directory_count": 0,
+      "fleet_session_count": 0,
+      "verifier_execution_count": 0
+    },
+    {
+      "served_id": "glm-5.3",
+      "task_version_id": "9375a9b9-04e5-4f6f-ad47-286121278992",
+      "attempt": 1,
+      "execution_generation": 1,
+      "plan_sha256": "sha256:9654b0f2e9cfbe5690a77ce83bc63e7e537a43597479686fc093db7d6533959a",
+      "run_id": "chris-glm53-ac-canary1-v2-sr013-a1-9375a9b9",
+      "job": {
+        "name": "chris-glm53-ac-canary1-v2",
+        "uid": "6ec3528e-d452-4d55-a532-106157d59fdf",
+        "created_at_utc": "2026-09-04T23:26:24Z",
+        "failed_at_utc": "2026-09-04T23:28:01Z",
+        "reason": "BackoffLimitExceeded"
+      },
+      "pod": {
+        "name": "chris-glm53-ac-canary1-v2-hbjq7",
+        "uid": "dee9bef1-5b00-494c-ab3e-8fcb615af092",
+        "exit_code": 1,
+        "restart_count": 0
+      },
+      "local_claim_sha256": "sha256:06488f6d76ae71e25b834f88c6164b5bcd0c66a22563947aaa28d28f164294ca",
+      "global_claim_receipt_sha256": "sha256:d887f57d8827e9ca8bba05f4559e8eb7ffc35e50e03bc79c45698d3c4bae8477",
+      "attempt_directory_count": 0,
+      "fleet_session_count": 0,
+      "verifier_execution_count": 0
+    }
+  ],
+  "aggregate": {
+    "jobs_failed": 2,
+    "pods_restarted": 0,
+    "attempt_directories": 0,
+    "fleet_sessions": 0,
+    "verifier_executions": 0,
+    "accepted_rollouts": 0
+  },
+  "evidence_method": {
+    "kubernetes_uid_bound_state_checked": true,
+    "sfs_roots_checked": true,
+    "fleet_sessions_exhaustively_paginated": true,
+    "hosted_model_requests_observed": 0,
+    "cause_read_only_after_zero_attempt_directories_proven": true
+  },
+  "privacy": {
+    "credentials_included": false,
+    "prompts_traces_flags_or_scores_included": false,
+    "source_logs_included": false
+  },
+  "receipt_sha256": "sha256:fd71d3fb42d1ea4fef4734352c817c62cf0ec5fe6e3e35a28c2a9a4f47aa3f23"
+}
