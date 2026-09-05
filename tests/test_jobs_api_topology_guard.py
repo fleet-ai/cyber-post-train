@@ -16,9 +16,7 @@ def _preview(annotation: str | None = "preferred") -> str:
             "kind": "RayJob",
             "spec": {
                 "rayClusterSpec": {
-                    "headGroupSpec": {
-                        "template": {"metadata": {"annotations": annotations}}
-                    },
+                    "headGroupSpec": {"template": {"metadata": {"annotations": annotations}}},
                     "workerGroupSpecs": [],
                 }
             },
@@ -39,9 +37,7 @@ def _queue(topology_name: str | None) -> tuple[dict, dict, dict]:
                     "flavors": [
                         {
                             "name": "b300",
-                            "resources": [
-                                {"name": "nvidia.com/gpu", "nominalQuota": "8"}
-                            ],
+                            "resources": [{"name": "nvidia.com/gpu", "nominalQuota": "8"}],
                         }
                     ]
                 }
@@ -60,9 +56,7 @@ def _queue(topology_name: str | None) -> tuple[dict, dict, dict]:
 def test_guard_rejects_rendered_request_on_non_topology_flavor() -> None:
     local, cluster, flavors = _queue(None)
     with pytest.raises(RuntimeError, match="without topology support: b300"):
-        topology.require_rendered_topology_compatibility(
-            _preview(), local, cluster, flavors
-        )
+        topology.require_rendered_topology_compatibility(_preview(), local, cluster, flavors)
 
 
 def test_guard_accepts_compatible_live_queue() -> None:

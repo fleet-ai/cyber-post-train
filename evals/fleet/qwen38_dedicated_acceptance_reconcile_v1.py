@@ -10,9 +10,7 @@ from pathlib import Path
 from evals.fleet import qwen38_dedicated_scored_canary_v1 as canary
 from evals.fleet import self_hosted
 
-SOURCE_TERMINAL_SHA256 = (
-    "sha256:68fa8b63d14d26e8bb7f48f4bd103eafb5ac0165545c72e3d1765d7609aeb746"
-)
+SOURCE_TERMINAL_SHA256 = "sha256:68fa8b63d14d26e8bb7f48f4bd103eafb5ac0165545c72e3d1765d7609aeb746"
 
 
 def reconcile(root: Path, key: str, *, job_uid: str, pod_uid: str) -> dict:
@@ -31,8 +29,7 @@ def reconcile(root: Path, key: str, *, job_uid: str, pod_uid: str) -> dict:
     )
     claim = json.loads(claim_path.read_text())
     if (
-        claim.get("receipt_sha256")
-        != self_hosted.digest_without(claim, "receipt_sha256")
+        claim.get("receipt_sha256") != self_hosted.digest_without(claim, "receipt_sha256")
         or claim.get("cell_id") != plan["item"]["cell_id"]
         or claim.get("execution_id") != plan["item"]["execution_id"]
         or claim.get("run_id") != plan["item"]["run_id"]
