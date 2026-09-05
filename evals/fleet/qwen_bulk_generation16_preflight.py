@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -74,23 +75,28 @@ def run(plan_path: Path, output: Path) -> dict[str, Any]:
         ):
             raise RuntimeError("Generation-16 Fleet team authority drifted")
         _stage(output, 3, "account-valid")
-        for task_key in sorted(by_task):
-            sessions = self_hosted._task_sessions(client, task_key)  # noqa: SLF001
-            request_count += 1
-            for session in sessions:
-                metadata = session.get("metadata") or {}
-                if any(
-                    metadata.get(field) in values
-                    for field, values in expected_by_field.items()
-                ):
-                    collisions += 1
-                if session.get("session_id") == accepted_gate["api_session"]["session_id"]:
-                    accepted_matches.append(session)
-        _stage(output, 4, "session-inventory-complete")
         roster_response = client.get("https://inference.flt.build/v1/models")
         request_count += 1
         roster_response.raise_for_status()
         roster = roster_response.json()
+    def task_sessions(task_key: str) -> list[dict[str, Any]]:
+        with httpx.Client(headers=headers, timeout=120) as client:
+            return self_hosted._task_sessions(client, task_key)  # noqa: SLF001
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        pages = list(executor.map(task_sessions, sorted(by_task)))
+    request_count += len(pages)
+    for sessions in pages:
+        for session in sessions:
+            metadata = session.get("metadata") or {}
+            if any(
+                metadata.get(field) in values
+                for field, values in expected_by_field.items()
+            ):
+                collisions += 1
+            if session.get("session_id") == accepted_gate["api_session"]["session_id"]:
+                accepted_matches.append(session)
+    _stage(output, 4, "session-inventory-complete")
     selected = [
         row
         for row in roster.get("data", [])
