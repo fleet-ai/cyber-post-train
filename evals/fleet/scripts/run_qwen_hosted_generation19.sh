@@ -6,7 +6,8 @@ mkdir -p "$ROOT/evals/fleet/configs"
 touch "$ROOT/evals/__init__.py" "$ROOT/evals/fleet/__init__.py"
 for file in self_hosted.py opencode_train_sweep_runner.py exact_pass4_bulk_v3.py \
   exact_pass4_bulk_runtime_v3.py exact_pass4_universe.py exact_pass4_crypto.py \
-  endpoint_lease.py qwen_bulk_generation16.py qwen_hosted_generation19_bulk.py \
+  endpoint_lease.py qwen_bulk_generation16.py qwen_hosted_generation18.py \
+  qwen_hosted_generation19_bulk.py \
   qwen_hosted_generation19_runtime.py fixed_proxy.py Dockerfile.opencode; do
   install -m 0644 "/bootstrap/$file" "$ROOT/evals/fleet/$file"
 done

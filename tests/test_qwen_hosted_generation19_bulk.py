@@ -93,3 +93,26 @@ def test_preflight_every_boundary_has_stage_and_failure_receipt() -> None:
     assert 'args.output.parent / "FAILED.json"' in main_source
     assert '"error_type": type(exc).__name__' in main_source
     assert '"error_sha256": self_hosted.sha256(str(exc).encode())' in main_source
+
+
+def test_scored_packages_have_closed_python_imports_and_hydration(tmp_path: Path) -> None:
+    rendered = package.render(
+        ROOT, "sha256:5e2ea6d4d1417f0db242984f85b3466736dcb29b13272b5187fa340ae90c1ac7"
+    )
+    for cm in [row for row in rendered["items"] if row["kind"] == "ConfigMap"][1:]:
+        module_root = tmp_path / cm["metadata"]["name"] / "evals" / "fleet"
+        module_root.mkdir(parents=True)
+        (module_root.parent / "__init__.py").touch()
+        (module_root / "__init__.py").touch()
+        for name, value in cm["data"].items():
+            if name.endswith(".py"):
+                (module_root / name).write_text(value)
+        run_script = cm["data"]["run_qwen_hosted_generation19.sh"]
+        assert all(name in run_script for name in cm["data"] if name.endswith(".py"))
+        subprocess.run(
+            [sys.executable, "-c", "import evals.fleet.qwen_hosted_generation19_runtime"],
+            cwd=module_root.parents[1],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
