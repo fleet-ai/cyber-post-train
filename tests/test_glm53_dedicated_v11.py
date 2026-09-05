@@ -130,5 +130,33 @@ def test_contract_has_topology_fields_but_no_queue_or_flavor_selector() -> None:
     }
     preview.require_contract(openapi)
     openapi["components"]["schemas"]["RLJobConfig"]["properties"]["queue"] = {"type": "string"}
-    with pytest.raises(RuntimeError, match="newly exposed queue"):
+    with pytest.raises(RuntimeError, match="newly exposed placement selectors.*queue"):
+        preview.require_contract(openapi)
+
+
+def test_contract_requires_review_before_selective_topology_fields_are_used() -> None:
+    openapi = {
+        "paths": {
+            "/v1/runs": {},
+            "/v1/runs/preview": {},
+            "/v1/runs/{name}": {"delete": {}},
+        },
+        "components": {
+            "schemas": {
+                "RLJobConfig": {
+                    "properties": {
+                        "topology_mode": {
+                            "anyOf": [
+                                {"enum": ["required", "preferred"]},
+                                {"type": "null"},
+                            ]
+                        },
+                        "topology_level": {},
+                        "worker_topology_mode": {},
+                    }
+                }
+            }
+        },
+    }
+    with pytest.raises(RuntimeError, match="placement selectors.*worker_topology_mode"):
         preview.require_contract(openapi)

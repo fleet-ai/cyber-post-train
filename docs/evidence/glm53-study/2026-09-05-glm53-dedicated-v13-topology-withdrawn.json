@@ -1,0 +1,27 @@
+{
+  "api_run_id": "ft-run-1f935759",
+  "api_state_before_release": "Suspended",
+  "delete_http_status": 204,
+  "gpu_allocated": false,
+  "kubernetes_objects_absent_after_release": true,
+  "pod_created": false,
+  "prompts_traces_flags_or_scores_included": false,
+  "rayjob_uid": "4fbe6f6d-594e-49d7-af16-bacb4f6f6f34",
+  "receipt_sha256": "sha256:b6d7c25540e548149a7c4df256a76001bb934b6cc5ae11a093effbe03878f72a",
+  "release_reason": "deterministic_head_podset_topology_flavor_incompatibility",
+  "route": "DELETE /v1/runs/ft-run-1f935759",
+  "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-glm53-tp8-a-v13",
+  "schema_version": "fleet-glm53-dedicated-serving-v13-topology-withdrawal-v1",
+  "scored_tasks_launched": 0,
+  "status": "WITHDRAWN_ZERO_RESOURCE_SIDE_EFFECT",
+  "topology_failure": {
+    "candidate_flavors": [
+      "b300-unconstrained",
+      "cpu-head"
+    ],
+    "condition_reason": "Pending",
+    "head_podset_flavors_support_topology_aware_scheduling": false,
+    "message_class": "could_not_assign_flavors_to_head_podset"
+  },
+  "workload_uid": "34734a52-35d6-4021-8d92-03c1e91115b0"
+}

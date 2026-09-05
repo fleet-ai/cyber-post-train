@@ -34,8 +34,20 @@ def require_contract(openapi: dict[str, Any]) -> None:
     }
     if mode_options != {"required", "preferred"} or "topology_level" not in properties:
         raise RuntimeError("Jobs API topology request contract drifted")
-    if "queue" in properties or "resource_flavor" in properties:
-        raise RuntimeError("review the newly exposed queue or flavor selector before using it")
+    review_fields = {
+        "queue",
+        "resource_flavor",
+        "topology_scope",
+        "head_topology_mode",
+        "head_topology_level",
+        "worker_topology_mode",
+        "worker_topology_level",
+    } & properties.keys()
+    if review_fields:
+        raise RuntimeError(
+            "review newly exposed placement selectors before using them: "
+            + ", ".join(sorted(review_fields))
+        )
 
 
 def preview_identity(
