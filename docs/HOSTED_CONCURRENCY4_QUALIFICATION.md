@@ -22,9 +22,13 @@ not be retried merely to obtain a pass.
 Before a human prepares a separately reviewed launch release, all of the
 following must hold:
 
-1. The generation-5 Qwen and GLM canaries are exclusively Complete and have
-   digest-valid accepted receipts under their exact Job and Pod UIDs.
-2. No scored generation-5 or exact-pass@4 bulk controller is active. This
+1. The generation-6 Qwen and GLM canaries are exclusively Complete and have
+   digest-valid accepted receipts under their exact Job and Pod UIDs. The
+   superseded generation-5 canaries failed before model execution, so their
+   generation-5-specific launch release is permanently invalid and must not be
+   reused.
+2. No scored generation-6 controller is active, and all exact-pass@4 bulk
+   Jobs, Pods, ConfigMaps, and output roots are absent. This
    qualification uses its own `hosted-concurrency-qualification-v1` lease
    namespace and must not overlap scored endpoint traffic.
 3. The Fleet credential resolves to team id
@@ -40,5 +44,11 @@ following must hold:
 Even a passing terminal receipt only supports a proposal to raise the hosted
 stream cap from two to four. It does not prove task capability, exact hosted
 weight bytes, or the 262144-token context when the hosted roster omits context
-metadata. Existing accepted generation-5 harness evidence remains required,
+metadata. Existing accepted generation-6 harness evidence remains required,
 and any bulk concurrency change needs its own reviewed, task-boundary-safe plan.
+
+The G6-gated v2 successor remains held until both canaries meet the first gate.
+Its held preview performs no model, task, session, scoring, or verifier call and
+creates no object. Once the terminal evidence exists, render the append-only v2
+launch release from the clean implementation commit; only the v2 launcher may
+consume it.
