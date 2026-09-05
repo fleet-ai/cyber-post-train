@@ -12,6 +12,10 @@ from evals.fleet import laptop_opencode_lane_v1 as lane
 from evals.fleet import laptop_secret_launcher_v1 as secret_launcher
 
 ROOT = Path(__file__).resolve().parents[1]
+TERMINAL_RECEIPT = ROOT / (
+    "docs/evidence/qwen38-study/"
+    "2026-09-05-qwen38-laptop-rank3-tool-parity-terminal-v1.json"
+)
 
 
 def _runner(argv: list[str] | tuple[str, ...]) -> str:
@@ -260,3 +264,33 @@ def test_secret_launcher_rejects_any_child_leak(tmp_path: Path, leak_target: str
 
     with pytest.raises(secret_launcher.SecretLaunchError, match="credential_leaked"):
         secret_launcher.launch(out, runner=runner)
+
+
+def test_terminal_tool_parity_failure_receipt_is_digest_valid_and_non_scored() -> None:
+    receipt = json.loads(TERMINAL_RECEIPT.read_text())
+    assert receipt["schema_version"] == (
+        "fleet-qwen38-laptop-rank3-tool-parity-terminal-v1"
+    )
+    assert receipt["status"] == "FAILED"
+    assert receipt["classification"] == "NON_SCORED_PARITY_BLOCKER"
+    assert receipt["final_probe"]["exact_model_identity"]["server_info_exact"] is True
+    assert receipt["final_probe"]["result_class"] == (
+        "STRUCTURED_SUBMIT_REPORT_CONTRACT_FAILED"
+    )
+    assert receipt["request_summary"] == {
+        "benchmark_requests": 0,
+        "content_free_chat_completion_calls": 5,
+        "model_started_scored_cells": 0,
+        "task_instance_session_verifier_or_scoring_mutations": 0,
+    }
+    assert receipt["held_partition"]["scored_launch_authorized"] is False
+    assert receipt["privacy"] == {
+        "credentials_included": False,
+        "model_outputs_included": False,
+        "prompts_traces_flags_or_scores_included": False,
+        "response_content_included": False,
+        "tool_arguments_included": False,
+    }
+    assert receipt["receipt_sha256"] == lane.crypto.digest_without(
+        receipt, "receipt_sha256"
+    )
