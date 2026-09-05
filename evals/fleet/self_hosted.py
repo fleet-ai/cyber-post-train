@@ -74,6 +74,20 @@ def digest_without(value: dict[str, Any], field: str) -> str:
     return sha256(canonical_json({key: item for key, item in value.items() if key != field}))
 
 
+def session_execution_metadata(config: dict[str, Any]) -> dict[str, str]:
+    """Project an optional exact statistical execution identity into a session."""
+    execution = config.get("execution") or {}
+    values = {field: execution.get(field) for field in ("cell_id", "execution_id")}
+    if all(value is None for value in values.values()):
+        return {}
+    if any(
+        not isinstance(value, str) or re.fullmatch(r"sha256:[0-9a-f]{64}", value) is None
+        for value in values.values()
+    ):
+        raise ValueError("session statistical execution metadata is incomplete or invalid")
+    return {field: value for field, value in values.items() if isinstance(value, str)}
+
+
 def session_model_identity(config: dict[str, Any]) -> str:
     explicit = (config.get("model") or {}).get("session_model")
     if isinstance(explicit, str) and explicit:
@@ -1570,6 +1584,7 @@ def run(
                             f"{harness_name}-{config['harness']['version']}"
                         ),
                         "run_id": config["run_id"],
+                        **session_execution_metadata(config),
                         "tool_catalog_sha256": tool_digest,
                         "agent_exit_code": result.returncode,
                         "agent_termination": agent_termination,

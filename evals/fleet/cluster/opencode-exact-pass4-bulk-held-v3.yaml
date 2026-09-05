@@ -1,0 +1,65 @@
+apiVersion: v1
+kind: List
+items:
+  - &held-job
+    apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: chris-q38-ac-exact100-bulk-a199-v3
+      namespace: fleet-train-jobs
+      labels: &held-labels
+        cyber-post-train.fleet.ai/owner: chris
+        cyber-post-train.fleet.ai/experiment: exact100-bulk-held-v3
+        kueue.x-k8s.io/queue-name: training-lq
+      annotations: &held-annotations
+        cyber-post-train.fleet.ai/preview-only: "true"
+        cyber-post-train.fleet.ai/launch-authorized: "false"
+        cyber-post-train.fleet.ai/release-required: "true"
+    spec:
+      backoffLimit: 0
+      ttlSecondsAfterFinished: 604800
+      template:
+        metadata:
+          labels:
+            cyber-post-train.fleet.ai/owner: chris
+            cyber-post-train.fleet.ai/experiment: exact100-bulk-held-v3
+            kueue.x-k8s.io/queue-name: training-lq
+        spec:
+          restartPolicy: Never
+          priorityClassName: fleet-serve-low
+          preemptionPolicy: Never
+          nodeSelector:
+            kubernetes.io/arch: amd64
+            workload: fleetai-training-ng-cpu
+          tolerations:
+            - key: workload
+              operator: Equal
+              value: fleetai-training-ng-cpu
+              effect: NoSchedule
+          containers:
+            - name: evaluator
+              image: ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
+              command: ["/bin/sh", "-ceu"]
+              args:
+                - echo 'held bulk preview cannot execute without an append-only release' >&2; exit 78
+              resources:
+                requests: {cpu: 100m, memory: 128Mi}
+                limits: {cpu: 100m, memory: 128Mi}
+  - <<: *held-job
+    metadata:
+      name: chris-q38-ac-exact100-bulk-b200-v3
+      namespace: fleet-train-jobs
+      labels: *held-labels
+      annotations: *held-annotations
+  - <<: *held-job
+    metadata:
+      name: chris-glm53-ac-exact100-bulk-a199-v3
+      namespace: fleet-train-jobs
+      labels: *held-labels
+      annotations: *held-annotations
+  - <<: *held-job
+    metadata:
+      name: chris-glm53-ac-exact100-bulk-b200-v3
+      namespace: fleet-train-jobs
+      labels: *held-labels
+      annotations: *held-annotations
