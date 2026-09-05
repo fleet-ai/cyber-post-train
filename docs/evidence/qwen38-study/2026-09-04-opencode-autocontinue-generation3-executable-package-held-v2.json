@@ -1,0 +1,56 @@
+{
+  "aggregate_sha256": "sha256:4c8c09743de3891e4b0948bfaf0a43330a8740e3c98459daebc995dfc305fb3b",
+  "append_only": true,
+  "execution_generation": 3,
+  "implementation": {
+    "manifest_path": "evals/fleet/cluster/opencode-autocontinue-generation3-executable-held-v2.yaml",
+    "manifest_sha256": "sha256:17f2797329fdec7e2a1020b9b941a027b89293998fc4894b6e709a09927b6cc1",
+    "module_path": "evals/fleet/autocontinue_generation3_executable_package.py",
+    "module_sha256": "sha256:eb8c169b0a59b9b0063ece07b8db3958b43e97e39bc453b648ade4c40ad63ed5",
+    "run_path": "evals/fleet/scripts/run_opencode_autocontinue_generation3_executable_v2.sh",
+    "run_sha256": "sha256:1035047100ef26a701e31e5508ae818b8dbbad36dbafbdedaf831265ee68f62e",
+    "submit_path": "evals/fleet/scripts/submit_opencode_autocontinue_generation3_executable_v2.sh",
+    "submit_sha256": "sha256:5fa9964627e5321a4549f250fa1ddeb2d520c207aec50473b78e68aff75fea71"
+  },
+  "jobs": [
+    "chris-q38-ac-r004-a1-g3-v1",
+    "chris-glm53-ac-r013-a1-g3-v1"
+  ],
+  "kubernetes_object_limit_bytes": 1048576,
+  "launch_authorized": false,
+  "model_aggregate_sha256s": {
+    "glm-5.3": "sha256:6b29e296385a7780dd7f54a1b0da80cd06f9f431119e5133b2d21926de0decc2",
+    "qwen3.8-27b": "sha256:e6939f9dfd4bfce23a105e24509f522feebf8b573a751d6977837bc1d5025301"
+  },
+  "object_json_bytes": {
+    "chris-ac-g3-runtime-core-a-v2": 487930,
+    "chris-ac-g3-runtime-core-b-v2": 602996,
+    "chris-glm53-ac-r013-a1-g3-run-v1": 17674,
+    "chris-q38-ac-r004-a1-g3-run-v1": 17669
+  },
+  "objects": [
+    "chris-ac-g3-runtime-core-a-v2",
+    "chris-ac-g3-runtime-core-b-v2",
+    "chris-glm53-ac-r013-a1-g3-run-v1",
+    "chris-q38-ac-r004-a1-g3-run-v1"
+  ],
+  "objects_created": false,
+  "package_layout": "split_immutable_configmaps_projected_volume_v2",
+  "package_object_safety_limit_bytes": 972800,
+  "priority": {
+    "class": "fleet-serve-low",
+    "preemption_policy": "Never"
+  },
+  "privacy": {
+    "credentials_included": false,
+    "prompts_traces_flags_or_scores_included": false
+  },
+  "receipt_sha256": "sha256:b94f6227d55e211cf5754c1a95906c24355608a3bc13546e078e8f1b3eeda8b3",
+  "remaining_gates": [
+    "fresh_route_and_duplicate_inventory",
+    "append_only_model_specific_generation3_scoring_releases",
+    "explicit_root_launch_authorization"
+  ],
+  "schema_version": "fleet-opencode-autocontinue-generation3-split-package-held-v1",
+  "status": "HELD"
+}
