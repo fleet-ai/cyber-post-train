@@ -33,5 +33,10 @@ def test_package_is_small_create_once_nonpreempting_cpu_job() -> None:
     assert pod["priorityClassName"] == "fleet-serve-low"
     assert pod["nodeSelector"]["workload"] == "fleetai-training-ng-cpu"
     assert not any("nvidia.com/gpu" in str(row) for row in pod.get("containers", []))
+    evaluator = next(row for row in pod["containers"] if row["name"] == "evaluator")
+    startup = evaluator["args"][0]
+    assert "apt-get update" in startup
+    assert "docker.io=20.10.24+dfsg1-1+deb12u1+b6" in startup
+    assert startup.index("docker.io=") < startup.index("exec /bin/bash /bootstrap/run.sh")
     manifest = ROOT / "evals/fleet/cluster/hosted-glm-exact-r001-a1-canary-v1.yaml"
     yaml.safe_load(manifest.read_text())

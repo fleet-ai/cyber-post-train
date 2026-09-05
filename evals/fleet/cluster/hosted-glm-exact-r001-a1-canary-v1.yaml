@@ -1,10 +1,10 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: chris-glm53-exact100-hosted-r001-a1-canary-v2
+  name: chris-glm53-exact100-hosted-r001-a1-canary-v3
   namespace: fleet-train-jobs
   labels:
-    cyber-post-train.fleet.ai/experiment: glm53-exact100-hosted-r001-a1-canary-v2
+    cyber-post-train.fleet.ai/experiment: glm53-exact100-hosted-r001-a1-canary-v3
     cyber-post-train.fleet.ai/owner: chris
     kueue.x-k8s.io/queue-name: training-lq
   annotations:
@@ -17,7 +17,7 @@ spec:
   template:
     metadata:
       labels:
-        cyber-post-train.fleet.ai/experiment: glm53-exact100-hosted-r001-a1-canary-v2
+        cyber-post-train.fleet.ai/experiment: glm53-exact100-hosted-r001-a1-canary-v3
         cyber-post-train.fleet.ai/owner: chris
     spec:
       restartPolicy: Never
@@ -53,11 +53,15 @@ spec:
         - name: evaluator
           image: ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
           command: ["/bin/bash", "-ceu", "--"]
-          args: ["exec /bin/bash /bootstrap/run.sh"]
+          args:
+            - |
+              apt-get update
+              apt-get install --yes --no-install-recommends docker.io=20.10.24+dfsg1-1+deb12u1+b6
+              exec /bin/bash /bootstrap/run.sh
           env:
             - {name: DOCKER_HOST, value: "unix:///var/run/docker.sock"}
             - {name: DOCKER_TLS_CERTDIR, value: ""}
-            - {name: JOB_NAME, value: chris-glm53-exact100-hosted-r001-a1-canary-v2}
+            - {name: JOB_NAME, value: chris-glm53-exact100-hosted-r001-a1-canary-v3}
             - {name: SECRET_UID, value: e0febd8e-94a2-46b0-a0bf-dd6b3154187b}
             - name: JOB_UID
               valueFrom: {fieldRef: {apiVersion: v1, fieldPath: "metadata.labels['batch.kubernetes.io/controller-uid']"}}
@@ -75,7 +79,7 @@ spec:
             - {name: sfs, mountPath: /mnt/sfs}
       volumes:
         - name: bootstrap
-          configMap: {name: chris-glm53-exact100-hosted-r001-a1-canary-v2-run}
+          configMap: {name: chris-glm53-exact100-hosted-r001-a1-canary-v3-run}
         - {name: docker-data, emptyDir: {sizeLimit: 40Gi}}
         - {name: docker-socket, emptyDir: {}}
         - {name: workspace, emptyDir: {sizeLimit: 5Gi}}
