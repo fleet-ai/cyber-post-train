@@ -1,7 +1,9 @@
+import json
 from pathlib import Path
 
 from evals.fleet import qwen38_dedicated_rank3_a2_g22_v1 as lane
 from evals.fleet import qwen38_dedicated_rank3_a2_g22_v1_job as job
+from evals.fleet import self_hosted
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -43,3 +45,18 @@ def test_g22_package_uses_exact_new_runner(tmp_path: Path) -> None:
     rendered = job.render(ROOT)
     assert rendered["metadata"]["name"] == job.NAME
     assert rendered["spec"]["template"]["spec"]["preemptionPolicy"] == "Never"
+
+
+def test_g21_preplan_failure_is_retry_safe_and_sealed() -> None:
+    path = ROOT / (
+        "docs/evidence/qwen38-study/"
+        "2026-09-05-qwen38-dedicated-rank3-a2-g21-package-tombstone-v1.json"
+    )
+    value = json.loads(path.read_text())
+    assert value["status"] == "RETRY_SAFE_INFRA_FAILURE"
+    assert value["pod_phase_when_released"] == "Pending"
+    assert value["output_root_created"] is False
+    assert value["claim_created"] is False
+    assert value["model_call_started"] is False
+    assert value["scored_session_created"] is False
+    assert value["receipt_sha256"] == self_hosted.digest_without(value, "receipt_sha256")

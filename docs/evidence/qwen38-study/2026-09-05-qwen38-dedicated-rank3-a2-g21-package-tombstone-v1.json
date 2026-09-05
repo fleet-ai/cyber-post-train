@@ -1,0 +1,23 @@
+{
+  "claim_created": false,
+  "configmap_deleted": true,
+  "execution_id": "sha256:49b30d65bac2afca7c21d6a4b763b8bea136d9f8e2314d0cd563aa50e7d82fab",
+  "failure_class": "wrong_packaged_runner_module",
+  "job_deleted": true,
+  "job_uid": "13904bed-ff82-46f8-8014-f35426bf4fd0",
+  "model_call_started": false,
+  "output_root_created": false,
+  "pod_phase_when_released": "Pending",
+  "pod_uid": "f61bac43-ad7a-482b-9822-19f65f775d83",
+  "prompts_traces_flags_or_scores_included": false,
+  "receipt_sha256": "sha256:1da84adacde8581e79054bf6e0a7a0554144b6f4168b928a0e96eec0f7a3760c",
+  "released_at_utc": "2026-09-05T21:59:43Z",
+  "retry_allowed_only_with_fresh_execution_identity": true,
+  "run_id": "chris-cyber-q38-opencode11827-ded-tp1-r003-a2-g21-v2",
+  "schema_version": "fleet-qwen38-dedicated-rank3-preplan-package-tombstone-v1",
+  "scored_session_created": false,
+  "status": "RETRY_SAFE_INFRA_FAILURE",
+  "successor_execution_generation": 22,
+  "task_instance_created": false,
+  "verifier_started": false
+}
