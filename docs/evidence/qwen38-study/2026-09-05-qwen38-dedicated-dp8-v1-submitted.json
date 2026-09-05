@@ -1,0 +1,37 @@
+{
+  "api_run_id": "ft-run-f8094254",
+  "credentials_included": false,
+  "http_status": 202,
+  "live_gate_receipt_sha256": "sha256:f9c4b76d3ec53ecd310460f534173af19a565feee0b30ec06a45df77581e4ae4",
+  "project_resource_shape": {
+    "active_peers": [
+      {
+        "api_run_id": "ft-run-76c7f016",
+        "gpus": 1,
+        "nodes": 1,
+        "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-q38-tp1-b-v2"
+      }
+    ],
+    "max_gpus": 16,
+    "max_nodes": 2,
+    "planned_gpus": 9,
+    "planned_nodes": 2
+  },
+  "prompts_traces_flags_or_scores_included": false,
+  "receipt_sha256": "sha256:1edb9cec7cb90834337485b52770c0a4368de0578562dd5e4d29e1b3eaa9b384",
+  "request_sha256": "sha256:eecab25e3d287164191ed033350b39b629e3788222d4085a15069c3955dc2ab7",
+  "route": "POST /v1/runs",
+  "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-q38-dp8-a-v1",
+  "schema_version": "fleet-qwen38-dedicated-dp8-v1-submission-v1",
+  "scored_tasks_launched": 0,
+  "selected_priority": {
+    "name": "fleet-infra-quiet",
+    "preemption_policy": "Never",
+    "selection_scope": "live_cluster_intersect_jobs_api",
+    "uid": "d45daf46-24e1-4564-a61c-714fb3047fad",
+    "value": -1000
+  },
+  "status": "SUBMITTED",
+  "submitted_at_utc": "2026-09-05T21:15:09.592637Z",
+  "title": "chris-cyber-evalserve-q38-dp8-a-v1"
+}
