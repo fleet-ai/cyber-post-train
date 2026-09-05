@@ -22,6 +22,7 @@ from evals.fleet import exact_pass4_bulk_v3 as bulk
 from evals.fleet import exact_pass4_universe as exact
 from evals.fleet import qwen38_dedicated_scored_canary_v1 as qwen_dedicated
 from evals.fleet import qwen_bulk_generation16 as qwen_generation16
+from evals.fleet import qwen_hosted_generation18 as qwen_generation18
 from evals.fleet import self_hosted
 
 DEFAULT_CAMPAIGN = Path("evals/fleet/configs/q38-glm53-exact-easiest100-pass4-campaign-v1.json")
@@ -388,6 +389,7 @@ class Authority:
     cells: dict[str, dict[str, Any]]
     bulk_items: dict[tuple[str, str], tuple[dict[str, Any], dict[str, Any]]]
     qwen_generation16_items: dict[tuple[str, str], tuple[dict[str, Any], dict[str, Any]]]
+    qwen_generation18_items: dict[tuple[str, str], tuple[dict[str, Any], dict[str, Any]]]
     dedicated_qwen_items: dict[tuple[str, str], tuple[dict[str, Any], dict[str, Any]]]
     generation7: dict[tuple[str, str], dict[str, Any]]
     generation15: dict[tuple[str, str], dict[str, Any]]
@@ -463,6 +465,16 @@ def _build_authority(repo_root: Path, campaign_path: Path) -> Authority:
                 raise LedgerError("Qwen generation-16 execution authority is duplicated")
             qwen_generation16_items[key] = (plan, item)
 
+    qwen_generation18_items: dict[tuple[str, str], tuple[dict[str, Any], dict[str, Any]]] = {}
+    for plan in qwen_generation18.validate_all(repo_root).values():
+        if plan.get("treatment") != exact.EXPECTED_TREATMENT:
+            raise LedgerError("Qwen generation-18 plan treatment drifted from the exact universe")
+        for item in plan["attempts"]:
+            key = (item["cell_id"], item["execution_id"])
+            if key in qwen_generation18_items:
+                raise LedgerError("Qwen generation-18 execution authority is duplicated")
+            qwen_generation18_items[key] = (plan, item)
+
     dedicated_qwen_items: dict[tuple[str, str], tuple[dict[str, Any], dict[str, Any]]] = {}
     for attempt in sorted(qwen_dedicated.EXPECTED_IDENTITIES):
         generated_plan = qwen_dedicated.build_plan(repo_root, attempt)
@@ -508,6 +520,7 @@ def _build_authority(repo_root: Path, campaign_path: Path) -> Authority:
         cells=cells,
         bulk_items=bulk_items,
         qwen_generation16_items=qwen_generation16_items,
+        qwen_generation18_items=qwen_generation18_items,
         dedicated_qwen_items=dedicated_qwen_items,
         generation7=generation7_items,
         generation15=generation15_items,
@@ -586,7 +599,11 @@ def _accepted_bulk(value: dict[str, Any], path: Path, authority: Authority) -> E
         optional={BULK_ACCEPTED_OPTIONAL_PROJECTION_FIELD},
     )
     key = (value.get("cell_id"), value.get("execution_id"))
-    pair = authority.qwen_generation16_items.get(key) or authority.bulk_items.get(key)
+    pair = (
+        authority.qwen_generation18_items.get(key)
+        or authority.qwen_generation16_items.get(key)
+        or authority.bulk_items.get(key)
+    )
     if pair is None:
         raise LedgerError(f"bulk acceptance is absent from the exact frozen plans: {path}")
     plan, item = pair
@@ -887,16 +904,12 @@ def _accepted_validated_dedicated_qwen(
         "claim_receipt_sha256": binding["claim_sha256"],
         "config_sha256": binding["config_sha256"],
         "source_terminal_receipt_sha256": binding["source_terminal_receipt_sha256"],
-        "source_terminal_stale_claim_sha256": binding[
-            "source_terminal_stale_claim_sha256"
-        ],
+        "source_terminal_stale_claim_sha256": binding["source_terminal_stale_claim_sha256"],
         "source_terminal_actual_canonical_sha256": binding[
             "source_terminal_actual_canonical_sha256"
         ],
         "accepted_receipt_sha256": binding["accepted_receipt_sha256"],
-        "acceptance_terminal_receipt_sha256": binding[
-            "acceptance_terminal_receipt_sha256"
-        ],
+        "acceptance_terminal_receipt_sha256": binding["acceptance_terminal_receipt_sha256"],
         "collector_job_uid": binding["collector_job_uid"],
         "collector_pod_uid": binding["collector_pod_uid"],
         "validator_job_uid": binding["validator_job_uid"],
@@ -970,7 +983,11 @@ def accepted_evidence(path: Path, authority: Authority) -> Evidence:
 def _claim_bulk(value: dict[str, Any], path: Path, authority: Authority) -> Evidence:
     _require_exact_fields(value, BULK_CLAIM_FIELDS, path)
     key = (value.get("cell_id"), value.get("execution_id"))
-    pair = authority.qwen_generation16_items.get(key) or authority.bulk_items.get(key)
+    pair = (
+        authority.qwen_generation18_items.get(key)
+        or authority.qwen_generation16_items.get(key)
+        or authority.bulk_items.get(key)
+    )
     if pair is None:
         raise LedgerError(f"bulk claim is absent from exact frozen plans: {path}")
     plan, item = pair

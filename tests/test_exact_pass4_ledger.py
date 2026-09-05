@@ -179,25 +179,19 @@ def _dedicated_qwen_validated(authority: ledger.Authority) -> dict:
         "claim_sha256": binding["claim_sha256"],
         "config_sha256": binding["config_sha256"],
         "authoritative_projection_omissions": ["metadata", "model", "task_version_id"],
-        "authoritative_projection_rule": (
-            "legacy_list_fields_may_be_null_but_never_mismatched_v1"
-        ),
+        "authoritative_projection_rule": ("legacy_list_fields_may_be_null_but_never_mismatched_v1"),
         "plan_file_sha256": binding["artifact_file_sha256"]["plan_file_sha256"],
         "claim_file_sha256": binding["artifact_file_sha256"]["claim_file_sha256"],
         "claim_receipt_sha256": binding["claim_sha256"],
         "artifact_file_sha256": copy.deepcopy(binding["artifact_file_sha256"]),
         "all_artifact_byte_digests_matched": True,
         "source_terminal_receipt_sha256": binding["source_terminal_receipt_sha256"],
-        "source_terminal_stale_claim_sha256": binding[
-            "source_terminal_stale_claim_sha256"
-        ],
+        "source_terminal_stale_claim_sha256": binding["source_terminal_stale_claim_sha256"],
         "source_terminal_actual_canonical_sha256": binding[
             "source_terminal_actual_canonical_sha256"
         ],
         "accepted_receipt_sha256": binding["accepted_receipt_sha256"],
-        "acceptance_terminal_receipt_sha256": binding[
-            "acceptance_terminal_receipt_sha256"
-        ],
+        "acceptance_terminal_receipt_sha256": binding["acceptance_terminal_receipt_sha256"],
         "collector_job_uid": binding["collector_job_uid"],
         "collector_pod_uid": binding["collector_pod_uid"],
         "validator_job_uid": binding["validator_job_uid"],
@@ -402,8 +396,7 @@ def test_durable_generation15_gate_is_exact_accepted_evidence(
     tmp_path: Path, authority: ledger.Authority
 ) -> None:
     source = (
-        ROOT
-        / "docs/evidence/qwen38-study/2026-09-05-qwen38-generation15-accepted-gate-v1.json"
+        ROOT / "docs/evidence/qwen38-study/2026-09-05-qwen38-generation15-accepted-gate-v1.json"
     )
     accepted = ledger.accepted_evidence(source, authority)
     assert accepted.state == "accepted"
@@ -434,6 +427,30 @@ def test_current_qwen_hosted_claim_uses_its_exact_successor_plan(
     evidence = ledger.claim_evidence(path, authority, active=True)
     assert evidence.cell_id == item["cell_id"]
     assert evidence.execution_generation == item["execution_generation"]
+
+
+def test_generation18_qwen_claim_uses_its_exact_successor_plan(
+    tmp_path: Path, authority: ledger.Authority
+) -> None:
+    pairs = list(authority.qwen_generation18_items.values())
+    assert len(pairs) == 1
+    plan, item = pairs[0]
+    assert plan["plan_sha256"] == (
+        "sha256:6770e4a0f423154101f9d7c14277593f38ce8ff5539b5155fc1f1f4e58b9003b"
+    )
+    root = tmp_path / "claims"
+    value = runtime.claim_cell(
+        plan,
+        item,
+        claim_root=root,
+        job_uid="11111111-1111-4111-8111-111111111111",
+        pod_uid="22222222-2222-4222-8222-222222222222",
+    )
+    assert value is not None
+    path = root / f"{item['execution_id'].removeprefix('sha256:')}.json"
+    evidence = ledger.claim_evidence(path, authority, active=True)
+    assert evidence.cell_id == item["cell_id"]
+    assert evidence.execution_generation == 18
 
 
 def test_dedicated_qwen_claim_and_acceptance_are_strict_score_blind_adapters(
@@ -519,9 +536,7 @@ def test_validated_dedicated_qwen_chain_is_the_only_post_terminal_credit(
             ],
         }
     )
-    provisional["receipt_sha256"] = self_hosted.digest_without(
-        provisional, "receipt_sha256"
-    )
+    provisional["receipt_sha256"] = self_hosted.digest_without(provisional, "receipt_sha256")
     provisional_path = _write(tmp_path / "ACCEPTED.json", provisional)
     with pytest.raises(ledger.LedgerError, match="fields drifted"):
         ledger.accepted_evidence(provisional_path, authority)
