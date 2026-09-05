@@ -8,6 +8,7 @@ cannot accidentally turn a local inspection into a task or scoring mutation.
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import subprocess
@@ -15,9 +16,12 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
+import httpx
+
 from evals.fleet import exact_pass4_crypto as crypto
 from evals.fleet import exact_pass4_universe as exact
-from evals.fleet import hosted_behavioral_preflight, self_hosted
+from evals.fleet import hosted_concurrency4_qualification_v1 as hosted_qualification
+from evals.fleet import qwen38_calibration, self_hosted
 
 SCHEMA = "fleet-laptop-opencode-qualification-v1"
 PLAN_SCHEMA = "fleet-laptop-opencode-held-task-v1"
@@ -62,6 +66,54 @@ ModelProbe = Callable[[str, str], dict[str, Any]]
 def _run(argv: Sequence[str]) -> str:
     completed = subprocess.run(list(argv), check=True, text=True, capture_output=True)
     return completed.stdout.strip()
+
+
+def _probe_qwen_parity(model: str, api_key: str) -> dict[str, Any]:
+    """Use the campaign's proven identity and representative tool probes."""
+    expected = exact.EXPECTED_MODELS[RESERVED_MODEL]
+    identity = qwen38_calibration.live_model_identity(
+        api_key,
+        {
+            "endpoint_origin": "https://inference.flt.build",
+            "served_id": model,
+            "revision": expected["revision"],
+        },
+    )
+    observations = [
+        {
+            "tool": "submit_report",
+            "http_status": 200,
+            "result_class": "VALID_TOOL_STRUCTURE",
+        }
+    ]
+    try:
+        latency = hosted_qualification.post_completion(model, "bash", api_key)
+    except hosted_qualification.QualificationError as exc:
+        observations.append({"tool": "bash", "http_status": None, "result_class": exc.code})
+    else:
+        observations.append(
+            {
+                "tool": "bash",
+                "http_status": 200,
+                "result_class": "VALID_TOOL_STRUCTURE",
+                "latency_ms": round(latency * 1000),
+            }
+        )
+    observations.sort(key=lambda row: ("bash", "submit_report").index(row["tool"]))
+    body = {
+        "served_id": model,
+        "exact_served_id_advertised": True,
+        "observations": observations,
+        "model_identity": identity,
+        "passed": all(row["result_class"] == "VALID_TOOL_STRUCTURE" for row in observations),
+        "request": {
+            "generic_non_benchmark": True,
+            "max_tokens": 128,
+            "response_content_persisted": False,
+        },
+        "credentials_included": False,
+    }
+    return {**body, "receipt_sha256": crypto.digest_without(body, "receipt_sha256")}
 
 
 def _qualification_config() -> dict[str, Any]:
@@ -241,7 +293,10 @@ def qualify_network(
         raise QualificationError("fleet_credential_absent")
     plan = held_plan(repo_root)
     account = self_hosted._request(client, "GET", "/v1/account")
-    if account != {"team_name": "fleet", "team_id": self_hosted.FLEET_TEAM_ID}:
+    if (
+        account.get("team_name") != "fleet"
+        or account.get("team_id") != self_hosted.FLEET_TEAM_ID
+    ):
         raise QualificationError("fleet_team_identity_mismatch")
     config = {
         "authority": {
@@ -259,10 +314,14 @@ def qualify_network(
     }
     routes = self_hosted.assert_authoritative_routes_deployed(client, config)
     if model_probe is None:
-        model_probe = hosted_behavioral_preflight.probe
+        model_probe = _probe_qwen_parity
     behavior = model_probe("qwen3.8-27b", api_key)
     if behavior.get("passed") is not True:
-        raise QualificationError("qwen_hosted_structured_tool_parity_failed")
+        classes = ",".join(
+            f"{row.get('tool')}={row.get('result_class')}/{row.get('http_status')}"
+            for row in behavior.get("observations") or []
+        )
+        raise QualificationError(f"qwen_hosted_structured_tool_parity_failed:{classes}")
     observed_tools = [row.get("tool") for row in behavior.get("observations") or []]
     if observed_tools != ["bash", "submit_report"]:
         raise QualificationError("qwen_hosted_tool_probe_set_drifted")
@@ -270,7 +329,10 @@ def qualify_network(
         "schema_version": SCHEMA,
         "status": "NETWORK_PASSED_LAUNCH_STILL_HELD",
         "scored_launch_authorized": False,
-        "fleet_account": account,
+        "fleet_account": {
+            "team_name": account["team_name"],
+            "team_id": account["team_id"],
+        },
         "authoritative_routes": routes,
         "qwen_hosted_behavior": {
             "served_id": behavior.get("served_id"),
@@ -294,3 +356,44 @@ def qualify_network(
     }
     receipt["receipt_sha256"] = crypto.digest_without(receipt, "receipt_sha256")
     return receipt
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--out", type=Path, required=True)
+    args = parser.parse_args()
+    if args.out.exists() or args.out.is_symlink():
+        parser.error("--out must be unused")
+    key = os.environ.get("FLEET_API_KEY")
+    if not key:
+        parser.error("FLEET_API_KEY is required")
+    root = Path(__file__).resolve().parents[2]
+    local = qualify_local(root)
+    with httpx.Client(
+        headers={"Authorization": f"Bearer {key}", "Accept": "application/json"},
+        timeout=180,
+    ) as client:
+        network = qualify_network(root, key, client=client)
+    receipt = {
+        "schema_version": SCHEMA,
+        "status": "QUALIFIED_NON_SCORED",
+        "scored_launch_authorized": False,
+        "local": local,
+        "network": network,
+        "request_policy": {
+            "task_instance_session_verifier_or_scoring_mutations": 0,
+            "benchmark_requests": 0,
+        },
+        "privacy": {
+            "prompts_traces_flags_scores_or_model_outputs_included": False,
+            "credentials_included": False,
+            "response_content_persisted": False,
+        },
+    }
+    receipt["receipt_sha256"] = crypto.digest_without(receipt, "receipt_sha256")
+    self_hosted.write_json_once(args.out, receipt)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

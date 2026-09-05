@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import base64
 import copy
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
 
 from evals.fleet import laptop_opencode_lane_v1 as lane
+from evals.fleet import laptop_secret_launcher_v1 as secret_launcher
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -196,3 +199,64 @@ def test_network_qualification_rejects_incomplete_tool_parity(
             client=_NetworkClient(),
             model_probe=lambda *_args: {"passed": False},
         )
+
+
+def test_secret_launcher_keeps_key_out_of_argv_output_and_receipt(tmp_path: Path) -> None:
+    secret = b"inert-test-secret-value"
+    encoded = base64.b64encode(secret)
+    calls: list[tuple[list[str], dict]] = []
+    out = tmp_path / "qualified.json"
+
+    def runner(argv: list[str], **kwargs: object) -> subprocess.CompletedProcess[bytes]:
+        calls.append((list(argv), dict(kwargs)))
+        if argv[0] == "kubectl":
+            return subprocess.CompletedProcess(argv, 0, encoded, b"")
+        env = kwargs["env"]
+        assert isinstance(env, dict)
+        assert env["FLEET_API_KEY"] == secret.decode()
+        assert secret.decode() not in "\x00".join(argv)
+        out.write_text(
+            json.dumps({"status": "QUALIFIED_NON_SCORED", "receipt_sha256": "sha256:x"})
+        )
+        return subprocess.CompletedProcess(argv, 0, b"sanitized", b"")
+
+    result = secret_launcher.launch(out, runner=runner)
+    rendered = json.dumps(result).encode()
+    assert secret not in rendered and encoded not in rendered
+    assert result["credential_in_argv"] is False
+    assert len(calls) == 2
+
+
+def test_secret_launcher_fails_before_child_when_key_absent(tmp_path: Path) -> None:
+    calls = 0
+
+    def runner(argv: list[str], **_kwargs: object) -> subprocess.CompletedProcess[bytes]:
+        nonlocal calls
+        calls += 1
+        return subprocess.CompletedProcess(argv, 0, b"", b"")
+
+    with pytest.raises(secret_launcher.SecretLaunchError, match="cluster_secret_key_absent"):
+        secret_launcher.launch(tmp_path / "qualified.json", runner=runner)
+    assert calls == 1
+
+
+@pytest.mark.parametrize("leak_target", ["stdout", "stderr", "receipt"])
+def test_secret_launcher_rejects_any_child_leak(tmp_path: Path, leak_target: str) -> None:
+    secret = b"inert-sensitive-value"
+    encoded = base64.b64encode(secret)
+    out = tmp_path / "qualified.json"
+
+    def runner(argv: list[str], **kwargs: object) -> subprocess.CompletedProcess[bytes]:
+        if argv[0] == "kubectl":
+            return subprocess.CompletedProcess(argv, 0, encoded, b"")
+        receipt = {"status": "QUALIFIED_NON_SCORED", "receipt_sha256": "sha256:x"}
+        raw = json.dumps(receipt).encode()
+        if leak_target == "receipt":
+            raw += secret
+        out.write_bytes(raw)
+        stdout = secret if leak_target == "stdout" else b""
+        stderr = secret if leak_target == "stderr" else b""
+        return subprocess.CompletedProcess(argv, 0, stdout, stderr)
+
+    with pytest.raises(secret_launcher.SecretLaunchError, match="credential_leaked"):
+        secret_launcher.launch(out, runner=runner)
