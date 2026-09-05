@@ -1,0 +1,54 @@
+{
+  "schema_version": "fleet-qwen38-dedicated-rank97-whole-task-release-v1",
+  "status": "RELEASED_TO_DEDICATED",
+  "observed_at_utc": "2026-09-05T22:03:31Z",
+  "campaign_id": "chris-cyber-q38-glm53-exact-easiest100-pass4-v1",
+  "selection_rank": 97,
+  "cell_ids": [
+    "sha256:59df171f31662465c8a9a98844b254a3fcf6bb242e53347501248a8e499bb068",
+    "sha256:160c68de576263202b614038ded2140e6bcf72435a2086fc7af6da6a3a19ba78",
+    "sha256:209f2350068810f475a61771b588a2ec4ed8aaa99b82197e037eaca57f929413",
+    "sha256:0652b1bc6305c8d1ff4cc4184390d69f67ee2a365551ba59408377dddf333869"
+  ],
+  "execution_ids": [
+    "sha256:c7ec5b2d485989c9e2e437714f4c6eeb94a2c2bb7f771b29a76da978e5a42ad1",
+    "sha256:dc6722e3954e719722491a2734a5b138f672b4a59dff4a6b6b38051b0a418c36",
+    "sha256:d1e51b4814866658a73a791333798e8fddd05e0fa9b8fe9d20075e07aba4d86c",
+    "sha256:ed052dc0f396e72602a4f4d55e7c12036f57cd801c41b4d7079f046e7c62c4bf"
+  ],
+  "plan_sha256s": [
+    "sha256:ef6485e542fea7634b6f6b08564843731172e4f3b82b76c70bed22f925b35053",
+    "sha256:f9b42ffcc75737a87ab862c40630ae09a4775617492eba0730998377a450bd68",
+    "sha256:4a10d521e9fb5d88c1ca3dcbcbb11b49017c5a84be44aa9229049b25da87cb2f",
+    "sha256:6a3d2c2fc5738faf84bbdfb69907eb6ed6a8ac2b1df80a007e3eba01dcdd207f"
+  ],
+  "package_commit": "d6b8c03",
+  "serving_block": "dedicated-qwen-tp1-d-v1",
+  "serving_identity": {
+    "api_run_id": "ft-run-ef3b2fcb",
+    "rayjob_uid": "0956e41f-c4ce-4809-b930-8b892f7d13d0",
+    "workload_uid": "e56ff660-27b8-42b9-9db7-19ff7815912f",
+    "pod_uid": "6bc94492-192a-4c39-91a5-ff59390c2f03",
+    "service_uid": "cb53a63e-9af3-4652-9c67-d74bb14563af",
+    "parity_receipt_sha256": "sha256:2fdd5e2c1e86d4ad144a324a95426ad6358ab56852a1f48ee5bbe2a3bc2a6f1e"
+  },
+  "prior_owner": "qwen-a-generation19-v4",
+  "single_job_four_claim_reservation_required": true,
+  "fresh_global_ledger_clear": true,
+  "fresh_authoritative_sessions_clear": true,
+  "claims_clear": true,
+  "output_roots_clear": true,
+  "reconciliation": {
+    "authoritative_session_rows_examined": 17,
+    "authoritative_session_collisions": 0,
+    "canonical_claim_collisions": 0,
+    "dedicated_output_root_collisions": 0,
+    "hosted_owner_output_collisions": 0,
+    "fleet_api_mutations": 0,
+    "rayjob_status": "RUNNING",
+    "pod_phase": "Running",
+    "pod_restarts": 0
+  },
+  "prompts_traces_flags_or_scores_included": false,
+  "receipt_sha256": "sha256:bdbcb7de08093f9e40f5a111ba8cbe8ff1ff185a1d85ceed16d99f454b682b33"
+}
