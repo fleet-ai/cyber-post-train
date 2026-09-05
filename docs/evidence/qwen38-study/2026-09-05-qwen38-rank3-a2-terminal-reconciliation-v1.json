@@ -1,0 +1,54 @@
+{
+  "attempt": 2,
+  "campaign_id": "chris-cyber-q38-glm53-exact-easiest100-pass4-v1",
+  "cell_id": "sha256:6edac950ae44ff62c07074a775afdb65cc9b394047883e0b57fcad84e74d2fa7",
+  "classification": "POST_MODEL_NONREPEATABLE_UNCREDITED",
+  "execution_generation": 22,
+  "execution_id": "sha256:6a64d050625fdb15dde3a1a734ec88afd43ef1d07d7c6be8f1951addac62112e",
+  "fresh_authoritative_reconciliation": {
+    "current_session_rows": 29,
+    "matching_session_count": 0,
+    "new_session_rows": 0,
+    "verifier_execution_presence": false
+  },
+  "local_authoritative_outputs_present": {
+    "accepted": false,
+    "result": false,
+    "reward_result": false,
+    "session_ingest": false,
+    "terminal": false
+  },
+  "observed_at_utc": "2026-09-05T23:37:54Z",
+  "privacy": {
+    "credentials_included": false,
+    "prompts_traces_flags_read": false,
+    "scores_read": false
+  },
+  "receipt_sha256": "sha256:b9a809279763b08b084161708523fb19f79a05c6404df53edaafec21a7f0deaa",
+  "release_authority": {
+    "file_sha256": "sha256:e5202618dc374db7135d6d57c717698acbf7de9448235c48e8acd91bbba163fb",
+    "path": "docs/evidence/qwen38-study/2026-09-05-qwen38-dedicated-rank3-a2-g22-release-v1.json",
+    "prelaunch_session_rows": 29,
+    "receipt_sha256": "sha256:d99e169afe08aed6c78cf6c80c2e3f91fca563022c229516c3258b689a41933c"
+  },
+  "request_counts": {
+    "account_get": 1,
+    "api_mutations": 0,
+    "session_list_get": 1
+  },
+  "retry_allowed": false,
+  "run_id": "chris-cyber-q38-opencode11827-ded-tp1-r003-a2-g22-v1",
+  "schema_version": "fleet-qwen38-rank3-a2-terminal-reconciliation-v1",
+  "selection_rank": 3,
+  "source_job": {
+    "name": "chris-cyber-q38-opencode11827-ded-tp1-r003-a2-g22-v1",
+    "pod_exit_code": 1,
+    "pod_restarts": 0,
+    "pod_uid": "30b2682f-e873-4e77-8e39-d6c41ceecc64",
+    "terminal_reason": "BackoffLimitExceeded",
+    "uid": "6d65c2e3-7162-4a02-86b9-03bbf216239b"
+  },
+  "status": "NO_AUTHORITATIVE_SESSION_OR_VERIFIER",
+  "task_key": "cysec1-2-current-gen_blackbox-607e28ace466c1f71ece3d32__blackbox_ctf_v1",
+  "task_version_id": "33d37078-0669-478e-af39-43cd245f0da8"
+}
