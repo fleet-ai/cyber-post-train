@@ -1,13 +1,13 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: chris-cyber-hosted-q38-c4-addon-v1
+  name: chris-cyber-hosted-q38-c4-addon-v2
   namespace: fleet-train-jobs
   annotations:
     cyber-post-train.fleet.ai/preview-only: "true"
     cyber-post-train.fleet.ai/launch-authorized: "false"
   labels:
-    cyber-post-train.fleet.ai/experiment: hosted-q38-c4-addon-v1
+    cyber-post-train.fleet.ai/experiment: hosted-q38-c4-addon-v2
     cyber-post-train.fleet.ai/owner: chris
     kueue.x-k8s.io/queue-name: training-lq
 spec:
@@ -17,7 +17,7 @@ spec:
   template:
     metadata:
       labels:
-        cyber-post-train.fleet.ai/experiment: hosted-q38-c4-addon-v1
+        cyber-post-train.fleet.ai/experiment: hosted-q38-c4-addon-v2
         cyber-post-train.fleet.ai/owner: chris
     spec:
       restartPolicy: Never
@@ -54,12 +54,12 @@ spec:
             - name: PACKAGE_COMMIT
               valueFrom:
                 configMapKeyRef:
-                  name: chris-cyber-hosted-q38-c4-addon-bootstrap-v1
+                  name: chris-cyber-hosted-q38-c4-addon-bootstrap-v2
                   key: package_commit
             - name: PACKAGE_SHA256
               valueFrom:
                 configMapKeyRef:
-                  name: chris-cyber-hosted-q38-c4-addon-bootstrap-v1
+                  name: chris-cyber-hosted-q38-c4-addon-bootstrap-v2
                   key: package_sha256
           resources:
             requests:
@@ -77,7 +77,7 @@ spec:
       volumes:
         - name: bootstrap
           configMap:
-            name: chris-cyber-hosted-q38-c4-addon-bootstrap-v1
+            name: chris-cyber-hosted-q38-c4-addon-bootstrap-v2
         - name: sfs
           persistentVolumeClaim:
             claimName: sfs-shared

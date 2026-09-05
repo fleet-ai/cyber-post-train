@@ -20,6 +20,7 @@ def test_held_manifest_is_non_scoring_cpu_only() -> None:
     assert pod["priorityClassName"] == "fleet-serve-low"
     assert "nvidia.com/gpu" not in pod["containers"][0]["resources"]["requests"]
     assert value["spec"]["backoffLimit"] == 0
+    assert value["metadata"]["name"] == package.JOB_NAME
 
 
 def test_package_contract_is_held_and_exactly_two_addon_streams() -> None:

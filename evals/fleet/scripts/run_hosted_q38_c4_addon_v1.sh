@@ -10,4 +10,4 @@ python /bootstrap/package.py materialize \
 test "$(cat /bootstrap/package_sha256)" = "$PACKAGE_SHA256"
 cd "$runtime"
 exec python -m evals.fleet.hosted_c4_addon_qualifier_v1 run \
-  --out-dir /mnt/sfs/jobs/chris-cyber-hosted-q38-c4-addon-v1
+  --out-dir /mnt/sfs/jobs/chris-cyber-hosted-q38-c4-addon-v2

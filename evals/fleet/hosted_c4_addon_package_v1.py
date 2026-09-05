@@ -12,10 +12,10 @@ from typing import Any
 
 SCHEMA = "fleet-hosted-qwen-c4-addon-package-v1"
 NAMESPACE = "fleet-train-jobs"
-JOB_NAME = "chris-cyber-hosted-q38-c4-addon-v1"
-CONFIGMAP_NAME = "chris-cyber-hosted-q38-c4-addon-bootstrap-v1"
+JOB_NAME = "chris-cyber-hosted-q38-c4-addon-v2"
+CONFIGMAP_NAME = "chris-cyber-hosted-q38-c4-addon-bootstrap-v2"
 MANIFEST_PATH = "evals/fleet/cluster/hosted-q38-c4-addon-held-v1.yaml"
-OUT_ROOT = "/mnt/sfs/jobs/chris-cyber-hosted-q38-c4-addon-v1"
+OUT_ROOT = "/mnt/sfs/jobs/chris-cyber-hosted-q38-c4-addon-v2"
 COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 FILES = {
     "package.py": "evals/fleet/hosted_c4_addon_package_v1.py",
