@@ -1,0 +1,40 @@
+{
+  "credentials_included": false,
+  "fresh_actual_opencode_parity_required_before_scoring": true,
+  "observed_at_utc": "2026-09-05T21:57:11.088663Z",
+  "preemption_policy": "Never",
+  "project_resource_shape": {
+    "active_peers": [
+      {
+        "api_run_id": "ft-run-76c7f016",
+        "gpus": 1,
+        "nodes": 1,
+        "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-q38-tp1-b-v2"
+      }
+    ],
+    "max_gpus": 16,
+    "max_nodes": 2,
+    "planned_gpus": 2,
+    "planned_nodes": 2
+  },
+  "prompts_traces_flags_or_scores_included": false,
+  "receipt_sha256": "sha256:fb6c510387249fb44a9f5f7a949c6641a89c54a8cae05d23025b5cda26e5a610",
+  "rendered": {
+    "command_sha256": "sha256:feae888dca9616dbabcd1f8a7a24c9abf73a51425e89427fc5945218876ff693",
+    "gpus": 1,
+    "image": "ghcr.io/fleet-ai/cyber-post-train-glm53-runtime@sha256:ec93ba50613fd13fb4c0b0a9105767ab18209a1e0108dab0923aad694c0206ec",
+    "image_pull_secrets": [
+      "ghcr-pull"
+    ],
+    "priority_class": "fleet-infra-quiet",
+    "privileged": false,
+    "privileged_field_present": false,
+    "queue": "training-lq",
+    "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-q38-tp1-d-v1",
+    "suspended_for_admission": true
+  },
+  "request_sha256": "sha256:07b8e2d5e39bb97c014977ce576052e671e2e4d56182f753ee6c6c8926311616",
+  "schema_version": "fleet-qwen38-dedicated-serving-v7-live-gate-v1",
+  "status": "PASSED",
+  "traffic_idle_guard_seconds": 600
+}
