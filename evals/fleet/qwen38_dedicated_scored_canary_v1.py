@@ -164,11 +164,7 @@ def build_plan(root: Path, attempt: int = 1) -> dict[str, Any]:
             "pass_k": 1,
             "planned_full_pass_k": 4,
             "max_concurrent": 1,
-            "network": (
-                "q38-ded-tp1-r002-a1-v2"
-                if attempt == 1
-                else run_id
-            ),
+            "network": run_id,
             "cell_id": cell["cell_id"],
             "execution_id": execution["execution_id"],
             "training_data_eligible": False,

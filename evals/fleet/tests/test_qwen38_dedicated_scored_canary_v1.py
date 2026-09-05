@@ -51,8 +51,6 @@ def test_rank2_attempts_have_exact_fresh_identities() -> None:
         assert plan["item"]["run_id"].endswith(f"-a{attempt}-v1")
         assert plan["config"]["execution"]["network"] == plan["item"]["run_id"]
         assert plan["output_root"].endswith(plan["item"]["run_id"])
-
-
 def test_successor_runner_binds_attempt_argument() -> None:
     script = (
         Path(__file__).parents[3] / "evals/fleet/scripts/run_qwen38_dedicated_scored_canary_v1.sh"
