@@ -53,6 +53,10 @@ docker build --pull --platform linux/amd64 \
 test "$(docker image inspect "$QWEN_IMAGE" --format '{{.Architecture}}')" = amd64
 test "$(docker run --rm --platform linux/amd64 "$QWEN_IMAGE" qwen --version)" = 0.22.3
 docker pull --platform linux/amd64 "$PROXY_IMAGE"
+uv run --no-project python "$ROOT/evals/fleet/treatment_parity.py" local-image \
+  --image-architecture "$(docker image inspect "$QWEN_IMAGE" --format '{{.Architecture}}')"
+uv run --no-project python "$ROOT/evals/fleet/treatment_parity.py" local-image \
+  --image-architecture "$(docker image inspect "$PROXY_IMAGE" --format '{{.Architecture}}')"
 
 capture_image_evidence() {
   if test -d "$OUT_DIR"; then

@@ -42,6 +42,35 @@ Every command requires `FLEET_API_KEY`. It first verifies that the credential
 belongs to team `fleet` (`a1025f0b-ad67-49fc-a023-51800ab43e84`). Secrets are
 never included in plans, events or error messages.
 
+### Treatment identity and local-image guards
+
+A provider catalog name proves that a model can be requested; it does not prove
+the exact checkpoint or provider route needed for a pooled scientific result.
+Before combining a hosted Agent Runtime result with an exact-checkpoint arm,
+validate two sanitized route receipts:
+
+```bash
+uv run python -m evals.fleet.treatment_parity pool \
+  --frozen /restricted/frozen-treatment.json \
+  --candidate /restricted/candidate-treatment.json
+```
+
+The guard requires immutable model and provider-route revisions plus identical
+harness, context/compaction, tool-schema, and exact-task-version bindings. Any
+missing or different selector fails closed and the candidate stays in a
+separate result block.
+
+Before a scored local run, inspect every OCI image and validate it against the
+host architecture:
+
+```bash
+uv run python -m evals.fleet.treatment_parity local-image \
+  --image-architecture "$(docker image inspect "$IMAGE" --format '{{.Architecture}}')"
+```
+
+The architecture check accepts equivalent names such as `x86_64`/`amd64`, but
+rejects cross-architecture emulation.
+
 ```bash
 # Identity and model-catalog check
 uv run python -m evals.fleet.cli preflight

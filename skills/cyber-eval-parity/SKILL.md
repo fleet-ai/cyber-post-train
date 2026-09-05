@@ -13,6 +13,12 @@ Measure the checkpoint intervention rather than a difference in serving, harness
 2. Freeze a machine-readable protocol before scored work. Permit exactly the intended checkpoint or adapter bytes to differ between arms.
 3. Bind model revision, tokenizer, chat template, precision, quantization, serving image and arguments, harness image and commit, system prompt, tools, task and verifier versions, sampling, budgets, seeds, concurrency, timeout, and retry policy.
 4. Require a completed export receipt, serving-registration receipt, and live-parity receipt for the intervention. A model-list entry or Ready replica is not sufficient.
+5. Treat a provider catalog name as availability, not checkpoint identity. Pool a
+   hosted route with an exact-checkpoint treatment only when immutable evidence
+   binds the model repository and revision, provider, endpoint route revision,
+   harness image/version, context and compaction policy, tool schema, and exact
+   task-version mode. A missing binding or a different provider creates a
+   separate result block.
 
 Read [references/paired-protocol.md](references/paired-protocol.md) before preparing or launching any scored arm.
 
@@ -27,6 +33,16 @@ Read [references/paired-protocol.md](references/paired-protocol.md) before prepa
 - **WebExploitBench:** use the exact pinned CAGE and Qwen Code path defined by the protocol. Refuse an existing run root. Preserve valid zeros and follow the predeclared retry policy for infrastructure-invalid targets.
 - **ExploitGym:** use one immutable linux/amd64 harness digest for both arms, the same dynamic graders and task images, single-use output roots, and counterbalanced arm order. Accept a run only after its terminal artifact and live Job UID agree.
 - **Fleet holdout:** launch exact `eval_task_version_id` bindings, not mutable task keys or current versions. Preserve exact environment, data, verifier, model-route, harness, and session identities.
+
+## Preflight local execution
+
+- Inspect every local evaluator image before scored execution and require its
+  normalized OCI architecture to equal the host architecture. Do not silently
+  use cross-architecture emulation for a scored arm.
+- Run the repository's deterministic treatment and architecture guards before
+  accepting or pooling results. Keep concrete model IDs, revisions, route
+  commits, and incident identities in configs or evidence receipts rather than
+  this skill.
 
 ## Interpret results
 
