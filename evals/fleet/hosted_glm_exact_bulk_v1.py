@@ -201,7 +201,7 @@ def build_runtime_plan(
     runtime = copy.deepcopy(plan)
     selected_ranks = sorted({key[0] for key in selected_keys(controller)})
     runtime["tasks"] = [tasks_by_rank[rank] for rank in selected_ranks]
-    runtime["inventory_receipt"] = {"receipt_sha256": inventory_receipt["receipt_sha256"]}
+    runtime["inventory_receipt"] = copy.deepcopy(inventory_receipt)
     runtime["inventory_receipt_sha256"] = inventory_receipt["receipt_sha256"]
     runtime["authority"] = copy.deepcopy(sources["glm-a"]["authority"])
     runtime["launch_authorized"] = True
