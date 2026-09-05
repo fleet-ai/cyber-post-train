@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Any
 
 import yaml
@@ -10,6 +11,174 @@ TOPOLOGY_ANNOTATIONS = {
     "kueue.x-k8s.io/podset-preferred-topology": "preferred",
     "kueue.x-k8s.io/podset-required-topology": "required",
 }
+
+_QUANTITY_SUFFIXES = {
+    "m": Decimal("0.001"),
+    "Ki": Decimal(2**10),
+    "Mi": Decimal(2**20),
+    "Gi": Decimal(2**30),
+    "Ti": Decimal(2**40),
+}
+
+
+def _quantity(value: Any) -> Decimal:
+    """Parse the bounded Kubernetes quantities used by the Jobs API gate."""
+    raw = str(value)
+    for suffix, multiplier in _QUANTITY_SUFFIXES.items():
+        if raw.endswith(suffix):
+            return Decimal(raw[: -len(suffix)]) * multiplier
+    return Decimal(raw)
+
+
+def _rendered_podset_requests(manifest_yaml: str) -> tuple[str, dict[str, dict[str, Any]]]:
+    manifests = [row for row in yaml.safe_load_all(manifest_yaml) if isinstance(row, dict)]
+    if len(manifests) != 1 or manifests[0].get("kind") != "RayJob":
+        raise ValueError("preview must render exactly one RayJob")
+    manifest = manifests[0]
+    queue = ((manifest.get("metadata") or {}).get("labels") or {}).get("kueue.x-k8s.io/queue-name")
+    if not isinstance(queue, str) or not queue:
+        raise ValueError("preview omitted the LocalQueue")
+    cluster = (manifest.get("spec") or {}).get("rayClusterSpec") or {}
+    templates: list[tuple[str, dict[str, Any]]] = [
+        ("head", ((cluster.get("headGroupSpec") or {}).get("template") or {}))
+    ]
+    for index, group in enumerate(cluster.get("workerGroupSpecs") or []):
+        templates.append((f"worker-{index}", (group or {}).get("template") or {}))
+    result: dict[str, dict[str, Any]] = {}
+    for name, template in templates:
+        spec = template.get("spec") or {}
+        containers = spec.get("containers") or []
+        if len(containers) != 1:
+            raise ValueError(f"pod set {name} must render exactly one container")
+        requests = (containers[0].get("resources") or {}).get("requests") or {}
+        result[name] = {
+            "requests": {key: _quantity(value) for key, value in requests.items()},
+            "node_selector": spec.get("nodeSelector") or {},
+        }
+    return queue, result
+
+
+def _cluster_queue_flavors(cluster_queue: dict[str, Any]) -> dict[str, dict[str, Decimal]]:
+    result: dict[str, dict[str, Decimal]] = {}
+    for group in (cluster_queue.get("spec") or {}).get("resourceGroups") or []:
+        for flavor in (group or {}).get("flavors") or []:
+            name = flavor.get("name")
+            if not isinstance(name, str) or not name or name in result:
+                raise ValueError("ClusterQueue flavor identity is invalid")
+            result[name] = {
+                row["name"]: _quantity(row.get("nominalQuota", "0"))
+                for row in flavor.get("resources") or []
+                if isinstance(row, dict) and isinstance(row.get("name"), str)
+            }
+    return result
+
+
+def _reserved_by_flavor(cluster_queue: dict[str, Any]) -> dict[str, dict[str, Decimal]]:
+    result: dict[str, dict[str, Decimal]] = {}
+    for flavor in (cluster_queue.get("status") or {}).get("flavorsReservation") or []:
+        name = flavor.get("name")
+        if not isinstance(name, str) or not name:
+            raise ValueError("ClusterQueue reservation flavor identity is invalid")
+        result[name] = {
+            row["name"]: _quantity(row.get("total", "0"))
+            for row in flavor.get("resources") or []
+            if isinstance(row, dict) and isinstance(row.get("name"), str)
+        }
+    return result
+
+
+def require_exact_topology_candidate(
+    manifest_yaml: str,
+    local_queue: dict[str, Any],
+    cluster_queue: dict[str, Any],
+    resource_flavors: dict[str, dict[str, Any]],
+    topologies: dict[str, dict[str, Any]],
+    *,
+    expected_queue: str,
+    expected_level: str,
+    expected_podsets: tuple[str, ...],
+) -> dict[str, Any]:
+    """Require an in-quota topology-capable flavor for every rendered GPU pod set.
+
+    The Jobs API cannot name a ResourceFlavor.  A required TAS annotation makes
+    non-topology flavors ineligible; this gate additionally proves that at least
+    one topology-aware flavor has enough unreserved quota for the complete
+    request immediately before submit.  Admission remains authoritative, so the
+    check must be repeated after preview and a later inadmissible Workload must
+    be released rather than patched.
+    """
+    queue, podsets = _rendered_podset_requests(manifest_yaml)
+    if queue != expected_queue or (local_queue.get("metadata") or {}).get("name") != queue:
+        raise ValueError("rendered and live LocalQueue identities disagree")
+    cluster_queue_name = (local_queue.get("spec") or {}).get("clusterQueue")
+    if cluster_queue_name != (cluster_queue.get("metadata") or {}).get("name"):
+        raise ValueError("LocalQueue and ClusterQueue identities disagree")
+    if tuple(podsets) != expected_podsets:
+        raise ValueError("rendered Ray pod-set shape drifted")
+
+    topology_requests = rendered_topology_requests(manifest_yaml)
+    if len(topology_requests) != len(expected_podsets) or any(
+        row["mode"] != "required" or row["level"] != expected_level for row in topology_requests
+    ):
+        raise ValueError("every GPU pod set must require the exact topology level")
+
+    quota = _cluster_queue_flavors(cluster_queue)
+    reserved = _reserved_by_flavor(cluster_queue)
+    aggregate: dict[str, Decimal] = {}
+    for podset in podsets.values():
+        for resource, amount in podset["requests"].items():
+            aggregate[resource] = aggregate.get(resource, Decimal(0)) + amount
+
+    candidates: list[dict[str, Any]] = []
+    for name, limits in quota.items():
+        flavor = resource_flavors.get(name)
+        if not flavor:
+            raise ValueError(f"ResourceFlavor evidence is absent for: {name}")
+        flavor_spec = flavor.get("spec") or {}
+        topology_name = flavor_spec.get("topologyName")
+        if not isinstance(topology_name, str) or not topology_name:
+            continue
+        topology = topologies.get(topology_name)
+        if not topology:
+            raise ValueError(f"Topology evidence is absent for: {topology_name}")
+        levels = [row.get("nodeLabel") for row in (topology.get("spec") or {}).get("levels") or []]
+        if expected_level not in levels:
+            continue
+        labels = flavor_spec.get("nodeLabels") or {}
+        if any(
+            labels.get(key) not in {None, value}
+            for podset in podsets.values()
+            for key, value in podset["node_selector"].items()
+        ):
+            continue
+        available = {
+            resource: limits.get(resource, Decimal(0))
+            - reserved.get(name, {}).get(resource, Decimal(0))
+            for resource in aggregate
+        }
+        if all(available[resource] >= amount for resource, amount in aggregate.items()):
+            candidates.append(
+                {
+                    "name": name,
+                    "uid": str((flavor.get("metadata") or {}).get("uid") or ""),
+                    "topology_name": topology_name,
+                    "topology_uid": str((topology.get("metadata") or {}).get("uid") or ""),
+                    "available": {key: str(value) for key, value in available.items()},
+                }
+            )
+    if not candidates:
+        raise RuntimeError("no topology-aware flavor has enough unreserved quota")
+    return {
+        "local_queue": queue,
+        "local_queue_uid": str((local_queue.get("metadata") or {}).get("uid") or ""),
+        "cluster_queue": cluster_queue_name,
+        "cluster_queue_uid": str((cluster_queue.get("metadata") or {}).get("uid") or ""),
+        "required_topology_level": expected_level,
+        "rendered_podsets": list(podsets),
+        "aggregate_requests": {key: str(value) for key, value in aggregate.items()},
+        "eligible_flavors": candidates,
+        "must_recheck_immediately_before_submit": True,
+    }
 
 
 def rendered_topology_requests(manifest_yaml: str) -> list[dict[str, str]]:

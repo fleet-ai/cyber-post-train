@@ -1,0 +1,60 @@
+{
+  "credentials_included": false,
+  "jobs_api_run_dir_matches": 0,
+  "jobs_api_title_matches": 0,
+  "kubernetes_identity_matches": 0,
+  "launch_authorized": false,
+  "mutations": 0,
+  "observed_at_utc": "2026-09-05T19:02:04.608141Z",
+  "prompts_traces_flags_or_scores_included": false,
+  "receipt_sha256": "sha256:fd6278d5056dab6bf2e45ce00e3aaf072a4b2abe2c68781df843d49c47bb9b90",
+  "rendered": {
+    "command_sha256": "sha256:d04d578e249ebc6b261e8b7535be3735dde738c604fe88301d1da4b992ffb799",
+    "gpus": 8,
+    "image": "ghcr.io/fleet-ai/cyber-post-train-glm53-runtime@sha256:ec93ba50613fd13fb4c0b0a9105767ab18209a1e0108dab0923aad694c0206ec",
+    "image_pull_secrets": [
+      "ghcr-pull"
+    ],
+    "priority_class": "fleet-infra-quiet",
+    "privileged": true,
+    "queue": "training-lq",
+    "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-glm53-tp8-a-v11",
+    "suspended_for_admission": true,
+    "topology_level": "topology.nebius.com/tier-1",
+    "topology_mode": "required"
+  },
+  "request_sha256": "sha256:59935113135f6f00db1e64f5c7278cc844655d3f11322f1658f56b47cc1725b2",
+  "schema_version": "fleet-glm53-dedicated-serving-v11-preview-receipt-v1",
+  "sfs_run_dir_exists": false,
+  "status": "PASSED_PREVIEW_ONLY",
+  "topology_gate": {
+    "aggregate_requests": {
+      "cpu": "96",
+      "memory": "1099511627776",
+      "nvidia.com/gpu": "8"
+    },
+    "cluster_queue": "training-cq",
+    "cluster_queue_uid": "a0871515-e979-4292-a994-51b987e4016c",
+    "eligible_flavors": [
+      {
+        "available": {
+          "cpu": "1464",
+          "memory": "19585050869760",
+          "nvidia.com/gpu": "24"
+        },
+        "name": "b300-training",
+        "topology_name": "ib-topology",
+        "topology_uid": "3a1f28b4-0d5e-4fbf-a1bd-8feaedd12c37",
+        "uid": "d375ea06-5e3e-4b9e-8fb0-b8ccf73715c0"
+      }
+    ],
+    "local_queue": "training-lq",
+    "local_queue_uid": "585e1a29-300a-438c-bb2f-268ca57e0f56",
+    "must_recheck_immediately_before_submit": true,
+    "rendered_podsets": [
+      "head"
+    ],
+    "required_topology_level": "topology.nebius.com/tier-1"
+  },
+  "two_node_tp16_allowed": false
+}
