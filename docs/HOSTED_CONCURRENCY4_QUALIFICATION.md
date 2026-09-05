@@ -47,6 +47,28 @@ weight bytes, or the 262144-token context when the hosted roster omits context
 metadata. Existing accepted generation-6 harness evidence remains required,
 and any bulk concurrency change needs its own reviewed, task-boundary-safe plan.
 
+After both Generation-7 Jobs are exclusively complete, use the score-blind
+evidence wrapper to prepare the append-only v3 release:
+
+```sh
+evals/fleet/scripts/prepare_hosted_concurrency4_qualification_release_v3.sh preview
+evals/fleet/scripts/prepare_hosted_concurrency4_qualification_release_v3.sh render-release
+```
+
+The wrapper binds the exact live `allie-dev` UID, reads only the two exact G7
+Job/Pod objects and their allowlisted terminal/claim receipts, and validates
+the complete acceptance chain before writing the release once. Commit and
+review that new receipt before using the existing v3 submitter. It never reads
+session transcripts, prompts, flags, or scores.
+
+Create-only Kubernetes objects may be applied through
+`evals.fleet.kubernetes_create_relay`. Its input is a separately frozen
+kind/name/digest allowlist, and it supports only internal ConfigMaps, CPU-only
+Jobs, and ClusterIP Services. When the local identity cannot create an object,
+the exact live `allie-dev` Pod can relay the same immutable bytes using its
+projected service-account identity; the token never leaves the Pod. Partial
+creates are preserved for reconciliation and are never retried blindly.
+
 The G6-gated v2 successor remains held until both canaries meet the first gate.
 Its held preview performs no model, task, session, scoring, or verifier call and
 creates no object. Once the terminal evidence exists, render the append-only v2
