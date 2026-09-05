@@ -515,3 +515,50 @@ minimized, resource-free incident binding is under `docs/evidence/qwen38-study/`
 V3 fails closed on zero, missing score, invalid cleanup, missing verifier UUID,
 canary identity drift, or any unrecognized gate criterion and has not been
 submitted.
+
+## Exact Qwen3.8/GLM5.3 pass@4 rollout ledger
+
+`exact_pass4_ledger.py` is the score-blind status authority for the frozen
+easiest-100 campaign: 100 task versions × 4 attempts × 2 models = exactly 800
+cells. It derives that denominator from `exact_pass4_universe.py`; it never
+infers progress from directory counts, Job names, or session totals.
+
+Only supply explicit, sanitized evidence:
+
+- digest-valid `ACCEPTED.json` receipts for accepted cells;
+- immutable execution claims already classified with UID-bound cluster/API
+  evidence as either currently active or blocked/nonrepeatable; and
+- exact-universe tombstones whose schema proves the model, verifier, session,
+  and authoritative outcome were never created and retry is allowed.
+
+Do not point a claim root at historical claims wholesale. An accepted cell's
+preserved claim is expected history, not an active claim. First select only
+claims whose exact Job/Pod UIDs are independently proven active. The command
+fails closed on duplicate outcomes, contradictory state, non-contiguous retry
+history, treatment drift, malformed digests, and prompt/trace/flag/score fields.
+
+```bash
+# Empty baseline: proves the frozen 400 + 400 denominator.
+uv run python -m evals.fleet.exact_pass4_ledger \
+  --repo-root "$PWD"
+
+# Example score-blind reconciliation. Repeat each option as needed.
+uv run python -m evals.fleet.exact_pass4_ledger \
+  --repo-root "$PWD" \
+  --mount-map /mnt/sfs/jobs=/shared/jobs \
+  --accepted /absolute/path/to/ACCEPTED.json \
+  --active-claim /absolute/path/to/current-claim.json \
+  --nonrepeatable-claim /absolute/path/to/preserved-claim.json \
+  --tombstone /absolute/path/to/retry-safe-tombstone.json \
+  --json
+```
+
+The table reports, per model, `accepted`, `active`, retryable infrastructure
+failure, blocked/nonrepeatable, and unstarted counts. It is read-only and does
+not inspect workload logs, rollout conversations, prompts, flags, or scores.
+`--mount-map /mnt/sfs/jobs=/shared/jobs` lets an observer name the immutable
+producer location while reading the same bytes through its read-only mount.
+An API session row may omit its model or projection metadata only when the
+digest-valid acceptance receipt records each optional field as `matched` or
+`omitted`; the exact frozen plan, cell/execution claim, verifier identity, and
+session-ingest chain remain mandatory.

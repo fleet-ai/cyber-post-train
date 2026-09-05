@@ -38,3 +38,14 @@ An API row that says running while its UID-bound controller object is gone is st
 Lead with the outcome, then state what is running, what is not launched, the last verified transition, the next gate, and any user action required. Distinguish observed facts from inference.
 
 Publish a terminal receipt only when the terminal classification and artifact identities are provable. Keep private traces and sensitive evidence in ignored or restricted storage; commit only sanitized digests and conclusions permitted by repository policy.
+
+## Exact pass@4 campaign ledger
+
+For the frozen Qwen3.8-27B/GLM-5.3 easiest-100 pass@4 campaign, use
+`evals/fleet/exact_pass4_ledger.py` to reconcile the exact 800 statistical
+cells. Feed it only digest-valid sanitized acceptance receipts, claims whose
+active/nonrepeatable state was independently proven against exact UIDs, and
+schema-valid retry-safe tombstones. Never estimate completion from Job counts,
+directories, or raw session totals, and never pass prompts, traces, flags,
+scores, or broad historical claim roots. Any duplicate, contradictory state,
+or treatment/identity drift is a blocker rather than a count to repair by hand.
