@@ -1,0 +1,75 @@
+{
+  "attempts": {
+    "1": {
+      "accepted_receipt_file_sha256": "sha256:570c14b58aae0e245d4becb9dbef0ccabe9d7c5ad027178e8f989d39a7d3e967",
+      "accepted_receipt_self_sha256": "sha256:5c1cb7bcba452e84ba748d04d989c1d3d50933453163b9c5358af145a6418bcc",
+      "accepted_receipt_written_at_utc": "2026-09-05T22:16:33Z",
+      "authoritative_session_count_by_accepted_session_id": 1,
+      "classification": "NONREPEATABLE_UNCREDITED_TIMING_UNPROVEN",
+      "credited": false,
+      "final_answer_file_mtime_utc": "2026-09-05T22:15:59Z",
+      "plan_file_sha256": "sha256:a1ec5a5276c7564ffaadbb233c4408f8d8b10b4f8c1b6ca7572f1f4edb1f6154",
+      "retry_allowed": false,
+      "session_ingest_completed_at_utc": "2026-09-05T22:16:18Z",
+      "terminal_receipt_file_sha256": "sha256:ecaf8ca57760ee2538fe525b659b45e608313487df33d7139d2be174bc7d4e48",
+      "terminal_receipt_self_sha256": "sha256:549b72eaada6c8a2d4aaefb6655b3c65257b298f6130ec02998209f5e4a0d3a9"
+    },
+    "2": {
+      "classification": "CLAIMED_PLAN_ONLY_NONREPEATABLE",
+      "credited": false,
+      "plan_file_sha256": "sha256:661b40025a4422159fc2eee8b1043d45a87d6425c5c4a2a2df7d3a7d0441e6a5",
+      "retry_allowed": false
+    },
+    "3": {
+      "classification": "CLAIMED_ONLY_NONREPEATABLE",
+      "credited": false,
+      "retry_allowed": false
+    },
+    "4": {
+      "classification": "CLAIMED_ONLY_NONREPEATABLE",
+      "credited": false,
+      "retry_allowed": false
+    }
+  },
+  "canonical_claims": {
+    "all_four_bound_to_exact_controller_job_and_pod": true,
+    "all_four_self_digest_valid": true,
+    "file_sha256s_by_attempt": {
+      "1": "sha256:b03396839f0191f82cd76217a49aedfd543c2fcc9a2a950b82c6e30163031819",
+      "2": "sha256:3dd97ba48e988ad5318eb6d544688e7acc56d67fd86a0217b9f3db2f219b6746",
+      "3": "sha256:273445918c03f5d325981e115a138815e3e6db48b42abf50cc9700ec3324c982",
+      "4": "sha256:429f01e3d613183d47707028c7aff68f03b417aa8485d96333428899d78b5a55"
+    },
+    "remain_present": true
+  },
+  "controller": {
+    "deleted_at_utc": "2026-09-05T22:17:52Z",
+    "job_uid": "e89b45fe-7746-4112-bfe0-25e0475c40f2",
+    "pod_restarts": 0,
+    "pod_uid": "66879e57-5e6d-4f03-bac9-a1b29b6bd150"
+  },
+  "privacy": {
+    "credentials_included": false,
+    "prompts_traces_flags_or_scores_included": false
+  },
+  "reservation": {
+    "file_sha256": "sha256:45b2609eeee6724572e959ab4ee46d14bb4e0320b25607d08b2e88249281e751",
+    "self_sha256": "sha256:32125108a91276a3a9810fb2112bc14335a150ded06d67ccbd2adc53b25de24f"
+  },
+  "receipt_sha256": "sha256:f63b5dec6695163fdccdd1d9487f0582729716bd5838b246a2e2c377b9b96627",
+  "schema_version": "fleet-qwen38-dedicated-rank97-v2-interrupted-terminal-v1",
+  "server_release": {
+    "api_run_id": "ft-run-ef3b2fcb",
+    "exact_get_after_release": 404,
+    "gpu_objects_remaining": 0,
+    "http_status": 204,
+    "released_at_utc": "2026-09-05T22:12:40Z"
+  },
+  "status": "INTERRUPTED_NONREPEATABLE",
+  "timing_boundary": {
+    "decision": "The model-traffic counter changed before release, but exact stream finalization before service identity loss is not provable. The later local ACCEPTED receipt is therefore not credited.",
+    "last_real_traffic_heartbeat_mtime_utc": "2026-09-05T22:12:30Z",
+    "server_release_utc": "2026-09-05T22:12:40Z",
+    "stream_finalization_before_release_proven": false
+  }
+}
