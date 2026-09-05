@@ -386,6 +386,7 @@ def test_task_receipt_uses_targeted_version_and_never_source_job_roster() -> Non
     config = _config()
     expected_route = f"/v1/tasks/{config['task']['key']}"
     fixture = {
+        "id": config["task"]["id"],
         "key": config["task"]["key"],
         "environment_id": config["environment"]["id"],
         "version": config["environment"]["version"],
@@ -421,12 +422,14 @@ def test_task_receipt_uses_targeted_version_and_never_source_job_roster() -> Non
             assert kwargs["params"] == {"version_id": config["task"]["version_id"]}
             return type("Response", (), {"status_code": 200, "json": lambda self: fixture})()
 
+    assert "version_id" not in fixture
     assert self_hosted.load_and_verify_task(Client(), config) == fixture
 
 
 def test_build_instance_payload_preserves_exact_runtime_binding() -> None:
     config = _config()
     task = {
+        "id": config["task"]["id"],
         "env_variables": {"VISIBLE": "value"},
         "metadata": {
             "runtime_seed_manifest": {
@@ -450,6 +453,40 @@ def test_build_instance_payload_preserves_exact_runtime_binding() -> None:
 def test_build_instance_payload_fails_closed_without_runtime_seed() -> None:
     with pytest.raises(RuntimeError, match="no runtime seed overlay"):
         self_hosted.build_instance_payload(_config(), {"metadata": {}})
+
+
+def test_projected_config_uses_validated_live_task_id() -> None:
+    config = _config()
+    del config["task"]["id"]
+    task = {
+        "id": "11111111-1111-4111-8111-111111111111",
+        "metadata": {
+            "runtime_seed_manifest": {
+                "files": [
+                    {"target_path": "/task/a", "s3_key": "key/a", "bucket": "bucket"}
+                ]
+            }
+        },
+    }
+    payload = self_hosted.build_instance_payload(config, task)
+    assert payload["task_id"] == task["id"]
+
+
+def test_projected_config_rejects_invalid_live_task_id() -> None:
+    config = _config()
+    del config["task"]["id"]
+    task = {
+        "id": "not-a-uuid",
+        "metadata": {
+            "runtime_seed_manifest": {
+                "files": [
+                    {"target_path": "/task/a", "s3_key": "key/a", "bucket": "bucket"}
+                ]
+            }
+        },
+    }
+    with pytest.raises(RuntimeError, match="task ID is not a UUID"):
+        self_hosted.build_instance_payload(config, task)
 
 
 def test_extract_final_answer_reads_last_qwen_result(tmp_path: Path) -> None:

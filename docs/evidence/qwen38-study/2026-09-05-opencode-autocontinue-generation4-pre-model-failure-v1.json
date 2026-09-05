@@ -1,0 +1,52 @@
+{
+  "schema_version": "fleet-opencode-autocontinue-generation4-pre-model-failure-v1",
+  "append_only": true,
+  "status": "INFRASTRUCTURE_INVALID_PRE_MODEL",
+  "observed_at_utc": "2026-09-05T07:15:00Z",
+  "classification": "bootstrap_release_transport_and_dependency_closure_failure",
+  "package_commit": "b46d9ddccb616734566b1d50f66fcc4354bfde39",
+  "side_effects": {
+    "model_calls": 0,
+    "sessions": 0,
+    "verifier_executions": 0,
+    "generation4_claims": 0,
+    "output_roots": 0
+  },
+  "bootstrap_failure_proof": {
+    "failures": [
+      "release_file_sha256_bound_pretty_repository_bytes_but_mounted_canonical_bytes",
+      "model_projection_omitted_opposite_generation4_spec_and_transitive_predecessor_specs"
+    ],
+    "runner_reached_route_claim_or_model": false,
+    "claim_precedes_first_model_call": true
+  },
+  "jobs": [
+    {
+      "model": "qwen3.8-27b",
+      "name": "chris-q38-ac-r004-a1-g4-v1",
+      "uid": "28cb20fd-71b0-406e-bc0c-ee6d57e93200",
+      "pod": {
+        "uid": "633815f2-45e3-4481-ac77-b12ebeeee87d",
+        "evaluator_exit_code": 1,
+        "evaluator_restarts": 0
+      },
+      "terminal_condition": "BackoffLimitExceeded"
+    },
+    {
+      "model": "glm-5.3",
+      "name": "chris-glm53-ac-r013-a1-g4-v1",
+      "uid": "08cef047-4901-4d75-be26-981f71818af6",
+      "pod": {
+        "uid": "f0c739e3-e70a-43f1-a72d-a04bd8ed5d42",
+        "evaluator_exit_code": 1,
+        "evaluator_restarts": 0
+      },
+      "terminal_condition": "BackoffLimitExceeded"
+    }
+  ],
+  "privacy": {
+    "prompts_traces_flags_or_scores_included": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:f7567ef3545d451db2eb34bc967433f3ea5011a6f37a464e3a5a336d91415d0a"
+}

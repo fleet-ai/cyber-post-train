@@ -134,6 +134,12 @@ def load_and_verify_task(client: httpx.Client, config: dict[str, Any]) -> dict[s
         f"/v1/tasks/{expected['key']}",
         params={"version_id": expected["version_id"]},
     )
+    live_task_id = _nonzero_uuid(task.get("id"), "Fleet task ID")
+    configured_task_id = expected.get("id")
+    if configured_task_id is not None and live_task_id != _nonzero_uuid(
+        configured_task_id, "configured Fleet task ID"
+    ):
+        raise RuntimeError("exact Fleet task ID drifted")
     verifier = task.get("verifier") or {}
     metadata = task.get("metadata") or {}
     actual = {
@@ -192,7 +198,7 @@ def build_instance_payload(config: dict[str, Any], task: dict[str, Any]) -> dict
         "data_key": config["environment"]["data_id"],
         "data_version": config["environment"]["data_version"],
         "env_variables": task.get("env_variables") or {},
-        "task_id": config["task"]["id"],
+        "task_id": _nonzero_uuid(task.get("id"), "Fleet task ID"),
         "seed_overlay_files": overlays,
         "ttl_seconds": config["environment"]["ttl_seconds"],
         "run_id": config["run_id"],
