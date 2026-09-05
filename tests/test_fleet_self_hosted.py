@@ -526,60 +526,109 @@ def test_authority_paths_are_exact_task_version_routes() -> None:
     assert self_hosted.authoritative_route(config, "scoring") == prefix
 
 
-def test_authority_gate_accepts_exact_behavioral_guard_when_openapi_lags() -> None:
+def test_authority_gate_accepts_non_mutating_route_probe_when_openapi_omits_routes() -> None:
     class Response:
-        status_code = 422
-        content = b"yes"
+        status_code = 405
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        @property
+        def content(self) -> bytes:
+            raise AssertionError("route-probe response body must not be read")
 
         def json(self) -> dict:
-            return {"detail": "Authoritative RL rollout rewards support report-only tasks"}
+            raise AssertionError("route-probe response body must not be decoded")
+
+    class Client:
+        probed_urls: list[str] = []
+
+        def request(self, method: str, url: str, **kwargs):
+            assert method == "GET"
+            assert not kwargs
+            if url.endswith("/openapi.json"):
+                return type(
+                    "OpenAPIResponse",
+                    (),
+                    {"status_code": 200, "json": lambda self: {"paths": {}}},
+                )()
+            raise AssertionError("behavioral route probes must be streamed")
+
+        def stream(self, method: str, url: str, **kwargs):
+            assert method == "GET"
+            assert not kwargs
+            self.probed_urls.append(url)
+            return Response()
+
+    client = Client()
+    config = _config()
+    result = self_hosted.assert_authoritative_routes_deployed(client, config)
+    assert result == {
+        "mode": "behavioral_method_not_allowed",
+        "method": "GET",
+        "statuses": {"provisioning": 405, "scoring": 405},
+    }
+    assert client.probed_urls == [
+        self_hosted.ORCHESTRATOR
+        + self_hosted.authoritative_route(config, "provisioning"),
+        self_hosted.ORCHESTRATOR + self_hosted.authoritative_route(config, "scoring"),
+    ]
+
+
+def test_authority_gate_fails_closed_when_behavioral_route_probe_is_not_matched() -> None:
+    class Response:
+        status_code = 404
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
 
     class Client:
         def request(self, method: str, url: str, **kwargs):
             assert method == "GET"
-            return type(
-                "OpenAPIResponse",
-                (),
-                {"status_code": 200, "json": lambda self: {"paths": {}}},
-            )()
+            if url.endswith("/openapi.json"):
+                return type(
+                    "OpenAPIResponse",
+                    (),
+                    {"status_code": 200, "json": lambda self: {"paths": {}}},
+                )()
+            raise AssertionError("behavioral route probes must be streamed")
 
-        def post(self, url: str, **kwargs):
+        def stream(self, method: str, url: str, **kwargs):
+            assert method == "GET"
+            assert not kwargs
             return Response()
 
-    result = self_hosted.assert_authoritative_routes_deployed(Client(), _config())
-    assert result == {
-        "mode": "behavioral_report_only_guard",
-        "statuses": {"provisioning": 422, "scoring": 422},
+    with pytest.raises(RuntimeError, match="routes are not deployed"):
+        self_hosted.assert_authoritative_routes_deployed(Client(), _config())
+
+
+def test_authority_gate_prefers_openapi_without_behavioral_probe() -> None:
+    config = _config()
+    expected_paths = {
+        config["authority"]["provisioning_route_template"]: {},
+        config["authority"]["scoring_route_template"]: {},
     }
 
-
-def test_authority_gate_accepts_deployed_blackbox_shape_guard() -> None:
-    class Response:
-        status_code = 422
-        content = b"yes"
-
-        def json(self) -> dict:
-            return {
-                "detail": (
-                    "Authoritative RL rollout rewards currently support exact black-box "
-                    "capability tasks and their additive safety-evidence clones"
-                )
-            }
-
     class Client:
         def request(self, method: str, url: str, **kwargs):
             assert method == "GET"
+            assert url.endswith("/openapi.json")
             return type(
                 "OpenAPIResponse",
                 (),
-                {"status_code": 200, "json": lambda self: {"paths": {}}},
+                {"status_code": 200, "json": lambda self: {"paths": expected_paths}},
             )()
 
-        def post(self, url: str, **kwargs):
-            return Response()
-
-    result = self_hosted.assert_authoritative_routes_deployed(Client(), _config())
-    assert result["statuses"] == {"provisioning": 422, "scoring": 422}
+    assert self_hosted.assert_authoritative_routes_deployed(Client(), config) == {
+        "mode": "openapi",
+        "routes": sorted(expected_paths),
+    }
 
 
 def test_qwen_trace_normalization_preserves_calls_results_and_thinking() -> None:

@@ -1002,33 +1002,23 @@ def assert_authoritative_routes_deployed(
     if not missing:
         return {"mode": "openapi", "routes": sorted(expected)}
 
-    # Canonical OpenAPI can lag the newly deployed public router. Exercise the
-    # report-only guard with a deliberately invalid task shape: the guard runs
-    # before hydration/provisioning, so a 422 proves routing without creating an
-    # instance or invoking a verifier. A 404 or any other response fails closed.
-    probe_prefix = "/v1/rollout-rewards/qwen-route-probe/versions/not-a-task-version"
+    # Canonical OpenAPI intentionally omits some deployed routes. Probe the
+    # concrete, exactly bound paths with GET: these endpoints are POST-only, so
+    # 405 proves that the router matched without crossing any mutation boundary.
+    # Do not inspect the response body; 404 or any other status fails closed.
     results = {}
-    for kind, path, body in (
-        ("provisioning", probe_prefix + "/instances", {}),
-        ("scoring", probe_prefix, {"instance_id": "route-probe"}),
-    ):
-        response = client.post(f"{ORCHESTRATOR}{path}", json=body)
-        try:
-            response_body = response.json() if response.content else {}
-        except ValueError:
-            response_body = {}
-        detail = str(response_body.get("detail") or "")
-        results[kind] = response.status_code
-        supported_shape_guard = any(
-            marker in detail
-            for marker in (
-                "report-only",
-                "exact black-box capability tasks",
-            )
-        )
-        if response.status_code != 422 or not supported_shape_guard:
+    for kind in ("provisioning", "scoring"):
+        path = authoritative_route(config, kind)
+        with client.stream("GET", f"{ORCHESTRATOR}{path}") as response:
+            status_code = response.status_code
+        results[kind] = status_code
+        if status_code != 405:
             raise RuntimeError("authoritative rollout-reward routes are not deployed")
-    return {"mode": "behavioral_report_only_guard", "statuses": results}
+    return {
+        "mode": "behavioral_method_not_allowed",
+        "method": "GET",
+        "statuses": results,
+    }
 
 
 def _docker(
