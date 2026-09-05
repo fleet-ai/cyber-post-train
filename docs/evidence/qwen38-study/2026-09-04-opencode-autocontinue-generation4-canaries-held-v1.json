@@ -1,0 +1,20 @@
+{
+  "schema_version": "fleet-opencode-autocontinue-generation4-canary-held-v1",
+  "append_only": true,
+  "status": "HELD",
+  "observed_at_utc": "2026-09-05T06:24:59Z",
+  "incident": {"path": "docs/evidence/qwen38-study/2026-09-04-opencode-autocontinue-generation3-pre-model-failure-v1.json", "file_sha256": "sha256:8ca8de29fb7d4a46a09cec448a695d73084075bc0eb83bc05916aeb0c58c4647", "receipt_sha256": "sha256:89d4e6a673a9084fdf68a37bb3b52647f489f12db88381b821985c5ca4a4ac98"},
+  "tombstones": {"path": "docs/evidence/qwen38-study/2026-09-04-opencode-autocontinue-generation3-pre-model-tombstones-v1.json", "file_sha256": "sha256:423b735af28ff7c081b0a1e56e79eccc2ee0a66abbc0ce54bee4206f95cf863a", "receipt_sha256": "sha256:47036e86edcec407212ae1b6118c8973f85d3f023dfd59e11336e6998e09635b"},
+  "generation4_spec_sha256s": ["sha256:37e94f8dad42b0d45bb0a439dd7c8b8d8518e62373bbfd0d25c36a23f046c005", "sha256:7180392984db8cc598b71970b259d1814cabce79e90ca29db40af2d5ff2c2e91"],
+  "rendered_plan_sha256s": ["sha256:78ae578f050959f00e4ecbc1a088593796792c978a9f1d76e02d986f57406f58", "sha256:1eb3c7c8636d9b2ae417b7e2147520542539fba8ce56899b4ee16f2a3ebcede7"],
+  "jobs": ["chris-q38-ac-r004-a1-g4-v1", "chris-glm53-ac-r013-a1-g4-v1"],
+  "execution_generation": 4,
+  "statistical_cells": 2,
+  "priority": {"class": "fleet-serve-low", "value": 100, "preemption_policy": "Never"},
+  "launch_authorized": false,
+  "bulk_release_authorized": false,
+  "dedicated_serving_authorized": false,
+  "remaining_gates": ["independent_generation4_package_audit", "fresh_hosted_route_and_duplicate_inventory", "append_only_root_authorization_and_model_releases"],
+  "privacy": {"prompts_traces_flags_or_scores_included": false, "credentials_included": false},
+  "receipt_sha256": "sha256:8c1419e998e6c7558b3638b70fd1d4adcf5f0c709fe820068b437bab106e67cc"
+}
