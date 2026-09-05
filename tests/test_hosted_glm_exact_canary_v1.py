@@ -28,7 +28,9 @@ def test_package_is_small_create_once_nonpreempting_cpu_job() -> None:
     assert job["spec"]["backoffLimit"] == 0
     pod = job["spec"]["template"]["spec"]
     assert pod["preemptionPolicy"] == "Never"
-    assert pod["priorityClassName"] == "fleet-train-high"
+    # The admission controller derives PreemptLowerPriority for fleet-train-high
+    # and rejects an explicit Never override before Pod creation.
+    assert pod["priorityClassName"] == "fleet-serve-low"
     assert pod["nodeSelector"]["workload"] == "fleetai-training-ng-cpu"
     assert not any("nvidia.com/gpu" in str(row) for row in pod.get("containers", []))
     manifest = ROOT / "evals/fleet/cluster/hosted-glm-exact-r001-a1-canary-v1.yaml"

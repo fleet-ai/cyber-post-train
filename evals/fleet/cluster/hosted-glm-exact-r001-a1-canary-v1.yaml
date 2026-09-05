@@ -1,10 +1,10 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: chris-glm53-exact100-hosted-r001-a1-canary-v1
+  name: chris-glm53-exact100-hosted-r001-a1-canary-v2
   namespace: fleet-train-jobs
   labels:
-    cyber-post-train.fleet.ai/experiment: glm53-exact100-hosted-r001-a1-canary-v1
+    cyber-post-train.fleet.ai/experiment: glm53-exact100-hosted-r001-a1-canary-v2
     cyber-post-train.fleet.ai/owner: chris
     kueue.x-k8s.io/queue-name: training-lq
   annotations:
@@ -17,11 +17,11 @@ spec:
   template:
     metadata:
       labels:
-        cyber-post-train.fleet.ai/experiment: glm53-exact100-hosted-r001-a1-canary-v1
+        cyber-post-train.fleet.ai/experiment: glm53-exact100-hosted-r001-a1-canary-v2
         cyber-post-train.fleet.ai/owner: chris
     spec:
       restartPolicy: Never
-      priorityClassName: fleet-train-high
+      priorityClassName: fleet-serve-low
       preemptionPolicy: Never
       nodeSelector:
         kubernetes.io/arch: amd64
@@ -57,7 +57,7 @@ spec:
           env:
             - {name: DOCKER_HOST, value: "unix:///var/run/docker.sock"}
             - {name: DOCKER_TLS_CERTDIR, value: ""}
-            - {name: JOB_NAME, value: chris-glm53-exact100-hosted-r001-a1-canary-v1}
+            - {name: JOB_NAME, value: chris-glm53-exact100-hosted-r001-a1-canary-v2}
             - {name: SECRET_UID, value: e0febd8e-94a2-46b0-a0bf-dd6b3154187b}
             - name: JOB_UID
               valueFrom: {fieldRef: {apiVersion: v1, fieldPath: "metadata.labels['batch.kubernetes.io/controller-uid']"}}
@@ -75,7 +75,7 @@ spec:
             - {name: sfs, mountPath: /mnt/sfs}
       volumes:
         - name: bootstrap
-          configMap: {name: chris-glm53-exact100-hosted-r001-a1-canary-v1-run}
+          configMap: {name: chris-glm53-exact100-hosted-r001-a1-canary-v2-run}
         - {name: docker-data, emptyDir: {sizeLimit: 40Gi}}
         - {name: docker-socket, emptyDir: {}}
         - {name: workspace, emptyDir: {sizeLimit: 5Gi}}
