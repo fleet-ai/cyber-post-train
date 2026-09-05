@@ -20,28 +20,7 @@ PACKAGE_COMMIT=$(jq -er '.package_commit | select(test("^[0-9a-f]{40}$"))' "$REL
 WORK_DIR=$(mktemp -d)
 trap 'rm -rf -- "$WORK_DIR"' EXIT
 SNAPSHOT=$WORK_DIR/package-commit
-MANIFEST=$WORK_DIR/released.yaml
-
-SECRET_UID=$(kubectl -n fleet-train-jobs get secret chris-cyber-opencode-evals-v2 \
-  -o jsonpath='{.metadata.uid}')
-test "$SECRET_UID" = e0febd8e-94a2-46b0-a0bf-dd6b3154187b
-SECRET_KEY=$(kubectl -n fleet-train-jobs get secret chris-cyber-opencode-evals-v2 \
-  -o jsonpath='{.data.FLEET_API_KEY}' | base64 --decode)
-FLEET_API_KEY="$SECRET_KEY" uv run --with httpx==0.28.1 python - <<'PY'
-import os
-import httpx
-
-response = httpx.get(
-    "https://orchestrator.fleetai.com/v1/account",
-    headers={"Authorization": f"Bearer {os.environ['FLEET_API_KEY']}"},
-    timeout=30,
-)
-response.raise_for_status()
-value = response.json()
-if value.get("team_id") != "a1025f0b-ad67-49fc-a023-51800ab43e84" or value.get("team_name") != "fleet":
-    raise SystemExit("exact evaluator Secret does not resolve to Fleet team")
-PY
-unset SECRET_KEY
+RENDERED=$WORK_DIR/rendered
 
 python3 -m evals.fleet.immutable_submission_snapshot assert-stable \
   --repo "$SOURCE_ROOT" --expected-head "$PACKAGE_COMMIT"
@@ -51,7 +30,7 @@ python3 -m evals.fleet.immutable_submission_snapshot materialize \
 ARGS=(
   --release "$RELEASE" --inventory "$INVENTORY" --prebulk "$PREBULK"
   --fresh-duplicate "$FRESH_DUPLICATE"
-  --repo "$SNAPSHOT" --output "$MANIFEST"
+  --repo "$SNAPSHOT" --output-dir "$RENDERED"
 )
 [[ -z "${FINAL_QUALIFIER_LAUNCH_RELEASE:-}" ]] || ARGS+=(--qualifier-launch-release "$FINAL_QUALIFIER_LAUNCH_RELEASE")
 [[ -z "${FINAL_QUALIFIER_MODEL:-}" ]] || ARGS+=(--qualifier-model "$FINAL_QUALIFIER_MODEL")
@@ -66,16 +45,21 @@ ARGS=(
   cd "$SNAPSHOT"
   PYTHONPATH="$SNAPSHOT" python3 -m evals.fleet.exact_pass4_final_bulk_renderer_v5 "${ARGS[@]}"
 )
-kubectl create --dry-run=server -f "$MANIFEST" -o name
+uv run --project "$SNAPSHOT" python \
+  -m evals.fleet.kubernetes_create_relay validate \
+  --manifest "$RENDERED/manifest.json" --allowlist "$RENDERED/allowlist.json"
 if [[ "$MODE" == preview ]]; then
   printf '%s\n' 'preview only; no objects created'
   exit 0
 fi
 
-while read -r resource; do
-  if kubectl -n fleet-train-jobs get "$resource" >/dev/null 2>&1; then
-    printf '%s\n' "create-once collision: $resource" >&2
-    exit 1
-  fi
-done < <(kubectl create --dry-run=client -f "$MANIFEST" -o name)
-kubectl create -f "$MANIFEST"
+: "${FINAL_BULK_CREATE_RECEIPT:?FINAL_BULK_CREATE_RECEIPT must be an unused absolute path}"
+[[ "$FINAL_BULK_CREATE_RECEIPT" == /* ]] || {
+  printf '%s\n' 'FINAL_BULK_CREATE_RECEIPT must be absolute' >&2
+  exit 2
+}
+test ! -e "$FINAL_BULK_CREATE_RECEIPT" && test ! -L "$FINAL_BULK_CREATE_RECEIPT"
+uv run --project "$SNAPSHOT" python \
+  -m evals.fleet.kubernetes_create_relay create \
+  --manifest "$RENDERED/manifest.json" --allowlist "$RENDERED/allowlist.json" \
+  --transport auto --receipt "$FINAL_BULK_CREATE_RECEIPT"

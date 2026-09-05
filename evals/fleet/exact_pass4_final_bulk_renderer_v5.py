@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import argparse
 import copy
+import json
+import os
+import stat
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +15,20 @@ import yaml
 from evals.fleet import exact_pass4_bulk_release_renderer_v3 as prior_renderer
 from evals.fleet import exact_pass4_final_bulk_package_v5 as package
 from evals.fleet import exact_pass4_final_bulk_v5 as bulk
+from evals.fleet import kubernetes_create_relay as relay
+
+
+def _write_once(path: Path, raw: bytes) -> None:
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    fd = os.open(path, flags, 0o400)
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode) or os.write(fd, raw) != len(raw):
+            raise ValueError("final v5 render write failed")
+        os.fsync(fd)
+    finally:
+        os.close(fd)
 
 
 def _group_core_name(name: str, group: str) -> str:
@@ -139,6 +156,10 @@ def render(
                 },
             }
             job = prior_renderer._job(controller, manifest, runtime_plans[controller])  # noqa: SLF001
+            # Relay-created final groups are single-attempt controllers.  A
+            # successor must reconcile global claims rather than allowing the
+            # Kubernetes Job controller to recreate a failed Pod implicitly.
+            job["spec"]["backoffLimit"] = 0
             for labels in (
                 job["metadata"]["labels"],
                 job["spec"]["template"]["metadata"]["labels"],
@@ -185,13 +206,15 @@ def main() -> int:
     parser.add_argument("--dedicated-canary", type=Path)
     parser.add_argument("--dedicated-runtime", type=Path)
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--output-dir", type=Path)
     args = parser.parse_args()
 
     def optional(path: Path | None) -> dict[str, Any] | None:
         return bulk.load(path) if path else None
 
+    release = bulk.load(args.release)
     value = render(
-        bulk.load(args.release),
+        release,
         bulk.load(args.inventory),
         bulk.load(args.prebulk),
         bulk.load(args.fresh_duplicate),
@@ -205,6 +228,36 @@ def main() -> int:
         dedicated_canary=optional(args.dedicated_canary),
         dedicated_runtime=optional(args.dedicated_runtime),
     )
+    if args.output and args.output_dir:
+        parser.error("choose either --output or --output-dir")
+    if args.output_dir:
+        if args.output_dir.exists() or args.output_dir.is_symlink():
+            raise ValueError("final v5 output directory already exists")
+        args.output_dir.mkdir(mode=0o700, parents=True)
+        objects = value["items"]
+        allowlist = relay.build_allowlist(objects)
+        relay.build_envelope(objects, allowlist)
+        _write_once(
+            args.output_dir / "manifest.json",
+            relay.canonical_json(value) + b"\n",
+        )
+        _write_once(
+            args.output_dir / "allowlist.json",
+            relay.canonical_json(allowlist) + b"\n",
+        )
+        print(
+            json.dumps(
+                {
+                    "status": "RENDERED",
+                    "group": release["group"],
+                    "object_count": len(objects),
+                    "allowlist_sha256": allowlist["allowlist_sha256"],
+                    "objects_created": False,
+                },
+                sort_keys=True,
+            )
+        )
+        return 0
     text = yaml.safe_dump(value, sort_keys=False)
     if args.output:
         args.output.write_text(text)

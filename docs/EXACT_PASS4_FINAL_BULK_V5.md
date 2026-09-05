@@ -33,8 +33,9 @@ policy.
 ## Safety and restart behavior
 
 Every controller uses the existing global O_EXCL execution-claim namespace.
-Accepted, active, claimed, or model-started cells are nonrepeatable. Controller
-restarts skip claimed cells and may only continue the untouched tail. The
+Accepted, active, claimed, or model-started cells are nonrepeatable. Automatic
+Job retries are disabled; any reviewed successor skips claimed cells and may
+only continue the untouched tail. The
 harness is OpenCode 1.18.27 with only `bash` and `submit_report`, 262,144-token
 context, 20,000-token compaction headroom, and the exact immutable model/task
 bindings inherited from the Generation-7 plan.
@@ -46,8 +47,9 @@ uv run python -m evals.fleet.exact_pass4_final_bulk_v5 preview --repo .
 uv run python -m evals.fleet.exact_pass4_final_bulk_package_v5 preview --repo .
 ```
 
-The submitter always renders from the exact release commit, runs a server-side
-dry run, and uses create-only semantics. Dedicated and hosted groups use
+The submitter always renders from the exact release commit, validates a frozen
+kind/name/digest allowlist, rechecks exact absence immediately before each
+create, and uses create-only semantics. Dedicated and hosted groups use
 separate ConfigMaps and Jobs, so hosted work can start while GPU serving is
 still gated.
 
@@ -80,7 +82,19 @@ Every group release also requires a fresh
 `fleet-exact-pass4-final-bulk-fresh-duplicate-v5` receipt observed no more than
 15 minutes earlier. It binds that
 group's exact v5 Job, ConfigMap, SFS-root, cell, claim, and Fleet-session
-absence. The validator and release hook are included here. The matching exact
-GET-only source/accept observer is a required integration artifact and must be
-reviewed before this held package can receive a launch GO; the generic create
-relay is intentionally not allowed to synthesize that evidence.
+absence. The exact source/accept observer lives in
+`exact_pass4_final_duplicate_observer_v5`: the release builder calls its live
+`validate_accepted_for_release` hook, which revalidates the digest and freshness
+and requires both exact source and accept Jobs and their owned Pods to have
+completed with zero restarts under the receipt's UIDs. The generic create relay
+only submits the observer's and controller's separately frozen object sets; it
+cannot synthesize or waive this evidence.
+
+For hosted groups, first use
+`evals/fleet/scripts/prepare_hosted_concurrency4_qualification_release_v3.sh`
+to gather the
+exact Generation-7 evidence and render the reviewed qualifier release. The
+final renderer consumes the resulting launch release plus the model-specific
+terminal, model, Job, and Pod receipts. Both the duplicate observer and final
+controller submitters freeze a kind/name/digest allowlist and call
+`kubernetes_create_relay`; partial creates are preserved and never repeated.

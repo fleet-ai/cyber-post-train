@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -11,6 +12,8 @@ from evals.fleet import exact_pass4_final_bulk_renderer_v5 as renderer
 from evals.fleet import exact_pass4_final_bulk_runtime_v5 as runtime
 from evals.fleet import exact_pass4_final_bulk_v5 as bulk
 from evals.fleet import exact_pass4_final_dedicated_evidence_v5 as dedicated_evidence
+from evals.fleet import exact_pass4_final_duplicate_observer_v5 as duplicate
+from evals.fleet import kubernetes_create_relay as relay
 
 ROOT = Path(__file__).parents[1]
 
@@ -256,7 +259,9 @@ def test_model_specific_hosted_release_does_not_require_other_model_pass(
 ) -> None:
     monkeypatch.setattr(bulk, "validate_package_commit", lambda root, commit: None)
     monkeypatch.setattr(bulk, "_validate_prebulk", lambda value, root: None)
-    monkeypatch.setattr(bulk, "validate_fresh_duplicate", lambda value, group, root, commit: None)
+    monkeypatch.setattr(
+        duplicate, "validate_accepted_for_release", lambda value, group, root, commit: None
+    )
     monkeypatch.setattr(
         bulk,
         "validate_selected_qualifier",
@@ -270,12 +275,19 @@ def test_model_specific_hosted_release_does_not_require_other_model_pass(
     )
     model = _qualifier_model("qwen3.8-27b")
     terminal = _qualifier_terminal(model)
+    fresh_duplicate = {
+        "receipt_sha256": "sha256:" + "4" * 64,
+        "observer_job_uid": "00000000-0000-4000-8000-000000000020",
+        "observer_pod_uid": "00000000-0000-4000-8000-000000000021",
+        "acceptor_job_uid": "00000000-0000-4000-8000-000000000022",
+        "acceptor_pod_uid": "00000000-0000-4000-8000-000000000023",
+    }
     release = bulk.build_release(
         "hosted-qwen",
         ROOT,
         bulk.BASE_COMMIT,
         prebulk_terminal={"receipt_sha256": "sha256:" + "1" * 64},
-        fresh_duplicate={"receipt_sha256": "sha256:" + "4" * 64},
+        fresh_duplicate=fresh_duplicate,
         qualifier_launch_release={},
         qualifier_model=model,
         qualifier_terminal=terminal,
@@ -290,6 +302,13 @@ def test_model_specific_hosted_release_does_not_require_other_model_pass(
     }
     assert len(release["controllers"]) == 4
     assert sum(row["session_count"] for row in release["controllers"]) == 399
+    assert release["gates"]["fresh_duplicate_source_accept"] == {
+        "receipt_sha256": fresh_duplicate["receipt_sha256"],
+        "source_job_uid": fresh_duplicate["observer_job_uid"],
+        "source_pod_uid": fresh_duplicate["observer_pod_uid"],
+        "accept_job_uid": fresh_duplicate["acceptor_job_uid"],
+        "accept_pod_uid": fresh_duplicate["acceptor_pod_uid"],
+    }
     changed = copy.deepcopy(model)
     changed["decision"]["accepted"] = False
     changed["receipt_sha256"] = bulk.digest(changed)
@@ -299,12 +318,40 @@ def test_model_specific_hosted_release_does_not_require_other_model_pass(
             ROOT,
             bulk.BASE_COMMIT,
             prebulk_terminal={"receipt_sha256": "sha256:" + "1" * 64},
-            fresh_duplicate={"receipt_sha256": "sha256:" + "4" * 64},
+            fresh_duplicate=fresh_duplicate,
             qualifier_launch_release={},
             qualifier_model=changed,
             qualifier_terminal=terminal,
             qualifier_job={},
             qualifier_pods={},
+        )
+
+
+@pytest.mark.parametrize("group", tuple(bulk.GROUPS))
+def test_every_release_group_requires_live_source_accept_validation(
+    monkeypatch: pytest.MonkeyPatch, group: str
+) -> None:
+    class ExpectedGate(RuntimeError):
+        pass
+
+    monkeypatch.setattr(bulk, "validate_package_commit", lambda root, commit: None)
+    monkeypatch.setattr(bulk, "_validate_prebulk", lambda value, root: None)
+
+    def gate(value: dict, observed_group: str, root: Path, commit: str) -> None:
+        assert value == {"receipt_sha256": "sha256:" + "4" * 64}
+        assert observed_group == group
+        assert root == ROOT
+        assert commit == bulk.BASE_COMMIT
+        raise ExpectedGate
+
+    monkeypatch.setattr(duplicate, "validate_accepted_for_release", gate)
+    with pytest.raises(ExpectedGate):
+        bulk.build_release(
+            group,
+            ROOT,
+            bulk.BASE_COMMIT,
+            prebulk_terminal={"receipt_sha256": "sha256:" + "1" * 64},
+            fresh_duplicate={"receipt_sha256": "sha256:" + "4" * 64},
         )
 
 
@@ -317,6 +364,22 @@ def test_held_package_is_bounded_and_content_addressed() -> None:
     assert all(
         size < package.prior.PACKAGE_OBJECT_LIMIT for size in built["object_json_bytes"].values()
     )
+
+
+def test_final_submitter_uses_frozen_create_relay_and_binds_qualifier_gather() -> None:
+    submitter = ROOT / bulk.SUBMIT_PATH
+    subprocess.run(["bash", "-n", str(submitter)], check=True)
+    source = submitter.read_text()
+    assert "kubernetes_create_relay validate" in source
+    assert "kubernetes_create_relay create" in source
+    assert "kubectl create" not in source
+    assert "kubectl -n fleet-train-jobs get secret" not in source
+    assert "base64 --decode" not in source
+    assert "FINAL_BULK_CREATE_RECEIPT" in source
+    assert bulk.DUPLICATE_OBSERVER_PATH in bulk.PACKAGE_PATHS
+    assert bulk.CREATE_RELAY_PATH in bulk.PACKAGE_PATHS
+    assert bulk.QUALIFIER_GATHER_PATH in bulk.PACKAGE_PATHS
+    assert bulk.QUALIFIER_PREPARE_PATH in bulk.PACKAGE_PATHS
 
 
 def test_renderer_emits_independent_create_only_hosted_group(
@@ -336,6 +399,7 @@ def test_renderer_emits_independent_create_only_hosted_group(
     assert services == []
     for job in jobs:
         spec = job["spec"]["template"]["spec"]
+        assert job["spec"]["backoffLimit"] == 0
         assert spec["priorityClassName"] == "fleet-serve-low"
         assert spec["preemptionPolicy"] == "Never"
         assert job["metadata"]["annotations"]["cyber-post-train.fleet.ai/create-once"] == "true"
@@ -347,6 +411,9 @@ def test_renderer_emits_independent_create_only_hosted_group(
         assert (
             job["metadata"]["labels"]["cyber-post-train.fleet.ai/experiment"] == "exact100-final-v5"
         )
+    allowlist = relay.build_allowlist(rendered["items"])
+    envelope = relay.build_envelope(rendered["items"], allowlist)
+    assert envelope["allowlist_sha256"] == allowlist["allowlist_sha256"]
 
 
 def test_renderer_emits_one_dedicated_canary_and_exact_alias_service(

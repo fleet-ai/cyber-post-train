@@ -174,6 +174,32 @@ def load_objects(path: Path) -> list[dict[str, Any]]:
     return validated
 
 
+def build_allowlist(objects: list[dict[str, Any]]) -> dict[str, Any]:
+    """Freeze the exact create set accepted by this relay."""
+    validated = [validate_object(item) for item in objects]
+    rows = [
+        {
+            "api_version": item["apiVersion"],
+            "kind": item["kind"],
+            "namespace": item["metadata"]["namespace"],
+            "name": item["metadata"]["name"],
+            "sha256": sha256(canonical_json(item)),
+        }
+        for item in validated
+    ]
+    identities = [(row["api_version"], row["kind"], row["namespace"], row["name"]) for row in rows]
+    if len(identities) != len(set(identities)):
+        raise RelayError("rendered_object_identity_duplicate")
+    value = {
+        "schema_version": ALLOWLIST_SCHEMA,
+        "namespace": NAMESPACE,
+        "allie_dev": {"name": ALLIE_NAME, "uid": ALLIE_UID},
+        "objects": rows,
+    }
+    value["allowlist_sha256"] = digest_without(value, "allowlist_sha256")
+    return value
+
+
 def build_envelope(objects: list[dict[str, Any]], allowlist: dict[str, Any]) -> dict[str, Any]:
     rows = allowlist.get("objects")
     if (

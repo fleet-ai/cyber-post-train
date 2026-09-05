@@ -70,10 +70,11 @@ def _bulk() -> Any:
     return exact_pass4_final_bulk_v5
 
 
-def _prior() -> Any:
-    from evals.fleet import exact_pass4_prebulk_reconciliation_v3
+def _evidence() -> Any:
+    """Return the reviewed score-blind helpers through the current v4 gate."""
+    from evals.fleet import exact_pass4_prebulk_reconciliation_v4
 
-    return exact_pass4_prebulk_reconciliation_v3
+    return exact_pass4_prebulk_reconciliation_v4.prior
 
 
 def canonical(value: Any) -> bytes:
@@ -191,12 +192,8 @@ def group_binding(root: Path, group: str) -> dict[str, Any]:
         "run_ids": sorted(cell["run_id"] for cell in cells),
         "task_keys": sorted({cell["task_key"] for cell in cells}),
         "task_version_ids": sorted({cell["task_version_id"] for cell in cells}),
-        "environment_version_ids": sorted(
-            {cell["environment_version_id"] for cell in cells}
-        ),
-        "controller_plan_sha256": {
-            plan["controller"]: plan["plan_sha256"] for plan in selected
-        },
+        "environment_version_ids": sorted({cell["environment_version_id"] for cell in cells}),
+        "controller_plan_sha256": {plan["controller"]: plan["plan_sha256"] for plan in selected},
         "model_serving_bindings": sorted(
             (
                 {
@@ -223,8 +220,7 @@ def group_binding(root: Path, group: str) -> dict[str, Any]:
 def validate_held(root: Path) -> dict[str, Any]:
     value = load(root / HELD_PATH)
     if (
-        value.get("schema_version")
-        != "fleet-exact-pass4-final-duplicate-observer-held-v5"
+        value.get("schema_version") != "fleet-exact-pass4-final-duplicate-observer-held-v5"
         or value.get("status") != "HELD"
         or value.get("groups") != list(_groups())
         or value.get("source_job_count") != len(_groups())
@@ -307,6 +303,30 @@ def _in_cluster_metadata(kind: str, name: str) -> dict[str, Any] | list[dict[str
             raise DuplicateError("kubernetes_metadata_list_invalid")
         return items
     return value
+
+
+def _release_kubernetes(kind: str, name: str | None = None) -> dict[str, Any]:
+    """Read exact terminal Job/Pod objects without transporting credentials.
+
+    The release builder normally runs beside the create relay on the operator
+    workstation, while source and accept collection run in-cluster.  Prefer the
+    projected service-account reader when present and otherwise use the current
+    read-only kubectl identity.  Only the two object kinds consumed by the
+    UID-bound terminal validator are supported.
+    """
+    if os.environ.get("KUBERNETES_SERVICE_HOST"):
+        return _evidence()._default_kubernetes(kind, name)  # noqa: SLF001
+    if not name or kind not in {"job", "pods"}:
+        raise DuplicateError("release_kubernetes_query_invalid")
+    command = ["kubectl", "-n", NAMESPACE, "get"]
+    if kind == "job":
+        command.extend(("job", name, "-o", "json"))
+    else:
+        command.extend(("pods", "-l", f"job-name={name}", "-o", "json"))
+    result = subprocess.run(command, capture_output=True, check=False)
+    if result.returncode != 0 or len(result.stdout) > MAX_JSON_BYTES:
+        raise DuplicateError("release_kubernetes_query_failed")
+    return _strict_json(result.stdout)
 
 
 def _fleet_account(api_key: str) -> dict[str, str]:
@@ -427,9 +447,9 @@ def _session_absence(
             raise DuplicateError("fleet_session_metadata_invalid")
         rows_examined += len(rows)
         for row in rows:
-            if _identity_values(
-                row, frozenset({"cell_id", "execution_id", "run_id"})
-            ).intersection(expected):
+            if _identity_values(row, frozenset({"cell_id", "execution_id", "run_id"})).intersection(
+                expected
+            ):
                 raise DuplicateError("fleet_session_collision")
     return rows_examined
 
@@ -529,7 +549,7 @@ def collect(
     _sfs_absence(binding)
     root_claims = claim_root or Path(_bulk().hosted.CLAIM_ROOT)
     claim_files = _claim_files_clear(root_claims, binding)
-    session_reader = sessions or _prior()._default_sessions  # noqa: SLF001
+    session_reader = sessions or _evidence()._default_sessions  # noqa: SLF001
     session_rows = _session_absence(binding, session_reader, key)
     timestamp = observed_at or _now()
     if UTC_RE.fullmatch(timestamp) is None:
@@ -567,9 +587,7 @@ def collect(
             "fleet_task_session_gets": len(binding["task_keys"]),
             "fleet_session_rows_examined": session_rows,
             "kubernetes_metadata_gets": (
-                1
-                + 2 * len(binding["checked_job_names"])
-                + len(binding["checked_configmap_names"])
+                1 + 2 * len(binding["checked_job_names"]) + len(binding["checked_configmap_names"])
             ),
             "transcript_or_score_gets": 0,
         },
@@ -682,9 +700,9 @@ def accept(
     claim_root: Path | None = None,
 ) -> dict[str, Any]:
     validate_source(observation, group, root, package_commit)
-    cluster = kubernetes or _prior()._default_kubernetes  # noqa: SLF001
+    cluster = kubernetes or _evidence()._default_kubernetes  # noqa: SLF001
     source_runtime = observation["runtime"]
-    source_state = _prior()._succeeded_job(  # noqa: SLF001
+    source_state = _evidence()._succeeded_job(  # noqa: SLF001
         source_job(group), source_runtime["job_uid"], source_runtime["pod_uid"], cluster
     )
     fresh = collect(
@@ -730,9 +748,7 @@ def accept(
         "acceptor_pod_uid": _uuid(collector_pod_uid, "acceptor_pod_uid"),
         "source_observation_receipt_sha256": observation["receipt_sha256"],
         "fresh_source_receipt_sha256": fresh["receipt_sha256"],
-        "global_generation_claim_files_examined": fresh[
-            "global_generation_claim_files_examined"
-        ],
+        "global_generation_claim_files_examined": fresh["global_generation_claim_files_examined"],
         "request_counts": fresh["request_counts"],
         "credential_authority": fresh["credential_authority"],
         "observed_at_utc": fresh["observed_at_utc"],
@@ -749,8 +765,68 @@ def validate_accepted_structure(
     receipt: dict[str, Any], group: str, root: Path, package_commit: str
 ) -> None:
     _bulk().validate_fresh_duplicate(receipt, group, root, package_commit)
+    binding = group_binding(root, group)
+    requests = receipt.get("request_counts") or {}
     if (
-        receipt.get("credential_authority")
+        set(receipt)
+        != {
+            "schema_version",
+            "status",
+            "group",
+            "planned_execution_count",
+            "exact_identity_sha256",
+            "checked_job_names",
+            "checked_configmap_names",
+            "checked_output_roots",
+            "checked_cell_ids",
+            "task_version_ids",
+            "environment_version_ids",
+            "controller_plan_sha256",
+            "model_serving_bindings",
+            "execution_contract",
+            "collisions",
+            "methods",
+            "mutation_calls",
+            "checked_immediately_before_release",
+            "observer_job_succeeded",
+            "observer_pod_restarts",
+            "observer_package_commit",
+            "observer_job_uid",
+            "observer_pod_uid",
+            "acceptor_job_uid",
+            "acceptor_pod_uid",
+            "source_observation_receipt_sha256",
+            "fresh_source_receipt_sha256",
+            "global_generation_claim_files_examined",
+            "request_counts",
+            "credential_authority",
+            "observed_at_utc",
+            "prompts_traces_flags_or_scores_included",
+            "credentials_included",
+            "receipt_sha256",
+        }
+        or receipt.get("checked_cell_ids") != binding["cell_ids"]
+        or receipt.get("task_version_ids") != binding["task_version_ids"]
+        or receipt.get("environment_version_ids") != binding["environment_version_ids"]
+        or receipt.get("controller_plan_sha256") != binding["controller_plan_sha256"]
+        or receipt.get("model_serving_bindings") != binding["model_serving_bindings"]
+        or receipt.get("execution_contract") != binding["execution_contract"]
+        or set(requests)
+        != {
+            "fleet_account_get",
+            "fleet_task_session_gets",
+            "fleet_session_rows_examined",
+            "kubernetes_metadata_gets",
+            "transcript_or_score_gets",
+        }
+        or requests.get("fleet_account_get") != 1
+        or requests.get("fleet_task_session_gets") != len(binding["task_keys"])
+        or not isinstance(requests.get("fleet_session_rows_examined"), int)
+        or requests.get("fleet_session_rows_examined", -1) < 0
+        or requests.get("kubernetes_metadata_gets")
+        != 1 + 2 * len(binding["checked_job_names"]) + len(binding["checked_configmap_names"])
+        or requests.get("transcript_or_score_gets") != 0
+        or receipt.get("credential_authority")
         != {
             "secret_name": SECRET_NAME,
             "secret_uid": SECRET_UID,
@@ -776,11 +852,11 @@ def validate_accepted_for_release(
     kubernetes: Callable[[str, str | None], dict[str, Any]] | None = None,
 ) -> None:
     validate_accepted_structure(receipt, group, root, package_commit)
-    cluster = kubernetes or _prior()._default_kubernetes  # noqa: SLF001
-    _prior()._succeeded_job(  # noqa: SLF001
+    cluster = kubernetes or _release_kubernetes
+    _evidence()._succeeded_job(  # noqa: SLF001
         source_job(group), receipt["observer_job_uid"], receipt["observer_pod_uid"], cluster
     )
-    _prior()._succeeded_job(  # noqa: SLF001
+    _evidence()._succeeded_job(  # noqa: SLF001
         accept_job(group), receipt["acceptor_job_uid"], receipt["acceptor_pod_uid"], cluster
     )
 

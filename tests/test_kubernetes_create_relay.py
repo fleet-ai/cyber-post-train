@@ -111,6 +111,7 @@ class FakeClient:
 
 def test_allowlist_and_envelope_are_independently_digest_bound() -> None:
     objects = _objects()
+    assert relay.build_allowlist(objects) == _allowlist(objects)
     envelope = relay.build_envelope(objects, _allowlist(objects))
     assert relay.validate_envelope(envelope) == envelope
     changed = json.loads(json.dumps(objects))

@@ -66,24 +66,7 @@ def _configmap(name: str, data: dict[str, str]) -> dict[str, Any]:
 
 
 def _allowlist(objects: list[dict[str, Any]]) -> dict[str, Any]:
-    rows = [
-        {
-            "api_version": row["apiVersion"],
-            "kind": row["kind"],
-            "namespace": row["metadata"]["namespace"],
-            "name": row["metadata"]["name"],
-            "sha256": relay.sha256(relay.canonical_json(row)),
-        }
-        for row in objects
-    ]
-    body = {
-        "schema_version": relay.ALLOWLIST_SCHEMA,
-        "namespace": relay.NAMESPACE,
-        "allie_dev": {"name": relay.ALLIE_NAME, "uid": relay.ALLIE_UID},
-        "objects": rows,
-    }
-    body["allowlist_sha256"] = relay.digest_without(body, "allowlist_sha256")
-    return body
+    return relay.build_allowlist(objects)
 
 
 def render(

@@ -24,6 +24,12 @@ RUNTIME_PATH = "evals/fleet/exact_pass4_final_bulk_runtime_v5.py"
 PACKAGE_PATH = "evals/fleet/exact_pass4_final_bulk_package_v5.py"
 RENDER_PATH = "evals/fleet/exact_pass4_final_bulk_renderer_v5.py"
 DEDICATED_EVIDENCE_PATH = "evals/fleet/exact_pass4_final_dedicated_evidence_v5.py"
+DUPLICATE_OBSERVER_PATH = "evals/fleet/exact_pass4_final_duplicate_observer_v5.py"
+CREATE_RELAY_PATH = "evals/fleet/kubernetes_create_relay.py"
+QUALIFIER_GATHER_PATH = "evals/fleet/hosted_concurrency4_qualification_release_v3_gather.py"
+QUALIFIER_PREPARE_PATH = (
+    "evals/fleet/scripts/prepare_hosted_concurrency4_qualification_release_v3.sh"
+)
 RUN_PATH = "evals/fleet/scripts/run_exact_pass4_final_bulk_v5.sh"
 SUBMIT_PATH = "evals/fleet/scripts/submit_exact_pass4_final_bulk_v5.sh"
 HELD_PATH = "docs/evidence/qwen38-study/2026-09-05-opencode-exact-pass4-final-bulk-held-v5.json"
@@ -384,6 +390,10 @@ PACKAGE_PATHS = (
     PACKAGE_PATH,
     RENDER_PATH,
     DEDICATED_EVIDENCE_PATH,
+    DUPLICATE_OBSERVER_PATH,
+    CREATE_RELAY_PATH,
+    QUALIFIER_GATHER_PATH,
+    QUALIFIER_PREPARE_PATH,
     RUN_PATH,
     SUBMIT_PATH,
     HELD_PATH,
@@ -626,9 +636,28 @@ def build_release(
         raise ValueError("unsupported final v5 release group")
     validate_package_commit(root, package_commit)
     _validate_prebulk(prebulk_terminal, root)
-    validate_fresh_duplicate(fresh_duplicate, group, root, package_commit)
+    # A structurally valid receipt is not sufficient here.  The dedicated
+    # source/accept observer revalidates freshness and binds both exact
+    # terminal Job/Pod UID pairs immediately before this release is rendered.
+    from evals.fleet import exact_pass4_final_duplicate_observer_v5 as duplicate
+
+    duplicate.validate_accepted_for_release(
+        fresh_duplicate,
+        group,
+        root,
+        package_commit,
+    )
     plans = validate_all(root)
-    gates: dict[str, Any] = {"prebulk_receipt_sha256": prebulk_terminal["receipt_sha256"]}
+    gates: dict[str, Any] = {
+        "prebulk_receipt_sha256": prebulk_terminal["receipt_sha256"],
+        "fresh_duplicate_source_accept": {
+            "receipt_sha256": fresh_duplicate["receipt_sha256"],
+            "source_job_uid": fresh_duplicate["observer_job_uid"],
+            "source_pod_uid": fresh_duplicate["observer_pod_uid"],
+            "accept_job_uid": fresh_duplicate["acceptor_job_uid"],
+            "accept_pod_uid": fresh_duplicate["acceptor_pod_uid"],
+        },
+    }
     if group.startswith("hosted-"):
         model = "qwen3.8-27b" if group == "hosted-qwen" else "glm-5.3"
         if any(
