@@ -1,0 +1,138 @@
+apiVersion: v1
+kind: List
+items:
+  - &job
+    apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: chris-q38-ac-r004-a1-g3-v1
+      namespace: fleet-train-jobs
+      annotations: &held
+        cyber-post-train.fleet.ai/preview-only: "true"
+        cyber-post-train.fleet.ai/launch-authorized: "false"
+        cyber-post-train.fleet.ai/package-layout: semantic-split-configmap-v3
+    spec:
+      activeDeadlineSeconds: 43200
+      backoffLimit: 0
+      ttlSecondsAfterFinished: 604800
+      template:
+        metadata:
+          labels:
+            cyber-post-train.fleet.ai/experiment: q38-ac-r004-a1-g3-v1
+            cyber-post-train.fleet.ai/owner: chris
+            kueue.x-k8s.io/queue-name: training-lq
+        spec:
+          restartPolicy: Never
+          priorityClassName: fleet-serve-low
+          preemptionPolicy: Never
+          nodeSelector: {kubernetes.io/arch: amd64, workload: fleetai-training-ng-cpu}
+          tolerations:
+            - {key: workload, operator: Equal, value: fleetai-training-ng-cpu, effect: NoSchedule}
+          initContainers:
+            - name: dind
+              image: docker.io/library/docker@sha256:f649ef046008ca7f926a2571c32b0ac22e5c59eb61b959617f9acc2a4c638cf5
+              restartPolicy: Always
+              args: ["--host=unix:///var/run/docker.sock", "--host=tcp://0.0.0.0:2375", "--tls=false"]
+              readinessProbe: {tcpSocket: {port: 2375}, initialDelaySeconds: 2, periodSeconds: 2}
+              securityContext: {privileged: true}
+              resources:
+                requests: {cpu: 500m, memory: 2Gi, ephemeral-storage: 20Gi}
+                limits: {cpu: "2", memory: 4Gi, ephemeral-storage: 40Gi}
+              volumeMounts: &dind-mounts
+                - {name: docker-socket, mountPath: /var/run}
+                - {name: docker-data, mountPath: /var/lib/docker}
+                - {name: workspace, mountPath: /workspace}
+                - {name: sfs, mountPath: /mnt/sfs}
+          containers:
+            - name: evaluator
+              image: ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
+              command: ["/bin/bash", "/bootstrap/run-g3-v3.sh"]
+              env:
+                - {name: DOCKER_HOST, value: "unix:///var/run/docker.sock"}
+                - {name: DOCKER_TLS_CERTDIR, value: ""}
+                - {name: GENERATION3_JOB_NAME, value: chris-q38-ac-r004-a1-g3-v1}
+                - {name: GENERATION3_MODEL, value: qwen3.8-27b}
+                - {name: GENERATION3_PACKAGE_AGGREGATE_SHA256, valueFrom: {configMapKeyRef: {name: chris-q38-ac-r004-a1-g3-run-v1, key: package_aggregate_sha256}}}
+                - {name: JOB_UID, valueFrom: {fieldRef: {apiVersion: v1, fieldPath: "metadata.labels['batch.kubernetes.io/controller-uid']"}}}
+                - {name: POD_UID, valueFrom: {fieldRef: {apiVersion: v1, fieldPath: metadata.uid}}}
+                - {name: FLEET_API_KEY, valueFrom: {secretKeyRef: {name: chris-cyber-opencode-evals-v2, key: FLEET_API_KEY}}}
+              resources:
+                requests: {cpu: 100m, memory: 512Mi, ephemeral-storage: 5Gi}
+                limits: {cpu: "1", memory: 2Gi, ephemeral-storage: 20Gi}
+              volumeMounts: &evaluator-mounts
+                - {name: docker-socket, mountPath: /var/run}
+                - {name: bootstrap, mountPath: /bootstrap, readOnly: true}
+                - {name: workspace, mountPath: /workspace}
+                - {name: sfs, mountPath: /mnt/sfs}
+          volumes:
+            - name: bootstrap
+              projected:
+                sources:
+                  - configMap: {name: chris-ac-g3-runtime-core-a-v3}
+                  - configMap: {name: chris-ac-g3-runtime-core-b-v3}
+                  - configMap: {name: chris-q38-ac-r004-a1-g3-run-v1}
+            - {name: docker-data, emptyDir: {sizeLimit: 40Gi}}
+            - {name: docker-socket, emptyDir: {}}
+            - {name: workspace, emptyDir: {sizeLimit: 5Gi}}
+            - {name: sfs, persistentVolumeClaim: {claimName: sfs-shared}}
+  - <<: *job
+    metadata:
+      name: chris-glm53-ac-r013-a1-g3-v1
+      namespace: fleet-train-jobs
+      annotations: *held
+    spec:
+      activeDeadlineSeconds: 43200
+      backoffLimit: 0
+      ttlSecondsAfterFinished: 604800
+      template:
+        metadata:
+          labels:
+            cyber-post-train.fleet.ai/experiment: glm53-ac-r013-a1-g3-v1
+            cyber-post-train.fleet.ai/owner: chris
+            kueue.x-k8s.io/queue-name: training-lq
+        spec:
+          restartPolicy: Never
+          priorityClassName: fleet-serve-low
+          preemptionPolicy: Never
+          nodeSelector: {kubernetes.io/arch: amd64, workload: fleetai-training-ng-cpu}
+          tolerations:
+            - {key: workload, operator: Equal, value: fleetai-training-ng-cpu, effect: NoSchedule}
+          initContainers:
+            - name: dind
+              image: docker.io/library/docker@sha256:f649ef046008ca7f926a2571c32b0ac22e5c59eb61b959617f9acc2a4c638cf5
+              restartPolicy: Always
+              args: ["--host=unix:///var/run/docker.sock", "--host=tcp://0.0.0.0:2375", "--tls=false"]
+              readinessProbe: {tcpSocket: {port: 2375}, initialDelaySeconds: 2, periodSeconds: 2}
+              securityContext: {privileged: true}
+              resources:
+                requests: {cpu: 500m, memory: 2Gi, ephemeral-storage: 20Gi}
+                limits: {cpu: "2", memory: 4Gi, ephemeral-storage: 40Gi}
+              volumeMounts: *dind-mounts
+          containers:
+            - name: evaluator
+              image: ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
+              command: ["/bin/bash", "/bootstrap/run-g3-v3.sh"]
+              env:
+                - {name: DOCKER_HOST, value: "unix:///var/run/docker.sock"}
+                - {name: DOCKER_TLS_CERTDIR, value: ""}
+                - {name: GENERATION3_JOB_NAME, value: chris-glm53-ac-r013-a1-g3-v1}
+                - {name: GENERATION3_MODEL, value: glm-5.3}
+                - {name: GENERATION3_PACKAGE_AGGREGATE_SHA256, valueFrom: {configMapKeyRef: {name: chris-glm53-ac-r013-a1-g3-run-v1, key: package_aggregate_sha256}}}
+                - {name: JOB_UID, valueFrom: {fieldRef: {apiVersion: v1, fieldPath: "metadata.labels['batch.kubernetes.io/controller-uid']"}}}
+                - {name: POD_UID, valueFrom: {fieldRef: {apiVersion: v1, fieldPath: metadata.uid}}}
+                - {name: FLEET_API_KEY, valueFrom: {secretKeyRef: {name: chris-cyber-opencode-evals-v2, key: FLEET_API_KEY}}}
+              resources:
+                requests: {cpu: 100m, memory: 512Mi, ephemeral-storage: 5Gi}
+                limits: {cpu: "1", memory: 2Gi, ephemeral-storage: 20Gi}
+              volumeMounts: *evaluator-mounts
+          volumes:
+            - name: bootstrap
+              projected:
+                sources:
+                  - configMap: {name: chris-ac-g3-runtime-core-a-v3}
+                  - configMap: {name: chris-ac-g3-runtime-core-b-v3}
+                  - configMap: {name: chris-glm53-ac-r013-a1-g3-run-v1}
+            - {name: docker-data, emptyDir: {sizeLimit: 40Gi}}
+            - {name: docker-socket, emptyDir: {}}
+            - {name: workspace, emptyDir: {sizeLimit: 5Gi}}
+            - {name: sfs, persistentVolumeClaim: {claimName: sfs-shared}}

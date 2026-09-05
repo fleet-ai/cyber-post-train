@@ -1,0 +1,69 @@
+{
+  "schema_version": "fleet-opencode-autocontinue-generation3-split-package-held-v2",
+  "append_only": true,
+  "status": "HELD",
+  "execution_generation": 3,
+  "supersedes_split_package": {
+    "path": "docs/evidence/qwen38-study/2026-09-04-opencode-autocontinue-generation3-executable-package-held-v2.json",
+    "receipt_sha256": "sha256:b94f6227d55e211cf5754c1a95906c24355608a3bc13546e078e8f1b3eeda8b3"
+  },
+  "semantic_evidence": {
+    "incident_path": "docs/evidence/qwen38-study/2026-09-04-opencode-autocontinue-generation2-admission-failure-v1.json",
+    "incident_receipt_sha256": "sha256:99bbde2c57290cad719a436c054deab12675257ac84f8dfb5471787aa2e5ee0a",
+    "tombstone_path": "docs/evidence/qwen38-study/2026-09-04-opencode-autocontinue-generation2-admission-tombstones-v1.json",
+    "tombstone_receipt_sha256": "sha256:348d8ebe2a80eed139e9f57a6c796f95c3f34b28040aea4aaaf8fb0b5b9a156a",
+    "generation3_held_path": "docs/evidence/qwen38-study/2026-09-04-opencode-autocontinue-generation3-canaries-held-v1.json",
+    "generation3_held_receipt_sha256": "sha256:be9999a433257b20e96ce413f2fb073524884e029705cf82119e7f07f6f88887",
+    "both_specs_and_rendered_plans_validated": true
+  },
+  "package_layout": "split_immutable_configmaps_projected_volume_v3",
+  "objects": [
+    "chris-ac-g3-runtime-core-a-v3",
+    "chris-ac-g3-runtime-core-b-v3",
+    "chris-glm53-ac-r013-a1-g3-run-v1",
+    "chris-q38-ac-r004-a1-g3-run-v1"
+  ],
+  "object_json_bytes": {
+    "chris-ac-g3-runtime-core-a-v3": 487813,
+    "chris-ac-g3-runtime-core-b-v3": 614111,
+    "chris-q38-ac-r004-a1-g3-run-v1": 18440,
+    "chris-glm53-ac-r013-a1-g3-run-v1": 18445
+  },
+  "kubernetes_object_limit_bytes": 1048576,
+  "package_object_safety_limit_bytes": 972800,
+  "aggregate_sha256": "sha256:eb05dd4a13064939cfab23288e01ce7f1129227aedd44b03d8895957a65d70e8",
+  "model_aggregate_sha256s": {
+    "qwen3.8-27b": "sha256:f45a2f4ea02800eecd1eb5428effef6767fc51baec343ecd752f0687c1d079dc",
+    "glm-5.3": "sha256:172099e413ded2bab5259d9c79255098553587f214a7135ef8888d93288e14fb"
+  },
+  "jobs": [
+    "chris-q38-ac-r004-a1-g3-v1",
+    "chris-glm53-ac-r013-a1-g3-v1"
+  ],
+  "priority": {
+    "class": "fleet-serve-low",
+    "preemption_policy": "Never"
+  },
+  "implementation": {
+    "module_path": "evals/fleet/autocontinue_generation3_executable_package_v2.py",
+    "module_sha256": "sha256:c11030c32eb4bddb5005ca2db92a60caea2684075f1d77334efb86c002356eda",
+    "manifest_path": "evals/fleet/cluster/opencode-autocontinue-generation3-executable-held-v3.yaml",
+    "manifest_sha256": "sha256:ab1514d9b9d62c779a4075a7f1061ec61ea9c61169c61eb9422912896c4eed8d",
+    "run_path": "evals/fleet/scripts/run_opencode_autocontinue_generation3_executable_v3.sh",
+    "run_sha256": "sha256:551d00d696f7c71a89c807f2829868ec811ebab9abf28d0e016d23af65892c18",
+    "submit_path": "evals/fleet/scripts/submit_opencode_autocontinue_generation3_executable_v3.sh",
+    "submit_sha256": "sha256:59695b14fd9456a916883920c29fe83da316ec004cd7b55be339e0872fb696b8"
+  },
+  "launch_authorized": false,
+  "objects_created": false,
+  "remaining_gates": [
+    "fresh_route_and_duplicate_inventory",
+    "append_only_model_specific_generation3_scoring_releases",
+    "explicit_root_launch_authorization"
+  ],
+  "privacy": {
+    "prompts_traces_flags_or_scores_included": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:22b2d2135a11f73f7ba5df6ca37350c55f8edab23f07e04efe066a5f0ca724ce"
+}
