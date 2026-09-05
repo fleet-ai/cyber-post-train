@@ -25,6 +25,10 @@ BULK_MISSING_SECRET_TOMBSTONE = ROOT / (
     "docs/evidence/qwen38-study/"
     "2026-09-05-qwen38-generation16-bulk-missing-secret-terminal-v1.json"
 )
+G17_BOOTSTRAP_TOMBSTONE = ROOT / (
+    "docs/evidence/qwen38-study/"
+    "2026-09-05-qwen38-generation17-bulk-bootstrap-terminal-v1.json"
+)
 
 
 def test_exact_hosted_partition_excludes_accepted_and_dedicated_cells() -> None:
@@ -71,6 +75,17 @@ def test_g15_nullable_model_gate_and_package_are_valid() -> None:
         size < package.prior.PACKAGE_OBJECT_LIMIT
         for size in built["object_json_bytes"].values()
     )
+    packaged_paths = {
+        entry["source_path"]
+        for manifest in built["controller_manifests"].values()
+        for obj in manifest["objects"]
+        for entry in obj["entries"]
+    }
+    assert "evals/fleet/projected_runtime_plan.py" in packaged_paths
+    run_script = (ROOT / bulk.RUN_PATH).read_text()
+    assert "python3 -m evals.fleet.projected_runtime_plan" in run_script
+    assert 'BULK_PLAN="$MATERIALIZED_PLAN"' in run_script
+    assert 'test ! -L "$BULK_PLAN"' in run_script
 
 
 def test_runtime_plans_preserve_exact_treatment() -> None:
@@ -310,6 +325,16 @@ def test_session_inventory_rejects_empty_task_keys_and_is_bounded() -> None:
     assert preflight.SESSION_TOTAL_DEADLINE_SECONDS == 300
 
 
+def test_preflight_uses_canonical_global_claim_filenames(tmp_path: Path) -> None:
+    source = Path(preflight.__file__).read_text()
+    assert "runtime.engine.claim_filename" in source
+    execution_id = "sha256:" + "a" * 64
+    expected = tmp_path / runtime.engine.claim_filename(execution_id)
+    expected.write_text("{}\n")
+    assert expected.exists()
+    assert not (tmp_path / execution_id).exists()
+
+
 def test_v3_v8_read_only_tombstones_are_digest_valid() -> None:
     receipt = json.loads(PREFLIGHT_TOMBSTONES.read_text())
     assert receipt["receipt_sha256"] == self_hosted.digest_without(
@@ -338,3 +363,21 @@ def test_missing_secret_terminal_receipt_is_digest_valid_and_retry_safe() -> Non
     assert all(row["container_started"] is False for row in receipt["jobs"])
     assert receipt["release"]["owned_jobs_deleted"] is True
     assert receipt["release"]["successor_state"] == "HELD"
+
+
+def test_g17_bootstrap_terminal_receipt_is_digest_valid_and_retry_safe() -> None:
+    receipt = json.loads(G17_BOOTSTRAP_TOMBSTONE.read_text())
+    assert receipt["receipt_sha256"] == self_hosted.digest_without(
+        receipt, "receipt_sha256"
+    )
+    assert receipt["classification"] == "INFRASTRUCTURE_INVALID_PRE_EXECUTION"
+    assert receipt["bootstrap_reconciliation"]["projected_package_valid"] is True
+    assert receipt["bootstrap_reconciliation"]["deterministic_cause"] == (
+        "projected_configmap_runtime_plan_is_symlink_rejected_by_strict_loader"
+    )
+    assert receipt["consumption_reconciliation"]["consumed_cells"] == 0
+    assert receipt["release"] == {
+        "owned_jobs_deleted": True,
+        "configmaps_preserved": True,
+        "successor_state": "HELD",
+    }

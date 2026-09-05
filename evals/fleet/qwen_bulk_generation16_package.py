@@ -20,6 +20,7 @@ CORE_C_PATHS = tuple(
         (
             *prior.CORE_C_PATHS,
             "evals/fleet/exact_pass4_bulk_runtime_v3.py",
+            "evals/fleet/projected_runtime_plan.py",
             bulk.MODULE_PATH,
             "evals/fleet/qwen_bulk_generation16_preflight.py",
             bulk.G15_GATE_PATH,

@@ -1,0 +1,88 @@
+{
+  "schema_version": "fleet-qwen-generation17-bulk-preexecution-terminal-v1",
+  "classification": "INFRASTRUCTURE_INVALID_PRE_EXECUTION",
+  "observed_at_utc": "2026-09-05T18:31:00Z",
+  "incident": "bootstrap_exit_before_sfs_root",
+  "jobs": [
+    {
+      "controller": "qwen-a",
+      "planned_cells": 199,
+      "job_name": "chris-q38-ac-exact100-g17-a199-v1",
+      "job_uid": "2edd923c-4421-4902-b987-db25704b8fad",
+      "pod_name": "chris-q38-ac-exact100-g17-a199-v1-j4x4j",
+      "pod_uid": "07907c83-41fc-4487-a2db-b6fb026ef3e5",
+      "workload_uid": "1c72500e-5ff7-4265-86a2-294d457881b8",
+      "job_reason": "BackoffLimitExceeded",
+      "container_exit_code": 1,
+      "container_restarts": 0,
+      "container_started_at": "2026-09-05T18:26:18Z",
+      "container_finished_at": "2026-09-05T18:27:05Z"
+    },
+    {
+      "controller": "qwen-b",
+      "planned_cells": 196,
+      "job_name": "chris-q38-ac-exact100-g17-b196-v1",
+      "job_uid": "bcf0d135-7f24-4383-80e0-d6f7c981332f",
+      "pod_name": "chris-q38-ac-exact100-g17-b196-v1-v8wlz",
+      "pod_uid": "54584974-71a6-483e-a147-99aad6c6e1d9",
+      "workload_uid": "73e26345-1218-4a1b-8d69-d8a566f42ce0",
+      "job_reason": "BackoffLimitExceeded",
+      "container_exit_code": 1,
+      "container_restarts": 0,
+      "container_started_at": "2026-09-05T18:26:19Z",
+      "container_finished_at": "2026-09-05T18:27:05Z"
+    }
+  ],
+  "bootstrap_reconciliation": {
+    "docker_cli_init_exit_code": 0,
+    "dind_sidecar_exit_code": 0,
+    "projected_package_observer_job_uid": "809a6c7d-b98d-478e-80f6-59feb16f3494",
+    "projected_package_observer_pod_uid": "160586a7-8740-4dba-9be0-c4aeb4b3f9cc",
+    "projected_package_entries_checked": 140,
+    "projected_package_missing_entries": 0,
+    "projected_package_digest_mismatches": 0,
+    "projected_package_valid": true,
+    "projected_package_aggregate_sha256": "sha256:4d6b179de3d02907fc459fe8bfd73630a19bff08722e97327d0236f2bb8bf830",
+    "failure_boundary": "runtime_plan_load_after_harness_version_before_runtime_sfs_root",
+    "deterministic_cause": "projected_configmap_runtime_plan_is_symlink_rejected_by_strict_loader",
+    "bootstrap_diagnostic_v2": {
+      "job_uid": "5e95cc40-b95c-4bc5-9205-a110ce57e3f2",
+      "pod_uid": "9995620b-56e9-489c-9069-39bc6c77f765",
+      "exclusive_success": true,
+      "container_restarts": 0,
+      "digest_valid_stage_receipts": 12,
+      "terminal_stage": "06-clear-CLEAR",
+      "task_session_model_or_scoring_calls": 0
+    },
+    "runtime_gate_diagnostic": {
+      "job_uid": "35db32d3-6396-42c1-9f47-7f78be30e623",
+      "pod_uid": "beb56f6f-7eb0-4026-b8ca-a1cc72e37018",
+      "uv_import_succeeded": true,
+      "plan_rebuild_entered": true,
+      "plan_rebuild_completed": false,
+      "task_session_model_or_scoring_calls": 0
+    },
+    "prevention": "validate_plan_schema_and_self_digest_then_copy_create_once_to_regular_workspace_file"
+  },
+  "consumption_reconciliation": {
+    "prelaunch_clear_receipt_sha256": "sha256:a796eabd63c2b97d4ae7de77990008457632ffbd9b16dfc369a052b3f15d503a",
+    "prelaunch_planned_cells": 395,
+    "sfs_output_roots_created": 0,
+    "local_claims": 0,
+    "global_claims": 0,
+    "accepted_receipts": 0,
+    "result_receipts": 0,
+    "session_ingest_receipts": 0,
+    "model_started_cells": 0,
+    "scoring_calls": 0,
+    "consumed_cells": 0
+  },
+  "release": {
+    "owned_jobs_deleted": true,
+    "configmaps_preserved": true,
+    "successor_state": "HELD"
+  },
+  "prompts_traces_flags_or_scores_included": false,
+  "credentials_included": false,
+  "receipt_sha256": "sha256:a699cbe07d503c276bad063d8f14b4af73e6dfe893a50dde69827845a49e78ca"
+}

@@ -26,6 +26,14 @@ def _seal(body: dict[str, object]) -> dict[str, object]:
     }
 
 
+def test_global_claim_filename_is_canonical_and_strict() -> None:
+    execution_id = "sha256:" + "a" * 64
+    assert runtime.claim_filename(execution_id) == "a" * 64 + ".json"
+    for invalid in ("", "a" * 64, "sha256:../escape", "sha256:" + "g" * 64):
+        with pytest.raises(ValueError, match="sha256 digest"):
+            runtime.claim_filename(invalid)
+
+
 def test_four_partitions_cover_exact_universe_minus_two_canaries() -> None:
     plans = bulk.validate_all(ROOT)
     assert {key: plan["new_session_count"] for key, plan in plans.items()} == {

@@ -71,6 +71,13 @@ def _write_once(path: Path, value: dict[str, Any]) -> None:
         os.close(directory_fd)
 
 
+def claim_filename(execution_id: str) -> str:
+    """Return the only canonical global-claim filename for an execution id."""
+    if bulk.SHA256_RE.fullmatch(execution_id) is None:
+        raise ValueError("execution id must be a sha256 digest")
+    return execution_id.removeprefix("sha256:") + ".json"
+
+
 def claim_cell(
     plan: dict[str, Any], item: dict[str, Any], *, claim_root: Path, job_uid: str, pod_uid: str
 ) -> dict[str, Any] | None:
@@ -80,7 +87,7 @@ def claim_cell(
     if claim_root.exists() and (claim_root.is_symlink() or not claim_root.is_dir()):
         raise RuntimeError("global claim root is unsafe")
     claim_root.mkdir(mode=0o700, parents=True, exist_ok=True)
-    name = item["execution_id"].removeprefix("sha256:") + ".json"
+    name = claim_filename(item["execution_id"])
     receipt = _seal(
         {
             "schema_version": CLAIM_SCHEMA,
@@ -112,7 +119,7 @@ def claim_cell(
 def _validate_preserved_claim(
     plan: dict[str, Any], item: dict[str, Any], claim_root: Path
 ) -> dict[str, Any]:
-    path = claim_root / (item["execution_id"].removeprefix("sha256:") + ".json")
+    path = claim_root / claim_filename(item["execution_id"])
     claim = bulk.load(path)
     if (
         claim.get("receipt_sha256") != self_hosted.digest_without(claim, "receipt_sha256")

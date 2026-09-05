@@ -38,6 +38,12 @@ PY
 
 touch "$ROOT/evals/__init__.py" "$ROOT/evals/fleet/__init__.py"
 cd "$ROOT"
+MATERIALIZED_PLAN="$ROOT/.runtime/runtime-plan.json"
+python3 -m evals.fleet.projected_runtime_plan \
+  "$BULK_PLAN" "$MATERIALIZED_PLAN" \
+  --schema fleet-qwen-generation17-bulk-executable-plan-v1
+BULK_PLAN="$MATERIALIZED_PLAN"
+test -f "$BULK_PLAN" && test ! -L "$BULK_PLAN"
 test "$(command -v docker)" = /docker-cli/bin/docker
 test "$(sha256sum /docker-cli/bin/docker | awk '{print $1}')" = \
   242c7a8de606afba2acada7c7af00d77f92c3601678b2f3a60911b49a892c722

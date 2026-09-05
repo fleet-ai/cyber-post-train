@@ -1048,7 +1048,10 @@ def _claim_dedicated_qwen(value: dict[str, Any], path: Path, authority: Authorit
 
 
 def _require_canonical_claim_filename(path: Path, value: dict[str, Any]) -> None:
-    expected_name = str(value.get("execution_id", "")).removeprefix("sha256:") + ".json"
+    try:
+        expected_name = bulk_runtime.claim_filename(str(value.get("execution_id", "")))
+    except ValueError as exc:
+        raise LedgerError(f"bulk claim execution id is invalid: {path}") from exc
     if path.name != expected_name:
         raise LedgerError(f"bulk claim filename does not bind its execution id: {path}")
 

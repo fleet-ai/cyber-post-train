@@ -162,7 +162,10 @@ def run(plan_path: Path, output: Path) -> dict[str, Any]:
     if len(rows) != 395 or len({row["execution_id"] for row in rows}) != 395:
         raise RuntimeError("Generation-17 preflight cell universe drifted")
     output_roots = [Path(plan["sfs_root"]) for plan in plans]
-    claims = [Path(bulk.CLAIM_ROOT) / row["execution_id"] for row in rows]
+    claims = [
+        Path(bulk.CLAIM_ROOT) / runtime.engine.claim_filename(row["execution_id"])
+        for row in rows
+    ]
     if any(path.exists() for path in [*output_roots, *claims]):
         raise RuntimeError("Generation-17 SFS output or execution claim collision")
     _stage(output, 2, "sfs-clear")
