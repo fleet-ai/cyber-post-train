@@ -19,7 +19,7 @@ from evals.fleet import hosted_glm_s2_c2_canary_v1 as c2
 from evals.fleet import self_hosted
 
 SCHEMA = "fleet-hosted-glm-s2-c2-release-v1"
-JOB_NAME = "chris-glm53-exact100-hosted-s2-c2-release-v1"
+JOB_NAME = "chris-glm53-exact100-hosted-s2-c2-release-v2"
 CONFIGMAP_NAME = JOB_NAME + "-run"
 OUTPUT_PATH = Path("/mnt/sfs/jobs") / JOB_NAME / "RELEASE.json"
 S1_JOB = "chris-glm53-exact100-hosted-s1-retry-v2"

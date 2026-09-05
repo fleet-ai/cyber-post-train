@@ -40,6 +40,9 @@ def render(root: Path, *, s1_accepted: Path | None = None) -> dict[str, Any]:
     configmap["data"]["bulk_runtime.py"] = (
         root / "evals/fleet/hosted_glm_exact_bulk_runtime_v1.py"
     ).read_text()
+    configmap["data"]["original_release.py"] = (
+        root / "evals/fleet/hosted_glm_exact_bulk_release_v1.py"
+    ).read_text()
     configmap["data"]["c2.py"] = (root / "evals/fleet/hosted_glm_s2_c2_canary_v1.py").read_text()
     configmap["data"]["c2_release.py"] = (
         root / "evals/fleet/hosted_glm_s2_c2_release_v1.py"
