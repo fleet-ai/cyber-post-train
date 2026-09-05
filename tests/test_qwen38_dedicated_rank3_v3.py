@@ -7,6 +7,10 @@ from evals.fleet import qwen38_dedicated_rank3_v3 as lane
 from evals.fleet import self_hosted
 
 ROOT = Path(__file__).resolve().parents[1]
+G20_TOMBSTONE = ROOT / (
+    "docs/evidence/qwen38-study/"
+    "2026-09-05-qwen38-dedicated-rank3-g20-runner-domain-tombstone-v1.json"
+)
 
 
 def test_rank3_block_has_fresh_generation_exact_complete_cells_and_is_held() -> None:
@@ -75,3 +79,18 @@ def test_rank3_parity_is_uid_bound_to_tp1_b_server() -> None:
     assert binding["rayjob_uid"] == lane.RAYJOB_UID
     assert binding["service_uid"] == lane.SERVICE_UID
     assert binding["context_length"] == 262144
+
+
+def test_g20_attempt1_runner_failure_is_retry_safe_and_self_digesting() -> None:
+    value = json.loads(G20_TOMBSTONE.read_text())
+    assert value["status"] == "RETRY_SAFE_INFRA_FAILURE"
+    assert value["pod_exit_code"] == 64
+    assert value["plan_created"] is False
+    assert value["claim_created"] is False
+    assert value["model_call_started"] is False
+    assert value["task_instance_created"] is False
+    assert value["session_created"] is False
+    assert value["verifier_started"] is False
+    assert value["retry_allowed"] is True
+    assert value["successor_execution_generation"] == 21
+    assert value["receipt_sha256"] == self_hosted.digest_without(value, "receipt_sha256")
