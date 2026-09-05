@@ -36,6 +36,12 @@ Prefer cross-field and rendered-output invariants over tests that match prose or
 
 After the fix passes, update the living evidence or handoff only when its claims changed. Update a skill only if the lesson will alter future decisions across multiple runs. Remove or replace stale guidance rather than stacking contradictory rules.
 
+When a lesson applies across runs, update
+[`docs/OPERATIONAL_LESSONS.md`](../../docs/OPERATIONAL_LESSONS.md) with the
+failure class, durable decision, enforcing code, and meaningful regression.
+Keep exact workload identities and mutable observations in sanitized receipts,
+not in the prevention map.
+
 Use this incident-closeout gate before scaling or handing off the affected path:
 
 1. Preserve sanitized, immutable evidence of what failed and whether any paid or scored side effect occurred.

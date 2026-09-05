@@ -22,6 +22,11 @@ For the current Qwen3.8-27B/GLM-5.3 easiest-100 pass@4 experiment, read
 historical provenance. Chronological status notes and early example configs are
 context, not authority.
 
+Before modifying a Fleet evaluator, duplicate preflight, acceptance path, or
+dedicated-serving package, read `docs/OPERATIONAL_LESSONS.md`. It is the living
+map from previously observed failure classes to the code, tests, and operator
+rules that prevent recurrence; one-run facts remain in sanitized receipts.
+
 ## Source-of-truth order
 
 When sources disagree, use this order and preserve the disagreement:
@@ -94,6 +99,10 @@ guard and regression test when repository code can enforce it, and update the
 living operator guidance when the decision recurs across runs. If the lesson
 cannot yet be enforced, preserve it as an explicit residual risk and keep the
 relevant scale gate closed.
+
+For a reusable cross-run lesson, update `docs/OPERATIONAL_LESSONS.md` in the
+same closeout change with links to its enforcing code and regression. Do not use
+that index for mutable job state, credentials, or protected evaluation content.
 
 ## Handoff standard
 

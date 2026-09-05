@@ -5,6 +5,11 @@ Fleet blackbox study. It describes the frozen scientific contract and safe
 workflow; it does not claim the campaign is complete and is not blanket launch
 authorization.
 
+Before changing or replacing any part of this path, read
+[`OPERATIONAL_LESSONS.md`](OPERATIONAL_LESSONS.md). It maps prior operational
+failure classes to the guards and regression tests that now define the safe
+boundary.
+
 ## Question and denominator
 
 Evaluate these exact checkpoints on the same frozen 100 historically easiest
