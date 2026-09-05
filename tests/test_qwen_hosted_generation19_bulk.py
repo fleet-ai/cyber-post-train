@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from evals.fleet import qwen_hosted_generation19_bulk as g19
+from evals.fleet import qwen_hosted_generation19_package as package
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -32,3 +33,19 @@ def test_committed_plans_are_held_and_exact() -> None:
         "qwen-b": 192,
     }
     assert all(plan["launch_authorized"] is False for plan in plans.values())
+
+
+def test_held_package_is_whole_task_and_nonpreemptible() -> None:
+    rendered = package.render(ROOT)
+    jobs = [row for row in rendered["items"] if row["kind"] == "Job"]
+    assert len(jobs) == 3
+    for job in jobs:
+        pod = job["spec"]["template"]["spec"]
+        assert pod["priorityClassName"] == "fleet-serve-low"
+        assert pod["preemptionPolicy"] == "Never"
+        assert job["metadata"]["labels"]["kueue.x-k8s.io/queue-name"] == "training-lq"
+    scored = [job for job in jobs if job["metadata"]["name"] != package.PREFLIGHT_JOB]
+    assert all(
+        job["metadata"]["annotations"]["cyber-post-train.fleet.ai/launch-authorized"] == "false"
+        for job in scored
+    )
