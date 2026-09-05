@@ -1,10 +1,11 @@
-"""Render the create-once Kubernetes evaluator Job for dedicated Qwen rank2/a2."""
+"""Render create-once Kubernetes evaluator Jobs for dedicated Qwen rank2."""
 
 # ruff: noqa: E501 -- shell bootstrap paths are intentionally exact.
 
 from __future__ import annotations
 
 import copy
+import os
 from pathlib import Path
 from typing import Any
 
@@ -14,9 +15,17 @@ from evals.fleet import self_hosted
 
 SOURCE = Path("evals/fleet/cluster/qwen38-dedicated-tp1-scored-canary-v2.yaml")
 SOURCE_SHA256 = "sha256:aa299342269f5d7f1ef34fad35965904e1c9349e596444a2269ddd55cd3d89c8"
-NAME = "chris-cyber-q38-opencode11827-ded-tp1-r002-a2-v3"
-EXPERIMENT = "q38-ded-tp1-r002-a2-v3"
 SERVING_BLOCK = "dedicated-qwen-tp1-v3"
+
+
+def _identity(attempt: int) -> tuple[str, str]:
+    if attempt not in (2, 3, 4):
+        raise ValueError("dedicated Qwen v3 attempt must be 2, 3, or 4")
+    return (
+        f"chris-cyber-q38-opencode11827-ded-tp1-r002-a{attempt}-v3",
+        f"q38-ded-tp1-r002-a{attempt}-v3",
+    )
+
 
 BOOTSTRAP = """root=/workspace/cyber-post-train
 mkdir -p "$root/evals/fleet/configs" "$root/evals/fleet/scripts" "$root/docs/evidence/qwen38-study"
@@ -37,24 +46,29 @@ exec "$root/evals/fleet/scripts/run.sh"
 """
 
 
-def render(root: Path) -> dict[str, Any]:
+def render(root: Path, attempt: int = 2) -> dict[str, Any]:
+    name, experiment = _identity(attempt)
     source = root / SOURCE
     if self_hosted.sha256(source.read_bytes()) != SOURCE_SHA256:
         raise ValueError("source evaluator Job template drifted")
     value = yaml.safe_load(source.read_text())
     result = copy.deepcopy(value)
-    result["metadata"]["name"] = NAME
-    result["metadata"]["labels"]["cyber-post-train.fleet.ai/experiment"] = EXPERIMENT
+    result["metadata"]["name"] = name
+    result["metadata"]["labels"]["cyber-post-train.fleet.ai/experiment"] = experiment
     result["metadata"]["annotations"]["cyber-post-train.fleet.ai/serving-block"] = SERVING_BLOCK
     template = result["spec"]["template"]
-    template["metadata"]["labels"]["cyber-post-train.fleet.ai/experiment"] = EXPERIMENT
-    template["spec"]["volumes"][0]["configMap"]["name"] = NAME
+    template["metadata"]["labels"]["cyber-post-train.fleet.ai/experiment"] = experiment
+    template["spec"]["volumes"][0]["configMap"]["name"] = name
     template["spec"]["containers"][0]["args"] = [BOOTSTRAP]
+    template["spec"]["containers"][0].setdefault("env", []).append(
+        {"name": "QWEN_DEDICATED_ATTEMPT", "value": str(attempt)}
+    )
     return result
 
 
 def main() -> int:
-    print(yaml.safe_dump(render(Path.cwd()), sort_keys=False), end="")
+    attempt = int(os.environ.get("QWEN_DEDICATED_ATTEMPT", "2"))
+    print(yaml.safe_dump(render(Path.cwd(), attempt), sort_keys=False), end="")
     return 0
 
 
