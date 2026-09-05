@@ -6,6 +6,7 @@ import pytest
 
 from evals.fleet import glm53_dedicated_v14 as v14
 from evals.fleet import glm53_dedicated_v15 as v15
+from evals.fleet import glm53_dedicated_v15_canary_heartbeat_v1 as heartbeat
 from evals.fleet import glm53_dedicated_v15_canary_release_package_v1 as release_package
 from evals.fleet import glm53_dedicated_v15_live as live
 from evals.fleet import self_hosted
@@ -126,3 +127,19 @@ def test_v15_release_package_binds_pre_admitted_controller() -> None:
     assert "binding.json" in configmap["data"]
     assert job["spec"]["template"]["spec"]["priorityClassName"] == "fleet-infra-quiet"
     assert job["spec"]["template"]["spec"]["preemptionPolicy"] == "Never"
+
+
+def test_v15_heartbeat_is_uid_bound_and_nonpreempting() -> None:
+    value = heartbeat.render(
+        canary_job_uid="11111111-1111-4111-8111-111111111111",
+        server_rayjob_uid="22222222-2222-4222-8222-222222222222",
+    )
+    job = value["object"]
+    pod = job["spec"]["template"]["spec"]
+    assert pod["priorityClassName"] == "fleet-infra-quiet"
+    assert pod["preemptionPolicy"] == "Never"
+    script = pod["containers"][0]["command"][2]
+    compile(script, "heartbeat.py", "exec")
+    assert "ft-run-16335b81" in script
+    assert "11111111-1111-4111-8111-111111111111" in script
+    assert heartbeat.HEARTBEAT.endswith("v15/lifecycle/traffic-stream-1")
