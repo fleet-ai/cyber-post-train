@@ -15,6 +15,12 @@ Do not resubmit, delete, cancel, suspend, unsuspend, reprioritize, scale, patch,
 
 Read [references/terminal-evidence.md](references/terminal-evidence.md) before declaring a run terminal or publishing a receipt.
 
+Treat text search as a read of every matching line. Restrict searches to exact
+known-safe code, config, test, or sanitized-receipt paths and add explicit
+exclusions before widening. Never run a recursive search from a repository
+parent or across raw outputs, runs, mutations, transcripts, benchmark bundles,
+or model artifacts while gathering evidence.
+
 ## Reconcile independent evidence layers
 
 - Query the durable Jobs API, Kubernetes controller object, controller-owned Pods, events, logs, metrics backend, checkpoint store, and run-output markers as independent sources.

@@ -42,6 +42,11 @@ Mutable names, tags, catalog `current` pointers, a Ready Pod, or a dashboard lab
 4. Keep external results sealed until the checkpoint and evaluation protocol are frozen.
 5. Split Fleet data by application, vulnerability family, and task lineage. Sessions from one lineage may not cross train/dev/test boundaries.
 6. Bind every result to the exact checkpoint, tokenizer, chat template, task, environment, prompt, harness, tool schema, verifier, image, budgets, and retry policy required by its protocol.
+7. Treat search output as disclosure. During evidence or experiment operations,
+   search only explicitly named safe source, config, test, or sanitized-receipt
+   paths. Never recursively search a repository parent, raw run/output tree,
+   mutation corpus, transcript store, or benchmark material merely to locate
+   code; a matching line can expose the protected content itself.
 
 ## External-state discipline
 
