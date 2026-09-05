@@ -16,7 +16,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from evals.fleet import self_hosted
+from evals.fleet import exact_pass4_crypto as crypto
 
 CAMPAIGN_SCHEMA = "fleet-exact-easiest100-pass4-campaign-v1"
 EXPECTED_CAMPAIGN_ID = "chris-cyber-q38-glm53-exact-easiest100-pass4-v1"
@@ -188,7 +188,7 @@ def validate_selection(campaign: dict[str, Any], repo_root: Path) -> list[dict[s
     selection = read_object(selection_path)
     if selection.get("schema_version") != SELECTION_SCHEMA:
         raise ValueError("selection schema drifted")
-    if selection.get("selection_sha256") != self_hosted.digest_without(
+    if selection.get("selection_sha256") != crypto.digest_without(
         selection, "selection_sha256"
     ):
         raise ValueError("selection semantic digest mismatch")
@@ -367,7 +367,7 @@ def execution_for(cell_id: str, generation: int) -> dict[str, Any]:
         "cell_id": cell_id,
         "execution_generation": generation,
     }
-    return {**identity, "execution_id": self_hosted.sha256(self_hosted.canonical_json(identity))}
+    return {**identity, "execution_id": crypto.sha256(crypto.canonical_json(identity))}
 
 
 def build_universe(campaign: dict[str, Any], repo_root: Path) -> dict[str, Any]:
@@ -377,7 +377,7 @@ def build_universe(campaign: dict[str, Any], repo_root: Path) -> dict[str, Any]:
         for task in tasks:
             for attempt in campaign["attempts"]:
                 identity = _cell_identity(model, task, attempt)
-                cell_id = self_hosted.sha256(self_hosted.canonical_json(identity))
+                cell_id = crypto.sha256(crypto.canonical_json(identity))
                 cells.append(
                     {
                         **identity,
@@ -406,7 +406,7 @@ def build_universe(campaign: dict[str, Any], repo_root: Path) -> dict[str, Any]:
     }
     universe = {
         **body,
-        "universe_sha256": self_hosted.sha256(self_hosted.canonical_json(body)),
+        "universe_sha256": crypto.sha256(crypto.canonical_json(body)),
     }
     if universe["universe_sha256"] != campaign["expected_universe_sha256"]:
         raise ValueError("expanded universe digest does not match the campaign binding")
@@ -451,7 +451,7 @@ def validate_tombstone(tombstone: dict[str, Any], cell: dict[str, Any]) -> None:
         if tombstone.get(key) != value:
             raise ValueError("tombstone is not a retry-safe pre-model terminal generation")
     _require_sha256(tombstone.get("evidence_receipt_sha256"), "tombstone evidence receipt")
-    if tombstone.get("receipt_sha256") != self_hosted.digest_without(tombstone, "receipt_sha256"):
+    if tombstone.get("receipt_sha256") != crypto.digest_without(tombstone, "receipt_sha256"):
         raise ValueError("tombstone digest mismatch")
 
 

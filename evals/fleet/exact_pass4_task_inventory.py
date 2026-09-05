@@ -20,8 +20,8 @@ from typing import Any
 from urllib.parse import quote, urlencode
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
+from evals.fleet import exact_pass4_crypto as crypto
 from evals.fleet import exact_pass4_universe as exact
-from evals.fleet import self_hosted
 
 FLEET_ORIGIN = "https://orchestrator.fleetai.com"
 FLEET_TEAM_ID = "a1025f0b-ad67-49fc-a023-51800ab43e84"
@@ -70,15 +70,15 @@ class _RejectRedirects(HTTPRedirectHandler):
 
 
 def canonical_json(value: Any) -> bytes:
-    return self_hosted.canonical_json(value)
+    return crypto.canonical_json(value)
 
 
 def sha256(value: bytes) -> str:
-    return self_hosted.sha256(value)
+    return crypto.sha256(value)
 
 
 def digest_without(value: dict[str, Any], field: str) -> str:
-    return self_hosted.digest_without(value, field)
+    return crypto.digest_without(value, field)
 
 
 def _uuid(value: Any, code: str) -> str:

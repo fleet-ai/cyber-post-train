@@ -1,0 +1,69 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: chris-cyber-exact100-pass4-inventory-v1
+  namespace: fleet-train-jobs
+  labels:
+    cyber-post-train.fleet.ai/experiment: exact100-pass4-inventory-v1
+    cyber-post-train.fleet.ai/owner: chris
+    kueue.x-k8s.io/queue-name: training-lq
+spec:
+  activeDeadlineSeconds: 7200
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 604800
+  template:
+    metadata:
+      labels:
+        cyber-post-train.fleet.ai/experiment: exact100-pass4-inventory-v1
+        cyber-post-train.fleet.ai/owner: chris
+        kueue.x-k8s.io/queue-name: training-lq
+    spec:
+      restartPolicy: Never
+      priorityClassName: fleet-serve-low
+      preemptionPolicy: Never
+      nodeSelector:
+        kubernetes.io/arch: amd64
+        workload: fleetai-training-ng-cpu
+      tolerations:
+        - key: workload
+          operator: Equal
+          value: fleetai-training-ng-cpu
+          effect: NoSchedule
+      containers:
+        - name: inventory
+          image: ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
+          command: ["/bin/bash", "/bootstrap/run.sh"]
+          env:
+            - name: PACKAGE_COMMIT
+              valueFrom:
+                configMapKeyRef:
+                  name: chris-cyber-exact100-pass4-inventory-bootstrap-v1
+                  key: package_commit
+            - name: FLEET_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: chris-cyber-opencode-evals-v2
+                  key: FLEET_API_KEY
+            - name: JOB_UID
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.labels['batch.kubernetes.io/controller-uid']
+            - name: POD_UID
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.uid
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {cpu: "1", memory: 1Gi}
+          volumeMounts:
+            - {name: bootstrap, mountPath: /bootstrap, readOnly: true}
+            - {name: workspace, mountPath: /workspace}
+            - {name: sfs, mountPath: /mnt/sfs}
+      volumes:
+        - name: bootstrap
+          configMap:
+            name: chris-cyber-exact100-pass4-inventory-bootstrap-v1
+        - {name: workspace, emptyDir: {sizeLimit: 1Gi}}
+        - {name: sfs, persistentVolumeClaim: {claimName: sfs-shared}}
