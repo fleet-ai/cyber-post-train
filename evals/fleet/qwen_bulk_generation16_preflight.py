@@ -18,7 +18,21 @@ from evals.fleet import self_hosted
 SCHEMA = "fleet-qwen-generation16-preflight-v1"
 
 
+def _stage(output: Path, ordinal: int, name: str) -> None:
+    body = {
+        "schema_version": "fleet-qwen-generation16-preflight-stage-v1",
+        "ordinal": ordinal,
+        "name": name,
+        "prompts_traces_flags_or_scores_included": False,
+    }
+    self_hosted.write_json_once(
+        output.parent / f"STAGE-{ordinal:02d}.json",
+        {**body, "receipt_sha256": self_hosted.digest_without(body, "receipt_sha256")},
+    )
+
+
 def run(plan_path: Path, output: Path) -> dict[str, Any]:
+    _stage(output, 1, "started")
     payload = bulk.load(plan_path)
     plans = payload.get("plans")
     if not isinstance(plans, list) or len(plans) != 2:
@@ -30,6 +44,7 @@ def run(plan_path: Path, output: Path) -> dict[str, Any]:
     claims = [Path(bulk.CLAIM_ROOT) / row["execution_id"] for row in rows]
     if any(path.exists() for path in [*output_roots, *claims]):
         raise RuntimeError("Generation-16 SFS output or execution claim collision")
+    _stage(output, 2, "sfs-clear")
 
     key = os.environ.get("FLEET_API_KEY")
     if not key:
@@ -54,6 +69,7 @@ def run(plan_path: Path, output: Path) -> dict[str, Any]:
             or account.get("team_id") != self_hosted.FLEET_TEAM_ID
         ):
             raise RuntimeError("Generation-16 Fleet team authority drifted")
+        _stage(output, 3, "account-valid")
         for task_key in sorted(by_task):
             sessions = self_hosted._task_sessions(client, task_key)  # noqa: SLF001
             request_count += 1
@@ -66,6 +82,7 @@ def run(plan_path: Path, output: Path) -> dict[str, Any]:
                     collisions += 1
                 if session.get("session_id") == accepted_gate["api_session"]["session_id"]:
                     accepted_matches.append(session)
+        _stage(output, 4, "session-inventory-complete")
         roster_response = client.get("https://inference.flt.build/v1/models")
         request_count += 1
         roster_response.raise_for_status()
@@ -77,6 +94,7 @@ def run(plan_path: Path, output: Path) -> dict[str, Any]:
     ]
     if len(selected) != 1 or collisions != 0 or len(accepted_matches) != 1:
         raise RuntimeError("Generation-16 live duplicate or route gate failed")
+    _stage(output, 5, "route-and-collision-gates-clear")
     accepted = accepted_matches[0]
     projected_model = accepted.get("model")
     verifier = accepted.get("verifier_execution") or {}
@@ -118,7 +136,22 @@ def main() -> int:
     parser.add_argument("--plan", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    run(args.plan, args.output)
+    try:
+        run(args.plan, args.output)
+    except Exception as exc:
+        body = {
+            "schema_version": "fleet-qwen-generation16-preflight-failure-v1",
+            "status": "FAILED",
+            "error_type": type(exc).__name__,
+            "error_sha256": self_hosted.sha256(str(exc).encode()),
+            "prompts_traces_flags_or_scores_included": False,
+            "credentials_included": False,
+        }
+        self_hosted.write_json_once(
+            args.output.parent / "FAILED.json",
+            {**body, "receipt_sha256": self_hosted.digest_without(body, "receipt_sha256")},
+        )
+        raise
     return 0
 
 
