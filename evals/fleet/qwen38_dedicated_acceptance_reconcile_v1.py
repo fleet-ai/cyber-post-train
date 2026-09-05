@@ -11,12 +11,23 @@ from evals.fleet import qwen38_dedicated_scored_canary_v1 as canary
 from evals.fleet import self_hosted
 
 SOURCE_TERMINAL_SHA256 = "sha256:68fa8b63d14d26e8bb7f48f4bd103eafb5ac0165545c72e3d1765d7609aeb746"
+HISTORICAL_NETWORK = "q38-ded-tp1-r002-a1-v2"
+
+
+def historical_source_plan(root: Path) -> dict:
+    """Reconstruct attempt 1 without changing current successor planning."""
+    plan = canary.build_plan(root, 1)
+    config = plan["config"]
+    config["execution"]["network"] = HISTORICAL_NETWORK
+    config["config_sha256"] = self_hosted.digest_without(config, "config_sha256")
+    plan["plan_sha256"] = self_hosted.digest_without(plan, "plan_sha256")
+    return plan
 
 
 def reconcile(root: Path, key: str, *, job_uid: str, pod_uid: str) -> dict:
     uuid.UUID(job_uid)
     uuid.UUID(pod_uid)
-    plan = canary.build_plan(root)
+    plan = historical_source_plan(root)
     output = Path(plan["output_root"])
     accepted_path, terminal_path = output / "ACCEPTED.json", output / "TERMINAL.json"
     if accepted_path.exists() or terminal_path.exists():
