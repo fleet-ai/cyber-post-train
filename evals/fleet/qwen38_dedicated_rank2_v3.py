@@ -101,12 +101,13 @@ def build_plan(root: Path, attempt: int = 2) -> dict[str, Any]:
     return plan
 
 
-def _require_previous_accepted(attempt: int) -> None:
+def _require_previous_accepted(attempt: int, jobs_root: Path = Path("/mnt/sfs/jobs")) -> None:
     if attempt == 2:
         return
-    previous_root = Path(f"/mnt/sfs/jobs/{RUN_IDS[attempt - 1]}")
+    previous_root = jobs_root / RUN_IDS[attempt - 1]
     accepted = json.loads((previous_root / "ACCEPTED.json").read_text())
     terminal = json.loads((previous_root / "TERMINAL.json").read_text())
+    validated = json.loads((previous_root / "ACCEPTED_VALIDATED.json").read_text())
     if (
         accepted.get("receipt_sha256") != self_hosted.digest_without(accepted, "receipt_sha256")
         or accepted.get("accepted") is not True
@@ -115,6 +116,24 @@ def _require_previous_accepted(attempt: int) -> None:
         or terminal.get("receipt_sha256") != self_hosted.digest_without(terminal, "receipt_sha256")
         or terminal.get("status") != "ACCEPTED"
         or terminal.get("accepted_receipt_sha256") != accepted.get("receipt_sha256")
+        or validated.get("receipt_sha256")
+        != self_hosted.digest_without(validated, "receipt_sha256")
+        or validated.get("schema_version") != "fleet-qwen38-dedicated-tp1-accepted-validated-v2"
+        or validated.get("status") != "ACCEPTED_VALIDATED"
+        or validated.get("accepted") is not True
+        or validated.get("credited") is not True
+        or validated.get("retry_allowed") is not False
+        or validated.get("attempt") != attempt - 1
+        or validated.get("serving_block") != SERVING_BLOCK
+        or validated.get("cell_id") != accepted.get("cell_id")
+        or validated.get("execution_id") != accepted.get("execution_id")
+        or validated.get("session_id") != accepted.get("session_id")
+        or validated.get("verifier_execution_id") != accepted.get("verifier_execution_id")
+        or validated.get("all_artifact_byte_digests_matched") is not True
+        or validated.get("fresh_authoritative_session_reconciled") is not True
+        or validated.get("fleet_api_mutations") != 0
+        or validated.get("prompts_or_traces_included") is not False
+        or validated.get("scores_included") is not False
     ):
         raise RuntimeError("previous dedicated Qwen v3 attempt is not accepted")
 
