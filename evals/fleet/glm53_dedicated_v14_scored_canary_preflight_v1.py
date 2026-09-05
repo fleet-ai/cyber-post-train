@@ -17,7 +17,7 @@ from evals.fleet import hosted_glm_exact_bulk_v1 as source
 from evals.fleet import self_hosted
 
 SCHEMA = "fleet-glm53-dedicated-v14-scored-canary-preflight-v1"
-JOB_NAME = "chris-glm53-dedicated-v14-r051-preflight-v6"
+JOB_NAME = "chris-glm53-dedicated-v14-r051-preflight-v7"
 CONFIGMAP_NAME = JOB_NAME + "-run"
 OUTPUT_PATH = Path("/mnt/sfs/jobs") / JOB_NAME / "PREPARED.json"
 
