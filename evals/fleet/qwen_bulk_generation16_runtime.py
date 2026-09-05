@@ -1,4 +1,4 @@
-"""Runtime adapter and immutable G15 gate for Qwen Generation-16 bulk."""
+"""Runtime adapter and immutable G15 gate for Qwen Generation-17 bulk."""
 
 from __future__ import annotations
 
@@ -80,7 +80,7 @@ def runtime_gate(plan: dict[str, Any]) -> None:
         or package_commit is None
         or authority.COMMIT_RE.fullmatch(package_commit) is None
     ):
-        raise RuntimeError("Generation-16 runtime environment gate is incomplete")
+        raise RuntimeError("Generation-17 runtime environment gate is incomplete")
     gate = authority.load(Path(plan["repo_root"]) / authority.G15_GATE_PATH)
     validate_g15_gate(gate)
     if gate["receipt_sha256"] != expected_digest:
@@ -94,7 +94,7 @@ def runtime_gate(plan: dict[str, Any]) -> None:
         or plan["execution"]["endpoint_lease"]["maximum_streams"] != 2
         or plan["execution"]["attempts_per_task_sequential"] is not True
     ):
-        raise RuntimeError("Generation-16 runtime partition gate drifted")
+        raise RuntimeError("Generation-17 runtime partition gate drifted")
 
 
 def main() -> int:

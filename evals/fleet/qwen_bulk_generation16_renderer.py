@@ -1,4 +1,4 @@
-"""Render exactly two create-once Qwen G16 bulk controller Jobs."""
+"""Render exactly two create-once Qwen G17 bulk controller Jobs."""
 
 from __future__ import annotations
 
@@ -75,7 +75,7 @@ def validate_runtime_dependencies(
     missing_configmaps = required_configmaps - available_configmaps - declared_configmaps
     if missing_secrets or missing_configmaps:
         raise ValueError(
-            "Generation-16 runtime dependencies are absent: "
+            "Generation-17 runtime dependencies are absent: "
             f"secrets={sorted(missing_secrets)!r}, "
             f"configmaps={sorted(missing_configmaps)!r}"
         )
@@ -83,7 +83,7 @@ def validate_runtime_dependencies(
 
 def _kubectl_names(kind: str, namespace: str) -> set[str]:
     if kind not in {"secrets", "configmaps"} or NAMESPACE_RE.fullmatch(namespace) is None:
-        raise ValueError("Generation-16 dependency inventory request is invalid")
+        raise ValueError("Generation-17 dependency inventory request is invalid")
     result = subprocess.run(
         ["kubectl", "-n", namespace, "get", kind, "-o", "name"],
         check=True,
@@ -94,7 +94,7 @@ def _kubectl_names(kind: str, namespace: str) -> set[str]:
     names: set[str] = set()
     for line in result.stdout.splitlines():
         if line and not line.startswith(prefix):
-            raise ValueError("Generation-16 dependency inventory output drifted")
+            raise ValueError("Generation-17 dependency inventory output drifted")
         if line:
             names.add(line.removeprefix(prefix))
     return names
@@ -113,7 +113,7 @@ def validate_live_runtime_dependencies(
 def render(root: Path, inventory: dict[str, Any], package_commit: str) -> dict[str, Any]:
     bulk.validate_inventory_gate(inventory, root)
     if bulk.COMMIT_RE.fullmatch(package_commit) is None:
-        raise ValueError("Generation-16 package commit must be immutable")
+        raise ValueError("Generation-17 package commit must be immutable")
     gate = bulk.load(root / bulk.G15_GATE_PATH)
     validate_g15_gate(gate)
     built = package.build_package(root)
@@ -160,11 +160,11 @@ def render(root: Path, inventory: dict[str, Any], package_commit: str) -> dict[s
                 if env.get("name") == "FLEET_API_KEY":
                     env["valueFrom"]["secretKeyRef"]["name"] = bulk.FLEET_API_KEY_SECRET
         job["metadata"]["labels"]["cyber-post-train.fleet.ai/experiment"] = (
-            "qwen-exact100-g16"
+            "qwen-exact100-g17"
         )
         job["spec"]["backoffLimit"] = 0
         pod_labels = job["spec"]["template"]["metadata"]["labels"]
-        pod_labels["cyber-post-train.fleet.ai/experiment"] = "qwen-exact100-g16"
+        pod_labels["cyber-post-train.fleet.ai/experiment"] = "qwen-exact100-g17"
         items.append(job)
     return {"apiVersion": "v1", "kind": "List", "items": items}
 

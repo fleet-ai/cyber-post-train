@@ -37,7 +37,12 @@ def test_exact_hosted_partition_excludes_accepted_and_dedicated_cells() -> None:
     assert len(rows) == len(identities) == 395
     assert not any(rank == 2 for rank, _attempt in identities)
     assert (4, 1) not in identities
-    assert all(row["execution_generation"] == 16 for row in rows)
+    assert all(row["execution_generation"] == 17 for row in rows)
+    assert {plan["job_name"] for plan in plans.values()} == {
+        "chris-q38-ac-exact100-g17-a199-v1",
+        "chris-q38-ac-exact100-g17-b196-v1",
+    }
+    assert all("-g17-" in plan["sfs_root"] for plan in plans.values())
     assert all(
         plan["execution"]["endpoint_lease"]["maximum_streams"] == 2
         for plan in plans.values()

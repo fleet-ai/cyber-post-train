@@ -1,4 +1,4 @@
-"""Exact two-controller Qwen bulk successor after the accepted G15 canary.
+"""Exact two-controller Qwen G17 successor after the accepted G15 canary.
 
 This module is deliberately Qwen-only.  Rank 2 is reserved in its entirety for
 the dedicated-serving block, and the accepted rank-4/attempt-1 G15 cell is
@@ -15,16 +15,16 @@ from evals.fleet import exact_pass4_bulk_v3 as base
 from evals.fleet import exact_pass4_universe as exact
 from evals.fleet import self_hosted
 
-SPEC_SCHEMA = "fleet-qwen-generation16-bulk-controller-spec-v1"
-PLAN_SCHEMA = "fleet-qwen-generation16-bulk-controller-plan-v1"
+SPEC_SCHEMA = "fleet-qwen-generation17-bulk-controller-spec-v1"
+PLAN_SCHEMA = "fleet-qwen-generation17-bulk-controller-plan-v1"
 MODULE_PATH = "evals/fleet/qwen_bulk_generation16.py"
 RUNTIME_PATH = "evals/fleet/qwen_bulk_generation16_runtime.py"
 RUN_PATH = "evals/fleet/scripts/run_qwen_bulk_generation16.sh"
-MANIFEST_PATH = "evals/fleet/cluster/qwen-bulk-generation16.yaml"
+MANIFEST_PATH = "evals/fleet/cluster/qwen-bulk-generation17.yaml"
 G15_GATE_PATH = (
     "docs/evidence/qwen38-study/2026-09-05-qwen38-generation15-accepted-gate-v1.json"
 )
-EXECUTION_GENERATION = 16
+EXECUTION_GENERATION = 17
 FLEET_API_KEY_SECRET = "chris-cyber-opencode-evals-v2"
 CLAIM_ROOT = base.CLAIM_ROOT
 LEASE_ROOT = base.LEASE_ROOT
@@ -37,8 +37,8 @@ validate_inventory_gate = base.validate_inventory_gate
 CONTROLLERS = {
     "qwen-a": {
         "model": "qwen3.8-27b",
-        "job_name": "chris-q38-ac-exact100-g16-a199-v1",
-        "configmap_name": "chris-q38-ac-exact100-g16-a199-run-v1",
+        "job_name": "chris-q38-ac-exact100-g17-a199-v1",
+        "configmap_name": "chris-q38-ac-exact100-g17-a199-run-v1",
         "serving_block": "qwen-hosted-autocontinue-v1",
         "full_ranks": list(range(1, 98, 2)),
         "partial_attempts": {4: [2, 3, 4]},
@@ -46,8 +46,8 @@ CONTROLLERS = {
     },
     "qwen-b": {
         "model": "qwen3.8-27b",
-        "job_name": "chris-q38-ac-exact100-g16-b196-v1",
-        "configmap_name": "chris-q38-ac-exact100-g16-b196-run-v1",
+        "job_name": "chris-q38-ac-exact100-g17-b196-v1",
+        "configmap_name": "chris-q38-ac-exact100-g17-b196-run-v1",
         "serving_block": "qwen-hosted-autocontinue-v1",
         "full_ranks": [*range(6, 99, 2), 99, 100],
         "partial_attempts": {},
@@ -55,7 +55,7 @@ CONTROLLERS = {
     },
 }
 SPEC_PATHS = {
-    key: f"evals/fleet/configs/qwen-bulk-generation16-{key}.json" for key in CONTROLLERS
+    key: f"evals/fleet/configs/qwen-bulk-generation17-{key}.json" for key in CONTROLLERS
 }
 
 
@@ -67,7 +67,7 @@ def _selected_keys(controller: str) -> list[tuple[str, int, int]]:
         for attempt in partial.get(rank, [1, 2, 3, 4]):
             selected.append((row["model"], rank, attempt))
     if len(selected) != row["cell_count"] or len(selected) != len(set(selected)):
-        raise ValueError("Generation-16 controller partition drifted")
+        raise ValueError("Generation-17 controller partition drifted")
     return selected
 
 
@@ -136,14 +136,14 @@ def build_spec(controller: str, root: Path) -> dict[str, Any]:
 def build_plan(spec: dict[str, Any], root: Path) -> dict[str, Any]:
     controller = spec["controller"]
     if spec != build_spec(controller, root):
-        raise ValueError("Generation-16 source spec drifted")
+        raise ValueError("Generation-17 source spec drifted")
     selected = exact.validate_selection(exact.read_object(root / base.CAMPAIGN_PATH), root)
     tasks = {row["rank"]: row for row in selected}
     attempts: list[dict[str, Any]] = []
     for ordinal, cell in enumerate(_compact_cells(controller, root), 1):
         task = tasks[cell["selection_rank"]]
         run_id = (
-            f"chris-q38-ac-g16-{controller[-1]}-r{cell['selection_rank']:03d}-"
+            f"chris-q38-ac-g17-{controller[-1]}-r{cell['selection_rank']:03d}-"
             f"a{cell['attempt']}-{cell['execution_id'][7:15]}"
         )
         attempts.append(
@@ -188,13 +188,13 @@ def validate_all(root: Path) -> dict[str, dict[str, Any]]:
     for controller, path in SPEC_PATHS.items():
         spec = load(root / path)
         if spec != build_spec(controller, root):
-            raise ValueError("Generation-16 immutable spec drifted")
+            raise ValueError("Generation-17 immutable spec drifted")
         plan = build_plan(spec, root)
         plans[controller] = plan
         for row in plan["attempts"]:
             identity = (row["selection_rank"], row["attempt"])
             if identity in identities:
-                raise ValueError("Generation-16 partitions overlap")
+                raise ValueError("Generation-17 partitions overlap")
             identities.add(identity)
     expected = {
         (rank, attempt)
@@ -206,7 +206,7 @@ def validate_all(root: Path) -> dict[str, dict[str, Any]]:
         "qwen-a": 199,
         "qwen-b": 196,
     }:
-        raise ValueError("Generation-16 coverage drifted")
+        raise ValueError("Generation-17 coverage drifted")
     return plans
 
 
@@ -246,7 +246,7 @@ def build_runtime_plan(
     harness = copy.deepcopy(template["harness"])
     harness["compaction_headroom_tokens"] = compact["treatment"]["compaction_headroom_tokens"]
     body = {
-        "schema_version": "fleet-qwen-generation16-bulk-executable-plan-v1",
+        "schema_version": "fleet-qwen-generation17-bulk-executable-plan-v1",
         "controller": controller,
         "campaign_id": compact["job_name"],
         "source_job_id": compact["job_name"],
@@ -275,5 +275,5 @@ def build_runtime_plan(
         or settings.get("compaction") != {"auto": True, "reserved": 20000}
         or "plugin" in settings
     ):
-        raise ValueError("Generation-16 harness treatment drifted")
+        raise ValueError("Generation-17 harness treatment drifted")
     return plan

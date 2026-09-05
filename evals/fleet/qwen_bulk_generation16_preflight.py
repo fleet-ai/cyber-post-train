@@ -1,4 +1,4 @@
-"""Content-free SFS and Fleet-session duplicate preflight for Qwen G16."""
+"""Content-free SFS and Fleet-session duplicate preflight for Qwen G17."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from evals.fleet import qwen_bulk_generation16 as bulk
 from evals.fleet import qwen_bulk_generation16_runtime as runtime
 from evals.fleet import self_hosted
 
-SCHEMA = "fleet-qwen-generation16-preflight-v1"
+SCHEMA = "fleet-qwen-generation17-preflight-v1"
 SESSION_PAGE_SIZE = 500
 SESSION_WORKERS = 8
 SESSION_REQUEST_TIMEOUT_SECONDS = 60
@@ -35,7 +35,7 @@ TRANSIENT_GET_STATUS_CODES = {429, 502, 503, 504}
 
 def _stage(output: Path, ordinal: int, name: str) -> None:
     body = {
-        "schema_version": "fleet-qwen-generation16-preflight-stage-v1",
+        "schema_version": "fleet-qwen-generation17-preflight-stage-v1",
         "ordinal": ordinal,
         "name": name,
         "prompts_traces_flags_or_scores_included": False,
@@ -50,7 +50,7 @@ def load_projected_envelope(path: Path) -> dict[str, Any]:
     raw = path.read_bytes()
     payload = json.loads(raw)
     if not isinstance(payload, dict) or raw != self_hosted.canonical_json(payload) + b"\n":
-        raise RuntimeError("Generation-16 preflight envelope drifted")
+        raise RuntimeError("Generation-17 preflight envelope drifted")
     return payload
 
 
@@ -63,7 +63,7 @@ async def _task_sessions_for_key(
     retry_delay_seconds: float,
 ) -> list[dict[str, Any]]:
     if not isinstance(task_key, str) or not task_key:
-        raise RuntimeError("Generation-16 task key is empty")
+        raise RuntimeError("Generation-17 task key is empty")
     sessions: list[dict[str, Any]] = []
     offset = 0
     while True:
@@ -77,7 +77,7 @@ async def _task_sessions_for_key(
                 response.raise_for_status()
                 value = response.json()
                 if not isinstance(value, dict):
-                    raise RuntimeError("Generation-16 task session response drifted")
+                    raise RuntimeError("Generation-17 task session response drifted")
                 page = value
                 break
             except TRANSIENT_GET_ERRORS:
@@ -92,15 +92,15 @@ async def _task_sessions_for_key(
                     raise
                 await asyncio.sleep(retry_delay_seconds)
         if page is None:
-            raise RuntimeError("Generation-16 task session retry state drifted")
+            raise RuntimeError("Generation-17 task session retry state drifted")
         rows = page.get("sessions") or []
         if not isinstance(rows, list):
-            raise RuntimeError("Generation-16 task session page drifted")
+            raise RuntimeError("Generation-17 task session page drifted")
         sessions.extend(row for row in rows if isinstance(row, dict))
         if page.get("has_more") is False:
             return sessions
         if not rows:
-            raise RuntimeError("Generation-16 task session pagination stalled")
+            raise RuntimeError("Generation-17 task session pagination stalled")
         offset += len(rows)
 
 
@@ -113,7 +113,7 @@ async def _collect_task_sessions_async(
     retry_delay_seconds: float = SESSION_RETRY_DELAY_SECONDS,
 ) -> tuple[list[dict[str, Any]], int]:
     if not task_keys or any(not isinstance(key, str) or not key for key in task_keys):
-        raise RuntimeError("Generation-16 task-key inventory is invalid")
+        raise RuntimeError("Generation-17 task-key inventory is invalid")
     counter = [0]
     semaphore = asyncio.Semaphore(SESSION_WORKERS)
     limits = httpx.Limits(
@@ -142,7 +142,7 @@ async def _collect_task_sessions_async(
                     )
                 )
     except TimeoutError as exc:
-        raise RuntimeError("Generation-16 task session inventory exceeded deadline") from exc
+        raise RuntimeError("Generation-17 task session inventory exceeded deadline") from exc
     return [session for page in pages for session in page], counter[0]
 
 
@@ -157,14 +157,14 @@ def run(plan_path: Path, output: Path) -> dict[str, Any]:
     payload = load_projected_envelope(plan_path)
     plans = payload.get("plans")
     if not isinstance(plans, list) or len(plans) != 2:
-        raise RuntimeError("Generation-16 preflight plan envelope drifted")
+        raise RuntimeError("Generation-17 preflight plan envelope drifted")
     rows = [row for plan in plans for row in plan.get("attempts", [])]
     if len(rows) != 395 or len({row["execution_id"] for row in rows}) != 395:
-        raise RuntimeError("Generation-16 preflight cell universe drifted")
+        raise RuntimeError("Generation-17 preflight cell universe drifted")
     output_roots = [Path(plan["sfs_root"]) for plan in plans]
     claims = [Path(bulk.CLAIM_ROOT) / row["execution_id"] for row in rows]
     if any(path.exists() for path in [*output_roots, *claims]):
-        raise RuntimeError("Generation-16 SFS output or execution claim collision")
+        raise RuntimeError("Generation-17 SFS output or execution claim collision")
     _stage(output, 2, "sfs-clear")
 
     key = os.environ.get("FLEET_API_KEY")
@@ -189,7 +189,7 @@ def run(plan_path: Path, output: Path) -> dict[str, Any]:
             account.get("team_name") != "fleet"
             or account.get("team_id") != self_hosted.FLEET_TEAM_ID
         ):
-            raise RuntimeError("Generation-16 Fleet team authority drifted")
+            raise RuntimeError("Generation-17 Fleet team authority drifted")
         _stage(output, 3, "account-valid")
         roster_response = client.get("https://inference.flt.build/v1/models")
         request_count += 1
@@ -212,7 +212,7 @@ def run(plan_path: Path, output: Path) -> dict[str, Any]:
         if isinstance(row, dict) and row.get("id") == "qwen3.8-27b"
     ]
     if len(selected) != 1 or collisions != 0 or len(accepted_matches) != 1:
-        raise RuntimeError("Generation-16 live duplicate or route gate failed")
+        raise RuntimeError("Generation-17 live duplicate or route gate failed")
     _stage(output, 5, "route-and-collision-gates-clear")
     accepted = accepted_matches[0]
     projected_model = accepted.get("model")
@@ -260,7 +260,7 @@ def main() -> int:
         run(args.plan, args.output)
     except Exception as exc:
         body = {
-            "schema_version": "fleet-qwen-generation16-preflight-failure-v1",
+            "schema_version": "fleet-qwen-generation17-preflight-failure-v1",
             "status": "FAILED",
             "error_type": type(exc).__name__,
             "error_sha256": self_hosted.sha256(str(exc).encode()),

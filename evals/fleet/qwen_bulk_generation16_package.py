@@ -1,4 +1,4 @@
-"""Build the split immutable package for the two Qwen G16 controllers."""
+"""Build the split immutable package for the two Qwen G17 controllers."""
 
 from __future__ import annotations
 
@@ -8,10 +8,10 @@ from typing import Any
 from evals.fleet import exact_pass4_bulk_package_v3 as prior
 from evals.fleet import qwen_bulk_generation16 as bulk
 
-SCHEMA = "fleet-qwen-generation16-bulk-split-package-v1"
-CORE_A_NAME = "chris-q38-g16-runtime-core-a-v1"
-CORE_B_NAME = "chris-q38-g16-runtime-core-b-v1"
-CORE_C_NAME = "chris-q38-g16-runtime-core-c-v1"
+SCHEMA = "fleet-qwen-generation17-bulk-split-package-v1"
+CORE_A_NAME = "chris-q38-g17-runtime-core-a-v1"
+CORE_B_NAME = "chris-q38-g17-runtime-core-b-v1"
+CORE_C_NAME = "chris-q38-g17-runtime-core-c-v1"
 CORE_NAMES = (CORE_A_NAME, CORE_B_NAME, CORE_C_NAME)
 CORE_A_PATHS = prior.CORE_A_PATHS
 CORE_B_PATHS = prior.CORE_B_PATHS
@@ -69,7 +69,7 @@ def build_package(root: Path) -> dict[str, Any]:
     configmaps = {name: prior._configmap(name, data) for name, data in payloads.items()}  # noqa: SLF001
     sizes = {name: prior._size(value) for name, value in configmaps.items()}  # noqa: SLF001
     if any(size >= prior.PACKAGE_OBJECT_LIMIT for size in sizes.values()):
-        raise ValueError("Generation-16 package exceeds ConfigMap safety budget")
+        raise ValueError("Generation-17 package exceeds ConfigMap safety budget")
     all_objects = [objects[name] for name in sorted(objects)]
     return {
         "schema_version": SCHEMA,

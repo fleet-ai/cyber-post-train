@@ -17,20 +17,20 @@ bootstrap, destination = Path(bootstrap_path), Path(destination_path)
 manifest = json.loads(Path(manifest_path).read_text())
 canonical = lambda value: json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
 sha = lambda raw: "sha256:" + hashlib.sha256(raw).hexdigest()
-if (manifest.get("schema_version") != "fleet-qwen-generation16-bulk-split-package-v1"
+if (manifest.get("schema_version") != "fleet-qwen-generation17-bulk-split-package-v1"
     or manifest.get("launch_authorized") is not True
     or manifest.get("release_included") is not True
     or manifest.get("aggregate_sha256") != expected
     or manifest.get("aggregate_sha256") != sha(canonical(manifest.get("objects")))):
-    raise SystemExit("Generation-16 mounted package manifest drifted")
+    raise SystemExit("Generation-17 mounted package manifest drifted")
 for obj in manifest["objects"]:
     body = {k: v for k, v in obj.items() if k != "payload_sha256"}
     if obj.get("payload_sha256") != sha(canonical(body)):
-        raise SystemExit("Generation-16 mounted object manifest drifted")
+        raise SystemExit("Generation-17 mounted object manifest drifted")
     for entry in obj["entries"]:
         raw = (bootstrap / entry["data_key"]).read_bytes()
         if len(raw) != entry["bytes"] or sha(raw) != entry["sha256"]:
-            raise SystemExit("Generation-16 mounted payload drifted")
+            raise SystemExit("Generation-17 mounted payload drifted")
         target = destination / entry["source_path"]
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(raw)
