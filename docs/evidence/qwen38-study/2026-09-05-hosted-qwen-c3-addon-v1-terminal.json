@@ -1,0 +1,62 @@
+{
+  "schema_version": "fleet-hosted-qwen-c3-addon-terminal-v1",
+  "status": "REJECTED_NON_SCORED",
+  "classification": "structured_tool_argument_contract_failed_under_addon_load",
+  "observed_at_utc": "2026-09-05T22:00:00Z",
+  "package": {
+    "commit": "be54ceae4c22e8331f289018ffe105e9b6da85af",
+    "sha256": "sha256:bb2c2ae69ea577f4563e97137963a7bf5187b55b38466cf1af26ff67a8c22822"
+  },
+  "kubernetes": {
+    "namespace": "fleet-train-jobs",
+    "job_name": "chris-cyber-hosted-q38-c3-addon-v1",
+    "job_uid": "c6a6877a-6226-453f-97d2-ecf1c93ddacb",
+    "pod_name": "chris-cyber-hosted-q38-c3-addon-v1-z58zr",
+    "pod_uid": "e644fd64-9e79-4f07-baec-4e46660e4a0e",
+    "configmap_uid": "20b144ef-3932-474d-812d-1733f9247b82",
+    "workload_uid": "d6cc6794-099a-42ae-9e04-2a5bc098eb40",
+    "job_created_at_utc": "2026-09-05T21:59:24Z",
+    "pod_started_at_utc": "2026-09-05T21:59:25Z",
+    "pod_finished_at_utc": "2026-09-05T21:59:29Z",
+    "pod_exit_code": 1,
+    "pod_restarts": 0,
+    "job_terminal_reason": "BackoffLimitExceeded"
+  },
+  "source_terminal": {
+    "path": "/mnt/sfs/jobs/chris-cyber-hosted-q38-c3-addon-v1/TERMINAL.json",
+    "file_sha256": "sha256:65b0a64048c703b39c6c619f0d52f62a4effa9e3db373d48cc8af627d001d7b7",
+    "receipt_sha256": "sha256:3dc919446989f73b15271ade21e7c07e2ccfc34ef18b76721b94385216cd47d4",
+    "failure_code": "completion_submit_report_arguments_mismatch"
+  },
+  "interpretation": {
+    "exact_model_identity_check_passed_before_failure": true,
+    "exact_forced_tool_name_check_passed_before_failure": true,
+    "exact_submit_report_argument_schema_check_passed": false,
+    "capacity_gate_passed": false,
+    "hosted_qwen_stream_cap": 2,
+    "scored_c3_successor_authorized": false,
+    "automatic_retry_allowed": false,
+    "further_hosted_concurrency_probes_allowed": false
+  },
+  "scientific_effect": {
+    "task_instance_calls": 0,
+    "session_calls": 0,
+    "scoring_calls": 0,
+    "verifier_calls": 0,
+    "scored_rollouts_created": 0
+  },
+  "postcondition": {
+    "endpoint_slots": ["busy", "busy", "free"],
+    "addon_slot_released": true,
+    "g19_a_accepted_count": 3,
+    "g19_b_accepted_count": 1,
+    "g19_controllers_unchanged": true
+  },
+  "privacy": {
+    "credentials_included": false,
+    "request_or_response_bodies_included": false,
+    "tool_arguments_included": false,
+    "prompts_traces_flags_or_scores_included": false
+  },
+  "receipt_sha256": "sha256:45bd721121dc85bff29f9854dd155de4404a88bbc88772db58bac6c24c0d9542"
+}
