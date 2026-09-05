@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -53,3 +54,35 @@ def test_rank97_parity_is_exact_uid_bound() -> None:
     assert value["receipt_sha256"] == lane.PARITY_SHA256
     assert value["receipt_sha256"] == self_hosted.digest_without(value, "receipt_sha256")
     assert value["endpoint"]["server_binding"]["service_uid"] == lane.SERVICE_UID
+
+
+def test_rank97_release_requires_complete_fresh_four_cell_transfer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    release = {
+        "schema_version": "fleet-qwen38-dedicated-rank97-whole-task-release-v1",
+        "status": "RELEASED_TO_DEDICATED",
+        "selection_rank": 97,
+        "cell_ids": [lane.EXPECTED_IDENTITIES[index][0] for index in (1, 2, 3, 4)],
+        "execution_ids": [lane.EXPECTED_IDENTITIES[index][1] for index in (1, 2, 3, 4)],
+        "serving_block": lane.SERVING_BLOCK,
+        "prior_owner": "qwen-a-generation19-v4",
+        "single_job_four_claim_reservation_required": True,
+        "fresh_global_ledger_clear": True,
+        "fresh_authoritative_sessions_clear": True,
+        "claims_clear": True,
+        "output_roots_clear": True,
+        "prompts_traces_flags_or_scores_included": False,
+    }
+    release["receipt_sha256"] = self_hosted.digest_without(release, "receipt_sha256")
+    path = tmp_path / "release.json"
+    path.write_text(json.dumps(release))
+    monkeypatch.setenv("QWEN_RANK97_RELEASE_PATH", str(path))
+    plans = lane._released_plans(ROOT)
+    assert len(plans) == 4
+    assert all(plan["launch_authorized"] is True for plan in plans)
+    release["claims_clear"] = False
+    release["receipt_sha256"] = self_hosted.digest_without(release, "receipt_sha256")
+    path.write_text(json.dumps(release))
+    with pytest.raises(RuntimeError, match="release receipt drifted"):
+        lane._released_plans(ROOT)

@@ -30,7 +30,7 @@ install -m 0644 /bootstrap/legacy.py "$root/evals/fleet/qwen38_dedicated_scored_
 install -m 0644 /bootstrap/lane.py "$root/evals/fleet/qwen38_dedicated_rank97_bundle_v1.py"
 install -m 0644 /bootstrap/parity.json "$root/docs/evidence/qwen38-study/2026-09-05-qwen38-dedicated-tp1-c-v1-actual-opencode-parity.json"
 install -m 0644 /bootstrap/campaign.json "$root/evals/fleet/configs/q38-glm53-exact-easiest100-pass4-campaign-v1.json"
-install -m 0644 /bootstrap/source.json "$root/evals/fleet/configs/qwen-hosted-generation19-qwen-a-v3.json"
+install -m 0644 /bootstrap/source.json "$root/evals/fleet/configs/qwen-hosted-generation19-qwen-a-v4.json"
 install -m 0644 /bootstrap/Dockerfile.opencode "$root/evals/fleet/Dockerfile.opencode"
 install -m 0644 /bootstrap/fixed_proxy.py "$root/evals/fleet/fixed_proxy.py"
 install -m 0755 /bootstrap/run.sh "$root/evals/fleet/scripts/run_qwen38_dedicated_rank97_bundle_v1.sh"
@@ -72,7 +72,7 @@ def configmap_data(root: Path, release_path: Path) -> dict[str, str]:
         ),
         "campaign.json": root
         / ("evals/fleet/configs/q38-glm53-exact-easiest100-pass4-campaign-v1.json"),
-        "source.json": root / "evals/fleet/configs/qwen-hosted-generation19-qwen-a-v3.json",
+        "source.json": root / "evals/fleet/configs/qwen-hosted-generation19-qwen-a-v4.json",
         "Dockerfile.opencode": root / "evals/fleet/Dockerfile.opencode",
         "fixed_proxy.py": root / "evals/fleet/fixed_proxy.py",
         "run.sh": root / RUN_SCRIPT,
