@@ -1,0 +1,39 @@
+{
+  "schema": "fleet_platform_v2_cyber_import_canary_observation_v1",
+  "observed_at": "2026-09-05T02:47:17.762174Z",
+  "source": {
+    "job_id": "a62dd51f-a52b-4941-8207-4679e4b25b51",
+    "task_count": 160,
+    "manifest_digest": "sha256:fb09668f8de77e6baee37dc1e3162a7617ca9a0a450da9ca53422c17bfbc942a"
+  },
+  "destination": {
+    "namespace": "gentle-ember-ledger",
+    "repository": "fleet-cyber-a62-frozen",
+    "visibility": "private"
+  },
+  "deployed_contract": {
+    "protocol": "fleet.legacy-task-import.v2",
+    "exact_task_version_selector": false
+  },
+  "canaries": [
+    {
+      "import_id": "lti_01a06f751acdb3669df59ef322079e66",
+      "destination_tag": "dev-001-9d37921b",
+      "state": "failed",
+      "error_code": "extract_failed",
+      "published": false
+    },
+    {
+      "import_id": "lti_01a06f7682681ca77a64f107536cb656",
+      "destination_tag": "dev-002-2c47ef51",
+      "state": "failed",
+      "error_code": "extract_failed",
+      "published": false
+    }
+  ],
+  "result": {
+    "published_tasksets": 0,
+    "further_v2_imports_held": true,
+    "reason": "The deployed legacy extractor failed two distinct cyber imports before publication. Exact frozen-version selection and reviewed cyber topology support must be deployed before fan-out."
+  }
+}
