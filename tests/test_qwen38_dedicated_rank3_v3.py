@@ -13,7 +13,7 @@ def test_rank3_block_has_fresh_generation_exact_complete_cells_and_is_held() -> 
     plans = [lane.build_plan(ROOT, attempt) for attempt in (1, 2, 3, 4)]
     assert [plan["item"]["attempt"] for plan in plans] == [1, 2, 3, 4]
     assert {plan["item"]["selection_rank"] for plan in plans} == {3}
-    assert {plan["item"]["execution_generation"] for plan in plans} == {20}
+    assert {plan["item"]["execution_generation"] for plan in plans} == {21}
     assert [plan["item"]["cell_id"] for plan in plans] == [
         lane.EXPECTED_IDENTITIES[index][0] for index in (1, 2, 3, 4)
     ]

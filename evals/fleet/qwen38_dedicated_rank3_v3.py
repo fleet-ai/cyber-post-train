@@ -12,7 +12,7 @@ from typing import Any
 from evals.fleet import qwen38_dedicated_scored_canary_v1 as legacy
 from evals.fleet import self_hosted
 
-CONTROLLER = "qwen-dedicated-tp1-rank3-v3"
+CONTROLLER = "qwen-dedicated-tp1-rank3-g21-v2"
 SERVING_BLOCK = "dedicated-qwen-tp1-b-v1"
 PARITY = Path(
     "docs/evidence/qwen38-study/2026-09-05-qwen38-dedicated-tp1-b-v1-actual-opencode-parity.json"
@@ -23,28 +23,28 @@ SERVICE_UID = "b0f706ca-7190-42a1-a4a0-23e0f5eaf41f"
 RAYJOB_UID = "a16fa2a7-27e6-480a-a7fb-4332ebdff5b6"
 WORKLOAD_UID = "3a800a6e-ec90-46ba-a308-734379b7d23e"
 TRAFFIC = Path("/mnt/sfs/jobs/chris-cyber-evalserve-q38-tp1-b-v1/lifecycle/traffic")
-EXECUTION_GENERATION = 20
+EXECUTION_GENERATION = 21
 TASK_VERSION_ID = "33d37078-0669-478e-af39-43cd245f0da8"
 EXPECTED_IDENTITIES = {
     1: (
         "sha256:f728f5712478f233b05c0f2acfd1aba5ae9f63862e1b759ea40a508e188557d8",
-        "sha256:1b37b508368614cedfa623c6ced4d90a238d2be8fe5c1ccc1b57ca81c388b894",
+        "sha256:acf0be00dcb0d87203e6805b506ba061434bcd1b2c56181b220fbfd6c31bfd2c",
     ),
     2: (
         "sha256:6edac950ae44ff62c07074a775afdb65cc9b394047883e0b57fcad84e74d2fa7",
-        "sha256:82bd4090ef719aa774f93275b22b8e2bdf8cfe12d72958bcc8580aef2f87c98b",
+        "sha256:49b30d65bac2afca7c21d6a4b763b8bea136d9f8e2314d0cd563aa50e7d82fab",
     ),
     3: (
         "sha256:ffb5b0fb6a3eb702b78c75aca66446eb39668d0949bc92b4628ad77c2102bcae",
-        "sha256:b85501b099cd954a5f031c1f537da54a3a0260638f34e7d6c0d7a4a359cad0f5",
+        "sha256:677af5f417f6df4f3fd58ba34df0951e832822e4dc0587fdefdcec9af6c09215",
     ),
     4: (
         "sha256:47e1093f8b03d4179d334a4feac13aba526c5c36f8eb98bc29a681d27aa68e36",
-        "sha256:440134d515f28224e809fadd31ecd2bb8a7c0b7b835a39db5e81066f1431106d",
+        "sha256:0507ac14037c875483a4f7ac87bcf48cc1daa4d50d326afde8c8072496fbf289",
     ),
 }
 RUN_IDS = {
-    attempt: f"chris-cyber-q38-opencode11827-ded-tp1-r003-a{attempt}-g20-v1"
+    attempt: f"chris-cyber-q38-opencode11827-ded-tp1-r003-a{attempt}-g21-v2"
     for attempt in EXPECTED_IDENTITIES
 }
 

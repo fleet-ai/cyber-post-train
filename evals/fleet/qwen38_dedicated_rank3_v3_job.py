@@ -29,14 +29,19 @@ def rank3_run_script(rank2_script: str) -> str:
     old = "-m evals.fleet.qwen38_dedicated_rank2_v3"
     if rank2_script.count(old) != 1:
         raise ValueError("rank2 evaluator run script module binding drifted")
-    return rank2_script.replace(old, "-m evals.fleet.qwen38_dedicated_rank3_v3")
+    attempt_domain = 'case "$QWEN_DEDICATED_ATTEMPT" in 2|3|4)'
+    if rank2_script.count(attempt_domain) != 1:
+        raise ValueError("rank2 evaluator attempt-domain binding drifted")
+    return rank2_script.replace(
+        attempt_domain, 'case "$QWEN_DEDICATED_ATTEMPT" in 1|2|3|4)'
+    ).replace(old, "-m evals.fleet.qwen38_dedicated_rank3_v3")
 
 
 def render(root: Path, attempt: int) -> dict[str, Any]:
     if attempt not in (1, 2, 3, 4):
         raise ValueError("dedicated Qwen rank3 attempt must be 1 through 4")
-    name = f"chris-cyber-q38-opencode11827-ded-tp1-r003-a{attempt}-g20-v1"
-    experiment = f"q38-ded-tp1-r003-a{attempt}-g20-v1"
+    name = f"chris-cyber-q38-opencode11827-ded-tp1-r003-a{attempt}-g21-v2"
+    experiment = f"q38-ded-tp1-r003-a{attempt}-g21-v2"
     source = root / SOURCE
     if self_hosted.sha256(source.read_bytes()) != SOURCE_SHA256:
         raise ValueError("source evaluator Job template drifted")
