@@ -24,7 +24,10 @@ SERVICE_UID = "bc8e0add-f8ec-4dbe-820d-8d78c4a8bc8d"
 RAYJOB_UID = "ce6ee4d7-fd6d-4ea9-94f3-7c8fa18f58fe"
 WORKLOAD_UID = "1532e82a-91f9-40f3-81a7-8247e79d4126"
 TRAFFIC = Path("/mnt/sfs/jobs/chris-cyber-evalserve-q38-tp1-a-v3/lifecycle/traffic")
-RUN_ID = "chris-cyber-q38-opencode11827-ded-tp1-r002-a2-v3"
+RUN_IDS = {
+    attempt: f"chris-cyber-q38-opencode11827-ded-tp1-r002-a{attempt}-v3" for attempt in (2, 3, 4)
+}
+RUN_ID = RUN_IDS[2]
 OUTPUT_ROOT = Path(f"/mnt/sfs/jobs/{RUN_ID}")
 
 
@@ -71,15 +74,18 @@ def _validate_parity(root: Path) -> dict[str, Any]:
     return value
 
 
-def build_plan(root: Path) -> dict[str, Any]:
+def build_plan(root: Path, attempt: int = 2) -> dict[str, Any]:
+    if attempt not in RUN_IDS:
+        raise ValueError("dedicated Qwen v3 attempt must be 2, 3, or 4")
+    run_id = RUN_IDS[attempt]
     with _binding():
-        plan = legacy.build_plan(root, 2)
+        plan = legacy.build_plan(root, attempt)
     plan["controller"] = CONTROLLER
-    plan["item"]["run_id"] = RUN_ID
-    plan["output_root"] = str(OUTPUT_ROOT)
+    plan["item"]["run_id"] = run_id
+    plan["output_root"] = f"/mnt/sfs/jobs/{run_id}"
     config = plan["config"]
-    config["run_id"] = RUN_ID
-    config["execution"]["network"] = RUN_ID
+    config["run_id"] = run_id
+    config["execution"]["network"] = run_id
     config["serving"] = {
         "kind": "dedicated_qwen_tp1_v3",
         "serving_block": SERVING_BLOCK,
@@ -95,29 +101,49 @@ def build_plan(root: Path) -> dict[str, Any]:
     return plan
 
 
-def run(root: Path, proxy: Path) -> dict[str, Any]:
+def _require_previous_accepted(attempt: int) -> None:
+    if attempt == 2:
+        return
+    previous_root = Path(f"/mnt/sfs/jobs/{RUN_IDS[attempt - 1]}")
+    accepted = json.loads((previous_root / "ACCEPTED.json").read_text())
+    terminal = json.loads((previous_root / "TERMINAL.json").read_text())
+    if (
+        accepted.get("receipt_sha256") != self_hosted.digest_without(accepted, "receipt_sha256")
+        or accepted.get("accepted") is not True
+        or accepted.get("attempt") != attempt - 1
+        or accepted.get("serving_block") != SERVING_BLOCK
+        or terminal.get("receipt_sha256") != self_hosted.digest_without(terminal, "receipt_sha256")
+        or terminal.get("status") != "ACCEPTED"
+        or terminal.get("accepted_receipt_sha256") != accepted.get("receipt_sha256")
+    ):
+        raise RuntimeError("previous dedicated Qwen v3 attempt is not accepted")
+
+
+def run(root: Path, proxy: Path, attempt: int = 2) -> dict[str, Any]:
     with _binding():
-        plan = build_plan(root)
+        _require_previous_accepted(attempt)
+        plan = build_plan(root, attempt)
+        output_root = Path(plan["output_root"])
         key = os.environ.get("FLEET_API_KEY")
         job_uid, pod_uid = os.environ.get("JOB_UID", ""), os.environ.get("POD_UID", "")
         if not key:
             raise RuntimeError("FLEET_API_KEY is required")
         _validate_parity(root)
         legacy._live_checks(plan, key)
-        OUTPUT_ROOT.mkdir(mode=0o700, parents=False)
-        self_hosted.write_json_once(OUTPUT_ROOT / "PLAN.json", plan)
+        output_root.mkdir(mode=0o700, parents=False)
+        self_hosted.write_json_once(output_root / "PLAN.json", plan)
         claim = legacy._claim(plan, job_uid, pod_uid)
         stop = threading.Event()
         watcher = threading.Thread(target=legacy._traffic_loop, args=(stop,), daemon=True)
         watcher.start()
-        attempt_root = OUTPUT_ROOT / "attempt"
+        attempt_root = output_root / "attempt"
         try:
             self_hosted.run(plan["config"], attempt_root, proxy)
             accepted = legacy._classify(attempt_root, plan, claim, key)
             accepted.pop("receipt_sha256", None)
             accepted["serving_block"] = SERVING_BLOCK
             accepted = legacy._seal(accepted)
-            self_hosted.write_json_once(OUTPUT_ROOT / "ACCEPTED.json", accepted)
+            self_hosted.write_json_once(output_root / "ACCEPTED.json", accepted)
             terminal = legacy._seal(
                 {
                     "schema_version": legacy.TERMINAL_SCHEMA,
@@ -134,7 +160,7 @@ def run(root: Path, proxy: Path) -> dict[str, Any]:
                     "prompts_or_traces_included": False,
                 }
             )
-            self_hosted.write_json_once(OUTPUT_ROOT / "TERMINAL.json", terminal)
+            self_hosted.write_json_once(output_root / "TERMINAL.json", terminal)
             return terminal
         finally:
             stop.set()
@@ -143,7 +169,12 @@ def run(root: Path, proxy: Path) -> dict[str, Any]:
 
 def main() -> int:
     root = Path(os.environ.get("CYBER_ROOT", "/workspace/cyber-post-train"))
-    run(root, root / "evals/fleet/fixed_proxy.py")
+    raw_attempt = os.environ.get("QWEN_DEDICATED_ATTEMPT", "2")
+    try:
+        attempt = int(raw_attempt)
+    except ValueError as exc:
+        raise RuntimeError("QWEN_DEDICATED_ATTEMPT must be an integer") from exc
+    run(root, root / "evals/fleet/fixed_proxy.py", attempt)
     return 0
 
 

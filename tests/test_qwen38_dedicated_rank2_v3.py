@@ -21,6 +21,16 @@ def test_rank2_attempt2_plan_is_exact_and_sequential() -> None:
     )
 
 
+def test_rank2_attempts3_and4_have_fresh_exact_identities() -> None:
+    for attempt in (3, 4):
+        plan = lane.build_plan(ROOT, attempt)
+        assert plan["item"]["selection_rank"] == 2
+        assert plan["item"]["attempt"] == attempt
+        assert plan["item"]["run_id"] == lane.RUN_IDS[attempt]
+        assert plan["output_root"].endswith(lane.RUN_IDS[attempt])
+        assert plan["config"]["serving"]["serving_block"] == lane.SERVING_BLOCK
+
+
 def test_rank2_v3_parity_receipt_is_exact_and_non_scored() -> None:
     receipt = lane._validate_parity(ROOT)
     assert receipt["execution"]["task_instance_session_verifier_scoring_calls"] == 0

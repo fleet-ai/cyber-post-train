@@ -4,6 +4,8 @@ set -euo pipefail
 ROOT=${CYBER_ROOT:-/workspace/cyber-post-train}
 : "${FLEET_API_KEY:?FLEET_API_KEY is required}"
 : "${JOB_UID:?JOB_UID is required}" "${POD_UID:?POD_UID is required}"
+: "${QWEN_DEDICATED_ATTEMPT:=2}"
+case "$QWEN_DEDICATED_ATTEMPT" in 2|3|4) ;; *) exit 64 ;; esac
 test "${DOCKER_HOST:-}" = unix:///var/run/docker.sock
 for _ in $(seq 1 120); do docker info >/dev/null 2>&1 && break; sleep 1; done
 docker info >/dev/null
