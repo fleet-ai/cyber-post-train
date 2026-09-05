@@ -234,6 +234,11 @@ def test_v16_bootstrap_runs_exact_controller_source_and_stops_pre_model() -> Non
         item["name"]: item.get("value")
         for item in job["spec"]["template"]["spec"]["containers"][0]["env"]
     }
+    names = [
+        item["name"]
+        for item in job["spec"]["template"]["spec"]["containers"][0]["env"]
+    ]
+    assert len(names) == len(set(names))
     assert env["DEDICATED_BOOTSTRAP_ONLY"] == "1"
     assert env["DEDICATED_CONTROLLER_PACKAGE_SHA256"] == final["package_sha256"]
     assert job["metadata"]["annotations"]["cyber-post-train.fleet.ai/launch-authorized"] == "false"

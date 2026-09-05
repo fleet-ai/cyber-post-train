@@ -50,6 +50,9 @@ def render(root: Path) -> dict[str, Any]:
     for env in evaluator["env"]:
         if env["name"] == "JOB_NAME":
             env["value"] = JOB_NAME
+        elif env["name"] == "DEDICATED_SERVICE_ORIGIN":
+            env.pop("valueFrom", None)
+            env["value"] = "http://bootstrap.invalid.fleet-train-jobs.svc.cluster.local:8000"
     evaluator["env"].extend(
         [
             {"name": "DEDICATED_BOOTSTRAP_ONLY", "value": "1"},
@@ -60,10 +63,6 @@ def render(root: Path) -> dict[str, Any]:
             {
                 "name": "DEDICATED_CONTROLLER_PACKAGE_SHA256",
                 "value": final["package_sha256"],
-            },
-            {
-                "name": "DEDICATED_SERVICE_ORIGIN",
-                "value": "http://bootstrap.invalid.fleet-train-jobs.svc.cluster.local:8000",
             },
         ]
     )
