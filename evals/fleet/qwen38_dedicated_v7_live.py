@@ -16,9 +16,52 @@ from evals.fleet import qwen38_dedicated_v6_live as v6_live
 from evals.fleet import qwen38_dedicated_v7 as v7
 from evals.fleet import self_hosted
 
+ACTIVE_STATUSES = {"submitted", "suspended", "running"}
+ALLOWED_ACTIVE_PEERS = {"/mnt/sfs/jobs/chris-cyber-evalserve-q38-tp1-b-v2": {"nodes": 1, "gpus": 1}}
+
 
 def _project_shape(rows: list[dict[str, Any]]) -> dict[str, Any]:
-    return v6_live._project_shape(rows)
+    peers = []
+    nodes, gpus = 1, 1
+    for row in rows:
+        run_dir = row.get("run_dir")
+        if run_dir == v7.RUN_DIR:
+            raise RuntimeError("Qwen v7 Jobs API identity already exists")
+        shape = ALLOWED_ACTIVE_PEERS.get(run_dir)
+        if shape is None:
+            raise RuntimeError("unknown active dedicated serving peer")
+        nodes += shape["nodes"]
+        gpus += shape["gpus"]
+        peers.append({"api_run_id": row.get("name"), "run_dir": run_dir, **shape})
+    if nodes > v7.MAX_PROJECT_GPU_NODES or gpus > v7.MAX_PROJECT_GPUS:
+        raise RuntimeError("dedicated serving resource ceiling would be exceeded")
+    return {
+        "planned_nodes": nodes,
+        "planned_gpus": gpus,
+        "active_peers": peers,
+        "max_nodes": v7.MAX_PROJECT_GPU_NODES,
+        "max_gpus": v7.MAX_PROJECT_GPUS,
+    }
+
+
+def _live_rows(client: httpx.Client, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    live = []
+    for row in rows:
+        run_dir = row.get("run_dir")
+        if not isinstance(run_dir, str) or "chris-cyber-evalserve-" not in run_dir:
+            continue
+        name = row.get("name")
+        if not isinstance(name, str) or not name.startswith("ft-run-"):
+            raise RuntimeError("dedicated Jobs API row lacks immutable identity")
+        response = client.get(f"/v1/runs/{name}")
+        if response.status_code == 404:
+            continue
+        response.raise_for_status()
+        current = response.json()
+        status = str(current.get("status") or row.get("status") or "").lower()
+        if status in ACTIVE_STATUSES:
+            live.append({**row, **current, "name": name, "run_dir": run_dir})
+    return live
 
 
 def live_gate(root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -26,9 +69,8 @@ def live_gate(root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     headers = {"Authorization": f"Bearer {shared._token()}", "Accept": "application/json"}
     with httpx.Client(base_url=shared.BASE_URL, headers=headers, timeout=60) as client:
         runs = shared._runs(client)
-        if any(row.get("title") == v7.TITLE or row.get("run_dir") == v7.RUN_DIR for row in runs):
-            raise RuntimeError("Qwen v7 Jobs API identity already exists")
-        shape = _project_shape(runs)
+        live_rows = _live_rows(client, runs)
+        shape = _project_shape(live_rows)
         preview = client.post("/v1/runs/preview", json=payload)
         preview.raise_for_status()
         rendered = v6_live._preview_identity(preview.json()["manifest_yaml"], payload)

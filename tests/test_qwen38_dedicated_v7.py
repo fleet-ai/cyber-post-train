@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import httpx
 import pytest
 
 from evals.fleet import qwen38_dedicated_v6 as v6
@@ -41,3 +42,29 @@ def test_v7_resource_ceiling_allows_only_live_tp1_b_peer() -> None:
                 }
             ]
         )
+
+
+def test_v7_filters_stale_list_rows_through_exact_get() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("ft-run-stale"):
+            return httpx.Response(404)
+        return httpx.Response(200, json={"status": "RUNNING"})
+
+    rows = [
+        {
+            "name": "ft-run-stale",
+            "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-q38-tp1-c-v1",
+            "status": "submitted",
+        },
+        {
+            "name": "ft-run-live-b",
+            "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-q38-tp1-b-v2",
+            "status": "RUNNING",
+        },
+    ]
+    with httpx.Client(
+        transport=httpx.MockTransport(handler), base_url="https://example.test"
+    ) as client:
+        filtered = live._live_rows(client, rows)
+    assert [row["name"] for row in filtered] == ["ft-run-live-b"]
+    assert live._project_shape(filtered)["planned_nodes"] == 2
