@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import os
 from collections import defaultdict
 from datetime import UTC, datetime
@@ -17,12 +18,38 @@ from evals.fleet import qwen_hosted_generation18 as g18
 from evals.fleet import qwen_hosted_generation19_bulk as g19
 from evals.fleet import self_hosted
 
+STAGES = (
+    "01-plan-valid",
+    "02-sfs-and-g18-gates-valid",
+    "03-account-and-route-valid",
+    "04-session-inventory-complete",
+    "05-clear",
+)
+
+
+def _stage(output: Path, name: str) -> None:
+    if name not in STAGES:
+        raise ValueError("unknown Generation-19 preflight stage")
+    output.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    body = {
+        "schema_version": "fleet-qwen-generation19-preflight-stage-v1",
+        "stage": name,
+        "mutation_calls": 0,
+        "prompts_traces_flags_or_scores_included": False,
+        "credentials_included": False,
+    }
+    self_hosted.write_json_once(
+        output.parent / f"STAGE-{name}.json",
+        {**body, "receipt_sha256": self_hosted.digest_without(body, "receipt_sha256")},
+    )
+
 
 def run(output: Path) -> dict[str, Any]:
     plans = g19.validate_all(Path.cwd())
     rows = [row for plan in plans.values() for row in plan["attempts"]]
     if len(rows) != 384 or any(row["selection_rank"] in {2, 3, 4, 5} for row in rows):
         raise RuntimeError("Generation-19 held partition drifted")
+    _stage(output, "01-plan-valid")
     output_roots = [Path(plan["sfs_root"]) for plan in plans.values()]
     claims = [Path(g18.CLAIM_ROOT) / engine.claim_filename(row["execution_id"]) for row in rows]
     if any(path.exists() for path in [*output_roots, *claims]):
@@ -49,6 +76,7 @@ def run(output: Path) -> dict[str, Any]:
         )
     ):
         raise RuntimeError("Generation-18 acceptance gate drifted")
+    _stage(output, "02-sfs-and-g18-gates-valid")
     key = os.environ.get("FLEET_API_KEY")
     if not key:
         raise RuntimeError("FLEET_API_KEY required")
@@ -64,7 +92,9 @@ def run(output: Path) -> dict[str, Any]:
         roster_response = client.get("https://inference.flt.build/v1/models")
         roster_response.raise_for_status()
         roster = roster_response.json()
+    _stage(output, "03-account-and-route-valid")
     sessions, requests = inventory.collect_task_sessions(sorted(by_task), headers)
+    _stage(output, "04-session-inventory-complete")
     collisions = [
         row
         for row in sessions
@@ -107,6 +137,7 @@ def run(output: Path) -> dict[str, Any]:
     }
     receipt = {**body, "receipt_sha256": self_hosted.digest_without(body, "receipt_sha256")}
     self_hosted.write_json_once(output, receipt)
+    _stage(output, "05-clear")
     return receipt
 
 
@@ -114,7 +145,29 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    run(args.output)
+    try:
+        run(args.output)
+    except Exception as exc:
+        completed = sorted(
+            path.stem.removeprefix("STAGE-") for path in args.output.parent.glob("STAGE-*.json")
+        )
+        body = {
+            "schema_version": "fleet-qwen-generation19-preflight-failure-v1",
+            "status": "FAILED_READ_ONLY",
+            "completed_stages": completed,
+            "last_completed_stage": completed[-1] if completed else None,
+            "error_type": type(exc).__name__,
+            "error_sha256": self_hosted.sha256(str(exc).encode()),
+            "mutation_calls": 0,
+            "prompts_traces_flags_or_scores_included": False,
+            "credentials_included": False,
+        }
+        with contextlib.suppress(FileExistsError):
+            self_hosted.write_json_once(
+                args.output.parent / "FAILED.json",
+                {**body, "receipt_sha256": self_hosted.digest_without(body, "receipt_sha256")},
+            )
+        raise
     return 0
 
 

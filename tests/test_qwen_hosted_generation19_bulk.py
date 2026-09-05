@@ -1,9 +1,11 @@
+import inspect
 import subprocess
 import sys
 from pathlib import Path
 
 from evals.fleet import qwen_hosted_generation19_bulk as g19
 from evals.fleet import qwen_hosted_generation19_package as package
+from evals.fleet import qwen_hosted_generation19_preflight as preflight
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -82,3 +84,12 @@ def test_preflight_package_has_closed_python_imports(tmp_path: Path) -> None:
         capture_output=True,
         text=True,
     )
+
+
+def test_preflight_every_boundary_has_stage_and_failure_receipt() -> None:
+    source = inspect.getsource(preflight.run)
+    assert all(f'_stage(output, "{stage}")' in source for stage in preflight.STAGES)
+    main_source = inspect.getsource(preflight.main)
+    assert 'args.output.parent / "FAILED.json"' in main_source
+    assert '"error_type": type(exc).__name__' in main_source
+    assert '"error_sha256": self_hosted.sha256(str(exc).encode())' in main_source

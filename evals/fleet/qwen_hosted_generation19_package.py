@@ -9,7 +9,7 @@ from typing import Any
 from evals.fleet import qwen_hosted_generation18_package as base
 from evals.fleet import qwen_hosted_generation19_bulk as g19
 
-PREFLIGHT_JOB = "chris-q38-ac-exact100-g19-preflight-v3"
+PREFLIGHT_JOB = "chris-q38-ac-exact100-g19-preflight-v4"
 PREFLIGHT_CM = PREFLIGHT_JOB + "-run-v1"
 PREFLIGHT_ROOT = f"/mnt/sfs/jobs/{PREFLIGHT_JOB}"
 COMMON = (

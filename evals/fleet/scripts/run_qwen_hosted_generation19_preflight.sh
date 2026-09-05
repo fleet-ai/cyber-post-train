@@ -19,4 +19,4 @@ install -m 0644 /bootstrap/plan-b.json \
 cd "$ROOT"
 exec uv run --no-project --with httpx==0.28.1 python \
   -m evals.fleet.qwen_hosted_generation19_preflight \
-  --output /mnt/sfs/jobs/chris-q38-ac-exact100-g19-preflight-v3/CLEAR.json
+  --output /mnt/sfs/jobs/chris-q38-ac-exact100-g19-preflight-v4/CLEAR.json
