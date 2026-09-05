@@ -1,0 +1,120 @@
+{
+  "schema_version": "fleet-opencode-autocontinue-generation1-tombstones-v1",
+  "append_only": true,
+  "status": "GENERATION_1_TOMBSTONED",
+  "incident_receipt": {
+    "path": "docs/evidence/qwen38-study/2026-09-04-opencode-autocontinue-canary-v2-pre-model-failure.json",
+    "receipt_sha256": "sha256:fd71d3fb42d1ea4fef4734352c817c62cf0ec5fe6e3e35a28c2a9a4f47aa3f23"
+  },
+  "models": [
+    {
+      "served_id": "qwen3.8-27b",
+      "cell_id": "sha256:631c9d7cc5328849ce137393943927192b1b50dc60458cdb3425fbce893ecf5a",
+      "predecessor": {
+        "served_id": "qwen3.8-27b",
+        "task_version_id": "02dd4e3f-d85d-4bf8-9976-eae2f102384d",
+        "attempt": 1,
+        "execution_generation": 1,
+        "plan_sha256": "sha256:726320dd5e161e28becd22d7bb6e31f1627f36a3c7291c0dabb53f94626b3c2d",
+        "run_id": "chris-q38-ac-canary1-v2-sr004-a1-02dd4e3f",
+        "job": {
+          "name": "chris-q38-ac-canary1-v2",
+          "uid": "226bf66e-363c-47a6-84bd-afd8d380ab48",
+          "created_at_utc": "2026-09-04T23:26:24Z",
+          "failed_at_utc": "2026-09-04T23:28:00Z",
+          "reason": "BackoffLimitExceeded"
+        },
+        "pod": {
+          "name": "chris-q38-ac-canary1-v2-249mz",
+          "uid": "e3ff23b9-98ee-41f8-bb6f-61ef6bf9f41b",
+          "exit_code": 1,
+          "restart_count": 0
+        },
+        "local_claim_sha256": "sha256:c1b14e4562fa192e02b1f5880f2999abbaca59bd62aa90c07371c0b98e0c59be",
+        "global_claim_receipt_sha256": "sha256:f0a38836835a2993cae6c2bea21a927f3b9349ff28b1959cda08dab79819ca15",
+        "attempt_directory_count": 0,
+        "fleet_session_count": 0,
+        "verifier_execution_count": 0
+      },
+      "claims": {
+        "local_path": "/mnt/sfs/jobs/chris-q38-ac-canary1-v2/claims/chris-q38-ac-canary1-v2-sr004-a1-02dd4e3f.json",
+        "local_claim_sha256": "sha256:c1b14e4562fa192e02b1f5880f2999abbaca59bd62aa90c07371c0b98e0c59be",
+        "global_path": "/mnt/sfs/cell-claims/opencode11827-autocontinue-primary-v1/d9a8b7af84dde45ed8ef0a4ad6b744827608427c5ced6528c04544dd7f8c813d.json",
+        "global_claim_receipt_sha256": "sha256:f0a38836835a2993cae6c2bea21a927f3b9349ff28b1959cda08dab79819ca15",
+        "preserved_not_deleted_or_reused": true
+      },
+      "tombstone": {
+        "schema_version": "fleet-pre-model-infrastructure-tombstone-v1",
+        "cell_id": "sha256:631c9d7cc5328849ce137393943927192b1b50dc60458cdb3425fbce893ecf5a",
+        "execution_id": "sha256:d839f3c2ade74ff72b5034fc6e988f3acb93863e0beaf5eaaf97bdf92ba1f8f3",
+        "execution_generation": 1,
+        "classification": "pre_model_infrastructure_failure",
+        "terminal": true,
+        "model_called": false,
+        "verifier_called": false,
+        "session_created": false,
+        "authoritative_outcome_created": false,
+        "retry_allowed": true,
+        "evidence_receipt_sha256": "sha256:fd71d3fb42d1ea4fef4734352c817c62cf0ec5fe6e3e35a28c2a9a4f47aa3f23",
+        "receipt_sha256": "sha256:7bd048a47e2892b435ca78593a85916698aaa1a29f898cc11b2c86a260014671"
+      }
+    },
+    {
+      "served_id": "glm-5.3",
+      "cell_id": "sha256:905051f141077d3aa5086c1f5dc6ad015d5ee6173a1ea7515025805cf9a24b41",
+      "predecessor": {
+        "served_id": "glm-5.3",
+        "task_version_id": "9375a9b9-04e5-4f6f-ad47-286121278992",
+        "attempt": 1,
+        "execution_generation": 1,
+        "plan_sha256": "sha256:9654b0f2e9cfbe5690a77ce83bc63e7e537a43597479686fc093db7d6533959a",
+        "run_id": "chris-glm53-ac-canary1-v2-sr013-a1-9375a9b9",
+        "job": {
+          "name": "chris-glm53-ac-canary1-v2",
+          "uid": "6ec3528e-d452-4d55-a532-106157d59fdf",
+          "created_at_utc": "2026-09-04T23:26:24Z",
+          "failed_at_utc": "2026-09-04T23:28:01Z",
+          "reason": "BackoffLimitExceeded"
+        },
+        "pod": {
+          "name": "chris-glm53-ac-canary1-v2-hbjq7",
+          "uid": "dee9bef1-5b00-494c-ab3e-8fcb615af092",
+          "exit_code": 1,
+          "restart_count": 0
+        },
+        "local_claim_sha256": "sha256:06488f6d76ae71e25b834f88c6164b5bcd0c66a22563947aaa28d28f164294ca",
+        "global_claim_receipt_sha256": "sha256:d887f57d8827e9ca8bba05f4559e8eb7ffc35e50e03bc79c45698d3c4bae8477",
+        "attempt_directory_count": 0,
+        "fleet_session_count": 0,
+        "verifier_execution_count": 0
+      },
+      "claims": {
+        "local_path": "/mnt/sfs/jobs/chris-glm53-ac-canary1-v2/claims/chris-glm53-ac-canary1-v2-sr013-a1-9375a9b9.json",
+        "local_claim_sha256": "sha256:06488f6d76ae71e25b834f88c6164b5bcd0c66a22563947aaa28d28f164294ca",
+        "global_path": "/mnt/sfs/cell-claims/opencode11827-autocontinue-primary-v1/29b5a7875caa52f4d90544a6ede30dbefd5f723659674816a704cf994153872c.json",
+        "global_claim_receipt_sha256": "sha256:d887f57d8827e9ca8bba05f4559e8eb7ffc35e50e03bc79c45698d3c4bae8477",
+        "preserved_not_deleted_or_reused": true
+      },
+      "tombstone": {
+        "schema_version": "fleet-pre-model-infrastructure-tombstone-v1",
+        "cell_id": "sha256:905051f141077d3aa5086c1f5dc6ad015d5ee6173a1ea7515025805cf9a24b41",
+        "execution_id": "sha256:8d828cab823f0d2c551e77bc80f8d8eff79a1f55f3ef3193def475b0fc80dd70",
+        "execution_generation": 1,
+        "classification": "pre_model_infrastructure_failure",
+        "terminal": true,
+        "model_called": false,
+        "verifier_called": false,
+        "session_created": false,
+        "authoritative_outcome_created": false,
+        "retry_allowed": true,
+        "evidence_receipt_sha256": "sha256:fd71d3fb42d1ea4fef4734352c817c62cf0ec5fe6e3e35a28c2a9a4f47aa3f23",
+        "receipt_sha256": "sha256:a3d19c24696c212dddab216360cb9a1dce8a5f29fc592500e4c33fe4f928d233"
+      }
+    }
+  ],
+  "privacy": {
+    "prompts_traces_flags_or_scores_included": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:256398d56acef1caacb9de7f2d8ca7d336cdb154c6191f8986797cb75afcbab8"
+}
