@@ -34,6 +34,23 @@ QUARANTINE_SCHEMA = "fleet-exact-pass4-bulk-cell-quarantine-v3"
 ABORT_SCHEMA = "fleet-exact-pass4-bulk-controller-abort-v3"
 UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
 ISO_UTC_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z$")
+BULK_ADAPTER_MEMBERS = (
+    "CANARY_GATE_SCHEMA",
+    "COMMIT_RE",
+    "CONTROLLERS",
+    "RECONCILIATION_GATE_SCHEMA",
+    "SHA256_RE",
+    "build_runtime_plan",
+    "load",
+    "validate_all",
+    "validate_inventory_gate",
+)
+
+
+def validate_bulk_adapter(adapter: Any) -> None:
+    missing = [name for name in BULK_ADAPTER_MEMBERS if not hasattr(adapter, name)]
+    if missing:
+        raise TypeError(f"bulk adapter interface is incomplete: {','.join(missing)}")
 
 
 def _now() -> str:
@@ -800,6 +817,7 @@ def run_controller(
     stage_observer: Callable[[str, dict[str, Any] | None], None] | None = None,
 ) -> dict[str, Any]:
     """Run untouched cells sequentially, preserving progress across infrastructure attrition."""
+    validate_bulk_adapter(bulk)
     controller = plan_controller(plan["campaign_id"])
     rebuilt = bulk.build_runtime_plan(
         controller, plan["inventory_receipt"], Path(plan["repo_root"])

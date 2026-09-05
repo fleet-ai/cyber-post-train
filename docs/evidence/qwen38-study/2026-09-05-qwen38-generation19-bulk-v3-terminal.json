@@ -1,0 +1,38 @@
+{
+  "schema_version": "fleet-qwen-generation19-bulk-preclaim-terminal-v3",
+  "classification": "infrastructure_invalid_pre_model_retry_safe",
+  "controllers": [
+    {
+      "controller": "qwen-a",
+      "job_name": "chris-q38-ac-exact100-g19-a192-v3",
+      "job_uid": "14c87468-b0e4-4e1d-8758-2f228aaefd3e",
+      "pod_uid": "edc0c7a6-a54b-42ba-b360-4fbacc1336a3",
+      "workload_uid": "b9b9259b-244a-4408-ab63-2660163bc92a",
+      "configmap_uid": "3b1d50ba-1f5d-449e-bf77-64825a5322a0",
+      "failure_receipt_sha256": "sha256:f4e18b05cf46ca55756a9665b897f80754fb6fca1bd15727849b9550795bab41"
+    },
+    {
+      "controller": "qwen-b",
+      "job_name": "chris-q38-ac-exact100-g19-b192-v3",
+      "job_uid": "fb66988a-17d5-45c4-a647-79470db6085c",
+      "pod_uid": "76bd71f1-a934-4321-8f3b-295a8052d3ee",
+      "workload_uid": "7bb700e8-b51c-4e7e-ac9c-5fff6f9cab54",
+      "configmap_uid": "7351afdf-4fa1-469f-9951-1da02c06e7b2",
+      "failure_receipt_sha256": "sha256:d5ea28c975ad2dc0efac0a69cdf0b34aec7acb0c33bc3c1483604e7f2d9b8eda"
+    }
+  ],
+  "last_completed_stage": "06-route-valid",
+  "error_type": "AttributeError",
+  "error_sha256": "sha256:1bc859a19f697ec67eadf22bbf75d46229af9bd7ead93662d356b4bf3e8d01bf",
+  "deterministic_cause": "bulk_engine_adapter_omitted_required_sha256_regex_member",
+  "planned_cells": 384,
+  "global_execution_claims": 0,
+  "model_started_cells": 0,
+  "scored_cells": 0,
+  "jobs_released": true,
+  "successor_gate": "complete_adapter_interface_and_packaged_atomic_claim_regression",
+  "retry_allowed_for_all_planned_cells": true,
+  "prompts_traces_flags_or_scores_included": false,
+  "credentials_included": false,
+  "receipt_sha256": "sha256:c289dda43945db0905a60938d58ba3cb513b34d6b7f08ffe81947402ae5f992c"
+}

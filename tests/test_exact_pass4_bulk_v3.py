@@ -950,6 +950,14 @@ def test_preclaim_stage_observer_covers_every_runtime_boundary(
     ]
 
 
+def test_bulk_adapter_interface_fails_closed_before_execution() -> None:
+    class Incomplete:
+        CONTROLLERS = {}
+
+    with pytest.raises(TypeError, match="SHA256_RE"):
+        runtime.validate_bulk_adapter(Incomplete())
+
+
 def test_transient_ingest_failure_quarantines_only_the_exact_cell(tmp_path: Path) -> None:
     out = tmp_path / "attempt"
     out.mkdir()

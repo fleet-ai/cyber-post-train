@@ -76,6 +76,7 @@ def run(
     proxy: Path,
     diagnostic_root: Path,
     bulk_module: Any = g19,
+    engine_kwargs: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     diagnostic_root.mkdir(mode=0o700, parents=True, exist_ok=True)
     state: dict[str, Any] = {"stage": None, "item": None}
@@ -93,6 +94,7 @@ def run(
             proxy=proxy,
             runtime_gate_check=lambda value: runtime_gate(value, bulk_module),
             stage_observer=observe,
+            **(engine_kwargs or {}),
         )
     except Exception as exc:
         item = state["item"]

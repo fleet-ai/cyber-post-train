@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import textwrap
 from pathlib import Path
 
 import pytest
@@ -13,6 +14,8 @@ from evals.fleet import qwen_hosted_generation19_v2_package as package
 from evals.fleet import qwen_hosted_generation19_v2_runtime as runtime
 from evals.fleet import qwen_hosted_generation19_v3 as g19_v3
 from evals.fleet import qwen_hosted_generation19_v3_package as package_v3
+from evals.fleet import qwen_hosted_generation19_v4 as g19_v4
+from evals.fleet import qwen_hosted_generation19_v4_package as package_v4
 from evals.fleet import self_hosted
 
 ROOT = Path(__file__).parents[1]
@@ -164,6 +167,51 @@ def test_v3_materialized_package_executes_validate_all(tmp_path: Path) -> None:
             capture_output=True,
             text=True,
         )
+        probe = textwrap.dedent(
+            """
+            import copy
+            import os
+            from pathlib import Path
+            from evals.fleet import exact_pass4_bulk_runtime_v3 as engine
+            from evals.fleet import qwen_hosted_generation19_v3 as g
+
+            root = Path.cwd()
+            plan = copy.deepcopy(g.validate_all(root)["qwen-a"])
+            plan["repo_root"] = str(root)
+            plan["execution"]["claim_root"] = str(root / "claims")
+            plan["execution"]["endpoint_lease"]["lease_root"] = str(root / "leases")
+            g.build_runtime_plan = lambda *_args: plan
+            engine.bulk = g
+            os.environ["FLEET_API_KEY"] = "test-only"
+            os.environ["JOB_UID"] = "11111111-1111-4111-8111-111111111111"
+            os.environ["POD_UID"] = "22222222-2222-4222-8222-222222222222"
+            try:
+                engine.run_controller(
+                    plan,
+                    out=root / "output",
+                    proxy=root / "proxy.py",
+                    model_runner=lambda *_args: (_ for _ in ()).throw(
+                        SystemExit("stop before external model mutation")
+                    ),
+                    classifier=lambda *_args: {},
+                    check_run_absent=lambda *_args: None,
+                    route_check=lambda *_args: None,
+                    runtime_gate_check=lambda *_args: None,
+                )
+            except SystemExit:
+                pass
+            else:
+                raise AssertionError("packaged boundary probe did not stop")
+            assert len(list((root / "claims").glob("*.json"))) == 1
+            """
+        )
+        subprocess.run(
+            [sys.executable, "-c", probe],
+            cwd=module_root.parents[1],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
 
 
 def test_v2_terminal_tombstone_is_digest_valid_and_retry_safe() -> None:
@@ -176,3 +224,90 @@ def test_v2_terminal_tombstone_is_digest_valid_and_retry_safe() -> None:
     assert receipt["global_execution_claims"] == 0
     assert receipt["model_started_cells"] == 0
     assert receipt["receipt_sha256"] == self_hosted.digest_without(receipt, "receipt_sha256")
+
+
+def test_v4_materialized_entrypoint_reaches_atomic_claim_without_external_mutation(
+    tmp_path: Path,
+) -> None:
+    rendered = package_v4.render(ROOT)
+    cm = rendered["items"][0]
+    module_root = tmp_path / "materialized" / "evals" / "fleet"
+    config_root = module_root / "configs"
+    config_root.mkdir(parents=True)
+    (module_root.parent / "__init__.py").touch()
+    (module_root / "__init__.py").touch()
+    for name, value in cm["data"].items():
+        if name.endswith(".py"):
+            (module_root / name).write_text(value)
+    for controller in ("a", "b"):
+        (config_root / f"qwen-hosted-generation19-qwen-{controller}-v4.json").write_text(
+            cm["data"][f"plan-v4-{controller}.json"]
+        )
+    probe = textwrap.dedent(
+        """
+        import copy
+        import os
+        from pathlib import Path
+        from evals.fleet import qwen_hosted_generation19_v2_runtime as shared
+        from evals.fleet import qwen_hosted_generation19_v4 as g
+        from evals.fleet import qwen_hosted_generation19_v4_runtime
+        from evals.fleet import self_hosted
+
+        root = Path.cwd()
+        plans = g.validate_all(root)
+        plan = copy.deepcopy(plans["qwen-a"])
+        plan["repo_root"] = str(root)
+        plan["execution"]["claim_root"] = str(root / "claims")
+        plan["execution"]["endpoint_lease"]["lease_root"] = str(root / "leases")
+        g.build_runtime_plan = lambda *_args: plan
+        execution_ids = sorted(
+            row["execution_id"] for value in plans.values() for row in value["attempts"]
+        )
+        body = {
+            "schema_version": "fleet-qwen-generation19-hosted-bulk-preflight-v1",
+            "status": "CLEAR",
+            "planned_cells": 384,
+            "planned_execution_ids_sha256": self_hosted.sha256(
+                self_hosted.canonical_json(execution_ids)
+            ),
+            "mutation_calls": 0,
+        }
+        receipt = {**body, "receipt_sha256": self_hosted.digest_without(body, "receipt_sha256")}
+        self_hosted.write_json_once(root / "CLEAR.json", receipt)
+        os.environ["G19_PREFLIGHT_PATH"] = str(root / "CLEAR.json")
+        os.environ["G19_PREFLIGHT_SHA256"] = receipt["receipt_sha256"]
+        os.environ["FLEET_API_KEY"] = "test-only"
+        os.environ["JOB_UID"] = "11111111-1111-4111-8111-111111111111"
+        os.environ["POD_UID"] = "22222222-2222-4222-8222-222222222222"
+        try:
+            shared.run(
+                plan,
+                out=root / "output",
+                proxy=root / "proxy.py",
+                diagnostic_root=root / "diagnostic",
+                bulk_module=g,
+                engine_kwargs={
+                    "model_runner": lambda *_args: (_ for _ in ()).throw(
+                        SystemExit("stop before external model mutation")
+                    ),
+                    "classifier": lambda *_args: {},
+                    "check_run_absent": lambda *_args: None,
+                    "route_check": lambda *_args: None,
+                },
+            )
+        except SystemExit:
+            pass
+        else:
+            raise AssertionError("packaged v4 entrypoint did not stop")
+        assert len(list((root / "claims").glob("*.json"))) == 1
+        assert (root / "diagnostic" / "STAGE-r001-a1-08-model-runner-entered.json").is_file()
+        """
+    )
+    subprocess.run(
+        [sys.executable, "-c", probe],
+        cwd=module_root.parents[1],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert {len(plan["attempts"]) for plan in g19_v4.validate_all(ROOT).values()} == {192}
