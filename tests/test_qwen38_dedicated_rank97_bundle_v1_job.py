@@ -38,6 +38,7 @@ def test_rank97_configmap_package_is_closed(tmp_path: Path) -> None:
         "lane.py",
         "parity.json",
         "campaign.json",
+        "selection.json",
         "source.json",
         "Dockerfile.opencode",
         "fixed_proxy.py",
