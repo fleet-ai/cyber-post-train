@@ -10,6 +10,7 @@ import pytest
 from evals.fleet import qwen_bulk_generation16 as bulk
 from evals.fleet import qwen_bulk_generation16_package as package
 from evals.fleet import qwen_bulk_generation16_preflight as preflight
+from evals.fleet import qwen_bulk_generation16_renderer as renderer
 from evals.fleet import qwen_bulk_generation16_runtime as runtime
 from evals.fleet import self_hosted
 
@@ -18,6 +19,10 @@ INVENTORY = Path("/private/tmp/exact100-inventory.XXXXXX.json")
 PREFLIGHT_TOMBSTONES = ROOT / (
     "docs/evidence/qwen38-study/"
     "2026-09-05-qwen38-generation16-preflight-v3-v8-terminal-tombstones-v1.json"
+)
+BULK_MISSING_SECRET_TOMBSTONE = ROOT / (
+    "docs/evidence/qwen38-study/"
+    "2026-09-05-qwen38-generation16-bulk-missing-secret-terminal-v1.json"
 )
 
 
@@ -74,6 +79,70 @@ def test_runtime_plans_preserve_exact_treatment() -> None:
         for plan in plans.values()
     )
     assert all(plan["harness"]["context_window_size"] == 262144 for plan in plans.values())
+
+
+def test_rendered_jobs_require_only_deployed_runtime_dependencies() -> None:
+    inventory = json.loads(INVENTORY.read_text())
+    rendered = renderer.render(ROOT, inventory, "a" * 40)
+    jobs = [item for item in rendered["items"] if item["kind"] == "Job"]
+    assert len(jobs) == 2
+    secret_refs = {
+        env["valueFrom"]["secretKeyRef"]["name"]
+        for job in jobs
+        for container in job["spec"]["template"]["spec"]["containers"]
+        for env in container.get("env", [])
+        if "secretKeyRef" in env.get("valueFrom", {})
+    }
+    assert secret_refs == {bulk.FLEET_API_KEY_SECRET}
+    renderer.validate_runtime_dependencies(
+        rendered,
+        available_secrets={bulk.FLEET_API_KEY_SECRET},
+        available_configmaps=set(),
+    )
+    with pytest.raises(ValueError, match="runtime dependencies are absent"):
+        renderer.validate_runtime_dependencies(
+            rendered,
+            available_secrets=set(),
+            available_configmaps=set(),
+        )
+
+
+def test_runtime_dependency_gate_rejects_missing_external_configmap() -> None:
+    rendered = {
+        "items": [
+            {
+                "kind": "Job",
+                "spec": {
+                    "template": {
+                        "spec": {
+                            "containers": [{"env": []}],
+                            "volumes": [
+                                {
+                                    "name": "bootstrap",
+                                    "projected": {
+                                        "sources": [
+                                            {"configMap": {"name": "runtime-core"}}
+                                        ]
+                                    },
+                                }
+                            ],
+                        }
+                    }
+                },
+            }
+        ]
+    }
+    with pytest.raises(ValueError, match="runtime-core"):
+        renderer.validate_runtime_dependencies(
+            rendered,
+            available_secrets=set(),
+            available_configmaps=set(),
+        )
+    renderer.validate_runtime_dependencies(
+        rendered,
+        available_secrets=set(),
+        available_configmaps={"runtime-core"},
+    )
 
 
 def test_projected_symlink_envelope_is_read_canonically(tmp_path: Path) -> None:
@@ -225,3 +294,15 @@ def test_v3_v8_read_only_tombstones_are_digest_valid() -> None:
     assert all(row["read_only"] is True for row in receipt["entries"])
     assert all(row["scored_model_calls"] == 0 for row in receipt["entries"])
     assert receipt["bulk_jobs_submitted"] is False
+
+
+def test_missing_secret_terminal_receipt_is_digest_valid_and_retry_safe() -> None:
+    receipt = json.loads(BULK_MISSING_SECRET_TOMBSTONE.read_text())
+    assert receipt["receipt_sha256"] == self_hosted.digest_without(
+        receipt, "receipt_sha256"
+    )
+    assert receipt["classification"] == "INFRASTRUCTURE_INVALID_PRE_EXECUTION"
+    assert receipt["consumption_reconciliation"]["consumed_cells"] == 0
+    assert all(row["container_started"] is False for row in receipt["jobs"])
+    assert receipt["release"]["owned_jobs_deleted"] is True
+    assert receipt["release"]["successor_state"] == "HELD"

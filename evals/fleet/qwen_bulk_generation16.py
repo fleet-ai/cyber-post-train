@@ -25,6 +25,7 @@ G15_GATE_PATH = (
     "docs/evidence/qwen38-study/2026-09-05-qwen38-generation15-accepted-gate-v1.json"
 )
 EXECUTION_GENERATION = 16
+FLEET_API_KEY_SECRET = "chris-cyber-opencode-evals-v2"
 CLAIM_ROOT = base.CLAIM_ROOT
 LEASE_ROOT = base.LEASE_ROOT
 SHA256_RE = base.SHA256_RE
