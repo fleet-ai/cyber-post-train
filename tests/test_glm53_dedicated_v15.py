@@ -11,6 +11,7 @@ from evals.fleet import glm53_dedicated_v15_canary_heartbeat_v1 as heartbeat
 from evals.fleet import glm53_dedicated_v15_canary_release_package_v1 as release_package
 from evals.fleet import glm53_dedicated_v15_live as live
 from evals.fleet import glm53_dedicated_v16 as v16
+from evals.fleet import glm53_dedicated_v16_canary_launch_v1 as launch
 from evals.fleet import self_hosted
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -192,3 +193,43 @@ def test_v16_preserves_v15_runtime_and_binds_corrected_preflight() -> None:
     assert new["env"] == {**old["env"], "GLM53_RUN_DIR": v16.RUN_DIR}
     assert v16.PRE_ADMISSION["receipt_sha256"].endswith("5f9339d")
     assert v16.PRE_ADMISSION["controller_package_sha256"] == release_package.CONTROLLER_PACKAGE_SHA256
+
+
+def test_v16_canary_launch_binds_dynamic_evidence(tmp_path: Path) -> None:
+    parity = ROOT / "docs/evidence/glm53-study/2026-09-05-glm53-dedicated-v14-actual-opencode-parity.json"
+    binding = ROOT / "docs/evidence/glm53-study/2026-09-05-glm53-dedicated-v14-server-binding.json"
+    origin = "http://glm-v16-head-svc.fleet-train-jobs.svc.cluster.local:8000"
+    plan = launch.canary.build_plan(
+        ROOT, service_origin=origin, parity_path=parity, binding_path=binding
+    )
+    item = plan["attempts"][0]
+    release = {
+        "schema_version": launch.runtime.RELEASE_SCHEMA,
+        "status": "CLEAR",
+        "plan_sha256": "sha256:" + "4" * 64,
+        "selection_rank": 51,
+        "attempt": 1,
+        "cell_id": item["cell_id"],
+        "execution_id": item["execution_id"],
+        "all_four_rank_cells_unstarted": True,
+        "fleet_session_collisions": 0,
+        "global_claim_collisions": 0,
+        "sfs_output_collisions": 0,
+        "kubernetes_object_collisions": 0,
+        "checked_immediately_before_create": True,
+    }
+    release["receipt_sha256"] = self_hosted.digest_without(release, "receipt_sha256")
+    release_path = tmp_path / "release.json"
+    release_path.write_text(json.dumps(release))
+    built = launch.render(
+        ROOT,
+        parity_path=parity,
+        binding_path=binding,
+        release_path=release_path,
+        service_origin=origin,
+    )
+    source, evidence, job = built["objects"]["items"]
+    assert source["immutable"] is True
+    assert evidence["data"]["service_origin"] == origin
+    assert job["metadata"]["annotations"]["cyber-post-train.fleet.ai/launch-authorized"] == "true"
+    assert built["runtime_plan_sha256"] == release["plan_sha256"]
