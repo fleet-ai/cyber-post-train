@@ -6,6 +6,7 @@ import pytest
 
 from evals.fleet import glm53_dedicated_v14 as v14
 from evals.fleet import glm53_dedicated_v15 as v15
+from evals.fleet import glm53_dedicated_v15_canary_release_package_v1 as release_package
 from evals.fleet import glm53_dedicated_v15_live as live
 from evals.fleet import self_hosted
 
@@ -106,3 +107,22 @@ def test_live_rows_reconciles_stale_list_state() -> None:
     ]
     with httpx.Client(transport=httpx.MockTransport(handler), base_url="https://test") as client:
         assert [row["name"] for row in live._live_rows(client, rows)] == ["ft-run-qwen"]
+
+
+def test_v15_release_package_binds_pre_admitted_controller() -> None:
+    parity = ROOT / "docs/evidence/glm53-study/2026-09-05-glm53-dedicated-v14-actual-opencode-parity.json"
+    binding = ROOT / "docs/evidence/glm53-study/2026-09-05-glm53-dedicated-v14-server-binding.json"
+    built = release_package.render(
+        ROOT,
+        parity,
+        binding,
+        "http://glm-v15-head-svc.fleet-train-jobs.svc.cluster.local:8000",
+    )
+    assert built["launch_authorized"] is True
+    assert built["controller_package_sha256"] == v15.PRE_ADMISSION["controller_package_sha256"]
+    configmap, job = built["objects"]["items"]
+    assert "release.py" in configmap["data"]
+    assert "parity.json" in configmap["data"]
+    assert "binding.json" in configmap["data"]
+    assert job["spec"]["template"]["spec"]["priorityClassName"] == "fleet-infra-quiet"
+    assert job["spec"]["template"]["spec"]["preemptionPolicy"] == "Never"
