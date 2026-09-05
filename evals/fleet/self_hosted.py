@@ -302,6 +302,14 @@ def agent_container_user_args() -> list[str]:
     return ["--user", f"{os.getuid()}:{os.getgid()}"]
 
 
+def write_agent_prompt(path: Path, prompt: str) -> None:
+    """Write a least-readable prompt that the pinned non-root agent can consume."""
+    path.write_text(prompt)
+    if os.geteuid() == 0:
+        os.chown(path, 1000, 1000)
+    path.chmod(0o400)
+
+
 def extract_final_answer(path: Path) -> str:
     final = ""
     for line in path.read_text(errors="replace").splitlines():
@@ -1266,7 +1274,7 @@ def run(
             "harness": config["harness"],
         }
         (out_dir / "binding.json").write_bytes(canonical_json(binding) + b"\n")
-        (out_dir / "prompt.txt").write_text(task["prompt"])
+        write_agent_prompt(out_dir / "prompt.txt", task["prompt"])
 
         response = client.post(
             f"{ORCHESTRATOR}{authoritative_route(config, 'provisioning')}",

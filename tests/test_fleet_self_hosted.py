@@ -551,6 +551,34 @@ def test_projected_config_rejects_invalid_live_task_id() -> None:
         self_hosted.build_instance_payload(config, task)
 
 
+def test_write_agent_prompt_chowns_root_controller_input_for_node_agent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    prompt = tmp_path / "prompt.txt"
+    chowns: list[tuple[Path, int, int]] = []
+    monkeypatch.setattr(self_hosted.os, "geteuid", lambda: 0)
+    monkeypatch.setattr(
+        self_hosted.os, "chown", lambda path, uid, gid: chowns.append((path, uid, gid))
+    )
+    self_hosted.write_agent_prompt(prompt, "sealed task input")
+    assert chowns == [(prompt, 1000, 1000)]
+    assert prompt.stat().st_mode & 0o777 == 0o400
+
+
+def test_write_agent_prompt_keeps_nonroot_controller_ownership(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    prompt = tmp_path / "prompt.txt"
+    monkeypatch.setattr(self_hosted.os, "geteuid", lambda: 501)
+    monkeypatch.setattr(
+        self_hosted.os,
+        "chown",
+        lambda *_args: pytest.fail("non-root controller must not chown prompt"),
+    )
+    self_hosted.write_agent_prompt(prompt, "sealed task input")
+    assert prompt.stat().st_mode & 0o777 == 0o400
+
+
 def test_extract_final_answer_reads_last_qwen_result(tmp_path: Path) -> None:
     trace = tmp_path / "trace.jsonl"
     trace.write_text(
