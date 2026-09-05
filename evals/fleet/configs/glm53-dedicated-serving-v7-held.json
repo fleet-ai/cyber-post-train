@@ -1,0 +1,191 @@
+{
+  "schema_version": "fleet-glm53-dedicated-serving-v7-held-spec-v1",
+  "status": "HELD",
+  "launch_authorized": false,
+  "model": {
+    "repository": "zai-org/GLM-5.3",
+    "revision": "30333038ada1f1dacb294a93270305a890b50c14",
+    "served_id": "glm-5.3",
+    "sfs_path": "/mnt/sfs/models/glm-5.3-30333038",
+    "context_length": 262144,
+    "staging_receipt_sha256": "sha256:9a680f714de5c72e60dc6b08f363a8c82658dc1540bbb9aab90a3b8939445869"
+  },
+  "runtime": {
+    "image": "ghcr.io/fleet-ai/cyber-post-train-glm53-runtime@sha256:ec93ba50613fd13fb4c0b0a9105767ab18209a1e0108dab0923aad694c0206ec",
+    "base_image": "lmsysorg/sglang@sha256:9e148f5ac788e856a06166bd6347a831831eb9fcfab4d1770874823a7c29a1a1",
+    "ray_version": "2.56.0",
+    "image_pull_secret_required": "ghcr-pull"
+  },
+  "jobs_api": {
+    "base_url": "https://api.ft.flt.build",
+    "identity_route": "GET /v1/whoami",
+    "preview_route": "POST /v1/runs/preview",
+    "submit_route": "POST /v1/runs",
+    "authentication": "github_cli_token_in_memory_bearer_header",
+    "openapi_observed_at_utc": "2026-09-05T12:41:49Z",
+    "openapi_priority_classes": ["fleet-train-high", "fleet-infra-quiet"],
+    "requested_priority_class": "fleet-infra-quiet",
+    "requested_priority_accepted": true,
+    "requested_preemption_policy": "Never",
+    "authenticated_preview_priority_class": "fleet-infra-quiet",
+    "authenticated_preview_rendered_pull_secret": "ghcr-pull",
+    "authenticated_preview_launch_authorized": false,
+    "observation_path": "docs/evidence/qwen38-study/2026-09-05-glm53-dedicated-serving-v7-jobs-api-observation.json",
+    "observation_receipt_sha256": "sha256:fdfcdd6490d507b6068f9947b9847121d9c9eb2ba6905aa2c04dcb5629462fb0"
+  },
+  "resources": {
+    "workers": 1,
+    "gpus_per_worker": 8,
+    "maximum_nodes": 2,
+    "maximum_gpus": 16,
+    "cpu_request": "96",
+    "cpu_limit": "192",
+    "memory_request": "1Ti",
+    "memory_limit": "2Ti",
+    "privileged": true,
+    "priority_class": "fleet-infra-quiet",
+    "preemption_policy": "Never"
+  },
+  "server_arguments": [
+    "python3", "-m", "sglang.launch_server",
+    "--model-path", "/mnt/sfs/models/glm-5.3-30333038",
+    "--served-model-name", "glm-5.3",
+    "--host", "0.0.0.0", "--port", "8000",
+    "--trust-remote-code",
+    "--tp-size", "8", "--dp-size", "8", "--ep-size", "8",
+    "--enable-dp-attention",
+    "--context-length", "262144",
+    "--quantization", "fp8",
+    "--kv-cache-dtype", "bfloat16",
+    "--mem-fraction-static", "0.85",
+    "--attention-backend", "dsa",
+    "--dsa-prefill-backend", "trtllm",
+    "--dsa-decode-backend", "trtllm",
+    "--moe-a2a-backend", "deepep",
+    "--speculative-algorithm", "EAGLE",
+    "--speculative-draft-model-path", "/mnt/sfs/models/glm-5.3-30333038",
+    "--speculative-num-steps", "1",
+    "--speculative-eagle-topk", "1",
+    "--speculative-num-draft-tokens", "2",
+    "--reasoning-parser", "glm45",
+    "--tool-call-parser", "glm47",
+    "--enable-metrics", "--enable-mfu-metrics", "--enable-metrics-for-all-schedulers"
+  ],
+  "server_arguments_sha256": "sha256:5969c3805b0473da3c445bebe89f96e3a2f7e7318b555eebd9135dd0eddd4903",
+  "replicas": {
+    "A": {
+      "title": "chris-cyber-evalserve-glm53-tp8-a-v7",
+      "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-glm53-tp8-a-v7",
+      "serving_block": "glm-dedicated-a-v7",
+      "service_name_template": "{ray_cluster_name}-head-svc",
+      "service_dns_template": "{service_name}.fleet-train-jobs.svc.cluster.local",
+      "probe_job_name": "chris-cyber-glm53-dedicated-a-v7-parity",
+      "qualified_controller_concurrency": 2,
+      "parity_receipt_path": "/mnt/sfs/jobs/chris-cyber-exact100-prebulk-reconcile-v4/glm-dedicated-a-parity.json",
+      "canary_receipt_path": "/mnt/sfs/jobs/chris-cyber-exact100-prebulk-reconcile-v4/glm-dedicated-a-canary.json",
+      "runtime_receipt_path": "/mnt/sfs/jobs/chris-cyber-exact100-prebulk-reconcile-v4/glm-dedicated-a-runtime.json"
+    },
+    "B": {
+      "title": "chris-cyber-evalserve-glm53-tp8-b-v7",
+      "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-glm53-tp8-b-v7",
+      "serving_block": "glm-dedicated-b-v7",
+      "service_name_template": "{ray_cluster_name}-head-svc",
+      "service_dns_template": "{service_name}.fleet-train-jobs.svc.cluster.local",
+      "probe_job_name": "chris-cyber-glm53-dedicated-b-v7-parity",
+      "qualified_controller_concurrency": 2,
+      "parity_receipt_path": "/mnt/sfs/jobs/chris-cyber-exact100-prebulk-reconcile-v4/glm-dedicated-b-parity.json",
+      "canary_receipt_path": "/mnt/sfs/jobs/chris-cyber-exact100-prebulk-reconcile-v4/glm-dedicated-b-canary.json",
+      "runtime_receipt_path": "/mnt/sfs/jobs/chris-cyber-exact100-prebulk-reconcile-v4/glm-dedicated-b-runtime.json"
+    }
+  },
+  "lifecycle": {
+    "script": "evals/fleet/scripts/glm53_dedicated_v6_lifecycle.sh",
+    "controller_heartbeat_script": "evals/fleet/scripts/glm53_dedicated_v7_controller_heartbeat.sh",
+    "post_ready_idle_seconds": 600,
+    "poll_seconds": 5,
+    "maximum_streams_per_endpoint": 2,
+    "heartbeat_files": ["lifecycle/traffic-stream-1", "lifecycle/traffic-stream-2"],
+    "drain_file": "lifecycle/DRAIN",
+    "startup_is_outside_idle_budget": true,
+    "release_on_controller_terminal": true
+  },
+  "generation7": {
+    "model": "glm-5.3",
+    "selection_rank": 13,
+    "attempt": 1,
+    "job_name": "chris-glm53-ac-r013-a1-g7-v1",
+    "run_id": "chris-glm53-ac-g7-r013-a1-b6338d53",
+    "spec_path": "evals/fleet/configs/glm53-opencode-autocontinue-canary-generation7-v1.json",
+    "generation7_spec_sha256": "sha256:bab642484368c507f53c2b99b29f63d80eb765705899b3d8955e2bb03a84f36a",
+    "release_path": "docs/evidence/qwen38-study/2026-09-05-glm53-autocontinue-generation7-scoring-release-v1.json",
+    "release_file_sha256": "sha256:2374b7933223c7922aa38c0f302bc6e89f6f5b6b20c7f99ab32315056d2e92cd",
+    "release_receipt_sha256": "sha256:3bdb7a64b512426c9e368ede5626565ca65aa058686ade54b39055807a38783b",
+    "package_commit": "e549ed9588159af9aaf6186e5b458a9eb070c114",
+    "accepted_gate_path": "/mnt/sfs/jobs/chris-cyber-exact100-prebulk-reconcile-v3/glm-5.3-generation7-gate.json",
+    "accepted_gate_required": true
+  },
+  "bulk_handoff": {
+    "current_generation7_bulk_commit": "b2934446d93cf34facf5fd007216e6dedcc9c2b4",
+    "current_generation7_bulk_serving_block": "glm-hosted-autocontinue-v1",
+    "current_generation7_bulk_is_dedicated_compatible": false,
+    "current_generation7_bulk_must_remain_unreleased_for_dedicated_path": true,
+    "dedicated_aware_append_only_successor_required": true,
+    "fresh_prebulk_reconciliation_required": true,
+    "whole_task_partition_required": true,
+    "pooling_across_serving_blocks_allowed": false
+  },
+  "partition": {
+    "accepted_generation7_hosted_canary": {"selection_rank": 13, "attempt": 1},
+    "dedicated_canaries": {
+      "A": {"selection_rank": 51, "attempt": 1},
+      "B": {"selection_rank": 76, "attempt": 1}
+    },
+    "blocks": [
+      {"serving_block": "glm-hosted-autocontinue-v1", "kind": "hosted", "ranks": [1, 25], "partial_attempts": {"13": [2, 3, 4]}, "streams": [{"name": "hosted-1", "ranks": [1, 25]}]},
+      {"serving_block": "glm-hosted-autocontinue-v1", "kind": "hosted", "ranks": [26, 50], "partial_attempts": {}, "streams": [{"name": "hosted-2", "ranks": [26, 50]}]},
+      {"serving_block": "glm-dedicated-a-v7", "kind": "dedicated", "ranks": [51, 75], "partial_attempts": {}, "streams": [{"name": "dedicated-a-1", "ranks": [51, 63]}, {"name": "dedicated-a-2", "ranks": [64, 75]}]},
+      {"serving_block": "glm-dedicated-b-v7", "kind": "dedicated", "ranks": [76, 100], "partial_attempts": {}, "streams": [{"name": "dedicated-b-1", "ranks": [76, 88]}, {"name": "dedicated-b-2", "ranks": [89, 100]}]}
+    ],
+    "whole_task_serving_block_required": true,
+    "pooling_across_serving_blocks_allowed": false
+  },
+  "release_sequence": [
+    "generation7_hosted_canary_accepted",
+    "fresh_prebulk_reconciliation_accepted",
+    "dedicated_aware_bulk_successor_frozen",
+    "replica_a_authenticated_preview_exact",
+    "replica_a_create_once_duplicate_gate",
+    "replica_a_uid_bound_non_scored_parity",
+    "replica_a_parity_only_scored_canary",
+    "replica_a_post_canary_runtime_acceptance",
+    "replica_a_second_stream_released",
+    "replica_b_authenticated_preview_exact",
+    "replica_b_create_once_duplicate_gate",
+    "replica_b_uid_bound_non_scored_parity",
+    "replica_b_parity_only_scored_canary",
+    "replica_b_post_canary_runtime_acceptance",
+    "replica_b_second_stream_released"
+  ],
+  "acceptance_contract": {
+    "jobs_api_run_and_rayjob_binding_required": true,
+    "workload_uid_and_owner_required": true,
+    "service_dns_selector_target_required": true,
+    "probe_job_and_pod_uid_required": true,
+    "endpoint_traversal_required": true,
+    "parallel_non_scored_concurrency_qualification_required": true,
+    "source_binding_required": true,
+    "global_cell_claim_required": true,
+    "claim_execution_binding_required": true,
+    "authoritative_session_match_count": 1,
+    "verifier_execution_id_required": true,
+    "session_ingest_completed_required": true,
+    "cleanup_completed_required": true,
+    "job_and_pod_uid_required": true,
+    "zero_restarts_required": true,
+    "scores_included": false
+  },
+  "privacy": {
+    "credentials_included": false,
+    "prompts_traces_flags_or_scores_included": false
+  }
+}

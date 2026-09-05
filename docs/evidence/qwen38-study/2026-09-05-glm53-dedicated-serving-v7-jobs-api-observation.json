@@ -1,0 +1,52 @@
+{
+  "authentication": {
+    "attribution_email_present": true,
+    "credential_persisted": false,
+    "login_present": true,
+    "source": "github_cli_token",
+    "transport": "authorization_bearer_header",
+    "whoami_http_status": 200
+  },
+  "base_url": "https://api.ft.flt.build",
+  "policy_preview": {
+    "accepted": true,
+    "http_status": 200,
+    "launch_authorized": false,
+    "manifest_kinds": ["RayJob"],
+    "rendered_gpu_limits": [8],
+    "rendered_image_pull_secrets": ["ghcr-pull"],
+    "rendered_images": [
+      "ghcr.io/fleet-ai/cyber-post-train-glm53-runtime@sha256:ec93ba50613fd13fb4c0b0a9105767ab18209a1e0108dab0923aad694c0206ec"
+    ],
+    "rendered_preemption_policy_from_priority_class": "Never",
+    "rendered_priority_class": "fleet-infra-quiet",
+    "request_sha256": "sha256:500d0b9ee1acb9fcd18aae4911e1f53f3eba359d1e40ec02da80478b78c9de41",
+    "route": "POST /v1/runs/preview"
+  },
+  "mutations": {
+    "objects_created": false,
+    "put_patch_delete_requests": 0,
+    "submit_requests": 0
+  },
+  "observed_at_utc": "2026-09-05T12:47:07Z",
+  "openapi": {
+    "allowed_priority_classes": ["fleet-train-high", "fleet-infra-quiet"],
+    "http_status": 200,
+    "paths": ["/v1/runs", "/v1/runs/preview", "/v1/runs/{name}", "/v1/whoami"],
+    "preview_request_schema": "RLJobConfig"
+  },
+  "privacy": {
+    "credentials_included": false,
+    "prompts_traces_flags_or_scores_included": false
+  },
+  "receipt_sha256": "sha256:fdfcdd6490d507b6068f9947b9847121d9c9eb2ba6905aa2c04dcb5629462fb0",
+  "requested_preview": {
+    "accepted": false,
+    "error_locations": [["body", "priority_class"]],
+    "error_types": ["value_error"],
+    "http_status": 422,
+    "request_sha256": "sha256:6a97a2a1823946fca2f5c2e0f8f0c59b4bc7f5668902ddaaa4323be69720dad5",
+    "route": "POST /v1/runs/preview"
+  },
+  "schema_version": "fleet-glm53-dedicated-serving-v7-jobs-api-observation-v1"
+}

@@ -1,8 +1,24 @@
 # Fleet blackbox baseline
 
-The current HELD two-node GLM5.3 dedicated-serving package and its no-idle
-lifecycle are documented in [DEDICATED_GLM53_V6.md](./DEDICATED_GLM53_V6.md).
-It does not authorize a launch.
+The current HELD generation-7-aware GLM5.3 dedicated-serving package and its
+no-idle lifecycle are documented in
+[DEDICATED_GLM53_V7.md](./DEDICATED_GLM53_V7.md). It does not authorize a
+launch. The v6 package remains frozen as historical generation-5 planning
+evidence and must not be used for the generation-7 campaign.
+
+The companion HELD bulk authority is
+`exact_pass4_dedicated_bulk_v4.py`. It freezes Qwen's 399 remaining cells on
+hosted inference and partitions GLM's 399 remaining cells into hosted ranks
+1–50, dedicated replica A ranks 51–75, and replica B ranks 76–100. No task
+crosses a serving treatment. Its wrapper exposes validation plus the gated
+prebulk workflow; a scored release must first accept both generation-7 canaries
+and complete the executable
+v4 CPU-only source/accept duplicate reconciliation. The two dedicated scored
+canaries are separate parity-only plans; only their post-canary runtime receipts
+can release dependent bulk. A parallel non-scored probe must separately qualify
+bounded concurrency two on each server; only then may its two disjoint,
+heartbeat-leased streams run together. The scored-controller packages remain
+held until those gates are present, and A must ramp before B.
 
 This evaluator runs the 160 registered tasks from Fleet job
 `a62dd51f-a52b-4941-8207-4679e4b25b51` with GLM-5.2 on hosted Agent Runtime v1.

@@ -1,0 +1,120 @@
+{
+  "controller_counts": {
+    "glm-dedicated-a-1": 51,
+    "glm-dedicated-a-2": 48,
+    "glm-dedicated-b-1": 51,
+    "glm-dedicated-b-2": 48,
+    "glm-hosted-1": 99,
+    "glm-hosted-2": 100,
+    "qwen-hosted-1": 199,
+    "qwen-hosted-2": 200
+  },
+  "controller_plan_sha256": {
+    "glm-dedicated-a-1": "sha256:2837904d8cdd06d83be767a1d5710e338a74c7d914719a064fcdd41bc42c59c8",
+    "glm-dedicated-a-2": "sha256:54bb2ff8e3fe5df49965fc187c3a29266045248b2855737ae6ddb88adf2b77f4",
+    "glm-dedicated-b-1": "sha256:891588b4f462e4d6d40cd48b27dd4187ea120bee1fb50628035c8034b5be75b3",
+    "glm-dedicated-b-2": "sha256:b1e596ab8fdc2371e48888aa19830188b889c7b98199e653337afce0a5aed9e1",
+    "glm-hosted-1": "sha256:923cac9b21b91de1e31b9a5e740e9ccc1a0e51f9e81fe0c598147c612601b9a6",
+    "glm-hosted-2": "sha256:ce30023e18bcc2255f2fb6a8603f2f366176854704f6e6aaadff7767bc83546f",
+    "qwen-hosted-1": "sha256:387b2dfe7155000961b3be0bc1ddf90f09e60e25d06cfddb36c570596145d7c5",
+    "qwen-hosted-2": "sha256:d66b4468b2bc69abf343213170b30f8ce2920d90e991b0fdd9468b36c64024e1"
+  },
+  "dedicated_ramp": {
+    "A_before_B": true,
+    "A_canary": {
+      "attempt": 1,
+      "selection_rank": 51
+    },
+    "B_canary": {
+      "attempt": 1,
+      "selection_rank": 76
+    },
+    "maximum_gpus": 16,
+    "maximum_nodes": 2,
+    "no_heartbeat_release_seconds": 600
+  },
+  "dedicated_v7_spec_sha256": "sha256:5c47d7114b9ff3d50419d79d65366bc3016a42bb114fc5927e81827a3b95067f",
+  "generation7_acceptance_gates": {
+    "glm-5.3": "/mnt/sfs/jobs/chris-cyber-exact100-prebulk-reconcile-v4/glm-5.3-generation7-gate.json",
+    "qwen3.8-27b": "/mnt/sfs/jobs/chris-cyber-exact100-prebulk-reconcile-v4/qwen3.8-27b-generation7-gate.json"
+  },
+  "generation7_package_commit": "e549ed9588159af9aaf6186e5b458a9eb070c114",
+  "glm_dedicated_a_bulk_cells": 99,
+  "glm_dedicated_b_bulk_cells": 99,
+  "glm_dedicated_scored_canary_cells": 2,
+  "glm_hosted_cells": 199,
+  "jobs_api_observation_receipt_sha256": "sha256:fdfcdd6490d507b6068f9947b9847121d9c9eb2ba6905aa2c04dcb5629462fb0",
+  "launch_authorized": false,
+  "module_file_sha256": "sha256:4b50ba0fba7ee6f7b1d046624e7c34a197bb8a6dda751762aa84d9b53bbea2a7",
+  "module_path": "evals/fleet/exact_pass4_dedicated_bulk_v4.py",
+  "objects_created": false,
+  "prebulk": {
+    "controller_plan_sha256": {
+      "glm-dedicated-a-1": "sha256:2837904d8cdd06d83be767a1d5710e338a74c7d914719a064fcdd41bc42c59c8",
+      "glm-dedicated-a-2": "sha256:54bb2ff8e3fe5df49965fc187c3a29266045248b2855737ae6ddb88adf2b77f4",
+      "glm-dedicated-b-1": "sha256:891588b4f462e4d6d40cd48b27dd4187ea120bee1fb50628035c8034b5be75b3",
+      "glm-dedicated-b-2": "sha256:b1e596ab8fdc2371e48888aa19830188b889c7b98199e653337afce0a5aed9e1",
+      "glm-hosted-1": "sha256:923cac9b21b91de1e31b9a5e740e9ccc1a0e51f9e81fe0c598147c612601b9a6",
+      "glm-hosted-2": "sha256:ce30023e18bcc2255f2fb6a8603f2f366176854704f6e6aaadff7767bc83546f",
+      "qwen-hosted-1": "sha256:387b2dfe7155000961b3be0bc1ddf90f09e60e25d06cfddb36c570596145d7c5",
+      "qwen-hosted-2": "sha256:d66b4468b2bc69abf343213170b30f8ce2920d90e991b0fdd9468b36c64024e1"
+    },
+    "jobs_api_server_receipts_required": {
+      "A": [
+        "authenticated_preview",
+        "duplicate_gate",
+        "uid_parity",
+        "parity_only_scored_canary",
+        "post_canary_runtime_gate"
+      ],
+      "B": [
+        "authenticated_preview",
+        "duplicate_gate",
+        "uid_parity",
+        "parity_only_scored_canary",
+        "post_canary_runtime_gate"
+      ]
+    },
+    "launch_authorized": false,
+    "required_checks": [
+      "exact_inventory_digest_and_100_rank_order",
+      "qwen_generation7_rank4_attempt1_accepted_once",
+      "glm_generation7_rank13_attempt1_accepted_once",
+      "all_798_planned_cells_have_zero_accepted_active_claimed_or_model_started_collisions",
+      "all_hosted_v3_has_no_release_or_active_controller",
+      "global_claim_root_matches_generation7",
+      "model_task_harness_tool_and_context_bindings_match",
+      "dedicated_tasks_are_whole_task_stratified_blocks",
+      "no_prompts_traces_flags_scores_or_credentials_persisted"
+    ],
+    "root": "/mnt/sfs/jobs/chris-cyber-exact100-prebulk-reconcile-v4",
+    "schema_version": "fleet-exact-pass4-dedicated-prebulk-v4",
+    "scored_canary_plan_sha256": {
+      "A": "sha256:31ab521ec09ffd8d7d2e5abb37f8e77d199de5f2502d808da792d3d4988c2d4d",
+      "B": "sha256:c65d562442496735b5516549e3d34e9070bf754a42c18201b95250f04a3d275f"
+    },
+    "status": "REQUIRED_BEFORE_RELEASE"
+  },
+  "privacy": {
+    "credentials_included": false,
+    "prompts_traces_flags_or_scores_included": false
+  },
+  "qwen_hosted_cells": 399,
+  "receipt_sha256": "sha256:578f28dce6a38e850816d25db2790551677464933892cad56ddd21aac06fff93",
+  "schema_version": "fleet-exact-pass4-dedicated-bulk-v4-held-receipt-v1",
+  "scored_canary_counts": {
+    "A": 1,
+    "B": 1
+  },
+  "scored_canary_plan_sha256": {
+    "A": "sha256:31ab521ec09ffd8d7d2e5abb37f8e77d199de5f2502d808da792d3d4988c2d4d",
+    "B": "sha256:c65d562442496735b5516549e3d34e9070bf754a42c18201b95250f04a3d275f"
+  },
+  "source_bulk_commit": "b2934446d93cf34facf5fd007216e6dedcc9c2b4",
+  "spec_file_sha256": "sha256:289192f808d57fd8f11540d3d1ebd9ddbec664c4a0492988ad4631d6acab1133",
+  "spec_path": "evals/fleet/configs/exact-pass4-dedicated-bulk-v4-held.json",
+  "status": "HELD",
+  "submit_file_sha256": "sha256:ffdadba0d60f7c65483717e9ba92e132912a2ce8d79bcdf7024a433e4685e9d6",
+  "submit_path": "evals/fleet/scripts/submit_exact_pass4_dedicated_bulk_v4.sh",
+  "total_cells": 798
+}
