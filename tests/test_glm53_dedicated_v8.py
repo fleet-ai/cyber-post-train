@@ -1,7 +1,10 @@
 from pathlib import Path
 
+import pytest
+
 from evals.fleet import glm53_dedicated_v8 as v8
 from evals.fleet import glm53_dedicated_v8_live as live
+from evals.fleet import self_hosted
 
 ROOT = Path.cwd()
 
@@ -38,3 +41,32 @@ def test_v8_live_rail_is_create_once_and_has_release_contract() -> None:
     assert 'client.post("/v1/runs", json=payload)' in source
     assert '"DELETE /v1/runs/{name}"' in source
     assert '"scored_tasks_launched": 0' in source
+
+
+def test_v8_sfs_duplicate_check_translates_the_observer_mount() -> None:
+    assert live._observer_sfs_path(v8.RUN_DIR) == (
+        "/shared/jobs/chris-cyber-evalserve-glm53-tp8-a-v8"
+    )
+    with pytest.raises(ValueError, match="outside the exact SFS mount"):
+        live._observer_sfs_path("/shared/jobs/not-a-runtime-path")
+    with pytest.raises(ValueError, match="unsafe"):
+        live._observer_sfs_path("/mnt/sfs/../escape")
+
+
+def test_v8_terminal_and_diagnosis_receipts_are_digest_valid_and_non_scored() -> None:
+    terminal = v8.load(
+        ROOT
+        / "docs/evidence/qwen38-study/2026-09-05-glm53-dedicated-serving-v8-terminal.json"
+    )
+    diagnosis = v8.load(
+        ROOT
+        / "docs/evidence/qwen38-study/2026-09-05-glm53-dedicated-serving-v8-diagnosis.json"
+    )
+    assert terminal["receipt_sha256"] == self_hosted.digest_without(
+        terminal, "receipt_sha256"
+    )
+    assert diagnosis["receipt_sha256"] == self_hosted.digest_without(
+        diagnosis, "receipt_sha256"
+    )
+    assert terminal["evidence"]["scored_tasks_launched"] == 0
+    assert diagnosis["classification"]["relaunch_allowed"] is False

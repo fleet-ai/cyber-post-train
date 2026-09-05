@@ -20,6 +20,8 @@ from evals.fleet import self_hosted
 BASE_URL = "https://api.ft.flt.build"
 NAMESPACE = "fleet-train-jobs"
 OBSERVER_POD = "allie-dev"
+RUNTIME_SFS_PREFIX = "/mnt/sfs/"
+OBSERVER_SFS_PREFIX = "/shared/"
 
 
 def _token() -> str:
@@ -56,6 +58,16 @@ def _write_once(path: Path, value: dict[str, Any]) -> None:
         os.link(temporary, path)
     finally:
         temporary.unlink(missing_ok=True)
+
+
+def _observer_sfs_path(runtime_path: str) -> str:
+    """Translate the Jobs API mount into allie-dev's read-only SFS mount."""
+    if not runtime_path.startswith(RUNTIME_SFS_PREFIX):
+        raise ValueError("runtime path is outside the exact SFS mount")
+    relative = runtime_path.removeprefix(RUNTIME_SFS_PREFIX)
+    if not relative or relative.startswith("/") or ".." in Path(relative).parts:
+        raise ValueError("runtime SFS path is unsafe")
+    return OBSERVER_SFS_PREFIX + relative
 
 
 def _runs(client: httpx.Client) -> list[dict[str, Any]]:
@@ -154,6 +166,7 @@ def live_gate(root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     serialized = json.dumps(inventory, sort_keys=True)
     kubernetes_matches = int(v8.TITLE in serialized) + int(v8.RUN_DIR in serialized)
     observer_uid = _kubectl("get", "pod", OBSERVER_POD, "-o", "jsonpath={.metadata.uid}")
+    observer_run_dir = _observer_sfs_path(v8.RUN_DIR)
     absent = subprocess.run(
         [
             "kubectl",
@@ -165,7 +178,7 @@ def live_gate(root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
             "test",
             "!",
             "-e",
-            v8.RUN_DIR,
+            observer_run_dir,
         ],
         check=False,
         capture_output=True,
@@ -193,6 +206,8 @@ def live_gate(root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
         "jobs_api_run_dir_matches": run_dir_matches,
         "kubernetes_identity_matches": kubernetes_matches,
         "sfs_run_dir_exists": False,
+        "sfs_runtime_run_dir": v8.RUN_DIR,
+        "sfs_observer_run_dir": observer_run_dir,
         "sfs_observer_pod_uid": observer_uid,
         "rendered": rendered,
         "preemption_policy": "Never",
