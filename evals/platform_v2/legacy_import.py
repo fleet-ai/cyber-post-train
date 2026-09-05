@@ -247,7 +247,7 @@ def _json(response: httpx.Response, operation: str) -> dict[str, Any]:
     if response.status_code >= 400:
         if response.status_code == 403 and operation == "Legacy task import":
             raise PlatformImportError(
-                "Legacy task import requires destination Repository write access"
+                "Legacy task import requires destination write access to the Repository"
             )
         raise PlatformImportError(f"{operation} failed with HTTP {response.status_code}")
     try:
