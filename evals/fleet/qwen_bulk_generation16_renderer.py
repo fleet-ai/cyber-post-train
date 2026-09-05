@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import copy
 import json
 import re
@@ -110,6 +111,34 @@ def validate_live_runtime_dependencies(
     )
 
 
+def submit_rendered_jobs(
+    rendered: dict[str, Any], namespace: str = "fleet-train-jobs"
+) -> None:
+    jobs = {
+        "apiVersion": "v1",
+        "kind": "List",
+        "items": [item for item in rendered.get("items", []) if item.get("kind") == "Job"],
+    }
+    if len(jobs["items"]) != len(bulk.CONTROLLERS):
+        raise ValueError("Generation-17 rendered Job count drifted")
+    validate_live_runtime_dependencies(jobs, namespace)
+    payload = yaml.safe_dump(jobs, sort_keys=False)
+    subprocess.run(
+        ["kubectl", "-n", namespace, "create", "--dry-run=server", "-f", "-"],
+        input=payload,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        ["kubectl", "-n", namespace, "create", "-f", "-"],
+        input=payload,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+
 def render(root: Path, inventory: dict[str, Any], package_commit: str) -> dict[str, Any]:
     bulk.validate_inventory_gate(inventory, root)
     if bulk.COMMIT_RE.fullmatch(package_commit) is None:
@@ -173,3 +202,24 @@ def dump(root: Path, inventory: Path, package_commit: str, output: Path) -> None
     output.write_text(
         yaml.safe_dump(render(root, bulk.load(inventory), package_commit), sort_keys=False)
     )
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--repo-root", type=Path, required=True)
+    parser.add_argument("--inventory", type=Path, required=True)
+    parser.add_argument("--package-commit", required=True)
+    parser.add_argument("--namespace", default="fleet-train-jobs")
+    parser.add_argument("--submit-jobs", action="store_true")
+    args = parser.parse_args()
+    if not args.submit_jobs:
+        parser.error("--submit-jobs is required")
+    submit_rendered_jobs(
+        render(args.repo_root, bulk.load(args.inventory), args.package_commit),
+        args.namespace,
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

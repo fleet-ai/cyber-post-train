@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import subprocess
 from pathlib import Path
 
 import httpx
@@ -148,6 +149,32 @@ def test_runtime_dependency_gate_rejects_missing_external_configmap() -> None:
         available_secrets=set(),
         available_configmaps={"runtime-core"},
     )
+
+
+def test_submit_path_cannot_create_when_runtime_dependency_is_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    inventory = json.loads(INVENTORY.read_text())
+    rendered = renderer.render(ROOT, inventory, "a" * 40)
+    calls: list[list[str]] = []
+
+    def fake_run(command: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append(command)
+        if command[-3:] == ["secrets", "-o", "name"]:
+            return subprocess.CompletedProcess(command, 0, "", "")
+        if command[-3:] == ["configmaps", "-o", "name"]:
+            names = "\n".join(
+                f"configmap/{item['metadata']['name']}"
+                for item in rendered["items"]
+                if item["kind"] == "ConfigMap"
+            )
+            return subprocess.CompletedProcess(command, 0, names + "\n", "")
+        pytest.fail("kubectl create was called after a missing dependency")
+
+    monkeypatch.setattr(renderer.subprocess, "run", fake_run)
+    with pytest.raises(ValueError, match=bulk.FLEET_API_KEY_SECRET):
+        renderer.submit_rendered_jobs(rendered)
+    assert all("create" not in command for command in calls)
 
 
 def test_projected_symlink_envelope_is_read_canonically(tmp_path: Path) -> None:
