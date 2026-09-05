@@ -25,6 +25,7 @@ from evals.fleet import qwen38_dedicated_rank2_v3 as qwen_dedicated_v3
 from evals.fleet import qwen38_dedicated_scored_canary_v1 as qwen_dedicated
 from evals.fleet import qwen_bulk_generation16 as qwen_generation16
 from evals.fleet import qwen_hosted_generation18 as qwen_generation18
+from evals.fleet import qwen_hosted_generation19_v4 as qwen_generation19_v4
 from evals.fleet import self_hosted
 
 DEFAULT_CAMPAIGN = Path("evals/fleet/configs/q38-glm53-exact-easiest100-pass4-campaign-v1.json")
@@ -36,6 +37,7 @@ GENERATION15_CLAIM_SCHEMA = "fleet-statistical-cell-execution-claim-v15"
 GENERATION15_ACCEPTED_GATE_SCHEMA = "fleet-qwen38-generation15-accepted-gate-v1"
 DEDICATED_QWEN_ACCEPTED_SCHEMA = "fleet-qwen38-dedicated-tp1-cell-accepted-v1"
 DEDICATED_QWEN_VALIDATED_SCHEMA = "fleet-qwen38-dedicated-tp1-accepted-validated-v1"
+DEDICATED_QWEN_VALIDATED_V2_SCHEMA = "fleet-qwen38-dedicated-tp1-accepted-validated-v2"
 DEDICATED_QWEN_ATTEMPT1_BINDING = {
     "plan_sha256": "sha256:5358ae8d0c81fd18d815f5289eabf771274101e099c799c49a85d0713687aa67",
     "controller": "qwen-dedicated-tp1-rank2-v1",
@@ -100,6 +102,7 @@ ACCEPTED_SCHEMAS = {
     GENERATION15_TERMINAL_SCHEMA,
     DEDICATED_QWEN_ACCEPTED_SCHEMA,
     DEDICATED_QWEN_VALIDATED_SCHEMA,
+    DEDICATED_QWEN_VALIDATED_V2_SCHEMA,
     GENERATION15_ACCEPTED_GATE_SCHEMA,
 }
 CLAIM_SCHEMAS = {
@@ -369,6 +372,43 @@ DEDICATED_QWEN_VALIDATED_FIELDS = {
     "credentials_included",
     "receipt_sha256",
 }
+DEDICATED_QWEN_VALIDATED_V2_FIELDS = {
+    "schema_version",
+    "status",
+    "accepted",
+    "credited",
+    "retry_allowed",
+    "serving_block",
+    "serving_parity_receipt_sha256",
+    "cell_id",
+    "execution_id",
+    "run_id",
+    "selection_rank",
+    "attempt",
+    "task_version_id",
+    "session_id",
+    "verifier_execution_id",
+    "claim_sha256",
+    "claim_receipt_sha256",
+    "config_sha256",
+    "plan_sha256",
+    "authoritative_projection_omissions",
+    "authoritative_projection_rule",
+    "artifact_file_sha256",
+    "all_artifact_byte_digests_matched",
+    "accepted_receipt_sha256",
+    "terminal_receipt_sha256",
+    "source_job_uid",
+    "source_pod_uid",
+    "validator_job_uid",
+    "validator_pod_uid",
+    "fleet_api_mutations",
+    "fresh_authoritative_session_reconciled",
+    "scores_included",
+    "prompts_or_traces_included",
+    "credentials_included",
+    "receipt_sha256",
+}
 
 
 class LedgerError(RuntimeError):
@@ -392,6 +432,9 @@ class Authority:
     bulk_items: dict[tuple[str, str], tuple[dict[str, Any], dict[str, Any]]]
     qwen_generation16_items: dict[tuple[str, str], tuple[dict[str, Any], dict[str, Any]]]
     qwen_generation18_items: dict[tuple[str, str], tuple[dict[str, Any], dict[str, Any]]]
+    qwen_generation19_v4_items: dict[
+        tuple[str, str], tuple[dict[str, Any], dict[str, Any]]
+    ]
     hosted_glm_bulk_items: dict[tuple[str, str], tuple[dict[str, Any], dict[str, Any]]]
     dedicated_qwen_items: dict[tuple[str, str], tuple[dict[str, Any], dict[str, Any]]]
     dedicated_qwen_v3_items: dict[tuple[str, str], tuple[dict[str, Any], dict[str, Any]]]
@@ -408,15 +451,22 @@ def _strict_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return value
 
 
-def _reject_sensitive_content(value: Any) -> None:
+def _reject_sensitive_content(value: Any, parent_key: str | None = None) -> None:
     if isinstance(value, dict):
+        if parent_key == "artifact_file_sha256":
+            if not value or any(
+                not isinstance(item, str) or exact.SHA256_RE.fullmatch(item) is None
+                for item in value.values()
+            ):
+                raise LedgerError("artifact_file_sha256 must contain digests only")
+            return
         forbidden = PROHIBITED_CONTENT_KEYS.intersection(value)
         if forbidden:
             raise LedgerError(
                 "receipt contains prohibited content fields: " + ", ".join(sorted(forbidden))
             )
-        for child in value.values():
-            _reject_sensitive_content(child)
+        for key, child in value.items():
+            _reject_sensitive_content(child, key)
     elif isinstance(value, list):
         for child in value:
             _reject_sensitive_content(child)
@@ -479,6 +529,20 @@ def _build_authority(repo_root: Path, campaign_path: Path) -> Authority:
                 raise LedgerError("Qwen generation-18 execution authority is duplicated")
             qwen_generation18_items[key] = (plan, item)
 
+    qwen_generation19_v4_items: dict[
+        tuple[str, str], tuple[dict[str, Any], dict[str, Any]]
+    ] = {}
+    for plan in qwen_generation19_v4.validate_all(repo_root).values():
+        if plan.get("treatment") != exact.EXPECTED_TREATMENT:
+            raise LedgerError(
+                "Qwen generation-19 v4 plan treatment drifted from the exact universe"
+            )
+        for item in plan["attempts"]:
+            key = (item["cell_id"], item["execution_id"])
+            if key in qwen_generation19_v4_items:
+                raise LedgerError("Qwen generation-19 v4 execution authority is duplicated")
+            qwen_generation19_v4_items[key] = (plan, item)
+
     hosted_glm_bulk_items: dict[tuple[str, str], tuple[dict[str, Any], dict[str, Any]]] = {}
     for plan in hosted_glm_bulk.validate_all(repo_root).values():
         if plan.get("treatment") != exact.EXPECTED_TREATMENT:
@@ -527,14 +591,16 @@ def _build_authority(repo_root: Path, campaign_path: Path) -> Authority:
             raise LedgerError("dedicated Qwen execution authority is duplicated")
         dedicated_qwen_items[key] = (plan, item)
 
-    dedicated_qwen_v3_plan = qwen_dedicated_v3.build_plan(repo_root)
-    dedicated_qwen_v3_item = dedicated_qwen_v3_plan["item"]
-    dedicated_qwen_v3_items = {
-        (dedicated_qwen_v3_item["cell_id"], dedicated_qwen_v3_item["execution_id"]): (
-            dedicated_qwen_v3_plan,
-            dedicated_qwen_v3_item,
-        )
-    }
+    dedicated_qwen_v3_items: dict[
+        tuple[str, str], tuple[dict[str, Any], dict[str, Any]]
+    ] = {}
+    for attempt in (2, 3, 4):
+        dedicated_qwen_v3_plan = qwen_dedicated_v3.build_plan(repo_root, attempt)
+        dedicated_qwen_v3_item = dedicated_qwen_v3_plan["item"]
+        key = (dedicated_qwen_v3_item["cell_id"], dedicated_qwen_v3_item["execution_id"])
+        if key in dedicated_qwen_v3_items:
+            raise LedgerError("dedicated Qwen v3 execution authority is duplicated")
+        dedicated_qwen_v3_items[key] = (dedicated_qwen_v3_plan, dedicated_qwen_v3_item)
 
     generation7_items = _validated_fixed_bindings(cells, GENERATION7_BINDINGS, 7)
     generation15_items = _validated_fixed_bindings(cells, GENERATION15_BINDINGS, 15)
@@ -544,6 +610,7 @@ def _build_authority(repo_root: Path, campaign_path: Path) -> Authority:
         bulk_items=bulk_items,
         qwen_generation16_items=qwen_generation16_items,
         qwen_generation18_items=qwen_generation18_items,
+        qwen_generation19_v4_items=qwen_generation19_v4_items,
         hosted_glm_bulk_items=hosted_glm_bulk_items,
         dedicated_qwen_items=dedicated_qwen_items,
         dedicated_qwen_v3_items=dedicated_qwen_v3_items,
@@ -623,6 +690,7 @@ def _bulk_pair(
         pair
         for mapping in (
             authority.qwen_generation18_items,
+            authority.qwen_generation19_v4_items,
             authority.qwen_generation16_items,
             authority.hosted_glm_bulk_items,
             authority.bulk_items,
@@ -1009,6 +1077,90 @@ def _accepted_validated_dedicated_qwen(
     )
 
 
+def _accepted_validated_dedicated_qwen_v2(
+    value: dict[str, Any], path: Path, authority: Authority
+) -> Evidence:
+    """Validate the reusable v3-server acceptance chain without opening artifacts."""
+    _require_exact_fields(value, DEDICATED_QWEN_VALIDATED_V2_FIELDS, path)
+    key = (value.get("cell_id"), value.get("execution_id"))
+    pair = authority.dedicated_qwen_v3_items.get(key)
+    if pair is None:
+        raise LedgerError(f"validated dedicated Qwen v2 receipt lacks exact plan authority: {path}")
+    plan, item = pair
+    cell, generation = _require_cell_execution(authority, *key, item["execution_generation"], path)
+    expected = {
+        "serving_block": qwen_dedicated_v3.SERVING_BLOCK,
+        "serving_parity_receipt_sha256": qwen_dedicated_v3.PARITY_SHA256,
+        "cell_id": item["cell_id"],
+        "execution_id": item["execution_id"],
+        "run_id": item["run_id"],
+        "selection_rank": item["selection_rank"],
+        "attempt": item["attempt"],
+        "task_version_id": item["task_version_id"],
+        "config_sha256": plan["config"]["config_sha256"],
+        "plan_sha256": plan["plan_sha256"],
+    }
+    if any(value.get(field) != expected_value for field, expected_value in expected.items()):
+        raise LedgerError(f"validated dedicated Qwen v2 identity or plan binding drifted: {path}")
+    artifact_digests = value.get("artifact_file_sha256")
+    if not isinstance(artifact_digests, dict) or set(artifact_digests) != {
+        "plan",
+        "claim",
+        "result",
+        "reward",
+        "session_ingest",
+        "cleanup",
+        "accepted",
+        "terminal",
+    }:
+        raise LedgerError(f"validated dedicated Qwen v2 artifact digest map drifted: {path}")
+    for field in (
+        "claim_sha256",
+        "claim_receipt_sha256",
+        "accepted_receipt_sha256",
+        "terminal_receipt_sha256",
+    ):
+        _require_sha256(value.get(field), field, path)
+    if value.get("claim_sha256") != value.get("claim_receipt_sha256"):
+        raise LedgerError(f"validated dedicated Qwen v2 claim chain drifted: {path}")
+    if any(
+        (
+            value.get("status") != "ACCEPTED_VALIDATED",
+            value.get("accepted") is not True,
+            value.get("credited") is not True,
+            value.get("retry_allowed") is not False,
+            value.get("authoritative_projection_omissions")
+            != ["metadata", "model", "task_version_id"],
+            value.get("authoritative_projection_rule")
+            != "legacy_list_fields_may_be_null_but_never_mismatched_v1",
+            value.get("all_artifact_byte_digests_matched") is not True,
+            value.get("fleet_api_mutations") != 0,
+            value.get("fresh_authoritative_session_reconciled") is not True,
+            value.get("scores_included") is not False,
+            value.get("prompts_or_traces_included") is not False,
+            value.get("credentials_included") is not False,
+        )
+    ):
+        raise LedgerError(f"validated dedicated Qwen v2 outcome is not authoritative: {path}")
+    for field in (
+        "session_id",
+        "verifier_execution_id",
+        "source_job_uid",
+        "source_pod_uid",
+        "validator_job_uid",
+        "validator_pod_uid",
+    ):
+        _require_uuid(value.get(field), field, path)
+    return Evidence(
+        "accepted",
+        cell["cell_id"],
+        item["execution_id"],
+        generation,
+        value["receipt_sha256"],
+        path,
+    )
+
+
 def accepted_evidence(path: Path, authority: Authority) -> Evidence:
     value = load_receipt(path)
     schema = value.get("schema_version")
@@ -1020,6 +1172,8 @@ def accepted_evidence(path: Path, authority: Authority) -> Evidence:
         return _accepted_dedicated_qwen(value, path, authority)
     if schema == DEDICATED_QWEN_VALIDATED_SCHEMA:
         return _accepted_validated_dedicated_qwen(value, path, authority)
+    if schema == DEDICATED_QWEN_VALIDATED_V2_SCHEMA:
+        return _accepted_validated_dedicated_qwen_v2(value, path, authority)
     if schema == GENERATION15_ACCEPTED_GATE_SCHEMA:
         return _accepted_generation15_gate(value, path, authority)
     if schema == GENERATION7_TERMINAL_SCHEMA:

@@ -30,6 +30,11 @@ def _first_bulk(authority: ledger.Authority, model: str = "qwen3.8-27b") -> tupl
     raise AssertionError("bulk fixture missing")
 
 
+def _first_g19_v4(authority: ledger.Authority) -> tuple[dict, dict, dict]:
+    plan, item = next(iter(authority.qwen_generation19_v4_items.values()))
+    return plan, item, authority.cells[item["cell_id"]]
+
+
 def _accepted(authority: ledger.Authority, model: str = "qwen3.8-27b") -> dict:
     plan, item, cell = _first_bulk(authority, model)
     value = {
@@ -83,6 +88,20 @@ def _claim(
     assert value is not None
     path = root / f"{item['execution_id'].removeprefix('sha256:')}.json"
     return path, value
+
+
+def _g19_v4_claim(tmp_path: Path, authority: ledger.Authority) -> tuple[Path, dict]:
+    plan, item, _cell = _first_g19_v4(authority)
+    root = tmp_path / "claims"
+    value = runtime.claim_cell(
+        plan,
+        item,
+        claim_root=root,
+        job_uid="11111111-1111-4111-8111-111111111111",
+        pod_uid="22222222-2222-4222-8222-222222222222",
+    )
+    assert value is not None
+    return root / f"{item['execution_id'].removeprefix('sha256:')}.json", value
 
 
 def _tombstone(cell: dict, generation: int = 1) -> dict:
@@ -652,6 +671,38 @@ def test_retry_safe_tombstone_is_counted_without_consuming_the_cell(
     )
     assert result["models"]["qwen3.8-27b"]["retryable_infra_failed"] == 1
     assert result["models"]["qwen3.8-27b"]["accepted"] == 0
+
+
+def test_generation19_v4_claim_is_bound_to_exact_frozen_plan(
+    tmp_path: Path, authority: ledger.Authority
+) -> None:
+    path, value = _g19_v4_claim(tmp_path, authority)
+    evidence = ledger.claim_evidence(path, authority, active=True)
+    assert evidence.state == "active"
+
+    value["controller"] = "qwen-b" if value["controller"] == "qwen-a" else "qwen-a"
+    value["receipt_sha256"] = self_hosted.digest_without(value, "receipt_sha256")
+    _write(path, value)
+    with pytest.raises(ledger.LedgerError, match="absent from exact frozen plans"):
+        ledger.claim_evidence(path, authority, active=True)
+
+
+def test_dedicated_qwen_v2_validated_acceptance_is_digest_only_and_plan_bound(
+    tmp_path: Path, authority: ledger.Authority
+) -> None:
+    source = ROOT / (
+        "docs/evidence/qwen38-study/"
+        "2026-09-05-qwen38-dedicated-r002-a2-accepted-validated-v2.json"
+    )
+    evidence = ledger.accepted_evidence(source, authority)
+    assert evidence.state == "accepted"
+
+    value = json.loads(source.read_text())
+    value["artifact_file_sha256"]["reward"] = "protected-content"
+    value["receipt_sha256"] = self_hosted.digest_without(value, "receipt_sha256")
+    path = _write(tmp_path / "ACCEPTED_VALIDATED.json", value)
+    with pytest.raises(ledger.LedgerError, match="digests only"):
+        ledger.accepted_evidence(path, authority)
 
 
 @pytest.mark.parametrize(
