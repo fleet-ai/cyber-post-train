@@ -1,0 +1,61 @@
+{
+  "schema_version": "fleet-qwen38-dedicated-serving-v1-authorization-v1",
+  "status": "AUTHORIZED",
+  "authorized_at_utc": "2026-09-05T17:36:56Z",
+  "authorization_source": "explicit_root_agent_instruction",
+  "authorized_scope": "one_non_scored_one_node_one_gpu_qwen38_parity_canary",
+  "source_parent_commit": "0e5edbb798512b031d908038a52cbc335881dba2",
+  "title": "chris-cyber-evalserve-q38-tp1-a-v1",
+  "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-q38-tp1-a-v1",
+  "model": {
+    "repository": "Qwen/Qwen3.8-27B",
+    "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "staging_receipt_sha256": "sha256:9a680f714de5c72e60dc6b08f363a8c82658dc1540bbb9aab90a3b8939445869",
+    "indexed_shard_count": 18,
+    "indexed_weight_bytes": 55563006776,
+    "context_length": 262144
+  },
+  "compatibility": {
+    "exact_live_inference_model_uid": "d06c0531-7181-41ad-a3fd-cd8e3e774ab9",
+    "exact_live_inference_model_identity_sha256": "sha256:a0b181ca8bbaba35098346b6a75e4d3509e21939be25339eae027507cb30e4f0",
+    "live_state": "Ready",
+    "live_tensor_parallel_size": 1,
+    "live_gpu_count": 1,
+    "live_context_length": 262144,
+    "runtime_image": "ghcr.io/fleet-ai/cyber-post-train-glm53-runtime@sha256:ec93ba50613fd13fb4c0b0a9105767ab18209a1e0108dab0923aad694c0206ec",
+    "runtime_sglang_version": "0.5.18",
+    "runtime_sglang_commit": "71de97b264b04dcd514cf904003028aefe9775c8",
+    "runtime_ray_version": "2.56.0",
+    "qwen35_architecture_and_parsers_present": true,
+    "verdict": "SUPPORTED_FOR_ONE_NON_SCORED_EXECUTION_CANARY"
+  },
+  "controls": {
+    "one_full_b300_preflight_required": true,
+    "reject_partial_memory_b300": true,
+    "pre_ready_exit_receipt_required": true,
+    "release_within_nonproductive_seconds": 600,
+    "additional_replica_allowed": false,
+    "scored_tasks_allowed": false,
+    "parity_required_before_scoring": true
+  },
+  "resources": {
+    "nodes": 1,
+    "gpus": 1,
+    "priority_class": "fleet-infra-quiet",
+    "preemption_policy": "Never",
+    "privileged": true
+  },
+  "file_sha256": {
+    "evals/fleet/configs/qwen38-dedicated-serving-v1-authorized.json": "sha256:45bdd77a574b96703fe4f874c7e8cf6c946940974ae022de6750d3b0b45a535e",
+    "evals/fleet/qwen38_dedicated_v1.py": "sha256:263bab437a110d7969b90965ede8d9be89de8c46507ca045703edb4ce24d9bef",
+    "evals/fleet/qwen38_dedicated_v1_live.py": "sha256:29b14452ddd868d8817e1340fbb6f896f5fe6ed79278d8764381e22c5b7cead7",
+    "evals/fleet/scripts/qwen38_dedicated_lifecycle_v1.sh": "sha256:e41e47e88179dda48fc00f4ffeed4c6e5bf98d5e83ad7ccbda4fd2c5cecfbc88",
+    "evals/fleet/scripts/submit_qwen38_dedicated_v1.sh": "sha256:48fbda18b4a2b72098a7aff192a80cccc50ecf0d7210aa6e1d32ba81abd8c299",
+    "tests/test_qwen38_dedicated_v1.py": "sha256:c90a90d1b126ebc8bc5e50315e2fab1beb5addb3cee01f971c5221308898bf80"
+  },
+  "privacy": {
+    "credentials_included": false,
+    "prompts_traces_flags_or_scores_included": false
+  },
+  "receipt_sha256": "sha256:e2a4846973005dc0a3eb3ddf40d92d22186959d4384917f2f5a84ed83a6fbda1"
+}

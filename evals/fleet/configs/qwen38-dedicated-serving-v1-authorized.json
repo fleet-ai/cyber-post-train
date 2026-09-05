@@ -1,0 +1,67 @@
+{
+  "schema_version": "fleet-qwen38-dedicated-serving-v1-authorized-spec-v1",
+  "status": "AUTHORIZED",
+  "launch_authorized": true,
+  "scope": "one_non_scored_parity_canary_only",
+  "title": "chris-cyber-evalserve-q38-tp1-a-v1",
+  "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-q38-tp1-a-v1",
+  "model": {
+    "repository": "Qwen/Qwen3.8-27B",
+    "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "served_id": "qwen3.8-27b",
+    "sfs_path": "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2",
+    "context_length": 262144,
+    "staging_receipt_sha256": "sha256:9a680f714de5c72e60dc6b08f363a8c82658dc1540bbb9aab90a3b8939445869"
+  },
+  "runtime": {
+    "image": "ghcr.io/fleet-ai/cyber-post-train-glm53-runtime@sha256:ec93ba50613fd13fb4c0b0a9105767ab18209a1e0108dab0923aad694c0206ec",
+    "base_image": "lmsysorg/sglang@sha256:9e148f5ac788e856a06166bd6347a831831eb9fcfab4d1770874823a7c29a1a1",
+    "sglang_version": "0.5.18",
+    "sglang_commit": "71de97b264b04dcd514cf904003028aefe9775c8",
+    "ray_version": "2.56.0",
+    "qwen35_architecture_present": true,
+    "qwen3_reasoning_parser_present": true,
+    "qwen3_coder_tool_parser_present": true
+  },
+  "resources": {
+    "workers": 1,
+    "gpus_per_worker": 1,
+    "cpu_request": "32",
+    "cpu_limit": "96",
+    "memory_request": "256Gi",
+    "memory_limit": "768Gi",
+    "privileged": true,
+    "priority_class": "fleet-infra-quiet",
+    "preemption_policy": "Never"
+  },
+  "shape_basis": {
+    "exact_live_inference_model_uid": "d06c0531-7181-41ad-a3fd-cd8e3e774ab9",
+    "exact_live_revision_ready": true,
+    "exact_live_context_length": 262144,
+    "exact_live_tensor_parallel_size": 1,
+    "exact_live_gpu_count": 1,
+    "serialized_weight_bytes": 55563006776,
+    "kv_cache_dtype": "fp8_e4m3"
+  },
+  "lifecycle": {
+    "script": "evals/fleet/scripts/qwen38_dedicated_lifecycle_v1.sh",
+    "hardware_preflight_required": true,
+    "pre_ready_exit_receipt_required": true,
+    "post_ready_idle_seconds": 600,
+    "release_when_idle_or_failed": true
+  },
+  "server_arguments_sha256": "sha256:836d25fc3df3f0a1ecfc53788492cfa4f97df3462c4a4b0e6c23f272016f14c0",
+  "create_once": {
+    "fresh_authenticated_preview_required": true,
+    "jobs_api_title_and_run_dir_absent": true,
+    "kubernetes_identity_absent": true,
+    "sfs_run_dir_absent": true,
+    "additional_replica_allowed": false
+  },
+  "evaluation": {
+    "scored_tasks_allowed": false,
+    "health_and_identity_parity_required": true,
+    "structured_tool_parity_required_before_scored_canary": true,
+    "accepted_canary_required_before_bulk": true
+  }
+}
