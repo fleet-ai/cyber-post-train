@@ -1,7 +1,8 @@
 {
-  "schema_version": "fleet-glm53-dedicated-serving-v11-preview-v1",
-  "status": "PREVIEW_ONLY",
-  "launch_authorized": false,
+  "schema_version": "fleet-glm53-dedicated-serving-v11-authorized-v1",
+  "status": "AUTHORIZED",
+  "launch_authorized": true,
+  "scope": "one_non_scored_dedicated_server_only",
   "title": "chris-cyber-evalserve-glm53-tp8-a-v11",
   "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-glm53-tp8-a-v11",
   "model": {

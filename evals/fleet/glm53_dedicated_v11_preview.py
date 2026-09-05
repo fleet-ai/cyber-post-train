@@ -216,7 +216,7 @@ def live_gate(root: Path) -> dict[str, Any]:
         "jobs_api_run_dir_matches": run_dir_matches,
         "kubernetes_identity_matches": kubernetes_matches,
         "sfs_run_dir_exists": False,
-        "launch_authorized": False,
+        "launch_authorized": True,
         "mutations": 0,
         "two_node_tp16_allowed": False,
         "credentials_included": False,
@@ -228,14 +228,58 @@ def live_gate(root: Path) -> dict[str, Any]:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("command", choices=("preview",))
+    parser.add_argument("command", choices=("preview", "submit"))
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     if args.output.exists() or args.output.is_symlink():
         raise RuntimeError("refusing existing output receipt")
-    receipt = live_gate(Path.cwd())
+    if args.command == "submit":
+        dirty = subprocess.run(
+            ["git", "status", "--porcelain", "--untracked-files=all"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+        if dirty:
+            raise RuntimeError("submit requires a clean immutable worktree")
+    gate = live_gate(Path.cwd())
+    if args.command == "preview":
+        shared._write_once(args.output, gate)
+        print(json.dumps({"status": gate["status"], "receipt_sha256": gate["receipt_sha256"]}))
+        return 0
+
+    payload = v11.payload(v11.spec(Path.cwd()), Path.cwd())
+    with httpx.Client(
+        base_url=shared.BASE_URL,
+        headers={"Authorization": f"Bearer {shared._token()}", "Accept": "application/json"},
+        timeout=60,
+    ) as client:
+        response = client.post("/v1/runs", json=payload)
+        response.raise_for_status()
+        if response.status_code != 202:
+            raise RuntimeError("Jobs API submit did not return 202")
+        api_run_id = response.json().get("name")
+    if not isinstance(api_run_id, str) or not api_run_id.startswith("ft-run-"):
+        raise RuntimeError("Jobs API response omitted the exact run identity")
+    receipt = {
+        "schema_version": "fleet-glm53-dedicated-serving-v11-submission-v1",
+        "status": "SUBMITTED",
+        "submitted_at_utc": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        "api_run_id": api_run_id,
+        "title": v11.TITLE,
+        "run_dir": v11.RUN_DIR,
+        "request_sha256": gate["request_sha256"],
+        "live_gate_receipt_sha256": gate["receipt_sha256"],
+        "eligible_flavor_uids": [row["uid"] for row in gate["topology_gate"]["eligible_flavors"]],
+        "route": "POST /v1/runs",
+        "http_status": 202,
+        "scored_tasks_launched": 0,
+        "credentials_included": False,
+        "prompts_traces_flags_or_scores_included": False,
+    }
+    receipt["receipt_sha256"] = self_hosted.digest_without(receipt, "receipt_sha256")
     shared._write_once(args.output, receipt)
-    print(json.dumps({"status": receipt["status"], "receipt_sha256": receipt["receipt_sha256"]}))
+    print(json.dumps({"api_run_id": api_run_id, "status": "SUBMITTED"}, sort_keys=True))
     return 0
 
 

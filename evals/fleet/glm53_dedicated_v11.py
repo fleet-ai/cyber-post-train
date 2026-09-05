@@ -11,7 +11,7 @@ from typing import Any
 from evals.fleet import glm53_dedicated_v7 as v7
 from evals.fleet import glm53_dedicated_v8 as v8
 
-SPEC_PATH = "evals/fleet/configs/glm53-dedicated-serving-v11-preview.json"
+SPEC_PATH = "evals/fleet/configs/glm53-dedicated-serving-v11-authorized.json"
 TITLE = "chris-cyber-evalserve-glm53-tp8-a-v11"
 RUN_DIR = "/mnt/sfs/jobs/chris-cyber-evalserve-glm53-tp8-a-v11"
 TOPOLOGY_MODE = "required"
@@ -41,10 +41,12 @@ def spec(root: Path) -> dict[str, Any]:
 
 
 def validate(value: dict[str, Any], root: Path) -> None:
-    if value.get("schema_version") != "fleet-glm53-dedicated-serving-v11-preview-v1":
+    if value.get("schema_version") != "fleet-glm53-dedicated-serving-v11-authorized-v1":
         raise ValueError("v11 schema drifted")
-    if value.get("status") != "PREVIEW_ONLY" or value.get("launch_authorized") is not False:
-        raise ValueError("v11 must remain held for preview")
+    if value.get("status") != "AUTHORIZED" or value.get("launch_authorized") is not True:
+        raise ValueError("v11 launch is not explicitly authorized")
+    if value.get("scope") != "one_non_scored_dedicated_server_only":
+        raise ValueError("v11 authorization scope drifted")
     if value.get("title") != TITLE or value.get("run_dir") != RUN_DIR:
         raise ValueError("v11 create-once identity drifted")
     if value.get("model") != {

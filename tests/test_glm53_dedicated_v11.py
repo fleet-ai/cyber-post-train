@@ -10,11 +10,12 @@ from evals.fleet import self_hosted
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_v11_is_held_and_uses_exact_required_topology() -> None:
+def test_v11_authorizes_one_non_scored_server_and_uses_exact_required_topology() -> None:
     value = v11.spec(ROOT)
     request = v11.payload(value, ROOT)
-    assert value["status"] == "PREVIEW_ONLY"
-    assert value["launch_authorized"] is False
+    assert value["status"] == "AUTHORIZED"
+    assert value["launch_authorized"] is True
+    assert value["scope"] == "one_non_scored_dedicated_server_only"
     assert request["topology_mode"] == "required"
     assert "topology_level" not in request
     assert request["workers"] == 1
