@@ -1,4 +1,4 @@
-"""Held sequential rank-3 block for the exact dedicated Qwen v3 server."""
+"""Held sequential rank-3 block for the exact dedicated Qwen TP1-B server."""
 
 from __future__ import annotations
 
@@ -9,12 +9,20 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-from evals.fleet import qwen38_dedicated_rank2_v3 as rank2
 from evals.fleet import qwen38_dedicated_scored_canary_v1 as legacy
 from evals.fleet import self_hosted
 
 CONTROLLER = "qwen-dedicated-tp1-rank3-v3"
-SERVING_BLOCK = rank2.SERVING_BLOCK
+SERVING_BLOCK = "dedicated-qwen-tp1-b-v1"
+PARITY = Path(
+    "docs/evidence/qwen38-study/2026-09-05-qwen38-dedicated-tp1-b-v1-actual-opencode-parity.json"
+)
+PARITY_SHA256 = "sha256:9e4feeb252924031bbc79ca4b812bf482ed466c7be707b52229350437cdca5bd"
+SERVICE_ORIGIN = "http://ft-run-8656260d-ln8hl-head-svc.fleet-train-jobs.svc.cluster.local:8000"
+SERVICE_UID = "b0f706ca-7190-42a1-a4a0-23e0f5eaf41f"
+RAYJOB_UID = "a16fa2a7-27e6-480a-a7fb-4332ebdff5b6"
+WORKLOAD_UID = "3a800a6e-ec90-46ba-a308-734379b7d23e"
+TRAFFIC = Path("/mnt/sfs/jobs/chris-cyber-evalserve-q38-tp1-b-v1/lifecycle/traffic")
 EXECUTION_GENERATION = 20
 TASK_VERSION_ID = "33d37078-0669-478e-af39-43cd245f0da8"
 EXPECTED_IDENTITIES = {
@@ -45,11 +53,11 @@ RUN_IDS = {
 def _binding():
     replacements = {
         "CONTROLLER": CONTROLLER,
-        "SERVICE_ORIGIN": rank2.SERVICE_ORIGIN,
-        "SERVICE_UID": rank2.SERVICE_UID,
-        "RAYJOB_UID": rank2.RAYJOB_UID,
-        "WORKLOAD_UID": rank2.WORKLOAD_UID,
-        "TRAFFIC": rank2.TRAFFIC,
+        "SERVICE_ORIGIN": SERVICE_ORIGIN,
+        "SERVICE_UID": SERVICE_UID,
+        "RAYJOB_UID": RAYJOB_UID,
+        "WORKLOAD_UID": WORKLOAD_UID,
+        "TRAFFIC": TRAFFIC,
     }
     previous = {name: getattr(legacy, name) for name in replacements}
     try:
@@ -79,13 +87,13 @@ def build_plan(root: Path, attempt: int) -> dict[str, Any]:
     plan["controller"] = CONTROLLER
     config = plan["config"]
     config["serving"] = {
-        "kind": "dedicated_qwen_tp1_v3",
+        "kind": "dedicated_qwen_tp1_b_v1",
         "serving_block": SERVING_BLOCK,
-        "service_origin": rank2.SERVICE_ORIGIN,
-        "service_uid": rank2.SERVICE_UID,
-        "rayjob_uid": rank2.RAYJOB_UID,
-        "workload_uid": rank2.WORKLOAD_UID,
-        "parity_receipt_sha256": rank2.PARITY_SHA256,
+        "service_origin": SERVICE_ORIGIN,
+        "service_uid": SERVICE_UID,
+        "rayjob_uid": RAYJOB_UID,
+        "workload_uid": WORKLOAD_UID,
+        "parity_receipt_sha256": PARITY_SHA256,
         "hosted_and_dedicated_results_must_remain_explicit_blocks": True,
     }
     config["config_sha256"] = self_hosted.digest_without(config, "config_sha256")
@@ -146,6 +154,29 @@ def _require_previous_validated(attempt: int, jobs_root: Path = Path("/mnt/sfs/j
         raise RuntimeError("previous dedicated Qwen rank3 cell is not fully validated")
 
 
+def _validate_parity(root: Path) -> dict[str, Any]:
+    value = json.loads((root / PARITY).read_text())
+    binding = (value.get("endpoint") or {}).get("server_binding") or {}
+    execution = value.get("execution") or {}
+    tools = value.get("tool_contract") or {}
+    if (
+        value.get("receipt_sha256") != PARITY_SHA256
+        or self_hosted.digest_without(value, "receipt_sha256") != PARITY_SHA256
+        or value.get("status") != "PASSED_NON_SCORED"
+        or binding.get("rayjob_uid") != RAYJOB_UID
+        or binding.get("service_uid") != SERVICE_UID
+        or binding.get("model_revision") != legacy.MODEL_REVISION
+        or binding.get("context_length") != 262144
+        or execution.get("harness_exit_code") != 0
+        or execution.get("task_instance_session_verifier_scoring_calls") != 0
+        or tools.get("calls_observed_in_order") != ["bash", "submit_report"]
+        or tools.get("model_request_catalog_exact") is not True
+        or tools.get("arguments_structurally_valid") is not True
+    ):
+        raise RuntimeError("dedicated Qwen TP1-B actual-harness parity drifted")
+    return value
+
+
 def run(root: Path, proxy: Path, attempt: int) -> dict[str, Any]:
     with _binding():
         _require_previous_validated(attempt)
@@ -154,7 +185,7 @@ def run(root: Path, proxy: Path, attempt: int) -> dict[str, Any]:
         key = os.environ.get("FLEET_API_KEY")
         if not key:
             raise RuntimeError("FLEET_API_KEY is required")
-        rank2._validate_parity(root)
+        _validate_parity(root)
         legacy._live_checks(plan, key)
         output.mkdir(mode=0o700, parents=False)
         self_hosted.write_json_once(output / "PLAN.json", plan)

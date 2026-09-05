@@ -22,6 +22,11 @@ def test_rank3_block_has_fresh_generation_exact_complete_cells_and_is_held() -> 
     ]
     assert all(plan["launch_authorized"] is False for plan in plans)
     assert all(plan["config"]["serving"]["serving_block"] == lane.SERVING_BLOCK for plan in plans)
+    assert all(plan["config"]["serving"]["service_uid"] == lane.SERVICE_UID for plan in plans)
+    assert all(plan["config"]["serving"]["rayjob_uid"] == lane.RAYJOB_UID for plan in plans)
+    assert all(
+        plan["config"]["serving"]["parity_receipt_sha256"] == lane.PARITY_SHA256 for plan in plans
+    )
     assert all(
         plan["plan_sha256"] == self_hosted.digest_without(plan, "plan_sha256") for plan in plans
     )
@@ -61,3 +66,12 @@ def test_rank3_release_must_transfer_laptop_hold_and_clear_global_evidence(
 def test_rank3_attempt_order_requires_validated_previous_cell(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError):
         lane._require_previous_validated(2, tmp_path)
+
+
+def test_rank3_parity_is_uid_bound_to_tp1_b_server() -> None:
+    value = lane._validate_parity(ROOT)
+    binding = value["endpoint"]["server_binding"]
+    assert binding["api_run_id"] == "ft-run-8656260d"
+    assert binding["rayjob_uid"] == lane.RAYJOB_UID
+    assert binding["service_uid"] == lane.SERVICE_UID
+    assert binding["context_length"] == 262144
