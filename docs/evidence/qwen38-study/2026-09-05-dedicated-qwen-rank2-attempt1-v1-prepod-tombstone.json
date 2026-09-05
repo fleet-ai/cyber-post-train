@@ -1,0 +1,22 @@
+{
+  "schema_version": "fleet-qwen38-dedicated-scored-canary-prepod-tombstone-v1",
+  "job_name": "chris-cyber-q38-opencode11827-ded-tp1-r002-a1-v1",
+  "job_uid": "523069fa-2703-4c0d-a528-49ba68b9b52f",
+  "workload_uid": "f9b351c1-1040-4d1d-bc5b-9c540ebb461d",
+  "classification": "rendered_priority_preemption_policy_contradiction_before_pod_creation",
+  "pod_created": false,
+  "claim_created": false,
+  "task_instance_created": false,
+  "session_created": false,
+  "verifier_executed": false,
+  "model_call_started": false,
+  "output_root_created": false,
+  "job_and_workload_released": true,
+  "retry_same_job_identity_allowed": false,
+  "fresh_successor_identity_required": true,
+  "successor_required_priority_class": "fleet-serve-low",
+  "successor_required_preemption_policy": "Never",
+  "scores_included": false,
+  "prompts_or_traces_included": false,
+  "receipt_sha256": "sha256:c712dd7891fbe027984ecd3fce5028c926a8e1d85ef8d6fa1746faa6a44c7de6"
+}
