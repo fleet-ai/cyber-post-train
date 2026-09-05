@@ -1,0 +1,59 @@
+{
+  "schema_version": "fleet-exact-pass4-ledger-evidence-manifest-v1",
+  "campaign_id": "chris-cyber-q38-glm53-exact-easiest100-pass4-v1",
+  "campaign_path": "evals/fleet/configs/q38-glm53-exact-easiest100-pass4-campaign-v1.json",
+  "entries": [
+    {
+      "kind": "accepted",
+      "path": "docs/evidence/qwen38-study/2026-09-05-qwen38-generation15-accepted-gate-v1.json",
+      "expected_receipt_sha256": "sha256:e0aef9a97d146fe5fcc686efafd4399bd7c2ee65a325e64fc089613507ab6745"
+    },
+    {
+      "kind": "accepted",
+      "path": "docs/evidence/qwen38-study/2026-09-05-dedicated-qwen-rank2-attempt1-accepted-validated-v1.json",
+      "expected_receipt_sha256": "sha256:108903b167e40d8628776a6bed35ef7fd871b687dd8c81413fe66ca0f2e43212"
+    },
+    {
+      "kind": "accepted",
+      "path": "docs/evidence/qwen38-study/2026-09-05-qwen38-dedicated-r002-a2-accepted-validated-v2.json",
+      "expected_receipt_sha256": "sha256:4ae37cf4b2c5f38699e82e96f788ad8969faf2545251a8570ef0b549defe3ffb"
+    },
+    {
+      "kind": "accepted",
+      "path": "/mnt/sfs/jobs/chris-q38-ac-r005-a1-g18-v1/accepted/chris-q38-ac-g18-r005-a1-deb44299.json",
+      "expected_receipt_sha256": "sha256:083deadd604e090bb43fc4455fed032e763119e8e89ce4bae7632e02ef99eb30"
+    },
+    {
+      "kind": "accepted",
+      "path": "/mnt/sfs/jobs/chris-cyber-q38-opencode11827-ded-tp1-r002-a3-v3/ACCEPTED_VALIDATED.json",
+      "expected_receipt_sha256": "sha256:0b0c81a825103ff66699cdfce8a166b4f45371f556fa0a46ea5e67e09509b769"
+    },
+    {
+      "kind": "accepted",
+      "path": "/mnt/sfs/jobs/chris-q38-ac-exact100-g19-a192-v4/accepted/chris-q38-ac-g19v4-a-r001-a1-eb69e891.json",
+      "expected_receipt_sha256": "sha256:846e8faf1e4741e8b26383fe750a1dc5edb2cd6a6dea9749a2877b4f1957d198"
+    },
+    {
+      "kind": "active_claim",
+      "path": "/mnt/sfs/cell-execution-claims/opencode11827-autocontinue-v1/f1627acb9e9719f0d04fbd6f7567b11fab479e4d351c498c44ac9f9126875786.json",
+      "expected_receipt_sha256": "sha256:f03dedf21c13a3c84b52d52d58362c5f5e71a9d5405b55b0248bfcd9e512e0e8"
+    },
+    {
+      "kind": "active_claim",
+      "path": "/mnt/sfs/cell-execution-claims/opencode11827-autocontinue-v1/c1e94e99301075a35d9ebb68c21125a7bbecd47c0d3d052011e2dd8bbaa92c3a.json",
+      "expected_receipt_sha256": "sha256:ac3d1fc263e82f3f51cea877f4b5c29e0ba502c67225d3fa7f7220704750f380"
+    },
+    {
+      "kind": "active_claim",
+      "path": "/mnt/sfs/cell-execution-claims/opencode11827-autocontinue-v1/9b3279796be5705ebaaee52b297a3b17d06e682202ab80b62dc516c2510b9eb4.json",
+      "expected_receipt_sha256": "sha256:2d7d889bcfb35e6a44866a6f1fdc9f2ba2d1711796cc5bc0adc996f0fe22854d"
+    }
+  ],
+  "privacy": {
+    "prompts_read": false,
+    "traces_read": false,
+    "flags_read": false,
+    "scores_read": false
+  },
+  "receipt_sha256": "sha256:bec395b41b1588983eefeaed4a0d7cb673ebc998aac78178bc8f6e34bd924ac9"
+}
