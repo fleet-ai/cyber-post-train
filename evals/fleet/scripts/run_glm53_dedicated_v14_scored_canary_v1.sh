@@ -36,6 +36,11 @@ for binding in \
 done
 install -m 0644 /bootstrap/Dockerfile.opencode "$ROOT/evals/fleet/Dockerfile.opencode"
 cd "$ROOT"
+EVIDENCE_DIR=$ROOT/.dedicated-evidence
+install -d -m 0700 "$EVIDENCE_DIR"
+install -m 0600 /evidence/parity.json "$EVIDENCE_DIR/parity.json"
+install -m 0600 /evidence/binding.json "$EVIDENCE_DIR/binding.json"
+install -m 0600 /evidence/release.json "$EVIDENCE_DIR/release.json"
 for _ in $(seq 1 120); do docker info >/dev/null 2>&1 && break; sleep 1; done
 docker info >/dev/null
 docker build --pull --platform linux/amd64 --tag chris/opencode:1.18.27-cyber-v1 \
@@ -43,9 +48,9 @@ docker build --pull --platform linux/amd64 --tag chris/opencode:1.18.27-cyber-v1
 test "$(docker run --rm chris/opencode:1.18.27-cyber-v1 opencode --version)" = 1.18.27
 export AGENT_HARNESS_IMAGE=chris/opencode:1.18.27-cyber-v1
 export FIXED_PROXY_IMAGE=ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
-export DEDICATED_PARITY_PATH=/evidence/parity.json
-export DEDICATED_BINDING_PATH=/evidence/binding.json
-export DEDICATED_RELEASE_PATH=/evidence/release.json
+export DEDICATED_PARITY_PATH=$EVIDENCE_DIR/parity.json
+export DEDICATED_BINDING_PATH=$EVIDENCE_DIR/binding.json
+export DEDICATED_RELEASE_PATH=$EVIDENCE_DIR/release.json
 exec uv run --no-project --with httpx==0.28.1 python \
   -m evals.fleet.glm53_dedicated_v14_scored_canary_runtime_v1 --repo "$ROOT" \
   --proxy "$ROOT/evals/fleet/fixed_proxy.py"

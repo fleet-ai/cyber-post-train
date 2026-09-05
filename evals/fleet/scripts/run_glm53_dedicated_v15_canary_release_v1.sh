@@ -35,7 +35,13 @@ for binding in \
   install -m 0644 "/bootstrap/${binding%%:*}" "$ROOT/evals/fleet/configs/${binding#*:}"
 done
 cd "$ROOT"
-export DEDICATED_PARITY_PATH=/bootstrap/parity.json
-export DEDICATED_BINDING_PATH=/bootstrap/binding.json
+EVIDENCE_DIR=$ROOT/.dedicated-evidence
+install -d -m 0700 "$EVIDENCE_DIR"
+install -m 0600 /bootstrap/parity.json "$EVIDENCE_DIR/parity.json"
+install -m 0600 /bootstrap/binding.json "$EVIDENCE_DIR/binding.json"
+install -m 0600 /bootstrap/controller-package.json "$EVIDENCE_DIR/controller-package.json"
+export DEDICATED_PARITY_PATH=$EVIDENCE_DIR/parity.json
+export DEDICATED_BINDING_PATH=$EVIDENCE_DIR/binding.json
 exec uv run --no-project --with httpx==0.28.1 python \
-  -m evals.fleet.glm53_dedicated_v15_canary_release_v1
+  -m evals.fleet.glm53_dedicated_v15_canary_release_v1 \
+  --controller-package "$EVIDENCE_DIR/controller-package.json"

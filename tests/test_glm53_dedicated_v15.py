@@ -1,4 +1,5 @@
 import json
+import subprocess
 from pathlib import Path
 
 import httpx
@@ -120,7 +121,10 @@ def test_v15_release_package_binds_pre_admitted_controller() -> None:
         "http://glm-v15-head-svc.fleet-train-jobs.svc.cluster.local:8000",
     )
     assert built["launch_authorized"] is True
-    assert built["controller_package_sha256"] == v15.PRE_ADMISSION["controller_package_sha256"]
+    assert (
+        built["controller_package_sha256"]
+        == release_package.CONTROLLER_PACKAGE_SHA256
+    )
     configmap, job = built["objects"]["items"]
     assert "release.py" in configmap["data"]
     assert "parity.json" in configmap["data"]
@@ -143,3 +147,33 @@ def test_v15_heartbeat_is_uid_bound_and_nonpreempting() -> None:
     assert "ft-run-16335b81" in script
     assert "11111111-1111-4111-8111-111111111111" in script
     assert heartbeat.HEARTBEAT.endswith("v15/lifecycle/traffic-stream-1")
+
+
+def test_projected_configmap_evidence_is_copied_to_regular_files(tmp_path: Path) -> None:
+    projected = tmp_path / "projected"
+    version = projected / "..data" / "version"
+    version.mkdir(parents=True)
+    destination = tmp_path / "private"
+    destination.mkdir(mode=0o700)
+    for name in ("parity.json", "binding.json", "release.json"):
+        source = version / name
+        source.write_text('{"safe":true}\n')
+        (projected / name).symlink_to(Path("..data/version") / name)
+        assert (projected / name).is_symlink()
+        subprocess.run(
+            ["install", "-m", "0600", str(projected / name), str(destination / name)],
+            check=True,
+        )
+        assert (destination / name).is_file()
+        assert not (destination / name).is_symlink()
+        assert (destination / name).read_bytes() == source.read_bytes()
+    canary_script = (
+        ROOT / "evals/fleet/scripts/run_glm53_dedicated_v14_scored_canary_v1.sh"
+    ).read_text()
+    release_script = (
+        ROOT / "evals/fleet/scripts/run_glm53_dedicated_v15_canary_release_v1.sh"
+    ).read_text()
+    assert "install -m 0600 /evidence/parity.json" in canary_script
+    assert "install -m 0600 /evidence/release.json" in canary_script
+    assert "install -m 0600 /bootstrap/parity.json" in release_script
+    assert '--controller-package "$EVIDENCE_DIR/controller-package.json"' in release_script

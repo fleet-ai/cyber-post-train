@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import uuid
+import argparse
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -141,7 +142,10 @@ def build(root: Path, package_path: Path) -> dict[str, Any]:
 
 
 def main() -> int:
-    receipt = build(Path.cwd(), Path("/bootstrap/controller-package.json"))
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--controller-package", type=Path, required=True)
+    args = parser.parse_args()
+    receipt = build(Path.cwd(), args.controller_package)
     OUTPUT.parent.mkdir(mode=0o700, parents=True, exist_ok=False)
     engine._write_once(OUTPUT, receipt)  # noqa: SLF001
     return 0

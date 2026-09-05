@@ -15,11 +15,15 @@ from evals.fleet import glm53_dedicated_v14_scored_canary_preflight_package_v1 a
 from evals.fleet import glm53_dedicated_v15_canary_release_v1 as release
 from evals.fleet import self_hosted
 
+CONTROLLER_PACKAGE_SHA256 = (
+    "sha256:e6a7ea5a5831c737f1610269cf6deeaf3194895c14f2c15e333bdb0a62f47471"
+)
+
 
 def render(root: Path, parity: Path, binding: Path, service_origin: str) -> dict[str, Any]:
     package = controller.render(root)
     preview = {key: value for key, value in package.items() if key != "objects"}
-    if package["package_sha256"] != "sha256:e26bb6dc20e87b56fb9ed8d746e631d8f8c969bfe2717c7ab4d100975afdda3c":
+    if package["package_sha256"] != CONTROLLER_PACKAGE_SHA256:
         raise ValueError("dedicated v15 pre-admitted controller package drifted")
     data = copy.deepcopy(base.render(root)["objects"]["items"][0]["data"])
     data["dedicated_runtime.py"] = (
