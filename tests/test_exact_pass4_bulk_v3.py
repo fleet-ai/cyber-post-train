@@ -638,6 +638,108 @@ def test_claim_is_o_excl_and_never_reacquired(tmp_path: Path) -> None:
     assert len(list((tmp_path / "claims").glob("*.json"))) == 1
 
 
+def test_uid_bound_drain_stops_before_next_claim_and_is_restart_stable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    plan = _runtime_plan(tmp_path)
+    job_uid = "11111111-1111-4111-8111-111111111111"
+    pod_uid = "22222222-2222-4222-8222-222222222222"
+    monkeypatch.setenv("FLEET_API_KEY", "test-only")
+    monkeypatch.setenv("JOB_UID", job_uid)
+    monkeypatch.setenv("POD_UID", pod_uid)
+    monkeypatch.setattr(bulk, "build_runtime_plan", lambda *_args: plan)
+    request = runtime._seal(  # noqa: SLF001 - exact drain contract fixture
+        {
+            "schema_version": runtime.DRAIN_REQUEST_SCHEMA,
+            "status": "REQUESTED",
+            "plan_sha256": plan["plan_sha256"],
+            "controller": "qwen-a",
+            "target_job_uid": job_uid,
+            "target_pod_uid": pod_uid,
+            "reason": "capacity_requalification",
+            "requested_at_utc": "2026-09-05T21:40:00Z",
+            "scores_included": False,
+            "prompts_or_traces_included": False,
+        }
+    )
+    request_path = tmp_path / "DRAIN-REQUEST.json"
+    self_hosted.write_json_once(request_path, request)
+    model_calls: list[str] = []
+    absent_checks: list[str] = []
+    out = tmp_path / "drained"
+
+    first = runtime.run_controller(
+        plan,
+        out=out,
+        proxy=tmp_path / "proxy.py",
+        drain_request_path=request_path,
+        model_runner=lambda config, *_args: model_calls.append(config["run_id"]),
+        classifier=lambda *_args: {},
+        check_run_absent=lambda config, *_args: absent_checks.append(config["run_id"]),
+        route_check=lambda *_args: None,
+        runtime_gate_check=lambda *_args: None,
+    )
+    assert first["status"] == "DRAINED_BEFORE_CLAIM"
+    assert first["next_cell_id"] == plan["attempts"][0]["cell_id"]
+    assert first["next_cell_claim_created"] is False
+    assert first["accounted_cells"] == 0
+    assert first["unclaimed_tail_cells"] == len(plan["attempts"])
+    assert model_calls == absent_checks == []
+    assert list((tmp_path / "claims").glob("*.json")) == []
+
+    restarted = runtime.run_controller(
+        plan,
+        out=out,
+        proxy=tmp_path / "proxy.py",
+        drain_request_path=request_path,
+        model_runner=lambda *_args: pytest.fail("drained restart called the model"),
+        classifier=lambda *_args: {},
+        check_run_absent=lambda *_args: pytest.fail("drained restart checked a run"),
+        route_check=lambda *_args: None,
+        runtime_gate_check=lambda *_args: None,
+    )
+    assert restarted == first
+
+
+def test_drain_request_rejects_wrong_uid_before_claim(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    plan = _runtime_plan(tmp_path)
+    monkeypatch.setenv("FLEET_API_KEY", "test-only")
+    monkeypatch.setenv("JOB_UID", "11111111-1111-4111-8111-111111111111")
+    monkeypatch.setenv("POD_UID", "22222222-2222-4222-8222-222222222222")
+    monkeypatch.setattr(bulk, "build_runtime_plan", lambda *_args: plan)
+    request = runtime._seal(  # noqa: SLF001
+        {
+            "schema_version": runtime.DRAIN_REQUEST_SCHEMA,
+            "status": "REQUESTED",
+            "plan_sha256": plan["plan_sha256"],
+            "controller": "qwen-a",
+            "target_job_uid": "33333333-3333-4333-8333-333333333333",
+            "target_pod_uid": "22222222-2222-4222-8222-222222222222",
+            "reason": "operator_requested",
+            "requested_at_utc": "2026-09-05T21:40:00Z",
+            "scores_included": False,
+            "prompts_or_traces_included": False,
+        }
+    )
+    request_path = tmp_path / "DRAIN-REQUEST.json"
+    self_hosted.write_json_once(request_path, request)
+    with pytest.raises(RuntimeError, match="drain request drifted"):
+        runtime.run_controller(
+            plan,
+            out=tmp_path / "wrong-uid",
+            proxy=tmp_path / "proxy.py",
+            drain_request_path=request_path,
+            model_runner=lambda *_args: pytest.fail("wrong UID called the model"),
+            classifier=lambda *_args: {},
+            check_run_absent=lambda *_args: None,
+            route_check=lambda *_args: None,
+            runtime_gate_check=lambda *_args: None,
+        )
+    assert list((tmp_path / "claims").glob("*.json")) == []
+
+
 def test_infrastructure_quarantine_continues_tail_and_restart_never_repeats(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

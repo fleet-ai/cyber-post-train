@@ -32,6 +32,8 @@ CLAIM_SCHEMA = "fleet-exact-pass4-bulk-cell-execution-claim-v3"
 TERMINAL_SCHEMA = "fleet-exact-pass4-bulk-controller-terminal-v3"
 QUARANTINE_SCHEMA = "fleet-exact-pass4-bulk-cell-quarantine-v3"
 ABORT_SCHEMA = "fleet-exact-pass4-bulk-controller-abort-v3"
+DRAIN_REQUEST_SCHEMA = "fleet-exact-pass4-bulk-drain-request-v1"
+DRAINED_SCHEMA = "fleet-exact-pass4-bulk-controller-drained-v1"
 UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
 ISO_UTC_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z$")
 BULK_ADAPTER_MEMBERS = (
@@ -86,6 +88,95 @@ def _write_once(path: Path, value: dict[str, Any]) -> None:
         os.fsync(directory_fd)
     finally:
         os.close(directory_fd)
+
+
+def _load_drain_request(
+    path: Path | None, plan: dict[str, Any], *, job_uid: str, pod_uid: str
+) -> dict[str, Any] | None:
+    if path is None or not path.exists():
+        return None
+    value = bulk.load(path)
+    expected_fields = {
+        "schema_version",
+        "status",
+        "plan_sha256",
+        "controller",
+        "target_job_uid",
+        "target_pod_uid",
+        "reason",
+        "requested_at_utc",
+        "scores_included",
+        "prompts_or_traces_included",
+        "receipt_sha256",
+    }
+    if (
+        set(value) != expected_fields
+        or value.get("schema_version") != DRAIN_REQUEST_SCHEMA
+        or value.get("status") != "REQUESTED"
+        or value.get("plan_sha256") != plan["plan_sha256"]
+        or value.get("controller") != plan_controller(plan["campaign_id"])
+        or value.get("target_job_uid") != job_uid
+        or value.get("target_pod_uid") != pod_uid
+        or value.get("reason") not in {"capacity_requalification", "operator_requested"}
+        or ISO_UTC_RE.fullmatch(str(value.get("requested_at_utc"))) is None
+        or value.get("scores_included") is not False
+        or value.get("prompts_or_traces_included") is not False
+        or value.get("receipt_sha256") != self_hosted.digest_without(value, "receipt_sha256")
+    ):
+        raise RuntimeError("exact pass4 drain request drifted")
+    return value
+
+
+def _drained_receipt(
+    plan: dict[str, Any],
+    item: dict[str, Any],
+    request: dict[str, Any],
+    *,
+    accepted: int,
+    quarantined: int,
+    preserved: int,
+    job_uid: str,
+    pod_uid: str,
+) -> dict[str, Any]:
+    accounted = accepted + quarantined + preserved
+    return _seal(
+        {
+            "schema_version": DRAINED_SCHEMA,
+            "status": "DRAINED_BEFORE_CLAIM",
+            "controller": plan_controller(plan["campaign_id"]),
+            "plan_sha256": plan["plan_sha256"],
+            "drain_request_sha256": request["receipt_sha256"],
+            "next_cell_id": item["cell_id"],
+            "next_execution_id": item["execution_id"],
+            "accepted_cells": accepted,
+            "quarantined_cells": quarantined,
+            "preserved_cells": preserved,
+            "accounted_cells": accounted,
+            "unclaimed_tail_cells": len(plan["attempts"]) - accounted,
+            "next_cell_claim_created": False,
+            "job_uid": job_uid,
+            "pod_uid": pod_uid,
+            "drained_at_utc": _now(),
+            "scores_included": False,
+            "prompts_or_traces_included": False,
+        }
+    )
+
+
+def _validate_existing_drained(path: Path, plan: dict[str, Any]) -> dict[str, Any]:
+    value = bulk.load(path)
+    if (
+        value.get("receipt_sha256") != self_hosted.digest_without(value, "receipt_sha256")
+        or value.get("schema_version") != DRAINED_SCHEMA
+        or value.get("status") != "DRAINED_BEFORE_CLAIM"
+        or value.get("controller") != plan_controller(plan["campaign_id"])
+        or value.get("plan_sha256") != plan["plan_sha256"]
+        or value.get("next_cell_claim_created") is not False
+        or value.get("scores_included") is not False
+        or value.get("prompts_or_traces_included") is not False
+    ):
+        raise RuntimeError("existing exact pass4 drained receipt drifted")
+    return value
 
 
 def claim_filename(execution_id: str) -> str:
@@ -815,6 +906,7 @@ def run_controller(
     route_check: Callable[[dict[str, Any], str], None] = _fresh_route_check,
     runtime_gate_check: Callable[[dict[str, Any]], None] = _runtime_release_gate_check,
     stage_observer: Callable[[str, dict[str, Any] | None], None] | None = None,
+    drain_request_path: Path | None = None,
 ) -> dict[str, Any]:
     """Run untouched cells sequentially, preserving progress across infrastructure attrition."""
     validate_bulk_adapter(bulk)
@@ -830,6 +922,8 @@ def run_controller(
     job_uid, pod_uid = os.environ.get("JOB_UID", ""), os.environ.get("POD_UID", "")
     if not key:
         raise RuntimeError("FLEET_API_KEY is required")
+    if drain_request_path is None and os.environ.get("EXACT_PASS4_DRAIN_REQUEST_PATH"):
+        drain_request_path = Path(os.environ["EXACT_PASS4_DRAIN_REQUEST_PATH"])
     runtime_gate_check(plan)
     if stage_observer is not None:
         stage_observer("02-runtime-gate-valid", None)
@@ -841,6 +935,9 @@ def run_controller(
         stage_observer("03-output-root-initialized", None)
     if existing_terminal is not None:
         return existing_terminal
+    drained_path = out / "DRAINED.json"
+    if drained_path.exists():
+        return _validate_existing_drained(drained_path, plan)
     lease = plan["execution"]["endpoint_lease"]
     accepted = len(accepted_runs)
     quarantined = len(quarantined_runs)
@@ -855,6 +952,25 @@ def run_controller(
         for item in plan["attempts"]:
             if item["run_id"] in accepted_runs | quarantined_runs | preserved_runs:
                 continue
+            drain_request = _load_drain_request(
+                drain_request_path,
+                plan,
+                job_uid=job_uid,
+                pod_uid=pod_uid,
+            )
+            if drain_request is not None:
+                drained = _drained_receipt(
+                    plan,
+                    item,
+                    drain_request,
+                    accepted=accepted,
+                    quarantined=quarantined,
+                    preserved=preserved,
+                    job_uid=job_uid,
+                    pod_uid=pod_uid,
+                )
+                _write_once(drained_path, drained)
+                return drained
             task = _task_for_item(plan, item)
             config = _attempt_config(plan, task, item)
             try:
