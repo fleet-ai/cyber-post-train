@@ -14,7 +14,7 @@ from evals.fleet import self_hosted
 CONTROLLER = "qwen-canary"
 JOB_NAME = "chris-q38-ac-r005-a1-g18-v1"
 CONFIGMAP_NAME = JOB_NAME + "-run-v1"
-PREFLIGHT_JOB_NAME = JOB_NAME + "-preflight"
+PREFLIGHT_JOB_NAME = JOB_NAME + "-preflight-v2"
 PREFLIGHT_CONFIGMAP_NAME = PREFLIGHT_JOB_NAME + "-run-v1"
 PREFLIGHT_ROOT = f"/mnt/sfs/jobs/{PREFLIGHT_JOB_NAME}"
 OUTPUT_ROOT = f"/mnt/sfs/jobs/{JOB_NAME}"

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import os
 from datetime import UTC, datetime
 from pathlib import Path
@@ -79,7 +80,24 @@ def main() -> int:
     parser.add_argument("--parity", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    run(args.plan, args.parity, args.output)
+    try:
+        run(args.plan, args.parity, args.output)
+    except Exception as exc:
+        body = {
+            "schema_version": "fleet-qwen-generation18-hosted-canary-preflight-failure-v1",
+            "status": "FAILED_READ_ONLY",
+            "error_type": type(exc).__name__,
+            "error_sha256": self_hosted.sha256(str(exc).encode()),
+            "mutation_calls": 0,
+            "prompts_traces_flags_or_scores_included": False,
+            "credentials_included": False,
+        }
+        with contextlib.suppress(FileExistsError):
+            self_hosted.write_json_once(
+                args.output.parent / "FAILED.json",
+                {**body, "receipt_sha256": self_hosted.digest_without(body, "receipt_sha256")},
+            )
+        raise
     return 0
 
 
