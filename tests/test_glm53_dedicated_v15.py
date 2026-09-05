@@ -137,7 +137,9 @@ def test_v15_release_package_binds_pre_admitted_controller() -> None:
 def test_v15_heartbeat_is_uid_bound_and_nonpreempting() -> None:
     value = heartbeat.render(
         canary_job_uid="11111111-1111-4111-8111-111111111111",
+        server_api_run_id="ft-run-v16",
         server_rayjob_uid="22222222-2222-4222-8222-222222222222",
+        server_run_dir="/mnt/sfs/jobs/chris-cyber-evalserve-glm53-tp8-a-v16",
     )
     job = value["object"]
     pod = job["spec"]["template"]["spec"]
@@ -145,9 +147,9 @@ def test_v15_heartbeat_is_uid_bound_and_nonpreempting() -> None:
     assert pod["preemptionPolicy"] == "Never"
     script = pod["containers"][0]["command"][2]
     compile(script, "heartbeat.py", "exec")
-    assert "ft-run-16335b81" in script
+    assert "ft-run-v16" in script
     assert "11111111-1111-4111-8111-111111111111" in script
-    assert heartbeat.HEARTBEAT.endswith("v15/lifecycle/traffic-stream-1")
+    assert value["heartbeat_path"].endswith("v16/lifecycle/traffic-stream-1")
 
 
 def test_projected_configmap_evidence_is_copied_to_regular_files(tmp_path: Path) -> None:

@@ -12,22 +12,31 @@ from typing import Any
 import yaml
 
 from evals.fleet import glm53_dedicated_v14_scored_canary_v1 as canary
-from evals.fleet import glm53_dedicated_v15 as server
 from evals.fleet import self_hosted
 
-JOB_NAME = "chris-glm53-dedicated-v15-r051-heartbeat-v1"
+JOB_NAME = "chris-glm53-dedicated-r051-heartbeat-v2"
 OUTPUT_ROOT = f"/mnt/sfs/jobs/{JOB_NAME}"
-HEARTBEAT = f"{server.RUN_DIR}/lifecycle/traffic-stream-1"
 IMAGE = (
     "ghcr.io/astral-sh/uv:python3.12-bookworm@"
     "sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7"
 )
 
 
-def render(*, canary_job_uid: str, server_rayjob_uid: str) -> dict[str, Any]:
+def render(
+    *,
+    canary_job_uid: str,
+    server_api_run_id: str,
+    server_rayjob_uid: str,
+    server_run_dir: str,
+) -> dict[str, Any]:
     for value in (canary_job_uid, server_rayjob_uid):
         if uuid.UUID(value).int == 0:
             raise ValueError("heartbeat requires nonzero bound UIDs")
+    if not server_api_run_id.startswith("ft-run-"):
+        raise ValueError("heartbeat server API identity drifted")
+    if not server_run_dir.startswith("/mnt/sfs/jobs/chris-cyber-evalserve-glm53-"):
+        raise ValueError("heartbeat server run directory drifted")
+    heartbeat_path = f"{server_run_dir}/lifecycle/traffic-stream-1"
     script = textwrap.dedent(
         f"""
         import hashlib, json, os, pathlib, ssl, time, urllib.request
@@ -35,9 +44,9 @@ def render(*, canary_job_uid: str, server_rayjob_uid: str) -> dict[str, Any]:
         namespace = "fleet-train-jobs"
         canary_name = "{canary.JOB_NAME}"
         canary_uid = "{canary_job_uid}"
-        server_name = "ft-run-16335b81"
+        server_name = "{server_api_run_id}"
         server_uid = "{server_rayjob_uid}"
-        heartbeat = pathlib.Path("{HEARTBEAT}")
+        heartbeat = pathlib.Path("{heartbeat_path}")
         output = pathlib.Path("{OUTPUT_ROOT}")
         token = pathlib.Path("/var/run/secrets/kubernetes.io/serviceaccount/token").read_text().strip()
         ca = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
@@ -169,8 +178,10 @@ def render(*, canary_job_uid: str, server_rayjob_uid: str) -> dict[str, Any]:
         "status": "READY",
         "launch_authorized": True,
         "canary_job_uid": canary_job_uid,
+        "server_api_run_id": server_api_run_id,
         "server_rayjob_uid": server_rayjob_uid,
-        "heartbeat_path": HEARTBEAT,
+        "server_run_dir": server_run_dir,
+        "heartbeat_path": heartbeat_path,
         "object": job,
     }
     body["package_sha256"] = self_hosted.digest_without(body, "package_sha256")
@@ -180,14 +191,18 @@ def render(*, canary_job_uid: str, server_rayjob_uid: str) -> dict[str, Any]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--canary-job-uid", required=True)
+    parser.add_argument("--server-api-run-id", required=True)
     parser.add_argument("--server-rayjob-uid", required=True)
+    parser.add_argument("--server-run-dir", required=True)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     if args.output.exists() or args.output.is_symlink():
         parser.error("output must be unused")
     value = render(
         canary_job_uid=args.canary_job_uid,
+        server_api_run_id=args.server_api_run_id,
         server_rayjob_uid=args.server_rayjob_uid,
+        server_run_dir=args.server_run_dir,
     )
     args.output.write_text(yaml.safe_dump(value["object"], sort_keys=False))
     print(json.dumps({key: item for key, item in value.items() if key != "object"}, sort_keys=True))
