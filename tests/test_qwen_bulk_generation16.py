@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 
+import httpx
 import pytest
 
 from evals.fleet import qwen_bulk_generation16 as bulk
@@ -13,6 +15,10 @@ from evals.fleet import self_hosted
 
 ROOT = Path(__file__).parents[1]
 INVENTORY = Path("/private/tmp/exact100-inventory.XXXXXX.json")
+PREFLIGHT_TOMBSTONES = ROOT / (
+    "docs/evidence/qwen38-study/"
+    "2026-09-05-qwen38-generation16-preflight-v3-v8-terminal-tombstones-v1.json"
+)
 
 
 def test_exact_hosted_partition_excludes_accepted_and_dedicated_cells() -> None:
@@ -83,25 +89,139 @@ def test_projected_symlink_envelope_is_read_canonically(tmp_path: Path) -> None:
         preflight.load_projected_envelope(projected)
 
 
-def test_session_inventory_uses_task_key_and_supported_page_size(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_session_inventory_retries_transient_read_timeout() -> None:
+    calls = 0
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise httpx.ReadTimeout("transient", request=request)
+        return httpx.Response(200, json={"sessions": [], "has_more": False})
+
+    sessions, requests = asyncio.run(
+        preflight._collect_task_sessions_async(  # noqa: SLF001
+            ["task-key"],
+            {},
+            transport=httpx.MockTransport(handler),
+            retry_delay_seconds=0,
+        )
+    )
+    assert sessions == []
+    assert requests == calls == 2
+
+
+def test_session_inventory_retry_exhaustion_is_terminal() -> None:
+    calls = 0
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        raise httpx.ConnectError("unavailable", request=request)
+
+    with pytest.raises(httpx.ConnectError):
+        asyncio.run(
+            preflight._collect_task_sessions_async(  # noqa: SLF001
+                ["task-key"],
+                {},
+                transport=httpx.MockTransport(handler),
+                retry_delay_seconds=0,
+            )
+        )
+    assert calls == preflight.SESSION_TRANSPORT_RETRIES + 1
+
+
+def test_session_inventory_retries_connect_timeout_and_transient_http() -> None:
+    calls = 0
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise httpx.ConnectTimeout("connect", request=request)
+        if calls == 2:
+            return httpx.Response(503, request=request)
+        return httpx.Response(200, json={"sessions": [], "has_more": False})
+
+    sessions, requests = asyncio.run(
+        preflight._collect_task_sessions_async(  # noqa: SLF001
+            ["task-key"],
+            {},
+            transport=httpx.MockTransport(handler),
+            retry_delay_seconds=0,
+        )
+    )
+    assert sessions == []
+    assert requests == calls == 3
+    assert {429, 502, 503, 504} == preflight.TRANSIENT_GET_STATUS_CODES
+    assert issubclass(httpx.PoolTimeout, preflight.TRANSIENT_GET_ERRORS)
+
+
+def test_session_inventory_paginates_with_exact_supported_params() -> None:
     calls: list[tuple[str, int, int]] = []
 
-    def request(_client: object, method: str, path: str, *, params: dict) -> dict:
-        assert method == "GET"
-        assert path == "/v1/sessions"
-        calls.append((params["task_key"], params["limit"], params["offset"]))
-        return {"sessions": [], "has_more": False}
+    async def handler(request: httpx.Request) -> httpx.Response:
+        params = request.url.params
+        call = (params["task_key"], int(params["limit"]), int(params["offset"]))
+        calls.append(call)
+        if call[2] == 0:
+            return httpx.Response(200, json={"sessions": [{"session_id": "one"}], "has_more": True})
+        return httpx.Response(200, json={"sessions": [], "has_more": False})
 
-    monkeypatch.setattr(self_hosted, "_request", request)
-    assert preflight._task_sessions_for_key(object(), "task-key") == []  # noqa: SLF001
-    assert calls == [("task-key", 500, 0)]
-    with pytest.raises(RuntimeError, match="task key is empty"):
-        preflight._task_sessions_for_key(object(), "")  # noqa: SLF001
+    sessions, requests = asyncio.run(
+        preflight._collect_task_sessions_async(  # noqa: SLF001
+            ["task-key"], {}, transport=httpx.MockTransport(handler)
+        )
+    )
+    assert sessions == [{"session_id": "one"}]
+    assert requests == 2
+    assert calls == [("task-key", 500, 0), ("task-key", 500, 1)]
 
 
-def test_session_inventory_has_bounded_parallelism_and_deadline() -> None:
-    assert preflight.SESSION_WORKERS == 32
-    assert preflight.SESSION_REQUEST_TIMEOUT_SECONDS == 20
-    assert preflight.SESSION_TOTAL_DEADLINE_SECONDS == 120
+def test_session_inventory_deadline_cancels_pending_requests() -> None:
+    cancelled = asyncio.Event()
+
+    async def handler(_request: httpx.Request) -> httpx.Response:
+        try:
+            await asyncio.sleep(10)
+        except asyncio.CancelledError:
+            cancelled.set()
+            raise
+        return httpx.Response(200, json={"sessions": [], "has_more": False})
+
+    with pytest.raises(RuntimeError, match="exceeded deadline"):
+        asyncio.run(
+            preflight._collect_task_sessions_async(  # noqa: SLF001
+                [f"task-{index}" for index in range(16)],
+                {},
+                transport=httpx.MockTransport(handler),
+                total_deadline_seconds=0.01,
+            )
+        )
+    assert cancelled.is_set()
+
+
+def test_session_inventory_rejects_empty_task_keys_and_is_bounded() -> None:
+    with pytest.raises(RuntimeError, match="task-key inventory is invalid"):
+        asyncio.run(preflight._collect_task_sessions_async([""], {}))  # noqa: SLF001
+    assert preflight.SESSION_WORKERS == 8
+    assert preflight.SESSION_REQUEST_TIMEOUT_SECONDS == 60
+    assert preflight.SESSION_TOTAL_DEADLINE_SECONDS == 300
+
+
+def test_v3_v8_read_only_tombstones_are_digest_valid() -> None:
+    receipt = json.loads(PREFLIGHT_TOMBSTONES.read_text())
+    assert receipt["receipt_sha256"] == self_hosted.digest_without(
+        receipt, "receipt_sha256"
+    )
+    assert [row["generation"] for row in receipt["entries"]] == [
+        "v3",
+        "v4",
+        "v5",
+        "v6",
+        "v7",
+        "v8",
+    ]
+    assert all(row["read_only"] is True for row in receipt["entries"])
+    assert all(row["scored_model_calls"] == 0 for row in receipt["entries"])
+    assert receipt["bulk_jobs_submitted"] is False

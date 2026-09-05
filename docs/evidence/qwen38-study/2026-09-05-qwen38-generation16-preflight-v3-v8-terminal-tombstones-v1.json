@@ -1,0 +1,153 @@
+{
+  "bulk_jobs_submitted": false,
+  "credentials_included": false,
+  "entries": [
+    {
+      "controller_jobs_created": false,
+      "credentials_included": false,
+      "error_sha256": "sha256:3f107194ccf83f9b718626c7ab93987fdb36fe67289bee678d562a0c6e016060",
+      "error_type": "ValueError",
+      "failure_receipt_sha256": "sha256:931d89815d12a2c7e0652ecd9fec555cdcdb487198b27d4b09056a1643979e88",
+      "generation": "v3",
+      "job_uid": "f26aed91-23ce-469e-a4c1-c82c94445405",
+      "last_observed_stage_receipts": {
+        "01": "sha256:a85d3eee48340828c9ce208f6de25ac3fc10b8542a00e923a82dca89581aa73f"
+      },
+      "mutation_calls": 0,
+      "owned_job_deleted": true,
+      "pod_uid": "6ea0f823-f352-49fd-93b8-93176d646d96",
+      "prompts_traces_flags_or_scores_included": false,
+      "quota_released": true,
+      "read_only": true,
+      "scored_model_calls": 0,
+      "status": "FAILED",
+      "terminal_reason": "projected_envelope_symlink_rejected",
+      "workload_uid": "b0579892-00ac-4e90-96cc-b5db7e71bd3a"
+    },
+    {
+      "controller_jobs_created": false,
+      "credentials_included": false,
+      "error_sha256": null,
+      "error_type": null,
+      "failure_receipt_sha256": null,
+      "generation": "v4",
+      "job_uid": "987d1611-bf15-4ba7-956c-6f2a0ea7040b",
+      "last_observed_stage_receipts": {
+        "01": "sha256:a85d3eee48340828c9ce208f6de25ac3fc10b8542a00e923a82dca89581aa73f",
+        "02": "sha256:19a8ea445e890b608f78466c0cd6777030b1abbdea7248c958795cc9ceb61ddf",
+        "03": "sha256:21feb059d21e967a5532dca9a9fc1e0b0dd15792e2301816ce99ab741a7e844d"
+      },
+      "mutation_calls": 0,
+      "owned_job_deleted": true,
+      "pod_uid": "e562964b-bb64-4256-84f5-bae7c9970f2b",
+      "prompts_traces_flags_or_scores_included": false,
+      "quota_released": true,
+      "read_only": true,
+      "scored_model_calls": 0,
+      "status": "OPERATOR_STOPPED_READ_ONLY",
+      "terminal_reason": "root_operator_cancelled_serial_inventory_after_stage3",
+      "workload_uid": "caed4795-d2c8-44b9-9db2-b4ade94b857e"
+    },
+    {
+      "controller_jobs_created": false,
+      "credentials_included": false,
+      "error_sha256": null,
+      "error_type": null,
+      "failure_receipt_sha256": null,
+      "generation": "v5",
+      "job_uid": "22b73376-a296-464e-a71b-2ec28a9ce535",
+      "last_observed_stage_receipts": {
+        "01": "sha256:a85d3eee48340828c9ce208f6de25ac3fc10b8542a00e923a82dca89581aa73f",
+        "02": "sha256:19a8ea445e890b608f78466c0cd6777030b1abbdea7248c958795cc9ceb61ddf",
+        "03": "sha256:21feb059d21e967a5532dca9a9fc1e0b0dd15792e2301816ce99ab741a7e844d"
+      },
+      "mutation_calls": 0,
+      "owned_job_deleted": true,
+      "pod_uid": "0afc7352-582b-45b5-b0bb-5d7211c97dc9",
+      "prompts_traces_flags_or_scores_included": false,
+      "quota_released": true,
+      "read_only": true,
+      "scored_model_calls": 0,
+      "status": "OPERATOR_STOPPED_READ_ONLY",
+      "terminal_reason": "root_operator_cancelled_bounded_inventory_after_stage3",
+      "workload_uid": "8ab34cc1-f3d5-4e2c-9c62-6e3962bbb400"
+    },
+    {
+      "controller_jobs_created": false,
+      "credentials_included": false,
+      "error_sha256": "sha256:67813209fc721dbb8dfc229c2b5f4c62f59413f89be0a9eca1859e9a51780d7e",
+      "error_type": "FleetRequestError",
+      "failure_receipt_sha256": "sha256:362f68f00acd4e72f38f1b34417bfc8de3ebb4c44dbfd25b5902aa974b0498f2",
+      "generation": "v6",
+      "job_uid": "72ff86d5-6f5d-494b-ada9-223921c85599",
+      "last_observed_stage_receipts": {
+        "01": "sha256:a85d3eee48340828c9ce208f6de25ac3fc10b8542a00e923a82dca89581aa73f",
+        "02": "sha256:19a8ea445e890b608f78466c0cd6777030b1abbdea7248c958795cc9ceb61ddf",
+        "03": "sha256:21feb059d21e967a5532dca9a9fc1e0b0dd15792e2301816ce99ab741a7e844d"
+      },
+      "mutation_calls": 0,
+      "owned_job_deleted": true,
+      "pod_uid": "ca8c9d02-a832-467e-9385-4b3124d5187d",
+      "prompts_traces_flags_or_scores_included": false,
+      "quota_released": true,
+      "read_only": true,
+      "scored_model_calls": 0,
+      "status": "FAILED",
+      "terminal_reason": "unfiltered_session_inventory_http_400",
+      "workload_uid": "33431f0c-18a7-421e-9fdc-ea9a2e8841b1"
+    },
+    {
+      "controller_jobs_created": false,
+      "credentials_included": false,
+      "error_sha256": null,
+      "error_type": null,
+      "failure_receipt_sha256": null,
+      "generation": "v7",
+      "job_uid": "0bff24fb-58d1-4657-9920-c2a3a518d868",
+      "last_observed_stage_receipts": {
+        "01": "sha256:a85d3eee48340828c9ce208f6de25ac3fc10b8542a00e923a82dca89581aa73f",
+        "02": "sha256:19a8ea445e890b608f78466c0cd6777030b1abbdea7248c958795cc9ceb61ddf",
+        "03": "sha256:21feb059d21e967a5532dca9a9fc1e0b0dd15792e2301816ce99ab741a7e844d"
+      },
+      "mutation_calls": 0,
+      "owned_job_deleted": true,
+      "pod_uid": "c7e6eb62-9bd7-45f5-8265-3749aecefcbc",
+      "prompts_traces_flags_or_scores_included": false,
+      "quota_released": true,
+      "read_only": true,
+      "scored_model_calls": 0,
+      "status": "OPERATOR_STOPPED_READ_ONLY",
+      "terminal_reason": "root_operator_cancelled_after_stage3_for_review",
+      "workload_uid": "9a1d4790-2a8e-4e81-873a-6232253ecd59"
+    },
+    {
+      "controller_jobs_created": false,
+      "credentials_included": false,
+      "error_sha256": "sha256:693919be92a592d0ab39d3a80a50801930732ee20d6dee5aaf1c0eb0cda7c5ff",
+      "error_type": "ReadTimeout",
+      "failure_receipt_sha256": "sha256:1f652230ff2497a67567ccfc7463dd5843caef825c96249de1a8382ccbaf2880",
+      "generation": "v8",
+      "job_uid": "8bfbd2b7-b6b0-4e46-b441-44b5fb86edcd",
+      "last_observed_stage_receipts": {
+        "01": "sha256:a85d3eee48340828c9ce208f6de25ac3fc10b8542a00e923a82dca89581aa73f",
+        "02": "sha256:19a8ea445e890b608f78466c0cd6777030b1abbdea7248c958795cc9ceb61ddf",
+        "03": "sha256:21feb059d21e967a5532dca9a9fc1e0b0dd15792e2301816ce99ab741a7e844d"
+      },
+      "mutation_calls": 0,
+      "owned_job_deleted": true,
+      "pod_uid": "ff961394-058a-4084-98e8-55a7ee219f3a",
+      "prompts_traces_flags_or_scores_included": false,
+      "quota_released": true,
+      "read_only": true,
+      "scored_model_calls": 0,
+      "status": "FAILED",
+      "terminal_reason": "task_session_inventory_read_timeout",
+      "workload_uid": "4e574a3e-ac07-4013-bd27-b216eb4eb739"
+    }
+  ],
+  "prompts_traces_flags_or_scores_included": false,
+  "receipt_sha256": "sha256:0ff0e376dd331bf68de59afb821610488c8a1f21b2d96f63eb6d3cb3a134888b",
+  "schema_version": "fleet-qwen-generation16-preflight-v3-v8-terminal-tombstones-v1",
+  "status": "TERMINAL_READ_ONLY_ATTEMPTS",
+  "successor_status": "HELD_FOR_REVIEW"
+}
