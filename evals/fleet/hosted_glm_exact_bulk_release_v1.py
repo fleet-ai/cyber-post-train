@@ -62,6 +62,18 @@ def _kubernetes_collisions() -> int:
     return collisions
 
 
+def _session_collides(row: dict[str, Any], config: dict[str, Any], item: dict[str, Any]) -> bool:
+    metadata = row.get("metadata") or {}
+    return any(
+        metadata.get(field) == expected
+        for field, expected in {
+            "run_id": config["run_id"],
+            "cell_id": item["cell_id"],
+            "execution_id": item["execution_id"],
+        }.items()
+    )
+
+
 def build(root: Path) -> dict[str, Any]:
     if not os.environ.get("FLEET_API_KEY"):
         raise RuntimeError("FLEET_API_KEY is required")
@@ -98,17 +110,8 @@ def build(root: Path) -> dict[str, Any]:
             if task_key not in task_cache:
                 with runtime.engine._client(key) as client:  # noqa: SLF001
                     task_cache[task_key] = self_hosted._task_sessions(client, task_key)
-            expected_model = self_hosted.persisted_session_model_identity(config)
             for row in task_cache[task_key]:
-                metadata = row.get("metadata") or {}
-                if row.get("model") == expected_model or any(
-                    metadata.get(field) == expected
-                    for field, expected in {
-                        "run_id": config["run_id"],
-                        "cell_id": item["cell_id"],
-                        "execution_id": item["execution_id"],
-                    }.items()
-                ):
+                if _session_collides(row, config, item):
                     session_collisions += 1
     kubernetes_collisions = _kubernetes_collisions()
     if claim_collisions or output_collisions or session_collisions or kubernetes_collisions:

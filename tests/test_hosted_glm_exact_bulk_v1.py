@@ -4,6 +4,7 @@ from pathlib import Path
 
 from evals.fleet import hosted_glm_exact_bulk_package_v1 as package
 from evals.fleet import hosted_glm_exact_bulk_release_package_v1 as release_package
+from evals.fleet import hosted_glm_exact_bulk_release_v1 as release
 from evals.fleet import hosted_glm_exact_bulk_runtime_v1 as runtime
 from evals.fleet import hosted_glm_exact_bulk_v1 as bulk
 from evals.fleet import self_hosted
@@ -139,3 +140,16 @@ def test_release_bundle_imports_in_isolated_tree(tmp_path: Path) -> None:
         text=True,
     )
     assert completed.returncode == 0, completed.stderr
+
+
+def test_release_session_collision_is_cell_specific_not_model_wide() -> None:
+    config = {"run_id": "expected-run"}
+    item = {"cell_id": "sha256:" + "1" * 64, "execution_id": "sha256:" + "2" * 64}
+    unrelated_same_model = {"model": "glm-5.3", "metadata": {"run_id": "other-run"}}
+    assert release._session_collides(unrelated_same_model, config, item) is False
+    assert (
+        release._session_collides(
+            {"metadata": {"execution_id": item["execution_id"]}}, config, item
+        )
+        is True
+    )
