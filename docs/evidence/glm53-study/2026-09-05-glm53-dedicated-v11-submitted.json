@@ -1,0 +1,19 @@
+{
+  "api_run_id": "ft-run-ea43e45d",
+  "credentials_included": false,
+  "eligible_flavor_uids": [
+    "d375ea06-5e3e-4b9e-8fb0-b8ccf73715c0"
+  ],
+  "http_status": 202,
+  "live_gate_receipt_sha256": "sha256:bdc1df760cb885f4bbafd4db787f387cb2618b374e0cc5095ebe844c7700a665",
+  "prompts_traces_flags_or_scores_included": false,
+  "receipt_sha256": "sha256:08f815f232a415fa52e00f4a2e502c7b17b0eb07be0dbaa8c8b532c3e91d8dc4",
+  "request_sha256": "sha256:59935113135f6f00db1e64f5c7278cc844655d3f11322f1658f56b47cc1725b2",
+  "route": "POST /v1/runs",
+  "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-glm53-tp8-a-v11",
+  "schema_version": "fleet-glm53-dedicated-serving-v11-submission-v1",
+  "scored_tasks_launched": 0,
+  "status": "SUBMITTED",
+  "submitted_at_utc": "2026-09-05T19:04:40.872141Z",
+  "title": "chris-cyber-evalserve-glm53-tp8-a-v11"
+}
