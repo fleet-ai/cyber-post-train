@@ -1,0 +1,49 @@
+{
+  "schema_version": "fleet-qwen-generation19-bulk-preclaim-terminal-v1",
+  "classification": "infrastructure_invalid_pre_model_retry_safe",
+  "controllers": [
+    {
+      "controller": "qwen-a",
+      "job_name": "chris-q38-ac-exact100-g19-a192-v1",
+      "job_uid": "bcbc3f00-31a0-4dde-81ff-221590ecf733",
+      "pod_uid": "6a6e0a32-86e0-42e6-8d42-37d21ceef7d8",
+      "workload_uid": "bd7eae76-a7a9-44e6-8918-f1fb1dcb7ea9",
+      "configmap_uid": "d6bdc462-e030-4547-a9e8-edf66e571e71",
+      "finished_at_utc": "2026-09-05T19:51:44Z",
+      "pod_exit_code": 1,
+      "pod_restarts": 0,
+      "job_reason": "BackoffLimitExceeded",
+      "plan_file_sha256": "sha256:b44b1d7d684d96141379e618d8edfa50ab4932e78ac7d84d2556b8a2cca3aaca"
+    },
+    {
+      "controller": "qwen-b",
+      "job_name": "chris-q38-ac-exact100-g19-b192-v1",
+      "job_uid": "190650be-a720-4327-8904-67e00b3e312d",
+      "pod_uid": "cb9f2d87-6699-4b3f-96c9-aa671c294fe6",
+      "workload_uid": "ef86081c-bdd7-44f4-8a76-398f72719d9b",
+      "configmap_uid": "63244b83-8880-47b1-8dc3-b5fd5d867cd8",
+      "finished_at_utc": "2026-09-05T19:51:37Z",
+      "pod_exit_code": 1,
+      "pod_restarts": 0,
+      "job_reason": "BackoffLimitExceeded",
+      "plan_file_sha256": "sha256:8eb4decc2ea5e6fffdab9264a86a33ddeebb220b7395c9271af4e2f6b84a855d"
+    }
+  ],
+  "planned_cells": 384,
+  "accepted_receipts": 0,
+  "quarantine_receipts": 0,
+  "abort_receipts": 0,
+  "terminal_receipts": 0,
+  "global_execution_claims": 0,
+  "model_started_cells": 0,
+  "scored_cells": 0,
+  "output_roots_contained_only_plan_receipt": true,
+  "jobs_released": true,
+  "released_at_utc": "2026-09-05T19:54:30Z",
+  "exact_exception_available_without_logs": false,
+  "successor_gate": "instrument_every_preclaim_boundary_and_emit_sanitized_failure_receipt",
+  "retry_allowed_for_all_planned_cells": true,
+  "prompts_traces_flags_or_scores_included": false,
+  "credentials_included": false,
+  "receipt_sha256": "sha256:f8ad2f597cab4b25c3328d431dfc8f50075226218caf40b6280834fbc048f67f"
+}

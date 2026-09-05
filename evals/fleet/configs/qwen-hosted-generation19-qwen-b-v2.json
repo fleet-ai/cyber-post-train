@@ -1,0 +1,4136 @@
+{
+  "attempts": [
+    {
+      "attempt": 1,
+      "cell_id": "sha256:58d181b6542f5178cb8cb28a0fd0fc6192b69fc212826e614c2b981d054cfcbb",
+      "environment_version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+      "execution_generation": 19,
+      "execution_id": "sha256:c1e94e99301075a35d9ebb68c21125a7bbecd47c0d3d052011e2dd8bbaa92c3a",
+      "network": "q38-ac-g19v2-b-r006-a1-c1e94e99",
+      "ordinal": 1,
+      "run_id": "chris-q38-ac-g19v2-b-r006-a1-c1e94e99",
+      "selection_rank": 6,
+      "task_key": "cysec1-2-current-gen_blackbox-9d641429faef16a05bff575e__blackbox_ctf_v1",
+      "task_version_id": "2f2681bf-c1f7-4056-b6e4-cb2e5058f027"
+    },
+    {
+      "attempt": 2,
+      "cell_id": "sha256:bf1536154def3399890713f3cfdeea7e794d92e47f6e51d1d96cf8ff1f408dd2",
+      "environment_version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+      "execution_generation": 19,
+      "execution_id": "sha256:5981748383dad20688fc53dee821d5e3253ee3a986e8010850f6c7a059e4df7e",
+      "network": "q38-ac-g19v2-b-r006-a2-59817483",
+      "ordinal": 2,
+      "run_id": "chris-q38-ac-g19v2-b-r006-a2-59817483",
+      "selection_rank": 6,
+      "task_key": "cysec1-2-current-gen_blackbox-9d641429faef16a05bff575e__blackbox_ctf_v1",
+      "task_version_id": "2f2681bf-c1f7-4056-b6e4-cb2e5058f027"
+    },
+    {
+      "attempt": 3,
+      "cell_id": "sha256:af4099888d47cc6862a76a1cda011af88dac0a3eb1eb0b66a3c07797f2b94b1c",
+      "environment_version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+      "execution_generation": 19,
+      "execution_id": "sha256:75aa2f5a56382b5c753ccd09910314421877e8443b985937c3481853aafbfa74",
+      "network": "q38-ac-g19v2-b-r006-a3-75aa2f5a",
+      "ordinal": 3,
+      "run_id": "chris-q38-ac-g19v2-b-r006-a3-75aa2f5a",
+      "selection_rank": 6,
+      "task_key": "cysec1-2-current-gen_blackbox-9d641429faef16a05bff575e__blackbox_ctf_v1",
+      "task_version_id": "2f2681bf-c1f7-4056-b6e4-cb2e5058f027"
+    },
+    {
+      "attempt": 4,
+      "cell_id": "sha256:2bb5c27f563508e7f0074c59a5c9c45532708c11800922cdda20f3fb9a9c2311",
+      "environment_version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+      "execution_generation": 19,
+      "execution_id": "sha256:eefd3d69895bfaae67996198cffe9fcff9e4968fc98c2afa38e0309a8006990a",
+      "network": "q38-ac-g19v2-b-r006-a4-eefd3d69",
+      "ordinal": 4,
+      "run_id": "chris-q38-ac-g19v2-b-r006-a4-eefd3d69",
+      "selection_rank": 6,
+      "task_key": "cysec1-2-current-gen_blackbox-9d641429faef16a05bff575e__blackbox_ctf_v1",
+      "task_version_id": "2f2681bf-c1f7-4056-b6e4-cb2e5058f027"
+    },
+    {
+      "attempt": 1,
+      "cell_id": "sha256:70453a3c06688139f10e7bc452dd40b8f009b5451d672eb03990797ba30d96a0",
+      "environment_version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+      "execution_generation": 19,
+      "execution_id": "sha256:83e2da14e39bf13798fa156dbb00bb7c9ec6a7aab758082f738d4a00a6f22fa7",
+      "network": "q38-ac-g19v2-b-r008-a1-83e2da14",
+      "ordinal": 5,
+      "run_id": "chris-q38-ac-g19v2-b-r008-a1-83e2da14",
+      "selection_rank": 8,
+      "task_key": "cysec1-2-current-gen_blackbox-f294215ad60b41799b9f7bac__blackbox_ctf_v1",
+      "task_version_id": "e4068901-ba6e-4faf-b30c-7535aa11f0fc"
+    },
+    {
+      "attempt": 2,
+      "cell_id": "sha256:b50287c95e63d1e3299b09eb5b8e6a9a776f30ffb5513491084ed8b2c13c5b3c",
+      "environment_version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+      "execution_generation": 19,
+      "execution_id": "sha256:6736ba4d646b142a9c3d2059f038ecf3d17208308da5cbcbfb80fc82d6f1d6e1",
+      "network": "q38-ac-g19v2-b-r008-a2-6736ba4d",
+      "ordinal": 6,
+      "run_id": "chris-q38-ac-g19v2-b-r008-a2-6736ba4d",
+      "selection_rank": 8,
+      "task_key": "cysec1-2-current-gen_blackbox-f294215ad60b41799b9f7bac__blackbox_ctf_v1",
+      "task_version_id": "e4068901-ba6e-4faf-b30c-7535aa11f0fc"
+    },
+    {
+      "attempt": 3,
+      "cell_id": "sha256:cc3db8d062958167e56fe854a168fcb5331c6bdeda0d621738c909043f29eef5",
+      "environment_version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+      "execution_generation": 19,
+      "execution_id": "sha256:7627e145b8d1a2e610c8191ebb1c344b068d23ea26ff9f289ad6de8834e37cdf",
+      "network": "q38-ac-g19v2-b-r008-a3-7627e145",
+      "ordinal": 7,
+      "run_id": "chris-q38-ac-g19v2-b-r008-a3-7627e145",
+      "selection_rank": 8,
+      "task_key": "cysec1-2-current-gen_blackbox-f294215ad60b41799b9f7bac__blackbox_ctf_v1",
+      "task_version_id": "e4068901-ba6e-4faf-b30c-7535aa11f0fc"
+    },
+    {
+      "attempt": 4,
+      "cell_id": "sha256:2f43910cf715f7494d3a5d76bb906aea6f03d0e39fe09a2511bf310c0f956942",
+      "environment_version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+      "execution_generation": 19,
+      "execution_id": "sha256:478b390270f6416bf30ed1ee127d1757eee96a1d5e104eb3f9390e434708f1e4",
+      "network": "q38-ac-g19v2-b-r008-a4-478b3902",
+      "ordinal": 8,
+      "run_id": "chris-q38-ac-g19v2-b-r008-a4-478b3902",
+      "selection_rank": 8,
+      "task_key": "cysec1-2-current-gen_blackbox-f294215ad60b41799b9f7bac__blackbox_ctf_v1",
+      "task_version_id": "e4068901-ba6e-4faf-b30c-7535aa11f0fc"
+    },
+    {
+      "attempt": 1,
+      "cell_id": "sha256:0af40d1d501cef2eb09e20aae7f0c13a1479d8e44dc84afbcc6f41dd10483f58",
+      "environment_version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+      "execution_generation": 19,
+      "execution_id": "sha256:bd0053944af4320dcf6ae2b99a71c9e9fb38870505362cf593daf648bb3a0333",
+      "network": "q38-ac-g19v2-b-r010-a1-bd005394",
+      "ordinal": 9,
+      "run_id": "chris-q38-ac-g19v2-b-r010-a1-bd005394",
+      "selection_rank": 10,
+      "task_key": "cysec1-2-fakelook-gen_blackbox-2c504442adc773ca9a82c247__blackbox_ctf_v1",
+      "task_version_id": "53d2f089-6502-4208-9795-d6ba7277fa9a"
+    },
+    {
+      "attempt": 2,
+      "cell_id": "sha256:af83c56760eb4089fb4799ebf06d39cd651d0ea79a49b23c055c60a5e2d3443d",
+      "environment_version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+      "execution_generation": 19,
+      "execution_id": "sha256:020f6a038e5a70fc080eb980b0e919d34c590057687fcd29281e8283df5a87cd",
+      "network": "q38-ac-g19v2-b-r010-a2-020f6a03",
+      "ordinal": 10,
+      "run_id": "chris-q38-ac-g19v2-b-r010-a2-020f6a03",
+      "selection_rank": 10,
+      "task_key": "cysec1-2-fakelook-gen_blackbox-2c504442adc773ca9a82c247__blackbox_ctf_v1",
+      "task_version_id": "53d2f089-6502-4208-9795-d6ba7277fa9a"
+    },
+    {
+      "attempt": 3,
+      "cell_id": "sha256:a91e0fa9875352fd3d6e88a66e25cccd5ca4a80850af0065b28e603ae27c4477",
+      "environment_version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+      "execution_generation": 19,
+      "execution_id": "sha256:f93ab98593b17e53ac46139ddbf77064c110c5119280a5a8b75c572b9503f201",
+      "network": "q38-ac-g19v2-b-r010-a3-f93ab985",
+      "ordinal": 11,
+      "run_id": "chris-q38-ac-g19v2-b-r010-a3-f93ab985",
+      "selection_rank": 10,
+      "task_key": "cysec1-2-fakelook-gen_blackbox-2c504442adc773ca9a82c247__blackbox_ctf_v1",
+      "task_version_id": "53d2f089-6502-4208-9795-d6ba7277fa9a"
+    },
+    {
+      "attempt": 4,
+      "cell_id": "sha256:82e76930e18171b5a93c5d40237f62c93fd8381acc8fa4bb80b55479071ee1f9",
+      "environment_version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+      "execution_generation": 19,
+      "execution_id": "sha256:1d7f4fd3085906292172924856905b66dbb2d54535f298b77e7e58f22cfd4eba",
+      "network": "q38-ac-g19v2-b-r010-a4-1d7f4fd3",
+      "ordinal": 12,
+      "run_id": "chris-q38-ac-g19v2-b-r010-a4-1d7f4fd3",
+      "selection_rank": 10,
+      "task_key": "cysec1-2-fakelook-gen_blackbox-2c504442adc773ca9a82c247__blackbox_ctf_v1",
+      "task_version_id": "53d2f089-6502-4208-9795-d6ba7277fa9a"
+    },
+    {
+      "attempt": 1,
+      "cell_id": "sha256:913202a66041e42423ee8455f7f5a7aac87802077d88e320a05b3f89bd39463a",
+      "environment_version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+      "execution_generation": 19,
+      "execution_id": "sha256:bcc567781e0adfb2acc215af8d8ed63e726d844d994c6897477a820f4aaca205",
+      "network": "q38-ac-g19v2-b-r012-a1-bcc56778",
+      "ordinal": 13,
+      "run_id": "chris-q38-ac-g19v2-b-r012-a1-bcc56778",
+      "selection_rank": 12,
+      "task_key": "cysec1-2-fakelook-gen_blackbox-8095d44c3871865064a0702c__blackbox_ctf_v1",
+      "task_version_id": "e13f62eb-170a-40c6-86bf-3c3f3829e3d8"
+    },
+    {
+      "attempt": 2,
+      "cell_id": "sha256:4e95117922f2fbdf3ae9d2ffceedec81ae6e5ef5c2bf96c5beeb41ae027ea3aa",
+      "environment_version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+      "execution_generation": 19,
+      "execution_id": "sha256:682e2463324c4466292b0b58550ab425f982316b73c25f62afa10504bf80b8b6",
+      "network": "q38-ac-g19v2-b-r012-a2-682e2463",
+      "ordinal": 14,
+      "run_id": "chris-q38-ac-g19v2-b-r012-a2-682e2463",
+      "selection_rank": 12,
+      "task_key": "cysec1-2-fakelook-gen_blackbox-8095d44c3871865064a0702c__blackbox_ctf_v1",
+      "task_version_id": "e13f62eb-170a-40c6-86bf-3c3f3829e3d8"
+    },
+    {
+      "attempt": 3,
+      "cell_id": "sha256:63c7936cf4756921c77a3d436b3135c8907cf7184dd0982e2693f02a9564bda2",
+      "environment_version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+      "execution_generation": 19,
+      "execution_id": "sha256:7496b7ef38a9035884d5aa1c45e59ace249b593cb75b1ffd99196c6d5a8bfe1a",
+      "network": "q38-ac-g19v2-b-r012-a3-7496b7ef",
+      "ordinal": 15,
+      "run_id": "chris-q38-ac-g19v2-b-r012-a3-7496b7ef",
+      "selection_rank": 12,
+      "task_key": "cysec1-2-fakelook-gen_blackbox-8095d44c3871865064a0702c__blackbox_ctf_v1",
+      "task_version_id": "e13f62eb-170a-40c6-86bf-3c3f3829e3d8"
+    },
+    {
+      "attempt": 4,
+      "cell_id": "sha256:63c55cc7d194b313fe3fe02933f7dc26189a45cad3c1051363162bcc3f4bbc91",
+      "environment_version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+      "execution_generation": 19,
+      "execution_id": "sha256:e16fc5f76b54887e7e974b3d931f55fe678e30fc9c68676f33b25427f9065ba8",
+      "network": "q38-ac-g19v2-b-r012-a4-e16fc5f7",
+      "ordinal": 16,
+      "run_id": "chris-q38-ac-g19v2-b-r012-a4-e16fc5f7",
+      "selection_rank": 12,
+      "task_key": "cysec1-2-fakelook-gen_blackbox-8095d44c3871865064a0702c__blackbox_ctf_v1",
+      "task_version_id": "e13f62eb-170a-40c6-86bf-3c3f3829e3d8"
+    },
+    {
+      "attempt": 1,
+      "cell_id": "sha256:d460a5138b88aaee43fb12e26468ef89945d97e6171cf77f05fb7222370b1754",
+      "environment_version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+      "execution_generation": 19,
+      "execution_id": "sha256:18c219ee798429bc89376acdad3351f1de7b8f0dc5b442291a7e93f8808567b9",
+      "network": "q38-ac-g19v2-b-r014-a1-18c219ee",
+      "ordinal": 17,
+      "run_id": "chris-q38-ac-g19v2-b-r014-a1-18c219ee",
+      "selection_rank": 14,
+      "task_key": "cysec1-2-fakelook-gen_blackbox-fb581ab1aa4a347bb5f6fd65__blackbox_ctf_v1",
+      "task_version_id": "d6634975-2918-4037-9cd2-467f365e39b0"
+    },
+    {
+      "attempt": 2,
+      "cell_id": "sha256:984c2b173563ed1fec56b394fbfdbda95b9e624db5af620329cdf1370227ce02",
+      "environment_version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+      "execution_generation": 19,
+      "execution_id": "sha256:5402cfb7fa7e77c2a9c6f73c1033d9f067c3f11ca31470eb06603bceed78787c",
+      "network": "q38-ac-g19v2-b-r014-a2-5402cfb7",
+      "ordinal": 18,
+      "run_id": "chris-q38-ac-g19v2-b-r014-a2-5402cfb7",
+      "selection_rank": 14,
+      "task_key": "cysec1-2-fakelook-gen_blackbox-fb581ab1aa4a347bb5f6fd65__blackbox_ctf_v1",
+      "task_version_id": "d6634975-2918-4037-9cd2-467f365e39b0"
+    },
+    {
+      "attempt": 3,
+      "cell_id": "sha256:09845302949417175049d8569097ca095eedb87a70531273d2aa81e2a4d3808a",
+      "environment_version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+      "execution_generation": 19,
+      "execution_id": "sha256:b31227a9d777aa66a369b8a99ab2b8af6ae42cc3cad5887ba4e5c1fdd1e7f389",
+      "network": "q38-ac-g19v2-b-r014-a3-b31227a9",
+      "ordinal": 19,
+      "run_id": "chris-q38-ac-g19v2-b-r014-a3-b31227a9",
+      "selection_rank": 14,
+      "task_key": "cysec1-2-fakelook-gen_blackbox-fb581ab1aa4a347bb5f6fd65__blackbox_ctf_v1",
+      "task_version_id": "d6634975-2918-4037-9cd2-467f365e39b0"
+    },
+    {
+      "attempt": 4,
+      "cell_id": "sha256:7b3fbbfb532baa1cedac131fb120a1b27c976c03867f6880496535aded99f033",
+      "environment_version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+      "execution_generation": 19,
+      "execution_id": "sha256:521c2e47179260462e3ea9f49254e4e2ebe90a5ca2b6d88aaf5c91412c29ac02",
+      "network": "q38-ac-g19v2-b-r014-a4-521c2e47",
+      "ordinal": 20,
+      "run_id": "chris-q38-ac-g19v2-b-r014-a4-521c2e47",
+      "selection_rank": 14,
+      "task_key": "cysec1-2-fakelook-gen_blackbox-fb581ab1aa4a347bb5f6fd65__blackbox_ctf_v1",
+      "task_version_id": "d6634975-2918-4037-9cd2-467f365e39b0"
+    },
+    {
+      "attempt": 1,
+      "cell_id": "sha256:bb1eb87b817eb015533d59880b3d16fc9768f910237009ff7730b6b85d65e89d",
+      "environment_version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595",
+      "execution_generation": 19,
+      "execution_id": "sha256:03c851a4acd6eaa9aeab70b878b43fd60321df06e9558b22a93f4fae19bac8bd",
+      "network": "q38-ac-g19v2-b-r016-a1-03c851a4",
+      "ordinal": 21,
+      "run_id": "chris-q38-ac-g19v2-b-r016-a1-03c851a4",
+      "selection_rank": 16,
+      "task_key": "cysec1-2-fentry-gen_blackbox-8b7c28d59cbc439114db9a56__blackbox_ctf_v1",
+      "task_version_id": "fd07b96f-7aa4-4041-862b-5aa7411eff4b"
+    },
+    {
+      "attempt": 2,
+      "cell_id": "sha256:f8a05b93a8de548cfcb1eb36dbf78ace2fa2647d3eee5e3d5b41894f3dc26dba",
+      "environment_version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595",
+      "execution_generation": 19,
+      "execution_id": "sha256:edde70ec2fa87c46b41bb95867c5dc3ce61414606483180ee7ecc143208727a8",
+      "network": "q38-ac-g19v2-b-r016-a2-edde70ec",
+      "ordinal": 22,
+      "run_id": "chris-q38-ac-g19v2-b-r016-a2-edde70ec",
+      "selection_rank": 16,
+      "task_key": "cysec1-2-fentry-gen_blackbox-8b7c28d59cbc439114db9a56__blackbox_ctf_v1",
+      "task_version_id": "fd07b96f-7aa4-4041-862b-5aa7411eff4b"
+    },
+    {
+      "attempt": 3,
+      "cell_id": "sha256:47b41dbbdcad5126c1a2813f14b40213bebf8c99e8b42e4b1c89c98fd1722cd6",
+      "environment_version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595",
+      "execution_generation": 19,
+      "execution_id": "sha256:c667605b02577c15851e69ce96894a8c232aefaf51addadbb5c13e8117191308",
+      "network": "q38-ac-g19v2-b-r016-a3-c667605b",
+      "ordinal": 23,
+      "run_id": "chris-q38-ac-g19v2-b-r016-a3-c667605b",
+      "selection_rank": 16,
+      "task_key": "cysec1-2-fentry-gen_blackbox-8b7c28d59cbc439114db9a56__blackbox_ctf_v1",
+      "task_version_id": "fd07b96f-7aa4-4041-862b-5aa7411eff4b"
+    },
+    {
+      "attempt": 4,
+      "cell_id": "sha256:16152cb6dc73f034124cb4bb03e08d2ec35acafcb0e9a9ef06c713fc4c3def3c",
+      "environment_version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595",
+      "execution_generation": 19,
+      "execution_id": "sha256:767be6204a0d5401e86e7e8a7655e7e87e2d37e49ed4f1147001503442ccf636",
+      "network": "q38-ac-g19v2-b-r016-a4-767be620",
+      "ordinal": 24,
+      "run_id": "chris-q38-ac-g19v2-b-r016-a4-767be620",
+      "selection_rank": 16,
+      "task_key": "cysec1-2-fentry-gen_blackbox-8b7c28d59cbc439114db9a56__blackbox_ctf_v1",
+      "task_version_id": "fd07b96f-7aa4-4041-862b-5aa7411eff4b"
+    },
+    {
+      "attempt": 1,
+      "cell_id": "sha256:4eda1896bf25d2fd6deb9d1cc021fff3a60d66c9662a15a3bd324c6203c6dda4",
+      "environment_version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595",
+      "execution_generation": 19,
+      "execution_id": "sha256:8639f4e6525ca7fc0525a3c452fa603d7fe34bc6f09ff9f3e1d480010e504be7",
+      "network": "q38-ac-g19v2-b-r018-a1-8639f4e6",
+      "ordinal": 25,
+      "run_id": "chris-q38-ac-g19v2-b-r018-a1-8639f4e6",
+      "selection_rank": 18,
+      "task_key": "cysec1-2-fentry-gen_blackbox-ebd29ca3d4ae284704202ebc__blackbox_ctf_v1",
+      "task_version_id": "3aafc5a8-2144-4bc3-919f-fcbbebd9f0d7"
+    },
+    {
+      "attempt": 2,
+      "cell_id": "sha256:7028c4817efa58fbe3406cd348655d31f658de82be8bfef07c6c397b5a1ac561",
+      "environment_version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595",
+      "execution_generation": 19,
+      "execution_id": "sha256:833380ba10ace403d06d30a8e4f520984dd9867cc3635f928628b86472dcabbc",
+      "network": "q38-ac-g19v2-b-r018-a2-833380ba",
+      "ordinal": 26,
+      "run_id": "chris-q38-ac-g19v2-b-r018-a2-833380ba",
+      "selection_rank": 18,
+      "task_key": "cysec1-2-fentry-gen_blackbox-ebd29ca3d4ae284704202ebc__blackbox_ctf_v1",
+      "task_version_id": "3aafc5a8-2144-4bc3-919f-fcbbebd9f0d7"
+    },
+    {
+      "attempt": 3,
+      "cell_id": "sha256:d88e5f205de4467deda0fa876617588b937c2b3bc90435233cbe7ad87e08ac50",
+      "environment_version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595",
+      "execution_generation": 19,
+      "execution_id": "sha256:9bb25612f72aed514c2c15472b8ebca1f81cbe125a3e421b34a81de9f69f5518",
+      "network": "q38-ac-g19v2-b-r018-a3-9bb25612",
+      "ordinal": 27,
+      "run_id": "chris-q38-ac-g19v2-b-r018-a3-9bb25612",
+      "selection_rank": 18,
+      "task_key": "cysec1-2-fentry-gen_blackbox-ebd29ca3d4ae284704202ebc__blackbox_ctf_v1",
+      "task_version_id": "3aafc5a8-2144-4bc3-919f-fcbbebd9f0d7"
+    },
+    {
+      "attempt": 4,
+      "cell_id": "sha256:5ae35b4613ede22ea8151792b9518ef8b16692b7115ad96e8aee328b12e0ae7d",
+      "environment_version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595",
+      "execution_generation": 19,
+      "execution_id": "sha256:282d51ed7ee59d9c84b3181eb7e0c1f60d6d3a259f8d0827be4aa9d3a00841a8",
+      "network": "q38-ac-g19v2-b-r018-a4-282d51ed",
+      "ordinal": 28,
+      "run_id": "chris-q38-ac-g19v2-b-r018-a4-282d51ed",
+      "selection_rank": 18,
+      "task_key": "cysec1-2-fentry-gen_blackbox-ebd29ca3d4ae284704202ebc__blackbox_ctf_v1",
+      "task_version_id": "3aafc5a8-2144-4bc3-919f-fcbbebd9f0d7"
+    },
+    {
+      "attempt": 1,
+      "cell_id": "sha256:56dee6e897641e69d1fb4384f572e1619b6bf1c0f683f3153427770e084a1734",
+      "environment_version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+      "execution_generation": 19,
+      "execution_id": "sha256:819ace53fde7444fd5fb422bffafccb961f50e5befe0e5ea3b394fdaf8ac3401",
+      "network": "q38-ac-g19v2-b-r020-a1-819ace53",
+      "ordinal": 29,
+      "run_id": "chris-q38-ac-g19v2-b-r020-a1-819ace53",
+      "selection_rank": 20,
+      "task_key": "cysec1-2-fira-gen_blackbox-2637dbd94a61305dbd406c3c__blackbox_ctf_v1",
+      "task_version_id": "f8533754-39ad-4683-b9c1-d26bc24dfd14"
+    },
+    {
+      "attempt": 2,
+      "cell_id": "sha256:01b850bd2bee6afbc89ada41f325ff3ea2731e42b37a0d762f7e533fc6b80549",
+      "environment_version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+      "execution_generation": 19,
+      "execution_id": "sha256:9faa0af4baa8802c2a1b97df473f437f92eb4fd9f4e3b43557f1c8dc64ff2551",
+      "network": "q38-ac-g19v2-b-r020-a2-9faa0af4",
+      "ordinal": 30,
+      "run_id": "chris-q38-ac-g19v2-b-r020-a2-9faa0af4",
+      "selection_rank": 20,
+      "task_key": "cysec1-2-fira-gen_blackbox-2637dbd94a61305dbd406c3c__blackbox_ctf_v1",
+      "task_version_id": "f8533754-39ad-4683-b9c1-d26bc24dfd14"
+    },
+    {
+      "attempt": 3,
+      "cell_id": "sha256:e25636d522f535ffcabe5f526555bc24ac1c4732220442debb63708d8bd7195d",
+      "environment_version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+      "execution_generation": 19,
+      "execution_id": "sha256:d487225a24d32431a0898a084a68d38c58c9d5a5f1a43ee026a73a9d3d6d0746",
+      "network": "q38-ac-g19v2-b-r020-a3-d487225a",
+      "ordinal": 31,
+      "run_id": "chris-q38-ac-g19v2-b-r020-a3-d487225a",
+      "selection_rank": 20,
+      "task_key": "cysec1-2-fira-gen_blackbox-2637dbd94a61305dbd406c3c__blackbox_ctf_v1",
+      "task_version_id": "f8533754-39ad-4683-b9c1-d26bc24dfd14"
+    },
+    {
+      "attempt": 4,
+      "cell_id": "sha256:663253181770d5b92bcdc3bad79019cf483f3631cb36c5ca761293471fc6b3cd",
+      "environment_version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+      "execution_generation": 19,
+      "execution_id": "sha256:cc7dd4a7752b82c3d262a431a86312dd26d88f447dc527d7c15d1746ec86b2b3",
+      "network": "q38-ac-g19v2-b-r020-a4-cc7dd4a7",
+      "ordinal": 32,
+      "run_id": "chris-q38-ac-g19v2-b-r020-a4-cc7dd4a7",
+      "selection_rank": 20,
+      "task_key": "cysec1-2-fira-gen_blackbox-2637dbd94a61305dbd406c3c__blackbox_ctf_v1",
+      "task_version_id": "f8533754-39ad-4683-b9c1-d26bc24dfd14"
+    },
+    {
+      "attempt": 1,
+      "cell_id": "sha256:2ac3ae387373e5c0b96bfc4bc2217472a71ccd6fac465554da5822627a4e8557",
+      "environment_version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+      "execution_generation": 19,
+      "execution_id": "sha256:5943774b94865ac58d500739418009eb42735ee08b7ed10bddf3db21f0f79971",
+      "network": "q38-ac-g19v2-b-r022-a1-5943774b",
+      "ordinal": 33,
+      "run_id": "chris-q38-ac-g19v2-b-r022-a1-5943774b",
+      "selection_rank": 22,
+      "task_key": "cysec1-2-fira-gen_blackbox-30fe0df0968b9561fa5f987b__blackbox_ctf_v1",
+      "task_version_id": "4b134baa-bbd7-4448-894d-2444e89a46e7"
+    },
+    {
+      "attempt": 2,
+      "cell_id": "sha256:3999831b8c6a68addd012cd7e50764d44669d520c78a3f14b51d2077f1e21f91",
+      "environment_version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+      "execution_generation": 19,
+      "execution_id": "sha256:8ae0e7c87ef6bc8e6a15dddb41b63228c3aa4ba2615a12fc92fd9e1cde538273",
+      "network": "q38-ac-g19v2-b-r022-a2-8ae0e7c8",
+      "ordinal": 34,
+      "run_id": "chris-q38-ac-g19v2-b-r022-a2-8ae0e7c8",
+      "selection_rank": 22,
+      "task_key": "cysec1-2-fira-gen_blackbox-30fe0df0968b9561fa5f987b__blackbox_ctf_v1",
+      "task_version_id": "4b134baa-bbd7-4448-894d-2444e89a46e7"
+    },
+    {
+      "attempt": 3,
+      "cell_id": "sha256:c9f0a59596280ebb888912375adc39a75dc1fb16dcba6fa9c35763fa3db28c9d",
+      "environment_version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+      "execution_generation": 19,
+      "execution_id": "sha256:af6bf1a45d5b333f0fe3fd5e9fcd681a24893a3110eafa0b4c460214e8bc84be",
+      "network": "q38-ac-g19v2-b-r022-a3-af6bf1a4",
+      "ordinal": 35,
+      "run_id": "chris-q38-ac-g19v2-b-r022-a3-af6bf1a4",
+      "selection_rank": 22,
+      "task_key": "cysec1-2-fira-gen_blackbox-30fe0df0968b9561fa5f987b__blackbox_ctf_v1",
+      "task_version_id": "4b134baa-bbd7-4448-894d-2444e89a46e7"
+    },
+    {
+      "attempt": 4,
+      "cell_id": "sha256:49942d3c7c84b791c2105f8b8d1e460b48ad0f3acd31724ff375fcd11a42c14d",
+      "environment_version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+      "execution_generation": 19,
+      "execution_id": "sha256:0fa08fee7938de81bc1a7239a1564dc90ee84ddf8d77070c4b0a211def89430d",
+      "network": "q38-ac-g19v2-b-r022-a4-0fa08fee",
+      "ordinal": 36,
+      "run_id": "chris-q38-ac-g19v2-b-r022-a4-0fa08fee",
+      "selection_rank": 22,
+      "task_key": "cysec1-2-fira-gen_blackbox-30fe0df0968b9561fa5f987b__blackbox_ctf_v1",
+      "task_version_id": "4b134baa-bbd7-4448-894d-2444e89a46e7"
+    },
+    {
+      "attempt": 1,
+      "cell_id": "sha256:43af613e77bd90f0f7bb4a660c592fab52b9248ab42b146f22f922a80799ea4a",
+      "environment_version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+      "execution_generation": 19,
+      "execution_id": "sha256:2057413319d14f349210544540e040f784ba1e69c1834f1f8d354548286929ab",
+      "network": "q38-ac-g19v2-b-r024-a1-20574133",
+      "ordinal": 37,
+      "run_id": "chris-q38-ac-g19v2-b-r024-a1-20574133",
+      "selection_rank": 24,
+      "task_key": "cysec1-2-fira-gen_blackbox-5b51b6dcb4193e59b96b1b13__blackbox_ctf_v1",
+      "task_version_id": "b6efa2e4-7743-4b8b-a014-832d90cd5e39"
+    },
+    {
+      "attempt": 2,
+      "cell_id": "sha256:96cbf585ba8c5c43e39d01ec2c56d8d985d9b445e7f4d58eb3ba29f3c7cb0195",
+      "environment_version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+      "execution_generation": 19,
+      "execution_id": "sha256:17436bdc9fbecde4158331c2b7af3039430b50b096258ab86afcc7d23832aedf",
+      "network": "q38-ac-g19v2-b-r024-a2-17436bdc",
+      "ordinal": 38,
+      "run_id": "chris-q38-ac-g19v2-b-r024-a2-17436bdc",
+      "selection_rank": 24,
+      "task_key": "cysec1-2-fira-gen_blackbox-5b51b6dcb4193e59b96b1b13__blackbox_ctf_v1",
+      "task_version_id": "b6efa2e4-7743-4b8b-a014-832d90cd5e39"
+    },
+    {
+      "attempt": 3,
+      "cell_id": "sha256:eb8cff475b82623b946f3154be626e107eade499d781fd850b670ee5e1472fde",
+      "environment_version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+      "execution_generation": 19,
+      "execution_id": "sha256:876ba3d05dc7f6d28f0111cd14cb81dba366d6b530e593aa459fb1634bffd636",
+      "network": "q38-ac-g19v2-b-r024-a3-876ba3d0",
+      "ordinal": 39,
+      "run_id": "chris-q38-ac-g19v2-b-r024-a3-876ba3d0",
+      "selection_rank": 24,
+      "task_key": "cysec1-2-fira-gen_blackbox-5b51b6dcb4193e59b96b1b13__blackbox_ctf_v1",
+      "task_version_id": "b6efa2e4-7743-4b8b-a014-832d90cd5e39"
+    },
+    {
+      "attempt": 4,
+      "cell_id": "sha256:a44d58415c5727c9dd0ca34639020f7ec16197bd6fd30e0f7d26c29250334791",
+      "environment_version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+      "execution_generation": 19,
+      "execution_id": "sha256:5b7ae79f9a1abcf3eee7e89ff33ee8fbd9f024f2716f70107e3d2c92882398e9",
+      "network": "q38-ac-g19v2-b-r024-a4-5b7ae79f",
+      "ordinal": 40,
+      "run_id": "chris-q38-ac-g19v2-b-r024-a4-5b7ae79f",
+      "selection_rank": 24,
+      "task_key": "cysec1-2-fira-gen_blackbox-5b51b6dcb4193e59b96b1b13__blackbox_ctf_v1",
+      "task_version_id": "b6efa2e4-7743-4b8b-a014-832d90cd5e39"
+    },
+    {
+      "attempt": 1,
+      "cell_id": "sha256:8cee1f6c8e387c07e751e4361c12fb84e01375a19f4642c13ffe8b35c274d7b4",
+      "environment_version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+      "execution_generation": 19,
+      "execution_id": "sha256:8cd3db843d618a203a6dad71270d97dbcdcbe2f30865c3a34fe9c9715241332b",
+      "network": "q38-ac-g19v2-b-r026-a1-8cd3db84",
+      "ordinal": 41,
+      "run_id": "chris-q38-ac-g19v2-b-r026-a1-8cd3db84",
+      "selection_rank": 26,
+      "task_key": "cysec1-2-fira-gen_blackbox-aacc90d872cf2f38171417b8__blackbox_ctf_v1",
+      "task_version_id": "493bc3d8-7806-4e38-9bc3-e964a5c26f5b"
+    },
+    {
+      "attempt": 2,
+      "cell_id": "sha256:3921f47571d339eab6d4ebb1cf005bf72c7d0cf3164b16d80eb2dd9f76a7fc8f",
+      "environment_version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+      "execution_generation": 19,
+      "execution_id": "sha256:b6b15517ca9ef7db4f8cb3aadfa98d7f48744e55f54d1adf50a9970ccd306530",
+      "network": "q38-ac-g19v2-b-r026-a2-b6b15517",
+      "ordinal": 42,
+      "run_id": "chris-q38-ac-g19v2-b-r026-a2-b6b15517",
+      "selection_rank": 26,
+      "task_key": "cysec1-2-fira-gen_blackbox-aacc90d872cf2f38171417b8__blackbox_ctf_v1",
+      "task_version_id": "493bc3d8-7806-4e38-9bc3-e964a5c26f5b"
+    },
+    {
+      "attempt": 3,
+      "cell_id": "sha256:2889ba85c589f6b92f85dd943d2312401fc21099e8634d2a7cfa24ef61a73677",
+      "environment_version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+      "execution_generation": 19,
+      "execution_id": "sha256:72f00604a7fcdd09c94c5f2035e256eb8325b0510d7cf05eee77998686f5ca89",
+      "network": "q38-ac-g19v2-b-r026-a3-72f00604",
+      "ordinal": 43,
+      "run_id": "chris-q38-ac-g19v2-b-r026-a3-72f00604",
+      "selection_rank": 26,
+      "task_key": "cysec1-2-fira-gen_blackbox-aacc90d872cf2f38171417b8__blackbox_ctf_v1",
+      "task_version_id": "493bc3d8-7806-4e38-9bc3-e964a5c26f5b"
+    },
+    {
+      "attempt": 4,
+      "cell_id": "sha256:c07b45f69436077f7b9c52d19919364192ff0634009bf54ae7f0d5bf5c42194a",
+      "environment_version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+      "execution_generation": 19,
+      "execution_id": "sha256:dc0788ffcb4d705faefa44f1b6c02c43759e6a158271978a28247c1e76ae2062",
+      "network": "q38-ac-g19v2-b-r026-a4-dc0788ff",
+      "ordinal": 44,
+      "run_id": "chris-q38-ac-g19v2-b-r026-a4-dc0788ff",
+      "selection_rank": 26,
+      "task_key": "cysec1-2-fira-gen_blackbox-aacc90d872cf2f38171417b8__blackbox_ctf_v1",
+      "task_version_id": "493bc3d8-7806-4e38-9bc3-e964a5c26f5b"
+    },
+    {
+      "attempt": 1,
+      "cell_id": "sha256:bea980b0452da7606da9b998d21741506764d997789144d9ab9fda3cef18f601",
+      "environment_version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+      "execution_generation": 19,
+      "execution_id": "sha256:70be32737a8ffb1c381f3ad860c27bd81c8947a4cbd20bcced9015bd57dec06d",
+      "network": "q38-ac-g19v2-b-r028-a1-70be3273",
+      "ordinal": 45,
+      "run_id": "chris-q38-ac-g19v2-b-r028-a1-70be3273",
+      "selection_rank": 28,
+      "task_key": "cysec1-2-fira-gen_blackbox-d15d056570961f463e4e6ba8__blackbox_ctf_v1",
+      "task_version_id": "c3fbe2bd-b9e6-41b1-a47f-5342fdc28053"
+    },
+    {
+      "attempt": 2,
+      "cell_id": "sha256:d6c78d30781bfdd399521aef1eb33e312522cfae95490f39f3751f07e79f66ed",
+      "environment_version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+      "execution_generation": 19,
+      "execution_id": "sha256:4eb43f28e5b631a568b27f707cecc2624f73c81a43a8c0ecc21b1bcdb538c5f7",
+      "network": "q38-ac-g19v2-b-r028-a2-4eb43f28",
+      "ordinal": 46,
+      "run_id": "chris-q38-ac-g19v2-b-r028-a2-4eb43f28",
+      "selection_rank": 28,
+      "task_key": "cysec1-2-fira-gen_blackbox-d15d056570961f463e4e6ba8__blackbox_ctf_v1",
+      "task_version_id": "c3fbe2bd-b9e6-41b1-a47f-5342fdc28053"
+    },
+    {
+      "attempt": 3,
+      "cell_id": "sha256:c6cdfa5e365a9226a59c42cc498d3402bd9302f09071cf50242008ce17a8fa07",
+      "environment_version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+      "execution_generation": 19,
+      "execution_id": "sha256:97a1c50ca40ac2b11cbdb14ce37c9454e2efd40d1c03a46e18b9ff2e76c354bf",
+      "network": "q38-ac-g19v2-b-r028-a3-97a1c50c",
+      "ordinal": 47,
+      "run_id": "chris-q38-ac-g19v2-b-r028-a3-97a1c50c",
+      "selection_rank": 28,
+      "task_key": "cysec1-2-fira-gen_blackbox-d15d056570961f463e4e6ba8__blackbox_ctf_v1",
+      "task_version_id": "c3fbe2bd-b9e6-41b1-a47f-5342fdc28053"
+    },
+    {
+      "attempt": 4,
+      "cell_id": "sha256:0ec8a9a37d0ca9d700732ac504ae00301d73b90fe7ff6199caf4371db3873a5b",
+      "environment_version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+      "execution_generation": 19,
+      "execution_id": "sha256:f40fb965433fe8d5064dcd2b9731293cde1268bdd5c13210ae3d8e3d195b92d4",
+      "network": "q38-ac-g19v2-b-r028-a4-f40fb965",
+      "ordinal": 48,
+      "run_id": "chris-q38-ac-g19v2-b-r028-a4-f40fb965",
+      "selection_rank": 28,
+      "task_key": "cysec1-2-fira-gen_blackbox-d15d056570961f463e4e6ba8__blackbox_ctf_v1",
+      "task_version_id": "c3fbe2bd-b9e6-41b1-a47f-5342fdc28053"
+    },
+    {
+      "attempt": 1,
+      "cell_id": "sha256:0712e1067f7b5ede6a435a350f2f8d8b8db7a7451a9c328d4976eb0f9c33a056",
+      "environment_version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+      "execution_generation": 19,
+      "execution_id": "sha256:56d351f0a4e0f205ea3d6f51531f3356637597bbb3442564778cb0d2f035100e",
+      "network": "q38-ac-g19v2-b-r030-a1-56d351f0",
+      "ordinal": 49,
+      "run_id": "chris-q38-ac-g19v2-b-r030-a1-56d351f0",
+      "selection_rank": 30,
+      "task_key": "cysec1-2-fira-gen_blackbox-df372d5a31676a815c9f0751__blackbox_ctf_v1",
+      "task_version_id": "a0cacaaf-480b-4a4c-9ed7-6b6192bb6783"
+    },
+    {
+      "attempt": 2,
+      "cell_id": "sha256:94c7963fa28e388543bdcc6c04e41d7ad10dacd7ecbe97928c0ebedfdefab26e",
+      "environment_version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+      "execution_generation": 19,
+      "execution_id": "sha256:b2b8f4a3eb6a1366cedc0237cf2d97a25d895a154dc2f6a5c6551a0d5c094dd4",
+      "network": "q38-ac-g19v2-b-r030-a2-b2b8f4a3",
+      "ordinal": 50,
+      "run_id": "chris-q38-ac-g19v2-b-r030-a2-b2b8f4a3",
+      "selection_rank": 30,
+      "task_key": "cysec1-2-fira-gen_blackbox-df372d5a31676a815c9f0751__blackbox_ctf_v1",
+      "task_version_id": "a0cacaaf-480b-4a4c-9ed7-6b6192bb6783"
+    },
+    {
+      "attempt": 3,
+      "cell_id": "sha256:26beacce411d2ae0434f41c0e09ee25c85bb249e9ec34e9febdfd934453c6676",
+      "environment_version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+      "execution_generation": 19,
+      "execution_id": "sha256:168eb1cd5bd9b2c6c1efca8356902de82e5dd25198cde6a83577213884de078b",
+      "network": "q38-ac-g19v2-b-r030-a3-168eb1cd",
+      "ordinal": 51,
+      "run_id": "chris-q38-ac-g19v2-b-r030-a3-168eb1cd",
+      "selection_rank": 30,
+      "task_key": "cysec1-2-fira-gen_blackbox-df372d5a31676a815c9f0751__blackbox_ctf_v1",
+      "task_version_id": "a0cacaaf-480b-4a4c-9ed7-6b6192bb6783"
+    },
+    {
+      "attempt": 4,
+      "cell_id": "sha256:670e55534c982d5f1df0b755be9ba75fa605b1ceac8ed479ed0a1f73acba4640",
+      "environment_version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+      "execution_generation": 19,
+      "execution_id": "sha256:33467ba37a36e3332b143532a29bce6110749c000543af26654375f26e99cbe6",
+      "network": "q38-ac-g19v2-b-r030-a4-33467ba3",
+      "ordinal": 52,
+      "run_id": "chris-q38-ac-g19v2-b-r030-a4-33467ba3",
+      "selection_rank": 30,
+      "task_key": "cysec1-2-fira-gen_blackbox-df372d5a31676a815c9f0751__blackbox_ctf_v1",
+      "task_version_id": "a0cacaaf-480b-4a4c-9ed7-6b6192bb6783"
+    },
+    {
+      "attempt": 1,
+      "cell_id": "sha256:959b1bf6e14ee778b6a4a45e8a76e0e3c57313bbec5108551efcd517176f46d8",
+      "environment_version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+      "execution_generation": 19,
+      "execution_id": "sha256:5e765c0b12c8d88d7432de5db4c32d5ce6cf84262076cea7174c2a7a4b26af34",
+      "network": "q38-ac-g19v2-b-r032-a1-5e765c0b",
+      "ordinal": 53,
+      "run_id": "chris-q38-ac-g19v2-b-r032-a1-5e765c0b",
+      "selection_rank": 32,
+      "task_key": "cysec1-2-fira-gen_blackbox-f464547baf18c14b28013c66__blackbox_ctf_v1",
+      "task_version_id": "4b48f9cf-a5c4-4e86-814d-ebe86957e725"
+    },
+    {
+      "attempt": 2,
+      "cell_id": "sha256:57c13a3515fde5543951d96b43b89494145becfbb30390a7b42509e7df68eaa3",
+      "environment_version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+      "execution_generation": 19,
+      "execution_id": "sha256:7acc76ad8a688d93d428dce95c66befc9a609a71f09b892feacf04713e7bfc61",
+      "network": "q38-ac-g19v2-b-r032-a2-7acc76ad",
+      "ordinal": 54,
+      "run_id": "chris-q38-ac-g19v2-b-r032-a2-7acc76ad",
+      "selection_rank": 32,
+      "task_key": "cysec1-2-fira-gen_blackbox-f464547baf18c14b28013c66__blackbox_ctf_v1",
+      "task_version_id": "4b48f9cf-a5c4-4e86-814d-ebe86957e725"
+    },
+    {
+      "attempt": 3,
+      "cell_id": "sha256:a35eb38a83bc315d59931c57c250c8c830b7662ad3159b9424de60a1b9a66ff7",
+      "environment_version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+      "execution_generation": 19,
+      "execution_id": "sha256:5e5f2b477aab44adacb67319be3bb87c7d7b64a7ca388bcd5ef99f48b98b69ab",
+      "network": "q38-ac-g19v2-b-r032-a3-5e5f2b47",
+      "ordinal": 55,
+      "run_id": "chris-q38-ac-g19v2-b-r032-a3-5e5f2b47",
+      "selection_rank": 32,
+      "task_key": "cysec1-2-fira-gen_blackbox-f464547baf18c14b28013c66__blackbox_ctf_v1",
+      "task_version_id": "4b48f9cf-a5c4-4e86-814d-ebe86957e725"
+    },
+    {
+      "attempt": 4,
+      "cell_id": "sha256:a206808b8650ec8fceb441e9dbb52bf3ee6d6361c8bdc1f7f8d9f87f31ec2e9f",
+      "environment_version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+      "execution_generation": 19,
+      "execution_id": "sha256:1526909bc2e001950186361c198b04ce6212d77fff6fab203100dece8abd43b6",
+      "network": "q38-ac-g19v2-b-r032-a4-1526909b",
+      "ordinal": 56,
+      "run_id": "chris-q38-ac-g19v2-b-r032-a4-1526909b",
+      "selection_rank": 32,
+      "task_key": "cysec1-2-fira-gen_blackbox-f464547baf18c14b28013c66__blackbox_ctf_v1",
+      "task_version_id": "4b48f9cf-a5c4-4e86-814d-ebe86957e725"
+    },
+    {
+      "attempt": 1,
+      "cell_id": "sha256:a6810e399ba255627ddad5ff73fcaeef5eabd4a1527c03e409431e21a1d36ea0",
+      "environment_version_id": "a1532a5c-6ec9-45bd-899d-24c0fe3d1df5",
+      "execution_generation": 19,
+      "execution_id": "sha256:0566014065e6e8474eb27f208f338f654f81ca26bcfb3c8583a734305d5e46b9",
+      "network": "q38-ac-g19v2-b-r034-a1-05660140",
+      "ordinal": 57,
+      "run_id": "chris-q38-ac-g19v2-b-r034-a1-05660140",
+      "selection_rank": 34,
+      "task_key": "cysec1-2-fubspot-gen_blackbox-438e3127ab9af7efad692398__blackbox_ctf_v1",
+      "task_version_id": "383a2b61-e82b-4426-9a2b-d5372c92e346"
+    },
+    {
+      "attempt": 2,
+      "cell_id": "sha256:6e775de37f940408470d426a9ae7a37237ae1db5d48e8a0fea681d83bf470d5c",
+      "environment_version_id": "a1532a5c-6ec9-45bd-899d-24c0fe3d1df5",
+      "execution_generation": 19,
+      "execution_id": "sha256:7b25cd2835fba88612314101e380432e3c6793b170ca44ffe0924921fa1dabc6",
+      "network": "q38-ac-g19v2-b-r034-a2-7b25cd28",
+      "ordinal": 58,
+      "run_id": "chris-q38-ac-g19v2-b-r034-a2-7b25cd28",
+      "selection_rank": 34,
+      "task_key": "cysec1-2-fubspot-gen_blackbox-438e3127ab9af7efad692398__blackbox_ctf_v1",
+      "task_version_id": "383a2b61-e82b-4426-9a2b-d5372c92e346"
+    },
+    {
+      "attempt": 3,
+      "cell_id": "sha256:71294aaa44a629b4b6b1c4b591c3bccec927c4a645b48143196b7c45012f2c05",
+      "environment_version_id": "a1532a5c-6ec9-45bd-899d-24c0fe3d1df5",
+      "execution_generation": 19,
+      "execution_id": "sha256:7983478ea52f3fdfffc293b9d89c833ae0e866800b7c903b21c32d616ad8f39d",
+      "network": "q38-ac-g19v2-b-r034-a3-7983478e",
+      "ordinal": 59,
+      "run_id": "chris-q38-ac-g19v2-b-r034-a3-7983478e",
+      "selection_rank": 34,
+      "task_key": "cysec1-2-fubspot-gen_blackbox-438e3127ab9af7efad692398__blackbox_ctf_v1",
+      "task_version_id": "383a2b61-e82b-4426-9a2b-d5372c92e346"
+    },
+    {
+      "attempt": 4,
+      "cell_id": "sha256:d8c43b0dc74830473af33f39b77a2e1c7e299f32a736e728b9100a3af8f050c4",
+      "environment_version_id": "a1532a5c-6ec9-45bd-899d-24c0fe3d1df5",
+      "execution_generation": 19,
+      "execution_id": "sha256:9a90102ea7f13ff58036407304642e1c71810d0f085cd9d228e71570cb9badc2",
+      "network": "q38-ac-g19v2-b-r034-a4-9a90102e",
+      "ordinal": 60,
+      "run_id": "chris-q38-ac-g19v2-b-r034-a4-9a90102e",
+      "selection_rank": 34,
+      "task_key": "cysec1-2-fubspot-gen_blackbox-438e3127ab9af7efad692398__blackbox_ctf_v1",
+      "task_version_id": "383a2b61-e82b-4426-9a2b-d5372c92e346"
+    },
+    {
+      "attempt": 1,
+      "cell_id": "sha256:c358d80923bfa6c6bdce66f5f4af2cf4d179b0816e97ec5cbb62d7111fad3ac5",
+      "environment_version_id": "5d180319-567a-492b-8c34-b24baab505cc",
+      "execution_generation": 19,
+      "execution_id": "sha256:2b2356838cd4c12f889efc5c85d4b38f301a58f1ee700c8d513306826de59b85",
+      "network": "q38-ac-g19v2-b-r036-a1-2b235683",
+      "ordinal": 61,
+      "run_id": "chris-q38-ac-g19v2-b-r036-a1-2b235683",
+      "selection_rank": 36,
+      "task_key": "cysec1-2-rops-gen_single-atom-confluence-refusal-title-disclosure__blackbox_ctf_v1",
+      "task_version_id": "47180c40-447d-4b8c-9387-ca8bae891e46"
+    },
+    {
+      "attempt": 2,
+      "cell_id": "sha256:4c50bacfa9db78c02a2c76f1f341fcd3c62b180f9e0c49434ca450ae3dc8a6b2",
+      "environment_version_id": "5d180319-567a-492b-8c34-b24baab505cc",
+      "execution_generation": 19,
+      "execution_id": "sha256:02d5fbb7688cf2fbc104bc4f34ffd0211d44d10ffe73ee19d2e31c4aa6c45089",
+      "network": "q38-ac-g19v2-b-r036-a2-02d5fbb7",
+      "ordinal": 62,
+      "run_id": "chris-q38-ac-g19v2-b-r036-a2-02d5fbb7",
+      "selection_rank": 36,
+      "task_key": "cysec1-2-rops-gen_single-atom-confluence-refusal-title-disclosure__blackbox_ctf_v1",
+      "task_version_id": "47180c40-447d-4b8c-9387-ca8bae891e46"
+    },
+    {
+      "attempt": 3,
+      "cell_id": "sha256:d2c1c74bb4e45b8a906bd9f5450314bfd25ce59dbd681666984737e52a5832dc",
+      "environment_version_id": "5d180319-567a-492b-8c34-b24baab505cc",
+      "execution_generation": 19,
+      "execution_id": "sha256:5ceb229818c01db96a3547114054fcb75e636de61956716d5826bfdf2ec6232a",
+      "network": "q38-ac-g19v2-b-r036-a3-5ceb2298",
+      "ordinal": 63,
+      "run_id": "chris-q38-ac-g19v2-b-r036-a3-5ceb2298",
+      "selection_rank": 36,
+      "task_key": "cysec1-2-rops-gen_single-atom-confluence-refusal-title-disclosure__blackbox_ctf_v1",
+      "task_version_id": "47180c40-447d-4b8c-9387-ca8bae891e46"
+    },
+    {
+      "attempt": 4,
+      "cell_id": "sha256:bcfbcb7e33ad3a9bfd7408cc19a5d74ef29e37c5a78edbf21b89ef6a3bdba4ef",
+      "environment_version_id": "5d180319-567a-492b-8c34-b24baab505cc",
+      "execution_generation": 19,
+      "execution_id": "sha256:1b06088e40cdbed34933398de77125e63fe4fb7c5074761d0d3c0d23ab18ed2a",
+      "network": "q38-ac-g19v2-b-r036-a4-1b06088e",
+      "ordinal": 64,
+      "run_id": "chris-q38-ac-g19v2-b-r036-a4-1b06088e",
+      "selection_rank": 36,
+      "task_key": "cysec1-2-rops-gen_single-atom-confluence-refusal-title-disclosure__blackbox_ctf_v1",
+      "task_version_id": "47180c40-447d-4b8c-9387-ca8bae891e46"
+    },
+    {
+      "attempt": 1,
+      "cell_id": "sha256:4f05a00d8bc74a01bb2dbb83aa66a65c6ca6b42c42dd1ec30b4d2dfb66603259",
+      "environment_version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+      "execution_generation": 19,
+      "execution_id": "sha256:376ac79c4e00a4e2d41a16fa1fcb98430895c1ec5449bc6d6f5369f071d87f63",
+      "network": "q38-ac-g19v2-b-r038-a1-376ac79c",
+      "ordinal": 65,
+      "run_id": "chris-q38-ac-g19v2-b-r038-a1-376ac79c",
+      "selection_rank": 38,
+      "task_key": "cysec1-2-fakelook-gen_blackbox-2bd5f9fdee284564d8ce5ea4__blackbox_ctf_v1",
+      "task_version_id": "25afa659-5e00-4c5a-9ad4-39779b59c5ef"
+    },
+    {
+      "attempt": 2,
+      "cell_id": "sha256:1fe03ecf28bb6b22f6d6dd959eba6d544cdb5bfc0bd9e9a746b8958cdf8017ba",
+      "environment_version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+      "execution_generation": 19,
+      "execution_id": "sha256:c94d1b851fa37d5cfcd09905d80e305fc7b74f117730ad7bcb881744b6dab4c7",
+      "network": "q38-ac-g19v2-b-r038-a2-c94d1b85",
+      "ordinal": 66,
+      "run_id": "chris-q38-ac-g19v2-b-r038-a2-c94d1b85",
+      "selection_rank": 38,
+      "task_key": "cysec1-2-fakelook-gen_blackbox-2bd5f9fdee284564d8ce5ea4__blackbox_ctf_v1",
+      "task_version_id": "25afa659-5e00-4c5a-9ad4-39779b59c5ef"
+    },
+    {
+      "attempt": 3,
+      "cell_id": "sha256:c7741b2d8f82c0702aca24f69cb1648e28595f792eeea156894f7bb9c092ae05",
+      "environment_version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+      "execution_generation": 19,
+      "execution_id": "sha256:0ab7477151a16d4123fb2fe179d35ce2a56de258e7bd510f6c02dc681233c8f7",
+      "network": "q38-ac-g19v2-b-r038-a3-0ab74771",
+      "ordinal": 67,
+      "run_id": "chris-q38-ac-g19v2-b-r038-a3-0ab74771",
+      "selection_rank": 38,
+      "task_key": "cysec1-2-fakelook-gen_blackbox-2bd5f9fdee284564d8ce5ea4__blackbox_ctf_v1",
+      "task_version_id": "25afa659-5e00-4c5a-9ad4-39779b59c5ef"
+    },
+    {
+      "attempt": 4,
+      "cell_id": "sha256:bcdc196151e485271c46685469d209acf484cb5f23ba77594e3bd076577de56e",
+      "environment_version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+      "execution_generation": 19,
+      "execution_id": "sha256:203d3cdb42a5aab9fde24f296c4a92118b40bcd9effbe9250474fc61cb16c1d0",
+      "network": "q38-ac-g19v2-b-r038-a4-203d3cdb",
+      "ordinal": 68,
+      "run_id": "chris-q38-ac-g19v2-b-r038-a4-203d3cdb",
+      "selection_rank": 38,
+      "task_key": "cysec1-2-fakelook-gen_blackbox-2bd5f9fdee284564d8ce5ea4__blackbox_ctf_v1",
+      "task_version_id": "25afa659-5e00-4c5a-9ad4-39779b59c5ef"
+    },
+    {
+      "attempt": 1,
+      "cell_id": "sha256:fe9b47b23c5f4ead8991574bb732c650772182926150026a03a3e661959ebbfe",
+      "environment_version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595",
+      "execution_generation": 19,
+      "execution_id": "sha256:35875bab8a50e7e24441c1b981dcb2134e1579809696dba8d7b4e97a6e3ae246",
+      "network": "q38-ac-g19v2-b-r040-a1-35875bab",
+      "ordinal": 69,
+      "run_id": "chris-q38-ac-g19v2-b-r040-a1-35875bab",
+      "selection_rank": 40,
+      "task_key": "cysec1-2-fentry-gen_blackbox-38f07564c9639347d11eca37__blackbox_ctf_v1",
+      "task_version_id": "05d09c55-ccdf-4d26-b06d-b851a2314a35"
+    },
+    {
+      "attempt": 2,
+      "cell_id": "sha256:f7c71521b3d31c044d0d397497ec57aac534a989193d52d571bcdf5ea359ac7b",
+      "environment_version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595",
+      "execution_generation": 19,
+      "execution_id": "sha256:de1cdd42dcfee2a3b017e64f81dcb1abb02f0fa17b7cf75ba2ece664fba6247d",
+      "network": "q38-ac-g19v2-b-r040-a2-de1cdd42",
+      "ordinal": 70,
+      "run_id": "chris-q38-ac-g19v2-b-r040-a2-de1cdd42",
+      "selection_rank": 40,
+      "task_key": "cysec1-2-fentry-gen_blackbox-38f07564c9639347d11eca37__blackbox_ctf_v1",
+      "task_version_id": "05d09c55-ccdf-4d26-b06d-b851a2314a35"
+    },
+    {
+      "attempt": 3,
+      "cell_id": "sha256:c8df88c6dd056de892d6edc985e473d575aeb9b5a9d44600aa086a66c40d688a",
+      "environment_version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595",
+      "execution_generation": 19,
+      "execution_id": "sha256:332a9e2165b3184d8ce291d5766b328dbb57c5660043e092e70b1e2d874467f2",
+      "network": "q38-ac-g19v2-b-r040-a3-332a9e21",
+      "ordinal": 71,
+      "run_id": "chris-q38-ac-g19v2-b-r040-a3-332a9e21",
+      "selection_rank": 40,
+      "task_key": "cysec1-2-fentry-gen_blackbox-38f07564c9639347d11eca37__blackbox_ctf_v1",
+      "task_version_id": "05d09c55-ccdf-4d26-b06d-b851a2314a35"
+    },
+    {
+      "attempt": 4,
+      "cell_id": "sha256:a14d7679751b83af40b89d575019fefe8f435deca0ece5a11eb3e3c1a42954da",
+      "environment_version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595",
+      "execution_generation": 19,
+      "execution_id": "sha256:e92ded0e8c7af15e4dc67d6bf7a74bdab2f3e867678981735e2aefa6fd389229",
+      "network": "q38-ac-g19v2-b-r040-a4-e92ded0e",
+      "ordinal": 72,
+      "run_id": "chris-q38-ac-g19v2-b-r040-a4-e92ded0e",
+      "selection_rank": 40,
+      "task_key": "cysec1-2-fentry-gen_blackbox-38f07564c9639347d11eca37__blackbox_ctf_v1",
+      "task_version_id": "05d09c55-ccdf-4d26-b06d-b851a2314a35"
+    },
+    {
+      "attempt": 1,
+      "cell_id": "sha256:617c81788083a31b9129d4ea1d7c482638bf358e677534be058f92934eaa8635",
+      "environment_version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+      "execution_generation": 19,
+      "execution_id": "sha256:695e1bdc9c47c9eb4757294a2285205d3cc467e05a1693c6de69b60b9c700a6a",
+      "network": "q38-ac-g19v2-b-r042-a1-695e1bdc",
+      "ordinal": 73,
+      "run_id": "chris-q38-ac-g19v2-b-r042-a1-695e1bdc",
+      "selection_rank": 42,
+      "task_key": "cysec1-2-fira-gen_blackbox-1865d9918e1ac5d264706d43__blackbox_ctf_v1",
+      "task_version_id": "eefe304c-499d-4c9e-b09c-8aa0fab87213"
+    },
+    {
+      "attempt": 2,
+      "cell_id": "sha256:95f5eec99db8765267df337d0f2bd4ee3aea6abbd4a5a4455f519d65893f7ca0",
+      "environment_version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+      "execution_generation": 19,
+      "execution_id": "sha256:c9beb984c2dbede644db92057db3ef0a6246ba71c0dc46a4b09a5c8f3591b2da",
+      "network": "q38-ac-g19v2-b-r042-a2-c9beb984",
+      "ordinal": 74,
+      "run_id": "chris-q38-ac-g19v2-b-r042-a2-c9beb984",
+      "selection_rank": 42,
+      "task_key": "cysec1-2-fira-gen_blackbox-1865d9918e1ac5d264706d43__blackbox_ctf_v1",
+      "task_version_id": "eefe304c-499d-4c9e-b09c-8aa0fab87213"
+    },
+    {
+      "attempt": 3,
+      "cell_id": "sha256:27642f0ba99cafc8c20be2fcb7b05638a488f459c1d0c04a4bd90233c373444f",
+      "environment_version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+      "execution_generation": 19,
+      "execution_id": "sha256:f48c912049dc2a6e4a088cd38b117f6f71da66a6a1490fe4ee05b4027f5cd543",
+      "network": "q38-ac-g19v2-b-r042-a3-f48c9120",
+      "ordinal": 75,
+      "run_id": "chris-q38-ac-g19v2-b-r042-a3-f48c9120",
+      "selection_rank": 42,
+      "task_key": "cysec1-2-fira-gen_blackbox-1865d9918e1ac5d264706d43__blackbox_ctf_v1",
+      "task_version_id": "eefe304c-499d-4c9e-b09c-8aa0fab87213"
+    },
+    {
+      "attempt": 4,
+      "cell_id": "sha256:56d9184ac5f20a61da5a3a54668cd7412beb17b699caefa7cd776651e30e1b26",
+      "environment_version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+      "execution_generation": 19,
+      "execution_id": "sha256:605ec7ffc4ee188f74550ba17f7242f06dc55262fa4aea71370eba9784cd776f",
+      "network": "q38-ac-g19v2-b-r042-a4-605ec7ff",
+      "ordinal": 76,
+      "run_id": "chris-q38-ac-g19v2-b-r042-a4-605ec7ff",
+      "selection_rank": 42,
+      "task_key": "cysec1-2-fira-gen_blackbox-1865d9918e1ac5d264706d43__blackbox_ctf_v1",
+      "task_version_id": "eefe304c-499d-4c9e-b09c-8aa0fab87213"
+    },
+    {
+      "attempt": 1,
+      "cell_id": "sha256:d065fd48d3d154e2c308f849fd63c0c4d7532eaee8d4dec504b50f6e60b9f45e",
+      "environment_version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+      "execution_generation": 19,
+      "execution_id": "sha256:c3ec4f5805da4843a6bf993d4d8ae9b72cb9b94f971a257173d0631fa155088a",
+      "network": "q38-ac-g19v2-b-r044-a1-c3ec4f58",
+      "ordinal": 77,
+      "run_id": "chris-q38-ac-g19v2-b-r044-a1-c3ec4f58",
+      "selection_rank": 44,
+      "task_key": "cysec1-2-fira-gen_blackbox-ae047f45e37c42a1ad5b09ca__blackbox_ctf_v1",
+      "task_version_id": "f50eee68-84c7-44d1-b4de-4c554ecc3e2e"
+    },
+    {
+      "attempt": 2,
+      "cell_id": "sha256:34c6a04d9083e7e82c5b39eedcac92931a89f1849eccd0fb41609a495f2dad09",
+      "environment_version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+      "execution_generation": 19,
+      "execution_id": "sha256:88ffe663b7e2d6dcd32e90f906160ade9d5161dea969678cbf25200371b2a6e9",
+      "network": "q38-ac-g19v2-b-r044-a2-88ffe663",
+      "ordinal": 78,
+      "run_id": "chris-q38-ac-g19v2-b-r044-a2-88ffe663",
+      "selection_rank": 44,
+      "task_key": "cysec1-2-fira-gen_blackbox-ae047f45e37c42a1ad5b09ca__blackbox_ctf_v1",
+      "task_version_id": "f50eee68-84c7-44d1-b4de-4c554ecc3e2e"
+    },
+    {
+      "attempt": 3,
+      "cell_id": "sha256:c5a9d6bbad173233438157eb6c90f987ed0d700e50addb7c9710b0bad6b86dc2",
+      "environment_version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+      "execution_generation": 19,
+      "execution_id": "sha256:732ec2643ffa32610c6352c586380dce399d52c3f4d0e1240ebbc2b1200165b5",
+      "network": "q38-ac-g19v2-b-r044-a3-732ec264",
+      "ordinal": 79,
+      "run_id": "chris-q38-ac-g19v2-b-r044-a3-732ec264",
+      "selection_rank": 44,
+      "task_key": "cysec1-2-fira-gen_blackbox-ae047f45e37c42a1ad5b09ca__blackbox_ctf_v1",
+      "task_version_id": "f50eee68-84c7-44d1-b4de-4c554ecc3e2e"
+    },
+    {
+      "attempt": 4,
+      "cell_id": "sha256:2b01e4d9fa5941e055390d8ed13d1a97f13e9ba46e297635677453f181adfded",
+      "environment_version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+      "execution_generation": 19,
+      "execution_id": "sha256:d14b0f049ba38874534d877c39e025fcc4f51528a7be683508f772611c9d4b1b",
+      "network": "q38-ac-g19v2-b-r044-a4-d14b0f04",
+      "ordinal": 80,
+      "run_id": "chris-q38-ac-g19v2-b-r044-a4-d14b0f04",
+      "selection_rank": 44,
+      "task_key": "cysec1-2-fira-gen_blackbox-ae047f45e37c42a1ad5b09ca__blackbox_ctf_v1",
+      "task_version_id": "f50eee68-84c7-44d1-b4de-4c554ecc3e2e"
+    },
+    {
+      "attempt": 1,
+      "cell_id": "sha256:7cb37f8b4b471d4de752f08f6bd37e346ac99ca0ce00dcc91376d32648980c09",
+      "environment_version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+      "execution_generation": 19,
+      "execution_id": "sha256:2ab6b5b78b01e3dd8da4c6400c0910f6c49982cb2bcdfe87e5bdba8848f35482",
+      "network": "q38-ac-g19v2-b-r046-a1-2ab6b5b7",
+      "ordinal": 81,
+      "run_id": "chris-q38-ac-g19v2-b-r046-a1-2ab6b5b7",
+      "selection_rank": 46,
+      "task_key": "cysec1-2-current-gen_blackbox-ac3376172d9071d3d519f24e__blackbox_ctf_v1",
+      "task_version_id": "139ff10d-8c00-4bd6-9437-e6fbcccf2f4d"
+    },
+    {
+      "attempt": 2,
+      "cell_id": "sha256:66e98ef7dbb70a6867ddcb1c4ab10226b223abc2eaee8953b9c125e35622e989",
+      "environment_version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+      "execution_generation": 19,
+      "execution_id": "sha256:2a8da9149e0eb5fc82fc021a16eb4f1d79b01af8dda62288c49928f233142ce9",
+      "network": "q38-ac-g19v2-b-r046-a2-2a8da914",
+      "ordinal": 82,
+      "run_id": "chris-q38-ac-g19v2-b-r046-a2-2a8da914",
+      "selection_rank": 46,
+      "task_key": "cysec1-2-current-gen_blackbox-ac3376172d9071d3d519f24e__blackbox_ctf_v1",
+      "task_version_id": "139ff10d-8c00-4bd6-9437-e6fbcccf2f4d"
+    },
+    {
+      "attempt": 3,
+      "cell_id": "sha256:f389bbac5bb6eaa7ea2d53572ccca4c3edd83157405f34907dd548e19519ec15",
+      "environment_version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+      "execution_generation": 19,
+      "execution_id": "sha256:1154b6f8bad4fc838d9b28ef6fdaf9294f7f3e923bc0321650a1db1c5ba4e8be",
+      "network": "q38-ac-g19v2-b-r046-a3-1154b6f8",
+      "ordinal": 83,
+      "run_id": "chris-q38-ac-g19v2-b-r046-a3-1154b6f8",
+      "selection_rank": 46,
+      "task_key": "cysec1-2-current-gen_blackbox-ac3376172d9071d3d519f24e__blackbox_ctf_v1",
+      "task_version_id": "139ff10d-8c00-4bd6-9437-e6fbcccf2f4d"
+    },
+    {
+      "attempt": 4,
+      "cell_id": "sha256:75ce838fd461f9ff53d7ad65be311100f3efc036d6e9d47182313fc18052e882",
+      "environment_version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+      "execution_generation": 19,
+      "execution_id": "sha256:1913ee0d7f97d6f6fba1e58800342e8028bd9337ff59203d8ace310f8db7ace0",
+      "network": "q38-ac-g19v2-b-r046-a4-1913ee0d",
+      "ordinal": 84,
+      "run_id": "chris-q38-ac-g19v2-b-r046-a4-1913ee0d",
+      "selection_rank": 46,
+      "task_key": "cysec1-2-current-gen_blackbox-ac3376172d9071d3d519f24e__blackbox_ctf_v1",
+      "task_version_id": "139ff10d-8c00-4bd6-9437-e6fbcccf2f4d"
+    },
+    {
+      "attempt": 1,
+      "cell_id": "sha256:6fa4cfee3dd7e243c74277840315fa3e024c1147c563046bc9f03a546fab3418",
+      "environment_version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+      "execution_generation": 19,
+      "execution_id": "sha256:a65dc5b83fa45caf244bde6ef585f056c0ede27087082b1b468147c38049f80c",
+      "network": "q38-ac-g19v2-b-r048-a1-a65dc5b8",
+      "ordinal": 85,
+      "run_id": "chris-q38-ac-g19v2-b-r048-a1-a65dc5b8",
+      "selection_rank": 48,
+      "task_key": "cysec1-2-fira-gen_blackbox-5ea6bdcd678f45f8cc0ba673__blackbox_ctf_v1",
+      "task_version_id": "ab2fd90d-1ee5-4451-a866-260ddf5c336d"
+    },
+    {
+      "attempt": 2,
+      "cell_id": "sha256:76117674aea9f794fa643b68b3ba89984216bd670681bee662891aa5b056040a",
+      "environment_version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+      "execution_generation": 19,
+      "execution_id": "sha256:9dad9dd2107b2c260b7944b2177275cef8c10febbbd32a7e9ad516119dae1607",
+      "network": "q38-ac-g19v2-b-r048-a2-9dad9dd2",
+      "ordinal": 86,
+      "run_id": "chris-q38-ac-g19v2-b-r048-a2-9dad9dd2",
+      "selection_rank": 48,
+      "task_key": "cysec1-2-fira-gen_blackbox-5ea6bdcd678f45f8cc0ba673__blackbox_ctf_v1",
+      "task_version_id": "ab2fd90d-1ee5-4451-a866-260ddf5c336d"
+    },
+    {
+      "attempt": 3,
+      "cell_id": "sha256:e8496d2612e2f2a4991696804e4048324cdfb27e5233073d69373a0a46ff064f",
+      "environment_version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+      "execution_generation": 19,
+      "execution_id": "sha256:278b19769a7d4d64c645eb62a7ab4a350a29b33903b2cb6dc632f573ec9a43ee",
+      "network": "q38-ac-g19v2-b-r048-a3-278b1976",
+      "ordinal": 87,
+      "run_id": "chris-q38-ac-g19v2-b-r048-a3-278b1976",
+      "selection_rank": 48,
+      "task_key": "cysec1-2-fira-gen_blackbox-5ea6bdcd678f45f8cc0ba673__blackbox_ctf_v1",
+      "task_version_id": "ab2fd90d-1ee5-4451-a866-260ddf5c336d"
+    },
+    {
+      "attempt": 4,
+      "cell_id": "sha256:cd5f0a1aaa55e75544a9a573b619ce19c2d5f333f8052a777b00cfd620fc5a1e",
+      "environment_version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+      "execution_generation": 19,
+      "execution_id": "sha256:39b17e6711a8e852d25a2f414f85b1455370a1c8957d9021eb6880d5d50cfa30",
+      "network": "q38-ac-g19v2-b-r048-a4-39b17e67",
+      "ordinal": 88,
+      "run_id": "chris-q38-ac-g19v2-b-r048-a4-39b17e67",
+      "selection_rank": 48,
+      "task_key": "cysec1-2-fira-gen_blackbox-5ea6bdcd678f45f8cc0ba673__blackbox_ctf_v1",
+      "task_version_id": "ab2fd90d-1ee5-4451-a866-260ddf5c336d"
+    },
+    {
+      "attempt": 1,
+      "cell_id": "sha256:11bc37cf13401624819b024584b16d2db17cc2a82cd107e2b5b22f7eff1154cd",
+      "environment_version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+      "execution_generation": 19,
+      "execution_id": "sha256:b49fd4ae09fd880ca7bf7015c6f0d82262a0e0556f93b6434766fa771aa7cf81",
+      "network": "q38-ac-g19v2-b-r050-a1-b49fd4ae",
+      "ordinal": 89,
+      "run_id": "chris-q38-ac-g19v2-b-r050-a1-b49fd4ae",
+      "selection_rank": 50,
+      "task_key": "cysec1-2-fakelook-gen_blackbox-9063fa10a36b73f9044c608f__blackbox_ctf_v1",
+      "task_version_id": "dcf2aefc-e34d-4a4a-8aa9-b18a3b754d5a"
+    },
+    {
+      "attempt": 2,
+      "cell_id": "sha256:d7d596b4005015968b7295560d3b8bc247df87aa8d76212460938fb13cfa409d",
+      "environment_version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+      "execution_generation": 19,
+      "execution_id": "sha256:b19186b013ec2044059ef036407ca38dca84fa09a31e1dedca27c167284ec13b",
+      "network": "q38-ac-g19v2-b-r050-a2-b19186b0",
+      "ordinal": 90,
+      "run_id": "chris-q38-ac-g19v2-b-r050-a2-b19186b0",
+      "selection_rank": 50,
+      "task_key": "cysec1-2-fakelook-gen_blackbox-9063fa10a36b73f9044c608f__blackbox_ctf_v1",
+      "task_version_id": "dcf2aefc-e34d-4a4a-8aa9-b18a3b754d5a"
+    },
+    {
+      "attempt": 3,
+      "cell_id": "sha256:6ce2d9553725e3440eb84c1346493a83a5d90e9fa712bb85fd542a7e1c7c5634",
+      "environment_version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+      "execution_generation": 19,
+      "execution_id": "sha256:d7002a7a7ca7d6644253b180cbe7a0e80783940243478b6a27c4405ec2713a92",
+      "network": "q38-ac-g19v2-b-r050-a3-d7002a7a",
+      "ordinal": 91,
+      "run_id": "chris-q38-ac-g19v2-b-r050-a3-d7002a7a",
+      "selection_rank": 50,
+      "task_key": "cysec1-2-fakelook-gen_blackbox-9063fa10a36b73f9044c608f__blackbox_ctf_v1",
+      "task_version_id": "dcf2aefc-e34d-4a4a-8aa9-b18a3b754d5a"
+    },
+    {
+      "attempt": 4,
+      "cell_id": "sha256:36e152ee3f7666f114f937bd33abaf08d9da0172e0ce2d6e4d3c00dc39b8f683",
+      "environment_version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+      "execution_generation": 19,
+      "execution_id": "sha256:e939c677b2b9aae60bdfc2221b830befe2a97398356a4814e13e3ee8ebaa714f",
+      "network": "q38-ac-g19v2-b-r050-a4-e939c677",
+      "ordinal": 92,
+      "run_id": "chris-q38-ac-g19v2-b-r050-a4-e939c677",
+      "selection_rank": 50,
+      "task_key": "cysec1-2-fakelook-gen_blackbox-9063fa10a36b73f9044c608f__blackbox_ctf_v1",
+      "task_version_id": "dcf2aefc-e34d-4a4a-8aa9-b18a3b754d5a"
+    },
+    {
+      "attempt": 1,
+      "cell_id": "sha256:383f49e1d177edadfe34b84618caeb58368cdc5eda79fc55b71f76c812be6f3b",
+      "environment_version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595",
+      "execution_generation": 19,
+      "execution_id": "sha256:c530d50dbe4ac78929ccdf3c7a9656b301d75fdc2d9a177a873311862beeee46",
+      "network": "q38-ac-g19v2-b-r052-a1-c530d50d",
+      "ordinal": 93,
+      "run_id": "chris-q38-ac-g19v2-b-r052-a1-c530d50d",
+      "selection_rank": 52,
+      "task_key": "cysec1-2-fentry-gen_blackbox-ce65143165164b6f99df040c__blackbox_ctf_v1",
+      "task_version_id": "fa04ef0d-3341-4b5f-8a13-d2955feaadc1"
+    },
+    {
+      "attempt": 2,
+      "cell_id": "sha256:67ef285ba037fdf7685d1b80191b06b41b211489dd9aac462cce2ef7b61a3f83",
+      "environment_version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595",
+      "execution_generation": 19,
+      "execution_id": "sha256:5646358976067ba0e7eb206120be9293a7a3f790698715c0e5714116598635cc",
+      "network": "q38-ac-g19v2-b-r052-a2-56463589",
+      "ordinal": 94,
+      "run_id": "chris-q38-ac-g19v2-b-r052-a2-56463589",
+      "selection_rank": 52,
+      "task_key": "cysec1-2-fentry-gen_blackbox-ce65143165164b6f99df040c__blackbox_ctf_v1",
+      "task_version_id": "fa04ef0d-3341-4b5f-8a13-d2955feaadc1"
+    },
+    {
+      "attempt": 3,
+      "cell_id": "sha256:c5fb806aeaa0a491e0fd10ef8b318cfcb64f040e17a5667b4478b8cb9abc3b53",
+      "environment_version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595",
+      "execution_generation": 19,
+      "execution_id": "sha256:2b30aedfe2cc186bb686fb83176af7e43ec6d6683f04998d659e04ccbb9a681f",
+      "network": "q38-ac-g19v2-b-r052-a3-2b30aedf",
+      "ordinal": 95,
+      "run_id": "chris-q38-ac-g19v2-b-r052-a3-2b30aedf",
+      "selection_rank": 52,
+      "task_key": "cysec1-2-fentry-gen_blackbox-ce65143165164b6f99df040c__blackbox_ctf_v1",
+      "task_version_id": "fa04ef0d-3341-4b5f-8a13-d2955feaadc1"
+    },
+    {
+      "attempt": 4,
+      "cell_id": "sha256:7275034e6a37b334316d98742d615049985f870d897755d005994d642352bf44",
+      "environment_version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595",
+      "execution_generation": 19,
+      "execution_id": "sha256:ee686ae8f5e4dd29b4990fb2fa3c40688de8cc71ba2f1496b5ec427204116747",
+      "network": "q38-ac-g19v2-b-r052-a4-ee686ae8",
+      "ordinal": 96,
+      "run_id": "chris-q38-ac-g19v2-b-r052-a4-ee686ae8",
+      "selection_rank": 52,
+      "task_key": "cysec1-2-fentry-gen_blackbox-ce65143165164b6f99df040c__blackbox_ctf_v1",
+      "task_version_id": "fa04ef0d-3341-4b5f-8a13-d2955feaadc1"
+    },
+    {
+      "attempt": 1,
+      "cell_id": "sha256:27446197abb7a0a86a2d25aa46f291c99b9d9a2dc0a7042b234e36dd1813d8cb",
+      "environment_version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+      "execution_generation": 19,
+      "execution_id": "sha256:494d831cd58bb2e5bcaab20e8c84c889f4fbc63385b8fd972fb6df16eb339229",
+      "network": "q38-ac-g19v2-b-r054-a1-494d831c",
+      "ordinal": 97,
+      "run_id": "chris-q38-ac-g19v2-b-r054-a1-494d831c",
+      "selection_rank": 54,
+      "task_key": "cysec1-2-current-gen_blackbox-9afe9e08da314948b573657e__blackbox_ctf_v1",
+      "task_version_id": "dd8dd22e-75c0-4b93-8f8e-ea8a292d92bb"
+    },
+    {
+      "attempt": 2,
+      "cell_id": "sha256:2a024691626f2f32a986163aa621e31826aad57061deffdbf88d6f748368fe26",
+      "environment_version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+      "execution_generation": 19,
+      "execution_id": "sha256:134b8c13ea3efb5776a13dc4cf65dda37e2b585d2ac9234017cc09fde7f2beea",
+      "network": "q38-ac-g19v2-b-r054-a2-134b8c13",
+      "ordinal": 98,
+      "run_id": "chris-q38-ac-g19v2-b-r054-a2-134b8c13",
+      "selection_rank": 54,
+      "task_key": "cysec1-2-current-gen_blackbox-9afe9e08da314948b573657e__blackbox_ctf_v1",
+      "task_version_id": "dd8dd22e-75c0-4b93-8f8e-ea8a292d92bb"
+    },
+    {
+      "attempt": 3,
+      "cell_id": "sha256:ec369a4755de76e49bae193ed10345b0d2185f1e0e563d27e77914329b108318",
+      "environment_version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+      "execution_generation": 19,
+      "execution_id": "sha256:e0ccc10f71e109a64a30e51c527c68bb47d73261c480aa259389132551773f5c",
+      "network": "q38-ac-g19v2-b-r054-a3-e0ccc10f",
+      "ordinal": 99,
+      "run_id": "chris-q38-ac-g19v2-b-r054-a3-e0ccc10f",
+      "selection_rank": 54,
+      "task_key": "cysec1-2-current-gen_blackbox-9afe9e08da314948b573657e__blackbox_ctf_v1",
+      "task_version_id": "dd8dd22e-75c0-4b93-8f8e-ea8a292d92bb"
+    },
+    {
+      "attempt": 4,
+      "cell_id": "sha256:ee42d1936b43ab78a535458f6e4b324c155e5527b8987244d3fe56b272240911",
+      "environment_version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+      "execution_generation": 19,
+      "execution_id": "sha256:ef62d1ca6bc9ab57d611c7131883c2a1df5f69abd2b37c5f144281fe4aa75b7a",
+      "network": "q38-ac-g19v2-b-r054-a4-ef62d1ca",
+      "ordinal": 100,
+      "run_id": "chris-q38-ac-g19v2-b-r054-a4-ef62d1ca",
+      "selection_rank": 54,
+      "task_key": "cysec1-2-current-gen_blackbox-9afe9e08da314948b573657e__blackbox_ctf_v1",
+      "task_version_id": "dd8dd22e-75c0-4b93-8f8e-ea8a292d92bb"
+    },
+    {
+      "attempt": 1,
+      "cell_id": "sha256:76eb58beff86aaffb80dd81916525fb63d8342165586bd1f7e285c9f35024ecc",
+      "environment_version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+      "execution_generation": 19,
+      "execution_id": "sha256:8cddc657903d23a79cee8d3c86ca6138ef960e08c4aabea5309174f4a366a28d",
+      "network": "q38-ac-g19v2-b-r056-a1-8cddc657",
+      "ordinal": 101,
+      "run_id": "chris-q38-ac-g19v2-b-r056-a1-8cddc657",
+      "selection_rank": 56,
+      "task_key": "cysec1-2-fira-gen_blackbox-f1d8a0c49352bdf40faf015f__blackbox_ctf_v1",
+      "task_version_id": "33527414-ced7-4005-9c5a-eb9c211a32da"
+    },
+    {
+      "attempt": 2,
+      "cell_id": "sha256:b307d9e7030d507eacde5f97e106eafa44a83998ad02def467f410ec2a6500db",
+      "environment_version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+      "execution_generation": 19,
+      "execution_id": "sha256:579c9bb20b3f0888cb931c0aa59b5502c64302b73da63d9936579e8495696c33",
+      "network": "q38-ac-g19v2-b-r056-a2-579c9bb2",
+      "ordinal": 102,
+      "run_id": "chris-q38-ac-g19v2-b-r056-a2-579c9bb2",
+      "selection_rank": 56,
+      "task_key": "cysec1-2-fira-gen_blackbox-f1d8a0c49352bdf40faf015f__blackbox_ctf_v1",
+      "task_version_id": "33527414-ced7-4005-9c5a-eb9c211a32da"
+    },
+    {
+      "attempt": 3,
+      "cell_id": "sha256:7ddfcf5d61c0351f43f310cbc51c4615384fef656a894590a49881a1a9ec67cb",
+      "environment_version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+      "execution_generation": 19,
+      "execution_id": "sha256:218a0e8822c99740df0b81944c30e3e71ec6e54d5b9b05ae2dc00be7805ef8f9",
+      "network": "q38-ac-g19v2-b-r056-a3-218a0e88",
+      "ordinal": 103,
+      "run_id": "chris-q38-ac-g19v2-b-r056-a3-218a0e88",
+      "selection_rank": 56,
+      "task_key": "cysec1-2-fira-gen_blackbox-f1d8a0c49352bdf40faf015f__blackbox_ctf_v1",
+      "task_version_id": "33527414-ced7-4005-9c5a-eb9c211a32da"
+    },
+    {
+      "attempt": 4,
+      "cell_id": "sha256:aeb293894a2caacb71d1e878cefbf37abf842001cd586df3c60db3424262567a",
+      "environment_version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+      "execution_generation": 19,
+      "execution_id": "sha256:4880c8d09077e5795917abe0ff9d7c526c2e118ef56e47fdda76999c18cec544",
+      "network": "q38-ac-g19v2-b-r056-a4-4880c8d0",
+      "ordinal": 104,
+      "run_id": "chris-q38-ac-g19v2-b-r056-a4-4880c8d0",
+      "selection_rank": 56,
+      "task_key": "cysec1-2-fira-gen_blackbox-f1d8a0c49352bdf40faf015f__blackbox_ctf_v1",
+      "task_version_id": "33527414-ced7-4005-9c5a-eb9c211a32da"
+    },
+    {
+      "attempt": 1,
+      "cell_id": "sha256:3ce4e91d59216be167ec7bd3eb3824a706ea2e9ea408c5fe32bf5a2577152bb8",
+      "environment_version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+      "execution_generation": 19,
+      "execution_id": "sha256:8991392ee25d2524c618eb3382b96a693543bc2c87c38c64e4dc3cfb32289355",
+      "network": "q38-ac-g19v2-b-r058-a1-8991392e",
+      "ordinal": 105,
+      "run_id": "chris-q38-ac-g19v2-b-r058-a1-8991392e",
+      "selection_rank": 58,
+      "task_key": "cysec1-2-fira-gen_blackbox-529751381aa5ed41b3935adb__blackbox_ctf_v1",
+      "task_version_id": "2c62b98d-61e8-4216-bc84-c61bc4cd5ccb"
+    },
+    {
+      "attempt": 2,
+      "cell_id": "sha256:e2650d90d7b5e754f746f57f4831afb27e3a82700ac4eb5d029f5401edfe6df4",
+      "environment_version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+      "execution_generation": 19,
+      "execution_id": "sha256:1e9b532120201d6035d629297cb4fb7b8272a980dcefa03fc22a7c5fca2c43ba",
+      "network": "q38-ac-g19v2-b-r058-a2-1e9b5321",
+      "ordinal": 106,
+      "run_id": "chris-q38-ac-g19v2-b-r058-a2-1e9b5321",
+      "selection_rank": 58,
+      "task_key": "cysec1-2-fira-gen_blackbox-529751381aa5ed41b3935adb__blackbox_ctf_v1",
+      "task_version_id": "2c62b98d-61e8-4216-bc84-c61bc4cd5ccb"
+    },
+    {
+      "attempt": 3,
+      "cell_id": "sha256:e593f3fde6b4546fe5716aab5079be976cb2b4db8c2f106dd059c03bb79a15c5",
+      "environment_version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+      "execution_generation": 19,
+      "execution_id": "sha256:af06e1a0ea38a60ae84716510451919eaa6f2da6e79478f704f43bb80e68d720",
+      "network": "q38-ac-g19v2-b-r058-a3-af06e1a0",
+      "ordinal": 107,
+      "run_id": "chris-q38-ac-g19v2-b-r058-a3-af06e1a0",
+      "selection_rank": 58,
+      "task_key": "cysec1-2-fira-gen_blackbox-529751381aa5ed41b3935adb__blackbox_ctf_v1",
+      "task_version_id": "2c62b98d-61e8-4216-bc84-c61bc4cd5ccb"
+    },
+    {
+      "attempt": 4,
+      "cell_id": "sha256:79b79d2c70a1f745aeb72881392ea656fcdb2720da1c23c0901dba8a96591879",
+      "environment_version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+      "execution_generation": 19,
+      "execution_id": "sha256:1fb451385bc0d3256697193da243f57b8b00b10a373237de1d5ee1dac9d67726",
+      "network": "q38-ac-g19v2-b-r058-a4-1fb45138",
+      "ordinal": 108,
+      "run_id": "chris-q38-ac-g19v2-b-r058-a4-1fb45138",
+      "selection_rank": 58,
+      "task_key": "cysec1-2-fira-gen_blackbox-529751381aa5ed41b3935adb__blackbox_ctf_v1",
+      "task_version_id": "2c62b98d-61e8-4216-bc84-c61bc4cd5ccb"
+    },
+    {
+      "attempt": 1,
+      "cell_id": "sha256:3051b2fb386747bb3a67cc13d6a287fca6391fd3fa439879c10e8e94d79e232f",
+      "environment_version_id": "a1532a5c-6ec9-45bd-899d-24c0fe3d1df5",
+      "execution_generation": 19,
+      "execution_id": "sha256:70b430fbea17dc453b975ac9572a95b9a1e6f04c576dda573ddd67a3ffe566c9",
+      "network": "q38-ac-g19v2-b-r060-a1-70b430fb",
+      "ordinal": 109,
+      "run_id": "chris-q38-ac-g19v2-b-r060-a1-70b430fb",
+      "selection_rank": 60,
+      "task_key": "cysec1-2-fubspot-gen_blackbox-401a45aae0038d8f9cb6420b__blackbox_ctf_v1",
+      "task_version_id": "5f0c9b28-fe2f-41e0-b73f-0e7749f64195"
+    },
+    {
+      "attempt": 2,
+      "cell_id": "sha256:e128b196dfe245875d767600fb60f71bc36d8c20f20726d238fd69f8e0fdf52f",
+      "environment_version_id": "a1532a5c-6ec9-45bd-899d-24c0fe3d1df5",
+      "execution_generation": 19,
+      "execution_id": "sha256:84e17f96365c782cd35f249220ae3f66a7800ed639ac4e23aa60c4702f8d030f",
+      "network": "q38-ac-g19v2-b-r060-a2-84e17f96",
+      "ordinal": 110,
+      "run_id": "chris-q38-ac-g19v2-b-r060-a2-84e17f96",
+      "selection_rank": 60,
+      "task_key": "cysec1-2-fubspot-gen_blackbox-401a45aae0038d8f9cb6420b__blackbox_ctf_v1",
+      "task_version_id": "5f0c9b28-fe2f-41e0-b73f-0e7749f64195"
+    },
+    {
+      "attempt": 3,
+      "cell_id": "sha256:ff37f8d976ab29313988606252718d45e555d3bb9d6ba60dd1583bf6796b1113",
+      "environment_version_id": "a1532a5c-6ec9-45bd-899d-24c0fe3d1df5",
+      "execution_generation": 19,
+      "execution_id": "sha256:699c639632be89047d37e6c6dba11a1b46623632d659c9daf7c30a491218765a",
+      "network": "q38-ac-g19v2-b-r060-a3-699c6396",
+      "ordinal": 111,
+      "run_id": "chris-q38-ac-g19v2-b-r060-a3-699c6396",
+      "selection_rank": 60,
+      "task_key": "cysec1-2-fubspot-gen_blackbox-401a45aae0038d8f9cb6420b__blackbox_ctf_v1",
+      "task_version_id": "5f0c9b28-fe2f-41e0-b73f-0e7749f64195"
+    },
+    {
+      "attempt": 4,
+      "cell_id": "sha256:8dea278169c7c05066b19e51fac74681f5e6a3897f89d2cbe970b0bac0c54f18",
+      "environment_version_id": "a1532a5c-6ec9-45bd-899d-24c0fe3d1df5",
+      "execution_generation": 19,
+      "execution_id": "sha256:927444ca09a5a8e4c7007379a1a69e9f59f8c726aafb94288729d1945f927a2b",
+      "network": "q38-ac-g19v2-b-r060-a4-927444ca",
+      "ordinal": 112,
+      "run_id": "chris-q38-ac-g19v2-b-r060-a4-927444ca",
+      "selection_rank": 60,
+      "task_key": "cysec1-2-fubspot-gen_blackbox-401a45aae0038d8f9cb6420b__blackbox_ctf_v1",
+      "task_version_id": "5f0c9b28-fe2f-41e0-b73f-0e7749f64195"
+    },
+    {
+      "attempt": 1,
+      "cell_id": "sha256:564e0f04093ed2c8538e15548dc794cf38d4b7460e8ad1563a48a16d03e65ef1",
+      "environment_version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+      "execution_generation": 19,
+      "execution_id": "sha256:afe3a07fdfdb99314820a4c6b873f14f9c01010081aeb28be8eed137f0d97e13",
+      "network": "q38-ac-g19v2-b-r062-a1-afe3a07f",
+      "ordinal": 113,
+      "run_id": "chris-q38-ac-g19v2-b-r062-a1-afe3a07f",
+      "selection_rank": 62,
+      "task_key": "cysec1-2-current-gen_blackbox-3a1c4858db3e787986bfb723__blackbox_ctf_v1",
+      "task_version_id": "65c8cc68-6ada-421f-ad0a-eb1d81fc9141"
+    },
+    {
+      "attempt": 2,
+      "cell_id": "sha256:ad0d249efd435094e88fc3a02043bf09338c4bbb71b49bcbbe4cc7246ef8ee31",
+      "environment_version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+      "execution_generation": 19,
+      "execution_id": "sha256:2c5247fa0f714c5c24974ca16dd6fca667538a5adabc05514a80a43b5d585a57",
+      "network": "q38-ac-g19v2-b-r062-a2-2c5247fa",
+      "ordinal": 114,
+      "run_id": "chris-q38-ac-g19v2-b-r062-a2-2c5247fa",
+      "selection_rank": 62,
+      "task_key": "cysec1-2-current-gen_blackbox-3a1c4858db3e787986bfb723__blackbox_ctf_v1",
+      "task_version_id": "65c8cc68-6ada-421f-ad0a-eb1d81fc9141"
+    },
+    {
+      "attempt": 3,
+      "cell_id": "sha256:81782c92951de431ed569baf514f78322c1cb49198f09b674192612646328166",
+      "environment_version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+      "execution_generation": 19,
+      "execution_id": "sha256:98748dbdd79212fb0b6e810785f424a27c6f66fa961083063d63597734aa559c",
+      "network": "q38-ac-g19v2-b-r062-a3-98748dbd",
+      "ordinal": 115,
+      "run_id": "chris-q38-ac-g19v2-b-r062-a3-98748dbd",
+      "selection_rank": 62,
+      "task_key": "cysec1-2-current-gen_blackbox-3a1c4858db3e787986bfb723__blackbox_ctf_v1",
+      "task_version_id": "65c8cc68-6ada-421f-ad0a-eb1d81fc9141"
+    },
+    {
+      "attempt": 4,
+      "cell_id": "sha256:9180c35677783489012c8a881b63660118137a5ef651085ae10123c99995ba24",
+      "environment_version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+      "execution_generation": 19,
+      "execution_id": "sha256:3dc260e9f1eda29e042686eabd7034d03dc8c351768cd9ab8818fec4b1fb3a00",
+      "network": "q38-ac-g19v2-b-r062-a4-3dc260e9",
+      "ordinal": 116,
+      "run_id": "chris-q38-ac-g19v2-b-r062-a4-3dc260e9",
+      "selection_rank": 62,
+      "task_key": "cysec1-2-current-gen_blackbox-3a1c4858db3e787986bfb723__blackbox_ctf_v1",
+      "task_version_id": "65c8cc68-6ada-421f-ad0a-eb1d81fc9141"
+    },
+    {
+      "attempt": 1,
+      "cell_id": "sha256:a41c161844fcffc580327ff18cffe02581d92325c813ab740fe6255fe42eefdb",
+      "environment_version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+      "execution_generation": 19,
+      "execution_id": "sha256:a5afe5c0cc23bcd9eb6f22fa28bb92cf9cf3016d618b3375688e2f429e60665e",
+      "network": "q38-ac-g19v2-b-r064-a1-a5afe5c0",
+      "ordinal": 117,
+      "run_id": "chris-q38-ac-g19v2-b-r064-a1-a5afe5c0",
+      "selection_rank": 64,
+      "task_key": "cysec1-2-fakelook-gen_blackbox-5863ceeee099e5f9247cc2c6__blackbox_ctf_v1",
+      "task_version_id": "8d84b316-d741-44f8-aaa5-7a0f0d7b8d3a"
+    },
+    {
+      "attempt": 2,
+      "cell_id": "sha256:e8bd5b352597611a523992551dcb0186a93d3aadb8b6d98bc43ebbcab8576764",
+      "environment_version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+      "execution_generation": 19,
+      "execution_id": "sha256:2fe3b33dd7580d8b9b82cf0edfbd7d3b1e86d7f38bd74bfabcddba3c04fc42b2",
+      "network": "q38-ac-g19v2-b-r064-a2-2fe3b33d",
+      "ordinal": 118,
+      "run_id": "chris-q38-ac-g19v2-b-r064-a2-2fe3b33d",
+      "selection_rank": 64,
+      "task_key": "cysec1-2-fakelook-gen_blackbox-5863ceeee099e5f9247cc2c6__blackbox_ctf_v1",
+      "task_version_id": "8d84b316-d741-44f8-aaa5-7a0f0d7b8d3a"
+    },
+    {
+      "attempt": 3,
+      "cell_id": "sha256:bade40dc3cfcfc75432beeea564dbfef7df8bfba6647a67f2f2ce302b17328b6",
+      "environment_version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+      "execution_generation": 19,
+      "execution_id": "sha256:b517182694da38d88fa54f2770725a3c5ec86e82617a2346227308d82e6defbf",
+      "network": "q38-ac-g19v2-b-r064-a3-b5171826",
+      "ordinal": 119,
+      "run_id": "chris-q38-ac-g19v2-b-r064-a3-b5171826",
+      "selection_rank": 64,
+      "task_key": "cysec1-2-fakelook-gen_blackbox-5863ceeee099e5f9247cc2c6__blackbox_ctf_v1",
+      "task_version_id": "8d84b316-d741-44f8-aaa5-7a0f0d7b8d3a"
+    },
+    {
+      "attempt": 4,
+      "cell_id": "sha256:a3401b6fc7e05f88b3a82a646d3e8480e0e34235a66a9ac2f1c76cae0fa8f303",
+      "environment_version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+      "execution_generation": 19,
+      "execution_id": "sha256:5cbfa540afe6451fbd95dff54fa7da22f32e584666e09b78d67c6dd590656e1e",
+      "network": "q38-ac-g19v2-b-r064-a4-5cbfa540",
+      "ordinal": 120,
+      "run_id": "chris-q38-ac-g19v2-b-r064-a4-5cbfa540",
+      "selection_rank": 64,
+      "task_key": "cysec1-2-fakelook-gen_blackbox-5863ceeee099e5f9247cc2c6__blackbox_ctf_v1",
+      "task_version_id": "8d84b316-d741-44f8-aaa5-7a0f0d7b8d3a"
+    },
+    {
+      "attempt": 1,
+      "cell_id": "sha256:fbefaabd855a64d1ca066c3a2883d1d4bcf460157819a83785bdd8d4b6ac81d7",
+      "environment_version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595",
+      "execution_generation": 19,
+      "execution_id": "sha256:857593e2a2f47fe237d61c9527e940bb649d276a0f547786ce9d9865f0875d2a",
+      "network": "q38-ac-g19v2-b-r066-a1-857593e2",
+      "ordinal": 121,
+      "run_id": "chris-q38-ac-g19v2-b-r066-a1-857593e2",
+      "selection_rank": 66,
+      "task_key": "cysec1-2-fentry-gen_blackbox-e7cf771cd5152704dce3be24__blackbox_ctf_v1",
+      "task_version_id": "fa83b3a7-be02-4193-9670-2cd794fa28b4"
+    },
+    {
+      "attempt": 2,
+      "cell_id": "sha256:5e4bc72798f21d3241065d5409ab1a8989a24da8907edd8eb0c0228d83fc631d",
+      "environment_version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595",
+      "execution_generation": 19,
+      "execution_id": "sha256:7bd7066e43b03ad81fa539637dca68b04275401bb4dd441b302bd0f0572e32c4",
+      "network": "q38-ac-g19v2-b-r066-a2-7bd7066e",
+      "ordinal": 122,
+      "run_id": "chris-q38-ac-g19v2-b-r066-a2-7bd7066e",
+      "selection_rank": 66,
+      "task_key": "cysec1-2-fentry-gen_blackbox-e7cf771cd5152704dce3be24__blackbox_ctf_v1",
+      "task_version_id": "fa83b3a7-be02-4193-9670-2cd794fa28b4"
+    },
+    {
+      "attempt": 3,
+      "cell_id": "sha256:bb92cb2d524cbf68b3d60dd428a16005394e17d3859b2aab69aab222decd2d2a",
+      "environment_version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595",
+      "execution_generation": 19,
+      "execution_id": "sha256:d74f3ca016795ff9173c05a0e7efb1d15f2382a1a4ec9982df567a48c91cc8d9",
+      "network": "q38-ac-g19v2-b-r066-a3-d74f3ca0",
+      "ordinal": 123,
+      "run_id": "chris-q38-ac-g19v2-b-r066-a3-d74f3ca0",
+      "selection_rank": 66,
+      "task_key": "cysec1-2-fentry-gen_blackbox-e7cf771cd5152704dce3be24__blackbox_ctf_v1",
+      "task_version_id": "fa83b3a7-be02-4193-9670-2cd794fa28b4"
+    },
+    {
+      "attempt": 4,
+      "cell_id": "sha256:706962bdf1e0dba33b4f148d5283e9bd72e6c5ac3b310df385e8dddfdfb4fb9f",
+      "environment_version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595",
+      "execution_generation": 19,
+      "execution_id": "sha256:2ffbbf6920bc7a8debd65a73a352fcd1a34946e0f2d453ed10b50f4915c9029e",
+      "network": "q38-ac-g19v2-b-r066-a4-2ffbbf69",
+      "ordinal": 124,
+      "run_id": "chris-q38-ac-g19v2-b-r066-a4-2ffbbf69",
+      "selection_rank": 66,
+      "task_key": "cysec1-2-fentry-gen_blackbox-e7cf771cd5152704dce3be24__blackbox_ctf_v1",
+      "task_version_id": "fa83b3a7-be02-4193-9670-2cd794fa28b4"
+    },
+    {
+      "attempt": 1,
+      "cell_id": "sha256:43013309dfe4e750a11747ead0106823f879e9cd0b8e5401b177173e61bc899e",
+      "environment_version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+      "execution_generation": 19,
+      "execution_id": "sha256:556523e5199e753782cd9756a870c26a35eac8bcdab2d82dae36f8a1df0122b6",
+      "network": "q38-ac-g19v2-b-r068-a1-556523e5",
+      "ordinal": 125,
+      "run_id": "chris-q38-ac-g19v2-b-r068-a1-556523e5",
+      "selection_rank": 68,
+      "task_key": "cysec1-2-current-gen_blackbox-16d922dbbfaa21f0f6fa5b97__blackbox_ctf_v1",
+      "task_version_id": "e53d70e2-c129-422a-b878-033bfb5556ab"
+    },
+    {
+      "attempt": 2,
+      "cell_id": "sha256:1fa6a771acfd9ca57a967fc262e466976a14202b017da395f24fe3de49096e8a",
+      "environment_version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+      "execution_generation": 19,
+      "execution_id": "sha256:700c0ce7f362f69330f4809b3ac2a50d7a816b0adfaef2c1c4e6f96cdf70f008",
+      "network": "q38-ac-g19v2-b-r068-a2-700c0ce7",
+      "ordinal": 126,
+      "run_id": "chris-q38-ac-g19v2-b-r068-a2-700c0ce7",
+      "selection_rank": 68,
+      "task_key": "cysec1-2-current-gen_blackbox-16d922dbbfaa21f0f6fa5b97__blackbox_ctf_v1",
+      "task_version_id": "e53d70e2-c129-422a-b878-033bfb5556ab"
+    },
+    {
+      "attempt": 3,
+      "cell_id": "sha256:0817d2ce20ba520dc700399f0364151371a17be6409b719337a639d637929f1b",
+      "environment_version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+      "execution_generation": 19,
+      "execution_id": "sha256:d5f00e7478896cf4816df40adc75737ab17fecf37173cd4f4b901aafbda015f9",
+      "network": "q38-ac-g19v2-b-r068-a3-d5f00e74",
+      "ordinal": 127,
+      "run_id": "chris-q38-ac-g19v2-b-r068-a3-d5f00e74",
+      "selection_rank": 68,
+      "task_key": "cysec1-2-current-gen_blackbox-16d922dbbfaa21f0f6fa5b97__blackbox_ctf_v1",
+      "task_version_id": "e53d70e2-c129-422a-b878-033bfb5556ab"
+    },
+    {
+      "attempt": 4,
+      "cell_id": "sha256:aa38834c3696fe10abe562f300cedcdde18d579ea7f35a19819920d1324f3f55",
+      "environment_version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+      "execution_generation": 19,
+      "execution_id": "sha256:81f5ab9dba5983d63520b80c88c0011537321a24ed31603829fc00015069c97f",
+      "network": "q38-ac-g19v2-b-r068-a4-81f5ab9d",
+      "ordinal": 128,
+      "run_id": "chris-q38-ac-g19v2-b-r068-a4-81f5ab9d",
+      "selection_rank": 68,
+      "task_key": "cysec1-2-current-gen_blackbox-16d922dbbfaa21f0f6fa5b97__blackbox_ctf_v1",
+      "task_version_id": "e53d70e2-c129-422a-b878-033bfb5556ab"
+    },
+    {
+      "attempt": 1,
+      "cell_id": "sha256:a71203c2fbb003c430a7b5d44eb319ec46cba24434ba2871b6bc793421af4774",
+      "environment_version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+      "execution_generation": 19,
+      "execution_id": "sha256:e04be70255a183ac4f4c66fd2f1f3a33938609d36b78e06240ed75516d73c5b6",
+      "network": "q38-ac-g19v2-b-r070-a1-e04be702",
+      "ordinal": 129,
+      "run_id": "chris-q38-ac-g19v2-b-r070-a1-e04be702",
+      "selection_rank": 70,
+      "task_key": "cysec1-2-fakelook-gen_blackbox-58a0a253d85d53703781bb50__blackbox_ctf_v1",
+      "task_version_id": "6e565e4d-2cb9-402f-a492-457d6802cee6"
+    },
+    {
+      "attempt": 2,
+      "cell_id": "sha256:147bbc9f0a93c8a5cbdbd05efe83c70595c81d2f8fcb7d7b276519328dbfca42",
+      "environment_version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+      "execution_generation": 19,
+      "execution_id": "sha256:c72c34a44dab71bc92e60aabbc77d100ebe5be22bb44dd197f47e0a92cd80287",
+      "network": "q38-ac-g19v2-b-r070-a2-c72c34a4",
+      "ordinal": 130,
+      "run_id": "chris-q38-ac-g19v2-b-r070-a2-c72c34a4",
+      "selection_rank": 70,
+      "task_key": "cysec1-2-fakelook-gen_blackbox-58a0a253d85d53703781bb50__blackbox_ctf_v1",
+      "task_version_id": "6e565e4d-2cb9-402f-a492-457d6802cee6"
+    },
+    {
+      "attempt": 3,
+      "cell_id": "sha256:40a7988d851c5492eb7121bbeb86015d0a35f51bc3da1e142bb39d088e6f28c6",
+      "environment_version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+      "execution_generation": 19,
+      "execution_id": "sha256:d2cf3f050cfc9bfe02f80a45ed29e2d8731e9ef3c28d1c2bc26100c25fbb65ae",
+      "network": "q38-ac-g19v2-b-r070-a3-d2cf3f05",
+      "ordinal": 131,
+      "run_id": "chris-q38-ac-g19v2-b-r070-a3-d2cf3f05",
+      "selection_rank": 70,
+      "task_key": "cysec1-2-fakelook-gen_blackbox-58a0a253d85d53703781bb50__blackbox_ctf_v1",
+      "task_version_id": "6e565e4d-2cb9-402f-a492-457d6802cee6"
+    },
+    {
+      "attempt": 4,
+      "cell_id": "sha256:fd193a180ec189cd93ed7dc80843c32dbfebe7d05d4f777c03aa5309288423e3",
+      "environment_version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+      "execution_generation": 19,
+      "execution_id": "sha256:9af928bff395fb5b664b550e017e0f6b999b0f36244f8b5a69f9a9c4393830f1",
+      "network": "q38-ac-g19v2-b-r070-a4-9af928bf",
+      "ordinal": 132,
+      "run_id": "chris-q38-ac-g19v2-b-r070-a4-9af928bf",
+      "selection_rank": 70,
+      "task_key": "cysec1-2-fakelook-gen_blackbox-58a0a253d85d53703781bb50__blackbox_ctf_v1",
+      "task_version_id": "6e565e4d-2cb9-402f-a492-457d6802cee6"
+    },
+    {
+      "attempt": 1,
+      "cell_id": "sha256:fd5dbff200430cd1fadc41694d6ea3fa7f025b5c8558a1ed50f13ba808f28134",
+      "environment_version_id": "a1532a5c-6ec9-45bd-899d-24c0fe3d1df5",
+      "execution_generation": 19,
+      "execution_id": "sha256:82faa79fc65300581728bcac7ad76edd66c47df9765f59ca247d5715eca9ce88",
+      "network": "q38-ac-g19v2-b-r072-a1-82faa79f",
+      "ordinal": 133,
+      "run_id": "chris-q38-ac-g19v2-b-r072-a1-82faa79f",
+      "selection_rank": 72,
+      "task_key": "cysec1-2-fubspot-gen_blackbox-2c4543c99976ddc656588bfe__blackbox_ctf_v1",
+      "task_version_id": "bf88b387-f5b5-4452-b539-4ad48f0c177e"
+    },
+    {
+      "attempt": 2,
+      "cell_id": "sha256:da73e8a388190df9a1215d36d0060b2c2645f537919d9da7354a8e7d82af2d1a",
+      "environment_version_id": "a1532a5c-6ec9-45bd-899d-24c0fe3d1df5",
+      "execution_generation": 19,
+      "execution_id": "sha256:f9556978f5a3ce3a3b975bf3a088846d0342b90476119943e2a9e81c2d36c30d",
+      "network": "q38-ac-g19v2-b-r072-a2-f9556978",
+      "ordinal": 134,
+      "run_id": "chris-q38-ac-g19v2-b-r072-a2-f9556978",
+      "selection_rank": 72,
+      "task_key": "cysec1-2-fubspot-gen_blackbox-2c4543c99976ddc656588bfe__blackbox_ctf_v1",
+      "task_version_id": "bf88b387-f5b5-4452-b539-4ad48f0c177e"
+    },
+    {
+      "attempt": 3,
+      "cell_id": "sha256:9d6ff3bf80843fe406b1931d5ec22ffda42610feec2d0c506fc0107822fa6975",
+      "environment_version_id": "a1532a5c-6ec9-45bd-899d-24c0fe3d1df5",
+      "execution_generation": 19,
+      "execution_id": "sha256:0c4cc577cf77b8634c074adbc57fff154ddf3328950312d59ab78a9d0529d71b",
+      "network": "q38-ac-g19v2-b-r072-a3-0c4cc577",
+      "ordinal": 135,
+      "run_id": "chris-q38-ac-g19v2-b-r072-a3-0c4cc577",
+      "selection_rank": 72,
+      "task_key": "cysec1-2-fubspot-gen_blackbox-2c4543c99976ddc656588bfe__blackbox_ctf_v1",
+      "task_version_id": "bf88b387-f5b5-4452-b539-4ad48f0c177e"
+    },
+    {
+      "attempt": 4,
+      "cell_id": "sha256:3ce0099a2b596a9561aa48f65782d1a4c340414d6a2fd637052643a8c5828129",
+      "environment_version_id": "a1532a5c-6ec9-45bd-899d-24c0fe3d1df5",
+      "execution_generation": 19,
+      "execution_id": "sha256:1a24625d05ef36d078399da36a88fd3288a2f8a06f207b542f5dacda0685d7de",
+      "network": "q38-ac-g19v2-b-r072-a4-1a24625d",
+      "ordinal": 136,
+      "run_id": "chris-q38-ac-g19v2-b-r072-a4-1a24625d",
+      "selection_rank": 72,
+      "task_key": "cysec1-2-fubspot-gen_blackbox-2c4543c99976ddc656588bfe__blackbox_ctf_v1",
+      "task_version_id": "bf88b387-f5b5-4452-b539-4ad48f0c177e"
+    },
+    {
+      "attempt": 1,
+      "cell_id": "sha256:d1ac88c00d9a4f598ba6ae9dcd721481dd5da16c95070b9d34c015110135511a",
+      "environment_version_id": "a1532a5c-6ec9-45bd-899d-24c0fe3d1df5",
+      "execution_generation": 19,
+      "execution_id": "sha256:fb3821fb75ffe76bf396c47d4999c24b138aede7cdb4337537dc0e536d4f91fb",
+      "network": "q38-ac-g19v2-b-r074-a1-fb3821fb",
+      "ordinal": 137,
+      "run_id": "chris-q38-ac-g19v2-b-r074-a1-fb3821fb",
+      "selection_rank": 74,
+      "task_key": "cysec1-2-fubspot-gen_blackbox-bb3f496e48b40493bee8aa92__blackbox_ctf_v1",
+      "task_version_id": "b66062df-4c6a-419f-8568-82e152e9df73"
+    },
+    {
+      "attempt": 2,
+      "cell_id": "sha256:2996dc36f23db88b3810a0d395747018c566dde3aa0c65b4ca33d13ae45db8ce",
+      "environment_version_id": "a1532a5c-6ec9-45bd-899d-24c0fe3d1df5",
+      "execution_generation": 19,
+      "execution_id": "sha256:49413b25fed77d7554531dc7f1283e8005a6b36f9d45d895b1f5e8dcb8b3ba90",
+      "network": "q38-ac-g19v2-b-r074-a2-49413b25",
+      "ordinal": 138,
+      "run_id": "chris-q38-ac-g19v2-b-r074-a2-49413b25",
+      "selection_rank": 74,
+      "task_key": "cysec1-2-fubspot-gen_blackbox-bb3f496e48b40493bee8aa92__blackbox_ctf_v1",
+      "task_version_id": "b66062df-4c6a-419f-8568-82e152e9df73"
+    },
+    {
+      "attempt": 3,
+      "cell_id": "sha256:2d9fbeeb1daa2f0cc037ba3f6e99267e536928183b6fcb030f1eea59d57e633c",
+      "environment_version_id": "a1532a5c-6ec9-45bd-899d-24c0fe3d1df5",
+      "execution_generation": 19,
+      "execution_id": "sha256:0a36fd4a69ac7cfcae8a5818a9c171cdac97ae15e93238a772489abfd21d3e3a",
+      "network": "q38-ac-g19v2-b-r074-a3-0a36fd4a",
+      "ordinal": 139,
+      "run_id": "chris-q38-ac-g19v2-b-r074-a3-0a36fd4a",
+      "selection_rank": 74,
+      "task_key": "cysec1-2-fubspot-gen_blackbox-bb3f496e48b40493bee8aa92__blackbox_ctf_v1",
+      "task_version_id": "b66062df-4c6a-419f-8568-82e152e9df73"
+    },
+    {
+      "attempt": 4,
+      "cell_id": "sha256:6ca256b2876696a8aa532389fcf928cb732d1beb1b0da077573981b1ad22001a",
+      "environment_version_id": "a1532a5c-6ec9-45bd-899d-24c0fe3d1df5",
+      "execution_generation": 19,
+      "execution_id": "sha256:d5e57575929578ccc398284501ac8bb99e6b5a8f385ef61c7ccd5fedda171337",
+      "network": "q38-ac-g19v2-b-r074-a4-d5e57575",
+      "ordinal": 140,
+      "run_id": "chris-q38-ac-g19v2-b-r074-a4-d5e57575",
+      "selection_rank": 74,
+      "task_key": "cysec1-2-fubspot-gen_blackbox-bb3f496e48b40493bee8aa92__blackbox_ctf_v1",
+      "task_version_id": "b66062df-4c6a-419f-8568-82e152e9df73"
+    },
+    {
+      "attempt": 1,
+      "cell_id": "sha256:1cc798eff9778b99b5014dc4332bd2b0ca38f4f69e9f61cf35dbe47542fc0dda",
+      "environment_version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+      "execution_generation": 19,
+      "execution_id": "sha256:58f07bc6e9f74680294468f9fbef4267932db840b943858dd7199de298013402",
+      "network": "q38-ac-g19v2-b-r076-a1-58f07bc6",
+      "ordinal": 141,
+      "run_id": "chris-q38-ac-g19v2-b-r076-a1-58f07bc6",
+      "selection_rank": 76,
+      "task_key": "cysec1-2-current-gen_blackbox-124bb98758975c4aa3ebbe82__blackbox_ctf_v1",
+      "task_version_id": "1fdbcb5b-4582-47dc-a794-29e7a40682da"
+    },
+    {
+      "attempt": 2,
+      "cell_id": "sha256:b87edd5ffc9c9a54c9a7c2b8978b4ac143490165cea3384ba74d5228a0b69a48",
+      "environment_version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+      "execution_generation": 19,
+      "execution_id": "sha256:7a98b5fbe1080baf017b7c2a41df2e776a27f8d913e176e1c49963dc162eb536",
+      "network": "q38-ac-g19v2-b-r076-a2-7a98b5fb",
+      "ordinal": 142,
+      "run_id": "chris-q38-ac-g19v2-b-r076-a2-7a98b5fb",
+      "selection_rank": 76,
+      "task_key": "cysec1-2-current-gen_blackbox-124bb98758975c4aa3ebbe82__blackbox_ctf_v1",
+      "task_version_id": "1fdbcb5b-4582-47dc-a794-29e7a40682da"
+    },
+    {
+      "attempt": 3,
+      "cell_id": "sha256:b6ffa09951f04cd5084ee806ce3f9432959dbacc754035bba70874427a421840",
+      "environment_version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+      "execution_generation": 19,
+      "execution_id": "sha256:ecb2481bfd0e0a838cc64d5fd6814cb09fcdbe77ccce2dd026f69fb4a433f636",
+      "network": "q38-ac-g19v2-b-r076-a3-ecb2481b",
+      "ordinal": 143,
+      "run_id": "chris-q38-ac-g19v2-b-r076-a3-ecb2481b",
+      "selection_rank": 76,
+      "task_key": "cysec1-2-current-gen_blackbox-124bb98758975c4aa3ebbe82__blackbox_ctf_v1",
+      "task_version_id": "1fdbcb5b-4582-47dc-a794-29e7a40682da"
+    },
+    {
+      "attempt": 4,
+      "cell_id": "sha256:71ef0c04ec61172fd0376648c53df87c4eb14211e3734db4ef0bd7a0a1f9d171",
+      "environment_version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+      "execution_generation": 19,
+      "execution_id": "sha256:980c010f4104541b321939270b94dade4fea09f0e819cc77b9b521264ff689ed",
+      "network": "q38-ac-g19v2-b-r076-a4-980c010f",
+      "ordinal": 144,
+      "run_id": "chris-q38-ac-g19v2-b-r076-a4-980c010f",
+      "selection_rank": 76,
+      "task_key": "cysec1-2-current-gen_blackbox-124bb98758975c4aa3ebbe82__blackbox_ctf_v1",
+      "task_version_id": "1fdbcb5b-4582-47dc-a794-29e7a40682da"
+    },
+    {
+      "attempt": 1,
+      "cell_id": "sha256:077da51b9465bca0e54532235512c8d870ffacd5ee1578d12f5cb0ada22d6967",
+      "environment_version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+      "execution_generation": 19,
+      "execution_id": "sha256:3dca719ae56653d9bb34c975ab9f3f11038d2385aeb15a8934d2764a94e7a27a",
+      "network": "q38-ac-g19v2-b-r078-a1-3dca719a",
+      "ordinal": 145,
+      "run_id": "chris-q38-ac-g19v2-b-r078-a1-3dca719a",
+      "selection_rank": 78,
+      "task_key": "cysec1-2-current-gen_blackbox-3a7455937196b81cf5999fb5__blackbox_ctf_v1",
+      "task_version_id": "18079a9c-cb79-4013-aa08-54092c415165"
+    },
+    {
+      "attempt": 2,
+      "cell_id": "sha256:bf097401b090adeb95d55ea7c41b96e11a1e88d5cdded440cdbe03ceacbf93f0",
+      "environment_version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+      "execution_generation": 19,
+      "execution_id": "sha256:2a115a68f11c38205cf2c684137e03974649766404924677238df9cdb42bf1ea",
+      "network": "q38-ac-g19v2-b-r078-a2-2a115a68",
+      "ordinal": 146,
+      "run_id": "chris-q38-ac-g19v2-b-r078-a2-2a115a68",
+      "selection_rank": 78,
+      "task_key": "cysec1-2-current-gen_blackbox-3a7455937196b81cf5999fb5__blackbox_ctf_v1",
+      "task_version_id": "18079a9c-cb79-4013-aa08-54092c415165"
+    },
+    {
+      "attempt": 3,
+      "cell_id": "sha256:fbf835c9264aedea3a12c70156a8c1e837d31799a6f74ea87d49f9f653d50a2e",
+      "environment_version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+      "execution_generation": 19,
+      "execution_id": "sha256:70bf4738a5505c195b02b1dee3ac614c728cb6110b352f3d643f9b59762963f7",
+      "network": "q38-ac-g19v2-b-r078-a3-70bf4738",
+      "ordinal": 147,
+      "run_id": "chris-q38-ac-g19v2-b-r078-a3-70bf4738",
+      "selection_rank": 78,
+      "task_key": "cysec1-2-current-gen_blackbox-3a7455937196b81cf5999fb5__blackbox_ctf_v1",
+      "task_version_id": "18079a9c-cb79-4013-aa08-54092c415165"
+    },
+    {
+      "attempt": 4,
+      "cell_id": "sha256:3173c164c0570991e928ab9931771c2cea99910e6dc5957e30c637c3a23e8aa2",
+      "environment_version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+      "execution_generation": 19,
+      "execution_id": "sha256:d2cec40fe4890386cae713f332c4501f237b78b72e8ab8cd78794a7994f3e034",
+      "network": "q38-ac-g19v2-b-r078-a4-d2cec40f",
+      "ordinal": 148,
+      "run_id": "chris-q38-ac-g19v2-b-r078-a4-d2cec40f",
+      "selection_rank": 78,
+      "task_key": "cysec1-2-current-gen_blackbox-3a7455937196b81cf5999fb5__blackbox_ctf_v1",
+      "task_version_id": "18079a9c-cb79-4013-aa08-54092c415165"
+    },
+    {
+      "attempt": 1,
+      "cell_id": "sha256:82be82e45c6ed4196b0476584786d141c93001011312e4014f5665a0ea9b5157",
+      "environment_version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+      "execution_generation": 19,
+      "execution_id": "sha256:9be5e78c5502d885dd840ba7d58b4d50a5bec2e0794a7dbd0bc21e621455d0ab",
+      "network": "q38-ac-g19v2-b-r080-a1-9be5e78c",
+      "ordinal": 149,
+      "run_id": "chris-q38-ac-g19v2-b-r080-a1-9be5e78c",
+      "selection_rank": 80,
+      "task_key": "cysec1-2-current-gen_blackbox-58a5b481cf56ffb7954e7396__blackbox_ctf_v1",
+      "task_version_id": "d6c906fc-ef92-4ce6-ab9c-54a9b7eb9037"
+    },
+    {
+      "attempt": 2,
+      "cell_id": "sha256:df1f2096fa9ebe6cbc889ca6cc8704319dbb0ac595163e15ae737058afabf24b",
+      "environment_version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+      "execution_generation": 19,
+      "execution_id": "sha256:0cb9603e62a09e79d166963bf05e45b34be8c73e7b3e8938bea6f69cc7306bc7",
+      "network": "q38-ac-g19v2-b-r080-a2-0cb9603e",
+      "ordinal": 150,
+      "run_id": "chris-q38-ac-g19v2-b-r080-a2-0cb9603e",
+      "selection_rank": 80,
+      "task_key": "cysec1-2-current-gen_blackbox-58a5b481cf56ffb7954e7396__blackbox_ctf_v1",
+      "task_version_id": "d6c906fc-ef92-4ce6-ab9c-54a9b7eb9037"
+    },
+    {
+      "attempt": 3,
+      "cell_id": "sha256:096c3cc2090f7f154eabfbd601c2cb2ac7f007252323623e3864a449df663604",
+      "environment_version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+      "execution_generation": 19,
+      "execution_id": "sha256:bb1e8b1f29896ebffb66ac41cd3be5d321431b013eb6da5f6d59f227fa45a2d2",
+      "network": "q38-ac-g19v2-b-r080-a3-bb1e8b1f",
+      "ordinal": 151,
+      "run_id": "chris-q38-ac-g19v2-b-r080-a3-bb1e8b1f",
+      "selection_rank": 80,
+      "task_key": "cysec1-2-current-gen_blackbox-58a5b481cf56ffb7954e7396__blackbox_ctf_v1",
+      "task_version_id": "d6c906fc-ef92-4ce6-ab9c-54a9b7eb9037"
+    },
+    {
+      "attempt": 4,
+      "cell_id": "sha256:b066dee9e351da5c8c74b3cb4978ace98f114eeea33c51fb643576c6c3b91b0a",
+      "environment_version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+      "execution_generation": 19,
+      "execution_id": "sha256:c6245a20202a61dbb7e03e45660ddab117b5b761c4610d3cae88c56ee9e11d94",
+      "network": "q38-ac-g19v2-b-r080-a4-c6245a20",
+      "ordinal": 152,
+      "run_id": "chris-q38-ac-g19v2-b-r080-a4-c6245a20",
+      "selection_rank": 80,
+      "task_key": "cysec1-2-current-gen_blackbox-58a5b481cf56ffb7954e7396__blackbox_ctf_v1",
+      "task_version_id": "d6c906fc-ef92-4ce6-ab9c-54a9b7eb9037"
+    },
+    {
+      "attempt": 1,
+      "cell_id": "sha256:2364e907a390f1e1206b286d0a71eda4e289ac1cbb00d098d0e5cd46be567c05",
+      "environment_version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+      "execution_generation": 19,
+      "execution_id": "sha256:14bc6e853d7c315eae56201b13edb4f0010119e32b964dba74122509affce981",
+      "network": "q38-ac-g19v2-b-r082-a1-14bc6e85",
+      "ordinal": 153,
+      "run_id": "chris-q38-ac-g19v2-b-r082-a1-14bc6e85",
+      "selection_rank": 82,
+      "task_key": "cysec1-2-current-gen_blackbox-c5ba6fa280b5731a06d45214__blackbox_ctf_v1",
+      "task_version_id": "63e6ea95-1b08-44ec-aea7-244d9c6253af"
+    },
+    {
+      "attempt": 2,
+      "cell_id": "sha256:3c462199dc35652d23e287003ce8ee9bd874d8046a1f8ae6b343dcac919a8b2e",
+      "environment_version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+      "execution_generation": 19,
+      "execution_id": "sha256:32e1443cab892a3068bcbf94755a2bb3178c179679d4339b4f99269d8abe10a3",
+      "network": "q38-ac-g19v2-b-r082-a2-32e1443c",
+      "ordinal": 154,
+      "run_id": "chris-q38-ac-g19v2-b-r082-a2-32e1443c",
+      "selection_rank": 82,
+      "task_key": "cysec1-2-current-gen_blackbox-c5ba6fa280b5731a06d45214__blackbox_ctf_v1",
+      "task_version_id": "63e6ea95-1b08-44ec-aea7-244d9c6253af"
+    },
+    {
+      "attempt": 3,
+      "cell_id": "sha256:69c1489e730f4d04ca1b562ed52d5ef62b67d0144ec57ca7e672cf1924055625",
+      "environment_version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+      "execution_generation": 19,
+      "execution_id": "sha256:b3857d4a07df0ed808286ce0a5fd1f715f3363810884bf5a76f11faeedf84390",
+      "network": "q38-ac-g19v2-b-r082-a3-b3857d4a",
+      "ordinal": 155,
+      "run_id": "chris-q38-ac-g19v2-b-r082-a3-b3857d4a",
+      "selection_rank": 82,
+      "task_key": "cysec1-2-current-gen_blackbox-c5ba6fa280b5731a06d45214__blackbox_ctf_v1",
+      "task_version_id": "63e6ea95-1b08-44ec-aea7-244d9c6253af"
+    },
+    {
+      "attempt": 4,
+      "cell_id": "sha256:d37de0e340c57c103733bc2a69e9b7503bf32dcee000062eabfbf17f0faed541",
+      "environment_version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+      "execution_generation": 19,
+      "execution_id": "sha256:542ab26aee338b90c9d4e8914cb7fa61f91be2a4e5e348e023ca301db97a76f2",
+      "network": "q38-ac-g19v2-b-r082-a4-542ab26a",
+      "ordinal": 156,
+      "run_id": "chris-q38-ac-g19v2-b-r082-a4-542ab26a",
+      "selection_rank": 82,
+      "task_key": "cysec1-2-current-gen_blackbox-c5ba6fa280b5731a06d45214__blackbox_ctf_v1",
+      "task_version_id": "63e6ea95-1b08-44ec-aea7-244d9c6253af"
+    },
+    {
+      "attempt": 1,
+      "cell_id": "sha256:c39e68872bcaaa95ea9deb84cea4996a117b5c0955cfab03f30112865f5991bb",
+      "environment_version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+      "execution_generation": 19,
+      "execution_id": "sha256:253c5202585397eeda2d4264a14d62e436bb08d9b9970c6fc707bfa52dbc3117",
+      "network": "q38-ac-g19v2-b-r084-a1-253c5202",
+      "ordinal": 157,
+      "run_id": "chris-q38-ac-g19v2-b-r084-a1-253c5202",
+      "selection_rank": 84,
+      "task_key": "cysec1-2-fakelook-gen_blackbox-03faebe1772eea3cd1e8e2cb__blackbox_ctf_v1",
+      "task_version_id": "f1ce26fc-39b6-442c-a03c-3c18f99e119f"
+    },
+    {
+      "attempt": 2,
+      "cell_id": "sha256:ad7eaea4fb7084dfcea62a0408e5dbbb58c9b4b453a423b330bd57d34180c161",
+      "environment_version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+      "execution_generation": 19,
+      "execution_id": "sha256:9b53880adecaa9feb62f6e943b5b381d73714e06025b485156d56092161e34e6",
+      "network": "q38-ac-g19v2-b-r084-a2-9b53880a",
+      "ordinal": 158,
+      "run_id": "chris-q38-ac-g19v2-b-r084-a2-9b53880a",
+      "selection_rank": 84,
+      "task_key": "cysec1-2-fakelook-gen_blackbox-03faebe1772eea3cd1e8e2cb__blackbox_ctf_v1",
+      "task_version_id": "f1ce26fc-39b6-442c-a03c-3c18f99e119f"
+    },
+    {
+      "attempt": 3,
+      "cell_id": "sha256:2b67a03bd812832f63e738dc7d917a14d01ea87a0670f34863a502a31d278633",
+      "environment_version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+      "execution_generation": 19,
+      "execution_id": "sha256:3960a07956194e9679015e039941181a168444e8cd8bc54b85cd339529f895c1",
+      "network": "q38-ac-g19v2-b-r084-a3-3960a079",
+      "ordinal": 159,
+      "run_id": "chris-q38-ac-g19v2-b-r084-a3-3960a079",
+      "selection_rank": 84,
+      "task_key": "cysec1-2-fakelook-gen_blackbox-03faebe1772eea3cd1e8e2cb__blackbox_ctf_v1",
+      "task_version_id": "f1ce26fc-39b6-442c-a03c-3c18f99e119f"
+    },
+    {
+      "attempt": 4,
+      "cell_id": "sha256:be8217ee3e8a301e63bc9da88495f382904269a2d89afa0e0630a92568466c89",
+      "environment_version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+      "execution_generation": 19,
+      "execution_id": "sha256:ca4e601f37b996a6dbf620aefecad30f02e50ea1a5a06294491ef9d1bcc85308",
+      "network": "q38-ac-g19v2-b-r084-a4-ca4e601f",
+      "ordinal": 160,
+      "run_id": "chris-q38-ac-g19v2-b-r084-a4-ca4e601f",
+      "selection_rank": 84,
+      "task_key": "cysec1-2-fakelook-gen_blackbox-03faebe1772eea3cd1e8e2cb__blackbox_ctf_v1",
+      "task_version_id": "f1ce26fc-39b6-442c-a03c-3c18f99e119f"
+    },
+    {
+      "attempt": 1,
+      "cell_id": "sha256:437bf054d2962ca0680177073670de63e12f6da43937fecb44b8ea49a47a26e4",
+      "environment_version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+      "execution_generation": 19,
+      "execution_id": "sha256:211daa33e34ccdbb67b84fb9e40da43c700147e215b79d00968c1d8bbb40d443",
+      "network": "q38-ac-g19v2-b-r086-a1-211daa33",
+      "ordinal": 161,
+      "run_id": "chris-q38-ac-g19v2-b-r086-a1-211daa33",
+      "selection_rank": 86,
+      "task_key": "cysec1-2-fakelook-gen_blackbox-5743976142f21673d5143b71__blackbox_ctf_v1",
+      "task_version_id": "7ec7aeca-0c69-4df6-989e-81278980d0a9"
+    },
+    {
+      "attempt": 2,
+      "cell_id": "sha256:19c8d2d3d8923a562a7a1fbaa1a813d73678a9feca3b8f1d9ff855785d00f72c",
+      "environment_version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+      "execution_generation": 19,
+      "execution_id": "sha256:67a5f0cbbfa7d1ab8a4c74a57fc307d8092972ccd288d68d95a1721035a404f2",
+      "network": "q38-ac-g19v2-b-r086-a2-67a5f0cb",
+      "ordinal": 162,
+      "run_id": "chris-q38-ac-g19v2-b-r086-a2-67a5f0cb",
+      "selection_rank": 86,
+      "task_key": "cysec1-2-fakelook-gen_blackbox-5743976142f21673d5143b71__blackbox_ctf_v1",
+      "task_version_id": "7ec7aeca-0c69-4df6-989e-81278980d0a9"
+    },
+    {
+      "attempt": 3,
+      "cell_id": "sha256:c313e0f1ddebc3b6f7468d9e45bf173d8e6a22bd0672532f0fa9447c45a879a4",
+      "environment_version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+      "execution_generation": 19,
+      "execution_id": "sha256:b3452fe4824a858b4874d14ab769ebe31e981fdf2e7ed3d53d2f6029d1f2a538",
+      "network": "q38-ac-g19v2-b-r086-a3-b3452fe4",
+      "ordinal": 163,
+      "run_id": "chris-q38-ac-g19v2-b-r086-a3-b3452fe4",
+      "selection_rank": 86,
+      "task_key": "cysec1-2-fakelook-gen_blackbox-5743976142f21673d5143b71__blackbox_ctf_v1",
+      "task_version_id": "7ec7aeca-0c69-4df6-989e-81278980d0a9"
+    },
+    {
+      "attempt": 4,
+      "cell_id": "sha256:a3ff0fbe81803ce1f52156ba2f40ac3c5dad0507a7c47a263ab74a1757c32e15",
+      "environment_version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+      "execution_generation": 19,
+      "execution_id": "sha256:1a3d41b19b92ea2619b2a33afa408bccabdda3c01a80445f8609523772654e6c",
+      "network": "q38-ac-g19v2-b-r086-a4-1a3d41b1",
+      "ordinal": 164,
+      "run_id": "chris-q38-ac-g19v2-b-r086-a4-1a3d41b1",
+      "selection_rank": 86,
+      "task_key": "cysec1-2-fakelook-gen_blackbox-5743976142f21673d5143b71__blackbox_ctf_v1",
+      "task_version_id": "7ec7aeca-0c69-4df6-989e-81278980d0a9"
+    },
+    {
+      "attempt": 1,
+      "cell_id": "sha256:9c749279817791337f542b1ce0f540a40e5c176aa4c5bce1717595954338b496",
+      "environment_version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+      "execution_generation": 19,
+      "execution_id": "sha256:cff7323159453a47691803f7e97951c2f400cd735cb7d03bf0be538f9e657bfa",
+      "network": "q38-ac-g19v2-b-r088-a1-cff73231",
+      "ordinal": 165,
+      "run_id": "chris-q38-ac-g19v2-b-r088-a1-cff73231",
+      "selection_rank": 88,
+      "task_key": "cysec1-2-fakelook-gen_blackbox-7647df87d82993fdb4d8942d__blackbox_ctf_v1",
+      "task_version_id": "96977ecb-4d8c-4c4f-a5e0-02d925bdc724"
+    },
+    {
+      "attempt": 2,
+      "cell_id": "sha256:84092ebb648f7931033fea42be532b24fe60f1f542a9ef7c0c272e9019e1f633",
+      "environment_version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+      "execution_generation": 19,
+      "execution_id": "sha256:4b59132c8bf2906e8f4e4beea89ff5533aa15a2ff3b275cf2f7e6b3a01b5ea91",
+      "network": "q38-ac-g19v2-b-r088-a2-4b59132c",
+      "ordinal": 166,
+      "run_id": "chris-q38-ac-g19v2-b-r088-a2-4b59132c",
+      "selection_rank": 88,
+      "task_key": "cysec1-2-fakelook-gen_blackbox-7647df87d82993fdb4d8942d__blackbox_ctf_v1",
+      "task_version_id": "96977ecb-4d8c-4c4f-a5e0-02d925bdc724"
+    },
+    {
+      "attempt": 3,
+      "cell_id": "sha256:830d9900618e1a19c7c0618079ebdbcbe5e9713375ed9ff283ea8065d4f77d13",
+      "environment_version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+      "execution_generation": 19,
+      "execution_id": "sha256:606953b92df0d99fa24e2ab6bc73791b24d718729325c61c929b2fdbc42a577c",
+      "network": "q38-ac-g19v2-b-r088-a3-606953b9",
+      "ordinal": 167,
+      "run_id": "chris-q38-ac-g19v2-b-r088-a3-606953b9",
+      "selection_rank": 88,
+      "task_key": "cysec1-2-fakelook-gen_blackbox-7647df87d82993fdb4d8942d__blackbox_ctf_v1",
+      "task_version_id": "96977ecb-4d8c-4c4f-a5e0-02d925bdc724"
+    },
+    {
+      "attempt": 4,
+      "cell_id": "sha256:c63f827c9254847bbf74296cee3aaaa04b445dffd990ce629eb4d6241b378c6f",
+      "environment_version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+      "execution_generation": 19,
+      "execution_id": "sha256:8550f6b5eb8bec67f1d8668983e3e877b9fce0ffe18b32015dda31034072ad0f",
+      "network": "q38-ac-g19v2-b-r088-a4-8550f6b5",
+      "ordinal": 168,
+      "run_id": "chris-q38-ac-g19v2-b-r088-a4-8550f6b5",
+      "selection_rank": 88,
+      "task_key": "cysec1-2-fakelook-gen_blackbox-7647df87d82993fdb4d8942d__blackbox_ctf_v1",
+      "task_version_id": "96977ecb-4d8c-4c4f-a5e0-02d925bdc724"
+    },
+    {
+      "attempt": 1,
+      "cell_id": "sha256:82d3e3d96315b7bf0a125be88e86893a20e690780af4beb409fb292e2956fb52",
+      "environment_version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+      "execution_generation": 19,
+      "execution_id": "sha256:4660a17107f96ab0d564b6b54c082a1fa9ac107c4ba79b763bf14d804253ffa8",
+      "network": "q38-ac-g19v2-b-r090-a1-4660a171",
+      "ordinal": 169,
+      "run_id": "chris-q38-ac-g19v2-b-r090-a1-4660a171",
+      "selection_rank": 90,
+      "task_key": "cysec1-2-fakelook-gen_blackbox-9db42d6bba9934e37106b1cf__blackbox_ctf_v1",
+      "task_version_id": "1407dcf7-46ad-4b82-8aa1-f88307dd8264"
+    },
+    {
+      "attempt": 2,
+      "cell_id": "sha256:b8200de6ed2830ea12331bc4bc3ac6ce927a4927fdaddfbecca80b61008e5094",
+      "environment_version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+      "execution_generation": 19,
+      "execution_id": "sha256:93c99983b239e28ec5d681b53edccf34cc57685e4cec52450b67369bc72d5d1a",
+      "network": "q38-ac-g19v2-b-r090-a2-93c99983",
+      "ordinal": 170,
+      "run_id": "chris-q38-ac-g19v2-b-r090-a2-93c99983",
+      "selection_rank": 90,
+      "task_key": "cysec1-2-fakelook-gen_blackbox-9db42d6bba9934e37106b1cf__blackbox_ctf_v1",
+      "task_version_id": "1407dcf7-46ad-4b82-8aa1-f88307dd8264"
+    },
+    {
+      "attempt": 3,
+      "cell_id": "sha256:a7e55eb3e6201232928ff992fbd3e91ff1b1643eb426b3d653ccd8cc2321ebc0",
+      "environment_version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+      "execution_generation": 19,
+      "execution_id": "sha256:1f740d749aeaf9fb3ac01c4718fca9dfa261a8a059e50203e6cd9300339f0118",
+      "network": "q38-ac-g19v2-b-r090-a3-1f740d74",
+      "ordinal": 171,
+      "run_id": "chris-q38-ac-g19v2-b-r090-a3-1f740d74",
+      "selection_rank": 90,
+      "task_key": "cysec1-2-fakelook-gen_blackbox-9db42d6bba9934e37106b1cf__blackbox_ctf_v1",
+      "task_version_id": "1407dcf7-46ad-4b82-8aa1-f88307dd8264"
+    },
+    {
+      "attempt": 4,
+      "cell_id": "sha256:2df8ab9cb7e7722d5645ce84ea5c13fcfd110496b902a72efa2a28c696d93418",
+      "environment_version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+      "execution_generation": 19,
+      "execution_id": "sha256:901e1c9fdd9ffc78b8d8042ec46178a3c1efea40fa2d650a94038b1fac10bcce",
+      "network": "q38-ac-g19v2-b-r090-a4-901e1c9f",
+      "ordinal": 172,
+      "run_id": "chris-q38-ac-g19v2-b-r090-a4-901e1c9f",
+      "selection_rank": 90,
+      "task_key": "cysec1-2-fakelook-gen_blackbox-9db42d6bba9934e37106b1cf__blackbox_ctf_v1",
+      "task_version_id": "1407dcf7-46ad-4b82-8aa1-f88307dd8264"
+    },
+    {
+      "attempt": 1,
+      "cell_id": "sha256:b03780c5326c6da597a3188214641fd5aa6d136d01989a7a1346865d1cf948d7",
+      "environment_version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+      "execution_generation": 19,
+      "execution_id": "sha256:079b8a8de5ad967661b637642ea9075e9dd531252b2d20466c5640a4cb33aa14",
+      "network": "q38-ac-g19v2-b-r092-a1-079b8a8d",
+      "ordinal": 173,
+      "run_id": "chris-q38-ac-g19v2-b-r092-a1-079b8a8d",
+      "selection_rank": 92,
+      "task_key": "cysec1-2-fakelook-gen_blackbox-cc7129b8653c8bcf4db5cdf4__blackbox_ctf_v1",
+      "task_version_id": "9fd14da1-efd5-4852-81aa-e6020219b75f"
+    },
+    {
+      "attempt": 2,
+      "cell_id": "sha256:119ebd1f1621b68742c73af4be113ae9fb2038220278ff5ee0705291e61e5adf",
+      "environment_version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+      "execution_generation": 19,
+      "execution_id": "sha256:d1b8a72e81bee9d1f7933d5f870ed373215566b9f8f1519912d77312797342ab",
+      "network": "q38-ac-g19v2-b-r092-a2-d1b8a72e",
+      "ordinal": 174,
+      "run_id": "chris-q38-ac-g19v2-b-r092-a2-d1b8a72e",
+      "selection_rank": 92,
+      "task_key": "cysec1-2-fakelook-gen_blackbox-cc7129b8653c8bcf4db5cdf4__blackbox_ctf_v1",
+      "task_version_id": "9fd14da1-efd5-4852-81aa-e6020219b75f"
+    },
+    {
+      "attempt": 3,
+      "cell_id": "sha256:1289b5a294c45f97f4fc3175de6a3076180cc587e44a4e06244eff162d5c3e93",
+      "environment_version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+      "execution_generation": 19,
+      "execution_id": "sha256:6da78e5b3b2bc47b2242d60ea219d316e86b27da82507ef4a73be76b1c2b453a",
+      "network": "q38-ac-g19v2-b-r092-a3-6da78e5b",
+      "ordinal": 175,
+      "run_id": "chris-q38-ac-g19v2-b-r092-a3-6da78e5b",
+      "selection_rank": 92,
+      "task_key": "cysec1-2-fakelook-gen_blackbox-cc7129b8653c8bcf4db5cdf4__blackbox_ctf_v1",
+      "task_version_id": "9fd14da1-efd5-4852-81aa-e6020219b75f"
+    },
+    {
+      "attempt": 4,
+      "cell_id": "sha256:7b0004cce2d860072c7379974ef51e2ba665cc50d0e15dd311107f7018746edf",
+      "environment_version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+      "execution_generation": 19,
+      "execution_id": "sha256:d45dba782ad6e8e761ac0fc89d27e1bb617cb3e7d8b86863f325b8d6bf585295",
+      "network": "q38-ac-g19v2-b-r092-a4-d45dba78",
+      "ordinal": 176,
+      "run_id": "chris-q38-ac-g19v2-b-r092-a4-d45dba78",
+      "selection_rank": 92,
+      "task_key": "cysec1-2-fakelook-gen_blackbox-cc7129b8653c8bcf4db5cdf4__blackbox_ctf_v1",
+      "task_version_id": "9fd14da1-efd5-4852-81aa-e6020219b75f"
+    },
+    {
+      "attempt": 1,
+      "cell_id": "sha256:b11ebe0bdb62ddc133e2602e9984a1775eb49fe01bf11a5225947adabbbc9c4a",
+      "environment_version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595",
+      "execution_generation": 19,
+      "execution_id": "sha256:ebc78f27a28cbc7cc11d1bbe3d680cbd43a00a3969aad4cca78e405d4f14c416",
+      "network": "q38-ac-g19v2-b-r094-a1-ebc78f27",
+      "ordinal": 177,
+      "run_id": "chris-q38-ac-g19v2-b-r094-a1-ebc78f27",
+      "selection_rank": 94,
+      "task_key": "cysec1-2-fentry-gen_blackbox-0a841d6127c4042fd3d99f68__blackbox_ctf_v1",
+      "task_version_id": "056f0e20-cd7d-40c8-b3c8-369fcee838be"
+    },
+    {
+      "attempt": 2,
+      "cell_id": "sha256:f327fe3f00b497851d7e5d79f48fa471acf8307e7b0eadc973b2e9f8d1937b10",
+      "environment_version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595",
+      "execution_generation": 19,
+      "execution_id": "sha256:15bd8ab90d19415bca2950d562d49a3d9e1c9c35cfc9e5f771dceab06193be8c",
+      "network": "q38-ac-g19v2-b-r094-a2-15bd8ab9",
+      "ordinal": 178,
+      "run_id": "chris-q38-ac-g19v2-b-r094-a2-15bd8ab9",
+      "selection_rank": 94,
+      "task_key": "cysec1-2-fentry-gen_blackbox-0a841d6127c4042fd3d99f68__blackbox_ctf_v1",
+      "task_version_id": "056f0e20-cd7d-40c8-b3c8-369fcee838be"
+    },
+    {
+      "attempt": 3,
+      "cell_id": "sha256:ac459d894f1c86e6c6a829683063eb6f126e6b71d29b1a5f6bf19434a323b7f4",
+      "environment_version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595",
+      "execution_generation": 19,
+      "execution_id": "sha256:41b0e038fd95fa77bfa11c1e3c2501a80817325e5737e8d211a24a5101824671",
+      "network": "q38-ac-g19v2-b-r094-a3-41b0e038",
+      "ordinal": 179,
+      "run_id": "chris-q38-ac-g19v2-b-r094-a3-41b0e038",
+      "selection_rank": 94,
+      "task_key": "cysec1-2-fentry-gen_blackbox-0a841d6127c4042fd3d99f68__blackbox_ctf_v1",
+      "task_version_id": "056f0e20-cd7d-40c8-b3c8-369fcee838be"
+    },
+    {
+      "attempt": 4,
+      "cell_id": "sha256:d4d41c6891891c391b9c5caa2db15b31b6bbaeee0ddb75f1c7293a08d7b9ba4a",
+      "environment_version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595",
+      "execution_generation": 19,
+      "execution_id": "sha256:cb6d8d5462ea8b9562dbdd32e6f77c174634b3a574240051bb980bbb94a96e31",
+      "network": "q38-ac-g19v2-b-r094-a4-cb6d8d54",
+      "ordinal": 180,
+      "run_id": "chris-q38-ac-g19v2-b-r094-a4-cb6d8d54",
+      "selection_rank": 94,
+      "task_key": "cysec1-2-fentry-gen_blackbox-0a841d6127c4042fd3d99f68__blackbox_ctf_v1",
+      "task_version_id": "056f0e20-cd7d-40c8-b3c8-369fcee838be"
+    },
+    {
+      "attempt": 1,
+      "cell_id": "sha256:92ad3aadbd7a8cf6e58b4a958e7aec4ebd0af5b2eaa5ca308090002fc310cede",
+      "environment_version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595",
+      "execution_generation": 19,
+      "execution_id": "sha256:7d83cbd361236c6369f194140bb5dfd2ae3fe318901cd3c49deec837ef534dfc",
+      "network": "q38-ac-g19v2-b-r096-a1-7d83cbd3",
+      "ordinal": 181,
+      "run_id": "chris-q38-ac-g19v2-b-r096-a1-7d83cbd3",
+      "selection_rank": 96,
+      "task_key": "cysec1-2-fentry-gen_blackbox-34652ac7eb0d3cc85ab093a6__blackbox_ctf_v1",
+      "task_version_id": "a0e4a473-b544-4006-b4fa-8e6b6bfb0a50"
+    },
+    {
+      "attempt": 2,
+      "cell_id": "sha256:b5a305135cfd9ba222f1ffc3fd8ac1dbee53525b145798fa9ff0eb041c98ed52",
+      "environment_version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595",
+      "execution_generation": 19,
+      "execution_id": "sha256:c7730336627e5689d39238e71a4ec8916e9ce4fb267f4fd5f79cb90003443f60",
+      "network": "q38-ac-g19v2-b-r096-a2-c7730336",
+      "ordinal": 182,
+      "run_id": "chris-q38-ac-g19v2-b-r096-a2-c7730336",
+      "selection_rank": 96,
+      "task_key": "cysec1-2-fentry-gen_blackbox-34652ac7eb0d3cc85ab093a6__blackbox_ctf_v1",
+      "task_version_id": "a0e4a473-b544-4006-b4fa-8e6b6bfb0a50"
+    },
+    {
+      "attempt": 3,
+      "cell_id": "sha256:d4aa54c888e4b26a1906148e3dee3eb8a9f4d89e5e30ddb791aa1a171ed5445e",
+      "environment_version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595",
+      "execution_generation": 19,
+      "execution_id": "sha256:7a5efb31950e00d716c6fdbe98093753ee2d93710e41fa2c6b813594f04a734c",
+      "network": "q38-ac-g19v2-b-r096-a3-7a5efb31",
+      "ordinal": 183,
+      "run_id": "chris-q38-ac-g19v2-b-r096-a3-7a5efb31",
+      "selection_rank": 96,
+      "task_key": "cysec1-2-fentry-gen_blackbox-34652ac7eb0d3cc85ab093a6__blackbox_ctf_v1",
+      "task_version_id": "a0e4a473-b544-4006-b4fa-8e6b6bfb0a50"
+    },
+    {
+      "attempt": 4,
+      "cell_id": "sha256:73c0b18a32ef59d86c809d1fdd01d88c54090e66384c032105dcc02e76a2a02b",
+      "environment_version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595",
+      "execution_generation": 19,
+      "execution_id": "sha256:37c30f8b900c8abc2b5cf437ff12d839c8a8c8c8e6b14c3e3502d5278c33c3d9",
+      "network": "q38-ac-g19v2-b-r096-a4-37c30f8b",
+      "ordinal": 184,
+      "run_id": "chris-q38-ac-g19v2-b-r096-a4-37c30f8b",
+      "selection_rank": 96,
+      "task_key": "cysec1-2-fentry-gen_blackbox-34652ac7eb0d3cc85ab093a6__blackbox_ctf_v1",
+      "task_version_id": "a0e4a473-b544-4006-b4fa-8e6b6bfb0a50"
+    },
+    {
+      "attempt": 1,
+      "cell_id": "sha256:fa44c73ce9b606dfeee70245ca9d6732274a53af166a7546f7008efb7dee1e39",
+      "environment_version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595",
+      "execution_generation": 19,
+      "execution_id": "sha256:df3bc0fdaec573b481b2ef215b480ad58edd023776cbba4f2a95216cb35a998b",
+      "network": "q38-ac-g19v2-b-r098-a1-df3bc0fd",
+      "ordinal": 185,
+      "run_id": "chris-q38-ac-g19v2-b-r098-a1-df3bc0fd",
+      "selection_rank": 98,
+      "task_key": "cysec1-2-fentry-gen_blackbox-6157a8d49f4e47208ebbc716__blackbox_ctf_v1",
+      "task_version_id": "390e360e-ad44-43c2-91fd-8e7c9801b0be"
+    },
+    {
+      "attempt": 2,
+      "cell_id": "sha256:87dfc931108c9cba062e2cf1a170ea8f80a5dede022704c927dd654f82c3f4dc",
+      "environment_version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595",
+      "execution_generation": 19,
+      "execution_id": "sha256:41fd786356475817e23755b2841e1914cad2d68485740939cec6ef03f6f7612b",
+      "network": "q38-ac-g19v2-b-r098-a2-41fd7863",
+      "ordinal": 186,
+      "run_id": "chris-q38-ac-g19v2-b-r098-a2-41fd7863",
+      "selection_rank": 98,
+      "task_key": "cysec1-2-fentry-gen_blackbox-6157a8d49f4e47208ebbc716__blackbox_ctf_v1",
+      "task_version_id": "390e360e-ad44-43c2-91fd-8e7c9801b0be"
+    },
+    {
+      "attempt": 3,
+      "cell_id": "sha256:ea3afd1d70ddd54bef514c90822914145632384ccd73dd40fcfbb2247c8bfb26",
+      "environment_version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595",
+      "execution_generation": 19,
+      "execution_id": "sha256:00cfa13c70b57398717cadf0b474b49eed1d3957a18e0fb9a84f5341f1cec6ba",
+      "network": "q38-ac-g19v2-b-r098-a3-00cfa13c",
+      "ordinal": 187,
+      "run_id": "chris-q38-ac-g19v2-b-r098-a3-00cfa13c",
+      "selection_rank": 98,
+      "task_key": "cysec1-2-fentry-gen_blackbox-6157a8d49f4e47208ebbc716__blackbox_ctf_v1",
+      "task_version_id": "390e360e-ad44-43c2-91fd-8e7c9801b0be"
+    },
+    {
+      "attempt": 4,
+      "cell_id": "sha256:213208c6b9da1e577afefabee435ca5199f564a79cb4a81beacf0716a2a8e28f",
+      "environment_version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595",
+      "execution_generation": 19,
+      "execution_id": "sha256:729e57e20a14ba2a5605b1cd249bc1b4730f031d06ace8b4a177ddd19dc42d88",
+      "network": "q38-ac-g19v2-b-r098-a4-729e57e2",
+      "ordinal": 188,
+      "run_id": "chris-q38-ac-g19v2-b-r098-a4-729e57e2",
+      "selection_rank": 98,
+      "task_key": "cysec1-2-fentry-gen_blackbox-6157a8d49f4e47208ebbc716__blackbox_ctf_v1",
+      "task_version_id": "390e360e-ad44-43c2-91fd-8e7c9801b0be"
+    },
+    {
+      "attempt": 1,
+      "cell_id": "sha256:9271e7d47c93e14d10fdaa3a89f1f2bd12a8703248cd85107d27d68e55012ab7",
+      "environment_version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595",
+      "execution_generation": 19,
+      "execution_id": "sha256:b9dfe92070b66ef12b315c71472da94a6e116b34c2f15f41571514630802d81e",
+      "network": "q38-ac-g19v2-b-r100-a1-b9dfe920",
+      "ordinal": 189,
+      "run_id": "chris-q38-ac-g19v2-b-r100-a1-b9dfe920",
+      "selection_rank": 100,
+      "task_key": "cysec1-2-fentry-gen_blackbox-916f373b8301132f09f8abee__blackbox_ctf_v1",
+      "task_version_id": "2b841931-a8ff-4f5c-b32b-6824ea5b4429"
+    },
+    {
+      "attempt": 2,
+      "cell_id": "sha256:e9c774bc23d604ec4c10cf469802c3e038c3c0eed638330f9fd4d1ec6ccad9b3",
+      "environment_version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595",
+      "execution_generation": 19,
+      "execution_id": "sha256:9d6f7174d0b8e8c7e9c0fc444628c22929af0c3fb3d045c1820a2587b83f800b",
+      "network": "q38-ac-g19v2-b-r100-a2-9d6f7174",
+      "ordinal": 190,
+      "run_id": "chris-q38-ac-g19v2-b-r100-a2-9d6f7174",
+      "selection_rank": 100,
+      "task_key": "cysec1-2-fentry-gen_blackbox-916f373b8301132f09f8abee__blackbox_ctf_v1",
+      "task_version_id": "2b841931-a8ff-4f5c-b32b-6824ea5b4429"
+    },
+    {
+      "attempt": 3,
+      "cell_id": "sha256:e6a5749995921a2f136970d85af3a06ee9aa6e468d4f78670b46ffdcb961c142",
+      "environment_version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595",
+      "execution_generation": 19,
+      "execution_id": "sha256:6dbcf27a6f60d0c5f050e0f3e231f37cc132dc43a24e70d0c9c9342b757bf31a",
+      "network": "q38-ac-g19v2-b-r100-a3-6dbcf27a",
+      "ordinal": 191,
+      "run_id": "chris-q38-ac-g19v2-b-r100-a3-6dbcf27a",
+      "selection_rank": 100,
+      "task_key": "cysec1-2-fentry-gen_blackbox-916f373b8301132f09f8abee__blackbox_ctf_v1",
+      "task_version_id": "2b841931-a8ff-4f5c-b32b-6824ea5b4429"
+    },
+    {
+      "attempt": 4,
+      "cell_id": "sha256:23810f8ed3a4ff98624570ee0a5910d6d4d6faffa822af8b384cd11421244049",
+      "environment_version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595",
+      "execution_generation": 19,
+      "execution_id": "sha256:4033c08121e9ab179dc3c0c66dd2e6a7410be733f0f5d14cdcba1dcc4c86405d",
+      "network": "q38-ac-g19v2-b-r100-a4-4033c081",
+      "ordinal": 192,
+      "run_id": "chris-q38-ac-g19v2-b-r100-a4-4033c081",
+      "selection_rank": 100,
+      "task_key": "cysec1-2-fentry-gen_blackbox-916f373b8301132f09f8abee__blackbox_ctf_v1",
+      "task_version_id": "2b841931-a8ff-4f5c-b32b-6824ea5b4429"
+    }
+  ],
+  "authority": {
+    "multi_app_aggregation_mode": "fractional",
+    "provisioning_route_template": "/v1/rollout-rewards/{task_key}/versions/{task_version_id}/instances",
+    "required_cyber_contract": {
+      "evidence_schema": "1.0.0",
+      "submission_protocol": "2.0.0",
+      "verifier_contract": "3.0.0"
+    },
+    "scoring_mode": "partial",
+    "scoring_route_template": "/v1/rollout-rewards/{task_key}/versions/{task_version_id}"
+  },
+  "campaign_id": "chris-q38-ac-exact100-g19-b192-v2",
+  "controller": "qwen-b",
+  "execution": {
+    "accepted_active_or_claimed_cells_are_nonrepeatable": true,
+    "attempts_per_task_sequential": true,
+    "automatic_retry": false,
+    "claim_root": "/mnt/sfs/cell-execution-claims/opencode11827-autocontinue-v1",
+    "endpoint_lease": {
+      "endpoint_key": "qwen-hosted-autocontinue-v1",
+      "lease_root": "/mnt/sfs/endpoint-leases/opencode11827-autocontinue-primary-v1",
+      "maximum_streams": 2
+    },
+    "future_nonzero_exit_policy": "credit_only_if_reward_ingest_cleanup_and_authoritative_session_match",
+    "global_execution_claim_before_model_call": true,
+    "infrastructure_failure_policy": "quarantine_exact_cell_and_continue_tail",
+    "preemption_policy": "Never",
+    "priority_class": "fleet-serve-low",
+    "required_task_tool_catalog_sha256": "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a",
+    "required_task_tools": [
+      "bash",
+      "submit_report"
+    ],
+    "same_task_max_inflight": 1,
+    "tail_survives_single_cell_failure": true,
+    "training_data_eligible": false,
+    "workers": 1
+  },
+  "harness": {
+    "compaction_headroom_tokens": 20000,
+    "context_management": "opencode_1.18.27_native_compaction_autocontinue_v1",
+    "context_window_size": 262144,
+    "max_model_requests": 600,
+    "max_output_tokens": 32768,
+    "name": "opencode",
+    "provider_adapter": "@ai-sdk/openai-compatible",
+    "release_asset_sha256": "sha256:4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702",
+    "settings_canonical_sha256": "sha256:0458cabed67de9e2001661e61707fb16d91669774add3adbf4c97dd559fb5531",
+    "settings_file_sha256": "sha256:1328f6eb97861443b712625d9038a924de9c220c146667565dd4c5bb73a6d8f8",
+    "timeout_seconds": 28800,
+    "version": "1.18.27"
+  },
+  "inventory_receipt": {
+    "receipt_sha256": "sha256:bf7fae379833aca5c914e1a2761ab608a805ee6f2424c714c3ef060e318fb9d3"
+  },
+  "inventory_receipt_sha256": "sha256:bf7fae379833aca5c914e1a2761ab608a805ee6f2424c714c3ef060e318fb9d3",
+  "launch_authorized": false,
+  "model": {
+    "endpoint_origin": "https://inference.flt.build",
+    "repository": "Qwen/Qwen3.8-27B",
+    "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "served_id": "qwen3.8-27b",
+    "session_model": "fleet-cluster-opencode-1.18.27/qwen3.8-27b-opencode11827-autocontinue-v1"
+  },
+  "plan_sha256": "sha256:b936a8b4ef69067ec11e20b2bd80000848e258bcd3367d0f94d791a5adc1e701",
+  "privacy": {
+    "credentials_included": false,
+    "prompts_included": false,
+    "scores_included": false,
+    "transcripts_included": false
+  },
+  "release_gates": {
+    "fresh_score_blind_global_ledger_required": true,
+    "g18_validated_acceptance_required": true
+  },
+  "release_required": true,
+  "repo_root": ".",
+  "schema_version": "fleet-qwen-generation19-hosted-bulk-plan-v2",
+  "serving_block": "qwen-hosted-autocontinue-v1",
+  "sfs_root": "/mnt/sfs/jobs/chris-q38-ac-exact100-g19-b192-v2",
+  "source_job_id": "chris-q38-ac-exact100-g19-b192-v2",
+  "tasks": [
+    {
+      "environment": {
+        "data_id": "commercial",
+        "data_version": "v0.0.9",
+        "id": "cysec1-2-current-gen",
+        "runtime_seed_content_sha256": "6d383be7392aea6862d7174184bae3a89d86c91f5df50a4ef5c89fd56975aaa3",
+        "ttl_seconds": 32400,
+        "version": "v0.0.3",
+        "version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22"
+      },
+      "rank": 6,
+      "source_rank": 6,
+      "task": {
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
+        "env_variables_sha256": "sha256:f061f33089b8a4aa570d77b615ab583cac028868899407c0b1c17bc432fb4b08",
+        "key": "cysec1-2-current-gen_blackbox-9d641429faef16a05bff575e__blackbox_ctf_v1",
+        "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "prompt_sha256": "sha256:61bcc61236247c7bda0146ca95767e6ec1e433c81d4ae29177c80ca6abef1fd3",
+        "version_id": "2f2681bf-c1f7-4056-b6e4-cb2e5058f027"
+      },
+      "verifier": {
+        "function_name": "verify",
+        "id": "c1a25a89-8cab-4647-a23b-f9a05ab66f57",
+        "sha256": "578af4378493ec9a2ddaa20b1d7d9becd2ddcbd554bbca1da0e305be2eda2417",
+        "version": 1,
+        "version_id": "34fc0b2f-6434-4a15-a295-bb5c9315c1eb"
+      }
+    },
+    {
+      "environment": {
+        "data_id": "commercial",
+        "data_version": "v0.0.9",
+        "id": "cysec1-2-current-gen",
+        "runtime_seed_content_sha256": "2f6fcfbf89379caf57171c00120d6adab99efde23e2fc81c42a4a6dac4b39272",
+        "ttl_seconds": 32400,
+        "version": "v0.0.3",
+        "version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22"
+      },
+      "rank": 8,
+      "source_rank": 8,
+      "task": {
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
+        "env_variables_sha256": "sha256:01259cc3028c23cc92afc904bb03b4a294b2ac16fb14c85d7cecd1b3a8afa9d8",
+        "key": "cysec1-2-current-gen_blackbox-f294215ad60b41799b9f7bac__blackbox_ctf_v1",
+        "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "prompt_sha256": "sha256:61bcc61236247c7bda0146ca95767e6ec1e433c81d4ae29177c80ca6abef1fd3",
+        "version_id": "e4068901-ba6e-4faf-b30c-7535aa11f0fc"
+      },
+      "verifier": {
+        "function_name": "verify",
+        "id": "3c92bffc-acef-45e0-8525-b53b3ddbb435",
+        "sha256": "545519808df26fa0e2379d4a0f880cd413853e4f5ca1b961cd74bbd8c2a61f08",
+        "version": 1,
+        "version_id": "e99e97eb-5ad6-49d6-bcd9-40cedb863c97"
+      }
+    },
+    {
+      "environment": {
+        "data_id": "fakelook-cyber-gen",
+        "data_version": "v0.0.2",
+        "id": "cysec1-2-fakelook-gen",
+        "runtime_seed_content_sha256": "bec4caeff7b335c99b37ad695ac1362e49b7bfbd01eae07907ef8181d9134c26",
+        "ttl_seconds": 32400,
+        "version": "v0.0.3",
+        "version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4"
+      },
+      "rank": 10,
+      "source_rank": 10,
+      "task": {
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
+        "env_variables_sha256": "sha256:75ca8285db90228fe22b43e44a1faf6f8d267f166ba2a3d83d234b9f3da73ee0",
+        "key": "cysec1-2-fakelook-gen_blackbox-2c504442adc773ca9a82c247__blackbox_ctf_v1",
+        "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "prompt_sha256": "sha256:399858ca5eacbef7d3a4079c8dd966419e87aa8e303fda34e1964528e05f1559",
+        "version_id": "53d2f089-6502-4208-9795-d6ba7277fa9a"
+      },
+      "verifier": {
+        "function_name": "verify",
+        "id": "36494e12-6036-4167-ae13-76dc4a48520c",
+        "sha256": "c7efdabebd6da31e6e7a5ffb8d55523e20ee52c919523bfb7cf3d5bc8b62e1f6",
+        "version": 1,
+        "version_id": "b0738f59-3dd6-464b-b7f6-633cab4496b4"
+      }
+    },
+    {
+      "environment": {
+        "data_id": "fakelook-cyber-gen",
+        "data_version": "v0.0.2",
+        "id": "cysec1-2-fakelook-gen",
+        "runtime_seed_content_sha256": "570f5e55ba890f46cdc1e7fa1287469427e82f93fa3647f76b282b0d01c8a062",
+        "ttl_seconds": 32400,
+        "version": "v0.0.3",
+        "version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4"
+      },
+      "rank": 12,
+      "source_rank": 12,
+      "task": {
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
+        "env_variables_sha256": "sha256:4bf4b08bd87d01d051e7bd2f2aa378ebeca1a896d523756f6450523bf991151d",
+        "key": "cysec1-2-fakelook-gen_blackbox-8095d44c3871865064a0702c__blackbox_ctf_v1",
+        "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "prompt_sha256": "sha256:399858ca5eacbef7d3a4079c8dd966419e87aa8e303fda34e1964528e05f1559",
+        "version_id": "e13f62eb-170a-40c6-86bf-3c3f3829e3d8"
+      },
+      "verifier": {
+        "function_name": "verify",
+        "id": "11a70fa0-b8b4-4070-9f53-63774b776e57",
+        "sha256": "3939eada5fe74176a8a38330cf48556d98baa0f7744332b32df0be7c8897403c",
+        "version": 1,
+        "version_id": "0c51f20b-1c7e-4f02-b06a-7e84bc6b2b59"
+      }
+    },
+    {
+      "environment": {
+        "data_id": "fakelook-cyber-gen",
+        "data_version": "v0.0.2",
+        "id": "cysec1-2-fakelook-gen",
+        "runtime_seed_content_sha256": "ebd5af0e97ce2c45f236ae2837b32dbaa31dd3aed738a07e05edae736b2bc7c2",
+        "ttl_seconds": 32400,
+        "version": "v0.0.3",
+        "version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4"
+      },
+      "rank": 14,
+      "source_rank": 14,
+      "task": {
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
+        "env_variables_sha256": "sha256:189ad13d33017f235b157c88e1a000441c57fe2f625b04cbb2d58615e2012759",
+        "key": "cysec1-2-fakelook-gen_blackbox-fb581ab1aa4a347bb5f6fd65__blackbox_ctf_v1",
+        "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "prompt_sha256": "sha256:399858ca5eacbef7d3a4079c8dd966419e87aa8e303fda34e1964528e05f1559",
+        "version_id": "d6634975-2918-4037-9cd2-467f365e39b0"
+      },
+      "verifier": {
+        "function_name": "verify",
+        "id": "1472d621-2504-4355-b6c8-5a6ee5cd49e8",
+        "sha256": "2a59c187459c094056644ab7a463dc292b600489c69ecb46701d63f2df961ed5",
+        "version": 1,
+        "version_id": "e9c7ee54-fc4e-4323-ae19-cc4925373b52"
+      }
+    },
+    {
+      "environment": {
+        "data_id": "fentry-current-gen",
+        "data_version": "v0.0.3",
+        "id": "cysec1-2-fentry-gen",
+        "runtime_seed_content_sha256": "e248cfe7a46f466abc8919e669643cae10fb09d5cb094ed5ee2036085229a82a",
+        "ttl_seconds": 32400,
+        "version": "v0.0.3",
+        "version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595"
+      },
+      "rank": 16,
+      "source_rank": 16,
+      "task": {
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
+        "env_variables_sha256": "sha256:60e53b030135c3b4cb6b86bd6b611309f2afcaeb33d5bd8429d78dcc996b713b",
+        "key": "cysec1-2-fentry-gen_blackbox-8b7c28d59cbc439114db9a56__blackbox_ctf_v1",
+        "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "prompt_sha256": "sha256:6333161f6f445e9e5a3f4b86599219b928f05c681f1804e9cb2f7653afa0b551",
+        "version_id": "fd07b96f-7aa4-4041-862b-5aa7411eff4b"
+      },
+      "verifier": {
+        "function_name": "verify",
+        "id": "6cff3ec4-9469-4cfa-a962-e30cd2721841",
+        "sha256": "afbcd7e400df5425102426d83fd1c738b81f071d9ef1614ef134da843e204892",
+        "version": 1,
+        "version_id": "d4573141-68da-4005-8319-f6e7f3bc9081"
+      }
+    },
+    {
+      "environment": {
+        "data_id": "fentry-current-gen",
+        "data_version": "v0.0.3",
+        "id": "cysec1-2-fentry-gen",
+        "runtime_seed_content_sha256": "8e363a79ba982d48af51443c6c43264e034bf5242390a31f14178a199b667d2c",
+        "ttl_seconds": 32400,
+        "version": "v0.0.3",
+        "version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595"
+      },
+      "rank": 18,
+      "source_rank": 18,
+      "task": {
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
+        "env_variables_sha256": "sha256:01c5e38c81b5b56897c04cb2367b8be5c0a53028737558a656720bfc85d7b1d0",
+        "key": "cysec1-2-fentry-gen_blackbox-ebd29ca3d4ae284704202ebc__blackbox_ctf_v1",
+        "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "prompt_sha256": "sha256:6333161f6f445e9e5a3f4b86599219b928f05c681f1804e9cb2f7653afa0b551",
+        "version_id": "3aafc5a8-2144-4bc3-919f-fcbbebd9f0d7"
+      },
+      "verifier": {
+        "function_name": "verify",
+        "id": "4453ceb2-53bd-4684-8c7f-8f9400e04e9c",
+        "sha256": "fe772f7a6daeee1c34def9f4661c93b25302eb0157b50d9806f7021bc3ccdc1d",
+        "version": 1,
+        "version_id": "a6b7d56e-9e40-47ec-b484-152fa7661ca7"
+      }
+    },
+    {
+      "environment": {
+        "data_id": "cultivacore",
+        "data_version": "v0.0.61",
+        "id": "cysec1-2-fira-gen",
+        "runtime_seed_content_sha256": "bd33e335e12ee6060a4f0a562e4d5dbf0a77bc28dac40c4fde498c247b35337a",
+        "ttl_seconds": 32400,
+        "version": "v0.0.3",
+        "version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4"
+      },
+      "rank": 20,
+      "source_rank": 20,
+      "task": {
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
+        "env_variables_sha256": "sha256:559b4b3f09933a4a9cb5576cdd0a4171d0755ddccd38182de57d073c1340b9ad",
+        "key": "cysec1-2-fira-gen_blackbox-2637dbd94a61305dbd406c3c__blackbox_ctf_v1",
+        "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "prompt_sha256": "sha256:db6e5c9d7c5c9d5ef81db8dbb51d1821229e1c6338848f197c05666f2afd3e39",
+        "version_id": "f8533754-39ad-4683-b9c1-d26bc24dfd14"
+      },
+      "verifier": {
+        "function_name": "verify",
+        "id": "453d73b7-bef2-4442-9228-a93a81e398b1",
+        "sha256": "ca4787d3042152925c0c0926243be8a9d1fb676e645f4f8631cbd522696845cc",
+        "version": 1,
+        "version_id": "135d7a7c-5e61-4267-a977-20fe4581d5d7"
+      }
+    },
+    {
+      "environment": {
+        "data_id": "cultivacore",
+        "data_version": "v0.0.61",
+        "id": "cysec1-2-fira-gen",
+        "runtime_seed_content_sha256": "f6b3eb0d41321bf7525d52b0d75155f1ae051d77d877d7cf4c2188dd7949e733",
+        "ttl_seconds": 32400,
+        "version": "v0.0.3",
+        "version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4"
+      },
+      "rank": 22,
+      "source_rank": 22,
+      "task": {
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
+        "env_variables_sha256": "sha256:6c3854423ada48c3fbb323c96af0206dae94042ab97303fdef6f136745715906",
+        "key": "cysec1-2-fira-gen_blackbox-30fe0df0968b9561fa5f987b__blackbox_ctf_v1",
+        "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "prompt_sha256": "sha256:db6e5c9d7c5c9d5ef81db8dbb51d1821229e1c6338848f197c05666f2afd3e39",
+        "version_id": "4b134baa-bbd7-4448-894d-2444e89a46e7"
+      },
+      "verifier": {
+        "function_name": "verify",
+        "id": "d969e6bb-c693-495c-b1ae-5ac3fdfbeb51",
+        "sha256": "e26c02f8568a9fe8fd1c2edc6ee3171c56cd2abf4aaa661e119b98ad5e85d9c9",
+        "version": 1,
+        "version_id": "ff54c4d3-0b28-4a41-bb0a-220f8b1ede89"
+      }
+    },
+    {
+      "environment": {
+        "data_id": "cultivacore",
+        "data_version": "v0.0.61",
+        "id": "cysec1-2-fira-gen",
+        "runtime_seed_content_sha256": "c9a741562ebfd6fade744222f9dba4e0c617374ffdbe7a801436a46536cdce1f",
+        "ttl_seconds": 32400,
+        "version": "v0.0.3",
+        "version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4"
+      },
+      "rank": 24,
+      "source_rank": 24,
+      "task": {
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
+        "env_variables_sha256": "sha256:187e168c13ea8f60b6f10b8a5b369fa47e13cae9f2a686ce74f7138afa13ab15",
+        "key": "cysec1-2-fira-gen_blackbox-5b51b6dcb4193e59b96b1b13__blackbox_ctf_v1",
+        "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "prompt_sha256": "sha256:db6e5c9d7c5c9d5ef81db8dbb51d1821229e1c6338848f197c05666f2afd3e39",
+        "version_id": "b6efa2e4-7743-4b8b-a014-832d90cd5e39"
+      },
+      "verifier": {
+        "function_name": "verify",
+        "id": "f3e3802c-fc68-4e7c-a7a5-690d2a21c921",
+        "sha256": "61e64184a4f624992a3b38daf20337d8ca732d5d9612568f51b5fb189a506fcd",
+        "version": 1,
+        "version_id": "a1f768bc-f9eb-4fa1-834e-67a9fdd86a87"
+      }
+    },
+    {
+      "environment": {
+        "data_id": "cultivacore",
+        "data_version": "v0.0.61",
+        "id": "cysec1-2-fira-gen",
+        "runtime_seed_content_sha256": "7361b66ac4f5f12a9c7b2528cc72f0bc88aeba4ba30522638d731338966bbfe4",
+        "ttl_seconds": 32400,
+        "version": "v0.0.3",
+        "version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4"
+      },
+      "rank": 26,
+      "source_rank": 26,
+      "task": {
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
+        "env_variables_sha256": "sha256:c0a8a070b483e747e25548ae126aeb1144c0217ff0e2e14eccbd9de05b81676c",
+        "key": "cysec1-2-fira-gen_blackbox-aacc90d872cf2f38171417b8__blackbox_ctf_v1",
+        "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "prompt_sha256": "sha256:db6e5c9d7c5c9d5ef81db8dbb51d1821229e1c6338848f197c05666f2afd3e39",
+        "version_id": "493bc3d8-7806-4e38-9bc3-e964a5c26f5b"
+      },
+      "verifier": {
+        "function_name": "verify",
+        "id": "26fe0668-fe6b-4ea5-8294-7df74fa32d62",
+        "sha256": "44194416b2068c8eac3bfa9be9e37328180c5c4d008b15a0bf9826fdecbc01fa",
+        "version": 1,
+        "version_id": "198b936e-8e77-4fc9-b4a0-54a5ee36226b"
+      }
+    },
+    {
+      "environment": {
+        "data_id": "cultivacore",
+        "data_version": "v0.0.61",
+        "id": "cysec1-2-fira-gen",
+        "runtime_seed_content_sha256": "b06f9f7f6ffe034b016e72d1c59dc1b12624f58b503f306093a887abf608a703",
+        "ttl_seconds": 32400,
+        "version": "v0.0.3",
+        "version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4"
+      },
+      "rank": 28,
+      "source_rank": 28,
+      "task": {
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
+        "env_variables_sha256": "sha256:5f4dd4fec22834492a148802a57f2b06e2e34ec6bb492408b34c3e4823a657e4",
+        "key": "cysec1-2-fira-gen_blackbox-d15d056570961f463e4e6ba8__blackbox_ctf_v1",
+        "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "prompt_sha256": "sha256:db6e5c9d7c5c9d5ef81db8dbb51d1821229e1c6338848f197c05666f2afd3e39",
+        "version_id": "c3fbe2bd-b9e6-41b1-a47f-5342fdc28053"
+      },
+      "verifier": {
+        "function_name": "verify",
+        "id": "1d8fc234-06f3-4761-84b6-c6ee1faadd05",
+        "sha256": "4c93488a5d17ab94fb15e4c65e8df9e5e78f7effacbe57ef11460fe68a88d6a4",
+        "version": 1,
+        "version_id": "4aba006b-3e30-4424-b89b-aaefadb22498"
+      }
+    },
+    {
+      "environment": {
+        "data_id": "cultivacore",
+        "data_version": "v0.0.61",
+        "id": "cysec1-2-fira-gen",
+        "runtime_seed_content_sha256": "faaaab7a46c78cc4af072422c38563da8a925e9584ed8a83971e911b8b456019",
+        "ttl_seconds": 32400,
+        "version": "v0.0.3",
+        "version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4"
+      },
+      "rank": 30,
+      "source_rank": 30,
+      "task": {
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
+        "env_variables_sha256": "sha256:a4a3ce7d95c1c3f6f4216887bc3d6e4f6972248383945602f7b3caba20411776",
+        "key": "cysec1-2-fira-gen_blackbox-df372d5a31676a815c9f0751__blackbox_ctf_v1",
+        "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "prompt_sha256": "sha256:db6e5c9d7c5c9d5ef81db8dbb51d1821229e1c6338848f197c05666f2afd3e39",
+        "version_id": "a0cacaaf-480b-4a4c-9ed7-6b6192bb6783"
+      },
+      "verifier": {
+        "function_name": "verify",
+        "id": "ec7f3b09-a520-4cd4-aa6e-6b873751eec3",
+        "sha256": "5d0369b5a0f7622be5aaf39243fc45015f83ff58ce5ec2805ef7efd90fe40159",
+        "version": 1,
+        "version_id": "e6ec90e6-830e-4b11-8337-6500780df707"
+      }
+    },
+    {
+      "environment": {
+        "data_id": "cultivacore",
+        "data_version": "v0.0.61",
+        "id": "cysec1-2-fira-gen",
+        "runtime_seed_content_sha256": "e0389ad150f488ec2d188d64285080c20c7b506afb70c6b3a4fe152855f04cea",
+        "ttl_seconds": 32400,
+        "version": "v0.0.3",
+        "version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4"
+      },
+      "rank": 32,
+      "source_rank": 32,
+      "task": {
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
+        "env_variables_sha256": "sha256:905b6c53d1926ba9f8633ae2ec07825d0831e60ed4367eafb44e2cf2edb9c983",
+        "key": "cysec1-2-fira-gen_blackbox-f464547baf18c14b28013c66__blackbox_ctf_v1",
+        "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "prompt_sha256": "sha256:db6e5c9d7c5c9d5ef81db8dbb51d1821229e1c6338848f197c05666f2afd3e39",
+        "version_id": "4b48f9cf-a5c4-4e86-814d-ebe86957e725"
+      },
+      "verifier": {
+        "function_name": "verify",
+        "id": "99a8808a-2f05-431d-97f9-e0bb417d58c0",
+        "sha256": "f61b8d315a315407eb3782123ce6affadf51917f02608d8d58f372bb9f6d1a3f",
+        "version": 1,
+        "version_id": "cd51e6bf-ae76-435f-ad2a-a0f5c4bdeca3"
+      }
+    },
+    {
+      "environment": {
+        "data_id": "current-fubspot-gen",
+        "data_version": "v0.0.3",
+        "id": "cysec1-2-fubspot-gen",
+        "runtime_seed_content_sha256": "12927a1806dea8bc3535eda3c6810f121829005849a2be81e991b4ac04b567c6",
+        "ttl_seconds": 32400,
+        "version": "v0.0.3",
+        "version_id": "a1532a5c-6ec9-45bd-899d-24c0fe3d1df5"
+      },
+      "rank": 34,
+      "source_rank": 34,
+      "task": {
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
+        "env_variables_sha256": "sha256:1f97a9c7977f9af61043b362f756fb79bd5cdc0356394b76e041cc97f8de668a",
+        "key": "cysec1-2-fubspot-gen_blackbox-438e3127ab9af7efad692398__blackbox_ctf_v1",
+        "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "prompt_sha256": "sha256:df30ebf38ac1c7fac4952f9153806b0e3352dd54303662bf495f5973b0bbe1c6",
+        "version_id": "383a2b61-e82b-4426-9a2b-d5372c92e346"
+      },
+      "verifier": {
+        "function_name": "verify",
+        "id": "29b6c287-f289-4a2b-83db-e03e95f7a916",
+        "sha256": "01d96fc01f198d4d66b51821c4a3b82b2e43d4b1b2b84a1d1136d6b9dff33536",
+        "version": 1,
+        "version_id": "17cce977-3fa0-4676-8ca6-c7abbde2dc67"
+      }
+    },
+    {
+      "environment": {
+        "data_id": "current-fubspot-gen",
+        "data_version": "v0.0.3",
+        "id": "cysec1-2-rops-gen",
+        "runtime_seed_content_sha256": "b05e174cebb64627290bc6166161b14bd050568c7376836ddbab06277bb69feb",
+        "ttl_seconds": 32400,
+        "version": "v0.0.984",
+        "version_id": "5d180319-567a-492b-8c34-b24baab505cc"
+      },
+      "rank": 36,
+      "source_rank": 36,
+      "task": {
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
+        "env_variables_sha256": "sha256:c55788569ff85d78ff64753ded971d82f2fd09a83f6c05694fce31c931b8aec7",
+        "key": "cysec1-2-rops-gen_single-atom-confluence-refusal-title-disclosure__blackbox_ctf_v1",
+        "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "prompt_sha256": "sha256:db6e5c9d7c5c9d5ef81db8dbb51d1821229e1c6338848f197c05666f2afd3e39",
+        "version_id": "47180c40-447d-4b8c-9387-ca8bae891e46"
+      },
+      "verifier": {
+        "function_name": "verify",
+        "id": "a7010648-386f-402f-b9ff-05e984749e34",
+        "sha256": "1f9925f4fb575b7653bc499a09c5997aa350d0ea242ea6ef13c0c1be65ce21dd",
+        "version": 1,
+        "version_id": "7551e63e-8160-432e-b273-8d759d7df871"
+      }
+    },
+    {
+      "environment": {
+        "data_id": "fakelook-cyber-gen",
+        "data_version": "v0.0.2",
+        "id": "cysec1-2-fakelook-gen",
+        "runtime_seed_content_sha256": "8bbcdf1ba88a948107f107295dad37eeb59e68ff8fcbf1e6f00c3c9dd33fdae0",
+        "ttl_seconds": 32400,
+        "version": "v0.0.3",
+        "version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4"
+      },
+      "rank": 38,
+      "source_rank": 38,
+      "task": {
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
+        "env_variables_sha256": "sha256:1544cabf6b73311485d4d9ea90447df092cbdf847913cbe9361fcbced1178beb",
+        "key": "cysec1-2-fakelook-gen_blackbox-2bd5f9fdee284564d8ce5ea4__blackbox_ctf_v1",
+        "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "prompt_sha256": "sha256:399858ca5eacbef7d3a4079c8dd966419e87aa8e303fda34e1964528e05f1559",
+        "version_id": "25afa659-5e00-4c5a-9ad4-39779b59c5ef"
+      },
+      "verifier": {
+        "function_name": "verify",
+        "id": "3e61bc15-e19b-43b1-abb6-4285ddd3ac36",
+        "sha256": "3520b5218ee7b46cf7d1e910a0f59a593009ce95eef7c947ae1ecf6af6638a24",
+        "version": 1,
+        "version_id": "3e606747-2a59-4369-b97c-132868e0d4ac"
+      }
+    },
+    {
+      "environment": {
+        "data_id": "fentry-current-gen",
+        "data_version": "v0.0.3",
+        "id": "cysec1-2-fentry-gen",
+        "runtime_seed_content_sha256": "588ad7513a70fcb7b9a6297b2f334a4a811c70e009b8c780726572c38fd0a50c",
+        "ttl_seconds": 32400,
+        "version": "v0.0.3",
+        "version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595"
+      },
+      "rank": 40,
+      "source_rank": 40,
+      "task": {
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
+        "env_variables_sha256": "sha256:3a2e7d037e664389d2e06cdb36bbc9c36067eb1ebdbb3670f3be1f38a1870b33",
+        "key": "cysec1-2-fentry-gen_blackbox-38f07564c9639347d11eca37__blackbox_ctf_v1",
+        "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "prompt_sha256": "sha256:6333161f6f445e9e5a3f4b86599219b928f05c681f1804e9cb2f7653afa0b551",
+        "version_id": "05d09c55-ccdf-4d26-b06d-b851a2314a35"
+      },
+      "verifier": {
+        "function_name": "verify",
+        "id": "8a395522-62a1-4c24-8c66-eb8b88af3c7b",
+        "sha256": "9a070a5b1688d5d7b7c9022d49a12251697ec64a0191af7b7e280b678a5bb034",
+        "version": 1,
+        "version_id": "c0e9bac9-3c14-400f-bc0c-9173a4c7abaa"
+      }
+    },
+    {
+      "environment": {
+        "data_id": "cultivacore",
+        "data_version": "v0.0.61",
+        "id": "cysec1-2-fira-gen",
+        "runtime_seed_content_sha256": "056582d4a0cec32de1406b0d8b42821b47ee0a7448e30dce56392155e1fa449d",
+        "ttl_seconds": 32400,
+        "version": "v0.0.3",
+        "version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4"
+      },
+      "rank": 42,
+      "source_rank": 42,
+      "task": {
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
+        "env_variables_sha256": "sha256:e234807ff2fda6cd3e655d35e7c185ce0f0ce3ad8724a07c96aebb6b7b9739b4",
+        "key": "cysec1-2-fira-gen_blackbox-1865d9918e1ac5d264706d43__blackbox_ctf_v1",
+        "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "prompt_sha256": "sha256:db6e5c9d7c5c9d5ef81db8dbb51d1821229e1c6338848f197c05666f2afd3e39",
+        "version_id": "eefe304c-499d-4c9e-b09c-8aa0fab87213"
+      },
+      "verifier": {
+        "function_name": "verify",
+        "id": "fb656ad6-a53e-42d4-aee0-f703495f4cd4",
+        "sha256": "4cbdfb810753ff9dcb1b3a96673f604ae74ea52ace5a1f65234e5083aca1da98",
+        "version": 1,
+        "version_id": "dde2818d-a999-4665-ada5-82a23a476c6d"
+      }
+    },
+    {
+      "environment": {
+        "data_id": "cultivacore",
+        "data_version": "v0.0.61",
+        "id": "cysec1-2-fira-gen",
+        "runtime_seed_content_sha256": "0b6d0dd5a5116c940cb8f0bfddd1283b71de8f9478e489c3d7ee1a250b252286",
+        "ttl_seconds": 32400,
+        "version": "v0.0.3",
+        "version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4"
+      },
+      "rank": 44,
+      "source_rank": 44,
+      "task": {
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
+        "env_variables_sha256": "sha256:fa1216f6a5afbd50420db005df2f07ce383b570edcc7c93a7864a551c5b2a411",
+        "key": "cysec1-2-fira-gen_blackbox-ae047f45e37c42a1ad5b09ca__blackbox_ctf_v1",
+        "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "prompt_sha256": "sha256:db6e5c9d7c5c9d5ef81db8dbb51d1821229e1c6338848f197c05666f2afd3e39",
+        "version_id": "f50eee68-84c7-44d1-b4de-4c554ecc3e2e"
+      },
+      "verifier": {
+        "function_name": "verify",
+        "id": "7af54f6a-dc4d-4f69-b4ed-b197433f28b1",
+        "sha256": "2f37941e5ceccce0d7fecd5bbb6ae12024edf6830045bf93b42583d5b8ec82cd",
+        "version": 1,
+        "version_id": "ac420b35-7c74-4e48-b216-8cd2b64581d3"
+      }
+    },
+    {
+      "environment": {
+        "data_id": "commercial",
+        "data_version": "v0.0.9",
+        "id": "cysec1-2-current-gen",
+        "runtime_seed_content_sha256": "99c9cdb47d8a18163f23cbfc4a97e98eb2868e3953c5803674ea04cd489116b2",
+        "ttl_seconds": 32400,
+        "version": "v0.0.3",
+        "version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22"
+      },
+      "rank": 46,
+      "source_rank": 46,
+      "task": {
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
+        "env_variables_sha256": "sha256:0002f71973fd1d022862ab141cfb898c4326267ff34cfc9943522d0853447d15",
+        "key": "cysec1-2-current-gen_blackbox-ac3376172d9071d3d519f24e__blackbox_ctf_v1",
+        "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "prompt_sha256": "sha256:61bcc61236247c7bda0146ca95767e6ec1e433c81d4ae29177c80ca6abef1fd3",
+        "version_id": "139ff10d-8c00-4bd6-9437-e6fbcccf2f4d"
+      },
+      "verifier": {
+        "function_name": "verify",
+        "id": "fa2eedcb-ef04-4d3c-ada4-eda4ff53e34d",
+        "sha256": "6ef0adaa4871435c5d1a36a5b2f2041188426a1243ff416112dbc1de67ac6543",
+        "version": 1,
+        "version_id": "07cd955e-acce-4807-84c3-b1eb5ee1a0c8"
+      }
+    },
+    {
+      "environment": {
+        "data_id": "cultivacore",
+        "data_version": "v0.0.61",
+        "id": "cysec1-2-fira-gen",
+        "runtime_seed_content_sha256": "47b36dcb96224c897d3548d8f7f64b1081cf00861a153010a258e6c13345719b",
+        "ttl_seconds": 32400,
+        "version": "v0.0.3",
+        "version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4"
+      },
+      "rank": 48,
+      "source_rank": 48,
+      "task": {
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
+        "env_variables_sha256": "sha256:c637f783fd4e165d1ed4f0159e3d62224831f1023b931a9f1f6d3b27e364626f",
+        "key": "cysec1-2-fira-gen_blackbox-5ea6bdcd678f45f8cc0ba673__blackbox_ctf_v1",
+        "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "prompt_sha256": "sha256:db6e5c9d7c5c9d5ef81db8dbb51d1821229e1c6338848f197c05666f2afd3e39",
+        "version_id": "ab2fd90d-1ee5-4451-a866-260ddf5c336d"
+      },
+      "verifier": {
+        "function_name": "verify",
+        "id": "a58daef5-0aa9-416a-81d0-0c3c7c70c09f",
+        "sha256": "f08b016626953aeafba2553f4550e35c1e110c0859f35fb4dfc64eb471d45611",
+        "version": 1,
+        "version_id": "088165b2-d696-48ea-b3d2-72567a7a80b9"
+      }
+    },
+    {
+      "environment": {
+        "data_id": "fakelook-cyber-gen",
+        "data_version": "v0.0.2",
+        "id": "cysec1-2-fakelook-gen",
+        "runtime_seed_content_sha256": "fc737d32579f2873f9e021d0e0450ea257919d5a543519f7398b9050cb91b168",
+        "ttl_seconds": 32400,
+        "version": "v0.0.3",
+        "version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4"
+      },
+      "rank": 50,
+      "source_rank": 50,
+      "task": {
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
+        "env_variables_sha256": "sha256:3c3842d5b980b993e6ac6037950f0c18a0661a362d3373cdf948e25172a3595b",
+        "key": "cysec1-2-fakelook-gen_blackbox-9063fa10a36b73f9044c608f__blackbox_ctf_v1",
+        "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "prompt_sha256": "sha256:399858ca5eacbef7d3a4079c8dd966419e87aa8e303fda34e1964528e05f1559",
+        "version_id": "dcf2aefc-e34d-4a4a-8aa9-b18a3b754d5a"
+      },
+      "verifier": {
+        "function_name": "verify",
+        "id": "4c656d8b-6426-4c74-ad9f-3f66f17709f5",
+        "sha256": "ddd63655efcd5a5275e28a8fe4a55974ac7f64ddcdd903bd91aa84252559491f",
+        "version": 1,
+        "version_id": "96929b24-99ac-4806-b115-8bd4af4c1dbb"
+      }
+    },
+    {
+      "environment": {
+        "data_id": "fentry-current-gen",
+        "data_version": "v0.0.3",
+        "id": "cysec1-2-fentry-gen",
+        "runtime_seed_content_sha256": "7693352a2ed1b9a62d29bbad84d728b1e3475cf503c6d5adfe5ac5054e4dfb28",
+        "ttl_seconds": 32400,
+        "version": "v0.0.3",
+        "version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595"
+      },
+      "rank": 52,
+      "source_rank": 52,
+      "task": {
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
+        "env_variables_sha256": "sha256:3c561bac1f6183a9cc4a8bb0945a83915b838418ee75916f3a59f590c2fd7596",
+        "key": "cysec1-2-fentry-gen_blackbox-ce65143165164b6f99df040c__blackbox_ctf_v1",
+        "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "prompt_sha256": "sha256:6333161f6f445e9e5a3f4b86599219b928f05c681f1804e9cb2f7653afa0b551",
+        "version_id": "fa04ef0d-3341-4b5f-8a13-d2955feaadc1"
+      },
+      "verifier": {
+        "function_name": "verify",
+        "id": "8109229c-ea8d-414b-80c1-ab6a6512ce5f",
+        "sha256": "5f990670f9815f92cb4b5e59be3f5065676daf2bb78a2398ed25b49c6198611d",
+        "version": 1,
+        "version_id": "d3e21b3e-c4f5-4c2d-b045-ce90b7fd1e3b"
+      }
+    },
+    {
+      "environment": {
+        "data_id": "commercial",
+        "data_version": "v0.0.9",
+        "id": "cysec1-2-current-gen",
+        "runtime_seed_content_sha256": "372e7d9a2e705f944213a8fe1f24caf92f5f040b152fe16e263729a3a4999865",
+        "ttl_seconds": 32400,
+        "version": "v0.0.3",
+        "version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22"
+      },
+      "rank": 54,
+      "source_rank": 54,
+      "task": {
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
+        "env_variables_sha256": "sha256:89081d1eb848ed046925171e8cfa5ecd35d661c6562b639e722f170f467ff30f",
+        "key": "cysec1-2-current-gen_blackbox-9afe9e08da314948b573657e__blackbox_ctf_v1",
+        "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "prompt_sha256": "sha256:61bcc61236247c7bda0146ca95767e6ec1e433c81d4ae29177c80ca6abef1fd3",
+        "version_id": "dd8dd22e-75c0-4b93-8f8e-ea8a292d92bb"
+      },
+      "verifier": {
+        "function_name": "verify",
+        "id": "d42d96e8-690c-45ef-bf86-f03b064ed3c5",
+        "sha256": "fd4f7612e00c76913e7ab80572aaffd987483169c8502be99550ce305a3b5713",
+        "version": 1,
+        "version_id": "e380dd5d-121a-4c53-a866-74a4adf57706"
+      }
+    },
+    {
+      "environment": {
+        "data_id": "cultivacore",
+        "data_version": "v0.0.61",
+        "id": "cysec1-2-fira-gen",
+        "runtime_seed_content_sha256": "9da5603574d29a96a87cd9dca812ff1d8d089f713ef1dff0e6417ee1c9d2c851",
+        "ttl_seconds": 32400,
+        "version": "v0.0.3",
+        "version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4"
+      },
+      "rank": 56,
+      "source_rank": 56,
+      "task": {
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
+        "env_variables_sha256": "sha256:89d0f073576cf1d1acb1bd5e2b9008058150573b06f8be642a4a852130b9e450",
+        "key": "cysec1-2-fira-gen_blackbox-f1d8a0c49352bdf40faf015f__blackbox_ctf_v1",
+        "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "prompt_sha256": "sha256:db6e5c9d7c5c9d5ef81db8dbb51d1821229e1c6338848f197c05666f2afd3e39",
+        "version_id": "33527414-ced7-4005-9c5a-eb9c211a32da"
+      },
+      "verifier": {
+        "function_name": "verify",
+        "id": "252eb5ce-7383-46e1-ac1d-f1a389362d7d",
+        "sha256": "d77228dd5ad954a5ffc99c6eadf49f896288d9ef7836f87b09d0fed9e2d3a788",
+        "version": 1,
+        "version_id": "db631382-f3ed-4c97-b887-27a510cb63c2"
+      }
+    },
+    {
+      "environment": {
+        "data_id": "cultivacore",
+        "data_version": "v0.0.61",
+        "id": "cysec1-2-fira-gen",
+        "runtime_seed_content_sha256": "1cc32c2499e95da078068c03cb109cafd6599faa51bbb3cc30c30901e7f1840d",
+        "ttl_seconds": 32400,
+        "version": "v0.0.3",
+        "version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4"
+      },
+      "rank": 58,
+      "source_rank": 58,
+      "task": {
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
+        "env_variables_sha256": "sha256:918efd10f86dbd7cb5963e370790bbd7b6cd6325aa011f800fbc7159d260a887",
+        "key": "cysec1-2-fira-gen_blackbox-529751381aa5ed41b3935adb__blackbox_ctf_v1",
+        "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "prompt_sha256": "sha256:db6e5c9d7c5c9d5ef81db8dbb51d1821229e1c6338848f197c05666f2afd3e39",
+        "version_id": "2c62b98d-61e8-4216-bc84-c61bc4cd5ccb"
+      },
+      "verifier": {
+        "function_name": "verify",
+        "id": "5c17f6b7-ef79-4b6e-8dd3-29d2ba4f822e",
+        "sha256": "efc92dc73244e5fbe5a20310bfd8340e5832b2b7be29e20ca863cffc60125031",
+        "version": 1,
+        "version_id": "b369ae24-b8cf-4ba4-a6e5-2dfbc63c9178"
+      }
+    },
+    {
+      "environment": {
+        "data_id": "current-fubspot-gen",
+        "data_version": "v0.0.3",
+        "id": "cysec1-2-fubspot-gen",
+        "runtime_seed_content_sha256": "cd9b3c5ec161141076d89b27a050437aa04c05d0e4af628487aa561215adc30b",
+        "ttl_seconds": 32400,
+        "version": "v0.0.3",
+        "version_id": "a1532a5c-6ec9-45bd-899d-24c0fe3d1df5"
+      },
+      "rank": 60,
+      "source_rank": 60,
+      "task": {
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
+        "env_variables_sha256": "sha256:978ce7ff5f6cc93c725c04bca65c050f21cbc8eb8f3ba701095d452c75628527",
+        "key": "cysec1-2-fubspot-gen_blackbox-401a45aae0038d8f9cb6420b__blackbox_ctf_v1",
+        "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "prompt_sha256": "sha256:df30ebf38ac1c7fac4952f9153806b0e3352dd54303662bf495f5973b0bbe1c6",
+        "version_id": "5f0c9b28-fe2f-41e0-b73f-0e7749f64195"
+      },
+      "verifier": {
+        "function_name": "verify",
+        "id": "05de97a7-7119-47b8-9950-b51402ddb1b6",
+        "sha256": "18a0902df2461aca43ab7972d74172f4a8811be4bc146996164c2e0ad52d499b",
+        "version": 1,
+        "version_id": "fb261b14-e211-4632-95e1-7499969e7054"
+      }
+    },
+    {
+      "environment": {
+        "data_id": "commercial",
+        "data_version": "v0.0.9",
+        "id": "cysec1-2-current-gen",
+        "runtime_seed_content_sha256": "fce8addeee1f9748de870ae6e9fd7a632baa50beb2bcc87f4d1595c79574c41f",
+        "ttl_seconds": 32400,
+        "version": "v0.0.3",
+        "version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22"
+      },
+      "rank": 62,
+      "source_rank": 62,
+      "task": {
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
+        "env_variables_sha256": "sha256:7e9f7b86a750de0890c6020bba347f31fa2637ea38d46085ab4d2d232c369a41",
+        "key": "cysec1-2-current-gen_blackbox-3a1c4858db3e787986bfb723__blackbox_ctf_v1",
+        "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "prompt_sha256": "sha256:61bcc61236247c7bda0146ca95767e6ec1e433c81d4ae29177c80ca6abef1fd3",
+        "version_id": "65c8cc68-6ada-421f-ad0a-eb1d81fc9141"
+      },
+      "verifier": {
+        "function_name": "verify",
+        "id": "ca081fbf-c092-4895-a209-eb22c905ed5c",
+        "sha256": "3051466f320bf2595bb42e1dfad6cf10701c605e347c76e1dbfea245a39a1c09",
+        "version": 1,
+        "version_id": "6055d87d-3f58-49e0-a711-ffa5ba1e2e89"
+      }
+    },
+    {
+      "environment": {
+        "data_id": "fakelook-cyber-gen",
+        "data_version": "v0.0.2",
+        "id": "cysec1-2-fakelook-gen",
+        "runtime_seed_content_sha256": "920a29650065862060349536eced605a25b46da1eaa6ae3a82333313970931a3",
+        "ttl_seconds": 32400,
+        "version": "v0.0.3",
+        "version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4"
+      },
+      "rank": 64,
+      "source_rank": 64,
+      "task": {
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
+        "env_variables_sha256": "sha256:2fbd129e767c8cda82919bdc233fd09b402167770274f2872c1872135288c057",
+        "key": "cysec1-2-fakelook-gen_blackbox-5863ceeee099e5f9247cc2c6__blackbox_ctf_v1",
+        "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "prompt_sha256": "sha256:399858ca5eacbef7d3a4079c8dd966419e87aa8e303fda34e1964528e05f1559",
+        "version_id": "8d84b316-d741-44f8-aaa5-7a0f0d7b8d3a"
+      },
+      "verifier": {
+        "function_name": "verify",
+        "id": "4cd1c508-d0a0-4ce2-9fc5-a4091485a334",
+        "sha256": "0c087192cd870d58b2ad8f8b496ac18b70461a985f5a8863c3b52bfacc73b781",
+        "version": 1,
+        "version_id": "604ca332-e627-42c2-9f87-e6c4ddcad0cd"
+      }
+    },
+    {
+      "environment": {
+        "data_id": "fentry-current-gen",
+        "data_version": "v0.0.3",
+        "id": "cysec1-2-fentry-gen",
+        "runtime_seed_content_sha256": "c6fae0c71e6000ce00ac8d4a44d8f40f769c67049366a628836df70b2a5788b9",
+        "ttl_seconds": 32400,
+        "version": "v0.0.3",
+        "version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595"
+      },
+      "rank": 66,
+      "source_rank": 66,
+      "task": {
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
+        "env_variables_sha256": "sha256:e4f199655ccd2b803bd195229b6395d048a16069ce55aa6c2c5f6cc9e9f2c69f",
+        "key": "cysec1-2-fentry-gen_blackbox-e7cf771cd5152704dce3be24__blackbox_ctf_v1",
+        "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "prompt_sha256": "sha256:6333161f6f445e9e5a3f4b86599219b928f05c681f1804e9cb2f7653afa0b551",
+        "version_id": "fa83b3a7-be02-4193-9670-2cd794fa28b4"
+      },
+      "verifier": {
+        "function_name": "verify",
+        "id": "09377af3-d844-4f65-89d1-a4c04bba5b80",
+        "sha256": "40ba6255d8ae121ae9cadf5fe5f49a4763f85a6899a34126ce4fe5496bb40f8c",
+        "version": 1,
+        "version_id": "fc05134e-6451-48e1-9d49-7d96c3fcc37b"
+      }
+    },
+    {
+      "environment": {
+        "data_id": "commercial",
+        "data_version": "v0.0.9",
+        "id": "cysec1-2-current-gen",
+        "runtime_seed_content_sha256": "f618c9ab4dccd8c3b625db3a79bde46cf7a94730078df597b5eb5ee9b3286d4e",
+        "ttl_seconds": 32400,
+        "version": "v0.0.3",
+        "version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22"
+      },
+      "rank": 68,
+      "source_rank": 68,
+      "task": {
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
+        "env_variables_sha256": "sha256:1b95dbb2a681781f39595cc56987632bf16d013d655a2747e5d9ac597fed262c",
+        "key": "cysec1-2-current-gen_blackbox-16d922dbbfaa21f0f6fa5b97__blackbox_ctf_v1",
+        "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "prompt_sha256": "sha256:61bcc61236247c7bda0146ca95767e6ec1e433c81d4ae29177c80ca6abef1fd3",
+        "version_id": "e53d70e2-c129-422a-b878-033bfb5556ab"
+      },
+      "verifier": {
+        "function_name": "verify",
+        "id": "688a8bd7-1489-4951-a89f-4d6e495d60f4",
+        "sha256": "74f64fff42540983502c0c6d67ff2b6bd475dd1a848cac864686fabb99f78e76",
+        "version": 1,
+        "version_id": "6dfe8513-890c-4b9c-8b85-f383d3520710"
+      }
+    },
+    {
+      "environment": {
+        "data_id": "fakelook-cyber-gen",
+        "data_version": "v0.0.2",
+        "id": "cysec1-2-fakelook-gen",
+        "runtime_seed_content_sha256": "b3cebf52309b63a1b17ced6afdc15b4daba06695f86fd572a6348f436781d5da",
+        "ttl_seconds": 32400,
+        "version": "v0.0.3",
+        "version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4"
+      },
+      "rank": 70,
+      "source_rank": 70,
+      "task": {
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
+        "env_variables_sha256": "sha256:9e00e61eac6fdc230392c33ab3dc86ee790eaba002dec0254450474f3e270c0f",
+        "key": "cysec1-2-fakelook-gen_blackbox-58a0a253d85d53703781bb50__blackbox_ctf_v1",
+        "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "prompt_sha256": "sha256:399858ca5eacbef7d3a4079c8dd966419e87aa8e303fda34e1964528e05f1559",
+        "version_id": "6e565e4d-2cb9-402f-a492-457d6802cee6"
+      },
+      "verifier": {
+        "function_name": "verify",
+        "id": "70044946-1e95-4500-88f9-63dd4a47db83",
+        "sha256": "79baad0962a886cca7c064b5141bce79d55014a6813cbdf9f69de203a141c4f3",
+        "version": 1,
+        "version_id": "704241a5-d5c7-43f2-8dfa-d0bc5db61eb2"
+      }
+    },
+    {
+      "environment": {
+        "data_id": "current-fubspot-gen",
+        "data_version": "v0.0.3",
+        "id": "cysec1-2-fubspot-gen",
+        "runtime_seed_content_sha256": "eb050c791894cc7c4d11de119d78b4d51363c9d5710981ff0ef50600393108b8",
+        "ttl_seconds": 32400,
+        "version": "v0.0.3",
+        "version_id": "a1532a5c-6ec9-45bd-899d-24c0fe3d1df5"
+      },
+      "rank": 72,
+      "source_rank": 72,
+      "task": {
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
+        "env_variables_sha256": "sha256:facab7e2c6ebffca59555553103fc75ded1e5fe29e7bd64edf0b8f18116a2dd4",
+        "key": "cysec1-2-fubspot-gen_blackbox-2c4543c99976ddc656588bfe__blackbox_ctf_v1",
+        "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "prompt_sha256": "sha256:6bc56e69d4e9c7b3fb58c56e3ec595eaf42f04ad9a17105dbdc5cf303d58918e",
+        "version_id": "bf88b387-f5b5-4452-b539-4ad48f0c177e"
+      },
+      "verifier": {
+        "function_name": "verify",
+        "id": "b5b10de4-6cd5-4ca4-8c12-da08f44ceba6",
+        "sha256": "cd998313b43539d1b0c58243dc0f9ca8fb676158c27e36bd5c8cddb8f971d9a9",
+        "version": 1,
+        "version_id": "69f4315a-a96e-4324-b0b3-4ef7f7b77690"
+      }
+    },
+    {
+      "environment": {
+        "data_id": "current-fubspot-gen",
+        "data_version": "v0.0.3",
+        "id": "cysec1-2-fubspot-gen",
+        "runtime_seed_content_sha256": "6754d837153f8c2ff8e146ba094445eb6b00f4da92dabe30dfecb7a628bb1072",
+        "ttl_seconds": 32400,
+        "version": "v0.0.3",
+        "version_id": "a1532a5c-6ec9-45bd-899d-24c0fe3d1df5"
+      },
+      "rank": 74,
+      "source_rank": 74,
+      "task": {
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
+        "env_variables_sha256": "sha256:e9535286023a79c3fa1334dbb9d8dd3ed2f8196bfc751f34de7927296ef1a48c",
+        "key": "cysec1-2-fubspot-gen_blackbox-bb3f496e48b40493bee8aa92__blackbox_ctf_v1",
+        "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "prompt_sha256": "sha256:df30ebf38ac1c7fac4952f9153806b0e3352dd54303662bf495f5973b0bbe1c6",
+        "version_id": "b66062df-4c6a-419f-8568-82e152e9df73"
+      },
+      "verifier": {
+        "function_name": "verify",
+        "id": "74d532d6-c45d-4437-93af-53869e1ebcea",
+        "sha256": "95a6554d6df2f14e14512ced378d62872ad36fcc82aee31d2ca4621be8fbf20a",
+        "version": 1,
+        "version_id": "400a7245-e6fc-41e8-a698-8a244afe96b7"
+      }
+    },
+    {
+      "environment": {
+        "data_id": "commercial",
+        "data_version": "v0.0.9",
+        "id": "cysec1-2-current-gen",
+        "runtime_seed_content_sha256": "9ad6f02e53e3327e21bd41e2499125d08f467bd28ca1fddf30592507bc69b8a1",
+        "ttl_seconds": 32400,
+        "version": "v0.0.3",
+        "version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22"
+      },
+      "rank": 76,
+      "source_rank": 76,
+      "task": {
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
+        "env_variables_sha256": "sha256:10f2ab370fabd84ae478ddf86ac39c0495b35d9091af07920a119900cfb93f6b",
+        "key": "cysec1-2-current-gen_blackbox-124bb98758975c4aa3ebbe82__blackbox_ctf_v1",
+        "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "prompt_sha256": "sha256:61bcc61236247c7bda0146ca95767e6ec1e433c81d4ae29177c80ca6abef1fd3",
+        "version_id": "1fdbcb5b-4582-47dc-a794-29e7a40682da"
+      },
+      "verifier": {
+        "function_name": "verify",
+        "id": "6d16552f-d9d4-4fff-a124-3251092168ec",
+        "sha256": "543cc9ca9a9819b6745d5f436c58614687b155d732d9167d69d628ef9fad20e2",
+        "version": 1,
+        "version_id": "f3b78302-9a1d-4651-8ea0-f9033c00c26a"
+      }
+    },
+    {
+      "environment": {
+        "data_id": "commercial",
+        "data_version": "v0.0.9",
+        "id": "cysec1-2-current-gen",
+        "runtime_seed_content_sha256": "f11a84fb88c2b858bf96e441630bb8ccdb2f71222b723ea9365ae94f47869fc5",
+        "ttl_seconds": 32400,
+        "version": "v0.0.3",
+        "version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22"
+      },
+      "rank": 78,
+      "source_rank": 78,
+      "task": {
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
+        "env_variables_sha256": "sha256:50b9ede1c576c52f47459b4b7290b07cb572937ad62e633f85e811cd3aeb49bb",
+        "key": "cysec1-2-current-gen_blackbox-3a7455937196b81cf5999fb5__blackbox_ctf_v1",
+        "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "prompt_sha256": "sha256:61bcc61236247c7bda0146ca95767e6ec1e433c81d4ae29177c80ca6abef1fd3",
+        "version_id": "18079a9c-cb79-4013-aa08-54092c415165"
+      },
+      "verifier": {
+        "function_name": "verify",
+        "id": "a040365f-9163-4252-9765-a79e042cfb84",
+        "sha256": "11f1b6c43b9d062ad71d43ae7839d622da0d7415bf5bce5aff3b91fe5adf0588",
+        "version": 1,
+        "version_id": "85238493-0d71-4058-8e70-dbc1e16393dc"
+      }
+    },
+    {
+      "environment": {
+        "data_id": "commercial",
+        "data_version": "v0.0.9",
+        "id": "cysec1-2-current-gen",
+        "runtime_seed_content_sha256": "91b610a5e3d5e34c5a948f4afdffbee1fc1380da9651d00fdcc8498768ecbefb",
+        "ttl_seconds": 32400,
+        "version": "v0.0.3",
+        "version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22"
+      },
+      "rank": 80,
+      "source_rank": 80,
+      "task": {
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
+        "env_variables_sha256": "sha256:4468b395cb62dd130909cfe906646c092b30847631126200d3f2044fb52c6fce",
+        "key": "cysec1-2-current-gen_blackbox-58a5b481cf56ffb7954e7396__blackbox_ctf_v1",
+        "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "prompt_sha256": "sha256:61bcc61236247c7bda0146ca95767e6ec1e433c81d4ae29177c80ca6abef1fd3",
+        "version_id": "d6c906fc-ef92-4ce6-ab9c-54a9b7eb9037"
+      },
+      "verifier": {
+        "function_name": "verify",
+        "id": "300d5237-437b-40f7-9444-afe9707edeba",
+        "sha256": "4b4e7eb028a07993a81c13e3798318914f9a4591ac2725948d20fde35f426dfd",
+        "version": 1,
+        "version_id": "cd4f9311-141a-413f-b0f9-fe57e27470e4"
+      }
+    },
+    {
+      "environment": {
+        "data_id": "commercial",
+        "data_version": "v0.0.9",
+        "id": "cysec1-2-current-gen",
+        "runtime_seed_content_sha256": "454929b8a3524541e327b3b4fb0d1ab2dc54f480706795fdbbf135fb3044afe7",
+        "ttl_seconds": 32400,
+        "version": "v0.0.3",
+        "version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22"
+      },
+      "rank": 82,
+      "source_rank": 82,
+      "task": {
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
+        "env_variables_sha256": "sha256:d4a0593779f1d1793eb1294242ed0b850bd5d82867095b3518cb56f8e015f89c",
+        "key": "cysec1-2-current-gen_blackbox-c5ba6fa280b5731a06d45214__blackbox_ctf_v1",
+        "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "prompt_sha256": "sha256:61bcc61236247c7bda0146ca95767e6ec1e433c81d4ae29177c80ca6abef1fd3",
+        "version_id": "63e6ea95-1b08-44ec-aea7-244d9c6253af"
+      },
+      "verifier": {
+        "function_name": "verify",
+        "id": "652014bd-8205-432b-a8fb-381691a52fd7",
+        "sha256": "fbc9f0d7615a294e5bdaedb5aceb69d9609c27a3dfe8afaf9c232240f026d3f4",
+        "version": 1,
+        "version_id": "05dd731f-36ed-4c33-8d4a-c67c48f306f8"
+      }
+    },
+    {
+      "environment": {
+        "data_id": "fakelook-cyber-gen",
+        "data_version": "v0.0.2",
+        "id": "cysec1-2-fakelook-gen",
+        "runtime_seed_content_sha256": "f509bb876930c5bd5e5a09d61372a72ba9afeab2174f2d87d3cfcf81121a1766",
+        "ttl_seconds": 32400,
+        "version": "v0.0.3",
+        "version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4"
+      },
+      "rank": 84,
+      "source_rank": 84,
+      "task": {
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
+        "env_variables_sha256": "sha256:05c350f73d90cd8b2483dc451a6d53a5adeaeb7b264aa2fea685341dbac48d0b",
+        "key": "cysec1-2-fakelook-gen_blackbox-03faebe1772eea3cd1e8e2cb__blackbox_ctf_v1",
+        "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "prompt_sha256": "sha256:399858ca5eacbef7d3a4079c8dd966419e87aa8e303fda34e1964528e05f1559",
+        "version_id": "f1ce26fc-39b6-442c-a03c-3c18f99e119f"
+      },
+      "verifier": {
+        "function_name": "verify",
+        "id": "7eca69bc-6272-4384-ac7c-9b544f284ea9",
+        "sha256": "db27db17c70387e7af090758f791d1e960baa0826a9ea8d5372b4327d9e56422",
+        "version": 1,
+        "version_id": "0622ecef-bace-43bc-a832-433ddbb0bbdf"
+      }
+    },
+    {
+      "environment": {
+        "data_id": "fakelook-cyber-gen",
+        "data_version": "v0.0.2",
+        "id": "cysec1-2-fakelook-gen",
+        "runtime_seed_content_sha256": "952485e5990859cda32e8fe6748d324812f32fcbdf6065af13587cba2603aa53",
+        "ttl_seconds": 32400,
+        "version": "v0.0.3",
+        "version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4"
+      },
+      "rank": 86,
+      "source_rank": 86,
+      "task": {
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
+        "env_variables_sha256": "sha256:0765b850c0f6cd3d2ab4292889ec1b4f72e50f68bf231ec3378ded6898feacfb",
+        "key": "cysec1-2-fakelook-gen_blackbox-5743976142f21673d5143b71__blackbox_ctf_v1",
+        "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "prompt_sha256": "sha256:399858ca5eacbef7d3a4079c8dd966419e87aa8e303fda34e1964528e05f1559",
+        "version_id": "7ec7aeca-0c69-4df6-989e-81278980d0a9"
+      },
+      "verifier": {
+        "function_name": "verify",
+        "id": "75e4bf17-66fc-442e-93ff-b5d6e2e592c4",
+        "sha256": "c473c00aebbe41f141c24a1d3c65e0ac67ae7accb468d26746db32e9d0f94460",
+        "version": 1,
+        "version_id": "18fb3405-0566-4dd8-86ee-ec4b34f60bef"
+      }
+    },
+    {
+      "environment": {
+        "data_id": "fakelook-cyber-gen",
+        "data_version": "v0.0.2",
+        "id": "cysec1-2-fakelook-gen",
+        "runtime_seed_content_sha256": "d0526e0ec07d8e1978ecbc8ae4ca465a2232d9af01cf4fa85c67d22e3929f061",
+        "ttl_seconds": 32400,
+        "version": "v0.0.3",
+        "version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4"
+      },
+      "rank": 88,
+      "source_rank": 88,
+      "task": {
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
+        "env_variables_sha256": "sha256:04843fb008f1107e5d1b121d996c04f16fd9a084a35dec142395adf862ca68bd",
+        "key": "cysec1-2-fakelook-gen_blackbox-7647df87d82993fdb4d8942d__blackbox_ctf_v1",
+        "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "prompt_sha256": "sha256:399858ca5eacbef7d3a4079c8dd966419e87aa8e303fda34e1964528e05f1559",
+        "version_id": "96977ecb-4d8c-4c4f-a5e0-02d925bdc724"
+      },
+      "verifier": {
+        "function_name": "verify",
+        "id": "fe01c8d1-be91-493f-acab-0d0f88822782",
+        "sha256": "14b3c83e8aa362806b559a066cf42a697bbfa7645d6c7b05c5e91f355149892a",
+        "version": 1,
+        "version_id": "6ad7575e-de1a-41da-a121-a86b81df7884"
+      }
+    },
+    {
+      "environment": {
+        "data_id": "fakelook-cyber-gen",
+        "data_version": "v0.0.2",
+        "id": "cysec1-2-fakelook-gen",
+        "runtime_seed_content_sha256": "0bb85012055db5dbe82ccd000a97eeccd4096a24fb20f4f93681cdaa2a9e3ce4",
+        "ttl_seconds": 32400,
+        "version": "v0.0.3",
+        "version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4"
+      },
+      "rank": 90,
+      "source_rank": 90,
+      "task": {
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
+        "env_variables_sha256": "sha256:1fc5a6172c6047de1cce6f489ded4a167b5de36ba38dbce745fe30eb5007aae9",
+        "key": "cysec1-2-fakelook-gen_blackbox-9db42d6bba9934e37106b1cf__blackbox_ctf_v1",
+        "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "prompt_sha256": "sha256:399858ca5eacbef7d3a4079c8dd966419e87aa8e303fda34e1964528e05f1559",
+        "version_id": "1407dcf7-46ad-4b82-8aa1-f88307dd8264"
+      },
+      "verifier": {
+        "function_name": "verify",
+        "id": "fcda4d1d-f1bd-47be-b246-571addc1b33c",
+        "sha256": "1e9a7292ee116d1425dabd0033b8c933087eff3c80159f09d1dba25cb5ac47dd",
+        "version": 1,
+        "version_id": "67e0bb97-9aa8-43af-a8d6-141b3b35bcdb"
+      }
+    },
+    {
+      "environment": {
+        "data_id": "fakelook-cyber-gen",
+        "data_version": "v0.0.2",
+        "id": "cysec1-2-fakelook-gen",
+        "runtime_seed_content_sha256": "b6bad9ac86c66a021b32587f56cf8c5c0129c389d622b944c80c06f603e8f58c",
+        "ttl_seconds": 32400,
+        "version": "v0.0.3",
+        "version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4"
+      },
+      "rank": 92,
+      "source_rank": 92,
+      "task": {
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
+        "env_variables_sha256": "sha256:1411a61f24616fcf9242d578a591eba971de0f04bbbc8d6ee839d5e407d04289",
+        "key": "cysec1-2-fakelook-gen_blackbox-cc7129b8653c8bcf4db5cdf4__blackbox_ctf_v1",
+        "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "prompt_sha256": "sha256:399858ca5eacbef7d3a4079c8dd966419e87aa8e303fda34e1964528e05f1559",
+        "version_id": "9fd14da1-efd5-4852-81aa-e6020219b75f"
+      },
+      "verifier": {
+        "function_name": "verify",
+        "id": "02788207-1510-4b0d-bae8-ee7c10922098",
+        "sha256": "6bd0aa4c7b722092188fa327789ef102d4cd61c19bc256d8f39bc3aee00fe0a5",
+        "version": 1,
+        "version_id": "5465c904-f714-4a55-af1a-cbe7d26f76f1"
+      }
+    },
+    {
+      "environment": {
+        "data_id": "fentry-current-gen",
+        "data_version": "v0.0.3",
+        "id": "cysec1-2-fentry-gen",
+        "runtime_seed_content_sha256": "538ba7c51e8053bcf0f8fe6d04019cc2f44cce5b3674274293115ac12003b2ec",
+        "ttl_seconds": 32400,
+        "version": "v0.0.3",
+        "version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595"
+      },
+      "rank": 94,
+      "source_rank": 94,
+      "task": {
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
+        "env_variables_sha256": "sha256:08b9b9d3cc6c0b1b7610995baa6148e3a7fb73d7d086b57069931078e6443cbc",
+        "key": "cysec1-2-fentry-gen_blackbox-0a841d6127c4042fd3d99f68__blackbox_ctf_v1",
+        "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "prompt_sha256": "sha256:6333161f6f445e9e5a3f4b86599219b928f05c681f1804e9cb2f7653afa0b551",
+        "version_id": "056f0e20-cd7d-40c8-b3c8-369fcee838be"
+      },
+      "verifier": {
+        "function_name": "verify",
+        "id": "822feeb0-690c-40b0-be10-4ae9f2ac772f",
+        "sha256": "106f035d5b4e546b785d52b8f62417081dbd2741bfcf10063fc8dac8578da1ad",
+        "version": 1,
+        "version_id": "e6b95420-2f78-441a-bea8-f877333a0ffa"
+      }
+    },
+    {
+      "environment": {
+        "data_id": "fentry-current-gen",
+        "data_version": "v0.0.3",
+        "id": "cysec1-2-fentry-gen",
+        "runtime_seed_content_sha256": "dc0829a8a85f2845216b10bbccfccde8caad6812b9b96f7daeb0a257f6e0fdc2",
+        "ttl_seconds": 32400,
+        "version": "v0.0.3",
+        "version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595"
+      },
+      "rank": 96,
+      "source_rank": 96,
+      "task": {
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
+        "env_variables_sha256": "sha256:40b425c39de5c51c726ede8e12c0746eb3f06273c031173afbfd218b7d11fb1f",
+        "key": "cysec1-2-fentry-gen_blackbox-34652ac7eb0d3cc85ab093a6__blackbox_ctf_v1",
+        "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "prompt_sha256": "sha256:6333161f6f445e9e5a3f4b86599219b928f05c681f1804e9cb2f7653afa0b551",
+        "version_id": "a0e4a473-b544-4006-b4fa-8e6b6bfb0a50"
+      },
+      "verifier": {
+        "function_name": "verify",
+        "id": "f091b287-a229-48f0-826f-5cd8414d687d",
+        "sha256": "bf925d045bbf2a9287809e4819d1eea9f324cac3b98bea5138e8161cff340cce",
+        "version": 1,
+        "version_id": "12c01dad-dfcd-4f4e-9568-531e8c3f8410"
+      }
+    },
+    {
+      "environment": {
+        "data_id": "fentry-current-gen",
+        "data_version": "v0.0.3",
+        "id": "cysec1-2-fentry-gen",
+        "runtime_seed_content_sha256": "64e105688c4d49bb3ca07760fbd5c16f9dd5fb32dfeb82da6351f8534e6cd183",
+        "ttl_seconds": 32400,
+        "version": "v0.0.3",
+        "version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595"
+      },
+      "rank": 98,
+      "source_rank": 98,
+      "task": {
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
+        "env_variables_sha256": "sha256:f73344f5a6a0b4cc08c531d3cb9c751518d42c04aabf0365fc7086b00eea5d6b",
+        "key": "cysec1-2-fentry-gen_blackbox-6157a8d49f4e47208ebbc716__blackbox_ctf_v1",
+        "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "prompt_sha256": "sha256:6333161f6f445e9e5a3f4b86599219b928f05c681f1804e9cb2f7653afa0b551",
+        "version_id": "390e360e-ad44-43c2-91fd-8e7c9801b0be"
+      },
+      "verifier": {
+        "function_name": "verify",
+        "id": "d2d00540-acd5-4e14-99f4-6dcd58abd0b9",
+        "sha256": "d94b574a26ceb4e58c9be1a8931286a6435ca444fb6016ef0617626a6793d66d",
+        "version": 1,
+        "version_id": "c8cbe2fa-03a9-45e6-8947-ee4da08bdba4"
+      }
+    },
+    {
+      "environment": {
+        "data_id": "fentry-current-gen",
+        "data_version": "v0.0.3",
+        "id": "cysec1-2-fentry-gen",
+        "runtime_seed_content_sha256": "84938e9bc243a285881aa28871a4792165f675eced1c618fa4a348fc366c3317",
+        "ttl_seconds": 32400,
+        "version": "v0.0.3",
+        "version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595"
+      },
+      "rank": 100,
+      "source_rank": 100,
+      "task": {
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
+        "env_variables_sha256": "sha256:3d0b8f0b068c6ea99049e4b10c46daaafc14f7a5229c1e4ef725505df3fc3791",
+        "key": "cysec1-2-fentry-gen_blackbox-916f373b8301132f09f8abee__blackbox_ctf_v1",
+        "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "prompt_sha256": "sha256:6333161f6f445e9e5a3f4b86599219b928f05c681f1804e9cb2f7653afa0b551",
+        "version_id": "2b841931-a8ff-4f5c-b32b-6824ea5b4429"
+      },
+      "verifier": {
+        "function_name": "verify",
+        "id": "757d0316-3b3f-48a5-b33b-aaa2af4ae8e7",
+        "sha256": "64147f2dacefc345f66f9e427d1ac5ac78f9f3f8144a3160c9ea50e6810b7e95",
+        "version": 1,
+        "version_id": "11b604f4-67fb-46ec-91c0-47cdb15bc956"
+      }
+    }
+  ],
+  "treatment": {
+    "compaction_headroom_tokens": 20000,
+    "context_management": "opencode_1.18.27_native_compaction_autocontinue_v1",
+    "context_window_size": 262144,
+    "harness": "opencode",
+    "harness_version": "1.18.27",
+    "max_model_requests": 600,
+    "max_output_tokens": 32768,
+    "provider_adapter": "@ai-sdk/openai-compatible",
+    "release_asset_sha256": "sha256:4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702",
+    "timeout_seconds": 28800,
+    "tool_catalog_sha256": "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a",
+    "tools": [
+      "bash",
+      "submit_report"
+    ]
+  }
+}

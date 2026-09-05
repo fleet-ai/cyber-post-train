@@ -915,6 +915,41 @@ def test_ingest_binding_drift_is_not_mislabeled_as_infrastructure(tmp_path: Path
     )
 
 
+def test_preclaim_stage_observer_covers_every_runtime_boundary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    plan = _runtime_plan(tmp_path)
+    monkeypatch.setenv("FLEET_API_KEY", "test-only")
+    monkeypatch.setenv("JOB_UID", "11111111-1111-4111-8111-111111111111")
+    monkeypatch.setenv("POD_UID", "22222222-2222-4222-8222-222222222222")
+    monkeypatch.setattr(bulk, "build_runtime_plan", lambda *_args: plan)
+    observed: list[str] = []
+
+    with pytest.raises(SystemExit, match="stop after claim"):
+        runtime.run_controller(
+            plan,
+            out=tmp_path / "stages",
+            proxy=tmp_path / "proxy.py",
+            model_runner=lambda *_args: (_ for _ in ()).throw(SystemExit("stop after claim")),
+            classifier=lambda *_args: {},
+            check_run_absent=lambda *_args: None,
+            route_check=lambda *_args: None,
+            runtime_gate_check=lambda *_args: None,
+            stage_observer=lambda stage, _item: observed.append(stage),
+        )
+
+    assert observed == [
+        "01-plan-rebuilt",
+        "02-runtime-gate-valid",
+        "03-output-root-initialized",
+        "04-endpoint-lease-acquired",
+        "05-run-identity-absent",
+        "06-route-valid",
+        "07-claim-written",
+        "08-model-runner-entered",
+    ]
+
+
 def test_transient_ingest_failure_quarantines_only_the_exact_cell(tmp_path: Path) -> None:
     out = tmp_path / "attempt"
     out.mkdir()

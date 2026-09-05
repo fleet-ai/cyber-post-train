@@ -797,6 +797,7 @@ def run_controller(
     check_run_absent: Callable[[dict[str, Any], str], None] = _assert_run_absent,
     route_check: Callable[[dict[str, Any], str], None] = _fresh_route_check,
     runtime_gate_check: Callable[[dict[str, Any]], None] = _runtime_release_gate_check,
+    stage_observer: Callable[[str, dict[str, Any] | None], None] | None = None,
 ) -> dict[str, Any]:
     """Run untouched cells sequentially, preserving progress across infrastructure attrition."""
     controller = plan_controller(plan["campaign_id"])
@@ -805,15 +806,21 @@ def run_controller(
     )
     if plan != rebuilt:
         raise ValueError("bulk executable runtime plan drifted")
+    if stage_observer is not None:
+        stage_observer("01-plan-rebuilt", None)
     key = os.environ.get("FLEET_API_KEY")
     job_uid, pod_uid = os.environ.get("JOB_UID", ""), os.environ.get("POD_UID", "")
     if not key:
         raise RuntimeError("FLEET_API_KEY is required")
     runtime_gate_check(plan)
+    if stage_observer is not None:
+        stage_observer("02-runtime-gate-valid", None)
     root = claim_root or Path(plan["execution"]["claim_root"])
     accepted_runs, quarantined_runs, preserved_runs, existing_terminal = _prepare_output_root(
         out, plan, root
     )
+    if stage_observer is not None:
+        stage_observer("03-output-root-initialized", None)
     if existing_terminal is not None:
         return existing_terminal
     lease = plan["execution"]["endpoint_lease"]
@@ -825,6 +832,8 @@ def run_controller(
         endpoint_key=lease["endpoint_key"],
         maximum_streams=lease["maximum_streams"],
     ):
+        if stage_observer is not None:
+            stage_observer("04-endpoint-lease-acquired", None)
         for item in plan["attempts"]:
             if item["run_id"] in accepted_runs | quarantined_runs | preserved_runs:
                 continue
@@ -854,10 +863,14 @@ def run_controller(
                     ),
                 )
                 continue
+            if stage_observer is not None:
+                stage_observer("05-run-identity-absent", item)
             # The public endpoint is shared mutable infrastructure.  Re-prove
             # the served model id and context immediately before each atomic
             # claim/model boundary, not merely once when a days-long Job starts.
             route_check(plan, key)
+            if stage_observer is not None:
+                stage_observer("06-route-valid", item)
             claim = claim_cell(plan, item, claim_root=root, job_uid=job_uid, pod_uid=pod_uid)
             if claim is None:
                 existing_claim = _validate_preserved_claim(plan, item, root)
@@ -883,8 +896,12 @@ def run_controller(
                     ),
                 )
                 continue
+            if stage_observer is not None:
+                stage_observer("07-claim-written", item)
             attempt_out = out / "attempts" / item["run_id"]
             try:
+                if stage_observer is not None:
+                    stage_observer("08-model-runner-entered", item)
                 model_runner(config, attempt_out, proxy)
                 receipt = classifier(attempt_out, config, item, claim, key)
                 _write_once(out / "accepted" / f"{item['run_id']}.json", receipt)
