@@ -82,6 +82,14 @@ Do not interpret all-zero reward as model incapability when trajectories truncat
 
 For every material failure, ask whether a durable correction belongs in code, a regression test, `AGENTS.md`, a focused skill, a receipt/config, or narrative docs. Prefer deterministic enforcement in code. Add skill guidance only for stable decisions that recur across runs; never hardcode current job IDs, secrets, mutable state, or benchmark content into a skill.
 
+A material incident is not closed merely because a successor works. Before
+scaling or handing off the affected path, record the sanitized failure evidence,
+identify the narrowest deterministic prevention boundary, land the corresponding
+guard and regression test when repository code can enforce it, and update the
+living operator guidance when the decision recurs across runs. If the lesson
+cannot yet be enforced, preserve it as an explicit residual risk and keep the
+relevant scale gate closed.
+
 ## Handoff standard
 
 Lead with the outcome. State what is running, what has not launched, the last verified transition, the next gate, blockers, and any user action required. Link exact PRs/jobs and evidence paths where useful. Never make the reader infer whether an optimizer step, scored evaluation, serving route, or artifact publication actually occurred.

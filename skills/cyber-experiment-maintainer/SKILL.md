@@ -36,4 +36,16 @@ Prefer cross-field and rendered-output invariants over tests that match prose or
 
 After the fix passes, update the living evidence or handoff only when its claims changed. Update a skill only if the lesson will alter future decisions across multiple runs. Remove or replace stale guidance rather than stacking contradictory rules.
 
+Use this incident-closeout gate before scaling or handing off the affected path:
+
+1. Preserve sanitized, immutable evidence of what failed and whether any paid or scored side effect occurred.
+2. Name the narrowest deterministic boundary that should have rejected or detected it earlier.
+3. Put the prevention at that boundary and add a regression through the rendered or API-facing behavior when practical.
+4. Update living operator guidance only for a stable cross-run decision; keep mutable identities and one-run facts in receipts.
+5. Re-run focused tests and the relevant end-to-end preview, then state any remaining unenforced risk explicitly.
+
+A successful successor does not by itself close the incident. If no durable
+prevention exists yet, keep the related scale gate closed or record the residual
+risk explicitly rather than relying on chat memory.
+
 Before handoff, validate every skill package, run focused and relevant repository tests, check formatting and the final diff, and state which failures were pre-existing or out of scope. Report material residual risk rather than claiming that tests prove more than they do.
