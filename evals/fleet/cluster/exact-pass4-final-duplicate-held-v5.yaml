@@ -1,0 +1,856 @@
+apiVersion: v1
+kind: List
+items:
+  - apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: chris-cyber-final-v5-dup-hosted-qwen-source
+      namespace: fleet-train-jobs
+      annotations:
+        cyber-post-train.fleet.ai/preview-only: "true"
+        cyber-post-train.fleet.ai/launch-authorized: "false"
+      labels:
+        cyber-post-train.fleet.ai/experiment: final-v5-duplicate-hosted-qwen
+        cyber-post-train.fleet.ai/owner: chris
+        kueue.x-k8s.io/queue-name: training-lq
+    spec:
+      activeDeadlineSeconds: 7200
+      backoffLimit: 0
+      ttlSecondsAfterFinished: 604800
+      template:
+        metadata:
+          labels:
+            cyber-post-train.fleet.ai/experiment: final-v5-duplicate-hosted-qwen
+            cyber-post-train.fleet.ai/owner: chris
+            kueue.x-k8s.io/queue-name: training-lq
+        spec:
+          serviceAccountName: default
+          restartPolicy: Never
+          priorityClassName: fleet-serve-low
+          preemptionPolicy: Never
+          nodeSelector: {kubernetes.io/arch: amd64, workload: fleetai-training-ng-cpu}
+          tolerations:
+            - {key: workload, operator: Equal, value: fleetai-training-ng-cpu, effect: NoSchedule}
+          containers:
+            - name: observer
+              image: ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
+              command: [/bin/bash, /bootstrap/run.sh]
+              env:
+                - {name: DUPLICATE_MODE, value: source}
+                - {name: DUPLICATE_GROUP, value: hosted-qwen}
+                - name: PACKAGE_AGGREGATE
+                  valueFrom: {configMapKeyRef: {name: chris-final-v5-dup-hosted-qwen-runtime, key: package_aggregate_sha256}}
+                - name: PACKAGE_COMMIT
+                  valueFrom: {configMapKeyRef: {name: chris-final-v5-dup-hosted-qwen-runtime, key: package_commit}}
+                - name: RELEASE_FILE_SHA256
+                  valueFrom: {configMapKeyRef: {name: chris-final-v5-dup-release-hosted-qwen, key: release_file_sha256}}
+                - name: FLEET_API_KEY
+                  valueFrom: {secretKeyRef: {name: chris-cyber-opencode-evals-v2, key: FLEET_API_KEY}}
+                - name: JOB_UID
+                  valueFrom: {fieldRef: {apiVersion: v1, fieldPath: "metadata.labels['batch.kubernetes.io/controller-uid']"}}
+                - name: POD_UID
+                  valueFrom: {fieldRef: {apiVersion: v1, fieldPath: metadata.uid}}
+              resources:
+                requests: {cpu: 100m, memory: 256Mi}
+                limits: {cpu: "1", memory: 1Gi}
+              volumeMounts:
+                - {name: bootstrap, mountPath: /bootstrap, readOnly: true}
+                - {name: workspace, mountPath: /workspace}
+                - {name: sfs, mountPath: /mnt/sfs}
+          volumes:
+            - name: bootstrap
+              projected:
+                sources:
+                  - configMap: {name: chris-final-v5-dup-hosted-qwen-core-a}
+                  - configMap: {name: chris-final-v5-dup-hosted-qwen-core-b}
+                  - configMap: {name: chris-final-v5-dup-hosted-qwen-core-c}
+                  - configMap: {name: chris-final-v5-dup-hosted-qwen-core-d}
+                  - configMap: {name: chris-final-v5-dup-hosted-qwen-runtime}
+                  - configMap:
+                      name: chris-final-v5-dup-release-hosted-qwen
+                      items:
+                        - {key: release.json, path: duplicate-release.json}
+            - {name: workspace, emptyDir: {sizeLimit: 1Gi}}
+            - {name: sfs, persistentVolumeClaim: {claimName: sfs-shared}}
+  - apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: chris-cyber-final-v5-dup-hosted-qwen-accept
+      namespace: fleet-train-jobs
+      annotations:
+        cyber-post-train.fleet.ai/preview-only: "true"
+        cyber-post-train.fleet.ai/launch-authorized: "false"
+      labels:
+        cyber-post-train.fleet.ai/experiment: final-v5-duplicate-hosted-qwen
+        cyber-post-train.fleet.ai/owner: chris
+        kueue.x-k8s.io/queue-name: training-lq
+    spec:
+      activeDeadlineSeconds: 7200
+      backoffLimit: 0
+      ttlSecondsAfterFinished: 604800
+      template:
+        metadata:
+          labels:
+            cyber-post-train.fleet.ai/experiment: final-v5-duplicate-hosted-qwen
+            cyber-post-train.fleet.ai/owner: chris
+            kueue.x-k8s.io/queue-name: training-lq
+        spec:
+          serviceAccountName: default
+          restartPolicy: Never
+          priorityClassName: fleet-serve-low
+          preemptionPolicy: Never
+          nodeSelector: {kubernetes.io/arch: amd64, workload: fleetai-training-ng-cpu}
+          tolerations:
+            - {key: workload, operator: Equal, value: fleetai-training-ng-cpu, effect: NoSchedule}
+          containers:
+            - name: observer
+              image: ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
+              command: [/bin/bash, /bootstrap/run.sh]
+              env:
+                - {name: DUPLICATE_MODE, value: accept}
+                - {name: DUPLICATE_GROUP, value: hosted-qwen}
+                - name: PACKAGE_AGGREGATE
+                  valueFrom: {configMapKeyRef: {name: chris-final-v5-dup-hosted-qwen-runtime, key: package_aggregate_sha256}}
+                - name: PACKAGE_COMMIT
+                  valueFrom: {configMapKeyRef: {name: chris-final-v5-dup-hosted-qwen-runtime, key: package_commit}}
+                - name: RELEASE_FILE_SHA256
+                  valueFrom: {configMapKeyRef: {name: chris-final-v5-dup-release-hosted-qwen, key: release_file_sha256}}
+                - name: FLEET_API_KEY
+                  valueFrom: {secretKeyRef: {name: chris-cyber-opencode-evals-v2, key: FLEET_API_KEY}}
+                - name: JOB_UID
+                  valueFrom: {fieldRef: {apiVersion: v1, fieldPath: "metadata.labels['batch.kubernetes.io/controller-uid']"}}
+                - name: POD_UID
+                  valueFrom: {fieldRef: {apiVersion: v1, fieldPath: metadata.uid}}
+              resources:
+                requests: {cpu: 100m, memory: 256Mi}
+                limits: {cpu: "1", memory: 1Gi}
+              volumeMounts:
+                - {name: bootstrap, mountPath: /bootstrap, readOnly: true}
+                - {name: workspace, mountPath: /workspace}
+                - {name: sfs, mountPath: /mnt/sfs}
+          volumes:
+            - name: bootstrap
+              projected:
+                sources:
+                  - configMap: {name: chris-final-v5-dup-hosted-qwen-core-a}
+                  - configMap: {name: chris-final-v5-dup-hosted-qwen-core-b}
+                  - configMap: {name: chris-final-v5-dup-hosted-qwen-core-c}
+                  - configMap: {name: chris-final-v5-dup-hosted-qwen-core-d}
+                  - configMap: {name: chris-final-v5-dup-hosted-qwen-runtime}
+                  - configMap:
+                      name: chris-final-v5-dup-release-hosted-qwen
+                      items:
+                        - {key: release.json, path: duplicate-release.json}
+            - {name: workspace, emptyDir: {sizeLimit: 1Gi}}
+            - {name: sfs, persistentVolumeClaim: {claimName: sfs-shared}}
+  - apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: chris-cyber-final-v5-dup-hosted-glm-source
+      namespace: fleet-train-jobs
+      annotations:
+        cyber-post-train.fleet.ai/preview-only: "true"
+        cyber-post-train.fleet.ai/launch-authorized: "false"
+      labels:
+        cyber-post-train.fleet.ai/experiment: final-v5-duplicate-hosted-glm
+        cyber-post-train.fleet.ai/owner: chris
+        kueue.x-k8s.io/queue-name: training-lq
+    spec:
+      activeDeadlineSeconds: 7200
+      backoffLimit: 0
+      ttlSecondsAfterFinished: 604800
+      template:
+        metadata:
+          labels:
+            cyber-post-train.fleet.ai/experiment: final-v5-duplicate-hosted-glm
+            cyber-post-train.fleet.ai/owner: chris
+            kueue.x-k8s.io/queue-name: training-lq
+        spec:
+          serviceAccountName: default
+          restartPolicy: Never
+          priorityClassName: fleet-serve-low
+          preemptionPolicy: Never
+          nodeSelector: {kubernetes.io/arch: amd64, workload: fleetai-training-ng-cpu}
+          tolerations:
+            - {key: workload, operator: Equal, value: fleetai-training-ng-cpu, effect: NoSchedule}
+          containers:
+            - name: observer
+              image: ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
+              command: [/bin/bash, /bootstrap/run.sh]
+              env:
+                - {name: DUPLICATE_MODE, value: source}
+                - {name: DUPLICATE_GROUP, value: hosted-glm}
+                - name: PACKAGE_AGGREGATE
+                  valueFrom: {configMapKeyRef: {name: chris-final-v5-dup-hosted-glm-runtime, key: package_aggregate_sha256}}
+                - name: PACKAGE_COMMIT
+                  valueFrom: {configMapKeyRef: {name: chris-final-v5-dup-hosted-glm-runtime, key: package_commit}}
+                - name: RELEASE_FILE_SHA256
+                  valueFrom: {configMapKeyRef: {name: chris-final-v5-dup-release-hosted-glm, key: release_file_sha256}}
+                - name: FLEET_API_KEY
+                  valueFrom: {secretKeyRef: {name: chris-cyber-opencode-evals-v2, key: FLEET_API_KEY}}
+                - name: JOB_UID
+                  valueFrom: {fieldRef: {apiVersion: v1, fieldPath: "metadata.labels['batch.kubernetes.io/controller-uid']"}}
+                - name: POD_UID
+                  valueFrom: {fieldRef: {apiVersion: v1, fieldPath: metadata.uid}}
+              resources:
+                requests: {cpu: 100m, memory: 256Mi}
+                limits: {cpu: "1", memory: 1Gi}
+              volumeMounts:
+                - {name: bootstrap, mountPath: /bootstrap, readOnly: true}
+                - {name: workspace, mountPath: /workspace}
+                - {name: sfs, mountPath: /mnt/sfs}
+          volumes:
+            - name: bootstrap
+              projected:
+                sources:
+                  - configMap: {name: chris-final-v5-dup-hosted-glm-core-a}
+                  - configMap: {name: chris-final-v5-dup-hosted-glm-core-b}
+                  - configMap: {name: chris-final-v5-dup-hosted-glm-core-c}
+                  - configMap: {name: chris-final-v5-dup-hosted-glm-core-d}
+                  - configMap: {name: chris-final-v5-dup-hosted-glm-runtime}
+                  - configMap:
+                      name: chris-final-v5-dup-release-hosted-glm
+                      items:
+                        - {key: release.json, path: duplicate-release.json}
+            - {name: workspace, emptyDir: {sizeLimit: 1Gi}}
+            - {name: sfs, persistentVolumeClaim: {claimName: sfs-shared}}
+  - apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: chris-cyber-final-v5-dup-hosted-glm-accept
+      namespace: fleet-train-jobs
+      annotations:
+        cyber-post-train.fleet.ai/preview-only: "true"
+        cyber-post-train.fleet.ai/launch-authorized: "false"
+      labels:
+        cyber-post-train.fleet.ai/experiment: final-v5-duplicate-hosted-glm
+        cyber-post-train.fleet.ai/owner: chris
+        kueue.x-k8s.io/queue-name: training-lq
+    spec:
+      activeDeadlineSeconds: 7200
+      backoffLimit: 0
+      ttlSecondsAfterFinished: 604800
+      template:
+        metadata:
+          labels:
+            cyber-post-train.fleet.ai/experiment: final-v5-duplicate-hosted-glm
+            cyber-post-train.fleet.ai/owner: chris
+            kueue.x-k8s.io/queue-name: training-lq
+        spec:
+          serviceAccountName: default
+          restartPolicy: Never
+          priorityClassName: fleet-serve-low
+          preemptionPolicy: Never
+          nodeSelector: {kubernetes.io/arch: amd64, workload: fleetai-training-ng-cpu}
+          tolerations:
+            - {key: workload, operator: Equal, value: fleetai-training-ng-cpu, effect: NoSchedule}
+          containers:
+            - name: observer
+              image: ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
+              command: [/bin/bash, /bootstrap/run.sh]
+              env:
+                - {name: DUPLICATE_MODE, value: accept}
+                - {name: DUPLICATE_GROUP, value: hosted-glm}
+                - name: PACKAGE_AGGREGATE
+                  valueFrom: {configMapKeyRef: {name: chris-final-v5-dup-hosted-glm-runtime, key: package_aggregate_sha256}}
+                - name: PACKAGE_COMMIT
+                  valueFrom: {configMapKeyRef: {name: chris-final-v5-dup-hosted-glm-runtime, key: package_commit}}
+                - name: RELEASE_FILE_SHA256
+                  valueFrom: {configMapKeyRef: {name: chris-final-v5-dup-release-hosted-glm, key: release_file_sha256}}
+                - name: FLEET_API_KEY
+                  valueFrom: {secretKeyRef: {name: chris-cyber-opencode-evals-v2, key: FLEET_API_KEY}}
+                - name: JOB_UID
+                  valueFrom: {fieldRef: {apiVersion: v1, fieldPath: "metadata.labels['batch.kubernetes.io/controller-uid']"}}
+                - name: POD_UID
+                  valueFrom: {fieldRef: {apiVersion: v1, fieldPath: metadata.uid}}
+              resources:
+                requests: {cpu: 100m, memory: 256Mi}
+                limits: {cpu: "1", memory: 1Gi}
+              volumeMounts:
+                - {name: bootstrap, mountPath: /bootstrap, readOnly: true}
+                - {name: workspace, mountPath: /workspace}
+                - {name: sfs, mountPath: /mnt/sfs}
+          volumes:
+            - name: bootstrap
+              projected:
+                sources:
+                  - configMap: {name: chris-final-v5-dup-hosted-glm-core-a}
+                  - configMap: {name: chris-final-v5-dup-hosted-glm-core-b}
+                  - configMap: {name: chris-final-v5-dup-hosted-glm-core-c}
+                  - configMap: {name: chris-final-v5-dup-hosted-glm-core-d}
+                  - configMap: {name: chris-final-v5-dup-hosted-glm-runtime}
+                  - configMap:
+                      name: chris-final-v5-dup-release-hosted-glm
+                      items:
+                        - {key: release.json, path: duplicate-release.json}
+            - {name: workspace, emptyDir: {sizeLimit: 1Gi}}
+            - {name: sfs, persistentVolumeClaim: {claimName: sfs-shared}}
+  - apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: chris-cyber-final-v5-dup-dedicated-a-canary-source
+      namespace: fleet-train-jobs
+      annotations:
+        cyber-post-train.fleet.ai/preview-only: "true"
+        cyber-post-train.fleet.ai/launch-authorized: "false"
+      labels:
+        cyber-post-train.fleet.ai/experiment: final-v5-duplicate-dedicated-a-canary
+        cyber-post-train.fleet.ai/owner: chris
+        kueue.x-k8s.io/queue-name: training-lq
+    spec:
+      activeDeadlineSeconds: 7200
+      backoffLimit: 0
+      ttlSecondsAfterFinished: 604800
+      template:
+        metadata:
+          labels:
+            cyber-post-train.fleet.ai/experiment: final-v5-duplicate-dedicated-a-canary
+            cyber-post-train.fleet.ai/owner: chris
+            kueue.x-k8s.io/queue-name: training-lq
+        spec:
+          serviceAccountName: default
+          restartPolicy: Never
+          priorityClassName: fleet-serve-low
+          preemptionPolicy: Never
+          nodeSelector: {kubernetes.io/arch: amd64, workload: fleetai-training-ng-cpu}
+          tolerations:
+            - {key: workload, operator: Equal, value: fleetai-training-ng-cpu, effect: NoSchedule}
+          containers:
+            - name: observer
+              image: ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
+              command: [/bin/bash, /bootstrap/run.sh]
+              env:
+                - {name: DUPLICATE_MODE, value: source}
+                - {name: DUPLICATE_GROUP, value: dedicated-a-canary}
+                - name: PACKAGE_AGGREGATE
+                  valueFrom: {configMapKeyRef: {name: chris-final-v5-dup-dedicated-a-canary-runtime, key: package_aggregate_sha256}}
+                - name: PACKAGE_COMMIT
+                  valueFrom: {configMapKeyRef: {name: chris-final-v5-dup-dedicated-a-canary-runtime, key: package_commit}}
+                - name: RELEASE_FILE_SHA256
+                  valueFrom: {configMapKeyRef: {name: chris-final-v5-dup-release-dedicated-a-canary, key: release_file_sha256}}
+                - name: FLEET_API_KEY
+                  valueFrom: {secretKeyRef: {name: chris-cyber-opencode-evals-v2, key: FLEET_API_KEY}}
+                - name: JOB_UID
+                  valueFrom: {fieldRef: {apiVersion: v1, fieldPath: "metadata.labels['batch.kubernetes.io/controller-uid']"}}
+                - name: POD_UID
+                  valueFrom: {fieldRef: {apiVersion: v1, fieldPath: metadata.uid}}
+              resources:
+                requests: {cpu: 100m, memory: 256Mi}
+                limits: {cpu: "1", memory: 1Gi}
+              volumeMounts:
+                - {name: bootstrap, mountPath: /bootstrap, readOnly: true}
+                - {name: workspace, mountPath: /workspace}
+                - {name: sfs, mountPath: /mnt/sfs}
+          volumes:
+            - name: bootstrap
+              projected:
+                sources:
+                  - configMap: {name: chris-final-v5-dup-dedicated-a-canary-core-a}
+                  - configMap: {name: chris-final-v5-dup-dedicated-a-canary-core-b}
+                  - configMap: {name: chris-final-v5-dup-dedicated-a-canary-core-c}
+                  - configMap: {name: chris-final-v5-dup-dedicated-a-canary-core-d}
+                  - configMap: {name: chris-final-v5-dup-dedicated-a-canary-runtime}
+                  - configMap:
+                      name: chris-final-v5-dup-release-dedicated-a-canary
+                      items:
+                        - {key: release.json, path: duplicate-release.json}
+            - {name: workspace, emptyDir: {sizeLimit: 1Gi}}
+            - {name: sfs, persistentVolumeClaim: {claimName: sfs-shared}}
+  - apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: chris-cyber-final-v5-dup-dedicated-a-canary-accept
+      namespace: fleet-train-jobs
+      annotations:
+        cyber-post-train.fleet.ai/preview-only: "true"
+        cyber-post-train.fleet.ai/launch-authorized: "false"
+      labels:
+        cyber-post-train.fleet.ai/experiment: final-v5-duplicate-dedicated-a-canary
+        cyber-post-train.fleet.ai/owner: chris
+        kueue.x-k8s.io/queue-name: training-lq
+    spec:
+      activeDeadlineSeconds: 7200
+      backoffLimit: 0
+      ttlSecondsAfterFinished: 604800
+      template:
+        metadata:
+          labels:
+            cyber-post-train.fleet.ai/experiment: final-v5-duplicate-dedicated-a-canary
+            cyber-post-train.fleet.ai/owner: chris
+            kueue.x-k8s.io/queue-name: training-lq
+        spec:
+          serviceAccountName: default
+          restartPolicy: Never
+          priorityClassName: fleet-serve-low
+          preemptionPolicy: Never
+          nodeSelector: {kubernetes.io/arch: amd64, workload: fleetai-training-ng-cpu}
+          tolerations:
+            - {key: workload, operator: Equal, value: fleetai-training-ng-cpu, effect: NoSchedule}
+          containers:
+            - name: observer
+              image: ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
+              command: [/bin/bash, /bootstrap/run.sh]
+              env:
+                - {name: DUPLICATE_MODE, value: accept}
+                - {name: DUPLICATE_GROUP, value: dedicated-a-canary}
+                - name: PACKAGE_AGGREGATE
+                  valueFrom: {configMapKeyRef: {name: chris-final-v5-dup-dedicated-a-canary-runtime, key: package_aggregate_sha256}}
+                - name: PACKAGE_COMMIT
+                  valueFrom: {configMapKeyRef: {name: chris-final-v5-dup-dedicated-a-canary-runtime, key: package_commit}}
+                - name: RELEASE_FILE_SHA256
+                  valueFrom: {configMapKeyRef: {name: chris-final-v5-dup-release-dedicated-a-canary, key: release_file_sha256}}
+                - name: FLEET_API_KEY
+                  valueFrom: {secretKeyRef: {name: chris-cyber-opencode-evals-v2, key: FLEET_API_KEY}}
+                - name: JOB_UID
+                  valueFrom: {fieldRef: {apiVersion: v1, fieldPath: "metadata.labels['batch.kubernetes.io/controller-uid']"}}
+                - name: POD_UID
+                  valueFrom: {fieldRef: {apiVersion: v1, fieldPath: metadata.uid}}
+              resources:
+                requests: {cpu: 100m, memory: 256Mi}
+                limits: {cpu: "1", memory: 1Gi}
+              volumeMounts:
+                - {name: bootstrap, mountPath: /bootstrap, readOnly: true}
+                - {name: workspace, mountPath: /workspace}
+                - {name: sfs, mountPath: /mnt/sfs}
+          volumes:
+            - name: bootstrap
+              projected:
+                sources:
+                  - configMap: {name: chris-final-v5-dup-dedicated-a-canary-core-a}
+                  - configMap: {name: chris-final-v5-dup-dedicated-a-canary-core-b}
+                  - configMap: {name: chris-final-v5-dup-dedicated-a-canary-core-c}
+                  - configMap: {name: chris-final-v5-dup-dedicated-a-canary-core-d}
+                  - configMap: {name: chris-final-v5-dup-dedicated-a-canary-runtime}
+                  - configMap:
+                      name: chris-final-v5-dup-release-dedicated-a-canary
+                      items:
+                        - {key: release.json, path: duplicate-release.json}
+            - {name: workspace, emptyDir: {sizeLimit: 1Gi}}
+            - {name: sfs, persistentVolumeClaim: {claimName: sfs-shared}}
+  - apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: chris-cyber-final-v5-dup-dedicated-a-bulk-source
+      namespace: fleet-train-jobs
+      annotations:
+        cyber-post-train.fleet.ai/preview-only: "true"
+        cyber-post-train.fleet.ai/launch-authorized: "false"
+      labels:
+        cyber-post-train.fleet.ai/experiment: final-v5-duplicate-dedicated-a-bulk
+        cyber-post-train.fleet.ai/owner: chris
+        kueue.x-k8s.io/queue-name: training-lq
+    spec:
+      activeDeadlineSeconds: 7200
+      backoffLimit: 0
+      ttlSecondsAfterFinished: 604800
+      template:
+        metadata:
+          labels:
+            cyber-post-train.fleet.ai/experiment: final-v5-duplicate-dedicated-a-bulk
+            cyber-post-train.fleet.ai/owner: chris
+            kueue.x-k8s.io/queue-name: training-lq
+        spec:
+          serviceAccountName: default
+          restartPolicy: Never
+          priorityClassName: fleet-serve-low
+          preemptionPolicy: Never
+          nodeSelector: {kubernetes.io/arch: amd64, workload: fleetai-training-ng-cpu}
+          tolerations:
+            - {key: workload, operator: Equal, value: fleetai-training-ng-cpu, effect: NoSchedule}
+          containers:
+            - name: observer
+              image: ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
+              command: [/bin/bash, /bootstrap/run.sh]
+              env:
+                - {name: DUPLICATE_MODE, value: source}
+                - {name: DUPLICATE_GROUP, value: dedicated-a-bulk}
+                - name: PACKAGE_AGGREGATE
+                  valueFrom: {configMapKeyRef: {name: chris-final-v5-dup-dedicated-a-bulk-runtime, key: package_aggregate_sha256}}
+                - name: PACKAGE_COMMIT
+                  valueFrom: {configMapKeyRef: {name: chris-final-v5-dup-dedicated-a-bulk-runtime, key: package_commit}}
+                - name: RELEASE_FILE_SHA256
+                  valueFrom: {configMapKeyRef: {name: chris-final-v5-dup-release-dedicated-a-bulk, key: release_file_sha256}}
+                - name: FLEET_API_KEY
+                  valueFrom: {secretKeyRef: {name: chris-cyber-opencode-evals-v2, key: FLEET_API_KEY}}
+                - name: JOB_UID
+                  valueFrom: {fieldRef: {apiVersion: v1, fieldPath: "metadata.labels['batch.kubernetes.io/controller-uid']"}}
+                - name: POD_UID
+                  valueFrom: {fieldRef: {apiVersion: v1, fieldPath: metadata.uid}}
+              resources:
+                requests: {cpu: 100m, memory: 256Mi}
+                limits: {cpu: "1", memory: 1Gi}
+              volumeMounts:
+                - {name: bootstrap, mountPath: /bootstrap, readOnly: true}
+                - {name: workspace, mountPath: /workspace}
+                - {name: sfs, mountPath: /mnt/sfs}
+          volumes:
+            - name: bootstrap
+              projected:
+                sources:
+                  - configMap: {name: chris-final-v5-dup-dedicated-a-bulk-core-a}
+                  - configMap: {name: chris-final-v5-dup-dedicated-a-bulk-core-b}
+                  - configMap: {name: chris-final-v5-dup-dedicated-a-bulk-core-c}
+                  - configMap: {name: chris-final-v5-dup-dedicated-a-bulk-core-d}
+                  - configMap: {name: chris-final-v5-dup-dedicated-a-bulk-runtime}
+                  - configMap:
+                      name: chris-final-v5-dup-release-dedicated-a-bulk
+                      items:
+                        - {key: release.json, path: duplicate-release.json}
+            - {name: workspace, emptyDir: {sizeLimit: 1Gi}}
+            - {name: sfs, persistentVolumeClaim: {claimName: sfs-shared}}
+  - apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: chris-cyber-final-v5-dup-dedicated-a-bulk-accept
+      namespace: fleet-train-jobs
+      annotations:
+        cyber-post-train.fleet.ai/preview-only: "true"
+        cyber-post-train.fleet.ai/launch-authorized: "false"
+      labels:
+        cyber-post-train.fleet.ai/experiment: final-v5-duplicate-dedicated-a-bulk
+        cyber-post-train.fleet.ai/owner: chris
+        kueue.x-k8s.io/queue-name: training-lq
+    spec:
+      activeDeadlineSeconds: 7200
+      backoffLimit: 0
+      ttlSecondsAfterFinished: 604800
+      template:
+        metadata:
+          labels:
+            cyber-post-train.fleet.ai/experiment: final-v5-duplicate-dedicated-a-bulk
+            cyber-post-train.fleet.ai/owner: chris
+            kueue.x-k8s.io/queue-name: training-lq
+        spec:
+          serviceAccountName: default
+          restartPolicy: Never
+          priorityClassName: fleet-serve-low
+          preemptionPolicy: Never
+          nodeSelector: {kubernetes.io/arch: amd64, workload: fleetai-training-ng-cpu}
+          tolerations:
+            - {key: workload, operator: Equal, value: fleetai-training-ng-cpu, effect: NoSchedule}
+          containers:
+            - name: observer
+              image: ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
+              command: [/bin/bash, /bootstrap/run.sh]
+              env:
+                - {name: DUPLICATE_MODE, value: accept}
+                - {name: DUPLICATE_GROUP, value: dedicated-a-bulk}
+                - name: PACKAGE_AGGREGATE
+                  valueFrom: {configMapKeyRef: {name: chris-final-v5-dup-dedicated-a-bulk-runtime, key: package_aggregate_sha256}}
+                - name: PACKAGE_COMMIT
+                  valueFrom: {configMapKeyRef: {name: chris-final-v5-dup-dedicated-a-bulk-runtime, key: package_commit}}
+                - name: RELEASE_FILE_SHA256
+                  valueFrom: {configMapKeyRef: {name: chris-final-v5-dup-release-dedicated-a-bulk, key: release_file_sha256}}
+                - name: FLEET_API_KEY
+                  valueFrom: {secretKeyRef: {name: chris-cyber-opencode-evals-v2, key: FLEET_API_KEY}}
+                - name: JOB_UID
+                  valueFrom: {fieldRef: {apiVersion: v1, fieldPath: "metadata.labels['batch.kubernetes.io/controller-uid']"}}
+                - name: POD_UID
+                  valueFrom: {fieldRef: {apiVersion: v1, fieldPath: metadata.uid}}
+              resources:
+                requests: {cpu: 100m, memory: 256Mi}
+                limits: {cpu: "1", memory: 1Gi}
+              volumeMounts:
+                - {name: bootstrap, mountPath: /bootstrap, readOnly: true}
+                - {name: workspace, mountPath: /workspace}
+                - {name: sfs, mountPath: /mnt/sfs}
+          volumes:
+            - name: bootstrap
+              projected:
+                sources:
+                  - configMap: {name: chris-final-v5-dup-dedicated-a-bulk-core-a}
+                  - configMap: {name: chris-final-v5-dup-dedicated-a-bulk-core-b}
+                  - configMap: {name: chris-final-v5-dup-dedicated-a-bulk-core-c}
+                  - configMap: {name: chris-final-v5-dup-dedicated-a-bulk-core-d}
+                  - configMap: {name: chris-final-v5-dup-dedicated-a-bulk-runtime}
+                  - configMap:
+                      name: chris-final-v5-dup-release-dedicated-a-bulk
+                      items:
+                        - {key: release.json, path: duplicate-release.json}
+            - {name: workspace, emptyDir: {sizeLimit: 1Gi}}
+            - {name: sfs, persistentVolumeClaim: {claimName: sfs-shared}}
+  - apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: chris-cyber-final-v5-dup-dedicated-b-canary-source
+      namespace: fleet-train-jobs
+      annotations:
+        cyber-post-train.fleet.ai/preview-only: "true"
+        cyber-post-train.fleet.ai/launch-authorized: "false"
+      labels:
+        cyber-post-train.fleet.ai/experiment: final-v5-duplicate-dedicated-b-canary
+        cyber-post-train.fleet.ai/owner: chris
+        kueue.x-k8s.io/queue-name: training-lq
+    spec:
+      activeDeadlineSeconds: 7200
+      backoffLimit: 0
+      ttlSecondsAfterFinished: 604800
+      template:
+        metadata:
+          labels:
+            cyber-post-train.fleet.ai/experiment: final-v5-duplicate-dedicated-b-canary
+            cyber-post-train.fleet.ai/owner: chris
+            kueue.x-k8s.io/queue-name: training-lq
+        spec:
+          serviceAccountName: default
+          restartPolicy: Never
+          priorityClassName: fleet-serve-low
+          preemptionPolicy: Never
+          nodeSelector: {kubernetes.io/arch: amd64, workload: fleetai-training-ng-cpu}
+          tolerations:
+            - {key: workload, operator: Equal, value: fleetai-training-ng-cpu, effect: NoSchedule}
+          containers:
+            - name: observer
+              image: ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
+              command: [/bin/bash, /bootstrap/run.sh]
+              env:
+                - {name: DUPLICATE_MODE, value: source}
+                - {name: DUPLICATE_GROUP, value: dedicated-b-canary}
+                - name: PACKAGE_AGGREGATE
+                  valueFrom: {configMapKeyRef: {name: chris-final-v5-dup-dedicated-b-canary-runtime, key: package_aggregate_sha256}}
+                - name: PACKAGE_COMMIT
+                  valueFrom: {configMapKeyRef: {name: chris-final-v5-dup-dedicated-b-canary-runtime, key: package_commit}}
+                - name: RELEASE_FILE_SHA256
+                  valueFrom: {configMapKeyRef: {name: chris-final-v5-dup-release-dedicated-b-canary, key: release_file_sha256}}
+                - name: FLEET_API_KEY
+                  valueFrom: {secretKeyRef: {name: chris-cyber-opencode-evals-v2, key: FLEET_API_KEY}}
+                - name: JOB_UID
+                  valueFrom: {fieldRef: {apiVersion: v1, fieldPath: "metadata.labels['batch.kubernetes.io/controller-uid']"}}
+                - name: POD_UID
+                  valueFrom: {fieldRef: {apiVersion: v1, fieldPath: metadata.uid}}
+              resources:
+                requests: {cpu: 100m, memory: 256Mi}
+                limits: {cpu: "1", memory: 1Gi}
+              volumeMounts:
+                - {name: bootstrap, mountPath: /bootstrap, readOnly: true}
+                - {name: workspace, mountPath: /workspace}
+                - {name: sfs, mountPath: /mnt/sfs}
+          volumes:
+            - name: bootstrap
+              projected:
+                sources:
+                  - configMap: {name: chris-final-v5-dup-dedicated-b-canary-core-a}
+                  - configMap: {name: chris-final-v5-dup-dedicated-b-canary-core-b}
+                  - configMap: {name: chris-final-v5-dup-dedicated-b-canary-core-c}
+                  - configMap: {name: chris-final-v5-dup-dedicated-b-canary-core-d}
+                  - configMap: {name: chris-final-v5-dup-dedicated-b-canary-runtime}
+                  - configMap:
+                      name: chris-final-v5-dup-release-dedicated-b-canary
+                      items:
+                        - {key: release.json, path: duplicate-release.json}
+            - {name: workspace, emptyDir: {sizeLimit: 1Gi}}
+            - {name: sfs, persistentVolumeClaim: {claimName: sfs-shared}}
+  - apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: chris-cyber-final-v5-dup-dedicated-b-canary-accept
+      namespace: fleet-train-jobs
+      annotations:
+        cyber-post-train.fleet.ai/preview-only: "true"
+        cyber-post-train.fleet.ai/launch-authorized: "false"
+      labels:
+        cyber-post-train.fleet.ai/experiment: final-v5-duplicate-dedicated-b-canary
+        cyber-post-train.fleet.ai/owner: chris
+        kueue.x-k8s.io/queue-name: training-lq
+    spec:
+      activeDeadlineSeconds: 7200
+      backoffLimit: 0
+      ttlSecondsAfterFinished: 604800
+      template:
+        metadata:
+          labels:
+            cyber-post-train.fleet.ai/experiment: final-v5-duplicate-dedicated-b-canary
+            cyber-post-train.fleet.ai/owner: chris
+            kueue.x-k8s.io/queue-name: training-lq
+        spec:
+          serviceAccountName: default
+          restartPolicy: Never
+          priorityClassName: fleet-serve-low
+          preemptionPolicy: Never
+          nodeSelector: {kubernetes.io/arch: amd64, workload: fleetai-training-ng-cpu}
+          tolerations:
+            - {key: workload, operator: Equal, value: fleetai-training-ng-cpu, effect: NoSchedule}
+          containers:
+            - name: observer
+              image: ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
+              command: [/bin/bash, /bootstrap/run.sh]
+              env:
+                - {name: DUPLICATE_MODE, value: accept}
+                - {name: DUPLICATE_GROUP, value: dedicated-b-canary}
+                - name: PACKAGE_AGGREGATE
+                  valueFrom: {configMapKeyRef: {name: chris-final-v5-dup-dedicated-b-canary-runtime, key: package_aggregate_sha256}}
+                - name: PACKAGE_COMMIT
+                  valueFrom: {configMapKeyRef: {name: chris-final-v5-dup-dedicated-b-canary-runtime, key: package_commit}}
+                - name: RELEASE_FILE_SHA256
+                  valueFrom: {configMapKeyRef: {name: chris-final-v5-dup-release-dedicated-b-canary, key: release_file_sha256}}
+                - name: FLEET_API_KEY
+                  valueFrom: {secretKeyRef: {name: chris-cyber-opencode-evals-v2, key: FLEET_API_KEY}}
+                - name: JOB_UID
+                  valueFrom: {fieldRef: {apiVersion: v1, fieldPath: "metadata.labels['batch.kubernetes.io/controller-uid']"}}
+                - name: POD_UID
+                  valueFrom: {fieldRef: {apiVersion: v1, fieldPath: metadata.uid}}
+              resources:
+                requests: {cpu: 100m, memory: 256Mi}
+                limits: {cpu: "1", memory: 1Gi}
+              volumeMounts:
+                - {name: bootstrap, mountPath: /bootstrap, readOnly: true}
+                - {name: workspace, mountPath: /workspace}
+                - {name: sfs, mountPath: /mnt/sfs}
+          volumes:
+            - name: bootstrap
+              projected:
+                sources:
+                  - configMap: {name: chris-final-v5-dup-dedicated-b-canary-core-a}
+                  - configMap: {name: chris-final-v5-dup-dedicated-b-canary-core-b}
+                  - configMap: {name: chris-final-v5-dup-dedicated-b-canary-core-c}
+                  - configMap: {name: chris-final-v5-dup-dedicated-b-canary-core-d}
+                  - configMap: {name: chris-final-v5-dup-dedicated-b-canary-runtime}
+                  - configMap:
+                      name: chris-final-v5-dup-release-dedicated-b-canary
+                      items:
+                        - {key: release.json, path: duplicate-release.json}
+            - {name: workspace, emptyDir: {sizeLimit: 1Gi}}
+            - {name: sfs, persistentVolumeClaim: {claimName: sfs-shared}}
+  - apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: chris-cyber-final-v5-dup-dedicated-b-bulk-source
+      namespace: fleet-train-jobs
+      annotations:
+        cyber-post-train.fleet.ai/preview-only: "true"
+        cyber-post-train.fleet.ai/launch-authorized: "false"
+      labels:
+        cyber-post-train.fleet.ai/experiment: final-v5-duplicate-dedicated-b-bulk
+        cyber-post-train.fleet.ai/owner: chris
+        kueue.x-k8s.io/queue-name: training-lq
+    spec:
+      activeDeadlineSeconds: 7200
+      backoffLimit: 0
+      ttlSecondsAfterFinished: 604800
+      template:
+        metadata:
+          labels:
+            cyber-post-train.fleet.ai/experiment: final-v5-duplicate-dedicated-b-bulk
+            cyber-post-train.fleet.ai/owner: chris
+            kueue.x-k8s.io/queue-name: training-lq
+        spec:
+          serviceAccountName: default
+          restartPolicy: Never
+          priorityClassName: fleet-serve-low
+          preemptionPolicy: Never
+          nodeSelector: {kubernetes.io/arch: amd64, workload: fleetai-training-ng-cpu}
+          tolerations:
+            - {key: workload, operator: Equal, value: fleetai-training-ng-cpu, effect: NoSchedule}
+          containers:
+            - name: observer
+              image: ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
+              command: [/bin/bash, /bootstrap/run.sh]
+              env:
+                - {name: DUPLICATE_MODE, value: source}
+                - {name: DUPLICATE_GROUP, value: dedicated-b-bulk}
+                - name: PACKAGE_AGGREGATE
+                  valueFrom: {configMapKeyRef: {name: chris-final-v5-dup-dedicated-b-bulk-runtime, key: package_aggregate_sha256}}
+                - name: PACKAGE_COMMIT
+                  valueFrom: {configMapKeyRef: {name: chris-final-v5-dup-dedicated-b-bulk-runtime, key: package_commit}}
+                - name: RELEASE_FILE_SHA256
+                  valueFrom: {configMapKeyRef: {name: chris-final-v5-dup-release-dedicated-b-bulk, key: release_file_sha256}}
+                - name: FLEET_API_KEY
+                  valueFrom: {secretKeyRef: {name: chris-cyber-opencode-evals-v2, key: FLEET_API_KEY}}
+                - name: JOB_UID
+                  valueFrom: {fieldRef: {apiVersion: v1, fieldPath: "metadata.labels['batch.kubernetes.io/controller-uid']"}}
+                - name: POD_UID
+                  valueFrom: {fieldRef: {apiVersion: v1, fieldPath: metadata.uid}}
+              resources:
+                requests: {cpu: 100m, memory: 256Mi}
+                limits: {cpu: "1", memory: 1Gi}
+              volumeMounts:
+                - {name: bootstrap, mountPath: /bootstrap, readOnly: true}
+                - {name: workspace, mountPath: /workspace}
+                - {name: sfs, mountPath: /mnt/sfs}
+          volumes:
+            - name: bootstrap
+              projected:
+                sources:
+                  - configMap: {name: chris-final-v5-dup-dedicated-b-bulk-core-a}
+                  - configMap: {name: chris-final-v5-dup-dedicated-b-bulk-core-b}
+                  - configMap: {name: chris-final-v5-dup-dedicated-b-bulk-core-c}
+                  - configMap: {name: chris-final-v5-dup-dedicated-b-bulk-core-d}
+                  - configMap: {name: chris-final-v5-dup-dedicated-b-bulk-runtime}
+                  - configMap:
+                      name: chris-final-v5-dup-release-dedicated-b-bulk
+                      items:
+                        - {key: release.json, path: duplicate-release.json}
+            - {name: workspace, emptyDir: {sizeLimit: 1Gi}}
+            - {name: sfs, persistentVolumeClaim: {claimName: sfs-shared}}
+  - apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: chris-cyber-final-v5-dup-dedicated-b-bulk-accept
+      namespace: fleet-train-jobs
+      annotations:
+        cyber-post-train.fleet.ai/preview-only: "true"
+        cyber-post-train.fleet.ai/launch-authorized: "false"
+      labels:
+        cyber-post-train.fleet.ai/experiment: final-v5-duplicate-dedicated-b-bulk
+        cyber-post-train.fleet.ai/owner: chris
+        kueue.x-k8s.io/queue-name: training-lq
+    spec:
+      activeDeadlineSeconds: 7200
+      backoffLimit: 0
+      ttlSecondsAfterFinished: 604800
+      template:
+        metadata:
+          labels:
+            cyber-post-train.fleet.ai/experiment: final-v5-duplicate-dedicated-b-bulk
+            cyber-post-train.fleet.ai/owner: chris
+            kueue.x-k8s.io/queue-name: training-lq
+        spec:
+          serviceAccountName: default
+          restartPolicy: Never
+          priorityClassName: fleet-serve-low
+          preemptionPolicy: Never
+          nodeSelector: {kubernetes.io/arch: amd64, workload: fleetai-training-ng-cpu}
+          tolerations:
+            - {key: workload, operator: Equal, value: fleetai-training-ng-cpu, effect: NoSchedule}
+          containers:
+            - name: observer
+              image: ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
+              command: [/bin/bash, /bootstrap/run.sh]
+              env:
+                - {name: DUPLICATE_MODE, value: accept}
+                - {name: DUPLICATE_GROUP, value: dedicated-b-bulk}
+                - name: PACKAGE_AGGREGATE
+                  valueFrom: {configMapKeyRef: {name: chris-final-v5-dup-dedicated-b-bulk-runtime, key: package_aggregate_sha256}}
+                - name: PACKAGE_COMMIT
+                  valueFrom: {configMapKeyRef: {name: chris-final-v5-dup-dedicated-b-bulk-runtime, key: package_commit}}
+                - name: RELEASE_FILE_SHA256
+                  valueFrom: {configMapKeyRef: {name: chris-final-v5-dup-release-dedicated-b-bulk, key: release_file_sha256}}
+                - name: FLEET_API_KEY
+                  valueFrom: {secretKeyRef: {name: chris-cyber-opencode-evals-v2, key: FLEET_API_KEY}}
+                - name: JOB_UID
+                  valueFrom: {fieldRef: {apiVersion: v1, fieldPath: "metadata.labels['batch.kubernetes.io/controller-uid']"}}
+                - name: POD_UID
+                  valueFrom: {fieldRef: {apiVersion: v1, fieldPath: metadata.uid}}
+              resources:
+                requests: {cpu: 100m, memory: 256Mi}
+                limits: {cpu: "1", memory: 1Gi}
+              volumeMounts:
+                - {name: bootstrap, mountPath: /bootstrap, readOnly: true}
+                - {name: workspace, mountPath: /workspace}
+                - {name: sfs, mountPath: /mnt/sfs}
+          volumes:
+            - name: bootstrap
+              projected:
+                sources:
+                  - configMap: {name: chris-final-v5-dup-dedicated-b-bulk-core-a}
+                  - configMap: {name: chris-final-v5-dup-dedicated-b-bulk-core-b}
+                  - configMap: {name: chris-final-v5-dup-dedicated-b-bulk-core-c}
+                  - configMap: {name: chris-final-v5-dup-dedicated-b-bulk-core-d}
+                  - configMap: {name: chris-final-v5-dup-dedicated-b-bulk-runtime}
+                  - configMap:
+                      name: chris-final-v5-dup-release-dedicated-b-bulk
+                      items:
+                        - {key: release.json, path: duplicate-release.json}
+            - {name: workspace, emptyDir: {sizeLimit: 1Gi}}
+            - {name: sfs, persistentVolumeClaim: {claimName: sfs-shared}}
+
