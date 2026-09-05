@@ -16,6 +16,7 @@ VERSION = "v11"
 TITLE = "chris-cyber-evalserve-glm53-tp8-a-v11"
 RUN_DIR = "/mnt/sfs/jobs/chris-cyber-evalserve-glm53-tp8-a-v11"
 PRIORITY_CLASS = "fleet-infra-quiet"
+API_PRIORITY_CLASSES = {"fleet-train-high", "fleet-infra-quiet"}
 TOPOLOGY_MODE = "required"
 TOPOLOGY_LEVEL = "topology.nebius.com/tier-1"
 QUEUE = "training-lq"

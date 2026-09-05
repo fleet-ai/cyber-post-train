@@ -28,8 +28,10 @@ def validate_pod_priority_policy(
         raise ValueError("rendered Pod preemptionPolicy contradicts its PriorityClass")
 
 
-def select_highest_nonpreempting(priority_classes: list[dict[str, Any]]) -> dict[str, Any]:
-    """Select the highest live class whose policy prevents this Pod preempting peers."""
+def select_highest_nonpreempting(
+    priority_classes: list[dict[str, Any]], *, allowed_names: set[str] | None = None
+) -> dict[str, Any]:
+    """Select the highest live and API-allowed class that cannot preempt peers."""
     eligible = [
         row
         for row in priority_classes
@@ -37,6 +39,7 @@ def select_highest_nonpreempting(priority_classes: list[dict[str, Any]]) -> dict
         and row.get("preemptionPolicy") == "Never"
         and isinstance((row.get("metadata") or {}).get("name"), str)
         and type(row.get("value")) is int
+        and (allowed_names is None or row["metadata"]["name"] in allowed_names)
     ]
     if not eligible:
         raise ValueError("no live nonpreempting PriorityClass is available")
@@ -50,6 +53,9 @@ def select_highest_nonpreempting(priority_classes: list[dict[str, Any]]) -> dict
         "uid": str((row.get("metadata") or {}).get("uid") or ""),
         "value": row["value"],
         "preemption_policy": "Never",
+        "selection_scope": "live_cluster"
+        if allowed_names is None
+        else "live_cluster_intersect_jobs_api",
     }
 
 

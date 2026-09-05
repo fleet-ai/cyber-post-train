@@ -201,7 +201,7 @@ def live_gate(root: Path, package: Any = v11) -> dict[str, Any]:
         ).stdout
     )
     selected_priority = priority_guard.select_highest_nonpreempting(
-        priority_classes.get("items") or []
+        priority_classes.get("items") or [], allowed_names=package.API_PRIORITY_CLASSES
     )
     if (
         title_matches

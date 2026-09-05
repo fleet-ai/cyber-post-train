@@ -1,0 +1,19 @@
+{
+  "api_run_id": "ft-run-ea43e45d",
+  "api_run_absent_after_delete": true,
+  "credentials_included": false,
+  "delete_http_status": 204,
+  "deleted_at_utc": "2026-09-05T19:11:00Z",
+  "exact_kubernetes_objects_remaining": 0,
+  "gpu_pods_created": 0,
+  "rayjob_uid": "7b09672c-4842-403e-980c-9a097fae8f87",
+  "receipt_sha256": "sha256:bc40e44689f19871ff047254c6abafbb16340bd7262ff64c74b8f1077a141705",
+  "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-glm53-tp8-a-v11",
+  "run_dir_absent_after_delete": true,
+  "schema_version": "fleet-glm53-dedicated-serving-v11-withdrawal-v1",
+  "scored_task_or_session_mutations": 0,
+  "status": "WITHDRAWN_ZERO_SIDE_EFFECT",
+  "title": "chris-cyber-evalserve-glm53-tp8-a-v11",
+  "withdrawal_reason": "fresh_successor_required_for_corrected_priority_selection",
+  "workload_uid": "180f0408-49b7-4823-81f5-16cd31ebcb19"
+}

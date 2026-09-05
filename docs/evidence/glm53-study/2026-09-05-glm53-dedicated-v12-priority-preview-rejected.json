@@ -1,0 +1,22 @@
+{
+  "accepted_priority_names_observed": [
+    "fleet-train-high",
+    "fleet-infra-quiet"
+  ],
+  "api_runs_created": 0,
+  "credentials_included": false,
+  "gpu_pods_created": 0,
+  "http_status": 422,
+  "openapi_priority_enum_exposed": false,
+  "previewed_at_utc": "2026-09-05T19:12:00Z",
+  "prompts_traces_flags_or_scores_included": false,
+  "receipt_sha256": "sha256:c79483b1f95c7108c8f3e8d3f2d0901c884e5c0135e05173f0dd20b893a42af7",
+  "requested_priority": "fleet-serve-low",
+  "route": "POST /v1/runs/preview",
+  "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-glm53-tp8-a-v12",
+  "schema_version": "fleet-glm53-dedicated-serving-v12-preview-rejection-v1",
+  "scored_task_or_session_mutations": 0,
+  "stable_failure_class": "jobs_api_priority_not_allowed",
+  "status": "PREVIEW_REJECTED",
+  "title": "chris-cyber-evalserve-glm53-tp8-a-v12"
+}

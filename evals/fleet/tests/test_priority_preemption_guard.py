@@ -53,6 +53,36 @@ def test_selects_highest_live_nonpreempting_class() -> None:
         "uid": "serve-uid",
         "value": 100,
         "preemption_policy": "Never",
+        "selection_scope": "live_cluster",
+    }
+
+
+def test_selects_highest_nonpreempting_class_supported_by_jobs_api() -> None:
+    rows = [
+        {
+            "metadata": {"name": "fleet-infra-quiet", "uid": "quiet-uid"},
+            "value": -1000,
+            "preemptionPolicy": "Never",
+        },
+        {
+            "metadata": {"name": "fleet-serve-low", "uid": "serve-uid"},
+            "value": 100,
+            "preemptionPolicy": "Never",
+        },
+        {
+            "metadata": {"name": "fleet-train-high", "uid": "train-uid"},
+            "value": 10000,
+            "preemptionPolicy": "PreemptLowerPriority",
+        },
+    ]
+    assert select_highest_nonpreempting(
+        rows, allowed_names={"fleet-train-high", "fleet-infra-quiet"}
+    ) == {
+        "name": "fleet-infra-quiet",
+        "uid": "quiet-uid",
+        "value": -1000,
+        "preemption_policy": "Never",
+        "selection_scope": "live_cluster_intersect_jobs_api",
     }
 
 
