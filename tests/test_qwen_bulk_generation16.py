@@ -3,9 +3,13 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from evals.fleet import qwen_bulk_generation16 as bulk
 from evals.fleet import qwen_bulk_generation16_package as package
+from evals.fleet import qwen_bulk_generation16_preflight as preflight
 from evals.fleet import qwen_bulk_generation16_runtime as runtime
+from evals.fleet import self_hosted
 
 ROOT = Path(__file__).parents[1]
 INVENTORY = Path("/private/tmp/exact100-inventory.XXXXXX.json")
@@ -64,3 +68,40 @@ def test_runtime_plans_preserve_exact_treatment() -> None:
         for plan in plans.values()
     )
     assert all(plan["harness"]["context_window_size"] == 262144 for plan in plans.values())
+
+
+def test_projected_symlink_envelope_is_read_canonically(tmp_path: Path) -> None:
+    payload = {"g15_gate_path": bulk.G15_GATE_PATH, "plans": [{}, {}]}
+    target = tmp_path / "..data" / "plan.json"
+    target.parent.mkdir()
+    target.write_bytes(self_hosted.canonical_json(payload) + b"\n")
+    projected = tmp_path / "preflight-plan.json"
+    projected.symlink_to(target)
+    assert preflight.load_projected_envelope(projected) == payload
+    target.write_text(json.dumps(payload, indent=2) + "\n")
+    with pytest.raises(RuntimeError, match="envelope drifted"):
+        preflight.load_projected_envelope(projected)
+
+
+def test_session_inventory_uses_task_key_and_supported_page_size(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[str, int, int]] = []
+
+    def request(_client: object, method: str, path: str, *, params: dict) -> dict:
+        assert method == "GET"
+        assert path == "/v1/sessions"
+        calls.append((params["task_key"], params["limit"], params["offset"]))
+        return {"sessions": [], "has_more": False}
+
+    monkeypatch.setattr(self_hosted, "_request", request)
+    assert preflight._task_sessions_for_key(object(), "task-key") == []  # noqa: SLF001
+    assert calls == [("task-key", 500, 0)]
+    with pytest.raises(RuntimeError, match="task key is empty"):
+        preflight._task_sessions_for_key(object(), "")  # noqa: SLF001
+
+
+def test_session_inventory_has_bounded_parallelism_and_deadline() -> None:
+    assert preflight.SESSION_WORKERS == 32
+    assert preflight.SESSION_REQUEST_TIMEOUT_SECONDS == 20
+    assert preflight.SESSION_TOTAL_DEADLINE_SECONDS == 120

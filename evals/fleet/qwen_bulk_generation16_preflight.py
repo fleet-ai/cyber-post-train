@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import time
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
@@ -18,6 +19,10 @@ from evals.fleet import qwen_bulk_generation16_runtime as runtime
 from evals.fleet import self_hosted
 
 SCHEMA = "fleet-qwen-generation16-preflight-v1"
+SESSION_PAGE_SIZE = 500
+SESSION_WORKERS = 32
+SESSION_REQUEST_TIMEOUT_SECONDS = 20
+SESSION_TOTAL_DEADLINE_SECONDS = 120
 
 
 def _stage(output: Path, ordinal: int, name: str) -> None:
@@ -33,12 +38,56 @@ def _stage(output: Path, ordinal: int, name: str) -> None:
     )
 
 
-def run(plan_path: Path, output: Path) -> dict[str, Any]:
-    _stage(output, 1, "started")
-    raw = plan_path.read_bytes()
+def load_projected_envelope(path: Path) -> dict[str, Any]:
+    raw = path.read_bytes()
     payload = json.loads(raw)
     if not isinstance(payload, dict) or raw != self_hosted.canonical_json(payload) + b"\n":
         raise RuntimeError("Generation-16 preflight envelope drifted")
+    return payload
+
+
+def _task_sessions_for_key(client: httpx.Client, task_key: str) -> list[dict[str, Any]]:
+    if not isinstance(task_key, str) or not task_key:
+        raise RuntimeError("Generation-16 task key is empty")
+    sessions: list[dict[str, Any]] = []
+    offset = 0
+    while True:
+        page = self_hosted._request(  # noqa: SLF001
+            client,
+            "GET",
+            "/v1/sessions",
+            params={"task_key": task_key, "limit": SESSION_PAGE_SIZE, "offset": offset},
+        )
+        rows = page.get("sessions") or []
+        if not isinstance(rows, list):
+            raise RuntimeError("Generation-16 task session page drifted")
+        sessions.extend(row for row in rows if isinstance(row, dict))
+        if page.get("has_more") is False:
+            return sessions
+        if not rows:
+            raise RuntimeError("Generation-16 task session pagination stalled")
+        offset += len(rows)
+
+
+def collect_task_sessions(task_keys: list[str], headers: dict[str, str]) -> list[dict[str, Any]]:
+    if not task_keys or any(not isinstance(key, str) or not key for key in task_keys):
+        raise RuntimeError("Generation-16 task-key inventory is invalid")
+    started = time.monotonic()
+
+    def one(task_key: str) -> list[dict[str, Any]]:
+        with httpx.Client(headers=headers, timeout=SESSION_REQUEST_TIMEOUT_SECONDS) as client:
+            return _task_sessions_for_key(client, task_key)
+
+    with ThreadPoolExecutor(max_workers=SESSION_WORKERS) as executor:
+        pages = list(executor.map(one, task_keys))
+    if time.monotonic() - started > SESSION_TOTAL_DEADLINE_SECONDS:
+        raise RuntimeError("Generation-16 task session inventory exceeded deadline")
+    return [session for page in pages for session in page]
+
+
+def run(plan_path: Path, output: Path) -> dict[str, Any]:
+    _stage(output, 1, "started")
+    payload = load_projected_envelope(plan_path)
     plans = payload.get("plans")
     if not isinstance(plans, list) or len(plans) != 2:
         raise RuntimeError("Generation-16 preflight plan envelope drifted")
@@ -79,14 +128,8 @@ def run(plan_path: Path, output: Path) -> dict[str, Any]:
         request_count += 1
         roster_response.raise_for_status()
         roster = roster_response.json()
-    def task_sessions(task_key: str) -> list[dict[str, Any]]:
-        with httpx.Client(headers=headers, timeout=30) as client:
-            return self_hosted._task_sessions(client, task_key)  # noqa: SLF001
-
-    with ThreadPoolExecutor(max_workers=32) as executor:
-        pages = list(executor.map(task_sessions, sorted(by_task)))
-    request_count += len(pages)
-    sessions = [session for page in pages for session in page]
+    sessions = collect_task_sessions(sorted(by_task), headers)
+    request_count += len(by_task)
     for session in sessions:
             metadata = session.get("metadata") or {}
             if any(
