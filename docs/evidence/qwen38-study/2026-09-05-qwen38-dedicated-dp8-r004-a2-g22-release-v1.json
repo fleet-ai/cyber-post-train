@@ -1,0 +1,43 @@
+{
+  "schema_version": "fleet-qwen38-dedicated-dp8-canary-release-v1",
+  "status": "RELEASED_ONE_CANARY",
+  "observed_at_utc": "2026-09-05T21:28:00Z",
+  "campaign_id": "chris-cyber-q38-glm53-exact-easiest100-pass4-v1",
+  "cell_id": "sha256:f5dced06656b0bf069930628978ce31b6ff682f437c86d55c6b241b2f83f4f48",
+  "execution_id": "sha256:18f44011c472d154c8be8eea7f4e18f00fcad794709401c6875047f27bcba0b1",
+  "selection_rank": 4,
+  "attempt": 2,
+  "serving_block": "dedicated-qwen-dp8-a-v1",
+  "parity_receipt_sha256": "sha256:22b33d598baab0a35f9d8340110e0f2783aba824894c3efda97298226d729966",
+  "rayjob_uid": "a3f06d5d-b6ff-4b06-ba7b-9f8f05972106",
+  "head_pod_uid": "0fe269e3-8796-4164-9fa6-310a36e88aae",
+  "service_uid": "b88f67d1-8369-4fa3-b8a3-d2a53c44399c",
+  "fresh_global_ledger_clear": true,
+  "fresh_authoritative_sessions_clear": true,
+  "claim_clear": true,
+  "output_root_clear": true,
+  "reconciliation": {
+    "ledger": {
+      "qwen_accepted": 10,
+      "qwen_ledger_active": 2,
+      "qwen_ledger_unstarted": 388,
+      "target_cell_state": "unstarted"
+    },
+    "separately_validated_active_claims": [
+      {
+        "cell_id": "sha256:f728f5712478f233b05c0f2acfd1aba5ae9f63862e1b759ea40a508e188557d8",
+        "execution_id": "sha256:acf0be00dcb0d87203e6805b506ba061434bcd1b2c56181b220fbfd6c31bfd2c",
+        "receipt_sha256": "sha256:7b205da172b239a4e0585d79fe5fb33e94bc573a0d3e126ee36562d3dff4af8f"
+      }
+    ],
+    "effective_qwen_active": 3,
+    "authoritative_session_rows_examined": 28,
+    "target_session_collisions": 0,
+    "canonical_claim_collisions": 0,
+    "output_root_collisions": 0,
+    "kubernetes_job_collisions": 0,
+    "fleet_api_mutations": 0
+  },
+  "prompts_traces_flags_or_scores_included": false,
+  "receipt_sha256": "sha256:b5ddb3281944fbc3db3de18236df45890b7fd97603ebfb4de0e728b3044ea15c"
+}
