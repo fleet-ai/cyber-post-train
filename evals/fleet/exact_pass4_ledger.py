@@ -35,6 +35,7 @@ from evals.fleet import self_hosted
 
 DEFAULT_CAMPAIGN = Path("evals/fleet/configs/q38-glm53-exact-easiest100-pass4-campaign-v1.json")
 EVIDENCE_MANIFEST_SCHEMA = "fleet-exact-pass4-ledger-evidence-manifest-v1"
+EVIDENCE_MANIFEST_V2_SCHEMA = "fleet-exact-pass4-ledger-evidence-manifest-v2"
 HOSTED_GLM_INVENTORY_PATH = Path(
     "/mnt/sfs/jobs/chris-cyber-exact100-pass4-inventory-v2/TERMINAL.json"
 )
@@ -48,6 +49,7 @@ EVIDENCE_MANIFEST_KINDS = {
     "accepted",
     "active_claim",
     "nonrepeatable_claim",
+    "operational_incident",
     "tombstone",
 }
 
@@ -753,6 +755,7 @@ def _build_authority(repo_root: Path, campaign_path: Path) -> Authority:
                 "task_version_id",
             )
         }
+        item["task_key"] = cell["task_key"]
         supplemental_bulk_items[key] = (
             {"controller": row["controller"], "plan_sha256": row["plan_sha256"]},
             item,
@@ -965,6 +968,21 @@ def _bulk_pair(
     controller: Any,
     plan_sha256: Any = None,
 ) -> tuple[dict[str, Any], dict[str, Any]] | None:
+    supplemental = authority.supplemental_bulk_items.get(key)
+    if (
+        supplemental is not None
+        and supplemental[0].get("controller") == controller
+        and (
+            plan_sha256 is None
+            or supplemental[0].get("plan_sha256") == plan_sha256
+        )
+    ):
+        # The immutable supplemental authority exists specifically to resolve
+        # a runtime identity that is otherwise represented by more than one
+        # frozen controller plan.  Prefer it before considering those broader
+        # plans; accepting both as peers would recreate the ambiguity the
+        # authority receipt closed.
+        return supplemental
     candidates = [
         pair
         for mapping in (
@@ -973,7 +991,6 @@ def _bulk_pair(
             authority.qwen_generation16_items,
             authority.hosted_glm_bulk_items,
             authority.hosted_glm_c2_items,
-            authority.supplemental_bulk_items,
             authority.bulk_items,
         )
         if (pair := mapping.get(key)) is not None
@@ -1972,8 +1989,9 @@ def _manifest_paths(
     }
     if set(manifest) != expected_fields:
         raise LedgerError(f"evidence manifest fields drifted: {manifest_path}")
+    manifest_schema = manifest.get("schema_version")
     if (
-        manifest.get("schema_version") != EVIDENCE_MANIFEST_SCHEMA
+        manifest_schema not in {EVIDENCE_MANIFEST_SCHEMA, EVIDENCE_MANIFEST_V2_SCHEMA}
         or manifest.get("campaign_id") != exact.EXPECTED_CAMPAIGN_ID
         or manifest.get("campaign_path") != str(campaign.relative_to(repo_root))
         or manifest.get("privacy")
@@ -2003,6 +2021,11 @@ def _manifest_paths(
         expected_sha = entry.get("expected_receipt_sha256")
         if kind not in EVIDENCE_MANIFEST_KINDS:
             raise LedgerError(f"evidence manifest entry {index} kind is invalid: {manifest_path}")
+        if kind == "operational_incident" and manifest_schema != EVIDENCE_MANIFEST_V2_SCHEMA:
+            raise LedgerError(
+                f"evidence manifest entry {index} requires the v2 manifest schema: "
+                f"{manifest_path}"
+            )
         if not isinstance(supplied, str) or not supplied:
             raise LedgerError(f"evidence manifest entry {index} path is invalid: {manifest_path}")
         if not isinstance(expected_sha, str) or exact.SHA256_RE.fullmatch(expected_sha) is None:

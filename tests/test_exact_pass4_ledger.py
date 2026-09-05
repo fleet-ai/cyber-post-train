@@ -71,9 +71,9 @@ def _write(path: Path, value: dict) -> Path:
     return path
 
 
-def _evidence_manifest(entries: list[dict]) -> dict:
+def _evidence_manifest(entries: list[dict], *, schema: str | None = None) -> dict:
     value = {
-        "schema_version": ledger.EVIDENCE_MANIFEST_SCHEMA,
+        "schema_version": schema or ledger.EVIDENCE_MANIFEST_SCHEMA,
         "campaign_id": exact.EXPECTED_CAMPAIGN_ID,
         "campaign_path": str(CAMPAIGN.relative_to(ROOT)),
         "entries": entries,
@@ -539,6 +539,75 @@ def test_evidence_manifest_rejects_receipt_digest_drift(
             campaign=CAMPAIGN,
             mappings=mappings,
         )
+
+
+def test_v2_evidence_manifest_binds_operational_incident_without_counting_a_cell(
+    tmp_path: Path, authority: ledger.Authority, capsys: pytest.CaptureFixture[str]
+) -> None:
+    incident = {
+        "schema_version": "test-score-blind-operational-incident-v1",
+        "status": "TERMINAL_PRECLAIM_INFRASTRUCTURE_FAILURE",
+        "scores_included": False,
+        "prompts_or_traces_included": False,
+    }
+    incident["receipt_sha256"] = self_hosted.digest_without(incident, "receipt_sha256")
+    incident_path = _write(tmp_path / "incident.json", incident)
+    manifest = _write(
+        tmp_path / "manifest-v2.json",
+        _evidence_manifest(
+            [
+                {
+                    "kind": "accepted",
+                    "path": (
+                        "docs/evidence/qwen38-study/"
+                        "2026-09-05-qwen38-generation15-accepted-gate-v1.json"
+                    ),
+                    "expected_receipt_sha256": (
+                        "sha256:e0aef9a97d146fe5fcc686efafd4399bd7c2ee65a325e64fc089613507ab6745"
+                    ),
+                },
+                {
+                    "kind": "operational_incident",
+                    "path": str(Path("/mnt/sfs/incidents") / incident_path.name),
+                    "expected_receipt_sha256": incident["receipt_sha256"],
+                },
+            ],
+            schema=ledger.EVIDENCE_MANIFEST_V2_SCHEMA,
+        ),
+    )
+
+    assert (
+        ledger.main(
+            [
+                "--repo-root",
+                str(ROOT),
+                "--evidence-manifest",
+                str(manifest),
+                "--mount-map",
+                f"/mnt/sfs/incidents={tmp_path}",
+            ]
+        )
+        == 0
+    )
+    output = capsys.readouterr().out
+    assert "qwen3.8-27b  400     1" in output
+
+
+def test_supplemental_runtime_authority_resolves_ambiguous_bulk_identity(
+    authority: ledger.Authority,
+) -> None:
+    key = (
+        "sha256:83d88543af87e4cb8983953165582ff724ca4db7f8dfb5d40b7a549c9ec8902b",
+        "sha256:fcad0a06b3321a28675af9a2e3e826574ceffbfaa2e4ff2b3428923fbf87e2e6",
+    )
+
+    plan, item = ledger._bulk_pair(authority, key, "glm-hosted-s2") or ({}, {})
+
+    assert plan["plan_sha256"] == (
+        "sha256:c0cc69202751fbbea53dfeea98a62efe41b2638b4e9ad60307b0c0bdbeefd83f"
+    )
+    assert item["run_id"] == "chris-glm53-ac-bulk-a-r026-a2-g1-493bc3d8"
+    assert item["task_key"] == authority.cells[key[0]]["task_key"]
 
 
 def test_evidence_manifest_cannot_be_mixed_with_individual_paths(
