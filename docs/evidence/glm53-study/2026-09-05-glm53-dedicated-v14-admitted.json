@@ -1,0 +1,39 @@
+{
+  "schema_version": "fleet-glm53-dedicated-serving-v14-admission-v1",
+  "status": "ADMITTED_STARTING",
+  "observed_at_utc": "2026-09-05T22:38:35Z",
+  "source_commit": "76b17db",
+  "api_run_id": "ft-run-e741525c",
+  "title": "chris-cyber-evalserve-glm53-tp8-a-v14",
+  "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-glm53-tp8-a-v14",
+  "request_sha256": "sha256:982110b2d62a39df169cf8992cec770d4f86fd15e0a68b44b22db9a4c4e7c7ee",
+  "submission_receipt_sha256": "sha256:52fea8d62a1dd5adb9e2e915dc20c8b38ee487c52400f0e006a5178edcfdffa9",
+  "kubernetes": {
+    "namespace": "fleet-train-jobs",
+    "rayjob_uid": "4d7c724c-0ac3-4701-bf50-5e4cfd497eb5",
+    "workload_name": "rayjob-ft-run-e741525c-b376b",
+    "workload_uid": "0658acd1-eb13-48fa-a279-420127917a4e",
+    "service_uid": "d16abb4f-2b09-44bc-a381-ed17facdfefe",
+    "pod_uid": null
+  },
+  "admission": {
+    "quota_reserved": true,
+    "admitted": true,
+    "flavor": "b300-training",
+    "node": "computeinstance-e04c264q1k2bmjw6zp",
+    "resources": {
+      "cpu": "64",
+      "memory": "768Gi",
+      "nvidia.com/gpu": "8"
+    },
+    "priority_class": "fleet-infra-quiet",
+    "preemption_policy": "Never"
+  },
+  "evaluation": {
+    "scored_tasks_launched": 0,
+    "parity_required_before_scored_canary": true
+  },
+  "credentials_included": false,
+  "prompts_traces_flags_or_scores_included": false,
+  "receipt_sha256": "sha256:0fc270eef836b45b630fb5f02b800f3c95418ab04e13587e4beddfa556ba5631"
+}
