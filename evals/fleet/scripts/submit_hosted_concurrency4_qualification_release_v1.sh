@@ -45,9 +45,11 @@ git -C "$root" worktree add --detach "$snapshot" "$implementation_commit" >/dev/
 install -m 0600 "$release" "$snapshot/$release_rel"
 (
   cd "$snapshot"
-  uv run --no-project --with pyyaml python -m evals.fleet.hosted_concurrency4_qualification_release_v1 \
+  uv run --no-project --with pyyaml --with httpx==0.28.1 python \
+    -m evals.fleet.hosted_concurrency4_qualification_release_v1 \
     validate-release --release "$snapshot/$release_rel" --repo "$snapshot"
-  uv run --no-project --with pyyaml python -m evals.fleet.hosted_concurrency4_qualification_release_v1 \
+  uv run --no-project --with pyyaml --with httpx==0.28.1 python \
+    -m evals.fleet.hosted_concurrency4_qualification_release_v1 \
     render-bundle --release "$snapshot/$release_rel" --repo "$snapshot" \
     --output "$work/bundle.yaml"
 )
@@ -102,7 +104,8 @@ for pair in "qwen3.8-27b:$q_job:$q_execution" "glm-5.3:$g_job:$g_execution"; do
   kubectl -n "$namespace" get pods -l job-name="$source_job" -o json >"$work/$model-pods.json"
   (
     cd "$snapshot"
-    uv run --no-project --with pyyaml python -m evals.fleet.hosted_concurrency4_qualification_release_v1 \
+    uv run --no-project --with pyyaml --with httpx==0.28.1 python \
+      -m evals.fleet.hosted_concurrency4_qualification_release_v1 \
       validate-terminal-job --job-json "$work/$model-job.json" \
       --pods-json "$work/$model-pods.json" --job-name "$source_job"
   )
@@ -130,7 +133,8 @@ for pair in "qwen3.8-27b:$q_job:$q_execution" "glm-5.3:$g_job:$g_execution"; do
     >"$work/$model-claim.json"
   (
     cd "$snapshot"
-    uv run --no-project --with pyyaml python -m evals.fleet.hosted_concurrency4_qualification_release_v1 \
+    uv run --no-project --with pyyaml --with httpx==0.28.1 python \
+      -m evals.fleet.hosted_concurrency4_qualification_release_v1 \
       validate-generation5-evidence --repo "$snapshot" --model "$model" \
       --terminal "$work/$model-terminal.json" --claim "$work/$model-claim.json" \
       --live-job-uid "$(cat "$work/$model-job-uid")" \
@@ -152,7 +156,8 @@ done
 api_key=$(kubectl -n "$namespace" get secret "$secret" -o jsonpath='{.data.FLEET_API_KEY}' | base64 --decode)
 (
   cd "$snapshot"
-  FLEET_API_KEY="$api_key" uv run --no-project --with pyyaml python - <<'PY'
+  FLEET_API_KEY="$api_key" uv run --no-project --with pyyaml --with httpx==0.28.1 \
+    python - <<'PY'
 from evals.fleet.hosted_concurrency4_qualification_v1 import validate_identity
 import os
 
