@@ -1,0 +1,57 @@
+{
+  "schema_version": "fleet-opencode-autocontinue-generation2-canary-scoring-release-v5",
+  "append_only": true,
+  "status": "RELEASED",
+  "released_at_utc": "2026-09-05T04:34:27Z",
+  "generation2_spec_sha256": "sha256:9d8201974794edd3bad379721cf9c9e0e9ae0b978221d223d8165730302e737c",
+  "plan_sha256": "sha256:1c98863eb54921e338020954e2395da0ecc085a6300c7fb60b97142ec0e949da",
+  "cell_id": "sha256:631c9d7cc5328849ce137393943927192b1b50dc60458cdb3425fbce893ecf5a",
+  "execution_id": "sha256:71236ff990db210eb4989ee9e2b4c7afc4b7153b008178c2ae31d5149c3dc8ce",
+  "incident_receipt_sha256": "sha256:fd71d3fb42d1ea4fef4734352c817c62cf0ec5fe6e3e35a28c2a9a4f47aa3f23",
+  "tombstone_bundle_receipt_sha256": "sha256:256398d56acef1caacb9de7f2d8ca7d336cdb154c6191f8986797cb75afcbab8",
+  "package_commit": "8f387a8a98d8b7586be7905ce9b22461df6ab93b",
+  "root_authorization": {
+    "path": "docs/evidence/qwen38-study/2026-09-04-opencode-autocontinue-generation2-root-authorization-v1.json",
+    "file_sha256": "sha256:72c6852dfe4ebf5d1f12e524a49b8e721a1db8a19a468cb5ddb2c52a74d9fa76",
+    "receipt_sha256": "sha256:bfd654aecee65486bf903d4bbbbe8551417fe0885d154ea25bf6c97889930380"
+  },
+  "executable_held_authority": {
+    "path": "docs/evidence/qwen38-study/2026-09-04-opencode-autocontinue-generation2-authority-bound-held-v2.json",
+    "file_sha256": "sha256:e890c52cee166cb32cd42451e0b8062380c298c95f09d04191cb8111eaded8c2",
+    "receipt_sha256": "sha256:a301300d59e0e3c51978188e52c73fbf6288c0901860c2b449abafa5b0eee589"
+  },
+  "implementation": {
+    "module_path": "evals/fleet/autocontinue_generation2_authority_v5.py",
+    "module_sha256": "sha256:8957f711bdd6616117dabc294f89a5cef3f73fb557e3cf237f6d9ff76f689223",
+    "manifest_path": "evals/fleet/cluster/opencode-autocontinue-generation2-canaries-v5.yaml",
+    "manifest_sha256": "sha256:2ca1c44a0c33120c876fd9bed7e5e96f7672d4684dcdcba7f39319ae8ed60d10",
+    "run_path": "evals/fleet/scripts/run_opencode_autocontinue_generation2_canary_v5.sh",
+    "run_sha256": "sha256:8235965247df96e2a5d00b28b8a7a8ab7507cd679a615730e031b82e7d5558f8",
+    "submit_path": "evals/fleet/scripts/submit_opencode_autocontinue_generation2_canaries_v5.sh",
+    "submit_sha256": "sha256:946404bacff2c1186392db8cdf291a58674dfa7b756449cf0c1dfdfd7a279050",
+    "job_name": "chris-q38-ac-r004-a1-g2-v1",
+    "configmap_name": "chris-q38-ac-r004-a1-g2-run-v1",
+    "sfs_root": "/mnt/sfs/jobs/chris-q38-ac-r004-a1-g2-v1"
+  },
+  "authorization": {
+    "launch_authorized": true,
+    "create_once": true,
+    "execution_generation": 2,
+    "bulk_release_authorized": false,
+    "dedicated_serving_authorized": false,
+    "author": "/root",
+    "authorized_at_utc": "2026-09-05T04:34:27Z",
+    "statement": "Authorize exactly one create-once generation-2 hosted Qwen3.8 27B canary cell after all fresh route, duplicate, package, and runtime gates pass; no dedicated serving or bulk release is authorized."
+  },
+  "route_and_inventory": {
+    "fresh_authenticated_hosted_route_required": true,
+    "fresh_exact_treatment_session_inventory_required": true,
+    "old_claims_must_exist_and_match": true,
+    "generation_2_claim_must_be_absent": true
+  },
+  "privacy": {
+    "prompts_traces_flags_or_scores_included": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:8864061dbe6e39d61bc21c5a05cdc13e58af87845a658e666d5dfda5e491d929"
+}
