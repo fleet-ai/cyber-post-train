@@ -138,35 +138,13 @@
       "path": "/mnt/sfs/cell-execution-claims/opencode11827-autocontinue-v1/ed052dc0f396e72602a4f4d55e7c12036f57cd801c41b4d7079f046e7c62c4bf.json"
     }
   ],
-  "expected_counts": {
-    "combined": {
-      "accepted": 17,
-      "active": 5,
-      "blocked": 5,
-      "unstarted": 773
-    },
-    "glm-5.3": {
-      "accepted": 4,
-      "active": 2,
-      "blocked": 0,
-      "unstarted": 394
-    },
-    "qwen3.8-27b": {
-      "accepted": 13,
-      "active": 3,
-      "blocked": 5,
-      "unstarted": 379
-    }
-  },
   "privacy": {
     "flags_read": false,
     "prompts_read": false,
     "scores_read": false,
     "traces_read": false
   },
-  "receipt_sha256": "sha256:ae58ab788cd7bf5dbf73ae3620e0799f3e2f109c4c3b5f4c26c0c511ce6fd53e",
-  "recorded_at_utc": "2026-09-05T22:48:00Z",
-  "schema_version": "fleet-exact-pass4-ledger-evidence-manifest-v1",
-  "snapshot_version": 6
+  "receipt_sha256": "sha256:8b57f51387ee6ef85e1ceafa187fe416a2b335e90eb692fddc1397ef63553f27",
+  "schema_version": "fleet-exact-pass4-ledger-evidence-manifest-v1"
 }
 
