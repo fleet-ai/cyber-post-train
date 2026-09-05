@@ -71,6 +71,23 @@ def _write(path: Path, value: dict) -> Path:
     return path
 
 
+def _evidence_manifest(entries: list[dict]) -> dict:
+    value = {
+        "schema_version": ledger.EVIDENCE_MANIFEST_SCHEMA,
+        "campaign_id": exact.EXPECTED_CAMPAIGN_ID,
+        "campaign_path": str(CAMPAIGN.relative_to(ROOT)),
+        "entries": entries,
+        "privacy": {
+            "prompts_read": False,
+            "traces_read": False,
+            "flags_read": False,
+            "scores_read": False,
+        },
+    }
+    value["receipt_sha256"] = self_hosted.digest_without(value, "receipt_sha256")
+    return value
+
+
 def _claim(
     tmp_path: Path,
     authority: ledger.Authority,
@@ -427,6 +444,116 @@ def test_durable_generation15_gate_is_exact_accepted_evidence(
     changed_path = _write(tmp_path / "g15-gate.json", changed)
     with pytest.raises(ledger.LedgerError, match="drifted"):
         ledger.accepted_evidence(changed_path, authority)
+
+
+def test_evidence_manifest_runs_exact_score_blind_ledger_without_reconstructing_paths(
+    tmp_path: Path, authority: ledger.Authority, capsys: pytest.CaptureFixture[str]
+) -> None:
+    claim_path, claim = _g19_v4_claim(tmp_path, authority)
+    producer_claim = Path("/mnt/sfs/claims") / claim_path.name
+    manifest = _write(
+        tmp_path / "manifest.json",
+        _evidence_manifest(
+            [
+                {
+                    "kind": "accepted",
+                    "path": (
+                        "docs/evidence/qwen38-study/"
+                        "2026-09-05-qwen38-generation15-accepted-gate-v1.json"
+                    ),
+                    "expected_receipt_sha256": (
+                        "sha256:e0aef9a97d146fe5fcc686efafd4399bd7c2ee65a325e64fc089613507ab6745"
+                    ),
+                },
+                {
+                    "kind": "active_claim",
+                    "path": str(producer_claim),
+                    "expected_receipt_sha256": claim["receipt_sha256"],
+                },
+            ]
+        ),
+    )
+
+    assert (
+        ledger.main(
+            [
+                "--repo-root",
+                str(ROOT),
+                "--evidence-manifest",
+                str(manifest),
+                "--mount-map",
+                f"/mnt/sfs={tmp_path}",
+            ]
+        )
+        == 0
+    )
+    output = capsys.readouterr().out
+    assert "qwen3.8-27b  400     1         1" in output
+
+
+def test_evidence_manifest_rejects_receipt_digest_drift(
+    tmp_path: Path, authority: ledger.Authority
+) -> None:
+    claim_path, _claim_value = _g19_v4_claim(tmp_path, authority)
+    manifest = _write(
+        tmp_path / "manifest.json",
+        _evidence_manifest(
+            [
+                {
+                    "kind": "active_claim",
+                    "path": str(Path("/mnt/sfs/claims") / claim_path.name),
+                    "expected_receipt_sha256": "sha256:" + "0" * 64,
+                }
+            ]
+        ),
+    )
+    mappings = ledger._mount_maps([f"/mnt/sfs={tmp_path}"])
+    with pytest.raises(ledger.LedgerError, match="receipt digest drifted"):
+        ledger._manifest_paths(
+            manifest,
+            repo_root=ROOT,
+            campaign=CAMPAIGN,
+            mappings=mappings,
+        )
+
+
+def test_evidence_manifest_cannot_be_mixed_with_individual_paths(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    manifest = _write(
+        tmp_path / "manifest.json",
+        _evidence_manifest(
+            [
+                {
+                    "kind": "accepted",
+                    "path": (
+                        "docs/evidence/qwen38-study/"
+                        "2026-09-05-qwen38-generation15-accepted-gate-v1.json"
+                    ),
+                    "expected_receipt_sha256": (
+                        "sha256:e0aef9a97d146fe5fcc686efafd4399bd7c2ee65a325e64fc089613507ab6745"
+                    ),
+                }
+            ]
+        ),
+    )
+    assert (
+        ledger.main(
+            [
+                "--repo-root",
+                str(ROOT),
+                "--evidence-manifest",
+                str(manifest),
+                "--accepted",
+                str(
+                    ROOT / "docs/evidence/qwen38-study/"
+                    "2026-09-05-qwen38-generation15-accepted-gate-v1.json"
+                ),
+            ]
+        )
+        == 2
+    )
+    assert "cannot be combined" in capsys.readouterr().err
 
 
 def test_current_qwen_hosted_claim_uses_its_exact_successor_plan(

@@ -1,0 +1,49 @@
+{
+  "schema_version": "fleet-exact-pass4-ledger-evidence-manifest-v1",
+  "campaign_id": "chris-cyber-q38-glm53-exact-easiest100-pass4-v1",
+  "campaign_path": "evals/fleet/configs/q38-glm53-exact-easiest100-pass4-campaign-v1.json",
+  "entries": [
+    {
+      "kind": "accepted",
+      "path": "docs/evidence/qwen38-study/2026-09-05-qwen38-generation15-accepted-gate-v1.json",
+      "expected_receipt_sha256": "sha256:e0aef9a97d146fe5fcc686efafd4399bd7c2ee65a325e64fc089613507ab6745"
+    },
+    {
+      "kind": "accepted",
+      "path": "docs/evidence/qwen38-study/2026-09-05-dedicated-qwen-rank2-attempt1-accepted-validated-v1.json",
+      "expected_receipt_sha256": "sha256:108903b167e40d8628776a6bed35ef7fd871b687dd8c81413fe66ca0f2e43212"
+    },
+    {
+      "kind": "accepted",
+      "path": "docs/evidence/qwen38-study/2026-09-05-qwen38-dedicated-r002-a2-accepted-validated-v2.json",
+      "expected_receipt_sha256": "sha256:4ae37cf4b2c5f38699e82e96f788ad8969faf2545251a8570ef0b549defe3ffb"
+    },
+    {
+      "kind": "accepted",
+      "path": "/mnt/sfs/jobs/chris-q38-ac-r005-a1-g18-v1/accepted/chris-q38-ac-g18-r005-a1-deb44299.json",
+      "expected_receipt_sha256": "sha256:083deadd604e090bb43fc4455fed032e763119e8e89ce4bae7632e02ef99eb30"
+    },
+    {
+      "kind": "active_claim",
+      "path": "/mnt/sfs/cell-execution-claims/opencode11827-autocontinue-v1/cafce1143041a9da93564df60dc3858d2f919f193bc7ace481b6f44f592643f2.json",
+      "expected_receipt_sha256": "sha256:e321ca8a124880d0c204f8855e24c94574f55452d4b7027df23f138fbfaa0a0a"
+    },
+    {
+      "kind": "active_claim",
+      "path": "/mnt/sfs/cell-execution-claims/opencode11827-autocontinue-v1/eb69e8913632033536e1607827412eb4c05163b6cdfabb77113919e6d98f7813.json",
+      "expected_receipt_sha256": "sha256:600cd49c3811462575803dd9a04c06511d110fb66bdc1cce376974666ebebe9c"
+    },
+    {
+      "kind": "active_claim",
+      "path": "/mnt/sfs/cell-execution-claims/opencode11827-autocontinue-v1/c1e94e99301075a35d9ebb68c21125a7bbecd47c0d3d052011e2dd8bbaa92c3a.json",
+      "expected_receipt_sha256": "sha256:ac3d1fc263e82f3f51cea877f4b5c29e0ba502c67225d3fa7f7220704750f380"
+    }
+  ],
+  "privacy": {
+    "prompts_read": false,
+    "traces_read": false,
+    "flags_read": false,
+    "scores_read": false
+  },
+  "receipt_sha256": "sha256:cffb3d312f99e459ffe0b051c25a053aed6fcd3eddf2192687411b1992b8fa18"
+}

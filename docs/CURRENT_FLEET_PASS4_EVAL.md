@@ -169,6 +169,23 @@ uv run python -m evals.fleet.exact_pass4_ledger \
   --json
 ```
 
+For a reviewed point-in-time authority set, prefer an exact evidence manifest
+over rebuilding a long command from memory. The manifest lists each receipt or
+claim path together with its expected self-digest and fails closed if either
+changes. Cluster paths can be projected through one read-only observer mount:
+
+```bash
+uv run python -m evals.fleet.exact_pass4_ledger \
+  --repo-root "$PWD" \
+  --evidence-manifest \
+    docs/evidence/qwen38-study/2026-09-05-exact-pass4-ledger-evidence-snapshot-v1.json \
+  --mount-map /mnt/sfs=/absolute/read-only/sfs/mount
+```
+
+Snapshots are immutable evidence. Publish a successor snapshot when a claim
+becomes accepted, blocked, or retry-safe; do not edit a sealed snapshot or
+infer an acceptance path from the adjacent raw attempt directory.
+
 Repeat an option as needed. Do not point a claim root at unreviewed historical
 claims: a preserved claim behind an accepted result is history, not active
 work. The ledger rejects malformed digests, duplicate or contradictory states,

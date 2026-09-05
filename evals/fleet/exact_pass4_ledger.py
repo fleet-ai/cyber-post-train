@@ -29,6 +29,13 @@ from evals.fleet import qwen_hosted_generation19_v4 as qwen_generation19_v4
 from evals.fleet import self_hosted
 
 DEFAULT_CAMPAIGN = Path("evals/fleet/configs/q38-glm53-exact-easiest100-pass4-campaign-v1.json")
+EVIDENCE_MANIFEST_SCHEMA = "fleet-exact-pass4-ledger-evidence-manifest-v1"
+EVIDENCE_MANIFEST_KINDS = {
+    "accepted",
+    "active_claim",
+    "nonrepeatable_claim",
+    "tombstone",
+}
 
 GENERATION7_TERMINAL_SCHEMA = "fleet-opencode-autocontinue-generation7-terminal-v1"
 GENERATION7_CLAIM_SCHEMA = "fleet-statistical-cell-execution-claim-v9"
@@ -1417,6 +1424,92 @@ def _paths(
     return normalized
 
 
+def _manifest_paths(
+    path: Path,
+    *,
+    repo_root: Path,
+    campaign: Path,
+    mappings: Sequence[tuple[Path, Path]],
+) -> dict[str, list[Path]]:
+    """Resolve one immutable score-blind evidence-path snapshot.
+
+    The manifest is deliberately a list of exact files rather than directory
+    globs. Every referenced receipt digest is checked before the existing
+    schema and identity validators see the receipt, so operators do not have
+    to reconstruct the authoritative path set from chat or mutable listings.
+    """
+    manifest_path = path if path.is_absolute() else repo_root / path
+    manifest = load_receipt(manifest_path.absolute())
+    expected_fields = {
+        "schema_version",
+        "campaign_id",
+        "campaign_path",
+        "entries",
+        "privacy",
+        "receipt_sha256",
+    }
+    if set(manifest) != expected_fields:
+        raise LedgerError(f"evidence manifest fields drifted: {manifest_path}")
+    if (
+        manifest.get("schema_version") != EVIDENCE_MANIFEST_SCHEMA
+        or manifest.get("campaign_id") != exact.EXPECTED_CAMPAIGN_ID
+        or manifest.get("campaign_path") != str(campaign.relative_to(repo_root))
+        or manifest.get("privacy")
+        != {
+            "prompts_read": False,
+            "traces_read": False,
+            "flags_read": False,
+            "scores_read": False,
+        }
+    ):
+        raise LedgerError(f"evidence manifest authority or privacy drifted: {manifest_path}")
+    entries = manifest.get("entries")
+    if not isinstance(entries, list) or not entries:
+        raise LedgerError(f"evidence manifest entries are absent: {manifest_path}")
+
+    resolved: dict[str, list[Path]] = {kind: [] for kind in EVIDENCE_MANIFEST_KINDS}
+    seen_paths: set[Path] = set()
+    for index, entry in enumerate(entries):
+        if not isinstance(entry, dict) or set(entry) != {
+            "kind",
+            "path",
+            "expected_receipt_sha256",
+        }:
+            raise LedgerError(f"evidence manifest entry {index} fields drifted: {manifest_path}")
+        kind = entry.get("kind")
+        supplied = entry.get("path")
+        expected_sha = entry.get("expected_receipt_sha256")
+        if kind not in EVIDENCE_MANIFEST_KINDS:
+            raise LedgerError(f"evidence manifest entry {index} kind is invalid: {manifest_path}")
+        if not isinstance(supplied, str) or not supplied:
+            raise LedgerError(f"evidence manifest entry {index} path is invalid: {manifest_path}")
+        if not isinstance(expected_sha, str) or exact.SHA256_RE.fullmatch(expected_sha) is None:
+            raise LedgerError(f"evidence manifest entry {index} digest is invalid: {manifest_path}")
+        producer_path = Path(supplied)
+        if producer_path.is_absolute():
+            observer_path = _observer_path(producer_path, mappings).absolute()
+        else:
+            if ".." in producer_path.parts:
+                raise LedgerError(
+                    f"evidence manifest entry {index} escapes the repository: {manifest_path}"
+                )
+            observer_path = (repo_root / producer_path).absolute()
+            try:
+                observer_path.relative_to(repo_root)
+            except ValueError as exc:
+                raise LedgerError(
+                    f"evidence manifest entry {index} escapes the repository: {manifest_path}"
+                ) from exc
+        if observer_path in seen_paths:
+            raise LedgerError(f"evidence manifest repeats a path: {observer_path}")
+        seen_paths.add(observer_path)
+        receipt = load_receipt(observer_path)
+        if receipt.get("receipt_sha256") != expected_sha:
+            raise LedgerError(f"evidence manifest receipt digest drifted: {observer_path}")
+        resolved[kind].append(observer_path)
+    return resolved
+
+
 def reconcile(
     authority: Authority,
     *,
@@ -1579,6 +1672,14 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--tombstone", type=Path, action="append", default=[])
     parser.add_argument("--tombstone-root", type=Path, action="append", default=[])
     parser.add_argument(
+        "--evidence-manifest",
+        type=Path,
+        help=(
+            "exact score-blind evidence-path snapshot with expected receipt digests; "
+            "cannot be combined with individual evidence path options"
+        ),
+    )
+    parser.add_argument(
         "--mount-map",
         action="append",
         default=[],
@@ -1596,15 +1697,41 @@ def main(argv: Sequence[str] | None = None) -> int:
         campaign = (args.campaign or repo_root / DEFAULT_CAMPAIGN).resolve(strict=True)
         authority = _build_authority(repo_root, campaign)
         mappings = _mount_maps(args.mount_map)
-        accepted_paths = _paths(args.accepted, args.accepted_root, "ACCEPTED.json", mappings)
-        active_paths = _paths(args.active_claim, args.active_claim_root, "*.json", mappings)
-        blocked_paths = _paths(
-            args.nonrepeatable_claim,
-            args.nonrepeatable_claim_root,
-            "*.json",
-            mappings,
+        individual_inputs = (
+            args.accepted
+            + args.accepted_root
+            + args.active_claim
+            + args.active_claim_root
+            + args.nonrepeatable_claim
+            + args.nonrepeatable_claim_root
+            + args.tombstone
+            + args.tombstone_root
         )
-        tombstone_paths = _paths(args.tombstone, args.tombstone_root, "*.json", mappings)
+        if args.evidence_manifest is not None and individual_inputs:
+            raise LedgerError(
+                "--evidence-manifest cannot be combined with individual evidence paths"
+            )
+        if args.evidence_manifest is not None:
+            manifest_paths = _manifest_paths(
+                args.evidence_manifest,
+                repo_root=repo_root,
+                campaign=campaign,
+                mappings=mappings,
+            )
+            accepted_paths = manifest_paths["accepted"]
+            active_paths = manifest_paths["active_claim"]
+            blocked_paths = manifest_paths["nonrepeatable_claim"]
+            tombstone_paths = manifest_paths["tombstone"]
+        else:
+            accepted_paths = _paths(args.accepted, args.accepted_root, "ACCEPTED.json", mappings)
+            active_paths = _paths(args.active_claim, args.active_claim_root, "*.json", mappings)
+            blocked_paths = _paths(
+                args.nonrepeatable_claim,
+                args.nonrepeatable_claim_root,
+                "*.json",
+                mappings,
+            )
+            tombstone_paths = _paths(args.tombstone, args.tombstone_root, "*.json", mappings)
         ledger = reconcile(
             authority,
             accepted=(accepted_evidence(path, authority) for path in accepted_paths),
