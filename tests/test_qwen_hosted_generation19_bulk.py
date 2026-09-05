@@ -73,6 +73,8 @@ def test_preflight_package_has_closed_python_imports(tmp_path: Path) -> None:
     for name, value in preflight_cm["data"].items():
         if name.endswith(".py"):
             (module_root / name).write_text(value)
+    run_script = preflight_cm["data"]["run_qwen_hosted_generation19_preflight.sh"]
+    assert all(name in run_script for name in preflight_cm["data"] if name.endswith(".py"))
     subprocess.run(
         [sys.executable, "-c", "import evals.fleet.qwen_hosted_generation19_preflight"],
         cwd=tmp_path,
