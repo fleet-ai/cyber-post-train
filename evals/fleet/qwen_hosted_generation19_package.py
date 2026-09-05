@@ -9,7 +9,7 @@ from typing import Any
 from evals.fleet import qwen_hosted_generation18_package as base
 from evals.fleet import qwen_hosted_generation19_bulk as g19
 
-PREFLIGHT_JOB = "chris-q38-ac-exact100-g19-preflight-v1"
+PREFLIGHT_JOB = "chris-q38-ac-exact100-g19-preflight-v2"
 PREFLIGHT_CM = PREFLIGHT_JOB + "-run-v1"
 PREFLIGHT_ROOT = f"/mnt/sfs/jobs/{PREFLIGHT_JOB}"
 COMMON = (
@@ -20,6 +20,7 @@ COMMON = (
     "evals/fleet/exact_pass4_crypto.py",
     "evals/fleet/endpoint_lease.py",
     "evals/fleet/qwen_bulk_generation16.py",
+    "evals/fleet/qwen_hosted_generation18.py",
     "evals/fleet/qwen_hosted_generation19_bulk.py",
 )
 

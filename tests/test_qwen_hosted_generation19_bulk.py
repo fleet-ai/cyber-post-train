@@ -37,6 +37,12 @@ def test_committed_plans_are_held_and_exact() -> None:
 
 def test_held_package_is_whole_task_and_nonpreemptible() -> None:
     rendered = package.render(ROOT)
+    preflight_cm = next(
+        row
+        for row in rendered["items"]
+        if row["kind"] == "ConfigMap" and row["metadata"]["name"] == package.PREFLIGHT_CM
+    )
+    assert "qwen_hosted_generation18.py" in preflight_cm["data"]
     jobs = [row for row in rendered["items"] if row["kind"] == "Job"]
     assert len(jobs) == 3
     for job in jobs:
