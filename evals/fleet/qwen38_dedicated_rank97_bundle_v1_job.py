@@ -13,8 +13,8 @@ import yaml
 from evals.fleet import qwen38_dedicated_rank2_v3_job as base
 from evals.fleet import self_hosted
 
-NAME = "chris-cyber-q38-opencode11827-ded-tp1-r097-g19-c-bundle-v1"
-EXPERIMENT = "q38-ded-tp1-r097-g19-c-bundle-v1"
+NAME = "chris-cyber-q38-opencode11827-ded-tp1-r097-g19-d-bundle-v2"
+EXPERIMENT = "q38-ded-tp1-r097-g19-d-bundle-v2"
 SERVING_BLOCK = "dedicated-qwen-tp1-d-v1"
 SOURCE = base.SOURCE
 SOURCE_SHA256 = base.SOURCE_SHA256
@@ -30,6 +30,7 @@ install -m 0644 /bootstrap/legacy.py "$root/evals/fleet/qwen38_dedicated_scored_
 install -m 0644 /bootstrap/lane.py "$root/evals/fleet/qwen38_dedicated_rank97_bundle_v1.py"
 install -m 0644 /bootstrap/parity.json "$root/docs/evidence/qwen38-study/2026-09-05-qwen38-dedicated-tp1-d-v1-actual-opencode-parity.json"
 install -m 0644 /bootstrap/campaign.json "$root/evals/fleet/configs/q38-glm53-exact-easiest100-pass4-campaign-v1.json"
+install -m 0644 /bootstrap/selection.json "$root/evals/fleet/configs/opencode-easiest-train100-selection-v2.json"
 install -m 0644 /bootstrap/source.json "$root/evals/fleet/configs/qwen-hosted-generation19-qwen-a-v4.json"
 install -m 0644 /bootstrap/Dockerfile.opencode "$root/evals/fleet/Dockerfile.opencode"
 install -m 0644 /bootstrap/fixed_proxy.py "$root/evals/fleet/fixed_proxy.py"
@@ -72,6 +73,8 @@ def configmap_data(root: Path, release_path: Path) -> dict[str, str]:
         ),
         "campaign.json": root
         / ("evals/fleet/configs/q38-glm53-exact-easiest100-pass4-campaign-v1.json"),
+        "selection.json": root
+        / "evals/fleet/configs/opencode-easiest-train100-selection-v2.json",
         "source.json": root / "evals/fleet/configs/qwen-hosted-generation19-qwen-a-v4.json",
         "Dockerfile.opencode": root / "evals/fleet/Dockerfile.opencode",
         "fixed_proxy.py": root / "evals/fleet/fixed_proxy.py",

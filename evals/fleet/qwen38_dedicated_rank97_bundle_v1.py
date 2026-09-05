@@ -32,7 +32,7 @@ PARITY = Path(
     "docs/evidence/qwen38-study/2026-09-05-qwen38-dedicated-tp1-d-v1-actual-opencode-parity.json"
 )
 PARITY_SHA256 = "sha256:2fdd5e2c1e86d4ad144a324a95426ad6358ab56852a1f48ee5bbe2a3bc2a6f1e"
-BUNDLE_RUN_ID = "chris-cyber-q38-opencode11827-ded-tp1-r097-g19-c-bundle-v1"
+BUNDLE_RUN_ID = "chris-cyber-q38-opencode11827-ded-tp1-r097-g19-d-bundle-v2"
 BUNDLE_ROOT = Path(f"/mnt/sfs/jobs/{BUNDLE_RUN_ID}")
 EXPECTED_IDENTITIES = {
     1: (
@@ -53,7 +53,7 @@ EXPECTED_IDENTITIES = {
     ),
 }
 RUN_IDS = {
-    attempt: f"chris-cyber-q38-opencode11827-ded-tp1-r097-a{attempt}-g19-c-v1"
+    attempt: f"chris-cyber-q38-opencode11827-ded-tp1-r097-a{attempt}-g19-d-v2"
     for attempt in EXPECTED_IDENTITIES
 }
 
