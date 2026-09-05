@@ -14,6 +14,7 @@ Read this file before acting. Then select only the skill matching the work and r
 | Design, launch, or interpret matched evaluations | [`cyber-eval-parity`](skills/cyber-eval-parity/SKILL.md) |
 | Diagnose a job or assemble status/terminal evidence | [`cyber-run-evidence`](skills/cyber-run-evidence/SKILL.md) |
 | Convert a lesson into code, tests, docs, or agent guidance | [`cyber-experiment-maintainer`](skills/cyber-experiment-maintainer/SKILL.md) |
+| Submit or operate general GPU workloads through the Nebius cluster Jobs API | [`cyber-cluster-jobs-operator`](skills/cyber-cluster-jobs-operator/SKILL.md) |
 
 For current experiment state, read `docs/QWEN36_STUDY_EVIDENCE.md`. For scientific controls, read `docs/SCIENTIFIC_PROTOCOL.md`. Chronological status notes and early example configs are context, not authority.
 
@@ -45,6 +46,13 @@ Mutable names, tags, catalog `current` pointers, a Ready Pod, or a dashboard lab
 - Use meaningful `chris-cyber-*` ownership names, normal queues, and default priority. Never bypass admission, unsuspend manually, cancel, preempt, or change peer workloads.
 - Do not mutate an immutable failed Job to retry it. Preserve it and create a reviewed successor only when authorized.
 - Merge authority follows the user's current instruction and repository ownership. Historical approval is not permanent authorization for a new shared-repository merge or deployment.
+
+### Do not conflate the two Jobs APIs
+
+- The Nebius cluster Jobs API is `https://api.ft.flt.build/v1/runs`. Its deployed OpenAPI contract is the authority for its current request shape. It accepts a general container image, command, and GPU/resource shape and renders a RayJob through the cluster queue.
+- Fleet's managed evaluation Jobs API is `https://orchestrator.fleetai.com/v1/jobs`. It creates managed agent-evaluation jobs and accepts only the models and harnesses supported by that platform.
+- A repository convenience client that exposes only SFT/RL does not prove that the deployed cluster API is restricted to SFT/RL. Conversely, the general cluster API does not imply that the managed evaluation API accepts arbitrary endpoints or checkpoints.
+- Before building or submitting a cluster workload, run `python3 skills/cyber-cluster-jobs-operator/scripts/check_contract.py`. Stop on contract drift and inspect the live schema; never guess from a stale checkout or chat summary.
 
 ## Scientific interpretation
 

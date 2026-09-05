@@ -19,6 +19,7 @@ Read [references/gates.md](references/gates.md) before submitting training, expo
 ## Operate through the supported rail
 
 - Prefer the typed Fleet Jobs API and repository CLIs. Preview is the default; submission requires an explicit execute path and a duplicate-title check.
+- Distinguish the general Nebius cluster API (`POST https://api.ft.flt.build/v1/runs`) from Fleet's managed evaluation API (`POST https://orchestrator.fleetai.com/v1/jobs`). Read [`../cyber-cluster-jobs-operator/SKILL.md`](../cyber-cluster-jobs-operator/SKILL.md) before using the former. A narrow local SFT/RL wrapper is not evidence that the deployed cluster API is model-catalog limited.
 - Use the configured namespace, normal queue, default priority, and a meaningful `chris-cyber-*` name. Never bypass admission, unsuspend manually, preempt, cancel, or modify another owner's workload.
 - Resolve images to immutable digests and record both the requested image and runtime `imageID`. A tag, Ready Pod, or catalog row alone is insufficient evidence.
 - Keep credentials in environment or workload-secret injection. Never print, serialize, commit, or pass them as command arguments.
