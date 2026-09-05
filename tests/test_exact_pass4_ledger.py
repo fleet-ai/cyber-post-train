@@ -880,6 +880,34 @@ def test_dedicated_qwen_v2_validated_acceptance_is_digest_only_and_plan_bound(
         ledger.accepted_evidence(path, authority)
 
 
+def test_glm_c2_validated_acceptance_uses_reviewed_runtime_plan_mapping(
+    tmp_path: Path, authority: ledger.Authority
+) -> None:
+    source = ROOT / (
+        "docs/evidence/qwen38-study/"
+        "2026-09-05-glm53-hosted-c2-accepted-validated-v1.json"
+    )
+    evidence = ledger.accepted_evidence(source, authority)
+    assert evidence.state == "accepted"
+    assert evidence.cell_id == (
+        "sha256:ef0273d94a3e967f41ae53ee12c808907efee86377d6c85b55740018370b598c"
+    )
+
+    value = json.loads(source.read_text())
+    value["plan_sha256"] = "sha256:" + "0" * 64
+    value["receipt_sha256"] = self_hosted.digest_without(value, "receipt_sha256")
+    path = _write(tmp_path / "ACCEPTED_VALIDATED.json", value)
+    with pytest.raises(ledger.LedgerError, match="source receipt chain drifted"):
+        ledger.accepted_evidence(path, authority)
+
+    value = json.loads(source.read_text())
+    value["release_receipt_sha256"] = "sha256:" + "1" * 64
+    value["receipt_sha256"] = self_hosted.digest_without(value, "receipt_sha256")
+    _write(path, value)
+    with pytest.raises(ledger.LedgerError, match="source receipt chain drifted"):
+        ledger.accepted_evidence(path, authority)
+
+
 @pytest.mark.parametrize(
     ("mutation", "message"),
     [

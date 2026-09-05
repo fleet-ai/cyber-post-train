@@ -60,6 +60,18 @@ GENERATION15_ACCEPTED_GATE_SCHEMA = "fleet-qwen38-generation15-accepted-gate-v1"
 DEDICATED_QWEN_ACCEPTED_SCHEMA = "fleet-qwen38-dedicated-tp1-cell-accepted-v1"
 DEDICATED_QWEN_VALIDATED_SCHEMA = "fleet-qwen38-dedicated-tp1-accepted-validated-v1"
 DEDICATED_QWEN_VALIDATED_V2_SCHEMA = "fleet-qwen38-dedicated-tp1-accepted-validated-v2"
+GLM_C2_ACCEPTED_VALIDATED_SCHEMA = "fleet-glm53-hosted-c2-accepted-validated-v1"
+GLM_C2_RUNTIME_AUTHORITY_SCHEMA = "fleet-glm53-hosted-c2-runtime-authority-v1"
+GLM_C2_RUNTIME_AUTHORITY_PATH = Path(
+    "docs/evidence/qwen38-study/2026-09-05-glm53-hosted-c2-runtime-authority-v1.json"
+)
+SUPPLEMENTAL_RUNTIME_AUTHORITY_SCHEMA = (
+    "fleet-exact-pass4-supplemental-runtime-authority-v1"
+)
+SUPPLEMENTAL_RUNTIME_AUTHORITY_PATH = Path(
+    "docs/evidence/qwen38-study/"
+    "2026-09-05-exact-pass4-supplemental-runtime-authority-v1.json"
+)
 DEDICATED_QWEN_ATTEMPT1_BINDING = {
     "plan_sha256": "sha256:5358ae8d0c81fd18d815f5289eabf771274101e099c799c49a85d0713687aa67",
     "controller": "qwen-dedicated-tp1-rank2-v1",
@@ -127,6 +139,7 @@ ACCEPTED_SCHEMAS = {
     DEDICATED_QWEN_VALIDATED_SCHEMA,
     DEDICATED_QWEN_VALIDATED_V2_SCHEMA,
     GENERATION15_ACCEPTED_GATE_SCHEMA,
+    GLM_C2_ACCEPTED_VALIDATED_SCHEMA,
 }
 LEGACY_GLM_GENERATION7_ACCEPTED_FIELDS = {
     "schema_version",
@@ -241,6 +254,47 @@ BULK_ACCEPTED_FIELDS = {
     "receipt_sha256",
 }
 BULK_ACCEPTED_OPTIONAL_PROJECTION_FIELD = "authoritative_session_optional_fields"
+GLM_C2_ACCEPTED_VALIDATED_FIELDS = {
+    "schema_version",
+    "status",
+    "accepted",
+    "credited",
+    "retry_allowed",
+    "controller",
+    "cell_id",
+    "execution_id",
+    "execution_generation",
+    "plan_sha256",
+    "run_id",
+    "selection_rank",
+    "attempt",
+    "task_key",
+    "task_version_id",
+    "config_sha256",
+    "release_path",
+    "release_receipt_sha256",
+    "release_file_sha256",
+    "release_observer_job_uid",
+    "release_observer_pod_uid",
+    "claim_sha256",
+    "claim_file_sha256",
+    "terminal_path",
+    "terminal_receipt_sha256",
+    "terminal_file_sha256",
+    "accepted_path",
+    "accepted_receipt_sha256",
+    "accepted_file_sha256",
+    "source_job_uid",
+    "source_pod_uid",
+    "session_id",
+    "verifier_execution_id",
+    "all_source_receipt_byte_digests_matched",
+    "fresh_authoritative_session_reconciled",
+    "scores_included",
+    "prompts_or_traces_included",
+    "credentials_included",
+    "receipt_sha256",
+}
 BULK_CLAIM_FIELDS = {
     "schema_version",
     "plan_sha256",
@@ -488,6 +542,7 @@ class Authority:
     ]
     hosted_glm_bulk_items: dict[tuple[str, str], tuple[dict[str, Any], dict[str, Any]]]
     hosted_glm_c2_items: dict[tuple[str, str], tuple[dict[str, Any], dict[str, Any]]]
+    supplemental_bulk_items: dict[tuple[str, str], tuple[dict[str, Any], dict[str, Any]]]
     dedicated_qwen_items: dict[tuple[str, str], tuple[dict[str, Any], dict[str, Any]]]
     dedicated_qwen_v3_items: dict[tuple[str, str], tuple[dict[str, Any], dict[str, Any]]]
     dedicated_qwen_rank3_items: dict[
@@ -626,15 +681,81 @@ def _build_authority(repo_root: Path, campaign_path: Path) -> Authority:
                 raise LedgerError("hosted GLM bulk execution authority is duplicated")
             hosted_glm_bulk_items[key] = (plan, item)
 
-    hosted_glm_c2_items: dict[
-        tuple[str, str], tuple[dict[str, Any], dict[str, Any]]
-    ] = {}
+    c2_plan = hosted_glm_c2.build_plan(hosted_glm_c2.CONTROLLER, repo_root)
     if HOSTED_GLM_INVENTORY_PATH.is_file():
         c2_plan = hosted_glm_c2.build_runtime_plan("glm-hosted-s2", inventory, repo_root)
-        c2_item = c2_plan["attempts"][0]
-        hosted_glm_c2_items[(c2_item["cell_id"], c2_item["execution_id"])] = (
-            c2_plan,
-            c2_item,
+    c2_item = c2_plan["attempts"][0]
+    hosted_glm_c2_items = {
+        (c2_item["cell_id"], c2_item["execution_id"]): (c2_plan, c2_item)
+    }
+
+    supplemental_path = repo_root / SUPPLEMENTAL_RUNTIME_AUTHORITY_PATH
+    supplemental = load_receipt(supplemental_path)
+    _require_exact_fields(
+        supplemental,
+        {"schema_version", "entries", "privacy", "receipt_sha256"},
+        supplemental_path,
+    )
+    if (
+        supplemental.get("schema_version") != SUPPLEMENTAL_RUNTIME_AUTHORITY_SCHEMA
+        or supplemental.get("privacy")
+        != {
+            "scores_read": False,
+            "prompts_traces_flags_read": False,
+            "credentials_included": False,
+        }
+        or not isinstance(supplemental.get("entries"), list)
+    ):
+        raise LedgerError("supplemental runtime authority envelope drifted")
+    supplemental_bulk_items: dict[
+        tuple[str, str], tuple[dict[str, Any], dict[str, Any]]
+    ] = {}
+    supplemental_fields = {
+        "model",
+        "controller",
+        "plan_sha256",
+        "cell_id",
+        "execution_id",
+        "execution_generation",
+        "run_id",
+        "selection_rank",
+        "attempt",
+        "task_version_id",
+    }
+    for row in supplemental["entries"]:
+        if not isinstance(row, dict) or set(row) != supplemental_fields:
+            raise LedgerError("supplemental runtime authority entry fields drifted")
+        key = (row["cell_id"], row["execution_id"])
+        cell = cells.get(row["cell_id"])
+        if (
+            cell is None
+            or cell["model"] != row["model"]
+            or cell["selection_rank"] != row["selection_rank"]
+            or cell["attempt"] != row["attempt"]
+            or cell["task_version_id"] != row["task_version_id"]
+            or exact.execution_for(row["cell_id"], row["execution_generation"])[
+                "execution_id"
+            ]
+            != row["execution_id"]
+            or key in supplemental_bulk_items
+        ):
+            raise LedgerError("supplemental runtime authority statistical binding drifted")
+        _require_sha256(row["plan_sha256"], "supplemental plan sha256", supplemental_path)
+        item = {
+            name: row[name]
+            for name in (
+                "cell_id",
+                "execution_id",
+                "execution_generation",
+                "run_id",
+                "selection_rank",
+                "attempt",
+                "task_version_id",
+            )
+        }
+        supplemental_bulk_items[key] = (
+            {"controller": row["controller"], "plan_sha256": row["plan_sha256"]},
+            item,
         )
 
     dedicated_qwen_items: dict[tuple[str, str], tuple[dict[str, Any], dict[str, Any]]] = {}
@@ -763,6 +884,7 @@ def _build_authority(repo_root: Path, campaign_path: Path) -> Authority:
         qwen_generation19_v4_items=qwen_generation19_v4_items,
         hosted_glm_bulk_items=hosted_glm_bulk_items,
         hosted_glm_c2_items=hosted_glm_c2_items,
+        supplemental_bulk_items=supplemental_bulk_items,
         dedicated_qwen_items=dedicated_qwen_items,
         dedicated_qwen_v3_items=dedicated_qwen_v3_items,
         dedicated_qwen_rank3_items=dedicated_qwen_rank3_items,
@@ -851,6 +973,7 @@ def _bulk_pair(
             authority.qwen_generation16_items,
             authority.hosted_glm_bulk_items,
             authority.hosted_glm_c2_items,
+            authority.supplemental_bulk_items,
             authority.bulk_items,
         )
         if (pair := mapping.get(key)) is not None
@@ -1377,6 +1500,177 @@ def _accepted_validated_dedicated_qwen_v2(
     )
 
 
+def _accepted_validated_glm_c2(
+    value: dict[str, Any], path: Path, authority: Authority
+) -> Evidence:
+    """Validate the reviewed GLM c2 receipt chain and exact runtime-plan mapping."""
+    _require_exact_fields(value, GLM_C2_ACCEPTED_VALIDATED_FIELDS, path)
+    mapping_path = authority.repo_root / GLM_C2_RUNTIME_AUTHORITY_PATH
+    mapping = load_receipt(mapping_path)
+    _require_exact_fields(
+        mapping,
+        {
+            "schema_version",
+            "controller",
+            "cell_id",
+            "execution_id",
+            "execution_generation",
+            "plan_sha256",
+            "run_id",
+            "selection_rank",
+            "attempt",
+            "task_key",
+            "task_version_id",
+            "config_sha256",
+            "release",
+            "claim",
+            "terminal",
+            "accepted",
+            "privacy",
+            "receipt_sha256",
+        },
+        mapping_path,
+    )
+    if mapping.get("schema_version") != GLM_C2_RUNTIME_AUTHORITY_SCHEMA:
+        raise LedgerError(f"GLM c2 runtime authority schema drifted: {mapping_path}")
+    nested_fields = {
+        "release": {
+            "path",
+            "receipt_sha256",
+            "file_sha256",
+            "observer_job_uid",
+            "observer_pod_uid",
+        },
+        "claim": {"path", "receipt_sha256", "file_sha256"},
+        "terminal": {
+            "path",
+            "receipt_sha256",
+            "file_sha256",
+            "source_job_uid",
+            "source_pod_uid",
+        },
+        "accepted": {
+            "path",
+            "receipt_sha256",
+            "file_sha256",
+            "session_id",
+            "verifier_execution_id",
+        },
+    }
+    for name, fields in nested_fields.items():
+        child = mapping.get(name)
+        if not isinstance(child, dict) or set(child) != fields:
+            raise LedgerError(f"GLM c2 runtime authority {name} fields drifted: {mapping_path}")
+    if mapping.get("privacy") != {
+        "scores_read": False,
+        "prompts_traces_flags_read": False,
+        "credentials_included": False,
+    }:
+        raise LedgerError(f"GLM c2 runtime authority privacy drifted: {mapping_path}")
+
+    key = (mapping.get("cell_id"), mapping.get("execution_id"))
+    pair = authority.hosted_glm_c2_items.get(key)
+    if pair is None:
+        raise LedgerError(f"GLM c2 mapping is absent from exact statistical authority: {path}")
+    plan, item = pair
+    cell, generation = _require_cell_execution(
+        authority,
+        *key,
+        mapping.get("execution_generation"),
+        path,
+    )
+    item_expected = {
+        "cell_id": item["cell_id"],
+        "execution_id": item["execution_id"],
+        "execution_generation": item["execution_generation"],
+        "run_id": item["run_id"],
+        "selection_rank": item["selection_rank"],
+        "attempt": item["attempt"],
+        "task_key": item["task_key"],
+        "task_version_id": item["task_version_id"],
+    }
+    if any(mapping.get(name) != expected for name, expected in item_expected.items()):
+        raise LedgerError(f"GLM c2 runtime authority statistical binding drifted: {mapping_path}")
+    if HOSTED_GLM_INVENTORY_PATH.is_file() and plan.get("plan_sha256") != mapping.get(
+        "plan_sha256"
+    ):
+        raise LedgerError(f"GLM c2 runtime plan digest drifted: {mapping_path}")
+
+    release = mapping["release"]
+    claim = mapping["claim"]
+    terminal = mapping["terminal"]
+    accepted = mapping["accepted"]
+    expected = {
+        **item_expected,
+        "controller": mapping["controller"],
+        "plan_sha256": mapping["plan_sha256"],
+        "config_sha256": mapping["config_sha256"],
+        "release_path": release["path"],
+        "release_receipt_sha256": release["receipt_sha256"],
+        "release_file_sha256": release["file_sha256"],
+        "release_observer_job_uid": release["observer_job_uid"],
+        "release_observer_pod_uid": release["observer_pod_uid"],
+        "claim_sha256": claim["receipt_sha256"],
+        "claim_file_sha256": claim["file_sha256"],
+        "terminal_path": terminal["path"],
+        "terminal_receipt_sha256": terminal["receipt_sha256"],
+        "terminal_file_sha256": terminal["file_sha256"],
+        "accepted_path": accepted["path"],
+        "accepted_receipt_sha256": accepted["receipt_sha256"],
+        "accepted_file_sha256": accepted["file_sha256"],
+        "source_job_uid": terminal["source_job_uid"],
+        "source_pod_uid": terminal["source_pod_uid"],
+        "session_id": accepted["session_id"],
+        "verifier_execution_id": accepted["verifier_execution_id"],
+    }
+    if any(value.get(name) != expected_value for name, expected_value in expected.items()):
+        raise LedgerError(f"validated GLM c2 identity or source receipt chain drifted: {path}")
+    for field in (
+        "plan_sha256",
+        "config_sha256",
+        "release_receipt_sha256",
+        "release_file_sha256",
+        "claim_sha256",
+        "claim_file_sha256",
+        "terminal_receipt_sha256",
+        "terminal_file_sha256",
+        "accepted_receipt_sha256",
+        "accepted_file_sha256",
+    ):
+        _require_sha256(value.get(field), field, path)
+    for field in (
+        "release_observer_job_uid",
+        "release_observer_pod_uid",
+        "source_job_uid",
+        "source_pod_uid",
+        "session_id",
+        "verifier_execution_id",
+    ):
+        _require_uuid(value.get(field), field, path)
+    if any(
+        (
+            value.get("status") != "ACCEPTED_VALIDATED",
+            value.get("accepted") is not True,
+            value.get("credited") is not True,
+            value.get("retry_allowed") is not False,
+            value.get("all_source_receipt_byte_digests_matched") is not True,
+            value.get("fresh_authoritative_session_reconciled") is not True,
+            value.get("scores_included") is not False,
+            value.get("prompts_or_traces_included") is not False,
+            value.get("credentials_included") is not False,
+        )
+    ):
+        raise LedgerError(f"validated GLM c2 outcome is not authoritative: {path}")
+    return Evidence(
+        "accepted",
+        cell["cell_id"],
+        item["execution_id"],
+        generation,
+        value["receipt_sha256"],
+        path,
+    )
+
+
 def accepted_evidence(path: Path, authority: Authority) -> Evidence:
     value = load_receipt(path)
     schema = value.get("schema_version")
@@ -1390,6 +1684,8 @@ def accepted_evidence(path: Path, authority: Authority) -> Evidence:
         return _accepted_validated_dedicated_qwen(value, path, authority)
     if schema == DEDICATED_QWEN_VALIDATED_V2_SCHEMA:
         return _accepted_validated_dedicated_qwen_v2(value, path, authority)
+    if schema == GLM_C2_ACCEPTED_VALIDATED_SCHEMA:
+        return _accepted_validated_glm_c2(value, path, authority)
     if schema == GENERATION15_ACCEPTED_GATE_SCHEMA:
         return _accepted_generation15_gate(value, path, authority)
     if schema == LEGACY_GLM_GENERATION7_ACCEPTED_SCHEMA:
