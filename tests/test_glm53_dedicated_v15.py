@@ -13,6 +13,8 @@ from evals.fleet import glm53_dedicated_v15_live as live
 from evals.fleet import glm53_dedicated_v16 as v16
 from evals.fleet import glm53_dedicated_v16_bootstrap_package_v1 as bootstrap
 from evals.fleet import glm53_dedicated_v16_canary_launch_v1 as launch
+from evals.fleet import glm53_dedicated_v17 as v17
+from evals.fleet import glm53_dedicated_v17_live as v17_live
 from evals.fleet import self_hosted
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -244,3 +246,42 @@ def test_v16_bootstrap_runs_exact_controller_source_and_stops_pre_model() -> Non
     assert job["metadata"]["annotations"]["cyber-post-train.fleet.ai/launch-authorized"] == "false"
     assert job["spec"]["template"]["spec"]["priorityClassName"] == "fleet-infra-quiet"
     assert job["spec"]["template"]["spec"]["preemptionPolicy"] == "Never"
+
+
+def test_v17_preserves_server_runtime_and_binds_both_admission_receipts() -> None:
+    old = v15.payload(v15.spec(ROOT), ROOT)
+    new = v17.payload(v17.spec(ROOT), ROOT)
+    for field in set(old) - {"title", "run_dir", "env"}:
+        assert new[field] == old[field]
+    assert new["title"] == v17.TITLE
+    assert new["run_dir"] == v17.RUN_DIR
+    assert new["env"] == {**old["env"], "GLM53_RUN_DIR": v17.RUN_DIR}
+    assert v17.PRE_ADMISSION["controller_package_sha256"] == v17.CONTROLLER_BOOTSTRAP["controller_package_sha256"]
+    assert v17.CONTROLLER_BOOTSTRAP["receipt_sha256"].endswith("200cea5")
+
+
+def test_v17_bootstrap_validator_is_fail_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    value = {
+        "schema_version": "fleet-glm53-dedicated-controller-bootstrap-v1",
+        "status": "PASSED_PRE_MODEL",
+        "job_uid": v17.CONTROLLER_BOOTSTRAP["job_uid"],
+        "pod_uid": v17.CONTROLLER_BOOTSTRAP["pod_uid"],
+        "controller_package_sha256": v17.CONTROLLER_BOOTSTRAP["controller_package_sha256"],
+        "harness_image": "chris/opencode:1.18.27-cyber-v1",
+        "harness_version": "1.18.27",
+        "projected_evidence_copied_to_private_regular_files": True,
+        "runtime_import_closure_valid": True,
+        "docker_build_and_version_check_completed_by_exact_run_sh": True,
+        "claim_calls": 0,
+        "model_requests": 0,
+        "task_instance_session_verifier_scoring_calls": 0,
+        "prompts_traces_flags_or_scores_read": False,
+    }
+    value["receipt_sha256"] = self_hosted.digest_without(value, "receipt_sha256")
+    raw = self_hosted.canonical_json(value) + b"\n"
+    monkeypatch.setattr(v17_live.shared, "_observer_sfs_path", lambda _: "/receipt")
+    monkeypatch.setattr(v17_live.v17, "CONTROLLER_BOOTSTRAP", {**v17.CONTROLLER_BOOTSTRAP, "file_sha256": self_hosted.sha256(raw), "receipt_sha256": value["receipt_sha256"]})
+    class Done:
+        stdout = raw
+    monkeypatch.setattr(v17_live.subprocess, "run", lambda *a, **k: Done())
+    assert v17_live._bootstrap()[1]["status"] == "PASSED_PRE_MODEL"
