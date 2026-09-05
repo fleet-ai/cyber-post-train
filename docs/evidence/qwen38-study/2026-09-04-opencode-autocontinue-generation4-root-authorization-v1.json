@@ -1,0 +1,49 @@
+{
+  "schema_version": "fleet-opencode-autocontinue-generation4-root-authorization-v1",
+  "append_only": true,
+  "status": "AUTHORIZED",
+  "author": "/root",
+  "scope": {
+    "execution_generation": 4,
+    "create_once": true,
+    "hosted_only": true,
+    "scored_launch_authorized": true,
+    "dedicated_serving_authorized": false,
+    "bulk_release_authorized": false,
+    "release_receipts_present": false,
+    "cluster_mutation_authorized_by_this_package": false
+  },
+  "models": [
+    {
+      "model": "qwen3.8-27b",
+      "cell_id": "sha256:631c9d7cc5328849ce137393943927192b1b50dc60458cdb3425fbce893ecf5a",
+      "generation4_spec_sha256": "sha256:37e94f8dad42b0d45bb0a439dd7c8b8d8518e62373bbfd0d25c36a23f046c005",
+      "rendered_plan_sha256": "sha256:78ae578f050959f00e4ecbc1a088593796792c978a9f1d76e02d986f57406f58",
+      "execution_id": "sha256:232a0409f90327711144283182611d0c28e18e388578f3b062fd29f0f83e6fff",
+      "authorized_at_utc": "2026-09-05T06:39:34Z",
+      "statement": "Authorize exactly one create-once corrected-treatment hosted Qwen3.8 27B generation-4 scored canary cell under the frozen OpenCode 1.18.27 auto-compaction-and-continuation protocol, superseding only the terminal generation-3 pre-model bootstrap failure; use fleet-serve-low with preemptionPolicy Never; no dedicated GPU serving and no bulk release are authorized."
+    },
+    {
+      "model": "glm-5.3",
+      "cell_id": "sha256:905051f141077d3aa5086c1f5dc6ad015d5ee6173a1ea7515025805cf9a24b41",
+      "generation4_spec_sha256": "sha256:7180392984db8cc598b71970b259d1814cabce79e90ca29db40af2d5ff2c2e91",
+      "rendered_plan_sha256": "sha256:1eb3c7c8636d9b2ae417b7e2147520542539fba8ce56899b4ee16f2a3ebcede7",
+      "execution_id": "sha256:736c28d3fb9ce42dd7aa2b1a9865f218616171767cd19a56b6028dd006af9d71",
+      "authorized_at_utc": "2026-09-05T06:39:34Z",
+      "statement": "Authorize exactly one create-once corrected-treatment hosted GLM5.3 generation-4 scored canary cell under the frozen OpenCode 1.18.27 auto-compaction-and-continuation protocol, superseding only the terminal generation-3 pre-model bootstrap failure; use fleet-serve-low with preemptionPolicy Never; no dedicated GPU serving and no bulk release are authorized."
+    }
+  ],
+  "evidence": {
+    "generation3_incident_file_sha256": "sha256:8ca8de29fb7d4a46a09cec448a695d73084075bc0eb83bc05916aeb0c58c4647",
+    "generation3_incident_receipt_sha256": "sha256:89d4e6a673a9084fdf68a37bb3b52647f489f12db88381b821985c5ca4a4ac98",
+    "generation3_tombstone_file_sha256": "sha256:423b735af28ff7c081b0a1e56e79eccc2ee0a66abbc0ce54bee4206f95cf863a",
+    "generation3_tombstone_receipt_sha256": "sha256:47036e86edcec407212ae1b6118c8973f85d3f023dfd59e11336e6998e09635b",
+    "generation4_semantic_held_file_sha256": "sha256:21a159d44b1a0dc722bd2e3f9755bfc2b364cb055f70ff7ca5a81dd3547513fc",
+    "generation4_semantic_held_receipt_sha256": "sha256:8c1419e998e6c7558b3638b70fd1d4adcf5f0c709fe820068b437bab106e67cc"
+  },
+  "privacy": {
+    "prompts_traces_flags_or_scores_included": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:fecdb5d46dcad0dacab578916d4aea650ddd6974884aab75254a25d82b1c2db1"
+}
