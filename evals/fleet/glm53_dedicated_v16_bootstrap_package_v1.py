@@ -42,9 +42,10 @@ def render(root: Path) -> dict[str, Any]:
     pod = job["spec"]["template"]
     pod["metadata"]["labels"]["cyber-post-train.fleet.ai/experiment"] = JOB_NAME
     pod["spec"]["volumes"][0]["configMap"]["name"] = SOURCE_CONFIGMAP
-    pod["spec"]["volumes"].append(
-        {"name": "evidence", "configMap": {"name": EVIDENCE_CONFIGMAP}}
+    evidence_volume = next(
+        item for item in pod["spec"]["volumes"] if item["name"] == "evidence"
     )
+    evidence_volume["configMap"]["name"] = EVIDENCE_CONFIGMAP
     evaluator = pod["spec"]["containers"][0]
     for env in evaluator["env"]:
         if env["name"] == "JOB_NAME":
@@ -65,9 +66,6 @@ def render(root: Path) -> dict[str, Any]:
                 "value": "http://bootstrap.invalid.fleet-train-jobs.svc.cluster.local:8000",
             },
         ]
-    )
-    evaluator["volumeMounts"].append(
-        {"name": "evidence", "mountPath": "/evidence", "readOnly": True}
     )
     objects = {"apiVersion": "v1", "kind": "List", "items": [source, evidence, job]}
     body = {
