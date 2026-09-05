@@ -1,0 +1,52 @@
+{
+  "schema_version": "fleet-exact-pass4-prebulk-reconciliation-held-v1",
+  "append_only": true,
+  "status": "HELD",
+  "campaign_id": "chris-cyber-q38-glm53-exact-easiest100-pass4-v1",
+  "planned_cell_count": 800,
+  "required_generation5_accepted_cells": 2,
+  "expected_remaining_cells": 798,
+  "jobs": {
+    "source": "chris-cyber-exact100-prebulk-reconcile-source-v1",
+    "acceptance": "chris-cyber-exact100-prebulk-reconcile-accept-v1"
+  },
+  "prerequisites": [
+    "digest-valid exact-100 task inventory-v2 terminal with exact Complete Job and clean Succeeded Pod runtime",
+    "immutable inventory-v2 bootstrap and intent ConfigMaps with digest-valid package bytes",
+    "accepted Qwen3.8 generation-5 canary terminal and authoritative Fleet session",
+    "accepted GLM5.3 generation-5 canary terminal and authoritative Fleet session",
+    "both generation-5 Jobs exclusively Complete with zero Pod restarts",
+    "all 798 bulk run identities, output roots, and global execution claims absent"
+  ],
+  "two_phase_acceptance": {
+    "source_writes": "OBSERVATION.json",
+    "source_must_be_exclusively_complete_before_acceptance": true,
+    "acceptance_rechecks_live_state": true,
+    "acceptance_writes": "TERMINAL.json",
+    "automatic_retry": false
+  },
+  "request_policy": {
+    "fleet_methods": ["GET"],
+    "kubernetes_methods": ["GET", "LIST"],
+    "transcript_calls": 0,
+    "model_or_scoring_calls": 0,
+    "mutation_calls": 0
+  },
+  "execution": {
+    "cpu_only": true,
+    "priority_class": "fleet-serve-low",
+    "preemption_policy": "Never",
+    "backoff_limit": 0,
+    "create_once": true
+  },
+  "release": {
+    "launch_authorized": false,
+    "bulk_launch_authorized": false,
+    "requires_all_prerequisites": true
+  },
+  "privacy": {
+    "prompts_traces_flags_or_scores_included": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:475a394b0478541d957e3e5ebfc08a950c142f933e8d20e79ea4bcbf582d9b50"
+}
