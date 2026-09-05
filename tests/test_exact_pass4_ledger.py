@@ -159,6 +159,60 @@ def _dedicated_qwen_accepted(authority: ledger.Authority) -> dict:
     return value
 
 
+def _dedicated_qwen_validated(authority: ledger.Authority) -> dict:
+    binding = ledger.DEDICATED_QWEN_ATTEMPT1_BINDING
+    value = {
+        "schema_version": ledger.DEDICATED_QWEN_VALIDATED_SCHEMA,
+        "status": "ACCEPTED_VALIDATED",
+        "accepted": True,
+        "credited": True,
+        "retry_allowed": False,
+        "serving_block": binding["serving_block"],
+        "cell_id": binding["cell_id"],
+        "execution_id": binding["execution_id"],
+        "run_id": binding["run_id"],
+        "selection_rank": binding["selection_rank"],
+        "attempt": binding["attempt"],
+        "task_version_id": binding["task_version_id"],
+        "session_id": binding["session_id"],
+        "verifier_execution_id": binding["verifier_execution_id"],
+        "claim_sha256": binding["claim_sha256"],
+        "config_sha256": binding["config_sha256"],
+        "authoritative_projection_omissions": ["metadata", "model", "task_version_id"],
+        "authoritative_projection_rule": (
+            "legacy_list_fields_may_be_null_but_never_mismatched_v1"
+        ),
+        "plan_file_sha256": binding["artifact_file_sha256"]["plan_file_sha256"],
+        "claim_file_sha256": binding["artifact_file_sha256"]["claim_file_sha256"],
+        "claim_receipt_sha256": binding["claim_sha256"],
+        "artifact_file_sha256": copy.deepcopy(binding["artifact_file_sha256"]),
+        "all_artifact_byte_digests_matched": True,
+        "source_terminal_receipt_sha256": binding["source_terminal_receipt_sha256"],
+        "source_terminal_stale_claim_sha256": binding[
+            "source_terminal_stale_claim_sha256"
+        ],
+        "source_terminal_actual_canonical_sha256": binding[
+            "source_terminal_actual_canonical_sha256"
+        ],
+        "accepted_receipt_sha256": binding["accepted_receipt_sha256"],
+        "acceptance_terminal_receipt_sha256": binding[
+            "acceptance_terminal_receipt_sha256"
+        ],
+        "collector_job_uid": binding["collector_job_uid"],
+        "collector_pod_uid": binding["collector_pod_uid"],
+        "validator_job_uid": binding["validator_job_uid"],
+        "validator_pod_uid": binding["validator_pod_uid"],
+        "fleet_api_mutations": 0,
+        "fresh_authoritative_session_reconciled": True,
+        "scores_included": False,
+        "prompts_or_traces_included": False,
+        "credentials_included": False,
+    }
+    value["receipt_sha256"] = self_hosted.digest_without(value, "receipt_sha256")
+    assert value["receipt_sha256"] == binding["validated_receipt_sha256"]
+    return value
+
+
 def _generation7_terminal(authority: ledger.Authority, model: str) -> dict:
     binding = next(item for item in authority.generation7.values() if item["model"] == model)
     value = {
@@ -344,6 +398,25 @@ def test_fixed_historical_adapters_remain_score_blind(
     assert result["models"]["glm-5.3"]["active"] == 1
 
 
+def test_durable_generation15_gate_is_exact_accepted_evidence(
+    tmp_path: Path, authority: ledger.Authority
+) -> None:
+    source = (
+        ROOT
+        / "docs/evidence/qwen38-study/2026-09-05-qwen38-generation15-accepted-gate-v1.json"
+    )
+    accepted = ledger.accepted_evidence(source, authority)
+    assert accepted.state == "accepted"
+    assert accepted.cell_id == ledger.GENERATION15_BINDINGS["qwen3.8-27b"]["cell_id"]
+
+    changed = json.loads(source.read_text())
+    changed["api_session"]["model_projection"] = "matched"
+    changed["receipt_sha256"] = self_hosted.digest_without(changed, "receipt_sha256")
+    changed_path = _write(tmp_path / "g15-gate.json", changed)
+    with pytest.raises(ledger.LedgerError, match="drifted"):
+        ledger.accepted_evidence(changed_path, authority)
+
+
 def test_current_qwen_hosted_claim_uses_its_exact_successor_plan(
     tmp_path: Path, authority: ledger.Authority
 ) -> None:
@@ -420,6 +493,83 @@ def test_dedicated_qwen_adapter_rejects_serving_block_drift(
     value["receipt_sha256"] = self_hosted.digest_without(value, "receipt_sha256")
     path = _write(tmp_path / "ACCEPTED.json", value)
     with pytest.raises(ledger.LedgerError, match="treatment drifted"):
+        ledger.accepted_evidence(path, authority)
+
+
+def test_validated_dedicated_qwen_chain_is_the_only_post_terminal_credit(
+    tmp_path: Path, authority: ledger.Authority
+) -> None:
+    value = _dedicated_qwen_validated(authority)
+    path = _write(tmp_path / "ACCEPTED_VALIDATED.json", value)
+    evidence = ledger.accepted_evidence(path, authority)
+    assert evidence.state == "accepted"
+    assert evidence.cell_id == ledger.DEDICATED_QWEN_ATTEMPT1_BINDING["cell_id"]
+
+    provisional = _dedicated_qwen_accepted(authority)
+    provisional.update(
+        {
+            "authoritative_session_task_key_matched": True,
+            "authoritative_projection_omissions": ["metadata", "model", "task_version_id"],
+            "authoritative_projection_rule": (
+                "legacy_list_fields_may_be_null_but_never_mismatched_v1"
+            ),
+            "reconciled_after_source_job_terminal": True,
+            "source_terminal_receipt_sha256": ledger.DEDICATED_QWEN_ATTEMPT1_BINDING[
+                "source_terminal_receipt_sha256"
+            ],
+        }
+    )
+    provisional["receipt_sha256"] = self_hosted.digest_without(
+        provisional, "receipt_sha256"
+    )
+    provisional_path = _write(tmp_path / "ACCEPTED.json", provisional)
+    with pytest.raises(ledger.LedgerError, match="fields drifted"):
+        ledger.accepted_evidence(provisional_path, authority)
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        lambda value: value["artifact_file_sha256"].__setitem__(
+            "result_file_sha256", "sha256:" + "0" * 64
+        ),
+        lambda value: value.__setitem__("accepted_receipt_sha256", "sha256:" + "1" * 64),
+        lambda value: value.__setitem__("authoritative_projection_omissions", ["model"]),
+        lambda value: value.__setitem__("fleet_api_mutations", 1),
+    ],
+)
+def test_validated_dedicated_qwen_chain_drift_fails_closed(
+    tmp_path: Path, authority: ledger.Authority, mutation
+) -> None:
+    value = _dedicated_qwen_validated(authority)
+    mutation(value)
+    value["receipt_sha256"] = self_hosted.digest_without(value, "receipt_sha256")
+    path = _write(tmp_path / "ACCEPTED_VALIDATED.json", value)
+    with pytest.raises(ledger.LedgerError, match="drifted|not authoritative"):
+        ledger.accepted_evidence(path, authority)
+
+
+def test_direct_dedicated_qwen_projection_omissions_are_explicit_and_bounded(
+    tmp_path: Path, authority: ledger.Authority
+) -> None:
+    value = _dedicated_qwen_accepted(authority)
+    value.update(
+        {
+            "authoritative_session_task_key_matched": True,
+            "authoritative_projection_omissions": ["metadata", "model"],
+            "authoritative_projection_rule": (
+                "legacy_list_fields_may_be_null_but_never_mismatched_v1"
+            ),
+        }
+    )
+    value["receipt_sha256"] = self_hosted.digest_without(value, "receipt_sha256")
+    path = _write(tmp_path / "ACCEPTED.json", value)
+    assert ledger.accepted_evidence(path, authority).state == "accepted"
+
+    value["authoritative_projection_omissions"] = ["metadata", "unexpected"]
+    value["receipt_sha256"] = self_hosted.digest_without(value, "receipt_sha256")
+    _write(path, value)
+    with pytest.raises(ledger.LedgerError, match="projection evidence drifted"):
         ledger.accepted_evidence(path, authority)
 
 

@@ -30,7 +30,9 @@ GENERATION7_TERMINAL_SCHEMA = "fleet-opencode-autocontinue-generation7-terminal-
 GENERATION7_CLAIM_SCHEMA = "fleet-statistical-cell-execution-claim-v9"
 GENERATION15_TERMINAL_SCHEMA = "fleet-opencode-generation15-simple-terminal-v1"
 GENERATION15_CLAIM_SCHEMA = "fleet-statistical-cell-execution-claim-v15"
+GENERATION15_ACCEPTED_GATE_SCHEMA = "fleet-qwen38-generation15-accepted-gate-v1"
 DEDICATED_QWEN_ACCEPTED_SCHEMA = "fleet-qwen38-dedicated-tp1-cell-accepted-v1"
+DEDICATED_QWEN_VALIDATED_SCHEMA = "fleet-qwen38-dedicated-tp1-accepted-validated-v1"
 DEDICATED_QWEN_ATTEMPT1_BINDING = {
     "plan_sha256": "sha256:5358ae8d0c81fd18d815f5289eabf771274101e099c799c49a85d0713687aa67",
     "controller": "qwen-dedicated-tp1-rank2-v1",
@@ -43,12 +45,59 @@ DEDICATED_QWEN_ATTEMPT1_BINDING = {
     "selection_rank": 2,
     "attempt": 1,
     "task_version_id": "09a3fea6-f691-4841-9218-d04459041a1f",
+    "claim_sha256": "sha256:be390c624629780fbd3ad723272c60387ebc89186206263423ab2c231aabb555",
+    "source_terminal_receipt_sha256": (
+        "sha256:d756b797be1c493fcc7ed630e75787a0dad9b14c592f93e0ca6183ab5ae707f2"
+    ),
+    "source_terminal_stale_claim_sha256": (
+        "sha256:68fa8b63d14d26e8bb7f48f4bd103eafb5ac0165545c72e3d1765d7609aeb746"
+    ),
+    "source_terminal_actual_canonical_sha256": (
+        "sha256:161f822c67b3dda33964f1883981dd0a6997cbe3f09aa3e1a8611aa94cb0be84"
+    ),
+    "accepted_receipt_sha256": (
+        "sha256:1b045f8e5174ae607cbb0cdddfd5c29b02e9dada63172a1f899c526f849a743e"
+    ),
+    "acceptance_terminal_receipt_sha256": (
+        "sha256:93f8bb0313ef7f34bab1e5e1e064efd5426bfcb6a4da5b72658e00b68a8fb5d9"
+    ),
+    "collector_job_uid": "c16b0001-df99-4c02-a210-1c7ab523ea11",
+    "collector_pod_uid": "79c1623d-0330-42bf-bb2a-93dbfc8ed061",
+    "validator_job_uid": "9368f7fe-dd7f-497f-86ba-f3ba4cf277d5",
+    "validator_pod_uid": "9f407539-d4c1-4a51-91da-c57eaea73bd0",
+    "session_id": "89a321f1-51dd-4ace-832b-6782385f6bf0",
+    "verifier_execution_id": "9ed9b1d5-2f96-4f6c-aaa3-3f2e82c67adb",
+    "validated_receipt_sha256": (
+        "sha256:108903b167e40d8628776a6bed35ef7fd871b687dd8c81413fe66ca0f2e43212"
+    ),
+    "artifact_file_sha256": {
+        "plan_file_sha256": (
+            "sha256:ca86be8f389ae17e9d4d05ffe82323d591184bfd7630a75510140813526dcfb7"
+        ),
+        "result_file_sha256": (
+            "sha256:58e2f0dc9165da00597f700268a2c40f723c4dca88ab168c7e161cda80f5c8b1"
+        ),
+        "reward_file_sha256": (
+            "sha256:c56ef9d56c12bafeb6167271eceea99d93c1f5ba809ee189c7a58c18589ebc59"
+        ),
+        "session_ingest_file_sha256": (
+            "sha256:e86244a9ce9f16978ac7a35aa5299cb2ba0cda9b5324a69bb4aca525d9ca1c69"
+        ),
+        "cleanup_file_sha256": (
+            "sha256:a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c"
+        ),
+        "claim_file_sha256": (
+            "sha256:ba7f1b19f6242b7fbe162c19dd6afbadcdf28f5de3e2e408ad641226ded27ee4"
+        ),
+    },
 }
 ACCEPTED_SCHEMAS = {
     "fleet-exact-pass4-bulk-cell-accepted-v3",
     GENERATION7_TERMINAL_SCHEMA,
     GENERATION15_TERMINAL_SCHEMA,
     DEDICATED_QWEN_ACCEPTED_SCHEMA,
+    DEDICATED_QWEN_VALIDATED_SCHEMA,
+    GENERATION15_ACCEPTED_GATE_SCHEMA,
 }
 CLAIM_SCHEMAS = {
     bulk_runtime.CLAIM_SCHEMA,
@@ -228,6 +277,26 @@ GENERATION15_CLAIM_FIELDS = {
     "scores_included",
     "receipt_sha256",
 }
+GENERATION15_ACCEPTED_GATE_FIELDS = {
+    "schema_version",
+    "status",
+    "model",
+    "cell_id",
+    "execution_id",
+    "task_key",
+    "task_version_id",
+    "config_sha256",
+    "inner_acceptance_receipt_sha256",
+    "top_acceptance_receipt_sha256",
+    "api_session",
+    "job",
+    "pod",
+    "workload_uid",
+    "cleanup_completed",
+    "credentials_included",
+    "prompts_traces_flags_or_scores_included",
+    "receipt_sha256",
+}
 DEDICATED_QWEN_ACCEPTED_FIELDS = {
     "schema_version",
     "accepted",
@@ -250,6 +319,51 @@ DEDICATED_QWEN_ACCEPTED_FIELDS = {
     "session_ingest_completed",
     "scores_included",
     "prompts_or_traces_included",
+    "receipt_sha256",
+}
+DEDICATED_QWEN_PROJECTION_FIELDS = {
+    "authoritative_session_task_key_matched",
+    "authoritative_projection_omissions",
+    "authoritative_projection_rule",
+}
+DEDICATED_QWEN_VALIDATED_FIELDS = {
+    "schema_version",
+    "status",
+    "accepted",
+    "credited",
+    "retry_allowed",
+    "serving_block",
+    "cell_id",
+    "execution_id",
+    "run_id",
+    "selection_rank",
+    "attempt",
+    "task_version_id",
+    "session_id",
+    "verifier_execution_id",
+    "claim_sha256",
+    "config_sha256",
+    "authoritative_projection_omissions",
+    "authoritative_projection_rule",
+    "plan_file_sha256",
+    "claim_file_sha256",
+    "claim_receipt_sha256",
+    "artifact_file_sha256",
+    "all_artifact_byte_digests_matched",
+    "source_terminal_receipt_sha256",
+    "source_terminal_stale_claim_sha256",
+    "source_terminal_actual_canonical_sha256",
+    "accepted_receipt_sha256",
+    "acceptance_terminal_receipt_sha256",
+    "collector_job_uid",
+    "collector_pod_uid",
+    "validator_job_uid",
+    "validator_pod_uid",
+    "fleet_api_mutations",
+    "fresh_authoritative_session_reconciled",
+    "scores_included",
+    "prompts_or_traces_included",
+    "credentials_included",
     "receipt_sha256",
 }
 
@@ -611,8 +725,81 @@ def _accepted_generation15(value: dict[str, Any], path: Path, authority: Authori
     return Evidence("accepted", cell["cell_id"], key[1], generation, value["receipt_sha256"], path)
 
 
+def _accepted_generation15_gate(
+    value: dict[str, Any], path: Path, authority: Authority
+) -> Evidence:
+    """Admit the exact durable score-blind G15 acceptance gate."""
+    _require_exact_fields(value, GENERATION15_ACCEPTED_GATE_FIELDS, path)
+    binding = GENERATION15_BINDINGS["qwen3.8-27b"]
+    key = (value.get("cell_id"), value.get("execution_id"))
+    if key not in authority.generation15 or key != (
+        binding["cell_id"],
+        binding["execution_id"],
+    ):
+        raise LedgerError(f"generation-15 gate lacks exact immutable authority: {path}")
+    cell, generation = _require_cell_execution(authority, *key, 15, path)
+    expected = {
+        "status": "ACCEPTED",
+        "model": "qwen3.8-27b",
+        "cell_id": binding["cell_id"],
+        "execution_id": binding["execution_id"],
+        "task_key": cell["task_key"],
+        "task_version_id": cell["task_version_id"],
+        "config_sha256": (
+            "sha256:b4d07e3b4c5ff610ccf9eb8c334cbd4dd3eb43873204ecfbe08ce3e9b1cde053"
+        ),
+        "inner_acceptance_receipt_sha256": (
+            "sha256:887cc71ed706f60b6364a5e639e0f891e09c70847d86853fef6a270beea9074a"
+        ),
+        "top_acceptance_receipt_sha256": (
+            "sha256:398e7aadd91d77306dcff464747e5f026809bc61ec543b63879a2ab0a9c6915b"
+        ),
+        "workload_uid": "f3ff2cf1-7c37-4c2f-8f6b-3db39d821718",
+        "cleanup_completed": True,
+        "credentials_included": False,
+        "prompts_traces_flags_or_scores_included": False,
+        "receipt_sha256": (
+            "sha256:e0aef9a97d146fe5fcc686efafd4399bd7c2ee65a325e64fc089613507ab6745"
+        ),
+    }
+    if any(value.get(field) != expected_value for field, expected_value in expected.items()):
+        raise LedgerError(f"generation-15 gate identity or evidence drifted: {path}")
+    expected_session = {
+        "exact_session_present": True,
+        "model_projection": "omitted",
+        "session_id": "e98906f6-5878-4f88-b30a-e65e84706b02",
+        "transcript_content_read": False,
+        "transcript_route_status": 200,
+        "verifier_execution_id": "0ddbe2b9-7135-4f87-be5d-383ad5f36e24",
+    }
+    expected_job = {
+        "exclusive_complete": True,
+        "name": "chris-q38-ac-r004-a1-g15-v1",
+        "uid": "2e35df7c-e4f6-45fa-aa27-21839b211944",
+    }
+    expected_pod = {
+        "name": "chris-q38-ac-r004-a1-g15-v1-wmf4f",
+        "restarts": 0,
+        "uid": "f66d1e33-1062-4e58-97b4-41d2d25f76e2",
+    }
+    if (
+        value.get("api_session") != expected_session
+        or value.get("job") != expected_job
+        or value.get("pod") != expected_pod
+    ):
+        raise LedgerError(f"generation-15 gate authoritative observation drifted: {path}")
+    _require_uuid(expected_session["session_id"], "session id", path)
+    _require_uuid(expected_session["verifier_execution_id"], "verifier execution id", path)
+    return Evidence("accepted", cell["cell_id"], key[1], generation, value["receipt_sha256"], path)
+
+
 def _accepted_dedicated_qwen(value: dict[str, Any], path: Path, authority: Authority) -> Evidence:
-    _require_exact_fields(value, DEDICATED_QWEN_ACCEPTED_FIELDS, path)
+    _require_exact_fields(
+        value,
+        DEDICATED_QWEN_ACCEPTED_FIELDS,
+        path,
+        optional=DEDICATED_QWEN_PROJECTION_FIELDS,
+    )
     key = (value.get("cell_id"), value.get("execution_id"))
     pair = authority.dedicated_qwen_items.get(key)
     if pair is None:
@@ -646,7 +833,110 @@ def _accepted_dedicated_qwen(value: dict[str, Any], path: Path, authority: Autho
         )
     ):
         raise LedgerError(f"dedicated Qwen acceptance is not authoritative: {path}")
+    projection_fields = set(value).intersection(DEDICATED_QWEN_PROJECTION_FIELDS)
+    if projection_fields and projection_fields != DEDICATED_QWEN_PROJECTION_FIELDS:
+        raise LedgerError(f"dedicated Qwen API projection evidence is incomplete: {path}")
+    if projection_fields:
+        omissions = value.get("authoritative_projection_omissions")
+        if (
+            value.get("authoritative_session_task_key_matched") is not True
+            or value.get("authoritative_projection_rule")
+            != "legacy_list_fields_may_be_null_but_never_mismatched_v1"
+            or not isinstance(omissions, list)
+            or omissions != sorted(set(omissions))
+            or not set(omissions) <= {"metadata", "model", "task_version_id"}
+        ):
+            raise LedgerError(f"dedicated Qwen API projection evidence drifted: {path}")
     _require_sha256(value.get("claim_sha256"), "claim sha256", path)
+    _require_uuid(value.get("session_id"), "session id", path)
+    _require_uuid(value.get("verifier_execution_id"), "verifier execution id", path)
+    return Evidence(
+        "accepted",
+        cell["cell_id"],
+        item["execution_id"],
+        generation,
+        value["receipt_sha256"],
+        path,
+    )
+
+
+def _accepted_validated_dedicated_qwen(
+    value: dict[str, Any], path: Path, authority: Authority
+) -> Evidence:
+    """Admit the one reviewed post-terminal acceptance chain, fail closed."""
+    _require_exact_fields(value, DEDICATED_QWEN_VALIDATED_FIELDS, path)
+    binding = DEDICATED_QWEN_ATTEMPT1_BINDING
+    key = (value.get("cell_id"), value.get("execution_id"))
+    expected_key = (binding["cell_id"], binding["execution_id"])
+    if key != expected_key:
+        raise LedgerError(f"validated dedicated Qwen receipt is not the reviewed attempt: {path}")
+    pair = authority.dedicated_qwen_items.get(key)
+    if pair is None:
+        raise LedgerError(f"validated dedicated Qwen receipt lacks exact plan authority: {path}")
+    plan, item = pair
+    cell, generation = _require_cell_execution(authority, *key, item["execution_generation"], path)
+    expected = {
+        "serving_block": binding["serving_block"],
+        "cell_id": binding["cell_id"],
+        "execution_id": binding["execution_id"],
+        "run_id": binding["run_id"],
+        "selection_rank": binding["selection_rank"],
+        "attempt": binding["attempt"],
+        "task_version_id": binding["task_version_id"],
+        "claim_sha256": binding["claim_sha256"],
+        "claim_receipt_sha256": binding["claim_sha256"],
+        "config_sha256": binding["config_sha256"],
+        "source_terminal_receipt_sha256": binding["source_terminal_receipt_sha256"],
+        "source_terminal_stale_claim_sha256": binding[
+            "source_terminal_stale_claim_sha256"
+        ],
+        "source_terminal_actual_canonical_sha256": binding[
+            "source_terminal_actual_canonical_sha256"
+        ],
+        "accepted_receipt_sha256": binding["accepted_receipt_sha256"],
+        "acceptance_terminal_receipt_sha256": binding[
+            "acceptance_terminal_receipt_sha256"
+        ],
+        "collector_job_uid": binding["collector_job_uid"],
+        "collector_pod_uid": binding["collector_pod_uid"],
+        "validator_job_uid": binding["validator_job_uid"],
+        "validator_pod_uid": binding["validator_pod_uid"],
+        "session_id": binding["session_id"],
+        "verifier_execution_id": binding["verifier_execution_id"],
+        "plan_file_sha256": binding["artifact_file_sha256"]["plan_file_sha256"],
+        "claim_file_sha256": binding["artifact_file_sha256"]["claim_file_sha256"],
+    }
+    if any(value.get(field) != expected_value for field, expected_value in expected.items()):
+        raise LedgerError(f"validated dedicated Qwen identity or chain binding drifted: {path}")
+    if plan["plan_sha256"] != binding["plan_sha256"] or item["cell_id"] != cell["cell_id"]:
+        raise LedgerError(f"validated dedicated Qwen immutable plan authority drifted: {path}")
+    artifact_digests = value.get("artifact_file_sha256")
+    if artifact_digests != binding["artifact_file_sha256"]:
+        raise LedgerError(f"validated dedicated Qwen artifact digest chain drifted: {path}")
+    if value.get("receipt_sha256") != binding["validated_receipt_sha256"]:
+        raise LedgerError(f"validated dedicated Qwen reviewed receipt digest drifted: {path}")
+    omissions = value.get("authoritative_projection_omissions")
+    if omissions != ["metadata", "model", "task_version_id"]:
+        raise LedgerError(f"validated dedicated Qwen API omission evidence drifted: {path}")
+    if any(
+        (
+            value.get("status") != "ACCEPTED_VALIDATED",
+            value.get("accepted") is not True,
+            value.get("credited") is not True,
+            value.get("retry_allowed") is not False,
+            value.get("authoritative_projection_rule")
+            != "legacy_list_fields_may_be_null_but_never_mismatched_v1",
+            value.get("all_artifact_byte_digests_matched") is not True,
+            value.get("fleet_api_mutations") != 0,
+            value.get("fresh_authoritative_session_reconciled") is not True,
+            value.get("scores_included") is not False,
+            value.get("prompts_or_traces_included") is not False,
+            value.get("credentials_included") is not False,
+        )
+    ):
+        raise LedgerError(f"validated dedicated Qwen outcome is not authoritative: {path}")
+    for field in ("validator_job_uid", "validator_pod_uid"):
+        _require_uuid(value.get(field), field, path)
     _require_uuid(value.get("session_id"), "session id", path)
     _require_uuid(value.get("verifier_execution_id"), "verifier execution id", path)
     return Evidence(
@@ -668,6 +958,10 @@ def accepted_evidence(path: Path, authority: Authority) -> Evidence:
         return _accepted_bulk(value, path, authority)
     if schema == DEDICATED_QWEN_ACCEPTED_SCHEMA:
         return _accepted_dedicated_qwen(value, path, authority)
+    if schema == DEDICATED_QWEN_VALIDATED_SCHEMA:
+        return _accepted_validated_dedicated_qwen(value, path, authority)
+    if schema == GENERATION15_ACCEPTED_GATE_SCHEMA:
+        return _accepted_generation15_gate(value, path, authority)
     if schema == GENERATION7_TERMINAL_SCHEMA:
         return _accepted_generation7(value, path, authority)
     return _accepted_generation15(value, path, authority)
