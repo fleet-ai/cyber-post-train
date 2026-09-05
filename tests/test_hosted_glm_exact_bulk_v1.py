@@ -3,6 +3,7 @@ import sys
 from pathlib import Path
 
 from evals.fleet import hosted_glm_exact_bulk_package_v1 as package
+from evals.fleet import hosted_glm_exact_bulk_release_package_v1 as release_package
 from evals.fleet import hosted_glm_exact_bulk_runtime_v1 as runtime
 from evals.fleet import hosted_glm_exact_bulk_v1 as bulk
 from evals.fleet import self_hosted
@@ -91,6 +92,43 @@ def test_exact_bundle_imports_in_isolated_tree(tmp_path: Path) -> None:
         "import sys; from pathlib import Path; "
         f"sys.path.insert(0, {str(tmp_path)!r}); "
         "from evals.fleet import hosted_glm_exact_bulk_runtime_v1; "
+        "from evals.fleet import hosted_glm_exact_bulk_v1 as b; "
+        f"b.validate_all(Path({str(tmp_path)!r}))"
+    )
+    completed = subprocess.run(
+        [sys.executable, "-I", "-c", code],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode == 0, completed.stderr
+
+
+def test_release_observer_is_held_create_once_cpu_job() -> None:
+    rendered = release_package.render(ROOT)
+    assert rendered["launch_authorized"] is False
+    configmap, job = rendered["objects"]["items"]
+    assert configmap["immutable"] is True
+    assert job["spec"]["backoffLimit"] == 0
+    assert job["metadata"]["annotations"]["cyber-post-train.fleet.ai/create-once"] == "true"
+    assert job["metadata"]["annotations"]["cyber-post-train.fleet.ai/launch-authorized"] == "false"
+    pod = job["spec"]["template"]["spec"]
+    assert pod["priorityClassName"] == "fleet-serve-low"
+    assert pod["preemptionPolicy"] == "Never"
+
+
+def test_release_bundle_imports_in_isolated_tree(tmp_path: Path) -> None:
+    configmap = release_package.render(ROOT)["objects"]["items"][0]
+    for name, relative in release_package.INSTALL_PATHS.items():
+        target = tmp_path / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(configmap["data"][name])
+    (tmp_path / "evals/__init__.py").touch()
+    (tmp_path / "evals/fleet/__init__.py").touch()
+    code = (
+        "import sys; from pathlib import Path; "
+        f"sys.path.insert(0, {str(tmp_path)!r}); "
+        "from evals.fleet import hosted_glm_exact_bulk_release_v1; "
         "from evals.fleet import hosted_glm_exact_bulk_v1 as b; "
         f"b.validate_all(Path({str(tmp_path)!r}))"
     )
