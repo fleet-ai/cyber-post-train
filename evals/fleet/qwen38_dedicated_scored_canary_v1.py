@@ -9,6 +9,7 @@ before that claim.
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import threading
@@ -43,6 +44,21 @@ OUTPUT_ROOT = Path(f"/mnt/sfs/jobs/{JOB_NAME}")
 TRAFFIC = Path("/mnt/sfs/jobs/chris-cyber-evalserve-q38-tp1-a-v1/lifecycle/traffic")
 EXPECTED_CELL_ID = "sha256:6351b9167d5846a2a30f0725f09f9918cbc749df963c5eba63dc1fc2a835b713"
 EXPECTED_EXECUTION_ID = "sha256:d84a03547e45240e9702097b47d68ee122312987c5b18fcfa6ab7ee2ab738f0f"
+EXPECTED_IDENTITIES = {
+    1: (EXPECTED_CELL_ID, EXPECTED_EXECUTION_ID),
+    2: (
+        "sha256:7f64bf75eca3485a3e9505e055aca0e61da0e0309bd9557b2b12e24dc57cf413",
+        "sha256:d03e96edd079706a35ff9ada0a01dc4249f351ad3819c3491e7b969bc586415e",
+    ),
+    3: (
+        "sha256:d0344219ca8ee093d13f8318b01058b0ed613287464dbbf4e209a6c5fc0f03bc",
+        "sha256:cafce1143041a9da93564df60dc3858d2f919f193bc7ace481b6f44f592643f2",
+    ),
+    4: (
+        "sha256:9fa6cc8fd67f925b15936d6a195c4c37a51230230e02f5eab463c2ae0a6d2ba7",
+        "sha256:9b3279796be5705ebaaee52b297a3b17d06e682202ab80b62dc516c2510b9eb4",
+    ),
+}
 CLAIM_SCHEMA = "fleet-exact-pass4-bulk-cell-execution-claim-v3"
 
 
@@ -87,7 +103,12 @@ def _claim(plan: dict[str, Any], job_uid: str, pod_uid: str) -> dict[str, Any]:
     return receipt
 
 
-def build_plan(root: Path) -> dict[str, Any]:
+def build_plan(root: Path, attempt: int = 1) -> dict[str, Any]:
+    if attempt not in EXPECTED_IDENTITIES:
+        raise ValueError("dedicated rank-2 attempt must be 1 through 4")
+    run_id = RUN_ID if attempt == 1 else (
+        f"chris-cyber-q38-opencode11827-ded-tp1-r002-a{attempt}-v1"
+    )
     campaign = exact.read_object(root / CAMPAIGN)
     universe = exact.build_universe(campaign, root)
     selected = [
@@ -95,15 +116,16 @@ def build_plan(root: Path) -> dict[str, Any]:
         for row in universe["cells"]
         if row["model"] == "qwen3.8-27b"
         and row["selection_rank"] == 2
-        and row["attempt"] == 1
+        and row["attempt"] == attempt
     ]
     if len(selected) != 1:
         raise ValueError("dedicated canary cell is not unique")
     cell = selected[0]
     execution = exact.execution_for(cell["cell_id"], 1)
+    expected_cell_id, expected_execution_id = EXPECTED_IDENTITIES[attempt]
     if (
-        cell["cell_id"] != EXPECTED_CELL_ID
-        or execution["execution_id"] != EXPECTED_EXECUTION_ID
+        cell["cell_id"] != expected_cell_id
+        or execution["execution_id"] != expected_execution_id
         or cell["task_version_id"] != "09a3fea6-f691-4841-9218-d04459041a1f"
     ):
         raise ValueError("dedicated canary statistical identity drifted")
@@ -129,7 +151,7 @@ def build_plan(root: Path) -> dict[str, Any]:
     }
     config = {
         "schema_version": "fleet-hosted-opencode-task-boundary-attempt-v1",
-        "run_id": RUN_ID,
+        "run_id": run_id,
         "campaign_id": campaign["campaign_id"],
         "source_job_id": campaign["selection"]["source_job_id"],
         "task": task["task"],
@@ -142,7 +164,7 @@ def build_plan(root: Path) -> dict[str, Any]:
             "pass_k": 1,
             "planned_full_pass_k": 4,
             "max_concurrent": 1,
-            "network": "q38-ded-tp1-r002-a1-v2",
+            "network": run_id,
             "cell_id": cell["cell_id"],
             "execution_id": execution["execution_id"],
             "training_data_eligible": False,
@@ -165,9 +187,9 @@ def build_plan(root: Path) -> dict[str, Any]:
         "cell_id": cell["cell_id"],
         "execution_id": execution["execution_id"],
         "execution_generation": 1,
-        "run_id": RUN_ID,
+        "run_id": run_id,
         "selection_rank": 2,
-        "attempt": 1,
+        "attempt": attempt,
         "task_version_id": cell["task_version_id"],
     }
     body = {
@@ -180,7 +202,7 @@ def build_plan(root: Path) -> dict[str, Any]:
         "item": item,
         "config": config,
         "claim_root": str(CLAIM_ROOT),
-        "output_root": str(OUTPUT_ROOT),
+        "output_root": f"/mnt/sfs/jobs/{run_id}",
         "launch_authorized": True,
         "score_blind": True,
     }
@@ -237,7 +259,8 @@ def _safe_receipt_scan(item: dict[str, Any]) -> None:
 
 def _live_checks(plan: dict[str, Any], key: str) -> None:
     config, item = plan["config"], plan["item"]
-    if OUTPUT_ROOT.exists():
+    output_root = Path(plan["output_root"])
+    if output_root.exists():
         raise RuntimeError("dedicated canary output root already exists")
     if (CLAIM_ROOT / (item["execution_id"].removeprefix("sha256:") + ".json")).exists():
         raise RuntimeError("dedicated canary execution already claimed")
@@ -255,7 +278,7 @@ def _live_checks(plan: dict[str, Any], key: str) -> None:
         for row in sessions
         if (row.get("metadata") or {}).get("cell_id") == item["cell_id"]
         or (row.get("metadata") or {}).get("execution_id") == item["execution_id"]
-        or (row.get("metadata") or {}).get("run_id") == RUN_ID
+        or (row.get("metadata") or {}).get("run_id") == item["run_id"]
     ]
     if collisions:
         raise RuntimeError("dedicated canary has an authoritative session collision")
@@ -304,7 +327,7 @@ def _classify(out: Path, plan: dict[str, Any], claim: dict[str, Any], key: str) 
     uuid.UUID(str(session_id))
     uuid.UUID(str(verifier_id))
     if not all((
-        result.get("run_id") == RUN_ID,
+        result.get("run_id") == item["run_id"],
         result.get("task_version_id") == config["task"]["version_id"],
         result.get("agent_termination") == "completed",
         type(result.get("agent_exit_code")) is int,
@@ -336,7 +359,7 @@ def _classify(out: Path, plan: dict[str, Any], claim: dict[str, Any], key: str) 
         or (row.get("verifier_execution") or {}).get("id") != verifier_id
         or (row.get("eval_task_version_id") or row.get("task_version_id"))
         != config["task"]["version_id"]
-        or metadata.get("run_id") != RUN_ID
+        or metadata.get("run_id") != item["run_id"]
         or metadata.get("cell_id") != item["cell_id"]
         or metadata.get("execution_id") != item["execution_id"]
     ):
@@ -349,9 +372,9 @@ def _classify(out: Path, plan: dict[str, Any], claim: dict[str, Any], key: str) 
         "serving_block": "dedicated-qwen-tp1-v1",
         "cell_id": item["cell_id"],
         "execution_id": item["execution_id"],
-        "run_id": RUN_ID,
-        "selection_rank": 2,
-        "attempt": 1,
+        "run_id": item["run_id"],
+        "selection_rank": item["selection_rank"],
+        "attempt": item["attempt"],
         "task_version_id": config["task"]["version_id"],
         "session_id": session_id,
         "verifier_execution_id": verifier_id,
@@ -366,25 +389,26 @@ def _classify(out: Path, plan: dict[str, Any], claim: dict[str, Any], key: str) 
     })
 
 
-def run(root: Path, proxy: Path) -> dict[str, Any]:
-    plan = build_plan(root)
+def run(root: Path, proxy: Path, attempt: int = 1) -> dict[str, Any]:
+    plan = build_plan(root, attempt)
+    output_root = Path(plan["output_root"])
     key = os.environ.get("FLEET_API_KEY")
     job_uid, pod_uid = os.environ.get("JOB_UID", ""), os.environ.get("POD_UID", "")
     if not key:
         raise RuntimeError("FLEET_API_KEY is required")
     _validate_parity()
     _live_checks(plan, key)
-    OUTPUT_ROOT.mkdir(mode=0o700, parents=False)
-    self_hosted.write_json_once(OUTPUT_ROOT / "PLAN.json", plan)
+    output_root.mkdir(mode=0o700, parents=False)
+    self_hosted.write_json_once(output_root / "PLAN.json", plan)
     claim = _claim(plan, job_uid, pod_uid)
     stop = threading.Event()
     watcher = threading.Thread(target=_traffic_loop, args=(stop,), daemon=True)
     watcher.start()
-    attempt = OUTPUT_ROOT / "attempt"
+    attempt_root = output_root / "attempt"
     try:
-        self_hosted.run(plan["config"], attempt, proxy)
-        accepted = _classify(attempt, plan, claim, key)
-        self_hosted.write_json_once(OUTPUT_ROOT / "ACCEPTED.json", accepted)
+        self_hosted.run(plan["config"], attempt_root, proxy)
+        accepted = _classify(attempt_root, plan, claim, key)
+        self_hosted.write_json_once(output_root / "ACCEPTED.json", accepted)
         terminal = _seal({
             "schema_version": TERMINAL_SCHEMA,
             "status": "ACCEPTED",
@@ -399,7 +423,7 @@ def run(root: Path, proxy: Path) -> dict[str, Any]:
             "scores_included": False,
             "prompts_or_traces_included": False,
         })
-        self_hosted.write_json_once(OUTPUT_ROOT / "TERMINAL.json", terminal)
+        self_hosted.write_json_once(output_root / "TERMINAL.json", terminal)
         return terminal
     finally:
         stop.set()
@@ -407,8 +431,11 @@ def run(root: Path, proxy: Path) -> dict[str, Any]:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--attempt", type=int, choices=sorted(EXPECTED_IDENTITIES), default=1)
+    args = parser.parse_args()
     root = Path(os.environ.get("CYBER_ROOT", "/workspace/cyber-post-train"))
-    run(root, root / "evals/fleet/fixed_proxy.py")
+    run(root, root / "evals/fleet/fixed_proxy.py", args.attempt)
     return 0
 
 
