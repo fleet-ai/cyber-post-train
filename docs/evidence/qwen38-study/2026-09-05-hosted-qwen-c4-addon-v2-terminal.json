@@ -1,0 +1,60 @@
+{
+  "schema_version": "fleet-hosted-qwen-c4-addon-terminal-v1",
+  "status": "REJECTED_NON_SCORED",
+  "classification": "structured_tool_argument_contract_failed_under_addon_load",
+  "observed_at_utc": "2026-09-05T21:57:00Z",
+  "package": {
+    "commit": "e60746231fe1efd4272f57ff092a75de7b458128",
+    "sha256": "sha256:63fe3c84cd19d2359a375449c7f4ef281b9f209dc58091f9c3bf4987a30fbcaa"
+  },
+  "kubernetes": {
+    "namespace": "fleet-train-jobs",
+    "job_name": "chris-cyber-hosted-q38-c4-addon-v2",
+    "job_uid": "4f3aeb5f-e9b4-45d8-b317-2a9d87b2c4ec",
+    "pod_name": "chris-cyber-hosted-q38-c4-addon-v2-7kbs6",
+    "pod_uid": "60c03238-a2ef-4c93-bf23-95168a585d75",
+    "configmap_uid": "78dbd370-f3a7-40bc-b736-6db8d4df652b",
+    "workload_uid": "dfca5d98-f28b-40c5-affc-dee045be8829",
+    "job_created_at_utc": "2026-09-05T21:56:37Z",
+    "pod_started_at_utc": "2026-09-05T21:56:38Z",
+    "pod_finished_at_utc": "2026-09-05T21:56:42Z",
+    "pod_exit_code": 1,
+    "pod_restarts": 0,
+    "job_terminal_reason": "BackoffLimitExceeded"
+  },
+  "source_terminal": {
+    "path": "/mnt/sfs/jobs/chris-cyber-hosted-q38-c4-addon-v2/TERMINAL.json",
+    "file_sha256": "sha256:484192a9e12ba1518d20f937675c03e38ff1b59592f9630f7c183e09c318f91b",
+    "receipt_sha256": "sha256:e0ee91c1c655d4d873cb37b5dc57eb2709dc5b3f7b35cedfcc38392593a9cc2b",
+    "failure_code": "completion_submit_report_arguments_mismatch"
+  },
+  "interpretation": {
+    "exact_model_identity_check_passed_before_failure": true,
+    "exact_forced_tool_name_check_passed_before_failure": true,
+    "exact_submit_report_argument_schema_check_passed": false,
+    "capacity_gate_passed": false,
+    "scored_c4_successor_authorized": false,
+    "automatic_retry_allowed": false
+  },
+  "scientific_effect": {
+    "task_instance_calls": 0,
+    "session_calls": 0,
+    "scoring_calls": 0,
+    "verifier_calls": 0,
+    "scored_rollouts_created": 0
+  },
+  "postcondition": {
+    "endpoint_slots": ["busy", "busy", "free", "free"],
+    "addon_slots_released": true,
+    "g19_a_accepted_count": 3,
+    "g19_b_accepted_count": 1,
+    "g19_controllers_unchanged": true
+  },
+  "privacy": {
+    "credentials_included": false,
+    "request_or_response_bodies_included": false,
+    "tool_arguments_included": false,
+    "prompts_traces_flags_or_scores_included": false
+  },
+  "receipt_sha256": "sha256:fd83fc7aa784db0b0a2f96473e863fe1ee2b913dace0652650d979265496a837"
+}
