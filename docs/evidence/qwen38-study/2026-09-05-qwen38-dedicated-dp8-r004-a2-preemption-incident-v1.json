@@ -1,0 +1,77 @@
+{
+  "schema_version": "fleet-qwen38-dedicated-dp8-preemption-incident-v1",
+  "status": "NONREPEATABLE_UNCREDITED_PENDING_REVIEW",
+  "observed_at_utc": "2026-09-05T21:36:00Z",
+  "campaign_id": "chris-cyber-q38-glm53-exact-easiest100-pass4-v1",
+  "cell_id": "sha256:f5dced06656b0bf069930628978ce31b6ff682f437c86d55c6b241b2f83f4f48",
+  "execution_id": "sha256:18f44011c472d154c8be8eea7f4e18f00fcad794709401c6875047f27bcba0b1",
+  "serving_block": "dedicated-qwen-dp8-a-v1",
+  "scored_job": {
+    "name": "chris-cyber-q38-opencode11827-ded-dp8-r004-a2-g22-v1",
+    "uid": "87fa3130-ad5b-4f9c-9554-4a9777f2b92d",
+    "pod_uid": "838cdd67-98be-4602-8605-a6308377d907",
+    "pod_phase": "Succeeded",
+    "pod_exit_code": 0,
+    "pod_restarts": 0,
+    "pod_finished_at_utc": "2026-09-05T21:34:39Z",
+    "job_completion_time_utc": "2026-09-05T21:34:45Z"
+  },
+  "original_parity_binding": {
+    "parity_receipt_sha256": "sha256:22b33d598baab0a35f9d8340110e0f2783aba824894c3efda97298226d729966",
+    "api_run_id": "ft-run-f8094254",
+    "rayjob_uid": "a3f06d5d-b6ff-4b06-ba7b-9f8f05972106",
+    "workload_uid": "9c8ad74d-7ecd-4102-98b1-b48d14386f0b",
+    "head_pod_name": "ft-run-f8094254-ssnbz-head-hp4x9",
+    "head_pod_uid": "0fe269e3-8796-4164-9fa6-310a36e88aae",
+    "service_name": "ft-run-f8094254-ssnbz-head-svc",
+    "service_uid": "b88f67d1-8369-4fa3-b8a3-d2a53c44399c"
+  },
+  "preemption": {
+    "observed_at_utc": "2026-09-05T21:33:02Z",
+    "source": "kubernetes_events",
+    "reason": "Preempted",
+    "classification": "kueue_clusterqueue_priority_preemption",
+    "original_raycluster_deleted": true,
+    "replacement_raycluster_name": "ft-run-f8094254-68bmw",
+    "replacement_head_pod_uid": "3867551b-7a9a-4592-aed0-78eb8028b08e",
+    "replacement_service_uid": "86767b7e-5f47-486f-99c6-4a9a7b4e3a1c",
+    "exact_endpoint_identity_rotated": true
+  },
+  "terminal_artifacts": {
+    "canonical_claim_receipt_sha256": "sha256:18219263f3d95ea63465dafed3d1eb7dbeb9a3669dd8925ae93cef6ef1aee3b9",
+    "accepted_receipt_sha256": "sha256:c6e4643530b04e6d469b15a20d6c0df6e51e8bd9e37025e56e00dc93041aecab",
+    "accepted_file_sha256": "sha256:499b522f6f5535adba7c298eea10caf29238271cf18cc5d477ac159e93e679fa",
+    "terminal_receipt_sha256": "sha256:2394a5514034465701d8c8be4e3d4653945f28c6d2efb1f92b96be5257e7c523",
+    "terminal_file_sha256": "sha256:77c260983015fa1d772cb1dfe34034bb7895cd488334a3e9808a9b60d805d42d",
+    "result_file_sha256": "sha256:3065b288e483e0b26dcfe55d5d494cb37ca0142698d2ebdeb63d02ccf74ded4f",
+    "session_ingest_file_sha256": "sha256:25fcee7019957688eb252232748c552e4572ac6a170a54f3940cdbd3171ec07d",
+    "cleanup_file_sha256": "sha256:a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+    "authoritative_session_reconciled_by_acceptance_classifier": true,
+    "session_ingest_completed": true,
+    "cleanup_completed": true
+  },
+  "immutable_timing": {
+    "opencode_stream_final_mtime_utc": "2026-09-05T21:34:06Z",
+    "result_mtime_utc": "2026-09-05T21:34:24Z",
+    "session_ingest_mtime_utc": "2026-09-05T21:34:24Z",
+    "cleanup_mtime_utc": "2026-09-05T21:34:31Z",
+    "accepted_mtime_utc": "2026-09-05T21:34:39Z",
+    "terminal_mtime_utc": "2026-09-05T21:34:39Z",
+    "all_model_interaction_proven_complete_before_preemption": false
+  },
+  "disposition": {
+    "accepted_artifacts_are_not_sufficient_to_prove_endpoint_identity_continuity": true,
+    "credited": false,
+    "retry_permitted": false,
+    "requires_reviewed_reconciliation_rule": true,
+    "automatic_retry_prohibited": true
+  },
+  "privacy": {
+    "prompts_read": false,
+    "traces_read": false,
+    "flags_read": false,
+    "scores_read": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:2f4670bca98eea2450f7394e7fd3e9014d097fd2b85ebcf9f10f2f620f81a08c"
+}
