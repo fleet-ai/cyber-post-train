@@ -40,10 +40,23 @@ There are two deliberately different planning modes:
   `expected_current_task_version_id`. The latter must still equal
   `eval_tasks.current_version_id` when extraction begins. V3 prevents a later
   pointer move from silently changing the import; it does not select a
-  historical non-current task version.
+  historical non-current task version. V3 also does not yet carry a
+  source-system authorization receipt. Destination Repository write access is
+  not proof that the caller may read the named V1 task, so new V3 creates must
+  remain fenced until that boundary is deployed and behaviorally verified.
 
-Do not publish while discovery still reports v2. Do not publish only the
-apparently eligible rows and later call the mixed result the frozen cohort.
+The historical-version successor must not accept a caller-authored source
+selection. Fleet V1 must authorize the exact source team, task, and version for
+the authenticated caller, and the trusted capture path must bind the resolved
+runnable image plus task, verifier, topology, tools, seed, and attachment
+identities. Registry must verify that authorization, destination, expiry, and
+single-use identity before creating an import. This also removes the circular
+requirement for an ordinary caller to precompute privileged ECR/S3-derived
+hashes.
+
+Do not publish while discovery still reports v2, or while source authorization
+is absent from the discovered contract. Do not publish only the apparently
+eligible rows and later call the mixed result the frozen cohort.
 Regenerate a v3 plan from the exact manifest and reviewed identity roster; do
 not upgrade or hand-edit a v2 plan.
 
@@ -116,7 +129,9 @@ The latest reviewed snapshot has only 146
 `eligible_exact_current_frozen` rows and 14
 `blocked_frozen_version_not_current` rows. Therefore the 160-task campaign is
 still held. Importing those 14 exact historical versions requires a further
-Platform contract extension; v3 from PR #905 cannot do it.
+Platform contract extension; v3 from PR #905 cannot do it. No canary may be
+submitted until the source-authorization and executable-byte identity gates
+above are also present.
 
 ## 2. Import one create-once canary
 
