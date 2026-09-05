@@ -19,19 +19,19 @@ from evals.fleet import qwen38_dedicated_scored_canary_v1 as legacy
 from evals.fleet import self_hosted
 
 CONTROLLER = "qwen-dedicated-tp1-rank97-whole-task-g19-v1"
-SERVING_BLOCK = "dedicated-qwen-tp1-c-v1"
+SERVING_BLOCK = "dedicated-qwen-tp1-d-v1"
 SELECTION_RANK = 97
 EXECUTION_GENERATION = 19
 TASK_VERSION_ID = "d4f5e664-d4fd-4492-a103-429260ad9e99"
-SERVICE_ORIGIN = "http://ft-run-ef77363d-7rqq4-head-svc.fleet-train-jobs.svc.cluster.local:8000"
-SERVICE_UID = "e5abd7bf-689f-4e16-8f89-4c57cb1fed30"
-RAYJOB_UID = "0fdf9f53-aefe-4488-a02c-1bd16c01e017"
-WORKLOAD_UID = "bf1525c4-e441-4e91-94de-daf89bcc6191"
-TRAFFIC = Path("/mnt/sfs/jobs/chris-cyber-evalserve-q38-tp1-c-v1/lifecycle/traffic")
+SERVICE_ORIGIN = "http://ft-run-ef3b2fcb-hrt2w-head-svc.fleet-train-jobs.svc.cluster.local:8000"
+SERVICE_UID = "cb53a63e-9af3-4652-9c67-d74bb14563af"
+RAYJOB_UID = "0956e41f-c4ce-4809-b930-8b892f7d13d0"
+WORKLOAD_UID = "e56ff660-27b8-42b9-9db7-19ff7815912f"
+TRAFFIC = Path("/mnt/sfs/jobs/chris-cyber-evalserve-q38-tp1-d-v1/lifecycle/traffic")
 PARITY = Path(
-    "docs/evidence/qwen38-study/2026-09-05-qwen38-dedicated-tp1-c-v1-actual-opencode-parity.json"
+    "docs/evidence/qwen38-study/2026-09-05-qwen38-dedicated-tp1-d-v1-actual-opencode-parity.json"
 )
-PARITY_SHA256 = "sha256:10e39ad330db4e019495ec6849ad823a42f63b38464ad1a82ae5a9e484a3a3d5"
+PARITY_SHA256 = "sha256:2fdd5e2c1e86d4ad144a324a95426ad6358ab56852a1f48ee5bbe2a3bc2a6f1e"
 BUNDLE_RUN_ID = "chris-cyber-q38-opencode11827-ded-tp1-r097-g19-c-bundle-v1"
 BUNDLE_ROOT = Path(f"/mnt/sfs/jobs/{BUNDLE_RUN_ID}")
 EXPECTED_IDENTITIES = {
@@ -96,7 +96,7 @@ def build_plan(root: Path, attempt: int) -> dict[str, Any]:
         )
     plan["controller"] = CONTROLLER
     plan["config"]["serving"] = {
-        "kind": "dedicated_qwen_tp1_c_v1",
+        "kind": "dedicated_qwen_tp1_d_v1",
         "serving_block": SERVING_BLOCK,
         "service_origin": SERVICE_ORIGIN,
         "service_uid": SERVICE_UID,
@@ -131,7 +131,7 @@ def _validate_parity(root: Path) -> dict[str, Any]:
         or tools.get("model_request_catalog_exact") is not True
         or tools.get("arguments_structurally_valid") is not True
     ):
-        raise RuntimeError("dedicated Qwen TP1-c actual-harness parity drifted")
+        raise RuntimeError("dedicated Qwen TP1-d actual-harness parity drifted")
     return value
 
 
