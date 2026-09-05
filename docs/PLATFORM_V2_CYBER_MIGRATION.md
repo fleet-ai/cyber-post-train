@@ -22,28 +22,45 @@ The complete content-free composition contract is
 `evals/platform_v2/fleet_a62_compositions_v1.json`. Do not substitute a
 mutable `latest` tag or a task's current catalog pointer.
 
-## Current hold
+## Current hold and pending exact protocol
 
-The deployed legacy importer selects a task by key and exports its mutable
-current version. It does not accept the frozen task-version UUID. The most
-recent reconciliation found 14 frozen versions that no longer equal current.
-The deployed TaskDump topology also omits one environment shape used by two
-rows. Either defect is enough to hold the entire 160-task publication; do not
-publish only the apparently eligible rows and later call the mixed result the
-frozen cohort.
+There are two deliberately different planning modes:
 
-The safe unblock is a deployed import protocol that binds the exact task and
-environment version IDs in its request, authorization digest, exporter input,
-and publication receipt, plus support for the omitted environment topology.
-After that deployment, regenerate the plan. Historical counts are evidence,
-not permission to skip the live preflight.
+- Discovery protocol `fleet.legacy-task-import.v2` is diagnostics-only. It
+  selects by task key and therefore follows a mutable current pointer. The most
+  recent reconciliation found 14 frozen versions that no longer equal current,
+  and its TaskDump topology omits one environment shape used by two rows. The
+  controller reports those facts but refuses every write.
+- Pending discovery protocol `fleet.legacy-task-import.v3` accepts a
+  `source_selection` with schema `fleet.taskdump.selection.v1`. It selects the
+  frozen source row directly and supports the previously omitted environment
+  topology. Only this protocol can produce write-admissible rows.
+
+Do not publish while discovery still reports v2. Do not publish only the
+apparently eligible rows and later call the mixed result the frozen cohort.
+After v3 is deployed, regenerate the plan from the exact manifest; do not
+upgrade or hand-edit a v2 plan.
+
+Every v3 `source_selection` binds all nine fields below:
+
+```text
+schema, task_key, task_version_id, team_id, environment_version_id,
+env_key, env_version, data_key, data_version
+```
+
+Registry returns both that complete selection and its digest. The controller
+requires both to match the request in the create receipt and every later status
+read. The digest is the SHA-256 of the compact JSON object in the server's
+declared field order; it is distinct from the request, plan, and published
+TaskSet digests.
 
 ## Credentials and private output
 
-Authenticate to Registry alpha through the normal Fleet Registry login. Make
-`FLEET_API_KEY` available as an environment secret for the read-only v1
-identity check. Never put either credential in a command argument, plan,
-journal, commit, or chat transcript.
+Authenticate to Registry alpha through the normal Fleet Registry login. When
+discovery reports v2, make `FLEET_API_KEY` available as an environment secret
+for the read-only current-pointer diagnostic. V3 planning does not read the
+current pointer and does not need that credential. Never put either credential
+in a command argument, plan, journal, commit, or chat transcript.
 
 Keep the plan and append-only receipt journal in a private operator directory:
 
@@ -68,19 +85,25 @@ uv run python -m evals.platform_v2.legacy_import \
 ```
 
 This does not create a Repository or an import. Review the create-once plan and
-record its digest. Publication remains held unless its count is exactly:
+record its digest.
+
+If discovery reports v2, the output is a diagnostic snapshot with
+`eligible_current_equals_frozen`, `blocked_current_differs_from_frozen`, and
+`blocked_deployed_topology_omits_environment` counts. It is never valid input
+to submission, even if all mutable pointers happened to agree.
+
+If discovery reports v3, submission remains held unless the plan has exactly:
 
 ```text
 total = 160
-eligible_current_equals_frozen = 160
-blocked_current_differs_from_frozen = 0
-blocked_deployed_topology_omits_environment = 0
+eligible_exact_frozen_version = 160
+registry_protocol = fleet.legacy-task-import.v3
+deployed_exact_task_version_selector = true
 ```
 
-Those names describe the current compatibility controller. Once Registry has
-an exact-version selector, the reviewed plan must additionally prove that the
-rendered request contains and binds every frozen source identity; equality to
-the current pointer must no longer be the source of truth.
+Every v3 row must have a request digest and source-selection digest derived
+from the frozen manifest. Its `current_task_version_id` is intentionally null:
+current-pointer equality is not an authority in v3.
 
 ## 2. Import one create-once canary
 
@@ -106,9 +129,10 @@ uv run python -m evals.platform_v2.legacy_import \
 ```
 
 Proceed only when the canary is exclusively `published` and verification binds
-the requested tag, one exact task digest, prepared Environment, detached bare
-Environment, and immutable image lineage. `failed`, `needs_input`, identity
-drift, or conflicting evidence is a stop, not a reason to mint another import.
+the returned source selection and digest, requested tag, one exact task digest,
+prepared Environment, detached bare Environment, and immutable image lineage.
+`failed`, `needs_input`, identity drift, or conflicting evidence is a stop, not
+a reason to mint another import.
 
 ## 3. Import and reconcile all 160 rows
 
