@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -65,7 +66,7 @@ def run(plan_path: Path, output: Path) -> dict[str, Any]:
     runtime.validate_g15_gate(accepted_gate)
     accepted_matches: list[dict[str, Any]] = []
     request_count = 0
-    with httpx.Client(headers=headers, timeout=120) as client:
+    with httpx.Client(headers=headers, timeout=30) as client:
         account = self_hosted._request(client, "GET", "/v1/account")  # noqa: SLF001
         request_count += 1
         if (
@@ -78,26 +79,15 @@ def run(plan_path: Path, output: Path) -> dict[str, Any]:
         request_count += 1
         roster_response.raise_for_status()
         roster = roster_response.json()
-        sessions: list[dict[str, Any]] = []
-        offset = 0
-        while True:
-            page = self_hosted._request(  # noqa: SLF001
-                client,
-                "GET",
-                "/v1/sessions",
-                params={"limit": 500, "offset": offset},
-            )
-            request_count += 1
-            page_rows = page.get("sessions") or []
-            if not isinstance(page_rows, list):
-                raise RuntimeError("Generation-16 global session inventory page drifted")
-            sessions.extend(row for row in page_rows if isinstance(row, dict))
-            if page.get("has_more") is False:
-                break
-            if not page_rows:
-                raise RuntimeError("Generation-16 global session inventory stalled")
-            offset += len(page_rows)
-        for session in sessions:
+    def task_sessions(task_key: str) -> list[dict[str, Any]]:
+        with httpx.Client(headers=headers, timeout=30) as client:
+            return self_hosted._task_sessions(client, task_key)  # noqa: SLF001
+
+    with ThreadPoolExecutor(max_workers=32) as executor:
+        pages = list(executor.map(task_sessions, sorted(by_task)))
+    request_count += len(pages)
+    sessions = [session for page in pages for session in page]
+    for session in sessions:
             metadata = session.get("metadata") or {}
             if any(
                 metadata.get(field) in values
@@ -106,7 +96,7 @@ def run(plan_path: Path, output: Path) -> dict[str, Any]:
                 collisions += 1
             if session.get("session_id") == accepted_gate["api_session"]["session_id"]:
                 accepted_matches.append(session)
-    _stage(output, 4, "global-session-inventory-complete")
+    _stage(output, 4, "task-session-inventory-complete")
     selected = [
         row
         for row in roster.get("data", [])
