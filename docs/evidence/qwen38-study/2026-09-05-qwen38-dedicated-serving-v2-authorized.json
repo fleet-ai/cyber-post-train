@@ -1,0 +1,26 @@
+{
+  "authorization": {
+    "authorized_at_utc": "2026-09-05T18:41:00Z",
+    "authorizer": "/root",
+    "bulk_scoring_authorized": false,
+    "fresh_non_scored_parity_required": true,
+    "rank2_attempts2_through4_authorized_after_parity": true,
+    "statement": "Prepare and submit one fresh exact dedicated Qwen3.8-27B TP1 server; after new parity, resume only reserved rank2 attempts 2 through 4 sequentially."
+  },
+  "file_sha256": {
+    "evals/fleet/configs/qwen38-dedicated-serving-v2-authorized.json": "sha256:6b20420c94cb54a4859231154560194c84ffd47eae8e634ddeb46d4ce7def334",
+    "evals/fleet/qwen38_dedicated_v2.py": "sha256:ed4c82db265bf4ee3e08877585b13855d6c818ea4cd97a42c42e435bf0384f5a",
+    "evals/fleet/qwen38_dedicated_v2_live.py": "sha256:21ce3d0ede2cd6f907d10b68001c72bb778a7932db9c17de987719ed8571ca2e",
+    "evals/fleet/scripts/qwen38_dedicated_lifecycle_v1.sh": "sha256:e41e47e88179dda48fc00f4ffeed4c6e5bf98d5e83ad7ccbda4fd2c5cecfbc88",
+    "evals/fleet/scripts/submit_qwen38_dedicated_v2.sh": "sha256:0dbbf7b7c72068cba7591ba184eb28a1e174d1d3233721bd54e68ecc34c207b2"
+  },
+  "model_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+  "prior_validated_rank2_attempt1_receipt_sha256": "sha256:108903b167e40d8628776a6bed35ef7fd871b687dd8c81413fe66ca0f2e43212",
+  "prompts_traces_flags_or_scores_included": false,
+  "receipt_sha256": "sha256:c5a66306a899ae8e28a4eca938843f3b71d590f995decbd583e28c958b1b22e9",
+  "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-q38-tp1-a-v2",
+  "runtime_image": "ghcr.io/fleet-ai/cyber-post-train-glm53-runtime@sha256:ec93ba50613fd13fb4c0b0a9105767ab18209a1e0108dab0923aad694c0206ec",
+  "schema_version": "fleet-qwen38-dedicated-serving-v2-authorization-v1",
+  "status": "AUTHORIZED",
+  "title": "chris-cyber-evalserve-q38-tp1-a-v2"
+}

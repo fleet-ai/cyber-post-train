@@ -1,0 +1,61 @@
+{
+  "create_once": {
+    "additional_replica_allowed": false,
+    "api_route": "POST /v1/runs",
+    "duplicate_checks_required": true
+  },
+  "evaluation": {
+    "fresh_parity_required_before_scoring": true,
+    "rank2_attempts_allowed_after_parity": [
+      2,
+      3,
+      4
+    ],
+    "same_task_max_inflight": 1,
+    "scored_tasks_allowed_before_parity": false
+  },
+  "launch_authorized": true,
+  "lifecycle": {
+    "hardware_preflight_required": true,
+    "post_ready_idle_seconds": 600,
+    "pre_ready_exit_receipt_required": true,
+    "release_when_idle_or_failed": true,
+    "script": "evals/fleet/scripts/qwen38_dedicated_lifecycle_v1.sh"
+  },
+  "model": {
+    "context_length": 262144,
+    "repository": "Qwen/Qwen3.8-27B",
+    "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "served_id": "qwen3.8-27b",
+    "sfs_path": "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2",
+    "staging_receipt_sha256": "sha256:9a680f714de5c72e60dc6b08f363a8c82658dc1540bbb9aab90a3b8939445869"
+  },
+  "prior_validated_cell": {
+    "accepted_validated_receipt_sha256": "sha256:108903b167e40d8628776a6bed35ef7fd871b687dd8c81413fe66ca0f2e43212",
+    "attempt": 1,
+    "selection_rank": 2
+  },
+  "resources": {
+    "cpu_limit": "96",
+    "cpu_request": "32",
+    "gpus_per_worker": 1,
+    "memory_limit": "768Gi",
+    "memory_request": "256Gi",
+    "preemption_policy": "Never",
+    "priority_class": "fleet-infra-quiet",
+    "privileged": false,
+    "workers": 1
+  },
+  "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-q38-tp1-a-v2",
+  "runtime": {
+    "image": "ghcr.io/fleet-ai/cyber-post-train-glm53-runtime@sha256:ec93ba50613fd13fb4c0b0a9105767ab18209a1e0108dab0923aad694c0206ec",
+    "opencode_version": "1.18.27",
+    "reasoning_parser": "qwen3",
+    "tool_call_parser": "qwen3_coder"
+  },
+  "schema_version": "fleet-qwen38-dedicated-serving-v2-authorized-spec-v1",
+  "scope": "one_non_scored_parity_server_then_rank2_attempts2_through4",
+  "server_arguments_sha256": "sha256:836d25fc3df3f0a1ecfc53788492cfa4f97df3462c4a4b0e6c23f272016f14c0",
+  "status": "AUTHORIZED",
+  "title": "chris-cyber-evalserve-q38-tp1-a-v2"
+}
