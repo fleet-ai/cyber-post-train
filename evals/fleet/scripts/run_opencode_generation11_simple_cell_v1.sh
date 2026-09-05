@@ -14,6 +14,9 @@ install -m 0644 "/bootstrap/${GENERATION11_SPEC_KEY}" "$ROOT/evals/fleet/configs
 install -m 0644 /bootstrap/q-g10-tombstone.json "$ROOT/docs/evidence/qwen38-study/2026-09-05-qwen38-generation10-preclaim-preoutput-tombstone-v1.json"
 install -m 0644 /bootstrap/g-g10-tombstone.json "$ROOT/docs/evidence/qwen38-study/2026-09-05-glm53-generation10-preclaim-preoutput-tombstone-v1.json"
 uv run --no-project --with httpx==0.28.1 python -m evals.fleet.generation11_simple_cell validate --spec "$ROOT/evals/fleet/configs/spec.json" --repo "$ROOT"
+test "$(sha256sum /docker-cli/bin/docker | awk '{print $1}')" = 242c7a8de606afba2acada7c7af00d77f92c3601678b2f3a60911b49a892c722
+test "$(sha256sum /docker-cli/plugins/docker-buildx | awk '{print $1}')" = 8c38f60308a895fa570f1410e453c5de11aafd65a99fa99965d96d24b6225a78
+install -D -m 0755 /docker-cli/plugins/docker-buildx "$DOCKER_CONFIG/cli-plugins/docker-buildx"
 for _ in $(seq 1 120); do docker info >/dev/null 2>&1 && break; sleep 1; done
 docker info >/dev/null
 docker build --pull --platform linux/amd64 --tag chris/opencode:1.18.27-cyber-v1 --file "$ROOT/evals/fleet/Dockerfile.opencode" "$ROOT/evals/fleet"

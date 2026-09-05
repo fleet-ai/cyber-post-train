@@ -25,7 +25,7 @@ spec:
         - name: docker-cli
           image: &docker docker.io/library/docker@sha256:f649ef046008ca7f926a2571c32b0ac22e5c59eb61b959617f9acc2a4c638cf5
           command: ["/bin/sh", "-ec"]
-          args: ["install -D -m 0755 /usr/local/bin/docker /cli/bin/docker; install -D -m 0755 /usr/local/libexec/docker/cli-plugins/docker-buildx /cli/plugins/docker-buildx; test \"$(sha256sum /cli/bin/docker | awk '{print $1}')\" = 242c7a8de606afba2acada7c7af00d77f92c3601678b2f3a60911b49a892c722"]
+          args: ["install -D -m 0755 /usr/local/bin/docker /cli/bin/docker; install -D -m 0755 /usr/local/libexec/docker/cli-plugins/docker-buildx /cli/plugins/docker-buildx; test \"$(sha256sum /cli/bin/docker | awk '{print $1}')\" = 242c7a8de606afba2acada7c7af00d77f92c3601678b2f3a60911b49a892c722; test \"$(sha256sum /cli/plugins/docker-buildx | awk '{print $1}')\" = 8c38f60308a895fa570f1410e453c5de11aafd65a99fa99965d96d24b6225a78"]
           resources:
             requests: {cpu: 10m, memory: 32Mi, ephemeral-storage: 32Mi}
             limits: {cpu: 100m, memory: 128Mi, ephemeral-storage: 128Mi}
