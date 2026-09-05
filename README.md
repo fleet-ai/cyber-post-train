@@ -1,59 +1,93 @@
 # cyber-post-train
 
-Reproducible evaluation and post-training for execution-grounded blackbox cyber agents.
+Reproducible evaluation and post-training for execution-grounded blackbox cyber
+agents.
 
-The primary experiment targets the dense Apache-2.0
-`Qwen/Qwen3.6-27B` checkpoint at exact revision
-`6a9e13bd6fc8f0983b9b99948120bc37f49c13e9`. The repository has four
-deliberately separate streams:
+## Current study
 
-1. `evals/webexploitbench/` — evaluation-only WebExploitBench Level 0.
-2. `evals/fleet/` — held-out and full-corpus Fleet blackbox task evaluation.
-3. `training/` — Fleet-data export, normalization, SFT and verifiable-reward RL.
-4. `evals/secondary/` — public XBEN and CVE-Bench fallback evaluations.
+The active Fleet evaluation measures two exact open-weight checkpoints on one
+frozen set of the 100 historically easiest eligible Fleet blackbox exploit task
+versions:
 
-## Safety and experimental integrity
+| Model | Exact revision | Target |
+|---|---|---:|
+| `Qwen/Qwen3.8-27B` | `1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0` | 100 tasks × 4 attempts |
+| `zai-org/GLM-5.3` | `30333038ada1f1dacb294a93270305a890b50c14` | 100 tasks × 4 attempts |
 
-- Secrets are read from environment variables and are never written to artifacts.
-- WebExploitBench is evaluation-only. Its inputs, outputs, traces and derived artifacts
-  must never enter training or agent optimization.
-- Training data is limited to authorized Fleet challenge environments.
-- External benchmark results remain sealed until the training checkpoint is frozen.
-- Dataset splits are by task lineage, vulnerability family and application, not by session.
-- Every run records immutable model, data, prompt, harness and verifier identifiers.
+This is an 800-cell evaluation universe. It is not complete merely because a
+controller ran or a session exists: each cell needs a digest-valid acceptance
+receipt under the frozen treatment. Read
+[`docs/CURRENT_FLEET_PASS4_EVAL.md`](docs/CURRENT_FLEET_PASS4_EVAL.md) for the
+current protocol, safe operating sequence, and score-blind progress command.
+
+The current agent treatment is OpenCode `1.18.27`, a 262,144-token context,
+32,768 maximum output tokens, native compaction with 20,000 tokens reserved for
+compaction/autocontinue, and only the ordered `bash` and `submit_report` tools.
+Model, task-version, route, harness, tool, verifier, and retry identities are
+immutable experimental inputs.
+
+## Repository map
+
+- `evals/fleet/` — exact-version Fleet blackbox evaluation and its acceptance
+  ledger.
+- `evals/webexploitbench/` — evaluation-only WebExploitBench Level 0.
+- `evals/exploitgym/` — evaluation-only ExploitGym comparisons.
+- `training/` — Fleet-data export, normalization, SFT, and verifiable-reward RL.
+- `configs/runs/` — versioned, preview-first training requests.
+- `docs/SCIENTIFIC_PROTOCOL.md` — controls shared across studies.
+
+External benchmarks are evaluation-only. Their prompts, applications, traces,
+outputs, metadata, solutions, and derived exploit hints must never enter
+training, retrieval, prompt development, reward development, or skills.
 
 ## Local setup
 
 ```bash
 cd /Users/christan/Desktop/cyber-post-train
 uv sync --extra dev
-cp .env.example .env
 ```
 
-Export credentials in the shell or use a local untracked `.env`; do not put them in
-commands, source files, logs or committed configuration.
+Provide credentials through environment variables or the cluster secret
+manager. Never put a credential in a command argument, source file, committed
+configuration, receipt, or log.
 
-## Current model and execution backend
+Run the read-only checks before choosing an execution path:
 
-```text
-model: Qwen/Qwen3.6-27B
-revision: 6a9e13bd6fc8f0983b9b99948120bc37f49c13e9
-weights: 27,781,427,952 parameters, 15 verified BF16 safetensor shards
-training: Fleet Training API, exact SkyRL trainer version selected in each run config
-formal evaluation: self-hosted exact checkpoint through a pinned SGLang serving contract
+```bash
+# Validate the frozen 800-cell universe.
+uv run python -m evals.fleet.exact_pass4_universe \
+  evals/fleet/configs/q38-glm53-exact-easiest100-pass4-campaign-v1.json \
+  --repo-root "$PWD" --summary
+
+# Print a score-blind baseline ledger (400 cells per model).
+uv run python -m evals.fleet.exact_pass4_ledger --repo-root "$PWD"
+
+# Verify the deployed general cluster Jobs API contract without creating work.
+uv run python skills/cyber-cluster-jobs-operator/scripts/check_contract.py
 ```
 
-Runnable SFT and RL requests live in `configs/runs/`. They keep the model,
-dataset filters, objective, trainer version, compute shape, and evaluation split
-explicit and independently replaceable. The server preview is always checked
-before submission; the resulting RayJobs enter `training-lq` through Kueue.
+These commands do not authorize a scored launch. Use create-once plans and the
+release/acceptance gates documented in the current study guide.
 
-The older GLM files are preserved as experiment provenance, not as the current
-model choice. Detailed launch commands live beside each evaluation and training
-implementation. The evidence-first current state, terminal results, pending
-jobs, and remaining causal-comparison gates are indexed in
-`docs/QWEN36_STUDY_EVIDENCE.md`. `docs/STATUS.md` remains the chronological
-operational narrative and can contain superseded intermediate observations.
+## Execution services
 
-The fail-closed checkpoint selection, export, serving-parity, and paired-evaluation
-handoff for the active SFT run is documented in `docs/POST_SFT_EVALUATION.md`.
+Do not confuse the two Jobs APIs:
+
+- Fleet's managed evaluation API at `https://orchestrator.fleetai.com/v1/jobs`
+  creates supported managed agent evaluations.
+- The Nebius cluster API at `https://api.ft.flt.build/v1/runs` runs a general
+  immutable container command through the cluster queue. It is used for work
+  such as exact model serving, staging, training, and GPU diagnostics.
+
+Hosted inference and dedicated self-hosted inference are separate serving
+treatments. Keep their results in separate blocks unless immutable evidence
+proves complete treatment parity. Assign whole tasks to one serving block; do
+not split a task's four attempts across routes merely to improve throughput.
+
+## Historical studies
+
+Qwen3.6 material remains valuable provenance but is not the current target.
+Start at [`docs/QWEN36_STUDY_EVIDENCE.md`](docs/QWEN36_STUDY_EVIDENCE.md) for
+that frozen study. `docs/STATUS.md` is chronological history and can contain
+superseded intermediate observations. Historical documents and receipts must
+not be rewritten to resemble current state.

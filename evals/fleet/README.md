@@ -1,5 +1,11 @@
 # Fleet blackbox baseline
 
+> **Current operator entry point:** the active Qwen3.8-27B/GLM-5.3
+> easiest-100 pass@4 protocol and score-blind workflow are documented in
+> [`../../docs/CURRENT_FLEET_PASS4_EVAL.md`](../../docs/CURRENT_FLEET_PASS4_EVAL.md).
+> The sections below retain implementation history and earlier model-specific
+> procedures; a historical launch command is not current launch authority.
+
 The current HELD generation-7-aware GLM5.3 dedicated-serving package and its
 no-idle lifecycle are documented in
 [DEDICATED_GLM53_V7.md](./DEDICATED_GLM53_V7.md). It does not authorize a

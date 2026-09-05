@@ -16,7 +16,11 @@ Read this file before acting. Then select only the skill matching the work and r
 | Convert a lesson into code, tests, docs, or agent guidance | [`cyber-experiment-maintainer`](skills/cyber-experiment-maintainer/SKILL.md) |
 | Submit or operate general GPU workloads through the Nebius cluster Jobs API | [`cyber-cluster-jobs-operator`](skills/cyber-cluster-jobs-operator/SKILL.md) |
 
-For current experiment state, read `docs/QWEN36_STUDY_EVIDENCE.md`. For scientific controls, read `docs/SCIENTIFIC_PROTOCOL.md`. Chronological status notes and early example configs are context, not authority.
+For the current Qwen3.8-27B/GLM-5.3 easiest-100 pass@4 experiment, read
+`docs/CURRENT_FLEET_PASS4_EVAL.md`. For scientific controls, read
+`docs/SCIENTIFIC_PROTOCOL.md`. `docs/QWEN36_STUDY_EVIDENCE.md` is frozen
+historical provenance. Chronological status notes and early example configs are
+context, not authority.
 
 ## Source-of-truth order
 
