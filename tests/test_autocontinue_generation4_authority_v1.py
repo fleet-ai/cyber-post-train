@@ -367,7 +367,7 @@ def test_launcher_is_paired_create_once_and_releases_are_absent() -> None:
     assert submit.count("/shared/cell-execution-claims/") == 8
     assert "observe-route" in submit and "_validate_inventory_for_task" in submit
     assert "kubectl delete" not in submit and "kubectl apply" not in submit
-    for kind, name in (
+    for kind, _name in (
         ("raycluster", "ft-run-98c32208-5gpb2"),
         ("raycluster", "ft-run-9e92209d-pppzg"),
         ("pod", "ft-run-98c32208-5gpb2-head-7qxwc"),
