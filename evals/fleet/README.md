@@ -1,5 +1,9 @@
 # Fleet blackbox baseline
 
+The current HELD two-node GLM5.3 dedicated-serving package and its no-idle
+lifecycle are documented in [DEDICATED_GLM53_V6.md](./DEDICATED_GLM53_V6.md).
+It does not authorize a launch.
+
 This evaluator runs the 160 registered tasks from Fleet job
 `a62dd51f-a52b-4941-8207-4679e4b25b51` with GLM-5.2 on hosted Agent Runtime v1.
 
