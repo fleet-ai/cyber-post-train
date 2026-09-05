@@ -18,6 +18,7 @@ MANIFEST_PATH = "evals/fleet/cluster/hosted-q38-c4-addon-held-v1.yaml"
 OUT_ROOT = "/mnt/sfs/jobs/chris-cyber-hosted-q38-c4-addon-v1"
 COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 FILES = {
+    "package.py": "evals/fleet/hosted_c4_addon_package_v1.py",
     "endpoint_lease.py": "evals/fleet/endpoint_lease.py",
     "probe.py": "evals/fleet/hosted_concurrency4_qualification_v1.py",
     "addon.py": "evals/fleet/hosted_c4_addon_qualifier_v1.py",

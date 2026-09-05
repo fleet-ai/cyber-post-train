@@ -29,3 +29,4 @@ def test_package_contract_is_held_and_exactly_two_addon_streams() -> None:
     assert '"maximum_total_owned_streams": 4' in source
     assert '"task_instance_session_scoring_or_verifier_calls": 0' in source
     assert '"launch_authorized": False' in source
+    assert '"package.py": "evals/fleet/hosted_c4_addon_package_v1.py"' in source
