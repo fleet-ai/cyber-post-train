@@ -1,4 +1,4 @@
-"""Split immutable package for the held Qwen Generation-10 canary."""
+"""Split immutable package for the held GLM Generation-10 canary."""
 
 from __future__ import annotations
 
@@ -9,15 +9,15 @@ from typing import Any
 
 from evals.fleet import autocontinue_generation3_executable_package as base
 from evals.fleet import autocontinue_generation8_package_v1 as generation8_package
-from evals.fleet import autocontinue_generation10_qwen_v1 as generation10
+from evals.fleet import autocontinue_generation10_glm53_v1 as generation10
 
-SCHEMA = "fleet-opencode-autocontinue-generation10-qwen-split-package-v1"
-CORE_A_NAME = "chris-q38-ac-g10-runtime-core-a-v1"
-CORE_B_NAME = "chris-q38-ac-g10-runtime-core-b-v1"
+SCHEMA = "fleet-opencode-autocontinue-generation10-glm53-split-package-v1"
+CORE_A_NAME = "chris-glm53-ac-g10-runtime-core-a-v1"
+CORE_B_NAME = "chris-glm53-ac-g10-runtime-core-b-v1"
 MODEL_NAME = generation10.CONFIGMAP_NAME
 CORE_A_PATHS = generation8_package.CORE_A_PATHS
 CORE_B_PATHS = generation8_package.CORE_B_PATHS
-QWEN_PATHS = (
+GLM53_PATHS = (
     *generation8_package.G8_PATHS,
     generation10.preparer.MODULE_PATH,
     generation10.MODULE_PATH,
@@ -41,7 +41,7 @@ def sha256(raw: bytes) -> str:
 
 def data_key(path: str) -> str:
     if path == generation10.RUN_PATH:
-        return "run-g10-qwen-v1.sh"
+        return "run-g10-glm53-v1.sh"
     return "f-" + hashlib.sha256(path.encode()).hexdigest()[:24]
 
 
@@ -70,7 +70,7 @@ def build_package(root: Path) -> dict[str, Any]:
     for name, paths in (
         (CORE_A_NAME, CORE_A_PATHS),
         (CORE_B_NAME, CORE_B_PATHS),
-        (MODEL_NAME, QWEN_PATHS),
+        (MODEL_NAME, GLM53_PATHS),
     ):
         payloads[name], entries = _payload(root, paths)
         objects[name] = base.object_manifest(name, entries)

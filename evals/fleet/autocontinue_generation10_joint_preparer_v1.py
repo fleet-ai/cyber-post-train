@@ -21,6 +21,7 @@ from evals.fleet import autocontinue_generation8_package_v1 as generation8_packa
 from evals.fleet import self_hosted
 
 SCHEMA = "fleet-opencode-autocontinue-generation10-joint-preparer-v1"
+MODULE_PATH = "evals/fleet/autocontinue_generation10_joint_preparer_v1.py"
 TOMBSTONE_SCHEMA = "fleet-opencode-autocontinue-generation7-postclaim-preinstance-tombstone-v1"
 TOMBSTONE_STATUS = "G7_FAILED_AFTER_CLAIM_BEFORE_INSTANCE_MODEL_SESSION_VERIFIER"
 SHA_RE = re.compile(r"sha256:[0-9a-f]{64}")
@@ -123,7 +124,7 @@ def _names(model: str) -> dict[str, str]:
     run_id = f"chris-{row['short']}-ac-g10-r{row['rank']:03d}-a1-{suffix}"
     return {
         "job": stem,
-        "configmap": f"{stem}-run",
+        "configmap": f"{stem}-run-v1",
         "root": f"/mnt/sfs/jobs/{stem}",
         "run_id": run_id,
         "network": f"{row['short']}-ac-g10-r{row['rank']:03d}-a1-{suffix}",

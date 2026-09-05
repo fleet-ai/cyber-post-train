@@ -1,4 +1,4 @@
-"""Create-once Qwen Generation-10 canary runtime.
+"""Create-once GLM Generation-10 canary runtime.
 
 This is an independently releasable, single-cell successor.  The checked-in
 state is held: a release and a fresh duplicate preflight must be supplied by a
@@ -26,10 +26,10 @@ from evals.fleet import autocontinue_generation10_joint_preparer_v1 as preparer
 from evals.fleet import hosted_sweep_controller as hosted
 from evals.fleet import self_hosted
 
-MODEL = "qwen3.8-27b"
+MODEL = "glm-5.3"
 NAMESPACE = "fleet-train-jobs"
-JOB_NAME = "chris-q38-ac-r004-a1-g10-v1"
-CONFIGMAP_NAME = "chris-q38-ac-r004-a1-g10-v1-run-v1"
+JOB_NAME = "chris-glm53-ac-r013-a1-g10-v1"
+CONFIGMAP_NAME = "chris-glm53-ac-r013-a1-g10-v1-run-v1"
 OUTPUT_ROOT = f"/mnt/sfs/jobs/{JOB_NAME}"
 SECRET_NAME = "chris-cyber-opencode-evals-v2"
 SECRET_UID = "e0febd8e-94a2-46b0-a0bf-dd6b3154187b"
@@ -37,19 +37,19 @@ SECRET_KEY = "FLEET_API_KEY"
 FLEET_TEAM_ID = "a1025f0b-ad67-49fc-a023-51800ab43e84"
 CLAIM_ROOT = Path(preparer.CLAIM_ROOT)
 HELD_PATH = (
-    "docs/evidence/qwen38-study/2026-09-05-qwen38-autocontinue-generation10-executable-held-v1.json"
+    "docs/evidence/qwen38-study/2026-09-05-glm53-autocontinue-generation10-executable-held-v1.json"
 )
 TOMBSTONE_PATH = preparer.MODELS[MODEL]["tombstone"]
 DIAGNOSIS_PATH = preparer.DIAGNOSIS_PATH
-MODULE_PATH = "evals/fleet/autocontinue_generation10_qwen_v1.py"
-PACKAGE_PATH = "evals/fleet/autocontinue_generation10_qwen_package_v1.py"
-RUN_PATH = "evals/fleet/scripts/run_opencode_autocontinue_generation10_qwen_v1.sh"
-SUBMIT_PATH = "evals/fleet/scripts/submit_opencode_autocontinue_generation10_qwen_v1.sh"
-MANIFEST_PATH = "evals/fleet/cluster/opencode-autocontinue-generation10-qwen-held-v1.yaml"
-RELEASE_SCHEMA = "fleet-opencode-autocontinue-generation10-qwen-release-v1"
-DUPLICATE_SCHEMA = "fleet-opencode-autocontinue-generation10-qwen-duplicate-preflight-v1"
+MODULE_PATH = "evals/fleet/autocontinue_generation10_glm53_v1.py"
+PACKAGE_PATH = "evals/fleet/autocontinue_generation10_glm53_package_v1.py"
+RUN_PATH = "evals/fleet/scripts/run_opencode_autocontinue_generation10_glm53_v1.sh"
+SUBMIT_PATH = "evals/fleet/scripts/submit_opencode_autocontinue_generation10_glm53_v1.sh"
+MANIFEST_PATH = "evals/fleet/cluster/opencode-autocontinue-generation10-glm53-held-v1.yaml"
+RELEASE_SCHEMA = "fleet-opencode-autocontinue-generation10-glm53-release-v1"
+DUPLICATE_SCHEMA = "fleet-opencode-autocontinue-generation10-glm53-duplicate-preflight-v1"
 CLAIM_SCHEMA = "fleet-statistical-cell-execution-claim-v10"
-TERMINAL_SCHEMA = "fleet-opencode-autocontinue-generation10-qwen-terminal-v1"
+TERMINAL_SCHEMA = "fleet-opencode-autocontinue-generation10-glm53-terminal-v1"
 COMMIT_RE = re.compile(r"[0-9a-f]{40}")
 SHA_RE = re.compile(r"sha256:[0-9a-f]{64}")
 
@@ -77,17 +77,17 @@ def load(path: Path) -> dict[str, Any]:
 
 
 def static(root: Path) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
-    """Validate the Q treatment without requiring any GLM tombstone."""
+    """Validate the GLM treatment without requiring any Qwen tombstone."""
     preparer.assert_route_gate_implementation()
     preparer.assert_optimized_runtime_implementation(root)
     prepared = preparer.prepare_model(root, MODEL)
     if prepared.get("status") != "HELD_RELEASE_AND_DUPLICATE_PREFLIGHT_REQUIRED":
-        raise ValueError("Qwen Generation-10 pre-instance authority is not ready")
+        raise ValueError("GLM Generation-10 pre-instance authority is not ready")
     spec = prepared["spec"]
     plan = prepared["plan"]
     held = load(root / HELD_PATH)
     expected_held = {
-        "schema_version": "fleet-opencode-autocontinue-generation10-qwen-executable-held-v1",
+        "schema_version": "fleet-opencode-autocontinue-generation10-glm53-executable-held-v1",
         "status": "HELD",
         "launch_authorized": False,
         "objects_created": False,
@@ -125,7 +125,7 @@ def static(root: Path) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     }
     expected_held["receipt_sha256"] = digest(expected_held)
     if held != expected_held:
-        raise ValueError("Qwen Generation-10 executable held receipt drifted")
+        raise ValueError("GLM Generation-10 executable held receipt drifted")
     return spec, plan, held
 
 
@@ -148,7 +148,7 @@ def validate_duplicate(
         )
         age = ((now or datetime.now(UTC)) - observed).total_seconds()
     except (TypeError, ValueError) as exc:
-        raise ValueError("Qwen Generation-10 duplicate preflight timestamp drifted") from exc
+        raise ValueError("GLM Generation-10 duplicate preflight timestamp drifted") from exc
     expected_fleet = {
         f"generation{generation}_matching_session_rows": 0
         for generation in (8, 9, 10)
@@ -199,7 +199,7 @@ def validate_duplicate(
         or age < 0
         or age > maximum_age_seconds
     ):
-        raise ValueError("Qwen Generation-10 duplicate preflight drifted")
+        raise ValueError("GLM Generation-10 duplicate preflight drifted")
 
 
 def _command(argv: list[str]) -> str:
@@ -365,7 +365,7 @@ def observe_duplicate(root: Path, key: str) -> dict[str, Any]:
         raise RuntimeError("Fleet session metadata response is invalid")
     run_ids = {
         8: preparer.load_static(root)[MODEL]["plan"]["attempts"][0]["run_id"],
-        9: f"chris-q38-ac-g9-r004-a1-{generation_ids[9].removeprefix('sha256:')[:8]}",
+        9: f"chris-glm53-ac-g9-r013-a1-{generation_ids[9].removeprefix('sha256:')[:8]}",
         10: plan["attempts"][0]["run_id"],
     }
     fleet: dict[str, int] = {}
@@ -466,7 +466,7 @@ def build_release(
     )
     if (
         package.get("schema_version")
-        != "fleet-opencode-autocontinue-generation10-qwen-split-package-v1"
+        != "fleet-opencode-autocontinue-generation10-glm53-split-package-v1"
         or package.get("model") != MODEL
         or package.get("generation10_spec_sha256") != spec["generation10_spec_sha256"]
         or package.get("rendered_plan_sha256") != plan["plan_sha256"]
@@ -474,7 +474,7 @@ def build_release(
         or package.get("launch_authorized") is not False
         or package.get("release_included") is not False
     ):
-        raise ValueError("Qwen Generation-10 package drifted")
+        raise ValueError("GLM Generation-10 package drifted")
     body = {
         "schema_version": RELEASE_SCHEMA,
         "status": "RELEASED",
@@ -523,7 +523,7 @@ def validate_release(
     launch_route: Mapping[str, Any],
 ) -> None:
     if value != build_release(root, package, package_commit, duplicate, launch_route):
-        raise ValueError("Qwen Generation-10 release drifted")
+        raise ValueError("GLM Generation-10 release drifted")
 
 
 def _claim_path(execution_id: str) -> Path:

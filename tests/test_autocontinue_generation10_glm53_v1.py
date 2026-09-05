@@ -9,8 +9,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from evals.fleet import autocontinue_generation10_qwen_package_v1 as package
-from evals.fleet import autocontinue_generation10_qwen_v1 as runtime
+from evals.fleet import autocontinue_generation10_glm53_package_v1 as package
+from evals.fleet import autocontinue_generation10_glm53_v1 as runtime
 from evals.fleet import kubernetes_create_relay as relay
 
 ROOT = Path(__file__).parents[1]
@@ -71,20 +71,20 @@ def _route() -> dict:
     }
 
 
-def test_qwen_static_is_independent_and_exact() -> None:
+def test_glm_static_is_independent_and_exact() -> None:
     spec, plan, held = runtime.static(ROOT)
     assert spec["execution"] == {
         "schema_version": "fleet-statistical-cell-execution-v1",
-        "cell_id": "sha256:631c9d7cc5328849ce137393943927192b1b50dc60458cdb3425fbce893ecf5a",
+        "cell_id": "sha256:905051f141077d3aa5086c1f5dc6ad015d5ee6173a1ea7515025805cf9a24b41",
         "execution_generation": 10,
-        "execution_id": "sha256:84df092e1904306b308326188609a520f9ffd870a45fad26f65ad1eb60f3aa0b",
+        "execution_id": "sha256:fa6623334f96957d0879a97d3d08f1fae226719f080043e274d067a73f0fe0e2",
     }
     assert plan["campaign_id"] == runtime.JOB_NAME
     assert spec["identities"]["configmap_name"] == runtime.CONFIGMAP_NAME
     assert plan["execution"]["required_task_tools"] == ["bash", "submit_report"]
     assert plan["harness"]["context_window_size"] == 262144
     assert held["launch_authorized"] is False
-    assert runtime.preparer.MODELS["glm-5.3"]["tombstone"] not in package.QWEN_PATHS
+    assert runtime.preparer.MODELS["qwen3.8-27b"]["tombstone"] not in package.GLM53_PATHS
 
 
 def test_held_package_is_bounded_and_contains_corrected_runtime() -> None:
@@ -111,7 +111,7 @@ def test_held_package_is_bounded_and_contains_corrected_runtime() -> None:
     assert "evals/fleet/self_hosted.py" in paths
 
 
-def test_qwen_package_imports_from_an_isolated_materialization(tmp_path: Path) -> None:
+def test_glm_package_imports_from_an_isolated_materialization(tmp_path: Path) -> None:
     built = package.build_package(ROOT)
     for obj in built["model_manifest"]["objects"]:
         data = built["configmaps"][obj["name"]]["data"]
@@ -128,7 +128,7 @@ def test_qwen_package_imports_from_an_isolated_materialization(tmp_path: Path) -
             "-c",
             (
                 "from pathlib import Path; "
-                "from evals.fleet import autocontinue_generation10_qwen_v1 as runtime; "
+                "from evals.fleet import autocontinue_generation10_glm53_v1 as runtime; "
                 "runtime.static(Path.cwd())"
             ),
         ],
@@ -296,7 +296,7 @@ def test_held_manifest_is_one_cpu_never_preempt_job() -> None:
 def test_scripts_preserve_optimized_path_and_create_once_guards() -> None:
     run = (ROOT / runtime.RUN_PATH).read_text()
     submit = (ROOT / runtime.SUBMIT_PATH).read_text()
-    assert "autocontinue_generation10_qwen_v1 run" in run
+    assert "autocontinue_generation10_glm53_v1 run" in run
     assert "autocontinue_generation7_authority_v1 run" not in run
     assert "docker build --pull --platform linux/amd64" in run
     assert 'launch-authorized: "false"' in (ROOT / runtime.MANIFEST_PATH).read_text()
@@ -309,4 +309,4 @@ def test_scripts_preserve_optimized_path_and_create_once_guards() -> None:
     assert "observe-duplicate" in (ROOT / runtime.MODULE_PATH).read_text()
     assert submit.count('get job "$name" --ignore-not-found') == 2
     assert "SFS_OBSERVER_UID" in submit
-    assert "b2991e6062643b6a7875d3dd8d677a63e0f848323c2faedf3022b16ea1616d98" in submit
+    assert "ffedddf7dcf6c0df2f4b4999f3016f387b6b39eba8c8f0b27779197ecf36b3ad" in submit
