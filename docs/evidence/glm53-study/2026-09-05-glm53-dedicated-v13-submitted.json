@@ -1,0 +1,26 @@
+{
+  "api_run_id": "ft-run-1f935759",
+  "credentials_included": false,
+  "eligible_flavor_uids": [
+    "d375ea06-5e3e-4b9e-8fb0-b8ccf73715c0"
+  ],
+  "http_status": 202,
+  "live_gate_receipt_sha256": "sha256:b9a3a3dcb660d5763a7b7633f4609c454ed352b2a5d5fdcbfd29e4cc35e194d9",
+  "prompts_traces_flags_or_scores_included": false,
+  "receipt_sha256": "sha256:6874b9cb77dbb6abbf8b82d751ab0ab177861a7c391eca5cc0496a251545adab",
+  "request_sha256": "sha256:94ed80c6cd4f245e2c95fc03b94a97cce80d9bd1d881c0252349c3d14ceea971",
+  "route": "POST /v1/runs",
+  "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-glm53-tp8-a-v13",
+  "schema_version": "fleet-glm53-dedicated-serving-v13-submission-v1",
+  "scored_tasks_launched": 0,
+  "selected_priority": {
+    "name": "fleet-infra-quiet",
+    "preemption_policy": "Never",
+    "selection_scope": "live_cluster_intersect_jobs_api",
+    "uid": "d45daf46-24e1-4564-a61c-714fb3047fad",
+    "value": -1000
+  },
+  "status": "SUBMITTED",
+  "submitted_at_utc": "2026-09-05T19:14:15.127106Z",
+  "title": "chris-cyber-evalserve-glm53-tp8-a-v13"
+}
