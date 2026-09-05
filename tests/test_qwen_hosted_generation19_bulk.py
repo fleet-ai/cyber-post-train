@@ -1,3 +1,5 @@
+import subprocess
+import sys
 from pathlib import Path
 
 from evals.fleet import qwen_hosted_generation19_bulk as g19
@@ -54,4 +56,27 @@ def test_held_package_is_whole_task_and_nonpreemptible() -> None:
     assert all(
         job["metadata"]["annotations"]["cyber-post-train.fleet.ai/launch-authorized"] == "false"
         for job in scored
+    )
+
+
+def test_preflight_package_has_closed_python_imports(tmp_path: Path) -> None:
+    rendered = package.render(ROOT)
+    preflight_cm = next(
+        row
+        for row in rendered["items"]
+        if row["kind"] == "ConfigMap" and row["metadata"]["name"] == package.PREFLIGHT_CM
+    )
+    module_root = tmp_path / "evals" / "fleet"
+    module_root.mkdir(parents=True)
+    (tmp_path / "evals" / "__init__.py").touch()
+    (module_root / "__init__.py").touch()
+    for name, value in preflight_cm["data"].items():
+        if name.endswith(".py"):
+            (module_root / name).write_text(value)
+    subprocess.run(
+        [sys.executable, "-c", "import evals.fleet.qwen_hosted_generation19_preflight"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        text=True,
     )
