@@ -1,0 +1,57 @@
+{
+  "api_run_id": "ft-run-75891e80",
+  "concurrency2_cluster_stream": {
+    "exit_code": 1,
+    "job_uid": "9820a83f-df23-40a6-b3f5-5aadd86bf368",
+    "pod_uid": "55ca9ab7-59c4-4235-b6af-15f23a0021c4",
+    "receipt_created": false,
+    "restarts": 0
+  },
+  "corrected_exact_catalog_probe": {
+    "bash_protocol_valid": true,
+    "request_order": [
+      "bash",
+      "submit_report"
+    ],
+    "request_payload_sha256": [
+      "sha256:c9fbd0310d0860e4a28e722d0f575c581b95e2b7abc647e17062ba98d6d7b1d4",
+      "sha256:8cf57921443f9c974c347e6db08bddb8ce3aa63a0594a893b97e94e3f1a2fcb1"
+    ],
+    "response_content_persisted": false,
+    "route": "uid_bound_local_port_forward",
+    "served_model_roster_exact": true,
+    "submit_report_failure_class": "completion_finish_reason_mismatch",
+    "submit_report_protocol_valid": false
+  },
+  "effects": {
+    "scored_cells_launched": 0,
+    "scoring_executed": false,
+    "session_created": false,
+    "task_instance_created": false,
+    "verifier_executed": false
+  },
+  "head_pod_uid": "9781ee19-cd71-44df-9013-89cf351b4269",
+  "observed_at_utc": "2026-09-05T18:55:30.098869Z",
+  "old_parity_receipt": {
+    "digest_valid": true,
+    "invalid_reason": "request_tool_catalog_differed_from_frozen_treatment_while_recording_treatment_digest",
+    "path": "/mnt/sfs/jobs/chris-cyber-evalserve-q38-tp1-a-v2/parity/PARITY.json",
+    "receipt_sha256": "sha256:89e05f5633137c3f8287299d1100e15613f0ed2ad55bfe94fd837b1ba3da6e14",
+    "scientifically_valid": false
+  },
+  "privacy": {
+    "credentials_included": false,
+    "prompts_traces_flags_scores_or_model_outputs_included": false
+  },
+  "ray_job_uid": "7c6bcfb9-c4a7-497c-b1d5-9f31f7a838cf",
+  "receipt_sha256": "sha256:da9f2d80f54ae21d92482044fb77972481e60a2b027528dff4b569b920bb5899",
+  "release": {
+    "gpu_released": true,
+    "http_status": 204,
+    "route": "DELETE /v1/runs/{name}",
+    "runtime_kubernetes_objects_remaining": 0
+  },
+  "schema_version": "fleet-qwen38-dedicated-v2-parity-failed-released-v1",
+  "service_uid": "6c244802-37ca-4607-aacd-95a37bc303b0",
+  "status": "RELEASED_PARITY_FAILED"
+}
