@@ -51,7 +51,7 @@ uv run python -m evals.fleet.immutable_submission_snapshot materialize \
 
 # Metadata-only binding: the Secret value is neither decoded nor printed.
 test "$(kubectl -n "$NS" get secret "$SECRET" -o jsonpath='{.metadata.uid}')" = "$SECRET_UID"
-test "$(kubectl -n "$NS" get secret "$SECRET" -o go-template='{{range $k,$v := .data}}{{$k}}{{"\\n"}}{{end}}')" = FLEET_API_KEY
+test "$(kubectl -n "$NS" get secret "$SECRET" -o go-template='{{range $k,$v := .data}}{{$k}}{{"\n"}}{{end}}')" = FLEET_API_KEY
 for name in "$JOB"; do
   test -z "$(kubectl -n "$NS" get job "$name" --ignore-not-found -o name)"
   test -z "$(kubectl -n "$NS" get pod -l job-name="$name" -o name)"
