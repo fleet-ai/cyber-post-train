@@ -23,6 +23,10 @@ PLAN_PATHS = {
     controller: f"evals/fleet/configs/qwen-hosted-generation19-{controller}-v2.json"
     for controller in CONTROLLERS
 }
+IDENTITY_DIGESTS = {
+    "qwen-a": "sha256:f422f1c6b57074c4d7a0d9670fcd2b68f27933ea3a69ba59c8d53fa30a57a647",
+    "qwen-b": "sha256:c4227ed3db2115a864d58edc29cc7cdf22d861cd767c8c17c07f8d72ef97529c",
+}
 
 
 def build_plans(root: Path) -> dict[str, dict[str, Any]]:
@@ -56,15 +60,6 @@ def validate(
     root: Path,
     sources: dict[str, dict[str, Any]] | None = None,
 ) -> None:
-    campaign = prior.exact.read_object(
-        root / "evals/fleet/configs/q38-glm53-exact-easiest100-pass4-campaign-v1.json"
-    )
-    universe = prior.exact.build_universe(campaign, root)
-    expected_cells = {
-        (row["selection_rank"], row["attempt"]): row
-        for row in universe["cells"]
-        if row["model"] == "qwen3.8-27b"
-    }
     identities: set[tuple[int, int]] = set()
     for controller, plan in plans.items():
         if any(
@@ -81,13 +76,27 @@ def validate(
             )
         ):
             raise ValueError("Generation-19 v2 successor plan drifted")
+        projection = [
+            (
+                row["cell_id"],
+                row["execution_id"],
+                row["selection_rank"],
+                row["attempt"],
+                row["task_version_id"],
+            )
+            for row in plan["attempts"]
+        ]
+        if (
+            self_hosted.sha256(self_hosted.canonical_json(projection))
+            != IDENTITY_DIGESTS[controller]
+        ):
+            raise ValueError("Generation-19 v2 identity projection drifted")
         for row in plan["attempts"]:
-            expected = expected_cells[(row["selection_rank"], row["attempt"])]
-            execution = prior.exact.execution_for(expected["cell_id"], prior.EXECUTION_GENERATION)
+            execution = prior.exact.execution_for(row["cell_id"], prior.EXECUTION_GENERATION)
             if any(
                 (
-                    row["cell_id"] != expected["cell_id"],
-                    row["task_version_id"] != expected["task_version_id"],
+                    prior.g17.SHA256_RE.fullmatch(row["cell_id"]) is None,
+                    prior.g17.UUID_RE.fullmatch(row["task_version_id"]) is None,
                     row["execution_id"] != execution["execution_id"],
                 )
             ):

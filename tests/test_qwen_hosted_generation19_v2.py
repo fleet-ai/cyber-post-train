@@ -11,6 +11,8 @@ from evals.fleet import qwen_hosted_generation19_bulk as prior
 from evals.fleet import qwen_hosted_generation19_v2 as g19
 from evals.fleet import qwen_hosted_generation19_v2_package as package
 from evals.fleet import qwen_hosted_generation19_v2_runtime as runtime
+from evals.fleet import qwen_hosted_generation19_v3 as g19_v3
+from evals.fleet import qwen_hosted_generation19_v3_package as package_v3
 from evals.fleet import self_hosted
 
 ROOT = Path(__file__).parents[1]
@@ -60,7 +62,16 @@ def test_package_is_closed_and_instrumented(tmp_path: Path) -> None:
             cm["data"]["plan-v2-b.json"]
         )
         subprocess.run(
-            [sys.executable, "-c", "import evals.fleet.qwen_hosted_generation19_v2_runtime"],
+            [
+                sys.executable,
+                "-c",
+                (
+                    "from pathlib import Path; "
+                    "from evals.fleet import qwen_hosted_generation19_v2 as g; "
+                    "from evals.fleet import qwen_hosted_generation19_v2_runtime; "
+                    "g.validate_all(Path.cwd())"
+                ),
+            ],
             cwd=module_root.parents[1],
             check=True,
             capture_output=True,
@@ -118,4 +129,50 @@ def test_v1_terminal_tombstone_is_digest_valid_and_retry_safe() -> None:
     assert receipt["model_started_cells"] == 0
     assert receipt["scored_cells"] == 0
     assert receipt["retry_allowed_for_all_planned_cells"] is True
+    assert receipt["receipt_sha256"] == self_hosted.digest_without(receipt, "receipt_sha256")
+
+
+def test_v3_materialized_package_executes_validate_all(tmp_path: Path) -> None:
+    plans = g19_v3.validate_all(ROOT)
+    assert {len(plan["attempts"]) for plan in plans.values()} == {192}
+    rendered = package_v3.render(ROOT)
+    for cm in rendered["items"][::2]:
+        module_root = tmp_path / cm["metadata"]["name"] / "evals" / "fleet"
+        config_root = module_root / "configs"
+        config_root.mkdir(parents=True)
+        (module_root.parent / "__init__.py").touch()
+        (module_root / "__init__.py").touch()
+        for name, value in cm["data"].items():
+            if name.endswith(".py"):
+                (module_root / name).write_text(value)
+        for controller in ("a", "b"):
+            (config_root / f"qwen-hosted-generation19-qwen-{controller}-v3.json").write_text(
+                cm["data"][f"plan-v3-{controller}.json"]
+            )
+        subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                (
+                    "from pathlib import Path; "
+                    "from evals.fleet import qwen_hosted_generation19_v3 as g; "
+                    "g.validate_all(Path.cwd())"
+                ),
+            ],
+            cwd=module_root.parents[1],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+
+def test_v2_terminal_tombstone_is_digest_valid_and_retry_safe() -> None:
+    path = ROOT / (
+        "docs/evidence/qwen38-study/"
+        "2026-09-05-qwen38-generation19-bulk-v2-terminal.json"
+    )
+    receipt = json.loads(path.read_text())
+    assert receipt["error_type"] == "FileNotFoundError"
+    assert receipt["global_execution_claims"] == 0
+    assert receipt["model_started_cells"] == 0
     assert receipt["receipt_sha256"] == self_hosted.digest_without(receipt, "receipt_sha256")

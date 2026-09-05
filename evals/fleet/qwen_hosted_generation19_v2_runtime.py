@@ -44,11 +44,11 @@ def _write_stage(root: Path, stage: str, item: dict[str, Any] | None) -> None:
     self_hosted.write_json_once(_stage_path(root, stage, item), _seal(body))
 
 
-def runtime_gate(plan: dict[str, Any]) -> None:
+def runtime_gate(plan: dict[str, Any], bulk_module: Any = g19) -> None:
     path = Path(os.environ.get("G19_PREFLIGHT_PATH", ""))
     expected = os.environ.get("G19_PREFLIGHT_SHA256")
     receipt = g19.prior.g17.load(path)
-    plans = g19.validate_all(Path(plan["repo_root"]))
+    plans = bulk_module.validate_all(Path(plan["repo_root"]))
     execution_ids = sorted(
         row["execution_id"] for built in plans.values() for row in built["attempts"]
     )
@@ -69,7 +69,14 @@ def runtime_gate(plan: dict[str, Any]) -> None:
         raise RuntimeError("Generation-19 v2 live release preflight drifted")
 
 
-def run(plan: dict[str, Any], *, out: Path, proxy: Path, diagnostic_root: Path) -> dict[str, Any]:
+def run(
+    plan: dict[str, Any],
+    *,
+    out: Path,
+    proxy: Path,
+    diagnostic_root: Path,
+    bulk_module: Any = g19,
+) -> dict[str, Any]:
     diagnostic_root.mkdir(mode=0o700, parents=True, exist_ok=True)
     state: dict[str, Any] = {"stage": None, "item": None}
 
@@ -79,12 +86,12 @@ def run(plan: dict[str, Any], *, out: Path, proxy: Path, diagnostic_root: Path) 
 
     prior = engine.bulk
     try:
-        engine.bulk = g19
+        engine.bulk = bulk_module
         return engine.run_controller(
             plan,
             out=out,
             proxy=proxy,
-            runtime_gate_check=runtime_gate,
+            runtime_gate_check=lambda value: runtime_gate(value, bulk_module),
             stage_observer=observe,
         )
     except Exception as exc:
