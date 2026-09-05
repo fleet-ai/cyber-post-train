@@ -352,18 +352,39 @@ def _classify(out: Path, plan: dict[str, Any], claim: dict[str, Any], key: str) 
         time.sleep(5)
     if len(authoritative) != 1:
         raise RuntimeError("dedicated canary lacks one authoritative session")
-    row, metadata = authoritative[0], authoritative[0].get("metadata") or {}
+    row = authoritative[0]
+    metadata = row.get("metadata")
+    projected_task_version = row.get("eval_task_version_id") or row.get("task_version_id")
+    expected_model = self_hosted.persisted_session_model_identity(config)
     if (
         row.get("status") != "completed"
-        or row.get("model") != self_hosted.persisted_session_model_identity(config)
+        or row.get("task_key") != config["task"]["key"]
         or (row.get("verifier_execution") or {}).get("id") != verifier_id
-        or (row.get("eval_task_version_id") or row.get("task_version_id"))
-        != config["task"]["version_id"]
-        or metadata.get("run_id") != item["run_id"]
-        or metadata.get("cell_id") != item["cell_id"]
-        or metadata.get("execution_id") != item["execution_id"]
+        or (row.get("model") is not None and row.get("model") != expected_model)
+        or (
+            projected_task_version is not None
+            and projected_task_version != config["task"]["version_id"]
+        )
+        or (
+            metadata is not None
+            and (
+                not isinstance(metadata, dict)
+                or metadata.get("run_id") != item["run_id"]
+                or metadata.get("cell_id") != item["cell_id"]
+                or metadata.get("execution_id") != item["execution_id"]
+            )
+        )
     ):
         raise RuntimeError("dedicated canary authoritative session binding drifted")
+    projection_omissions = sorted(
+        name
+        for name, value in {
+            "model": row.get("model"),
+            "task_version_id": projected_task_version,
+            "metadata": metadata,
+        }.items()
+        if value is None
+    )
     return _seal({
         "schema_version": ACCEPTED_SCHEMA,
         "accepted": True,
@@ -384,6 +405,9 @@ def _classify(out: Path, plan: dict[str, Any], claim: dict[str, Any], key: str) 
         "config_sha256": config["config_sha256"],
         "cleanup_completed": True,
         "session_ingest_completed": True,
+        "authoritative_session_task_key_matched": True,
+        "authoritative_projection_omissions": projection_omissions,
+        "authoritative_projection_rule": "legacy_list_fields_may_be_null_but_never_mismatched_v1",
         "scores_included": False,
         "prompts_or_traces_included": False,
     })
