@@ -21,3 +21,9 @@ and cannot substitute for the authoritative Workload admission result.
 The GLM TP8 scale gate remains closed on the current head-wide required-TAS
 shape. Do not submit another identical successor.
 
+A two-node/16-GPU request does not avoid this boundary. It renders one
+eight-GPU Ray head and one eight-GPU worker, applies the same required-TAS
+annotation to both, and therefore needs topology-compatible admission for both
+pod sets. It would also consume the entire approved 16-GPU ceiling and is a
+different TP/runtime contract from the validated TP8 server command. It must
+not be used as an admission workaround.
