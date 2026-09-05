@@ -431,17 +431,14 @@ def test_fixed_historical_adapters_remain_score_blind(
 def test_reviewed_legacy_glm_generation7_acceptance_is_exact(
     tmp_path: Path, authority: ledger.Authority
 ) -> None:
-    value = {
-        "schema_version": ledger.LEGACY_GLM_GENERATION7_ACCEPTED_SCHEMA,
-        **ledger.LEGACY_GLM_GENERATION7_ACCEPTED_BINDING,
-        "accepted": True,
-        "credited": True,
-        "retry_allowed": False,
-        "cleanup_completed": True,
-        "session_ingest_completed": True,
-        "scores_included": False,
-        "prompts_or_traces_included": False,
-    }
+    source = ledger.load_receipt(ROOT / ledger.LEGACY_GLM_GENERATION7_SOURCE)
+    value = next(
+        row["receipt"]
+        for row in source["accepted_cells"]
+        if row.get("model_block") == "glm_hosted_v12"
+        and row.get("source_rank") == 13
+        and row.get("attempt") == 1
+    )
     path = _write(tmp_path / "legacy-glm-accepted.json", value)
     evidence = ledger.accepted_evidence(path, authority)
     assert evidence.state == "accepted"

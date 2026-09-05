@@ -16,7 +16,6 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from unittest import mock
 
 from evals.fleet import exact_pass4_bulk_runtime_v3 as bulk_runtime
 from evals.fleet import exact_pass4_bulk_v3 as bulk
@@ -151,20 +150,12 @@ LEGACY_GLM_GENERATION7_ACCEPTED_FIELDS = {
     "prompts_or_traces_included",
     "receipt_sha256",
 }
-LEGACY_GLM_GENERATION7_ACCEPTED_BINDING = {
-    "run_id": "chris-cyber-glm53-opencode11827-hosted-primary46-p4-v12-sr013-a1-85027a7a",
-    "rank": 1,
-    "source_rank": 13,
-    "attempt": 1,
-    "task_key": "cysec1-2-fakelook-gen_blackbox-ab56dfb6116356c402290fa8__blackbox_ctf_v1",
-    "task_version_id": "9375a9b9-04e5-4f6f-ad47-286121278992",
-    "session_id": "0088dc21-0e12-4db2-ada5-32d6e6ff914f",
-    "verifier_execution_id": "d6727db1-0f89-4c10-986d-f123ba2e2025",
-    "agent_exit_code": 0,
-    "config_sha256": "sha256:7e2f175c39d05308a6f2fcabea567aa1d4c5ecbb9b3ce674a72ff170f1faad84",
-    "claim_sha256": "sha256:09465aa21d27475b8642e77a3ac8bf6b550f21c57212b463d9f463e53ef37e31",
-    "receipt_sha256": "sha256:1c6e404b9edca1a8ab78303c8137a4cac55eb3bfa6c94db1a473ac9512425637",
-}
+LEGACY_GLM_GENERATION7_SOURCE = Path(
+    "docs/evidence/qwen38-study/2026-09-04-completed-exit1-gap-source-v1.json"
+)
+LEGACY_GLM_GENERATION7_SOURCE_SHA256 = (
+    "sha256:30338f0561867bda8ab8b10cd2601b3a1ce0c60ad27d7fd55f9a7ad87d4b46a2"
+)
 CLAIM_SCHEMAS = {
     bulk_runtime.CLAIM_SCHEMA,
     GENERATION7_CLAIM_SCHEMA,
@@ -718,10 +709,9 @@ def _build_authority(repo_root: Path, campaign_path: Path) -> Authority:
         / "docs/evidence/qwen38-study/"
         "2026-09-05-qwen38-dedicated-rank3-a2-g22-release-v1.json"
     )
-    with mock.patch.dict(
-        "os.environ", {"QWEN_RANK3_G22_RELEASE_PATH": str(rank3_g22_release)}
-    ):
-        rank3_g22_plan = qwen_dedicated_rank3_g22._released_plan(repo_root)  # noqa: SLF001
+    rank3_g22_plan = qwen_dedicated_rank3_g22._released_plan(  # noqa: SLF001
+        repo_root, release_path=rank3_g22_release
+    )
     rank3_g22_item = rank3_g22_plan["item"]
     rank3_g22_key = (rank3_g22_item["cell_id"], rank3_g22_item["execution_id"])
     if rank3_g22_key in dedicated_qwen_rank3_items:
@@ -752,8 +742,9 @@ def _build_authority(repo_root: Path, campaign_path: Path) -> Authority:
         / "docs/evidence/qwen38-study/"
         "2026-09-05-qwen38-dedicated-rank97-tp1-d-release-v2.json"
     )
-    with mock.patch.dict("os.environ", {"QWEN_RANK97_RELEASE_PATH": str(rank97_release)}):
-        rank97_plans = qwen_dedicated_rank97._released_plans(repo_root)  # noqa: SLF001
+    rank97_plans = qwen_dedicated_rank97._released_plans(  # noqa: SLF001
+        repo_root, release_path=rank97_release
+    )
     for plan in rank97_plans:
         item = plan["item"]
         key = (item["cell_id"], item["execution_id"])
@@ -946,18 +937,18 @@ def _accepted_legacy_glm_generation7(
     if key not in authority.generation7:
         raise LedgerError(f"legacy GLM acceptance lacks generation-7 authority: {path}")
     cell, generation = _require_cell_execution(authority, *key, 7, path)
-    expected = {
-        **LEGACY_GLM_GENERATION7_ACCEPTED_BINDING,
-        "accepted": True,
-        "credited": True,
-        "retry_allowed": False,
-        "cleanup_completed": True,
-        "session_ingest_completed": True,
-        "scores_included": False,
-        "prompts_or_traces_included": False,
-    }
-    if set(value) != set(expected) | {"schema_version"} or any(
-        value.get(field) != expected_value for field, expected_value in expected.items()
+    source = load_receipt(authority.repo_root / LEGACY_GLM_GENERATION7_SOURCE)
+    entries = [
+        row
+        for row in source.get("accepted_cells", [])
+        if row.get("model_block") == "glm_hosted_v12"
+        and row.get("source_rank") == 13
+        and row.get("attempt") == 1
+    ]
+    if (
+        source.get("receipt_sha256") != LEGACY_GLM_GENERATION7_SOURCE_SHA256
+        or len(entries) != 1
+        or entries[0].get("receipt") != value
     ):
         raise LedgerError(f"legacy GLM acceptance identity or outcome drifted: {path}")
     if cell["selection_rank"] != 13 or cell["attempt"] != 1:

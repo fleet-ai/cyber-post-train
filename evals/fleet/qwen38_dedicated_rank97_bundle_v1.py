@@ -135,12 +135,14 @@ def _validate_parity(root: Path) -> dict[str, Any]:
     return value
 
 
-def _released_plans(root: Path) -> list[dict[str, Any]]:
+def _released_plans(root: Path, *, release_path: Path | None = None) -> list[dict[str, Any]]:
     plans = [build_plan(root, attempt) for attempt in (1, 2, 3, 4)]
-    raw_path = os.environ.get("QWEN_RANK97_RELEASE_PATH")
-    if not raw_path:
-        raise RuntimeError("rank97 whole-task release receipt is required")
-    release = json.loads(Path(raw_path).read_text())
+    if release_path is None:
+        raw_path = os.environ.get("QWEN_RANK97_RELEASE_PATH")
+        if not raw_path:
+            raise RuntimeError("rank97 whole-task release receipt is required")
+        release_path = Path(raw_path)
+    release = json.loads(release_path.read_text())
     if (
         release.get("receipt_sha256") != self_hosted.digest_without(release, "receipt_sha256")
         or release.get("schema_version") != "fleet-qwen38-dedicated-rank97-whole-task-release-v1"
