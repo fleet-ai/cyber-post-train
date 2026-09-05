@@ -20,6 +20,8 @@ from typing import Any
 from evals.fleet import exact_pass4_bulk_runtime_v3 as bulk_runtime
 from evals.fleet import exact_pass4_bulk_v3 as bulk
 from evals.fleet import exact_pass4_universe as exact
+from evals.fleet import hosted_glm_exact_bulk_v1 as hosted_glm_bulk
+from evals.fleet import qwen38_dedicated_rank2_v3 as qwen_dedicated_v3
 from evals.fleet import qwen38_dedicated_scored_canary_v1 as qwen_dedicated
 from evals.fleet import qwen_bulk_generation16 as qwen_generation16
 from evals.fleet import qwen_hosted_generation18 as qwen_generation18
@@ -390,7 +392,9 @@ class Authority:
     bulk_items: dict[tuple[str, str], tuple[dict[str, Any], dict[str, Any]]]
     qwen_generation16_items: dict[tuple[str, str], tuple[dict[str, Any], dict[str, Any]]]
     qwen_generation18_items: dict[tuple[str, str], tuple[dict[str, Any], dict[str, Any]]]
+    hosted_glm_bulk_items: dict[tuple[str, str], tuple[dict[str, Any], dict[str, Any]]]
     dedicated_qwen_items: dict[tuple[str, str], tuple[dict[str, Any], dict[str, Any]]]
+    dedicated_qwen_v3_items: dict[tuple[str, str], tuple[dict[str, Any], dict[str, Any]]]
     generation7: dict[tuple[str, str], dict[str, Any]]
     generation15: dict[tuple[str, str], dict[str, Any]]
 
@@ -475,6 +479,16 @@ def _build_authority(repo_root: Path, campaign_path: Path) -> Authority:
                 raise LedgerError("Qwen generation-18 execution authority is duplicated")
             qwen_generation18_items[key] = (plan, item)
 
+    hosted_glm_bulk_items: dict[tuple[str, str], tuple[dict[str, Any], dict[str, Any]]] = {}
+    for plan in hosted_glm_bulk.validate_all(repo_root).values():
+        if plan.get("treatment") != exact.EXPECTED_TREATMENT:
+            raise LedgerError("hosted GLM bulk treatment drifted from the exact universe")
+        for item in plan["attempts"]:
+            key = (item["cell_id"], item["execution_id"])
+            if key in hosted_glm_bulk_items:
+                raise LedgerError("hosted GLM bulk execution authority is duplicated")
+            hosted_glm_bulk_items[key] = (plan, item)
+
     dedicated_qwen_items: dict[tuple[str, str], tuple[dict[str, Any], dict[str, Any]]] = {}
     for attempt in sorted(qwen_dedicated.EXPECTED_IDENTITIES):
         generated_plan = qwen_dedicated.build_plan(repo_root, attempt)
@@ -513,6 +527,15 @@ def _build_authority(repo_root: Path, campaign_path: Path) -> Authority:
             raise LedgerError("dedicated Qwen execution authority is duplicated")
         dedicated_qwen_items[key] = (plan, item)
 
+    dedicated_qwen_v3_plan = qwen_dedicated_v3.build_plan(repo_root)
+    dedicated_qwen_v3_item = dedicated_qwen_v3_plan["item"]
+    dedicated_qwen_v3_items = {
+        (dedicated_qwen_v3_item["cell_id"], dedicated_qwen_v3_item["execution_id"]): (
+            dedicated_qwen_v3_plan,
+            dedicated_qwen_v3_item,
+        )
+    }
+
     generation7_items = _validated_fixed_bindings(cells, GENERATION7_BINDINGS, 7)
     generation15_items = _validated_fixed_bindings(cells, GENERATION15_BINDINGS, 15)
     return Authority(
@@ -521,7 +544,9 @@ def _build_authority(repo_root: Path, campaign_path: Path) -> Authority:
         bulk_items=bulk_items,
         qwen_generation16_items=qwen_generation16_items,
         qwen_generation18_items=qwen_generation18_items,
+        hosted_glm_bulk_items=hosted_glm_bulk_items,
         dedicated_qwen_items=dedicated_qwen_items,
+        dedicated_qwen_v3_items=dedicated_qwen_v3_items,
         generation7=generation7_items,
         generation15=generation15_items,
     )
@@ -591,6 +616,24 @@ def _require_exact_fields(
         raise LedgerError(f"receipt fields drifted from its score-blind schema: {path}")
 
 
+def _bulk_pair(
+    authority: Authority, key: tuple[Any, Any], controller: Any
+) -> tuple[dict[str, Any], dict[str, Any]] | None:
+    candidates = [
+        pair
+        for mapping in (
+            authority.qwen_generation18_items,
+            authority.qwen_generation16_items,
+            authority.hosted_glm_bulk_items,
+            authority.bulk_items,
+        )
+        if (pair := mapping.get(key)) is not None and pair[0].get("controller") == controller
+    ]
+    if len(candidates) > 1:
+        raise LedgerError("bulk receipt controller is ambiguous across frozen plans")
+    return candidates[0] if candidates else None
+
+
 def _accepted_bulk(value: dict[str, Any], path: Path, authority: Authority) -> Evidence:
     _require_exact_fields(
         value,
@@ -599,11 +642,7 @@ def _accepted_bulk(value: dict[str, Any], path: Path, authority: Authority) -> E
         optional={BULK_ACCEPTED_OPTIONAL_PROJECTION_FIELD},
     )
     key = (value.get("cell_id"), value.get("execution_id"))
-    pair = (
-        authority.qwen_generation18_items.get(key)
-        or authority.qwen_generation16_items.get(key)
-        or authority.bulk_items.get(key)
-    )
+    pair = _bulk_pair(authority, key, value.get("controller"))
     if pair is None:
         raise LedgerError(f"bulk acceptance is absent from the exact frozen plans: {path}")
     plan, item = pair
@@ -818,8 +857,16 @@ def _accepted_dedicated_qwen(value: dict[str, Any], path: Path, authority: Autho
         optional=DEDICATED_QWEN_PROJECTION_FIELDS,
     )
     key = (value.get("cell_id"), value.get("execution_id"))
-    pair = authority.dedicated_qwen_items.get(key)
+    candidates = [
+        pair
+        for mapping in (authority.dedicated_qwen_items, authority.dedicated_qwen_v3_items)
+        if (pair := mapping.get(key)) is not None
+        and pair[0]["config"]["serving"]["serving_block"] == value.get("serving_block")
+    ]
+    pair = candidates[0] if len(candidates) == 1 else None
     if pair is None:
+        if key in authority.dedicated_qwen_items or key in authority.dedicated_qwen_v3_items:
+            raise LedgerError(f"dedicated Qwen acceptance identity or treatment drifted: {path}")
         raise LedgerError(f"dedicated Qwen acceptance lacks exact plan authority: {path}")
     plan, item = pair
     cell, generation = _require_cell_execution(authority, *key, item["execution_generation"], path)
@@ -983,11 +1030,7 @@ def accepted_evidence(path: Path, authority: Authority) -> Evidence:
 def _claim_bulk(value: dict[str, Any], path: Path, authority: Authority) -> Evidence:
     _require_exact_fields(value, BULK_CLAIM_FIELDS, path)
     key = (value.get("cell_id"), value.get("execution_id"))
-    pair = (
-        authority.qwen_generation18_items.get(key)
-        or authority.qwen_generation16_items.get(key)
-        or authority.bulk_items.get(key)
-    )
+    pair = _bulk_pair(authority, key, value.get("controller"))
     if pair is None:
         raise LedgerError(f"bulk claim is absent from exact frozen plans: {path}")
     plan, item = pair
@@ -1028,7 +1071,13 @@ def _claim_bulk(value: dict[str, Any], path: Path, authority: Authority) -> Evid
 def _claim_dedicated_qwen(value: dict[str, Any], path: Path, authority: Authority) -> Evidence:
     _require_exact_fields(value, BULK_CLAIM_FIELDS, path)
     key = (value.get("cell_id"), value.get("execution_id"))
-    pair = authority.dedicated_qwen_items.get(key)
+    candidates = [
+        pair
+        for mapping in (authority.dedicated_qwen_items, authority.dedicated_qwen_v3_items)
+        if (pair := mapping.get(key)) is not None
+        and pair[0]["controller"] == value.get("controller")
+    ]
+    pair = candidates[0] if len(candidates) == 1 else None
     if pair is None:
         raise LedgerError(f"dedicated Qwen claim lacks exact plan authority: {path}")
     plan, item = pair
@@ -1130,7 +1179,10 @@ def claim_evidence(path: Path, authority: Authority, *, active: bool) -> Evidenc
     if schema not in CLAIM_SCHEMAS:
         raise LedgerError(f"unsupported claim receipt schema at {path}: {schema!r}")
     if schema == bulk_runtime.CLAIM_SCHEMA:
-        if value.get("controller") == qwen_dedicated.CONTROLLER:
+        if value.get("controller") in {
+            qwen_dedicated.CONTROLLER,
+            qwen_dedicated_v3.CONTROLLER,
+        }:
             evidence = _claim_dedicated_qwen(value, path, authority)
         else:
             evidence = _claim_bulk(value, path, authority)

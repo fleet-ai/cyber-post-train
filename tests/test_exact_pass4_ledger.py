@@ -453,6 +453,44 @@ def test_generation18_qwen_claim_uses_its_exact_successor_plan(
     assert evidence.execution_generation == 18
 
 
+def test_hosted_glm_bulk_claim_uses_exact_partition_authority(
+    tmp_path: Path, authority: ledger.Authority
+) -> None:
+    assert len(authority.hosted_glm_bulk_items) == 394
+    plan, item = next(iter(authority.hosted_glm_bulk_items.values()))
+    root = tmp_path / "claims"
+    value = runtime.claim_cell(
+        plan,
+        item,
+        claim_root=root,
+        job_uid="11111111-1111-4111-8111-111111111111",
+        pod_uid="22222222-2222-4222-8222-222222222222",
+    )
+    assert value is not None
+    path = root / f"{item['execution_id'].removeprefix('sha256:')}.json"
+    evidence = ledger.claim_evidence(path, authority, active=True)
+    assert evidence.cell_id == item["cell_id"]
+
+
+def test_dedicated_qwen_v3_claim_uses_exact_rank2_attempt2_authority(
+    tmp_path: Path, authority: ledger.Authority
+) -> None:
+    plan, item = next(iter(authority.dedicated_qwen_v3_items.values()))
+    root = tmp_path / "claims"
+    value = runtime.claim_cell(
+        plan,
+        item,
+        claim_root=root,
+        job_uid="11111111-1111-4111-8111-111111111111",
+        pod_uid="22222222-2222-4222-8222-222222222222",
+    )
+    assert value is not None
+    path = root / f"{item['execution_id'].removeprefix('sha256:')}.json"
+    evidence = ledger.claim_evidence(path, authority, active=True)
+    assert evidence.cell_id == item["cell_id"]
+    assert evidence.execution_generation == 1
+
+
 def test_dedicated_qwen_claim_and_acceptance_are_strict_score_blind_adapters(
     tmp_path: Path, authority: ledger.Authority
 ) -> None:
