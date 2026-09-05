@@ -12,6 +12,10 @@ scored evaluations.
   `ab444cb664ffb4da351e4d33298cc052f848f2833487807bf984a753fa7c3b47`
 - Manifest digest:
   `sha256:fb09668f8de77e6baee37dc1e3162a7617ca9a0a450da9ca53422c17bfbc942a`
+- Reviewed task-ID roster:
+  `configs/data/fleet-a62-task-identity-roster-v1.json`
+- Roster file SHA-256:
+  `d58f146e1c5cdc2ba372f13b079a13eab997ba7addd47d943f2ab9eceeec6bb9`
 - Membership: 160 unique task versions: 130 train, 10 dev, and 20 test
 - Import Repository: `gentle-ember-ledger/fleet-cyber-a62-frozen`
 - Final composition identities:
@@ -22,7 +26,7 @@ The complete content-free composition contract is
 `evals/platform_v2/fleet_a62_compositions_v1.json`. Do not substitute a
 mutable `latest` tag or a task's current catalog pointer.
 
-## Current hold and pending exact protocol
+## Current hold and deployed v3 contract
 
 There are two deliberately different planning modes:
 
@@ -31,36 +35,42 @@ There are two deliberately different planning modes:
   recent reconciliation found 14 frozen versions that no longer equal current,
   and its TaskDump topology omits one environment shape used by two rows. The
   controller reports those facts but refuses every write.
-- Pending discovery protocol `fleet.legacy-task-import.v3` accepts a
-  `source_selection` with schema `fleet.taskdump.selection.v1`. It selects the
-  frozen source row directly and supports the previously omitted environment
-  topology. Only this protocol can produce write-admissible rows.
+- Discovery protocol `fleet.legacy-task-import.v3`, as merged in Platform PR
+  #905, accepts two top-level pins: `expected_eval_task_id` and
+  `expected_current_task_version_id`. The latter must still equal
+  `eval_tasks.current_version_id` when extraction begins. V3 prevents a later
+  pointer move from silently changing the import; it does not select a
+  historical non-current task version.
 
 Do not publish while discovery still reports v2. Do not publish only the
 apparently eligible rows and later call the mixed result the frozen cohort.
-After v3 is deployed, regenerate the plan from the exact manifest; do not
-upgrade or hand-edit a v2 plan.
+Regenerate a v3 plan from the exact manifest and reviewed identity roster; do
+not upgrade or hand-edit a v2 plan.
 
-Every v3 `source_selection` binds all nine fields below:
+The frozen split manifest carries each task key and frozen task-version UUID,
+but not its stable `eval_tasks.id`. Supply the separately reviewed, content-free
+160-row identity roster. The controller pins its exact raw SHA-256:
 
 ```text
-schema, task_key, task_version_id, team_id, environment_version_id,
-env_key, env_version, data_key, data_version
+sha256:d58f146e1c5cdc2ba372f13b079a13eab997ba7addd47d943f2ab9eceeec6bb9
 ```
 
-Registry returns both that complete selection and its digest. The controller
-requires both to match the request in the create receipt and every later status
-read. The digest is the SHA-256 of the compact JSON object in the server's
-declared field order; it is distinct from the request, plan, and published
-TaskSet digests.
+It must have schema `chris.cyber.v2.source-roster.v1`, the exact source Job ID,
+and a one-to-one ordered mapping of all 160 task keys to canonical
+`eval_task_id` values. The roster's captured current-version values are
+diagnostic only. The request always takes
+`expected_current_task_version_id` from the frozen split manifest.
+
+The create response and every status response must echo the v3 protocol and
+both pins. The append-only receipt binds those values, the full request digest,
+a source-identity digest, and the plan digest.
 
 ## Credentials and private output
 
-Authenticate to Registry alpha through the normal Fleet Registry login. When
-discovery reports v2, make `FLEET_API_KEY` available as an environment secret
-for the read-only current-pointer diagnostic. V3 planning does not read the
-current pointer and does not need that credential. Never put either credential
-in a command argument, plan, journal, commit, or chat transcript.
+Authenticate to Registry alpha through the normal Fleet Registry login. Make
+`FLEET_API_KEY` available as an environment secret for the GET-only task-ID and
+current-pointer preflight in both modes. Never put either credential in a
+command argument, plan, journal, commit, or chat transcript.
 
 Keep the plan and append-only receipt journal in a private operator directory:
 
@@ -92,18 +102,21 @@ If discovery reports v2, the output is a diagnostic snapshot with
 `blocked_deployed_topology_omits_environment` counts. It is never valid input
 to submission, even if all mutable pointers happened to agree.
 
-If discovery reports v3, submission remains held unless the plan has exactly:
+If discovery reports v3, each row sends the reviewed stable task ID plus the
+frozen task-version UUID. Submission remains held unless the plan has exactly:
 
 ```text
 total = 160
-eligible_exact_frozen_version = 160
+eligible_exact_current_frozen = 160
 registry_protocol = fleet.legacy-task-import.v3
-deployed_exact_task_version_selector = true
+deployed_exact_current_source_pins = true
 ```
 
-Every v3 row must have a request digest and source-selection digest derived
-from the frozen manifest. Its `current_task_version_id` is intentionally null:
-current-pointer equality is not an authority in v3.
+The latest reviewed snapshot has only 146
+`eligible_exact_current_frozen` rows and 14
+`blocked_frozen_version_not_current` rows. Therefore the 160-task campaign is
+still held. Importing those 14 exact historical versions requires a further
+Platform contract extension; v3 from PR #905 cannot do it.
 
 ## 2. Import one create-once canary
 
@@ -129,7 +142,7 @@ uv run python -m evals.platform_v2.legacy_import \
 ```
 
 Proceed only when the canary is exclusively `published` and verification binds
-the returned source selection and digest, requested tag, one exact task digest,
+the returned protocol and two source pins, requested tag, one exact task digest,
 prepared Environment, detached bare Environment, and immutable image lineage.
 `failed`, `needs_input`, identity drift, or conflicting evidence is a stop, not
 a reason to mint another import.

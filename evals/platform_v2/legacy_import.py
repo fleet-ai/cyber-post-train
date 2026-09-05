@@ -1,8 +1,8 @@
 """Plan and submit exact legacy Fleet cyber task imports to Platform v2.
 
-Protocol v3 binds every frozen source identity in ``source_selection``.  The
-legacy v2 protocol remains available for read-only current-pointer diagnostics,
-but is never write-admissible.
+Protocol v3 binds the Fleet task row and its expected current frozen version.
+The legacy v2 protocol remains available for read-only current-pointer
+diagnostics, but is never write-admissible.
 """
 
 from __future__ import annotations
@@ -34,13 +34,17 @@ REPOSITORY_PATH = "/api/v1/repositories"
 LEGACY_IMPORT_PROTOCOL = "fleet.legacy-task-import.v2"
 EXPECTED_IMPORT_PROTOCOL = "fleet.legacy-task-import.v3"
 SUPPORTED_IMPORT_PROTOCOLS = {LEGACY_IMPORT_PROTOCOL, EXPECTED_IMPORT_PROTOCOL}
-SOURCE_SELECTION_SCHEMA = "fleet.taskdump.selection.v1"
-PLAN_SCHEMA = "fleet_platform_v2_cyber_import_plan_v2"
+IDENTITY_ROSTER_SCHEMA = "chris.cyber.v2.source-roster.v1"
+PLAN_SCHEMA = "fleet_platform_v2_cyber_import_plan_v3"
 DEFAULT_SELECTION = Path("configs/data/fleet-a62-task-split-v1.json")
+DEFAULT_IDENTITY_ROSTER = Path("configs/data/fleet-a62-task-identity-roster-v1.json")
 DEFAULT_NAMESPACE = "gentle-ember-ledger"
 DEFAULT_REPOSITORY = "fleet-cyber-a62-frozen"
 EXPECTED_SELECTION_DIGEST = (
     "sha256:fb09668f8de77e6baee37dc1e3162a7617ca9a0a450da9ca53422c17bfbc942a"
+)
+EXPECTED_IDENTITY_ROSTER_SHA256 = (
+    "sha256:d58f146e1c5cdc2ba372f13b079a13eab997ba7addd47d943f2ab9eceeec6bb9"
 )
 TAG_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$")
 UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
@@ -59,18 +63,7 @@ ALLOWED_RESOLUTION_AUTHORITIES = {
     "fleet_job_roster+training_environment_catalog",
 }
 DEPLOYED_TOPOLOGY_OMITTED_ENV_KEYS = {"cysec1-2-current-fubspot-gen"}
-ROW_RECEIPT_SCHEMA = "fleet_platform_v2_cyber_import_row_receipt_v2"
-SOURCE_SELECTION_FIELDS = (
-    "schema",
-    "task_key",
-    "task_version_id",
-    "team_id",
-    "environment_version_id",
-    "env_key",
-    "env_version",
-    "data_key",
-    "data_version",
-)
+ROW_RECEIPT_SCHEMA = "fleet_platform_v2_cyber_import_row_receipt_v3"
 
 
 class PlatformImportError(RuntimeError):
@@ -166,43 +159,53 @@ def task_tag(row: dict[str, Any], split_index: int) -> str:
     return value
 
 
-def exact_source_selection(row: dict[str, Any]) -> dict[str, str]:
-    """Render the TaskDump v7 selector in the Registry's digest field order."""
-    selection = {
-        "schema": SOURCE_SELECTION_SCHEMA,
-        "task_key": row["task_key"],
-        "task_version_id": row["task_version_id"],
-        "team_id": FLEET_TEAM_ID,
-        "environment_version_id": row["environment_version_id"],
-        "env_key": row["env_key"],
-        "env_version": row["env_version"],
-        "data_key": row["data_key"],
-        "data_version": row["data_version"],
-    }
-    _validate_source_selection(selection)
-    return selection
+def load_identity_roster(path: Path, selection: dict[str, Any]) -> dict[str, Any]:
+    """Load the separately reviewed task-key to stable eval-task-ID roster."""
+    try:
+        raw = path.read_bytes()
+        roster = json.loads(raw)
+    except (OSError, json.JSONDecodeError):
+        raise PlatformImportError("identity roster is unavailable or invalid") from None
+    if sha256(raw) != EXPECTED_IDENTITY_ROSTER_SHA256:
+        raise PlatformImportError("identity roster does not match the reviewed file digest")
+    _validate_identity_roster(roster, selection)
+    return roster
 
 
-def _validate_source_selection(selection: dict[str, Any]) -> None:
+def _validate_identity_roster(roster: Any, selection: dict[str, Any]) -> None:
+    rows = roster.get("tasks") if isinstance(roster, dict) else None
+    expected_keys = [row["task_key"] for row in selection["tasks"]]
     if (
-        tuple(selection) != SOURCE_SELECTION_FIELDS
-        or selection.get("schema") != SOURCE_SELECTION_SCHEMA
-        or not UUID_RE.fullmatch(str(selection.get("task_version_id")))
-        or not UUID_RE.fullmatch(str(selection.get("team_id")))
-        or not UUID_RE.fullmatch(str(selection.get("environment_version_id")))
+        not isinstance(roster, dict)
+        or set(roster) != {"schema", "source_job_id", "tasks"}
+        or roster.get("schema") != IDENTITY_ROSTER_SCHEMA
+        or roster.get("source_job_id") != selection["source"]["job_id"]
+        or not isinstance(rows, list)
+        or len(rows) != 160
         or any(
-            not TAG_RE.fullmatch(str(selection.get(field)))
-            for field in ("task_key", "env_key", "env_version", "data_key", "data_version")
+            not isinstance(row, dict)
+            or set(row) != {"task_key", "eval_task_id", "current_task_version_id"}
+            or not TAG_RE.fullmatch(str(row.get("task_key")))
+            or not UUID_RE.fullmatch(str(row.get("eval_task_id")))
+            or not UUID_RE.fullmatch(str(row.get("current_task_version_id")))
+            for row in rows
         )
+        or set(row["task_key"] for row in rows) != set(expected_keys)
+        or len({row["task_key"] for row in rows}) != 160
+        or len({row["eval_task_id"] for row in rows}) != 160
     ):
-        raise PlatformImportError("exact source selection is invalid or unordered")
+        raise PlatformImportError("identity roster does not match the frozen 160-task cohort")
 
 
-def exact_source_selection_digest(selection: dict[str, Any]) -> str:
-    """Match Go's json.Marshal digest for LegacyTaskImportSourceSelection."""
-    normalized = {field: selection.get(field) for field in SOURCE_SELECTION_FIELDS}
-    _validate_source_selection(normalized)
-    return sha256(json.dumps(normalized, separators=(",", ":")).encode())
+def source_identity(row: dict[str, Any], eval_task_id: str) -> dict[str, str]:
+    identity = {
+        "task_key": row["task_key"],
+        "expected_eval_task_id": eval_task_id,
+        "expected_current_task_version_id": row["task_version_id"],
+    }
+    if not UUID_RE.fullmatch(eval_task_id):
+        raise PlatformImportError("reviewed eval task ID is not a canonical UUID")
+    return identity
 
 
 def import_request(
@@ -212,6 +215,7 @@ def import_request(
     repository: str,
     split_index: int,
     protocol: str = EXPECTED_IMPORT_PROTOCOL,
+    expected_eval_task_id: str | None = None,
 ) -> dict[str, Any]:
     if (namespace, repository) != (DEFAULT_NAMESPACE, DEFAULT_REPOSITORY):
         raise PlatformImportError("destination differs from the frozen import campaign")
@@ -233,7 +237,9 @@ def import_request(
         },
     }
     if protocol == EXPECTED_IMPORT_PROTOCOL:
-        request["source_selection"] = exact_source_selection(row)
+        if expected_eval_task_id is None:
+            raise PlatformImportError("v3 import requires a reviewed eval task ID")
+        request.update(source_identity(row, expected_eval_task_id))
     return request
 
 
@@ -268,23 +274,38 @@ def _request(
     return _json(response, operation)
 
 
-def _current_version(fleet_client: httpx.Client, source: dict[str, Any]) -> str | None:
+def _current_identity(
+    fleet_client: httpx.Client, source: dict[str, Any]
+) -> tuple[str | None, str | None]:
     current = _request(
         fleet_client,
         "GET",
         f"{ORCHESTRATOR}/v1/tasks/{quote(source['task_key'], safe='')}",
         "v1 task identity read",
     )
-    if current.get("task_key") not in {None, source["task_key"]}:
+    task_key_values = {
+        value for value in (current.get("task_key"), current.get("key")) if value is not None
+    }
+    if task_key_values not in (set(), {source["task_key"]}):
         raise PlatformImportError("v1 task identity response named a different task")
-    value = current.get("eval_task_version_id")
-    return value if isinstance(value, str) else None
+    id_values = {
+        value for value in (current.get("eval_task_id"), current.get("id")) if value is not None
+    }
+    if len(id_values) > 1:
+        raise PlatformImportError("v1 task identity response named conflicting task IDs")
+    eval_task_id = next(iter(id_values), None)
+    version_id = current.get("eval_task_version_id")
+    return (
+        eval_task_id if isinstance(eval_task_id, str) else None,
+        version_id if isinstance(version_id, str) else None,
+    )
 
 
 def build_plan(
     selection: dict[str, Any],
     *,
-    fleet_client: httpx.Client | None,
+    identity_roster: dict[str, Any] | None,
+    fleet_client: httpx.Client,
     registry_client: httpx.Client,
     namespace: str,
     repository: str,
@@ -295,26 +316,37 @@ def build_plan(
     if not 1 <= read_concurrency <= 64:
         raise PlatformImportError("read_concurrency must be between 1 and 64")
 
-    if protocol == LEGACY_IMPORT_PROTOCOL:
-        if fleet_client is None:
-            raise PlatformImportError("v2 diagnostics require a Fleet read credential")
+    if protocol == EXPECTED_IMPORT_PROTOCOL and identity_roster is None:
+        raise PlatformImportError("v3 planning requires the reviewed 160-row identity roster")
+    if identity_roster is not None:
+        _validate_identity_roster(identity_roster, selection)
+    roster_by_key = {
+        row["task_key"]: row for row in (identity_roster or {}).get("tasks", [])
+    }
 
-        def read_current(source: dict[str, Any]) -> str | None:
-            return _current_version(fleet_client, source)
+    def read_current(source: dict[str, Any]) -> tuple[str | None, str | None]:
+        return _current_identity(fleet_client, source)
 
-        with ThreadPoolExecutor(max_workers=read_concurrency) as executor:
-            current_versions = list(executor.map(read_current, selection["tasks"]))
-    else:
-        # Exact v3 imports select immutable rows directly. A mutable catalog read
-        # is neither required nor authoritative for admission.
-        current_versions = [None] * len(selection["tasks"])
+    with ThreadPoolExecutor(max_workers=read_concurrency) as executor:
+        current_identities = list(executor.map(read_current, selection["tasks"]))
 
     split_seen: Counter[str] = Counter()
     rows: list[dict[str, Any]] = []
-    for source, current_version_id in zip(selection["tasks"], current_versions, strict=True):
+    for source, (current_eval_task_id, current_version_id) in zip(
+        selection["tasks"], current_identities, strict=True
+    ):
         split_seen[source["split"]] += 1
-        if protocol == EXPECTED_IMPORT_PROTOCOL:
-            disposition = "eligible_exact_frozen_version"
+        reviewed = roster_by_key.get(source["task_key"])
+        expected_eval_task_id = reviewed.get("eval_task_id") if reviewed else None
+        if protocol == EXPECTED_IMPORT_PROTOCOL and current_eval_task_id != expected_eval_task_id:
+            disposition = "blocked_eval_task_identity_differs_from_reviewed"
+        elif (
+            protocol == EXPECTED_IMPORT_PROTOCOL
+            and current_version_id != source["task_version_id"]
+        ):
+            disposition = "blocked_frozen_version_not_current"
+        elif protocol == EXPECTED_IMPORT_PROTOCOL:
+            disposition = "eligible_exact_current_frozen"
         elif source["env_key"] in DEPLOYED_TOPOLOGY_OMITTED_ENV_KEYS:
             disposition = "blocked_deployed_topology_omits_environment"
         elif current_version_id == source["task_version_id"]:
@@ -327,9 +359,10 @@ def build_plan(
             repository=repository,
             split_index=split_seen[source["split"]],
             protocol=protocol,
+            expected_eval_task_id=expected_eval_task_id,
         )
-        source_digest = (
-            exact_source_selection_digest(request["source_selection"])
+        identity_digest = (
+            sha256(canonical_json(source_identity(source, expected_eval_task_id)))
             if protocol == EXPECTED_IMPORT_PROTOCOL
             else None
         )
@@ -339,11 +372,13 @@ def build_plan(
                 "split": source["split"],
                 "task_key": source["task_key"],
                 "frozen_task_version_id": source["task_version_id"],
+                "expected_eval_task_id": expected_eval_task_id,
+                "observed_eval_task_id": current_eval_task_id,
                 "current_task_version_id": current_version_id,
                 "destination_tag": request["destination"]["tag"],
                 "idempotency_key": request["idempotency_key"],
                 "disposition": disposition,
-                "source_selection_digest": source_digest,
+                "source_identity_sha256": identity_digest,
                 "request_sha256": sha256(canonical_json(request)),
             }
         )
@@ -353,16 +388,24 @@ def build_plan(
         "source_job_id": selection["source"]["job_id"],
         "source_manifest_digest": selection["manifest_digest"],
         "source_team_id": FLEET_TEAM_ID,
+        "identity_roster_sha256": (
+            EXPECTED_IDENTITY_ROSTER_SHA256
+            if protocol == EXPECTED_IMPORT_PROTOCOL
+            else None
+        ),
         "destination": {"namespace": namespace, "repository": repository},
         "registry_protocol": protocol,
-        "deployed_exact_task_version_selector": protocol == EXPECTED_IMPORT_PROTOCOL,
+        "deployed_exact_current_source_pins": protocol == EXPECTED_IMPORT_PROTOCOL,
         "policy": {
             "one_import_per_frozen_task_version": True,
             "tool_use_modality_predeclared": True,
             "moved_current_versions_fail_closed": True,
             "partial_cohort_publication_forbidden": True,
             "task_content_retained": False,
-            "source_selection_schema": SOURCE_SELECTION_SCHEMA,
+            "exact_source_pin_fields": [
+                "expected_eval_task_id",
+                "expected_current_task_version_id",
+            ],
         },
         "counts": {"total": len(rows), **dict(sorted(counts.items()))},
         "rows": rows,
@@ -384,15 +427,20 @@ def _validate_discovery(registry_client: httpx.Client) -> str:
     return imports["protocol"]
 
 
-def validate_plan(plan: dict[str, Any], selection: dict[str, Any]) -> None:
+def validate_plan(
+    plan: dict[str, Any],
+    selection: dict[str, Any],
+    identity_roster: dict[str, Any] | None = None,
+) -> None:
     expected_fields = {
         "schema",
         "source_job_id",
         "source_manifest_digest",
         "source_team_id",
+        "identity_roster_sha256",
         "destination",
         "registry_protocol",
-        "deployed_exact_task_version_selector",
+        "deployed_exact_current_source_pins",
         "policy",
         "counts",
         "rows",
@@ -401,14 +449,23 @@ def validate_plan(plan: dict[str, Any], selection: dict[str, Any]) -> None:
     rows = plan.get("rows")
     protocol = plan.get("registry_protocol")
     exact_protocol = protocol == EXPECTED_IMPORT_PROTOCOL
+    if exact_protocol and identity_roster is None:
+        raise PlatformImportError("v3 plan validation requires the reviewed identity roster")
+    if identity_roster is not None:
+        _validate_identity_roster(identity_roster, selection)
+    roster_by_key = {
+        row["task_key"]: row for row in (identity_roster or {}).get("tasks", [])
+    }
     if (
         set(plan) != expected_fields
         or plan.get("schema") != PLAN_SCHEMA
         or plan.get("source_job_id") != selection["source"]["job_id"]
         or plan.get("source_manifest_digest") != selection["manifest_digest"]
         or plan.get("source_team_id") != FLEET_TEAM_ID
+        or plan.get("identity_roster_sha256")
+        != (EXPECTED_IDENTITY_ROSTER_SHA256 if exact_protocol else None)
         or protocol not in SUPPORTED_IMPORT_PROTOCOLS
-        or plan.get("deployed_exact_task_version_selector") is not exact_protocol
+        or plan.get("deployed_exact_current_source_pins") is not exact_protocol
         or plan.get("policy")
         != {
             "one_import_per_frozen_task_version": True,
@@ -416,7 +473,10 @@ def validate_plan(plan: dict[str, Any], selection: dict[str, Any]) -> None:
             "moved_current_versions_fail_closed": True,
             "partial_cohort_publication_forbidden": True,
             "task_content_retained": False,
-            "source_selection_schema": SOURCE_SELECTION_SCHEMA,
+            "exact_source_pin_fields": [
+                "expected_eval_task_id",
+                "expected_current_task_version_id",
+            ],
         }
         or not isinstance(rows, list)
         or len(rows) != len(selection["tasks"])
@@ -430,39 +490,50 @@ def validate_plan(plan: dict[str, Any], selection: dict[str, Any]) -> None:
     dispositions: Counter[str] = Counter()
     for index, (row, source) in enumerate(zip(rows, selection["tasks"], strict=True), start=1):
         split_seen[source["split"]] += 1
+        expected_eval_task_id = (
+            roster_by_key.get(source["task_key"], {}).get("eval_task_id")
+            if exact_protocol
+            else None
+        )
         request = import_request(
             source,
             namespace=destination["namespace"],
             repository=destination["repository"],
             split_index=split_seen[source["split"]],
             protocol=protocol,
+            expected_eval_task_id=expected_eval_task_id,
         )
         if exact_protocol:
-            disposition = "eligible_exact_frozen_version"
-            current_version_id = None
-            source_digest = exact_source_selection_digest(request["source_selection"])
+            if row.get("observed_eval_task_id") != expected_eval_task_id:
+                disposition = "blocked_eval_task_identity_differs_from_reviewed"
+            elif row.get("current_task_version_id") != source["task_version_id"]:
+                disposition = "blocked_frozen_version_not_current"
+            else:
+                disposition = "eligible_exact_current_frozen"
+            identity_digest = sha256(
+                canonical_json(source_identity(source, expected_eval_task_id))
+            )
         elif source["env_key"] in DEPLOYED_TOPOLOGY_OMITTED_ENV_KEYS:
             disposition = "blocked_deployed_topology_omits_environment"
-            current_version_id = row.get("current_task_version_id")
-            source_digest = None
+            identity_digest = None
         elif row.get("current_task_version_id") == source["task_version_id"]:
             disposition = "eligible_current_equals_frozen"
-            current_version_id = row.get("current_task_version_id")
-            source_digest = None
+            identity_digest = None
         else:
             disposition = "blocked_current_differs_from_frozen"
-            current_version_id = row.get("current_task_version_id")
-            source_digest = None
+            identity_digest = None
         expected = {
             "source_index": index,
             "split": source["split"],
             "task_key": source["task_key"],
             "frozen_task_version_id": source["task_version_id"],
-            "current_task_version_id": current_version_id,
+            "expected_eval_task_id": expected_eval_task_id,
+            "observed_eval_task_id": row.get("observed_eval_task_id"),
+            "current_task_version_id": row.get("current_task_version_id"),
             "destination_tag": request["destination"]["tag"],
             "idempotency_key": request["idempotency_key"],
             "disposition": disposition,
-            "source_selection_digest": source_digest,
+            "source_identity_sha256": identity_digest,
             "request_sha256": sha256(canonical_json(request)),
         }
         if row != expected:
@@ -477,14 +548,14 @@ def require_submit_safe(plan: dict[str, Any]) -> None:
     """Reject writes until the deployed importer binds the exact frozen versions."""
     if (
         plan.get("registry_protocol") != EXPECTED_IMPORT_PROTOCOL
-        or plan.get("deployed_exact_task_version_selector") is not True
+        or plan.get("deployed_exact_current_source_pins") is not True
     ):
         raise PlatformImportError(
             "import submission is held until the deployed importer binds exact task versions"
         )
     if plan.get("counts") != {
         "total": 160,
-        "eligible_exact_frozen_version": 160,
+        "eligible_exact_current_frozen": 160,
     }:
         raise PlatformImportError("partial frozen-cohort publication is forbidden")
 
@@ -539,8 +610,17 @@ def _row_receipt(
 ) -> dict[str, Any]:
     import_id = result.get("import_id")
     state = result.get("state")
-    source_selection = request.get("source_selection")
-    source_digest = exact_source_selection_digest(source_selection)
+    expected_eval_task_id = request.get("expected_eval_task_id")
+    expected_version_id = request.get("expected_current_task_version_id")
+    identity_digest = sha256(
+        canonical_json(
+            {
+                "task_key": request["task_key"],
+                "expected_eval_task_id": expected_eval_task_id,
+                "expected_current_task_version_id": expected_version_id,
+            }
+        )
+    )
     if (
         not isinstance(import_id, str)
         or not TAG_RE.fullmatch(import_id)
@@ -549,8 +629,9 @@ def _row_receipt(
         or result.get("source_team_id") != FLEET_TEAM_ID
         or result.get("destination") != request["destination"]
         or result.get("modality_decision") != request["modality_decision"]
-        or result.get("source_selection") != source_selection
-        or result.get("source_selection_digest") != source_digest
+        or result.get("protocol_version") != EXPECTED_IMPORT_PROTOCOL
+        or result.get("expected_eval_task_id") != expected_eval_task_id
+        or result.get("expected_current_task_version_id") != expected_version_id
         or not isinstance(result.get("idempotent_replay", False), bool)
     ):
         raise PlatformImportError("Legacy task import returned mismatched receipt identity")
@@ -560,8 +641,10 @@ def _row_receipt(
         "request_sha256": row["request_sha256"],
         "task_key": row["task_key"],
         "task_version_id": row["frozen_task_version_id"],
-        "source_selection": source_selection,
-        "source_selection_digest": source_digest,
+        "protocol_version": EXPECTED_IMPORT_PROTOCOL,
+        "expected_eval_task_id": expected_eval_task_id,
+        "expected_current_task_version_id": expected_version_id,
+        "source_identity_sha256": identity_digest,
         "destination": request["destination"],
         "import_id": import_id,
         "state": state,
@@ -580,8 +663,10 @@ def validate_row_receipt(receipt: dict[str, Any]) -> None:
             "request_sha256",
             "task_key",
             "task_version_id",
-            "source_selection",
-            "source_selection_digest",
+            "protocol_version",
+            "expected_eval_task_id",
+            "expected_current_task_version_id",
+            "source_identity_sha256",
             "destination",
             "import_id",
             "state",
@@ -592,12 +677,21 @@ def validate_row_receipt(receipt: dict[str, Any]) -> None:
         or not UUID_RE.fullmatch(str(receipt.get("task_version_id")))
         or not TAG_RE.fullmatch(str(receipt.get("task_key")))
         or not TAG_RE.fullmatch(str(receipt.get("import_id")))
-        or not isinstance(receipt.get("source_selection"), dict)
-        or receipt["source_selection"].get("task_key") != receipt.get("task_key")
-        or receipt["source_selection"].get("task_version_id") != receipt.get("task_version_id")
-        or receipt["source_selection"].get("team_id") != FLEET_TEAM_ID
-        or receipt.get("source_selection_digest")
-        != exact_source_selection_digest(receipt["source_selection"])
+        or receipt.get("protocol_version") != EXPECTED_IMPORT_PROTOCOL
+        or not UUID_RE.fullmatch(str(receipt.get("expected_eval_task_id")))
+        or receipt.get("expected_current_task_version_id") != receipt.get("task_version_id")
+        or receipt.get("source_identity_sha256")
+        != sha256(
+            canonical_json(
+                {
+                    "task_key": receipt.get("task_key"),
+                    "expected_eval_task_id": receipt.get("expected_eval_task_id"),
+                    "expected_current_task_version_id": receipt.get(
+                        "expected_current_task_version_id"
+                    ),
+                }
+            )
+        )
         or receipt.get("state") not in IMPORT_STATES
         or not isinstance(receipt.get("idempotent_replay"), bool)
         or not isinstance(receipt.get("destination"), dict)
@@ -662,17 +756,19 @@ def submit_rows(
     plan: dict[str, Any],
     selection: dict[str, Any],
     *,
-    fleet_client: httpx.Client | None,
+    identity_roster: dict[str, Any],
     registry_client: httpx.Client,
     limit: int | None,
     prior_receipts: list[dict[str, Any]] | None = None,
     receipt_sink: Any = None,
 ) -> dict[str, Any]:
-    validate_plan(plan, selection)
+    validate_plan(plan, selection, identity_roster)
     require_submit_safe(plan)
     source_by_version = {row["task_version_id"]: row for row in selection["tasks"]}
     eligible = [
-        row for row in plan["rows"] if row["disposition"] == "eligible_exact_frozen_version"
+        row
+        for row in plan["rows"]
+        if row["disposition"] == "eligible_exact_current_frozen"
     ]
     if limit is not None:
         eligible = eligible[:limit]
@@ -691,6 +787,7 @@ def submit_rows(
             repository=plan["destination"]["repository"],
             split_index=int(row["destination_tag"].split("-")[1]),
             protocol=plan["registry_protocol"],
+            expected_eval_task_id=row["expected_eval_task_id"],
         )
         if (
             version in prior
@@ -698,8 +795,10 @@ def submit_rows(
             or receipt["request_sha256"] != row["request_sha256"]
             or receipt["task_key"] != row["task_key"]
             or receipt["destination"] != request["destination"]
-            or receipt["source_selection"] != request["source_selection"]
-            or receipt["source_selection_digest"] != row["source_selection_digest"]
+            or receipt["expected_eval_task_id"] != request["expected_eval_task_id"]
+            or receipt["expected_current_task_version_id"]
+            != request["expected_current_task_version_id"]
+            or receipt["source_identity_sha256"] != row["source_identity_sha256"]
         ):
             raise PlatformImportError("import journal contains conflicting task receipts")
         prior[version] = receipt
@@ -714,6 +813,7 @@ def submit_rows(
             repository=plan["destination"]["repository"],
             split_index=int(row["destination_tag"].split("-")[1]),
             protocol=plan["registry_protocol"],
+            expected_eval_task_id=row["expected_eval_task_id"],
         )
         if sha256(canonical_json(request)) != row["request_sha256"]:
             raise PlatformImportError("import request drifted from the frozen plan")
@@ -724,8 +824,10 @@ def submit_rows(
                 or existing["request_sha256"] != row["request_sha256"]
                 or existing["task_key"] != row["task_key"]
                 or existing["destination"] != request["destination"]
-                or existing["source_selection"] != request["source_selection"]
-                or existing["source_selection_digest"] != row["source_selection_digest"]
+                or existing["expected_eval_task_id"] != request["expected_eval_task_id"]
+                or existing["expected_current_task_version_id"]
+                != request["expected_current_task_version_id"]
+                or existing["source_identity_sha256"] != row["source_identity_sha256"]
             ):
                 raise PlatformImportError("import journal receipt does not match the frozen plan")
             receipts.append(existing)
@@ -772,8 +874,10 @@ def monitor_receipts(
             or value.get("task_key") != receipt["task_key"]
             or value.get("source_team_id") != FLEET_TEAM_ID
             or value.get("destination") != receipt["destination"]
-            or value.get("source_selection") != receipt["source_selection"]
-            or value.get("source_selection_digest") != receipt["source_selection_digest"]
+            or value.get("protocol_version") != receipt["protocol_version"]
+            or value.get("expected_eval_task_id") != receipt["expected_eval_task_id"]
+            or value.get("expected_current_task_version_id")
+            != receipt["expected_current_task_version_id"]
             or value.get("state") not in IMPORT_STATES
             or not isinstance(value.get("version"), int)
             or value.get("version", 0) < 1
@@ -791,15 +895,19 @@ def monitor_receipts(
             {
                 "import_id": receipt["import_id"],
                 "destination_tag": receipt["destination"]["tag"],
-                "source_selection": receipt["source_selection"],
-                "source_selection_digest": receipt["source_selection_digest"],
+                "protocol_version": receipt["protocol_version"],
+                "expected_eval_task_id": receipt["expected_eval_task_id"],
+                "expected_current_task_version_id": receipt[
+                    "expected_current_task_version_id"
+                ],
+                "source_identity_sha256": receipt["source_identity_sha256"],
                 "state": value["state"],
                 "version": value["version"],
                 "error_code": error_code,
             }
         )
     return {
-        "schema": "fleet_platform_v2_cyber_import_status_v2",
+        "schema": "fleet_platform_v2_cyber_import_status_v3",
         "imports": len(rows),
         "states": dict(Counter(row["state"] for row in rows)),
         "rows": rows,
@@ -852,7 +960,8 @@ def submission_summary(
             {
                 "import_id": row["import_id"],
                 "destination_tag": row["destination"]["tag"],
-                "source_selection_digest": row["source_selection_digest"],
+                "protocol_version": row["protocol_version"],
+                "source_identity_sha256": row["source_identity_sha256"],
                 "state": row["state"],
                 "idempotent_replay": row["idempotent_replay"],
             }
@@ -864,6 +973,7 @@ def submission_summary(
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--selection", type=Path, default=DEFAULT_SELECTION)
+    parser.add_argument("--identity-roster", type=Path, default=DEFAULT_IDENTITY_ROSTER)
     parser.add_argument("--namespace", default=DEFAULT_NAMESPACE)
     parser.add_argument("--repository", default=DEFAULT_REPOSITORY)
     parser.add_argument("--plan-input", type=Path)
@@ -896,27 +1006,29 @@ def main() -> None:
             status = monitor_receipts(receipts, registry_client=registry)
         print(json.dumps(status, indent=2))
         return
-    with httpx.Client(
-        headers={"Authorization": f"Bearer {registry_token}"}, timeout=120
-    ) as registry:
+    fleet_key = os.environ.get("FLEET_API_KEY")
+    if not fleet_key:
+        raise SystemExit("FLEET_API_KEY is required for the source identity preflight")
+    identity_roster = load_identity_roster(args.identity_roster, selection)
+    with (
+        httpx.Client(
+            headers={"Authorization": f"Bearer {registry_token}"}, timeout=120
+        ) as registry,
+        httpx.Client(headers={"Authorization": f"Bearer {fleet_key}"}, timeout=120) as fleet,
+    ):
         deployed_protocol = _validate_discovery(registry)
-        fleet: httpx.Client | None = None
-        if deployed_protocol == LEGACY_IMPORT_PROTOCOL:
-            fleet_key = os.environ.get("FLEET_API_KEY")
-            if not fleet_key:
-                raise SystemExit("FLEET_API_KEY is required for v2 current-pointer diagnostics")
-            fleet = httpx.Client(headers={"Authorization": f"Bearer {fleet_key}"}, timeout=120)
         if args.plan_input:
             plan = load_json_object(args.plan_input, "reviewed import plan")
         else:
             plan = build_plan(
                 selection,
+                identity_roster=identity_roster,
                 fleet_client=fleet,
                 registry_client=registry,
                 namespace=args.namespace,
                 repository=args.repository,
             )
-        validate_plan(plan, selection)
+        validate_plan(plan, selection, identity_roster)
         if plan["registry_protocol"] != deployed_protocol:
             raise PlatformImportError("reviewed plan protocol differs from deployed discovery")
         if plan["destination"] != {
@@ -942,7 +1054,7 @@ def main() -> None:
             submission = submit_rows(
                 plan,
                 selection,
-                fleet_client=fleet,
+                identity_roster=identity_roster,
                 registry_client=registry,
                 limit=args.limit,
                 prior_receipts=prior,

@@ -3,10 +3,12 @@ from __future__ import annotations
 import copy
 import json
 from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
 
+import evals.platform_v2.legacy_import as legacy_import
 from evals.platform_v2.legacy_import import (
     EXPECTED_IMPORT_PROTOCOL,
     FLEET_TEAM_ID,
@@ -15,13 +17,14 @@ from evals.platform_v2.legacy_import import (
     build_plan,
     digest_without,
     ensure_repository,
-    exact_source_selection,
-    exact_source_selection_digest,
     import_request,
+    load_identity_roster,
     load_selection,
     monitor_receipts,
     receipt_journal,
     require_submit_safe,
+    sha256,
+    source_identity,
     submission_summary,
     submit_rows,
     validate_plan,
@@ -31,170 +34,55 @@ from evals.platform_v2.legacy_import import (
 SELECTION = Path("configs/data/fleet-a62-task-split-v1.json")
 
 
-def test_frozen_selection_verifies() -> None:
-    selection = load_selection(SELECTION)
-    assert len(selection["tasks"]) == 160
-    assert {row["resolution_authority"] for row in selection["tasks"]} == {
-        "training_task_catalog",
-        "fleet_job_roster+training_environment_catalog",
+def _roster(selection: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "schema": "chris.cyber.v2.source-roster.v1",
+        "source_job_id": selection["source"]["job_id"],
+        "tasks": [
+            {
+                "task_key": row["task_key"],
+                "eval_task_id": f"00000000-0000-4000-8000-{index:012d}",
+                "current_task_version_id": row["task_version_id"],
+            }
+            for index, row in enumerate(selection["tasks"], start=1)
+        ],
     }
-
-
-def test_request_is_exact_and_stable() -> None:
-    row = load_selection(SELECTION)["tasks"][0]
-    request = import_request(
-        row, namespace="gentle-ember-ledger", repository="fleet-cyber-a62-frozen", split_index=1
-    )
-    assert request["destination"]["tag"].endswith(row["task_version_id"][:8])
-    assert request["modality_decision"]["modality"] == "tool_use"
-    assert request["source_selection"] == exact_source_selection(row)
-    assert request["source_selection"] == {
-        "schema": "fleet.taskdump.selection.v1",
-        "task_key": row["task_key"],
-        "task_version_id": row["task_version_id"],
-        "team_id": FLEET_TEAM_ID,
-        "environment_version_id": row["environment_version_id"],
-        "env_key": row["env_key"],
-        "env_version": row["env_version"],
-        "data_key": row["data_key"],
-        "data_version": row["data_version"],
-    }
-    assert exact_source_selection_digest(request["source_selection"]) == (
-        "sha256:0c0fc07160ce36c628f9851608283fbdc9bea4f8d607d824ffe06b77c1fba515"
-    )
-    legacy_request = import_request(
-        row,
-        namespace="gentle-ember-ledger",
-        repository="fleet-cyber-a62-frozen",
-        split_index=1,
-        protocol=LEGACY_IMPORT_PROTOCOL,
-    )
-    assert "source_selection" not in legacy_request
-
-
-def test_plan_blocks_mutable_version_drift_and_omitted_topology_before_submit() -> None:
-    selection = load_selection(SELECTION)
-    expected = {row["task_key"]: row["task_version_id"] for row in selection["tasks"]}
-
-    def fleet_handler(request: httpx.Request) -> httpx.Response:
-        task_key = request.url.path.rsplit("/", 1)[-1]
-        version = expected[task_key]
-        if task_key == selection["tasks"][1]["task_key"]:
-            version = "11111111-1111-4111-8111-111111111111"
-        return httpx.Response(200, json={"eval_task_version_id": version})
-
-    def registry_handler(request: httpx.Request) -> httpx.Response:
-        if request.url.path == "/.well-known/fleet-registry":
-            return httpx.Response(
-                200,
-                json={
-                    "legacy_task_imports": {
-                        "base_path": "/api/v1/imports/legacy-tasks",
-                        "protocol": LEGACY_IMPORT_PROTOCOL,
-                    }
-                },
-            )
-        raise AssertionError("a held plan must not submit imports")
-
-    with (
-        httpx.Client(transport=httpx.MockTransport(fleet_handler)) as fleet,
-        httpx.Client(transport=httpx.MockTransport(registry_handler)) as registry,
-    ):
-        plan = build_plan(
-            selection,
-            fleet_client=fleet,
-            registry_client=registry,
-            namespace="gentle-ember-ledger",
-            repository="fleet-cyber-a62-frozen",
-        )
-        with pytest.raises(PlatformImportError, match="binds exact task versions"):
-            submit_rows(
-                plan,
-                selection,
-                fleet_client=fleet,
-                registry_client=registry,
-                limit=None,
-            )
-
-    assert plan["counts"] == {
-        "total": 160,
-        "blocked_current_differs_from_frozen": 1,
-        "blocked_deployed_topology_omits_environment": 2,
-        "eligible_current_equals_frozen": 157,
-    }
-    omitted = [
-        row
-        for row in plan["rows"]
-        if row["disposition"] == "blocked_deployed_topology_omits_environment"
-    ]
-    assert len(omitted) == 2
-
-
-def test_v3_plan_uses_all_frozen_rows_without_mutable_catalog_reads() -> None:
-    selection = load_selection(SELECTION)
-    fleet_reads: list[str] = []
-
-    def fleet_handler(request: httpx.Request) -> httpx.Response:
-        fleet_reads.append(request.url.path)
-        raise AssertionError("v3 exact planning must not read a mutable current pointer")
-
-    def registry_handler(request: httpx.Request) -> httpx.Response:
-        assert request.url.path == "/.well-known/fleet-registry"
-        return httpx.Response(
-            200,
-            json={
-                "legacy_task_imports": {
-                    "base_path": "/api/v1/imports/legacy-tasks",
-                    "protocol": EXPECTED_IMPORT_PROTOCOL,
-                }
-            },
-        )
-
-    with (
-        httpx.Client(transport=httpx.MockTransport(fleet_handler)) as fleet,
-        httpx.Client(transport=httpx.MockTransport(registry_handler)) as registry,
-    ):
-        plan = build_plan(
-            selection,
-            fleet_client=fleet,
-            registry_client=registry,
-            namespace="gentle-ember-ledger",
-            repository="fleet-cyber-a62-frozen",
-        )
-    assert fleet_reads == []
-    assert plan["registry_protocol"] == EXPECTED_IMPORT_PROTOCOL
-    assert plan["deployed_exact_task_version_selector"] is True
-    assert plan["counts"] == {"total": 160, "eligible_exact_frozen_version": 160}
-    assert all(row["current_task_version_id"] is None for row in plan["rows"])
-    assert all(row["source_selection_digest"] for row in plan["rows"])
-    require_submit_safe(plan)
-
-    tampered = copy.deepcopy(plan)
-    tampered["counts"] = {"total": 159, "eligible_exact_frozen_version": 159}
-    tampered["plan_sha256"] = digest_without(tampered, "plan_sha256")
-    with pytest.raises(PlatformImportError, match="160 unique task-version UUIDs|counts drifted"):
-        validate_plan(tampered, selection)
 
 
 def _clients(
-    selection: dict,
+    selection: dict[str, Any],
+    roster: dict[str, Any],
     *,
     protocol: str = EXPECTED_IMPORT_PROTOCOL,
-    move_after_plan: bool = False,
+    moved: int = 0,
+    mismatched_eval_id: bool = False,
     forbidden: bool = False,
-) -> tuple[httpx.Client, httpx.Client, list[dict[str, object]]]:
-    expected = {row["task_key"]: row["task_version_id"] for row in selection["tasks"]}
-    reads = 0
-    posts: list[dict[str, object]] = []
+    response_pin_drift: bool = False,
+) -> tuple[httpx.Client, httpx.Client, list[dict[str, Any]], list[str]]:
+    frozen = {row["task_key"]: row["task_version_id"] for row in selection["tasks"]}
+    eval_ids = {row["task_key"]: row["eval_task_id"] for row in roster["tasks"]}
+    movable_keys = [
+        row["task_key"]
+        for row in selection["tasks"]
+        if row["env_key"] != "cysec1-2-current-fubspot-gen"
+    ]
+    moved_keys = set(movable_keys[:moved])
+    posts: list[dict[str, Any]] = []
+    fleet_reads: list[str] = []
 
     def fleet_handler(request: httpx.Request) -> httpx.Response:
-        nonlocal reads
-        reads += 1
         task_key = request.url.path.rsplit("/", 1)[-1]
-        version = expected[task_key]
-        if move_after_plan and reads > len(selection["tasks"]):
-            version = "11111111-1111-4111-8111-111111111111"
-        return httpx.Response(200, json={"task_key": task_key, "eval_task_version_id": version})
+        fleet_reads.append(task_key)
+        version = frozen[task_key]
+        if task_key in moved_keys:
+            version = "ffffffff-ffff-4fff-8fff-ffffffffffff"
+        eval_task_id = eval_ids[task_key]
+        if mismatched_eval_id and task_key == selection["tasks"][0]["task_key"]:
+            eval_task_id = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+        return httpx.Response(
+            200,
+            json={"id": eval_task_id, "key": task_key, "eval_task_version_id": version},
+        )
 
     def registry_handler(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/.well-known/fleet-registry":
@@ -210,7 +98,10 @@ def _clients(
         payload = json.loads(request.content)
         posts.append(payload)
         if forbidden:
-            return httpx.Response(403, json={"secret": "must-not-surface"})
+            return httpx.Response(403, json={"private": "must-not-surface"})
+        expected_eval_task_id = payload["expected_eval_task_id"]
+        if response_pin_drift:
+            expected_eval_task_id = "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
         return httpx.Response(
             202,
             json={
@@ -218,12 +109,13 @@ def _clients(
                 "state": "requested",
                 "task_key": payload["task_key"],
                 "source_team_id": FLEET_TEAM_ID,
+                "protocol_version": EXPECTED_IMPORT_PROTOCOL,
+                "expected_eval_task_id": expected_eval_task_id,
+                "expected_current_task_version_id": payload[
+                    "expected_current_task_version_id"
+                ],
                 "destination": payload["destination"],
                 "modality_decision": payload["modality_decision"],
-                "source_selection": payload.get("source_selection"),
-                "source_selection_digest": exact_source_selection_digest(
-                    payload["source_selection"]
-                ),
             },
         )
 
@@ -231,52 +123,46 @@ def _clients(
         httpx.Client(transport=httpx.MockTransport(fleet_handler)),
         httpx.Client(transport=httpx.MockTransport(registry_handler)),
         posts,
+        fleet_reads,
     )
 
 
-def test_v3_submit_posts_exact_selection_and_binds_returned_digest() -> None:
-    selection = load_selection(SELECTION)
-    fleet, registry, posts = _clients(selection)
+def _plan(
+    selection: dict[str, Any],
+    roster: dict[str, Any],
+    *,
+    protocol: str = EXPECTED_IMPORT_PROTOCOL,
+    moved: int = 0,
+) -> tuple[dict[str, Any], list[dict[str, Any]], list[str]]:
+    fleet, registry, posts, reads = _clients(
+        selection, roster, protocol=protocol, moved=moved
+    )
     with fleet, registry:
         plan = build_plan(
             selection,
+            identity_roster=roster if protocol == EXPECTED_IMPORT_PROTOCOL else None,
             fleet_client=fleet,
             registry_client=registry,
             namespace="gentle-ember-ledger",
             repository="fleet-cyber-a62-frozen",
         )
-        submission = submit_rows(
-            plan,
-            selection,
-            fleet_client=fleet,
-            registry_client=registry,
-            limit=1,
-        )
-    assert len(posts) == 1
-    assert posts[0]["source_selection"] == exact_source_selection(selection["tasks"][0])
-    receipt = submission["receipts"][0]
-    assert receipt["source_selection"] == posts[0]["source_selection"]
-    assert receipt["source_selection_digest"] == exact_source_selection_digest(
-        posts[0]["source_selection"]
-    )
+    return plan, posts, reads
 
 
-def _receipt_for_plan(plan: dict, *, state: str = "requested") -> dict:
-    row = next(row for row in plan["rows"] if row["disposition"] == "eligible_exact_frozen_version")
-    selection_row = next(
-        source
-        for source in load_selection(SELECTION)["tasks"]
-        if source["task_version_id"] == row["frozen_task_version_id"]
+def _receipt_for_plan(plan: dict[str, Any], *, state: str = "requested") -> dict[str, Any]:
+    row = next(
+        row for row in plan["rows"] if row["disposition"] == "eligible_exact_current_frozen"
     )
-    source_selection = exact_source_selection(selection_row)
     receipt = {
-        "schema": "fleet_platform_v2_cyber_import_row_receipt_v2",
+        "schema": "fleet_platform_v2_cyber_import_row_receipt_v3",
         "plan_sha256": plan["plan_sha256"],
         "request_sha256": row["request_sha256"],
         "task_key": row["task_key"],
         "task_version_id": row["frozen_task_version_id"],
-        "source_selection": source_selection,
-        "source_selection_digest": exact_source_selection_digest(source_selection),
+        "protocol_version": EXPECTED_IMPORT_PROTOCOL,
+        "expected_eval_task_id": row["expected_eval_task_id"],
+        "expected_current_task_version_id": row["frozen_task_version_id"],
+        "source_identity_sha256": row["source_identity_sha256"],
         "destination": {**plan["destination"], "tag": row["destination_tag"]},
         "import_id": "lti_resume_example",
         "state": state,
@@ -286,132 +172,222 @@ def _receipt_for_plan(plan: dict, *, state: str = "requested") -> dict:
     return receipt
 
 
-def test_submit_is_held_before_version_reads_or_posts() -> None:
+def test_frozen_selection_and_reviewed_identity_roster_verify(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     selection = load_selection(SELECTION)
-    fleet, registry, posts = _clients(
-        selection, protocol=LEGACY_IMPORT_PROTOCOL, move_after_plan=True
+    assert len(selection["tasks"]) == 160
+    reviewed = load_identity_roster(
+        Path("configs/data/fleet-a62-task-identity-roster-v1.json"), selection
+    )
+    assert len(reviewed["tasks"]) == 160
+    assert len({row["eval_task_id"] for row in reviewed["tasks"]}) == 160
+    frozen_by_key = {row["task_key"]: row["task_version_id"] for row in selection["tasks"]}
+    assert sum(
+        row["current_task_version_id"] == frozen_by_key[row["task_key"]]
+        for row in reviewed["tasks"]
+    ) == 146
+    assert sum(
+        row["current_task_version_id"] != frozen_by_key[row["task_key"]]
+        for row in reviewed["tasks"]
+    ) == 14
+    roster = _roster(selection)
+    path = tmp_path / "roster.json"
+    raw = json.dumps(roster, separators=(",", ":")).encode()
+    path.write_bytes(raw)
+    monkeypatch.setattr(legacy_import, "EXPECTED_IDENTITY_ROSTER_SHA256", sha256(raw))
+    assert load_identity_roster(path, selection) == roster
+
+    invalid = copy.deepcopy(roster)
+    invalid["tasks"][0]["eval_task_id"] = invalid["tasks"][1]["eval_task_id"]
+    changed = tmp_path / "changed.json"
+    changed_raw = json.dumps(invalid, separators=(",", ":")).encode()
+    changed.write_bytes(changed_raw)
+    monkeypatch.setattr(legacy_import, "EXPECTED_IDENTITY_ROSTER_SHA256", sha256(changed_raw))
+    with pytest.raises(PlatformImportError, match="frozen 160-task cohort"):
+        load_identity_roster(changed, selection)
+
+
+def test_v3_request_matches_platform_905_contract() -> None:
+    selection = load_selection(SELECTION)
+    roster = _roster(selection)
+    row = selection["tasks"][0]
+    eval_task_id = roster["tasks"][0]["eval_task_id"]
+    request = import_request(
+        row,
+        namespace="gentle-ember-ledger",
+        repository="fleet-cyber-a62-frozen",
+        split_index=1,
+        expected_eval_task_id=eval_task_id,
+    )
+    assert request["expected_eval_task_id"] == eval_task_id
+    assert request["expected_current_task_version_id"] == row["task_version_id"]
+    assert "source_selection" not in request
+    assert source_identity(row, eval_task_id) == {
+        "task_key": row["task_key"],
+        "expected_eval_task_id": eval_task_id,
+        "expected_current_task_version_id": row["task_version_id"],
+    }
+    legacy = import_request(
+        row,
+        namespace="gentle-ember-ledger",
+        repository="fleet-cyber-a62-frozen",
+        split_index=1,
+        protocol=LEGACY_IMPORT_PROTOCOL,
+    )
+    assert "expected_eval_task_id" not in legacy
+    assert "expected_current_task_version_id" not in legacy
+
+
+def test_v2_stays_diagnostics_only_and_held() -> None:
+    selection = load_selection(SELECTION)
+    roster = _roster(selection)
+    plan, posts, reads = _plan(selection, roster, protocol=LEGACY_IMPORT_PROTOCOL, moved=1)
+    assert len(reads) == 160
+    assert posts == []
+    assert plan["counts"] == {
+        "total": 160,
+        "blocked_current_differs_from_frozen": 1,
+        "blocked_deployed_topology_omits_environment": 2,
+        "eligible_current_equals_frozen": 157,
+    }
+    with pytest.raises(PlatformImportError, match="binds exact task versions"):
+        require_submit_safe(plan)
+
+
+def test_v3_models_905_current_pin_limit_and_holds_partial_cohort() -> None:
+    selection = load_selection(SELECTION)
+    roster = _roster(selection)
+    plan, posts, reads = _plan(selection, roster, moved=14)
+    assert len(reads) == 160
+    assert posts == []
+    assert plan["counts"] == {
+        "total": 160,
+        "blocked_frozen_version_not_current": 14,
+        "eligible_exact_current_frozen": 146,
+    }
+    assert all(row["source_identity_sha256"] for row in plan["rows"])
+    with pytest.raises(PlatformImportError, match="partial frozen-cohort"):
+        require_submit_safe(plan)
+
+
+def test_v3_fails_closed_on_reviewed_eval_task_identity_drift() -> None:
+    selection = load_selection(SELECTION)
+    roster = _roster(selection)
+    fleet, registry, _posts, _reads = _clients(
+        selection, roster, mismatched_eval_id=True
     )
     with fleet, registry:
         plan = build_plan(
             selection,
+            identity_roster=roster,
             fleet_client=fleet,
             registry_client=registry,
             namespace="gentle-ember-ledger",
             repository="fleet-cyber-a62-frozen",
         )
-        with pytest.raises(PlatformImportError, match="binds exact task versions"):
+    assert plan["counts"] == {
+        "total": 160,
+        "blocked_eval_task_identity_differs_from_reviewed": 1,
+        "eligible_exact_current_frozen": 159,
+    }
+    with pytest.raises(PlatformImportError, match="partial frozen-cohort"):
+        require_submit_safe(plan)
+
+
+def test_v3_full_plan_can_submit_one_exact_create_once_canary() -> None:
+    selection = load_selection(SELECTION)
+    roster = _roster(selection)
+    fleet, registry, posts, _reads = _clients(selection, roster)
+    with fleet, registry:
+        plan = build_plan(
+            selection,
+            identity_roster=roster,
+            fleet_client=fleet,
+            registry_client=registry,
+            namespace="gentle-ember-ledger",
+            repository="fleet-cyber-a62-frozen",
+        )
+        assert plan["counts"] == {"total": 160, "eligible_exact_current_frozen": 160}
+        require_submit_safe(plan)
+        submission = submit_rows(
+            plan,
+            selection,
+            identity_roster=roster,
+            registry_client=registry,
+            limit=1,
+        )
+    assert len(posts) == 1
+    assert posts[0]["expected_eval_task_id"] == roster["tasks"][0]["eval_task_id"]
+    assert posts[0]["expected_current_task_version_id"] == selection["tasks"][0][
+        "task_version_id"
+    ]
+    assert submission["receipts"][0]["request_sha256"] == plan["rows"][0][
+        "request_sha256"
+    ]
+
+
+def test_create_receipt_rejects_protocol_source_pin_drift() -> None:
+    selection = load_selection(SELECTION)
+    roster = _roster(selection)
+    fleet, registry, _posts, _reads = _clients(
+        selection, roster, response_pin_drift=True
+    )
+    with fleet, registry:
+        plan = build_plan(
+            selection,
+            identity_roster=roster,
+            fleet_client=fleet,
+            registry_client=registry,
+            namespace="gentle-ember-ledger",
+            repository="fleet-cyber-a62-frozen",
+        )
+        with pytest.raises(PlatformImportError, match="mismatched receipt identity"):
             submit_rows(
                 plan,
                 selection,
-                fleet_client=fleet,
+                identity_roster=roster,
                 registry_client=registry,
                 limit=1,
             )
-    assert posts == []
 
 
-def test_resealed_plan_cannot_promote_blocked_or_change_destination() -> None:
+def test_resealed_plan_cannot_change_reviewed_eval_task_id() -> None:
     selection = load_selection(SELECTION)
-    fleet, registry, _posts = _clients(selection, protocol=LEGACY_IMPORT_PROTOCOL)
-    with fleet, registry:
-        plan = build_plan(
-            selection,
-            fleet_client=fleet,
-            registry_client=registry,
-            namespace="gentle-ember-ledger",
-            repository="fleet-cyber-a62-frozen",
-        )
+    roster = _roster(selection)
+    plan, _posts, _reads = _plan(selection, roster)
     tampered = copy.deepcopy(plan)
-    blocked = next(
-        row
-        for row in tampered["rows"]
-        if row["disposition"] == "blocked_deployed_topology_omits_environment"
+    tampered["rows"][0]["expected_eval_task_id"] = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+    tampered["rows"][0]["source_identity_sha256"] = sha256(
+        legacy_import.canonical_json(
+            source_identity(selection["tasks"][0], tampered["rows"][0]["expected_eval_task_id"])
+        )
     )
-    blocked["disposition"] = "eligible_current_equals_frozen"
     tampered["plan_sha256"] = digest_without(tampered, "plan_sha256")
     with pytest.raises(PlatformImportError, match="plan row drifted"):
-        validate_plan(tampered, selection)
-
-    tampered = copy.deepcopy(plan)
-    tampered["destination"]["repository"] = "other"
-    tampered["plan_sha256"] = digest_without(tampered, "plan_sha256")
-    with pytest.raises(PlatformImportError, match="frozen import campaign"):
-        validate_plan(tampered, selection)
+        validate_plan(tampered, selection, roster)
 
 
-def test_journal_resumes_sanitized_receipts_without_reposting(tmp_path: Path) -> None:
+def test_journal_resumes_sanitized_receipts(tmp_path: Path) -> None:
     selection = load_selection(SELECTION)
-    fleet, registry, _posts = _clients(selection)
+    roster = _roster(selection)
+    plan, _posts, _reads = _plan(selection, roster)
+    receipt = _receipt_for_plan(plan, state="extracting")
     journal = tmp_path / "receipts.jsonl"
-    with fleet, registry:
-        plan = build_plan(
-            selection,
-            fleet_client=fleet,
-            registry_client=registry,
-            namespace="gentle-ember-ledger",
-            repository="fleet-cyber-a62-frozen",
-        )
-        receipt = _receipt_for_plan(plan, state="extracting")
-        with receipt_journal(journal) as (_prior, append):
-            append(receipt)
-        with receipt_journal(journal) as (prior, append):
-            assert prior == [receipt]
-            assert append is not None
-    assert len(journal.read_text().splitlines()) == 1
-
-    missing = tmp_path / "missing.jsonl"
-    with (
-        pytest.raises(PlatformImportError, match="cannot be opened safely"),
-        receipt_journal(missing, create=False),
-    ):
-        pass
-
-
-def test_import_forbidden_is_sanitized_and_journal_stays_empty(tmp_path: Path) -> None:
-    selection = load_selection(SELECTION)
-    fleet, registry, _posts = _clients(selection)
-    journal = tmp_path / "receipts.jsonl"
-    with fleet, registry:
-        plan = build_plan(
-            selection,
-            fleet_client=fleet,
-            registry_client=registry,
-            namespace="gentle-ember-ledger",
-            repository="fleet-cyber-a62-frozen",
-        )
-        receipt = _receipt_for_plan(plan)
-        with receipt_journal(journal) as (_prior, append):
-            append(receipt)
-
-    def forbidden_status(_request: httpx.Request) -> httpx.Response:
-        return httpx.Response(403, json={"secret": "must-not-surface"})
-
-    with (
-        httpx.Client(transport=httpx.MockTransport(forbidden_status)) as status_client,
-        pytest.raises(PlatformImportError, match="HTTP 403") as error,
-    ):
-        monitor_receipts([receipt], registry_client=status_client)
-    assert "must-not-surface" not in str(error.value)
+    with receipt_journal(journal) as (_prior, append):
+        append(receipt)
+    with receipt_journal(journal) as (prior, _append):
+        assert prior == [receipt]
     assert len(journal.read_text().splitlines()) == 1
 
 
-def test_status_monitor_emits_only_sanitized_ids_tags_and_state(tmp_path: Path) -> None:
+def test_status_monitor_binds_protocol_and_source_pins_without_private_data() -> None:
     selection = load_selection(SELECTION)
-    fleet, registry, _posts = _clients(selection)
-    journal = tmp_path / "receipts.jsonl"
-    with fleet, registry:
-        plan = build_plan(
-            selection,
-            fleet_client=fleet,
-            registry_client=registry,
-            namespace="gentle-ember-ledger",
-            repository="fleet-cyber-a62-frozen",
-        )
-        receipt = _receipt_for_plan(plan)
-        with receipt_journal(journal) as (_prior, append):
-            append(receipt)
+    roster = _roster(selection)
+    plan, _posts, _reads = _plan(selection, roster)
+    receipt = _receipt_for_plan(plan)
 
-    def status_handler(_request: httpx.Request) -> httpx.Response:
+    def handler(_request: httpx.Request) -> httpx.Response:
         return httpx.Response(
             200,
             json={
@@ -420,112 +396,49 @@ def test_status_monitor_emits_only_sanitized_ids_tags_and_state(tmp_path: Path) 
                 "version": 2,
                 "task_key": receipt["task_key"],
                 "source_team_id": FLEET_TEAM_ID,
+                "protocol_version": receipt["protocol_version"],
+                "expected_eval_task_id": receipt["expected_eval_task_id"],
+                "expected_current_task_version_id": receipt[
+                    "expected_current_task_version_id"
+                ],
                 "destination": receipt["destination"],
-                "source_selection": receipt["source_selection"],
-                "source_selection_digest": receipt["source_selection_digest"],
                 "private_task_content": "must-not-be-copied",
             },
         )
 
-    with httpx.Client(transport=httpx.MockTransport(status_handler)) as status_client:
-        status = monitor_receipts([receipt], registry_client=status_client)
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        status = monitor_receipts([receipt], registry_client=client)
     assert status["rows"] == [
         {
             "import_id": receipt["import_id"],
             "destination_tag": receipt["destination"]["tag"],
-            "source_selection": receipt["source_selection"],
-            "source_selection_digest": receipt["source_selection_digest"],
+            "protocol_version": EXPECTED_IMPORT_PROTOCOL,
+            "expected_eval_task_id": receipt["expected_eval_task_id"],
+            "expected_current_task_version_id": receipt["expected_current_task_version_id"],
+            "source_identity_sha256": receipt["source_identity_sha256"],
             "state": "extracting",
             "version": 2,
             "error_code": None,
         }
     ]
     assert "private_task_content" not in json.dumps(status)
-    submission = {
-        "submitted": 1,
-        "submitted_new": 0,
-        "resumed_from_journal": 1,
-        "receipts": [receipt],
-    }
-    summary = submission_summary({"created": True}, submission, plan)
-    assert summary["receipts"] == [
+    summary = submission_summary(
+        {"created": True},
         {
-            "import_id": receipt["import_id"],
-            "destination_tag": receipt["destination"]["tag"],
-            "source_selection_digest": receipt["source_selection_digest"],
-            "state": "requested",
-            "idempotent_replay": False,
-        }
-    ]
+            "submitted": 1,
+            "submitted_new": 0,
+            "resumed_from_journal": 1,
+            "receipts": [receipt],
+        },
+        plan,
+    )
     assert receipt["task_key"] not in json.dumps(summary)
 
 
-def test_status_monitor_fails_closed_on_relocated_or_malformed_import() -> None:
-    source_selection = {
-        "schema": "fleet.taskdump.selection.v1",
-        "task_key": "task-one",
-        "task_version_id": "11111111-1111-4111-8111-111111111111",
-        "team_id": FLEET_TEAM_ID,
-        "environment_version_id": "22222222-2222-4222-8222-222222222222",
-        "env_key": "cysec1-2-current-fubspot-gen",
-        "env_version": "v0.1.0",
-        "data_key": "current-fubspot-gen",
-        "data_version": "v0.0.3",
-    }
-    receipt = {
-        "schema": "fleet_platform_v2_cyber_import_row_receipt_v2",
-        "plan_sha256": "sha256:" + "1" * 64,
-        "request_sha256": "sha256:" + "2" * 64,
-        "task_key": "task-one",
-        "task_version_id": "11111111-1111-4111-8111-111111111111",
-        "source_selection": source_selection,
-        "source_selection_digest": exact_source_selection_digest(source_selection),
-        "destination": {
-            "namespace": "gentle-ember-ledger",
-            "repository": "fleet-cyber-a62-frozen",
-            "tag": "train-001-11111111",
-        },
-        "import_id": "imp_one",
-        "state": "requested",
-        "idempotent_replay": False,
-    }
-    receipt["receipt_sha256"] = digest_without(receipt, "receipt_sha256")
-
-    def handler(_request: httpx.Request) -> httpx.Response:
-        return httpx.Response(
-            200,
-            json={
-                "import_id": "imp_other",
-                "state": "published",
-                "version": 2,
-                "task_key": "task-one",
-                "source_team_id": FLEET_TEAM_ID,
-                "destination": receipt["destination"],
-                "source_selection": receipt["source_selection"],
-                "source_selection_digest": receipt["source_selection_digest"],
-                "private": "must-not-surface",
-            },
-        )
-
-    with (
-        httpx.Client(transport=httpx.MockTransport(handler)) as client,
-        pytest.raises(PlatformImportError, match="identity drifted") as error,
-    ):
-        monitor_receipts([receipt], registry_client=client)
-    assert "must-not-surface" not in str(error.value)
-
-
-def test_status_monitor_rejects_source_selection_digest_drift() -> None:
+def test_status_monitor_rejects_source_pin_drift() -> None:
     selection = load_selection(SELECTION)
-    fleet, registry, _posts = _clients(selection)
-    with fleet, registry:
-        plan = build_plan(
-            selection,
-            fleet_client=fleet,
-            registry_client=registry,
-            namespace="gentle-ember-ledger",
-            repository="fleet-cyber-a62-frozen",
-        )
+    roster = _roster(selection)
+    plan, _posts, _reads = _plan(selection, roster)
     receipt = _receipt_for_plan(plan)
 
     def handler(_request: httpx.Request) -> httpx.Response:
@@ -537,9 +450,12 @@ def test_status_monitor_rejects_source_selection_digest_drift() -> None:
                 "version": 2,
                 "task_key": receipt["task_key"],
                 "source_team_id": FLEET_TEAM_ID,
+                "protocol_version": receipt["protocol_version"],
+                "expected_eval_task_id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+                "expected_current_task_version_id": receipt[
+                    "expected_current_task_version_id"
+                ],
                 "destination": receipt["destination"],
-                "source_selection": receipt["source_selection"],
-                "source_selection_digest": "sha256:" + "f" * 64,
             },
         )
 
@@ -550,23 +466,38 @@ def test_status_monitor_rejects_source_selection_digest_drift() -> None:
         monitor_receipts([receipt], registry_client=client)
 
 
-def test_corrupt_or_public_journal_fails_closed(tmp_path: Path) -> None:
+def test_forbidden_errors_and_journal_failures_are_sanitized(tmp_path: Path) -> None:
+    selection = load_selection(SELECTION)
+    roster = _roster(selection)
+    fleet, registry, _posts, _reads = _clients(selection, roster, forbidden=True)
+    with fleet, registry:
+        plan = build_plan(
+            selection,
+            identity_roster=roster,
+            fleet_client=fleet,
+            registry_client=registry,
+            namespace="gentle-ember-ledger",
+            repository="fleet-cyber-a62-frozen",
+        )
+        with pytest.raises(PlatformImportError, match="destination write access") as error:
+            submit_rows(
+                plan,
+                selection,
+                identity_roster=roster,
+                registry_client=registry,
+                limit=1,
+            )
+    assert "must-not-surface" not in str(error.value)
+
     corrupt = tmp_path / "corrupt.jsonl"
     corrupt.write_text("{truncated")
     corrupt.chmod(0o600)
-    with (
-        pytest.raises(PlatformImportError, match="invalid JSON"),
-        receipt_journal(corrupt),
-    ):
+    with pytest.raises(PlatformImportError, match="invalid JSON"), receipt_journal(corrupt):
         pass
-
     public = tmp_path / "public.jsonl"
     public.write_text("")
     public.chmod(0o644)
-    with (
-        pytest.raises(PlatformImportError, match="private regular file"),
-        receipt_journal(public),
-    ):
+    with pytest.raises(PlatformImportError, match="private regular file"), receipt_journal(public):
         pass
 
 
@@ -580,14 +511,11 @@ def test_repository_and_operator_outputs_fail_closed(tmp_path: Path) -> None:
     with httpx.Client(
         transport=httpx.MockTransport(lambda _request: httpx.Response(200, json=good))
     ) as client:
-        assert (
-            ensure_repository(
-                client,
-                namespace="gentle-ember-ledger",
-                repository="fleet-cyber-a62-frozen",
-            )["created"]
-            is False
-        )
+        assert not ensure_repository(
+            client,
+            namespace="gentle-ember-ledger",
+            repository="fleet-cyber-a62-frozen",
+        )["created"]
     wrong = {**good, "visibility": "public"}
     with (
         httpx.Client(
