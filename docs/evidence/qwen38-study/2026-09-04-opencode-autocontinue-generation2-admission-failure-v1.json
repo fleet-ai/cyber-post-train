@@ -1,0 +1,99 @@
+{
+  "schema_version": "fleet-opencode-autocontinue-generation2-admission-failure-v1",
+  "append_only": true,
+  "status": "INFRASTRUCTURE_INVALID_PRE_POD",
+  "observed_at_utc": "2026-09-05T05:00:43Z",
+  "classification": "priority_class_preemption_policy_conflict",
+  "namespace": "fleet-train-jobs",
+  "submission": {
+    "intent_configmap": {
+      "name": "chris-ac-g2-canary-submit-v1",
+      "uid": "b1779942-7f29-49fa-9b16-4de557852c54",
+      "immutable": true,
+      "created_at_utc": "2026-09-05T04:57:58Z"
+    },
+    "runtime_configmaps": [
+      {
+        "name": "chris-q38-ac-r004-a1-g2-run-v1",
+        "uid": "af3a9671-fd41-4fe7-b434-f39d0bf192ef",
+        "immutable": true,
+        "created_at_utc": "2026-09-05T04:58:01Z"
+      },
+      {
+        "name": "chris-glm53-ac-r013-a1-g2-run-v1",
+        "uid": "c07f5793-dc76-472d-892e-4e5b3d21d002",
+        "immutable": true,
+        "created_at_utc": "2026-09-05T04:58:04Z"
+      }
+    ]
+  },
+  "priority_classes": {
+    "requested": {
+      "name": "fleet-train-high",
+      "value": 10000,
+      "preemption_policy": "PreemptLowerPriority"
+    },
+    "highest_installed_never": {
+      "name": "fleet-serve-low",
+      "value": 100,
+      "preemption_policy": "Never"
+    }
+  },
+  "jobs": [
+    {
+      "model": "qwen3.8-27b",
+      "name": "chris-q38-ac-r004-a1-g2-v1",
+      "uid": "2c2e6346-4d8f-49ba-8890-e5cf59090976",
+      "release_file_sha256": "sha256:f0d42ac7f9191ca4857f87c58f0de38a60b4a1ffe43b3207c8e69ece9b11e024",
+      "release_receipt_sha256": "sha256:8864061dbe6e39d61bc21c5a05cdc13e58af87845a658e666d5dfda5e491d929",
+      "kueue_admitted": true,
+      "cluster_queue": "training-cq",
+      "failed_create": {
+        "reason": "FailedCreate",
+        "first_at_utc": "2026-09-05T04:58:06Z",
+        "last_at_utc": "2026-09-05T04:59:09Z",
+        "event_count": 7,
+        "error_class": "explicit_Never_conflicts_with_priority_class_PreemptLowerPriority"
+      },
+      "pods_created": 0,
+      "current_job_objects": 0
+    },
+    {
+      "model": "glm-5.3",
+      "name": "chris-glm53-ac-r013-a1-g2-v1",
+      "uid": "4af2be6d-668d-4968-a8d7-439118ab0375",
+      "release_file_sha256": "sha256:a6e03085546174e7ad809fd92edae04b6337f5bbd17a800fe8e41589ffb2762e",
+      "release_receipt_sha256": "sha256:dd412e6e48b5528497eb8edde8cc7bfc59595b674d1e0aa6304afdaa83531404",
+      "kueue_admitted": true,
+      "cluster_queue": "training-cq",
+      "failed_create": {
+        "reason": "FailedCreate",
+        "first_at_utc": "2026-09-05T04:58:06Z",
+        "last_at_utc": "2026-09-05T04:59:09Z",
+        "event_count": 7,
+        "error_class": "explicit_Never_conflicts_with_priority_class_PreemptLowerPriority"
+      },
+      "pods_created": 0,
+      "current_job_objects": 0
+    }
+  ],
+  "side_effects": {
+    "model_calls": 0,
+    "sessions": 0,
+    "verifier_executions": 0,
+    "generation2_claims": 0,
+    "output_roots": 0
+  },
+  "retry_disposition": {
+    "same_jobs_must_not_be_recreated": true,
+    "same_execution_generation_must_not_be_reused": true,
+    "fresh_execution_generation_required": 3,
+    "same_statistical_cells_preserved": true
+  },
+  "privacy": {
+    "logs_included": false,
+    "prompts_traces_flags_or_scores_included": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:99bbde2c57290cad719a436c054deab12675257ac84f8dfb5471787aa2e5ee0a"
+}
