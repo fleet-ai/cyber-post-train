@@ -1,0 +1,43 @@
+{
+  "schema_version": "fleet-opencode-autocontinue-generation2-canary-held-release-v3",
+  "append_only": true,
+  "status": "HELD",
+  "observed_at_utc": "2026-09-05T04:30:00Z",
+  "supersedes_held_receipt": {
+    "path": "docs/evidence/qwen38-study/2026-09-04-opencode-autocontinue-generation2-canaries-held-v2.json",
+    "receipt_sha256": "sha256:cc61e3926024db42c5dfb638b84d6688ddded329e3d0ed75a112b0f5597bf05d"
+  },
+  "generation2_spec_sha256s": [
+    "sha256:9d8201974794edd3bad379721cf9c9e0e9ae0b978221d223d8165730302e737c",
+    "sha256:f4b9f990da87ac46da30a26d3c00a8d023b82ddf2251964343cc55eff309d938"
+  ],
+  "rendered_plan_sha256s": [
+    "sha256:1c98863eb54921e338020954e2395da0ecc085a6300c7fb60b97142ec0e949da",
+    "sha256:7b1bfaf18158e224595b4d31c2a56b064f3c78c848284558f070a28889b2a5c3"
+  ],
+  "jobs": [
+    "chris-q38-ac-r004-a1-g2-v1",
+    "chris-glm53-ac-r013-a1-g2-v1"
+  ],
+  "execution_generation": 2,
+  "statistical_cells": 2,
+  "implementation": {
+    "module_path": "evals/fleet/autocontinue_generation2_canary_v3.py",
+    "module_sha256": "sha256:6d71a53a991710fa7f6e7173cfad7cc1ced0271e7efe5d2c97f990572b2befd8"
+  },
+  "launch_authorized": false,
+  "bulk_release_authorized": false,
+  "dedicated_serving_authorized": false,
+  "remaining_gates": [
+    "independent_v3_contract_audit",
+    "v3_executable_manifest_and_launcher",
+    "fresh_hosted_route_and_duplicate_inventory",
+    "append_only_model_specific_scoring_releases",
+    "explicit_root_launch_authorization"
+  ],
+  "privacy": {
+    "prompts_traces_flags_or_scores_included": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:010a541d9c9f7f24a28b94e5a315364d01d550e2fad96f9facd01ca7b9ac0b9e"
+}

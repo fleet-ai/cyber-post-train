@@ -1,0 +1,211 @@
+{
+  "schema_version": "fleet-hosted-scoring-api-common-mode-incident-v1",
+  "observed_at": "2026-09-04T05:31:52Z",
+  "common_failure": {
+    "component": "fleet_rollout_reward_acquisition_api",
+    "method": "POST",
+    "route_shape": "/v1/rollout-rewards/{task_key}/versions/{task_version_id}",
+    "http_status": 500,
+    "first_terminal_at": "2026-09-04T05:26:29Z",
+    "last_terminal_at": "2026-09-04T05:26:32Z",
+    "controller_count": 4,
+    "scientific_classification": "infrastructure_incomplete_agent_finished_pre_verifier",
+    "shared_signature_confirmed": true
+  },
+  "infrastructure_reconciliation": {
+    "hosted_gateway_models_status": 200,
+    "qwen_served_id_present": true,
+    "glm_served_id_present": true,
+    "affected_nodes_ready": true,
+    "affected_nodes_memory_pressure": false,
+    "affected_nodes_disk_pressure": false,
+    "affected_nodes_pid_pressure": false,
+    "pod_eviction_observed": false,
+    "kueue_preemption_observed": false,
+    "job_terminal_reason": "BackoffLimitExceeded",
+    "pod_restart_count": 0
+  },
+  "controllers": [
+    {
+      "controller_receipt_sha256": "sha256:b7397090d14e95ca997ad1ebda7fa18fce3dce51d915b4ff8651ef70ce1a56f1",
+      "model_block": "qwen_hosted_original",
+      "job": {
+        "name": "chris-cyber-q38-opencode11827-hosted-complete47-p4-v7",
+        "uid": "5a76cb37-e8c1-4566-a1ca-e087da1236b4"
+      },
+      "pod": {
+        "name": "chris-cyber-q38-opencode11827-hosted-complete47-p4-v7-925lb",
+        "uid": "c3767e16-2111-4699-a0fe-315e039bfea6",
+        "evaluator_exit_code": 1,
+        "finished_at": "2026-09-04T05:26:30Z"
+      },
+      "plan_sha256": "sha256:f367d5148b035e29f57e5a29633609c4dbc8876d94c2795a79ff1ff25dad2ee2",
+      "last_claim": {
+        "source_rank": 5,
+        "attempt": 1,
+        "task_claim_sha256": "sha256:fc20495c13a435e860a0f2fca9d51f6b66c06bd61c4d146dd44b0abf9df0ac0a",
+        "attempt_claim_sha256": "sha256:2b8f69613651c875511383a289fcb107a6d91e9dfc276315fa7a3da8840fbaa3"
+      },
+      "accepted_receipts": [
+        "sha256:0748eb5ec92988f8b21fb231a6228600c1722fc758fb2d3c1cfef9def6eb39c8",
+        "sha256:6cba2692b9bfecb1b0d8fe5ca3c596bbb3e1f8f7c7e4ec96ca930468088c042c",
+        "sha256:63565df9242bcd923ecb1778caa75e18a277c0e289d03e9637b1f77b1a3e899f",
+        "sha256:f373f13cf132085b57b06a8b5e5979b4f50163ebca4ce8845bc8cf275f7bec38"
+      ],
+      "failed_cell": {
+        "agent_artifacts_complete": true,
+        "cleanup_complete": true,
+        "reward_result_present": false,
+        "verifier_execution_present": false,
+        "session_ingest_present": false,
+        "accepted_present": false,
+        "noncreditable_present": false,
+        "api_planned_run_id_matches": 0,
+        "api_verifier_matches": 0
+      },
+      "whole_task_fenced": true,
+      "retry_allowed": false
+    },
+    {
+      "controller_receipt_sha256": "sha256:ccae7fa0a8459df30fb1aab7325f32d9c7b2adc062499f50948dfee89ecebfd1",
+      "model_block": "qwen_hosted_replacements",
+      "job": {
+        "name": "chris-cyber-q38-opencode11827-hosted-replacements3-p4-v1",
+        "uid": "4ee454bd-8ec0-49aa-a5cc-c64dd05c5e26"
+      },
+      "pod": {
+        "name": "chris-cyber-q38-opencode11827-hosted-replacements3-p4-v1-xglkl",
+        "uid": "1c941c59-f33b-41cd-aabe-2c25a412327a",
+        "evaluator_exit_code": 1,
+        "finished_at": "2026-09-04T05:26:32Z"
+      },
+      "plan_sha256": "sha256:9f879c054e770c120f2d4b77750475f402ba067873fbb93d0e356b062168841d",
+      "last_claim": {
+        "source_rank": 51,
+        "attempt": 2,
+        "task_claim_sha256": "sha256:50c6689da9e3b295c302515915017f759f2ecf91e20cabf2f9c962c1205c2d7b",
+        "attempt_claim_sha256": "sha256:78053c60364fe1f133e1610aa9e58b593c06b1ee5e8bfcd11ffe96ba17e2ff15"
+      },
+      "accepted_receipts": [
+        "sha256:1dca144c5831d4dc5e2c8d07b150c617a29ea5b9b3c4e4d7f8b5f81076c52981"
+      ],
+      "failed_cell": {
+        "agent_artifacts_complete": true,
+        "cleanup_complete": true,
+        "reward_result_present": false,
+        "verifier_execution_present": false,
+        "session_ingest_present": false,
+        "accepted_present": false,
+        "noncreditable_present": false,
+        "api_planned_run_id_matches": 0,
+        "api_verifier_matches": 0
+      },
+      "whole_task_fenced": true,
+      "retry_allowed": false
+    },
+    {
+      "controller_receipt_sha256": "sha256:89b804e9d15fb521076c72b9e9f426074597a38f1a54b8633008ded796318e2b",
+      "model_block": "glm_hosted_original",
+      "job": {
+        "name": "chris-cyber-glm53-opencode11827-hosted-odd45-p4-v10",
+        "uid": "a4812f3d-d76a-49ba-a2cf-fec575ca071d"
+      },
+      "pod": {
+        "name": "chris-cyber-glm53-opencode11827-hosted-odd45-p4-v10-78b4m",
+        "uid": "bfc127cf-9c64-4ed8-b289-6ef17dc8d99f",
+        "evaluator_exit_code": 1,
+        "finished_at": "2026-09-04T05:26:29Z"
+      },
+      "plan_sha256": "sha256:ee31a410a8dcf955e97a3f5ee2d26717e0cdda1d07257e30760d62a25666df8e",
+      "last_claim": {
+        "source_rank": 11,
+        "attempt": 1,
+        "task_claim_sha256": "sha256:f6250acf25981284bb4e09f45a0f1f5e94cb3c2e5f39167f5af2835dd6712883",
+        "attempt_claim_sha256": "sha256:1ef8514503c54a5cafdc89cd4f86dddde2575fb6861a4313011724a1381c181c"
+      },
+      "accepted_receipts": [],
+      "failed_cell": {
+        "agent_artifacts_complete": true,
+        "cleanup_complete": true,
+        "reward_result_present": false,
+        "verifier_execution_present": false,
+        "session_ingest_present": false,
+        "accepted_present": false,
+        "noncreditable_present": false,
+        "api_planned_run_id_matches": 0,
+        "api_verifier_matches": 0
+      },
+      "whole_task_fenced": true,
+      "retry_allowed": false
+    },
+    {
+      "controller_receipt_sha256": "sha256:8150d2302e7e65b7e3e7acbddf3c13ad563a79aa52aa158edb990d488f38315b",
+      "model_block": "glm_hosted_replacement_r106",
+      "job": {
+        "name": "chris-cyber-glm53-opencode11827-hosted-replacement-r106-p4-v1",
+        "uid": "e4a31855-907e-43a4-86f9-3ba0019e3fe4"
+      },
+      "pod": {
+        "name": "chris-cyber-glm53-opencode11827-hosted-replacement-r106-p4wqfsx",
+        "uid": "41904587-20ec-4469-8ac1-558e8d299199",
+        "evaluator_exit_code": 1,
+        "finished_at": "2026-09-04T05:26:30Z"
+      },
+      "plan_sha256": "sha256:8d86219998687ac76365c7530a24f60b6a8702bddb03d90b4ed7a2c6e288edce",
+      "last_claim": {
+        "source_rank": 106,
+        "attempt": 1,
+        "task_claim_sha256": "sha256:47389ea77e91f2e2f74fd92e54bf8313a4191601bd7669b4ea4ae139c2a1c6b8",
+        "attempt_claim_sha256": "sha256:44d4003ce102c978bd4ca00bdca1a5b1297013e04424d9011491ac3093af6f3b"
+      },
+      "accepted_receipts": [],
+      "failed_cell": {
+        "agent_artifacts_complete": true,
+        "cleanup_complete": true,
+        "reward_result_present": false,
+        "verifier_execution_present": false,
+        "session_ingest_present": false,
+        "accepted_present": false,
+        "noncreditable_present": false,
+        "api_planned_run_id_matches": 0,
+        "api_verifier_matches": 0
+      },
+      "whole_task_fenced": true,
+      "retry_allowed": false
+    }
+  ],
+  "untouched_successor_partitions": {
+    "qwen_hosted_original_source_ranks": [
+      6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
+      24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40,
+      41, 42, 43, 44, 45, 46, 47, 48, 49, 50
+    ],
+    "qwen_hosted_prior_replacement_source_ranks": [52, 53],
+    "qwen_pending_replacement_ranks": [54, 55],
+    "glm_hosted_original_source_ranks": [
+      13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35, 37, 39, 41, 43, 45,
+      47, 49, 51, 53, 55, 57, 59, 61, 63, 65, 67, 69, 71, 73, 75, 77, 79,
+      81, 83, 85, 87, 89, 91, 93, 95, 97, 99
+    ],
+    "glm_hosted_reassigned_b_task_count": 27,
+    "glm_dedicated_a_task_count": 27,
+    "glm_pending_replacement_ranks": [108, 109]
+  },
+  "successor_gate": {
+    "new_create_once_identities_required": true,
+    "failed_source_tasks_must_not_repeat": true,
+    "scoring_api_recovery_signal_required": true,
+    "replacement_locks_required": true,
+    "read_only_hydration_allowed_after_lock": true,
+    "scored_launch_authorized": false,
+    "future_jobs_priority_class": "fleet-train-high",
+    "priority_class_is_not_preemption_immunity": true
+  },
+  "privacy": {
+    "scores_included": false,
+    "prompts_or_traces_included": false,
+    "task_content_included": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:043c01e05e9118a080bd642a5da6f7c22c279781bc0c97803330091e55fdb27e"
+}

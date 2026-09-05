@@ -1,0 +1,111 @@
+{
+  "schema_version": "fleet-cyber-glm53-dedicated-serving-canary-v1",
+  "observed_at": "2026-09-04T05:52:33Z",
+  "classification": "operational-gate-passed",
+  "api_run": {
+    "name": "ft-run-9e92209d",
+    "run_id": "9e92209d-6249-4622-b8fc-d8f8b29f8ff0",
+    "status": "RUNNING",
+    "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-glm53-tp8-b-v5"
+  },
+  "immutable_config": {
+    "path": "evals/fleet/configs/dedicated-glm53-tp8-b-v5.json",
+    "commit": "2b263bd",
+    "sha256": "sha256:f93b2f73d9d42fa16e72a9e1f9af638623fe514550602359b9d6a3906021967e",
+    "preview_manifest_sha256": "sha256:d19ef5a465d5cc841b7f47b23a79ddd607ab17bc4c90f9935f4e7bc122ea572f",
+    "entrypoint_sha256": "sha256:1ac006a84f76a17fe48fc006b02b4fd30840e1cadc40f779ef204c5175035884",
+    "rendered_entrypoint_matches": true
+  },
+  "controllers": {
+    "ray_job_uid": "2bbfd34a-d74a-4497-ab28-48cada0c9753",
+    "workload_name": "rayjob-ft-run-9e92209d-0580b",
+    "workload_uid": "009252cb-48b1-4a47-b952-b2d8ce0297f8",
+    "workload_admitted_at": "2026-09-04T05:41:25Z",
+    "ray_cluster_name": "ft-run-9e92209d-pppzg",
+    "ray_cluster_uid": "f7f7ae34-6a79-482a-b771-4639b786f66a",
+    "submitter_job_uid": "7195bf07-81e4-4c87-9672-d333749d57fc",
+    "submitter_pod_uid": "c5832854-848f-4c02-80b1-feaee91c787b"
+  },
+  "runtime": {
+    "head_pod_name": "ft-run-9e92209d-pppzg-head-rc9nd",
+    "head_pod_uid": "bfeb4c6a-9e4a-4f14-adb2-3f516dd25fdb",
+    "head_pod_node": "computeinstance-e04q707wzj5z9c6a2r",
+    "head_pod_restarts": 0,
+    "gpu_count": 8,
+    "worker_group_count": 0,
+    "priority_class": "fleet-train-high",
+    "priority_value": 10000,
+    "preemption_policy": "PreemptLowerPriority",
+    "non_preemptible": false,
+    "privileged": true,
+    "seccomp_profile": "Unconfined",
+    "secret_env_from_count": 0,
+    "run_root_file_count": 0,
+    "run_root_byte_count": 0
+  },
+  "image": {
+    "requested": "ghcr.io/fleet-ai/cyber-post-train-glm53-runtime@sha256:ec93ba50613fd13fb4c0b0a9105767ab18209a1e0108dab0923aad694c0206ec",
+    "resolved_image_id": "ghcr.io/fleet-ai/cyber-post-train-glm53-runtime@sha256:ec93ba50613fd13fb4c0b0a9105767ab18209a1e0108dab0923aad694c0206ec",
+    "private_pull_succeeded": true,
+    "image_pull_secret": "ghcr-pull",
+    "image_pull_secret_uid": "74911d64-d540-4eba-bea6-f3c10cffa670"
+  },
+  "model": {
+    "served_name": "glm-5.3",
+    "source": "zai-org/GLM-5.3",
+    "revision": "30333038ada1f1dacb294a93270305a890b50c14",
+    "live_path": "/mnt/sfs/models/glm-5.3-30333038",
+    "context_length": 262144,
+    "base_and_draft_identity_match": true
+  },
+  "network": {
+    "service_name": "ft-run-9e92209d-pppzg-head-svc",
+    "service_uid": "14ae906a-60ef-4a02-b6bf-814a00c2c89f",
+    "health_first_observed_200_at": "2026-09-04T05:49:28Z",
+    "health_dwell_last_observed_200_at": "2026-09-04T05:51:32Z",
+    "health_dwell_restart_count": 0,
+    "ports": {
+      "http": 8000,
+      "dashboard": 8265,
+      "metrics": 8080
+    }
+  },
+  "content_blind_probe": {
+    "schema": "fleet_cyber_glm53_serving_probe_v1",
+    "health": true,
+    "served_model": "glm-5.3",
+    "context_length": 262144,
+    "structured_tool_schema_names": [
+      "bash",
+      "submit_report"
+    ],
+    "selected_tool_names": [
+      "submit_report"
+    ],
+    "finish_reason": "tool_calls",
+    "tool_arguments_valid_json": true,
+    "response_content_included": false,
+    "tool_arguments_included": false,
+    "sanitized_probe_sha256": "sha256:d0e8d004aee6a5eca0ee5315d1db0a00cee42d104cb1cf2b34eab97e0cdab491"
+  },
+  "outcome_integrity": {
+    "non_scored_model_requests": 1,
+    "scored_controller_launched": false,
+    "scored_sessions": 0,
+    "verifier_executions": 0,
+    "capability_score_claim_allowed": false,
+    "scores_read": false,
+    "prompts_or_task_traces_read": false
+  },
+  "capacity": {
+    "replica_a_healthy": true,
+    "replica_a_head_pod_uid": "d1dcfa3b-0db0-4bfa-b2b2-3ab8d7d63a2d",
+    "replica_a_node": "computeinstance-e04vjdcdbaz285nnj7",
+    "healthy_replicas": 2,
+    "dedicated_nodes": 2,
+    "dedicated_gpus": 16,
+    "maximum_respected": true,
+    "eviction_immunity_claimed": false
+  },
+  "receipt_sha256": "sha256:4eba7bbbe3ce13bbce61b13b8a2898278407e518611e25625e3688d4219f722d"
+}

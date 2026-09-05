@@ -1,0 +1,64 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: chris-cyber-glm53-replacement-hydration-v1
+  namespace: fleet-train-jobs
+  labels:
+    cyber-post-train.fleet.ai/experiment: glm53-replacement-hydration-v1
+    cyber-post-train.fleet.ai/owner: chris
+    kueue.x-k8s.io/queue-name: training-lq
+spec:
+  activeDeadlineSeconds: 900
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 604800
+  template:
+    metadata:
+      labels:
+        cyber-post-train.fleet.ai/experiment: glm53-replacement-hydration-v1
+        cyber-post-train.fleet.ai/owner: chris
+    spec:
+      restartPolicy: Never
+      priorityClassName: fleet-infra-quiet
+      nodeSelector:
+        kubernetes.io/arch: amd64
+        workload: fleetai-training-ng-cpu
+      tolerations:
+        - key: workload
+          operator: Equal
+          value: fleetai-training-ng-cpu
+          effect: NoSchedule
+      containers:
+        - name: hydrate
+          image: ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
+          command: ["/bin/bash", "-ceu", "--"]
+          args:
+            - |
+              root=/workspace/cyber-post-train
+              out=/mnt/sfs/jobs/chris-cyber-glm53-replacement-hydration-v1
+              test ! -e "$out"
+              mkdir -p "$root/evals/fleet"
+              touch "$root/evals/__init__.py" "$root/evals/fleet/__init__.py"
+              install -m 0644 /bootstrap/self_hosted.py "$root/evals/fleet/self_hosted.py"
+              install -m 0644 /bootstrap/controller.py "$root/evals/fleet/hosted_sweep_controller.py"
+              cd "$root"
+              uv run --no-project --with httpx==0.28.1 python \
+                -m evals.fleet.hosted_sweep_controller hydrate-replacements \
+                --assignment /bootstrap/assignment.json \
+                --output /tmp/HYDRATION.json
+              mkdir -m 0700 "$out"
+              install -m 0600 /tmp/HYDRATION.json "$out/HYDRATION.json"
+          env:
+            - name: FLEET_API_KEY
+              valueFrom:
+                secretKeyRef: {name: chris-cyber-opencode-evals-v2, key: FLEET_API_KEY}
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {cpu: 250m, memory: 512Mi}
+          volumeMounts:
+            - {name: bootstrap, mountPath: /bootstrap, readOnly: true}
+            - {name: workspace, mountPath: /workspace}
+            - {name: sfs, mountPath: /mnt/sfs}
+      volumes:
+        - {name: bootstrap, configMap: {name: chris-cyber-glm53-replacement-hydration-v1}}
+        - {name: workspace, emptyDir: {sizeLimit: 1Gi}}
+        - {name: sfs, persistentVolumeClaim: {claimName: sfs-shared}}

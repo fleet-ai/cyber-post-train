@@ -1,0 +1,101 @@
+{
+  "schema_version": "fleet-hosted-opencode-task-boundary-shard-v1",
+  "shard_key": "glm53_autocontinue_canary",
+  "campaign_id": "chris-glm53-ac-canary1-v1",
+  "source_job_id": "chris-glm53-ac-canary1-v1",
+  "serving_block": "glm-hosted-autocontinue-v1",
+  "preflight_job_name": "chris-glm53-ac-canary1-v1-preflight",
+  "scored_job_name": "chris-glm53-ac-canary1-v1",
+  "sfs_root": "chris-glm53-ac-canary1-v1",
+  "plan_sha256": "sha256:6bfc06e5ede3a572f03d74e810dc26006bdbf5134b841ca12565cdf13c02ca93",
+  "source": {
+    "campaign_sha256": "sha256:63946f224a33eb0d2c2a6fdba34358ebf9ca379e5f0f156cd137c95a9b98097e",
+    "scientific_mapping_sha256": "sha256:de30c778e4337c79dea921b7463aa74760da59f972c928927c4359e828f1f009",
+    "flock_release_gate_receipt_sha256": "sha256:e9f34d35ac3c9e60d2698ebc1685374b98f13e41ac305df0609fb051f35c416c",
+    "hosted_health_receipt_sha256": "sha256:d81a01ffe1087d7d85fe511bc9c978461ba3e24a2c15675871cfb8668c49bd85",
+    "fresh_inventory_receipt_sha256": null,
+    "dedicated_parity_receipt_sha256": null
+  },
+  "model": {
+    "endpoint_origin": "https://inference.flt.build",
+    "repository": "zai-org/GLM-5.3",
+    "revision": "30333038ada1f1dacb294a93270305a890b50c14",
+    "served_id": "glm-5.3",
+    "session_model": "fleet-cluster-opencode-1.18.27/glm-5.3-opencode11827-autocontinue-v1"
+  },
+  "harness": {
+    "name": "opencode",
+    "version": "1.18.27",
+    "release_asset_sha256": "sha256:4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702",
+    "provider_adapter": "@ai-sdk/openai-compatible",
+    "context_management": "opencode_1.18.27_native_compaction_autocontinue_v1",
+    "context_window_size": 262144,
+    "max_model_requests": 600,
+    "max_output_tokens": 32768,
+    "timeout_seconds": 28800,
+    "settings_canonical_sha256": "sha256:9614806454c86784e54fde31a8acc3f51adda11593fad3e762142cd04a4010f2",
+    "settings_file_sha256": "sha256:84a1ca763a297bd8badb184391a02c82d57069b9a211ecef4f5e53dd79e20e20"
+  },
+  "treatment_block": {
+    "kind": "hosted_inference_endpoint_v1",
+    "serving_block": "glm-hosted-autocontinue-v1",
+    "campaign_sha256": "sha256:63946f224a33eb0d2c2a6fdba34358ebf9ca379e5f0f156cd137c95a9b98097e",
+    "endpoint_origin": "https://inference.flt.build",
+    "served_id": "glm-5.3",
+    "model_revision": "30333038ada1f1dacb294a93270305a890b50c14",
+    "session_model": "fleet-cluster-opencode-1.18.27/glm-5.3-opencode11827-autocontinue-v1",
+    "harness": {
+      "name": "opencode",
+      "version": "1.18.27",
+      "release_asset_sha256": "sha256:4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702",
+      "provider_adapter": "@ai-sdk/openai-compatible",
+      "context_management": "opencode_1.18.27_native_compaction_autocontinue_v1",
+      "context_window_size": 262144,
+      "max_model_requests": 600,
+      "max_output_tokens": 32768,
+      "timeout_seconds": 28800,
+      "settings_canonical_sha256": "sha256:9614806454c86784e54fde31a8acc3f51adda11593fad3e762142cd04a4010f2",
+      "settings_file_sha256": "sha256:84a1ca763a297bd8badb184391a02c82d57069b9a211ecef4f5e53dd79e20e20"
+    },
+    "required_task_tools": ["bash", "submit_report"],
+    "required_task_tool_catalog_sha256": "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a"
+  },
+  "authority": {
+    "multi_app_aggregation_mode": "fractional",
+    "provisioning_route_template": "/v1/rollout-rewards/{task_key}/versions/{task_version_id}/instances",
+    "scoring_mode": "partial",
+    "scoring_route_template": "/v1/rollout-rewards/{task_key}/versions/{task_version_id}",
+    "required_cyber_contract": {"evidence_schema": "1.0.0", "submission_protocol": "2.0.0", "verifier_contract": "3.0.0"}
+  },
+  "task_count": 1,
+  "pass_k": 4,
+  "total_session_count": 1,
+  "new_session_count": 1,
+  "credited_sessions": [],
+  "legacy_credited_sessions": 0,
+  "canary_acceptance_required_before_bulk": true,
+  "execution": {
+    "task_partition": "explicit_one_cell_canary",
+    "same_task_max_inflight": 1,
+    "retry_policy": "never_repeat_any_verifier_backed_outcome",
+    "future_nonzero_exit_policy": "credit_only_if_reward_ingest_cleanup_and_authoritative_session_match",
+    "infrastructure_failure_policy": "quarantine_only_exact_cell_no_automatic_retry",
+    "training_data_eligible": true,
+    "required_task_tools": ["bash", "submit_report"],
+    "required_task_tool_catalog_sha256": "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a",
+    "score_blind_concurrency_schedule": [{"accepted_outcomes_at_least": 0, "workers": 1, "headroom_gate": "fixed_at_launch_no_automatic_widening"}],
+    "inventory_policy": "conservative_no_same_model_session_for_task_key_v1",
+    "required_priority_class": "fleet-train-high",
+    "launch_authorized": false,
+    "endpoint_lease": {"lease_root": "/mnt/sfs/endpoint-leases/opencode11827-autocontinue-primary-v1", "endpoint_key": "glm-hosted-autocontinue-v1", "maximum_streams": 2}
+  },
+  "tasks": [{
+    "rank": 1,
+    "source_rank": 13,
+    "environment": {"id": "cysec1-2-fakelook-gen", "version": "v0.0.3", "version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4", "data_id": "fakelook-cyber-gen", "data_version": "v0.0.2", "runtime_seed_content_sha256": "bc61fa38225eb0eaccac044c2e8e49411032405f109e2fdc2951530fc0e9168e", "ttl_seconds": 32400},
+    "task": {"key": "cysec1-2-fakelook-gen_blackbox-ab56dfb6116356c402290fa8__blackbox_ctf_v1", "version_id": "9375a9b9-04e5-4f6f-ad47-286121278992", "prompt_sha256": "sha256:399858ca5eacbef7d3a4079c8dd966419e87aa8e303fda34e1964528e05f1559", "env_variables_sha256": "sha256:0014ce676a11f556a2951311789dea150b303f183e6e7ba834060a67d922919f", "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b", "cyber_contract": {"evidence_schema": "1.0.0", "submission_protocol": "2.0.0", "verifier_contract": "3.0.0"}},
+    "verifier": {"id": "3ed8b746-15c4-43cf-9947-a54c325f6f3d", "version": 1, "version_id": "41a1f7fb-0319-4eb0-80de-4fb40ad9bb74", "function_name": "verify", "sha256": "519b4a2654cd7c9632f348575eb708103ea01ef0e48488e6ee04e3f136786ebf"}
+  }],
+  "attempts": [{"rank": 1, "source_rank": 13, "attempt": 1, "ordinal": 1, "run_id": "chris-glm53-ac-canary1-v1-sr013-a1-9375a9b9", "network": "glm53-ac-canary1-v1-sr013-a1-9375a9b9"}],
+  "privacy": {"credentials_included": false, "prompts_included": false, "scores_included": false, "transcripts_included": false}
+}

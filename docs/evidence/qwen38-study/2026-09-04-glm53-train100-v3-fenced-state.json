@@ -1,0 +1,18 @@
+{
+  "accepted_attempts": 0,
+  "campaign_id": "chris-cyber-glm53-opencode11827-fleet-train100-p4-v3",
+  "job_uid": "5607e688-93dd-477f-a376-43524d991fe3",
+  "kubernetes_job_name": "chris-cyber-opencode-glm53-train100-p4-v3",
+  "model_rollouts_started": 0,
+  "observed_at": "2026-09-04T00:17:04Z",
+  "original_artifacts_preserved": true,
+  "pod_uid": "983f1390-2c2b-494f-bf0d-cc366c28889e",
+  "quiesced": true,
+  "receipt_sha256": "sha256:bf485148ae310b116535df75b609041519b2d0681ba1e93ad747c0c658119c1e",
+  "schema_version": "fleet-selfhosted-opencode-v3-fenced-state-v1",
+  "scored_sessions_created": 0,
+  "scores_read": false,
+  "sfs_root_created": false,
+  "traces_read": false,
+  "unresolved_attempts": 0
+}

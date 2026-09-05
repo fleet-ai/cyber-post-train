@@ -1,0 +1,141 @@
+{
+  "schema_version": "fleet-opencode-replacement-selection-supplement-v6",
+  "supplement_id": "glm53-dedicated-a-source6-source14-whole-task-replacements-v1",
+  "recorded_at": "2026-09-04T18:25:23Z",
+  "append_only": true,
+  "prior_supplement": {
+    "path": "docs/evidence/qwen38-study/2026-09-04-opencode-replacement-selection-supplement-v5.json",
+    "file_sha256": "sha256:181b7ecc7e2377cc74b40acede81de56403a20fd33f214fb2fb9b4c1719ac2d5",
+    "receipt_sha256": "sha256:e8b6c3f993c4e5b76f823acc0bbda4c210a7dbd4526c1adb093c0535bbb4c00d",
+    "rewritten": false
+  },
+  "frozen_selection_authority": {
+    "split_path": "configs/data/fleet-a62-task-split-v1.json",
+    "split_file_sha256": "sha256:ab444cb664ffb4da351e4d33298cc052f848f2833487807bf984a753fa7c3b47",
+    "split_manifest_digest": "sha256:fb09668f8de77e6baee37dc1e3162a7617ca9a0a450da9ca53422c17bfbc942a",
+    "locked_selection_path": "evals/fleet/configs/opencode-easiest-train100-selection-v2.json",
+    "locked_selection_file_sha256": "sha256:9f5e83123cfe7d8a3f4cc0b791ac1dc9032a3d5faf5eba2a431c7246069255df",
+    "runnable_inventory_path": "configs/runs/qwen36-27b-rl-base-full-runnable.json",
+    "runnable_inventory_file_sha256": "sha256:70f303f5bb6892598c8e4867151fd176774c5e59d2f0998c6cdb291609b036ff",
+    "selection_rule": "continue_the_reproduced_locked_eligible_order_after_r111_and_take_r112_r113",
+    "mutable_live_statistics_used": false
+  },
+  "attrition_sources": [
+    {
+      "source_rank": 6,
+      "replacement_rank": 112,
+      "classification": "INFRASTRUCTURE_PRE_MODEL_CLAIM_CONSUMED",
+      "retry_original_task": false,
+      "job_uid": "6eaec014-7139-44dc-abea-a07c868492f4",
+      "pod_uid": "22e49d5e-44d7-4f96-955f-272e2cdd6a95",
+      "plan_sha256": "sha256:14b799389571e82765ce83373a5d88fc37adb8c4a36b414366f699b75ef4da27",
+      "task_claim_sha256": "sha256:b74fef7f598557e431f06d21a63d6a9499230c286f1ce87937cd22bd6f31e98d",
+      "attempt_claim_sha256": "sha256:78caff6e72ef6ae8c78707c465e53115ab43032011f2b18a0b28ac493e0415e3",
+      "terminal_tombstone_receipt_sha256": "sha256:5e3e877811953c1dd25f8aef547fed1677bcefed90d5de190853b27cdc744e70",
+      "sanitized_log_sha256_prefix": "sha256:6cc81d",
+      "exception_class": "ValueError",
+      "exception_message": "OpenCode requires a new plan declaring the autocontinue context policy",
+      "model_request_started": false,
+      "score_requested": false,
+      "session_ingested": false,
+      "verifier_executed": false
+    },
+    {
+      "source_rank": 14,
+      "replacement_rank": 113,
+      "classification": "INFRASTRUCTURE_PARTIAL_INGEST_NO_AUTHORITATIVE_SESSION",
+      "retry_original_task": false,
+      "job_uid": "87e2ca85-d684-4d87-9f05-f4399b7906d0",
+      "pod_uid": "083a29e3-7d0e-4cbb-9447-62373772080d",
+      "plan_sha256": "sha256:e1f37476700beb16ccb3978f61a162a59e16501334d316417cd0718a94c2ef68",
+      "task_claim_sha256": "sha256:a64661ed559fb2ec0e729cc8673a48e3674cb5216a1e5a0b540bc07e2f93bead",
+      "attempt_claim_sha256": "sha256:81cd1c464274f5bf328e5654c908cf383a5ba75628ea605b22aa87c975bc9992",
+      "result_file_sha256": "sha256:c757b8dec50971e6281c0e12608be3ccb443e0582c1657e6f9117e7a12da4913",
+      "reward_result_file_sha256": "sha256:ce3fb95d76059cb9747ffcd61234995c5193792b78a26a21b4cb61e15ef0a816",
+      "session_ingest_file_sha256": "sha256:c839ecd94b8d260efcbf362ae264927a382e47e70a59e02bc2dd618927436736",
+      "cleanup_file_sha256": "sha256:a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+      "agent_exit_code": 1,
+      "ingest_error_type": "FleetRequestError",
+      "ingest_chunks_completed": 8,
+      "ingest_chunk_count": 20,
+      "cleanup_completed": true,
+      "authoritative_api_session_matches": 0,
+      "exact_resume_supported": false
+    }
+  ],
+  "selection_replay": {
+    "score_blind": true,
+    "locked_prefix_replacement_ranks": [101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111],
+    "next_historical_ranks": [120, 121],
+    "next_replacement_ranks": [112, 113]
+  },
+  "replacements": [
+    {
+      "replacement_rank": 112,
+      "historical_rank": 120,
+      "replaces_source_rank": 6,
+      "serving_block": "dedicated_a_v5_whole_task_replacement",
+      "task_key": "cysec1-2-fubspot-gen_blackbox-b81e6f9c36fc6ce74306eec6__blackbox_ctf_v1",
+      "task_version_id": "24030b60-cb61-4366-a3be-b3b808cad8ba",
+      "task_version": "14",
+      "environment_version_id": "a1532a5c-6ec9-45bd-899d-24c0fe3d1df5",
+      "env_key": "cysec1-2-fubspot-gen",
+      "env_version": "v0.0.3",
+      "data_key": "current-fubspot-gen",
+      "data_version": "v0.0.3",
+      "split": "train",
+      "hydration_gate": {"status": "required_not_satisfied", "required_before_paid_launch": true},
+      "scored_launch_authorized": false
+    },
+    {
+      "replacement_rank": 113,
+      "historical_rank": 121,
+      "replaces_source_rank": 14,
+      "serving_block": "dedicated_a_v5_whole_task_replacement",
+      "task_key": "cysec1-2-fubspot-gen_blackbox-c892d22e16a0042cd5a8b57a__blackbox_ctf_v1",
+      "task_version_id": "21baee36-dc26-4dcd-983e-ae58a665dfa9",
+      "task_version": "16",
+      "environment_version_id": "a1532a5c-6ec9-45bd-899d-24c0fe3d1df5",
+      "env_key": "cysec1-2-fubspot-gen",
+      "env_version": "v0.0.3",
+      "data_key": "current-fubspot-gen",
+      "data_version": "v0.0.3",
+      "split": "train",
+      "hydration_gate": {"status": "required_not_satisfied", "required_before_paid_launch": true},
+      "scored_launch_authorized": false
+    }
+  ],
+  "overlap_audit": {
+    "api_exact_task_version_sessions": {"112": 0, "113": 0},
+    "sfs_nonattempt_json_refs": {"112": 0, "113": 0},
+    "current_repo_plan_or_evidence_refs_before_this_supplement": {"112": 0, "113": 0},
+    "live_kubernetes_claims": {"112": 0, "113": 0},
+    "historical_kubernetes_configmap": {
+      "name": "chris-cyber-qwen36-qcode-fleet-test20-base-v1",
+      "uid": "1132ae88-c651-4c43-813b-04b51a53cc02",
+      "job_uid": "84bfbf73-b79c-4cd8-a9ae-30c101e8ae33",
+      "job_failed": true,
+      "active_pods": 0,
+      "produced_exact_task_version_session_or_sfs_claim": false
+    },
+    "unused_for_current_glm_experiment": true
+  },
+  "future_submission_gate": {
+    "required_priority_class": "fleet-train-high",
+    "same_dedicated_a_v5_treatment_required": true,
+    "fresh_hydration_required": true,
+    "fresh_api_kubernetes_sfs_duplicate_preflight_required": true,
+    "maximum_active_worker_streams_for_endpoint": 2,
+    "launch_only_after_capacity_is_available": true,
+    "scored_launch_authorized": false
+  },
+  "privacy": {
+    "scores_read": false,
+    "scores_included": false,
+    "prompts_included": false,
+    "traces_included": false,
+    "flags_included": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:5ee4ec1da3248d1823b9a3b90c903b6414091e1762262c55f7b3e4462d0cebf8"
+}

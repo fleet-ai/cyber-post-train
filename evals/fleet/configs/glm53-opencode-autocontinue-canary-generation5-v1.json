@@ -1,0 +1,12 @@
+{
+  "schema_version": "fleet-opencode-autocontinue-generation5-canary-spec-v1",
+  "model": "glm-5.3",
+  "statistical_cell": {"cell_id": "sha256:905051f141077d3aa5086c1f5dc6ad015d5ee6173a1ea7515025805cf9a24b41", "selection_rank": 13, "attempt": 1, "task_version_id": "9375a9b9-04e5-4f6f-ad47-286121278992"},
+  "execution": {"schema_version": "fleet-statistical-cell-execution-v1", "cell_id": "sha256:905051f141077d3aa5086c1f5dc6ad015d5ee6173a1ea7515025805cf9a24b41", "execution_generation": 5, "execution_id": "sha256:54008eb3de475a49d737cf8f7a4c344bf1815b4f2e8818a49d6ec236a3d8a83b"},
+  "predecessor_generation4": {"spec_path": "evals/fleet/configs/glm53-opencode-autocontinue-canary-generation4-v1.json", "spec_sha256": "sha256:7180392984db8cc598b71970b259d1814cabce79e90ca29db40af2d5ff2c2e91", "plan_sha256": "sha256:1eb3c7c8636d9b2ae417b7e2147520542539fba8ce56899b4ee16f2a3ebcede7", "job_uid": "08cef047-4901-4d75-be26-981f71818af6", "pod_uid": "f0c739e3-e70a-43f1-a72d-a04bd8ed5d42"},
+  "supersession": {"incident_path": "docs/evidence/qwen38-study/2026-09-05-opencode-autocontinue-generation4-pre-model-failure-v1.json", "incident_file_sha256": "sha256:21431a369cd427d57ef4b9cc764b0dce06d50437c98e86c7fd7cf78152774718", "incident_receipt_sha256": "sha256:f7567ef3545d451db2eb34bc967433f3ea5011a6f37a464e3a5a336d91415d0a", "tombstone_path": "docs/evidence/qwen38-study/2026-09-05-opencode-autocontinue-generation4-pre-model-tombstones-v1.json", "tombstone_file_sha256": "sha256:efeb730097bba431d338848583b297caeae4b4df2269a4b133428664e55dd650", "tombstone_receipt_sha256": "sha256:15de0c2d1d973555cd5c115034dc4707958663c800651c4f163355b3470eb6b8", "prior_generation": 4, "new_generation": 5, "same_statistical_cell": true, "generation4_nonrepeatable": true},
+  "identities": {"job_name": "chris-glm53-ac-r013-a1-g5-v1", "configmap_name": "chris-glm53-ac-r013-a1-g5-run-v1", "intent_configmap_name": "chris-ac-g5-canary-submit-v1", "run_id": "chris-glm53-ac-g5-r013-a1-9375a9b9", "network": "glm53-ac-g5-r013-a1-9375a9b9", "sfs_root": "/mnt/sfs/jobs/chris-glm53-ac-r013-a1-g5-v1", "generation_claim_root": "/mnt/sfs/cell-execution-claims/opencode11827-autocontinue-v1"},
+  "rendered_plan_sha256": "sha256:c6460b78091d7096f27c9321c8379d85b35b9906b3fd7699979e7c55c9543334",
+  "launch_authorized": false,
+  "generation5_spec_sha256": "sha256:1578efa8b6f1107d3fe99a4b19ad2010398f773d027188ed0b5c1be0bd6a3857"
+}

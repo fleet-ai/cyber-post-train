@@ -1,0 +1,84 @@
+{
+  "schema_version": "fleet-opencode-autocontinue-canary-held-release-v2",
+  "append_only": true,
+  "status": "HELD",
+  "campaign_sha256": "sha256:63946f224a33eb0d2c2a6fdba34358ebf9ca379e5f0f156cd137c95a9b98097e",
+  "plan_sha256": "sha256:726320dd5e161e28becd22d7bb6e31f1627f36a3c7291c0dabb53f94626b3c2d",
+  "cell": {
+    "source_rank": 4,
+    "attempt": 1,
+    "task_version_id": "02dd4e3f-d85d-4bf8-9976-eae2f102384d"
+  },
+  "predecessor": {
+    "scored_bootstrap_failure_receipt_sha256": "sha256:b30930aeb12cbe4d8ab5ef91a1608ec672e2536576168b50639318b866e30423",
+    "intent_configmap": {
+      "name": "chris-ac-canary1-hosted-scored-submit-v1",
+      "uid": "be93b29f-249f-475b-b4a7-ca7efa47fff0"
+    },
+    "scored_configmap": {
+      "name": "chris-q38-ac-canary1-run-v2",
+      "uid": "6315320f-3768-4e4c-9663-d97f98c49f0b"
+    },
+    "scored_job": {
+      "name": "chris-q38-ac-canary1-v1",
+      "uid": "b4b1c5ff-47f8-4866-8734-adec995ea5af"
+    },
+    "scored_pod": {
+      "name": "chris-q38-ac-canary1-v1-j5gh8",
+      "uid": "9cafd38d-9be4-4272-9786-88529a7ed5b6"
+    },
+    "cell_unclaimed": true,
+    "exact_treatment_sessions": 0,
+    "sfs_root_absent": true,
+    "global_claim_absent": true
+  },
+  "evidence": {
+    "task_inventory_receipt_sha256": "sha256:c71604d22b1d52a7091727b957e0f56f2e8e270e461c844fb57d48b392d831c5",
+    "hosted_health_receipt_sha256": "sha256:d81a01ffe1087d7d85fe511bc9c978461ba3e24a2c15675871cfb8668c49bd85",
+    "shared_pvc_flock_receipt_sha256": "sha256:e9f34d35ac3c9e60d2698ebc1685374b98f13e41ac305df0609fb051f35c416c",
+    "controller_compatibility_receipt_sha256": "sha256:b3920547030db509de25f3a04559d9f4173866b81b02efa0957812b35cf06ba2",
+    "dedicated_parity_is_historical_only": true,
+    "fresh_duplicate_inventory_receipt_sha256": null
+  },
+  "implementation": {
+    "package_commit": null,
+    "package_commit_bound_after_phase_a_audit": true,
+    "controller_sha256": "sha256:605a695e818f8598274d9d64111868ecc1b092514c7ea725437de0cff7585260",
+    "frozen_controller_sha256": "sha256:e14670e40d2b1fbe4896e4b6dfb2902f121b81c8103efea3a74a11fed496809a",
+    "preflight_manifest_sha256": "sha256:44262e7dad2329219480f9e52b19064fab3c59d67f9c174fd11e7e058beb4f12",
+    "scored_manifest_sha256": "sha256:f7402d99d575a1f1ce8f4c6073de0fe6decd58a289d013f375bb27519ea2fb22",
+    "scored_manifest_authorization_sha256": "sha256:8a576d38be80bd9d77e7ef587a5e2b13f7f8ab00940ed96fa1f2d4b470bf8b7e",
+    "preflight_launcher_sha256": null,
+    "scored_launcher_sha256": null
+  },
+  "fresh_identities": {
+    "preflight_configmap": "chris-q38-ac-canary1-pre-v3",
+    "preflight_job": "chris-q38-ac-canary1-v3-preflight",
+    "preflight_sfs_root": "/mnt/sfs/jobs/chris-q38-ac-canary1-v3-preflight",
+    "scored_configmap": "chris-q38-ac-canary1-run-v3",
+    "scored_job": "chris-q38-ac-canary1-v2",
+    "scored_sfs_root": "/mnt/sfs/jobs/chris-q38-ac-canary1-v2"
+  },
+  "remaining_gates": [
+    "phase_a_immutable_commit",
+    "read_only_v3_preflight_authorization",
+    "successful_uid_bound_v3_preflight",
+    "fresh_exact_cell_duplicate_inventory",
+    "new_root_scored_launch_authorization",
+    "final_hosted_released_receipt"
+  ],
+  "authorization": {
+    "author": null,
+    "preflight_authorized": false,
+    "launch_authorized": false,
+    "create_once": true,
+    "required_priority_class": "fleet-train-high",
+    "statement": null
+  },
+  "privacy": {
+    "credentials_included": false,
+    "prompts_or_traces_included": false,
+    "scores_included": false
+  },
+  "receipt_sha256": "sha256:af2cbd562126eb253447aab0141cd6405697b52476e4b1c6370c9afc104650ac"
+}

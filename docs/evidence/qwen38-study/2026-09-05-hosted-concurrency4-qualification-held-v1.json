@@ -1,0 +1,36 @@
+{
+  "schema_version": "fleet-hosted-concurrency4-qualification-held-v1",
+  "status": "HELD",
+  "models": [
+    "qwen3.8-27b",
+    "glm-5.3"
+  ],
+  "concurrency_waves_per_model": [
+    2,
+    4
+  ],
+  "requests_per_stream": 2,
+  "openai_tool_schema_sha256": "sha256:9960b2e350c79ab994d42f2741afeec29bf2c312b5b98a07af32a929f01aae46",
+  "chat_completion_requests_if_released": 24,
+  "task_instance_session_scoring_or_verifier_calls": 0,
+  "scheduler": {
+    "namespace": "fleet-train-jobs",
+    "queue": "training-lq",
+    "priority_class": "fleet-serve-low",
+    "preemption_policy": "Never",
+    "cpu_only": true
+  },
+  "lease_namespace": "hosted-concurrency-qualification-v1",
+  "output_root": "/mnt/sfs/jobs/chris-cyber-hosted-c4-qualification-v1",
+  "launch_authorized": false,
+  "scored_bulk_launch_authorized": false,
+  "objects_created": false,
+  "classification": "held_non_scoring_operational_gate_no_capability_claim",
+  "privacy": {
+    "credentials_included": false,
+    "request_or_response_bodies_included": false,
+    "tool_arguments_included": false,
+    "prompts_traces_flags_or_scores_included": false
+  },
+  "receipt_sha256": "sha256:ccd79fdcf69a332a8ade054e936d538e2b8b3cec9ede3f80676c18b91d78e825"
+}

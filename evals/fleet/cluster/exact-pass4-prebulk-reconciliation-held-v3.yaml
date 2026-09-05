@@ -1,0 +1,196 @@
+apiVersion: v1
+kind: List
+items:
+  - apiVersion: v1
+    kind: ServiceAccount
+    metadata:
+      name: chris-cyber-exact100-prebulk-observer-v3
+      namespace: fleet-train-jobs
+      annotations: &held
+        cyber-post-train.fleet.ai/preview-only: "true"
+        cyber-post-train.fleet.ai/launch-authorized: "false"
+  - apiVersion: rbac.authorization.k8s.io/v1
+    kind: Role
+    metadata:
+      name: chris-cyber-exact100-prebulk-observer-v3
+      namespace: fleet-train-jobs
+      annotations: *held
+    rules:
+      - apiGroups: [""]
+        resources: [pods]
+        verbs: [get, list]
+      - apiGroups: [""]
+        resources: [configmaps]
+        resourceNames:
+          - chris-cyber-exact100-pass4-inventory-bootstrap-v2
+          - chris-cyber-exact100-pass4-inventory-intent-v2
+        verbs: [get]
+      - apiGroups: [batch]
+        resources: [jobs]
+        verbs: [get, list]
+  - apiVersion: rbac.authorization.k8s.io/v1
+    kind: RoleBinding
+    metadata:
+      name: chris-cyber-exact100-prebulk-observer-v3
+      namespace: fleet-train-jobs
+      annotations: *held
+    subjects:
+      - kind: ServiceAccount
+        name: chris-cyber-exact100-prebulk-observer-v3
+        namespace: fleet-train-jobs
+    roleRef:
+      apiGroup: rbac.authorization.k8s.io
+      kind: Role
+      name: chris-cyber-exact100-prebulk-observer-v3
+  - &job
+    apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: chris-cyber-exact100-prebulk-reconcile-source-v3
+      namespace: fleet-train-jobs
+      annotations: *held
+      labels: &labels
+        cyber-post-train.fleet.ai/experiment: exact100-prebulk-reconcile-v3
+        cyber-post-train.fleet.ai/owner: chris
+        kueue.x-k8s.io/queue-name: training-lq
+    spec:
+      activeDeadlineSeconds: 7200
+      backoffLimit: 0
+      ttlSecondsAfterFinished: 604800
+      template:
+        metadata:
+          labels: *labels
+        spec:
+          serviceAccountName: chris-cyber-exact100-prebulk-observer-v3
+          restartPolicy: Never
+          priorityClassName: fleet-serve-low
+          preemptionPolicy: Never
+          nodeSelector:
+            kubernetes.io/arch: amd64
+            workload: fleetai-training-ng-cpu
+          tolerations:
+            - key: workload
+              operator: Equal
+              value: fleetai-training-ng-cpu
+              effect: NoSchedule
+          containers:
+            - name: observer
+              image: ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
+              command: [/bin/bash, /bootstrap/run.sh]
+              env:
+                - {name: PREBULK_MODE, value: source}
+                - name: PREBULK_PACKAGE_AGGREGATE_SHA256
+                  valueFrom: {configMapKeyRef: {name: chris-exact100-prebulk-runtime-observer-v3, key: package_aggregate_sha256}}
+                - name: PREBULK_PACKAGE_COMMIT
+                  valueFrom: {configMapKeyRef: {name: chris-exact100-prebulk-runtime-observer-v3, key: package_commit}}
+                - name: PREBULK_RELEASE_FILE_SHA256
+                  valueFrom: {configMapKeyRef: {name: chris-exact100-prebulk-release-v3, key: release_file_sha256}}
+                - name: FLEET_API_KEY
+                  valueFrom: {secretKeyRef: {name: chris-cyber-opencode-evals-v3, key: FLEET_API_KEY}}
+                - name: JOB_UID
+                  valueFrom: {fieldRef: {apiVersion: v1, fieldPath: "metadata.labels['batch.kubernetes.io/controller-uid']"}}
+                - name: POD_UID
+                  valueFrom: {fieldRef: {apiVersion: v1, fieldPath: metadata.uid}}
+              resources:
+                requests: {cpu: 100m, memory: 256Mi}
+                limits: {cpu: "1", memory: 1Gi}
+              volumeMounts:
+                - {name: bootstrap, mountPath: /bootstrap, readOnly: true}
+                - {name: workspace, mountPath: /workspace}
+                - {name: sfs, mountPath: /mnt/sfs}
+          volumes:
+            - name: bootstrap
+              projected:
+                sources:
+                  - configMap: {name: chris-exact100-prebulk-runtime-core-a-v3}
+                  - configMap: {name: chris-exact100-prebulk-runtime-core-b-v3}
+                  - configMap: {name: chris-exact100-prebulk-runtime-observer-v3}
+                  - configMap:
+                      name: chris-exact100-prebulk-release-v3
+                      items:
+                        - {key: release.json, path: prebulk-release.json}
+                  - configMap:
+                      name: chris-q38-ac-r004-a1-g7-run-v1
+                      items:
+                        - {key: release.json, path: qwen-g7-release.json}
+                        - {key: release_file_sha256, path: qwen-g7-release-file-sha256}
+                        - {key: package_commit, path: qwen-g7-release-package-commit}
+                  - configMap:
+                      name: chris-glm53-ac-r013-a1-g7-run-v1
+                      items:
+                        - {key: release.json, path: glm-g7-release.json}
+                        - {key: release_file_sha256, path: glm-g7-release-file-sha256}
+                        - {key: package_commit, path: glm-g7-release-package-commit}
+            - {name: workspace, emptyDir: {sizeLimit: 1Gi}}
+            - {name: sfs, persistentVolumeClaim: {claimName: sfs-shared}}
+  - <<: *job
+    metadata:
+      name: chris-cyber-exact100-prebulk-reconcile-accept-v3
+      namespace: fleet-train-jobs
+      annotations: *held
+      labels: *labels
+    spec:
+      activeDeadlineSeconds: 7200
+      backoffLimit: 0
+      ttlSecondsAfterFinished: 604800
+      template:
+        metadata:
+          labels: *labels
+        spec:
+          serviceAccountName: chris-cyber-exact100-prebulk-observer-v3
+          restartPolicy: Never
+          priorityClassName: fleet-serve-low
+          preemptionPolicy: Never
+          nodeSelector: {kubernetes.io/arch: amd64, workload: fleetai-training-ng-cpu}
+          tolerations:
+            - {key: workload, operator: Equal, value: fleetai-training-ng-cpu, effect: NoSchedule}
+          containers:
+            - name: observer
+              image: ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
+              command: [/bin/bash, /bootstrap/run.sh]
+              env:
+                - {name: PREBULK_MODE, value: accept}
+                - name: PREBULK_PACKAGE_AGGREGATE_SHA256
+                  valueFrom: {configMapKeyRef: {name: chris-exact100-prebulk-runtime-observer-v3, key: package_aggregate_sha256}}
+                - name: PREBULK_PACKAGE_COMMIT
+                  valueFrom: {configMapKeyRef: {name: chris-exact100-prebulk-runtime-observer-v3, key: package_commit}}
+                - name: PREBULK_RELEASE_FILE_SHA256
+                  valueFrom: {configMapKeyRef: {name: chris-exact100-prebulk-release-v3, key: release_file_sha256}}
+                - name: FLEET_API_KEY
+                  valueFrom: {secretKeyRef: {name: chris-cyber-opencode-evals-v3, key: FLEET_API_KEY}}
+                - name: JOB_UID
+                  valueFrom: {fieldRef: {apiVersion: v1, fieldPath: "metadata.labels['batch.kubernetes.io/controller-uid']"}}
+                - name: POD_UID
+                  valueFrom: {fieldRef: {apiVersion: v1, fieldPath: metadata.uid}}
+              resources:
+                requests: {cpu: 100m, memory: 256Mi}
+                limits: {cpu: "1", memory: 1Gi}
+              volumeMounts:
+                - {name: bootstrap, mountPath: /bootstrap, readOnly: true}
+                - {name: workspace, mountPath: /workspace}
+                - {name: sfs, mountPath: /mnt/sfs}
+          volumes:
+            - name: bootstrap
+              projected:
+                sources:
+                  - configMap: {name: chris-exact100-prebulk-runtime-core-a-v3}
+                  - configMap: {name: chris-exact100-prebulk-runtime-core-b-v3}
+                  - configMap: {name: chris-exact100-prebulk-runtime-observer-v3}
+                  - configMap:
+                      name: chris-exact100-prebulk-release-v3
+                      items:
+                        - {key: release.json, path: prebulk-release.json}
+                  - configMap:
+                      name: chris-q38-ac-r004-a1-g7-run-v1
+                      items:
+                        - {key: release.json, path: qwen-g7-release.json}
+                        - {key: release_file_sha256, path: qwen-g7-release-file-sha256}
+                        - {key: package_commit, path: qwen-g7-release-package-commit}
+                  - configMap:
+                      name: chris-glm53-ac-r013-a1-g7-run-v1
+                      items:
+                        - {key: release.json, path: glm-g7-release.json}
+                        - {key: release_file_sha256, path: glm-g7-release-file-sha256}
+                        - {key: package_commit, path: glm-g7-release-package-commit}
+            - {name: workspace, emptyDir: {sizeLimit: 1Gi}}
+            - {name: sfs, persistentVolumeClaim: {claimName: sfs-shared}}

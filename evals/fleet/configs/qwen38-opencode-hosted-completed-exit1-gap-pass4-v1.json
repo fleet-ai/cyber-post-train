@@ -1,0 +1,249 @@
+{
+  "schema_version": "fleet-hosted-opencode-task-boundary-shard-v1",
+  "shard_key": "qwen38_completed_exit1_gap",
+  "campaign_id": "chris-cyber-q38-opencode11827-hosted-gap-q6q7-p4-v1",
+  "source_job_id": "a62dd51f-a52b-4941-8207-4679e4b25b51",
+  "source": {
+    "predecessor_plan_sha256": "sha256:8d6df6af63b308d648fb0c7ea9115f90b16de1d7e57b0968dda8fc8fd4a20c81",
+    "reconciliation_receipt_sha256": "sha256:5435c0a25b3be1872c1aae09fd88858c5251272e164ab8eb49ab66b4c5a4ca0e",
+    "gap_source_receipt_sha256": "sha256:30338f0561867bda8ab8b10cd2601b3a1ce0c60ad27d7fd55f9a7ad87d4b46a2",
+    "source_job_name": "chris-cyber-q38-opencode11827-hosted-successor49-p4-v8",
+    "source_job_uid": "84727b82-5187-425b-ba4b-9598f46691c4",
+    "source_pod_uid": "42df9b32-60c2-45aa-8ce3-ba850b82b909",
+    "held_unused_replacement_rank": 56
+  },
+  "treatment_block": {
+    "endpoint_origin": "https://inference.flt.build",
+    "harness": {
+      "context_management": "opencode_1.18.27_native_compaction_no_autocontinue",
+      "context_window_size": 262144,
+      "max_model_requests": 600,
+      "max_output_tokens": 32768,
+      "name": "opencode",
+      "provider_adapter": "@ai-sdk/openai-compatible",
+      "release_asset_sha256": "sha256:4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702",
+      "timeout_seconds": 28800,
+      "version": "1.18.27"
+    },
+    "kind": "hosted_inference_endpoint_v1",
+    "model_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "required_task_tool_catalog_sha256": "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a",
+    "required_task_tools": [
+      "bash",
+      "submit_report"
+    ],
+    "served_id": "qwen3.8-27b",
+    "session_model": "fleet-cluster-opencode-1.18.27/qwen3.8-27b"
+  },
+  "model": {
+    "endpoint_origin": "https://inference.flt.build",
+    "repository": "Qwen/Qwen3.8-27B",
+    "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "served_id": "qwen3.8-27b",
+    "session_model": "fleet-cluster-opencode-1.18.27/qwen3.8-27b"
+  },
+  "harness": {
+    "context_management": "opencode_1.18.27_native_compaction_no_autocontinue",
+    "context_window_size": 262144,
+    "max_model_requests": 600,
+    "max_output_tokens": 32768,
+    "name": "opencode",
+    "provider_adapter": "@ai-sdk/openai-compatible",
+    "release_asset_sha256": "sha256:4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702",
+    "timeout_seconds": 28800,
+    "version": "1.18.27"
+  },
+  "authority": {
+    "multi_app_aggregation_mode": "fractional",
+    "provisioning_route_template": "/v1/rollout-rewards/{task_key}/versions/{task_version_id}/instances",
+    "required_cyber_contract": {
+      "evidence_schema": "1.0.0",
+      "submission_protocol": "2.0.0",
+      "verifier_contract": "3.0.0"
+    },
+    "scoring_mode": "partial",
+    "scoring_route_template": "/v1/rollout-rewards/{task_key}/versions/{task_version_id}"
+  },
+  "task_count": 2,
+  "pass_k": 4,
+  "total_session_count": 8,
+  "credited_sessions": [
+    {
+      "rank": 1,
+      "source_rank": 6,
+      "attempt": 1,
+      "session_id": "8f6f7761-4af0-4ab1-bce1-69283fe537ba",
+      "verifier_execution_id": "ccc1e322-6d4e-48f7-9132-8113b338b65d",
+      "source_run_id": "chris-cyber-q38-opencode11827-hosted-successor49-p4-v8-sr006-a1-51fc6fa0",
+      "source_receipt_sha256": "sha256:c6b1dea26588f2511d8dd5b7463e9be23de1f3723f7586f8a692e262ebc2c76a",
+      "classification": "ACCEPTED"
+    },
+    {
+      "rank": 1,
+      "source_rank": 6,
+      "attempt": 2,
+      "session_id": "de19fae5-b1e1-4a09-b933-c763c9b3902f",
+      "verifier_execution_id": "ef0e506a-0f8e-4522-862f-53499e84b84a",
+      "source_run_id": "chris-cyber-q38-opencode11827-hosted-successor49-p4-v8-sr006-a2-51fc6fa0",
+      "source_receipt_sha256": "sha256:5435c0a25b3be1872c1aae09fd88858c5251272e164ab8eb49ab66b4c5a4ca0e",
+      "classification": "RECONCILED_ACCEPTED"
+    },
+    {
+      "rank": 2,
+      "source_rank": 7,
+      "attempt": 1,
+      "session_id": "1e54ed6d-77ac-4f47-8007-e9cc51e2b2a4",
+      "verifier_execution_id": "9d7d79b6-c128-48fe-a3a6-820803abdf34",
+      "source_run_id": "chris-cyber-q38-opencode11827-hosted-successor49-p4-v8-sr007-a1-37240f5f",
+      "source_receipt_sha256": "sha256:5435c0a25b3be1872c1aae09fd88858c5251272e164ab8eb49ab66b4c5a4ca0e",
+      "classification": "RECONCILED_ACCEPTED"
+    }
+  ],
+  "new_session_count": 5,
+  "primary_denominator": {
+    "tasks": 50,
+    "cells": 200
+  },
+  "primary_denominator_restored_only_after_all_gap_tasks_pass4": true,
+  "excluded_tasks": [],
+  "execution": {
+    "future_nonzero_exit_policy": "credit_only_if_reward_ingest_cleanup_and_authoritative_session_match",
+    "inventory_policy": "plan_identity_plus_authoritative_receipt_v1",
+    "launch_authorized": false,
+    "required_priority_class": "fleet-train-high",
+    "required_recovery_gate": "fleet_scoring_api_http500_recovery_v1",
+    "required_task_tool_catalog_sha256": "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a",
+    "required_task_tools": [
+      "bash",
+      "submit_report"
+    ],
+    "retry_policy": "never_repeat_any_authoritative_scored_outcome",
+    "same_task_max_inflight": 1,
+    "score_blind_concurrency_schedule": [
+      {
+        "accepted_outcomes_at_least": 0,
+        "headroom_gate": "fixed_at_launch_no_automatic_widening",
+        "workers": 1
+      }
+    ],
+    "task_partition": "complete_task_boundary",
+    "third_hosted_stream_authorized": false,
+    "training_data_eligible": true
+  },
+  "tasks": [
+    {
+      "environment": {
+        "data_id": "commercial",
+        "data_version": "v0.0.9",
+        "id": "cysec1-2-current-gen",
+        "runtime_seed_content_sha256": "6d383be7392aea6862d7174184bae3a89d86c91f5df50a4ef5c89fd56975aaa3",
+        "ttl_seconds": 32400,
+        "version": "v0.0.3",
+        "version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22"
+      },
+      "rank": 1,
+      "source_rank": 6,
+      "task": {
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
+        "env_variables_sha256": "sha256:f061f33089b8a4aa570d77b615ab583cac028868899407c0b1c17bc432fb4b08",
+        "key": "cysec1-2-current-gen_blackbox-9d641429faef16a05bff575e__blackbox_ctf_v1",
+        "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "prompt_sha256": "sha256:61bcc61236247c7bda0146ca95767e6ec1e433c81d4ae29177c80ca6abef1fd3",
+        "version_id": "2f2681bf-c1f7-4056-b6e4-cb2e5058f027"
+      },
+      "verifier": {
+        "function_name": "verify",
+        "id": "c1a25a89-8cab-4647-a23b-f9a05ab66f57",
+        "sha256": "578af4378493ec9a2ddaa20b1d7d9becd2ddcbd554bbca1da0e305be2eda2417",
+        "version": 1,
+        "version_id": "34fc0b2f-6434-4a15-a295-bb5c9315c1eb"
+      }
+    },
+    {
+      "environment": {
+        "data_id": "commercial",
+        "data_version": "v0.0.9",
+        "id": "cysec1-2-current-gen",
+        "runtime_seed_content_sha256": "39f9a6be75526d9bfd7132c8f60f6ba0a18244eae28894adc8d48394b08e0755",
+        "ttl_seconds": 32400,
+        "version": "v0.0.3",
+        "version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22"
+      },
+      "rank": 2,
+      "source_rank": 7,
+      "task": {
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
+        "env_variables_sha256": "sha256:e1925a6bc44c9d85bd626c3652fcb7834b6709dcc47978aa8cd6caf26b981b61",
+        "key": "cysec1-2-current-gen_blackbox-bc363f8239aeeaa3f648046a__blackbox_ctf_v1",
+        "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "prompt_sha256": "sha256:61bcc61236247c7bda0146ca95767e6ec1e433c81d4ae29177c80ca6abef1fd3",
+        "version_id": "ba912601-1184-4dcd-9e9d-2fce22543e4b"
+      },
+      "verifier": {
+        "function_name": "verify",
+        "id": "03a7f57a-1716-49b0-b2f6-d639106d3f55",
+        "sha256": "47c56ab45a2a98537988b997f9897c658ae4bce631c1e4f8c1f12a8659966095",
+        "version": 1,
+        "version_id": "01c28abd-d357-4bc5-ae73-d17e0cd030f8"
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "ordinal": 1,
+      "rank": 1,
+      "source_rank": 6,
+      "attempt": 3,
+      "run_id": "chris-cyber-q38-opencode11827-hosted-gap-q6q7-p4-v1-sr006-a3-51fc6fa0",
+      "network": "qwen38-hosted-gap-v1-sr006-a3-51fc6fa0"
+    },
+    {
+      "ordinal": 2,
+      "rank": 1,
+      "source_rank": 6,
+      "attempt": 4,
+      "run_id": "chris-cyber-q38-opencode11827-hosted-gap-q6q7-p4-v1-sr006-a4-51fc6fa0",
+      "network": "qwen38-hosted-gap-v1-sr006-a4-51fc6fa0"
+    },
+    {
+      "ordinal": 3,
+      "rank": 2,
+      "source_rank": 7,
+      "attempt": 2,
+      "run_id": "chris-cyber-q38-opencode11827-hosted-gap-q6q7-p4-v1-sr007-a2-37240f5f",
+      "network": "qwen38-hosted-gap-v1-sr007-a2-37240f5f"
+    },
+    {
+      "ordinal": 4,
+      "rank": 2,
+      "source_rank": 7,
+      "attempt": 3,
+      "run_id": "chris-cyber-q38-opencode11827-hosted-gap-q6q7-p4-v1-sr007-a3-37240f5f",
+      "network": "qwen38-hosted-gap-v1-sr007-a3-37240f5f"
+    },
+    {
+      "ordinal": 5,
+      "rank": 2,
+      "source_rank": 7,
+      "attempt": 4,
+      "run_id": "chris-cyber-q38-opencode11827-hosted-gap-q6q7-p4-v1-sr007-a4-37240f5f",
+      "network": "qwen38-hosted-gap-v1-sr007-a4-37240f5f"
+    }
+  ],
+  "privacy": {
+    "credentials_included": false,
+    "prompts_included": false,
+    "scores_included": false,
+    "transcripts_included": false
+  },
+  "plan_sha256": "sha256:43ef5b8e649ccd88b2f77216f9ca4ec6dea73edddff972321f89ba6d8a48c4b1"
+}
+

@@ -1,0 +1,100 @@
+{
+  "schema_version": "qwen38-fleet-prior-attempt-exclusions-v1",
+  "model_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+  "harness_version": "0.22.3",
+  "treatment_identity": {
+    "model": {
+      "repository": "Qwen/Qwen3.8-27B",
+      "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+      "served_id": "qwen3.8-27b",
+      "endpoint_origin": "https://inference.flt.build"
+    },
+    "harness": {
+      "name": "qwen_code",
+      "version": "0.22.3",
+      "source_commit": "09825973e7d3c3fd07e17909c396aa62f48ce51f",
+      "npm_tarball_sha1": "1529461d6c79c273b184849e6777e54ac98ae860",
+      "node_image": "docker.io/library/node@sha256:4d676821dff059fd00d277ee4261ef34ea712317fed0737c03941481b5760c96",
+      "max_model_requests": 600,
+      "context_window_size": 262144,
+      "timeout_seconds": 10800,
+      "context_management": "qwen_code_0.22.3_builtin_compaction"
+    },
+    "execution": {
+      "pass_k": 1,
+      "training_data_eligible": false,
+      "required_task_tools": [
+        "bash",
+        "submit_report"
+      ],
+      "required_task_tool_catalog_sha256": "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a"
+    }
+  },
+  "treatment_sha256": "sha256:800e75ff4d8b3cd23af087b2dcc99bc3d8a5b845fcf1595df55fe485d239ab7e",
+  "attempts": [
+    {
+      "campaign_id": "chris-cyber-q38-qcode-reward-cal-p1-v2",
+      "task_index": 1,
+      "task_version_id": "2b9ba166-6f43-44aa-894d-75761314c150",
+      "disposition": "valid_model_outcome",
+      "score": 0
+    },
+    {
+      "campaign_id": "chris-cyber-q38-qcode-reward-cal-p1-v2",
+      "task_index": 2,
+      "task_version_id": "25b185c5-6aee-479d-97ba-d94ed9df1f42",
+      "disposition": "unresolved_excluded"
+    },
+    {
+      "campaign_id": "chris-cyber-q38-qcode-reward-cal-p1-v2",
+      "task_index": 3,
+      "task_version_id": "4a4aba06-38d4-4fc7-83ee-b625fc934d00",
+      "disposition": "unresolved_excluded"
+    },
+    {
+      "campaign_id": "chris-cyber-q38-qcode-reward-cal-p1-v2",
+      "task_index": 4,
+      "task_version_id": "53669bab-1389-48cf-9d08-68e411f9cd78",
+      "disposition": "unresolved_excluded"
+    },
+    {
+      "campaign_id": "chris-cyber-q38-qcode-positive-gate-p1-v3",
+      "task_index": 1,
+      "task_version_id": "2c47ef51-29f9-4736-9916-18b748059cc6",
+      "disposition": "valid_model_outcome",
+      "score": 0,
+      "terminal_evidence": {
+        "run_id": "chris-cyber-q38-qcode-positive-gate-p1-v3-t01-8ad4f2ce",
+        "status": "model_outcome",
+        "evidence_run_id": "f42ab8f1-4d85-4040-88cc-22a677dd7e52",
+        "session_id": "d993539e-ccc3-47f2-87b8-84d88cfe8dbe",
+        "verifier_execution_id": "3e6a6376-3c5c-4911-8e54-3120cdaabea5",
+        "qwen_exit_code": 0,
+        "ingested_chunks": 10,
+        "planned_chunks": 10,
+        "cleanup_instance_closed": true,
+        "cleanup_containers_removed": true,
+        "authoritative_readback_confirmed": true
+      }
+    }
+  ],
+  "evidence": {
+    "v2_incident_binding": "docs/evidence/qwen38-study/2026-09-01-fleet-calibration-v2-infrastructure-incident.json",
+    "v2_incident_raw_file_sha256": "sha256:7a725154a95779c159beb90e82f4199fbbaea8e224241f1d8b29ec99d34e9821",
+    "v2_binding_receipt_sha256": "sha256:6f5b609d139c87a015263feac5f099df1a83e002d3146e038a98087ec8f9a1ad",
+    "v3_terminal_binding": "docs/evidence/qwen38-study/2026-09-01-fleet-calibration-v3-terminal-valid-zero.json",
+    "v3_terminal_binding_raw_file_sha256": "sha256:372ed161068c2a98f5f22cf0dfc9deef34f595fb0e792a61dcbe765c8c3bdcc6",
+    "v3_frozen_preflight_canonical_sha256": "sha256:2dabbd5eb0677c3e5b62f4a00f1979db07ab0e57c0b3ddeb6ff1222f021f8f0d",
+    "v3_terminal_summary_raw_file_sha256": "sha256:8f8c42aea41355d151f75363d827c18a703068362ced10822ef8a3de2e447fa3",
+    "v2_treatment_plan": "evals/fleet/configs/qwen38-27b-qwen-code-reward-calibration-pass1-v2.json",
+    "v2_treatment_plan_raw_file_sha256": "sha256:2e5e075287f24162ca1381549790b3647c578e1e9e0f310bb3c33525428c13a8",
+    "v3_treatment_plan": "evals/fleet/configs/qwen38-27b-qwen-code-reward-calibration-pass1-v3.json",
+    "v3_treatment_plan_raw_file_sha256": "sha256:71dc09116ca376129000df78cc6bbd2c5f577b9ddfa5013f12886f1942adcb77"
+  },
+  "policy": {
+    "valid_model_outcomes_are_never_rerun": true,
+    "unresolved_attempts_are_excluded_conservatively": true,
+    "sealed_test_tasks_are_not_candidates": true
+  },
+  "receipt_sha256": "sha256:a2ab52a37a873b4443fb8baf62a0bb0a225e7b5894b58e48b7d33c9bf4805dd9"
+}

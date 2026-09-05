@@ -1,0 +1,57 @@
+{
+  "schema_version": "fleet-opencode-autocontinue-canary-preflight-authorization-v3",
+  "append_only": true,
+  "status": "PREFLIGHT_AUTHORIZED",
+  "authorized_at_utc": "2026-09-04T22:26:36Z",
+  "package_commit": "f2c32e4571fddfa43770249f323e1843fc205f95",
+  "campaign_sha256": "sha256:63946f224a33eb0d2c2a6fdba34358ebf9ca379e5f0f156cd137c95a9b98097e",
+  "plan_sha256": "sha256:726320dd5e161e28becd22d7bb6e31f1627f36a3c7291c0dabb53f94626b3c2d",
+  "cell": {
+    "source_rank": 4,
+    "attempt": 1,
+    "task_version_id": "02dd4e3f-d85d-4bf8-9976-eae2f102384d"
+  },
+  "preflight_identity": {
+    "configmap_name": "chris-q38-ac-canary1-pre-v3",
+    "job_name": "chris-q38-ac-canary1-v3-preflight",
+    "sfs_root": "/mnt/sfs/jobs/chris-q38-ac-canary1-v3-preflight",
+    "scored_configmap_name": "chris-q38-ac-canary1-run-v3",
+    "scored_job_name": "chris-q38-ac-canary1-v2",
+    "scored_job_created": false
+  },
+  "evidence": {
+    "task_inventory_receipt_sha256": "sha256:c71604d22b1d52a7091727b957e0f56f2e8e270e461c844fb57d48b392d831c5",
+    "task_inventory_execution_sha256": "sha256:b4c175db0d04746e16fa9314edb093f7306e859545cd95972694e461b7f82fcb",
+    "dedicated_parity_receipt_sha256": "sha256:07e733b4b161ed7c36113fc3688f04a42938d93a499b1bcc10c7cd21342900df",
+    "hosted_health_receipt_sha256": "sha256:d81a01ffe1087d7d85fe511bc9c978461ba3e24a2c15675871cfb8668c49bd85",
+    "shared_pvc_flock_receipt_sha256": "sha256:e9f34d35ac3c9e60d2698ebc1685374b98f13e41ac305df0609fb051f35c416c",
+    "controller_compatibility_receipt_sha256": "sha256:b3920547030db509de25f3a04559d9f4173866b81b02efa0957812b35cf06ba2",
+    "v1_bootstrap_failure_receipt_sha256": "sha256:c07804a36065a68cc821b0c57e7989f7e9caa077142969046b4bff913a592ee4",
+    "fresh_duplicate_inventory_receipt_sha256": null,
+    "scored_v1_failure_receipt_sha256": "sha256:b30930aeb12cbe4d8ab5ef91a1608ec672e2536576168b50639318b866e30423"
+  },
+  "implementation": {
+    "package_commit": "f2c32e4571fddfa43770249f323e1843fc205f95",
+    "plan_sha256": "sha256:726320dd5e161e28becd22d7bb6e31f1627f36a3c7291c0dabb53f94626b3c2d",
+    "plan_file_sha256": "sha256:fa0f5f0f7b762d3050fab6b1c9335c6af4737a56b77c3bc96ea00c77f84d754c",
+    "controller_sha256": "sha256:605a695e818f8598274d9d64111868ecc1b092514c7ea725437de0cff7585260",
+    "frozen_controller_sha256": "sha256:e14670e40d2b1fbe4896e4b6dfb2902f121b81c8103efea3a74a11fed496809a",
+    "self_hosted_sha256": "sha256:16df432b5fde55112924d6106e6c03f09817846f1344ba0fe100dcf785c33d8b",
+    "runner_sha256": "sha256:b1f9c5028f65b0d7772538e3ce075310dc6c7a46b3de58d0196bc474e74e9e9d",
+    "endpoint_lease_sha256": "sha256:1df60ee13be8c6057113dbebadf9020343649e175b5de38aea41706748987019",
+    "compatibility_file_sha256": "sha256:f1e8ac4119a833e2c076b621f089d0500ff3b7d8e8838be349ba2a7c8ecd7bb3",
+    "preflight_manifest_sha256": "sha256:44262e7dad2329219480f9e52b19064fab3c59d67f9c174fd11e7e058beb4f12"
+  },
+  "authorization": {
+    "preflight_authorized": true,
+    "launch_authorized": false,
+    "author": "/root",
+    "statement": "Authorize exactly one create-once read-only Qwen corrected-canary v3 bootstrap preflight, superseding only the terminal scored-v1 bootstrap failure; it may create the exact preflight ConfigMap, Job, and sanitized SFS evidence, but no model, verifier, scoring, session, scored ConfigMap, or scored Job call is authorized."
+  },
+  "privacy": {
+    "credentials_included": false,
+    "prompts_or_traces_included": false,
+    "scores_included": false
+  },
+  "receipt_sha256": "sha256:2ccba714a6885ff8de4cd13f7a7857df2ccdf75bd8a258be04969e502d1ccf10"
+}

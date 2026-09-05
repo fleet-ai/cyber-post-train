@@ -1,0 +1,20 @@
+# syntax=docker/dockerfile:1.7
+FROM lmsysorg/sglang@sha256:9e148f5ac788e856a06166bd6347a831831eb9fcfab4d1770874823a7c29a1a1
+
+ARG RAY_VERSION=2.56.0
+
+LABEL org.opencontainers.image.title="Fleet cyber GLM5.3 SGLang + Ray runtime"
+LABEL org.opencontainers.image.description="Exact GLM5.3 serving image extended only with the Jobs API Ray startup dependency"
+LABEL fleet.cyber.base-image="lmsysorg/sglang@sha256:9e148f5ac788e856a06166bd6347a831831eb9fcfab4d1770874823a7c29a1a1"
+LABEL fleet.cyber.ray-version="2.56.0"
+
+RUN python3 -m pip install --no-cache-dir "ray[default]==${RAY_VERSION}" \
+    && python3 - <<'PY'
+import importlib.metadata
+import sglang
+import torch
+
+assert importlib.metadata.version("ray") == "2.56.0"
+assert sglang is not None
+assert torch.cuda.is_available() or torch.version.cuda is not None
+PY

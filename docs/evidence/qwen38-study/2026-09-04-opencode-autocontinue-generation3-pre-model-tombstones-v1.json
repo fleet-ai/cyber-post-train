@@ -1,0 +1,45 @@
+{
+  "schema_version": "fleet-opencode-autocontinue-generation3-pre-model-tombstones-v1",
+  "append_only": true,
+  "status": "SEALED_PRE_MODEL_INFRASTRUCTURE_TOMBSTONES",
+  "observed_at_utc": "2026-09-05T06:24:59Z",
+  "incident": {
+    "path": "docs/evidence/qwen38-study/2026-09-04-opencode-autocontinue-generation3-pre-model-failure-v1.json",
+    "file_sha256": "sha256:8ca8de29fb7d4a46a09cec448a695d73084075bc0eb83bc05916aeb0c58c4647",
+    "receipt_sha256": "sha256:89d4e6a673a9084fdf68a37bb3b52647f489f12db88381b821985c5ca4a4ac98"
+  },
+  "models": [
+    {
+      "model": "qwen3.8-27b",
+      "cell_id": "sha256:631c9d7cc5328849ce137393943927192b1b50dc60458cdb3425fbce893ecf5a",
+      "generation3_spec_sha256": "sha256:ce81660cbc136ee302e9f4ef8075e60cdd3e2bf9fc28cbd15ff50b32e915f929",
+      "generation3_plan_sha256": "sha256:31d0795205a02b8f705ba6db9f2d9c59df9106bb28e6d990c85bf6f03b9107f4",
+      "generation3_execution_id": "sha256:f4d798d1419e7e470447975162948ef4c30013cc2e684eb7b7de1a2fa7822a74",
+      "generation3_job": {"name": "chris-q38-ac-r004-a1-g3-v1", "uid": "395148cc-94b2-43d4-aa15-1c69d19b25e9", "terminal": true, "pods_created": 1},
+      "generation3_pod": {"name": "chris-q38-ac-r004-a1-g3-v1-wv4zh", "uid": "35ed25b8-c2b0-4ced-807c-1fa7df7dcc6e", "phase": "Failed", "evaluator_exit_code": 1, "restarts": 0},
+      "generation3_output_root": {"path": "/mnt/sfs/jobs/chris-q38-ac-r004-a1-g3-v1", "absent": true},
+      "generation3_execution_claim": {"path": "/mnt/sfs/cell-execution-claims/opencode11827-autocontinue-v1/f4d798d1419e7e470447975162948ef4c30013cc2e684eb7b7de1a2fa7822a74.json", "absent": true},
+      "authoritative_api": {"exact_treatment_sessions": 0, "planned_run_id_collisions": 0},
+      "replacement": {"permitted_execution_generation": 4, "same_cell": true, "generation3_nonrepeatable": true}
+    },
+    {
+      "model": "glm-5.3",
+      "cell_id": "sha256:905051f141077d3aa5086c1f5dc6ad015d5ee6173a1ea7515025805cf9a24b41",
+      "generation3_spec_sha256": "sha256:bcaa11f0619bed2b5f1e3ee80ec7d27e2216e5f67ef4013b7a1f1373ea6d5b9a",
+      "generation3_plan_sha256": "sha256:22b704c362d691201377e74861ae179eca6b5a7d39fb270ad6d1b4f4a0a307c9",
+      "generation3_execution_id": "sha256:163b867bd0ae54c706a22f8f7ba007d9e5a1d858418b16994c118f68fa52c07d",
+      "generation3_job": {"name": "chris-glm53-ac-r013-a1-g3-v1", "uid": "f20e3a1f-f1d6-4c97-859c-559bfaaf1fc7", "terminal": true, "pods_created": 1},
+      "generation3_pod": {"name": "chris-glm53-ac-r013-a1-g3-v1-zmfck", "uid": "ab1f6c75-cd7d-4b1f-87f6-ecd60a496eff", "phase": "Failed", "evaluator_exit_code": 1, "restarts": 0},
+      "generation3_output_root": {"path": "/mnt/sfs/jobs/chris-glm53-ac-r013-a1-g3-v1", "absent": true},
+      "generation3_execution_claim": {"path": "/mnt/sfs/cell-execution-claims/opencode11827-autocontinue-v1/163b867bd0ae54c706a22f8f7ba007d9e5a1d858418b16994c118f68fa52c07d.json", "absent": true},
+      "authoritative_api": {"exact_treatment_sessions": 0, "planned_run_id_collisions": 0},
+      "replacement": {"permitted_execution_generation": 4, "same_cell": true, "generation3_nonrepeatable": true}
+    }
+  ],
+  "privacy": {
+    "logs_included": false,
+    "prompts_traces_flags_or_scores_included": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:47036e86edcec407212ae1b6118c8973f85d3f023dfd59e11336e6998e09635b"
+}

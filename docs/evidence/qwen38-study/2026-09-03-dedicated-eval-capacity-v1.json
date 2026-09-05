@@ -1,0 +1,156 @@
+{
+  "schema_version": "cyber-dedicated-eval-capacity-launch-v1",
+  "captured_at": "2026-09-04T01:08:34Z",
+  "updated_at": "2026-09-04T01:28:00Z",
+  "authorization": {
+    "purpose": "increase Fleet cyber evaluation throughput with dedicated cluster inference",
+    "maximum_nodes": 2,
+    "maximum_gpus": 16
+  },
+  "allocation": {
+    "qwen": "continue using the existing exact Qwen3.8-27B hosted endpoint",
+    "glm": "two additional exact GLM-5.3 TP8 serving replicas after staging",
+    "basis": "GLM is the measured makespan bottleneck and Qwen already has substantially higher hosted generation throughput"
+  },
+  "hosted_controller_reconciliation": {
+    "qwen": {
+      "job": "chris-cyber-opencode-q38-train50-p4-v3",
+      "job_uid": "015924e1-a261-4bb0-979b-735c77ee7f19",
+      "state": "infrastructure_failed",
+      "accepted_new_attempts": 1,
+      "accepted_smokes": 1,
+      "accepted_total": 2,
+      "persisted_but_unaccepted_attempts": 1,
+      "known_persisted_sessions_including_smoke": 3,
+      "unaccepted_reason": "agent process exit code 1 despite completed verifier-backed session ingestion and cleanup",
+      "top_level_accepted": false
+    },
+    "glm": {
+      "job": "chris-cyber-opencode-glm53-train100-p4-v4",
+      "job_uid": "68344505-4d47-4055-b068-56f9620cc2aa",
+      "state": "infrastructure_failed",
+      "accepted_new_attempts": 1,
+      "accepted_smokes": 1,
+      "accepted_total": 2,
+      "persisted_but_unaccepted_attempts": 1,
+      "known_persisted_sessions_including_smoke": 3,
+      "unaccepted_reason": "agent process exit code 1 despite completed verifier-backed session ingestion and cleanup",
+      "top_level_accepted": false
+    },
+    "active_scored_attempts": 0
+  },
+  "courtesy_controls": {
+    "jobs_api": "https://api.ft.flt.build/v1/runs",
+    "namespace": "fleet-train-jobs",
+    "queue": "training-lq",
+    "priority_class": "fleet-infra-quiet",
+    "preemption": false,
+    "peer_mutation": false,
+    "staging_gpu_count": 1,
+    "staging_and_serving_overlap": false
+  },
+  "model_stage": {
+    "title": "chris-cyber-evalstage-glm53-q38-v1",
+    "api_name": "ft-run-f466d620",
+    "rayjob_uid": "03f882b1-921b-49b4-a435-acac577fabba",
+    "workload_name": "rayjob-ft-run-f466d620-3ee06",
+    "workload_uid": "c7c3de5d-6478-430f-bd60-701b3bfb2af1",
+    "pod_name": "ft-run-f466d620-hvngd-head-ntv4x",
+    "pod_uid": "20ea12c8-b393-4501-b18b-01e6ef6c9976",
+    "run_dir": "/mnt/sfs/jobs/chris-cyber-evalstage-glm53-q38-v1",
+    "payload_sha256": "sha256:c9a68096e269ead129bee6afc94063e5b19e8516a3eeb1e60e16c9fd83e71d0a",
+    "state": "infrastructure_invalid_deleted_after_exact_checkpoint_stage",
+    "terminal_observation": {
+      "qwen_init_exit_code": 0,
+      "glm_init_exit_code": 0,
+      "main_exit_code": 127,
+      "cause": "the raw pinned SGLang image did not contain the Ray runtime required by the generic Jobs API",
+      "scored_sessions_created": 0,
+      "deleted_through_jobs_api": true
+    },
+    "models": [
+      {
+        "repository": "Qwen/Qwen3.8-27B",
+        "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+        "target": "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2"
+      },
+      {
+        "repository": "zai-org/GLM-5.3",
+        "revision": "30333038ada1f1dacb294a93270305a890b50c14",
+        "target": "/mnt/sfs/models/glm-5.3-30333038"
+      }
+    ]
+  },
+  "model_stage_verification": {
+    "discarded_attempts": [
+      {
+        "title": "chris-cyber-evalstage-verify-glm53-q38-v2",
+        "api_name": "ft-run-9c5c4812",
+        "rayjob_uid": "1368cbd3-75f4-44d6-a5d1-6efad616839f",
+        "state": "deleted_before_main_start_after_oversized_image_pull_was_observed",
+        "receipt_created": false
+      },
+      {
+        "title": "chris-cyber-evalstage-verify-glm53-q38-v3",
+        "api_name": "ft-run-fed4e689",
+        "rayjob_uid": "7c1dd20a-b8b8-4b46-91a7-5ec9b7a8baf1",
+        "state": "infrastructure_invalid_submission_failed",
+        "cause": "the Jobs API submitter could not wrap a multiline shell heredoc",
+        "receipt_created": false
+      }
+    ],
+    "accepted_attempt": {
+      "title": "chris-cyber-evalstage-verify-glm53-q38-v4",
+      "api_name": "ft-run-b5ec94c9",
+      "rayjob_uid": "3339f407-a660-4178-a45a-cef4a53a5089",
+      "workload_name": "rayjob-ft-run-b5ec94c9-46906",
+      "workload_uid": "93072ede-0afd-45e7-8869-384bc026e589",
+      "run_dir": "/mnt/sfs/jobs/chris-cyber-evalstage-verify-glm53-q38-v4",
+      "state": "succeeded",
+      "started_at": "2026-09-04T01:25:49Z",
+      "finished_at": "2026-09-04T01:26:26Z",
+      "receipt_sha256": "sha256:9a680f714de5c72e60dc6b08f363a8c82658dc1540bbb9aab90a3b8939445869",
+      "models": [
+        {
+          "name": "qwen3.8-27b-1d4bf0f2",
+          "indexed_shard_count": 18,
+          "indexed_weight_bytes": 55563006776
+        },
+        {
+          "name": "glm-5.3-30333038",
+          "indexed_shard_count": 141,
+          "indexed_weight_bytes": 755632050320
+        }
+      ]
+    }
+  },
+  "serving_previews": [
+    {
+      "title": "chris-cyber-evalserve-glm53-tp8-a-v1",
+      "payload_sha256": "sha256:883d5091a51bfa5102ff9451967b19ff57aa8d6068dd8a20a6c75918acd50e7c",
+      "gpus": 8,
+      "submitted": false,
+      "state": "invalidated_preview_only",
+      "reason": "the raw SGLang image cannot satisfy the Ray-based Jobs API startup contract"
+    },
+    {
+      "title": "chris-cyber-evalserve-glm53-tp8-b-v1",
+      "payload_sha256": "sha256:6b38953cfb40494c1ca2dc1b926d2b6db65d32dfa774382e47f9c1a111923704",
+      "gpus": 8,
+      "submitted": false,
+      "state": "invalidated_preview_only",
+      "reason": "the raw SGLang image cannot satisfy the Ray-based Jobs API startup contract"
+    }
+  ],
+  "scientific_handoff": {
+    "scored_rollouts_started_on_dedicated_servers": 0,
+    "release_gates": [
+      "digest-valid model-stage receipt",
+      "both serving Jobs Ready with exact image and runtime arguments",
+      "model identity and context parity",
+      "structured bash and submit_report behavioral parity",
+      "remaining attempts partitioned at complete task boundaries",
+      "duplicate preflight against accepted and active session IDs"
+    ]
+  }
+}

@@ -1,0 +1,172 @@
+{
+  "schema_version": "fleet-opencode-replacement-selection-supplement-v3",
+  "supplement_id": "glm53-hosted-http500-replacements-r108-r109-v1",
+  "recorded_at": "2026-09-04T05:29:35Z",
+  "append_only": true,
+  "prior_supplement": {
+    "path": "docs/evidence/qwen38-study/2026-09-04-opencode-replacement-selection-supplement-v2.json",
+    "file_sha256": "sha256:1626858c3128e95480d2d3fe455fd12613d543c215e4cf11d1a06a89e65d6519",
+    "receipt_sha256": "sha256:731ba0583f43a7cc56f16cbf8c71ab98ca39642ff7091e21763f8561bf9d587a",
+    "rewritten": false
+  },
+  "frozen_selection_authority": {
+    "split_path": "configs/data/fleet-a62-task-split-v1.json",
+    "split_file_sha256": "sha256:ab444cb664ffb4da351e4d33298cc052f848f2833487807bf984a753fa7c3b47",
+    "split_manifest_digest": "sha256:fb09668f8de77e6baee37dc1e3162a7617ca9a0a450da9ca53422c17bfbc942a",
+    "locked_selection_path": "evals/fleet/configs/opencode-easiest-train100-selection-v2.json",
+    "locked_selection_file_sha256": "sha256:9f5e83123cfe7d8a3f4cc0b791ac1dc9032a3d5faf5eba2a431c7246069255df",
+    "runnable_inventory_path": "configs/runs/qwen36-27b-rl-base-full-runnable.json",
+    "runnable_inventory_file_sha256": "sha256:70f303f5bb6892598c8e4867151fd176774c5e59d2f0998c6cdb291609b036ff",
+    "selection_rule": "continue_the_reproduced_locked_eligible_order_after_r107_and_take_r108_r109",
+    "mutable_live_statistics_used": false
+  },
+  "common_infrastructure_failure": {
+    "classification": "infrastructure_incomplete_post_agent_pre_verifier",
+    "failure_window_utc": ["2026-09-04T05:26:21Z", "2026-09-04T05:26:22Z"],
+    "fleet_route": "POST_/v1/rollout-rewards/{task_key}/versions/{task_version_id}",
+    "http_status": 500,
+    "error_type": "FleetRequestError",
+    "agent_output_present": true,
+    "model_proxy_activity_present": true,
+    "trace_manifest_present": true,
+    "scoring_intent_present": true,
+    "cleanup_instance_closed": true,
+    "cleanup_containers_removed": true,
+    "reward_result_present": false,
+    "verifier_execution_present": false,
+    "session_ingest_present": false,
+    "accepted_receipt_present": false,
+    "noncreditable_receipt_present": false,
+    "retry_same_output": false
+  },
+  "fenced_tasks": [
+    {
+      "source_plan_path": "evals/fleet/configs/glm53-opencode-hosted-odd45-pass4-v10.json",
+      "source_plan_file_sha256": "sha256:f22623a5b007621868ac87121cd8bf3c231d9400d86031413bfceda55b6c378f",
+      "source_plan_sha256": "sha256:ee31a410a8dcf955e97a3f5ee2d26717e0cdda1d07257e30760d62a25666df8e",
+      "job_uid": "a4812f3d-d76a-49ba-a2cf-fec575ca071d",
+      "pod_uid": "bfc127cf-9c64-4ed8-b289-6ef17dc8d99f",
+      "source_rank": 11,
+      "attempt": 1,
+      "run_id": "chris-cyber-glm53-opencode11827-hosted-odd45-p4-v10-sr011-a1-de286df8",
+      "task_claim_sha256": "sha256:f6250acf25981284bb4e09f45a0f1f5e94cb3c2e5f39167f5af2835dd6712883",
+      "attempt_claim_sha256": "sha256:1ef8514503c54a5cafdc89cd4f86dddde2575fb6861a4313011724a1381c181c",
+      "failure_file_sha256": "sha256:7736216dadaa1afa9e23f46490b56375b2c2bc6d394fc3ba783f851d96293509",
+      "cleanup_file_sha256": "sha256:a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+      "trace_manifest_file_sha256": "sha256:35e674a5a753b76c8db87025f3a2d15cbf05bcc5c72a60153e060ebc8f50d4b5",
+      "scoring_intent_file_sha256": "sha256:5c3926939845fc647bbcd99dcd06b1be8c0f2d734761c7232727852f6362b66b",
+      "formal_credit": 0,
+      "whole_task_fenced": true
+    },
+    {
+      "source_plan_path": "evals/fleet/configs/glm53-opencode-hosted-replacement-r106-pass4-v1.json",
+      "source_plan_file_sha256": "sha256:de9f8313508a9b19e31c2000e99a797df768a835c7175b4fbd53296cbcaf76c4",
+      "source_plan_sha256": "sha256:8d86219998687ac76365c7530a24f60b6a8702bddb03d90b4ed7a2c6e288edce",
+      "job_uid": "e4a31855-907e-43a4-86f9-3ba0019e3fe4",
+      "pod_uid": "41904587-20ec-4469-8ac1-558e8d299199",
+      "source_rank": 106,
+      "attempt": 1,
+      "run_id": "chris-cyber-glm53-opencode11827-hosted-replacement-r106-p4-v1-sr106-a1-793c621e",
+      "task_claim_sha256": "sha256:47389ea77e91f2e2f74fd92e54bf8313a4191601bd7669b4ea4ae139c2a1c6b8",
+      "attempt_claim_sha256": "sha256:44d4003ce102c978bd4ca00bdca1a5b1297013e04424d9011491ac3093af6f3b",
+      "failure_file_sha256": "sha256:9fa5a29575ee4020e53b04c933d43f0d82a898042e850d8a2bbef069b00b9f00",
+      "cleanup_file_sha256": "sha256:a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+      "trace_manifest_file_sha256": "sha256:e8f7f6387e132390959412de6f0a7a0a42dfa0775820d72bdee26b8f67cf2d1c",
+      "scoring_intent_file_sha256": "sha256:ce5f204f2d7ac26ca5ba6e13d79c2a26b9be1ce52201b880e0cfec2cbb772993",
+      "formal_credit": 0,
+      "whole_task_fenced": true
+    }
+  ],
+  "selection_replay": {
+    "score_blind": true,
+    "locked_prefix_replacement_ranks": [101, 102, 103, 104, 105, 106, 107],
+    "next_historical_ranks": [116, 117],
+    "next_replacement_ranks": [108, 109]
+  },
+  "replacements": [
+    {
+      "replacement_rank": 108,
+      "historical_rank": 116,
+      "serving_block": "hosted_glm_successor",
+      "task_key": "cysec1-2-fubspot-gen_blackbox-5eeef7376c8837272737ff41__blackbox_ctf_v1",
+      "task_version_id": "be398179-b809-441f-85d0-b981c64faf43",
+      "task_version": "42",
+      "environment_version_id": "a1532a5c-6ec9-45bd-899d-24c0fe3d1df5",
+      "env_key": "cysec1-2-fubspot-gen",
+      "env_version": "v0.0.3",
+      "data_key": "current-fubspot-gen",
+      "data_version": "v0.0.3",
+      "split": "train"
+    },
+    {
+      "replacement_rank": 109,
+      "historical_rank": 117,
+      "serving_block": "hosted_glm_successor",
+      "task_key": "cysec1-2-fubspot-gen_blackbox-61a50f7fd0c9d7945083bded__blackbox_ctf_v1",
+      "task_version_id": "61ff6681-c1e6-44cc-814c-02c43edce687",
+      "task_version": "18",
+      "environment_version_id": "a1532a5c-6ec9-45bd-899d-24c0fe3d1df5",
+      "env_key": "cysec1-2-fubspot-gen",
+      "env_version": "v0.0.3",
+      "data_key": "current-fubspot-gen",
+      "data_version": "v0.0.3",
+      "split": "train"
+    }
+  ],
+  "treatment_reassignment": {
+    "preview_plan_path": "evals/fleet/configs/glm53-opencode-hosted-reassigned-b27-pass4-v1.json",
+    "preview_plan_file_sha256": "sha256:da9b4eb83563636837c51f1390cef390fe37bf80a05fae649d4a6feab21a8a8b",
+    "preview_plan_sha256": "sha256:729f63116093c40626bb5446bbcea23ea4eb4d3417a441c4dff472ae8f3fe0ed",
+    "serving_block": "hosted-reassigned-after-dedicated-preemption",
+    "pooling_silent": false,
+    "preview_plan_launch_authorized": false,
+    "must_be_rebuilt_to_include_r108_r109_and_exclude_fenced_r106": true
+  },
+  "hydration_gate": {
+    "status": "required_not_satisfied",
+    "required_before_paid_launch": true,
+    "fleet_scoring_api_health_required": true
+  },
+  "overlap_audit": {
+    "current_sfs_files_containing_replacement_versions": 0,
+    "current_experiment_claims": 0,
+    "unused_for_current_experiment": true
+  },
+  "revised_primary_estimator": {
+    "hosted_original_source_ranks": "odd_13_through_99",
+    "hosted_original_task_count": 44,
+    "hosted_reassigned_b_task_count": 27,
+    "hosted_new_replacement_ranks": [108, 109],
+    "hosted_new_replacement_task_count": 2,
+    "hosted_task_count": 73,
+    "hosted_cell_count": 292,
+    "dedicated_a_task_count": 27,
+    "dedicated_a_cell_count": 108,
+    "unique_task_count": 100,
+    "pass_k": 4,
+    "cell_count": 400,
+    "partially_accepted_sessions_outside_estimator": 5,
+    "formal_accept_count_if_primary_completes": 405
+  },
+  "concurrency": {
+    "hosted_launches_blocked": true,
+    "third_hosted_stream_authorized": false,
+    "reason": "common_fleet_scoring_http500_requires_health_recovery_and_fresh_preflight"
+  },
+  "future_submission_gate": {
+    "required_priority_class": "fleet-train-high",
+    "rejected_priority_class": "fleet-infra-quiet",
+    "true_non_preemptible_available": false,
+    "higher_priority_may_preempt_lower_priority": true,
+    "existing_jobs_mutated": false
+  },
+  "privacy": {
+    "scores_read": false,
+    "scores_included": false,
+    "prompts_included": false,
+    "traces_included": false,
+    "flags_included": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:a08c2c41f782f9b41e95575a75071e2a3c2fe8916a5db13bc095614dacb92b63"
+}

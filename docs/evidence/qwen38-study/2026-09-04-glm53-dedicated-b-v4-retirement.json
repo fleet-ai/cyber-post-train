@@ -1,0 +1,75 @@
+{
+  "schema_version": "fleet-cyber-glm53-dedicated-serving-retirement-v1",
+  "recorded_at": "2026-09-04T05:37:20Z",
+  "classification": "authorized_retirement_after_repeated_preemption",
+  "authorization": {
+    "author": "/root",
+    "scope": "delete_only_api_run_ft-run-65595541_bound_to_rayjob_uid_80578ad6-8b2a-4572-82ee-2b2d25aba58f",
+    "replacement_scoring_authorized": false
+  },
+  "serving_run": {
+    "api_name": "ft-run-65595541",
+    "api_run_id": "65595541-8c68-4f84-bb3e-452eb409939f",
+    "api_status_before_retirement": "RUNNING",
+    "ray_job_uid": "80578ad6-8b2a-4572-82ee-2b2d25aba58f",
+    "workload_name": "rayjob-ft-run-65595541-8aa6c",
+    "workload_uid": "43c012ca-c43c-4074-993a-b695e68699cd",
+    "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-glm53-tp8-b-v4",
+    "runtime_image_digest": "ghcr.io/fleet-ai/cyber-post-train-glm53-runtime@sha256:ec93ba50613fd13fb4c0b0a9105767ab18209a1e0108dab0923aad694c0206ec",
+    "priority_class": "fleet-infra-quiet"
+  },
+  "preemption_history": {
+    "eviction_count": 2,
+    "first_eviction_at": "2026-09-04T05:13:50Z",
+    "first_preemptor_workload_uid": "158c8d64-1bd0-4720-8b41-7317cc8549b4",
+    "second_eviction_at": "2026-09-04T05:22:09Z",
+    "second_preemptor_workload_uid": "7c12fd7c-e861-4e50-8550-0203205a6db5"
+  },
+  "runtime_generation_at_retirement": {
+    "ray_cluster_name": "ft-run-65595541-cxdkj",
+    "ray_cluster_uid": "12cb9bfc-faf5-4a0b-a41c-9a80f463790a",
+    "head_pod_name": "ft-run-65595541-cxdkj-head-5dv8h",
+    "head_pod_uid": "6ed95821-4ce1-47d6-a431-47ca2164b127",
+    "service_name": "ft-run-65595541-cxdkj-head-svc",
+    "service_uid": "be174426-aa39-485f-a3dc-1b8e6830363e",
+    "application_health_proven": false,
+    "parity_request_sent": false
+  },
+  "scored_controller_reconciliation": {
+    "job_name": "chris-cyber-glm53-opencode11827-dedicated-b-even27-p4-v1",
+    "job_uid": "b2ac0628-fc9e-442c-964b-52a4aeb3865e",
+    "pod_uid": "bc461b3c-dbdd-42ef-824e-146c47f0d6ec",
+    "job_present": false,
+    "pod_present": false,
+    "terminal_receipt_present": false,
+    "classification": "interrupted_incomplete"
+  },
+  "preserved_scored_evidence": {
+    "sfs_root": "/mnt/sfs/jobs/chris-cyber-glm53-opencode11827-dedicated-b-even27-p4-v1",
+    "selected_file_count": 21,
+    "selected_byte_count": 64198,
+    "selected_manifest_sha256": "sha256:9d9007b1bd641f78db130c6f825cbb64465424040bf0e4b03dc3bbfa0c150f9e",
+    "attempt_claims": 4,
+    "task_claims": 2,
+    "task_results": 1,
+    "accepted_outcomes": 2,
+    "noncreditable_outcomes": 1,
+    "infrastructure_invalid_outcomes": 1,
+    "claimed_incomplete_outcomes": 1,
+    "accepted_ingestions_completed": 2,
+    "retry_or_duplicate_launched": false
+  },
+  "deletion_semantics": {
+    "api_history_row_retained": true,
+    "sfs_evidence_retained": true,
+    "ray_runtime_resources_expected_deleted": true,
+    "gpu_release_required_before_successor": true
+  },
+  "privacy": {
+    "scores_read": false,
+    "prompts_or_traces_read": false,
+    "flags_read": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:91ea2f4876898c25f52d55aceb4af7eaa43b99fb7cfc2b486a75b69506622783"
+}

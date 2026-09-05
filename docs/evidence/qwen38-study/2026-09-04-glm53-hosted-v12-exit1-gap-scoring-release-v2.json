@@ -1,0 +1,47 @@
+{
+  "schema_version": "fleet-glm53-hosted-v12-exit1-gap-scoring-release-v2",
+  "created_at": "2026-09-04T18:22:05Z",
+  "append_only": true,
+  "supersedes_release_receipt_sha256": "sha256:b67d91963e64f0124fa5c5a6eccb7747122a88da8364a42cf14bbb067807a19d",
+  "plan_sha256": "sha256:6eec0a43e7aebf57bc273ad938da703e46c6875f32257b6352158fbc9282e828",
+  "failed_preflight_tombstone_receipt_sha256": "sha256:f2ce5aca88c99e7effc532408c7e01810c6a70b334f42d6427c17afc4070311f",
+  "sealed_credit_bindings": {
+    "reconciliation_receipt_sha256": "sha256:6dced67ad8a5360ac98c6297ee9bd40c608e0543fd4f2153648bbf8f3e795b26",
+    "accepted_source21_attempt1_receipt_sha256": "sha256:1b505efe5b49690524c9d9bc3d3fcc82856888d1364f5e3923fcfcfbb67579be",
+    "optional_public_projection_policy": "omitted_allowed_present_mismatch_rejected"
+  },
+  "fresh_identities": {
+    "configmap": "chris-cyber-glm53-gap-19212529-v13-v2",
+    "preflight_job": "chris-cyber-glm53-gap-19212529-v13-v2-preflight",
+    "scored_job": "chris-cyber-glm53-gap-19212529-v13-v2",
+    "scored_sfs_root": "/mnt/sfs/jobs/chris-cyber-glm53-gap-19212529-v13-v2",
+    "all_absent_before_create": true
+  },
+  "launch_gates": {
+    "existing_v12_job_uid": "0e25db24-8700-478f-8862-d1210511393c",
+    "existing_v12_pod_uid": "3a04238e-497e-4d21-a8d9-f33c50085879",
+    "existing_v12_healthy_required": true,
+    "hosted_glm_stream_count_before_create": 1,
+    "hosted_glm_stream_count_after_create": 2,
+    "all_11_cells_unclaimed_inactive_unscored_absent_required": true,
+    "fresh_preflight_success_required": true,
+    "required_priority_class": "fleet-train-high",
+    "exact_v12_no_autocontinue_treatment_required": true,
+    "corrected_per_cell_quarantine_required": true,
+    "create_once": true,
+    "must_not_repeat": true
+  },
+  "authorization": {
+    "timestamp_utc": "2026-09-04T18:22:05Z",
+    "author": "/root",
+    "statement": "I authorize the fresh v2 create-once preflight and scored launch of hosted GLM exact 11-cell gap plan sha256:6eec0a43e7aebf57bc273ad938da703e46c6875f32257b6352158fbc9282e828 after the tombstone, sealed-credit, health, concurrency, identity, and zero-history gates pass.",
+    "scored_launch_authorized": true
+  },
+  "privacy": {
+    "scores_read": false,
+    "prompts_or_traces_read": false,
+    "task_content_included": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:d0e1ddad801ddd6a1bead38219db0dfea1fe4065b127d20b6d2efc9c1993a942"
+}

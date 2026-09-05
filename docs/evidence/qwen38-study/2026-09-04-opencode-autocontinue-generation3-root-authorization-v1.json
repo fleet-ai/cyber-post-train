@@ -1,0 +1,41 @@
+{
+  "schema_version": "fleet-opencode-autocontinue-generation3-root-authorization-v1",
+  "append_only": true,
+  "status": "AUTHORIZED",
+  "author": "/root",
+  "scope": {
+    "execution_generation": 3,
+    "create_once": true,
+    "hosted_only": true,
+    "scored_launch_authorized": true,
+    "dedicated_serving_authorized": false,
+    "bulk_release_authorized": false,
+    "release_receipts_present": false,
+    "cluster_mutation_authorized_by_this_package": false
+  },
+  "models": [
+    {
+      "model": "qwen3.8-27b",
+      "cell_id": "sha256:631c9d7cc5328849ce137393943927192b1b50dc60458cdb3425fbce893ecf5a",
+      "generation3_spec_sha256": "sha256:ce81660cbc136ee302e9f4ef8075e60cdd3e2bf9fc28cbd15ff50b32e915f929",
+      "rendered_plan_sha256": "sha256:31d0795205a02b8f705ba6db9f2d9c59df9106bb28e6d990c85bf6f03b9107f4",
+      "execution_id": "sha256:f4d798d1419e7e470447975162948ef4c30013cc2e684eb7b7de1a2fa7822a74",
+      "authorized_at_utc": "2026-09-05T05:39:51Z",
+      "statement": "Authorize exactly one create-once corrected-treatment hosted Qwen3.8 27B generation-3 scored canary cell under the frozen OpenCode 1.18.27 auto-compaction-and-continuation protocol, superseding only the terminal generation-2 pre-Pod admission failure; use fleet-serve-low with preemptionPolicy Never; no dedicated GPU serving and no bulk release are authorized."
+    },
+    {
+      "model": "glm-5.3",
+      "cell_id": "sha256:905051f141077d3aa5086c1f5dc6ad015d5ee6173a1ea7515025805cf9a24b41",
+      "generation3_spec_sha256": "sha256:bcaa11f0619bed2b5f1e3ee80ec7d27e2216e5f67ef4013b7a1f1373ea6d5b9a",
+      "rendered_plan_sha256": "sha256:22b704c362d691201377e74861ae179eca6b5a7d39fb270ad6d1b4f4a0a307c9",
+      "execution_id": "sha256:163b867bd0ae54c706a22f8f7ba007d9e5a1d858418b16994c118f68fa52c07d",
+      "authorized_at_utc": "2026-09-05T05:39:51Z",
+      "statement": "Authorize exactly one create-once corrected-treatment hosted GLM5.3 generation-3 scored canary cell under the frozen OpenCode 1.18.27 auto-compaction-and-continuation protocol, superseding only the terminal generation-2 pre-Pod admission failure; use fleet-serve-low with preemptionPolicy Never; no dedicated GPU serving and no bulk release are authorized."
+    }
+  ],
+  "privacy": {
+    "prompts_traces_flags_or_scores_included": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:dbd81968a69990b17c98c62e05ae889a5d9720ea61e6c462050e2a2d9cc172c8"
+}

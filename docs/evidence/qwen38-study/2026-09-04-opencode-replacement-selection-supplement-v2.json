@@ -1,0 +1,190 @@
+{
+  "schema_version": "fleet-opencode-replacement-selection-supplement-v2",
+  "supplement_id": "glm53-dedicated-b-source54-replacement-r107-v1",
+  "recorded_at": "2026-09-04T05:20:20Z",
+  "append_only": true,
+  "parent_selection_lock": {
+    "path": "docs/evidence/qwen38-study/2026-09-04-opencode-replacement-selection-lock-v1.json",
+    "receipt_sha256": "sha256:77666813ed33cea95d1d21d31383d9deab2d596a97dfe8d7caee4139c80374b9",
+    "rewritten": false
+  },
+  "prior_supplement": {
+    "path": "docs/evidence/qwen38-study/2026-09-04-opencode-replacement-selection-supplement-v1.json",
+    "file_sha256": "sha256:5bce28b1f5f12bb8c6a19243cc9abfbf8a9a5ab3ea8f5f2d957670360811b829",
+    "receipt_sha256": "sha256:e0234fb53b771dde81475dd2cae0f1c60c051ee61e4ebaf7198e52e7111c5ed2",
+    "rewritten": false
+  },
+  "frozen_selection_authority": {
+    "source_job_id": "a62dd51f-a52b-4941-8207-4679e4b25b51",
+    "split_path": "configs/data/fleet-a62-task-split-v1.json",
+    "split_file_sha256": "sha256:ab444cb664ffb4da351e4d33298cc052f848f2833487807bf984a753fa7c3b47",
+    "split_manifest_digest": "sha256:fb09668f8de77e6baee37dc1e3162a7617ca9a0a450da9ca53422c17bfbc942a",
+    "locked_selection_path": "evals/fleet/configs/opencode-easiest-train100-selection-v2.json",
+    "locked_selection_file_sha256": "sha256:9f5e83123cfe7d8a3f4cc0b791ac1dc9032a3d5faf5eba2a431c7246069255df",
+    "locked_selection_sha256": "sha256:38bd544c74f4e45cb67b271849d657f49e356ccf41f97acca9fb6cd7eb7f56b8",
+    "runnable_inventory_path": "configs/runs/qwen36-27b-rl-base-full-runnable.json",
+    "runnable_inventory_file_sha256": "sha256:70f303f5bb6892598c8e4867151fd176774c5e59d2f0998c6cdb291609b036ff",
+    "ranking_implementation_path": "evals/fleet/opencode_train_sweep.py",
+    "ranking_implementation_file_sha256": "sha256:d93f8ea6b6794076d768629036d6f7c9c972530d4891031e07da949d4bd7b2b7",
+    "source_job_statistics_response_sha256": "sha256:72a6abfe437f4212746e3741113a5897e8cf7d53940975bf6da12db1dbb88387",
+    "mutable_live_statistics_used": false
+  },
+  "selection_replay": {
+    "score_blind": true,
+    "rule": "from_the_frozen_train_runnable_inventory_remove_the_locked_top100_the_five_prior_qwen_exclusions_and_the_eight_recorded_self_hosted_ineligible_versions_then_continue_the_locked_task_key_and_version_tiebreak_order",
+    "locked_prefix_reproduced": [
+      {"replacement_rank": 101, "task_version_id": "c0d14c8f-5f33-4957-8e38-af075bbf3df9"},
+      {"replacement_rank": 102, "task_version_id": "3ffeac73-fff8-49d8-b156-e726275edc2f"},
+      {"replacement_rank": 103, "task_version_id": "7e1fc9f6-7717-49bf-aee5-c09686dca297"},
+      {"replacement_rank": 104, "task_version_id": "62ed9ac8-478d-45a2-a09b-6750f5946d97"},
+      {"replacement_rank": 105, "task_version_id": "611014e8-6787-43a0-87a1-5c70fb69e3e1"},
+      {"replacement_rank": 106, "task_version_id": "32d32c35-52f1-43a1-8d3d-3faaf01aa6a5"}
+    ],
+    "prior_qwen_exclusion_count": 5,
+    "self_hosted_ineligible_count": 8,
+    "next_historical_rank": 115,
+    "next_replacement_rank": 107
+  },
+  "predecessor_attrition": {
+    "plan_path": "evals/fleet/configs/glm53-opencode-dedicated-b-even27-pass4-v1.json",
+    "plan_file_sha256": "sha256:122f08a9a6ebd79e05bd6ab6e8ca9c25d01f44406500cdcdb411afdd7c959445",
+    "plan_sha256": "sha256:008386c1bbc6d82229f2afdb85e074a0d5e717853dc7cab5b720ef13271e9cb5",
+    "scored_job_uid": "b2ac0628-fc9e-442c-964b-52a4aeb3865e",
+    "scored_pod_uid": "bc461b3c-dbdd-42ef-824e-146c47f0d6ec",
+    "job_deleted_to_prevent_additional_stale_endpoint_attempts": true,
+    "sfs_preserved": true,
+    "fenced_source_rank": 54,
+    "accepted_attempts": [
+      {"attempt": 1, "receipt_sha256": "sha256:ab488018e72267fa5628aaa81b051dd1fb89be90a21a7c4bbcd0d3ee77c3bc87"},
+      {"attempt": 2, "receipt_sha256": "sha256:36489d1f078f15bec58e9e0892283f647f89596c1152419161574053c256df3a"}
+    ],
+    "noncreditable_attempt": {
+      "attempt": 3,
+      "receipt_sha256": "sha256:6257cdfda5c3e29de25438b59d8bb68ce5226fef48626c90bde2efbefd070f2f",
+      "agent_exit_code": 1,
+      "verifier_execution_present": true,
+      "cleanup_completed": true,
+      "retry_allowed": false
+    },
+    "task_fence_receipt_sha256": "sha256:18a775fb974cdfad6c51b6840cf53e8b51aedac6d3efc50326f705db450c6404",
+    "unstarted_attempts": [4],
+    "primary_estimator_excludes_entire_task": true
+  },
+  "forced_stop_tombstone": {
+    "path": "docs/evidence/qwen38-study/2026-09-04-glm53-dedicated-b-forced-stop-tombstone-v1.json",
+    "file_sha256": "sha256:9f03d22661ac61055671c01a79d74c3018e4d7242d21a911b10db2fa1251dd03",
+    "receipt_sha256": "sha256:7cf5483e07e4053d7807d599b738e0555ade3b728ea20ae2356186592bd7c355",
+    "source54_whole_task_fenced": true,
+    "source56_scored_or_terminal_cell": false,
+    "source56_eligible_under_fresh_plan": true
+  },
+  "preemption_and_readmission": {
+    "preempted_at": "2026-09-04T05:13:50Z",
+    "readmitted_at": "2026-09-04T05:16:19Z",
+    "kueue_workload_uid": "43c012ca-c43c-4074-993a-b695e68699cd",
+    "ray_job_uid_preserved": "80578ad6-8b2a-4572-82ee-2b2d25aba58f",
+    "api_run_id_preserved": "65595541-8c68-4f84-bb3e-452eb409939f",
+    "old_runtime": {
+      "ray_cluster_uid": "673e0e12-57dc-4069-a226-85e5ed422c78",
+      "head_pod_uid": "aa0a0a0c-ee57-4f05-b630-0f0293d41e82",
+      "service_name": "ft-run-65595541-w72bv-head-svc",
+      "service_uid": "2357a332-2ef4-4a24-9d05-4bc92198edd8"
+    },
+    "readmitted_runtime": {
+      "ray_cluster_name": "ft-run-65595541-ddqzv",
+      "ray_cluster_uid": "f2458ed7-50cb-4206-b7d9-14b98deb5660",
+      "head_pod_uid": "d549fcdf-7a75-4e90-b98f-3d5352d422c8",
+      "service_name": "ft-run-65595541-ddqzv-head-svc",
+      "service_uid": "2633b75b-b76c-45c0-9167-baf576621f62"
+    },
+    "ray_job_identity_continuity_is_not_runtime_treatment_continuity": true,
+    "old_plan_endpoint_is_stale": true,
+    "fresh_health_and_non_scored_parity_required": true
+  },
+  "aborted_successor_claim": {
+    "source_rank": 56,
+    "attempt": 1,
+    "run_id": "chris-cyber-glm53-opencode11827-dedicated-b-even27-p4-v1-sr056-a1-33e6ff18",
+    "task_claim_sha256": "sha256:5c1d9ab05cd29c2edc0b7b0dde1910becea330c7af23a1a85f141b2f95383005",
+    "attempt_claim_sha256": "sha256:70036c6ba8a225b0077ee687e991f4ae79f597a028c4ccd879e54734b52e7316",
+    "stream_bytes": 0,
+    "stderr_bytes": 0,
+    "proxy_result_present": false,
+    "reward_result_present": false,
+    "trace_manifest_present": false,
+    "session_ingest_present": false,
+    "verifier_execution_present": false,
+    "accepted_or_noncreditable_receipt_present": false,
+    "planned_run_id_api_matches": 0,
+    "classification": "infrastructure_aborted_before_model_or_verifier",
+    "eligible_fresh_under_new_plan_and_treatment": true,
+    "old_plan_cell_must_not_resume": true
+  },
+  "replacement": {
+    "replacement_rank": 107,
+    "historical_rank": 115,
+    "serving_block": "dedicated_b_successor",
+    "task_key": "cysec1-2-fubspot-gen_blackbox-5ea795caa1e5d79bfb98ec82__blackbox_ctf_v1",
+    "task_version_id": "b6f2349e-fcb1-4a18-9c8d-3278d3f72991",
+    "task_version": "10",
+    "environment_version_id": "a1532a5c-6ec9-45bd-899d-24c0fe3d1df5",
+    "env_key": "cysec1-2-fubspot-gen",
+    "env_version": "v0.0.3",
+    "data_key": "current-fubspot-gen",
+    "data_version": "v0.0.3",
+    "split": "train",
+    "pass_k": 4,
+    "model_revision": "30333038ada1f1dacb294a93270305a890b50c14",
+    "hydration_gate": {
+      "status": "required_not_satisfied",
+      "required_before_paid_launch": true,
+      "checks": [
+        "exact_frozen_task_and_environment_binding",
+        "cyber_contract_v3",
+        "nonempty_runtime_seed_manifest",
+        "complete_verifier_receipt",
+        "fleet_team_authority",
+        "fresh_dedicated_b_runtime_health",
+        "fresh_dedicated_b_non_scored_parity"
+      ]
+    },
+    "scored_launch_authorized": false
+  },
+  "current_experiment_overlap_audit": {
+    "observed_at": "2026-09-04T05:20:20Z",
+    "plans_containing_task_version": 0,
+    "sfs_files_containing_task_version": 0,
+    "current_plan_claims": 0,
+    "current_plan_accepted_receipts": 0,
+    "current_plan_noncreditable_receipts": 0,
+    "launcher_owner_confirmation": "no_r107_artifacts_or_claims_created",
+    "unused_for_current_experiment": true
+  },
+  "revised_primary_estimator": {
+    "hosted_original_plus_r106_task_count": 46,
+    "hosted_cell_count": 184,
+    "dedicated_a_task_count": 27,
+    "dedicated_a_cell_count": 108,
+    "dedicated_b_original_source_ranks": "even_56_through_100",
+    "dedicated_b_original_task_count": 23,
+    "dedicated_b_prior_replacement_ranks": [101, 103, 105],
+    "dedicated_b_new_replacement_ranks": [107],
+    "dedicated_b_task_count": 27,
+    "dedicated_b_cell_count": 108,
+    "unique_task_count": 100,
+    "pass_k": 4,
+    "cell_count": 400,
+    "pairwise_disjoint": true,
+    "partially_accepted_sessions_outside_estimator": 5,
+    "formal_accept_count_if_primary_completes": 405
+  },
+  "privacy": {
+    "scores_read": false,
+    "scores_included": false,
+    "prompts_included": false,
+    "traces_included": false,
+    "flags_included": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:731ba0583f43a7cc56f16cbf8c71ab98ca39642ff7091e21763f8561bf9d587a"
+}

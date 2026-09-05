@@ -1,0 +1,41 @@
+{
+  "schema_version": "fleet-cyber-glm53-dedicated-serving-retirement-postcondition-v1",
+  "recorded_at": "2026-09-04T05:38:17Z",
+  "clarifies_claim_only": {
+    "receipt_path": "docs/evidence/qwen38-study/2026-09-04-glm53-dedicated-b-v4-retirement.json",
+    "receipt_commit": "d4de9ec",
+    "receipt_self_digest": "sha256:91ea2f4876898c25f52d55aceb4af7eaa43b99fb7cfc2b486a75b69506622783",
+    "json_pointer": "/deletion_semantics/api_history_row_retained",
+    "clarification": "The deleted run remains in the paginated history list, while direct name lookup returns 404."
+  },
+  "observed_delete": {
+    "api_name": "ft-run-65595541",
+    "api_run_id": "65595541-8c68-4f84-bb3e-452eb409939f",
+    "ray_job_uid": "80578ad6-8b2a-4572-82ee-2b2d25aba58f",
+    "delete_http_status": 204,
+    "post_delete_get_http_status": 404,
+    "paginated_history_item_present": true,
+    "api_history_row_observed_retained": true
+  },
+  "resource_absence_at": "2026-09-04T05:38:17Z",
+  "resource_absence": {
+    "ray_job": true,
+    "workload": true,
+    "ray_cluster": true,
+    "head_pod": true,
+    "service": true,
+    "gpu_released": true
+  },
+  "preservation": {
+    "sfs_evidence_retained": true,
+    "original_receipt_unchanged": true,
+    "classification": "api_direct_lookup_and_history_list_semantics_differ"
+  },
+  "privacy": {
+    "scores_read": false,
+    "prompts_or_traces_read": false,
+    "flags_read": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:442d465bb766a0d721afd1f6d80937641ab0ae4c5d3b1f1c50d6ed313b0bd897"
+}

@@ -1,5 +1,25 @@
 # Fleet blackbox baseline
 
+The current HELD generation-7-aware GLM5.3 dedicated-serving package and its
+no-idle lifecycle are documented in
+[DEDICATED_GLM53_V7.md](./DEDICATED_GLM53_V7.md). It does not authorize a
+launch. The v6 package remains frozen as historical generation-5 planning
+evidence and must not be used for the generation-7 campaign.
+
+The companion HELD bulk authority is
+`exact_pass4_dedicated_bulk_v4.py`. It freezes Qwen's 399 remaining cells on
+hosted inference and partitions GLM's 399 remaining cells into hosted ranks
+1–50, dedicated replica A ranks 51–75, and replica B ranks 76–100. No task
+crosses a serving treatment. Its wrapper exposes validation plus the gated
+prebulk workflow; a scored release must first accept both generation-7 canaries
+and complete the executable
+v4 CPU-only source/accept duplicate reconciliation. The two dedicated scored
+canaries are separate parity-only plans; only their post-canary runtime receipts
+can release dependent bulk. A parallel non-scored probe must separately qualify
+bounded concurrency two on each server; only then may its two disjoint,
+heartbeat-leased streams run together. The scored-controller packages remain
+held until those gates are present, and A must ramp before B.
+
 This evaluator runs the 160 registered tasks from Fleet job
 `a62dd51f-a52b-4941-8207-4679e4b25b51` with GLM-5.2 on hosted Agent Runtime v1.
 
@@ -195,6 +215,123 @@ The Job is `chris-cyber-qwen36-qcode-fleet-test20-base-v1`. It plans exactly
 runtime receipt, and keeps every artifact ineligible for training. A per-task
 infrastructure failure is recorded separately and does not become a model zero.
 
+### Sealed 20-task Qwen3.8 base baseline
+
+The Qwen3.8 baseline inherits the same exact untouched `test` task-version rows
+without reading prompt or verifier bodies into source control. It pins
+`Qwen/Qwen3.8-27B` revision
+`1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0`, Qwen Code 0.22.3, the exact
+tokenizer/chat-template digests, the live SGLang serving contract, the ordered
+`bash`/`submit_report` tool catalog, a 600-request ceiling, and a 262,144-token
+context. The run is evaluation-only and sequential pass@1.
+
+```bash
+# Live identity, exact-version task hydration, and server-side manifest preview.
+evals/fleet/scripts/submit_selfhosted_qwen38_test20.sh preview
+```
+
+The create-only `submit` path is deliberately blocked until the exact active V3
+reward canary has one authoritative model outcome with a nonzero verifier UUID
+and complete cleanup. At that point the operator supplies the immutable V3
+campaign root and frozen receipt through `Q38_CALIBRATION_ROOT` and
+`Q38_CALIBRATION_RECEIPT`. The launcher derives a self-digesting sanitized gate
+receipt, rechecks the live model and all 20 exact task versions, refuses an
+existing Job or ConfigMap, and uses Kubernetes `create` rather than replacement.
+The gate accepts a valid zero because it establishes harness/verifier execution;
+it does not reinterpret that zero as capability or release any V3 train/dev
+tasks. This protocol change does not itself authorize or submit the holdout Job.
+
+### Historical-frontier-ranked 50-task Qwen3.8 capability sweep
+
+The ranked-50 plan is a separate non-test capability baseline for the exact
+Qwen3.8/Qwen Code identity above. It selects 50 distinct immutable `train`/`dev`
+task versions from the frozen 160-task split and explicitly excludes all sealed
+test rows. Historical ease is derived only from prompt-free aggregates of the
+authorized 1,265-session Fleet source export: pass rate descending, then passes,
+sessions, task key, and task-version UUID. The frozen selection spans historical
+rates 1.0 through 0.75 (48 train, 2 dev) and binds its source export, split,
+exclusion receipt, and complete ordered task list by digest.
+This is a productivity-oriented capability-sweep ordering from historical
+frontier-model outcomes, not an unbiased or Qwen-specific difficulty estimate.
+
+Five prior Qwen3.8 attempts are excluded before ranking: both authoritative
+valid zeros and the three unresolved V2 attempts. Excluding unresolved versions
+is deliberately conservative because missing local output is not proof that the
+authoritative scorer never executed. The selector never reads or emits prompt,
+transcript, tool-output, or verifier-content fields.
+
+That five-row receipt is exhaustive only for the sanitized local campaign
+evidence currently available. The runtime `/v1/sessions` scan covers live,
+non-archived sessions and cannot prove absence of archived sessions or a scored
+attempt whose session ingestion failed. Paid submission therefore has a second
+fail-closed gate pending an authoritative scorer-side/all-history duplicate
+inventory. Do not describe the current proof as globally exhaustive.
+
+The create-only controller executes the easiest task alone. It releases the
+remaining 49 only after that task produces any authoritative model outcome,
+including zero, with a nonzero verifier-execution UUID and verified instance and
+container cleanup. Remaining tasks launch in easiest-first waves of at most
+three. Every task is pass@1, valid zeros are preserved, and outputs remain
+ineligible for training.
+
+```bash
+# Static selection and Kubernetes preview. This remains fail-closed until a
+# sanitized post-incident credential-rotation receipt is supplied.
+FLEET_CREDENTIAL_ROTATION_RECEIPT=/restricted/rotation-receipt.json \
+  evals/fleet/scripts/submit_selfhosted_qwen38_ranked50.sh preview
+
+# Paid launch only after review and explicit authorization.
+FLEET_CREDENTIAL_ROTATION_RECEIPT=/restricted/rotation-receipt.json \
+  evals/fleet/scripts/submit_selfhosted_qwen38_ranked50.sh submit
+```
+
+The submitter reads only the Secret's name, namespace, UID, resourceVersion,
+and presence of the expected data key. It never decodes the credential. The
+evaluator atomically reads the Secret metadata and value in memory at execution
+time, revalidates the same sanitized rotation receipt, and passes the value only
+through the runner process environment. The value is never written to a
+ConfigMap, argument, log, or receipt. An existing Job, ConfigMap, RBAC object,
+or single-use output root is a hard refusal.
+
+Paid submission is also deliberately blocked until deployed OpenAPI and a
+behavioral probe prove Fleet's zero-message session-ingestion contract. The
+ranked-50 client has a dedicated runtime-evidence-only path that submits
+`messages: []`, no trace metadata, and requires the response to echo the exact
+session, score, verifier, task-version, and instance bindings with
+`message_count: 0`. It never calls the full-trace ingestion path. Local task
+execution also uses a per-task `emptyDir` scratch root and persists only
+minimized receipts to SFS. Do not remove this privacy gate or represent the
+ranked-50 plan as launch-ready until the deployed contract is independently
+probed.
+
+The authoritative score path is separately constrained to Verifier Contract v3.
+Preflight requires every exact task version to expose the complete `2 / 1 / 3`
+cyber contract, and the score request contains only the instance ID and scoring
+modes—never `conversation` or `final_answer`. A legacy/v2 task fails before any
+task instance is created.
+
+The rotation proof is reusable by WebExploitBench and this Fleet run. Capture
+metadata before rotation, have the credential owner rotate the Secret, capture
+metadata after rotation, then build the self-digesting receipt. The capture
+script refuses an existing destination and emits no Secret value:
+
+```bash
+evals/fleet/scripts/capture_fleet_secret_metadata.sh /restricted/fleet-api.before.json
+# Credential owner rotates fleet-train-jobs/fleet-api out of band.
+evals/fleet/scripts/capture_fleet_secret_metadata.sh /restricted/fleet-api.after.json
+uv run python -m evals.fleet.qwen38_fleet50 credential-receipt \
+  --before-metadata /restricted/fleet-api.before.json \
+  --after-metadata /restricted/fleet-api.after.json \
+  --confirmed-by "$USER" \
+  --rotation-completed-at 2026-09-02T00:00:00Z \
+  --output /restricted/rotation-receipt.json
+```
+
+The builder requires the UID or resourceVersion to change and records only the
+before/after metadata, accountable confirmer, completion time, data-key
+presence, and receipt digest. The launcher re-reads live sanitized metadata and
+requires an exact match to the `after` record.
+
 ### Interrupted-attempt reconciliation
 
 The self-hosted runner writes `resource-plan.json` before starting local
@@ -234,6 +371,76 @@ an operator must obtain the authority observation through an authorized
 read-only verifier-store export. Absence of a local `reward-result.json` is not
 proof that scoring never happened. Do not score, clean up, or advance campaign
 state while that lookup is absent or ambiguous.
+
+### OpenCode context management
+
+New OpenCode 1.18.27 plans declare
+`opencode_1.18.27_native_compaction_autocontinue_v1` and
+`compaction_headroom_tokens: 20000`. The runner keeps native automatic
+compaction and continuation enabled. The previous plugin disabled continuation,
+so a long episode could compact successfully and then exit without resuming.
+
+The generated model input limit is `context_window_size - max_output_tokens`.
+OpenCode subtracts `compaction.reserved` from that limit before deciding to
+compact. With the current 262,144-token context and 32,768-token output allowance,
+compaction starts at 209,376 reported tokens, leaving another 20,000 tokens for
+new tool results. In this pinned version, setting `reserved` without an explicit
+input limit has no effect. The headroom is a buffer, not a guarantee against an
+arbitrarily large next tool result.
+
+Historical plans and receipts remain unchanged. The runner rejects the previous
+context-policy identity before creating an output directory, contacting Fleet,
+or starting Docker. Prepare a newly identified plan with the new harness policy;
+do not silently reuse a frozen plan or rerun an already-scored outcome. Historical
+trace recovery remains available because it does not execute the harness.
+
+The `full-plan` command also requires `--credit-result` pointing to the smoke's
+`result.json`. Its recorded harness must exactly match the new plan, and its task,
+session and verifier must match the live credit. Old-policy results cannot be
+credited into a new-policy evaluation.
+
+The submission scripts package `self_hosted.py` into create-only ConfigMaps;
+merging code does not change existing Jobs. A subsequent authorized launch must
+package the merged source and the new plan into a new ConfigMap/Job. This change
+requires no SGLang image update or serving configuration change.
+
+Run the local regression against a verified OpenCode 1.18.27 executable:
+
+```bash
+OPENCODE_TEST_BINARY=/absolute/path/to/opencode \
+  uv run pytest tests/test_opencode_compaction.py
+```
+
+It uses local fake model/MCP servers and the real OpenCode process. The negative
+control restores the old plugin and proves the episode stops after summarization;
+the fixed configuration must issue another agent request and finish. No Fleet
+instance, model inference service, or scored evaluation is used.
+The `OpenCode compaction regression` workflow runs this test with the checksummed
+Linux release on pull requests.
+
+### Post-score OpenCode session recovery
+
+OpenCode 1.18.27 emits JSON event timestamps as integer milliseconds, while
+Fleet trace ingestion requires ISO-8601 strings. `self_hosted.py` normalizes
+that boundary and validates every message before the first ingest mutation.
+Fleet HTTP failures retain only their method, route, and status in the safe
+receipt so schema failures do not collapse into an unactionable exception type.
+
+The v2 Qwen3.8/GLM5.3 smoke recovery reuses only immutable traces whose agent,
+authoritative verifier, cleanup, trace digest, and zero-completed-chunk failure
+all reconcile. It does not start an agent, model request, task instance, or
+verifier. Before writing, it proves there is no session with the same persisted
+model and authoritative verifier-execution ID; it then claims a create-once
+intent, ingests once, and verifies the resulting completed session through the
+public session inventory. The original failed output root is never modified.
+
+```bash
+# Server-side validation only; no session mutation.
+evals/fleet/scripts/submit_opencode_session_recovery.sh preview
+
+# One create-once recovery Job; zero model rollouts.
+evals/fleet/scripts/submit_opencode_session_recovery.sh submit
+```
 
 ## Qwen3.8-27B reward calibration (non-test)
 

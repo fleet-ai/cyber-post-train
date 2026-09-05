@@ -1,0 +1,82 @@
+{
+  "schema_version": "fleet-opencode-autocontinue-canary-controller-compatibility-v2",
+  "append_only": true,
+  "status": "HELD_COMPATIBLE",
+  "supersedes": {
+    "path": "docs/evidence/qwen38-study/2026-09-04-opencode-autocontinue-canary-controller-compatibility-v1.json",
+    "receipt_sha256": "sha256:a0ded706002accbbf482dfcba58d840b6ba7666f6af225a2207cfbcdbe5adc3c"
+  },
+  "campaign_sha256": "sha256:63946f224a33eb0d2c2a6fdba34358ebf9ca379e5f0f156cd137c95a9b98097e",
+  "immutable_campaign_file_sha256": "sha256:1dfcc6d9ddbd19ef5ff46b5d6308d62526db4d1a0ccf05c5fa3b10b176910f34",
+  "bootstrap_contract": {
+    "campaign_file_may_be_absent_during_read_only_preflight": true,
+    "plan_raw_sha256_is_caller_bound": true,
+    "scored_manifest_is_not_packaged_or_required": true,
+    "compatibility_and_all_executable_dependencies_are_hash_validated": true,
+    "v1_bootstrap_failure_receipt_sha256": "sha256:c07804a36065a68cc821b0c57e7989f7e9caa077142969046b4bff913a592ee4"
+  },
+  "frozen_controller": {
+    "path": "evals/fleet/hosted_sweep_controller.py",
+    "sha256": "sha256:e14670e40d2b1fbe4896e4b6dfb2902f121b81c8103efea3a74a11fed496809a",
+    "modified": false
+  },
+  "canary_controller": {
+    "path": "evals/fleet/autocontinue_canary_controller.py",
+    "sha256": "sha256:412bf8c0dd33d23e50a56c4597e5e0dfc90b122a8b06af0987059afdca53f7ef",
+    "scope": "two_exact_one_cell_canaries_only",
+    "imports_frozen_inventory_attempt_and_classification_primitives": true
+  },
+  "compatibility": {
+    "campaign_bytes_unchanged": true,
+    "supersedes_only_campaign_held_runtime_gate_booleans_via_append_only_evidence": true,
+    "campaign_embedded_canary_and_parity_false_fields_remain_historical_preview_state": true,
+    "legacy_credit": 0,
+    "exact_context_policy": "opencode_1.18.27_native_compaction_autocontinue_v1",
+    "release_required_before_preflight_or_run": true,
+    "endpoint_lease_required": true,
+    "downward_job_and_pod_uid_required": true,
+    "post_exit_k8s_observer_required": true,
+    "bulk_release_granted": false
+  },
+  "allowed_append_only_overlay": {
+    "campaign_mutation_allowed": false,
+    "satisfied_preview_gate_evidence": {
+      "r114_immutable_hydration_and_execution_binding": "sha256:c71604d22b1d52a7091727b957e0f56f2e8e270e461c844fb57d48b392d831c5",
+      "fresh_fleet_task_version_environment_verifier_inventory": "sha256:c71604d22b1d52a7091727b957e0f56f2e8e270e461c844fb57d48b392d831c5",
+      "dedicated_a_and_b_uid_bound_autocontinue_parity": "sha256:07e733b4b161ed7c36113fc3688f04a42938d93a499b1bcc10c7cd21342900df",
+      "shared_pvc_cross_pod_flock_preflight": "sha256:e9f34d35ac3c9e60d2698ebc1685374b98f13e41ac305df0609fb051f35c416c"
+    },
+    "still_held": [
+      "fresh_exact_cell_duplicate_preflights",
+      "qwen_and_glm_one_cell_canary_authorization_and_acceptance",
+      "append_only_bulk_release_authorization"
+    ],
+    "forbidden_overrides": [
+      "campaign_id",
+      "scientific_mapping",
+      "models",
+      "partitions",
+      "task_or_cell_identity",
+      "treatment_or_session_model",
+      "counts",
+      "job_or_sfs_identity",
+      "maximum_streams_per_endpoint",
+      "retry_policy",
+      "canary_launch_authorized",
+      "bulk_launch_authorized"
+    ]
+  },
+  "gates": {
+    "fresh_inventory_receipts_bound_by_final_release": false,
+    "dedicated_parity_receipt_sha256": "sha256:07e733b4b161ed7c36113fc3688f04a42938d93a499b1bcc10c7cd21342900df",
+    "hosted_health_receipt_sha256": "sha256:d81a01ffe1087d7d85fe511bc9c978461ba3e24a2c15675871cfb8668c49bd85",
+    "shared_pvc_flock_receipt_sha256": "sha256:e9f34d35ac3c9e60d2698ebc1685374b98f13e41ac305df0609fb051f35c416c",
+    "scored_canary_launch_authorized": false
+  },
+  "privacy": {
+    "credentials_included": false,
+    "prompts_or_traces_included": false,
+    "scores_included": false
+  },
+  "receipt_sha256": "sha256:7851d18a8176abb08aebcb857960380f7f8a59bb854c51437e4010f169c82b6a"
+}

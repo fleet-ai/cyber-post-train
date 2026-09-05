@@ -1,0 +1,305 @@
+{
+  "schema_version": "fleet-completed-exit1-reconciliation-v1",
+  "append_only": true,
+  "observed_at": "2026-09-04T07:18:42Z",
+  "methodology": {
+    "outcome_unit": "authoritative_scored_session",
+    "rule": "A plan-and-claim-bound attempt is a scored primary outcome when reward acquisition produced a verifier execution, the exact session is uniquely authoritative and completed with that verifier execution, session ingestion completed, and cleanup completed. OpenCode process exit 1 alone does not remove the observed outcome.",
+    "required_all": [
+      "immutable_plan_claim_and_config_binding",
+      "agent_termination_completed",
+      "reward_result_present",
+      "reward_result_verifier_matches_result",
+      "authoritative_session_unique_completed",
+      "authoritative_session_verifier_matches_result",
+      "session_ingest_completed",
+      "instance_cleanup_completed",
+      "no_stderr_or_proxy_transport_error_signal",
+      "no_independent_uid_time_overlap_infrastructure_incident"
+    ],
+    "exclude_if_any": [
+      "reward_result_missing",
+      "verifier_execution_missing",
+      "authoritative_session_missing_or_incomplete",
+      "session_ingest_incomplete",
+      "cleanup_incomplete",
+      "scoring_http_failure",
+      "endpoint_or_control_plane_preemption_overlaps_attempt",
+      "model_or_harness_transport_failure"
+    ],
+    "process_exit_role": "diagnostic_only_after_all_required_scoring_evidence_exists",
+    "selection_bias_control": "retain_original_task_and_complete_only_unstarted_attempt_indices",
+    "original_noncreditable_receipts_mutated": false
+  },
+  "reconciled_cells": [
+    {
+      "model_block": "qwen_hosted_v8",
+      "plan_sha256": "sha256:8d6df6af63b308d648fb0c7ea9115f90b16de1d7e57b0968dda8fc8fd4a20c81",
+      "job_uid": "84727b82-5187-425b-ba4b-9598f46691c4",
+      "pod_uid": "42df9b32-60c2-45aa-8ce3-ba850b82b909",
+      "rank": 1,
+      "source_rank": 6,
+      "attempt": 2,
+      "run_id": "chris-cyber-q38-opencode11827-hosted-successor49-p4-v8-sr006-a2-51fc6fa0",
+      "task_key": "cysec1-2-current-gen_blackbox-9d641429faef16a05bff575e__blackbox_ctf_v1",
+      "task_version_id": "2f2681bf-c1f7-4056-b6e4-cb2e5058f027",
+      "session_id": "de19fae5-b1e1-4a09-b933-c763c9b3902f",
+      "verifier_execution_id": "ef0e506a-0f8e-4522-862f-53499e84b84a",
+      "claim_sha256": "sha256:c6693715812b02ef363ff7cd6711e12a2f69c9fa376fa595da054d8cbcc9dff9",
+      "config_sha256": "sha256:b51b258287bc57a9a62957bc7affe945c31f86f49c9b15b988cc602fe23a196d",
+      "original_noncreditable_receipt_sha256": "sha256:afd3d970239c1c99ea2f4b94e58b9ad1df8b0d62d91bdd5339af74d477be19e7",
+      "original_noncreditable_file_sha256": "sha256:c6bd25fd4906648799ec3a8e00281e167ded68479954edc1952ab3a3c0056576",
+      "original_task_fence_receipt_sha256": "sha256:d5f47dd627afb33791430afef4644d6a7eec568e23942b29413351fd027d6a1a",
+      "original_task_fence_file_sha256": "sha256:f8c7da5ec044e70d1e4fb681a9f3c2a9cd0aa05b4bf7569be7e1930990692708",
+      "result_file_sha256": "sha256:0ee45912d2fe0ec9c7fdc17daed2f347b900f8bf2922c0908a750fa8b60f7e43",
+      "reward_result_file_sha256": "sha256:77453eeaa94e8630ee471825ada812d6afd44e841bc60a57160ba992fca7be93",
+      "session_ingest_file_sha256": "sha256:8ea39efbf067610d71b2a61976df6ce7aefead9c225c1614c1968063e398cb72",
+      "cleanup_file_sha256": "sha256:a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+      "evidence": {
+        "agent_exit_code": 1,
+        "agent_termination_completed": true,
+        "reward_result_present": true,
+        "reward_result_verifier_matches": true,
+        "authoritative_session_match_count": 1,
+        "authoritative_session_status": "completed",
+        "authoritative_session_verifier_matches": true,
+        "session_ingest_completed": true,
+        "cleanup_completed": true,
+        "stderr_file_count": 0,
+        "proxy_http_5xx_token_count": 0,
+        "proxy_transport_error_token_count": 0,
+        "independent_infrastructure_incident": false,
+        "agent_exit_code_was_only_prior_rejection": true
+      },
+      "reconciled_outcome": "RECONCILED_ACCEPTED",
+      "counts_as_primary_cell": true
+    },
+    {
+      "model_block": "qwen_hosted_v8",
+      "plan_sha256": "sha256:8d6df6af63b308d648fb0c7ea9115f90b16de1d7e57b0968dda8fc8fd4a20c81",
+      "job_uid": "84727b82-5187-425b-ba4b-9598f46691c4",
+      "pod_uid": "42df9b32-60c2-45aa-8ce3-ba850b82b909",
+      "rank": 2,
+      "source_rank": 7,
+      "attempt": 1,
+      "run_id": "chris-cyber-q38-opencode11827-hosted-successor49-p4-v8-sr007-a1-37240f5f",
+      "task_key": "cysec1-2-current-gen_blackbox-bc363f8239aeeaa3f648046a__blackbox_ctf_v1",
+      "task_version_id": "ba912601-1184-4dcd-9e9d-2fce22543e4b",
+      "session_id": "1e54ed6d-77ac-4f47-8007-e9cc51e2b2a4",
+      "verifier_execution_id": "9d7d79b6-c128-48fe-a3a6-820803abdf34",
+      "claim_sha256": "sha256:a6fdef72fea3d0e6a2fba76c14cd66e639f0b36116a16e4672b2a0e97f7d7569",
+      "config_sha256": "sha256:2d1ead2faec7a234b9b6e08a1d93549dc52eaadf7c81f578b59f5988acdd8c40",
+      "original_noncreditable_receipt_sha256": "sha256:192e4d58b075a92afb84a53543628da7f1a2cfd54cd7399568c0895e835c3ee5",
+      "original_noncreditable_file_sha256": "sha256:b3638e9dc1d0f96faee044ce5f5e33a14c5cbd9bc8af4c544407027ffc338071",
+      "original_task_fence_receipt_sha256": "sha256:60bff7ba9302069967985129f23eb563d91f10d5d440565af18d71b1547cab9c",
+      "original_task_fence_file_sha256": "sha256:da15af934c723715ce3d029b6cc1820a80da246cd340290a85d31642256c7189",
+      "result_file_sha256": "sha256:b80669646c247768c8bfc96f13ee1aee0300756fb6b487449ade326bae913425",
+      "reward_result_file_sha256": "sha256:ec7786e15afd485f2d00eefcacbf282d4579c7e0bbd9dd633b3285813b19397e",
+      "session_ingest_file_sha256": "sha256:688b6a4cae12785cca27117bce472585e4ccb7eeeff490212439d0050e549fe5",
+      "cleanup_file_sha256": "sha256:a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+      "evidence": {
+        "agent_exit_code": 1,
+        "agent_termination_completed": true,
+        "reward_result_present": true,
+        "reward_result_verifier_matches": true,
+        "authoritative_session_match_count": 1,
+        "authoritative_session_status": "completed",
+        "authoritative_session_verifier_matches": true,
+        "session_ingest_completed": true,
+        "cleanup_completed": true,
+        "stderr_file_count": 0,
+        "proxy_http_5xx_token_count": 0,
+        "proxy_transport_error_token_count": 0,
+        "independent_infrastructure_incident": false,
+        "agent_exit_code_was_only_prior_rejection": true
+      },
+      "reconciled_outcome": "RECONCILED_ACCEPTED",
+      "counts_as_primary_cell": true
+    },
+    {
+      "model_block": "glm_hosted_v12",
+      "plan_sha256": "sha256:8b0deafa9f51b75a0715be56b417454e96665b5342d4c346d5cda32dc24c8279",
+      "job_uid": "0e25db24-8700-478f-8862-d1210511393c",
+      "pod_uid": "3a04238e-497e-4d21-a8d9-f33c50085879",
+      "rank": 1,
+      "source_rank": 13,
+      "attempt": 2,
+      "run_id": "chris-cyber-glm53-opencode11827-hosted-primary46-p4-v12-sr013-a2-85027a7a",
+      "task_key": "cysec1-2-fakelook-gen_blackbox-ab56dfb6116356c402290fa8__blackbox_ctf_v1",
+      "task_version_id": "9375a9b9-04e5-4f6f-ad47-286121278992",
+      "session_id": "6aaa636e-ceab-40b8-be5d-5cae7c15812b",
+      "verifier_execution_id": "1d0a13b6-3fe2-448e-8787-dbd7580b5338",
+      "claim_sha256": "sha256:89863aaf2451f55b89784199ca2292061c328710ffc92b16ef04a49c9175044d",
+      "config_sha256": "sha256:68c767e56a8c3bfe3a32581729346cff3082908cf4c845c1399eed687307cc77",
+      "original_noncreditable_receipt_sha256": "sha256:289f92bdfc8ca53ca0e4b13722387b19efba49aab04ccca3350612471c263fb4",
+      "original_noncreditable_file_sha256": "sha256:80c74dc75670a28f9430b3414f116c7cea7c646141f0a95e4fc1f565a3db967e",
+      "original_task_fence_receipt_sha256": "sha256:81aed3de361c42f9ca8f3fff3a0fb771e816307f41dcb4a199930784002a0ef9",
+      "original_task_fence_file_sha256": "sha256:ebd695f8db01ca13486973d107ee92d13fb539969c7d74185eed7223293cc0b1",
+      "result_file_sha256": "sha256:910cfbe9d7ba30f0055c722b8294bff5a88ced84d9053a32318a27bb6106e571",
+      "reward_result_file_sha256": "sha256:9e6d2ba199de59b056d75f73f78e7dfc1e7b7e7d28ef6924cf0c14d66af818c6",
+      "session_ingest_file_sha256": "sha256:79297846274383329c592b460fe27fc8d5e3ce14845911fb0eda7993205fb5ff",
+      "cleanup_file_sha256": "sha256:a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+      "evidence": {
+        "agent_exit_code": 1,
+        "agent_termination_completed": true,
+        "reward_result_present": true,
+        "reward_result_verifier_matches": true,
+        "authoritative_session_match_count": 1,
+        "authoritative_session_status": "completed",
+        "authoritative_session_verifier_matches": true,
+        "session_ingest_completed": true,
+        "cleanup_completed": true,
+        "stderr_file_count": 0,
+        "proxy_http_5xx_token_count": 0,
+        "proxy_transport_error_token_count": 0,
+        "independent_infrastructure_incident": false,
+        "agent_exit_code_was_only_prior_rejection": true
+      },
+      "reconciled_outcome": "RECONCILED_ACCEPTED",
+      "counts_as_primary_cell": true
+    },
+    {
+      "model_block": "glm_hosted_v12",
+      "plan_sha256": "sha256:8b0deafa9f51b75a0715be56b417454e96665b5342d4c346d5cda32dc24c8279",
+      "job_uid": "0e25db24-8700-478f-8862-d1210511393c",
+      "pod_uid": "3a04238e-497e-4d21-a8d9-f33c50085879",
+      "rank": 2,
+      "source_rank": 15,
+      "attempt": 1,
+      "run_id": "chris-cyber-glm53-opencode11827-hosted-primary46-p4-v12-sr015-a1-f15f1ee7",
+      "task_key": "cysec1-2-fentry-gen_blackbox-46793210126eea4722e90448__blackbox_ctf_v1",
+      "task_version_id": "fb8f2178-7dd8-429a-8d3c-f14b21a51e02",
+      "session_id": "397cfa86-e0c4-4ba9-b526-670f0e3a5da2",
+      "verifier_execution_id": "60c42827-53c1-4acc-a99d-481d06941627",
+      "claim_sha256": "sha256:5414022ac7df95ec1520c722c982064abf311a0bb2f2dba16edbe84ea652442f",
+      "config_sha256": "sha256:960dd0bf514e84a39bc5ebfbafa8c83a645916127ce4e4e4ca8201d7750f821a",
+      "original_noncreditable_receipt_sha256": "sha256:c4247436a00bf175bda9e5d736fe1ffe19375e5b728b71ae4cd0813c99cd4951",
+      "original_noncreditable_file_sha256": "sha256:af4e3ddcd3165b1e5a5c841fc5b8a1108d00e753769ddfcdf3ab6f0f8ab9bcf3",
+      "original_task_fence_receipt_sha256": "sha256:ac12784b14556a8739c81df0098a8cff438e40f06292c83b23b9f7f24b311edb",
+      "original_task_fence_file_sha256": "sha256:99af7ec1c101558fe6031b588fa800e0cc844b20ad06eba65a9718a326aae67a",
+      "result_file_sha256": "sha256:0e6caf32f641d5e845c27011d2bf8029a66f8e72dbd9b0a274b755c90144cdda",
+      "reward_result_file_sha256": "sha256:9fd05bd05ac5f6c4e3e727d35c9ec40251148d736e0a47d0890605a685cee785",
+      "session_ingest_file_sha256": "sha256:9fbf8b36a49d677977b0c41f20806f6ee3dbf458f2b93fb44082018dd7866cce",
+      "cleanup_file_sha256": "sha256:a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+      "evidence": {
+        "agent_exit_code": 1,
+        "agent_termination_completed": true,
+        "reward_result_present": true,
+        "reward_result_verifier_matches": true,
+        "authoritative_session_match_count": 1,
+        "authoritative_session_status": "completed",
+        "authoritative_session_verifier_matches": true,
+        "session_ingest_completed": true,
+        "cleanup_completed": true,
+        "stderr_file_count": 0,
+        "proxy_http_5xx_token_count": 0,
+        "proxy_transport_error_token_count": 0,
+        "independent_infrastructure_incident": false,
+        "agent_exit_code_was_only_prior_rejection": true
+      },
+      "reconciled_outcome": "RECONCILED_ACCEPTED",
+      "counts_as_primary_cell": true
+    }
+  ],
+  "same_task_gap_completion": [
+    {
+      "model_block": "qwen_hosted_v8",
+      "source_rank": 6,
+      "already_accepted_attempts": [1],
+      "reconciled_accepted_attempts": [2],
+      "missing_attempts": [3, 4]
+    },
+    {
+      "model_block": "qwen_hosted_v8",
+      "source_rank": 7,
+      "already_accepted_attempts": [],
+      "reconciled_accepted_attempts": [1],
+      "missing_attempts": [2, 3, 4]
+    },
+    {
+      "model_block": "glm_hosted_v12",
+      "source_rank": 13,
+      "already_accepted_attempts": [1],
+      "reconciled_accepted_attempts": [2],
+      "missing_attempts": [3, 4]
+    },
+    {
+      "model_block": "glm_hosted_v12",
+      "source_rank": 15,
+      "already_accepted_attempts": [],
+      "reconciled_accepted_attempts": [1],
+      "missing_attempts": [2, 3, 4]
+    }
+  ],
+  "comparators": {
+    "hosted_http500_incident": {
+      "receipt_sha256": "sha256:043c01e05e9118a080bd642a5da6f7c22c279781bc0c97803330091e55fdb27e",
+      "classification": "EXCLUDED_INFRASTRUCTURE_INCOMPLETE",
+      "reason": "reward result, verifier execution, and session ingestion were absent after HTTP 500"
+    },
+    "dedicated_a_preemption": {
+      "receipt_sha256": "sha256:9bf6683d80c2dd517e371709a1aa2db0a13e1f4089a09a8296941c6df7054b79",
+      "classification": "EXCLUDED_INFRASTRUCTURE_INCOMPLETE",
+      "reason": "agent execution was interrupted before result, reward, verifier, or session ingestion"
+    },
+    "dedicated_b_source54_attempt3": {
+      "receipt_sha256": "sha256:7cf5483e07e4053d7807d599b738e0555ade3b728ea20ae2356186592bd7c355",
+      "classification": "TERMINAL_ATTRITION_ONLY_NOT_PRIMARY_TASK",
+      "reason": "the verifier-backed exit-1 cell overlapped independently proven serving loss and the immutable endpoint generation was retired before pass@4 completion"
+    }
+  },
+  "replacement_artifacts": [
+    {
+      "model_block": "qwen_hosted_v8",
+      "replacement_rank": 56,
+      "selection_supplement_receipt_sha256": "sha256:56406bb32541babc0189e089f339d6a7668b24cb86b1fd8587b60a3cfc57b24c",
+      "hydration_receipt_sha256": "sha256:4d059348e1c00eed04aef8b6a700a0b44921cfe0f6e6be0e8e55e08316886f79",
+      "preview_plan_sha256": "sha256:68094e0214415634c07949adf9dd6dd161e9ef0d6106485921429f1768b43350",
+      "status": "HELD_UNUSED_SUPERSEDED_IF_RECONCILIATION_RATIFIED",
+      "scored_claims": 0
+    },
+    {
+      "model_block": "glm_hosted_v12",
+      "replacement_rank": 111,
+      "selection_supplement_receipt_sha256": "sha256:e8b6c3f993c4e5b76f823acc0bbda4c210a7dbd4526c1adb093c0535bbb4c00d",
+      "hydration_receipt_sha256": "sha256:ba6327ce5ca006c48b4cec33ed93179c0fc9c32a0b2bda8ec0a023272ac1758d",
+      "preview_plan_sha256": "sha256:f0998fa2656f8c04e23fad46a96d3f0c15d002c0e44b1638720d1877501833f5",
+      "status": "HELD_UNUSED_SUPERSEDED_IF_RECONCILIATION_RATIFIED",
+      "scored_claims": 0
+    }
+  ],
+  "primary_denominators_after_gap_completion": {
+    "qwen": {
+      "retained_complete_source4_tasks": 1,
+      "original_v8_tasks": 49,
+      "replacement_tasks": 0,
+      "tasks": 50,
+      "cells": 200,
+      "affected_missing_cells": 5
+    },
+    "glm": {
+      "hosted_original_v12_tasks": 46,
+      "dedicated_a_tasks": 27,
+      "dedicated_b_tasks": 27,
+      "replacement_tasks_for_current_exit1_cells": 0,
+      "tasks": 100,
+      "cells": 400,
+      "affected_missing_cells": 5
+    }
+  },
+  "release_gate": {
+    "review_status": "methodology_reviewed_pending_root_scoring_release",
+    "scored_launch_authorized": false,
+    "future_gap_plan_must_credit_exact_reconciled_sessions": true,
+    "future_gap_plan_must_run_only_missing_attempt_indices": true,
+    "future_gap_plan_must_preserve_exact_predecessor_treatment": true,
+    "replacement_addons_must_not_launch": true
+  },
+  "privacy": {
+    "scores_read": false,
+    "prompts_or_traces_read": false,
+    "task_content_included": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:5435c0a25b3be1872c1aae09fd88858c5251272e164ab8eb49ab66b4c5a4ca0e"
+}

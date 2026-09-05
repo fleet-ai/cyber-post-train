@@ -1,0 +1,58 @@
+{
+  "schema_version": "fleet-glm53-dedicated-a-v5-scoring-release-v1",
+  "append_only": true,
+  "plan": {
+    "path": "evals/fleet/configs/glm53-opencode-dedicated-a-v5-successor27-pass4-v2.json",
+    "file_sha256": "sha256:8eab44f5dd16a2e3613d24cdb2a13f18664d35a2a48cb4d7b70e9f56e7896346",
+    "plan_sha256": "sha256:e1f37476700beb16ccb3978f61a162a59e16501334d316417cd0718a94c2ef68",
+    "task_count": 27,
+    "pass_k": 4,
+    "cell_count": 108,
+    "source_ranks": [
+      6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36,
+      38, 40, 42, 44, 46, 48, 50, 52, 102, 104, 110
+    ]
+  },
+  "gates": {
+    "corrected_stop_tombstone_receipt_sha256": "sha256:9bf6683d80c2dd517e371709a1aa2db0a13e1f4089a09a8296941c6df7054b79",
+    "selection_supplement_receipt_sha256": "sha256:3ccf7fdace01bc2a3e6245d26f65d6069fa5327d4a5ac7515640c7d59092e534",
+    "hydration_receipt_sha256": "sha256:5b52c2f54865434685ab30b10246b83a738b6fb9288cfcfbce0dcab9805377f7",
+    "parity_receipt_sha256": "sha256:9aa92ac211f102939dc24e03af5c93766b94b0ccf5ce887df1ac80415adf73bc",
+    "scoring_recovery_receipt_sha256": "sha256:708d635968e073d27153d3d9f13ae5fa7b4784349cc9e8e3928f0fbafeade132",
+    "source4_fenced": true,
+    "exact_treatment_gate_required": true,
+    "duplicate_gate_required": true,
+    "overlap_gate_required": true,
+    "fresh_create_once_identity_required": true
+  },
+  "treatment": {
+    "kind": "dedicated_inference_endpoint_v1",
+    "replica": "A",
+    "serving_generation": "v5",
+    "service_uid": "2c0e64de-c4a0-4f70-ae07-d15b1adad0b3",
+    "ray_job_uid": "ef7cb0f2-84d4-4017-ae31-bf34ebb70d0d",
+    "ray_cluster_uid": "5107d72e-ae6a-4582-a490-55b349421d06",
+    "head_pod_uid": "3f37ab91-4afa-4e4d-8f29-a3eeda70a774",
+    "model_revision": "30333038ada1f1dacb294a93270305a890b50c14"
+  },
+  "scheduling": {
+    "required_priority_class": "fleet-train-high",
+    "true_non_preemptible_available": false,
+    "priority_class_is_not_preemption_immunity": true,
+    "workers": 1
+  },
+  "authorization": {
+    "timestamp_utc": "2026-09-04T06:48:59Z",
+    "author": "/root",
+    "statement": "I authorize the create-once scored launch of dedicated GLM A v5 successor plan sha256:e1f37476700beb16ccb3978f61a162a59e16501334d316417cd0718a94c2ef68 after exact parity, scoring-recovery, hydration, corrected attrition, duplicate, and overlap gates pass. It contains exactly 27 complete primary tasks/108 cells, uses fleet-train-high, binds A v5 runtime identities, excludes fenced source4, and must not repeat any scored cell.",
+    "scored_launch_authorized": true,
+    "must_not_repeat": true
+  },
+  "privacy": {
+    "scores_included": false,
+    "prompts_or_traces_included": false,
+    "task_content_included": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:d03ef6387c85259c79dac119dd9c9bf435a8d5aad569d8d3d71be89221b01da1"
+}

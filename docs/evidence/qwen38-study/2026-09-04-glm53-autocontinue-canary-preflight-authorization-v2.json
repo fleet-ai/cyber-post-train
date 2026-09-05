@@ -1,0 +1,36 @@
+{
+  "schema_version": "fleet-opencode-autocontinue-canary-preflight-authorization-v2",
+  "append_only": true,
+  "status": "PREFLIGHT_AUTHORIZED",
+  "authorized_at_utc": "2026-09-04T21:31:11Z",
+  "package_commit": "9c93095f60d627c239fe2d01f35efd918f328fe6",
+  "campaign_sha256": "sha256:63946f224a33eb0d2c2a6fdba34358ebf9ca379e5f0f156cd137c95a9b98097e",
+  "plan_sha256": "sha256:6bfc06e5ede3a572f03d74e810dc26006bdbf5134b841ca12565cdf13c02ca93",
+  "cell": {"source_rank": 13, "attempt": 1, "task_version_id": "9375a9b9-04e5-4f6f-ad47-286121278992"},
+  "preflight_identity": {"configmap_name": "chris-glm53-ac-canary1-pre-v2", "job_name": "chris-glm53-ac-canary1-v2-preflight", "sfs_root": "/mnt/sfs/jobs/chris-glm53-ac-canary1-v2-preflight", "scored_configmap_name": "chris-glm53-ac-canary1-run-v2", "scored_job_name": "chris-glm53-ac-canary1-v1", "scored_job_created": false},
+  "evidence": {
+    "task_inventory_receipt_sha256": "sha256:c71604d22b1d52a7091727b957e0f56f2e8e270e461c844fb57d48b392d831c5",
+    "task_inventory_execution_sha256": "sha256:b4c175db0d04746e16fa9314edb093f7306e859545cd95972694e461b7f82fcb",
+    "dedicated_parity_receipt_sha256": "sha256:07e733b4b161ed7c36113fc3688f04a42938d93a499b1bcc10c7cd21342900df",
+    "hosted_health_receipt_sha256": "sha256:d81a01ffe1087d7d85fe511bc9c978461ba3e24a2c15675871cfb8668c49bd85",
+    "shared_pvc_flock_receipt_sha256": "sha256:e9f34d35ac3c9e60d2698ebc1685374b98f13e41ac305df0609fb051f35c416c",
+    "controller_compatibility_receipt_sha256": "sha256:7851d18a8176abb08aebcb857960380f7f8a59bb854c51437e4010f169c82b6a",
+    "v1_bootstrap_failure_receipt_sha256": "sha256:c07804a36065a68cc821b0c57e7989f7e9caa077142969046b4bff913a592ee4",
+    "fresh_duplicate_inventory_receipt_sha256": null
+  },
+  "implementation": {
+    "package_commit": "9c93095f60d627c239fe2d01f35efd918f328fe6",
+    "plan_sha256": "sha256:6bfc06e5ede3a572f03d74e810dc26006bdbf5134b841ca12565cdf13c02ca93",
+    "plan_file_sha256": "sha256:2eada8438613465f8d9422836e9a6cce76f5a6eefbdc31635939b6ff3fd958c8",
+    "controller_sha256": "sha256:412bf8c0dd33d23e50a56c4597e5e0dfc90b122a8b06af0987059afdca53f7ef",
+    "frozen_controller_sha256": "sha256:e14670e40d2b1fbe4896e4b6dfb2902f121b81c8103efea3a74a11fed496809a",
+    "self_hosted_sha256": "sha256:16df432b5fde55112924d6106e6c03f09817846f1344ba0fe100dcf785c33d8b",
+    "runner_sha256": "sha256:b1f9c5028f65b0d7772538e3ce075310dc6c7a46b3de58d0196bc474e74e9e9d",
+    "endpoint_lease_sha256": "sha256:1df60ee13be8c6057113dbebadf9020343649e175b5de38aea41706748987019",
+    "compatibility_file_sha256": "sha256:ddc57a78fe4ef8e85352cfb9541773e0cb6b96aa29f6890903a266cf095e62fa",
+    "preflight_manifest_sha256": "sha256:979071556343cfa23373a94742fefa684a9d9e0e39ecbe1f2bea05c58dce998a"
+  },
+  "authorization": {"preflight_authorized": true, "launch_authorized": false, "author": "/root", "statement": "I authorize the create-once read-only GLM corrected-treatment canary v2 preflight only; it supersedes the terminal infrastructure-failed v1 preflight and no scored Job or scored ConfigMap may be created."},
+  "privacy": {"credentials_included": false, "prompts_or_traces_included": false, "scores_included": false},
+  "receipt_sha256": "sha256:a7cef96859a38ace334d5edbef22ffa1d87ed74d5c1d216857945035bf07f530"
+}

@@ -1,0 +1,16 @@
+{
+  "schema_version": "fleet-opencode-autocontinue-canary-preflight-v1",
+  "status": "PASSED",
+  "plan_sha256": "sha256:5b2c5c2792de233d70cc4cb5d1c2b5482807c3745090939bcb426227089ff3b3",
+  "release_receipt_sha256": "sha256:d1b764cd8f96bbe5d36a62956ea32931066740c8c77b8ac60c5474c7209f3720",
+  "fleet_team_id": "a1025f0b-ad67-49fc-a023-51800ab43e84",
+  "current_plan_run_and_claim_identities_absent": true,
+  "output_root_absent": true,
+  "sfs_job_roots_reconciled": 99,
+  "exact_treatment_sessions_reconciled": 0,
+  "job_uid": "4a90d77e-c89c-4c33-970b-5dd2e4e9696e",
+  "pod_uid": "ac946812-36a6-43b5-81e2-fe7638daa4d5",
+  "scores_read": false,
+  "prompts_or_traces_read": false,
+  "receipt_sha256": "sha256:21e459b1a1773266fb3e39b12d5cdaa727e0ecd6848173ac4f0840d339579790"
+}

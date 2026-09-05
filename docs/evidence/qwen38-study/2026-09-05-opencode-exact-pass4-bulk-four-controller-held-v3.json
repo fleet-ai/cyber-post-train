@@ -1,0 +1,72 @@
+{
+  "append_only": true,
+  "campaign_id": "chris-cyber-q38-glm53-exact-easiest100-pass4-v1",
+  "controllers": [
+    {
+      "cell_count": 199,
+      "controller": "qwen-a",
+      "job_name": "chris-q38-ac-exact100-bulk-a199-v3",
+      "plan_sha256": "sha256:42a0a1b8ebf379215aa140b9169a22fef8d43bcadd6977cd169f5fec21d08512",
+      "spec_path": "evals/fleet/configs/exact-pass4-bulk-qwen-a-v3.json",
+      "spec_sha256": "sha256:5b0a8110c05dc56db84fffdd9d6fa44c6d91f1e14f0e2008841b0e5a0d3728bf"
+    },
+    {
+      "cell_count": 200,
+      "controller": "qwen-b",
+      "job_name": "chris-q38-ac-exact100-bulk-b200-v3",
+      "plan_sha256": "sha256:9993aea3de03f8cd93801922cc2246bccc4a4b51cc65d5538709703a1283e9b5",
+      "spec_path": "evals/fleet/configs/exact-pass4-bulk-qwen-b-v3.json",
+      "spec_sha256": "sha256:91dc564b10d4c4b01dfb533a6e20ccbe14f6cd42e5955a182d997edb3e2b3e26"
+    },
+    {
+      "cell_count": 199,
+      "controller": "glm-a",
+      "job_name": "chris-glm53-ac-exact100-bulk-a199-v3",
+      "plan_sha256": "sha256:8ffb307e3fb864af5a5e351408557e0fa7bcc8e45b7a6875f4acd10381cf9629",
+      "spec_path": "evals/fleet/configs/exact-pass4-bulk-glm-a-v3.json",
+      "spec_sha256": "sha256:6510177efef1cebb093cb495cfabe4d2967d79d7afd6aabfefd3ee7b0fcdf020"
+    },
+    {
+      "cell_count": 200,
+      "controller": "glm-b",
+      "job_name": "chris-glm53-ac-exact100-bulk-b200-v3",
+      "plan_sha256": "sha256:a1f24bea8962cef8e17924eb564f02f90bc23fe3dadd6c9c149dff3176045c80",
+      "spec_path": "evals/fleet/configs/exact-pass4-bulk-glm-b-v3.json",
+      "spec_sha256": "sha256:934c3f340837cb7812f4f4f392cfc59486c646e65a0b4ae8584945bfed10abaa"
+    }
+  ],
+  "execution_policy": {
+    "accepted_active_or_claimed_cells_nonrepeatable": true,
+    "create_once": true,
+    "four_one_stream_jobs": true,
+    "global_claim_before_model_call": true,
+    "infrastructure_failure_quarantines_only_exact_cell": true,
+    "launch_authorized": false,
+    "maximum_streams_per_hosted_endpoint": 2,
+    "preemption_policy": "Never",
+    "priority_class": "fleet-serve-low"
+  },
+  "objects_created": false,
+  "privacy": {
+    "credentials_included": false,
+    "prompts_traces_flags_or_scores_included": false
+  },
+  "receipt_sha256": "sha256:47194d240fd1eb72ba9a329621818d678adf4f46b752b60ca1b8358c9055fbc7",
+  "remaining_cells": {
+    "glm-5.3": 399,
+    "qwen3.8-27b": 399,
+    "total": 798
+  },
+  "required_gates": [
+    "digest_valid_exact100_get_only_inventory_receipt",
+    "sealed_generation5_pre_model_failures_preserved_with_zero_sessions_and_zero_accepted_cells",
+    "sealed_generation6_pre_model_evictions_preserved_with_zero_sessions_and_zero_accepted_cells",
+    "accepted_qwen_generation7_canary_with_session_verifier_ingestion_cleanup_zero_restarts_and_released_lease",
+    "accepted_glm_generation7_canary_with_session_verifier_ingestion_cleanup_zero_restarts_and_released_lease",
+    "fresh_exhaustive_api_kubernetes_sfs_and_global_claim_reconciliation",
+    "append_only_bulk_release_receipt"
+  ],
+  "schema_version": "fleet-exact-pass4-bulk-held-v3",
+  "status": "HELD",
+  "universe_sha256": "sha256:b9bf7798f42a4818a960be5d004d3f6732815c69446ce16f6284dbe7c0c3cf28"
+}

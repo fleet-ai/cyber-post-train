@@ -1,0 +1,48 @@
+{
+  "schema_version": "fleet-opencode-autocontinue-generation2-canary-held-release-v2",
+  "append_only": true,
+  "status": "HELD",
+  "observed_at_utc": "2026-09-05T04:00:00Z",
+  "supersedes_held_receipt": {
+    "path": "docs/evidence/qwen38-study/2026-09-04-opencode-autocontinue-generation2-canaries-held-v1.json",
+    "receipt_sha256": "sha256:b3cf7d77808a0f7ed8a2a9ca4d30672979a7e529fca0f8283e733a8326effa2b"
+  },
+  "generation2_spec_sha256s": [
+    "sha256:9d8201974794edd3bad379721cf9c9e0e9ae0b978221d223d8165730302e737c",
+    "sha256:f4b9f990da87ac46da30a26d3c00a8d023b82ddf2251964343cc55eff309d938"
+  ],
+  "rendered_plan_sha256s": [
+    "sha256:1c98863eb54921e338020954e2395da0ecc085a6300c7fb60b97142ec0e949da",
+    "sha256:7b1bfaf18158e224595b4d31c2a56b064f3c78c848284558f070a28889b2a5c3"
+  ],
+  "jobs": [
+    "chris-q38-ac-r004-a1-g2-v1",
+    "chris-glm53-ac-r013-a1-g2-v1"
+  ],
+  "execution_generation": 2,
+  "statistical_cells": 2,
+  "implementation": {
+    "module_path": "evals/fleet/autocontinue_generation2_canary_v2.py",
+    "module_sha256": "sha256:cc96a7b1a86b1968b70a7217226d82d1901409cf70c35fdbc590378763703571",
+    "manifest_path": "evals/fleet/cluster/opencode-autocontinue-generation2-canaries-v2.yaml",
+    "manifest_sha256": "sha256:669daee0eeb25c6e5f0ce33985df526107da43c04162b5fba9ca153eb1b257a6",
+    "run_path": "evals/fleet/scripts/run_opencode_autocontinue_generation2_canary_v2.sh",
+    "run_sha256": "sha256:b0c9926ab1eaf86115c1e3a4e1c28ad6d0752fd7c73b5bddc08a773cfdc77a66",
+    "submit_path": "evals/fleet/scripts/submit_opencode_autocontinue_generation2_canaries_v2.sh",
+    "submit_sha256": "sha256:ea8ef4c03ef474b230c0ea47d080015e6c2355624efe6bca513b86278e300c16"
+  },
+  "launch_authorized": false,
+  "bulk_release_authorized": false,
+  "dedicated_serving_authorized": false,
+  "remaining_gates": [
+    "independent_package_audit",
+    "fresh_hosted_route_and_duplicate_inventory",
+    "append_only_model_specific_scoring_releases",
+    "explicit_root_launch_authorization"
+  ],
+  "privacy": {
+    "prompts_traces_flags_or_scores_included": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:cc61e3926024db42c5dfb638b84d6688ddded329e3d0ed75a112b0f5597bf05d"
+}

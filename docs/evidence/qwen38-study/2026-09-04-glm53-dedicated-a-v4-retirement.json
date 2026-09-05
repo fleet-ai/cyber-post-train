@@ -1,0 +1,76 @@
+{
+  "schema_version": "fleet-cyber-glm53-dedicated-serving-retirement-v1",
+  "recorded_at": "2026-09-04T05:58:25Z",
+  "classification": "authorized_retirement_after_preemption",
+  "authorization": {
+    "author": "/root",
+    "scope": "delete_only_api_run_ft-run-99d69710_bound_to_rayjob_uid_558b9810-86d2-4417-8f54-2cab51bc9b09",
+    "replacement_scoring_authorized": false
+  },
+  "serving_run": {
+    "api_name": "ft-run-99d69710",
+    "api_run_id": "99d69710-a1a2-47da-8189-6a6feeb810ee",
+    "api_status_before_retirement": "SUSPENDED",
+    "ray_job_uid": "558b9810-86d2-4417-8f54-2cab51bc9b09",
+    "workload_name": "rayjob-ft-run-99d69710-6ee1e",
+    "workload_uid": "0559e1c2-216a-44e2-97da-6ba4ff6a7606",
+    "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-glm53-tp8-a-v4",
+    "runtime_image_digest": "ghcr.io/fleet-ai/cyber-post-train-glm53-runtime@sha256:ec93ba50613fd13fb4c0b0a9105767ab18209a1e0108dab0923aad694c0206ec",
+    "priority_class": "fleet-infra-quiet"
+  },
+  "preemption": {
+    "evicted_at": "2026-09-04T05:55:20Z",
+    "preemptor_workload_uid": "51f354e7-b7aa-4547-b142-f84990633c58",
+    "preemptor_ray_job_name": "ft-run-5b0c2a87",
+    "preemptor_ray_job_uid": "e1fd8aa8-8021-4cf9-a19f-67e845f3eadc",
+    "preemptor_priority_class": "fleet-train-high",
+    "owned_replica_b_was_preemptor": false
+  },
+  "runtime_after_preemption": {
+    "ray_cluster_present": false,
+    "head_pod_present": false,
+    "service_present": false,
+    "ray_job_suspended": true,
+    "workload_admitted": false
+  },
+  "scored_controller_reconciliation": {
+    "job_name": "chris-cyber-glm53-opencode11827-dedicated-a-even27-p4-v1",
+    "job_uid": "aa9a79a9-37dd-4910-a094-a172d058749b",
+    "pod_uid": "b26a37e3-0a15-4c1e-96a9-d065de50ba59",
+    "job_present": false,
+    "pod_present": false,
+    "terminal_receipt_present": false,
+    "classification": "interrupted_incomplete"
+  },
+  "preserved_scored_evidence": {
+    "sfs_root": "/mnt/sfs/jobs/chris-cyber-glm53-opencode11827-dedicated-a-even27-p4-v1",
+    "selected_file_count": 31,
+    "selected_byte_count": 75336,
+    "selected_manifest_sha256": "sha256:d442237b55222bed483848c84019efc3ea6ec6b090d1852b6b7d68fdf51dd717",
+    "attempt_claims": 4,
+    "task_claims": 1,
+    "task_results": 0,
+    "accepted_outcomes": 3,
+    "noncreditable_outcomes": 0,
+    "claimed_incomplete_outcomes": 1,
+    "accepted_receipts_digest_valid": 3,
+    "accepted_ingestions_completed": 3,
+    "accepted_cleanups_completed": 3,
+    "accepted_distinct_sessions": 3,
+    "accepted_distinct_verifier_executions": 3,
+    "retry_or_duplicate_launched": false
+  },
+  "deletion_semantics": {
+    "api_history_list_retained": true,
+    "sfs_evidence_retained": true,
+    "ray_runtime_resources_expected_deleted": true,
+    "gpu_release_required_before_successor": true
+  },
+  "privacy": {
+    "scores_read": false,
+    "prompts_or_traces_read": false,
+    "flags_read": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:5dca4bec384231122afe95c37d77a692252a56b453e664cd0f54cad9614a85c9"
+}

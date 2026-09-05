@@ -1,0 +1,73 @@
+{
+  "schema_version": "fleet-glm53-dedicated-a-controller-stop-tombstone-v2",
+  "append_only": true,
+  "supersedes": {
+    "path": "docs/evidence/qwen38-study/2026-09-04-glm53-dedicated-a-controller-stop-tombstone-v1.json",
+    "file_sha256": "sha256:74d27aeb135245956e8c256f44ca77da24c2dc5fa103b616e505e3160ed2c96c",
+    "receipt_sha256": "sha256:9ef664c9a2abcdb99137d4b1a648b39b5134c3985ec48897716b92fb107e4e1d",
+    "reason": "the original receipt incorrectly classified source4 attempt4 as zero execution because its file-depth audit omitted the nested agent-output stream"
+  },
+  "observed_at": "2026-09-04T06:00:24Z",
+  "stopped_controller": {
+    "job_name": "chris-cyber-glm53-opencode11827-dedicated-a-even27-p4-v1",
+    "job_uid": "aa9a79a9-37dd-4910-a094-a172d058749b",
+    "pod_name": "chris-cyber-glm53-opencode11827-dedicated-a-even27-p4-v1-hzvsb",
+    "pod_uid": "b26a37e3-0a15-4c1e-96a9-d065de50ba59",
+    "plan_sha256": "sha256:4f8d4fcf50af8abccf3b9d272a18755f9be0bc862a66fe25bba691bee8a22208",
+    "termination_observed_at": "2026-09-04T05:56:50Z",
+    "job_absent_after_delete": true,
+    "pod_absent_after_delete": true,
+    "sfs_preserved": true,
+    "serving_mutated": false
+  },
+  "source4_attempt4": {
+    "task_claim_sha256": "sha256:6cd82335bad5f434e6de49df0b2f421e7129c9790852094614825f1bdde3f157",
+    "attempt_claim_sha256": "sha256:d23ef95943d03994ab21f36697dcc734add0d8c016e08ecefc9d176c54e3f1e6",
+    "agent_execution_started": true,
+    "agent_execution_completed": false,
+    "opencode_stream_present": true,
+    "opencode_stream_bytes": 301387,
+    "opencode_stream_file_sha256": "sha256:1ba3665873543248096fd015d9ef629a0d34c9ad2643fdfe4a48476bae15b202",
+    "opencode_stream_last_write_at": "2026-09-04T05:55:17Z",
+    "opencode_stderr_bytes": 0,
+    "model_proxy_log_present": false,
+    "result_present": false,
+    "reward_result_present": false,
+    "verifier_execution_present": false,
+    "session_ingest_present": false,
+    "accepted_or_noncreditable_receipt_present": false,
+    "api_planned_run_id_matches": 0,
+    "api_verifier_matches": 0,
+    "scientific_classification": "infrastructure_incomplete_mid_agent_pre_scoring_session_verifier",
+    "scored_or_terminal_cell": false,
+    "retry_allowed": false
+  },
+  "source4_task_fence": {
+    "accepted_attempt_count": 3,
+    "attempt4_incomplete_count": 1,
+    "whole_task_fenced": true,
+    "accepted_sessions_outside_successor_estimator": 3,
+    "must_not_repeat_any_source4_cell": true
+  },
+  "later_task_claim_audit": {
+    "task_claim_files": ["rank-001.json"],
+    "rank2_claim_present": false,
+    "source6_claim_present": false,
+    "later_task_claimed": false
+  },
+  "successor_gate": {
+    "original_zero_execution_classification_forbidden": true,
+    "new_create_once_controller_required": true,
+    "source4_must_not_repeat": true,
+    "r110_lock_and_hydration_required": true,
+    "exact_serving_binding_and_duplicate_preflight_required": true,
+    "scored_launch_authorized": false
+  },
+  "privacy": {
+    "scores_included": false,
+    "prompts_or_traces_included": false,
+    "task_content_included": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:9bf6683d80c2dd517e371709a1aa2db0a13e1f4089a09a8296941c6df7054b79"
+}

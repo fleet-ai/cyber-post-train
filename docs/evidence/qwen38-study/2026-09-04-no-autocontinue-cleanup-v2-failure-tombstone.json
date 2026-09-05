@@ -1,0 +1,22 @@
+{
+  "schema_version": "fleet-opencode-legacy8-cleanup-failure-tombstone-v2",
+  "recorded_at": "2026-09-04T19:41:41Z",
+  "predecessor_failure_receipt_sha256": "sha256:d57b4563150bdc91f10a720dee2bd40747bc9914379a24b2e7a3bcf8fb7ca8f5",
+  "retirement_receipt_sha256": "sha256:2a904547d5450e46982d33466f8a55c3bbe41652bd6705aa451172dc20656d8a",
+  "manifest_file_sha256": "sha256:776e060f916ee59b92ea15648821ef4873be050568b2143077c2dfde200e75b1",
+  "job": {"name": "chris-cyber-opencode-legacy8-env-cleanup-v2", "uid": "67d69dac-b5b4-43d7-9c39-e7f8e841426c", "created_at": "2026-09-04T19:41:10Z", "failed_at": "2026-09-04T19:41:15Z", "failed": true, "reason": "BackoffLimitExceeded"},
+  "pod": {"name": "chris-cyber-opencode-legacy8-env-cleanup-v2-vdbpt", "uid": "dcd83092-cb46-4d40-9636-60057f67be45", "phase": "Failed", "exit_code": 1, "restart_count": 0, "finished_at": "2026-09-04T19:41:13Z"},
+  "sanitized_failure": {
+    "exception_type": "RuntimeError",
+    "message": "runtime binding instance identity is invalid",
+    "cause_type": "ValueError",
+    "cause_message": "badly formed hexadecimal UUID string",
+    "log_sha256": "sha256:f7a764694b6084dab10caa304bb43e62737fa06d5b32837bc6f84a8d1a5f8e96",
+    "root_cause": "v2_invented_an_unsupported_uuid_instance_id_contract",
+    "failed_in_complete_pre_delete_validation_phase": true
+  },
+  "sfs": {"root": "/mnt/sfs/jobs/chris-cyber-opencode-legacy8-env-cleanup-v2", "root_present": false, "cell_cleanup_receipts": 0, "terminal_receipt_present": false},
+  "outcome": {"environment_delete_calls_completed": 0, "instances_proven_absent": 0, "v2_retry_allowed": false, "fresh_v3_identity_required": true},
+  "privacy": {"credentials_included": false, "instance_ids_included": false, "prompts_or_traces_included": false, "scores_included": false},
+  "receipt_sha256": "sha256:5febbd0530058dbfee5796c02ef1064825f6eb93145d2ce4cfc86aad308bba87"
+}

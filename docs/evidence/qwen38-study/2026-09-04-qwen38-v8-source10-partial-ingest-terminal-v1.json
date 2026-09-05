@@ -1,0 +1,81 @@
+{
+  "schema_version": "fleet-qwen38-v8-partial-ingest-terminal-v1",
+  "observed_at": "2026-09-04T12:19:17Z",
+  "controller": {
+    "job_name": "chris-cyber-q38-opencode11827-hosted-successor49-p4-v8",
+    "job_uid": "84727b82-5187-425b-ba4b-9598f46691c4",
+    "pod_name": "chris-cyber-q38-opencode11827-hosted-successor49-p4-v8-qmr4x",
+    "pod_uid": "42df9b32-60c2-45aa-8ce3-ba850b82b909",
+    "pod_restart_count": 0,
+    "evaluator_exit_code": 1,
+    "finished_at": "2026-09-04T12:19:17Z",
+    "job_terminal_reason": "BackoffLimitExceeded",
+    "plan_sha256": "sha256:8d6df6af63b308d648fb0c7ea9115f90b16de1d7e57b0968dda8fc8fd4a20c81"
+  },
+  "last_claim": {
+    "rank": 5,
+    "source_rank": 10,
+    "attempt": 3,
+    "run_id": "chris-cyber-q38-opencode11827-hosted-successor49-p4-v8-sr010-a3-22d233f7",
+    "task_claim_sha256": "sha256:8d7bbc380bb2cb63399b77744de51ffc6e710ca001448d05cbdafdfe0b0b92af",
+    "attempt_claim_sha256": "sha256:1cc7c667867dd56965f91e779b48cd8415b97dd39c814b8c37ad6a00e6b0532a",
+    "attempt_claim_file_sha256": "sha256:c3fd2f7e20137a0ba21e87de6ead3653ae574af1bb0b6c5c7b800e5dd64db26c",
+    "config_sha256": "sha256:833af87ee84a576145240c26f305d70b0faa7c605c8d32015fdc928d77d43dcb"
+  },
+  "attempt_evidence": {
+    "task_version_id": "53d2f089-6502-4208-9795-d6ba7277fa9a",
+    "session_id": "579cc47e-3b00-4868-894b-8def06761b1e",
+    "verifier_execution_id": "f4b61f8b-e087-4f8b-9bef-57859f367e03",
+    "binding_file_sha256": "sha256:0f459b16b773bb5336a16e9b4281de34f30ca03c994607a7953514ade27385fc",
+    "result_file_sha256": "sha256:c7839b3fc401ba1bf4c14c5291a992dfa67b624853059616e62cf5d3a61dc4d6",
+    "reward_result_file_sha256": "sha256:3d0682044a443ef29f9e2fb02b95dd12e6bd3deafd33171416f865677bd7f42c",
+    "session_ingest_file_sha256": "sha256:c167573d55e0525683e5a1cba0ad3bf8c9b22aa1651b13515a7a2232b6eeef1f",
+    "cleanup_file_sha256": "sha256:a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+    "trace_manifest_file_sha256": "sha256:83e52c5d3d08de741fb6b7ed23980e93c74b9fa5fd131dbec2c4b1a447d72677",
+    "agent_termination": "completed",
+    "reward_result_present": true,
+    "verifier_execution_present": true,
+    "cleanup_complete": true,
+    "session_ingest_status": "failed",
+    "session_ingest_http_status": 500,
+    "session_ingest_method": "POST",
+    "session_ingest_route": "/v1/sessions/ingest",
+    "normalized_message_count": 684,
+    "chunks_completed": 10,
+    "chunk_count": 22,
+    "persisted_prefix_message_count": 320,
+    "accepted_receipt_present": false,
+    "noncreditable_receipt_present": false
+  },
+  "authoritative_inventory": {
+    "unique_session_row_count": 1,
+    "session_status": "in_progress",
+    "session_model": "qwen3.8-27b",
+    "verifier_execution_projected": false,
+    "transcript_route": "/v1/sessions/{session_id}/transcript",
+    "transcript_read_in_memory_only": true,
+    "transcript_content_persisted_or_emitted": false
+  },
+  "classification": {
+    "state": "infrastructure_incomplete_partial_session_ingest",
+    "model_or_verifier_replay_allowed": false,
+    "same_session_suffix_resume_pending": true,
+    "replacement_selection_allowed": false,
+    "source10_attempt4_unstarted": true,
+    "source10_primary_task_complete": false
+  },
+  "untouched_tail": {
+    "source_ranks": [11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 52, 53, 54, 55],
+    "task_count": 44,
+    "cell_count": 176,
+    "claims_present": 0,
+    "attempt_roots_present": 0
+  },
+  "privacy": {
+    "scores_included": false,
+    "prompts_or_traces_included": false,
+    "task_content_included": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:bf34f05d3dff0de55b0f7aeff948b3b6c793dfa64adb298d4ae7e16d42666056"
+}

@@ -1,0 +1,59 @@
+{
+  "schema_version": "fleet-qwen38-post-partial-tail-scoring-release-v1",
+  "append_only": true,
+  "created_at": "2026-09-04T17:39:39Z",
+  "authorized_at": "2026-09-04T17:39:39Z",
+  "plans": {
+    "qwen38_post_partial_tail_a": {
+      "plan_sha256": "sha256:ce973c3842be767e46c79422dce8395932d81626b29e6e34c4b9bf05d89eda9e",
+      "source_ranks": [11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32],
+      "task_count": 22,
+      "cell_count": 88
+    },
+    "qwen38_post_partial_tail_b": {
+      "plan_sha256": "sha256:410324cc8a68c8d45746814c3882dc1c07e9182ce0c89a626eb5dfb045370131",
+      "source_ranks": [33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 52, 53, 54, 55],
+      "task_count": 22,
+      "cell_count": 88
+    }
+  },
+  "gates": {
+    "partial_ingest_incident_receipt_sha256": "sha256:bf34f05d3dff0de55b0f7aeff948b3b6c793dfa64adb298d4ae7e16d42666056",
+    "pairwise_task_and_cell_overlap": 0,
+    "source10_and_r56_excluded": true,
+    "each_preflight_must_succeed_exclusively": true,
+    "fresh_api_kubernetes_sfs_duplicate_check_required": true,
+    "current_plan_identity_absence_required": true,
+    "corrected_exit1_credit_policy_required": "credit_only_if_reward_ingest_cleanup_and_authoritative_session_match"
+  },
+  "frozen_no_autocontinue_renderer": {
+    "context_management": "opencode_1.18.27_native_compaction_no_autocontinue",
+    "settings_canonical_sha256": "sha256:fa7464a2a043b1e02febbabc70b1fce4278ec31a4d0968e4318677cae1f36e24",
+    "settings_file_sha256_with_newline": "sha256:2af2db821b685da8029f8d5765e1ce34c92c87df4a9f14315f56fb22ef6a90ed",
+    "plugin_sha256": "sha256:3542f8fe30d270bec6ee8e832081da8169fd78b667647ecd119425b1961a7a28",
+    "matches_predecessor_v8_runtime_bytes": true
+  },
+  "scheduling": {
+    "required_priority_class": "fleet-train-high",
+    "workers_per_shard": 1,
+    "maximum_qwen_hosted_streams": 2,
+    "true_non_preemptible_available": false,
+    "priority_class_is_not_preemption_immunity": true
+  },
+  "authorization": {
+    "timestamp_utc": "2026-09-04T17:39:39Z",
+    "author": "/root",
+    "statement": "I authorize create-once launch of the independently audited Qwen3.8 hosted untouched-tail shards with exact rebuilt plans A sha256:ce973c3842be767e46c79422dce8395932d81626b29e6e34c4b9bf05d89eda9e (sources11..32, 88 cells) and B sha256:410324cc8a68c8d45746814c3882dc1c07e9182ce0c89a626eb5dfb045370131 (sources33..50 plus52..55, 88 cells), only after exact releases/manifests are committed, each create-once preflight exclusively succeeds, and fresh exhaustive API/Kubernetes/SFS checks prove no planned run/cell is accepted, claimed, active, or present. Preserve the exact v8 Qwen revision, OpenCode1.18.27 frozen no-autocontinue bytes, task/environment/verifier/tool identities, corrected verifier-backed exit1 credit policy, and fleet-train-high. Exclude source10 and r56. Use at most two Qwen hosted streams; never repeat any claimed/scored/ingested/accepted/reconciled/active cell.",
+    "scored_launch_authorized": true,
+    "create_once": true,
+    "must_not_repeat": true
+  },
+  "privacy": {
+    "scores_included": false,
+    "prompts_included": false,
+    "transcripts_included": false,
+    "flags_included": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:8d28b60f68a85926184d0a0e8b683da2c86db5225a9dce4300faacb3b77e301f"
+}

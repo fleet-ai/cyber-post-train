@@ -1,0 +1,136 @@
+{
+  "schema_version": "fleet-score-blind-r114-unused-inventory-v1",
+  "receipt_id": "glm53-dedicated-b-r114-unused-inventory-v1",
+  "recorded_at": "2026-09-04T19:19:37Z",
+  "subject": {
+    "replacement_rank": 114,
+    "historical_rank": 122,
+    "serving_block": "dedicated_b_v5_whole_task_replacement",
+    "task_key": "cysec1-2-fubspot-gen_blackbox-d096d72a3734e3b85fde5c28__blackbox_ctf_v1",
+    "task_version_id": "66051718-314a-4dad-86ab-c7b9b72fa514",
+    "model": "glm-5.3",
+    "selection_supplement_receipt_sha256": "sha256:3faf062cd63315708c5468ab396fb4a7591c7266c297bb946e0ada904409c2c0"
+  },
+  "authority": {
+    "api_base": "https://orchestrator.fleetai.com",
+    "account_route": "/v1/account",
+    "session_list_route": "/v1/sessions",
+    "team_name": "fleet",
+    "team_id": "a1025f0b-ad67-49fc-a023-51800ab43e84"
+  },
+  "credentialed_api_observation": {
+    "manifest_path": "evals/fleet/cluster/glm53-dedicated-b-r114-unused-inventory-job-v1.yaml",
+    "manifest_file_sha256": "sha256:7f877800894ab397a550bed5d9ae98fcf8983f158f2c5aa51cf1fd6b8df19b1e",
+    "job_name": "chris-cyber-glm53-r114-unused-inventory-v1",
+    "job_uid": "0506e753-bc89-4517-aa2f-d6c6e8809377",
+    "pod_name": "chris-cyber-glm53-r114-unused-inventory-v1-5brcg",
+    "pod_uid": "b54ae173-3181-4994-8153-a3625302a87c",
+    "priority_class": "fleet-train-high",
+    "job_succeeded": true,
+    "pod_exit_code": 0,
+    "pod_restart_count": 0,
+    "observation_receipt_sha256": "sha256:2353a163214302d408d2c6f11a95358a282defeb29a5d9de95faa50a8d3e4514",
+    "pages": 1,
+    "rows_scanned": 24,
+    "unique_session_ids": 24,
+    "pagination_exhausted": true,
+    "exact_model_rows": 0,
+    "exact_model_and_projected_version_rows": 0,
+    "exact_current_treatment_rows": 0,
+    "zero_same_model_rows_is_stronger_than_optional_treatment_metadata_projection": true
+  },
+  "independent_prior_api_observation": {
+    "observer": "/root/gpt_timeline_audit",
+    "observed_at": "2026-09-04T19:16:04.169617Z",
+    "pages": 1,
+    "rows_scanned": 24,
+    "exact_model_rows": 0,
+    "exact_model_and_projected_version_rows": 0
+  },
+  "sfs_observation": {
+    "manifest_path": "evals/fleet/cluster/glm53-dedicated-b-r114-sfs-inventory-job-v1.yaml",
+    "manifest_file_sha256": "sha256:12af8ecf5e69225917cacc157ee50ae199b8fd748ed6e803f3a170158be20317",
+    "job_name": "chris-cyber-glm53-r114-sfs-inventory-v1",
+    "job_uid": "aedfdd63-8623-418f-b176-8b92ffa57a06",
+    "pod_name": "chris-cyber-glm53-r114-sfs-inventory-v1-7vt7g",
+    "pod_uid": "7b08f00d-bd88-42ac-8595-6ca3516b910b",
+    "priority_class": "fleet-train-high",
+    "job_succeeded": true,
+    "pod_exit_code": 0,
+    "pod_restart_count": 0,
+    "observation_receipt_sha256": "sha256:bab878714855f4df5bbfcb8e6d4c1f50a5301c695d831030c14aa3a7cbb4bf00",
+    "api_observation_receipt_sha256": "sha256:2353a163214302d408d2c6f11a95358a282defeb29a5d9de95faa50a8d3e4514",
+    "files_scanned": 1504,
+    "observer_roots_excluded": [
+      "chris-cyber-glm53-r114-unused-inventory-v1",
+      "chris-cyber-glm53-r114-sfs-inventory-v1"
+    ],
+    "preexisting_task_key_reference_files": 0,
+    "preexisting_task_version_reference_files": 0
+  },
+  "kubernetes_observation": {
+    "observed_at": "2026-09-04T19:19:37Z",
+    "namespace": "fleet-train-jobs",
+    "objects_scanned": [
+      "Job",
+      "Pod",
+      "ConfigMap"
+    ],
+    "exact_identifier_reference_objects": [
+      {
+        "kind": "Job",
+        "name": "chris-cyber-glm53-r114-unused-inventory-v1",
+        "uid": "0506e753-bc89-4517-aa2f-d6c6e8809377",
+        "classification": "read_only_inventory_observer_succeeded"
+      },
+      {
+        "kind": "Pod",
+        "name": "chris-cyber-glm53-r114-unused-inventory-v1-5brcg",
+        "uid": "b54ae173-3181-4994-8153-a3625302a87c",
+        "classification": "read_only_inventory_observer_succeeded"
+      },
+      {
+        "kind": "Job",
+        "name": "chris-cyber-glm53-r114-sfs-inventory-v1",
+        "uid": "aedfdd63-8623-418f-b176-8b92ffa57a06",
+        "classification": "read_only_inventory_observer_succeeded"
+      },
+      {
+        "kind": "Pod",
+        "name": "chris-cyber-glm53-r114-sfs-inventory-v1-7vt7g",
+        "uid": "7b08f00d-bd88-42ac-8595-6ca3516b910b",
+        "classification": "read_only_inventory_observer_succeeded"
+      },
+      {
+        "kind": "ConfigMap",
+        "name": "chris-cyber-qwen36-qcode-fleet-test20-base-v1",
+        "uid": "1132ae88-c651-4c43-813b-04b51a53cc02",
+        "classification": "historical_qwen36_failed_pre_execution_config",
+        "associated_job_uid": "84bfbf73-b79c-4cd8-a9ae-30c101e8ae33",
+        "associated_job_failed": true,
+        "active_pods": 0,
+        "exact_glm_model_api_or_sfs_cell_created": false
+      }
+    ],
+    "active_scored_claim_references": 0,
+    "active_current_treatment_references": 0,
+    "unclassified_reference_objects": 0
+  },
+  "conclusion": {
+    "exact_current_treatment_api_rows": 0,
+    "preexisting_sfs_references": 0,
+    "active_kubernetes_scored_references": 0,
+    "unused_for_current_glm_experiment": true,
+    "r114_hydration_and_exact_dedicated_b_v5_plan_still_required": true,
+    "scored_launch_authorized": false
+  },
+  "privacy": {
+    "credentials_included": false,
+    "session_ids_included": false,
+    "session_messages_read": false,
+    "scores_read": false,
+    "prompts_or_traces_read": false,
+    "matched_file_content_included": false
+  },
+  "receipt_sha256": "sha256:c9f191337e4f6ed1853e9b45bbf5e89f4f251b4207476cdeab010b31e702db8c"
+}

@@ -1,0 +1,55 @@
+{
+  "authority_module_file_sha256": "sha256:88427ddb52f1e0c81f1be02b86234cc5f7457cf6a33a0f0afc8b1f7e8ea1f642",
+  "authority_module_path": "evals/fleet/glm53_dedicated_v6.py",
+  "controller_heartbeat_file_sha256": "sha256:d779fb5e96e04ea088a4fe84c3edbb2eb06a0e40323419201d67b033947c730a",
+  "controller_heartbeat_path": "evals/fleet/scripts/glm53_dedicated_v6_controller_heartbeat.sh",
+  "controller_session_counts": {
+    "dedicated-a-1": 52,
+    "dedicated-a-2": 48,
+    "dedicated-b-1": 52,
+    "dedicated-b-2": 48,
+    "hosted-1": 99,
+    "hosted-2": 100
+  },
+  "documentation_file_sha256": "sha256:b1083184d5bed605af8e2e4a763647397894992dab76481f01a1045fca637f44",
+  "documentation_path": "evals/fleet/DEDICATED_GLM53_V6.md",
+  "launch_authorized": false,
+  "lifecycle_file_sha256": "sha256:2c573d474470e8750e31fc2707ab49125c02b2d5093540e3f44a8cb979e49e44",
+  "lifecycle_path": "evals/fleet/scripts/glm53_dedicated_v6_lifecycle.sh",
+  "privacy": {
+    "credentials_included": false,
+    "prompts_traces_flags_or_scores_included": false
+  },
+  "receipt_sha256": "sha256:5a6be7e0bf6d255fb416da4c4d228f0920c9f9faf526dd5bd302cccaa108c478",
+  "release_blockers": [
+    "generation5_glm_canary_must_be_accepted",
+    "fresh_prebulk_reconciliation_must_accept_exact_unstarted_cells",
+    "authenticated_jobs_api_preview_must_render_ghcr_pull_for_each_replica",
+    "replica_a_uid_bound_parity_and_scored_canary_before_second_stream_or_replica_b",
+    "replica_b_uid_bound_parity_and_scored_canary_before_its_second_stream"
+  ],
+  "resource_policy": {
+    "maximum_gpus": 16,
+    "maximum_nodes": 2,
+    "post_ready_no_heartbeat_shutdown_seconds": 600,
+    "preemption_policy": "Never",
+    "priority_class": "fleet-serve-low"
+  },
+  "schema_version": "fleet-glm53-dedicated-serving-v6-held-receipt-v1",
+  "server_request_sha256": {
+    "A": "sha256:5b433de657e622bc1748e898f1eac098f10c9d3673825d257ec72fa7c592098f",
+    "B": "sha256:8dfc078bbbde490b18643c5f56b010becff9fbebbb71370f5c57e4ce7d9e03ba"
+  },
+  "spec_file_sha256": "sha256:d246d96f68cc3665cf15343352a24321ed7fe60459df4fff2fe7eb8c24ec97e5",
+  "spec_path": "evals/fleet/configs/glm53-dedicated-serving-v6-held.json",
+  "staging_receipt_sha256": "sha256:9a680f714de5c72e60dc6b08f363a8c82658dc1540bbb9aab90a3b8939445869",
+  "status": "HELD",
+  "submit_file_sha256": "sha256:fc405d1237c34cc14384b255ffbeb8b345bd96e1102688bcdc9bd83bc19bc58e",
+  "submit_path": "evals/fleet/scripts/submit_glm53_dedicated_v6.sh",
+  "total_remaining_glm_cells": 399,
+  "treatment_policy": {
+    "hosted_and_dedicated_results_pooled": false,
+    "maximum_streams_per_endpoint": 2,
+    "whole_task_serving_blocks": true
+  }
+}

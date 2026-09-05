@@ -1,0 +1,61 @@
+{
+  "schema_version": "fleet-glm53-dedicated-v5-tail-unused-inventory-v1",
+  "recorded_at": "2026-09-04T18:38:52Z",
+  "append_only": true,
+  "source_plans": {
+    "A": "sha256:e1f37476700beb16ccb3978f61a162a59e16501334d316417cd0718a94c2ef68",
+    "B": "sha256:b3436ff09a6f382dac12029dbd9bea2270ccf52ab7c945f07464e715590305b8"
+  },
+  "candidate_source_ranks": {
+    "A": [36, 38, 40, 42, 44, 46, 48, 50, 52, 102, 104, 110],
+    "B": [82, 84, 86, 88, 90, 92, 94, 96, 98, 100, 101, 103, 105, 107]
+  },
+  "active_stream_exclusions": [
+    {
+      "campaign_id": "chris-cyber-glm53-opencode11827-ded-a-v5-repair3-p4-v2",
+      "job_uid": "1453ada3-0ddd-46d2-bbba-fbe0fc984c7a",
+      "plan_sha256": "sha256:d2b0016bd53d78a2e2c3e865c502bb6dd37d13a7103f714c38c9ff99f0f73075"
+    },
+    {
+      "campaign_id": "chris-cyber-glm53-opencode11827-ded-a-v5-bulk16-34-p4-v1",
+      "job_uid": "5f8bdd28-3c37-408a-9a18-b806dd7de7ef",
+      "plan_sha256": "sha256:c553335ec62e7c996ee0a1e336dc4c4acf4840dbc695391b015a6beeb726a4f9"
+    },
+    {
+      "campaign_id": "chris-cyber-glm53-opencode11827-ded-b-v5-r111-replacement-p4-v1",
+      "job_uid": "3a8297d1-9537-4a52-82c4-e4ea305bb0e2",
+      "plan_sha256": "sha256:46ff144a7d6dd6f6cc111f3d3bd4881e3ce507ff1813fcc756297b00ed7759db"
+    },
+    {
+      "campaign_id": "chris-cyber-glm53-opencode11827-ded-b-v5-bulk58-80-p4-v1",
+      "job_uid": "d5241d76-9814-4de0-9036-3f1080b0f669",
+      "plan_sha256": "sha256:4f7db0f60b33a7162fb2bb57c958102b27d01b07d562a13d57e4b367246065b7"
+    }
+  ],
+  "score_blind_overlap_audit": {
+    "candidate_task_count": 26,
+    "api_exact_glm53_task_version_sessions": 0,
+    "glm_sfs_claim_result_refs": 0,
+    "active_job_configmap_refs": 0,
+    "current_active_stream_cell_overlap": 0,
+    "r112_r113_replacement_cell_overlap": 0,
+    "all_candidates_unstarted": true
+  },
+  "future_submission_gate": {
+    "fresh_api_kubernetes_sfs_duplicate_preflight_required": true,
+    "required_priority_class": "fleet-train-high",
+    "required_harness_context_policy": "opencode_1.18.27_native_compaction_no_autocontinue",
+    "maximum_active_worker_streams_per_endpoint": 2,
+    "wait_for_existing_stream_capacity": true,
+    "scored_launch_authorized": false
+  },
+  "privacy": {
+    "scores_read": false,
+    "scores_included": false,
+    "prompts_included": false,
+    "traces_included": false,
+    "flags_included": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:378e8476ad89e2331b9c7382c790d4f2ba6858a674967a35fcf6bc4390d23426"
+}

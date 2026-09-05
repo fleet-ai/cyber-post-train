@@ -1,0 +1,60 @@
+{
+  "schema_version": "fleet-opencode-autocontinue-generation3-canary-held-release-v1",
+  "append_only": true,
+  "status": "HELD",
+  "observed_at_utc": "2026-09-05T05:10:00Z",
+  "incident": {
+    "path": "docs/evidence/qwen38-study/2026-09-04-opencode-autocontinue-generation2-admission-failure-v1.json",
+    "file_sha256": "sha256:c0c726cd72ee061e924639e36db260c46e3283d6265ae1935d6a4250ffc417cc",
+    "receipt_sha256": "sha256:99bbde2c57290cad719a436c054deab12675257ac84f8dfb5471787aa2e5ee0a"
+  },
+  "tombstones": {
+    "path": "docs/evidence/qwen38-study/2026-09-04-opencode-autocontinue-generation2-admission-tombstones-v1.json",
+    "file_sha256": "sha256:38939ff1884b66b72caa266da09cbdeb67f525dc075abbc3fc8e268f900cab63",
+    "receipt_sha256": "sha256:348d8ebe2a80eed139e9f57a6c796f95c3f34b28040aea4aaaf8fb0b5b9a156a"
+  },
+  "generation3_spec_sha256s": [
+    "sha256:ce81660cbc136ee302e9f4ef8075e60cdd3e2bf9fc28cbd15ff50b32e915f929",
+    "sha256:bcaa11f0619bed2b5f1e3ee80ec7d27e2216e5f67ef4013b7a1f1373ea6d5b9a"
+  ],
+  "rendered_plan_sha256s": [
+    "sha256:31d0795205a02b8f705ba6db9f2d9c59df9106bb28e6d990c85bf6f03b9107f4",
+    "sha256:22b704c362d691201377e74861ae179eca6b5a7d39fb270ad6d1b4f4a0a307c9"
+  ],
+  "jobs": [
+    "chris-q38-ac-r004-a1-g3-v1",
+    "chris-glm53-ac-r013-a1-g3-v1"
+  ],
+  "execution_generation": 3,
+  "statistical_cells": 2,
+  "priority": {
+    "class": "fleet-serve-low",
+    "value": 100,
+    "preemption_policy": "Never",
+    "highest_installed_never_class": true
+  },
+  "implementation": {
+    "module_path": "evals/fleet/autocontinue_generation3_canary.py",
+    "module_sha256": "sha256:d93da0b895f8e168353c56e774207f25ddb40d3cfcc9be487666db071ce271cb",
+    "manifest_path": "evals/fleet/cluster/opencode-autocontinue-generation3-canaries-v1.yaml",
+    "manifest_sha256": "sha256:6647330830e6befae03f4e1d86fb117b217c538240582797bb0ba739a9ac9270",
+    "run_path": "evals/fleet/scripts/run_opencode_autocontinue_generation3_canary_v1.sh",
+    "run_sha256": "sha256:42132d0f4d546b35df2ebbfec308c7b2221dcc57bebc0ec3c04abe125e11567f",
+    "submit_path": "evals/fleet/scripts/submit_opencode_autocontinue_generation3_canaries_v1.sh",
+    "submit_sha256": "sha256:a3b49de127769e890f1d1b14c9c80ce92e8d5c245b9f9f364012dbc86b75f98a"
+  },
+  "launch_authorized": false,
+  "bulk_release_authorized": false,
+  "dedicated_serving_authorized": false,
+  "remaining_gates": [
+    "independent_generation3_package_audit",
+    "fresh_hosted_route_and_duplicate_inventory",
+    "append_only_model_specific_generation3_scoring_releases",
+    "explicit_root_launch_authorization"
+  ],
+  "privacy": {
+    "prompts_traces_flags_or_scores_included": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:be9999a433257b20e96ce413f2fb073524884e029705cf82119e7f07f6f88887"
+}

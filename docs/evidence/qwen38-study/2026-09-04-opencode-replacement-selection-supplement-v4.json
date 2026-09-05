@@ -1,0 +1,180 @@
+{
+  "schema_version": "fleet-opencode-replacement-selection-supplement-v4",
+  "supplement_id": "glm53-dedicated-a-preemption-replacement-r110-v1",
+  "recorded_at": "2026-09-04T05:57:59Z",
+  "append_only": true,
+  "prior_supplement": {
+    "path": "docs/evidence/qwen38-study/2026-09-04-opencode-replacement-selection-supplement-v3.json",
+    "file_sha256": "sha256:46490c294cbe5c8c6d83498c48988d56865567a92d66409314f775ee7d1db2dd",
+    "receipt_sha256": "sha256:a08c2c41f782f9b41e95575a75071e2a3c2fe8916a5db13bc095614dacb92b63",
+    "rewritten": false
+  },
+  "controller_stop_evidence": {
+    "tombstone_path": "docs/evidence/qwen38-study/2026-09-04-glm53-dedicated-a-controller-stop-tombstone-v2.json",
+    "tombstone_file_sha256": "sha256:43937f19994a03c4e9de10f96d073fddf2fc5fe4a545d89f75e72391473f73ad",
+    "tombstone_receipt_sha256": "sha256:9bf6683d80c2dd517e371709a1aa2db0a13e1f4089a09a8296941c6df7054b79",
+    "retirement_path": "docs/evidence/qwen38-study/2026-09-04-glm53-dedicated-a-v4-retirement.json",
+    "retirement_file_sha256": "sha256:9437238c6289a8112b0dfc68832983f11bfb7d2f0980bad1507790c39df93ccc",
+    "retirement_receipt_sha256": "sha256:5dca4bec384231122afe95c37d77a692252a56b453e664cd0f54cad9614a85c9",
+    "corrected_tombstone_binds_nonempty_agent_stream": true,
+    "superseded_tombstone_receipt_sha256": "sha256:9ef664c9a2abcdb99137d4b1a648b39b5134c3985ec48897716b92fb107e4e1d",
+    "stop_and_post_stop_absence_facts_retained": true
+  },
+  "frozen_selection_authority": {
+    "split_path": "configs/data/fleet-a62-task-split-v1.json",
+    "split_file_sha256": "sha256:ab444cb664ffb4da351e4d33298cc052f848f2833487807bf984a753fa7c3b47",
+    "split_manifest_digest": "sha256:fb09668f8de77e6baee37dc1e3162a7617ca9a0a450da9ca53422c17bfbc942a",
+    "locked_selection_path": "evals/fleet/configs/opencode-easiest-train100-selection-v2.json",
+    "locked_selection_file_sha256": "sha256:9f5e83123cfe7d8a3f4cc0b791ac1dc9032a3d5faf5eba2a431c7246069255df",
+    "runnable_inventory_path": "configs/runs/qwen36-27b-rl-base-full-runnable.json",
+    "runnable_inventory_file_sha256": "sha256:70f303f5bb6892598c8e4867151fd176774c5e59d2f0998c6cdb291609b036ff",
+    "selection_rule": "continue_the_reproduced_locked_eligible_order_after_r109_and_take_r110",
+    "mutable_live_statistics_used": false
+  },
+  "dedicated_a_preemption": {
+    "classification": "infrastructure_incomplete_mid_agent_due_serving_preemption",
+    "preempted_at": "2026-09-04T05:55:20Z",
+    "serving_api_name": "ft-run-99d69710",
+    "serving_api_run_id": "99d69710-a1a2-47da-8189-6a6feeb810ee",
+    "ray_job_uid": "558b9810-86d2-4417-8f54-2cab51bc9b09",
+    "workload_name": "rayjob-ft-run-99d69710-6ee1e",
+    "workload_uid": "0559e1c2-216a-44e2-97da-6ba4ff6a7606",
+    "ray_cluster_name": "ft-run-99d69710-p2vcc",
+    "ray_cluster_uid": "cfdf86b5-5aad-4742-b93c-8a1e35a79290",
+    "head_pod_uid": "d1dcfa3b-0db0-4bfa-b2b2-3ab8d7d63a2d",
+    "service_uid": "2365e879-e8aa-4ef4-b1ab-fdcd26c50394",
+    "preemptor_workload_uid": "51f354e7-b7aa-4547-b142-f84990633c58",
+    "preemptor_ray_job_name": "ft-run-5b0c2a87",
+    "preemptor_ray_job_uid": "e1fd8aa8-8021-4cf9-a19f-67e845f3eadc",
+    "ray_cluster_delete_event_observed": true,
+    "old_ray_cluster_present_after_stop": false,
+    "old_head_pod_present_after_stop": false,
+    "old_service_present_after_stop": false
+  },
+  "stopped_scored_controller": {
+    "plan_path": "evals/fleet/configs/glm53-opencode-dedicated-a-even27-pass4-v1.json",
+    "plan_file_sha256": "sha256:c901a4086cc66bc304a5de38f7fbcc0c1206966eb720ca9fbf53699fad3415f0",
+    "plan_sha256": "sha256:4f8d4fcf50af8abccf3b9d272a18755f9be0bc862a66fe25bba691bee8a22208",
+    "job_name": "chris-cyber-glm53-opencode11827-dedicated-a-even27-p4-v1",
+    "job_uid": "aa9a79a9-37dd-4910-a094-a172d058749b",
+    "pod_uid": "b26a37e3-0a15-4c1e-96a9-d065de50ba59",
+    "job_present_at_receipt": false,
+    "pod_present_at_receipt": false,
+    "controller_stop_authorized_by_root": true,
+    "source6_claim_present": false,
+    "source6_execution_present": false,
+    "old_plan_must_not_resume": true
+  },
+  "fenced_source4": {
+    "source_rank": 4,
+    "whole_task_fenced": true,
+    "accepted_attempts_are_attrition_only": true,
+    "accepted_attempts": [
+      {
+        "attempt": 1,
+        "accepted_file_sha256": "sha256:95a8511dfc718b46e734db892ba371366e574f003dd0511c13fcc8f2d80256a4",
+        "accepted_receipt_sha256": "sha256:eb08468d8fe9331d4fe5075ba4b29d4ad962ed0f1cc18caf778c50fc383a2a9d"
+      },
+      {
+        "attempt": 2,
+        "accepted_file_sha256": "sha256:64652efea7f06d43d0d73e83be3e6c03f8b216833d6f97755cc6db4b59170df9",
+        "accepted_receipt_sha256": "sha256:0e6cdf4d283dafd7fbfb13dc3767356fc1c8674b4dedb7940060d4a7b8318a11"
+      },
+      {
+        "attempt": 3,
+        "accepted_file_sha256": "sha256:360c30ecbebf5026d09eacf63f2ba423a4deaad8488fbb93e9771887d47c5fe3",
+        "accepted_receipt_sha256": "sha256:b487681c374d62bcbe987b95bb3628322c5d0ca2941f9e379483978b51f33b4b"
+      }
+    ],
+    "interrupted_attempt": {
+      "attempt": 4,
+      "run_id": "chris-cyber-glm53-opencode11827-dedicated-a-even27-p4-v1-sr004-a4-53d46367",
+      "attempt_claim_sha256": "sha256:566af3c5a5adda9e06c656b904824d2da8a40e1ab9b9716635cd0200163cf597",
+      "task_claim_sha256": "sha256:1efc2c916f40467b3806fb5f3b8b5bf4a2a113c492db911a9c2d5f09f9120762",
+      "agent_stream_bytes": 301387,
+      "agent_stream_sha256": "sha256:1ba3665873543248096fd015d9ef629a0d34c9ad2643fdfe4a48476bae15b202",
+      "agent_stream_last_write_at": "2026-09-04T05:55:17Z",
+      "stderr_bytes": 0,
+      "stderr_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "agent_activity_present": true,
+      "result_present": false,
+      "cleanup_present": false,
+      "trace_manifest_present": false,
+      "scoring_intent_present": false,
+      "reward_result_present": false,
+      "session_ingest_present": false,
+      "verifier_execution_present": false,
+      "accepted_or_noncreditable_receipt_present": false,
+      "retry_same_output": false
+    }
+  },
+  "selection_replay": {
+    "score_blind": true,
+    "locked_prefix_replacement_ranks": [101, 102, 103, 104, 105, 106, 107, 108, 109],
+    "next_historical_rank": 118,
+    "next_replacement_rank": 110
+  },
+  "replacement": {
+    "replacement_rank": 110,
+    "historical_rank": 118,
+    "serving_block": "dedicated_a_successor",
+    "task_key": "cysec1-2-fubspot-gen_blackbox-93cb7e23e9a08abe2d6d7a52__blackbox_ctf_v1",
+    "task_version_id": "b2f61fae-a07b-42c7-92ec-eeb4fa2064b6",
+    "task_version": "19",
+    "environment_version_id": "a1532a5c-6ec9-45bd-899d-24c0fe3d1df5",
+    "env_key": "cysec1-2-fubspot-gen",
+    "env_version": "v0.0.3",
+    "data_key": "current-fubspot-gen",
+    "data_version": "v0.0.3",
+    "split": "train",
+    "hydration_gate": {
+      "status": "required_not_satisfied",
+      "required_before_paid_launch": true
+    },
+    "scored_launch_authorized": false
+  },
+  "overlap_audit": {
+    "current_plan_files_containing_replacement_version": 0,
+    "current_sfs_files_containing_replacement_version": 0,
+    "current_experiment_claims": 0,
+    "unused_for_current_experiment": true
+  },
+  "revised_primary_estimator": {
+    "hosted_source_ranks": "odd_13_through_99_plus_108_and_109",
+    "hosted_task_count": 46,
+    "hosted_cell_count": 184,
+    "dedicated_a_original_source_ranks": "even_6_through_52",
+    "dedicated_a_original_task_count": 24,
+    "dedicated_a_replacement_ranks": [102, 104, 110],
+    "dedicated_a_task_count": 27,
+    "dedicated_a_cell_count": 108,
+    "dedicated_b_source_ranks": "even_56_through_100_plus_101_103_105_107",
+    "dedicated_b_task_count": 27,
+    "dedicated_b_cell_count": 108,
+    "pairwise_disjoint": true,
+    "unique_task_count": 100,
+    "pass_k": 4,
+    "cell_count": 400,
+    "partially_accepted_sessions_outside_estimator": 8,
+    "formal_accept_count_if_primary_completes": 408
+  },
+  "future_submission_gate": {
+    "required_a_priority_class": "fleet-train-high",
+    "rejected_priority_class": "fleet-infra-quiet",
+    "fresh_a_serving_runtime_required": true,
+    "fresh_a_non_scored_parity_required": true,
+    "fresh_a_scored_plan_and_preflight_required": true,
+    "true_non_preemptible_available": false,
+    "higher_priority_may_preempt_lower_priority": true,
+    "existing_jobs_mutated": false
+  },
+  "privacy": {
+    "scores_read": false,
+    "scores_included": false,
+    "prompts_included": false,
+    "traces_included": false,
+    "flags_included": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:3ccf7fdace01bc2a3e6245d26f65d6069fa5327d4a5ac7515640c7d59092e534"
+}

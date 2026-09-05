@@ -1,0 +1,85 @@
+{
+  "schema_version": "fleet-opencode-autocontinue-generation4-scoring-release-v1",
+  "append_only": true,
+  "status": "RELEASED",
+  "released_at_utc": "2026-09-05T06:39:34Z",
+  "model": "glm-5.3",
+  "generation4_spec_sha256": "sha256:7180392984db8cc598b71970b259d1814cabce79e90ca29db40af2d5ff2c2e91",
+  "plan_sha256": "sha256:1eb3c7c8636d9b2ae417b7e2147520542539fba8ce56899b4ee16f2a3ebcede7",
+  "cell_id": "sha256:905051f141077d3aa5086c1f5dc6ad015d5ee6173a1ea7515025805cf9a24b41",
+  "execution_id": "sha256:736c28d3fb9ce42dd7aa2b1a9865f218616171767cd19a56b6028dd006af9d71",
+  "package_commit": "b46d9ddccb616734566b1d50f66fcc4354bfde39",
+  "root_authorization": {
+    "path": "docs/evidence/qwen38-study/2026-09-04-opencode-autocontinue-generation4-root-authorization-v1.json",
+    "file_sha256": "sha256:fc325ffa434442fb5e8970de2b7f15486d943cb47bdef40c82e4d261b35c32ce",
+    "receipt_sha256": "sha256:fecdb5d46dcad0dacab578916d4aea650ddd6974884aab75254a25d82b1c2db1"
+  },
+  "semantic_held_authority": {
+    "path": "docs/evidence/qwen38-study/2026-09-04-opencode-autocontinue-generation4-canaries-held-v1.json",
+    "file_sha256": "sha256:21a159d44b1a0dc722bd2e3f9755bfc2b364cb055f70ff7ca5a81dd3547513fc",
+    "receipt_sha256": "sha256:8c1419e998e6c7558b3638b70fd1d4adcf5f0c709fe820068b437bab106e67cc"
+  },
+  "split_configmap_package": {
+    "schema_version": "fleet-opencode-autocontinue-generation4-authority-split-package-v1",
+    "aggregate_sha256": "sha256:53c814321d8aa27af6d3ac2f6fb09b8a5825821828b4b980bea013355669ce96",
+    "model_aggregate_sha256": "sha256:edb837190246df433f5a58986e2de3ae4f950e67dec197cae110910c1f8f2789",
+    "objects": [
+      "chris-ac-g4-runtime-core-a-v2",
+      "chris-ac-g4-runtime-core-b-v2",
+      "chris-glm53-ac-r013-a1-g4-run-v1",
+      "chris-q38-ac-r004-a1-g4-run-v1"
+    ],
+    "object_json_bytes": {
+      "chris-ac-g4-runtime-core-a-v2": 490070,
+      "chris-ac-g4-runtime-core-b-v2": 791286,
+      "chris-q38-ac-r004-a1-g4-run-v1": 23839,
+      "chris-glm53-ac-r013-a1-g4-run-v1": 23844
+    }
+  },
+  "implementation": {
+    "authority_module_path": "evals/fleet/autocontinue_generation4_authority_v1.py",
+    "authority_module_sha256": "sha256:300860dc632efcb0deb7496b82baecf2775d33aadaa808fac7c97e55f7b8219f",
+    "package_module_path": "evals/fleet/autocontinue_generation4_authority_package_v1.py",
+    "package_module_sha256": "sha256:5c8f89c8b5db2c71d1b7580870c8b1d743c7a92aae348aa73568a767d7e5fa2c",
+    "manifest_path": "evals/fleet/cluster/opencode-autocontinue-generation4-authority-held-v2.yaml",
+    "manifest_sha256": "sha256:744e535217ecce8c31446eec912ffe285a8d36ed4d7084a703fa738aa07a813d",
+    "run_path": "evals/fleet/scripts/run_opencode_autocontinue_generation4_authority_v2.sh",
+    "run_sha256": "sha256:0ed3875f94f738e2bd3f91f62b934b3f48c1e971bde2226f428db9a3b2a33c4f",
+    "submit_path": "evals/fleet/scripts/submit_opencode_autocontinue_generation4_authority_v2.sh",
+    "submit_sha256": "sha256:a21923ab2995d4a4f9d20d0cff2eaffbec4670693ecaefba544aebc67f2c15ad",
+    "manifest_authorization_path": "evals/fleet/scored_manifest_authorization.py",
+    "manifest_authorization_sha256": "sha256:8a576d38be80bd9d77e7ef587a5e2b13f7f8ab00940ed96fa1f2d4b470bf8b7e",
+    "job_name": "chris-glm53-ac-r013-a1-g4-v1",
+    "configmap_name": "chris-glm53-ac-r013-a1-g4-run-v1",
+    "intent_configmap_name": "chris-ac-g4-canary-submit-v1",
+    "sfs_root": "/mnt/sfs/jobs/chris-glm53-ac-r013-a1-g4-v1",
+    "split_package_aggregate_sha256": "sha256:53c814321d8aa27af6d3ac2f6fb09b8a5825821828b4b980bea013355669ce96",
+    "model_aggregate_sha256": "sha256:edb837190246df433f5a58986e2de3ae4f950e67dec197cae110910c1f8f2789"
+  },
+  "authorization": {
+    "launch_authorized": true,
+    "create_once": true,
+    "execution_generation": 4,
+    "hosted_only": true,
+    "priority_class": "fleet-serve-low",
+    "preemption_policy": "Never",
+    "bulk_release_authorized": false,
+    "dedicated_serving_authorized": false,
+    "author": "/root",
+    "authorized_at_utc": "2026-09-05T06:39:34Z",
+    "statement": "Authorize exactly one create-once corrected-treatment hosted GLM5.3 generation-4 scored canary cell under the frozen OpenCode 1.18.27 auto-compaction-and-continuation protocol, superseding only the terminal generation-3 pre-model bootstrap failure; use fleet-serve-low with preemptionPolicy Never; no dedicated GPU serving and no bulk release are authorized."
+  },
+  "route_and_inventory": {
+    "fresh_fleet_team_and_hosted_models_required": true,
+    "fresh_exact_treatment_session_inventory_required": true,
+    "generation1_through_generation4_claims_must_be_absent": true,
+    "generation4_job_configmap_and_sfs_root_must_be_absent": true,
+    "generation3_incident_and_tombstones_must_match": true,
+    "dedicated_serving_must_remain_user_stopped": true
+  },
+  "privacy": {
+    "prompts_traces_flags_or_scores_included": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:c2f370cb6120f696f062696950cae25e2dcfb0941fa4c564be2c7e72e5b25382"
+}

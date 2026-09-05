@@ -1,0 +1,88 @@
+{
+  "schema_version": "fleet-opencode-protocol-retirement-v1",
+  "retired_treatment": "opencode_1.18.27_native_compaction_no_autocontinue",
+  "replacement_treatment": "opencode_1.18.27_native_compaction_autocontinue_v1",
+  "decision": "retire_from_headline_and_stop_active_controllers",
+  "reason": "Native compaction summaries did not resume agent work under the retired treatment. Selectively rerunning only observed compaction cells would bias pass@4, so the entire treatment is exploratory and the headline grid restarts from zero.",
+  "retired_jobs": [
+    {
+      "name": "chris-cyber-q38-opencode11827-hosted-tail-a22-p4-v9",
+      "uid": "7d0ed90d-3926-438c-a69c-30efb3ce0b8b",
+      "pod_uid": "86b528e1-b613-45f2-b132-5f6e9f16b3a0",
+      "model": "qwen3.8-27b",
+      "active_source_rank": 11,
+      "active_attempt": 4
+    },
+    {
+      "name": "chris-cyber-q38-opencode11827-hosted-tail-b22-p4-v9",
+      "uid": "677aa2f9-771b-4ffa-9ef8-a763f6747bb4",
+      "pod_uid": "b2215a4c-b168-49f7-818d-f8880298ab5d",
+      "model": "qwen3.8-27b",
+      "active_source_rank": 33,
+      "active_attempt": 1
+    },
+    {
+      "name": "chris-cyber-glm53-opencode11827-hosted-primary46-p4-v12",
+      "uid": "0e25db24-8700-478f-8862-d1210511393c",
+      "pod_uid": "3a04238e-497e-4d21-a8d9-f33c50085879",
+      "model": "glm-5.3",
+      "active_source_rank": 31,
+      "active_attempt": 3
+    },
+    {
+      "name": "chris-cyber-glm53-gap-19212529-v13-v2",
+      "uid": "f5ef5c53-6399-4162-af07-7d0c8d148811",
+      "pod_uid": "a40202af-9dd5-4aeb-92f2-6f7427dd79e0",
+      "model": "glm-5.3",
+      "active_source_rank": 19,
+      "active_attempt": 2
+    },
+    {
+      "name": "chris-cyber-glm53-opencode11827-ded-a-v5-bulk16-34-p4-v1",
+      "uid": "5f8bdd28-3c37-408a-9a18-b806dd7de7ef",
+      "pod_uid": "c1d96ff5-166e-47e4-9400-b0f8ae57b0be",
+      "model": "glm-5.3",
+      "active_source_rank": 18,
+      "active_attempt": 1
+    },
+    {
+      "name": "chris-cyber-glm53-opencode11827-ded-a-v5-repair3-p4-v2",
+      "uid": "1453ada3-0ddd-46d2-bbba-fbe0fc984c7a",
+      "pod_uid": "0d408924-403a-49f2-9881-e3ea19279cb8",
+      "model": "glm-5.3",
+      "active_source_rank": 8,
+      "active_attempt": 2
+    },
+    {
+      "name": "chris-cyber-glm53-opencode11827-ded-b-v5-bulk58-80-p4-v1",
+      "uid": "d5241d76-9814-4de0-9036-3f1080b0f669",
+      "pod_uid": "f9b4d4f2-4471-4ffb-bb27-e8a26d287526",
+      "model": "glm-5.3",
+      "active_source_rank": 58,
+      "active_attempt": 3
+    },
+    {
+      "name": "chris-cyber-glm53-opencode11827-ded-b-v5-tail14-p4-v1",
+      "uid": "3bc71a4a-8a28-4137-b216-120aedf1c31d",
+      "pod_uid": "87e06a47-246e-4828-af33-4feffd399897",
+      "model": "glm-5.3",
+      "active_source_rank": 82,
+      "active_attempt": 1
+    }
+  ],
+  "headline_credit": {
+    "qwen_cells": 0,
+    "glm_cells": 0,
+    "legacy_results_pooled": false,
+    "selective_reruns_allowed": false
+  },
+  "retirement_invariants": {
+    "sfs_evidence_preserved": true,
+    "active_cells_classified_as_protocol_censored": true,
+    "active_cells_are_not_model_failures": true,
+    "dedicated_model_servers_retained_for_fixed_treatment": true,
+    "peer_workloads_mutated": false,
+    "scores_prompts_traces_flags_included": false
+  },
+  "receipt_sha256": "sha256:2a904547d5450e46982d33466f8a55c3bbe41652bd6705aa451172dc20656d8a"
+}

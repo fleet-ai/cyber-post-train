@@ -1,0 +1,80 @@
+{
+  "controller_session_counts": {
+    "dedicated-a-1": 51,
+    "dedicated-a-2": 48,
+    "dedicated-a-canary": 1,
+    "dedicated-b-1": 51,
+    "dedicated-b-2": 48,
+    "dedicated-b-canary": 1,
+    "hosted-1": 99,
+    "hosted-2": 100
+  },
+  "documentation_file_sha256": "sha256:356f45911a7c2216e4c222a3618703e4aed6cbeec626cac43b231bd368d3e511",
+  "documentation_path": "evals/fleet/DEDICATED_GLM53_V7.md",
+  "generation7_release": {
+    "accepted_gate_path": "/mnt/sfs/jobs/chris-cyber-exact100-prebulk-reconcile-v3/glm-5.3-generation7-gate.json",
+    "accepted_gate_required": true,
+    "attempt": 1,
+    "generation7_spec_sha256": "sha256:bab642484368c507f53c2b99b29f63d80eb765705899b3d8955e2bb03a84f36a",
+    "job_name": "chris-glm53-ac-r013-a1-g7-v1",
+    "model": "glm-5.3",
+    "package_commit": "e549ed9588159af9aaf6186e5b458a9eb070c114",
+    "release_file_sha256": "sha256:2374b7933223c7922aa38c0f302bc6e89f6f5b6b20c7f99ab32315056d2e92cd",
+    "release_path": "docs/evidence/qwen38-study/2026-09-05-glm53-autocontinue-generation7-scoring-release-v1.json",
+    "release_receipt_sha256": "sha256:3bdb7a64b512426c9e368ede5626565ca65aa058686ade54b39055807a38783b",
+    "run_id": "chris-glm53-ac-g7-r013-a1-b6338d53",
+    "selection_rank": 13,
+    "spec_path": "evals/fleet/configs/glm53-opencode-autocontinue-canary-generation7-v1.json"
+  },
+  "jobs_api_observation": {
+    "file_sha256": "sha256:5bdeb1eb0426bb3580c215f4c6e3358acc238ff9db1e46c9cb2cd9d12fd36f93",
+    "path": "docs/evidence/qwen38-study/2026-09-05-glm53-dedicated-serving-v7-jobs-api-observation.json",
+    "receipt_sha256": "sha256:fdfcdd6490d507b6068f9947b9847121d9c9eb2ba6905aa2c04dcb5629462fb0"
+  },
+  "launch_authorized": false,
+  "module_file_sha256": "sha256:d440300732f4487f5d5821234443d243a207e14dc5948c56973b014639211676",
+  "module_path": "evals/fleet/glm53_dedicated_v7.py",
+  "objects_created": false,
+  "privacy": {
+    "credentials_included": false,
+    "prompts_traces_flags_or_scores_included": false
+  },
+  "receipt_sha256": "sha256:02084426c5bd397c7aea98f35ae4d26a2c396d8b064388716ff37dbf1df719a7",
+  "release_blockers": [
+    "generation7_glm_canary_gate_must_be_accepted",
+    "all_hosted_generation7_bulk_v3_must_remain_unreleased_for_this_path",
+    "fresh_dedicated_aware_bulk_and_prebulk_successor_must_be_accepted",
+    "replica_a_and_b_exact_authenticated_previews_must_be_fresh_at_release",
+    "replica_a_uid_bound_parity_and_scored_canary_before_second_stream_or_replica_b",
+    "replica_b_uid_bound_parity_and_scored_canary_before_its_second_stream"
+  ],
+  "resource_policy": {
+    "cpu_limit": "192",
+    "cpu_request": "96",
+    "gpus_per_worker": 8,
+    "maximum_gpus": 16,
+    "maximum_nodes": 2,
+    "memory_limit": "2Ti",
+    "memory_request": "1Ti",
+    "preemption_policy": "Never",
+    "priority_class": "fleet-infra-quiet",
+    "privileged": true,
+    "workers": 1
+  },
+  "schema_version": "fleet-glm53-dedicated-serving-v7-held-receipt-v1",
+  "server_request_sha256": {
+    "A": "sha256:500d0b9ee1acb9fcd18aae4911e1f53f3eba359d1e40ec02da80478b78c9de41",
+    "B": "sha256:4c30d76083e8eb34ad162adc38ef29ceb9d7c83d809d6ccb416f312bd5f7a998"
+  },
+  "spec_file_sha256": "sha256:5c47d7114b9ff3d50419d79d65366bc3016a42bb114fc5927e81827a3b95067f",
+  "spec_path": "evals/fleet/configs/glm53-dedicated-serving-v7-held.json",
+  "status": "HELD",
+  "submit_file_sha256": "sha256:395eeea66a489110c054a5dc809046c6b3d5ccd734eac22e37e402b55c47a1e6",
+  "submit_path": "evals/fleet/scripts/submit_glm53_dedicated_v7.sh",
+  "total_post_generation7_glm_cells": 399,
+  "treatment_policy": {
+    "hosted_and_dedicated_results_pooled": false,
+    "maximum_streams_per_endpoint": 2,
+    "whole_task_serving_blocks": true
+  }
+}

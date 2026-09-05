@@ -1,0 +1,156 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: chris-cyber-opencode-legacy8-env-cleanup-v2
+  namespace: fleet-train-jobs
+  labels:
+    cyber-post-train.fleet.ai/experiment: opencode-legacy8-env-cleanup-v2
+    cyber-post-train.fleet.ai/owner: chris
+    kueue.x-k8s.io/queue-name: training-lq
+spec:
+  activeDeadlineSeconds: 900
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 604800
+  template:
+    metadata:
+      labels:
+        cyber-post-train.fleet.ai/experiment: opencode-legacy8-env-cleanup-v2
+        cyber-post-train.fleet.ai/owner: chris
+    spec:
+      restartPolicy: Never
+      priorityClassName: fleet-train-high
+      nodeSelector: {kubernetes.io/arch: amd64, workload: fleetai-training-ng-cpu}
+      tolerations:
+        - {key: workload, operator: Equal, value: fleetai-training-ng-cpu, effect: NoSchedule}
+      containers:
+        - name: cleanup
+          image: ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
+          command: ["python", "-c"]
+          args:
+            - |
+              import hashlib, json, os, pathlib, time, urllib.error, urllib.request, uuid
+
+              BASE = "https://orchestrator.fleetai.com"
+              TEAM_ID = "a1025f0b-ad67-49fc-a023-51800ab43e84"
+              RETIREMENT = "sha256:2a904547d5450e46982d33466f8a55c3bbe41652bd6705aa451172dc20656d8a"
+              ABSENCE = "sha256:6fe0cf60f16dc560af19e984e2559cec3e38bca8eb398cc5e62cb9e783f49c3c"
+              V1_FAILURE = "sha256:d57b4563150bdc91f10a720dee2bd40747bc9914379a24b2e7a3bcf8fb7ca8f5"
+              OUT = pathlib.Path("/mnt/sfs/jobs/chris-cyber-opencode-legacy8-env-cleanup-v2")
+              CELLS = [
+                  ("chris-cyber-q38-opencode11827-hosted-tail-a22-p4-v9", "chris-cyber-q38-opencode11827-hosted-tail-a22-p4-v9-sr011-a4-de286df8", 11, 4, "7d0ed90d-3926-438c-a69c-30efb3ce0b8b", "86b528e1-b613-45f2-b132-5f6e9f16b3a0"),
+                  ("chris-cyber-q38-opencode11827-hosted-tail-b22-p4-v9", "chris-cyber-q38-opencode11827-hosted-tail-b22-p4-v9-sr033-a1-16f81223", 33, 1, "677aa2f9-771b-4ffa-9ef8-a763f6747bb4", "b2215a4c-b168-49f7-818d-f8880298ab5d"),
+                  ("chris-cyber-glm53-opencode11827-hosted-primary46-p4-v12", "chris-cyber-glm53-opencode11827-hosted-primary46-p4-v12-sr031-a3-e87676d5", 31, 3, "0e25db24-8700-478f-8862-d1210511393c", "3a04238e-497e-4d21-a8d9-f33c50085879"),
+                  ("chris-cyber-glm53-gap-19212529-v13-v2", "chris-cyber-glm53-opencode11827-hosted-gap-g19g21g25g29-p4-v13-sr019-a2-30d4886d", 19, 2, "f5ef5c53-6399-4162-af07-7d0c8d148811", "a40202af-9dd5-4aeb-92f2-6f7427dd79e0"),
+                  ("chris-cyber-glm53-opencode11827-ded-a-v5-bulk16-34-p4-v1", "chris-cyber-glm53-opencode11827-ded-a-v5-bulk16-34-p4-v1-sr018-a1-d729afd6", 18, 1, "5f8bdd28-3c37-408a-9a18-b806dd7de7ef", "c1d96ff5-166e-47e4-9400-b0f8ae57b0be"),
+                  ("chris-cyber-glm53-opencode11827-ded-a-v5-repair3-p4-v2", "chris-cyber-glm53-opencode11827-ded-a-v5-repair3-p4-v2-sr008-a2-f4e69704", 8, 2, "1453ada3-0ddd-46d2-bbba-fbe0fc984c7a", "0d408924-403a-49f2-9881-e3ea19279cb8"),
+                  ("chris-cyber-glm53-opencode11827-ded-b-v5-bulk58-80-p4-v1", "chris-cyber-glm53-opencode11827-ded-b-v5-bulk58-80-p4-v1-sr058-a3-9fd81b71", 58, 3, "d5241d76-9814-4de0-9036-3f1080b0f669", "f9b4d4f2-4471-4ffb-bb27-e8a26d287526"),
+                  ("chris-cyber-glm53-opencode11827-ded-b-v5-tail14-p4-v1", "chris-cyber-glm53-opencode11827-ded-b-v5-tail82-100-r101-r103-r105-r107-p4-v1-sr082-a1-e7e642ed", 82, 1, "3bc71a4a-8a28-4137-b216-120aedf1c31d", "87e06a47-246e-4828-af33-4feffd399897"),
+              ]
+
+              def canonical(value):
+                  return json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
+
+              def digest_without(value, field):
+                  return "sha256:" + hashlib.sha256(canonical({k: v for k, v in value.items() if k != field})).hexdigest()
+
+              def write_once(path, value):
+                  fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                  with os.fdopen(fd, "wb") as handle:
+                      handle.write(canonical(value) + b"\n")
+
+              def request(method, route):
+                  req = urllib.request.Request(
+                      BASE + route,
+                      method=method,
+                      headers={"Authorization": "Bearer " + os.environ["FLEET_API_KEY"], "Accept": "application/json", "X-Request-ID": str(uuid.uuid4())},
+                  )
+                  try:
+                      with urllib.request.urlopen(req, timeout=180) as response:
+                          raw = response.read()
+                          return response.status, json.loads(raw) if raw else {}
+                  except urllib.error.HTTPError as exc:
+                      if exc.code == 404:
+                          return 404, {}
+                      raise RuntimeError("Fleet cleanup request failed") from exc
+
+              def delete_and_prove_absent(instance_id):
+                  status, body = request("DELETE", "/v1/env/instances/" + instance_id)
+                  if status == 404:
+                      return "not_found", status, "delete_404"
+                  if status not in {200, 202, 204}:
+                      raise RuntimeError("unexpected environment cleanup status")
+                  if body.get("terminated_at"):
+                      return "terminated", status, "delete_terminated_at"
+                  for _ in range(60):
+                      get_status, state = request("GET", "/v1/env/instances/" + instance_id)
+                      if get_status == 404:
+                          return "terminated", status, "post_delete_get_404"
+                      if get_status != 200:
+                          raise RuntimeError("unexpected environment state status")
+                      if state.get("terminated_at"):
+                          return "terminated", status, "post_delete_get_terminated_at"
+                      time.sleep(1)
+                  raise RuntimeError("environment cleanup did not reach authoritative absence")
+
+              status, account = request("GET", "/v1/account")
+              assert status == 200 and account.get("team_name") == "fleet" and account.get("team_id") == TEAM_ID
+              frozen, instance_hashes = [], set()
+              for root, run_id, source_rank, attempt, job_uid, pod_uid in CELLS:
+                  path = pathlib.Path("/mnt/sfs/jobs") / root / "attempts" / run_id / "runtime-binding.json"
+                  if path.is_symlink() or not path.is_file():
+                      raise RuntimeError("exact runtime binding is absent or unsafe")
+                  binding_bytes = path.read_bytes()
+                  instance_id = json.loads(binding_bytes).get("instance_id")
+                  try:
+                      uuid.UUID(instance_id)
+                  except (TypeError, ValueError) as exc:
+                      raise RuntimeError("runtime binding instance identity is invalid") from exc
+                  instance_hash = "sha256:" + hashlib.sha256(instance_id.encode()).hexdigest()
+                  if instance_hash in instance_hashes:
+                      raise RuntimeError("runtime binding instance identity is duplicated")
+                  instance_hashes.add(instance_hash)
+                  frozen.append((run_id, source_rank, attempt, job_uid, pod_uid, binding_bytes, instance_id, instance_hash))
+              if len(frozen) != 8 or len(instance_hashes) != 8:
+                  raise RuntimeError("cleanup pre-delete inventory is incomplete")
+              os.mkdir(OUT, 0o700)
+              os.mkdir(OUT / "cells", 0o700)
+              outcomes = []
+              for run_id, source_rank, attempt, job_uid, pod_uid, binding_bytes, instance_id, instance_hash in frozen:
+                  outcome, delete_status, absence_evidence = delete_and_prove_absent(instance_id)
+                  receipt = {
+                      "schema_version": "fleet-opencode-interrupted-cell-cleanup-v2", "retirement_receipt_sha256": RETIREMENT,
+                      "controller_absence_receipt_sha256": ABSENCE, "v1_failure_tombstone_receipt_sha256": V1_FAILURE,
+                      "run_id": run_id, "source_rank": source_rank, "attempt": attempt,
+                      "retired_job_uid": job_uid, "retired_pod_uid": pod_uid,
+                      "runtime_binding_file_sha256": "sha256:" + hashlib.sha256(binding_bytes).hexdigest(), "instance_id_sha256": instance_hash,
+                      "environment_delete_outcome": outcome, "delete_response_status": delete_status,
+                      "authoritative_absence_evidence": absence_evidence, "post_delete_absence_verified": True,
+                      "task_owned_docker_cleanup_applicable": False, "task_owned_network_cleanup_applicable": False,
+                      "protocol_classification": "censored_exploratory", "credentials_included": False,
+                      "prompts_or_traces_included": False, "scores_included": False,
+                  }
+                  receipt["receipt_sha256"] = digest_without(receipt, "receipt_sha256")
+                  write_once(OUT / "cells" / (run_id + ".json"), receipt)
+                  outcomes.append(outcome)
+              terminal = {
+                  "schema_version": "fleet-opencode-legacy8-cleanup-terminal-v2", "retirement_receipt_sha256": RETIREMENT,
+                  "controller_absence_receipt_sha256": ABSENCE, "v1_failure_tombstone_receipt_sha256": V1_FAILURE,
+                  "pre_delete_bindings_validated": 8, "pre_delete_unique_instance_hashes": 8,
+                  "planned_cells": 8, "cleanup_receipts": len(outcomes),
+                  "terminated": outcomes.count("terminated"), "not_found": outcomes.count("not_found"),
+                  "all_instances_idempotently_absent": len(outcomes) == 8,
+                  "serving_rayjobs_excluded": ["ef7cb0f2-84d4-4017-ae31-bf34ebb70d0d", "2bbfd34a-d74a-4497-ab28-48cada0c9753"],
+                  "credentials_included": False, "prompts_or_traces_included": False, "scores_included": False,
+              }
+              terminal["receipt_sha256"] = digest_without(terminal, "receipt_sha256")
+              write_once(OUT / "TERMINAL.json", terminal)
+              print(json.dumps({"ok": True, "cleanup_receipts": len(outcomes), "terminated": terminal["terminated"], "not_found": terminal["not_found"], "receipt_sha256": terminal["receipt_sha256"]}, sort_keys=True))
+          env:
+            - name: FLEET_API_KEY
+              valueFrom: {secretKeyRef: {name: chris-cyber-opencode-evals-v2, key: FLEET_API_KEY}}
+          resources:
+            requests: {cpu: 100m, memory: 128Mi, ephemeral-storage: 128Mi}
+            limits: {cpu: 250m, memory: 256Mi, ephemeral-storage: 256Mi}
+          volumeMounts: [{name: sfs, mountPath: /mnt/sfs}]
+      volumes:
+        - {name: sfs, persistentVolumeClaim: {claimName: sfs-shared}}

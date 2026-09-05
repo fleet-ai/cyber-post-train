@@ -1,0 +1,66 @@
+{
+  "schema_version": "fleet-opencode-autocontinue-hosted-only-route-v1",
+  "append_only": true,
+  "status": "PASSED",
+  "observed_at_utc": "2026-09-04T21:39:55Z",
+  "campaign_sha256": "sha256:63946f224a33eb0d2c2a6fdba34358ebf9ca379e5f0f156cd137c95a9b98097e",
+  "fleet_team": {
+    "team_id": "a1025f0b-ad67-49fc-a023-51800ab43e84",
+    "qwen_preflight_receipt_sha256": "sha256:21e459b1a1773266fb3e39b12d5cdaa727e0ecd6848173ac4f0840d339579790",
+    "glm_preflight_receipt_sha256": "sha256:e66c09c09953c1220d8752f5ba43419e2ed0d934c075eea1bf156c47911879ba",
+    "both_preflights_authenticated_as_fleet": true
+  },
+  "hosted_routes": {
+    "health_receipt_sha256": "sha256:d81a01ffe1087d7d85fe511bc9c978461ba3e24a2c15675871cfb8668c49bd85",
+    "origin": "https://inference.flt.build",
+    "qwen_served_id": "qwen3.8-27b",
+    "glm_served_id": "glm-5.3",
+    "qwen_route_available_in_bound_health_receipt": true,
+    "glm_route_available_in_bound_health_receipt": true,
+    "generation_calls": 0
+  },
+  "dedicated_serving": {
+    "state": "USER_STOPPED_UNAVAILABLE",
+    "may_be_recreated_without_ready_scored_consumer_and_new_parity": false,
+    "rayjobs_present": 0,
+    "head_pods_present": 0,
+    "services_present": 0,
+    "replica_a": {
+      "rayjob_name": "ft-run-98c32208",
+      "head_pod_name": "ft-run-98c32208-5gpb2-head-7qxwc",
+      "service_name": "ft-run-98c32208-5gpb2-head-svc"
+    },
+    "replica_b": {
+      "rayjob_name": "ft-run-9e92209d",
+      "head_pod_name": "ft-run-9e92209d-pppzg-head-rc9nd",
+      "service_name": "ft-run-9e92209d-pppzg-head-svc"
+    },
+    "historical_parity_receipt_is_not_current_live_route_authority": true
+  },
+  "candidate_absence": {
+    "qwen_scored_job_name": "chris-q38-ac-canary1-v1",
+    "glm_scored_job_name": "chris-glm53-ac-canary1-v1",
+    "qwen_scored_configmap_name": "chris-q38-ac-canary1-run-v2",
+    "glm_scored_configmap_name": "chris-glm53-ac-canary1-run-v2",
+    "exact_scored_jobs_present": 0,
+    "exact_scored_pods_present": 0,
+    "exact_scored_configmaps_present": 0,
+    "qwen_scored_sfs_root_absent": true,
+    "glm_scored_sfs_root_absent": true,
+    "qwen_global_cell_claim_absent": true,
+    "glm_global_cell_claim_absent": true,
+    "sfs_observer_pod_name": "allie-dev",
+    "sfs_observer_pod_uid": "73dabe56-60f8-4879-be9f-365196c502e3"
+  },
+  "authorization": {
+    "route": "HOSTED_ONLY",
+    "scored_launch_authorized": false,
+    "dedicated_recreation_authorized": false
+  },
+  "privacy": {
+    "credentials_included": false,
+    "prompts_or_traces_included": false,
+    "scores_included": false
+  },
+  "receipt_sha256": "sha256:d3a285c09f0abb1f66d6ab692193f5ad16c3cd1e432be87f134ae89977d5d00c"
+}

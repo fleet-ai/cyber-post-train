@@ -1,0 +1,100 @@
+{
+  "schema_version": "fleet-cyber-glm53-dedicated-serving-canary-v1",
+  "observed_at": "2026-09-04T03:44:44Z",
+  "classification": "operational-gate-passed",
+  "api_run": {
+    "name": "ft-run-65595541",
+    "run_id": "65595541-8c68-4f84-bb3e-452eb409939f",
+    "status": "RUNNING",
+    "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-glm53-tp8-b-v4"
+  },
+  "immutable_config": {
+    "path": "evals/fleet/configs/dedicated-glm53-tp8-b-v4.json",
+    "commit": "f4585c1036a77594478cdf8854f89a804c50b515",
+    "sha256": "sha256:853635c8fdcf8ead0a6bf0efffbe197dac0a137c75470c8ac81e6767057c385d",
+    "preview_manifest_sha256": "sha256:8963be87d40878e4f788d43f49728ef2a6988b2e6b486e54084698a7ada90f80",
+    "entrypoint_sha256": "sha256:1ac006a84f76a17fe48fc006b02b4fd30840e1cadc40f779ef204c5175035884",
+    "rendered_entrypoint_matches": true
+  },
+  "controllers": {
+    "ray_job_uid": "80578ad6-8b2a-4572-82ee-2b2d25aba58f",
+    "workload_name": "rayjob-ft-run-65595541-8aa6c",
+    "workload_uid": "43c012ca-c43c-4074-993a-b695e68699cd",
+    "ray_cluster_name": "ft-run-65595541-w72bv",
+    "ray_cluster_uid": "673e0e12-57dc-4069-a226-85e5ed422c78",
+    "submitter_job_uid": "668e290a-6151-4272-906c-893e1d04c1d5",
+    "submitter_pod_uid": "f328827d-2e77-4934-9d25-65cb58b90eed"
+  },
+  "runtime": {
+    "head_pod_name": "ft-run-65595541-w72bv-head-zl2jh",
+    "head_pod_uid": "aa0a0a0c-ee57-4f05-b630-0f0293d41e82",
+    "head_pod_node": "computeinstance-e04az8ppqdsr7e9pah",
+    "head_pod_tier_1": "249ef49de9748d59e91317f0c15ef100",
+    "head_pod_restarts": 0,
+    "gpu_count": 8,
+    "worker_group_count": 0,
+    "priority_class": "fleet-infra-quiet",
+    "privileged": true,
+    "seccomp_profile": "Unconfined",
+    "secret_env_from_count": 0,
+    "run_root_file_count": 0,
+    "run_root_byte_count": 0
+  },
+  "image": {
+    "requested": "ghcr.io/fleet-ai/cyber-post-train-glm53-runtime@sha256:ec93ba50613fd13fb4c0b0a9105767ab18209a1e0108dab0923aad694c0206ec",
+    "resolved_image_id": "ghcr.io/fleet-ai/cyber-post-train-glm53-runtime@sha256:ec93ba50613fd13fb4c0b0a9105767ab18209a1e0108dab0923aad694c0206ec",
+    "private_pull_succeeded": true,
+    "image_pull_secret": "ghcr-pull"
+  },
+  "model": {
+    "served_name": "glm-5.3",
+    "source": "zai-org/GLM-5.3",
+    "revision": "30333038ada1f1dacb294a93270305a890b50c14",
+    "live_path": "/mnt/sfs/models/glm-5.3-30333038",
+    "context_length": 262144,
+    "base_and_draft_identity_match": true
+  },
+  "network": {
+    "service_name": "ft-run-65595541-w72bv-head-svc",
+    "service_uid": "2357a332-2ef4-4a24-9d05-4bc92198edd8",
+    "health_http_status": 200,
+    "ports": {
+      "http": 8000,
+      "dashboard": 8265,
+      "metrics": 8080
+    }
+  },
+  "content_blind_probe": {
+    "schema": "fleet_cyber_glm53_serving_probe_v1",
+    "health": true,
+    "served_model": "glm-5.3",
+    "context_length": 262144,
+    "structured_tool_schema_names": [
+      "bash",
+      "submit_report"
+    ],
+    "selected_tool_names": [
+      "submit_report"
+    ],
+    "finish_reason": "tool_calls",
+    "tool_arguments_valid_json": true,
+    "response_content_included": false,
+    "tool_arguments_included": false
+  },
+  "outcome_integrity": {
+    "non_scored_model_requests": 1,
+    "scored_sessions": 0,
+    "verifier_executions": 0,
+    "capability_score_claim_allowed": false,
+    "scores_read": false,
+    "prompts_or_task_traces_read": false
+  },
+  "capacity": {
+    "replica_a_healthy": true,
+    "healthy_replicas": 2,
+    "dedicated_nodes": 2,
+    "dedicated_gpus": 16,
+    "maximum_respected": true,
+    "eviction_immunity_claimed": false
+  }
+}

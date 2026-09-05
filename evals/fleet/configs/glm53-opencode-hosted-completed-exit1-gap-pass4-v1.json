@@ -1,0 +1,251 @@
+{
+  "schema_version": "fleet-hosted-opencode-task-boundary-shard-v1",
+  "shard_key": "glm53_completed_exit1_gap",
+  "campaign_id": "chris-cyber-glm53-opencode11827-hosted-gap-g13g15-p4-v1",
+  "source_job_id": "a62dd51f-a52b-4941-8207-4679e4b25b51",
+  "source": {
+    "predecessor_plan_sha256": "sha256:8b0deafa9f51b75a0715be56b417454e96665b5342d4c346d5cda32dc24c8279",
+    "reconciliation_receipt_sha256": "sha256:5435c0a25b3be1872c1aae09fd88858c5251272e164ab8eb49ab66b4c5a4ca0e",
+    "gap_source_receipt_sha256": "sha256:30338f0561867bda8ab8b10cd2601b3a1ce0c60ad27d7fd55f9a7ad87d4b46a2",
+    "source_job_name": "chris-cyber-glm53-opencode11827-hosted-primary46-p4-v12",
+    "source_job_uid": "0e25db24-8700-478f-8862-d1210511393c",
+    "source_pod_uid": "3a04238e-497e-4d21-a8d9-f33c50085879",
+    "held_unused_replacement_rank": 111
+  },
+  "treatment_block": {
+    "endpoint_origin": "https://inference.flt.build",
+    "harness": {
+      "context_management": "opencode_1.18.27_native_compaction_no_autocontinue",
+      "context_window_size": 262144,
+      "max_model_requests": 600,
+      "max_output_tokens": 32768,
+      "name": "opencode",
+      "provider_adapter": "@ai-sdk/openai-compatible",
+      "release_asset_sha256": "sha256:4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702",
+      "timeout_seconds": 28800,
+      "version": "1.18.27"
+    },
+    "kind": "hosted_inference_endpoint_v1",
+    "model_revision": "30333038ada1f1dacb294a93270305a890b50c14",
+    "required_task_tool_catalog_sha256": "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a",
+    "required_task_tools": [
+      "bash",
+      "submit_report"
+    ],
+    "served_id": "glm-5.3",
+    "serving_block": "hosted-primary-after-scoring-outage-v1",
+    "session_model": "fleet-cluster-opencode-1.18.27/glm-5.3"
+  },
+  "model": {
+    "endpoint_origin": "https://inference.flt.build",
+    "repository": "zai-org/GLM-5.3",
+    "revision": "30333038ada1f1dacb294a93270305a890b50c14",
+    "served_id": "glm-5.3",
+    "session_model": "fleet-cluster-opencode-1.18.27/glm-5.3"
+  },
+  "harness": {
+    "context_management": "opencode_1.18.27_native_compaction_no_autocontinue",
+    "context_window_size": 262144,
+    "max_model_requests": 600,
+    "max_output_tokens": 32768,
+    "name": "opencode",
+    "provider_adapter": "@ai-sdk/openai-compatible",
+    "release_asset_sha256": "sha256:4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702",
+    "timeout_seconds": 28800,
+    "version": "1.18.27"
+  },
+  "authority": {
+    "multi_app_aggregation_mode": "fractional",
+    "provisioning_route_template": "/v1/rollout-rewards/{task_key}/versions/{task_version_id}/instances",
+    "required_cyber_contract": {
+      "evidence_schema": "1.0.0",
+      "submission_protocol": "2.0.0",
+      "verifier_contract": "3.0.0"
+    },
+    "scoring_mode": "partial",
+    "scoring_route_template": "/v1/rollout-rewards/{task_key}/versions/{task_version_id}"
+  },
+  "task_count": 2,
+  "pass_k": 4,
+  "total_session_count": 8,
+  "credited_sessions": [
+    {
+      "rank": 1,
+      "source_rank": 13,
+      "attempt": 1,
+      "session_id": "0088dc21-0e12-4db2-ada5-32d6e6ff914f",
+      "verifier_execution_id": "d6727db1-0f89-4c10-986d-f123ba2e2025",
+      "source_run_id": "chris-cyber-glm53-opencode11827-hosted-primary46-p4-v12-sr013-a1-85027a7a",
+      "source_receipt_sha256": "sha256:1c6e404b9edca1a8ab78303c8137a4cac55eb3bfa6c94db1a473ac9512425637",
+      "classification": "ACCEPTED"
+    },
+    {
+      "rank": 1,
+      "source_rank": 13,
+      "attempt": 2,
+      "session_id": "6aaa636e-ceab-40b8-be5d-5cae7c15812b",
+      "verifier_execution_id": "1d0a13b6-3fe2-448e-8787-dbd7580b5338",
+      "source_run_id": "chris-cyber-glm53-opencode11827-hosted-primary46-p4-v12-sr013-a2-85027a7a",
+      "source_receipt_sha256": "sha256:5435c0a25b3be1872c1aae09fd88858c5251272e164ab8eb49ab66b4c5a4ca0e",
+      "classification": "RECONCILED_ACCEPTED"
+    },
+    {
+      "rank": 2,
+      "source_rank": 15,
+      "attempt": 1,
+      "session_id": "397cfa86-e0c4-4ba9-b526-670f0e3a5da2",
+      "verifier_execution_id": "60c42827-53c1-4acc-a99d-481d06941627",
+      "source_run_id": "chris-cyber-glm53-opencode11827-hosted-primary46-p4-v12-sr015-a1-f15f1ee7",
+      "source_receipt_sha256": "sha256:5435c0a25b3be1872c1aae09fd88858c5251272e164ab8eb49ab66b4c5a4ca0e",
+      "classification": "RECONCILED_ACCEPTED"
+    }
+  ],
+  "new_session_count": 5,
+  "primary_denominator": {
+    "tasks": 100,
+    "cells": 400
+  },
+  "primary_denominator_restored_only_after_all_gap_tasks_pass4": true,
+  "excluded_tasks": [],
+  "execution": {
+    "dedicated_b_route_authorization_required": true,
+    "future_nonzero_exit_policy": "credit_only_if_reward_ingest_cleanup_and_authoritative_session_match",
+    "inventory_policy": "conservative_no_same_model_session_for_task_key_v1",
+    "launch_authorized": false,
+    "required_priority_class": "fleet-train-high",
+    "required_recovery_gate": "fleet_scoring_api_http500_recovery_v1",
+    "required_task_tool_catalog_sha256": "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a",
+    "required_task_tools": [
+      "bash",
+      "submit_report"
+    ],
+    "retry_policy": "never_repeat_any_authoritative_scored_outcome",
+    "same_task_max_inflight": 1,
+    "score_blind_concurrency_schedule": [
+      {
+        "accepted_outcomes_at_least": 0,
+        "headroom_gate": "fixed_at_launch_no_automatic_widening",
+        "workers": 1
+      }
+    ],
+    "task_partition": "complete_task_boundary",
+    "third_hosted_stream_authorized": false,
+    "training_data_eligible": true
+  },
+  "tasks": [
+    {
+      "environment": {
+        "data_id": "fakelook-cyber-gen",
+        "data_version": "v0.0.2",
+        "id": "cysec1-2-fakelook-gen",
+        "runtime_seed_content_sha256": "bc61fa38225eb0eaccac044c2e8e49411032405f109e2fdc2951530fc0e9168e",
+        "ttl_seconds": 32400,
+        "version": "v0.0.3",
+        "version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4"
+      },
+      "rank": 1,
+      "source_rank": 13,
+      "task": {
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
+        "env_variables_sha256": "sha256:0014ce676a11f556a2951311789dea150b303f183e6e7ba834060a67d922919f",
+        "key": "cysec1-2-fakelook-gen_blackbox-ab56dfb6116356c402290fa8__blackbox_ctf_v1",
+        "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "prompt_sha256": "sha256:399858ca5eacbef7d3a4079c8dd966419e87aa8e303fda34e1964528e05f1559",
+        "version_id": "9375a9b9-04e5-4f6f-ad47-286121278992"
+      },
+      "verifier": {
+        "function_name": "verify",
+        "id": "3ed8b746-15c4-43cf-9947-a54c325f6f3d",
+        "sha256": "519b4a2654cd7c9632f348575eb708103ea01ef0e48488e6ee04e3f136786ebf",
+        "version": 1,
+        "version_id": "41a1f7fb-0319-4eb0-80de-4fb40ad9bb74"
+      }
+    },
+    {
+      "environment": {
+        "data_id": "fentry-current-gen",
+        "data_version": "v0.0.3",
+        "id": "cysec1-2-fentry-gen",
+        "runtime_seed_content_sha256": "7ee489cd8e1d209e35767e1bb22c2bc7e9c8ec1c0cbaaab722c1b6b265225bba",
+        "ttl_seconds": 32400,
+        "version": "v0.0.3",
+        "version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595"
+      },
+      "rank": 2,
+      "source_rank": 15,
+      "task": {
+        "cyber_contract": {
+          "evidence_schema": "1.0.0",
+          "submission_protocol": "2.0.0",
+          "verifier_contract": "3.0.0"
+        },
+        "env_variables_sha256": "sha256:2e2ceeadb36aeb353b29a76694d92abe20642c10e64ae2c8ee63938d67a0037a",
+        "key": "cysec1-2-fentry-gen_blackbox-46793210126eea4722e90448__blackbox_ctf_v1",
+        "output_json_schema_sha256": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "prompt_sha256": "sha256:6333161f6f445e9e5a3f4b86599219b928f05c681f1804e9cb2f7653afa0b551",
+        "version_id": "fb8f2178-7dd8-429a-8d3c-f14b21a51e02"
+      },
+      "verifier": {
+        "function_name": "verify",
+        "id": "a562c980-f541-4b8a-84fe-f24ab317f2b9",
+        "sha256": "46f322dd587887949c7ffdd63fc71db9f2e1e1d4ad7fcac03e79927f88b9744e",
+        "version": 1,
+        "version_id": "cdb8b942-e8e7-4e27-b41f-bc5eae554621"
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "ordinal": 1,
+      "rank": 1,
+      "source_rank": 13,
+      "attempt": 3,
+      "run_id": "chris-cyber-glm53-opencode11827-hosted-gap-g13g15-p4-v1-sr013-a3-85027a7a",
+      "network": "glm53-hosted-gap-v1-sr013-a3-85027a7a"
+    },
+    {
+      "ordinal": 2,
+      "rank": 1,
+      "source_rank": 13,
+      "attempt": 4,
+      "run_id": "chris-cyber-glm53-opencode11827-hosted-gap-g13g15-p4-v1-sr013-a4-85027a7a",
+      "network": "glm53-hosted-gap-v1-sr013-a4-85027a7a"
+    },
+    {
+      "ordinal": 3,
+      "rank": 2,
+      "source_rank": 15,
+      "attempt": 2,
+      "run_id": "chris-cyber-glm53-opencode11827-hosted-gap-g13g15-p4-v1-sr015-a2-f15f1ee7",
+      "network": "glm53-hosted-gap-v1-sr015-a2-f15f1ee7"
+    },
+    {
+      "ordinal": 4,
+      "rank": 2,
+      "source_rank": 15,
+      "attempt": 3,
+      "run_id": "chris-cyber-glm53-opencode11827-hosted-gap-g13g15-p4-v1-sr015-a3-f15f1ee7",
+      "network": "glm53-hosted-gap-v1-sr015-a3-f15f1ee7"
+    },
+    {
+      "ordinal": 5,
+      "rank": 2,
+      "source_rank": 15,
+      "attempt": 4,
+      "run_id": "chris-cyber-glm53-opencode11827-hosted-gap-g13g15-p4-v1-sr015-a4-f15f1ee7",
+      "network": "glm53-hosted-gap-v1-sr015-a4-f15f1ee7"
+    }
+  ],
+  "privacy": {
+    "credentials_included": false,
+    "prompts_included": false,
+    "scores_included": false,
+    "transcripts_included": false
+  },
+  "plan_sha256": "sha256:f67e1b02040bd795d336d27a42c8f3ea8752d66c1618f623ebe0ba87e152a0ac"
+}
+

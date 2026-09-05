@@ -1,0 +1,23 @@
+{
+  "schema_version": "fleet-opencode-autocontinue-generation2-canary-spec-v2",
+  "model": "qwen3.8-27b",
+  "statistical_cell": {
+    "cell_id": "sha256:631c9d7cc5328849ce137393943927192b1b50dc60458cdb3425fbce893ecf5a",
+    "selection_rank": 4,
+    "attempt": 1,
+    "task_version_id": "02dd4e3f-d85d-4bf8-9976-eae2f102384d"
+  },
+  "execution": {
+    "schema_version": "fleet-statistical-cell-execution-v1",
+    "cell_id": "sha256:631c9d7cc5328849ce137393943927192b1b50dc60458cdb3425fbce893ecf5a",
+    "execution_generation": 2,
+    "execution_id": "sha256:71236ff990db210eb4989ee9e2b4c7afc4b7153b008178c2ae31d5149c3dc8ce"
+  },
+  "predecessor_generation2_spec": {
+    "path": "evals/fleet/configs/qwen38-opencode-autocontinue-canary-generation2-v1.json",
+    "generation2_spec_sha256": "sha256:82826c2e5863d5aaebc5b5cbeb335f73a31b6795913839a38969ef3c179d91cd"
+  },
+  "rendered_plan_sha256": "sha256:1c98863eb54921e338020954e2395da0ecc085a6300c7fb60b97142ec0e949da",
+  "launch_authorized": false,
+  "generation2_spec_sha256": "sha256:9d8201974794edd3bad379721cf9c9e0e9ae0b978221d223d8165730302e737c"
+}

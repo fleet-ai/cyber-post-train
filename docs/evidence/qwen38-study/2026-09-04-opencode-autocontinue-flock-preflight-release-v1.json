@@ -1,0 +1,31 @@
+{
+  "schema_version": "fleet-opencode-autocontinue-flock-preflight-release-v1",
+  "append_only": true,
+  "authorized_by": "/root",
+  "recorded_at": "2026-09-04T19:57:39Z",
+  "campaign_sha256": "sha256:63946f224a33eb0d2c2a6fdba34358ebf9ca379e5f0f156cd137c95a9b98097e",
+  "campaign_file_sha256": "sha256:1dfcc6d9ddbd19ef5ff46b5d6308d62526db4d1a0ccf05c5fa3b10b176910f34",
+  "manifest_sha256": "sha256:d9fa9ed9b1c144977d4132e1a4b2929a1037400b7aec3fab62e047c0d825a7ce",
+  "source_sha256": "sha256:dc012e6cdaf34f8297d48d43a483c1af2b2099f637403fc93d9ea45946d18088",
+  "configmap_name": "chris-opencode11827-ac-flock-preflight-v1",
+  "job_creation_order": [
+    "chris-opencode11827-ac-flock-holder-v1",
+    "chris-opencode11827-ac-flock-prober-v1"
+  ],
+  "sfs_root": "/mnt/sfs/endpoint-leases/preflight-opencode11827-autocontinue-v1",
+  "preflight_launch_authorized": true,
+  "scored_launch_authorized": false,
+  "model_or_fleet_api_calls": 0,
+  "required_priority_class": "fleet-train-high",
+  "create_once": true,
+  "require_configmap_jobs_pods_and_sfs_absent": true,
+  "require_server_dry_run": true,
+  "cluster_objects_created_at_seal": false,
+  "terminal_receipt_sha256_at_seal": null,
+  "privacy": {
+    "credentials_included": false,
+    "prompts_or_traces_included": false,
+    "scores_included": false
+  },
+  "receipt_sha256": "sha256:e7a5fbb2ede2f972d6893af70884d50682a9b48d046cca4f4e7bc2fb6f8f24f0"
+}

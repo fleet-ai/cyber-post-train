@@ -1,0 +1,86 @@
+{
+  "append_only": true,
+  "authorization": {
+    "author": "/root",
+    "authorized_at_utc": "2026-09-04T23:20:55Z",
+    "create_once": true,
+    "launch_authorized": true,
+    "required_priority_class": "fleet-train-high",
+    "statement": "Authorize exactly one create-once corrected-treatment hosted GLM5.3 successor scored canary cell under the frozen auto-compaction-and-continuation protocol, superseding only the terminal pre-claim v1 bootstrap failure; no dedicated GPU serving and no bulk release are authorized."
+  },
+  "campaign_sha256": "sha256:63946f224a33eb0d2c2a6fdba34358ebf9ca379e5f0f156cd137c95a9b98097e",
+  "cell": {
+    "attempt": 1,
+    "source_rank": 13,
+    "task_version_id": "9375a9b9-04e5-4f6f-ad47-286121278992"
+  },
+  "evidence": {
+    "controller_compatibility_receipt_sha256": "sha256:b3920547030db509de25f3a04559d9f4173866b81b02efa0957812b35cf06ba2",
+    "dedicated_parity_receipt_sha256": "sha256:07e733b4b161ed7c36113fc3688f04a42938d93a499b1bcc10c7cd21342900df",
+    "dedicated_parity_role": "historical_compatibility_only_not_live_route_authority",
+    "fresh_duplicate_inventory_receipt_path": "docs/evidence/qwen38-study/2026-09-04-glm53-autocontinue-canary-duplicate-inventory-v3.json",
+    "fresh_duplicate_inventory_receipt_sha256": "sha256:e4d215278d56b070c59c3eb7af946747280eb93ae93898b5b1e1b7f0a552d9d1",
+    "fresh_inventory_execution_sha256": "sha256:b4c175db0d04746e16fa9314edb093f7306e859545cd95972694e461b7f82fcb",
+    "fresh_inventory_receipt_sha256": "sha256:c71604d22b1d52a7091727b957e0f56f2e8e270e461c844fb57d48b392d831c5",
+    "hosted_health_receipt_sha256": "sha256:d81a01ffe1087d7d85fe511bc9c978461ba3e24a2c15675871cfb8668c49bd85",
+    "preflight_authorization_receipt_path": "docs/evidence/qwen38-study/2026-09-04-glm53-autocontinue-canary-preflight-authorization-v3.json",
+    "preflight_authorization_receipt_sha256": "sha256:f5766496049bfe8e649e95b2ef450263b461c03b803a7b39b0da8bca63b3ea5c",
+    "preflight_post_exit_receipt_path": "docs/evidence/qwen38-study/2026-09-04-glm53-autocontinue-canary-preflight-v3-post-exit.json",
+    "preflight_post_exit_receipt_sha256": "sha256:858aae67031f22ef42628891ff32224e14ed99d0303a4ed59207d24d869bfe26",
+    "preflight_receipt_path": "docs/evidence/qwen38-study/2026-09-04-glm53-autocontinue-canary-preflight-v3-pass.json",
+    "preflight_receipt_sha256": "sha256:b32da5b2ce836440e2b845f3f960cb77cceaf19a5c6e555ed6418e12c7889603",
+    "shared_pvc_flock_receipt_sha256": "sha256:e9f34d35ac3c9e60d2698ebc1685374b98f13e41ac305df0609fb051f35c416c"
+  },
+  "hosted_only_route": {
+    "dedicated_recreation_authorized": false,
+    "dedicated_serving_state": "USER_STOPPED_UNAVAILABLE",
+    "fresh_authenticated_models_get_required_before_global_cell_claim": true,
+    "fresh_authenticated_models_get_required_before_scored_job_create": true,
+    "launcher_precreate_maximum_route_age_seconds": 120,
+    "required_served_ids": [
+      "qwen3.8-27b",
+      "glm-5.3"
+    ],
+    "runtime_does_not_rely_on_launcher_receipt_freshness": true,
+    "runtime_maximum_route_age_seconds": 30,
+    "serving_route": "HOSTED_ONLY"
+  },
+  "implementation": {
+    "campaign_file_sha256": "sha256:1dfcc6d9ddbd19ef5ff46b5d6308d62526db4d1a0ccf05c5fa3b10b176910f34",
+    "compatibility_file_sha256": "sha256:f1e8ac4119a833e2c076b621f089d0500ff3b7d8e8838be349ba2a7c8ecd7bb3",
+    "controller_sha256": "sha256:605a695e818f8598274d9d64111868ecc1b092514c7ea725437de0cff7585260",
+    "dockerfile_sha256": "sha256:799b2f71179a16080de5d8bdd6d3eed91bc16a97295f9ca6775aa86319f0afb6",
+    "endpoint_lease_sha256": "sha256:1df60ee13be8c6057113dbebadf9020343649e175b5de38aea41706748987019",
+    "fixed_proxy_sha256": "sha256:a73ef328a17bcc8990c7c941f75be1b3038fc5fbf699ff664a8a8d39dcf1c441",
+    "frozen_controller_sha256": "sha256:e14670e40d2b1fbe4896e4b6dfb2902f121b81c8103efea3a74a11fed496809a",
+    "hosted_health_sha256": "sha256:5e438a7a900fc24298cc27017ff6cfdad6fa89ecda55f9bbbfb4e5d9c83cefcc",
+    "hosted_runtime_sha256": "sha256:dedafdad1e64297bcdb9234572f69159a9b824f2a62c88ffad41447538cffd0d",
+    "launcher_sha256": "sha256:5b149de53e5cb5e2c63c144e0a1ea998073f42fe2ef8c821c335280d41842310",
+    "manifest_authorization_sha256": "sha256:4e6bbd0481ad0e7b576035a10ea262a8b5efc48fb3f2eb9f3dd512849a405564",
+    "package_commit": "c33da24d128800b8b65442f6ecfe5cbadeab5f72",
+    "phase_c_validator_sha256": "sha256:2508ad8f8e7d881d70b56635f571718f8f33f3bb1723dd10e69abc70ce9a8a4f",
+    "plan_sha256": "sha256:9654b0f2e9cfbe5690a77ce83bc63e7e537a43597479686fc093db7d6533959a",
+    "preflight_manifest_sha256": "sha256:44262e7dad2329219480f9e52b19064fab3c59d67f9c174fd11e7e058beb4f12",
+    "run_script_sha256": "sha256:633173994ecf025d058e6f9adf7e9f34e831808df377cd1cea2e5b480832d19d",
+    "runner_sha256": "sha256:b1f9c5028f65b0d7772538e3ce075310dc6c7a46b3de58d0196bc474e74e9e9d",
+    "scored_manifest_sha256": "sha256:3fdc1099e05bd07e6d938991ad7a9acfb4f6e175d14fdc6b92126f678a5652ca",
+    "self_hosted_sha256": "sha256:16df432b5fde55112924d6106e6c03f09817846f1344ba0fe100dcf785c33d8b"
+  },
+  "plan_sha256": "sha256:9654b0f2e9cfbe5690a77ce83bc63e7e537a43597479686fc093db7d6533959a",
+  "privacy": {
+    "credentials_included": false,
+    "prompts_or_traces_included": false,
+    "scores_included": false
+  },
+  "receipt_sha256": "sha256:fd2b80f8168228307dc26d8738ee94ccc48a58e844284cf15621f97d5b341700",
+  "released_at_utc": "2026-09-04T23:20:55Z",
+  "schema_version": "fleet-opencode-autocontinue-canary-scoring-release-v2",
+  "status": "RELEASED",
+  "terminal_contract": {
+    "downward_job_uid_required": true,
+    "downward_pod_uid_required": true,
+    "post_exit_k8s_observer_required": true,
+    "post_exit_schema_version": "fleet-opencode-autocontinue-canary-post-exit-v1",
+    "terminal_schema_version": "fleet-opencode-autocontinue-canary-terminal-v2"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "schema_version": "fleet-opencode-autocontinue-generation5-canary-spec-v1",
+  "model": "qwen3.8-27b",
+  "statistical_cell": {"cell_id": "sha256:631c9d7cc5328849ce137393943927192b1b50dc60458cdb3425fbce893ecf5a", "selection_rank": 4, "attempt": 1, "task_version_id": "02dd4e3f-d85d-4bf8-9976-eae2f102384d"},
+  "execution": {"schema_version": "fleet-statistical-cell-execution-v1", "cell_id": "sha256:631c9d7cc5328849ce137393943927192b1b50dc60458cdb3425fbce893ecf5a", "execution_generation": 5, "execution_id": "sha256:0e359500ab08e29efc95c8cb3ee6c2bc4d719e31cb8c9aadf53fedda03e1c3f1"},
+  "predecessor_generation4": {"spec_path": "evals/fleet/configs/qwen38-opencode-autocontinue-canary-generation4-v1.json", "spec_sha256": "sha256:37e94f8dad42b0d45bb0a439dd7c8b8d8518e62373bbfd0d25c36a23f046c005", "plan_sha256": "sha256:78ae578f050959f00e4ecbc1a088593796792c978a9f1d76e02d986f57406f58", "job_uid": "28cb20fd-71b0-406e-bc0c-ee6d57e93200", "pod_uid": "633815f2-45e3-4481-ac77-b12ebeeee87d"},
+  "supersession": {"incident_path": "docs/evidence/qwen38-study/2026-09-05-opencode-autocontinue-generation4-pre-model-failure-v1.json", "incident_file_sha256": "sha256:21431a369cd427d57ef4b9cc764b0dce06d50437c98e86c7fd7cf78152774718", "incident_receipt_sha256": "sha256:f7567ef3545d451db2eb34bc967433f3ea5011a6f37a464e3a5a336d91415d0a", "tombstone_path": "docs/evidence/qwen38-study/2026-09-05-opencode-autocontinue-generation4-pre-model-tombstones-v1.json", "tombstone_file_sha256": "sha256:efeb730097bba431d338848583b297caeae4b4df2269a4b133428664e55dd650", "tombstone_receipt_sha256": "sha256:15de0c2d1d973555cd5c115034dc4707958663c800651c4f163355b3470eb6b8", "prior_generation": 4, "new_generation": 5, "same_statistical_cell": true, "generation4_nonrepeatable": true},
+  "identities": {"job_name": "chris-q38-ac-r004-a1-g5-v1", "configmap_name": "chris-q38-ac-r004-a1-g5-run-v1", "intent_configmap_name": "chris-ac-g5-canary-submit-v1", "run_id": "chris-q38-ac-g5-r004-a1-02dd4e3f", "network": "q38-ac-g5-r004-a1-02dd4e3f", "sfs_root": "/mnt/sfs/jobs/chris-q38-ac-r004-a1-g5-v1", "generation_claim_root": "/mnt/sfs/cell-execution-claims/opencode11827-autocontinue-v1"},
+  "rendered_plan_sha256": "sha256:865fd811f5508ede4c2ad630539ecc436bd46c84ffb11e5cea8abe9c5621871e",
+  "launch_authorized": false,
+  "generation5_spec_sha256": "sha256:731143707f343bb8dcc37af8fd89b2f67dc6ce28e5f0732a517db450cc58ace3"
+}

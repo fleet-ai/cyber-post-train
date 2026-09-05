@@ -1,0 +1,51 @@
+{
+  "schema_version": "fleet-opencode-legacy8-cleanup-failure-tombstone-v1",
+  "recorded_at": "2026-09-04T19:39:25Z",
+  "retirement_receipt_sha256": "sha256:2a904547d5450e46982d33466f8a55c3bbe41652bd6705aa451172dc20656d8a",
+  "manifest": {
+    "path": "evals/fleet/cluster/opencode-legacy8-interrupted-env-cleanup-v1.yaml",
+    "file_sha256": "sha256:a93df53b2db9f45cc03eadbe6d46c926d1591d4aa16c4964b57294b7d5bad5fa"
+  },
+  "job": {
+    "name": "chris-cyber-opencode-legacy8-env-cleanup-v1",
+    "uid": "6ab08323-d2b1-4343-bc9c-7febe2fdfe50",
+    "created_at": "2026-09-04T19:37:19Z",
+    "failed_at": "2026-09-04T19:37:25Z",
+    "failed": true,
+    "reason": "BackoffLimitExceeded"
+  },
+  "pod": {
+    "name": "chris-cyber-opencode-legacy8-env-cleanup-v1-mjmm4",
+    "uid": "9661e595-4774-4f90-a59a-dbd244a3b183",
+    "phase": "Failed",
+    "exit_code": 1,
+    "restart_count": 0,
+    "finished_at": "2026-09-04T19:37:22Z"
+  },
+  "sanitized_failure": {
+    "exception_type": "RuntimeError",
+    "message": "runtime binding run identity drifted",
+    "log_sha256": "sha256:35ec7eb59afec4a4cdccc5ec8b2cf900cce0198940b9d3dec0be9993d6b89986",
+    "root_cause": "v1_invented_an_unsupported_evidence_run_id_equality_contract",
+    "failed_before_first_delete_call": true
+  },
+  "sfs": {
+    "root": "/mnt/sfs/jobs/chris-cyber-opencode-legacy8-env-cleanup-v1",
+    "root_present": true,
+    "cell_cleanup_receipts": 0,
+    "terminal_receipt_present": false
+  },
+  "outcome": {
+    "environment_delete_calls_completed": 0,
+    "instances_proven_absent": 0,
+    "v1_retry_allowed": false,
+    "fresh_v2_identity_required": true
+  },
+  "privacy": {
+    "credentials_included": false,
+    "instance_ids_included": false,
+    "prompts_or_traces_included": false,
+    "scores_included": false
+  },
+  "receipt_sha256": "sha256:d57b4563150bdc91f10a720dee2bd40747bc9914379a24b2e7a3bcf8fb7ca8f5"
+}

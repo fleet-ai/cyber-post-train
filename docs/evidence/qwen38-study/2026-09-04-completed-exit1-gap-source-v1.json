@@ -1,0 +1,92 @@
+{
+  "schema_version": "fleet-completed-exit1-gap-source-v1",
+  "created_at": "2026-09-04T07:28:31Z",
+  "append_only": true,
+  "reconciliation_receipt_sha256": "sha256:5435c0a25b3be1872c1aae09fd88858c5251272e164ab8eb49ab66b4c5a4ca0e",
+  "source_jobs": {
+    "qwen_hosted_v8": {
+      "job_name": "chris-cyber-q38-opencode11827-hosted-successor49-p4-v8",
+      "job_uid": "84727b82-5187-425b-ba4b-9598f46691c4",
+      "pod_uid": "42df9b32-60c2-45aa-8ce3-ba850b82b909",
+      "plan_sha256": "sha256:8d6df6af63b308d648fb0c7ea9115f90b16de1d7e57b0968dda8fc8fd4a20c81"
+    },
+    "glm_hosted_v12": {
+      "job_name": "chris-cyber-glm53-opencode11827-hosted-primary46-p4-v12",
+      "job_uid": "0e25db24-8700-478f-8862-d1210511393c",
+      "pod_uid": "3a04238e-497e-4d21-a8d9-f33c50085879",
+      "plan_sha256": "sha256:8b0deafa9f51b75a0715be56b417454e96665b5342d4c346d5cda32dc24c8279"
+    }
+  },
+  "accepted_cells": [
+    {
+      "model_block": "qwen_hosted_v8",
+      "source_rank": 6,
+      "attempt": 1,
+      "receipt": {
+        "accepted": true,
+        "agent_exit_code": 0,
+        "attempt": 1,
+        "claim_sha256": "sha256:f0ba12338b91ee0050a1a46a6a90360c30d374976d54fb6d164fae24b624f044",
+        "cleanup_completed": true,
+        "config_sha256": "sha256:f96ba7e172938c6cc65cfd45b383f759b48502c114b0cf409e7a97b1b10a6763",
+        "credited": true,
+        "prompts_or_traces_included": false,
+        "rank": 1,
+        "receipt_sha256": "sha256:c6b1dea26588f2511d8dd5b7463e9be23de1f3723f7586f8a692e262ebc2c76a",
+        "retry_allowed": false,
+        "run_id": "chris-cyber-q38-opencode11827-hosted-successor49-p4-v8-sr006-a1-51fc6fa0",
+        "schema_version": "fleet-hosted-opencode-attempt-accepted-v1",
+        "scores_included": false,
+        "session_id": "8f6f7761-4af0-4ab1-bce1-69283fe537ba",
+        "session_ingest_completed": true,
+        "source_rank": 6,
+        "task_key": "cysec1-2-current-gen_blackbox-9d641429faef16a05bff575e__blackbox_ctf_v1",
+        "task_version_id": "2f2681bf-c1f7-4056-b6e4-cb2e5058f027",
+        "verifier_execution_id": "ccc1e322-6d4e-48f7-9132-8113b338b65d"
+      }
+    },
+    {
+      "model_block": "glm_hosted_v12",
+      "source_rank": 13,
+      "attempt": 1,
+      "receipt": {
+        "accepted": true,
+        "agent_exit_code": 0,
+        "attempt": 1,
+        "claim_sha256": "sha256:09465aa21d27475b8642e77a3ac8bf6b550f21c57212b463d9f463e53ef37e31",
+        "cleanup_completed": true,
+        "config_sha256": "sha256:7e2f175c39d05308a6f2fcabea567aa1d4c5ecbb9b3ce674a72ff170f1faad84",
+        "credited": true,
+        "prompts_or_traces_included": false,
+        "rank": 1,
+        "receipt_sha256": "sha256:1c6e404b9edca1a8ab78303c8137a4cac55eb3bfa6c94db1a473ac9512425637",
+        "retry_allowed": false,
+        "run_id": "chris-cyber-glm53-opencode11827-hosted-primary46-p4-v12-sr013-a1-85027a7a",
+        "schema_version": "fleet-hosted-opencode-attempt-accepted-v1",
+        "scores_included": false,
+        "session_id": "0088dc21-0e12-4db2-ada5-32d6e6ff914f",
+        "session_ingest_completed": true,
+        "source_rank": 13,
+        "task_key": "cysec1-2-fakelook-gen_blackbox-ab56dfb6116356c402290fa8__blackbox_ctf_v1",
+        "task_version_id": "9375a9b9-04e5-4f6f-ad47-286121278992",
+        "verifier_execution_id": "d6727db1-0f89-4c10-986d-f123ba2e2025"
+      }
+    }
+  ],
+  "gap_cells": {
+    "qwen_hosted_v8": [[6, 3], [6, 4], [7, 2], [7, 3], [7, 4]],
+    "glm_hosted_v12": [[13, 3], [13, 4], [15, 2], [15, 3], [15, 4]]
+  },
+  "held_unused_replacements": [56, 111],
+  "replacement_addons_scored_claims": 0,
+  "primary_denominators": {
+    "qwen": {"tasks": 50, "cells": 200},
+    "glm": {"tasks": 100, "cells": 400}
+  },
+  "primary_denominator_restored_only_after_all_gap_tasks_pass4": true,
+  "scores_read": false,
+  "prompts_or_traces_read": false,
+  "task_content_included": false,
+  "credentials_included": false,
+  "receipt_sha256": "sha256:30338f0561867bda8ab8b10cd2601b3a1ce0c60ad27d7fd55f9a7ad87d4b46a2"
+}

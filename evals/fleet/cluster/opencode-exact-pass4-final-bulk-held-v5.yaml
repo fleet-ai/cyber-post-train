@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: List
+metadata:
+  annotations:
+    cyber-post-train.fleet.ai/preview-only: "true"
+    cyber-post-train.fleet.ai/launch-authorized: "false"
+items: []

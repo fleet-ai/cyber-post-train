@@ -1,0 +1,88 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: chris-cyber-opencode-fleet-smokes-v2-session-recovery-accept-v1
+  namespace: fleet-train-jobs
+  labels:
+    cyber-post-train.fleet.ai/experiment: opencode-qwen38-glm53-session-recovery-v1
+    cyber-post-train.fleet.ai/owner: chris
+    kueue.x-k8s.io/queue-name: training-lq
+spec:
+  activeDeadlineSeconds: 900
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 604800
+  template:
+    metadata:
+      labels:
+        cyber-post-train.fleet.ai/experiment: opencode-qwen38-glm53-session-recovery-v1
+        cyber-post-train.fleet.ai/owner: chris
+    spec:
+      restartPolicy: Never
+      nodeSelector:
+        kubernetes.io/arch: amd64
+        workload: fleetai-training-ng-cpu
+      tolerations:
+        - key: workload
+          operator: Equal
+          value: fleetai-training-ng-cpu
+          effect: NoSchedule
+      containers:
+        - name: collector
+          image: ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
+          command: ["python", "-c"]
+          args:
+            - |
+              import hashlib
+              import json
+              import uuid
+              from pathlib import Path
+
+              path = Path("/evidence/ACCEPTED.json")
+              value = json.loads(path.read_text())
+              digest = value.pop("acceptance_sha256")
+              raw = json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
+              assert digest == "sha256:" + hashlib.sha256(raw).hexdigest()
+              assert value == {
+                  "schema_version": "fleet-opencode-session-recovery-acceptance-v1",
+                  "accepted": True,
+                  "runs": value["runs"],
+                  "scores_included": False,
+                  "prompts_or_traces_included": False,
+              }
+              assert len(value["runs"]) == 2
+              for run in value["runs"]:
+                  assert set(run) == {
+                      "run_id",
+                      "session_id",
+                      "verifier_execution_id",
+                      "trace_recovered",
+                  }
+                  assert run["trace_recovered"] is True
+                  uuid.UUID(run["session_id"])
+                  uuid.UUID(run["verifier_execution_id"])
+              print(json.dumps({
+                  "accepted": True,
+                  "digest_valid": True,
+                  "run_count": 2,
+                  "scores_included": False,
+                  "prompts_or_traces_included": False,
+              }, sort_keys=True))
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+              ephemeral-storage: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+              ephemeral-storage: 512Mi
+          volumeMounts:
+            - name: evidence
+              mountPath: /evidence
+              subPath: jobs/chris-cyber-opencode-fleet-smokes-v2-session-recovery-v1
+              readOnly: true
+      volumes:
+        - name: evidence
+          persistentVolumeClaim:
+            claimName: sfs-shared
+            readOnly: true

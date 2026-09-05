@@ -1,0 +1,48 @@
+{
+  "schema_version": "fleet-completed-exit1-gap-preflight-failure-v1",
+  "observed_at": "2026-09-04T07:35:09Z",
+  "append_only": true,
+  "plan_sha256": "sha256:43ef5b8e649ccd88b2f77216f9ca4ec6dea73edddff972321f89ba6d8a48c4b1",
+  "release_receipt_sha256": "sha256:5dc7328597b9db51baf01e13493b0c85f5532eeb0ea5f68e5fa0037aa3a4e935",
+  "preflight": {
+    "job_name": "chris-cyber-q38-hosted-gap-q6q7-p4-v1-preflight",
+    "job_uid": "5e9aec65-f786-4c11-ac38-c4726e8641f9",
+    "pod_name": "chris-cyber-q38-hosted-gap-q6q7-p4-v1-preflight-fljt6",
+    "pod_uid": "7df84d9b-fe9b-491e-9d91-2df1dc6eb0b1",
+    "configmap_name": "chris-cyber-q38-hosted-gap-q6q7-p4-v1",
+    "configmap_uid": "d8624034-b259-4bdb-a6f2-b623fca28c80",
+    "started_at": "2026-09-04T07:34:54Z",
+    "finished_at": "2026-09-04T07:35:09Z",
+    "exit_code": 1,
+    "restart_count": 0,
+    "classification": "PREFLIGHT_FALSE_REJECTION_PUBLIC_PROJECTION_OMISSION"
+  },
+  "absence": {
+    "scored_job_created": false,
+    "scored_pod_created": false,
+    "sfs_output_root_present": false,
+    "task_claims_created": 0,
+    "attempt_claims_created": 0,
+    "model_requests": 0,
+    "scoring_requests": 0
+  },
+  "cause": {
+    "public_session_projection_task_version_omitted": true,
+    "credited_session_completed_and_verifier_matched": true,
+    "old_inventory_rule_required_projected_task_version_for_plan_credit": true,
+    "duplicate_or_overlap_detected": false
+  },
+  "successor_gate": {
+    "reuse_failed_job_or_configmap": false,
+    "fresh_plan_campaign_run_ids_root_required": true,
+    "sealed_gap_credit_inventory_rule_required": true,
+    "independent_audit_required": true
+  },
+  "privacy": {
+    "scores_read": false,
+    "prompts_or_traces_read": false,
+    "task_content_included": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:9b294a1f55059f3ba12670b060caf86ed42d33a84eb4b462e29f05f521aa3b8b"
+}

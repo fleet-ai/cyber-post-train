@@ -1,0 +1,94 @@
+{
+  "append_only": true,
+  "authorization": {
+    "bulk_release_authorized": false,
+    "launch_authorized": false,
+    "root_scoring_authorization_required": true
+  },
+  "campaign_sha256": "sha256:63946f224a33eb0d2c2a6fdba34358ebf9ca379e5f0f156cd137c95a9b98097e",
+  "cell": {
+    "attempt": 1,
+    "source_rank": 13,
+    "task_version_id": "9375a9b9-04e5-4f6f-ad47-286121278992"
+  },
+  "evidence": {
+    "controller_compatibility_receipt_sha256": "sha256:b3920547030db509de25f3a04559d9f4173866b81b02efa0957812b35cf06ba2",
+    "dedicated_parity_receipt_sha256": "sha256:07e733b4b161ed7c36113fc3688f04a42938d93a499b1bcc10c7cd21342900df",
+    "dedicated_parity_role": "historical_only_not_current_route_authority",
+    "duplicate_inventory_path": "docs/evidence/qwen38-study/2026-09-04-glm53-autocontinue-canary-duplicate-inventory-v3.json",
+    "duplicate_inventory_sha256": "sha256:e4d215278d56b070c59c3eb7af946747280eb93ae93898b5b1e1b7f0a552d9d1",
+    "hosted_health_receipt_sha256": "sha256:d81a01ffe1087d7d85fe511bc9c978461ba3e24a2c15675871cfb8668c49bd85",
+    "predecessor_scored_bootstrap_failure_receipt_sha256": "sha256:b30930aeb12cbe4d8ab5ef91a1608ec672e2536576168b50639318b866e30423",
+    "preflight_authorization_path": "docs/evidence/qwen38-study/2026-09-04-glm53-autocontinue-canary-preflight-authorization-v3.json",
+    "preflight_authorization_sha256": "sha256:f5766496049bfe8e649e95b2ef450263b461c03b803a7b39b0da8bca63b3ea5c",
+    "preflight_package_commit": "f2c32e4571fddfa43770249f323e1843fc205f95",
+    "preflight_post_exit_path": "docs/evidence/qwen38-study/2026-09-04-glm53-autocontinue-canary-preflight-v3-post-exit.json",
+    "preflight_post_exit_sha256": "sha256:858aae67031f22ef42628891ff32224e14ed99d0303a4ed59207d24d869bfe26",
+    "preflight_receipt_path": "docs/evidence/qwen38-study/2026-09-04-glm53-autocontinue-canary-preflight-v3-pass.json",
+    "preflight_receipt_sha256": "sha256:b32da5b2ce836440e2b845f3f960cb77cceaf19a5c6e555ed6418e12c7889603",
+    "preflight_sfs_file_sha256": "sha256:1a515e446f1c40385b2fd71d2f5e8277024d037315df47da57ce0b7c5cadee8b",
+    "shared_pvc_flock_receipt_sha256": "sha256:e9f34d35ac3c9e60d2698ebc1685374b98f13e41ac305df0609fb051f35c416c",
+    "task_inventory_execution_sha256": "sha256:b4c175db0d04746e16fa9314edb093f7306e859545cd95972694e461b7f82fcb",
+    "task_inventory_receipt_sha256": "sha256:c71604d22b1d52a7091727b957e0f56f2e8e270e461c844fb57d48b392d831c5"
+  },
+  "implementation": {
+    "campaign_file_sha256": "sha256:1dfcc6d9ddbd19ef5ff46b5d6308d62526db4d1a0ccf05c5fa3b10b176910f34",
+    "compatibility_file_sha256": "sha256:f1e8ac4119a833e2c076b621f089d0500ff3b7d8e8838be349ba2a7c8ecd7bb3",
+    "controller_sha256": "sha256:605a695e818f8598274d9d64111868ecc1b092514c7ea725437de0cff7585260",
+    "dockerfile_sha256": "sha256:799b2f71179a16080de5d8bdd6d3eed91bc16a97295f9ca6775aa86319f0afb6",
+    "endpoint_lease_sha256": "sha256:1df60ee13be8c6057113dbebadf9020343649e175b5de38aea41706748987019",
+    "executable_package_commit": null,
+    "executable_package_commit_required_after_audit": true,
+    "fixed_proxy_sha256": "sha256:a73ef328a17bcc8990c7c941f75be1b3038fc5fbf699ff664a8a8d39dcf1c441",
+    "frozen_controller_sha256": "sha256:e14670e40d2b1fbe4896e4b6dfb2902f121b81c8103efea3a74a11fed496809a",
+    "hosted_health_sha256": "sha256:5e438a7a900fc24298cc27017ff6cfdad6fa89ecda55f9bbbfb4e5d9c83cefcc",
+    "hosted_runtime_sha256": "sha256:dedafdad1e64297bcdb9234572f69159a9b824f2a62c88ffad41447538cffd0d",
+    "launcher_sha256": "sha256:371adee8dde750cf81a299a5e1114cdbef7dd23ab4d29f2546f780a6f1c4039c",
+    "manifest_authorization_sha256": "sha256:4e6bbd0481ad0e7b576035a10ea262a8b5efc48fb3f2eb9f3dd512849a405564",
+    "phase_c_validator_sha256": "sha256:2508ad8f8e7d881d70b56635f571718f8f33f3bb1723dd10e69abc70ce9a8a4f",
+    "plan_file_sha256": "sha256:7096622e3b8dcaa04b8b8f286822db6564d89866a0df7e06c30ec3998b3d28bf",
+    "preflight_manifest_sha256": "sha256:44262e7dad2329219480f9e52b19064fab3c59d67f9c174fd11e7e058beb4f12",
+    "run_script_sha256": "sha256:633173994ecf025d058e6f9adf7e9f34e831808df377cd1cea2e5b480832d19d",
+    "runner_sha256": "sha256:b1f9c5028f65b0d7772538e3ce075310dc6c7a46b3de58d0196bc474e74e9e9d",
+    "scored_manifest_sha256": "sha256:748f32f263f155275b9723b192d870e01e7787e49bfdb1456d343911969afcae",
+    "self_hosted_sha256": "sha256:16df432b5fde55112924d6106e6c03f09817846f1344ba0fe100dcf785c33d8b"
+  },
+  "observed_at_utc": "2026-09-04T22:57:09Z",
+  "plan_sha256": "sha256:9654b0f2e9cfbe5690a77ce83bc63e7e537a43597479686fc093db7d6533959a",
+  "privacy": {
+    "credentials_included": false,
+    "logs_read": false,
+    "prompts_or_traces_included": false,
+    "scores_included": false
+  },
+  "receipt_sha256": "sha256:178d6164757707dcd3971f4f5bd6543d39cb69c03ea6e583f3eabe80327fca75",
+  "remaining_gates": [
+    "immutable_executable_package_commit",
+    "fresh_authenticated_hosted_route_within_120_seconds_of_create",
+    "fresh_api_kubernetes_sfs_and_global_claim_inventory",
+    "model_specific_released_receipt_with_root_authorization",
+    "runtime_hosted_route_recheck_before_any_permanent_claim",
+    "post_exit_uid_bound_acceptance_observer"
+  ],
+  "route": {
+    "dedicated_recreation_authorized": false,
+    "dedicated_serving_state": "USER_STOPPED_UNAVAILABLE",
+    "fresh_authenticated_models_get_required_before_global_claim": true,
+    "fresh_authenticated_models_get_required_before_scored_create": true,
+    "required_served_ids": [
+      "qwen3.8-27b",
+      "glm-5.3"
+    ],
+    "serving_route": "HOSTED_ONLY"
+  },
+  "schema_version": "fleet-opencode-autocontinue-canary-successor-held-release-v1",
+  "scored_identity": {
+    "configmap_name": "chris-glm53-ac-canary1-run-v3",
+    "create_once_required": true,
+    "job_name": "chris-glm53-ac-canary1-v2",
+    "priority_class": "fleet-train-high",
+    "priority_class_is_not_preemption_immunity": true,
+    "sfs_root": "/mnt/sfs/jobs/chris-glm53-ac-canary1-v2"
+  },
+  "status": "HELD"
+}

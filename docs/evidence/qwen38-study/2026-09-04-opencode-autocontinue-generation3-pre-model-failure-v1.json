@@ -1,0 +1,87 @@
+{
+  "schema_version": "fleet-opencode-autocontinue-generation3-pre-model-failure-v1",
+  "append_only": true,
+  "status": "INFRASTRUCTURE_INVALID_PRE_MODEL",
+  "observed_at_utc": "2026-09-05T06:24:59Z",
+  "classification": "bootstrap_cwd_module_resolution_failure",
+  "namespace": "fleet-train-jobs",
+  "package_commit": "36e86d2bee67dd5b3ed59cea5cba079d05699186",
+  "source_ordering_proof": {
+    "run_script_path": "evals/fleet/scripts/run_opencode_autocontinue_generation3_authority_v4.sh",
+    "run_script_sha256": "sha256:586e457ec7bd4956916faed1119babffd6f3e33be4715cff4ad7b3c07e0163a6",
+    "repo_reconstructed_before_failure": true,
+    "working_directory_changed_to_repo_before_module_validation": false,
+    "pythonpath_set_to_repo_before_module_validation": false,
+    "first_module_validation_precedes_route_claim_and_model": true
+  },
+  "package_dependency_proof": {
+    "authority_call_chain": "validate_release->semantic_held_binding->semantic.validate_held",
+    "core_b_omitted_required_paths": [
+      "docs/evidence/qwen38-study/2026-09-04-opencode-autocontinue-generation3-executable-package-held-v3.json",
+      "evals/fleet/cluster/opencode-autocontinue-generation3-executable-held-v3.yaml",
+      "evals/fleet/scripts/run_opencode_autocontinue_generation3_executable_v3.sh",
+      "evals/fleet/scripts/submit_opencode_autocontinue_generation3_executable_v3.sh"
+    ],
+    "all_four_paths_required_before_route_claim_or_model": true,
+    "generation4_package_includes_all_four": true
+  },
+  "submission": {
+    "intent_configmap": {
+      "name": "chris-ac-g3-canary-submit-v1",
+      "uid": "6adb71b3-2e21-4b2a-902d-58a3410b3ad2",
+      "immutable": true,
+      "created_at_utc": "2026-09-05T06:22:26Z"
+    },
+    "runtime_configmaps": [
+      {"name": "chris-ac-g3-runtime-core-a-v4", "uid": "a125b1f0-4d8f-4cc0-b01a-46a19bd2c240", "immutable": true, "created_at_utc": "2026-09-05T06:22:28Z"},
+      {"name": "chris-ac-g3-runtime-core-b-v4", "uid": "a36d9d30-53aa-4a61-889a-3d70e6238c2f", "immutable": true, "created_at_utc": "2026-09-05T06:22:29Z"},
+      {"name": "chris-q38-ac-r004-a1-g3-run-v1", "uid": "eddfaa8c-718b-44f4-9b9a-6c6087c9f1a5", "immutable": true, "created_at_utc": "2026-09-05T06:22:29Z"},
+      {"name": "chris-glm53-ac-r013-a1-g3-run-v1", "uid": "b5cfae45-c2ad-432f-8c1b-defb40350c4b", "immutable": true, "created_at_utc": "2026-09-05T06:22:30Z"}
+    ]
+  },
+  "jobs": [
+    {
+      "model": "qwen3.8-27b",
+      "name": "chris-q38-ac-r004-a1-g3-v1",
+      "uid": "395148cc-94b2-43d4-aa15-1c69d19b25e9",
+      "pod": {"name": "chris-q38-ac-r004-a1-g3-v1-wv4zh", "uid": "35ed25b8-c2b0-4ced-807c-1fa7df7dcc6e", "owner_job_uid": "395148cc-94b2-43d4-aa15-1c69d19b25e9", "phase": "Failed", "evaluator_exit_code": 1, "evaluator_restarts": 0, "started_at_utc": "2026-09-05T06:22:31Z", "finished_at_utc": "2026-09-05T06:22:32Z"},
+      "job_terminal": {"type": "Failed", "status": "True", "reason": "BackoffLimitExceeded", "at_utc": "2026-09-05T06:23:06Z"},
+      "release_file_sha256": "sha256:15a2af23c41e010a753668740ff193a482be03c634e76c6c8b69456642f46c72",
+      "release_receipt_sha256": "sha256:1963918ace37960c8a4e97fb9204933a4333be60bce39604ad4228027be208b8"
+    },
+    {
+      "model": "glm-5.3",
+      "name": "chris-glm53-ac-r013-a1-g3-v1",
+      "uid": "f20e3a1f-f1d6-4c97-859c-559bfaaf1fc7",
+      "pod": {"name": "chris-glm53-ac-r013-a1-g3-v1-zmfck", "uid": "ab1f6c75-cd7d-4b1f-87f6-ecd60a496eff", "owner_job_uid": "f20e3a1f-f1d6-4c97-859c-559bfaaf1fc7", "phase": "Failed", "evaluator_exit_code": 1, "evaluator_restarts": 0, "started_at_utc": "2026-09-05T06:22:31Z", "finished_at_utc": "2026-09-05T06:22:32Z"},
+      "job_terminal": {"type": "Failed", "status": "True", "reason": "BackoffLimitExceeded", "at_utc": "2026-09-05T06:22:38Z"},
+      "release_file_sha256": "sha256:c13f565dd45e2d1b8b06a8204b094867e8a4d5f43f0969ef3f7a15a5ba7082b7",
+      "release_receipt_sha256": "sha256:ed47f590699688d97e039839ed688a512b27505164f049695a19adefa6959101"
+    }
+  ],
+  "side_effects": {
+    "model_calls": 0,
+    "sessions": 0,
+    "verifier_executions": 0,
+    "generation3_claims": 0,
+    "output_roots": 0
+  },
+  "observers": {
+    "sfs_pod_name": "allie-dev",
+    "sfs_pod_uid": "73dabe56-60f8-4879-be9f-365196c502e3",
+    "api_team": "fleet",
+    "content_or_scores_read": false
+  },
+  "retry_disposition": {
+    "same_jobs_must_not_be_recreated": true,
+    "same_execution_generation_must_not_be_reused": true,
+    "fresh_execution_generation_required": 4,
+    "same_statistical_cells_preserved": true
+  },
+  "privacy": {
+    "logs_included": false,
+    "prompts_traces_flags_or_scores_included": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:89d4e6a673a9084fdf68a37bb3b52647f489f12db88381b821985c5ca4a4ac98"
+}

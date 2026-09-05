@@ -1,0 +1,150 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: chris-cyber-qwen38-qcode-fleet-ranked50-acceptor-v1
+  namespace: fleet-train-jobs
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: chris-cyber-qwen38-qcode-fleet-ranked50-acceptor-v1
+  namespace: fleet-train-jobs
+rules:
+  - apiGroups: [batch]
+    resources: [jobs]
+    resourceNames: [chris-cyber-qwen38-qcode-fleet-ranked50-base-v1]
+    verbs: [get]
+  - apiGroups: [""]
+    resources: [configmaps]
+    resourceNames:
+      - chris-cyber-qwen38-qcode-fleet-ranked50-base-v1
+      - chris-cyber-qwen38-qcode-fleet-ranked50-acceptor-v1
+    verbs: [get]
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: chris-cyber-qwen38-qcode-fleet-ranked50-acceptor-v1
+  namespace: fleet-train-jobs
+subjects:
+  - kind: ServiceAccount
+    name: chris-cyber-qwen38-qcode-fleet-ranked50-acceptor-v1
+    namespace: fleet-train-jobs
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: chris-cyber-qwen38-qcode-fleet-ranked50-acceptor-v1
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: chris-cyber-qwen38-qcode-fleet-ranked50-accept-v1
+  namespace: fleet-train-jobs
+  labels:
+    cyber-post-train.fleet.ai/experiment: qwen38-qwen-code-fleet-ranked50-acceptance-v1
+    cyber-post-train.fleet.ai/owner: chris
+    kueue.x-k8s.io/queue-name: training-lq
+spec:
+  activeDeadlineSeconds: 1800
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 604800
+  template:
+    metadata:
+      labels:
+        cyber-post-train.fleet.ai/experiment: qwen38-qwen-code-fleet-ranked50-acceptance-v1
+        cyber-post-train.fleet.ai/owner: chris
+    spec:
+      restartPolicy: Never
+      serviceAccountName: chris-cyber-qwen38-qcode-fleet-ranked50-acceptor-v1
+      nodeSelector: {kubernetes.io/arch: amd64, workload: fleetai-training-ng-cpu}
+      tolerations:
+        - {key: workload, operator: Equal, value: fleetai-training-ng-cpu, effect: NoSchedule}
+      containers:
+        - name: collector
+          image: ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
+          command: ["/bin/bash", "-ceu", "--"]
+          args:
+            - |
+              mkdir -p /workspace/bin /workspace/package/evals/fleet
+              touch /workspace/package/evals/__init__.py /workspace/package/evals/fleet/__init__.py
+              install -m 0644 /bootstrap/credential_rotation.py \
+                /workspace/package/evals/credential_rotation.py
+              install -m 0644 /bootstrap/qwen38_fleet50.py \
+                /workspace/package/evals/fleet/qwen38_fleet50.py
+              python - <<'PY'
+              import hashlib
+              import pathlib
+              import urllib.request
+
+              url = "https://dl.k8s.io/release/v1.35.6/bin/linux/amd64/kubectl"
+              expected = "5d11e2ba01ea68ffd053f56e27738e2b4330013ee67f7e46c6da6c585d3c9926"
+              destination = pathlib.Path("/workspace/bin/kubectl")
+              payload = urllib.request.urlopen(url, timeout=60).read()
+              if hashlib.sha256(payload).hexdigest() != expected:
+                  raise SystemExit("kubectl checksum mismatch")
+              destination.write_bytes(payload)
+              destination.chmod(0o500)
+              PY
+              export PATH=/workspace/bin:$PATH
+              export PYTHONPATH=/workspace/package
+              source_job=chris-cyber-qwen38-qcode-fleet-ranked50-base-v1
+              source_uid=$(python -c 'import json; print(json.load(open("/binding/source-binding.json"))["job_uid"])')
+              kubectl -n fleet-train-jobs get job "$source_job" -o json >/workspace/job.json
+              kubectl -n fleet-train-jobs get pods \
+                -l "batch.kubernetes.io/controller-uid=$source_uid" -o json >/workspace/pods.json
+              kubectl -n fleet-train-jobs get configmap "$source_job" \
+                -o json >/workspace/configmap.json
+              python - <<'PY'
+              import json
+
+              binding = json.load(open("/binding/source-binding.json"))
+              job = json.load(open("/workspace/job.json"))
+              pods = json.load(open("/workspace/pods.json"))
+              configmap = json.load(open("/workspace/configmap.json"))
+              rows = pods.get("items") or []
+              if job.get("metadata", {}).get("uid") != binding["job_uid"]:
+                  raise SystemExit("source Job UID drift")
+              if len(rows) != 1 or rows[0].get("metadata", {}).get("uid") != binding["pod_uid"]:
+                  raise SystemExit("source Pod UID drift")
+              if (
+                  configmap.get("metadata", {}).get("uid") != binding["configmap_uid"]
+                  or configmap.get("immutable") is not True
+              ):
+                  raise SystemExit("source immutable ConfigMap identity drift")
+              PY
+              run_root=/mnt/sfs/jobs/$source_job/chris-cyber-q38-qcode-fleet-ranked50-base-v1
+              python -m evals.fleet.qwen38_fleet50 finalize \
+                --run-acceptance "$run_root/ACCEPTED.json" \
+                --job-json /workspace/job.json \
+                --pods-json /workspace/pods.json \
+                --configmap-json /workspace/configmap.json \
+                --source-binding /binding/source-binding.json \
+                --run-root "$run_root" \
+                --output "/mnt/sfs/jobs/$source_job/FINAL_ACCEPTED.json"
+              python - <<'PY'
+              import json
+
+              path = "/mnt/sfs/jobs/chris-cyber-qwen38-qcode-fleet-ranked50-base-v1/FINAL_ACCEPTED.json"
+              receipt = json.load(open(path))
+              print(json.dumps({
+                  "accepted": receipt["accepted"],
+                  "acceptance_sha256": receipt["acceptance_sha256"],
+              }, sort_keys=True))
+              PY
+          resources:
+            requests: {cpu: "250m", memory: 256Mi}
+            limits: {cpu: "1", memory: 1Gi}
+          volumeMounts:
+            - {name: bootstrap, mountPath: /bootstrap, readOnly: true}
+            - {name: binding, mountPath: /binding, readOnly: true}
+            - {name: sfs, mountPath: /mnt/sfs}
+      volumes:
+        - name: bootstrap
+          configMap: {name: chris-cyber-qwen38-qcode-fleet-ranked50-base-v1}
+        - name: binding
+          configMap: {name: chris-cyber-qwen38-qcode-fleet-ranked50-acceptor-v1}
+        - name: sfs
+          persistentVolumeClaim: {claimName: sfs-shared}

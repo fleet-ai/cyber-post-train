@@ -1,0 +1,39 @@
+{
+  "schema_version": "fleet-opencode-autocontinue-generation2-canary-plan-v1",
+  "model": "qwen3.8-27b",
+  "statistical_cell": {
+    "cell_id": "sha256:631c9d7cc5328849ce137393943927192b1b50dc60458cdb3425fbce893ecf5a",
+    "selection_rank": 4,
+    "attempt": 1,
+    "task_version_id": "02dd4e3f-d85d-4bf8-9976-eae2f102384d"
+  },
+  "execution": {
+    "schema_version": "fleet-statistical-cell-execution-v1",
+    "cell_id": "sha256:631c9d7cc5328849ce137393943927192b1b50dc60458cdb3425fbce893ecf5a",
+    "execution_generation": 2,
+    "execution_id": "sha256:71236ff990db210eb4989ee9e2b4c7afc4b7153b008178c2ae31d5149c3dc8ce"
+  },
+  "predecessor_plan": {
+    "path": "evals/fleet/configs/qwen38-opencode-autocontinue-canary1-v2.json",
+    "plan_sha256": "sha256:726320dd5e161e28becd22d7bb6e31f1627f36a3c7291c0dabb53f94626b3c2d"
+  },
+  "supersession": {
+    "incident_receipt_sha256": "sha256:fd71d3fb42d1ea4fef4734352c817c62cf0ec5fe6e3e35a28c2a9a4f47aa3f23",
+    "tombstone_bundle_receipt_sha256": "sha256:256398d56acef1caacb9de7f2d8ca7d336cdb154c6191f8986797cb75afcbab8",
+    "prior_generation": 1,
+    "new_generation": 2,
+    "same_statistical_cell": true,
+    "old_claims_preserved": true
+  },
+  "identities": {
+    "job_name": "chris-q38-ac-r004-a1-g2-v1",
+    "configmap_name": "chris-q38-ac-r004-a1-g2-run-v1",
+    "intent_configmap_name": "chris-ac-g2-canary-submit-v1",
+    "run_id": "chris-q38-ac-g2-r004-a1-02dd4e3f",
+    "network": "q38-ac-g2-r004-a1-02dd4e3f",
+    "sfs_root": "/mnt/sfs/jobs/chris-q38-ac-r004-a1-g2-v1",
+    "generation_claim_root": "/mnt/sfs/cell-execution-claims/opencode11827-autocontinue-v1"
+  },
+  "launch_authorized": false,
+  "plan_sha256": "sha256:82826c2e5863d5aaebc5b5cbeb335f73a31b6795913839a38969ef3c179d91cd"
+}

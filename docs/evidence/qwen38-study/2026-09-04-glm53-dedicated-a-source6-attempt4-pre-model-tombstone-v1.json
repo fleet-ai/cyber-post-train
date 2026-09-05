@@ -1,0 +1,66 @@
+{
+  "schema_version": "fleet-glm53-dedicated-a-pre-model-attrition-tombstone-v1",
+  "recorded_at": "2026-09-04T18:31:00Z",
+  "append_only": true,
+  "source_rank": 6,
+  "attempt": 4,
+  "classification": "INFRASTRUCTURE_PRE_MODEL_CLAIM_CONSUMED",
+  "job": {
+    "name": "chris-cyber-glm53-opencode11827-ded-a-v5-gap-s6a4-p4-v1",
+    "uid": "6eaec014-7139-44dc-abea-a07c868492f4",
+    "created_at": "2026-09-04T17:28:09Z",
+    "failed_at": "2026-09-04T17:29:17Z",
+    "terminal_reason": "BackoffLimitExceeded"
+  },
+  "pod": {
+    "uid": "22e49d5e-44d7-4f96-955f-272e2cdd6a95",
+    "phase": "Failed",
+    "restart_count": 0,
+    "exit_code": 1,
+    "finished_at": "2026-09-04T17:29:11Z"
+  },
+  "immutable_claims": {
+    "plan_sha256": "sha256:14b799389571e82765ce83373a5d88fc37adb8c4a36b414366f699b75ef4da27",
+    "task_claim_sha256": "sha256:b74fef7f598557e431f06d21a63d6a9499230c286f1ce87937cd22bd6f31e98d",
+    "task_claim_file_sha256": "sha256:256cf6701b26b32d11d2b779152462ef8cbdaeef5c03985d19101621f6bb8ae1",
+    "attempt_claim_sha256": "sha256:78caff6e72ef6ae8c78707c465e53115ab43032011f2b18a0b28ac493e0415e3",
+    "attempt_claim_file_sha256": "sha256:755b942fd4ad095d85a315388e2e3ec4eadad97c83f421315920dbf8199d4e9e"
+  },
+  "sanitized_failure": {
+    "exception_class": "ValueError",
+    "exception_message": "OpenCode requires a new plan declaring the autocontinue context policy",
+    "observer_log_sha256_prefix": "sha256:6cc81d",
+    "observer_line_count": 416,
+    "only_controller_event": "task_claimed"
+  },
+  "post_terminal_zero_evidence": {
+    "observed_after_terminal": true,
+    "attempt_output_file_count": 0,
+    "model_proxy_file_count": 0,
+    "scoring_intent_file_count": 0,
+    "result_file_count": 0,
+    "session_ingest_file_count": 0,
+    "terminal_file_count": 0,
+    "api_lineage_sessions_created_since_job_start": 0,
+    "api_exact_task_version_sessions_created_since_job_start": 0,
+    "model_request_started": false,
+    "score_requested": false,
+    "session_ingested": false,
+    "verifier_executed": false
+  },
+  "decision": {
+    "source_attempt_must_not_repeat": true,
+    "source_task_is_primary_incomplete": true,
+    "whole_task_replacement_required": true,
+    "replacement_must_use_all_four_attempts": true
+  },
+  "privacy": {
+    "scores_read": false,
+    "scores_included": false,
+    "prompts_included": false,
+    "traces_included": false,
+    "flags_included": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:5e3e877811953c1dd25f8aef547fed1677bcefed90d5de190853b27cdc744e70"
+}

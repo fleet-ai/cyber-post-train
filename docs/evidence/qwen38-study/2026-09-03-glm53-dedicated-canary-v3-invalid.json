@@ -1,0 +1,82 @@
+{
+  "schema_version": "fleet-cyber-glm53-dedicated-canary-invalid-v1",
+  "observed_at": "2026-09-04T03:21:37Z",
+  "classification": "infrastructure-invalid",
+  "api_run": {
+    "name": "ft-run-785294a4",
+    "status": "FAILED",
+    "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-glm53-tp8-a-v3"
+  },
+  "ray_job": {
+    "name": "ft-run-785294a4",
+    "uid": "4c212b96-d039-46dd-bd33-287228508ed9",
+    "deployment_status": "Failed",
+    "job_status": "FAILED",
+    "ray_cluster_name": "ft-run-785294a4-p86g6",
+    "start_time": "2026-09-04T03:05:44Z",
+    "end_time": "2026-09-04T03:13:16Z"
+  },
+  "workload": {
+    "name": "rayjob-ft-run-785294a4-9e88f",
+    "uid": "a7833a21-0d86-42c0-9892-771a058dc3e4",
+    "admitted": true,
+    "gpu_request": 8
+  },
+  "runtime_objects": {
+    "ray_cluster_name": "ft-run-785294a4-p86g6",
+    "ray_cluster_uid": "7400c566-5811-425d-a3b7-a7307e0c7330",
+    "head_service_uid": "79aee149-2ff1-4026-9e22-c751867c0d9f",
+    "head_pod_uid": "ab1d3321-72e3-4f40-905a-c082422fd863",
+    "submitter_job_uid": "31c9a79a-4891-4e45-9125-8bb33f417ab1",
+    "submitter_pod_uid": "0caeafa9-ede4-48bd-8485-062c96665278",
+    "submitter_succeeded": true,
+    "head_exit_code": 137,
+    "head_restart_count": 0,
+    "gpu_node": "computeinstance-e04q707wzj5z9c6a2r",
+    "gpu_node_tier_1": "200356ff0220b57bf31ac5f5cd34c5fc"
+  },
+  "image": {
+    "requested": "ghcr.io/fleet-ai/cyber-post-train-glm53-runtime@sha256:ec93ba50613fd13fb4c0b0a9105767ab18209a1e0108dab0923aad694c0206ec",
+    "resolved_image_id": "ghcr.io/fleet-ai/cyber-post-train-glm53-runtime@sha256:ec93ba50613fd13fb4c0b0a9105767ab18209a1e0108dab0923aad694c0206ec",
+    "private_pull_succeeded": true
+  },
+  "failure": {
+    "signature": "nvshmem_ibgda_transport_initialization_failure",
+    "phase": "after_base_and_draft_weight_load_and_kv_allocation_before_health",
+    "controller_tail_signature": "dp_controller_eof_then_child_sigquit_and_exit_137",
+    "sglang_health_ready": false,
+    "run_root_file_count": 0,
+    "run_root_byte_count": 0
+  },
+  "outcome_integrity": {
+    "model_requests": 0,
+    "scored_sessions": 0,
+    "verifier_executions": 0,
+    "capability_claim_allowed": false,
+    "scores_read": false,
+    "prompts_or_traces_read": false
+  },
+  "positive_control": {
+    "inference_model": "inference/glm-5.3",
+    "inference_model_uid": "cedb0210-f3bd-4c56-97e9-aa53c08a0ce0",
+    "pod_uid": "65942663-888d-4dcf-ac87-3c40f152308c",
+    "ready_at": "2026-09-04T03:18:52Z",
+    "restart_count": 0,
+    "same_base_image": true,
+    "same_model_revision": true,
+    "same_sglang_arguments": true,
+    "execution_differences": [
+      "IPC_LOCK_capability",
+      "256Gi_shared_memory",
+      "exact_tier_1_node_selector"
+    ]
+  },
+  "replacement": {
+    "api_run": "ft-run-99d69710",
+    "config": "evals/fleet/configs/dedicated-glm53-tp8-a-v4.json",
+    "config_commit": "f4585c1036a77594478cdf8854f89a804c50b515",
+    "config_sha256": "sha256:13afc10a2c889ae4d77f57beb2218ad875479aa97204ce0e3ccaf268c27a639c",
+    "fix": "supported_whole_node_privileged_execution_for_ibgda_device_access",
+    "launched": true
+  }
+}

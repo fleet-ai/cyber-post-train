@@ -1,0 +1,159 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: chris-cyber-glm53-r114-sfs-inventory-v1
+  namespace: fleet-train-jobs
+  labels:
+    cyber-post-train.fleet.ai/experiment: glm53-r114-unused-inventory-v1
+    cyber-post-train.fleet.ai/owner: chris
+    kueue.x-k8s.io/queue-name: training-lq
+spec:
+  activeDeadlineSeconds: 900
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 604800
+  template:
+    metadata:
+      labels:
+        cyber-post-train.fleet.ai/experiment: glm53-r114-unused-inventory-v1
+        cyber-post-train.fleet.ai/owner: chris
+    spec:
+      restartPolicy: Never
+      priorityClassName: fleet-train-high
+      nodeSelector:
+        kubernetes.io/arch: amd64
+        workload: fleetai-training-ng-cpu
+      tolerations:
+        - key: workload
+          operator: Equal
+          value: fleetai-training-ng-cpu
+          effect: NoSchedule
+      containers:
+        - name: observer
+          image: ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
+          command: ["python", "-c"]
+          args:
+            - |
+              import datetime
+              import hashlib
+              import json
+              import os
+              import pathlib
+
+              TASK_KEY = b"cysec1-2-fubspot-gen_blackbox-d096d72a3734e3b85fde5c28__blackbox_ctf_v1"
+              TASK_VERSION_ID = b"66051718-314a-4dad-86ab-c7b9b72fa514"
+              API_ROOT = pathlib.Path(
+                  "/mnt/sfs/jobs/chris-cyber-glm53-r114-unused-inventory-v1"
+              )
+              OUT = pathlib.Path(
+                  "/mnt/sfs/jobs/chris-cyber-glm53-r114-sfs-inventory-v1"
+              )
+
+              def canonical(value):
+                  return json.dumps(
+                      value, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+                  ).encode()
+
+              def digest_without(value, field):
+                  body = {key: item for key, item in value.items() if key != field}
+                  return "sha256:" + hashlib.sha256(canonical(body)).hexdigest()
+
+              api_path = API_ROOT / "API-OBSERVATION.json"
+              api = json.loads(api_path.read_text())
+              assert api.get("receipt_sha256") == digest_without(api, "receipt_sha256")
+              assert api.get("query", {}).get("pagination_exhausted") is True
+              assert api.get("query", {}).get("exact_model_rows") == 0
+              assert api.get("query", {}).get("exact_current_treatment_rows") == 0
+
+              excluded_roots = {API_ROOT.resolve(), OUT.resolve()}
+              private_markers = ("transcript", "trace", "prompt", "tool-output", "opencode")
+              files_scanned = 0
+              bytes_scanned = 0
+              task_key_refs = 0
+              task_version_refs = 0
+              for root, dirs, files in os.walk("/mnt/sfs/jobs"):
+                  root_path = pathlib.Path(root)
+                  dirs[:] = [
+                      name
+                      for name in dirs
+                      if (root_path / name).resolve() not in excluded_roots
+                  ]
+                  for name in files:
+                      lowered = name.lower()
+                      if not lowered.endswith(".json") or any(
+                          marker in lowered for marker in private_markers
+                      ):
+                          continue
+                      path = root_path / name
+                      if not path.is_file() or path.is_symlink():
+                          continue
+                      payload = path.read_bytes()
+                      files_scanned += 1
+                      bytes_scanned += len(payload)
+                      task_key_refs += int(TASK_KEY in payload)
+                      task_version_refs += int(TASK_VERSION_ID in payload)
+
+              assert task_key_refs == 0
+              assert task_version_refs == 0
+              receipt = {
+                  "schema_version": "fleet-score-blind-unused-inventory-sfs-observation-v1",
+                  "observed_at": datetime.datetime.now(datetime.UTC).isoformat().replace(
+                      "+00:00", "Z"
+                  ),
+                  "observer": {
+                      "job_name": os.environ["JOB_NAME"],
+                      "pod_name": os.environ["POD_NAME"],
+                      "pod_uid": os.environ["POD_UID"],
+                      "priority_class": "fleet-train-high",
+                  },
+                  "api_observation_receipt_sha256": api["receipt_sha256"],
+                  "inventory": {
+                      "root": "/mnt/sfs/jobs",
+                      "observer_roots_excluded": [API_ROOT.name, OUT.name],
+                      "files_scanned": files_scanned,
+                      "bytes_scanned": bytes_scanned,
+                      "task_key_reference_files": task_key_refs,
+                      "task_version_reference_files": task_version_refs,
+                  },
+                  "privacy": {
+                      "credentials_included": False,
+                      "file_paths_included": False,
+                      "matched_content_included": False,
+                      "scores_extracted": False,
+                      "prompts_or_traces_extracted": False,
+                  },
+              }
+              receipt["receipt_sha256"] = digest_without(receipt, "receipt_sha256")
+              os.mkdir(OUT, 0o700)
+              path = OUT / "SFS-OBSERVATION.json"
+              fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+              with os.fdopen(fd, "wb") as handle:
+                  handle.write(canonical(receipt) + b"\n")
+              print(json.dumps({
+                  "ok": True,
+                  "receipt_sha256": receipt["receipt_sha256"],
+                  "api_observation_receipt_sha256": api["receipt_sha256"],
+                  "files_scanned": files_scanned,
+                  "task_key_reference_files": task_key_refs,
+                  "task_version_reference_files": task_version_refs,
+              }, sort_keys=True))
+          env:
+            - name: JOB_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: "metadata.labels['job-name']"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_UID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.uid
+          resources:
+            requests: {cpu: 100m, memory: 128Mi, ephemeral-storage: 128Mi}
+            limits: {cpu: 250m, memory: 256Mi, ephemeral-storage: 256Mi}
+          volumeMounts:
+            - {name: sfs, mountPath: /mnt/sfs}
+      volumes:
+        - name: sfs
+          persistentVolumeClaim: {claimName: sfs-shared}

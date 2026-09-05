@@ -1,0 +1,99 @@
+{
+  "schema_version": "fleet-completed-exit1-gap-scoring-release-v1",
+  "created_at": "2026-09-04T07:30:30Z",
+  "append_only": true,
+  "supersedes": null,
+  "plan": {
+    "path": "evals/fleet/configs/glm53-opencode-hosted-completed-exit1-gap-pass4-v1.json",
+    "plan_sha256": "sha256:f67e1b02040bd795d336d27a42c8f3ea8752d66c1618f623ebe0ba87e152a0ac",
+    "task_count": 2,
+    "credited_cell_count": 3,
+    "new_cell_count": 5,
+    "pass_k": 4,
+    "attempt_cells": [
+      [
+        13,
+        3
+      ],
+      [
+        13,
+        4
+      ],
+      [
+        15,
+        2
+      ],
+      [
+        15,
+        3
+      ],
+      [
+        15,
+        4
+      ]
+    ]
+  },
+  "gates": {
+    "reconciliation_receipt_sha256": "sha256:5435c0a25b3be1872c1aae09fd88858c5251272e164ab8eb49ab66b4c5a4ca0e",
+    "gap_source_receipt_sha256": "sha256:30338f0561867bda8ab8b10cd2601b3a1ce0c60ad27d7fd55f9a7ad87d4b46a2",
+    "held_unused_replacement_rank": 111,
+    "exact_treatment_gate_required": true,
+    "duplicate_gate_required": true,
+    "overlap_gate_required": true,
+    "fresh_create_once_identity_required": true,
+    "credited_cells_must_not_repeat": true,
+    "primary_denominator_completion_gate_required": true
+  },
+  "treatment": {
+    "endpoint_origin": "https://inference.flt.build",
+    "harness": {
+      "context_management": "opencode_1.18.27_native_compaction_no_autocontinue",
+      "context_window_size": 262144,
+      "max_model_requests": 600,
+      "max_output_tokens": 32768,
+      "name": "opencode",
+      "provider_adapter": "@ai-sdk/openai-compatible",
+      "release_asset_sha256": "sha256:4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702",
+      "timeout_seconds": 28800,
+      "version": "1.18.27"
+    },
+    "kind": "hosted_inference_endpoint_v1",
+    "model_revision": "30333038ada1f1dacb294a93270305a890b50c14",
+    "required_task_tool_catalog_sha256": "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a",
+    "required_task_tools": [
+      "bash",
+      "submit_report"
+    ],
+    "served_id": "glm-5.3",
+    "serving_block": "hosted-primary-after-scoring-outage-v1",
+    "session_model": "fleet-cluster-opencode-1.18.27/glm-5.3"
+  },
+  "concurrency": {
+    "authorized_hosted_streams_per_model_endpoint": 2,
+    "authorized_hosted_streams_total": 4,
+    "authorized_scored_controllers_total": 6,
+    "third_hosted_stream_per_endpoint_authorized": false,
+    "stop_adding_on_regression": true
+  },
+  "scheduling": {
+    "required_priority_class": "fleet-train-high",
+    "workers": 1,
+    "true_non_preemptible_available": false,
+    "priority_class_is_not_preemption_immunity": true
+  },
+  "authorization": {
+    "timestamp_utc": "2026-09-04T07:30:30Z",
+    "author": "/root",
+    "statement": "I authorize create-once scored launches of Qwen gap plan sha256:43ef5b8e649ccd88b2f77216f9ca4ec6dea73edddff972321f89ba6d8a48c4b1 and hosted GLM gap plan sha256:f67e1b02040bd795d336d27a42c8f3ea8752d66c1618f623ebe0ba87e152a0ac after exact reconciliation, treatment, duplicate, overlap, and preflight gates pass. This raises hosted concurrency from one to two streams per model endpoint (four hosted streams total; six scored controllers including dedicated A/B), not three on either endpoint. Prior Qwen concurrency2 was healthy; prior GLM common failure was control-plane HTTP500, not inference pressure. Use fleet-train-high, monitor score-blind latency/5xx/transport/restarts, and stop adding concurrency on any regression. Run only the five never-started cells per model; never repeat credited cells or launch r56/r111.",
+    "scored_launch_authorized": true,
+    "create_once": true,
+    "must_not_repeat": true
+  },
+  "privacy": {
+    "scores_read": false,
+    "prompts_or_traces_read": false,
+    "task_content_included": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:fcdeb9bb70d08ca3afc277c44f72b2e7d4cf76636f1d90a5fd30c41135b43a38"
+}

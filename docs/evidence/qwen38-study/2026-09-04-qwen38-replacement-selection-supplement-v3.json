@@ -1,0 +1,104 @@
+{
+  "schema_version": "fleet-qwen38-replacement-selection-supplement-v3",
+  "supplement_id": "qwen38-hosted-source6-noncreditable-replacement-r56-v1",
+  "recorded_at": "2026-09-04T07:03:00Z",
+  "append_only": true,
+  "prior_supplement": {
+    "path": "docs/evidence/qwen38-study/2026-09-04-qwen38-replacement-selection-supplement-v2.json",
+    "file_sha256": "sha256:bfd0df59773e14160db75b882e60e3537366d29c1ff8856448750c2157c5d539",
+    "receipt_sha256": "sha256:7ad740c7b8a13178a2e090623d3f0c4786d52d29143e740fd3649392acbf5276",
+    "rewritten": false
+  },
+  "frozen_selection": {
+    "path": "evals/fleet/configs/opencode-easiest-train100-selection-v2.json",
+    "file_sha256": "sha256:9f5e83123cfe7d8a3f4cc0b791ac1dc9032a3d5faf5eba2a431c7246069255df",
+    "selection_sha256": "sha256:38bd544c74f4e45cb67b271849d657f49e356ccf41f97acca9fb6cd7eb7f56b8",
+    "split_path": "configs/data/fleet-a62-task-split-v1.json",
+    "split_file_sha256": "sha256:ab444cb664ffb4da351e4d33298cc052f848f2833487807bf984a753fa7c3b47",
+    "selection_rule": "take_locked_qwen_selection_rank_56_after_r55_when_source6_whole_task_is_fenced",
+    "mutable_live_statistics_used": false
+  },
+  "source6_fence": {
+    "plan_path": "evals/fleet/configs/qwen38-opencode-hosted-http500-successor49-pass4-v8.json",
+    "plan_file_sha256": "sha256:2143a309268d83abf83def32e6d7facf41dd2cf23b1a3b3daed80b3ca0f3bf22",
+    "plan_sha256": "sha256:8d6df6af63b308d648fb0c7ea9115f90b16de1d7e57b0968dda8fc8fd4a20c81",
+    "job_uid": "84727b82-5187-425b-ba4b-9598f46691c4",
+    "pod_uid": "42df9b32-60c2-45aa-8ce3-ba850b82b909",
+    "source_rank": 6,
+    "task_version_id": "2f2681bf-c1f7-4056-b6e4-cb2e5058f027",
+    "accepted_attempt": {
+      "attempt": 1,
+      "receipt_sha256": "sha256:c6b1dea26588f2511d8dd5b7463e9be23de1f3723f7586f8a692e262ebc2c76a",
+      "file_sha256": "sha256:0d71f1d89d28c493075d0b4a00b9f28890c974f3aaaa00d39a71dce9dc269cd2",
+      "accepted_at": "2026-09-04T06:49:48Z",
+      "attrition_only": true
+    },
+    "noncreditable_attempt": {
+      "attempt": 2,
+      "receipt_sha256": "sha256:afd3d970239c1c99ea2f4b94e58b9ad1df8b0d62d91bdd5339af74d477be19e7",
+      "file_sha256": "sha256:c6bd25fd4906648799ec3a8e00281e167ded68479954edc1952ab3a3c0056576",
+      "terminal_at": "2026-09-04T07:01:50Z",
+      "agent_exit_code": 1,
+      "session_ingest_completed": true,
+      "verifier_execution_present": true,
+      "cleanup_completed": true,
+      "retry_allowed": false
+    },
+    "whole_task_fenced": true,
+    "attempts_3_and_4_launched": false,
+    "controller_advanced_to_source7": true
+  },
+  "replacement": {
+    "replacement_rank": 56,
+    "historical_rank": 61,
+    "serving_block": "hosted_qwen_successor_replacement",
+    "task_key": "cysec1-2-fira-gen_blackbox-f1d8a0c49352bdf40faf015f__blackbox_ctf_v1",
+    "task_version_id": "33527414-ced7-4005-9c5a-eb9c211a32da",
+    "task_version": "24",
+    "environment_version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+    "env_key": "cysec1-2-fira-gen",
+    "env_version": "v0.0.3",
+    "data_key": "cultivacore",
+    "data_version": "v0.0.61",
+    "split": "train",
+    "hydration_gate": {
+      "status": "required_not_satisfied",
+      "required_before_paid_launch": true
+    },
+    "scored_launch_authorized": false
+  },
+  "overlap_audit": {
+    "same_qwen_plan_or_claim_references": 0,
+    "cross_model_glm_references_present": true,
+    "cross_model_references_are_not_same_treatment_cells": true,
+    "exact_qwen_plan_run_and_treatment_identity_required": true,
+    "unused_for_current_qwen_experiment": true
+  },
+  "revised_primary_estimator": {
+    "retained_complete_source4_task_count": 1,
+    "current_v8_intact_task_count_after_source6_fence": 48,
+    "new_replacement_ranks": [56],
+    "replacement_task_count": 1,
+    "unique_task_count": 50,
+    "pass_k": 4,
+    "cell_count": 200,
+    "partially_accepted_sessions_outside_estimator": 6,
+    "formal_accept_count_if_primary_completes": 206
+  },
+  "future_submission_gate": {
+    "required_priority_class": "fleet-train-high",
+    "fresh_hydration_required": true,
+    "same_hosted_treatment_required": true,
+    "duplicate_and_overlap_preflight_required": true,
+    "existing_jobs_mutated": false
+  },
+  "privacy": {
+    "scores_read": false,
+    "scores_included": false,
+    "prompts_included": false,
+    "traces_included": false,
+    "flags_included": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:56406bb32541babc0189e089f339d6a7668b24cb86b1fd8587b60a3cfc57b24c"
+}

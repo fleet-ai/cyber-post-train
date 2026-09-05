@@ -1,0 +1,64 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: chris-cyber-glm53-serving-preflight-observer-v1
+  namespace: fleet-train-jobs
+  labels:
+    cyber-post-train.fleet.ai/experiment: glm53-serving-preflight-observer-v1
+    cyber-post-train.fleet.ai/owner: chris
+    kueue.x-k8s.io/queue-name: training-lq
+spec:
+  activeDeadlineSeconds: 900
+  backoffLimit: 0
+  suspend: true
+  ttlSecondsAfterFinished: 604800
+  template:
+    metadata:
+      labels:
+        cyber-post-train.fleet.ai/experiment: glm53-serving-preflight-observer-v1
+        cyber-post-train.fleet.ai/owner: chris
+    spec:
+      priorityClassName: fleet-infra-quiet
+      restartPolicy: Never
+      nodeSelector:
+        kubernetes.io/arch: amd64
+        workload: fleetai-training-ng-cpu
+      tolerations:
+        - key: workload
+          operator: Equal
+          value: fleetai-training-ng-cpu
+          effect: NoSchedule
+      containers:
+        - name: observer
+          image: ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
+          command: ["python3", "-c"]
+          args:
+            - |
+              import json
+              from pathlib import Path
+
+              candidates = [
+                  Path("/mnt/sfs/jobs/chris-cyber-evalserve-glm53-tp8-a-v2"),
+                  Path("/mnt/sfs/jobs/chris-cyber-evalserve-glm53-tp8-b-v2"),
+              ]
+              existing = [str(path) for path in candidates if path.exists()]
+              if existing:
+                  raise SystemExit("candidate serving output root already exists")
+              print(json.dumps({
+                  "schema": "fleet_cyber_glm53_serving_sfs_preflight_v1",
+                  "candidate_count": len(candidates),
+                  "existing_count": len(existing),
+                  "all_candidates_absent": True,
+              }, sort_keys=True))
+          resources:
+            requests: {cpu: "100m", memory: 128Mi}
+            limits: {cpu: "500m", memory: 512Mi}
+          volumeMounts:
+            - name: sfs
+              mountPath: /mnt/sfs
+              readOnly: true
+      volumes:
+        - name: sfs
+          persistentVolumeClaim:
+            claimName: sfs-shared
+            readOnly: true
