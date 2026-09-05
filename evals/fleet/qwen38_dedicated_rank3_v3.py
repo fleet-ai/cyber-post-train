@@ -13,16 +13,16 @@ from evals.fleet import qwen38_dedicated_scored_canary_v1 as legacy
 from evals.fleet import self_hosted
 
 CONTROLLER = "qwen-dedicated-tp1-rank3-g21-v2"
-SERVING_BLOCK = "dedicated-qwen-tp1-b-v1"
+SERVING_BLOCK = "dedicated-qwen-tp1-b-v2"
 PARITY = Path(
-    "docs/evidence/qwen38-study/2026-09-05-qwen38-dedicated-tp1-b-v1-actual-opencode-parity.json"
+    "docs/evidence/qwen38-study/2026-09-05-qwen38-dedicated-tp1-b-v2-actual-opencode-parity.json"
 )
-PARITY_SHA256 = "sha256:9e4feeb252924031bbc79ca4b812bf482ed466c7be707b52229350437cdca5bd"
-SERVICE_ORIGIN = "http://ft-run-8656260d-ln8hl-head-svc.fleet-train-jobs.svc.cluster.local:8000"
-SERVICE_UID = "b0f706ca-7190-42a1-a4a0-23e0f5eaf41f"
-RAYJOB_UID = "a16fa2a7-27e6-480a-a7fb-4332ebdff5b6"
-WORKLOAD_UID = "3a800a6e-ec90-46ba-a308-734379b7d23e"
-TRAFFIC = Path("/mnt/sfs/jobs/chris-cyber-evalserve-q38-tp1-b-v1/lifecycle/traffic")
+PARITY_SHA256 = "sha256:06920a9cec20cff7b86312ffad6d2ce4a2a4ec3f9779f3a57c45b4f1b6fb70e7"
+SERVICE_ORIGIN = "http://ft-run-76c7f016-pmzv6-head-svc.fleet-train-jobs.svc.cluster.local:8000"
+SERVICE_UID = "c0dbe1ca-e10f-48b0-8221-f5a36b555b1d"
+RAYJOB_UID = "5e153629-8166-4b79-a707-0e3fde8ab321"
+WORKLOAD_UID = "87aef71c-b63f-4352-a1c0-9869232a4050"
+TRAFFIC = Path("/mnt/sfs/jobs/chris-cyber-evalserve-q38-tp1-b-v2/lifecycle/traffic")
 EXECUTION_GENERATION = 21
 TASK_VERSION_ID = "33d37078-0669-478e-af39-43cd245f0da8"
 EXPECTED_IDENTITIES = {
@@ -87,7 +87,7 @@ def build_plan(root: Path, attempt: int) -> dict[str, Any]:
     plan["controller"] = CONTROLLER
     config = plan["config"]
     config["serving"] = {
-        "kind": "dedicated_qwen_tp1_b_v1",
+        "kind": "dedicated_qwen_tp1_b_v2",
         "serving_block": SERVING_BLOCK,
         "service_origin": SERVICE_ORIGIN,
         "service_uid": SERVICE_UID,

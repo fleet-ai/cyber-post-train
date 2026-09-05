@@ -75,7 +75,7 @@ def test_rank3_attempt_order_requires_validated_previous_cell(tmp_path: Path) ->
 def test_rank3_parity_is_uid_bound_to_tp1_b_server() -> None:
     value = lane._validate_parity(ROOT)
     binding = value["endpoint"]["server_binding"]
-    assert binding["api_run_id"] == "ft-run-8656260d"
+    assert binding["api_run_id"] == "ft-run-76c7f016"
     assert binding["rayjob_uid"] == lane.RAYJOB_UID
     assert binding["service_uid"] == lane.SERVICE_UID
     assert binding["context_length"] == 262144

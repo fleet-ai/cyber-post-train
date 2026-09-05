@@ -15,13 +15,13 @@ from evals.fleet import self_hosted
 
 SOURCE = rank2_job.SOURCE
 SOURCE_SHA256 = rank2_job.SOURCE_SHA256
-SERVING_BLOCK = "dedicated-qwen-tp1-b-v1"
+SERVING_BLOCK = "dedicated-qwen-tp1-b-v2"
 BOOTSTRAP = rank2_job.BOOTSTRAP.replace(
     'install -m 0644 /bootstrap/lane.py "$root/evals/fleet/qwen38_dedicated_rank2_v3.py"',
     'install -m 0644 /bootstrap/lane.py "$root/evals/fleet/qwen38_dedicated_rank3_v3.py"',
 ).replace(
     'install -m 0644 /bootstrap/parity.json "$root/docs/evidence/qwen38-study/2026-09-05-qwen38-dedicated-v3-actual-opencode-parity.json"',
-    'install -m 0644 /bootstrap/parity.json "$root/docs/evidence/qwen38-study/2026-09-05-qwen38-dedicated-tp1-b-v1-actual-opencode-parity.json"',
+    'install -m 0644 /bootstrap/parity.json "$root/docs/evidence/qwen38-study/2026-09-05-qwen38-dedicated-tp1-b-v2-actual-opencode-parity.json"',
 )
 
 

@@ -16,7 +16,7 @@ def test_rank3_job_is_nonpreempting_and_release_gated() -> None:
     assert env["QWEN_DEDICATED_ATTEMPT"] == "1"
     assert env["QWEN_RANK3_RELEASE_PATH"] == "/bootstrap/rank3-release.json"
     assert "qwen38_dedicated_rank3_v3.py" in job.BOOTSTRAP
-    assert "qwen38-dedicated-tp1-b-v1-actual-opencode-parity.json" in job.BOOTSTRAP
+    assert "qwen38-dedicated-tp1-b-v2-actual-opencode-parity.json" in job.BOOTSTRAP
     assert "qwen38-dedicated-v3-actual-opencode-parity.json" not in job.BOOTSTRAP
 
 
