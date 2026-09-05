@@ -26,7 +26,7 @@ def _committed_repo(root: Path) -> tuple[Path, str]:
     paths = [
         *(source for source, _install in package.PACKAGE_FILES.values()),
         package.MANIFEST_PATH,
-        "evals/fleet/scripts/submit_exact_pass4_task_inventory_v1.sh",
+        "evals/fleet/scripts/submit_exact_pass4_task_inventory_v2.sh",
     ]
     for relative in paths:
         target = repo / relative
@@ -232,7 +232,7 @@ def test_submitter_preview_is_server_validated_and_create_free(tmp_path: Path) -
             "bash",
             str(
                 repo
-                / "evals/fleet/scripts/submit_exact_pass4_task_inventory_v1.sh"
+                / "evals/fleet/scripts/submit_exact_pass4_task_inventory_v2.sh"
             ),
             "preview",
         ],
@@ -284,7 +284,7 @@ def test_submitter_rejects_head_change_before_create(tmp_path: Path) -> None:
     result = subprocess.run(
         [
             "bash",
-            str(repo / "evals/fleet/scripts/submit_exact_pass4_task_inventory_v1.sh"),
+            str(repo / "evals/fleet/scripts/submit_exact_pass4_task_inventory_v2.sh"),
             "submit",
         ],
         cwd=repo,
@@ -320,7 +320,7 @@ def test_submitter_rejects_dirty_tree_before_cluster_access(tmp_path: Path) -> N
     result = subprocess.run(
         [
             "bash",
-            str(repo / "evals/fleet/scripts/submit_exact_pass4_task_inventory_v1.sh"),
+            str(repo / "evals/fleet/scripts/submit_exact_pass4_task_inventory_v2.sh"),
             "submit",
         ],
         cwd=repo,
@@ -337,7 +337,7 @@ def test_runner_uses_fixed_create_once_output_and_never_prints_secret() -> None:
         ROOT / "evals/fleet/scripts/run_exact_pass4_task_inventory_v2.sh"
     ).read_text()
     submitter = (
-        ROOT / "evals/fleet/scripts/submit_exact_pass4_task_inventory_v1.sh"
+        ROOT / "evals/fleet/scripts/submit_exact_pass4_task_inventory_v2.sh"
     ).read_text()
     assert "OUT_ROOT=/mnt/sfs/jobs/chris-cyber-exact100-pass4-inventory-v2" in runner
     assert "FLEET_API_KEY" in runner
