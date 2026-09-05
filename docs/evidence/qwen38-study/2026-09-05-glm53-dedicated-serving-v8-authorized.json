@@ -1,0 +1,52 @@
+{
+  "schema_version": "fleet-glm53-dedicated-serving-v8-authorization-v1",
+  "status": "AUTHORIZED",
+  "authorized_scope": "one_non_scored_one_node_eight_gpu_glm53_server",
+  "authorization_source": "explicit_user_instruction_via_root_agent",
+  "source_parent_commit": "973d6d9931f6d30bf11b4b0f7806a5a8523e94ef",
+  "v7_history_preserved": true,
+  "title": "chris-cyber-evalserve-glm53-tp8-a-v8",
+  "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-glm53-tp8-a-v8",
+  "model_revision": "30333038ada1f1dacb294a93270305a890b50c14",
+  "context_length": 262144,
+  "runtime_image": "ghcr.io/fleet-ai/cyber-post-train-glm53-runtime@sha256:ec93ba50613fd13fb4c0b0a9105767ab18209a1e0108dab0923aad694c0206ec",
+  "resources": {
+    "nodes": 1,
+    "gpus": 8,
+    "priority_class": "fleet-infra-quiet",
+    "preemption_policy": "Never",
+    "privileged": true
+  },
+  "file_sha256": {
+    "evals/fleet/configs/glm53-dedicated-serving-v8-authorized.json": "sha256:5465e6d9c9cd2eed6d48912fccb367b979cbe2ed45e8b3b040fcaed00b9371b2",
+    "evals/fleet/glm53_dedicated_v8.py": "sha256:4c71b4d529c3d3134c9608e5273a3cfd2cf9fb83ad104f60fd927b4300854245",
+    "evals/fleet/glm53_dedicated_v8_live.py": "sha256:40f5ef4490fe24da0415cec03f7c6266af25543367eb0717d0ccbb5249b53302",
+    "evals/fleet/scripts/submit_glm53_dedicated_v8.sh": "sha256:da67d867fb1f64c0d2d9424a392d287052df682c96cb6361ffaa8b6462de66b8",
+    "evals/fleet/scripts/glm53_dedicated_v6_lifecycle.sh": "sha256:2c573d474470e8750e31fc2707ab49125c02b2d5093540e3f44a8cb979e49e44",
+    "tests/test_glm53_dedicated_v8.py": "sha256:fecd3a68dba9f4b674be1699f2a42f5dde44625e2ea909b422ebf3682d99dfc7"
+  },
+  "live_preview": {
+    "receipt_path": "/private/tmp/glm53-dedicated-v8-preview.json",
+    "receipt_sha256": "sha256:a6b14c46e10360a7dd4864218256161a45bf02878e0b820a578a0bf5a25c8805",
+    "request_sha256": "sha256:38d2724c9d7d835dff233dd9d8b767e3eb70c723ec049451d2618dba51607a56",
+    "duplicate_matches": 0,
+    "objects_created": false
+  },
+  "post_submit_gate": {
+    "uid_bound_readiness_required": true,
+    "gpu_utilization_monitoring_required": true,
+    "release_if_admitted_idle_or_unproductive_over_seconds": 600,
+    "non_scored_parity_required_before_scored_canary": true,
+    "accepted_canary_required_before_bulk": true,
+    "replica_b_allowed": false
+  },
+  "tests": {
+    "targeted_passed": 11,
+    "ruff_passed": true
+  },
+  "privacy": {
+    "credentials_included": false,
+    "prompts_traces_flags_or_scores_included": false
+  },
+  "receipt_sha256": "sha256:988b917091a5f2b24b403129354f88b58fc3cd235a2b9afc7f100c85e8595b6d"
+}

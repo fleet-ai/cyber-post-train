@@ -1,0 +1,63 @@
+{
+  "schema_version": "fleet-glm53-dedicated-serving-v8-authorized-spec-v1",
+  "status": "AUTHORIZED",
+  "launch_authorized": true,
+  "scope": "one_non_scored_dedicated_server_only",
+  "title": "chris-cyber-evalserve-glm53-tp8-a-v8",
+  "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-glm53-tp8-a-v8",
+  "model": {
+    "repository": "zai-org/GLM-5.3",
+    "revision": "30333038ada1f1dacb294a93270305a890b50c14",
+    "served_id": "glm-5.3",
+    "sfs_path": "/mnt/sfs/models/glm-5.3-30333038",
+    "context_length": 262144,
+    "staging_receipt_sha256": "sha256:9a680f714de5c72e60dc6b08f363a8c82658dc1540bbb9aab90a3b8939445869"
+  },
+  "runtime": {
+    "image": "ghcr.io/fleet-ai/cyber-post-train-glm53-runtime@sha256:ec93ba50613fd13fb4c0b0a9105767ab18209a1e0108dab0923aad694c0206ec",
+    "base_image": "lmsysorg/sglang@sha256:9e148f5ac788e856a06166bd6347a831831eb9fcfab4d1770874823a7c29a1a1",
+    "ray_version": "2.56.0",
+    "image_pull_secret_required": "ghcr-pull"
+  },
+  "resources": {
+    "workers": 1,
+    "gpus_per_worker": 8,
+    "cpu_request": "96",
+    "cpu_limit": "192",
+    "memory_request": "1Ti",
+    "memory_limit": "2Ti",
+    "privileged": true,
+    "priority_class": "fleet-infra-quiet",
+    "preemption_policy": "Never"
+  },
+  "lifecycle": {
+    "script": "evals/fleet/scripts/glm53_dedicated_v6_lifecycle.sh",
+    "post_ready_idle_seconds": 600,
+    "startup_is_outside_idle_budget": true,
+    "release_when_idle": true
+  },
+  "server_arguments_sha256": "sha256:5969c3805b0473da3c445bebe89f96e3a2f7e7318b555eebd9135dd0eddd4903",
+  "jobs_api": {
+    "base_url": "https://api.ft.flt.build",
+    "identity_route": "GET /v1/whoami",
+    "openapi_route": "GET /v1/openapi.json",
+    "preview_route": "POST /v1/runs/preview",
+    "submit_route": "POST /v1/runs"
+  },
+  "create_once": {
+    "fresh_authenticated_preview_required": true,
+    "jobs_api_title_and_run_dir_absent": true,
+    "kubernetes_identity_absent": true,
+    "sfs_run_dir_absent": true,
+    "replica_b_allowed": false
+  },
+  "evaluation": {
+    "scored_tasks_allowed": false,
+    "parity_required_before_scored_canary": true,
+    "accepted_canary_required_before_bulk": true
+  },
+  "privacy": {
+    "credentials_included": false,
+    "prompts_traces_flags_or_scores_included": false
+  }
+}
