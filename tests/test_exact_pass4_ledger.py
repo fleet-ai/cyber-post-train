@@ -344,7 +344,7 @@ def test_fixed_historical_adapters_remain_score_blind(
     assert result["models"]["glm-5.3"]["active"] == 1
 
 
-def test_generation16_hosted_claim_uses_its_exact_successor_plan(
+def test_current_qwen_hosted_claim_uses_its_exact_successor_plan(
     tmp_path: Path, authority: ledger.Authority
 ) -> None:
     plan, item = next(iter(authority.qwen_generation16_items.values()))
@@ -360,7 +360,7 @@ def test_generation16_hosted_claim_uses_its_exact_successor_plan(
     path = root / f"{item['execution_id'].removeprefix('sha256:')}.json"
     evidence = ledger.claim_evidence(path, authority, active=True)
     assert evidence.cell_id == item["cell_id"]
-    assert evidence.execution_generation == 16
+    assert evidence.execution_generation == item["execution_generation"]
 
 
 def test_dedicated_qwen_claim_and_acceptance_are_strict_score_blind_adapters(
@@ -394,6 +394,22 @@ def test_dedicated_qwen_claim_and_acceptance_are_strict_score_blind_adapters(
         tombstones=[],
     )
     assert accepted_result["models"]["qwen3.8-27b"]["accepted"] == 1
+
+
+def test_dedicated_attempt1_keeps_its_immutable_historical_plan_authority(
+    authority: ledger.Authority,
+) -> None:
+    key = (
+        ledger.DEDICATED_QWEN_ATTEMPT1_BINDING["cell_id"],
+        ledger.DEDICATED_QWEN_ATTEMPT1_BINDING["execution_id"],
+    )
+    plan, item = authority.dedicated_qwen_items[key]
+    assert plan["plan_sha256"] == ledger.DEDICATED_QWEN_ATTEMPT1_BINDING["plan_sha256"]
+    assert (
+        plan["config"]["config_sha256"] == ledger.DEDICATED_QWEN_ATTEMPT1_BINDING["config_sha256"]
+    )
+    assert item == qwen_dedicated.build_plan(ROOT, 1)["item"]
+    assert plan["plan_sha256"] != qwen_dedicated.build_plan(ROOT, 1)["plan_sha256"]
 
 
 def test_dedicated_qwen_adapter_rejects_serving_block_drift(

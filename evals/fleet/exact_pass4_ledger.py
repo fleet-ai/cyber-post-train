@@ -31,6 +31,19 @@ GENERATION7_CLAIM_SCHEMA = "fleet-statistical-cell-execution-claim-v9"
 GENERATION15_TERMINAL_SCHEMA = "fleet-opencode-generation15-simple-terminal-v1"
 GENERATION15_CLAIM_SCHEMA = "fleet-statistical-cell-execution-claim-v15"
 DEDICATED_QWEN_ACCEPTED_SCHEMA = "fleet-qwen38-dedicated-tp1-cell-accepted-v1"
+DEDICATED_QWEN_ATTEMPT1_BINDING = {
+    "plan_sha256": "sha256:5358ae8d0c81fd18d815f5289eabf771274101e099c799c49a85d0713687aa67",
+    "controller": "qwen-dedicated-tp1-rank2-v1",
+    "config_sha256": "sha256:df57b47039edab8dbfa610e728afd3d5e6e2b813dbb11abf5d73ff667e821d31",
+    "serving_block": "dedicated-qwen-tp1-v1",
+    "cell_id": "sha256:6351b9167d5846a2a30f0725f09f9918cbc749df963c5eba63dc1fc2a835b713",
+    "execution_id": "sha256:d84a03547e45240e9702097b47d68ee122312987c5b18fcfa6ab7ee2ab738f0f",
+    "execution_generation": 1,
+    "run_id": "chris-cyber-q38-opencode11827-ded-tp1-r002-a1-v2",
+    "selection_rank": 2,
+    "attempt": 1,
+    "task_version_id": "09a3fea6-f691-4841-9218-d04459041a1f",
+}
 ACCEPTED_SCHEMAS = {
     "fleet-exact-pass4-bulk-cell-accepted-v3",
     GENERATION7_TERMINAL_SCHEMA,
@@ -336,12 +349,43 @@ def _build_authority(repo_root: Path, campaign_path: Path) -> Authority:
                 raise LedgerError("Qwen generation-16 execution authority is duplicated")
             qwen_generation16_items[key] = (plan, item)
 
-    dedicated_plan = qwen_dedicated.build_plan(repo_root)
-    dedicated_item = dedicated_plan["item"]
-    dedicated_key = (dedicated_item["cell_id"], dedicated_item["execution_id"])
-    if dedicated_plan.get("treatment") != exact.EXPECTED_TREATMENT:
-        raise LedgerError("dedicated Qwen plan treatment drifted from the exact universe")
-    dedicated_qwen_items = {dedicated_key: (dedicated_plan, dedicated_item)}
+    dedicated_qwen_items: dict[tuple[str, str], tuple[dict[str, Any], dict[str, Any]]] = {}
+    for attempt in sorted(qwen_dedicated.EXPECTED_IDENTITIES):
+        generated_plan = qwen_dedicated.build_plan(repo_root, attempt)
+        if generated_plan.get("treatment") != exact.EXPECTED_TREATMENT:
+            raise LedgerError("dedicated Qwen plan treatment drifted from the exact universe")
+        if attempt == 1:
+            binding = DEDICATED_QWEN_ATTEMPT1_BINDING
+            item = {
+                key: binding[key]
+                for key in (
+                    "cell_id",
+                    "execution_id",
+                    "execution_generation",
+                    "run_id",
+                    "selection_rank",
+                    "attempt",
+                    "task_version_id",
+                )
+            }
+            if item != generated_plan["item"]:
+                raise LedgerError("dedicated Qwen attempt-1 statistical binding drifted")
+            plan = {
+                "plan_sha256": binding["plan_sha256"],
+                "controller": binding["controller"],
+                "treatment": exact.EXPECTED_TREATMENT,
+                "config": {
+                    "config_sha256": binding["config_sha256"],
+                    "serving": {"serving_block": binding["serving_block"]},
+                },
+                "item": item,
+            }
+        else:
+            plan, item = generated_plan, generated_plan["item"]
+        key = (item["cell_id"], item["execution_id"])
+        if key in dedicated_qwen_items:
+            raise LedgerError("dedicated Qwen execution authority is duplicated")
+        dedicated_qwen_items[key] = (plan, item)
 
     generation7_items = _validated_fixed_bindings(cells, GENERATION7_BINDINGS, 7)
     generation15_items = _validated_fixed_bindings(cells, GENERATION15_BINDINGS, 15)
