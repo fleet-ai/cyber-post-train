@@ -26,7 +26,17 @@ all of the following for both exact Generation-7 UIDs:
 1. The Job is no longer active and is exclusively terminal Failed; its exact
    Pod is terminal.
 2. Every global execution-claim path for generations 1 through 8 is absent.
-3. Every known output root for the cell's generations 1 through 8 is absent.
+3. Every known output root for the cell's generations 1 through 8 is absent,
+   except the two preserved Generation-1 `canary1-v2` roots. If either preserved
+   root exists, it must contain exactly the canonical Generation-1 plan and
+   scoring release, one exact task claim, one exact attempt claim, the empty
+   claim-gate lock, and empty attempt/result/quarantine directories. Its claim
+   digests must match the reviewed Generation-1 pre-model tombstone, which
+   proves zero model calls, attempts, sessions, verifier executions, terminals,
+   and accepted outcomes. The originally owning Job and Pod must also remain
+   Failed under their exact reviewed UIDs. Any extra, missing, changed, or
+   symlinked entry or live-identity drift fails closed; the preserved root is
+   never deleted or reused.
 4. Fleet task-session metadata contains none of the cell, execution, or run
    identities. The observer never requests transcripts, scores, prompts, flags,
    or logs.
@@ -44,8 +54,9 @@ terminal Failed. A separate explicit controlled-stop path is available if the
 operator decides to stop the still-active, pre-claim G7 work:
 
 1. `observe-prestop` freezes both exact active Job/Pod UIDs and resource
-   versions and proves every G1-G8 execution claim, known output root, and
-   authoritative Fleet session identity absent.
+   versions and proves every G1-G8 execution claim, non-historical output root,
+   and authoritative Fleet session identity absent, while revalidating either
+   preserved Generation-1 root under the exact contract above.
 2. `render-delete-authorization` emits a HELD receipt containing exactly two
    Kubernetes DELETE requests. Each request names one owned G7 Job, carries its
    exact UID as a server-enforced precondition, and uses foreground propagation.

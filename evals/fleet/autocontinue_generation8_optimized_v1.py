@@ -27,6 +27,7 @@ from typing import Any
 
 from evals.fleet import autocontinue_canary_controller as legacy
 from evals.fleet import autocontinue_canary_hosted_runtime as hosted_runtime
+from evals.fleet import autocontinue_generation2_canary as generation1_evidence
 from evals.fleet import autocontinue_generation2_canary_v3 as generation2
 from evals.fleet import autocontinue_generation7_authority_v1 as authority7
 from evals.fleet import autocontinue_generation7_canary as generation7
@@ -97,6 +98,50 @@ MODELS = {
             "chris-glm53-ac-g7-r013-a1-b6338d53",
             "chris-glm53-ac-g8-r013-a1-a8b2f9b6",
         ),
+    },
+}
+PRESERVED_GENERATION1_ROOTS = {
+    "qwen3.8-27b": {
+        "root": "/mnt/sfs/jobs/chris-q38-ac-canary1-v2",
+        "plan": "evals/fleet/configs/qwen38-opencode-autocontinue-canary1-v2.json",
+        "release": (
+            "docs/evidence/qwen38-study/"
+            "2026-09-04-qwen38-autocontinue-canary-successor-hosted-scoring-release-v4.json"
+        ),
+        "plan_sha256": ("sha256:726320dd5e161e28becd22d7bb6e31f1627f36a3c7291c0dabb53f94626b3c2d"),
+        "release_receipt_sha256": (
+            "sha256:14335ecfc211a925ffe7d0c6d7f2af0e0e3935d439073040d102f40321e1ebf1"
+        ),
+        "task_claim_sha256": (
+            "sha256:0b39bb92c761de1a648e024095e7b6e7d710f36da3b734b7201cfbe987d464f0"
+        ),
+        "attempt_claim_sha256": (
+            "sha256:c1b14e4562fa192e02b1f5880f2999abbaca59bd62aa90c07371c0b98e0c59be"
+        ),
+        "job_name": "chris-q38-ac-canary1-v2",
+        "job_uid": "226bf66e-363c-47a6-84bd-afd8d380ab48",
+        "pod_uid": "e3ff23b9-98ee-41f8-bb6f-61ef6bf9f41b",
+    },
+    "glm-5.3": {
+        "root": "/mnt/sfs/jobs/chris-glm53-ac-canary1-v2",
+        "plan": "evals/fleet/configs/glm53-opencode-autocontinue-canary1-v2.json",
+        "release": (
+            "docs/evidence/qwen38-study/"
+            "2026-09-04-glm53-autocontinue-canary-successor-hosted-scoring-release-v4.json"
+        ),
+        "plan_sha256": ("sha256:9654b0f2e9cfbe5690a77ce83bc63e7e537a43597479686fc093db7d6533959a"),
+        "release_receipt_sha256": (
+            "sha256:fd2b80f8168228307dc26d8738ee94ccc48a58e844284cf15621f97d5b341700"
+        ),
+        "task_claim_sha256": (
+            "sha256:a7e9f42afd9736cbaa5c47ac33e50c83b7b9573ff96a93cd9d27f77054e0bd35"
+        ),
+        "attempt_claim_sha256": (
+            "sha256:06488f6d76ae71e25b834f88c6164b5bcd0c66a22563947aaa28d28f164294ca"
+        ),
+        "job_name": "chris-glm53-ac-canary1-v2",
+        "job_uid": "6ec3528e-d452-4d55-a532-106157d59fdf",
+        "pod_uid": "dee9bef1-5b00-494c-ab3e-8fcb615af092",
     },
 }
 RELEASE_PATHS = {
@@ -353,6 +398,175 @@ def _identity_values(value: Any, keys: set[str]) -> set[str]:
     return found
 
 
+def _canonical_file(path: Path) -> dict[str, Any]:
+    if path.is_symlink() or not path.is_file():
+        raise RuntimeError("preserved Generation-1 root file is absent or unsafe")
+    raw = path.read_bytes()
+    value = _strict_json(raw)
+    if raw != canonical(value) + b"\n":
+        raise RuntimeError("preserved Generation-1 root file is not canonical JSON")
+    return value
+
+
+def _source_json(path: Path) -> dict[str, Any]:
+    if path.is_symlink() or not path.is_file():
+        raise RuntimeError("preserved Generation-1 source file is absent or unsafe")
+    return _strict_json(path.read_bytes())
+
+
+def validate_preserved_generation1_root(
+    model: str,
+    path: Path,
+    *,
+    repository_root: Path | None = None,
+    kubernetes: Callable[[str, str], dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Prove one exact preserved root is only the sealed Generation-1 claim boundary."""
+    expected = PRESERVED_GENERATION1_ROOTS.get(model)
+    repo = repository_root or Path(__file__).resolve().parents[2]
+    if expected is None or str(path) != expected["root"]:
+        raise RuntimeError("preserved Generation-1 root identity drifted")
+    if kubernetes is None:
+        raise RuntimeError("preserved Generation-1 terminal reader is required")
+    job = kubernetes("job", expected["job_name"])
+    pods = kubernetes("pods", expected["job_name"]).get("items", [])
+    terminal = [
+        row
+        for row in job.get("status", {}).get("conditions", [])
+        if row.get("type") == "Failed" and row.get("status") == "True"
+    ]
+    if (
+        job.get("metadata", {}).get("uid") != expected["job_uid"]
+        or job.get("status", {}).get("active", 0) not in (0, None)
+        or job.get("status", {}).get("failed") != 1
+        or len(terminal) != 1
+        or len(pods) != 1
+        or pods[0].get("metadata", {}).get("uid") != expected["pod_uid"]
+        or not any(
+            owner.get("kind") == "Job" and owner.get("uid") == expected["job_uid"]
+            for owner in pods[0].get("metadata", {}).get("ownerReferences", [])
+        )
+        or pods[0].get("status", {}).get("phase") != "Failed"
+    ):
+        raise RuntimeError("preserved Generation-1 terminal identity drifted")
+    if path.is_symlink() or not path.is_dir():
+        raise RuntimeError("preserved Generation-1 root is absent or unsafe")
+    allowed = {
+        ".attempt-claim-gate.lock",
+        "PLAN.json",
+        "SCORING-RELEASE.json",
+        "attempts",
+        "claims",
+        "quarantine",
+        "ramps",
+        "task-claims",
+        "task-results",
+    }
+    if {item.name for item in path.iterdir()} != allowed:
+        raise RuntimeError("preserved Generation-1 root shape drifted")
+    gate = path / ".attempt-claim-gate.lock"
+    if gate.is_symlink() or not gate.is_file() or gate.stat().st_size != 0:
+        raise RuntimeError("preserved Generation-1 claim gate drifted")
+    for name in ("attempts", "claims", "quarantine", "ramps", "task-claims", "task-results"):
+        directory = path / name
+        if directory.is_symlink() or not directory.is_dir():
+            raise RuntimeError("preserved Generation-1 root directory drifted")
+    for name in ("attempts", "quarantine", "ramps", "task-results"):
+        if any((path / name).iterdir()):
+            raise RuntimeError("preserved Generation-1 root contains execution evidence")
+
+    plan = _canonical_file(path / "PLAN.json")
+    release = _canonical_file(path / "SCORING-RELEASE.json")
+    expected_plan = _source_json(repo / expected["plan"])
+    expected_release = _source_json(repo / expected["release"])
+    if plan != expected_plan or release != expected_release:
+        raise RuntimeError("preserved Generation-1 plan or release drifted")
+    legacy.validate_plan(plan)
+    if (
+        release.get("receipt_sha256") != expected["release_receipt_sha256"]
+        or release.get("receipt_sha256") != legacy.digest_without(release, "receipt_sha256")
+        or release.get("status") != "RELEASED"
+        or release.get("plan_sha256") != plan["plan_sha256"]
+    ):
+        raise RuntimeError("preserved Generation-1 scoring release is not authoritative")
+
+    task = plan["tasks"][0]
+    item = plan["attempts"][0]
+    task_claim = {
+        "schema_version": "fleet-hosted-opencode-task-claim-v1",
+        "plan_sha256": plan["plan_sha256"],
+        "rank": int(task["rank"]),
+        "source_rank": int(task["source_rank"]),
+        "task_key": task["task"]["key"],
+        "task_version_id": task["task"]["version_id"],
+        "run_ids": [item["run_id"]],
+    }
+    task_claim["claim_sha256"] = legacy.digest_without(task_claim, "claim_sha256")
+    config = hosted._attempt_config(plan, task, item)  # noqa: SLF001
+    attempt_claim = {
+        "schema_version": "fleet-hosted-opencode-attempt-claim-v1",
+        "plan_sha256": plan["plan_sha256"],
+        "task_claim_sha256": task_claim["claim_sha256"],
+        "run_id": item["run_id"],
+        "rank": int(task["rank"]),
+        "source_rank": int(item["source_rank"]),
+        "attempt": 1,
+        "network": item["network"],
+        "task_key": task["task"]["key"],
+        "task_version_id": task["task"]["version_id"],
+        "config_sha256": config["config_sha256"],
+    }
+    attempt_claim["claim_sha256"] = legacy.digest_without(attempt_claim, "claim_sha256")
+    stored_task_claims = list((path / "task-claims").iterdir())
+    stored_attempt_claims = list((path / "claims").iterdir())
+    if (
+        len(stored_task_claims) != 1
+        or stored_task_claims[0].name != "rank-001.json"
+        or _canonical_file(stored_task_claims[0]) != task_claim
+        or task_claim["claim_sha256"] != expected["task_claim_sha256"]
+        or len(stored_attempt_claims) != 1
+        or stored_attempt_claims[0].name != f"{item['run_id']}.json"
+        or _canonical_file(stored_attempt_claims[0]) != attempt_claim
+        or attempt_claim["claim_sha256"] != expected["attempt_claim_sha256"]
+    ):
+        raise RuntimeError("preserved Generation-1 claim evidence drifted")
+
+    incident = generation1_evidence._incident(repo)  # noqa: SLF001
+    tombstones = generation1_evidence._tombstones(repo)  # noqa: SLF001
+    incident_row = next(row for row in incident["models"] if row["served_id"] == model)
+    tombstone_row = next(row for row in tombstones["models"] if row["served_id"] == model)
+    if (
+        incident_row["local_claim_sha256"] != attempt_claim["claim_sha256"]
+        or incident_row["run_id"] != item["run_id"]
+        or incident_row["attempt_directory_count"] != 0
+        or incident_row["fleet_session_count"] != 0
+        or incident_row["verifier_execution_count"] != 0
+        or tombstone_row["tombstone"]["model_called"] is not False
+        or tombstone_row["tombstone"]["session_created"] is not False
+        or tombstone_row["tombstone"]["verifier_called"] is not False
+        or tombstone_row["tombstone"]["authoritative_outcome_created"] is not False
+    ):
+        raise RuntimeError("preserved Generation-1 pre-model tombstone drifted")
+    return {
+        "path": str(path),
+        "status": "VALIDATED_GENERATION1_PRE_MODEL_ROOT",
+        "plan_sha256": plan["plan_sha256"],
+        "scoring_release_receipt_sha256": release["receipt_sha256"],
+        "task_claim_sha256": task_claim["claim_sha256"],
+        "attempt_claim_sha256": attempt_claim["claim_sha256"],
+        "incident_receipt_sha256": incident["receipt_sha256"],
+        "generation1_tombstone_receipt_sha256": tombstones["receipt_sha256"],
+        "generation1_job_uid": expected["job_uid"],
+        "generation1_pod_uid": expected["pod_uid"],
+        "generation1_terminal": "Failed",
+        "attempt_directories": 0,
+        "model_calls": 0,
+        "sessions": 0,
+        "verifier_executions": 0,
+        "accepted_or_terminal_receipts": 0,
+    }
+
+
 def _absence_row(
     model: str,
     spec: Mapping[str, Any],
@@ -360,11 +574,21 @@ def _absence_row(
     *,
     path_exists: Callable[[str], bool],
     sessions: Callable[[str], list[dict[str, Any]]],
+    preserved_root_validator: Callable[[str, Path], Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     claims = generation_claim_paths(spec)
     outputs = generation_output_paths(model, spec)
-    if any(path_exists(path) for path in [*claims, *outputs]):
+    if any(path_exists(path) for path in claims):
         raise RuntimeError("Generation-1-through-8 claim/output identity exists")
+    preserved_path = PRESERVED_GENERATION1_ROOTS[model]["root"]
+    if any(path_exists(path) for path in outputs if path != preserved_path):
+        raise RuntimeError("Generation-1-through-8 claim/output identity exists")
+    preserved = {"path": preserved_path, "status": "ABSENT"}
+    if path_exists(preserved_path):
+        if preserved_root_validator is None:
+            raise RuntimeError("preserved Generation-1 root validator is required")
+        validator = preserved_root_validator
+        preserved = dict(validator(model, Path(preserved_path)))
     run_ids = list(MODELS[model]["run_ids"])
     if (
         plan["attempts"][0]["run_id"] != run_ids[-1]
@@ -392,6 +616,7 @@ def _absence_row(
     return {
         "checked_claim_paths": claims,
         "checked_output_paths": outputs,
+        "preserved_generation1_root": preserved,
         "run_ids_checked": run_ids,
         "task_key": task_key,
         "session_rows_examined": len(rows),
@@ -405,9 +630,33 @@ def _validate_absence_row(
     spec: Mapping[str, Any],
     plan: Mapping[str, Any],
 ) -> int:
+    preserved = row.get("preserved_generation1_root")
+    expected_preserved = PRESERVED_GENERATION1_ROOTS[model]
+    absent = {"path": expected_preserved["root"], "status": "ABSENT"}
+    validated = {
+        "path": expected_preserved["root"],
+        "status": "VALIDATED_GENERATION1_PRE_MODEL_ROOT",
+        "plan_sha256": expected_preserved["plan_sha256"],
+        "scoring_release_receipt_sha256": expected_preserved["release_receipt_sha256"],
+        "task_claim_sha256": expected_preserved["task_claim_sha256"],
+        "attempt_claim_sha256": expected_preserved["attempt_claim_sha256"],
+        "incident_receipt_sha256": generation1_evidence.INCIDENT_SHA,
+        "generation1_tombstone_receipt_sha256": (
+            "sha256:256398d56acef1caacb9de7f2d8ca7d336cdb154c6191f8986797cb75afcbab8"
+        ),
+        "generation1_job_uid": expected_preserved["job_uid"],
+        "generation1_pod_uid": expected_preserved["pod_uid"],
+        "generation1_terminal": "Failed",
+        "attempt_directories": 0,
+        "model_calls": 0,
+        "sessions": 0,
+        "verifier_executions": 0,
+        "accepted_or_terminal_receipts": 0,
+    }
     if (
         row.get("checked_claim_paths") != generation_claim_paths(spec)
         or row.get("checked_output_paths") != generation_output_paths(model, spec)
+        or preserved not in (absent, validated)
         or row.get("run_ids_checked") != list(MODELS[model]["run_ids"])
         or row.get("task_key") != plan["tasks"][0]["task"]["key"]
         or not isinstance(row.get("session_rows_examined"), int)
@@ -452,7 +701,18 @@ def build_prestop(
             or pods[0].get("status", {}).get("phase") not in {"Pending", "Running"}
         ):
             raise RuntimeError("Generation-7 active pre-stop identity drifted")
-        absence = _absence_row(model, spec, plan, path_exists=path_exists, sessions=sessions)
+        absence = _absence_row(
+            model,
+            spec,
+            plan,
+            path_exists=path_exists,
+            sessions=sessions,
+            preserved_root_validator=lambda selected_model, selected_path: (
+                validate_preserved_generation1_root(
+                    selected_model, selected_path, kubernetes=kubernetes
+                )
+            ),
+        )
         total_rows += absence["session_rows_examined"]
         models.append(
             {
@@ -531,6 +791,7 @@ def validate_prestop(
                 "g7_pod",
                 "checked_claim_paths",
                 "checked_output_paths",
+                "preserved_generation1_root",
                 "run_ids_checked",
                 "task_key",
                 "session_rows_examined",
@@ -616,7 +877,18 @@ def build_poststop(
         job_name = generation7.EXPECTED[model]["job_name"]
         if kubernetes("job", job_name) or kubernetes("pods", job_name).get("items", []):
             raise RuntimeError("Generation-7 foreground deletion is not terminally absent")
-        absence = _absence_row(model, spec, plan, path_exists=path_exists, sessions=sessions)
+        absence = _absence_row(
+            model,
+            spec,
+            plan,
+            path_exists=path_exists,
+            sessions=sessions,
+            preserved_root_validator=lambda selected_model, selected_path: (
+                validate_preserved_generation1_root(
+                    selected_model, selected_path, kubernetes=kubernetes
+                )
+            ),
+        )
         total_rows += absence["session_rows_examined"]
         models.append(
             {
@@ -696,6 +968,7 @@ def validate_poststop(
                 "g7_pod",
                 "checked_claim_paths",
                 "checked_output_paths",
+                "preserved_generation1_root",
                 "run_ids_checked",
                 "task_key",
                 "session_rows_examined",
@@ -857,7 +1130,18 @@ def build_tombstone(
                 "terminal": "ForegroundDeleted",
             }
             pod_evidence = {"uid": row["g7_pod_uid"], "phase": "Absent"}
-        absence = _absence_row(model, spec, plan, path_exists=path_exists, sessions=sessions)
+        absence = _absence_row(
+            model,
+            spec,
+            plan,
+            path_exists=path_exists,
+            sessions=sessions,
+            preserved_root_validator=lambda selected_model, selected_path: (
+                validate_preserved_generation1_root(
+                    selected_model, selected_path, kubernetes=kubernetes
+                )
+            ),
+        )
         total_rows += absence["session_rows_examined"]
         models.append(
             {
@@ -946,6 +1230,7 @@ def validate_tombstone(
             "g7_pod",
             "checked_claim_paths",
             "checked_output_paths",
+            "preserved_generation1_root",
             "run_ids_checked",
             "task_key",
             "session_rows_examined",

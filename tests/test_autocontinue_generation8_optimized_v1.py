@@ -13,6 +13,7 @@ import yaml
 from evals.fleet import autocontinue_generation7_canary as generation7
 from evals.fleet import autocontinue_generation8_optimized_v1 as generation8
 from evals.fleet import autocontinue_generation8_package_v1 as package
+from evals.fleet import hosted_sweep_controller as hosted
 
 ROOT = Path(__file__).parents[1]
 
@@ -77,6 +78,34 @@ def _active_kubernetes(kind: str, name: str) -> dict:
     }
 
 
+def _generation1_kubernetes(kind: str, name: str) -> dict:
+    model = next(
+        model
+        for model, row in generation8.PRESERVED_GENERATION1_ROOTS.items()
+        if row["job_name"] == name
+    )
+    row = generation8.PRESERVED_GENERATION1_ROOTS[model]
+    if kind == "job":
+        return {
+            "metadata": {"name": name, "uid": row["job_uid"]},
+            "status": {
+                "failed": 1,
+                "conditions": [{"type": "Failed", "status": "True"}],
+            },
+        }
+    return {
+        "items": [
+            {
+                "metadata": {
+                    "uid": row["pod_uid"],
+                    "ownerReferences": [{"kind": "Job", "uid": row["job_uid"]}],
+                },
+                "status": {"phase": "Failed"},
+            }
+        ]
+    }
+
+
 def _tombstone(static):
     return generation8.build_tombstone(
         static,
@@ -85,6 +114,169 @@ def _tombstone(static):
         sessions=lambda _task: [],
         observed_at_utc="2026-09-05T15:00:00Z",
     )
+
+
+def _generation1_root(tmp_path: Path, model: str) -> Path:
+    binding = generation8.PRESERVED_GENERATION1_ROOTS[model]
+    root = tmp_path / f"preserved-{generation8.MODELS[model]['short']}"
+    root.mkdir()
+    for name in ("attempts", "claims", "quarantine", "ramps", "task-claims", "task-results"):
+        (root / name).mkdir()
+    (root / ".attempt-claim-gate.lock").touch()
+    plan = json.loads((ROOT / binding["plan"]).read_text())
+    release = json.loads((ROOT / binding["release"]).read_text())
+    _write(root / "PLAN.json", plan)
+    _write(root / "SCORING-RELEASE.json", release)
+    task = plan["tasks"][0]
+    item = plan["attempts"][0]
+    task_claim = {
+        "schema_version": "fleet-hosted-opencode-task-claim-v1",
+        "plan_sha256": plan["plan_sha256"],
+        "rank": int(task["rank"]),
+        "source_rank": int(task["source_rank"]),
+        "task_key": task["task"]["key"],
+        "task_version_id": task["task"]["version_id"],
+        "run_ids": [item["run_id"]],
+    }
+    task_claim["claim_sha256"] = generation8.legacy.digest_without(task_claim, "claim_sha256")
+    config = hosted._attempt_config(plan, task, item)  # noqa: SLF001
+    attempt_claim = {
+        "schema_version": "fleet-hosted-opencode-attempt-claim-v1",
+        "plan_sha256": plan["plan_sha256"],
+        "task_claim_sha256": task_claim["claim_sha256"],
+        "run_id": item["run_id"],
+        "rank": int(task["rank"]),
+        "source_rank": int(item["source_rank"]),
+        "attempt": 1,
+        "network": item["network"],
+        "task_key": task["task"]["key"],
+        "task_version_id": task["task"]["version_id"],
+        "config_sha256": config["config_sha256"],
+    }
+    attempt_claim["claim_sha256"] = generation8.legacy.digest_without(attempt_claim, "claim_sha256")
+    _write(root / "task-claims/rank-001.json", task_claim)
+    _write(root / "claims" / f"{item['run_id']}.json", attempt_claim)
+    return root
+
+
+@pytest.mark.parametrize("model", sorted(generation8.MODELS))
+def test_exact_preserved_generation1_root_is_safe_nonexecution_evidence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, model: str
+) -> None:
+    root = _generation1_root(tmp_path, model)
+    monkeypatch.setitem(generation8.PRESERVED_GENERATION1_ROOTS[model], "root", str(root))
+    receipt = generation8.validate_preserved_generation1_root(
+        model, root, repository_root=ROOT, kubernetes=_generation1_kubernetes
+    )
+    assert receipt["status"] == "VALIDATED_GENERATION1_PRE_MODEL_ROOT"
+    assert receipt["attempt_directories"] == receipt["model_calls"] == 0
+    assert receipt["sessions"] == receipt["verifier_executions"] == 0
+    assert receipt["accepted_or_terminal_receipts"] == 0
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    ("attempt", "terminal", "extra-claim", "changed-plan", "symlink-claim"),
+)
+def test_preserved_generation1_root_fails_closed_on_execution_or_drift(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mutation: str
+) -> None:
+    model = "qwen3.8-27b"
+    root = _generation1_root(tmp_path, model)
+    monkeypatch.setitem(generation8.PRESERVED_GENERATION1_ROOTS[model], "root", str(root))
+    if mutation == "attempt":
+        (root / "attempts/unexpected").mkdir()
+    elif mutation == "terminal":
+        _write(root / "CANARY-TERMINAL.json", {})
+    elif mutation == "extra-claim":
+        _write(root / "claims/extra.json", {})
+    elif mutation == "changed-plan":
+        _write(root / "PLAN.json.changed", {})
+    else:
+        claim = next((root / "claims").iterdir())
+        claim.unlink()
+        claim.symlink_to(root / "PLAN.json")
+    with pytest.raises(RuntimeError):
+        generation8.validate_preserved_generation1_root(
+            model, root, repository_root=ROOT, kubernetes=_generation1_kubernetes
+        )
+
+
+def test_preserved_generation1_root_requires_exact_failed_job_and_pod(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    model = "qwen3.8-27b"
+    root = _generation1_root(tmp_path, model)
+    monkeypatch.setitem(generation8.PRESERVED_GENERATION1_ROOTS[model], "root", str(root))
+
+    def wrong_job(kind: str, name: str) -> dict:
+        value = copy.deepcopy(_generation1_kubernetes(kind, name))
+        if kind == "job":
+            value["metadata"]["uid"] = "wrong-job-uid"
+        return value
+
+    with pytest.raises(RuntimeError, match="terminal identity drifted"):
+        generation8.validate_preserved_generation1_root(
+            model, root, repository_root=ROOT, kubernetes=wrong_job
+        )
+
+
+def test_absence_row_allows_only_the_validated_preserved_generation1_root() -> None:
+    _, _, static = _static()
+    model = "qwen3.8-27b"
+    spec, plan = static[model]
+    preserved = generation8.PRESERVED_GENERATION1_ROOTS[model]["root"]
+    calls: list[tuple[str, Path]] = []
+
+    def validate(selected_model: str, selected_path: Path) -> dict:
+        calls.append((selected_model, selected_path))
+        expected = generation8.PRESERVED_GENERATION1_ROOTS[selected_model]
+        return {
+            "path": str(selected_path),
+            "status": "VALIDATED_GENERATION1_PRE_MODEL_ROOT",
+            "plan_sha256": expected["plan_sha256"],
+            "scoring_release_receipt_sha256": expected["release_receipt_sha256"],
+            "task_claim_sha256": expected["task_claim_sha256"],
+            "attempt_claim_sha256": expected["attempt_claim_sha256"],
+            "incident_receipt_sha256": generation8.generation1_evidence.INCIDENT_SHA,
+            "generation1_tombstone_receipt_sha256": (
+                "sha256:256398d56acef1caacb9de7f2d8ca7d336cdb154c6191f8986797cb75afcbab8"
+            ),
+            "generation1_job_uid": expected["job_uid"],
+            "generation1_pod_uid": expected["pod_uid"],
+            "generation1_terminal": "Failed",
+            "attempt_directories": 0,
+            "model_calls": 0,
+            "sessions": 0,
+            "verifier_executions": 0,
+            "accepted_or_terminal_receipts": 0,
+        }
+
+    row = generation8._absence_row(  # noqa: SLF001
+        model,
+        spec,
+        plan,
+        path_exists=lambda path: path == preserved,
+        sessions=lambda _task: [],
+        preserved_root_validator=validate,
+    )
+    generation8._validate_absence_row(row, model, spec, plan)  # noqa: SLF001
+    assert calls == [(model, Path(preserved))]
+    changed = copy.deepcopy(row)
+    changed["preserved_generation1_root"]["model_calls"] = 1
+    with pytest.raises(ValueError, match="absence binding drifted"):
+        generation8._validate_absence_row(changed, model, spec, plan)  # noqa: SLF001
+
+    other = generation8.generation_output_paths(model, spec)[0]
+    with pytest.raises(RuntimeError, match="claim/output identity exists"):
+        generation8._absence_row(  # noqa: SLF001
+            model,
+            spec,
+            plan,
+            path_exists=lambda path: path == other,
+            sessions=lambda _task: [],
+            preserved_root_validator=validate,
+        )
 
 
 def test_static_validation_is_exactly_once_and_fast_without_recursive_g7(
