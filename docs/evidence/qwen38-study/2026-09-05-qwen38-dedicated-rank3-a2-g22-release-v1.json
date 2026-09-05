@@ -1,0 +1,41 @@
+{
+  "schema_version": "fleet-qwen38-dedicated-rank3-a2-g22-release-v1",
+  "status": "RELEASED_TO_DEDICATED",
+  "observed_at_utc": "2026-09-05T22:02:40Z",
+  "campaign_id": "chris-cyber-q38-glm53-exact-easiest100-pass4-v1",
+  "selection_rank": 3,
+  "attempt": 2,
+  "cell_id": "sha256:6edac950ae44ff62c07074a775afdb65cc9b394047883e0b57fcad84e74d2fa7",
+  "execution_id": "sha256:6a64d050625fdb15dde3a1a734ec88afd43ef1d07d7c6be8f1951addac62112e",
+  "run_id": "chris-cyber-q38-opencode11827-ded-tp1-r003-a2-g22-v1",
+  "held_plan_sha256": "sha256:c0488a1fbb565c4013f2eb302d36d1d5091a9a72155f34f65de377e5e14a2ca7",
+  "package_commit": "21d5a5f",
+  "serving_block": "dedicated-qwen-tp1-b-v2",
+  "serving_identity": {
+    "api_run_id": "ft-run-76c7f016",
+    "rayjob_uid": "5e153629-8166-4b79-a707-0e3fde8ab321",
+    "workload_uid": "87aef71c-b63f-4352-a1c0-9869232a4050",
+    "pod_uid": "5473be17-adf1-4c68-ab4e-a1ef75727349",
+    "service_uid": "c0dbe1ca-e10f-48b0-8221-f5a36b555b1d",
+    "parity_receipt_sha256": "sha256:06920a9cec20cff7b86312ffad6d2ce4a2a4ec3f9779f3a57c45b4f1b6fb70e7"
+  },
+  "prior_attempt1_accepted_validated": true,
+  "prior_attempt1_receipt_sha256": "sha256:4552b1f9f3323cae18952ed70241fa75ba76b17be1a2787a3c4f8e865ee45859",
+  "fresh_global_ledger_clear": true,
+  "fresh_authoritative_sessions_clear": true,
+  "claim_clear": true,
+  "output_root_clear": true,
+  "reconciliation": {
+    "authoritative_session_rows_examined": 29,
+    "authoritative_session_collisions": 0,
+    "canonical_claim_collisions": 0,
+    "output_root_collisions": 0,
+    "fleet_api_mutations": 0,
+    "rayjob_status": "RUNNING",
+    "pod_phase": "Running",
+    "pod_ready": true,
+    "pod_restarts": 0
+  },
+  "prompts_traces_flags_or_scores_included": false,
+  "receipt_sha256": "sha256:d99e169afe08aed6c78cf6c80c2e3f91fca563022c229516c3258b689a41933c"
+}
