@@ -87,6 +87,142 @@ def _reserved_by_flavor(cluster_queue: dict[str, Any]) -> dict[str, dict[str, De
     return result
 
 
+def _pod_requests(pod: dict[str, Any]) -> dict[str, Decimal]:
+    """Return the effective scheduler request for one already-bound Pod."""
+    spec = pod.get("spec") or {}
+
+    def container_requests(container: dict[str, Any]) -> dict[str, Decimal]:
+        resources = container.get("resources") or {}
+        requests = resources.get("requests") or {}
+        limits = resources.get("limits") or {}
+        return {
+            resource: _quantity(requests.get(resource, limit))
+            for resource, limit in {**limits, **requests}.items()
+        }
+
+    summed: dict[str, Decimal] = {}
+    for container in spec.get("containers") or []:
+        for resource, amount in container_requests(container).items():
+            summed[resource] = summed.get(resource, Decimal(0)) + amount
+    init_max: dict[str, Decimal] = {}
+    for container in spec.get("initContainers") or []:
+        for resource, amount in container_requests(container).items():
+            init_max[resource] = max(init_max.get(resource, Decimal(0)), amount)
+    result = {
+        resource: max(summed.get(resource, Decimal(0)), init_max.get(resource, Decimal(0)))
+        for resource in set(summed) | set(init_max)
+    }
+    for resource, amount in (spec.get("overhead") or {}).items():
+        result[resource] = result.get(resource, Decimal(0)) + _quantity(amount)
+    return result
+
+
+def _tolerates(taint: dict[str, Any], tolerations: list[dict[str, Any]]) -> bool:
+    if taint.get("effect") not in {"NoSchedule", "NoExecute"}:
+        return True
+    for toleration in tolerations:
+        if toleration.get("effect") not in {None, "", taint.get("effect")}:
+            continue
+        operator = toleration.get("operator", "Equal")
+        if operator == "Exists" and toleration.get("key") in {None, "", taint.get("key")}:
+            return True
+        if (
+            operator == "Equal"
+            and toleration.get("key") == taint.get("key")
+            and toleration.get("value", "") == taint.get("value", "")
+        ):
+            return True
+    return False
+
+
+def require_single_pod_node_capacity(
+    manifest_yaml: str,
+    nodes: list[dict[str, Any]],
+    pods: list[dict[str, Any]],
+    resource_flavor: dict[str, Any],
+    *,
+    expected_podset: str = "head",
+) -> dict[str, Any]:
+    """Require one currently schedulable node that fits the complete GPU Pod.
+
+    ClusterQueue quota does not prove that a multi-GPU Pod fits one node.  This
+    gate closes that gap using live allocatable resources and requests of
+    non-terminal Pods already bound to each candidate node.  Admission remains
+    authoritative and this snapshot must be refreshed immediately before create.
+    """
+    _, podsets = _rendered_podset_requests(manifest_yaml)
+    if tuple(podsets) != (expected_podset,):
+        raise ValueError("node-capacity gate requires exactly one rendered pod set")
+    manifests = [row for row in yaml.safe_load_all(manifest_yaml) if isinstance(row, dict)]
+    cluster = (manifests[0].get("spec") or {}).get("rayClusterSpec") or {}
+    template = (cluster.get("headGroupSpec") or {}).get("template") or {}
+    pod_spec = template.get("spec") or {}
+    selector = {
+        **((resource_flavor.get("spec") or {}).get("nodeLabels") or {}),
+        **(pod_spec.get("nodeSelector") or {}),
+    }
+    tolerations = pod_spec.get("tolerations") or []
+    requested = podsets[expected_podset]["requests"]
+    active_phases = {None, "", "Pending", "Running", "Unknown"}
+    eligible: list[dict[str, Any]] = []
+    for node in nodes:
+        metadata = node.get("metadata") or {}
+        spec = node.get("spec") or {}
+        status = node.get("status") or {}
+        if spec.get("unschedulable") is True:
+            continue
+        ready = next(
+            (
+                row.get("status")
+                for row in status.get("conditions") or []
+                if row.get("type") == "Ready"
+            ),
+            None,
+        )
+        if ready != "True":
+            continue
+        labels = metadata.get("labels") or {}
+        if any(labels.get(key) != value for key, value in selector.items()):
+            continue
+        if any(not _tolerates(taint, tolerations) for taint in spec.get("taints") or []):
+            continue
+        name = metadata.get("name")
+        if not isinstance(name, str) or not name:
+            raise ValueError("candidate node identity is absent")
+        used: dict[str, Decimal] = {}
+        for pod in pods:
+            if (pod.get("spec") or {}).get("nodeName") != name:
+                continue
+            if (pod.get("status") or {}).get("phase") not in active_phases:
+                continue
+            for resource, amount in _pod_requests(pod).items():
+                used[resource] = used.get(resource, Decimal(0)) + amount
+        allocatable = {
+            resource: _quantity(amount)
+            for resource, amount in (status.get("allocatable") or {}).items()
+        }
+        free = {
+            resource: allocatable.get(resource, Decimal(0)) - used.get(resource, Decimal(0))
+            for resource in requested
+        }
+        if all(free[resource] >= amount for resource, amount in requested.items()):
+            eligible.append(
+                {
+                    "name": name,
+                    "uid": str(metadata.get("uid") or ""),
+                    "free": {resource: str(amount) for resource, amount in free.items()},
+                }
+            )
+    if not eligible:
+        raise RuntimeError("no currently schedulable node fits the complete rendered GPU pod")
+    return {
+        "rendered_podset": expected_podset,
+        "requested": {resource: str(amount) for resource, amount in requested.items()},
+        "eligible_nodes": eligible,
+        "must_recheck_immediately_before_submit": True,
+    }
+
+
 def require_exact_topology_candidate(
     manifest_yaml: str,
     local_queue: dict[str, Any],

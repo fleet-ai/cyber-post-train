@@ -309,3 +309,83 @@ def test_two_node_shape_needs_double_quota_and_is_a_different_runtime_contract()
             expected_level="topology.nebius.com/tier-1",
             expected_podsets=("head", "worker-0"),
         )
+
+
+def _node(name: str, *, schedulable: bool = True) -> dict:
+    return {
+        "metadata": {
+            "name": name,
+            "uid": f"{name}-uid",
+            "labels": {"workload": "fleetai-training-ng-gpu"},
+        },
+        "spec": {
+            "unschedulable": not schedulable,
+            "taints": [
+                {"key": "workload", "value": "fleetai-training-ng-gpu", "effect": "NoSchedule"}
+            ],
+        },
+        "status": {
+            "allocatable": {"cpu": "184", "memory": "2500Gi", "nvidia.com/gpu": "8"},
+            "conditions": [{"type": "Ready", "status": "True"}],
+        },
+    }
+
+
+def _capacity_shape() -> str:
+    value = yaml.safe_load(_live_shape())
+    pod = value["spec"]["rayClusterSpec"]["headGroupSpec"]["template"]["spec"]
+    pod["containers"][0]["resources"]["requests"] = {
+        "cpu": "64",
+        "memory": "768Gi",
+        "nvidia.com/gpu": 8,
+    }
+    pod["tolerations"] = [
+        {
+            "key": "workload",
+            "operator": "Equal",
+            "value": "fleetai-training-ng-gpu",
+            "effect": "NoSchedule",
+        }
+    ]
+    return yaml.safe_dump(value)
+
+
+def test_node_capacity_gate_requires_one_node_for_the_complete_tp8_pod() -> None:
+    free = _node("free")
+    busy = _node("busy")
+    pods = [
+        {
+            "spec": {
+                "nodeName": "busy",
+                "containers": [
+                    {
+                        "resources": {
+                            "requests": {"cpu": "32", "memory": "256Gi", "nvidia.com/gpu": 1}
+                        }
+                    }
+                ],
+            },
+            "status": {"phase": "Running"},
+        }
+    ]
+    flavor = {"spec": {"nodeLabels": {"workload": "fleetai-training-ng-gpu"}}}
+    value = topology.require_single_pod_node_capacity(_capacity_shape(), [free, busy], pods, flavor)
+    assert [row["name"] for row in value["eligible_nodes"]] == ["free"]
+    assert value["requested"]["nvidia.com/gpu"] == "8"
+
+
+def test_node_capacity_gate_rejects_cordoned_or_partially_used_nodes() -> None:
+    cordoned = _node("cordoned", schedulable=False)
+    busy = _node("busy")
+    pods = [
+        {
+            "spec": {
+                "nodeName": "busy",
+                "containers": [{"resources": {"limits": {"nvidia.com/gpu": 1}}}],
+            },
+            "status": {"phase": "Running"},
+        }
+    ]
+    flavor = {"spec": {"nodeLabels": {"workload": "fleetai-training-ng-gpu"}}}
+    with pytest.raises(RuntimeError, match="no currently schedulable node"):
+        topology.require_single_pod_node_capacity(_capacity_shape(), [cordoned, busy], pods, flavor)
