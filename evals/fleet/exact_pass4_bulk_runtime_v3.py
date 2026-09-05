@@ -415,12 +415,21 @@ def _classify_result(
     projected_run = metadata.get("run_id")
     if (
         row.get("status") != "completed"
-        or row.get("model") != self_hosted.persisted_session_model_identity(config)
+        or (
+            row.get("model") is not None
+            and row.get("model") != self_hosted.persisted_session_model_identity(config)
+        )
         or verifier.get("id") != verifier_id
-        or projected_version != config["task"]["version_id"]
-        or projected_run != config["run_id"]
-        or metadata.get("execution_id") != item["execution_id"]
-        or metadata.get("cell_id") != item["cell_id"]
+        or (
+            projected_version is not None
+            and projected_version != config["task"]["version_id"]
+        )
+        or (projected_run is not None and projected_run != config["run_id"])
+        or (
+            metadata.get("execution_id") is not None
+            and metadata.get("execution_id") != item["execution_id"]
+        )
+        or (metadata.get("cell_id") is not None and metadata.get("cell_id") != item["cell_id"])
     ):
         raise RuntimeError("bulk authoritative scored session binding drifted")
     return _seal(
@@ -445,6 +454,15 @@ def _classify_result(
             "claim_sha256": claim["receipt_sha256"],
             "cleanup_completed": True,
             "session_ingest_completed": True,
+            "authoritative_session_optional_fields": {
+                "model": "matched" if row.get("model") is not None else "omitted",
+                "task_version_id": "matched" if projected_version is not None else "omitted",
+                "run_id": "matched" if projected_run is not None else "omitted",
+                "execution_id": (
+                    "matched" if metadata.get("execution_id") is not None else "omitted"
+                ),
+                "cell_id": "matched" if metadata.get("cell_id") is not None else "omitted",
+            },
             "scores_included": False,
             "prompts_or_traces_included": False,
         }

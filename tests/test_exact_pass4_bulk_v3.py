@@ -1022,6 +1022,80 @@ def test_completed_nonzero_agent_exit_is_credited_only_with_full_authority(
     assert accepted["credited"] is True
     assert accepted["agent_exit_code"] == 1
     assert accepted["agent_process_exit_success"] is False
+    assert accepted["authoritative_session_optional_fields"] == {
+        "model": "matched",
+        "task_version_id": "matched",
+        "run_id": "matched",
+        "execution_id": "matched",
+        "cell_id": "matched",
+    }
     session_metadata["execution_id"] = "sha256:" + "e" * 64
+    with pytest.raises(RuntimeError, match="session binding drifted"):
+        runtime._classify_result(tmp_path, config, item, claim, "test-only")  # noqa: SLF001
+
+
+def test_classification_accepts_omitted_session_projection_but_rejects_contradiction(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = {
+        "run_id": "run",
+        "campaign_id": bulk.CONTROLLERS["qwen-a"]["job_name"],
+        "task": {"key": "task", "version_id": "version"},
+        "config_sha256": "sha256:" + "d" * 64,
+    }
+    item = {
+        "cell_id": "sha256:" + "a" * 64,
+        "execution_id": "sha256:" + "b" * 64,
+        "run_id": "run",
+        "selection_rank": 1,
+        "attempt": 1,
+    }
+    claim = {"receipt_sha256": "sha256:" + "c" * 64}
+    session_id = "11111111-1111-4111-8111-111111111111"
+    verifier_id = "22222222-2222-4222-8222-222222222222"
+    rows = {
+        "result.json": {
+            "run_id": "run",
+            "task_key": "task",
+            "task_version_id": "version",
+            "agent_termination": "completed",
+            "agent_exit_code": 0,
+            "session_ingest_status": "completed",
+            "session_id": session_id,
+            "verifier_execution_id": verifier_id,
+            "instance_id": "instance",
+        },
+        "reward-result.json": {
+            "task_key": "task",
+            "task_version_id": "version",
+            "verifier_execution_id": verifier_id,
+            "instance_id": "instance",
+            "reward": 0,
+        },
+        "session-ingest.json": {"status": "completed", "session_id": session_id},
+        "cleanup.json": {
+            "instance_created": True,
+            "instance_closed": True,
+            "containers_removed": True,
+        },
+    }
+    for name, value in rows.items():
+        self_hosted.write_json_once(tmp_path / name, value)
+    session = {
+        "session_id": session_id,
+        "status": "completed",
+        "model": None,
+        "verifier_execution": {"id": verifier_id},
+    }
+    monkeypatch.setattr(runtime, "_client", lambda _key: nullcontext(object()))
+    monkeypatch.setattr(self_hosted, "_task_sessions", lambda *_args: [session])
+    monkeypatch.setattr(
+        self_hosted, "persisted_session_model_identity", lambda _config: "qwen3.8-27b"
+    )
+    accepted = runtime._classify_result(  # noqa: SLF001
+        tmp_path, config, item, claim, "test-only"
+    )
+    assert set(accepted["authoritative_session_optional_fields"].values()) == {"omitted"}
+    session["model"] = "contradictory-model"
     with pytest.raises(RuntimeError, match="session binding drifted"):
         runtime._classify_result(tmp_path, config, item, claim, "test-only")  # noqa: SLF001
