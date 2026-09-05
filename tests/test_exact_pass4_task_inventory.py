@@ -247,7 +247,6 @@ def test_incomplete_runtime_bindings_fail_closed(
         ("prompt", "", "live_prompt_invalid"),
         ("prompt", None, "live_prompt_invalid"),
         ("env_variables", [], "live_env_variables_invalid"),
-        ("output_json_schema", None, "live_output_json_schema_invalid"),
         ("output_json_schema", [], "live_output_json_schema_invalid"),
     ],
 )
@@ -259,6 +258,14 @@ def test_private_task_content_requires_exact_safe_shapes(
     task[field] = value
     with pytest.raises(inventory.GateError, match=code):
         inventory._hydrate_task(task, expected)
+
+
+def test_null_output_schema_is_valid_and_digest_bound() -> None:
+    expected = _expected()["tasks"][0]
+    task = _live_task(expected)
+    task["output_json_schema"] = None
+    hydrated = inventory._hydrate_task(task, expected)
+    assert hydrated["task"]["output_json_schema_sha256"] == inventory.sha256(b"null")
 
 
 @pytest.mark.parametrize("bad_file", [None, {}, {"target_path": "/task/a"}])

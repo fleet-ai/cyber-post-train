@@ -334,12 +334,12 @@ def test_submitter_rejects_dirty_tree_before_cluster_access(tmp_path: Path) -> N
 
 def test_runner_uses_fixed_create_once_output_and_never_prints_secret() -> None:
     runner = (
-        ROOT / "evals/fleet/scripts/run_exact_pass4_task_inventory_v1.sh"
+        ROOT / "evals/fleet/scripts/run_exact_pass4_task_inventory_v2.sh"
     ).read_text()
     submitter = (
         ROOT / "evals/fleet/scripts/submit_exact_pass4_task_inventory_v1.sh"
     ).read_text()
-    assert "OUT_ROOT=/mnt/sfs/jobs/chris-cyber-exact100-pass4-inventory-v1" in runner
+    assert "OUT_ROOT=/mnt/sfs/jobs/chris-cyber-exact100-pass4-inventory-v2" in runner
     assert "FLEET_API_KEY" in runner
     assert "uv run" not in runner
     assert "httpx" not in runner

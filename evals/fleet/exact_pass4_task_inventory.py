@@ -293,7 +293,9 @@ def _hydrate_task(task: dict[str, Any], expected: dict[str, Any]) -> dict[str, A
         raise GateError("live_prompt_invalid")
     if not isinstance(env_variables, dict):
         raise GateError("live_env_variables_invalid")
-    if not isinstance(output_json_schema, dict):
+    # Report-only cyber task versions legitimately expose JSON null here. Bind
+    # that exact value by digest, while rejecting every other non-object shape.
+    if output_json_schema is not None and not isinstance(output_json_schema, dict):
         raise GateError("live_output_json_schema_invalid")
 
     metadata = task.get("metadata")

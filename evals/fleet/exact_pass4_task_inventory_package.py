@@ -18,12 +18,12 @@ import sys
 from pathlib import Path
 from typing import Any
 
-SCHEMA = "fleet-exact-pass4-task-inventory-package-v1"
-CONFIGMAP_NAME = "chris-cyber-exact100-pass4-inventory-bootstrap-v1"
-INTENT_NAME = "chris-cyber-exact100-pass4-inventory-intent-v1"
+SCHEMA = "fleet-exact-pass4-task-inventory-package-v2"
+CONFIGMAP_NAME = "chris-cyber-exact100-pass4-inventory-bootstrap-v2"
+INTENT_NAME = "chris-cyber-exact100-pass4-inventory-intent-v2"
 NAMESPACE = "fleet-train-jobs"
 COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
-MANIFEST_PATH = "evals/fleet/cluster/exact-pass4-task-inventory-observer-v1.yaml"
+MANIFEST_PATH = "evals/fleet/cluster/exact-pass4-task-inventory-observer-v2.yaml"
 
 PACKAGE_FILES = {
     "package.py": (
@@ -51,7 +51,7 @@ PACKAGE_FILES = {
         "evals/fleet/configs/opencode-easiest-train100-selection-v2.json",
     ),
     "run.sh": (
-        "evals/fleet/scripts/run_exact_pass4_task_inventory_v1.sh",
+        "evals/fleet/scripts/run_exact_pass4_task_inventory_v2.sh",
         None,
     ),
 }
@@ -149,7 +149,7 @@ def build_configmap(repo_root: Path, package_commit: str) -> dict[str, Any]:
             "session_calls": 0,
             "mutation_calls": 0,
             "sfs_terminal_path": (
-                "/mnt/sfs/jobs/chris-cyber-exact100-pass4-inventory-v1/TERMINAL.json"
+                "/mnt/sfs/jobs/chris-cyber-exact100-pass4-inventory-v2/TERMINAL.json"
             ),
         },
     }
@@ -185,8 +185,8 @@ def build_intent(configmap: dict[str, Any]) -> dict[str, Any]:
             "package_sha256": package["package_sha256"],
             "job_manifest_sha256": package["job_manifest"]["sha256"],
             "bootstrap_configmap": CONFIGMAP_NAME,
-            "job": "chris-cyber-exact100-pass4-inventory-v1",
-            "output_root": "/mnt/sfs/jobs/chris-cyber-exact100-pass4-inventory-v1",
+            "job": "chris-cyber-exact100-pass4-inventory-v2",
+            "output_root": "/mnt/sfs/jobs/chris-cyber-exact100-pass4-inventory-v2",
         },
     }
 
@@ -236,7 +236,7 @@ def validate_package_manifest(package: dict[str, Any]) -> None:
         "session_calls": 0,
         "mutation_calls": 0,
         "sfs_terminal_path": (
-            "/mnt/sfs/jobs/chris-cyber-exact100-pass4-inventory-v1/TERMINAL.json"
+            "/mnt/sfs/jobs/chris-cyber-exact100-pass4-inventory-v2/TERMINAL.json"
         ),
     }:
         raise PackageError("package_runtime_contract_mismatch")
