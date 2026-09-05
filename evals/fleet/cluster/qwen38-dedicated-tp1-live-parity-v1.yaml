@@ -1,0 +1,146 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: chris-cyber-q38-dedicated-tp1-v1-parity
+  namespace: fleet-train-jobs
+  labels:
+    cyber-post-train.fleet.ai/experiment: qwen38-dedicated-tp1-v1-parity
+    cyber-post-train.fleet.ai/owner: chris
+    kueue.x-k8s.io/queue-name: training-lq
+spec:
+  activeDeadlineSeconds: 900
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 604800
+  template:
+    metadata:
+      labels:
+        cyber-post-train.fleet.ai/experiment: qwen38-dedicated-tp1-v1-parity
+        cyber-post-train.fleet.ai/owner: chris
+    spec:
+      restartPolicy: Never
+      priorityClassName: fleet-infra-quiet
+      nodeSelector: {kubernetes.io/arch: amd64, workload: fleetai-training-ng-cpu}
+      tolerations:
+        - {key: workload, operator: Equal, value: fleetai-training-ng-cpu, effect: NoSchedule}
+      containers:
+        - name: parity
+          image: ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
+          command: ["python", "-c"]
+          args:
+            - |
+              import hashlib, json, os, pathlib, urllib.error, urllib.request
+
+              OUT = pathlib.Path("/mnt/sfs/jobs/chris-cyber-evalserve-q38-tp1-a-v1/parity")
+              HEARTBEAT = pathlib.Path("/mnt/sfs/jobs/chris-cyber-evalserve-q38-tp1-a-v1/lifecycle/traffic")
+              BASE = "http://ft-run-c4c7d042-vh5wn-head-svc:8000"
+              MODEL_PATH = "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2"
+              MODEL_REVISION = "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
+              RUNTIME_IMAGE = "ghcr.io/fleet-ai/cyber-post-train-glm53-runtime@sha256:ec93ba50613fd13fb4c0b0a9105767ab18209a1e0108dab0923aad694c0206ec"
+              SERVER_ARGUMENTS_SHA256 = "sha256:836d25fc3df3f0a1ecfc53788492cfa4f97df3462c4a4b0e6c23f272016f14c0"
+              CAMPAIGN_SHA256 = "sha256:63946f224a33eb0d2c2a6fdba34358ebf9ca379e5f0f156cd137c95a9b98097e"
+              SETTINGS_CANONICAL = "sha256:0458cabed67de9e2001661e61707fb16d91669774add3adbf4c97dd559fb5531"
+              SETTINGS_FILE = "sha256:1328f6eb97861443b712625d9038a924de9c220c146667565dd4c5bb73a6d8f8"
+              RELEASE_ASSET = "sha256:4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702"
+              TOOL_CATALOG = "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a"
+
+              def canonical(value):
+                  return json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
+
+              def digest_without(value, field):
+                  return "sha256:" + hashlib.sha256(canonical({k: v for k, v in value.items() if k != field})).hexdigest()
+
+              def write_once(path, value):
+                  fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                  with os.fdopen(fd, "wb") as handle:
+                      handle.write(canonical(value) + b"\n")
+
+              def request(method, route, payload=None):
+                  req = urllib.request.Request(
+                      BASE + route,
+                      method=method,
+                      data=canonical(payload) if payload is not None else None,
+                      headers={"Accept": "application/json", "Content-Type": "application/json"},
+                  )
+                  try:
+                      with urllib.request.urlopen(req, timeout=300) as response:
+                          raw = response.read()
+                          return response.status, json.loads(raw) if raw else {}
+                  except urllib.error.HTTPError as exc:
+                      raise RuntimeError("non-scored parity request failed") from exc
+
+              tools = [
+                  {"type": "function", "function": {"name": "bash", "description": "Run a shell command.", "parameters": {"type": "object", "properties": {"command": {"type": "string"}}, "required": ["command"], "additionalProperties": False}}},
+                  {"type": "function", "function": {"name": "submit_report", "description": "Submit the final report.", "parameters": {"type": "object", "properties": {"report": {"type": "string"}}, "required": ["report"], "additionalProperties": False}}},
+              ]
+
+              def payload(name):
+                  instruction = "Call bash exactly once with a benign command. Do not call submit_report." if name == "bash" else "Call submit_report exactly once with a brief benign status. Do not call bash."
+                  return {"model": "qwen3.8-27b", "messages": [{"role": "user", "content": instruction}], "tools": tools, "tool_choice": {"type": "function", "function": {"name": name}}, "temperature": 0, "max_tokens": 128}
+
+              if OUT.exists():
+                  raise RuntimeError("single-use parity root already exists")
+              OUT.mkdir(mode=0o700)
+              HEARTBEAT.touch()
+              statuses = []
+              status, _ = request("GET", "/health"); statuses.append(status)
+              status, models = request("GET", "/v1/models"); statuses.append(status)
+              status, info = request("GET", "/get_model_info"); statuses.append(status)
+              status, server = request("GET", "/get_server_info"); statuses.append(status)
+              assert statuses == [200, 200, 200, 200]
+              assert [row.get("id") for row in models.get("data", [])] == ["qwen3.8-27b"]
+              assert info.get("model_path") == info.get("tokenizer_path") == MODEL_PATH
+              assert server.get("model_path") == server.get("tokenizer_path") == MODEL_PATH
+              assert server.get("context_length") == 262144
+              assert server.get("tp_size") == server.get("dp_size") == 1
+              assert server.get("kv_cache_dtype") == "fp8_e4m3"
+              assert server.get("attention_backend") == "trtllm_mha"
+              assert server.get("reasoning_parser") == "qwen3"
+              assert server.get("tool_call_parser") == "qwen3_coder"
+              selected = []
+              for tool_name in ["bash", "submit_report"]:
+                  HEARTBEAT.touch()
+                  status, completion = request("POST", "/v1/chat/completions", payload(tool_name))
+                  assert status == 200 and completion.get("model") == "qwen3.8-27b"
+                  choices = completion.get("choices") or []
+                  assert len(choices) == 1 and choices[0].get("finish_reason") == "tool_calls"
+                  calls = (choices[0].get("message") or {}).get("tool_calls") or []
+                  assert len(calls) == 1
+                  function = calls[0].get("function") or {}
+                  arguments = json.loads(function.get("arguments") or "")
+                  assert function.get("name") == tool_name and isinstance(arguments, dict)
+                  if tool_name == "bash":
+                      assert set(arguments) == {"command"} and isinstance(arguments["command"], str)
+                  else:
+                      assert set(arguments) == {"report"} and isinstance(arguments["report"], str) and arguments["report"]
+                  selected.append(tool_name)
+              HEARTBEAT.touch()
+              receipt = {
+                  "schema_version": "fleet-qwen38-dedicated-tp1-live-parity-v1",
+                  "status": "PASSED", "probe_job_uid": os.environ["JOB_UID"], "probe_pod_uid": os.environ["POD_UID"],
+                  "api_run_id": "ft-run-c4c7d042", "ray_job_uid": "9f1ecf8a-a047-44ae-8d51-45af1f4ae9ac", "ray_cluster_uid": "6516f5ef-0e62-42e0-9e3a-c455e8009536", "service_uid": "4bb3c7a4-77cc-46cc-a3a6-e204b7f46b33", "head_pod_uid": "205a9faf-8ee5-494c-b27c-bfeaeda812d8",
+                  "runtime_image": RUNTIME_IMAGE, "server_arguments_sha256": SERVER_ARGUMENTS_SHA256,
+                  "model_revision": MODEL_REVISION, "model_path": MODEL_PATH, "served_model": "qwen3.8-27b",
+                  "context_length": 262144, "tp_size": 1, "dp_size": 1, "kv_cache_dtype": "fp8_e4m3", "attention_backend": "trtllm_mha", "reasoning_parser": "qwen3", "tool_call_parser": "qwen3_coder",
+                  "opencode_version": "1.18.27", "provider_adapter": "@ai-sdk/openai-compatible", "context_management": "opencode_1.18.27_native_compaction_autocontinue_v1", "campaign_sha256": CAMPAIGN_SHA256, "settings_canonical_sha256": SETTINGS_CANONICAL, "settings_file_sha256": SETTINGS_FILE, "release_asset_sha256": RELEASE_ASSET,
+                  "required_task_tool_catalog_sha256": TOOL_CATALOG, "structured_tool_schema_names": ["bash", "submit_report"], "selected_tool_names": selected, "exact_argument_schema_keys_and_types_valid": True, "tool_arguments_valid_json": True,
+                  "non_scored_model_requests": 2, "tool_execution_performed": False, "fleet_api_contacted": False, "task_instance_created": False, "session_created": False, "scoring_executed": False, "verifier_executed": False,
+                  "response_content_included": False, "tool_arguments_included": False, "prompts_or_traces_included": False, "scores_included": False,
+              }
+              receipt["receipt_sha256"] = digest_without(receipt, "receipt_sha256")
+              write_once(OUT / "PARITY.json", receipt)
+              print(json.dumps({"status": "PASSED", "non_scored_model_requests": 2, "receipt_sha256": receipt["receipt_sha256"]}, sort_keys=True))
+          env:
+            - name: JOB_UID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['batch.kubernetes.io/controller-uid']
+            - name: POD_UID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.uid
+          resources:
+            requests: {cpu: 100m, memory: 128Mi, ephemeral-storage: 128Mi}
+            limits: {cpu: 500m, memory: 512Mi, ephemeral-storage: 512Mi}
+          volumeMounts: [{name: sfs, mountPath: /mnt/sfs}]
+      volumes:
+        - {name: sfs, persistentVolumeClaim: {claimName: sfs-shared}}
