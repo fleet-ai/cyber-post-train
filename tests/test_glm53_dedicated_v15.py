@@ -11,6 +11,7 @@ from evals.fleet import glm53_dedicated_v15_canary_heartbeat_v1 as heartbeat
 from evals.fleet import glm53_dedicated_v15_canary_release_package_v1 as release_package
 from evals.fleet import glm53_dedicated_v15_live as live
 from evals.fleet import glm53_dedicated_v16 as v16
+from evals.fleet import glm53_dedicated_v16_bootstrap_package_v1 as bootstrap
 from evals.fleet import glm53_dedicated_v16_canary_launch_v1 as launch
 from evals.fleet import self_hosted
 
@@ -113,26 +114,16 @@ def test_live_rows_reconciles_stale_list_state() -> None:
         assert [row["name"] for row in live._live_rows(client, rows)] == ["ft-run-qwen"]
 
 
-def test_v15_release_package_binds_pre_admitted_controller() -> None:
+def test_v15_release_package_rejects_controller_changed_after_pre_admission() -> None:
     parity = ROOT / "docs/evidence/glm53-study/2026-09-05-glm53-dedicated-v14-actual-opencode-parity.json"
     binding = ROOT / "docs/evidence/glm53-study/2026-09-05-glm53-dedicated-v14-server-binding.json"
-    built = release_package.render(
-        ROOT,
-        parity,
-        binding,
-        "http://glm-v15-head-svc.fleet-train-jobs.svc.cluster.local:8000",
-    )
-    assert built["launch_authorized"] is True
-    assert (
-        built["controller_package_sha256"]
-        == release_package.CONTROLLER_PACKAGE_SHA256
-    )
-    configmap, job = built["objects"]["items"]
-    assert "release.py" in configmap["data"]
-    assert "parity.json" in configmap["data"]
-    assert "binding.json" in configmap["data"]
-    assert job["spec"]["template"]["spec"]["priorityClassName"] == "fleet-infra-quiet"
-    assert job["spec"]["template"]["spec"]["preemptionPolicy"] == "Never"
+    with pytest.raises(ValueError, match="pre-admitted controller package drifted"):
+        release_package.render(
+            ROOT,
+            parity,
+            binding,
+            "http://glm-v15-head-svc.fleet-train-jobs.svc.cluster.local:8000",
+        )
 
 
 def test_v15_heartbeat_is_uid_bound_and_nonpreempting() -> None:
@@ -195,7 +186,7 @@ def test_v16_preserves_v15_runtime_and_binds_corrected_preflight() -> None:
     assert v16.PRE_ADMISSION["controller_package_sha256"] == release_package.CONTROLLER_PACKAGE_SHA256
 
 
-def test_v16_canary_launch_binds_dynamic_evidence(tmp_path: Path) -> None:
+def test_v16_canary_launch_rejects_changed_controller(tmp_path: Path) -> None:
     parity = ROOT / "docs/evidence/glm53-study/2026-09-05-glm53-dedicated-v14-actual-opencode-parity.json"
     binding = ROOT / "docs/evidence/glm53-study/2026-09-05-glm53-dedicated-v14-server-binding.json"
     origin = "http://glm-v16-head-svc.fleet-train-jobs.svc.cluster.local:8000"
@@ -221,15 +212,30 @@ def test_v16_canary_launch_binds_dynamic_evidence(tmp_path: Path) -> None:
     release["receipt_sha256"] = self_hosted.digest_without(release, "receipt_sha256")
     release_path = tmp_path / "release.json"
     release_path.write_text(json.dumps(release))
-    built = launch.render(
-        ROOT,
-        parity_path=parity,
-        binding_path=binding,
-        release_path=release_path,
-        service_origin=origin,
-    )
+    with pytest.raises(ValueError, match="controller package drifted"):
+        launch.render(
+            ROOT,
+            parity_path=parity,
+            binding_path=binding,
+            release_path=release_path,
+            service_origin=origin,
+        )
+
+
+def test_v16_bootstrap_runs_exact_controller_source_and_stops_pre_model() -> None:
+    built = bootstrap.render(ROOT)
     source, evidence, job = built["objects"]["items"]
-    assert source["immutable"] is True
-    assert evidence["data"]["service_origin"] == origin
-    assert job["metadata"]["annotations"]["cyber-post-train.fleet.ai/launch-authorized"] == "true"
-    assert built["runtime_plan_sha256"] == release["plan_sha256"]
+    final = bootstrap.controller.render(ROOT)
+    assert source["data"] == final["objects"]["items"][0]["data"]
+    assert built["uses_exact_controller_source_data"] is True
+    assert built["controller_package_sha256"] == final["package_sha256"]
+    assert evidence["immutable"] is True
+    env = {
+        item["name"]: item.get("value")
+        for item in job["spec"]["template"]["spec"]["containers"][0]["env"]
+    }
+    assert env["DEDICATED_BOOTSTRAP_ONLY"] == "1"
+    assert env["DEDICATED_CONTROLLER_PACKAGE_SHA256"] == final["package_sha256"]
+    assert job["metadata"]["annotations"]["cyber-post-train.fleet.ai/launch-authorized"] == "false"
+    assert job["spec"]["template"]["spec"]["priorityClassName"] == "fleet-infra-quiet"
+    assert job["spec"]["template"]["spec"]["preemptionPolicy"] == "Never"

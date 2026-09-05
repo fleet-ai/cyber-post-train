@@ -5,6 +5,8 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from urllib.request import urlopen
@@ -17,6 +19,73 @@ from evals.fleet import hosted_glm_exact_bulk_runtime_v1 as inventory
 from evals.fleet import self_hosted
 
 RELEASE_SCHEMA = "fleet-glm53-dedicated-v14-canary-release-v1"
+BOOTSTRAP_SCHEMA = "fleet-glm53-dedicated-controller-bootstrap-v1"
+
+
+def _bootstrap_only(root: Path) -> dict[str, Any]:
+    """Prove the packaged controller bootstrap and stop before any live route use."""
+    evidence = {}
+    for key, fallback in (
+        ("parity", "/bootstrap/parity.json"),
+        ("binding", "/bootstrap/binding.json"),
+        ("release", "/bootstrap/release.json"),
+    ):
+        env_key = f"DEDICATED_{key.upper()}_PATH"
+        path = Path(os.environ.get(env_key, fallback))
+        if path.is_symlink() or not path.is_file():
+            raise RuntimeError(f"bootstrap evidence is not a private regular file: {key}")
+        json.loads(path.read_text())
+        evidence[key] = self_hosted.sha256(path.read_bytes())
+    expected_modules = (
+        "fixed_proxy.py",
+        "glm53_dedicated_v14_scored_canary_runtime_v1.py",
+        "glm53_dedicated_v14_scored_canary_v1.py",
+        "hosted_glm_exact_bulk_runtime_v1.py",
+        "hosted_glm_exact_bulk_v1.py",
+        "opencode_train_sweep_runner.py",
+    )
+    for name in expected_modules:
+        path = root / "evals/fleet" / name
+        if path.is_symlink() or not path.is_file():
+            raise RuntimeError(f"bootstrap install closure is absent: {name}")
+        compile(path.read_text(), name, "exec")
+    image = os.environ.get("AGENT_HARNESS_IMAGE")
+    package_sha256 = os.environ.get("DEDICATED_CONTROLLER_PACKAGE_SHA256")
+    if image != "chris/opencode:1.18.27-cyber-v1":
+        raise RuntimeError("bootstrap harness image drifted")
+    if (
+        not isinstance(package_sha256, str)
+        or len(package_sha256) != 71
+        or not package_sha256.startswith("sha256:")
+    ):
+        raise RuntimeError("bootstrap controller package digest drifted")
+    job_uid = str(os.environ.get("JOB_UID", ""))
+    pod_uid = str(os.environ.get("POD_UID", ""))
+    uuid.UUID(job_uid)
+    uuid.UUID(pod_uid)
+    receipt = {
+        "schema_version": BOOTSTRAP_SCHEMA,
+        "status": "PASSED_PRE_MODEL",
+        "checked_at_utc": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        "job_uid": job_uid,
+        "pod_uid": pod_uid,
+        "controller_package_sha256": package_sha256,
+        "harness_image": image,
+        "harness_version": "1.18.27",
+        "projected_evidence_copied_to_private_regular_files": True,
+        "evidence_file_sha256": evidence,
+        "runtime_import_closure_valid": True,
+        "docker_build_and_version_check_completed_by_exact_run_sh": True,
+        "claim_calls": 0,
+        "model_requests": 0,
+        "task_instance_session_verifier_scoring_calls": 0,
+        "prompts_traces_flags_or_scores_read": False,
+    }
+    receipt["receipt_sha256"] = self_hosted.digest_without(receipt, "receipt_sha256")
+    output = Path(os.environ["DEDICATED_BOOTSTRAP_RECEIPT"])
+    output.parent.mkdir(parents=True, exist_ok=False)
+    output.write_bytes(self_hosted.canonical_json(receipt) + b"\n")
+    return receipt
 
 
 def _route_check(plan: dict[str, Any], key: str) -> None:
@@ -83,6 +152,9 @@ def main() -> int:
     parser.add_argument("--repo", type=Path, default=Path.cwd())
     parser.add_argument("--proxy", type=Path, required=True)
     args = parser.parse_args()
+    if os.environ.get("DEDICATED_BOOTSTRAP_ONLY") == "1":
+        _bootstrap_only(args.repo.resolve())
+        return 0
     run(args.repo.resolve(), args.proxy)
     return 0
 
