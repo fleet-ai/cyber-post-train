@@ -1,0 +1,43 @@
+{
+  "schema_version": "fleet-qwen38-dedicated-rank3-release-v1",
+  "status": "RELEASED_TO_DEDICATED",
+  "observed_at_utc": "2026-09-05T21:00:00Z",
+  "campaign_id": "chris-cyber-q38-glm53-exact-easiest100-pass4-v1",
+  "selection_rank": 3,
+  "cell_ids": [
+    "sha256:f728f5712478f233b05c0f2acfd1aba5ae9f63862e1b759ea40a508e188557d8",
+    "sha256:6edac950ae44ff62c07074a775afdb65cc9b394047883e0b57fcad84e74d2fa7",
+    "sha256:ffb5b0fb6a3eb702b78c75aca66446eb39668d0949bc92b4628ad77c2102bcae",
+    "sha256:47e1093f8b03d4179d334a4feac13aba526c5c36f8eb98bc29a681d27aa68e36"
+  ],
+  "execution_ids": [
+    "sha256:1b37b508368614cedfa623c6ced4d90a238d2be8fe5c1ccc1b57ca81c388b894",
+    "sha256:82bd4090ef719aa774f93275b22b8e2bdf8cfe12d72958bcc8580aef2f87c98b",
+    "sha256:b85501b099cd954a5f031c1f537da54a3a0260638f34e7d6c0d7a4a359cad0f5",
+    "sha256:440134d515f28224e809fadd31ecd2bb8a7c0b7b835a39db5e81066f1431106d"
+  ],
+  "serving_block": "dedicated-qwen-tp1-b-v1",
+  "parity_receipt_sha256": "sha256:9e4feeb252924031bbc79ca4b812bf482ed466c7be707b52229350437cdca5bd",
+  "laptop_hold_transferred": true,
+  "fresh_global_ledger_clear": true,
+  "fresh_authoritative_sessions_clear": true,
+  "claims_clear": true,
+  "reconciliation": {
+    "global_ledger": {
+      "qwen_accepted": 8,
+      "qwen_active": 2,
+      "qwen_unstarted": 390,
+      "rank3_cells_unstarted": 4
+    },
+    "authoritative_sessions": {
+      "pages": 1,
+      "rows_examined": 28,
+      "rank3_collisions": 0
+    },
+    "canonical_claim_collisions": 0,
+    "output_root_collisions": 0,
+    "fleet_api_mutations": 0
+  },
+  "prompts_traces_flags_or_scores_included": false,
+  "receipt_sha256": "sha256:772b5782d1f3e25520f2f77198ae459511f99df818b238b4f057f4e66529852b"
+}
