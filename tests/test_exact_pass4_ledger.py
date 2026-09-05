@@ -428,6 +428,33 @@ def test_fixed_historical_adapters_remain_score_blind(
     assert result["models"]["glm-5.3"]["active"] == 1
 
 
+def test_reviewed_legacy_glm_generation7_acceptance_is_exact(
+    tmp_path: Path, authority: ledger.Authority
+) -> None:
+    value = {
+        "schema_version": ledger.LEGACY_GLM_GENERATION7_ACCEPTED_SCHEMA,
+        **ledger.LEGACY_GLM_GENERATION7_ACCEPTED_BINDING,
+        "accepted": True,
+        "credited": True,
+        "retry_allowed": False,
+        "cleanup_completed": True,
+        "session_ingest_completed": True,
+        "scores_included": False,
+        "prompts_or_traces_included": False,
+    }
+    path = _write(tmp_path / "legacy-glm-accepted.json", value)
+    evidence = ledger.accepted_evidence(path, authority)
+    assert evidence.state == "accepted"
+    assert evidence.execution_generation == 7
+    assert evidence.cell_id == ledger.GENERATION7_BINDINGS["glm-5.3"]["cell_id"]
+
+    changed = copy.deepcopy(value)
+    changed["run_id"] += "-drift"
+    changed["receipt_sha256"] = self_hosted.digest_without(changed, "receipt_sha256")
+    with pytest.raises(ledger.LedgerError, match="identity or outcome drifted"):
+        ledger.accepted_evidence(_write(tmp_path / "drift.json", changed), authority)
+
+
 def test_durable_generation15_gate_is_exact_accepted_evidence(
     tmp_path: Path, authority: ledger.Authority
 ) -> None:
@@ -616,6 +643,30 @@ def test_hosted_glm_bulk_claim_uses_exact_partition_authority(
     path = root / f"{item['execution_id'].removeprefix('sha256:')}.json"
     evidence = ledger.claim_evidence(path, authority, active=True)
     assert evidence.cell_id == item["cell_id"]
+
+
+@pytest.mark.parametrize(
+    "authority_field",
+    ["dedicated_qwen_rank3_items", "dedicated_qwen_rank97_items"],
+)
+def test_released_dedicated_successor_claims_use_exact_plan_authority(
+    tmp_path: Path, authority: ledger.Authority, authority_field: str
+) -> None:
+    pairs = getattr(authority, authority_field)
+    plan, item = max(pairs.values(), key=lambda pair: pair[1]["execution_generation"])
+    root = tmp_path / authority_field
+    value = runtime.claim_cell(
+        plan,
+        item,
+        claim_root=root,
+        job_uid="11111111-1111-4111-8111-111111111111",
+        pod_uid="22222222-2222-4222-8222-222222222222",
+    )
+    assert value is not None
+    path = root / f"{item['execution_id'].removeprefix('sha256:')}.json"
+    evidence = ledger.claim_evidence(path, authority, active=False)
+    assert evidence.cell_id == item["cell_id"]
+    assert evidence.state == "blocked_nonrepeatable"
 
 
 def test_dedicated_qwen_v3_claim_uses_exact_rank2_attempt2_authority(

@@ -16,14 +16,18 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from unittest import mock
 
 from evals.fleet import exact_pass4_bulk_runtime_v3 as bulk_runtime
 from evals.fleet import exact_pass4_bulk_v3 as bulk
 from evals.fleet import exact_pass4_universe as exact
 from evals.fleet import hosted_glm_exact_bulk_v1 as hosted_glm_bulk
-from evals.fleet import qwen38_dedicated_rank2_v3 as qwen_dedicated_v3
-from evals.fleet import qwen38_dedicated_rank3_v3 as qwen_dedicated_rank3
+from evals.fleet import hosted_glm_s2_c2_canary_v1 as hosted_glm_c2
 from evals.fleet import qwen38_dedicated_dp8_canary_v1 as qwen_dedicated_dp8
+from evals.fleet import qwen38_dedicated_rank2_v3 as qwen_dedicated_v3
+from evals.fleet import qwen38_dedicated_rank3_a2_g22_v1 as qwen_dedicated_rank3_g22
+from evals.fleet import qwen38_dedicated_rank3_v3 as qwen_dedicated_rank3
+from evals.fleet import qwen38_dedicated_rank97_bundle_v1 as qwen_dedicated_rank97
 from evals.fleet import qwen38_dedicated_scored_canary_v1 as qwen_dedicated
 from evals.fleet import qwen_bulk_generation16 as qwen_generation16
 from evals.fleet import qwen_hosted_generation18 as qwen_generation18
@@ -49,6 +53,7 @@ EVIDENCE_MANIFEST_KINDS = {
 }
 
 GENERATION7_TERMINAL_SCHEMA = "fleet-opencode-autocontinue-generation7-terminal-v1"
+LEGACY_GLM_GENERATION7_ACCEPTED_SCHEMA = "fleet-hosted-opencode-attempt-accepted-v1"
 GENERATION7_CLAIM_SCHEMA = "fleet-statistical-cell-execution-claim-v9"
 GENERATION15_TERMINAL_SCHEMA = "fleet-opencode-generation15-simple-terminal-v1"
 GENERATION15_CLAIM_SCHEMA = "fleet-statistical-cell-execution-claim-v15"
@@ -117,11 +122,48 @@ DEDICATED_QWEN_ATTEMPT1_BINDING = {
 ACCEPTED_SCHEMAS = {
     "fleet-exact-pass4-bulk-cell-accepted-v3",
     GENERATION7_TERMINAL_SCHEMA,
+    LEGACY_GLM_GENERATION7_ACCEPTED_SCHEMA,
     GENERATION15_TERMINAL_SCHEMA,
     DEDICATED_QWEN_ACCEPTED_SCHEMA,
     DEDICATED_QWEN_VALIDATED_SCHEMA,
     DEDICATED_QWEN_VALIDATED_V2_SCHEMA,
     GENERATION15_ACCEPTED_GATE_SCHEMA,
+}
+LEGACY_GLM_GENERATION7_ACCEPTED_FIELDS = {
+    "schema_version",
+    "accepted",
+    "credited",
+    "retry_allowed",
+    "run_id",
+    "rank",
+    "source_rank",
+    "attempt",
+    "task_key",
+    "task_version_id",
+    "session_id",
+    "verifier_execution_id",
+    "agent_exit_code",
+    "config_sha256",
+    "claim_sha256",
+    "cleanup_completed",
+    "session_ingest_completed",
+    "scores_included",
+    "prompts_or_traces_included",
+    "receipt_sha256",
+}
+LEGACY_GLM_GENERATION7_ACCEPTED_BINDING = {
+    "run_id": "chris-cyber-glm53-opencode11827-hosted-primary46-p4-v12-sr013-a1-85027a7a",
+    "rank": 1,
+    "source_rank": 13,
+    "attempt": 1,
+    "task_key": "cysec1-2-fakelook-gen_blackbox-ab56dfb6116356c402290fa8__blackbox_ctf_v1",
+    "task_version_id": "9375a9b9-04e5-4f6f-ad47-286121278992",
+    "session_id": "0088dc21-0e12-4db2-ada5-32d6e6ff914f",
+    "verifier_execution_id": "d6727db1-0f89-4c10-986d-f123ba2e2025",
+    "agent_exit_code": 0,
+    "config_sha256": "sha256:7e2f175c39d05308a6f2fcabea567aa1d4c5ecbb9b3ce674a72ff170f1faad84",
+    "claim_sha256": "sha256:09465aa21d27475b8642e77a3ac8bf6b550f21c57212b463d9f463e53ef37e31",
+    "receipt_sha256": "sha256:1c6e404b9edca1a8ab78303c8137a4cac55eb3bfa6c94db1a473ac9512425637",
 }
 CLAIM_SCHEMAS = {
     bulk_runtime.CLAIM_SCHEMA,
@@ -454,9 +496,13 @@ class Authority:
         tuple[str, str], tuple[dict[str, Any], dict[str, Any]]
     ]
     hosted_glm_bulk_items: dict[tuple[str, str], tuple[dict[str, Any], dict[str, Any]]]
+    hosted_glm_c2_items: dict[tuple[str, str], tuple[dict[str, Any], dict[str, Any]]]
     dedicated_qwen_items: dict[tuple[str, str], tuple[dict[str, Any], dict[str, Any]]]
     dedicated_qwen_v3_items: dict[tuple[str, str], tuple[dict[str, Any], dict[str, Any]]]
     dedicated_qwen_rank3_items: dict[
+        tuple[str, str], tuple[dict[str, Any], dict[str, Any]]
+    ]
+    dedicated_qwen_rank97_items: dict[
         tuple[str, str], tuple[dict[str, Any], dict[str, Any]]
     ]
     dedicated_qwen_dp8_items: dict[tuple[str, str], tuple[dict[str, Any], dict[str, Any]]]
@@ -589,6 +635,17 @@ def _build_authority(repo_root: Path, campaign_path: Path) -> Authority:
                 raise LedgerError("hosted GLM bulk execution authority is duplicated")
             hosted_glm_bulk_items[key] = (plan, item)
 
+    hosted_glm_c2_items: dict[
+        tuple[str, str], tuple[dict[str, Any], dict[str, Any]]
+    ] = {}
+    if HOSTED_GLM_INVENTORY_PATH.is_file():
+        c2_plan = hosted_glm_c2.build_runtime_plan("glm-hosted-s2", inventory, repo_root)
+        c2_item = c2_plan["attempts"][0]
+        hosted_glm_c2_items[(c2_item["cell_id"], c2_item["execution_id"])] = (
+            c2_plan,
+            c2_item,
+        )
+
     dedicated_qwen_items: dict[tuple[str, str], tuple[dict[str, Any], dict[str, Any]]] = {}
     for attempt in sorted(qwen_dedicated.EXPECTED_IDENTITIES):
         generated_plan = qwen_dedicated.build_plan(repo_root, attempt)
@@ -647,7 +704,8 @@ def _build_authority(repo_root: Path, campaign_path: Path) -> Authority:
             attempt,
             release_path=(
                 repo_root
-                / "docs/evidence/qwen38-study/2026-09-05-qwen38-dedicated-rank3-g21-b-v2-release-v3.json"
+                / "docs/evidence/qwen38-study/"
+                "2026-09-05-qwen38-dedicated-rank3-g21-b-v2-release-v3.json"
             ),
         )
         item = plan["item"]
@@ -655,12 +713,27 @@ def _build_authority(repo_root: Path, campaign_path: Path) -> Authority:
         if key in dedicated_qwen_rank3_items:
             raise LedgerError("dedicated Qwen rank-3 execution authority is duplicated")
         dedicated_qwen_rank3_items[key] = (plan, item)
+    rank3_g22_release = (
+        repo_root
+        / "docs/evidence/qwen38-study/"
+        "2026-09-05-qwen38-dedicated-rank3-a2-g22-release-v1.json"
+    )
+    with mock.patch.dict(
+        "os.environ", {"QWEN_RANK3_G22_RELEASE_PATH": str(rank3_g22_release)}
+    ):
+        rank3_g22_plan = qwen_dedicated_rank3_g22._released_plan(repo_root)  # noqa: SLF001
+    rank3_g22_item = rank3_g22_plan["item"]
+    rank3_g22_key = (rank3_g22_item["cell_id"], rank3_g22_item["execution_id"])
+    if rank3_g22_key in dedicated_qwen_rank3_items:
+        raise LedgerError("dedicated Qwen rank-3 g22 execution authority is duplicated")
+    dedicated_qwen_rank3_items[rank3_g22_key] = (rank3_g22_plan, rank3_g22_item)
 
     dedicated_qwen_dp8_plan = qwen_dedicated_dp8.released_plan(
         repo_root,
         release_path=(
             repo_root
-            / "docs/evidence/qwen38-study/2026-09-05-qwen38-dedicated-dp8-r004-a2-g22-release-v1.json"
+            / "docs/evidence/qwen38-study/"
+            "2026-09-05-qwen38-dedicated-dp8-r004-a2-g22-release-v1.json"
         ),
     )
     dedicated_qwen_dp8_item = dedicated_qwen_dp8_plan["item"]
@@ -670,6 +743,23 @@ def _build_authority(repo_root: Path, campaign_path: Path) -> Authority:
             dedicated_qwen_dp8_item["execution_id"],
         ): (dedicated_qwen_dp8_plan, dedicated_qwen_dp8_item)
     }
+
+    dedicated_qwen_rank97_items: dict[
+        tuple[str, str], tuple[dict[str, Any], dict[str, Any]]
+    ] = {}
+    rank97_release = (
+        repo_root
+        / "docs/evidence/qwen38-study/"
+        "2026-09-05-qwen38-dedicated-rank97-tp1-d-release-v2.json"
+    )
+    with mock.patch.dict("os.environ", {"QWEN_RANK97_RELEASE_PATH": str(rank97_release)}):
+        rank97_plans = qwen_dedicated_rank97._released_plans(repo_root)  # noqa: SLF001
+    for plan in rank97_plans:
+        item = plan["item"]
+        key = (item["cell_id"], item["execution_id"])
+        if key in dedicated_qwen_rank97_items:
+            raise LedgerError("dedicated Qwen rank-97 execution authority is duplicated")
+        dedicated_qwen_rank97_items[key] = (plan, item)
 
     generation7_items = _validated_fixed_bindings(cells, GENERATION7_BINDINGS, 7)
     generation15_items = _validated_fixed_bindings(cells, GENERATION15_BINDINGS, 15)
@@ -681,9 +771,11 @@ def _build_authority(repo_root: Path, campaign_path: Path) -> Authority:
         qwen_generation18_items=qwen_generation18_items,
         qwen_generation19_v4_items=qwen_generation19_v4_items,
         hosted_glm_bulk_items=hosted_glm_bulk_items,
+        hosted_glm_c2_items=hosted_glm_c2_items,
         dedicated_qwen_items=dedicated_qwen_items,
         dedicated_qwen_v3_items=dedicated_qwen_v3_items,
         dedicated_qwen_rank3_items=dedicated_qwen_rank3_items,
+        dedicated_qwen_rank97_items=dedicated_qwen_rank97_items,
         dedicated_qwen_dp8_items=dedicated_qwen_dp8_items,
         generation7=generation7_items,
         generation15=generation15_items,
@@ -755,7 +847,10 @@ def _require_exact_fields(
 
 
 def _bulk_pair(
-    authority: Authority, key: tuple[Any, Any], controller: Any
+    authority: Authority,
+    key: tuple[Any, Any],
+    controller: Any,
+    plan_sha256: Any = None,
 ) -> tuple[dict[str, Any], dict[str, Any]] | None:
     candidates = [
         pair
@@ -764,9 +859,12 @@ def _bulk_pair(
             authority.qwen_generation19_v4_items,
             authority.qwen_generation16_items,
             authority.hosted_glm_bulk_items,
+            authority.hosted_glm_c2_items,
             authority.bulk_items,
         )
-        if (pair := mapping.get(key)) is not None and pair[0].get("controller") == controller
+        if (pair := mapping.get(key)) is not None
+        and pair[0].get("controller") == controller
+        and (plan_sha256 is None or pair[0].get("plan_sha256") == plan_sha256)
     ]
     if len(candidates) > 1:
         raise LedgerError("bulk receipt controller is ambiguous across frozen plans")
@@ -781,7 +879,7 @@ def _accepted_bulk(value: dict[str, Any], path: Path, authority: Authority) -> E
         optional={BULK_ACCEPTED_OPTIONAL_PROJECTION_FIELD},
     )
     key = (value.get("cell_id"), value.get("execution_id"))
-    pair = _bulk_pair(authority, key, value.get("controller"))
+    pair = _bulk_pair(authority, key, value.get("controller"), value.get("plan_sha256"))
     if pair is None:
         raise LedgerError(f"bulk acceptance is absent from the exact frozen plans: {path}")
     plan, item = pair
@@ -836,6 +934,37 @@ def _accepted_bulk(value: dict[str, Any], path: Path, authority: Authority) -> E
         value["receipt_sha256"],
         path,
     )
+
+
+def _accepted_legacy_glm_generation7(
+    value: dict[str, Any], path: Path, authority: Authority
+) -> Evidence:
+    """Admit the one reviewed legacy receipt imported as exact generation 7."""
+    _require_exact_fields(value, LEGACY_GLM_GENERATION7_ACCEPTED_FIELDS, path)
+    binding = GENERATION7_BINDINGS["glm-5.3"]
+    key = (binding["cell_id"], binding["execution_id"])
+    if key not in authority.generation7:
+        raise LedgerError(f"legacy GLM acceptance lacks generation-7 authority: {path}")
+    cell, generation = _require_cell_execution(authority, *key, 7, path)
+    expected = {
+        **LEGACY_GLM_GENERATION7_ACCEPTED_BINDING,
+        "accepted": True,
+        "credited": True,
+        "retry_allowed": False,
+        "cleanup_completed": True,
+        "session_ingest_completed": True,
+        "scores_included": False,
+        "prompts_or_traces_included": False,
+    }
+    if set(value) != set(expected) | {"schema_version"} or any(
+        value.get(field) != expected_value for field, expected_value in expected.items()
+    ):
+        raise LedgerError(f"legacy GLM acceptance identity or outcome drifted: {path}")
+    if cell["selection_rank"] != 13 or cell["attempt"] != 1:
+        raise LedgerError(f"legacy GLM acceptance statistical cell drifted: {path}")
+    _require_uuid(value.get("session_id"), "session id", path)
+    _require_uuid(value.get("verifier_execution_id"), "verifier execution id", path)
+    return Evidence("accepted", cell["cell_id"], key[1], generation, value["receipt_sha256"], path)
 
 
 def _accepted_generation7(value: dict[str, Any], path: Path, authority: Authority) -> Evidence:
@@ -1002,6 +1131,7 @@ def _accepted_dedicated_qwen(value: dict[str, Any], path: Path, authority: Autho
             authority.dedicated_qwen_items,
             authority.dedicated_qwen_v3_items,
             authority.dedicated_qwen_rank3_items,
+            authority.dedicated_qwen_rank97_items,
             authority.dedicated_qwen_dp8_items,
         )
         if (pair := mapping.get(key)) is not None
@@ -1015,6 +1145,7 @@ def _accepted_dedicated_qwen(value: dict[str, Any], path: Path, authority: Autho
                 authority.dedicated_qwen_items,
                 authority.dedicated_qwen_v3_items,
                 authority.dedicated_qwen_rank3_items,
+                authority.dedicated_qwen_rank97_items,
                 authority.dedicated_qwen_dp8_items,
             )
         ):
@@ -1167,14 +1298,24 @@ def _accepted_validated_dedicated_qwen_v2(
     """Validate the reusable v3-server acceptance chain without opening artifacts."""
     _require_exact_fields(value, DEDICATED_QWEN_VALIDATED_V2_FIELDS, path)
     key = (value.get("cell_id"), value.get("execution_id"))
-    pair = authority.dedicated_qwen_v3_items.get(key)
+    candidates = [
+        pair
+        for mapping in (
+            authority.dedicated_qwen_v3_items,
+            authority.dedicated_qwen_rank3_items,
+        )
+        if (pair := mapping.get(key)) is not None
+    ]
+    pair = candidates[0] if len(candidates) == 1 else None
     if pair is None:
         raise LedgerError(f"validated dedicated Qwen v2 receipt lacks exact plan authority: {path}")
     plan, item = pair
     cell, generation = _require_cell_execution(authority, *key, item["execution_generation"], path)
     expected = {
-        "serving_block": qwen_dedicated_v3.SERVING_BLOCK,
-        "serving_parity_receipt_sha256": qwen_dedicated_v3.PARITY_SHA256,
+        "serving_block": plan["config"]["serving"]["serving_block"],
+        "serving_parity_receipt_sha256": plan["config"]["serving"][
+            "parity_receipt_sha256"
+        ],
         "cell_id": item["cell_id"],
         "execution_id": item["execution_id"],
         "run_id": item["run_id"],
@@ -1260,6 +1401,8 @@ def accepted_evidence(path: Path, authority: Authority) -> Evidence:
         return _accepted_validated_dedicated_qwen_v2(value, path, authority)
     if schema == GENERATION15_ACCEPTED_GATE_SCHEMA:
         return _accepted_generation15_gate(value, path, authority)
+    if schema == LEGACY_GLM_GENERATION7_ACCEPTED_SCHEMA:
+        return _accepted_legacy_glm_generation7(value, path, authority)
     if schema == GENERATION7_TERMINAL_SCHEMA:
         return _accepted_generation7(value, path, authority)
     return _accepted_generation15(value, path, authority)
@@ -1268,7 +1411,7 @@ def accepted_evidence(path: Path, authority: Authority) -> Evidence:
 def _claim_bulk(value: dict[str, Any], path: Path, authority: Authority) -> Evidence:
     _require_exact_fields(value, BULK_CLAIM_FIELDS, path)
     key = (value.get("cell_id"), value.get("execution_id"))
-    pair = _bulk_pair(authority, key, value.get("controller"))
+    pair = _bulk_pair(authority, key, value.get("controller"), value.get("plan_sha256"))
     if pair is None:
         raise LedgerError(f"bulk claim is absent from exact frozen plans: {path}")
     plan, item = pair
@@ -1315,6 +1458,7 @@ def _claim_dedicated_qwen(value: dict[str, Any], path: Path, authority: Authorit
             authority.dedicated_qwen_items,
             authority.dedicated_qwen_v3_items,
             authority.dedicated_qwen_rank3_items,
+            authority.dedicated_qwen_rank97_items,
             authority.dedicated_qwen_dp8_items,
         )
         if (pair := mapping.get(key)) is not None
@@ -1422,12 +1566,19 @@ def claim_evidence(path: Path, authority: Authority, *, active: bool) -> Evidenc
     if schema not in CLAIM_SCHEMAS:
         raise LedgerError(f"unsupported claim receipt schema at {path}: {schema!r}")
     if schema == bulk_runtime.CLAIM_SCHEMA:
-        if value.get("controller") in {
-            qwen_dedicated.CONTROLLER,
-            qwen_dedicated_v3.CONTROLLER,
-            qwen_dedicated_rank3.CONTROLLER,
-            qwen_dedicated_dp8.CONTROLLER,
-        }:
+        key = (value.get("cell_id"), value.get("execution_id"))
+        dedicated_pair_exists = any(
+            (pair := mapping.get(key)) is not None
+            and pair[0]["controller"] == value.get("controller")
+            for mapping in (
+                authority.dedicated_qwen_items,
+                authority.dedicated_qwen_v3_items,
+                authority.dedicated_qwen_rank3_items,
+                authority.dedicated_qwen_rank97_items,
+                authority.dedicated_qwen_dp8_items,
+            )
+        )
+        if dedicated_pair_exists:
             evidence = _claim_dedicated_qwen(value, path, authority)
         else:
             evidence = _claim_bulk(value, path, authority)
