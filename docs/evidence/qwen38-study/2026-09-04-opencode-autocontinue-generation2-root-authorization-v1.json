@@ -1,0 +1,41 @@
+{
+  "schema_version": "fleet-opencode-autocontinue-generation2-root-authorization-v1",
+  "append_only": true,
+  "status": "AUTHORIZED",
+  "author": "/root",
+  "scope": {
+    "execution_generation": 2,
+    "create_once": true,
+    "hosted_only": true,
+    "scored_launch_authorized": true,
+    "dedicated_serving_authorized": false,
+    "bulk_release_authorized": false,
+    "release_receipts_present": false,
+    "cluster_mutation_authorized_by_this_package": false
+  },
+  "models": [
+    {
+      "model": "qwen3.8-27b",
+      "cell_id": "sha256:631c9d7cc5328849ce137393943927192b1b50dc60458cdb3425fbce893ecf5a",
+      "generation2_spec_sha256": "sha256:9d8201974794edd3bad379721cf9c9e0e9ae0b978221d223d8165730302e737c",
+      "rendered_plan_sha256": "sha256:1c98863eb54921e338020954e2395da0ecc085a6300c7fb60b97142ec0e949da",
+      "execution_id": "sha256:71236ff990db210eb4989ee9e2b4c7afc4b7153b008178c2ae31d5149c3dc8ce",
+      "authorized_at_utc": "2026-09-05T04:34:27Z",
+      "statement": "Authorize exactly one create-once generation-2 hosted Qwen3.8 27B canary cell after all fresh route, duplicate, package, and runtime gates pass; no dedicated serving or bulk release is authorized."
+    },
+    {
+      "model": "glm-5.3",
+      "cell_id": "sha256:905051f141077d3aa5086c1f5dc6ad015d5ee6173a1ea7515025805cf9a24b41",
+      "generation2_spec_sha256": "sha256:f4b9f990da87ac46da30a26d3c00a8d023b82ddf2251964343cc55eff309d938",
+      "rendered_plan_sha256": "sha256:7b1bfaf18158e224595b4d31c2a56b064f3c78c848284558f070a28889b2a5c3",
+      "execution_id": "sha256:db5c16dfac428436d4b70dd68ac65b5d1f835937cd4a620839ec9c9a0f4bac5f",
+      "authorized_at_utc": "2026-09-05T04:34:27Z",
+      "statement": "Authorize exactly one create-once generation-2 hosted GLM5.3 canary cell after all fresh route, duplicate, package, and runtime gates pass; no dedicated serving or bulk release is authorized."
+    }
+  ],
+  "privacy": {
+    "prompts_traces_flags_or_scores_included": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:bfd654aecee65486bf903d4bbbbe8551417fe0885d154ea25bf6c97889930380"
+}
