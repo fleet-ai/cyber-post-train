@@ -105,6 +105,10 @@ def _validate_server(value: Mapping[str, Any]) -> None:
         or value.get("head_pod_restarts") != 0
         or value.get("workload_preempted") is not False
         or not str(value.get("parity_receipt_sha256", "")).startswith("sha256:")
+        or not str(value.get("parity_file_sha256", "")).startswith("sha256:")
+        or not str(value.get("parity_path", "")).startswith(
+            "docs/evidence/qwen38-study/"
+        )
     ):
         raise PartitionError("exact_dp8_server_binding_required")
 
@@ -241,6 +245,12 @@ def build_held(
             "fresh_live_scan_receipt_sha256",
             "root_review_receipt_sha256",
         ],
+        "held_controller_identity": {
+            "configmap_name": "chris-cyber-q38-dp8-c-r098-a1-canary-v1-held",
+            "job_name": "chris-cyber-q38-dp8-c-r098-a1-canary-v1-held",
+            "active_attempt": 1,
+            "held_attempts": [2, 3, 4],
+        },
         "controller_create_permitted": False,
         "api_mutation_calls": 0,
         "prompts_traces_flags_scores_or_model_outputs_included": False,

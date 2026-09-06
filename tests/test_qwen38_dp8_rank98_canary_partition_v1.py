@@ -38,6 +38,8 @@ def _server() -> dict:
         "head_pod_restarts": 0,
         "workload_preempted": False,
         "parity_receipt_sha256": "sha256:" + "3" * 64,
+        "parity_file_sha256": "sha256:" + "5" * 64,
+        "parity_path": "docs/evidence/qwen38-study/future-dp8-c-parity.json",
     }
     value["receipt_sha256"] = self_hosted.digest_without(value, "receipt_sha256")
     return value
