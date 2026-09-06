@@ -1,0 +1,21 @@
+{
+  "api_mutations": 0,
+  "config_sha256": "sha256:fb7c461c29d17e781e36b8394c4efb3fd4b86f317544513ea6a219132974a87d",
+  "explicit_root_review_required": true,
+  "fresh_live_gate_required_immediately_before_any_create": true,
+  "inventory_receipt_sha256": "sha256:f3ddd9bce828dbb15e348684a86572a0698aa023442c4d139a86e9d5a090adff",
+  "launch_authorized": false,
+  "plan_receipt_sha256": "sha256:380acb5fc43b3351f3b1dbc334d167ad6e91e56673359e01b18b2ef576557300",
+  "preview_receipt_sha256": "sha256:10ac755166f96295b1f24182ac4272596b4af5575ee33e97c87e81740c792ae0",
+  "prompts_traces_flags_or_scores_included": false,
+  "qualification_only": true,
+  "receipt_sha256": "sha256:fd158f8684d51eae11471232102a3f427d8b0e1fc1970f369d9401b1050958a2",
+  "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-q38-dp6-a-v1",
+  "schema_version": "fleet-qwen38-dp6-early-qualification-held-release-v3",
+  "scoring_authorized": false,
+  "server_create_limit": 1,
+  "serving_block": "dedicated-qwen-dp6-a-v1",
+  "statistical_cells_selected": 0,
+  "status": "HELD_FOR_ROOT_REVIEW",
+  "title": "chris-cyber-evalserve-q38-dp6-a-v1"
+}

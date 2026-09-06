@@ -45,7 +45,7 @@ class ActualHarnessParityError(RuntimeError):
     """Stable content-free parity failure."""
 
 
-def inspect_local_image() -> dict[str, Any]:
+def inspect_local_image(expected_image_id: str = IMAGE_ID) -> dict[str, Any]:
     """Bind the image tag to the observed immutable local amd64 image."""
     completed = subprocess.run(
         ["docker", "image", "inspect", IMAGE, "--format", "{{json .}}"],
@@ -63,7 +63,7 @@ def inspect_local_image() -> dict[str, Any]:
     config = value.get("Config") if isinstance(value, dict) else None
     if (
         not isinstance(config, dict)
-        or value.get("Id") != IMAGE_ID
+        or value.get("Id") != expected_image_id
         or value.get("Os") != "linux"
         or value.get("Architecture") != "amd64"
         or config.get("User") != "node"
@@ -419,6 +419,58 @@ def _docker_run_argv(
     ]
 
 
+def _owned_by_agent(path: Path) -> bool:
+    metadata = path.stat()
+    return metadata.st_uid == 1000 and metadata.st_gid == 1000
+
+
+def _prepare_agent_mounts(root: Path, settings: Mapping[str, Any]) -> tuple[Path, Path]:
+    """Create the two bind mounts and make them writable by the pinned image user."""
+    home = root / "home"
+    config_dir = home / ".config" / "opencode"
+    state_dir = home / ".local" / "share" / "opencode"
+    cache_dir = home / ".cache" / "opencode"
+    workspace = root / "workspace"
+    for directory in (config_dir, state_dir, cache_dir, workspace):
+        directory.mkdir(parents=True, exist_ok=True)
+    (config_dir / "opencode.json").write_bytes(self_hosted.canonical_json(settings) + b"\n")
+    if os.geteuid() == 0:
+        mounted = [home, *home.rglob("*"), workspace, *workspace.rglob("*")]
+        for path in mounted:
+            os.chown(path, 1000, 1000)
+        if any(not _owned_by_agent(path) for path in mounted):
+            raise ActualHarnessParityError("cluster_dind_bind_mount_ownership_failed")
+    return home, workspace
+
+
+def _docker_mount_writeability_argv(home: Path, workspace: Path) -> list[str]:
+    """Prove the inner uid-1000 image can write both Linux DinD bind mounts."""
+    script = (
+        "set -eu; test \"$(id -u)\" = 1000; "
+        "test -w /home/node; test -w /workspace; "
+        "mkdir -p /home/node/.local/share/opencode /home/node/.cache/opencode; "
+        "touch /home/node/.local/share/opencode/.fleet-write-probe; "
+        "mkdir /workspace/.fleet-write-probe; "
+        "rm -f /home/node/.local/share/opencode/.fleet-write-probe; "
+        "rmdir /workspace/.fleet-write-probe"
+    )
+    return [
+        "docker",
+        "run",
+        "--rm",
+        "--platform",
+        "linux/amd64",
+        "-v",
+        f"{home}:/home/node",
+        "-v",
+        f"{workspace}:/workspace",
+        IMAGE,
+        "sh",
+        "-ec",
+        script,
+    ]
+
+
 def _cluster_dind_connectivity_argv(model_port: int, mcp_port: int) -> list[str]:
     script = """
 const net = require('net');
@@ -455,8 +507,9 @@ def run(
     upstream_origin: str = HOSTED_ORIGIN,
     server_binding: Mapping[str, Any] | None = None,
     cluster_dind: bool = False,
+    expected_image_id: str = IMAGE_ID,
 ) -> dict[str, Any]:
-    observed_image = inspect_local_image()
+    observed_image = inspect_local_image(expected_image_id)
     is_hosted = upstream_origin.rstrip("/") == HOSTED_ORIGIN
     if is_hosted and not api_key:
         raise ActualHarnessParityError("fleet_credential_absent")
@@ -486,12 +539,17 @@ def run(
                 raise ActualHarnessParityError("cluster_dind_proxy_connectivity_failed")
         with tempfile.TemporaryDirectory(prefix="opencode-parity-") as temp:
             root = Path(temp)
-            home = root / "home"
-            config_dir = home / ".config" / "opencode"
-            config_dir.mkdir(parents=True)
-            (config_dir / "opencode.json").write_bytes(self_hosted.canonical_json(settings) + b"\n")
-            workspace = root / "workspace"
-            workspace.mkdir()
+            home, workspace = _prepare_agent_mounts(root, settings)
+            if cluster_dind:
+                writable = subprocess.run(
+                    _docker_mount_writeability_argv(home, workspace),
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                    check=False,
+                )
+                if writable.returncode != 0:
+                    raise ActualHarnessParityError("cluster_dind_bind_mount_unwritable")
             prompt = (
                 "This is a non-scored availability check. Call bash exactly once with a benign "
                 "script. Then call submit_report exactly once with verdict no_flag and a brief "

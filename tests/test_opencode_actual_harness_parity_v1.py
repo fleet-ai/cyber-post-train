@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -157,6 +158,29 @@ def test_cluster_dind_argv_adds_explicit_host_gateway_without_changing_default()
     assert "host.docker.internal" in preflight[-3]
 
 
+def test_cluster_dind_mounts_are_prepared_for_uid1000_and_probed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    chowned: list[Path] = []
+    monkeypatch.setattr(parity.os, "geteuid", lambda: 0)
+    monkeypatch.setattr(parity.os, "chown", lambda path, _uid, _gid: chowned.append(Path(path)))
+    monkeypatch.setattr(parity, "_owned_by_agent", lambda _path: True)
+    home, workspace = parity._prepare_agent_mounts(  # noqa: SLF001
+        tmp_path, {"permission": {"*": "deny"}}
+    )
+    assert home in chowned
+    assert workspace in chowned
+    assert home / ".config" / "opencode" / "opencode.json" in chowned
+    assert home / ".local" / "share" / "opencode" in chowned
+    argv = parity._docker_mount_writeability_argv(home, workspace)  # noqa: SLF001
+    assert argv[:5] == ["docker", "run", "--rm", "--platform", "linux/amd64"]
+    assert argv[argv.index("-v") + 1] == f"{home}:/home/node"
+    assert "test -w /home/node" in argv[-1]
+    assert "test -w /workspace" in argv[-1]
+    assert "$(id -u)\" = 1000" in argv[-1]
+    assert os.path.exists(home / ".local" / "share" / "opencode")
+
+
 def test_local_image_inspection_requires_exact_immutable_amd64_image(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -185,6 +209,26 @@ def test_local_image_inspection_requires_exact_immutable_amd64_image(
     Result.stdout = parity.json.dumps(observed)
     with pytest.raises(parity.ActualHarnessParityError, match="opencode_image_identity_drift"):
         parity.inspect_local_image()
+
+
+def test_local_image_inspection_can_bind_classic_docker_config_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime_id = "sha256:" + "4" * 64
+    value = {
+        "Id": runtime_id,
+        "Os": "linux",
+        "Architecture": "amd64",
+        "Config": {"User": "node", "WorkingDir": "/workspace"},
+    }
+    monkeypatch.setattr(
+        parity.subprocess,
+        "run",
+        lambda *_args, **_kwargs: type(
+            "Completed", (), {"returncode": 0, "stdout": json.dumps(value)}
+        )(),
+    )
+    assert parity.inspect_local_image(runtime_id)["image_id"] == runtime_id
 
 
 def test_committed_laptop_qwen_parity_receipt_is_digest_valid_and_non_scored() -> None:

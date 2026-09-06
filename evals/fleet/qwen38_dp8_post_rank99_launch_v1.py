@@ -554,9 +554,15 @@ def validate_stream_receipt(value: Mapping[str, Any], plan: Mapping[str, Any]) -
         self_hosted.canonical_json(parity.expected_openai_tools())
     )
     harness_fields = treatment["harness"]
+    harness_runtime = plan.get("harness_runtime_image")
+    expected_image_id = (
+        harness_runtime.get("runtime_image_id")
+        if isinstance(harness_runtime, Mapping)
+        else parity.IMAGE_ID
+    )
     expected_observed_image = {
         "image": parity.IMAGE,
-        "image_id": parity.IMAGE_ID,
+        "image_id": expected_image_id,
         "os": "linux",
         "architecture": "amd64",
         "user": "node",
@@ -577,7 +583,7 @@ def validate_stream_receipt(value: Mapping[str, Any], plan: Mapping[str, Any]) -
         != {*harness_fields, "image", "image_id", "observed_image", "settings_sha256"}
         or any(harness.get(key) != expected for key, expected in harness_fields.items())
         or harness.get("image") != parity.IMAGE
-        or harness.get("image_id") != parity.IMAGE_ID
+        or harness.get("image_id") != expected_image_id
         or harness.get("observed_image") != expected_observed_image
         or not isinstance(harness.get("settings_sha256"), str)
         or not re.fullmatch(r"sha256:[0-9a-f]{64}", harness["settings_sha256"])
