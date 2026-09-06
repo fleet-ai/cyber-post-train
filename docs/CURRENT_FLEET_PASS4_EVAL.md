@@ -133,8 +133,12 @@ controller, or an ingested session is not by itself a valid model outcome.
 ## Ten-minute GPU idle-release rule
 
 Dedicated serving has a hard ceiling of two nodes and 16 GPUs. Select the
-highest live priority class whose deployed preemption policy is `Never`; never
-infer nonpreemption from a class name. A server must not reserve idle GPUs.
+highest priority class that is both accepted by the deployed Jobs API and has a
+live Kubernetes `preemptionPolicy` of `Never`; never infer nonpreemption from a
+class name. At the current deployed contract that intersection selects
+`fleet-infra-quiet`: Kubernetes also exposes the higher non-preempting
+`fleet-serve-low`, but `/v1/runs/preview` rejects it before creating a run. A
+server must not reserve idle GPUs.
 Model loading is productive startup. After the server is Ready, require useful
 GPU work or a fresh controller heartbeat. If neither remains fresh for 600
 seconds, terminate the server through the supported Jobs API, record the
