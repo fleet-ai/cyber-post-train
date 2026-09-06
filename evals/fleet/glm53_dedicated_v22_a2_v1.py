@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from evals.fleet import glm53_dedicated_v21_a2_v1 as prior
+from evals.fleet import glm53_dedicated_v20_a2_v1 as evidence_base
 from evals.fleet import hosted_glm_exact_bulk_v1 as source
 from evals.fleet import self_hosted
 
@@ -22,6 +23,7 @@ CONTROLLERS = prior.CONTROLLERS
 load = prior.load
 validate_inventory_gate = prior.validate_inventory_gate
 validate_all = prior.validate_all
+_validate_evidence = evidence_base._validate_evidence
 
 
 def _transform(

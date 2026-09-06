@@ -2,8 +2,13 @@ from pathlib import Path
 
 from evals.fleet import glm53_dedicated_v22_a2_package_v1 as package
 from evals.fleet import glm53_dedicated_v22_a2_release_package_v1 as release
+from evals.fleet import glm53_dedicated_v22_a2_v1 as controller
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_v22_controller_exports_route_evidence_validator() -> None:
+    assert callable(controller._validate_evidence)
 
 
 def test_v22_controller_package_binds_only_v22_runtime_identity() -> None:
