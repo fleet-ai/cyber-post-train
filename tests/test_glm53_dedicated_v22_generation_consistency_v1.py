@@ -50,3 +50,9 @@ def test_cpu_canary_is_projected_create_once_and_non_scoring() -> None:
     assert pod["preemptionPolicy"] == "Never"
     assert "nvidia.com/gpu" not in json.dumps(pod)
     assert pod["volumes"][0]["configMap"]["name"] == job.NAME
+    assert {row["name"] for row in pod["volumes"] if "emptyDir" in row} == {"work"}
+    container = pod["containers"][0]
+    assert container["securityContext"]["readOnlyRootFilesystem"] is True
+    assert {row["mountPath"] for row in container["volumeMounts"]} >= {"/work", "/mnt/sfs"}
+    assert 'root="/work/root"' in container["args"][0]
+    assert "mktemp" not in container["args"][0]

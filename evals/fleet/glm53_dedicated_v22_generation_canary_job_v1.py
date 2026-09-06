@@ -11,7 +11,7 @@ from typing import Any
 from evals.fleet import glm53_dedicated_v22_generation_consistency_v1 as gate
 from evals.fleet import self_hosted
 
-NAME = "chris-glm53-dedicated-v22-generation-consistency-v1"
+NAME = "chris-glm53-dedicated-v22-generation-consistency-v2"
 OUTPUT = f"/mnt/sfs/jobs/{NAME}/CANARY.json"
 
 
@@ -39,7 +39,7 @@ def render(root: Path) -> dict[str, Any]:
     }
     script = (
         "set -euo pipefail\n"
-        "root=$(mktemp -d)\n"
+        'root="/work/root"\n'
         'mkdir -p "$root/evals/fleet"\n'
         'touch "$root/evals/__init__.py" "$root/evals/fleet/__init__.py"\n'
         'cp /bootstrap/gate.py "$root/evals/fleet/glm53_dedicated_v22_generation_consistency_v1.py"\n'
@@ -94,6 +94,7 @@ def render(root: Path) -> dict[str, Any]:
                             "volumeMounts": [
                                 {"name": "bootstrap", "mountPath": "/bootstrap", "readOnly": True},
                                 {"name": "sfs", "mountPath": "/mnt/sfs"},
+                                {"name": "work", "mountPath": "/work"},
                             ],
                             "resources": {
                                 "requests": {"cpu": "100m", "memory": "128Mi"},
@@ -111,6 +112,7 @@ def render(root: Path) -> dict[str, Any]:
                     "volumes": [
                         {"name": "bootstrap", "configMap": {"name": NAME}},
                         {"name": "sfs", "persistentVolumeClaim": {"claimName": "sfs-shared"}},
+                        {"name": "work", "emptyDir": {}},
                     ],
                 },
             },
