@@ -12,14 +12,11 @@ from evals.fleet import hosted_glm_s1_r2_c2_successor_v1 as successor
 from evals.fleet import self_hosted
 
 
-def render(root: Path, *, release_path: Path | None = None, inventory_path: Path | None = None) -> dict[str, Any]:
+def render(root: Path, *, release_path: Path | None = None) -> dict[str, Any]:
     successor.validate_all(root)
-    authorized = release_path is not None or inventory_path is not None
+    authorized = release_path is not None
     if authorized:
-        if release_path is None or inventory_path is None:
-            raise ValueError("rank-2 authorization requires release and inventory")
-        plan = successor.build_runtime_plan(successor.load(inventory_path), root)
-        runtime.validate_release(plan, successor.load(release_path))
+        runtime.validate_release_static(successor.load(release_path))
     configmap, job = copy.deepcopy(base.render(root)["objects"]["items"][:2])
     configmap["metadata"]["name"] = successor.CONFIGMAP_NAME
     additions = {
@@ -44,4 +41,3 @@ def render(root: Path, *, release_path: Path | None = None, inventory_path: Path
         "launch_authorized": authorized,
         "reason": None if authorized else "requires_fresh_rank2_release",
     }
-

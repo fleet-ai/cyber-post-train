@@ -14,16 +14,13 @@ from evals.fleet import self_hosted
 RELEASE_PATH = release_module.OUTPUT_PATH
 
 
-def validate_release(plan: dict[str, Any], receipt: dict[str, Any]) -> None:
+def validate_release_static(receipt: dict[str, Any]) -> None:
     if any(
         (
             receipt.get("schema_version") != release_module.SCHEMA,
             receipt.get("status") != "CLEAR",
             receipt.get("successor_job") != successor.JOB_NAME,
             receipt.get("successor_configmap") != successor.CONFIGMAP_NAME,
-            receipt.get("plan_sha256") != plan["plan_sha256"],
-            receipt.get("cell_ids") != [row["cell_id"] for row in plan["attempts"]],
-            receipt.get("execution_ids") != [row["execution_id"] for row in plan["attempts"]],
             receipt.get("selection_rank") != 2,
             receipt.get("attempts") != [1, 2, 3, 4],
             receipt.get("whole_task_boundary") is not True,
@@ -44,6 +41,18 @@ def validate_release(plan: dict[str, Any], receipt: dict[str, Any]) -> None:
         raise RuntimeError("rank-2 hosted successor release drifted")
 
 
+def validate_release(plan: dict[str, Any], receipt: dict[str, Any]) -> None:
+    validate_release_static(receipt)
+    if any(
+        (
+            receipt.get("plan_sha256") != plan["plan_sha256"],
+            receipt.get("cell_ids") != [row["cell_id"] for row in plan["attempts"]],
+            receipt.get("execution_ids") != [row["execution_id"] for row in plan["attempts"]],
+        )
+    ):
+        raise RuntimeError("rank-2 hosted successor runtime plan drifted")
+
+
 def run(root: Path, proxy: Path) -> dict[str, Any]:
     inventory = successor.load(bulk_runtime.INVENTORY_PATH)
     plan = successor.build_runtime_plan(inventory, root)
@@ -59,4 +68,3 @@ def run(root: Path, proxy: Path) -> dict[str, Any]:
         proxy=proxy,
         runtime_gate_check=lambda _: validate_release(plan, receipt),
     )
-
