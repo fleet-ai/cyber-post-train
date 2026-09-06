@@ -139,3 +139,6 @@ def test_cluster_canary_is_cpu_only_non_scored_and_exact_source() -> None:
     assert "gpu" not in str(pod["containers"][0]["resources"]).lower()
     assert "task_instance_session_verifier_scoring_calls" in source["data"]["probe.py"]
     assert "FLEET_API_KEY" not in source["data"]["probe.py"]
+    assert 'projected = pathlib.Path("/bootstrap/lifecycle.sh")' in source["data"]["probe.py"]
+    assert 'lifecycle = pathlib.Path("/tmp/glm53-metric-lifecycle.sh")' in source["data"]["probe.py"]
+    assert "os.O_EXCL" in source["data"]["probe.py"]

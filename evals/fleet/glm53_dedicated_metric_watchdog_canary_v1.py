@@ -13,7 +13,7 @@ import yaml
 
 from evals.fleet import self_hosted
 
-JOB_NAME = "chris-glm53-dedicated-metric-watchdog-canary-v1"
+JOB_NAME = "chris-glm53-dedicated-metric-watchdog-canary-v2"
 CONFIGMAP_NAME = JOB_NAME + "-run"
 OUTPUT_ROOT = f"/mnt/sfs/jobs/{JOB_NAME}"
 LIFECYCLE = Path("evals/fleet/scripts/glm53_dedicated_metric_lifecycle_v1.sh")
@@ -38,9 +38,16 @@ output = pathlib.Path(os.environ["OUTPUT_ROOT"])
 if output.exists() or output.is_symlink():
     raise RuntimeError("watchdog canary output collision")
 output.mkdir(mode=0o700, parents=True)
-lifecycle = pathlib.Path("/bootstrap/lifecycle.sh")
+projected = pathlib.Path("/bootstrap/lifecycle.sh")
+resolved = projected.resolve()
+if not projected.is_file() or pathlib.Path("/bootstrap") not in resolved.parents:
+    raise RuntimeError("watchdog lifecycle projected source is invalid")
+lifecycle = pathlib.Path("/tmp/glm53-metric-lifecycle.sh")
+fd = os.open(lifecycle, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o700)
+with os.fdopen(fd, "wb") as handle:
+    handle.write(projected.read_bytes())
 if lifecycle.is_symlink() or not lifecycle.is_file():
-    raise RuntimeError("watchdog lifecycle source is not a regular file")
+    raise RuntimeError("watchdog lifecycle private copy is not a regular file")
 lifecycle_sha = "sha256:" + hashlib.sha256(lifecycle.read_bytes()).hexdigest()
 
 server_source = r"""
