@@ -1,4 +1,5 @@
 import copy
+import hashlib
 import json
 import os
 import subprocess
@@ -576,3 +577,36 @@ def test_v32_held_and_v31_terminal_receipts_are_digest_valid() -> None:
     assert terminal["fleet_session_calls"] == 0
     assert terminal["verifier_calls"] == 0
     assert terminal["scoring_calls"] == 0
+
+
+def test_v32_live_create_review_receipts_are_immutable_and_held() -> None:
+    evidence = ROOT / "docs/evidence/glm53-study"
+    auth_path = (
+        evidence
+        / "2026-09-06-glm53-dedicated-v32-live-create-authorization-review-v1.json"
+    )
+    review = json.loads(
+        (
+            evidence
+            / "2026-09-06-glm53-dedicated-v32-live-create-review-held-v1.json"
+        ).read_text()
+    )
+    auth = json.loads(auth_path.read_text())
+    live_auth.validate_live_observation(auth["live_observation"], auth)
+    assert review["live_authorization_receipt_sha256"] == auth["receipt_sha256"]
+    assert review["live_authorization_file_sha256"] == (
+        "sha256:" + hashlib.sha256(auth_path.read_bytes()).hexdigest()
+    )
+    assert review["server_api_name"] == server.API_NAME
+    assert review["request_sha256"] == server.request_sha256()
+    assert review["preview_http_status"] == 200
+    assert review["active_dedicated_nodes"] == 0
+    assert review["active_dedicated_gpus"] == 0
+    assert review["planned_nodes_after_create"] == 1
+    assert review["planned_gpus_after_create"] == 8
+    assert review["server_post_authorized_by_review"] is False
+    assert review["qualification_launch_authorized"] is False
+    assert review["scored_launch_authorized"] is False
+    assert review["receipt_sha256"] == crypto.digest_without(
+        review, "receipt_sha256"
+    )
