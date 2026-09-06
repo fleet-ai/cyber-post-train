@@ -6,6 +6,7 @@ import pytest
 
 from evals.fleet import exact_pass4_crypto as crypto
 from evals.fleet import glm53_dedicated_v23_request_counter_watchdog_v1 as watchdog_runtime
+from evals.fleet import glm53_dedicated_v23_scorefree_gpu_observer_v1 as gpu_observer
 from evals.fleet import glm53_dedicated_v23_scorefree_package_v1 as package
 from evals.fleet import glm53_dedicated_v23_scorefree_qualifier_v1 as qualifier
 from evals.fleet import opencode_actual_harness_parity_v1 as actual_harness
@@ -105,7 +106,10 @@ def _evidence() -> tuple[dict, dict, dict]:
         watcher_pod_uid="66666666-6666-4666-8666-666666666666",
     )
     watchdog["initial_request_counter"] = 4
+    watchdog["initial_running_requests"] = 0
+    watchdog["initial_queued_requests"] = 0
     watchdog["ready_at_epoch"] = 123.0
+    watchdog["terminal_receipt_required"] = True
     watchdog["receipt_sha256"] = crypto.digest_without(watchdog, "receipt_sha256")
     live = {
         "schema_version": "fleet-glm53-dedicated-v23-scorefree-live-state-v1",
@@ -243,15 +247,28 @@ def test_authorization_rejects_rehashed_live_or_wrong_watchdog_source() -> None:
         qualifier.authorize(_binding(), parity, watchdog, live)
 
 
+def test_authorization_configmap_rejects_rehashed_extra_fields() -> None:
+    parity, watchdog, live = _evidence()
+    authorization = qualifier.authorize(_binding(), parity, watchdog, live)
+    authorization["unexpected_content"] = "forbidden"
+    authorization["receipt_sha256"] = crypto.digest_without(authorization, "receipt_sha256")
+    with pytest.raises(package.PackageError, match="authorization_invalid"):
+        package.build_authorization_configmap(authorization)
+
+
 def test_request_counter_watchdog_refreshes_only_on_counter_growth() -> None:
     state = {"counter": 4, "last_model_request_at": 100.0}
-    assert watchdog_runtime.advance(state, counter=4, now=200.0) == state
-    assert watchdog_runtime.advance(state, counter=5, now=200.0) == {
+    assert watchdog_runtime.advance(state, counter=4, running=0, queued=0, now=200.0) == state
+    assert watchdog_runtime.advance(state, counter=5, running=0, queued=0, now=200.0) == {
         "counter": 5,
         "last_model_request_at": 200.0,
     }
+    assert watchdog_runtime.advance(state, counter=4, running=1, queued=0, now=700.0) == {
+        "counter": 4,
+        "last_model_request_at": 700.0,
+    }
     with pytest.raises(watchdog_runtime.WatchdogError, match="regressed"):
-        watchdog_runtime.advance(state, counter=3, now=200.0)
+        watchdog_runtime.advance(state, counter=3, running=0, queued=0, now=200.0)
 
 
 def test_request_counter_parser_sums_realistic_labeled_glm_series_only() -> None:
@@ -260,8 +277,21 @@ def test_request_counter_parser_sums_realistic_labeled_glm_series_only() -> None
 sglang:num_requests_total{model_name="glm-5.3",is_streaming="true",engine_type="tp"} 4.0
 sglang:num_requests_total{engine_type="tp",model_name="glm-5.3",is_streaming="false"} 3
 sglang:num_requests_total{model_name="another-model",is_streaming="true"} 900
+sglang:num_running_reqs{model_name="glm-5.3",engine_type="tp"} 1
+sglang:num_queue_reqs{model_name="glm-5.3",engine_type="tp"} 2
 """
     assert watchdog_runtime.parse_counter(metrics) == 7
+    assert watchdog_runtime.parse_activity(metrics) == {"requests": 7, "running": 1, "queued": 2}
+
+
+def test_activity_parser_rejects_malformed_target_family_line() -> None:
+    metrics = """
+sglang:num_requests_total{model_name="glm-5.3"} 2
+sglang:num_running_reqs{model_name="glm-5.3"} not-a-number
+sglang:num_queue_reqs{model_name="glm-5.3"} 0
+"""
+    with pytest.raises(watchdog_runtime.WatchdogError, match="line_invalid"):
+        watchdog_runtime.parse_activity(metrics)
 
 
 def test_request_counter_watchdog_releases_exact_run_after_600_idle_seconds() -> None:
@@ -271,7 +301,7 @@ def test_request_counter_watchdog_releases_exact_run_after_600_idle_seconds() ->
         api_run_id="ft-run-freshv23",
         initial_counter=7,
         ready_at=0.0,
-        read_counter=lambda: 7,
+        read_activity=lambda: {"requests": 7, "running": 0, "queued": 0},
         release_via_jobs_api=released.append,
         clock=lambda: next(times),
         sleep=lambda _seconds: None,
@@ -282,13 +312,20 @@ def test_request_counter_watchdog_releases_exact_run_after_600_idle_seconds() ->
 
 def test_request_growth_prevents_false_idle_release() -> None:
     times = iter((599.0, 600.0, 1199.0, 1200.0))
-    counters = iter((8, 8, 8, 8))
+    activity = iter(
+        (
+            {"requests": 8, "running": 1, "queued": 0},
+            {"requests": 8, "running": 1, "queued": 0},
+            {"requests": 8, "running": 0, "queued": 0},
+            {"requests": 8, "running": 0, "queued": 0},
+        )
+    )
     released: list[str] = []
     result = watchdog_runtime.watch(
         api_run_id="ft-run-freshv23",
         initial_counter=7,
         ready_at=0.0,
-        read_counter=lambda: next(counters),
+        read_activity=lambda: next(activity),
         release_via_jobs_api=released.append,
         clock=lambda: next(times),
         sleep=lambda _seconds: None,
@@ -318,6 +355,32 @@ def test_gpu_observer_rejects_valid_uuid_for_the_wrong_server() -> None:
     observed["receipt_sha256"] = crypto.digest_without(observed, "receipt_sha256")
     with pytest.raises(qualifier.QualificationError, match="gpu_wave"):
         qualifier.validate_gpu_wave(observed, 1, qualifier.build_held()["server"], _binding())
+
+
+def test_gpu_observer_requires_exact_qualifier_job_owner_uid() -> None:
+    job = {
+        "metadata": {
+            "name": qualifier.JOB_NAME,
+            "uid": "77777777-7777-4777-8777-777777777777",
+        }
+    }
+    pod = {
+        "metadata": {
+            "ownerReferences": [
+                {
+                    "apiVersion": "batch/v1",
+                    "kind": "Job",
+                    "name": qualifier.JOB_NAME,
+                    "uid": "77777777-7777-4777-8777-777777777777",
+                    "controller": True,
+                    "blockOwnerDeletion": True,
+                }
+            ]
+        }
+    }
+    assert gpu_observer.qualifier_pod_owned_by_job(pod, job)
+    pod["metadata"]["ownerReferences"][0]["uid"] = "99999999-9999-4999-8999-999999999999"
+    assert not gpu_observer.qualifier_pod_owned_by_job(pod, job)
 
 
 def test_watchdog_active_receipt_binds_exact_loaded_source_and_release_route() -> None:
@@ -499,6 +562,17 @@ def test_execute_keeps_fleet_calls_zero_and_runs_frozen_waves(tmp_path, monkeypa
     }
     assert result["receipt_sha256"] == crypto.digest_without(result, "receipt_sha256")
     qualifier.validate_raw(result)
+    verdict = qualifier.build_verdict(result)
+    assert verdict["receipt_sha256"] == crypto.digest_without(verdict, "receipt_sha256")
+    qualifier.validate_verdict(verdict, result)
+    invalid_verdict = dict(verdict)
+    invalid_verdict["qualifier_identity"] = {
+        "job_uid": "99999999-9999-4999-8999-999999999999",
+        "pod_uid": verdict["qualifier_identity"]["pod_uid"],
+    }
+    invalid_verdict["receipt_sha256"] = crypto.digest_without(invalid_verdict, "receipt_sha256")
+    with pytest.raises(qualifier.QualificationError, match="qualified_verdict"):
+        qualifier.validate_verdict(invalid_verdict, result)
     tampered = json.loads(json.dumps(result))
     tampered["qualifier_identity"]["pod_uid"] = "99999999-9999-4999-8999-999999999999"
     tampered["receipt_sha256"] = crypto.digest_without(tampered, "receipt_sha256")

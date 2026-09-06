@@ -26,6 +26,20 @@ class ObserverError(RuntimeError):
 CommandRunner = Callable[..., subprocess.CompletedProcess[bytes]]
 
 
+def qualifier_pod_owned_by_job(pod: dict[str, Any], job: dict[str, Any]) -> bool:
+    owners = pod.get("metadata", {}).get("ownerReferences") or []
+    return owners == [
+        {
+            "apiVersion": "batch/v1",
+            "kind": "Job",
+            "name": job.get("metadata", {}).get("name"),
+            "uid": job.get("metadata", {}).get("uid"),
+            "controller": True,
+            "blockOwnerDeletion": True,
+        }
+    ]
+
+
 def resolve_identity(
     authorization: dict[str, Any], *, runner: CommandRunner = subprocess.run
 ) -> tuple[dict[str, str], str, str]:
@@ -58,6 +72,7 @@ def resolve_identity(
         or not support._ready(server_rows[0], "ray-head")  # noqa: SLF001
         or not support._ready(qualifier_rows[0], "qualifier")  # noqa: SLF001
         or job.get("status", {}).get("active") != 1
+        or not qualifier_pod_owned_by_job(qualifier_rows[0], job)
     ):
         raise ObserverError("v23_kubernetes_identity_or_health_mismatch")
     identity = {

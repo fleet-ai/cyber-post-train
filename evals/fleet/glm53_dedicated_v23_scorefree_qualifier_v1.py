@@ -32,6 +32,28 @@ CONTEXT_LENGTH = 262144
 IDLE_RELEASE_SECONDS = 600
 CPU_PRIORITY_CLASS = "fleet-serve-low"
 CPU_PRIORITY_VALUE = 100
+AUTH_KEYS = {
+    "schema_version",
+    "status",
+    "server_binding",
+    "parity_receipt_sha256",
+    "watchdog_receipt_sha256",
+    "live_receipt_sha256",
+    "idle_release_seconds",
+    "cpu_priority_class",
+    "cpu_priority_value",
+    "cpu_priority_preemption_policy",
+    "no_active_scored_controller",
+    "qualification_result_root_absent",
+    "endpoint_lease_exclusive",
+    "qualification_launch_authorized",
+    "scored_launch_authorized",
+    "fleet_task_instance_calls",
+    "fleet_session_calls",
+    "verifier_calls",
+    "scoring_calls",
+    "receipt_sha256",
+}
 CONCURRENCY = (1, 2, 4)
 GPU_OBSERVER_SCHEMA = "fleet-glm53-dedicated-v23-scorefree-gpu-wave-v1"
 GPU_OBSERVER_WAIT_SECONDS = 300
@@ -223,6 +245,11 @@ def authorize(
         or watchdog.get("idle_release_seconds") != IDLE_RELEASE_SECONDS
         or watchdog.get("health_or_process_liveness_refreshes") is not False
         or watchdog.get("model_request_counter_growth_refreshes") is not True
+        or watchdog.get("active_request_or_queue_refreshes") is not True
+        or watchdog.get("active_request_metrics")
+        != ["sglang:num_running_reqs", "sglang:num_queue_reqs"]
+        or watchdog.get("metric_contract_commit") != watchdog_runtime.METRIC_CONTRACT_COMMIT
+        or watchdog.get("metric_contract_source") != watchdog_runtime.METRIC_CONTRACT_SOURCE
         or watchdog.get("release_via_jobs_api") is not True
         or watchdog.get("release_route") != watchdog_runtime.RELEASE_ROUTE
         or watchdog.get("implementation_id") != watchdog_runtime.IMPLEMENTATION_ID
@@ -235,6 +262,7 @@ def authorize(
         or watchdog.get("initial_request_counter", -1) < 0
         or not isinstance(watchdog.get("ready_at_epoch"), (int, float))
         or watchdog.get("ready_at_epoch", 0) <= 0
+        or watchdog.get("terminal_receipt_required") is not True
     ):
         raise QualificationError("v23_request_counter_watchdog_invalid")
     if (
@@ -282,7 +310,49 @@ def authorize(
         "scoring_calls": 0,
     }
     body["receipt_sha256"] = crypto.digest_without(body, "receipt_sha256")
+    validate_authorization(body)
     return body
+
+
+def validate_authorization(authorization: dict[str, Any]) -> None:
+    binding = authorization.get("server_binding")
+    if not isinstance(binding, dict):
+        raise QualificationError("v23_scorefree_authorization_invalid")
+    _validate_binding(binding)
+    if (
+        set(authorization) != AUTH_KEYS
+        or authorization.get("schema_version") != AUTH_SCHEMA
+        or authorization.get("status") != "AUTHORIZED_SCORE_FREE_ONLY"
+        or authorization.get("receipt_sha256")
+        != crypto.digest_without(authorization, "receipt_sha256")
+        or authorization.get("idle_release_seconds") != IDLE_RELEASE_SECONDS
+        or authorization.get("cpu_priority_class") != CPU_PRIORITY_CLASS
+        or authorization.get("cpu_priority_value") != CPU_PRIORITY_VALUE
+        or authorization.get("cpu_priority_preemption_policy") != "Never"
+        or authorization.get("no_active_scored_controller") is not True
+        or authorization.get("qualification_result_root_absent") is not True
+        or authorization.get("endpoint_lease_exclusive") is not True
+        or authorization.get("qualification_launch_authorized") is not True
+        or authorization.get("scored_launch_authorized") is not False
+        or any(
+            authorization.get(field) != 0
+            for field in (
+                "fleet_task_instance_calls",
+                "fleet_session_calls",
+                "verifier_calls",
+                "scoring_calls",
+            )
+        )
+        or not all(
+            _valid_sha(authorization.get(field))
+            for field in (
+                "parity_receipt_sha256",
+                "watchdog_receipt_sha256",
+                "live_receipt_sha256",
+            )
+        )
+    ):
+        raise QualificationError("v23_scorefree_authorization_invalid")
 
 
 Observer = Callable[[Path, int, dict[str, Any]], dict[str, Any]]
@@ -354,45 +424,16 @@ def validate_raw(raw: dict[str, Any]) -> None:
         or not isinstance(qualifier_identity, dict)
     ):
         raise QualificationError("v23_raw_authority_invalid")
+    validate_authorization(authorization)
     _validate_binding(binding)
     if (
         raw.get("schema_version") != RAW_SCHEMA
         or raw.get("status") != "COMPLETED_SCORE_FREE_WAVES"
         or raw.get("receipt_sha256") != crypto.digest_without(raw, "receipt_sha256")
-        or authorization.get("schema_version") != AUTH_SCHEMA
-        or authorization.get("receipt_sha256")
-        != crypto.digest_without(authorization, "receipt_sha256")
         or raw.get("authorization_receipt_sha256") != authorization.get("receipt_sha256")
         or authorization.get("server_binding") != binding
-        or authorization.get("qualification_launch_authorized") is not True
-        or authorization.get("scored_launch_authorized") is not False
         or set(qualifier_identity) != {"job_uid", "pod_uid"}
         or any(not _valid_uuid(value) for value in qualifier_identity.values())
-        or authorization.get("status") != "AUTHORIZED_SCORE_FREE_ONLY"
-        or authorization.get("idle_release_seconds") != IDLE_RELEASE_SECONDS
-        or authorization.get("cpu_priority_class") != CPU_PRIORITY_CLASS
-        or authorization.get("cpu_priority_value") != CPU_PRIORITY_VALUE
-        or authorization.get("cpu_priority_preemption_policy") != "Never"
-        or authorization.get("no_active_scored_controller") is not True
-        or authorization.get("qualification_result_root_absent") is not True
-        or authorization.get("endpoint_lease_exclusive") is not True
-        or any(
-            authorization.get(field) != 0
-            for field in (
-                "fleet_task_instance_calls",
-                "fleet_session_calls",
-                "verifier_calls",
-                "scoring_calls",
-            )
-        )
-        or not all(
-            _valid_sha(authorization.get(field))
-            for field in (
-                "parity_receipt_sha256",
-                "watchdog_receipt_sha256",
-                "live_receipt_sha256",
-            )
-        )
         or any(
             raw.get(field) != 0
             for field in (
@@ -455,9 +496,87 @@ def evaluate(
         "failures": failures,
         "qualified_concurrency_ceiling": 4 if not failures else 0,
         "server_binding": binding,
-        "qualifier_identity": identities[0],
+        "qualifier_identity": qualifier_identity,
         "scored_concurrency_change_authorized": False,
     }
+
+
+def build_verdict(raw: dict[str, Any]) -> dict[str, Any]:
+    validate_raw(raw)
+    body: dict[str, Any] = {
+        "schema_version": VERDICT_SCHEMA,
+        **evaluate(
+            raw["waves"],
+            raw["gpu_waves"],
+            raw["server_binding"],
+            raw["qualifier_identity"],
+        ),
+        "raw_receipt_sha256": raw["receipt_sha256"],
+        "gpu_observer_receipt_sha256s": [row["receipt_sha256"] for row in raw["gpu_waves"]],
+        "fleet_task_instance_calls": 0,
+        "fleet_session_calls": 0,
+        "verifier_calls": 0,
+        "scoring_calls": 0,
+        "scored_launch_authorized": False,
+    }
+    body["receipt_sha256"] = crypto.digest_without(body, "receipt_sha256")
+    validate_verdict(body, raw)
+    return body
+
+
+def validate_verdict(verdict: dict[str, Any], raw: dict[str, Any]) -> None:
+    expected = {
+        "schema_version",
+        "status",
+        "failures",
+        "qualified_concurrency_ceiling",
+        "server_binding",
+        "qualifier_identity",
+        "scored_concurrency_change_authorized",
+        "raw_receipt_sha256",
+        "gpu_observer_receipt_sha256s",
+        "fleet_task_instance_calls",
+        "fleet_session_calls",
+        "verifier_calls",
+        "scoring_calls",
+        "scored_launch_authorized",
+        "receipt_sha256",
+    }
+    if (
+        set(verdict) != expected
+        or verdict.get("schema_version") != VERDICT_SCHEMA
+        or verdict.get("receipt_sha256") != crypto.digest_without(verdict, "receipt_sha256")
+        or verdict.get("raw_receipt_sha256") != raw.get("receipt_sha256")
+        or verdict.get("gpu_observer_receipt_sha256s")
+        != [row.get("receipt_sha256") for row in raw.get("gpu_waves", [])]
+        or verdict.get("server_binding") != raw.get("server_binding")
+        or verdict.get("qualifier_identity") != raw.get("qualifier_identity")
+        or any(
+            verdict.get(field) != 0
+            for field in (
+                "fleet_task_instance_calls",
+                "fleet_session_calls",
+                "verifier_calls",
+                "scoring_calls",
+            )
+        )
+        or verdict.get("scored_launch_authorized") is not False
+        or verdict.get("scored_concurrency_change_authorized") is not False
+        or verdict.get("status") not in {"PASSED_SCORE_FREE", "FAILED"}
+        or (
+            verdict.get("status") == "PASSED_SCORE_FREE"
+            and (verdict.get("failures") != [] or verdict.get("qualified_concurrency_ceiling") != 4)
+        )
+        or (
+            verdict.get("status") == "FAILED"
+            and (
+                not isinstance(verdict.get("failures"), list)
+                or not verdict["failures"]
+                or verdict.get("qualified_concurrency_ceiling") != 0
+            )
+        )
+    ):
+        raise QualificationError("v23_qualified_verdict_invalid")
 
 
 def execute(
@@ -473,15 +592,9 @@ def execute(
     """Run c1/c2/c4 actual-OpenCode waves without Fleet API calls."""
 
     binding = authorization.get("server_binding")
-    if (
-        authorization.get("schema_version") != AUTH_SCHEMA
-        or authorization.get("qualification_launch_authorized") is not True
-        or authorization.get("scored_launch_authorized") is not False
-        or authorization.get("receipt_sha256")
-        != crypto.digest_without(authorization, "receipt_sha256")
-        or not isinstance(binding, dict)
-    ):
+    if not isinstance(binding, dict):
         raise QualificationError("v23_scorefree_authorization_invalid")
+    validate_authorization(authorization)
     _validate_binding(binding)
     if set(qualifier_identity) != {"job_uid", "pod_uid"} or any(
         not _valid_uuid(value) for value in qualifier_identity.values()
@@ -580,22 +693,9 @@ def main() -> int:
             parser.error("validate requires raw and out")
         raw = load(args.raw)
         validate_raw(raw)
-        verdict = {
-            "schema_version": VERDICT_SCHEMA,
-            **evaluate(
-                raw["waves"],
-                raw["gpu_waves"],
-                raw["server_binding"],
-                raw["qualifier_identity"],
-            ),
-            "raw_receipt_sha256": raw["receipt_sha256"],
-            "fleet_task_instance_calls": 0,
-            "fleet_session_calls": 0,
-            "verifier_calls": 0,
-            "scoring_calls": 0,
-            "scored_launch_authorized": False,
-        }
+        verdict = build_verdict(raw)
         engine.write_once(args.out, verdict)
+        validate_verdict(verdict, raw)
         if verdict["status"] != "PASSED_SCORE_FREE":
             return 1
     return 0

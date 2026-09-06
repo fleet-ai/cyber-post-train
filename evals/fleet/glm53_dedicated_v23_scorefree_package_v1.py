@@ -123,14 +123,10 @@ def build_configmap(root: Path, commit: str) -> dict[str, Any]:
 
 
 def build_authorization_configmap(authorization: dict[str, Any]) -> dict[str, Any]:
-    if (
-        authorization.get("schema_version") != qualifier.AUTH_SCHEMA
-        or authorization.get("qualification_launch_authorized") is not True
-        or authorization.get("scored_launch_authorized") is not False
-        or authorization.get("receipt_sha256")
-        != crypto.digest_without(authorization, "receipt_sha256")
-    ):
-        raise PackageError("v23_authorization_invalid")
+    try:
+        qualifier.validate_authorization(authorization)
+    except qualifier.QualificationError as exc:
+        raise PackageError("v23_authorization_invalid") from exc
     return {
         "apiVersion": "v1",
         "kind": "ConfigMap",
