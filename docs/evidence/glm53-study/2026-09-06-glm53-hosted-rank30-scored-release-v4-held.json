@@ -1,0 +1,76 @@
+{
+  "campaign_reconciliation": {
+    "active_cell": {
+      "attempt": 4,
+      "controller_job_uid": "74cdb483-65fb-4331-9e3e-567a54b53315",
+      "controller_pod_uid": "dc891f43-917f-4cdb-9769-1639f6bfcaab",
+      "model": "glm-5.3",
+      "rank": 29,
+      "run_id": "chris-glm53-ac-bulk-b-r029-a4-g2-b51782f9"
+    },
+    "glm_counts": {
+      "accepted": 23,
+      "active": 1,
+      "blocked": 4,
+      "total": 400,
+      "unstarted": 372
+    },
+    "rank30_attempts": [
+      1,
+      2,
+      3,
+      4
+    ],
+    "rank30_cells_unstarted": 4,
+    "safe_counts": {
+      "accepted_collisions": 0,
+      "accepted_files_examined": 62,
+      "claim_collisions": 0,
+      "claim_files_examined": 95,
+      "output_collisions": 0,
+      "output_run_ids_examined": 4,
+      "target_object_collisions": 0
+    },
+    "source": "v6-score-blind-global-collision-reconciliation"
+  },
+  "fresh_identity": {
+    "configmap_name": "chris-glm53-r030-single-slot-release-v4-run",
+    "job_name": "chris-glm53-r030-single-slot-release-v4",
+    "sfs_root": "/mnt/sfs/jobs/chris-glm53-r030-single-slot-release-v4"
+  },
+  "held_release_package_sha256": "sha256:7835d00fe1ec34dfbd41637949d878347e0382c411f6aba42b35eb189807bf43",
+  "held_scored_package_sha256": "sha256:7d50e93176ca83852c3df4585e6f252dbfda681cdbe0981fe2d3fe95d73337cd",
+  "launch_authorized": false,
+  "model_calls_authorized": false,
+  "rank29_peer": {
+    "accepted_attempt": 3,
+    "active_attempt": 4,
+    "active_claim_sha256": "sha256:cb297199e45e8192dd3cb1308f91cc83d5c9ea9cec1c9fb32325ab16dc52e091",
+    "job_uid": "74cdb483-65fb-4331-9e3e-567a54b53315",
+    "pod_uid": "dc891f43-917f-4cdb-9769-1639f6bfcaab",
+    "stream_fresh_at_utc": "2026-09-06T15:08:22Z"
+  },
+  "rank30_cells_changed": false,
+  "rank31_held": true,
+  "receipt_sha256": "sha256:49b6b0e34d0fe6d701f63ccca7409e1ca00c5071f93fccc2ca34d952c1d9528d",
+  "schema_version": "fleet-hosted-glm-rank30-scored-release-held-v4",
+  "scored_source_package_sha256": "sha256:f94237a58819eba51def73e3f9645ad75f3abf5b4de9b2df96a9292f4994c052",
+  "scoring_authorized": false,
+  "status": "HELD_FOR_INDEPENDENT_REVIEW",
+  "v6_runtime_gate_diagnostic": {
+    "file_sha256": "sha256:b3c55eb136648b3956320754a3f4a1f9cf23b6475f2865d1dcad5a56cca7fbd1",
+    "job_uid": "d5b0fd0d-f99c-426f-875f-946d84dd43e4",
+    "last_completed_phase": "09-release-projection",
+    "path": "/mnt/sfs/jobs/chris-glm53-r030-release-diagnostic-v6/DIAGNOSTIC.json",
+    "pod_uid": "04d64479-d5e3-4ce2-b6bd-69201487411b",
+    "projected_attempts": [
+      1,
+      2,
+      3,
+      4
+    ],
+    "receipt_sha256": "sha256:28b56482621bc165d9379b419de17e93eefb521bea140a46bd1d2c9bb005d875",
+    "status": "PASSED_TO_SESSION_BOUNDARY",
+    "zero_model_task_session_verifier_scoring_api_calls": true
+  }
+}

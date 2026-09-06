@@ -18,6 +18,7 @@ on:
       - 'tests/test_hosted_glm_rank30_single_slot_v1.py'
       - 'tests/test_hosted_glm_rank30_runtime_plan_fix_v1.py'
       - 'tests/test_hosted_glm_rank30_release_diagnostic_v6.py'
+      - 'tests/test_hosted_glm_rank30_single_slot_release_v4.py'
       - 'skills/**'
       - 'pyproject.toml'
       - 'uv.lock'
@@ -77,4 +78,5 @@ jobs:
             tests/test_hosted_glm_whole_task_successor_v1.py \
             tests/test_hosted_glm_rank30_single_slot_v1.py \
             tests/test_hosted_glm_rank30_runtime_plan_fix_v1.py \
-            tests/test_hosted_glm_rank30_release_diagnostic_v6.py
+            tests/test_hosted_glm_rank30_release_diagnostic_v6.py \
+            tests/test_hosted_glm_rank30_single_slot_release_v4.py
