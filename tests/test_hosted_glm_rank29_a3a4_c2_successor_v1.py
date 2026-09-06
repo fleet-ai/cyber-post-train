@@ -1,3 +1,4 @@
+import fcntl
 import json
 import subprocess
 import sys
@@ -188,6 +189,182 @@ def _write_receipt(path: Path, **fields: object) -> None:
     path.write_text(json.dumps(fields))
 
 
+def _terminal_predecessor_objects() -> dict[tuple[str, str], tuple[int, dict]]:
+    return {
+        ("jobs", release.SOURCE_JOB): (
+            200,
+            {
+                "metadata": {"uid": successor.SOURCE_FAILED_JOB_UID},
+                "status": {
+                    "conditions": [
+                        {
+                            "type": "Failed",
+                            "status": "True",
+                            "reason": "DeadlineExceeded",
+                        }
+                    ]
+                },
+            },
+        ),
+        ("pods", "chris-glm53-exact100-hosted-s2-c2-bulk-v1-622nw"): (
+            404,
+            {},
+        ),
+        ("jobs", release.PEER_JOB): (
+            200,
+            {
+                "metadata": {"uid": release.PEER_JOB_UID},
+                "status": {
+                    "succeeded": 1,
+                    "conditions": [
+                        {
+                            "type": "Complete",
+                            "status": "True",
+                            "reason": "CompletionsReached",
+                        }
+                    ],
+                },
+            },
+        ),
+        ("pods", release.PEER_POD_NAME): (
+            200,
+            {
+                "metadata": {"uid": release.PEER_POD_UID},
+                "status": {
+                    "phase": "Succeeded",
+                    "containerStatuses": [
+                        {
+                            "restartCount": 0,
+                            "state": {"terminated": {"exitCode": 0}},
+                        }
+                    ],
+                },
+            },
+        ),
+    }
+
+
+def test_predecessor_gate_requires_exact_succeeded_peer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    objects = _terminal_predecessor_objects()
+    monkeypatch.setattr(release, "_kube_get", lambda kind, name: objects[(kind, name)])
+    release._validate_predecessors()  # noqa: SLF001
+
+
+@pytest.mark.parametrize(
+    ("target", "field", "value"),
+    [
+        ("job", "active", 1),
+        ("job", "succeeded", 0),
+        ("job", "failed", 1),
+        ("pod", "phase", "Running"),
+        ("pod", "restartCount", 1),
+        ("pod", "exitCode", 1),
+    ],
+)
+def test_predecessor_gate_rejects_nonexclusive_peer_terminal_state(
+    monkeypatch: pytest.MonkeyPatch, target: str, field: str, value: object
+) -> None:
+    objects = _terminal_predecessor_objects()
+    if target == "job":
+        objects[("jobs", release.PEER_JOB)][1]["status"][field] = value
+    elif field == "phase":
+        objects[("pods", release.PEER_POD_NAME)][1]["status"][field] = value
+    else:
+        terminated = objects[("pods", release.PEER_POD_NAME)][1]["status"][
+            "containerStatuses"
+        ][0]
+        if field == "exitCode":
+            terminated["state"]["terminated"][field] = value
+        else:
+            terminated[field] = value
+    monkeypatch.setattr(release, "_kube_get", lambda kind, name: objects[(kind, name)])
+    with pytest.raises(RuntimeError, match="peer"):
+        release._validate_predecessors()  # noqa: SLF001
+
+
+def test_peer_acceptance_gate_binds_all_three_digest_valid_receipts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    expected = []
+    for original in runtime.PEER_ACCEPTED_RECEIPTS:
+        path = tmp_path / f"a{original['attempt']}.json"
+        receipt = {
+            "schema_version": "fleet-exact-pass4-bulk-cell-accepted-v3",
+            "selection_rank": 3,
+            "attempt": original["attempt"],
+            "cell_id": original["cell_id"],
+            "execution_id": original["execution_id"],
+            "run_id": original["run_id"],
+            "accepted": True,
+            "credited": True,
+            "retry_allowed": False,
+        }
+        receipt["receipt_sha256"] = self_hosted.digest_without(
+            receipt, "receipt_sha256"
+        )
+        path.write_bytes(self_hosted.canonical_json(receipt))
+        expected.append(
+            {
+                **original,
+                "path": path,
+                "receipt_sha256": receipt["receipt_sha256"],
+                "file_sha256": self_hosted.sha256(path.read_bytes()),
+            }
+        )
+    monkeypatch.setattr(release, "PEER_ACCEPTED", tuple(expected))
+    evidence = release._validate_peer_acceptances()  # noqa: SLF001
+    assert [row["attempt"] for row in evidence] == [2, 3, 4]
+    assert [row["file_sha256"] for row in evidence] == [
+        row["file_sha256"] for row in expected
+    ]
+
+
+def test_endpoint_capacity_probe_acquires_both_slots_and_releases(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    endpoint = tmp_path / successor.LEASE_ENDPOINT_KEY
+    endpoint.mkdir()
+    for slot in (1, 2):
+        (endpoint / f"slot-{slot}.lock").touch()
+    monkeypatch.setattr(successor, "LEASE_ROOT", tmp_path)
+    bindings = release._probe_endpoint_capacity_free()  # noqa: SLF001
+    assert [row["slot"] for row in bindings] == [1, 2]
+    handles = [(endpoint / f"slot-{slot}.lock").open("a+b") for slot in (1, 2)]
+    try:
+        for handle in handles:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    finally:
+        for handle in handles:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+            handle.close()
+
+
+def test_endpoint_capacity_probe_rolls_back_partial_acquisition(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    endpoint = tmp_path / successor.LEASE_ENDPOINT_KEY
+    endpoint.mkdir()
+    for slot in (1, 2):
+        (endpoint / f"slot-{slot}.lock").touch()
+    monkeypatch.setattr(successor, "LEASE_ROOT", tmp_path)
+    held = (endpoint / "slot-2.lock").open("a+b")
+    fcntl.flock(held.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    try:
+        with pytest.raises(RuntimeError, match="capacity is not fully free"):
+            release._probe_endpoint_capacity_free()  # noqa: SLF001
+        first = (endpoint / "slot-1.lock").open("a+b")
+        try:
+            fcntl.flock(first.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        finally:
+            fcntl.flock(first.fileno(), fcntl.LOCK_UN)
+            first.close()
+    finally:
+        fcntl.flock(held.fileno(), fcntl.LOCK_UN)
+        held.close()
+
+
 def test_global_duplicate_scan_is_clear_for_unused_generations(tmp_path: Path) -> None:
     jobs = tmp_path / "jobs"
     claims = tmp_path / "claims"
@@ -279,6 +456,29 @@ def test_release_builder_seals_exact_global_and_package_bindings(
     monkeypatch.setattr(successor, "build_runtime_plan", lambda *_args: plan)
     monkeypatch.setattr(successor, "SFS_ROOT", tmp_path / "unused-output")
     monkeypatch.setattr(release, "_validate_predecessors", lambda: None)
+    monkeypatch.setattr(
+        release,
+        "_validate_peer_acceptances",
+        lambda: runtime.PEER_ACCEPTED_RECEIPTS,
+    )
+    monkeypatch.setattr(
+        release,
+        "_probe_endpoint_capacity_free",
+        lambda: [
+            {
+                "slot": slot,
+                "path": str(
+                    Path(successor.LEASE_ROOT)
+                    / successor.LEASE_ENDPOINT_KEY
+                    / f"slot-{slot}.lock"
+                ),
+                "device": 42,
+                "inode": 100 + slot,
+                "size": 0,
+            }
+            for slot in (1, 2)
+        ],
+    )
     monkeypatch.setattr(release, "_validate_rank29_history", lambda: None)
     monkeypatch.setattr(release, "_global_evidence", lambda _plan: clear)
     monkeypatch.setattr(release, "_kube_get", lambda *_args: (404, {}))
@@ -328,7 +528,29 @@ def test_scored_renderer_rejects_source_or_template_binding_drift(
         "blocked_a2_session_collisions": 0,
         "peer_job_uid": runtime.PEER_JOB_UID,
         "peer_pod_uid": "0da05643-b6a5-4cf0-8498-d715e2cb3422",
-        "peer_active": True,
+        "peer_active": False,
+        "peer_succeeded": True,
+        "peer_pod_phase": "Succeeded",
+        "peer_pod_restarts": 0,
+        "peer_accepted_receipts": runtime.PEER_ACCEPTED_RECEIPTS,
+        "endpoint_lease_root": str(successor.LEASE_ROOT),
+        "endpoint_lease_key": successor.LEASE_ENDPOINT_KEY,
+        "endpoint_lease_slots_available": 2,
+        "endpoint_lease_slot_bindings": [
+            {
+                "slot": slot,
+                "path": str(
+                    Path(successor.LEASE_ROOT)
+                    / successor.LEASE_ENDPOINT_KEY
+                    / f"slot-{slot}.lock"
+                ),
+                "device": 42,
+                "inode": 100 + slot,
+                "size": 0,
+            }
+            for slot in (1, 2)
+        ],
+        "endpoint_lease_probe_released": True,
         "maximum_scored_streams": 2,
         "fleet_session_collisions": 0,
         "global_claim_collisions": 0,
@@ -362,10 +584,21 @@ def test_scored_renderer_rejects_source_or_template_binding_drift(
     configmap = rendered["objects"]["items"][0]
     assert configmap["immutable"] is True
     assert configmap["data"]["release.json"] == receipt.read_text()
-    for field in (*bindings, "retired_generation_claim_collisions"):
+    for field in (
+        *bindings,
+        "retired_generation_claim_collisions",
+        "peer_accepted_receipts",
+        "peer_succeeded",
+        "endpoint_lease_slot_bindings",
+        "endpoint_lease_probe_released",
+    ):
         drifted = dict(body)
         drifted[field] = (
-            "sha256:" + "0" * 64 if field in bindings else 1
+            "sha256:" + "0" * 64
+            if field in bindings
+            else False
+            if field in {"peer_succeeded", "endpoint_lease_probe_released"}
+            else 1
         )
         drifted["receipt_sha256"] = self_hosted.digest_without(
             drifted, "receipt_sha256"
@@ -387,6 +620,18 @@ def test_tracked_held_receipt_binds_plan_package_and_no_launch() -> None:
     assert value["launch_authorized"] is False
     assert value["plan_sha256"] == plan["plan_sha256"]
     assert value["package_sha256"] == rendered["package_sha256"]
+    assert value["peer_terminal_prerequisite"] == {
+        "accepted_receipt_sha256s": [
+            row["receipt_sha256"] for row in runtime.PEER_ACCEPTED_RECEIPTS
+        ],
+        "attempts": [2, 3, 4],
+        "endpoint_lease_slots_required_free": 2,
+        "job_succeeded": 1,
+        "job_uid": runtime.PEER_JOB_UID,
+        "pod_phase": "Succeeded",
+        "pod_restarts": 0,
+        "pod_uid": "0da05643-b6a5-4cf0-8498-d715e2cb3422",
+    }
     assert value["receipt_sha256"] == self_hosted.digest_without(
         value, "receipt_sha256"
     )

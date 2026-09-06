@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import fcntl
 import os
+import stat
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -23,7 +25,40 @@ MAX_SAFE_RECEIPT_BYTES = 262_144
 SOURCE_JOB = "chris-glm53-exact100-hosted-s2-c2-bulk-v1"
 PEER_JOB = "chris-glm53-exact100-hosted-r003-a2a4-successor-v2"
 PEER_JOB_UID = runtime.PEER_JOB_UID
+PEER_POD_NAME = "chris-glm53-exact100-hosted-r003-a2a4-successor-v2-9g56k"
 PEER_POD_UID = "0da05643-b6a5-4cf0-8498-d715e2cb3422"
+PEER_ACCEPTED_ROOT = Path(
+    "/mnt/sfs/jobs/chris-glm53-exact100-hosted-r003-a2a4-successor-v2/accepted"
+)
+PEER_ACCEPTED = (
+    {
+        "attempt": 2,
+        "path": PEER_ACCEPTED_ROOT / "chris-glm53-ac-bulk-b-r003-a2-g1-33d37078.json",
+        "receipt_sha256": "sha256:b9d644bbbe844c9840a789880893629becc0953ea607fc92a98f886beeaa9d55",
+        "file_sha256": "sha256:81e3eea0ece47e0ea30aefdeb0e27bd8e150096f3f7dff6c77de723c6b456baa",
+        "cell_id": "sha256:57f0ec78f93760d980f31df4dac3fc6daf38f2849ee2949d943e3a41f4a61e2d",
+        "execution_id": "sha256:6e93f24d70b8d76f936db9a910492a2479bca86c3a12cbc8c2a5592f16335cea",
+        "run_id": "chris-glm53-ac-bulk-b-r003-a2-g1-33d37078",
+    },
+    {
+        "attempt": 3,
+        "path": PEER_ACCEPTED_ROOT / "chris-glm53-ac-bulk-b-r003-a3-g1-33d37078.json",
+        "receipt_sha256": "sha256:399aac0f15220d9f4f6ccfab857a02eeddabda496dad2f628cf072df8080f692",
+        "file_sha256": "sha256:be0542174dd14a28cd1d5191c2d97a73d5bd457335b4f105506b032c9fac1a3c",
+        "cell_id": "sha256:85d8da4373e2dbd30100aca88b08b884f3ef65febf71f77060ae67246df37c8b",
+        "execution_id": "sha256:53eb697586931da3dd195636c3395ae58af60fcae1d383d5eb5f3aee960357d7",
+        "run_id": "chris-glm53-ac-bulk-b-r003-a3-g1-33d37078",
+    },
+    {
+        "attempt": 4,
+        "path": PEER_ACCEPTED_ROOT / "chris-glm53-ac-bulk-b-r003-a4-g1-33d37078.json",
+        "receipt_sha256": "sha256:182d5ddd1f7f1632f296ab695127184d5d73d116425dc2cc0f73d226e0f02f27",
+        "file_sha256": "sha256:c88c18a508c8cdf0a44d703520befb999dee4fbe0e757ff767c8bb3371d5fd86",
+        "cell_id": "sha256:f5b26b9037dd0f02ad2bb22401c9d0be8b9ab4d98641fdb091cc5f1bf6cddb44",
+        "execution_id": "sha256:0ca50d2ac1458b5335e17d76efb2a244b92bcdd84df0d21dac1164bb0f392ade",
+        "run_id": "chris-glm53-ac-bulk-b-r003-a4-g1-33d37078",
+    },
+)
 RANK29_A1_ACCEPTED = Path(
     "/mnt/sfs/jobs/chris-glm53-exact100-hosted-s2-c2-bulk-v1/accepted/"
     "chris-glm53-ac-bulk-b-r029-a1-g1-b51782f9.json"
@@ -80,26 +115,119 @@ def _validate_predecessors() -> None:
         raise RuntimeError("rank-29 source Pod is not absent")
 
     status, peer = _kube_get("jobs", PEER_JOB)
+    peer_conditions = peer.get("status", {}).get("conditions", [])
+    peer_complete = any(
+        row.get("type") == "Complete" and row.get("status") == "True"
+        for row in peer_conditions
+        if isinstance(row, dict)
+    )
+    peer_failed = any(
+        row.get("type") == "Failed" and row.get("status") == "True"
+        for row in peer_conditions
+        if isinstance(row, dict)
+    )
     if (
         status != 200
         or peer.get("metadata", {}).get("uid") != PEER_JOB_UID
-        or peer.get("status", {}).get("active") != 1
+        or bool(peer.get("status", {}).get("active"))
         or bool(peer.get("status", {}).get("failed"))
-        or bool(peer.get("status", {}).get("succeeded"))
+        or peer.get("status", {}).get("succeeded") != 1
+        or not peer_complete
+        or peer_failed
     ):
-        raise RuntimeError("rank-29 successor peer stream is not exact and active")
-    pod_status, peer_pod = _kube_get(
-        "pods", "chris-glm53-exact100-hosted-r003-a2a4-successor-v2-9g56k"
-    )
+        raise RuntimeError("rank-29 successor peer is not exact and succeeded")
+    pod_status, peer_pod = _kube_get("pods", PEER_POD_NAME)
     statuses = peer_pod.get("status", {}).get("containerStatuses", [])
     if (
         pod_status != 200
         or peer_pod.get("metadata", {}).get("uid") != PEER_POD_UID
-        or peer_pod.get("status", {}).get("phase") != "Running"
+        or peer_pod.get("status", {}).get("phase") != "Succeeded"
         or not statuses
-        or any(row.get("ready") is not True or row.get("restartCount") != 0 for row in statuses)
+        or any(
+            row.get("restartCount") != 0
+            or row.get("state", {}).get("terminated", {}).get("exitCode") != 0
+            for row in statuses
+        )
     ):
-        raise RuntimeError("rank-29 successor peer Pod is not healthy")
+        raise RuntimeError("rank-29 successor peer Pod is not exact and succeeded")
+
+
+def _validate_peer_acceptances() -> list[dict[str, Any]]:
+    evidence: list[dict[str, Any]] = []
+    for expected in PEER_ACCEPTED:
+        path = expected["path"]
+        receipt = _safe_receipt(path)
+        file_sha256 = self_hosted.sha256(path.read_bytes())
+        if (
+            receipt.get("schema_version") != "fleet-exact-pass4-bulk-cell-accepted-v3"
+            or receipt.get("receipt_sha256") != expected["receipt_sha256"]
+            or receipt.get("receipt_sha256")
+            != self_hosted.digest_without(receipt, "receipt_sha256")
+            or file_sha256 != expected["file_sha256"]
+            or receipt.get("selection_rank") != 3
+            or receipt.get("attempt") != expected["attempt"]
+            or receipt.get("cell_id") != expected["cell_id"]
+            or receipt.get("execution_id") != expected["execution_id"]
+            or receipt.get("run_id") != expected["run_id"]
+            or receipt.get("accepted") is not True
+            or receipt.get("credited") is not True
+            or receipt.get("retry_allowed") is not False
+        ):
+            raise RuntimeError("rank-3 peer acceptance evidence drifted")
+        evidence.append(
+            {
+                "attempt": expected["attempt"],
+                "path": str(path),
+                "receipt_sha256": expected["receipt_sha256"],
+                "file_sha256": file_sha256,
+                "cell_id": expected["cell_id"],
+                "execution_id": expected["execution_id"],
+                "run_id": expected["run_id"],
+            }
+        )
+    return evidence
+
+
+def _probe_endpoint_capacity_free() -> list[dict[str, Any]]:
+    endpoint_root = Path(successor.LEASE_ROOT) / successor.LEASE_ENDPOINT_KEY
+    if endpoint_root.is_symlink() or not endpoint_root.is_dir():
+        raise RuntimeError("rank-29 endpoint lease root is unsafe")
+    handles: list[Any] = []
+    bindings: list[dict[str, Any]] = []
+    try:
+        for slot in range(1, 3):
+            path = endpoint_root / f"slot-{slot}.lock"
+            if path.is_symlink() or not path.is_file():
+                raise RuntimeError("rank-29 endpoint lease slot is unsafe")
+            flags = os.O_RDWR
+            if hasattr(os, "O_NOFOLLOW"):
+                flags |= os.O_NOFOLLOW
+            handle = os.fdopen(os.open(path, flags), "a+b")
+            try:
+                metadata = os.fstat(handle.fileno())
+                if not stat.S_ISREG(metadata.st_mode) or metadata.st_size != 0:
+                    raise RuntimeError("rank-29 endpoint lease slot drifted")
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except Exception:
+                handle.close()
+                raise
+            handles.append(handle)
+            bindings.append(
+                {
+                    "slot": slot,
+                    "path": str(path),
+                    "device": metadata.st_dev,
+                    "inode": metadata.st_ino,
+                    "size": metadata.st_size,
+                }
+            )
+    except Exception as exc:
+        raise RuntimeError("rank-29 endpoint lease capacity is not fully free") from exc
+    finally:
+        for handle in reversed(handles):
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+            handle.close()
+    return bindings
 
 
 def _validate_rank29_history() -> None:
@@ -264,6 +392,8 @@ def build(root: Path) -> dict[str, Any]:
     ):
         raise RuntimeError("rank-29 release requires key and nonzero UIDs")
     _validate_predecessors()
+    peer_acceptances = _validate_peer_acceptances()
+    endpoint_lease_bindings = _probe_endpoint_capacity_free()
     _validate_rank29_history()
     inventory = successor.load(source_runtime.INVENTORY_PATH)
     plan = successor.build_runtime_plan(successor.CONTROLLER, inventory, root)
@@ -313,7 +443,16 @@ def build(root: Path) -> dict[str, Any]:
         "blocked_a2_session_collisions": blocked_session_collisions,
         "peer_job_uid": PEER_JOB_UID,
         "peer_pod_uid": PEER_POD_UID,
-        "peer_active": True,
+        "peer_active": False,
+        "peer_succeeded": True,
+        "peer_pod_phase": "Succeeded",
+        "peer_pod_restarts": 0,
+        "peer_accepted_receipts": peer_acceptances,
+        "endpoint_lease_root": str(successor.LEASE_ROOT),
+        "endpoint_lease_key": successor.LEASE_ENDPOINT_KEY,
+        "endpoint_lease_slots_available": len(endpoint_lease_bindings),
+        "endpoint_lease_slot_bindings": endpoint_lease_bindings,
+        "endpoint_lease_probe_released": True,
         "fleet_session_collisions": session_collisions,
         "global_claim_collisions": (
             global_evidence["fresh_generation_claim_collisions"]
