@@ -1,0 +1,198 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: chris-cyber-opencode11827-image-stage-v1
+  namespace: fleet-train-jobs
+immutable: true
+data:
+  stage.sh: |
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    out=/mnt/sfs/jobs/chris-cyber-opencode11827-image-stage-v1
+    incoming="$out/opencode-1.18.27-amd64.tar.gz.part"
+    ready="$incoming.ready"
+    archive="$out/opencode-1.18.27-amd64.tar.gz"
+    expected_archive_sha=578ff2a933f17a19d22ebf8634533651cec2f0ce611e16f3c5fe8efea7940cd3
+    expected_image_id=sha256:ca4f0b8f50bd051d709c7c0ae5ec47ca31bbff7d2a2ad754c67b9cdf585567cb
+    stage=STARTING
+
+    failed_receipt() {
+      code=$?
+      if test "$code" -ne 0; then
+        python3 - "$out" "$stage" "$code" <<'PY'
+    import hashlib
+    import json
+    import pathlib
+    import sys
+
+    out = pathlib.Path(sys.argv[1])
+    receipt = {
+        "schema_version": "fleet-opencode11827-exact-image-stage-terminal-v1",
+        "status": "FAILED",
+        "last_completed_stage": sys.argv[2],
+        "exit_code": int(sys.argv[3]),
+        "credentials_included": False,
+        "prompts_traces_flags_or_scores_included": False,
+    }
+    canonical = json.dumps(receipt, sort_keys=True, separators=(",", ":")).encode()
+    receipt["receipt_sha256"] = "sha256:" + hashlib.sha256(canonical).hexdigest()
+    payload = json.dumps(receipt, sort_keys=True, separators=(",", ":")) + "\n"
+    (out / "TERMINAL.json").write_text(payload)
+    (out / "TERMINAL.json.sha256").write_text(
+        hashlib.sha256(payload.encode()).hexdigest() + "  TERMINAL.json\n"
+    )
+    PY
+      fi
+      exit "$code"
+    }
+    trap failed_receipt EXIT
+
+    umask 077
+    mkdir -p "$out"
+    test ! -e "$archive"
+    test ! -e "$out/STAGED.json"
+    test ! -e "$out/TERMINAL.json"
+    test "$(command -v docker)" = /docker-cli/bin/docker
+    test "$(sha256sum /docker-cli/bin/docker | cut -d' ' -f1)" = \
+      242c7a8de606afba2acada7c7af00d77f92c3601678b2f3a60911b49a892c722
+
+    stage=WAITING_FOR_ARCHIVE
+    for _ in $(seq 1 600); do
+      test -f "$ready" && break
+      sleep 1
+    done
+    test -f "$ready"
+    test "$(sha256sum "$incoming" | cut -d' ' -f1)" = "$expected_archive_sha"
+    stage=ARCHIVE_HASH_VERIFIED
+
+    for _ in $(seq 1 180); do
+      docker info >/dev/null 2>&1 && break
+      sleep 1
+    done
+    docker info >/dev/null
+    gzip -dc "$incoming" | docker load >/dev/null
+    inspect=$(docker image inspect chris/opencode:1.18.27-cyber-v1 --format \
+      '{{.Id}} {{.Os}} {{.Architecture}} {{.Config.User}} {{.Config.WorkingDir}}')
+    test "$inspect" = "$expected_image_id linux amd64 node /workspace"
+    test "$(docker run --rm chris/opencode:1.18.27-cyber-v1 opencode --version)" = 1.18.27
+    stage=IMAGE_IDENTITY_VERIFIED
+
+    mv "$incoming" "$archive"
+    rm -f "$ready"
+    chmod 0444 "$archive"
+    stage=ARCHIVE_PUBLISHED
+
+    python3 - "$out" "$archive" "$expected_archive_sha" "$expected_image_id" <<'PY'
+    import hashlib
+    import json
+    import pathlib
+    import sys
+
+    out = pathlib.Path(sys.argv[1])
+    receipt = {
+        "schema_version": "fleet-opencode11827-exact-image-stage-v1",
+        "status": "STAGED_EXACT",
+        "archive_path": sys.argv[2],
+        "archive_sha256": "sha256:" + sys.argv[3],
+        "source_image_id": sys.argv[4],
+        "platform": {"architecture": "amd64", "os": "linux"},
+        "runtime": {
+            "opencode_version": "1.18.27",
+            "user": "node",
+            "working_dir": "/workspace",
+        },
+        "credentials_included": False,
+        "prompts_traces_flags_or_scores_included": False,
+    }
+    canonical = json.dumps(receipt, sort_keys=True, separators=(",", ":")).encode()
+    receipt["receipt_sha256"] = "sha256:" + hashlib.sha256(canonical).hexdigest()
+    payload = json.dumps(receipt, sort_keys=True, separators=(",", ":")) + "\n"
+    (out / "STAGED.json").write_text(payload)
+    (out / "STAGED.json.sha256").write_text(
+        hashlib.sha256(payload.encode()).hexdigest() + "  STAGED.json\n"
+    )
+    PY
+    chmod 0444 "$out/STAGED.json" "$out/STAGED.json.sha256"
+    stage=STAGED_EXACT
+    trap - EXIT
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: chris-cyber-opencode11827-image-stage-v1
+  namespace: fleet-train-jobs
+  labels:
+    cyber-post-train.fleet.ai/experiment: opencode11827-image-stage-v1
+    cyber-post-train.fleet.ai/owner: chris
+spec:
+  activeDeadlineSeconds: 1200
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 604800
+  template:
+    metadata:
+      labels:
+        cyber-post-train.fleet.ai/experiment: opencode11827-image-stage-v1
+        cyber-post-train.fleet.ai/owner: chris
+    spec:
+      priorityClassName: fleet-serve-low
+      preemptionPolicy: Never
+      restartPolicy: Never
+      nodeSelector:
+        kubernetes.io/arch: amd64
+        workload: fleetai-training-ng-cpu
+      tolerations:
+        - key: workload
+          operator: Equal
+          value: fleetai-training-ng-cpu
+          effect: NoSchedule
+      initContainers:
+        - name: docker-cli
+          image: docker.io/library/docker@sha256:f649ef046008ca7f926a2571c32b0ac22e5c59eb61b959617f9acc2a4c638cf5
+          command: ["/bin/sh", "-ec"]
+          args:
+            - install -D -m 0755 /usr/local/bin/docker /cli/bin/docker
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {cpu: 500m, memory: 512Mi}
+          volumeMounts:
+            - {name: docker-cli, mountPath: /cli}
+        - name: dind
+          image: docker.io/library/docker@sha256:f649ef046008ca7f926a2571c32b0ac22e5c59eb61b959617f9acc2a4c638cf5
+          restartPolicy: Always
+          args: ["--host=unix:///var/run/docker.sock", "--tls=false"]
+          securityContext: {privileged: true}
+          readinessProbe:
+            exec: {command: ["docker", "info"]}
+            periodSeconds: 2
+            timeoutSeconds: 2
+          resources:
+            requests: {cpu: "1", memory: 2Gi, ephemeral-storage: 20Gi}
+            limits: {cpu: "2", memory: 4Gi, ephemeral-storage: 30Gi}
+          volumeMounts:
+            - {name: docker-socket, mountPath: /var/run}
+            - {name: docker-data, mountPath: /var/lib/docker}
+      containers:
+        - name: stager
+          image: ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
+          command: ["/bin/bash", "/bootstrap/stage.sh"]
+          env:
+            - {name: PATH, value: "/docker-cli/bin:/usr/local/bin:/usr/bin:/bin"}
+            - {name: DOCKER_HOST, value: "unix:///var/run/docker.sock"}
+          resources:
+            requests: {cpu: "1", memory: 2Gi, ephemeral-storage: 2Gi}
+            limits: {cpu: "2", memory: 4Gi, ephemeral-storage: 4Gi}
+          volumeMounts:
+            - {name: docker-cli, mountPath: /docker-cli, readOnly: true}
+            - {name: docker-socket, mountPath: /var/run}
+            - {name: bootstrap, mountPath: /bootstrap, readOnly: true}
+            - {name: sfs, mountPath: /mnt/sfs}
+      volumes:
+        - name: bootstrap
+          configMap:
+            name: chris-cyber-opencode11827-image-stage-v1
+            defaultMode: 0555
+        - {name: docker-cli, emptyDir: {sizeLimit: 256Mi}}
+        - {name: docker-data, emptyDir: {sizeLimit: 30Gi}}
+        - {name: docker-socket, emptyDir: {}}
+        - {name: sfs, persistentVolumeClaim: {claimName: sfs-shared}}
