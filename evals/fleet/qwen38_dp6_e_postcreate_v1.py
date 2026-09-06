@@ -30,6 +30,7 @@ POLL_SECONDS = 5
 IDLE_SECONDS = 600
 STARTUP_TIMEOUT_SECONDS = 600
 DELETE_TIMEOUT_SECONDS = 180
+CREATE_RECONCILE_TIMEOUT_SECONDS = 60
 
 
 def _digest(value: Mapping[str, Any]) -> str:
@@ -327,6 +328,7 @@ def create_qualifier(
     binding: Mapping[str, Any],
     release: Mapping[str, Any],
     root: Path,
+    created_uids: dict[str, str],
 ) -> tuple[str, str]:
     rendered = qualifier.render(root, submission, binding, release)
     created = []
@@ -341,6 +343,9 @@ def create_qualifier(
         value = json.loads(completed.stdout)
         if not isinstance(value, dict) or value.get("kind") != manifest["kind"]:
             raise RuntimeError("qualifier create response drifted")
+        created_uids[manifest["kind"]] = _uid(
+            value.get("metadata", {}).get("uid"), f"qualifier {manifest['kind']} UID"
+        )
         created.append(value)
     by_kind = {row["kind"]: row for row in created}
     return (
@@ -352,6 +357,42 @@ def create_qualifier(
 def _release_server(
     client: httpx.Client, api_run_id: str, binding: Mapping[str, Any] | None
 ) -> dict[str, Any]:
+    # Binding can fail before SERVER-BINDING.json exists.  Snapshot both the
+    # exact owner closure and the Jobs-API-generated suffixed names before the
+    # delete so cleanup remains observable even in that state.
+    before_items = _inventory()
+    tracked_uids = {
+        str(binding[field])
+        for field in (
+            "rayjob_uid",
+            "workload_uid",
+            "ray_cluster_uid",
+            "head_pod_uid",
+            "service_uid",
+        )
+        if binding is not None and binding.get(field)
+    }
+    tracked_names = {api_run_id}
+    changed = True
+    while changed:
+        changed = False
+        for item in before_items:
+            metadata = item.get("metadata", {})
+            name = str(metadata.get("name") or "")
+            uid = str(metadata.get("uid") or "")
+            owners = {
+                str(owner.get("uid") or "")
+                for owner in metadata.get("ownerReferences") or []
+                if isinstance(owner, dict)
+            }
+            generated_name = name == api_run_id or name.startswith(f"{api_run_id}-")
+            if generated_name or owners.intersection(tracked_uids):
+                if name and name not in tracked_names:
+                    tracked_names.add(name)
+                    changed = True
+                if uid and uid not in tracked_uids:
+                    tracked_uids.add(uid)
+                    changed = True
     before = client.get(f"/v1/runs/{api_run_id}")
     if before.status_code == 404:
         delete_status: int | str = "already_absent"
@@ -366,22 +407,14 @@ def _release_server(
         after = client.get(f"/v1/runs/{api_run_id}")
         if after.status_code == 404:
             items = _inventory()
-            known_uids = (
-                {
-                    binding["rayjob_uid"],
-                    binding["workload_uid"],
-                    binding["ray_cluster_uid"],
-                    binding["head_pod_uid"],
-                    binding["service_uid"],
-                }
-                if binding is not None
-                else set()
-            )
             remaining = [
                 item
                 for item in items
-                if item.get("metadata", {}).get("name") == api_run_id
-                or item.get("metadata", {}).get("uid") in known_uids
+                if str(item.get("metadata", {}).get("name") or "") in tracked_names
+                or str(item.get("metadata", {}).get("name") or "").startswith(
+                    f"{api_run_id}-"
+                )
+                or str(item.get("metadata", {}).get("uid") or "") in tracked_uids
             ]
             if not remaining:
                 return {
@@ -394,44 +427,128 @@ def _release_server(
     raise RuntimeError("Jobs API run or UID-bound Kubernetes objects remained after release")
 
 
-def _stop_qualifier(job_uid: str | None) -> dict[str, Any]:
-    if job_uid is None:
-        return {"job_known": False, "delete": "not_created"}
+def _recover_created_api_run(client: httpx.Client) -> str | None:
+    """Recover an uncertain successful POST from the exact target identity."""
+    deadline = time.monotonic() + CREATE_RECONCILE_TIMEOUT_SECONDS
+    while time.monotonic() < deadline:
+        matches: list[str] = []
+        for row in shared._runs(client):  # noqa: SLF001 - paginated GET authority
+            title, run_dir, name = row.get("title"), row.get("run_dir"), row.get("name")
+            if title != held.TITLE and run_dir != held.RUN_DIR:
+                continue
+            if title != held.TITLE or run_dir != held.RUN_DIR:
+                raise RuntimeError("uncertain DP6-e create identity is contradictory")
+            if not isinstance(name, str) or not name.startswith("ft-run-"):
+                raise RuntimeError("uncertain DP6-e create omitted its run identity")
+            matches.append(name)
+        if len(matches) > 1:
+            raise RuntimeError("ambiguous created DP6-e server during cleanup")
+        if matches:
+            return matches[0]
+        time.sleep(POLL_SECONDS)
+    return None
+
+
+def _delete_qualifier_object(kind: str, name: str, expected_uid: str | None) -> dict[str, Any]:
     current = subprocess.run(
-        [
-            "kubectl",
-            "-n",
-            shared.NAMESPACE,
-            "get",
-            "job",
-            qualifier.JOB_NAME,
-            "-o",
-            "json",
-        ],
+        ["kubectl", "-n", shared.NAMESPACE, "get", kind, name, "-o", "json"],
         check=False,
         capture_output=True,
         text=True,
     )
     if current.returncode != 0:
-        return {"job_known": True, "job_uid": job_uid, "delete": "already_absent"}
+        return {"known": expected_uid is not None, "uid": expected_uid, "delete": "already_absent"}
     value = json.loads(current.stdout)
-    if value.get("metadata", {}).get("uid") != job_uid:
-        raise RuntimeError("refusing to stop qualifier after Job UID drift")
+    observed_uid = _uid(value.get("metadata", {}).get("uid"), f"qualifier {kind} UID")
+    if expected_uid is not None and observed_uid != expected_uid:
+        raise RuntimeError(f"refusing to stop qualifier after {kind} UID drift")
     subprocess.run(
-        [
-            "kubectl",
-            "-n",
-            shared.NAMESPACE,
-            "delete",
-            "job",
-            qualifier.JOB_NAME,
-            "--wait=true",
-        ],
+        ["kubectl", "-n", shared.NAMESPACE, "delete", kind, name, "--wait=true"],
         check=True,
         capture_output=True,
         text=True,
     )
-    return {"job_known": True, "job_uid": job_uid, "delete": "completed"}
+    absent = subprocess.run(
+        ["kubectl", "-n", shared.NAMESPACE, "get", kind, name, "-o", "name"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if absent.returncode == 0:
+        raise RuntimeError(f"qualifier {kind} remained after delete")
+    return {"known": True, "uid": observed_uid, "delete": "completed"}
+
+
+def _stop_qualifier(job_uid: str | None, configmap_uid: str | None) -> dict[str, Any]:
+    # Recover exact-name objects when create succeeded but response handling
+    # failed before the caller could retain a UID.  The release gate proved
+    # both names absent immediately before their create.
+    job: dict[str, Any] | None = None
+    configmap: dict[str, Any] | None = None
+    errors: list[BaseException] = []
+    try:
+        job = _delete_qualifier_object("job", qualifier.JOB_NAME, job_uid)
+    except BaseException as exc:
+        errors.append(exc)
+    try:
+        configmap = _delete_qualifier_object(
+            "configmap", qualifier.CONFIGMAP_NAME, configmap_uid
+        )
+    except BaseException as exc:
+        errors.append(exc)
+    if errors:
+        raise RuntimeError("one or more qualifier objects failed cleanup") from errors[0]
+    return {
+        "job": job,
+        "configmap": configmap,
+        "job_and_configmap_absent": True,
+    }
+
+
+def _failure_cleanup(
+    client: httpx.Client,
+    api_run_id: str | None,
+    binding: Mapping[str, Any] | None,
+    qualifier_uids: Mapping[str, str],
+    *,
+    server_create_started: bool,
+    qualifier_create_started: bool,
+) -> tuple[str | None, dict[str, Any], dict[str, Any], dict[str, str | None]]:
+    errors: dict[str, str | None] = {
+        "create_reconciliation": None,
+        "server": None,
+        "qualifier": None,
+    }
+    if api_run_id is None and server_create_started:
+        try:
+            api_run_id = _recover_created_api_run(client)
+        except BaseException as exc:
+            errors["create_reconciliation"] = type(exc).__name__
+    server_release: dict[str, Any] = {
+        "get_before": "not_created",
+        "delete": "not_created",
+        "get_after": 404,
+        "rayjob_workload_raycluster_pod_service_absent": True,
+    }
+    if api_run_id is not None:
+        try:
+            server_release = _release_server(client, api_run_id, binding)
+        except BaseException as exc:
+            errors["server"] = type(exc).__name__
+    qualifier_stop: dict[str, Any] = {
+        "job": {"known": False, "uid": None, "delete": "not_created"},
+        "configmap": {"known": False, "uid": None, "delete": "not_created"},
+        "job_and_configmap_absent": True,
+    }
+    if qualifier_create_started:
+        try:
+            qualifier_stop = _stop_qualifier(
+                qualifier_uids.get("Job"), qualifier_uids.get("ConfigMap")
+            )
+        except BaseException as exc:
+            errors["qualifier"] = type(exc).__name__
+            qualifier_stop = {"cleanup_error_type": type(exc).__name__}
+    return api_run_id, server_release, qualifier_stop, errors
 
 
 def monitor_and_release(
@@ -439,6 +556,7 @@ def monitor_and_release(
     api_run_id: str,
     submission: Mapping[str, Any],
     binding: Mapping[str, Any],
+    qualifier_configmap_uid: str,
     qualifier_job_uid: str,
     root: Path,
 ) -> dict[str, Any]:
@@ -467,11 +585,6 @@ def monitor_and_release(
             break
         time.sleep(POLL_SECONDS)
     released = _release_server(client, api_run_id, binding)
-    qualifier_stop = (
-        _stop_qualifier(qualifier_job_uid)
-        if terminal_reason not in {"qualifier_succeeded", "qualifier_failed"}
-        else {"job_known": True, "job_uid": qualifier_job_uid, "delete": "terminal_no_action"}
-    )
     qualifier_receipt: dict[str, Any] | None = None
     if qualifier_phase == "Succeeded":
         qualifier_receipt = _sfs_json(f"{qualifier.OUTPUT_ROOT}/RESULT.json")
@@ -486,6 +599,7 @@ def monitor_and_release(
             or qualifier_receipt.get("prompts_traces_flags_or_scores_included") is not False
         ):
             raise RuntimeError("qualifier failure receipt drifted")
+    qualifier_stop = _stop_qualifier(qualifier_job_uid, qualifier_configmap_uid)
     value = {
         "schema_version": TERMINAL_SCHEMA,
         "status": "RELEASED_AFTER_SCORE_FREE_QUALIFICATION_BOUNDARY",
@@ -541,14 +655,20 @@ def main() -> int:
         headers={"Authorization": f"Bearer {shared._token()}", "Accept": "application/json"},  # noqa: SLF001
         timeout=60,
     ) as client:
-        payload, gate = server_live.live_gate(client, server_release, root, source_commit)
-        api_run_id = server_live.submit_create_once(
-            client, payload, gate, server_release, source_commit, root
-        )
-        binding = None
-        job_uid = None
-        stage = "write_submission"
+        api_run_id: str | None = None
+        binding: dict[str, Any] | None = None
+        qualifier_uids: dict[str, str] = {}
+        server_create_started = False
+        qualifier_create_started = False
+        stage = "live_gate"
         try:
+            payload, gate = server_live.live_gate(client, server_release, root, source_commit)
+            stage = "create_server"
+            server_create_started = True
+            api_run_id = server_live.submit_create_once(
+                client, payload, gate, server_release, source_commit, root
+            )
+            stage = "write_submission"
             submission = {
                 "schema_version": server_live.SUBMISSION_SCHEMA,
                 "status": "SUBMITTED_SCORE_FREE_DP6_E_SERVER",
@@ -590,23 +710,54 @@ def main() -> int:
             release = qualifier_release(submission, binding, root)
             _write_once(args.evidence_dir / "QUALIFIER-RELEASE.json", release)
             stage = "create_qualifier"
-            configmap_uid, job_uid = create_qualifier(submission, binding, release, root)
+            qualifier_create_started = True
+            configmap_uid, job_uid = create_qualifier(
+                submission, binding, release, root, qualifier_uids
+            )
             stage = "monitor_qualifier_and_server"
-            terminal = monitor_and_release(client, api_run_id, submission, binding, job_uid, root)
+            terminal = monitor_and_release(
+                client,
+                api_run_id,
+                submission,
+                binding,
+                configmap_uid,
+                job_uid,
+                root,
+            )
             terminal["qualifier_configmap_uid"] = configmap_uid
             terminal["receipt_sha256"] = _digest(terminal)
             _write_once(args.evidence_dir / "TERMINAL.json", terminal)
         except BaseException as exc:
+            api_run_id, server_release_result, qualifier_stop, cleanup_errors = (
+                _failure_cleanup(
+                    client,
+                    api_run_id,
+                    binding,
+                    qualifier_uids,
+                    server_create_started=server_create_started,
+                    qualifier_create_started=qualifier_create_started,
+                )
+            )
+            cleanup_complete = all(value is None for value in cleanup_errors.values())
             terminal = {
                 "schema_version": TERMINAL_SCHEMA,
-                "status": "RELEASED_AFTER_SCORE_FREE_QUALIFICATION_BOUNDARY",
+                "status": (
+                    "RELEASED_AFTER_SCORE_FREE_QUALIFICATION_BOUNDARY"
+                    if cleanup_complete
+                    else "CLEANUP_INCOMPLETE"
+                ),
                 "observed_at_utc": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
                 "api_run_id": api_run_id,
                 "terminal_reason": "orchestration_failure",
                 "failure_stage": stage,
                 "error_type": type(exc).__name__,
-                "jobs_api_release": _release_server(client, api_run_id, binding),
-                "qualifier_stop": _stop_qualifier(job_uid),
+                "jobs_api_release": server_release_result,
+                "qualifier_stop": qualifier_stop,
+                "server_cleanup_error_type": cleanup_errors["server"],
+                "qualifier_cleanup_error_type": cleanup_errors["qualifier"],
+                "create_reconciliation_error_type": cleanup_errors[
+                    "create_reconciliation"
+                ],
                 "scored_calls": 0,
                 "prompts_traces_flags_or_scores_included": False,
             }

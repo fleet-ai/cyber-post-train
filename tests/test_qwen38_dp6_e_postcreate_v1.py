@@ -217,6 +217,7 @@ def test_monitor_releases_immediately_at_terminal_boundary(monkeypatch: pytest.M
         "ft-run-example",
         {},
         binding,
+        "77777777-7777-4777-8777-777777777777",
         "66666666-6666-4666-8666-666666666666",
         ROOT,
     )
@@ -232,8 +233,10 @@ def test_qualifier_stop_is_uid_bound(monkeypatch: pytest.MonkeyPatch) -> None:
         stdout = '{"metadata":{"uid":"different"}}'
 
     monkeypatch.setattr(postcreate.subprocess, "run", lambda *_args, **_kwargs: Completed())
-    with pytest.raises(RuntimeError, match="UID drift"):
-        postcreate._stop_qualifier("66666666-6666-4666-8666-666666666666")  # noqa: SLF001
+    with pytest.raises(RuntimeError, match="failed cleanup"):
+        postcreate._stop_qualifier(  # noqa: SLF001
+            "66666666-6666-4666-8666-666666666666", None
+        )
 
 
 def test_server_release_requires_api404_and_bound_uid_absence(
@@ -273,3 +276,142 @@ def test_server_release_requires_api404_and_bound_uid_absence(
         "get_after": 404,
         "rayjob_workload_raycluster_pod_service_absent": True,
     }
+
+
+def test_server_release_rejects_suffixed_object_without_binding(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class Response:
+        def __init__(self, status_code: int) -> None:
+            self.status_code = status_code
+
+        def raise_for_status(self) -> None:
+            if self.status_code >= 400:
+                raise RuntimeError(self.status_code)
+
+    class Client:
+        def __init__(self) -> None:
+            self.gets = 0
+
+        def get(self, _path: str) -> Response:
+            self.gets += 1
+            return Response(200 if self.gets == 1 else 404)
+
+        def delete(self, _path: str) -> Response:
+            return Response(204)
+
+    suffix = {
+        "kind": "RayCluster",
+        "metadata": {
+            "name": "ft-run-example-abcd1",
+            "uid": "22222222-2222-4222-8222-222222222222",
+        },
+    }
+    monkeypatch.setattr(postcreate, "_inventory", lambda: [suffix])
+    moments = iter([0.0, 0.0, 999.0])
+    monkeypatch.setattr(postcreate.time, "monotonic", lambda: next(moments))
+    monkeypatch.setattr(postcreate.time, "sleep", lambda _seconds: None)
+    with pytest.raises(RuntimeError, match="remained after release"):
+        postcreate._release_server(Client(), "ft-run-example", None)  # noqa: SLF001
+
+
+def test_uncertain_create_recovers_exact_target_run(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        postcreate.shared,
+        "_runs",
+        lambda _client: [
+            {
+                "name": "ft-run-recovered",
+                "title": held.TITLE,
+                "run_dir": held.RUN_DIR,
+            }
+        ],
+    )
+    assert postcreate._recover_created_api_run(object()) == "ft-run-recovered"  # noqa: SLF001
+
+
+def test_qualifier_cleanup_attempts_configmap_after_job_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    called: list[str] = []
+
+    def remove(kind: str, _name: str, _uid: str | None) -> dict:
+        called.append(kind)
+        if kind == "job":
+            raise RuntimeError("job cleanup failed")
+        return {"known": True, "delete": "completed"}
+
+    monkeypatch.setattr(postcreate, "_delete_qualifier_object", remove)
+    with pytest.raises(RuntimeError, match="failed cleanup"):
+        postcreate._stop_qualifier(None, None)  # noqa: SLF001
+    assert called == ["job", "configmap"]
+
+
+def test_server_cleanup_error_does_not_skip_qualifier_cleanup(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    called: list[str] = []
+
+    def release(*_args):
+        called.append("server")
+        raise RuntimeError("server cleanup failed")
+
+    def stop(*_args):
+        called.append("qualifier")
+        return {"job_and_configmap_absent": True}
+
+    monkeypatch.setattr(postcreate, "_release_server", release)
+    monkeypatch.setattr(postcreate, "_stop_qualifier", stop)
+    api_run_id, _released, stopped, errors = postcreate._failure_cleanup(  # noqa: SLF001
+        object(),
+        "ft-run-example",
+        None,
+        {},
+        server_create_started=True,
+        qualifier_create_started=True,
+    )
+    assert api_run_id == "ft-run-example"
+    assert called == ["server", "qualifier"]
+    assert stopped == {"job_and_configmap_absent": True}
+    assert errors == {
+        "create_reconciliation": None,
+        "server": "RuntimeError",
+        "qualifier": None,
+    }
+
+
+def test_partial_qualifier_create_retains_configmap_uid(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rendered = {
+        "configmap": {"kind": "ConfigMap", "metadata": {"name": "cm"}},
+        "job": {"kind": "Job", "metadata": {"name": "job"}},
+    }
+    monkeypatch.setattr(postcreate.qualifier, "render", lambda *_args: rendered)
+    calls = 0
+
+    def run(*_args, **_kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return type(
+                "Completed",
+                (),
+                {
+                    "stdout": json.dumps(
+                        {
+                            "kind": "ConfigMap",
+                            "metadata": {
+                                "uid": "77777777-7777-4777-8777-777777777777"
+                            },
+                        }
+                    )
+                },
+            )()
+        raise RuntimeError("Job create failed")
+
+    monkeypatch.setattr(postcreate.subprocess, "run", run)
+    created: dict[str, str] = {}
+    with pytest.raises(RuntimeError, match="Job create failed"):
+        postcreate.create_qualifier({}, {}, {}, ROOT, created)
+    assert created == {"ConfigMap": "77777777-7777-4777-8777-777777777777"}
