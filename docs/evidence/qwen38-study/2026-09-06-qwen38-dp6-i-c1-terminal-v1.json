@@ -1,0 +1,50 @@
+{
+  "api_run_id": "ft-run-831f7c26",
+  "binding_projection_receipt_sha256": "sha256:6911c158a968e61d3ce8542eb7acbb5323fcc7f565fecade032e65a6e464937b",
+  "counter_producer_gate_receipt_sha256": "sha256:a2f7e85d493d6bc5e860e13bd5fdeb0d4bafcd541bcff20a20ce64da7d22956e",
+  "deterministic_source_diagnosis": {
+    "cluster_cgroup_version": 2,
+    "consumer_wait_seconds": 30,
+    "failure_boundary": "pre_request_controller_resource_sample",
+    "producer_failure": "hard_coded_cgroup_root_memory_events_absent",
+    "required_fix": "resolve_exact_container_leaf_from_proc_self_cgroup_and_prove_shared_sample_readback",
+    "root_memory_events_readable": false,
+    "self_cgroup_leaf_cpu_stat_readable": true,
+    "self_cgroup_leaf_memory_events_readable": true
+  },
+  "fresh_successor_required": true,
+  "head_pod_uid": "eb1544b8-1b57-4d53-90bd-877116d4a5c2",
+  "observed_at_utc": "2026-09-06T14:29:30.530719Z",
+  "prompts_traces_flags_or_scores_included": false,
+  "qualifier_configmap_uid": "c7510907-da8b-4190-bb70-fcdf375f1590",
+  "qualifier_job_uid": "82856dd1-4986-47a3-9a65-8e7fa59dcf83",
+  "qualifier_result": {
+    "completed_stream_count": 0,
+    "elapsed_milliseconds": 30014,
+    "error_type": "PreRequestResourceSampleError",
+    "failure_stage": "pre_request_resource_sample",
+    "highest_passing_concurrency": 0,
+    "observed_model_request_count": 0,
+    "observed_server_request_delta": 0,
+    "receipt_sha256": "sha256:c048216a65bb1165a896d37409fe73ec647a6eebfb990ac1c39da31e1d46bf39"
+  },
+  "ray_cluster_uid": "82287f94-7d2c-4fc4-a622-32279d73b240",
+  "rayjob_uid": "342424df-9ae4-4a65-aa79-74af4c9e6679",
+  "receipt_sha256": "sha256:dd4a1041b94d7f53733159ff1d1b82e1cc3db5d817fe060ed6a3dec8ec9c771f",
+  "schema_version": "fleet-qwen38-dp6-i-c1-terminal-v1",
+  "scored_calls": 0,
+  "service_uid": "2a8ba4d5-8204-4dfb-ba92-5cc8768935ee",
+  "source_commit": "4ec9617ef0632b5ad1d225d63f25c48467677fad",
+  "statistical_cells_selected": 0,
+  "status": "TERMINAL_SCORE_FREE_QUALIFICATION_FAILED_NO_IDENTITY_REUSE",
+  "terminal_identity_reuse_authorized": false,
+  "terminal_receipt_sha256": "sha256:bd9c539dfa9c91491a6993c5211ddb03022c3388489f9b137e29b3d15a575535",
+  "terminal_reconciliation": {
+    "api_get_after": 404,
+    "jobs_api_release_complete": true,
+    "kubernetes_owner_closure_count": 0,
+    "qualifier_job_and_configmap_absent": true,
+    "scored_calls": 0
+  },
+  "workload_uid": "27e946d3-3eb2-48e0-9465-2efe05db1446"
+}
