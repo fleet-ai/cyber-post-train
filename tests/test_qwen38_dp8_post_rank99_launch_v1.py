@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import json
 from pathlib import Path
 
 import pytest
@@ -132,6 +133,29 @@ def test_preview_validator_requires_exact_jobs_api_render() -> None:
     ]["requests"]["nvidia.com/gpu"] = 4
     with pytest.raises(RuntimeError):
         launch.preview_identity(yaml.safe_dump(manifest), ROOT)
+
+
+def test_authenticated_preview_receipt_is_exact_and_non_mutating() -> None:
+    value = json.loads((ROOT / launch.PREVIEW_RECEIPT_PATH).read_text())
+    launch.validate_preview_receipt(value, ROOT)
+    assert value["side_effects"] == {
+        "api_mutations": 0,
+        "launch_authorized": False,
+        "scoring_authorized": False,
+    }
+    for path, replacement in (
+        (("rendered", "gpus"), 4),
+        (("rendered", "suspended"), False),
+        (("side_effects", "api_mutations"), 1),
+    ):
+        changed = copy.deepcopy(value)
+        cursor = changed
+        for key in path[:-1]:
+            cursor = cursor[key]
+        cursor[path[-1]] = replacement
+        changed["receipt_sha256"] = self_hosted.digest_without(changed, "receipt_sha256")
+        with pytest.raises(ValueError):
+            launch.validate_preview_receipt(changed, ROOT)
 
 
 def test_qualification_plan_is_exact_score_free_ladder() -> None:

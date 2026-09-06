@@ -16,7 +16,11 @@ from evals.fleet import qwen38_dp8_post_rank99_plan_v1 as held
 from evals.fleet import self_hosted
 
 SPEC_PATH = Path("evals/fleet/configs/qwen38-dedicated-dp8-post-rank99-v1-held.json")
+PREVIEW_RECEIPT_PATH = Path(
+    "docs/evidence/qwen38-study/2026-09-06-qwen38-dp8-post-rank99-authenticated-preview-v1.json"
+)
 SCHEMA = "fleet-qwen38-dedicated-dp8-post-rank99-launch-held-v1"
+PREVIEW_RECEIPT_SCHEMA = "fleet-qwen38-dp8-post-rank99-authenticated-preview-v1"
 TRANSITION_SCHEMA = "fleet-qwen38-rank99-to-dp8-transition-release-v1"
 QUALIFICATION_SCHEMA = "fleet-qwen38-dp8-nonscored-qualification-plan-v1"
 RESULT_SCHEMA = "fleet-qwen38-dp8-nonscored-qualification-result-v1"
@@ -147,6 +151,49 @@ def spec(root: Path) -> dict[str, Any]:
     value = _load(root / SPEC_PATH)
     validate_spec(value, root)
     return value
+
+
+def validate_preview_receipt(value: dict[str, Any], root: Path) -> None:
+    """Validate the sanitized evidence from the authenticated preview-only API call."""
+    expected = {
+        "schema_version": PREVIEW_RECEIPT_SCHEMA,
+        "status": "PASSED_NON_MUTATING",
+        "observed_at": "2026-09-06T04:45:16Z",
+        "held_config_path": str(SPEC_PATH),
+        "held_config_sha256": spec(root)["config_sha256"],
+        "request_sha256": self_hosted.sha256(self_hosted.canonical_json(jobs_payload(root))),
+        "route": "POST /v1/runs/preview",
+        "rendered": {
+            "command_sha256": (
+                "sha256:e0fda171b57c418bd499b9442b7285a6cdf629dd84523b28f75c7bf16ec2c8bd"
+            ),
+            "gpus": 8,
+            "image": prior.IMAGE,
+            "image_pull_secrets": ["ghcr-pull"],
+            "preferred_topology": "topology.nebius.com/tier-1",
+            "priority_class": prior.PRIORITY_CLASS,
+            "privileged": False,
+            "privileged_field_present": False,
+            "queue_name": "training-lq",
+            "run_dir": held.RUN_DIR,
+            "suspended": True,
+        },
+        "side_effects": {
+            "api_mutations": 0,
+            "launch_authorized": False,
+            "scoring_authorized": False,
+        },
+        "privacy": {
+            "credentials_included": False,
+            "response_body_included": False,
+            "prompts_traces_flags_or_scores_included": False,
+        },
+    }
+    actual = {key: item for key, item in value.items() if key != "receipt_sha256"}
+    if actual != expected:
+        raise ValueError("authenticated DP8 preview receipt drifted")
+    if value.get("receipt_sha256") != self_hosted.digest_without(value, "receipt_sha256"):
+        raise ValueError("authenticated DP8 preview receipt digest drifted")
 
 
 def validate_transition_release(value: dict[str, Any]) -> None:
