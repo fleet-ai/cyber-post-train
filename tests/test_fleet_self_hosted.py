@@ -935,6 +935,23 @@ def test_session_trace_ingest_preserves_partial_receipt_without_mutation_retry()
     }
 
 
+def test_sanitized_failure_receipt_preserves_only_fleet_request_routing_facts() -> None:
+    receipt = self_hosted.sanitized_failure_receipt(
+        self_hosted.FleetRequestError("POST", "/v1/rollout-rewards", 422),
+        run_id="safe-run-id",
+        elapsed_seconds=12.3456,
+    )
+    assert receipt == {
+        "error_type": "FleetRequestError",
+        "elapsed_seconds": 12.346,
+        "run_id": "safe-run-id",
+        "method": "POST",
+        "route": "/v1/rollout-rewards",
+        "http_status": 422,
+    }
+    assert not ({"prompt", "trace", "score", "response"} & receipt.keys())
+
+
 def test_session_trace_ingest_also_bounds_serialized_payload_bytes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
