@@ -11,6 +11,7 @@ on:
       - 'tests/test_agent_assets.py'
       - 'tests/test_hosted_glm_rank29_a3a4_c2_successor_v1.py'
       - 'tests/test_hosted_glm_rank29_release_diagnostic_v1.py'
+      - 'tests/test_hosted_glm_rank29_release_diagnostic_v2.py'
       - 'skills/**'
       - 'pyproject.toml'
       - 'uv.lock'
@@ -63,4 +64,5 @@ jobs:
             tests/test_opencode_train_sweep.py \
             tests/test_agent_assets.py \
             tests/test_hosted_glm_rank29_a3a4_c2_successor_v1.py \
-            tests/test_hosted_glm_rank29_release_diagnostic_v1.py
+            tests/test_hosted_glm_rank29_release_diagnostic_v1.py \
+            tests/test_hosted_glm_rank29_release_diagnostic_v2.py
