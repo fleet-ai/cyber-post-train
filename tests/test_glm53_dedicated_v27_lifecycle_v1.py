@@ -1,3 +1,4 @@
+import json
 import subprocess
 from pathlib import Path
 
@@ -110,3 +111,19 @@ def test_v27_adapter_held_receipt_and_engine_restoration() -> None:
         live_engine.LIVE_STATE_SCHEMA,
         live_engine.RELEASE_SCHEMA,
     )
+    tracked_create = json.loads(
+        (
+            ROOT
+            / "docs/evidence/glm53-study/"
+            "2026-09-06-glm53-dedicated-v27-create-wrapper-held-v1.json"
+        ).read_text()
+    )
+    assert tracked_create == server.build_held()
+    tracked_watchdog = json.loads(
+        (
+            ROOT
+            / "docs/evidence/glm53-study/"
+            "2026-09-06-glm53-dedicated-v27-watchdog-adapter-held-v1.json"
+        ).read_text()
+    )
+    assert tracked_watchdog == adapter.build_held(tracked_watchdog["package_commit"])
