@@ -26,6 +26,18 @@
     },
     {
       "attempt": 4,
+      "cell_id": "sha256:ac3f5b1d7fb05d6689891bf9acb67942d1c6dc3174ff13160785bb0a61bc5e76",
+      "controller": "glm-hosted-s2",
+      "execution_generation": 1,
+      "execution_id": "sha256:d3b673f16e6cb31bc54adf4ee3d79c132ffbb6bd176b1e6de89314bd35b4bcde",
+      "model": "glm-5.3",
+      "plan_sha256": "sha256:c0cc69202751fbbea53dfeea98a62efe41b2638b4e9ad60307b0c0bdbeefd83f",
+      "run_id": "chris-glm53-ac-bulk-a-r026-a4-g1-493bc3d8",
+      "selection_rank": 26,
+      "task_version_id": "493bc3d8-7806-4e38-9bc3-e964a5c26f5b"
+    },
+    {
+      "attempt": 4,
       "cell_id": "sha256:f3921b5927bcf73a0df58ff991841db52f9b23f04cae5d482c5f7e8630308250",
       "controller": "glm-hosted-s1",
       "execution_generation": 1,
@@ -138,7 +150,7 @@
     "prompts_traces_flags_read": false,
     "scores_read": false
   },
-  "receipt_sha256": "sha256:c601cfd9d37c57114a83441a1a9685bbe89c788917c35aaa36e68f6e909d57a2",
+  "receipt_sha256": "sha256:8b932884071e5bf8a66338bb3a6c5e6429c73eebe92d1a11344833a188f6656a",
   "schema_version": "fleet-exact-pass4-supplemental-runtime-authority-v2",
   "execution_rollforwards": [
     {
