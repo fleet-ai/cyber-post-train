@@ -1,0 +1,73 @@
+{
+  "diagnostic_only": true,
+  "failed_objects": [
+    {
+      "configmap_immutable": true,
+      "configmap_name": "chris-q38-hosted-r015-whole-task-g20-package-v2",
+      "configmap_uid": "a93c42df-01a9-4fbc-a75c-122bc889fd6c",
+      "controller": "qwen-a",
+      "diagnostic_receipt_sha256": "sha256:a8776733ad2a91172f949e0a3d3d0c6eb2e791f39d4642ce48b47fdebc2e4adf",
+      "job_completion_time_utc": "2026-09-06T11:15:39Z",
+      "job_name": "chris-q38-hosted-r015-whole-task-g20-v2",
+      "job_reason": "BackoffLimitExceeded",
+      "job_uid": "c5d02921-3271-4186-89b8-65d227a44f2c",
+      "plan_sha256": "sha256:9f3b402b3f6ab261018d86bbe2cbc81e48a1f839d7a02b0e1b4112a458c069ce",
+      "pod_exit_code": 1,
+      "pod_name": "chris-q38-hosted-r015-whole-task-g20-v2-bzpgr",
+      "pod_restarts": 0,
+      "pod_uid": "d3e39095-adb0-40d9-91b2-95f9ae27693b",
+      "production_sfs_root": "/mnt/sfs/jobs/chris-q38-hosted-r015-whole-task-g20-v2",
+      "production_sfs_root_absent": true
+    },
+    {
+      "configmap_immutable": true,
+      "configmap_name": "chris-q38-hosted-r016-whole-task-g20-package-v2",
+      "configmap_uid": "ad31b0da-7ac5-481f-a73b-1bd4b4a063d7",
+      "controller": "qwen-b",
+      "diagnostic_receipt_sha256": "sha256:5bc410aac253179b6558bddc16d8aee15baebcc880b3d284f0a9fdd086fc0a1f",
+      "job_completion_time_utc": "2026-09-06T11:15:39Z",
+      "job_name": "chris-q38-hosted-r016-whole-task-g20-v2",
+      "job_reason": "BackoffLimitExceeded",
+      "job_uid": "ea058426-820e-4b0c-af9e-499f0350dbd7",
+      "plan_sha256": "sha256:d0571a1edec58f79fbdd27367d9bb27323e662e9513662a54f73213aa2b9c8e2",
+      "pod_exit_code": 1,
+      "pod_name": "chris-q38-hosted-r016-whole-task-g20-v2-5jwfc",
+      "pod_restarts": 0,
+      "pod_uid": "ff722cc1-e36d-4758-b7b6-f8edc8b8f4c6",
+      "production_sfs_root": "/mnt/sfs/jobs/chris-q38-hosted-r016-whole-task-g20-v2",
+      "production_sfs_root_absent": true
+    }
+  ],
+  "failure": {
+    "error_sha256": "sha256:479e069bb83952f1e78da1093e22edd061ceb95a9000044fcfaacf766ae6502e",
+    "error_type": "TypeError",
+    "last_completed_stage": null,
+    "missing_bulk_adapter_members": [
+      "CANARY_GATE_SCHEMA",
+      "COMMIT_RE",
+      "RECONCILIATION_GATE_SCHEMA",
+      "validate_all",
+      "validate_inventory_gate"
+    ],
+    "reservation_committed": false,
+    "root_cause": "bulk_adapter_contract_incomplete",
+    "runtime_failure_schema": "fleet-qwen38-hosted-whole-task-runtime-failure-v2"
+  },
+  "operational_base_commit": "bd5f5c2caef722f950592207c013b9d2f541a810",
+  "privacy": {
+    "credentials_included": false,
+    "prompts_traces_flags_included": false,
+    "scores_included": false,
+    "source_logs_read": false
+  },
+  "receipt_sha256": "sha256:6705c63327e3c9829171a4708fee58eca356a65f1a3004dd5de8966dbc1c327f",
+  "schema_version": "fleet-qwen38-hosted-g20v2-adapter-failure-incident-v1",
+  "statistical_effects": {
+    "accepted_receipts_created": 0,
+    "model_calls": 0,
+    "reservations_committed": 0,
+    "scored_sessions_created": 0,
+    "statistical_cells_consumed": 0
+  },
+  "status": "TERMINAL_INFRASTRUCTURE_FAILED"
+}

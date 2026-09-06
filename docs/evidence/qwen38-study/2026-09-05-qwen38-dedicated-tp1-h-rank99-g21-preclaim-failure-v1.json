@@ -1,0 +1,91 @@
+{
+  "schema_version": "fleet-qwen38-rank99-generation21-preclaim-failure-v1",
+  "status": "TERMINAL_INFRASTRUCTURE_INVALID_PRECLAIM",
+  "observed_at_utc": "2026-09-06T00:24:45Z",
+  "campaign_id": "chris-cyber-q38-glm53-exact-easiest100-pass4-v1",
+  "selection_rank": 99,
+  "execution_generation": 21,
+  "controller": {
+    "job_name": "chris-cyber-q38-r099-g21-package-reservation-v1",
+    "job_uid": "d4f62c2c-a4a4-403e-8005-b119d4372681",
+    "job_terminal_reason": "BackoffLimitExceeded",
+    "pod_name": "chris-cyber-q38-r099-g21-package-reservation-v1-qntrr",
+    "pod_uid": "74599cff-c10e-4a56-aafc-41152faa67d7",
+    "pod_exit_code": 1,
+    "pod_restarts": 0,
+    "pod_finished_at_utc": "2026-09-06T00:22:42Z",
+    "config_map_name": "chris-cyber-q38-r099-g21-package-reservation-v1",
+    "config_map_uid": "a6196b45-9aa5-40a0-81f2-aee3dace5a15",
+    "package_sha256": "sha256:72b34282eb4119b4abeeacbba15d873a0b679acd2736a40f11962c16a52b4b56",
+    "release_receipt_sha256": "sha256:aaa61ebaeb5fb388d10cf2dccc6af90042e17248edce8d5c7d4ce60002fdd91e",
+    "server_binding_sha256": "sha256:8005785b037ab664215300e2e5a7436cf3e8a165e957844bbf936719f28558e7"
+  },
+  "serverbound_package_canary": {
+    "path": "/mnt/sfs/jobs/chris-cyber-q38-r099-g21-serverbound-package-canary-v1/CANARY.json",
+    "receipt_sha256": "sha256:485da04468cd69e54cbb0fafcdfd9d2b4cefb77efa5271682cbd837b227443c7",
+    "file_sha256": "sha256:7cec8a50bba2722151aa3ebef735107dd36d46cdcac3f2b504ac20c5a717ccc9",
+    "job_uid": "4b2ef2c8-af8d-499f-b233-0fd15010aa4b",
+    "pod_uid": "a9711af2-1623-4a31-9738-7613b2a4e66f",
+    "config_map_uid": "5ce9f88d-df9d-4dd1-871a-7d9e314ec7bb",
+    "exit_code": 0,
+    "restarts": 0,
+    "side_effect_calls": 0
+  },
+  "deterministic_cause": {
+    "classification": "overbroad_authoritative_task_session_guard",
+    "source_commit": "8ab4e4d",
+    "source_path": "evals/fleet/qwen38_dedicated_rank99_gen21_v1.py",
+    "guard": "_task_sessions_zero",
+    "observed_task_key_session_rows": 15,
+    "exact_target_model_cell_or_execution_matches": 0,
+    "failure_boundary": "before_canonical_claim_or_output_root_creation",
+    "summary": "the packaged guard rejected every historical task-key session instead of only exact target model or execution identity collisions"
+  },
+  "generation21_execution_ids": [
+    "sha256:e66e5a1ecbe2803b7450623ebac5e1b61577ce2df8f1b07fb38a0a7d38eb2f73",
+    "sha256:a27d3af1231e4c04f172ec33a9dec0c1adaa933263eeeccfa14756a05d06019f",
+    "sha256:169443e2a7eea68bb864e80f33e14d43d0d05e6ecfd853f8210ea87168ddcbff",
+    "sha256:d5b2a1985618afc5b5715b116f72ce9c0064c9733cd78b4584df78d0cf298213"
+  ],
+  "fresh_get_only_reconciliation": {
+    "generation21_canonical_claim_paths_checked": 4,
+    "generation21_canonical_claim_paths_present": 0,
+    "generation21_attempt_and_reservation_output_roots_checked": 5,
+    "generation21_attempt_and_reservation_output_roots_present": 0,
+    "task_session_rows_checked": 15,
+    "session_get_requests": 1,
+    "exact_target_model_cell_or_execution_session_matches": 0,
+    "accepted_outcome_matches": 0,
+    "model_calls": 0,
+    "task_instance_calls": 0,
+    "verifier_calls": 0,
+    "scoring_calls": 0,
+    "api_mutations": 0
+  },
+  "server_release": {
+    "api_run_id": "ft-run-9dd538fb",
+    "rayjob_uid": "68551697-315c-4f75-aed1-c4c79518bbb5",
+    "workload_uid": "ff000a6d-ef29-483e-8d81-0709d9516653",
+    "head_pod_uid": "c7c7a68d-04d2-40b3-8361-5dec2b2cc0d1",
+    "service_uid": "65c44f0e-ef16-4d08-9e15-314d026f1a65",
+    "kubernetes_objects_present_after_release": 0,
+    "released_before_idle_deadline": true
+  },
+  "disposition": {
+    "statistical_cells_accepted": 0,
+    "generation21_retry_allowed": false,
+    "generation21_identity_reuse_prohibited": true,
+    "fresh_execution_generation_required": true,
+    "next_generation": 22,
+    "scoring_launch_authorized": false,
+    "required_fix": "filter authoritative sessions by exact frozen target model or cell, execution, and run identity; apply the same filter before and after reservation",
+    "required_regression": "unrelated historical task-key sessions pass; any exact target model or cell, execution, or run identity session fails and post-reservation collision rolls back all claims",
+    "required_prelaunch_gate": "exact final rendered generation22 cluster package must pass the inert model-boundary canary before another GPU server is allocated"
+  },
+  "privacy": {
+    "scores_read": false,
+    "prompts_traces_flags_read": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:8d8e70edae83d03dc8d54511f7a358db318ba8d428585d558d96d38d743c9538"
+}

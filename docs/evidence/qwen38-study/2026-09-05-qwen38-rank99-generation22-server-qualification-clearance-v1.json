@@ -1,0 +1,67 @@
+{
+  "schema_version": "fleet-qwen38-rank99-generation22-server-qualification-clearance-v1",
+  "status": "CLEAR_FOR_ONE_DEDICATED_TP1_I_SERVER_QUALIFICATION_ONLY",
+  "observed_at_utc": "2026-09-06T00:37:29Z",
+  "campaign_id": "chris-cyber-q38-glm53-exact-easiest100-pass4-v1",
+  "selection_rank": 99,
+  "execution_generation": 22,
+  "preserver_clearance": {
+    "path": "docs/evidence/qwen38-study/2026-09-05-qwen38-rank99-generation22-preserver-clearance-v1.json",
+    "receipt_sha256": "sha256:84f6467e778fa0ba23f545d78911eafa7a09fb8793048c49348861e61d646b67",
+    "file_sha256": "sha256:e0ff14d78595da603363d7d631694c24dc6c1fddd19dc2f87000b39a82c956f2"
+  },
+  "failed_preclaim_canary_v1": {
+    "path": "docs/evidence/qwen38-study/2026-09-05-qwen38-rank99-generation22-preclaim-canary-v1-terminal.json",
+    "receipt_sha256": "sha256:ea7f1d9aa8951977ec49cf1000bd2ad5ddbd2047dfc4a0256b460c7c2280eeb3",
+    "file_sha256": "sha256:e0cb499c81858d861d657c8777ec18cd4f69a39999ace9be68af07df1306eaf5",
+    "scored_identities_consumed": false
+  },
+  "corrected_exact_preclaim_canary_v2": {
+    "path": "/mnt/sfs/jobs/chris-cyber-q38-r099-g22-exact-preclaim-canary-v2/CANARY.json",
+    "receipt_sha256": "sha256:94875e17d736d3871548b0af6ca1f8174b1b4b5acc3b169e645871cba5ef53dd",
+    "file_sha256": "sha256:84cb0432f4f42fa21ff242776e5e3ce445e31265eb507c2ddd205b64fbadbd86",
+    "package_sha256": "sha256:a80f6e6e58233cce677fb2c746f90036b89e11eff504408bef8f6d7306327fdc",
+    "job_uid": "1347ae0e-2243-445c-8222-91e1add73d07",
+    "pod_uid": "6864661b-56aa-49a3-a0eb-8c710e9e4541",
+    "config_map_uid": "3ee512c9-9a46-4778-aa15-9cffd891fb44",
+    "status": "PASSED_EXACT_PRECLAIM_WITH_CLAIMS_DISABLED",
+    "session_counts_before_and_after": [15, 15],
+    "exact_session_collisions": 0,
+    "claims_outputs_model_task_session_verifier_scoring_calls": 0
+  },
+  "successor_execution_ids": [
+    "sha256:c067f67398e0df670d43f51f2a37ee0d404c1baf80c2c8d61fd59a7c2c79f2c8",
+    "sha256:62bb7a8cc870918a605b0b5c3771eefd2b27c9c0313481f063e4aab33f1fd442",
+    "sha256:12898c4ed8d63666c88be4a4a63ff333b2062351c304508d4ad5e49d86793a1e",
+    "sha256:4ec4ba245de88cf0f738575cdc3c3c7d9e8d86c26eed5ffe8434e9ad06ba418b"
+  ],
+  "fresh_get_only_reconciliation": {
+    "generation22_canonical_claim_paths_checked": 4,
+    "generation22_canonical_claim_paths_present": 0,
+    "generation22_attempt_and_reservation_output_roots_checked": 5,
+    "generation22_attempt_and_reservation_output_roots_present": 0,
+    "task_session_rows_checked": 15,
+    "session_get_requests": 1,
+    "exact_target_model_cell_or_execution_session_matches": 0,
+    "accepted_outcome_matches": 0,
+    "api_mutations": 0
+  },
+  "disposition": {
+    "generation20_reuse_prohibited": true,
+    "generation21_reuse_prohibited": true,
+    "generation22_only": true,
+    "dedicated_server_count_authorized": 1,
+    "authorized_server_label": "TP1-i",
+    "dedicated_server_qualification_launch_authorized": true,
+    "scoring_launch_authorized": false,
+    "server_bound_release_required_after_exact_actual_opencode_parity": true,
+    "fresh_duplicate_reconciliation_required_before_scoring": true
+  },
+  "objects_created": false,
+  "privacy": {
+    "scores_read": false,
+    "prompts_traces_flags_read": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:efb3b34dc571bb33d22ea50b807ff23c61cde9807a417c3464c0d5954f8b8cc3"
+}

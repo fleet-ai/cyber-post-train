@@ -1,0 +1,56 @@
+{
+  "failure": {
+    "failed_package_schema": "fleet-qwen38-hosted-whole-task-release-gate-package-v5",
+    "failure_code": "release_gate_package_source_invalid",
+    "last_stage": "package-source",
+    "required_package_schema": "fleet-qwen38-hosted-whole-task-release-gate-package-v1",
+    "root_cause": "observer_package_schema_contract_mismatch"
+  },
+  "job": {
+    "failed_at_utc": "2026-09-06T11:31:29Z",
+    "name": "chris-q38-hosted-r15-r16-release-gate-v5",
+    "reason": "BackoffLimitExceeded",
+    "uid": "5bfbf278-9b0c-436e-b219-7a876bca7694"
+  },
+  "pod": {
+    "exit_code": 1,
+    "finished_at_utc": "2026-09-06T11:31:26Z",
+    "name": "chris-q38-hosted-r15-r16-release-gate-v5-wjf7b",
+    "restart_count": 0,
+    "uid": "c223a93b-12ae-4abb-8170-8bb75dace866"
+  },
+  "privacy": {
+    "credentials_included": false,
+    "prompts_traces_flags_included": false,
+    "scores_included": false,
+    "source_logs_read": false
+  },
+  "receipt_sha256": "sha256:35a02715a0eb3eb58cc4c42b5ab606586846763bb4ce27e169e3801a0963a9fe",
+  "runtime_failure_receipt": {
+    "api_mutations": 0,
+    "credentials_included": false,
+    "error_sha256": "sha256:09fbb2073ce4935974b8aac2d9215611d17df31bdfc72db305c9943b59b3241f",
+    "error_type": "GateError",
+    "failure_code": "release_gate_package_source_invalid",
+    "job_uid": "5bfbf278-9b0c-436e-b219-7a876bca7694",
+    "last_stage": "package-source",
+    "model_calls": 0,
+    "pod_uid": "c223a93b-12ae-4abb-8170-8bb75dace866",
+    "prompts_traces_flags_included": false,
+    "receipt_sha256": "sha256:e21732c46eb61777bd8429918d667c9741239ace694dc7f8e1070daf99efdba3",
+    "schema_version": "fleet-qwen38-hosted-release-gate-failure-v1",
+    "scores_included": false,
+    "scoring_calls": 0,
+    "session_mutations": 0,
+    "status": "FAILED",
+    "task_calls": 0,
+    "verifier_calls": 0
+  },
+  "schema_version": "fleet-qwen38-hosted-release-observer-v5-failure-incident-v1",
+  "statistical_effects": {
+    "model_calls": 0,
+    "scored_sessions_created": 0,
+    "statistical_cells_consumed": 0
+  },
+  "status": "TERMINAL_INFRASTRUCTURE_FAILED"
+}

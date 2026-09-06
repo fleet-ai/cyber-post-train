@@ -1,0 +1,25 @@
+{
+  "bootstrap_stages": [
+    {"file_sha256":"sha256:56585c9f258c087cd539a3c5625fae8e2066ae0dd8cc9ffabd661ac24e06271b","receipt_sha256":"sha256:66daabf2bf03d3e5dc68637fac980f22156f0ac1835a815b1bec1a5da4ada6fb","stage":"00-started"},
+    {"file_sha256":"sha256:123d2db8c05597937eaff97203f027264581587ff16338218a7c2598e2c6ba2d","receipt_sha256":"sha256:a2057a2bfac5f069cff4a19f94f997f58677ae7922589d35ec56e3ae4bbdac13","stage":"01-package-source-validated"},
+    {"file_sha256":"sha256:08bed0958fe1ec0079a73847b7dddaa756f0744e883ec053e28f876e80f39f1c","receipt_sha256":"sha256:4872da6c46f0e3c1894debd80166f6b456efcaf1916220965e32e50086fb012f","stage":"02-sources-installed"},
+    {"file_sha256":"sha256:b087e991cdfb993d9b51af07aef9f5df4edce89fa1aaefb76eb810570d3a2005","receipt_sha256":"sha256:91bce1e52746fcec17e88b756b02e3982e017fe37fc338d196bbcb10d2d4d4f1","stage":"03-docker-ready"},
+    {"file_sha256":"sha256:cf3c587eb5cd2327d2cae3c564c75ddee6d49de021c540003938bfa0b60497f6","receipt_sha256":"sha256:075757ee0778eeb8430b40f123394e60eeff2a0952c95b5bd505a1bb06c0207b","stage":"04-image-built"},
+    {"file_sha256":"sha256:81e6548aa3c91b216d1dab76ed5eb73de388afa0241ae782f19d6fc53e7de7fa","receipt_sha256":"sha256:87f5c16429574d9ddac8ea8f0ae6d95d98533155067103cf5fbef08ba8094bb9","stage":"05-harness-version-validated"},
+    {"file_sha256":"sha256:95c7d4947561fad2439d855c88b5750e685531d28ff30b8027d8552d4e2b0a79","receipt_sha256":"sha256:1163eb117640d13a31ed7b3965d2e5f1f55d7d33ffd01941352c1fc4cf0069a7","stage":"06-runtime-exec"}
+  ],
+  "configmap":{"immutable":true,"name":"chris-q38-hosted-whole-task-runtime-gate-canary-v2-package","uid":"b8fdc1c3-5343-4490-8a1c-b934279769c8"},
+  "disposition":{"canary_v2_identity_retry_authorized":false,"fresh_score_free_canary_requires_new_identity":true,"phase_tracked_runtime_gate_required":true,"scored_successor_authorized":false},
+  "failure_evidence":{"error_sha256":"sha256:7bc266369121c322081301fd75452411a597ac4724e8ad07bca9291a826ee05e","error_type":"ValueError","last_completed_stage":"06-runtime-exec","runtime_gate_canary_pass_receipts_present":0,"sanitized_runtime_failure_receipts_present":1},
+  "job":{"completion_observed_at_utc":"2026-09-06T09:38:19Z","failed":1,"name":"chris-q38-hosted-whole-task-runtime-gate-canary-v2","reason":"BackoffLimitExceeded","uid":"08bd69ff-b3e7-47c0-833d-5ca9bfff5945"},
+  "observed_at_utc":"2026-09-06T09:38:19Z",
+  "package_source_receipt_sha256":"sha256:a64a0898b0cefb05ad590d0faf2fecb2bc33c176c522680e07d1a654f124738a",
+  "pod":{"exit_code":1,"finished_at_utc":"2026-09-06T09:38:14Z","name":"chris-q38-hosted-whole-task-runtime-gate-canary-v2-7ctgs","phase":"Failed","restarts":0,"uid":"580f5224-c08a-46cb-bd49-e17b03e7ac93"},
+  "privacy":{"credentials_included":false,"prompts_traces_flags_read":false,"scores_read":false},
+  "receipt_sha256":"sha256:cbfb5d0e1e9e7fa6e0333186cb5b725606bb0c480f16b73cfbfac9afcf316a8a",
+  "rendered_manifest_sha256":"sha256:68d08197c3aa53d27cc33e58bdca081d1cf18d22aa6f5be8ef14de2fd6123395",
+  "runtime_failure_receipt":{"file_sha256":"sha256:40c32ab981ff5c9d0c7bd0263814e3e3c86ad15f23d23a09da69c9cbe71d685e","path":"/mnt/sfs/jobs/chris-q38-hosted-whole-task-runtime-gate-canary-v2-diagnostic/RUNTIME-GATE-CANARY-FAILED.json","receipt_sha256":"sha256:ad8cf0837076f6450b9a2fb3b5106dd5cc6a6f0c296ea49465df4a2207b1b9c8"},
+  "schema_version":"fleet-qwen38-hosted-whole-task-runtime-gate-canary-failure-v2",
+  "score_blind_effects":{"accepted_evidence_created":0,"canonical_claims_created":0,"endpoint_leases_acquired":0,"model_calls":0,"output_roots_created":0,"scoring_calls":0,"session_calls":0,"task_calls":0,"verifier_calls":0},
+  "status":"FAILED_UNCLASSIFIED_INSIDE_RUNTIME_GATE"
+}

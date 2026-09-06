@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import json
 import uuid
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -71,9 +72,9 @@ def _write(path: Path, value: dict) -> Path:
     return path
 
 
-def _evidence_manifest(entries: list[dict]) -> dict:
+def _evidence_manifest(entries: list[dict], *, schema: str | None = None) -> dict:
     value = {
-        "schema_version": ledger.EVIDENCE_MANIFEST_SCHEMA,
+        "schema_version": schema or ledger.EVIDENCE_MANIFEST_SCHEMA,
         "campaign_id": exact.EXPECTED_CAMPAIGN_ID,
         "campaign_path": str(CAMPAIGN.relative_to(ROOT)),
         "entries": entries,
@@ -406,6 +407,147 @@ def test_active_and_nonrepeatable_claims_are_distinct_states(
     assert result["models"]["glm-5.3"]["blocked_nonrepeatable"] == 1
 
 
+def _rank99_rollforward_evidence(
+    authority: ledger.Authority,
+    *,
+    state: str = "active",
+    tmp_path: Path | None = None,
+) -> tuple[ledger.Evidence, ledger.Evidence]:
+    cell_id, binding = next(iter(authority.rollforward_precedence.items()))
+    prior_execution_id, successor_execution_id, prior_receipt, successor_claim = binding
+    blocked = ledger.Evidence(
+        state="blocked_nonrepeatable",
+        cell_id=cell_id,
+        execution_id=prior_execution_id,
+        execution_generation=19,
+        receipt_sha256=prior_receipt,
+        path=Path("/score-blind/prior-claim.json"),
+    )
+    current_path = Path("/score-blind/current-evidence.json")
+    current_receipt = successor_claim
+    if state == "accepted":
+        assert tmp_path is not None
+        accepted_receipt = {"claim_sha256": successor_claim}
+        accepted_receipt["receipt_sha256"] = self_hosted.digest_without(
+            accepted_receipt, "receipt_sha256"
+        )
+        current_path = _write(tmp_path / "accepted.json", accepted_receipt)
+        current_receipt = accepted_receipt["receipt_sha256"]
+    current = ledger.Evidence(
+        state=state,
+        cell_id=cell_id,
+        execution_id=successor_execution_id,
+        execution_generation=23,
+        receipt_sha256=current_receipt,
+        path=current_path,
+    )
+    return blocked, current
+
+
+def test_exact_append_only_rollforward_selects_newer_active_generation(
+    authority: ledger.Authority,
+) -> None:
+    blocked, active = _rank99_rollforward_evidence(authority)
+    result = ledger.reconcile(
+        authority,
+        accepted=[],
+        active_claims=[active],
+        blocked_claims=[blocked],
+        tombstones=[],
+    )
+    row = next(item for item in result["cells"] if item["cell_id"] == active.cell_id)
+    assert row["state"] == "active"
+    assert row["latest_execution_generation"] == 23
+    assert result["models"]["qwen3.8-27b"]["blocked_nonrepeatable"] == 0
+
+
+def test_exact_append_only_rollforward_allows_validated_successor_acceptance(
+    tmp_path: Path, authority: ledger.Authority,
+) -> None:
+    blocked, accepted = _rank99_rollforward_evidence(
+        authority, state="accepted", tmp_path=tmp_path
+    )
+    result = ledger.reconcile(
+        authority,
+        accepted=[accepted],
+        active_claims=[],
+        blocked_claims=[blocked],
+        tombstones=[],
+    )
+    row = next(item for item in result["cells"] if item["cell_id"] == accepted.cell_id)
+    assert row["state"] == "accepted"
+    assert row["latest_execution_generation"] == 23
+
+    receipt = json.loads(accepted.path.read_text())
+    receipt["claim_sha256"] = "sha256:" + "0" * 64
+    receipt["receipt_sha256"] = self_hosted.digest_without(receipt, "receipt_sha256")
+    changed_path = _write(tmp_path / "accepted-drift.json", receipt)
+    changed = replace(
+        accepted,
+        receipt_sha256=receipt["receipt_sha256"],
+        path=changed_path,
+    )
+    with pytest.raises(ledger.LedgerError, match="no exact append-only roll-forward"):
+        ledger.reconcile(
+            authority,
+            accepted=[changed],
+            active_claims=[],
+            blocked_claims=[blocked],
+            tombstones=[],
+        )
+
+
+def test_unmapped_or_receipt_drifted_rollforward_fails_closed(
+    authority: ledger.Authority,
+) -> None:
+    blocked, active = _rank99_rollforward_evidence(authority)
+    without_mapping = replace(authority, rollforward_precedence={})
+    with pytest.raises(ledger.LedgerError, match="no exact append-only roll-forward"):
+        ledger.reconcile(
+            without_mapping,
+            accepted=[],
+            active_claims=[active],
+            blocked_claims=[blocked],
+            tombstones=[],
+        )
+
+    drifted = replace(
+        authority,
+        rollforward_precedence={
+            **authority.rollforward_precedence,
+            active.cell_id: (
+                blocked.execution_id,
+                active.execution_id,
+                blocked.receipt_sha256,
+                "sha256:" + "0" * 64,
+            ),
+        },
+    )
+    with pytest.raises(ledger.LedgerError, match="no exact append-only roll-forward"):
+        ledger.reconcile(
+            drifted,
+            accepted=[],
+            active_claims=[active],
+            blocked_claims=[blocked],
+            tombstones=[],
+        )
+
+
+def test_supplemental_rollforward_rejects_tampered_clearance_binding(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = ROOT / ledger.SUPPLEMENTAL_RUNTIME_AUTHORITY_PATH
+    value = json.loads(source.read_text())
+    value["execution_rollforwards"][0]["preserver_clearance_receipt_sha256"] = (
+        "sha256:" + "0" * 64
+    )
+    value["receipt_sha256"] = self_hosted.digest_without(value, "receipt_sha256")
+    changed = _write(tmp_path / "supplemental.json", value)
+    monkeypatch.setattr(ledger, "SUPPLEMENTAL_RUNTIME_AUTHORITY_PATH", changed)
+    with pytest.raises(ledger.LedgerError, match="preserver_clearance binding drifted"):
+        ledger._build_authority(ROOT, CAMPAIGN)
+
+
 def test_fixed_historical_adapters_remain_score_blind(
     tmp_path: Path, authority: ledger.Authority
 ) -> None:
@@ -539,6 +681,410 @@ def test_evidence_manifest_rejects_receipt_digest_drift(
             campaign=CAMPAIGN,
             mappings=mappings,
         )
+
+
+def test_v2_evidence_manifest_binds_operational_incident_without_counting_a_cell(
+    tmp_path: Path, authority: ledger.Authority, capsys: pytest.CaptureFixture[str]
+) -> None:
+    incident = {
+        "schema_version": "test-score-blind-operational-incident-v1",
+        "status": "TERMINAL_PRECLAIM_INFRASTRUCTURE_FAILURE",
+        "scores_included": False,
+        "prompts_or_traces_included": False,
+    }
+    incident["receipt_sha256"] = self_hosted.digest_without(incident, "receipt_sha256")
+    incident_path = _write(tmp_path / "incident.json", incident)
+    manifest = _write(
+        tmp_path / "manifest-v2.json",
+        _evidence_manifest(
+            [
+                {
+                    "kind": "accepted",
+                    "path": (
+                        "docs/evidence/qwen38-study/"
+                        "2026-09-05-qwen38-generation15-accepted-gate-v1.json"
+                    ),
+                    "expected_receipt_sha256": (
+                        "sha256:e0aef9a97d146fe5fcc686efafd4399bd7c2ee65a325e64fc089613507ab6745"
+                    ),
+                },
+                {
+                    "kind": "operational_incident",
+                    "path": str(Path("/mnt/sfs/incidents") / incident_path.name),
+                    "expected_receipt_sha256": incident["receipt_sha256"],
+                },
+            ],
+            schema=ledger.EVIDENCE_MANIFEST_V2_SCHEMA,
+        ),
+    )
+
+    assert (
+        ledger.main(
+            [
+                "--repo-root",
+                str(ROOT),
+                "--evidence-manifest",
+                str(manifest),
+                "--mount-map",
+                f"/mnt/sfs/incidents={tmp_path}",
+            ]
+        )
+        == 0
+    )
+    output = capsys.readouterr().out
+    assert "qwen3.8-27b  400     1" in output
+
+
+def test_supplemental_runtime_authority_resolves_ambiguous_bulk_identity(
+    authority: ledger.Authority,
+) -> None:
+    key = (
+        "sha256:83d88543af87e4cb8983953165582ff724ca4db7f8dfb5d40b7a549c9ec8902b",
+        "sha256:fcad0a06b3321a28675af9a2e3e826574ceffbfaa2e4ff2b3428923fbf87e2e6",
+    )
+
+    plan, item = ledger._bulk_pair(authority, key, "glm-hosted-s2") or ({}, {})
+
+    assert plan["plan_sha256"] == (
+        "sha256:c0cc69202751fbbea53dfeea98a62efe41b2638b4e9ad60307b0c0bdbeefd83f"
+    )
+    assert item["run_id"] == "chris-glm53-ac-bulk-a-r026-a2-g1-493bc3d8"
+    assert item["task_key"] == authority.cells[key[0]]["task_key"]
+
+
+def test_supplemental_runtime_authority_resolves_live_glm_rank27_attempt3(
+    authority: ledger.Authority,
+) -> None:
+    key = (
+        "sha256:600b2af93e99baa4c0442f0b0b48e36e5183ae42135a9549918c61b49ccd9f71",
+        "sha256:a8227c016231192540bdba4d3058f284727c8a97a5d7e50ea378f8294bc434cb",
+    )
+
+    plan, item = ledger._bulk_pair(authority, key, "glm-hosted-s2") or ({}, {})
+
+    assert plan == {
+        "controller": "glm-hosted-s2",
+        "plan_sha256": (
+            "sha256:c0cc69202751fbbea53dfeea98a62efe41b2638b4e9ad60307b0c0bdbeefd83f"
+        ),
+    }
+    assert item["run_id"] == "chris-glm53-ac-bulk-b-r027-a3-g1-36dd3619"
+    assert item["selection_rank"] == 27
+    assert item["attempt"] == 3
+    assert item["task_key"] == authority.cells[key[0]]["task_key"]
+
+
+def test_supplemental_runtime_authority_resolves_live_glm_rank27_attempt4(
+    authority: ledger.Authority,
+) -> None:
+    key = (
+        "sha256:22b36c9e6b2f43ae2fcce7b6d729cb0791375f38dd8da770968bb295f8c14bbc",
+        "sha256:ca83617d5bec99592b0e175afe44d44fa8a611958c97efa21fe9c942205dff9f",
+    )
+
+    plan, item = ledger._bulk_pair(authority, key, "glm-hosted-s2") or ({}, {})
+
+    assert plan == {
+        "controller": "glm-hosted-s2",
+        "plan_sha256": (
+            "sha256:c0cc69202751fbbea53dfeea98a62efe41b2638b4e9ad60307b0c0bdbeefd83f"
+        ),
+    }
+    assert item["run_id"] == "chris-glm53-ac-bulk-b-r027-a4-g1-36dd3619"
+    assert item["selection_rank"] == 27
+    assert item["attempt"] == 4
+    assert item["task_key"] == authority.cells[key[0]]["task_key"]
+
+
+@pytest.mark.parametrize(
+    ("attempt", "cell_id", "execution_id"),
+    [
+        (
+            1,
+            "sha256:b036345f7f10180cfc4f9226cf495943e528394b3ca096634c89498010f80f34",
+            "sha256:bc7c2d7d0d4330d1cfe5634872ef498092457250496d892de2cb7feb6ddde741",
+        ),
+        (
+            2,
+            "sha256:161518898b56ae52cfe4dbb15d9fc82499c59a1e48c4e625389c46449473ec0b",
+            "sha256:dc9833e1f42f57bdc9fef690e07c83bb0a3207986c0d51d935b13f1de3577b2a",
+        ),
+        (
+            3,
+            "sha256:a39b169770345597cd53c3d8042254e3298313e3e161a4600388f2f9e26a5410",
+            "sha256:3ac02e2bb743218ccc72f6d3b5b86a864831457398665e6cc36b5897336540bf",
+        ),
+        (
+            4,
+            "sha256:31cdbce338d8afb2d61c59cdd64d3edf91e420e393889bc0d7828206b12d75f0",
+            "sha256:51419b57963a75e7c387b9bae607a2760e55cf56c5267e8f26b3112b2a0b0c11",
+        ),
+    ],
+)
+def test_supplemental_runtime_authority_resolves_live_glm_rank28(
+    authority: ledger.Authority,
+    attempt: int,
+    cell_id: str,
+    execution_id: str,
+) -> None:
+    plan, item = ledger._bulk_pair(
+        authority, (cell_id, execution_id), "glm-hosted-s2"
+    ) or ({}, {})
+
+    assert plan == {
+        "controller": "glm-hosted-s2",
+        "plan_sha256": (
+            "sha256:c0cc69202751fbbea53dfeea98a62efe41b2638b4e9ad60307b0c0bdbeefd83f"
+        ),
+    }
+    assert item["run_id"] == (
+        f"chris-glm53-ac-bulk-a-r028-a{attempt}-g1-c3fbe2bd"
+    )
+    assert item["selection_rank"] == 28
+    assert item["attempt"] == attempt
+    assert item["task_key"] == authority.cells[cell_id]["task_key"]
+
+
+def test_supplemental_runtime_authority_resolves_live_glm_rank29_attempt1(
+    authority: ledger.Authority,
+) -> None:
+    key = (
+        "sha256:77dde32eb233a7bfae8594b2873caff0279d7e67600d51f2ce384dd486cb1361",
+        "sha256:0312a3507bbf4f6763a7ea84815053c6d89c540632458a143e3e5e9a61eda9a4",
+    )
+
+    plan, item = ledger._bulk_pair(authority, key, "glm-hosted-s2") or ({}, {})
+
+    assert plan == {
+        "controller": "glm-hosted-s2",
+        "plan_sha256": (
+            "sha256:c0cc69202751fbbea53dfeea98a62efe41b2638b4e9ad60307b0c0bdbeefd83f"
+        ),
+    }
+    assert item["run_id"] == "chris-glm53-ac-bulk-b-r029-a1-g1-b51782f9"
+    assert item["selection_rank"] == 29
+    assert item["attempt"] == 1
+    assert item["task_key"] == authority.cells[key[0]]["task_key"]
+
+
+def test_supplemental_runtime_authority_resolves_live_glm_rank3_attempt1(
+    authority: ledger.Authority,
+) -> None:
+    key = (
+        "sha256:7568e59b6949088e67f3a98a566a22927640771abfd331ce5094364eb7cbac04",
+        "sha256:4c64408156e2d084a6bc5bf593be06dc82203bdc7236f1bf511f642e730f1cb0",
+    )
+
+    plan, item = ledger._bulk_pair(authority, key, "glm-hosted-r3-a1-canary") or (
+        {},
+        {},
+    )
+
+    assert plan == {
+        "controller": "glm-hosted-r3-a1-canary",
+        "plan_sha256": (
+            "sha256:2cb3111dd8af5e5b165f864fec71d7697cf51f3c44e84d3ead5d0e5d76b29fc5"
+        ),
+    }
+    assert item["run_id"] == "chris-glm53-ac-bulk-b-r003-a1-g1-33d37078"
+    assert item["selection_rank"] == 3
+    assert item["attempt"] == 1
+    assert item["task_key"] == authority.cells[key[0]]["task_key"]
+
+
+@pytest.mark.parametrize(
+    ("attempt", "cell_id", "execution_id"),
+    [
+        (
+            2,
+            "sha256:57f0ec78f93760d980f31df4dac3fc6daf38f2849ee2949d943e3a41f4a61e2d",
+            "sha256:6e93f24d70b8d76f936db9a910492a2479bca86c3a12cbc8c2a5592f16335cea",
+        ),
+        (
+            3,
+            "sha256:85d8da4373e2dbd30100aca88b08b884f3ef65febf71f77060ae67246df37c8b",
+            "sha256:53eb697586931da3dd195636c3395ae58af60fcae1d383d5eb5f3aee960357d7",
+        ),
+        (
+            4,
+            "sha256:f5b26b9037dd0f02ad2bb22401c9d0be8b9ab4d98641fdb091cc5f1bf6cddb44",
+            "sha256:0ca50d2ac1458b5335e17d76efb2a244b92bcdd84df0d21dac1164bb0f392ade",
+        ),
+    ],
+)
+def test_supplemental_runtime_authority_resolves_terminal_glm_rank3_successor(
+    authority: ledger.Authority,
+    attempt: int,
+    cell_id: str,
+    execution_id: str,
+) -> None:
+    plan, item = ledger._bulk_pair(
+        authority, (cell_id, execution_id), "glm-hosted-r3-successor"
+    ) or ({}, {})
+
+    assert plan == {
+        "controller": "glm-hosted-r3-successor",
+        "plan_sha256": (
+            "sha256:0584e2701d2f47c1bb8335f605faef289e4bbc8959c03ecac9fee7c7dc2e5c19"
+        ),
+    }
+    assert item["run_id"] == f"chris-glm53-ac-bulk-b-r003-a{attempt}-g1-33d37078"
+    assert item["selection_rank"] == 3
+    assert item["attempt"] == attempt
+    assert item["task_key"] == authority.cells[cell_id]["task_key"]
+
+
+@pytest.mark.parametrize(
+    ("attempt", "cell_id", "execution_id", "controller", "generation"),
+    [
+        (
+            2,
+            "sha256:5a82e16e0892f64f9bc2f751b7fc54bea96ed856c4782947f24ab6e2da3858eb",
+            "sha256:103a5fff50b4de20ed0d36c135cb36b9d99dd237f5df7ecb14007cf4cdc45f4e",
+            "glm-hosted-s2",
+            1,
+        ),
+        (
+            3,
+            "sha256:bd6f3cc1524132f17b48bb6b655ad047b82858deaf58fdbfa6888658a45c7a3b",
+            "sha256:6df2e9eb387b1d6cf2cbd5c1e82d955f5a90b07d44f0cfd4ba4d83139e1cf993",
+            "glm-hosted-r29-a3a4-successor",
+            2,
+        ),
+        (
+            4,
+            "sha256:414d1bc62c3e9af45b63cea021bf4be8e8584905c0298225f209f2b7ab58e821",
+            "sha256:708601826b6acefa693d49318475fceca0541095af3f5422d10e7c7b15e1a72b",
+            "glm-hosted-r29-a3a4-successor",
+            2,
+        ),
+    ],
+)
+def test_supplemental_runtime_authority_resolves_terminal_glm_rank29(
+    authority: ledger.Authority,
+    attempt: int,
+    cell_id: str,
+    execution_id: str,
+    controller: str,
+    generation: int,
+) -> None:
+    plan, item = ledger._bulk_pair(
+        authority, (cell_id, execution_id), controller
+    ) or ({}, {})
+
+    assert plan["controller"] == controller
+    assert item["run_id"] == (
+        f"chris-glm53-ac-bulk-b-r029-a{attempt}-g{generation}-b51782f9"
+    )
+    assert item["selection_rank"] == 29
+    assert item["attempt"] == attempt
+    assert item["execution_generation"] == generation
+    assert item["task_key"] == authority.cells[cell_id]["task_key"]
+
+
+def test_v48_manifest_replaces_terminal_glm_claims_and_is_self_digesting() -> None:
+    path = ROOT / (
+        "docs/evidence/qwen38-study/"
+        "2026-09-05-exact-pass4-ledger-evidence-snapshot-v48.json"
+    )
+    value = ledger.load_receipt(path)
+    paths = {entry["path"]: entry for entry in value["entries"]}
+
+    assert value["schema_version"] == ledger.EVIDENCE_MANIFEST_V2_SCHEMA
+    assert value["receipt_sha256"] == self_hosted.digest_without(
+        value, "receipt_sha256"
+    )
+    assert value["privacy"] == {
+        "flags_read": False,
+        "prompts_read": False,
+        "scores_read": False,
+        "traces_read": False,
+    }
+    assert not {
+        "/mnt/sfs/cell-execution-claims/opencode11827-autocontinue-v1/"
+        "4c64408156e2d084a6bc5bf593be06dc82203bdc7236f1bf511f642e730f1cb0.json",
+        "/mnt/sfs/cell-execution-claims/opencode11827-autocontinue-v1/"
+        "0312a3507bbf4f6763a7ea84815053c6d89c540632458a143e3e5e9a61eda9a4.json",
+    }.intersection(paths)
+    assert paths[
+        "/mnt/sfs/jobs/chris-glm53-exact100-hosted-r029-a3a4-successor-v1/"
+        "accepted/chris-glm53-ac-bulk-b-r029-a4-g2-b51782f9.json"
+    ] == {
+        "kind": "accepted",
+        "path": (
+            "/mnt/sfs/jobs/chris-glm53-exact100-hosted-r029-a3a4-successor-v1/"
+            "accepted/chris-glm53-ac-bulk-b-r029-a4-g2-b51782f9.json"
+        ),
+        "expected_receipt_sha256": (
+            "sha256:c33f2540b30693948417f1a5b9d138db85af13562031472f141d48fd15c196bf"
+        ),
+    }
+    assert paths[
+        "/mnt/sfs/cell-execution-claims/opencode11827-autocontinue-v1/"
+        "103a5fff50b4de20ed0d36c135cb36b9d99dd237f5df7ecb14007cf4cdc45f4e.json"
+    ]["kind"] == "nonrepeatable_claim"
+
+
+def test_v48_live_validation_receipt_is_exact_and_score_blind() -> None:
+    path = ROOT / (
+        "docs/evidence/glm53-study/"
+        "2026-09-06-glm53-ledger-v48-live-validation.json"
+    )
+    value = ledger.load_receipt(path)
+
+    assert value["status"] == "PASSED_SCORE_BLIND_800_CELL_RECONCILIATION"
+    assert value["receipt_sha256"] == self_hosted.digest_without(
+        value, "receipt_sha256"
+    )
+    assert value["glm53_tally"] == {
+        "target": 400,
+        "accepted": 24,
+        "active": 0,
+        "retryable_infra_failed": 0,
+        "blocked_nonrepeatable": 4,
+        "unstarted": 372,
+    }
+    assert value["rank29_attempt4_acceptance"]["receipt_sha256"] == (
+        "sha256:c33f2540b30693948417f1a5b9d138db85af13562031472f141d48fd15c196bf"
+    )
+    assert set(value["effects"].values()) == {0}
+    assert set(value["privacy"].values()) == {False}
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "2026-09-06-qwen38-hosted-a-rank13-a1-deadline-terminal-reconciliation-v1.json",
+        "2026-09-06-qwen38-hosted-b-rank14-a1-deadline-terminal-reconciliation-v1.json",
+    ],
+)
+def test_hosted_qwen_deadline_tombstones_are_score_blind_and_nonrepeatable(
+    name: str,
+) -> None:
+    path = ROOT / "docs/evidence/qwen38-study" / name
+    receipt = ledger.load_receipt(path)
+
+    assert receipt["schema_version"] == (
+        "fleet-qwen38-hosted-deadline-terminal-reconciliation-v1"
+    )
+    assert receipt["classification"] == "POST_MODEL_NONREPEATABLE_UNCREDITED"
+    assert receipt["status"] == "NO_AUTHORITATIVE_SESSION_OR_VERIFIER"
+    assert receipt["retry_allowed"] is False
+    assert receipt["fresh_authoritative_reconciliation"]["matching_session_count"] == 0
+    assert receipt["fresh_authoritative_reconciliation"][
+        "verifier_execution_presence"
+    ] is False
+    assert receipt["request_counts"]["api_mutations"] == 0
+    assert receipt["privacy"] == {
+        "credentials_included": False,
+        "prompts_traces_flags_read": False,
+        "scores_read": False,
+    }
+    assert receipt["model_stream"] == {
+        **receipt["model_stream"],
+        "content_read": False,
+        "present": True,
+    }
 
 
 def test_evidence_manifest_cannot_be_mixed_with_individual_paths(
@@ -880,6 +1426,65 @@ def test_dedicated_qwen_v2_validated_acceptance_is_digest_only_and_plan_bound(
         ledger.accepted_evidence(path, authority)
 
 
+def test_glm_c2_validated_acceptance_uses_reviewed_runtime_plan_mapping(
+    tmp_path: Path, authority: ledger.Authority
+) -> None:
+    source = ROOT / (
+        "docs/evidence/qwen38-study/"
+        "2026-09-05-glm53-hosted-c2-accepted-validated-v1.json"
+    )
+    evidence = ledger.accepted_evidence(source, authority)
+    assert evidence.state == "accepted"
+    assert evidence.cell_id == (
+        "sha256:ef0273d94a3e967f41ae53ee12c808907efee86377d6c85b55740018370b598c"
+    )
+
+    value = json.loads(source.read_text())
+    value["plan_sha256"] = "sha256:" + "0" * 64
+    value["receipt_sha256"] = self_hosted.digest_without(value, "receipt_sha256")
+    path = _write(tmp_path / "ACCEPTED_VALIDATED.json", value)
+    with pytest.raises(ledger.LedgerError, match="source receipt chain drifted"):
+        ledger.accepted_evidence(path, authority)
+
+    value = json.loads(source.read_text())
+    value["release_receipt_sha256"] = "sha256:" + "1" * 64
+    value["receipt_sha256"] = self_hosted.digest_without(value, "receipt_sha256")
+    _write(path, value)
+    with pytest.raises(ledger.LedgerError, match="source receipt chain drifted"):
+        ledger.accepted_evidence(path, authority)
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        lambda value: value["accepted"].__setitem__("cell_id", "sha256:" + "0" * 64),
+        lambda value: value["session_inventory"].__setitem__("matching_count", 0),
+        lambda value: value["verifier"].__setitem__("present", False),
+        lambda value: value["cleanup"].__setitem__("instance_closed", False),
+        lambda value: value["accepted"].__setitem__("file_sha256", "not-a-digest"),
+    ],
+)
+def test_hosted_glm_validated_acceptance_is_exact_and_score_blind(
+    tmp_path: Path, authority: ledger.Authority, mutation
+) -> None:
+    source = ROOT / (
+        "docs/evidence/glm53-study/"
+        "2026-09-06-glm53-hosted-s2-rank27-a1-accepted-validated.json"
+    )
+    evidence = ledger.accepted_evidence(source, authority)
+    assert evidence.state == "accepted"
+    assert evidence.cell_id == (
+        "sha256:309baef0b19473c8e7b19340adcb881d12fb559118c2a3a3b7576ccb3bb19c00"
+    )
+
+    value = json.loads(source.read_text())
+    mutation(value)
+    value["receipt_sha256"] = self_hosted.digest_without(value, "receipt_sha256")
+    path = _write(tmp_path / "ACCEPTED_VALIDATED.json", value)
+    with pytest.raises(ledger.LedgerError):
+        ledger.accepted_evidence(path, authority)
+
+
 @pytest.mark.parametrize(
     ("mutation", "message"),
     [
@@ -994,6 +1599,22 @@ def test_duplicate_json_keys_and_symlinks_are_rejected(tmp_path: Path) -> None:
     link.symlink_to(target)
     with pytest.raises(ledger.LedgerError, match="non-symlink"):
         ledger.load_receipt(link)
+
+
+def test_rank99_rollforward_acceptance_binds_plan_server_and_session_chain(
+    authority: ledger.Authority,
+) -> None:
+    path = (
+        ROOT
+        / "docs/evidence/qwen38-study/"
+        "2026-09-05-qwen38-dedicated-rank99-g23-a1-accepted-validated-v1.json"
+    )
+    evidence = ledger.accepted_evidence(path, authority)
+    assert evidence.state == "accepted"
+    assert evidence.cell_id == (
+        "sha256:bf9f6d8aee8d775f6ce5dbd238d0b3a7abc544da0687c9cb943b3ba090408b2a"
+    )
+    assert evidence.execution_generation == 23
 
 
 def test_cli_is_read_only_and_emits_json_summary(

@@ -1,0 +1,61 @@
+{
+  "schema_version": "fleet-qwen38-rank99-generation22-preclaim-canary-terminal-v1",
+  "status": "TERMINAL_NON_SCORED_CANARY_DEFECT",
+  "observed_at_utc": "2026-09-06T00:35:10Z",
+  "campaign_id": "chris-cyber-q38-glm53-exact-easiest100-pass4-v1",
+  "selection_rank": 99,
+  "execution_generation": 22,
+  "canary_identity": {
+    "job_name": "chris-cyber-q38-r099-g22-exact-preclaim-canary-v1",
+    "job_uid": "5b86e33c-529a-4c44-b727-f11346a35b6f",
+    "pod_name": "chris-cyber-q38-r099-g22-exact-preclaim-canary-v1-nt9n7",
+    "pod_uid": "a8e5b474-5eb4-4702-b0da-10a4878b4448",
+    "config_map_name": "chris-cyber-q38-r099-g22-exact-preclaim-canary-v1",
+    "config_map_uid": "ff386ffa-7bca-4752-87f6-89ae268a30d4",
+    "package_sha256": "sha256:d240ce35411f59af09a6a98e5a7a976ad4be97ca5fbf291137e84d7af91e559e",
+    "release_sha256": "sha256:de79ceef8370e8c4306af83c5e31be82ec92b70378e0eb424f9b94a8f5a80ffa",
+    "rollforward_sha256": "sha256:84f6467e778fa0ba23f545d78911eafa7a09fb8793048c49348861e61d646b67",
+    "terminal_reason": "BackoffLimitExceeded",
+    "exit_code": 1,
+    "restarts": 0,
+    "finished_at_utc": "2026-09-06T00:33:06Z"
+  },
+  "deterministic_cause": {
+    "classification": "preserved_prior_generation_claim_false_collision",
+    "generic_scan_behavior": "claim evidence was matched by statistical cell id",
+    "contradiction": "generation19 claims intentionally preserve the same statistical cell ids while generation22 uses fresh execution ids",
+    "failure_boundary": "claims_disabled_preclaim_cpu_canary",
+    "fix_commit": "0842f2c",
+    "fixed_rule": "accepted evidence collides by statistical cell or current execution; claim evidence collides only by current execution; preserved generation19 claims are validated separately"
+  },
+  "fresh_get_only_reconciliation": {
+    "canary_output_root_present": false,
+    "generation22_canonical_claim_paths_checked": 4,
+    "generation22_canonical_claim_paths_present": 0,
+    "generation22_attempt_and_reservation_output_roots_checked": 5,
+    "generation22_attempt_and_reservation_output_roots_present": 0,
+    "model_calls": 0,
+    "task_instance_calls": 0,
+    "session_create_calls": 0,
+    "verifier_calls": 0,
+    "scoring_calls": 0,
+    "api_mutations": 0
+  },
+  "disposition": {
+    "non_scored_canary_only": true,
+    "generation22_scored_identities_consumed": false,
+    "generation22_scored_identity_reuse_prohibited": false,
+    "fresh_canary_identity_required": true,
+    "fresh_generation_required": false,
+    "same_generation22_scored_identities_remain_held": true,
+    "gpu_server_launch_authorized": false,
+    "scoring_launch_authorized": false,
+    "required_next_gate": "create-once canary v2 must exercise the corrected exact preclaim collision filter with claims disabled and emit append-only stage receipts"
+  },
+  "privacy": {
+    "scores_read": false,
+    "prompts_traces_flags_read": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:ea7f1d9aa8951977ec49cf1000bd2ad5ddbd2047dfc4a0256b460c7c2280eeb3"
+}

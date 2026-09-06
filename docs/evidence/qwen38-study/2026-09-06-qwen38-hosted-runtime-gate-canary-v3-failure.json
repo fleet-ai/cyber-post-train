@@ -1,0 +1,75 @@
+{
+  "schema_version": "fleet-qwen38-hosted-whole-task-runtime-gate-canary-failure-v3",
+  "status": "FAILED_BEFORE_BOOTSTRAP_STAGE_ZERO",
+  "observed_at_utc": "2026-09-06T09:50:48Z",
+  "package_commit": "91bade92b571b3998ac92b569548e719f1cf2ad3",
+  "configmap": {
+    "name": "chris-q38-hosted-whole-task-runtime-gate-canary-v3-package",
+    "uid": "71d20972-e977-47d2-803f-a09deed3122d",
+    "immutable": true
+  },
+  "job": {
+    "name": "chris-q38-hosted-whole-task-runtime-gate-canary-v3",
+    "uid": "3dfac037-2cbe-419f-8275-e2f3a4d1354b",
+    "failed": 1,
+    "reason": "BackoffLimitExceeded",
+    "completion_observed_at_utc": "2026-09-06T09:50:48Z"
+  },
+  "pod": {
+    "name": "chris-q38-hosted-whole-task-runtime-gate-canary-v3-82q5f",
+    "uid": "58d0083a-4ea1-4a07-a64b-4e1630cf83a4",
+    "phase": "Failed",
+    "started_at_utc": "2026-09-06T09:50:12Z",
+    "finished_at_utc": "2026-09-06T09:50:43Z",
+    "exit_code": 1,
+    "restarts": 0,
+    "runtime_image_id": "ghcr.io/astral-sh/uv@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7"
+  },
+  "failure_evidence": {
+    "diagnostic_root": "/mnt/sfs/jobs/chris-q38-hosted-whole-task-runtime-gate-canary-v3-diagnostic",
+    "diagnostic_root_absent": true,
+    "bootstrap_stage_receipts_present": 0,
+    "runtime_gate_canary_pass_receipts_present": 0,
+    "sanitized_runtime_failure_receipts_present": 0,
+    "last_proven_boundary": "EVALUATOR_CONTAINER_STARTED",
+    "next_unproven_boundaries": [
+      "apt-get-update",
+      "pinned-docker-cli-package-install",
+      "bootstrap-script-exec"
+    ],
+    "observed_cause_classification": "PRE_BOOTSTRAP_UNCLASSIFIED",
+    "logs_used": false
+  },
+  "deterministic_correction": {
+    "network_package_install_removed": true,
+    "docker_cli_source_image": "docker.io/library/docker@sha256:f649ef046008ca7f926a2571c32b0ac22e5c59eb61b959617f9acc2a4c638cf5",
+    "docker_cli_shared_emptydir": true,
+    "exact_copied_binary_bytes": 105594160,
+    "docker_cli_emptydir_size_limit_bytes": 268435456,
+    "prebootstrap_phase_receipt_before_cli_copy": true,
+    "observed_exit_assigned_to_specific_apt_command": false
+  },
+  "score_blind_effects": {
+    "output_roots_created": 0,
+    "endpoint_leases_acquired": 0,
+    "canonical_claims_created": 0,
+    "model_calls": 0,
+    "task_calls": 0,
+    "session_calls": 0,
+    "verifier_calls": 0,
+    "scoring_calls": 0,
+    "api_mutations": 0,
+    "accepted_evidence_created": 0
+  },
+  "disposition": {
+    "canary_v3_identity_retry_authorized": false,
+    "fresh_score_free_canary_requires_new_identity": true,
+    "scored_successor_authorized": false
+  },
+  "privacy": {
+    "scores_read": false,
+    "prompts_traces_flags_read": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:6ce9723ed40619ef40c8a67e71feb71f5a530947075009078f7a11b02e999963"
+}

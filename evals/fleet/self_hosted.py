@@ -74,6 +74,24 @@ def digest_without(value: dict[str, Any], field: str) -> str:
     return sha256(canonical_json({key: item for key, item in value.items() if key != field}))
 
 
+def sanitized_failure_receipt(
+    error: BaseException, *, run_id: str, elapsed_seconds: float
+) -> dict[str, Any]:
+    """Retain routing facts needed to classify a failed Fleet request safely."""
+    receipt: dict[str, Any] = {
+        "error_type": type(error).__name__,
+        "elapsed_seconds": round(elapsed_seconds, 3),
+        "run_id": run_id,
+    }
+    if isinstance(error, FleetRequestError):
+        receipt.update(
+            method=error.method,
+            route=error.route,
+            http_status=error.status_code,
+        )
+    return receipt
+
+
 def session_execution_metadata(config: dict[str, Any]) -> dict[str, str]:
     """Project an optional exact statistical execution identity into a session."""
     execution = config.get("execution") or {}
@@ -1644,11 +1662,11 @@ def run(
         if out_dir.exists():
             (out_dir / "failure.json").write_bytes(
                 canonical_json(
-                    {
-                        "error_type": type(exc).__name__,
-                        "elapsed_seconds": round(time.time() - started_at, 3),
-                        "run_id": config["run_id"],
-                    }
+                    sanitized_failure_receipt(
+                        exc,
+                        run_id=config["run_id"],
+                        elapsed_seconds=time.time() - started_at,
+                    )
                 )
                 + b"\n"
             )

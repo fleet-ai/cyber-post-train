@@ -1,0 +1,95 @@
+{
+  "schema_version": "fleet-exact-pass4-supplemental-runtime-authority-v1",
+  "entries": [
+    {
+      "model": "glm-5.3",
+      "controller": "glm-hosted-s2",
+      "plan_sha256": "sha256:c0cc69202751fbbea53dfeea98a62efe41b2638b4e9ad60307b0c0bdbeefd83f",
+      "cell_id": "sha256:83d88543af87e4cb8983953165582ff724ca4db7f8dfb5d40b7a549c9ec8902b",
+      "execution_id": "sha256:fcad0a06b3321a28675af9a2e3e826574ceffbfaa2e4ff2b3428923fbf87e2e6",
+      "execution_generation": 1,
+      "run_id": "chris-glm53-ac-bulk-a-r026-a2-g1-493bc3d8",
+      "selection_rank": 26,
+      "attempt": 2,
+      "task_version_id": "493bc3d8-7806-4e38-9bc3-e964a5c26f5b"
+    },
+    {
+      "model": "glm-5.3",
+      "controller": "glm-hosted-s2",
+      "plan_sha256": "sha256:c0cc69202751fbbea53dfeea98a62efe41b2638b4e9ad60307b0c0bdbeefd83f",
+      "cell_id": "sha256:e2a6a81aa1c84276dde915fd18f0e5df7d4cfea60cc59f73e0c863fbd3224c52",
+      "execution_id": "sha256:b5a4621a47d23007d26646da737de79e33cc31317bb6637f04bf7ee327a1033e",
+      "execution_generation": 1,
+      "run_id": "chris-glm53-ac-bulk-a-r026-a3-g1-493bc3d8",
+      "selection_rank": 26,
+      "attempt": 3,
+      "task_version_id": "493bc3d8-7806-4e38-9bc3-e964a5c26f5b"
+    },
+    {
+      "model": "glm-5.3",
+      "controller": "glm-hosted-s1",
+      "plan_sha256": "sha256:4a6ff44b0d82b4d4004184d89c3ed4b8e3b7d1bc29d0d9e7a83343a2cf8ab7d7",
+      "cell_id": "sha256:f3921b5927bcf73a0df58ff991841db52f9b23f04cae5d482c5f7e8630308250",
+      "execution_id": "sha256:b475fceb1fa1875953ab08c7d769962c6b6c57c7a919d56b658140b37adaed78",
+      "execution_generation": 1,
+      "run_id": "chris-glm53-ac-bulk-b-r001-a4-g1-90338ce0",
+      "selection_rank": 1,
+      "attempt": 4,
+      "task_version_id": "90338ce0-194b-4cea-bef4-d64e5d426319"
+    },
+    {
+      "model": "qwen3.8-27b",
+      "controller": "qwen-dedicated-tp1-fanout-v1",
+      "plan_sha256": "sha256:313576f5b34b456c9c635a6962000ebc30997445a208ac0bb80f511d63323309",
+      "cell_id": "sha256:bf9f6d8aee8d775f6ce5dbd238d0b3a7abc544da0687c9cb943b3ba090408b2a",
+      "execution_id": "sha256:e3aaf88286b811eb91c82693cc87dac7ba485ef33040bf7694a6872e9c1d744e",
+      "execution_generation": 19,
+      "run_id": "chris-cyber-q38-opencode11827-ded-tp1-r099-a1-g19-f-v1",
+      "selection_rank": 99,
+      "attempt": 1,
+      "task_version_id": "2cb87286-a35e-4ba0-a949-1d93dfbd229a"
+    },
+    {
+      "model": "qwen3.8-27b",
+      "controller": "qwen-dedicated-tp1-fanout-v1",
+      "plan_sha256": "sha256:5c790559635983dd72986b8f5733316cd736adf11b58886c13d88241d85a60b7",
+      "cell_id": "sha256:50631acab97cb28a5316b2371b3b0755eb5a4cacc0f8269be1b1febc9d16f13b",
+      "execution_id": "sha256:2012545da2f0bd7db4b3134f74a34ac42aecb0e20987fc3328a9b5c760763aaf",
+      "execution_generation": 19,
+      "run_id": "chris-cyber-q38-opencode11827-ded-tp1-r099-a2-g19-f-v1",
+      "selection_rank": 99,
+      "attempt": 2,
+      "task_version_id": "2cb87286-a35e-4ba0-a949-1d93dfbd229a"
+    },
+    {
+      "model": "qwen3.8-27b",
+      "controller": "qwen-dedicated-tp1-fanout-v1",
+      "plan_sha256": "sha256:b3372b7c6165aeec39f99ecfef47d42e406ddf9c1296c5e22c191864a9ceee74",
+      "cell_id": "sha256:f0ac4a3222216fab4b64ec2b40faed4a2e5fb74d9548eeb02d27ed5259679b8a",
+      "execution_id": "sha256:a21d62bbfa09957e68c6008afbcdb8b921638fcaa84021de1ed4c93f3e96fcc9",
+      "execution_generation": 19,
+      "run_id": "chris-cyber-q38-opencode11827-ded-tp1-r099-a3-g19-f-v1",
+      "selection_rank": 99,
+      "attempt": 3,
+      "task_version_id": "2cb87286-a35e-4ba0-a949-1d93dfbd229a"
+    },
+    {
+      "model": "qwen3.8-27b",
+      "controller": "qwen-dedicated-tp1-fanout-v1",
+      "plan_sha256": "sha256:b42a2e7b88052875be0cf448e89e9ae07486814c9ff71b21faa3a78f855f3f0e",
+      "cell_id": "sha256:42feb24d99dbae7b38928760ddb46ba3ce7b7c40a72b38d5e9cebbef064ae08c",
+      "execution_id": "sha256:e408e3607a563644fcc019a3b575dbd486d4084fe58d1e2f9efcb8f0a717c57c",
+      "execution_generation": 19,
+      "run_id": "chris-cyber-q38-opencode11827-ded-tp1-r099-a4-g19-f-v1",
+      "selection_rank": 99,
+      "attempt": 4,
+      "task_version_id": "2cb87286-a35e-4ba0-a949-1d93dfbd229a"
+    }
+  ],
+  "privacy": {
+    "scores_read": false,
+    "prompts_traces_flags_read": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:72ea544a89d1c7b13c96295c86f0f946417ab8e254c17f9775cd6433d57e6b40"
+}

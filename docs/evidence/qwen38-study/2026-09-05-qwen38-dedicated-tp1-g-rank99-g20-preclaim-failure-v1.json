@@ -1,0 +1,96 @@
+{
+  "schema_version": "fleet-qwen38-dedicated-rank99-generation20-preclaim-failure-v1",
+  "status": "TERMINAL_PRECLAIM_INFRASTRUCTURE_FAILURE",
+  "observed_at_utc": "2026-09-05T23:51:58Z",
+  "campaign_id": "chris-cyber-q38-glm53-exact-easiest100-pass4-v1",
+  "selection_rank": 99,
+  "execution_generation": 20,
+  "controller": {
+    "job_name": "chris-cyber-q38-opencode11827-ded-tp1-r099-g20-g-reservation-v1",
+    "job_uid": "e28b97ac-cc41-4de5-b018-8743675325fc",
+    "pod_name": "chris-cyber-q38-opencode11827-ded-tp1-r099-g20-g-reservatisx8xf",
+    "pod_uid": "d8b397c0-a507-45ff-87b5-e865f89c0821",
+    "config_map_uid": "d6179cdc-a393-4f65-b9ac-eed4621ed426",
+    "created_at_utc": "2026-09-05T23:46:18Z",
+    "evaluator_started_at_utc": "2026-09-05T23:46:28Z",
+    "evaluator_finished_at_utc": "2026-09-05T23:46:48Z",
+    "job_failed_at_utc": "2026-09-05T23:46:54Z",
+    "job_reason": "BackoffLimitExceeded",
+    "evaluator_exit_code": 1,
+    "evaluator_restart_count": 0
+  },
+  "immutable_bindings": {
+    "package_sha256": "sha256:d25ae08abc8bd64afcf4362909ff1ecd1aa26a511e835d5003f1a95eb297d641",
+    "release_sha256": "sha256:2ac0f41d67cdee93d622eb3296a27c70a067603532d4d1bd10eb9f21c25e3e8d",
+    "rollforward_sha256": "sha256:40c2c6a91be6b57164ebc46b5283c2bd1d8d684b69ab5dfad9421e961a787cec",
+    "server_binding_sha256": "sha256:e67afbe4af82238e9cfd0a15e2f092b06f20b344133823c08a0425f176aa3421",
+    "serving_block": "dedicated-qwen-tp1-g-v1"
+  },
+  "failure": {
+    "phase": "release_validation_before_claim_preparation",
+    "exception_type": "FileNotFoundError",
+    "missing_repo_relative_path": "docs/evidence/qwen38-study/2026-09-05-qwen38-dedicated-dp8-r004-a2-preemption-incident-v1.json",
+    "config_map_dependency_present": false,
+    "classification": "transitive_rendered_package_dependency_omission"
+  },
+  "target_cells": [
+    {
+      "attempt": 1,
+      "cell_id": "sha256:bf9f6d8aee8d775f6ce5dbd238d0b3a7abc544da0687c9cb943b3ba090408b2a",
+      "execution_id": "sha256:ffb3f2bdc68c0ceea6ca9fb6328e4e908fa93723f9634c00e801999946f47c9e",
+      "run_id": "chris-cyber-q38-opencode11827-ded-tp1-r099-a1-g20-held-v1"
+    },
+    {
+      "attempt": 2,
+      "cell_id": "sha256:50631acab97cb28a5316b2371b3b0755eb5a4cacc0f8269be1b1febc9d16f13b",
+      "execution_id": "sha256:4f96af8622e2455d91882f792827607ed5789d16b53e895682ce8eed9e87911e",
+      "run_id": "chris-cyber-q38-opencode11827-ded-tp1-r099-a2-g20-held-v1"
+    },
+    {
+      "attempt": 3,
+      "cell_id": "sha256:f0ac4a3222216fab4b64ec2b40faed4a2e5fb74d9548eeb02d27ed5259679b8a",
+      "execution_id": "sha256:068fb291a1f703103cffe8b934ce59496d4c02dbc2139d12e98a2af894ffff28",
+      "run_id": "chris-cyber-q38-opencode11827-ded-tp1-r099-a3-g20-held-v1"
+    },
+    {
+      "attempt": 4,
+      "cell_id": "sha256:42feb24d99dbae7b38928760ddb46ba3ce7b7c40a72b38d5e9cebbef064ae08c",
+      "execution_id": "sha256:0118d9753b956a9b7aee013a8d889109dedb7a718a64f6b80c0d9e9e42606543",
+      "run_id": "chris-cyber-q38-opencode11827-ded-tp1-r099-a4-g20-held-v1"
+    }
+  ],
+  "fresh_get_only_reconciliation": {
+    "canonical_claim_paths_checked": 4,
+    "canonical_claim_paths_present": 0,
+    "controller_and_attempt_output_roots_checked": 5,
+    "controller_and_attempt_output_roots_present": 0,
+    "accepted_receipts_scanned": 99,
+    "accepted_receipt_parse_failures": 0,
+    "target_cell_or_execution_accepted_matches": 0,
+    "task_session_rows_checked": 15,
+    "exact_target_model_task_session_matches": 0,
+    "api_mutations": 0
+  },
+  "side_effects": {
+    "canonical_claims_created": 0,
+    "reservation_created": false,
+    "model_calls": 0,
+    "task_calls": 0,
+    "sessions_created": 0,
+    "verifier_calls": 0,
+    "scoring_calls": 0,
+    "accepted_generations": 0
+  },
+  "disposition": {
+    "statistical_cells_remain_unstarted": true,
+    "retry_allowed": false,
+    "automatic_successor_allowed": false,
+    "required_prevention": "full_rendered_cluster_bootstrap_canary_must_validate_transitive_immutable_evidence_closure_before_any_successor_release"
+  },
+  "privacy": {
+    "scores_read": false,
+    "prompts_traces_flags_read": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:5c0243cebff36700c90c9d29150ab402b31551691768dfddde7a3af33ef48099"
+}

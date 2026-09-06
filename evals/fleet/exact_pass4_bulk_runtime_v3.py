@@ -905,6 +905,10 @@ def run_controller(
     check_run_absent: Callable[[dict[str, Any], str], None] = _assert_run_absent,
     route_check: Callable[[dict[str, Any], str], None] = _fresh_route_check,
     runtime_gate_check: Callable[[dict[str, Any]], None] = _runtime_release_gate_check,
+    claim_provider: Callable[
+        [dict[str, Any], dict[str, Any], Path, str, str], dict[str, Any] | None
+    ]
+    | None = None,
     stage_observer: Callable[[str, dict[str, Any] | None], None] | None = None,
     drain_request_path: Path | None = None,
 ) -> dict[str, Any]:
@@ -1005,7 +1009,17 @@ def run_controller(
             route_check(plan, key)
             if stage_observer is not None:
                 stage_observer("06-route-valid", item)
-            claim = claim_cell(plan, item, claim_root=root, job_uid=job_uid, pod_uid=pod_uid)
+            claim = (
+                claim_provider(plan, item, root, job_uid, pod_uid)
+                if claim_provider is not None
+                else claim_cell(
+                    plan,
+                    item,
+                    claim_root=root,
+                    job_uid=job_uid,
+                    pod_uid=pod_uid,
+                )
+            )
             if claim is None:
                 existing_claim = _validate_preserved_claim(plan, item, root)
                 preserved += 1
