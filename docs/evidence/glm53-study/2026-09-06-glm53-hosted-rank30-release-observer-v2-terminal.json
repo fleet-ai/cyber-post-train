@@ -1,0 +1,35 @@
+{
+  "classification": "PRE_RECEIPT_UNCLASSIFIED",
+  "failed_identity": {
+    "configmap_name": "chris-glm53-exact100-hosted-r030-single-slot-release-v2-run",
+    "job_name": "chris-glm53-exact100-hosted-r030-single-slot-release-v2",
+    "job_uid": "6f626b8b-1daf-46c9-8be7-c3e3ccd96b3a",
+    "pod_name": "chris-glm53-exact100-hosted-r030-single-slot-release-v2-cdzkw",
+    "pod_uid": "ba5cc5f7-e6ba-47e6-9751-d0dd15407128"
+  },
+  "job_terminal": {
+    "failed": 1,
+    "pod_exit_code": 1,
+    "pod_restarts": 0,
+    "reason": "BackoffLimitExceeded"
+  },
+  "privacy": {
+    "logs_read": false,
+    "prompts_traces_flags_read": false,
+    "scores_read": false
+  },
+  "receipt_sha256": "sha256:d9916371abd9fd1297a50417db70b7c9d32d9452bf3c9014ca445d0fb2e82765",
+  "retry_allowed": false,
+  "schema_version": "fleet-hosted-glm-rank30-release-observer-terminal-v2",
+  "score_blind_side_effects": {
+    "model_calls": 0,
+    "rank30_claims_created": 0,
+    "rank30_output_root_created": false,
+    "release_receipt_created": false,
+    "scoring_calls": 0,
+    "session_mutations": 0,
+    "verifier_mutations": 0
+  },
+  "status": "FAILED",
+  "successor_diagnostic_required": "chris-glm53-exact100-hosted-r030-single-slot-release-diagnostic-v3"
+}
