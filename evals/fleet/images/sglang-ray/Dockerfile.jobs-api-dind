@@ -1,0 +1,36 @@
+# syntax=docker/dockerfile:1.7
+
+# Keep the already-qualified SGLang and Ray runtime byte-identical, and add
+# only the daemon/tooling needed to run the frozen OpenCode sandbox image from
+# a privileged, eight-GPU Jobs API head pod.
+FROM ghcr.io/fleet-ai/cyber-post-train-glm53-runtime@sha256:ec93ba50613fd13fb4c0b0a9105767ab18209a1e0108dab0923aad694c0206ec
+
+ARG DOCKER_VERSION=27.5.1
+ARG DOCKER_STATIC_SHA256=4f798b3ee1e0140eab5bf30b0edc4e84f4cdb53255a429dc3bbae9524845d640
+
+LABEL org.opencontainers.image.title="Fleet cyber Jobs API SGLang + Ray + Docker runtime"
+LABEL org.opencontainers.image.description="Exact qualified Fleet cyber serving runtime with a pinned Docker daemon for the frozen OpenCode sandbox"
+LABEL fleet.cyber.parent-image="ghcr.io/fleet-ai/cyber-post-train-glm53-runtime@sha256:ec93ba50613fd13fb4c0b0a9105767ab18209a1e0108dab0923aad694c0206ec"
+LABEL fleet.cyber.docker-version="27.5.1"
+LABEL fleet.cyber.docker-static-sha256="4f798b3ee1e0140eab5bf30b0edc4e84f4cdb53255a429dc3bbae9524845d640"
+LABEL fleet.cyber.opencode-image-id="sha256:ca4f0b8f50bd051d709c7c0ae5ec47ca31bbff7d2a2ad754c67b9cdf585567cb"
+
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends \
+        ca-certificates \
+        iproute2 \
+        iptables \
+        pigz \
+        procps \
+    && rm -rf /var/lib/apt/lists/* \
+    && curl --fail --location --silent --show-error \
+        "https://download.docker.com/linux/static/stable/x86_64/docker-${DOCKER_VERSION}.tgz" \
+        --output /tmp/docker.tgz \
+    && printf '%s  %s\n' "${DOCKER_STATIC_SHA256}" /tmp/docker.tgz \
+        | sha256sum --check --strict \
+    && tar --extract --gzip --file /tmp/docker.tgz \
+        --directory /usr/local/bin --strip-components=1 \
+    && rm /tmp/docker.tgz \
+    && test "$(docker --version)" = "Docker version 27.5.1, build 9f9e405" \
+    && test "$(dockerd --version)" = "Docker version 27.5.1, build 4c9b3b0"
+
