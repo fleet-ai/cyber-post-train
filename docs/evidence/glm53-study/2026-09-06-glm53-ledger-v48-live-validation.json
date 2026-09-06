@@ -1,0 +1,64 @@
+{
+  "campaign_total_cells": 800,
+  "effects": {
+    "api_mutations": 0,
+    "filesystem_writes_to_sfs": 0,
+    "model_calls": 0,
+    "scoring_calls": 0,
+    "session_calls": 0,
+    "task_calls": 0,
+    "verifier_calls": 0
+  },
+  "glm53_tally": {
+    "accepted": 24,
+    "active": 0,
+    "blocked_nonrepeatable": 4,
+    "retryable_infra_failed": 0,
+    "target": 400,
+    "unstarted": 372
+  },
+  "manifest": {
+    "file_sha256": "sha256:332c5ceae480e9c73cf1e391aeb59994049b69b240a8bbc106aefc35a9a01f25",
+    "path": "docs/evidence/qwen38-study/2026-09-05-exact-pass4-ledger-evidence-snapshot-v48.json",
+    "receipt_sha256": "sha256:1275d84f1b6aad8d02bc916be55f3a1f3ea99c6817f465905ec0791b0f66cd7a"
+  },
+  "observed_at_utc": "2026-09-06T16:57:33Z",
+  "observer": {
+    "filesystem_operations": [
+      "list",
+      "open-read",
+      "stat"
+    ],
+    "pod_name": "forge-historical-opus-qwen-sft-rebuild-v1-s6hr6",
+    "pod_phase": "Running",
+    "pod_ready": true,
+    "pod_restarts": 0,
+    "pod_uid": "0181c5e3-f691-4d95-812e-9d9994331b1a",
+    "sfs_mount": "/mnt/sfs"
+  },
+  "privacy": {
+    "credentials_included": false,
+    "flags_read": false,
+    "prompts_read": false,
+    "scores_read": false,
+    "traces_read": false
+  },
+  "rank29_attempt4_acceptance": {
+    "accepted": true,
+    "cell_id": "sha256:414d1bc62c3e9af45b63cea021bf4be8e8584905c0298225f209f2b7ab58e821",
+    "execution_id": "sha256:708601826b6acefa693d49318475fceca0541095af3f5422d10e7c7b15e1a72b",
+    "file_sha256": "sha256:12939c74d01b8995d74d0c6ff8dee54cc4739ce8bd4b6548b8b1a5d58d2ca765",
+    "path": "/mnt/sfs/jobs/chris-glm53-exact100-hosted-r029-a3a4-successor-v1/accepted/chris-glm53-ac-bulk-b-r029-a4-g2-b51782f9.json",
+    "receipt_sha256": "sha256:c33f2540b30693948417f1a5b9d138db85af13562031472f141d48fd15c196bf",
+    "retry_allowed": false,
+    "run_id": "chris-glm53-ac-bulk-b-r029-a4-g2-b51782f9"
+  },
+  "receipt_sha256": "sha256:7b77ed00959f6bb219c5c20724ed6958ee85b56d01771f9f158a575cd7301c96",
+  "schema_version": "fleet-glm53-ledger-v48-live-validation-v1",
+  "status": "PASSED_SCORE_BLIND_800_CELL_RECONCILIATION",
+  "supplemental_runtime_authority": {
+    "file_sha256": "sha256:bdb3d4ca8aae94fb4e99fd2d0db75b38813cae8a2dd9e7ab85f05e92ce1105f7",
+    "path": "docs/evidence/qwen38-study/2026-09-05-exact-pass4-supplemental-runtime-authority-v15.json",
+    "receipt_sha256": "sha256:c4d4c5d6dfe939d3d1aa9d9525489d5bebb16aefdd462ecde7baa9370a346740"
+  }
+}
