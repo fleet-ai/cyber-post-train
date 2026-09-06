@@ -128,6 +128,18 @@ def load(path: Path) -> dict[str, Any]:
     return _strict_json(path.read_bytes())
 
 
+def load_projected(path: Path, package_root: Path) -> dict[str, Any]:
+    """Load one ConfigMap-projected file only when it resolves inside its mount."""
+    try:
+        root = package_root.resolve(strict=True)
+        source = path.resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise GateError("input_path_unsafe") from exc
+    if not source.is_relative_to(root):
+        raise GateError("input_path_unsafe")
+    return load(source)
+
+
 def write_once(path: Path, value: dict[str, Any]) -> None:
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
@@ -585,7 +597,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         validate_package_source(args.package_source, args.package_source.parent)
         stage = "binding"
-        binding = load(args.binding)
+        binding = load_projected(args.binding, args.package_source.parent)
         key = os.environ.get("FLEET_API_KEY")
         if not key:
             raise GateError("fleet_api_key_absent")
