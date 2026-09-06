@@ -1,9 +1,13 @@
 import copy
+import json
+from pathlib import Path
 
 import pytest
 
 from evals.fleet import exact_pass4_crypto as crypto
 from evals.fleet import glm53_dedicated_postmodel_recovery_successor_v1 as recovery
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def _ledger() -> dict:
@@ -109,3 +113,47 @@ def test_recovery_successor_rejects_consumed_identity_and_incomplete_ledger() ->
     ledger["receipt_sha256"] = crypto.digest_without(ledger, "receipt_sha256")
     with pytest.raises(recovery.RecoveryPlanError, match="global_ledger_not_authoritative"):
         recovery.build_held(ledger, _candidate())
+
+
+def test_v23_authenticated_preview_is_digest_valid_and_still_held() -> None:
+    path = (
+        ROOT
+        / "docs/evidence/glm53-study/"
+        "2026-09-06-glm53-dedicated-v23-jobs-api-preview-held-v1.json"
+    )
+    value = json.loads(path.read_bytes())
+    assert value["status"] == "PASSED_PREVIEW_ONLY"
+    assert value["preview_http_status"] == 200
+    assert value["api_mutation_calls"] == 0
+    assert value["rendered"]["gpus"] == 8
+    assert value["rendered"]["priority"] == "fleet-infra-quiet"
+    assert value["rendered"]["preemption_policy"] == "Never"
+    assert value["rendered"]["run_dir"] == recovery.SERVER_RUN_DIR
+    assert value["api_title_matches"] == 0
+    assert value["api_run_dir_matches"] == 0
+    assert value["kubernetes_identity_matches"] == 0
+    assert value["sfs_absence_not_yet_bound"] is True
+    assert value["future_full_capacity_gate_required"] is True
+    assert value["launch_authorized"] is False
+    assert value["gpu_server_submit_permitted"] is False
+    assert value["scoring_create_permitted"] is False
+    assert value["receipt_sha256"] == crypto.digest_without(value, "receipt_sha256")
+
+
+def test_root_review_checklist_keeps_all_live_gates_explicit() -> None:
+    text = (
+        ROOT
+        / "docs/evidence/glm53-study/"
+        "2026-09-06-glm53-dedicated-recovery-root-review-checklist-v1.md"
+    ).read_text()
+    for gate in (
+        "self-digested 400-cell global ledger",
+        "two-node/16-GPU",
+        "preemptionPolicy: Never",
+        "complete Kueue Workload condition history",
+        "actual-request counter",
+        "600-second idle release",
+        "CPU full-path",
+        "Root independently reviews",
+    ):
+        assert gate in text
