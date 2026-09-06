@@ -1,0 +1,19 @@
+{
+  "api_mutation_calls": 0,
+  "diagnostic_configmap": "chris-glm53-exact100-hosted-r029-a3a4-release-diagnostic-v2-run",
+  "diagnostic_job": "chris-glm53-exact100-hosted-r029-a3a4-release-diagnostic-v2",
+  "inventory_receipt_sha256": "sha256:bf7fae379833aca5c914e1a2761ab608a805ee6f2424c714c3ef060e318fb9d3",
+  "launch_authorized": false,
+  "model_calls_authorized": false,
+  "package_sha256": "sha256:a2ac7a534dbff3c5620b58b821ac995f07e804fa75d2810108d9b9171275c2b4",
+  "prior_diagnostic_receipt_sha256": "sha256:751d2a4b1b9b40762c21a7416992111777384b4c463eb6c0ed62b25fbd95948d",
+  "prior_diagnostic_retry": false,
+  "receipt_sha256": "sha256:4d1c0af3bf0d4c25931806af0799f83ba42d462aa8df3a61aed7cda7a753a89f",
+  "runtime_plan_sha256": "sha256:2c5d68d34f9370188e4fb3446be05a02a9e716e2cc6d9b0b674ecd9b13afa60d",
+  "schema_version": "fleet-hosted-glm-rank29-release-phase-diagnostic-held-v2",
+  "scored_launch_authorized": false,
+  "source_commit": "193f660ec80420cd26f49757e67169a13ed63d12",
+  "static_plan_sha256": "sha256:8ca09b5e050c040c254ba407d6055dd7f9d0c5f7cdea4c1e0c715a05ab8acd8c",
+  "status": "HELD_FOR_INDEPENDENT_REVIEW",
+  "task_session_verifier_calls_authorized": false
+}
