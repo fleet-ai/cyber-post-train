@@ -4,6 +4,7 @@ import copy
 import fcntl
 import json
 import re
+import traceback
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -34,6 +35,15 @@ def test_binding_exactly_binds_plan_commit_tally_and_four_cells() -> None:
         "job_name": "chris-q38-hosted-r017-whole-task-g22-v1",
         "configmap_name": "chris-q38-hosted-r017-whole-task-g22-package-v1",
     }
+    assert binding["task_version_id"] == observer.EXPECTED_TASK_VERSION_ID
+    assert binding["session_model"] == observer.EXPECTED_SESSION_MODEL
+    assert binding["planned_claim_paths"] == [
+        f"{binding['claim_root']}/{row['execution_id'].removeprefix('sha256:')}.json"
+        for row in binding["cells"]
+    ]
+    assert binding["planned_accepted_paths"] == [
+        f"/mnt/sfs/jobs/{row['run_id']}/ACCEPTED.json" for row in binding["cells"]
+    ]
 
 
 @pytest.mark.parametrize(
@@ -42,6 +52,10 @@ def test_binding_exactly_binds_plan_commit_tally_and_four_cells() -> None:
         lambda value: value["authoritative_tally"].__setitem__("accepted", 52),
         lambda value: value.__setitem__("plan_commit", "0" * 40),
         lambda value: value["cells"][0].__setitem__("cell_id", "sha256:" + "0" * 64),
+        lambda value: value.__setitem__("task_version_id", "0" * 36),
+        lambda value: value.__setitem__("session_model", "other-model"),
+        lambda value: value["planned_claim_paths"].__setitem__(0, "/tmp/other.json"),
+        lambda value: value["planned_accepted_paths"].__setitem__(0, "/tmp/ACCEPTED.json"),
         lambda value: value["fresh_object"].__setitem__("job_name", "reused"),
         lambda value: value.__setitem__("unexpected", True),
     ],
@@ -127,7 +141,16 @@ def test_file_collision_and_two_slot_lease_gates(tmp_path: Path) -> None:
     for slot in (1, 2):
         (lease / f"slot-{slot}.lock").write_bytes(b"")
     expected = {"sha256:" + "1" * 64}
-    (claims / "unrelated.json").write_text(json.dumps({"cell_id": "sha256:" + "2" * 64}))
+    (claims / "unrelated.json").write_text(
+        json.dumps(
+            observer.seal(
+                {
+                    "schema_version": "test-sanitized-claim-v1",
+                    "cell_id": "sha256:" + "2" * 64,
+                }
+            )
+        )
+    )
     assert observer._file_identity_collisions(claims, expected, accepted_only=False) == (1, 0)  # noqa: SLF001
     assert observer._file_identity_collisions(jobs, expected, accepted_only=True) == (0, 0)  # noqa: SLF001
     binding = {"lease_root": str(tmp_path / "leases"), "endpoint_key": "endpoint"}
@@ -136,6 +159,128 @@ def test_file_collision_and_two_slot_lease_gates(tmp_path: Path) -> None:
         fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         with pytest.raises(observer.GateError, match="endpoint_lease_slot_held"):
             observer._lease_slots_clear(binding)  # noqa: SLF001
+
+
+@pytest.mark.parametrize("body", [b"not-json", b"{}"])
+def test_scanners_reject_malformed_or_unsealed_other_receipts(
+    tmp_path: Path, body: bytes
+) -> None:
+    claims = tmp_path / "claims"
+    jobs = tmp_path / "jobs" / "other-run"
+    claims.mkdir()
+    jobs.mkdir(parents=True)
+    (claims / "other.json").write_bytes(body)
+    with pytest.raises(observer.GateError, match="invalid_json|scan_receipt_invalid"):
+        observer._file_identity_collisions(claims, set(), accepted_only=False)  # noqa: SLF001
+    (claims / "other.json").unlink()
+    (jobs / "ACCEPTED.json").write_bytes(body)
+    with pytest.raises(observer.GateError, match="invalid_json|scan_receipt_invalid"):
+        observer._file_identity_collisions(tmp_path / "jobs", set(), accepted_only=True)  # noqa: SLF001
+
+
+@pytest.mark.parametrize("kind", ["claim", "accepted"])
+@pytest.mark.parametrize("body", [b"", b"not-json", b"{}"])
+def test_exact_planned_path_existence_is_collision_regardless_body(
+    tmp_path: Path, kind: str, body: bytes
+) -> None:
+    path = tmp_path / kind / "planned.json"
+    path.parent.mkdir()
+    path.write_bytes(body)
+    code = f"planned_{kind}_path_collision"
+    with pytest.raises(observer.GateError, match=code):
+        observer._planned_paths_absent([str(path)], failure_code=code)  # noqa: SLF001
+
+
+@pytest.mark.parametrize(
+    "page",
+    [
+        {},
+        {"sessions": None, "has_more": False},
+        {"sessions": [], "has_more": None},
+        {"sessions": [], "has_more": "false"},
+    ],
+)
+def test_session_inventory_requires_typed_page(
+    monkeypatch: pytest.MonkeyPatch, page: dict[str, object]
+) -> None:
+    monkeypatch.setattr(observer, "_fleet_get", lambda *_args, **_kwargs: page)
+    with pytest.raises(observer.GateError, match="fleet_session_inventory_invalid"):
+        observer._session_collisions(  # noqa: SLF001
+            {
+                "task_key": observer.EXPECTED_TASK_KEY,
+                "task_version_id": observer.EXPECTED_TASK_VERSION_ID,
+                "session_model": observer.EXPECTED_SESSION_MODEL,
+            },
+            "unused",
+            set(),
+        )
+
+
+@pytest.mark.parametrize(
+    "row",
+    [
+        {"session_id": "one"},
+        {"session_id": "one", "model": observer.EXPECTED_SESSION_MODEL},
+        {
+            "session_id": "one",
+            "model": observer.EXPECTED_SESSION_MODEL,
+            "metadata": {},
+            "task_version_id": observer.EXPECTED_TASK_VERSION_ID,
+        },
+        {
+            "session_id": "one",
+            "model": observer.EXPECTED_SESSION_MODEL,
+            "metadata": {"run_id": "unknown"},
+            "task_version_id": "wrong",
+        },
+    ],
+)
+def test_target_session_missing_or_ambiguous_identity_fails_closed(
+    monkeypatch: pytest.MonkeyPatch, row: dict[str, object]
+) -> None:
+    monkeypatch.setattr(
+        observer,
+        "_fleet_get",
+        lambda *_args, **_kwargs: {"sessions": [row], "has_more": False},
+    )
+    with pytest.raises(observer.GateError, match="fleet_session_identity_ambiguous"):
+        observer._session_collisions(  # noqa: SLF001
+            {
+                "task_key": observer.EXPECTED_TASK_KEY,
+                "task_version_id": observer.EXPECTED_TASK_VERSION_ID,
+                "session_model": observer.EXPECTED_SESSION_MODEL,
+            },
+            "unused",
+            {"planned"},
+        )
+
+
+def test_target_session_exact_identity_collides_and_other_model_does_not(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rows = [
+        {"session_id": "other", "model": "other-model"},
+        {
+            "session_id": "target",
+            "model": observer.EXPECTED_SESSION_MODEL,
+            "metadata": {"run_id": "planned"},
+            "task_version_id": observer.EXPECTED_TASK_VERSION_ID,
+        },
+    ]
+    monkeypatch.setattr(
+        observer,
+        "_fleet_get",
+        lambda *_args, **_kwargs: {"sessions": rows, "has_more": False},
+    )
+    assert observer._session_collisions(  # noqa: SLF001
+        {
+            "task_key": observer.EXPECTED_TASK_KEY,
+            "task_version_id": observer.EXPECTED_TASK_VERSION_ID,
+            "session_model": observer.EXPECTED_SESSION_MODEL,
+        },
+        "unused",
+        {"planned"},
+    ) == (2, 1, 1)
 
 
 def _mock_collect_dependencies(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -197,7 +342,7 @@ def test_observation_rejects_rehashed_tally_or_effect_mutation(
             observer.validate_observation(receipt, binding=binding)
 
 
-def test_failure_receipt_redacts_unexpected_text_and_preserves_original(
+def test_failure_receipt_redacts_unexpected_text_and_raises_log_safe_terminal(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     output = tmp_path / "out" / "OBSERVATION.json"
@@ -208,7 +353,7 @@ def test_failure_receipt_redacts_unexpected_text_and_preserves_original(
         "validate_package_source",
         lambda *_args: (_ for _ in ()).throw(RuntimeError("sk_live_secret123")),
     )
-    with pytest.raises(RuntimeError, match="sk_live_secret123"):
+    with pytest.raises(observer.GateError, match="observer_failed_safely") as caught:
         observer.main(
             [
                 "--binding",
@@ -219,6 +364,9 @@ def test_failure_receipt_redacts_unexpected_text_and_preserves_original(
                 str(output),
             ]
         )
+    assert "sk_live_secret123" not in "".join(
+        traceback.format_exception(caught.type, caught.value, caught.tb)
+    )
     failure_text = output.with_name("FAILED.json").read_text()
     failure = json.loads(failure_text)
     assert failure["failure_code"] == "redacted"
@@ -228,7 +376,7 @@ def test_failure_receipt_redacts_unexpected_text_and_preserves_original(
     collision_output = tmp_path / "collision" / "OBSERVATION.json"
     collision_output.parent.mkdir()
     collision_output.with_name("FAILED.json").write_text("existing")
-    with pytest.raises(RuntimeError, match="sk_live_secret123"):
+    with pytest.raises(observer.GateError, match="observer_failed_safely") as collision:
         observer.main(
             [
                 "--binding",
@@ -239,6 +387,9 @@ def test_failure_receipt_redacts_unexpected_text_and_preserves_original(
                 str(collision_output),
             ]
         )
+    assert "sk_live_secret123" not in "".join(
+        traceback.format_exception(collision.type, collision.value, collision.tb)
+    )
 
 
 def test_held_release_is_exact_nonexecuting_and_self_digested() -> None:

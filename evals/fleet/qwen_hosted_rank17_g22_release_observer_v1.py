@@ -53,6 +53,10 @@ EXPECTED_PLAN_SHA256 = (
 EXPECTED_TASK_KEY = (
     "cysec1-2-fentry-gen_blackbox-ddc48a638b2d9f6001c2c935__blackbox_ctf_v1"
 )
+EXPECTED_TASK_VERSION_ID = "0b192133-c9b8-4211-b0a1-dbf98be46fe3"
+EXPECTED_SESSION_MODEL = (
+    "fleet-cluster-opencode-1.18.27/qwen3.8-27b-opencode11827-autocontinue-v1"
+)
 EXPECTED_FRESH_OBJECT = {
     "job_name": "chris-q38-hosted-r017-whole-task-g22-v1",
     "configmap_name": "chris-q38-hosted-r017-whole-task-g22-package-v1",
@@ -99,6 +103,7 @@ SAFE_FAILURE_CODES = frozenset(
         "endpoint_lease_slot_held",
         "fleet_api_key_absent",
         "fleet_session_inventory_invalid",
+        "fleet_session_identity_ambiguous",
         "fleet_session_pagination_stalled",
         "fleet_team_identity_invalid",
         "fresh_configmap_collision",
@@ -114,6 +119,9 @@ SAFE_FAILURE_CODES = frozenset(
         "observer_pod_uid_invalid",
         "output_path_unsafe",
         "output_short_write",
+        "observer_failed_safely",
+        "planned_accepted_path_collision",
+        "planned_claim_path_collision",
         "planned_statistical_cell_collision",
         "read_request_failed",
         "read_response_too_large",
@@ -125,6 +133,7 @@ SAFE_FAILURE_CODES = frozenset(
         "release_package_source_invalid",
         "scan_directory_symlink_forbidden",
         "scan_file_unsafe",
+        "scan_receipt_invalid",
         "scan_root_unsafe",
         "sfs_output_root_collision",
     }
@@ -300,6 +309,27 @@ def _identity_values(value: Any) -> set[str]:
     return found
 
 
+def _validate_scanned_receipt(value: dict[str, Any]) -> None:
+    """Require self-authenticating sanitized metadata before using its identities."""
+    schema = value.get("schema_version")
+    receipt_sha256 = value.get("receipt_sha256")
+    if (
+        not isinstance(schema, str)
+        or not schema
+        or SHA_RE.fullmatch(str(receipt_sha256)) is None
+        or receipt_sha256 != digest(value)
+    ):
+        raise GateError("scan_receipt_invalid")
+
+
+def _planned_paths_absent(paths: list[str], *, failure_code: str) -> int:
+    for raw in paths:
+        path = Path(raw)
+        if path.exists() or path.is_symlink():
+            raise GateError(failure_code)
+    return len(paths)
+
+
 def _file_identity_collisions(
     root: Path, expected: set[str], *, accepted_only: bool
 ) -> tuple[int, int]:
@@ -325,6 +355,7 @@ def _file_identity_collisions(
             raise GateError("scan_file_unsafe")
         examined += 1
         value = _strict_json(path.read_bytes())
+        _validate_scanned_receipt(value)
         collisions += int(bool(_identity_values(value).intersection(expected)))
     return examined, collisions
 
@@ -384,12 +415,32 @@ def _session_collisions(
             {"task_key": binding["task_key"], "limit": 500, "offset": offset},
         )
         gets += 1
-        rows = page.get("sessions") or []
+        if "sessions" not in page or "has_more" not in page:
+            raise GateError("fleet_session_inventory_invalid")
+        rows = page["sessions"]
+        has_more = page["has_more"]
         if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
             raise GateError("fleet_session_inventory_invalid")
+        if not isinstance(has_more, bool):
+            raise GateError("fleet_session_inventory_invalid")
         rows_examined += len(rows)
-        collisions += sum(bool(_identity_values(row).intersection(expected)) for row in rows)
-        if page.get("has_more") is False:
+        for row in rows:
+            row_identities = _identity_values(row)
+            collisions += int(bool(row_identities.intersection(expected)))
+            model = row.get("model")
+            if model is None:
+                raise GateError("fleet_session_identity_ambiguous")
+            if not isinstance(model, str):
+                raise GateError("fleet_session_identity_ambiguous")
+            if model != binding["session_model"]:
+                continue
+            metadata = row.get("metadata")
+            projected_version = row.get("eval_task_version_id") or row.get("task_version_id")
+            if not isinstance(metadata, dict) or projected_version != binding["task_version_id"]:
+                raise GateError("fleet_session_identity_ambiguous")
+            if not _identity_values(metadata):
+                raise GateError("fleet_session_identity_ambiguous")
+        if has_more is False:
             break
         if not rows:
             raise GateError("fleet_session_pagination_stalled")
@@ -410,10 +461,14 @@ def validate_binding(binding: dict[str, Any]) -> None:
         "cells",
         "identity_values",
         "task_key",
+        "task_version_id",
+        "session_model",
         "fresh_object",
         "checked_sfs_roots",
         "claim_root",
+        "planned_claim_paths",
         "jobs_root",
+        "planned_accepted_paths",
         "lease_root",
         "endpoint_key",
         "binding_sha256",
@@ -438,11 +493,22 @@ def validate_binding(binding: dict[str, Any]) -> None:
             len(identities) != len(set(identities)),
             identities != sorted(_identity_values(EXPECTED_CELLS)),
             binding.get("task_key") != EXPECTED_TASK_KEY,
+            binding.get("task_version_id") != EXPECTED_TASK_VERSION_ID,
+            binding.get("session_model") != EXPECTED_SESSION_MODEL,
             binding.get("fresh_object") != EXPECTED_FRESH_OBJECT,
             binding.get("checked_sfs_roots") != EXPECTED_SFS_ROOTS,
             binding.get("claim_root")
             != "/mnt/sfs/cell-execution-claims/opencode11827-autocontinue-v1",
+            binding.get("planned_claim_paths")
+            != [
+                "/mnt/sfs/cell-execution-claims/opencode11827-autocontinue-v1/"
+                + row["execution_id"].removeprefix("sha256:")
+                + ".json"
+                for row in EXPECTED_CELLS
+            ],
             binding.get("jobs_root") != "/mnt/sfs/jobs",
+            binding.get("planned_accepted_paths")
+            != [f"/mnt/sfs/jobs/{row['run_id']}/ACCEPTED.json" for row in EXPECTED_CELLS],
             binding.get("lease_root")
             != "/mnt/sfs/endpoint-leases/opencode11827-autocontinue-primary-v1",
             binding.get("endpoint_key") != "qwen-hosted-autocontinue-v1",
@@ -460,6 +526,12 @@ def collect(binding: dict[str, Any], *, job_uid: str, pod_uid: str, api_key: str
     expected = set(binding["identity_values"])
     kubernetes_gets = _fresh_objects_absent(binding)
     _sfs_roots_clear(binding)
+    planned_claims_absent = _planned_paths_absent(
+        binding["planned_claim_paths"], failure_code="planned_claim_path_collision"
+    )
+    planned_accepted_absent = _planned_paths_absent(
+        binding["planned_accepted_paths"], failure_code="planned_accepted_path_collision"
+    )
     claim_examined, claim_collisions = _file_identity_collisions(
         Path(binding["claim_root"]), expected, accepted_only=False
     )
@@ -494,6 +566,8 @@ def collect(binding: dict[str, Any], *, job_uid: str, pod_uid: str, api_key: str
             "observed_aggregates": {
                 "canonical_claim_receipts_examined": claim_examined,
                 "accepted_receipts_examined": accepted_examined,
+                "planned_claim_paths_absent": planned_claims_absent,
+                "planned_accepted_paths_absent": planned_accepted_absent,
                 "authoritative_session_rows_examined": session_rows,
                 "fresh_object_sets_absent": 1,
                 "checked_sfs_roots_absent": 2,
@@ -584,6 +658,8 @@ def validate_observation(receipt: Any, *, binding: dict[str, Any]) -> None:
             != {
                 "canonical_claim_receipts_examined",
                 "accepted_receipts_examined",
+                "planned_claim_paths_absent",
+                "planned_accepted_paths_absent",
                 "authoritative_session_rows_examined",
                 "fresh_object_sets_absent",
                 "checked_sfs_roots_absent",
@@ -591,6 +667,8 @@ def validate_observation(receipt: Any, *, binding: dict[str, Any]) -> None:
             },
             aggregates.get("fresh_object_sets_absent") != 1,
             aggregates.get("checked_sfs_roots_absent") != 2,
+            aggregates.get("planned_claim_paths_absent") != 4,
+            aggregates.get("planned_accepted_paths_absent") != 4,
             aggregates.get("endpoint_lease_slots_simultaneously_free") != 2,
             requests.get("fleet_account_gets") != 1,
             set(requests)
@@ -717,7 +795,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         with contextlib.suppress(Exception):
             write_once(args.output.with_name("FAILED.json"), failure)
-        raise
+        raise GateError("observer_failed_safely") from None
     return 0
 
 

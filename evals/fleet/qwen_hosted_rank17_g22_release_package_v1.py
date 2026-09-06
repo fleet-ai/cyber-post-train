@@ -72,13 +72,22 @@ def build_binding(root: Path) -> dict[str, Any]:
             for value in (row["cell_id"], row["execution_id"], row["run_id"])
         ),
         "task_key": task_keys.pop(),
+        "task_version_id": plan["tasks"][0]["task"]["version_id"],
+        "session_model": plan["model"]["session_model"],
         "fresh_object": {
             "job_name": held.JOB_NAME,
             "configmap_name": held.CONFIGMAP_NAME,
         },
         "checked_sfs_roots": sorted({held.SFS_ROOT, held.DIAGNOSTIC_ROOT}),
         "claim_root": plan["execution"]["claim_root"],
+        "planned_claim_paths": [
+            f"{plan['execution']['claim_root']}/{row['execution_id'].removeprefix('sha256:')}.json"
+            for row in cells
+        ],
         "jobs_root": "/mnt/sfs/jobs",
+        "planned_accepted_paths": [
+            f"/mnt/sfs/jobs/{row['run_id']}/ACCEPTED.json" for row in cells
+        ],
         "lease_root": plan["execution"]["endpoint_lease"]["lease_root"],
         "endpoint_key": plan["execution"]["endpoint_lease"]["endpoint_key"],
     }
