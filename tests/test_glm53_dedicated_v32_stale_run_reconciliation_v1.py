@@ -263,6 +263,73 @@ def test_terminal_owner_identity_mutations_reject(
         stale.validate_reconciliation(value, rows=backend.rows, now=1_001.0)
 
 
+@pytest.mark.parametrize("target", ["global", "per_row"])
+@pytest.mark.parametrize(
+    "owners",
+    [
+        [],
+        [
+            {
+                "kind": "RayCluster",
+                "name": "ft-run-deadbeef-cluster",
+                "uid": "33333333-3333-4333-8333-333333333333",
+            }
+        ],
+        [
+            {
+                "kind": "RayJob",
+                "name": "ft-run-deadbeef",
+                "uid": "11111111-1111-4111-8111-111111111111",
+            },
+            {
+                "kind": "Job",
+                "name": "extra-owner",
+                "uid": "33333333-3333-4333-8333-333333333333",
+            },
+        ],
+    ],
+)
+def test_workload_owner_cardinality_and_kind_mutations_reject(
+    target: str, owners: list[dict[str, object]]
+) -> None:
+    backend = FakeBackend()
+    backend.items = [
+        {
+            "kind": "Workload",
+            "metadata": {
+                "name": "rayjob-ft-run-deadbeef-12345",
+                "uid": "22222222-2222-4222-8222-222222222222",
+                "labels": {"cyber-post-train.fleet.ai/owner": "chris"},
+                "ownerReferences": [
+                    {
+                        "kind": "RayJob",
+                        "name": "ft-run-deadbeef",
+                        "uid": "11111111-1111-4111-8111-111111111111",
+                    }
+                ],
+            },
+            "status": {
+                "conditions": [
+                    {"type": "Finished", "status": "True", "reason": "Failed"}
+                ]
+            },
+        }
+    ]
+    value = _build(backend)
+    if target == "global":
+        value["terminal_project_objects"][0]["owners"] = owners
+        value["terminal_project_object_snapshot_sha256"] = crypto.sha256(
+            crypto.canonical_json(value["terminal_project_objects"])
+        )
+    else:
+        value["reconciled_rows"][0]["terminal_kubernetes_evidence"][0][
+            "owners"
+        ] = owners
+    value["receipt_sha256"] = crypto.digest_without(value, "receipt_sha256")
+    with pytest.raises(stale.ReconciliationError, match="reconciliation_invalid"):
+        stale.validate_reconciliation(value, rows=backend.rows, now=1_001.0)
+
+
 def test_sfs_symlink_or_malformed_evidence_blocks() -> None:
     backend = FakeBackend()
     backend.unsafe_symlink = True

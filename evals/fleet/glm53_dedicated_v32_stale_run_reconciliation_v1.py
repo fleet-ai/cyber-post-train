@@ -69,7 +69,7 @@ ROW_KEYS = {
 }
 PROJECT_ROW_KEYS = {"api_run_id", "title", "run_dir", "listed_status"}
 KUBERNETES_NAME = re.compile(r"^[a-z0-9](?:[-a-z0-9.]*[a-z0-9])?$")
-OWNER_KINDS = {"Job", "RayCluster", "RayJob"}
+OWNER_KINDS = {"Job", "RayJob"}
 
 
 class ReconciliationError(RuntimeError):
@@ -286,6 +286,12 @@ def _terminal_projection_valid(item: object) -> bool:
             or item["finished_reason"] in {"Failed", "Succeeded"}
         )
         and isinstance(owners, list)
+        and (
+            item["kind"] == "RayJob"
+            and owners == []
+            or item["kind"] == "Workload"
+            and len(owners) == 1
+        )
         and all(
             isinstance(owner, dict)
             and set(owner) == {"kind", "name", "uid"}
