@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: chris-cyber-opencode11827-image-stage-v1
+  name: chris-cyber-opencode11827-image-stage-v2
   namespace: fleet-train-jobs
 immutable: true
 data:
@@ -9,12 +9,13 @@ data:
     #!/usr/bin/env bash
     set -euo pipefail
 
-    out=/mnt/sfs/jobs/chris-cyber-opencode11827-image-stage-v1
+    out=/mnt/sfs/jobs/chris-cyber-opencode11827-image-stage-v2
     incoming="$out/opencode-1.18.27-amd64.tar.gz.part"
     ready="$incoming.ready"
     archive="$out/opencode-1.18.27-amd64.tar.gz"
     expected_archive_sha=578ff2a933f17a19d22ebf8634533651cec2f0ce611e16f3c5fe8efea7940cd3
-    expected_image_id=sha256:ca4f0b8f50bd051d709c7c0ae5ec47ca31bbff7d2a2ad754c67b9cdf585567cb
+    expected_oci_index=sha256:ca4f0b8f50bd051d709c7c0ae5ec47ca31bbff7d2a2ad754c67b9cdf585567cb
+    expected_runtime_image_id=sha256:4a46e71e98fbbc67f54dfd75fab15730af5ae575070d7b2ba1ad09ad4fa28b11
     stage=STARTING
 
     failed_receipt() {
@@ -28,7 +29,7 @@ data:
 
     out = pathlib.Path(sys.argv[1])
     receipt = {
-        "schema_version": "fleet-opencode11827-exact-image-stage-terminal-v1",
+        "schema_version": "fleet-opencode11827-exact-image-stage-terminal-v2",
         "status": "FAILED",
         "last_completed_stage": sys.argv[2],
         "exit_code": int(sys.argv[3]),
@@ -64,6 +65,20 @@ data:
     done
     test -f "$ready"
     test "$(sha256sum "$incoming" | cut -d' ' -f1)" = "$expected_archive_sha"
+    read -r archive_index archive_config < <(python3 - "$incoming" <<'PY'
+    import json
+    import pathlib
+    import sys
+    import tarfile
+
+    with tarfile.open(sys.argv[1], "r:gz") as archive:
+        index = json.load(archive.extractfile("index.json"))
+        manifest = json.load(archive.extractfile("manifest.json"))
+    print(index["manifests"][0]["digest"], "sha256:" + pathlib.Path(manifest[0]["Config"]).name)
+    PY
+    )
+    test "$archive_index" = "$expected_oci_index"
+    test "$archive_config" = "$expected_runtime_image_id"
     stage=ARCHIVE_HASH_VERIFIED
 
     for _ in $(seq 1 180); do
@@ -74,7 +89,7 @@ data:
     gzip -dc "$incoming" | docker load >/dev/null
     inspect=$(docker image inspect chris/opencode:1.18.27-cyber-v1 --format \
       '{{.Id}} {{.Os}} {{.Architecture}} {{.Config.User}} {{.Config.WorkingDir}}')
-    test "$inspect" = "$expected_image_id linux amd64 node /workspace"
+    test "$inspect" = "$expected_runtime_image_id linux amd64 node /workspace"
     test "$(docker run --rm chris/opencode:1.18.27-cyber-v1 opencode --version)" = 1.18.27
     stage=IMAGE_IDENTITY_VERIFIED
 
@@ -83,7 +98,8 @@ data:
     chmod 0444 "$archive"
     stage=ARCHIVE_PUBLISHED
 
-    python3 - "$out" "$archive" "$expected_archive_sha" "$expected_image_id" <<'PY'
+    python3 - "$out" "$archive" "$expected_archive_sha" "$expected_oci_index" \
+      "$expected_runtime_image_id" <<'PY'
     import hashlib
     import json
     import pathlib
@@ -91,11 +107,12 @@ data:
 
     out = pathlib.Path(sys.argv[1])
     receipt = {
-        "schema_version": "fleet-opencode11827-exact-image-stage-v1",
+        "schema_version": "fleet-opencode11827-exact-image-stage-v2",
         "status": "STAGED_EXACT",
         "archive_path": sys.argv[2],
         "archive_sha256": "sha256:" + sys.argv[3],
-        "source_image_id": sys.argv[4],
+        "source_oci_index_digest": sys.argv[4],
+        "runtime_image_id": sys.argv[5],
         "platform": {"architecture": "amd64", "os": "linux"},
         "runtime": {
             "opencode_version": "1.18.27",
@@ -120,10 +137,10 @@ data:
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: chris-cyber-opencode11827-image-stage-v1
+  name: chris-cyber-opencode11827-image-stage-v2
   namespace: fleet-train-jobs
   labels:
-    cyber-post-train.fleet.ai/experiment: opencode11827-image-stage-v1
+    cyber-post-train.fleet.ai/experiment: opencode11827-image-stage-v2
     cyber-post-train.fleet.ai/owner: chris
 spec:
   activeDeadlineSeconds: 1200
@@ -132,7 +149,7 @@ spec:
   template:
     metadata:
       labels:
-        cyber-post-train.fleet.ai/experiment: opencode11827-image-stage-v1
+        cyber-post-train.fleet.ai/experiment: opencode11827-image-stage-v2
         cyber-post-train.fleet.ai/owner: chris
     spec:
       priorityClassName: fleet-serve-low
@@ -190,7 +207,7 @@ spec:
       volumes:
         - name: bootstrap
           configMap:
-            name: chris-cyber-opencode11827-image-stage-v1
+            name: chris-cyber-opencode11827-image-stage-v2
             defaultMode: 0555
         - {name: docker-cli, emptyDir: {sizeLimit: 256Mi}}
         - {name: docker-data, emptyDir: {sizeLimit: 30Gi}}

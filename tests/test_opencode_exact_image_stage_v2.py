@@ -5,7 +5,7 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
-MANIFEST = ROOT / "evals/fleet/cluster/opencode-exact-image-stage-v1.yaml"
+MANIFEST = ROOT / "evals/fleet/cluster/opencode-exact-image-stage-v2.yaml"
 
 
 def _objects() -> tuple[dict, dict]:
@@ -15,7 +15,7 @@ def _objects() -> tuple[dict, dict]:
 
 def test_stage_is_cpu_only_nonpreempting_secret_free_and_create_once() -> None:
     configmap, job = _objects()
-    name = "chris-cyber-opencode11827-image-stage-v1"
+    name = "chris-cyber-opencode11827-image-stage-v2"
     assert configmap["metadata"] == {"name": name, "namespace": "fleet-train-jobs"}
     assert configmap["immutable"] is True
     assert job["metadata"]["name"] == name
@@ -36,7 +36,10 @@ def test_stage_verifies_exact_bytes_and_emits_success_or_failure_receipt() -> No
     script = configmap["data"]["stage.sh"]
     assert "578ff2a933f17a19d22ebf8634533651cec2f0ce611e16f3c5fe8efea7940cd3" in script
     assert "sha256:ca4f0b8f50bd051d709c7c0ae5ec47ca31bbff7d2a2ad754c67b9cdf585567cb" in script
-    assert 'test "$inspect" = "$expected_image_id linux amd64 node /workspace"' in script
+    assert "sha256:4a46e71e98fbbc67f54dfd75fab15730af5ae575070d7b2ba1ad09ad4fa28b11" in script
+    assert 'test "$archive_index" = "$expected_oci_index"' in script
+    assert 'test "$archive_config" = "$expected_runtime_image_id"' in script
+    assert 'test "$inspect" = "$expected_runtime_image_id linux amd64 node /workspace"' in script
     assert "opencode --version" in script
     assert 'chmod 0444 "$archive"' in script
     assert 'test ! -e "$archive"' in script

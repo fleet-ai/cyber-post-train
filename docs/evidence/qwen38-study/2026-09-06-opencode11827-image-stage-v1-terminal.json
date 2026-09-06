@@ -1,0 +1,33 @@
+{
+  "archive_sha256": "sha256:578ff2a933f17a19d22ebf8634533651cec2f0ce611e16f3c5fe8efea7940cd3",
+  "cluster_terminal": {
+    "container_exit_code": 1,
+    "container_restart_count": 0,
+    "job_condition": "Failed",
+    "job_reason": "BackoffLimitExceeded",
+    "job_uid": "858aa0db-7500-4e3a-881c-67bf5928741f",
+    "pod_uid": "dc566dca-286b-4ccf-93de-c84677ab3d6c"
+  },
+  "classification": "infrastructure-invalid",
+  "credentials_included": false,
+  "deterministic_prevention": {
+    "archive_oci_index_digest": "sha256:ca4f0b8f50bd051d709c7c0ae5ec47ca31bbff7d2a2ad754c67b9cdf585567cb",
+    "docker_27_runtime_image_id": "sha256:4a46e71e98fbbc67f54dfd75fab15730af5ae575070d7b2ba1ad09ad4fa28b11",
+    "finding": "The source OCI index digest and the classic Docker runtime image ID are different content addresses. The v1 stager compared the runtime image ID to the OCI index digest and was guaranteed to fail after loading the exact archive.",
+    "successor": "opencode-exact-image-stage-v2",
+    "successor_rule": "Bind and validate the archive digest, OCI index digest, embedded image-config digest, and runtime image ID as separate fields."
+  },
+  "prompts_traces_flags_or_scores_included": false,
+  "receipt_sha256": "sha256:b2c61e68e3efa4c25c702c937015717dc235ce7b74aa737e4d8ead6c0451cf86",
+  "schema_version": "fleet-opencode11827-image-stage-incident-v1",
+  "source_terminal_receipt": {
+    "file_sha256": "sha256:ffd017f60fa7c61a5f083422480d80f762472955dec10acafabbc838f45f02f3",
+    "last_completed_stage": "ARCHIVE_HASH_VERIFIED",
+    "receipt_sha256": "sha256:c99f20936f36ed5178dc3a1cfbaaa3ecafb97b45ab8d83935df5033103d3cab8"
+  },
+  "status": "TERMINAL_PRESERVED",
+  "timestamps": {
+    "created_at": "2026-09-06T07:58:23Z",
+    "failed_at": "2026-09-06T07:59:25Z"
+  }
+}
