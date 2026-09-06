@@ -242,6 +242,23 @@ def test_held_successor_is_fresh_score_free_and_not_launchable() -> None:
         "task_instance_calls": 0,
         "verifier_calls": 0,
     }
+    commit = "97c6978369ac1e04c91fcc01c98acc25129a6000"
+    assert value["source_evidence"] == {
+        "finding": "completed-request counter is not sufficient active-request evidence",
+        "metrics_collector": (
+            f"https://github.com/sgl-project/sglang/blob/{commit}/"
+            "python/sglang/srt/observability/metrics_collector.py"
+        ),
+        "production_metrics": (
+            f"https://github.com/sgl-project/sglang/blob/{commit}/"
+            "docs/docs/references/production_metrics.mdx"
+        ),
+        "sglang_commit": commit,
+    }
+    assert (
+        value["observer"]["active_request_authority"]["schema_status"]
+        == "required_score_free_live_gate_not_pre_proven"
+    )
 
 
 def test_idle_tp1_was_released_before_successor_work() -> None:
