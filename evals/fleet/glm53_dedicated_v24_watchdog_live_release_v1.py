@@ -1490,7 +1490,6 @@ def launch_from_observation(
 ) -> dict[str, Any]:
     """Create the watcher from one already-validated immutable live observation."""
 
-    validate_live_state(live, binding)
     pod_name = live["head_pod_name"]
     rendered: dict[str, Any] | None = None
     reconciliation: list[dict[str, str]] = []
