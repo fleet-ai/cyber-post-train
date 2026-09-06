@@ -89,6 +89,9 @@ def _evidence() -> tuple[dict, dict, dict]:
         watcher_job_uid="55555555-5555-4555-8555-555555555555",
         watcher_pod_uid="66666666-6666-4666-8666-666666666666",
     )
+    watchdog["initial_request_counter"] = 4
+    watchdog["ready_at_epoch"] = 123.0
+    watchdog["receipt_sha256"] = crypto.digest_without(watchdog, "receipt_sha256")
     live = {
         "schema_version": "fleet-glm53-dedicated-v23-scorefree-live-state-v1",
         "server_binding": binding,
@@ -102,6 +105,9 @@ def _evidence() -> tuple[dict, dict, dict]:
         "endpoint_lease_available": True,
         "watcher_job_uid": watchdog["watcher_job_uid"],
         "watcher_pod_uid": watchdog["watcher_pod_uid"],
+        "watcher_job_active": 1,
+        "watcher_pod_ready": True,
+        "watcher_pod_restarts": 0,
         "seconds_since_last_model_request": 1,
     }
     live["receipt_sha256"] = crypto.digest_without(live, "receipt_sha256")
@@ -230,6 +236,16 @@ def test_request_counter_watchdog_refreshes_only_on_counter_growth() -> None:
         watchdog_runtime.advance(state, counter=3, now=200.0)
 
 
+def test_request_counter_parser_sums_realistic_labeled_glm_series_only() -> None:
+    metrics = """
+# HELP sglang:num_requests_total Number of requests
+sglang:num_requests_total{model_name="glm-5.3",is_streaming="true",engine_type="tp"} 4.0
+sglang:num_requests_total{engine_type="tp",model_name="glm-5.3",is_streaming="false"} 3
+sglang:num_requests_total{model_name="another-model",is_streaming="true"} 900
+"""
+    assert watchdog_runtime.parse_counter(metrics) == 7
+
+
 def test_request_counter_watchdog_releases_exact_run_after_600_idle_seconds() -> None:
     times = iter((599.0, 600.0))
     released: list[str] = []
@@ -270,6 +286,7 @@ def test_gpu_observer_rejects_valid_uuid_for_the_wrong_server() -> None:
         "concurrency": 1,
         "server": qualifier.build_held()["server"],
         "devices_seen": 8,
+        "samples_per_device": 2,
         "max_utilization_percent_by_device": [50] * 8,
         "identity": {
             "server_rayjob_uid": "99999999-9999-4999-8999-999999999999",
@@ -294,6 +311,32 @@ def test_watchdog_active_receipt_binds_exact_loaded_source_and_release_route() -
     assert receipt["implementation_sha256"] == watchdog_runtime.source_sha256()
     assert receipt["release_route"] == "DELETE /v1/runs/{api_run_id}"
     assert receipt["receipt_sha256"] == crypto.digest_without(receipt, "receipt_sha256")
+
+
+def test_watchdog_package_is_create_once_uid_bound_and_nonpreempting() -> None:
+    commit = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=ROOT, check=True, text=True, capture_output=True
+    ).stdout.strip()
+    rendered = package.render_watchdog(ROOT, commit, _binding(), ready_at_epoch=123.0)
+    configmap, job = rendered["objects"]["items"]
+    assert configmap["immutable"] is True
+    assert job["metadata"]["annotations"]["cyber-post-train.fleet.ai/create-once"] == "true"
+    pod = job["spec"]["template"]["spec"]
+    assert pod["priorityClassName"] == "fleet-infra-quiet"
+    assert pod["preemptionPolicy"] == "Never"
+    container = pod["containers"][0]
+    env = {row["name"]: row for row in container["env"]}
+    assert env["JOB_UID"]["valueFrom"]["fieldRef"]["fieldPath"] == (
+        "metadata.labels['batch.kubernetes.io/controller-uid']"
+    )
+    assert env["POD_UID"]["valueFrom"]["fieldRef"]["fieldPath"] == "metadata.uid"
+    assert env["GH_TOKEN"]["valueFrom"]["secretKeyRef"] == {
+        "name": "img-build-secrets",
+        "key": "GH_TOKEN",
+    }
+    assert rendered["watchdog_launch_authorized"] is True
+    assert rendered["qualification_launch_authorized"] is False
+    assert rendered["scored_launch_authorized"] is False
 
 
 def test_package_is_exact_create_once_nonpreempting_and_scorefree() -> None:
@@ -326,8 +369,12 @@ def test_package_is_exact_create_once_nonpreempting_and_scorefree() -> None:
         for key in configmap["data"]
     )
     container = job["spec"]["template"]["spec"]["containers"][0]
-    env = {row["name"]: row["value"] for row in container["env"]}
-    assert env["DEDICATED_SERVICE_ORIGIN"] == _binding()["service_origin"]
+    env = {row["name"]: row for row in container["env"]}
+    assert env["DEDICATED_SERVICE_ORIGIN"]["value"] == _binding()["service_origin"]
+    assert env["JOB_UID"]["valueFrom"]["fieldRef"]["fieldPath"] == (
+        "metadata.labels['batch.kubernetes.io/controller-uid']"
+    )
+    assert env["POD_UID"]["valueFrom"]["fieldRef"]["fieldPath"] == "metadata.uid"
 
 
 def test_execute_keeps_fleet_calls_zero_and_runs_frozen_waves(tmp_path, monkeypatch) -> None:
@@ -366,6 +413,7 @@ def test_execute_keeps_fleet_calls_zero_and_runs_frozen_waves(tmp_path, monkeypa
             "concurrency": concurrency,
             "server": qualifier.build_held()["server"],
             "devices_seen": 8,
+            "samples_per_device": 2,
             "max_utilization_percent_by_device": [50] * 8,
             "identity": {
                 "server_rayjob_uid": "11111111-1111-4111-8111-111111111111",
@@ -386,6 +434,10 @@ def test_execute_keeps_fleet_calls_zero_and_runs_frozen_waves(tmp_path, monkeypa
         runner=lambda *_args, **_kwargs: {},
         counter=lambda _origin: 0,
         observer=observed,
+        qualifier_identity={
+            "job_uid": "77777777-7777-4777-8777-777777777777",
+            "pod_uid": "88888888-8888-4888-8888-888888888888",
+        },
     )
     assert calls == [1, 2, 4]
     assert result["fleet_task_instance_calls"] == 0

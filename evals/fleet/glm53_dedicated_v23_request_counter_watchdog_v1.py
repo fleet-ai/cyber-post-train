@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import argparse
+import json
+import os
 import re
+import tempfile
 import time
 import urllib.error
 import urllib.parse
@@ -18,9 +22,11 @@ IMPLEMENTATION_ID = "glm53-v23-sglang-request-counter-watchdog-v1"
 METRIC = "sglang_num_requests_total"
 IDLE_RELEASE_SECONDS = 600
 RELEASE_ROUTE = "DELETE /v1/runs/{api_run_id}"
-COUNTER = re.compile(
-    r'^sglang:num_requests_total\{model_name="glm-5\.3"\}\s+([0-9]+(?:\.[0-9]+)?)$', re.M
+COUNTER_LINE = re.compile(
+    r"^sglang:num_requests_total\{(?P<labels>[^{}]*)\}\s+"
+    r"(?P<value>[0-9]+(?:\.[0-9]+)?)$"
 )
+LABEL = re.compile(r'(?P<name>[A-Za-z_][A-Za-z0-9_]*)="(?P<value>(?:[^"\\]|\\.)*)"')
 
 
 class WatchdogError(RuntimeError):
@@ -74,13 +80,44 @@ def build_active_receipt(
 
 
 def parse_counter(metrics: str) -> int:
-    match = COUNTER.search(metrics)
-    if match is None:
+    total = 0
+    matched = 0
+    labelsets: set[tuple[tuple[str, str], ...]] = set()
+    for line in metrics.splitlines():
+        match = COUNTER_LINE.fullmatch(line.strip())
+        if match is None:
+            continue
+        labels_text = match.group("labels")
+        labels: dict[str, str] = {}
+        position = 0
+        while position < len(labels_text):
+            label = LABEL.match(labels_text, position)
+            if label is None or label.group("name") in labels:
+                raise WatchdogError("request_counter_labels_invalid")
+            try:
+                labels[label.group("name")] = json.loads(f'"{label.group("value")}"')
+            except json.JSONDecodeError as exc:
+                raise WatchdogError("request_counter_labels_invalid") from exc
+            position = label.end()
+            if position == len(labels_text):
+                break
+            if labels_text[position] != ",":
+                raise WatchdogError("request_counter_labels_invalid")
+            position += 1
+        if labels.get("model_name") != "glm-5.3":
+            continue
+        canonical = tuple(sorted(labels.items()))
+        if canonical in labelsets:
+            raise WatchdogError("request_counter_series_duplicated")
+        labelsets.add(canonical)
+        value = float(match.group("value"))
+        if not value.is_integer() or value < 0:
+            raise WatchdogError("request_counter_invalid")
+        total += int(value)
+        matched += 1
+    if matched == 0:
         raise WatchdogError("request_counter_absent")
-    value = float(match.group(1))
-    if not value.is_integer() or value < 0:
-        raise WatchdogError("request_counter_invalid")
-    return int(value)
+    return total
 
 
 def read_counter_http(
@@ -202,3 +239,57 @@ def watch_http(
         sleep=sleep,
         poll_seconds=poll_seconds,
     )
+
+
+def _write_once(path: Path, value: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists() or path.is_symlink():
+        raise WatchdogError("watchdog_receipt_collision")
+    with tempfile.NamedTemporaryFile("w", dir=path.parent, delete=False) as handle:
+        temporary = Path(handle.name)
+        json.dump(value, handle, sort_keys=True, separators=(",", ":"))
+        handle.write("\n")
+    temporary.chmod(0o400)
+    try:
+        os.link(temporary, path)
+    except FileExistsError as exc:
+        raise WatchdogError("watchdog_receipt_collision") from exc
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("watch", nargs="?")
+    parser.add_argument("--binding", type=Path, required=True)
+    parser.add_argument("--active-receipt", type=Path, required=True)
+    parser.add_argument("--ready-at-epoch", type=float, required=True)
+    args = parser.parse_args()
+    binding = json.loads(args.binding.read_text())
+    initial_counter = read_counter_http(binding["service_origin"])
+    receipt = build_active_receipt(
+        binding,
+        watcher_job_uid=os.environ.get("JOB_UID", ""),
+        watcher_pod_uid=os.environ.get("POD_UID", ""),
+    )
+    receipt["initial_request_counter"] = initial_counter
+    receipt["ready_at_epoch"] = args.ready_at_epoch
+    receipt["receipt_sha256"] = crypto.digest_without(receipt, "receipt_sha256")
+    _write_once(args.active_receipt, receipt)
+    watch(
+        api_run_id=binding["api_run_id"],
+        initial_counter=initial_counter,
+        ready_at=args.ready_at_epoch,
+        read_counter=lambda: read_counter_http(binding["service_origin"]),
+        release_via_jobs_api=lambda run_id: release_run_http(
+            api_base="https://api.ft.flt.build",
+            bearer_token=os.environ.get("GH_TOKEN", ""),
+            api_run_id=run_id,
+        ),
+        clock=time.time,
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

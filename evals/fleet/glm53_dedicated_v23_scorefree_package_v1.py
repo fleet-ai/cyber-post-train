@@ -16,6 +16,9 @@ from evals.fleet import glm53_dedicated_v23_scorefree_qualifier_v1 as qualifier
 SCHEMA = "fleet-glm53-dedicated-v23-scorefree-package-v1"
 CONFIGMAP_NAME = qualifier.JOB_NAME + "-package"
 AUTHORIZATION_CONFIGMAP_NAME = qualifier.JOB_NAME + "-authorization"
+WATCHDOG_JOB_NAME = "chris-glm53-dedicated-v23-request-watchdog-v1"
+WATCHDOG_CONFIGMAP_NAME = WATCHDOG_JOB_NAME + "-package"
+WATCHDOG_RESULT_ROOT = f"/mnt/sfs/jobs/{WATCHDOG_JOB_NAME}"
 COMMIT_RE = re.compile(r"[0-9a-f]{40}")
 FILES = tuple(
     path
@@ -114,6 +117,191 @@ def build_authorization_configmap(authorization: dict[str, Any]) -> dict[str, An
     }
 
 
+def build_watchdog_configmap(
+    root: Path,
+    commit: str,
+    binding: dict[str, Any],
+    *,
+    ready_at_epoch: float,
+) -> dict[str, Any]:
+    """Package the concrete watcher before score-free qualification authorization."""
+
+    qualifier._validate_binding(binding)  # noqa: SLF001
+    if ready_at_epoch <= 0:
+        raise PackageError("v23_watchdog_ready_epoch_invalid")
+    source_files = (
+        "evals/fleet/exact_pass4_crypto.py",
+        "evals/fleet/glm53_dedicated_v23_request_counter_watchdog_v1.py",
+    )
+    data = {_key(path): _source(root, commit, path).decode() for path in source_files}
+    manifest = {path: crypto.sha256(_source(root, commit, path)) for path in source_files}
+    data["binding.json"] = json.dumps(binding, sort_keys=True, separators=(",", ":")) + "\n"
+    watchdog_package = {
+        "schema_version": "fleet-glm53-dedicated-v23-watchdog-package-v1",
+        "package_commit": commit,
+        "files": manifest,
+        "binding_sha256": crypto.sha256(crypto.canonical_json(binding)),
+        "ready_at_epoch": ready_at_epoch,
+        "job_name": WATCHDOG_JOB_NAME,
+        "result_root": WATCHDOG_RESULT_ROOT,
+        "idle_release_seconds": qualifier.IDLE_RELEASE_SECONDS,
+        "release_route": "DELETE /v1/runs/{api_run_id}",
+        "create_once": True,
+        "score_free": True,
+    }
+    watchdog_package["package_sha256"] = crypto.digest_without(watchdog_package, "package_sha256")
+    data["package.json"] = (
+        json.dumps(watchdog_package, sort_keys=True, separators=(",", ":")) + "\n"
+    )
+    return {
+        "apiVersion": "v1",
+        "kind": "ConfigMap",
+        "metadata": {"name": WATCHDOG_CONFIGMAP_NAME, "namespace": prior.NAMESPACE},
+        "immutable": True,
+        "data": data,
+    }
+
+
+def build_watchdog_job(configmap: dict[str, Any]) -> dict[str, Any]:
+    package = json.loads(configmap["data"]["package.json"])
+    command = """
+set -euo pipefail
+test ! -e "$WATCHDOG_RESULT_ROOT"
+mkdir -p /work/evals/fleet "$WATCHDOG_RESULT_ROOT"
+for source in /bootstrap/*__SLASH__*; do
+  target="/work/$(basename "$source" | sed 's,__SLASH__,/,g')"
+  install -D -m 0444 "$source" "$target"
+done
+export PYTHONPATH=/work
+exec python -m evals.fleet.glm53_dedicated_v23_request_counter_watchdog_v1 watch \
+  --binding /bootstrap/binding.json \
+  --active-receipt "$WATCHDOG_RESULT_ROOT/ACTIVE.json" \
+  --ready-at-epoch "$READY_AT_EPOCH"
+""".strip()
+    return {
+        "apiVersion": "batch/v1",
+        "kind": "Job",
+        "metadata": {
+            "name": WATCHDOG_JOB_NAME,
+            "namespace": prior.NAMESPACE,
+            "annotations": {
+                "cyber-post-train.fleet.ai/create-once": "true",
+                "cyber-post-train.fleet.ai/score-free": "true",
+                "cyber-post-train.fleet.ai/package-sha256": package["package_sha256"],
+            },
+        },
+        "spec": {
+            "backoffLimit": 0,
+            "activeDeadlineSeconds": 604800,
+            "ttlSecondsAfterFinished": 604800,
+            "template": {
+                "metadata": {"labels": {"cyber-post-train.fleet.ai/experiment": WATCHDOG_JOB_NAME}},
+                "spec": {
+                    "restartPolicy": "Never",
+                    "priorityClassName": "fleet-infra-quiet",
+                    "preemptionPolicy": "Never",
+                    "nodeSelector": {
+                        "kubernetes.io/arch": "amd64",
+                        "workload": "fleetai-training-ng-cpu",
+                    },
+                    "tolerations": [
+                        {
+                            "key": "workload",
+                            "operator": "Equal",
+                            "value": "fleetai-training-ng-cpu",
+                            "effect": "NoSchedule",
+                        }
+                    ],
+                    "containers": [
+                        {
+                            "name": "watchdog",
+                            "image": prior.UV_IMAGE,
+                            "command": ["bash", "-ec", command],
+                            "env": [
+                                {
+                                    "name": "WATCHDOG_RESULT_ROOT",
+                                    "value": WATCHDOG_RESULT_ROOT,
+                                },
+                                {
+                                    "name": "READY_AT_EPOCH",
+                                    "value": str(package["ready_at_epoch"]),
+                                },
+                                {
+                                    "name": "JOB_UID",
+                                    "valueFrom": {
+                                        "fieldRef": {
+                                            "fieldPath": (
+                                                "metadata.labels["
+                                                "'batch.kubernetes.io/controller-uid']"
+                                            )
+                                        }
+                                    },
+                                },
+                                {
+                                    "name": "POD_UID",
+                                    "valueFrom": {"fieldRef": {"fieldPath": "metadata.uid"}},
+                                },
+                                {
+                                    "name": "GH_TOKEN",
+                                    "valueFrom": {
+                                        "secretKeyRef": {
+                                            "name": "img-build-secrets",
+                                            "key": "GH_TOKEN",
+                                        }
+                                    },
+                                },
+                            ],
+                            "resources": {
+                                "requests": {"cpu": "100m", "memory": "128Mi"},
+                                "limits": {"cpu": "500m", "memory": "512Mi"},
+                            },
+                            "volumeMounts": [
+                                {
+                                    "name": "package",
+                                    "mountPath": "/bootstrap",
+                                    "readOnly": True,
+                                },
+                                {"name": "sfs", "mountPath": "/mnt/sfs"},
+                            ],
+                        }
+                    ],
+                    "volumes": [
+                        {
+                            "name": "package",
+                            "configMap": {"name": WATCHDOG_CONFIGMAP_NAME},
+                        },
+                        {
+                            "name": "sfs",
+                            "persistentVolumeClaim": {"claimName": "sfs-shared"},
+                        },
+                    ],
+                },
+            },
+        },
+    }
+
+
+def render_watchdog(
+    root: Path,
+    commit: str,
+    binding: dict[str, Any],
+    *,
+    ready_at_epoch: float,
+) -> dict[str, Any]:
+    configmap = build_watchdog_configmap(root, commit, binding, ready_at_epoch=ready_at_epoch)
+    return {
+        "objects": {
+            "apiVersion": "v1",
+            "kind": "List",
+            "items": [configmap, build_watchdog_job(configmap)],
+        },
+        "server_launch_authorized": False,
+        "watchdog_launch_authorized": True,
+        "qualification_launch_authorized": False,
+        "scored_launch_authorized": False,
+    }
+
+
 def build_job(configmap: dict[str, Any], authorization: dict[str, Any]) -> dict[str, Any]:
     seed = {
         "qualification_launch_authorized": True,
@@ -140,6 +328,22 @@ def build_job(configmap: dict[str, Any], authorization: dict[str, Any]) -> dict[
             row["value"] = package_commit
         elif row["name"] == "QUALIFICATION_OUTPUT_ROOT":
             row["value"] = str(qualifier.RESULT_ROOT)
+    pod["spec"]["containers"][0]["env"].extend(
+        [
+            {
+                "name": "JOB_UID",
+                "valueFrom": {
+                    "fieldRef": {
+                        "fieldPath": "metadata.labels['batch.kubernetes.io/controller-uid']"
+                    }
+                },
+            },
+            {
+                "name": "POD_UID",
+                "valueFrom": {"fieldRef": {"fieldPath": "metadata.uid"}},
+            },
+        ]
+    )
     pod["spec"]["containers"][0]["env"].append(
         {
             "name": "DEDICATED_SERVICE_ORIGIN",

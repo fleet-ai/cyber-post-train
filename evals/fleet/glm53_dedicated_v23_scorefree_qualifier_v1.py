@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import statistics
 import uuid
 from collections.abc import Callable
@@ -228,6 +229,10 @@ def authorize(
         or watchdog.get("implementation_sha256") != watchdog_runtime.source_sha256()
         or not _valid_uuid(watchdog.get("watcher_job_uid"))
         or not _valid_uuid(watchdog.get("watcher_pod_uid"))
+        or not isinstance(watchdog.get("initial_request_counter"), int)
+        or watchdog.get("initial_request_counter", -1) < 0
+        or not isinstance(watchdog.get("ready_at_epoch"), (int, float))
+        or watchdog.get("ready_at_epoch", 0) <= 0
     ):
         raise QualificationError("v23_request_counter_watchdog_invalid")
     if (
@@ -244,6 +249,9 @@ def authorize(
         or live.get("endpoint_lease_available") is not True
         or live.get("watcher_job_uid") != watchdog.get("watcher_job_uid")
         or live.get("watcher_pod_uid") != watchdog.get("watcher_pod_uid")
+        or live.get("watcher_job_active") != 1
+        or live.get("watcher_pod_ready") is not True
+        or live.get("watcher_pod_restarts") != 0
         or live.get("seconds_since_last_model_request") not in range(IDLE_RELEASE_SECONDS)
     ):
         raise QualificationError("v23_live_scorefree_boundary_invalid")
@@ -277,6 +285,7 @@ def validate_gpu_wave(
     concurrency: int,
     server: dict[str, Any],
     binding: dict[str, Any],
+    qualifier_identity: dict[str, str] | None = None,
 ) -> None:
     utilization = observed.get("max_utilization_percent_by_device")
     identity = observed.get("identity")
@@ -286,6 +295,8 @@ def validate_gpu_wave(
         or observed.get("concurrency") != concurrency
         or observed.get("server") != server
         or observed.get("devices_seen") != 8
+        or not isinstance(observed.get("samples_per_device"), int)
+        or observed.get("samples_per_device", 0) < 1
         or not isinstance(utilization, list)
         or len(utilization) != 8
         or any(type(value) not in {int, float} or not 0 < value <= 100 for value in utilization)
@@ -300,6 +311,13 @@ def validate_gpu_wave(
         or any(not _valid_uuid(value) for value in identity.values())
         or identity.get("server_rayjob_uid") != binding.get("rayjob_uid")
         or identity.get("server_head_pod_uid") != binding.get("head_pod_uid")
+        or (
+            qualifier_identity is not None
+            and (
+                identity.get("qualifier_job_uid") != qualifier_identity.get("job_uid")
+                or identity.get("qualifier_pod_uid") != qualifier_identity.get("pod_uid")
+            )
+        )
         or observed.get("server_identity_unchanged") is not True
         or observed.get("qualifier_identity_unchanged") is not True
         or observed.get("receipt_sha256") != crypto.digest_without(observed, "receipt_sha256")
@@ -415,6 +433,7 @@ def execute(
     runner: engine.HarnessRunner,
     counter: Callable[[str], int],
     observer: Observer,
+    qualifier_identity: dict[str, str],
 ) -> dict[str, Any]:
     """Run c1/c2/c4 actual-OpenCode waves without Fleet API calls."""
 
@@ -429,6 +448,10 @@ def execute(
     ):
         raise QualificationError("v23_scorefree_authorization_invalid")
     _validate_binding(binding)
+    if set(qualifier_identity) != {"job_uid", "pod_uid"} or any(
+        not _valid_uuid(value) for value in qualifier_identity.values()
+    ):
+        raise QualificationError("v23_runtime_qualifier_identity_invalid")
     if out.exists() or out.is_symlink():
         raise QualificationError("v23_qualification_result_collision")
     waves: list[dict[str, Any]] = []
@@ -459,7 +482,13 @@ def execute(
             )
             engine.validate_runtime_ramp(wave, baseline=waves[0] if waves else None)
             observed = observer(out.parent, concurrency, build_held()["server"])
-            validate_gpu_wave(observed, concurrency, build_held()["server"], binding)
+            validate_gpu_wave(
+                observed,
+                concurrency,
+                build_held()["server"],
+                binding,
+                qualifier_identity,
+            )
             waves.append(wave)
             gpu_waves.append(observed)
     body: dict[str, Any] = {
@@ -505,6 +534,10 @@ def main() -> int:
             observer=lambda root, concurrency, server: engine.await_gpu_observer(
                 args.gpu_observer_root, concurrency, server
             ),
+            qualifier_identity={
+                "job_uid": os.environ.get("JOB_UID", ""),
+                "pod_uid": os.environ.get("POD_UID", ""),
+            },
         )
     else:
         if args.raw is None or args.out is None:
