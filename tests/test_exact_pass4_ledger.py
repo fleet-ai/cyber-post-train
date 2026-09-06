@@ -796,6 +796,45 @@ def test_supplemental_runtime_authority_resolves_live_glm_rank27_attempt4(
     assert item["task_key"] == authority.cells[key[0]]["task_key"]
 
 
+@pytest.mark.parametrize(
+    ("attempt", "cell_id", "execution_id"),
+    [
+        (
+            1,
+            "sha256:b036345f7f10180cfc4f9226cf495943e528394b3ca096634c89498010f80f34",
+            "sha256:bc7c2d7d0d4330d1cfe5634872ef498092457250496d892de2cb7feb6ddde741",
+        ),
+        (
+            2,
+            "sha256:161518898b56ae52cfe4dbb15d9fc82499c59a1e48c4e625389c46449473ec0b",
+            "sha256:dc9833e1f42f57bdc9fef690e07c83bb0a3207986c0d51d935b13f1de3577b2a",
+        ),
+    ],
+)
+def test_supplemental_runtime_authority_resolves_live_glm_rank28(
+    authority: ledger.Authority,
+    attempt: int,
+    cell_id: str,
+    execution_id: str,
+) -> None:
+    plan, item = ledger._bulk_pair(
+        authority, (cell_id, execution_id), "glm-hosted-s2"
+    ) or ({}, {})
+
+    assert plan == {
+        "controller": "glm-hosted-s2",
+        "plan_sha256": (
+            "sha256:c0cc69202751fbbea53dfeea98a62efe41b2638b4e9ad60307b0c0bdbeefd83f"
+        ),
+    }
+    assert item["run_id"] == (
+        f"chris-glm53-ac-bulk-a-r028-a{attempt}-g1-c3fbe2bd"
+    )
+    assert item["selection_rank"] == 28
+    assert item["attempt"] == attempt
+    assert item["task_key"] == authority.cells[cell_id]["task_key"]
+
+
 def test_supplemental_runtime_authority_resolves_live_glm_rank3_attempt1(
     authority: ledger.Authority,
 ) -> None:
