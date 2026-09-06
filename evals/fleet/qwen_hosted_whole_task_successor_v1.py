@@ -9,10 +9,12 @@ is held.
 
 from __future__ import annotations
 
+import contextlib
 import copy
 import fcntl
 import json
 import os
+import stat
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -23,28 +25,31 @@ from evals.fleet import qwen_hosted_generation19_v4 as source
 from evals.fleet import self_hosted
 
 SCHEMA = "fleet-qwen38-hosted-atomic-whole-task-plan-v2"
-HELD_SCHEMA = "fleet-qwen38-hosted-atomic-whole-task-held-v2"
-RELEASE_SCHEMA = "fleet-qwen38-hosted-atomic-whole-task-release-v2"
+HELD_SCHEMA = "fleet-qwen38-hosted-atomic-whole-task-held-v3"
+RELEASE_SCHEMA = "fleet-qwen38-hosted-atomic-whole-task-release-v3"
 RESERVATION_SCHEMA = "fleet-qwen38-hosted-four-claim-reservation-v2"
 PREPARING_SCHEMA = "fleet-qwen38-hosted-four-claim-preparing-v1"
 MODEL_BOUNDARY_SCHEMA = "fleet-qwen38-hosted-model-boundary-v1"
 PACKAGE_SOURCE_SCHEMA = "fleet-qwen38-hosted-package-source-v1"
+LEASE_OBSERVER_SCHEMA = "fleet-qwen38-hosted-endpoint-lease-observer-v1"
 LEDGER_PATH = "docs/evidence/qwen38-study/2026-09-05-exact-pass4-ledger-evidence-snapshot-v47.json"
 LEDGER_SELF_SHA256 = "sha256:bf0b9086dd97eecafe20fa9a4cf3b5d643f0ce8f6abad60fae6e3cba3e3e2e29"
 LEDGER_FILE_SHA256 = "sha256:0a2baba7c16745a4d69f0f5aafc04010734eacbace8f6d712d44011c4a36d0dd"
 HELD_PATH = (
-    "docs/evidence/qwen38-study/2026-09-06-qwen38-hosted-rank15-rank16-whole-task-held-v2.json"
+    "docs/evidence/qwen38-study/2026-09-06-qwen38-hosted-rank15-rank16-whole-task-held-v3.json"
 )
 SUPERSEDED_HELD = {
     "path": (
-        "docs/evidence/qwen38-study/2026-09-06-qwen38-hosted-rank15-rank16-whole-task-held-v1.json"
+        "docs/evidence/qwen38-study/2026-09-06-qwen38-hosted-rank15-rank16-whole-task-held-v2.json"
     ),
-    "receipt_sha256": ("sha256:322d14b3f3c71fd89e942d0f61e3c95b44e2f8df17af3d1992e227526299dd82"),
-    "file_sha256": "sha256:a392b4cf7b4d064cd5d02463d856138753e1f4d296d753f49fa9066c68a67c96",
+    "receipt_sha256": "sha256:dccd9f8724ffd7d104c986d1b3b2309b516c361ecad49edc0c528521c75aa772",
+    "file_sha256": "sha256:3c74c4af457c03e9559ac08050e826e62a04b439b8f01e066211193174be158b",
 }
 CLAIM_ROOT = Path("/mnt/sfs/cell-execution-claims/opencode11827-autocontinue-v1")
 RESERVATION_ROOT = Path("/mnt/sfs/cell-execution-reservations/opencode11827-autocontinue-v1")
 JOBS_ROOT = Path("/mnt/sfs/jobs")
+ENDPOINT_LEASE_ROOT = Path("/mnt/sfs/endpoint-leases/opencode11827-autocontinue-primary-v1")
+ENDPOINT_KEY = "qwen-hosted-autocontinue-v1"
 PREDECESSOR_TOMBSTONES = [
     {
         "selection_rank": 13,
@@ -212,6 +217,148 @@ def build_runtime_plan(
     return plan
 
 
+def observe_endpoint_lease_slots(
+    observer_pod_uid: str,
+    *,
+    lease_root: Path = ENDPOINT_LEASE_ROOT,
+    endpoint_key: str = ENDPOINT_KEY,
+) -> dict[str, Any]:
+    """Prove both persistent slot inodes are simultaneously free without deletion."""
+    if engine.UUID_RE.fullmatch(observer_pod_uid) is None:
+        raise ValueError("hosted whole-task lease observer requires a Pod UID")
+    endpoint_root = lease_root / endpoint_key
+    if endpoint_root.is_symlink() or not endpoint_root.is_dir():
+        raise RuntimeError("hosted whole-task endpoint lease directory is unsafe")
+    handles: list[tuple[Any, Path, os.stat_result]] = []
+    slots: list[dict[str, Any]] = []
+    try:
+        for slot in (1, 2):
+            path = endpoint_root / f"slot-{slot}.lock"
+            flags = os.O_RDWR
+            if hasattr(os, "O_NOFOLLOW"):
+                flags |= os.O_NOFOLLOW
+            try:
+                fd = os.open(path, flags)
+            except OSError as exc:
+                raise RuntimeError("hosted whole-task endpoint lease inode drifted") from exc
+            handle = os.fdopen(fd, "a+b")
+            info = os.fstat(handle.fileno())
+            handles.append((handle, path, info))
+            if not stat.S_ISREG(info.st_mode) or info.st_size != 0:
+                raise RuntimeError("hosted whole-task endpoint lease inode drifted")
+            try:
+                path_info = path.stat(follow_symlinks=False)
+            except OSError as exc:
+                raise RuntimeError("hosted whole-task endpoint lease inode drifted") from exc
+            if (path_info.st_dev, path_info.st_ino) != (info.st_dev, info.st_ino):
+                raise RuntimeError("hosted whole-task endpoint lease inode drifted")
+            try:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError as exc:
+                raise RuntimeError("hosted whole-task endpoint lease slot is held") from exc
+            slots.append(
+                {
+                    "slot": slot,
+                    "device": info.st_dev,
+                    "inode": info.st_ino,
+                    "size": info.st_size,
+                    "path_sha256": self_hosted.sha256(str(path).encode()),
+                    "file_sha256": self_hosted.sha256(b""),
+                }
+            )
+        for _handle, path, info in handles:
+            try:
+                path_info = path.stat(follow_symlinks=False)
+            except OSError as exc:
+                raise RuntimeError("hosted whole-task endpoint lease inode drifted") from exc
+            if (path_info.st_dev, path_info.st_ino) != (info.st_dev, info.st_ino):
+                raise RuntimeError("hosted whole-task endpoint lease inode drifted")
+    finally:
+        for handle, _path, _info in reversed(handles):
+            if not handle.closed:
+                with contextlib.suppress(OSError):
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+                handle.close()
+    if len(slots) != 2:
+        raise RuntimeError("hosted whole-task endpoint lease probe was incomplete")
+    return _seal(
+        {
+            "schema_version": LEASE_OBSERVER_SCHEMA,
+            "status": "BOTH_SLOTS_FREE",
+            "observer_pod_uid": observer_pod_uid,
+            "lease_root_sha256": self_hosted.sha256(str(lease_root).encode()),
+            "endpoint_key_sha256": self_hosted.sha256(endpoint_key.encode()),
+            "slots": slots,
+            "simultaneous_nonblocking_exclusive_acquisition": True,
+            "all_locks_released": True,
+            "files_created": 0,
+            "files_deleted": 0,
+            "api_mutations": 0,
+            "scores_included": False,
+            "prompts_or_traces_included": False,
+        }
+    )
+
+
+def validate_endpoint_lease_observer(value: dict[str, Any]) -> None:
+    slots = value.get("slots") or []
+    if any(
+        (
+            set(value)
+            != {
+                "schema_version",
+                "status",
+                "observer_pod_uid",
+                "lease_root_sha256",
+                "endpoint_key_sha256",
+                "slots",
+                "simultaneous_nonblocking_exclusive_acquisition",
+                "all_locks_released",
+                "files_created",
+                "files_deleted",
+                "api_mutations",
+                "scores_included",
+                "prompts_or_traces_included",
+                "receipt_sha256",
+            },
+            value.get("schema_version") != LEASE_OBSERVER_SCHEMA,
+            value.get("status") != "BOTH_SLOTS_FREE",
+            engine.UUID_RE.fullmatch(str(value.get("observer_pod_uid"))) is None,
+            value.get("lease_root_sha256") != self_hosted.sha256(str(ENDPOINT_LEASE_ROOT).encode()),
+            value.get("endpoint_key_sha256") != self_hosted.sha256(ENDPOINT_KEY.encode()),
+            not isinstance(slots, list),
+            len(slots) != 2,
+            [row.get("slot") for row in slots] != [1, 2],
+            any(
+                set(row) != {"slot", "device", "inode", "size", "path_sha256", "file_sha256"}
+                or type(row.get("device")) is not int
+                or row["device"] < 1
+                or type(row.get("inode")) is not int
+                or row["inode"] < 1
+                or row.get("size") != 0
+                or row.get("path_sha256")
+                != self_hosted.sha256(
+                    str(
+                        ENDPOINT_LEASE_ROOT / ENDPOINT_KEY / f"slot-{row.get('slot')}.lock"
+                    ).encode()
+                )
+                or row.get("file_sha256") != self_hosted.sha256(b"")
+                for row in slots
+            ),
+            len({(row.get("device"), row.get("inode")) for row in slots}) != 2,
+            value.get("simultaneous_nonblocking_exclusive_acquisition") is not True,
+            value.get("all_locks_released") is not True,
+            value.get("files_created") != 0,
+            value.get("files_deleted") != 0,
+            value.get("api_mutations") != 0,
+            value.get("scores_included") is not False,
+            value.get("prompts_or_traces_included") is not False,
+            value.get("receipt_sha256") != self_hosted.digest_without(value, "receipt_sha256"),
+        )
+    ):
+        raise RuntimeError("hosted whole-task endpoint lease observer drifted")
+
+
 def package_source_receipt(
     controller: str, plan: dict[str, Any], data: dict[str, str]
 ) -> dict[str, Any]:
@@ -346,7 +493,8 @@ def validate_held(
             held.get("required_fresh_release_gates")
             != [
                 "prior_jobs_terminal_and_pods_absent",
-                "endpoint_lease_files_absent",
+                "endpoint_lease_slots_simultaneously_lockable",
+                "no_relevant_active_hosted_q_jobs_or_pods",
                 "canonical_claim_collisions_zero",
                 "authoritative_session_collisions_zero",
                 "accepted_evidence_collisions_zero",
@@ -376,6 +524,8 @@ def validate_release(
     privacy = release.get("privacy") or {}
     collision = release.get("fresh_collision_reconciliation") or {}
     predecessor = release.get("predecessor_disposition") or {}
+    lease_observer = release.get("endpoint_lease_observer") or {}
+    validate_endpoint_lease_observer(lease_observer)
     if any(
         (
             set(release)
@@ -393,6 +543,7 @@ def validate_release(
                 "ledger_snapshot_file_sha256",
                 "predecessor_disposition",
                 "predecessor_tombstones",
+                "endpoint_lease_observer",
                 "fresh_collision_reconciliation",
                 "privacy",
                 "receipt_sha256",
@@ -417,7 +568,11 @@ def validate_release(
                 "prior_pod_uids",
                 "prior_jobs_terminal",
                 "prior_pods_absent",
-                "endpoint_lease_files_absent",
+                "relevant_active_hosted_q_jobs",
+                "relevant_active_hosted_q_pods",
+                "new_jobs_absent",
+                "new_configmaps_absent",
+                "kubernetes_api_mutations",
             },
             predecessor.get("prior_job_uids")
             != [
@@ -431,7 +586,11 @@ def validate_release(
             ],
             predecessor.get("prior_jobs_terminal") is not True,
             predecessor.get("prior_pods_absent") is not True,
-            predecessor.get("endpoint_lease_files_absent") is not True,
+            predecessor.get("relevant_active_hosted_q_jobs") != 0,
+            predecessor.get("relevant_active_hosted_q_pods") != 0,
+            predecessor.get("new_jobs_absent") is not True,
+            predecessor.get("new_configmaps_absent") is not True,
+            predecessor.get("kubernetes_api_mutations") != 0,
             collision.get("checked_immediately_before_release") is not True,
             set(collision)
             != {
@@ -447,6 +606,7 @@ def validate_release(
             },
             collision.get("checked_from_uid_bound_sfs_pod") is not True,
             engine.UUID_RE.fullmatch(str(collision.get("observer_pod_uid"))) is None,
+            collision.get("observer_pod_uid") != lease_observer.get("observer_pod_uid"),
             collision.get("observed_cells") != 8,
             collision.get("canonical_claim_collisions") != 0,
             collision.get("authoritative_session_collisions") != 0,

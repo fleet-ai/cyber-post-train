@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import fcntl
 import json
 import subprocess
 import sys
@@ -23,6 +24,51 @@ def _sources(plans: dict[str, dict]) -> dict[str, dict]:
     return sources
 
 
+def _lease_observer() -> dict:
+    return successor._seal(  # noqa: SLF001
+        {
+            "schema_version": successor.LEASE_OBSERVER_SCHEMA,
+            "status": "BOTH_SLOTS_FREE",
+            "observer_pod_uid": "33333333-3333-4333-8333-333333333333",
+            "lease_root_sha256": self_hosted.sha256(str(successor.ENDPOINT_LEASE_ROOT).encode()),
+            "endpoint_key_sha256": self_hosted.sha256(successor.ENDPOINT_KEY.encode()),
+            "slots": [
+                {
+                    "slot": 1,
+                    "device": 1,
+                    "inode": 101,
+                    "size": 0,
+                    "path_sha256": self_hosted.sha256(
+                        str(
+                            successor.ENDPOINT_LEASE_ROOT / successor.ENDPOINT_KEY / "slot-1.lock"
+                        ).encode()
+                    ),
+                    "file_sha256": self_hosted.sha256(b""),
+                },
+                {
+                    "slot": 2,
+                    "device": 1,
+                    "inode": 102,
+                    "size": 0,
+                    "path_sha256": self_hosted.sha256(
+                        str(
+                            successor.ENDPOINT_LEASE_ROOT / successor.ENDPOINT_KEY / "slot-2.lock"
+                        ).encode()
+                    ),
+                    "file_sha256": self_hosted.sha256(b""),
+                },
+            ],
+            "simultaneous_nonblocking_exclusive_acquisition": True,
+            "all_locks_released": True,
+            "files_created": 0,
+            "files_deleted": 0,
+            "api_mutations": 0,
+            "scores_included": False,
+            "prompts_or_traces_included": False,
+        }
+    )
+
+
 def _release(plans: dict[str, dict], sources: dict[str, dict] | None = None) -> dict:
     sources = sources or _sources(plans)
     body = {
@@ -38,6 +84,7 @@ def _release(plans: dict[str, dict], sources: dict[str, dict] | None = None) -> 
         "ledger_snapshot_receipt_sha256": successor.LEDGER_SELF_SHA256,
         "ledger_snapshot_file_sha256": successor.LEDGER_FILE_SHA256,
         "predecessor_tombstones": successor.PREDECESSOR_TOMBSTONES,
+        "endpoint_lease_observer": _lease_observer(),
         "predecessor_disposition": {
             "retry_forbidden_selection_ranks": [13, 14],
             "prior_job_uids": [
@@ -50,7 +97,11 @@ def _release(plans: dict[str, dict], sources: dict[str, dict] | None = None) -> 
             ],
             "prior_jobs_terminal": True,
             "prior_pods_absent": True,
-            "endpoint_lease_files_absent": True,
+            "relevant_active_hosted_q_jobs": 0,
+            "relevant_active_hosted_q_pods": 0,
+            "new_jobs_absent": True,
+            "new_configmaps_absent": True,
+            "kubernetes_api_mutations": 0,
         },
         "fresh_collision_reconciliation": {
             "checked_immediately_before_release": True,
@@ -124,13 +175,102 @@ def test_release_validator_fails_closed_on_every_collision_class() -> None:
         bad["receipt_sha256"] = self_hosted.digest_without(bad, "receipt_sha256")
         with pytest.raises(RuntimeError, match="release drifted"):
             successor.validate_release(bad, plans, sources)
-    with pytest.raises(RuntimeError, match="release drifted"):
+    with pytest.raises(RuntimeError, match="drifted"):
         successor.validate_release(successor.load(ROOT / successor.HELD_PATH), plans, sources)
     extra = copy.deepcopy(release)
     extra["score"] = 0
     extra["receipt_sha256"] = self_hosted.digest_without(extra, "receipt_sha256")
     with pytest.raises(RuntimeError, match="release drifted"):
         successor.validate_release(extra, plans, sources)
+
+
+def _lease_root(tmp_path: Path) -> tuple[Path, list[Path]]:
+    root = tmp_path / "leases"
+    endpoint = root / successor.ENDPOINT_KEY
+    endpoint.mkdir(parents=True)
+    paths = [endpoint / "slot-1.lock", endpoint / "slot-2.lock"]
+    for path in paths:
+        path.touch(mode=0o600)
+    return root, paths
+
+
+def test_persistent_lease_inodes_are_simultaneously_probed_and_never_deleted(
+    tmp_path: Path,
+) -> None:
+    root, paths = _lease_root(tmp_path)
+    before = [(path.stat().st_dev, path.stat().st_ino) for path in paths]
+    receipt = successor.observe_endpoint_lease_slots(
+        "33333333-3333-4333-8333-333333333333", lease_root=root
+    )
+    assert receipt["status"] == "BOTH_SLOTS_FREE"
+    assert receipt["all_locks_released"] is True
+    assert receipt["files_created"] == receipt["files_deleted"] == 0
+    assert [(path.stat().st_dev, path.stat().st_ino) for path in paths] == before
+    handles = [path.open("a+b") for path in paths]
+    try:
+        for handle in handles:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    finally:
+        for handle in reversed(handles):
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+            handle.close()
+
+
+def test_held_second_slot_fails_and_releases_partial_first_slot(tmp_path: Path) -> None:
+    root, paths = _lease_root(tmp_path)
+    held = paths[1].open("a+b")
+    fcntl.flock(held.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    try:
+        with pytest.raises(RuntimeError, match="lease slot is held"):
+            successor.observe_endpoint_lease_slots(
+                "33333333-3333-4333-8333-333333333333", lease_root=root
+            )
+        first = paths[0].open("a+b")
+        try:
+            fcntl.flock(first.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        finally:
+            fcntl.flock(first.fileno(), fcntl.LOCK_UN)
+            first.close()
+    finally:
+        fcntl.flock(held.fileno(), fcntl.LOCK_UN)
+        held.close()
+    assert all(path.exists() for path in paths)
+
+
+def test_lease_observer_fails_closed_on_path_and_inode_drift(tmp_path: Path) -> None:
+    root, paths = _lease_root(tmp_path)
+    paths[1].unlink()
+    with pytest.raises(RuntimeError, match="inode drifted"):
+        successor.observe_endpoint_lease_slots(
+            "33333333-3333-4333-8333-333333333333", lease_root=root
+        )
+    paths[1].mkdir()
+    with pytest.raises(RuntimeError, match="inode drifted"):
+        successor.observe_endpoint_lease_slots(
+            "33333333-3333-4333-8333-333333333333", lease_root=root
+        )
+    bad = _lease_observer()
+    bad["slots"][1]["inode"] = bad["slots"][0]["inode"]
+    bad["receipt_sha256"] = self_hosted.digest_without(bad, "receipt_sha256")
+    with pytest.raises(RuntimeError, match="lease observer drifted"):
+        successor.validate_endpoint_lease_observer(bad)
+    bad = _lease_observer()
+    bad["slots"][1]["path_sha256"] = bad["slots"][0]["path_sha256"]
+    bad["receipt_sha256"] = self_hosted.digest_without(bad, "receipt_sha256")
+    with pytest.raises(RuntimeError, match="lease observer drifted"):
+        successor.validate_endpoint_lease_observer(bad)
+
+
+def test_release_requires_zero_relevant_active_hosted_objects() -> None:
+    plans = successor.build_plans(ROOT)
+    sources = _sources(plans)
+    release = _release(plans, sources)
+    for field in ("relevant_active_hosted_q_jobs", "relevant_active_hosted_q_pods"):
+        bad = copy.deepcopy(release)
+        bad["predecessor_disposition"][field] = 1
+        bad["receipt_sha256"] = self_hosted.digest_without(bad, "receipt_sha256")
+        with pytest.raises(RuntimeError, match="release drifted"):
+            successor.validate_release(bad, plans, sources)
 
 
 def test_atomic_provider_publishes_and_validates_all_four_before_return(
