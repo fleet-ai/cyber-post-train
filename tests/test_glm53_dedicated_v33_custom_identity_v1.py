@@ -14,6 +14,7 @@ from evals.fleet import glm53_dedicated_v33_watchdog_package_v1 as watchdog
 
 ROOT = Path(__file__).resolve().parents[1]
 OBSERVED_RUN_ID = "glm53-tp8-v33-e4888aa7"
+PACKAGE_COMMIT = "9aa7e3dd311f11373b1eb76923489d85255d2c77"
 
 
 class FakeResponse:
@@ -147,6 +148,38 @@ def test_v33_generation_identities_are_fresh_and_score_free() -> None:
     assert held["api_run_id_pattern"] == server.API_RUN_ID_RE.pattern
     assert held["scored_launch_authorized"] is False
     assert held["api_mutation_calls"] == 0
+
+
+def test_v33_watchdog_package_runs_generation_exact_runtime() -> None:
+    classes = [
+        {
+            "metadata": {"name": "fleet-infra-quiet"},
+            "value": -1000,
+            "preemptionPolicy": "Never",
+        },
+        {
+            "metadata": {"name": "fleet-serve-low"},
+            "value": 100,
+            "preemptionPolicy": "Never",
+        },
+    ]
+    rendered = watchdog.render(
+        ROOT,
+        PACKAGE_COMMIT,
+        binding(),
+        ready_at_epoch=1.0,
+        priority_classes=classes,
+    )
+    configmap, job = rendered["objects"]["items"]
+    manifest = json.loads(configmap["data"]["package.json"])
+    runtime_path = "evals/fleet/glm53_dedicated_v33_request_counter_watchdog_v1.py"
+    assert runtime_path in manifest["files"]
+    assert manifest["package_sha256"] == crypto.digest_without(
+        manifest, "package_sha256"
+    )
+    command = job["spec"]["template"]["spec"]["containers"][0]["command"][-1]
+    assert "glm53_dedicated_v33_request_counter_watchdog_v1" in command
+    assert "glm53_dedicated_v23_request_counter_watchdog_v1 watch" not in command
 
 
 def test_v32_incident_and_release_receipts_are_sanitized_and_digest_valid() -> None:
