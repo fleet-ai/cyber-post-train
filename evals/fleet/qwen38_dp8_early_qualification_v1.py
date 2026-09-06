@@ -17,23 +17,17 @@ from evals.fleet import qwen38_dp8_post_rank99_plan_v1 as predecessor
 from evals.fleet import self_hosted
 
 PLAN_PATH = Path(
-    "docs/evidence/qwen38-study/"
-    "2026-09-06-qwen38-dp8-early-qualification-held-v1.json"
+    "docs/evidence/qwen38-study/2026-09-06-qwen38-dp8-early-qualification-held-v1.json"
 )
-CONFIG_PATH = Path(
-    "evals/fleet/configs/qwen38-dedicated-dp8-early-qualification-v1-held.json"
-)
+CONFIG_PATH = Path("evals/fleet/configs/qwen38-dedicated-dp8-early-qualification-v1-held.json")
 PREVIEW_PATH = Path(
-    "docs/evidence/qwen38-study/"
-    "2026-09-06-qwen38-dp8-early-qualification-preview-v1.json"
+    "docs/evidence/qwen38-study/2026-09-06-qwen38-dp8-early-qualification-preview-v1.json"
 )
 INVENTORY_PATH = Path(
-    "docs/evidence/qwen38-study/"
-    "2026-09-06-qwen38-dp8-early-qualification-node-inventory-v1.json"
+    "docs/evidence/qwen38-study/2026-09-06-qwen38-dp8-early-qualification-node-inventory-v1.json"
 )
 RELEASE_PATH = Path(
-    "docs/evidence/qwen38-study/"
-    "2026-09-06-qwen38-dp8-early-qualification-held-release-v1.json"
+    "docs/evidence/qwen38-study/2026-09-06-qwen38-dp8-early-qualification-held-release-v1.json"
 )
 SCHEMA = "fleet-qwen38-dp8-early-qualification-held-v1"
 CONFIG_SCHEMA = "fleet-qwen38-dp8-early-qualification-config-v1"
@@ -45,6 +39,9 @@ RUN_DIR = "/mnt/sfs/jobs/chris-cyber-evalserve-q38-dp8-c-v1"
 SERVING_BLOCK = "dedicated-qwen-dp8-c-v1"
 LIFECYCLE_V2_PATH = Path("evals/fleet/scripts/qwen38_dedicated_dp8_lifecycle_v2.sh")
 OBSERVER_V2_PATH = Path("evals/fleet/qwen38_dp8_metric_observer_v2.py")
+QUALIFIER_RUNTIME_PATH = Path("evals/fleet/qwen38_dp8_early_qualifier_runtime_v1.py")
+QUALIFIER_PACKAGE_PATH = Path("evals/fleet/qwen38_dp8_early_qualifier_package_v1.py")
+LIVE_SUBMITTER_PATH = Path("evals/fleet/qwen38_dp8_early_live_v1.py")
 RUNTIME_OBSERVER_PATH = "/tmp/qwen38_dp8_metric_observer_v2.py"
 
 
@@ -63,16 +60,12 @@ def jobs_payload(root: Path) -> dict[str, Any]:
         "from pathlib import Path\n"
         f"Path({RUNTIME_OBSERVER_PATH!r}).write_text({observer_source!r})\n"
         f"Path({RUNTIME_OBSERVER_PATH!r}).chmod(0o500)\n"
-        "PY\n"
-        + lifecycle
+        "PY\n" + lifecycle
     )
     payload = {
         "image": runtime.IMAGE,
         "command": (
-            "bash -lc "
-            + shlex.quote(bootstrap)
-            + " -- "
-            + shlex.join(runtime.SERVER_ARGUMENTS)
+            "bash -lc " + shlex.quote(bootstrap) + " -- " + shlex.join(runtime.SERVER_ARGUMENTS)
         ),
         "workers": 1,
         "gpus_per_worker": 8,
@@ -100,9 +93,7 @@ def jobs_payload(root: Path) -> dict[str, Any]:
 
 
 def validate_config(value: Mapping[str, Any], root: Path) -> None:
-    if value.get("config_sha256") != self_hosted.digest_without(
-        dict(value), "config_sha256"
-    ):
+    if value.get("config_sha256") != self_hosted.digest_without(dict(value), "config_sha256"):
         raise ValueError("early DP8 config digest drifted")
     payload = jobs_payload(root)
     if {key: item for key, item in value.items() if key != "config_sha256"} != {
@@ -125,9 +116,7 @@ def validate_config(value: Mapping[str, Any], root: Path) -> None:
 
 
 def validate_plan(value: Mapping[str, Any], root: Path) -> None:
-    if value.get("receipt_sha256") != self_hosted.digest_without(
-        dict(value), "receipt_sha256"
-    ):
+    if value.get("receipt_sha256") != self_hosted.digest_without(dict(value), "receipt_sha256"):
         raise ValueError("early DP8 plan digest drifted")
     expected = {
         "schema_version": SCHEMA,
@@ -141,9 +130,7 @@ def validate_plan(value: Mapping[str, Any], root: Path) -> None:
         },
         "predecessor": {
             "immutable_plan_path": str(predecessor.PLAN_PATH),
-            "immutable_plan_receipt_sha256": predecessor.load_held(root)[
-                "receipt_sha256"
-            ],
+            "immutable_plan_receipt_sha256": predecessor.load_held(root)["receipt_sha256"],
             "changed_contract": "qualification_may_coexist_with_productive_tp1",
             "predecessor_rewritten": False,
         },
@@ -195,6 +182,29 @@ def validate_plan(value: Mapping[str, Any], root: Path) -> None:
                 "docker.io/library/docker@sha256:"
                 "f649ef046008ca7f926a2571c32b0ac22e5c59eb61b959617f9acc2a4c638cf5"
             ),
+            "docker_cli_sha256": (
+                "sha256:242c7a8de606afba2acada7c7af00d77f92c3601678b2f3a60911b49a892c722"
+            ),
+            "docker_buildx_sha256": (
+                "sha256:8c38f60308a895fa570f1410e453c5de11aafd65a99fa99965d96d24b6225a78"
+            ),
+            "docker_cli_total_bytes": 105594160,
+            "docker_cli_emptydir_size": "256Mi",
+            "docker_build_pull_exact_digest_intended": True,
+            "shared_workspace_between_evaluator_and_dind": True,
+            "tmpdir": "/workspace/tmp",
+            "cluster_dind_host_gateway_required": True,
+            "cluster_proxy_bind_host": "0.0.0.0",
+            "dind_resources": {
+                "requests": {"cpu": "4", "memory": "8Gi", "ephemeral-storage": "40Gi"},
+                "limits": {"cpu": "10", "memory": "24Gi", "ephemeral-storage": "80Gi"},
+            },
+            "evaluator_resources": {
+                "requests": {"cpu": "1", "memory": "2Gi", "ephemeral-storage": "10Gi"},
+                "limits": {"cpu": "4", "memory": "8Gi", "ephemeral-storage": "40Gi"},
+            },
+            "controller_resource_observer": "dind_cgroup_v2_per_second_v1",
+            "zero_dind_oom_throttle_and_protocol_errors_required": True,
             "actual_opencode_runs_in_pinned_dind": True,
             "service_origin_from_uid_bound_binding_only": True,
             "cluster_dns_only_no_port_forward": True,
@@ -203,25 +213,35 @@ def validate_plan(value: Mapping[str, Any], root: Path) -> None:
             "gpu_distribution_source": "server_local_signed_sfs_observation_v2",
             "server_pod_name_and_uid_cross_binding_required": True,
             "create_only_renderer_required_before_launch": True,
-            "controller_package_ready": False,
+            "create_only_renderer_path": str(QUALIFIER_PACKAGE_PATH),
+            "create_only_renderer_file_sha256": self_hosted.sha256(
+                (root / QUALIFIER_PACKAGE_PATH).read_bytes()
+            ),
+            "runtime_path": str(QUALIFIER_RUNTIME_PATH),
+            "runtime_file_sha256": self_hosted.sha256((root / QUALIFIER_RUNTIME_PATH).read_bytes()),
+            "separate_uid_bound_qualifier_release_required": True,
+            "controller_package_ready": True,
+            "server_submitter_path": str(LIVE_SUBMITTER_PATH),
+            "server_submitter_file_sha256": self_hosted.sha256(
+                (root / LIVE_SUBMITTER_PATH).read_bytes()
+            ),
+            "server_submitter_requires_clean_exact_commit": True,
+            "server_submitter_create_once_post_limit": 1,
+            "server_submitter_allowed_peer": "dedicated-qwen-tp1-j-v1",
         },
         "qualification": {
-            "existing_runner_path": "evals/fleet/qwen38_dp8_post_rank99_launch_v1.py",
-            "existing_runner_file_sha256": (
-                "sha256:eeb86f6d4555411ff26917f8bdcc2f3adc7a38fc41ece2b5d8abc1370139c5f0"
+            "existing_runner_path": str(QUALIFIER_RUNTIME_PATH),
+            "existing_runner_file_sha256": self_hosted.sha256(
+                (root / QUALIFIER_RUNTIME_PATH).read_bytes()
             ),
-            "lifecycle_file_sha256": (
-                "sha256:e1f8f2cdcdeb3e71e98f5a3faf90e35f78ee8c3713d784511761eb3b9fc2d87c"
-            ),
-            "metric_observer_file_sha256": (
-                "sha256:07583fb3a9bead73d8ab5006ac969ad7c1bfc1413835227701bee8a06cfc5520"
+            "lifecycle_file_sha256": self_hosted.sha256((root / LIFECYCLE_V2_PATH).read_bytes()),
+            "metric_observer_file_sha256": self_hosted.sha256(
+                (root / OBSERVER_V2_PATH).read_bytes()
             ),
             "concurrency_ladder": [1, 2, 4, 8],
             "strictly_ascending_stop_before_next_on_failure": True,
             "actual_opencode_version": "1.18.27",
-            "context_management": (
-                "opencode_1.18.27_native_compaction_autocontinue_v1"
-            ),
+            "context_management": ("opencode_1.18.27_native_compaction_autocontinue_v1"),
             "compaction_headroom_tokens": 20000,
             "max_output_tokens": 32768,
             "max_model_requests": 600,
@@ -274,9 +294,7 @@ def validate_plan(value: Mapping[str, Any], root: Path) -> None:
 
 
 def validate_preview(value: Mapping[str, Any], root: Path) -> None:
-    if value.get("receipt_sha256") != self_hosted.digest_without(
-        dict(value), "receipt_sha256"
-    ):
+    if value.get("receipt_sha256") != self_hosted.digest_without(dict(value), "receipt_sha256"):
         raise ValueError("early DP8 preview digest drifted")
     if set(value) != {
         "schema_version",
@@ -301,8 +319,7 @@ def validate_preview(value: Mapping[str, Any], root: Path) -> None:
         value.get("schema_version") != PREVIEW_SCHEMA
         or value.get("status") != "PASSED_NON_MUTATING"
         or value.get("config_path") != str(CONFIG_PATH)
-        or value.get("config_sha256")
-        != _load(root / CONFIG_PATH).get("config_sha256")
+        or value.get("config_sha256") != _load(root / CONFIG_PATH).get("config_sha256")
         or value.get("request_sha256")
         != self_hosted.sha256(self_hosted.canonical_json(jobs_payload(root)))
         or value.get("title") != TITLE
@@ -339,9 +356,7 @@ def preview_identity(manifest_yaml: str, root: Path) -> dict[str, Any]:
         raise RuntimeError("preview did not render exactly one RayJob")
     rayjob = manifests[0]
     spec = rayjob.get("spec") or {}
-    head = ((spec.get("rayClusterSpec") or {}).get("headGroupSpec") or {}).get(
-        "template"
-    ) or {}
+    head = ((spec.get("rayClusterSpec") or {}).get("headGroupSpec") or {}).get("template") or {}
     pod = head.get("spec") or {}
     containers = pod.get("containers") or []
     if len(containers) != 1:
@@ -360,13 +375,9 @@ def preview_identity(manifest_yaml: str, root: Path) -> dict[str, Any]:
         "priority_class": pod.get("priorityClassName"),
         "privileged": security.get("privileged", False),
         "run_dir": env.get("RUN_DIR"),
-        "queue": (rayjob.get("metadata", {}).get("labels") or {}).get(
-            "kueue.x-k8s.io/queue-name"
-        ),
+        "queue": (rayjob.get("metadata", {}).get("labels") or {}).get("kueue.x-k8s.io/queue-name"),
         "suspended": spec.get("suspend"),
-        "preferred_topology": annotations.get(
-            "kueue.x-k8s.io/podset-preferred-topology"
-        ),
+        "preferred_topology": annotations.get("kueue.x-k8s.io/podset-preferred-topology"),
     }
     expected = {
         "image": payload["image"],
@@ -385,9 +396,7 @@ def preview_identity(manifest_yaml: str, root: Path) -> dict[str, Any]:
 
 
 def validate_inventory(value: Mapping[str, Any]) -> None:
-    if value.get("receipt_sha256") != self_hosted.digest_without(
-        dict(value), "receipt_sha256"
-    ):
+    if value.get("receipt_sha256") != self_hosted.digest_without(dict(value), "receipt_sha256"):
         raise ValueError("early DP8 inventory digest drifted")
     if set(value) != {
         "schema_version",
@@ -401,6 +410,7 @@ def validate_inventory(value: Mapping[str, Any]) -> None:
         "projected_gpus_after_create",
         "unknown_active_dedicated_runs",
         "active_peer",
+        "cpu_qualifier_placement",
         "title_matches",
         "run_dir_matches",
         "kubernetes_identity_matches",
@@ -439,12 +449,39 @@ def validate_inventory(value: Mapping[str, Any]) -> None:
         or peer.get("productive_traffic") is not True
     ):
         raise ValueError("early DP8 inventory peer drifted")
+    placement = value.get("cpu_qualifier_placement")
+    if not isinstance(placement, dict) or (
+        placement.get("node_pinning") is not False
+        or placement.get("node_selector") != "workload=fleetai-training-ng-cpu"
+        or placement.get("qualifier_requests")
+        != {"cpu_millicores": 5000, "memory_mib": 10240}
+        or placement.get("qualifier_limits")
+        != {"cpu_millicores": 14000, "memory_mib": 32768}
+        or placement.get("request_fit_node_count", 0) < 1
+    ):
+        raise ValueError("early DP8 CPU qualifier placement is not schedulable")
+    nodes = placement.get("nodes")
+    if not isinstance(nodes, list) or len(nodes) != 3:
+        raise ValueError("early DP8 CPU qualifier node inventory is incomplete")
+    required = placement["qualifier_requests"]
+    fit = sum(
+        type(row.get("allocatable_cpu_millicores")) is int
+        and type(row.get("observed_cpu_used_millicores")) is int
+        and row["allocatable_cpu_millicores"] - row["observed_cpu_used_millicores"]
+        >= required["cpu_millicores"]
+        and type(row.get("allocatable_memory_mib")) is int
+        and type(row.get("observed_memory_used_mib")) is int
+        and row["allocatable_memory_mib"] - row["observed_memory_used_mib"]
+        >= required["memory_mib"]
+        for row in nodes
+        if isinstance(row, dict)
+    )
+    if fit != placement["request_fit_node_count"]:
+        raise ValueError("early DP8 CPU qualifier placement fit count drifted")
 
 
 def validate_held_release(value: Mapping[str, Any], root: Path) -> None:
-    if value.get("receipt_sha256") != self_hosted.digest_without(
-        dict(value), "receipt_sha256"
-    ):
+    if value.get("receipt_sha256") != self_hosted.digest_without(dict(value), "receipt_sha256"):
         raise ValueError("early DP8 held release digest drifted")
     if set(value) != {
         "schema_version",
@@ -474,12 +511,9 @@ def validate_held_release(value: Mapping[str, Any], root: Path) -> None:
         or value.get("title") != TITLE
         or value.get("run_dir") != RUN_DIR
         or value.get("serving_block") != SERVING_BLOCK
-        or value.get("config_sha256")
-        != _load(root / CONFIG_PATH).get("config_sha256")
-        or value.get("plan_receipt_sha256")
-        != _load(root / PLAN_PATH).get("receipt_sha256")
-        or value.get("preview_receipt_sha256")
-        != _load(root / PREVIEW_PATH).get("receipt_sha256")
+        or value.get("config_sha256") != _load(root / CONFIG_PATH).get("config_sha256")
+        or value.get("plan_receipt_sha256") != _load(root / PLAN_PATH).get("receipt_sha256")
+        or value.get("preview_receipt_sha256") != _load(root / PREVIEW_PATH).get("receipt_sha256")
         or value.get("inventory_receipt_sha256")
         != _load(root / INVENTORY_PATH).get("receipt_sha256")
         or value.get("server_create_limit") != 1
@@ -487,8 +521,7 @@ def validate_held_release(value: Mapping[str, Any], root: Path) -> None:
         or value.get("api_mutations") != 0
         or value.get("explicit_root_review_required") is not True
         or value.get("qualification_only") is not True
-        or value.get("fresh_live_gate_required_immediately_before_any_create")
-        is not True
+        or value.get("fresh_live_gate_required_immediately_before_any_create") is not True
         or value.get("prompts_traces_flags_or_scores_included") is not False
     ):
         raise ValueError("early DP8 release is not held")

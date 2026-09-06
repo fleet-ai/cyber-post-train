@@ -13,6 +13,8 @@ DRAIN_FILE=$LIFECYCLE_DIR/DRAIN
 TRAFFIC_FILE=$LIFECYCLE_DIR/traffic
 COUNTER_STATE=$LIFECYCLE_DIR/.request-counters.json
 TRAFFIC_OBSERVATION=$LIFECYCLE_DIR/REAL-TRAFFIC.json
+TRAFFIC_EVENT_DIR=$LIFECYCLE_DIR/real-traffic-events
+SERVER_BINDING=$LIFECYCLE_DIR/SERVER-BINDING.json
 IDLE_SECONDS=600
 POLL_SECONDS=5
 
@@ -83,6 +85,8 @@ while kill -0 "$server_pid" 2>/dev/null; do
     --state-path "$COUNTER_STATE" \
     --receipt-path "$TRAFFIC_OBSERVATION" \
     --traffic-path "$TRAFFIC_FILE" \
+    --binding-path "$SERVER_BINDING" \
+    --event-dir "$TRAFFIC_EVENT_DIR" \
     --server-run-dir "$QWEN38_RUN_DIR" || true
   now=$(date +%s)
   newest=$ready_at

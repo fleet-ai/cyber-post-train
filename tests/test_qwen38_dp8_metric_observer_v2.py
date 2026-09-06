@@ -10,6 +10,13 @@ from evals.fleet import qwen38_dp8_early_qualification_v1 as early
 from evals.fleet import qwen38_dp8_metric_observer_v2 as observer
 
 ROOT = Path(__file__).resolve().parents[1]
+BINDING = {
+    "api_run_id": "ft-run-example",
+    "head_pod_name": "example-head",
+    "head_pod_uid": "11111111-1111-4111-8111-111111111111",
+    "service_uid": "22222222-2222-4222-8222-222222222222",
+    "receipt_sha256": "sha256:" + "a" * 64,
+}
 
 
 def _metrics(*, offset: int = 0, family: str = "sglang_requests_total") -> str:
@@ -36,6 +43,10 @@ def test_real_counter_increase_is_the_only_traffic_observation() -> None:
             utilization_percent=[0] * 8,
             server_run_dir="/mnt/sfs/jobs/chris-cyber-evalserve-q38-dp8-c-v1",
             pod_name="example-head",
+            pod_uid=BINDING["head_pod_uid"],
+            api_run_id=BINDING["api_run_id"],
+            service_uid=BINDING["service_uid"],
+            server_binding_receipt_sha256=BINDING["receipt_sha256"],
             observed_at_epoch=1,
         )
         is None
@@ -47,6 +58,10 @@ def test_real_counter_increase_is_the_only_traffic_observation() -> None:
         utilization_percent=[100] + [0] * 7,
         server_run_dir="/mnt/sfs/jobs/chris-cyber-evalserve-q38-dp8-c-v1",
         pod_name="example-head",
+        pod_uid=BINDING["head_pod_uid"],
+        api_run_id=BINDING["api_run_id"],
+        service_uid=BINDING["service_uid"],
+        server_binding_receipt_sha256=BINDING["receipt_sha256"],
         observed_at_epoch=2,
     )
     assert receipt is not None
@@ -64,6 +79,10 @@ def test_counter_decrease_and_invalid_gpu_samples_fail_closed() -> None:
             utilization_percent=[0] * 8,
             server_run_dir="/mnt/sfs/jobs/chris-cyber-evalserve-q38-dp8-c-v1",
             pod_name="example-head",
+            pod_uid=BINDING["head_pod_uid"],
+            api_run_id=BINDING["api_run_id"],
+            service_uid=BINDING["service_uid"],
+            server_binding_receipt_sha256=BINDING["receipt_sha256"],
             observed_at_epoch=3,
         )
     rows = "\n".join(f"{rank}, 250000, 0" for rank in range(8))
@@ -82,6 +101,10 @@ def test_receipt_digest_changes_if_safe_evidence_is_tampered() -> None:
         utilization_percent=[100] * 8,
         server_run_dir="/mnt/sfs/jobs/chris-cyber-evalserve-q38-dp8-c-v1",
         pod_name="example-head",
+        pod_uid=BINDING["head_pod_uid"],
+        api_run_id=BINDING["api_run_id"],
+        service_uid=BINDING["service_uid"],
+        server_binding_receipt_sha256=BINDING["receipt_sha256"],
         observed_at_epoch=4,
     )
     assert receipt is not None
@@ -94,6 +117,8 @@ def test_lifecycle_refreshes_idle_only_via_real_counter_observer() -> None:
     lifecycle = (ROOT / early.LIFECYCLE_V2_PATH).read_text()
     assert 'python3 "$QWEN38_OBSERVER_SCRIPT"' in lifecycle
     assert '--traffic-path "$TRAFFIC_FILE"' in lifecycle
+    assert '--binding-path "$SERVER_BINDING"' in lifecycle
+    assert '--event-dir "$TRAFFIC_EVENT_DIR"' in lifecycle
     assert 'urlopen("http://127.0.0.1:8000/health"' in lifecycle
     assert 'touch "$TRAFFIC_FILE"' not in lifecycle
     payload = early.jobs_payload(ROOT)

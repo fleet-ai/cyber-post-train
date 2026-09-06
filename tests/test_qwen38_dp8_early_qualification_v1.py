@@ -27,7 +27,9 @@ def test_held_packet_is_valid_and_authorizes_nothing() -> None:
     assert inventory["projected_gpu_nodes_after_create"] == 2
     assert early.QUALIFICATION_LEVELS == (1, 2, 4, 8)
     assert plan["qualifier_controller"]["kubectl_access_required"] is False
-    assert plan["qualifier_controller"]["controller_package_ready"] is False
+    assert plan["qualifier_controller"]["controller_package_ready"] is True
+    assert plan["qualifier_controller"]["kubectl_access_required"] is False
+    assert plan["qualifier_controller"]["separate_uid_bound_qualifier_release_required"] is True
 
 
 def test_jobs_payload_is_exact_one_node_eight_gpu_nonpreempting_server() -> None:
