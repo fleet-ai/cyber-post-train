@@ -138,6 +138,7 @@ def build_held(root: Path, package_commit: str) -> dict[str, Any]:
         "package_commit": package_commit,
         "package_sha256": package["package_sha256"],
         "server_title": server.TITLE,
+        "server_api_name": server.API_NAME,
         "server_run_dir": server.RUN_DIR,
         "controller_job_name": JOB_NAME,
         "watchdog_job_name": "chris-glm53-dedicated-v32-request-watchdog-v1",
