@@ -147,6 +147,11 @@ def build_held(root: Path, package_commit: str) -> dict[str, Any]:
         "required_active_dedicated_gpus": 0,
         "planned_nodes_after_create": 1,
         "planned_gpus_after_create": 8,
+        "allowed_footprints": [
+            "zero_to_one_node_8gpu",
+            "exact_q_dp6_l_to_two_nodes_14gpu",
+        ],
+        "exact_qwen_coexistence": server.EXACT_QWEN_COEXISTENCE,
         "server_priority_class": server.payload()["priority_class"],
         "server_preemption_policy": "Never",
         "idle_release_seconds": 600,
