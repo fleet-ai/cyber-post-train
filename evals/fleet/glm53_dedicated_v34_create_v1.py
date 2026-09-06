@@ -43,6 +43,8 @@ CreateError = engine.CreateError
 ServerPlanError = CreateError
 POST_CREATE_ATTEMPTS = 60
 POST_CREATE_POLL_SECONDS = 1.0
+POST_CREATE_TRANSIENT_ERRORS = 3
+POST_CREATE_CLEANUP_ATTEMPTS = 3
 _LOCK = threading.Lock()
 
 
@@ -54,6 +56,15 @@ class ReconciliationBackend(Protocol):
     def get_run(self, api_run_id: str) -> dict[str, Any] | None: ...
 
     def release_run(self, api_run_id: str) -> int: ...
+
+
+class PostCreateFailure(CreateError):
+    """A sanitized post-POST failure carrying only safe candidate rows."""
+
+    def __init__(self, code: str, candidates: list[dict[str, Any]] | None = None) -> None:
+        super().__init__(code)
+        self.code = code
+        self.candidates = list(candidates or [])
 
 
 class SystemReconciliationBackend(live_authorization.SystemBackend):
@@ -242,15 +253,55 @@ def _validate_exact_created_row(row: Mapping[str, Any], api_run_id: str) -> None
 
 def _release_candidates(backend: ReconciliationBackend, candidates: list[dict[str, Any]]) -> None:
     run_ids = {_top_level_run_id(row) for row in candidates}
-    if None in run_ids or not run_ids:
-        for api_run_id in sorted(item for item in run_ids if item is not None):
+    safe_run_ids = sorted(item for item in run_ids if item is not None)
+    complete = None not in run_ids and bool(safe_run_ids)
+    for api_run_id in safe_run_ids:
+        try:
             backend.release_run(api_run_id)
-        raise CreateError("v34_post_create_ambiguity_not_fully_releasable")
-    for api_run_id in sorted(run_ids):
-        assert api_run_id is not None
-        backend.release_run(api_run_id)
-    if any(backend.get_run(api_run_id) is not None for api_run_id in run_ids):
-        raise CreateError("v34_post_create_release_absence_unconfirmed")
+        except Exception:  # noqa: BLE001 - fixed failure class, never exception text
+            complete = False
+    for api_run_id in safe_run_ids:
+        try:
+            if backend.get_run(api_run_id) is not None:
+                complete = False
+        except Exception:  # noqa: BLE001 - every safe candidate is still attempted
+            complete = False
+    if not complete:
+        raise CreateError("v34_post_create_release_incomplete_do_not_retry")
+
+
+def _cleanup_post_create(
+    backend: ReconciliationBackend,
+    candidates: list[dict[str, Any]],
+    *,
+    sleep: Callable[[float], None],
+) -> None:
+    """Find and release every safely identified generation candidate."""
+    combined = list(candidates)
+    for attempt in range(POST_CREATE_CLEANUP_ATTEMPTS):
+        try:
+            rows, pages = backend.list_runs()
+            if not isinstance(pages, int) or isinstance(pages, bool) or pages < 1:
+                raise CreateError("v34_post_create_cleanup_inventory_invalid")
+            combined.extend(row for row in rows if _matches_generation_identity(row))
+            if combined:
+                break
+        except Exception:  # noqa: BLE001 - retry boundedly, never expose exception text
+            pass
+        if attempt + 1 < POST_CREATE_CLEANUP_ATTEMPTS:
+            sleep(POST_CREATE_POLL_SECONDS)
+    deduplicated: dict[str, dict[str, Any]] = {}
+    unsafe: list[dict[str, Any]] = []
+    for row in combined:
+        api_run_id = _top_level_run_id(row)
+        if api_run_id is None:
+            unsafe.append(row)
+        else:
+            deduplicated[api_run_id] = row
+    release_rows = list(deduplicated.values()) + unsafe
+    if not release_rows:
+        raise CreateError("v34_post_create_cleanup_identity_absent_do_not_retry")
+    _release_candidates(backend, release_rows)
 
 
 def _preflight_absent(backend: ReconciliationBackend) -> tuple[int, str]:
@@ -266,8 +317,23 @@ def _reconcile_created(
     *,
     sleep: Callable[[float], None],
 ) -> tuple[str, int, str]:
+    inventory_errors = 0
+    exact_get_errors = 0
     for attempt in range(POST_CREATE_ATTEMPTS):
-        rows, pages = backend.list_runs()
+        try:
+            rows, pages = backend.list_runs()
+            if not isinstance(pages, int) or isinstance(pages, bool) or pages < 1:
+                raise CreateError("v34_post_create_inventory_invalid")
+            inventory_errors = 0
+        except Exception:  # noqa: BLE001 - bounded retry with fixed failure evidence
+            inventory_errors += 1
+            if inventory_errors >= POST_CREATE_TRANSIENT_ERRORS:
+                raise PostCreateFailure(
+                    "v34_post_create_inventory_unavailable_do_not_retry"
+                ) from None
+            if attempt + 1 < POST_CREATE_ATTEMPTS:
+                sleep(POST_CREATE_POLL_SECONDS)
+            continue
         candidates = [row for row in rows if _matches_generation_identity(row)]
         if not candidates:
             if attempt + 1 < POST_CREATE_ATTEMPTS:
@@ -287,9 +353,18 @@ def _reconcile_created(
             _validate_exact_created_row(exact, api_run_id)
             return api_run_id, pages, crypto.sha256(crypto.canonical_json(projection))
         except CreateError:
-            _release_candidates(backend, candidates)
-            raise CreateError("v34_post_create_identity_ambiguous_released") from None
-    raise CreateError("v34_post_create_identity_absent_reconcile_do_not_retry")
+            raise PostCreateFailure(
+                "v34_post_create_identity_ambiguous_do_not_retry", candidates
+            ) from None
+        except Exception:  # noqa: BLE001 - exact GET transient, then central cleanup
+            exact_get_errors += 1
+            if exact_get_errors >= POST_CREATE_TRANSIENT_ERRORS:
+                raise PostCreateFailure(
+                    "v34_post_create_exact_get_unavailable_do_not_retry", candidates
+                ) from None
+            if attempt + 1 < POST_CREATE_ATTEMPTS:
+                sleep(POST_CREATE_POLL_SECONDS)
+    raise PostCreateFailure("v34_post_create_identity_absent_reconcile_do_not_retry")
 
 
 def create_once(
@@ -314,51 +389,53 @@ def create_once(
         method="POST",
         headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"},
     )
+    known_candidates: list[dict[str, Any]] = []
     try:
-        with opener(request, timeout=30) as response:
-            status = int(response.status)
-    except (OSError, urllib.error.URLError):
-        status = 0
-    api_run_id, post_pages, post_snapshot = _reconcile_created(active_backend, sleep=sleep)
-    if status != 202:
-        _release_candidates(
-            active_backend,
-            [{"name": api_run_id, "title": TITLE, "run_dir": RUN_DIR, "status": "RUNNING"}],
-        )
-        raise CreateError("v34_create_http_status_invalid_released")
-    result: dict[str, Any] = {
-        "schema_version": RESULT_SCHEMA,
-        "status": "CREATE_ACCEPTED_RECONCILED_WATCHDOG_HANDOFF_REQUIRED",
-        "api_run_id": api_run_id,
-        "http_status": status,
-        "server_title": TITLE,
-        "server_api_name": API_NAME,
-        "server_run_dir": RUN_DIR,
-        "request_sha256": request_sha256(),
-        "authorization_receipt_sha256": authorization["receipt_sha256"],
-        "pre_create_jobs_api_pages": preflight_pages,
-        "pre_create_identity_snapshot_sha256": preflight_snapshot,
-        "post_create_jobs_api_pages": post_pages,
-        "post_create_identity_snapshot_sha256": post_snapshot,
-        "create_response_body_authoritative": False,
-        "watchdog_handoff_complete": False,
-        "qualification_launch_authorized": False,
-        "scored_launch_authorized": False,
-        "protected_content_included": False,
-    }
-    result["receipt_sha256"] = crypto.digest_without(result, "receipt_sha256")
-    result_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    try:
+        try:
+            with opener(request, timeout=30) as response:
+                status = int(response.status)
+        except (OSError, urllib.error.URLError):
+            status = 0
+        api_run_id, post_pages, post_snapshot = _reconcile_created(active_backend, sleep=sleep)
+        known_candidates = [
+            {"name": api_run_id, "title": TITLE, "run_dir": RUN_DIR, "status": "RUNNING"}
+        ]
+        if status != 202:
+            raise PostCreateFailure("v34_create_http_status_invalid", known_candidates)
+        result: dict[str, Any] = {
+            "schema_version": RESULT_SCHEMA,
+            "status": "CREATE_ACCEPTED_RECONCILED_WATCHDOG_HANDOFF_REQUIRED",
+            "api_run_id": api_run_id,
+            "http_status": status,
+            "server_title": TITLE,
+            "server_api_name": API_NAME,
+            "server_run_dir": RUN_DIR,
+            "request_sha256": request_sha256(),
+            "authorization_receipt_sha256": authorization["receipt_sha256"],
+            "pre_create_jobs_api_pages": preflight_pages,
+            "pre_create_identity_snapshot_sha256": preflight_snapshot,
+            "post_create_jobs_api_pages": post_pages,
+            "post_create_identity_snapshot_sha256": post_snapshot,
+            "create_response_body_authoritative": False,
+            "watchdog_handoff_complete": False,
+            "qualification_launch_authorized": False,
+            "scored_launch_authorized": False,
+            "protected_content_included": False,
+        }
+        result["receipt_sha256"] = crypto.digest_without(result, "receipt_sha256")
+        result_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         with result_path.open("x") as handle:
             json.dump(result, handle, sort_keys=True, separators=(",", ":"))
             handle.write("\n")
-    except (FileExistsError, OSError):
-        _release_candidates(
-            active_backend,
-            [{"name": api_run_id, "title": TITLE, "run_dir": RUN_DIR, "status": "RUNNING"}],
-        )
-        raise CreateError("v34_result_write_failed_server_released") from None
-    return result
+        return result
+    except Exception as exc:  # noqa: BLE001 - every post-POST path enters cleanup
+        candidates = exc.candidates if isinstance(exc, PostCreateFailure) else known_candidates
+        try:
+            _cleanup_post_create(active_backend, candidates, sleep=sleep)
+        except Exception:  # noqa: BLE001 - fixed terminal class, no dynamic detail
+            raise CreateError("v34_post_create_cleanup_incomplete_do_not_retry") from None
+        code = exc.code if isinstance(exc, PostCreateFailure) else "v34_post_create_failure"
+        raise CreateError(code + "_server_released") from None
 
 
 def build_held() -> dict[str, Any]:

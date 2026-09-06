@@ -55,21 +55,32 @@ class FakeBackend:
         snapshots: list[list[dict[str, Any]]],
         *,
         exact: dict[str, dict[str, Any] | None] | None = None,
+        list_failures: set[int] | None = None,
+        release_failures: set[str] | None = None,
     ) -> None:
         self.snapshots = snapshots
         self.exact = dict(exact or {})
+        self.list_failures = set(list_failures or set())
+        self.release_failures = set(release_failures or set())
         self.released: list[str] = []
+        self.release_attempts: list[str] = []
         self.list_calls = 0
 
     def list_runs(self) -> tuple[list[dict[str, Any]], int]:
-        index = min(self.list_calls, len(self.snapshots) - 1)
+        call = self.list_calls
         self.list_calls += 1
+        if call in self.list_failures:
+            raise OSError("dynamic detail must not escape")
+        index = min(call, len(self.snapshots) - 1)
         return self.snapshots[index], 1
 
     def get_run(self, api_run_id: str) -> dict[str, Any] | None:
         return self.exact.get(api_run_id)
 
     def release_run(self, api_run_id: str) -> int:
+        self.release_attempts.append(api_run_id)
+        if api_run_id in self.release_failures:
+            raise OSError("dynamic detail must not escape")
         self.released.append(api_run_id)
         self.exact[api_run_id] = None
         return 204
@@ -144,7 +155,7 @@ def test_two_post_create_candidates_are_both_released(tmp_path: Path) -> None:
     other = "glm53-tp8-v34-deadbeef"
     rows = [row(), row(other)]
     backend = FakeBackend([[], rows], exact={RUN_ID: rows[0], other: rows[1]})
-    with pytest.raises(server.CreateError, match="ambiguous_released"):
+    with pytest.raises(server.CreateError, match="ambiguous.*server_released"):
         create(tmp_path, backend)
     assert backend.released == sorted([RUN_ID, other])
     assert not (tmp_path / "CREATED.json").exists()
@@ -163,7 +174,7 @@ def test_disagreeing_post_create_identity_is_released(
 ) -> None:
     api_run_id = candidate["name"]
     backend = FakeBackend([[], [candidate]], exact={api_run_id: candidate})
-    with pytest.raises(server.CreateError, match="ambiguous_released"):
+    with pytest.raises(server.CreateError, match="ambiguous.*server_released"):
         create(tmp_path, backend)
     assert backend.released == [api_run_id]
 
@@ -178,7 +189,7 @@ def test_disagreeing_post_create_identity_is_released(
 def test_non_202_or_lost_response_reconciles_then_releases(tmp_path: Path, opener: Any) -> None:
     created = row()
     backend = FakeBackend([[], [created]], exact={RUN_ID: created})
-    with pytest.raises(server.CreateError, match="http_status_invalid_released"):
+    with pytest.raises(server.CreateError, match="http_status_invalid_server_released"):
         server.create_once(
             {"receipt_sha256": "sha256:authorization"},
             result_path=tmp_path / "CREATED.json",
@@ -193,18 +204,149 @@ def test_exact_get_disagreement_releases_listed_candidate(tmp_path: Path) -> Non
     listed = row()
     exact = row(run_dir="/mnt/sfs/jobs/wrong")
     backend = FakeBackend([[], [listed]], exact={RUN_ID: exact})
-    with pytest.raises(server.CreateError, match="ambiguous_released"):
+    with pytest.raises(server.CreateError, match="ambiguous.*server_released"):
         create(tmp_path, backend)
     assert backend.released == [RUN_ID]
 
 
 def test_no_post_create_candidate_fails_without_fabricating_identity(tmp_path: Path) -> None:
     backend = FakeBackend([[], []])
-    with pytest.raises(server.CreateError, match="identity_absent_reconcile_do_not_retry"):
+    with pytest.raises(server.CreateError, match="cleanup_incomplete_do_not_retry"):
         create(tmp_path, backend)
-    assert backend.list_calls == 1 + server.POST_CREATE_ATTEMPTS
+    assert backend.list_calls == (
+        1 + server.POST_CREATE_ATTEMPTS + server.POST_CREATE_CLEANUP_ATTEMPTS
+    )
     assert backend.released == []
     assert not (tmp_path / "CREATED.json").exists()
+
+
+def test_transient_post_create_inventory_errors_reconcile_without_duplicate_post(
+    tmp_path: Path,
+) -> None:
+    created = row()
+    backend = FakeBackend(
+        [[], [created]],
+        exact={RUN_ID: created},
+        list_failures={1, 2},
+    )
+    result = create(tmp_path, backend)
+    assert result["api_run_id"] == RUN_ID
+    assert backend.list_calls == 4
+    assert backend.release_attempts == []
+
+
+def test_post_create_inventory_failure_runs_cleanup_and_releases_discovered_server(
+    tmp_path: Path,
+) -> None:
+    created = row()
+    backend = FakeBackend(
+        [[], [created]],
+        exact={RUN_ID: created},
+        list_failures={1, 2, 3},
+    )
+    with pytest.raises(server.CreateError, match="inventory_unavailable.*server_released"):
+        create(tmp_path, backend)
+    assert backend.released == [RUN_ID]
+    assert not (tmp_path / "CREATED.json").exists()
+
+
+def test_post_create_exact_get_failure_runs_cleanup_and_releases_server(
+    tmp_path: Path,
+) -> None:
+    created = row()
+
+    class ExactGetFailureBackend(FakeBackend):
+        def __init__(self) -> None:
+            super().__init__([[], [created]], exact={RUN_ID: created})
+            self.exact_get_calls = 0
+
+        def get_run(self, api_run_id: str) -> dict[str, Any] | None:
+            self.exact_get_calls += 1
+            if self.exact_get_calls <= server.POST_CREATE_TRANSIENT_ERRORS:
+                raise OSError("dynamic detail must not escape")
+            return super().get_run(api_run_id)
+
+    backend = ExactGetFailureBackend()
+    with pytest.raises(server.CreateError, match="exact_get_unavailable.*server_released"):
+        create(tmp_path, backend)
+    assert backend.released == [RUN_ID]
+    assert not (tmp_path / "CREATED.json").exists()
+
+
+def test_unexpected_post_exception_still_reconciles_and_releases_server(
+    tmp_path: Path,
+) -> None:
+    created = row()
+    backend = FakeBackend([[], [created]], exact={RUN_ID: created})
+
+    def unexpected(*_args: Any, **_kwargs: Any) -> FakeResponse:
+        raise ValueError("dynamic detail must not escape")
+
+    with pytest.raises(server.CreateError, match="post_create_failure_server_released"):
+        server.create_once(
+            {"receipt_sha256": "sha256:authorization"},
+            result_path=tmp_path / "CREATED.json",
+            opener=unexpected,
+            backend=backend,
+            sleep=lambda _seconds: None,
+        )
+    assert backend.released == [RUN_ID]
+
+
+def test_result_parent_creation_failure_releases_reconciled_server(tmp_path: Path) -> None:
+    created = row()
+    backend = FakeBackend([[], [created]], exact={RUN_ID: created})
+    blocked_parent = tmp_path / "not-a-directory"
+    blocked_parent.write_text("regular file")
+    with pytest.raises(server.CreateError, match="post_create_failure_server_released"):
+        server.create_once(
+            {"receipt_sha256": "sha256:authorization"},
+            result_path=blocked_parent / "CREATED.json",
+            opener=lambda *_args, **_kwargs: FakeResponse(),
+            backend=backend,
+            sleep=lambda _seconds: None,
+        )
+    assert backend.released == [RUN_ID]
+
+
+def test_result_write_failure_releases_reconciled_server(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    created = row()
+    backend = FakeBackend([[], [created]], exact={RUN_ID: created})
+    result_path = tmp_path / "CREATED.json"
+    original_open = Path.open
+
+    def fail_target(path: Path, *args: Any, **kwargs: Any) -> Any:
+        if path == result_path:
+            raise OSError("dynamic detail must not escape")
+        return original_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", fail_target)
+    with pytest.raises(server.CreateError, match="post_create_failure_server_released"):
+        server.create_once(
+            {"receipt_sha256": "sha256:authorization"},
+            result_path=result_path,
+            opener=lambda *_args, **_kwargs: FakeResponse(),
+            backend=backend,
+            sleep=lambda _seconds: None,
+        )
+    assert backend.released == [RUN_ID]
+
+
+def test_release_attempts_every_safe_candidate_when_first_delete_fails() -> None:
+    other = "glm53-tp8-v34-deadbeef"
+    rows = [row(), row(other)]
+    backend = FakeBackend(
+        [rows],
+        exact={RUN_ID: rows[0], other: rows[1]},
+        release_failures={RUN_ID},
+    )
+    with pytest.raises(server.CreateError, match="release_incomplete_do_not_retry") as error:
+        server._release_candidates(backend, rows)  # noqa: SLF001
+    assert str(error.value) == "v34_post_create_release_incomplete_do_not_retry"
+    assert backend.release_attempts == sorted([RUN_ID, other])
+    assert backend.released == [other]
 
 
 def test_v34_generation_identities_are_fresh_and_score_free() -> None:
