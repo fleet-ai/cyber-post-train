@@ -15,6 +15,10 @@ from evals.fleet import glm53_dedicated_v15_live as common
 from evals.fleet import glm53_dedicated_v17 as v17
 from evals.fleet import self_hosted
 
+ALLOWED = {
+    "/mnt/sfs/jobs/chris-cyber-evalserve-q38-tp1-h-v1": {"nodes": 1, "gpus": 1}
+}
+
 
 def _bootstrap() -> tuple[bytes, dict]:
     path = shared._observer_sfs_path(v17.CONTROLLER_BOOTSTRAP["receipt_path"])
@@ -53,6 +57,37 @@ def _bootstrap() -> tuple[bytes, dict]:
     return raw, value
 
 
+def _runtime_gate() -> tuple[bytes, dict]:
+    path = shared._observer_sfs_path(v17.RUNTIME_GATE["receipt_path"])
+    raw = subprocess.run(
+        ["kubectl", "-n", shared.NAMESPACE, "exec", shared.OBSERVER_POD, "--", "cat", path],
+        check=True, capture_output=True,
+    ).stdout
+    if self_hosted.sha256(raw) != v17.RUNTIME_GATE["file_sha256"]:
+        raise RuntimeError("v18 runtime gate file digest drifted")
+    value = json.loads(raw)
+    if (
+        value.get("schema_version") != "fleet-glm53-dedicated-runtime-gate-observer-v1"
+        or value.get("status") != "PASSED_PRECLAIM"
+        or value.get("job_uid") != v17.RUNTIME_GATE["job_uid"]
+        or value.get("pod_uid") != v17.RUNTIME_GATE["pod_uid"]
+        or value.get("plan_sha256") != v17.RUNTIME_GATE["plan_sha256"]
+        or value.get("stages") != [
+            "01-adapter-interface-valid", "02-runtime-plan-built",
+            "03-runtime-plan-rebuilt-exactly", "04-release-gate-valid",
+        ]
+        or value.get("claim_calls") != 0
+        or value.get("model_requests") != 0
+        or value.get("task_instance_session_verifier_scoring_calls") != 0
+        or value.get("prompts_traces_flags_or_scores_read") is not False
+        or value.get("receipt_sha256") != v17.RUNTIME_GATE["receipt_sha256"]
+        or value.get("receipt_sha256")
+        != self_hosted.digest_without(value, "receipt_sha256")
+    ):
+        raise RuntimeError("v18 runtime gate receipt drifted")
+    return raw, value
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("command", choices=("preview", "submit"))
@@ -68,7 +103,8 @@ def main() -> int:
     ).stdout:
         raise RuntimeError("submit requires a clean immutable worktree")
     raw_bootstrap, bootstrap = _bootstrap()
-    gate = common.live_gate(Path.cwd(), v17, {})
+    raw_runtime_gate, runtime_gate = _runtime_gate()
+    gate = common.live_gate(Path.cwd(), v17, ALLOWED)
     gate["controller_bootstrap"] = {
         "path": v17.CONTROLLER_BOOTSTRAP["receipt_path"],
         "file_sha256": self_hosted.sha256(raw_bootstrap),
@@ -77,6 +113,13 @@ def main() -> int:
         "status": bootstrap["status"],
         "claim_calls": bootstrap["claim_calls"],
         "model_requests": bootstrap["model_requests"],
+    }
+    gate["runtime_gate"] = {
+        "path": v17.RUNTIME_GATE["receipt_path"],
+        "file_sha256": self_hosted.sha256(raw_runtime_gate),
+        "receipt_sha256": runtime_gate["receipt_sha256"],
+        "plan_sha256": runtime_gate["plan_sha256"],
+        "status": runtime_gate["status"],
     }
     gate["receipt_sha256"] = self_hosted.digest_without(gate, "receipt_sha256")
     if args.command == "preview":
@@ -97,7 +140,7 @@ def main() -> int:
     if not isinstance(api_run_id, str) or not api_run_id.startswith("ft-run-"):
         raise RuntimeError("Jobs API response omitted run identity")
     receipt = {
-        "schema_version": "fleet-glm53-dedicated-serving-v17-submission-v1",
+        "schema_version": "fleet-glm53-dedicated-serving-v18-submission-v1",
         "status": "SUBMITTED",
         "submitted_at_utc": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         "api_run_id": api_run_id,
@@ -107,6 +150,7 @@ def main() -> int:
         "live_gate_receipt_sha256": gate["receipt_sha256"],
         "pre_admission": gate["pre_admission"],
         "controller_bootstrap": gate["controller_bootstrap"],
+        "runtime_gate": gate["runtime_gate"],
         "project_resource_shape": gate["project_resource_shape"],
         "selected_priority": gate["selected_priority"],
         "http_status": 202,

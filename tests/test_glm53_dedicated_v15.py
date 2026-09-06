@@ -263,8 +263,9 @@ def test_v17_preserves_server_runtime_and_binds_both_admission_receipts() -> Non
     assert new["run_dir"] == v17.RUN_DIR
     assert new["env"] == {**old["env"], "GLM53_RUN_DIR": v17.RUN_DIR}
     assert v17.PRE_ADMISSION["controller_package_sha256"] == v17.CONTROLLER_BOOTSTRAP["controller_package_sha256"]
-    assert v17.CONTROLLER_BOOTSTRAP["controller_package_sha256"] != release_package.CONTROLLER_PACKAGE_SHA256
-    assert v17.CONTROLLER_BOOTSTRAP["receipt_sha256"].endswith("200cea5")
+    assert v17.CONTROLLER_BOOTSTRAP["controller_package_sha256"] == release_package.CONTROLLER_PACKAGE_SHA256
+    assert v17.CONTROLLER_BOOTSTRAP["receipt_sha256"].endswith("e3661333")
+    assert v17.RUNTIME_GATE["receipt_sha256"].endswith("9c7930")
 
 
 def test_v17_bootstrap_validator_is_fail_closed(monkeypatch: pytest.MonkeyPatch) -> None:
