@@ -1,0 +1,17 @@
+{
+  "api_mutation_calls": 0,
+  "diagnostic_configmap": "chris-glm53-exact100-hosted-r029-a3a4-release-diagnostic-v3-run",
+  "diagnostic_job": "chris-glm53-exact100-hosted-r029-a3a4-release-diagnostic-v3",
+  "launch_authorized": false,
+  "model_calls_authorized": false,
+  "package_sha256": "sha256:4dd124ae3a1fba69341ab7f3c8a88fbe604c9eb83e7775fa261e5f43749bf786",
+  "path_normalization_required": true,
+  "prior_diagnostic_receipt_sha256": "sha256:11e06f2607b357835f5d116a026f3a9c0e5d00644008df754de9fc8510084891",
+  "prior_diagnostic_retry": false,
+  "receipt_sha256": "sha256:1d4eaab449788484722043f825496897e1df598ea6b0dc53ffd577a951293302",
+  "schema_version": "fleet-hosted-glm-rank29-release-phase-diagnostic-held-v3",
+  "scored_launch_authorized": false,
+  "source_commit": "193f660ec80420cd26f49757e67169a13ed63d12",
+  "status": "HELD_FOR_INDEPENDENT_REVIEW",
+  "task_session_verifier_calls_authorized": false
+}
