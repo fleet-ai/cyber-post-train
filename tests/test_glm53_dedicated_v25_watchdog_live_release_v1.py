@@ -148,6 +148,14 @@ def test_held_receipt_is_digest_valid_and_non_authorizing() -> None:
     assert value["qualification_launch_authorized"] is False
     assert value["scored_launch_authorized"] is False
     assert value["receipt_sha256"] == crypto.digest_without(value, "receipt_sha256")
+    tracked = json.loads(
+        (
+            ROOT
+            / "docs/evidence/glm53-study/"
+            "2026-09-06-glm53-dedicated-v25-watchdog-adapter-held-v1.json"
+        ).read_text()
+    )
+    assert tracked == adapter.build_held(tracked["package_commit"])
 
 
 def test_bound_engine_is_exact_and_restored() -> None:
