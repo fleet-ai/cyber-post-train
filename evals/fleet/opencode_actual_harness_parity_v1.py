@@ -220,6 +220,14 @@ def docker_transport_args(
     return ("127.0.0.1" if docker_network_host else "host.docker.internal", args)
 
 
+def validate_temp_root(temp_root: Path | None) -> Path | None:
+    if temp_root is None:
+        return None
+    if not temp_root.is_absolute() or not temp_root.is_dir() or temp_root.is_symlink():
+        raise ActualHarnessParityError("parity_temp_root_invalid")
+    return temp_root
+
+
 def _json_response(handler: BaseHTTPRequestHandler, status: int, value: Any) -> None:
     payload = json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
     handler.send_response(status)
@@ -407,6 +415,7 @@ def run(
     server_binding: Mapping[str, Any] | None = None,
     docker_add_host_gateway: bool = False,
     docker_network_host: bool = False,
+    temp_root: Path | None = None,
 ) -> dict[str, Any]:
     observed_image = inspect_local_image()
     is_hosted = upstream_origin.rstrip("/") == HOSTED_ORIGIN
@@ -433,8 +442,11 @@ def run(
         transport_host=transport_host,
     )
     threads = [_serve(model_server), _serve(mcp_server)]
+    validated_temp_root = validate_temp_root(temp_root)
     try:
-        with tempfile.TemporaryDirectory(prefix="opencode-parity-") as temp:
+        with tempfile.TemporaryDirectory(
+            prefix="opencode-parity-", dir=validated_temp_root
+        ) as temp:
             root = Path(temp)
             home = root / "home"
             config_dir = home / ".config" / "opencode"

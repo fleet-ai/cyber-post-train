@@ -1,5 +1,7 @@
 import copy
 import json
+import os
+import subprocess
 import time
 from pathlib import Path
 
@@ -142,18 +144,22 @@ def test_runtime_invokes_exact_linux_dind_transport_and_writes_uid_receipts(
         return parity_receipt()
 
     monkeypatch.setattr(rail, "RESULT_ROOT", tmp_path / "result")
+    shared_temp_root = tmp_path / "workspace" / "parity-tmp"
+    shared_temp_root.mkdir(parents=True)
+    monkeypatch.setattr(rail, "PARITY_TEMP_ROOT", str(shared_temp_root))
     monkeypatch.setattr(rail.parity, "run", run)
-    monkeypatch.setenv("FLEET_API_KEY", "not-persisted")
     result = rail.execute(
         authorization(),
         job_uid="55555555-5555-4555-8555-555555555555",
         pod_uid="66666666-6666-4666-8666-666666666666",
     )
+    assert observed["args"] == ("glm-5.3", "")
     assert observed["kwargs"] == {
         "upstream_origin": binding()["service_origin"],
         "server_binding": rail.canonical_binding(binding()),
         "docker_add_host_gateway": True,
         "docker_network_host": True,
+        "temp_root": shared_temp_root,
     }
     assert result["nested_container_network"] == "host"
     assert result["local_proxy_bind_address"] == "127.0.0.1"
@@ -176,6 +182,8 @@ def test_rendered_package_is_create_once_dind_and_held_from_scoring() -> None:
     assert package["package_commit"] == COMMIT
     assert package["nested_container_network"] == "host"
     assert package["local_proxy_bind_address"] == "127.0.0.1"
+    assert package["shared_temp_root"] == "/workspace/parity-tmp"
+    assert package["fleet_api_secret_mounted"] is False
     assert auth["immutable"] is True
     assert job["metadata"]["name"] == rail.JOB_NAME
     assert job["spec"]["backoffLimit"] == 0
@@ -187,13 +195,79 @@ def test_rendered_package_is_create_once_dind_and_held_from_scoring() -> None:
         row["name"] == "dind" and row["securityContext"]["privileged"] is True
         for row in job["spec"]["template"]["spec"]["initContainers"]
     )
+    pod_spec = job["spec"]["template"]["spec"]
+    dind = next(
+        row for row in pod_spec["initContainers"] if row["name"] == "dind"
+    )
+    runner = next(row for row in pod_spec["containers"] if row["name"] == "parity")
+    dind_workspace = next(
+        mount for mount in dind["volumeMounts"] if mount["name"] == "workspace"
+    )
+    runner_workspace = next(
+        mount for mount in runner["volumeMounts"] if mount["name"] == "workspace"
+    )
+    assert dind_workspace == runner_workspace == {
+        "name": "workspace",
+        "mountPath": "/workspace",
+    }
+    env = {row["name"]: row for row in runner["env"]}
+    assert env["TMPDIR"] == {"name": "TMPDIR", "value": "/workspace/parity-tmp"}
+    assert "FLEET_API_KEY" not in env
     assert rendered["scored_launch_authorized"] is False
+
+
+def test_parity_temp_root_requires_an_existing_absolute_nonsymlink_dir(
+    tmp_path: Path,
+) -> None:
+    shared = tmp_path / "workspace" / "parity-tmp"
+    shared.mkdir(parents=True)
+    assert parity.validate_temp_root(shared) == shared
+    with pytest.raises(parity.ActualHarnessParityError, match="parity_temp_root_invalid"):
+        parity.validate_temp_root(Path("relative"))
+    link = tmp_path / "linked"
+    link.symlink_to(shared, target_is_directory=True)
+    with pytest.raises(parity.ActualHarnessParityError, match="parity_temp_root_invalid"):
+        parity.validate_temp_root(link)
+
+
+def test_materialized_run_reaches_and_enforces_its_digest_gate(tmp_path: Path) -> None:
+    configmap = rail.build_configmap(ROOT, COMMIT)
+    bootstrap = tmp_path / "bootstrap"
+    bootstrap.mkdir()
+    for key in ("package.json", "run.sh"):
+        (bootstrap / key).write_text(configmap["data"][key])
+    run_path = bootstrap / "run.sh"
+    env = {
+        **os.environ,
+        "DOCKER_HOST": "unix:///var/run/docker.sock",
+        "PARITY_RESULT_ROOT": str(tmp_path / "result"),
+        "BOOTSTRAP_ROOT": str(bootstrap),
+        "PACKAGE_COMMIT": COMMIT,
+        "PARITY_BOOTSTRAP_VERIFY_ONLY": "true",
+        "TMPDIR": str(tmp_path / "workspace" / "parity-tmp"),
+    }
+    syntax = subprocess.run(
+        ["bash", "-n", str(run_path)], capture_output=True, text=True, check=False
+    )
+    assert syntax.returncode == 0, syntax.stderr
+    completed = subprocess.run(
+        ["bash", str(run_path)], env=env, capture_output=True, text=True, check=False
+    )
+    assert completed.returncode == 0, completed.stderr
+
+    run_path.write_text(run_path.read_text() + "# tampered\n")
+    rejected = subprocess.run(
+        ["bash", str(run_path)], env=env, capture_output=True, text=True, check=False
+    )
+    assert rejected.returncode != 0
 
 
 def test_held_contract_never_authorizes_launch() -> None:
     held = rail.build_held()
     assert held["nested_container_network"] == "host"
     assert held["local_proxy_bind_address"] == "127.0.0.1"
+    assert held["shared_temp_root"] == "/workspace/parity-tmp"
+    assert held["fleet_api_secret_mounted"] is False
     assert held["endpoint_origin_must_equal_internal_service_origin"] is True
     assert held["qualification_launch_authorized"] is False
     assert held["scored_launch_authorized"] is False

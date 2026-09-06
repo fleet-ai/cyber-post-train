@@ -31,7 +31,7 @@ MODEL_REVISION = "30333038ada1f1dacb294a93270305a890b50c14"
 CONTEXT_LENGTH = 262144
 NAMESPACE = "fleet-train-jobs"
 CPU_PRIORITY_CLASS = "fleet-serve-low"
-FLEET_SECRET_NAME = "chris-cyber-opencode-evals-v2"
+PARITY_TEMP_ROOT = "/workspace/parity-tmp"
 AUTH_MAX_AGE_SECONDS = 300
 COMMIT_RE = re.compile(r"[0-9a-f]{40}")
 FILES = (
@@ -235,11 +235,12 @@ def execute(authorization: dict[str, Any], *, job_uid: str, pod_uid: str) -> dic
     binding = authorization["server_binding"]
     receipt = parity.run(
         "glm-5.3",
-        os.environ.get("FLEET_API_KEY", ""),
+        "",
         upstream_origin=binding["service_origin"],
         server_binding=canonical_binding(binding),
         docker_add_host_gateway=True,
         docker_network_host=True,
+        temp_root=Path(PARITY_TEMP_ROOT),
     )
     validate_parity_receipt(receipt, binding)
     support.write_json_once(RESULT_ROOT / "PARITY.json", receipt)
@@ -287,22 +288,28 @@ def _key(path: str) -> str:
 def build_configmap(root: Path, commit: str) -> dict[str, Any]:
     data = {_key(path): _source(root, commit, path).decode() for path in FILES}
     manifest = {path: crypto.sha256(_source(root, commit, path)) for path in FILES}
+    observed_commit_line = (
+        "observed_commit=\"$(python -c "
+        "'import json,sys;print(json.load(open(sys.argv[1]))[\"package_commit\"])' "
+        "\"$bootstrap_root/package.json\")\""
+    )
+    expected_run_sha_line = (
+        "expected_run_sha=\"$(python -c "
+        "'import json,sys;print(json.load(open(sys.argv[1]))[\"run_sha256\"][7:])' "
+        "\"$bootstrap_root/package.json\")\""
+    )
     run = """#!/usr/bin/env bash
 set -euo pipefail
 test "${DOCKER_HOST:-}" = unix:///var/run/docker.sock
 test ! -e "$PARITY_RESULT_ROOT"
-observed_commit="$(
-  uv run python -c \
-    'import json; print(json.load(open("/bootstrap/package.json"))["package_commit"])'
-)"
+bootstrap_root="${BOOTSTRAP_ROOT:-/bootstrap}"
+""" + observed_commit_line + """
 test "$observed_commit" = "$PACKAGE_COMMIT"
-expected_run_sha="$(
-  uv run python -c \
-    'import json; print(json.load(open("/bootstrap/package.json"))["run_sha256"][7:])'
-)"
-test "$(sha256sum /bootstrap/run.sh | cut -d' ' -f1)" = "$expected_run_sha"
-mkdir -p /work/evals/fleet/configs
-for source in /bootstrap/*__SLASH__*; do
+""" + expected_run_sha_line + """
+test "$(sha256sum "$bootstrap_root/run.sh" | cut -d' ' -f1)" = "$expected_run_sha"
+test "${PARITY_BOOTSTRAP_VERIFY_ONLY:-false}" = false || exit 0
+mkdir -p /work/evals/fleet/configs "$TMPDIR"
+for source in "$bootstrap_root"/*__SLASH__*; do
   target="/work/$(basename "$source" | sed 's,__SLASH__,/,g')"
   install -D -m 0444 "$source" "$target"
 done
@@ -328,6 +335,8 @@ exec uv run --with httpx==0.28.1 --with pyyaml==6.0.2 \
         "server_run_dir": SERVER_RUN_DIR,
         "nested_container_network": "host",
         "local_proxy_bind_address": "127.0.0.1",
+        "shared_temp_root": PARITY_TEMP_ROOT,
+        "fleet_api_secret_mounted": False,
         "score_free": True,
     }
     package["package_sha256"] = crypto.digest_without(package, "package_sha256")
@@ -449,6 +458,7 @@ def build_job(configmap: dict[str, Any], authorization: dict[str, Any]) -> dict[
                                 },
                                 {"name": "DOCKER_HOST", "value": "unix:///var/run/docker.sock"},
                                 {"name": "DOCKER_TLS_CERTDIR", "value": ""},
+                                {"name": "TMPDIR", "value": PARITY_TEMP_ROOT},
                                 {"name": "PARITY_RESULT_ROOT", "value": str(RESULT_ROOT)},
                                 {"name": "PACKAGE_COMMIT", "value": package["package_commit"]},
                                 {
@@ -465,15 +475,6 @@ def build_job(configmap: dict[str, Any], authorization: dict[str, Any]) -> dict[
                                 {
                                     "name": "POD_UID",
                                     "valueFrom": {"fieldRef": {"fieldPath": "metadata.uid"}},
-                                },
-                                {
-                                    "name": "FLEET_API_KEY",
-                                    "valueFrom": {
-                                        "secretKeyRef": {
-                                            "name": FLEET_SECRET_NAME,
-                                            "key": "FLEET_API_KEY",
-                                        }
-                                    },
                                 },
                             ],
                             "resources": {
@@ -547,6 +548,8 @@ def build_held() -> dict[str, Any]:
         "result_root": str(RESULT_ROOT),
         "nested_container_network": "host",
         "local_proxy_bind_address": "127.0.0.1",
+        "shared_temp_root": PARITY_TEMP_ROOT,
+        "fleet_api_secret_mounted": False,
         "endpoint_origin_must_equal_internal_service_origin": True,
         "qualification_launch_authorized": False,
         "scored_launch_authorized": False,
