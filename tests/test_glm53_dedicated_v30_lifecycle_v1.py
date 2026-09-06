@@ -74,6 +74,8 @@ def binding() -> dict[str, object]:
 def watchdog_launch() -> dict[str, object]:
     return {
         "receipt_sha256": "sha256:" + "1" * 64,
+        "server_binding": binding(),
+        "application_ready_receipt_sha256": "sha256:" + "3" * 64,
         "runtime": {
             "watchdog_job_uid": "55555555-5555-4555-8555-555555555555",
             "watchdog_pod_uid": "66666666-6666-4666-8666-666666666666",
@@ -144,19 +146,38 @@ def test_parity_authorization_binds_ready_and_active_watchdog() -> None:
     assert value["scored_launch_authorized"] is False
 
 
-def test_v30_observe_live_binds_the_underlying_runtime_engine(
+def test_watchdog_adapter_returns_the_exact_observed_binding_without_reobserving(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    sentinel = (binding(), live_state())
-
-    def observe(api_run_id: str) -> tuple[dict[str, object], dict[str, object]]:
-        assert api_run_id == "ft-run-1234abcd"
-        assert adapter.engine.server is server
-        assert adapter.engine.package is watchdog
-        return sentinel
-
-    monkeypatch.setattr(adapter.engine, "observe_live", observe)
-    assert adapter.observe_live("ft-run-1234abcd") == sentinel
+    runtime = watchdog_launch()["runtime"]
+    engine_receipt: dict[str, object] = {
+        "schema_version": adapter.LAUNCH_SCHEMA,
+        "status": "WATCHDOG_CREATE_REQUEST_ACCEPTED",
+        "server_binding_sha256": crypto.sha256(crypto.canonical_json(binding())),
+        "runtime": runtime,
+        "server_launch_authorized": False,
+        "watchdog_launch_authorized": True,
+        "qualification_launch_authorized": False,
+        "scored_launch_authorized": False,
+        "protected_content_included": False,
+    }
+    engine_receipt["receipt_sha256"] = crypto.digest_without(
+        engine_receipt, "receipt_sha256"
+    )
+    monkeypatch.setattr(
+        adapter.engine,
+        "observe_live",
+        lambda _run: (binding(), live_state()),
+    )
+    monkeypatch.setattr(adapter.engine, "launch", lambda *_args, **_kwargs: engine_receipt)
+    observed = adapter.launch(ROOT, COMMIT, "ft-run-1234abcd", priority_classes=[])
+    assert observed["schema_version"] == adapter.ADAPTER_LAUNCH_SCHEMA
+    assert observed["server_binding"] == binding()
+    assert observed["application_ready_receipt_sha256"] == "sha256:" + "3" * 64
+    assert observed["runtime"] == runtime
+    assert observed["receipt_sha256"] == crypto.digest_without(
+        observed, "receipt_sha256"
+    )
 
 
 def test_controller_orders_watchdog_before_parity(
@@ -183,11 +204,6 @@ def test_controller_orders_watchdog_before_parity(
         return watchdog_launch()
 
     monkeypatch.setattr(controller.adapter, "launch", launch)
-    monkeypatch.setattr(
-        controller.adapter,
-        "observe_live",
-        lambda _run: (binding(), live_state()),
-    )
     monkeypatch.setattr(controller, "_assert_parity_absent", lambda: events.append("absent"))
     monkeypatch.setattr(
         controller.parity,

@@ -215,7 +215,12 @@ def run(root: Path, commit: str, authorization_path: Path) -> dict[str, Any]:
                 api_run_id,
                 priority_classes=priorities,
             )
-            binding, live = adapter.observe_live(api_run_id)
+            binding = watchdog["server_binding"]
+            live = {
+                "application_ready_receipt_sha256": watchdog[
+                    "application_ready_receipt_sha256"
+                ]
+            }
             _assert_parity_absent()
             parity_authorization = build_parity_authorization(
                 binding,

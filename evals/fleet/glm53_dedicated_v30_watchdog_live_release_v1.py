@@ -19,6 +19,7 @@ from evals.fleet import glm53_dedicated_v30_watchdog_package_v1 as package
 LIVE_STATE_SCHEMA = "fleet-glm53-dedicated-v30-watchdog-live-state-v1"
 RELEASE_SCHEMA = package.LIVE_RELEASE_SCHEMA
 LAUNCH_SCHEMA = "fleet-glm53-dedicated-v30-watchdog-launch-v1"
+ADAPTER_LAUNCH_SCHEMA = "fleet-glm53-dedicated-v30-watchdog-adapter-launch-v1"
 AUTHORIZATION_CONFIGMAP_NAME = package.JOB_NAME + "-live-release"
 
 _LOCK = threading.Lock()
@@ -80,11 +81,6 @@ def bound_engine() -> Iterator[None]:
         _LOCK.release()
 
 
-def observe_live(api_run_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
-    with bound_engine():
-        return engine.observe_live(api_run_id)
-
-
 def launch(
     root: Path,
     commit: str,
@@ -93,17 +89,39 @@ def launch(
     priority_classes: list[dict[str, Any]],
 ) -> dict[str, Any]:
     with bound_engine():
-        receipt = engine.launch(root, commit, api_run_id, priority_classes=priority_classes)
+        binding, live = engine.observe_live(api_run_id)
+        engine_receipt = engine.launch(
+            root, commit, api_run_id, priority_classes=priority_classes
+        )
         if (
-            receipt.get("schema_version") != LAUNCH_SCHEMA
-            or receipt.get("server_launch_authorized") is not False
-            or receipt.get("watchdog_launch_authorized") is not True
-            or receipt.get("qualification_launch_authorized") is not False
-            or receipt.get("scored_launch_authorized") is not False
-            or receipt.get("protected_content_included") is not False
+            engine_receipt.get("schema_version") != LAUNCH_SCHEMA
+            or engine_receipt.get("server_binding_sha256")
+            != crypto.sha256(crypto.canonical_json(binding))
+            or engine_receipt.get("server_launch_authorized") is not False
+            or engine_receipt.get("watchdog_launch_authorized") is not True
+            or engine_receipt.get("qualification_launch_authorized") is not False
+            or engine_receipt.get("scored_launch_authorized") is not False
+            or engine_receipt.get("protected_content_included") is not False
         ):
             engine._release_local(api_run_id)  # noqa: SLF001
             raise AdapterError("v30_watchdog_launch_receipt_invalid")
+    receipt: dict[str, Any] = {
+        "schema_version": ADAPTER_LAUNCH_SCHEMA,
+        "status": "WATCHDOG_ACTIVE_UID_BOUND",
+        "engine_launch_receipt_sha256": engine_receipt["receipt_sha256"],
+        "server_binding": binding,
+        "server_binding_sha256": crypto.sha256(crypto.canonical_json(binding)),
+        "application_ready_receipt_sha256": live[
+            "application_ready_receipt_sha256"
+        ],
+        "runtime": engine_receipt["runtime"],
+        "server_launch_authorized": False,
+        "watchdog_launch_authorized": True,
+        "qualification_launch_authorized": False,
+        "scored_launch_authorized": False,
+        "protected_content_included": False,
+    }
+    receipt["receipt_sha256"] = crypto.digest_without(receipt, "receipt_sha256")
     return receipt
 
 
