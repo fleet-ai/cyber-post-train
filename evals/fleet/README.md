@@ -12,6 +12,16 @@ no-idle lifecycle are documented in
 launch. The v6 package remains frozen as historical generation-5 planning
 evidence and must not be used for the generation-7 campaign.
 
+### Dedicated concurrency ramp invariant
+
+A dedicated concurrency ladder must finish and validate each wave before it
+invokes the next one. Protocol success, an exclusive model-request-counter
+delta, the latency ceiling, and a self-digested per-wave GPU observation must
+all pass; the observation binds the unchanged server identity and proves
+activity on every expected device. Any failed or missing requirement stops the
+ramp. See the [enforcement](./glm53_dedicated_v22_concurrency_qualification_v1.py)
+and the [stop-before-next-wave regression](../../tests/test_glm53_dedicated_v22_concurrency_qualification_v1.py).
+
 The companion HELD bulk authority is
 `exact_pass4_dedicated_bulk_v4.py`. It freezes Qwen's 399 remaining cells on
 hosted inference and partitions GLM's 399 remaining cells into hosted ranks
