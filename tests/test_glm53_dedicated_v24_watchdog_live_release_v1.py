@@ -384,14 +384,32 @@ def _kubernetes_fixture() -> dict[tuple[str, str | None], dict]:
             },
             "spec": {"selector": {"ray.io/node-type": "head"}},
         },
-        ("secrets", "ft-run-deadbeef-fleet-key"): {
-            "metadata": {
-                "uid": "55555555-5555-4555-8555-555555555555",
-                "ownerReferences": [{"kind": "RayJob", "uid": rayjob_uid}],
-            },
-            "data": {"FLEET_API_KEY": "redacted-never-read"},
-        },
     }
+
+
+def test_secret_observer_requests_only_metadata_and_key_names(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    commands: list[list[str]] = []
+
+    def run(command: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        commands.append(command)
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            "55555555-5555-4555-8555-555555555555\n"
+            "RayJob\t11111111-1111-4111-8111-111111111111\n"
+            "FLEET_API_KEY\n",
+            "",
+        )
+
+    monkeypatch.setattr(live_release.subprocess, "run", run)
+    value = live_release._kubectl_secret_metadata("ft-run-deadbeef-fleet-key")
+    assert value["keys"] == ["FLEET_API_KEY"]
+    assert commands[0][-1].startswith("go-template=")
+    assert ".data}}{{$key}}" in commands[0][-1]
+    assert "-o" in commands[0]
+    assert "json" not in commands[0]
 
 
 def test_observer_binds_randomized_object_names_without_secret_read(
@@ -406,6 +424,17 @@ def test_observer_binds_randomized_object_names_without_secret_read(
         lambda kind, name=None: copy.deepcopy(objects[(kind, name)]),
     )
     monkeypatch.setattr(live_release, "_kubectl_optional", lambda kind, name: None)
+    monkeypatch.setattr(
+        live_release,
+        "_kubectl_secret_metadata",
+        lambda _name: {
+            "uid": "55555555-5555-4555-8555-555555555555",
+            "ownerReferences": [
+                {"kind": "RayJob", "uid": _binding()["rayjob_uid"]}
+            ],
+            "keys": ["FLEET_API_KEY"],
+        },
+    )
 
     def pod_python(_pod: str, source: str) -> dict:
         seen_sources.append(source)
@@ -425,7 +454,7 @@ def test_observer_binds_randomized_object_names_without_secret_read(
     binding, live = live_release.observe_live("ft-run-deadbeef")
     assert binding == _binding()
     assert live["jobs_api_credential_secret_name"] == "ft-run-deadbeef-fleet-key"
-    assert all("redacted-never-read" not in source for source in seen_sources)
+    assert all("FLEET_API_KEY" not in source or "os.environ" in source for source in seen_sources)
 
 
 def test_create_once_recovers_partial_success_and_rejects_collision(

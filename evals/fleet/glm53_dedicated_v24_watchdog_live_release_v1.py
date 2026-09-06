@@ -465,6 +465,45 @@ def _kubectl_optional(kind: str, name: str) -> dict[str, Any] | None:
     return value
 
 
+def _kubectl_secret_metadata(name: str) -> dict[str, Any]:
+    """Read only a Secret's identity and key names, never any credential bytes."""
+
+    template = (
+        """{{.metadata.uid}}{{"\\n"}}"""
+        """{{range .metadata.ownerReferences}}"""
+        """{{.kind}}{{"\\t"}}{{.uid}}{{"\\n"}}{{end}}"""
+        """{{range $key, $_ := .data}}{{$key}}{{"\\n"}}{{end}}"""
+    )
+    result = subprocess.run(
+        [
+            "kubectl",
+            "-n",
+            NAMESPACE,
+            "get",
+            "secret",
+            name,
+            "-o",
+            "go-template=" + template,
+        ],
+        text=True,
+        capture_output=True,
+    )
+    if result.returncode != 0:
+        raise LiveReleaseError("kubectl_secret_metadata_failed")
+    lines = result.stdout.splitlines()
+    if not lines or not _valid_uuid(lines[0]):
+        raise LiveReleaseError("kubectl_secret_metadata_invalid")
+    owners = []
+    keys = []
+    for line in lines[1:]:
+        if "\t" in line:
+            kind, uid = line.split("\t", 1)
+            owners.append({"kind": kind, "uid": uid})
+        elif line:
+            keys.append(line)
+    return {"uid": lines[0], "ownerReferences": owners, "keys": sorted(keys)}
+
+
 def _pod_python(pod_name: str, source: str) -> dict[str, Any]:
     result = subprocess.run(
         [
@@ -607,15 +646,18 @@ def observe_live(api_run_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
     pod = _kubectl_json("pods", pod_name)
     service = _kubectl_json("services", service_name)
     secret_name = f"{api_run_id}-fleet-key"
-    secret = _kubectl_json("secrets", secret_name)
+    secret = _kubectl_secret_metadata(secret_name)
     if (
         not _valid_uuid(workload_uid)
         or not _valid_uuid(raycluster_uid)
         or not _owned_by(raycluster, kind="RayJob", uid=rayjob_uid)
         or not _owned_by(pod, kind="RayCluster", uid=raycluster_uid)
         or not _owned_by(service, kind="RayCluster", uid=raycluster_uid)
-        or not _owned_by(secret, kind="RayJob", uid=rayjob_uid)
-        or set(secret.get("data", {})) != {"FLEET_API_KEY"}
+        or not any(
+            row.get("kind") == "RayJob" and row.get("uid") == rayjob_uid
+            for row in secret.get("ownerReferences", [])
+        )
+        or secret.get("keys") != ["FLEET_API_KEY"]
     ):
         raise LiveReleaseError("v24_server_object_owner_chain_invalid")
     selector = service.get("spec", {}).get("selector", {})
@@ -678,7 +720,7 @@ def observe_live(api_run_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
         "metrics_http_status": metrics.get("http_status"),
         "activity_metric_families": metrics.get("families"),
         "jobs_api_credential_secret_name": secret_name,
-        "jobs_api_credential_secret_uid": secret.get("metadata", {}).get("uid"),
+        "jobs_api_credential_secret_uid": secret.get("uid"),
         "jobs_api_credential_owner_rayjob_uid": rayjob_uid,
         "jobs_api_credential_key": "FLEET_API_KEY",
         "jobs_api_credential_probe_http_status": api.get("http_status"),
