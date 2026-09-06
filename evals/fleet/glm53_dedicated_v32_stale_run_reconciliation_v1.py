@@ -64,6 +64,7 @@ ROW_KEYS = {
     "sfs_root_exists",
     "sfs_terminal_evidence",
 }
+PROJECT_ROW_KEYS = {"api_run_id", "title", "run_dir", "listed_status"}
 
 
 class ReconciliationError(RuntimeError):
@@ -117,8 +118,31 @@ def normalize_project_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return sorted(result, key=lambda row: (row["api_run_id"], row["run_dir"]))
 
 
+def normalized_project_snapshot(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    if rows and all(set(row) == PROJECT_ROW_KEYS for row in rows):
+        normalized = []
+        for row in rows:
+            if (
+                not isinstance(row.get("api_run_id"), str)
+                or not _project_run_dir(row.get("run_dir"))
+                or row.get("title") is not None
+                and not isinstance(row.get("title"), str)
+            ):
+                raise ReconciliationError("v32_stale_run_identity_invalid")
+            normalized.append(
+                {
+                    "api_run_id": row["api_run_id"],
+                    "title": row.get("title"),
+                    "run_dir": row["run_dir"],
+                    "listed_status": _status(row.get("listed_status")),
+                }
+            )
+        return sorted(normalized, key=lambda row: (row["api_run_id"], row["run_dir"]))
+    return normalize_project_rows(rows)
+
+
 def project_snapshot_sha256(rows: list[dict[str, Any]]) -> str:
-    return crypto.sha256(crypto.canonical_json(normalize_project_rows(rows)))
+    return crypto.sha256(crypto.canonical_json(normalized_project_snapshot(rows)))
 
 
 def _metadata(value: Mapping[str, Any]) -> Mapping[str, Any]:
@@ -223,7 +247,7 @@ def build_reconciliation(
 ) -> dict[str, Any]:
     observed = time.time() if now is None else now
     rows, pages = backend.list_runs() if rows_snapshot is None else rows_snapshot
-    normalized = normalize_project_rows(rows)
+    normalized = normalized_project_snapshot(rows)
     stale: list[dict[str, Any]] = []
     for row in normalized:
         current = backend.get_run(row["api_run_id"])
@@ -380,7 +404,7 @@ def validate_reconciliation(
     observed = value.get("observed_at_epoch")
     current_time = time.time() if now is None else now
     reconciled = value.get("reconciled_rows")
-    normalized = normalize_project_rows(rows)
+    normalized = normalized_project_snapshot(rows)
     expected = [row for row in normalized if row["listed_status"] in ACTIVE_STATUSES]
     if (
         set(value) != RESULT_KEYS
