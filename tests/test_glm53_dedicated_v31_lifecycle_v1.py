@@ -18,7 +18,7 @@ from evals.fleet import glm53_dedicated_v31_incluster_parity_v1 as parity
 from evals.fleet import glm53_dedicated_v31_watchdog_live_release_v1 as adapter
 
 ROOT = Path(__file__).resolve().parents[1]
-COMMIT = "0000000000000000000000000000000000000000"
+COMMIT = "65a3949229dd4360b66fc2fc1b9b1d46802f9a86"
 
 
 def authorization() -> dict[str, object]:
@@ -303,3 +303,28 @@ def test_v31_parity_and_watchdog_are_held_score_free() -> None:
     assert held["exactly_one_live_observation"] is True
     assert held["api_mutation_calls"] == 0
     assert held["scored_launch_authorized"] is False
+
+
+def test_v31_held_and_v30_tombstone_receipts_are_digest_valid() -> None:
+    evidence = ROOT / "docs/evidence/glm53-study"
+    v31 = json.loads(
+        (
+            evidence
+            / "2026-09-06-glm53-dedicated-v31-zero-state-lifecycle-held-v1.json"
+        ).read_text()
+    )
+    v30 = json.loads(
+        (
+            evidence
+            / "2026-09-06-glm53-dedicated-v30-double-observation-release-v1.json"
+        ).read_text()
+    )
+    assert v31 == package.build_held(ROOT, COMMIT)
+    assert v31["receipt_sha256"] == crypto.digest_without(v31, "receipt_sha256")
+    assert v30["receipt_sha256"] == crypto.digest_without(v30, "receipt_sha256")
+    assert v30["status"] == "RELEASED_ZERO_GPU_REMNANTS"
+    assert v30["retry_same_identity"] is False
+    assert v30["fleet_task_instance_calls"] == 0
+    assert v30["fleet_session_calls"] == 0
+    assert v30["verifier_calls"] == 0
+    assert v30["scoring_calls"] == 0
