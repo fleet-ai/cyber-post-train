@@ -79,6 +79,33 @@ def _project_shape() -> dict[str, object]:
     }
 
 
+def _server_release(source_commit: str) -> dict[str, object]:
+    config, plan, preview, inventory, held_release = held.load_all(ROOT)
+    value: dict[str, object] = {
+        "schema_version": live.SERVER_RELEASE_SCHEMA,
+        "status": "RELEASED_FOR_ONE_SCORE_FREE_DP6_M_SERVER",
+        "launch_authorized": True,
+        "scoring_authorized": False,
+        "source_commit": source_commit,
+        "title": held.TITLE,
+        "run_dir": held.RUN_DIR,
+        "serving_block": held.SERVING_BLOCK,
+        "config_sha256": config["config_sha256"],
+        "plan_receipt_sha256": plan["receipt_sha256"],
+        "preview_receipt_sha256": preview["receipt_sha256"],
+        "review_inventory_receipt_sha256": inventory["receipt_sha256"],
+        "held_release_receipt_sha256": held_release["receipt_sha256"],
+        "release_first_reconciled": True,
+        "server_create_limit": 1,
+        "qualifier_create_limit": 0,
+        "statistical_cells_selected": 0,
+        "scored_calls": 0,
+        "prompts_traces_flags_or_scores_included": False,
+    }
+    _resign(value)
+    return value
+
+
 def test_held_packet_is_append_only_score_free_and_exact() -> None:
     config, plan, preview, inventory, release = held.load_all(ROOT)
     assert held.TITLE == "chris-cyber-evalserve-q38-dp6-m-v1"
@@ -121,6 +148,61 @@ def test_held_packet_is_append_only_score_free_and_exact() -> None:
     assert plan["qualification"]["server_binding_projected_create_once_before_counter_producer"]
     assert plan["qualification"]["server_binding_projection_exact_readback_required"]
     assert plan["qualification"]["fresh_sanitized_failed_observer_status_releases_immediately"]
+
+
+def test_live_loader_and_server_release_reject_ambiguous_or_extra_inputs(
+    tmp_path: Path,
+) -> None:
+    duplicate = tmp_path / "duplicate.json"
+    duplicate.write_text('{"status":"safe","status":"SECRET_PROTECTED_VALUE"}')
+    with pytest.raises(ValueError, match="duplicate JSON key"):
+        live._load(duplicate)  # noqa: SLF001
+
+    source_commit = "a" * 40
+    release = _server_release(source_commit)
+    release["protected_score"] = "SECRET_MARKER"
+    _resign(release)
+    with pytest.raises(ValueError, match="not executable"):
+        live.validate_server_release(release, ROOT, source_commit)
+
+
+def test_submission_round_trip_binds_fresh_rendered_preview() -> None:
+    source_commit = "a" * 40
+    release = _server_release(source_commit)
+    config = held.config(ROOT)
+    gate: dict[str, object] = {
+        "schema_version": live.LIVE_GATE_SCHEMA,
+        "status": "PASSED_IMMEDIATELY_BEFORE_CREATE",
+        "observed_at_utc": "2026-09-06T10:30:00Z",
+        "source_commit": source_commit,
+        "server_release_receipt_sha256": release["receipt_sha256"],
+        "config_sha256": config["config_sha256"],
+        "request_sha256": config["request_sha256"],
+        "active_project_serving_runs": 0,
+        "project_resource_shape": _project_shape(),
+        "target_identity_matches": {"jobs_api": 0, "kubernetes": 0, "sfs": 0},
+        "sfs_observation": {
+            "observer_pod_name": "observer",
+            "observer_pod_uid": "44444444-4444-4444-8444-444444444444",
+            "observer_sfs_mount_path": "/shared",
+            "run_dir_exists": False,
+        },
+        "rendered": live._expected_rendered(ROOT),  # noqa: SLF001
+        "api_mutations": 0,
+        "scored_calls": 0,
+        "prompts_traces_flags_or_scores_included": False,
+    }
+    _resign(gate)
+    receipt = live.submission_receipt("ft-run-dp6m", gate, release, source_commit, ROOT)
+    live.validate_submission(receipt, release, ROOT, source_commit)
+
+    tampered = copy.deepcopy(receipt)
+    tampered["live_gate"]["rendered"]["unexpected"] = "SECRET_MARKER"
+    _resign(tampered["live_gate"])
+    tampered["live_gate_receipt_sha256"] = tampered["live_gate"]["receipt_sha256"]
+    _resign(tampered)
+    with pytest.raises(ValueError, match="not executable evidence"):
+        live.validate_submission(tampered, release, ROOT, source_commit)
 
 
 def test_payload_installs_metric_observer_v5_and_uses_600_second_rail() -> None:

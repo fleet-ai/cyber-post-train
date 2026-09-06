@@ -44,13 +44,32 @@ CAPACITY_KEYS = {
     "priority_class",
     "peer_preemption_required",
 }
+SERVER_RELEASE_KEYS = {
+    "schema_version",
+    "status",
+    "launch_authorized",
+    "scoring_authorized",
+    "source_commit",
+    "title",
+    "run_dir",
+    "serving_block",
+    "config_sha256",
+    "plan_receipt_sha256",
+    "preview_receipt_sha256",
+    "review_inventory_receipt_sha256",
+    "held_release_receipt_sha256",
+    "release_first_reconciled",
+    "server_create_limit",
+    "qualifier_create_limit",
+    "statistical_cells_selected",
+    "scored_calls",
+    "prompts_traces_flags_or_scores_included",
+    "receipt_sha256",
+}
 
 
 def _load(path: Path) -> dict[str, Any]:
-    value = json.loads(path.read_text())
-    if not isinstance(value, dict):
-        raise ValueError(f"{path} must contain an object")
-    return value
+    return held._load(path)  # noqa: SLF001 - one strict receipt loader
 
 
 def _git(root: Path, *args: str) -> str:
@@ -104,28 +123,48 @@ def _pod_run_dir(pod: Mapping[str, Any]) -> str | None:
 
 def validate_server_release(value: Mapping[str, Any], root: Path, source_commit: str) -> None:
     config, plan, preview, inventory, held_release = held.load_all(root)
-    if value.get("receipt_sha256") != self_hosted.digest_without(dict(value), "receipt_sha256") or (
-        value.get("schema_version") != SERVER_RELEASE_SCHEMA
-        or value.get("status") != "RELEASED_FOR_ONE_SCORE_FREE_DP6_M_SERVER"
-        or value.get("launch_authorized") is not True
-        or value.get("scoring_authorized") is not False
-        or value.get("source_commit") != source_commit
-        or value.get("title") != held.TITLE
-        or value.get("run_dir") != held.RUN_DIR
-        or value.get("serving_block") != held.SERVING_BLOCK
-        or value.get("config_sha256") != config["config_sha256"]
-        or value.get("plan_receipt_sha256") != plan["receipt_sha256"]
-        or value.get("preview_receipt_sha256") != preview["receipt_sha256"]
-        or value.get("review_inventory_receipt_sha256") != inventory["receipt_sha256"]
-        or value.get("held_release_receipt_sha256") != held_release["receipt_sha256"]
-        or value.get("release_first_reconciled") is not True
-        or value.get("server_create_limit") != 1
-        or value.get("qualifier_create_limit") != 0
-        or value.get("statistical_cells_selected") != 0
-        or value.get("scored_calls") != 0
-        or value.get("prompts_traces_flags_or_scores_included") is not False
+    if (
+        set(value) != SERVER_RELEASE_KEYS
+        or value.get("receipt_sha256") != self_hosted.digest_without(dict(value), "receipt_sha256")
+        or (
+            value.get("schema_version") != SERVER_RELEASE_SCHEMA
+            or value.get("status") != "RELEASED_FOR_ONE_SCORE_FREE_DP6_M_SERVER"
+            or value.get("launch_authorized") is not True
+            or value.get("scoring_authorized") is not False
+            or value.get("source_commit") != source_commit
+            or value.get("title") != held.TITLE
+            or value.get("run_dir") != held.RUN_DIR
+            or value.get("serving_block") != held.SERVING_BLOCK
+            or value.get("config_sha256") != config["config_sha256"]
+            or value.get("plan_receipt_sha256") != plan["receipt_sha256"]
+            or value.get("preview_receipt_sha256") != preview["receipt_sha256"]
+            or value.get("review_inventory_receipt_sha256") != inventory["receipt_sha256"]
+            or value.get("held_release_receipt_sha256") != held_release["receipt_sha256"]
+            or value.get("release_first_reconciled") is not True
+            or value.get("server_create_limit") != 1
+            or value.get("qualifier_create_limit") != 0
+            or value.get("statistical_cells_selected") != 0
+            or value.get("scored_calls") != 0
+            or value.get("prompts_traces_flags_or_scores_included") is not False
+        )
     ):
         raise ValueError("DP6-m server release is not executable")
+
+
+def _expected_rendered(root: Path) -> dict[str, Any]:
+    payload = held.jobs_payload(root)
+    return {
+        "kind": "RayJob",
+        "suspended": True,
+        "queue": "training-lq",
+        "priority_class": held.SERVER_PRIORITY_CLASS,
+        "preemption_policy": None,
+        "image": payload["image"],
+        "run_dir": held.RUN_DIR,
+        "gpu_request": 6,
+        "gpu_limit": 6,
+        "command_sha256": self_hosted.sha256(payload["command"].encode()),
+    }
 
 
 def _active_project_runs(client: httpx.Client) -> list[dict[str, str]]:
@@ -286,9 +325,7 @@ def _sfs_observation_valid(value: object) -> bool:
     }:
         return False
     try:
-        lifecycle_guard.observer_sfs_path(
-            str(value.get("observer_sfs_mount_path")), held.RUN_DIR
-        )
+        lifecycle_guard.observer_sfs_path(str(value.get("observer_sfs_mount_path")), held.RUN_DIR)
     except ValueError:
         return False
     return (
@@ -470,8 +507,6 @@ def validate_submission(
     if gate.get("receipt_sha256") != self_hosted.digest_without(gate, "receipt_sha256"):
         raise ValueError("DP6-m nested live gate digest drifted")
     config = held.config(root)
-    preview = _load(root / held.PREVIEW_PATH)
-    held.validate_preview(preview, root)
     submission_keys = {
         "schema_version",
         "status",
@@ -555,7 +590,7 @@ def validate_submission(
         or gate.get("active_project_serving_runs") != 0
         or gate.get("target_identity_matches") != {"jobs_api": 0, "kubernetes": 0, "sfs": 0}
         or not _sfs_observation_valid(sfs)
-        or gate.get("rendered") != preview.get("rendered")
+        or gate.get("rendered") != _expected_rendered(root)
         or gate.get("api_mutations") != 0
         or gate.get("scored_calls") != 0
         or gate.get("prompts_traces_flags_or_scores_included") is not False
