@@ -53,6 +53,29 @@ def _release() -> dict[str, object]:
     return value
 
 
+def _live_gate() -> dict[str, object]:
+    value: dict[str, object] = {
+        "schema_version": launch.LIVE_SUBMIT_GATE_SCHEMA,
+        "status": "CLEAR",
+        "title": "chris-cyber-evalserve-q38-dp8-b-v1",
+        "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-q38-dp8-b-v1",
+        "jobs_api_title_matches": 0,
+        "jobs_api_run_dir_matches": 0,
+        "kubernetes_identity_matches": 0,
+        "sfs_run_dir_exists": False,
+        "project_gpu_nodes_before_create": 1,
+        "project_gpus_before_create": 8,
+        "tp1_objects_absent": True,
+        "tp1_gpu_released": True,
+        "observed_after_transition_release": True,
+        "freshness_seconds_at_submit": 5,
+        "api_mutations": 0,
+        "prompts_traces_flags_or_scores_included": False,
+    }
+    value["receipt_sha256"] = self_hosted.digest_without(value, "receipt_sha256")
+    return value
+
+
 def test_held_config_renders_exact_nonpreempting_full_node_payload() -> None:
     value = launch.spec(ROOT)
     payload = launch.jobs_payload(ROOT)
@@ -156,6 +179,209 @@ def test_authenticated_preview_receipt_is_exact_and_non_mutating() -> None:
         changed["receipt_sha256"] = self_hosted.digest_without(changed, "receipt_sha256")
         with pytest.raises(ValueError):
             launch.validate_preview_receipt(changed, ROOT)
+
+
+def test_create_once_submit_requires_release_and_immediate_live_gate(monkeypatch) -> None:
+    payload = launch.jobs_payload(ROOT)
+    manifest = {
+        "kind": "RayJob",
+        "metadata": {"labels": {"kueue.x-k8s.io/queue-name": "training-lq"}},
+        "spec": {
+            "suspend": True,
+            "entrypoint": payload["command"],
+            "rayClusterSpec": {
+                "headGroupSpec": {
+                    "template": {
+                        "metadata": {
+                            "annotations": {
+                                "kueue.x-k8s.io/podset-preferred-topology": (
+                                    "topology.nebius.com/tier-1"
+                                )
+                            }
+                        },
+                        "spec": {
+                            "imagePullSecrets": [{"name": "ghcr-pull"}],
+                            "priorityClassName": "fleet-infra-quiet",
+                            "containers": [
+                                {
+                                    "image": payload["image"],
+                                    "env": [{"name": "RUN_DIR", "value": payload["run_dir"]}],
+                                    "resources": {
+                                        "requests": {"nvidia.com/gpu": 8},
+                                        "limits": {"nvidia.com/gpu": 8},
+                                    },
+                                }
+                            ],
+                        },
+                    }
+                }
+            },
+        },
+    }
+
+    class Response:
+        def __init__(self, status_code, value):
+            self.status_code = status_code
+            self._value = value
+
+        def raise_for_status(self):
+            assert self.status_code < 400
+
+        def json(self):
+            return self._value
+
+    class Client:
+        def __init__(self):
+            self.routes = []
+
+        def post(self, route, json):
+            assert json == payload
+            self.routes.append(route)
+            if route.endswith("preview"):
+                return Response(200, {"manifest_yaml": yaml.safe_dump(manifest)})
+            return Response(202, {"name": "ft-run-fresh"})
+
+        def get(self, route, params=None):
+            assert route == "/v1/runs"
+            assert params is not None
+            return Response(200, {"runs": [], "next_cursor": None})
+
+    # Avoid depending on wall-clock formatting in this pure create-once unit test.
+    class Clock:
+        @classmethod
+        def now(cls, _zone):
+            class Value:
+                def isoformat(self):
+                    return "2026-09-06T05:00:00+00:00"
+
+            return Value()
+
+    monkeypatch.setattr(launch, "datetime", Clock)
+    client = Client()
+    receipt = launch.submit_create_once(
+        client, _release(), _live_gate(), ROOT, source_commit="a" * 40
+    )
+    assert client.routes == ["/v1/runs/preview", "/v1/runs"]
+    assert receipt["status"] == "SUBMITTED_NON_SCORED_SERVER"
+    assert receipt["scored_calls"] == 0
+    changed = _live_gate()
+    changed["tp1_gpu_released"] = False
+    changed["receipt_sha256"] = self_hosted.digest_without(changed, "receipt_sha256")
+    with pytest.raises(ValueError):
+        launch.submit_create_once(Client(), _release(), changed, ROOT, source_commit="a" * 40)
+
+
+def test_server_binding_requires_exact_immutable_runtime_and_uids() -> None:
+    submission = {
+        "schema_version": launch.SUBMISSION_SCHEMA,
+        "status": "SUBMITTED_NON_SCORED_SERVER",
+        "api_run_id": "ft-run-fresh",
+        "title": "chris-cyber-evalserve-q38-dp8-b-v1",
+        "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-q38-dp8-b-v1",
+        "serving_block": "dedicated-qwen-dp8-b-v1",
+        "route": "POST /v1/runs",
+        "http_status": 202,
+        "server_instances_created": 1,
+        "scored_calls": 0,
+        "prompts_traces_flags_or_scores_included": False,
+    }
+    submission["receipt_sha256"] = self_hosted.digest_without(submission, "receipt_sha256")
+    value = {
+        "schema_version": launch.SERVER_BINDING_SCHEMA,
+        "status": "READY_NON_SCORED",
+        "submission_receipt_sha256": submission["receipt_sha256"],
+        "api_run_id": submission["api_run_id"],
+        "title": "chris-cyber-evalserve-q38-dp8-b-v1",
+        "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-q38-dp8-b-v1",
+        "serving_block": "dedicated-qwen-dp8-b-v1",
+        "service_origin": "http://ft-run-fresh-example-head-svc:8000",
+        "rayjob_uid": "11111111-1111-4111-8111-111111111111",
+        "workload_uid": "22222222-2222-4222-8222-222222222222",
+        "head_pod_uid": "33333333-3333-4333-8333-333333333333",
+        "service_uid": "44444444-4444-4444-8444-444444444444",
+        "image": launch.prior.IMAGE,
+        "model_revision": launch.prior.MODEL_REVISION,
+        "context_length": 262144,
+        "tensor_parallel_size": 1,
+        "data_parallel_size": 8,
+        "head_pod_running_ready": True,
+        "head_pod_restarts": 0,
+        "kueue_preempted": False,
+        "scoring_authorized": False,
+        "prompts_traces_flags_or_scores_included": False,
+    }
+    value["receipt_sha256"] = self_hosted.digest_without(value, "receipt_sha256")
+    assert launch.validate_server_binding_receipt(value, submission)["api_run_id"] == (
+        "ft-run-fresh"
+    )
+    changed = copy.deepcopy(value)
+    changed["data_parallel_size"] = 4
+    changed["receipt_sha256"] = self_hosted.digest_without(changed, "receipt_sha256")
+    with pytest.raises(ValueError):
+        launch.validate_server_binding_receipt(changed, submission)
+
+
+def _probe(status: str = "PASSED_NON_SCORED") -> dict[str, object]:
+    value: dict[str, object] = {
+        "status": status,
+        "tool_contract": {
+            "calls_observed_in_order": ["bash", "submit_report"],
+            "arguments_structurally_valid": True,
+        },
+        "execution": {"task_instance_session_verifier_scoring_calls": 0},
+        "privacy": {"responses_or_model_outputs_included": False},
+    }
+    value["receipt_sha256"] = self_hosted.digest_without(value, "receipt_sha256")
+    return value
+
+
+def test_actual_opencode_ladder_stops_before_next_level_on_failure() -> None:
+    plan = launch.qualification_plan(_binding(), ROOT)
+    calls = 0
+
+    def probe():
+        nonlocal calls
+        calls += 1
+        return _probe("FAILED" if calls == 3 else "PASSED_NON_SCORED")
+
+    result = launch.run_qualification_ladder(plan, probe)
+    assert [row["concurrency"] for row in result["levels"]] == [1, 2]
+    assert result["highest_passing_concurrency"] == 1
+    assert calls == 3
+
+
+def test_scored_partition_includes_only_whole_unstarted_task_boundaries() -> None:
+    plan = launch.qualification_plan(_binding(), ROOT)
+    result = launch.run_qualification_ladder(plan, _probe)
+    cells = [
+        {
+            "task_version_id": "task-a",
+            "attempt": attempt,
+            "cell_id": f"sha256:{attempt:064x}",
+            "execution_id": f"sha256:{attempt + 10:064x}",
+            "status": "unstarted",
+            "accepted_receipt_sha256": None,
+            "active_claim_sha256": None,
+            "authoritative_session_matches": 0,
+            "output_root_exists": False,
+        }
+        for attempt in range(1, 5)
+    ]
+    held = launch.held_scored_partition(result, cells)
+    assert held["launch_authorized"] is False
+    assert held["scoring_authorized"] is False
+    assert held["qualified_concurrency_ceiling"] == 8
+    assert [row["attempt"] for row in held["whole_task_partitions"][0]["cells"]] == [
+        1,
+        2,
+        3,
+        4,
+    ]
+    changed = copy.deepcopy(cells)
+    changed[2]["status"] = "accepted"
+    changed[2]["accepted_receipt_sha256"] = "sha256:" + "a" * 64
+    with pytest.raises(ValueError):
+        launch.held_scored_partition(result, changed)
 
 
 def test_qualification_plan_is_exact_score_free_ladder() -> None:
