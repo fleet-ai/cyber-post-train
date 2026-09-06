@@ -131,6 +131,7 @@ done
 cp /package/pyproject.toml /workspace/pyproject.toml
 cp /package/uv.lock /workspace/uv.lock
 export PATH="/tools:$PATH"
+export PYTHONPATH=/workspace
 export UV_PROJECT_ENVIRONMENT=/tmp/v28-env
 uv sync --project /workspace --frozen --no-install-project
 cd /workspace
