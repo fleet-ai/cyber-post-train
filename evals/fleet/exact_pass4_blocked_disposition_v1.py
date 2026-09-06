@@ -10,7 +10,7 @@ from typing import Any
 
 from evals.fleet import self_hosted
 
-SCHEMA = "fleet-exact-pass4-blocked-cell-disposition-v1"
+SCHEMA = "fleet-exact-pass4-blocked-cell-disposition-v2"
 EXPECTED_CELLS = {
     "sha256:f3921b5927bcf73a0df58ff991841db52f9b23f04cae5d482c5f7e8630308250",
     "sha256:6edac950ae44ff62c07074a775afdb65cc9b394047883e0b57fcad84e74d2fa7",
@@ -44,6 +44,16 @@ def validate(path: Path, *, root: Path) -> dict[str, Any]:
     value = _load_receipt(path)
     if value.get("schema_version") != SCHEMA:
         raise ValueError("blocked-cell disposition schema drifted")
+    supersedes = value.get("supersedes", {})
+    if (
+        supersedes.get("path")
+        != "docs/evidence/qwen38-study/2026-09-06-exact-pass4-blocked-cell-disposition-v1.json"
+        or supersedes.get("receipt_sha256")
+        != "sha256:ad4c4402b01dec0b43f4319f3628640adf99a422a170bb074f74d155dcb953b0"
+        or supersedes.get("reason")
+        != "rank97_attempt1_identity_corrected_from_canonical_claim"
+    ):
+        raise ValueError("blocked-cell supersession authority drifted")
     if value.get("privacy") != {
         "prompts_read": False,
         "traces_read": False,

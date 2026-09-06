@@ -10,7 +10,7 @@ from evals.fleet import self_hosted
 ROOT = Path(__file__).parents[1]
 RECEIPT = ROOT / (
     "docs/evidence/qwen38-study/"
-    "2026-09-06-exact-pass4-blocked-cell-disposition-v1.json"
+    "2026-09-06-exact-pass4-blocked-cell-disposition-v2.json"
 )
 
 
