@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from evals.fleet import glm53_dedicated_v22_a2_bootstrap_v1 as bootstrap
 from evals.fleet import glm53_dedicated_v22_a2_package_v1 as package
 from evals.fleet import glm53_dedicated_v22_a2_release_package_v1 as release
 from evals.fleet import glm53_dedicated_v22_a2_v1 as controller
@@ -40,3 +41,16 @@ def test_v22_release_package_binds_current_origin_and_controller() -> None:
     }
     assert env["DEDICATED_SERVICE_ORIGIN"] == package.ORIGIN
     assert "glm53_dedicated_v22_a2_release_v1" in configmap["data"]["run.sh"]
+
+
+def test_v22_bootstrap_stages_exact_release_and_disables_scoring() -> None:
+    built = bootstrap.render(ROOT)
+    assert built["launch_authorized"] is False
+    source, evidence, job = built["objects"]["items"]
+    assert source["metadata"]["name"] == bootstrap.JOB_NAME + "-source"
+    assert evidence["metadata"]["name"] == bootstrap.JOB_NAME + "-evidence-source"
+    pod = job["spec"]["template"]["spec"]
+    assert str(bootstrap.RELEASE_PATH) in pod["initContainers"][0]["args"][0]
+    env = {row["name"]: row.get("value") for row in pod["containers"][0]["env"]}
+    assert env["DEDICATED_BOOTSTRAP_ONLY"] == "1"
+    assert env["DEDICATED_SERVICE_ORIGIN"] == package.ORIGIN
