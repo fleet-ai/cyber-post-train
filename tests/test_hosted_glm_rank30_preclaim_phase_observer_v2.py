@@ -128,7 +128,7 @@ def prior_file_sha256(payload: bytes) -> str:
 
 
 def test_held_receipt_is_digest_valid_and_forbids_launch() -> None:
-    held = package.build_held(ROOT, "a03c5c80fddce915bc05ce7171189653f1aad962")
+    held = package.build_held(ROOT, "6faff7efdc835523de0e5a1e47b7ff9910b53899")
     tracked = json.loads(
         (
             ROOT
