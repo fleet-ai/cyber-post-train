@@ -1,0 +1,22 @@
+{
+  "accepted_present": false,
+  "claim_present": false,
+  "deterministic_cause": "bulk adapter interface incomplete: CANARY_GATE_SCHEMA,RECONCILIATION_GATE_SCHEMA,validate_all",
+  "evaluator_exit_code": 1,
+  "failed_identity_reused": false,
+  "finished_at_utc": "2026-09-06T00:09:29Z",
+  "fix_commit": "2156738",
+  "job_name": "chris-glm53-dedicated-v14-r051-a1-canary-v1",
+  "job_uid": "c0bf99c9-c3de-448d-8b5b-9985742100d8",
+  "model_requests": 0,
+  "pod_restarts": 0,
+  "pod_uid": "607707ea-9d36-4d08-bceb-e6454afc5867",
+  "prompts_traces_flags_or_scores_read": false,
+  "receipt_sha256": "sha256:924b98a7b98932cc15b66b904901f8be2f7dca10c4ef35d9f986dde9533f7844",
+  "retry_allowed": false,
+  "schema_version": "fleet-glm53-dedicated-preclaim-failure-v1",
+  "sfs_output_present": false,
+  "started_at_utc": "2026-09-06T00:09:00Z",
+  "status": "TERMINAL_INFRASTRUCTURE_FAILED_PRECLAIM",
+  "task_instance_session_verifier_scoring_calls": 0
+}
