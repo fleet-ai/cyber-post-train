@@ -22,6 +22,7 @@ from evals.fleet import glm53_dedicated_v32_watchdog_package_v1 as watchdog
 
 ROOT = Path(__file__).resolve().parents[1]
 COMMIT = "630fbc20c1d11e3036ed4e94057c3ac4efccf520"
+BOUNDED_EXACT_GET_COMMIT = "7c2ebbf7d963d0ab50f3c3d4002d003e2fa2a5c8"
 
 
 class FakeBackend:
@@ -696,6 +697,25 @@ def test_v32_held_and_v31_terminal_receipts_are_digest_valid() -> None:
     assert terminal["fleet_session_calls"] == 0
     assert terminal["verifier_calls"] == 0
     assert terminal["scoring_calls"] == 0
+
+
+def test_v32_bounded_exact_get_package_is_digest_valid_and_held() -> None:
+    tracked = json.loads(
+        (
+            ROOT
+            / "docs/evidence/glm53-study/"
+            "2026-09-06-glm53-dedicated-v32-bounded-exact-get-latency-held-v1.json"
+        ).read_text()
+    )
+    assert tracked == package.build_held(ROOT, BOUNDED_EXACT_GET_COMMIT)
+    assert tracked["package_commit"] == BOUNDED_EXACT_GET_COMMIT
+    assert tracked["server_launch_authorized"] is False
+    assert tracked["qualification_launch_authorized"] is False
+    assert tracked["scored_launch_authorized"] is False
+    assert tracked["api_mutation_calls"] == 0
+    assert tracked["receipt_sha256"] == crypto.digest_without(
+        tracked, "receipt_sha256"
+    )
 
 
 def test_v32_live_create_review_receipts_are_immutable_and_held() -> None:
