@@ -14,6 +14,7 @@ from evals.fleet import glm53_dedicated_v32_controller_package_v1 as package
 from evals.fleet import glm53_dedicated_v32_create_v1 as server
 from evals.fleet import glm53_dedicated_v32_incluster_parity_v1 as parity
 from evals.fleet import glm53_dedicated_v32_live_authorization_v1 as live_auth
+from evals.fleet import glm53_dedicated_v32_stale_run_reconciliation_v1 as stale_runs
 from evals.fleet import glm53_dedicated_v32_watchdog_live_release_v1 as adapter
 from evals.fleet import glm53_dedicated_v32_watchdog_package_v1 as watchdog
 
@@ -55,16 +56,43 @@ class FakeBackend:
     def preview(self, _payload: object) -> int:
         return self.preview_status
 
+    def sfs_evidence(self, run_dirs: tuple[str, ...]) -> dict[str, object]:
+        return {
+            "observer_pod_name": live_auth.SFS_OBSERVER_POD_NAME,
+            "observer_pod_uid": live_auth.SFS_OBSERVER_POD_UID,
+            "observer_sfs_mount_path": live_auth.SFS_OBSERVER_MOUNT_PATH,
+            "roots": {
+                run_dir: {
+                    "root_exists": False,
+                    "unsafe_symlink": False,
+                    "terminal_evidence": [],
+                }
+                for run_dir in run_dirs
+            },
+        }
+
 
 def create_authorization(backend: FakeBackend | None = None) -> dict[str, object]:
+    selected = backend or FakeBackend()
+    stale_backend = copy.deepcopy(selected)
+    stale_backend.exact = {}
+    stale_backend.items = []
+    try:
+        reconciliation = stale_runs.build_reconciliation(
+            backend=stale_backend,
+            now=time.time(),
+        )
+    except stale_runs.ReconciliationError as exc:
+        raise live_auth.LiveAuthorizationError(str(exc)) from exc
     return live_auth.build_live_authorization(
-        backend=backend or FakeBackend(),
+        backend=selected,
         payload=server.payload(),
         title=server.TITLE,
         run_dir=server.RUN_DIR,
         control_result_path=server.RESULT_PATH,
         request_sha256=server.request_sha256(),
         priority_class=v24.PRIORITY_CLASS,
+        stale_run_reconciliation=reconciliation,
         now=time.time(),
     )
 
@@ -299,6 +327,31 @@ def test_v32_create_gate_rejects_rehashed_sfs_identity_drift(mutation: str) -> N
         server.validate_authorization(changed)
 
 
+def test_v32_create_gate_rejects_rehashed_stale_reconciliation_drift() -> None:
+    backend = FakeBackend()
+    backend.rows = [
+        {
+            "name": "ft-run-deadbeef",
+            "title": "chris-cyber-evalserve-old-v1",
+            "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-old-v1",
+            "status": "FAILED",
+        }
+    ]
+    value = create_authorization(backend)
+    changed = copy.deepcopy(value)
+    reconciliation = changed["live_observation"]["stale_run_reconciliation"]
+    reconciliation["reconciled_rows"][0]["exact_get_status"] = "RUNNING"
+    reconciliation["receipt_sha256"] = crypto.digest_without(
+        reconciliation, "receipt_sha256"
+    )
+    changed["live_observation"]["receipt_sha256"] = crypto.digest_without(
+        changed["live_observation"], "receipt_sha256"
+    )
+    changed["receipt_sha256"] = crypto.digest_without(changed, "receipt_sha256")
+    with pytest.raises(server.CreateError, match="authorization_invalid"):
+        server.validate_authorization(changed)
+
+
 def test_v32_live_builder_rejects_malformed_project_api_identity() -> None:
     backend = FakeBackend()
     backend.rows = [
@@ -310,7 +363,7 @@ def test_v32_live_builder_rejects_malformed_project_api_identity() -> None:
         }
     ]
     with pytest.raises(
-        live_auth.LiveAuthorizationError, match="project_identity_invalid"
+        live_auth.LiveAuthorizationError, match="identity_invalid"
     ):
         create_authorization(backend)
 
