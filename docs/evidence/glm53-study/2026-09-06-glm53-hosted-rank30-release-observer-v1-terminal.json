@@ -1,0 +1,42 @@
+{
+  "classification": "PRE_RECEIPT_UNCLASSIFIED",
+  "failed_identity": {
+    "configmap_name": "chris-glm53-exact100-hosted-r030-single-slot-release-v1-run",
+    "job_name": "chris-glm53-exact100-hosted-r030-single-slot-release-v1",
+    "job_uid": "2b538d17-d5a8-4841-b152-47cfd737e0d9",
+    "pod_name": "chris-glm53-exact100-hosted-r030-single-slot-release-v1-pb8j6",
+    "pod_uid": "f0d26a3d-16ec-4a81-86c2-91512057328a"
+  },
+  "job_terminal": {
+    "failed": 1,
+    "pod_exit_code": 1,
+    "pod_restarts": 0,
+    "reason": "BackoffLimitExceeded"
+  },
+  "latent_package_defect": {
+    "classification": "TRANSITIVE_IMPORT_CLOSURE_MISSING",
+    "observed_as_terminal_cause": false,
+    "proof": "static_package_and_materialized_import_regression",
+    "required_successor_identity": "chris-glm53-exact100-hosted-r030-single-slot-release-v2"
+  },
+  "privacy": {
+    "logs_read": false,
+    "prompts_traces_flags_read": false,
+    "scores_read": false
+  },
+  "receipt_sha256": "sha256:b19b06ed9f4dd76f2088599f3ff9b20d235ad0ac58ae12ac0dc176d8d486bff8",
+  "retry_allowed": false,
+  "schema_version": "fleet-hosted-glm-rank30-release-observer-terminal-v1",
+  "score_blind_side_effects": {
+    "accepted_receipts_created": 0,
+    "model_calls": 0,
+    "rank30_claims_created": 0,
+    "rank30_output_root_created": false,
+    "release_receipt_created": false,
+    "scoring_calls": 0,
+    "session_mutations": 0,
+    "verifier_mutations": 0
+  },
+  "status": "FAILED",
+  "superseded_by_fresh_identity": true
+}
