@@ -1,0 +1,51 @@
+{
+  "api_run_id": "ft-run-aa95ff6a",
+  "binding_projection_receipt_sha256": "sha256:0e70320882f5d71b6c92d139a04270ad884689b4ef709248e8ccacb18b1e8dbe",
+  "counter_producer_gate_receipt_sha256": "sha256:bd2e430202acdf946cadfc09018207fda261e3bb78930847c85c93d7ed246b05",
+  "deterministic_source_diagnosis": {
+    "endpoint_model_and_tool_request_exercised": false,
+    "failure_boundary": "pre_request_controller_resource_sample",
+    "resource_sample_is_only_immediate_operation_before_probe_execution": true,
+    "resource_sample_wait_existed": false,
+    "stable_counter_producer_gate_passed": true
+  },
+  "fresh_successor_required": true,
+  "head_pod_uid": "1e88a3eb-95bb-4749-b0bd-258c748ef9f8",
+  "observed_at_utc": "2026-09-06T13:53:24Z",
+  "prompts_traces_flags_or_scores_included": false,
+  "qualifier_configmap_uid": "0e8bbd13-9ea0-405b-8844-15de33310aae",
+  "qualifier_job_uid": "4bfbe4f3-9a6a-4794-a49e-7ce97d8b38b7",
+  "qualifier_result": {
+    "completed_stream_count": 0,
+    "elapsed_milliseconds": 10,
+    "error_count": 1,
+    "highest_passing_concurrency": 0,
+    "level": 1,
+    "level_status": "FAILED",
+    "observed_model_request_count": 0,
+    "observed_server_request_delta": 0,
+    "receipt_sha256": "sha256:86d99cc68f5b9c4955ea54469c90d6fa5039dd330ae405fd62b4f26f8351ef59",
+    "tool_arguments_exact": false,
+    "tool_order_exact": false
+  },
+  "ray_cluster_uid": "defdaf10-64e0-43fb-9921-1e384a0326c7",
+  "rayjob_uid": "82c788b7-0b98-4e8f-b19b-76859695ed39",
+  "receipt_sha256": "sha256:1e8fe63874c5111dcff8a3b81725effe24ea086f05434ae187986b021bb9f7a0",
+  "schema_version": "fleet-qwen38-dp6-h-c1-terminal-v1",
+  "scored_calls": 0,
+  "service_uid": "01a2f252-0326-4042-9616-e97b04324776",
+  "source_commit": "222b4d4a347a010751128b4bf489a93cb56ec35d",
+  "statistical_cells_selected": 0,
+  "status": "TERMINAL_SCORE_FREE_QUALIFICATION_FAILED_NO_IDENTITY_REUSE",
+  "terminal_identity_reuse_authorized": false,
+  "terminal_receipt_sha256": "sha256:983181d5c31da7a876173332357ab5d1087074b290169ae1db64e2d6d3e44abc",
+  "terminal_reconciliation": {
+    "gpu_nodes": 0,
+    "gpus": 0,
+    "jobs_api_delete": 204,
+    "jobs_api_get_after": 404,
+    "kubernetes_owner_closure_count": 0,
+    "qualifier_job_and_configmap_absent": true
+  },
+  "workload_uid": "6276619f-2c84-4634-9914-cbdaf6234ad1"
+}
