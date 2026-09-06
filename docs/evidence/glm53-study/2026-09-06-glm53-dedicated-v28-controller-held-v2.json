@@ -1,0 +1,16 @@
+{
+  "api_mutation_calls": 0,
+  "cpu_priority_class": "fleet-serve-low",
+  "credentialed_release_required": true,
+  "fleet_secret_name": "chris-cyber-opencode-evals-v2",
+  "job_name": "chris-glm53-v28-create-watchdog-controller-v2",
+  "preemption_policy": "Never",
+  "protected_content_included": false,
+  "qualification_launch_authorized": false,
+  "ready_timeout_seconds": 600,
+  "receipt_sha256": "sha256:57620f851d52823092ff85ec526c4f9695c5515b481bdf704f147bb8f0c7bd40",
+  "schema_version": "fleet-glm53-dedicated-v28-controller-held-v1",
+  "scored_launch_authorized": false,
+  "server_launch_authorized": false,
+  "status": "PASSED_HELD_NO_LAUNCH"
+}

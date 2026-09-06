@@ -11,7 +11,6 @@ SKILLS = (
     "cyber-eval-parity",
     "cyber-run-evidence",
     "cyber-experiment-maintainer",
-    "cyber-gpu-steward",
 )
 UUID = re.compile(
     r"\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b",

@@ -1,5 +1,18 @@
 # Fleet blackbox baseline
 
+## Dedicated concurrency ramp invariant
+
+A dedicated concurrency ladder must finish and validate each wave before it
+invokes the next one. Protocol success, an exclusive model-request-counter
+delta, the latency ceiling, and a self-digested per-wave GPU observation must
+all pass; the observation binds the unchanged server identity and proves
+activity on every expected device. Any failed or missing requirement stops the
+ramp. See the [enforcement](./glm53_dedicated_v22_concurrency_qualification_v1.py)
+and the [stop-before-next-wave regression](../../tests/test_glm53_dedicated_v22_concurrency_qualification_v1.py).
+The per-wave GPU receipt is produced by the
+[UID-bound content-free observer](./glm53_dedicated_v22_concurrency_gpu_observer_v1.py),
+not by an assumed shared-filesystem side effect.
+
 This evaluator runs the 160 registered tasks from Fleet job
 `a62dd51f-a52b-4941-8207-4679e4b25b51` with GLM-5.2 on hosted Agent Runtime v1.
 
@@ -149,6 +162,15 @@ task-version scoring validates all production bindings.
 The raw Qwen chat JSONL is the canonical trace. A normalized copy retaining
 assistant thinking, tool calls, and tool observations is supplied to scoring
 and Fleet trace ingestion. All artifacts are marked ineligible for training.
+
+Post-model Fleet request failures are never automatically retried: the claim is
+already consumed even when no result, verifier execution, or session-ingest row
+exists. Immediately before the one-shot scoring POST, the runner performs a
+body-blind `GET` against that exact route and requires `405`; this distinguishes
+late route/authentication failures without scoring. Any subsequent request
+failure records only its method, route, and HTTP status. A successor must use a
+fresh, wholly unstarted task proven disjoint from every accepted, ingested,
+claimed, and ambiguous cell by a self-digested global-ledger reconciliation.
 
 ```bash
 # Read-only task identity plus deployed-route gate.

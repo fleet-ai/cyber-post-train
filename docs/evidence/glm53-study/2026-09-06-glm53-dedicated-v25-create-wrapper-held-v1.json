@@ -1,0 +1,22 @@
+{
+  "api_mutation_calls": 0,
+  "cli_authorization_path": "/mnt/sfs/jobs/chris-cyber-evalserve-glm53-tp8-a-v25-create-control/CREATE-AUTHORIZED.json",
+  "cli_result_path": "/mnt/sfs/jobs/chris-cyber-evalserve-glm53-tp8-a-v25-create-control/CREATED.json",
+  "control_result_absence_required": true,
+  "create_response_name_field_supported": true,
+  "expected_create_http_status": 202,
+  "fresh_live_authorization_required": true,
+  "protected_content_included": false,
+  "qualification_launch_authorized": false,
+  "receipt_sha256": "sha256:50229b23c0c9ad48b9acc028864d97336aeecc19353c32da75cffec85829eabd",
+  "request_sha256": "sha256:4a3ebcf6a6940a057e6c048c25c163a00e7cbf1e27586c040076024095a24570",
+  "response_identity_parser": "evals.fleet.glm53_dedicated_v24_watchdog_live_release_v1.extract_jobs_api_run_id",
+  "schema_version": "fleet-glm53-dedicated-v25-create-wrapper-held-v1",
+  "scored_launch_authorized": false,
+  "server_launch_authorized": false,
+  "server_run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-glm53-tp8-a-v25",
+  "server_title": "chris-cyber-evalserve-glm53-tp8-a-v25",
+  "status": "PASSED_HELD_NO_LAUNCH",
+  "unknown_response_requires_reconciliation_without_retry": true,
+  "watchdog_handoff_required_immediately": true
+}

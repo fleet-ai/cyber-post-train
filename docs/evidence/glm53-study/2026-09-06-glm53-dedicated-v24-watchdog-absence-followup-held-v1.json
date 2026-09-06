@@ -1,0 +1,40 @@
+{
+  "schema_version": "fleet-glm53-dedicated-v24-watchdog-absence-followup-held-v1",
+  "status": "MULTI_OBJECT_ABSENCE_HARDENING_READY_HELD_FOR_INDEPENDENT_REVIEW",
+  "operational_base": {
+    "branch": "codex/glm53-v22-concurrency-qualifier",
+    "commit": "6113123b26884a98b1c818492aafbe8515449080",
+    "contains_merged_pr": 123
+  },
+  "implementation_commit": "6ea53ce4c1d35946c8b81169ee6068b7c974c8b7",
+  "scope": {
+    "api_absence_confirmed_from_independent_control_plane": true,
+    "kubernetes_inventory_kinds": [
+      "Pod",
+      "RayCluster",
+      "RayJob",
+      "Service",
+      "Workload"
+    ],
+    "exact_uid_and_owner_uid_remnants_rejected": true,
+    "api_run_id_title_run_dir_name_label_annotation_remnants_rejected": true
+  },
+  "exact_sources": {
+    "live_release_module_sha256": "sha256:acf58d2e08438a25736c39dd60e4fd4f11170610a62198c714712f1d9743ef39"
+  },
+  "tests": {
+    "focused_passed": 126,
+    "focused_failed": 0,
+    "ruff_passed": true,
+    "python_compile_passed": true,
+    "diff_check_passed": true
+  },
+  "server_launch_authorized": false,
+  "watchdog_launch_authorized": false,
+  "qualification_launch_authorized": false,
+  "scored_launch_authorized": false,
+  "api_mutation_calls": 0,
+  "gpu_nodes_allocated": 0,
+  "prompts_traces_flags_scores_or_model_outputs_included": false,
+  "receipt_sha256": "sha256:3302ce50e035ae87df1ae2244bd58783c187a81096f50fdfcdd0260cb18c16bc"
+}

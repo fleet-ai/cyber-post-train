@@ -1,0 +1,44 @@
+{
+  "schema_version": "fleet-glm53-dedicated-v24-watchdog-handoff-fixes-held-v2",
+  "status": "CODE_AND_TESTS_READY_HELD_FOR_INDEPENDENT_REVIEW",
+  "operational_base": {
+    "branch": "codex/glm53-v22-concurrency-qualifier",
+    "commit": "f397c6d2abf8c8e7b2621e7297741ea4e8f1b6f1",
+    "merge_target_required": true
+  },
+  "implementation_commit": "4f77a5c0b45985c118d8a9cc5d618d9ef6969ab1",
+  "exact_sources": {
+    "request_counter_watchdog_sha256": "sha256:5935c1b7e396c776fce957af7a53b59d41fe565b8d0b00efb6b8de47ed4d96a2",
+    "server_payload_sha256": "sha256:111469b5bc496233e611606a8c7b16c06b032dbdb91475d783fba7d790a6dace",
+    "application_ready_observer_sha256": "sha256:28ad3624d0601e8281b4880d7345f183092af858146a17b041fddacb9d540eda",
+    "live_release_module_sha256": "sha256:25faa45b0f23c5b0edac4b69e0d1f66b289559da3c19837279777a3aa99a8805"
+  },
+  "closed_review_findings": {
+    "observe_live_releases_server_on_failure": true,
+    "waits_for_uid_bound_watcher_job_pod_active_and_runtime_authorization": true,
+    "partial_object_adoption_is_exact_only": true,
+    "partial_object_rollback_is_reverse_order_and_exact": true,
+    "different_run_cleanup_requires_terminal_job_zero_durable_runtime_evidence_and_api_kubernetes_absence": true,
+    "application_ready_uses_first_real_health_http_200_time": true,
+    "raycluster_uid_name_bound": true,
+    "sfs_pvc_uid_name_mount_bound": true,
+    "jobs_api_probe_run_id_exact": true,
+    "watchdog_authorization_argument_mandatory": true,
+    "watchdog_runtime_source_digest_matches_authorization": true
+  },
+  "tests": {
+    "focused_passed": 124,
+    "focused_failed": 0,
+    "ruff_passed": true,
+    "python_compile_passed": true,
+    "diff_check_passed": true
+  },
+  "server_launch_authorized": false,
+  "watchdog_launch_authorized": false,
+  "qualification_launch_authorized": false,
+  "scored_launch_authorized": false,
+  "api_mutation_calls": 0,
+  "gpu_nodes_allocated": 0,
+  "prompts_traces_flags_scores_or_model_outputs_included": false,
+  "receipt_sha256": "sha256:66a3b1c59ee4d4443f93be962b6f72389f628064a152cf307a824a4e3a7dfb6b"
+}

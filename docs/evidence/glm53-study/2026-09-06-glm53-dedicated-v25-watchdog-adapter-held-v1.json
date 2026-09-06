@@ -1,0 +1,22 @@
+{
+  "api_mutation_calls": 0,
+  "engine_binding_restored_after_call": true,
+  "engine_module": "evals.fleet.glm53_dedicated_v24_watchdog_live_release_v1",
+  "exact_v25_contract_bound": true,
+  "generic_runtime_module": "evals.fleet.glm53_dedicated_v23_request_counter_watchdog_v1",
+  "idle_release_seconds": 600,
+  "package_commit": "1324a7f892d4d25cae16554b187447ede2417455",
+  "protected_content_included": false,
+  "qualification_launch_authorized": false,
+  "receipt_sha256": "sha256:5dc5fc55304bae79cc80a074ad8356d21558725e6f3bb0078ab0d78da4c73134",
+  "schema_version": "fleet-glm53-dedicated-v25-watchdog-adapter-held-v1",
+  "scored_launch_authorized": false,
+  "server_launch_authorized": false,
+  "server_request_sha256": "sha256:4a3ebcf6a6940a057e6c048c25c163a00e7cbf1e27586c040076024095a24570",
+  "server_run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-glm53-tp8-a-v25",
+  "server_title": "chris-cyber-evalserve-glm53-tp8-a-v25",
+  "status": "PASSED_HELD_NO_LAUNCH",
+  "watchdog_job_name": "chris-glm53-dedicated-v25-request-watchdog-v1",
+  "watchdog_launch_authorized": false,
+  "watchdog_result_root": "/mnt/sfs/jobs/chris-glm53-dedicated-v25-request-watchdog-v1"
+}

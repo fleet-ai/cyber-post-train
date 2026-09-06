@@ -1,0 +1,54 @@
+{
+  "schema_version": "fleet-glm53-dedicated-v24-pre-model-failure-v1",
+  "status": "RELEASED_PRE_MODEL_ALL_REMNANTS_ABSENT",
+  "server": {
+    "api_run_id": "ft-run-e3f8c138",
+    "rayjob_uid": "c923c4eb-f030-4c56-94e0-8019667449c2",
+    "workload_uid": "a7fa26ae-f7da-412f-b6ef-22aa557b6361",
+    "raycluster_name": "ft-run-e3f8c138-98skk",
+    "head_pod_name": "ft-run-e3f8c138-98skk-head-2b8nr",
+    "service_name": "ft-run-e3f8c138-98skk-head-svc",
+    "title": "chris-cyber-evalserve-glm53-tp8-a-v24",
+    "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-glm53-tp8-a-v24"
+  },
+  "jobs_api_create_response_contract": {
+    "run_identity_field": "name",
+    "run_identity_value": "ft-run-e3f8c138",
+    "response_status": "Initializing"
+  },
+  "failure": {
+    "rayjob_reason": "AppFailed",
+    "entrypoint_exit_code": 2,
+    "classification": "shell_renderer_parsed_embedded_python_as_shell",
+    "application_ready_written": false,
+    "model_server_started": false,
+    "retry_same_identity_allowed": false
+  },
+  "release": {
+    "jobs_api_get_http_status": 404,
+    "kubernetes_remnant_count": 0,
+    "resource_kinds_checked": [
+      "Pod",
+      "RayCluster",
+      "RayJob",
+      "Service",
+      "Workload"
+    ],
+    "initial_sfs_file_count": 0,
+    "initial_sfs_directory_count": 0,
+    "initial_sfs_total_bytes": 0,
+    "empty_run_directory_removed": true,
+    "sfs_run_dir_absent": true,
+    "watchdog_result_root_absent": true,
+    "cleanup_job_uid": "a7c530a9-d57f-41a2-8a14-5357de979a5f",
+    "cleanup_pod_uid": "8ecf88f4-d9b6-4550-b224-abdc12a5959d"
+  },
+  "watchdog_calls": 0,
+  "qualification_calls": 0,
+  "fleet_task_instance_calls": 0,
+  "fleet_session_calls": 0,
+  "verifier_calls": 0,
+  "scoring_calls": 0,
+  "prompts_traces_flags_scores_or_model_outputs_included": false,
+  "receipt_sha256": "sha256:a284c487814a66bf35461ed62fbce596600ebfd8ed9cba9dce67ca044ba2be86"
+}

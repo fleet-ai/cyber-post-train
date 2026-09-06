@@ -1,0 +1,37 @@
+{
+  "api_mutation_calls": 0,
+  "binding_contract": {
+    "context_length": 262144,
+    "model_revision": "30333038ada1f1dacb294a93270305a890b50c14",
+    "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-glm53-tp8-a-v24",
+    "served_id": "glm-5.3",
+    "title": "chris-cyber-evalserve-glm53-tp8-a-v24",
+    "uid_fields_required": [
+      "rayjob_uid",
+      "workload_uid",
+      "head_pod_uid",
+      "service_uid"
+    ]
+  },
+  "package_commit": "d9db73636d285081cfcda051a04e44db2305b9b6",
+  "prompts_traces_flags_scores_or_model_outputs_included": false,
+  "qualification_launch_authorized": false,
+  "receipt_sha256": "sha256:0c091a88a9ee5bb6dbfb0aeb3c0d40a0e1ef7585024acfc5bfdb058624fdb4e9",
+  "rendered_sentinel": {
+    "configmap_sha256": "sha256:fdf2f5cfeb368532d0759ee897bd9a74bc28354685e36e30cd9f781e9907f32b",
+    "job_sha256": "sha256:1e273d7a14a44f51e73c04cd0b580c57d080392f17cd26250ba14ddaec889652",
+    "package_sha256": "sha256:59d807f6649091fc17290f55d06ef5020d05442b18aef24bbbf8fede8bf73e63",
+    "uses_non_live_sentinel_uids": true
+  },
+  "runtime": {
+    "implementation_module": "evals.fleet.glm53_dedicated_v23_request_counter_watchdog_v1",
+    "implementation_sha256": "sha256:cdc791f6c78b579e45da65f0bc5d6e8d3c0415132dfb0b7a1d0e99b7065708dd",
+    "idle_release_seconds": 600,
+    "release_route": "DELETE /v1/runs/{api_run_id}"
+  },
+  "schema_version": "fleet-glm53-dedicated-v24-watchdog-package-held-v1",
+  "scored_launch_authorized": false,
+  "server_launch_authorized": false,
+  "status": "READY_HELD_FOR_EXACT_LIVE_BINDING",
+  "watchdog_launch_authorized": false
+}
