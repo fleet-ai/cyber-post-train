@@ -5,8 +5,10 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import time
+import uuid
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, Protocol
@@ -58,6 +60,7 @@ ROW_KEYS = {
     "run_dir",
     "listed_status",
     "exact_get_http_status",
+    "exact_get_status",
     "kubernetes_reference_count",
     "terminal_basis",
     "terminal_kubernetes_evidence",
@@ -65,6 +68,8 @@ ROW_KEYS = {
     "sfs_terminal_evidence",
 }
 PROJECT_ROW_KEYS = {"api_run_id", "title", "run_dir", "listed_status"}
+KUBERNETES_NAME = re.compile(r"^[a-z0-9](?:[-a-z0-9.]*[a-z0-9])?$")
+OWNER_KINDS = {"Job", "RayCluster", "RayJob"}
 
 
 class ReconciliationError(RuntimeError):
@@ -210,7 +215,7 @@ def _terminal_object_projection(item: Mapping[str, Any]) -> dict[str, Any]:
     owners = metadata.get("ownerReferences") or []
     if not isinstance(owners, list) or not all(isinstance(row, dict) for row in owners):
         raise ReconciliationError("v32_stale_run_kubernetes_inventory_invalid")
-    return {
+    result = {
         "kind": item.get("kind"),
         "name": metadata.get("name"),
         "uid": metadata.get("uid"),
@@ -237,6 +242,59 @@ def _terminal_object_projection(item: Mapping[str, Any]) -> dict[str, Any]:
             key=lambda row: (str(row["kind"]), str(row["name"]), str(row["uid"])),
         ),
     }
+    if not _terminal_projection_valid(result):
+        raise ReconciliationError("v32_stale_run_kubernetes_terminal_identity_invalid")
+    return result
+
+
+def _valid_uid(value: object) -> bool:
+    try:
+        return isinstance(value, str) and uuid.UUID(value).int != 0
+    except ValueError:
+        return False
+
+
+def _valid_kubernetes_name(value: object) -> bool:
+    return (
+        isinstance(value, str)
+        and 0 < len(value) <= 253
+        and KUBERNETES_NAME.fullmatch(value) is not None
+    )
+
+
+def _terminal_projection_valid(item: object) -> bool:
+    if not isinstance(item, dict) or set(item) != {
+        "kind",
+        "name",
+        "uid",
+        "job_status",
+        "finished_reason",
+        "owners",
+    }:
+        return False
+    owners = item["owners"]
+    return (
+        item["kind"] in {"RayJob", "Workload"}
+        and _valid_kubernetes_name(item["name"])
+        and _valid_uid(item["uid"])
+        and (
+            item["kind"] != "RayJob"
+            or item["job_status"] in {"FAILED", "STOPPED", "SUCCEEDED"}
+        )
+        and (
+            item["kind"] != "Workload"
+            or item["finished_reason"] in {"Failed", "Succeeded"}
+        )
+        and isinstance(owners, list)
+        and all(
+            isinstance(owner, dict)
+            and set(owner) == {"kind", "name", "uid"}
+            and owner["kind"] in OWNER_KINDS
+            and _valid_kubernetes_name(owner["name"])
+            and _valid_uid(owner["uid"])
+            for owner in owners
+        )
+    )
 
 
 def build_reconciliation(
@@ -248,20 +306,30 @@ def build_reconciliation(
     observed = time.time() if now is None else now
     rows, pages = backend.list_runs() if rows_snapshot is None else rows_snapshot
     normalized = normalized_project_snapshot(rows)
-    stale: list[dict[str, Any]] = []
+    observed_rows: list[dict[str, Any]] = []
     for row in normalized:
         current = backend.get_run(row["api_run_id"])
         if current is None:
-            if row["listed_status"] in ACTIVE_STATUSES:
-                stale.append(row)
+            observed_rows.append(
+                {**row, "exact_get_http_status": 404, "exact_get_status": None}
+            )
             continue
-        if current.get("run_dir") != row["run_dir"]:
+        if (
+            current.get("name") != row["api_run_id"]
+            or current.get("title") != row["title"]
+            or current.get("run_dir") != row["run_dir"]
+        ):
             raise ReconciliationError("v32_stale_run_exact_get_drift")
         current_status = _status(current.get("status"))
-        if row["listed_status"] in ACTIVE_STATUSES:
-            if current_status in ACTIVE_STATUSES:
-                raise ReconciliationError("v32_stale_run_current_server_present")
-            raise ReconciliationError("v32_stale_run_exact_get_status_drift")
+        if current_status in ACTIVE_STATUSES:
+            raise ReconciliationError("v32_stale_run_current_server_present")
+        observed_rows.append(
+            {
+                **row,
+                "exact_get_http_status": 200,
+                "exact_get_status": current_status,
+            }
+        )
 
     inventory = backend.kubernetes_inventory()
     projection = _safe_kubernetes_projection(inventory)
@@ -305,7 +373,7 @@ def build_reconciliation(
     if blocking_project_objects or gpu_pods:
         raise ReconciliationError("v32_stale_run_kubernetes_or_gpu_remnant")
 
-    sfs = backend.sfs_evidence(tuple(row["run_dir"] for row in stale))
+    sfs = backend.sfs_evidence(tuple(row["run_dir"] for row in observed_rows))
     roots = sfs.get("roots") if isinstance(sfs, dict) else None
     if (
         set(sfs) != {
@@ -315,11 +383,11 @@ def build_reconciliation(
             "roots",
         }
         or not isinstance(roots, dict)
-        or set(roots) != {row["run_dir"] for row in stale}
+        or set(roots) != {row["run_dir"] for row in observed_rows}
     ):
         raise ReconciliationError("v32_stale_run_sfs_evidence_invalid")
     reconciled = []
-    for row in stale:
+    for row in observed_rows:
         evidence = roots[row["run_dir"]]
         receipts = evidence.get("terminal_evidence") if isinstance(evidence, dict) else None
         if (
@@ -350,12 +418,18 @@ def build_reconciliation(
         reconciled.append(
             {
                 **row,
-                "exact_get_http_status": 404,
                 "kubernetes_reference_count": len(references),
                 "terminal_basis": (
-                    "EXACT_GET_404_AND_TERMINAL_KUBERNETES_UID_CHAIN"
-                    if references
-                    else "EXACT_GET_404_AND_ZERO_KUBERNETES_REFERENCES"
+                    (
+                        "EXACT_GET_404"
+                        if row["exact_get_http_status"] == 404
+                        else "EXACT_GET_TERMINAL"
+                    )
+                    + (
+                        "_AND_TERMINAL_KUBERNETES_UID_CHAIN"
+                        if references
+                        else "_AND_ZERO_KUBERNETES_REFERENCES"
+                    )
                 ),
                 "terminal_kubernetes_evidence": sorted(
                     references,
@@ -405,7 +479,7 @@ def validate_reconciliation(
     current_time = time.time() if now is None else now
     reconciled = value.get("reconciled_rows")
     normalized = normalized_project_snapshot(rows)
-    expected = [row for row in normalized if row["listed_status"] in ACTIVE_STATUSES]
+    expected = normalized
     if (
         set(value) != RESULT_KEYS
         or value.get("schema_version") != SCHEMA
@@ -468,6 +542,11 @@ def validate_reconciliation(
         receipts = row["sfs_terminal_evidence"]
         if (
             row["exact_get_http_status"] != 404
+            and row["exact_get_http_status"] != 200
+            or row["exact_get_http_status"] == 404
+            and row["exact_get_status"] is not None
+            or row["exact_get_http_status"] == 200
+            and row["exact_get_status"] not in TERMINAL_STATUSES
             or not isinstance(row["kubernetes_reference_count"], int)
             or isinstance(row["kubernetes_reference_count"], bool)
             or row["kubernetes_reference_count"] < 0
@@ -477,39 +556,18 @@ def validate_reconciliation(
             not in {
                 "EXACT_GET_404_AND_ZERO_KUBERNETES_REFERENCES",
                 "EXACT_GET_404_AND_TERMINAL_KUBERNETES_UID_CHAIN",
+                "EXACT_GET_TERMINAL_AND_ZERO_KUBERNETES_REFERENCES",
+                "EXACT_GET_TERMINAL_AND_TERMINAL_KUBERNETES_UID_CHAIN",
             }
             or (row["kubernetes_reference_count"] == 0)
-            != (
-                row["terminal_basis"]
-                == "EXACT_GET_404_AND_ZERO_KUBERNETES_REFERENCES"
-            )
+            != row["terminal_basis"].endswith("ZERO_KUBERNETES_REFERENCES")
+            or (row["exact_get_http_status"] == 404)
+            != row["terminal_basis"].startswith("EXACT_GET_404")
             or not isinstance(row["sfs_root_exists"], bool)
             or not isinstance(receipts, list)
             or not isinstance(row["terminal_kubernetes_evidence"], list)
             or any(
-                not isinstance(item, dict)
-                or set(item)
-                != {
-                    "kind",
-                    "name",
-                    "uid",
-                    "job_status",
-                    "finished_reason",
-                    "owners",
-                }
-                or item["kind"] not in {"RayJob", "Workload"}
-                or not isinstance(item["name"], str)
-                or not isinstance(item["uid"], str)
-                or not item["uid"]
-                or (
-                    item["kind"] == "RayJob"
-                    and item["job_status"] not in {"FAILED", "STOPPED", "SUCCEEDED"}
-                )
-                or (
-                    item["kind"] == "Workload"
-                    and item["finished_reason"] not in {"Failed", "Succeeded"}
-                )
-                or not isinstance(item["owners"], list)
+                not _terminal_projection_valid(item)
                 for item in row["terminal_kubernetes_evidence"]
             )
             or any(
@@ -542,29 +600,7 @@ def validate_reconciliation(
         or value["terminal_project_object_snapshot_sha256"]
         != crypto.sha256(crypto.canonical_json(value["terminal_project_objects"]))
         or any(
-            not isinstance(item, dict)
-            or set(item)
-            != {
-                "kind",
-                "name",
-                "uid",
-                "job_status",
-                "finished_reason",
-                "owners",
-            }
-            or item["kind"] not in {"RayJob", "Workload"}
-            or not isinstance(item["name"], str)
-            or not isinstance(item["uid"], str)
-            or not item["uid"]
-            or (
-                item["kind"] == "RayJob"
-                and item["job_status"] not in {"FAILED", "STOPPED", "SUCCEEDED"}
-            )
-            or (
-                item["kind"] == "Workload"
-                and item["finished_reason"] not in {"Failed", "Succeeded"}
-            )
-            or not isinstance(item["owners"], list)
+            not _terminal_projection_valid(item)
             for item in value["terminal_project_objects"]
         )
     ):

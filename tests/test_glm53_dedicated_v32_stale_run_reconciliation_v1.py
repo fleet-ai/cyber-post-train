@@ -105,14 +105,23 @@ def test_unknown_or_malformed_status_blocks(status: object) -> None:
         _build(backend)
 
 
-def test_active_exact_get_and_status_drift_block() -> None:
+def test_active_exact_get_blocks_and_terminal_exact_get_is_bound() -> None:
     backend = FakeBackend()
     backend.exact["ft-run-deadbeef"] = _row(status="RUNNING")
     with pytest.raises(stale.ReconciliationError, match="current_server_present"):
         _build(backend)
 
     backend.exact["ft-run-deadbeef"] = _row(status="FAILED")
-    with pytest.raises(stale.ReconciliationError, match="exact_get_status_drift"):
+    value = _build(backend)
+    assert value["reconciled_rows"][0]["exact_get_http_status"] == 200
+    assert value["reconciled_rows"][0]["exact_get_status"] == "FAILED"
+
+
+def test_terminal_list_row_with_exact_active_get_blocks() -> None:
+    backend = FakeBackend()
+    backend.rows[0]["status"] = "FAILED"
+    backend.exact["ft-run-deadbeef"] = _row(status="RUNNING")
+    with pytest.raises(stale.ReconciliationError, match="current_server_present"):
         _build(backend)
 
 
@@ -196,6 +205,62 @@ def test_terminal_rayjob_and_finished_workload_are_bound_not_ignored() -> None:
     )
     assert row["kubernetes_reference_count"] == 2
     assert value["terminal_project_object_count"] == 2
+
+
+@pytest.mark.parametrize("target", ["global", "per_row"])
+@pytest.mark.parametrize(
+    "owner_mutation",
+    [
+        {"kind": "Pod", "name": "unsafe", "uid": "3" * 36},
+        {"kind": "RayJob", "name": "../unsafe", "uid": "3" * 36},
+        {"kind": "RayJob", "name": "safe", "uid": "not-a-uuid"},
+        {
+            "kind": "RayJob",
+            "name": "safe",
+            "uid": "33333333-3333-4333-8333-333333333333",
+            "protected": "forbidden",
+        },
+    ],
+)
+def test_terminal_owner_identity_mutations_reject(
+    target: str, owner_mutation: dict[str, object]
+) -> None:
+    backend = FakeBackend()
+    backend.items = [
+        {
+            "kind": "Workload",
+            "metadata": {
+                "name": "rayjob-ft-run-deadbeef-12345",
+                "uid": "22222222-2222-4222-8222-222222222222",
+                "labels": {"cyber-post-train.fleet.ai/owner": "chris"},
+                "ownerReferences": [
+                    {
+                        "kind": "RayJob",
+                        "name": "ft-run-deadbeef",
+                        "uid": "11111111-1111-4111-8111-111111111111",
+                    }
+                ],
+            },
+            "status": {
+                "conditions": [
+                    {"type": "Finished", "status": "True", "reason": "Failed"}
+                ]
+            },
+        }
+    ]
+    value = _build(backend)
+    if target == "global":
+        value["terminal_project_objects"][0]["owners"][0] = owner_mutation
+        value["terminal_project_object_snapshot_sha256"] = crypto.sha256(
+            crypto.canonical_json(value["terminal_project_objects"])
+        )
+    else:
+        value["reconciled_rows"][0]["terminal_kubernetes_evidence"][0]["owners"][
+            0
+        ] = owner_mutation
+    value["receipt_sha256"] = crypto.digest_without(value, "receipt_sha256")
+    with pytest.raises(stale.ReconciliationError, match="reconciliation_invalid"):
+        stale.validate_reconciliation(value, rows=backend.rows, now=1_001.0)
 
 
 def test_sfs_symlink_or_malformed_evidence_blocks() -> None:
