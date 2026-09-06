@@ -1,0 +1,35 @@
+{
+  "api_get_after_release_http_status": 404,
+  "api_run_id": "ft-run-64ac13da",
+  "application_ready_at_epoch": 1788702121.2840781,
+  "create_receipt_sha256": "sha256:88981573e0931936a344745e269c24416f9dfc197b921000462ed6c2c011b253",
+  "deterministic_fix": "validate exact canonical sorted activity metric family order",
+  "gpu_allocation_count_after_release": 0,
+  "head_pod_uid": "eca74a40-d1a1-464d-8891-7cc5d8e3b1e4",
+  "live_state_receipt_sha256": "sha256:a4dc7dadf44d14a838f4515ce9d68a877d3253f7d563c3f99b25815fd6add494",
+  "prevalidation_receipt_sha256": "sha256:a27fd28998df9b01c972dd9b811d73250c4d6c28fb248ba287e2b7c3fc6664c3",
+  "producer_order": [
+    "sglang:num_queue_reqs",
+    "sglang:num_requests_total",
+    "sglang:num_running_reqs"
+  ],
+  "protected_content_included": false,
+  "qualifier_created": false,
+  "raycluster_uid": "79d4139b-9635-4f1e-a82d-1d764026c23f",
+  "rayjob_uid": "1d910c7c-2f18-4f6e-805e-ba9a3e79d7bc",
+  "rayjob_workload_raycluster_pod_service_remnants": 0,
+  "receipt_sha256": "sha256:bb2d8c8cf8015b9ee987de2d6a0e74cf88c8418df98fc64609519ada11792438",
+  "retry_same_generation": false,
+  "schema_version": "fleet-glm53-dedicated-v28-watchdog-order-failure-v1",
+  "service_uid": "f1d21f06-7294-49a2-bf0d-8afdc6bb6abb",
+  "sole_failed_predicate": "activity_metric_families_order",
+  "status": "FAILED_CLOSED_RELEASED_ZERO_EFFECT",
+  "task_session_verifier_scoring_calls": 0,
+  "validator_order": [
+    "sglang:num_requests_total",
+    "sglang:num_running_reqs",
+    "sglang:num_queue_reqs"
+  ],
+  "watchdog_job_created": false,
+  "workload_uid": "e824000a-2687-4689-b2ba-d15b8396d80a"
+}
