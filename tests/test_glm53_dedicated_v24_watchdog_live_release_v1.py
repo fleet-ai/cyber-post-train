@@ -3,6 +3,7 @@ import datetime
 import inspect
 import json
 import subprocess
+import urllib.error
 from pathlib import Path
 
 import pytest
@@ -791,23 +792,55 @@ def test_launch_releases_exact_server_if_watcher_handoff_fails(
     assert releases == [(binding, live["head_pod_name"])]
 
 
-def test_handoff_failure_release_requires_api_and_kubernetes_absence(
+def test_handoff_failure_release_uses_independent_local_control_plane(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    calls: list[str] = []
     monkeypatch.setattr(
         live_release,
         "_pod_python",
-        lambda _pod, _source: {"delete_status": 202, "api_absent": True},
+        lambda _pod, _source: (_ for _ in ()).throw(
+            ConnectionError("server Pod disappeared during its own deletion")
+        ),
     )
-    monkeypatch.setattr(live_release, "_kubectl_optional", lambda _kind, _name: None)
+    monkeypatch.setattr(live_release, "_release_local", calls.append)
     live_release._release_on_handoff_failure(_binding(), "head-pod")
-    monkeypatch.setattr(
-        live_release,
-        "_pod_python",
-        lambda _pod, _source: {"delete_status": 202, "api_absent": False},
-    )
-    with pytest.raises(live_release.LiveReleaseError, match="release_unconfirmed"):
-        live_release._release_on_handoff_failure(_binding(), "head-pod")
+    assert calls == ["ft-run-deadbeef"]
+
+
+def test_local_release_confirms_api_and_kubernetes_absence_after_delete(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    methods: list[str] = []
+
+    class Response:
+        status = 202
+
+        def __enter__(self) -> "Response":
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+    def open_request(request: object, *, timeout: int) -> Response:
+        assert timeout == 30
+        method = request.get_method()  # type: ignore[attr-defined]
+        methods.append(method)
+        if method == "DELETE":
+            return Response()
+        raise urllib.error.HTTPError(
+            request.full_url,  # type: ignore[attr-defined]
+            404,
+            "gone",
+            {},
+            None,
+        )
+
+    monkeypatch.setenv("FLEET_API_KEY", "not-persisted")
+    monkeypatch.setattr(live_release.urllib.request, "urlopen", open_request)
+    monkeypatch.setattr(live_release, "_kubectl_optional", lambda _kind, _name: None)
+    live_release._release_local("ft-run-deadbeef")
+    assert methods == ["DELETE", "GET"]
 
 
 def test_tracked_live_release_receipt_is_self_digested_and_held() -> None:

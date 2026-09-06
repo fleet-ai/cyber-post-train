@@ -1279,48 +1279,12 @@ def _wait_for_watchdog_active(
 
 
 def _release_on_handoff_failure(binding: dict[str, Any], pod_name: str) -> None:
-    api_run_id = binding["api_run_id"]
-    source = f"""
-import json, os, time, urllib.error, urllib.parse, urllib.request
-url = 'https://api.ft.flt.build/v1/runs/' + urllib.parse.quote({api_run_id!r}, safe='')
-headers = {{'Authorization': 'Bearer ' + os.environ['FLEET_API_KEY'], 'Accept': 'application/json'}}
-api_absent = False
-try:
-    request = urllib.request.Request(url, method='DELETE', headers=headers)
-    with urllib.request.urlopen(request, timeout=30) as response:
-        delete_status = response.status
-except urllib.error.HTTPError as error:
-    if error.code != 404: raise
-    delete_status = 404
-    api_absent = True
-if not api_absent:
-    for _ in range(12):
-        try:
-            request = urllib.request.Request(url, method='GET', headers=headers)
-            with urllib.request.urlopen(request, timeout=30) as response:
-                if response.status != 200: raise RuntimeError('unexpected GET status')
-        except urllib.error.HTTPError as error:
-            if error.code != 404: raise
-            api_absent = True
-            break
-        time.sleep(5)
-print(json.dumps(
-    {{'delete_status': delete_status, 'api_absent': api_absent}},
-    sort_keys=True,
-    separators=(',', ':'),
-))
-""".strip()
-    outcome = _pod_python(pod_name, source)
-    if (
-        outcome.get("delete_status") not in {200, 202, 204, 404}
-        or outcome.get("api_absent") is not True
-    ):
-        raise LiveReleaseError("handoff_failure_release_unconfirmed")
-    for _ in range(12):
-        if _kubectl_optional("rayjobs.ray.io", api_run_id) is None:
-            return
-        time.sleep(5)
-    raise LiveReleaseError("handoff_failure_kubernetes_absence_unconfirmed")
+    # Never ask the server Pod to confirm its own deletion.  A successful Jobs
+    # API DELETE starts tearing down that Pod immediately, so its exec stream is
+    # not a durable control plane.  The local launcher owns an independent Fleet
+    # credential and performs both API and Kubernetes absence confirmation.
+    del pod_name
+    _release_local(str(binding["api_run_id"]))
 
 
 def launch(
