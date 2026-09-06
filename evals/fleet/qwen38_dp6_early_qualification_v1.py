@@ -11,11 +11,15 @@ from typing import Any
 import yaml
 
 from evals.fleet import glm53_dedicated_v7 as jobs_api
+from evals.fleet import opencode_staged_image_v1 as staged_image
 from evals.fleet import qwen38_dedicated_dp6_v1 as runtime
 from evals.fleet import qwen38_dp8_post_rank99_plan_v1 as predecessor
 from evals.fleet import self_hosted
 
 PLAN_PATH = Path(
+    "docs/evidence/qwen38-study/2026-09-06-qwen38-dp6-early-qualification-held-v3.json"
+)
+V2_PLAN_PATH = Path(
     "docs/evidence/qwen38-study/2026-09-06-qwen38-dp6-early-qualification-held-v2.json"
 )
 CONFIG_PATH = Path("evals/fleet/configs/qwen38-dedicated-dp6-early-qualification-v2-held.json")
@@ -26,7 +30,7 @@ INVENTORY_PATH = Path(
     "docs/evidence/qwen38-study/2026-09-06-qwen38-dp6-early-qualification-node-inventory-v2.json"
 )
 RELEASE_PATH = Path(
-    "docs/evidence/qwen38-study/2026-09-06-qwen38-dp6-early-qualification-held-release-v2.json"
+    "docs/evidence/qwen38-study/2026-09-06-qwen38-dp6-early-qualification-held-release-v3.json"
 )
 V1_INCIDENT_PATH = Path(
     "docs/evidence/qwen38-study/"
@@ -35,11 +39,11 @@ V1_INCIDENT_PATH = Path(
 PRIORITY_CONTRACT_PATH = Path(
     "docs/evidence/qwen38-study/2026-09-06-qwen38-dp6-priority-contract-v1.json"
 )
-SCHEMA = "fleet-qwen38-dp6-early-qualification-held-v2"
+SCHEMA = "fleet-qwen38-dp6-early-qualification-held-v3"
 CONFIG_SCHEMA = "fleet-qwen38-dp6-early-qualification-config-v2"
 PREVIEW_SCHEMA = "fleet-qwen38-dp6-early-qualification-preview-v2"
 INVENTORY_SCHEMA = "fleet-qwen38-dp6-early-qualification-node-inventory-v2"
-RELEASE_SCHEMA = "fleet-qwen38-dp6-early-qualification-held-release-v2"
+RELEASE_SCHEMA = "fleet-qwen38-dp6-early-qualification-held-release-v3"
 TITLE = "chris-cyber-evalserve-q38-dp6-a-v1"
 RUN_DIR = "/mnt/sfs/jobs/chris-cyber-evalserve-q38-dp6-a-v1"
 SERVING_BLOCK = "dedicated-qwen-dp6-a-v1"
@@ -195,6 +199,12 @@ def validate_plan(value: Mapping[str, Any], root: Path) -> None:
             "changed_contract": "qualification_may_coexist_with_productive_tp1",
             "predecessor_rewritten": False,
         },
+        "superseded_held_plan": {
+            "path": str(V2_PLAN_PATH),
+            "receipt_sha256": _load(root / V2_PLAN_PATH)["receipt_sha256"],
+            "reason": "exact_staged_runtime_replaces_fresh_image_build",
+            "predecessor_rewritten": False,
+        },
         "superseded_v1_incident": {
             "path": str(V1_INCIDENT_PATH),
             "receipt_sha256": _load(root / V1_INCIDENT_PATH)["receipt_sha256"],
@@ -254,9 +264,9 @@ def validate_plan(value: Mapping[str, Any], root: Path) -> None:
         "qualifier_controller": {
             "placement": "fleet-train-jobs_cpu_job",
             "namespace": "fleet-train-jobs",
-            "job_name": "chris-cyber-q38-dp6-c-qualifier-v2",
-            "configmap_name": "chris-cyber-q38-dp6-c-qualifier-v2",
-            "output_root": "/mnt/sfs/jobs/chris-cyber-q38-dp6-c-qualifier-v2",
+            "job_name": "chris-cyber-q38-dp6-c-qualifier-v3",
+            "configmap_name": "chris-cyber-q38-dp6-c-qualifier-v3",
+            "output_root": "/mnt/sfs/jobs/chris-cyber-q38-dp6-c-qualifier-v3",
             "priority_class": QUALIFIER_PRIORITY_CLASS,
             "priority_value": QUALIFIER_PRIORITY_VALUE,
             "preemption_policy": "Never",
@@ -283,7 +293,8 @@ def validate_plan(value: Mapping[str, Any], root: Path) -> None:
             ),
             "docker_cli_total_bytes": 105594160,
             "docker_cli_emptydir_size": "256Mi",
-            "docker_build_pull_exact_digest_intended": True,
+            "staged_image_direct_load_required": True,
+            "staged_image": staged_image.identity(),
             "shared_workspace_between_evaluator_and_dind": True,
             "tmpdir": "/workspace/tmp",
             "cluster_dind_host_gateway_required": True,

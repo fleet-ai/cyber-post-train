@@ -211,6 +211,26 @@ def test_local_image_inspection_requires_exact_immutable_amd64_image(
         parity.inspect_local_image()
 
 
+def test_local_image_inspection_can_bind_classic_docker_config_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime_id = "sha256:" + "4" * 64
+    value = {
+        "Id": runtime_id,
+        "Os": "linux",
+        "Architecture": "amd64",
+        "Config": {"User": "node", "WorkingDir": "/workspace"},
+    }
+    monkeypatch.setattr(
+        parity.subprocess,
+        "run",
+        lambda *_args, **_kwargs: type(
+            "Completed", (), {"returncode": 0, "stdout": json.dumps(value)}
+        )(),
+    )
+    assert parity.inspect_local_image(runtime_id)["image_id"] == runtime_id
+
+
 def test_committed_laptop_qwen_parity_receipt_is_digest_valid_and_non_scored() -> None:
     receipt = json.loads(LAPTOP_QWEN_RECEIPT.read_text())
     assert receipt["schema_version"] == parity.SCHEMA

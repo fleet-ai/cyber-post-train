@@ -45,7 +45,7 @@ class ActualHarnessParityError(RuntimeError):
     """Stable content-free parity failure."""
 
 
-def inspect_local_image() -> dict[str, Any]:
+def inspect_local_image(expected_image_id: str = IMAGE_ID) -> dict[str, Any]:
     """Bind the image tag to the observed immutable local amd64 image."""
     completed = subprocess.run(
         ["docker", "image", "inspect", IMAGE, "--format", "{{json .}}"],
@@ -63,7 +63,7 @@ def inspect_local_image() -> dict[str, Any]:
     config = value.get("Config") if isinstance(value, dict) else None
     if (
         not isinstance(config, dict)
-        or value.get("Id") != IMAGE_ID
+        or value.get("Id") != expected_image_id
         or value.get("Os") != "linux"
         or value.get("Architecture") != "amd64"
         or config.get("User") != "node"
@@ -507,8 +507,9 @@ def run(
     upstream_origin: str = HOSTED_ORIGIN,
     server_binding: Mapping[str, Any] | None = None,
     cluster_dind: bool = False,
+    expected_image_id: str = IMAGE_ID,
 ) -> dict[str, Any]:
-    observed_image = inspect_local_image()
+    observed_image = inspect_local_image(expected_image_id)
     is_hosted = upstream_origin.rstrip("/") == HOSTED_ORIGIN
     if is_hosted and not api_key:
         raise ActualHarnessParityError("fleet_credential_absent")

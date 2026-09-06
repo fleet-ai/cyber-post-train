@@ -104,6 +104,7 @@ def _inputs() -> tuple[dict[str, object], dict[str, object], dict[str, object]]:
             "submission_receipt_sha256": submission["receipt_sha256"],
             "server_binding_receipt_sha256": binding["receipt_sha256"],
             "package_sha256": package.package_sha256(ROOT),
+            "harness_runtime_image": package.staged_image.identity(),
             "fresh_job_matches": 0,
             "fresh_configmap_matches": 0,
             "fresh_output_root_exists": False,
@@ -124,7 +125,8 @@ def test_archive_is_deterministic_and_contains_exact_runtime_closure(tmp_path: P
     assert str(early.QUALIFIER_RUNTIME_PATH) in names
     assert "evals/fleet/opencode_actual_harness_parity_v1.py" in names
     assert "evals/fleet/configs/blackbox-ctf-tool-catalog-v1.json" in names
-    assert "evals/fleet/Dockerfile.opencode" in names
+    assert "evals/fleet/opencode_staged_image_v1.py" in names
+    assert "evals/fleet/Dockerfile.opencode" not in names
     with tarfile.open(fileobj=io.BytesIO(first), mode="r:gz") as archive:
         archive.extractall(tmp_path, filter="data")
     completed = subprocess.run(
@@ -203,7 +205,11 @@ def test_renderer_is_create_once_score_free_and_needs_no_kubectl() -> None:
     assert str(package.DOCKER_CLI_TOTAL_BYTES) in command
     assert "Docker version 27.5.1, build 9f9e405" in command
     assert "v0.20.1" in command
-    assert "docker build --pull" in command
+    assert "docker build" not in command
+    assert "opencode_staged_image_v1" in command
+    assert "gzip -dc" in command
+    assert package.staged_image.ARCHIVE_SHA256.removeprefix("sha256:") not in command
+    assert package.staged_image.RUNTIME_IMAGE_ID in command
 
 
 def test_release_fails_closed_on_scoring_or_identity_drift() -> None:

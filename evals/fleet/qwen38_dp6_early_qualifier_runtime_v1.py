@@ -13,13 +13,14 @@ from pathlib import Path
 from typing import Any
 
 from evals.fleet import opencode_actual_harness_parity_v1 as parity
+from evals.fleet import opencode_staged_image_v1 as staged_image
 from evals.fleet import qwen38_dp6_early_qualification_v1 as early
 from evals.fleet import qwen38_dp6_metric_observer_v1 as metric_observer
 from evals.fleet import qwen38_dp8_post_rank99_launch_v1 as core
 from evals.fleet import self_hosted
 
-SCHEMA = "fleet-qwen38-dp6-early-qualification-plan-v2"
-RESULT_SCHEMA = "fleet-qwen38-dp6-early-qualification-result-v2"
+SCHEMA = "fleet-qwen38-dp6-early-qualification-plan-v3"
+RESULT_SCHEMA = "fleet-qwen38-dp6-early-qualification-result-v3"
 DISTRIBUTION_SCHEMA = "fleet-qwen38-dp6-wave-distribution-v1"
 MIN_LATENCY_HEADROOM_MILLISECONDS = 120_000
 MIN_LATENCY_HEADROOM_FRACTION = 0.20
@@ -33,7 +34,7 @@ COUNTER_STATE_PATH = Path(early.RUN_DIR) / "lifecycle/.request-counters.json"
 COUNTER_BASELINE_PATH = Path(early.RUN_DIR) / "lifecycle/REQUEST-COUNTER-BASELINE.json"
 EVENT_DIR = Path(early.RUN_DIR) / "lifecycle/real-traffic-events"
 DIND_RESOURCE_SAMPLES_PATH = Path("/workspace/dind-resource-samples.tsv")
-QUALIFIER_RELEASE_SCHEMA = "fleet-qwen38-dp6-early-qualifier-release-v2"
+QUALIFIER_RELEASE_SCHEMA = "fleet-qwen38-dp6-early-qualifier-release-v3"
 BASELINE_WAIT_SECONDS = 30
 
 
@@ -144,13 +145,14 @@ def validate_runtime_release(
         or value.get("status") != "RELEASED_FOR_ONE_NON_SCORED_QUALIFIER"
         or value.get("launch_authorized") is not True
         or value.get("scoring_authorized") is not False
-        or value.get("job_name") != "chris-cyber-q38-dp6-c-qualifier-v2"
-        or value.get("configmap_name") != "chris-cyber-q38-dp6-c-qualifier-v2"
-        or value.get("output_root") != "/mnt/sfs/jobs/chris-cyber-q38-dp6-c-qualifier-v2"
+        or value.get("job_name") != "chris-cyber-q38-dp6-c-qualifier-v3"
+        or value.get("configmap_name") != "chris-cyber-q38-dp6-c-qualifier-v3"
+        or value.get("output_root") != "/mnt/sfs/jobs/chris-cyber-q38-dp6-c-qualifier-v3"
         or value.get("serving_block") != early.SERVING_BLOCK
         or value.get("submission_receipt_sha256") != submission.get("receipt_sha256")
         or value.get("server_binding_receipt_sha256") != binding.get("receipt_sha256")
         or value.get("package_sha256") != package_digest
+        or value.get("harness_runtime_image") != staged_image.identity()
         or value.get("task_instance_session_verifier_scoring_calls") != 0
         or value.get("prompts_traces_flags_or_scores_included") is not False
     ):
@@ -179,6 +181,7 @@ def qualification_plan(binding: Mapping[str, Any], origin: str, root: Path) -> d
         "serving_block": early.SERVING_BLOCK,
         "server_binding": dict(binding),
         "service_origin": origin,
+        "harness_runtime_image": staged_image.identity(),
         "treatment": treatment,
         "waves": [
             {
@@ -479,6 +482,7 @@ def run(plan: Mapping[str, Any], binding_receipt: Mapping[str, Any], root: Path)
                 upstream_origin=plan["service_origin"],
                 server_binding=plan["server_binding"],
                 cluster_dind=True,
+                expected_image_id=staged_image.RUNTIME_IMAGE_ID,
             )
         except Exception as exc:  # content-free fail-closed classification
             value = {

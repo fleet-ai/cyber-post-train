@@ -16,14 +16,15 @@ from typing import Any
 
 import yaml
 
+from evals.fleet import opencode_staged_image_v1 as staged_image
 from evals.fleet import qwen38_dp6_early_qualification_v1 as early
 from evals.fleet import qwen38_dp6_early_qualifier_runtime_v1 as runtime
 from evals.fleet import self_hosted
 
 NAMESPACE = "fleet-train-jobs"
-JOB_NAME = "chris-cyber-q38-dp6-c-qualifier-v2"
-CONFIGMAP_NAME = "chris-cyber-q38-dp6-c-qualifier-v2"
-OUTPUT_ROOT = "/mnt/sfs/jobs/chris-cyber-q38-dp6-c-qualifier-v2"
+JOB_NAME = "chris-cyber-q38-dp6-c-qualifier-v3"
+CONFIGMAP_NAME = "chris-cyber-q38-dp6-c-qualifier-v3"
+OUTPUT_ROOT = "/mnt/sfs/jobs/chris-cyber-q38-dp6-c-qualifier-v3"
 UV_IMAGE = (
     "ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:"
     "9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7"
@@ -36,18 +37,19 @@ DOCKER_CLI_SHA256 = "242c7a8de606afba2acada7c7af00d77f92c3601678b2f3a60911b49a89
 DOCKER_BUILDX_SHA256 = "8c38f60308a895fa570f1410e453c5de11aafd65a99fa99965d96d24b6225a78"
 DOCKER_CLI_TOTAL_BYTES = 105_594_160
 DOCKER_CLI_VOLUME_SIZE = "256Mi"
-RELEASE_SCHEMA = "fleet-qwen38-dp6-early-qualifier-release-v2"
-PACKAGE_SCHEMA = "fleet-qwen38-dp6-early-qualifier-package-v2"
+RELEASE_SCHEMA = "fleet-qwen38-dp6-early-qualifier-release-v3"
+PACKAGE_SCHEMA = "fleet-qwen38-dp6-early-qualifier-package-v3"
 QUALIFIER_PRIORITY_CLASS = "fleet-serve-low"
 QUALIFIER_PRIORITY_VALUE = 100
 STATIC_PATHS = {
     Path("evals/__init__.py"),
     Path("evals/fleet/__init__.py"),
     Path("evals/fleet/models.py"),
-    Path("evals/fleet/Dockerfile.opencode"),
+    Path("evals/fleet/opencode_staged_image_v1.py"),
     Path("evals/fleet/configs/blackbox-ctf-tool-catalog-v1.json"),
     early.CONFIG_PATH,
     early.PLAN_PATH,
+    early.V2_PLAN_PATH,
     early.PREVIEW_PATH,
     early.INVENTORY_PATH,
     early.RELEASE_PATH,
@@ -136,6 +138,7 @@ def validate_release(
         or value.get("submission_receipt_sha256") != submission.get("receipt_sha256")
         or value.get("server_binding_receipt_sha256") != binding.get("receipt_sha256")
         or value.get("package_sha256") != package_sha256(root)
+        or value.get("harness_runtime_image") != staged_image.identity()
         or value.get("fresh_job_matches") != 0
         or value.get("fresh_configmap_matches") != 0
         or value.get("fresh_output_root_exists") is not False
@@ -167,11 +170,15 @@ install -D -m 0755 /docker-cli/plugins/docker-buildx \
 test "$(sha256sum "$DOCKER_CONFIG/cli-plugins/docker-buildx" | awk '{print $1}')" = \
   8c38f60308a895fa570f1410e453c5de11aafd65a99fa99965d96d24b6225a78
 test "$(docker --version)" = 'Docker version 27.5.1, build 9f9e405'
-docker buildx version | grep -F 'v0.20.1' >/dev/null
+"$DOCKER_CONFIG/cli-plugins/docker-buildx" version | grep -F 'v0.20.1' >/dev/null
 until docker info >/dev/null 2>&1; do sleep 1; done
-docker build --pull --platform linux/amd64 \
-  --tag chris/opencode:1.18.27-cyber-v1 \
-  --file evals/fleet/Dockerfile.opencode evals/fleet
+uv run python -m evals.fleet.opencode_staged_image_v1 \
+  --receipt /mnt/sfs/jobs/chris-cyber-opencode11827-image-stage-v2/STAGED.json \
+  --archive /mnt/sfs/jobs/chris-cyber-opencode11827-image-stage-v2/opencode-1.18.27-amd64.tar.gz
+gzip -dc /mnt/sfs/jobs/chris-cyber-opencode11827-image-stage-v2/opencode-1.18.27-amd64.tar.gz \
+  | docker load >/dev/null
+test "$(docker image inspect chris/opencode:1.18.27-cyber-v1 --format '{{.Id}}')" = \
+  sha256:4a46e71e98fbbc67f54dfd75fab15730af5ae575070d7b2ba1ad09ad4fa28b11
 test "$(docker run --rm chris/opencode:1.18.27-cyber-v1 opencode --version)" = 1.18.27
 mkdir -p "$OUTPUT_ROOT"
 exec uv run --with httpx --with pyyaml python -m evals.fleet.qwen38_dp6_early_qualifier_runtime_v1 \
@@ -384,6 +391,7 @@ def render(
         "schema_version": PACKAGE_SCHEMA,
         "package_sha256": "sha256:" + hashlib.sha256(archive).hexdigest(),
         "release_receipt_sha256": release["receipt_sha256"],
+        "harness_runtime_image": staged_image.identity(),
         "job": job,
         "configmap": configmap,
     }
