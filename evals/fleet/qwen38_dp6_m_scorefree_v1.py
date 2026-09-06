@@ -7,6 +7,7 @@ contains no scored-cell selector and exposes no live create operation.
 from __future__ import annotations
 
 import json
+import re
 import shlex
 from collections.abc import Mapping
 from pathlib import Path
@@ -38,6 +39,9 @@ PREVIEW_SCHEMA = "fleet-qwen38-dp6-m-jobs-preview-v1"
 INVENTORY_SCHEMA = "fleet-qwen38-dp6-m-review-inventory-v1"
 RELEASE_SCHEMA = "fleet-qwen38-dp6-m-held-release-v1"
 TITLE = "chris-cyber-evalserve-q38-dp6-m-v1"
+API_NAME = "q38-dp6m-v1"
+API_RUN_ID_RE = re.compile(r"q38-dp6m-v1-[0-9a-f]{8}")
+OPERATOR_LOCK_PATH = Path("/tmp/fleet-qwen38-dp6m-v1-create.lock")
 RUN_DIR = "/mnt/sfs/jobs/chris-cyber-evalserve-q38-dp6-m-v1"
 SERVING_BLOCK = "dedicated-qwen-dp6-m-v1"
 QUALIFIER_JOB = "chris-cyber-q38-dp6-m-qualifier-v13"
@@ -56,6 +60,7 @@ PREVIEW_KEYS = {
     "schema_version",
     "status",
     "http_status",
+    "name",
     "title",
     "run_dir",
     "priority_class",
@@ -128,7 +133,7 @@ def _validate_successor_authority(value: Mapping[str, Any]) -> None:
         raise ValueError("DP6-m successor authority drifted")
 
 
-def jobs_payload(root: Path) -> dict[str, Any]:
+def _jobs_payload(root: Path) -> dict[str, Any]:
     lifecycle = (root / LIFECYCLE_PATH).read_text()
     expected_pre_ready = f"PRE_READY_TIMEOUT_SECONDS={SERVER_PRE_READY_TIMEOUT_SECONDS}"
     if expected_pre_ready not in lifecycle:
@@ -159,6 +164,7 @@ def jobs_payload(root: Path) -> dict[str, Any]:
         )
     bootstrap = "python3 - <<'PY'\n" + "\n".join(writes) + "\nPY\n" + lifecycle
     payload = {
+        "name": API_NAME,
         "image": runtime.IMAGE,
         "command": (
             "bash -lc " + shlex.quote(bootstrap) + " -- " + shlex.join(runtime.SERVER_ARGUMENTS)
@@ -184,9 +190,26 @@ def jobs_payload(root: Path) -> dict[str, Any]:
         "run_dir": RUN_DIR,
         "title": TITLE,
     }
-    if set(payload) != jobs_api.EXPECTED_API_FIELDS:
-        raise AssertionError("DP6-m Jobs API payload shape drifted")
     return payload
+
+
+def jobs_payload(root: Path) -> dict[str, Any]:
+    payload = _jobs_payload(root)
+    validate_jobs_payload(payload, root)
+    return payload
+
+
+def validate_jobs_payload(value: Mapping[str, Any], root: Path) -> None:
+    expected = _jobs_payload(root)
+    if (
+        set(value) != jobs_api.EXPECTED_API_FIELDS | {"name"}
+        or value.get("name") != API_NAME
+        or not isinstance(value.get("name"), str)
+        or API_RUN_ID_RE.fullmatch(f"{value['name']}-00000000") is None
+    ):
+        raise AssertionError("DP6-m Jobs API payload shape drifted")
+    if dict(value) != expected:
+        raise AssertionError("DP6-m Jobs API payload identity drifted")
 
 
 def preview_identity(manifest_yaml: str, root: Path) -> dict[str, Any]:
@@ -195,6 +218,9 @@ def preview_identity(manifest_yaml: str, root: Path) -> dict[str, Any]:
     if not isinstance(value, dict) or value.get("kind") != "RayJob":
         raise ValueError("DP6-m preview is not one RayJob")
     spec = value.get("spec") or {}
+    rendered_name = (value.get("metadata") or {}).get("name")
+    if not isinstance(rendered_name, str) or API_RUN_ID_RE.fullmatch(rendered_name) is None:
+        raise ValueError("DP6-m preview run name drifted")
     pod = (
         ((spec.get("rayClusterSpec") or {}).get("headGroupSpec") or {}).get("template") or {}
     ).get("spec") or {}
@@ -207,6 +233,8 @@ def preview_identity(manifest_yaml: str, root: Path) -> dict[str, Any]:
     env = {row.get("name"): row.get("value") for row in container.get("env") or []}
     result = {
         "kind": "RayJob",
+        "api_name": API_NAME,
+        "api_run_id_pattern": API_RUN_ID_RE.pattern,
         "suspended": spec.get("suspend"),
         "queue": (value.get("metadata", {}).get("labels") or {}).get("kueue.x-k8s.io/queue-name"),
         "priority_class": pod.get("priorityClassName"),
@@ -219,6 +247,8 @@ def preview_identity(manifest_yaml: str, root: Path) -> dict[str, Any]:
     }
     if result != {
         "kind": "RayJob",
+        "api_name": API_NAME,
+        "api_run_id_pattern": API_RUN_ID_RE.pattern,
         "suspended": True,
         "queue": "training-lq",
         "priority_class": SERVER_PRIORITY_CLASS,
@@ -241,11 +271,20 @@ def config(root: Path) -> dict[str, Any]:
         "launch_authorized": False,
         "scoring_authorized": False,
         "title": TITLE,
+        "name": API_NAME,
         "run_dir": RUN_DIR,
         "serving_block": SERVING_BLOCK,
         "create_once": True,
+        "operator_reservation": {
+            "path": str(OPERATOR_LOCK_PATH),
+            "scope": "local_host_all_operators",
+            "exclusive": True,
+            "held_from": "final_preflight",
+            "held_through": "submission_receipt_publication",
+        },
         "request_sha256": self_hosted.sha256(self_hosted.canonical_json(payload)),
         "request_binding": {
+            "name": payload["name"],
             "image": payload["image"],
             "command_sha256": self_hosted.sha256(payload["command"].encode()),
             "workers": 1,
@@ -278,17 +317,19 @@ def validate_config(value: Mapping[str, Any], root: Path) -> None:
 def plan(root: Path) -> dict[str, Any]:
     successor = _load(root / SUCCESSOR_AUTHORITY_PATH)
     _validate_successor_authority(successor)
+    config_value = config(root)
     value = {
         "schema_version": PLAN_SCHEMA,
         "status": "HELD_PENDING_INDEPENDENT_REVIEW",
         "launch_authorized": False,
         "scoring_authorized": False,
         "config_path": str(CONFIG_PATH),
-        "config_sha256": config(root)["config_sha256"],
+        "config_sha256": config_value["config_sha256"],
         "successor_authority": {
             "path": str(SUCCESSOR_AUTHORITY_PATH),
             "receipt_sha256": successor["receipt_sha256"],
             "fresh_server_title": TITLE,
+            "fresh_server_name": API_NAME,
             "fresh_server_run_dir": RUN_DIR,
             "fresh_qualifier": QUALIFIER_JOB,
         },
@@ -311,6 +352,8 @@ def plan(root: Path) -> dict[str, Any]:
             "minimum_nominal_quota_headroom_gpus": 6,
         },
         "server": {
+            "api_name": API_NAME,
+            "operator_reservation": config_value["operator_reservation"],
             "title": TITLE,
             "run_dir": RUN_DIR,
             "serving_block": SERVING_BLOCK,
@@ -426,6 +469,7 @@ def validate_preview(value: Mapping[str, Any], root: Path) -> None:
             or value.get("status") != "HELD_NOT_RUN"
             or value.get("http_status") is not None
             or value.get("title") != TITLE
+            or value.get("name") != API_NAME
             or value.get("run_dir") != RUN_DIR
             or value.get("priority_class") != SERVER_PRIORITY_CLASS
             or value.get("config_sha256") != config(root)["config_sha256"]
@@ -466,6 +510,7 @@ def validate_held_release(value: Mapping[str, Any], root: Path) -> None:
         "launch_authorized": False,
         "scoring_authorized": False,
         "title": TITLE,
+        "name": API_NAME,
         "run_dir": RUN_DIR,
         "serving_block": SERVING_BLOCK,
         "plan_receipt_sha256": plan(root)["receipt_sha256"],
