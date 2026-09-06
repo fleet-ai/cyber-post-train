@@ -263,6 +263,28 @@ def test_request_growth_prevents_false_idle_release() -> None:
     assert released == ["ft-run-freshv23"]
 
 
+def test_gpu_observer_rejects_valid_uuid_for_the_wrong_server() -> None:
+    observed = {
+        "schema_version": qualifier.GPU_OBSERVER_SCHEMA,
+        "status": "OBSERVED_SCORE_FREE_WAVE",
+        "concurrency": 1,
+        "server": qualifier.build_held()["server"],
+        "devices_seen": 8,
+        "max_utilization_percent_by_device": [50] * 8,
+        "identity": {
+            "server_rayjob_uid": "99999999-9999-4999-8999-999999999999",
+            "server_head_pod_uid": _binding()["head_pod_uid"],
+            "qualifier_job_uid": "77777777-7777-4777-8777-777777777777",
+            "qualifier_pod_uid": "88888888-8888-4888-8888-888888888888",
+        },
+        "server_identity_unchanged": True,
+        "qualifier_identity_unchanged": True,
+    }
+    observed["receipt_sha256"] = crypto.digest_without(observed, "receipt_sha256")
+    with pytest.raises(qualifier.QualificationError, match="gpu_wave"):
+        qualifier.validate_gpu_wave(observed, 1, qualifier.build_held()["server"], _binding())
+
+
 def test_watchdog_active_receipt_binds_exact_loaded_source_and_release_route() -> None:
     receipt = watchdog_runtime.build_active_receipt(
         _binding(),
