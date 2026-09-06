@@ -110,7 +110,7 @@ def live() -> dict:
         "sfs_pvc_uid": "77777777-7777-4777-8777-777777777777",
         "head_pod_sfs_mount_path": "/mnt/sfs",
         "metrics_http_status": 200,
-        "activity_metric_families": list(runtime.ACTIVITY_METRICS),
+        "activity_metric_families": sorted(runtime.ACTIVITY_METRICS),
         "jobs_api_credential_secret_name": "ft-run-deadbeef-fleet-key",
         "jobs_api_credential_secret_uid": "55555555-5555-4555-8555-555555555555",
         "jobs_api_credential_owner_rayjob_uid": server_binding["rayjob_uid"],

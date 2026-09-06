@@ -285,7 +285,7 @@ def _validate_live_state_at(
             f"http://{value.get('service_name')}.{NAMESPACE}.svc.cluster.local:8000",
         }
         or value.get("metrics_http_status") != 200
-        or value.get("activity_metric_families") != list(runtime.ACTIVITY_METRICS)
+        or value.get("activity_metric_families") != sorted(runtime.ACTIVITY_METRICS)
         or value.get("jobs_api_credential_secret_name") != f"{api_run_id}-fleet-key"
         or not _valid_uuid(value.get("jobs_api_credential_secret_uid"))
         or value.get("jobs_api_credential_owner_rayjob_uid") != binding.get("rayjob_uid")
