@@ -4,6 +4,9 @@ from evals.fleet import hosted_glm_s1_r2_c2_package_v2 as package
 from evals.fleet import hosted_glm_s1_r2_c2_release_package_v2 as release_package
 from evals.fleet import hosted_glm_s1_r2_c2_release_package_v3 as release_package_v3
 from evals.fleet import hosted_glm_s1_r2_c2_successor_v2 as successor
+from evals.fleet import hosted_glm_s1_r2_c2_package_v3 as package_v3
+from evals.fleet import hosted_glm_s1_r2_c2_release_package_v4 as release_package_v4
+from evals.fleet import hosted_glm_s1_r2_c2_bootstrap_package_v1 as bootstrap_package
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -42,3 +45,42 @@ def test_fresh_release_installs_the_full_immutable_config_set():
     assert "mkdir -p \"$ROOT/evals/fleet/configs\"" in script
     assert "campaign.json:q38-glm53-exact-easiest100-pass4-campaign-v1.json" in script
     assert "successor_release_v2.py:hosted_glm_s1_r2_c2_release_v2.py" in script
+
+
+def test_v3_controller_and_release_have_complete_rendered_install_closure():
+    controller_data = package_v3.render(ROOT)["objects"]["items"][0]["data"]
+    package_v3.validate_install_closure(controller_data)
+    assert "original_release.py" in controller_data
+    release_data = release_package_v4.render(ROOT)["objects"]["items"][0]["data"]
+    package_v3.validate_install_closure(release_data)
+
+
+def test_install_closure_rejects_the_exact_v2_omission():
+    data = package_v3.render(ROOT)["objects"]["items"][0]["data"].copy()
+    del data["original_release.py"]
+    try:
+        package_v3.validate_install_closure(data)
+    except ValueError as exc:
+        assert "original_release.py" in str(exc)
+    else:
+        raise AssertionError("missing install source was accepted")
+
+
+def test_bootstrap_executes_exact_controller_package_with_claims_disabled(tmp_path):
+    from evals.fleet import self_hosted
+    from evals.fleet import hosted_glm_s1_r2_c2_release_v4 as release
+    plan = __import__("evals.fleet.hosted_glm_s1_r2_c2_successor_v3", fromlist=["x"]).validate_all(ROOT)
+    receipt = {
+        "schema_version": release.SCHEMA,
+        "status": "CLEAR",
+        "successor_job": plan["job_name"],
+        "successor_configmap": plan["configmap_name"],
+    }
+    receipt["receipt_sha256"] = self_hosted.digest_without(receipt, "receipt_sha256")
+    path = tmp_path / "release.json"
+    path.write_bytes(self_hosted.canonical_json(receipt))
+    rendered = bootstrap_package.render(ROOT, release_path=path)
+    assert rendered["claims_authorized"] is False
+    env = {row["name"]: row.get("value") for row in rendered["objects"]["items"][1]["spec"]["template"]["spec"]["containers"][0]["env"]}
+    assert env["HOSTED_BOOTSTRAP_ONLY"] == "1"
+    assert env["HOSTED_BOOTSTRAP_RECEIPT"].endswith("/BOOTSTRAP.json")

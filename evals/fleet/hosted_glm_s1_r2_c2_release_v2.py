@@ -45,7 +45,7 @@ def _validate_failed_v1() -> None:
         raise RuntimeError("rank-2 v1 unexpectedly created output")
 
 
-def build(root: Path) -> dict[str, Any]:
+def build(root: Path, *, target: Any = successor) -> dict[str, Any]:
     key = os.environ.get("FLEET_API_KEY", "")
     job_uid, pod_uid = os.environ.get("JOB_UID", ""), os.environ.get("POD_UID", "")
     if not key or any(uuid.UUID(value).int == 0 for value in (job_uid, pod_uid)):
@@ -55,11 +55,11 @@ def build(root: Path) -> dict[str, Any]:
     occupied = prior._active_lease_slots()  # noqa: SLF001
     if occupied not in (0, 1):
         raise RuntimeError("rank-2 v2 has no free cap-two endpoint slot")
-    inventory = successor.load(bulk_runtime.INVENTORY_PATH)
-    plan = successor.build_runtime_plan(inventory, root)
-    if successor.SFS_ROOT.exists() or successor.SFS_ROOT.is_symlink():
+    inventory = target.load(bulk_runtime.INVENTORY_PATH)
+    plan = target.build_runtime_plan(inventory, root)
+    if target.SFS_ROOT.exists() or target.SFS_ROOT.is_symlink():
         raise RuntimeError("rank-2 v2 output collision")
-    for kind, name in (("jobs", successor.JOB_NAME), ("configmaps", successor.CONFIGMAP_NAME)):
+    for kind, name in (("jobs", target.JOB_NAME), ("configmaps", target.CONFIGMAP_NAME)):
         prefix = "/apis/batch/v1" if kind == "jobs" else "/api/v1"
         status, _ = prior._kube_get(f"{prefix}/namespaces/{ledger.NAMESPACE}/{kind}/{name}")  # noqa: SLF001
         if status != 404:
@@ -71,7 +71,7 @@ def build(root: Path) -> dict[str, Any]:
         sessions = self_hosted._task_sessions(client, first["task"]["key"])
     claim_collisions = session_collisions = 0
     for item in plan["attempts"]:
-        claim = Path(successor.CLAIM_ROOT) / engine.claim_filename(item["execution_id"])
+        claim = Path(target.CLAIM_ROOT) / engine.claim_filename(item["execution_id"])
         claim_collisions += int(claim.exists() or claim.is_symlink())
         config = engine._attempt_config(plan, task, item)  # noqa: SLF001
         session_collisions += sum(ledger._session_collides(row, config, item) for row in sessions)  # noqa: SLF001
@@ -80,8 +80,8 @@ def build(root: Path) -> dict[str, Any]:
     body = {
         "schema_version": SCHEMA,
         "status": "CLEAR",
-        "successor_job": successor.JOB_NAME,
-        "successor_configmap": successor.CONFIGMAP_NAME,
+        "successor_job": target.JOB_NAME,
+        "successor_configmap": target.CONFIGMAP_NAME,
         "plan_sha256": plan["plan_sha256"],
         "cell_ids": [row["cell_id"] for row in plan["attempts"]],
         "execution_ids": [row["execution_id"] for row in plan["attempts"]],
