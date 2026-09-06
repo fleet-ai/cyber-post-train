@@ -1,0 +1,32 @@
+{
+  "failed_predecessor": {
+    "job_uid": "6f626b8b-1daf-46c9-8be7-c3e3ccd96b3a",
+    "receipt_path": "docs/evidence/glm53-study/2026-09-06-glm53-hosted-rank30-release-observer-v2-terminal.json",
+    "receipt_sha256": "sha256:b59366cf693fcff1f8f29c9ade67e3b7909da99088335467232166489a3e316c",
+    "retry_allowed": false
+  },
+  "fresh_identity": {
+    "configmap_name": "chris-glm53-exact100-hosted-r030-single-slot-release-v3-run",
+    "job_name": "chris-glm53-exact100-hosted-r030-single-slot-release-v3",
+    "sfs_root": "/mnt/sfs/jobs/chris-glm53-exact100-hosted-r030-single-slot-release-v3"
+  },
+  "held_observer_package_sha256": "sha256:d843d17515a6cd3065d28c531e6dab87e6a3fb40a971e52168435f30e2038c77",
+  "held_scored_package_sha256": "sha256:37f690cfdd3633f3dea9aa13ffbb35f096f8ec6ebfba4aba0a0afddf208addd9",
+  "launch_authorized": false,
+  "model_calls_authorized": false,
+  "rank29_current_peer": {
+    "accepted_attempt": 3,
+    "accepted_receipt_sha256": "sha256:81a090a15e1847646591e701c350639a31780e3dc6a83f96c9b60b5159f2af3d",
+    "active_attempt": 4,
+    "active_claim_sha256": "sha256:cb297199e45e8192dd3cb1308f91cc83d5c9ea9cec1c9fb32325ab16dc52e091",
+    "job_uid": "74cdb483-65fb-4331-9e3e-567a54b53315",
+    "pod_uid": "dc891f43-917f-4cdb-9769-1639f6bfcaab"
+  },
+  "rank30_cells_changed": false,
+  "rank31_held": true,
+  "receipt_sha256": "sha256:3470c0639ef2b1251a02d0c16d0f44a766ce4e1498cca2dfd91f32da80597320",
+  "schema_version": "fleet-hosted-glm-rank30-current-peer-release-held-v3",
+  "scored_source_package_sha256": "sha256:10f0e44ba2e758bf3b24611da5f9069f4a821f3cd737b6c0bf4237531af0ce43",
+  "scoring_authorized": false,
+  "status": "HELD_FOR_INDEPENDENT_REVIEW"
+}
