@@ -111,6 +111,7 @@ def _inputs() -> tuple[dict[str, object], dict[str, object], dict[str, object]]:
             "title": early.TITLE,
             "run_dir": early.RUN_DIR,
             "serving_block": early.SERVING_BLOCK,
+            "service_name": "ft-run-example-head-svc",
             "service_origin": "http://ft-run-example-head-svc.fleet-train-jobs.svc.cluster.local:8000",
             "rayjob_uid": "11111111-1111-4111-8111-111111111111",
             "workload_uid": "22222222-2222-4222-8222-222222222222",
@@ -333,6 +334,23 @@ def test_binding_requires_exact_fields_and_nonzero_workload_uid() -> None:
             runtime.validate_binding(changed, submission, ROOT)
 
 
+def test_binding_rejects_resigned_unrelated_service_and_retains_full_authority() -> None:
+    submission, binding, _ = _inputs()
+    aligned = runtime.validate_binding(binding, submission, ROOT)
+    assert aligned["service_name"] == "ft-run-example-head-svc"
+    assert aligned["service_origin"] == binding["service_origin"]
+    assert aligned["workload_uid"] == binding["workload_uid"]
+    assert aligned["server_binding_receipt_sha256"] == binding["receipt_sha256"]
+    unrelated = copy.deepcopy(binding)
+    unrelated["service_name"] = "unrelated-head-svc"
+    unrelated["service_origin"] = (
+        "http://unrelated-head-svc.fleet-train-jobs.svc.cluster.local:8000"
+    )
+    _receipt(unrelated)
+    with pytest.raises(ValueError, match="Service identity"):
+        runtime.validate_binding(unrelated, submission, ROOT)
+
+
 def test_runtime_submission_uses_strict_live_gate_validation() -> None:
     submission, _, _ = _inputs()
     runtime.validate_submission(submission, ROOT)
@@ -496,6 +514,10 @@ def test_result_uses_observed_requests_and_records_latency_headroom() -> None:
     }
     result["receipt_sha256"] = self_hosted.digest_without(result, "receipt_sha256")
     assert runtime.validate_result(result, plan, ROOT) == 1
+    result_binding = result["qualification_plan"]["server_binding"]
+    assert result_binding["service_origin"] == binding["service_origin"]
+    assert result_binding["workload_uid"] == binding["workload_uid"]
+    assert result_binding["server_binding_receipt_sha256"] == binding["receipt_sha256"]
     level["observed_model_request_count"] = 2
     result["receipt_sha256"] = self_hosted.digest_without(result, "receipt_sha256")
     with pytest.raises(ValueError, match="request/latency"):

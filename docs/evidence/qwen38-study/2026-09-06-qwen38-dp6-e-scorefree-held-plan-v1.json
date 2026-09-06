@@ -45,7 +45,7 @@
     "priority_value": 100,
     "task_instance_session_verifier_scoring_calls": 0
   },
-  "receipt_sha256": "sha256:c405aacda7c52d137d7fcf17255c49fd61ccc9a4fcb7a49bbadd7ad8dcf26275",
+  "receipt_sha256": "sha256:a63082eafd13971a4e9d38443e7373bc25caca7ac15a77b4ad34cdd47abe8bd5",
   "release_first_gate": {
     "active_project_gpu_nodes_required": 0,
     "active_project_gpus_required": 0,
@@ -80,7 +80,7 @@
   "source_digests": {
     "evals/fleet/qwen38_dp6_e_live_v1.py": "sha256:8d2bef52b73a29fa9f399a839e3746768e3631aae6f6e1f59d9496c8d90271d7",
     "evals/fleet/qwen38_dp6_e_qualifier_package_v1.py": "sha256:a587a912e2b6afc4cc91fbf0ac91c7aadfff505d5afc4d5952d9b4b7c80c9d43",
-    "evals/fleet/qwen38_dp6_e_qualifier_runtime_v1.py": "sha256:a66cf612f5a0ff61effae9537e2a313bcdeb5ef23126d29822a04a6df6f83a26",
+    "evals/fleet/qwen38_dp6_e_qualifier_runtime_v1.py": "sha256:6e526cbbc37408336d670b98486ad4446881d63f81b639faefb5b989c0d73561",
     "evals/fleet/qwen38_dp6_metric_observer_v1.py": "sha256:4921dea0d25392ba98a678eb58e74ff952fb9331647bdf0579028e5b18fd89c8",
     "evals/fleet/qwen38_dp6_metric_observer_v2.py": "sha256:5628072295f26ef7aaba02e239dcbca3945dd8e3d830f2443f2ef148cb723b90",
     "evals/fleet/qwen38_dp6_metric_observer_v3.py": "sha256:7cb57d7c01103550ea91e83d2c8b8ce8d8ccc9ed2362f7ae046bdb45d68df3c9",

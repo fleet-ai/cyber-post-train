@@ -29,6 +29,7 @@ MIN_LATENCY_HEADROOM_FRACTION = 0.20
 SUBMISSION_SCHEMA = "fleet-qwen38-dp6-e-submission-v1"
 LIVE_GATE_SCHEMA = "fleet-qwen38-dp6-e-live-gate-v1"
 BINDING_SCHEMA = "fleet-qwen38-dp6-early-server-binding-v2"
+NAMESPACE = "fleet-train-jobs"
 EVENT_SCHEMA = metric_observer.EVENT_SCHEMA
 LEVELS = (1, 2, 4, 6)
 RANKS = 6
@@ -50,6 +51,7 @@ BINDING_KEYS = {
     "title",
     "run_dir",
     "serving_block",
+    "service_name",
     "service_origin",
     "rayjob_uid",
     "workload_uid",
@@ -175,6 +177,17 @@ def validate_binding(
         raise ValueError("early DP6 Workload UID drifted")
     if not isinstance(value.get("head_pod_name"), str) or not value.get("head_pod_name"):
         raise ValueError("early DP6 head Pod name drifted")
+    service_name = value.get("service_name")
+    api_run_id = value.get("api_run_id")
+    expected_origin = f"http://{service_name}.{NAMESPACE}.svc.cluster.local:8000"
+    if (
+        not isinstance(service_name, str)
+        or not isinstance(api_run_id, str)
+        or not service_name.startswith(f"{api_run_id}-")
+        or not service_name.endswith("-head-svc")
+        or value.get("service_origin") != expected_origin
+    ):
+        raise ValueError("early DP6 UID-bound Service identity drifted")
     origin = value.get("service_origin")
     if (
         not isinstance(origin, str)
@@ -182,18 +195,27 @@ def validate_binding(
         or not origin.endswith(":8000")
     ):
         raise ValueError("early DP6 service origin drifted")
-    return parity.validate_server_binding(
-        {
-            "api_run_id": value["api_run_id"],
-            "rayjob_uid": value["rayjob_uid"],
-            "head_pod_uid": value["head_pod_uid"],
-            "service_uid": value["service_uid"],
-            "served_id": "qwen3.8-27b",
-            "model_revision": value["model_revision"],
-            "context_length": value["context_length"],
-        },
-        "qwen3.8-27b",
-    )
+    validated = parity.validate_server_binding(_parity_binding(value), "qwen3.8-27b")
+    return {
+        **validated,
+        "workload_uid": value["workload_uid"],
+        "service_name": service_name,
+        "service_origin": origin,
+        "head_pod_name": value["head_pod_name"],
+        "server_binding_receipt_sha256": value["receipt_sha256"],
+    }
+
+
+def _parity_binding(value: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "api_run_id": value["api_run_id"],
+        "rayjob_uid": value["rayjob_uid"],
+        "head_pod_uid": value["head_pod_uid"],
+        "service_uid": value["service_uid"],
+        "served_id": "qwen3.8-27b",
+        "model_revision": value["model_revision"],
+        "context_length": value["context_length"],
+    }
 
 
 def validate_runtime_release(
@@ -290,7 +312,7 @@ def validate_plan(value: Mapping[str, Any], root: Path) -> None:
     )
     if dict(value) != expected:
         raise ValueError("early DP6 qualification plan drifted")
-    parity.validate_server_binding(value["server_binding"], "qwen3.8-27b")
+    parity.validate_server_binding(_parity_binding(value["server_binding"]), "qwen3.8-27b")
 
 
 def _event(path: Path, binding_receipt: Mapping[str, Any]) -> dict[str, Any]:
@@ -531,7 +553,7 @@ def run(plan: Mapping[str, Any], binding_receipt: Mapping[str, Any], root: Path)
                 "qwen3.8-27b",
                 "",
                 upstream_origin=plan["service_origin"],
-                server_binding=plan["server_binding"],
+                server_binding=_parity_binding(plan["server_binding"]),
                 cluster_dind=True,
                 expected_image_id=staged_image.RUNTIME_IMAGE_ID,
             )
