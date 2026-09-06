@@ -9,6 +9,7 @@ scores, prompts or task bodies.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import fcntl
 import hashlib
 import json
@@ -33,6 +34,49 @@ MAX_JSON_BYTES = 16 * 1024 * 1024
 MAX_RECEIPT_BYTES = 2 * 1024 * 1024
 SHA_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 UTC_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
+SAFE_FAILURE_CODES = frozenset(
+    {
+        "duplicate_json_key",
+        "endpoint_lease_inode_drifted",
+        "endpoint_lease_root_unsafe",
+        "endpoint_lease_slot_held",
+        "fleet_api_key_absent",
+        "fleet_session_inventory_invalid",
+        "fleet_session_pagination_stalled",
+        "fleet_team_identity_invalid",
+        "fresh_configmap_collision",
+        "fresh_job_collision",
+        "fresh_pod_collision",
+        "input_path_unsafe",
+        "invalid_json",
+        "json_root_invalid",
+        "kubernetes_kind_invalid",
+        "kubernetes_pod_list_invalid",
+        "kubernetes_service_unavailable",
+        "observer_job_uid_invalid",
+        "observer_pod_uid_invalid",
+        "output_path_unsafe",
+        "output_short_write",
+        "planned_statistical_cell_collision",
+        "predecessor_configmap_identity_drifted",
+        "predecessor_job_identity_drifted",
+        "predecessor_job_not_exclusively_failed",
+        "predecessor_pod_count_drifted",
+        "predecessor_pod_terminal_identity_drifted",
+        "read_request_failed",
+        "read_response_too_large",
+        "redirect_forbidden",
+        "release_gate_binding_invalid",
+        "release_gate_observation_invalid",
+        "release_gate_package_file_drifted",
+        "release_gate_package_source_invalid",
+        "release_gate_runtime_namespace_invalid",
+        "scan_directory_symlink_forbidden",
+        "scan_file_unsafe",
+        "scan_root_unsafe",
+        "sfs_output_root_collision",
+    }
+)
 
 
 class GateError(RuntimeError):
@@ -526,18 +570,49 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--package-source", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args(argv)
-    validate_package_source(args.package_source, args.package_source.parent)
-    binding = load(args.binding)
-    key = os.environ.get("FLEET_API_KEY")
-    if not key:
-        raise GateError("fleet_api_key_absent")
-    receipt = collect(
-        binding,
-        job_uid=os.environ["JOB_UID"],
-        pod_uid=os.environ["POD_UID"],
-        api_key=key,
-    )
-    write_once(args.output, receipt)
+    stage = "package-source"
+    try:
+        validate_package_source(args.package_source, args.package_source.parent)
+        stage = "binding"
+        binding = load(args.binding)
+        key = os.environ.get("FLEET_API_KEY")
+        if not key:
+            raise GateError("fleet_api_key_absent")
+        stage = "collect"
+        receipt = collect(
+            binding,
+            job_uid=os.environ["JOB_UID"],
+            pod_uid=os.environ["POD_UID"],
+            api_key=key,
+        )
+        stage = "write"
+        write_once(args.output, receipt)
+    except Exception as exc:
+        code = str(exc)
+        failure = _seal(
+            {
+                "schema_version": "fleet-qwen38-hosted-release-gate-failure-v1",
+                "status": "FAILED",
+                "last_stage": stage,
+                "failure_code": code if code in SAFE_FAILURE_CODES else "redacted",
+                "error_type": type(exc).__name__,
+                "error_sha256": sha256(str(exc).encode()),
+                "job_uid": os.environ.get("JOB_UID"),
+                "pod_uid": os.environ.get("POD_UID"),
+                "model_calls": 0,
+                "task_calls": 0,
+                "session_mutations": 0,
+                "verifier_calls": 0,
+                "scoring_calls": 0,
+                "api_mutations": 0,
+                "scores_included": False,
+                "prompts_traces_flags_included": False,
+                "credentials_included": False,
+            }
+        )
+        with contextlib.suppress(Exception):
+            write_once(args.output.with_name("FAILED.json"), failure)
+        raise
     return 0
 
 
