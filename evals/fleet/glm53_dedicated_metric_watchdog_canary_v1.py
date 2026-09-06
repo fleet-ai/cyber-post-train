@@ -13,7 +13,7 @@ import yaml
 
 from evals.fleet import self_hosted
 
-JOB_NAME = "chris-glm53-dedicated-metric-watchdog-canary-v2"
+JOB_NAME = "chris-glm53-dedicated-metric-watchdog-canary-v3"
 CONFIGMAP_NAME = JOB_NAME + "-run"
 OUTPUT_ROOT = f"/mnt/sfs/jobs/{JOB_NAME}"
 LIFECYCLE = Path("evals/fleet/scripts/glm53_dedicated_metric_lifecycle_v1.sh")
@@ -167,7 +167,7 @@ body["receipt_sha256"] = "sha256:" + hashlib.sha256(
 target = output / "QUALIFIED.json"
 fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
 with os.fdopen(fd, "w") as handle:
-    handle.write(json.dumps(body, sort_keys=True, separators=(",", ":")) + "\\n")
+    handle.write(json.dumps(body, sort_keys=True, separators=(",", ":")) + "\n")
 '''.strip()
 
 

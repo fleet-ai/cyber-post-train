@@ -142,3 +142,5 @@ def test_cluster_canary_is_cpu_only_non_scored_and_exact_source() -> None:
     assert 'projected = pathlib.Path("/bootstrap/lifecycle.sh")' in source["data"]["probe.py"]
     assert 'lifecycle = pathlib.Path("/tmp/glm53-metric-lifecycle.sh")' in source["data"]["probe.py"]
     assert "os.O_EXCL" in source["data"]["probe.py"]
+    assert '+ "\\n")' in source["data"]["probe.py"]
+    assert '+ "\\\\n")' not in source["data"]["probe.py"]
