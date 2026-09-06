@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from contextlib import suppress
 from pathlib import Path
 
 SCHEMA = "fleet-hosted-glm-rank30-preclaim-source-manifest-v1"
@@ -29,13 +30,42 @@ def _safe_relative(value: object) -> Path:
     return path
 
 
-def _write_once(path: Path, payload: bytes) -> None:
-    if path.exists() or path.is_symlink():
-        raise RuntimeError("rank-30 diagnostic source materialization is unsafe")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    with os.fdopen(descriptor, "wb") as handle:
-        handle.write(payload)
+def _write_once(root: Path, relative: Path, payload: bytes) -> None:
+    relative = _safe_relative(str(relative))
+    try:
+        root.mkdir(parents=True, exist_ok=True)
+        root_descriptor = os.open(
+            root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+        )
+    except OSError as error:
+        raise RuntimeError("rank-30 diagnostic destination is unsafe") from error
+    parent_descriptor = root_descriptor
+    try:
+        for part in relative.parts[:-1]:
+            with suppress(FileExistsError):
+                os.mkdir(part, 0o700, dir_fd=parent_descriptor)
+            next_descriptor = os.open(
+                part,
+                os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                dir_fd=parent_descriptor,
+            )
+            if parent_descriptor != root_descriptor:
+                os.close(parent_descriptor)
+            parent_descriptor = next_descriptor
+        descriptor = os.open(
+            relative.name,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+            0o600,
+            dir_fd=parent_descriptor,
+        )
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(payload)
+    except OSError as error:
+        raise RuntimeError("rank-30 diagnostic destination is unsafe") from error
+    finally:
+        if parent_descriptor != root_descriptor:
+            os.close(parent_descriptor)
+        os.close(root_descriptor)
 
 
 def materialize(bootstrap: Path, root: Path) -> None:
@@ -59,18 +89,17 @@ def materialize(bootstrap: Path, root: Path) -> None:
         ):
             raise RuntimeError("rank-30 diagnostic source binding is invalid")
         source = _projected_regular_file(bootstrap / ("source__" + key), bootstrap)
-        _write_once(root / _safe_relative(binding["relative_path"]), source.read_bytes())
-    for package in (root / "evals", root / "evals/fleet"):
-        package.mkdir(parents=True, exist_ok=True)
-        initializer = package / "__init__.py"
-        if not initializer.exists():
-            _write_once(initializer, b"")
+        _write_once(root, _safe_relative(binding["relative_path"]), source.read_bytes())
+    for initializer in (Path("evals/__init__.py"), Path("evals/fleet/__init__.py")):
+        _write_once(root, initializer, b"")
     _write_once(
-        root / "evals/fleet/hosted_glm_rank30_preclaim_phase_observer_v1.py",
+        root,
+        Path("evals/fleet/hosted_glm_rank30_preclaim_phase_observer_v1.py"),
         _projected_regular_file(bootstrap / "diagnostic-v1.py", bootstrap).read_bytes(),
     )
     _write_once(
-        root / "evals/fleet/hosted_glm_rank30_preclaim_phase_observer_v2.py",
+        root,
+        Path("evals/fleet/hosted_glm_rank30_preclaim_phase_observer_v2.py"),
         _projected_regular_file(bootstrap / "diagnostic-v2.py", bootstrap).read_bytes(),
     )
 

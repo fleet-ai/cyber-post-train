@@ -65,6 +65,22 @@ def test_configmap_symlink_projection_rejects_escape(tmp_path: Path) -> None:
         bootstrap.materialize(projected, tmp_path / "repo")
 
 
+def test_materialization_rejects_symlinked_destination_parent(tmp_path: Path) -> None:
+    data = package.render(ROOT)["objects"]["items"][0]["data"]
+    projected = tmp_path / "bootstrap"
+    projected.mkdir()
+    _project(data, projected)
+    repo = tmp_path / "repo"
+    outside = tmp_path / "outside"
+    repo.mkdir()
+    outside.mkdir()
+    (repo / "evals").symlink_to(outside, target_is_directory=True)
+
+    with pytest.raises(RuntimeError, match="destination is unsafe"):
+        bootstrap.materialize(projected, repo)
+    assert list(outside.iterdir()) == []
+
+
 def test_v2_source_phase_accepts_projected_symlinks(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
