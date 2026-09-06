@@ -37,11 +37,20 @@ def test_projection_is_metadata_only_and_fail_closed() -> None:
     assert projection["team_scoped"] is True
     assert projection["requires_exactly_one_task_selector"] is True
     assert projection["model_resolution"] == {
-        "source": "sessions.model foreign key joined to models.provider",
+        "source": "sessions.model_identity write-once server provenance",
         "provider_and_model_required": True,
         "missing_or_invalid_is_ambiguous": True,
-        "no_inference_from_job_name_or_mutable_catalog": True,
+        "mutable_provider_catalog_join_forbidden": True,
+        "caller_metadata_identity_forbidden": True,
         "historical_dropped_trace_ingest_model_remains_ambiguous": True,
+    }
+    assert projection["pagination"] == {
+        "limit_max": 500,
+        "includes_archived_sessions": True,
+        "stable_order": ["created_at_desc", "session_id_desc"],
+        "cursor": "immutable_created_at_session_id_keyset",
+        "snapshot_head_returned": True,
+        "has_more_probe": "limit_plus_one",
     }
     assert set(projection["fields"]).isdisjoint(projection["forbidden_fields"])
     assert {
@@ -53,6 +62,9 @@ def test_projection_is_metadata_only_and_fail_closed() -> None:
         "flag",
         "metadata",
         "workflow_input_json",
+        "cell_id",
+        "execution_id",
+        "run_id",
     } <= set(projection["forbidden_fields"])
 
 
@@ -63,7 +75,10 @@ def test_projection_is_metadata_only_and_fail_closed() -> None:
         lambda value: value["authoritative_tally"].__setitem__("active", 1),
         lambda value: value["required_projection"]["fields"].append("score"),
         lambda value: value["required_projection"]["model_resolution"].__setitem__(
-            "no_inference_from_job_name_or_mutable_catalog", False
+            "mutable_provider_catalog_join_forbidden", False
+        ),
+        lambda value: value["required_projection"]["pagination"].__setitem__(
+            "includes_archived_sessions", False
         ),
         lambda value: value["deployment_gate"].__setitem__(
             "merge_or_deploy_authorized", True
