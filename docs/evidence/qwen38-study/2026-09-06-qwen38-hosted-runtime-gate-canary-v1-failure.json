@@ -1,0 +1,107 @@
+{
+  "bootstrap_stages": [
+    {
+      "file_sha256": "sha256:c48b51e68410c1ab474375ffcd333965119e9ab0e1edff82c57227025abafbb7",
+      "receipt_sha256": "sha256:02843e73f982334dba07a999428a2b71ae001ba14ff87c729de340fe99e741bc",
+      "stage": "00-started"
+    },
+    {
+      "file_sha256": "sha256:7e852ae501e788ca18a55ad0fbccce2a2770128f75c9fa8de8689a09eda8061f",
+      "receipt_sha256": "sha256:ad80d4662a4a890934ef6c666844216c9e95b18269d2741b2abbccfdc0fad17e",
+      "stage": "01-package-source-validated"
+    },
+    {
+      "file_sha256": "sha256:a1ee6bee80c7eaa9a90e8d99355482b2390cc9fc3f24dbdd8e2b2c63067d48fc",
+      "receipt_sha256": "sha256:604439d8c4cef1670da3ae5144016d40a08af09344c742bd0d3d597d027eb5b9",
+      "stage": "02-sources-installed"
+    },
+    {
+      "file_sha256": "sha256:c6263548604d2d9007a4c492f608ceb64631aa8fff908cfde985fdd07b85bae9",
+      "receipt_sha256": "sha256:880970d99b3bf428c85f1dbdd2f00b63f358d21b89a9a13f052289d2e8b2f879",
+      "stage": "03-docker-ready"
+    },
+    {
+      "file_sha256": "sha256:7ba7c5f0e1598aa8a427207c4c94d601f488897ccb152e6bd04752d01e237ebe",
+      "receipt_sha256": "sha256:25cf9fbe56bc6f38f69c1071e12e8074c426f21a3bf434c26f2ed4f7a069f3bb",
+      "stage": "04-image-built"
+    },
+    {
+      "file_sha256": "sha256:1086e31ff0e4423115e162ead3672496469c05eefb995170a8f5da6ab355ee2a",
+      "receipt_sha256": "sha256:a9f0842c0acf7d0bab1a2a7da052770101132bedb313e26c0db7e1b345d8359c",
+      "stage": "05-harness-version-validated"
+    },
+    {
+      "file_sha256": "sha256:85a94f9342f35e2fa8b9af5ffccb18c728ae307d194a5de020731d12d7fd3a73",
+      "receipt_sha256": "sha256:d5065615860b4ab750109da08a9dd6215852b877d7fa851027dad34c352dfc61",
+      "stage": "06-runtime-exec"
+    }
+  ],
+  "configmap": {
+    "immutable": true,
+    "name": "chris-q38-hosted-whole-task-runtime-gate-canary-v1-package",
+    "uid": "192ea677-8e43-489c-b52a-27a236c153ff"
+  },
+  "disposition": {
+    "canary_v1_identity_retry_authorized": false,
+    "fresh_score_free_canary_requires_new_identity": true,
+    "sanitized_runtime_failure_capture_required": true,
+    "scored_successor_authorized": false,
+    "unmocked_archive_materialization_regression_required": true
+  },
+  "failure_evidence": {
+    "deterministic_cause_identified": false,
+    "error_sha256": null,
+    "error_type": "UNAVAILABLE_NO_SANITIZED_RUNTIME_FAILURE_RECEIPT",
+    "last_completed_stage": "06-runtime-exec",
+    "runtime_gate_canary_pass_receipts_present": 0,
+    "sanitized_runtime_failure_receipts_present": 0
+  },
+  "held_authority": {
+    "file_sha256": "sha256:a159c11c6fc7b54d98e3d276c96198ccb9afaff46c6840a29d08351a7e9ec1a7",
+    "path": "docs/evidence/qwen38-study/2026-09-06-qwen38-hosted-rank15-rank16-whole-task-held-v4.json",
+    "receipt_sha256": "sha256:dafb5f08164276f80d5c5b7683a3880c34bd2fb766a9c56f9ad94bdc5c9e7228"
+  },
+  "job": {
+    "completion_observed_at_utc": "2026-09-06T09:28:44Z",
+    "failed": 1,
+    "name": "chris-q38-hosted-whole-task-runtime-gate-canary-v1",
+    "reason": "BackoffLimitExceeded",
+    "uid": "7ce4daab-b12b-4cd1-834d-9c4cf1168f19"
+  },
+  "local_exact_package_reproduction": {
+    "authority_for_live_cause": false,
+    "cluster_exit_reproduced": false,
+    "status": "PASS",
+    "unmocked_bound_input_and_runtime_gate": true
+  },
+  "observed_at_utc": "2026-09-06T09:28:44Z",
+  "package_source_receipt_sha256": "sha256:193b8662132bef5fd009adc78fb85a90e262912d6c68bacc8221415c9a4de213",
+  "pod": {
+    "exit_code": 1,
+    "finished_at_utc": "2026-09-06T09:28:39Z",
+    "name": "chris-q38-hosted-whole-task-runtime-gate-canary-v1-vqg5j",
+    "phase": "Failed",
+    "restarts": 0,
+    "uid": "ff2492de-b46e-491e-92a4-c5e549bde3e7"
+  },
+  "privacy": {
+    "credentials_included": false,
+    "prompts_traces_flags_read": false,
+    "scores_read": false
+  },
+  "receipt_sha256": "sha256:df98676ff25d2eb0ba7b1bb7bc78215ba4a722b6872594531146bfc285cedaae",
+  "rendered_manifest_sha256": "sha256:6e7124b772d5a34d35e5d678d9cf409703969f7d33e65c8bc1cc7ccf475962a9",
+  "schema_version": "fleet-qwen38-hosted-whole-task-runtime-gate-canary-failure-v1",
+  "score_blind_effects": {
+    "accepted_evidence_created": 0,
+    "canonical_claims_created": 0,
+    "endpoint_leases_acquired": 0,
+    "model_calls": 0,
+    "output_roots_created": 0,
+    "scoring_calls": 0,
+    "session_calls": 0,
+    "task_calls": 0,
+    "verifier_calls": 0
+  },
+  "status": "FAILED_UNCLASSIFIED_AFTER_STAGE06"
+}

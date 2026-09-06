@@ -100,15 +100,60 @@ bootstrap_stage 05-harness-version-validated
 export AGENT_HARNESS_IMAGE=chris/opencode:1.18.27-cyber-v1
 export FIXED_PROXY_IMAGE=ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
 bootstrap_stage 06-runtime-exec
-CANARY_ARGS=()
+RUNTIME_ARGS=(
+  --plan "$ROOT/evals/fleet/configs/runtime-plan.json"
+  --out "$QWEN_HOSTED_WHOLE_TASK_OUTPUT_ROOT"
+  --diagnostic-root "$QWEN_HOSTED_WHOLE_TASK_DIAGNOSTIC_ROOT"
+  --proxy "$ROOT/evals/fleet/fixed_proxy.py"
+)
 if [[ "${QWEN_HOSTED_WHOLE_TASK_RUNTIME_GATE_CANARY:-false}" == "true" ]]; then
-  CANARY_ARGS=(--runtime-gate-canary-receipt \
-    "$QWEN_HOSTED_WHOLE_TASK_DIAGNOSTIC_ROOT/RUNTIME-GATE-CANARY.json")
+  CANARY_RECEIPT="$QWEN_HOSTED_WHOLE_TASK_DIAGNOSTIC_ROOT/RUNTIME-GATE-CANARY.json"
+  set +e
+  uv run --no-project --with httpx==0.28.1 python \
+    -m evals.fleet.qwen_hosted_whole_task_successor_v1_runtime \
+    "${RUNTIME_ARGS[@]}" --runtime-gate-canary-receipt "$CANARY_RECEIPT"
+  CANARY_EXIT=$?
+  set -e
+  if [[ "$CANARY_EXIT" -ne 0 && \
+        ! -e "$QWEN_HOSTED_WHOLE_TASK_DIAGNOSTIC_ROOT/RUNTIME-GATE-CANARY-FAILED.json" ]]; then
+    CANARY_EXIT="$CANARY_EXIT" python - <<'PY'
+import hashlib
+import json
+import os
+from pathlib import Path
+
+error = f"exit_code:{os.environ['CANARY_EXIT']}"
+body = {
+    "schema_version": "fleet-qwen38-hosted-whole-task-runtime-gate-failure-v1",
+    "status": "FAILED",
+    "last_completed_stage": "06-runtime-exec",
+    "error_type": "ProcessExitNonzero",
+    "error_sha256": "sha256:" + hashlib.sha256(error.encode()).hexdigest(),
+    "job_uid": os.environ["JOB_UID"],
+    "pod_uid": os.environ["POD_UID"],
+    "authority_receipt_sha256": os.environ["QWEN_HOSTED_WHOLE_TASK_RELEASE_SHA256"],
+    "package_source_receipt_sha256": os.environ[
+        "QWEN_HOSTED_WHOLE_TASK_PACKAGE_SOURCE_SHA256"
+    ],
+    "scores_included": False,
+    "prompts_or_traces_included": False,
+    "credentials_included": False,
+}
+canonical = json.dumps(body, sort_keys=True, separators=(",", ":")).encode()
+body["receipt_sha256"] = "sha256:" + hashlib.sha256(canonical).hexdigest()
+path = Path(os.environ["QWEN_HOSTED_WHOLE_TASK_DIAGNOSTIC_ROOT"]) / (
+    "RUNTIME-GATE-CANARY-FAILED.json"
+)
+payload = json.dumps(body, sort_keys=True, separators=(",", ":")).encode() + b"\n"
+fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+with os.fdopen(fd, "wb") as handle:
+    handle.write(payload)
+    handle.flush()
+    os.fsync(handle.fileno())
+PY
+  fi
+  exit "$CANARY_EXIT"
 fi
 exec uv run --no-project --with httpx==0.28.1 python \
   -m evals.fleet.qwen_hosted_whole_task_successor_v1_runtime \
-  --plan "$ROOT/evals/fleet/configs/runtime-plan.json" \
-  --out "$QWEN_HOSTED_WHOLE_TASK_OUTPUT_ROOT" \
-  --diagnostic-root "$QWEN_HOSTED_WHOLE_TASK_DIAGNOSTIC_ROOT" \
-  --proxy "$ROOT/evals/fleet/fixed_proxy.py" \
-  "${CANARY_ARGS[@]}"
+  "${RUNTIME_ARGS[@]}"

@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import fcntl
 import json
+import os
 import subprocess
 import sys
 import textwrap
@@ -231,6 +232,23 @@ def test_preclaim_failure_receipt_is_score_blind_and_retry_closed() -> None:
     assert receipt["disposition"]["launch_authorized"] is False
 
 
+def test_canary_v1_failure_is_stage06_unclassified_and_zero_effect() -> None:
+    receipt = successor.load(ROOT / successor.CANARY_FAILURE["path"])
+    assert receipt["receipt_sha256"] == successor.CANARY_FAILURE["receipt_sha256"]
+    assert receipt["receipt_sha256"] == self_hosted.digest_without(receipt, "receipt_sha256")
+    assert receipt["failure_evidence"] == {
+        "last_completed_stage": "06-runtime-exec",
+        "runtime_gate_canary_pass_receipts_present": 0,
+        "sanitized_runtime_failure_receipts_present": 0,
+        "error_type": "UNAVAILABLE_NO_SANITIZED_RUNTIME_FAILURE_RECEIPT",
+        "error_sha256": None,
+        "deterministic_cause_identified": False,
+    }
+    assert set(receipt["score_blind_effects"].values()) == {0}
+    assert receipt["disposition"]["canary_v1_identity_retry_authorized"] is False
+    assert receipt["disposition"]["scored_successor_authorized"] is False
+
+
 def test_score_free_runtime_gate_canary_stops_before_any_scored_boundary(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -238,7 +256,9 @@ def test_score_free_runtime_gate_canary_stops_before_any_scored_boundary(
     plan = plans["qwen-a"]
     package_source = _sources(plans)["qwen-a"]
     held = successor.load(ROOT / successor.HELD_PATH)
-    monkeypatch.setattr(runtime, "_load_bound_inputs", lambda _plan: (plans, package_source))
+    monkeypatch.setattr(
+        runtime, "_load_bound_inputs", lambda _plan, **_kwargs: (plans, package_source)
+    )
     monkeypatch.setattr(
         runtime,
         "runtime_gate_check",
@@ -276,6 +296,22 @@ def test_runtime_gate_canary_rejects_any_nonexact_held_authority_digest(
     monkeypatch.setenv("QWEN_HOSTED_WHOLE_TASK_RELEASE_SHA256", "sha256:" + "b" * 64)
     with pytest.raises(RuntimeError, match="canary held digest drifted"):
         runtime.runtime_gate_check(plans, package_source, canary=True)
+
+
+def test_runtime_gate_failure_receipt_contains_only_sanitized_error_identity(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("JOB_UID", "11111111-1111-4111-8111-111111111111")
+    monkeypatch.setenv("POD_UID", "22222222-2222-4222-8222-222222222222")
+    monkeypatch.setenv("QWEN_HOSTED_WHOLE_TASK_RELEASE_SHA256", "sha256:" + "a" * 64)
+    monkeypatch.setenv("QWEN_HOSTED_WHOLE_TASK_PACKAGE_SOURCE_SHA256", "sha256:" + "b" * 64)
+    path = tmp_path / "RUNTIME-GATE-CANARY-FAILED.json"
+    receipt = runtime.write_gate_canary_failure(path, RuntimeError("protected detail"))
+    assert successor.load(path) == receipt
+    assert receipt["last_completed_stage"] == "06-runtime-exec"
+    assert receipt["error_type"] == "RuntimeError"
+    assert receipt["error_sha256"] == self_hosted.sha256(b"protected detail")
+    assert "protected detail" not in path.read_text()
 
 
 def test_scored_release_is_unconditionally_closed_for_consumed_identities() -> None:
@@ -894,6 +930,8 @@ def test_held_package_is_closed_create_once_and_cap_two(tmp_path: Path) -> None:
         assert "fleet-qwen38-hosted-whole-task-bootstrap-stage-v1" in bootstrap
         assert "os.O_WRONLY | os.O_CREAT | os.O_EXCL" in bootstrap
         assert "QWEN_HOSTED_WHOLE_TASK_RUNTIME_GATE_CANARY" in bootstrap
+        assert "RUNTIME-GATE-CANARY-FAILED.json" in bootstrap
+        assert '"error_type": "ProcessExitNonzero"' in bootstrap
 
         module_root = tmp_path / cm["metadata"]["name"] / "evals" / "fleet"
         config_root = module_root / "configs"
@@ -954,6 +992,86 @@ def test_runtime_gate_canary_package_is_new_score_free_create_once_identity() ->
     held = json.loads(cm["data"]["release.json"])
     assert held["launch_authorized"] is False
     assert env["QWEN_HOSTED_WHOLE_TASK_RELEASE_SHA256"]["value"] == held["receipt_sha256"]
+
+
+def test_unmocked_materialized_canary_package_runs_exact_runtime_gate(tmp_path: Path) -> None:
+    cm, _job = package.render_runtime_gate_canary(ROOT)["items"]
+    data = cm["data"]
+    root = tmp_path / "workspace" / "cyber-post-train"
+    module_root = root / "evals" / "fleet"
+    config_root = module_root / "configs"
+    bootstrap = tmp_path / "bootstrap"
+    config_root.mkdir(parents=True)
+    bootstrap.mkdir()
+    (module_root.parent / "__init__.py").touch()
+    (module_root / "__init__.py").touch()
+    for name, value in data.items():
+        if name.endswith(".py"):
+            (module_root / name).write_text(value)
+    (config_root / "qwen-hosted-generation19-qwen-a-v4.json").write_text(
+        data["source-plan-v4-a.json"]
+    )
+    (config_root / "qwen-hosted-generation19-qwen-b-v4.json").write_text(
+        data["source-plan-v4-b.json"]
+    )
+    plan_path = config_root / "runtime-plan.json"
+    plan_path.write_text(data["plan.json"])
+    package_source_path = bootstrap / "package-source.json"
+    package_source_path.write_text(data["package-source.json"])
+    authority_path = bootstrap / "release.json"
+    authority_path.write_text(data["release.json"])
+    diagnostic = tmp_path / "diagnostic"
+    receipt_path = diagnostic / "RUNTIME-GATE-CANARY.json"
+    forbidden_output = tmp_path / "forbidden-output"
+    env = os.environ.copy()
+    env.pop("FLEET_API_KEY", None)
+    env.update(
+        {
+            "QWEN_HOSTED_WHOLE_TASK_PACKAGE_SOURCE_SHA256": json.loads(data["package-source.json"])[
+                "receipt_sha256"
+            ],
+            "QWEN_HOSTED_WHOLE_TASK_RELEASE_PATH": str(authority_path),
+            "QWEN_HOSTED_WHOLE_TASK_RELEASE_SHA256": json.loads(data["release.json"])[
+                "receipt_sha256"
+            ],
+            "JOB_UID": "11111111-1111-4111-8111-111111111111",
+            "POD_UID": "22222222-2222-4222-8222-222222222222",
+        }
+    )
+    subprocess.run(
+        [
+            "uv",
+            "run",
+            "--no-project",
+            "--with",
+            "httpx==0.28.1",
+            "python",
+            "-m",
+            "evals.fleet.qwen_hosted_whole_task_successor_v1_runtime",
+            "--plan",
+            str(plan_path),
+            "--out",
+            str(forbidden_output),
+            "--diagnostic-root",
+            str(diagnostic),
+            "--proxy",
+            str(module_root / "fixed_proxy.py"),
+            "--runtime-gate-canary-receipt",
+            str(receipt_path),
+            "--package-source",
+            str(package_source_path),
+        ],
+        cwd=root,
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    receipt = successor.load(receipt_path)
+    successor.validate_runtime_gate_canary(receipt)
+    assert receipt["status"] == "PASS"
+    assert not forbidden_output.exists()
+    assert not receipt_path.with_name("RUNTIME-GATE-CANARY-FAILED.json").exists()
 
 
 def test_released_render_is_closed_for_consumed_identities(tmp_path: Path) -> None:

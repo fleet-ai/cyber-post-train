@@ -25,7 +25,7 @@ from evals.fleet import qwen_hosted_generation19_v4 as source
 from evals.fleet import self_hosted
 
 SCHEMA = "fleet-qwen38-hosted-atomic-whole-task-plan-v2"
-HELD_SCHEMA = "fleet-qwen38-hosted-atomic-whole-task-held-v4"
+HELD_SCHEMA = "fleet-qwen38-hosted-atomic-whole-task-held-v5"
 RELEASE_SCHEMA = "fleet-qwen38-hosted-atomic-whole-task-release-v4"
 RESERVATION_SCHEMA = "fleet-qwen38-hosted-four-claim-reservation-v2"
 PREPARING_SCHEMA = "fleet-qwen38-hosted-four-claim-preparing-v1"
@@ -37,14 +37,21 @@ LEDGER_PATH = "docs/evidence/qwen38-study/2026-09-05-exact-pass4-ledger-evidence
 LEDGER_SELF_SHA256 = "sha256:bf0b9086dd97eecafe20fa9a4cf3b5d643f0ce8f6abad60fae6e3cba3e3e2e29"
 LEDGER_FILE_SHA256 = "sha256:0a2baba7c16745a4d69f0f5aafc04010734eacbace8f6d712d44011c4a36d0dd"
 HELD_PATH = (
-    "docs/evidence/qwen38-study/2026-09-06-qwen38-hosted-rank15-rank16-whole-task-held-v4.json"
+    "docs/evidence/qwen38-study/2026-09-06-qwen38-hosted-rank15-rank16-whole-task-held-v5.json"
 )
 SUPERSEDED_HELD = {
     "path": (
-        "docs/evidence/qwen38-study/2026-09-06-qwen38-hosted-rank15-rank16-whole-task-held-v3.json"
+        "docs/evidence/qwen38-study/2026-09-06-qwen38-hosted-rank15-rank16-whole-task-held-v4.json"
     ),
-    "receipt_sha256": "sha256:658b3abd494cf4a36254a4731cedfb4cd28360ba2eacdaf7a57aa5fd95bd207b",
-    "file_sha256": "sha256:eef7b1bdf5c7a0db8239c02bb4472db0611b9e3094dd414e49ee643715a843a6",
+    "receipt_sha256": "sha256:dafb5f08164276f80d5c5b7683a3880c34bd2fb766a9c56f9ad94bdc5c9e7228",
+    "file_sha256": "sha256:a159c11c6fc7b54d98e3d276c96198ccb9afaff46c6840a29d08351a7e9ec1a7",
+}
+CANARY_FAILURE = {
+    "path": (
+        "docs/evidence/qwen38-study/2026-09-06-qwen38-hosted-runtime-gate-canary-v1-failure.json"
+    ),
+    "receipt_sha256": "sha256:df98676ff25d2eb0ba7b1bb7bc78215ba4a722b6872594531146bfc285cedaae",
+    "file_sha256": "sha256:b29f989169e2a47b1a460847851d2b8956aa849f1c11793a678342e270f9cf77",
 }
 PRECLAIM_FAILURE = {
     "path": (
@@ -538,6 +545,7 @@ def validate_held(
                 "controllers",
                 "supersedes",
                 "preclaim_failure",
+                "canary_failure",
                 "ledger_snapshot_path",
                 "ledger_snapshot_receipt_sha256",
                 "ledger_snapshot_file_sha256",
@@ -557,6 +565,7 @@ def validate_held(
             held.get("controllers") != release_projection(plans, package_sources),
             held.get("supersedes") != SUPERSEDED_HELD,
             held.get("preclaim_failure") != PRECLAIM_FAILURE,
+            held.get("canary_failure") != CANARY_FAILURE,
             held.get("ledger_snapshot_path") != LEDGER_PATH,
             held.get("ledger_snapshot_receipt_sha256") != LEDGER_SELF_SHA256,
             held.get("ledger_snapshot_file_sha256") != LEDGER_FILE_SHA256,

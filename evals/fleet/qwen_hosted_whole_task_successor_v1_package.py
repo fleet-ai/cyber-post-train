@@ -16,10 +16,10 @@ COMMON = (
     "evals/fleet/qwen_hosted_whole_task_successor_v1.py",
     "evals/fleet/qwen_hosted_whole_task_successor_v1_runtime.py",
 )
-RUNTIME_GATE_CANARY_JOB = "chris-q38-hosted-whole-task-runtime-gate-canary-v1"
+RUNTIME_GATE_CANARY_JOB = "chris-q38-hosted-whole-task-runtime-gate-canary-v2"
 RUNTIME_GATE_CANARY_CONFIGMAP = RUNTIME_GATE_CANARY_JOB + "-package"
 RUNTIME_GATE_CANARY_DIAGNOSTIC_ROOT = (
-    "/mnt/sfs/jobs/chris-q38-hosted-whole-task-runtime-gate-canary-v1-diagnostic"
+    "/mnt/sfs/jobs/chris-q38-hosted-whole-task-runtime-gate-canary-v2-diagnostic"
 )
 
 

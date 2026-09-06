@@ -27,7 +27,7 @@ def runtime_gate_check(
     if canary:
         raw_path = os.environ.get("QWEN_HOSTED_WHOLE_TASK_RELEASE_PATH")
         expected = os.environ.get("QWEN_HOSTED_WHOLE_TASK_RELEASE_SHA256")
-        if raw_path != "/bootstrap/release.json" or not expected:
+        if not raw_path or not Path(raw_path).is_absolute() or not expected:
             raise RuntimeError("hosted whole-task canary held binding drifted")
         held = successor.load(Path(raw_path))
         if held.get("receipt_sha256") != expected:
@@ -46,9 +46,15 @@ def runtime_gate_check(
     return successor.load_runtime_release(plans, package_source)
 
 
-def _load_bound_inputs(plan: dict[str, Any]) -> tuple[dict[str, dict[str, Any]], dict[str, Any]]:
+def _load_bound_inputs(
+    plan: dict[str, Any],
+    *,
+    package_source_path: Path = Path("/bootstrap/package-source.json"),
+) -> tuple[dict[str, dict[str, Any]], dict[str, Any]]:
     plans = successor.build_plans(Path(plan["repo_root"]))
-    package_source = successor.load(Path("/bootstrap/package-source.json"))
+    if not package_source_path.is_absolute():
+        raise RuntimeError("hosted whole-task package source path must be absolute")
+    package_source = successor.load(package_source_path)
     if package_source.get("receipt_sha256") != os.environ.get(
         "QWEN_HOSTED_WHOLE_TASK_PACKAGE_SOURCE_SHA256"
     ):
@@ -58,9 +64,14 @@ def _load_bound_inputs(plan: dict[str, Any]) -> tuple[dict[str, dict[str, Any]],
     return plans, package_source
 
 
-def run_gate_canary(plan: dict[str, Any], *, receipt_path: Path) -> dict[str, Any]:
+def run_gate_canary(
+    plan: dict[str, Any],
+    *,
+    receipt_path: Path,
+    package_source_path: Path = Path("/bootstrap/package-source.json"),
+) -> dict[str, Any]:
     """Revalidate the packaged runtime gate and exit before any scored boundary."""
-    plans, package_source = _load_bound_inputs(plan)
+    plans, package_source = _load_bound_inputs(plan, package_source_path=package_source_path)
     authority = runtime_gate_check(plans, package_source, canary=True)
     body = {
         "schema_version": successor.RUNTIME_GATE_CANARY_SCHEMA,
@@ -90,6 +101,31 @@ def run_gate_canary(plan: dict[str, Any], *, receipt_path: Path) -> dict[str, An
     successor.validate_runtime_gate_canary(receipt)
     receipt_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     self_hosted.write_json_once(receipt_path, receipt)
+    return receipt
+
+
+def write_gate_canary_failure(receipt_path: Path, exc: Exception) -> dict[str, Any]:
+    """Persist only a sanitized exception class and digest after stage 06."""
+    body = {
+        "schema_version": "fleet-qwen38-hosted-whole-task-runtime-gate-failure-v1",
+        "status": "FAILED",
+        "last_completed_stage": "06-runtime-exec",
+        "error_type": type(exc).__name__,
+        "error_sha256": self_hosted.sha256(str(exc).encode()),
+        "job_uid": os.environ.get("JOB_UID"),
+        "pod_uid": os.environ.get("POD_UID"),
+        "authority_receipt_sha256": os.environ.get("QWEN_HOSTED_WHOLE_TASK_RELEASE_SHA256"),
+        "package_source_receipt_sha256": os.environ.get(
+            "QWEN_HOSTED_WHOLE_TASK_PACKAGE_SOURCE_SHA256"
+        ),
+        "scores_included": False,
+        "prompts_or_traces_included": False,
+        "credentials_included": False,
+    }
+    receipt = _seal(body)
+    receipt_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    with contextlib.suppress(FileExistsError):
+        self_hosted.write_json_once(receipt_path, receipt)
     return receipt
 
 
@@ -161,10 +197,26 @@ def main() -> int:
     parser.add_argument("--proxy", type=Path, required=True)
     parser.add_argument("--diagnostic-root", type=Path, required=True)
     parser.add_argument("--runtime-gate-canary-receipt", type=Path)
+    parser.add_argument(
+        "--package-source",
+        type=Path,
+        default=Path("/bootstrap/package-source.json"),
+    )
     args = parser.parse_args()
     plan = successor.load(args.plan)
     if args.runtime_gate_canary_receipt is not None:
-        run_gate_canary(plan, receipt_path=args.runtime_gate_canary_receipt)
+        try:
+            run_gate_canary(
+                plan,
+                receipt_path=args.runtime_gate_canary_receipt,
+                package_source_path=args.package_source,
+            )
+        except Exception as exc:
+            write_gate_canary_failure(
+                args.runtime_gate_canary_receipt.with_name("RUNTIME-GATE-CANARY-FAILED.json"),
+                exc,
+            )
+            raise
     else:
         run(plan, out=args.out, proxy=args.proxy, diagnostic_root=args.diagnostic_root)
     return 0
