@@ -5,8 +5,11 @@ from __future__ import annotations
 import argparse
 import concurrent.futures
 import json
+import re
 import shlex
 import subprocess
+import threading
+import time
 import uuid
 from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
@@ -36,6 +39,8 @@ LIVE_SUBMIT_GATE_SCHEMA = "fleet-qwen38-dp8-post-rank99-live-submit-gate-v1"
 SUBMISSION_SCHEMA = "fleet-qwen38-dp8-post-rank99-submission-v1"
 SERVER_BINDING_SCHEMA = "fleet-qwen38-dp8-post-rank99-server-binding-v1"
 PARTITION_SCHEMA = "fleet-qwen38-dp8-post-rank99-scored-partition-held-v1"
+SNAPSHOT_SCHEMA = "fleet-qwen38-dp8-rank-distribution-snapshot-v1"
+DISTRIBUTION_SCHEMA = "fleet-qwen38-dp8-wave-distribution-v1"
 LEVELS = (1, 2, 4, 8)
 
 
@@ -349,6 +354,8 @@ def validate_server_binding_receipt(
         or not isinstance(value.get("service_origin"), str)
         or not value["service_origin"].startswith("http://")
         or not value["service_origin"].endswith(":8000")
+        or not isinstance(value.get("head_pod_name"), str)
+        or not value["head_pod_name"]
         or value.get("image") != prior.IMAGE
         or value.get("model_revision") != prior.MODEL_REVISION
         or value.get("context_length") != 262144
@@ -393,9 +400,13 @@ def validate_submission_receipt(value: Mapping[str, Any]) -> None:
         raise ValueError("DP8 submission receipt drifted")
 
 
-def qualification_plan(server_binding: dict[str, Any], root: Path) -> dict[str, Any]:
+def qualification_plan(
+    server_binding: dict[str, Any], service_origin: str, root: Path
+) -> dict[str, Any]:
     """Freeze a content-free c1->c2->c4->c8 qualification plan."""
     binding = parity.validate_server_binding(server_binding, "qwen3.8-27b")
+    if not service_origin.startswith("http://") or not service_origin.endswith(":8000"):
+        raise ValueError("DP8 qualification service origin is invalid")
     plan = {
         "schema_version": QUALIFICATION_SCHEMA,
         "status": "HELD_NON_SCORED",
@@ -403,6 +414,7 @@ def qualification_plan(server_binding: dict[str, Any], root: Path) -> dict[str, 
         "scoring_authorized": False,
         "serving_block": held.SERVING_BLOCK,
         "server_binding": binding,
+        "service_origin": service_origin,
         "treatment": spec(root)["qualification"],
         "waves": [
             {
@@ -439,19 +451,447 @@ def qualification_plan(server_binding: dict[str, Any], root: Path) -> dict[str, 
     return plan
 
 
+def validate_qualification_plan(value: Mapping[str, Any]) -> None:
+    """Require the complete score-free ladder, exact treatment, and no extra fields."""
+    if value.get("receipt_sha256") != self_hosted.digest_without(dict(value), "receipt_sha256"):
+        raise ValueError("DP8 qualification plan digest drifted")
+    if set(value) != {
+        "schema_version",
+        "status",
+        "launch_authorized",
+        "scoring_authorized",
+        "serving_block",
+        "server_binding",
+        "service_origin",
+        "treatment",
+        "waves",
+        "acceptance",
+        "side_effects",
+        "privacy",
+        "receipt_sha256",
+    }:
+        raise ValueError("DP8 qualification plan contains an unreviewed field")
+    expected_waves = [
+        {
+            "concurrency": level,
+            "parallel_streams": level,
+            "requests_per_stream": 2,
+            "request_count": level * 2,
+            "tool_order": ["bash", "submit_report"],
+            "strict_tool_arguments_required": True,
+        }
+        for level in LEVELS
+    ]
+    if (
+        value.get("schema_version") != QUALIFICATION_SCHEMA
+        or value.get("status") != "HELD_NON_SCORED"
+        or value.get("launch_authorized") is not False
+        or value.get("scoring_authorized") is not False
+        or value.get("serving_block") != held.SERVING_BLOCK
+        or value.get("treatment") != spec(parity.REPO_ROOT)["qualification"]
+        or value.get("waves") != expected_waves
+        or value.get("acceptance")
+        != {
+            "levels_must_run_in_order": True,
+            "zero_http_model_or_tool_protocol_errors": True,
+            "all_tool_names_order_and_arguments_exact": True,
+            "stop_at_first_failed_level": True,
+            "highest_passing_level_is_scored_concurrency_ceiling": True,
+        }
+        or value.get("side_effects")
+        != {
+            "task_calls": 0,
+            "instance_calls": 0,
+            "session_calls": 0,
+            "verifier_calls": 0,
+            "scoring_calls": 0,
+        }
+        or value.get("privacy")
+        != {
+            "credentials_included": False,
+            "request_or_response_bodies_included": False,
+            "prompts_traces_flags_or_scores_included": False,
+        }
+    ):
+        raise ValueError("DP8 qualification plan treatment drifted")
+    parity.validate_server_binding(value.get("server_binding") or {}, "qwen3.8-27b")
+    origin = value.get("service_origin")
+    if (
+        not isinstance(origin, str)
+        or not origin.startswith("http://")
+        or not origin.endswith(":8000")
+    ):
+        raise ValueError("DP8 qualification plan service origin drifted")
+
+
+def validate_stream_receipt(value: Mapping[str, Any], plan: Mapping[str, Any]) -> None:
+    """Validate one sanitized actual-OpenCode parity receipt against the exact server/treatment."""
+    if value.get("receipt_sha256") != self_hosted.digest_without(dict(value), "receipt_sha256"):
+        raise ValueError("DP8 stream receipt digest drifted")
+    if set(value) != {
+        "schema_version",
+        "status",
+        "classification",
+        "model",
+        "endpoint",
+        "harness",
+        "tool_contract",
+        "execution",
+        "privacy",
+        "receipt_sha256",
+    }:
+        raise ValueError("DP8 stream receipt contains an unreviewed field")
+    treatment = parity.treatment_config("qwen3.8-27b")
+    endpoint = value.get("endpoint") or {}
+    harness = value.get("harness") or {}
+    tools = value.get("tool_contract") or {}
+    execution = value.get("execution") or {}
+    privacy = value.get("privacy") or {}
+    expected_binding = plan.get("server_binding")
+    expected_binding_sha = self_hosted.sha256(self_hosted.canonical_json(expected_binding))
+    expected_mcp_sha = self_hosted.sha256(self_hosted.canonical_json(parity.mcp_tools()))
+    expected_openai_sha = self_hosted.sha256(
+        self_hosted.canonical_json(parity.expected_openai_tools())
+    )
+    harness_fields = treatment["harness"]
+    expected_observed_image = {
+        "image": parity.IMAGE,
+        "image_id": parity.IMAGE_ID,
+        "os": "linux",
+        "architecture": "amd64",
+        "user": "node",
+        "working_dir": "/workspace",
+    }
+    observed_catalogs = tools.get("observed_model_request_catalog_sha256s")
+    if (
+        value.get("schema_version") != parity.SCHEMA
+        or value.get("status") != "PASSED_NON_SCORED"
+        or value.get("classification") != "ACTUAL_HARNESS_PARITY"
+        or value.get("model") != treatment["model"]
+        or set(endpoint) != {"origin", "kind", "server_binding", "server_binding_sha256"}
+        or endpoint.get("origin") != plan.get("service_origin")
+        or endpoint.get("kind") != "dedicated_uid_bound_inference"
+        or endpoint.get("server_binding") != expected_binding
+        or endpoint.get("server_binding_sha256") != expected_binding_sha
+        or set(harness)
+        != {*harness_fields, "image", "image_id", "observed_image", "settings_sha256"}
+        or any(harness.get(key) != expected for key, expected in harness_fields.items())
+        or harness.get("image") != parity.IMAGE
+        or harness.get("image_id") != parity.IMAGE_ID
+        or harness.get("observed_image") != expected_observed_image
+        or not isinstance(harness.get("settings_sha256"), str)
+        or not re.fullmatch(r"sha256:[0-9a-f]{64}", harness["settings_sha256"])
+        or set(tools)
+        != {
+            "names",
+            "mcp_catalog_sha256",
+            "production_catalog_provenance",
+            "openai_catalog_sha256",
+            "model_request_catalog_exact",
+            "model_request_tool_names_exact",
+            "model_request_tool_descriptions_exact",
+            "model_request_tool_parameters_exact",
+            "observed_model_request_catalog_sha256s",
+            "model_requests_with_tools",
+            "model_requests_without_tools",
+            "calls_observed_in_order",
+            "arguments_structurally_valid",
+        }
+        or tools.get("names") != ["bash", "submit_report"]
+        or tools.get("mcp_catalog_sha256") != expected_mcp_sha
+        or tools.get("production_catalog_provenance")
+        != parity.production_tools.provenance(parity.REPO_ROOT)
+        or tools.get("openai_catalog_sha256") != expected_openai_sha
+        or tools.get("model_request_catalog_exact") is not True
+        or tools.get("model_request_tool_names_exact") is not True
+        or tools.get("model_request_tool_descriptions_exact") is not True
+        or tools.get("model_request_tool_parameters_exact") is not True
+        or observed_catalogs != [expected_openai_sha]
+        or type(tools.get("model_requests_with_tools")) is not int
+        or tools["model_requests_with_tools"] < 1
+        or type(tools.get("model_requests_without_tools")) is not int
+        or tools["model_requests_without_tools"] < 0
+        or tools.get("calls_observed_in_order") != ["bash", "submit_report"]
+        or tools.get("arguments_structurally_valid") is not True
+        or set(execution)
+        != {
+            "harness_exit_code",
+            "model_requests",
+            "final_marker_observed",
+            "task_instance_session_verifier_scoring_calls",
+            "scored_launch_authorized",
+        }
+        or type(execution.get("model_requests")) is not int
+        or not 1 <= execution["model_requests"] <= parity.MAX_MODEL_REQUESTS
+        or tools.get("model_requests_with_tools") + tools.get("model_requests_without_tools")
+        != execution.get("model_requests")
+        or execution.get("harness_exit_code") != 0
+        or execution.get("final_marker_observed") is not True
+        or execution.get("task_instance_session_verifier_scoring_calls") != 0
+        or execution.get("scored_launch_authorized") is not False
+        or privacy
+        != {
+            "credentials_included": False,
+            "prompt_included": False,
+            "responses_or_model_outputs_included": False,
+            "tool_arguments_included": False,
+            "stderr_or_stdout_included": False,
+            "benchmark_content_included": False,
+        }
+    ):
+        raise ValueError("DP8 stream receipt treatment or server binding drifted")
+
+
+def validate_distribution_receipt(
+    value: Mapping[str, Any],
+    plan: Mapping[str, Any],
+    level: int,
+    rows: list[Mapping[str, Any]],
+) -> None:
+    """Require UID-bound request and GPU activity across enough DP ranks for this wave."""
+    if value.get("receipt_sha256") != self_hosted.digest_without(dict(value), "receipt_sha256"):
+        raise ValueError("DP8 distribution receipt digest drifted")
+    if set(value) != {
+        "schema_version",
+        "status",
+        "plan_receipt_sha256",
+        "server_binding",
+        "service_origin",
+        "concurrency",
+        "stream_receipt_sha256s",
+        "request_counters_before_by_rank",
+        "request_counters_after_by_rank",
+        "request_deltas_by_rank",
+        "gpu_peak_utilization_percent_by_rank",
+        "gpu_peak_memory_used_mib_by_rank",
+        "gpu_device_count",
+        "gpu_memory_loaded_count",
+        "sampling_seconds",
+        "observer_errors",
+        "task_instance_session_verifier_scoring_calls",
+        "prompts_traces_flags_or_scores_included",
+        "receipt_sha256",
+    }:
+        raise ValueError("DP8 distribution receipt contains an unreviewed field")
+    expected_streams = [row.get("receipt_sha256") for row in rows]
+    before = value.get("request_counters_before_by_rank")
+    after = value.get("request_counters_after_by_rank")
+    request_deltas = value.get("request_deltas_by_rank")
+    gpu_peaks = value.get("gpu_peak_utilization_percent_by_rank")
+    gpu_memory = value.get("gpu_peak_memory_used_mib_by_rank")
+    counters_valid = all(
+        isinstance(row, list)
+        and len(row) == 8
+        and all(type(item) is int and item >= 0 for item in row)
+        for row in (before, after, request_deltas)
+    )
+    gpu_valid = (
+        isinstance(gpu_peaks, list)
+        and len(gpu_peaks) == 8
+        and all(type(item) is int and 0 <= item <= 100 for item in gpu_peaks)
+        and isinstance(gpu_memory, list)
+        and len(gpu_memory) == 8
+        and all(type(item) is int and item > 0 for item in gpu_memory)
+    )
+    active_requests = (
+        [index for index, count in enumerate(request_deltas) if type(count) is int and count > 0]
+        if isinstance(request_deltas, list) and len(request_deltas) == 8
+        else []
+    )
+    active_gpus = (
+        [index for index, peak in enumerate(gpu_peaks) if type(peak) is int and peak > 0]
+        if isinstance(gpu_peaks, list) and len(gpu_peaks) == 8
+        else []
+    )
+    required = set(range(8)) if level == 8 else None
+    if (
+        value.get("schema_version") != DISTRIBUTION_SCHEMA
+        or value.get("status") != "PASSED_NON_SCORED_DISTRIBUTION"
+        or value.get("plan_receipt_sha256") != plan.get("receipt_sha256")
+        or value.get("server_binding") != plan.get("server_binding")
+        or value.get("service_origin") != plan.get("service_origin")
+        or value.get("concurrency") != level
+        or value.get("stream_receipt_sha256s") != expected_streams
+        or not counters_valid
+        or request_deltas != [after[index] - before[index] for index in range(8)]
+        or not gpu_valid
+        or value.get("gpu_device_count") != 8
+        or value.get("gpu_memory_loaded_count") != 8
+        or type(value.get("sampling_seconds")) is not int
+        or value["sampling_seconds"] < 0
+        or value.get("observer_errors") != []
+        or len(active_requests) < level
+        or len(active_gpus) < level
+        or (required is not None and set(active_requests) != required)
+        or (required is not None and set(active_gpus) != required)
+        or value.get("task_instance_session_verifier_scoring_calls") != 0
+        or value.get("prompts_traces_flags_or_scores_included") is not False
+    ):
+        raise ValueError("DP8 wave did not prove UID-bound request/GPU distribution")
+
+
+_LABEL = re.compile(r'(?:^|,\s*)([A-Za-z_][A-Za-z0-9_]*)="([^"]*)"')
+
+
+def _request_counters_by_rank(metrics: str) -> list[int]:
+    """Extract one unambiguous eight-rank cumulative request counter family."""
+    families: dict[str, dict[int, int]] = {}
+    for raw in metrics.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "{" not in line or "}" not in line:
+            continue
+        head, rest = line.split("{", 1)
+        labels_text, raw_value = rest.split("}", 1)
+        if "requests_total" not in head:
+            continue
+        labels = dict(_LABEL.findall(labels_text))
+        rank_text = labels.get("dp_rank") or labels.get("data_parallel_rank")
+        if rank_text is None or not rank_text.isdigit():
+            continue
+        try:
+            value = int(float(raw_value.strip().split()[0]))
+        except (IndexError, ValueError):
+            continue
+        rank = int(rank_text)
+        if 0 <= rank < 8 and value >= 0:
+            families.setdefault(head, {})[rank] = value
+    complete = [values for values in families.values() if set(values) == set(range(8))]
+    if len(complete) != 1:
+        raise ValueError("DP8 metrics did not expose one unambiguous eight-rank request family")
+    return [complete[0][rank] for rank in range(8)]
+
+
+def _gpu_sample(pod_name: str, pod_uid: str) -> tuple[list[int], list[int]]:
+    pod = json.loads(
+        subprocess.run(
+            ["kubectl", "-n", live_api.NAMESPACE, "get", "pod", pod_name, "-o", "json"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+    )
+    if pod.get("metadata", {}).get("uid") != pod_uid:
+        raise RuntimeError("DP8 GPU observer Pod UID drifted")
+    rows = subprocess.run(
+        [
+            "kubectl",
+            "-n",
+            live_api.NAMESPACE,
+            "exec",
+            pod_name,
+            "--",
+            "nvidia-smi",
+            "--query-gpu=index,memory.used,utilization.gpu",
+            "--format=csv,noheader,nounits",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.splitlines()
+    parsed: dict[int, tuple[int, int]] = {}
+    for row in rows:
+        fields = [field.strip() for field in row.split(",")]
+        if len(fields) != 3 or not all(field.isdigit() for field in fields):
+            raise RuntimeError("DP8 GPU observer returned invalid device data")
+        parsed[int(fields[0])] = (int(fields[1]), int(fields[2]))
+    if set(parsed) != set(range(8)):
+        raise RuntimeError("DP8 GPU observer did not see exactly eight devices")
+    return (
+        [parsed[index][0] for index in range(8)],
+        [parsed[index][1] for index in range(8)],
+    )
+
+
+def live_wave_observer(
+    binding_receipt: Mapping[str, Any],
+) -> Callable[
+    [int, Callable[[], list[dict[str, Any]]], Mapping[str, Any]],
+    tuple[list[dict[str, Any]], Mapping[str, Any]],
+]:
+    """Produce per-wave request-rank deltas and sampled GPU activity from exact server UIDs."""
+    origin = str(binding_receipt["service_origin"])
+    pod_name = str(binding_receipt["head_pod_name"])
+    pod_uid = str(binding_receipt["head_pod_uid"])
+
+    def observe(
+        level: int,
+        execute: Callable[[], list[dict[str, Any]]],
+        plan: Mapping[str, Any],
+    ) -> tuple[list[dict[str, Any]], Mapping[str, Any]]:
+        before_response = httpx.get(origin + "/metrics", timeout=30)
+        before_response.raise_for_status()
+        before = _request_counters_by_rank(before_response.text)
+        max_memory, max_utilization = _gpu_sample(pod_name, pod_uid)
+        stop = threading.Event()
+        errors: list[str] = []
+
+        def sample() -> None:
+            while not stop.is_set():
+                try:
+                    memory, utilization = _gpu_sample(pod_name, pod_uid)
+                    for index in range(8):
+                        max_memory[index] = max(max_memory[index], memory[index])
+                        max_utilization[index] = max(max_utilization[index], utilization[index])
+                except (
+                    OSError,
+                    RuntimeError,
+                    subprocess.SubprocessError,
+                    json.JSONDecodeError,
+                ) as exc:
+                    errors.append(type(exc).__name__)
+                    return
+                stop.wait(1)
+
+        sampler = threading.Thread(target=sample, daemon=True)
+        started = time.time()
+        sampler.start()
+        try:
+            rows = execute()
+        finally:
+            stop.set()
+            sampler.join(timeout=10)
+        after_response = httpx.get(origin + "/metrics", timeout=30)
+        after_response.raise_for_status()
+        after = _request_counters_by_rank(after_response.text)
+        deltas = [after[index] - before[index] for index in range(8)]
+        if any(delta < 0 for delta in deltas):
+            raise RuntimeError("DP8 request counters decreased during a qualification wave")
+        receipt = {
+            "schema_version": DISTRIBUTION_SCHEMA,
+            "status": "PASSED_NON_SCORED_DISTRIBUTION" if not errors else "FAILED",
+            "plan_receipt_sha256": plan["receipt_sha256"],
+            "server_binding": plan["server_binding"],
+            "service_origin": origin,
+            "concurrency": level,
+            "stream_receipt_sha256s": [row.get("receipt_sha256") for row in rows],
+            "request_counters_before_by_rank": before,
+            "request_counters_after_by_rank": after,
+            "request_deltas_by_rank": deltas,
+            "gpu_peak_utilization_percent_by_rank": max_utilization,
+            "gpu_peak_memory_used_mib_by_rank": max_memory,
+            "gpu_device_count": len(max_memory),
+            "gpu_memory_loaded_count": sum(value > 0 for value in max_memory),
+            "sampling_seconds": max(0, int(time.time() - started)),
+            "observer_errors": errors,
+            "task_instance_session_verifier_scoring_calls": 0,
+            "prompts_traces_flags_or_scores_included": False,
+        }
+        receipt["receipt_sha256"] = self_hosted.digest_without(receipt, "receipt_sha256")
+        return rows, receipt
+
+    return observe
+
+
 def run_qualification_ladder(
     plan: Mapping[str, Any],
     probe: Callable[[], Mapping[str, Any]],
+    wave_observer: Callable[
+        [int, Callable[[], list[dict[str, Any]]], Mapping[str, Any]],
+        tuple[list[dict[str, Any]], Mapping[str, Any]],
+    ],
 ) -> dict[str, Any]:
     """Run actual-OpenCode probes c1->c2->c4->c8, stopping before the next failed level."""
-    if (
-        plan.get("schema_version") != QUALIFICATION_SCHEMA
-        or plan.get("receipt_sha256") != self_hosted.digest_without(dict(plan), "receipt_sha256")
-        or plan.get("status") != "HELD_NON_SCORED"
-        or plan.get("launch_authorized") is not False
-        or plan.get("scoring_authorized") is not False
-    ):
-        raise ValueError("DP8 qualification plan schema drifted")
+    validate_qualification_plan(plan)
 
     def safe_probe(_index: int) -> dict[str, Any]:
         try:
@@ -470,21 +910,27 @@ def run_qualification_ladder(
     observations = []
     highest = 0
     for level in LEVELS:
-        with concurrent.futures.ThreadPoolExecutor(max_workers=level) as executor:
-            rows = list(executor.map(safe_probe, range(level)))
-        passed = all(
-            row.get("status") == "PASSED_NON_SCORED"
-            and isinstance(row.get("receipt_sha256"), str)
-            and row["receipt_sha256"].startswith("sha256:")
-            and len(row["receipt_sha256"]) == 71
-            and (row.get("tool_contract") or {}).get("calls_observed_in_order")
-            == ["bash", "submit_report"]
-            and (row.get("tool_contract") or {}).get("arguments_structurally_valid") is True
-            and (row.get("execution") or {}).get("task_instance_session_verifier_scoring_calls")
-            == 0
-            and (row.get("privacy") or {}).get("responses_or_model_outputs_included") is False
-            for row in rows
-        )
+
+        def execute_wave(wave_level: int = level) -> list[dict[str, Any]]:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=wave_level) as executor:
+                return list(executor.map(safe_probe, range(wave_level)))
+
+        rows, distribution = wave_observer(level, execute_wave, plan)
+        stream_valid = []
+        for row in rows:
+            try:
+                validate_stream_receipt(row, plan)
+            except ValueError:
+                stream_valid.append(False)
+            else:
+                stream_valid.append(True)
+        try:
+            validate_distribution_receipt(distribution, plan, level, rows)
+        except ValueError:
+            distribution_valid = False
+        else:
+            distribution_valid = True
+        passed = len(rows) == level and all(stream_valid) and distribution_valid
         observations.append(
             {
                 "concurrency": level,
@@ -494,7 +940,8 @@ def run_qualification_ladder(
                 "error_count": 0 if passed else 1,
                 "tool_order_exact": passed,
                 "tool_arguments_exact": passed,
-                "stream_receipt_sha256s": [row.get("receipt_sha256") for row in rows],
+                "stream_receipts": rows,
+                "distribution_receipt": dict(distribution),
             }
         )
         if not passed:
@@ -503,6 +950,7 @@ def run_qualification_ladder(
     result = {
         "schema_version": RESULT_SCHEMA,
         "plan_receipt_sha256": plan["receipt_sha256"],
+        "qualification_plan": dict(plan),
         "levels": observations,
         "highest_passing_concurrency": highest,
         "scored_calls": 0,
@@ -591,8 +1039,26 @@ def held_scored_partition(
 
 def validate_result(value: dict[str, Any], plan: dict[str, Any]) -> int:
     """Return the highest passing level, failing closed on partial or invalid evidence."""
+    embedded_plan = value.get("qualification_plan")
+    if not isinstance(embedded_plan, dict):
+        raise ValueError("DP8 qualification result omitted its exact plan")
+    validate_qualification_plan(embedded_plan)
+    if set(plan) != {"receipt_sha256"} and plan != embedded_plan:
+        raise ValueError("DP8 qualification embedded plan identity drifted")
+    plan = embedded_plan
     if value.get("receipt_sha256") != self_hosted.digest_without(value, "receipt_sha256"):
         raise ValueError("DP8 qualification result digest drifted")
+    if set(value) != {
+        "schema_version",
+        "plan_receipt_sha256",
+        "qualification_plan",
+        "levels",
+        "highest_passing_concurrency",
+        "scored_calls",
+        "prompts_traces_flags_or_scores_included",
+        "receipt_sha256",
+    }:
+        raise ValueError("DP8 qualification result contains an unreviewed field")
     if (
         value.get("schema_version") != RESULT_SCHEMA
         or value.get("plan_receipt_sha256") != plan.get("receipt_sha256")
@@ -611,6 +1077,28 @@ def validate_result(value: dict[str, Any], plan: dict[str, Any]) -> int:
     highest = 0
     failed = False
     for row in observations:
+        if set(row) != {
+            "concurrency",
+            "status",
+            "request_count",
+            "completed_count",
+            "error_count",
+            "tool_order_exact",
+            "tool_arguments_exact",
+            "stream_receipts",
+            "distribution_receipt",
+        }:
+            raise ValueError("DP8 qualification level contains an unreviewed field")
+        streams = row.get("stream_receipts")
+        distribution = row.get("distribution_receipt")
+        detailed_valid = isinstance(streams, list) and len(streams) == row.get("concurrency")
+        if detailed_valid:
+            try:
+                for stream in streams:
+                    validate_stream_receipt(stream, plan)
+                validate_distribution_receipt(distribution or {}, plan, row["concurrency"], streams)
+            except (TypeError, ValueError):
+                detailed_valid = False
         passed = all(
             (
                 row.get("status") == "PASSED",
@@ -619,6 +1107,7 @@ def validate_result(value: dict[str, Any], plan: dict[str, Any]) -> int:
                 row.get("error_count") == 0,
                 row.get("tool_order_exact") is True,
                 row.get("tool_arguments_exact") is True,
+                detailed_valid,
             )
         )
         if failed or (row.get("status") == "PASSED" and not passed):
@@ -709,7 +1198,7 @@ def main() -> int:
         submission = _load(args.submission)
         binding_receipt = _load(args.server_binding)
         binding = validate_server_binding_receipt(binding_receipt, submission)
-        plan = qualification_plan(binding, root)
+        plan = qualification_plan(binding, binding_receipt["service_origin"], root)
         result = run_qualification_ladder(
             plan,
             lambda: parity.run(
@@ -718,6 +1207,7 @@ def main() -> int:
                 upstream_origin=binding_receipt["service_origin"],
                 server_binding=binding,
             ),
+            live_wave_observer(binding_receipt),
         )
         self_hosted.write_json_once(args.output, result)
         print(json.dumps({"highest_passing_concurrency": result["highest_passing_concurrency"]}))

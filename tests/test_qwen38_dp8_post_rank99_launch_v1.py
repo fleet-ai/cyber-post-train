@@ -11,6 +11,7 @@ from evals.fleet import qwen38_dp8_post_rank99_launch_v1 as launch
 from evals.fleet import self_hosted
 
 ROOT = Path(__file__).resolve().parents[1]
+SERVICE_ORIGIN = "http://ft-run-fresh-example-head-svc:8000"
 
 
 def _binding() -> dict[str, object]:
@@ -294,7 +295,8 @@ def test_server_binding_requires_exact_immutable_runtime_and_uids() -> None:
         "title": "chris-cyber-evalserve-q38-dp8-b-v1",
         "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-q38-dp8-b-v1",
         "serving_block": "dedicated-qwen-dp8-b-v1",
-        "service_origin": "http://ft-run-fresh-example-head-svc:8000",
+        "service_origin": SERVICE_ORIGIN,
+        "head_pod_name": "ft-run-fresh-example-head",
         "rayjob_uid": "11111111-1111-4111-8111-111111111111",
         "workload_uid": "22222222-2222-4222-8222-222222222222",
         "head_pod_uid": "33333333-3333-4333-8333-333333333333",
@@ -321,38 +323,131 @@ def test_server_binding_requires_exact_immutable_runtime_and_uids() -> None:
         launch.validate_server_binding_receipt(changed, submission)
 
 
-def _probe(status: str = "PASSED_NON_SCORED") -> dict[str, object]:
+def _probe(plan: dict[str, object], status: str = "PASSED_NON_SCORED") -> dict[str, object]:
+    treatment = launch.parity.treatment_config("qwen3.8-27b")
     value: dict[str, object] = {
+        "schema_version": launch.parity.SCHEMA,
         "status": status,
+        "classification": "ACTUAL_HARNESS_PARITY",
+        "model": treatment["model"],
+        "endpoint": {
+            "origin": SERVICE_ORIGIN,
+            "kind": "dedicated_uid_bound_inference",
+            "server_binding": plan["server_binding"],
+            "server_binding_sha256": self_hosted.sha256(
+                self_hosted.canonical_json(plan["server_binding"])
+            ),
+        },
+        "harness": {
+            **treatment["harness"],
+            "image": launch.parity.IMAGE,
+            "image_id": launch.parity.IMAGE_ID,
+            "observed_image": {
+                "image": launch.parity.IMAGE,
+                "image_id": launch.parity.IMAGE_ID,
+                "os": "linux",
+                "architecture": "amd64",
+                "user": "node",
+                "working_dir": "/workspace",
+            },
+            "settings_sha256": "sha256:" + "a" * 64,
+        },
         "tool_contract": {
+            "names": ["bash", "submit_report"],
+            "mcp_catalog_sha256": self_hosted.sha256(
+                self_hosted.canonical_json(launch.parity.mcp_tools())
+            ),
+            "production_catalog_provenance": launch.parity.production_tools.provenance(
+                launch.parity.REPO_ROOT
+            ),
+            "openai_catalog_sha256": self_hosted.sha256(
+                self_hosted.canonical_json(launch.parity.expected_openai_tools())
+            ),
+            "model_request_catalog_exact": True,
+            "model_request_tool_names_exact": True,
+            "model_request_tool_descriptions_exact": True,
+            "model_request_tool_parameters_exact": True,
+            "observed_model_request_catalog_sha256s": [
+                self_hosted.sha256(
+                    self_hosted.canonical_json(launch.parity.expected_openai_tools())
+                )
+            ],
+            "model_requests_with_tools": 2,
+            "model_requests_without_tools": 1,
             "calls_observed_in_order": ["bash", "submit_report"],
             "arguments_structurally_valid": True,
         },
-        "execution": {"task_instance_session_verifier_scoring_calls": 0},
-        "privacy": {"responses_or_model_outputs_included": False},
+        "execution": {
+            "harness_exit_code": 0,
+            "model_requests": 3,
+            "final_marker_observed": True,
+            "task_instance_session_verifier_scoring_calls": 0,
+            "scored_launch_authorized": False,
+        },
+        "privacy": {
+            "credentials_included": False,
+            "prompt_included": False,
+            "responses_or_model_outputs_included": False,
+            "tool_arguments_included": False,
+            "stderr_or_stdout_included": False,
+            "benchmark_content_included": False,
+        },
     }
     value["receipt_sha256"] = self_hosted.digest_without(value, "receipt_sha256")
     return value
 
 
+def _wave_observer(level, execute, plan):
+    rows = execute()
+    active = list(range(level))
+    before = [10] * 8
+    deltas = [1 if index in active else 0 for index in range(8)]
+    value = {
+        "schema_version": launch.DISTRIBUTION_SCHEMA,
+        "status": "PASSED_NON_SCORED_DISTRIBUTION",
+        "plan_receipt_sha256": plan["receipt_sha256"],
+        "server_binding": plan["server_binding"],
+        "service_origin": plan["service_origin"],
+        "concurrency": level,
+        "stream_receipt_sha256s": [row["receipt_sha256"] for row in rows],
+        "request_counters_before_by_rank": before,
+        "request_counters_after_by_rank": [
+            before[index] + deltas[index] for index in range(8)
+        ],
+        "request_deltas_by_rank": deltas,
+        "gpu_peak_utilization_percent_by_rank": [
+            50 if index in active else 0 for index in range(8)
+        ],
+        "gpu_peak_memory_used_mib_by_rank": [200000] * 8,
+        "gpu_device_count": 8,
+        "gpu_memory_loaded_count": 8,
+        "sampling_seconds": 1,
+        "observer_errors": [],
+        "task_instance_session_verifier_scoring_calls": 0,
+        "prompts_traces_flags_or_scores_included": False,
+    }
+    value["receipt_sha256"] = self_hosted.digest_without(value, "receipt_sha256")
+    return rows, value
+
+
 def test_actual_opencode_ladder_stops_before_next_level_on_failure() -> None:
-    plan = launch.qualification_plan(_binding(), ROOT)
+    plan = launch.qualification_plan(_binding(), SERVICE_ORIGIN, ROOT)
     calls = 0
 
     def probe():
         nonlocal calls
         calls += 1
-        return _probe("FAILED" if calls == 3 else "PASSED_NON_SCORED")
+        return _probe(plan, "FAILED" if calls == 3 else "PASSED_NON_SCORED")
 
-    result = launch.run_qualification_ladder(plan, probe)
+    result = launch.run_qualification_ladder(plan, probe, _wave_observer)
     assert [row["concurrency"] for row in result["levels"]] == [1, 2]
     assert result["highest_passing_concurrency"] == 1
     assert calls == 3
 
 
 def test_scored_partition_includes_only_whole_unstarted_task_boundaries() -> None:
-    plan = launch.qualification_plan(_binding(), ROOT)
-    result = launch.run_qualification_ladder(plan, _probe)
+    plan = launch.qualification_plan(_binding(), SERVICE_ORIGIN, ROOT)
+    result = launch.run_qualification_ladder(plan, lambda: _probe(plan), _wave_observer)
     cells = [
         {
             "task_version_id": "task-a",
@@ -385,7 +480,8 @@ def test_scored_partition_includes_only_whole_unstarted_task_boundaries() -> Non
 
 
 def test_qualification_plan_is_exact_score_free_ladder() -> None:
-    value = launch.qualification_plan(_binding(), ROOT)
+    value = launch.qualification_plan(_binding(), SERVICE_ORIGIN, ROOT)
+    launch.validate_qualification_plan(value)
     assert [row["concurrency"] for row in value["waves"]] == [1, 2, 4, 8]
     assert [row["request_count"] for row in value["waves"]] == [2, 4, 8, 16]
     assert all(row["tool_order"] == ["bash", "submit_report"] for row in value["waves"])
@@ -393,35 +489,23 @@ def test_qualification_plan_is_exact_score_free_ladder() -> None:
     assert value["treatment"]["tool_catalog_sha256"] == (
         "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a"
     )
+    changed = copy.deepcopy(value)
+    changed["treatment"]["context_window_size"] = 131072
+    changed["receipt_sha256"] = self_hosted.digest_without(changed, "receipt_sha256")
+    with pytest.raises(ValueError):
+        launch.validate_qualification_plan(changed)
 
 
 def _result(plan: dict[str, object], count: int = 4) -> dict[str, object]:
-    rows = [
-        {
-            "concurrency": concurrency,
-            "status": "PASSED",
-            "request_count": concurrency * 2,
-            "completed_count": concurrency * 2,
-            "error_count": 0,
-            "tool_order_exact": True,
-            "tool_arguments_exact": True,
-        }
-        for concurrency in launch.LEVELS[:count]
-    ]
-    value: dict[str, object] = {
-        "schema_version": launch.RESULT_SCHEMA,
-        "plan_receipt_sha256": plan["receipt_sha256"],
-        "levels": rows,
-        "highest_passing_concurrency": rows[-1]["concurrency"],
-        "scored_calls": 0,
-        "prompts_traces_flags_or_scores_included": False,
-    }
+    value = launch.run_qualification_ladder(plan, lambda: _probe(plan), _wave_observer)
+    value["levels"] = value["levels"][:count]
+    value["highest_passing_concurrency"] = value["levels"][-1]["concurrency"]
     value["receipt_sha256"] = self_hosted.digest_without(value, "receipt_sha256")
     return value
 
 
 def test_qualification_result_fails_closed_on_partial_or_protocol_drift() -> None:
-    plan = launch.qualification_plan(_binding(), ROOT)
+    plan = launch.qualification_plan(_binding(), SERVICE_ORIGIN, ROOT)
     assert launch.validate_result(_result(plan), plan) == 8
     with pytest.raises(ValueError, match="stopped without"):
         launch.validate_result(_result(plan, 2), plan)
@@ -430,6 +514,56 @@ def test_qualification_result_fails_closed_on_partial_or_protocol_drift() -> Non
     changed["receipt_sha256"] = self_hosted.digest_without(changed, "receipt_sha256")
     with pytest.raises(ValueError):
         launch.validate_result(changed, plan)
+    changed = _result(plan)
+    changed["levels"][0]["stream_receipts"][0]["receipt_sha256"] = "sha256:" + "0" * 64
+    changed["receipt_sha256"] = self_hosted.digest_without(changed, "receipt_sha256")
+    with pytest.raises(ValueError):
+        launch.validate_result(changed, plan)
+    changed = _result(plan)
+    distribution = changed["levels"][3]["distribution_receipt"]
+    distribution["request_deltas_by_rank"][7] = 0
+    distribution["receipt_sha256"] = self_hosted.digest_without(distribution, "receipt_sha256")
+    changed["receipt_sha256"] = self_hosted.digest_without(changed, "receipt_sha256")
+    with pytest.raises(ValueError):
+        launch.validate_result(changed, plan)
+
+
+def test_distribution_metric_parser_requires_one_complete_eight_rank_family() -> None:
+    metrics = "\n".join(
+        f'sglang_requests_total{{dp_rank="{rank}"}} {rank + 10}' for rank in range(8)
+    )
+    assert launch._request_counters_by_rank(metrics) == list(range(10, 18))
+    with pytest.raises(ValueError):
+        launch._request_counters_by_rank("\n".join(metrics.splitlines()[:-1]))
+
+
+def test_stream_receipt_rejects_rehashed_binding_drift_and_unreviewed_fields() -> None:
+    plan = launch.qualification_plan(_binding(), SERVICE_ORIGIN, ROOT)
+    changed = _probe(plan)
+    changed["endpoint"]["origin"] = "http://different-server:8000"
+    changed["receipt_sha256"] = self_hosted.digest_without(changed, "receipt_sha256")
+    with pytest.raises(ValueError):
+        launch.validate_stream_receipt(changed, plan)
+    changed = _probe(plan)
+    changed["response_body"] = "redacted"
+    changed["receipt_sha256"] = self_hosted.digest_without(changed, "receipt_sha256")
+    with pytest.raises(ValueError, match="unreviewed field"):
+        launch.validate_stream_receipt(changed, plan)
+
+
+def test_distribution_receipt_rejects_rehashed_counter_or_protected_field_drift() -> None:
+    plan = launch.qualification_plan(_binding(), SERVICE_ORIGIN, ROOT)
+    rows, receipt = _wave_observer(8, lambda: [_probe(plan) for _ in range(8)], plan)
+    changed = copy.deepcopy(receipt)
+    changed["request_deltas_by_rank"][0] += 1
+    changed["receipt_sha256"] = self_hosted.digest_without(changed, "receipt_sha256")
+    with pytest.raises(ValueError):
+        launch.validate_distribution_receipt(changed, plan, 8, rows)
+    changed = copy.deepcopy(receipt)
+    changed["prompt"] = "redacted"
+    changed["receipt_sha256"] = self_hosted.digest_without(changed, "receipt_sha256")
+    with pytest.raises(ValueError, match="unreviewed field"):
+        launch.validate_distribution_receipt(changed, plan, 8, rows)
 
 
 def test_held_spec_rejects_authorization_or_runtime_drift() -> None:
