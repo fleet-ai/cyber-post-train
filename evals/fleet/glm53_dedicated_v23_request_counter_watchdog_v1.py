@@ -23,6 +23,7 @@ IMPLEMENTATION_ID = "glm53-v23-sglang-request-counter-watchdog-v1"
 METRIC = "sglang_num_requests_total"
 IDLE_RELEASE_SECONDS = 600
 RELEASE_ROUTE = "DELETE /v1/runs/{api_run_id}"
+API_RUN_ID_RE = re.compile(r"ft-run-.*")
 METRIC_CONTRACT_COMMIT = "97c6978369ac1e04c91fcc01c98acc25129a6000"
 METRIC_CONTRACT_SOURCE = (
     "https://github.com/sgl-project/sglang/blob/"
@@ -107,7 +108,7 @@ def build_active_receipt(
         "model_revision",
         "context_length",
     }
-    if set(binding) != required or not binding["api_run_id"].startswith("ft-run-"):
+    if set(binding) != required or API_RUN_ID_RE.fullmatch(binding["api_run_id"]) is None:
         raise WatchdogError("watchdog_server_binding_invalid")
     body: dict[str, Any] = {
         "schema_version": SCHEMA,
@@ -283,14 +284,12 @@ def validate_launch_authorization(
         or value.get("status") != "AUTHORIZED_EXACT_WATCHDOG_ONLY"
         or value.get("receipt_sha256") != crypto.digest_without(value, "receipt_sha256")
         or value.get("server_binding") != binding
-        or value.get("server_binding_sha256")
-        != crypto.sha256(crypto.canonical_json(binding))
+        or value.get("server_binding_sha256") != crypto.sha256(crypto.canonical_json(binding))
         or SHA256_RE.fullmatch(str(value.get("live_state_receipt_sha256"))) is None
         or SHA256_RE.fullmatch(str(value.get("request_sha256"))) is None
         or not isinstance(value.get("raycluster_name"), str)
         or not value["raycluster_name"]
-        or SHA256_RE.fullmatch(str(value.get("application_ready_receipt_sha256")))
-        is None
+        or SHA256_RE.fullmatch(str(value.get("application_ready_receipt_sha256"))) is None
         or value.get("head_pod_sfs_mount_path") != "/mnt/sfs"
         or not isinstance(value.get("sfs_pvc_name"), str)
         or not value["sfs_pvc_name"]
@@ -302,10 +301,8 @@ def validate_launch_authorization(
             is None
             for field in ("raycluster_uid", "sfs_pvc_uid")
         )
-        or value.get("watchdog_job_name")
-        != expected_watchdog_job_name
-        or value.get("watchdog_result_root")
-        != expected_watchdog_result_root
+        or value.get("watchdog_job_name") != expected_watchdog_job_name
+        or value.get("watchdog_result_root") != expected_watchdog_result_root
         or value.get("watchdog_package_commit") != package_commit
         or COMMIT_RE.fullmatch(str(package_commit)) is None
         or value.get("watchdog_package_sha256") != package_sha256
@@ -426,7 +423,7 @@ def release_run_http(
 ) -> None:
     """Release the one exact server through the Fleet Jobs API."""
 
-    if not bearer_token or not api_run_id.startswith("ft-run-"):
+    if not bearer_token or API_RUN_ID_RE.fullmatch(api_run_id) is None:
         raise WatchdogError("jobs_api_release_identity_invalid")
     url = api_base.rstrip("/") + "/v1/runs/" + urllib.parse.quote(api_run_id, safe="")
     request = urllib.request.Request(
@@ -452,7 +449,7 @@ def run_absent_http(
     api_run_id: str,
     opener: Callable[..., Any] = urllib.request.urlopen,
 ) -> bool:
-    if not bearer_token or not api_run_id.startswith("ft-run-"):
+    if not bearer_token or API_RUN_ID_RE.fullmatch(api_run_id) is None:
         raise WatchdogError("jobs_api_absence_identity_invalid")
     url = api_base.rstrip("/") + "/v1/runs/" + urllib.parse.quote(api_run_id, safe="")
     request = urllib.request.Request(
@@ -556,7 +553,7 @@ def watch(
 ) -> str:
     """Release exactly once after 600 seconds without request-counter growth."""
 
-    if not api_run_id.startswith("ft-run-") or initial_counter < 0 or poll_seconds <= 0:
+    if API_RUN_ID_RE.fullmatch(api_run_id) is None or initial_counter < 0 or poll_seconds <= 0:
         raise WatchdogError("watchdog_identity_or_poll_invalid")
     state = {"counter": initial_counter, "last_model_request_at": ready_at}
     while True:
@@ -636,18 +633,10 @@ def main() -> int:
     parser.add_argument("--active-receipt", type=Path, required=True)
     parser.add_argument("--ready-at-epoch", type=float, required=True)
     parser.add_argument("--authorization", type=Path, required=True)
-    parser.add_argument(
-        "--expected-runtime-auth-schema", default=RUNTIME_AUTH_SCHEMA
-    )
-    parser.add_argument(
-        "--expected-live-release-schema", default=LIVE_RELEASE_SCHEMA
-    )
-    parser.add_argument(
-        "--expected-watchdog-job-name", default=DEFAULT_WATCHDOG_JOB_NAME
-    )
-    parser.add_argument(
-        "--expected-watchdog-result-root", default=DEFAULT_WATCHDOG_RESULT_ROOT
-    )
+    parser.add_argument("--expected-runtime-auth-schema", default=RUNTIME_AUTH_SCHEMA)
+    parser.add_argument("--expected-live-release-schema", default=LIVE_RELEASE_SCHEMA)
+    parser.add_argument("--expected-watchdog-job-name", default=DEFAULT_WATCHDOG_JOB_NAME)
+    parser.add_argument("--expected-watchdog-result-root", default=DEFAULT_WATCHDOG_RESULT_ROOT)
     args = parser.parse_args()
     terminal = args.active_receipt.with_name("TERMINAL.json")
     emergency_api_run_id = os.environ.get("WATCHDOG_API_RUN_ID", "")
