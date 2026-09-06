@@ -89,6 +89,10 @@ def test_controller_job_keeps_credential_through_ready_and_handoff() -> None:
     assert any(row["name"] == "FLEET_API_KEY" for row in container["env"])
     assert "glm53_dedicated_v28_controller_v1" in command
     assert "uv sync --project /workspace --frozen" in command
+    assert command.index("cd /workspace") < command.index(
+        "python -m evals.fleet.glm53_dedicated_v28_controller_v1"
+    )
+    assert controller_package.JOB_NAME.endswith("controller-v2")
     assert spec["volumes"][2]["persistentVolumeClaim"]["claimName"] == "sfs-shared"
     held = controller_package.build_held()
     assert held["credentialed_release_required"] is True

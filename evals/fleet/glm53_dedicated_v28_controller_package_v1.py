@@ -13,7 +13,7 @@ from evals.fleet import glm53_dedicated_v23_scorefree_package_v1 as prior
 from evals.fleet import glm53_dedicated_v28_controller_v1 as controller
 from evals.fleet import glm53_dedicated_v28_create_v1 as server
 
-JOB_NAME = "chris-glm53-v28-create-watchdog-controller-v1"
+JOB_NAME = "chris-glm53-v28-create-watchdog-controller-v2"
 CONFIGMAP_NAME = JOB_NAME + "-package"
 AUTHORIZATION_CONFIGMAP_NAME = JOB_NAME + "-authorization"
 FLEET_SECRET_NAME = "chris-cyber-opencode-evals-v2"
@@ -133,6 +133,7 @@ cp /package/uv.lock /workspace/uv.lock
 export PATH="/tools:$PATH"
 export UV_PROJECT_ENVIRONMENT=/tmp/v28-env
 uv sync --project /workspace --frozen --no-install-project
+cd /workspace
 exec /tmp/v28-env/bin/python -m evals.fleet.glm53_dedicated_v28_controller_v1 \
   --root /workspace \
   --package-commit {package_commit} \
