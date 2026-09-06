@@ -235,7 +235,7 @@ def test_submission_validator_binds_complete_nested_gate_and_rejects_drift() -> 
     _resign(gate)
     receipt = {
         "schema_version": live.SUBMISSION_SCHEMA,
-        "status": "SUBMITTED_SCORE_FREE_DP6_E_SERVER",
+        "status": "SUBMITTED_SCORE_FREE_DP6_F_SERVER",
         "api_run_id": "ft-run-dp6f",
         "source_commit": source_commit,
         "title": held.TITLE,

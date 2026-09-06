@@ -105,7 +105,7 @@ def validate_server_release(value: Mapping[str, Any], root: Path, source_commit:
     config, plan, preview, inventory, held_release = held.load_all(root)
     if value.get("receipt_sha256") != self_hosted.digest_without(dict(value), "receipt_sha256") or (
         value.get("schema_version") != SERVER_RELEASE_SCHEMA
-        or value.get("status") != "RELEASED_FOR_ONE_SCORE_FREE_DP6_E_SERVER"
+        or value.get("status") != "RELEASED_FOR_ONE_SCORE_FREE_DP6_F_SERVER"
         or value.get("launch_authorized") is not True
         or value.get("scoring_authorized") is not False
         or value.get("source_commit") != source_commit
@@ -481,7 +481,7 @@ def validate_submission(
     }
     expected = {
         "schema_version": SUBMISSION_SCHEMA,
-        "status": "SUBMITTED_SCORE_FREE_DP6_E_SERVER",
+        "status": "SUBMITTED_SCORE_FREE_DP6_F_SERVER",
         "source_commit": source_commit,
         "title": held.TITLE,
         "run_dir": held.RUN_DIR,
@@ -561,7 +561,7 @@ def main() -> int:
         api_run_id = submit_create_once(client, payload, gate, release, source_commit, root)
     receipt = {
         "schema_version": SUBMISSION_SCHEMA,
-        "status": "SUBMITTED_SCORE_FREE_DP6_E_SERVER",
+        "status": "SUBMITTED_SCORE_FREE_DP6_F_SERVER",
         "api_run_id": api_run_id,
         "source_commit": source_commit,
         "title": held.TITLE,
@@ -586,4 +586,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

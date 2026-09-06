@@ -169,7 +169,7 @@ def test_postcreate_release_is_score_free_gap_bound_and_exact() -> None:
     source_commit = "b" * 40
     value = {
         "schema_version": postcreate.POSTCREATE_RELEASE_SCHEMA,
-        "status": "RELEASED_FOR_ONE_GAP_FREE_SCORE_FREE_DP6_E_SEQUENCE",
+        "status": "RELEASED_FOR_ONE_GAP_FREE_SCORE_FREE_DP6_F_SEQUENCE",
         "launch_authorized": True,
         "scoring_authorized": False,
         "source_commit": source_commit,

@@ -45,7 +45,7 @@
     "priority_value": 100,
     "task_instance_session_verifier_scoring_calls": 0
   },
-  "receipt_sha256": "sha256:26bae417dfa5c56eac9b8121daabeff998c2112c7ad542d0c7e2317ea0ad7ab3",
+  "receipt_sha256": "sha256:0d2b9ac29e14ef0388d146f04764ef6e630e1ad79f7ca70e2f5554072bc055b9",
   "release_first_gate": {
     "active_project_gpu_nodes_required": 0,
     "active_project_gpus_required": 0,
@@ -78,7 +78,7 @@
     "title": "chris-cyber-evalserve-q38-dp6-f-v1"
   },
   "source_digests": {
-    "evals/fleet/qwen38_dp6_f_live_v1.py": "sha256:6661ce8394ecf43e85902de73d4fd0b6d43a2be7a76694162a8be9dc5e3e3bb8",
+    "evals/fleet/qwen38_dp6_f_live_v1.py": "sha256:8d75899106f53fad5f2d705876e64c2ed261c34a4b147accbb2c208e98eec5e0",
     "evals/fleet/qwen38_dp6_f_qualifier_package_v1.py": "sha256:ad8416b623c268c7f4d77ad06f33702bff4248ffa14deaf0de92e40eb6bf1bdf",
     "evals/fleet/qwen38_dp6_f_qualifier_runtime_v1.py": "sha256:57e1470258255ef6813a8f620aecd78a41c3d9e582b0dfc8e44b47cc2b5b7070",
     "evals/fleet/qwen38_dp6_metric_observer_v1.py": "sha256:4921dea0d25392ba98a678eb58e74ff952fb9331647bdf0579028e5b18fd89c8",

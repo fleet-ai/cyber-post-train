@@ -74,7 +74,7 @@ def validate_release(
 ) -> None:
     expected = {
         "schema_version": POSTCREATE_RELEASE_SCHEMA,
-        "status": "RELEASED_FOR_ONE_GAP_FREE_SCORE_FREE_DP6_E_SEQUENCE",
+        "status": "RELEASED_FOR_ONE_GAP_FREE_SCORE_FREE_DP6_F_SEQUENCE",
         "launch_authorized": True,
         "scoring_authorized": False,
         "source_commit": source_commit,
@@ -740,7 +740,7 @@ def main() -> int:
             stage = "write_submission"
             submission = {
                 "schema_version": server_live.SUBMISSION_SCHEMA,
-                "status": "SUBMITTED_SCORE_FREE_DP6_E_SERVER",
+                "status": "SUBMITTED_SCORE_FREE_DP6_F_SERVER",
                 "api_run_id": api_run_id,
                 "source_commit": source_commit,
                 "title": held.TITLE,
@@ -841,4 +841,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
