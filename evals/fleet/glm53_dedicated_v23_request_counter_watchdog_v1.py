@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import re
 import tempfile
@@ -38,6 +39,42 @@ ACTIVITY_LINE = re.compile(
     r"(?P<value>[0-9]+(?:\.[0-9]+)?)$"
 )
 LABEL = re.compile(r'(?P<name>[A-Za-z_][A-Za-z0-9_]*)="(?P<value>(?:[^"\\]|\\.)*)"')
+SHA256_RE = re.compile(r"sha256:[0-9a-f]{64}")
+COMMIT_RE = re.compile(r"[0-9a-f]{40}")
+LIVE_RELEASE_SCHEMA = "fleet-glm53-dedicated-v24-watchdog-live-release-v1"
+RUNTIME_AUTH_SCHEMA = "fleet-glm53-dedicated-v24-watchdog-runtime-auth-v1"
+LIVE_RELEASE_KEYS = {
+    "schema_version",
+    "status",
+    "server_binding",
+    "server_binding_sha256",
+    "live_state_receipt_sha256",
+    "request_sha256",
+    "raycluster_name",
+    "raycluster_uid",
+    "sfs_pvc_name",
+    "sfs_pvc_uid",
+    "head_pod_sfs_mount_path",
+    "application_ready_receipt_sha256",
+    "watchdog_job_name",
+    "watchdog_result_root",
+    "watchdog_package_commit",
+    "watchdog_package_sha256",
+    "watchdog_implementation_sha256",
+    "ready_at_epoch",
+    "idle_release_seconds",
+    "create_once",
+    "server_launch_authorized",
+    "watchdog_launch_authorized",
+    "qualification_launch_authorized",
+    "scored_launch_authorized",
+    "fleet_task_instance_calls",
+    "fleet_session_calls",
+    "verifier_calls",
+    "scoring_calls",
+    "protected_content_included",
+    "receipt_sha256",
+}
 
 
 class WatchdogError(RuntimeError):
@@ -92,6 +129,169 @@ def build_active_receipt(
     }
     body["receipt_sha256"] = crypto.digest_without(body, "receipt_sha256")
     return body
+
+
+def validate_active_receipt(
+    value: dict[str, Any],
+    binding: dict[str, Any],
+    *,
+    watcher_job_uid: str,
+    watcher_pod_uid: str,
+) -> None:
+    expected = build_active_receipt(
+        binding, watcher_job_uid=watcher_job_uid, watcher_pod_uid=watcher_pod_uid
+    )
+    expected_keys = set(expected) | {
+        "initial_request_counter",
+        "initial_running_requests",
+        "initial_queued_requests",
+        "ready_at_epoch",
+        "terminal_receipt_required",
+    }
+    if (
+        set(value) != expected_keys
+        or any(value.get(key) != item for key, item in expected.items() if key != "receipt_sha256")
+        or any(
+            type(value.get(field)) is not int or value[field] < 0
+            for field in (
+                "initial_request_counter",
+                "initial_running_requests",
+                "initial_queued_requests",
+            )
+        )
+        or type(value.get("ready_at_epoch")) not in {int, float}
+        or not math.isfinite(float(value["ready_at_epoch"]))
+        or value["ready_at_epoch"] <= 0
+        or value.get("terminal_receipt_required") is not True
+        or value.get("receipt_sha256") != crypto.digest_without(value, "receipt_sha256")
+    ):
+        raise WatchdogError("watchdog_active_receipt_invalid")
+
+
+def build_runtime_authorization_receipt(
+    authorization: dict[str, Any],
+    binding: dict[str, Any],
+    *,
+    watcher_job_uid: str,
+    watcher_pod_uid: str,
+    package_commit: str,
+    package_sha256: str,
+) -> dict[str, Any]:
+    validate_launch_authorization(
+        authorization,
+        binding,
+        ready_at_epoch=authorization["ready_at_epoch"],
+        package_commit=package_commit,
+        package_sha256=package_sha256,
+    )
+    body: dict[str, Any] = {
+        "schema_version": RUNTIME_AUTH_SCHEMA,
+        "status": "RUNTIME_AUTHORIZATION_VALIDATED",
+        "server_binding_sha256": crypto.sha256(crypto.canonical_json(binding)),
+        "live_release_receipt_sha256": authorization["receipt_sha256"],
+        "watchdog_package_commit": package_commit,
+        "watchdog_package_sha256": package_sha256,
+        "watchdog_implementation_sha256": source_sha256(),
+        "watcher_job_uid": watcher_job_uid,
+        "watcher_pod_uid": watcher_pod_uid,
+        "fleet_task_instance_calls": 0,
+        "fleet_session_calls": 0,
+        "verifier_calls": 0,
+        "scoring_calls": 0,
+        "protected_content_included": False,
+    }
+    body["receipt_sha256"] = crypto.digest_without(body, "receipt_sha256")
+    return body
+
+
+def validate_runtime_authorization_receipt(
+    value: dict[str, Any],
+    authorization: dict[str, Any],
+    binding: dict[str, Any],
+    *,
+    watcher_job_uid: str,
+    watcher_pod_uid: str,
+    package_commit: str,
+    package_sha256: str,
+) -> None:
+    expected = build_runtime_authorization_receipt(
+        authorization,
+        binding,
+        watcher_job_uid=watcher_job_uid,
+        watcher_pod_uid=watcher_pod_uid,
+        package_commit=package_commit,
+        package_sha256=package_sha256,
+    )
+    if value != expected:
+        raise WatchdogError("watchdog_runtime_authorization_receipt_invalid")
+
+
+def validate_launch_authorization(
+    value: dict[str, Any],
+    binding: dict[str, Any],
+    *,
+    ready_at_epoch: float,
+    package_commit: str,
+    package_sha256: str,
+) -> None:
+    """Require the mounted immutable live release before a v24 watcher runs."""
+
+    if (
+        set(value) != LIVE_RELEASE_KEYS
+        or value.get("schema_version") != LIVE_RELEASE_SCHEMA
+        or value.get("status") != "AUTHORIZED_EXACT_WATCHDOG_ONLY"
+        or value.get("receipt_sha256") != crypto.digest_without(value, "receipt_sha256")
+        or value.get("server_binding") != binding
+        or value.get("server_binding_sha256")
+        != crypto.sha256(crypto.canonical_json(binding))
+        or SHA256_RE.fullmatch(str(value.get("live_state_receipt_sha256"))) is None
+        or SHA256_RE.fullmatch(str(value.get("request_sha256"))) is None
+        or not isinstance(value.get("raycluster_name"), str)
+        or not value["raycluster_name"]
+        or SHA256_RE.fullmatch(str(value.get("application_ready_receipt_sha256")))
+        is None
+        or value.get("head_pod_sfs_mount_path") != "/mnt/sfs"
+        or not isinstance(value.get("sfs_pvc_name"), str)
+        or not value["sfs_pvc_name"]
+        or any(
+            re.fullmatch(
+                r"[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}",
+                str(value.get(field)),
+            )
+            is None
+            for field in ("raycluster_uid", "sfs_pvc_uid")
+        )
+        or value.get("watchdog_job_name")
+        != "chris-glm53-dedicated-v24-request-watchdog-v1"
+        or value.get("watchdog_result_root")
+        != "/mnt/sfs/jobs/chris-glm53-dedicated-v24-request-watchdog-v1"
+        or value.get("watchdog_package_commit") != package_commit
+        or COMMIT_RE.fullmatch(str(package_commit)) is None
+        or value.get("watchdog_package_sha256") != package_sha256
+        or SHA256_RE.fullmatch(str(package_sha256)) is None
+        or value.get("watchdog_implementation_sha256") != source_sha256()
+        or value.get("ready_at_epoch") != ready_at_epoch
+        or type(ready_at_epoch) not in {int, float}
+        or not math.isfinite(float(ready_at_epoch))
+        or ready_at_epoch <= 0
+        or value.get("idle_release_seconds") != IDLE_RELEASE_SECONDS
+        or value.get("create_once") is not True
+        or value.get("server_launch_authorized") is not False
+        or value.get("watchdog_launch_authorized") is not True
+        or value.get("qualification_launch_authorized") is not False
+        or value.get("scored_launch_authorized") is not False
+        or any(
+            type(value.get(field)) is not int or value[field] != 0
+            for field in (
+                "fleet_task_instance_calls",
+                "fleet_session_calls",
+                "verifier_calls",
+                "scoring_calls",
+            )
+        )
+        or value.get("protected_content_included") is not False
+    ):
+        raise WatchdogError("watchdog_live_release_authorization_invalid")
 
 
 def parse_activity(metrics: str) -> dict[str, int]:
@@ -394,10 +594,37 @@ def main() -> int:
     parser.add_argument("--binding", type=Path, required=True)
     parser.add_argument("--active-receipt", type=Path, required=True)
     parser.add_argument("--ready-at-epoch", type=float, required=True)
+    parser.add_argument("--authorization", type=Path, required=True)
     args = parser.parse_args()
-    binding = json.loads(args.binding.read_text())
     terminal = args.active_receipt.with_name("TERMINAL.json")
+    emergency_api_run_id = os.environ.get("WATCHDOG_API_RUN_ID", "")
+    binding: dict[str, Any] = {}
     try:
+        binding = json.loads(args.binding.read_text())
+        if binding.get("api_run_id") != emergency_api_run_id:
+            raise WatchdogError("watchdog_emergency_release_identity_mismatch")
+        authorization = json.loads(args.authorization.read_text())
+        package_commit = os.environ.get("WATCHDOG_PACKAGE_COMMIT", "")
+        package_sha256 = os.environ.get("WATCHDOG_PACKAGE_SHA256", "")
+        validate_launch_authorization(
+            authorization,
+            binding,
+            ready_at_epoch=args.ready_at_epoch,
+            package_commit=package_commit,
+            package_sha256=package_sha256,
+        )
+        runtime_authorization = build_runtime_authorization_receipt(
+            authorization,
+            binding,
+            watcher_job_uid=os.environ.get("JOB_UID", ""),
+            watcher_pod_uid=os.environ.get("POD_UID", ""),
+            package_commit=package_commit,
+            package_sha256=package_sha256,
+        )
+        _write_once(
+            args.active_receipt.with_name("AUTHORIZATION_VALIDATED.json"),
+            runtime_authorization,
+        )
         initial = read_activity_http(binding["service_origin"])
         receipt = build_active_receipt(
             binding,
@@ -418,7 +645,7 @@ def main() -> int:
             read_activity=lambda: read_activity_http(binding["service_origin"]),
             release_via_jobs_api=lambda run_id: release_run_and_confirm_http(
                 api_base="https://api.ft.flt.build",
-                bearer_token=os.environ.get("GH_TOKEN", ""),
+                bearer_token=os.environ.get("FLEET_API_KEY", ""),
                 api_run_id=run_id,
             ),
             clock=time.time,
@@ -443,8 +670,8 @@ def main() -> int:
         try:
             release_run_and_confirm_http(
                 api_base="https://api.ft.flt.build",
-                bearer_token=os.environ.get("GH_TOKEN", ""),
-                api_run_id=str(binding.get("api_run_id", "")),
+                bearer_token=os.environ.get("FLEET_API_KEY", ""),
+                api_run_id=emergency_api_run_id,
             )
             release_confirmed = True
         except WatchdogError:

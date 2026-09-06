@@ -33,11 +33,12 @@ def test_exact_payload_has_no_internal_idle_or_process_kill_authority() -> None:
     assert value["priority_class"] == "fleet-infra-quiet"
 
 
-def test_command_executes_only_the_exact_frozen_sglang_argv() -> None:
+def test_command_wraps_only_exact_frozen_sglang_argv_with_ready_observer() -> None:
     value = server.payload()
-    prefix = "bash -lc 'exec \"$@\"' -- "
-    assert value["command"].startswith(prefix)
-    assert tuple(shlex.split(value["command"][len(prefix) :])) == server.SERVER_ARGV
+    assert value["command"].endswith(shlex.join(server.SERVER_ARGV))
+    assert "GLM53_SERVER_PID" in value["command"]
+    assert "APPLICATION_HEALTH_HTTP_200" in value["command"]
+    assert server.READY_PATH in value["command"]
     assert server.SERVER_ARGV.count("--model-path") == 1
     assert server.SERVER_ARGV.count("--served-model-name") == 1
 
@@ -67,7 +68,7 @@ def test_payload_validation_rejects_any_reintroduced_idle_killer() -> None:
         server.validate_payload(value)
 
 
-def test_tracked_preview_is_digest_valid_and_remains_held() -> None:
+def test_historical_preview_is_digest_valid_and_invalidated_by_new_payload() -> None:
     path = (
         ROOT / "docs/evidence/glm53-study/"
         "2026-09-06-glm53-dedicated-v24-server-preview-held-v1.json"
@@ -75,7 +76,7 @@ def test_tracked_preview_is_digest_valid_and_remains_held() -> None:
     value = json.loads(path.read_text())
     assert value["status"] == "PASSED_PREVIEW_ONLY_HELD"
     assert value["preview"]["http_status"] == 200
-    assert value["create_request_sha256"] == crypto.sha256(crypto.canonical_json(server.payload()))
+    assert value["create_request_sha256"] != crypto.sha256(crypto.canonical_json(server.payload()))
     assert value["duplicate_gate"]["jobs_api_title_matches"] == 0
     assert value["duplicate_gate"]["jobs_api_run_dir_matches"] == 0
     assert value["duplicate_gate"]["kubernetes_identity_or_remnant_matches"] == 0
