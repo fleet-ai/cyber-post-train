@@ -1,5 +1,8 @@
 import copy
 import json
+import os
+import subprocess
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -7,7 +10,9 @@ import pytest
 
 from evals.fleet import hosted_glm_rank30_single_slot_package_v1 as package
 from evals.fleet import hosted_glm_rank30_single_slot_release_package_v1 as release_package
+from evals.fleet import hosted_glm_rank30_single_slot_release_package_v2 as release_package_v2
 from evals.fleet import hosted_glm_rank30_single_slot_release_v1 as release
+from evals.fleet import hosted_glm_rank30_single_slot_release_v2 as release_v2
 from evals.fleet import hosted_glm_rank30_single_slot_v1 as successor
 from evals.fleet import hosted_glm_whole_task_engine_v1 as engine
 from evals.fleet import hosted_glm_whole_task_successor_v1 as whole
@@ -235,3 +240,87 @@ def test_observer_build_is_sanitized_and_validated(
     assert "prompt" not in json.dumps(receipt).lower().replace(
         "prompts_traces_flags_read", ""
     )
+
+
+def test_v2_observer_uses_fresh_identity_and_closes_transitive_imports(
+    tmp_path: Path,
+) -> None:
+    rendered = release_package_v2.render(ROOT)
+    configmap, job = rendered["objects"]["items"]
+    assert configmap["metadata"]["name"] == release_v2.CONFIGMAP_NAME
+    assert job["metadata"]["name"] == release_v2.JOB_NAME
+    assert job["metadata"]["name"] != release.JOB_NAME
+    assert rendered["launch_authorized"] is False
+    assert rendered["scoring_authorized"] is False
+    assert rendered["model_calls_authorized"] is False
+    data = configmap["data"]
+    mappings = {
+        "self_hosted.py": "self_hosted.py",
+        "runner.py": "opencode_train_sweep_runner.py",
+        "endpoint_lease.py": "endpoint_lease.py",
+        "predecessor.py": "exact_pass4_bulk_v3.py",
+        "base_engine.py": "exact_pass4_bulk_runtime_v3.py",
+        "engine.py": "hosted_glm_whole_task_engine_v1.py",
+        "universe.py": "exact_pass4_universe.py",
+        "crypto.py": "exact_pass4_crypto.py",
+        "inventory.py": "exact_pass4_task_inventory.py",
+        "bulk.py": "hosted_glm_exact_bulk_v1.py",
+        "source_runtime.py": "hosted_glm_exact_bulk_runtime_v1.py",
+        "original_release.py": "hosted_glm_exact_bulk_release_v1.py",
+        "rank29_successor.py": "hosted_glm_rank29_a3a4_c2_successor_v1.py",
+        "rank29_runtime.py": "hosted_glm_rank29_a3a4_c2_runtime_v1.py",
+        "whole.py": "hosted_glm_whole_task_successor_v1.py",
+        "successor.py": "hosted_glm_rank30_single_slot_v1.py",
+        "kube.py": "hosted_glm_rank29_a3a4_c2_release_v2.py",
+        "release.py": "hosted_glm_rank30_single_slot_release_v1.py",
+        "release_v2.py": "hosted_glm_rank30_single_slot_release_v2.py",
+    }
+    package_root = tmp_path / "evals/fleet"
+    package_root.mkdir(parents=True)
+    (tmp_path / "evals/__init__.py").write_text("")
+    (package_root / "__init__.py").write_text("")
+    for source_name, target_name in mappings.items():
+        (package_root / target_name).write_text(data[source_name])
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from evals.fleet import hosted_glm_rank30_single_slot_release_v2",
+        ],
+        cwd=tmp_path,
+        env={**os.environ, "PYTHONPATH": str(tmp_path)},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_v1_terminal_and_v2_held_receipts_are_self_digesting() -> None:
+    evidence = ROOT / "docs/evidence/glm53-study"
+    terminal = json.loads(
+        (
+            evidence
+            / "2026-09-06-glm53-hosted-rank30-release-observer-v1-terminal.json"
+        ).read_text()
+    )
+    held = json.loads(
+        (
+            evidence
+            / "2026-09-06-glm53-hosted-rank30-release-observer-v2-held.json"
+        ).read_text()
+    )
+    assert terminal["receipt_sha256"] == self_hosted.digest_without(
+        terminal, "receipt_sha256"
+    )
+    assert held["receipt_sha256"] == self_hosted.digest_without(
+        held, "receipt_sha256"
+    )
+    assert held["failed_predecessor"]["receipt_sha256"] == terminal[
+        "receipt_sha256"
+    ]
+    rendered = release_package_v2.render(ROOT)
+    assert held["held_package_sha256"] == rendered["package_sha256"]
+    assert held["source_package_sha256"] == rendered["source_package_sha256"]
+    assert held["launch_authorized"] is False
+    assert held["scoring_authorized"] is False

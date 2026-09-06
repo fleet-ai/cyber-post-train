@@ -1,0 +1,22 @@
+{
+  "failed_predecessor": {
+    "job_uid": "2b538d17-d5a8-4841-b152-47cfd737e0d9",
+    "receipt_path": "docs/evidence/glm53-study/2026-09-06-glm53-hosted-rank30-release-observer-v1-terminal.json",
+    "receipt_sha256": "sha256:b19b06ed9f4dd76f2088599f3ff9b20d235ad0ac58ae12ac0dc176d8d486bff8",
+    "retry_allowed": false
+  },
+  "fresh_identity": {
+    "configmap_name": "chris-glm53-exact100-hosted-r030-single-slot-release-v2-run",
+    "job_name": "chris-glm53-exact100-hosted-r030-single-slot-release-v2",
+    "sfs_root": "/mnt/sfs/jobs/chris-glm53-exact100-hosted-r030-single-slot-release-v2"
+  },
+  "held_package_sha256": "sha256:800fff9adf874b092af0278aab5b0739332204cf0b8b1bef4a8126af99fcf6a9",
+  "launch_authorized": false,
+  "materialized_import_regression_required": true,
+  "model_calls_authorized": false,
+  "receipt_sha256": "sha256:1e7293b3e817140a87c8821b07c6f32f0295e6f034404fdd04459f04089dfe20",
+  "schema_version": "fleet-hosted-glm-rank30-release-observer-held-v2",
+  "scoring_authorized": false,
+  "source_package_sha256": "sha256:27a8af1fa99b0bb73e9d6cde3d096263011a87aaf0698968ffb5da8b8c3a1d4d",
+  "status": "HELD_FOR_INDEPENDENT_REVIEW"
+}
