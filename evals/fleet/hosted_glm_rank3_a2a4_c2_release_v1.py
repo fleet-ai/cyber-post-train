@@ -40,12 +40,12 @@ def _kube_absent(name: str, kind: str) -> None:
         raise RuntimeError("rank-3 successor Kubernetes collision")
 
 
-def _validate_predecessors() -> None:
-    status, canary = _kube_job(successor.CANARY_JOB)
+def _validate_predecessors(target: Any = successor) -> None:
+    status, canary = _kube_job(target.CANARY_JOB)
     if any(
         (
             status != 200,
-            canary.get("metadata", {}).get("uid") != successor.CANARY_JOB_UID,
+            canary.get("metadata", {}).get("uid") != target.CANARY_JOB_UID,
             canary.get("status", {}).get("succeeded") != 1,
             bool(canary.get("status", {}).get("active")),
             bool(canary.get("status", {}).get("failed")),
@@ -56,16 +56,16 @@ def _validate_predecessors() -> None:
     validation = successor.load(CANARY_VALIDATION_PATH)
     if any(
         (
-            accepted.get("receipt_sha256") != successor.CANARY_ACCEPTED_SHA,
+            accepted.get("receipt_sha256") != target.CANARY_ACCEPTED_SHA,
             accepted.get("receipt_sha256") != self_hosted.digest_without(accepted, "receipt_sha256"),
             accepted.get("selection_rank") != 3,
             accepted.get("attempt") != 1,
             accepted.get("accepted") is not True,
             accepted.get("credited") is not True,
-            validation.get("receipt_sha256") != successor.CANARY_VALIDATION_SHA,
+            validation.get("receipt_sha256") != target.CANARY_VALIDATION_SHA,
             validation.get("receipt_sha256") != self_hosted.digest_without(validation, "receipt_sha256"),
             validation.get("status") != "ACCEPTED_VALIDATED",
-            validation.get("accepted", {}).get("receipt_sha256") != successor.CANARY_ACCEPTED_SHA,
+            validation.get("accepted", {}).get("receipt_sha256") != target.CANARY_ACCEPTED_SHA,
         )
     ):
         raise RuntimeError("rank-3/a1 acceptance authority drifted")
@@ -82,23 +82,29 @@ def _validate_predecessors() -> None:
         raise RuntimeError("exact hosted GLM s2 stream is not active")
 
 
-def build(root: Path) -> dict[str, Any]:
+def build(
+    root: Path,
+    *,
+    target: Any = successor,
+    runtime_module: Any = runtime,
+    failed_identity: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     key = os.environ.get("FLEET_API_KEY", "")
     job_uid, pod_uid = os.environ.get("JOB_UID", ""), os.environ.get("POD_UID", "")
     if not key or any(uuid.UUID(value).int == 0 for value in (job_uid, pod_uid)):
         raise RuntimeError("rank-3 successor release requires key and nonzero UIDs")
-    _validate_predecessors()
-    inventory = successor.load(source_runtime.INVENTORY_PATH)
-    plan = successor.build_runtime_plan(successor.CONTROLLER, inventory, root)
-    output_collisions = int(successor.SFS_ROOT.exists() or successor.SFS_ROOT.is_symlink())
-    _kube_absent(successor.JOB_NAME, "jobs")
-    _kube_absent(successor.CONFIGMAP_NAME, "configmaps")
+    _validate_predecessors(target)
+    inventory = target.load(source_runtime.INVENTORY_PATH)
+    plan = target.build_runtime_plan(target.CONTROLLER, inventory, root)
+    output_collisions = int(target.SFS_ROOT.exists() or target.SFS_ROOT.is_symlink())
+    _kube_absent(target.JOB_NAME, "jobs")
+    _kube_absent(target.CONFIGMAP_NAME, "configmaps")
     engine._fresh_route_check(plan, key)  # noqa: SLF001
     claim_collisions = 0
     session_collisions = 0
     sessions_by_task: dict[str, list[dict[str, Any]]] = {}
     for item in plan["attempts"]:
-        claim = Path(successor.CLAIM_ROOT) / engine.claim_filename(item["execution_id"])
+        claim = Path(target.CLAIM_ROOT) / engine.claim_filename(item["execution_id"])
         claim_collisions += int(claim.exists() or claim.is_symlink())
         task = engine._task_for_item(plan, item)  # noqa: SLF001
         config = engine._attempt_config(plan, task, item)  # noqa: SLF001
@@ -113,15 +119,15 @@ def build(root: Path) -> dict[str, Any]:
     if output_collisions or claim_collisions or session_collisions:
         raise RuntimeError("rank-3 successor duplicate ledger is not clear")
     body = {
-        "schema_version": runtime.RELEASE_SCHEMA,
+        "schema_version": runtime_module.RELEASE_SCHEMA,
         "status": "CLEAR",
-        "successor_job": successor.JOB_NAME,
-        "successor_configmap": successor.CONFIGMAP_NAME,
+        "successor_job": target.JOB_NAME,
+        "successor_configmap": target.CONFIGMAP_NAME,
         "plan_sha256": plan["plan_sha256"],
         "planned_cells": len(plan["attempts"]),
-        "canary_job_uid": successor.CANARY_JOB_UID,
-        "canary_accepted_receipt_sha256": successor.CANARY_ACCEPTED_SHA,
-        "canary_validation_receipt_sha256": successor.CANARY_VALIDATION_SHA,
+        "canary_job_uid": target.CANARY_JOB_UID,
+        "canary_accepted_receipt_sha256": target.CANARY_ACCEPTED_SHA,
+        "canary_validation_receipt_sha256": target.CANARY_VALIDATION_SHA,
         "s2_job_uid": S2_JOB_UID,
         "s2_pod_uid": S2_POD_UID,
         "s2_active": True,
@@ -129,7 +135,7 @@ def build(root: Path) -> dict[str, Any]:
         "global_claim_collisions": claim_collisions,
         "kubernetes_object_collisions": 0,
         "sfs_output_collisions": output_collisions,
-        "serving_load_block": successor.SERVING_LOAD_BLOCK,
+        "serving_load_block": target.SERVING_LOAD_BLOCK,
         "maximum_scored_streams": 2,
         "checked_immediately_before_create": True,
         "mutation_calls": 0,
@@ -139,6 +145,8 @@ def build(root: Path) -> dict[str, Any]:
         "scores_read": False,
         "prompts_traces_flags_read": False,
     }
+    if failed_identity is not None:
+        body["failed_v1"] = failed_identity
     return {**body, "receipt_sha256": self_hosted.digest_without(body, "receipt_sha256")}
 
 

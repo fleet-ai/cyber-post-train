@@ -36,6 +36,10 @@ CONTROLLERS = {
 }
 load = source.load
 validate_inventory_gate = source.validate_inventory_gate
+SHA256_RE = source.SHA256_RE
+COMMIT_RE = source.COMMIT_RE
+CANARY_GATE_SCHEMA = source.predecessor.CANARY_GATE_SCHEMA
+RECONCILIATION_GATE_SCHEMA = source.predecessor.RECONCILIATION_GATE_SCHEMA
 
 
 def _transform(plan: dict[str, Any], *, runtime: bool) -> dict[str, Any]:
