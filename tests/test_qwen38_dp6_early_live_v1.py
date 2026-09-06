@@ -53,6 +53,7 @@ class Client:
 
 
 def _gate(payload: dict, release: dict, source_commit: str) -> dict:
+    binding = json.loads((ROOT / live.TP1_BINDING_PATH).read_text())
     value = {
         "schema_version": live.LIVE_GATE_SCHEMA,
         "status": "PASSED_IMMEDIATELY_BEFORE_CREATE",
@@ -62,7 +63,11 @@ def _gate(payload: dict, release: dict, source_commit: str) -> dict:
         "server_release_receipt_sha256": release["receipt_sha256"],
         "config_sha256": "sha256:" + "a" * 64,
         "request_sha256": self_hosted.sha256(self_hosted.canonical_json(payload)),
-        "allowed_active_peer": {},
+        "allowed_active_peer": {
+            "api_run_id": binding["api_run_id"],
+            "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-q38-tp1-j-v1",
+            "status": "RUNNING",
+        },
         "allowed_active_peer_traffic": {
             "head_pod_uid": "tp1-pod-uid",
             "traffic_age_seconds": 1,
@@ -70,7 +75,7 @@ def _gate(payload: dict, release: dict, source_commit: str) -> dict:
         "project_resource_shape": {
             "current_gpu_nodes": 1,
             "current_gpus": 1,
-            "projected_gpu_nodes": 1,
+            "projected_gpu_nodes_allowed": [1, 2],
             "projected_gpus": 7,
             "maximum_gpu_nodes": 2,
             "maximum_gpus": 16,
@@ -78,8 +83,9 @@ def _gate(payload: dict, release: dict, source_commit: str) -> dict:
             "peer_workload_admitted": True,
             "peer_workload_quota_reserved": True,
             "peer_workload_preemption_observed": False,
-            "physical_unique_fit": {
-                "unique_schedulable_six_gpu_fit": True,
+            "physical_capacity": {
+                "eligible_six_gpu_node_count": 2,
+                "tp1_node_is_eligible": True,
                 "b300_gpu_quota_headroom": 6,
                 "priority_class": {
                     "name": "fleet-infra-quiet",
@@ -115,15 +121,36 @@ def test_submitter_posts_exactly_once_only_after_digest_valid_live_gate(
     gate = _gate(payload, release, source_commit)
     client = Client()
     monkeypatch.setattr(early, "preview_identity", lambda *_args: gate["rendered"])
+    late_active = [gate["allowed_active_peer"]]
+    monkeypatch.setattr(live, "_active_serving_runs", lambda _client: late_active)
+    monkeypatch.setattr(
+        live,
+        "_kubernetes_gate",
+        lambda _binding, _active: (gate["project_resource_shape"], "tp1"),
+    )
+    monkeypatch.setattr(
+        live,
+        "_tp1_traffic_gate",
+        lambda _pod, _binding: gate["allowed_active_peer_traffic"],
+    )
+    monkeypatch.setattr(live, "_sfs_run_dir_absent", lambda _pod: True)
     assert live.submit_create_once(client, payload, gate, release, source_commit, ROOT) == (
         "ft-run-12345678"
     )
     assert client.posts == [("/v1/runs/preview", payload), ("/v1/runs", payload)]
 
-    appeared = Client(runs=[{"title": early.TITLE, "run_dir": early.RUN_DIR}])
-    with pytest.raises(RuntimeError, match="appeared after the live gate"):
+    appeared = Client()
+    late_active.append(
+        {
+            "api_run_id": "ft-run-late-project-server",
+            "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-late-v1",
+            "status": "RUNNING",
+        }
+    )
+    with pytest.raises(RuntimeError, match="active serving peers"):
         live.submit_create_once(appeared, payload, gate, release, source_commit, ROOT)
     assert appeared.posts == []
+    late_active.pop()
 
     changed = copy.deepcopy(gate)
     changed["jobs_api_title_matches"] = 1
@@ -193,7 +220,10 @@ def test_kubernetes_gate_requires_exact_tp1_peer_and_one_gpu(
     monkeypatch.setattr(
         live,
         "_capacity_gate",
-        lambda _node: {"unique_schedulable_six_gpu_fit": True},
+        lambda _node: {
+            "eligible_six_gpu_node_count": 2,
+            "tp1_node_is_eligible": True,
+        },
     )
     active = [
         {
@@ -204,7 +234,7 @@ def test_kubernetes_gate_requires_exact_tp1_peer_and_one_gpu(
     ]
     shape, observer = live._kubernetes_gate(binding, active)  # noqa: SLF001
     assert observer == "tp1-head"
-    assert shape["projected_gpu_nodes"] == 1
+    assert shape["projected_gpu_nodes_allowed"] == [1, 2]
     assert shape["projected_gpus"] == 7
     assert shape["maximum_gpu_nodes"] == 2
     assert shape["maximum_gpus"] == 16
@@ -275,7 +305,10 @@ def test_kubernetes_gate_rejects_orphan_project_gpu_pod(
     monkeypatch.setattr(
         live,
         "_capacity_gate",
-        lambda _node: {"unique_schedulable_six_gpu_fit": True},
+        lambda _node: {
+            "eligible_six_gpu_node_count": 2,
+            "tp1_node_is_eligible": True,
+        },
     )
     active = [
         {
@@ -363,7 +396,7 @@ def test_tp1_traffic_must_be_uid_bound_and_fresh(
         live._tp1_traffic_gate("tp1", binding)  # noqa: SLF001
 
 
-def test_capacity_gate_requires_unique_shared_six_gpu_fit_and_quota(
+def test_capacity_gate_allows_multiple_safe_six_gpu_fits_and_requires_quota(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     target = "computeinstance-e04nnbyjvf87b5q53j"
@@ -374,6 +407,20 @@ def test_capacity_gate_requires_unique_shared_six_gpu_fit_and_quota(
                     "name": target,
                     "labels": {
                         "topology.nebius.com/tier-1": "rack-a",
+                        "nvidia.com/gpu.product": "NVIDIA-B300-SXM6-PC",
+                    },
+                },
+                "spec": {"unschedulable": False},
+                "status": {
+                    "allocatable": {"nvidia.com/gpu": "8"},
+                    "conditions": [{"type": "Ready", "status": "True"}],
+                },
+            },
+            {
+                "metadata": {
+                    "name": "another-free-node",
+                    "labels": {
+                        "topology.nebius.com/tier-1": "rack-c",
                         "nvidia.com/gpu.product": "NVIDIA-B300-SXM6-PC",
                     },
                 },
@@ -481,7 +528,8 @@ def test_capacity_gate_requires_unique_shared_six_gpu_fit_and_quota(
         "-o",
         "json",
     ) in calls
-    assert result["unique_schedulable_six_gpu_fit"] is True
+    assert result["eligible_six_gpu_node_count"] == 2
+    assert result["tp1_node_is_eligible"] is True
     assert result["target_free_gpus"] == 6
     assert result["b300_gpu_quota_headroom"] == 31
     assert result["priority_class"]["preemption_policy"] == "Never"

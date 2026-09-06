@@ -209,7 +209,7 @@ def _kubectl_global_json(*args: str) -> dict[str, Any]:
 
 
 def _capacity_gate(tp1_node: str) -> dict[str, Any]:
-    """Prove the TP1 node is the only schedulable six-GPU fit without preemption."""
+    """Prove at least one non-preempting six-GPU fit while TP1 remains healthy."""
     nodes = (
         _kubectl_global_json(
             "get", "nodes", "-l", "workload=fleetai-training-ng-gpu", "-o", "json"
@@ -259,8 +259,11 @@ def _capacity_gate(tp1_node: str) -> dict[str, Any]:
             and "B300" in str(labels.get("nvidia.com/gpu.product") or "")
         ):
             candidates.append({"name": name, "allocatable_gpus": allocatable, "free_gpus": free})
-    if candidates != [{"name": tp1_node, "allocatable_gpus": 8, "free_gpus": 6}]:
-        raise RuntimeError("TP1 node is not the unique schedulable six-GPU fit")
+    tp1_candidates = [row for row in candidates if row["name"] == tp1_node]
+    if not candidates or tp1_candidates != [
+        {"name": tp1_node, "allocatable_gpus": 8, "free_gpus": 6}
+    ]:
+        raise RuntimeError("no safe six-GPU fit exists while TP1 remains healthy")
     target = [row for row in active_gpu_pods if row["node"] == tp1_node]
     if sorted(row["gpus"] for row in target) != [1, 1]:
         raise RuntimeError("shared TP1 node peer GPU shape drifted")
@@ -301,7 +304,8 @@ def _capacity_gate(tp1_node: str) -> dict[str, Any]:
         "target_allocatable_gpus": 8,
         "target_active_gpu_requests": 2,
         "target_free_gpus": 6,
-        "unique_schedulable_six_gpu_fit": True,
+        "eligible_six_gpu_node_count": len(candidates),
+        "tp1_node_is_eligible": True,
         "active_gpu_pods_on_target": target,
         "b300_nominal_gpu_quota": nominal,
         "b300_used_gpu_quota": used_quota,
@@ -439,7 +443,7 @@ def _kubernetes_gate(
     return {
         "current_gpu_nodes": len(current_nodes),
         "current_gpus": current_gpus,
-        "projected_gpu_nodes": len(current_nodes),
+        "projected_gpu_nodes_allowed": [len(current_nodes), len(current_nodes) + 1],
         "projected_gpus": current_gpus + 6,
         "maximum_gpu_nodes": 2,
         "maximum_gpus": 16,
@@ -449,7 +453,7 @@ def _kubernetes_gate(
         "peer_workload_preemption_observed": False,
         "scope": "project_chris_cyber_evalserve_runs_only",
         "unrelated_namespace_gpu_pods_counted": False,
-        "physical_unique_fit": capacity,
+        "physical_capacity": capacity,
         "project_object_inventory": {
             "active_jobs_api_run_ids": sorted(active_ids),
             "active_run_dirs": sorted(active_dirs),
@@ -481,6 +485,66 @@ def _validate_active_peer(
     return expected
 
 
+def _sfs_run_dir_absent(observer_pod: str) -> bool:
+    result = subprocess.run(
+        [
+            "kubectl",
+            "-n",
+            shared.NAMESPACE,
+            "exec",
+            observer_pod,
+            "--",
+            "test",
+            "!",
+            "-e",
+            early.RUN_DIR,
+        ],
+        check=False,
+        capture_output=True,
+    )
+    return result.returncode == 0
+
+
+def _project_shape_is_safe(shape: object) -> bool:
+    if not isinstance(shape, dict):
+        return False
+    return not (
+        shape.get("current_gpu_nodes") != 1
+        or shape.get("current_gpus") != 1
+        or shape.get("projected_gpu_nodes_allowed") != [1, 2]
+        or shape.get("projected_gpus") != 7
+        or shape.get("maximum_gpu_nodes") != 2
+        or shape.get("maximum_gpus") != 16
+        or shape.get("peer_workload_admitted") is not True
+        or shape.get("peer_workload_quota_reserved") is not True
+        or shape.get("peer_workload_preemption_observed") is not False
+        or (shape.get("physical_capacity") or {}).get(
+            "eligible_six_gpu_node_count", 0
+        )
+        < 1
+        or (shape.get("physical_capacity") or {}).get("tp1_node_is_eligible")
+        is not True
+        or (shape.get("physical_capacity") or {}).get(
+            "b300_gpu_quota_headroom", 0
+        )
+        < 6
+        or (shape.get("physical_capacity") or {}).get("priority_class")
+        != {
+            "name": early.SERVER_PRIORITY_CLASS,
+            "value": SERVER_PRIORITY_VALUE,
+            "preemption_policy": "Never",
+        }
+        or (shape.get("project_object_inventory") or {}).get(
+            "orphan_project_rayjobs"
+        )
+        != 0
+        or (shape.get("project_object_inventory") or {}).get(
+            "orphan_project_gpu_pods"
+        )
+        != 0
+    )
+
+
 def live_gate(
     client: httpx.Client, release: Mapping[str, Any], root: Path, source_commit: str
 ) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -506,23 +570,7 @@ def live_gate(
     rendered = early.preview_identity(preview.json()["manifest_yaml"], root)
     project_shape, observer_pod = _kubernetes_gate(binding, active)
     tp1_traffic = _tp1_traffic_gate(observer_pod, binding)
-    absent = subprocess.run(
-        [
-            "kubectl",
-            "-n",
-            shared.NAMESPACE,
-            "exec",
-            observer_pod,
-            "--",
-            "test",
-            "!",
-            "-e",
-            early.RUN_DIR,
-        ],
-        check=False,
-        capture_output=True,
-    )
-    if absent.returncode != 0:
+    if not _sfs_run_dir_absent(observer_pod):
         raise RuntimeError("early DP6 SFS run root already exists")
     gate = {
         "schema_version": LIVE_GATE_SCHEMA,
@@ -579,40 +627,26 @@ def submit_create_once(
         != shape.get("tp1_head_pod_uid")
         or gate["allowed_active_peer_traffic"].get("traffic_age_seconds", 999999)
         > MAX_TP1_TRAFFIC_AGE_SECONDS
-        or not isinstance(shape, dict)
-        or shape.get("current_gpu_nodes") != 1
-        or shape.get("current_gpus") != 1
-        or shape.get("projected_gpu_nodes") != 1
-        or shape.get("projected_gpus") != 7
-        or shape.get("maximum_gpu_nodes") != 2
-        or shape.get("maximum_gpus") != 16
-        or shape.get("peer_workload_admitted") is not True
-        or shape.get("peer_workload_quota_reserved") is not True
-        or shape.get("peer_workload_preemption_observed") is not False
-        or (shape.get("physical_unique_fit") or {}).get(
-            "unique_schedulable_six_gpu_fit"
-        )
-        is not True
-        or (shape.get("physical_unique_fit") or {}).get("b300_gpu_quota_headroom", 0)
-        < 6
-        or (shape.get("physical_unique_fit") or {}).get("priority_class")
-        != {
-            "name": early.SERVER_PRIORITY_CLASS,
-            "value": SERVER_PRIORITY_VALUE,
-            "preemption_policy": "Never",
-        }
-        or (shape.get("project_object_inventory") or {}).get("orphan_project_rayjobs") != 0
-        or (shape.get("project_object_inventory") or {}).get("orphan_project_gpu_pods") != 0
+        or not _project_shape_is_safe(shape)
     ):
         raise ValueError("early DP6 live submit gate is not clear")
-    # Close the time-of-check/time-of-create gap: another submitter may have
-    # created this immutable identity after the larger live gate completed.
-    runs = shared._runs(client)  # noqa: SLF001 - paginated Jobs API authority
-    if any(
-        row.get("title") == early.TITLE or row.get("run_dir") == early.RUN_DIR
-        for row in runs
+    # Repeat the complete project-capacity gate at the create boundary. A
+    # different project server, orphan, quota change, or fit change is just as
+    # important as this exact identity appearing after the earlier review.
+    binding = _load(root / TP1_BINDING_PATH)
+    late_active = _active_serving_runs(client)
+    late_peer = _validate_active_peer(late_active, binding)
+    late_shape, late_observer = _kubernetes_gate(binding, late_active)
+    late_traffic = _tp1_traffic_gate(late_observer, binding)
+    if (
+        late_peer != gate.get("allowed_active_peer")
+        or not _project_shape_is_safe(late_shape)
+        or late_traffic.get("head_pod_uid") != late_shape.get("tp1_head_pod_uid")
+        or late_traffic.get("traffic_age_seconds", 999999)
+        > MAX_TP1_TRAFFIC_AGE_SECONDS
+        or not _sfs_run_dir_absent(late_observer)
     ):
-        raise RuntimeError("early DP6 create-once identity appeared after the live gate")
+        raise RuntimeError("early DP6 project capacity changed before create")
     preview = client.post("/v1/runs/preview", json=dict(payload))
     preview.raise_for_status()
     rendered = early.preview_identity(preview.json()["manifest_yaml"], root)

@@ -17,6 +17,9 @@ from evals.fleet import qwen38_dp8_post_rank99_plan_v1 as predecessor
 from evals.fleet import self_hosted
 
 PLAN_PATH = Path(
+    "docs/evidence/qwen38-study/2026-09-06-qwen38-dp6-early-qualification-held-v6.json"
+)
+V5_PLAN_PATH = Path(
     "docs/evidence/qwen38-study/2026-09-06-qwen38-dp6-early-qualification-held-v5.json"
 )
 V4_PLAN_PATH = Path(
@@ -36,7 +39,7 @@ INVENTORY_PATH = Path(
     "docs/evidence/qwen38-study/2026-09-06-qwen38-dp6-early-qualification-node-inventory-v2.json"
 )
 RELEASE_PATH = Path(
-    "docs/evidence/qwen38-study/2026-09-06-qwen38-dp6-early-qualification-held-release-v5.json"
+    "docs/evidence/qwen38-study/2026-09-06-qwen38-dp6-early-qualification-held-release-v6.json"
 )
 V1_INCIDENT_PATH = Path(
     "docs/evidence/qwen38-study/"
@@ -45,11 +48,11 @@ V1_INCIDENT_PATH = Path(
 PRIORITY_CONTRACT_PATH = Path(
     "docs/evidence/qwen38-study/2026-09-06-qwen38-dp6-priority-contract-v1.json"
 )
-SCHEMA = "fleet-qwen38-dp6-early-qualification-held-v5"
+SCHEMA = "fleet-qwen38-dp6-early-qualification-held-v6"
 CONFIG_SCHEMA = "fleet-qwen38-dp6-early-qualification-config-v3"
 PREVIEW_SCHEMA = "fleet-qwen38-dp6-early-qualification-preview-v3"
 INVENTORY_SCHEMA = "fleet-qwen38-dp6-early-qualification-node-inventory-v2"
-RELEASE_SCHEMA = "fleet-qwen38-dp6-early-qualification-held-release-v5"
+RELEASE_SCHEMA = "fleet-qwen38-dp6-early-qualification-held-release-v6"
 TITLE = "chris-cyber-evalserve-q38-dp6-b-v1"
 RUN_DIR = "/mnt/sfs/jobs/chris-cyber-evalserve-q38-dp6-b-v1"
 SERVING_BLOCK = "dedicated-qwen-dp6-b-v1"
@@ -206,11 +209,9 @@ def validate_plan(value: Mapping[str, Any], root: Path) -> None:
             "predecessor_rewritten": False,
         },
         "superseded_held_plan": {
-            "path": str(V4_PLAN_PATH),
-            "receipt_sha256": _load(root / V4_PLAN_PATH)["receipt_sha256"],
-            "reason": (
-                "install_staged_validator_runtime_dependencies_and_use_fresh_server_identity"
-            ),
+            "path": str(V5_PLAN_PATH),
+            "receipt_sha256": _load(root / V5_PLAN_PATH)["receipt_sha256"],
+            "reason": "allow_flexible_one_or_two_node_placement_after_capacity_change",
             "predecessor_rewritten": False,
         },
         "superseded_v1_incident": {
@@ -229,11 +230,11 @@ def validate_plan(value: Mapping[str, Any], root: Path) -> None:
             "max_project_gpus": 16,
             "required_gpu_nodes_before_create": 1,
             "maximum_gpus_before_create": 8,
-            "required_projected_gpu_nodes_after_create": 1,
+            "allowed_projected_gpu_nodes_after_create": [1, 2],
             "required_target_node_allocatable_gpus": 8,
             "required_target_node_active_gpu_requests": 2,
             "required_target_node_free_gpus": 6,
-            "unique_schedulable_six_gpu_fit_required": True,
+            "minimum_schedulable_six_gpu_fit_nodes": 1,
             "minimum_b300_quota_headroom_gpus": 6,
             "allowed_existing_serving_block": "dedicated-qwen-tp1-j-v1",
             "existing_tp1_must_be_running_ready_restart0_and_productive": True,
