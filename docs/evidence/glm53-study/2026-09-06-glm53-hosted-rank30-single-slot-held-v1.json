@@ -1,0 +1,34 @@
+{
+  "controller": {
+    "cells": [
+      {"attempt": 1, "cell_id": "sha256:5af2152499b8af043a847707e47cc3c04b81d24c47aa99c33c04a8688cbcafa6", "execution_id": "sha256:e406c5be7a74ca76dcef590dc93ccc185f5d75f8aeab340582fa742e98db8d66", "run_id": "chris-glm53-ac-bulk-a-r030-a1-g1-a0cacaaf"},
+      {"attempt": 2, "cell_id": "sha256:7e2fffc5a21d93d76e97ab387800a687669bf39e69763d8a5b874dfea4da1f41", "execution_id": "sha256:8266f16bf278ff8d854349351f98dcb3bd2ce5d3a55ab04bdb477c114e1552ae", "run_id": "chris-glm53-ac-bulk-a-r030-a2-g1-a0cacaaf"},
+      {"attempt": 3, "cell_id": "sha256:b77c81587baee31eabe1bf65903749e8a89cf7719c38e8f527fd5bc53e087121", "execution_id": "sha256:01e32805da63f6d94b0455d24674f01087dbedbb8202cab88cc8eea379a652b5", "run_id": "chris-glm53-ac-bulk-a-r030-a3-g1-a0cacaaf"},
+      {"attempt": 4, "cell_id": "sha256:2b6f93f57e1862f339e55ff758ce6258a9665c66df80ad6d67fee21fa9fbe66f", "execution_id": "sha256:cb72b074761f906fcd5e4f5849d10ab0d21d23df6cae48ea49eeb7fa89a045dc", "run_id": "chris-glm53-ac-bulk-a-r030-a4-g1-a0cacaaf"}
+    ],
+    "configmap_name": "chris-glm53-exact100-hosted-r030-whole-task-g1-package-v1",
+    "controller": "glm-hosted-r30-whole-task",
+    "job_name": "chris-glm53-exact100-hosted-r030-whole-task-g1-v1",
+    "plan_sha256": "sha256:1db7a9fc033b93f1bf7f152793bbc0338181d559890d1b5ac30c48d98ae5cb95",
+    "selection_rank": 30,
+    "sfs_root": "/mnt/sfs/jobs/chris-glm53-exact100-hosted-r030-whole-task-g1-v1",
+    "task_version_id": "a0cacaaf-480b-4a4c-9ed7-6b6192bb6783"
+  },
+  "controller_cap": 1,
+  "fresh_release_required": true,
+  "held_release_observer_package_sha256": "sha256:83f50ec9ef3442ad777d26109d5daf986f3d4f7837227c4dffb2803889526b7d",
+  "held_scored_package_sha256": "sha256:0f88b39d91d2e38923d360ac27dc5b0437778d76ef3bacc64786b45111a46ea4",
+  "launch_authorized": false,
+  "ledger_authority": {"file_sha256": "sha256:0a2baba7c16745a4d69f0f5aafc04010734eacbace8f6d712d44011c4a36d0dd", "path": "docs/evidence/qwen38-study/2026-09-05-exact-pass4-ledger-evidence-snapshot-v47.json", "receipt_sha256": "sha256:bf0b9086dd97eecafe20fa9a4cf3b5d643f0ce8f6abad60fae6e3cba3e3e2e29"},
+  "live_rank29_required": {"active": true, "endpoint_slots_held": 1, "job_uid": "74cdb483-65fb-4331-9e3e-567a54b53315", "pod_uid": "dc891f43-917f-4cdb-9769-1639f6bfcaab"},
+  "observer_model_calls_authorized": false,
+  "privacy": {"credentials_included": false, "prompts_traces_flags_read": false, "scores_read": false},
+  "rank31_disposition": {"cells_claimed": 0, "held": true, "selected": false},
+  "receipt_sha256": "sha256:8cf1e7905f371b1d275d6c9f282bd435dc9f5e2646ca2a08e71b638bc2265327",
+  "release_max_age_seconds": 600,
+  "schema_version": "fleet-hosted-glm-rank30-single-slot-held-v1",
+  "scoring_authorized": false,
+  "selection_authority": {"file_sha256": "sha256:9f5e83123cfe7d8a3f4cc0b791ac1dc9032a3d5faf5eba2a431c7246069255df", "path": "evals/fleet/configs/opencode-easiest-train100-selection-v2.json", "semantic_sha256": "sha256:38bd544c74f4e45cb67b271849d657f49e356ccf41f97acca9fb6cd7eb7f56b8"},
+  "source_package_sha256": "sha256:27a8af1fa99b0bb73e9d6cde3d096263011a87aaf0698968ffb5da8b8c3a1d4d",
+  "status": "HELD_FOR_INDEPENDENT_REVIEW"
+}

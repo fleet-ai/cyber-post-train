@@ -15,6 +15,7 @@ on:
       - 'tests/test_hosted_glm_rank29_release_diagnostic_v3.py'
       - 'tests/test_hosted_glm_rank29_a3a4_c2_release_v2.py'
       - 'tests/test_hosted_glm_whole_task_successor_v1.py'
+      - 'tests/test_hosted_glm_rank30_single_slot_v1.py'
       - 'skills/**'
       - 'pyproject.toml'
       - 'uv.lock'
@@ -71,4 +72,5 @@ jobs:
             tests/test_hosted_glm_rank29_release_diagnostic_v2.py \
             tests/test_hosted_glm_rank29_release_diagnostic_v3.py \
             tests/test_hosted_glm_rank29_a3a4_c2_release_v2.py \
-            tests/test_hosted_glm_whole_task_successor_v1.py
+            tests/test_hosted_glm_whole_task_successor_v1.py \
+            tests/test_hosted_glm_rank30_single_slot_v1.py
