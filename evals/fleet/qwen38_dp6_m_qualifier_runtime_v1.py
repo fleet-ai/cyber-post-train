@@ -88,6 +88,156 @@ BINDING_KEYS = {
     "prompts_traces_flags_or_scores_included",
     "receipt_sha256",
 }
+COUNTER_SNAPSHOT_KEYS = {
+    "schema_version",
+    "status",
+    "concurrency",
+    "global_request_total",
+    "server_binding_receipt_sha256",
+    "service_origin",
+    "sampler_state_used_as_counter_authority",
+    "prompts_traces_flags_or_scores_included",
+    "receipt_sha256",
+}
+BASELINE_KEYS = {
+    "schema_version",
+    "status",
+    "server_run_dir",
+    "api_run_id",
+    "pod_name",
+    "pod_uid",
+    "service_uid",
+    "server_binding_receipt_sha256",
+    "observed_at_epoch",
+    metric_observer.STATE_KEY,
+    "request_delta_since_prior_sample",
+    "traffic_refresh_performed",
+    "prompts_traces_flags_or_scores_included",
+    "receipt_sha256",
+}
+RESOURCE_SAMPLE_KEYS = {"observed_at_epoch", "oom_kill", "nr_throttled", "throttled_usec"}
+RESOURCE_CONTROL_KEYS = {
+    "schema_version",
+    "status",
+    "before",
+    "after",
+    "deltas",
+    "dind_oom_kill_delta",
+    "dind_nr_throttled_delta",
+    "dind_throttled_usec_delta",
+    "protocol_errors",
+    "prompts_traces_flags_or_scores_included",
+    "receipt_sha256",
+}
+DISTRIBUTION_KEYS = {
+    "schema_version",
+    "status",
+    "plan_receipt_sha256",
+    "server_binding",
+    "service_origin",
+    "concurrency",
+    "stream_receipt_sha256s",
+    "counter_before_snapshot",
+    "counter_after_snapshot",
+    "global_request_total_before",
+    "global_request_total_after",
+    "global_request_delta",
+    "per_rank_request_attribution_claimed",
+    "gpu_peak_utilization_percent_by_device",
+    "gpu_peak_memory_used_mib_by_device",
+    "gpu_device_count",
+    "gpu_memory_loaded_count",
+    "sampling_seconds",
+    "observer_errors",
+    "task_instance_session_verifier_scoring_calls",
+    "prompts_traces_flags_or_scores_included",
+    "receipt_sha256",
+}
+FAILED_STREAM_SCHEMA = "fleet-qwen38-dp6-sanitized-failed-stream-v1"
+FAILED_STREAM_KEYS = {
+    "schema_version",
+    "status",
+    "failure_code",
+    "execution",
+    "privacy",
+    "receipt_sha256",
+}
+LEVEL_KEYS = {
+    "concurrency",
+    "status",
+    "completed_stream_count",
+    "observed_model_request_count",
+    "observed_server_request_delta",
+    "elapsed_milliseconds",
+    "timeout_budget_milliseconds",
+    "latency_headroom_milliseconds",
+    "required_latency_headroom_milliseconds",
+    "minimum_latency_headroom_fraction",
+    "error_count",
+    "tool_order_exact",
+    "tool_arguments_exact",
+    "failure_stage",
+    "failure_code",
+    "stream_receipts",
+    "distribution_receipt",
+    "controller_resource_receipt",
+    "stable_counter_baseline_receipt",
+}
+RESULT_KEYS = {
+    "schema_version",
+    "plan_receipt_sha256",
+    "qualification_plan",
+    "levels",
+    "highest_passing_concurrency",
+    "scored_calls",
+    "prompts_traces_flags_or_scores_included",
+    "receipt_sha256",
+}
+RUNTIME_RELEASE_KEYS = {
+    "schema_version",
+    "status",
+    "launch_authorized",
+    "scoring_authorized",
+    "job_name",
+    "configmap_name",
+    "output_root",
+    "serving_block",
+    "submission_receipt_sha256",
+    "server_binding_receipt_sha256",
+    "package_sha256",
+    "harness_runtime_image",
+    "fresh_job_matches",
+    "fresh_configmap_matches",
+    "fresh_output_root_exists",
+    "server_running_ready_restart0",
+    "api_mutations_before_create",
+    "task_instance_session_verifier_scoring_calls",
+    "prompts_traces_flags_or_scores_included",
+    "receipt_sha256",
+}
+EVENT_KEYS = {
+    "schema_version",
+    "status",
+    "server_run_dir",
+    "api_run_id",
+    "pod_name",
+    "pod_uid",
+    "service_uid",
+    "server_binding_receipt_sha256",
+    "observed_at_epoch",
+    "global_request_total_before",
+    "global_request_total_after",
+    "global_request_delta",
+    "running_requests",
+    "queued_requests",
+    "gpu_memory_used_mib_by_device",
+    "gpu_utilization_percent_by_device",
+    "activity_reasons",
+    "per_rank_request_attribution_claimed",
+    "prompts_traces_flags_or_scores_included",
+    "receipt_sha256",
+}
+MAX_JSON_BYTES = 16 * 1024 * 1024
 
 
 class PreRequestResourceSampleError(RuntimeError):
@@ -95,7 +245,18 @@ class PreRequestResourceSampleError(RuntimeError):
 
 
 def _load(path: Path) -> dict[str, Any]:
-    value = json.loads(path.read_text())
+    if path.is_symlink() or not path.is_file() or path.stat().st_size > MAX_JSON_BYTES:
+        raise ValueError(f"{path} is not a safe bounded JSON input")
+
+    def pairs(rows: list[tuple[str, Any]]) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for key, item in rows:
+            if key in result:
+                raise ValueError("duplicate JSON key")
+            result[key] = item
+        return result
+
+    value = json.loads(path.read_bytes(), object_pairs_hook=pairs)
     if not isinstance(value, dict):
         raise ValueError(f"{path} must contain an object")
     return value
@@ -258,7 +419,7 @@ def validate_runtime_release(
     package_path: Path,
 ) -> None:
     package_digest = "sha256:" + hashlib.sha256(package_path.read_bytes()).hexdigest()
-    if value.get("receipt_sha256") != _digest(value) or (
+    if set(value) != RUNTIME_RELEASE_KEYS or value.get("receipt_sha256") != _digest(value) or (
         value.get("schema_version") != QUALIFIER_RELEASE_SCHEMA
         or value.get("status") != "RELEASED_FOR_ONE_NON_SCORED_QUALIFIER"
         or value.get("launch_authorized") is not True
@@ -350,7 +511,25 @@ def validate_plan(value: Mapping[str, Any], root: Path) -> None:
 
 def _event(path: Path, binding_receipt: Mapping[str, Any]) -> dict[str, Any]:
     value = _load(path)
-    if value.get("receipt_sha256") != _digest(value) or (
+    before = value.get("global_request_total_before")
+    after = value.get("global_request_total_after")
+    delta = value.get("global_request_delta")
+    running = value.get("running_requests")
+    queued = value.get("queued_requests")
+    memory = value.get("gpu_memory_used_mib_by_device")
+    utilization = value.get("gpu_utilization_percent_by_device")
+    expected_reasons: list[str] = []
+    if type(before) is int and type(after) is int and after > before:
+        expected_reasons.append("completed_request_counter_increased")
+    if type(running) is int and running > 0:
+        expected_reasons.append("running_requests_positive")
+    if type(queued) is int and queued > 0:
+        expected_reasons.append("queued_requests_positive")
+    if isinstance(utilization, list) and any(
+        type(item) is int and item > 0 for item in utilization
+    ):
+        expected_reasons.append("gpu_utilization_positive")
+    if set(value) != EVENT_KEYS or value.get("receipt_sha256") != _digest(value) or (
         value.get("schema_version") != EVENT_SCHEMA
         or value.get("status") != "REAL_REQUEST_OR_GPU_ACTIVITY_OBSERVED"
         or value.get("server_run_dir") != early.RUN_DIR
@@ -359,6 +538,20 @@ def _event(path: Path, binding_receipt: Mapping[str, Any]) -> dict[str, Any]:
         or value.get("pod_uid") != binding_receipt.get("head_pod_uid")
         or value.get("service_uid") != binding_receipt.get("service_uid")
         or value.get("server_binding_receipt_sha256") != binding_receipt.get("receipt_sha256")
+        or type(value.get("observed_at_epoch")) is not int
+        or type(before) is not int
+        or type(after) is not int
+        or type(delta) is not int
+        or before < 0
+        or after < before
+        or delta != after - before
+        or type(running) is not int
+        or running < 0
+        or type(queued) is not int
+        or queued < 0
+        or value.get("activity_reasons") != expected_reasons
+        or not expected_reasons
+        or value.get("per_rank_request_attribution_claimed") is not False
         or value.get("prompts_traces_flags_or_scores_included") is not False
     ):
         raise ValueError("server-local traffic event drifted")
@@ -373,6 +566,8 @@ def _event(path: Path, binding_receipt: Mapping[str, Any]) -> dict[str, Any]:
             or not all(type(item) is int for item in row)
         ):
             raise ValueError("server-local traffic event shape drifted")
+    if not all(item > 0 for item in memory) or not all(0 <= item <= 100 for item in utilization):
+        raise ValueError("server-local traffic event value drifted")
     return value
 
 
@@ -393,7 +588,8 @@ def _stable_counter_baseline(binding_receipt: Mapping[str, Any]) -> dict[str, An
             continue
         counter = baseline.get(metric_observer.STATE_KEY)
         if (
-            baseline.get("receipt_sha256") == _digest(baseline)
+            set(baseline) == BASELINE_KEYS
+            and baseline.get("receipt_sha256") == _digest(baseline)
             and baseline.get("schema_version") == metric_observer.BASELINE_SCHEMA
             and baseline.get("status") == "STABLE_BOUND_GLOBAL_REQUEST_BASELINE"
             and baseline.get("server_run_dir") == early.RUN_DIR
@@ -448,6 +644,8 @@ def _counter_snapshot(
 def _validate_counter_snapshot(
     value: Mapping[str, Any], phase: str, level: int, plan: Mapping[str, Any]
 ) -> None:
+    if set(value) != COUNTER_SNAPSHOT_KEYS:
+        raise ValueError("counter snapshot contains an unreviewed field")
     expected = _counter_snapshot(phase, value.get("global_request_total"), level, plan)
     if dict(value) != expected:
         raise ValueError("counter snapshot drifted")
@@ -537,6 +735,25 @@ def _dind_resource_control(before: Mapping[str, int], after: Mapping[str, int]) 
     return value
 
 
+def _validate_resource_control(value: Mapping[str, Any]) -> None:
+    before = value.get("before")
+    after = value.get("after")
+    deltas = value.get("deltas")
+    if (
+        set(value) != RESOURCE_CONTROL_KEYS
+        or not isinstance(before, dict)
+        or set(before) != RESOURCE_SAMPLE_KEYS
+        or not isinstance(after, dict)
+        or set(after) != RESOURCE_SAMPLE_KEYS
+        or not isinstance(deltas, dict)
+        or set(deltas) != {"oom_kill", "nr_throttled", "throttled_usec"}
+        or not all(type(item) is int and item >= 0 for item in before.values())
+        or not all(type(item) is int and item >= 0 for item in after.values())
+        or dict(value) != _dind_resource_control(before, after)
+    ):
+        raise ValueError("controller resource receipt contains an unreviewed field")
+
+
 def observe_wave(
     level: int,
     execute: Any,
@@ -560,7 +777,10 @@ def observe_wave(
     _write_counter_snapshot_once(counter_before)
     before_paths = set(EVENT_DIR.glob("*.json")) if EVENT_DIR.is_dir() else set()
     resource_before = _wait_dind_resource_sample()
-    rows = execute()
+    produced = execute()
+    if not isinstance(produced, list):
+        raise RuntimeError("wave stream collection unavailable")
+    rows = [_project_stream(row, plan) for row in produced]
     if evidence_sink is not None:
         evidence_sink["stream_receipts"] = rows
     counter_after = _counter_snapshot(
@@ -637,6 +857,8 @@ def validate_distribution_receipt(
     rows: list[Mapping[str, Any]],
 ) -> None:
     """Require UID-bound counter and GPU activity across the six DP ranks."""
+    if set(value) != DISTRIBUTION_KEYS:
+        raise ValueError("DP6 distribution receipt contains an unreviewed field")
     before = value.get("global_request_total_before")
     after = value.get("global_request_total_after")
     delta = value.get("global_request_delta")
@@ -702,10 +924,12 @@ def validate_distribution_receipt(
 
 def run(plan: Mapping[str, Any], binding_receipt: Mapping[str, Any], root: Path) -> dict[str, Any]:
     validate_plan(plan, root)
+    candidate_binding = plan.get("server_binding")
+    server_binding = candidate_binding if isinstance(candidate_binding, Mapping) else {}
 
     def safe_probe() -> dict[str, Any]:
         try:
-            return parity.run(
+            raw = parity.run(
                 "qwen3.8-27b",
                 "",
                 upstream_origin=plan["service_origin"],
@@ -713,16 +937,9 @@ def run(plan: Mapping[str, Any], binding_receipt: Mapping[str, Any], root: Path)
                 cluster_dind=True,
                 expected_image_id=staged_image.RUNTIME_IMAGE_ID,
             )
+            return _project_stream(raw, plan)
         except Exception:  # content-free fail-closed classification
-            value = {
-                "status": "FAILED",
-                "failure_code": "probe_execution_failed",
-                "tool_contract": {},
-                "execution": {"task_instance_session_verifier_scoring_calls": 0},
-                "privacy": {"responses_or_model_outputs_included": False},
-            }
-            value["receipt_sha256"] = _digest(value)
-            return value
+            return _failed_stream("probe_execution_failed")
 
     observations: list[dict[str, Any]] = []
     highest = 0
@@ -747,6 +964,10 @@ def run(plan: Mapping[str, Any], binding_receipt: Mapping[str, Any], root: Path)
             rows, distribution, resource_control, baseline = observe_wave(
                 level, execute, plan, binding_receipt, captured_evidence
             )
+            rows = [_project_stream(row, plan) for row in rows]
+            distribution = _project_distribution_evidence(distribution, plan, level, rows)
+            resource_control = _project_resource_evidence(resource_control)
+            baseline = _project_baseline_evidence(baseline, server_binding)
             streams_ok = all(_valid_stream(row, plan) for row in rows)
             observed_model_requests = sum(
                 int((row.get("execution") or {}).get("model_requests") or 0) for row in rows
@@ -762,13 +983,23 @@ def run(plan: Mapping[str, Any], binding_receipt: Mapping[str, Any], root: Path)
                 and observed_server_requests == observed_model_requests
                 and resource_control.get("status") == "PASSED_NO_CONTROLLER_RESOURCE_ERROR"
             )
-        except (RuntimeError, ValueError) as exc:
-            rows = captured_evidence.get("stream_receipts", rows)
-            distribution = captured_evidence.get("distribution_receipt", distribution)
-            resource_control = captured_evidence.get(
-                "controller_resource_receipt", resource_control
+        except Exception as exc:  # evidence is projected below; classification is fixed
+            captured_rows = captured_evidence.get("stream_receipts", rows)
+            rows = (
+                [_project_stream(row, plan) for row in captured_rows]
+                if isinstance(captured_rows, list)
+                else []
             )
-            baseline = captured_evidence.get("stable_counter_baseline_receipt", baseline)
+            distribution = _project_distribution_evidence(
+                captured_evidence.get("distribution_receipt", distribution), plan, level, rows
+            )
+            resource_control = _project_resource_evidence(
+                captured_evidence.get("controller_resource_receipt", resource_control)
+            )
+            baseline = _project_baseline_evidence(
+                captured_evidence.get("stable_counter_baseline_receipt", baseline),
+                server_binding,
+            )
             failure_stage = (
                 "pre_request_resource_sample"
                 if isinstance(exc, PreRequestResourceSampleError)
@@ -841,6 +1072,9 @@ def run(plan: Mapping[str, Any], binding_receipt: Mapping[str, Any], root: Path)
 
 
 def _valid_stream(row: Mapping[str, Any], plan: Mapping[str, Any]) -> bool:
+    if row.get("schema_version") == FAILED_STREAM_SCHEMA:
+        _validate_failed_stream(row)
+        return False
     try:
         core.validate_stream_receipt(row, plan)
     except ValueError:
@@ -848,9 +1082,150 @@ def _valid_stream(row: Mapping[str, Any], plan: Mapping[str, Any]) -> bool:
     return True
 
 
+def _failed_stream(failure_code: str) -> dict[str, Any]:
+    if failure_code not in {"probe_execution_failed", "probe_evidence_invalid"}:
+        raise ValueError("failed stream classification drifted")
+    value = {
+        "schema_version": FAILED_STREAM_SCHEMA,
+        "status": "FAILED",
+        "failure_code": failure_code,
+        "execution": {
+            "model_requests": 0,
+            "task_instance_session_verifier_scoring_calls": 0,
+            "scored_launch_authorized": False,
+        },
+        "privacy": {
+            "request_or_response_bodies_included": False,
+            "prompts_traces_flags_or_scores_included": False,
+        },
+    }
+    value["receipt_sha256"] = _digest(value)
+    return value
+
+
+def _validate_failed_stream(value: Mapping[str, Any]) -> None:
+    expected = _failed_stream(str(value.get("failure_code")))
+    if set(value) != FAILED_STREAM_KEYS or dict(value) != expected:
+        raise ValueError("failed stream receipt contains an unreviewed field")
+
+
+def _project_stream(value: Any, plan: Mapping[str, Any]) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return _failed_stream("probe_evidence_invalid")
+    if value.get("schema_version") == FAILED_STREAM_SCHEMA:
+        try:
+            _validate_failed_stream(value)
+        except Exception:
+            return _failed_stream("probe_evidence_invalid")
+        return dict(value)
+    try:
+        core.validate_stream_receipt(value, plan)
+    except Exception:
+        return _failed_stream("probe_evidence_invalid")
+    # The upstream validator requires exact keys recursively. Copy only after
+    # that validation so invalid mappings can never be embedded in RESULT.
+    return json.loads(json.dumps(value, sort_keys=True, separators=(",", ":")))
+
+
+def _validate_baseline_evidence(
+    value: Mapping[str, Any], binding: Mapping[str, Any]
+) -> None:
+    counter = value.get(metric_observer.STATE_KEY)
+    if (
+        set(value) != BASELINE_KEYS
+        or value.get("receipt_sha256") != _digest(value)
+        or value.get("schema_version") != metric_observer.BASELINE_SCHEMA
+        or value.get("status") != "STABLE_BOUND_GLOBAL_REQUEST_BASELINE"
+        or value.get("server_run_dir") != early.RUN_DIR
+        or value.get("api_run_id") != binding.get("api_run_id")
+        or value.get("pod_name") != binding.get("head_pod_name")
+        or value.get("pod_uid") != binding.get("head_pod_uid")
+        or value.get("service_uid") != binding.get("service_uid")
+        or value.get("server_binding_receipt_sha256")
+        != binding.get("server_binding_receipt_sha256")
+        or type(value.get("observed_at_epoch")) is not int
+        or type(counter) is not int
+        or counter < 0
+        or value.get("request_delta_since_prior_sample") != 0
+        or value.get("traffic_refresh_performed") is not False
+        or value.get("prompts_traces_flags_or_scores_included") is not False
+    ):
+        raise ValueError("baseline receipt contains an unreviewed field")
+
+
+def _project_baseline_evidence(
+    value: Any, binding: Mapping[str, Any]
+) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+    try:
+        _validate_baseline_evidence(value, binding)
+    except Exception:
+        return {}
+    return dict(value)
+
+
+def _project_resource_evidence(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+    try:
+        _validate_resource_control(value)
+    except Exception:
+        return {}
+    return json.loads(json.dumps(value, sort_keys=True, separators=(",", ":")))
+
+
+def _project_distribution_evidence(
+    value: Any,
+    plan: Mapping[str, Any],
+    level: int,
+    rows: list[Mapping[str, Any]],
+) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+    try:
+        validate_distribution_receipt(value, plan, level, rows)
+    except Exception:
+        return {}
+    return json.loads(json.dumps(value, sort_keys=True, separators=(",", ":")))
+
+
+def _validate_optional_level_evidence(row: Mapping[str, Any], plan: Mapping[str, Any]) -> None:
+    streams = row.get("stream_receipts")
+    if not isinstance(streams, list):
+        raise ValueError("stream receipts contain an unreviewed field")
+    for stream_receipt in streams:
+        if not isinstance(stream_receipt, dict):
+            raise ValueError("stream receipts contain an unreviewed field")
+        if stream_receipt.get("schema_version") == FAILED_STREAM_SCHEMA:
+            _validate_failed_stream(stream_receipt)
+        else:
+            core.validate_stream_receipt(stream_receipt, plan)
+
+    baseline = row.get("stable_counter_baseline_receipt")
+    if baseline:
+        if not isinstance(baseline, dict):
+            raise ValueError("baseline receipt contains an unreviewed field")
+        _validate_baseline_evidence(baseline, plan["server_binding"])
+
+    distribution = row.get("distribution_receipt")
+    if distribution:
+        if not isinstance(distribution, dict):
+            raise ValueError("distribution receipt contains an unreviewed field")
+        validate_distribution_receipt(
+            distribution, plan, row["concurrency"], streams
+        )
+
+    resource = row.get("controller_resource_receipt")
+    if resource:
+        if not isinstance(resource, dict):
+            raise ValueError("controller resource receipt contains an unreviewed field")
+        _validate_resource_control(resource)
+
+
 def validate_result(value: Mapping[str, Any], plan: Mapping[str, Any], root: Path) -> int:
     validate_plan(plan, root)
-    if value.get("receipt_sha256") != _digest(value) or (
+    if set(value) != RESULT_KEYS or value.get("receipt_sha256") != _digest(value) or (
         value.get("schema_version") != RESULT_SCHEMA
         or value.get("plan_receipt_sha256") != plan.get("receipt_sha256")
         or value.get("qualification_plan") != dict(plan)
@@ -865,8 +1240,37 @@ def validate_result(value: Mapping[str, Any], plan: Mapping[str, Any], root: Pat
     failure_count = 0
     highest = 0
     for index, row in enumerate(levels):
-        if not isinstance(row, dict) or row.get("concurrency") != LEVELS[index]:
+        if (
+            index >= len(LEVELS)
+            or not isinstance(row, dict)
+            or set(row) != LEVEL_KEYS
+            or row.get("concurrency") != LEVELS[index]
+            or row.get("status") not in {"PASSED", "FAILED"}
+            or type(row.get("completed_stream_count")) is not int
+            or row["completed_stream_count"] < 0
+            or type(row.get("observed_model_request_count")) is not int
+            or row["observed_model_request_count"] < 0
+            or type(row.get("observed_server_request_delta")) is not int
+            or row["observed_server_request_delta"] < 0
+            or type(row.get("elapsed_milliseconds")) is not int
+            or row["elapsed_milliseconds"] < 0
+            or row.get("timeout_budget_milliseconds") != parity.TIMEOUT_SECONDS * 1000
+            or type(row.get("latency_headroom_milliseconds")) is not int
+            or row["latency_headroom_milliseconds"]
+            != row["timeout_budget_milliseconds"] - row["elapsed_milliseconds"]
+            or row.get("required_latency_headroom_milliseconds")
+            != max(
+                MIN_LATENCY_HEADROOM_MILLISECONDS,
+                int(row["timeout_budget_milliseconds"] * MIN_LATENCY_HEADROOM_FRACTION),
+            )
+            or row.get("minimum_latency_headroom_fraction")
+            != MIN_LATENCY_HEADROOM_FRACTION
+            or row.get("error_count") != (0 if row.get("status") == "PASSED" else 1)
+            or row.get("tool_order_exact") is not (row.get("status") == "PASSED")
+            or row.get("tool_arguments_exact") is not (row.get("status") == "PASSED")
+        ):
             raise ValueError("early DP6 qualification ladder order drifted")
+        _validate_optional_level_evidence(row, plan)
         if row.get("status") == "FAILED" and (
             row.get("failure_stage")
             not in {"pre_request_resource_sample", "qualification_wave"}
@@ -908,8 +1312,6 @@ def validate_result(value: Mapping[str, Any], plan: Mapping[str, Any], root: Pat
             )
             if (
                 not isinstance(baseline, dict)
-                or baseline.get("receipt_sha256") != _digest(baseline)
-                or baseline.get("schema_version") != metric_observer.BASELINE_SCHEMA
                 or row.get("completed_stream_count") != row.get("concurrency")
                 or row.get("observed_model_request_count") != model_requests
                 or row.get("observed_server_request_delta") != server_requests

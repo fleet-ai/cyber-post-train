@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+import copy
+import io
 import json
 import subprocess
+import sys
+import tarfile
+import urllib.error
 from pathlib import Path
 
 import pytest
@@ -9,6 +14,37 @@ import pytest
 from evals.fleet import qwen38_dp6_m_qualifier_package_v1 as package
 from evals.fleet import qwen38_dp6_m_qualifier_runtime_v1 as runtime
 from evals.fleet import qwen38_dp6_metric_observer_v5 as observer
+
+
+def test_runtime_loader_rejects_duplicate_json_keys(tmp_path: Path) -> None:
+    path = tmp_path / "duplicate.json"
+    path.write_text('{"status":"safe","status":"SECRET_PROTECTED_VALUE"}')
+    with pytest.raises(ValueError, match="duplicate JSON key"):
+        runtime._load(path)  # noqa: SLF001
+
+
+def test_qualifier_archive_imports_in_isolated_materialization(tmp_path: Path) -> None:
+    archive = package.archive_bytes(Path(__file__).resolve().parents[1])
+    with tarfile.open(fileobj=io.BytesIO(archive), mode="r:gz") as bundle:
+        bundle.extractall(tmp_path, filter="data")
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-I",
+            "-c",
+            (
+                "import sys; sys.path.insert(0, sys.argv[1]); "
+                "import evals.fleet.qwen38_dp6_m_qualifier_runtime_v1 as runtime; "
+                "assert runtime.RESULT_SCHEMA == "
+                "'fleet-qwen38-dp6-m-qualification-result-v1'"
+            ),
+            str(tmp_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 def test_cgroup_leaf_producer_to_shared_consumer_end_to_end(
@@ -193,14 +229,14 @@ def test_wave_uses_exact_before_after_metrics_across_first_request_observer_race
     observed_rows, distribution, resource, baseline = runtime.observe_wave(
         4, lambda: rows, plan, {}
     )
-    assert observed_rows == rows
+    assert observed_rows == [runtime._failed_stream("probe_evidence_invalid")] * 4  # noqa: SLF001
     assert baseline == {"frozen": 0}
     assert resource["status"] == "PASSED_NO_CONTROLLER_RESOURCE_ERROR"
     assert distribution["global_request_total_before"] == 0
     assert distribution["global_request_total_after"] == 4
     assert distribution["global_request_delta"] == 4
     assert distribution["gpu_peak_utilization_percent_by_device"] == [0] * 6
-    runtime.validate_distribution_receipt(distribution, plan, 4, rows)
+    runtime.validate_distribution_receipt(distribution, plan, 4, observed_rows)
     before_snapshot = json.loads((tmp_path / "snapshots/c4-before.json").read_text())
     after_snapshot = json.loads((tmp_path / "snapshots/c4-after.json").read_text())
     assert before_snapshot["global_request_total"] == 0
@@ -235,10 +271,12 @@ def test_validation_exception_preserves_sanitized_wave_evidence(
     value = runtime.run(plan, {}, Path("."))
     failed = value["levels"][0]
     assert failed["failure_code"] == "wave_distribution_invalid"
-    assert failed["stream_receipts"] == rows
-    assert failed["distribution_receipt"] == distribution
-    assert failed["controller_resource_receipt"] == resource
-    assert failed["stable_counter_baseline_receipt"] == baseline
+    assert failed["stream_receipts"] == [
+        runtime._failed_stream("probe_evidence_invalid")  # noqa: SLF001
+    ]
+    assert failed["distribution_receipt"] == {}
+    assert failed["controller_resource_receipt"] == {}
+    assert failed["stable_counter_baseline_receipt"] == {}
     assert "sensitive_validation_detail" not in json.dumps(value)
 
 
@@ -270,8 +308,10 @@ def test_observation_exception_preserves_evidence_captured_before_failure(
     value = runtime.run(plan, {}, Path("."))
     failed = value["levels"][0]
     assert failed["failure_code"] == "wave_observation_unavailable"
-    assert failed["stream_receipts"] == rows
-    assert failed["stable_counter_baseline_receipt"] == baseline
+    assert failed["stream_receipts"] == [
+        runtime._failed_stream("probe_evidence_invalid")  # noqa: SLF001
+    ]
+    assert failed["stable_counter_baseline_receipt"] == {}
     assert "sensitive_post_request_observer_detail" not in json.dumps(value)
 
 
@@ -292,6 +332,158 @@ def test_unexpected_exception_class_text_and_hash_are_not_persisted(
     assert secret not in raw
     assert runtime._digest({"secret": secret}) not in raw  # noqa: SLF001
     assert value["levels"][0]["failure_code"] == "wave_observation_unavailable"
+
+
+def test_invalid_stream_is_projected_to_fixed_content_free_schema() -> None:
+    secret = "SECRET_PROTECTED_STREAM_FIELD"
+    raw = {
+        "schema_version": "rehashed-invalid",
+        "unexpected": {"score": 0.75, "payload": secret},
+        "receipt_sha256": "sha256:" + "a" * 64,
+    }
+    projected = runtime._project_stream(raw, {})  # noqa: SLF001
+    assert projected == runtime._failed_stream("probe_evidence_invalid")  # noqa: SLF001
+    assert secret not in json.dumps(projected)
+    assert set(projected) == runtime.FAILED_STREAM_KEYS
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        OSError("SECRET_OBSERVER_DETAIL"),
+        urllib.error.URLError("SECRET_OBSERVER_DETAIL"),
+        TimeoutError("SECRET_OBSERVER_DETAIL"),
+    ],
+)
+def test_result_and_level_reject_rehashed_extra_fields(
+    monkeypatch: pytest.MonkeyPatch, failure: Exception
+) -> None:
+    plan = {"receipt_sha256": "sha256:" + "a" * 64}
+    monkeypatch.setattr(runtime, "validate_plan", lambda *_args: None)
+    monkeypatch.setattr(
+        runtime,
+        "observe_wave",
+        lambda *_args: (_ for _ in ()).throw(failure),
+    )
+    valid = runtime.run(plan, {}, Path("."))
+    assert "SECRET_OBSERVER_DETAIL" not in json.dumps(valid)
+    runtime.validate_result(valid, plan, Path("."))
+
+    top_extra = copy.deepcopy(valid)
+    top_extra["protected"] = "SECRET"
+    top_extra["receipt_sha256"] = runtime._digest(top_extra)  # noqa: SLF001
+    with pytest.raises(ValueError, match="result drifted"):
+        runtime.validate_result(top_extra, plan, Path("."))
+
+    level_extra = copy.deepcopy(valid)
+    level_extra["levels"][0]["protected"] = "SECRET"
+    level_extra["receipt_sha256"] = runtime._digest(level_extra)  # noqa: SLF001
+    with pytest.raises(ValueError, match="ladder order drifted"):
+        runtime.validate_result(level_extra, plan, Path("."))
+
+    scalar_content = copy.deepcopy(valid)
+    scalar_content["levels"][0]["elapsed_milliseconds"] = "SECRET"
+    scalar_content["receipt_sha256"] = runtime._digest(scalar_content)  # noqa: SLF001
+    with pytest.raises(ValueError, match="ladder order drifted"):
+        runtime.validate_result(scalar_content, plan, Path("."))
+
+    stream_extra = copy.deepcopy(valid)
+    stream_extra["levels"][0]["stream_receipts"] = [
+        runtime._failed_stream("probe_evidence_invalid")  # noqa: SLF001
+    ]
+    stream_extra["levels"][0]["stream_receipts"][0]["protected"] = "SECRET"
+    stream_extra["levels"][0]["stream_receipts"][0]["receipt_sha256"] = runtime._digest(  # noqa: SLF001
+        stream_extra["levels"][0]["stream_receipts"][0]
+    )
+    stream_extra["receipt_sha256"] = runtime._digest(stream_extra)  # noqa: SLF001
+    with pytest.raises(ValueError, match="failed stream receipt"):
+        runtime.validate_result(stream_extra, plan, Path("."))
+
+
+def test_nested_evidence_keysets_reject_rehashed_extras() -> None:
+    plan = {
+        "receipt_sha256": "sha256:" + "a" * 64,
+        "service_origin": "http://server:8000",
+        "server_binding": {"receipt_sha256": "sha256:" + "b" * 64},
+    }
+    counter = runtime._counter_snapshot("BEFORE_WAVE", 0, 1, plan)  # noqa: SLF001
+    counter["protected"] = "SECRET"
+    counter["receipt_sha256"] = runtime._digest(counter)  # noqa: SLF001
+    with pytest.raises(ValueError, match="counter snapshot contains"):
+        runtime._validate_counter_snapshot(counter, "BEFORE_WAVE", 1, plan)  # noqa: SLF001
+
+    identity = {
+        "server_run_dir": runtime.early.RUN_DIR,
+        "pod_name": "pod",
+        "pod_uid": "11111111-1111-4111-8111-111111111111",
+        "api_run_id": "ft-run-one",
+        "service_uid": "22222222-2222-4222-8222-222222222222",
+        "server_binding_receipt_sha256": "sha256:" + "c" * 64,
+    }
+    baseline = observer.baseline_observation(0, observed_at_epoch=1, **identity)
+    baseline["protected"] = "SECRET"
+    baseline["receipt_sha256"] = runtime._digest(baseline)  # noqa: SLF001
+    binding = {
+        "api_run_id": identity["api_run_id"],
+        "head_pod_name": identity["pod_name"],
+        "head_pod_uid": identity["pod_uid"],
+        "service_uid": identity["service_uid"],
+        "server_binding_receipt_sha256": identity["server_binding_receipt_sha256"],
+    }
+    with pytest.raises(ValueError, match="baseline receipt contains"):
+        runtime._validate_baseline_evidence(baseline, binding)  # noqa: SLF001
+    with pytest.raises(ValueError, match="baseline receipt contains"):
+        runtime._validate_optional_level_evidence(  # noqa: SLF001
+            {
+                "stream_receipts": [],
+                "stable_counter_baseline_receipt": baseline,
+                "distribution_receipt": {},
+                "controller_resource_receipt": {},
+            },
+            {"server_binding": binding},
+        )
+
+    before = {"observed_at_epoch": 1, "oom_kill": 0, "nr_throttled": 0, "throttled_usec": 0}
+    after = {"observed_at_epoch": 2, "oom_kill": 0, "nr_throttled": 0, "throttled_usec": 0}
+    resource = runtime._dind_resource_control(before, after)  # noqa: SLF001
+    resource["protected"] = "SECRET"
+    resource["receipt_sha256"] = runtime._digest(resource)  # noqa: SLF001
+    with pytest.raises(ValueError, match="resource receipt contains"):
+        runtime._validate_resource_control(resource)  # noqa: SLF001
+
+
+def test_event_rejects_rehashed_extra_or_identity_drift(tmp_path: Path) -> None:
+    receipt_sha = "sha256:" + "a" * 64
+    identity = {
+        "server_run_dir": runtime.early.RUN_DIR,
+        "pod_name": "pod",
+        "pod_uid": "11111111-1111-4111-8111-111111111111",
+        "api_run_id": "ft-run-one",
+        "service_uid": "22222222-2222-4222-8222-222222222222",
+        "server_binding_receipt_sha256": receipt_sha,
+    }
+    event = observer.traffic_observation(
+        0,
+        1,
+        memory_mib=[1] * runtime.RANKS,
+        utilization_percent=[1] * runtime.RANKS,
+        observed_at_epoch=1,
+        **identity,
+    )
+    assert event is not None
+    event["protected"] = "SECRET"
+    event["receipt_sha256"] = runtime._digest(event)  # noqa: SLF001
+    path = tmp_path / "event.json"
+    path.write_text(json.dumps(event))
+    binding = {
+        "api_run_id": identity["api_run_id"],
+        "head_pod_name": identity["pod_name"],
+        "head_pod_uid": identity["pod_uid"],
+        "service_uid": identity["service_uid"],
+        "receipt_sha256": receipt_sha,
+    }
+    with pytest.raises(ValueError, match="traffic event drifted"):
+        runtime._event(path, binding)  # noqa: SLF001
 
 
 def test_initial_sampler_baseline_is_never_overwritten(tmp_path: Path) -> None:
@@ -359,5 +551,10 @@ def test_c6_still_requires_all_six_instantaneous_gpu_samples(
         "prompts_traces_flags_or_scores_included": False,
     }
     distribution["receipt_sha256"] = runtime._digest(distribution)  # noqa: SLF001
+    with_extra = copy.deepcopy(distribution)
+    with_extra["protected"] = "SECRET"
+    with_extra["receipt_sha256"] = runtime._digest(with_extra)  # noqa: SLF001
+    with pytest.raises(ValueError, match="distribution receipt contains"):
+        runtime.validate_distribution_receipt(with_extra, plan, 6, rows)
     with pytest.raises(ValueError, match="six-rank"):
         runtime.validate_distribution_receipt(distribution, plan, 6, rows)
