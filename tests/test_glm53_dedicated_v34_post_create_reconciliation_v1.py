@@ -392,6 +392,10 @@ def test_v34_held_launch_receipt_binds_frozen_package_and_zero_effects() -> None
     assert value["response_body_identity_required"] is False
     assert value["exhaustive_pre_post_jobs_api_reconciliation_required"] is True
     assert value["ambiguous_post_create_identity_release_required"] is True
+    assert value["post_create_transient_error_limit"] == 3
+    assert value["post_create_cleanup_attempt_limit"] == 3
+    assert value["all_safe_candidates_release_attempted"] is True
+    assert value["result_parent_and_write_failure_release_required"] is True
     assert value["api_mutation_calls"] == 0
     assert value["kubernetes_mutation_calls"] == 0
     assert value["server_launch_authorized"] is False

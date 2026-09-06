@@ -32,3 +32,10 @@ body. It must instead:
 Materialized-package tests must exercise an empty, malformed, and irrelevant
 202 response body so a later API-client refactor cannot reintroduce response
 body authority. The v33 identity is frozen and must never be retried.
+
+Once POST has been attempted, every later failure belongs to one cleanup
+envelope. That includes transient inventory or exact-GET failures and local
+receipt-directory or receipt-write failures. Cleanup must boundedly reconcile
+the generation again, attempt release and absence confirmation for every safe
+candidate even when an earlier candidate's delete fails, and emit only a fixed
+do-not-retry failure class if complete absence cannot be proved.

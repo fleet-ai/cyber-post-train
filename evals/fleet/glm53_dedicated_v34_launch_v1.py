@@ -15,8 +15,8 @@ from evals.fleet import glm53_dedicated_v34_controller_package_v1 as package
 from evals.fleet import glm53_dedicated_v34_create_v1 as server
 from evals.fleet import glm53_dedicated_v34_live_authorization_v1 as live
 
-FROZEN_PACKAGE_COMMIT = "3b373975dbbe2cf5aa5b5e20fcb474faeeaffdaa"
-FROZEN_PACKAGE_SHA256 = "sha256:4b3d7573733258842004b73c47e572b6635f273f6ab61165b13d975ccc735755"
+FROZEN_PACKAGE_COMMIT = "95212bc9aacd78ae45a0b2b9e0167d052007ca79"
+FROZEN_PACKAGE_SHA256 = "sha256:2c689526676a761e9d2e2d70f5b0011d78a739e016015b13620d9d66c1af8fa2"
 HELD_SCHEMA = "fleet-glm53-dedicated-v34-launch-held-v1"
 RESULT_SCHEMA = "fleet-glm53-dedicated-v34-controller-submission-v1"
 LaunchError = engine.LaunchError
@@ -65,6 +65,10 @@ def build_held(root: Path) -> dict[str, Any]:
             "response_body_identity_required": False,
             "exhaustive_pre_post_jobs_api_reconciliation_required": True,
             "ambiguous_post_create_identity_release_required": True,
+            "post_create_transient_error_limit": server.POST_CREATE_TRANSIENT_ERRORS,
+            "post_create_cleanup_attempt_limit": server.POST_CREATE_CLEANUP_ATTEMPTS,
+            "all_safe_candidates_release_attempted": True,
+            "result_parent_and_write_failure_release_required": True,
         }
     )
     from evals.fleet import exact_pass4_crypto as crypto
