@@ -1,0 +1,21 @@
+{
+  "api_mutations": 0,
+  "base_commit": "afd87debd3f19508e90c68f89bd4eb2e302b3bcc",
+  "fresh_current_inventory_max_age_seconds": 300,
+  "fresh_current_zero_serving_required": true,
+  "historical_blocked_inventory_is_not_launch_proof": true,
+  "launch_authorized": false,
+  "live_release_source_path": "evals/fleet/qwen38_dp6_g_live_release_v1.py",
+  "live_release_source_sha256": "sha256:6f47547ccb794d02e751351a8c773c70c35cc3ae4acf58ac2392182b1099ecbb",
+  "postcreate_source_path": "evals/fleet/qwen38_dp6_g_postcreate_v1.py",
+  "postcreate_source_sha256": "sha256:6172292a5bc8d3074e35b524e34b053d79521979d01e2eb968fbe1d7c8b14638",
+  "prompts_traces_flags_or_scores_included": false,
+  "qualifier_create_limit": 1,
+  "receipt_sha256": "sha256:3ba454bc78183cbe8965ca1b272343eca842d21cc8010332693e2b10c12a4508",
+  "schema_version": "fleet-qwen38-dp6-g-live-release-held-v1",
+  "scored_calls": 0,
+  "scoring_authorized": false,
+  "server_create_limit": 1,
+  "statistical_cells_selected": 0,
+  "status": "HELD_PENDING_FRESH_CURRENT_RELEASE_REVIEW"
+}
