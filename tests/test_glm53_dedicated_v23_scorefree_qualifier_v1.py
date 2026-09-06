@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from evals.fleet import exact_pass4_crypto as crypto
+from evals.fleet import glm53_dedicated_v23_request_counter_watchdog_v1 as watchdog_runtime
 from evals.fleet import glm53_dedicated_v23_scorefree_package_v1 as package
 from evals.fleet import glm53_dedicated_v23_scorefree_qualifier_v1 as qualifier
 from evals.fleet import opencode_actual_harness_parity_v1 as actual_harness
@@ -30,23 +31,66 @@ def _binding() -> dict:
 
 def _evidence() -> tuple[dict, dict, dict]:
     binding = _binding()
+    treatment = actual_harness.exact.EXPECTED_TREATMENT
+    expected_model = actual_harness.exact.EXPECTED_MODELS["glm-5.3"]
     parity = {
+        "schema_version": actual_harness.SCHEMA,
+        "classification": "ACTUAL_HARNESS_PARITY",
         "status": "PASSED_NON_SCORED",
-        "endpoint": {"server_binding": qualifier.canonical_model_binding(binding)},
-        "execution": {"task_instance_session_verifier_scoring_calls": 0},
+        "endpoint": {
+            "kind": "dedicated_uid_bound_inference",
+            "server_binding": qualifier.canonical_model_binding(binding),
+        },
+        "execution": {
+            "final_marker_observed": True,
+            "harness_exit_code": 0,
+            "model_requests": 4,
+            "scored_launch_authorized": False,
+            "task_instance_session_verifier_scoring_calls": 0,
+        },
+        "harness": {
+            "name": treatment["harness"],
+            "version": treatment["harness_version"],
+            "image": actual_harness.IMAGE,
+            "image_id": actual_harness.IMAGE_ID,
+            "release_asset_sha256": treatment["release_asset_sha256"],
+            "provider_adapter": treatment["provider_adapter"],
+            "context_management": treatment["context_management"],
+            "context_window_size": treatment["context_window_size"],
+            "compaction_headroom_tokens": treatment["compaction_headroom_tokens"],
+            "max_output_tokens": treatment["max_output_tokens"],
+            "max_model_requests": treatment["max_model_requests"],
+            "timeout_seconds": treatment["timeout_seconds"],
+        },
+        "model": dict(expected_model),
+        "tool_contract": {
+            "names": treatment["tools"],
+            "calls_observed_in_order": actual_harness.EXPECTED_CALL_ORDER,
+            "mcp_catalog_sha256": treatment["tool_catalog_sha256"],
+            "arguments_structurally_valid": True,
+            "model_request_catalog_exact": True,
+            "model_request_tool_names_exact": True,
+            "model_request_tool_descriptions_exact": True,
+            "model_request_tool_parameters_exact": True,
+            "model_requests_with_tools": 3,
+        },
+        "privacy": {
+            "benchmark_content_included": False,
+            "credentials_included": False,
+            "prompt_included": False,
+            "responses_or_model_outputs_included": False,
+            "stderr_or_stdout_included": False,
+            "tool_arguments_included": False,
+        },
     }
     parity["receipt_sha256"] = crypto.digest_without(parity, "receipt_sha256")
-    watchdog = {
-        "status": "ACTIVE_UID_BOUND",
-        "server_binding": binding,
-        "metric": "sglang_num_requests_total",
-        "idle_release_seconds": 600,
-        "health_or_process_liveness_refreshes": False,
-        "model_request_counter_growth_refreshes": True,
-        "release_via_jobs_api": True,
-    }
-    watchdog["receipt_sha256"] = crypto.digest_without(watchdog, "receipt_sha256")
+    watchdog = watchdog_runtime.build_active_receipt(
+        binding,
+        watcher_job_uid="55555555-5555-4555-8555-555555555555",
+        watcher_pod_uid="66666666-6666-4666-8666-666666666666",
+    )
     live = {
+        "schema_version": "fleet-glm53-dedicated-v23-scorefree-live-state-v1",
         "server_binding": binding,
         "rayjob_running": True,
         "workload_admitted": True,
@@ -56,8 +100,11 @@ def _evidence() -> tuple[dict, dict, dict]:
         "active_scored_controller_count": 0,
         "qualification_result_root_absent": True,
         "endpoint_lease_available": True,
+        "watcher_job_uid": watchdog["watcher_job_uid"],
+        "watcher_pod_uid": watchdog["watcher_pod_uid"],
         "seconds_since_last_model_request": 1,
     }
+    live["receipt_sha256"] = crypto.digest_without(live, "receipt_sha256")
     return parity, watchdog, live
 
 
@@ -78,8 +125,7 @@ def test_held_contract_removes_false_acceptance_gate_and_forbids_scoring() -> No
 
 def test_tracked_held_receipt_is_self_digested_and_never_authorizes_launch() -> None:
     path = (
-        ROOT
-        / "docs/evidence/glm53-study/"
+        ROOT / "docs/evidence/glm53-study/"
         "2026-09-06-glm53-dedicated-v23-scorefree-qualifier-held-v1.json"
     )
     value = json.loads(path.read_text())
@@ -98,9 +144,7 @@ def test_authorization_binds_uid_parity_watchdog_and_live_state() -> None:
     assert authorization["scored_launch_authorized"] is False
     assert authorization["idle_release_seconds"] == 600
     assert authorization["server_binding"] == _binding()
-    assert authorization["receipt_sha256"] == crypto.digest_without(
-        authorization, "receipt_sha256"
-    )
+    assert authorization["receipt_sha256"] == crypto.digest_without(authorization, "receipt_sha256")
 
 
 def test_real_parity_validator_accepts_only_canonical_seven_key_binding() -> None:
@@ -139,6 +183,97 @@ def test_authorization_fails_closed(source: str, field: str, value: object, mess
         qualifier.authorize(_binding(), parity, watchdog, live)
 
 
+@pytest.mark.parametrize(
+    ("path", "field", "value"),
+    [
+        (("harness",), "image_id", "sha256:wrong"),
+        (("tool_contract",), "model_request_tool_parameters_exact", False),
+        (("model",), "revision", "wrong"),
+        (("execution",), "task_instance_session_verifier_scoring_calls", 1),
+    ],
+)
+def test_authorization_rejects_rehashed_but_noncanonical_actual_parity(
+    path: tuple[str, ...], field: str, value: object
+) -> None:
+    parity, watchdog, live = _evidence()
+    target = parity
+    for part in path:
+        target = target[part]
+    target[field] = value
+    parity["receipt_sha256"] = crypto.digest_without(parity, "receipt_sha256")
+    with pytest.raises(qualifier.QualificationError, match="parity"):
+        qualifier.authorize(_binding(), parity, watchdog, live)
+
+
+def test_authorization_rejects_rehashed_live_or_wrong_watchdog_source() -> None:
+    parity, watchdog, live = _evidence()
+    live["active_scored_controller_count"] = 1
+    live["receipt_sha256"] = crypto.digest_without(live, "receipt_sha256")
+    with pytest.raises(qualifier.QualificationError, match="boundary"):
+        qualifier.authorize(_binding(), parity, watchdog, live)
+
+    parity, watchdog, live = _evidence()
+    watchdog["implementation_sha256"] = "sha256:" + "0" * 64
+    watchdog["receipt_sha256"] = crypto.digest_without(watchdog, "receipt_sha256")
+    with pytest.raises(qualifier.QualificationError, match="watchdog"):
+        qualifier.authorize(_binding(), parity, watchdog, live)
+
+
+def test_request_counter_watchdog_refreshes_only_on_counter_growth() -> None:
+    state = {"counter": 4, "last_model_request_at": 100.0}
+    assert watchdog_runtime.advance(state, counter=4, now=200.0) == state
+    assert watchdog_runtime.advance(state, counter=5, now=200.0) == {
+        "counter": 5,
+        "last_model_request_at": 200.0,
+    }
+    with pytest.raises(watchdog_runtime.WatchdogError, match="regressed"):
+        watchdog_runtime.advance(state, counter=3, now=200.0)
+
+
+def test_request_counter_watchdog_releases_exact_run_after_600_idle_seconds() -> None:
+    times = iter((599.0, 600.0))
+    released: list[str] = []
+    result = watchdog_runtime.watch(
+        api_run_id="ft-run-freshv23",
+        initial_counter=7,
+        ready_at=0.0,
+        read_counter=lambda: 7,
+        release_via_jobs_api=released.append,
+        clock=lambda: next(times),
+        sleep=lambda _seconds: None,
+    )
+    assert result == "RELEASED_IDLE"
+    assert released == ["ft-run-freshv23"]
+
+
+def test_request_growth_prevents_false_idle_release() -> None:
+    times = iter((599.0, 600.0, 1199.0, 1200.0))
+    counters = iter((8, 8, 8, 8))
+    released: list[str] = []
+    result = watchdog_runtime.watch(
+        api_run_id="ft-run-freshv23",
+        initial_counter=7,
+        ready_at=0.0,
+        read_counter=lambda: next(counters),
+        release_via_jobs_api=released.append,
+        clock=lambda: next(times),
+        sleep=lambda _seconds: None,
+    )
+    assert result == "RELEASED_IDLE"
+    assert released == ["ft-run-freshv23"]
+
+
+def test_watchdog_active_receipt_binds_exact_loaded_source_and_release_route() -> None:
+    receipt = watchdog_runtime.build_active_receipt(
+        _binding(),
+        watcher_job_uid="55555555-5555-4555-8555-555555555555",
+        watcher_pod_uid="66666666-6666-4666-8666-666666666666",
+    )
+    assert receipt["implementation_sha256"] == watchdog_runtime.source_sha256()
+    assert receipt["release_route"] == "DELETE /v1/runs/{api_run_id}"
+    assert receipt["receipt_sha256"] == crypto.digest_without(receipt, "receipt_sha256")
+
+
 def test_package_is_exact_create_once_nonpreempting_and_scorefree() -> None:
     parity, watchdog, live = _evidence()
     authorization = qualifier.authorize(_binding(), parity, watchdog, live)
@@ -164,6 +299,10 @@ def test_package_is_exact_create_once_nonpreempting_and_scorefree() -> None:
         "evals/fleet/scripts/observe_glm53_dedicated_v23_scorefree_gpu_v1.sh",
     }
     assert "glm53_dedicated_v23_scorefree_qualifier_v1 run" in configmap["data"]["run.sh"]
+    assert any(
+        key.endswith("glm53_dedicated_v23_request_counter_watchdog_v1.py")
+        for key in configmap["data"]
+    )
     container = job["spec"]["template"]["spec"]["containers"][0]
     env = {row["name"]: row["value"] for row in container["env"]}
     assert env["DEDICATED_SERVICE_ORIGIN"] == _binding()["service_origin"]
@@ -197,6 +336,7 @@ def test_execute_keeps_fleet_calls_zero_and_runs_frozen_waves(tmp_path, monkeypa
         lambda **_kwargs: __import__("contextlib").nullcontext(),
     )
     out = tmp_path / "RAW.json"
+
     def observed(_root, concurrency, _server):
         value = {
             "schema_version": qualifier.GPU_OBSERVER_SCHEMA,
@@ -207,9 +347,9 @@ def test_execute_keeps_fleet_calls_zero_and_runs_frozen_waves(tmp_path, monkeypa
             "max_utilization_percent_by_device": [50] * 8,
             "identity": {
                 "server_rayjob_uid": "11111111-1111-4111-8111-111111111111",
-                "server_head_pod_uid": "22222222-2222-4222-8222-222222222222",
-                "qualifier_job_uid": "33333333-3333-4333-8333-333333333333",
-                "qualifier_pod_uid": "44444444-4444-4444-8444-444444444444",
+                "server_head_pod_uid": "33333333-3333-4333-8333-333333333333",
+                "qualifier_job_uid": "77777777-7777-4777-8777-777777777777",
+                "qualifier_pod_uid": "88888888-8888-4888-8888-888888888888",
             },
             "server_identity_unchanged": True,
             "qualifier_identity_unchanged": True,
@@ -265,5 +405,29 @@ def test_raw_validation_fails_closed(field: str, value: object) -> None:
     raw[field] = value
     if field != "authorization_receipt_sha256":
         raw["receipt_sha256"] = crypto.digest_without(raw, "receipt_sha256")
+    with pytest.raises(qualifier.QualificationError, match="raw_authority"):
+        qualifier.validate_raw(raw)
+
+
+def test_raw_rejects_rehashed_authorization_with_nonzero_fleet_calls() -> None:
+    parity, watchdog, live = _evidence()
+    authorization = qualifier.authorize(_binding(), parity, watchdog, live)
+    authorization["fleet_session_calls"] = 1
+    authorization["receipt_sha256"] = crypto.digest_without(authorization, "receipt_sha256")
+    raw = {
+        "schema_version": qualifier.RAW_SCHEMA,
+        "status": "COMPLETED_SCORE_FREE_WAVES",
+        "authorization_receipt_sha256": authorization["receipt_sha256"],
+        "authorization": authorization,
+        "server_binding": _binding(),
+        "waves": [],
+        "gpu_waves": [],
+        "fleet_task_instance_calls": 0,
+        "fleet_session_calls": 0,
+        "verifier_calls": 0,
+        "scoring_calls": 0,
+        "scored_launch_authorized": False,
+    }
+    raw["receipt_sha256"] = crypto.digest_without(raw, "receipt_sha256")
     with pytest.raises(qualifier.QualificationError, match="raw_authority"):
         qualifier.validate_raw(raw)

@@ -25,6 +25,7 @@ FILES = tuple(
 ) + (
     "evals/fleet/glm53_dedicated_v22_concurrency_qualification_v1.py",
     "evals/fleet/glm53_dedicated_v23_scorefree_qualifier_v1.py",
+    "evals/fleet/glm53_dedicated_v23_request_counter_watchdog_v1.py",
 )
 RUN = "evals/fleet/scripts/run_glm53_dedicated_v23_scorefree_qualification_v1.sh"
 OPERATOR_FILES = (
@@ -107,9 +108,7 @@ def build_authorization_configmap(authorization: dict[str, Any]) -> dict[str, An
         "metadata": {"name": AUTHORIZATION_CONFIGMAP_NAME, "namespace": prior.NAMESPACE},
         "immutable": True,
         "data": {
-            "authorization.json": json.dumps(
-                authorization, sort_keys=True, separators=(",", ":")
-            )
+            "authorization.json": json.dumps(authorization, sort_keys=True, separators=(",", ":"))
             + "\n"
         },
     }
