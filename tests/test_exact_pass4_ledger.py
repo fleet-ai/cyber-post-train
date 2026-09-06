@@ -814,6 +814,11 @@ def test_supplemental_runtime_authority_resolves_live_glm_rank27_attempt4(
             "sha256:a39b169770345597cd53c3d8042254e3298313e3e161a4600388f2f9e26a5410",
             "sha256:3ac02e2bb743218ccc72f6d3b5b86a864831457398665e6cc36b5897336540bf",
         ),
+        (
+            4,
+            "sha256:31cdbce338d8afb2d61c59cdd64d3edf91e420e393889bc0d7828206b12d75f0",
+            "sha256:51419b57963a75e7c387b9bae607a2760e55cf56c5267e8f26b3112b2a0b0c11",
+        ),
     ],
 )
 def test_supplemental_runtime_authority_resolves_live_glm_rank28(
