@@ -69,6 +69,7 @@ def _release(plan: dict, source_sha: str) -> dict:
             "stable_session_snapshot": True,
             "session_identity_projection": "/v1/sessions/identities",
             "session_snapshot_sha256": "sha256:" + "3" * 64,
+            "accepted_authority_snapshot_sha256": "sha256:" + "4" * 64,
             "api_mutations": 0,
         },
         "privacy": {
@@ -106,8 +107,7 @@ def test_exact_rank30_generation_two_scientific_binding() -> None:
         "sha256:4296e8b9300a114686794dce795cec010f601430e2ac13594cfaa650431b4c72",
     ]
     assert all(
-        "r029" not in row["run_id"] and "g1" not in row["run_id"]
-        for row in plan["attempts"]
+        "r029" not in row["run_id"] and "g1" not in row["run_id"] for row in plan["attempts"]
     )
 
 
@@ -143,10 +143,7 @@ def test_held_package_is_one_create_once_job_and_closed() -> None:
 
 
 def test_tracked_held_receipt_rebuilds_byte_exact() -> None:
-    path = (
-        ROOT
-        / "docs/evidence/glm53-study/2026-09-06-glm53-hosted-rank30-peer-free-held-v2.json"
-    )
+    path = ROOT / "docs/evidence/glm53-study/2026-09-06-glm53-hosted-rank30-peer-free-held-v2.json"
     value = json.loads(path.read_text())
     rendered = package.render(ROOT)
     assert value == rendered["held_receipt"]
@@ -195,8 +192,8 @@ def test_release_rejects_ledger_diagnostic_extra_keys_and_staleness() -> None:
         with pytest.raises(RuntimeError, match="release drifted"):
             successor.validate_release(changed, plan, source_sha)
     stale = copy.deepcopy(release)
-    stale["checked_at_utc"] = (datetime.now(UTC) - timedelta(seconds=601)).isoformat().replace(
-        "+00:00", "Z"
+    stale["checked_at_utc"] = (
+        (datetime.now(UTC) - timedelta(seconds=601)).isoformat().replace("+00:00", "Z")
     )
     stale["receipt_sha256"] = self_hosted.digest_without(stale, "receipt_sha256")
     with pytest.raises(RuntimeError, match="release is stale"):

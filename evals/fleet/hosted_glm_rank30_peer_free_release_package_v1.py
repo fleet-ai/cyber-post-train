@@ -22,6 +22,8 @@ UV_IMAGE = (
     "sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7"
 )
 EXTRA_FILES = {
+    successor.LEDGER_AUTHORITY["path"],
+    successor.LIVE_LEDGER_VALIDATION["path"],
     "evals/fleet/hosted_glm_rank30_peer_free_release_bootstrap_v1.py",
     "evals/fleet/hosted_glm_rank30_peer_free_release_observer_v1.py",
     "evals/fleet/hosted_glm_exact_bulk_runtime_v1.py",

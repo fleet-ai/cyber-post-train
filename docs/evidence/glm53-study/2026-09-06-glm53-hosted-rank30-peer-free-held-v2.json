@@ -31,7 +31,7 @@
   "ledger_authority": {"file_sha256": "sha256:332c5ceae480e9c73cf1e391aeb59994049b69b240a8bbc106aefc35a9a01f25", "path": "docs/evidence/qwen38-study/2026-09-05-exact-pass4-ledger-evidence-snapshot-v48.json", "receipt_sha256": "sha256:1275d84f1b6aad8d02bc916be55f3a1f3ea99c6817f465905ec0791b0f66cd7a"},
   "live_ledger_validation": {"file_sha256": "sha256:c3c527a68217190555af394b94b7996901dd46e1e52505c9843d02afe66c7738", "glm_tally": {"accepted": 24, "active": 0, "blocked": 4, "unstarted": 372}, "path": "docs/evidence/glm53-study/2026-09-06-glm53-ledger-v48-live-validation.json", "receipt_sha256": "sha256:7b77ed00959f6bb219c5c20724ed6958ee85b56d01771f9f158a575cd7301c96"},
   "privacy": {"credentials_included": false, "prompts_traces_flags_read": false, "scores_read": false},
-  "receipt_sha256": "sha256:f25cdfa8e7ef15cdda626ade52b1dabb2f7630545f3a8a1f9cf5e9be10810a91",
+  "receipt_sha256": "sha256:089559c6689bec01460f530aa56843443e780e7ccc3d7b4cf35cb2abbd841b81",
   "required_release": {
     "active_hosted_controllers": 0,
     "all_four_rank30_cells_clear_all_generations": true,
@@ -48,7 +48,7 @@
   },
   "schema_version": "fleet-hosted-glm-rank30-peer-free-held-v2",
   "scoring_authorized": false,
-  "source_package_sha256": "sha256:6e9c2c7fa57d748f09150b07e86f2d4fe148f557477d44abaaee5b0b6b44dae0",
+  "source_package_sha256": "sha256:f4ead0f9af5b6649be6d8480b50561edd37cdef32dba83e16c7fb8afc0fe9b8e",
   "status": "HELD_PENDING_FRESH_SCORE_BLIND_RELEASE",
   "superseded_identities": {"configmap_name": "chris-glm53-exact100-hosted-r030-whole-task-g1-package-v1", "job_name": "chris-glm53-exact100-hosted-r030-whole-task-g1-v1", "retry_authorized": false, "sfs_root": "/mnt/sfs/jobs/chris-glm53-exact100-hosted-r030-whole-task-g1-v1"}
 }

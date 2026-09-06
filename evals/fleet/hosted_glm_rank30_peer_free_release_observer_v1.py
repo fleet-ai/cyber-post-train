@@ -67,9 +67,7 @@ EXPECTED_CELL_IDS = [
     "sha256:2b6f93f57e1862f339e55ff758ce6258a9665c66df80ad6d67fee21fa9fbe66f",
 ]
 EXPECTED_TASK_KEYS = ["cysec1-2-fira-gen_blackbox-df372d5a31676a815c9f0751__blackbox_ctf_v1"]
-EXPECTED_ALLOWED_PATHS = [
-    "/mnt/sfs/jobs/chris-glm53-r030-preclaim-phase-observer-v2"
-]
+EXPECTED_ALLOWED_PATHS = ["/mnt/sfs/jobs/chris-glm53-r030-preclaim-phase-observer-v2"]
 EXPECTED_TASK_VERSION_ID = "a0cacaaf-480b-4a4c-9ed7-6b6192bb6783"
 EXPECTED_SESSION_MODEL = "fleet-cluster-opencode-1.18.27/glm-5.3-opencode11827-autocontinue-v1"
 SESSION_IDENTITY_PATH = "/v1/sessions/identities"
@@ -78,10 +76,14 @@ SESSION_IDENTITY_KEYS = {
     "eval_task_id",
     "eval_task_version_id",
     "task_key",
+    "model_id",
     "model_identity",
     "model_identity_status",
     "status",
 }
+EXPECTED_SESSION_MODEL_ID = EXPECTED_SESSION_MODEL.rsplit("/", 1)[1]
+LEDGER_MANIFEST_SCHEMA = "fleet-exact-pass4-ledger-evidence-manifest-v2"
+LEDGER_VALIDATION_SCHEMA = "fleet-glm53-ledger-v48-live-validation-v1"
 
 
 class ObserverError(RuntimeError):
@@ -255,12 +257,8 @@ def _kubernetes_clear(
     observer_job_uid: str | None = None,
     observer_pod_uid: str | None = None,
 ) -> dict[str, int]:
-    jobs, job_gets = _kubernetes_items(
-        f"/apis/batch/v1/namespaces/{NAMESPACE}/jobs", "job"
-    )
-    pods, pod_gets = _kubernetes_items(
-        f"/api/v1/namespaces/{NAMESPACE}/pods", "pod"
-    )
+    jobs, job_gets = _kubernetes_items(f"/apis/batch/v1/namespaces/{NAMESPACE}/jobs", "job")
+    pods, pod_gets = _kubernetes_items(f"/api/v1/namespaces/{NAMESPACE}/pods", "pod")
     configmaps, configmap_gets = _kubernetes_items(
         f"/api/v1/namespaces/{NAMESPACE}/configmaps", "configmap"
     )
@@ -268,8 +266,7 @@ def _kubernetes_clear(
     target_configmap = binding["fresh_configmap_name"]
     fresh_job = sum((row.get("metadata") or {}).get("name") == target_job for row in jobs)
     fresh_pod = sum(
-        (row.get("metadata") or {}).get("labels", {}).get("job-name") == target_job
-        for row in pods
+        (row.get("metadata") or {}).get("labels", {}).get("job-name") == target_job for row in pods
     )
     fresh_configmap = sum(
         (row.get("metadata") or {}).get("name") == target_configmap for row in configmaps
@@ -281,23 +278,20 @@ def _kubernetes_clear(
         name = str(metadata.get("name", ""))
         experiment = str(labels.get("cyber-post-train.fleet.ai/experiment", ""))
         owner = labels.get("cyber-post-train.fleet.ai/owner")
-        hosted_glm = "glm" in (name + experiment).lower() and "hosted" in (
-            name + experiment
-        ).lower()
+        hosted_glm = (
+            "glm" in (name + experiment).lower() and "hosted" in (name + experiment).lower()
+        )
         active += int(owner == "chris" and hosted_glm and _is_nonterminal_job(row))
     if (observer_job_uid is None) != (observer_pod_uid is None):
         raise ObserverError("observer_identity_incomplete")
     if observer_job_uid is not None and observer_pod_uid is not None:
         observer_jobs = [
-            row
-            for row in jobs
-            if (row.get("metadata") or {}).get("name") == OBSERVER_JOB_NAME
+            row for row in jobs if (row.get("metadata") or {}).get("name") == OBSERVER_JOB_NAME
         ]
         observer_pods = [
             row
             for row in pods
-            if (row.get("metadata") or {}).get("labels", {}).get("job-name")
-            == OBSERVER_JOB_NAME
+            if (row.get("metadata") or {}).get("labels", {}).get("job-name") == OBSERVER_JOB_NAME
         ]
         if len(observer_jobs) != 1 or len(observer_pods) != 1:
             raise ObserverError("observer_identity_not_unique")
@@ -346,7 +340,7 @@ def _identity_values(value: Any, fields: set[str]) -> set[str]:
     return found
 
 
-def _safe_json_files(root: Path, *, accepted_only: bool) -> list[Path]:
+def _safe_claim_files(root: Path) -> list[Path]:
     if root.is_symlink() or not root.is_dir():
         raise ObserverError("scan_root_unsafe")
     paths: list[Path] = []
@@ -355,27 +349,121 @@ def _safe_json_files(root: Path, *, accepted_only: bool) -> list[Path]:
         if any((parent / name).is_symlink() for name in names):
             raise ObserverError("scan_directory_symlink_forbidden")
         for name in files:
-            if accepted_only and name != "ACCEPTED.json" and not (
-                parent.name == "accepted" and name.endswith(".json")
-            ):
-                continue
-            if not accepted_only and not name.endswith(".json"):
+            if not name.endswith(".json"):
                 continue
             paths.append(parent / name)
     return paths
 
 
-def _receipt_collisions(
-    root: Path, cell_ids: set[str], *, accepted_only: bool
-) -> tuple[int, int]:
+def _claim_collisions(root: Path, cell_ids: set[str]) -> tuple[int, int]:
     examined = collisions = 0
-    for path in _safe_json_files(root, accepted_only=accepted_only):
+    for path in _safe_claim_files(root):
         if path.is_symlink() or not path.is_file() or path.stat().st_size > MAX_RECEIPT_BYTES:
             raise ObserverError("scan_file_unsafe")
         value = strict_json(path.read_bytes())
         examined += 1
         collisions += int(bool(_identity_values(value, {"cell_id"}) & cell_ids))
     return examined, collisions
+
+
+def _load_exact_projection(root: Path, authority: dict[str, Any]) -> dict[str, Any]:
+    path = root / authority["path"]
+    if path.is_symlink() or not path.is_file() or path.stat().st_size > MAX_RECEIPT_BYTES:
+        raise ObserverError("acceptance_authority_path_unsafe")
+    raw = path.read_bytes()
+    value = strict_json(raw)
+    if (
+        sha256(raw) != authority["file_sha256"]
+        or value.get("receipt_sha256") != authority["receipt_sha256"]
+        or value.get("receipt_sha256") != digest(value)
+    ):
+        raise ObserverError("acceptance_authority_digest_invalid")
+    return value
+
+
+def _accepted_authority_clear(root: Path) -> tuple[int, int, str]:
+    """Validate only the exact score-blind ledger projections, never result trees."""
+
+    manifest = _load_exact_projection(root, successor.LEDGER_AUTHORITY)
+    validation = _load_exact_projection(root, successor.LIVE_LEDGER_VALIDATION)
+    entries = manifest.get("entries")
+    if (
+        set(manifest)
+        != {
+            "schema_version",
+            "campaign_id",
+            "campaign_path",
+            "entries",
+            "privacy",
+            "receipt_sha256",
+        }
+        or manifest.get("schema_version") != LEDGER_MANIFEST_SCHEMA
+        or not isinstance(entries, list)
+        or any(
+            not isinstance(row, dict) or set(row) != {"kind", "path", "expected_receipt_sha256"}
+            for row in entries or []
+        )
+        or manifest.get("privacy")
+        != {"flags_read": False, "prompts_read": False, "scores_read": False, "traces_read": False}
+    ):
+        raise ObserverError("acceptance_manifest_projection_invalid")
+    expected_tally = {
+        "accepted": 24,
+        "active": 0,
+        "blocked_nonrepeatable": 4,
+        "retryable_infra_failed": 0,
+        "target": 400,
+        "unstarted": 372,
+    }
+    if (
+        set(validation)
+        != {
+            "campaign_total_cells",
+            "effects",
+            "glm53_tally",
+            "manifest",
+            "observed_at_utc",
+            "observer",
+            "privacy",
+            "rank29_attempt4_acceptance",
+            "receipt_sha256",
+            "schema_version",
+            "status",
+            "supplemental_runtime_authority",
+        }
+        or validation.get("schema_version") != LEDGER_VALIDATION_SCHEMA
+        or validation.get("status") != "PASSED_SCORE_BLIND_800_CELL_RECONCILIATION"
+        or validation.get("manifest") != successor.LEDGER_AUTHORITY
+        or validation.get("glm53_tally") != expected_tally
+        or validation.get("privacy")
+        != {
+            "credentials_included": False,
+            "flags_read": False,
+            "prompts_read": False,
+            "scores_read": False,
+            "traces_read": False,
+        }
+        or validation.get("effects")
+        != {
+            "api_mutations": 0,
+            "filesystem_writes_to_sfs": 0,
+            "model_calls": 0,
+            "scoring_calls": 0,
+            "session_calls": 0,
+            "task_calls": 0,
+            "verifier_calls": 0,
+        }
+    ):
+        raise ObserverError("acceptance_live_projection_invalid")
+    projection_sha = sha256(
+        canonical(
+            {
+                "manifest": successor.LEDGER_AUTHORITY,
+                "validation": successor.LIVE_LEDGER_VALIDATION,
+            }
+        )
+    )
+    return 2, 0, projection_sha
 
 
 def _output_paths_clear(binding: dict[str, Any]) -> int:
@@ -477,12 +565,36 @@ def _session_collisions(binding: dict[str, Any], key: str) -> tuple[int, int, in
                     or row.get("task_key") != task_key
                 ):
                     raise ObserverError("session_identity_row_invalid")
-                if row.get("eval_task_version_id") == EXPECTED_TASK_VERSION_ID:
-                    model_status = row.get("model_identity_status")
-                    model_identity = row.get("model_identity")
-                    if model_status == "resolved" and model_identity == EXPECTED_SESSION_MODEL:
+                task_version = row.get("eval_task_version_id")
+                try:
+                    task_version_valid = uuid.UUID(str(task_version)).int != 0
+                except (TypeError, ValueError):
+                    task_version_valid = False
+                if not task_version_valid:
+                    raise ObserverError("target_session_task_version_ambiguous")
+                model_status = row.get("model_identity_status")
+                model_identity = row.get("model_identity")
+                model_id = row.get("model_id")
+                if model_status == "resolved" and (
+                    not isinstance(model_identity, str)
+                    or not isinstance(model_id, str)
+                    or model_identity.rsplit("/", 1)[-1] != model_id
+                ):
+                    raise ObserverError("session_model_identity_row_invalid")
+                if model_status not in {"resolved", "ambiguous"}:
+                    raise ObserverError("session_model_identity_row_invalid")
+                if task_version == EXPECTED_TASK_VERSION_ID:
+                    if (
+                        model_status == "resolved"
+                        and model_identity == EXPECTED_SESSION_MODEL
+                        and model_id == EXPECTED_SESSION_MODEL_ID
+                    ):
                         collisions += 1
-                    elif model_status != "resolved" or not isinstance(model_identity, str):
+                    elif (
+                        model_status != "resolved"
+                        or not isinstance(model_identity, str)
+                        or not isinstance(model_id, str)
+                    ):
                         raise ObserverError("target_session_model_identity_ambiguous")
                 snapshot.append(row)
             has_more = page["has_more"]
@@ -504,11 +616,24 @@ def _session_collisions(binding: dict[str, Any], key: str) -> tuple[int, int, in
 
 def validate_binding(value: dict[str, Any]) -> None:
     required = {
-        "schema_version", "release_schema", "cell_ids", "task_keys", "fresh_job_name",
-        "fresh_configmap_name", "fresh_sfs_root", "claim_root", "jobs_root", "lease_root",
-        "endpoint_key", "allowed_rank30_paths", "held_source_package_sha256",
-        "ledger_authority", "live_ledger_validation", "diagnostic_v2",
-        "superseded_identities", "binding_sha256",
+        "schema_version",
+        "release_schema",
+        "cell_ids",
+        "task_keys",
+        "fresh_job_name",
+        "fresh_configmap_name",
+        "fresh_sfs_root",
+        "claim_root",
+        "jobs_root",
+        "lease_root",
+        "endpoint_key",
+        "allowed_rank30_paths",
+        "held_source_package_sha256",
+        "ledger_authority",
+        "live_ledger_validation",
+        "diagnostic_v2",
+        "superseded_identities",
+        "binding_sha256",
     }
     cell_ids = value.get("cell_ids")
     task_keys = value.get("task_keys")
@@ -536,9 +661,7 @@ def validate_binding(value: dict[str, Any]) -> None:
             SHA_RE.fullmatch(str(value.get("held_source_package_sha256"))) is None,
             value.get("binding_sha256")
             != sha256(
-                canonical(
-                    {key: item for key, item in value.items() if key != "binding_sha256"}
-                )
+                canonical({key: item for key, item in value.items() if key != "binding_sha256"})
             ),
         )
     ):
@@ -588,11 +711,9 @@ def _clear_state(
         observer_pod_uid=observer_pod_uid,
     )
     cell_ids = set(binding["cell_ids"])
-    claim_examined, claim_collisions = _receipt_collisions(
-        Path(binding["claim_root"]), cell_ids, accepted_only=False
-    )
-    accepted_examined, accepted_collisions = _receipt_collisions(
-        Path(binding["jobs_root"]), cell_ids, accepted_only=True
+    claim_examined, claim_collisions = _claim_collisions(Path(binding["claim_root"]), cell_ids)
+    accepted_examined, accepted_collisions, accepted_projection_sha = _accepted_authority_clear(
+        Path(__file__).resolve().parents[2]
     )
     session_rows, session_gets, session_collisions, session_sha = _session_collisions(
         binding, api_key
@@ -603,7 +724,8 @@ def _clear_state(
         raise ObserverError("rank30_cell_collision")
     return {
         "claim_receipts_examined": claim_examined,
-        "accepted_receipts_examined": accepted_examined,
+        "accepted_authority_projections_examined": accepted_examined,
+        "accepted_authority_snapshot_sha256": accepted_projection_sha,
         "session_rows_examined": session_rows,
         "session_inventory_scans": 1,
         "archived_sessions_included": True,
@@ -652,6 +774,7 @@ def collect(
         "all_generation_claim_collisions": state["all_generation_claim_collisions"],
         "authoritative_session_collisions": state["authoritative_session_collisions"],
         "accepted_evidence_collisions": state["accepted_evidence_collisions"],
+        "accepted_authority_snapshot_sha256": state["accepted_authority_snapshot_sha256"],
         "output_root_collisions": state["output_root_collisions"],
         "new_job_collisions": state["new_job_collisions"],
         "new_pod_collisions": state["new_pod_collisions"],
