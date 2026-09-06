@@ -1,0 +1,27 @@
+{
+  "api_mutation_calls": 0,
+  "completed_phases": [
+    "01-materialized-sources",
+    "02-failed-v3-terminal",
+    "03-observer-bindings",
+    "04-inventory-load"
+  ],
+  "diagnostic_file_sha256": "sha256:4abf6c145119bbf542196313b54b984526c379d346b84dc09a9097b8394c59b4",
+  "diagnostic_receipt_sha256": "sha256:bc309d8bb9e834f1eb8b717dcd884ec989e7b75506316bd74fd3cce32d07cd05",
+  "error_sha256": "sha256:a4e74e385c47c00772057df3606dfa3e74307893bf32edea05563ef37118b09d",
+  "error_type_class": "value-error",
+  "failed_phase": "05-runtime-plan",
+  "failure_cause": "static-plan digest compared against executable runtime-plan digest",
+  "job_uid": "7222c06f-1887-4f7d-b467-4f8782077c85",
+  "model_calls": 0,
+  "pod_restarts": 0,
+  "pod_uid": "dc071272-99da-48b4-8ad9-7ce5a6a6ec79",
+  "receipt_sha256": "sha256:7cd1785f34469a9263a919a0a0d60f56555e45e64f38738b90d55ee63268af0d",
+  "retry_same_identity": false,
+  "schema_version": "fleet-hosted-glm-rank30-release-diagnostic-terminal-v4b",
+  "scoring_calls": 0,
+  "session_calls": 0,
+  "status": "FAILED_DETERMINISTIC_ZERO_EFFECT",
+  "task_calls": 0,
+  "verifier_calls": 0
+}
