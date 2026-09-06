@@ -1,0 +1,33 @@
+{
+  "api_mutation_calls": 0,
+  "base_merge_commit": "f397c6d2abf8c8e7b2621e7297741ea4e8f1b6f1",
+  "implementation": {
+    "commit": "cf0211f74cb93b1e661596d7c3a25a46536c1d45",
+    "module": "evals.fleet.glm53_dedicated_v24_watchdog_live_release_v1",
+    "module_sha256": "sha256:3efea80b7bb9380b3acfa525353ae950194edbc118d58f44df49030d5e65ef46",
+    "test_sha256": "sha256:223758efa009992b21d5d37e728e542b17f469a115b76a720631d770295c4d22"
+  },
+  "live_release_requirements": {
+    "application_metrics_http_status": 200,
+    "exact_post_create_api_rayjob_workload_head_pod_service_binding": true,
+    "maximum_observation_age_seconds": 60,
+    "maximum_ready_age_seconds": 120,
+    "preexisting_watchdog_objects": 0,
+    "request_payload_sha256": "sha256:9dfc5cb1bd4d42ae1a2aea765d092bbe69c1398a62c678612a1ce62562ad24d5",
+    "server_state": "RUNNING_READY_NO_RESTARTS_NO_PREEMPTION",
+    "watchdog_result_root_absent": true
+  },
+  "prompts_traces_flags_scores_or_model_outputs_included": false,
+  "qualification_launch_authorized": false,
+  "receipt_sha256": "sha256:77dd87134885858f182d18068ae5af11d752825bc68bd94af6e22de37963d305",
+  "schema_version": "fleet-glm53-dedicated-v24-watchdog-live-release-held-v1",
+  "scored_launch_authorized": false,
+  "server_launch_authorized": false,
+  "status": "READY_HELD_FOR_EXACT_POST_CREATE_BINDING",
+  "tests": {
+    "focused_passed": 92,
+    "live_release_tests_passed": 48,
+    "ruff_passed": true
+  },
+  "watchdog_launch_authorized": false
+}
