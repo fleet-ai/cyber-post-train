@@ -1480,16 +1480,17 @@ def _release_on_handoff_failure(binding: dict[str, Any], pod_name: str) -> None:
     raise LiveReleaseError("fallback_kubernetes_remnant_absence_unconfirmed")
 
 
-def launch(
+def launch_from_observation(
     root: Path,
     commit: str,
-    api_run_id: str,
+    binding: dict[str, Any],
+    live: dict[str, Any],
     *,
     priority_classes: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    """Observe, render, and create the exact watcher; release on handoff failure."""
+    """Create the watcher from one already-validated immutable live observation."""
 
-    binding, live = observe_live(api_run_id)
+    validate_live_state(live, binding)
     pod_name = live["head_pod_name"]
     rendered: dict[str, Any] | None = None
     reconciliation: list[dict[str, str]] = []
@@ -1541,6 +1542,25 @@ def launch(
     }
     receipt["receipt_sha256"] = crypto.digest_without(receipt, "receipt_sha256")
     return receipt
+
+
+def launch(
+    root: Path,
+    commit: str,
+    api_run_id: str,
+    *,
+    priority_classes: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Observe exactly once, then create the exact watcher from that observation."""
+
+    binding, live = observe_live(api_run_id)
+    return launch_from_observation(
+        root,
+        commit,
+        binding,
+        live,
+        priority_classes=priority_classes,
+    )
 
 
 def main() -> int:
