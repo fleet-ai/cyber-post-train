@@ -596,9 +596,13 @@ def main() -> int:
     parser.add_argument("--ready-at-epoch", type=float, required=True)
     parser.add_argument("--authorization", type=Path, required=True)
     args = parser.parse_args()
-    binding = json.loads(args.binding.read_text())
     terminal = args.active_receipt.with_name("TERMINAL.json")
+    emergency_api_run_id = os.environ.get("WATCHDOG_API_RUN_ID", "")
+    binding: dict[str, Any] = {}
     try:
+        binding = json.loads(args.binding.read_text())
+        if binding.get("api_run_id") != emergency_api_run_id:
+            raise WatchdogError("watchdog_emergency_release_identity_mismatch")
         authorization = json.loads(args.authorization.read_text())
         package_commit = os.environ.get("WATCHDOG_PACKAGE_COMMIT", "")
         package_sha256 = os.environ.get("WATCHDOG_PACKAGE_SHA256", "")
@@ -667,7 +671,7 @@ def main() -> int:
             release_run_and_confirm_http(
                 api_base="https://api.ft.flt.build",
                 bearer_token=os.environ.get("FLEET_API_KEY", ""),
-                api_run_id=str(binding.get("api_run_id", "")),
+                api_run_id=emergency_api_run_id,
             )
             release_confirmed = True
         except WatchdogError:

@@ -489,6 +489,10 @@ def render(
                 "value": watchdog_package["package_sha256"],
             },
             {
+                "name": "WATCHDOG_API_RUN_ID",
+                "value": binding["api_run_id"],
+            },
+            {
                 "name": "FLEET_API_KEY",
                 "valueFrom": {
                     "secretKeyRef": {
