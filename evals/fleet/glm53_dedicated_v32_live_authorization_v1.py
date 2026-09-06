@@ -21,8 +21,15 @@ LIVE_SCHEMA = "fleet-glm53-dedicated-v32-live-create-observation-v1"
 NAMESPACE = "fleet-train-jobs"
 BASE_URL = "https://api.ft.flt.build"
 ACTIVE_API_STATUSES = {"SUBMITTED", "SUSPENDED", "RUNNING"}
+TERMINAL_API_STATUSES = {"CANCELLED", "COMPLETED", "FAILED", "STOPPED", "SUCCEEDED"}
 MAX_NODES = 2
 MAX_GPUS = 16
+CONTROL_RESULT_PATH = (
+    "/mnt/sfs/jobs/chris-cyber-evalserve-glm53-tp8-a-v32-create-control/CREATED.json"
+)
+SFS_OBSERVER_POD_NAME = "allie-dev"
+SFS_OBSERVER_POD_UID = "73dabe56-60f8-4879-be9f-365196c502e3"
+SFS_OBSERVER_MOUNT_PATH = "/shared"
 LIVE_KEYS = {
     "schema_version",
     "status",
@@ -122,6 +129,15 @@ def _is_project_title(value: object) -> bool:
     return isinstance(value, str) and value.startswith("chris-cyber-evalserve-")
 
 
+def _api_status(value: object) -> str:
+    if not isinstance(value, str):
+        raise LiveAuthorizationError("v32_jobs_api_status_invalid")
+    status = value.upper()
+    if status not in ACTIVE_API_STATUSES | TERMINAL_API_STATUSES:
+        raise LiveAuthorizationError("v32_jobs_api_status_invalid")
+    return status
+
+
 def _active_project_runs(
     backend: Backend, rows: list[dict[str, Any]], title: str, run_dir: str
 ) -> list[dict[str, Any]]:
@@ -137,12 +153,16 @@ def _active_project_runs(
             continue
         if not isinstance(name, str) or not _is_project_run_dir(row_run_dir):
             raise LiveAuthorizationError("v32_jobs_api_project_identity_invalid")
+        row_status = _api_status(row.get("status"))
         current = backend.get_run(name)
         if current is None:
-            continue
+            if row_status in TERMINAL_API_STATUSES:
+                continue
+            raise LiveAuthorizationError("v32_jobs_api_history_live_drift")
         if current.get("run_dir") != row_run_dir:
             raise LiveAuthorizationError("v32_jobs_api_history_live_drift")
-        if str(current.get("status") or "").upper() in ACTIVE_API_STATUSES:
+        current_status = _api_status(current.get("status"))
+        if current_status in ACTIVE_API_STATUSES:
             active.append({**current, "_observed_api_run_id": name})
     return active
 
@@ -204,6 +224,8 @@ def build_live_authorization(
 ) -> dict[str, Any]:
     """Observe live state once and produce a zero-footprint authorization."""
 
+    if control_result_path != CONTROL_RESULT_PATH:
+        raise LiveAuthorizationError("v32_control_result_path_invalid")
     observed_at = time.time() if now is None else now
     rows, page_count = backend.list_runs()
     active = _active_project_runs(backend, rows, title, run_dir)
@@ -219,6 +241,9 @@ def build_live_authorization(
             "observer_sfs_mount_path",
             "absent_paths",
         }
+        or sfs.get("observer_pod_name") != SFS_OBSERVER_POD_NAME
+        or sfs.get("observer_pod_uid") != SFS_OBSERVER_POD_UID
+        or sfs.get("observer_sfs_mount_path") != SFS_OBSERVER_MOUNT_PATH
         or not _nonzero_uuid(sfs.get("observer_pod_uid"))
         or sfs.get("absent_paths") != [run_dir, control_result_path]
     ):
@@ -325,11 +350,14 @@ def validate_live_observation(
             "observer_sfs_mount_path",
             "absent_paths",
         }
+        or sfs.get("observer_pod_name") != SFS_OBSERVER_POD_NAME
+        or sfs.get("observer_pod_uid") != SFS_OBSERVER_POD_UID
+        or sfs.get("observer_sfs_mount_path") != SFS_OBSERVER_MOUNT_PATH
         or not _nonzero_uuid(sfs.get("observer_pod_uid"))
         or not isinstance(absent_paths, list)
         or len(absent_paths) != 2
         or absent_paths[0] != authorization.get("server_run_dir")
-        or not str(absent_paths[1]).endswith("/CREATED.json")
+        or absent_paths[1] != CONTROL_RESULT_PATH
         or any(
             value.get(field) != authorization.get(field)
             for field in (
@@ -461,10 +489,19 @@ class SystemBackend:
                                 str(mount.get("mountPath")),
                             )
                         )
-        candidates = [row for row in candidates if _nonzero_uuid(row[1])]
-        if not candidates:
+        exact = [
+            row
+            for row in sorted(set(candidates))
+            if row
+            == (
+                SFS_OBSERVER_POD_NAME,
+                SFS_OBSERVER_POD_UID,
+                SFS_OBSERVER_MOUNT_PATH,
+            )
+        ]
+        if len(exact) != 1:
             raise LiveAuthorizationError("v32_sfs_observer_absent")
-        return sorted(set(candidates))[0]
+        return exact[0]
 
     @staticmethod
     def _observed_path(mount: str, canonical: str) -> str:

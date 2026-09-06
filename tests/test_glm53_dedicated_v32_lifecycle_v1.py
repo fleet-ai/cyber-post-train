@@ -29,6 +29,9 @@ class FakeBackend:
         self.pages = 1
         self.preview_status = 200
         self.sfs_paths_override: list[str] | None = None
+        self.sfs_name = live_auth.SFS_OBSERVER_POD_NAME
+        self.sfs_uid = live_auth.SFS_OBSERVER_POD_UID
+        self.sfs_mount = live_auth.SFS_OBSERVER_MOUNT_PATH
 
     def list_runs(self) -> tuple[list[dict[str, object]], int]:
         return copy.deepcopy(self.rows), self.pages
@@ -43,9 +46,9 @@ class FakeBackend:
         self, *, absent_paths: tuple[str, ...]
     ) -> dict[str, object]:
         return {
-            "observer_pod_name": "stable-sfs-observer",
-            "observer_pod_uid": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-            "observer_sfs_mount_path": "/shared",
+            "observer_pod_name": self.sfs_name,
+            "observer_pod_uid": self.sfs_uid,
+            "observer_sfs_mount_path": self.sfs_mount,
             "absent_paths": self.sfs_paths_override or list(absent_paths),
         }
 
@@ -153,6 +156,8 @@ def test_v32_create_gate_requires_fresh_zero_state() -> None:
         ("qwen_shaped_gpu", "requires_zero_project_server"),
         ("orphan_object", "requires_zero_project_server"),
         ("sfs", "sfs_observation_invalid"),
+        ("sfs_name", "sfs_observation_invalid"),
+        ("sfs_mount", "sfs_observation_invalid"),
         ("preview", "preview_invalid"),
     ],
 )
@@ -197,6 +202,10 @@ def test_v32_live_builder_rejects_rehashed_drift_and_orphans(
         )
     elif mutation == "sfs":
         backend.sfs_paths_override = [server.RUN_DIR]
+    elif mutation == "sfs_name":
+        backend.sfs_name = "arbitrary-ready-pod"
+    elif mutation == "sfs_mount":
+        backend.sfs_mount = "/tmp"
     elif mutation == "preview":
         backend.preview_status = 422
     with pytest.raises(live_auth.LiveAuthorizationError, match=error):
@@ -218,6 +227,76 @@ def test_v32_live_builder_pages_and_rejects_hidden_active_server() -> None:
         live_auth.LiveAuthorizationError, match="requires_zero_project_server"
     ):
         create_authorization(backend)
+
+
+def test_v32_live_builder_rejects_active_list_row_when_exact_get_is_404() -> None:
+    backend = FakeBackend()
+    backend.rows = [
+        {
+            "name": "ft-run-deadbeef",
+            "title": "chris-cyber-evalserve-q38-dp6-z-v1",
+            "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-q38-dp6-z-v1",
+            "status": "RUNNING",
+        }
+    ]
+    with pytest.raises(
+        live_auth.LiveAuthorizationError, match="history_live_drift"
+    ):
+        create_authorization(backend)
+
+
+@pytest.mark.parametrize("status", ["PENDING", "CREATED", "ADMITTED", "MYSTERY", None, 7])
+def test_v32_live_builder_rejects_unknown_or_malformed_api_status(
+    status: object,
+) -> None:
+    backend = FakeBackend()
+    row = {
+        "name": "ft-run-deadbeef",
+        "title": "chris-cyber-evalserve-q38-dp6-z-v1",
+        "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-q38-dp6-z-v1",
+        "status": status,
+    }
+    backend.rows = [row]
+    backend.exact["ft-run-deadbeef"] = row
+    with pytest.raises(live_auth.LiveAuthorizationError, match="status_invalid"):
+        create_authorization(backend)
+
+
+def test_v32_live_builder_ignores_only_explicit_terminal_row_with_exact_404() -> None:
+    backend = FakeBackend()
+    backend.rows = [
+        {
+            "name": "ft-run-deadbeef",
+            "title": "chris-cyber-evalserve-q38-dp6-z-v1",
+            "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-q38-dp6-z-v1",
+            "status": "FAILED",
+        }
+    ]
+    server.validate_authorization(create_authorization(backend))
+
+
+@pytest.mark.parametrize("mutation", ["control_path", "observer_name", "observer_mount"])
+def test_v32_create_gate_rejects_rehashed_sfs_identity_drift(mutation: str) -> None:
+    value = create_authorization()
+    changed = copy.deepcopy(value)
+    if mutation == "control_path":
+        changed["live_observation"]["sfs_observation"]["absent_paths"][1] = (
+            "/tmp/CREATED.json"
+        )
+    elif mutation == "observer_name":
+        changed["live_observation"]["sfs_observation"]["observer_pod_name"] = (
+            "arbitrary-ready-pod"
+        )
+    else:
+        changed["live_observation"]["sfs_observation"][
+            "observer_sfs_mount_path"
+        ] = "/tmp"
+    changed["live_observation"]["receipt_sha256"] = crypto.digest_without(
+        changed["live_observation"], "receipt_sha256"
+    )
+    changed["receipt_sha256"] = crypto.digest_without(changed, "receipt_sha256")
+    with pytest.raises(server.CreateError, match="authorization_invalid"):
+        server.validate_authorization(changed)
 
 
 def test_v32_live_builder_rejects_malformed_project_api_identity() -> None:

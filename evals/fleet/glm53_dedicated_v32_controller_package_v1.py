@@ -14,6 +14,7 @@ from evals.fleet import glm53_dedicated_v31_controller_package_v1 as prior
 from evals.fleet import glm53_dedicated_v32_controller_v1 as controller
 from evals.fleet import glm53_dedicated_v32_create_v1 as server
 from evals.fleet import glm53_dedicated_v32_incluster_parity_v1 as parity
+from evals.fleet import glm53_dedicated_v32_live_authorization_v1 as live_authorization
 
 JOB_NAME = "chris-glm53-v32-create-watchdog-parity-controller-v1"
 CONFIGMAP_NAME = JOB_NAME + "-package"
@@ -151,6 +152,10 @@ def build_held(root: Path, package_commit: str) -> dict[str, Any]:
         "live_authorization_builder": (
             "evals.fleet.glm53_dedicated_v32_live_authorization_v1"
         ),
+        "sfs_observer_pod_name": live_authorization.SFS_OBSERVER_POD_NAME,
+        "sfs_observer_pod_uid": live_authorization.SFS_OBSERVER_POD_UID,
+        "sfs_observer_mount_path": live_authorization.SFS_OBSERVER_MOUNT_PATH,
+        "control_result_path": live_authorization.CONTROL_RESULT_PATH,
         "server_priority_class": server.payload()["priority_class"],
         "server_preemption_policy": "Never",
         "idle_release_seconds": 600,

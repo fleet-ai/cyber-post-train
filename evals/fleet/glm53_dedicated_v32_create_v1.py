@@ -212,6 +212,10 @@ def build_held() -> dict[str, Any]:
         "live_authorization_builder": (
             "evals.fleet.glm53_dedicated_v32_live_authorization_v1"
         ),
+        "sfs_observer_pod_name": live_authorization.SFS_OBSERVER_POD_NAME,
+        "sfs_observer_pod_uid": live_authorization.SFS_OBSERVER_POD_UID,
+        "sfs_observer_mount_path": live_authorization.SFS_OBSERVER_MOUNT_PATH,
+        "control_result_path": live_authorization.CONTROL_RESULT_PATH,
         "priority_class": payload()["priority_class"],
         "preemption_policy": "Never",
         "single_live_observation_required": True,
