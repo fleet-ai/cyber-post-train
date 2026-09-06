@@ -207,6 +207,10 @@ def test_renderer_is_create_once_score_free_and_needs_no_kubectl() -> None:
     assert "v0.20.1" in command
     assert "docker build" not in command
     assert "opencode_staged_image_v1" in command
+    assert (
+        "uv run --with httpx --with pyyaml python -m "
+        "evals.fleet.opencode_staged_image_v1"
+    ) in command
     assert "gzip -dc" in command
     assert package.staged_image.ARCHIVE_SHA256.removeprefix("sha256:") not in command
     assert package.staged_image.RUNTIME_IMAGE_ID in command

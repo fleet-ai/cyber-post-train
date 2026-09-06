@@ -34,8 +34,8 @@ def test_held_packet_is_valid_and_authorizes_nothing() -> None:
 
 def test_jobs_payload_is_exact_one_node_six_gpu_nonpreempting_server() -> None:
     payload = early.jobs_payload(ROOT)
-    assert payload["title"] == "chris-cyber-evalserve-q38-dp6-a-v1"
-    assert payload["run_dir"] == "/mnt/sfs/jobs/chris-cyber-evalserve-q38-dp6-a-v1"
+    assert payload["title"] == "chris-cyber-evalserve-q38-dp6-b-v1"
+    assert payload["run_dir"] == "/mnt/sfs/jobs/chris-cyber-evalserve-q38-dp6-b-v1"
     assert payload["workers"] == 1
     assert payload["gpus_per_worker"] == 6
     assert payload["priority_class"] == "fleet-infra-quiet"
