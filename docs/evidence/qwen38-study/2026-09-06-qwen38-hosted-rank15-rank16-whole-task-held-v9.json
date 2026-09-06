@@ -1,0 +1,121 @@
+{
+    "controllers": [
+        {
+            "cells": [
+                {
+                    "attempt": 1,
+                    "cell_id": "sha256:154ea5b3f132cff779ee42d79f7d787bcb48eaa8b90c7f5851e03bfe698457b2",
+                    "execution_generation": 20,
+                    "execution_id": "sha256:0c20a3dab5cdf42462e640e33f2b5143cc39823340aa1d5a86b1ee5eea47a32f",
+                    "run_id": "chris-q38-ac-g20v2-a-r015-a1-0c20a3da"
+                },
+                {
+                    "attempt": 2,
+                    "cell_id": "sha256:84e50468e938989a23d301ee7a099cf6eba7a70c9f5ed4f27aeac63a67950aee",
+                    "execution_generation": 20,
+                    "execution_id": "sha256:7adc3b06699d5357012c44cc3d4c0d6bcf2bd68e6160d5e7d6bc9f066465a0bf",
+                    "run_id": "chris-q38-ac-g20v2-a-r015-a2-7adc3b06"
+                },
+                {
+                    "attempt": 3,
+                    "cell_id": "sha256:f34439505333624a27411105aa3eb8b61c6b841a0193e7ac39b4632131da656c",
+                    "execution_generation": 20,
+                    "execution_id": "sha256:b847e6b72dd3844b2de0102dd528d7c7bab1a2fbd17e595e069dbf838d35385a",
+                    "run_id": "chris-q38-ac-g20v2-a-r015-a3-b847e6b7"
+                },
+                {
+                    "attempt": 4,
+                    "cell_id": "sha256:27e3d90cfbfa2bc0f6e3e8b7e823d3ee265345ed8e0695cd1063717fec5dac1c",
+                    "execution_generation": 20,
+                    "execution_id": "sha256:cc402e688797b3833819eb6cbcff5d92fd9a7608f32dfacf365ebeb165d3424d",
+                    "run_id": "chris-q38-ac-g20v2-a-r015-a4-cc402e68"
+                }
+            ],
+            "configmap_name": "chris-q38-hosted-r015-whole-task-g20-package-v2",
+            "controller": "qwen-a",
+            "job_name": "chris-q38-hosted-r015-whole-task-g20-v2",
+      "package_source_receipt_sha256": "sha256:14e927ed97f31126dacb1db8f999160111557ee7db32b9efba319a09a1bbe5ae",
+            "plan_sha256": "sha256:9f3b402b3f6ab261018d86bbe2cbc81e48a1f839d7a02b0e1b4112a458c069ce",
+            "selection_rank": 15,
+            "sfs_root": "/mnt/sfs/jobs/chris-q38-hosted-r015-whole-task-g20-v2",
+            "task_version_id": "fb8f2178-7dd8-429a-8d3c-f14b21a51e02"
+        },
+        {
+            "cells": [
+                {
+                    "attempt": 1,
+                    "cell_id": "sha256:bb1eb87b817eb015533d59880b3d16fc9768f910237009ff7730b6b85d65e89d",
+                    "execution_generation": 20,
+                    "execution_id": "sha256:8f6c1b5d94d7165417b8997158c481a04845bb147265d6381cc2ed1356ca160e",
+                    "run_id": "chris-q38-ac-g20v2-b-r016-a1-8f6c1b5d"
+                },
+                {
+                    "attempt": 2,
+                    "cell_id": "sha256:f8a05b93a8de548cfcb1eb36dbf78ace2fa2647d3eee5e3d5b41894f3dc26dba",
+                    "execution_generation": 20,
+                    "execution_id": "sha256:1b1a19a64f54a155e61a991e10040847ce08aa6dc077ce983306156b33e0d45b",
+                    "run_id": "chris-q38-ac-g20v2-b-r016-a2-1b1a19a6"
+                },
+                {
+                    "attempt": 3,
+                    "cell_id": "sha256:47b41dbbdcad5126c1a2813f14b40213bebf8c99e8b42e4b1c89c98fd1722cd6",
+                    "execution_generation": 20,
+                    "execution_id": "sha256:b438cbc95d5d8c808f31b51bf14b0373f6033c0c6d6629ba65dac8d6a4eb52cb",
+                    "run_id": "chris-q38-ac-g20v2-b-r016-a3-b438cbc9"
+                },
+                {
+                    "attempt": 4,
+                    "cell_id": "sha256:16152cb6dc73f034124cb4bb03e08d2ec35acafcb0e9a9ef06c713fc4c3def3c",
+                    "execution_generation": 20,
+                    "execution_id": "sha256:c9f20662f022d65dee2e1a4c849ef3d869da4b6fa6c9b798e7980287ff09fe7f",
+                    "run_id": "chris-q38-ac-g20v2-b-r016-a4-c9f20662"
+                }
+            ],
+            "configmap_name": "chris-q38-hosted-r016-whole-task-g20-package-v2",
+            "controller": "qwen-b",
+            "job_name": "chris-q38-hosted-r016-whole-task-g20-v2",
+      "package_source_receipt_sha256": "sha256:8d9e6337b58393161be5e7b91931f05edfac9b3e09474d65ff2c6c45b6233b50",
+            "plan_sha256": "sha256:d0571a1edec58f79fbdd27367d9bb27323e662e9513662a54f73213aa2b9c8e2",
+            "selection_rank": 16,
+            "sfs_root": "/mnt/sfs/jobs/chris-q38-hosted-r016-whole-task-g20-v2",
+            "task_version_id": "fd07b96f-7aa4-4041-862b-5aa7411eff4b"
+        }
+    ],
+    "launch_authorized": false,
+    "preclaim_failure": {
+        "file_sha256": "sha256:e423007ca58b69462d7fdd3a13a9f325a34a1a0f828473882c5b72d574dc560d",
+        "path": "docs/evidence/qwen38-study/2026-09-06-qwen38-hosted-rank15-rank16-preclaim-failure-v2.json",
+        "receipt_sha256": "sha256:5d51c5e8bd0009c8f01462087c11e6cf1531e87588517fea251e96d7c4030f60"
+    },
+    "privacy": {
+        "credentials_included": false,
+        "prompts_traces_flags_read": false,
+        "scores_read": false
+    },
+  "receipt_sha256": "sha256:7223357495fbabcd7ee7bb07730c98576e82b1fa2b1b854ae40411d85733c3ba",
+    "required_release_gate": {
+        "accepted_receipts_clear": true,
+        "all_eight_statistical_cells_clear": true,
+        "authoritative_sessions_clear": true,
+        "both_endpoint_lease_slots_simultaneously_free": true,
+        "canonical_claims_clear": true,
+        "fresh_v2_runtime_gate_canary_pass": true,
+        "fresh_uid_bound_score_blind_observer": true,
+        "independent_terminal_validation_required": true,
+        "new_job_pod_configmap_and_sfs_identities_absent": true,
+        "observer_job_must_succeed": true,
+        "old_execution_identities_reconciled": true
+    },
+    "runtime_gate_canary_pass": {
+        "path": "docs/evidence/qwen38-study/2026-09-06-qwen38-hosted-runtime-gate-canary-v5-pass.json",
+        "receipt_sha256": "sha256:0d06e9bbb97c08bcb34588ddb093549a2d02d7508b53c42b11362502e4580902"
+    },
+    "schema_version": "fleet-qwen38-hosted-atomic-whole-task-held-v9",
+    "scoring_authorized": false,
+    "status": "HELD_PENDING_FRESH_SCORE_BLIND_GATES",
+    "supersedes": {
+        "file_sha256": "sha256:43b0eba368f488bc34f1ce5ae0d8ae2953a2f31d0ccbe1ab0bb88f058a102124",
+        "path": "docs/evidence/qwen38-study/2026-09-06-qwen38-hosted-rank15-rank16-whole-task-held-v8.json",
+        "receipt_sha256": "sha256:d5513759ba467e72c1750e9e294be9d90729cb52086f57cc991f156eca55484d"
+    }
+}
