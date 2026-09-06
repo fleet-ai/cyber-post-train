@@ -5,25 +5,33 @@
     2,
     4
   ],
-  "package_commit": "11014b28a6e82ba986bc8621b06e177bfdf51bbd",
-  "package_sha256": "sha256:501a85b1853c0318dff855fa3fd350c839993d75009abf9affeede98b20a2f6f",
+  "package_commit": "7ca2fe2e9f8809ae71b6ad9d768cce323cdf00fa",
+  "package_sha256": "sha256:6ecdb69f15b1239ec072f7287f46ba012272107dfe3973380406c7f9eb8ca287",
   "plan_receipt_sha256": "sha256:97949d8b7dd214e85786ba39bf18496e92bae95e79e5c08d1071139ce3bc4477",
   "prompts_traces_flags_scores_or_model_outputs_included": false,
   "qualification_launch_authorized": false,
-  "receipt_sha256": "sha256:7c3760ed7f735ee4e78eda65307163f0bc49fb0308930059deeae3607445240d",
+  "receipt_sha256": "sha256:96613f397edccacdbd1e8009511425387602bb710f4e77ac8fea0d043210f247",
   "removed_false_prerequisite": {
     "rank51_attempt2_accepted_required": false,
     "reason": "rank51_attempt2_is_sealed_nonrepeatable_uncredited"
   },
   "request_counter_watchdog": {
+    "active_request_metrics": [
+      "sglang:num_running_reqs",
+      "sglang:num_queue_reqs"
+    ],
+    "active_request_or_queue_refreshes": true,
     "health_or_process_liveness_refreshes": false,
     "idle_release_seconds": 600,
     "implementation_id": "glm53-v23-sglang-request-counter-watchdog-v1",
     "implementation_module": "evals.fleet.glm53_dedicated_v23_request_counter_watchdog_v1",
-    "implementation_sha256": "sha256:de1b7b54666817bc55bbdf482de3fb0d4fffb41ded214fd4c589f7ab6806e4d5",
+    "implementation_sha256": "sha256:c1cc9858a059e8fd412cae9183f4754f7534d1e654580807b9ba3693aa871487",
     "metric": "sglang_num_requests_total",
+    "metric_contract_commit": "97c6978369ac1e04c91fcc01c98acc25129a6000",
+    "metric_contract_source": "https://github.com/sgl-project/sglang/blob/97c6978369ac1e04c91fcc01c98acc25129a6000/docs/docs/references/production_metrics.mdx",
     "release_route": "DELETE /v1/runs/{api_run_id}",
     "release_via_jobs_api": true,
+    "terminal_receipt_required": true,
     "watcher_job_and_pod_uids_required": true
   },
   "schema_version": "fleet-glm53-dedicated-v23-scorefree-held-receipt-v1",
