@@ -1,0 +1,27 @@
+{
+  "api_mutations": 0,
+  "config_sha256": "sha256:a55b7f5ce806f7e7fb37c008bf3c5bc687c95c540318050f3f05ef3f4e7c0703",
+  "http_status": 200,
+  "priority_class": "fleet-infra-quiet",
+  "prompts_traces_flags_or_scores_included": false,
+  "receipt_sha256": "sha256:bc5c030c87ce12a7c7ddbeeb5bd2b04cee04d786d9b7d5acc8f73ac308d7349f",
+  "rendered": {
+    "command_sha256": "sha256:b73d5d4c26a463fecc5b6989bcf11b9049a4361b54ae8d3186d1f4d737109815",
+    "gpu_limit": 6,
+    "gpu_request": 6,
+    "image": "ghcr.io/fleet-ai/cyber-post-train-glm53-runtime@sha256:ec93ba50613fd13fb4c0b0a9105767ab18209a1e0108dab0923aad694c0206ec",
+    "kind": "RayJob",
+    "preemption_policy": null,
+    "priority_class": "fleet-infra-quiet",
+    "queue": "training-lq",
+    "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-q38-dp6-j-v1",
+    "suspended": true
+  },
+  "request_sha256": "sha256:62bcb558b4ff9acb2d09dc24927e0d7436c751765c28e6ba30a93a416b349c79",
+  "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-q38-dp6-j-v1",
+  "schema_version": "fleet-qwen38-dp6-j-jobs-preview-v1",
+  "scored_calls": 0,
+  "serving_block": "dedicated-qwen-dp6-j-v1",
+  "status": "PASSED_NON_MUTATING",
+  "title": "chris-cyber-evalserve-q38-dp6-j-v1"
+}

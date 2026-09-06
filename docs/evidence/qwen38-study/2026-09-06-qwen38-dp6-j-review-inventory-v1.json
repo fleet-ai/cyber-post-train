@@ -1,0 +1,70 @@
+{
+  "active_project_gpu_nodes": 1,
+  "active_project_gpus": 8,
+  "active_project_serving_runs": 1,
+  "allowed_existing_serving_binding": {
+    "api_run_id": "ft-run-1dd00ca3",
+    "gpu_nodes": 1,
+    "gpus": 8,
+    "head_node_name": "computeinstance-e04q707wzj5z9c6a2r",
+    "head_node_uid": "2ecc0914-d62f-4ece-bd49-91c3405b5ce1",
+    "head_pod_name": "ft-run-1dd00ca3-v2sqd-head-4w6jg",
+    "head_pod_uid": "474fa83d-c0bd-4b98-b8de-a7f16682fc88",
+    "raycluster_name": "ft-run-1dd00ca3-v2sqd",
+    "raycluster_uid": "f9b48060-9c56-423e-978f-0f5579493abf",
+    "rayjob_name": "ft-run-1dd00ca3",
+    "rayjob_uid": "784eab08-d34c-4f18-9f2f-afa259c12161",
+    "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-glm53-tp8-a-v29",
+    "service_name": "ft-run-1dd00ca3-v2sqd-head-svc",
+    "service_uid": "20b6b71b-75d7-47e2-b0f8-453aefd5f1d9",
+    "title": "chris-cyber-evalserve-glm53-tp8-a-v29",
+    "watchdog_job_name": "chris-glm53-dedicated-v29-request-watchdog-v1",
+    "watchdog_job_uid": "c16d0947-af0e-44e1-9c6f-7456bf099b9f",
+    "watchdog_pod_name": "chris-glm53-dedicated-v29-request-watchdog-v1-hh5rc",
+    "watchdog_pod_uid": "b1661bd3-08f7-43f3-bec2-61c6cff4ed62",
+    "workload_name": "rayjob-ft-run-1dd00ca3-b1e3f",
+    "workload_uid": "62f0588b-715a-4236-b1b1-b9bf05ef66a5"
+  },
+  "api_mutations": 0,
+  "capacity": {
+    "cluster_queue_uid": "a0871515-e979-4292-a994-51b987e4016c",
+    "eligible_node_uids": [
+      "135f1ac8-be85-4a44-aeab-f0276244ca4e",
+      "159f1f6d-5df3-493e-9f24-59e2bd3a2525",
+      "3be70331-03d6-4446-834d-ed48f26298e6",
+      "7b03e4b0-16b5-4ceb-ab88-643d9d6b42d1",
+      "c59dd323-3c46-4835-9831-41565a1120d8",
+      "e0a062ee-3bdd-4964-b5c1-79c0a0a58dde"
+    ],
+    "local_queue_uid": "585e1a29-300a-438c-bb2f-268ca57e0f56",
+    "nominal_quota_gpus": 128,
+    "nominal_quota_headroom_gpus": 72,
+    "peer_preemption_required": false,
+    "schedulable_six_gpu_fit_nodes": 6,
+    "server_priority_class": {
+      "name": "fleet-infra-quiet",
+      "preemption_policy": "Never",
+      "value": -1000
+    },
+    "used_quota_gpus": 56
+  },
+  "jobs_api_inventory_complete": true,
+  "kubernetes_inventory_complete": true,
+  "maximum_project_gpu_nodes": 2,
+  "maximum_project_gpus": 16,
+  "observed_at": "2026-09-06T14:08:40.406160Z",
+  "projected_gpu_nodes": 2,
+  "projected_gpus": 14,
+  "prompts_traces_flags_or_scores_included": false,
+  "receipt_sha256": "sha256:23642951e4c22866928f14c6c094719dabe370db19dc250df0caba996b022c87",
+  "schema_version": "fleet-qwen38-dp6-j-review-inventory-v1",
+  "scored_calls": 0,
+  "sfs_observer_mount_path": "/shared",
+  "sfs_observer_pod_uid": "73dabe56-60f8-4879-be9f-365196c502e3",
+  "status": "CLEAR_EXACT_GLM_V29_COEXISTENCE_FOR_REVIEW_ONLY",
+  "target_identity_matches": {
+    "jobs_api": 0,
+    "kubernetes": 0,
+    "sfs": 0
+  }
+}
