@@ -1,0 +1,20 @@
+{
+  "api_mutation_calls_authorized": 0,
+  "diagnostic_configmap": "chris-glm53-exact100-hosted-r030-single-slot-release-diagnostic-v4-run",
+  "diagnostic_job": "chris-glm53-exact100-hosted-r030-single-slot-release-diagnostic-v4",
+  "diagnostic_output": "/mnt/sfs/jobs/chris-glm53-exact100-hosted-r030-single-slot-release-diagnostic-v4/DIAGNOSTIC.json",
+  "failed_release_job_uid": "9c3235a5-7919-4eae-a099-2886adad2fad",
+  "failed_release_pod_uid": "c1b44935-4eb6-40fc-88c0-d0ee7e4e4928",
+  "launch_authorized": false,
+  "model_calls_authorized": 0,
+  "package_sha256": "sha256:dd41e369178d2e751aa5cefb68e3cfc4d411c027b528ff2e4eb09d0e51c98915",
+  "receipt_sha256": "sha256:187e96dee750494d0343aec4b0a76aa97ce2ec3f17bbc3298a69319d39efe804",
+  "schema_version": "fleet-hosted-glm-rank30-release-phase-diagnostic-held-v4",
+  "scored_launch_authorized": false,
+  "scoring_calls_authorized": 0,
+  "session_calls_authorized": 0,
+  "status": "HELD_FOR_INDEPENDENT_REVIEW",
+  "supersedes_release_observer_v3": true,
+  "task_calls_authorized": 0,
+  "verifier_calls_authorized": 0
+}
