@@ -158,6 +158,22 @@ def test_held_receipt_is_digest_valid_and_non_authorizing() -> None:
     assert tracked == adapter.build_held(tracked["package_commit"])
 
 
+def test_v25_failed_handoff_receipt_is_digest_valid_and_zero_effect() -> None:
+    value = json.loads(
+        (
+            ROOT
+            / "docs/evidence/glm53-study/"
+            "2026-09-06-glm53-dedicated-v25-watchdog-handoff-failure-v1.json"
+        ).read_text()
+    )
+    assert value["status"] == "FAILED_CLOSED_RELEASED_ZERO_EFFECT"
+    assert value["retry_same_server_identity"] is False
+    assert value["watchdog_result_root_absent"] is True
+    assert value["dedicated_gpu_nodes_after_release"] == 0
+    assert value["dedicated_gpus_after_release"] == 0
+    assert value["receipt_sha256"] == crypto.digest_without(value, "receipt_sha256")
+
+
 def test_bound_engine_is_exact_and_restored() -> None:
     prior = (
         engine.server,
@@ -215,6 +231,118 @@ def test_real_v25_render_builds_exact_watcher_package(
     assert release["watchdog_launch_authorized"] is True
     assert release["qualification_launch_authorized"] is False
     assert release["scored_launch_authorized"] is False
+    command = job["spec"]["template"]["spec"]["containers"][0]["command"][-1]
+    assert (
+        "--expected-runtime-auth-schema "
+        "fleet-glm53-dedicated-v25-watchdog-runtime-auth-v1"
+    ) in command
+    assert (
+        "--expected-live-release-schema "
+        "fleet-glm53-dedicated-v25-watchdog-live-release-v1"
+    ) in command
+    assert f"--expected-watchdog-job-name {package.JOB_NAME}" in command
+    assert f"--expected-watchdog-result-root {package.RESULT_ROOT}" in command
+    assert command.rstrip().endswith("--authorization /authorization/LIVE_RELEASE.json")
+    assert command.index("--expected-live-release-schema") < command.index(
+        "--ready-at-epoch"
+    )
+
+    runtime.validate_launch_authorization(
+        release,
+        binding(),
+        ready_at_epoch=release["ready_at_epoch"],
+        package_commit=release["watchdog_package_commit"],
+        package_sha256=release["watchdog_package_sha256"],
+        expected_runtime_auth_schema=(
+            "fleet-glm53-dedicated-v25-watchdog-runtime-auth-v1"
+        ),
+        expected_live_release_schema=adapter.RELEASE_SCHEMA,
+        expected_watchdog_job_name=package.JOB_NAME,
+        expected_watchdog_result_root=package.RESULT_ROOT,
+    )
+    with pytest.raises(runtime.WatchdogError, match="release_authorization"):
+        runtime.validate_launch_authorization(
+            release,
+            binding(),
+            ready_at_epoch=release["ready_at_epoch"],
+            package_commit=release["watchdog_package_commit"],
+            package_sha256=release["watchdog_package_sha256"],
+        )
+
+    runtime_receipt = runtime.build_runtime_authorization_receipt(
+        release,
+        binding(),
+        watcher_job_uid="88888888-8888-4888-8888-888888888888",
+        watcher_pod_uid="99999999-9999-4999-8999-999999999999",
+        package_commit=release["watchdog_package_commit"],
+        package_sha256=release["watchdog_package_sha256"],
+        expected_runtime_auth_schema=(
+            "fleet-glm53-dedicated-v25-watchdog-runtime-auth-v1"
+        ),
+        expected_live_release_schema=adapter.RELEASE_SCHEMA,
+        expected_watchdog_job_name=package.JOB_NAME,
+        expected_watchdog_result_root=package.RESULT_ROOT,
+    )
+    assert runtime_receipt["schema_version"] == (
+        "fleet-glm53-dedicated-v25-watchdog-runtime-auth-v1"
+    )
+    assert runtime_receipt["expected_runtime_auth_schema"] == (
+        runtime_receipt["schema_version"]
+    )
+
+
+@pytest.mark.parametrize(
+    ("keyword", "bad"),
+    [
+        (
+            "expected_runtime_auth_schema",
+            "fleet-glm53-dedicated-v26-watchdog-runtime-auth-v1",
+        ),
+        (
+            "expected_live_release_schema",
+            "fleet-glm53-dedicated-v26-watchdog-live-release-v1",
+        ),
+        (
+            "expected_watchdog_job_name",
+            "chris-glm53-dedicated-v26-request-watchdog-v1",
+        ),
+        (
+            "expected_watchdog_result_root",
+            "/mnt/sfs/jobs/chris-glm53-dedicated-v26-request-watchdog-v1",
+        ),
+    ],
+)
+def test_v25_runtime_rejects_each_wrong_explicit_contract(
+    monkeypatch: pytest.MonkeyPatch, keyword: str, bad: str
+) -> None:
+    monkeypatch.setattr(engine.time, "time", lambda: NOW)
+    with adapter.bound_engine():
+        rendered = engine.render(
+            ROOT,
+            COMMIT,
+            binding(),
+            live(),
+            priority_classes=priorities(),
+        )
+    release = json.loads(rendered["objects"]["items"][1]["data"]["LIVE_RELEASE.json"])
+    expected = {
+        "expected_runtime_auth_schema": (
+            "fleet-glm53-dedicated-v25-watchdog-runtime-auth-v1"
+        ),
+        "expected_live_release_schema": adapter.RELEASE_SCHEMA,
+        "expected_watchdog_job_name": package.JOB_NAME,
+        "expected_watchdog_result_root": package.RESULT_ROOT,
+    }
+    expected[keyword] = bad
+    with pytest.raises(runtime.WatchdogError, match="release_authorization"):
+        runtime.validate_launch_authorization(
+            release,
+            binding(),
+            ready_at_epoch=release["ready_at_epoch"],
+            package_commit=release["watchdog_package_commit"],
+            package_sha256=release["watchdog_package_sha256"],
+            **expected,
+        )
 
 
 def test_executable_adapter_calls_engine_under_exact_binding_and_validates_result(

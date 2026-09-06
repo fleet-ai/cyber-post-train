@@ -31,6 +31,21 @@ def render(
         result_root=RESULT_ROOT,
     )
     job = prior.build_watchdog_job(configmap, job_name=JOB_NAME, result_root=RESULT_ROOT)
+    command = job["spec"]["template"]["spec"]["containers"][0]["command"][-1]
+    suffix = '--ready-at-epoch "$READY_AT_EPOCH"'
+    if not command.endswith(suffix):
+        raise ValueError("v25_watchdog_command_contract_drifted")
+    expected = (
+        "--expected-runtime-auth-schema "
+        "fleet-glm53-dedicated-v25-watchdog-runtime-auth-v1 "
+        "--expected-live-release-schema "
+        "fleet-glm53-dedicated-v25-watchdog-live-release-v1 "
+        f"--expected-watchdog-job-name {JOB_NAME} "
+        f"--expected-watchdog-result-root {RESULT_ROOT} "
+    )
+    job["spec"]["template"]["spec"]["containers"][0]["command"][-1] = (
+        command[: -len(suffix)] + expected + suffix
+    )
     return {
         "objects": {"apiVersion": "v1", "kind": "List", "items": [configmap, job]},
         "server_binding": binding,

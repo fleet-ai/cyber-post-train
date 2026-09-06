@@ -43,6 +43,8 @@ SHA256_RE = re.compile(r"sha256:[0-9a-f]{64}")
 COMMIT_RE = re.compile(r"[0-9a-f]{40}")
 LIVE_RELEASE_SCHEMA = "fleet-glm53-dedicated-v24-watchdog-live-release-v1"
 RUNTIME_AUTH_SCHEMA = "fleet-glm53-dedicated-v24-watchdog-runtime-auth-v1"
+DEFAULT_WATCHDOG_JOB_NAME = "chris-glm53-dedicated-v24-request-watchdog-v1"
+DEFAULT_WATCHDOG_RESULT_ROOT = "/mnt/sfs/jobs/chris-glm53-dedicated-v24-request-watchdog-v1"
 LIVE_RELEASE_KEYS = {
     "schema_version",
     "status",
@@ -176,6 +178,10 @@ def build_runtime_authorization_receipt(
     watcher_pod_uid: str,
     package_commit: str,
     package_sha256: str,
+    expected_runtime_auth_schema: str = RUNTIME_AUTH_SCHEMA,
+    expected_live_release_schema: str = LIVE_RELEASE_SCHEMA,
+    expected_watchdog_job_name: str = DEFAULT_WATCHDOG_JOB_NAME,
+    expected_watchdog_result_root: str = DEFAULT_WATCHDOG_RESULT_ROOT,
 ) -> dict[str, Any]:
     validate_launch_authorization(
         authorization,
@@ -183,15 +189,23 @@ def build_runtime_authorization_receipt(
         ready_at_epoch=authorization["ready_at_epoch"],
         package_commit=package_commit,
         package_sha256=package_sha256,
+        expected_runtime_auth_schema=expected_runtime_auth_schema,
+        expected_live_release_schema=expected_live_release_schema,
+        expected_watchdog_job_name=expected_watchdog_job_name,
+        expected_watchdog_result_root=expected_watchdog_result_root,
     )
     body: dict[str, Any] = {
-        "schema_version": RUNTIME_AUTH_SCHEMA,
+        "schema_version": expected_runtime_auth_schema,
         "status": "RUNTIME_AUTHORIZATION_VALIDATED",
         "server_binding_sha256": crypto.sha256(crypto.canonical_json(binding)),
         "live_release_receipt_sha256": authorization["receipt_sha256"],
         "watchdog_package_commit": package_commit,
         "watchdog_package_sha256": package_sha256,
         "watchdog_implementation_sha256": source_sha256(),
+        "expected_runtime_auth_schema": expected_runtime_auth_schema,
+        "expected_live_release_schema": expected_live_release_schema,
+        "expected_watchdog_job_name": expected_watchdog_job_name,
+        "expected_watchdog_result_root": expected_watchdog_result_root,
         "watcher_job_uid": watcher_job_uid,
         "watcher_pod_uid": watcher_pod_uid,
         "fleet_task_instance_calls": 0,
@@ -213,6 +227,10 @@ def validate_runtime_authorization_receipt(
     watcher_pod_uid: str,
     package_commit: str,
     package_sha256: str,
+    expected_runtime_auth_schema: str = RUNTIME_AUTH_SCHEMA,
+    expected_live_release_schema: str = LIVE_RELEASE_SCHEMA,
+    expected_watchdog_job_name: str = DEFAULT_WATCHDOG_JOB_NAME,
+    expected_watchdog_result_root: str = DEFAULT_WATCHDOG_RESULT_ROOT,
 ) -> None:
     expected = build_runtime_authorization_receipt(
         authorization,
@@ -221,6 +239,10 @@ def validate_runtime_authorization_receipt(
         watcher_pod_uid=watcher_pod_uid,
         package_commit=package_commit,
         package_sha256=package_sha256,
+        expected_runtime_auth_schema=expected_runtime_auth_schema,
+        expected_live_release_schema=expected_live_release_schema,
+        expected_watchdog_job_name=expected_watchdog_job_name,
+        expected_watchdog_result_root=expected_watchdog_result_root,
     )
     if value != expected:
         raise WatchdogError("watchdog_runtime_authorization_receipt_invalid")
@@ -233,12 +255,31 @@ def validate_launch_authorization(
     ready_at_epoch: float,
     package_commit: str,
     package_sha256: str,
+    expected_runtime_auth_schema: str = RUNTIME_AUTH_SCHEMA,
+    expected_live_release_schema: str = LIVE_RELEASE_SCHEMA,
+    expected_watchdog_job_name: str = DEFAULT_WATCHDOG_JOB_NAME,
+    expected_watchdog_result_root: str = DEFAULT_WATCHDOG_RESULT_ROOT,
 ) -> None:
     """Require the mounted immutable live release before a v24 watcher runs."""
 
+    runtime_match = re.fullmatch(
+        r"fleet-glm53-dedicated-(v[0-9]+)-watchdog-runtime-auth-v1",
+        expected_runtime_auth_schema,
+    )
+    release_match = re.fullmatch(
+        r"fleet-glm53-dedicated-(v[0-9]+)-watchdog-live-release-v1",
+        expected_live_release_schema,
+    )
+    generation = release_match.group(1) if release_match else ""
+    exact_job_name = f"chris-glm53-dedicated-{generation}-request-watchdog-v1"
     if (
-        set(value) != LIVE_RELEASE_KEYS
-        or value.get("schema_version") != LIVE_RELEASE_SCHEMA
+        runtime_match is None
+        or release_match is None
+        or runtime_match.group(1) != generation
+        or expected_watchdog_job_name != exact_job_name
+        or expected_watchdog_result_root != f"/mnt/sfs/jobs/{exact_job_name}"
+        or set(value) != LIVE_RELEASE_KEYS
+        or value.get("schema_version") != expected_live_release_schema
         or value.get("status") != "AUTHORIZED_EXACT_WATCHDOG_ONLY"
         or value.get("receipt_sha256") != crypto.digest_without(value, "receipt_sha256")
         or value.get("server_binding") != binding
@@ -262,9 +303,9 @@ def validate_launch_authorization(
             for field in ("raycluster_uid", "sfs_pvc_uid")
         )
         or value.get("watchdog_job_name")
-        != "chris-glm53-dedicated-v24-request-watchdog-v1"
+        != expected_watchdog_job_name
         or value.get("watchdog_result_root")
-        != "/mnt/sfs/jobs/chris-glm53-dedicated-v24-request-watchdog-v1"
+        != expected_watchdog_result_root
         or value.get("watchdog_package_commit") != package_commit
         or COMMIT_RE.fullmatch(str(package_commit)) is None
         or value.get("watchdog_package_sha256") != package_sha256
@@ -595,6 +636,18 @@ def main() -> int:
     parser.add_argument("--active-receipt", type=Path, required=True)
     parser.add_argument("--ready-at-epoch", type=float, required=True)
     parser.add_argument("--authorization", type=Path, required=True)
+    parser.add_argument(
+        "--expected-runtime-auth-schema", default=RUNTIME_AUTH_SCHEMA
+    )
+    parser.add_argument(
+        "--expected-live-release-schema", default=LIVE_RELEASE_SCHEMA
+    )
+    parser.add_argument(
+        "--expected-watchdog-job-name", default=DEFAULT_WATCHDOG_JOB_NAME
+    )
+    parser.add_argument(
+        "--expected-watchdog-result-root", default=DEFAULT_WATCHDOG_RESULT_ROOT
+    )
     args = parser.parse_args()
     terminal = args.active_receipt.with_name("TERMINAL.json")
     emergency_api_run_id = os.environ.get("WATCHDOG_API_RUN_ID", "")
@@ -612,6 +665,10 @@ def main() -> int:
             ready_at_epoch=args.ready_at_epoch,
             package_commit=package_commit,
             package_sha256=package_sha256,
+            expected_runtime_auth_schema=args.expected_runtime_auth_schema,
+            expected_live_release_schema=args.expected_live_release_schema,
+            expected_watchdog_job_name=args.expected_watchdog_job_name,
+            expected_watchdog_result_root=args.expected_watchdog_result_root,
         )
         runtime_authorization = build_runtime_authorization_receipt(
             authorization,
@@ -620,6 +677,10 @@ def main() -> int:
             watcher_pod_uid=os.environ.get("POD_UID", ""),
             package_commit=package_commit,
             package_sha256=package_sha256,
+            expected_runtime_auth_schema=args.expected_runtime_auth_schema,
+            expected_live_release_schema=args.expected_live_release_schema,
+            expected_watchdog_job_name=args.expected_watchdog_job_name,
+            expected_watchdog_result_root=args.expected_watchdog_result_root,
         )
         _write_once(
             args.active_receipt.with_name("AUTHORIZATION_VALIDATED.json"),

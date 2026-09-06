@@ -82,3 +82,19 @@ For each affected serving block, hand off the last observed allocation identity,
 identity and activity evidence, active exception and deadline, drain/release state, in-flight
 attempt disposition, preserved receipt locations and digests, and the exact gates remaining
 before a create-once successor may launch.
+
+## Generation-specific watchdog handoff
+
+A reusable watchdog runtime must not hard-code the runtime-authorization schema, release
+schema, Job name, or result root of the first server generation that used it. The reviewed
+generation adapter must pass those four values explicitly, validate their shared generation,
+and validate them against the immutable live-release
+receipt before writing `ACTIVE.json`, and the packaged command must remain digest-bound.
+Defaults may preserve replay compatibility for an older generation, but a successor must
+prove its own exact contract in a real runtime-authorization regression.
+
+If the runtime and adapter identities disagree, fail before qualification or scoring, roll
+back the watcher objects, release the owned server through the Jobs API, and confirm API and
+Kubernetes absence. Never reuse that server identity. A later generation requires a reviewed
+package and fresh create-once control root; application health alone is not authority to keep
+the GPU allocation.
