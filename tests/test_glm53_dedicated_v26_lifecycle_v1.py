@@ -204,6 +204,22 @@ def test_v26_held_receipts_are_digest_valid_and_non_authorizing() -> None:
         assert value["qualification_launch_authorized"] is False
         assert value["scored_launch_authorized"] is False
         assert value["receipt_sha256"] == crypto.digest_without(value, "receipt_sha256")
+    tracked_create = json.loads(
+        (
+            ROOT
+            / "docs/evidence/glm53-study/"
+            "2026-09-06-glm53-dedicated-v26-create-wrapper-held-v1.json"
+        ).read_text()
+    )
+    assert tracked_create == server.build_held()
+    tracked_watchdog = json.loads(
+        (
+            ROOT
+            / "docs/evidence/glm53-study/"
+            "2026-09-06-glm53-dedicated-v26-watchdog-adapter-held-v1.json"
+        ).read_text()
+    )
+    assert tracked_watchdog == adapter.build_held(tracked_watchdog["package_commit"])
 
 
 def test_v26_wrong_generation_contract_fails_closed(
