@@ -43,6 +43,9 @@ RELEASE_SCHEMA = "fleet-qwen38-dp8-early-qualification-held-release-v1"
 TITLE = "chris-cyber-evalserve-q38-dp8-c-v1"
 RUN_DIR = "/mnt/sfs/jobs/chris-cyber-evalserve-q38-dp8-c-v1"
 SERVING_BLOCK = "dedicated-qwen-dp8-c-v1"
+LIFECYCLE_V2_PATH = Path("evals/fleet/scripts/qwen38_dedicated_dp8_lifecycle_v2.sh")
+OBSERVER_V2_PATH = Path("evals/fleet/qwen38_dp8_metric_observer_v2.py")
+RUNTIME_OBSERVER_PATH = "/tmp/qwen38_dp8_metric_observer_v2.py"
 
 
 def _load(path: Path) -> dict[str, Any]:
@@ -53,12 +56,21 @@ def _load(path: Path) -> dict[str, Any]:
 
 
 def jobs_payload(root: Path) -> dict[str, Any]:
-    lifecycle = (root / runtime.LIFECYCLE_PATH).read_text()
+    lifecycle = (root / LIFECYCLE_V2_PATH).read_text()
+    observer_source = (root / OBSERVER_V2_PATH).read_text()
+    bootstrap = (
+        "python3 - <<'PY'\n"
+        "from pathlib import Path\n"
+        f"Path({RUNTIME_OBSERVER_PATH!r}).write_text({observer_source!r})\n"
+        f"Path({RUNTIME_OBSERVER_PATH!r}).chmod(0o500)\n"
+        "PY\n"
+        + lifecycle
+    )
     payload = {
         "image": runtime.IMAGE,
         "command": (
             "bash -lc "
-            + shlex.quote(lifecycle)
+            + shlex.quote(bootstrap)
             + " -- "
             + shlex.join(runtime.SERVER_ARGUMENTS)
         ),
@@ -68,6 +80,7 @@ def jobs_payload(root: Path) -> dict[str, Any]:
             "HF_HUB_OFFLINE": "1",
             "TRANSFORMERS_OFFLINE": "1",
             "QWEN38_RUN_DIR": RUN_DIR,
+            "QWEN38_OBSERVER_SCRIPT": RUNTIME_OBSERVER_PATH,
         },
         "secrets": [],
         "resources": {
@@ -168,13 +181,40 @@ def validate_plan(value: Mapping[str, Any], root: Path) -> None:
                 self_hosted.canonical_json(jobs_payload(root))
             ),
         },
+        "qualifier_controller": {
+            "placement": "fleet-train-jobs_cpu_job",
+            "namespace": "fleet-train-jobs",
+            "job_name": "chris-cyber-q38-dp8-c-qualifier-v1",
+            "configmap_name": "chris-cyber-q38-dp8-c-qualifier-v1",
+            "output_root": "/mnt/sfs/jobs/chris-cyber-q38-dp8-c-qualifier-v1",
+            "evaluator_image": (
+                "ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:"
+                "9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7"
+            ),
+            "docker_image": (
+                "docker.io/library/docker@sha256:"
+                "f649ef046008ca7f926a2571c32b0ac22e5c59eb61b959617f9acc2a4c638cf5"
+            ),
+            "actual_opencode_runs_in_pinned_dind": True,
+            "service_origin_from_uid_bound_binding_only": True,
+            "cluster_dns_only_no_port_forward": True,
+            "sfs_claim_and_evidence_mount": "sfs-shared",
+            "kubectl_access_required": False,
+            "gpu_distribution_source": "server_local_signed_sfs_observation_v2",
+            "server_pod_name_and_uid_cross_binding_required": True,
+            "create_only_renderer_required_before_launch": True,
+            "controller_package_ready": False,
+        },
         "qualification": {
             "existing_runner_path": "evals/fleet/qwen38_dp8_post_rank99_launch_v1.py",
             "existing_runner_file_sha256": (
                 "sha256:eeb86f6d4555411ff26917f8bdcc2f3adc7a38fc41ece2b5d8abc1370139c5f0"
             ),
             "lifecycle_file_sha256": (
-                "sha256:c1c051dc55891cf624d1ae2c5043965fcd134ba7fc28ee0c54efad203118573a"
+                "sha256:e1f8f2cdcdeb3e71e98f5a3faf90e35f78ee8c3713d784511761eb3b9fc2d87c"
+            ),
+            "metric_observer_file_sha256": (
+                "sha256:07583fb3a9bead73d8ab5006ac969ad7c1bfc1413835227701bee8a06cfc5520"
             ),
             "concurrency_ladder": [1, 2, 4, 8],
             "strictly_ascending_stop_before_next_on_failure": True,
@@ -224,9 +264,13 @@ def validate_plan(value: Mapping[str, Any], root: Path) -> None:
     ):
         raise ValueError("early DP8 qualification runner bytes drifted")
     if value["qualification"]["lifecycle_file_sha256"] != self_hosted.sha256(
-        (root / runtime.LIFECYCLE_PATH).read_bytes()
+        (root / LIFECYCLE_V2_PATH).read_bytes()
     ):
         raise ValueError("early DP8 lifecycle bytes drifted")
+    if value["qualification"]["metric_observer_file_sha256"] != self_hosted.sha256(
+        (root / OBSERVER_V2_PATH).read_bytes()
+    ):
+        raise ValueError("early DP8 metric observer bytes drifted")
 
 
 def validate_preview(value: Mapping[str, Any], root: Path) -> None:

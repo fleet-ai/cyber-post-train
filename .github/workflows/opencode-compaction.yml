@@ -12,6 +12,7 @@ on:
       - 'tests/test_qwen38_dp8_post_rank99_plan_v1.py'
       - 'tests/test_qwen38_dp8_post_rank99_launch_v1.py'
       - 'tests/test_qwen38_dp8_early_qualification_v1.py'
+      - 'tests/test_qwen38_dp8_metric_observer_v2.py'
       - 'skills/**'
       - 'pyproject.toml'
       - 'uv.lock'
@@ -52,4 +53,5 @@ jobs:
             tests/test_agent_assets.py \
             tests/test_qwen38_dp8_post_rank99_plan_v1.py \
             tests/test_qwen38_dp8_post_rank99_launch_v1.py \
-            tests/test_qwen38_dp8_early_qualification_v1.py
+            tests/test_qwen38_dp8_early_qualification_v1.py \
+            tests/test_qwen38_dp8_metric_observer_v2.py

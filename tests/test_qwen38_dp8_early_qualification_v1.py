@@ -26,6 +26,8 @@ def test_held_packet_is_valid_and_authorizes_nothing() -> None:
     assert inventory["gpu_nodes"] == 1
     assert inventory["projected_gpu_nodes_after_create"] == 2
     assert early.QUALIFICATION_LEVELS == (1, 2, 4, 8)
+    assert plan["qualifier_controller"]["kubectl_access_required"] is False
+    assert plan["qualifier_controller"]["controller_package_ready"] is False
 
 
 def test_jobs_payload_is_exact_one_node_eight_gpu_nonpreempting_server() -> None:
@@ -94,6 +96,8 @@ def test_preview_parser_binds_rendered_identity() -> None:
         (("coexistence_gate", "max_project_gpu_nodes"), 3),
         (("server", "model_revision"), "drifted"),
         (("server", "data_parallel_size"), 4),
+        (("qualifier_controller", "cluster_dns_only_no_port_forward"), False),
+        (("qualifier_controller", "kubectl_access_required"), True),
         (("qualification", "concurrency_ladder"), [8]),
         (("qualification", "statistical_cells_selected"), 1),
         (("post_qualification_gate", "all_four_statistical_cells_reserved_atomically"), False),
