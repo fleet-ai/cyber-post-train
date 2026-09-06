@@ -774,6 +774,28 @@ def test_supplemental_runtime_authority_resolves_live_glm_rank27_attempt3(
     assert item["task_key"] == authority.cells[key[0]]["task_key"]
 
 
+def test_supplemental_runtime_authority_resolves_live_glm_rank27_attempt4(
+    authority: ledger.Authority,
+) -> None:
+    key = (
+        "sha256:22b36c9e6b2f43ae2fcce7b6d729cb0791375f38dd8da770968bb295f8c14bbc",
+        "sha256:ca83617d5bec99592b0e175afe44d44fa8a611958c97efa21fe9c942205dff9f",
+    )
+
+    plan, item = ledger._bulk_pair(authority, key, "glm-hosted-s2") or ({}, {})
+
+    assert plan == {
+        "controller": "glm-hosted-s2",
+        "plan_sha256": (
+            "sha256:c0cc69202751fbbea53dfeea98a62efe41b2638b4e9ad60307b0c0bdbeefd83f"
+        ),
+    }
+    assert item["run_id"] == "chris-glm53-ac-bulk-b-r027-a4-g1-36dd3619"
+    assert item["selection_rank"] == 27
+    assert item["attempt"] == 4
+    assert item["task_key"] == authority.cells[key[0]]["task_key"]
+
+
 def test_evidence_manifest_cannot_be_mixed_with_individual_paths(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
