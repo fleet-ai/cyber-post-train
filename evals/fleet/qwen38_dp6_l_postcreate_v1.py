@@ -6,7 +6,6 @@ import argparse
 import base64
 import hashlib
 import json
-import re
 import subprocess
 import time
 import uuid
@@ -39,7 +38,19 @@ BINDING_PROJECTION_SCHEMA = "fleet-qwen38-dp6-l-binding-projection-v1"
 STARTUP_TIMEOUT_SECONDS = 600
 DELETE_TIMEOUT_SECONDS = 180
 CREATE_RECONCILE_TIMEOUT_SECONDS = 60
-SAFE_HTTP_CODE_RE = re.compile(r"[A-Za-z0-9_.:-]{1,80}")
+SAFE_HTTP_CODES = frozenset(
+    {
+        "conflict",
+        "forbidden",
+        "internal_server_error",
+        "not_found",
+        "rate_limit_exceeded",
+        "service_unavailable",
+        "temporarily_unavailable",
+        "unauthorized",
+        "validation_error",
+    }
+)
 
 
 def _digest(value: Mapping[str, Any]) -> str:
@@ -79,7 +90,7 @@ def _http_failure(exc: BaseException) -> dict[str, object] | None:
         if isinstance(nested, dict):
             candidates.append(nested.get("code"))
         for candidate in candidates:
-            if isinstance(candidate, str) and SAFE_HTTP_CODE_RE.fullmatch(candidate):
+            if isinstance(candidate, str) and candidate in SAFE_HTTP_CODES:
                 code = candidate
                 break
     shape = _json_shape(body)

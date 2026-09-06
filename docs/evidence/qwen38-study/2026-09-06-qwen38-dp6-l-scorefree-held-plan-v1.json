@@ -35,7 +35,7 @@
     "http_failure_free_text_forbidden": true,
     "http_failure_method_path_status_required": true,
     "http_failure_response_shape_and_class_hash_required": true,
-    "http_failure_structured_code_allowlisted_only": true,
+    "http_failure_structured_code_fixed_allowlist_only": true,
     "max_model_requests": 600,
     "max_output_tokens": 32768,
     "minimum_latency_headroom_fraction": 0.2,
@@ -66,7 +66,7 @@
     "priority_value": 100,
     "task_instance_session_verifier_scoring_calls": 0
   },
-  "receipt_sha256": "sha256:19428e2a87dfdee0faf1ec9865a66b5cb88e31534116856e5f7ef8867f8dd52f",
+  "receipt_sha256": "sha256:1dfb18260d44cc7e282c93232b6622a3822db0698fd168e807be50446546b581",
   "release_first_gate": {
     "active_project_gpu_nodes_required": 0,
     "active_project_gpus_required": 0,

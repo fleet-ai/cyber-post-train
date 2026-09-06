@@ -106,7 +106,9 @@ def test_held_packet_is_append_only_score_free_and_exact() -> None:
     assert plan["qualification"]["controller_resource_sample_advance_wait_seconds"] == 5
     assert plan["qualification"]["controller_resource_producer_consumer_end_to_end_tested"] is True
     assert plan["qualification"]["http_failure_method_path_status_required"] is True
-    assert plan["qualification"]["http_failure_structured_code_allowlisted_only"] is True
+    assert (
+        plan["qualification"]["http_failure_structured_code_fixed_allowlist_only"] is True
+    )
     assert plan["qualification"]["http_failure_response_shape_and_class_hash_required"] is True
     assert plan["qualification"]["http_failure_free_text_forbidden"] is True
     assert plan["qualification"]["observer_sfs_mount_path_must_be_derived_from_pod_spec"]

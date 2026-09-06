@@ -306,7 +306,7 @@ def plan(root: Path) -> dict[str, Any]:
             "controller_resource_sample_advance_wait_seconds": 5,
             "controller_resource_producer_consumer_end_to_end_tested": True,
             "http_failure_method_path_status_required": True,
-            "http_failure_structured_code_allowlisted_only": True,
+            "http_failure_structured_code_fixed_allowlist_only": True,
             "http_failure_response_shape_and_class_hash_required": True,
             "http_failure_free_text_forbidden": True,
             "observer_sfs_mount_path_must_be_derived_from_pod_spec": True,

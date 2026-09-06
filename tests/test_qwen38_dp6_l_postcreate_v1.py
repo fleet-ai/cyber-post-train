@@ -53,6 +53,15 @@ def test_http_failure_redacts_unexpected_code_and_non_http_exception() -> None:
     assert value is not None and value["structured_error_code"] is None
     assert postcreate._http_failure(RuntimeError("secret")) is None  # noqa: SLF001
 
+
+def test_http_failure_never_persists_secret_like_alphanumeric_code() -> None:
+    request = httpx.Request("GET", "https://api.ft.flt.build/v1/runs")
+    response = httpx.Response(500, request=request, json={"code": "sk_live_secret123"})
+    exc = httpx.HTTPStatusError("ignored", request=request, response=response)
+    value = postcreate._http_failure(exc)  # noqa: SLF001
+    assert value is not None and value["structured_error_code"] is None
+    assert "sk_live_secret123" not in json.dumps(value, sort_keys=True)
+
 ROOT = Path(__file__).resolve().parents[1]
 HELD_PATH = ROOT / "docs/evidence/qwen38-study/2026-09-06-qwen38-dp6-l-postcreate-held-v1.json"
 INCIDENT_PATH = (
