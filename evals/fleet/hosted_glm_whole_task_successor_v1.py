@@ -33,14 +33,24 @@ RELEASE_MAX_AGE_SECONDS = 600
 LEDGER_AUTHORITY = {
     "path": (
         "docs/evidence/qwen38-study/"
-        "2026-09-05-exact-pass4-ledger-evidence-snapshot-v47.json"
+        "2026-09-05-exact-pass4-ledger-evidence-snapshot-v48.json"
     ),
     "receipt_sha256": (
-        "sha256:bf0b9086dd97eecafe20fa9a4cf3b5d643f0ce8f6abad60fae6e3cba3e3e2e29"
+        "sha256:1275d84f1b6aad8d02bc916be55f3a1f3ea99c6817f465905ec0791b0f66cd7a"
     ),
     "file_sha256": (
-        "sha256:0a2baba7c16745a4d69f0f5aafc04010734eacbace8f6d712d44011c4a36d0dd"
+        "sha256:332c5ceae480e9c73cf1e391aeb59994049b69b240a8bbc106aefc35a9a01f25"
     ),
+}
+LIVE_LEDGER_VALIDATION = {
+    "path": "docs/evidence/glm53-study/2026-09-06-glm53-ledger-v48-live-validation.json",
+    "receipt_sha256": (
+        "sha256:7b77ed00959f6bb219c5c20724ed6958ee85b56d01771f9f158a575cd7301c96"
+    ),
+    "file_sha256": (
+        "sha256:c3c527a68217190555af394b94b7996901dd46e1e52505c9843d02afe66c7738"
+    ),
+    "glm_tally": {"accepted": 24, "active": 0, "blocked": 4, "unstarted": 372},
 }
 SELECTION_AUTHORITY = {
     "path": "evals/fleet/configs/opencode-easiest-train100-selection-v2.json",
@@ -241,7 +251,8 @@ def validate_release(
                 "schema_version", "status", "checked_at_utc", "launch_authorized",
                 "scoring_authorized", "controller_cap", "controllers",
                 "source_package_sha256", "fresh_collision_reconciliation",
-                "ledger_authority", "selection_authority", "rank29_disposition",
+                "ledger_authority", "live_ledger_validation", "selection_authority",
+                "rank29_disposition",
                 "privacy", "receipt_sha256",
             },
             release.get("schema_version") != RELEASE_SCHEMA,
@@ -253,6 +264,7 @@ def validate_release(
             release.get("source_package_sha256") != source_package_sha256,
             SHA256_RE.fullmatch(str(source_package_sha256)) is None,
             release.get("ledger_authority") != LEDGER_AUTHORITY,
+            release.get("live_ledger_validation") != LIVE_LEDGER_VALIDATION,
             release.get("selection_authority") != SELECTION_AUTHORITY,
             set(collision)
             != {

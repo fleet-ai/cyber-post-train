@@ -141,6 +141,13 @@ def test_tracked_held_receipt_binds_exact_plans_and_package() -> None:
     assert value["source_package_sha256"] == rendered["source_package_sha256"]
     assert value["held_package_sha256"] == rendered["package_sha256"]
     assert value["ledger_authority"] == successor.LEDGER_AUTHORITY
+    assert value["live_ledger_validation"] == successor.LIVE_LEDGER_VALIDATION
+    assert value["live_ledger_validation"]["glm_tally"] == {
+        "accepted": 24,
+        "active": 0,
+        "blocked": 4,
+        "unstarted": 372,
+    }
     assert value["selection_authority"] == successor.SELECTION_AUTHORITY
     assert value["launch_authorized"] is False
     assert value["scoring_authorized"] is False
@@ -257,6 +264,7 @@ def _release(plans: dict[str, dict], source_sha: str) -> dict:
         "controllers": successor.release_projection(plans),
         "source_package_sha256": source_sha,
         "ledger_authority": successor.LEDGER_AUTHORITY,
+        "live_ledger_validation": successor.LIVE_LEDGER_VALIDATION,
         "selection_authority": successor.SELECTION_AUTHORITY,
         "fresh_collision_reconciliation": {
             "checked_immediately_before_create": True,
@@ -311,6 +319,11 @@ def test_release_requires_every_collision_and_rank29_fence() -> None:
         successor.validate_release(changed, plans, source_sha)
     changed = copy.deepcopy(valid)
     changed["ledger_authority"]["file_sha256"] = "sha256:" + "0" * 64
+    changed["receipt_sha256"] = self_hosted.digest_without(changed, "receipt_sha256")
+    with pytest.raises(RuntimeError, match="release drifted"):
+        successor.validate_release(changed, plans, source_sha)
+    changed = copy.deepcopy(valid)
+    changed["live_ledger_validation"]["glm_tally"]["accepted"] = 23
     changed["receipt_sha256"] = self_hosted.digest_without(changed, "receipt_sha256")
     with pytest.raises(RuntimeError, match="release drifted"):
         successor.validate_release(changed, plans, source_sha)

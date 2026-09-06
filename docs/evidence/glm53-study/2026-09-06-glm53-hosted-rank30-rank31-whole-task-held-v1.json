@@ -49,17 +49,18 @@
     "output_root_collisions": 0,
     "session_rows_examined": 47
   },
-  "held_package_sha256": "sha256:d24c230118a4c3ead38496b970d794b04582d90ab3321560529dc6a99a1d119c",
+  "held_package_sha256": "sha256:10c09371c3cea1348e22b83ec13bba5ca27379a2615f8e2180d2ff228355465a",
   "launch_authorized": false,
-  "ledger_authority": {"file_sha256": "sha256:0a2baba7c16745a4d69f0f5aafc04010734eacbace8f6d712d44011c4a36d0dd", "path": "docs/evidence/qwen38-study/2026-09-05-exact-pass4-ledger-evidence-snapshot-v47.json", "receipt_sha256": "sha256:bf0b9086dd97eecafe20fa9a4cf3b5d643f0ce8f6abad60fae6e3cba3e3e2e29"},
+  "ledger_authority": {"file_sha256": "sha256:332c5ceae480e9c73cf1e391aeb59994049b69b240a8bbc106aefc35a9a01f25", "path": "docs/evidence/qwen38-study/2026-09-05-exact-pass4-ledger-evidence-snapshot-v48.json", "receipt_sha256": "sha256:1275d84f1b6aad8d02bc916be55f3a1f3ea99c6817f465905ec0791b0f66cd7a"},
+  "live_ledger_validation": {"file_sha256": "sha256:c3c527a68217190555af394b94b7996901dd46e1e52505c9843d02afe66c7738", "glm_tally": {"accepted": 24, "active": 0, "blocked": 4, "unstarted": 372}, "path": "docs/evidence/glm53-study/2026-09-06-glm53-ledger-v48-live-validation.json", "receipt_sha256": "sha256:7b77ed00959f6bb219c5c20724ed6958ee85b56d01771f9f158a575cd7301c96"},
   "privacy": {"credentials_included": false, "prompts_traces_flags_read": false, "scores_read": false},
   "rank29_disposition": {"preserved": true, "retry_or_supersession_authorized": false, "selected": false},
-  "receipt_sha256": "sha256:c7f9426df799bf1941b184a374c3e4dfc94b9e8dfcae6a63097a74118ce8f850",
+  "receipt_sha256": "sha256:2b6c98cad30bb3bf9d8b12bd2b2e817ee0cad6d0ae63baeebe6327aa0859071a",
   "release_requirements": {"all_four_claims_each_task_before_model_call": true, "create_once": true, "fresh_uid_bound_observer": true, "maximum_age_seconds": 600},
   "schema_version": "fleet-hosted-glm-atomic-whole-task-held-v1",
   "scoring_authorized": false,
   "selection_authority": {"file_sha256": "sha256:9f5e83123cfe7d8a3f4cc0b791ac1dc9032a3d5faf5eba2a431c7246069255df", "path": "evals/fleet/configs/opencode-easiest-train100-selection-v2.json", "semantic_sha256": "sha256:38bd544c74f4e45cb67b271849d657f49e356ccf41f97acca9fb6cd7eb7f56b8"},
-  "source_package_sha256": "sha256:77f76150eec35bcd8c6336699bed67708fcedf2f573f54000a22f32685965e68",
+  "source_package_sha256": "sha256:873e3de711a7a1ac9b290cbb5b634edf37874cc0405ea294d7e30271a6406dc9",
   "source_plan_sha256": "sha256:c42551064b3c384399405ffbb374832b6d1a1d623ed209d6a0b51009421a0320",
   "status": "HELD_FOR_INDEPENDENT_REVIEW"
 }
