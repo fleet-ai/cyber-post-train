@@ -1,0 +1,61 @@
+{
+  "schema_version": "fleet-hosted-glm-rank30-peer-free-production-held-v1",
+  "status": "HELD_RENDER_PREVIEW_ONLY",
+  "base_authority": {
+    "branch": "codex/exact-pass4-ledger-v6",
+    "commit": "4ee2d9e7f85a6b3cf5c8c37bfffb4fb8b856339f",
+    "ledger_tally": {
+      "accepted": 24,
+      "active": 0,
+      "blocked": 4,
+      "unstarted": 372
+    }
+  },
+  "release_observer": {
+    "job_name": "chris-glm53-peer-free-release-observer-v1",
+    "configmap_name": "chris-glm53-peer-free-release-observer-v1-package",
+    "output": "/mnt/sfs/jobs/chris-glm53-peer-free-release-observer-v1/RELEASE.json",
+    "binding_sha256": "sha256:90aede31607a70f4dfebec0eb031585a0ba4c71015dcb83311c64d481b674e48",
+    "configmap_sha256": "sha256:b2468a401c20cb622313056561f7f675884a38c2c15d7c4b7ff47aaa243ef9e0",
+    "rendered_list_sha256": "sha256:698a397a29698acab6aa85ca4606a9a50c14270213092efab373ded15f914968",
+    "file_count": 27,
+    "launch_authorized": false,
+    "score_free": true,
+    "api_mutations": 0
+  },
+  "controller": {
+    "job_name": "chris-glm53-exact100-hosted-r030-whole-task-g2-v2",
+    "configmap_name": "chris-glm53-exact100-hosted-r030-whole-task-g2-package-v2",
+    "sfs_root": "/mnt/sfs/jobs/chris-glm53-exact100-hosted-r030-whole-task-g2-v2",
+    "source_package_sha256": "sha256:f6571a3c1c535eb249e3831d068d05f30cbb3d3709a025d6aead6ce53b649efc",
+    "create_once": true,
+    "launch_authorized": false,
+    "scoring_authorized": false
+  },
+  "required_live_sequence": [
+    "create release observer ConfigMap and Job exactly once",
+    "validate fresh digest-valid CLEAR_PEER_FREE receipt",
+    "repeat all mutable collision, controller, session, output, and lease checks",
+    "render a self-digested create preview no older than 60 seconds",
+    "create immutable controller ConfigMap and Job exactly once"
+  ],
+  "fail_closed_controls": {
+    "strict_json_duplicate_key_rejection": true,
+    "all_four_cells_all_generations_clear_required": true,
+    "authoritative_sessions_clear_required": true,
+    "accepted_receipts_clear_required": true,
+    "controller_job_configmap_pod_output_clear_required": true,
+    "both_endpoint_slots_simultaneously_free_required": true,
+    "materialized_observer_import_verified": true,
+    "materialized_controller_import_verified": true,
+    "stale_or_rehashed_malicious_receipts_rejected": true,
+    "repeat_submit_rejected": true
+  },
+  "privacy": {
+    "scores_read": false,
+    "prompts_traces_flags_read": false,
+    "credentials_included": false
+  },
+  "workload_mutations": 0,
+  "receipt_sha256": "sha256:e1f468f6842534710f15d0e5bd495cfeca9f6099869b96a02e894138d00c8efc"
+}
