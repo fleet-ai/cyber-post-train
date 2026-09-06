@@ -17,7 +17,7 @@ from evals.fleet import glm53_dedicated_v32_watchdog_live_release_v1 as adapter
 from evals.fleet import glm53_dedicated_v32_watchdog_package_v1 as watchdog
 
 ROOT = Path(__file__).resolve().parents[1]
-COMMIT = "0000000000000000000000000000000000000000"
+COMMIT = "f370770520a3d872de6e04929ceb862f9504e382"
 
 
 def create_authorization() -> dict[str, object]:
@@ -38,6 +38,7 @@ def create_authorization() -> dict[str, object]:
         "active_dedicated_gpus": 0,
         "planned_nodes_after_create": 1,
         "planned_gpus_after_create": 8,
+        "coexisting_qwen_server": None,
         "priority_class": v24.PRIORITY_CLASS,
         "preemption_policy": v24.PREEMPTION_POLICY,
         "server_launch_authorized": True,
@@ -106,7 +107,17 @@ def test_v32_create_gate_requires_fresh_zero_state() -> None:
         }
     )
     changed["receipt_sha256"] = crypto.digest_without(changed, "receipt_sha256")
-    with pytest.raises(server.CreateError, match="requires_zero_project_server"):
+    changed["coexisting_qwen_server"] = server.EXACT_QWEN_COEXISTENCE
+    changed["receipt_sha256"] = crypto.digest_without(changed, "receipt_sha256")
+    server.validate_authorization(changed)
+    drifted = copy.deepcopy(changed)
+    drifted["coexisting_qwen_server"]["head_pod_restarts"] = 1
+    drifted["receipt_sha256"] = crypto.digest_without(drifted, "receipt_sha256")
+    with pytest.raises(server.CreateError, match="authorization_invalid"):
+        server.validate_authorization(drifted)
+    changed["coexisting_qwen_server"] = None
+    changed["receipt_sha256"] = crypto.digest_without(changed, "receipt_sha256")
+    with pytest.raises(server.CreateError, match="authorization_invalid"):
         server.validate_authorization(changed)
     assert server.TITLE.endswith("-v32")
     assert server.RUN_DIR.endswith("-v32")
@@ -237,3 +248,31 @@ def test_v32_held_contract_is_score_free_and_idle_bounded() -> None:
         assert receipt["receipt_sha256"] == crypto.digest_without(
             receipt, "receipt_sha256"
         )
+
+
+def test_v32_held_and_v31_terminal_receipts_are_digest_valid() -> None:
+    evidence = ROOT / "docs/evidence/glm53-study"
+    held = json.loads(
+        (
+            evidence
+            / "2026-09-06-glm53-dedicated-v32-zero-state-lifecycle-held-v1.json"
+        ).read_text()
+    )
+    terminal = json.loads(
+        (
+            evidence
+            / "2026-09-06-glm53-dedicated-v31-parity-package-failure-release-v1.json"
+        ).read_text()
+    )
+    assert held == package.build_held(ROOT, COMMIT)
+    assert held["receipt_sha256"] == crypto.digest_without(held, "receipt_sha256")
+    assert terminal["receipt_sha256"] == crypto.digest_without(
+        terminal, "receipt_sha256"
+    )
+    assert terminal["status"] == "RELEASED_ZERO_GPU_REMNANTS"
+    assert terminal["retry_same_identity"] is False
+    assert terminal["parity_result_present"] is False
+    assert terminal["fleet_task_instance_calls"] == 0
+    assert terminal["fleet_session_calls"] == 0
+    assert terminal["verifier_calls"] == 0
+    assert terminal["scoring_calls"] == 0
