@@ -17,21 +17,25 @@
   "launch_authorized": false,
   "maximum_scored_streams": 2,
   "model": "glm-5.3",
-  "package_sha256": "sha256:71e26de6162d2d0d352e3cb3cacd005dd5456e0c49b438a55d16843b30d688dd",
-  "plan_sha256": "sha256:5423a63f22d198e00e5bf5558f66eea46fe1f665c1e56d9d1c1877500615c885",
+  "package_sha256": "sha256:a89f1dd6c2c877b2c4cd5060d2b074ca55dc090da4a1fb439fc063c56975c5e5",
+  "plan_sha256": "sha256:8ca09b5e050c040c254ba407d6055dd7f9d0c5f7cdea4c1e0c715a05ab8acd8c",
   "preclaim_guard_seconds": 32400,
   "prompts_traces_flags_scores_or_model_outputs_included": false,
-  "receipt_sha256": "sha256:f260b2844e707c0b345fb4f58addb50ea6fdadcef58b61064e00c9fbd959fce9",
+  "receipt_sha256": "sha256:f39892014c2092a552731a8ea944c7da9b5d73ab21f5fa164eb7c2c67fce2faf",
   "release_observer_job": "chris-glm53-exact100-hosted-r029-a3a4-release-v1",
   "schema_version": "fleet-hosted-glm-rank29-a3a4-successor-held-v1",
+  "scored_package_template_sha256": "sha256:a20a3f4b2ade25d3ba41bfea11cb53fa4ed5f68d58b6fb981d2c3500db683642",
+  "scored_source_sha256": "sha256:55b2685bf84c46891e2c9ba3da1f6aed5c109f375e3f314ba8a94f6bb2771631",
   "selected_cells": [
     {
       "attempt": 3,
+      "cell_id": "sha256:bd6f3cc1524132f17b48bb6b655ad047b82858deaf58fdbfa6888658a45c7a3b",
       "execution_generation": 2,
       "selection_rank": 29
     },
     {
       "attempt": 4,
+      "cell_id": "sha256:414d1bc62c3e9af45b63cea021bf4be8e8584905c0298225f209f2b7ab58e821",
       "execution_generation": 2,
       "selection_rank": 29
     }

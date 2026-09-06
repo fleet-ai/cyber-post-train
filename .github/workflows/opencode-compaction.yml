@@ -9,6 +9,7 @@ on:
       - 'tests/test_fleet_self_hosted.py'
       - 'tests/test_opencode_train_sweep.py'
       - 'tests/test_agent_assets.py'
+      - 'tests/test_hosted_glm_rank29_a3a4_c2_successor_v1.py'
       - 'skills/**'
       - 'pyproject.toml'
       - 'uv.lock'
@@ -23,6 +24,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: astral-sh/setup-uv@v6
         with:
           version: '0.11.6'
@@ -40,6 +43,22 @@ jobs:
             --directory "$RUNNER_TEMP" opencode
           printf 'OPENCODE_TEST_BINARY=%s/opencode\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
       - name: Lint and test the runner with real OpenCode
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
-          uv run ruff check .
-          uv run pytest tests/test_opencode_compaction.py tests/test_fleet_self_hosted.py tests/test_opencode_train_sweep.py tests/test_agent_assets.py
+          if [[ -n "$PR_BASE_SHA" ]]; then
+            mapfile -d '' changed_python < <(
+              git diff --name-only --diff-filter=ACMR -z "$PR_BASE_SHA" "$GITHUB_SHA" -- '*.py'
+            )
+            if (( ${#changed_python[@]} )); then
+              uv run ruff check "${changed_python[@]}"
+            fi
+          else
+            uv run ruff check .
+          fi
+          uv run pytest \
+            tests/test_opencode_compaction.py \
+            tests/test_fleet_self_hosted.py \
+            tests/test_opencode_train_sweep.py \
+            tests/test_agent_assets.py \
+            tests/test_hosted_glm_rank29_a3a4_c2_successor_v1.py

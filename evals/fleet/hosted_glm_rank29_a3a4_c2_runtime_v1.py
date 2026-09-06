@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -20,10 +21,10 @@ ACTIVE_DEADLINE_SECONDS = 86_400
 CLAIM_GUARD_SECONDS = 32_400
 NAMESPACE = "fleet-train-jobs"
 PEER_JOB_UID = "a921e359-2ed4-4e90-83f2-05aa5812f454"
+RELEASE_MAX_AGE_SECONDS = 600
 
 
-def validate_release(plan: dict[str, Any]) -> None:
-    receipt = successor.load(RELEASE_PATH)
+def validate_release_receipt(plan: dict[str, Any], receipt: dict[str, Any]) -> None:
     expected = {
         "schema_version": RELEASE_SCHEMA,
         "status": "CLEAR",
@@ -41,19 +42,64 @@ def validate_release(plan: dict[str, Any]) -> None:
         "maximum_scored_streams": 2,
         "fleet_session_collisions": 0,
         "global_claim_collisions": 0,
+        "fresh_generation_claim_collisions": 0,
+        "retired_generation_claim_collisions": 0,
+        "global_cell_claim_collisions": 0,
+        "global_accepted_evidence_collisions": 0,
+        "global_output_evidence_collisions": 0,
         "kubernetes_object_collisions": 0,
         "sfs_output_collisions": 0,
         "serving_load_block": successor.SERVING_LOAD_BLOCK,
         "job_active_deadline_seconds": ACTIVE_DEADLINE_SECONDS,
         "preclaim_guard_seconds": CLAIM_GUARD_SECONDS,
+        "checked_immediately_before_create": True,
         "mutation_calls": 0,
         "scores_read": False,
         "prompts_traces_flags_read": False,
     }
-    if any(receipt.get(key) != value for key, value in expected.items()) or receipt.get(
-        "receipt_sha256"
-    ) != self_hosted.digest_without(receipt, "receipt_sha256"):
+    binding_fields = ("scored_source_sha256", "scored_package_template_sha256")
+    dynamic_fields = {
+        "global_accepted_files_examined",
+        "global_claim_files_examined",
+        "observed_at_utc",
+        "observer_job_uid",
+        "observer_pod_uid",
+        "receipt_sha256",
+        *binding_fields,
+    }
+    try:
+        observed = datetime.fromisoformat(
+            str(receipt.get("observed_at_utc", "")).replace("Z", "+00:00")
+        )
+        age = (datetime.now(UTC) - observed).total_seconds()
+        observer_uids_valid = all(
+            uuid.UUID(str(receipt.get(key))).int != 0
+            for key in ("observer_job_uid", "observer_pod_uid")
+        )
+    except (TypeError, ValueError):
+        age, observer_uids_valid = RELEASE_MAX_AGE_SECONDS + 1, False
+    if (
+        set(receipt) != set(expected) | dynamic_fields
+        or any(receipt.get(key) != value for key, value in expected.items())
+        or any(
+            successor.SHA256_RE.fullmatch(str(receipt.get(key))) is None
+            for key in binding_fields
+        )
+        or type(receipt.get("global_claim_files_examined")) is not int
+        or receipt.get("global_claim_files_examined", -1) < 0
+        or type(receipt.get("global_accepted_files_examined")) is not int
+        or receipt.get("global_accepted_files_examined", -1) < 0
+        or not observer_uids_valid
+        or age < -60
+        or age > RELEASE_MAX_AGE_SECONDS
+        or receipt.get("receipt_sha256")
+        != self_hosted.digest_without(receipt, "receipt_sha256")
+    ):
         raise RuntimeError("rank-29 hosted successor release drifted")
+
+
+def validate_release(plan: dict[str, Any]) -> None:
+    validate_release_receipt(plan, successor.load(RELEASE_PATH))
 
 
 def _job_timing() -> tuple[float, int]:

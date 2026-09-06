@@ -18,6 +18,8 @@ from evals.fleet import self_hosted
 JOB_NAME = "chris-glm53-exact100-hosted-r029-a3a4-release-v1"
 CONFIGMAP_NAME = JOB_NAME + "-run"
 OUTPUT_PATH = Path("/mnt/sfs/jobs") / JOB_NAME / "RELEASE.json"
+JOBS_ROOT = Path("/mnt/sfs/jobs")
+MAX_SAFE_RECEIPT_BYTES = 262_144
 SOURCE_JOB = "chris-glm53-exact100-hosted-s2-c2-bulk-v1"
 PEER_JOB = "chris-glm53-exact100-hosted-r003-a2a4-successor-v2"
 PEER_JOB_UID = runtime.PEER_JOB_UID
@@ -140,15 +142,132 @@ def _session_collides(
     )
 
 
+def _reject_protected_keys(value: Any) -> None:
+    forbidden = {
+        "flag",
+        "flags",
+        "messages",
+        "prompt",
+        "prompts",
+        "score",
+        "scores",
+        "solution",
+        "solutions",
+        "trace",
+        "traces",
+        "transcript",
+        "transcripts",
+    }
+    if isinstance(value, dict):
+        if forbidden.intersection(value):
+            raise RuntimeError("protected key in duplicate evidence")
+        for item in value.values():
+            _reject_protected_keys(item)
+    elif isinstance(value, list):
+        for item in value:
+            _reject_protected_keys(item)
+
+
+def _identity_values(value: Any) -> set[str]:
+    found: set[str] = set()
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if key in {"cell_id", "execution_id", "run_id"} and isinstance(item, str):
+                found.add(item)
+            else:
+                found.update(_identity_values(item))
+    elif isinstance(value, list):
+        for item in value:
+            found.update(_identity_values(item))
+    return found
+
+
+def _safe_receipt(path: Path) -> dict[str, Any]:
+    if path.is_symlink() or not path.is_file():
+        raise RuntimeError("unsafe duplicate evidence path")
+    if path.stat().st_size > MAX_SAFE_RECEIPT_BYTES:
+        raise RuntimeError("duplicate evidence exceeds size limit")
+    value = successor.load(path)
+    _reject_protected_keys(value)
+    return value
+
+
+def _global_evidence(
+    plan: dict[str, Any],
+    *,
+    jobs_root: Path = JOBS_ROOT,
+    claim_root: Path = successor.CLAIM_ROOT,
+) -> dict[str, int]:
+    if (
+        jobs_root.is_symlink()
+        or not jobs_root.is_dir()
+        or claim_root.is_symlink()
+        or not claim_root.is_dir()
+    ):
+        raise RuntimeError("rank-29 global evidence roots are unsafe")
+    current = plan["attempts"]
+    retired = plan["partition"]["source_generation_1_retired_unclaimed"]
+    cells = {row["cell_id"] for row in current}
+    fresh_executions = {row["execution_id"] for row in current}
+    retired_executions = {row["execution_id"] for row in retired}
+    run_ids = {row["run_id"] for row in current} | {row["run_id"] for row in retired}
+    target_identities = cells | fresh_executions | retired_executions | run_ids
+    result = {
+        "global_claim_files_examined": 0,
+        "global_accepted_files_examined": 0,
+        "fresh_generation_claim_collisions": 0,
+        "retired_generation_claim_collisions": 0,
+        "global_cell_claim_collisions": 0,
+        "global_accepted_evidence_collisions": 0,
+        "global_output_evidence_collisions": 0,
+    }
+    for path in sorted(claim_root.glob("*.json")):
+        result["global_claim_files_examined"] += 1
+        identities = _identity_values(_safe_receipt(path))
+        path_execution = "sha256:" + path.stem
+        result["fresh_generation_claim_collisions"] += int(
+            path_execution in fresh_executions
+            or bool(identities.intersection(fresh_executions))
+        )
+        result["retired_generation_claim_collisions"] += int(
+            path_execution in retired_executions
+            or bool(identities.intersection(retired_executions))
+        )
+        result["global_cell_claim_collisions"] += int(bool(identities.intersection(cells)))
+    for path in sorted(jobs_root.glob("*/accepted/*.json")):
+        result["global_accepted_files_examined"] += 1
+        identities = _identity_values(_safe_receipt(path))
+        result["global_accepted_evidence_collisions"] += int(
+            path.stem in run_ids or bool(identities.intersection(target_identities))
+        )
+    for run_id in run_ids:
+        result["global_output_evidence_collisions"] += sum(
+            int(path.exists() or path.is_symlink())
+            for path in jobs_root.glob(f"*/attempts/{run_id}")
+        )
+    return result
+
+
 def build(root: Path) -> dict[str, Any]:
     key = os.environ.get("FLEET_API_KEY", "")
     job_uid, pod_uid = os.environ.get("JOB_UID", ""), os.environ.get("POD_UID", "")
-    if not key or any(uuid.UUID(value).int == 0 for value in (job_uid, pod_uid)):
+    scored_bindings = {
+        "scored_source_sha256": os.environ.get("SCORED_SOURCE_SHA256", ""),
+        "scored_package_template_sha256": os.environ.get(
+            "SCORED_PACKAGE_TEMPLATE_SHA256", ""
+        ),
+    }
+    if (
+        not key
+        or any(uuid.UUID(value).int == 0 for value in (job_uid, pod_uid))
+        or any(successor.SHA256_RE.fullmatch(value) is None for value in scored_bindings.values())
+    ):
         raise RuntimeError("rank-29 release requires key and nonzero UIDs")
     _validate_predecessors()
     _validate_rank29_history()
     inventory = successor.load(source_runtime.INVENTORY_PATH)
     plan = successor.build_runtime_plan(successor.CONTROLLER, inventory, root)
+    global_evidence = _global_evidence(plan)
     output_collisions = int(successor.SFS_ROOT.exists() or successor.SFS_ROOT.is_symlink())
     kubernetes_collisions = sum(
         _kube_get(kind, name)[0] == 200
@@ -167,11 +286,8 @@ def build(root: Path) -> dict[str, Any]:
     blocked_session_collisions = sum(
         _session_collides(row, blocked_config, blocked_item) for row in sessions
     )
-    claim_collisions = 0
     session_collisions = 0
     for item in plan["attempts"]:
-        claim = Path(successor.CLAIM_ROOT) / engine.claim_filename(item["execution_id"])
-        claim_collisions += int(claim.exists() or claim.is_symlink())
         config = engine._attempt_config(plan, task, item)  # noqa: SLF001
         session_collisions += sum(_session_collides(row, config, item) for row in sessions)
     if any(
@@ -179,8 +295,8 @@ def build(root: Path) -> dict[str, Any]:
             blocked_session_collisions,
             output_collisions,
             kubernetes_collisions,
-            claim_collisions,
             session_collisions,
+            *(global_evidence[key] for key in global_evidence if key.endswith("collisions")),
         )
     ):
         raise RuntimeError("rank-29 successor duplicate ledger is not clear")
@@ -199,7 +315,12 @@ def build(root: Path) -> dict[str, Any]:
         "peer_pod_uid": PEER_POD_UID,
         "peer_active": True,
         "fleet_session_collisions": session_collisions,
-        "global_claim_collisions": claim_collisions,
+        "global_claim_collisions": (
+            global_evidence["fresh_generation_claim_collisions"]
+            + global_evidence["retired_generation_claim_collisions"]
+            + global_evidence["global_cell_claim_collisions"]
+        ),
+        **global_evidence,
         "kubernetes_object_collisions": kubernetes_collisions,
         "sfs_output_collisions": output_collisions,
         "serving_load_block": successor.SERVING_LOAD_BLOCK,
@@ -213,6 +334,7 @@ def build(root: Path) -> dict[str, Any]:
         "observed_at_utc": _now(),
         "scores_read": False,
         "prompts_traces_flags_read": False,
+        **scored_bindings,
     }
     return {**body, "receipt_sha256": self_hosted.digest_without(body, "receipt_sha256")}
 

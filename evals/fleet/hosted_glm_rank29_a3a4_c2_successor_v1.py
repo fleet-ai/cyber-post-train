@@ -59,6 +59,7 @@ def _transform(plan: dict[str, Any], *, runtime: bool) -> dict[str, Any]:
     source_generation = [
         {
             "attempt": row["attempt"],
+            "cell_id": row["cell_id"],
             "execution_id": row["execution_id"],
             "run_id": row["run_id"],
         }

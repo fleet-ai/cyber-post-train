@@ -1,6 +1,7 @@
 import json
 import subprocess
 import sys
+from contextlib import nullcontext
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -9,6 +10,7 @@ import pytest
 from evals.fleet import exact_pass4_bulk_runtime_v3 as engine
 from evals.fleet import hosted_glm_exact_bulk_v1 as source
 from evals.fleet import hosted_glm_rank29_a3a4_c2_package_v1 as package
+from evals.fleet import hosted_glm_rank29_a3a4_c2_release_v1 as release
 from evals.fleet import hosted_glm_rank29_a3a4_c2_runtime_v1 as runtime
 from evals.fleet import hosted_glm_rank29_a3a4_c2_successor_v1 as successor
 from evals.fleet import self_hosted
@@ -38,6 +40,7 @@ def test_rank29_successor_selects_only_unstarted_cells_with_fresh_executions() -
     assert plan["partition"]["source_generation_1_retired_unclaimed"] == [
         {
             "attempt": attempt,
+            "cell_id": source_rows[attempt]["cell_id"],
             "execution_id": source_rows[attempt]["execution_id"],
             "run_id": source_rows[attempt]["run_id"],
         }
@@ -67,7 +70,7 @@ def test_release_package_is_held_create_once_and_score_blind() -> None:
     assert rendered["scored_launch_authorized"] is False
     configmap, job = rendered["objects"]["items"]
     assert configmap["immutable"] is True
-    assert job["metadata"]["name"] == package.release.JOB_NAME
+    assert job["metadata"]["name"] == package.RELEASE_JOB_NAME
     assert (
         job["metadata"]["annotations"]["cyber-post-train.fleet.ai/launch-authorized"]
         == "false"
@@ -76,6 +79,15 @@ def test_release_package_is_held_create_once_and_score_blind() -> None:
     assert job["spec"]["template"]["spec"]["preemptionPolicy"] == "Never"
     assert "release.py" in configmap["data"]
     assert "successor_runtime.py" in configmap["data"]
+    env = {
+        row["name"]: row.get("value")
+        for row in job["spec"]["template"]["spec"]["containers"][0]["env"]
+    }
+    assert env["SCORED_SOURCE_SHA256"] == rendered["scored_source_sha256"]
+    assert (
+        env["SCORED_PACKAGE_TEMPLATE_SHA256"]
+        == rendered["scored_package_template_sha256"]
+    )
 
 
 def test_release_package_import_closure_materializes_in_isolated_tree(tmp_path: Path) -> None:
@@ -169,6 +181,198 @@ def test_runtime_uses_exact_engine_with_deadline_observer() -> None:
     assert runtime.CLAIM_GUARD_SECONDS > 28_800
     assert runtime.ACTIVE_DEADLINE_SECONDS > 2 * runtime.CLAIM_GUARD_SECONDS
     engine.validate_bulk_adapter(successor)
+
+
+def _write_receipt(path: Path, **fields: object) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(fields))
+
+
+def test_global_duplicate_scan_is_clear_for_unused_generations(tmp_path: Path) -> None:
+    jobs = tmp_path / "jobs"
+    claims = tmp_path / "claims"
+    jobs.mkdir()
+    claims.mkdir()
+    plan = successor.validate_all(ROOT)[successor.CONTROLLER]
+    result = release._global_evidence(plan, jobs_root=jobs, claim_root=claims)  # noqa: SLF001
+    assert all(value == 0 for value in result.values())
+
+
+@pytest.mark.parametrize(
+    ("kind", "expected"),
+    [
+        ("retired_claim", "retired_generation_claim_collisions"),
+        ("fresh_claim", "fresh_generation_claim_collisions"),
+        ("cell_claim", "global_cell_claim_collisions"),
+        ("accepted", "global_accepted_evidence_collisions"),
+        ("accepted_path", "global_accepted_evidence_collisions"),
+        ("output", "global_output_evidence_collisions"),
+    ],
+)
+def test_global_duplicate_scan_rejects_each_evidence_class(
+    tmp_path: Path, kind: str, expected: str
+) -> None:
+    jobs = tmp_path / "jobs"
+    claims = tmp_path / "claims"
+    jobs.mkdir()
+    claims.mkdir()
+    plan = successor.validate_all(ROOT)[successor.CONTROLLER]
+    fresh = plan["attempts"][0]
+    retired = plan["partition"]["source_generation_1_retired_unclaimed"][0]
+    if kind == "retired_claim":
+        _write_receipt(
+            claims / f"{retired['execution_id'].removeprefix('sha256:')}.json",
+            execution_id="sha256:" + "f" * 64,
+        )
+    elif kind == "fresh_claim":
+        _write_receipt(
+            claims / f"{fresh['execution_id'].removeprefix('sha256:')}.json",
+            execution_id="sha256:" + "f" * 64,
+        )
+    elif kind == "cell_claim":
+        _write_receipt(claims / "cell.json", cell_id=fresh["cell_id"])
+    elif kind == "accepted":
+        _write_receipt(jobs / "other" / "accepted" / "other.json", cell_id=fresh["cell_id"])
+    elif kind == "accepted_path":
+        _write_receipt(
+            jobs / "other" / "accepted" / f"{retired['run_id']}.json",
+            cell_id="sha256:" + "f" * 64,
+        )
+    else:
+        (jobs / "other" / "attempts" / retired["run_id"]).mkdir(parents=True)
+    result = release._global_evidence(plan, jobs_root=jobs, claim_root=claims)  # noqa: SLF001
+    assert result[expected] == 1
+
+
+def test_global_duplicate_scan_refuses_protected_receipt_keys(tmp_path: Path) -> None:
+    jobs = tmp_path / "jobs"
+    claims = tmp_path / "claims"
+    jobs.mkdir()
+    claims.mkdir()
+    _write_receipt(claims / "unsafe.json", score=0)
+    plan = successor.validate_all(ROOT)[successor.CONTROLLER]
+    with pytest.raises(RuntimeError, match="protected key"):
+        release._global_evidence(plan, jobs_root=jobs, claim_root=claims)  # noqa: SLF001
+
+
+def test_release_builder_seals_exact_global_and_package_bindings(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    plan = successor.validate_all(ROOT)[successor.CONTROLLER]
+    clear = {
+        "global_claim_files_examined": 85,
+        "global_accepted_files_examined": 53,
+        "fresh_generation_claim_collisions": 0,
+        "retired_generation_claim_collisions": 0,
+        "global_cell_claim_collisions": 0,
+        "global_accepted_evidence_collisions": 0,
+        "global_output_evidence_collisions": 0,
+    }
+    monkeypatch.setenv("FLEET_API_KEY", "not-serialized")
+    monkeypatch.setenv("JOB_UID", "11111111-1111-4111-8111-111111111111")
+    monkeypatch.setenv("POD_UID", "22222222-2222-4222-8222-222222222222")
+    monkeypatch.setenv("SCORED_SOURCE_SHA256", "sha256:" + "3" * 64)
+    monkeypatch.setenv("SCORED_PACKAGE_TEMPLATE_SHA256", "sha256:" + "4" * 64)
+    inventory = tmp_path / "inventory.json"
+    inventory.write_text("{}")
+    monkeypatch.setattr(release.source_runtime, "INVENTORY_PATH", inventory)
+    monkeypatch.setattr(successor, "build_runtime_plan", lambda *_args: plan)
+    monkeypatch.setattr(successor, "SFS_ROOT", tmp_path / "unused-output")
+    monkeypatch.setattr(release, "_validate_predecessors", lambda: None)
+    monkeypatch.setattr(release, "_validate_rank29_history", lambda: None)
+    monkeypatch.setattr(release, "_global_evidence", lambda _plan: clear)
+    monkeypatch.setattr(release, "_kube_get", lambda *_args: (404, {}))
+    monkeypatch.setattr(engine, "_fresh_route_check", lambda *_args: None)
+    monkeypatch.setattr(
+        engine, "_task_for_item", lambda *_args: {"task": {"key": "safe-task-key"}}
+    )
+    monkeypatch.setattr(
+        engine,
+        "_attempt_config",
+        lambda _plan, _task, item: {"run_id": item["run_id"]},
+    )
+    monkeypatch.setattr(engine, "_client", lambda _key: nullcontext(object()))
+    monkeypatch.setattr(self_hosted, "_task_sessions", lambda *_args: [])
+    receipt = release.build(ROOT)
+    runtime.validate_release_receipt(plan, receipt)
+    assert receipt["global_claim_files_examined"] == 85
+    assert receipt["global_accepted_files_examined"] == 53
+    assert receipt["scored_source_sha256"] == "sha256:" + "3" * 64
+    assert receipt["scored_package_template_sha256"] == "sha256:" + "4" * 64
+    assert "not-serialized" not in json.dumps(receipt)
+
+
+def test_scored_renderer_rejects_source_or_template_binding_drift(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    plan = successor.validate_all(ROOT)[successor.CONTROLLER]
+    bindings = package.scored_bindings(ROOT)
+    inventory = tmp_path / "inventory.json"
+    inventory.write_text("{}")
+    monkeypatch.setattr(package.base.runtime, "INVENTORY_PATH", inventory)
+    monkeypatch.setattr(
+        successor,
+        "build_runtime_plan",
+        lambda *_args, **_kwargs: {"plan_sha256": plan["plan_sha256"]},
+    )
+    body = {
+        "schema_version": runtime.RELEASE_SCHEMA,
+        "status": "CLEAR",
+        "successor_job": successor.JOB_NAME,
+        "successor_configmap": successor.CONFIGMAP_NAME,
+        "plan_sha256": plan["plan_sha256"],
+        "planned_cells": 2,
+        "source_failed_job_uid": successor.SOURCE_FAILED_JOB_UID,
+        "source_failed_pod_uid": successor.SOURCE_FAILED_POD_UID,
+        "blocked_a2_claim_sha256": successor.BLOCKED_A2_CLAIM_SHA,
+        "blocked_a2_session_collisions": 0,
+        "peer_job_uid": runtime.PEER_JOB_UID,
+        "peer_pod_uid": "0da05643-b6a5-4cf0-8498-d715e2cb3422",
+        "peer_active": True,
+        "maximum_scored_streams": 2,
+        "fleet_session_collisions": 0,
+        "global_claim_collisions": 0,
+        "fresh_generation_claim_collisions": 0,
+        "retired_generation_claim_collisions": 0,
+        "global_cell_claim_collisions": 0,
+        "global_accepted_evidence_collisions": 0,
+        "global_output_evidence_collisions": 0,
+        "kubernetes_object_collisions": 0,
+        "sfs_output_collisions": 0,
+        "serving_load_block": successor.SERVING_LOAD_BLOCK,
+        "job_active_deadline_seconds": runtime.ACTIVE_DEADLINE_SECONDS,
+        "preclaim_guard_seconds": runtime.CLAIM_GUARD_SECONDS,
+        "checked_immediately_before_create": True,
+        "mutation_calls": 0,
+        "scores_read": False,
+        "prompts_traces_flags_read": False,
+        "global_claim_files_examined": 85,
+        "global_accepted_files_examined": 53,
+        "observed_at_utc": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        "observer_job_uid": "11111111-1111-4111-8111-111111111111",
+        "observer_pod_uid": "22222222-2222-4222-8222-222222222222",
+        **bindings,
+    }
+    body["receipt_sha256"] = self_hosted.digest_without(body, "receipt_sha256")
+    receipt = tmp_path / "release.json"
+    receipt.write_text(json.dumps(body))
+    rendered = package.render_scored(ROOT, receipt)
+    assert rendered["held_plan_sha256"] == plan["plan_sha256"]
+    assert rendered["scored_source_sha256"] == bindings["scored_source_sha256"]
+    configmap = rendered["objects"]["items"][0]
+    assert configmap["immutable"] is True
+    assert configmap["data"]["release.json"] == receipt.read_text()
+    for field in (*bindings, "retired_generation_claim_collisions"):
+        drifted = dict(body)
+        drifted[field] = (
+            "sha256:" + "0" * 64 if field in bindings else 1
+        )
+        drifted["receipt_sha256"] = self_hosted.digest_without(
+            drifted, "receipt_sha256"
+        )
+        receipt.write_text(json.dumps(drifted))
+        with pytest.raises(RuntimeError, match="release drifted"):
+            package.render_scored(ROOT, receipt)
 
 
 def test_tracked_held_receipt_binds_plan_package_and_no_launch() -> None:
