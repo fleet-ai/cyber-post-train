@@ -87,7 +87,7 @@ def contract() -> dict[str, Any]:
         },
         "related_draft": {
             "pull_request": 30112,
-            "head": "00c0e2a5155950cde8bf38f75389af5926c16277",
+            "head": "44cd3b2e28544c7a089e02b095ff1eb59c5c590e",
             "adds_exact_task_version": True,
             "adds_write_once_exact_model_identity": True,
             "includes_archived_sessions": True,
