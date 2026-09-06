@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 from evals.fleet import self_hosted
 
@@ -34,4 +35,3 @@ def classify(abort: Mapping[str, Any]) -> dict[str, Any]:
         "execution_id": abort["execution_id"],
         "receipt_sha256": abort["receipt_sha256"],
     }
-
