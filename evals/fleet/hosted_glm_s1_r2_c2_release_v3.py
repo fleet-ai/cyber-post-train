@@ -12,6 +12,8 @@ SCHEMA = "fleet-hosted-glm-s1-r2-c2-successor-release-v3"
 JOB_NAME = "chris-glm53-exact100-hosted-s1-r002-c2-release-v3"
 CONFIGMAP_NAME = JOB_NAME + "-run"
 OUTPUT_PATH = Path("/mnt/sfs/jobs") / JOB_NAME / "RELEASE.json"
+FAILED_V1_JOB_UID = prior.FAILED_V1_JOB_UID
+FAILED_V1_POD_UID = prior.FAILED_V1_POD_UID
 
 
 def build(root: Path) -> dict[str, Any]:
