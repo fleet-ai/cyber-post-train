@@ -232,20 +232,19 @@ def test_preclaim_failure_receipt_is_score_blind_and_retry_closed() -> None:
     assert receipt["disposition"]["launch_authorized"] is False
 
 
-def test_canary_v1_failure_is_stage06_unclassified_and_zero_effect() -> None:
+def test_canary_v2_failure_is_stage06_unclassified_and_zero_effect() -> None:
     receipt = successor.load(ROOT / successor.CANARY_FAILURE["path"])
     assert receipt["receipt_sha256"] == successor.CANARY_FAILURE["receipt_sha256"]
     assert receipt["receipt_sha256"] == self_hosted.digest_without(receipt, "receipt_sha256")
     assert receipt["failure_evidence"] == {
         "last_completed_stage": "06-runtime-exec",
         "runtime_gate_canary_pass_receipts_present": 0,
-        "sanitized_runtime_failure_receipts_present": 0,
-        "error_type": "UNAVAILABLE_NO_SANITIZED_RUNTIME_FAILURE_RECEIPT",
-        "error_sha256": None,
-        "deterministic_cause_identified": False,
+        "sanitized_runtime_failure_receipts_present": 1,
+        "error_type": "ValueError",
+        "error_sha256": ("sha256:7bc266369121c322081301fd75452411a597ac4724e8ad07bca9291a826ee05e"),
     }
     assert set(receipt["score_blind_effects"].values()) == {0}
-    assert receipt["disposition"]["canary_v1_identity_retry_authorized"] is False
+    assert receipt["disposition"]["canary_v2_identity_retry_authorized"] is False
     assert receipt["disposition"]["scored_successor_authorized"] is False
 
 
@@ -262,7 +261,7 @@ def test_score_free_runtime_gate_canary_stops_before_any_scored_boundary(
     monkeypatch.setattr(
         runtime,
         "runtime_gate_check",
-        lambda actual_plans, actual_source, *, canary=False: (
+        lambda actual_plans, actual_source, *, canary=False, phase_callback=None: (
             held
             if actual_plans == plans and actual_source == package_source and canary
             else pytest.fail("runtime gate canary did not use the exact held gate")
@@ -306,9 +305,14 @@ def test_runtime_gate_failure_receipt_contains_only_sanitized_error_identity(
     monkeypatch.setenv("QWEN_HOSTED_WHOLE_TASK_RELEASE_SHA256", "sha256:" + "a" * 64)
     monkeypatch.setenv("QWEN_HOSTED_WHOLE_TASK_PACKAGE_SOURCE_SHA256", "sha256:" + "b" * 64)
     path = tmp_path / "RUNTIME-GATE-CANARY-FAILED.json"
-    receipt = runtime.write_gate_canary_failure(path, RuntimeError("protected detail"))
+    receipt = runtime.write_gate_canary_failure(
+        path,
+        RuntimeError("protected detail"),
+        last_completed_phase="package-source-digest-done",
+    )
     assert successor.load(path) == receipt
     assert receipt["last_completed_stage"] == "06-runtime-exec"
+    assert receipt["last_completed_phase"] == "package-source-digest-done"
     assert receipt["error_type"] == "RuntimeError"
     assert receipt["error_sha256"] == self_hosted.sha256(b"protected detail")
     assert "protected detail" not in path.read_text()
@@ -992,6 +996,70 @@ def test_runtime_gate_canary_package_is_new_score_free_create_once_identity() ->
     held = json.loads(cm["data"]["release.json"])
     assert held["launch_authorized"] is False
     assert env["QWEN_HOSTED_WHOLE_TASK_RELEASE_SHA256"]["value"] == held["receipt_sha256"]
+
+
+def test_runtime_gate_canary_records_every_safe_gate_phase(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    plans = successor.build_plans(ROOT)
+    sources = _sources(plans)
+    package_source_path = tmp_path / "package-source.json"
+    package_source_path.write_text(json.dumps(sources["qwen-a"], sort_keys=True) + "\n")
+    held_path = ROOT / successor.HELD_PATH
+    held = successor.load(held_path)
+    monkeypatch.setenv(
+        "QWEN_HOSTED_WHOLE_TASK_PACKAGE_SOURCE_SHA256",
+        sources["qwen-a"]["receipt_sha256"],
+    )
+    monkeypatch.setenv("QWEN_HOSTED_WHOLE_TASK_RELEASE_PATH", str(held_path.resolve()))
+    monkeypatch.setenv("QWEN_HOSTED_WHOLE_TASK_RELEASE_SHA256", held["receipt_sha256"])
+    phases: list[str] = []
+    loaded_plans, package_source = runtime._load_bound_inputs(  # noqa: SLF001
+        plans["qwen-a"],
+        package_source_path=package_source_path.resolve(),
+        phase_callback=phases.append,
+    )
+    assert (
+        runtime.runtime_gate_check(
+            loaded_plans,
+            package_source,
+            canary=True,
+            phase_callback=phases.append,
+        )
+        == held
+    )
+    assert phases == [
+        "build-plans-started",
+        "build-plans-done",
+        "package-source-load-done",
+        "package-source-digest-done",
+        "plan-match-done",
+        "held-load-started",
+        "held-load-done",
+        "held-digest-done",
+        "package-source-validate-done",
+        "held-validate-done",
+    ]
+
+
+def test_runtime_gate_canary_failure_preserves_last_completed_phase(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    plan = successor.build_plans(ROOT)["qwen-a"]
+    phases: list[str] = []
+    monkeypatch.setattr(
+        successor,
+        "build_plans",
+        lambda _root: (_ for _ in ()).throw(ValueError("protected phase detail")),
+    )
+    with pytest.raises(ValueError, match="protected phase detail"):
+        runtime.run_gate_canary(
+            plan,
+            receipt_path=tmp_path / "unused.json",
+            package_source_path=(tmp_path / "unused-package.json").resolve(),
+            phase_callback=phases.append,
+        )
+    assert phases == ["build-plans-started"]
 
 
 def test_unmocked_materialized_canary_package_runs_exact_runtime_gate(tmp_path: Path) -> None:
