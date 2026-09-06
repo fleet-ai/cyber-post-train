@@ -18,7 +18,7 @@ from evals.fleet import glm53_dedicated_v32_watchdog_live_release_v1 as adapter
 from evals.fleet import glm53_dedicated_v32_watchdog_package_v1 as watchdog
 
 ROOT = Path(__file__).resolve().parents[1]
-COMMIT = "fa8d042313d892b463842b4f9eb5975454aae49a"
+COMMIT = "791596c8896d00ebb277e965d9366f57f554c940"
 
 
 class FakeBackend:
