@@ -22,30 +22,50 @@ def _read(root: Path, paths: tuple[str, ...]) -> dict[str, str]:
     return {Path(path).name: (root / path).read_text() for path in dict.fromkeys(paths)}
 
 
+def _source_data(root: Path, plan: dict[str, Any]) -> dict[str, str]:
+    paths = (
+        *COMMON,
+        "evals/fleet/opencode_train_sweep_runner.py",
+        "evals/fleet/fixed_proxy.py",
+        "evals/fleet/Dockerfile.opencode",
+        "evals/fleet/scripts/run_qwen_hosted_whole_task_successor_v1.sh",
+    )
+    data = _read(root, paths)
+    data["source-plan-v4-a.json"] = (root / successor.source.PLAN_PATHS["qwen-a"]).read_text()
+    data["source-plan-v4-b.json"] = (root / successor.source.PLAN_PATHS["qwen-b"]).read_text()
+    data["plan.json"] = json.dumps(plan, sort_keys=True, separators=(",", ":")) + "\n"
+    return data
+
+
+def package_sources(
+    root: Path, plans: dict[str, dict[str, Any]]
+) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, str]]]:
+    data = {controller: _source_data(root, plan) for controller, plan in plans.items()}
+    receipts = {
+        controller: successor.package_source_receipt(controller, plans[controller], values)
+        for controller, values in data.items()
+    }
+    return receipts, data
+
+
 def render(root: Path, *, release_path: Path | None = None) -> dict[str, Any]:
     plans = successor.build_plans(root)
+    sources, source_data = package_sources(root, plans)
     held = successor.load(root / successor.HELD_PATH)
-    successor.validate_held(held, plans)
+    successor.validate_held(held, plans, sources)
     release: dict[str, Any] | None = None
     if release_path is not None:
         release = successor.load(release_path)
-        successor.validate_release(release, plans)
+        successor.validate_release(release, plans, sources)
     items: list[dict[str, Any]] = []
     for controller, plan in plans.items():
         authority = successor.CONTROLLERS[controller]
-        paths = (
-            *COMMON,
-            "evals/fleet/opencode_train_sweep_runner.py",
-            "evals/fleet/fixed_proxy.py",
-            "evals/fleet/Dockerfile.opencode",
-            "evals/fleet/scripts/run_qwen_hosted_whole_task_successor_v1.sh",
-        )
-        data = _read(root, paths)
-        data["source-plan-v4-a.json"] = (root / successor.source.PLAN_PATHS["qwen-a"]).read_text()
-        data["source-plan-v4-b.json"] = (root / successor.source.PLAN_PATHS["qwen-b"]).read_text()
-        data["plan.json"] = json.dumps(plan, sort_keys=True, separators=(",", ":")) + "\n"
+        data = source_data[controller]
         bound = release or held
         data["release.json"] = json.dumps(bound, sort_keys=True, separators=(",", ":")) + "\n"
+        data["package-source.json"] = (
+            json.dumps(sources[controller], sort_keys=True, separators=(",", ":")) + "\n"
+        )
         cm = {
             "apiVersion": "v1",
             "kind": "ConfigMap",
@@ -53,6 +73,7 @@ def render(root: Path, *, release_path: Path | None = None) -> dict[str, Any]:
                 "name": authority["configmap_name"],
                 "namespace": base.NAMESPACE,
             },
+            "immutable": True,
             "data": data,
         }
         job = base._base_job(authority["job_name"], authority["configmap_name"], scored=True)  # noqa: SLF001
@@ -93,6 +114,10 @@ def render(root: Path, *, release_path: Path | None = None) -> dict[str, Any]:
                 {
                     "name": "QWEN_HOSTED_WHOLE_TASK_RELEASE_SHA256",
                     "value": bound["receipt_sha256"],
+                },
+                {
+                    "name": "QWEN_HOSTED_WHOLE_TASK_PACKAGE_SOURCE_SHA256",
+                    "value": sources[controller]["receipt_sha256"],
                 },
             ]
         )

@@ -4,6 +4,27 @@ umask 077
 ROOT=/workspace/cyber-post-train
 mkdir -p "$ROOT/evals/fleet/configs"
 touch "$ROOT/evals/__init__.py" "$ROOT/evals/fleet/__init__.py"
+python - <<'PY'
+import hashlib
+import json
+import os
+from pathlib import Path
+
+root = Path("/bootstrap")
+receipt = json.loads(root.joinpath("package-source.json").read_text())
+body = {key: value for key, value in receipt.items() if key != "receipt_sha256"}
+canonical = json.dumps(body, sort_keys=True, separators=(",", ":")).encode()
+expected = "sha256:" + hashlib.sha256(canonical).hexdigest()
+if receipt.get("receipt_sha256") != expected:
+    raise SystemExit("package source receipt self-digest drifted")
+if expected != os.environ.get("QWEN_HOSTED_WHOLE_TASK_PACKAGE_SOURCE_SHA256"):
+    raise SystemExit("package source environment binding drifted")
+for name, digest in receipt.get("files", {}).items():
+    path = root / name
+    actual = "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
+    if actual != digest:
+        raise SystemExit(f"package source file drifted: {name}")
+PY
 for file in self_hosted.py opencode_train_sweep_runner.py exact_pass4_bulk_v3.py \
   exact_pass4_bulk_runtime_v3.py exact_pass4_universe.py exact_pass4_crypto.py \
   endpoint_lease.py qwen_bulk_generation16.py qwen_hosted_generation18.py \

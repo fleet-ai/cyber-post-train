@@ -18,10 +18,15 @@ def _seal(body: dict[str, Any]) -> dict[str, Any]:
 
 
 def run(plan: dict[str, Any], *, out: Path, proxy: Path, diagnostic_root: Path) -> dict[str, Any]:
-    if out.exists() or out.is_symlink():
-        raise RuntimeError("hosted whole-task create-once output root already exists")
+    if out.is_symlink():
+        raise RuntimeError("hosted whole-task output root is unsafe")
     plans = successor.build_plans(Path(plan["repo_root"]))
-    release = successor.load_runtime_release(plans)
+    package_source = successor.load(Path("/bootstrap/package-source.json"))
+    if package_source.get("receipt_sha256") != os.environ.get(
+        "QWEN_HOSTED_WHOLE_TASK_PACKAGE_SOURCE_SHA256"
+    ):
+        raise RuntimeError("hosted whole-task package source environment binding drifted")
+    release = successor.load_runtime_release(plans, package_source)
     if plan != plans.get(plan.get("controller")):
         raise RuntimeError("hosted whole-task runtime plan drifted")
     key = os.environ.get("FLEET_API_KEY")
@@ -32,6 +37,10 @@ def run(plan: dict[str, Any], *, out: Path, proxy: Path, diagnostic_root: Path) 
 
     def observe(stage: str, item: dict[str, Any] | None) -> None:
         state.update(stage=stage, item=item)
+        if stage == "07-claim-written":
+            if item is None:
+                raise RuntimeError("hosted whole-task model boundary item is missing")
+            provider.mark_model_boundary(item)
 
     prior = engine.bulk
     try:

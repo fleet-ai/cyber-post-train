@@ -18,7 +18,13 @@ from evals.fleet import self_hosted
 ROOT = Path(__file__).parents[1]
 
 
-def _release(plans: dict[str, dict]) -> dict:
+def _sources(plans: dict[str, dict]) -> dict[str, dict]:
+    sources, _ = package.package_sources(ROOT, plans)
+    return sources
+
+
+def _release(plans: dict[str, dict], sources: dict[str, dict] | None = None) -> dict:
+    sources = sources or _sources(plans)
     body = {
         "schema_version": successor.RELEASE_SCHEMA,
         "status": "CLEAR",
@@ -27,7 +33,7 @@ def _release(plans: dict[str, dict]) -> dict:
         "scoring_authorized": True,
         "controller_cap": 2,
         "endpoint_maximum_streams": 2,
-        "controllers": successor.release_projection(plans),
+        "controllers": successor.release_projection(plans, sources),
         "ledger_snapshot_path": successor.LEDGER_PATH,
         "ledger_snapshot_receipt_sha256": successor.LEDGER_SELF_SHA256,
         "ledger_snapshot_file_sha256": successor.LEDGER_FILE_SHA256,
@@ -93,8 +99,9 @@ def test_plans_select_only_two_untouched_complete_tasks() -> None:
 
 def test_held_evidence_is_digest_valid_and_never_launches() -> None:
     plans = successor.build_plans(ROOT)
+    sources = _sources(plans)
     held = successor.load(ROOT / successor.HELD_PATH)
-    successor.validate_held(held, plans)
+    successor.validate_held(held, plans, sources)
     assert held["receipt_sha256"] == self_hosted.digest_without(held, "receipt_sha256")
     assert held["launch_authorized"] is False
     assert held["scoring_authorized"] is False
@@ -103,8 +110,9 @@ def test_held_evidence_is_digest_valid_and_never_launches() -> None:
 
 def test_release_validator_fails_closed_on_every_collision_class() -> None:
     plans = successor.build_plans(ROOT)
-    release = _release(plans)
-    successor.validate_release(release, plans)
+    sources = _sources(plans)
+    release = _release(plans, sources)
+    successor.validate_release(release, plans, sources)
     for field in (
         "canonical_claim_collisions",
         "authoritative_session_collisions",
@@ -115,14 +123,14 @@ def test_release_validator_fails_closed_on_every_collision_class() -> None:
         bad["fresh_collision_reconciliation"][field] = 1
         bad["receipt_sha256"] = self_hosted.digest_without(bad, "receipt_sha256")
         with pytest.raises(RuntimeError, match="release drifted"):
-            successor.validate_release(bad, plans)
+            successor.validate_release(bad, plans, sources)
     with pytest.raises(RuntimeError, match="release drifted"):
-        successor.validate_release(successor.load(ROOT / successor.HELD_PATH), plans)
+        successor.validate_release(successor.load(ROOT / successor.HELD_PATH), plans, sources)
     extra = copy.deepcopy(release)
     extra["score"] = 0
     extra["receipt_sha256"] = self_hosted.digest_without(extra, "receipt_sha256")
     with pytest.raises(RuntimeError, match="release drifted"):
-        successor.validate_release(extra, plans)
+        successor.validate_release(extra, plans, sources)
 
 
 def test_atomic_provider_publishes_and_validates_all_four_before_return(
@@ -206,6 +214,171 @@ def test_partial_claim_publication_rolls_back_without_touching_existing_claim(
     assert not (out / "RESERVATION.json").exists()
 
 
+@pytest.mark.parametrize(
+    "stage",
+    [
+        "after_preparing",
+        "after_claim_1",
+        "after_claim_2",
+        "after_claim_3",
+        "after_claim_4",
+        "after_validation_1",
+        "after_validation_2",
+        "after_validation_3",
+        "after_validation_4",
+        "before_reservation_write",
+        "after_reservation_write",
+    ],
+)
+@pytest.mark.parametrize("error_type", [RuntimeError, SystemExit])
+def test_every_transaction_boundary_is_rollback_or_restart_recoverable(
+    tmp_path: Path, stage: str, error_type: type[BaseException]
+) -> None:
+    plan = successor.build_plans(ROOT)["qwen-a"]
+    out = tmp_path / "out"
+    out.mkdir()
+    claim_root = tmp_path / "claims"
+    claim_root.mkdir()
+    jobs_root = tmp_path / "jobs"
+    jobs_root.mkdir()
+    reservations = tmp_path / "reservations"
+
+    def fail_at(observed: str) -> None:
+        if observed == stage:
+            raise error_type(stage)
+
+    interrupted = successor.AtomicWholeTaskClaims(
+        plan,
+        out,
+        key="test-only",
+        jobs_root=jobs_root,
+        reservation_root=reservations,
+        session_check=lambda *_args: None,
+        fault_hook=fail_at,
+    )
+    with pytest.raises(error_type, match=stage):
+        interrupted(
+            plan,
+            plan["attempts"][0],
+            claim_root,
+            "11111111-1111-4111-8111-111111111111",
+            "22222222-2222-4222-8222-222222222222",
+        )
+    committed = stage == "after_reservation_write"
+    assert len(list(claim_root.glob("*.json"))) == (4 if committed else 0)
+    assert (out / "RESERVATION.json").exists() is committed
+    assert list((reservations / "preparing" / interrupted.task_version).glob("*.json"))
+
+    recovered = successor.AtomicWholeTaskClaims(
+        plan,
+        out,
+        key="test-only",
+        jobs_root=jobs_root,
+        reservation_root=reservations,
+        session_check=lambda *_args: None,
+    )
+    recovered(
+        plan,
+        plan["attempts"][0],
+        claim_root,
+        "11111111-1111-4111-8111-111111111111",
+        "22222222-2222-4222-8222-222222222222",
+    )
+    assert len(list(claim_root.glob("*.json"))) == 4
+    assert (out / "RESERVATION.json").is_file()
+
+
+def test_torn_reservation_write_rolls_back_claims_and_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    plan = successor.build_plans(ROOT)["qwen-b"]
+    out = tmp_path / "out"
+    out.mkdir()
+    claim_root = tmp_path / "claims"
+    claim_root.mkdir()
+    jobs_root = tmp_path / "jobs"
+    jobs_root.mkdir()
+    real = engine._write_once  # noqa: SLF001
+
+    def torn(path: Path, value: dict) -> None:
+        if path.name == "RESERVATION.json":
+            path.write_bytes(b'{"torn":')
+            raise OSError("injected torn reservation")
+        real(path, value)
+
+    monkeypatch.setattr(engine, "_write_once", torn)
+    provider = successor.AtomicWholeTaskClaims(
+        plan,
+        out,
+        key="test-only",
+        jobs_root=jobs_root,
+        reservation_root=tmp_path / "reservations",
+        session_check=lambda *_args: None,
+    )
+    with pytest.raises(OSError, match="torn reservation"):
+        provider(
+            plan,
+            plan["attempts"][0],
+            claim_root,
+            "11111111-1111-4111-8111-111111111111",
+            "22222222-2222-4222-8222-222222222222",
+        )
+    assert not list(claim_root.glob("*.json"))
+    assert not (out / "RESERVATION.json").exists()
+
+
+def test_restart_recovers_crash_like_preparing_and_partial_claim_state(tmp_path: Path) -> None:
+    plan = successor.build_plans(ROOT)["qwen-b"]
+    out = tmp_path / "out"
+    out.mkdir()
+    claim_root = tmp_path / "claims"
+    claim_root.mkdir()
+    jobs_root = tmp_path / "jobs"
+    jobs_root.mkdir()
+    reservations = tmp_path / "reservations"
+    crashed = successor.AtomicWholeTaskClaims(
+        plan,
+        out,
+        key="test-only",
+        jobs_root=jobs_root,
+        reservation_root=reservations,
+        session_check=lambda *_args: None,
+    )
+    job_uid = "11111111-1111-4111-8111-111111111111"
+    old_pod_uid = "22222222-2222-4222-8222-222222222222"
+    crashed._ensure_preparing(job_uid, old_pod_uid)  # noqa: SLF001
+    for item in plan["attempts"][-2:]:
+        assert engine.claim_cell(
+            plan,
+            item,
+            claim_root=claim_root,
+            job_uid=job_uid,
+            pod_uid=old_pod_uid,
+        )
+    assert len(list(claim_root.glob("*.json"))) == 2
+
+    restarted = successor.AtomicWholeTaskClaims(
+        plan,
+        out,
+        key="test-only",
+        jobs_root=jobs_root,
+        reservation_root=reservations,
+        session_check=lambda *_args: None,
+    )
+    restarted(
+        plan,
+        plan["attempts"][0],
+        claim_root,
+        job_uid,
+        "33333333-3333-4333-8333-333333333333",
+    )
+    assert len(list(claim_root.glob("*.json"))) == 4
+    assert {successor.load(path)["pod_uid"] for path in claim_root.glob("*.json")} == {
+        "33333333-3333-4333-8333-333333333333"
+    }
+    assert (out / "RESERVATION.json").is_file()
+
+
 def test_missing_canonical_mount_fails_before_claim(tmp_path: Path) -> None:
     plan = successor.build_plans(ROOT)["qwen-a"]
     out = tmp_path / "out"
@@ -252,7 +425,13 @@ def test_engine_reaches_model_boundary_only_after_four_claims(
     def stop_at_model(*_args: object) -> dict:
         assert len(list(claim_root.glob("*.json"))) == 4
         assert (out / "RESERVATION.json").is_file()
+        assert len(list((out / "model-boundaries").glob("*.json"))) == 1
         raise SystemExit("model boundary reached")
+
+    def observe(stage: str, item: dict | None) -> None:
+        if stage == "07-claim-written":
+            assert item is not None
+            provider.mark_model_boundary(item)
 
     prior = engine.bulk
     engine.bulk = successor
@@ -272,9 +451,104 @@ def test_engine_reaches_model_boundary_only_after_four_claims(
                 route_check=lambda *_args: None,
                 runtime_gate_check=lambda *_args: None,
                 claim_provider=provider,
+                stage_observer=observe,
             )
     finally:
         engine.bulk = prior
+
+
+def test_restart_never_repeats_a_durable_model_boundary(tmp_path: Path) -> None:
+    plan = successor.build_plans(ROOT)["qwen-a"]
+    out = tmp_path / "out"
+    out.mkdir()
+    claim_root = tmp_path / "claims"
+    claim_root.mkdir()
+    jobs_root = tmp_path / "jobs"
+    jobs_root.mkdir()
+    reservations = tmp_path / "reservations"
+    first = successor.AtomicWholeTaskClaims(
+        plan,
+        out,
+        key="test-only",
+        jobs_root=jobs_root,
+        reservation_root=reservations,
+        session_check=lambda *_args: None,
+    )
+    item = plan["attempts"][0]
+    first(
+        plan,
+        item,
+        claim_root,
+        "11111111-1111-4111-8111-111111111111",
+        "22222222-2222-4222-8222-222222222222",
+    )
+    first.mark_model_boundary(item)
+
+    restarted = successor.AtomicWholeTaskClaims(
+        plan,
+        out,
+        key="test-only",
+        jobs_root=jobs_root,
+        reservation_root=reservations,
+        session_check=lambda *_args: None,
+    )
+    restarted(
+        plan,
+        item,
+        claim_root,
+        "11111111-1111-4111-8111-111111111111",
+        "33333333-3333-4333-8333-333333333333",
+    )
+    with pytest.raises(RuntimeError, match="already crossed; retry prohibited"):
+        restarted.mark_model_boundary(item)
+
+
+def test_reservation_drift_after_model_boundary_never_rolls_back(tmp_path: Path) -> None:
+    plan = successor.build_plans(ROOT)["qwen-a"]
+    out = tmp_path / "out"
+    out.mkdir()
+    claim_root = tmp_path / "claims"
+    claim_root.mkdir()
+    jobs_root = tmp_path / "jobs"
+    jobs_root.mkdir()
+    reservations = tmp_path / "reservations"
+    provider = successor.AtomicWholeTaskClaims(
+        plan,
+        out,
+        key="test-only",
+        jobs_root=jobs_root,
+        reservation_root=reservations,
+        session_check=lambda *_args: None,
+    )
+    item = plan["attempts"][0]
+    provider(
+        plan,
+        item,
+        claim_root,
+        "11111111-1111-4111-8111-111111111111",
+        "22222222-2222-4222-8222-222222222222",
+    )
+    provider.mark_model_boundary(item)
+    (out / "RESERVATION.json").write_text("{}\n")
+
+    restarted = successor.AtomicWholeTaskClaims(
+        plan,
+        out,
+        key="test-only",
+        jobs_root=jobs_root,
+        reservation_root=reservations,
+        session_check=lambda *_args: None,
+    )
+    with pytest.raises(RuntimeError, match="drifted after model boundary"):
+        restarted(
+            plan,
+            item,
+            claim_root,
+            "11111111-1111-4111-8111-111111111111",
+            "33333333-3333-4333-8333-333333333333",
+        )
+    assert len(list(claim_root.glob("*.json"))) == 4
+    assert (out / "RESERVATION.json").read_text() == "{}\n"
 
 
 def test_held_package_is_closed_create_once_and_cap_two(tmp_path: Path) -> None:
@@ -286,6 +560,7 @@ def test_held_package_is_closed_create_once_and_cap_two(tmp_path: Path) -> None:
         "Job",
     ]
     for cm, job in zip(rendered["items"][::2], rendered["items"][1::2], strict=True):
+        assert cm["immutable"] is True
         assert job["metadata"]["annotations"] == {
             "cyber-post-train.fleet.ai/create-once": "true",
             "cyber-post-train.fleet.ai/launch-authorized": "false",
@@ -294,6 +569,21 @@ def test_held_package_is_closed_create_once_and_cap_two(tmp_path: Path) -> None:
         assert job["spec"]["template"]["spec"]["restartPolicy"] == "Never"
         assert job["spec"]["activeDeadlineSeconds"] >= 4 * 28_800
         plan = json.loads(cm["data"]["plan.json"])
+        source_receipt = json.loads(cm["data"]["package-source.json"])
+        source_data = {
+            name: value
+            for name, value in cm["data"].items()
+            if name not in {"release.json", "package-source.json"}
+        }
+        assert source_receipt == successor.package_source_receipt(
+            plan["controller"], plan, source_data
+        )
+        source_env = next(
+            row["value"]
+            for row in job["spec"]["template"]["spec"]["containers"][0]["env"]
+            if row["name"] == "QWEN_HOSTED_WHOLE_TASK_PACKAGE_SOURCE_SHA256"
+        )
+        assert source_env == source_receipt["receipt_sha256"]
         assert len(plan["attempts"]) == 4
         assert plan["execution"]["endpoint_lease"]["maximum_streams"] == 2
         assert [row["attempt"] for row in plan["attempts"]] == [1, 2, 3, 4]
