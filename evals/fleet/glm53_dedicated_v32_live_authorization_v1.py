@@ -167,6 +167,10 @@ def _is_project_run_dir(value: object) -> bool:
     )
 
 
+def _is_project_title(value: object) -> bool:
+    return isinstance(value, str) and value.startswith("chris-cyber-evalserve-")
+
+
 def validate_qwen_authority(value: Mapping[str, Any]) -> dict[str, Any]:
     """Validate the injected terminal, score-free Qwen authority exactly."""
 
@@ -376,8 +380,12 @@ def _active_project_runs(
         row_run_dir = row.get("run_dir")
         if row.get("title") == title or row_run_dir == run_dir:
             raise LiveAuthorizationError("v32_jobs_api_identity_already_exists")
-        if not isinstance(name, str) or not _is_project_run_dir(row_run_dir):
+        if not (
+            _is_project_run_dir(row_run_dir) or _is_project_title(row.get("title"))
+        ):
             continue
+        if not isinstance(name, str) or not _is_project_run_dir(row_run_dir):
+            raise LiveAuthorizationError("v32_jobs_api_project_identity_invalid")
         current = backend.get_run(name)
         if current is None:
             continue
@@ -417,7 +425,13 @@ def _project_kubernetes(
         if row.get("kind") == "Pod"
         and (row.get("status") or {}).get("phase") in {"Pending", "Running"}
         and _pod_gpu_requests(row) > 0
-        and _is_project_run_dir(_pod_run_dir(row))
+        and (
+            _is_project_run_dir(_pod_run_dir(row))
+            or (_metadata(row).get("labels") or {}).get(
+                "cyber-post-train.fleet.ai/owner"
+            )
+            == "chris"
+        )
     ]
     project_objects = [
         row

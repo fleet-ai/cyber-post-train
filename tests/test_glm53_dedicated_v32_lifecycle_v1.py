@@ -323,15 +323,7 @@ def test_v32_live_builder_rejects_rehashed_drift_and_orphans(
                 spec={
                     "containers": [
                         {
-                            "env": [
-                                {
-                                    "name": "RUN_DIR",
-                                    "value": (
-                                        "/mnt/sfs/jobs/"
-                                        "chris-cyber-evalserve-orphan"
-                                    ),
-                                }
-                            ],
+                            "env": [],
                             "resources": {
                                 "requests": {"nvidia.com/gpu": "1"}
                             },
@@ -375,6 +367,22 @@ def test_v32_live_builder_pages_and_rejects_hidden_active_server() -> None:
     backend.exact["ft-run-deadbeef"] = hidden
     with pytest.raises(
         live_auth.LiveAuthorizationError, match="zero_state_has_project_server"
+    ):
+        create_authorization(backend)
+
+
+def test_v32_live_builder_rejects_malformed_project_api_identity() -> None:
+    backend = FakeBackend()
+    backend.rows = [
+        {
+            "name": "ft-run-malformed",
+            "title": "chris-cyber-evalserve-malformed",
+            "run_dir": "/tmp/not-the-project-sfs-root",
+            "status": "RUNNING",
+        }
+    ]
+    with pytest.raises(
+        live_auth.LiveAuthorizationError, match="project_identity_invalid"
     ):
         create_authorization(backend)
 
