@@ -37,7 +37,7 @@ def render(root: Path, *, release_path: Path | None = None, bootstrap_path: Path
     closure.validate_install_closure(configmap["data"])
     if release_path is not None:
         receipt = successor.load(release_path)
-        if any((receipt.get("schema_version") != release.SCHEMA, receipt.get("status") != "CLEAR", receipt.get("successor_job") != successor.JOB_NAME, receipt.get("plan_sha256") != plan["plan_sha256"], receipt.get("receipt_sha256") != self_hosted.digest_without(receipt, "receipt_sha256"))):
+        if any((receipt.get("schema_version") != release.SCHEMA, receipt.get("status") != "CLEAR", receipt.get("successor_job") != successor.JOB_NAME, receipt.get("successor_configmap") != successor.CONFIGMAP_NAME, receipt.get("receipt_sha256") != self_hosted.digest_without(receipt, "receipt_sha256"))):
             raise RuntimeError("rank-2 hosted v4 package release drifted")
         if authorized:
             bootstrap = successor.load(bootstrap_path)
