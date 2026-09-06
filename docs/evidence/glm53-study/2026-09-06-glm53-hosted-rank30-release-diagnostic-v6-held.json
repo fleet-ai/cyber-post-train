@@ -1,0 +1,34 @@
+{
+  "api_mutation_calls_authorized": 0,
+  "diagnostic_configmap": "chris-glm53-r030-release-diagnostic-v6-run",
+  "diagnostic_job": "chris-glm53-r030-release-diagnostic-v6",
+  "diagnostic_output": "/mnt/sfs/jobs/chris-glm53-r030-release-diagnostic-v6/DIAGNOSTIC.json",
+  "expected_attempts": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "expected_rank": 30,
+  "launch_authorized": false,
+  "model_calls_authorized": 0,
+  "package_sha256": "sha256:68452b34386af84cade59682ed05539f3c21a7567c13a22b5d2dc146ec58cc57",
+  "phase_change": "09-release-projection-validates-cells",
+  "prior_diagnostic_receipt_sha256": "sha256:9e8899367fd436ef06aea859447f3063afc0774c89577612f66b10950e3d1d02",
+  "prior_error_sha256": "sha256:5a27ebe7ed0edfc2ef10cf4fa60f3a6b478740611c0e7e50ae0e3194f8b7504c",
+  "receipt_sha256": "sha256:6423fea2b31eab580057b3b41e5e831591915a1e89f75f7e6467a9d344623c71",
+  "schema_version": "fleet-hosted-glm-rank30-release-phase-diagnostic-held-v6",
+  "scored_launch_authorized": false,
+  "scoring_calls_authorized": 0,
+  "server_side_dry_run": {
+    "api_mutations": 0,
+    "configmap": "chris-glm53-r030-release-diagnostic-v6-run",
+    "job": "chris-glm53-r030-release-diagnostic-v6",
+    "status": "PASSED",
+    "verb": "create"
+  },
+  "session_calls_authorized": 0,
+  "status": "HELD_FOR_INDEPENDENT_REVIEW",
+  "task_calls_authorized": 0,
+  "verifier_calls_authorized": 0
+}
