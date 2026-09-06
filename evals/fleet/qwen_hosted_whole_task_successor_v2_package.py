@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 from pathlib import Path
 from typing import Any
@@ -22,8 +23,43 @@ COMMON = (
         }
     ),
     "evals/fleet/qwen_hosted_whole_task_successor_v2.py",
+    "evals/fleet/qwen_hosted_whole_task_release_gate_contract_v1.py",
     "evals/fleet/qwen_hosted_whole_task_successor_v2_runtime.py",
 )
+RUNTIME_GATE_CANARY_JOB = "chris-q38-hosted-whole-task-runtime-gate-canary-v6"
+RUNTIME_GATE_CANARY_CONFIGMAP = RUNTIME_GATE_CANARY_JOB + "-package"
+RUNTIME_GATE_CANARY_DIAGNOSTIC_ROOT = f"/mnt/sfs/jobs/{RUNTIME_GATE_CANARY_JOB}-diagnostic"
+RUNTIME_GATE_CANARY_PRIVATE_ROOT = "/workspace/q38-hosted-runtime-gate-v6-private"
+
+
+def _configure_v2_runtime_bootstrap(
+    job: dict[str, Any], *, diagnostic_root: str, private_root: str
+) -> None:
+    prior_package._configure_runtime_bootstrap(  # noqa: SLF001
+        job, diagnostic_root=diagnostic_root, private_root=private_root
+    )
+    container = job["spec"]["template"]["spec"]["containers"][0]
+    container["args"] = [
+        container["args"][0].replace(
+            "run_qwen_hosted_whole_task_successor_v1.sh",
+            "run_qwen_hosted_whole_task_successor_v2.sh",
+        )
+    ]
+
+
+def _replace_operational_string(value: Any, replacements: dict[str, str]) -> Any:
+    if isinstance(value, str):
+        for old, new in replacements.items():
+            value = value.replace(old, new)
+        return value
+    if isinstance(value, list):
+        return [_replace_operational_string(item, replacements) for item in value]
+    if isinstance(value, dict):
+        return {
+            key: _replace_operational_string(item, replacements)
+            for key, item in value.items()
+        }
+    return value
 
 
 def _source_data(root: Path, plan: dict[str, Any]) -> dict[str, str]:
@@ -119,18 +155,71 @@ def render(root: Path, *, release_path: Path | None = None) -> dict[str, Any]:
                 },
             ]
         )
-        prior_package._configure_runtime_bootstrap(  # noqa: SLF001
+        _configure_v2_runtime_bootstrap(
             job,
             diagnostic_root=plan["sfs_root"] + "-diagnostic",
             private_root=private_root,
         )
-        container["args"] = [
-            container["args"][0].replace(
-                "run_qwen_hosted_whole_task_successor_v1.sh",
-                "run_qwen_hosted_whole_task_successor_v2.sh",
-            )
-        ]
         if len(json.dumps(configmap).encode()) >= 900_000:
             raise ValueError("fresh hosted whole-task ConfigMap exceeds safety budget")
         items.extend([configmap, job])
     return {"apiVersion": "v1", "kind": "List", "items": items}
+
+
+def render_runtime_gate_canary(root: Path) -> dict[str, Any]:
+    """Render the exact v2 package/runtime and stop before every scored boundary."""
+    rendered = render(root)
+    source_cm, source_job = rendered["items"][:2]
+    cm = copy.deepcopy(source_cm)
+    cm["metadata"]["name"] = RUNTIME_GATE_CANARY_CONFIGMAP
+    job = copy.deepcopy(source_job)
+    job["metadata"]["name"] = RUNTIME_GATE_CANARY_JOB
+    job["metadata"]["annotations"].update(
+        {
+            "cyber-post-train.fleet.ai/create-once": "true",
+            "cyber-post-train.fleet.ai/launch-authorized": "false",
+            "cyber-post-train.fleet.ai/diagnostic-only": "true",
+            "cyber-post-train.fleet.ai/score-free": "true",
+        }
+    )
+    job["metadata"]["labels"]["cyber-post-train.fleet.ai/experiment"] = (
+        "q38-hosted-runtime-gate-canary-v2"
+    )
+    source_plan = successor.build_plans(root)["qwen-a"]
+    production_private_root = (
+        f"/workspace/{successor.CONTROLLERS['qwen-a']['job_name']}-private"
+    )
+    job = _replace_operational_string(
+        job,
+        {
+            source_plan["sfs_root"] + "-diagnostic": RUNTIME_GATE_CANARY_DIAGNOSTIC_ROOT,
+            production_private_root: RUNTIME_GATE_CANARY_PRIVATE_ROOT,
+            successor.CONTROLLERS["qwen-a"]["configmap_name"]: RUNTIME_GATE_CANARY_CONFIGMAP,
+        },
+    )
+    pod = job["spec"]["template"]
+    pod["metadata"]["labels"]["cyber-post-train.fleet.ai/experiment"] = (
+        "q38-hosted-runtime-gate-canary-v2"
+    )
+    pod["spec"]["containers"][0]["env"] = [
+        row
+        for row in pod["spec"]["containers"][0]["env"]
+        if row["name"] != "FLEET_API_KEY"
+    ]
+    container = pod["spec"]["containers"][0]
+    replacements = {
+        "QWEN_HOSTED_WHOLE_TASK_OUTPUT_ROOT": "/dev/null",
+        "QWEN_HOSTED_WHOLE_TASK_DIAGNOSTIC_ROOT": RUNTIME_GATE_CANARY_DIAGNOSTIC_ROOT,
+        "QWEN_HOSTED_WHOLE_TASK_RELEASE_PATH": RUNTIME_GATE_CANARY_PRIVATE_ROOT + "/release.json",
+        "QWEN_HOSTED_WHOLE_TASK_PACKAGE_SOURCE_PATH": (
+            RUNTIME_GATE_CANARY_PRIVATE_ROOT + "/package-source.json"
+        ),
+    }
+    for row in container["env"]:
+        if row["name"] in replacements:
+            row["value"] = replacements[row["name"]]
+    container["env"].append(
+        {"name": "QWEN_HOSTED_WHOLE_TASK_RUNTIME_GATE_CANARY", "value": "true"}
+    )
+    job["spec"]["activeDeadlineSeconds"] = 1800
+    return {"apiVersion": "v1", "kind": "List", "items": [cm, job]}

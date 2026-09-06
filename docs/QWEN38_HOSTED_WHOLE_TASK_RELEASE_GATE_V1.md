@@ -10,6 +10,24 @@ autocontinue. It changes only execution generation and operational identities.
 The two generation-20 scored Jobs are held. Rendering them without a release
 receipt produces `launch-authorized=false`; that output is for review only.
 
+The release requires both a fresh score-free runtime canary built from the
+exact generation-20 package and the collision observer below. The earlier v5
+canary remains useful bootstrap evidence, but cannot authorize this changed
+package. Render the new canary with:
+
+```sh
+python - <<'PY'
+import yaml
+from pathlib import Path
+from evals.fleet import qwen_hosted_whole_task_successor_v2_package as package
+
+print(yaml.safe_dump(package.render_runtime_gate_canary(Path.cwd()), sort_keys=False))
+PY
+```
+
+It uses the byte-identical production ConfigMap data and runtime entry, writes
+only to its own diagnostic root, and exits before any scored boundary.
+
 Before release, render and review the score-free observer:
 
 ```sh
@@ -18,9 +36,10 @@ python -m evals.fleet.qwen_hosted_whole_task_release_gate_package_v1 > /tmp/q38-
 
 The observer is a create-once, non-preempting CPU Job. It performs GET-only
 checks for the exact failed predecessor Job/Pod/ConfigMap identities, absence
-of all fresh Job/Pod/ConfigMap and SFS roots, global claim and accepted-receipt
-collisions, authoritative session collisions, and simultaneous availability of
-both hosted-Qwen endpoint lease slots. It emits only aggregate counts, binding
+of all fresh Job/Pod/ConfigMap and SFS roots, including both production
+diagnostic roots, global claim and accepted-receipt collisions, authoritative
+session collisions, and simultaneous availability of both hosted-Qwen endpoint
+lease slots. It emits only aggregate counts, binding
 hashes, its Job/Pod UIDs, and a self-digest. It does not request task bodies,
 transcripts, verifier output, or scores, and it performs no model, task,
 session, verifier, or scoring mutation.
@@ -46,4 +65,6 @@ PY
 
 Do not submit that held output. A later reviewed release must bind the accepted
 observer receipt and terminal UID evidence before the renderer can mark either
-scored Job launch-authorized.
+scored Job launch-authorized. The observer expires after one hour. At runtime,
+the atomic reservation performs one final cross-generation statistical-cell
+claim scan immediately before any model boundary.

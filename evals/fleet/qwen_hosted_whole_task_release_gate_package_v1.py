@@ -70,6 +70,7 @@ def build_binding(root: Path) -> dict[str, Any]:
         "checked_sfs_roots": sorted(
             {plan["sfs_root"] for plan in plans.values()}
             | {plan["sfs_root"] for plan in old.values()}
+            | {plan["sfs_root"] + "-diagnostic" for plan in plans.values()}
         ),
         "claim_root": str(successor.CLAIM_ROOT),
         "jobs_root": str(successor.JOBS_ROOT),

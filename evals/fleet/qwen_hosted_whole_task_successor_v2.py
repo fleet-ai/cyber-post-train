@@ -10,10 +10,13 @@ from __future__ import annotations
 
 import copy
 import os
+import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from evals.fleet import exact_pass4_universe as exact
+from evals.fleet import qwen_hosted_whole_task_release_gate_contract_v1 as release_gate_contract
 from evals.fleet import qwen_hosted_whole_task_successor_v1 as prior
 from evals.fleet import self_hosted
 
@@ -22,6 +25,19 @@ HELD_SCHEMA = "fleet-qwen38-hosted-atomic-whole-task-held-v9"
 RELEASE_SCHEMA = "fleet-qwen38-hosted-atomic-whole-task-release-v5"
 PACKAGE_SOURCE_SCHEMA = "fleet-qwen38-hosted-package-source-v2"
 EXECUTION_GENERATION = 20
+RUNTIME_GATE_V2_CANARY_JOB = "chris-q38-hosted-whole-task-runtime-gate-canary-v6"
+RELEASE_GATE_MAX_AGE_SECONDS = 3600
+RELEASE_GATE_MAX_FUTURE_SKEW_SECONDS = 300
+RELEASE_GATE_BINDING = {
+    "binding_sha256": "sha256:b7c8a21c749b3e3f3bf69f301b2aeb73c614e621549bd56d8ff9a33828755681",
+    "predecessor_object_set_sha256": (
+        "sha256:777bf8c9c1ece59f824048c4ad73dc25f21095206edb7e944453907f2a144cac"
+    ),
+    "fresh_object_set_sha256": (
+        "sha256:d4b3b4e0baa4c78a129b72b3728cd624d3488cbd1c0298f46bab1add4ceb688e"
+    ),
+    "plan_set_sha256": "sha256:01e8d0b747e3402aa2830b4b6bb847e3638183b7fceb05ef6990c750e74bb96c",
+}
 HELD_PATH = (
     "docs/evidence/qwen38-study/2026-09-06-qwen38-hosted-rank15-rank16-whole-task-held-v9.json"
 )
@@ -274,19 +290,26 @@ def validate_held(
     plans: dict[str, dict[str, Any]],
     package_sources: dict[str, dict[str, Any]],
 ) -> None:
-    if any(
-        (
-            held.get("schema_version") != HELD_SCHEMA,
-            held.get("status") != "HELD_PENDING_FRESH_SCORE_BLIND_OBSERVER",
-            held.get("launch_authorized") is not False,
-            held.get("scoring_authorized") is not False,
-            held.get("controllers") != release_projection(plans, package_sources),
-            held.get("supersedes") != SUPERSEDED_HELD,
-            held.get("preclaim_failure") != prior.PRECLAIM_FAILURE,
-            held.get("runtime_gate_canary_pass") != CANARY_PASS,
-            held.get("required_release_gate")
-            != {
+    if held != expected_held(plans, package_sources):
+        raise RuntimeError("fresh hosted whole-task held evidence drifted")
+
+
+def expected_held(
+    plans: dict[str, dict[str, Any]], package_sources: dict[str, dict[str, Any]]
+) -> dict[str, Any]:
+    return _seal(
+        {
+            "schema_version": HELD_SCHEMA,
+            "status": "HELD_PENDING_FRESH_SCORE_BLIND_GATES",
+            "launch_authorized": False,
+            "scoring_authorized": False,
+            "controllers": release_projection(plans, package_sources),
+            "supersedes": SUPERSEDED_HELD,
+            "preclaim_failure": prior.PRECLAIM_FAILURE,
+            "runtime_gate_canary_pass": CANARY_PASS,
+            "required_release_gate": {
                 "fresh_uid_bound_score_blind_observer": True,
+                "fresh_v2_runtime_gate_canary_pass": True,
                 "observer_job_must_succeed": True,
                 "independent_terminal_validation_required": True,
                 "all_eight_statistical_cells_clear": True,
@@ -297,56 +320,43 @@ def validate_held(
                 "authoritative_sessions_clear": True,
                 "both_endpoint_lease_slots_simultaneously_free": True,
             },
-            held.get("privacy")
-            != {
+            "privacy": {
                 "scores_read": False,
                 "prompts_traces_flags_read": False,
                 "credentials_included": False,
             },
-            held.get("receipt_sha256") != self_hosted.digest_without(held, "receipt_sha256"),
-        )
-    ):
-        raise RuntimeError("fresh hosted whole-task held evidence drifted")
+        }
+    )
 
 
 def validate_release(
     release: dict[str, Any],
     plans: dict[str, dict[str, Any]],
     package_sources: dict[str, dict[str, Any]],
+    *,
+    now: datetime | None = None,
 ) -> None:
     observation = release.get("release_gate_observation")
-    if not isinstance(observation, dict) or any(
+    if not isinstance(observation, dict):
+        raise RuntimeError("fresh hosted whole-task release-gate observation drifted")
+    try:
+        release_gate_contract.validate_observation(observation)
+    except release_gate_contract.GateContractError as exc:
+        raise RuntimeError("fresh hosted whole-task release-gate observation drifted") from exc
+    observed_at = datetime.strptime(observation["observed_at_utc"], "%Y-%m-%dT%H:%M:%SZ").replace(
+        tzinfo=UTC
+    )
+    age_seconds = ((now or datetime.now(UTC)) - observed_at).total_seconds()
+    if not -RELEASE_GATE_MAX_FUTURE_SKEW_SECONDS <= age_seconds <= RELEASE_GATE_MAX_AGE_SECONDS:
+        raise RuntimeError("fresh hosted whole-task release-gate observation is stale")
+    if any(
         (
-            observation.get("schema_version")
-            != "fleet-qwen38-hosted-whole-task-release-gate-observation-v1",
-            observation.get("status") != "CLEAR_PENDING_TERMINAL_JOB_VALIDATION",
-            observation.get("statistical_cell_count") != 8,
-            observation.get("controller_count") != 2,
-            observation.get("collisions")
-            != {
-                "canonical_claims": 0,
-                "accepted_receipts": 0,
-                "authoritative_sessions": 0,
-                "fresh_kubernetes_objects": 0,
-                "sfs_output_roots": 0,
-            },
-            observation.get("methods") != ["GET"],
-            any(
-                observation.get(field) != 0
-                for field in (
-                    "model_calls",
-                    "task_calls",
-                    "session_mutations",
-                    "verifier_calls",
-                    "scoring_calls",
-                    "api_mutations",
-                )
-            ),
-            observation.get("scores_included") is not False,
-            observation.get("prompts_traces_flags_included") is not False,
-            observation.get("credentials_included") is not False,
-            observation.get("receipt_sha256")
-            != self_hosted.digest_without(observation, "receipt_sha256"),
+            observation.get("binding_sha256") != RELEASE_GATE_BINDING["binding_sha256"],
+            observation.get("predecessor_object_set_sha256")
+            != RELEASE_GATE_BINDING["predecessor_object_set_sha256"],
+            observation.get("fresh_object_set_sha256")
+            != RELEASE_GATE_BINDING["fresh_object_set_sha256"],
+            observation.get("plan_set_sha256") != RELEASE_GATE_BINDING["plan_set_sha256"],
         )
     ):
         raise RuntimeError("fresh hosted whole-task release-gate observation drifted")
@@ -357,8 +367,8 @@ def validate_release(
             release.get("launch_authorized") is not True,
             release.get("scoring_authorized") is not True,
             release.get("controllers") != release_projection(plans, package_sources),
-            SHA256_RE.fullmatch(str(release.get("held_receipt_sha256"))) is None,
-            release.get("runtime_gate_canary_pass") != CANARY_PASS,
+            release.get("held_receipt_sha256")
+            != expected_held(plans, package_sources)["receipt_sha256"],
             release.get("observer_job_succeeded") is not True,
             release.get("observer_job_uid") != observation.get("runtime", {}).get("job_uid"),
             release.get("observer_pod_uid") != observation.get("runtime", {}).get("pod_uid"),
@@ -373,6 +383,61 @@ def validate_release(
         )
     ):
         raise RuntimeError("fresh hosted whole-task release evidence drifted")
+    validate_runtime_gate_v2_canary(
+        release.get("runtime_gate_v2_canary"),
+        plans,
+        package_sources,
+        held_receipt_sha256=release["held_receipt_sha256"],
+    )
+
+
+def validate_runtime_gate_v2_canary(
+    value: Any,
+    plans: dict[str, dict[str, Any]],
+    package_sources: dict[str, dict[str, Any]],
+    *,
+    held_receipt_sha256: str,
+) -> None:
+    if not isinstance(value, dict):
+        raise RuntimeError("fresh hosted whole-task v2 runtime canary evidence is absent")
+    runtime = value.get("sanitized_runtime_receipt")
+    if not isinstance(runtime, dict):
+        raise RuntimeError("fresh hosted whole-task v2 runtime canary evidence drifted")
+    prior.validate_runtime_gate_canary(runtime)
+    if any(
+        (
+            value.get("schema_version")
+            != "fleet-qwen38-hosted-whole-task-v2-runtime-gate-canary-terminal-v1",
+            value.get("status") != "PASS",
+            value.get("job_name") != RUNTIME_GATE_V2_CANARY_JOB,
+            value.get("job_complete") is not True,
+            value.get("pod_restarts") != 0,
+            engine_uuid(value.get("job_uid")) is None,
+            engine_uuid(value.get("pod_uid")) is None,
+            runtime.get("job_uid") != value.get("job_uid"),
+            runtime.get("pod_uid") != value.get("pod_uid"),
+            runtime.get("controller") != "qwen-a",
+            runtime.get("plan_sha256") != plans["qwen-a"]["plan_sha256"],
+            runtime.get("authority_schema_version") != HELD_SCHEMA,
+            runtime.get("authority_receipt_sha256") != held_receipt_sha256,
+            runtime.get("package_source_receipt_sha256")
+            != package_sources["qwen-a"]["receipt_sha256"],
+            value.get("source_logs_read") is not False,
+            value.get("scores_included") is not False,
+            value.get("prompts_or_traces_included") is not False,
+            value.get("credentials_included") is not False,
+            value.get("receipt_sha256") != self_hosted.digest_without(value, "receipt_sha256"),
+        )
+    ):
+        raise RuntimeError("fresh hosted whole-task v2 runtime canary evidence drifted")
+
+
+def engine_uuid(value: Any) -> str | None:
+    try:
+        parsed = uuid.UUID(str(value))
+    except (ValueError, AttributeError):
+        return None
+    return str(parsed) if parsed.int else None
 
 
 def load_runtime_release(
@@ -407,3 +472,29 @@ class AtomicWholeTaskClaims(prior.AtomicWholeTaskClaims):
     @property
     def task_version(self) -> str:
         return CONTROLLERS[self.plan["controller"]]["task_version_id"]
+
+    def _fresh_checks(self, claim_root: Path) -> None:
+        """Recheck statistical-cell claims at the last pre-model transaction boundary."""
+        super()._fresh_checks(claim_root)
+        cell_ids = {row["cell_id"] for row in self.plan["attempts"]}
+        collisions = 0
+        for path in claim_root.rglob("*.json"):
+            if path.is_symlink() or not path.is_file() or path.stat().st_size > 2_000_000:
+                raise RuntimeError("fresh hosted whole-task claim scan path is unsafe")
+            value = load(path)
+            collisions += int(any(row in cell_ids for row in _nested_cell_ids(value)))
+        if collisions:
+            raise RuntimeError("fresh hosted whole-task statistical cell claim collision")
+
+
+def _nested_cell_ids(value: Any) -> set[str]:
+    found: set[str] = set()
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if key == "cell_id" and isinstance(item, str):
+                found.add(item)
+            found.update(_nested_cell_ids(item))
+    elif isinstance(value, list):
+        for item in value:
+            found.update(_nested_cell_ids(item))
+    return found

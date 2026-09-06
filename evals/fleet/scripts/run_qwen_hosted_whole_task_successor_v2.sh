@@ -78,6 +78,7 @@ for file in self_hosted.py opencode_train_sweep_runner.py exact_pass4_bulk_v3.py
   qwen_hosted_generation19_bulk.py qwen_hosted_generation19_v2.py \
   qwen_hosted_generation19_v3.py qwen_hosted_generation19_v4.py \
   qwen_hosted_whole_task_successor_v1.py \
+  qwen_hosted_whole_task_release_gate_contract_v1.py \
   qwen_hosted_whole_task_successor_v2.py \
   qwen_hosted_whole_task_successor_v2_runtime.py fixed_proxy.py Dockerfile.opencode; do
   install -m 0644 "/bootstrap/$file" "$ROOT/evals/fleet/$file"
@@ -101,10 +102,20 @@ bootstrap_stage 05-harness-version-validated
 export AGENT_HARNESS_IMAGE=chris/opencode:1.18.27-cyber-v1
 export FIXED_PROXY_IMAGE=ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
 bootstrap_stage 06-runtime-exec
-exec uv run --no-project --with httpx==0.28.1 python \
-  -m evals.fleet.qwen_hosted_whole_task_successor_v2_runtime \
+RUNTIME_ARGS=(
   --plan "$ROOT/evals/fleet/configs/runtime-plan.json" \
   --out "$QWEN_HOSTED_WHOLE_TASK_OUTPUT_ROOT" \
   --diagnostic-root "$QWEN_HOSTED_WHOLE_TASK_DIAGNOSTIC_ROOT" \
   --proxy "$ROOT/evals/fleet/fixed_proxy.py" \
   --package-source "$QWEN_HOSTED_WHOLE_TASK_PACKAGE_SOURCE_PATH"
+)
+if [[ "${QWEN_HOSTED_WHOLE_TASK_RUNTIME_GATE_CANARY:-false}" == "true" ]]; then
+  exec uv run --no-project --with httpx==0.28.1 python \
+    -m evals.fleet.qwen_hosted_whole_task_successor_v2_runtime \
+    "${RUNTIME_ARGS[@]}" \
+    --runtime-gate-canary-receipt \
+    "$QWEN_HOSTED_WHOLE_TASK_DIAGNOSTIC_ROOT/RUNTIME-GATE-CANARY.json"
+fi
+exec uv run --no-project --with httpx==0.28.1 python \
+  -m evals.fleet.qwen_hosted_whole_task_successor_v2_runtime \
+  "${RUNTIME_ARGS[@]}"

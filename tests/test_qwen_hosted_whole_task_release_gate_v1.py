@@ -4,6 +4,7 @@ import copy
 import fcntl
 import json
 import re
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -87,9 +88,15 @@ def test_release_gate_binding_covers_old_and_new_cell_lineage() -> None:
     assert binding["statistical_cell_count"] == 8
     assert len(binding["predecessor_objects"]) == 2
     assert len(binding["fresh_objects"]) == 2
-    assert len(binding["checked_sfs_roots"]) == 4
+    assert len(binding["checked_sfs_roots"]) == 6
+    assert all(
+        plan["sfs_root"] + "-diagnostic" in binding["checked_sfs_roots"]
+        for plan in successor.build_plans(ROOT).values()
+    )
     assert len(binding["identity_values"]) == 40
     assert binding["binding_sha256"] == gate.binding_digest(binding)
+    for field, expected in successor.RELEASE_GATE_BINDING.items():
+        assert binding[field] == expected
 
 
 def test_real_filesystem_collision_and_lease_checks(tmp_path: Path) -> None:
@@ -149,3 +156,117 @@ def test_release_stays_closed_without_real_observer_receipt() -> None:
     )
     with pytest.raises(RuntimeError, match="release-gate observation"):
         successor.validate_release(fake, plans, sources)
+
+
+def _observation(binding: dict[str, object], observed_at: datetime) -> dict[str, object]:
+    body = {
+        "schema_version": gate.SCHEMA,
+        "status": "CLEAR_PENDING_TERMINAL_JOB_VALIDATION",
+        "observed_at_utc": observed_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "binding_sha256": binding["binding_sha256"],
+        "statistical_cell_count": 8,
+        "controller_count": 2,
+        "predecessor_object_set_sha256": binding["predecessor_object_set_sha256"],
+        "fresh_object_set_sha256": binding["fresh_object_set_sha256"],
+        "plan_set_sha256": binding["plan_set_sha256"],
+        "collisions": {
+            "canonical_claims": 0,
+            "accepted_receipts": 0,
+            "authoritative_sessions": 0,
+            "fresh_kubernetes_objects": 0,
+            "sfs_output_roots": 0,
+        },
+        "observed_aggregates": {
+            "canonical_claim_receipts_examined": 1,
+            "accepted_receipts_examined": 1,
+            "authoritative_session_rows_examined": 1,
+            "predecessor_jobs_exclusively_failed": 2,
+            "predecessor_pods_terminal_restart_zero": 2,
+            "predecessor_immutable_configmaps_bound": 2,
+            "fresh_object_sets_absent": 2,
+            "checked_sfs_roots_absent": 6,
+            "endpoint_lease_slots_simultaneously_free": 2,
+        },
+        "request_counts": {
+            "fleet_account_gets": 1,
+            "fleet_session_inventory_gets": 2,
+            "kubernetes_gets": 12,
+            "transcript_prompt_task_verifier_or_score_gets": 0,
+        },
+        "runtime": {
+            "namespace": gate.NAMESPACE,
+            "job_uid": "11111111-1111-4111-8111-111111111111",
+            "pod_uid": "22222222-2222-4222-8222-222222222222",
+        },
+        "methods": ["GET"],
+        "model_calls": 0,
+        "task_calls": 0,
+        "session_mutations": 0,
+        "verifier_calls": 0,
+        "scoring_calls": 0,
+        "api_mutations": 0,
+        "scores_included": False,
+        "prompts_traces_flags_included": False,
+        "credentials_included": False,
+    }
+    return gate._seal(body)  # noqa: SLF001
+
+
+def test_full_observation_contract_rejects_rehashed_wrong_binding_and_stale_receipt() -> None:
+    binding = gate_package.build_binding(ROOT)
+    now = datetime.now(UTC).replace(microsecond=0)
+    valid = _observation(binding, now)
+    gate.validate_observation(valid, ROOT, binding=binding)
+    wrong = copy.deepcopy(valid)
+    wrong["binding_sha256"] = "sha256:" + "0" * 64
+    wrong["receipt_sha256"] = gate.digest(wrong)
+    with pytest.raises(RuntimeError, match="release-gate observation drifted"):
+        successor.validate_release(
+            {"release_gate_observation": wrong},
+            successor.build_plans(ROOT),
+            {},
+            now=now,
+        )
+    with pytest.raises(RuntimeError, match="observation is stale"):
+        successor.validate_release(
+            {"release_gate_observation": _observation(binding, now - timedelta(hours=2))},
+            successor.build_plans(ROOT),
+            {},
+            now=now,
+        )
+
+
+def test_v2_canary_uses_exact_production_package_bytes_and_runtime_entry() -> None:
+    production = package.render(ROOT)
+    canary = package.render_runtime_gate_canary(ROOT)
+    assert canary["items"][0]["data"] == production["items"][0]["data"]
+    job = canary["items"][1]
+    assert job["metadata"]["name"] == package.RUNTIME_GATE_CANARY_JOB
+    assert job["metadata"]["annotations"]["cyber-post-train.fleet.ai/score-free"] == "true"
+    raw = json.dumps(job)
+    assert "run_qwen_hosted_whole_task_successor_v2.sh" in raw
+    assert "FLEET_API_KEY" not in raw
+
+
+def test_last_moment_claim_scan_rejects_alternate_generation_same_cell(tmp_path: Path) -> None:
+    plan = successor.build_plans(ROOT)["qwen-a"]
+    jobs = tmp_path / "jobs"
+    claims = tmp_path / "claims"
+    reservations = tmp_path / "reservations"
+    jobs.mkdir()
+    claims.mkdir()
+    collision = {
+        "cell_id": plan["attempts"][0]["cell_id"],
+        "execution_id": "sha256:" + "9" * 64,
+    }
+    (claims / "alternate-generation.json").write_text(json.dumps(collision))
+    provider = successor.AtomicWholeTaskClaims(
+        plan,
+        tmp_path / "out",
+        key="unused",
+        jobs_root=jobs,
+        reservation_root=reservations,
+        session_check=lambda _config, _key: None,
+    )
+    with pytest.raises(RuntimeError, match="statistical cell claim collision"):
+        provider._fresh_checks(claims)  # noqa: SLF001

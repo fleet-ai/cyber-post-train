@@ -413,7 +413,7 @@ def validate_binding(binding: dict[str, Any]) -> None:
             len(binding.get("predecessor_objects") or []) != 2,
             len(binding.get("fresh_objects") or []) != 2,
             len(binding.get("task_keys") or []) != 2,
-            len(binding.get("checked_sfs_roots") or []) != 4,
+            len(binding.get("checked_sfs_roots") or []) != 6,
             binding.get("binding_sha256") != binding_digest(binding),
         )
     ):
@@ -462,7 +462,7 @@ def validate_observation(
             aggregates.get("predecessor_pods_terminal_restart_zero") != 2,
             aggregates.get("predecessor_immutable_configmaps_bound") != 2,
             aggregates.get("fresh_object_sets_absent") != 2,
-            aggregates.get("checked_sfs_roots_absent") != 4,
+            aggregates.get("checked_sfs_roots_absent") != 6,
             aggregates.get("endpoint_lease_slots_simultaneously_free") != 2,
             requests.get("fleet_account_gets") != 1,
             not isinstance(requests.get("fleet_session_inventory_gets"), int),
