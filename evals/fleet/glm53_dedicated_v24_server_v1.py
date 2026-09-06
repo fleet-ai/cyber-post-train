@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import shlex
+import uuid
 from typing import Any
 
 from evals.fleet import exact_pass4_crypto as crypto
@@ -81,6 +82,41 @@ SERVER_ARGV = (
 
 class ServerPlanError(RuntimeError):
     """The held v24 server contract is inconsistent."""
+
+
+def validate_binding(binding: dict[str, Any]) -> None:
+    expected_keys = {
+        "server_title",
+        "server_run_dir",
+        "api_run_id",
+        "rayjob_uid",
+        "workload_uid",
+        "head_pod_uid",
+        "service_uid",
+        "service_origin",
+        "served_id",
+        "model_revision",
+        "context_length",
+    }
+    try:
+        uids_valid = all(
+            uuid.UUID(str(binding[key])).int != 0
+            for key in ("rayjob_uid", "workload_uid", "head_pod_uid", "service_uid")
+        )
+    except (KeyError, ValueError):
+        uids_valid = False
+    if (
+        set(binding) != expected_keys
+        or binding.get("server_title") != TITLE
+        or binding.get("server_run_dir") != RUN_DIR
+        or not str(binding.get("api_run_id", "")).startswith("ft-run-")
+        or not uids_valid
+        or not str(binding.get("service_origin", "")).startswith("http://")
+        or binding.get("served_id") != SERVED_ID
+        or binding.get("model_revision") != MODEL_REVISION
+        or binding.get("context_length") != CONTEXT_LENGTH
+    ):
+        raise ServerPlanError("v24_server_binding_invalid")
 
 
 def payload() -> dict[str, Any]:
