@@ -28,8 +28,7 @@ class FakeBackend:
         self.items: list[dict[str, object]] = []
         self.pages = 1
         self.preview_status = 200
-        self.qualification_present = False
-        self.qualification_file_sha256: str | None = None
+        self.sfs_paths_override: list[str] | None = None
 
     def list_runs(self) -> tuple[list[dict[str, object]], int]:
         return copy.deepcopy(self.rows), self.pages
@@ -41,17 +40,13 @@ class FakeBackend:
         return {"items": copy.deepcopy(self.items)}
 
     def sfs_observation(
-        self, *, absent_paths: tuple[str, ...], qualification_path: str | None
+        self, *, absent_paths: tuple[str, ...]
     ) -> dict[str, object]:
-        if qualification_path is None:
-            assert not self.qualification_present
         return {
             "observer_pod_name": "stable-sfs-observer",
             "observer_pod_uid": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
             "observer_sfs_mount_path": "/shared",
-            "absent_paths": list(absent_paths),
-            "qualification_result_present": self.qualification_present,
-            "qualification_result_file_sha256": self.qualification_file_sha256,
+            "absent_paths": self.sfs_paths_override or list(absent_paths),
         }
 
     def preview(self, _payload: object) -> int:
@@ -71,49 +66,6 @@ def create_authorization(backend: FakeBackend | None = None) -> dict[str, object
     )
 
 
-def qwen_authority() -> dict[str, object]:
-    value: dict[str, object] = {
-        "schema_version": live_auth.QWEN_AUTHORITY_SCHEMA,
-        "status": "QUALIFIED_SCORE_FREE_TERMINAL",
-        "qualified_at_epoch": time.time(),
-        "api_run_id": "ft-run-1234abcd",
-        "server_title": "chris-cyber-evalserve-q38-dp6-z-v1",
-        "server_run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-q38-dp6-z-v1",
-        "rayjob_name": "ft-run-1234abcd",
-        "rayjob_uid": "11111111-1111-4111-8111-111111111111",
-        "workload_name": "rayjob-ft-run-1234abcd-aaaaa",
-        "workload_uid": "22222222-2222-4222-8222-222222222222",
-        "raycluster_name": "ft-run-1234abcd-abcde",
-        "raycluster_uid": "33333333-3333-4333-8333-333333333333",
-        "head_pod_name": "ft-run-1234abcd-abcde-head-fffff",
-        "head_pod_uid": "44444444-4444-4444-8444-444444444444",
-        "head_pod_node": "computeinstance-qualified-qwen",
-        "service_name": "ft-run-1234abcd-abcde-head-svc",
-        "service_uid": "55555555-5555-4555-8555-555555555555",
-        "qualifier_job_name": "chris-cyber-q38-dp6-z-qualifier-v1",
-        "qualifier_job_uid": "66666666-6666-4666-8666-666666666666",
-        "qualifier_pod_name": "chris-cyber-q38-dp6-z-qualifier-v1-aaaaa",
-        "qualifier_pod_uid": "77777777-7777-4777-8777-777777777777",
-        "qualification_result_path": (
-            "/mnt/sfs/jobs/chris-cyber-q38-dp6-z-qualifier-v1/RESULT.json"
-        ),
-        "qualification_result_file_sha256": "sha256:" + "8" * 64,
-        "qualification_result_receipt_sha256": "sha256:" + "9" * 64,
-        "requested_nodes": 1,
-        "requested_gpus": 6,
-        "head_pod_running_ready": True,
-        "head_pod_restarts": 0,
-        "qualified_score_free": True,
-        "fleet_task_instance_calls": 0,
-        "fleet_session_calls": 0,
-        "verifier_calls": 0,
-        "scoring_calls": 0,
-        "protected_content_included": False,
-    }
-    value["receipt_sha256"] = crypto.digest_without(value, "receipt_sha256")
-    return value
-
-
 def _object(kind: str, name: str, uid: str, **extra: object) -> dict[str, object]:
     value: dict[str, object] = {
         "apiVersion": "v1",
@@ -126,94 +78,6 @@ def _object(kind: str, name: str, uid: str, **extra: object) -> dict[str, object
     }
     value.update(extra)
     return value
-
-
-def _owner(value: dict[str, object], kind: str, uid: object) -> None:
-    value["metadata"]["ownerReferences"] = [
-        {"kind": kind, "uid": uid, "controller": True}
-    ]
-
-
-def qualified_qwen_backend(authority: dict[str, object]) -> FakeBackend:
-    backend = FakeBackend()
-    api = {
-        "name": authority["api_run_id"],
-        "title": authority["server_title"],
-        "run_dir": authority["server_run_dir"],
-        "status": "RUNNING",
-    }
-    backend.rows = [api]
-    backend.exact[str(authority["api_run_id"])] = api
-    backend.qualification_present = True
-    backend.qualification_file_sha256 = str(
-        authority["qualification_result_file_sha256"]
-    )
-    backend.items = [
-        _object(
-            "RayJob",
-            str(authority["rayjob_name"]),
-            str(authority["rayjob_uid"]),
-            spec={"run_dir": authority["server_run_dir"]},
-            status={"jobStatus": "RUNNING"},
-        ),
-        _object(
-            "Workload",
-            str(authority["workload_name"]),
-            str(authority["workload_uid"]),
-        ),
-        _object(
-            "RayCluster",
-            str(authority["raycluster_name"]),
-            str(authority["raycluster_uid"]),
-        ),
-        _object(
-            "Service",
-            str(authority["service_name"]),
-            str(authority["service_uid"]),
-        ),
-        _object(
-            "Pod",
-            str(authority["head_pod_name"]),
-            str(authority["head_pod_uid"]),
-            spec={
-                "nodeName": authority["head_pod_node"],
-                "containers": [
-                    {
-                        "env": [
-                            {
-                                "name": "QWEN38_RUN_DIR",
-                                "value": authority["server_run_dir"],
-                            }
-                        ],
-                        "resources": {"requests": {"nvidia.com/gpu": "6"}},
-                    }
-                ],
-            },
-            status={
-                "phase": "Running",
-                "conditions": [{"type": "Ready", "status": "True"}],
-                "containerStatuses": [{"restartCount": 0}],
-            },
-        ),
-        _object(
-            "Job",
-            str(authority["qualifier_job_name"]),
-            str(authority["qualifier_job_uid"]),
-            status={"conditions": [{"type": "Complete", "status": "True"}]},
-        ),
-        _object(
-            "Pod",
-            str(authority["qualifier_pod_name"]),
-            str(authority["qualifier_pod_uid"]),
-            status={"phase": "Succeeded", "containerStatuses": [{"restartCount": 0}]},
-        ),
-    ]
-    _owner(backend.items[1], "RayJob", authority["rayjob_uid"])
-    _owner(backend.items[2], "RayJob", authority["rayjob_uid"])
-    _owner(backend.items[3], "RayCluster", authority["raycluster_uid"])
-    _owner(backend.items[4], "RayCluster", authority["raycluster_uid"])
-    _owner(backend.items[6], "Job", authority["qualifier_job_uid"])
-    return backend
 
 
 def binding() -> dict[str, object]:
@@ -261,31 +125,19 @@ def parity_authorization() -> dict[str, object]:
 def test_v32_create_gate_requires_fresh_zero_state() -> None:
     value = create_authorization()
     server.validate_authorization(value)
-    authority = qwen_authority()
-    backend = qualified_qwen_backend(authority)
-    # Workload/cluster/Service owner labels are not a stable deployed API
-    # contract. Exact authority UIDs remain sufficient; they are not inferred.
-    for index in (1, 2, 3):
-        backend.items[index]["metadata"]["labels"] = {}
-    changed = live_auth.build_live_authorization(
-        backend=backend,
-        payload=server.payload(),
-        title=server.TITLE,
-        run_dir=server.RUN_DIR,
-        control_result_path=server.RESULT_PATH,
-        request_sha256=server.request_sha256(),
-        priority_class=v24.PRIORITY_CLASS,
-        qwen_authority=authority,
-        now=time.time(),
+
+    forged = copy.deepcopy(value)
+    for field, changed in {
+        "active_dedicated_nodes": 1,
+        "active_dedicated_gpus": 6,
+        "planned_nodes_after_create": 2,
+        "planned_gpus_after_create": 14,
+    }.items():
+        forged[field] = changed
+        forged["live_observation"][field] = changed
+    forged["live_observation"]["receipt_sha256"] = crypto.digest_without(
+        forged["live_observation"], "receipt_sha256"
     )
-    server.validate_authorization(changed)
-    drifted = copy.deepcopy(changed)
-    drifted["coexisting_qwen_server"]["head_pod_restarts"] = 1
-    drifted["receipt_sha256"] = crypto.digest_without(drifted, "receipt_sha256")
-    with pytest.raises(server.CreateError, match="authorization_invalid"):
-        server.validate_authorization(drifted)
-    forged = copy.deepcopy(changed)
-    forged["live_observation"] = value["live_observation"]
     forged["receipt_sha256"] = crypto.digest_without(forged, "receipt_sha256")
     with pytest.raises(server.CreateError, match="authorization_invalid"):
         server.validate_authorization(forged)
@@ -298,34 +150,36 @@ def test_v32_create_gate_requires_fresh_zero_state() -> None:
 @pytest.mark.parametrize(
     ("mutation", "error"),
     [
-        ("qwen_restart", "live_qualification_invalid"),
-        ("qwen_result_digest", "live_qualification_invalid"),
-        ("orphan_gpu", "orphan_gpu_pod_detected"),
+        ("qwen_shaped_gpu", "requires_zero_project_server"),
+        ("orphan_object", "requires_zero_project_server"),
+        ("sfs", "sfs_observation_invalid"),
         ("preview", "preview_invalid"),
-        ("authority_extra", "authority_invalid"),
     ],
 )
 def test_v32_live_builder_rejects_rehashed_drift_and_orphans(
     mutation: str, error: str
 ) -> None:
-    authority = qwen_authority()
-    backend = qualified_qwen_backend(authority)
-    if mutation == "qwen_restart":
-        backend.items[4]["status"]["containerStatuses"][0]["restartCount"] = 1
-    elif mutation == "qwen_result_digest":
-        backend.qualification_file_sha256 = "sha256:" + "0" * 64
-    elif mutation == "orphan_gpu":
+    backend = FakeBackend()
+    if mutation == "qwen_shaped_gpu":
         backend.items.append(
             _object(
                 "Pod",
-                "orphan-project-gpu",
+                "qwen-shaped-project-gpu",
                 "99999999-9999-4999-8999-999999999999",
                 spec={
                     "containers": [
                         {
-                            "env": [],
+                            "env": [
+                                {
+                                    "name": "QWEN38_RUN_DIR",
+                                    "value": (
+                                        "/mnt/sfs/jobs/"
+                                        "chris-cyber-evalserve-q38-dp6-z-v1"
+                                    ),
+                                }
+                            ],
                             "resources": {
-                                "requests": {"nvidia.com/gpu": "1"}
+                                "requests": {"nvidia.com/gpu": "6"}
                             },
                         }
                     ]
@@ -333,25 +187,20 @@ def test_v32_live_builder_rejects_rehashed_drift_and_orphans(
                 status={"phase": "Running"},
             )
         )
+    elif mutation == "orphan_object":
+        backend.items.append(
+            _object(
+                "RayCluster",
+                "orphan-project-cluster",
+                "88888888-8888-4888-8888-888888888888",
+            )
+        )
+    elif mutation == "sfs":
+        backend.sfs_paths_override = [server.RUN_DIR]
     elif mutation == "preview":
         backend.preview_status = 422
-    else:
-        authority["unexpected"] = "must-fail"
-        authority["receipt_sha256"] = crypto.digest_without(
-            authority, "receipt_sha256"
-        )
     with pytest.raises(live_auth.LiveAuthorizationError, match=error):
-        live_auth.build_live_authorization(
-            backend=backend,
-            payload=server.payload(),
-            title=server.TITLE,
-            run_dir=server.RUN_DIR,
-            control_result_path=server.RESULT_PATH,
-            request_sha256=server.request_sha256(),
-            priority_class=v24.PRIORITY_CLASS,
-            qwen_authority=authority,
-            now=time.time(),
-        )
+        create_authorization(backend)
 
 
 def test_v32_live_builder_pages_and_rejects_hidden_active_server() -> None:
@@ -366,7 +215,7 @@ def test_v32_live_builder_pages_and_rejects_hidden_active_server() -> None:
     backend.rows = [{"name": "history", "run_dir": "/tmp/history"}, hidden]
     backend.exact["ft-run-deadbeef"] = hidden
     with pytest.raises(
-        live_auth.LiveAuthorizationError, match="zero_state_has_project_server"
+        live_auth.LiveAuthorizationError, match="requires_zero_project_server"
     ):
         create_authorization(backend)
 

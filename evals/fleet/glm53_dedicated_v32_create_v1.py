@@ -30,7 +30,7 @@ CONTROL_DIR = "/mnt/sfs/jobs/chris-cyber-evalserve-glm53-tp8-a-v32-create-contro
 AUTHORIZATION_PATH = CONTROL_DIR + "/CREATE-AUTHORIZED.json"
 RESULT_PATH = CONTROL_DIR + "/CREATED.json"
 
-AUTH_KEYS = engine.AUTH_KEYS | {"coexisting_qwen_server", "live_observation"}
+AUTH_KEYS = engine.AUTH_KEYS | {"live_observation"}
 API_URL = engine.API_URL
 AUTH_MAX_AGE_SECONDS = engine.AUTH_MAX_AGE_SECONDS
 SERVED_ID = engine.SERVED_ID
@@ -93,22 +93,6 @@ def validate_binding(binding: dict[str, Any]) -> None:
 def validate_authorization(value: dict[str, Any]) -> None:
     now = time.time()
     observed = value.get("observed_at_epoch")
-    footprint = (
-        value.get("active_dedicated_nodes"),
-        value.get("active_dedicated_gpus"),
-        value.get("planned_nodes_after_create"),
-        value.get("planned_gpus_after_create"),
-    )
-    coexistence = value.get("coexisting_qwen_server")
-    footprint_valid = (footprint == (0, 0, 1, 8) and coexistence is None) or (
-        footprint == (1, 6, 2, 14)
-        and isinstance(coexistence, dict)
-        and coexistence.get("requested_nodes") == 1
-        and coexistence.get("requested_gpus") == 6
-        and coexistence.get("qualified_score_free") is True
-        and coexistence.get("head_pod_running_ready") is True
-        and coexistence.get("head_pod_restarts") == 0
-    )
     if (
         set(value) != AUTH_KEYS
         or value.get("schema_version") != SCHEMA
@@ -126,7 +110,10 @@ def validate_authorization(value: dict[str, Any]) -> None:
         or value.get("kubernetes_identity_or_remnant_matches") != 0
         or value.get("sfs_run_dir_absent") is not True
         or value.get("control_result_absent") is not True
-        or not footprint_valid
+        or value.get("active_dedicated_nodes") != 0
+        or value.get("active_dedicated_gpus") != 0
+        or value.get("planned_nodes_after_create") != 1
+        or value.get("planned_gpus_after_create") != 8
         or value.get("priority_class") != payload()["priority_class"]
         or value.get("preemption_policy") != "Never"
         or value.get("server_launch_authorized") is not True
@@ -218,25 +205,10 @@ def build_held() -> dict[str, Any]:
         "server_title": TITLE,
         "server_run_dir": RUN_DIR,
         "request_sha256": request_sha256(),
-        "admissible_footprints": [
-            {
-                "mode": "ZERO_PROJECT_SERVER",
-                "required_active_nodes": 0,
-                "required_active_gpus": 0,
-                "projected_nodes": 1,
-                "projected_gpus": 8,
-            },
-            {
-                "mode": "LIVE_QUALIFIED_QWEN_DP6_COEXISTENCE",
-                "required_active_nodes": 1,
-                "required_active_gpus": 6,
-                "projected_nodes": 2,
-                "projected_gpus": 14,
-                "terminal_score_free_qualification_authority_required": True,
-                "exact_live_uid_chain_match_required": True,
-            },
-        ],
-        "current_qwen_qualification_claimed": False,
+        "required_active_dedicated_nodes": 0,
+        "required_active_dedicated_gpus": 0,
+        "planned_nodes_after_create": 1,
+        "planned_gpus_after_create": 8,
         "live_authorization_builder": (
             "evals.fleet.glm53_dedicated_v32_live_authorization_v1"
         ),

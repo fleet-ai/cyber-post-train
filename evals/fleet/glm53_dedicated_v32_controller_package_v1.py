@@ -144,25 +144,10 @@ def build_held(root: Path, package_commit: str) -> dict[str, Any]:
             "evals.fleet.glm53_dedicated_v32_incluster_parity_v1"
         ),
         "parity_authorization_schema": parity.SCHEMA,
-        "admissible_footprints": [
-            {
-                "mode": "ZERO_PROJECT_SERVER",
-                "required_active_nodes": 0,
-                "required_active_gpus": 0,
-                "projected_nodes": 1,
-                "projected_gpus": 8,
-            },
-            {
-                "mode": "LIVE_QUALIFIED_QWEN_DP6_COEXISTENCE",
-                "required_active_nodes": 1,
-                "required_active_gpus": 6,
-                "projected_nodes": 2,
-                "projected_gpus": 14,
-                "terminal_score_free_qualification_authority_required": True,
-                "exact_live_uid_chain_match_required": True,
-            },
-        ],
-        "current_qwen_qualification_claimed": False,
+        "required_active_dedicated_nodes": 0,
+        "required_active_dedicated_gpus": 0,
+        "planned_nodes_after_create": 1,
+        "planned_gpus_after_create": 8,
         "live_authorization_builder": (
             "evals.fleet.glm53_dedicated_v32_live_authorization_v1"
         ),
