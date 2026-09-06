@@ -128,6 +128,12 @@ def _object(kind: str, name: str, uid: str, **extra: object) -> dict[str, object
     return value
 
 
+def _owner(value: dict[str, object], kind: str, uid: object) -> None:
+    value["metadata"]["ownerReferences"] = [
+        {"kind": kind, "uid": uid, "controller": True}
+    ]
+
+
 def qualified_qwen_backend(authority: dict[str, object]) -> FakeBackend:
     backend = FakeBackend()
     api = {
@@ -202,6 +208,11 @@ def qualified_qwen_backend(authority: dict[str, object]) -> FakeBackend:
             status={"phase": "Succeeded", "containerStatuses": [{"restartCount": 0}]},
         ),
     ]
+    _owner(backend.items[1], "RayJob", authority["rayjob_uid"])
+    _owner(backend.items[2], "RayJob", authority["rayjob_uid"])
+    _owner(backend.items[3], "RayCluster", authority["raycluster_uid"])
+    _owner(backend.items[4], "RayCluster", authority["raycluster_uid"])
+    _owner(backend.items[6], "Job", authority["qualifier_job_uid"])
     return backend
 
 

@@ -232,6 +232,16 @@ def _metadata(value: Mapping[str, Any]) -> Mapping[str, Any]:
     return metadata if isinstance(metadata, dict) else {}
 
 
+def _owned_by(value: Mapping[str, Any], kind: str, uid: str) -> bool:
+    return any(
+        row.get("kind") == kind
+        and row.get("uid") == uid
+        and row.get("controller") is not False
+        for row in _metadata(value).get("ownerReferences") or []
+        if isinstance(row, dict)
+    )
+
+
 def _exact_item(
     items: list[dict[str, Any]], kind: str, name: str, uid: str
 ) -> dict[str, Any]:
@@ -255,20 +265,21 @@ def _validate_qwen_live_chain(
 ) -> dict[str, Any]:
     if (
         api_run.get("run_dir") != authority.get("server_run_dir")
-        or api_run.get("title") != authority.get("server_title")
+        or api_run.get("title")
+        not in {None, authority.get("server_title")}
         or str(api_run.get("status") or "").upper() not in ACTIVE_API_STATUSES
     ):
         raise LiveAuthorizationError("v32_qwen_jobs_api_identity_invalid")
     rayjob = _exact_item(
         items, "RayJob", str(authority["rayjob_name"]), str(authority["rayjob_uid"])
     )
-    _exact_item(
+    workload = _exact_item(
         items,
         "Workload",
         str(authority["workload_name"]),
         str(authority["workload_uid"]),
     )
-    _exact_item(
+    raycluster = _exact_item(
         items,
         "RayCluster",
         str(authority["raycluster_name"]),
@@ -277,7 +288,7 @@ def _validate_qwen_live_chain(
     pod = _exact_item(
         items, "Pod", str(authority["head_pod_name"]), str(authority["head_pod_uid"])
     )
-    _exact_item(
+    service = _exact_item(
         items, "Service", str(authority["service_name"]), str(authority["service_uid"])
     )
     qualifier_job = _exact_item(
@@ -308,6 +319,13 @@ def _validate_qwen_live_chain(
         or not _condition_true(qualifier_job, "Complete")
         or (qualifier_pod.get("status") or {}).get("phase") != "Succeeded"
         or qualifier_restarts != 0
+        or not _owned_by(workload, "RayJob", str(authority["rayjob_uid"]))
+        or not _owned_by(raycluster, "RayJob", str(authority["rayjob_uid"]))
+        or not _owned_by(pod, "RayCluster", str(authority["raycluster_uid"]))
+        or not _owned_by(service, "RayCluster", str(authority["raycluster_uid"]))
+        or not _owned_by(
+            qualifier_pod, "Job", str(authority["qualifier_job_uid"])
+        )
         or sfs.get("qualification_result_present") is not True
         or sfs.get("qualification_result_file_sha256")
         != authority.get("qualification_result_file_sha256")
@@ -366,7 +384,7 @@ def _active_project_runs(
         if current.get("run_dir") != row_run_dir:
             raise LiveAuthorizationError("v32_jobs_api_history_live_drift")
         if str(current.get("status") or "").upper() in ACTIVE_API_STATUSES:
-            active.append(dict(current))
+            active.append({**current, "_observed_api_run_id": name})
     return active
 
 
@@ -474,7 +492,10 @@ def build_live_authorization(
         coexisting = None
         authority_digest = None
     else:
-        if len(active) != 1 or active[0].get("name") != authority.get("api_run_id"):
+        if (
+            len(active) != 1
+            or active[0].get("_observed_api_run_id") != authority.get("api_run_id")
+        ):
             raise LiveAuthorizationError("v32_qwen_jobs_api_cardinality_invalid")
         coexisting = _validate_qwen_live_chain(authority, active[0], items, sfs)
         exact_rayjob = _exact_item(
@@ -524,7 +545,7 @@ def build_live_authorization(
         "jobs_api_pages": page_count,
         "active_project_runs": [
             {
-                "name": row.get("name"),
+                "api_run_id": row.get("_observed_api_run_id"),
                 "run_dir": row.get("run_dir"),
                 "status": row.get("status"),
             }
@@ -713,6 +734,15 @@ def validate_live_observation(
                     "head_pod_restarts",
                 )
             )
+        ):
+            raise LiveAuthorizationError("v32_live_observation_invalid")
+        active_row = value["active_project_runs"][0]
+        if (
+            not isinstance(active_row, dict)
+            or set(active_row) != {"api_run_id", "run_dir", "status"}
+            or active_row.get("api_run_id") != validated_authority.get("api_run_id")
+            or active_row.get("run_dir") != validated_authority.get("server_run_dir")
+            or str(active_row.get("status") or "").upper() not in ACTIVE_API_STATUSES
         ):
             raise LiveAuthorizationError("v32_live_observation_invalid")
     else:
