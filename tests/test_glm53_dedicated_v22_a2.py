@@ -20,9 +20,15 @@ def test_v22_controller_package_binds_only_v22_runtime_identity() -> None:
     assert value["launch_authorized"] is False
     assert len(value["reserved_cell_ids"]) == 4
     assert len(value["reserved_execution_ids"]) == 4
-    source, job = value["objects"]["items"]
+    source, evidence, job = value["objects"]["items"]
     assert source["metadata"]["name"].startswith("chris-glm53-dedicated-v22-")
     assert job["metadata"]["name"].startswith("chris-glm53-dedicated-v22-")
+    assert evidence["metadata"]["name"] == package.EVIDENCE_CONFIGMAP
+    assert set(evidence["data"]) == {"binding.json", "parity.json", "release.json"}
+    volume = next(
+        row for row in job["spec"]["template"]["spec"]["volumes"] if row["name"] == "evidence"
+    )
+    assert volume["configMap"]["name"] == package.EVIDENCE_CONFIGMAP
     env = {
         row["name"]: row.get("value")
         for row in job["spec"]["template"]["spec"]["containers"][0]["env"]

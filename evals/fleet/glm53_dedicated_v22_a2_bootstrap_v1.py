@@ -8,7 +8,7 @@ from pathlib import Path
 from evals.fleet import glm53_dedicated_v22_a2_package_v1 as controller
 from evals.fleet import self_hosted
 
-JOB_NAME = "chris-glm53-dedicated-v22-r051-a2-bootstrap-v2"
+JOB_NAME = "chris-glm53-dedicated-v22-r051-a2-bootstrap-v3"
 SFS_ROOT = f"/mnt/sfs/jobs/{JOB_NAME}"
 RELEASE_PATH = Path("/mnt/sfs/jobs/chris-glm53-dedicated-v22-r051-a2-release-v2/RELEASE.json")
 RELEASE_FILE_SHA256 = "sha256:053279794e21358732c176e3075f2ef5f7777e3436145c9e8c7724456820d500"
@@ -24,7 +24,7 @@ UV_IMAGE = (
 
 def render(root: Path):
     final = controller.render(root)
-    source, job = copy.deepcopy(final["objects"]["items"])
+    source, _final_evidence, job = copy.deepcopy(final["objects"]["items"])
     source["metadata"]["name"] = JOB_NAME + "-source"
     evidence = {
         "apiVersion": "v1",
