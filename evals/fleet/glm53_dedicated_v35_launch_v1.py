@@ -17,8 +17,8 @@ from evals.fleet import glm53_dedicated_v35_controller_v1 as controller
 from evals.fleet import glm53_dedicated_v35_create_v1 as server
 from evals.fleet import glm53_dedicated_v35_live_authorization_v1 as live
 
-FROZEN_PACKAGE_COMMIT = "95212bc9aacd78ae45a0b2b9e0167d052007ca79"
-FROZEN_PACKAGE_SHA256 = "sha256:2c689526676a761e9d2e2d70f5b0011d78a739e016015b13620d9d66c1af8fa2"
+FROZEN_PACKAGE_COMMIT = "dbb94e9f45827c745a2f281ea4a3c3265924f1d2"
+FROZEN_PACKAGE_SHA256 = "sha256:eb9c158aafd1f6d2aaf125b93d1c9b37e9545f9af27529db1104f4d4e3f156a2"
 HELD_SCHEMA = "fleet-glm53-dedicated-v35-launch-held-v1"
 RESULT_SCHEMA = "fleet-glm53-dedicated-v35-controller-submission-v1"
 LaunchError = engine.LaunchError

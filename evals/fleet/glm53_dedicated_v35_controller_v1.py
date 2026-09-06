@@ -115,9 +115,7 @@ def build_fresh_authorization(
         now=observation_started_at,
         rows_snapshot=(rows, pages),
     )
-    stale.validate_reconciliation(
-        reconciliation, rows=rows, now=observation_started_at
-    )
+    stale.validate_reconciliation(reconciliation, rows=rows, now=observation_started_at)
     authorization = live.build_live_authorization(
         backend=live_backend_factory(),
         payload=server.payload(),
@@ -129,9 +127,7 @@ def build_fresh_authorization(
         stale_run_reconciliation=reconciliation,
         now=observation_started_at,
     )
-    authorization = live.bind_observation_completion(
-        authorization, completed_at_epoch=now()
-    )
+    authorization = live.bind_observation_completion(authorization, completed_at_epoch=now())
     server.validate_authorization(authorization)
     return authorization
 

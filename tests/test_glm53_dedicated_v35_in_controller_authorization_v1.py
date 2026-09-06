@@ -251,6 +251,21 @@ def test_v34_terminal_evidence_is_sanitized_and_digest_valid() -> None:
     )
 
 
+def test_v35_held_evidence_matches_immutable_preview() -> None:
+    path = (
+        ROOT / "docs/evidence/glm53-study/"
+        "2026-09-06-glm53-dedicated-v35-in-controller-authorization-held-v1.json"
+    )
+    value = json.loads(path.read_text())
+    assert value == launch.build_held(ROOT)
+    assert value["receipt_sha256"] == crypto.digest_without(value, "receipt_sha256")
+    assert value["authorization_built_inside_controller"] is True
+    assert value["launcher_authorization_reuse_forbidden"] is True
+    assert value["api_mutation_calls"] == 0
+    assert value["kubernetes_mutation_calls"] == 0
+    assert value["scored_launch_authorized"] is False
+
+
 class FakeKubernetes:
     def __init__(self) -> None:
         self.objects: dict[tuple[str, str], dict[str, Any]] = {}
