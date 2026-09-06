@@ -1,6 +1,9 @@
 import datetime
+import io
 import json
 import subprocess
+import urllib.request
+from contextlib import redirect_stdout
 from pathlib import Path
 
 import pytest
@@ -333,3 +336,55 @@ def test_live_engine_validates_active_receipts_with_bound_v26_contract(
     assert observed["expected_live_release_schema"] == package.LIVE_RELEASE_SCHEMA
     assert observed["expected_watchdog_job_name"] == package.JOB_NAME
     assert observed["expected_watchdog_result_root"] == package.RESULT_ROOT
+
+
+def test_jobs_api_probe_does_not_confuse_top_level_run_name_with_title(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class Response:
+        status = 200
+
+        def __enter__(self) -> "Response":
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return json.dumps(
+                {
+                    "name": "ft-run-deadbeef",
+                    "state": "running",
+                    "config": {"title": server.TITLE, "run_dir": server.RUN_DIR},
+                }
+            ).encode()
+
+    monkeypatch.setattr(urllib.request, "urlopen", lambda *_args, **_kwargs: Response())
+    monkeypatch.setenv("FLEET_API_KEY", "test-only")
+    output = io.StringIO()
+    with redirect_stdout(output):
+        exec(engine._api_probe_source("ft-run-deadbeef"), {})
+    observed = json.loads(output.getvalue())
+    assert observed == {
+        "api_run_id": "ft-run-deadbeef",
+        "http_status": 200,
+        "run_dir": server.RUN_DIR,
+        "state": "running",
+        "title": server.TITLE,
+    }
+
+
+def test_v26_watchdog_handoff_failure_receipt_is_digest_valid() -> None:
+    value = json.loads(
+        (
+            ROOT
+            / "docs/evidence/glm53-study/"
+            "2026-09-06-glm53-dedicated-v26-watchdog-handoff-failure-v1.json"
+        ).read_text()
+    )
+    assert value["status"] == "FAILED_CLOSED_RELEASED_ZERO_EFFECT"
+    assert value["retry_same_server_identity"] is False
+    assert value["jobs_api_final_get_http_status"] == 404
+    assert value["kubernetes_remnants"] == 0
+    assert value["dedicated_gpus_after_release"] == 0
+    assert value["receipt_sha256"] == crypto.digest_without(value, "receipt_sha256")

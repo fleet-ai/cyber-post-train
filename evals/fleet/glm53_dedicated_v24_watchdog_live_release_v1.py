@@ -706,7 +706,7 @@ run_ids = {{
 print(json.dumps({{
     'http_status': response.status,
     'api_run_id': next(iter(run_ids)) if len(run_ids) == 1 else None,
-    'title': first('title', 'name'),
+    'title': first('title'),
     'run_dir': first('run_dir'),
     'state': first('state', 'status'),
 }}, sort_keys=True, separators=(',', ':')))
