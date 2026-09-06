@@ -13,6 +13,21 @@ from evals.fleet import opencode_actual_harness_parity_v1 as actual_harness
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def _priority_classes() -> list[dict]:
+    return [
+        {
+            "metadata": {"name": "fleet-infra-quiet"},
+            "value": -1000,
+            "preemptionPolicy": "Never",
+        },
+        {
+            "metadata": {"name": "fleet-serve-low"},
+            "value": 100,
+            "preemptionPolicy": "Never",
+        },
+    ]
+
+
 def _binding() -> dict:
     return {
         "server_title": qualifier.SERVER_TITLE,
@@ -108,6 +123,9 @@ def _evidence() -> tuple[dict, dict, dict]:
         "watcher_job_active": 1,
         "watcher_pod_ready": True,
         "watcher_pod_restarts": 0,
+        "cpu_priority_class": "fleet-serve-low",
+        "cpu_priority_value": 100,
+        "cpu_priority_preemption_policy": "Never",
         "seconds_since_last_model_request": 1,
     }
     live["receipt_sha256"] = crypto.digest_without(live, "receipt_sha256")
@@ -317,12 +335,23 @@ def test_watchdog_package_is_create_once_uid_bound_and_nonpreempting() -> None:
     commit = subprocess.run(
         ["git", "rev-parse", "HEAD"], cwd=ROOT, check=True, text=True, capture_output=True
     ).stdout.strip()
-    rendered = package.render_watchdog(ROOT, commit, _binding(), ready_at_epoch=123.0)
+    rendered = package.render_watchdog(
+        ROOT,
+        commit,
+        _binding(),
+        ready_at_epoch=123.0,
+        priority_classes=_priority_classes(),
+    )
     configmap, job = rendered["objects"]["items"]
     assert configmap["immutable"] is True
     assert job["metadata"]["annotations"]["cyber-post-train.fleet.ai/create-once"] == "true"
+    assert job["metadata"]["labels"] == {
+        "cyber-post-train.fleet.ai/owner": "chris",
+        "cyber-post-train.fleet.ai/experiment": package.WATCHDOG_JOB_NAME,
+        "kueue.x-k8s.io/queue-name": "training-lq",
+    }
     pod = job["spec"]["template"]["spec"]
-    assert pod["priorityClassName"] == "fleet-infra-quiet"
+    assert pod["priorityClassName"] == qualifier.CPU_PRIORITY_CLASS
     assert pod["preemptionPolicy"] == "Never"
     container = pod["containers"][0]
     env = {row["name"]: row for row in container["env"]}
@@ -339,6 +368,14 @@ def test_watchdog_package_is_create_once_uid_bound_and_nonpreempting() -> None:
     assert rendered["scored_launch_authorized"] is False
 
 
+def test_cpu_priority_live_contract_fails_closed_on_preempting_or_stale_class() -> None:
+    package.validate_cpu_priority_inventory(_priority_classes())
+    values = _priority_classes()
+    values[1]["preemptionPolicy"] = "PreemptLowerPriority"
+    with pytest.raises(package.PackageError, match="priority_contract"):
+        package.validate_cpu_priority_inventory(values)
+
+
 def test_package_is_exact_create_once_nonpreempting_and_scorefree() -> None:
     parity, watchdog, live = _evidence()
     authorization = qualifier.authorize(_binding(), parity, watchdog, live)
@@ -349,9 +386,11 @@ def test_package_is_exact_create_once_nonpreempting_and_scorefree() -> None:
     configmap, auth, job = rendered["objects"]["items"]
     assert configmap["immutable"] is auth["immutable"] is True
     assert job["metadata"]["name"] == qualifier.JOB_NAME
+    assert job["metadata"]["labels"]["cyber-post-train.fleet.ai/owner"] == "chris"
+    assert job["metadata"]["labels"]["kueue.x-k8s.io/queue-name"] == "training-lq"
     assert job["metadata"]["annotations"]["cyber-post-train.fleet.ai/create-once"] == "true"
     assert job["metadata"]["annotations"]["cyber-post-train.fleet.ai/score-free"] == "true"
-    assert job["spec"]["template"]["spec"]["priorityClassName"] == "fleet-infra-quiet"
+    assert job["spec"]["template"]["spec"]["priorityClassName"] == (qualifier.CPU_PRIORITY_CLASS)
     assert job["spec"]["template"]["spec"]["preemptionPolicy"] == "Never"
     assert rendered["server_launch_authorized"] is False
     assert rendered["qualification_launch_authorized"] is True
@@ -445,8 +484,17 @@ def test_execute_keeps_fleet_calls_zero_and_runs_frozen_waves(tmp_path, monkeypa
     assert result["verifier_calls"] == 0
     assert result["scoring_calls"] == 0
     assert result["scored_launch_authorized"] is False
+    assert result["qualifier_identity"] == {
+        "job_uid": "77777777-7777-4777-8777-777777777777",
+        "pod_uid": "88888888-8888-4888-8888-888888888888",
+    }
     assert result["receipt_sha256"] == crypto.digest_without(result, "receipt_sha256")
     qualifier.validate_raw(result)
+    tampered = json.loads(json.dumps(result))
+    tampered["qualifier_identity"]["pod_uid"] = "99999999-9999-4999-8999-999999999999"
+    tampered["receipt_sha256"] = crypto.digest_without(tampered, "receipt_sha256")
+    with pytest.raises(qualifier.QualificationError, match="gpu_wave"):
+        qualifier.validate_raw(tampered)
 
 
 @pytest.mark.parametrize(

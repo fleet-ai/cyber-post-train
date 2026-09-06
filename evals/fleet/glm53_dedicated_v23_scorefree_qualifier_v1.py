@@ -30,6 +30,8 @@ MODEL_REVISION = "30333038ada1f1dacb294a93270305a890b50c14"
 SERVED_ID = "glm-5.3"
 CONTEXT_LENGTH = 262144
 IDLE_RELEASE_SECONDS = 600
+CPU_PRIORITY_CLASS = "fleet-serve-low"
+CPU_PRIORITY_VALUE = 100
 CONCURRENCY = (1, 2, 4)
 GPU_OBSERVER_SCHEMA = "fleet-glm53-dedicated-v23-scorefree-gpu-wave-v1"
 GPU_OBSERVER_WAIT_SECONDS = 300
@@ -252,6 +254,9 @@ def authorize(
         or live.get("watcher_job_active") != 1
         or live.get("watcher_pod_ready") is not True
         or live.get("watcher_pod_restarts") != 0
+        or live.get("cpu_priority_class") != CPU_PRIORITY_CLASS
+        or live.get("cpu_priority_value") != CPU_PRIORITY_VALUE
+        or live.get("cpu_priority_preemption_policy") != "Never"
         or live.get("seconds_since_last_model_request") not in range(IDLE_RELEASE_SECONDS)
     ):
         raise QualificationError("v23_live_scorefree_boundary_invalid")
@@ -263,6 +268,9 @@ def authorize(
         "watchdog_receipt_sha256": watchdog["receipt_sha256"],
         "live_receipt_sha256": live["receipt_sha256"],
         "idle_release_seconds": IDLE_RELEASE_SECONDS,
+        "cpu_priority_class": CPU_PRIORITY_CLASS,
+        "cpu_priority_value": CPU_PRIORITY_VALUE,
+        "cpu_priority_preemption_policy": "Never",
         "no_active_scored_controller": True,
         "qualification_result_root_absent": True,
         "endpoint_lease_exclusive": True,
@@ -339,7 +347,12 @@ def _valid_sha(value: object) -> bool:
 def validate_raw(raw: dict[str, Any]) -> None:
     authorization = raw.get("authorization")
     binding = raw.get("server_binding")
-    if not isinstance(authorization, dict) or not isinstance(binding, dict):
+    qualifier_identity = raw.get("qualifier_identity")
+    if (
+        not isinstance(authorization, dict)
+        or not isinstance(binding, dict)
+        or not isinstance(qualifier_identity, dict)
+    ):
         raise QualificationError("v23_raw_authority_invalid")
     _validate_binding(binding)
     if (
@@ -353,8 +366,13 @@ def validate_raw(raw: dict[str, Any]) -> None:
         or authorization.get("server_binding") != binding
         or authorization.get("qualification_launch_authorized") is not True
         or authorization.get("scored_launch_authorized") is not False
+        or set(qualifier_identity) != {"job_uid", "pod_uid"}
+        or any(not _valid_uuid(value) for value in qualifier_identity.values())
         or authorization.get("status") != "AUTHORIZED_SCORE_FREE_ONLY"
         or authorization.get("idle_release_seconds") != IDLE_RELEASE_SECONDS
+        or authorization.get("cpu_priority_class") != CPU_PRIORITY_CLASS
+        or authorization.get("cpu_priority_value") != CPU_PRIORITY_VALUE
+        or authorization.get("cpu_priority_preemption_policy") != "Never"
         or authorization.get("no_active_scored_controller") is not True
         or authorization.get("qualification_result_root_absent") is not True
         or authorization.get("endpoint_lease_exclusive") is not True
@@ -387,14 +405,25 @@ def validate_raw(raw: dict[str, Any]) -> None:
         or raw.get("scored_launch_authorized") is not False
         or not isinstance(raw.get("waves"), list)
         or not isinstance(raw.get("gpu_waves"), list)
+        or len(raw.get("waves", [])) != len(CONCURRENCY)
+        or len(raw.get("gpu_waves", [])) != len(CONCURRENCY)
     ):
         raise QualificationError("v23_raw_authority_invalid")
+    for concurrency, observed in zip(CONCURRENCY, raw["gpu_waves"], strict=True):
+        validate_gpu_wave(
+            observed,
+            concurrency,
+            build_held()["server"],
+            binding,
+            qualifier_identity,
+        )
 
 
 def evaluate(
     waves: list[dict[str, Any]],
     gpu_waves: list[dict[str, Any]],
     binding: dict[str, Any],
+    qualifier_identity: dict[str, str],
 ) -> dict[str, Any]:
     if [row.get("concurrency") for row in waves] != list(CONCURRENCY) or len(gpu_waves) != 3:
         raise QualificationError("v23_wave_order_invalid")
@@ -403,7 +432,13 @@ def evaluate(
         concurrency = int(wave["concurrency"])
         try:
             engine.validate_runtime_ramp(wave, baseline=waves[0] if concurrency != 1 else None)
-            validate_gpu_wave(observed, concurrency, build_held()["server"], binding)
+            validate_gpu_wave(
+                observed,
+                concurrency,
+                build_held()["server"],
+                binding,
+                qualifier_identity,
+            )
         except (engine.QualificationError, QualificationError):
             failures.append(f"c{concurrency}_protocol_latency_gpu_or_identity")
     baseline = float(waves[0]["throughput_streams_per_second"])
@@ -497,6 +532,7 @@ def execute(
         "authorization_receipt_sha256": authorization["receipt_sha256"],
         "authorization": authorization,
         "server_binding": binding,
+        "qualifier_identity": qualifier_identity,
         "waves": waves,
         "gpu_waves": gpu_waves,
         "fleet_task_instance_calls": 0,
@@ -546,7 +582,12 @@ def main() -> int:
         validate_raw(raw)
         verdict = {
             "schema_version": VERDICT_SCHEMA,
-            **evaluate(raw["waves"], raw["gpu_waves"], raw["server_binding"]),
+            **evaluate(
+                raw["waves"],
+                raw["gpu_waves"],
+                raw["server_binding"],
+                raw["qualifier_identity"],
+            ),
             "raw_receipt_sha256": raw["receipt_sha256"],
             "fleet_task_instance_calls": 0,
             "fleet_session_calls": 0,

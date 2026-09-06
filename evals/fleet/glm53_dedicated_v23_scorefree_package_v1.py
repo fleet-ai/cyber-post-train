@@ -41,6 +41,26 @@ class PackageError(RuntimeError):
     """The immutable v23 package cannot be rendered."""
 
 
+def validate_cpu_priority_inventory(priority_classes: list[dict[str, Any]]) -> None:
+    """Require the live eligible nonpreempting class that outranks the old class."""
+
+    by_name = {
+        row.get("metadata", {}).get("name"): row
+        for row in priority_classes
+        if isinstance(row, dict)
+    }
+    selected = by_name.get(qualifier.CPU_PRIORITY_CLASS) or {}
+    old = by_name.get("fleet-infra-quiet") or {}
+    if (
+        selected.get("value") != qualifier.CPU_PRIORITY_VALUE
+        or selected.get("preemptionPolicy") != "Never"
+        or old.get("preemptionPolicy") != "Never"
+        or not isinstance(old.get("value"), int)
+        or old["value"] >= selected["value"]
+    ):
+        raise PackageError("v23_cpu_priority_contract_invalid")
+
+
 def _source(root: Path, commit: str, path: str) -> bytes:
     if COMMIT_RE.fullmatch(commit) is None:
         raise PackageError("package_commit_invalid")
@@ -184,6 +204,11 @@ exec python -m evals.fleet.glm53_dedicated_v23_request_counter_watchdog_v1 watch
         "metadata": {
             "name": WATCHDOG_JOB_NAME,
             "namespace": prior.NAMESPACE,
+            "labels": {
+                "cyber-post-train.fleet.ai/owner": "chris",
+                "cyber-post-train.fleet.ai/experiment": WATCHDOG_JOB_NAME,
+                "kueue.x-k8s.io/queue-name": "training-lq",
+            },
             "annotations": {
                 "cyber-post-train.fleet.ai/create-once": "true",
                 "cyber-post-train.fleet.ai/score-free": "true",
@@ -195,10 +220,16 @@ exec python -m evals.fleet.glm53_dedicated_v23_request_counter_watchdog_v1 watch
             "activeDeadlineSeconds": 604800,
             "ttlSecondsAfterFinished": 604800,
             "template": {
-                "metadata": {"labels": {"cyber-post-train.fleet.ai/experiment": WATCHDOG_JOB_NAME}},
+                "metadata": {
+                    "labels": {
+                        "cyber-post-train.fleet.ai/owner": "chris",
+                        "cyber-post-train.fleet.ai/experiment": WATCHDOG_JOB_NAME,
+                        "kueue.x-k8s.io/queue-name": "training-lq",
+                    }
+                },
                 "spec": {
                     "restartPolicy": "Never",
-                    "priorityClassName": "fleet-infra-quiet",
+                    "priorityClassName": qualifier.CPU_PRIORITY_CLASS,
                     "preemptionPolicy": "Never",
                     "nodeSelector": {
                         "kubernetes.io/arch": "amd64",
@@ -287,7 +318,9 @@ def render_watchdog(
     binding: dict[str, Any],
     *,
     ready_at_epoch: float,
+    priority_classes: list[dict[str, Any]],
 ) -> dict[str, Any]:
+    validate_cpu_priority_inventory(priority_classes)
     configmap = build_watchdog_configmap(root, commit, binding, ready_at_epoch=ready_at_epoch)
     return {
         "objects": {
@@ -315,13 +348,19 @@ def build_job(configmap: dict[str, Any], authorization: dict[str, Any]) -> dict[
     }
     job = copy.deepcopy(prior.build_job(old_configmap, seed))
     job["metadata"]["name"] = qualifier.JOB_NAME
+    job["metadata"]["labels"]["cyber-post-train.fleet.ai/owner"] = "chris"
     job["metadata"]["labels"]["cyber-post-train.fleet.ai/experiment"] = qualifier.JOB_NAME
+    job["metadata"]["labels"]["kueue.x-k8s.io/queue-name"] = "training-lq"
     job["metadata"]["annotations"]["cyber-post-train.fleet.ai/authorization-receipt-sha256"] = (
         authorization["receipt_sha256"]
     )
     job["spec"]["activeDeadlineSeconds"] = 1800
     pod = job["spec"]["template"]
+    pod["spec"]["priorityClassName"] = qualifier.CPU_PRIORITY_CLASS
+    pod["spec"]["preemptionPolicy"] = "Never"
+    pod["metadata"]["labels"]["cyber-post-train.fleet.ai/owner"] = "chris"
     pod["metadata"]["labels"]["cyber-post-train.fleet.ai/experiment"] = qualifier.JOB_NAME
+    pod["metadata"]["labels"]["kueue.x-k8s.io/queue-name"] = "training-lq"
     package_commit = json.loads(configmap["data"]["package.json"])["package_commit"]
     for row in pod["spec"]["containers"][0]["env"]:
         if row["name"] == "QUALIFICATION_PACKAGE_COMMIT":
