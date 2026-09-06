@@ -15,6 +15,7 @@ from evals.fleet import hosted_glm_rank30_single_slot_v5 as successor
 from evals.fleet import self_hosted
 
 ROOT = Path(__file__).resolve().parents[1]
+PACKAGE_COMMIT = "f30a1c0b24785ece6e6c68b839b02fea196a728d"
 
 
 def test_rank30_preclaim_package_is_exact_create_once_and_score_free() -> None:
@@ -160,7 +161,15 @@ def test_frozen_release_replay_uses_failed_execution_clock_and_exact_inputs(
 
 
 def test_held_receipt_is_digest_valid_and_forbids_launch() -> None:
-    held = package.build_held(ROOT, "a" * 40)
+    held = package.build_held(ROOT, PACKAGE_COMMIT)
+    tracked = json.loads(
+        (
+            ROOT
+            / "docs/evidence/glm53-study/"
+            "2026-09-06-glm53-hosted-rank30-preclaim-phase-observer-held-v1.json"
+        ).read_text()
+    )
+    assert tracked == held
     assert held["status"] == "PASSED_HELD_NO_LAUNCH"
     assert held["observer_launch_authorized"] is False
     assert held["scored_successor_launch_authorized"] is False
