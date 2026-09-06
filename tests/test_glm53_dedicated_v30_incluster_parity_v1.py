@@ -12,7 +12,7 @@ from evals.fleet import glm53_dedicated_v30_incluster_parity_v1 as rail
 from evals.fleet import opencode_actual_harness_parity_v1 as parity
 
 ROOT = Path(__file__).resolve().parents[1]
-COMMIT = "fec6d9b852ba4522646903a6ee4c76159305d6fd"
+COMMIT = "7e561c4b76dbee194186e50396e5602b439fa114"
 
 
 def binding() -> dict[str, object]:
