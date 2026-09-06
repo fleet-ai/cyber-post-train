@@ -65,3 +65,24 @@ def test_payload_validation_rejects_any_reintroduced_idle_killer() -> None:
     value["command"] += " ; kill -TERM 1"
     with pytest.raises(server.ServerPlanError, match="idle_authority"):
         server.validate_payload(value)
+
+
+def test_tracked_preview_is_digest_valid_and_remains_held() -> None:
+    path = (
+        ROOT / "docs/evidence/glm53-study/"
+        "2026-09-06-glm53-dedicated-v24-server-preview-held-v1.json"
+    )
+    value = json.loads(path.read_text())
+    assert value["status"] == "PASSED_PREVIEW_ONLY_HELD"
+    assert value["preview"]["http_status"] == 200
+    assert value["create_request_sha256"] == crypto.sha256(crypto.canonical_json(server.payload()))
+    assert value["duplicate_gate"]["jobs_api_title_matches"] == 0
+    assert value["duplicate_gate"]["jobs_api_run_dir_matches"] == 0
+    assert value["duplicate_gate"]["kubernetes_identity_or_remnant_matches"] == 0
+    assert value["duplicate_gate"]["sfs_run_dir_absent"] is True
+    assert value["capacity_gate"]["eligible_eight_gpu_nodes"] >= 1
+    assert value["idle_release_authority"]["server_internal_idle_killer_present"] is False
+    assert value["server_launch_authorized"] is False
+    assert value["qualification_launch_authorized"] is False
+    assert value["scored_launch_authorized"] is False
+    assert value["receipt_sha256"] == crypto.digest_without(value, "receipt_sha256")
