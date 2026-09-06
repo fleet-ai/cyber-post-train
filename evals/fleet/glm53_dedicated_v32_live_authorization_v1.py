@@ -194,7 +194,10 @@ def _active_project_runs(
 
 
 def _project_kubernetes(
-    inventory: Mapping[str, Any], title: str, run_dir: str
+    inventory: Mapping[str, Any],
+    title: str,
+    run_dir: str,
+    reconciliation: Mapping[str, Any],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     rows = inventory.get("items")
     if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
@@ -202,15 +205,10 @@ def _project_kubernetes(
     serialized = json.dumps(inventory, sort_keys=True)
     if title in serialized or run_dir in serialized:
         raise LiveAuthorizationError("v32_kubernetes_identity_already_exists")
-    project_objects = [
+    all_project_objects = [
         row
         for row in rows
         if row.get("kind") in {"RayJob", "RayCluster", "Workload", "Service"}
-        and not (
-            row.get("kind") == "RayJob"
-            and str((row.get("status") or {}).get("jobStatus") or "").upper()
-            in {"SUCCEEDED", "FAILED", "STOPPED"}
-        )
         and (
             "/mnt/sfs/jobs/chris-cyber-evalserve-"
             in json.dumps(row, sort_keys=True)
@@ -219,6 +217,21 @@ def _project_kubernetes(
             )
             == "chris"
         )
+    ]
+    terminal_projection = sorted(
+        [
+            stale_runs._terminal_object_projection(row)  # noqa: SLF001
+            for row in all_project_objects
+            if stale_runs._terminal_kubernetes_object(row)  # noqa: SLF001
+        ],
+        key=lambda row: (str(row["kind"]), str(row["name"])),
+    )
+    if terminal_projection != reconciliation.get("terminal_project_objects"):
+        raise LiveAuthorizationError("v32_stale_terminal_kubernetes_drift")
+    project_objects = [
+        row
+        for row in all_project_objects
+        if not stale_runs._terminal_kubernetes_object(row)  # noqa: SLF001
     ]
     gpu_pods = [
         row
@@ -264,7 +277,7 @@ def build_live_authorization(
         observed_at,
     )
     project_objects, project_gpu_pods = _project_kubernetes(
-        backend.kubernetes_inventory(), title, run_dir
+        backend.kubernetes_inventory(), title, run_dir, stale_run_reconciliation
     )
     sfs = backend.sfs_observation(absent_paths=(run_dir, control_result_path))
     if (

@@ -19,7 +19,7 @@ from evals.fleet import glm53_dedicated_v32_watchdog_live_release_v1 as adapter
 from evals.fleet import glm53_dedicated_v32_watchdog_package_v1 as watchdog
 
 ROOT = Path(__file__).resolve().parents[1]
-COMMIT = "befb879a4d57e68ba0ef27c4bbc617dcc866b54e"
+COMMIT = "bb531a9c081baf63a88b62abe8804876f2bfca41"
 
 
 class FakeBackend:
@@ -76,7 +76,11 @@ def create_authorization(backend: FakeBackend | None = None) -> dict[str, object
     selected = backend or FakeBackend()
     stale_backend = copy.deepcopy(selected)
     stale_backend.exact = {}
-    stale_backend.items = []
+    stale_backend.items = [
+        item
+        for item in stale_backend.items
+        if stale_runs._terminal_kubernetes_object(item)  # noqa: SLF001
+    ]
     try:
         reconciliation = stale_runs.build_reconciliation(
             backend=stale_backend,
@@ -363,6 +367,42 @@ def test_v32_live_builder_rejects_malformed_project_api_identity() -> None:
         live_auth.LiveAuthorizationError, match="identity_invalid"
     ):
         create_authorization(backend)
+
+
+def test_v32_live_builder_accepts_only_exact_reconciled_terminal_objects() -> None:
+    backend = FakeBackend()
+    backend.items = [
+        _object(
+            "RayJob",
+            "ft-run-deadbeef",
+            "11111111-1111-4111-8111-111111111111",
+            status={"jobStatus": "FAILED"},
+        )
+    ]
+    server.validate_authorization(create_authorization(backend))
+
+    stale_backend = copy.deepcopy(backend)
+    reconciliation = stale_runs.build_reconciliation(
+        backend=stale_backend,
+        now=time.time(),
+    )
+    backend.items[0]["metadata"]["uid"] = (
+        "22222222-2222-4222-8222-222222222222"
+    )
+    with pytest.raises(
+        live_auth.LiveAuthorizationError, match="terminal_kubernetes_drift"
+    ):
+        live_auth.build_live_authorization(
+            backend=backend,
+            payload=server.payload(),
+            title=server.TITLE,
+            run_dir=server.RUN_DIR,
+            control_result_path=server.RESULT_PATH,
+            request_sha256=server.request_sha256(),
+            priority_class=v24.PRIORITY_CLASS,
+            stale_run_reconciliation=reconciliation,
+            now=time.time(),
+        )
 
 
 def test_v32_system_backend_pagination_progress_and_second_page(
