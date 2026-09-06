@@ -1,9 +1,12 @@
 import copy
 import datetime
 import inspect
+import io
 import json
 import subprocess
 import urllib.error
+import urllib.request
+from contextlib import redirect_stdout
 from pathlib import Path
 
 import pytest
@@ -208,6 +211,55 @@ def test_server_bound_probe_accepts_name_field_only_under_exact_ft_run_regex() -
     assert "for key in ('id', 'run_id', 'name')" in source
     assert "ft-run-[0-9a-f]{8}" in source
     assert "len(run_ids) == 1" in source
+
+
+def test_live_state_accepts_deployed_submitted_state_without_title() -> None:
+    value = _live()
+    value["api_run_state"] = "SUBMITTED"
+    value["receipt_sha256"] = crypto.digest_without(value, "receipt_sha256")
+    live_release._validate_live_state_at(value, _binding(), observed_now_epoch=NOW)
+
+
+def test_deployed_list_shape_runs_through_generated_probe_without_invented_title(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    evidence = json.loads(
+        (
+            ROOT
+            / "docs/evidence/glm53-study/"
+            "2026-09-06-jobs-api-v27-deployed-list-shape-v1.json"
+        ).read_text()
+    )
+    assert evidence["receipt_sha256"] == crypto.digest_without(
+        evidence, "receipt_sha256"
+    )
+    row = evidence["selected_safe_fields"]
+
+    class Response:
+        status = evidence["http_status"]
+
+        def __enter__(self) -> "Response":
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return json.dumps(row).encode()
+
+    monkeypatch.setattr(urllib.request, "urlopen", lambda *_args, **_kwargs: Response())
+    monkeypatch.setenv("FLEET_API_KEY", "test-only")
+    output = io.StringIO()
+    with redirect_stdout(output):
+        exec(live_release._api_probe_source(evidence["api_run_id"]), {})
+    observed = json.loads(output.getvalue())
+    assert observed == {
+        "api_run_id": evidence["api_run_id"],
+        "http_status": 200,
+        "run_dir": evidence["server_run_dir"],
+        "state": "submitted",
+        "title": None,
+    }
 
 
 @pytest.mark.parametrize(
@@ -535,13 +587,13 @@ def test_observer_binds_randomized_object_names_without_secret_read(
     def pod_python(_pod: str, source: str) -> dict:
         seen_sources.append(source)
         if "/v1/runs/" in source:
-            return {
-                "http_status": 200,
-                "api_run_id": "ft-run-deadbeef",
-                "title": server.TITLE,
-                "run_dir": server.RUN_DIR,
-                "state": "RUNNING",
-            }
+                return {
+                    "http_status": 200,
+                    "api_run_id": "ft-run-deadbeef",
+                    "title": None,
+                    "run_dir": server.RUN_DIR,
+                    "state": "submitted",
+                }
         if "/metrics" in source:
             return {"http_status": 200, "families": list(runtime.ACTIVITY_METRICS)}
         return {
@@ -553,8 +605,16 @@ def test_observer_binds_randomized_object_names_without_secret_read(
     monkeypatch.setattr(live_release, "_pod_python", pod_python)
     binding, live = live_release.observe_live("ft-run-deadbeef")
     assert binding == _binding()
+    assert live["api_run_state"] == "SUBMITTED"
+    assert live["api_title_match_count"] == 1
     assert live["jobs_api_credential_secret_name"] == "ft-run-deadbeef-fleet-key"
-    assert all("FLEET_API_KEY" not in source or "os.environ" in source for source in seen_sources)
+    assert all(
+        "FLEET_API_KEY" not in source
+        or "os.environ" in source
+        or live_release.PREVALIDATION_SCHEMA in source
+        for source in seen_sources
+    )
+    assert any(live_release.PREVALIDATION_SCHEMA in source for source in seen_sources)
 
 
 def test_application_ready_requires_matching_real_timestamp_and_digest() -> None:
@@ -838,6 +898,32 @@ def test_handoff_failure_release_uses_independent_local_control_plane(
     )
     live_release._release_on_handoff_failure(_binding(), "head-pod")
     assert calls == [("ft-run-deadbeef", _binding())]
+
+
+def test_handoff_failure_without_local_key_uses_owner_pod_and_confirms_gpu_absence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        live_release,
+        "_release_local",
+        lambda *_args: (_ for _ in ()).throw(
+            live_release.LiveReleaseError("local_jobs_api_release_identity_absent")
+        ),
+    )
+    sources: list[str] = []
+
+    def disconnect_after_delete(_pod: str, source: str) -> dict:
+        sources.append(source)
+        raise ConnectionError("owner Pod deleted while exec was returning")
+
+    monkeypatch.setattr(live_release, "_pod_python", disconnect_after_delete)
+    monkeypatch.setattr(
+        live_release, "_kubernetes_server_remnants", lambda *_args: []
+    )
+    live_release._release_on_handoff_failure(_binding(), "head-pod")
+    assert len(sources) == 1
+    assert "method='DELETE'" in sources[0]
+    assert "ft-run-deadbeef" in sources[0]
 
 
 def test_local_release_confirms_api_and_kubernetes_absence_after_delete(

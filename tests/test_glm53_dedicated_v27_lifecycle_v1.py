@@ -127,3 +127,22 @@ def test_v27_adapter_held_receipt_and_engine_restoration() -> None:
         ).read_text()
     )
     assert tracked_watchdog == adapter.build_held(tracked_watchdog["package_commit"])
+
+
+def test_v27_handoff_failure_is_terminal_zero_gpu_and_successor_held() -> None:
+    value = json.loads(
+        (
+            ROOT
+            / "docs/evidence/glm53-study/"
+            "2026-09-06-glm53-dedicated-v27-watchdog-handoff-failure-v1.json"
+        ).read_text()
+    )
+    assert value["status"] == "FAILED_CLOSED_RELEASED_DIAGNOSTIC_GAP"
+    assert value["jobs_api_final_get_http_status"] == 404
+    assert value["kubernetes_remnants_after_release"] == 0
+    assert value["dedicated_gpus_after_release"] == 0
+    assert value["watchdog_job_created"] is False
+    assert value["qualification_job_created"] is False
+    assert value["retry_same_server_identity"] is False
+    assert value["successor_launch_authorized"] is False
+    assert value["receipt_sha256"] == crypto.digest_without(value, "receipt_sha256")
