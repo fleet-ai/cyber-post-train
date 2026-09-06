@@ -5,12 +5,12 @@
     2,
     4
   ],
-  "package_commit": "7d76b8117e4f4b1252b09a84f55ae0b6394d4207",
-  "package_sha256": "sha256:408aa35cd26231d94ea78b7fb52d6fefd1fbb195a007257be86973d8be68039f",
+  "package_commit": "69a7f999bd6ee45c5efa1d7f44efeaa8bc5ea500",
+  "package_sha256": "sha256:c84795097ebf5f4c223d12c9f252697f5c03705025ab85618b012fea8c5d899b",
   "plan_receipt_sha256": "sha256:97949d8b7dd214e85786ba39bf18496e92bae95e79e5c08d1071139ce3bc4477",
   "prompts_traces_flags_scores_or_model_outputs_included": false,
   "qualification_launch_authorized": false,
-  "receipt_sha256": "sha256:2adcb59d36d256d75ec39c298a5919783a62bf9ada59cbbbb19d4d11c6d0d7f3",
+  "receipt_sha256": "sha256:e39fb2a344679592dced7e00fa637187165810301160725ff3b1c8346a2467ab",
   "removed_false_prerequisite": {
     "rank51_attempt2_accepted_required": false,
     "reason": "rank51_attempt2_is_sealed_nonrepeatable_uncredited"
@@ -18,8 +18,13 @@
   "request_counter_watchdog": {
     "health_or_process_liveness_refreshes": false,
     "idle_release_seconds": 600,
+    "implementation_id": "glm53-v23-sglang-request-counter-watchdog-v1",
+    "implementation_module": "evals.fleet.glm53_dedicated_v23_request_counter_watchdog_v1",
+    "implementation_sha256": "sha256:5514ef4c56681d021133bdfb1514ec64a982d7fec084e6e7a1fa763c14f77fc2",
     "metric": "sglang_num_requests_total",
-    "release_via_jobs_api": true
+    "release_route": "DELETE /v1/runs/{api_run_id}",
+    "release_via_jobs_api": true,
+    "watcher_job_and_pod_uids_required": true
   },
   "schema_version": "fleet-glm53-dedicated-v23-scorefree-held-receipt-v1",
   "score_free_calls": {
