@@ -478,11 +478,23 @@ def test_submit_collision_and_repeat_fail_closed(
         calls.append(payload)
         return subprocess.CompletedProcess([], 0, "created", "")
 
-    receipt = submit.submit_once(manifest, receipt_path, runner=runner)
+    receipt = submit.submit_once(
+        manifest,
+        receipt_path,
+        root=ROOT,
+        api_key="not-persisted",
+        runner=runner,
+    )
     assert receipt["create_invocations"] == 1
     assert len(calls) == 1
     with pytest.raises(submit.SubmitError, match="do_not_repeat"):
-        submit.submit_once(manifest, receipt_path, runner=runner)
+        submit.submit_once(
+            manifest,
+            receipt_path,
+            root=ROOT,
+            api_key="not-persisted",
+            runner=runner,
+        )
     assert len(calls) == 1
 
 
@@ -503,13 +515,92 @@ def test_submit_rejects_stale_or_rehashed_extra_preview(
     )
     stale["preview_sha256"] = submit.preview_digest(stale)
     with pytest.raises(submit.SubmitError, match="preview_stale"):
-        submit.validate_preview(stale)
+        submit.validate_preview(stale, root=ROOT, api_key="not-persisted")
     malicious = copy.deepcopy(stale)
     malicious["prompt"] = "forbidden"
     malicious["previewed_at_utc"] = datetime.now(UTC).isoformat().replace("+00:00", "Z")
     malicious["preview_sha256"] = submit.preview_digest(malicious)
     with pytest.raises(submit.SubmitError, match="preview_invalid"):
-        submit.validate_preview(malicious)
+        submit.validate_preview(malicious, root=ROOT, api_key="not-persisted")
+
+
+def test_submit_preview_rebuilds_exact_objects_and_rejects_rehashed_mutations(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    release = _release(monkeypatch)
+    release_path = tmp_path / "RELEASE.json"
+    release_path.write_text(json.dumps(release))
+    plan = _runtime_plan()
+    monkeypatch.setattr(
+        submit, "_runtime_plan", lambda _root: (plan, release["source_package_sha256"])
+    )
+    monkeypatch.setattr(observer, "recheck", lambda *_args, **_kwargs: _clear_state())
+    manifest = submit.render(ROOT, release_path, api_key="not-persisted")
+    submit.validate_preview(manifest, root=ROOT, api_key="not-persisted")
+
+    mutations = {
+        "image": lambda value: value["items"][1]["spec"]["template"]["spec"]["containers"][
+            0
+        ].__setitem__("image", "attacker.invalid/runtime:latest"),
+        "command": lambda value: value["items"][1]["spec"]["template"]["spec"]["containers"][
+            0
+        ].__setitem__("command", ["sh", "-c", "exit 0"]),
+        "env": lambda value: value["items"][1]["spec"]["template"]["spec"]["containers"][0][
+            "env"
+        ].append({"name": "ATTACKER", "value": "1"}),
+        "resources": lambda value: value["items"][1]["spec"]["template"]["spec"]["containers"][
+            0
+        ].__setitem__("resources", {}),
+        "tool_contract": lambda value: value["items"][0]["data"].__setitem__(
+            "glm-template.json", "{}\n"
+        ),
+        "package_source": lambda value: value["items"][0]["data"].__setitem__(
+            "runner.py", "raise SystemExit(0)\n"
+        ),
+        "metadata": lambda value: value["items"][1]["metadata"]["labels"].__setitem__(
+            "cyber-post-train.fleet.ai/experiment", "attacker"
+        ),
+        "extra_field": lambda value: value["items"][1].__setitem__("attacker", True),
+    }
+    for _name, mutate in mutations.items():
+        malicious = copy.deepcopy(manifest)
+        mutate(malicious)
+        malicious["preview_sha256"] = submit.preview_digest(malicious)
+        with pytest.raises(submit.SubmitError, match="create_preview_objects_invalid"):
+            submit.validate_preview(malicious, root=ROOT, api_key="not-persisted")
+
+
+def test_submit_repeats_mutable_reconciliation_at_create_boundary(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    release = _release(monkeypatch)
+    release_path = tmp_path / "RELEASE.json"
+    release_path.write_text(json.dumps(release))
+    plan = _runtime_plan()
+    monkeypatch.setattr(
+        submit, "_runtime_plan", lambda _root: (plan, release["source_package_sha256"])
+    )
+    observations = [_clear_state(), _clear_state()]
+    observations[1]["new_job_collisions"] = 1
+    monkeypatch.setattr(observer, "recheck", lambda *_args, **_kwargs: observations.pop(0))
+    manifest = submit.render(ROOT, release_path, api_key="not-persisted")
+    receipt_path = tmp_path / "SUBMITTED.json"
+    monkeypatch.setattr(submit, "SUBMIT_RECEIPT", receipt_path)
+    calls: list[str] = []
+
+    def runner(payload: str) -> subprocess.CompletedProcess[str]:
+        calls.append(payload)
+        return subprocess.CompletedProcess([], 0, "created", "")
+
+    with pytest.raises(submit.SubmitError, match="reconciliation_failed"):
+        submit.submit_once(
+            manifest,
+            receipt_path,
+            root=ROOT,
+            api_key="not-persisted",
+            runner=runner,
+        )
+    assert calls == []
 
 
 def test_submit_release_loader_rejects_duplicate_key(tmp_path: Path) -> None:

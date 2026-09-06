@@ -24,6 +24,16 @@ SCHEMA = "fleet-hosted-glm-rank30-peer-free-submit-v1"
 PREVIEW_SCHEMA = "fleet-hosted-glm-rank30-peer-free-create-preview-v1"
 SUBMIT_RECEIPT = Path("/mnt/sfs/jobs/chris-glm53-peer-free-submit-v1/SUBMITTED.json")
 PREVIEW_MAX_AGE_SECONDS = 60
+RECONCILIATION_ZERO_FIELDS = (
+    "all_generation_claim_collisions",
+    "authoritative_session_collisions",
+    "accepted_evidence_collisions",
+    "output_root_collisions",
+    "new_job_collisions",
+    "new_pod_collisions",
+    "new_configmap_collisions",
+    "active_hosted_controllers",
+)
 
 
 class SubmitError(RuntimeError):
@@ -59,26 +69,20 @@ def validate_release(path: Path, root: Path) -> tuple[dict[str, Any], dict[str, 
     return release, binding
 
 
-def render(root: Path, release_path: Path, *, api_key: str) -> dict[str, Any]:
-    release, binding = validate_release(release_path, root)
-    current = observer.recheck(binding, api_key=api_key)
-    expected_zero = (
-        "all_generation_claim_collisions",
-        "authoritative_session_collisions",
-        "accepted_evidence_collisions",
-        "output_root_collisions",
-        "new_job_collisions",
-        "new_pod_collisions",
-        "new_configmap_collisions",
-        "active_hosted_controllers",
-    )
-    if any(current.get(key) != 0 for key in expected_zero) or any(
+def _validate_immediate_reconciliation(value: dict[str, Any]) -> None:
+    if any(value.get(key) != 0 for key in RECONCILIATION_ZERO_FIELDS) or any(
         (
-            current.get("endpoint_lease_slots_available") != 2,
-            current.get("both_endpoint_lease_slots_simultaneously_free") is not True,
+            value.get("endpoint_lease_slots_available") != 2,
+            value.get("both_endpoint_lease_slots_simultaneously_free") is not True,
         )
     ):
         raise SubmitError("immediate_create_reconciliation_failed")
+
+
+def render(root: Path, release_path: Path, *, api_key: str) -> dict[str, Any]:
+    release, binding = validate_release(release_path, root)
+    current = observer.recheck(binding, api_key=api_key)
+    _validate_immediate_reconciliation(current)
     rendered = controller_package.render(root, release_value=release)
     objects = rendered.get("objects") or {}
     items = objects.get("items") if isinstance(objects, dict) else None
@@ -116,7 +120,7 @@ def render(root: Path, release_path: Path, *, api_key: str) -> dict[str, Any]:
     return {**body, "preview_sha256": preview_digest(body)}
 
 
-def validate_preview(manifest: dict[str, Any]) -> None:
+def validate_preview(manifest: dict[str, Any], *, root: Path, api_key: str) -> None:
     if any(
         (
             set(manifest)
@@ -153,8 +157,18 @@ def validate_preview(manifest: dict[str, Any]) -> None:
         embedded_release = observer.strict_json(str(config_data["release.json"]).encode())
     except (KeyError, TypeError, observer.ObserverError) as exc:
         raise SubmitError("create_preview_embedded_release_invalid") from exc
+    try:
+        expected = controller_package.render(root, release_value=embedded_release)
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise SubmitError("create_preview_expected_objects_invalid") from exc
+    expected_objects = expected.get("objects")
+    expected_items = expected_objects.get("items") if isinstance(expected_objects, dict) else None
     if any(
         (
+            expected.get("launch_authorized") is not True,
+            expected.get("scoring_authorized") is not True,
+            not isinstance(expected_items, list),
+            items != expected_items,
             configmap.get("apiVersion") != "v1",
             configmap.get("metadata", {}).get("name") != successor.CONFIGMAP_NAME,
             configmap.get("metadata", {}).get("namespace") != observer.NAMESPACE,
@@ -181,6 +195,9 @@ def validate_preview(manifest: dict[str, Any]) -> None:
         )
     ):
         raise SubmitError("create_preview_objects_invalid")
+    binding = release_package.build_binding(root)
+    current = observer.recheck(binding, api_key=api_key)
+    _validate_immediate_reconciliation(current)
     try:
         observed = datetime.fromisoformat(str(manifest["previewed_at_utc"]).replace("Z", "+00:00"))
         age = (datetime.now(UTC) - observed).total_seconds()
@@ -204,13 +221,15 @@ def submit_once(
     manifest: dict[str, Any],
     receipt_path: Path,
     *,
+    root: Path,
+    api_key: str,
     runner: Callable[[str], subprocess.CompletedProcess[str]] = _default_runner,
 ) -> dict[str, Any]:
     if receipt_path != SUBMIT_RECEIPT:
         raise SubmitError("submit_receipt_identity_invalid")
     if receipt_path.exists() or receipt_path.is_symlink():
         raise SubmitError("submit_receipt_exists_do_not_repeat")
-    validate_preview(manifest)
+    validate_preview(manifest, root=root, api_key=api_key)
     payload = yaml.safe_dump(
         {key: manifest[key] for key in ("apiVersion", "kind", "items")}, sort_keys=False
     )
@@ -257,7 +276,7 @@ def main(argv: list[str] | None = None) -> int:
         raise SubmitError("fleet_api_key_absent")
     manifest = render(root, args.release, api_key=api_key)
     if args.submit:
-        receipt = submit_once(manifest, SUBMIT_RECEIPT)
+        receipt = submit_once(manifest, SUBMIT_RECEIPT, root=root, api_key=api_key)
         print(
             json.dumps(
                 {"status": receipt["status"], "receipt_sha256": receipt["receipt_sha256"]},
