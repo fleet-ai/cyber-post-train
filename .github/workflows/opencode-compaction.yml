@@ -42,4 +42,11 @@ jobs:
       - name: Lint and test the runner with real OpenCode
         run: |
           uv run ruff check .
-          uv run pytest tests/test_opencode_compaction.py tests/test_fleet_self_hosted.py tests/test_opencode_train_sweep.py tests/test_agent_assets.py
+          uv run pytest \
+            tests/test_opencode_compaction.py \
+            tests/test_fleet_self_hosted.py \
+            tests/test_opencode_train_sweep.py \
+            tests/test_agent_assets.py \
+            tests/test_glm53_dedicated_v22_concurrency_gpu_observer_v1.py \
+            tests/test_glm53_dedicated_v22_concurrency_qualification_v1.py \
+            tests/test_glm53_dedicated_v22_post_qualification_successor_v1.py
