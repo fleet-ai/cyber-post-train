@@ -13,14 +13,14 @@
       "service_uid"
     ]
   },
-  "package_commit": "b8d77d5bd4f1ed50165e4b9039872009578bd964",
+  "package_commit": "d9db73636d285081cfcda051a04e44db2305b9b6",
   "prompts_traces_flags_scores_or_model_outputs_included": false,
   "qualification_launch_authorized": false,
-  "receipt_sha256": "sha256:ce538e08ab05844a57045df11e3cfe0f6f0316fe6b4b09d6ba778e5ae572030c",
+  "receipt_sha256": "sha256:0c091a88a9ee5bb6dbfb0aeb3c0d40a0e1ef7585024acfc5bfdb058624fdb4e9",
   "rendered_sentinel": {
-    "configmap_sha256": "sha256:3e96c7f7cdb950aeee7bf0572b5bf94148619f4d3d114d64c25685ff062d7e62",
-    "job_sha256": "sha256:b427680d45baec7d14789d9d6b6d04a906adbd27c2b123019b2e6c3dcf149a5d",
-    "package_sha256": "sha256:50e8df86121eb1f6d63578e5e333093864afe74ca5347bcb72e615d9e1745180",
+    "configmap_sha256": "sha256:fdf2f5cfeb368532d0759ee897bd9a74bc28354685e36e30cd9f781e9907f32b",
+    "job_sha256": "sha256:1e273d7a14a44f51e73c04cd0b580c57d080392f17cd26250ba14ddaec889652",
+    "package_sha256": "sha256:59d807f6649091fc17290f55d06ef5020d05442b18aef24bbbf8fede8bf73e63",
     "uses_non_live_sentinel_uids": true
   },
   "runtime": {
