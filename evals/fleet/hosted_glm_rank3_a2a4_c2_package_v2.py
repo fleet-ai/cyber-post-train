@@ -13,7 +13,13 @@ from evals.fleet import hosted_glm_rank3_a2a4_c2_successor_v2 as successor
 from evals.fleet import self_hosted
 
 
-def _replace(data: dict[str, str], root: Path, *, observer: bool, receipt: Path | None = None) -> None:
+def _replace(
+    data: dict[str, str],
+    root: Path,
+    *,
+    observer: bool,
+    receipt: Path | None = None,
+) -> None:
     paths = {
         "prior_successor.py": "evals/fleet/hosted_glm_rank3_a2a4_c2_successor_v1.py",
         "successor.py": "evals/fleet/hosted_glm_rank3_a2a4_c2_successor_v2.py",
@@ -42,10 +48,16 @@ def render_release(root: Path) -> dict[str, Any]:
     _replace(configmap["data"], root, observer=True)
     job["metadata"]["name"] = release.JOB_NAME
     job["metadata"]["labels"]["cyber-post-train.fleet.ai/experiment"] = release.JOB_NAME
-    job["spec"]["template"]["metadata"]["labels"]["cyber-post-train.fleet.ai/experiment"] = release.JOB_NAME
+    job["spec"]["template"]["metadata"]["labels"][
+        "cyber-post-train.fleet.ai/experiment"
+    ] = release.JOB_NAME
     job["spec"]["template"]["spec"]["volumes"][0]["configMap"]["name"] = release.CONFIGMAP_NAME
     objects = {"apiVersion": "v1", "kind": "List", "items": [configmap, job]}
-    return {"objects": objects, "package_sha256": self_hosted.sha256(self_hosted.canonical_json(objects)), "launch_authorized": True}
+    return {
+        "objects": objects,
+        "package_sha256": self_hosted.sha256(self_hosted.canonical_json(objects)),
+        "launch_authorized": True,
+    }
 
 
 def render_scored(root: Path, receipt: Path) -> dict[str, Any]:
@@ -72,6 +84,14 @@ def render_scored(root: Path, receipt: Path) -> dict[str, Any]:
     pod["metadata"]["labels"]["cyber-post-train.fleet.ai/experiment"] = successor.JOB_NAME
     pod["spec"]["priorityClassName"] = "fleet-infra-quiet"
     pod["spec"]["volumes"][0]["configMap"]["name"] = successor.CONFIGMAP_NAME
-    pod["spec"]["containers"][0]["env"] = [row for row in pod["spec"]["containers"][0]["env"] if row["name"] not in {"JOB_NAME", "SECRET_UID", "CONTROLLER"}]
+    pod["spec"]["containers"][0]["env"] = [
+        row
+        for row in pod["spec"]["containers"][0]["env"]
+        if row["name"] not in {"JOB_NAME", "SECRET_UID", "CONTROLLER"}
+    ]
     objects = {"apiVersion": "v1", "kind": "List", "items": [configmap, job]}
-    return {"objects": objects, "package_sha256": self_hosted.sha256(self_hosted.canonical_json(objects)), "launch_authorized": True}
+    return {
+        "objects": objects,
+        "package_sha256": self_hosted.sha256(self_hosted.canonical_json(objects)),
+        "launch_authorized": True,
+    }

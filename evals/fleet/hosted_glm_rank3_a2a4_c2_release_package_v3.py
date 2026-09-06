@@ -15,14 +15,24 @@ def render(root: Path) -> dict[str, Any]:
     configmap["metadata"]["name"] = release.CONFIGMAP_NAME
     configmap["data"].update(
         {
-            "prior_runtime.py": (root / "evals/fleet/hosted_glm_rank3_a2a4_c2_runtime_v1.py").read_text(),
+            "prior_runtime.py": (
+                root / "evals/fleet/hosted_glm_rank3_a2a4_c2_runtime_v1.py"
+            ).read_text(),
             "release.py": (root / "evals/fleet/hosted_glm_rank3_a2a4_c2_release_v3.py").read_text(),
-            "run.sh": (root / "evals/fleet/scripts/run_hosted_glm_rank3_a2a4_c2_release_v3.sh").read_text(),
+            "run.sh": (
+                root / "evals/fleet/scripts/run_hosted_glm_rank3_a2a4_c2_release_v3.sh"
+            ).read_text(),
         }
     )
     job["metadata"]["name"] = release.JOB_NAME
     job["metadata"]["labels"]["cyber-post-train.fleet.ai/experiment"] = release.JOB_NAME
-    job["spec"]["template"]["metadata"]["labels"]["cyber-post-train.fleet.ai/experiment"] = release.JOB_NAME
+    job["spec"]["template"]["metadata"]["labels"][
+        "cyber-post-train.fleet.ai/experiment"
+    ] = release.JOB_NAME
     job["spec"]["template"]["spec"]["volumes"][0]["configMap"]["name"] = release.CONFIGMAP_NAME
     objects = {"apiVersion": "v1", "kind": "List", "items": [configmap, job]}
-    return {"objects": objects, "package_sha256": self_hosted.sha256(self_hosted.canonical_json(objects)), "launch_authorized": True}
+    return {
+        "objects": objects,
+        "package_sha256": self_hosted.sha256(self_hosted.canonical_json(objects)),
+        "launch_authorized": True,
+    }

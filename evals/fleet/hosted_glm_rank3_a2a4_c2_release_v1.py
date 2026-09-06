@@ -21,7 +21,10 @@ OUTPUT_PATH = Path("/mnt/sfs/jobs") / JOB_NAME / "RELEASE.json"
 S2_JOB = "chris-glm53-exact100-hosted-s2-c2-bulk-v1"
 S2_JOB_UID = "faf01255-0696-43e6-a47f-67802184986e"
 S2_POD_UID = "72ce8163-fb2d-40ac-92da-da0dd578658d"
-CANARY_ACCEPTED_PATH = Path("/mnt/sfs/jobs/chris-glm53-exact100-hosted-r003-a1-canary-v2/accepted/chris-glm53-ac-bulk-b-r003-a1-g1-33d37078.json")
+CANARY_ACCEPTED_PATH = Path(
+    "/mnt/sfs/jobs/chris-glm53-exact100-hosted-r003-a1-canary-v2/accepted/"
+    "chris-glm53-ac-bulk-b-r003-a1-g1-33d37078.json"
+)
 CANARY_VALIDATION_PATH = Path("/workspace/cyber-post-train/.runtime/canary-validation.json")
 
 
@@ -57,13 +60,15 @@ def _validate_predecessors(target: Any = successor) -> None:
     if any(
         (
             accepted.get("receipt_sha256") != target.CANARY_ACCEPTED_SHA,
-            accepted.get("receipt_sha256") != self_hosted.digest_without(accepted, "receipt_sha256"),
+            accepted.get("receipt_sha256")
+            != self_hosted.digest_without(accepted, "receipt_sha256"),
             accepted.get("selection_rank") != 3,
             accepted.get("attempt") != 1,
             accepted.get("accepted") is not True,
             accepted.get("credited") is not True,
             validation.get("receipt_sha256") != target.CANARY_VALIDATION_SHA,
-            validation.get("receipt_sha256") != self_hosted.digest_without(validation, "receipt_sha256"),
+            validation.get("receipt_sha256")
+            != self_hosted.digest_without(validation, "receipt_sha256"),
             validation.get("status") != "ACCEPTED_VALIDATED",
             validation.get("accepted", {}).get("receipt_sha256") != target.CANARY_ACCEPTED_SHA,
         )
