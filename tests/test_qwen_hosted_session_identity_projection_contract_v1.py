@@ -38,6 +38,8 @@ def test_projection_is_metadata_only_and_fail_closed() -> None:
     assert projection["requires_exactly_one_task_selector"] is True
     assert projection["model_resolution"] == {
         "source": "sessions.model_identity write-once server provenance",
+        "stored_model_id_field_required": True,
+        "stored_model_id_must_match_identity_suffix_when_resolved": True,
         "provider_and_model_required": True,
         "missing_or_invalid_is_ambiguous": True,
         "mutable_provider_catalog_join_forbidden": True,
@@ -53,6 +55,17 @@ def test_projection_is_metadata_only_and_fail_closed() -> None:
         "has_more_probe": "limit_plus_one",
     }
     assert set(projection["fields"]).isdisjoint(projection["forbidden_fields"])
+    assert "model_id" in projection["fields"]
+    assert contract.contract()["related_draft"] == {
+        "pull_request": 30112,
+        "head": "ab7f565a3a35a66f4921f7ae4a8a8c762132574b",
+        "adds_exact_task_version": True,
+        "adds_stored_model_id": True,
+        "adds_write_once_exact_model_identity": True,
+        "includes_archived_sessions": True,
+        "uses_snapshot_keyset_pagination": True,
+        "deployed": False,
+    }
     assert {
         "prompt",
         "transcript",
@@ -80,17 +93,13 @@ def test_projection_is_metadata_only_and_fail_closed() -> None:
         lambda value: value["required_projection"]["pagination"].__setitem__(
             "includes_archived_sessions", False
         ),
-        lambda value: value["deployment_gate"].__setitem__(
-            "merge_or_deploy_authorized", True
-        ),
+        lambda value: value["deployment_gate"].__setitem__("merge_or_deploy_authorized", True),
         lambda value: value.__setitem__("unexpected", True),
     ],
 )
 def test_rehashed_mutations_remain_rejected(mutate) -> None:
     value = copy.deepcopy(contract.contract())
     mutate(value)
-    value["receipt_sha256"] = contract.self_hosted.digest_without(
-        value, "receipt_sha256"
-    )
+    value["receipt_sha256"] = contract.self_hosted.digest_without(value, "receipt_sha256")
     with pytest.raises(ValueError, match="contract drifted"):
         contract.validate(value)

@@ -87,8 +87,9 @@ def contract() -> dict[str, Any]:
         },
         "related_draft": {
             "pull_request": 30112,
-            "head": "44cd3b2e28544c7a089e02b095ff1eb59c5c590e",
+            "head": "ab7f565a3a35a66f4921f7ae4a8a8c762132574b",
             "adds_exact_task_version": True,
+            "adds_stored_model_id": True,
             "adds_write_once_exact_model_identity": True,
             "includes_archived_sessions": True,
             "uses_snapshot_keyset_pagination": True,
@@ -103,6 +104,7 @@ def contract() -> dict[str, Any]:
                 "eval_task_id",
                 "eval_task_version_id",
                 "task_key",
+                "model_id",
                 "model_identity",
                 "model_identity_status",
                 "status",
@@ -124,6 +126,8 @@ def contract() -> dict[str, Any]:
             ],
             "model_resolution": {
                 "source": "sessions.model_identity write-once server provenance",
+                "stored_model_id_field_required": True,
+                "stored_model_id_must_match_identity_suffix_when_resolved": True,
                 "provider_and_model_required": True,
                 "missing_or_invalid_is_ambiguous": True,
                 "mutable_provider_catalog_join_forbidden": True,

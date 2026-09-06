@@ -12,6 +12,7 @@ SESSION_IDENTITY_FIELDS = {
     "eval_task_id",
     "eval_task_version_id",
     "task_key",
+    "model_id",
     "model_identity",
     "model_identity_status",
     "status",
@@ -46,6 +47,14 @@ def classify(
     version_id = row["eval_task_version_id"]
     if not isinstance(version_id, str) or not version_id:
         raise IdentityAmbiguous("session task version is missing")
+    model_id = row["model_id"]
+    if model_id is not None and (
+        not isinstance(model_id, str)
+        or not model_id
+        or model_id.strip() != model_id
+        or "/" in model_id
+    ):
+        raise IdentityAmbiguous("session model id is invalid")
 
     if version_id != task_version_id:
         return "NON_TARGET_VERSION"
@@ -53,8 +62,20 @@ def classify(
     model_status = row["model_identity_status"]
     model = row["model_identity"]
     if model_status == "resolved":
-        if not isinstance(model, str) or not model:
-            raise IdentityAmbiguous("resolved model identity is missing")
+        provider, separator, resolved_model_id = (
+            model.partition("/") if isinstance(model, str) else ("", "", "")
+        )
+        if (
+            not isinstance(model, str)
+            or not model
+            or model.strip() != model
+            or separator != "/"
+            or not provider
+            or not resolved_model_id
+            or "/" in resolved_model_id
+            or resolved_model_id != model_id
+        ):
+            raise IdentityAmbiguous("resolved model identity is invalid")
         return "TARGET_TREATMENT_COLLISION" if model == session_model else "NON_TARGET_MODEL"
     if model_status != "ambiguous" or model is not None:
         raise IdentityAmbiguous("model identity status is invalid")

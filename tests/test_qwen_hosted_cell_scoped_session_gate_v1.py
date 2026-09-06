@@ -9,12 +9,15 @@ from evals.fleet import qwen_hosted_cell_scoped_session_gate_v1 as gate
 TASK_KEY = "task-a"
 VERSION = "version-a"
 MODEL = "provider/model-a"
+
+
 def _row(**changes):
     value = {
         "session_id": "session-1",
         "eval_task_id": "task-id-1",
         "eval_task_version_id": VERSION,
         "task_key": TASK_KEY,
+        "model_id": "model-a",
         "model_identity": MODEL,
         "model_identity_status": "resolved",
         "status": "completed",
@@ -50,7 +53,9 @@ def test_null_model_does_not_blanket_block_a_different_exact_version() -> None:
 
 
 def test_resolved_different_model_is_non_target() -> None:
-    assert _classify(_row(model_identity="provider/model-b")) == "NON_TARGET_MODEL"
+    assert (
+        _classify(_row(model_id="model-b", model_identity="provider/model-b")) == "NON_TARGET_MODEL"
+    )
 
 
 @pytest.mark.parametrize(
@@ -58,7 +63,14 @@ def test_resolved_different_model_is_non_target() -> None:
     [
         _row(model_identity=None, model_identity_status="ambiguous"),
         _row(eval_task_version_id=None),
+        _row(model_id=None),
+        _row(model_id="model-b"),
+        _row(model_id="provider/model-a"),
+        _row(model_identity="/model-a"),
+        _row(model_identity="provider/extra/model-a"),
+        _row(model_identity=" provider/model-a"),
         _row(model_identity="provider/model-b", model_identity_status="ambiguous"),
+        {key: value for key, value in _row().items() if key != "model_id"},
         {**_row(), "run_id": "sk_live_secret123"},
         {**_row(), "score": 1},
     ],
@@ -79,16 +91,12 @@ def test_contract_is_exact_held_and_score_blind() -> None:
         "caller_cell_execution_run_metadata_is_untrusted": True,
         "exact_target_version_without_immutable_model_identity_blocks": True,
     }
-    assert set(value["required_projection_fields"]).isdisjoint(
-        value["forbidden_projection_fields"]
-    )
+    assert set(value["required_projection_fields"]).isdisjoint(value["forbidden_projection_fields"])
 
 
 def test_rehashed_contract_relaxation_is_rejected() -> None:
     value = copy.deepcopy(gate.contract())
     value["launch_authorized"] = True
-    value["receipt_sha256"] = gate.self_hosted.digest_without(
-        value, "receipt_sha256"
-    )
+    value["receipt_sha256"] = gate.self_hosted.digest_without(value, "receipt_sha256")
     with pytest.raises(ValueError, match="contract drifted"):
         gate.validate_contract(value)
