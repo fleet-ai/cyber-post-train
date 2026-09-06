@@ -34,6 +34,7 @@ RESULT_KEYS = {
     "observed_at_epoch",
     "jobs_api_pages",
     "project_list_snapshot_sha256",
+    "project_rows",
     "project_rows_seen",
     "reconciled_rows",
     "kubernetes_snapshot_sha256",
@@ -346,6 +347,7 @@ def build_reconciliation(
         "observed_at_epoch": observed,
         "jobs_api_pages": pages,
         "project_list_snapshot_sha256": crypto.sha256(crypto.canonical_json(normalized)),
+        "project_rows": normalized,
         "project_rows_seen": len(normalized),
         "reconciled_rows": reconciled,
         "kubernetes_snapshot_sha256": crypto.sha256(crypto.canonical_json(projection)),
@@ -391,6 +393,7 @@ def validate_reconciliation(
         or observed > current_time + 5
         or current_time - observed > MAX_AGE_SECONDS
         or value.get("project_list_snapshot_sha256") != project_snapshot_sha256(rows)
+        or value.get("project_rows") != normalized
         or value.get("project_rows_seen") != len(normalized)
         or not isinstance(reconciled, list)
         or any(set(row) != ROW_KEYS for row in reconciled if isinstance(row, dict))
