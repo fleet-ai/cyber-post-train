@@ -1,0 +1,38 @@
+{
+  "api_run_id": null,
+  "create_reconciliation_error_type": null,
+  "deterministic_diagnosis": {
+    "failure_boundary": "live_gate_before_create",
+    "followup_gate_api_mutations": 0,
+    "followup_gate_preview_http_status": 200,
+    "followup_gate_receipt_sha256": "sha256:7a430d4fc789246e2bc3dd86ea11dcb8a211dee22a77bd9653c2d62d6188be03",
+    "followup_gate_status": "PASSED_IMMEDIATELY_BEFORE_CREATE",
+    "original_http_method_path_status_available": false,
+    "root_cause": "terminal_http_failure_evidence_was_underinstrumented",
+    "successor_requirement": "persist_method_path_status_allowlisted_code_response_shape_hash_and_failure_class_hash"
+  },
+  "error_type": "HTTPStatusError",
+  "failure_stage": "live_gate",
+  "fresh_successor_required": true,
+  "jobs_api_release": {
+    "delete": "not_created",
+    "get_after": 404,
+    "get_before": "not_created",
+    "rayjob_workload_raycluster_pod_service_absent": true
+  },
+  "observed_at_utc": "2026-09-06T14:53:13.511888Z",
+  "prompts_traces_flags_or_scores_included": false,
+  "qualifier_stop": {
+    "configmap_created": false,
+    "job_and_configmap_absent": true,
+    "job_created": false
+  },
+  "receipt_sha256": "sha256:b7753b0eff1d19c90c6728fddd81aa86b7baf6765f0b8bff192903a52e919897",
+  "schema_version": "fleet-qwen38-dp6-k-live-gate-http-terminal-v1",
+  "scored_calls": 0,
+  "source_commit": "eedfc2857748af508c138f19cf43f94268502383",
+  "statistical_cells_selected": 0,
+  "status": "TERMINAL_PRECREATE_HTTP_FAILURE_NO_IDENTITY_REUSE",
+  "terminal_receipt_sha256": "sha256:9c1768f44e1609602d1803a28d26b82cab97b8f76209ab4dc4952a45bdf86334",
+  "title": "chris-cyber-evalserve-q38-dp6-k-v1"
+}
