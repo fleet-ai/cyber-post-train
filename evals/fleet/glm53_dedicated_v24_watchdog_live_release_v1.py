@@ -30,6 +30,7 @@ from evals.fleet import glm53_dedicated_v24_watchdog_package_v1 as package
 
 LIVE_STATE_SCHEMA = "fleet-glm53-dedicated-v24-watchdog-live-state-v1"
 RELEASE_SCHEMA = "fleet-glm53-dedicated-v24-watchdog-live-release-v1"
+LAUNCH_SCHEMA = "fleet-glm53-dedicated-v24-watchdog-launch-v1"
 AUTHORIZATION_CONFIGMAP_NAME = package.JOB_NAME + "-live-release"
 MAX_OBSERVATION_AGE_SECONDS = 60
 MAX_READY_AGE_SECONDS = 120
@@ -199,7 +200,7 @@ def _validate_application_ready(value: dict[str, Any]) -> None:
     if (
         set(value) != APPLICATION_READY_KEYS
         or value.get("schema_version")
-        != "fleet-glm53-dedicated-v24-application-ready-v1"
+        != server.READY_SCHEMA
         or value.get("status") != "APPLICATION_HEALTH_HTTP_200"
         or value.get("server_title") != server.TITLE
         or value.get("server_run_dir") != server.RUN_DIR
@@ -1430,7 +1431,7 @@ def launch(
         _release_on_handoff_failure(binding, pod_name)
         raise
     receipt: dict[str, Any] = {
-        "schema_version": "fleet-glm53-dedicated-v24-watchdog-launch-v1",
+        "schema_version": LAUNCH_SCHEMA,
         "status": "WATCHDOG_CREATE_REQUEST_ACCEPTED",
         "server_binding_sha256": crypto.sha256(crypto.canonical_json(binding)),
         "live_release_receipt_sha256": rendered["live_release"]["receipt_sha256"],
