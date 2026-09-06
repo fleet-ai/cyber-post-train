@@ -62,7 +62,7 @@ def _mock(monkeypatch: pytest.MonkeyPatch, *, sessions: int = 0) -> None:
         "legacy_per_run_accepted": 4,
         "engine_accepted_registry": 4,
     })
-    monkeypatch.setattr(observer_v1, "_session_collisions", lambda *_args: (5, 1, sessions))
+    monkeypatch.setattr(observer, "_session_collisions", lambda *_args: (5, 1, sessions))
     monkeypatch.setattr(observer_v1, "_lease_slots_clear", lambda _binding: 2)
 
 
@@ -106,6 +106,62 @@ def test_collect_rejects_authoritative_session_collision(
             pod_uid=POD_UID,
             api_key="not-persisted",
         )
+
+
+@pytest.mark.parametrize(
+    "row",
+    [
+        {
+            "session_id": "one",
+            "model": observer_v1.EXPECTED_SESSION_MODEL,
+            "eval_task_version_id": "11111111-1111-4111-8111-111111111111",
+            "task_version_id": observer_v1.EXPECTED_TASK_VERSION_ID,
+        },
+        {
+            "session_id": "one",
+            "model": observer_v1.EXPECTED_SESSION_MODEL,
+            "eval_task_version_id": "",
+            "task_version_id": observer_v1.EXPECTED_TASK_VERSION_ID,
+        },
+        {
+            "session_id": "one",
+            "model": observer_v1.EXPECTED_SESSION_MODEL,
+            "eval_task_version_id": 7,
+            "task_version_id": observer_v1.EXPECTED_TASK_VERSION_ID,
+        },
+    ],
+)
+def test_session_version_alias_disagreement_or_invalid_value_fails_closed(
+    monkeypatch: pytest.MonkeyPatch, row: dict[str, object]
+) -> None:
+    monkeypatch.setattr(
+        observer_v1,
+        "_fleet_get",
+        lambda *_args, **_kwargs: {"sessions": [row], "has_more": False},
+    )
+    with pytest.raises(observer_v1.GateError, match="fleet_session_identity_ambiguous"):
+        observer._session_collisions(  # noqa: SLF001
+            package.build_binding(ROOT), "unused", set()
+        )
+
+
+def test_equal_session_version_aliases_collide_for_exact_treatment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    row = {
+        "session_id": "one",
+        "model": observer_v1.EXPECTED_SESSION_MODEL,
+        "eval_task_version_id": observer_v1.EXPECTED_TASK_VERSION_ID,
+        "task_version_id": observer_v1.EXPECTED_TASK_VERSION_ID,
+    }
+    monkeypatch.setattr(
+        observer_v1,
+        "_fleet_get",
+        lambda *_args, **_kwargs: {"sessions": [row], "has_more": False},
+    )
+    assert observer._session_collisions(  # noqa: SLF001
+        package.build_binding(ROOT), "unused", set()
+    ) == (1, 1, 1)
 
 
 @pytest.mark.parametrize(

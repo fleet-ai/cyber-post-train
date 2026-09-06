@@ -60,6 +60,74 @@ def _finite_paths_absent(binding: dict[str, Any]) -> dict[str, int]:
     return observed
 
 
+def _session_collisions(
+    binding: dict[str, Any], key: str, expected: set[str]
+) -> tuple[int, int, int]:
+    rows_examined = 0
+    gets = 0
+    collisions = 0
+    offset = 0
+    pages_seen = 0
+    session_ids_seen: set[str] = set()
+    while True:
+        pages_seen += 1
+        if pages_seen > base.MAX_SESSION_PAGES:
+            raise base.GateError("fleet_session_pagination_stalled")
+        page = base._fleet_get(  # noqa: SLF001
+            "/v1/sessions",
+            key,
+            {"task_key": binding["task_key"], "limit": 500, "offset": offset},
+        )
+        gets += 1
+        if "sessions" not in page or "has_more" not in page:
+            raise base.GateError("fleet_session_inventory_invalid")
+        rows = page["sessions"]
+        has_more = page["has_more"]
+        if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
+            raise base.GateError("fleet_session_inventory_invalid")
+        if not isinstance(has_more, bool):
+            raise base.GateError("fleet_session_inventory_invalid")
+        session_ids = [row.get("session_id") for row in rows]
+        if any(not isinstance(value, str) or not value for value in session_ids):
+            raise base.GateError("fleet_session_inventory_invalid")
+        if len(set(session_ids)) != len(session_ids) or session_ids_seen.intersection(session_ids):
+            raise base.GateError("fleet_session_pagination_stalled")
+        session_ids_seen.update(session_ids)
+        rows_examined += len(rows)
+        if rows_examined > base.MAX_SESSION_ROWS:
+            raise base.GateError("fleet_session_pagination_stalled")
+        for row in rows:
+            eval_version = row.get("eval_task_version_id")
+            task_version = row.get("task_version_id")
+            provided_versions = [
+                value for value in (eval_version, task_version) if value is not None
+            ]
+            if any(not isinstance(value, str) or not value for value in provided_versions):
+                raise base.GateError("fleet_session_identity_ambiguous")
+            if len(provided_versions) == 2 and provided_versions[0] != provided_versions[1]:
+                raise base.GateError("fleet_session_identity_ambiguous")
+            projected_version = provided_versions[0] if provided_versions else None
+            row_identities = base._identity_values(row)  # noqa: SLF001
+            planned_identity_collision = bool(row_identities.intersection(expected))
+            model = row.get("model")
+            if not isinstance(model, str) or not model:
+                raise base.GateError("fleet_session_identity_ambiguous")
+            if model != binding["session_model"]:
+                collisions += int(planned_identity_collision)
+                continue
+            if projected_version is None:
+                raise base.GateError("fleet_session_identity_ambiguous")
+            if projected_version == binding["task_version_id"]:
+                collisions += 1
+            else:
+                collisions += int(planned_identity_collision)
+        if has_more is False:
+            return rows_examined, gets, collisions
+        if not rows:
+            raise base.GateError("fleet_session_pagination_stalled")
+        offset += len(rows)
+
+
 def collect(
     binding: dict[str, Any], *, job_uid: str, pod_uid: str, api_key: str
 ) -> dict[str, Any]:
@@ -71,7 +139,7 @@ def collect(
     base._sfs_roots_clear(binding)  # noqa: SLF001
     absent = _finite_paths_absent(binding)
     expected = set(binding["identity_values"])
-    session_rows, session_gets, session_collisions = base._session_collisions(  # noqa: SLF001
+    session_rows, session_gets, session_collisions = _session_collisions(
         binding, api_key, expected
     )
     slots = base._lease_slots_clear(binding)  # noqa: SLF001
