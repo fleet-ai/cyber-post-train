@@ -1,0 +1,78 @@
+{
+  "config_sha256": "sha256:74f07f52ec0476c87398713c38969f1e6dd636bd973cef5c5ea50793d6fab1f6",
+  "held_plan_path": "docs/evidence/qwen38-study/2026-09-06-qwen38-dp8-post-rank99-held-plan-v1.json",
+  "held_plan_receipt_sha256": "sha256:d573fd2b145032be2315e5c11eb8ba31583255b16f920ae0b20461958a30d64d",
+  "identity": {
+    "create_once": true,
+    "jobs_api_preview_route": "POST /v1/runs/preview",
+    "jobs_api_submit_route": "POST /v1/runs",
+    "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-q38-dp8-b-v1",
+    "serving_block": "dedicated-qwen-dp8-b-v1",
+    "title": "chris-cyber-evalserve-q38-dp8-b-v1"
+  },
+  "launch_authorized": false,
+  "privacy": {
+    "credentials_included": false,
+    "prompts_traces_flags_or_scores_included": false,
+    "request_or_response_bodies_included": false
+  },
+  "qualification": {
+    "actual_opencode_version": "1.18.27",
+    "compaction_headroom_tokens": 20000,
+    "context_management": "opencode_1.18.27_native_compaction_autocontinue_v1",
+    "levels": [
+      1,
+      2,
+      4,
+      8
+    ],
+    "max_model_requests": 600,
+    "max_output_tokens": 32768,
+    "schema_version": "fleet-qwen38-dp8-nonscored-qualification-plan-v1",
+    "stop_at_first_failed_level": true,
+    "strict_tool_name_order_and_arguments": true,
+    "task_instance_session_verifier_scoring_calls": 0,
+    "tool_catalog_sha256": "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a",
+    "tools": [
+      "bash",
+      "submit_report"
+    ]
+  },
+  "release_guard": {
+    "all_four_rank99_acceptances_required": true,
+    "fresh_duplicate_and_node_inventory_required": true,
+    "rank99_controller_terminal_success_required": true,
+    "release_must_authorize_one_server_and_zero_scoring": true,
+    "required_schema": "fleet-qwen38-rank99-to-dp8-transition-release-v1",
+    "tp1_gpu_released_required": true,
+    "tp1_jobs_api_delete_204_then_get_404_required": true,
+    "tp1_runtime_objects_absent_required": true
+  },
+  "resources": {
+    "gpus_per_worker": 8,
+    "max_project_gpu_nodes": 2,
+    "max_project_gpus": 16,
+    "preemption_policy": "Never",
+    "priority_class": "fleet-infra-quiet",
+    "privileged": false,
+    "workers": 1
+  },
+  "runtime": {
+    "context_length": 262144,
+    "data_parallel_size": 8,
+    "image": "ghcr.io/fleet-ai/cyber-post-train-glm53-runtime@sha256:ec93ba50613fd13fb4c0b0a9105767ab18209a1e0108dab0923aad694c0206ec",
+    "jobs_api_payload_sha256": "sha256:a5b7236101c7c21e000cc58464da4b669e325f9db64da7d61d5eb18557a04caf",
+    "load_balance_method": "total_tokens",
+    "model_path": "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2",
+    "model_repository": "Qwen/Qwen3.8-27B",
+    "model_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "reasoning_parser": "qwen3",
+    "served_id": "qwen3.8-27b",
+    "server_arguments_sha256": "sha256:eb9bad72213ed782c720a52f2bcf7dd04721fd1f69ef3adf1d65d00ca47110d1",
+    "tensor_parallel_size": 1,
+    "tool_call_parser": "qwen3_coder"
+  },
+  "schema_version": "fleet-qwen38-dedicated-dp8-post-rank99-launch-held-v1",
+  "scoring_authorized": false,
+  "status": "HELD_NO_LAUNCH"
+}

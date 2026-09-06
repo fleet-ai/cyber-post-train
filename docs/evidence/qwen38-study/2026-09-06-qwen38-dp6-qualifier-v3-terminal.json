@@ -1,0 +1,51 @@
+{
+  "failure_classification": {
+    "deterministic_fix": "run staged validator with pinned httpx and pyyaml ephemeral dependencies",
+    "error_type": "ModuleNotFoundError",
+    "evaluator_log_bytes": 403,
+    "evaluator_log_sha256": "sha256:11f0c1a6637ec7339277020fb7ef7813dbd081ead0894970582fea656b3f616d",
+    "exact_pattern_match": true,
+    "missing_module": "httpx",
+    "raw_log_persisted": false,
+    "raw_log_read_by_operator": false,
+    "step": "staged_image_validator_dependency_import"
+  },
+  "observed_at_utc": "2026-09-06T08:29:00Z",
+  "privacy": {
+    "credentials_included": false,
+    "prompts_traces_flags_or_scores_included": false,
+    "raw_log_content_included": false
+  },
+  "qualifier": {
+    "dind_sidecar_exit_code": 0,
+    "docker_cli_init_exit_code": 0,
+    "evaluator_exit_code": 1,
+    "evaluator_restarts": 0,
+    "job_name": "chris-cyber-q38-dp6-c-qualifier-v3",
+    "job_terminal_reason": "BackoffLimitExceeded",
+    "job_uid": "9e5f7aee-303b-4bf8-9673-a9647b48598c",
+    "output_root": "/mnt/sfs/jobs/chris-cyber-q38-dp6-c-qualifier-v3",
+    "output_root_exists": false,
+    "pod_name": "chris-cyber-q38-dp6-c-qualifier-v3-qzzsb",
+    "pod_uid": "d703efa8-dd67-4595-bd5b-d5dda4f604b5",
+    "qualification_waves_started": false,
+    "result_receipt_exists": false,
+    "task_instance_session_verifier_scoring_calls": 0
+  },
+  "receipt_sha256": "sha256:680215a9301fc18e5d90c75a88d2d41fb2d78167fd206a5ba4c9c82c70e316b8",
+  "retry_policy": {
+    "reuse_v3_identity": false,
+    "scoring_authorized": false,
+    "successor_requires_new_create_once_identity": true
+  },
+  "schema_version": "fleet-qwen38-dp6-qualifier-v3-terminal-v1",
+  "server_release": {
+    "api_run_id": "ft-run-53e93adf",
+    "drain_requested_after_failure": true,
+    "gpu_quota_released": true,
+    "head_pod_uid": "00a4853a-18cc-4aaf-b44b-481f51baa7a6",
+    "rayjob_uid": "f7ee7ea9-30e2-4cb9-8290-17acc655bd97",
+    "terminal_status": "SUCCEEDED"
+  },
+  "status": "INFRASTRUCTURE_FAILED_BEFORE_QUALIFICATION"
+}

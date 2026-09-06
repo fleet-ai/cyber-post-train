@@ -1,0 +1,35 @@
+{
+  "held_config_path": "evals/fleet/configs/qwen38-dedicated-dp8-post-rank99-v1-held.json",
+  "held_config_sha256": "sha256:74f07f52ec0476c87398713c38969f1e6dd636bd973cef5c5ea50793d6fab1f6",
+  "observed_at": "2026-09-06T04:45:16Z",
+  "privacy": {
+    "credentials_included": false,
+    "prompts_traces_flags_or_scores_included": false,
+    "response_body_included": false
+  },
+  "receipt_sha256": "sha256:36137f6f1c19efca4eba3731df5ed8389526a187b1d33122a538a77399d3dab5",
+  "rendered": {
+    "command_sha256": "sha256:e0fda171b57c418bd499b9442b7285a6cdf629dd84523b28f75c7bf16ec2c8bd",
+    "gpus": 8,
+    "image": "ghcr.io/fleet-ai/cyber-post-train-glm53-runtime@sha256:ec93ba50613fd13fb4c0b0a9105767ab18209a1e0108dab0923aad694c0206ec",
+    "image_pull_secrets": [
+      "ghcr-pull"
+    ],
+    "preferred_topology": "topology.nebius.com/tier-1",
+    "priority_class": "fleet-infra-quiet",
+    "privileged": false,
+    "privileged_field_present": false,
+    "queue_name": "training-lq",
+    "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-q38-dp8-b-v1",
+    "suspended": true
+  },
+  "request_sha256": "sha256:a5b7236101c7c21e000cc58464da4b669e325f9db64da7d61d5eb18557a04caf",
+  "route": "POST /v1/runs/preview",
+  "schema_version": "fleet-qwen38-dp8-post-rank99-authenticated-preview-v1",
+  "side_effects": {
+    "api_mutations": 0,
+    "launch_authorized": false,
+    "scoring_authorized": false
+  },
+  "status": "PASSED_NON_MUTATING"
+}

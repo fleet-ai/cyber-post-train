@@ -1,0 +1,104 @@
+{
+  "schema_version": "fleet-qwen38-dedicated-dp8-post-rank99-plan-v1",
+  "status": "HELD_NO_LAUNCH",
+  "launch_authorized": false,
+  "scoring_authorized": false,
+  "purpose": "post_rank99_qwen_data_parallel_throughput_qualification",
+  "rank99_transition_gate": {
+    "current_serving_block": "dedicated-qwen-tp1-j-v1",
+    "controller_job": "chris-cyber-q38-r099-g23-package-reservation-v1",
+    "all_four_rank99_cells_formally_accepted_required": true,
+    "controller_terminal_success_required": true,
+    "tp1_jobs_api_delete_204_then_get_404_required": true,
+    "tp1_rayjob_workload_pod_service_absence_required": true,
+    "tp1_gpu_release_required": true,
+    "no_overlap_with_dp8_server": true
+  },
+  "node_budget_gate": {
+    "max_project_gpu_nodes": 2,
+    "max_project_gpus": 16,
+    "fresh_jobs_api_and_kubernetes_inventory_required": true,
+    "maximum_other_gpu_nodes_before_create": 1,
+    "maximum_other_gpus_before_create": 8,
+    "new_server_gpu_nodes": 1,
+    "new_server_gpus": 8
+  },
+  "server": {
+    "title": "chris-cyber-evalserve-q38-dp8-b-v1",
+    "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-q38-dp8-b-v1",
+    "serving_block": "dedicated-qwen-dp8-b-v1",
+    "create_once": true,
+    "api_route": "POST /v1/runs",
+    "image": "ghcr.io/fleet-ai/cyber-post-train-glm53-runtime@sha256:ec93ba50613fd13fb4c0b0a9105767ab18209a1e0108dab0923aad694c0206ec",
+    "model_repository": "Qwen/Qwen3.8-27B",
+    "model_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "served_id": "qwen3.8-27b",
+    "context_length": 262144,
+    "tensor_parallel_size": 1,
+    "data_parallel_size": 8,
+    "load_balance_method": "total_tokens",
+    "server_arguments_sha256": "sha256:eb9bad72213ed782c720a52f2bcf7dd04721fd1f69ef3adf1d65d00ca47110d1",
+    "workers": 1,
+    "gpus_per_worker": 8,
+    "priority_class": "fleet-infra-quiet",
+    "preemption_policy": "Never",
+    "fresh_immutable_binding_receipt_required": true
+  },
+  "non_scored_qualification": {
+    "actual_opencode_1_18_27_parity_required": true,
+    "exact_model_revision_and_context_required": true,
+    "exact_bash_then_submit_report_tool_contract_required": true,
+    "task_instance_session_verifier_scoring_calls": 0,
+    "concurrency_ladder": [
+      1,
+      2,
+      4,
+      8
+    ],
+    "strict_tool_name_and_argument_validation": true,
+    "zero_http_model_or_tool_protocol_errors_required": true,
+    "persist_latency_error_and_throughput_receipt": true,
+    "stop_at_first_failed_level": true,
+    "maximum_scored_concurrency_after_pass": 8
+  },
+  "scored_canary_gate": {
+    "required_after_non_scored_qualification": true,
+    "exactly_one_globally_unstarted_cell": true,
+    "fresh_execution_generation_and_claim_namespace": true,
+    "canonical_claim_before_model_call": true,
+    "fresh_session_accepted_active_blocked_collision_scan": true,
+    "separate_serving_block": "dedicated-qwen-dp8-b-v1",
+    "formal_acceptance_required_before_bulk": true,
+    "stop_on_failure": true
+  },
+  "bulk_gate": {
+    "launch_authorized": false,
+    "whole_task_boundaries_only": true,
+    "all_four_attempt_claims_reserved_atomically_before_model": true,
+    "rollback_all_new_claims_if_partial_reservation_fails_before_model": true,
+    "same_serving_block_for_all_four_attempts": true,
+    "hosted_and_dedicated_results_remain_explicit_blocks": true,
+    "maximum_parallel_rollouts": 8,
+    "recommended_parallel_shape_after_canary": "two_tasks_x_four_attempts",
+    "fresh_launch_time_global_reconciliation_required": true
+  },
+  "lifecycle": {
+    "model_loading_counts_as_productive": true,
+    "post_ready_idle_seconds": 600,
+    "real_traffic_only_refreshes_idle_deadline": true,
+    "release_immediately_on_failure_or_idle": true
+  },
+  "throughput_estimate": {
+    "tp1_current_parallel_model_streams": 1,
+    "dp8_theoretical_parallel_model_streams": 8,
+    "expected_concurrency_multiplier_ceiling": 8,
+    "per_rollout_latency_speedup_claimed": false,
+    "accepted_rollouts_per_minute_requires_measurement": true,
+    "qualified_concurrency_is_highest_passing_ladder_level": true
+  },
+  "privacy": {
+    "prompts_traces_flags_or_scores_included": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:d573fd2b145032be2315e5c11eb8ba31583255b16f920ae0b20461958a30d64d"
+}

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -13,8 +14,7 @@ from evals.fleet import self_hosted
 
 ROOT = Path(__file__).resolve().parents[1]
 LAPTOP_QWEN_RECEIPT = ROOT / (
-    "docs/evidence/qwen38-study/"
-    "2026-09-05-qwen38-laptop-hosted-actual-opencode-parity-v2.json"
+    "docs/evidence/qwen38-study/2026-09-05-qwen38-laptop-hosted-actual-opencode-parity-v2.json"
 )
 
 
@@ -137,6 +137,50 @@ def test_rendered_settings_preserve_exact_runtime_and_only_repoint_transport() -
     assert all(value is False for value in settings["tools"].values())
 
 
+def test_cluster_dind_argv_adds_explicit_host_gateway_without_changing_default() -> None:
+    home = Path("/workspace/tmp/parity/home")
+    workspace = Path("/workspace/tmp/parity/workspace")
+    default = parity._docker_run_argv(  # noqa: SLF001 - exact execution boundary
+        home, workspace, "qwen3.8-27b", "benign", cluster_dind=False
+    )
+    cluster = parity._docker_run_argv(  # noqa: SLF001 - exact execution boundary
+        home, workspace, "qwen3.8-27b", "benign", cluster_dind=True
+    )
+    assert "host.docker.internal:host-gateway" not in default
+    assert cluster[cluster.index("--add-host") + 1] == "host.docker.internal:host-gateway"
+    stripped = cluster.copy()
+    index = stripped.index("--add-host")
+    del stripped[index : index + 2]
+    assert stripped == default
+    preflight = parity._cluster_dind_connectivity_argv(18080, 18081)  # noqa: SLF001
+    assert preflight[preflight.index("--add-host") + 1] == ("host.docker.internal:host-gateway")
+    assert preflight[-2:] == ["18080", "18081"]
+    assert "host.docker.internal" in preflight[-3]
+
+
+def test_cluster_dind_mounts_are_prepared_for_uid1000_and_probed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    chowned: list[Path] = []
+    monkeypatch.setattr(parity.os, "geteuid", lambda: 0)
+    monkeypatch.setattr(parity.os, "chown", lambda path, _uid, _gid: chowned.append(Path(path)))
+    monkeypatch.setattr(parity, "_owned_by_agent", lambda _path: True)
+    home, workspace = parity._prepare_agent_mounts(  # noqa: SLF001
+        tmp_path, {"permission": {"*": "deny"}}
+    )
+    assert home in chowned
+    assert workspace in chowned
+    assert home / ".config" / "opencode" / "opencode.json" in chowned
+    assert home / ".local" / "share" / "opencode" in chowned
+    argv = parity._docker_mount_writeability_argv(home, workspace)  # noqa: SLF001
+    assert argv[:5] == ["docker", "run", "--rm", "--platform", "linux/amd64"]
+    assert argv[argv.index("-v") + 1] == f"{home}:/home/node"
+    assert "test -w /home/node" in argv[-1]
+    assert "test -w /workspace" in argv[-1]
+    assert "$(id -u)\" = 1000" in argv[-1]
+    assert os.path.exists(home / ".local" / "share" / "opencode")
+
+
 def test_local_image_inspection_requires_exact_immutable_amd64_image(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -167,6 +211,26 @@ def test_local_image_inspection_requires_exact_immutable_amd64_image(
         parity.inspect_local_image()
 
 
+def test_local_image_inspection_can_bind_classic_docker_config_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime_id = "sha256:" + "4" * 64
+    value = {
+        "Id": runtime_id,
+        "Os": "linux",
+        "Architecture": "amd64",
+        "Config": {"User": "node", "WorkingDir": "/workspace"},
+    }
+    monkeypatch.setattr(
+        parity.subprocess,
+        "run",
+        lambda *_args, **_kwargs: type(
+            "Completed", (), {"returncode": 0, "stdout": json.dumps(value)}
+        )(),
+    )
+    assert parity.inspect_local_image(runtime_id)["image_id"] == runtime_id
+
+
 def test_committed_laptop_qwen_parity_receipt_is_digest_valid_and_non_scored() -> None:
     receipt = json.loads(LAPTOP_QWEN_RECEIPT.read_text())
     assert receipt["schema_version"] == parity.SCHEMA
@@ -187,6 +251,4 @@ def test_committed_laptop_qwen_parity_receipt_is_digest_valid_and_non_scored() -
         "user": "node",
         "working_dir": "/workspace",
     }
-    assert receipt["receipt_sha256"] == self_hosted.digest_without(
-        receipt, "receipt_sha256"
-    )
+    assert receipt["receipt_sha256"] == self_hosted.digest_without(receipt, "receipt_sha256")
