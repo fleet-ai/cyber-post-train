@@ -154,8 +154,10 @@ def observer_status(
         "REAL_REQUEST_OR_GPU_ACTIVITY_OBSERVED",
         "FAILED",
     }
-    if status not in allowed or not phase or (status == "FAILED") != (
-        failure_code == "observer_failed"
+    if (
+        status not in allowed
+        or not phase
+        or (status == "FAILED") != (failure_code == "observer_failed")
     ):
         raise ValueError("activity observer status drifted")
     value: dict[str, Any] = {

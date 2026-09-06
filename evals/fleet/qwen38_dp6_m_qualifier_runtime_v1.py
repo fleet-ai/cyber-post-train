@@ -419,21 +419,25 @@ def validate_runtime_release(
     package_path: Path,
 ) -> None:
     package_digest = "sha256:" + hashlib.sha256(package_path.read_bytes()).hexdigest()
-    if set(value) != RUNTIME_RELEASE_KEYS or value.get("receipt_sha256") != _digest(value) or (
-        value.get("schema_version") != QUALIFIER_RELEASE_SCHEMA
-        or value.get("status") != "RELEASED_FOR_ONE_NON_SCORED_QUALIFIER"
-        or value.get("launch_authorized") is not True
-        or value.get("scoring_authorized") is not False
-        or value.get("job_name") != early.QUALIFIER_JOB
-        or value.get("configmap_name") != early.QUALIFIER_JOB
-        or value.get("output_root") != early.QUALIFIER_OUTPUT_ROOT
-        or value.get("serving_block") != early.SERVING_BLOCK
-        or value.get("submission_receipt_sha256") != submission.get("receipt_sha256")
-        or value.get("server_binding_receipt_sha256") != binding.get("receipt_sha256")
-        or value.get("package_sha256") != package_digest
-        or value.get("harness_runtime_image") != staged_image.identity()
-        or value.get("task_instance_session_verifier_scoring_calls") != 0
-        or value.get("prompts_traces_flags_or_scores_included") is not False
+    if (
+        set(value) != RUNTIME_RELEASE_KEYS
+        or value.get("receipt_sha256") != _digest(value)
+        or (
+            value.get("schema_version") != QUALIFIER_RELEASE_SCHEMA
+            or value.get("status") != "RELEASED_FOR_ONE_NON_SCORED_QUALIFIER"
+            or value.get("launch_authorized") is not True
+            or value.get("scoring_authorized") is not False
+            or value.get("job_name") != early.QUALIFIER_JOB
+            or value.get("configmap_name") != early.QUALIFIER_JOB
+            or value.get("output_root") != early.QUALIFIER_OUTPUT_ROOT
+            or value.get("serving_block") != early.SERVING_BLOCK
+            or value.get("submission_receipt_sha256") != submission.get("receipt_sha256")
+            or value.get("server_binding_receipt_sha256") != binding.get("receipt_sha256")
+            or value.get("package_sha256") != package_digest
+            or value.get("harness_runtime_image") != staged_image.identity()
+            or value.get("task_instance_session_verifier_scoring_calls") != 0
+            or value.get("prompts_traces_flags_or_scores_included") is not False
+        )
     ):
         raise ValueError("mounted early DP6 qualifier release drifted")
 
@@ -529,30 +533,34 @@ def _event(path: Path, binding_receipt: Mapping[str, Any]) -> dict[str, Any]:
         type(item) is int and item > 0 for item in utilization
     ):
         expected_reasons.append("gpu_utilization_positive")
-    if set(value) != EVENT_KEYS or value.get("receipt_sha256") != _digest(value) or (
-        value.get("schema_version") != EVENT_SCHEMA
-        or value.get("status") != "REAL_REQUEST_OR_GPU_ACTIVITY_OBSERVED"
-        or value.get("server_run_dir") != early.RUN_DIR
-        or value.get("api_run_id") != binding_receipt.get("api_run_id")
-        or value.get("pod_name") != binding_receipt.get("head_pod_name")
-        or value.get("pod_uid") != binding_receipt.get("head_pod_uid")
-        or value.get("service_uid") != binding_receipt.get("service_uid")
-        or value.get("server_binding_receipt_sha256") != binding_receipt.get("receipt_sha256")
-        or type(value.get("observed_at_epoch")) is not int
-        or type(before) is not int
-        or type(after) is not int
-        or type(delta) is not int
-        or before < 0
-        or after < before
-        or delta != after - before
-        or type(running) is not int
-        or running < 0
-        or type(queued) is not int
-        or queued < 0
-        or value.get("activity_reasons") != expected_reasons
-        or not expected_reasons
-        or value.get("per_rank_request_attribution_claimed") is not False
-        or value.get("prompts_traces_flags_or_scores_included") is not False
+    if (
+        set(value) != EVENT_KEYS
+        or value.get("receipt_sha256") != _digest(value)
+        or (
+            value.get("schema_version") != EVENT_SCHEMA
+            or value.get("status") != "REAL_REQUEST_OR_GPU_ACTIVITY_OBSERVED"
+            or value.get("server_run_dir") != early.RUN_DIR
+            or value.get("api_run_id") != binding_receipt.get("api_run_id")
+            or value.get("pod_name") != binding_receipt.get("head_pod_name")
+            or value.get("pod_uid") != binding_receipt.get("head_pod_uid")
+            or value.get("service_uid") != binding_receipt.get("service_uid")
+            or value.get("server_binding_receipt_sha256") != binding_receipt.get("receipt_sha256")
+            or type(value.get("observed_at_epoch")) is not int
+            or type(before) is not int
+            or type(after) is not int
+            or type(delta) is not int
+            or before < 0
+            or after < before
+            or delta != after - before
+            or type(running) is not int
+            or running < 0
+            or type(queued) is not int
+            or queued < 0
+            or value.get("activity_reasons") != expected_reasons
+            or not expected_reasons
+            or value.get("per_rank_request_attribution_claimed") is not False
+            or value.get("prompts_traces_flags_or_scores_included") is not False
+        )
     ):
         raise ValueError("server-local traffic event drifted")
     for field in (
@@ -806,9 +814,7 @@ def observe_wave(
     if not events:
         raise RuntimeError("server-local observer produced no real-traffic event")
     first, last = events[0], events[-1]
-    request_delta = (
-        counter_after["global_request_total"] - counter_before["global_request_total"]
-    )
+    request_delta = counter_after["global_request_total"] - counter_before["global_request_total"]
     gpu_peaks = [
         max(event["gpu_utilization_percent_by_device"][rank] for event in events)
         for rank in range(RANKS)
@@ -886,10 +892,9 @@ def validate_distribution_receipt(
         try:
             _validate_counter_snapshot(counter_before, "BEFORE_WAVE", level, plan)
             _validate_counter_snapshot(counter_after, "AFTER_WAVE", level, plan)
-            snapshots_valid = (
-                before == counter_before.get("global_request_total")
-                and after == counter_after.get("global_request_total")
-            )
+            snapshots_valid = before == counter_before.get(
+                "global_request_total"
+            ) and after == counter_after.get("global_request_total")
         except (KeyError, TypeError, ValueError):
             snapshots_valid = False
     if value.get("receipt_sha256") != _digest(value) or (
@@ -1127,9 +1132,7 @@ def _project_stream(value: Any, plan: Mapping[str, Any]) -> dict[str, Any]:
     return json.loads(json.dumps(value, sort_keys=True, separators=(",", ":")))
 
 
-def _validate_baseline_evidence(
-    value: Mapping[str, Any], binding: Mapping[str, Any]
-) -> None:
+def _validate_baseline_evidence(value: Mapping[str, Any], binding: Mapping[str, Any]) -> None:
     counter = value.get(metric_observer.STATE_KEY)
     if (
         set(value) != BASELINE_KEYS
@@ -1153,9 +1156,7 @@ def _validate_baseline_evidence(
         raise ValueError("baseline receipt contains an unreviewed field")
 
 
-def _project_baseline_evidence(
-    value: Any, binding: Mapping[str, Any]
-) -> dict[str, Any]:
+def _project_baseline_evidence(value: Any, binding: Mapping[str, Any]) -> dict[str, Any]:
     if not isinstance(value, dict):
         return {}
     try:
@@ -1212,9 +1213,7 @@ def _validate_optional_level_evidence(row: Mapping[str, Any], plan: Mapping[str,
     if distribution:
         if not isinstance(distribution, dict):
             raise ValueError("distribution receipt contains an unreviewed field")
-        validate_distribution_receipt(
-            distribution, plan, row["concurrency"], streams
-        )
+        validate_distribution_receipt(distribution, plan, row["concurrency"], streams)
 
     resource = row.get("controller_resource_receipt")
     if resource:
@@ -1225,12 +1224,16 @@ def _validate_optional_level_evidence(row: Mapping[str, Any], plan: Mapping[str,
 
 def validate_result(value: Mapping[str, Any], plan: Mapping[str, Any], root: Path) -> int:
     validate_plan(plan, root)
-    if set(value) != RESULT_KEYS or value.get("receipt_sha256") != _digest(value) or (
-        value.get("schema_version") != RESULT_SCHEMA
-        or value.get("plan_receipt_sha256") != plan.get("receipt_sha256")
-        or value.get("qualification_plan") != dict(plan)
-        or value.get("scored_calls") != 0
-        or value.get("prompts_traces_flags_or_scores_included") is not False
+    if (
+        set(value) != RESULT_KEYS
+        or value.get("receipt_sha256") != _digest(value)
+        or (
+            value.get("schema_version") != RESULT_SCHEMA
+            or value.get("plan_receipt_sha256") != plan.get("receipt_sha256")
+            or value.get("qualification_plan") != dict(plan)
+            or value.get("scored_calls") != 0
+            or value.get("prompts_traces_flags_or_scores_included") is not False
+        )
     ):
         raise ValueError("early DP6 qualification result drifted")
     levels = value.get("levels")
@@ -1263,8 +1266,7 @@ def validate_result(value: Mapping[str, Any], plan: Mapping[str, Any], root: Pat
                 MIN_LATENCY_HEADROOM_MILLISECONDS,
                 int(row["timeout_budget_milliseconds"] * MIN_LATENCY_HEADROOM_FRACTION),
             )
-            or row.get("minimum_latency_headroom_fraction")
-            != MIN_LATENCY_HEADROOM_FRACTION
+            or row.get("minimum_latency_headroom_fraction") != MIN_LATENCY_HEADROOM_FRACTION
             or row.get("error_count") != (0 if row.get("status") == "PASSED" else 1)
             or row.get("tool_order_exact") is not (row.get("status") == "PASSED")
             or row.get("tool_arguments_exact") is not (row.get("status") == "PASSED")
@@ -1272,8 +1274,7 @@ def validate_result(value: Mapping[str, Any], plan: Mapping[str, Any], root: Pat
             raise ValueError("early DP6 qualification ladder order drifted")
         _validate_optional_level_evidence(row, plan)
         if row.get("status") == "FAILED" and (
-            row.get("failure_stage")
-            not in {"pre_request_resource_sample", "qualification_wave"}
+            row.get("failure_stage") not in {"pre_request_resource_sample", "qualification_wave"}
             or row.get("failure_code") not in FAILURE_CODES
         ):
             raise ValueError("early DP6 qualification failure is not sanitized")
