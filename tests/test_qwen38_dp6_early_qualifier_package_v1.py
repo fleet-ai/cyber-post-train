@@ -8,10 +8,10 @@ from pathlib import Path
 
 import pytest
 
-from evals.fleet import qwen38_dp6_early_qualification_v1 as early
-from evals.fleet import qwen38_dp6_early_qualifier_package_v1 as package
-from evals.fleet import qwen38_dp6_early_qualifier_runtime_v1 as runtime
-from evals.fleet import qwen38_dp6_metric_observer_v1 as observer
+from evals.fleet import qwen38_dp6_e_qualifier_package_v1 as package
+from evals.fleet import qwen38_dp6_e_qualifier_runtime_v1 as runtime
+from evals.fleet import qwen38_dp6_e_scorefree_v1 as early
+from evals.fleet import qwen38_dp6_metric_observer_v4 as observer
 from evals.fleet import self_hosted
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -35,18 +35,17 @@ def _inputs() -> tuple[dict[str, object], dict[str, object], dict[str, object]]:
             "server_release_receipt_sha256": server_release_sha256,
             "config_sha256": config["config_sha256"],
             "request_sha256": request_sha256,
-            "jobs_api_title_matches": 0,
-            "jobs_api_run_dir_matches": 0,
-            "kubernetes_identity_matches": 0,
-            "sfs_run_dir_exists": False,
+            "active_project_serving_runs": 0,
+            "target_identity_matches": {"jobs_api": 0, "kubernetes": 0, "sfs": 0},
+            "sfs_observation": {"run_dir_exists": False},
             "api_mutations": 0,
-            "scoring_authorized": False,
+            "scored_calls": 0,
         }
     )
     submission = _receipt(
         {
             "schema_version": runtime.SUBMISSION_SCHEMA,
-            "status": "SUBMITTED_NON_SCORED_SERVER",
+            "status": "SUBMITTED_SCORE_FREE_DP6_E_SERVER",
             "api_run_id": "ft-run-example",
             "title": early.TITLE,
             "run_dir": early.RUN_DIR,
@@ -126,7 +125,8 @@ def test_archive_is_deterministic_and_contains_exact_runtime_closure(tmp_path: P
     assert str(early.OBSERVER_V1_PATH) in names
     assert str(early.OBSERVER_V2_PATH) in names
     assert str(early.OBSERVER_V3_PATH) in names
-    assert str(early.LIFECYCLE_V2_PATH) in names
+    assert str(early.OBSERVER_V4_PATH) in names
+    assert str(early.LIFECYCLE_PATH) in names
     assert "evals/fleet/opencode_actual_harness_parity_v1.py" in names
     assert "evals/fleet/configs/blackbox-ctf-tool-catalog-v1.json" in names
     assert "evals/fleet/opencode_staged_image_v1.py" in names
@@ -139,7 +139,7 @@ def test_archive_is_deterministic_and_contains_exact_runtime_closure(tmp_path: P
             "-c",
             (
                 "from pathlib import Path; "
-                "from evals.fleet import qwen38_dp6_early_qualification_v1 as e; "
+                "from evals.fleet import qwen38_dp6_e_scorefree_v1 as e; "
                 "e.load_all(Path('.')); print('ok')"
             ),
         ],
@@ -169,7 +169,7 @@ def test_renderer_is_create_once_score_free_and_needs_no_kubectl() -> None:
     assert package.QUALIFIER_PRIORITY_VALUE == 100
     command = pod["containers"][0]["args"][0]
     assert "kubectl" not in command
-    assert "qwen38_dp6_early_qualifier_runtime_v1" in command
+    assert "qwen38_dp6_e_qualifier_runtime_v1" in command
     assert "FLEET_API_KEY" not in json.dumps(job)
     cli, dind = pod["initContainers"]
     assert cli["name"] == "docker-cli"
@@ -212,8 +212,7 @@ def test_renderer_is_create_once_score_free_and_needs_no_kubectl() -> None:
     assert "docker build" not in command
     assert "opencode_staged_image_v1" in command
     assert (
-        "uv run --with httpx --with pyyaml python -m "
-        "evals.fleet.opencode_staged_image_v1"
+        "uv run --with httpx --with pyyaml python -m evals.fleet.opencode_staged_image_v1"
     ) in command
     assert "gzip -dc" in command
     assert package.staged_image.ARCHIVE_SHA256.removeprefix("sha256:") not in command
@@ -223,9 +222,9 @@ def test_renderer_is_create_once_score_free_and_needs_no_kubectl() -> None:
 def test_fresh_qualifier_identity_and_failure_drain_are_create_once(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    assert package.JOB_NAME == "chris-cyber-q38-dp6-d-qualifier-v6"
+    assert package.JOB_NAME == "chris-cyber-q38-dp6-e-qualifier-v7"
     assert package.CONFIGMAP_NAME == package.JOB_NAME
-    assert package.OUTPUT_ROOT.endswith("/chris-cyber-q38-dp6-d-qualifier-v6")
+    assert package.OUTPUT_ROOT.endswith("/chris-cyber-q38-dp6-e-qualifier-v7")
     drain = tmp_path / "lifecycle" / "DRAIN"
     drain.parent.mkdir()
     monkeypatch.setattr(runtime, "DRAIN_PATH", drain)
@@ -237,7 +236,7 @@ def test_fresh_qualifier_identity_and_failure_drain_are_create_once(
 
 
 def test_lifecycle_releases_pre_ready_idle_and_bound_observer_failure() -> None:
-    source = (ROOT / early.LIFECYCLE_V2_PATH).read_text()
+    source = (ROOT / early.LIFECYCLE_PATH).read_text()
     assert "PRE_READY_TIMEOUT_SECONDS=600" in source
     assert "now - load_started_at >= PRE_READY_TIMEOUT_SECONDS" in source
     assert "fleet-qwen38-dedicated-dp6-idle-release-v1" in source
@@ -274,7 +273,7 @@ def test_runtime_revalidates_mounted_release_and_package(tmp_path: Path) -> None
 
 
 def test_runtime_uses_cluster_dind_network_mode() -> None:
-    source = (ROOT / "evals/fleet/qwen38_dp6_early_qualifier_runtime_v1.py").read_text()
+    source = (ROOT / "evals/fleet/qwen38_dp6_e_qualifier_runtime_v1.py").read_text()
     assert "cluster_dind=True" in source
     parity_source = (ROOT / "evals/fleet/opencode_actual_harness_parity_v1.py").read_text()
     assert 'bind_host = "0.0.0.0" if cluster_dind else "127.0.0.1"' in parity_source
@@ -293,10 +292,10 @@ def test_server_local_events_are_uid_bound_and_aggregated(
     samples.write_text("1 0 0 0\n")
     monkeypatch.setattr(runtime, "DIND_RESOURCE_SAMPLES_PATH", samples)
     state = tmp_path / "state.json"
-    state.write_text(json.dumps({"request_counters_by_rank": [0] * 6}))
+    state.write_text(json.dumps({observer.STATE_KEY: 0}))
     baseline_path = tmp_path / "baseline.json"
     baseline = observer.baseline_observation(
-        [0] * 6,
+        0,
         server_run_dir=early.RUN_DIR,
         pod_name=str(binding["head_pod_name"]),
         pod_uid=str(binding["head_pod_uid"]),
@@ -316,9 +315,9 @@ def test_server_local_events_are_uid_bound_and_aggregated(
     }
 
     def execute() -> list[dict[str, object]]:
-        event = observer.observation(
-            [0] * 6,
-            [1] * 6,
+        event = observer.traffic_observation(
+            0,
+            6,
             memory_mib=[250_000] * 6,
             utilization_percent=[100] * 6,
             server_run_dir=early.RUN_DIR,
@@ -338,8 +337,9 @@ def test_server_local_events_are_uid_bound_and_aggregated(
         6, execute, plan, binding
     )
     assert len(rows) == 6
-    assert distribution["request_deltas_by_rank"] == [1] * 6
-    assert distribution["gpu_peak_utilization_percent_by_rank"] == [100] * 6
+    assert distribution["global_request_delta"] == 6
+    assert distribution["per_rank_request_attribution_claimed"] is False
+    assert distribution["gpu_peak_utilization_percent_by_device"] == [100] * 6
     assert distribution["gpu_device_count"] == 6
     assert distribution["server_binding"] == reduced
     assert distribution["prompts_traces_flags_or_scores_included"] is False
@@ -369,7 +369,7 @@ def test_result_uses_observed_requests_and_records_latency_headroom() -> None:
     reduced = runtime.validate_binding(binding, submission, ROOT)
     plan = runtime.qualification_plan(reduced, str(binding["service_origin"]), ROOT)
     baseline = observer.baseline_observation(
-        [4] * 6,
+        4,
         server_run_dir=early.RUN_DIR,
         pod_name=str(binding["head_pod_name"]),
         pod_uid=str(binding["head_pod_uid"]),
@@ -388,7 +388,7 @@ def test_result_uses_observed_requests_and_records_latency_headroom() -> None:
         }
     )
     streams = [{"execution": {"model_requests": 4}}]
-    distribution = {"request_deltas_by_rank": [4] + [0] * 5}
+    distribution = {"global_request_delta": 4}
     level = {
         "concurrency": 1,
         "status": "PASSED",
@@ -400,11 +400,7 @@ def test_result_uses_observed_requests_and_records_latency_headroom() -> None:
         "latency_headroom_milliseconds": runtime.parity.TIMEOUT_SECONDS * 1_000 - 1_000,
         "required_latency_headroom_milliseconds": max(
             runtime.MIN_LATENCY_HEADROOM_MILLISECONDS,
-            int(
-                runtime.parity.TIMEOUT_SECONDS
-                * 1_000
-                * runtime.MIN_LATENCY_HEADROOM_FRACTION
-            ),
+            int(runtime.parity.TIMEOUT_SECONDS * 1_000 * runtime.MIN_LATENCY_HEADROOM_FRACTION),
         ),
         "minimum_latency_headroom_fraction": runtime.MIN_LATENCY_HEADROOM_FRACTION,
         "error_count": 0,

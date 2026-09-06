@@ -62,6 +62,10 @@ jobs:
             tests/test_qwen38_dp8_early_live_v1.py \
             tests/test_qwen38_dp6_early_qualification_v1.py \
             tests/test_qwen38_dp6_metric_observer_v1.py \
+            tests/test_qwen38_dp6_metric_observer_v2.py \
+            tests/test_qwen38_dp6_metric_observer_v3.py \
+            tests/test_qwen38_dp6_metric_observer_v4.py \
+            tests/test_qwen38_dp6_e_scorefree_v1.py \
             tests/test_qwen38_dp6_early_qualifier_package_v1.py \
             tests/test_qwen38_dp6_early_live_v1.py \
             tests/test_opencode_actual_harness_parity_v1.py
