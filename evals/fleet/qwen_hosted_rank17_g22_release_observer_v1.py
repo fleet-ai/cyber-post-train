@@ -93,6 +93,8 @@ EXPECTED_CELLS = [
 ]
 MAX_JSON_BYTES = 16 * 1024 * 1024
 MAX_RECEIPT_BYTES = 2 * 1024 * 1024
+MAX_SESSION_PAGES = 10_000
+MAX_SESSION_ROWS = 1_000_000
 SHA_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 UTC_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 SAFE_FAILURE_CODES = frozenset(
@@ -408,7 +410,12 @@ def _session_collisions(
     gets = 0
     collisions = 0
     offset = 0
+    pages_seen = 0
+    session_ids_seen: set[str] = set()
     while True:
+        pages_seen += 1
+        if pages_seen > MAX_SESSION_PAGES:
+            raise GateError("fleet_session_pagination_stalled")
         page = _fleet_get(
             "/v1/sessions",
             key,
@@ -423,23 +430,36 @@ def _session_collisions(
             raise GateError("fleet_session_inventory_invalid")
         if not isinstance(has_more, bool):
             raise GateError("fleet_session_inventory_invalid")
+        session_ids = [row.get("session_id") for row in rows]
+        if any(not isinstance(value, str) or not value for value in session_ids):
+            raise GateError("fleet_session_inventory_invalid")
+        if len(set(session_ids)) != len(session_ids) or session_ids_seen.intersection(session_ids):
+            raise GateError("fleet_session_pagination_stalled")
+        session_ids_seen.update(session_ids)
         rows_examined += len(rows)
+        if rows_examined > MAX_SESSION_ROWS:
+            raise GateError("fleet_session_pagination_stalled")
         for row in rows:
             row_identities = _identity_values(row)
-            collisions += int(bool(row_identities.intersection(expected)))
+            planned_identity_collision = bool(row_identities.intersection(expected))
             model = row.get("model")
             if model is None:
                 raise GateError("fleet_session_identity_ambiguous")
             if not isinstance(model, str):
                 raise GateError("fleet_session_identity_ambiguous")
             if model != binding["session_model"]:
+                collisions += int(planned_identity_collision)
                 continue
-            metadata = row.get("metadata")
             projected_version = row.get("eval_task_version_id") or row.get("task_version_id")
-            if not isinstance(metadata, dict) or projected_version != binding["task_version_id"]:
+            if not isinstance(projected_version, str):
                 raise GateError("fleet_session_identity_ambiguous")
-            if not _identity_values(metadata):
-                raise GateError("fleet_session_identity_ambiguous")
+            # A different exact task version is a positively identified
+            # non-target treatment.  Any row for this exact model+version is a
+            # collision even when its caller metadata is absent or unfamiliar.
+            if projected_version == binding["task_version_id"]:
+                collisions += 1
+            else:
+                collisions += int(planned_identity_collision)
         if has_more is False:
             break
         if not rows:
@@ -778,8 +798,9 @@ def main(argv: list[str] | None = None) -> int:
                 "status": "FAILED",
                 "last_stage": stage,
                 "failure_code": code if code in SAFE_FAILURE_CODES else "redacted",
-                "error_type": type(exc).__name__,
-                "error_sha256": sha256(str(exc).encode()),
+                "failure_category": (
+                    "safe_gate_failure" if code in SAFE_FAILURE_CODES else "unexpected_failure"
+                ),
                 "job_uid": os.environ.get("JOB_UID"),
                 "pod_uid": os.environ.get("POD_UID"),
                 "model_calls": 0,

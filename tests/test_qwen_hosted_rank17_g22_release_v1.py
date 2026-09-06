@@ -221,18 +221,6 @@ def test_session_inventory_requires_typed_page(
     [
         {"session_id": "one"},
         {"session_id": "one", "model": observer.EXPECTED_SESSION_MODEL},
-        {
-            "session_id": "one",
-            "model": observer.EXPECTED_SESSION_MODEL,
-            "metadata": {},
-            "task_version_id": observer.EXPECTED_TASK_VERSION_ID,
-        },
-        {
-            "session_id": "one",
-            "model": observer.EXPECTED_SESSION_MODEL,
-            "metadata": {"run_id": "unknown"},
-            "task_version_id": "wrong",
-        },
     ],
 )
 def test_target_session_missing_or_ambiguous_identity_fails_closed(
@@ -253,6 +241,61 @@ def test_target_session_missing_or_ambiguous_identity_fails_closed(
             "unused",
             {"planned"},
         )
+
+
+@pytest.mark.parametrize("metadata", [None, {}, {"run_id": "unknown-treatment-identity"}])
+def test_exact_target_model_and_version_always_collides(
+    monkeypatch: pytest.MonkeyPatch, metadata: dict[str, object] | None
+) -> None:
+    row = {
+        "session_id": "target",
+        "model": observer.EXPECTED_SESSION_MODEL,
+        "task_version_id": observer.EXPECTED_TASK_VERSION_ID,
+    }
+    if metadata is not None:
+        row["metadata"] = metadata
+    monkeypatch.setattr(
+        observer,
+        "_fleet_get",
+        lambda *_args, **_kwargs: {"sessions": [row], "has_more": False},
+    )
+    assert observer._session_collisions(  # noqa: SLF001
+        {
+            "task_key": observer.EXPECTED_TASK_KEY,
+            "task_version_id": observer.EXPECTED_TASK_VERSION_ID,
+            "session_model": observer.EXPECTED_SESSION_MODEL,
+        },
+        "unused",
+        {"planned"},
+    ) == (1, 1, 1)
+
+
+def test_exact_model_with_different_version_is_positive_non_target(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        observer,
+        "_fleet_get",
+        lambda *_args, **_kwargs: {
+            "sessions": [
+                {
+                    "session_id": "other-version",
+                    "model": observer.EXPECTED_SESSION_MODEL,
+                    "task_version_id": "11111111-1111-4111-8111-111111111111",
+                }
+            ],
+            "has_more": False,
+        },
+    )
+    assert observer._session_collisions(  # noqa: SLF001
+        {
+            "task_key": observer.EXPECTED_TASK_KEY,
+            "task_version_id": observer.EXPECTED_TASK_VERSION_ID,
+            "session_model": observer.EXPECTED_SESSION_MODEL,
+        },
+        "unused",
+        {"planned"},
+    ) == (1, 1, 0)
 
 
 def test_target_session_exact_identity_collides_and_other_model_does_not(
@@ -281,6 +324,51 @@ def test_target_session_exact_identity_collides_and_other_model_does_not(
         "unused",
         {"planned"},
     ) == (2, 1, 1)
+
+
+def test_repeated_nonempty_session_page_fails_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    page = {
+        "sessions": [{"session_id": "repeated", "model": "other-model"}],
+        "has_more": True,
+    }
+    monkeypatch.setattr(observer, "_fleet_get", lambda *_args, **_kwargs: page)
+    with pytest.raises(observer.GateError, match="fleet_session_pagination_stalled"):
+        observer._session_collisions(  # noqa: SLF001
+            {
+                "task_key": observer.EXPECTED_TASK_KEY,
+                "task_version_id": observer.EXPECTED_TASK_VERSION_ID,
+                "session_model": observer.EXPECTED_SESSION_MODEL,
+            },
+            "unused",
+            set(),
+        )
+
+
+@pytest.mark.parametrize("limit_name", ["MAX_SESSION_PAGES", "MAX_SESSION_ROWS"])
+def test_session_inventory_has_fixed_page_and_row_ceilings(
+    monkeypatch: pytest.MonkeyPatch, limit_name: str
+) -> None:
+    monkeypatch.setattr(observer, limit_name, 0)
+    monkeypatch.setattr(
+        observer,
+        "_fleet_get",
+        lambda *_args, **_kwargs: {
+            "sessions": [{"session_id": "one", "model": "other-model"}],
+            "has_more": False,
+        },
+    )
+    with pytest.raises(observer.GateError, match="fleet_session_pagination_stalled"):
+        observer._session_collisions(  # noqa: SLF001
+            {
+                "task_key": observer.EXPECTED_TASK_KEY,
+                "task_version_id": observer.EXPECTED_TASK_VERSION_ID,
+                "session_model": observer.EXPECTED_SESSION_MODEL,
+            },
+            "unused",
+            set(),
+        )
 
 
 def _mock_collect_dependencies(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -351,7 +439,9 @@ def test_failure_receipt_redacts_unexpected_text_and_raises_log_safe_terminal(
     monkeypatch.setattr(
         observer,
         "validate_package_source",
-        lambda *_args: (_ for _ in ()).throw(RuntimeError("sk_live_secret123")),
+        lambda *_args: (_ for _ in ()).throw(
+            type("sk_live_secret123", (RuntimeError,), {})("sk_live_secret123")
+        ),
     )
     with pytest.raises(observer.GateError, match="observer_failed_safely") as caught:
         observer.main(
@@ -370,6 +460,9 @@ def test_failure_receipt_redacts_unexpected_text_and_raises_log_safe_terminal(
     failure_text = output.with_name("FAILED.json").read_text()
     failure = json.loads(failure_text)
     assert failure["failure_code"] == "redacted"
+    assert failure["failure_category"] == "unexpected_failure"
+    assert "error_type" not in failure
+    assert "error_sha256" not in failure
     assert "sk_live_secret123" not in failure_text
     assert failure["receipt_sha256"] == observer.digest(failure)
 
