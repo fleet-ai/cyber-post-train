@@ -22,9 +22,7 @@ def test_schema_observation_contains_shape_but_never_values() -> None:
         ]
     )
     value = observer.schema_observation(metrics, observed_at_epoch=123)
-    assert value["receipt_sha256"] == self_hosted.digest_without(
-        value, "receipt_sha256"
-    )
+    assert value["receipt_sha256"] == observer._digest(value)  # noqa: SLF001
     assert value["metric_values_included"] is False
     assert value["warmup_attempt"] == 1
     assert value["request_or_response_bodies_included"] is False

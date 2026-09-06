@@ -22,9 +22,9 @@ from evals.fleet import qwen38_dp6_early_qualifier_runtime_v1 as runtime
 from evals.fleet import self_hosted
 
 NAMESPACE = "fleet-train-jobs"
-JOB_NAME = "chris-cyber-q38-dp6-c-qualifier-v5"
-CONFIGMAP_NAME = "chris-cyber-q38-dp6-c-qualifier-v5"
-OUTPUT_ROOT = "/mnt/sfs/jobs/chris-cyber-q38-dp6-c-qualifier-v5"
+JOB_NAME = "chris-cyber-q38-dp6-d-qualifier-v6"
+CONFIGMAP_NAME = "chris-cyber-q38-dp6-d-qualifier-v6"
+OUTPUT_ROOT = "/mnt/sfs/jobs/chris-cyber-q38-dp6-d-qualifier-v6"
 UV_IMAGE = (
     "ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:"
     "9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7"
@@ -37,8 +37,8 @@ DOCKER_CLI_SHA256 = "242c7a8de606afba2acada7c7af00d77f92c3601678b2f3a60911b49a89
 DOCKER_BUILDX_SHA256 = "8c38f60308a895fa570f1410e453c5de11aafd65a99fa99965d96d24b6225a78"
 DOCKER_CLI_TOTAL_BYTES = 105_594_160
 DOCKER_CLI_VOLUME_SIZE = "256Mi"
-RELEASE_SCHEMA = "fleet-qwen38-dp6-early-qualifier-release-v5"
-PACKAGE_SCHEMA = "fleet-qwen38-dp6-early-qualifier-package-v5"
+RELEASE_SCHEMA = "fleet-qwen38-dp6-early-qualifier-release-v6"
+PACKAGE_SCHEMA = "fleet-qwen38-dp6-early-qualifier-package-v6"
 QUALIFIER_PRIORITY_CLASS = "fleet-serve-low"
 QUALIFIER_PRIORITY_VALUE = 100
 STATIC_PATHS = {
@@ -49,6 +49,7 @@ STATIC_PATHS = {
     Path("evals/fleet/configs/blackbox-ctf-tool-catalog-v1.json"),
     early.CONFIG_PATH,
     early.PLAN_PATH,
+    early.V7_PLAN_PATH,
     early.V6_PLAN_PATH,
     early.V5_PLAN_PATH,
     early.V2_PLAN_PATH,
@@ -59,11 +60,12 @@ STATIC_PATHS = {
     early.RELEASE_PATH,
     early.V1_INCIDENT_PATH,
     early.B_V1_INCIDENT_PATH,
+    early.C_V1_INCIDENT_PATH,
     early.PRIORITY_CONTRACT_PATH,
     early.predecessor.PLAN_PATH,
     early.LIFECYCLE_V2_PATH,
     early.OBSERVER_V1_PATH,
-    early.OBSERVER_V2_PATH,
+    early.OBSERVER_V3_PATH,
     early.QUALIFIER_PACKAGE_PATH,
     early.LIVE_SUBMITTER_PATH,
 }

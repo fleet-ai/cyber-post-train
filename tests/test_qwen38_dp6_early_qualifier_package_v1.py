@@ -125,6 +125,7 @@ def test_archive_is_deterministic_and_contains_exact_runtime_closure(tmp_path: P
     assert str(early.QUALIFIER_RUNTIME_PATH) in names
     assert str(early.OBSERVER_V1_PATH) in names
     assert str(early.OBSERVER_V2_PATH) in names
+    assert str(early.OBSERVER_V3_PATH) in names
     assert str(early.LIFECYCLE_V2_PATH) in names
     assert "evals/fleet/opencode_actual_harness_parity_v1.py" in names
     assert "evals/fleet/configs/blackbox-ctf-tool-catalog-v1.json" in names
@@ -222,9 +223,9 @@ def test_renderer_is_create_once_score_free_and_needs_no_kubectl() -> None:
 def test_fresh_qualifier_identity_and_failure_drain_are_create_once(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    assert package.JOB_NAME == "chris-cyber-q38-dp6-c-qualifier-v5"
+    assert package.JOB_NAME == "chris-cyber-q38-dp6-d-qualifier-v6"
     assert package.CONFIGMAP_NAME == package.JOB_NAME
-    assert package.OUTPUT_ROOT.endswith("/chris-cyber-q38-dp6-c-qualifier-v5")
+    assert package.OUTPUT_ROOT.endswith("/chris-cyber-q38-dp6-d-qualifier-v6")
     drain = tmp_path / "lifecycle" / "DRAIN"
     drain.parent.mkdir()
     monkeypatch.setattr(runtime, "DRAIN_PATH", drain)
