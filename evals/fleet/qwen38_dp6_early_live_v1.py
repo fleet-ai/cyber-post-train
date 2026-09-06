@@ -554,6 +554,7 @@ def submit_create_once(
     gate: Mapping[str, Any],
     release: Mapping[str, Any],
     source_commit: str,
+    root: Path,
 ) -> str:
     shape = gate.get("project_resource_shape")
     if gate.get("receipt_sha256") != self_hosted.digest_without(dict(gate), "receipt_sha256") or (
@@ -602,6 +603,19 @@ def submit_create_once(
         or (shape.get("project_object_inventory") or {}).get("orphan_project_gpu_pods") != 0
     ):
         raise ValueError("early DP6 live submit gate is not clear")
+    # Close the time-of-check/time-of-create gap: another submitter may have
+    # created this immutable identity after the larger live gate completed.
+    runs = shared._runs(client)  # noqa: SLF001 - paginated Jobs API authority
+    if any(
+        row.get("title") == early.TITLE or row.get("run_dir") == early.RUN_DIR
+        for row in runs
+    ):
+        raise RuntimeError("early DP6 create-once identity appeared after the live gate")
+    preview = client.post("/v1/runs/preview", json=dict(payload))
+    preview.raise_for_status()
+    rendered = early.preview_identity(preview.json()["manifest_yaml"], root)
+    if rendered != gate.get("rendered"):
+        raise RuntimeError("early DP6 Jobs API preview drifted after the live gate")
     response = client.post("/v1/runs", json=dict(payload))
     response.raise_for_status()
     if response.status_code != 202:
@@ -673,7 +687,7 @@ def main() -> int:
             shared._write_once(args.output, gate)  # noqa: SLF001
             print(json.dumps({"status": gate["status"], "receipt_sha256": gate["receipt_sha256"]}))
             return 0
-        api_run_id = submit_create_once(client, payload, gate, release, source_commit)
+        api_run_id = submit_create_once(client, payload, gate, release, source_commit, root)
     receipt = {
         "schema_version": SUBMISSION_SCHEMA,
         "status": "SUBMITTED_NON_SCORED_SERVER",

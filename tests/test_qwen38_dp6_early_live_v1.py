@@ -28,14 +28,20 @@ class Response:
 
 
 class Client:
-    def __init__(self) -> None:
+    def __init__(self, runs: list[dict] | None = None) -> None:
         self.posts: list[tuple[str, dict]] = []
+        self.runs = runs or []
 
     def post(self, path: str, *, json: dict) -> Response:
         self.posts.append((path, json))
+        if path == "/v1/runs/preview":
+            return Response(200, {"manifest_yaml": "preview"})
         return Response(202, {"name": "ft-run-12345678"})
 
-    def get(self, path: str) -> Response:
+    def get(self, path: str, *, params: dict | None = None) -> Response:
+        if path == "/v1/runs":
+            assert params == {"limit": 200, "offset": 0}
+            return Response(200, {"items": self.runs, "has_more": False})
         return Response(
             200,
             {
@@ -100,23 +106,31 @@ def _gate(payload: dict, release: dict, source_commit: str) -> dict:
     return value
 
 
-def test_submitter_posts_exactly_once_only_after_digest_valid_live_gate() -> None:
+def test_submitter_posts_exactly_once_only_after_digest_valid_live_gate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     payload = {"title": early.TITLE, "run_dir": early.RUN_DIR}
     release = {"receipt_sha256": "sha256:" + "b" * 64}
     source_commit = "c" * 40
     gate = _gate(payload, release, source_commit)
     client = Client()
-    assert live.submit_create_once(client, payload, gate, release, source_commit) == (
+    monkeypatch.setattr(early, "preview_identity", lambda *_args: gate["rendered"])
+    assert live.submit_create_once(client, payload, gate, release, source_commit, ROOT) == (
         "ft-run-12345678"
     )
-    assert client.posts == [("/v1/runs", payload)]
+    assert client.posts == [("/v1/runs/preview", payload), ("/v1/runs", payload)]
+
+    appeared = Client(runs=[{"title": early.TITLE, "run_dir": early.RUN_DIR}])
+    with pytest.raises(RuntimeError, match="appeared after the live gate"):
+        live.submit_create_once(appeared, payload, gate, release, source_commit, ROOT)
+    assert appeared.posts == []
 
     changed = copy.deepcopy(gate)
     changed["jobs_api_title_matches"] = 1
     changed["receipt_sha256"] = self_hosted.digest_without(changed, "receipt_sha256")
     with pytest.raises(ValueError, match="not clear"):
-        live.submit_create_once(client, payload, changed, release, source_commit)
-    assert len(client.posts) == 1
+        live.submit_create_once(client, payload, changed, release, source_commit, ROOT)
+    assert len(client.posts) == 2
 
 
 def test_kubernetes_gate_requires_exact_tp1_peer_and_one_gpu(
