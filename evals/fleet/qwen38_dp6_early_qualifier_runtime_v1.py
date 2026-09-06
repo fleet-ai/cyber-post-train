@@ -34,7 +34,7 @@ COUNTER_STATE_PATH = Path(early.RUN_DIR) / "lifecycle/.request-counters.json"
 COUNTER_BASELINE_PATH = Path(early.RUN_DIR) / "lifecycle/REQUEST-COUNTER-BASELINE.json"
 EVENT_DIR = Path(early.RUN_DIR) / "lifecycle/real-traffic-events"
 DIND_RESOURCE_SAMPLES_PATH = Path("/workspace/dind-resource-samples.tsv")
-QUALIFIER_RELEASE_SCHEMA = "fleet-qwen38-dp6-early-qualifier-release-v3"
+QUALIFIER_RELEASE_SCHEMA = "fleet-qwen38-dp6-early-qualifier-release-v4"
 BASELINE_WAIT_SECONDS = 30
 
 
@@ -145,9 +145,9 @@ def validate_runtime_release(
         or value.get("status") != "RELEASED_FOR_ONE_NON_SCORED_QUALIFIER"
         or value.get("launch_authorized") is not True
         or value.get("scoring_authorized") is not False
-        or value.get("job_name") != "chris-cyber-q38-dp6-c-qualifier-v3"
-        or value.get("configmap_name") != "chris-cyber-q38-dp6-c-qualifier-v3"
-        or value.get("output_root") != "/mnt/sfs/jobs/chris-cyber-q38-dp6-c-qualifier-v3"
+        or value.get("job_name") != "chris-cyber-q38-dp6-c-qualifier-v4"
+        or value.get("configmap_name") != "chris-cyber-q38-dp6-c-qualifier-v4"
+        or value.get("output_root") != "/mnt/sfs/jobs/chris-cyber-q38-dp6-c-qualifier-v4"
         or value.get("serving_block") != early.SERVING_BLOCK
         or value.get("submission_receipt_sha256") != submission.get("receipt_sha256")
         or value.get("server_binding_receipt_sha256") != binding.get("receipt_sha256")

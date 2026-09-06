@@ -22,9 +22,9 @@ from evals.fleet import qwen38_dp6_early_qualifier_runtime_v1 as runtime
 from evals.fleet import self_hosted
 
 NAMESPACE = "fleet-train-jobs"
-JOB_NAME = "chris-cyber-q38-dp6-c-qualifier-v3"
-CONFIGMAP_NAME = "chris-cyber-q38-dp6-c-qualifier-v3"
-OUTPUT_ROOT = "/mnt/sfs/jobs/chris-cyber-q38-dp6-c-qualifier-v3"
+JOB_NAME = "chris-cyber-q38-dp6-c-qualifier-v4"
+CONFIGMAP_NAME = "chris-cyber-q38-dp6-c-qualifier-v4"
+OUTPUT_ROOT = "/mnt/sfs/jobs/chris-cyber-q38-dp6-c-qualifier-v4"
 UV_IMAGE = (
     "ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:"
     "9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7"
@@ -37,8 +37,8 @@ DOCKER_CLI_SHA256 = "242c7a8de606afba2acada7c7af00d77f92c3601678b2f3a60911b49a89
 DOCKER_BUILDX_SHA256 = "8c38f60308a895fa570f1410e453c5de11aafd65a99fa99965d96d24b6225a78"
 DOCKER_CLI_TOTAL_BYTES = 105_594_160
 DOCKER_CLI_VOLUME_SIZE = "256Mi"
-RELEASE_SCHEMA = "fleet-qwen38-dp6-early-qualifier-release-v3"
-PACKAGE_SCHEMA = "fleet-qwen38-dp6-early-qualifier-package-v3"
+RELEASE_SCHEMA = "fleet-qwen38-dp6-early-qualifier-release-v4"
+PACKAGE_SCHEMA = "fleet-qwen38-dp6-early-qualifier-package-v4"
 QUALIFIER_PRIORITY_CLASS = "fleet-serve-low"
 QUALIFIER_PRIORITY_VALUE = 100
 STATIC_PATHS = {
@@ -51,6 +51,7 @@ STATIC_PATHS = {
     early.PLAN_PATH,
     early.V2_PLAN_PATH,
     early.V3_PLAN_PATH,
+    early.V4_PLAN_PATH,
     early.PREVIEW_PATH,
     early.INVENTORY_PATH,
     early.RELEASE_PATH,
@@ -173,7 +174,7 @@ test "$(sha256sum "$DOCKER_CONFIG/cli-plugins/docker-buildx" | awk '{print $1}')
 test "$(docker --version)" = 'Docker version 27.5.1, build 9f9e405'
 "$DOCKER_CONFIG/cli-plugins/docker-buildx" version | grep -F 'v0.20.1' >/dev/null
 until docker info >/dev/null 2>&1; do sleep 1; done
-uv run python -m evals.fleet.opencode_staged_image_v1 \
+uv run --with httpx --with pyyaml python -m evals.fleet.opencode_staged_image_v1 \
   --receipt /mnt/sfs/jobs/chris-cyber-opencode11827-image-stage-v2/STAGED.json \
   --archive /mnt/sfs/jobs/chris-cyber-opencode11827-image-stage-v2/opencode-1.18.27-amd64.tar.gz
 gzip -dc /mnt/sfs/jobs/chris-cyber-opencode11827-image-stage-v2/opencode-1.18.27-amd64.tar.gz \
