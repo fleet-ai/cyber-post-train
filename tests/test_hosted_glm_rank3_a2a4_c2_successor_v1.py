@@ -1,11 +1,14 @@
 from pathlib import Path
 
 from evals.fleet import hosted_glm_rank3_a2a4_c2_package_v1 as package
+from evals.fleet import exact_pass4_bulk_runtime_v3 as engine
 from evals.fleet import hosted_glm_rank3_a2a4_c2_successor_v1 as successor
+from evals.fleet import hosted_glm_rank3_a2a4_c2_successor_v2 as successor_v2
 from evals.fleet import self_hosted
 
 
 def test_successor_is_exact_rank3_tail() -> None:
+    engine.validate_bulk_adapter(successor)
     plan = successor.validate_all(Path.cwd())[successor.CONTROLLER]
     assert [(row["selection_rank"], row["attempt"]) for row in plan["attempts"]] == [
         (3, 2),
@@ -28,3 +31,18 @@ def test_release_package_is_create_once_and_nonpreempting() -> None:
     assert job["spec"]["template"]["spec"]["preemptionPolicy"] == "Never"
     assert job["spec"]["template"]["spec"]["priorityClassName"] == "fleet-infra-quiet"
     assert "hosted_glm_rank3_a2a4_c2_release_v1" in configmap["data"]["run.sh"]
+
+
+def test_fresh_v2_adapter_is_engine_complete() -> None:
+    engine.validate_bulk_adapter(successor_v2)
+    plan = successor_v2.validate_all(Path.cwd())[successor_v2.CONTROLLER]
+    assert [(row["selection_rank"], row["attempt"]) for row in plan["attempts"]] == [
+        (3, 2),
+        (3, 3),
+        (3, 4),
+    ]
+    assert plan["partition"]["failed_v1_effects"] == {
+        "claims": 0,
+        "model_requests": 0,
+        "task_instance_session_verifier_scoring_calls": 0,
+    }
