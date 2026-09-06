@@ -29,6 +29,12 @@ def _metrics(*, false: int = 0, true: int | None = None) -> str:
         'moe_ep_rank="0",pp_rank="0",tp_rank="0"} 262144'
         for rank in range(6)
     )
+    for family in (observer.RUNNING_FAMILY, observer.QUEUE_FAMILY):
+        rows.extend(
+            f'{family}{{dp_rank="{rank}",engine_type="unified",'
+            'model_name="qwen3.8-27b",moe_ep_rank="0",pp_rank="0",tp_rank="0"} 0'
+            for rank in range(6)
+        )
     rows.append(
         'sglang:num_requests_total{engine_type="unified",'
         f'is_streaming="false",model_name="qwen3.8-27b"}} {false}'
@@ -61,6 +67,21 @@ def test_live_one_series_zero_schema_is_valid() -> None:
     assert observer._global_request_total(_metrics()) == 0  # noqa: SLF001
 
 
+def test_schema_receipt_covers_all_activity_families_without_values() -> None:
+    value = observer.schema_observation(
+        _metrics(false=123, true=45),
+        observed_at_epoch=1,
+        warmup_attempt=1,
+        validation_status="CONVERGED_ACTIVITY_SCHEMA",
+    )
+    assert set(value["target_families"]) == observer.TARGET_FAMILIES
+    assert value["metric_values_included"] is False
+    assert all(
+        set(shape) == {"raw_family_line_count", "parsed_sample_count", "label_key_sets"}
+        for shape in value["target_families"].values()
+    )
+
+
 @pytest.mark.parametrize(
     "metrics",
     [
@@ -68,6 +89,10 @@ def test_live_one_series_zero_schema_is_valid() -> None:
         _metrics().replace('is_streaming="false",', 'dp_rank="0",is_streaming="false",'),
         _metrics() + "\n" + _metrics().splitlines()[-1],
         _metrics().replace('is_streaming="false"', 'is_streaming="maybe"'),
+        _metrics().replace('engine_type="unified"', 'engine_type="other"', 1),
+        _metrics().replace('model_name="qwen3.8-27b"', 'model_name="other"', 1),
+        _metrics().replace('moe_ep_rank="0"', 'moe_ep_rank="1"', 1),
+        _metrics() + '\nsglang:num_running_reqs{dp_rank="0" BROKEN',
     ],
 )
 def test_schema_drift_fails_closed(metrics: str) -> None:
@@ -97,7 +122,7 @@ def test_bounded_schema_warmup_never_refreshes_traffic(tmp_path: Path) -> None:
     assert calls == 2
     assert not traffic_path.exists()
     receipt = json.loads(schema_path.read_text())
-    assert receipt["status"] == "CONVERGED_GLOBAL_COUNTER"
+    assert receipt["status"] == "CONVERGED_ACTIVITY_SCHEMA"
     assert receipt["metric_values_included"] is False
 
 
@@ -112,6 +137,10 @@ def test_global_counter_monotonicity_and_six_device_evidence() -> None:
     assert value is not None
     assert value["global_request_delta"] == 3
     assert value["per_rank_request_attribution_claimed"] is False
+    assert value["activity_reasons"] == [
+        "completed_request_counter_increased",
+        "gpu_utilization_positive",
+    ]
     assert value["gpu_memory_used_mib_by_device"] == [40000] * 6
     assert value["receipt_sha256"] == self_hosted.digest_without(value, "receipt_sha256")
     with pytest.raises(ValueError, match="decreased"):
@@ -134,6 +163,42 @@ def test_stable_sample_is_not_traffic() -> None:
             **_identity(),
         )
         is None
+    )
+
+
+def test_long_inflight_request_blocks_idle_release_after_600_seconds() -> None:
+    assert (
+        observer.idle_release_eligible(
+            10,
+            10,
+            running_requests=1,
+            queued_requests=0,
+            utilization_percent=[75] * 6,
+            activity_age_seconds=900,
+        )
+        is False
+    )
+    value = observer.traffic_observation(
+        10,
+        10,
+        memory_mib=[40000] * 6,
+        utilization_percent=[75] * 6,
+        running_requests=1,
+        queued_requests=0,
+        **_identity(),
+    )
+    assert value is not None
+    assert "running_requests_positive" in value["activity_reasons"]
+    assert (
+        observer.idle_release_eligible(
+            10,
+            10,
+            running_requests=0,
+            queued_requests=0,
+            utilization_percent=[0] * 6,
+            activity_age_seconds=600,
+        )
+        is True
     )
 
 
