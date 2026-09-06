@@ -13,6 +13,7 @@ import pytest
 
 from evals.fleet import exact_pass4_bulk_runtime_v3 as engine
 from evals.fleet import qwen_hosted_generation19_v4 as source
+from evals.fleet import qwen_hosted_prebootstrap_v4 as prebootstrap
 from evals.fleet import qwen_hosted_whole_task_successor_v1 as successor
 from evals.fleet import qwen_hosted_whole_task_successor_v1_package as package
 from evals.fleet import qwen_hosted_whole_task_successor_v1_runtime as runtime
@@ -232,19 +233,28 @@ def test_preclaim_failure_receipt_is_score_blind_and_retry_closed() -> None:
     assert receipt["disposition"]["launch_authorized"] is False
 
 
-def test_canary_v2_failure_is_stage06_unclassified_and_zero_effect() -> None:
+def test_canary_v3_failure_is_prebootstrap_unclassified_and_zero_effect() -> None:
     receipt = successor.load(ROOT / successor.CANARY_FAILURE["path"])
     assert receipt["receipt_sha256"] == successor.CANARY_FAILURE["receipt_sha256"]
     assert receipt["receipt_sha256"] == self_hosted.digest_without(receipt, "receipt_sha256")
-    assert receipt["failure_evidence"] == {
-        "last_completed_stage": "06-runtime-exec",
-        "runtime_gate_canary_pass_receipts_present": 0,
-        "sanitized_runtime_failure_receipts_present": 1,
-        "error_type": "ValueError",
-        "error_sha256": ("sha256:7bc266369121c322081301fd75452411a597ac4724e8ad07bca9291a826ee05e"),
+    assert receipt["status"] == "FAILED_BEFORE_BOOTSTRAP_STAGE_ZERO"
+    assert receipt["failure_evidence"]["diagnostic_root_absent"] is True
+    assert receipt["failure_evidence"]["bootstrap_stage_receipts_present"] == 0
+    assert receipt["failure_evidence"]["observed_cause_classification"] == (
+        "PRE_BOOTSTRAP_UNCLASSIFIED"
+    )
+    assert receipt["failure_evidence"]["logs_used"] is False
+    assert receipt["deterministic_correction"] == {
+        "network_package_install_removed": True,
+        "docker_cli_source_image": package.base.DIND_IMAGE,
+        "docker_cli_shared_emptydir": True,
+        "exact_copied_binary_bytes": package.DOCKER_CLI_BYTES,
+        "docker_cli_emptydir_size_limit_bytes": 256 * 1024 * 1024,
+        "prebootstrap_phase_receipt_before_cli_copy": True,
+        "observed_exit_assigned_to_specific_apt_command": False,
     }
     assert set(receipt["score_blind_effects"].values()) == {0}
-    assert receipt["disposition"]["canary_v2_identity_retry_authorized"] is False
+    assert receipt["disposition"]["canary_v3_identity_retry_authorized"] is False
     assert receipt["disposition"]["scored_successor_authorized"] is False
 
 
@@ -996,6 +1006,112 @@ def test_runtime_gate_canary_package_is_new_score_free_create_once_identity() ->
     held = json.loads(cm["data"]["release.json"])
     assert held["launch_authorized"] is False
     assert env["QWEN_HOSTED_WHOLE_TASK_RELEASE_SHA256"]["value"] == held["receipt_sha256"]
+    assert package.RUNTIME_GATE_CANARY_JOB.endswith("-v4")
+    assert not cm["metadata"]["name"].startswith(
+        "chris-q38-hosted-whole-task-runtime-gate-canary-v3"
+    )
+    assert not job["metadata"]["name"].startswith(
+        "chris-q38-hosted-whole-task-runtime-gate-canary-v3"
+    )
+
+
+def test_runtime_gate_canary_records_prebootstrap_and_uses_pinned_cli_without_apt() -> None:
+    cm, job = package.render_runtime_gate_canary(ROOT)["items"]
+    pod = job["spec"]["template"]["spec"]
+    assert [item["name"] for item in pod["initContainers"]] == [
+        "prebootstrap-evidence",
+        "docker-cli",
+        "dind",
+    ]
+    pre, cli, _dind = pod["initContainers"]
+    assert pre["command"] == ["python", "/bootstrap/qwen_hosted_prebootstrap_v4.py"]
+    assert pre["args"][2:4] == ["00-prebootstrap-entry", "--root"]
+    assert {row["name"] for row in pre["env"]} == {
+        "JOB_UID",
+        "POD_UID",
+        "QWEN_HOSTED_WHOLE_TASK_DIAGNOSTIC_ROOT",
+        "QWEN_HOSTED_WHOLE_TASK_RELEASE_SHA256",
+        "QWEN_HOSTED_WHOLE_TASK_PACKAGE_SOURCE_SHA256",
+    }
+    assert cli["image"] == package.base.DIND_IMAGE
+    assert package.DOCKER_CLI_SHA256 in cli["args"][0]
+    assert package.DOCKER_BUILDX_SHA256 in cli["args"][0]
+    assert str(package.DOCKER_CLI_BYTES) in cli["args"][0]
+    docker_volume = next(row for row in pod["volumes"] if row["name"] == "docker-cli")
+    assert docker_volume == {"name": "docker-cli", "emptyDir": {"sizeLimit": "256Mi"}}
+    evaluator = pod["containers"][0]
+    assert evaluator["args"][0].index("01-network-package-install-bypassed") < evaluator[
+        "args"
+    ][0].index("02-pinned-docker-cli-ready")
+    assert "apt-get" not in json.dumps(pod)
+    assert "qwen_hosted_prebootstrap_v4.py" in cm["data"]
+    package_source = json.loads(cm["data"]["package-source.json"])
+    assert package_source["files"]["qwen_hosted_prebootstrap_v4.py"] == self_hosted.sha256(
+        cm["data"]["qwen_hosted_prebootstrap_v4.py"].encode()
+    )
+    for required in (
+        "qwen_hosted_prebootstrap_v4.py",
+        "run_qwen_hosted_whole_task_successor_v1.sh",
+    ):
+        assert f"/bootstrap/{required}" in json.dumps(pod)
+        assert required in cm["data"]
+
+
+def test_materialized_prebootstrap_package_writes_self_digesting_score_free_receipts(
+    tmp_path: Path,
+) -> None:
+    cm, _job = package.render_runtime_gate_canary(ROOT)["items"]
+    module_path = tmp_path / "qwen_hosted_prebootstrap_v4.py"
+    module_path.write_text(cm["data"]["qwen_hosted_prebootstrap_v4.py"])
+    evidence_root = tmp_path / "evidence"
+    env = os.environ.copy()
+    env.update(
+        {
+            "JOB_UID": "11111111-1111-4111-8111-111111111111",
+            "POD_UID": "22222222-2222-4222-8222-222222222222",
+            "QWEN_HOSTED_WHOLE_TASK_RELEASE_SHA256": "sha256:" + "a" * 64,
+            "QWEN_HOSTED_WHOLE_TASK_PACKAGE_SOURCE_SHA256": "sha256:" + "b" * 64,
+        }
+    )
+    for phase in prebootstrap.PHASES:
+        subprocess.run(
+            [
+                sys.executable,
+                str(module_path),
+                "record",
+                "--phase",
+                phase,
+                "--root",
+                str(evidence_root.resolve()),
+            ],
+            check=True,
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        receipt = json.loads(
+            (evidence_root / "prebootstrap-phases" / f"{phase}.json").read_text()
+        )
+        assert receipt["receipt_sha256"] == self_hosted.digest_without(
+            receipt, "receipt_sha256"
+        )
+        assert receipt["network_package_install"] == "BYPASSED"
+        assert receipt["docker_cli_source"] == "PINNED_IMAGE_SHARED_EMPTYDIR"
+        assert receipt["credentials_included"] is False
+        assert {
+            receipt[field]
+            for field in (
+                "output_roots_created",
+                "endpoint_leases_acquired",
+                "canonical_claims_created",
+                "model_calls",
+                "task_calls",
+                "session_calls",
+                "verifier_calls",
+                "scoring_calls",
+                "api_mutations",
+            )
+        } == {0}
 
 
 def test_runtime_gate_canary_records_every_safe_gate_phase(

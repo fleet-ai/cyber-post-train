@@ -25,7 +25,7 @@ from evals.fleet import qwen_hosted_generation19_v4 as source
 from evals.fleet import self_hosted
 
 SCHEMA = "fleet-qwen38-hosted-atomic-whole-task-plan-v2"
-HELD_SCHEMA = "fleet-qwen38-hosted-atomic-whole-task-held-v6"
+HELD_SCHEMA = "fleet-qwen38-hosted-atomic-whole-task-held-v7"
 RELEASE_SCHEMA = "fleet-qwen38-hosted-atomic-whole-task-release-v4"
 RESERVATION_SCHEMA = "fleet-qwen38-hosted-four-claim-reservation-v2"
 PREPARING_SCHEMA = "fleet-qwen38-hosted-four-claim-preparing-v1"
@@ -37,21 +37,21 @@ LEDGER_PATH = "docs/evidence/qwen38-study/2026-09-05-exact-pass4-ledger-evidence
 LEDGER_SELF_SHA256 = "sha256:bf0b9086dd97eecafe20fa9a4cf3b5d643f0ce8f6abad60fae6e3cba3e3e2e29"
 LEDGER_FILE_SHA256 = "sha256:0a2baba7c16745a4d69f0f5aafc04010734eacbace8f6d712d44011c4a36d0dd"
 HELD_PATH = (
-    "docs/evidence/qwen38-study/2026-09-06-qwen38-hosted-rank15-rank16-whole-task-held-v6.json"
+    "docs/evidence/qwen38-study/2026-09-06-qwen38-hosted-rank15-rank16-whole-task-held-v7.json"
 )
 SUPERSEDED_HELD = {
     "path": (
-        "docs/evidence/qwen38-study/2026-09-06-qwen38-hosted-rank15-rank16-whole-task-held-v5.json"
+        "docs/evidence/qwen38-study/2026-09-06-qwen38-hosted-rank15-rank16-whole-task-held-v6.json"
     ),
-    "receipt_sha256": "sha256:fdf744f0461fc826797f943fa218e6a2cb642210f0dc8627f8fa149771d62034",
-    "file_sha256": "sha256:8a3206a37b8d4cb1d6a6a6c52d0de4c4e8501619b4d01a3e2a4aee1eb0f503e8",
+    "receipt_sha256": "sha256:7cf35b10573205ab35f2c9c36ef84e9de9b310a6239c350142d87b42f94e8ef1",
+    "file_sha256": "sha256:e49a9a4db1251cf792b8a094cdd903054bc90d32cee742a04e42e6ffd954b86d",
 }
 CANARY_FAILURE = {
     "path": (
-        "docs/evidence/qwen38-study/2026-09-06-qwen38-hosted-runtime-gate-canary-v2-failure.json"
+        "docs/evidence/qwen38-study/2026-09-06-qwen38-hosted-runtime-gate-canary-v3-failure.json"
     ),
-    "receipt_sha256": "sha256:cbfb5d0e1e9e7fa6e0333186cb5b725606bb0c480f16b73cfbfac9afcf316a8a",
-    "file_sha256": "sha256:12202545ff2b1e4ac27805418f4fc6afee9aae9180200cad881cf31b8e261816",
+    "receipt_sha256": "sha256:6ce9723ed40619ef40c8a67e71feb71f5a530947075009078f7a11b02e999963",
+    "file_sha256": "sha256:c0a9fa7d18d71f2835f452089990753b7c947922675767cafea4a429e213cd2a",
 }
 PRECLAIM_FAILURE = {
     "path": (
@@ -584,7 +584,7 @@ def validate_held(
                 "crash_recovery_before_model_boundary",
                 "atomic_four_claim_publication_and_validation",
                 "immutable_package_source_digest_binding",
-                "score_free_phase_tracked_stage06_runtime_gate_canary_pass",
+                "score_free_prebootstrap_evidenced_stage06_runtime_gate_canary_pass",
             ],
             held.get("privacy")
             != {
