@@ -1,5 +1,8 @@
 import copy
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -174,12 +177,59 @@ def test_v33_watchdog_package_runs_generation_exact_runtime() -> None:
     manifest = json.loads(configmap["data"]["package.json"])
     runtime_path = "evals/fleet/glm53_dedicated_v33_request_counter_watchdog_v1.py"
     assert runtime_path in manifest["files"]
-    assert manifest["package_sha256"] == crypto.digest_without(
-        manifest, "package_sha256"
-    )
+    assert manifest["package_sha256"] == crypto.digest_without(manifest, "package_sha256")
     command = job["spec"]["template"]["spec"]["containers"][0]["command"][-1]
     assert "glm53_dedicated_v33_request_counter_watchdog_v1" in command
     assert "glm53_dedicated_v23_request_counter_watchdog_v1 watch" not in command
+
+
+def test_v33_watchdog_projected_configmap_has_complete_import_closure(
+    tmp_path: Path,
+) -> None:
+    classes = [
+        {
+            "metadata": {"name": "fleet-infra-quiet"},
+            "value": -1000,
+            "preemptionPolicy": "Never",
+        },
+        {
+            "metadata": {"name": "fleet-serve-low"},
+            "value": 100,
+            "preemptionPolicy": "Never",
+        },
+    ]
+    rendered = watchdog.render(
+        ROOT,
+        PACKAGE_COMMIT,
+        binding(),
+        ready_at_epoch=1.0,
+        priority_classes=classes,
+    )
+    data = rendered["objects"]["items"][0]["data"]
+    projected = tmp_path / "work"
+    for key, source in data.items():
+        if "__SLASH__" not in key:
+            continue
+        target = projected / key.replace("__SLASH__", "/")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(source)
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "from evals.fleet import "
+                "glm53_dedicated_v33_request_counter_watchdog_v1 as runtime; "
+                "assert runtime.API_RUN_ID_RE.fullmatch('glm53-tp8-v33-e4888aa7'); "
+                "assert not runtime.API_RUN_ID_RE.fullmatch('ft-run-e4888aa7')"
+            ),
+        ],
+        cwd=tmp_path,
+        env={**os.environ, "PYTHONPATH": str(projected)},
+        text=True,
+        capture_output=True,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 def test_v32_incident_and_release_receipts_are_sanitized_and_digest_valid() -> None:
