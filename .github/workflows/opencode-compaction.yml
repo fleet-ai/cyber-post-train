@@ -9,6 +9,7 @@ on:
       - 'tests/test_fleet_self_hosted.py'
       - 'tests/test_opencode_train_sweep.py'
       - 'tests/test_agent_assets.py'
+      - 'tests/test_qwen_hosted_whole_task_successor_v3.py'
       - 'skills/**'
       - 'pyproject.toml'
       - 'uv.lock'
