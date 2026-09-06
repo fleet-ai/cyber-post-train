@@ -140,16 +140,19 @@ def build_authorization_configmap(authorization: dict[str, Any]) -> dict[str, An
     }
 
 
-def build_watchdog_configmap(
+def build_watchdog_configmap_for_binding(
     root: Path,
     commit: str,
     binding: dict[str, Any],
     *,
     ready_at_epoch: float,
+    binding_validator: Any,
+    job_name: str,
+    result_root: str,
 ) -> dict[str, Any]:
     """Package the concrete watcher before score-free qualification authorization."""
 
-    qualifier._validate_binding(binding)  # noqa: SLF001
+    binding_validator(binding)
     if ready_at_epoch <= 0:
         raise PackageError("v23_watchdog_ready_epoch_invalid")
     source_files = (
@@ -165,8 +168,8 @@ def build_watchdog_configmap(
         "files": manifest,
         "binding_sha256": crypto.sha256(crypto.canonical_json(binding)),
         "ready_at_epoch": ready_at_epoch,
-        "job_name": WATCHDOG_JOB_NAME,
-        "result_root": WATCHDOG_RESULT_ROOT,
+        "job_name": job_name,
+        "result_root": result_root,
         "idle_release_seconds": qualifier.IDLE_RELEASE_SECONDS,
         "release_route": "DELETE /v1/runs/{api_run_id}",
         "create_once": True,
@@ -179,13 +182,36 @@ def build_watchdog_configmap(
     return {
         "apiVersion": "v1",
         "kind": "ConfigMap",
-        "metadata": {"name": WATCHDOG_CONFIGMAP_NAME, "namespace": prior.NAMESPACE},
+        "metadata": {"name": job_name + "-package", "namespace": prior.NAMESPACE},
         "immutable": True,
         "data": data,
     }
 
 
-def build_watchdog_job(configmap: dict[str, Any]) -> dict[str, Any]:
+def build_watchdog_configmap(
+    root: Path,
+    commit: str,
+    binding: dict[str, Any],
+    *,
+    ready_at_epoch: float,
+) -> dict[str, Any]:
+    return build_watchdog_configmap_for_binding(
+        root,
+        commit,
+        binding,
+        ready_at_epoch=ready_at_epoch,
+        binding_validator=qualifier._validate_binding,  # noqa: SLF001
+        job_name=WATCHDOG_JOB_NAME,
+        result_root=WATCHDOG_RESULT_ROOT,
+    )
+
+
+def build_watchdog_job(
+    configmap: dict[str, Any],
+    *,
+    job_name: str = WATCHDOG_JOB_NAME,
+    result_root: str = WATCHDOG_RESULT_ROOT,
+) -> dict[str, Any]:
     package = json.loads(configmap["data"]["package.json"])
     command = """
 set -euo pipefail
@@ -205,11 +231,11 @@ exec python -m evals.fleet.glm53_dedicated_v23_request_counter_watchdog_v1 watch
         "apiVersion": "batch/v1",
         "kind": "Job",
         "metadata": {
-            "name": WATCHDOG_JOB_NAME,
+            "name": job_name,
             "namespace": prior.NAMESPACE,
             "labels": {
                 "cyber-post-train.fleet.ai/owner": "chris",
-                "cyber-post-train.fleet.ai/experiment": WATCHDOG_JOB_NAME,
+                "cyber-post-train.fleet.ai/experiment": job_name,
                 "kueue.x-k8s.io/queue-name": "training-lq",
             },
             "annotations": {
@@ -226,7 +252,7 @@ exec python -m evals.fleet.glm53_dedicated_v23_request_counter_watchdog_v1 watch
                 "metadata": {
                     "labels": {
                         "cyber-post-train.fleet.ai/owner": "chris",
-                        "cyber-post-train.fleet.ai/experiment": WATCHDOG_JOB_NAME,
+                        "cyber-post-train.fleet.ai/experiment": job_name,
                         "kueue.x-k8s.io/queue-name": "training-lq",
                     }
                 },
@@ -254,7 +280,7 @@ exec python -m evals.fleet.glm53_dedicated_v23_request_counter_watchdog_v1 watch
                             "env": [
                                 {
                                     "name": "WATCHDOG_RESULT_ROOT",
-                                    "value": WATCHDOG_RESULT_ROOT,
+                                    "value": result_root,
                                 },
                                 {
                                     "name": "READY_AT_EPOCH",
@@ -302,7 +328,7 @@ exec python -m evals.fleet.glm53_dedicated_v23_request_counter_watchdog_v1 watch
                     "volumes": [
                         {
                             "name": "package",
-                            "configMap": {"name": WATCHDOG_CONFIGMAP_NAME},
+                            "configMap": {"name": configmap["metadata"]["name"]},
                         },
                         {
                             "name": "sfs",
