@@ -5,12 +5,12 @@
     2,
     4
   ],
-  "package_commit": "e5cf12152acf199496568a02733ae16a032006bc",
-  "package_sha256": "sha256:df57882ce685ac4820a0889529989c612ca94a8878ca2f7229f54b42d0952761",
+  "package_commit": "cc4fbe4de50479ec6466f810d09dc3845513d572",
+  "package_sha256": "sha256:dbf4eb0cd08fed1166a2373125f74c070f477406e57c001c047b665bce627bf0",
   "plan_receipt_sha256": "sha256:97949d8b7dd214e85786ba39bf18496e92bae95e79e5c08d1071139ce3bc4477",
   "prompts_traces_flags_scores_or_model_outputs_included": false,
   "qualification_launch_authorized": false,
-  "receipt_sha256": "sha256:15bd07dc6d542aef5ae68974ff4bcf48dbde9531969a5cac99ac3e801affa921",
+  "receipt_sha256": "sha256:02f2b7a3cc63036b8d9bbe254e301425465edae3d484b1933779515aa8df6a70",
   "removed_false_prerequisite": {
     "rank51_attempt2_accepted_required": false,
     "reason": "rank51_attempt2_is_sealed_nonrepeatable_uncredited"
@@ -32,6 +32,11 @@
     "fleet_task_instance": 0,
     "scoring": 0,
     "verifier": 0
+  },
+  "score_free_cpu_priority": {
+    "class": "fleet-serve-low",
+    "preemption_policy": "Never",
+    "value": 100
   },
   "scored_launch_authorized": false,
   "server": {
