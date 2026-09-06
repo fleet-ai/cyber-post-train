@@ -71,6 +71,7 @@ jobs:
             tests/test_qwen38_dp6_qualification_guard_v1.py \
             tests/test_qwen38_dp6_f_scorefree_v1.py \
             tests/test_qwen38_dp6_f_postcreate_v2.py \
+            tests/test_qwen38_dp6_f_live_release_v2.py \
             tests/test_qwen38_dp6_early_qualifier_package_v1.py \
             tests/test_qwen38_dp6_early_live_v1.py \
             tests/test_opencode_actual_harness_parity_v1.py
