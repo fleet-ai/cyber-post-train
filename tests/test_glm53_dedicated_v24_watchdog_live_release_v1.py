@@ -795,7 +795,7 @@ def test_launch_releases_exact_server_if_watcher_handoff_fails(
 def test_handoff_failure_release_uses_independent_local_control_plane(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    calls: list[str] = []
+    calls: list[tuple[str, dict]] = []
     monkeypatch.setattr(
         live_release,
         "_pod_python",
@@ -803,9 +803,13 @@ def test_handoff_failure_release_uses_independent_local_control_plane(
             ConnectionError("server Pod disappeared during its own deletion")
         ),
     )
-    monkeypatch.setattr(live_release, "_release_local", calls.append)
+    monkeypatch.setattr(
+        live_release,
+        "_release_local",
+        lambda run_id, binding: calls.append((run_id, binding)),
+    )
     live_release._release_on_handoff_failure(_binding(), "head-pod")
-    assert calls == ["ft-run-deadbeef"]
+    assert calls == [("ft-run-deadbeef", _binding())]
 
 
 def test_local_release_confirms_api_and_kubernetes_absence_after_delete(
@@ -838,9 +842,52 @@ def test_local_release_confirms_api_and_kubernetes_absence_after_delete(
 
     monkeypatch.setenv("FLEET_API_KEY", "not-persisted")
     monkeypatch.setattr(live_release.urllib.request, "urlopen", open_request)
-    monkeypatch.setattr(live_release, "_kubectl_optional", lambda _kind, _name: None)
+    monkeypatch.setattr(
+        live_release, "_kubernetes_server_remnants", lambda _run, _binding: []
+    )
     live_release._release_local("ft-run-deadbeef")
     assert methods == ["DELETE", "GET"]
+
+
+def test_kubernetes_absence_checks_uid_owner_name_label_and_annotation_remnants(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rows = {
+        "items": [
+            {
+                "kind": "Workload",
+                "metadata": {
+                    "name": "random",
+                    "uid": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                    "ownerReferences": [
+                        {"uid": _binding()["rayjob_uid"], "name": "random-owner"}
+                    ],
+                },
+            },
+            {
+                "kind": "Pod",
+                "metadata": {
+                    "name": "orphan",
+                    "uid": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+                    "labels": {"run": "ft-run-deadbeef"},
+                },
+            },
+        ]
+    }
+    monkeypatch.setattr(
+        live_release.subprocess,
+        "run",
+        lambda *_args, **_kwargs: subprocess.CompletedProcess(
+            [], 0, json.dumps(rows), ""
+        ),
+    )
+    remnants = live_release._kubernetes_server_remnants(
+        "ft-run-deadbeef", _binding()
+    )
+    assert {(row["kind"], row["name"]) for row in remnants} == {
+        ("Workload", "random"),
+        ("Pod", "orphan"),
+    }
 
 
 def test_tracked_live_release_receipt_is_self_digested_and_held() -> None:
