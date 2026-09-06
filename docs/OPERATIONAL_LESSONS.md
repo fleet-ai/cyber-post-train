@@ -79,3 +79,4 @@ closeout must answer all of the following:
 Do not add credentials, prompts, traces, flags, scores, mutable endpoint state,
 or current workload identifiers. Link sanitized immutable evidence from the
 incident-specific receipt when that evidence is publishable.
+DP6 metric observers must persist a sanitized target-family schema receipt (sample counts and label-key sets only, never values) before validating rank coverage; installed SGLang adds `dp_rank` conditionally, and `/health` can precede convergence of all scheduler files into the multiprocess registry, so use a bounded post-ready schema warmup that never refreshes the real-traffic idle clock.
