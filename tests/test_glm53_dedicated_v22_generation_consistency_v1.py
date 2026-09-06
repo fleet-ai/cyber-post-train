@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import copy
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -56,3 +59,29 @@ def test_cpu_canary_is_projected_create_once_and_non_scoring() -> None:
     assert {row["mountPath"] for row in container["volumeMounts"]} >= {"/work", "/mnt/sfs"}
     assert 'root="/work/root"' in container["args"][0]
     assert "mktemp" not in container["args"][0]
+    data = package["objects"]["items"][0]["data"]
+    assert "self_hosted.py" not in data
+    assert "from evals.fleet" not in data["gate.py"]
+
+
+def test_projected_gate_imports_and_runs_with_stdlib_only(tmp_path: Path) -> None:
+    data = job.render(ROOT)["objects"]["items"][0]["data"]
+    projected = tmp_path / "projected"
+    projected.mkdir()
+    (projected / "gate.py").write_text(data["gate.py"])
+    (projected / "fixture.json").write_text(data["fixture.json"])
+    output = tmp_path / "result" / "CANARY.json"
+    script = (
+        "import importlib.util;from pathlib import Path;"
+        f"s=importlib.util.spec_from_file_location('gate',{str(projected / 'gate.py')!r});"
+        "m=importlib.util.module_from_spec(s);s.loader.exec_module(m);"
+        f"m.run_canary(Path({str(projected / 'fixture.json')!r}),Path({str(output)!r}))"
+    )
+    env = {
+        "PATH": os.environ["PATH"],
+        "JOB_UID": "33333333-3333-4333-8333-333333333331",
+        "POD_UID": "33333333-3333-4333-8333-333333333332",
+    }
+    subprocess.run([sys.executable, "-I", "-c", script], check=True, env=env)
+    receipt = json.loads(output.read_text())
+    assert receipt["status"] == "PASSED_FULL_GENERATION_BINDING_PATH"

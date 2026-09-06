@@ -11,7 +11,7 @@ from typing import Any
 from evals.fleet import glm53_dedicated_v22_generation_consistency_v1 as gate
 from evals.fleet import self_hosted
 
-NAME = "chris-glm53-dedicated-v22-generation-consistency-v2"
+NAME = "chris-glm53-dedicated-v22-generation-consistency-v3"
 OUTPUT = f"/mnt/sfs/jobs/{NAME}/CANARY.json"
 
 
@@ -22,8 +22,7 @@ def render(root: Path) -> dict[str, Any]:
         "gate.py": (
             root / "evals/fleet/glm53_dedicated_v22_generation_consistency_v1.py"
         ).read_text(),
-        "self_hosted.py": (root / "evals/fleet/self_hosted.py").read_text(),
-        "fixture.json": self_hosted.canonical_json(fixture).decode(),
+        "fixture.json": gate.canonical_json(fixture).decode(),
     }
     package_sha256 = self_hosted.sha256(self_hosted.canonical_json(data))
     configmap = {
@@ -43,7 +42,6 @@ def render(root: Path) -> dict[str, Any]:
         'mkdir -p "$root/evals/fleet"\n'
         'touch "$root/evals/__init__.py" "$root/evals/fleet/__init__.py"\n'
         'cp /bootstrap/gate.py "$root/evals/fleet/glm53_dedicated_v22_generation_consistency_v1.py"\n'
-        'cp /bootstrap/self_hosted.py "$root/evals/fleet/self_hosted.py"\n'
         "PYTHONPATH=\"$root\" python - <<'PY'\n"
         "import os\n"
         "from pathlib import Path\n"

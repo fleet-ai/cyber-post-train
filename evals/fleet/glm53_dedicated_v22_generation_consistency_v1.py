@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import uuid
 from pathlib import Path
 from typing import Any
-
-from evals.fleet import self_hosted
 
 GENERATION = 22
 SCHEMA = "fleet-glm53-dedicated-generation-consistency-v1"
@@ -19,6 +18,18 @@ RELEASE_JOB = "chris-glm53-dedicated-v22-r051-a2-release-v1"
 CONTROLLER_JOB = "chris-glm53-dedicated-v22-r051-a2-canary-v1"
 SERVING_BLOCK = "glm-dedicated-v22-r051-v1"
 LEASE_ROOT = "/mnt/sfs/endpoint-leases/opencode11827-dedicated-v22-v1"
+
+
+def canonical_json(value: Any) -> bytes:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
+
+
+def sha256(value: bytes) -> str:
+    return "sha256:" + hashlib.sha256(value).hexdigest()
+
+
+def digest_without(value: dict[str, Any], field: str) -> str:
+    return sha256(canonical_json({key: item for key, item in value.items() if key != field}))
 
 
 def qualification_fixture() -> dict[str, Any]:
@@ -138,7 +149,7 @@ def run_canary(fixture_path: Path, output_path: Path) -> dict[str, Any]:
     if any(uuid.UUID(item).int == 0 for item in (job_uid, pod_uid)):
         raise RuntimeError("generation consistency canary identity absent")
     # Cross the same serialized-boundary shape used by projected ConfigMaps.
-    roundtrip = json.loads(self_hosted.canonical_json(value))
+    roundtrip = json.loads(canonical_json(value))
     validate(roundtrip)
     receipt = {
         "schema_version": CANARY_SCHEMA,
@@ -146,7 +157,7 @@ def run_canary(fixture_path: Path, output_path: Path) -> dict[str, Any]:
         "generation": GENERATION,
         "job_uid": job_uid,
         "pod_uid": pod_uid,
-        "fixture_file_sha256": self_hosted.sha256(raw),
+        "fixture_file_sha256": sha256(raw),
         "server_title": value["server"]["title"],
         "server_run_dir": value["server"]["run_dir"],
         "api_run_id": value["server"]["api_run_id"],
@@ -164,7 +175,7 @@ def run_canary(fixture_path: Path, output_path: Path) -> dict[str, Any]:
         "claims_sessions_verifier_or_scoring_calls": 0,
         "prompts_traces_flags_scores_or_model_outputs_included": False,
     }
-    receipt["receipt_sha256"] = self_hosted.digest_without(receipt, "receipt_sha256")
+    receipt["receipt_sha256"] = digest_without(receipt, "receipt_sha256")
     output_path.parent.mkdir(mode=0o700, parents=False, exist_ok=False)
-    output_path.write_bytes(self_hosted.canonical_json(receipt) + b"\n")
+    output_path.write_bytes(canonical_json(receipt) + b"\n")
     return receipt
