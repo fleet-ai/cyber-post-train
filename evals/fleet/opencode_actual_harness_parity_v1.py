@@ -25,14 +25,13 @@ import httpx
 
 from evals.fleet import exact_pass4_crypto as crypto
 from evals.fleet import exact_pass4_universe as exact
-from evals.fleet import laptop_opencode_lane_v1 as laptop
 from evals.fleet import production_blackbox_tool_catalog_v1 as production_tools
 from evals.fleet import self_hosted
 
 SCHEMA = "fleet-opencode-actual-harness-hosted-parity-v1"
 HOSTED_ORIGIN = "https://inference.flt.build"
-IMAGE = laptop.IMAGE
-IMAGE_ID = laptop.IMAGE_ID
+IMAGE = "chris/opencode:1.18.27-cyber-v1"
+IMAGE_ID = "sha256:ca4f0b8f50bd051d709c7c0ae5ec47ca31bbff7d2a2ad754c67b9cdf585567cb"
 MODEL_KEYS = ("qwen3.8-27b", "glm-5.3")
 EXPECTED_CALL_ORDER = ["bash", "submit_report"]
 MAX_MODEL_REQUESTS = 600
@@ -383,6 +382,7 @@ def run(
     *,
     upstream_origin: str = HOSTED_ORIGIN,
     server_binding: Mapping[str, Any] | None = None,
+    docker_add_host_gateway: bool = False,
 ) -> dict[str, Any]:
     observed_image = inspect_local_image()
     is_hosted = upstream_origin.rstrip("/") == HOSTED_ORIGIN
@@ -421,6 +421,11 @@ def run(
                     "--rm",
                     "--platform",
                     "linux/amd64",
+                    *(
+                        ["--add-host", "host.docker.internal:host-gateway"]
+                        if docker_add_host_gateway
+                        else []
+                    ),
                     "-e",
                     "OPENCODE_DISABLE_MODELS_FETCH=true",
                     "-e",
@@ -525,6 +530,7 @@ def run(
             "harness_exit_code": completed.returncode,
             "model_requests": model_requests,
             "final_marker_observed": marker,
+            "docker_host_gateway_added": docker_add_host_gateway,
             "task_instance_session_verifier_scoring_calls": 0,
             "scored_launch_authorized": False,
         },
