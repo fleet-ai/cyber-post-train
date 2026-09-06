@@ -78,7 +78,7 @@ def test_v24_watcher_package_is_uid_bound_create_once_and_score_free() -> None:
     )
     assert env["POD_UID"]["valueFrom"]["fieldRef"]["fieldPath"] == "metadata.uid"
     assert rendered["server_binding"] == _binding()
-    assert rendered["watchdog_launch_authorized"] is True
+    assert rendered["watchdog_launch_authorized"] is False
     assert rendered["server_launch_authorized"] is False
     assert rendered["qualification_launch_authorized"] is False
     assert rendered["scored_launch_authorized"] is False

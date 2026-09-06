@@ -35,7 +35,7 @@ def render(
         "objects": {"apiVersion": "v1", "kind": "List", "items": [configmap, job]},
         "server_binding": binding,
         "server_launch_authorized": False,
-        "watchdog_launch_authorized": True,
+        "watchdog_launch_authorized": False,
         "qualification_launch_authorized": False,
         "scored_launch_authorized": False,
     }
