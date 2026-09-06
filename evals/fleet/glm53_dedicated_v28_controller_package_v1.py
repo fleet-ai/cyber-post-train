@@ -153,6 +153,7 @@ exec /tmp/v28-env/bin/python -m evals.fleet.glm53_dedicated_v28_controller_v1 \
         "spec": {
             "backoffLimit": 0,
             "activeDeadlineSeconds": 1200,
+            "ttlSecondsAfterFinished": 604800,
             "template": {
                 "metadata": {
                     "labels": {
@@ -181,6 +182,10 @@ exec /tmp/v28-env/bin/python -m evals.fleet.glm53_dedicated_v28_controller_v1 \
                         {
                             "name": "install-kubectl",
                             "image": KUBECTL_IMAGE,
+                            "resources": {
+                                "requests": {"cpu": "50m", "memory": "64Mi"},
+                                "limits": {"cpu": "500m", "memory": "256Mi"},
+                            },
                             "command": [
                                 "sh",
                                 "-c",
@@ -194,6 +199,10 @@ exec /tmp/v28-env/bin/python -m evals.fleet.glm53_dedicated_v28_controller_v1 \
                             "name": "controller",
                             "image": CPU_IMAGE,
                             "command": ["bash", "-lc", command],
+                            "resources": {
+                                "requests": {"cpu": "100m", "memory": "256Mi"},
+                                "limits": {"cpu": "2", "memory": "2Gi"},
+                            },
                             "env": [
                                 {
                                     "name": "FLEET_API_KEY",

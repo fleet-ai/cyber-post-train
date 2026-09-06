@@ -1,5 +1,6 @@
 import json
 import os
+import subprocess
 import time
 from pathlib import Path
 
@@ -17,7 +18,13 @@ from evals.fleet import glm53_dedicated_v28_watchdog_package_v1 as watchdog_pack
 
 ROOT = Path(__file__).resolve().parents[1]
 NOW = 2_000_000_000.0
-COMMIT = "0" * 40
+COMMIT = subprocess.run(
+    ["git", "rev-parse", "HEAD"],
+    cwd=ROOT,
+    check=True,
+    text=True,
+    capture_output=True,
+).stdout.strip()
 
 
 def authorization() -> dict:
@@ -82,7 +89,9 @@ def test_controller_job_keeps_credential_through_ready_and_handoff() -> None:
     assert spec["priorityClassName"] == "fleet-serve-low"
     assert spec["preemptionPolicy"] == "Never"
     assert spec["restartPolicy"] == "Never"
+    assert job["spec"]["ttlSecondsAfterFinished"] == 604800
     assert spec["initContainers"][0]["image"] == controller_package.KUBECTL_IMAGE
+    assert container["resources"]["requests"] == {"cpu": "100m", "memory": "256Mi"}
     assert any(row["name"] == "FLEET_API_KEY" for row in container["env"])
     assert "glm53_dedicated_v28_controller_v1" in command
     assert "uv sync --project /workspace --frozen" in command
@@ -91,6 +100,23 @@ def test_controller_job_keeps_credential_through_ready_and_handoff() -> None:
     assert held["credentialed_release_required"] is True
     assert held["server_launch_authorized"] is False
     assert held["receipt_sha256"] == crypto.digest_without(held, "receipt_sha256")
+
+
+def test_controller_package_is_exact_commit_closed_and_create_once() -> None:
+    rendered = controller_package.render(ROOT, COMMIT, authorization())
+    source, auth, job = rendered["objects"]["items"]
+    package = json.loads(source["data"]["package.json"])
+    assert package["package_commit"] == COMMIT
+    assert set(package["files"]) == set(controller_package.FILES)
+    assert package["credentialed_release_required"] is True
+    assert package["score_free"] is True
+    assert len(json.dumps(source)) < 1_000_000
+    assert auth["immutable"] is True
+    assert job["metadata"]["name"] == controller_package.JOB_NAME
+    assert rendered["server_launch_authorized"] is True
+    assert rendered["watchdog_handoff_required"] is True
+    assert rendered["qualification_launch_authorized"] is False
+    assert rendered["scored_launch_authorized"] is False
 
 
 def test_controller_releases_with_its_credential_when_handoff_fails(
