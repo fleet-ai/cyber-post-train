@@ -121,7 +121,17 @@ def test_evaluator_passes_c1_c2_c4_and_fails_closed() -> None:
     assert "c2_gpu_or_identity" in held.evaluate(waves, gpu)["failures"]
 
 
-def test_execute_stops_before_c4_when_c2_latency_fails(tmp_path: Path, monkeypatch) -> None:
+@pytest.mark.parametrize(
+    ("failure", "match"),
+    (
+        ("protocol", "c2_runtime_gate_failed"),
+        ("counter", "c2_runtime_gate_failed"),
+        ("latency", "c2_latency_gate_failed"),
+    ),
+)
+def test_execute_stops_before_c4_when_c2_gate_fails(
+    tmp_path: Path, monkeypatch, failure: str, match: str
+) -> None:
     plan = held.render(ROOT)
     authorization_receipt = {
         "qualification_launch_authorized": True,
@@ -137,7 +147,12 @@ def test_execute_stops_before_c4_when_c2_latency_fails(tmp_path: Path, monkeypat
 
     def fake_wave(concurrency, **_kwargs):
         calls.append(concurrency)
-        return _wave(concurrency, 10 if concurrency == 1 else 25, 0.1)
+        wave = _wave(concurrency, 10 if concurrency == 1 or failure != "latency" else 25, 0.1)
+        if concurrency == 2 and failure == "protocol":
+            wave["streams_succeeded"] = 1
+        if concurrency == 2 and failure == "counter":
+            wave["request_counter_delta"] += 1
+        return wave
 
     monkeypatch.setattr(held, "run_wave", fake_wave)
     monkeypatch.setattr(
@@ -158,7 +173,7 @@ def test_execute_stops_before_c4_when_c2_latency_fails(tmp_path: Path, monkeypat
         row["receipt_sha256"] = self_hosted.digest_without(row, "receipt_sha256")
         return row
 
-    with pytest.raises(held.QualificationError, match="c2_latency_gate_failed"):
+    with pytest.raises(held.QualificationError, match=match):
         held.execute(
             ROOT,
             authorization_path,
