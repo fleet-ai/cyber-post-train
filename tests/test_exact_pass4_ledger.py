@@ -1120,6 +1120,37 @@ def test_glm_c2_validated_acceptance_uses_reviewed_runtime_plan_mapping(
 
 
 @pytest.mark.parametrize(
+    "mutation",
+    [
+        lambda value: value["accepted"].__setitem__("cell_id", "sha256:" + "0" * 64),
+        lambda value: value["session_inventory"].__setitem__("matching_count", 0),
+        lambda value: value["verifier"].__setitem__("present", False),
+        lambda value: value["cleanup"].__setitem__("instance_closed", False),
+        lambda value: value["accepted"].__setitem__("file_sha256", "not-a-digest"),
+    ],
+)
+def test_hosted_glm_validated_acceptance_is_exact_and_score_blind(
+    tmp_path: Path, authority: ledger.Authority, mutation
+) -> None:
+    source = ROOT / (
+        "docs/evidence/glm53-study/"
+        "2026-09-06-glm53-hosted-s2-rank27-a1-accepted-validated.json"
+    )
+    evidence = ledger.accepted_evidence(source, authority)
+    assert evidence.state == "accepted"
+    assert evidence.cell_id == (
+        "sha256:309baef0b19473c8e7b19340adcb881d12fb559118c2a3a3b7576ccb3bb19c00"
+    )
+
+    value = json.loads(source.read_text())
+    mutation(value)
+    value["receipt_sha256"] = self_hosted.digest_without(value, "receipt_sha256")
+    path = _write(tmp_path / "ACCEPTED_VALIDATED.json", value)
+    with pytest.raises(ledger.LedgerError):
+        ledger.accepted_evidence(path, authority)
+
+
+@pytest.mark.parametrize(
     ("mutation", "message"),
     [
         (lambda value: value.__setitem__("receipt_sha256", "sha256:" + "0" * 64), "digest"),

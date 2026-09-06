@@ -66,16 +66,17 @@ DEDICATED_QWEN_ROLLFORWARD_VALIDATED_SCHEMA = (
     "fleet-qwen38-dedicated-rollforward-accepted-validated-v1"
 )
 GLM_C2_ACCEPTED_VALIDATED_SCHEMA = "fleet-glm53-hosted-c2-accepted-validated-v1"
+HOSTED_GLM_ACCEPTED_VALIDATED_SCHEMA = "fleet-hosted-glm-accepted-validated-v1"
 GLM_C2_RUNTIME_AUTHORITY_SCHEMA = "fleet-glm53-hosted-c2-runtime-authority-v1"
 GLM_C2_RUNTIME_AUTHORITY_PATH = Path(
     "docs/evidence/qwen38-study/2026-09-05-glm53-hosted-c2-runtime-authority-v1.json"
 )
 SUPPLEMENTAL_RUNTIME_AUTHORITY_SCHEMA = (
-    "fleet-exact-pass4-supplemental-runtime-authority-v6"
+    "fleet-exact-pass4-supplemental-runtime-authority-v7"
 )
 SUPPLEMENTAL_RUNTIME_AUTHORITY_PATH = Path(
     "docs/evidence/qwen38-study/"
-    "2026-09-05-exact-pass4-supplemental-runtime-authority-v6.json"
+    "2026-09-05-exact-pass4-supplemental-runtime-authority-v7.json"
 )
 DEDICATED_QWEN_ATTEMPT1_BINDING = {
     "plan_sha256": "sha256:5358ae8d0c81fd18d815f5289eabf771274101e099c799c49a85d0713687aa67",
@@ -146,6 +147,7 @@ ACCEPTED_SCHEMAS = {
     DEDICATED_QWEN_ROLLFORWARD_VALIDATED_SCHEMA,
     GENERATION15_ACCEPTED_GATE_SCHEMA,
     GLM_C2_ACCEPTED_VALIDATED_SCHEMA,
+    HOSTED_GLM_ACCEPTED_VALIDATED_SCHEMA,
 }
 LEGACY_GLM_GENERATION7_ACCEPTED_FIELDS = {
     "schema_version",
@@ -299,6 +301,19 @@ GLM_C2_ACCEPTED_VALIDATED_FIELDS = {
     "scores_included",
     "prompts_or_traces_included",
     "credentials_included",
+    "receipt_sha256",
+}
+HOSTED_GLM_ACCEPTED_VALIDATED_FIELDS = {
+    "schema_version",
+    "status",
+    "observed_at_utc",
+    "accepted",
+    "session_inventory",
+    "verifier",
+    "cleanup",
+    "evidence_files",
+    "job",
+    "privacy",
     "receipt_sha256",
 }
 BULK_CLAIM_FIELDS = {
@@ -2070,6 +2085,134 @@ def _accepted_validated_glm_c2(
     )
 
 
+def _accepted_validated_hosted_glm(
+    value: dict[str, Any], path: Path, authority: Authority
+) -> Evidence:
+    """Admit one hosted GLM acceptance through its score-blind validation wrapper."""
+    _require_exact_fields(value, HOSTED_GLM_ACCEPTED_VALIDATED_FIELDS, path)
+    accepted = value.get("accepted")
+    session = value.get("session_inventory")
+    verifier = value.get("verifier")
+    cleanup = value.get("cleanup")
+    evidence_files = value.get("evidence_files")
+    job = value.get("job")
+    privacy = value.get("privacy")
+    if not all(
+        isinstance(item, dict)
+        for item in (accepted, session, verifier, cleanup, evidence_files, job, privacy)
+    ):
+        raise LedgerError(f"validated hosted GLM receipt envelope drifted: {path}")
+    _require_exact_fields(
+        accepted,
+        {
+            "accepted",
+            "cell_id",
+            "execution_id",
+            "file_sha256",
+            "path",
+            "receipt_sha256",
+            "run_id",
+        },
+        path,
+    )
+    _require_exact_fields(
+        session,
+        {"matching_count", "route", "session_id", "status", "task_session_count"},
+        path,
+    )
+    _require_exact_fields(verifier, {"id", "matches_accepted_receipt", "present"}, path)
+    _require_exact_fields(
+        cleanup,
+        {
+            "containers_removed",
+            "file_sha256",
+            "instance_closed",
+            "instance_created",
+            "path",
+        },
+        path,
+    )
+    _require_exact_fields(
+        evidence_files,
+        {
+            "result_file_sha256",
+            "reward_result_file_sha256",
+            "session_ingest_file_sha256",
+        },
+        path,
+    )
+    _require_exact_fields(job, {"name", "pod_uid", "uid"}, path)
+    _require_exact_fields(privacy, {"prompts_traces_flags_or_scores_read"}, path)
+
+    key = (accepted.get("cell_id"), accepted.get("execution_id"))
+    pair = authority.supplemental_bulk_items.get(key)
+    if pair is None:
+        raise LedgerError(f"validated hosted GLM acceptance lacks exact authority: {path}")
+    _plan, item = pair
+    cell, generation = _require_cell_execution(
+        authority, *key, item.get("execution_generation"), path
+    )
+    expected_accepted = {
+        "accepted": True,
+        "cell_id": item["cell_id"],
+        "execution_id": item["execution_id"],
+        "run_id": item["run_id"],
+    }
+    if any(accepted.get(name) != expected for name, expected in expected_accepted.items()):
+        raise LedgerError(f"validated hosted GLM acceptance identity drifted: {path}")
+    job_name = job.get("name")
+    if not isinstance(job_name, str) or not job_name:
+        raise LedgerError(f"validated hosted GLM Job name is invalid: {path}")
+    expected_source_path = f"/mnt/sfs/jobs/{job_name}/accepted/{item['run_id']}.json"
+    expected_cleanup_path = (
+        f"/mnt/sfs/jobs/{job_name}/attempts/{item['run_id']}/cleanup.json"
+    )
+    if (
+        accepted.get("path") != expected_source_path
+        or cleanup.get("path") != expected_cleanup_path
+        or value.get("status") != "ACCEPTED_VALIDATED"
+        or accepted.get("accepted") is not True
+        or session.get("matching_count") != 1
+        or session.get("route") != "/v1/sessions?task_key=<exact-task-key>"
+        or session.get("status") != "completed"
+        or type(session.get("task_session_count")) is not int
+        or session.get("task_session_count") < 1
+        or verifier.get("present") is not True
+        or verifier.get("matches_accepted_receipt") is not True
+        or cleanup.get("instance_created") is not True
+        or cleanup.get("instance_closed") is not True
+        or cleanup.get("containers_removed") is not True
+        or privacy.get("prompts_traces_flags_or_scores_read") is not False
+        or not isinstance(value.get("observed_at_utc"), str)
+        or not value["observed_at_utc"].endswith("Z")
+    ):
+        raise LedgerError(f"validated hosted GLM outcome is not authoritative: {path}")
+    for mapping, field in (
+        (accepted, "file_sha256"),
+        (accepted, "receipt_sha256"),
+        (cleanup, "file_sha256"),
+        (evidence_files, "result_file_sha256"),
+        (evidence_files, "reward_result_file_sha256"),
+        (evidence_files, "session_ingest_file_sha256"),
+    ):
+        _require_sha256(mapping.get(field), field, path)
+    for mapping, field in (
+        (session, "session_id"),
+        (verifier, "id"),
+        (job, "uid"),
+        (job, "pod_uid"),
+    ):
+        _require_uuid(mapping.get(field), field, path)
+    return Evidence(
+        "accepted",
+        cell["cell_id"],
+        item["execution_id"],
+        generation,
+        value["receipt_sha256"],
+        path,
+    )
+
+
 def accepted_evidence(path: Path, authority: Authority) -> Evidence:
     value = load_receipt(path)
     schema = value.get("schema_version")
@@ -2087,6 +2230,8 @@ def accepted_evidence(path: Path, authority: Authority) -> Evidence:
         return _accepted_validated_dedicated_qwen_rollforward(value, path, authority)
     if schema == GLM_C2_ACCEPTED_VALIDATED_SCHEMA:
         return _accepted_validated_glm_c2(value, path, authority)
+    if schema == HOSTED_GLM_ACCEPTED_VALIDATED_SCHEMA:
+        return _accepted_validated_hosted_glm(value, path, authority)
     if schema == GENERATION15_ACCEPTED_GATE_SCHEMA:
         return _accepted_generation15_gate(value, path, authority)
     if schema == LEGACY_GLM_GENERATION7_ACCEPTED_SCHEMA:
