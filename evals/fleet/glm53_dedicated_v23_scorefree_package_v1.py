@@ -57,6 +57,12 @@ def validate_cpu_priority_inventory(priority_classes: list[dict[str, Any]]) -> N
         or old.get("preemptionPolicy") != "Never"
         or not isinstance(old.get("value"), int)
         or old["value"] >= selected["value"]
+        or any(
+            row.get("preemptionPolicy") == "Never"
+            and isinstance(row.get("value"), int)
+            and row["value"] > selected["value"]
+            for row in priority_classes
+        )
     ):
         raise PackageError("v23_cpu_priority_contract_invalid")
 

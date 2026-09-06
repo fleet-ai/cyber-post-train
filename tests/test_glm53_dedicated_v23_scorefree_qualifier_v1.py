@@ -374,6 +374,15 @@ def test_cpu_priority_live_contract_fails_closed_on_preempting_or_stale_class() 
     values[1]["preemptionPolicy"] = "PreemptLowerPriority"
     with pytest.raises(package.PackageError, match="priority_contract"):
         package.validate_cpu_priority_inventory(values)
+    values = _priority_classes() + [
+        {
+            "metadata": {"name": "future-nonpreempting"},
+            "value": 101,
+            "preemptionPolicy": "Never",
+        }
+    ]
+    with pytest.raises(package.PackageError, match="priority_contract"):
+        package.validate_cpu_priority_inventory(values)
 
 
 def test_package_is_exact_create_once_nonpreempting_and_scorefree() -> None:
