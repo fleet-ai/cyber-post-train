@@ -100,9 +100,15 @@ bootstrap_stage 05-harness-version-validated
 export AGENT_HARNESS_IMAGE=chris/opencode:1.18.27-cyber-v1
 export FIXED_PROXY_IMAGE=ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
 bootstrap_stage 06-runtime-exec
+CANARY_ARGS=()
+if [[ "${QWEN_HOSTED_WHOLE_TASK_RUNTIME_GATE_CANARY:-false}" == "true" ]]; then
+  CANARY_ARGS=(--runtime-gate-canary-receipt \
+    "$QWEN_HOSTED_WHOLE_TASK_DIAGNOSTIC_ROOT/RUNTIME-GATE-CANARY.json")
+fi
 exec uv run --no-project --with httpx==0.28.1 python \
   -m evals.fleet.qwen_hosted_whole_task_successor_v1_runtime \
   --plan "$ROOT/evals/fleet/configs/runtime-plan.json" \
   --out "$QWEN_HOSTED_WHOLE_TASK_OUTPUT_ROOT" \
   --diagnostic-root "$QWEN_HOSTED_WHOLE_TASK_DIAGNOSTIC_ROOT" \
-  --proxy "$ROOT/evals/fleet/fixed_proxy.py"
+  --proxy "$ROOT/evals/fleet/fixed_proxy.py" \
+  "${CANARY_ARGS[@]}"

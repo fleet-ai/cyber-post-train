@@ -16,6 +16,11 @@ COMMON = (
     "evals/fleet/qwen_hosted_whole_task_successor_v1.py",
     "evals/fleet/qwen_hosted_whole_task_successor_v1_runtime.py",
 )
+RUNTIME_GATE_CANARY_JOB = "chris-q38-hosted-whole-task-runtime-gate-canary-v1"
+RUNTIME_GATE_CANARY_CONFIGMAP = RUNTIME_GATE_CANARY_JOB + "-package"
+RUNTIME_GATE_CANARY_DIAGNOSTIC_ROOT = (
+    "/mnt/sfs/jobs/chris-q38-hosted-whole-task-runtime-gate-canary-v1-diagnostic"
+)
 
 
 def _read(root: Path, paths: tuple[str, ...]) -> dict[str, str]:
@@ -125,3 +130,70 @@ def render(root: Path, *, release_path: Path | None = None) -> dict[str, Any]:
             raise ValueError("hosted whole-task ConfigMap exceeds safety budget")
         items.extend([cm, job])
     return {"apiVersion": "v1", "kind": "List", "items": items}
+
+
+def render_runtime_gate_canary(root: Path) -> dict[str, Any]:
+    """Render one score-free create-once Job that stops after the runtime gate."""
+    plans = successor.build_plans(root)
+    sources, source_data = package_sources(root, plans)
+    held = successor.load(root / successor.HELD_PATH)
+    successor.validate_held(held, plans, sources)
+    controller = "qwen-a"
+    data = source_data[controller]
+    data["release.json"] = json.dumps(held, sort_keys=True, separators=(",", ":")) + "\n"
+    data["package-source.json"] = (
+        json.dumps(sources[controller], sort_keys=True, separators=(",", ":")) + "\n"
+    )
+    cm = {
+        "apiVersion": "v1",
+        "kind": "ConfigMap",
+        "metadata": {"name": RUNTIME_GATE_CANARY_CONFIGMAP, "namespace": base.NAMESPACE},
+        "immutable": True,
+        "data": data,
+    }
+    job = base._base_job(  # noqa: SLF001
+        RUNTIME_GATE_CANARY_JOB, RUNTIME_GATE_CANARY_CONFIGMAP, scored=True
+    )
+    job["metadata"]["annotations"]["cyber-post-train.fleet.ai/launch-authorized"] = "false"
+    job["metadata"]["annotations"]["cyber-post-train.fleet.ai/diagnostic-only"] = "true"
+    job["metadata"]["labels"]["cyber-post-train.fleet.ai/experiment"] = (
+        "q38-hosted-runtime-gate-canary"
+    )
+    job["spec"]["template"]["metadata"]["labels"]["cyber-post-train.fleet.ai/experiment"] = (
+        "q38-hosted-runtime-gate-canary"
+    )
+    job["spec"]["activeDeadlineSeconds"] = 1800
+    container = job["spec"]["template"]["spec"]["containers"][0]
+    container["args"] = [
+        "apt-get update; apt-get install --yes --no-install-recommends "
+        "docker.io=20.10.24+dfsg1-1+deb12u1+b6; "
+        "exec /bin/bash /bootstrap/run_qwen_hosted_whole_task_successor_v1.sh"
+    ]
+    container["env"] = [
+        row
+        for row in container["env"]
+        if row["name"] not in {"FLEET_API_KEY", "G18_PREFLIGHT_PATH", "G18_PREFLIGHT_SHA256"}
+    ]
+    container["env"].extend(
+        [
+            {"name": "QWEN_HOSTED_WHOLE_TASK_CONTROLLER", "value": controller},
+            {"name": "QWEN_HOSTED_WHOLE_TASK_OUTPUT_ROOT", "value": "/dev/null"},
+            {
+                "name": "QWEN_HOSTED_WHOLE_TASK_DIAGNOSTIC_ROOT",
+                "value": RUNTIME_GATE_CANARY_DIAGNOSTIC_ROOT,
+            },
+            {"name": "QWEN_HOSTED_WHOLE_TASK_RELEASE_PATH", "value": "/bootstrap/release.json"},
+            {
+                "name": "QWEN_HOSTED_WHOLE_TASK_RELEASE_SHA256",
+                "value": held["receipt_sha256"],
+            },
+            {
+                "name": "QWEN_HOSTED_WHOLE_TASK_PACKAGE_SOURCE_SHA256",
+                "value": sources[controller]["receipt_sha256"],
+            },
+            {"name": "QWEN_HOSTED_WHOLE_TASK_RUNTIME_GATE_CANARY", "value": "true"},
+        ]
+    )
+    if len(json.dumps(cm).encode()) >= 900_000:
+        raise ValueError("hosted whole-task runtime-gate canary ConfigMap exceeds safety budget")
+    return {"apiVersion": "v1", "kind": "List", "items": [cm, job]}

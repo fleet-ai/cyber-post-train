@@ -1,1 +1,134 @@
-{"controller_cap":2,"controllers":[{"cells":[{"attempt":1,"cell_id":"sha256:154ea5b3f132cff779ee42d79f7d787bcb48eaa8b90c7f5851e03bfe698457b2","execution_id":"sha256:c11f480b9abdccd8cd9e4f1fa766e304807c6d290b4249797e6f3524c5af19f9","run_id":"chris-q38-ac-g19v4-a-r015-a1-c11f480b"},{"attempt":2,"cell_id":"sha256:84e50468e938989a23d301ee7a099cf6eba7a70c9f5ed4f27aeac63a67950aee","execution_id":"sha256:c38e78924339efca7776fee76957b32092a89e6fd5ea046eb366f2ca35278322","run_id":"chris-q38-ac-g19v4-a-r015-a2-c38e7892"},{"attempt":3,"cell_id":"sha256:f34439505333624a27411105aa3eb8b61c6b841a0193e7ac39b4632131da656c","execution_id":"sha256:f823f771f62fd1d6b38a1f051bd31e5220ce5028c01b733e0d9633f87b1b1f17","run_id":"chris-q38-ac-g19v4-a-r015-a3-f823f771"},{"attempt":4,"cell_id":"sha256:27e3d90cfbfa2bc0f6e3e8b7e823d3ee265345ed8e0695cd1063717fec5dac1c","execution_id":"sha256:f89dedae711fe8feccfbfe3520775c1e781dd98094c66f3b5f95106b610d5440","run_id":"chris-q38-ac-g19v4-a-r015-a4-f89dedae"}],"configmap_name":"chris-q38-hosted-r015-whole-task-g19-package-v1","controller":"qwen-a","job_name":"chris-q38-hosted-r015-whole-task-g19-v1","package_source_receipt_sha256":"sha256:6f5928823a094c4587715946f8424e38c107a1df5a6b53c7d6a39ea4b37171f0","plan_sha256":"sha256:6f1e6e331f7aa8f56c49a087116c2ab3a2f5c53107ebe8d445478fbc4d77151f","selection_rank":15,"sfs_root":"/mnt/sfs/jobs/chris-q38-hosted-r015-whole-task-g19-v1","task_version_id":"fb8f2178-7dd8-429a-8d3c-f14b21a51e02"},{"cells":[{"attempt":1,"cell_id":"sha256:bb1eb87b817eb015533d59880b3d16fc9768f910237009ff7730b6b85d65e89d","execution_id":"sha256:03c851a4acd6eaa9aeab70b878b43fd60321df06e9558b22a93f4fae19bac8bd","run_id":"chris-q38-ac-g19v4-b-r016-a1-03c851a4"},{"attempt":2,"cell_id":"sha256:f8a05b93a8de548cfcb1eb36dbf78ace2fa2647d3eee5e3d5b41894f3dc26dba","execution_id":"sha256:edde70ec2fa87c46b41bb95867c5dc3ce61414606483180ee7ecc143208727a8","run_id":"chris-q38-ac-g19v4-b-r016-a2-edde70ec"},{"attempt":3,"cell_id":"sha256:47b41dbbdcad5126c1a2813f14b40213bebf8c99e8b42e4b1c89c98fd1722cd6","execution_id":"sha256:c667605b02577c15851e69ce96894a8c232aefaf51addadbb5c13e8117191308","run_id":"chris-q38-ac-g19v4-b-r016-a3-c667605b"},{"attempt":4,"cell_id":"sha256:16152cb6dc73f034124cb4bb03e08d2ec35acafcb0e9a9ef06c713fc4c3def3c","execution_id":"sha256:767be6204a0d5401e86e7e8a7655e7e87e2d37e49ed4f1147001503442ccf636","run_id":"chris-q38-ac-g19v4-b-r016-a4-767be620"}],"configmap_name":"chris-q38-hosted-r016-whole-task-g19-package-v1","controller":"qwen-b","job_name":"chris-q38-hosted-r016-whole-task-g19-v1","package_source_receipt_sha256":"sha256:749091cf5c05844b857ea2137a4deacc0f728c62d71b4862fc10705b460216ac","plan_sha256":"sha256:be52bb6159c476c8ba838ed5e56f57caad8e927dc925e92700287e6efdd31ae2","selection_rank":16,"sfs_root":"/mnt/sfs/jobs/chris-q38-hosted-r016-whole-task-g19-v1","task_version_id":"fd07b96f-7aa4-4041-862b-5aa7411eff4b"}],"endpoint_maximum_streams":2,"launch_authorized":false,"ledger_snapshot_file_sha256":"sha256:0a2baba7c16745a4d69f0f5aafc04010734eacbace8f6d712d44011c4a36d0dd","ledger_snapshot_path":"docs/evidence/qwen38-study/2026-09-05-exact-pass4-ledger-evidence-snapshot-v47.json","ledger_snapshot_receipt_sha256":"sha256:bf0b9086dd97eecafe20fa9a4cf3b5d643f0ce8f6abad60fae6e3cba3e3e2e29","mutation_calls":0,"preclaim_failure":{"file_sha256":"sha256:a7c56a747619445e8049c7d1fbe40c0b39d6c6279036909dfaea0a4329be9783","path":"docs/evidence/qwen38-study/2026-09-06-qwen38-hosted-rank15-rank16-preclaim-failure-v1.json","receipt_sha256":"sha256:8341da8ab018972d423403eb93ea06dbfd4eefe67f7bfb1781d2dbeafafc5be0"},"predecessor_tombstones":[{"file_sha256":"sha256:9ce8e6f797488adf0b0b101c1795646aee3ad4c424b11f677e3161b460ca4a66","path":"docs/evidence/qwen38-study/2026-09-06-qwen38-hosted-a-rank13-a1-deadline-terminal-reconciliation-v1.json","receipt_sha256":"sha256:f8b374c05ec106555a5fa2ae522231413b685d64e53c47526efb58b2e98cfbe7","selection_rank":13},{"file_sha256":"sha256:44e7ac1a83deb518f0f28acc0155d5ec46312de5491a8c80ae81c7fc0ae80c4c","path":"docs/evidence/qwen38-study/2026-09-06-qwen38-hosted-b-rank14-a1-deadline-terminal-reconciliation-v1.json","receipt_sha256":"sha256:3e388bb7611c3a197539128e72dcf155046fd7589fed7c443de23246de5f8a15","selection_rank":14}],"privacy":{"credentials_included":false,"prompts_traces_flags_read":false,"scores_read":false},"receipt_sha256":"sha256:c1975eba9d386f9478d62d36646de63ba6001188af25a11382b8aafc70f3e77b","required_fresh_release_gates":["prior_jobs_terminal_and_pods_absent","endpoint_lease_slots_simultaneously_lockable","no_relevant_active_hosted_q_jobs_or_pods","canonical_claim_collisions_zero","authoritative_session_collisions_zero","accepted_evidence_collisions_zero","output_root_collisions_zero","durable_preparing_before_four_claim_publication","crash_recovery_before_model_boundary","atomic_four_claim_publication_and_validation","immutable_package_source_digest_binding"],"retry_forbidden_selection_ranks":[13,14],"schema_version":"fleet-qwen38-hosted-atomic-whole-task-held-v4","scoring_authorized":false,"status":"HELD_FOR_REVIEW","supersedes":{"file_sha256":"sha256:eef7b1bdf5c7a0db8239c02bb4472db0611b9e3094dd414e49ee643715a843a6","path":"docs/evidence/qwen38-study/2026-09-06-qwen38-hosted-rank15-rank16-whole-task-held-v3.json","receipt_sha256":"sha256:658b3abd494cf4a36254a4731cedfb4cd28360ba2eacdaf7a57aa5fd95bd207b"}}
+{
+  "controller_cap": 2,
+  "controllers": [
+    {
+      "cells": [
+        {
+          "attempt": 1,
+          "cell_id": "sha256:154ea5b3f132cff779ee42d79f7d787bcb48eaa8b90c7f5851e03bfe698457b2",
+          "execution_id": "sha256:c11f480b9abdccd8cd9e4f1fa766e304807c6d290b4249797e6f3524c5af19f9",
+          "run_id": "chris-q38-ac-g19v4-a-r015-a1-c11f480b"
+        },
+        {
+          "attempt": 2,
+          "cell_id": "sha256:84e50468e938989a23d301ee7a099cf6eba7a70c9f5ed4f27aeac63a67950aee",
+          "execution_id": "sha256:c38e78924339efca7776fee76957b32092a89e6fd5ea046eb366f2ca35278322",
+          "run_id": "chris-q38-ac-g19v4-a-r015-a2-c38e7892"
+        },
+        {
+          "attempt": 3,
+          "cell_id": "sha256:f34439505333624a27411105aa3eb8b61c6b841a0193e7ac39b4632131da656c",
+          "execution_id": "sha256:f823f771f62fd1d6b38a1f051bd31e5220ce5028c01b733e0d9633f87b1b1f17",
+          "run_id": "chris-q38-ac-g19v4-a-r015-a3-f823f771"
+        },
+        {
+          "attempt": 4,
+          "cell_id": "sha256:27e3d90cfbfa2bc0f6e3e8b7e823d3ee265345ed8e0695cd1063717fec5dac1c",
+          "execution_id": "sha256:f89dedae711fe8feccfbfe3520775c1e781dd98094c66f3b5f95106b610d5440",
+          "run_id": "chris-q38-ac-g19v4-a-r015-a4-f89dedae"
+        }
+      ],
+      "configmap_name": "chris-q38-hosted-r015-whole-task-g19-package-v1",
+      "controller": "qwen-a",
+      "job_name": "chris-q38-hosted-r015-whole-task-g19-v1",
+      "package_source_receipt_sha256": "sha256:193b8662132bef5fd009adc78fb85a90e262912d6c68bacc8221415c9a4de213",
+      "plan_sha256": "sha256:6f1e6e331f7aa8f56c49a087116c2ab3a2f5c53107ebe8d445478fbc4d77151f",
+      "selection_rank": 15,
+      "sfs_root": "/mnt/sfs/jobs/chris-q38-hosted-r015-whole-task-g19-v1",
+      "task_version_id": "fb8f2178-7dd8-429a-8d3c-f14b21a51e02"
+    },
+    {
+      "cells": [
+        {
+          "attempt": 1,
+          "cell_id": "sha256:bb1eb87b817eb015533d59880b3d16fc9768f910237009ff7730b6b85d65e89d",
+          "execution_id": "sha256:03c851a4acd6eaa9aeab70b878b43fd60321df06e9558b22a93f4fae19bac8bd",
+          "run_id": "chris-q38-ac-g19v4-b-r016-a1-03c851a4"
+        },
+        {
+          "attempt": 2,
+          "cell_id": "sha256:f8a05b93a8de548cfcb1eb36dbf78ace2fa2647d3eee5e3d5b41894f3dc26dba",
+          "execution_id": "sha256:edde70ec2fa87c46b41bb95867c5dc3ce61414606483180ee7ecc143208727a8",
+          "run_id": "chris-q38-ac-g19v4-b-r016-a2-edde70ec"
+        },
+        {
+          "attempt": 3,
+          "cell_id": "sha256:47b41dbbdcad5126c1a2813f14b40213bebf8c99e8b42e4b1c89c98fd1722cd6",
+          "execution_id": "sha256:c667605b02577c15851e69ce96894a8c232aefaf51addadbb5c13e8117191308",
+          "run_id": "chris-q38-ac-g19v4-b-r016-a3-c667605b"
+        },
+        {
+          "attempt": 4,
+          "cell_id": "sha256:16152cb6dc73f034124cb4bb03e08d2ec35acafcb0e9a9ef06c713fc4c3def3c",
+          "execution_id": "sha256:767be6204a0d5401e86e7e8a7655e7e87e2d37e49ed4f1147001503442ccf636",
+          "run_id": "chris-q38-ac-g19v4-b-r016-a4-767be620"
+        }
+      ],
+      "configmap_name": "chris-q38-hosted-r016-whole-task-g19-package-v1",
+      "controller": "qwen-b",
+      "job_name": "chris-q38-hosted-r016-whole-task-g19-v1",
+      "package_source_receipt_sha256": "sha256:372da744779dc4991ae51c73621000f193e312e5fc39eedf79841b0f9739513a",
+      "plan_sha256": "sha256:be52bb6159c476c8ba838ed5e56f57caad8e927dc925e92700287e6efdd31ae2",
+      "selection_rank": 16,
+      "sfs_root": "/mnt/sfs/jobs/chris-q38-hosted-r016-whole-task-g19-v1",
+      "task_version_id": "fd07b96f-7aa4-4041-862b-5aa7411eff4b"
+    }
+  ],
+  "endpoint_maximum_streams": 2,
+  "launch_authorized": false,
+  "ledger_snapshot_file_sha256": "sha256:0a2baba7c16745a4d69f0f5aafc04010734eacbace8f6d712d44011c4a36d0dd",
+  "ledger_snapshot_path": "docs/evidence/qwen38-study/2026-09-05-exact-pass4-ledger-evidence-snapshot-v47.json",
+  "ledger_snapshot_receipt_sha256": "sha256:bf0b9086dd97eecafe20fa9a4cf3b5d643f0ce8f6abad60fae6e3cba3e3e2e29",
+  "mutation_calls": 0,
+  "preclaim_failure": {
+    "file_sha256": "sha256:e423007ca58b69462d7fdd3a13a9f325a34a1a0f828473882c5b72d574dc560d",
+    "path": "docs/evidence/qwen38-study/2026-09-06-qwen38-hosted-rank15-rank16-preclaim-failure-v2.json",
+    "receipt_sha256": "sha256:5d51c5e8bd0009c8f01462087c11e6cf1531e87588517fea251e96d7c4030f60"
+  },
+  "predecessor_tombstones": [
+    {
+      "file_sha256": "sha256:9ce8e6f797488adf0b0b101c1795646aee3ad4c424b11f677e3161b460ca4a66",
+      "path": "docs/evidence/qwen38-study/2026-09-06-qwen38-hosted-a-rank13-a1-deadline-terminal-reconciliation-v1.json",
+      "receipt_sha256": "sha256:f8b374c05ec106555a5fa2ae522231413b685d64e53c47526efb58b2e98cfbe7",
+      "selection_rank": 13
+    },
+    {
+      "file_sha256": "sha256:44e7ac1a83deb518f0f28acc0155d5ec46312de5491a8c80ae81c7fc0ae80c4c",
+      "path": "docs/evidence/qwen38-study/2026-09-06-qwen38-hosted-b-rank14-a1-deadline-terminal-reconciliation-v1.json",
+      "receipt_sha256": "sha256:3e388bb7611c3a197539128e72dcf155046fd7589fed7c443de23246de5f8a15",
+      "selection_rank": 14
+    }
+  ],
+  "privacy": {
+    "credentials_included": false,
+    "prompts_traces_flags_read": false,
+    "scores_read": false
+  },
+  "receipt_sha256": "sha256:dafb5f08164276f80d5c5b7683a3880c34bd2fb766a9c56f9ad94bdc5c9e7228",
+  "required_fresh_release_gates": [
+    "prior_jobs_terminal_and_pods_absent",
+    "endpoint_lease_slots_simultaneously_lockable",
+    "no_relevant_active_hosted_q_jobs_or_pods",
+    "canonical_claim_collisions_zero",
+    "authoritative_session_collisions_zero",
+    "accepted_evidence_collisions_zero",
+    "output_root_collisions_zero",
+    "durable_preparing_before_four_claim_publication",
+    "crash_recovery_before_model_boundary",
+    "atomic_four_claim_publication_and_validation",
+    "immutable_package_source_digest_binding",
+    "score_free_stage06_runtime_gate_canary_pass"
+  ],
+  "retry_forbidden_selection_ranks": [
+    13,
+    14
+  ],
+  "schema_version": "fleet-qwen38-hosted-atomic-whole-task-held-v4",
+  "scoring_authorized": false,
+  "status": "HELD_FOR_REVIEW",
+  "supersedes": {
+    "file_sha256": "sha256:eef7b1bdf5c7a0db8239c02bb4472db0611b9e3094dd414e49ee643715a843a6",
+    "path": "docs/evidence/qwen38-study/2026-09-06-qwen38-hosted-rank15-rank16-whole-task-held-v3.json",
+    "receipt_sha256": "sha256:658b3abd494cf4a36254a4731cedfb4cd28360ba2eacdaf7a57aa5fd95bd207b"
+  }
+}

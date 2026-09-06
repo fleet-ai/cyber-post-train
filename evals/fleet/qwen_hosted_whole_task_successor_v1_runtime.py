@@ -17,18 +17,87 @@ def _seal(body: dict[str, Any]) -> dict[str, Any]:
     return {**body, "receipt_sha256": self_hosted.digest_without(body, "receipt_sha256")}
 
 
-def run(plan: dict[str, Any], *, out: Path, proxy: Path, diagnostic_root: Path) -> dict[str, Any]:
-    if out.is_symlink():
-        raise RuntimeError("hosted whole-task output root is unsafe")
+def runtime_gate_check(
+    plans: dict[str, dict[str, Any]],
+    package_source: dict[str, Any],
+    *,
+    canary: bool = False,
+) -> dict[str, Any]:
+    """Run the exact packaged authority gate used at the engine boundary."""
+    if canary:
+        raw_path = os.environ.get("QWEN_HOSTED_WHOLE_TASK_RELEASE_PATH")
+        expected = os.environ.get("QWEN_HOSTED_WHOLE_TASK_RELEASE_SHA256")
+        if raw_path != "/bootstrap/release.json" or not expected:
+            raise RuntimeError("hosted whole-task canary held binding drifted")
+        held = successor.load(Path(raw_path))
+        if held.get("receipt_sha256") != expected:
+            raise RuntimeError("hosted whole-task canary held digest drifted")
+        controller = str(package_source.get("controller"))
+        projected = {row["controller"]: row for row in held.get("controllers") or []}
+        sources = {
+            name: package_source
+            if name == controller
+            else {"receipt_sha256": projected.get(name, {}).get("package_source_receipt_sha256")}
+            for name in plans
+        }
+        successor.validate_package_source_receipt(package_source, controller, plans[controller])
+        successor.validate_held(held, plans, sources)
+        return held
+    return successor.load_runtime_release(plans, package_source)
+
+
+def _load_bound_inputs(plan: dict[str, Any]) -> tuple[dict[str, dict[str, Any]], dict[str, Any]]:
     plans = successor.build_plans(Path(plan["repo_root"]))
     package_source = successor.load(Path("/bootstrap/package-source.json"))
     if package_source.get("receipt_sha256") != os.environ.get(
         "QWEN_HOSTED_WHOLE_TASK_PACKAGE_SOURCE_SHA256"
     ):
         raise RuntimeError("hosted whole-task package source environment binding drifted")
-    successor.load_runtime_release(plans, package_source)
     if plan != plans.get(plan.get("controller")):
         raise RuntimeError("hosted whole-task runtime plan drifted")
+    return plans, package_source
+
+
+def run_gate_canary(plan: dict[str, Any], *, receipt_path: Path) -> dict[str, Any]:
+    """Revalidate the packaged runtime gate and exit before any scored boundary."""
+    plans, package_source = _load_bound_inputs(plan)
+    authority = runtime_gate_check(plans, package_source, canary=True)
+    body = {
+        "schema_version": successor.RUNTIME_GATE_CANARY_SCHEMA,
+        "status": "PASS",
+        "controller": plan["controller"],
+        "plan_sha256": plan["plan_sha256"],
+        "job_uid": os.environ.get("JOB_UID"),
+        "pod_uid": os.environ.get("POD_UID"),
+        "authority_schema_version": authority["schema_version"],
+        "authority_receipt_sha256": authority["receipt_sha256"],
+        "package_source_receipt_sha256": package_source["receipt_sha256"],
+        "bootstrap_stage_reached": "06-runtime-exec",
+        "output_roots_created": 0,
+        "endpoint_leases_acquired": 0,
+        "canonical_claims_created": 0,
+        "model_calls": 0,
+        "task_calls": 0,
+        "session_calls": 0,
+        "verifier_calls": 0,
+        "scoring_calls": 0,
+        "api_mutations": 0,
+        "scores_included": False,
+        "prompts_or_traces_included": False,
+        "credentials_included": False,
+    }
+    receipt = _seal(body)
+    successor.validate_runtime_gate_canary(receipt)
+    receipt_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    self_hosted.write_json_once(receipt_path, receipt)
+    return receipt
+
+
+def run(plan: dict[str, Any], *, out: Path, proxy: Path, diagnostic_root: Path) -> dict[str, Any]:
+    if out.is_symlink():
+        raise RuntimeError("hosted whole-task output root is unsafe")
+    plans, package_source = _load_bound_inputs(plan)
+    runtime_gate_check(plans, package_source)
     key = os.environ.get("FLEET_API_KEY")
     if not key:
         raise RuntimeError("FLEET_API_KEY is required")
@@ -49,7 +118,7 @@ def run(plan: dict[str, Any], *, out: Path, proxy: Path, diagnostic_root: Path) 
             plan,
             out=out,
             proxy=proxy,
-            runtime_gate_check=lambda _plan: successor.load_runtime_release(plans, package_source),
+            runtime_gate_check=lambda _plan: runtime_gate_check(plans, package_source),
             claim_provider=provider,
             stage_observer=observe,
         )
@@ -91,13 +160,13 @@ def main() -> int:
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--proxy", type=Path, required=True)
     parser.add_argument("--diagnostic-root", type=Path, required=True)
+    parser.add_argument("--runtime-gate-canary-receipt", type=Path)
     args = parser.parse_args()
-    run(
-        successor.load(args.plan),
-        out=args.out,
-        proxy=args.proxy,
-        diagnostic_root=args.diagnostic_root,
-    )
+    plan = successor.load(args.plan)
+    if args.runtime_gate_canary_receipt is not None:
+        run_gate_canary(plan, receipt_path=args.runtime_gate_canary_receipt)
+    else:
+        run(plan, out=args.out, proxy=args.proxy, diagnostic_root=args.diagnostic_root)
     return 0
 
 

@@ -1,0 +1,91 @@
+{
+  "controllers": [
+    {
+      "controller": "qwen-a",
+      "finished_at_utc": "2026-09-06T09:10:02Z",
+      "job_terminal_reason": "BackoffLimitExceeded",
+      "job_uid": "d0d49c72-7d30-4c11-8036-f19c8141caaa",
+      "package_source_receipt_sha256": "sha256:58be5115155a5c71f13a362cf0b0566dd4c8374d84ccc16f37bdf998a7f5058b",
+      "pod_exit_code": 1,
+      "pod_restarts": 0,
+      "pod_uid": "199fc658-abb5-496a-80b5-02e8c290d800",
+      "selection_rank": 15
+    },
+    {
+      "controller": "qwen-b",
+      "finished_at_utc": "2026-09-06T09:10:02Z",
+      "job_terminal_reason": "BackoffLimitExceeded",
+      "job_uid": "9d6c0bf2-8e90-4267-83b0-c6f981496b79",
+      "package_source_receipt_sha256": "sha256:0c956fad65f946a01a6a45ca9b3e0c817643fd92d0204481cdb11d91ee4d67ce",
+      "pod_exit_code": 1,
+      "pod_restarts": 0,
+      "pod_uid": "b0ef573f-01e8-451c-9cb8-f4f8d7407b36",
+      "selection_rank": 16
+    }
+  ],
+  "disposition": {
+    "failed_job_identities_retry_authorized": false,
+    "fresh_successor_requires_new_object_and_execution_identities": true,
+    "launch_authorized": false,
+    "score_free_bootstrap_runtime_gate_canary_required": true,
+    "statistical_cells_credited": false
+  },
+  "latent_runtime_gate_defect": {
+    "actual_argument_count": 2,
+    "classification": "PROVEN_BY_STATIC_CODE_AND_REGRESSION",
+    "error_type": "TypeError",
+    "established_as_observed_exit": false,
+    "release_validator_source_sha256": "sha256:26b68f08bf2f567f4973d057192d78b246a9659258d4fc9556a7faa3b8a92a4f",
+    "required_argument_count": 3,
+    "runtime_source_sha256": "sha256:4f31e47acde818f2e1107a7bb88929118ba2e39bd8b84f137eba1c27ffe8a39f",
+    "stage_if_reached": "02-runtime-gate"
+  },
+  "observed_at_utc": "2026-09-06T09:12:00Z",
+  "observed_failure_stage": {
+    "bootstrap_stage_receipts_present": 0,
+    "classification": "PRE_RUNTIME_UNCLASSIFIED",
+    "possible_boundaries": [
+      "package-source-validation",
+      "source-install",
+      "docker-readiness",
+      "image-build",
+      "harness-version-validation",
+      "pre-try-runtime-construction"
+    ],
+    "runtime_failed_receipts_present": 0
+  },
+  "privacy": {
+    "credentials_included": false,
+    "prompts_traces_flags_read": false,
+    "scores_read": false
+  },
+  "receipt_sha256": "sha256:5d51c5e8bd0009c8f01462087c11e6cf1531e87588517fea251e96d7c4030f60",
+  "schema_version": "fleet-qwen38-hosted-whole-task-preclaim-failure-v2",
+  "score_blind_reconciliation": {
+    "accepted_evidence_matches": 0,
+    "api_mutations": 0,
+    "authoritative_session_matches": 0,
+    "canonical_claims_present": 0,
+    "diagnostic_failure_receipts_present": 0,
+    "model_calls": 0,
+    "observer_pod_uid": "35a00aeb-fb66-4bc5-a7d2-1056337ade69",
+    "output_roots_present": 0,
+    "scoring_calls": 0,
+    "session_calls": 0,
+    "task_calls": 0,
+    "verifier_calls": 0,
+    "verifier_execution_matches": 0
+  },
+  "source_commit": "ba1bd51f4f05e0190751f9f70a967f6a430d3ba9",
+  "source_release": {
+    "file_sha256": "sha256:46c19c9f8a4fe31facc42c4e0913f4dcdee7072e615728021d890555c1d25864",
+    "path": "docs/evidence/qwen38-study/2026-09-06-qwen38-hosted-rank15-rank16-whole-task-release-v3.json",
+    "receipt_sha256": "sha256:63993a7f9f5e4ef5466ee0c3eae0482fe91e756d9be47c373e159a3154e8104f"
+  },
+  "status": "INFRASTRUCTURE_INVALID_PRECLAIM",
+  "supersedes": {
+    "file_sha256": "sha256:a7c56a747619445e8049c7d1fbe40c0b39d6c6279036909dfaea0a4329be9783",
+    "path": "docs/evidence/qwen38-study/2026-09-06-qwen38-hosted-rank15-rank16-preclaim-failure-v1.json",
+    "receipt_sha256": "sha256:8341da8ab018972d423403eb93ea06dbfd4eefe67f7bfb1781d2dbeafafc5be0"
+  }
+}
