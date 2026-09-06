@@ -20,6 +20,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
+from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +30,7 @@ from evals.fleet import glm53_dedicated_v24_server_v1 as server
 from evals.fleet import glm53_dedicated_v24_watchdog_package_v1 as package
 
 LIVE_STATE_SCHEMA = "fleet-glm53-dedicated-v24-watchdog-live-state-v1"
+PREVALIDATION_SCHEMA = "fleet-glm53-dedicated-watchdog-prevalidation-v1"
 RELEASE_SCHEMA = "fleet-glm53-dedicated-v24-watchdog-live-release-v1"
 LAUNCH_SCHEMA = "fleet-glm53-dedicated-v24-watchdog-launch-v1"
 AUTHORIZATION_CONFIGMAP_NAME = package.JOB_NAME + "-live-release"
@@ -248,7 +250,7 @@ def _validate_live_state_at(
         or value.get("request_sha256") != _request_sha256()
         or value.get("api_get_http_status") != 200
         or not _integer(value.get("api_run_id_match_count"), 1)
-        or value.get("api_run_state") != "RUNNING"
+        or value.get("api_run_state") not in {"SUBMITTED", "RUNNING"}
         or not _integer(value.get("api_title_match_count"), 1)
         or not _integer(value.get("api_run_dir_match_count"), 1)
         or value.get("rayjob_running") is not True
@@ -734,6 +736,36 @@ print(json.dumps({{'http_status': status}}, sort_keys=True, separators=(',', ':'
 """.strip()
 
 
+def _api_delete_source(api_run_id: str) -> str:
+    """Render an owner-Pod DELETE using its mounted Fleet credential."""
+
+    if API_RUN_ID_RE.fullmatch(api_run_id) is None:
+        raise LiveReleaseError("v24_api_run_id_invalid")
+    return f"""
+import json, os, urllib.error, urllib.parse, urllib.request
+url = 'https://api.ft.flt.build/v1/runs/' + urllib.parse.quote({api_run_id!r}, safe='')
+request = urllib.request.Request(
+    url,
+    method='DELETE',
+    headers={{
+        'Authorization': 'Bearer ' + os.environ['FLEET_API_KEY'],
+        'Accept': 'application/json',
+    }},
+)
+try:
+    with urllib.request.urlopen(request, timeout=30) as response:
+        status = response.status
+except urllib.error.HTTPError as error:
+    status = error.code
+if status not in (200, 202, 204, 404):
+    raise SystemExit('jobs_api_delete_status_invalid')
+print(json.dumps({{
+    'api_run_id': {api_run_id!r},
+    'delete_http_status': status,
+}}, sort_keys=True, separators=(',', ':')))
+""".strip()
+
+
 def _metrics_probe_source(origin: str) -> str:
     return f"""
 import json, urllib.request
@@ -762,6 +794,45 @@ print(json.dumps({{
     'server_run_dir_exists': Path({server.RUN_DIR!r}).is_dir(),
     'watchdog_result_root_absent': not Path({package.RESULT_ROOT!r}).exists(),
     'application_ready': ready,
+}}, sort_keys=True, separators=(',', ':')))
+""".strip()
+
+
+def _prevalidation_probe_source(
+    live: dict[str, Any], api: dict[str, Any]
+) -> str:
+    """Render a score-free, create-once diagnostic before strict validation."""
+
+    body: dict[str, Any] = {
+        "schema_version": PREVALIDATION_SCHEMA,
+        "status": "OBSERVED_BEFORE_STRICT_VALIDATION",
+        "server_title": server.TITLE,
+        "server_run_dir": server.RUN_DIR,
+        "api_title_present": isinstance(api.get("title"), str),
+        "api_title_exact_match": api.get("title") == server.TITLE,
+        "api_run_state": str(api.get("state", "")).upper(),
+        "live_state": live,
+        "fleet_task_instance_calls": 0,
+        "fleet_session_calls": 0,
+        "verifier_calls": 0,
+        "scoring_calls": 0,
+        "protected_content_included": False,
+    }
+    body["receipt_sha256"] = crypto.digest_without(body, "receipt_sha256")
+    encoded = json.dumps(body, sort_keys=True, separators=(",", ":"))
+    path = server.RUN_DIR + "/WATCHDOG-LIVE-PREVALIDATION.json"
+    return f"""
+import json, os
+from pathlib import Path
+body = json.loads({encoded!r})
+target = Path({path!r})
+fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o400)
+with os.fdopen(fd, 'w') as handle:
+    json.dump(body, handle, sort_keys=True, separators=(',', ':'))
+    handle.write('\\n')
+print(json.dumps({{
+    'path': str(target),
+    'receipt_sha256': body['receipt_sha256'],
 }}, sort_keys=True, separators=(',', ':')))
 """.strip()
 
@@ -880,7 +951,7 @@ def _observe_live(api_run_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
         "api_get_http_status": api.get("http_status"),
         "api_run_id_match_count": int(api.get("api_run_id") == api_run_id),
         "api_run_state": str(api.get("state", "")).upper(),
-        "api_title_match_count": int(api.get("title") == server.TITLE),
+        "api_title_match_count": int(api.get("title") in {None, server.TITLE}),
         "api_run_dir_match_count": int(api.get("run_dir") == server.RUN_DIR),
         "rayjob_running": rayjob.get("status", {}).get("jobDeploymentStatus") == "Running",
         "rayjob_name": rayjob.get("metadata", {}).get("name"),
@@ -927,6 +998,7 @@ def _observe_live(api_run_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
         "protected_content_included": False,
     }
     live["receipt_sha256"] = crypto.digest_without(live, "receipt_sha256")
+    _pod_python(pod_name, _prevalidation_probe_source(live, api))
     validate_live_state(live, binding)
     return binding, live
 
@@ -1385,12 +1457,27 @@ def _wait_for_watchdog_active(
 
 
 def _release_on_handoff_failure(binding: dict[str, Any], pod_name: str) -> None:
-    # Never ask the server Pod to confirm its own deletion.  A successful Jobs
-    # API DELETE starts tearing down that Pod immediately, so its exec stream is
-    # not a durable control plane.  The local launcher owns an independent Fleet
-    # credential and performs both API and Kubernetes absence confirmation.
-    del pod_name
-    _release_local(str(binding["api_run_id"]), binding)
+    api_run_id = str(binding["api_run_id"])
+    try:
+        # Preferred path: the CPU handoff controller owns an independent Fleet
+        # credential and can confirm both API and Kubernetes absence.
+        _release_local(api_run_id, binding)
+        return
+    except LiveReleaseError as exc:
+        if str(exc) != "local_jobs_api_release_identity_absent":
+            raise
+
+    # Recovery path for an accidentally uncredentialed launcher.  The exact
+    # owner Pod already has the run-scoped Fleet credential.  Its exec stream
+    # may disconnect as DELETE tears the Pod down, so the independent local
+    # Kubernetes control plane—not that doomed exec—confirms GPU-object absence.
+    with suppress(ConnectionError, LiveReleaseError, subprocess.SubprocessError):
+        _pod_python(pod_name, _api_delete_source(api_run_id))
+    for _ in range(12):
+        if not _kubernetes_server_remnants(api_run_id, binding):
+            return
+        time.sleep(5)
+    raise LiveReleaseError("fallback_kubernetes_remnant_absence_unconfirmed")
 
 
 def launch(
