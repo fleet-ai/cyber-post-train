@@ -8,6 +8,7 @@ from typing import Any
 
 from evals.fleet import hosted_glm_exact_bulk_package_v1 as base
 from evals.fleet import hosted_glm_s1_r2_c2_runtime_v2 as runtime
+from evals.fleet import hosted_glm_s1_r2_c2_release_v3 as release
 from evals.fleet import hosted_glm_s1_r2_c2_successor_v2 as successor
 from evals.fleet import self_hosted
 
@@ -20,6 +21,7 @@ def render(root: Path, *, release_path: Path | None = None) -> dict[str, Any]:
     additions = {
         "successor.py": "evals/fleet/hosted_glm_s1_r2_c2_successor_v2.py",
         "successor_release.py": "evals/fleet/hosted_glm_s1_r2_c2_release_v2.py",
+        "successor_release_v3.py": "evals/fleet/hosted_glm_s1_r2_c2_release_v3.py",
         "successor_runtime.py": "evals/fleet/hosted_glm_s1_r2_c2_runtime_v2.py",
         "prior_successor.py": "evals/fleet/hosted_glm_s1_r2_c2_successor_v1.py",
         "prior_release.py": "evals/fleet/hosted_glm_s1_r2_c2_release_v1.py",
@@ -33,7 +35,7 @@ def render(root: Path, *, release_path: Path | None = None) -> dict[str, Any]:
         # admits only a self-digesting release tied to this fresh identity.
         if any(
             (
-                receipt.get("schema_version") != "fleet-hosted-glm-s1-r2-c2-successor-release-v2",
+                receipt.get("schema_version") != release.SCHEMA,
                 receipt.get("status") != "CLEAR",
                 receipt.get("successor_job") != successor.JOB_NAME,
                 receipt.get("successor_configmap") != successor.CONFIGMAP_NAME,
