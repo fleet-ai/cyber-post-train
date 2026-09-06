@@ -203,14 +203,14 @@ def create_once(
             nested = child.get("config")
             if isinstance(nested, dict):
                 candidates.append(nested)
-    run_ids = {
+    identity_values = {
         item
         for candidate in candidates
         for key in ("id", "run_id", "name")
         if isinstance((item := candidate.get(key)), str)
-        and API_RUN_ID_RE.fullmatch(item) is not None
     }
-    if len(run_ids) != 1:
+    run_ids = {item for item in identity_values if API_RUN_ID_RE.fullmatch(item) is not None}
+    if len(run_ids) != 1 or identity_values - run_ids - {API_NAME}:
         raise CreateError("v33_create_identity_invalid_reconcile_do_not_retry")
     result: dict[str, Any] = {
         "schema_version": RESULT_SCHEMA,

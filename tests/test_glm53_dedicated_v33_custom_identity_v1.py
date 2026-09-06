@@ -110,6 +110,15 @@ def test_v33_create_rejects_ambiguous_matching_response(
             ),
         )
 
+    with pytest.raises(server.CreateError, match="identity_invalid_reconcile_do_not_retry"):
+        server.create_once(
+            authorization(),
+            result_path=tmp_path / "CREATED-ALIAS.json",
+            opener=lambda *_args, **_kwargs: FakeResponse(
+                {"id": OBSERVED_RUN_ID, "run_id": "ft-run-e4888aa7"}
+            ),
+        )
+
 
 def test_v33_binding_watchdog_probe_and_release_use_same_exact_contract() -> None:
     server.validate_binding(binding())
@@ -145,6 +154,7 @@ def test_v32_incident_and_release_receipts_are_sanitized_and_digest_valid() -> N
     for name in (
         "2026-09-06-glm53-dedicated-v32-custom-api-id-incident-v1.json",
         "2026-09-06-glm53-dedicated-v32-custom-api-id-release-v1.json",
+        "2026-09-06-glm53-dedicated-v33-custom-api-id-lifecycle-held-v1.json",
     ):
         value = json.loads((evidence / name).read_text())
         assert value["receipt_sha256"] == crypto.digest_without(

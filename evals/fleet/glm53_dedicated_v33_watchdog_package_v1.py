@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
+from evals.fleet import exact_pass4_crypto as crypto
 from evals.fleet import glm53_dedicated_v23_scorefree_package_v1 as prior
 from evals.fleet import glm53_dedicated_v33_create_v1 as server
 
@@ -32,8 +34,23 @@ def render(
         job_name=JOB_NAME,
         result_root=RESULT_ROOT,
     )
+    runtime_path = "evals/fleet/glm53_dedicated_v33_request_counter_watchdog_v1.py"
+    raw = prior._source(root, commit, runtime_path)  # noqa: SLF001
+    key = prior._key(runtime_path)  # noqa: SLF001
+    configmap["data"][key] = raw.decode()
+    manifest = json.loads(configmap["data"]["package.json"])
+    manifest["files"][runtime_path] = crypto.sha256(raw)
+    manifest["package_sha256"] = crypto.digest_without(manifest, "package_sha256")
+    configmap["data"]["package.json"] = (
+        json.dumps(manifest, sort_keys=True, separators=(",", ":")) + "\n"
+    )
     job = prior.build_watchdog_job(configmap, job_name=JOB_NAME, result_root=RESULT_ROOT)
     command = job["spec"]["template"]["spec"]["containers"][0]["command"][-1]
+    inherited = "python -m evals.fleet.glm53_dedicated_v23_request_counter_watchdog_v1"
+    exact = "python -m evals.fleet.glm53_dedicated_v33_request_counter_watchdog_v1"
+    if command.count(inherited) != 1:
+        raise ValueError("v33_watchdog_entrypoint_template_drifted")
+    command = command.replace(inherited, exact)
     suffix = '--ready-at-epoch "$READY_AT_EPOCH"'
     if not command.endswith(suffix):
         raise ValueError("v33_watchdog_command_contract_drifted")

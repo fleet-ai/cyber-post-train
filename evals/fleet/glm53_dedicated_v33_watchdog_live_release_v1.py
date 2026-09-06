@@ -55,16 +55,17 @@ def first(*keys):
             if candidate.get(key) is not None:
                 return candidate[key]
     return None
-run_ids = {{
+identity_values = {{
     candidate.get(key)
     for candidate in candidates
     for key in ('id', 'run_id', 'name')
     if isinstance(candidate.get(key), str)
-    and re.fullmatch({pattern!r}, candidate[key])
 }}
+run_ids = {{item for item in identity_values if re.fullmatch({pattern!r}, item)}}
+identity_agreement = not identity_values - run_ids - {{{server.API_NAME!r}}}
 print(json.dumps({{
     'http_status': response.status,
-    'api_run_id': next(iter(run_ids)) if len(run_ids) == 1 else None,
+    'api_run_id': next(iter(run_ids)) if len(run_ids) == 1 and identity_agreement else None,
     'title': first('title'),
     'run_dir': first('run_dir'),
     'state': first('state', 'status'),
@@ -87,11 +88,14 @@ def bound_engine() -> Iterator[None]:
         "_api_probe_source": _api_probe_source,
     }
     prior = {name: getattr(engine, name) for name in values}
+    prior_runtime_pattern = engine.runtime.API_RUN_ID_RE
     try:
         for name, value in values.items():
             setattr(engine, name, value)
+        engine.runtime.API_RUN_ID_RE = server.API_RUN_ID_RE
         yield
     finally:
+        engine.runtime.API_RUN_ID_RE = prior_runtime_pattern
         for name, value in prior.items():
             setattr(engine, name, value)
         _LOCK.release()

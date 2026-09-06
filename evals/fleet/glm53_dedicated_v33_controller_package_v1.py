@@ -28,6 +28,7 @@ FILES = tuple(
             "evals/fleet/glm53_dedicated_v33_controller_v1.py",
             "evals/fleet/glm53_dedicated_v33_create_v1.py",
             "evals/fleet/glm53_dedicated_v33_live_authorization_v1.py",
+            "evals/fleet/glm53_dedicated_v33_request_counter_watchdog_v1.py",
             "evals/fleet/glm53_dedicated_v33_watchdog_live_release_v1.py",
             "evals/fleet/glm53_dedicated_v33_watchdog_package_v1.py",
         }
