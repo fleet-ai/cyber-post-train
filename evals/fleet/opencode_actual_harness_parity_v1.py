@@ -188,13 +188,44 @@ def treatment_config(model_key: str) -> dict[str, Any]:
     }
 
 
-def render_settings(model_key: str, model_port: int, mcp_port: int) -> dict[str, Any]:
+def render_settings(
+    model_key: str,
+    model_port: int,
+    mcp_port: int,
+    *,
+    transport_host: str = "host.docker.internal",
+) -> dict[str, Any]:
+    if transport_host not in {"host.docker.internal", "127.0.0.1"}:
+        raise ActualHarnessParityError("parity_transport_host_invalid")
     settings = support.opencode_settings(treatment_config(model_key))
     provider = settings["provider"]["fleet-cluster"]
-    provider["options"]["baseURL"] = f"http://host.docker.internal:{model_port}/v1"
-    settings["mcp"]["fleet"]["url"] = f"http://host.docker.internal:{mcp_port}/mcp"
+    provider["options"]["baseURL"] = f"http://{transport_host}:{model_port}/v1"
+    settings["mcp"]["fleet"]["url"] = f"http://{transport_host}:{mcp_port}/mcp"
     settings["enabled_providers"] = ["fleet-cluster"]
     return settings
+
+
+def docker_transport_args(
+    *, docker_add_host_gateway: bool, docker_network_host: bool
+) -> tuple[str, list[str]]:
+    """Render the exact Desktop or Linux-DinD nested-container transport."""
+
+    if docker_network_host and not docker_add_host_gateway:
+        raise ActualHarnessParityError("linux_dind_transport_contract_invalid")
+    args = []
+    if docker_network_host:
+        args.extend(["--network", "host"])
+    if docker_add_host_gateway:
+        args.extend(["--add-host", "host.docker.internal:host-gateway"])
+    return ("127.0.0.1" if docker_network_host else "host.docker.internal", args)
+
+
+def validate_temp_root(temp_root: Path | None) -> Path | None:
+    if temp_root is None:
+        return None
+    if not temp_root.is_absolute() or not temp_root.is_dir() or temp_root.is_symlink():
+        raise ActualHarnessParityError("parity_temp_root_invalid")
+    return temp_root
 
 
 def _json_response(handler: BaseHTTPRequestHandler, status: int, value: Any) -> None:
@@ -383,6 +414,8 @@ def run(
     upstream_origin: str = HOSTED_ORIGIN,
     server_binding: Mapping[str, Any] | None = None,
     docker_add_host_gateway: bool = False,
+    docker_network_host: bool = False,
+    temp_root: Path | None = None,
 ) -> dict[str, Any]:
     observed_image = inspect_local_image()
     is_hosted = upstream_origin.rstrip("/") == HOSTED_ORIGIN
@@ -398,10 +431,22 @@ def run(
     state = _State(served_id, upstream_origin, api_key)
     model_server = ThreadingHTTPServer(("127.0.0.1", 0), _model_handler(state))
     mcp_server = ThreadingHTTPServer(("127.0.0.1", 0), _mcp_handler(state))
-    settings = render_settings(model_key, model_server.server_port, mcp_server.server_port)
+    transport_host, docker_args = docker_transport_args(
+        docker_add_host_gateway=docker_add_host_gateway,
+        docker_network_host=docker_network_host,
+    )
+    settings = render_settings(
+        model_key,
+        model_server.server_port,
+        mcp_server.server_port,
+        transport_host=transport_host,
+    )
     threads = [_serve(model_server), _serve(mcp_server)]
+    validated_temp_root = validate_temp_root(temp_root)
     try:
-        with tempfile.TemporaryDirectory(prefix="opencode-parity-") as temp:
+        with tempfile.TemporaryDirectory(
+            prefix="opencode-parity-", dir=validated_temp_root
+        ) as temp:
             root = Path(temp)
             home = root / "home"
             config_dir = home / ".config" / "opencode"
@@ -421,11 +466,7 @@ def run(
                     "--rm",
                     "--platform",
                     "linux/amd64",
-                    *(
-                        ["--add-host", "host.docker.internal:host-gateway"]
-                        if docker_add_host_gateway
-                        else []
-                    ),
+                    *docker_args,
                     "-e",
                     "OPENCODE_DISABLE_MODELS_FETCH=true",
                     "-e",
