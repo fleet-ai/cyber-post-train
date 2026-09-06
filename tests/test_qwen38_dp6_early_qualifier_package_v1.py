@@ -291,11 +291,12 @@ def test_server_local_events_are_uid_bound_and_aggregated(
         return [{"receipt_sha256": f"sha256:{index:064x}"} for index in range(6)]
 
     rows, distribution, resource, observed_baseline = runtime.observe_wave(
-        8, execute, plan, binding
+        6, execute, plan, binding
     )
     assert len(rows) == 6
     assert distribution["request_deltas_by_rank"] == [1] * 6
     assert distribution["gpu_peak_utilization_percent_by_rank"] == [100] * 6
+    assert distribution["gpu_device_count"] == 6
     assert distribution["server_binding"] == reduced
     assert distribution["prompts_traces_flags_or_scores_included"] is False
     assert resource["status"] == "PASSED_NO_CONTROLLER_RESOURCE_ERROR"

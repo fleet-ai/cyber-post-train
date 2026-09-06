@@ -397,7 +397,7 @@ def observe_wave(
         "request_deltas_by_rank": request_delta,
         "gpu_peak_utilization_percent_by_rank": gpu_peaks,
         "gpu_peak_memory_used_mib_by_rank": gpu_memory,
-        "gpu_device_count": 8,
+        "gpu_device_count": RANKS,
         "gpu_memory_loaded_count": sum(item > 0 for item in gpu_memory),
         "sampling_seconds": max(0, last["observed_at_epoch"] - first["observed_at_epoch"]),
         "observer_errors": [],
