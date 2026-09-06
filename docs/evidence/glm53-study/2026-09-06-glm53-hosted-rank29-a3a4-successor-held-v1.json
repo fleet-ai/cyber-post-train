@@ -1,0 +1,51 @@
+{
+  "api_mutation_calls": 0,
+  "blocked_predecessor": {
+    "attempt": 2,
+    "claim_receipt_sha256": "sha256:bd17483d6e18c033cf19a1277e172a481c2abb8e35cee3840be9ad53b8dffc72",
+    "job_terminal_reason": "DeadlineExceeded",
+    "job_uid": "faf01255-0696-43e6-a47f-67802184986e",
+    "pod_uid": "72ce8163-fb2d-40ac-92da-da0dd578658d",
+    "repeat_allowed": false
+  },
+  "controller_job": "chris-glm53-exact100-hosted-r029-a3a4-successor-v1",
+  "execution_ids": [
+    "sha256:6df2e9eb387b1d6cf2cbd5c1e82d955f5a90b07d44f0cfd4ba4d83139e1cf993",
+    "sha256:708601826b6acefa693d49318475fceca0541095af3f5422d10e7c7b15e1a72b"
+  ],
+  "job_active_deadline_seconds": 86400,
+  "launch_authorized": false,
+  "maximum_scored_streams": 2,
+  "model": "glm-5.3",
+  "package_sha256": "sha256:71e26de6162d2d0d352e3cb3cacd005dd5456e0c49b438a55d16843b30d688dd",
+  "plan_sha256": "sha256:5423a63f22d198e00e5bf5558f66eea46fe1f665c1e56d9d1c1877500615c885",
+  "preclaim_guard_seconds": 32400,
+  "prompts_traces_flags_scores_or_model_outputs_included": false,
+  "receipt_sha256": "sha256:f260b2844e707c0b345fb4f58addb50ea6fdadcef58b61064e00c9fbd959fce9",
+  "release_observer_job": "chris-glm53-exact100-hosted-r029-a3a4-release-v1",
+  "schema_version": "fleet-hosted-glm-rank29-a3a4-successor-held-v1",
+  "selected_cells": [
+    {
+      "attempt": 3,
+      "execution_generation": 2,
+      "selection_rank": 29
+    },
+    {
+      "attempt": 4,
+      "execution_generation": 2,
+      "selection_rank": 29
+    }
+  ],
+  "status": "READY_HELD_FOR_SCORE_BLIND_RELEASE_AND_INDEPENDENT_REVIEW",
+  "treatment": {
+    "context_window_size": 262144,
+    "harness": "opencode",
+    "harness_version": "1.18.27",
+    "preemption_policy": "Never",
+    "priority_class": "fleet-serve-low",
+    "tools": [
+      "bash",
+      "submit_report"
+    ]
+  }
+}
