@@ -1,0 +1,63 @@
+{
+  "attempt": 1,
+  "campaign_id": "chris-cyber-q38-glm53-exact-easiest100-pass4-v1",
+  "cell_id": "sha256:d460a5138b88aaee43fb12e26468ef89945d97e6171cf77f05fb7222370b1754",
+  "classification": "POST_MODEL_NONREPEATABLE_UNCREDITED",
+  "execution_generation": 19,
+  "execution_id": "sha256:18c219ee798429bc89376acdad3351f1de7b8f0dc5b442291a7e93f8808567b9",
+  "fresh_authoritative_reconciliation": {
+    "matching_session_count": 0,
+    "route": "/v1/sessions?task_key=<exact-task-key>",
+    "task_session_count": 19,
+    "verifier_execution_presence": false
+  },
+  "local_authoritative_outputs_present": {
+    "accepted": false,
+    "cleanup": false,
+    "result": false,
+    "reward_result": false,
+    "scoring_intent": false,
+    "session_ingest": false,
+    "terminal": false
+  },
+  "model_stream": {
+    "content_read": false,
+    "file_size_bytes": 1279823,
+    "mtime_epoch": 1788682230,
+    "present": true
+  },
+  "observed_at_utc": "2026-09-06T08:15:00Z",
+  "privacy": {
+    "credentials_included": false,
+    "prompts_traces_flags_read": false,
+    "scores_read": false
+  },
+  "receipt_sha256": "sha256:3e388bb7611c3a197539128e72dcf155046fd7589fed7c443de23246de5f8a15",
+  "request_counts": {
+    "account_get": 1,
+    "api_mutations": 0,
+    "session_list_get": 1
+  },
+  "retry_allowed": false,
+  "run_id": "chris-q38-ac-g19v4-b-r014-a1-18c219ee",
+  "schema_version": "fleet-qwen38-hosted-deadline-terminal-reconciliation-v1",
+  "selection_rank": 14,
+  "source_claim": {
+    "file_sha256": "sha256:2aca4860e2737990d2d31b62ab87bcae9504a05a5c331eddbacbfebd6b271c9d",
+    "path": "/mnt/sfs/cell-execution-claims/opencode11827-autocontinue-v1/18c219ee798429bc89376acdad3351f1de7b8f0dc5b442291a7e93f8808567b9.json",
+    "receipt_sha256": "sha256:bd6521a9a1112fed88a081d1f5367dc80fc4a7502a78ee76c5629f3afc534f03"
+  },
+  "source_job": {
+    "failed_transition_time": "2026-09-06T08:10:37Z",
+    "last_observed_pod_phase": "Running",
+    "last_observed_pod_restarts": 0,
+    "name": "chris-q38-ac-exact100-g19-b192-v4",
+    "pod_present_after_terminal": false,
+    "pod_uid": "d5d7b7cf-d639-4ad6-b012-3001c4935b2d",
+    "terminal_reason": "DeadlineExceeded",
+    "uid": "f23805b5-516b-4828-a3b5-82673a1b3e2f"
+  },
+  "status": "NO_AUTHORITATIVE_SESSION_OR_VERIFIER",
+  "task_key": "cysec1-2-fakelook-gen_blackbox-fb581ab1aa4a347bb5f6fd65__blackbox_ctf_v1",
+  "task_version_id": "d6634975-2918-4037-9cd2-467f365e39b0"
+}

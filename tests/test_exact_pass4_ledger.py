@@ -845,6 +845,28 @@ def test_supplemental_runtime_authority_resolves_live_glm_rank28(
     assert item["task_key"] == authority.cells[cell_id]["task_key"]
 
 
+def test_supplemental_runtime_authority_resolves_live_glm_rank29_attempt1(
+    authority: ledger.Authority,
+) -> None:
+    key = (
+        "sha256:77dde32eb233a7bfae8594b2873caff0279d7e67600d51f2ce384dd486cb1361",
+        "sha256:0312a3507bbf4f6763a7ea84815053c6d89c540632458a143e3e5e9a61eda9a4",
+    )
+
+    plan, item = ledger._bulk_pair(authority, key, "glm-hosted-s2") or ({}, {})
+
+    assert plan == {
+        "controller": "glm-hosted-s2",
+        "plan_sha256": (
+            "sha256:c0cc69202751fbbea53dfeea98a62efe41b2638b4e9ad60307b0c0bdbeefd83f"
+        ),
+    }
+    assert item["run_id"] == "chris-glm53-ac-bulk-b-r029-a1-g1-b51782f9"
+    assert item["selection_rank"] == 29
+    assert item["attempt"] == 1
+    assert item["task_key"] == authority.cells[key[0]]["task_key"]
+
+
 def test_supplemental_runtime_authority_resolves_live_glm_rank3_attempt1(
     authority: ledger.Authority,
 ) -> None:
@@ -868,6 +890,42 @@ def test_supplemental_runtime_authority_resolves_live_glm_rank3_attempt1(
     assert item["selection_rank"] == 3
     assert item["attempt"] == 1
     assert item["task_key"] == authority.cells[key[0]]["task_key"]
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "2026-09-06-qwen38-hosted-a-rank13-a1-deadline-terminal-reconciliation-v1.json",
+        "2026-09-06-qwen38-hosted-b-rank14-a1-deadline-terminal-reconciliation-v1.json",
+    ],
+)
+def test_hosted_qwen_deadline_tombstones_are_score_blind_and_nonrepeatable(
+    name: str,
+) -> None:
+    path = ROOT / "docs/evidence/qwen38-study" / name
+    receipt = ledger.load_receipt(path)
+
+    assert receipt["schema_version"] == (
+        "fleet-qwen38-hosted-deadline-terminal-reconciliation-v1"
+    )
+    assert receipt["classification"] == "POST_MODEL_NONREPEATABLE_UNCREDITED"
+    assert receipt["status"] == "NO_AUTHORITATIVE_SESSION_OR_VERIFIER"
+    assert receipt["retry_allowed"] is False
+    assert receipt["fresh_authoritative_reconciliation"]["matching_session_count"] == 0
+    assert receipt["fresh_authoritative_reconciliation"][
+        "verifier_execution_presence"
+    ] is False
+    assert receipt["request_counts"]["api_mutations"] == 0
+    assert receipt["privacy"] == {
+        "credentials_included": False,
+        "prompts_traces_flags_read": False,
+        "scores_read": False,
+    }
+    assert receipt["model_stream"] == {
+        **receipt["model_stream"],
+        "content_read": False,
+        "present": True,
+    }
 
 
 def test_evidence_manifest_cannot_be_mixed_with_individual_paths(
