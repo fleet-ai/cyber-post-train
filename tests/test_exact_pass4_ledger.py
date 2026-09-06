@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import json
 import uuid
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -404,6 +405,147 @@ def test_active_and_nonrepeatable_claims_are_distinct_states(
     )
     assert result["models"]["qwen3.8-27b"]["active"] == 1
     assert result["models"]["glm-5.3"]["blocked_nonrepeatable"] == 1
+
+
+def _rank99_rollforward_evidence(
+    authority: ledger.Authority,
+    *,
+    state: str = "active",
+    tmp_path: Path | None = None,
+) -> tuple[ledger.Evidence, ledger.Evidence]:
+    cell_id, binding = next(iter(authority.rollforward_precedence.items()))
+    prior_execution_id, successor_execution_id, prior_receipt, successor_claim = binding
+    blocked = ledger.Evidence(
+        state="blocked_nonrepeatable",
+        cell_id=cell_id,
+        execution_id=prior_execution_id,
+        execution_generation=19,
+        receipt_sha256=prior_receipt,
+        path=Path("/score-blind/prior-claim.json"),
+    )
+    current_path = Path("/score-blind/current-evidence.json")
+    current_receipt = successor_claim
+    if state == "accepted":
+        assert tmp_path is not None
+        accepted_receipt = {"claim_sha256": successor_claim}
+        accepted_receipt["receipt_sha256"] = self_hosted.digest_without(
+            accepted_receipt, "receipt_sha256"
+        )
+        current_path = _write(tmp_path / "accepted.json", accepted_receipt)
+        current_receipt = accepted_receipt["receipt_sha256"]
+    current = ledger.Evidence(
+        state=state,
+        cell_id=cell_id,
+        execution_id=successor_execution_id,
+        execution_generation=23,
+        receipt_sha256=current_receipt,
+        path=current_path,
+    )
+    return blocked, current
+
+
+def test_exact_append_only_rollforward_selects_newer_active_generation(
+    authority: ledger.Authority,
+) -> None:
+    blocked, active = _rank99_rollforward_evidence(authority)
+    result = ledger.reconcile(
+        authority,
+        accepted=[],
+        active_claims=[active],
+        blocked_claims=[blocked],
+        tombstones=[],
+    )
+    row = next(item for item in result["cells"] if item["cell_id"] == active.cell_id)
+    assert row["state"] == "active"
+    assert row["latest_execution_generation"] == 23
+    assert result["models"]["qwen3.8-27b"]["blocked_nonrepeatable"] == 0
+
+
+def test_exact_append_only_rollforward_allows_validated_successor_acceptance(
+    tmp_path: Path, authority: ledger.Authority,
+) -> None:
+    blocked, accepted = _rank99_rollforward_evidence(
+        authority, state="accepted", tmp_path=tmp_path
+    )
+    result = ledger.reconcile(
+        authority,
+        accepted=[accepted],
+        active_claims=[],
+        blocked_claims=[blocked],
+        tombstones=[],
+    )
+    row = next(item for item in result["cells"] if item["cell_id"] == accepted.cell_id)
+    assert row["state"] == "accepted"
+    assert row["latest_execution_generation"] == 23
+
+    receipt = json.loads(accepted.path.read_text())
+    receipt["claim_sha256"] = "sha256:" + "0" * 64
+    receipt["receipt_sha256"] = self_hosted.digest_without(receipt, "receipt_sha256")
+    changed_path = _write(tmp_path / "accepted-drift.json", receipt)
+    changed = replace(
+        accepted,
+        receipt_sha256=receipt["receipt_sha256"],
+        path=changed_path,
+    )
+    with pytest.raises(ledger.LedgerError, match="no exact append-only roll-forward"):
+        ledger.reconcile(
+            authority,
+            accepted=[changed],
+            active_claims=[],
+            blocked_claims=[blocked],
+            tombstones=[],
+        )
+
+
+def test_unmapped_or_receipt_drifted_rollforward_fails_closed(
+    authority: ledger.Authority,
+) -> None:
+    blocked, active = _rank99_rollforward_evidence(authority)
+    without_mapping = replace(authority, rollforward_precedence={})
+    with pytest.raises(ledger.LedgerError, match="no exact append-only roll-forward"):
+        ledger.reconcile(
+            without_mapping,
+            accepted=[],
+            active_claims=[active],
+            blocked_claims=[blocked],
+            tombstones=[],
+        )
+
+    drifted = replace(
+        authority,
+        rollforward_precedence={
+            **authority.rollforward_precedence,
+            active.cell_id: (
+                blocked.execution_id,
+                active.execution_id,
+                blocked.receipt_sha256,
+                "sha256:" + "0" * 64,
+            ),
+        },
+    )
+    with pytest.raises(ledger.LedgerError, match="no exact append-only roll-forward"):
+        ledger.reconcile(
+            drifted,
+            accepted=[],
+            active_claims=[active],
+            blocked_claims=[blocked],
+            tombstones=[],
+        )
+
+
+def test_supplemental_rollforward_rejects_tampered_clearance_binding(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = ROOT / ledger.SUPPLEMENTAL_RUNTIME_AUTHORITY_PATH
+    value = json.loads(source.read_text())
+    value["execution_rollforwards"][0]["preserver_clearance_receipt_sha256"] = (
+        "sha256:" + "0" * 64
+    )
+    value["receipt_sha256"] = self_hosted.digest_without(value, "receipt_sha256")
+    changed = _write(tmp_path / "supplemental.json", value)
+    monkeypatch.setattr(ledger, "SUPPLEMENTAL_RUNTIME_AUTHORITY_PATH", changed)
+    with pytest.raises(ledger.LedgerError, match="preserver_clearance binding drifted"):
+        ledger._build_authority(ROOT, CAMPAIGN)
 
 
 def test_fixed_historical_adapters_remain_score_blind(

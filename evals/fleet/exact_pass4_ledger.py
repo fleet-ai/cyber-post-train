@@ -68,11 +68,11 @@ GLM_C2_RUNTIME_AUTHORITY_PATH = Path(
     "docs/evidence/qwen38-study/2026-09-05-glm53-hosted-c2-runtime-authority-v1.json"
 )
 SUPPLEMENTAL_RUNTIME_AUTHORITY_SCHEMA = (
-    "fleet-exact-pass4-supplemental-runtime-authority-v1"
+    "fleet-exact-pass4-supplemental-runtime-authority-v2"
 )
 SUPPLEMENTAL_RUNTIME_AUTHORITY_PATH = Path(
     "docs/evidence/qwen38-study/"
-    "2026-09-05-exact-pass4-supplemental-runtime-authority-v1.json"
+    "2026-09-05-exact-pass4-supplemental-runtime-authority-v2.json"
 )
 DEDICATED_QWEN_ATTEMPT1_BINDING = {
     "plan_sha256": "sha256:5358ae8d0c81fd18d815f5289eabf771274101e099c799c49a85d0713687aa67",
@@ -545,6 +545,7 @@ class Authority:
     hosted_glm_bulk_items: dict[tuple[str, str], tuple[dict[str, Any], dict[str, Any]]]
     hosted_glm_c2_items: dict[tuple[str, str], tuple[dict[str, Any], dict[str, Any]]]
     supplemental_bulk_items: dict[tuple[str, str], tuple[dict[str, Any], dict[str, Any]]]
+    rollforward_precedence: dict[str, tuple[str, str, str, str]]
     dedicated_qwen_items: dict[tuple[str, str], tuple[dict[str, Any], dict[str, Any]]]
     dedicated_qwen_v3_items: dict[tuple[str, str], tuple[dict[str, Any], dict[str, Any]]]
     dedicated_qwen_rank3_items: dict[
@@ -695,7 +696,13 @@ def _build_authority(repo_root: Path, campaign_path: Path) -> Authority:
     supplemental = load_receipt(supplemental_path)
     _require_exact_fields(
         supplemental,
-        {"schema_version", "entries", "privacy", "receipt_sha256"},
+        {
+            "schema_version",
+            "entries",
+            "execution_rollforwards",
+            "privacy",
+            "receipt_sha256",
+        },
         supplemental_path,
     )
     if (
@@ -707,6 +714,7 @@ def _build_authority(repo_root: Path, campaign_path: Path) -> Authority:
             "credentials_included": False,
         }
         or not isinstance(supplemental.get("entries"), list)
+        or not isinstance(supplemental.get("execution_rollforwards"), list)
     ):
         raise LedgerError("supplemental runtime authority envelope drifted")
     supplemental_bulk_items: dict[
@@ -760,6 +768,168 @@ def _build_authority(repo_root: Path, campaign_path: Path) -> Authority:
             {"controller": row["controller"], "plan_sha256": row["plan_sha256"]},
             item,
         )
+
+    rollforward_precedence: dict[str, tuple[str, str, str, str]] = {}
+    rollforward_fields = {
+        "cell_id",
+        "prior_execution_id",
+        "prior_execution_generation",
+        "prior_state",
+        "prior_claim_receipt_sha256",
+        "successor_execution_id",
+        "successor_execution_generation",
+        "successor_states_allowed",
+        "successor_claim_receipt_sha256",
+        "preserver_clearance_path",
+        "preserver_clearance_receipt_sha256",
+        "preserver_clearance_file_sha256",
+        "scoring_release_path",
+        "scoring_release_receipt_sha256",
+        "scoring_release_file_sha256",
+        "package_canary_path",
+        "package_canary_receipt_sha256",
+        "package_canary_file_sha256",
+        "prior_generations_retry_prohibited",
+        "fresh_exact_target_session_matches_at_release",
+        "fresh_accepted_generation_matches_at_release",
+        "atomic_whole_task_reservation_required",
+    }
+
+    def load_bound_repo_receipt(
+        row: dict[str, Any], prefix: str
+    ) -> tuple[Path, dict[str, Any]]:
+        supplied = row[f"{prefix}_path"]
+        if not isinstance(supplied, str):
+            raise LedgerError(f"supplemental {prefix} path is invalid")
+        relative = Path(supplied)
+        if relative.is_absolute() or ".." in relative.parts:
+            raise LedgerError(f"supplemental {prefix} path escapes the repository")
+        path = repo_root / relative
+        receipt = load_receipt(path)
+        if (
+            receipt.get("receipt_sha256") != row[f"{prefix}_receipt_sha256"]
+            or self_hosted.sha256(path.read_bytes()) != row[f"{prefix}_file_sha256"]
+        ):
+            raise LedgerError(f"supplemental {prefix} binding drifted")
+        return path, receipt
+
+    expected_rollforward_cells: set[str] = set()
+    for row in supplemental["execution_rollforwards"]:
+        if not isinstance(row, dict) or set(row) != rollforward_fields:
+            raise LedgerError("supplemental execution roll-forward fields drifted")
+        cell = cells.get(row["cell_id"])
+        prior_key = (row["cell_id"], row["prior_execution_id"])
+        successor_key = (row["cell_id"], row["successor_execution_id"])
+        if (
+            cell is None
+            or cell["model"] != "qwen3.8-27b"
+            or cell["selection_rank"] != 99
+            or row["prior_execution_generation"] != 19
+            or row["successor_execution_generation"] != 23
+            or exact.execution_for(row["cell_id"], 19)["execution_id"]
+            != row["prior_execution_id"]
+            or exact.execution_for(row["cell_id"], 23)["execution_id"]
+            != row["successor_execution_id"]
+            or prior_key not in supplemental_bulk_items
+            or successor_key not in supplemental_bulk_items
+            or row["prior_state"] != "blocked_nonrepeatable"
+            or row["successor_states_allowed"] != ["active", "accepted"]
+            or row["prior_generations_retry_prohibited"] != [20, 21, 22]
+            or row["fresh_exact_target_session_matches_at_release"] != 0
+            or row["fresh_accepted_generation_matches_at_release"] != 0
+            or row["atomic_whole_task_reservation_required"] is not True
+            or row["cell_id"] in rollforward_precedence
+        ):
+            raise LedgerError("supplemental execution roll-forward identity drifted")
+        for field in (
+            "prior_claim_receipt_sha256",
+            "successor_claim_receipt_sha256",
+            "preserver_clearance_receipt_sha256",
+            "preserver_clearance_file_sha256",
+            "scoring_release_receipt_sha256",
+            "scoring_release_file_sha256",
+            "package_canary_receipt_sha256",
+            "package_canary_file_sha256",
+        ):
+            _require_sha256(row[field], field, supplemental_path)
+
+        _preserver_path, preserver = load_bound_repo_receipt(row, "preserver_clearance")
+        _release_path, release = load_bound_repo_receipt(row, "scoring_release")
+        _canary_path, canary = load_bound_repo_receipt(row, "package_canary")
+        successors = {
+            (item.get("cell_id"), item.get("execution_id"))
+            for item in preserver.get("successors", [])
+            if isinstance(item, dict)
+        }
+        prior_claims = {
+            (item.get("execution_id"), item.get("receipt_sha256"))
+            for item in preserver.get("prior_execution_chain", {}).get(
+                "generation19_claims", []
+            )
+            if isinstance(item, dict)
+        }
+        terminal_chain = preserver.get("prior_execution_chain", {})
+        fresh = preserver.get("fresh_get_only_reconciliation", {})
+        release_cells = {
+            (item.get("cell_id"), item.get("execution_id"))
+            for item in release.get("cells", [])
+            if isinstance(item, dict)
+        }
+        release_rollforward = release.get("execution_generation_rollforward", {})
+        if (
+            preserver.get("status")
+            != "CLEAR_FOR_FIXED_RENDERED_CLUSTER_PACKAGE_CANARY_ONLY"
+            or preserver.get("selection_rank") != 99
+            or successor_key not in successors
+            or (
+                row["prior_execution_id"],
+                row["prior_claim_receipt_sha256"],
+            )
+            not in prior_claims
+            or any(
+                terminal_chain.get(f"generation{generation}_terminal", {}).get(
+                    "retry_allowed"
+                )
+                is not False
+                for generation in (20, 21, 22)
+            )
+            or fresh.get("exact_target_model_cell_or_execution_session_matches") != 0
+            or fresh.get("accepted_outcome_matches") != 0
+            or fresh.get("generation23_canonical_claim_paths_present") != 0
+            or release.get("status") != "RELEASED_TO_DEDICATED"
+            or release.get("selection_rank") != 99
+            or release.get("execution_generation") != 23
+            or release.get("whole_task_boundary_reserved") is not True
+            or release.get("scoring_launch_authorized") is not True
+            or successor_key not in release_cells
+            or release_rollforward.get("preserver_clearance_receipt_sha256")
+            != preserver["receipt_sha256"]
+            or release_rollforward.get("generation19_claims_preserved") is not True
+            or release_rollforward.get("generation20_21_22_retry_prohibited") is not True
+            or release_rollforward.get("fresh_zero_accepted_generations") is not True
+            or release_rollforward.get("fresh_exact_target_session_matches") != 0
+            or canary.get("status")
+            != "PASSED_CALLBACK_IDENTICAL_CLAIMS_DISABLED_PRECLAIM_BOUNDARY"
+            or canary.get("execution_generation") != 23
+            or canary.get("selection_rank") != 99
+            or canary.get("clearance_receipt_sha256") != preserver["receipt_sha256"]
+            or canary.get("release_receipt_sha256") != release["receipt_sha256"]
+            or canary.get("claims_disabled") is not True
+            or canary.get("claims_created") != 0
+            or canary.get("reservation_created") is not False
+            or canary.get("model_requests") != 0
+            or canary.get("task_instance_session_verifier_scoring_calls") != 0
+        ):
+            raise LedgerError("supplemental execution roll-forward evidence drifted")
+        expected_rollforward_cells.add(row["cell_id"])
+        rollforward_precedence[row["cell_id"]] = (
+            row["prior_execution_id"],
+            row["successor_execution_id"],
+            row["prior_claim_receipt_sha256"],
+            row["successor_claim_receipt_sha256"],
+        )
+    if len(expected_rollforward_cells) != 4:
+        raise LedgerError("supplemental execution roll-forward boundary is incomplete")
 
     dedicated_qwen_items: dict[tuple[str, str], tuple[dict[str, Any], dict[str, Any]]] = {}
     for attempt in sorted(qwen_dedicated.EXPECTED_IDENTITIES):
@@ -888,6 +1058,7 @@ def _build_authority(repo_root: Path, campaign_path: Path) -> Authority:
         hosted_glm_bulk_items=hosted_glm_bulk_items,
         hosted_glm_c2_items=hosted_glm_c2_items,
         supplemental_bulk_items=supplemental_bulk_items,
+        rollforward_precedence=rollforward_precedence,
         dedicated_qwen_items=dedicated_qwen_items,
         dedicated_qwen_v3_items=dedicated_qwen_v3_items,
         dedicated_qwen_rank3_items=dedicated_qwen_rank3_items,
@@ -2085,10 +2256,30 @@ def reconcile(
             raise LedgerError(f"cell has duplicate accepted outcomes: {cell_id}")
         if len(active_rows) > 1 or len(blocked_rows) > 1:
             raise LedgerError(f"cell has duplicate claim classifications: {cell_id}")
-        if active_rows and blocked_rows:
-            raise LedgerError(f"cell is simultaneously active and blocked: {cell_id}")
-        if accepted_rows and (active_rows or blocked_rows):
-            raise LedgerError(f"accepted cell also has a live/nonrepeatable claim input: {cell_id}")
+        if accepted_rows and active_rows:
+            raise LedgerError(f"accepted cell also has a live claim input: {cell_id}")
+        current_rows = accepted_rows or active_rows
+        if current_rows and blocked_rows:
+            precedence = authority.rollforward_precedence.get(cell_id)
+            current = current_rows[0]
+            blocked = blocked_rows[0]
+            binding_matches = precedence is not None and precedence[:3] == (
+                blocked.execution_id,
+                current.execution_id,
+                blocked.receipt_sha256,
+            )
+            if current.state == "active":
+                binding_matches = binding_matches and precedence[3] == current.receipt_sha256
+            else:
+                accepted_receipt = load_receipt(current.path)
+                binding_matches = (
+                    binding_matches
+                    and accepted_receipt.get("claim_sha256") == precedence[3]
+                )
+            if not binding_matches:
+                raise LedgerError(
+                    f"cell has no exact append-only roll-forward precedence: {cell_id}"
+                )
 
         ordered_tombstones = sorted(tombstone_rows, key=lambda item: item.execution_generation)
         if ordered_tombstones:
