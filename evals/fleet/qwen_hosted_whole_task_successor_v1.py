@@ -25,8 +25,8 @@ from evals.fleet import qwen_hosted_generation19_v4 as source
 from evals.fleet import self_hosted
 
 SCHEMA = "fleet-qwen38-hosted-atomic-whole-task-plan-v2"
-HELD_SCHEMA = "fleet-qwen38-hosted-atomic-whole-task-held-v3"
-RELEASE_SCHEMA = "fleet-qwen38-hosted-atomic-whole-task-release-v3"
+HELD_SCHEMA = "fleet-qwen38-hosted-atomic-whole-task-held-v4"
+RELEASE_SCHEMA = "fleet-qwen38-hosted-atomic-whole-task-release-v4"
 RESERVATION_SCHEMA = "fleet-qwen38-hosted-four-claim-reservation-v2"
 PREPARING_SCHEMA = "fleet-qwen38-hosted-four-claim-preparing-v1"
 MODEL_BOUNDARY_SCHEMA = "fleet-qwen38-hosted-model-boundary-v1"
@@ -36,14 +36,21 @@ LEDGER_PATH = "docs/evidence/qwen38-study/2026-09-05-exact-pass4-ledger-evidence
 LEDGER_SELF_SHA256 = "sha256:bf0b9086dd97eecafe20fa9a4cf3b5d643f0ce8f6abad60fae6e3cba3e3e2e29"
 LEDGER_FILE_SHA256 = "sha256:0a2baba7c16745a4d69f0f5aafc04010734eacbace8f6d712d44011c4a36d0dd"
 HELD_PATH = (
-    "docs/evidence/qwen38-study/2026-09-06-qwen38-hosted-rank15-rank16-whole-task-held-v3.json"
+    "docs/evidence/qwen38-study/2026-09-06-qwen38-hosted-rank15-rank16-whole-task-held-v4.json"
 )
 SUPERSEDED_HELD = {
     "path": (
-        "docs/evidence/qwen38-study/2026-09-06-qwen38-hosted-rank15-rank16-whole-task-held-v2.json"
+        "docs/evidence/qwen38-study/2026-09-06-qwen38-hosted-rank15-rank16-whole-task-held-v3.json"
     ),
-    "receipt_sha256": "sha256:dccd9f8724ffd7d104c986d1b3b2309b516c361ecad49edc0c528521c75aa772",
-    "file_sha256": "sha256:3c74c4af457c03e9559ac08050e826e62a04b439b8f01e066211193174be158b",
+    "receipt_sha256": "sha256:658b3abd494cf4a36254a4731cedfb4cd28360ba2eacdaf7a57aa5fd95bd207b",
+    "file_sha256": "sha256:eef7b1bdf5c7a0db8239c02bb4472db0611b9e3094dd414e49ee643715a843a6",
+}
+PRECLAIM_FAILURE = {
+    "path": (
+        "docs/evidence/qwen38-study/2026-09-06-qwen38-hosted-rank15-rank16-preclaim-failure-v1.json"
+    ),
+    "receipt_sha256": "sha256:8341da8ab018972d423403eb93ea06dbfd4eefe67f7bfb1781d2dbeafafc5be0",
+    "file_sha256": "sha256:a7c56a747619445e8049c7d1fbe40c0b39d6c6279036909dfaea0a4329be9783",
 }
 CLAIM_ROOT = Path("/mnt/sfs/cell-execution-claims/opencode11827-autocontinue-v1")
 RESERVATION_ROOT = Path("/mnt/sfs/cell-execution-reservations/opencode11827-autocontinue-v1")
@@ -467,6 +474,7 @@ def validate_held(
                 "endpoint_maximum_streams",
                 "controllers",
                 "supersedes",
+                "preclaim_failure",
                 "ledger_snapshot_path",
                 "ledger_snapshot_receipt_sha256",
                 "ledger_snapshot_file_sha256",
@@ -485,6 +493,7 @@ def validate_held(
             held.get("endpoint_maximum_streams") != 2,
             held.get("controllers") != release_projection(plans, package_sources),
             held.get("supersedes") != SUPERSEDED_HELD,
+            held.get("preclaim_failure") != PRECLAIM_FAILURE,
             held.get("ledger_snapshot_path") != LEDGER_PATH,
             held.get("ledger_snapshot_receipt_sha256") != LEDGER_SELF_SHA256,
             held.get("ledger_snapshot_file_sha256") != LEDGER_FILE_SHA256,

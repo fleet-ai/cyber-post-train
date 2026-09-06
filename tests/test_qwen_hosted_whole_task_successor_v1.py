@@ -14,6 +14,7 @@ from evals.fleet import exact_pass4_bulk_runtime_v3 as engine
 from evals.fleet import qwen_hosted_generation19_v4 as source
 from evals.fleet import qwen_hosted_whole_task_successor_v1 as successor
 from evals.fleet import qwen_hosted_whole_task_successor_v1_package as package
+from evals.fleet import qwen_hosted_whole_task_successor_v1_runtime as runtime
 from evals.fleet import self_hosted
 
 ROOT = Path(__file__).parents[1]
@@ -157,6 +158,30 @@ def test_held_evidence_is_digest_valid_and_never_launches() -> None:
     assert held["launch_authorized"] is False
     assert held["scoring_authorized"] is False
     assert held["retry_forbidden_selection_ranks"] == [13, 14]
+
+
+def test_preclaim_failure_receipt_is_score_blind_and_retry_closed() -> None:
+    receipt = successor.load(ROOT / successor.PRECLAIM_FAILURE["path"])
+    assert receipt["receipt_sha256"] == successor.PRECLAIM_FAILURE["receipt_sha256"]
+    assert receipt["receipt_sha256"] == self_hosted.digest_without(receipt, "receipt_sha256")
+    assert receipt["status"] == "INFRASTRUCTURE_INVALID_PRECLAIM"
+    assert receipt["score_blind_reconciliation"] == {
+        "observer_pod_uid": "35a00aeb-fb66-4bc5-a7d2-1056337ade69",
+        "canonical_claims_present": 0,
+        "output_roots_present": 0,
+        "accepted_evidence_matches": 0,
+        "authoritative_session_matches": 0,
+        "verifier_execution_matches": 0,
+        "diagnostic_failure_receipts_present": 0,
+        "model_calls": 0,
+        "task_calls": 0,
+        "session_calls": 0,
+        "verifier_calls": 0,
+        "scoring_calls": 0,
+        "api_mutations": 0,
+    }
+    assert receipt["disposition"]["failed_job_identities_retry_authorized"] is False
+    assert receipt["disposition"]["launch_authorized"] is False
 
 
 def test_release_validator_fails_closed_on_every_collision_class() -> None:
@@ -597,6 +622,49 @@ def test_engine_reaches_model_boundary_only_after_four_claims(
         engine.bulk = prior
 
 
+def test_production_runtime_gate_revalidates_exact_release_signature(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    plans = successor.build_plans(ROOT)
+    plan = plans["qwen-a"]
+    sources = _sources(plans)
+    package_source = sources["qwen-a"]
+    release = _release(plans, sources)
+    calls: list[str] = []
+
+    def load(path: Path) -> dict:
+        if path == Path("/bootstrap/package-source.json"):
+            return package_source
+        if path == Path("/release.json"):
+            return release
+        raise AssertionError(path)
+
+    def run_controller(actual_plan: dict, *, runtime_gate_check: object, **_kwargs: object) -> dict:
+        assert actual_plan == plan
+        runtime_gate_check(actual_plan)  # type: ignore[operator]
+        calls.append("production-runtime-gate")
+        return {"status": "gate-passed"}
+
+    monkeypatch.setattr(successor, "load", load)
+    monkeypatch.setattr(successor, "build_plans", lambda _root: plans)
+    monkeypatch.setattr(engine, "run_controller", run_controller)
+    monkeypatch.setenv("FLEET_API_KEY", "test-only")
+    monkeypatch.setenv("QWEN_HOSTED_WHOLE_TASK_RELEASE_PATH", "/release.json")
+    monkeypatch.setenv("QWEN_HOSTED_WHOLE_TASK_RELEASE_SHA256", release["receipt_sha256"])
+    monkeypatch.setenv(
+        "QWEN_HOSTED_WHOLE_TASK_PACKAGE_SOURCE_SHA256",
+        package_source["receipt_sha256"],
+    )
+    result = runtime.run(
+        plan,
+        out=tmp_path / "out",
+        proxy=tmp_path / "proxy.py",
+        diagnostic_root=tmp_path / "diagnostic",
+    )
+    assert result == {"status": "gate-passed"}
+    assert calls == ["production-runtime-gate"]
+
+
 def test_restart_never_repeats_a_durable_model_boundary(tmp_path: Path) -> None:
     plan = successor.build_plans(ROOT)["qwen-a"]
     out = tmp_path / "out"
@@ -728,6 +796,11 @@ def test_held_package_is_closed_create_once_and_cap_two(tmp_path: Path) -> None:
         assert plan["execution"]["endpoint_lease"]["maximum_streams"] == 2
         assert [row["attempt"] for row in plan["attempts"]] == [1, 2, 3, 4]
         assert {row["selection_rank"] for row in plan["attempts"]}.isdisjoint({13, 14})
+        bootstrap = cm["data"]["run_qwen_hosted_whole_task_successor_v1.sh"]
+        assert "bootstrap_stage 00-started" in bootstrap
+        assert "bootstrap_stage 06-runtime-exec" in bootstrap
+        assert "fleet-qwen38-hosted-whole-task-bootstrap-stage-v1" in bootstrap
+        assert "os.O_WRONLY | os.O_CREAT | os.O_EXCL" in bootstrap
 
         module_root = tmp_path / cm["metadata"]["name"] / "evals" / "fleet"
         config_root = module_root / "configs"

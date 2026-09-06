@@ -26,7 +26,7 @@ def run(plan: dict[str, Any], *, out: Path, proxy: Path, diagnostic_root: Path) 
         "QWEN_HOSTED_WHOLE_TASK_PACKAGE_SOURCE_SHA256"
     ):
         raise RuntimeError("hosted whole-task package source environment binding drifted")
-    release = successor.load_runtime_release(plans, package_source)
+    successor.load_runtime_release(plans, package_source)
     if plan != plans.get(plan.get("controller")):
         raise RuntimeError("hosted whole-task runtime plan drifted")
     key = os.environ.get("FLEET_API_KEY")
@@ -49,7 +49,7 @@ def run(plan: dict[str, Any], *, out: Path, proxy: Path, diagnostic_root: Path) 
             plan,
             out=out,
             proxy=proxy,
-            runtime_gate_check=lambda _plan: successor.validate_release(release, plans),
+            runtime_gate_check=lambda _plan: successor.load_runtime_release(plans, package_source),
             claim_provider=provider,
             stage_observer=observe,
         )
