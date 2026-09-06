@@ -34,14 +34,19 @@ def test_held_packet_is_valid_and_authorizes_nothing() -> None:
 
 def test_jobs_payload_is_exact_one_node_six_gpu_nonpreempting_server() -> None:
     payload = early.jobs_payload(ROOT)
-    assert payload["title"] == "chris-cyber-evalserve-q38-dp6-b-v1"
-    assert payload["run_dir"] == "/mnt/sfs/jobs/chris-cyber-evalserve-q38-dp6-b-v1"
+    assert payload["title"] == "chris-cyber-evalserve-q38-dp6-c-v1"
+    assert payload["run_dir"] == "/mnt/sfs/jobs/chris-cyber-evalserve-q38-dp6-c-v1"
     assert payload["workers"] == 1
     assert payload["gpus_per_worker"] == 6
     assert payload["priority_class"] == "fleet-infra-quiet"
     assert payload["privileged"] is False
     assert "--tp-size 1" in payload["command"]
     assert "--dp-size 6" in payload["command"]
+    assert "qwen38_dp6_metric_observer_v2.py" in payload["command"]
+    assert "qwen38_dp6_metric_observer_v1.py" in payload["command"]
+    assert "--status-path" in payload["command"]
+    assert "PRE_READY_TIMEOUT_SECONDS=600" in payload["command"]
+    assert "IDLE_SECONDS=600" in payload["command"]
     assert early.QUALIFIER_PRIORITY_CLASS == "fleet-serve-low"
     assert early.QUALIFIER_PRIORITY_VALUE == 100
     plan = early.load_all(ROOT)[1]

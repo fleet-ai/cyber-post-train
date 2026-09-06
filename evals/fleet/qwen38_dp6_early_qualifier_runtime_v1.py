@@ -15,7 +15,7 @@ from typing import Any
 from evals.fleet import opencode_actual_harness_parity_v1 as parity
 from evals.fleet import opencode_staged_image_v1 as staged_image
 from evals.fleet import qwen38_dp6_early_qualification_v1 as early
-from evals.fleet import qwen38_dp6_metric_observer_v1 as metric_observer
+from evals.fleet import qwen38_dp6_metric_observer_v2 as metric_observer
 from evals.fleet import qwen38_dp8_post_rank99_launch_v1 as core
 from evals.fleet import self_hosted
 
@@ -24,7 +24,8 @@ RESULT_SCHEMA = "fleet-qwen38-dp6-early-qualification-result-v3"
 DISTRIBUTION_SCHEMA = "fleet-qwen38-dp6-wave-distribution-v1"
 MIN_LATENCY_HEADROOM_MILLISECONDS = 120_000
 MIN_LATENCY_HEADROOM_FRACTION = 0.20
-SUBMISSION_SCHEMA = "fleet-qwen38-dp6-early-submission-v2"
+SUBMISSION_SCHEMA = "fleet-qwen38-dp6-early-submission-v3"
+LIVE_GATE_SCHEMA = "fleet-qwen38-dp6-early-live-submit-gate-v3"
 BINDING_SCHEMA = "fleet-qwen38-dp6-early-server-binding-v2"
 EVENT_SCHEMA = "fleet-qwen38-dp6-real-traffic-observation-v2"
 LEVELS = (1, 2, 4, 6)
@@ -34,8 +35,11 @@ COUNTER_STATE_PATH = Path(early.RUN_DIR) / "lifecycle/.request-counters.json"
 COUNTER_BASELINE_PATH = Path(early.RUN_DIR) / "lifecycle/REQUEST-COUNTER-BASELINE.json"
 EVENT_DIR = Path(early.RUN_DIR) / "lifecycle/real-traffic-events"
 DIND_RESOURCE_SAMPLES_PATH = Path("/workspace/dind-resource-samples.tsv")
-QUALIFIER_RELEASE_SCHEMA = "fleet-qwen38-dp6-early-qualifier-release-v4"
+QUALIFIER_RELEASE_SCHEMA = "fleet-qwen38-dp6-early-qualifier-release-v5"
+DRAIN_PATH = Path(early.RUN_DIR) / "lifecycle/DRAIN"
 BASELINE_WAIT_SECONDS = 30
+DRAIN_SCHEMA = "fleet-qwen38-dp6-qualifier-drain-request-v1"
+FAILURE_SCHEMA = "fleet-qwen38-dp6-qualifier-failure-v1"
 
 
 def _load(path: Path) -> dict[str, Any]:
@@ -47,6 +51,53 @@ def _load(path: Path) -> dict[str, Any]:
 
 def _digest(value: Mapping[str, Any]) -> str:
     return self_hosted.digest_without(dict(value), "receipt_sha256")
+
+
+def _write_drain_once(reason: str) -> dict[str, Any]:
+    if reason not in {"qualification_below_c6", "qualifier_infrastructure_failure"}:
+        raise ValueError("DP6 drain reason is not classified")
+    body = {
+        "schema_version": DRAIN_SCHEMA,
+        "status": "DRAIN_REQUESTED",
+        "reason": reason,
+        "server_run_dir": early.RUN_DIR,
+        "serving_block": early.SERVING_BLOCK,
+        "scoring_calls": 0,
+        "prompts_traces_flags_or_scores_included": False,
+    }
+    body["receipt_sha256"] = _digest(body)
+    try:
+        self_hosted.write_json_once(DRAIN_PATH, body)
+    except FileExistsError:
+        if DRAIN_PATH.is_symlink():
+            raise RuntimeError("DP6 drain path is a symlink") from None
+        existing = _load(DRAIN_PATH)
+        if existing != body:
+            raise RuntimeError(
+                "DP6 drain receipt already exists with different bytes"
+            ) from None
+    return body
+
+
+def _write_failure_once(path: Path, stage: str, error: Exception) -> dict[str, Any]:
+    body = {
+        "schema_version": FAILURE_SCHEMA,
+        "status": "FAILED_INFRASTRUCTURE_BEFORE_QUALIFICATION_COMPLETION",
+        "stage": stage,
+        "error_type": type(error).__name__,
+        "server_run_dir": early.RUN_DIR,
+        "serving_block": early.SERVING_BLOCK,
+        "retry_authorized": False,
+        "scoring_calls": 0,
+        "prompts_traces_flags_or_scores_included": False,
+    }
+    body["receipt_sha256"] = _digest(body)
+    try:
+        self_hosted.write_json_once(path, body)
+    except FileExistsError:
+        if _load(path) != body:
+            raise RuntimeError("DP6 qualifier failure receipt drifted") from error
+    return body
 
 
 def validate_submission(value: Mapping[str, Any], root: Path) -> None:
@@ -65,6 +116,7 @@ def validate_submission(value: Mapping[str, Any], root: Path) -> None:
         != self_hosted.sha256(self_hosted.canonical_json(early.jobs_payload(root)))
         or value.get("live_gate_receipt_sha256") != gate.get("receipt_sha256")
         or gate.get("receipt_sha256") != _digest(gate)
+        or gate.get("schema_version") != LIVE_GATE_SCHEMA
         or gate.get("status") != "PASSED_IMMEDIATELY_BEFORE_CREATE"
         or gate.get("source_commit") != value.get("source_commit")
         or gate.get("server_release_receipt_sha256") != value.get("server_release_receipt_sha256")
@@ -145,9 +197,9 @@ def validate_runtime_release(
         or value.get("status") != "RELEASED_FOR_ONE_NON_SCORED_QUALIFIER"
         or value.get("launch_authorized") is not True
         or value.get("scoring_authorized") is not False
-        or value.get("job_name") != "chris-cyber-q38-dp6-c-qualifier-v4"
-        or value.get("configmap_name") != "chris-cyber-q38-dp6-c-qualifier-v4"
-        or value.get("output_root") != "/mnt/sfs/jobs/chris-cyber-q38-dp6-c-qualifier-v4"
+        or value.get("job_name") != "chris-cyber-q38-dp6-c-qualifier-v5"
+        or value.get("configmap_name") != "chris-cyber-q38-dp6-c-qualifier-v5"
+        or value.get("output_root") != "/mnt/sfs/jobs/chris-cyber-q38-dp6-c-qualifier-v5"
         or value.get("serving_block") != early.SERVING_BLOCK
         or value.get("submission_receipt_sha256") != submission.get("receipt_sha256")
         or value.get("server_binding_receipt_sha256") != binding.get("receipt_sha256")
@@ -677,15 +729,28 @@ def main() -> int:
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     root = Path.cwd()
-    submission = _load(args.submission)
-    binding_receipt = _load(args.server_binding)
-    release = _load(args.release)
-    binding = validate_binding(binding_receipt, submission, root)
-    validate_runtime_release(release, submission, binding_receipt, args.package)
-    project_server_binding_once(binding_receipt)
-    plan = qualification_plan(binding, binding_receipt["service_origin"], root)
-    result = run(plan, binding_receipt, root)
-    self_hosted.write_json_once(args.output, result)
+    stage = "load_inputs"
+    try:
+        submission = _load(args.submission)
+        binding_receipt = _load(args.server_binding)
+        release = _load(args.release)
+        stage = "validate_release_and_binding"
+        binding = validate_binding(binding_receipt, submission, root)
+        validate_runtime_release(release, submission, binding_receipt, args.package)
+        stage = "project_server_binding"
+        project_server_binding_once(binding_receipt)
+        stage = "run_score_free_ladder"
+        plan = qualification_plan(binding, binding_receipt["service_origin"], root)
+        result = run(plan, binding_receipt, root)
+        stage = "write_result"
+        self_hosted.write_json_once(args.output, result)
+        if result["highest_passing_concurrency"] < RANKS:
+            _write_drain_once("qualification_below_c6")
+    except Exception as exc:
+        args.output.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        _write_failure_once(args.output.parent / "FAILED.json", stage, exc)
+        _write_drain_once("qualifier_infrastructure_failure")
+        raise
     print(json.dumps({"highest_passing_concurrency": result["highest_passing_concurrency"]}))
     return 0
 
