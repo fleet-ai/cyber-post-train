@@ -4,6 +4,7 @@ import copy
 import fcntl
 import json
 import os
+import re
 import subprocess
 import sys
 import textwrap
@@ -14,6 +15,7 @@ import pytest
 from evals.fleet import exact_pass4_bulk_runtime_v3 as engine
 from evals.fleet import qwen_hosted_generation19_v4 as source
 from evals.fleet import qwen_hosted_prebootstrap_v4 as prebootstrap
+from evals.fleet import qwen_hosted_private_stage_v5 as private_stage
 from evals.fleet import qwen_hosted_whole_task_successor_v1 as successor
 from evals.fleet import qwen_hosted_whole_task_successor_v1_package as package
 from evals.fleet import qwen_hosted_whole_task_successor_v1_runtime as runtime
@@ -233,28 +235,33 @@ def test_preclaim_failure_receipt_is_score_blind_and_retry_closed() -> None:
     assert receipt["disposition"]["launch_authorized"] is False
 
 
-def test_canary_v3_failure_is_prebootstrap_unclassified_and_zero_effect() -> None:
+def test_canary_v4_failure_is_stage06_projected_symlink_and_zero_effect() -> None:
     receipt = successor.load(ROOT / successor.CANARY_FAILURE["path"])
     assert receipt["receipt_sha256"] == successor.CANARY_FAILURE["receipt_sha256"]
     assert receipt["receipt_sha256"] == self_hosted.digest_without(receipt, "receipt_sha256")
-    assert receipt["status"] == "FAILED_BEFORE_BOOTSTRAP_STAGE_ZERO"
-    assert receipt["failure_evidence"]["diagnostic_root_absent"] is True
-    assert receipt["failure_evidence"]["bootstrap_stage_receipts_present"] == 0
-    assert receipt["failure_evidence"]["observed_cause_classification"] == (
-        "PRE_BOOTSTRAP_UNCLASSIFIED"
+    assert receipt["status"] == "FAILED_AT_BOOTSTRAP_STAGE_SIX"
+    assert receipt["sanitized_failure_receipt"]["last_completed_stage"] == (
+        "06-runtime-exec"
     )
-    assert receipt["failure_evidence"]["logs_used"] is False
+    assert receipt["sanitized_failure_receipt"]["last_completed_phase"] == (
+        "build-plans-done"
+    )
+    assert receipt["deterministic_static_diagnosis"]["cause_classification"] == (
+        "PROJECTED_CONFIGMAP_SYMLINK_REJECTED_BY_STRICT_RUNTIME_LOADER"
+    )
+    assert receipt["deterministic_static_diagnosis"]["logs_used"] is False
     assert receipt["deterministic_correction"] == {
-        "network_package_install_removed": True,
-        "docker_cli_source_image": package.base.DIND_IMAGE,
-        "docker_cli_shared_emptydir": True,
-        "exact_copied_binary_bytes": package.DOCKER_CLI_BYTES,
-        "docker_cli_emptydir_size_limit_bytes": 256 * 1024 * 1024,
-        "prebootstrap_phase_receipt_before_cli_copy": True,
-        "observed_exit_assigned_to_specific_apt_command": False,
+        "projected_files_are_transport_only": True,
+        "private_destination_mode": "0700",
+        "private_file_mode": "0600",
+        "copy_is_create_once": True,
+        "source_and_copy_bytes_match": True,
+        "source_and_copy_self_digests_validated": True,
+        "runtime_accepts_only_private_regular_files": True,
+        "strict_runtime_loader_weakened": False,
     }
     assert set(receipt["score_blind_effects"].values()) == {0}
-    assert receipt["disposition"]["canary_v3_identity_retry_authorized"] is False
+    assert receipt["disposition"]["canary_v4_identity_retry_authorized"] is False
     assert receipt["disposition"]["scored_successor_authorized"] is False
 
 
@@ -295,13 +302,17 @@ def test_score_free_runtime_gate_canary_stops_before_any_scored_boundary(
 
 
 def test_runtime_gate_canary_rejects_any_nonexact_held_authority_digest(
-    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     plans = successor.build_plans(ROOT)
     package_source = _sources(plans)["qwen-a"]
     held = successor.load(ROOT / successor.HELD_PATH)
-    monkeypatch.setattr(successor, "load", lambda _path: held)
-    monkeypatch.setenv("QWEN_HOSTED_WHOLE_TASK_RELEASE_PATH", "/bootstrap/release.json")
+    private = tmp_path / "private"
+    private.mkdir(mode=0o700)
+    held_path = private / "release.json"
+    held_path.write_text(json.dumps(held))
+    held_path.chmod(0o600)
+    monkeypatch.setenv("QWEN_HOSTED_WHOLE_TASK_RELEASE_PATH", str(held_path.resolve()))
     monkeypatch.setenv("QWEN_HOSTED_WHOLE_TASK_RELEASE_SHA256", "sha256:" + "b" * 64)
     with pytest.raises(RuntimeError, match="canary held digest drifted"):
         runtime.runtime_gate_check(plans, package_source, canary=True)
@@ -764,12 +775,14 @@ def test_production_runtime_gate_revalidates_exact_release_signature(
     calls: list[str] = []
     validator_calls: list[tuple[dict, dict, dict]] = []
 
-    def load(path: Path) -> dict:
-        if path == Path("/bootstrap/package-source.json"):
-            return package_source
-        if path == Path("/release.json"):
-            return release
-        raise AssertionError(path)
+    private = tmp_path / "private"
+    private.mkdir(mode=0o700)
+    package_source_path = private / "package-source.json"
+    package_source_path.write_text(json.dumps(package_source))
+    package_source_path.chmod(0o600)
+    release_path = private / "release.json"
+    release_path.write_text(json.dumps(release))
+    release_path.chmod(0o600)
 
     def run_controller(actual_plan: dict, *, runtime_gate_check: object, **_kwargs: object) -> dict:
         assert actual_plan == plan
@@ -777,7 +790,6 @@ def test_production_runtime_gate_revalidates_exact_release_signature(
         calls.append("production-runtime-gate")
         return {"status": "gate-passed"}
 
-    monkeypatch.setattr(successor, "load", load)
     monkeypatch.setattr(successor, "build_plans", lambda _root: plans)
     monkeypatch.setattr(
         successor,
@@ -788,7 +800,7 @@ def test_production_runtime_gate_revalidates_exact_release_signature(
     )
     monkeypatch.setattr(engine, "run_controller", run_controller)
     monkeypatch.setenv("FLEET_API_KEY", "test-only")
-    monkeypatch.setenv("QWEN_HOSTED_WHOLE_TASK_RELEASE_PATH", "/release.json")
+    monkeypatch.setenv("QWEN_HOSTED_WHOLE_TASK_RELEASE_PATH", str(release_path.resolve()))
     monkeypatch.setenv("QWEN_HOSTED_WHOLE_TASK_RELEASE_SHA256", release["receipt_sha256"])
     monkeypatch.setenv(
         "QWEN_HOSTED_WHOLE_TASK_PACKAGE_SOURCE_SHA256",
@@ -799,6 +811,7 @@ def test_production_runtime_gate_revalidates_exact_release_signature(
         out=tmp_path / "out",
         proxy=tmp_path / "proxy.py",
         diagnostic_root=tmp_path / "diagnostic",
+        package_source_path=package_source_path.resolve(),
     )
     assert result == {"status": "gate-passed"}
     assert calls == ["production-runtime-gate"]
@@ -982,6 +995,50 @@ def test_held_package_is_closed_create_once_and_cap_two(tmp_path: Path) -> None:
         )
 
 
+def test_score_free_canary_and_held_scored_job_share_exact_bootstrap_bytes() -> None:
+    held_cm, held_job = package.render(ROOT)["items"][:2]
+    canary_cm, canary_job = package.render_runtime_gate_canary(ROOT)["items"]
+    assert held_cm["data"] == canary_cm["data"]
+    held_pod = held_job["spec"]["template"]["spec"]
+    canary_pod = canary_job["spec"]["template"]["spec"]
+    held_env = {row["name"]: row for row in held_pod["containers"][0]["env"]}
+    canary_env = {row["name"]: row for row in canary_pod["containers"][0]["env"]}
+    held_diagnostic = held_env["QWEN_HOSTED_WHOLE_TASK_DIAGNOSTIC_ROOT"]["value"]
+    held_private = str(Path(held_env["QWEN_HOSTED_WHOLE_TASK_RELEASE_PATH"]["value"]).parent)
+
+    def normalize(value: object, diagnostic: str, private: str) -> object:
+        return json.loads(
+            json.dumps(value)
+            .replace(diagnostic, "__DIAGNOSTIC_ROOT__")
+            .replace(private, "__PRIVATE_ROOT__")
+        )
+
+    assert normalize(
+        held_pod["initContainers"], held_diagnostic, held_private
+    ) == normalize(
+        canary_pod["initContainers"],
+        package.RUNTIME_GATE_CANARY_DIAGNOSTIC_ROOT,
+        package.RUNTIME_GATE_CANARY_PRIVATE_ROOT,
+    )
+    assert normalize(
+        held_pod["containers"][0]["args"], held_diagnostic, held_private
+    ) == normalize(
+        canary_pod["containers"][0]["args"],
+        package.RUNTIME_GATE_CANARY_DIAGNOSTIC_ROOT,
+        package.RUNTIME_GATE_CANARY_PRIVATE_ROOT,
+    )
+    assert "apt-get" not in json.dumps(held_pod)
+    assert "apt-get" not in json.dumps(canary_pod)
+    assert "FLEET_API_KEY" in held_env
+    assert "FLEET_API_KEY" not in canary_env
+    assert "QWEN_HOSTED_WHOLE_TASK_RUNTIME_GATE_CANARY" not in held_env
+    assert canary_env["QWEN_HOSTED_WHOLE_TASK_RUNTIME_GATE_CANARY"]["value"] == "true"
+    assert held_job["metadata"]["annotations"]["cyber-post-train.fleet.ai/launch-authorized"] == (
+        "false"
+    )
+    assert canary_env["QWEN_HOSTED_WHOLE_TASK_OUTPUT_ROOT"]["value"] == "/dev/null"
+
+
 def test_runtime_gate_canary_package_is_new_score_free_create_once_identity() -> None:
     rendered = package.render_runtime_gate_canary(ROOT)
     assert [item["kind"] for item in rendered["items"]] == ["ConfigMap", "Job"]
@@ -1006,12 +1063,19 @@ def test_runtime_gate_canary_package_is_new_score_free_create_once_identity() ->
     held = json.loads(cm["data"]["release.json"])
     assert held["launch_authorized"] is False
     assert env["QWEN_HOSTED_WHOLE_TASK_RELEASE_SHA256"]["value"] == held["receipt_sha256"]
-    assert package.RUNTIME_GATE_CANARY_JOB.endswith("-v4")
+    assert env["QWEN_HOSTED_WHOLE_TASK_RELEASE_PATH"]["value"] == (
+        package.RUNTIME_GATE_CANARY_PRIVATE_ROOT + "/release.json"
+    )
+    assert env["QWEN_HOSTED_WHOLE_TASK_PACKAGE_SOURCE_PATH"]["value"] == (
+        package.RUNTIME_GATE_CANARY_PRIVATE_ROOT + "/package-source.json"
+    )
+    assert "/bootstrap/release.json" not in json.dumps(container)
+    assert package.RUNTIME_GATE_CANARY_JOB.endswith("-v5")
     assert not cm["metadata"]["name"].startswith(
-        "chris-q38-hosted-whole-task-runtime-gate-canary-v3"
+        "chris-q38-hosted-whole-task-runtime-gate-canary-v4"
     )
     assert not job["metadata"]["name"].startswith(
-        "chris-q38-hosted-whole-task-runtime-gate-canary-v3"
+        "chris-q38-hosted-whole-task-runtime-gate-canary-v4"
     )
 
 
@@ -1040,21 +1104,34 @@ def test_runtime_gate_canary_records_prebootstrap_and_uses_pinned_cli_without_ap
     docker_volume = next(row for row in pod["volumes"] if row["name"] == "docker-cli")
     assert docker_volume == {"name": "docker-cli", "emptyDir": {"sizeLimit": "256Mi"}}
     evaluator = pod["containers"][0]
-    assert evaluator["args"][0].index("01-network-package-install-bypassed") < evaluator[
-        "args"
-    ][0].index("02-pinned-docker-cli-ready")
+    command = evaluator["args"][0]
+    assert command.index("01-network-package-install-bypassed") < command.index(
+        "02-pinned-docker-cli-ready"
+    )
+    assert command.index("03-private-input-stage-started") < command.index(
+        "qwen_hosted_private_stage_v5.py stage-all"
+    )
+    assert command.index("qwen_hosted_private_stage_v5.py stage-all") < command.index(
+        "04-private-input-stage-done"
+    )
     assert "apt-get" not in json.dumps(pod)
     assert "qwen_hosted_prebootstrap_v4.py" in cm["data"]
+    assert "qwen_hosted_private_stage_v5.py" in cm["data"]
     package_source = json.loads(cm["data"]["package-source.json"])
     assert package_source["files"]["qwen_hosted_prebootstrap_v4.py"] == self_hosted.sha256(
         cm["data"]["qwen_hosted_prebootstrap_v4.py"].encode()
     )
     for required in (
         "qwen_hosted_prebootstrap_v4.py",
+        "qwen_hosted_private_stage_v5.py",
         "run_qwen_hosted_whole_task_successor_v1.sh",
     ):
         assert f"/bootstrap/{required}" in json.dumps(pod)
         assert required in cm["data"]
+    bootstrap_references = set(
+        re.findall(r"/bootstrap/([A-Za-z0-9_.-]+)", json.dumps(pod))
+    )
+    assert bootstrap_references <= set(cm["data"])
 
 
 def test_materialized_prebootstrap_package_writes_self_digesting_score_free_receipts(
@@ -1114,6 +1191,67 @@ def test_materialized_prebootstrap_package_writes_self_digesting_score_free_rece
         } == {0}
 
 
+def test_private_stage_materializes_projected_inputs_create_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cm, job = package.render_runtime_gate_canary(ROOT)["items"]
+    bootstrap = tmp_path / "bootstrap"
+    projected = bootstrap / "..data"
+    projected.mkdir(parents=True)
+    for name in private_stage.SOURCE_NAMES:
+        (projected / name).write_text(cm["data"][name])
+        (bootstrap / name).symlink_to(Path("..data") / name)
+    package_source = json.loads(cm["data"]["package-source.json"])
+    release = json.loads(cm["data"]["release.json"])
+    monkeypatch.setenv(
+        "QWEN_HOSTED_WHOLE_TASK_PACKAGE_SOURCE_SHA256",
+        package_source["receipt_sha256"],
+    )
+    monkeypatch.setenv("QWEN_HOSTED_WHOLE_TASK_RELEASE_SHA256", release["receipt_sha256"])
+    monkeypatch.setenv("JOB_UID", "11111111-1111-4111-8111-111111111111")
+    monkeypatch.setenv("POD_UID", "22222222-2222-4222-8222-222222222222")
+    destination = tmp_path / "private"
+    receipt = private_stage.stage_all(bootstrap.resolve(), destination.resolve())
+    assert receipt["receipt_sha256"] == self_hosted.digest_without(
+        receipt, "receipt_sha256"
+    )
+    assert {row["name"] for row in receipt["files"]} == set(private_stage.SOURCE_NAMES)
+    assert {row["source_was_projected_symlink"] for row in receipt["files"]} == {True}
+    assert {row["destination_is_private_regular_file"] for row in receipt["files"]} == {
+        True
+    }
+    assert destination.stat().st_mode & 0o777 == 0o700
+    for name in private_stage.SOURCE_NAMES:
+        staged = destination / name
+        assert staged.read_bytes() == (projected / name).read_bytes()
+        assert staged.stat().st_mode & 0o777 == 0o600
+        assert not staged.is_symlink()
+    with pytest.raises(FileExistsError):
+        private_stage.stage_all(bootstrap.resolve(), destination.resolve())
+    assert "FLEET_API_KEY" not in {
+        row["name"] for row in job["spec"]["template"]["spec"]["containers"][0]["env"]
+    }
+
+
+def test_private_runtime_loader_rejects_projected_symlink_and_nonprivate_mode(
+    tmp_path: Path,
+) -> None:
+    private = tmp_path / "private"
+    private.mkdir(mode=0o700)
+    regular = private / "release.json"
+    regular.write_text('{"status":"test"}\n')
+    regular.chmod(0o600)
+    assert runtime._load_private_regular(regular.resolve()) == {"status": "test"}  # noqa: SLF001
+    regular.chmod(0o644)
+    with pytest.raises(RuntimeError, match="mode drifted"):
+        runtime._load_private_regular(regular.resolve())  # noqa: SLF001
+    regular.chmod(0o600)
+    projected = private / "projected.json"
+    projected.symlink_to(regular.name)
+    with pytest.raises(RuntimeError, match="path drifted"):
+        runtime._load_private_regular(projected.absolute())  # noqa: SLF001
+
+
 def test_runtime_gate_canary_records_every_safe_gate_phase(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1121,18 +1259,29 @@ def test_runtime_gate_canary_records_every_safe_gate_phase(
     sources = _sources(plans)
     package_source_path = tmp_path / "package-source.json"
     package_source_path.write_text(json.dumps(sources["qwen-a"], sort_keys=True) + "\n")
+    package_source_path.chmod(0o600)
     held_path = ROOT / successor.HELD_PATH
     held = successor.load(held_path)
+    private = tmp_path / "private"
+    private.mkdir(mode=0o700)
+    private_held_path = private / "release.json"
+    private_held_path.write_text(json.dumps(held))
+    private_held_path.chmod(0o600)
+    private_package_source_path = private / "package-source.json"
+    private_package_source_path.write_bytes(package_source_path.read_bytes())
+    private_package_source_path.chmod(0o600)
     monkeypatch.setenv(
         "QWEN_HOSTED_WHOLE_TASK_PACKAGE_SOURCE_SHA256",
         sources["qwen-a"]["receipt_sha256"],
     )
-    monkeypatch.setenv("QWEN_HOSTED_WHOLE_TASK_RELEASE_PATH", str(held_path.resolve()))
+    monkeypatch.setenv(
+        "QWEN_HOSTED_WHOLE_TASK_RELEASE_PATH", str(private_held_path.resolve())
+    )
     monkeypatch.setenv("QWEN_HOSTED_WHOLE_TASK_RELEASE_SHA256", held["receipt_sha256"])
     phases: list[str] = []
     loaded_plans, package_source = runtime._load_bound_inputs(  # noqa: SLF001
         plans["qwen-a"],
-        package_source_path=package_source_path.resolve(),
+        package_source_path=private_package_source_path.resolve(),
         phase_callback=phases.append,
     )
     assert (
@@ -1187,6 +1336,8 @@ def test_unmocked_materialized_canary_package_runs_exact_runtime_gate(tmp_path: 
     bootstrap = tmp_path / "bootstrap"
     config_root.mkdir(parents=True)
     bootstrap.mkdir()
+    projected = bootstrap / "..data"
+    projected.mkdir()
     (module_root.parent / "__init__.py").touch()
     (module_root / "__init__.py").touch()
     for name, value in data.items():
@@ -1200,10 +1351,13 @@ def test_unmocked_materialized_canary_package_runs_exact_runtime_gate(tmp_path: 
     )
     plan_path = config_root / "runtime-plan.json"
     plan_path.write_text(data["plan.json"])
-    package_source_path = bootstrap / "package-source.json"
-    package_source_path.write_text(data["package-source.json"])
-    authority_path = bootstrap / "release.json"
-    authority_path.write_text(data["release.json"])
+    projected_package_source = projected / "package-source.json"
+    projected_package_source.write_text(data["package-source.json"])
+    projected_authority = projected / "release.json"
+    projected_authority.write_text(data["release.json"])
+    (bootstrap / "package-source.json").symlink_to(Path("..data/package-source.json"))
+    (bootstrap / "release.json").symlink_to(Path("..data/release.json"))
+    private = tmp_path / "private"
     diagnostic = tmp_path / "diagnostic"
     receipt_path = diagnostic / "RUNTIME-GATE-CANARY.json"
     forbidden_output = tmp_path / "forbidden-output"
@@ -1214,7 +1368,6 @@ def test_unmocked_materialized_canary_package_runs_exact_runtime_gate(tmp_path: 
             "QWEN_HOSTED_WHOLE_TASK_PACKAGE_SOURCE_SHA256": json.loads(data["package-source.json"])[
                 "receipt_sha256"
             ],
-            "QWEN_HOSTED_WHOLE_TASK_RELEASE_PATH": str(authority_path),
             "QWEN_HOSTED_WHOLE_TASK_RELEASE_SHA256": json.loads(data["release.json"])[
                 "receipt_sha256"
             ],
@@ -1222,6 +1375,28 @@ def test_unmocked_materialized_canary_package_runs_exact_runtime_gate(tmp_path: 
             "POD_UID": "22222222-2222-4222-8222-222222222222",
         }
     )
+    subprocess.run(
+        [
+            sys.executable,
+            str(module_root / "qwen_hosted_private_stage_v5.py"),
+            "stage-all",
+            "--bootstrap-root",
+            str(bootstrap.resolve()),
+            "--destination-root",
+            str(private.resolve()),
+        ],
+        check=True,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    package_source_path = private / "package-source.json"
+    authority_path = private / "release.json"
+    assert package_source_path.is_file() and not package_source_path.is_symlink()
+    assert authority_path.is_file() and not authority_path.is_symlink()
+    assert package_source_path.stat().st_mode & 0o777 == 0o600
+    assert authority_path.stat().st_mode & 0o777 == 0o600
+    env["QWEN_HOSTED_WHOLE_TASK_RELEASE_PATH"] = str(authority_path)
     subprocess.run(
         [
             "uv",

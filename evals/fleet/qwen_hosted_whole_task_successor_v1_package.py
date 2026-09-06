@@ -16,12 +16,14 @@ COMMON = (
     "evals/fleet/qwen_hosted_whole_task_successor_v1.py",
     "evals/fleet/qwen_hosted_whole_task_successor_v1_runtime.py",
     "evals/fleet/qwen_hosted_prebootstrap_v4.py",
+    "evals/fleet/qwen_hosted_private_stage_v5.py",
 )
-RUNTIME_GATE_CANARY_JOB = "chris-q38-hosted-whole-task-runtime-gate-canary-v4"
+RUNTIME_GATE_CANARY_JOB = "chris-q38-hosted-whole-task-runtime-gate-canary-v5"
 RUNTIME_GATE_CANARY_CONFIGMAP = RUNTIME_GATE_CANARY_JOB + "-package"
 RUNTIME_GATE_CANARY_DIAGNOSTIC_ROOT = (
-    "/mnt/sfs/jobs/chris-q38-hosted-whole-task-runtime-gate-canary-v4-diagnostic"
+    "/mnt/sfs/jobs/chris-q38-hosted-whole-task-runtime-gate-canary-v5-diagnostic"
 )
+RUNTIME_GATE_CANARY_PRIVATE_ROOT = "/workspace/q38-hosted-runtime-gate-v5-private"
 DOCKER_CLI_SHA256 = "242c7a8de606afba2acada7c7af00d77f92c3601678b2f3a60911b49a892c722"
 DOCKER_BUILDX_SHA256 = "8c38f60308a895fa570f1410e453c5de11aafd65a99fa99965d96d24b6225a78"
 DOCKER_CLI_BYTES = 105_594_160
@@ -55,6 +57,115 @@ def package_sources(
         for controller, values in data.items()
     }
     return receipts, data
+
+
+def _configure_runtime_bootstrap(
+    job: dict[str, Any], *, diagnostic_root: str, private_root: str
+) -> None:
+    """Install the one pinned, evidenced bootstrap shared by canary and scored Jobs."""
+    pod = job["spec"]["template"]["spec"]
+    container = pod["containers"][0]
+    container["env"].extend(
+        [
+            {
+                "name": "PATH",
+                "value": (
+                    "/docker-cli/bin:/usr/local/sbin:/usr/local/bin:"
+                    "/usr/sbin:/usr/bin:/sbin:/bin"
+                ),
+            },
+            {"name": "DOCKER_CONFIG", "value": "/workspace/docker-config"},
+        ]
+    )
+    prebootstrap_env = [
+        row
+        for row in container["env"]
+        if row["name"]
+        in {
+            "JOB_UID",
+            "POD_UID",
+            "QWEN_HOSTED_WHOLE_TASK_DIAGNOSTIC_ROOT",
+            "QWEN_HOSTED_WHOLE_TASK_RELEASE_SHA256",
+            "QWEN_HOSTED_WHOLE_TASK_PACKAGE_SOURCE_SHA256",
+        }
+    ]
+    dind = pod["initContainers"][0]
+    pod["initContainers"] = [
+        {
+            "name": "prebootstrap-evidence",
+            "image": base.UV_IMAGE,
+            "command": ["python", "/bootstrap/qwen_hosted_prebootstrap_v4.py"],
+            "args": [
+                "record",
+                "--phase",
+                "00-prebootstrap-entry",
+                "--root",
+                diagnostic_root,
+            ],
+            "env": prebootstrap_env,
+            "resources": {
+                "requests": {"cpu": "10m", "memory": "32Mi", "ephemeral-storage": "32Mi"},
+                "limits": {"cpu": "100m", "memory": "128Mi", "ephemeral-storage": "128Mi"},
+            },
+            "volumeMounts": [
+                {"name": "bootstrap", "mountPath": "/bootstrap", "readOnly": True},
+                {"name": "sfs", "mountPath": "/mnt/sfs"},
+            ],
+        },
+        {
+            "name": "docker-cli",
+            "image": base.DIND_IMAGE,
+            "command": ["/bin/sh", "-ec"],
+            "args": [
+                "install -D -m 0755 /usr/local/bin/docker /cli/bin/docker; "
+                "install -D -m 0755 /usr/local/libexec/docker/cli-plugins/docker-buildx "
+                "/cli/plugins/docker-buildx; "
+                f"test \"$(sha256sum /cli/bin/docker | awk '{{print $1}}')\" = "
+                f"{DOCKER_CLI_SHA256}; "
+                f"test \"$(sha256sum /cli/plugins/docker-buildx | awk '{{print $1}}')\" = "
+                f"{DOCKER_BUILDX_SHA256}; "
+                "test \"$(( $(wc -c < /cli/bin/docker) + "
+                "$(wc -c < /cli/plugins/docker-buildx) ))\" = "
+                f"{DOCKER_CLI_BYTES}"
+            ],
+            "resources": {
+                "requests": {"cpu": "10m", "memory": "32Mi", "ephemeral-storage": "32Mi"},
+                "limits": {"cpu": "100m", "memory": "128Mi", "ephemeral-storage": "128Mi"},
+            },
+            "volumeMounts": [{"name": "docker-cli", "mountPath": "/cli"}],
+        },
+        dind,
+    ]
+    pod["volumes"].append({"name": "docker-cli", "emptyDir": {"sizeLimit": "256Mi"}})
+    container["volumeMounts"].append(
+        {"name": "docker-cli", "mountPath": "/docker-cli", "readOnly": True}
+    )
+    container["args"] = [
+        "python /bootstrap/qwen_hosted_prebootstrap_v4.py record "
+        "--phase 01-network-package-install-bypassed "
+        f"--root {diagnostic_root}; "
+        "test \"$(command -v docker)\" = /docker-cli/bin/docker; "
+        f"test \"$(sha256sum /docker-cli/bin/docker | awk '{{print $1}}')\" = "
+        f"{DOCKER_CLI_SHA256}; "
+        f"test \"$(sha256sum /docker-cli/plugins/docker-buildx | awk '{{print $1}}')\" = "
+        f"{DOCKER_BUILDX_SHA256}; "
+        "mkdir -p /workspace/docker-config/cli-plugins; "
+        "install -m 0755 /docker-cli/plugins/docker-buildx "
+        "/workspace/docker-config/cli-plugins/docker-buildx; "
+        "python /bootstrap/qwen_hosted_prebootstrap_v4.py record "
+        "--phase 02-pinned-docker-cli-ready "
+        f"--root {diagnostic_root}; "
+        "python /bootstrap/qwen_hosted_prebootstrap_v4.py record "
+        "--phase 03-private-input-stage-started "
+        f"--root {diagnostic_root}; "
+        "python /bootstrap/qwen_hosted_private_stage_v5.py stage-all "
+        "--bootstrap-root /bootstrap "
+        f"--destination-root {private_root}; "
+        "python /bootstrap/qwen_hosted_prebootstrap_v4.py record "
+        "--phase 04-private-input-stage-done "
+        f"--root {diagnostic_root}; "
+        "exec /bin/bash /bootstrap/run_qwen_hosted_whole_task_successor_v1.sh"
+    ]
 
 
 def render(root: Path, *, release_path: Path | None = None) -> dict[str, Any]:
@@ -98,11 +209,6 @@ def render(root: Path, *, release_path: Path | None = None) -> dict[str, Any]:
             "q38-hosted-atomic-whole-task-successor"
         )
         container = job["spec"]["template"]["spec"]["containers"][0]
-        container["args"] = [
-            "apt-get update; apt-get install --yes --no-install-recommends "
-            "docker.io=20.10.24+dfsg1-1+deb12u1+b6; "
-            "exec /bin/bash /bootstrap/run_qwen_hosted_whole_task_successor_v1.sh"
-        ]
         container["env"] = [
             row
             for row in container["env"]
@@ -118,7 +224,11 @@ def render(root: Path, *, release_path: Path | None = None) -> dict[str, Any]:
                 },
                 {
                     "name": "QWEN_HOSTED_WHOLE_TASK_RELEASE_PATH",
-                    "value": "/bootstrap/release.json",
+                    "value": f"/workspace/{authority['job_name']}-private/release.json",
+                },
+                {
+                    "name": "QWEN_HOSTED_WHOLE_TASK_PACKAGE_SOURCE_PATH",
+                    "value": f"/workspace/{authority['job_name']}-private/package-source.json",
                 },
                 {
                     "name": "QWEN_HOSTED_WHOLE_TASK_RELEASE_SHA256",
@@ -129,6 +239,12 @@ def render(root: Path, *, release_path: Path | None = None) -> dict[str, Any]:
                     "value": sources[controller]["receipt_sha256"],
                 },
             ]
+        )
+        private_root = f"/workspace/{authority['job_name']}-private"
+        _configure_runtime_bootstrap(
+            job,
+            diagnostic_root=plan["sfs_root"] + "-diagnostic",
+            private_root=private_root,
         )
         if len(json.dumps(cm).encode()) >= 900_000:
             raise ValueError("hosted whole-task ConfigMap exceeds safety budget")
@@ -181,7 +297,14 @@ def render_runtime_gate_canary(root: Path) -> dict[str, Any]:
                 "name": "QWEN_HOSTED_WHOLE_TASK_DIAGNOSTIC_ROOT",
                 "value": RUNTIME_GATE_CANARY_DIAGNOSTIC_ROOT,
             },
-            {"name": "QWEN_HOSTED_WHOLE_TASK_RELEASE_PATH", "value": "/bootstrap/release.json"},
+            {
+                "name": "QWEN_HOSTED_WHOLE_TASK_RELEASE_PATH",
+                "value": RUNTIME_GATE_CANARY_PRIVATE_ROOT + "/release.json",
+            },
+            {
+                "name": "QWEN_HOSTED_WHOLE_TASK_PACKAGE_SOURCE_PATH",
+                "value": RUNTIME_GATE_CANARY_PRIVATE_ROOT + "/package-source.json",
+            },
             {
                 "name": "QWEN_HOSTED_WHOLE_TASK_RELEASE_SHA256",
                 "value": held["receipt_sha256"],
@@ -191,97 +314,13 @@ def render_runtime_gate_canary(root: Path) -> dict[str, Any]:
                 "value": sources[controller]["receipt_sha256"],
             },
             {"name": "QWEN_HOSTED_WHOLE_TASK_RUNTIME_GATE_CANARY", "value": "true"},
-            {
-                "name": "PATH",
-                "value": (
-                    "/docker-cli/bin:/usr/local/sbin:/usr/local/bin:"
-                    "/usr/sbin:/usr/bin:/sbin:/bin"
-                ),
-            },
-            {"name": "DOCKER_CONFIG", "value": "/workspace/docker-config"},
         ]
     )
-    prebootstrap_env = [
-        row
-        for row in container["env"]
-        if row["name"]
-        in {
-            "JOB_UID",
-            "POD_UID",
-            "QWEN_HOSTED_WHOLE_TASK_DIAGNOSTIC_ROOT",
-            "QWEN_HOSTED_WHOLE_TASK_RELEASE_SHA256",
-            "QWEN_HOSTED_WHOLE_TASK_PACKAGE_SOURCE_SHA256",
-        }
-    ]
-    pod = job["spec"]["template"]["spec"]
-    dind = pod["initContainers"][0]
-    pod["initContainers"] = [
-        {
-            "name": "prebootstrap-evidence",
-            "image": base.UV_IMAGE,
-            "command": ["python", "/bootstrap/qwen_hosted_prebootstrap_v4.py"],
-            "args": [
-                "record",
-                "--phase",
-                "00-prebootstrap-entry",
-                "--root",
-                RUNTIME_GATE_CANARY_DIAGNOSTIC_ROOT,
-            ],
-            "env": prebootstrap_env,
-            "resources": {
-                "requests": {"cpu": "10m", "memory": "32Mi", "ephemeral-storage": "32Mi"},
-                "limits": {"cpu": "100m", "memory": "128Mi", "ephemeral-storage": "128Mi"},
-            },
-            "volumeMounts": [
-                {"name": "bootstrap", "mountPath": "/bootstrap", "readOnly": True},
-                {"name": "sfs", "mountPath": "/mnt/sfs"},
-            ],
-        },
-        {
-            "name": "docker-cli",
-            "image": base.DIND_IMAGE,
-            "command": ["/bin/sh", "-ec"],
-            "args": [
-                "install -D -m 0755 /usr/local/bin/docker /cli/bin/docker; "
-                "install -D -m 0755 /usr/local/libexec/docker/cli-plugins/docker-buildx "
-                "/cli/plugins/docker-buildx; "
-                f"test \"$(sha256sum /cli/bin/docker | awk '{{print $1}}')\" = "
-                f"{DOCKER_CLI_SHA256}; "
-                f"test \"$(sha256sum /cli/plugins/docker-buildx | awk '{{print $1}}')\" = "
-                f"{DOCKER_BUILDX_SHA256}; "
-                "test \"$(( $(wc -c < /cli/bin/docker) + "
-                "$(wc -c < /cli/plugins/docker-buildx) ))\" = "
-                f"{DOCKER_CLI_BYTES}"
-            ],
-            "resources": {
-                "requests": {"cpu": "10m", "memory": "32Mi", "ephemeral-storage": "32Mi"},
-                "limits": {"cpu": "100m", "memory": "128Mi", "ephemeral-storage": "128Mi"},
-            },
-            "volumeMounts": [{"name": "docker-cli", "mountPath": "/cli"}],
-        },
-        dind,
-    ]
-    pod["volumes"].append({"name": "docker-cli", "emptyDir": {"sizeLimit": "256Mi"}})
-    container["volumeMounts"].append(
-        {"name": "docker-cli", "mountPath": "/docker-cli", "readOnly": True}
+    _configure_runtime_bootstrap(
+        job,
+        diagnostic_root=RUNTIME_GATE_CANARY_DIAGNOSTIC_ROOT,
+        private_root=RUNTIME_GATE_CANARY_PRIVATE_ROOT,
     )
-    container["args"] = [
-        "python /bootstrap/qwen_hosted_prebootstrap_v4.py record "
-        "--phase 01-network-package-install-bypassed "
-        f"--root {RUNTIME_GATE_CANARY_DIAGNOSTIC_ROOT}; "
-        "test \"$(command -v docker)\" = /docker-cli/bin/docker; "
-        f"test \"$(sha256sum /docker-cli/bin/docker | awk '{{print $1}}')\" = "
-        f"{DOCKER_CLI_SHA256}; "
-        f"test \"$(sha256sum /docker-cli/plugins/docker-buildx | awk '{{print $1}}')\" = "
-        f"{DOCKER_BUILDX_SHA256}; "
-        "mkdir -p /workspace/docker-config/cli-plugins; "
-        "install -m 0755 /docker-cli/plugins/docker-buildx "
-        "/workspace/docker-config/cli-plugins/docker-buildx; "
-        "python /bootstrap/qwen_hosted_prebootstrap_v4.py record "
-        "--phase 02-pinned-docker-cli-ready "
-        f"--root {RUNTIME_GATE_CANARY_DIAGNOSTIC_ROOT}; "
-        "exec /bin/bash /bootstrap/run_qwen_hosted_whole_task_successor_v1.sh"
-    ]
     if len(json.dumps(cm).encode()) >= 900_000:
         raise ValueError("hosted whole-task runtime-gate canary ConfigMap exceeds safety budget")
     return {"apiVersion": "v1", "kind": "List", "items": [cm, job]}

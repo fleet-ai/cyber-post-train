@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import os
+import stat
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -32,6 +33,23 @@ def _seal(body: dict[str, Any]) -> dict[str, Any]:
     return {**body, "receipt_sha256": self_hosted.digest_without(body, "receipt_sha256")}
 
 
+def _load_private_regular(path: Path) -> dict[str, Any]:
+    if not path.is_absolute() or path.is_symlink() or path.parent.is_symlink():
+        raise RuntimeError("hosted whole-task private runtime input path drifted")
+    try:
+        info = path.lstat()
+        parent = path.parent.stat()
+    except OSError as exc:
+        raise RuntimeError("hosted whole-task private runtime input is absent") from exc
+    if (
+        not stat.S_ISREG(info.st_mode)
+        or stat.S_IMODE(info.st_mode) != 0o600
+        or stat.S_IMODE(parent.st_mode) != 0o700
+    ):
+        raise RuntimeError("hosted whole-task private runtime input mode drifted")
+    return successor.load(path)
+
+
 def runtime_gate_check(
     plans: dict[str, dict[str, Any]],
     package_source: dict[str, Any],
@@ -47,7 +65,7 @@ def runtime_gate_check(
         expected = os.environ.get("QWEN_HOSTED_WHOLE_TASK_RELEASE_SHA256")
         if not raw_path or not Path(raw_path).is_absolute() or not expected:
             raise RuntimeError("hosted whole-task canary held binding drifted")
-        held = successor.load(Path(raw_path))
+        held = _load_private_regular(Path(raw_path))
         if phase_callback is not None:
             phase_callback("held-load-done")
         if held.get("receipt_sha256") != expected:
@@ -85,7 +103,7 @@ def _load_bound_inputs(
         phase_callback("build-plans-done")
     if not package_source_path.is_absolute():
         raise RuntimeError("hosted whole-task package source path must be absolute")
-    package_source = successor.load(package_source_path)
+    package_source = _load_private_regular(package_source_path)
     if phase_callback is not None:
         phase_callback("package-source-load-done")
     if package_source.get("receipt_sha256") != os.environ.get(
@@ -181,10 +199,17 @@ def write_gate_canary_failure(
     return receipt
 
 
-def run(plan: dict[str, Any], *, out: Path, proxy: Path, diagnostic_root: Path) -> dict[str, Any]:
+def run(
+    plan: dict[str, Any],
+    *,
+    out: Path,
+    proxy: Path,
+    diagnostic_root: Path,
+    package_source_path: Path = Path("/bootstrap/package-source.json"),
+) -> dict[str, Any]:
     if out.is_symlink():
         raise RuntimeError("hosted whole-task output root is unsafe")
-    plans, package_source = _load_bound_inputs(plan)
+    plans, package_source = _load_bound_inputs(plan, package_source_path=package_source_path)
     runtime_gate_check(plans, package_source)
     key = os.environ.get("FLEET_API_KEY")
     if not key:
@@ -277,7 +302,13 @@ def main() -> int:
             )
             raise
     else:
-        run(plan, out=args.out, proxy=args.proxy, diagnostic_root=args.diagnostic_root)
+        run(
+            plan,
+            out=args.out,
+            proxy=args.proxy,
+            diagnostic_root=args.diagnostic_root,
+            package_source_path=args.package_source,
+        )
     return 0
 
 
