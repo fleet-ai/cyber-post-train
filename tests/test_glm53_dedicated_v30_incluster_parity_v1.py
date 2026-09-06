@@ -10,7 +10,7 @@ from evals.fleet import glm53_dedicated_v30_incluster_parity_v1 as rail
 from evals.fleet import opencode_actual_harness_parity_v1 as parity
 
 ROOT = Path(__file__).resolve().parents[1]
-COMMIT = "8bc7062a4cf94c6c8fe124df3acf7ed18a0ae04e"
+COMMIT = "fec6d9b852ba4522646903a6ee4c76159305d6fd"
 
 
 def binding() -> dict[str, object]:
@@ -61,6 +61,7 @@ def parity_receipt() -> dict[str, object]:
         "schema_version": parity.SCHEMA,
         "status": "PASSED_NON_SCORED",
         "classification": "ACTUAL_HARNESS_PARITY",
+        "model": {},
         "endpoint": {
             "origin": binding()["service_origin"],
             "kind": "dedicated_uid_bound_inference",
@@ -77,6 +78,7 @@ def parity_receipt() -> dict[str, object]:
             "task_instance_session_verifier_scoring_calls": 0,
             "scored_launch_authorized": False,
         },
+        "harness": {},
         "tool_contract": {"calls_observed_in_order": ["bash", "submit_report"]},
         "privacy": {
             "credentials_included": False,
