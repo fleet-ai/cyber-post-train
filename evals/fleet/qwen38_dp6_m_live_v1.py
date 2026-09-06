@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import argparse
+import fcntl
 import json
+import os
+import stat
 import subprocess
 import uuid
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -51,6 +55,7 @@ SERVER_RELEASE_KEYS = {
     "scoring_authorized",
     "source_commit",
     "title",
+    "name",
     "run_dir",
     "serving_block",
     "config_sha256",
@@ -133,6 +138,7 @@ def validate_server_release(value: Mapping[str, Any], root: Path, source_commit:
             or value.get("scoring_authorized") is not False
             or value.get("source_commit") != source_commit
             or value.get("title") != held.TITLE
+            or value.get("name") != held.API_NAME
             or value.get("run_dir") != held.RUN_DIR
             or value.get("serving_block") != held.SERVING_BLOCK
             or value.get("config_sha256") != config["config_sha256"]
@@ -155,6 +161,8 @@ def _expected_rendered(root: Path) -> dict[str, Any]:
     payload = held.jobs_payload(root)
     return {
         "kind": "RayJob",
+        "api_name": held.API_NAME,
+        "api_run_id_pattern": held.API_RUN_ID_RE.pattern,
         "suspended": True,
         "queue": "training-lq",
         "priority_class": held.SERVER_PRIORITY_CLASS,
@@ -171,10 +179,14 @@ def _active_project_runs(client: httpx.Client) -> list[dict[str, str]]:
     active: list[dict[str, str]] = []
     for row in shared._runs(client):  # noqa: SLF001 - paginated GET authority
         name, run_dir = row.get("name"), row.get("run_dir")
+        if (
+            row.get("title") == held.TITLE
+            or run_dir == held.RUN_DIR
+            or (isinstance(name, str) and held.API_RUN_ID_RE.fullmatch(name) is not None)
+        ):
+            raise RuntimeError("DP6-m Jobs API identity already exists")
         if not isinstance(name, str) or not isinstance(run_dir, str):
             continue
-        if row.get("title") == held.TITLE or run_dir == held.RUN_DIR:
-            raise RuntimeError("DP6-m Jobs API identity already exists")
         if "/mnt/sfs/jobs/chris-cyber-evalserve-" not in run_dir:
             continue
         current = client.get(f"/v1/runs/{name}")
@@ -187,6 +199,42 @@ def _active_project_runs(client: httpx.Client) -> list[dict[str, str]]:
         if str(value.get("status") or "").upper() in ACTIVE_STATUSES:
             active.append({"api_run_id": name, "run_dir": run_dir, "status": value["status"]})
     return active
+
+
+@contextmanager
+def operator_reservation(
+    path: Path = held.OPERATOR_LOCK_PATH,
+) -> Iterator[None]:
+    """Hold one host-wide create reservation through durable receipt publication."""
+    flags = os.O_RDWR | os.O_CREAT
+    if hasattr(os, "O_CLOEXEC"):
+        flags |= os.O_CLOEXEC
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        fd = os.open(path, flags, 0o600)
+    except OSError as exc:
+        raise RuntimeError("DP6-m operator reservation path is unsafe") from exc
+    handle = os.fdopen(fd, "a+b")
+    locked = False
+    try:
+        metadata = os.fstat(handle.fileno())
+        if (
+            not stat.S_ISREG(metadata.st_mode)
+            or metadata.st_uid != os.getuid()
+            or stat.S_IMODE(metadata.st_mode) & 0o077
+        ):
+            raise RuntimeError("DP6-m operator reservation file is unsafe")
+        try:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise RuntimeError("DP6-m operator reservation is already held") from exc
+        locked = True
+        yield
+    finally:
+        if locked:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+        handle.close()
 
 
 def _priority_gate() -> dict[str, Any]:
@@ -349,7 +397,7 @@ def _kubernetes_gate(active_runs: list[dict[str, str]]) -> dict[str, Any]:
     )
     items = inventory.get("items") or []
     serialized = json.dumps(inventory, sort_keys=True)
-    if held.TITLE in serialized or held.RUN_DIR in serialized:
+    if held.TITLE in serialized or held.API_NAME in serialized or held.RUN_DIR in serialized:
         raise RuntimeError("DP6-m Kubernetes identity already exists")
     terminal = {"SUCCEEDED", "FAILED", "STOPPED"}
     project_rayjobs = [
@@ -493,7 +541,7 @@ def submit_create_once(
     if response.status_code != 202:
         raise RuntimeError("DP6-m create did not return HTTP 202")
     name = response.json().get("name")
-    if not isinstance(name, str) or not name.startswith("ft-run-"):
+    if not isinstance(name, str) or held.API_RUN_ID_RE.fullmatch(name) is None:
         raise RuntimeError("DP6-m create omitted run identity")
     return name
 
@@ -513,6 +561,7 @@ def validate_submission(
         "api_run_id",
         "source_commit",
         "title",
+        "name",
         "run_dir",
         "serving_block",
         "config_sha256",
@@ -551,6 +600,7 @@ def validate_submission(
         "status": "SUBMITTED_SCORE_FREE_DP6_M_SERVER",
         "source_commit": source_commit,
         "title": held.TITLE,
+        "name": held.API_NAME,
         "run_dir": held.RUN_DIR,
         "serving_block": held.SERVING_BLOCK,
         "config_sha256": config["config_sha256"],
@@ -573,8 +623,9 @@ def validate_submission(
         )
     ):
         raise ValueError("DP6-m submission receipt drifted")
-    if not isinstance(value.get("api_run_id"), str) or not str(value["api_run_id"]).startswith(
-        "ft-run-"
+    if (
+        not isinstance(value.get("api_run_id"), str)
+        or held.API_RUN_ID_RE.fullmatch(str(value["api_run_id"])) is None
     ):
         raise ValueError("DP6-m submission receipt omitted its Jobs API identity")
     sfs = gate.get("sfs_observation")
@@ -612,6 +663,7 @@ def submission_receipt(
         "api_run_id": api_run_id,
         "source_commit": source_commit,
         "title": held.TITLE,
+        "name": held.API_NAME,
         "run_dir": held.RUN_DIR,
         "serving_block": held.SERVING_BLOCK,
         "config_sha256": held.config(root)["config_sha256"],
@@ -631,6 +683,25 @@ def submission_receipt(
     return receipt
 
 
+def submit_and_publish_create_once(
+    client: httpx.Client,
+    release: Mapping[str, Any],
+    root: Path,
+    source_commit: str,
+    output: Path,
+    *,
+    lock_path: Path = held.OPERATOR_LOCK_PATH,
+) -> dict[str, Any]:
+    with operator_reservation(lock_path):
+        if output.exists() or output.is_symlink():
+            raise FileExistsError("refusing existing DP6-m receipt path")
+        payload, gate = live_gate(client, release, root, source_commit)
+        api_run_id = submit_create_once(client, payload, gate, release, source_commit, root)
+        receipt = submission_receipt(api_run_id, gate, release, source_commit, root)
+        shared._write_once(output, receipt)  # noqa: SLF001
+        return receipt
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=("gate", "submit"))
@@ -644,18 +715,17 @@ def main() -> int:
     if args.command == "submit" and _git(root, "status", "--porcelain", "--untracked-files=all"):
         raise RuntimeError("DP6-m submit requires a clean exact source commit")
     release = _load(args.release)
-    with httpx.Client(
+    client_context = httpx.Client(
         base_url=shared.BASE_URL,
         headers={"Authorization": f"Bearer {shared._token()}", "Accept": "application/json"},  # noqa: SLF001
         timeout=60,
-    ) as client:
-        payload, gate = live_gate(client, release, root, source_commit)
+    )
+    with client_context as client:
         if args.command == "gate":
+            payload, gate = live_gate(client, release, root, source_commit)
             shared._write_once(args.output, gate)  # noqa: SLF001
             return 0
-        api_run_id = submit_create_once(client, payload, gate, release, source_commit, root)
-    receipt = submission_receipt(api_run_id, gate, release, source_commit, root)
-    shared._write_once(args.output, receipt)  # noqa: SLF001
+        submit_and_publish_create_once(client, release, root, source_commit, args.output)
     return 0
 
 

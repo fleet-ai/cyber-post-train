@@ -12,6 +12,7 @@ from typing import Any
 
 DEFAULT_BASE_URL = "https://api.ft.flt.build"
 EXPECTED_FIELDS = {
+    "name",
     "image",
     "command",
     "workers",
@@ -52,8 +53,8 @@ def validate(document: dict[str, Any]) -> dict[str, Any]:
     required = schema.get("required")
     if not isinstance(properties, dict):
         raise ValueError(f"{name} has no properties object")
-    if not isinstance(required, list) or not {"image", "command"}.issubset(required):
-        raise ValueError(f"{name} no longer requires both image and command")
+    if not isinstance(required, list) or not {"name", "image", "command"}.issubset(required):
+        raise ValueError(f"{name} no longer requires name, image, and command")
     missing = sorted(EXPECTED_FIELDS - properties.keys())
     if missing:
         raise ValueError(f"{name} is missing general job fields: {missing}")

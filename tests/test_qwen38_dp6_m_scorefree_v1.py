@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import copy
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
 from evals.fleet import qwen38_dp6_l_scorefree_v1 as consumed
 from evals.fleet import qwen38_dp6_m_live_v1 as live
@@ -37,7 +40,7 @@ class Client:
         self.posts.append(path)
         if path.endswith("preview"):
             return Response(200, {"manifest_yaml": "preview"})
-        return Response(202, {"name": "ft-run-dp6g"})
+        return Response(202, {"name": "q38-dp6m-v1-deadbeef"})
 
 
 def _resign(value: dict[str, object]) -> None:
@@ -88,6 +91,7 @@ def _server_release(source_commit: str) -> dict[str, object]:
         "scoring_authorized": False,
         "source_commit": source_commit,
         "title": held.TITLE,
+        "name": held.API_NAME,
         "run_dir": held.RUN_DIR,
         "serving_block": held.SERVING_BLOCK,
         "config_sha256": config["config_sha256"],
@@ -106,9 +110,47 @@ def _server_release(source_commit: str) -> dict[str, object]:
     return value
 
 
+def _preview_manifest(*, name: object = "q38-dp6m-v1-0123abcd") -> str:
+    payload = held.jobs_payload(ROOT)
+    return yaml.safe_dump(
+        {
+            "apiVersion": "ray.io/v1",
+            "kind": "RayJob",
+            "metadata": {
+                "name": name,
+                "labels": {"kueue.x-k8s.io/queue-name": "training-lq"},
+            },
+            "spec": {
+                "suspend": True,
+                "entrypoint": payload["command"],
+                "rayClusterSpec": {
+                    "headGroupSpec": {
+                        "template": {
+                            "spec": {
+                                "priorityClassName": held.SERVER_PRIORITY_CLASS,
+                                "containers": [
+                                    {
+                                        "image": payload["image"],
+                                        "env": [{"name": "RUN_DIR", "value": held.RUN_DIR}],
+                                        "resources": {
+                                            "requests": {"nvidia.com/gpu": "6"},
+                                            "limits": {"nvidia.com/gpu": "6"},
+                                        },
+                                    }
+                                ],
+                            }
+                        }
+                    }
+                },
+            },
+        }
+    )
+
+
 def test_held_packet_is_append_only_score_free_and_exact() -> None:
     config, plan, preview, inventory, release = held.load_all(ROOT)
     assert held.TITLE == "chris-cyber-evalserve-q38-dp6-m-v1"
+    assert held.API_NAME == "q38-dp6m-v1"
     assert held.RUN_DIR == "/mnt/sfs/jobs/chris-cyber-evalserve-q38-dp6-m-v1"
     assert held.QUALIFIER_JOB == "chris-cyber-q38-dp6-m-qualifier-v13"
     assert held.TITLE != consumed.TITLE
@@ -125,6 +167,14 @@ def test_held_packet_is_append_only_score_free_and_exact() -> None:
     assert inventory["active_project_gpu_nodes"] is None
     assert inventory["active_project_gpus"] is None
     assert release["status"] == "HELD_CODE_REVIEW_ONLY"
+    assert config["operator_reservation"] == {
+        "path": "/tmp/fleet-qwen38-dp6m-v1-create.lock",
+        "scope": "local_host_all_operators",
+        "exclusive": True,
+        "held_from": "final_preflight",
+        "held_through": "submission_receipt_publication",
+    }
+    assert plan["server"]["operator_reservation"] == config["operator_reservation"]
     assert release["fresh_preview_and_inventory_required_before_release"] is True
     assert plan["superseded_plan"]["rewritten"] is False
     assert plan["successor_authority"]["receipt_sha256"].startswith("sha256:")
@@ -193,7 +243,7 @@ def test_submission_round_trip_binds_fresh_rendered_preview() -> None:
         "prompts_traces_flags_or_scores_included": False,
     }
     _resign(gate)
-    receipt = live.submission_receipt("ft-run-dp6m", gate, release, source_commit, ROOT)
+    receipt = live.submission_receipt("q38-dp6m-v1-0123abcd", gate, release, source_commit, ROOT)
     live.validate_submission(receipt, release, ROOT, source_commit)
 
     tampered = copy.deepcopy(receipt)
@@ -207,6 +257,8 @@ def test_submission_round_trip_binds_fresh_rendered_preview() -> None:
 
 def test_payload_installs_metric_observer_v5_and_uses_600_second_rail() -> None:
     payload = held.jobs_payload(ROOT)
+    assert payload["name"] == held.API_NAME
+    assert set(payload) == held.jobs_api.EXPECTED_API_FIELDS | {"name"}
     assert payload["priority_class"] == "fleet-infra-quiet"
     assert payload["gpus_per_worker"] == 6
     assert payload["workers"] == 1
@@ -230,6 +282,28 @@ def test_payload_installs_metric_observer_v5_and_uses_600_second_rail() -> None:
         "highest_jobs_api_admitted_nonpreempting": True,
         "fresh_jobs_api_preview_acceptance_required": True,
     }
+
+
+@pytest.mark.parametrize("attack", ["missing", "wrong", "extra"])
+def test_payload_rejects_missing_wrong_or_extra_name_binding(attack: str) -> None:
+    payload = held.jobs_payload(ROOT)
+    if attack == "missing":
+        payload.pop("name")
+    elif attack == "wrong":
+        payload["name"] = "q38-dp6l-v1"
+    else:
+        payload["run_name"] = payload["name"]
+    with pytest.raises(AssertionError, match="payload"):
+        held.validate_jobs_payload(payload, ROOT)
+
+
+def test_preview_identity_binds_generated_name_and_rejects_aliases() -> None:
+    rendered = held.preview_identity(_preview_manifest(), ROOT)
+    assert rendered["api_name"] == held.API_NAME
+    assert rendered["api_run_id_pattern"] == held.API_RUN_ID_RE.pattern
+    for attacked in (None, held.API_NAME, "q38-dp6l-v1-0123abcd", "q38-dp6m-v1-XYZ12345"):
+        with pytest.raises(ValueError, match="run name"):
+            held.preview_identity(_preview_manifest(name=attacked), ROOT)
 
 
 def test_qualifier_package_closure_contains_fresh_k_guard() -> None:
@@ -290,6 +364,119 @@ def test_release_first_shape_rejects_any_active_or_excess_project_state() -> Non
         assert not live._shape_safe(changed)  # noqa: SLF001
 
 
+def test_generated_name_collision_blocks_even_without_run_dir(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rows = [{"name": "q38-dp6m-v1-deadbeef", "run_dir": None, "title": None}]
+    monkeypatch.setattr(live.shared, "_runs", lambda _client: rows)
+    with pytest.raises(RuntimeError, match="identity already exists"):
+        live._active_project_runs(object())  # type: ignore[arg-type]  # noqa: SLF001
+
+
+def test_operator_reservation_excludes_a_concurrent_local_process(tmp_path: Path) -> None:
+    lock_path = tmp_path / "create.lock"
+    script = """
+import sys
+from pathlib import Path
+from evals.fleet.qwen38_dp6_m_live_v1 import operator_reservation
+with operator_reservation(Path(sys.argv[1])):
+    print("LOCKED", flush=True)
+    sys.stdin.readline()
+"""
+    process = subprocess.Popen(
+        [sys.executable, "-c", script, str(lock_path)],
+        cwd=ROOT,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        assert process.stdout is not None
+        assert process.stdout.readline().strip() == "LOCKED"
+        with (
+            pytest.raises(RuntimeError, match="already held"),
+            live.operator_reservation(lock_path),
+        ):
+            pass
+        assert process.stdin is not None
+        process.stdin.write("release\n")
+        process.stdin.flush()
+        assert process.wait(timeout=10) == 0
+        with live.operator_reservation(lock_path):
+            pass
+    finally:
+        if process.poll() is None:
+            process.terminate()
+            process.wait(timeout=10)
+
+
+def test_operator_reservation_rejects_symlink_or_permissive_file(tmp_path: Path) -> None:
+    target = tmp_path / "target"
+    target.write_text("")
+    target.chmod(0o600)
+    symlink = tmp_path / "symlink.lock"
+    symlink.symlink_to(target)
+    with pytest.raises(RuntimeError, match="unsafe"), live.operator_reservation(symlink):
+        pass
+
+    permissive = tmp_path / "permissive.lock"
+    permissive.write_text("")
+    permissive.chmod(0o644)
+    with pytest.raises(RuntimeError, match="unsafe"), live.operator_reservation(permissive):
+        pass
+
+
+def test_create_reservation_spans_preflight_post_and_receipt_publication(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    lock_path = tmp_path / "create.lock"
+    output = tmp_path / "submission.json"
+    stages: list[str] = []
+
+    def assert_locked(stage: str) -> None:
+        with (
+            pytest.raises(RuntimeError, match="already held"),
+            live.operator_reservation(lock_path),
+        ):
+            pass
+        stages.append(stage)
+
+    def fake_gate(*_args):
+        assert_locked("final_preflight")
+        return {"name": held.API_NAME}, {"gate": True}
+
+    def fake_submit(*_args):
+        assert_locked("post")
+        return "q38-dp6m-v1-deadbeef"
+
+    def fake_receipt(*_args):
+        assert_locked("receipt")
+        return {"receipt_sha256": "sha256:" + "a" * 64}
+
+    def fake_write(path: Path, value: dict[str, object]) -> None:
+        assert path == output
+        assert value["receipt_sha256"] == "sha256:" + "a" * 64
+        assert_locked("publication")
+
+    monkeypatch.setattr(live, "live_gate", fake_gate)
+    monkeypatch.setattr(live, "submit_create_once", fake_submit)
+    monkeypatch.setattr(live, "submission_receipt", fake_receipt)
+    monkeypatch.setattr(live.shared, "_write_once", fake_write)
+    receipt = live.submit_and_publish_create_once(
+        object(),
+        {},
+        ROOT,
+        "a" * 40,
+        output,
+        lock_path=lock_path,  # type: ignore[arg-type]
+    )
+    assert receipt["receipt_sha256"] == "sha256:" + "a" * 64
+    assert stages == ["final_preflight", "post", "receipt", "publication"]
+    with live.operator_reservation(lock_path):
+        pass
+
+
 def test_create_once_repeats_complete_release_first_gate(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -328,7 +515,7 @@ def test_create_once_repeats_complete_release_first_gate(
     client = Client()
     assert (
         live.submit_create_once(client, payload, gate, release, source_commit, ROOT)
-        == "ft-run-dp6g"
+        == "q38-dp6m-v1-deadbeef"
     )
     assert client.posts == ["/v1/runs/preview", "/v1/runs"]
     monkeypatch.setattr(
