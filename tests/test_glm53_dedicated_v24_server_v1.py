@@ -1,6 +1,8 @@
+import base64
 import json
 import shlex
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -37,10 +39,49 @@ def test_command_wraps_only_exact_frozen_sglang_argv_with_ready_observer() -> No
     value = server.payload()
     assert value["command"].endswith(shlex.join(server.SERVER_ARGV))
     assert "GLM53_SERVER_PID" in value["command"]
-    assert "APPLICATION_HEALTH_HTTP_200" in value["command"]
-    assert server.READY_PATH in value["command"]
+    encoded = base64.b64encode(server.READY_OBSERVER.encode()).decode()
+    assert encoded in value["command"]
+    assert "APPLICATION_HEALTH_HTTP_200" in server.READY_OBSERVER
+    assert server.READY_PATH in server.READY_OBSERVER
     assert server.SERVER_ARGV.count("--model-path") == 1
     assert server.SERVER_ARGV.count("--served-model-name") == 1
+
+
+def test_rendered_command_survives_jobs_api_outer_shell(tmp_path: Path) -> None:
+    marker = tmp_path / "observer-ran.json"
+    observer = "\n".join(
+        (
+            "import json",
+            "import os",
+            "import pathlib",
+            (
+                f"pathlib.Path({str(marker)!r}).write_text("
+                "json.dumps({'pid': int(os.environ['GLM53_SERVER_PID'])}))"
+            ),
+        )
+    )
+    command = server.render_server_command(
+        observer_source=observer,
+        server_argv=(sys.executable, "-c", "import time; time.sleep(0.2)"),
+    )
+
+    result = subprocess.run(
+        ["/bin/sh", "-c", command],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
+
+    assert result.returncode == 0, (result.stdout, result.stderr)
+    assert json.loads(marker.read_text())["pid"] > 0
+
+
+def test_rendered_command_rejects_empty_inputs() -> None:
+    with pytest.raises(server.ServerPlanError, match="command_input_invalid"):
+        server.render_server_command(observer_source="")
+    with pytest.raises(server.ServerPlanError, match="command_input_invalid"):
+        server.render_server_command(server_argv=())
 
 
 def test_held_contract_makes_external_watcher_the_only_idle_authority() -> None:
@@ -84,6 +125,24 @@ def test_historical_preview_is_digest_valid_and_invalidated_by_new_payload() -> 
     assert value["capacity_gate"]["eligible_eight_gpu_nodes"] >= 1
     assert value["idle_release_authority"]["server_internal_idle_killer_present"] is False
     assert value["server_launch_authorized"] is False
+    assert value["qualification_launch_authorized"] is False
+    assert value["scored_launch_authorized"] is False
+    assert value["receipt_sha256"] == crypto.digest_without(value, "receipt_sha256")
+
+
+def test_shell_renderer_held_receipt_is_digest_valid_and_non_authorizing() -> None:
+    path = (
+        ROOT / "docs/evidence/glm53-study/"
+        "2026-09-06-glm53-dedicated-v24-shell-renderer-held-v1.json"
+    )
+    value = json.loads(path.read_text())
+    assert value["status"] == "PASSED_HELD_NO_LAUNCH"
+    assert value["failure_identity"]["api_run_id"] == "ft-run-e3f8c138"
+    assert value["failure_identity"]["retry_allowed"] is False
+    assert value["failure_identity"]["api_get_http_status"] == 404
+    assert value["fresh_server_identity_required"] is True
+    assert value["server_launch_authorized"] is False
+    assert value["watchdog_launch_authorized"] is False
     assert value["qualification_launch_authorized"] is False
     assert value["scored_launch_authorized"] is False
     assert value["receipt_sha256"] == crypto.digest_without(value, "receipt_sha256")
