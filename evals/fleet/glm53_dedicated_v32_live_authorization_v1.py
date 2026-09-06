@@ -156,7 +156,9 @@ def _active_project_runs(
         )
     except stale_runs.ReconciliationError as exc:
         raise LiveAuthorizationError("v32_stale_run_reconciliation_invalid") from exc
-    active: list[dict[str, Any]] = []
+    reconciled = {
+        row["api_run_id"]: row for row in reconciliation["reconciled_rows"]
+    }
     for row in rows:
         name = row.get("name")
         row_run_dir = row.get("run_dir")
@@ -168,18 +170,27 @@ def _active_project_runs(
             continue
         if not isinstance(name, str) or not _is_project_run_dir(row_run_dir):
             raise LiveAuthorizationError("v32_jobs_api_project_identity_invalid")
-        row_status = _api_status(row.get("status"))
+        _api_status(row.get("status"))
+        evidence = reconciled.get(name)
+        if evidence is None:
+            raise LiveAuthorizationError("v32_stale_run_reconciliation_invalid")
         current = backend.get_run(name)
         if current is None:
-            if row_status in TERMINAL_API_STATUSES:
-                continue
-            raise LiveAuthorizationError("v32_jobs_api_history_live_drift")
-        if current.get("run_dir") != row_run_dir:
-            raise LiveAuthorizationError("v32_jobs_api_history_live_drift")
+            if evidence.get("exact_get_http_status") != 404:
+                raise LiveAuthorizationError("v32_jobs_api_history_live_drift")
+            continue
         current_status = _api_status(current.get("status"))
         if current_status in ACTIVE_API_STATUSES:
-            active.append({**current, "_observed_api_run_id": name})
-    return active
+            raise LiveAuthorizationError("v32_jobs_api_current_server_present")
+        if (
+            evidence.get("exact_get_http_status") != 200
+            or evidence.get("exact_get_status") != current_status
+            or current.get("name") != name
+            or current.get("title") != row.get("title")
+            or current.get("run_dir") != row_run_dir
+        ):
+            raise LiveAuthorizationError("v32_jobs_api_history_live_drift")
+    return []
 
 
 def _project_kubernetes(

@@ -252,12 +252,12 @@ def test_v32_live_builder_pages_and_rejects_hidden_active_server() -> None:
     backend.rows = [{"name": "history", "run_dir": "/tmp/history"}, hidden]
     backend.exact["ft-run-deadbeef"] = hidden
     with pytest.raises(
-        live_auth.LiveAuthorizationError, match="requires_zero_project_server"
+        live_auth.LiveAuthorizationError, match="current_server_present"
     ):
         create_authorization(backend)
 
 
-def test_v32_live_builder_rejects_active_list_row_when_exact_get_is_404() -> None:
+def test_v32_live_builder_accepts_reconciled_submitted_list_row_with_exact_404() -> None:
     backend = FakeBackend()
     backend.rows = [
         {
@@ -267,10 +267,7 @@ def test_v32_live_builder_rejects_active_list_row_when_exact_get_is_404() -> Non
             "status": "RUNNING",
         }
     ]
-    with pytest.raises(
-        live_auth.LiveAuthorizationError, match="history_live_drift"
-    ):
-        create_authorization(backend)
+    server.validate_authorization(create_authorization(backend))
 
 
 @pytest.mark.parametrize("status", ["PENDING", "CREATED", "ADMITTED", "MYSTERY", None, 7])
