@@ -17,6 +17,7 @@ from evals.fleet import glm53_dedicated_v23_scorefree_qualifier_v1 as qualifier
 NAMESPACE = "fleet-train-jobs"
 SAMPLE_SECONDS = 240
 POLL_SECONDS = 1
+RELEASE_CONFIRMATION_SCHEMA = "fleet-glm53-dedicated-v23-watchdog-release-confirmed-uid-absent-v1"
 
 
 class ObserverError(RuntimeError):
@@ -38,6 +39,100 @@ def qualifier_pod_owned_by_job(pod: dict[str, Any], job: dict[str, Any]) -> bool
             "blockOwnerDeletion": True,
         }
     ]
+
+
+def build_release_confirmation(
+    binding: dict[str, Any], terminal: dict[str, Any], inventory: dict[str, Any]
+) -> dict[str, Any]:
+    """Distinguish accepted API deletion from exact cluster UID absence."""
+
+    expected_uids = {
+        binding.get("rayjob_uid"),
+        binding.get("workload_uid"),
+        binding.get("head_pod_uid"),
+        binding.get("service_uid"),
+    }
+    rows = inventory.get("items")
+    released_keys = {
+        "schema_version",
+        "status",
+        "server_binding_sha256",
+        "active_receipt_sha256",
+        "release_route",
+        "fleet_task_instance_calls",
+        "fleet_session_calls",
+        "verifier_calls",
+        "scoring_calls",
+        "protected_content_included",
+        "receipt_sha256",
+    }
+    failed_keys = (released_keys - {"active_receipt_sha256"}) | {"reason"}
+    owned_rows = [
+        row
+        for row in rows or []
+        if row.get("metadata", {}).get("uid") in expected_uids
+        or any(
+            owner.get("uid") in expected_uids
+            for owner in row.get("metadata", {}).get("ownerReferences") or []
+        )
+    ]
+    if (
+        len(expected_uids) != 4
+        or any(not isinstance(value, str) or not value for value in expected_uids)
+        or set(terminal) not in (released_keys, failed_keys)
+        or terminal.get("receipt_sha256") != crypto.digest_without(terminal, "receipt_sha256")
+        or terminal.get("status")
+        not in {"RELEASED_IDLE_API_ABSENT", "FAILED_CLOSED_RELEASED_API_ABSENT"}
+        or terminal.get("schema_version") != "fleet-glm53-dedicated-v23-watchdog-terminal-v1"
+        or terminal.get("release_route") != "DELETE /v1/runs/{api_run_id}"
+        or any(
+            terminal.get(field) != 0
+            for field in (
+                "fleet_task_instance_calls",
+                "fleet_session_calls",
+                "verifier_calls",
+                "scoring_calls",
+            )
+        )
+        or terminal.get("protected_content_included") is not False
+        or terminal.get("server_binding_sha256") != crypto.sha256(crypto.canonical_json(binding))
+        or not isinstance(rows, list)
+        or owned_rows
+    ):
+        raise ObserverError("v23_release_uid_absence_unconfirmed")
+    body: dict[str, Any] = {
+        "schema_version": RELEASE_CONFIRMATION_SCHEMA,
+        "status": "CONFIRMED_UID_ABSENT",
+        "server_binding_sha256": crypto.sha256(crypto.canonical_json(binding)),
+        "watchdog_terminal_receipt_sha256": terminal["receipt_sha256"],
+        "absent_uids": sorted(str(value) for value in expected_uids),
+        "resource_kinds_checked": ["Pod", "RayCluster", "RayJob", "Service", "Workload"],
+        "fleet_task_instance_calls": 0,
+        "fleet_session_calls": 0,
+        "verifier_calls": 0,
+        "scoring_calls": 0,
+        "protected_content_included": False,
+    }
+    body["receipt_sha256"] = crypto.digest_without(body, "receipt_sha256")
+    return body
+
+
+def confirm_release(
+    binding: dict[str, Any], terminal: dict[str, Any], *, runner: CommandRunner = subprocess.run
+) -> dict[str, Any]:
+    inventory = support._json(  # noqa: SLF001
+        [
+            "kubectl",
+            "-n",
+            NAMESPACE,
+            "get",
+            "rayjobs.ray.io,rayclusters.ray.io,workloads.kueue.x-k8s.io,pods,services",
+            "-o",
+            "json",
+        ],
+        runner=runner,
+    )
+    return build_release_confirmation(binding, terminal, inventory)
 
 
 def resolve_identity(
@@ -190,9 +285,26 @@ def observe(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--authorization", type=Path, required=True)
+    parser.add_argument(
+        "command", nargs="?", choices=("observe", "confirm-release"), default="observe"
+    )
+    parser.add_argument("--authorization", type=Path)
+    parser.add_argument("--binding", type=Path)
+    parser.add_argument("--terminal", type=Path)
+    parser.add_argument("--out", type=Path)
     args = parser.parse_args()
-    observe(qualifier.load(args.authorization))
+    if args.command == "observe":
+        if args.authorization is None:
+            parser.error("observe requires --authorization")
+        observe(qualifier.load(args.authorization))
+    else:
+        if args.binding is None or args.terminal is None or args.out is None:
+            parser.error("confirm-release requires --binding, --terminal, and --out")
+        receipt = confirm_release(
+            qualifier.load(args.binding),
+            qualifier.load(args.terminal),
+        )
+        qualifier.engine.write_once(args.out, receipt)
     return 0
 
 

@@ -54,6 +54,66 @@ AUTH_KEYS = {
     "scoring_calls",
     "receipt_sha256",
 }
+PARITY_KEYS = {
+    "schema_version",
+    "status",
+    "classification",
+    "model",
+    "endpoint",
+    "harness",
+    "tool_contract",
+    "execution",
+    "privacy",
+    "receipt_sha256",
+}
+WATCHDOG_ACTIVE_KEYS = {
+    "schema_version",
+    "status",
+    "server_binding",
+    "metric",
+    "idle_release_seconds",
+    "health_or_process_liveness_refreshes",
+    "model_request_counter_growth_refreshes",
+    "active_request_or_queue_refreshes",
+    "active_request_metrics",
+    "metric_contract_commit",
+    "metric_contract_source",
+    "release_via_jobs_api",
+    "release_route",
+    "implementation_id",
+    "implementation_module",
+    "implementation_sha256",
+    "watcher_job_uid",
+    "watcher_pod_uid",
+    "initial_request_counter",
+    "initial_running_requests",
+    "initial_queued_requests",
+    "ready_at_epoch",
+    "terminal_receipt_required",
+    "receipt_sha256",
+}
+LIVE_KEYS = {
+    "schema_version",
+    "server_binding",
+    "rayjob_running",
+    "workload_admitted",
+    "workload_preemption_events",
+    "head_pod_ready",
+    "head_pod_restarts",
+    "active_scored_controller_count",
+    "qualification_result_root_absent",
+    "endpoint_lease_available",
+    "watcher_job_uid",
+    "watcher_pod_uid",
+    "watcher_job_active",
+    "watcher_pod_ready",
+    "watcher_pod_restarts",
+    "cpu_priority_class",
+    "cpu_priority_value",
+    "cpu_priority_preemption_policy",
+    "seconds_since_last_model_request",
+    "receipt_sha256",
+}
 CONCURRENCY = (1, 2, 4)
 GPU_OBSERVER_SCHEMA = "fleet-glm53-dedicated-v23-scorefree-gpu-wave-v1"
 GPU_OBSERVER_WAIT_SECONDS = 300
@@ -182,22 +242,94 @@ def authorize(
     tools = parity.get("tool_contract") or {}
     privacy = parity.get("privacy") or {}
     if (
-        parity.get("receipt_sha256") != crypto.digest_without(parity, "receipt_sha256")
+        set(parity) != PARITY_KEYS
+        or set(parity.get("model") or {})
+        != {"repository", "revision", "served_id", "session_model"}
+        or set(parity.get("endpoint") or {})
+        != {"origin", "kind", "server_binding", "server_binding_sha256"}
+        or set(harness)
+        != {
+            "name",
+            "version",
+            "release_asset_sha256",
+            "provider_adapter",
+            "context_management",
+            "context_window_size",
+            "compaction_headroom_tokens",
+            "max_output_tokens",
+            "max_model_requests",
+            "timeout_seconds",
+            "image",
+            "image_id",
+            "observed_image",
+            "settings_sha256",
+        }
+        or set(harness.get("observed_image") or {})
+        != {"image", "image_id", "os", "architecture", "user", "working_dir"}
+        or set(tools)
+        != {
+            "names",
+            "mcp_catalog_sha256",
+            "production_catalog_provenance",
+            "openai_catalog_sha256",
+            "model_request_catalog_exact",
+            "model_request_tool_names_exact",
+            "model_request_tool_descriptions_exact",
+            "model_request_tool_parameters_exact",
+            "observed_model_request_catalog_sha256s",
+            "model_requests_with_tools",
+            "model_requests_without_tools",
+            "calls_observed_in_order",
+            "arguments_structurally_valid",
+        }
+        or set(parity.get("execution") or {})
+        != {
+            "harness_exit_code",
+            "model_requests",
+            "final_marker_observed",
+            "docker_host_gateway_added",
+            "task_instance_session_verifier_scoring_calls",
+            "scored_launch_authorized",
+        }
+        or set(privacy)
+        != {
+            "credentials_included",
+            "prompt_included",
+            "responses_or_model_outputs_included",
+            "tool_arguments_included",
+            "stderr_or_stdout_included",
+            "benchmark_content_included",
+        }
+        or parity.get("receipt_sha256") != crypto.digest_without(parity, "receipt_sha256")
         or parity.get("schema_version") != actual_harness.SCHEMA
         or parity.get("status") != "PASSED_NON_SCORED"
         or parity.get("classification") != "ACTUAL_HARNESS_PARITY"
         or parity.get("endpoint", {}).get("kind") != "dedicated_uid_bound_inference"
+        or parity.get("endpoint", {}).get("origin") != binding["service_origin"].rstrip("/")
         or parity.get("endpoint", {}).get("server_binding") != canonical_model_binding(binding)
+        or parity.get("endpoint", {}).get("server_binding_sha256")
+        != crypto.sha256(crypto.canonical_json(canonical_model_binding(binding)))
         or parity.get("execution", {}).get("final_marker_observed") is not True
         or parity.get("execution", {}).get("harness_exit_code") != 0
         or not isinstance(parity.get("execution", {}).get("model_requests"), int)
         or parity.get("execution", {}).get("model_requests", 0) <= 0
         or parity.get("execution", {}).get("scored_launch_authorized") is not False
+        or parity.get("execution", {}).get("docker_host_gateway_added") is not True
         or parity.get("execution", {}).get("task_instance_session_verifier_scoring_calls") != 0
         or harness.get("name") != treatment["harness"]
         or harness.get("version") != treatment["harness_version"]
         or harness.get("image") != actual_harness.IMAGE
         or harness.get("image_id") != actual_harness.IMAGE_ID
+        or harness.get("observed_image")
+        != {
+            "image": actual_harness.IMAGE,
+            "image_id": actual_harness.IMAGE_ID,
+            "os": "linux",
+            "architecture": "amd64",
+            "user": "node",
+            "working_dir": "/workspace",
+        }
+        or not _valid_sha(harness.get("settings_sha256"))
         or harness.get("release_asset_sha256") != treatment["release_asset_sha256"]
         or harness.get("provider_adapter") != treatment["provider_adapter"]
         or harness.get("context_management") != treatment["context_management"]
@@ -216,6 +348,10 @@ def authorize(
         or tools.get("names") != treatment["tools"]
         or tools.get("calls_observed_in_order") != actual_harness.EXPECTED_CALL_ORDER
         or tools.get("mcp_catalog_sha256") != treatment["tool_catalog_sha256"]
+        or tools.get("production_catalog_provenance")
+        != actual_harness.production_tools.provenance(actual_harness.REPO_ROOT)
+        or tools.get("openai_catalog_sha256")
+        != crypto.sha256(crypto.canonical_json(actual_harness.expected_openai_tools()))
         or tools.get("arguments_structurally_valid") is not True
         or tools.get("model_request_catalog_exact") is not True
         or tools.get("model_request_tool_names_exact") is not True
@@ -223,6 +359,10 @@ def authorize(
         or tools.get("model_request_tool_parameters_exact") is not True
         or not isinstance(tools.get("model_requests_with_tools"), int)
         or tools.get("model_requests_with_tools", 0) <= 0
+        or not isinstance(tools.get("model_requests_without_tools"), int)
+        or tools.get("model_requests_without_tools", -1) < 0
+        or tools.get("observed_model_request_catalog_sha256s")
+        != [tools.get("openai_catalog_sha256")]
         or any(
             privacy.get(field) is not False
             for field in (
@@ -237,7 +377,8 @@ def authorize(
     ):
         raise QualificationError("v23_parity_invalid")
     if (
-        watchdog.get("receipt_sha256") != crypto.digest_without(watchdog, "receipt_sha256")
+        set(watchdog) != WATCHDOG_ACTIVE_KEYS
+        or watchdog.get("receipt_sha256") != crypto.digest_without(watchdog, "receipt_sha256")
         or watchdog.get("schema_version") != watchdog_runtime.SCHEMA
         or watchdog.get("status") != "ACTIVE_UID_BOUND"
         or watchdog.get("server_binding") != binding
@@ -260,13 +401,18 @@ def authorize(
         or not _valid_uuid(watchdog.get("watcher_pod_uid"))
         or not isinstance(watchdog.get("initial_request_counter"), int)
         or watchdog.get("initial_request_counter", -1) < 0
+        or not isinstance(watchdog.get("initial_running_requests"), int)
+        or watchdog.get("initial_running_requests", -1) < 0
+        or not isinstance(watchdog.get("initial_queued_requests"), int)
+        or watchdog.get("initial_queued_requests", -1) < 0
         or not isinstance(watchdog.get("ready_at_epoch"), (int, float))
         or watchdog.get("ready_at_epoch", 0) <= 0
         or watchdog.get("terminal_receipt_required") is not True
     ):
         raise QualificationError("v23_request_counter_watchdog_invalid")
     if (
-        live.get("schema_version") != "fleet-glm53-dedicated-v23-scorefree-live-state-v1"
+        set(live) != LIVE_KEYS
+        or live.get("schema_version") != "fleet-glm53-dedicated-v23-scorefree-live-state-v1"
         or live.get("receipt_sha256") != crypto.digest_without(live, "receipt_sha256")
         or live.get("server_binding") != binding
         or live.get("rayjob_running") is not True
@@ -368,7 +514,22 @@ def validate_gpu_wave(
     utilization = observed.get("max_utilization_percent_by_device")
     identity = observed.get("identity")
     if (
-        observed.get("schema_version") != GPU_OBSERVER_SCHEMA
+        set(observed)
+        != {
+            "schema_version",
+            "status",
+            "concurrency",
+            "server",
+            "identity",
+            "devices_seen",
+            "samples_per_device",
+            "max_utilization_percent_by_device",
+            "server_identity_unchanged",
+            "qualifier_identity_unchanged",
+            "prompts_responses_traces_tool_arguments_scores_read_or_persisted",
+            "receipt_sha256",
+        }
+        or observed.get("schema_version") != GPU_OBSERVER_SCHEMA
         or observed.get("status") != "OBSERVED_SCORE_FREE_WAVE"
         or observed.get("concurrency") != concurrency
         or observed.get("server") != server
@@ -398,6 +559,8 @@ def validate_gpu_wave(
         )
         or observed.get("server_identity_unchanged") is not True
         or observed.get("qualifier_identity_unchanged") is not True
+        or observed.get("prompts_responses_traces_tool_arguments_scores_read_or_persisted")
+        is not False
         or observed.get("receipt_sha256") != crypto.digest_without(observed, "receipt_sha256")
     ):
         raise QualificationError("v23_gpu_wave_invalid")
@@ -427,7 +590,24 @@ def validate_raw(raw: dict[str, Any]) -> None:
     validate_authorization(authorization)
     _validate_binding(binding)
     if (
-        raw.get("schema_version") != RAW_SCHEMA
+        set(raw)
+        != {
+            "schema_version",
+            "status",
+            "authorization_receipt_sha256",
+            "authorization",
+            "server_binding",
+            "qualifier_identity",
+            "waves",
+            "gpu_waves",
+            "fleet_task_instance_calls",
+            "fleet_session_calls",
+            "verifier_calls",
+            "scoring_calls",
+            "scored_launch_authorized",
+            "receipt_sha256",
+        }
+        or raw.get("schema_version") != RAW_SCHEMA
         or raw.get("status") != "COMPLETED_SCORE_FREE_WAVES"
         or raw.get("receipt_sha256") != crypto.digest_without(raw, "receipt_sha256")
         or raw.get("authorization_receipt_sha256") != authorization.get("receipt_sha256")

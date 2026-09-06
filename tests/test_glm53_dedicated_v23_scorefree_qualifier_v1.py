@@ -54,14 +54,19 @@ def _evidence() -> tuple[dict, dict, dict]:
         "classification": "ACTUAL_HARNESS_PARITY",
         "status": "PASSED_NON_SCORED",
         "endpoint": {
+            "origin": _binding()["service_origin"],
             "kind": "dedicated_uid_bound_inference",
             "server_binding": qualifier.canonical_model_binding(binding),
+            "server_binding_sha256": crypto.sha256(
+                crypto.canonical_json(qualifier.canonical_model_binding(binding))
+            ),
         },
         "execution": {
             "final_marker_observed": True,
             "harness_exit_code": 0,
             "model_requests": 4,
             "scored_launch_authorized": False,
+            "docker_host_gateway_added": True,
             "task_instance_session_verifier_scoring_calls": 0,
         },
         "harness": {
@@ -69,6 +74,15 @@ def _evidence() -> tuple[dict, dict, dict]:
             "version": treatment["harness_version"],
             "image": actual_harness.IMAGE,
             "image_id": actual_harness.IMAGE_ID,
+            "observed_image": {
+                "image": actual_harness.IMAGE,
+                "image_id": actual_harness.IMAGE_ID,
+                "os": "linux",
+                "architecture": "amd64",
+                "user": "node",
+                "working_dir": "/workspace",
+            },
+            "settings_sha256": "sha256:" + "9" * 64,
             "release_asset_sha256": treatment["release_asset_sha256"],
             "provider_adapter": treatment["provider_adapter"],
             "context_management": treatment["context_management"],
@@ -83,12 +97,22 @@ def _evidence() -> tuple[dict, dict, dict]:
             "names": treatment["tools"],
             "calls_observed_in_order": actual_harness.EXPECTED_CALL_ORDER,
             "mcp_catalog_sha256": treatment["tool_catalog_sha256"],
+            "production_catalog_provenance": actual_harness.production_tools.provenance(
+                actual_harness.REPO_ROOT
+            ),
+            "openai_catalog_sha256": crypto.sha256(
+                crypto.canonical_json(actual_harness.expected_openai_tools())
+            ),
             "arguments_structurally_valid": True,
             "model_request_catalog_exact": True,
             "model_request_tool_names_exact": True,
             "model_request_tool_descriptions_exact": True,
             "model_request_tool_parameters_exact": True,
+            "observed_model_request_catalog_sha256s": [
+                crypto.sha256(crypto.canonical_json(actual_harness.expected_openai_tools()))
+            ],
             "model_requests_with_tools": 3,
+            "model_requests_without_tools": 1,
         },
         "privacy": {
             "benchmark_content_included": False,
@@ -233,6 +257,14 @@ def test_authorization_rejects_rehashed_but_noncanonical_actual_parity(
         qualifier.authorize(_binding(), parity, watchdog, live)
 
 
+def test_authorization_rejects_rehashed_extra_parity_content() -> None:
+    parity, watchdog, live = _evidence()
+    parity["unexpected_protected_content"] = "forbidden"
+    parity["receipt_sha256"] = crypto.digest_without(parity, "receipt_sha256")
+    with pytest.raises(qualifier.QualificationError, match="parity"):
+        qualifier.authorize(_binding(), parity, watchdog, live)
+
+
 def test_authorization_rejects_rehashed_live_or_wrong_watchdog_source() -> None:
     parity, watchdog, live = _evidence()
     live["active_scored_controller_count"] = 1
@@ -242,6 +274,17 @@ def test_authorization_rejects_rehashed_live_or_wrong_watchdog_source() -> None:
 
     parity, watchdog, live = _evidence()
     watchdog["implementation_sha256"] = "sha256:" + "0" * 64
+    watchdog["receipt_sha256"] = crypto.digest_without(watchdog, "receipt_sha256")
+    with pytest.raises(qualifier.QualificationError, match="watchdog"):
+        qualifier.authorize(_binding(), parity, watchdog, live)
+
+    parity, watchdog, live = _evidence()
+    watchdog["initial_running_requests"] = -1
+    watchdog["receipt_sha256"] = crypto.digest_without(watchdog, "receipt_sha256")
+    with pytest.raises(qualifier.QualificationError, match="watchdog"):
+        qualifier.authorize(_binding(), parity, watchdog, live)
+    parity, watchdog, live = _evidence()
+    watchdog["unexpected"] = "forbidden"
     watchdog["receipt_sha256"] = crypto.digest_without(watchdog, "receipt_sha256")
     with pytest.raises(qualifier.QualificationError, match="watchdog"):
         qualifier.authorize(_binding(), parity, watchdog, live)
@@ -334,6 +377,32 @@ def test_request_growth_prevents_false_idle_release() -> None:
     assert released == ["ft-run-freshv23"]
 
 
+def test_release_retries_are_bounded_and_require_api_absence() -> None:
+    releases: list[str] = []
+    checks = iter((False, False, True))
+    watchdog_runtime.release_with_bounded_confirmation(
+        "ft-run-freshv23",
+        release=releases.append,
+        absent=lambda _run_id: next(checks),
+        sleep=lambda _seconds: None,
+        attempts=1,
+        polls_per_attempt=3,
+    )
+    assert releases == ["ft-run-freshv23"]
+
+
+def test_release_fails_closed_when_uid_bound_api_absence_is_not_confirmed() -> None:
+    with pytest.raises(watchdog_runtime.WatchdogError, match="unconfirmed"):
+        watchdog_runtime.release_with_bounded_confirmation(
+            "ft-run-freshv23",
+            release=lambda _run_id: None,
+            absent=lambda _run_id: False,
+            sleep=lambda _seconds: None,
+            attempts=2,
+            polls_per_attempt=2,
+        )
+
+
 def test_gpu_observer_rejects_valid_uuid_for_the_wrong_server() -> None:
     observed = {
         "schema_version": qualifier.GPU_OBSERVER_SCHEMA,
@@ -351,6 +420,7 @@ def test_gpu_observer_rejects_valid_uuid_for_the_wrong_server() -> None:
         },
         "server_identity_unchanged": True,
         "qualifier_identity_unchanged": True,
+        "prompts_responses_traces_tool_arguments_scores_read_or_persisted": False,
     }
     observed["receipt_sha256"] = crypto.digest_without(observed, "receipt_sha256")
     with pytest.raises(qualifier.QualificationError, match="gpu_wave"):
@@ -381,6 +451,46 @@ def test_gpu_observer_requires_exact_qualifier_job_owner_uid() -> None:
     assert gpu_observer.qualifier_pod_owned_by_job(pod, job)
     pod["metadata"]["ownerReferences"][0]["uid"] = "99999999-9999-4999-8999-999999999999"
     assert not gpu_observer.qualifier_pod_owned_by_job(pod, job)
+
+
+def test_release_confirmation_distinguishes_api_delete_from_uid_absence() -> None:
+    terminal = {
+        "schema_version": "fleet-glm53-dedicated-v23-watchdog-terminal-v1",
+        "status": "RELEASED_IDLE_API_ABSENT",
+        "server_binding_sha256": crypto.sha256(crypto.canonical_json(_binding())),
+        "active_receipt_sha256": "sha256:" + "1" * 64,
+        "release_route": "DELETE /v1/runs/{api_run_id}",
+        "fleet_task_instance_calls": 0,
+        "fleet_session_calls": 0,
+        "verifier_calls": 0,
+        "scoring_calls": 0,
+        "protected_content_included": False,
+    }
+    terminal["receipt_sha256"] = crypto.digest_without(terminal, "receipt_sha256")
+    receipt = gpu_observer.build_release_confirmation(_binding(), terminal, {"items": []})
+    assert receipt["status"] == "CONFIRMED_UID_ABSENT"
+    assert receipt["receipt_sha256"] == crypto.digest_without(receipt, "receipt_sha256")
+    with pytest.raises(gpu_observer.ObserverError, match="unconfirmed"):
+        gpu_observer.build_release_confirmation(
+            _binding(),
+            terminal,
+            {"items": [{"metadata": {"uid": _binding()["head_pod_uid"]}}]},
+        )
+    with pytest.raises(gpu_observer.ObserverError, match="unconfirmed"):
+        gpu_observer.build_release_confirmation(
+            _binding(),
+            terminal,
+            {
+                "items": [
+                    {
+                        "metadata": {
+                            "uid": "99999999-9999-4999-8999-999999999999",
+                            "ownerReferences": [{"uid": _binding()["rayjob_uid"]}],
+                        }
+                    }
+                ]
+            },
+        )
 
 
 def test_watchdog_active_receipt_binds_exact_loaded_source_and_release_route() -> None:
@@ -473,6 +583,7 @@ def test_package_is_exact_create_once_nonpreempting_and_scorefree() -> None:
     assert set(package_manifest["external_uid_bound_operator_files"]) == {
         "evals/fleet/glm53_dedicated_v23_scorefree_gpu_observer_v1.py",
         "evals/fleet/scripts/observe_glm53_dedicated_v23_scorefree_gpu_v1.sh",
+        "evals/fleet/scripts/confirm_glm53_dedicated_v23_release_v1.sh",
     }
     assert "glm53_dedicated_v23_scorefree_qualifier_v1 run" in configmap["data"]["run.sh"]
     assert any(
@@ -534,6 +645,7 @@ def test_execute_keeps_fleet_calls_zero_and_runs_frozen_waves(tmp_path, monkeypa
             },
             "server_identity_unchanged": True,
             "qualifier_identity_unchanged": True,
+            "prompts_responses_traces_tool_arguments_scores_read_or_persisted": False,
         }
         value["receipt_sha256"] = crypto.digest_without(value, "receipt_sha256")
         return value
@@ -578,6 +690,29 @@ def test_execute_keeps_fleet_calls_zero_and_runs_frozen_waves(tmp_path, monkeypa
     tampered["receipt_sha256"] = crypto.digest_without(tampered, "receipt_sha256")
     with pytest.raises(qualifier.QualificationError, match="gpu_wave"):
         qualifier.validate_raw(tampered)
+    extra_raw = json.loads(json.dumps(result))
+    extra_raw["unexpected"] = "forbidden"
+    extra_raw["receipt_sha256"] = crypto.digest_without(extra_raw, "receipt_sha256")
+    with pytest.raises(qualifier.QualificationError, match="raw_authority"):
+        qualifier.validate_raw(extra_raw)
+    extra_gpu = json.loads(json.dumps(result))
+    extra_gpu["gpu_waves"][0]["unexpected"] = "forbidden"
+    extra_gpu["gpu_waves"][0]["receipt_sha256"] = crypto.digest_without(
+        extra_gpu["gpu_waves"][0], "receipt_sha256"
+    )
+    extra_gpu["receipt_sha256"] = crypto.digest_without(extra_gpu, "receipt_sha256")
+    with pytest.raises(qualifier.QualificationError, match="gpu_wave"):
+        qualifier.validate_raw(extra_gpu)
+    privacy_violation = json.loads(json.dumps(result))
+    privacy_violation["gpu_waves"][0][
+        "prompts_responses_traces_tool_arguments_scores_read_or_persisted"
+    ] = True
+    privacy_violation["gpu_waves"][0]["receipt_sha256"] = crypto.digest_without(
+        privacy_violation["gpu_waves"][0], "receipt_sha256"
+    )
+    privacy_violation["receipt_sha256"] = crypto.digest_without(privacy_violation, "receipt_sha256")
+    with pytest.raises(qualifier.QualificationError, match="gpu_wave"):
+        qualifier.validate_raw(privacy_violation)
 
 
 @pytest.mark.parametrize(

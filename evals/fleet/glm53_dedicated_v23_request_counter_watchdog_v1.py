@@ -204,6 +204,75 @@ def release_run_http(
         raise WatchdogError("jobs_api_release_failed") from exc
 
 
+def run_absent_http(
+    *,
+    api_base: str,
+    bearer_token: str,
+    api_run_id: str,
+    opener: Callable[..., Any] = urllib.request.urlopen,
+) -> bool:
+    if not bearer_token or not api_run_id.startswith("ft-run-"):
+        raise WatchdogError("jobs_api_absence_identity_invalid")
+    url = api_base.rstrip("/") + "/v1/runs/" + urllib.parse.quote(api_run_id, safe="")
+    request = urllib.request.Request(
+        url,
+        method="GET",
+        headers={"Authorization": f"Bearer {bearer_token}", "Accept": "application/json"},
+    )
+    try:
+        with opener(request, timeout=30) as response:
+            if response.status == 200:
+                return False
+            raise WatchdogError("jobs_api_absence_http_status_invalid")
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            return True
+        raise WatchdogError("jobs_api_absence_check_failed") from exc
+    except (OSError, urllib.error.URLError) as exc:
+        raise WatchdogError("jobs_api_absence_check_failed") from exc
+
+
+def release_with_bounded_confirmation(
+    api_run_id: str,
+    *,
+    release: Callable[[str], None],
+    absent: Callable[[str], bool],
+    sleep: Callable[[float], None] = time.sleep,
+    attempts: int = 3,
+    polls_per_attempt: int = 12,
+    poll_seconds: float = 5,
+) -> None:
+    """Release only the bound run and require Jobs API absence within a bounded grace."""
+
+    if attempts < 1 or polls_per_attempt < 1 or poll_seconds <= 0:
+        raise WatchdogError("release_retry_policy_invalid")
+    for attempt in range(attempts):
+        try:
+            release(api_run_id)
+            for _ in range(polls_per_attempt):
+                if absent(api_run_id):
+                    return
+                sleep(poll_seconds)
+        except WatchdogError:
+            if attempt + 1 == attempts:
+                raise
+        if attempt + 1 < attempts:
+            sleep(poll_seconds)
+    raise WatchdogError("jobs_api_release_absence_unconfirmed")
+
+
+def release_run_and_confirm_http(*, api_base: str, bearer_token: str, api_run_id: str) -> None:
+    release_with_bounded_confirmation(
+        api_run_id,
+        release=lambda run_id: release_run_http(
+            api_base=api_base, bearer_token=bearer_token, api_run_id=run_id
+        ),
+        absent=lambda run_id: run_absent_http(
+            api_base=api_base, bearer_token=bearer_token, api_run_id=run_id
+        ),
+    )
+
+
 def advance(
     state: dict[str, Any],
     *,
@@ -291,7 +360,7 @@ def watch_http(
         initial_counter=initial["requests"],
         ready_at=ready_at,
         read_activity=lambda: read_activity_http(origin),
-        release_via_jobs_api=lambda run_id: release_run_http(
+        release_via_jobs_api=lambda run_id: release_run_and_confirm_http(
             api_base=api_base,
             bearer_token=bearer_token,
             api_run_id=run_id,
@@ -347,7 +416,7 @@ def main() -> int:
             initial_counter=initial["requests"],
             ready_at=args.ready_at_epoch,
             read_activity=lambda: read_activity_http(binding["service_origin"]),
-            release_via_jobs_api=lambda run_id: release_run_http(
+            release_via_jobs_api=lambda run_id: release_run_and_confirm_http(
                 api_base="https://api.ft.flt.build",
                 bearer_token=os.environ.get("GH_TOKEN", ""),
                 api_run_id=run_id,
@@ -356,7 +425,7 @@ def main() -> int:
         )
         outcome: dict[str, Any] = {
             "schema_version": "fleet-glm53-dedicated-v23-watchdog-terminal-v1",
-            "status": status,
+            "status": status + "_API_ABSENT",
             "server_binding_sha256": crypto.sha256(crypto.canonical_json(binding)),
             "active_receipt_sha256": receipt["receipt_sha256"],
             "release_route": RELEASE_ROUTE,
@@ -370,11 +439,26 @@ def main() -> int:
         _write_once(terminal, outcome)
         return 0
     except Exception as exc:
+        release_confirmed = False
+        try:
+            release_run_and_confirm_http(
+                api_base="https://api.ft.flt.build",
+                bearer_token=os.environ.get("GH_TOKEN", ""),
+                api_run_id=str(binding.get("api_run_id", "")),
+            )
+            release_confirmed = True
+        except WatchdogError:
+            pass
         failure: dict[str, Any] = {
             "schema_version": "fleet-glm53-dedicated-v23-watchdog-terminal-v1",
-            "status": "FAILED_CLOSED",
+            "status": (
+                "FAILED_CLOSED_RELEASED_API_ABSENT"
+                if release_confirmed
+                else "FAILED_CLOSED_RELEASE_UNCONFIRMED"
+            ),
             "server_binding_sha256": crypto.sha256(crypto.canonical_json(binding)),
             "reason": type(exc).__name__,
+            "release_route": RELEASE_ROUTE,
             "fleet_task_instance_calls": 0,
             "fleet_session_calls": 0,
             "verifier_calls": 0,

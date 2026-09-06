@@ -34,6 +34,7 @@ RUN = "evals/fleet/scripts/run_glm53_dedicated_v23_scorefree_qualification_v1.sh
 OPERATOR_FILES = (
     "evals/fleet/glm53_dedicated_v23_scorefree_gpu_observer_v1.py",
     "evals/fleet/scripts/observe_glm53_dedicated_v23_scorefree_gpu_v1.sh",
+    "evals/fleet/scripts/confirm_glm53_dedicated_v23_release_v1.sh",
 )
 
 
