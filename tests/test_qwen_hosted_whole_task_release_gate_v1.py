@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from evals.fleet import qwen_hosted_whole_task_release_gate_package_v1 as gate_package
+from evals.fleet import qwen_hosted_whole_task_release_gate_package_v2 as gate_package_v2
 from evals.fleet import qwen_hosted_whole_task_release_gate_v1 as gate
 from evals.fleet import qwen_hosted_whole_task_successor_v1 as prior
 from evals.fleet import qwen_hosted_whole_task_successor_v2 as successor
@@ -142,6 +143,102 @@ def test_observer_manifest_is_create_once_score_free_and_read_only() -> None:
     assert re.search(r"sk_[A-Za-z0-9]{12,}", raw) is None
     assert "prompt" not in configmap["data"]["binding.json"]
     assert "score" not in configmap["data"]["binding.json"]
+
+
+def test_observer_successor_preserves_binding_and_uses_fresh_identity() -> None:
+    old = gate_package.render(ROOT)
+    new = gate_package_v2.render(ROOT)
+    old_cm, old_job = old["items"]
+    new_cm, new_job = new["items"]
+    assert new_cm["data"] == old_cm["data"]
+    assert new_cm["metadata"]["name"] == gate_package_v2.CONFIGMAP_NAME
+    assert new_job["metadata"]["name"] == gate_package_v2.JOB_NAME
+    assert gate_package.JOB_NAME not in json.dumps(new_job)
+    assert gate_package.OUTPUT_ROOT not in json.dumps(new_job)
+    assert new_job["metadata"]["annotations"]["cyber-post-train.fleet.ai/create-once"] == "true"
+    assert new_job["metadata"]["annotations"]["cyber-post-train.fleet.ai/score-free"] == "true"
+
+
+def test_observer_failure_receipt_is_sanitized(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    package_source = tmp_path / "package-source.json"
+    binding = tmp_path / "binding.json"
+    output = tmp_path / "out" / "OBSERVATION.json"
+    package_source.write_text("{}")
+    binding.write_text("{}")
+    monkeypatch.setenv("JOB_UID", "11111111-1111-4111-8111-111111111111")
+    monkeypatch.setenv("POD_UID", "22222222-2222-4222-8222-222222222222")
+    with pytest.raises(gate.GateError):
+        gate.main(
+            [
+                "--binding",
+                str(binding),
+                "--package-source",
+                str(package_source),
+                "--output",
+                str(output),
+            ]
+        )
+    failure = gate.load(output.with_name("FAILED.json"))
+    assert failure["status"] == "FAILED"
+    assert failure["last_stage"] == "package-source"
+    assert failure["failure_code"] == "release_gate_package_source_invalid"
+    assert failure["receipt_sha256"] == gate.digest(failure)
+    assert failure["scores_included"] is False
+    assert failure["prompts_traces_flags_included"] is False
+    assert failure["credentials_included"] is False
+
+
+def test_observer_failure_redacts_unexpected_exception_text(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output = tmp_path / "out" / "OBSERVATION.json"
+    monkeypatch.setenv("JOB_UID", "11111111-1111-4111-8111-111111111111")
+    monkeypatch.setenv("POD_UID", "22222222-2222-4222-8222-222222222222")
+    monkeypatch.setattr(
+        gate,
+        "validate_package_source",
+        lambda *_args: (_ for _ in ()).throw(RuntimeError("sensitivevalue123")),
+    )
+    with pytest.raises(RuntimeError, match="sensitivevalue123"):
+        gate.main(
+            [
+                "--binding",
+                str(tmp_path / "binding.json"),
+                "--package-source",
+                str(tmp_path / "package-source.json"),
+                "--output",
+                str(output),
+            ]
+        )
+    failure = gate.load(output.with_name("FAILED.json"))
+    assert failure["failure_code"] == "redacted"
+    assert "sensitivevalue123" not in output.with_name("FAILED.json").read_text()
+
+
+def test_observer_failure_receipt_collision_does_not_mask_original(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output = tmp_path / "out" / "OBSERVATION.json"
+    output.parent.mkdir()
+    output.with_name("FAILED.json").write_text("existing")
+    monkeypatch.setattr(
+        gate,
+        "validate_package_source",
+        lambda *_args: (_ for _ in ()).throw(RuntimeError("originalfailure")),
+    )
+    with pytest.raises(RuntimeError, match="originalfailure"):
+        gate.main(
+            [
+                "--binding",
+                str(tmp_path / "binding.json"),
+                "--package-source",
+                str(tmp_path / "package-source.json"),
+                "--output",
+                str(output),
+            ]
+        )
 
 
 def test_release_stays_closed_without_real_observer_receipt() -> None:
