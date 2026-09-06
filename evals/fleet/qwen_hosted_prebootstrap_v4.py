@@ -14,6 +14,8 @@ PHASES = (
     "00-prebootstrap-entry",
     "01-network-package-install-bypassed",
     "02-pinned-docker-cli-ready",
+    "03-private-input-stage-started",
+    "04-private-input-stage-done",
 )
 
 

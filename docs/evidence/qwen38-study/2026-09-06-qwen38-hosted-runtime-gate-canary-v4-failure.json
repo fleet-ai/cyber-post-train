@@ -1,0 +1,84 @@
+{
+  "schema_version": "fleet-qwen38-hosted-whole-task-runtime-gate-canary-failure-v4",
+  "status": "FAILED_AT_BOOTSTRAP_STAGE_SIX",
+  "observed_at_utc": "2026-09-06T10:05:43Z",
+  "package_commit": "a1074132ccf26a462859889f89d65fd9e3cdd047",
+  "job": {
+    "name": "chris-q38-hosted-whole-task-runtime-gate-canary-v4",
+    "uid": "8b406557-99bf-49fc-8c72-897fa0d40396",
+    "failed": 1,
+    "reason": "BackoffLimitExceeded",
+    "completion_observed_at_utc": "2026-09-06T10:05:43Z"
+  },
+  "pod": {
+    "name": "chris-q38-hosted-whole-task-runtime-gate-canary-v4-ntvjd",
+    "uid": "fdbdb248-0d83-4d06-9021-a2e78831e14e",
+    "phase": "Failed",
+    "started_at_utc": "2026-09-06T10:05:14Z",
+    "finished_at_utc": "2026-09-06T10:05:37Z",
+    "exit_code": 1,
+    "restarts": 0,
+    "runtime_image_id": "ghcr.io/astral-sh/uv@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7"
+  },
+  "sanitized_failure_receipt": {
+    "path": "/mnt/sfs/jobs/chris-q38-hosted-whole-task-runtime-gate-canary-v4-diagnostic/RUNTIME-GATE-CANARY-FAILED.json",
+    "file_sha256": "sha256:a9e45bacff6f29606b768c3ef1369721b0b6859b29e73ec574d0f3ed34d6abbe",
+    "schema_version": "fleet-qwen38-hosted-whole-task-runtime-gate-failure-v2",
+    "status": "FAILED",
+    "last_completed_stage": "06-runtime-exec",
+    "last_completed_phase": "build-plans-done",
+    "error_type": "ValueError",
+    "error_sha256": "sha256:7bc266369121c322081301fd75452411a597ac4724e8ad07bca9291a826ee05e",
+    "authority_receipt_sha256": "sha256:41b9a5146e57e3b577cf7bc64db9a1003fe14b0bd59f298fcc7b65c47083cca0",
+    "package_source_receipt_sha256": "sha256:2fbaf426128a8c309bae7a51af647a2c7fb2ec7c524776bab8bb93fe7b056a16",
+    "receipt_sha256": "sha256:b75312aabc33ce6da7dda512c176f3fa142ecb2cb1536e42d17cb3db46f38f80"
+  },
+  "phase_marker_file_sha256": {
+    "prebootstrap-phases/00-prebootstrap-entry.json": "sha256:97e74c04dfab4e46f955667e03c39aa7e545880cdcfebd37f783c6663172a961",
+    "prebootstrap-phases/01-network-package-install-bypassed.json": "sha256:aa3545af35058041af328e98a2de08e7919c5f48c5980a40c71da9b21739a7a7",
+    "prebootstrap-phases/02-pinned-docker-cli-ready.json": "sha256:e20385868f278a535da7ca6e3a66997fe35d2c0f783ffa087565e2d06b0b9086",
+    "bootstrap-stages/06-runtime-exec.json": "sha256:1fe2c4916963c0f94eed792176ef5112ca147cff86d10bcae2094597c9b9ce51"
+  },
+  "deterministic_static_diagnosis": {
+    "observed_last_completed_operation": "build-plans-done",
+    "next_runtime_operation": "load-package-source",
+    "next_runtime_path": "/bootstrap/package-source.json",
+    "rendered_path_kind": "PROJECTED_CONFIGMAP_SYMLINK",
+    "runtime_loader_contract": "REGULAR_NON_SYMLINK_FILE",
+    "cause_classification": "PROJECTED_CONFIGMAP_SYMLINK_REJECTED_BY_STRICT_RUNTIME_LOADER",
+    "logs_used": false
+  },
+  "deterministic_correction": {
+    "projected_files_are_transport_only": true,
+    "private_destination_mode": "0700",
+    "private_file_mode": "0600",
+    "copy_is_create_once": true,
+    "source_and_copy_bytes_match": true,
+    "source_and_copy_self_digests_validated": true,
+    "runtime_accepts_only_private_regular_files": true,
+    "strict_runtime_loader_weakened": false
+  },
+  "score_blind_effects": {
+    "output_roots_created": 0,
+    "endpoint_leases_acquired": 0,
+    "canonical_claims_created": 0,
+    "model_calls": 0,
+    "task_calls": 0,
+    "session_calls": 0,
+    "verifier_calls": 0,
+    "scoring_calls": 0,
+    "api_mutations": 0,
+    "accepted_evidence_created": 0
+  },
+  "disposition": {
+    "canary_v4_identity_retry_authorized": false,
+    "fresh_score_free_canary_requires_new_identity": true,
+    "scored_successor_authorized": false
+  },
+  "privacy": {
+    "scores_read": false,
+    "prompts_traces_flags_read": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:2d99e969a6ff9911a2385747107302a4cff099795fdc3644baedab39e3626e20"
+}
