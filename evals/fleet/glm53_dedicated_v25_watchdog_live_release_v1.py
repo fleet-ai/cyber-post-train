@@ -100,15 +100,16 @@ def launch(
             api_run_id,
             priority_classes=priority_classes,
         )
-    if (
-        receipt.get("schema_version") != LAUNCH_SCHEMA
-        or receipt.get("server_launch_authorized") is not False
-        or receipt.get("watchdog_launch_authorized") is not True
-        or receipt.get("qualification_launch_authorized") is not False
-        or receipt.get("scored_launch_authorized") is not False
-        or receipt.get("protected_content_included") is not False
-    ):
-        raise AdapterError("v25_watchdog_launch_receipt_invalid")
+        if (
+            receipt.get("schema_version") != LAUNCH_SCHEMA
+            or receipt.get("server_launch_authorized") is not False
+            or receipt.get("watchdog_launch_authorized") is not True
+            or receipt.get("qualification_launch_authorized") is not False
+            or receipt.get("scored_launch_authorized") is not False
+            or receipt.get("protected_content_included") is not False
+        ):
+            engine._release_local(api_run_id)
+            raise AdapterError("v25_watchdog_launch_receipt_invalid")
     return receipt
 
 

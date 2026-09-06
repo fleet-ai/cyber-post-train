@@ -271,6 +271,14 @@ def test_adapter_rejects_mutated_launch_receipt(
     }
     value[field] = bad
     monkeypatch.setattr(engine, "launch", lambda *_args, **_kwargs: value)
+    released: dict[str, object] = {}
+
+    def release(api_run_id: str) -> None:
+        released["api_run_id"] = api_run_id
+        released["server"] = engine.server
+
+    monkeypatch.setattr(engine, "_release_local", release)
     with pytest.raises(adapter.AdapterError, match="receipt_invalid"):
         adapter.launch(ROOT, COMMIT, "ft-run-deadbeef", priority_classes=priorities())
+    assert released == {"api_run_id": "ft-run-deadbeef", "server": server}
     assert engine.server is v24_server
