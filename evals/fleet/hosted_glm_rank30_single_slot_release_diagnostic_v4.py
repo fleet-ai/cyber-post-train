@@ -17,7 +17,7 @@ from evals.fleet import hosted_glm_rank30_single_slot_v3 as successor
 from evals.fleet import self_hosted
 
 SCHEMA = "fleet-hosted-glm-rank30-release-phase-diagnostic-v4"
-JOB_NAME = "chris-glm53-exact100-hosted-r030-single-slot-release-diagnostic-v4"
+JOB_NAME = "chris-glm53-r030-release-diagnostic-v4b"
 CONFIGMAP_NAME = JOB_NAME + "-run"
 OUTPUT_PATH = Path("/mnt/sfs/jobs") / JOB_NAME / "DIAGNOSTIC.json"
 FAILED_RELEASE_JOB = release.JOB_NAME

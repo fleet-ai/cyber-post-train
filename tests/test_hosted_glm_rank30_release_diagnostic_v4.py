@@ -91,6 +91,13 @@ def test_v4_package_is_fresh_immutable_held_and_has_no_scored_credentials() -> N
     assert "GLM_HOSTED_R30_SOURCE_SHA256" not in env_names
     assert "kubectl create" not in json.dumps(configmap["data"])
     assert "_task_sessions" not in configmap["data"]["diagnostic.py"]
+    for obj in rendered["objects"]["items"]:
+        assert len(obj["metadata"]["name"]) <= 63
+        for value in obj["metadata"].get("labels", {}).values():
+            assert len(value) <= 63
+        template = obj.get("spec", {}).get("template", {})
+        for value in template.get("metadata", {}).get("labels", {}).values():
+            assert len(value) <= 63
 
 
 def test_failed_v3_identity_is_exact_and_v4_receipt_is_sanitized(
