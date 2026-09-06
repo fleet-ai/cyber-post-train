@@ -9,11 +9,15 @@ from pathlib import Path
 import pytest
 
 from evals.fleet import hosted_glm_rank30_single_slot_package_v1 as package
+from evals.fleet import hosted_glm_rank30_single_slot_package_v3 as package_v3
 from evals.fleet import hosted_glm_rank30_single_slot_release_package_v1 as release_package
 from evals.fleet import hosted_glm_rank30_single_slot_release_package_v2 as release_package_v2
+from evals.fleet import hosted_glm_rank30_single_slot_release_package_v3 as release_package_v3
 from evals.fleet import hosted_glm_rank30_single_slot_release_v1 as release
 from evals.fleet import hosted_glm_rank30_single_slot_release_v2 as release_v2
+from evals.fleet import hosted_glm_rank30_single_slot_release_v3 as release_v3
 from evals.fleet import hosted_glm_rank30_single_slot_v1 as successor
+from evals.fleet import hosted_glm_rank30_single_slot_v3 as successor_v3
 from evals.fleet import hosted_glm_whole_task_engine_v1 as engine
 from evals.fleet import hosted_glm_whole_task_successor_v1 as whole
 from evals.fleet import self_hosted
@@ -102,6 +106,36 @@ def _receipt(plan: dict, source_sha: str) -> dict:
         },
     }
     return {**body, "receipt_sha256": self_hosted.digest_without(body, "receipt_sha256")}
+
+
+def _receipt_v3(plan: dict, source_sha: str) -> dict:
+    value = _receipt(plan, source_sha)
+    value["schema_version"] = successor_v3.RELEASE_SCHEMA
+    value["live_rank29_peer"] = {
+        "job_name": successor_v3.PEER_JOB,
+        "job_uid": successor_v3.PEER_JOB_UID,
+        "job_active": 1,
+        "pod_name": successor_v3.PEER_POD,
+        "pod_uid": successor_v3.PEER_POD_UID,
+        "pod_phase": "Running",
+        "pod_ready": True,
+        "pod_restarts": 0,
+        "accepted_attempt": 3,
+        "accepted_receipt_path": str(successor_v3.PEER_A3_ACCEPTED_PATH),
+        "accepted_receipt_sha256": successor_v3.PEER_A3_ACCEPTED_SELF,
+        "accepted_file_sha256": successor_v3.PEER_A3_ACCEPTED_FILE,
+        "active_attempt": 4,
+        "active_claim_path": str(successor_v3.PEER_A4_CLAIM_PATH),
+        "active_claim_sha256": successor_v3.PEER_A4_CLAIM_SELF,
+        "active_claim_file_sha256": successor_v3.PEER_A4_CLAIM_FILE,
+        "active_run_id": successor_v3.PEER_A4_RUN,
+        "stream_path": str(successor_v3.PEER_STREAM),
+        "stream_bytes": 1_000_000,
+        "stream_mtime_epoch": int(datetime.now(UTC).timestamp()),
+        "endpoint_slot_held": 1,
+    }
+    value["receipt_sha256"] = self_hosted.digest_without(value, "receipt_sha256")
+    return value
 
 
 def test_rank30_only_preserves_rank31_and_rank29() -> None:
@@ -239,6 +273,209 @@ def test_observer_build_is_sanitized_and_validated(
     }
     assert "prompt" not in json.dumps(receipt).lower().replace(
         "prompts_traces_flags_read", ""
+    )
+
+
+def test_v3_release_binds_accepted_a3_and_only_live_a4() -> None:
+    plan = successor_v3.validate_all(ROOT)[successor_v3.CONTROLLER]
+    source_sha = package_v3.source_package_sha256(ROOT)
+    valid = _receipt_v3(plan, source_sha)
+    successor_v3.validate_release(valid, plan, source_sha)
+    mutations = [
+        ("accepted_receipt_sha256", successor_v3.PEER_A4_CLAIM_SELF),
+        ("accepted_attempt", 4),
+        ("active_claim_sha256", successor_v3.PEER_A3_ACCEPTED_SELF),
+        ("active_attempt", 3),
+        ("active_run_id", successor_v3.PEER_A3_RUN),
+        ("stream_path", str(successor_v3.PEER_A3_ACCEPTED_PATH)),
+    ]
+    for field, value in mutations:
+        changed = copy.deepcopy(valid)
+        changed["live_rank29_peer"][field] = value
+        changed["receipt_sha256"] = self_hosted.digest_without(
+            changed, "receipt_sha256"
+        )
+        with pytest.raises(RuntimeError, match="current-peer release drifted"):
+            successor_v3.validate_release(changed, plan, source_sha)
+
+    scored = package_v3.render(ROOT)
+    observer = release_package_v3.render(ROOT)
+    assert scored["launch_authorized"] is False
+    assert observer["launch_authorized"] is False
+    assert observer["scoring_authorized"] is False
+    assert observer["model_calls_authorized"] is False
+    assert observer["source_package_sha256"] == scored["source_package_sha256"]
+    assert "rank31" not in json.dumps(scored["objects"])
+    runtime_text = (
+        ROOT / "evals/fleet/hosted_glm_rank30_single_slot_runtime_v3.py"
+    ).read_text()
+    assert runtime_text.index("successor.validate_current_peer()") < runtime_text.index(
+        "AtomicWholeTaskClaims"
+    )
+    assert "runtime_gate_check=lambda _plan: current_gate()" in runtime_text
+
+
+def test_v3_live_peer_rejects_any_transition_race(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    accepted_path = tmp_path / "accepted.json"
+    claim_path = tmp_path / "claim.json"
+    stream_path = tmp_path / "opencode-stream.jsonl"
+    accepted_body = {
+        "schema_version": "fleet-exact-pass4-bulk-cell-accepted-v3",
+        "accepted": True,
+        "credited": True,
+        "selection_rank": 29,
+        "attempt": 3,
+        "cell_id": successor_v3.PEER_A3_CELL,
+        "execution_id": successor_v3.PEER_A3_EXECUTION,
+        "run_id": successor_v3.PEER_A3_RUN,
+    }
+    accepted = {
+        **accepted_body,
+        "receipt_sha256": self_hosted.digest_without(
+            accepted_body, "receipt_sha256"
+        ),
+    }
+    claim_body = {
+        "schema_version": "fleet-exact-pass4-bulk-cell-execution-claim-v3",
+        "selection_rank": 29,
+        "attempt": 4,
+        "cell_id": successor_v3.PEER_A4_CELL,
+        "execution_id": successor_v3.PEER_A4_EXECUTION,
+        "run_id": successor_v3.PEER_A4_RUN,
+        "job_uid": successor_v3.PEER_JOB_UID,
+        "pod_uid": successor_v3.PEER_POD_UID,
+    }
+    claim = {
+        **claim_body,
+        "receipt_sha256": self_hosted.digest_without(claim_body, "receipt_sha256"),
+    }
+    accepted_path.write_bytes(self_hosted.canonical_json(accepted) + b"\n")
+    claim_path.write_bytes(self_hosted.canonical_json(claim) + b"\n")
+    stream_path.write_text("{}\n")
+    monkeypatch.setattr(successor_v3, "PEER_A3_ACCEPTED_PATH", accepted_path)
+    monkeypatch.setattr(successor_v3, "PEER_A3_ACCEPTED_SELF", accepted["receipt_sha256"])
+    monkeypatch.setattr(
+        successor_v3, "PEER_A3_ACCEPTED_FILE", self_hosted.sha256(accepted_path.read_bytes())
+    )
+    monkeypatch.setattr(successor_v3, "PEER_A4_CLAIM_PATH", claim_path)
+    monkeypatch.setattr(successor_v3, "PEER_A4_CLAIM_SELF", claim["receipt_sha256"])
+    monkeypatch.setattr(
+        successor_v3, "PEER_A4_CLAIM_FILE", self_hosted.sha256(claim_path.read_bytes())
+    )
+    monkeypatch.setattr(successor_v3, "PEER_STREAM", stream_path)
+    job = {
+        "metadata": {"uid": successor_v3.PEER_JOB_UID},
+        "status": {"active": 1},
+    }
+    pod = {
+        "metadata": {"uid": successor_v3.PEER_POD_UID},
+        "status": {
+            "phase": "Running",
+            "containerStatuses": [
+                {"name": "evaluator", "ready": True, "restartCount": 0}
+            ],
+        },
+    }
+    monkeypatch.setattr(
+        release_v3.prior.kube,
+        "_kube_get",
+        lambda kind, _name: (200, job if kind == "jobs" else pod),
+    )
+    monkeypatch.setattr(
+        successor_v3,
+        "_kube_get",
+        lambda path: (200, job if "/jobs/" in path else pod),
+    )
+    assert release_v3._validate_live_peer()["active_attempt"] == 4  # noqa: SLF001
+    assert successor_v3.validate_current_peer()["active_attempt"] == 4
+
+    changed = {**claim, "attempt": 3}
+    changed["receipt_sha256"] = self_hosted.digest_without(
+        changed, "receipt_sha256"
+    )
+    claim_path.write_bytes(self_hosted.canonical_json(changed) + b"\n")
+    with pytest.raises(RuntimeError, match="a3-to-a4 evidence drifted"):
+        release_v3._validate_live_peer()  # noqa: SLF001
+    with pytest.raises(RuntimeError, match="a3-to-a4 evidence drifted"):
+        successor_v3.validate_current_peer()
+
+
+def test_v3_observer_materializes_without_checkout_fallback(tmp_path: Path) -> None:
+    data = release_package_v3.render(ROOT)["objects"]["items"][0]["data"]
+    package_root = tmp_path / "evals/fleet"
+    package_root.mkdir(parents=True)
+    (tmp_path / "evals/__init__.py").write_text("")
+    (package_root / "__init__.py").write_text("")
+    mappings = {
+        "self_hosted.py": "self_hosted.py",
+        "runner.py": "opencode_train_sweep_runner.py",
+        "endpoint_lease.py": "endpoint_lease.py",
+        "predecessor.py": "exact_pass4_bulk_v3.py",
+        "base_engine.py": "exact_pass4_bulk_runtime_v3.py",
+        "engine.py": "hosted_glm_whole_task_engine_v1.py",
+        "universe.py": "exact_pass4_universe.py",
+        "crypto.py": "exact_pass4_crypto.py",
+        "inventory.py": "exact_pass4_task_inventory.py",
+        "bulk.py": "hosted_glm_exact_bulk_v1.py",
+        "source_runtime.py": "hosted_glm_exact_bulk_runtime_v1.py",
+        "original_release.py": "hosted_glm_exact_bulk_release_v1.py",
+        "rank29_successor.py": "hosted_glm_rank29_a3a4_c2_successor_v1.py",
+        "rank29_runtime.py": "hosted_glm_rank29_a3a4_c2_runtime_v1.py",
+        "whole.py": "hosted_glm_whole_task_successor_v1.py",
+        "single_slot_v1.py": "hosted_glm_rank30_single_slot_v1.py",
+        "successor.py": "hosted_glm_rank30_single_slot_v3.py",
+        "kube.py": "hosted_glm_rank29_a3a4_c2_release_v2.py",
+        "release_v1.py": "hosted_glm_rank30_single_slot_release_v1.py",
+        "release.py": "hosted_glm_rank30_single_slot_release_v3.py",
+    }
+    for source_name, target_name in mappings.items():
+        (package_root / target_name).write_text(data[source_name])
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from evals.fleet import hosted_glm_rank30_single_slot_release_v3",
+        ],
+        cwd=tmp_path,
+        env={**os.environ, "PYTHONPATH": str(tmp_path)},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+
+    evidence = ROOT / "docs/evidence/glm53-study"
+    terminal = json.loads(
+        (
+            evidence
+            / "2026-09-06-glm53-hosted-rank30-release-observer-v2-terminal.json"
+        ).read_text()
+    )
+    held = json.loads(
+        (
+            evidence
+            / "2026-09-06-glm53-hosted-rank30-current-peer-release-v3-held.json"
+        ).read_text()
+    )
+    assert terminal["receipt_sha256"] == self_hosted.digest_without(
+        terminal, "receipt_sha256"
+    )
+    assert held["receipt_sha256"] == self_hosted.digest_without(
+        held, "receipt_sha256"
+    )
+    assert held["failed_predecessor"]["receipt_sha256"] == terminal[
+        "receipt_sha256"
+    ]
+    assert held["held_observer_package_sha256"] == release_package_v3.render(
+        ROOT
+    )["package_sha256"]
+    assert held["held_scored_package_sha256"] == package_v3.render(ROOT)[
+        "package_sha256"
+    ]
+    assert held["scored_source_package_sha256"] == package_v3.source_package_sha256(
+        ROOT
     )
 
 
