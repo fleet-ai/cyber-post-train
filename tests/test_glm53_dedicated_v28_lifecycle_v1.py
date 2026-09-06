@@ -1,6 +1,5 @@
 import json
 import os
-import subprocess
 import time
 from pathlib import Path
 
@@ -18,13 +17,8 @@ from evals.fleet import glm53_dedicated_v28_watchdog_package_v1 as watchdog_pack
 
 ROOT = Path(__file__).resolve().parents[1]
 NOW = 2_000_000_000.0
-COMMIT = subprocess.run(
-    ["git", "rev-parse", "HEAD"],
-    cwd=ROOT,
-    check=True,
-    text=True,
-    capture_output=True,
-).stdout.strip()
+COMMIT = "ed5ac1488754607ed45dd0e6caef501d31df0dab"
+EVIDENCE_ROOT = ROOT / "docs/evidence/glm53-study"
 
 
 def authorization() -> dict:
@@ -181,3 +175,25 @@ def test_controller_source_closure_has_no_protected_or_scoring_artifacts() -> No
         name.startswith(("prompts/", "traces/", "scoring/")) for name in names
     )
     assert os.path.isabs(server.RUN_DIR)
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        ("2026-09-06-glm53-dedicated-v28-create-wrapper-held-v1.json", server.build_held()),
+        (
+            "2026-09-06-glm53-dedicated-v28-watchdog-adapter-held-v1.json",
+            adapter.build_held(COMMIT),
+        ),
+        (
+            "2026-09-06-glm53-dedicated-v28-controller-held-v1.json",
+            controller_package.build_held(),
+        ),
+    ],
+)
+def test_tracked_held_receipts_are_exact(name: str, expected: dict[str, object]) -> None:
+    observed = json.loads((EVIDENCE_ROOT / name).read_text())
+    assert observed == expected
+    assert observed["receipt_sha256"] == crypto.digest_without(
+        observed, "receipt_sha256"
+    )
