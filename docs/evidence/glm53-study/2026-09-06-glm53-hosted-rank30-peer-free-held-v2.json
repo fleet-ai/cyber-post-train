@@ -1,0 +1,51 @@
+{
+  "controller": {
+    "cells": [
+      {"attempt": 1, "cell_id": "sha256:5af2152499b8af043a847707e47cc3c04b81d24c47aa99c33c04a8688cbcafa6", "execution_generation": 2, "execution_id": "sha256:eb5945fdab0567dfadcc9f4b1aa76d8edf2fe9ae27695202bc6a884613c0be21", "run_id": "chris-glm53-ac-bulk-a-r030-a1-g2-eb5945fd"},
+      {"attempt": 2, "cell_id": "sha256:7e2fffc5a21d93d76e97ab387800a687669bf39e69763d8a5b874dfea4da1f41", "execution_generation": 2, "execution_id": "sha256:aeea2d30f6c4fd425ea4d4c87af3301a9dcfc839618dafd2e4bb1ddc97a86432", "run_id": "chris-glm53-ac-bulk-a-r030-a2-g2-aeea2d30"},
+      {"attempt": 3, "cell_id": "sha256:b77c81587baee31eabe1bf65903749e8a89cf7719c38e8f527fd5bc53e087121", "execution_generation": 2, "execution_id": "sha256:54cb087f456a4284a87860dad4463c476bedf8508abdc7083076e673918b2a1d", "run_id": "chris-glm53-ac-bulk-a-r030-a3-g2-54cb087f"},
+      {"attempt": 4, "cell_id": "sha256:2b6f93f57e1862f339e55ff758ce6258a9665c66df80ad6d67fee21fa9fbe66f", "execution_generation": 2, "execution_id": "sha256:4296e8b9300a114686794dce795cec010f601430e2ac13594cfaa650431b4c72", "run_id": "chris-glm53-ac-bulk-a-r030-a4-g2-4296e8b9"}
+    ],
+    "configmap_name": "chris-glm53-exact100-hosted-r030-whole-task-g2-package-v2",
+    "controller": "glm-hosted-r30-whole-task",
+    "job_name": "chris-glm53-exact100-hosted-r030-whole-task-g2-v2",
+    "plan_sha256": "sha256:9ab289bfc22f1dc92fe4c68bc0fcbd8db3b914136568df480f8ffb76517e4b2a",
+    "selection_rank": 30,
+    "sfs_root": "/mnt/sfs/jobs/chris-glm53-exact100-hosted-r030-whole-task-g2-v2",
+    "task_version_id": "a0cacaaf-480b-4a4c-9ed7-6b6192bb6783"
+  },
+  "diagnostic_v2": {
+    "api_calls": 0,
+    "failed_phase": "07-strict-current-peer",
+    "failure_code": "CURRENT_PEER_INVARIANT_FAILED",
+    "file_sha256": "sha256:6211d4c0727b951252ac435186a71cb957167d6efa04ebf826f8e49ddea5f817",
+    "job_uid": "9a1f90a2-e0f4-41b5-a5ed-77169eec1622",
+    "path": "/mnt/sfs/jobs/chris-glm53-r030-preclaim-phase-observer-v2/DIAGNOSTIC.json",
+    "pod_uid": "81a3f651-0d5e-46eb-b216-31c39da082f9",
+    "prompts_traces_flags_read": false,
+    "provider_session_model_boundary_crossed": false,
+    "receipt_sha256": "sha256:769a2b5fb758d6f39d73d9a1624eb822283abc7a4465288b01af4f2046f0679c",
+    "scores_read": false
+  },
+  "launch_authorized": false,
+  "ledger_authority": {"file_sha256": "sha256:332c5ceae480e9c73cf1e391aeb59994049b69b240a8bbc106aefc35a9a01f25", "path": "docs/evidence/qwen38-study/2026-09-05-exact-pass4-ledger-evidence-snapshot-v48.json", "receipt_sha256": "sha256:1275d84f1b6aad8d02bc916be55f3a1f3ea99c6817f465905ec0791b0f66cd7a"},
+  "live_ledger_validation": {"file_sha256": "sha256:c3c527a68217190555af394b94b7996901dd46e1e52505c9843d02afe66c7738", "glm_tally": {"accepted": 24, "active": 0, "blocked": 4, "unstarted": 372}, "path": "docs/evidence/glm53-study/2026-09-06-glm53-ledger-v48-live-validation.json", "receipt_sha256": "sha256:7b77ed00959f6bb219c5c20724ed6958ee85b56d01771f9f158a575cd7301c96"},
+  "privacy": {"credentials_included": false, "prompts_traces_flags_read": false, "scores_read": false},
+  "receipt_sha256": "sha256:3c3fa7515266d7631d9da668668ea62a1ef1ea722af7bd71cf013b8512e3bf85",
+  "required_release": {
+    "active_hosted_controllers": 0,
+    "all_four_rank30_cells_clear_all_generations": true,
+    "both_endpoint_slots_simultaneously_free": true,
+    "canonical_claim_session_accepted_output_collisions_zero": true,
+    "create_once": true,
+    "current_peer_required": false,
+    "fresh_job_configmap_sfs_collisions_zero": true,
+    "fresh_uid_bound_observer": true,
+    "max_age_seconds": 600
+  },
+  "schema_version": "fleet-hosted-glm-rank30-peer-free-held-v2",
+  "scoring_authorized": false,
+  "source_package_sha256": "sha256:1d87c4210ec100bea1d80f89138d59863c935fbbc7e9bae33593a4e00957d010",
+  "status": "HELD_PENDING_FRESH_SCORE_BLIND_RELEASE",
+  "superseded_identities": {"configmap_name": "chris-glm53-exact100-hosted-r030-whole-task-g1-package-v1", "job_name": "chris-glm53-exact100-hosted-r030-whole-task-g1-v1", "retry_authorized": false, "sfs_root": "/mnt/sfs/jobs/chris-glm53-exact100-hosted-r030-whole-task-g1-v1"}
+}
