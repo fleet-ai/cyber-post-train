@@ -25,6 +25,8 @@ PATHS = {
     "whole_task_v1.py": "evals/fleet/hosted_glm_whole_task_successor_v1.py",
     "engine.py": "evals/fleet/hosted_glm_whole_task_engine_v1.py",
     "base_engine.py": "evals/fleet/exact_pass4_bulk_runtime_v3.py",
+    "hosted_glm_exact_bulk_v1.py": "evals/fleet/hosted_glm_exact_bulk_v1.py",
+    "hosted_glm_exact_bulk_runtime_v1.py": ("evals/fleet/hosted_glm_exact_bulk_runtime_v1.py"),
     "run.sh": "evals/fleet/scripts/run_hosted_glm_rank30_peer_free_v2.sh",
 }
 
@@ -49,9 +51,9 @@ def _job(
     job = copy.deepcopy(template)
     job["metadata"]["name"] = successor.JOB_NAME
     job["metadata"]["labels"]["cyber-post-train.fleet.ai/experiment"] = successor.JOB_NAME
-    job["metadata"]["annotations"][
-        "cyber-post-train.fleet.ai/launch-authorized"
-    ] = str(authorized).lower()
+    job["metadata"]["annotations"]["cyber-post-train.fleet.ai/launch-authorized"] = str(
+        authorized
+    ).lower()
     job["spec"]["activeDeadlineSeconds"] = 129_600
     pod = job["spec"]["template"]
     pod["metadata"]["labels"]["cyber-post-train.fleet.ai/experiment"] = successor.JOB_NAME
@@ -72,17 +74,26 @@ def _job(
     return job
 
 
-def render(root: Path, *, release_receipt: Path | None = None) -> dict[str, Any]:
+def render(
+    root: Path,
+    *,
+    release_receipt: Path | None = None,
+    release_value: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    if release_receipt is not None and release_value is not None:
+        raise ValueError("provide exactly one peer-free release authority")
     plan = successor.validate_all(root)[successor.CONTROLLER]
     data = _data(root)
     source_sha = self_hosted.sha256(self_hosted.canonical_json(data))
     held = successor.expected_held(plan, source_sha)
-    authorized = release_receipt is not None
+    authorized = release_receipt is not None or release_value is not None
     bound = held
     if authorized:
         inventory = successor.load(source_runtime.INVENTORY_PATH)
         runtime_plan = successor.build_runtime_plan(successor.CONTROLLER, inventory, root)
-        bound = successor.load(release_receipt)  # type: ignore[arg-type]
+        bound = (
+            release_value if release_value is not None else successor.load(release_receipt)  # type: ignore[arg-type]
+        )
         successor.validate_release(bound, runtime_plan, source_sha)
     data["release.json"] = json.dumps(bound, sort_keys=True, separators=(",", ":")) + "\n"
     template = yaml.safe_load(

@@ -29,35 +29,20 @@ RELEASE_PATH = Path("/bootstrap/release.json")
 RELEASE_MAX_AGE_SECONDS = 600
 
 LEDGER_AUTHORITY = {
-    "path": (
-        "docs/evidence/qwen38-study/"
-        "2026-09-05-exact-pass4-ledger-evidence-snapshot-v48.json"
-    ),
-    "receipt_sha256": (
-        "sha256:1275d84f1b6aad8d02bc916be55f3a1f3ea99c6817f465905ec0791b0f66cd7a"
-    ),
-    "file_sha256": (
-        "sha256:332c5ceae480e9c73cf1e391aeb59994049b69b240a8bbc106aefc35a9a01f25"
-    ),
+    "path": ("docs/evidence/qwen38-study/2026-09-05-exact-pass4-ledger-evidence-snapshot-v48.json"),
+    "receipt_sha256": ("sha256:1275d84f1b6aad8d02bc916be55f3a1f3ea99c6817f465905ec0791b0f66cd7a"),
+    "file_sha256": ("sha256:332c5ceae480e9c73cf1e391aeb59994049b69b240a8bbc106aefc35a9a01f25"),
 }
 LIVE_LEDGER_VALIDATION = {
     "path": "docs/evidence/glm53-study/2026-09-06-glm53-ledger-v48-live-validation.json",
-    "receipt_sha256": (
-        "sha256:7b77ed00959f6bb219c5c20724ed6958ee85b56d01771f9f158a575cd7301c96"
-    ),
-    "file_sha256": (
-        "sha256:c3c527a68217190555af394b94b7996901dd46e1e52505c9843d02afe66c7738"
-    ),
+    "receipt_sha256": ("sha256:7b77ed00959f6bb219c5c20724ed6958ee85b56d01771f9f158a575cd7301c96"),
+    "file_sha256": ("sha256:c3c527a68217190555af394b94b7996901dd46e1e52505c9843d02afe66c7738"),
     "glm_tally": {"accepted": 24, "active": 0, "blocked": 4, "unstarted": 372},
 }
 DIAGNOSTIC_V2 = {
     "path": "/mnt/sfs/jobs/chris-glm53-r030-preclaim-phase-observer-v2/DIAGNOSTIC.json",
-    "receipt_sha256": (
-        "sha256:769a2b5fb758d6f39d73d9a1624eb822283abc7a4465288b01af4f2046f0679c"
-    ),
-    "file_sha256": (
-        "sha256:6211d4c0727b951252ac435186a71cb957167d6efa04ebf826f8e49ddea5f817"
-    ),
+    "receipt_sha256": ("sha256:769a2b5fb758d6f39d73d9a1624eb822283abc7a4465288b01af4f2046f0679c"),
+    "file_sha256": ("sha256:6211d4c0727b951252ac435186a71cb957167d6efa04ebf826f8e49ddea5f817"),
     "job_uid": "9a1f90a2-e0f4-41b5-a5ed-77169eec1622",
     "pod_uid": "81a3f651-0d5e-46eb-b216-31c39da082f9",
     "failed_phase": "07-strict-current-peer",
@@ -98,10 +83,7 @@ def _seal(body: dict[str, Any]) -> dict[str, Any]:
 def _rebind_attempt(row: dict[str, Any]) -> dict[str, Any]:
     item = copy.deepcopy(row)
     execution = exact.execution_for(item["cell_id"], EXECUTION_GENERATION)
-    run_id = (
-        f"chris-glm53-ac-bulk-a-r030-a{item['attempt']}-g2-"
-        f"{execution['execution_id'][7:15]}"
-    )
+    run_id = f"chris-glm53-ac-bulk-a-r030-a{item['attempt']}-g2-{execution['execution_id'][7:15]}"
     item.update(
         execution_generation=EXECUTION_GENERATION,
         execution_id=execution["execution_id"],
@@ -156,9 +138,7 @@ def build_runtime_plan(
 ) -> dict[str, Any]:
     if controller != CONTROLLER:
         raise ValueError("unknown peer-free rank30 controller")
-    source_plan = prior.source.build_runtime_plan(
-        prior.SOURCE_CONTROLLER, inventory_receipt, root
-    )
+    source_plan = prior.source.build_runtime_plan(prior.SOURCE_CONTROLLER, inventory_receipt, root)
     return _transform(source_plan, runtime=True)
 
 
@@ -252,6 +232,9 @@ def expected_held(plan: dict[str, Any], source_package_sha256: str) -> dict[str,
                 "fresh_uid_bound_observer": True,
                 "all_four_rank30_cells_clear_all_generations": True,
                 "canonical_claim_session_accepted_output_collisions_zero": True,
+                "archived_sessions_included": True,
+                "stable_keyset_session_snapshot_required": True,
+                "session_identity_projection_required": "/v1/sessions/identities",
                 "fresh_job_configmap_sfs_collisions_zero": True,
                 "active_hosted_controllers": 0,
                 "both_endpoint_slots_simultaneously_free": True,
@@ -276,10 +259,19 @@ def validate_release(
         (
             set(release)
             != {
-                "schema_version", "status", "checked_at_utc", "launch_authorized",
-                "scoring_authorized", "controller", "source_package_sha256",
-                "ledger_authority", "live_ledger_validation", "diagnostic_v2",
-                "superseded_identities", "fresh_collision_reconciliation", "privacy",
+                "schema_version",
+                "status",
+                "checked_at_utc",
+                "launch_authorized",
+                "scoring_authorized",
+                "controller",
+                "source_package_sha256",
+                "ledger_authority",
+                "live_ledger_validation",
+                "diagnostic_v2",
+                "superseded_identities",
+                "fresh_collision_reconciliation",
+                "privacy",
                 "receipt_sha256",
             },
             release.get("schema_version") != RELEASE_SCHEMA,
@@ -295,12 +287,27 @@ def validate_release(
             release.get("superseded_identities") != SUPERSEDED_IDENTITIES,
             set(collision)
             != {
-                "checked_immediately_before_create", "observer_job_uid", "observer_pod_uid",
-                "observed_cells", "all_generation_claim_collisions",
-                "authoritative_session_collisions", "accepted_evidence_collisions",
-                "output_root_collisions", "new_job_collisions", "new_configmap_collisions",
-                "active_hosted_controllers", "endpoint_lease_slots_available",
-                "both_endpoint_lease_slots_simultaneously_free", "api_mutations",
+                "checked_immediately_before_create",
+                "observer_job_uid",
+                "observer_pod_uid",
+                "observed_cells",
+                "all_generation_claim_collisions",
+                "authoritative_session_collisions",
+                "accepted_evidence_collisions",
+                "output_root_collisions",
+                "new_job_collisions",
+                "new_pod_collisions",
+                "new_configmap_collisions",
+                "active_hosted_controllers",
+                "endpoint_lease_slots_available",
+                "both_endpoint_lease_slots_simultaneously_free",
+                "api_mutations",
+                "session_inventory_scans",
+                "archived_sessions_included",
+                "stable_session_snapshot",
+                "session_snapshot_sha256",
+                "session_identity_projection",
+                "accepted_authority_snapshot_sha256",
             },
             collision.get("checked_immediately_before_create") is not True,
             prior.engine.UUID_RE.fullmatch(str(collision.get("observer_job_uid"))) is None,
@@ -309,29 +316,37 @@ def validate_release(
             any(
                 collision.get(key) != 0
                 for key in (
-                    "all_generation_claim_collisions", "authoritative_session_collisions",
-                    "accepted_evidence_collisions", "output_root_collisions",
-                    "new_job_collisions", "new_configmap_collisions",
-                    "active_hosted_controllers", "api_mutations",
+                    "all_generation_claim_collisions",
+                    "authoritative_session_collisions",
+                    "accepted_evidence_collisions",
+                    "output_root_collisions",
+                    "new_job_collisions",
+                    "new_pod_collisions",
+                    "new_configmap_collisions",
+                    "active_hosted_controllers",
+                    "api_mutations",
                 )
             ),
             collision.get("endpoint_lease_slots_available") != 2,
             collision.get("both_endpoint_lease_slots_simultaneously_free") is not True,
+            collision.get("session_inventory_scans") != 1,
+            collision.get("archived_sessions_included") is not True,
+            collision.get("stable_session_snapshot") is not True,
+            collision.get("session_identity_projection") != "/v1/sessions/identities",
+            SHA256_RE.fullmatch(str(collision.get("session_snapshot_sha256"))) is None,
+            SHA256_RE.fullmatch(str(collision.get("accepted_authority_snapshot_sha256"))) is None,
             release.get("privacy")
             != {
                 "scores_read": False,
                 "prompts_traces_flags_read": False,
                 "credentials_included": False,
             },
-            release.get("receipt_sha256")
-            != self_hosted.digest_without(release, "receipt_sha256"),
+            release.get("receipt_sha256") != self_hosted.digest_without(release, "receipt_sha256"),
         )
     ):
         raise RuntimeError("peer-free rank30 release drifted")
     try:
-        checked_at = datetime.fromisoformat(
-            str(release["checked_at_utc"]).replace("Z", "+00:00")
-        )
+        checked_at = datetime.fromisoformat(str(release["checked_at_utc"]).replace("Z", "+00:00"))
         age = (datetime.now(UTC) - checked_at).total_seconds()
     except (KeyError, TypeError, ValueError):
         raise RuntimeError("peer-free rank30 release timestamp drifted") from None

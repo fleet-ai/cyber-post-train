@@ -1,0 +1,80 @@
+{
+  "schema_version": "fleet-hosted-glm-rank30-peer-free-production-held-v1",
+  "status": "HELD_RENDER_PREVIEW_ONLY",
+  "base_authority": {
+    "branch": "codex/exact-pass4-ledger-v6",
+    "commit": "4ee2d9e7f85a6b3cf5c8c37bfffb4fb8b856339f",
+    "ledger_tally": {
+      "accepted": 24,
+      "active": 0,
+      "blocked": 4,
+      "unstarted": 372
+    }
+  },
+  "release_observer": {
+    "job_name": "chris-glm53-peer-free-release-observer-v1",
+    "configmap_name": "chris-glm53-peer-free-release-observer-v1-package",
+    "output": "/mnt/sfs/jobs/chris-glm53-peer-free-release-observer-v1/RELEASE.json",
+    "binding_sha256": "sha256:a1122d179d1bb578e3ccddd7c43bb3b77373f3ec4fd41fb8406dcdae738f3726",
+    "configmap_sha256": "sha256:3523125911a6a1ed5cb813592507fcba18acd422c9638aa576fefbcef9d1f898",
+    "rendered_list_sha256": "sha256:d65acc3750f15993c8b8db83913a24ded4bd0085424b343b8ccccc4bc6df9e61",
+    "file_count": 29,
+    "launch_authorized": false,
+    "score_free": true,
+    "api_mutations": 0
+  },
+  "deployment_gate": {
+    "session_identity_projection": "/v1/sessions/identities",
+    "session_identity_row_keys": [
+      "eval_task_id",
+      "eval_task_version_id",
+      "model_id",
+      "model_identity",
+      "model_identity_status",
+      "session_id",
+      "status",
+      "task_key"
+    ],
+    "includes_archived_sessions": true,
+    "stable_keyset_snapshot_required": true,
+    "behavioral_probe_passed": false,
+    "observer_launch_authorized": false
+  },
+  "controller": {
+    "job_name": "chris-glm53-exact100-hosted-r030-whole-task-g2-v2",
+    "configmap_name": "chris-glm53-exact100-hosted-r030-whole-task-g2-package-v2",
+    "sfs_root": "/mnt/sfs/jobs/chris-glm53-exact100-hosted-r030-whole-task-g2-v2",
+    "source_package_sha256": "sha256:f4ead0f9af5b6649be6d8480b50561edd37cdef32dba83e16c7fb8afc0fe9b8e",
+    "create_once": true,
+    "launch_authorized": false,
+    "scoring_authorized": false
+  },
+  "required_live_sequence": [
+    "create release observer ConfigMap and Job exactly once",
+    "validate fresh digest-valid CLEAR_PEER_FREE receipt",
+    "repeat all mutable collision, controller, session, output, and lease checks",
+    "render a self-digested create preview no older than 60 seconds",
+    "create immutable controller ConfigMap and Job exactly once"
+  ],
+  "fail_closed_controls": {
+    "strict_json_duplicate_key_rejection": true,
+    "all_four_cells_all_generations_clear_required": true,
+    "authoritative_sessions_clear_required": true,
+    "session_identity_projection_required": "/v1/sessions/identities",
+    "stable_keyset_session_snapshot_required": true,
+    "exact_sanitized_acceptance_projections_clear_required": true,
+    "controller_job_configmap_pod_output_clear_required": true,
+    "both_endpoint_slots_simultaneously_free_required": true,
+    "materialized_observer_import_verified": true,
+    "materialized_controller_import_verified": true,
+    "stale_or_rehashed_malicious_receipts_rejected": true,
+    "repeat_submit_rejected": true
+  },
+  "privacy": {
+    "scores_read": false,
+    "prompts_traces_flags_read": false,
+    "credentials_included": false
+  },
+  "workload_mutations": 0,
+  "receipt_sha256": "sha256:999eb65d66e7b4148203eb6235d71afd2c093bd0ffa844a84e19a40236e0becc"
+}
