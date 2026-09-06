@@ -1,0 +1,103 @@
+{
+  "authorization": {
+    "claim_creation_authorized": false,
+    "launch_authorized": false,
+    "score_credit_authorized": false,
+    "workload_mutation_authorized": false
+  },
+  "campaign_id": "chris-cyber-q38-glm53-exact-easiest100-pass4-v1",
+  "future_release_requirements": {
+    "exact_harness_model_context_tools_and_compaction_binding": true,
+    "exact_successor_claim_and_output_roots_absent": true,
+    "fresh_accepted_active_and_claim_collision_scan": true,
+    "fresh_get_only_session_and_verifier_reconciliation": true,
+    "launch_time_capacity_and_lease_gate_required": true,
+    "separate_self_digesting_release_required": true,
+    "serving_block_identity_and_non_scored_parity_required": true
+  },
+  "infrastructure_invalid_class": "bound_endpoint_identity_discontinuity",
+  "model": "Qwen/Qwen3.8-27B",
+  "observed_at_utc": "2026-09-06T03:28:00Z",
+  "prior_execution": {
+    "acceptance_state": "local_receipt_present_but_not_credited",
+    "claim": {
+      "file_sha256": "sha256:8de97e7d3383fd5ac770f3ec6c695975842921e22be19839e9a0340d54421b0c",
+      "path": "/mnt/sfs/cell-execution-claims/opencode11827-autocontinue-v1/18f44011c472d154c8be8eea7f4e18f00fcad794709401c6875047f27bcba0b1.json",
+      "receipt_sha256": "sha256:18219263f3d95ea63465dafed3d1eb7dbeb9a3669dd8925ae93cef6ef1aee3b9"
+    },
+    "claim_and_incident_preserved": true,
+    "cleanup_state": "complete",
+    "execution_generation": 22,
+    "execution_id": "sha256:18f44011c472d154c8be8eea7f4e18f00fcad794709401c6875047f27bcba0b1",
+    "matching_authoritative_sessions": 1,
+    "process": {
+      "exit_code": 0,
+      "job_uid": "87fa3130-ad5b-4f9c-9554-4a9777f2b92d",
+      "pod_uid": "838cdd67-98be-4602-8605-a6308377d907",
+      "restarts": 0,
+      "terminal_reason": "Succeeded"
+    },
+    "session_preservation": "retained_excluded_as_protocol_invalid",
+    "verifier_state": "present_and_reconciled"
+  },
+  "privacy": {
+    "credentials_included": false,
+    "flags_read": false,
+    "prompts_read": false,
+    "scores_read": false,
+    "traces_read": false
+  },
+  "receipt_sha256": "sha256:f438d4d0edc81f29534bde81308d7f5a74bf930103c2abaab645c86ab09a5a31",
+  "schema_version": "fleet-infrastructure-invalid-generation-supersession-held-v1",
+  "scientific_basis": {
+    "classification_is_model_blind": true,
+    "classification_uses_model_output": false,
+    "classification_uses_prompts_traces_or_flags": false,
+    "classification_uses_scores": false,
+    "infrastructure_proof": {
+      "bound_endpoint_identity_discontinuity_proven": true
+    },
+    "prior_generation_remains_excluded_from_valid_outcomes": true
+  },
+  "sources": {
+    "blocked_disposition": {
+      "file_sha256": "sha256:e5a1ae3cca534beb242fb53d0aff22dfef4cbcbd97a6e009d66f17118b31b6c0",
+      "path": "docs/evidence/qwen38-study/2026-09-06-exact-pass4-blocked-cell-disposition-v2.json",
+      "receipt_sha256": "sha256:80b4ac45f0d31d9ede85a5bbccfae1a30fc6ea3aad097d524b48639a5d5e6c11"
+    },
+    "campaign": {
+      "file_sha256": "sha256:a8c379db6789232d8343ed37dee69bf3f841578efcb78c042d94f00ab8856867",
+      "path": "evals/fleet/configs/q38-glm53-exact-easiest100-pass4-campaign-v1.json"
+    },
+    "cell_evidence": [
+      {
+        "file_sha256": "sha256:7db57f6df3543dbacb5d027c80f248504907b00ccd67e04fb16b53add9319f78",
+        "path": "docs/evidence/qwen38-study/2026-09-05-qwen38-dedicated-dp8-r004-a2-preemption-incident-v1.json",
+        "receipt_sha256": "sha256:2f4670bca98eea2450f7394e7fd3e9014d097fd2b85ebcf9f10f2f620f81a08c"
+      }
+    ],
+    "selection": {
+      "file_sha256": "sha256:9f5e83123cfe7d8a3f4cc0b791ac1dc9032a3d5faf5eba2a431c7246069255df",
+      "path": "evals/fleet/configs/opencode-easiest-train100-selection-v2.json"
+    }
+  },
+  "statistical_cell": {
+    "cell_id": "sha256:f5dced06656b0bf069930628978ce31b6ff682f437c86d55c6b241b2f83f4f48",
+    "maximum_accepted_valid_generations": 1,
+    "one_cell_per_model_task_attempt": true
+  },
+  "status": "HELD_NO_LAUNCH",
+  "successor_execution": {
+    "claim_namespace": "opencode11827-autocontinue-v1",
+    "execution_generation": 23,
+    "execution_id": "sha256:3ded8967c4248a8bcf984469f4223eaa77a883a10bfdb61280da87f0bc9881ff",
+    "fresh_claim_required": true,
+    "same_model_task_version_attempt_and_cell_required": true
+  },
+  "task": {
+    "attempt": 2,
+    "key": "cysec1-2-current-gen_blackbox-8b929ebef54fb6207d898e95__blackbox_ctf_v1",
+    "selection_rank": 4,
+    "version_id": "02dd4e3f-d85d-4bf8-9976-eae2f102384d"
+  }
+}

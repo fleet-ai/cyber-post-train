@@ -1,0 +1,82 @@
+{
+  "authorization": {
+    "claim_creation_authorized": false,
+    "launch_authorized": false,
+    "score_credit_authorized": false,
+    "workload_mutation_authorized": false
+  },
+  "campaign_id": "chris-cyber-q38-glm53-exact-easiest100-pass4-v1",
+  "cells": [
+    {
+      "attempt": 4,
+      "cell_id": "sha256:f3921b5927bcf73a0df58ff991841db52f9b23f04cae5d482c5f7e8630308250",
+      "file_sha256": "sha256:3af66fbb69a0c47277265ff70ecb3235b0978051a9875f85e7a97226e3c236ec",
+      "infrastructure_invalid_class": "no_authoritative_outcome",
+      "model": "zai-org/GLM-5.3",
+      "path": "docs/evidence/glm53-study/2026-09-06-glm53-r001-a4-infrastructure-supersession-held-v1.json",
+      "prior_execution_id": "sha256:b475fceb1fa1875953ab08c7d769962c6b6c57c7a919d56b658140b37adaed78",
+      "receipt_sha256": "sha256:6d4727e9bb8c7f5a495b76ceaa8bfe9a8a35461686153608006670f73ec7a9e3",
+      "selection_rank": 1,
+      "successor_execution_id": "sha256:ab99bf91300c2c97addb32d42ff7177e4d9cdb1f01b3523ef9cb134c984a7eeb"
+    },
+    {
+      "attempt": 2,
+      "cell_id": "sha256:6edac950ae44ff62c07074a775afdb65cc9b394047883e0b57fcad84e74d2fa7",
+      "file_sha256": "sha256:b090e865d57ae048fe22d20a40c572ea26c167ed58d1488ac4fcbfc415267382",
+      "infrastructure_invalid_class": "no_authoritative_outcome",
+      "model": "Qwen/Qwen3.8-27B",
+      "path": "docs/evidence/qwen38-study/2026-09-06-qwen38-r003-a2-infrastructure-supersession-held-v1.json",
+      "prior_execution_id": "sha256:6a64d050625fdb15dde3a1a734ec88afd43ef1d07d7c6be8f1951addac62112e",
+      "receipt_sha256": "sha256:d56c53b470a0839de69151d5b4e971cb242353093b9a3b61f2cb19a3dd08d312",
+      "selection_rank": 3,
+      "successor_execution_id": "sha256:fe7570705b7e36bada79dcc5af1ceaa20a14bee536f23a06fb0004af52e715ee"
+    },
+    {
+      "attempt": 2,
+      "cell_id": "sha256:f5dced06656b0bf069930628978ce31b6ff682f437c86d55c6b241b2f83f4f48",
+      "file_sha256": "sha256:f4cba26461b8880372bfbff195083541c9fd65b3374d8d6725ed2c967646d9f0",
+      "infrastructure_invalid_class": "bound_endpoint_identity_discontinuity",
+      "model": "Qwen/Qwen3.8-27B",
+      "path": "docs/evidence/qwen38-study/2026-09-06-qwen38-r004-a2-infrastructure-supersession-held-v1.json",
+      "prior_execution_id": "sha256:18f44011c472d154c8be8eea7f4e18f00fcad794709401c6875047f27bcba0b1",
+      "receipt_sha256": "sha256:f438d4d0edc81f29534bde81308d7f5a74bf930103c2abaab645c86ab09a5a31",
+      "selection_rank": 4,
+      "successor_execution_id": "sha256:3ded8967c4248a8bcf984469f4223eaa77a883a10bfdb61280da87f0bc9881ff"
+    },
+    {
+      "attempt": 1,
+      "cell_id": "sha256:59df171f31662465c8a9a98844b254a3fcf6bb242e53347501248a8e499bb068",
+      "file_sha256": "sha256:c0b6f1000945be5a4b475c947efc00f5dd9f04fe1aa61f165ac76ae58aec91f7",
+      "infrastructure_invalid_class": "bound_endpoint_identity_discontinuity",
+      "model": "Qwen/Qwen3.8-27B",
+      "path": "docs/evidence/qwen38-study/2026-09-06-qwen38-r097-a1-infrastructure-supersession-held-v1.json",
+      "prior_execution_id": "sha256:c7ec5b2d485989c9e2e437714f4c6eeb94a2c2bb7f771b29a76da978e5a42ad1",
+      "receipt_sha256": "sha256:ab32d91d24ea6531687f47aca91d8e530afa02f330855e4bf17dd2c6fb949704",
+      "selection_rank": 97,
+      "successor_execution_id": "sha256:8328761973439abda8b457a291a9444733d378a2a1b8fb6bab3539b05c48023f"
+    }
+  ],
+  "counts": {
+    "bound_endpoint_identity_discontinuity": 2,
+    "held_cells": 4,
+    "launch_authorized": 0,
+    "no_authoritative_outcome": 2
+  },
+  "observed_at_utc": "2026-09-06T03:28:00Z",
+  "precedence": {
+    "fresh_generation_may_supersede_only_as_valid_execution_authority": true,
+    "ledger_must_retain_invalid_generations_as_operational_evidence": true,
+    "maximum_accepted_valid_generations_per_statistical_cell": 1,
+    "old_claims_sessions_and_incidents_remain_immutable": true
+  },
+  "privacy": {
+    "credentials_included": false,
+    "flags_read": false,
+    "prompts_read": false,
+    "scores_read": false,
+    "traces_read": false
+  },
+  "receipt_sha256": "sha256:d5026e869cc108c947fa4a9ea92768377b5c9225682f976e4b5c11d0fb6a9af1",
+  "schema_version": "fleet-infrastructure-invalid-generation-supersession-manifest-v1",
+  "status": "HELD_NO_LAUNCH"
+}
