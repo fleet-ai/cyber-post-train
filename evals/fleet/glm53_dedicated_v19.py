@@ -27,6 +27,9 @@ MODEL_PATH = v18.MODEL_PATH
 SERVER_ARGUMENTS = v18.SERVER_ARGUMENTS
 SERVER_ARGUMENTS_SHA256 = v18.SERVER_ARGUMENTS_SHA256
 EXPECTED_API_FIELDS = v18.EXPECTED_API_FIELDS
+# Compatibility input for the shared resource/duplicate gate only. The live
+# rail strips this stale cell receipt from v19 authority before hashing it.
+PRE_ADMISSION = v18.PRE_ADMISSION
 WATCHDOG_QUALIFICATION = {
     "receipt_path": (
         "/mnt/sfs/jobs/chris-glm53-dedicated-metric-watchdog-canary-v3/QUALIFIED.json"
