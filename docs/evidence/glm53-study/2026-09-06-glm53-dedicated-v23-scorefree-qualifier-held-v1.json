@@ -5,12 +5,12 @@
     2,
     4
   ],
-  "package_commit": "f02ba659a075914a9e11cab2de80d0d708ff6691",
-  "package_sha256": "sha256:c5d88668cf2280cc11383b00c69cc84a3c9549c00ff44f1adaaee593be59addc",
-  "plan_receipt_sha256": "sha256:97949d8b7dd214e85786ba39bf18496e92bae95e79e5c08d1071139ce3bc4477",
+  "package_commit": "d2364be5c7b837edd1b820215c7dc3c044ce1ac5",
+  "package_sha256": "sha256:f82d0763738783757fb89dccb1b6c20a5888ce332a6b78666ecaac4018181175",
+  "plan_receipt_sha256": "sha256:247e601a80e6d671d480878dbc1c739c4160b46ec246523587d1acc5f53ff639",
   "prompts_traces_flags_scores_or_model_outputs_included": false,
   "qualification_launch_authorized": false,
-  "receipt_sha256": "sha256:74c0afe694257fe6bbdc230ea46b4879831dbf8149397ddd2d4d2d3ef5938e39",
+  "receipt_sha256": "sha256:78593687314d107c3b95b64c893b9fce8882f78a14130ca40d27eca0d20a707b",
   "removed_false_prerequisite": {
     "rank51_attempt2_accepted_required": false,
     "reason": "rank51_attempt2_is_sealed_nonrepeatable_uncredited"
@@ -54,6 +54,7 @@
     "nodes": 1,
     "preemption_policy": "Never",
     "priority_class": "fleet-infra-quiet",
+    "priority_selection": "highest_jobs_api_admitted_nonpreempting",
     "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-glm53-tp8-a-v23",
     "served_id": "glm-5.3",
     "title": "chris-cyber-evalserve-glm53-tp8-a-v23"
