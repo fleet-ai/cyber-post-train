@@ -22,6 +22,7 @@ def test_concurrency_qualification_is_score_free_and_fail_closed() -> None:
     assert value["score_free_boundary"]["verifier_calls"] == 0
     assert value["score_free_boundary"]["scoring_calls"] == 0
     assert value["fail_closed_ramp"]["never_overlap_scored_controller"] is True
+    assert str(held.LEASE_ROOT).endswith("/opencode11827-dedicated-v22-v1")
     assert value["launch_prerequisites"]["rank51_attempt2_terminal_accepted"] is True
     assert value["scored_concurrency_change_authorized"] is False
 

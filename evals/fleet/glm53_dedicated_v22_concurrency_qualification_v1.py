@@ -25,7 +25,7 @@ PARITY = Path(
     "docs/evidence/glm53-study/2026-09-06-glm53-dedicated-v22-actual-opencode-parity.json"
 )
 ORIGIN = "http://ft-run-d2dff491-gfw5m-head-svc.fleet-train-jobs.svc.cluster.local:8000"
-LEASE_ROOT = Path("/mnt/sfs/endpoint-leases/glm53-v22-score-free-qualification-v1")
+LEASE_ROOT = Path("/mnt/sfs/endpoint-leases/opencode11827-dedicated-v22-v1")
 METRIC = re.compile(
     r'^sglang:num_requests_total\{model_name="glm-5\.3"\}\s+([0-9]+(?:\.[0-9]+)?)$', re.M
 )
@@ -207,7 +207,7 @@ def execute(
         raise QualificationError("qualification_result_collision")
     with endpoint_lease.acquire_endpoint_lease(
         lease_root=LEASE_ROOT,
-        endpoint_key="glm53-dedicated-v22",
+        endpoint_key=binding["api_run_id"],
         maximum_streams=1,
     ):
         waves = [
