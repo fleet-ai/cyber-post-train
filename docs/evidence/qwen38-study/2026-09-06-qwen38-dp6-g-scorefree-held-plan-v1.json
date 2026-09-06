@@ -1,0 +1,110 @@
+{
+  "config_path": "evals/fleet/configs/qwen38-dedicated-dp6-g-scorefree-v1-held.json",
+  "config_sha256": "sha256:00ae7af51de7c73bf8d40a210405855d0e14e2d917c3f36a4bec35a1f349654a",
+  "launch_authorized": false,
+  "lifecycle": {
+    "completed_request_delta_or_active_request_or_gpu_activity_only": true,
+    "health_or_clock_heartbeat_forbidden": true,
+    "idle_seconds": 600,
+    "release_on_idle_or_failure": true
+  },
+  "prompts_traces_flags_or_scores_included": false,
+  "qualification": {
+    "actual_opencode_version": "1.18.27",
+    "all_six_devices_active_at_c6_required": true,
+    "compaction_headroom_tokens": 20000,
+    "concurrency_ladder": [
+      1,
+      2,
+      4,
+      6
+    ],
+    "context_management": "opencode_1.18.27_native_compaction_autocontinue_v1",
+    "counter_producer_startup_grace_seconds": 120,
+    "counter_producer_wait_must_cover_pre_ready_plus_grace": true,
+    "exact_tool_names_order_and_arguments_required": true,
+    "max_model_requests": 600,
+    "max_output_tokens": 32768,
+    "minimum_latency_headroom_fraction": 0.2,
+    "minimum_latency_headroom_milliseconds": 120000,
+    "observer_sfs_mount_path_must_be_derived_from_pod_spec": true,
+    "server_health_precedes_counter_producer": true,
+    "server_pre_ready_timeout_seconds": 600,
+    "server_request_delta_must_equal_observed_model_requests": true,
+    "stable_post_binding_counter_baseline_required_before_every_wave": true,
+    "statistical_cells_selected": 0,
+    "strictly_ascending_stop_before_next_on_failure": true,
+    "task_instance_session_verifier_scoring_calls": 0,
+    "tool_catalog_sha256": "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a",
+    "tools": [
+      "bash",
+      "submit_report"
+    ]
+  },
+  "qualifier_controller": {
+    "configmap_name": "chris-cyber-q38-dp6-g-qualifier-v9",
+    "job_name": "chris-cyber-q38-dp6-g-qualifier-v9",
+    "output_root": "/mnt/sfs/jobs/chris-cyber-q38-dp6-g-qualifier-v9",
+    "preemption_policy": "Never",
+    "priority_class": "fleet-serve-low",
+    "priority_value": 100,
+    "task_instance_session_verifier_scoring_calls": 0
+  },
+  "receipt_sha256": "sha256:f8a0467155df0b620904f8b21c10cd2399a16671a193136fcea1ad538339a71a",
+  "release_first_gate": {
+    "active_project_gpu_nodes_required": 0,
+    "active_project_gpus_required": 0,
+    "active_project_serving_runs_required": 0,
+    "maximum_project_gpu_nodes": 2,
+    "maximum_project_gpus": 16,
+    "minimum_nominal_quota_headroom_gpus": 6,
+    "minimum_schedulable_six_gpu_fit_nodes": 1,
+    "projected_gpu_nodes": 1,
+    "projected_gpus": 6,
+    "target_jobs_api_kubernetes_sfs_matches_required": 0,
+    "unknown_or_orphan_project_objects_fail_closed": true
+  },
+  "schema_version": "fleet-qwen38-dp6-g-scorefree-held-plan-v1",
+  "scored_calls": 0,
+  "scoring_authorized": false,
+  "server": {
+    "data_parallel_size": 6,
+    "image": "ghcr.io/fleet-ai/cyber-post-train-glm53-runtime@sha256:ec93ba50613fd13fb4c0b0a9105767ab18209a1e0108dab0923aad694c0206ec",
+    "metric_observer": "evals/fleet/qwen38_dp6_metric_observer_v4.py",
+    "model_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "post_ready_idle_seconds": 600,
+    "preemption_policy": "Never",
+    "priority_class": "fleet-infra-quiet",
+    "priority_value": -1000,
+    "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-q38-dp6-g-v1",
+    "server_arguments_sha256": "sha256:85abc2d00c387bbd194be02c077a56541af7f2ee90e156cddda97a28fef65f0a",
+    "serving_block": "dedicated-qwen-dp6-g-v1",
+    "tensor_parallel_size": 1,
+    "title": "chris-cyber-evalserve-q38-dp6-g-v1"
+  },
+  "source_digests": {
+    "evals/fleet/qwen38_dp6_g_live_v1.py": "sha256:56ddd3ef11d8717a25bb3dc66758f25f7fcd2ba7ab41e1c0cb69b4946e7c235d",
+    "evals/fleet/qwen38_dp6_g_qualifier_package_v1.py": "sha256:b49f7d9a8cf11339ddbcc6505c22cd37ae93c86a50eeb1c8047313e549ae4053",
+    "evals/fleet/qwen38_dp6_g_qualifier_runtime_v1.py": "sha256:41ab93ddb5b4e83d59e0a60271e128a7427fc07d684e111f4b18f6cc4b0df0b8",
+    "evals/fleet/qwen38_dp6_metric_observer_v1.py": "sha256:4921dea0d25392ba98a678eb58e74ff952fb9331647bdf0579028e5b18fd89c8",
+    "evals/fleet/qwen38_dp6_metric_observer_v2.py": "sha256:5628072295f26ef7aaba02e239dcbca3945dd8e3d830f2443f2ef148cb723b90",
+    "evals/fleet/qwen38_dp6_metric_observer_v3.py": "sha256:7cb57d7c01103550ea91e83d2c8b8ce8d8ccc9ed2362f7ae046bdb45d68df3c9",
+    "evals/fleet/qwen38_dp6_metric_observer_v4.py": "sha256:2448d14d776f857aa09b67d73641d772fbc67c7ede04ed775eebc30fb9ab1eb3",
+    "evals/fleet/qwen38_dp6_qualification_guard_v2.py": "sha256:d5fc53c3d76656ac2f3aa2753a94a5dc4f672487877fbca43f77b487eb7eb240",
+    "evals/fleet/scripts/qwen38_dedicated_dp6_lifecycle_v2.sh": "sha256:78eb2f4766b6794fe77d2ee4cddd418899dd1ec05e7a0b89412869fe4980455b"
+  },
+  "statistical_cells_selected": 0,
+  "status": "HELD_PENDING_INDEPENDENT_REVIEW",
+  "successor_authority": {
+    "fresh_qualifier": "chris-cyber-q38-dp6-g-qualifier-v9",
+    "fresh_server_run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-q38-dp6-g-v1",
+    "fresh_server_title": "chris-cyber-evalserve-q38-dp6-g-v1",
+    "path": "docs/evidence/qwen38-study/2026-09-06-qwen38-dp6-f-readiness-terminal-v1.json",
+    "receipt_sha256": "sha256:5badc1bb9a67e72b4d47b35006450eb8c8b5654df090922bc5788310fbf792f2"
+  },
+  "superseded_plan": {
+    "path": "docs/evidence/qwen38-study/2026-09-06-qwen38-dp6-f-scorefree-held-plan-v1.json",
+    "receipt_sha256": "sha256:0d2b9ac29e14ef0388d146f04764ef6e630e1ad79f7ca70e2f5554072bc055b9",
+    "rewritten": false
+  }
+}
