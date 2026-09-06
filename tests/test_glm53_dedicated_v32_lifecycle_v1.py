@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -21,6 +22,7 @@ from evals.fleet import glm53_dedicated_v32_watchdog_package_v1 as watchdog
 
 ROOT = Path(__file__).resolve().parents[1]
 COMMIT = "630fbc20c1d11e3036ed4e94057c3ac4efccf520"
+BOUNDED_EXACT_GET_COMMIT = "7c2ebbf7d963d0ab50f3c3d4002d003e2fa2a5c8"
 
 
 class FakeBackend:
@@ -261,6 +263,124 @@ def test_v32_live_builder_pages_and_rejects_hidden_active_server() -> None:
         live_auth.LiveAuthorizationError, match="current_server_present"
     ):
         create_authorization(backend)
+
+
+def test_v32_live_builder_bounds_parallel_exact_gets() -> None:
+    backend = FakeBackend()
+    backend.rows = [
+        {
+            "name": f"ft-run-{index:08x}",
+            "title": f"chris-cyber-evalserve-old-v{index}",
+            "run_dir": f"/mnt/sfs/jobs/chris-cyber-evalserve-old-v{index}",
+            "status": "SUBMITTED",
+        }
+        for index in range(1, live_auth.MAX_EXACT_GET_WORKERS + 1)
+    ]
+    stale_backend = copy.deepcopy(backend)
+    reconciliation = stale_runs.build_reconciliation(
+        backend=stale_backend,
+        now=time.time(),
+    )
+    barrier = threading.Barrier(live_auth.MAX_EXACT_GET_WORKERS)
+    lock = threading.Lock()
+    in_flight = 0
+    maximum_in_flight = 0
+
+    def concurrent_get(_api_run_id: str) -> None:
+        nonlocal in_flight, maximum_in_flight
+        with lock:
+            in_flight += 1
+            maximum_in_flight = max(maximum_in_flight, in_flight)
+        try:
+            barrier.wait(timeout=2)
+            return None
+        finally:
+            with lock:
+                in_flight -= 1
+
+    backend.get_run = concurrent_get  # type: ignore[method-assign]
+    value = live_auth.build_live_authorization(
+        backend=backend,
+        payload=server.payload(),
+        title=server.TITLE,
+        run_dir=server.RUN_DIR,
+        control_result_path=server.RESULT_PATH,
+        request_sha256=server.request_sha256(),
+        priority_class=v24.PRIORITY_CLASS,
+        stale_run_reconciliation=reconciliation,
+        now=time.time(),
+    )
+
+    server.validate_authorization(value)
+    assert maximum_in_flight == live_auth.MAX_EXACT_GET_WORKERS
+
+
+def test_v32_parallel_exact_get_failure_is_sanitized() -> None:
+    backend = FakeBackend()
+    backend.rows = [
+        {
+            "name": "ft-run-deadbeef",
+            "title": "chris-cyber-evalserve-old-v1",
+            "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-old-v1",
+            "status": "SUBMITTED",
+        }
+    ]
+    stale_backend = copy.deepcopy(backend)
+    reconciliation = stale_runs.build_reconciliation(
+        backend=stale_backend,
+        now=time.time(),
+    )
+
+    def fail(_api_run_id: str) -> None:
+        raise RuntimeError("secret-shaped dynamic upstream error")
+
+    backend.get_run = fail  # type: ignore[method-assign]
+    with pytest.raises(live_auth.LiveAuthorizationError) as captured:
+        live_auth.build_live_authorization(
+            backend=backend,
+            payload=server.payload(),
+            title=server.TITLE,
+            run_dir=server.RUN_DIR,
+            control_result_path=server.RESULT_PATH,
+            request_sha256=server.request_sha256(),
+            priority_class=v24.PRIORITY_CLASS,
+            stale_run_reconciliation=reconciliation,
+            now=time.time(),
+        )
+    assert str(captured.value) == "v32_jobs_api_exact_get_invalid"
+    assert "secret-shaped" not in str(captured.value)
+    assert captured.value.__cause__ is None
+    assert captured.value.__suppress_context__ is True
+
+
+def test_v32_parallel_exact_get_rejects_duplicate_api_identity() -> None:
+    backend = FakeBackend()
+    row = {
+        "name": "ft-run-deadbeef",
+        "title": "chris-cyber-evalserve-old-v1",
+        "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-old-v1",
+        "status": "SUBMITTED",
+    }
+    backend.rows = [row, copy.deepcopy(row)]
+    stale_backend = copy.deepcopy(backend)
+    reconciliation = stale_runs.build_reconciliation(
+        backend=stale_backend,
+        now=time.time(),
+    )
+    with pytest.raises(
+        live_auth.LiveAuthorizationError, match="project_identity_invalid"
+    ):
+        live_auth.build_live_authorization(
+            backend=backend,
+            payload=server.payload(),
+            title=server.TITLE,
+            run_dir=server.RUN_DIR,
+            control_result_path=server.RESULT_PATH,
+            request_sha256=server.request_sha256(),
+            priority_class=v24.PRIORITY_CLASS,
+            stale_run_reconciliation=reconciliation,
+            now=time.time(),
+        )
 
 
 def test_v32_live_builder_accepts_reconciled_submitted_list_row_with_exact_404() -> None:
@@ -577,6 +697,25 @@ def test_v32_held_and_v31_terminal_receipts_are_digest_valid() -> None:
     assert terminal["fleet_session_calls"] == 0
     assert terminal["verifier_calls"] == 0
     assert terminal["scoring_calls"] == 0
+
+
+def test_v32_bounded_exact_get_package_is_digest_valid_and_held() -> None:
+    tracked = json.loads(
+        (
+            ROOT
+            / "docs/evidence/glm53-study/"
+            "2026-09-06-glm53-dedicated-v32-bounded-exact-get-latency-held-v1.json"
+        ).read_text()
+    )
+    assert tracked == package.build_held(ROOT, BOUNDED_EXACT_GET_COMMIT)
+    assert tracked["package_commit"] == BOUNDED_EXACT_GET_COMMIT
+    assert tracked["server_launch_authorized"] is False
+    assert tracked["qualification_launch_authorized"] is False
+    assert tracked["scored_launch_authorized"] is False
+    assert tracked["api_mutation_calls"] == 0
+    assert tracked["receipt_sha256"] == crypto.digest_without(
+        tracked, "receipt_sha256"
+    )
 
 
 def test_v32_live_create_review_receipts_are_immutable_and_held() -> None:

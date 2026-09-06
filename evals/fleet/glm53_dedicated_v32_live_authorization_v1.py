@@ -12,6 +12,7 @@ import urllib.parse
 import urllib.request
 import uuid
 from collections.abc import Mapping
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -25,6 +26,7 @@ ACTIVE_API_STATUSES = {"SUBMITTED", "SUSPENDED", "RUNNING"}
 TERMINAL_API_STATUSES = {"CANCELLED", "COMPLETED", "FAILED", "STOPPED", "SUCCEEDED"}
 MAX_NODES = 2
 MAX_GPUS = 16
+MAX_EXACT_GET_WORKERS = 8
 CONTROL_RESULT_PATH = (
     "/mnt/sfs/jobs/chris-cyber-evalserve-glm53-tp8-a-v32-create-control/CREATED.json"
 )
@@ -159,6 +161,7 @@ def _active_project_runs(
     reconciled = {
         row["api_run_id"]: row for row in reconciliation["reconciled_rows"]
     }
+    project_rows: list[tuple[dict[str, Any], str]] = []
     for row in rows:
         name = row.get("name")
         row_run_dir = row.get("run_dir")
@@ -174,7 +177,29 @@ def _active_project_runs(
         evidence = reconciled.get(name)
         if evidence is None:
             raise LiveAuthorizationError("v32_stale_run_reconciliation_invalid")
-        current = backend.get_run(name)
+        project_rows.append((row, name))
+    names = [name for _row, name in project_rows]
+    if len(names) != len(set(names)):
+        raise LiveAuthorizationError("v32_jobs_api_project_identity_invalid")
+    current_by_name: dict[str, dict[str, Any] | None] = {}
+    with ThreadPoolExecutor(
+        max_workers=min(MAX_EXACT_GET_WORKERS, max(1, len(names))),
+        thread_name_prefix="v32-exact-get",
+    ) as executor:
+        pending = {
+            executor.submit(backend.get_run, name): name
+            for name in names
+        }
+        for future in as_completed(pending):
+            name = pending[future]
+            try:
+                current_by_name[name] = future.result()
+            except Exception:
+                raise LiveAuthorizationError("v32_jobs_api_exact_get_invalid") from None
+    for row, name in project_rows:
+        row_run_dir = row["run_dir"]
+        evidence = reconciled[name]
+        current = current_by_name[name]
         if current is None:
             if evidence.get("exact_get_http_status") != 404:
                 raise LiveAuthorizationError("v32_jobs_api_history_live_drift")
