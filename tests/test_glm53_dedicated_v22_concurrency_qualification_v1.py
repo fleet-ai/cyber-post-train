@@ -112,9 +112,11 @@ def test_evaluator_passes_c1_c2_c4_and_fails_closed() -> None:
         gpu_waves.append(row)
     gpu = {"server": server, "waves": gpu_waves}
     assert held.evaluate(waves, gpu)["status"] == "PASSED_SCORE_FREE"
+    assert held.evaluate(waves, gpu)["qualified_concurrency_ceiling"] == 4
     waves[2]["throughput_streams_per_second"] = 0.14
     verdict = held.evaluate(waves, gpu)
     assert verdict["status"] == "FAILED"
+    assert verdict["qualified_concurrency_ceiling"] == 0
     assert "c4_throughput_ratio" in verdict["failures"]
     gpu_waves[1]["max_utilization_percent_by_device"][0] = 0
     gpu_waves[1]["receipt_sha256"] = self_hosted.digest_without(gpu_waves[1], "receipt_sha256")

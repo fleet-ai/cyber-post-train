@@ -175,6 +175,7 @@ def evaluate(waves: list[dict[str, Any]], gpu_observer: dict[str, Any]) -> dict[
         "status": "PASSED_SCORE_FREE" if not failures else "FAILED",
         "failures": failures,
         "scored_concurrency_change_authorized": not failures,
+        "qualified_concurrency_ceiling": max(CONCURRENCY) if not failures else 0,
     }
 
 
