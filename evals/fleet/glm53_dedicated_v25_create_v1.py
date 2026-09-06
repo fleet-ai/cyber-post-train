@@ -23,6 +23,7 @@ RESULT_SCHEMA = "fleet-glm53-dedicated-v25-create-result-v1"
 TITLE = "chris-cyber-evalserve-glm53-tp8-a-v25"
 RUN_DIR = "/mnt/sfs/jobs/chris-cyber-evalserve-glm53-tp8-a-v25"
 READY_PATH = RUN_DIR + "/READY.json"
+READY_SCHEMA = "fleet-glm53-dedicated-v25-application-ready-v1"
 API_URL = "https://api.ft.flt.build/v1/runs"
 AUTH_MAX_AGE_SECONDS = 60
 CONTROL_DIR = "/mnt/sfs/jobs/chris-cyber-evalserve-glm53-tp8-a-v25-create-control"
@@ -57,14 +58,22 @@ AUTH_KEYS = {
     "receipt_sha256",
 }
 
+SERVED_ID = v24.SERVED_ID
+MODEL_REVISION = v24.MODEL_REVISION
+CONTEXT_LENGTH = v24.CONTEXT_LENGTH
+
 
 class CreateError(RuntimeError):
     """The create-once GLM v25 server gate failed closed."""
 
 
+ServerPlanError = CreateError
+
+
 def _observer_source() -> str:
     source = v24.READY_OBSERVER
     replacements = (
+        (repr(v24.READY_SCHEMA), repr(READY_SCHEMA)),
         (repr(v24.READY_PATH), repr(READY_PATH)),
         (repr(v24.RUN_DIR), repr(RUN_DIR)),
         (repr(v24.TITLE), repr(TITLE)),
@@ -76,6 +85,35 @@ def _observer_source() -> str:
     if v24.TITLE in source or v24.RUN_DIR in source:
         raise CreateError("v25_observer_stale_identity_present")
     return source
+
+
+def validate_binding(binding: dict[str, Any]) -> None:
+    expected_keys = {
+        "server_title",
+        "server_run_dir",
+        "api_run_id",
+        "rayjob_uid",
+        "workload_uid",
+        "head_pod_uid",
+        "service_uid",
+        "service_origin",
+        "served_id",
+        "model_revision",
+        "context_length",
+    }
+    candidate = dict(binding)
+    candidate["server_title"] = v24.TITLE
+    candidate["server_run_dir"] = v24.RUN_DIR
+    try:
+        v24.validate_binding(candidate)
+    except v24.ServerPlanError as exc:
+        raise CreateError("v25_server_binding_invalid") from exc
+    if (
+        set(binding) != expected_keys
+        or binding.get("server_title") != TITLE
+        or binding.get("server_run_dir") != RUN_DIR
+    ):
+        raise CreateError("v25_server_binding_invalid")
 
 
 def payload() -> dict[str, Any]:

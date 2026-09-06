@@ -12,6 +12,7 @@ from evals.fleet import exact_pass4_crypto as crypto
 from evals.fleet import glm53_dedicated_v23_request_counter_watchdog_v1 as watchdog
 
 SCHEMA = "fleet-glm53-dedicated-v24-server-held-v1"
+READY_SCHEMA = "fleet-glm53-dedicated-v24-application-ready-v1"
 TITLE = "chris-cyber-evalserve-glm53-tp8-a-v24"
 RUN_DIR = "/mnt/sfs/jobs/chris-cyber-evalserve-glm53-tp8-a-v24"
 READY_PATH = RUN_DIR + "/READY.json"
@@ -107,7 +108,7 @@ while True:
     time.sleep(2)
 ready_at = time.time()
 body = {{
-    "schema_version": "fleet-glm53-dedicated-v24-application-ready-v1",
+    "schema_version": {READY_SCHEMA!r},
     "status": "APPLICATION_HEALTH_HTTP_200",
     "server_title": {TITLE!r},
     "server_run_dir": {RUN_DIR!r},
