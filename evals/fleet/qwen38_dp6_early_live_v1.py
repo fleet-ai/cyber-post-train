@@ -265,7 +265,9 @@ def _capacity_gate(tp1_node: str) -> dict[str, Any]:
     if sorted(row["gpus"] for row in target) != [1, 1]:
         raise RuntimeError("shared TP1 node peer GPU shape drifted")
 
-    local_queue = _kubectl_global_json("get", "localqueue", "training-lq", "-o", "json")
+    local_queue = _kubectl_global_json(
+        "get", "localqueue", "training-lq", "-n", shared.NAMESPACE, "-o", "json"
+    )
     queue = _kubectl_global_json("get", "clusterqueue", "training-cq", "-o", "json")
     if (
         local_queue.get("spec", {}).get("clusterQueue") != "training-cq"

@@ -50,6 +50,7 @@ STATIC_PATHS = {
     early.CONFIG_PATH,
     early.PLAN_PATH,
     early.V2_PLAN_PATH,
+    early.V3_PLAN_PATH,
     early.PREVIEW_PATH,
     early.INVENTORY_PATH,
     early.RELEASE_PATH,

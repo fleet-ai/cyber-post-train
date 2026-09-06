@@ -455,7 +455,10 @@ def test_capacity_gate_requires_unique_shared_six_gpu_fit_and_quota(
         "preemptionPolicy": "Never",
     }
 
+    calls: list[tuple[str, ...]] = []
+
     def read(*args: str) -> dict:
+        calls.append(args)
         joined = " ".join(args)
         if "priorityclass" in joined:
             return priority
@@ -469,6 +472,15 @@ def test_capacity_gate_requires_unique_shared_six_gpu_fit_and_quota(
 
     monkeypatch.setattr(live, "_kubectl_global_json", read)
     result = live._capacity_gate(target)  # noqa: SLF001
+    assert (
+        "get",
+        "localqueue",
+        "training-lq",
+        "-n",
+        "fleet-train-jobs",
+        "-o",
+        "json",
+    ) in calls
     assert result["unique_schedulable_six_gpu_fit"] is True
     assert result["target_free_gpus"] == 6
     assert result["b300_gpu_quota_headroom"] == 31
