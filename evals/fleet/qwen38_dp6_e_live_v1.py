@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import subprocess
+import uuid
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
@@ -20,6 +21,28 @@ SERVER_RELEASE_SCHEMA = "fleet-qwen38-dp6-e-server-release-v1"
 LIVE_GATE_SCHEMA = "fleet-qwen38-dp6-e-live-gate-v1"
 SUBMISSION_SCHEMA = "fleet-qwen38-dp6-e-submission-v1"
 ACTIVE_STATUSES = {"SUBMITTED", "SUSPENDED", "RUNNING"}
+PROJECT_SHAPE_KEYS = {
+    "current_gpu_nodes",
+    "current_gpus",
+    "projected_gpu_nodes",
+    "projected_gpus",
+    "maximum_gpu_nodes",
+    "maximum_gpus",
+    "active_project_rayjobs",
+    "active_project_gpu_pods",
+    "capacity",
+}
+CAPACITY_KEYS = {
+    "eligible_six_gpu_node_count",
+    "eligible_node_uids",
+    "b300_nominal_gpu_quota",
+    "b300_used_gpu_quota",
+    "b300_gpu_quota_headroom",
+    "local_queue_uid",
+    "cluster_queue_uid",
+    "priority_class",
+    "peer_preemption_required",
+}
 
 
 def _load(path: Path) -> dict[str, Any]:
@@ -49,6 +72,13 @@ def _condition_true(value: Mapping[str, Any], kind: str) -> bool:
         for row in value.get("status", {}).get("conditions") or []
         if isinstance(row, dict)
     )
+
+
+def _nonzero_uuid(value: object) -> bool:
+    try:
+        return uuid.UUID(str(value)).int != 0
+    except (AttributeError, TypeError, ValueError):
+        return False
 
 
 def _pod_gpu_requests(pod: Mapping[str, Any]) -> int:
@@ -290,8 +320,13 @@ def _shape_safe(value: object) -> bool:
     if not isinstance(value, dict):
         return False
     capacity = value.get("capacity") or {}
+    if not isinstance(capacity, dict):
+        return False
+    eligible_uids = capacity.get("eligible_node_uids")
     return (
-        value.get("current_gpu_nodes") == 0
+        set(value) == PROJECT_SHAPE_KEYS
+        and set(capacity) == CAPACITY_KEYS
+        and value.get("current_gpu_nodes") == 0
         and value.get("current_gpus") == 0
         and value.get("projected_gpu_nodes") == 1
         and value.get("projected_gpus") == 6
@@ -299,8 +334,17 @@ def _shape_safe(value: object) -> bool:
         and value.get("maximum_gpus") == 16
         and value.get("active_project_rayjobs") == 0
         and value.get("active_project_gpu_pods") == 0
-        and capacity.get("eligible_six_gpu_node_count", 0) >= 1
+        and isinstance(eligible_uids, list)
+        and capacity.get("eligible_six_gpu_node_count") == len(eligible_uids)
+        and len(eligible_uids) >= 1
+        and all(_nonzero_uuid(item) for item in eligible_uids)
+        and isinstance(capacity.get("b300_nominal_gpu_quota"), int)
+        and isinstance(capacity.get("b300_used_gpu_quota"), int)
         and capacity.get("b300_gpu_quota_headroom", 0) >= 6
+        and capacity.get("b300_nominal_gpu_quota") - capacity.get("b300_used_gpu_quota")
+        == capacity.get("b300_gpu_quota_headroom")
+        and _nonzero_uuid(capacity.get("local_queue_uid"))
+        and _nonzero_uuid(capacity.get("cluster_queue_uid"))
         and capacity.get("priority_class")
         == {
             "name": held.SERVER_PRIORITY_CLASS,
@@ -394,6 +438,47 @@ def validate_submission(
     if gate.get("receipt_sha256") != self_hosted.digest_without(gate, "receipt_sha256"):
         raise ValueError("DP6-e nested live gate digest drifted")
     config = held.config(root)
+    preview = _load(root / held.PREVIEW_PATH)
+    held.validate_preview(preview, root)
+    submission_keys = {
+        "schema_version",
+        "status",
+        "api_run_id",
+        "source_commit",
+        "title",
+        "run_dir",
+        "serving_block",
+        "config_sha256",
+        "server_release_receipt_sha256",
+        "live_gate_receipt_sha256",
+        "live_gate",
+        "request_sha256",
+        "project_resource_shape",
+        "route",
+        "http_status",
+        "server_instances_created",
+        "scored_calls",
+        "prompts_traces_flags_or_scores_included",
+        "receipt_sha256",
+    }
+    gate_keys = {
+        "schema_version",
+        "status",
+        "observed_at_utc",
+        "source_commit",
+        "server_release_receipt_sha256",
+        "config_sha256",
+        "request_sha256",
+        "active_project_serving_runs",
+        "project_resource_shape",
+        "target_identity_matches",
+        "sfs_observation",
+        "rendered",
+        "api_mutations",
+        "scored_calls",
+        "prompts_traces_flags_or_scores_included",
+        "receipt_sha256",
+    }
     expected = {
         "schema_version": SUBMISSION_SCHEMA,
         "status": "SUBMITTED_SCORE_FREE_DP6_E_SERVER",
@@ -412,21 +497,40 @@ def validate_submission(
         "scored_calls": 0,
         "prompts_traces_flags_or_scores_included": False,
     }
-    if value.get("receipt_sha256") != self_hosted.digest_without(
-        dict(value), "receipt_sha256"
-    ) or any(value.get(field) != expected_value for field, expected_value in expected.items()):
+    if (
+        set(value) != submission_keys
+        or set(gate) != gate_keys
+        or (
+            value.get("receipt_sha256") != self_hosted.digest_without(dict(value), "receipt_sha256")
+            or any(value.get(field) != expected_value for field, expected_value in expected.items())
+        )
+    ):
         raise ValueError("DP6-e submission receipt drifted")
     if not isinstance(value.get("api_run_id"), str) or not str(value["api_run_id"]).startswith(
         "ft-run-"
     ):
         raise ValueError("DP6-e submission receipt omitted its Jobs API identity")
-    if gate.get("source_commit") != source_commit or (
-        gate.get("server_release_receipt_sha256") != release.get("receipt_sha256")
+    sfs = gate.get("sfs_observation")
+    if not isinstance(sfs, dict):
+        raise ValueError("DP6-e SFS observation is absent")
+    if gate.get("schema_version") != LIVE_GATE_SCHEMA or (
+        gate.get("status") != "PASSED_IMMEDIATELY_BEFORE_CREATE"
+        or not isinstance(gate.get("observed_at_utc"), str)
+        or gate.get("source_commit") != source_commit
+        or gate.get("server_release_receipt_sha256") != release.get("receipt_sha256")
         or gate.get("config_sha256") != config["config_sha256"]
         or gate.get("request_sha256") != config["request_sha256"]
+        or gate.get("active_project_serving_runs") != 0
         or gate.get("target_identity_matches") != {"jobs_api": 0, "kubernetes": 0, "sfs": 0}
+        or set(sfs) != {"observer_pod_name", "observer_pod_uid", "run_dir_exists"}
+        or not isinstance(sfs.get("observer_pod_name"), str)
+        or not sfs.get("observer_pod_name")
+        or not _nonzero_uuid(sfs.get("observer_pod_uid"))
+        or sfs.get("run_dir_exists") is not False
+        or gate.get("rendered") != preview.get("rendered")
         or gate.get("api_mutations") != 0
         or gate.get("scored_calls") != 0
+        or gate.get("prompts_traces_flags_or_scores_included") is not False
         or not _shape_safe(gate.get("project_resource_shape"))
     ):
         raise ValueError("DP6-e nested live gate is not executable evidence")

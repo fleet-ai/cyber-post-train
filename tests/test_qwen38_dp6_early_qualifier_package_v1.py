@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import io
 import json
 import subprocess
@@ -22,24 +23,61 @@ def _receipt(value: dict[str, object]) -> dict[str, object]:
     return value
 
 
+def _project_shape() -> dict[str, object]:
+    return {
+        "current_gpu_nodes": 0,
+        "current_gpus": 0,
+        "projected_gpu_nodes": 1,
+        "projected_gpus": 6,
+        "maximum_gpu_nodes": 2,
+        "maximum_gpus": 16,
+        "active_project_rayjobs": 0,
+        "active_project_gpu_pods": 0,
+        "capacity": {
+            "eligible_six_gpu_node_count": 1,
+            "eligible_node_uids": ["55555555-5555-4555-8555-555555555555"],
+            "b300_nominal_gpu_quota": 128,
+            "b300_used_gpu_quota": 64,
+            "b300_gpu_quota_headroom": 64,
+            "local_queue_uid": "66666666-6666-4666-8666-666666666666",
+            "cluster_queue_uid": "77777777-7777-4777-8777-777777777777",
+            "priority_class": {
+                "name": "fleet-infra-quiet",
+                "value": -1000,
+                "preemption_policy": "Never",
+            },
+            "peer_preemption_required": False,
+        },
+    }
+
+
 def _inputs() -> tuple[dict[str, object], dict[str, object], dict[str, object]]:
     config = early.load_all(ROOT)[0]
     request_sha256 = self_hosted.sha256(self_hosted.canonical_json(early.jobs_payload(ROOT)))
     server_release_sha256 = "sha256:" + "9" * 64
     source_commit = "8" * 40
+    project_shape = _project_shape()
     live_gate = _receipt(
         {
             "schema_version": runtime.LIVE_GATE_SCHEMA,
             "status": "PASSED_IMMEDIATELY_BEFORE_CREATE",
+            "observed_at_utc": "2026-09-06T10:30:00Z",
             "source_commit": source_commit,
             "server_release_receipt_sha256": server_release_sha256,
             "config_sha256": config["config_sha256"],
             "request_sha256": request_sha256,
             "active_project_serving_runs": 0,
+            "project_resource_shape": project_shape,
             "target_identity_matches": {"jobs_api": 0, "kubernetes": 0, "sfs": 0},
-            "sfs_observation": {"run_dir_exists": False},
+            "sfs_observation": {
+                "observer_pod_name": "observer",
+                "observer_pod_uid": "88888888-8888-4888-8888-888888888888",
+                "run_dir_exists": False,
+            },
+            "rendered": early._load(ROOT / early.PREVIEW_PATH)["rendered"],  # noqa: SLF001
             "api_mutations": 0,
             "scored_calls": 0,
+            "prompts_traces_flags_or_scores_included": False,
         }
     )
     submission = _receipt(
@@ -55,6 +93,7 @@ def _inputs() -> tuple[dict[str, object], dict[str, object], dict[str, object]]:
             "server_release_receipt_sha256": server_release_sha256,
             "live_gate_receipt_sha256": live_gate["receipt_sha256"],
             "live_gate": live_gate,
+            "project_resource_shape": project_shape,
             "source_commit": source_commit,
             "route": "POST /v1/runs",
             "http_status": 202,
@@ -270,6 +309,41 @@ def test_runtime_revalidates_mounted_release_and_package(tmp_path: Path) -> None
     archive.write_bytes(archive.read_bytes() + b"drift")
     with pytest.raises(ValueError, match="mounted early DP6 qualifier release drifted"):
         runtime.validate_runtime_release(release, submission, binding, archive)
+
+
+def test_binding_requires_exact_fields_and_nonzero_workload_uid() -> None:
+    submission, binding, _ = _inputs()
+    variants = []
+    missing = copy.deepcopy(binding)
+    missing.pop("workload_uid")
+    variants.append(missing)
+    for invalid in ("", "not-a-uuid", "00000000-0000-0000-0000-000000000000"):
+        changed = copy.deepcopy(binding)
+        changed["workload_uid"] = invalid
+        variants.append(changed)
+    extra = copy.deepcopy(binding)
+    extra["ignored_future_field"] = "unsafe"
+    variants.append(extra)
+    empty_pod_name = copy.deepcopy(binding)
+    empty_pod_name["head_pod_name"] = ""
+    variants.append(empty_pod_name)
+    for changed in variants:
+        _receipt(changed)
+        with pytest.raises(ValueError):
+            runtime.validate_binding(changed, submission, ROOT)
+
+
+def test_runtime_submission_uses_strict_live_gate_validation() -> None:
+    submission, _, _ = _inputs()
+    runtime.validate_submission(submission, ROOT)
+    for mutate in ("project_resource_shape", "rendered"):
+        changed = copy.deepcopy(submission)
+        changed["live_gate"].pop(mutate)
+        _receipt(changed["live_gate"])
+        changed["live_gate_receipt_sha256"] = changed["live_gate"]["receipt_sha256"]
+        _receipt(changed)
+        with pytest.raises(ValueError):
+            runtime.validate_submission(changed, ROOT)
 
 
 def test_runtime_uses_cluster_dind_network_mode() -> None:

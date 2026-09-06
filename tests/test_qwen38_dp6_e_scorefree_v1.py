@@ -41,6 +41,34 @@ def _resign(value: dict[str, object]) -> None:
     value["receipt_sha256"] = self_hosted.digest_without(value, "receipt_sha256")
 
 
+def _project_shape() -> dict[str, object]:
+    return {
+        "current_gpu_nodes": 0,
+        "current_gpus": 0,
+        "projected_gpu_nodes": 1,
+        "projected_gpus": 6,
+        "maximum_gpu_nodes": 2,
+        "maximum_gpus": 16,
+        "active_project_rayjobs": 0,
+        "active_project_gpu_pods": 0,
+        "capacity": {
+            "eligible_six_gpu_node_count": 1,
+            "eligible_node_uids": ["11111111-1111-4111-8111-111111111111"],
+            "b300_nominal_gpu_quota": 128,
+            "b300_used_gpu_quota": 64,
+            "b300_gpu_quota_headroom": 64,
+            "local_queue_uid": "22222222-2222-4222-8222-222222222222",
+            "cluster_queue_uid": "33333333-3333-4333-8333-333333333333",
+            "priority_class": {
+                "name": "fleet-infra-quiet",
+                "value": -1000,
+                "preemption_policy": "Never",
+            },
+            "peer_preemption_required": False,
+        },
+    }
+
+
 def test_held_packet_is_append_only_score_free_and_exact() -> None:
     config, plan, preview, inventory, release = held.load_all(ROOT)
     assert held.TITLE == "chris-cyber-evalserve-q38-dp6-e-v1"
@@ -104,26 +132,7 @@ def test_artifacts_fail_closed(
 
 
 def test_release_first_shape_rejects_any_active_or_excess_project_state() -> None:
-    shape = {
-        "current_gpu_nodes": 0,
-        "current_gpus": 0,
-        "projected_gpu_nodes": 1,
-        "projected_gpus": 6,
-        "maximum_gpu_nodes": 2,
-        "maximum_gpus": 16,
-        "active_project_rayjobs": 0,
-        "active_project_gpu_pods": 0,
-        "capacity": {
-            "eligible_six_gpu_node_count": 2,
-            "b300_gpu_quota_headroom": 12,
-            "priority_class": {
-                "name": "fleet-infra-quiet",
-                "value": -1000,
-                "preemption_policy": "Never",
-            },
-            "peer_preemption_required": False,
-        },
-    }
+    shape = _project_shape()
     assert live._shape_safe(shape)  # noqa: SLF001
     for field, value in (("current_gpus", 1), ("projected_gpus", 17)):
         changed = copy.deepcopy(shape)
@@ -137,26 +146,7 @@ def test_create_once_repeats_complete_release_first_gate(
     payload = held.jobs_payload(ROOT)
     release = {"receipt_sha256": "sha256:" + "a" * 64}
     source_commit = "b" * 40
-    shape = {
-        "current_gpu_nodes": 0,
-        "current_gpus": 0,
-        "projected_gpu_nodes": 1,
-        "projected_gpus": 6,
-        "maximum_gpu_nodes": 2,
-        "maximum_gpus": 16,
-        "active_project_rayjobs": 0,
-        "active_project_gpu_pods": 0,
-        "capacity": {
-            "eligible_six_gpu_node_count": 1,
-            "b300_gpu_quota_headroom": 6,
-            "priority_class": {
-                "name": "fleet-infra-quiet",
-                "value": -1000,
-                "preemption_policy": "Never",
-            },
-            "peer_preemption_required": False,
-        },
-    }
+    shape = _project_shape()
     gate = {
         "schema_version": live.LIVE_GATE_SCHEMA,
         "status": "PASSED_IMMEDIATELY_BEFORE_CREATE",
@@ -207,37 +197,27 @@ def test_submission_validator_binds_complete_nested_gate_and_rejects_drift() -> 
     config = held.config(ROOT)
     source_commit = "b" * 40
     release = {"receipt_sha256": "sha256:" + "a" * 64}
-    shape = {
-        "current_gpu_nodes": 0,
-        "current_gpus": 0,
-        "projected_gpu_nodes": 1,
-        "projected_gpus": 6,
-        "maximum_gpu_nodes": 2,
-        "maximum_gpus": 16,
-        "active_project_rayjobs": 0,
-        "active_project_gpu_pods": 0,
-        "capacity": {
-            "eligible_six_gpu_node_count": 1,
-            "b300_gpu_quota_headroom": 6,
-            "priority_class": {
-                "name": "fleet-infra-quiet",
-                "value": -1000,
-                "preemption_policy": "Never",
-            },
-            "peer_preemption_required": False,
-        },
-    }
+    shape = _project_shape()
     gate = {
         "schema_version": live.LIVE_GATE_SCHEMA,
         "status": "PASSED_IMMEDIATELY_BEFORE_CREATE",
+        "observed_at_utc": "2026-09-06T10:30:00Z",
         "source_commit": source_commit,
         "server_release_receipt_sha256": release["receipt_sha256"],
         "config_sha256": config["config_sha256"],
         "request_sha256": config["request_sha256"],
+        "active_project_serving_runs": 0,
         "target_identity_matches": {"jobs_api": 0, "kubernetes": 0, "sfs": 0},
+        "sfs_observation": {
+            "observer_pod_name": "observer",
+            "observer_pod_uid": "44444444-4444-4444-8444-444444444444",
+            "run_dir_exists": False,
+        },
+        "rendered": held._load(ROOT / held.PREVIEW_PATH)["rendered"],  # noqa: SLF001
         "project_resource_shape": shape,
         "api_mutations": 0,
         "scored_calls": 0,
+        "prompts_traces_flags_or_scores_included": False,
     }
     _resign(gate)
     receipt = {
@@ -270,6 +250,13 @@ def test_submission_validator_binds_complete_nested_gate_and_rejects_drift() -> 
     _resign(tampered)
     with pytest.raises(ValueError):
         live.validate_submission(tampered, release, ROOT, source_commit)
+    extra = copy.deepcopy(receipt)
+    extra["live_gate"]["ignored_future_field"] = "unsafe"
+    _resign(extra["live_gate"])
+    extra["live_gate_receipt_sha256"] = extra["live_gate"]["receipt_sha256"]
+    _resign(extra)
+    with pytest.raises(ValueError):
+        live.validate_submission(extra, release, ROOT, source_commit)
 
 
 def test_release_first_plan_has_no_scored_cell_or_active_peer_exception() -> None:

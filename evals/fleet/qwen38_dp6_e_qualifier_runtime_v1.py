@@ -8,12 +8,14 @@ import hashlib
 import json
 import os
 import time
+import uuid
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
 from evals.fleet import opencode_actual_harness_parity_v1 as parity
 from evals.fleet import opencode_staged_image_v1 as staged_image
+from evals.fleet import qwen38_dp6_e_live_v1 as server_live
 from evals.fleet import qwen38_dp6_e_scorefree_v1 as early
 from evals.fleet import qwen38_dp6_metric_observer_v4 as metric_observer
 from evals.fleet import qwen38_dp8_post_rank99_launch_v1 as core
@@ -40,6 +42,32 @@ DRAIN_PATH = Path(early.RUN_DIR) / "lifecycle/DRAIN"
 BASELINE_WAIT_SECONDS = 30
 DRAIN_SCHEMA = "fleet-qwen38-dp6-qualifier-drain-request-v1"
 FAILURE_SCHEMA = "fleet-qwen38-dp6-qualifier-failure-v1"
+BINDING_KEYS = {
+    "schema_version",
+    "status",
+    "submission_receipt_sha256",
+    "api_run_id",
+    "title",
+    "run_dir",
+    "serving_block",
+    "service_origin",
+    "rayjob_uid",
+    "workload_uid",
+    "head_pod_name",
+    "head_pod_uid",
+    "service_uid",
+    "image",
+    "model_revision",
+    "context_length",
+    "tensor_parallel_size",
+    "data_parallel_size",
+    "head_pod_running_ready",
+    "head_pod_restarts",
+    "kueue_preempted",
+    "scoring_authorized",
+    "prompts_traces_flags_or_scores_included",
+    "receipt_sha256",
+}
 
 
 def _load(path: Path) -> dict[str, Any]:
@@ -99,68 +127,54 @@ def _write_failure_once(path: Path, stage: str, error: Exception) -> dict[str, A
 
 
 def validate_submission(value: Mapping[str, Any], root: Path) -> None:
-    config = early.load_all(root)[0]
-    gate = value.get("live_gate")
-    if not isinstance(gate, dict):
-        raise ValueError("early DP6 submission omitted durable live gate")
-    if value.get("receipt_sha256") != _digest(value) or (
-        value.get("schema_version") != SUBMISSION_SCHEMA
-        or value.get("status") != "SUBMITTED_SCORE_FREE_DP6_E_SERVER"
-        or value.get("title") != early.TITLE
-        or value.get("run_dir") != early.RUN_DIR
-        or value.get("serving_block") != early.SERVING_BLOCK
-        or value.get("config_sha256") != config["config_sha256"]
-        or value.get("request_sha256")
-        != self_hosted.sha256(self_hosted.canonical_json(early.jobs_payload(root)))
-        or value.get("live_gate_receipt_sha256") != gate.get("receipt_sha256")
-        or gate.get("receipt_sha256") != _digest(gate)
-        or gate.get("schema_version") != LIVE_GATE_SCHEMA
-        or gate.get("status") != "PASSED_IMMEDIATELY_BEFORE_CREATE"
-        or gate.get("source_commit") != value.get("source_commit")
-        or gate.get("server_release_receipt_sha256") != value.get("server_release_receipt_sha256")
-        or gate.get("config_sha256") != config["config_sha256"]
-        or gate.get("request_sha256") != value.get("request_sha256")
-        or gate.get("active_project_serving_runs") != 0
-        or gate.get("target_identity_matches") != {"jobs_api": 0, "kubernetes": 0, "sfs": 0}
-        or (gate.get("sfs_observation") or {}).get("run_dir_exists") is not False
-        or gate.get("api_mutations") != 0
-        or gate.get("scored_calls") != 0
-        or value.get("route") != "POST /v1/runs"
-        or value.get("http_status") != 202
-        or value.get("server_instances_created") != 1
-        or value.get("scored_calls") != 0
-        or value.get("prompts_traces_flags_or_scores_included") is not False
-    ):
-        raise ValueError("early DP6 submission receipt drifted")
-    api_run_id = value.get("api_run_id")
-    if not isinstance(api_run_id, str) or not api_run_id.startswith("ft-run-"):
-        raise ValueError("early DP6 submission API identity drifted")
+    source_commit = value.get("source_commit")
+    release_sha256 = value.get("server_release_receipt_sha256")
+    if not isinstance(source_commit, str) or not isinstance(release_sha256, str):
+        raise ValueError("early DP6 submission authority is incomplete")
+    server_live.validate_submission(
+        value,
+        {"receipt_sha256": release_sha256},
+        root,
+        source_commit,
+    )
 
 
 def validate_binding(
     value: Mapping[str, Any], submission: Mapping[str, Any], root: Path
 ) -> dict[str, Any]:
     validate_submission(submission, root)
-    if value.get("receipt_sha256") != _digest(value) or (
-        value.get("schema_version") != BINDING_SCHEMA
-        or value.get("status") != "READY_NON_SCORED"
-        or value.get("submission_receipt_sha256") != submission.get("receipt_sha256")
-        or value.get("api_run_id") != submission.get("api_run_id")
-        or value.get("title") != early.TITLE
-        or value.get("run_dir") != early.RUN_DIR
-        or value.get("serving_block") != early.SERVING_BLOCK
-        or value.get("image") != early.runtime.IMAGE
-        or value.get("model_revision") != early.runtime.MODEL_REVISION
-        or value.get("context_length") != 262144
-        or value.get("tensor_parallel_size") != 1
-        or value.get("data_parallel_size") != 6
-        or value.get("head_pod_running_ready") is not True
-        or value.get("head_pod_restarts") != 0
-        or value.get("kueue_preempted") is not False
-        or value.get("scoring_authorized") is not False
-        or value.get("prompts_traces_flags_or_scores_included") is not False
+    if (
+        set(value) != BINDING_KEYS
+        or value.get("receipt_sha256") != _digest(value)
+        or (
+            value.get("schema_version") != BINDING_SCHEMA
+            or value.get("status") != "READY_NON_SCORED"
+            or value.get("submission_receipt_sha256") != submission.get("receipt_sha256")
+            or value.get("api_run_id") != submission.get("api_run_id")
+            or value.get("title") != early.TITLE
+            or value.get("run_dir") != early.RUN_DIR
+            or value.get("serving_block") != early.SERVING_BLOCK
+            or value.get("image") != early.runtime.IMAGE
+            or value.get("model_revision") != early.runtime.MODEL_REVISION
+            or value.get("context_length") != 262144
+            or value.get("tensor_parallel_size") != 1
+            or value.get("data_parallel_size") != 6
+            or value.get("head_pod_running_ready") is not True
+            or value.get("head_pod_restarts") != 0
+            or value.get("kueue_preempted") is not False
+            or value.get("scoring_authorized") is not False
+            or value.get("prompts_traces_flags_or_scores_included") is not False
+        )
     ):
         raise ValueError("early DP6 server binding drifted")
+    try:
+        workload_uid = uuid.UUID(str(value.get("workload_uid")))
+    except (AttributeError, TypeError, ValueError) as exc:
+        raise ValueError("early DP6 Workload UID drifted") from exc
+    if workload_uid.int == 0:
+        raise ValueError("early DP6 Workload UID drifted")
+    if not isinstance(value.get("head_pod_name"), str) or not value.get("head_pod_name"):
+        raise ValueError("early DP6 head Pod name drifted")
     origin = value.get("service_origin")
     if (
         not isinstance(origin, str)
