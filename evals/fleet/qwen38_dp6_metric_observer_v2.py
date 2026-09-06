@@ -16,6 +16,7 @@ from typing import Any
 from evals.fleet import qwen38_dp6_metric_observer_v1 as legacy
 
 RANKS = 6
+BASELINE_SCHEMA = legacy.BASELINE_SCHEMA
 REQUEST_FAMILY = "sglang:num_requests_total"
 STARTUP_ANCHOR_FAMILY = "sglang:max_total_num_tokens"
 STATUS_SCHEMA = "fleet-qwen38-dp6-metric-observer-status-v2"

@@ -17,9 +17,9 @@ from evals.fleet import glm53_dedicated_v8_live as shared
 from evals.fleet import qwen38_dp6_early_qualification_v1 as early
 from evals.fleet import self_hosted
 
-SERVER_RELEASE_SCHEMA = "fleet-qwen38-dp6-early-server-launch-release-v2"
-LIVE_GATE_SCHEMA = "fleet-qwen38-dp6-early-live-submit-gate-v2"
-SUBMISSION_SCHEMA = "fleet-qwen38-dp6-early-submission-v2"
+SERVER_RELEASE_SCHEMA = "fleet-qwen38-dp6-early-server-launch-release-v3"
+LIVE_GATE_SCHEMA = "fleet-qwen38-dp6-early-live-submit-gate-v3"
+SUBMISSION_SCHEMA = "fleet-qwen38-dp6-early-submission-v3"
 TP1_BINDING_PATH = Path(
     "docs/evidence/qwen38-study/2026-09-05-qwen38-dedicated-tp1-j-v1-server-binding.json"
 )

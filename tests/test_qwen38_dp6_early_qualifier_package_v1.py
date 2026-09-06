@@ -29,7 +29,7 @@ def _inputs() -> tuple[dict[str, object], dict[str, object], dict[str, object]]:
     source_commit = "8" * 40
     live_gate = _receipt(
         {
-            "schema_version": "fleet-qwen38-dp6-early-live-submit-gate-v2",
+            "schema_version": runtime.LIVE_GATE_SCHEMA,
             "status": "PASSED_IMMEDIATELY_BEFORE_CREATE",
             "source_commit": source_commit,
             "server_release_receipt_sha256": server_release_sha256,
@@ -123,6 +123,9 @@ def test_archive_is_deterministic_and_contains_exact_runtime_closure(tmp_path: P
     with tarfile.open(fileobj=io.BytesIO(first), mode="r:gz") as archive:
         names = set(archive.getnames())
     assert str(early.QUALIFIER_RUNTIME_PATH) in names
+    assert str(early.OBSERVER_V1_PATH) in names
+    assert str(early.OBSERVER_V2_PATH) in names
+    assert str(early.LIFECYCLE_V2_PATH) in names
     assert "evals/fleet/opencode_actual_harness_parity_v1.py" in names
     assert "evals/fleet/configs/blackbox-ctf-tool-catalog-v1.json" in names
     assert "evals/fleet/opencode_staged_image_v1.py" in names
@@ -214,6 +217,36 @@ def test_renderer_is_create_once_score_free_and_needs_no_kubectl() -> None:
     assert "gzip -dc" in command
     assert package.staged_image.ARCHIVE_SHA256.removeprefix("sha256:") not in command
     assert package.staged_image.RUNTIME_IMAGE_ID in command
+
+
+def test_fresh_qualifier_identity_and_failure_drain_are_create_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    assert package.JOB_NAME == "chris-cyber-q38-dp6-c-qualifier-v5"
+    assert package.CONFIGMAP_NAME == package.JOB_NAME
+    assert package.OUTPUT_ROOT.endswith("/chris-cyber-q38-dp6-c-qualifier-v5")
+    drain = tmp_path / "lifecycle" / "DRAIN"
+    drain.parent.mkdir()
+    monkeypatch.setattr(runtime, "DRAIN_PATH", drain)
+    first = runtime._write_drain_once("qualifier_infrastructure_failure")  # noqa: SLF001
+    assert json.loads(drain.read_text()) == first
+    assert runtime._write_drain_once("qualifier_infrastructure_failure") == first  # noqa: SLF001
+    with pytest.raises(RuntimeError, match="different bytes"):
+        runtime._write_drain_once("qualification_below_c6")  # noqa: SLF001
+
+
+def test_lifecycle_releases_pre_ready_idle_and_bound_observer_failure() -> None:
+    source = (ROOT / early.LIFECYCLE_V2_PATH).read_text()
+    assert "PRE_READY_TIMEOUT_SECONDS=600" in source
+    assert "now - load_started_at >= PRE_READY_TIMEOUT_SECONDS" in source
+    assert "fleet-qwen38-dedicated-dp6-idle-release-v1" in source
+    assert "write_idle_receipt pre_ready" in source
+    assert "write_idle_receipt post_ready" in source
+    assert "IDLE_SECONDS=600" in source
+    assert '--status-path "$OBSERVER_STATUS"' in source
+    assert "observer_status != 0" in source
+    assert '[[ -f "$SERVER_BINDING" && ! -L "$SERVER_BINDING" ]]' in source
+    assert 'stop_server; server_pid=; exit "$observer_status"' in source
 
 
 def test_release_fails_closed_on_scoring_or_identity_drift() -> None:

@@ -140,7 +140,9 @@ def test_lifecycle_refreshes_idle_only_via_real_counter_observer() -> None:
     assert 'urlopen("http://127.0.0.1:8000/health"' in lifecycle
     assert 'touch "$TRAFFIC_FILE"' not in lifecycle
     source = (ROOT / early.OBSERVER_V2_PATH).read_text()
-    assert "The first post-binding sample establishes state only" in source
+    assert 'STARTUP_ANCHOR_FAMILY = "sglang:max_total_num_tokens"' in source
+    assert "absent request series are genuine zeros" in source
+    assert 'parser.add_argument("--status-path"' in source
     payload = early.jobs_payload(ROOT)
     assert str(early.RUNTIME_OBSERVER_PATH) in payload["command"]
     assert observer.__file__ is not None

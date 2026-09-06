@@ -17,6 +17,9 @@ from evals.fleet import qwen38_dp8_post_rank99_plan_v1 as predecessor
 from evals.fleet import self_hosted
 
 PLAN_PATH = Path(
+    "docs/evidence/qwen38-study/2026-09-06-qwen38-dp6-early-qualification-held-v7.json"
+)
+V6_PLAN_PATH = Path(
     "docs/evidence/qwen38-study/2026-09-06-qwen38-dp6-early-qualification-held-v6.json"
 )
 V5_PLAN_PATH = Path(
@@ -31,15 +34,18 @@ V3_PLAN_PATH = Path(
 V2_PLAN_PATH = Path(
     "docs/evidence/qwen38-study/2026-09-06-qwen38-dp6-early-qualification-held-v2.json"
 )
-CONFIG_PATH = Path("evals/fleet/configs/qwen38-dedicated-dp6-early-qualification-v3-held.json")
+CONFIG_PATH = Path("evals/fleet/configs/qwen38-dedicated-dp6-early-qualification-v4-held.json")
 PREVIEW_PATH = Path(
-    "docs/evidence/qwen38-study/2026-09-06-qwen38-dp6-early-qualification-preview-v3.json"
+    "docs/evidence/qwen38-study/2026-09-06-qwen38-dp6-early-qualification-preview-v4.json"
 )
 INVENTORY_PATH = Path(
     "docs/evidence/qwen38-study/2026-09-06-qwen38-dp6-early-qualification-node-inventory-v2.json"
 )
 RELEASE_PATH = Path(
-    "docs/evidence/qwen38-study/2026-09-06-qwen38-dp6-early-qualification-held-release-v6.json"
+    "docs/evidence/qwen38-study/2026-09-06-qwen38-dp6-early-qualification-held-release-v7.json"
+)
+B_V1_INCIDENT_PATH = Path(
+    "docs/evidence/qwen38-study/2026-09-06-qwen38-dp6-b-v1-baseline-deadlock-terminal.json"
 )
 V1_INCIDENT_PATH = Path(
     "docs/evidence/qwen38-study/"
@@ -48,25 +54,27 @@ V1_INCIDENT_PATH = Path(
 PRIORITY_CONTRACT_PATH = Path(
     "docs/evidence/qwen38-study/2026-09-06-qwen38-dp6-priority-contract-v1.json"
 )
-SCHEMA = "fleet-qwen38-dp6-early-qualification-held-v6"
-CONFIG_SCHEMA = "fleet-qwen38-dp6-early-qualification-config-v3"
-PREVIEW_SCHEMA = "fleet-qwen38-dp6-early-qualification-preview-v3"
+SCHEMA = "fleet-qwen38-dp6-early-qualification-held-v7"
+CONFIG_SCHEMA = "fleet-qwen38-dp6-early-qualification-config-v4"
+PREVIEW_SCHEMA = "fleet-qwen38-dp6-early-qualification-preview-v4"
 INVENTORY_SCHEMA = "fleet-qwen38-dp6-early-qualification-node-inventory-v2"
-RELEASE_SCHEMA = "fleet-qwen38-dp6-early-qualification-held-release-v6"
-TITLE = "chris-cyber-evalserve-q38-dp6-b-v1"
-RUN_DIR = "/mnt/sfs/jobs/chris-cyber-evalserve-q38-dp6-b-v1"
-SERVING_BLOCK = "dedicated-qwen-dp6-b-v1"
+RELEASE_SCHEMA = "fleet-qwen38-dp6-early-qualification-held-release-v7"
+TITLE = "chris-cyber-evalserve-q38-dp6-c-v1"
+RUN_DIR = "/mnt/sfs/jobs/chris-cyber-evalserve-q38-dp6-c-v1"
+SERVING_BLOCK = "dedicated-qwen-dp6-c-v1"
 SERVER_PRIORITY_CLASS = "fleet-infra-quiet"
 QUALIFIER_PRIORITY_CLASS = "fleet-serve-low"
 QUALIFIER_PRIORITY_VALUE = 100
 LOWER_NONPREEMPTING_PRIORITY_CLASS = "fleet-infra-quiet"
 LOWER_NONPREEMPTING_PRIORITY_VALUE = -1000
-LIFECYCLE_V2_PATH = Path("evals/fleet/scripts/qwen38_dedicated_dp6_lifecycle_v1.sh")
-OBSERVER_V2_PATH = Path("evals/fleet/qwen38_dp6_metric_observer_v1.py")
+LIFECYCLE_V2_PATH = Path("evals/fleet/scripts/qwen38_dedicated_dp6_lifecycle_v2.sh")
+OBSERVER_V1_PATH = Path("evals/fleet/qwen38_dp6_metric_observer_v1.py")
+OBSERVER_V2_PATH = Path("evals/fleet/qwen38_dp6_metric_observer_v2.py")
 QUALIFIER_RUNTIME_PATH = Path("evals/fleet/qwen38_dp6_early_qualifier_runtime_v1.py")
 QUALIFIER_PACKAGE_PATH = Path("evals/fleet/qwen38_dp6_early_qualifier_package_v1.py")
 LIVE_SUBMITTER_PATH = Path("evals/fleet/qwen38_dp6_early_live_v1.py")
-RUNTIME_OBSERVER_PATH = "/tmp/qwen38_dp6_metric_observer_v1.py"
+RUNTIME_OBSERVER_PATH = "/tmp/qwen38_dp6_metric_observer_v2.py"
+RUNTIME_LEGACY_OBSERVER_PATH = "/tmp/evals/fleet/qwen38_dp6_metric_observer_v1.py"
 
 
 def _load(path: Path) -> dict[str, Any]:
@@ -78,10 +86,16 @@ def _load(path: Path) -> dict[str, Any]:
 
 def jobs_payload(root: Path) -> dict[str, Any]:
     lifecycle = (root / LIFECYCLE_V2_PATH).read_text()
+    legacy_observer_source = (root / OBSERVER_V1_PATH).read_text()
     observer_source = (root / OBSERVER_V2_PATH).read_text()
     bootstrap = (
         "python3 - <<'PY'\n"
         "from pathlib import Path\n"
+        "Path('/tmp/evals/fleet').mkdir(parents=True, exist_ok=True)\n"
+        "Path('/tmp/evals/__init__.py').touch()\n"
+        "Path('/tmp/evals/fleet/__init__.py').touch()\n"
+        f"Path({RUNTIME_LEGACY_OBSERVER_PATH!r}).write_text({legacy_observer_source!r})\n"
+        f"Path({RUNTIME_LEGACY_OBSERVER_PATH!r}).chmod(0o400)\n"
         f"Path({RUNTIME_OBSERVER_PATH!r}).write_text({observer_source!r})\n"
         f"Path({RUNTIME_OBSERVER_PATH!r}).chmod(0o500)\n"
         "PY\n" + lifecycle
@@ -209,10 +223,18 @@ def validate_plan(value: Mapping[str, Any], root: Path) -> None:
             "predecessor_rewritten": False,
         },
         "superseded_held_plan": {
-            "path": str(V5_PLAN_PATH),
-            "receipt_sha256": _load(root / V5_PLAN_PATH)["receipt_sha256"],
-            "reason": "allow_flexible_one_or_two_node_placement_after_capacity_change",
+            "path": str(V6_PLAN_PATH),
+            "receipt_sha256": _load(root / V6_PLAN_PATH)["receipt_sha256"],
+            "reason": "replace_consumed_b_v1_with_zero_request_baseline_observer_v2",
             "predecessor_rewritten": False,
+        },
+        "superseded_b_v1_incident": {
+            "path": str(B_V1_INCIDENT_PATH),
+            "receipt_sha256": _load(root / B_V1_INCIDENT_PATH)["receipt_sha256"],
+            "server_identity_reusable": False,
+            "qualifier_identity_reusable": False,
+            "model_requests": 0,
+            "statistical_cells_selected": 0,
         },
         "superseded_v1_incident": {
             "path": str(V1_INCIDENT_PATH),
@@ -273,9 +295,9 @@ def validate_plan(value: Mapping[str, Any], root: Path) -> None:
         "qualifier_controller": {
             "placement": "fleet-train-jobs_cpu_job",
             "namespace": "fleet-train-jobs",
-            "job_name": "chris-cyber-q38-dp6-c-qualifier-v4",
-            "configmap_name": "chris-cyber-q38-dp6-c-qualifier-v4",
-            "output_root": "/mnt/sfs/jobs/chris-cyber-q38-dp6-c-qualifier-v4",
+            "job_name": "chris-cyber-q38-dp6-c-qualifier-v5",
+            "configmap_name": "chris-cyber-q38-dp6-c-qualifier-v5",
+            "output_root": "/mnt/sfs/jobs/chris-cyber-q38-dp6-c-qualifier-v5",
             "priority_class": QUALIFIER_PRIORITY_CLASS,
             "priority_value": QUALIFIER_PRIORITY_VALUE,
             "preemption_policy": "Never",
@@ -351,6 +373,12 @@ def validate_plan(value: Mapping[str, Any], root: Path) -> None:
             "metric_observer_file_sha256": self_hosted.sha256(
                 (root / OBSERVER_V2_PATH).read_bytes()
             ),
+            "legacy_observer_dependency_file_sha256": self_hosted.sha256(
+                (root / OBSERVER_V1_PATH).read_bytes()
+            ),
+            "observer_status_path": "lifecycle/OBSERVER-STATUS.json",
+            "zero_request_startup_anchor_family": "sglang:max_total_num_tokens",
+            "absent_request_family_means_zero_after_complete_startup_anchor": True,
             "stable_post_binding_counter_baseline_required_before_every_wave": True,
             "historical_request_counters_must_not_refresh_idle": True,
             "concurrency_ladder": [1, 2, 4, 6],
@@ -386,9 +414,12 @@ def validate_plan(value: Mapping[str, Any], root: Path) -> None:
         },
         "lifecycle": {
             "model_loading_counts_as_productive": True,
+            "pre_ready_timeout_seconds": 600,
             "post_ready_idle_seconds": 600,
             "real_traffic_only_refreshes_idle_deadline": True,
             "release_on_failure_or_idle": True,
+            "qualifier_failure_requests_drain": True,
+            "observer_failure_after_binding_is_fatal": True,
             "artificial_heartbeat_forbidden": True,
         },
         "privacy": {
