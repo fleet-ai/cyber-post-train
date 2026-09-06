@@ -29,4 +29,10 @@ uv run --with httpx==0.28.1 --with pyyaml==6.0.2 \
   python -m evals.fleet.glm53_dedicated_v22_concurrency_qualification_v1 run \
   --root /work \
   --authorization /authorization/authorization.json \
+  --gpu-observer-root "$QUALIFICATION_OUTPUT_ROOT/gpu-observer" \
   --out "$QUALIFICATION_OUTPUT_ROOT/RAW.json"
+uv run --with httpx==0.28.1 --with pyyaml==6.0.2 \
+  python -m evals.fleet.glm53_dedicated_v22_concurrency_qualification_v1 validate \
+  --root /work \
+  --raw "$QUALIFICATION_OUTPUT_ROOT/RAW.json" \
+  --out "$QUALIFICATION_OUTPUT_ROOT/QUALIFIED.json"

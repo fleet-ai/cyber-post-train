@@ -1,4 +1,5 @@
 import json
+from contextlib import nullcontext
 from pathlib import Path
 
 import pytest
@@ -22,6 +23,8 @@ def test_concurrency_qualification_is_score_free_and_fail_closed() -> None:
     assert value["score_free_boundary"]["verifier_calls"] == 0
     assert value["score_free_boundary"]["scoring_calls"] == 0
     assert value["fail_closed_ramp"]["never_overlap_scored_controller"] is True
+    assert value["fail_closed_ramp"]["gpu_observer_receipt_required_before_next_wave"] is True
+    assert value["fail_closed_ramp"]["ramp_2_requires"]["all_eight_gpus_active_in_wave"] is True
     assert str(held.LEASE_ROOT).endswith("/opencode11827-dedicated-v22-v1")
     assert value["launch_prerequisites"]["rank51_attempt2_terminal_accepted"] is True
     assert value["scored_concurrency_change_authorized"] is False
@@ -92,22 +95,78 @@ def _wave(concurrency: int, p95: float, throughput: float) -> dict:
 
 def test_evaluator_passes_c1_c2_c4_and_fails_closed() -> None:
     waves = [_wave(1, 10, 0.1), _wave(2, 15, 0.13), _wave(4, 19, 0.16)]
-    gpu = {
-        "waves": [
-            {
-                "concurrency": value,
-                "devices_seen": 8,
-                "samples_per_device": 3,
-                "server_identity_unchanged": True,
-            }
-            for value in (1, 2, 4)
-        ]
-    }
+    server = held.render(ROOT)["server"]
+    gpu_waves = []
+    for value in (1, 2, 4):
+        row = {
+            "schema_version": held.GPU_OBSERVER_SCHEMA,
+            "status": "OBSERVED_SCORE_FREE_WAVE",
+            "concurrency": value,
+            "server": server,
+            "devices_seen": 8,
+            "samples_per_device": 3,
+            "max_utilization_percent_by_device": [50] * 8,
+            "server_identity_unchanged": True,
+        }
+        row["receipt_sha256"] = self_hosted.digest_without(row, "receipt_sha256")
+        gpu_waves.append(row)
+    gpu = {"server": server, "waves": gpu_waves}
     assert held.evaluate(waves, gpu)["status"] == "PASSED_SCORE_FREE"
     waves[2]["throughput_streams_per_second"] = 0.14
     verdict = held.evaluate(waves, gpu)
     assert verdict["status"] == "FAILED"
     assert "c4_throughput_ratio" in verdict["failures"]
+    gpu_waves[1]["max_utilization_percent_by_device"][0] = 0
+    gpu_waves[1]["receipt_sha256"] = self_hosted.digest_without(gpu_waves[1], "receipt_sha256")
+    assert "c2_gpu_or_identity" in held.evaluate(waves, gpu)["failures"]
+
+
+def test_execute_stops_before_c4_when_c2_latency_fails(tmp_path: Path, monkeypatch) -> None:
+    plan = held.render(ROOT)
+    authorization_receipt = {
+        "qualification_launch_authorized": True,
+        "server": plan["server"],
+        "no_active_scored_controller": True,
+    }
+    authorization_receipt["receipt_sha256"] = self_hosted.digest_without(
+        authorization_receipt, "receipt_sha256"
+    )
+    authorization_path = tmp_path / "authorization.json"
+    authorization_path.write_text(json.dumps(authorization_receipt))
+    calls = []
+
+    def fake_wave(concurrency, **_kwargs):
+        calls.append(concurrency)
+        return _wave(concurrency, 10 if concurrency == 1 else 25, 0.1)
+
+    monkeypatch.setattr(held, "run_wave", fake_wave)
+    monkeypatch.setattr(
+        held.endpoint_lease, "acquire_endpoint_lease", lambda **_kwargs: nullcontext()
+    )
+
+    def observed(_root, concurrency, server):
+        row = {
+            "schema_version": held.GPU_OBSERVER_SCHEMA,
+            "status": "OBSERVED_SCORE_FREE_WAVE",
+            "concurrency": concurrency,
+            "server": server,
+            "devices_seen": 8,
+            "samples_per_device": 2,
+            "max_utilization_percent_by_device": [50] * 8,
+            "server_identity_unchanged": True,
+        }
+        row["receipt_sha256"] = self_hosted.digest_without(row, "receipt_sha256")
+        return row
+
+    with pytest.raises(held.QualificationError, match="c2_latency_gate_failed"):
+        held.execute(
+            ROOT,
+            authorization_path,
+            tmp_path / "RAW.json",
+            gpu_observer_root=tmp_path / "gpu",
+            observer=observed,
+        )
+    assert calls == [1, 2]
 
 
 def test_post_acceptance_authorization_is_score_free_only() -> None:

@@ -31,6 +31,8 @@ METRIC = re.compile(
 )
 CONCURRENCY = (1, 2, 4)
 STREAM_IDS = ("synthetic-a", "synthetic-b", "synthetic-c", "synthetic-d")
+GPU_OBSERVER_SCHEMA = "fleet-glm53-dedicated-v22-concurrency-gpu-wave-v1"
+GPU_OBSERVER_WAIT_SECONDS = 300
 
 
 class QualificationError(RuntimeError):
@@ -152,12 +154,9 @@ def evaluate(waves: list[dict[str, Any]], gpu_observer: dict[str, Any]) -> dict[
             or wave.get("request_counter_delta") != wave.get("model_requests_observed")
         ):
             failures.append(f"c{concurrency}_protocol_or_counter")
-        if (
-            observed.get("devices_seen") != 8
-            or not isinstance(observed.get("samples_per_device"), int)
-            or observed["samples_per_device"] < 1
-            or observed.get("server_identity_unchanged") is not True
-        ):
+        try:
+            validate_gpu_wave(observed, concurrency, gpu_observer.get("server"))
+        except QualificationError:
             failures.append(f"c{concurrency}_gpu_or_identity")
     base_p95 = float(waves[0]["stream_latency_seconds"]["p95"])
     if base_p95 <= 0:
@@ -179,6 +178,56 @@ def evaluate(waves: list[dict[str, Any]], gpu_observer: dict[str, Any]) -> dict[
     }
 
 
+def validate_gpu_wave(
+    observed: dict[str, Any], concurrency: int, expected_server: dict[str, Any] | None
+) -> None:
+    utilization = observed.get("max_utilization_percent_by_device")
+    if (
+        observed.get("schema_version") != GPU_OBSERVER_SCHEMA
+        or observed.get("status") != "OBSERVED_SCORE_FREE_WAVE"
+        or observed.get("concurrency") != concurrency
+        or observed.get("server") != expected_server
+        or observed.get("devices_seen") != 8
+        or not isinstance(observed.get("samples_per_device"), int)
+        or observed["samples_per_device"] < 1
+        or not isinstance(utilization, list)
+        or len(utilization) != 8
+        or any(type(value) not in {int, float} or not 0 < value <= 100 for value in utilization)
+        or observed.get("server_identity_unchanged") is not True
+        or observed.get("receipt_sha256") != self_hosted.digest_without(observed, "receipt_sha256")
+    ):
+        raise QualificationError("gpu_wave_observer_invalid")
+
+
+def validate_runtime_ramp(wave: dict[str, Any], *, baseline: dict[str, Any] | None = None) -> None:
+    concurrency = int(wave.get("concurrency", 0))
+    if (
+        concurrency not in CONCURRENCY
+        or wave.get("streams_succeeded") != concurrency
+        or wave.get("errors") != 0
+        or wave.get("retries") != 0
+        or wave.get("timeouts") != 0
+        or wave.get("request_counter_delta") != wave.get("model_requests_observed")
+    ):
+        raise QualificationError(f"c{concurrency}_runtime_gate_failed")
+    if baseline is not None:
+        baseline_p95 = float(baseline["stream_latency_seconds"]["p95"])
+        if baseline_p95 <= 0 or float(wave["stream_latency_seconds"]["p95"]) / baseline_p95 > 2.0:
+            raise QualificationError(f"c{concurrency}_latency_gate_failed")
+
+
+def await_gpu_observer(root: Path, concurrency: int, server: dict[str, Any]) -> dict[str, Any]:
+    path = root / f"c{concurrency}.json"
+    deadline = time.monotonic() + GPU_OBSERVER_WAIT_SECONDS
+    while time.monotonic() < deadline:
+        if path.is_file() and not path.is_symlink():
+            observed = load(path)
+            validate_gpu_wave(observed, concurrency, server)
+            return observed
+        time.sleep(1)
+    raise QualificationError(f"c{concurrency}_gpu_observer_timeout")
+
+
 def write_once(path: Path, body: dict[str, Any]) -> None:
     body["receipt_sha256"] = self_hosted.digest_without(body, "receipt_sha256")
     self_hosted.write_json_once(path, body)
@@ -191,6 +240,8 @@ def execute(
     *,
     runner: HarnessRunner = actual_harness.run,
     counter: Callable[[str], int] = read_request_counter,
+    gpu_observer_root: Path,
+    observer: Callable[[Path, int, dict[str, Any]], dict[str, Any]] = await_gpu_observer,
 ) -> dict[str, Any]:
     plan = render(root)
     authorization = load(authorization_path)
@@ -210,16 +261,28 @@ def execute(
         endpoint_key=binding["api_run_id"],
         maximum_streams=1,
     ):
-        waves = [
-            run_wave(
+        waves: list[dict[str, Any]] = []
+        gpu_waves: list[dict[str, Any]] = []
+        for concurrency in CONCURRENCY:
+            phase = {
+                "schema_version": "fleet-glm53-dedicated-v22-concurrency-phase-v1",
+                "status": "WAVE_STARTED_SCORE_FREE",
+                "concurrency": concurrency,
+                "server": plan["server"],
+            }
+            write_once(out.parent / f"PHASE-c{concurrency}.json", phase)
+            wave = run_wave(
                 concurrency,
                 origin=ORIGIN,
                 binding=binding,
                 runner=runner,
                 counter=counter,
             )
-            for concurrency in CONCURRENCY
-        ]
+            validate_runtime_ramp(wave, baseline=waves[0] if waves else None)
+            observed = observer(gpu_observer_root, concurrency, plan["server"])
+            validate_gpu_wave(observed, concurrency, plan["server"])
+            waves.append(wave)
+            gpu_waves.append(observed)
     result = {
         "schema_version": "fleet-glm53-dedicated-v22-concurrency-raw-v1",
         "status": "COMPLETED_SCORE_FREE_WAVES",
@@ -227,6 +290,7 @@ def execute(
         "authorization_receipt_sha256": authorization["receipt_sha256"],
         "server": plan["server"],
         "waves": waves,
+        "gpu_waves": gpu_waves,
         "fleet_task_instance_calls": 0,
         "fleet_session_calls": 0,
         "verifier_calls": 0,
@@ -318,7 +382,7 @@ def render(root: Path) -> dict[str, Any]:
                 "http_or_harness_failures": 0,
                 "timeout_or_retry_policy_changes": 0,
                 "p95_latency_ratio_to_baseline_lte": 2.0,
-                "all_eight_gpus_visible": True,
+                "all_eight_gpus_active_in_wave": True,
                 "server_identity_unchanged": True,
             },
             "ramp_4_requires": {
@@ -327,9 +391,11 @@ def render(root: Path) -> dict[str, Any]:
                 "timeout_or_retry_policy_changes": 0,
                 "p95_latency_ratio_to_baseline_lte": 2.0,
                 "throughput_ratio_to_baseline_gte": 1.5,
+                "all_eight_gpus_active_in_wave": True,
                 "server_identity_unchanged": True,
             },
             "stop_on_first_failed_requirement": True,
+            "gpu_observer_receipt_required_before_next_wave": True,
             "never_overlap_scored_controller": True,
         },
         "launch_prerequisites": {
@@ -352,25 +418,30 @@ def main() -> int:
     parser.add_argument("--root", type=Path, default=Path.cwd())
     parser.add_argument("--authorization", type=Path)
     parser.add_argument("--raw", type=Path)
-    parser.add_argument("--gpu-observer", type=Path)
+    parser.add_argument("--gpu-observer-root", type=Path)
     parser.add_argument("--out", type=Path)
     args = parser.parse_args()
     if args.command == "plan":
         print(json.dumps(render(args.root), sort_keys=True))
     elif args.command == "run":
-        if args.authorization is None or args.out is None:
-            parser.error("run requires --authorization and --out")
-        execute(args.root, args.authorization, args.out)
+        if args.authorization is None or args.out is None or args.gpu_observer_root is None:
+            parser.error("run requires --authorization, --gpu-observer-root, and --out")
+        execute(
+            args.root,
+            args.authorization,
+            args.out,
+            gpu_observer_root=args.gpu_observer_root,
+        )
     else:
-        if args.raw is None or args.gpu_observer is None or args.out is None:
-            parser.error("validate requires --raw, --gpu-observer, and --out")
+        if args.raw is None or args.out is None:
+            parser.error("validate requires --raw and --out")
         raw = load(args.raw)
-        observed = load(args.gpu_observer)
+        observed = {"server": raw["server"], "waves": raw["gpu_waves"]}
         verdict = {
             "schema_version": "fleet-glm53-dedicated-v22-concurrency-qualified-v1",
             **evaluate(raw["waves"], observed),
             "raw_receipt_sha256": raw["receipt_sha256"],
-            "gpu_observer_receipt_sha256": observed["receipt_sha256"],
+            "gpu_observer_receipt_sha256s": [row["receipt_sha256"] for row in raw["gpu_waves"]],
             "privacy": False,
         }
         write_once(args.out, verdict)
