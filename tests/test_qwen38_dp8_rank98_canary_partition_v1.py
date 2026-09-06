@@ -7,15 +7,16 @@ from evals.fleet import self_hosted
 
 
 def _qualification() -> dict:
-    return {
+    value = {
         "plan_receipt_sha256": "sha256:" + "1" * 64,
-        "receipt_sha256": "sha256:" + "2" * 64,
         "highest_passing_concurrency": 8,
         "scored_calls": 0,
         "levels": [
             {"concurrency": value, "status": "PASSED"} for value in (1, 2, 4, 8)
         ],
     }
+    value["receipt_sha256"] = self_hosted.digest_without(value, "receipt_sha256")
+    return value
 
 
 def _server() -> dict:
@@ -30,6 +31,7 @@ def _server() -> dict:
         "head_pod_uid": "33333333-3333-4333-8333-333333333333",
         "service_uid": "44444444-4444-4444-8444-444444444444",
         "service_origin": "http://ft-run-12345678-head-svc.example:8000",
+        "traffic_path": partition.early.RUN_DIR + "/lifecycle/traffic",
         "served_id": "qwen3.8-27b",
         "context_length": 262144,
         "tensor_parallel_size": 1,

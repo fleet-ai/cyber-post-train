@@ -56,4 +56,6 @@ jobs:
             tests/test_qwen38_dp8_early_qualification_v1.py \
             tests/test_qwen38_dp8_rank98_canary_partition_v1.py \
             tests/test_qwen38_dp8_rank98_canary_package_v1.py \
+            tests/test_qwen38_dp8_rank98_canary_controller_v1.py \
+            tests/test_qwen38_dp8_rank98_canary_executable_package_v1.py \
             tests/test_qwen38_dp8_metric_observer_v2.py

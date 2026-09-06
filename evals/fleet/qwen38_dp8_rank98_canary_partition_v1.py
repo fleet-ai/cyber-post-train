@@ -97,6 +97,7 @@ def _validate_server(value: Mapping[str, Any]) -> None:
         or any(UUID_RE.fullmatch(str(value.get(field, ""))) is None for field in uid_fields)
         or not str(value.get("service_origin", "")).startswith("http://")
         or not str(value.get("service_origin", "")).endswith(":8000")
+        or not str(value.get("traffic_path", "")).startswith(str(early.RUN_DIR))
         or value.get("served_id") != "qwen3.8-27b"
         or value.get("context_length") != 262144
         or value.get("tensor_parallel_size") != 1
@@ -193,6 +194,7 @@ def build_held(
         "scoring_authorized": False,
         "qualification_result_sha256": qualification_sha,
         "qualified_concurrency_ceiling": 8,
+        "fresh_live_scan_receipt_sha256": live_scan["receipt_sha256"],
         "ledger": {
             "path": LEDGER_PATH,
             "receipt_sha256": LEDGER_RECEIPT_SHA256,
