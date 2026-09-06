@@ -28,7 +28,7 @@ The check is GET-only. It must prove that the deployed `POST /v1/runs` request b
 1. Pin the image by immutable digest and bind the exact command, model path/revision, resources, run directory, priority, preemption policy, secrets, and topology.
 2. Use `POST /v1/runs/preview` first and validate the rendered image, command, pull secret, GPU count, priority, preemption behavior, mounts, and run directory.
 3. Search every page of `GET /v1/runs` plus live Kubernetes objects and the shared run directory before submission. A title alone is not a duplicate key because the service mints the run name.
-4. Submit once. Persist a sanitized receipt containing the request digest, returned `ft-run-*` name, run directory, and later the RayJob, Workload, and Pod UIDs. Never persist the bearer token.
+4. Submit once. Persist a sanitized receipt containing the request digest, returned API run name, run directory, and later the RayJob, Workload, and Pod UIDs. Never persist the bearer token.
 5. Prove model identity and non-scored behavioral parity before directing scored controllers to a new server.
 
 ## Resource discipline

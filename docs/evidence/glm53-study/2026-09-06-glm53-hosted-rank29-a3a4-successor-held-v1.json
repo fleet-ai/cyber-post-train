@@ -1,0 +1,73 @@
+{
+  "api_mutation_calls": 0,
+  "blocked_predecessor": {
+    "attempt": 2,
+    "claim_receipt_sha256": "sha256:bd17483d6e18c033cf19a1277e172a481c2abb8e35cee3840be9ad53b8dffc72",
+    "job_terminal_reason": "DeadlineExceeded",
+    "job_uid": "faf01255-0696-43e6-a47f-67802184986e",
+    "pod_uid": "72ce8163-fb2d-40ac-92da-da0dd578658d",
+    "repeat_allowed": false
+  },
+  "controller_job": "chris-glm53-exact100-hosted-r029-a3a4-successor-v1",
+  "execution_ids": [
+    "sha256:6df2e9eb387b1d6cf2cbd5c1e82d955f5a90b07d44f0cfd4ba4d83139e1cf993",
+    "sha256:708601826b6acefa693d49318475fceca0541095af3f5422d10e7c7b15e1a72b"
+  ],
+  "job_active_deadline_seconds": 86400,
+  "launch_authorized": false,
+  "maximum_scored_streams": 2,
+  "model": "glm-5.3",
+  "package_sha256": "sha256:52fd71ebb12aecb5a2600743be3605be00e64534d7a8919e19aaae14036e7e83",
+  "plan_sha256": "sha256:8ca09b5e050c040c254ba407d6055dd7f9d0c5f7cdea4c1e0c715a05ab8acd8c",
+  "preclaim_guard_seconds": 32400,
+  "prompts_traces_flags_scores_or_model_outputs_included": false,
+  "peer_terminal_prerequisite": {
+    "accepted_receipt_sha256s": [
+      "sha256:b9d644bbbe844c9840a789880893629becc0953ea607fc92a98f886beeaa9d55",
+      "sha256:399aac0f15220d9f4f6ccfab857a02eeddabda496dad2f628cf072df8080f692",
+      "sha256:182d5ddd1f7f1632f296ab695127184d5d73d116425dc2cc0f73d226e0f02f27"
+    ],
+    "attempts": [
+      2,
+      3,
+      4
+    ],
+    "endpoint_lease_slots_required_free": 2,
+    "job_succeeded": 1,
+    "job_uid": "a921e359-2ed4-4e90-83f2-05aa5812f454",
+    "pod_phase": "Succeeded",
+    "pod_restarts": 0,
+    "pod_uid": "0da05643-b6a5-4cf0-8498-d715e2cb3422"
+  },
+  "receipt_sha256": "sha256:b8d3e09465a3ed2baf024f8b05fa50b7097476706184cbd3991e73b09a2657c7",
+  "release_observer_job": "chris-glm53-exact100-hosted-r029-a3a4-release-v1",
+  "schema_version": "fleet-hosted-glm-rank29-a3a4-successor-held-v1",
+  "scored_package_template_sha256": "sha256:0e4292a758650e5acb727ffebe393d6f2694a34a6ccfb730cc10b25189aaf46e",
+  "scored_source_sha256": "sha256:aa15d222b026bb42b105ad5990097945399299be6667ca52eac0aaafa00dd76e",
+  "selected_cells": [
+    {
+      "attempt": 3,
+      "cell_id": "sha256:bd6f3cc1524132f17b48bb6b655ad047b82858deaf58fdbfa6888658a45c7a3b",
+      "execution_generation": 2,
+      "selection_rank": 29
+    },
+    {
+      "attempt": 4,
+      "cell_id": "sha256:414d1bc62c3e9af45b63cea021bf4be8e8584905c0298225f209f2b7ab58e821",
+      "execution_generation": 2,
+      "selection_rank": 29
+    }
+  ],
+  "status": "READY_HELD_FOR_SCORE_BLIND_RELEASE_AND_INDEPENDENT_REVIEW",
+  "treatment": {
+    "context_window_size": 262144,
+    "harness": "opencode",
+    "harness_version": "1.18.27",
+    "preemption_policy": "Never",
+    "priority_class": "fleet-serve-low",
+    "tools": [
+      "bash",
+      "submit_report"
+    ]
+  }
+}
