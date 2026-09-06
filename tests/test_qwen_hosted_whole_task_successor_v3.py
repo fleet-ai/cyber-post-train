@@ -9,6 +9,8 @@ import pytest
 
 from evals.fleet import exact_pass4_bulk_runtime_v3 as engine
 from evals.fleet import qwen_hosted_whole_task_release_gate_package_v5 as gate_package
+from evals.fleet import qwen_hosted_whole_task_release_gate_package_v6 as gate_package_v6
+from evals.fleet import qwen_hosted_whole_task_release_gate_v1 as gate
 from evals.fleet import qwen_hosted_whole_task_successor_v2 as predecessor
 from evals.fleet import qwen_hosted_whole_task_successor_v3 as successor
 from evals.fleet import qwen_hosted_whole_task_successor_v3_package as package
@@ -189,3 +191,69 @@ def test_release_stays_fail_closed_without_fresh_observer_and_v3_canary() -> Non
     candidate["receipt_sha256"] = self_hosted.digest_without(candidate, "receipt_sha256")
     with pytest.raises(RuntimeError, match="observation"):
         successor.validate_release(candidate, plans, sources)
+
+
+def _materialize_projected_configmap(tmp_path: Path, data: dict[str, str]) -> Path:
+    mount = tmp_path / "bootstrap"
+    revision = mount / "..2026_09_06_11_40_00"
+    revision.mkdir(parents=True)
+    for name, value in data.items():
+        (revision / name).write_text(value)
+    (mount / "..data").symlink_to(revision.name)
+    for name in data:
+        (mount / name).symlink_to(Path("..data") / name)
+    return mount
+
+
+def test_observer_v6_projected_package_executes_exact_generic_contract(tmp_path: Path) -> None:
+    failed = gate_package.render(ROOT)
+    failed_mount = _materialize_projected_configmap(tmp_path / "v5", failed["items"][0]["data"])
+    with pytest.raises(gate.GateError, match="release_gate_package_source_invalid"):
+        gate.validate_package_source(failed_mount / "package-source.json", failed_mount)
+
+    rendered = gate_package_v6.render(ROOT)
+    configmap, job = rendered["items"]
+    mount = _materialize_projected_configmap(tmp_path / "v6", configmap["data"])
+    gate.validate_package_source(mount / "package-source.json", mount)
+    binding = gate.load_projected(mount / "binding.json", mount)
+    gate.validate_binding(binding)
+    assert binding == gate_package.build_binding(ROOT)
+    package_source = gate.load_projected(mount / "package-source.json", mount)
+    assert package_source["schema_version"] == (
+        "fleet-qwen38-hosted-whole-task-release-gate-package-v1"
+    )
+    assert package_source["receipt_sha256"] == gate.digest(package_source)
+    assert job["metadata"]["name"] == gate_package_v6.JOB_NAME
+    assert gate_package.JOB_NAME not in json.dumps(job)
+    assert gate_package.OUTPUT_ROOT not in json.dumps(job)
+    assert job["metadata"]["annotations"]["cyber-post-train.fleet.ai/create-once"] == "true"
+    assert job["metadata"]["annotations"]["cyber-post-train.fleet.ai/score-free"] == "true"
+    assert job["metadata"]["annotations"]["cyber-post-train.fleet.ai/launch-authorized"] == "false"
+
+
+def test_observer_v5_failure_incident_is_sanitized_and_digest_valid() -> None:
+    path = (
+        ROOT
+        / "docs/evidence/qwen38-study/"
+        "2026-09-06-qwen38-hosted-release-observer-v5-failure-v1.json"
+    )
+    value = json.loads(path.read_text())
+    assert value["receipt_sha256"] == self_hosted.digest_without(value, "receipt_sha256")
+    assert value["runtime_failure_receipt"]["receipt_sha256"] == gate.digest(
+        value["runtime_failure_receipt"]
+    )
+    assert value["job"]["uid"] == "5bfbf278-9b0c-436e-b219-7a876bca7694"
+    assert value["pod"]["uid"] == "c223a93b-12ae-4abb-8170-8bb75dace866"
+    assert value["pod"]["exit_code"] == 1
+    assert value["pod"]["restart_count"] == 0
+    assert value["statistical_effects"] == {
+        "model_calls": 0,
+        "scored_sessions_created": 0,
+        "statistical_cells_consumed": 0,
+    }
+    assert value["privacy"] == {
+        "credentials_included": False,
+        "prompts_traces_flags_included": False,
+        "scores_included": False,
+        "source_logs_read": False,
+    }
