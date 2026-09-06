@@ -32,7 +32,10 @@ PARITY_TEMP_ROOT = engine.PARITY_TEMP_ROOT
 FILES = tuple(
     sorted(
         set(engine.FILES)
-        | {"evals/fleet/glm53_dedicated_v32_incluster_parity_v1.py"}
+        | {
+            "evals/fleet/glm53_dedicated_v22_concurrency_package_v1.py",
+            "evals/fleet/glm53_dedicated_v32_incluster_parity_v1.py",
+        }
     )
 )
 ParityPackageError = engine.ParityPackageError
