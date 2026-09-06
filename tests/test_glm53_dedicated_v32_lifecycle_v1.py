@@ -19,7 +19,7 @@ from evals.fleet import glm53_dedicated_v32_watchdog_live_release_v1 as adapter
 from evals.fleet import glm53_dedicated_v32_watchdog_package_v1 as watchdog
 
 ROOT = Path(__file__).resolve().parents[1]
-COMMIT = "bb531a9c081baf63a88b62abe8804876f2bfca41"
+COMMIT = "833d48a0da3de7fa56fd32a0f2c7bb0e8b7eb5fe"
 
 
 class FakeBackend:
@@ -179,6 +179,7 @@ def test_v32_create_gate_requires_fresh_zero_state() -> None:
     assert server.TITLE.endswith("-v32")
     assert server.RUN_DIR.endswith("-v32")
     assert server.payload()["gpus_per_worker"] == 8
+    assert server.payload()["name"] == server.TITLE
     assert server.payload()["priority_class"] == "fleet-infra-quiet"
 
 

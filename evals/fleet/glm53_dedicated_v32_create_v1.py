@@ -72,17 +72,22 @@ def _observer_source() -> str:
 
 def payload() -> dict[str, Any]:
     with bound_engine():
-        return engine.payload()
+        value = engine.payload()
+    value["name"] = TITLE
+    return value
 
 
 def validate_payload(value: dict[str, Any]) -> None:
+    if value != payload():
+        raise CreateError("v32_create_payload_invalid")
+    legacy = dict(value)
+    legacy.pop("name")
     with bound_engine():
-        engine.validate_payload(value)
+        engine.validate_payload(legacy)
 
 
 def request_sha256() -> str:
-    with bound_engine():
-        return engine.request_sha256()
+    return crypto.sha256(crypto.canonical_json(payload()))
 
 
 def validate_binding(binding: dict[str, Any]) -> None:
