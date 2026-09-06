@@ -19,7 +19,7 @@ from evals.fleet import glm53_dedicated_v30_watchdog_live_release_v1 as adapter
 from evals.fleet import glm53_dedicated_v30_watchdog_package_v1 as watchdog
 
 ROOT = Path(__file__).resolve().parents[1]
-COMMIT = "74836f25c0ef3625fe58f071e6f2de0404a25110"
+COMMIT = "652ce10aeec4cb613a3062a301f3236a3b51c255"
 
 
 def authorization() -> dict[str, object]:
