@@ -20,6 +20,8 @@ from evals.fleet import self_hosted
 
 SCHEMA = "fleet-qwen38-dp8-early-qualification-plan-v2"
 RESULT_SCHEMA = "fleet-qwen38-dp8-early-qualification-result-v2"
+MIN_LATENCY_HEADROOM_MILLISECONDS = 120_000
+MIN_LATENCY_HEADROOM_FRACTION = 0.20
 SUBMISSION_SCHEMA = "fleet-qwen38-dp8-early-submission-v2"
 BINDING_SCHEMA = "fleet-qwen38-dp8-early-server-binding-v2"
 EVENT_SCHEMA = "fleet-qwen38-dp8-real-traffic-observation-v2"
@@ -452,6 +454,14 @@ def run(plan: Mapping[str, Any], binding_receipt: Mapping[str, Any], root: Path)
             observed_server_requests = 0
         elapsed_milliseconds = int((time.monotonic() - started) * 1000)
         timeout_budget_milliseconds = parity.TIMEOUT_SECONDS * 1000
+        latency_headroom_milliseconds = timeout_budget_milliseconds - elapsed_milliseconds
+        required_latency_headroom_milliseconds = max(
+            MIN_LATENCY_HEADROOM_MILLISECONDS,
+            int(timeout_budget_milliseconds * MIN_LATENCY_HEADROOM_FRACTION),
+        )
+        passed = passed and (
+            latency_headroom_milliseconds >= required_latency_headroom_milliseconds
+        )
         observations.append(
             {
                 "concurrency": level,
@@ -461,9 +471,11 @@ def run(plan: Mapping[str, Any], binding_receipt: Mapping[str, Any], root: Path)
                 "observed_server_request_delta": observed_server_requests,
                 "elapsed_milliseconds": elapsed_milliseconds,
                 "timeout_budget_milliseconds": timeout_budget_milliseconds,
-                "latency_headroom_milliseconds": (
-                    timeout_budget_milliseconds - elapsed_milliseconds
+                "latency_headroom_milliseconds": latency_headroom_milliseconds,
+                "required_latency_headroom_milliseconds": (
+                    required_latency_headroom_milliseconds
                 ),
+                "minimum_latency_headroom_fraction": MIN_LATENCY_HEADROOM_FRACTION,
                 "error_count": 0 if passed else 1,
                 "tool_order_exact": passed,
                 "tool_arguments_exact": passed,
@@ -556,7 +568,18 @@ def validate_result(value: Mapping[str, Any], plan: Mapping[str, Any], root: Pat
                 or row.get("timeout_budget_milliseconds") != parity.TIMEOUT_SECONDS * 1000
                 or row.get("latency_headroom_milliseconds")
                 != row["timeout_budget_milliseconds"] - row["elapsed_milliseconds"]
-                or row["latency_headroom_milliseconds"] <= 0
+                or row.get("required_latency_headroom_milliseconds")
+                != max(
+                    MIN_LATENCY_HEADROOM_MILLISECONDS,
+                    int(
+                        row["timeout_budget_milliseconds"]
+                        * MIN_LATENCY_HEADROOM_FRACTION
+                    ),
+                )
+                or row.get("minimum_latency_headroom_fraction")
+                != MIN_LATENCY_HEADROOM_FRACTION
+                or row["latency_headroom_milliseconds"]
+                < row["required_latency_headroom_milliseconds"]
             ):
                 raise ValueError("early DP8 observed request/latency evidence drifted")
         if row.get("status") == "FAILED":

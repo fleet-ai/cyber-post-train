@@ -216,6 +216,11 @@ def validate_plan(value: Mapping[str, Any], root: Path) -> None:
             "existing_tp1_must_be_running_ready_restart0_and_productive": True,
             "fresh_jobs_api_kubernetes_gpu_inventory_required": True,
             "unknown_or_preempting_gpu_workload_fails_closed": True,
+            "peer_workload_admitted_quota_reserved_no_preemption_required": True,
+            "fresh_uid_bound_tp1_traffic_max_age_seconds": 300,
+            "one_schedulable_b300_node_with_eight_free_gpus_required": True,
+            "b300_training_free_quota_gpus_required": 8,
+            "live_priority_class_value_and_policy_required": True,
         },
         "server": {
             "title": TITLE,
@@ -340,6 +345,8 @@ def validate_plan(value: Mapping[str, Any], root: Path) -> None:
             "model_request_count_derived_from_stream_receipts": True,
             "server_request_delta_must_equal_observed_model_requests": True,
             "per_wave_latency_and_timeout_headroom_recorded": True,
+            "minimum_latency_headroom_milliseconds": 120000,
+            "minimum_latency_headroom_fraction": 0.2,
             "task_instance_session_verifier_scoring_calls": 0,
             "statistical_cells_selected": 0,
         },
@@ -494,6 +501,7 @@ def validate_inventory(value: Mapping[str, Any]) -> None:
         "kubernetes_inventory_complete",
         "gpu_nodes",
         "gpus",
+        "gpu_cluster_capacity",
         "projected_gpu_nodes_after_create",
         "projected_gpus_after_create",
         "unknown_active_dedicated_runs",
@@ -512,7 +520,7 @@ def validate_inventory(value: Mapping[str, Any]) -> None:
         "receipt_sha256",
     } or (
         value.get("schema_version") != INVENTORY_SCHEMA
-        or value.get("status") != "CLEAR_FOR_REVIEW_ONLY"
+        or value.get("status") != "HOLD_NO_SCHEDULABLE_EIGHT_GPU_NODE"
         or value.get("gpu_nodes") != 1
         or value.get("gpus") != 1
         or value.get("projected_gpu_nodes_after_create") != 2
@@ -529,7 +537,24 @@ def validate_inventory(value: Mapping[str, Any]) -> None:
         or value.get("scoring_authorized") is not False
         or value.get("prompts_traces_flags_or_scores_included") is not False
     ):
-        raise ValueError("early DP8 inventory is not review-clear")
+        raise ValueError("early DP8 inventory is not safely held")
+    capacity = value.get("gpu_cluster_capacity")
+    if not isinstance(capacity, dict) or (
+        capacity.get("all_namespaces_gpu_requests_included") is not True
+        or capacity.get("b300_nodes") != 24
+        or capacity.get("schedulable_nodes") != 23
+        or capacity.get("unschedulable_nodes") != 1
+        or capacity.get("eligible_schedulable_nodes_with_eight_free_gpus") != 0
+        or capacity.get("schedulable_free_gpu_histogram") != {"0": 22, "6": 1}
+        or capacity.get("tp1_node")
+        != {
+            "name": "computeinstance-e04nnbyjvf87b5q53j",
+            "allocatable_gpus": 8,
+            "requested_gpus": 2,
+            "free_gpus": 6,
+        }
+    ):
+        raise ValueError("early DP8 full-node capacity evidence drifted")
     project = value.get("project_serving_inventory")
     if not isinstance(project, dict) or (
         project.get("active_jobs_api_run_ids") != ["ft-run-e87e2bd4"]

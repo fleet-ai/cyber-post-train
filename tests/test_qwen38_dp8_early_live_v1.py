@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -56,6 +57,10 @@ def _gate(payload: dict, release: dict, source_commit: str) -> dict:
         "config_sha256": "sha256:" + "a" * 64,
         "request_sha256": self_hosted.sha256(self_hosted.canonical_json(payload)),
         "allowed_active_peer": {},
+        "allowed_active_peer_traffic": {
+            "head_pod_uid": "tp1-pod-uid",
+            "traffic_age_seconds": 1,
+        },
         "project_resource_shape": {
             "current_gpu_nodes": 1,
             "current_gpus": 1,
@@ -63,6 +68,19 @@ def _gate(payload: dict, release: dict, source_commit: str) -> dict:
             "projected_gpus": 9,
             "maximum_gpu_nodes": 2,
             "maximum_gpus": 16,
+            "tp1_head_pod_uid": "tp1-pod-uid",
+            "peer_workload_admitted": True,
+            "peer_workload_quota_reserved": True,
+            "peer_workload_preemption_observed": False,
+            "capacity": {
+                "eligible_eight_gpu_node_count": 1,
+                "b300_training_free_gpu_quota": 31,
+            },
+            "server_priority_class": {
+                "name": "fleet-infra-quiet",
+                "value": -1000,
+                "preemption_policy": "Never",
+            },
             "project_object_inventory": {
                 "orphan_project_rayjobs": 0,
                 "orphan_project_gpu_pods": 0,
@@ -80,6 +98,104 @@ def _gate(payload: dict, release: dict, source_commit: str) -> dict:
     }
     value["receipt_sha256"] = self_hosted.digest_without(value, "receipt_sha256")
     return value
+
+
+def _admitted_workload(uid: str) -> dict:
+    return {
+        "kind": "Workload",
+        "metadata": {"uid": uid},
+        "status": {
+            "conditions": [
+                {"type": "Admitted", "status": "True", "reason": "Admitted"},
+                {"type": "QuotaReserved", "status": "True", "reason": "Reserved"},
+            ]
+        },
+    }
+
+
+def _cluster_reads(inventory: dict):
+    nodes = {
+        "items": [
+            {
+                "metadata": {
+                    "name": "gpu-node-a",
+                    "labels": {
+                        "nvidia.com/gpu.product": "NVIDIA-B300-SXM6-PC",
+                        "topology.nebius.com/tier-1": "tier-a",
+                    },
+                },
+                "spec": {},
+                "status": {
+                    "allocatable": {"nvidia.com/gpu": "8"},
+                    "conditions": [{"type": "Ready", "status": "True"}],
+                },
+            },
+            {
+                "metadata": {
+                    "name": "gpu-node-b",
+                    "labels": {
+                        "nvidia.com/gpu.product": "NVIDIA-B300-SXM6-PC",
+                        "topology.nebius.com/tier-1": "tier-b",
+                    },
+                },
+                "spec": {},
+                "status": {
+                    "allocatable": {"nvidia.com/gpu": "8"},
+                    "conditions": [{"type": "Ready", "status": "True"}],
+                },
+            },
+        ]
+    }
+    local_queue = {
+        "metadata": {"uid": "local-queue-uid"},
+        "spec": {"clusterQueue": "training-cq"},
+        "status": {"conditions": [{"type": "Active", "status": "True"}]},
+    }
+    cluster_queue = {
+        "metadata": {"uid": "cluster-queue-uid"},
+        "spec": {
+            "resourceGroups": [
+                {
+                    "flavors": [
+                        {
+                            "name": "b300-training",
+                            "resources": [
+                                {"name": "nvidia.com/gpu", "nominalQuota": "128"}
+                            ],
+                        }
+                    ]
+                }
+            ]
+        },
+        "status": {
+            "conditions": [{"type": "Active", "status": "True"}],
+            "flavorsUsage": [
+                {
+                    "name": "b300-training",
+                    "resources": [{"name": "nvidia.com/gpu", "total": "97"}],
+                }
+            ],
+        },
+    }
+    priority = {
+        "metadata": {"name": "fleet-infra-quiet"},
+        "value": -1000,
+        "preemptionPolicy": "Never",
+    }
+
+    def run(*args: str) -> str:
+        joined = " ".join(args)
+        if "priorityclass" in joined:
+            return json.dumps(priority)
+        if "localqueue" in joined:
+            return json.dumps(local_queue)
+        if "clusterqueue" in joined:
+            return json.dumps(cluster_queue)
+        if "nodes" in joined:
+            return json.dumps(nodes)
+        return json.dumps(inventory)
+
+    return run
 
 
 def test_submitter_posts_exactly_once_only_after_digest_valid_live_gate() -> None:
@@ -134,7 +250,7 @@ def test_kubernetes_gate_requires_exact_tp1_peer_and_one_gpu(
                 "metadata": {"name": binding["api_run_id"], "uid": binding["rayjob_uid"]},
                 "status": {"jobStatus": "RUNNING"},
             },
-            {"kind": "Workload", "metadata": {"uid": binding["workload_uid"]}},
+            _admitted_workload(binding["workload_uid"]),
             pod,
             {"kind": "Service", "metadata": {"uid": binding["service_uid"]}},
             {
@@ -148,7 +264,7 @@ def test_kubernetes_gate_requires_exact_tp1_peer_and_one_gpu(
             },
         ]
     }
-    monkeypatch.setattr(live.shared, "_kubectl", lambda *_args: json.dumps(inventory))
+    monkeypatch.setattr(live.shared, "_kubectl", _cluster_reads(inventory))
     active = [
         {
             "api_run_id": binding["api_run_id"],
@@ -210,13 +326,13 @@ def test_kubernetes_gate_rejects_orphan_project_gpu_pod(
                 },
                 "status": {"jobStatus": "RUNNING"},
             },
-            {"kind": "Workload", "metadata": {"uid": binding["workload_uid"]}},
+                _admitted_workload(binding["workload_uid"]),
             pod,
             orphan,
             {"kind": "Service", "metadata": {"uid": binding["service_uid"]}},
         ]
     }
-    monkeypatch.setattr(live.shared, "_kubectl", lambda *_args: json.dumps(inventory))
+    monkeypatch.setattr(live.shared, "_kubectl", _cluster_reads(inventory))
     active = [
         {
             "api_run_id": binding["api_run_id"],
@@ -259,6 +375,88 @@ def test_unknown_active_chris_serving_run_is_not_an_allowed_peer(
     binding = json.loads((ROOT / live.TP1_BINDING_PATH).read_text())
     with pytest.raises(RuntimeError, match="not exactly productive TP1-j"):
         live._validate_active_peer(rows, binding)  # noqa: SLF001
+
+
+def test_peer_workload_requires_admission_quota_and_no_preemption() -> None:
+    found = {
+        "RayJob": [{"status": {"jobStatus": "RUNNING"}}],
+        "Workload": [_admitted_workload("workload-uid")],
+    }
+    live._validate_peer_control_plane(found)  # noqa: SLF001
+    found["Workload"][0]["status"]["conditions"].append(
+        {"type": "Evicted", "status": "True", "reason": "Preempted"}
+    )
+    with pytest.raises(RuntimeError, match="stably admitted"):
+        live._validate_peer_control_plane(found)  # noqa: SLF001
+
+
+def test_tp1_traffic_must_be_uid_bound_and_fresh(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    binding = json.loads((ROOT / live.TP1_BINDING_PATH).read_text())
+    monkeypatch.setattr(live.time, "time", lambda: 1_000)
+    monkeypatch.setattr(
+        live.subprocess,
+        "run",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            returncode=0, stdout="900 0\n", stderr=""
+        ),
+    )
+    receipt = live._tp1_traffic_gate("tp1", binding)  # noqa: SLF001
+    assert receipt["head_pod_uid"] == binding["head_pod_uid"]
+    assert receipt["traffic_age_seconds"] == 100
+    monkeypatch.setattr(live.time, "time", lambda: 1_301)
+    with pytest.raises(RuntimeError, match="traffic is stale"):
+        live._tp1_traffic_gate("tp1", binding)  # noqa: SLF001
+
+
+def test_capacity_gate_rejects_zero_schedulable_eight_gpu_nodes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pods = {
+        "items": [
+            {
+                "kind": "Pod",
+                "metadata": {"name": "busy-a"},
+                "spec": {
+                    "nodeName": "gpu-node-a",
+                    "containers": [
+                        {"resources": {"requests": {"nvidia.com/gpu": "1"}}}
+                    ],
+                },
+                "status": {"phase": "Running"},
+            },
+            {
+                "kind": "Pod",
+                "metadata": {"name": "busy-b"},
+                "spec": {
+                    "nodeName": "gpu-node-b",
+                    "containers": [
+                        {"resources": {"requests": {"nvidia.com/gpu": "8"}}}
+                    ],
+                },
+                "status": {"phase": "Running"},
+            },
+        ]
+    }
+    monkeypatch.setattr(live.shared, "_kubectl", _cluster_reads(pods))
+    with pytest.raises(RuntimeError, match="no schedulable eight-GPU"):
+        live._capacity_gate(pods["items"])  # noqa: SLF001
+
+
+def test_live_priority_class_requires_exact_value_and_never(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    good = {
+        "metadata": {"name": "fleet-infra-quiet"},
+        "value": -1000,
+        "preemptionPolicy": "Never",
+    }
+    monkeypatch.setattr(live.shared, "_kubectl", lambda *_args: json.dumps(good))
+    assert live._priority_class_gate()["value"] == -1000  # noqa: SLF001
+    good["preemptionPolicy"] = "PreemptLowerPriority"
+    with pytest.raises(RuntimeError, match="PriorityClass contract drifted"):
+        live._priority_class_gate()  # noqa: SLF001
 
 
 def test_server_release_stays_score_free_and_commit_bound() -> None:

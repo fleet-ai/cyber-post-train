@@ -1,1 +1,121 @@
-{"active_peer":{"api_run_id":"ft-run-e87e2bd4","gpu_memory_total_mib":275040,"gpu_memory_used_mib":250435,"gpu_nodes":1,"gpus":1,"head_pod_uid":"95bd5a32-a057-4cd4-bd4b-984cea292948","node":"computeinstance-e04nnbyjvf87b5q53j","productive_traffic":true,"rayjob_uid":"8847f5b0-4c76-4bec-9fa9-404bbbb0ad40","running_ready_restart0":true,"serving_block":"dedicated-qwen-tp1-j-v1","traffic_age_seconds":24,"traffic_mtime_epoch":1788678014},"api_mutations":0,"cpu_qualifier_placement":{"node_pinning":false,"node_selector":"workload=fleetai-training-ng-cpu","nodes":[{"allocatable_cpu_millicores":15900,"allocatable_memory_mib":63688,"name":"computeinstance-e04a737eqtfvpnyx08","observed_cpu_used_millicores":1521,"observed_memory_used_mib":26180},{"allocatable_cpu_millicores":15900,"allocatable_memory_mib":63688,"name":"computeinstance-e04fw0f2anvp0de74v","observed_cpu_used_millicores":1282,"observed_memory_used_mib":25696},{"allocatable_cpu_millicores":15900,"allocatable_memory_mib":63688,"name":"computeinstance-e04r6ge82f4fcgmbqz","observed_cpu_used_millicores":10141,"observed_memory_used_mib":23009}],"observed_at":"2026-09-06T07:00:42.871752Z","qualifier_limits":{"cpu_millicores":14000,"memory_mib":32768},"qualifier_requests":{"cpu_millicores":5000,"memory_mib":10240},"request_fit_node_count":3},"gpu_nodes":1,"gpus":1,"jobs_api_inventory_complete":true,"kubernetes_identity_matches":0,"kubernetes_inventory_complete":true,"launch_authorized":false,"observed_at":"2026-09-06T07:00:42.871652Z","priority_class_contract":{"fleet_infra_quiet_priority_value":-1000,"fleet_serve_low_preview_http_status":422,"fleet_train_high_disallowed_as_preempting":true,"jobs_api_allowed_priority_classes":["fleet-train-high","fleet-infra-quiet"],"jobs_api_preview_http_status":200,"qualifier_preemption_policy":"Never","qualifier_priority_class":"fleet-serve-low","qualifier_priority_value":100,"server_preemption_policy":"Never","server_priority_class":"fleet-infra-quiet"},"project_serving_inventory":{"active_jobs_api_run_ids":["ft-run-e87e2bd4"],"active_run_dirs":["/mnt/sfs/jobs/chris-cyber-evalserve-q38-tp1-j-v1"],"gpu_nodes":1,"gpu_requests":1,"orphan_project_gpu_pods":0,"orphan_project_rayjobs":0,"superseded_v1_jobs_api_http_status":404,"superseded_v1_kubernetes_object_matches":0,"terminal_project_rayjobs_ignored":2},"projected_gpu_nodes_after_create":2,"projected_gpus_after_create":9,"prompts_traces_flags_or_scores_included":false,"receipt_sha256":"sha256:deb7eea966c50b87ec7d8a4aa7b728e5642440bad9fca6351b0bfbbd00de74cc","run_dir_matches":0,"schema_version":"fleet-qwen38-dp8-early-qualification-node-inventory-v2","scoring_authorized":false,"sfs_run_dir_exists":false,"status":"CLEAR_FOR_REVIEW_ONLY","title_matches":0,"unknown_active_dedicated_runs":0}
+{
+  "active_peer": {
+    "api_run_id": "ft-run-e87e2bd4",
+    "gpu_memory_total_mib": 275040,
+    "gpu_memory_used_mib": 250435,
+    "gpu_nodes": 1,
+    "gpus": 1,
+    "head_pod_uid": "95bd5a32-a057-4cd4-bd4b-984cea292948",
+    "node": "computeinstance-e04nnbyjvf87b5q53j",
+    "productive_traffic": true,
+    "rayjob_uid": "8847f5b0-4c76-4bec-9fa9-404bbbb0ad40",
+    "running_ready_restart0": true,
+    "serving_block": "dedicated-qwen-tp1-j-v1",
+    "traffic_age_seconds": 24,
+    "traffic_mtime_epoch": 1788678014
+  },
+  "api_mutations": 0,
+  "cpu_qualifier_placement": {
+    "node_pinning": false,
+    "node_selector": "workload=fleetai-training-ng-cpu",
+    "nodes": [
+      {
+        "allocatable_cpu_millicores": 15900,
+        "allocatable_memory_mib": 63688,
+        "name": "computeinstance-e04a737eqtfvpnyx08",
+        "observed_cpu_used_millicores": 1521,
+        "observed_memory_used_mib": 26180
+      },
+      {
+        "allocatable_cpu_millicores": 15900,
+        "allocatable_memory_mib": 63688,
+        "name": "computeinstance-e04fw0f2anvp0de74v",
+        "observed_cpu_used_millicores": 1282,
+        "observed_memory_used_mib": 25696
+      },
+      {
+        "allocatable_cpu_millicores": 15900,
+        "allocatable_memory_mib": 63688,
+        "name": "computeinstance-e04r6ge82f4fcgmbqz",
+        "observed_cpu_used_millicores": 10141,
+        "observed_memory_used_mib": 23009
+      }
+    ],
+    "observed_at": "2026-09-06T07:00:42.871752Z",
+    "qualifier_limits": {
+      "cpu_millicores": 14000,
+      "memory_mib": 32768
+    },
+    "qualifier_requests": {
+      "cpu_millicores": 5000,
+      "memory_mib": 10240
+    },
+    "request_fit_node_count": 3
+  },
+  "gpu_nodes": 1,
+  "gpus": 1,
+  "gpu_cluster_capacity": {
+    "all_namespaces_gpu_requests_included": true,
+    "b300_nodes": 24,
+    "eligible_schedulable_nodes_with_eight_free_gpus": 0,
+    "observed_at": "2026-09-06T07:16:38.966077Z",
+    "schedulable_free_gpu_histogram": {
+      "0": 22,
+      "6": 1
+    },
+    "schedulable_nodes": 23,
+    "tp1_node": {
+      "allocatable_gpus": 8,
+      "name": "computeinstance-e04nnbyjvf87b5q53j",
+      "requested_gpus": 2,
+      "free_gpus": 6
+    },
+    "unschedulable_nodes": 1
+  },
+  "jobs_api_inventory_complete": true,
+  "kubernetes_identity_matches": 0,
+  "kubernetes_inventory_complete": true,
+  "launch_authorized": false,
+  "observed_at": "2026-09-06T07:00:42.871652Z",
+  "priority_class_contract": {
+    "fleet_infra_quiet_priority_value": -1000,
+    "fleet_serve_low_preview_http_status": 422,
+    "fleet_train_high_disallowed_as_preempting": true,
+    "jobs_api_allowed_priority_classes": [
+      "fleet-train-high",
+      "fleet-infra-quiet"
+    ],
+    "jobs_api_preview_http_status": 200,
+    "qualifier_preemption_policy": "Never",
+    "qualifier_priority_class": "fleet-serve-low",
+    "qualifier_priority_value": 100,
+    "server_preemption_policy": "Never",
+    "server_priority_class": "fleet-infra-quiet"
+  },
+  "project_serving_inventory": {
+    "active_jobs_api_run_ids": [
+      "ft-run-e87e2bd4"
+    ],
+    "active_run_dirs": [
+      "/mnt/sfs/jobs/chris-cyber-evalserve-q38-tp1-j-v1"
+    ],
+    "gpu_nodes": 1,
+    "gpu_requests": 1,
+    "orphan_project_gpu_pods": 0,
+    "orphan_project_rayjobs": 0,
+    "superseded_v1_jobs_api_http_status": 404,
+    "superseded_v1_kubernetes_object_matches": 0,
+    "terminal_project_rayjobs_ignored": 2
+  },
+  "projected_gpu_nodes_after_create": 2,
+  "projected_gpus_after_create": 9,
+  "prompts_traces_flags_or_scores_included": false,
+  "receipt_sha256": "sha256:c290a03ef06d7d6d42ef60c9a4ad97548a132136207962813138afba0619dfd8",
+  "run_dir_matches": 0,
+  "schema_version": "fleet-qwen38-dp8-early-qualification-node-inventory-v2",
+  "scoring_authorized": false,
+  "sfs_run_dir_exists": false,
+  "status": "HOLD_NO_SCHEDULABLE_EIGHT_GPU_NODE",
+  "title_matches": 0,
+  "unknown_active_dedicated_runs": 0
+}

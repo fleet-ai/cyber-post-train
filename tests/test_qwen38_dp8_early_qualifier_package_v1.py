@@ -353,6 +353,15 @@ def test_result_uses_observed_requests_and_records_latency_headroom() -> None:
         "elapsed_milliseconds": 1_000,
         "timeout_budget_milliseconds": runtime.parity.TIMEOUT_SECONDS * 1_000,
         "latency_headroom_milliseconds": runtime.parity.TIMEOUT_SECONDS * 1_000 - 1_000,
+        "required_latency_headroom_milliseconds": max(
+            runtime.MIN_LATENCY_HEADROOM_MILLISECONDS,
+            int(
+                runtime.parity.TIMEOUT_SECONDS
+                * 1_000
+                * runtime.MIN_LATENCY_HEADROOM_FRACTION
+            ),
+        ),
+        "minimum_latency_headroom_fraction": runtime.MIN_LATENCY_HEADROOM_FRACTION,
         "error_count": 0,
         "tool_order_exact": True,
         "tool_arguments_exact": True,
@@ -373,6 +382,13 @@ def test_result_uses_observed_requests_and_records_latency_headroom() -> None:
     result["receipt_sha256"] = self_hosted.digest_without(result, "receipt_sha256")
     assert runtime.validate_result(result, plan, ROOT) == 1
     level["observed_model_request_count"] = 2
+    result["receipt_sha256"] = self_hosted.digest_without(result, "receipt_sha256")
+    with pytest.raises(ValueError, match="request/latency"):
+        runtime.validate_result(result, plan, ROOT)
+
+    level["observed_model_request_count"] = 4
+    level["elapsed_milliseconds"] = runtime.parity.TIMEOUT_SECONDS * 1_000 - 1
+    level["latency_headroom_milliseconds"] = 1
     result["receipt_sha256"] = self_hosted.digest_without(result, "receipt_sha256")
     with pytest.raises(ValueError, match="request/latency"):
         runtime.validate_result(result, plan, ROOT)
