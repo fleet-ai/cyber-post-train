@@ -12,7 +12,7 @@ set +e
 uv run --no-project --with httpx==0.28.1 python -m evals.fleet.hosted_glm_rank30_single_slot_release_diagnostic_v4
 status=$?
 set -e
-OUTPUT=/mnt/sfs/jobs/chris-glm53-exact100-hosted-r030-single-slot-release-diagnostic-v4/DIAGNOSTIC.json
+OUTPUT=/mnt/sfs/jobs/chris-glm53-r030-release-diagnostic-v4b/DIAGNOSTIC.json
 if (( status != 0 )) && [[ ! -e "$OUTPUT" && ! -L "$OUTPUT" ]]; then
   python - "$status" "$OUTPUT" <<'PY'
 import hashlib
@@ -28,8 +28,8 @@ def canonical(value):
 body = {
     "schema_version": "fleet-hosted-glm-rank30-release-phase-diagnostic-bootstrap-v4",
     "status": "FAILED",
-    "diagnostic_job": "chris-glm53-exact100-hosted-r030-single-slot-release-diagnostic-v4",
-    "diagnostic_configmap": "chris-glm53-exact100-hosted-r030-single-slot-release-diagnostic-v4-run",
+    "diagnostic_job": "chris-glm53-r030-release-diagnostic-v4b",
+    "diagnostic_configmap": "chris-glm53-r030-release-diagnostic-v4b-run",
     "observer_job_uid": os.environ["JOB_UID"],
     "observer_pod_uid": os.environ["POD_UID"],
     "failed_phase": "00-bootstrap-runtime",
