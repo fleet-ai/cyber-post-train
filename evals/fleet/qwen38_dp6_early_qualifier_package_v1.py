@@ -49,6 +49,7 @@ STATIC_PATHS = {
     Path("evals/fleet/configs/blackbox-ctf-tool-catalog-v1.json"),
     early.CONFIG_PATH,
     early.PLAN_PATH,
+    early.V5_PLAN_PATH,
     early.V2_PLAN_PATH,
     early.V3_PLAN_PATH,
     early.V4_PLAN_PATH,
