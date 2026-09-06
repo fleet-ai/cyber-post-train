@@ -143,6 +143,8 @@ def test_v26_create_identity_is_fresh_and_restores_engine() -> None:
     assert v25.RUN_DIR not in encoded
     assert v24.TITLE not in encoded
     assert before == (v25.TITLE, v25.RUN_DIR, v25.READY_SCHEMA)
+    assert server.API_URL == v25.API_URL
+    assert server.AUTH_MAX_AGE_SECONDS == 60
 
 
 def test_v26_watchdog_render_and_runtime_authorization_are_generation_exact(
@@ -220,6 +222,16 @@ def test_v26_held_receipts_are_digest_valid_and_non_authorizing() -> None:
         ).read_text()
     )
     assert tracked_watchdog == adapter.build_held(tracked_watchdog["package_commit"])
+    failed = json.loads(
+        (
+            ROOT
+            / "docs/evidence/glm53-study/"
+            "2026-09-06-glm53-dedicated-v26-create-controller-v1-failure.json"
+        ).read_text()
+    )
+    assert failed["status"] == "FAILED_PREPOST_ZERO_EFFECT"
+    assert failed["retry_same_job_identity"] is False
+    assert failed["receipt_sha256"] == crypto.digest_without(failed, "receipt_sha256")
 
 
 def test_v26_wrong_generation_contract_fails_closed(
