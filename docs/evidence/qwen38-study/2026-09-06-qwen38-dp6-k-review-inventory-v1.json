@@ -1,0 +1,47 @@
+{
+  "active_project_gpu_nodes": 1,
+  "active_project_gpus": 8,
+  "active_project_serving_runs": 1,
+  "api_mutations": 0,
+  "capacity": {
+    "cluster_queue_uid": "a0871515-e979-4292-a994-51b987e4016c",
+    "eligible_node_uids": [
+      "135f1ac8-be85-4a44-aeab-f0276244ca4e",
+      "159f1f6d-5df3-493e-9f24-59e2bd3a2525",
+      "3be70331-03d6-4446-834d-ed48f26298e6",
+      "7b03e4b0-16b5-4ceb-ab88-643d9d6b42d1",
+      "c59dd323-3c46-4835-9831-41565a1120d8",
+      "e0a062ee-3bdd-4964-b5c1-79c0a0a58dde"
+    ],
+    "local_queue_uid": "585e1a29-300a-438c-bb2f-268ca57e0f56",
+    "nominal_quota_gpus": 128,
+    "nominal_quota_headroom_gpus": 72,
+    "peer_preemption_required": false,
+    "schedulable_six_gpu_fit_nodes": 6,
+    "server_priority_class": {
+      "name": "fleet-infra-quiet",
+      "preemption_policy": "Never",
+      "value": -1000
+    },
+    "used_quota_gpus": 56
+  },
+  "jobs_api_inventory_complete": true,
+  "kubernetes_inventory_complete": true,
+  "maximum_project_gpu_nodes": 2,
+  "maximum_project_gpus": 16,
+  "observed_at": "2026-09-06T14:40:28.336715Z",
+  "projected_gpu_nodes": 1,
+  "projected_gpus": 6,
+  "prompts_traces_flags_or_scores_included": false,
+  "receipt_sha256": "sha256:9b03f6f2da09874f7b84cee9349f2e911caa2d0b4a1fd557b947c33b5d3c8b38",
+  "schema_version": "fleet-qwen38-dp6-k-review-inventory-v1",
+  "scored_calls": 0,
+  "sfs_observer_mount_path": "/shared",
+  "sfs_observer_pod_uid": "73dabe56-60f8-4879-be9f-365196c502e3",
+  "status": "BLOCKED_ACTIVE_PROJECT_SERVING",
+  "target_identity_matches": {
+    "jobs_api": 0,
+    "kubernetes": 0,
+    "sfs": 0
+  }
+}
