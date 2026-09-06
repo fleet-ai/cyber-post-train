@@ -752,6 +752,28 @@ def test_supplemental_runtime_authority_resolves_ambiguous_bulk_identity(
     assert item["task_key"] == authority.cells[key[0]]["task_key"]
 
 
+def test_supplemental_runtime_authority_resolves_live_glm_rank27_attempt3(
+    authority: ledger.Authority,
+) -> None:
+    key = (
+        "sha256:600b2af93e99baa4c0442f0b0b48e36e5183ae42135a9549918c61b49ccd9f71",
+        "sha256:a8227c016231192540bdba4d3058f284727c8a97a5d7e50ea378f8294bc434cb",
+    )
+
+    plan, item = ledger._bulk_pair(authority, key, "glm-hosted-s2") or ({}, {})
+
+    assert plan == {
+        "controller": "glm-hosted-s2",
+        "plan_sha256": (
+            "sha256:c0cc69202751fbbea53dfeea98a62efe41b2638b4e9ad60307b0c0bdbeefd83f"
+        ),
+    }
+    assert item["run_id"] == "chris-glm53-ac-bulk-b-r027-a3-g1-36dd3619"
+    assert item["selection_rank"] == 27
+    assert item["attempt"] == 3
+    assert item["task_key"] == authority.cells[key[0]]["task_key"]
+
+
 def test_evidence_manifest_cannot_be_mixed_with_individual_paths(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
