@@ -15,7 +15,7 @@ from evals.fleet import hosted_glm_rank30_single_slot_v5 as successor
 from evals.fleet import self_hosted
 
 ROOT = Path(__file__).resolve().parents[1]
-PACKAGE_COMMIT = "f30a1c0b24785ece6e6c68b839b02fea196a728d"
+PACKAGE_COMMIT = "3dff2c9c3547f8cc69634dc838466970fff8e0d5"
 
 
 def test_rank30_preclaim_package_is_exact_create_once_and_score_free() -> None:
