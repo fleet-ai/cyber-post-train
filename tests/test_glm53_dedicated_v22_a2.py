@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from evals.fleet import exact_pass4_bulk_runtime_v3 as engine
 from evals.fleet import glm53_dedicated_v22_a2_bootstrap_v1 as bootstrap
 from evals.fleet import glm53_dedicated_v22_a2_package_v1 as package
 from evals.fleet import glm53_dedicated_v22_a2_release_package_v1 as release
@@ -10,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_v22_controller_exports_route_evidence_validator() -> None:
     assert callable(controller._validate_evidence)
+    engine.validate_bulk_adapter(controller)
 
 
 def test_v22_controller_package_binds_only_v22_runtime_identity() -> None:
