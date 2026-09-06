@@ -290,6 +290,7 @@ def test_live_renderer_mounts_exact_authorization_and_fleet_secret(
         "name": "ft-run-deadbeef-fleet-key",
         "key": "FLEET_API_KEY",
     }
+    assert env["WATCHDOG_API_RUN_ID"]["value"] == "ft-run-deadbeef"
     assert "/authorization/LIVE_RELEASE.json" in container["command"][-1]
     assert {row["name"] for row in container["volumeMounts"]} >= {"authorization"}
     runtime.validate_launch_authorization(
