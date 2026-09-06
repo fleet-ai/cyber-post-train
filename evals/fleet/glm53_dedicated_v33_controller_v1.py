@@ -17,6 +17,9 @@ from evals.fleet import glm53_dedicated_v33_incluster_parity_v1 as parity
 from evals.fleet import glm53_dedicated_v33_watchdog_live_release_v1 as adapter
 
 RESULT_SCHEMA = "fleet-glm53-dedicated-v33-controller-result-v1"
+READY_TIMEOUT_SECONDS = engine.READY_TIMEOUT_SECONDS
+PARITY_TIMEOUT_SECONDS = engine.PARITY_TIMEOUT_SECONDS
+POLL_SECONDS = engine.POLL_SECONDS
 _LOCK = threading.Lock()
 
 
