@@ -63,3 +63,28 @@ def test_v19_live_allowlist_is_exact_current_q_peer() -> None:
     assert live.ALLOWED == {
         "/mnt/sfs/jobs/chris-cyber-evalserve-q38-tp1-i-v1": {"nodes": 1, "gpus": 1}
     }
+
+
+def test_v19_server_authority_does_not_reuse_stale_rank51_admission(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    watchdog = {
+        "receipt_sha256": v19.WATCHDOG_QUALIFICATION["receipt_sha256"],
+        "lifecycle_file_sha256": v19.WATCHDOG_QUALIFICATION["lifecycle_file_sha256"],
+        "status": "PASSED_NON_SCORED",
+    }
+    monkeypatch.setattr(live, "_watchdog", lambda: (b"safe\n", watchdog))
+    monkeypatch.setattr(
+        live.common,
+        "live_gate",
+        lambda *a, **k: {
+            "status": "READY",
+            "receipt_sha256": "sha256:" + "0" * 64,
+            "pre_admission": {"all_four_rank_cells_unstarted": True},
+        },
+    )
+    monkeypatch.setattr(live.self_hosted, "sha256", lambda _: "sha256:" + "1" * 64)
+    gate = live.live_gate(ROOT)
+    assert "pre_admission" not in gate
+    assert gate["scored_create_gate"]["status"] == "CLOSED"
+    assert gate["scored_tasks_launched"] == 0

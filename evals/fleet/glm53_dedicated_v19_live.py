@@ -63,6 +63,11 @@ def _watchdog() -> tuple[bytes, dict[str, Any]]:
 def live_gate(root: Path) -> dict[str, Any]:
     raw, watchdog = _watchdog()
     gate = common.live_gate(root, v19, ALLOWED)
+    # The inherited v18 rank-51 admission receipt predates its accepted attempt
+    # and cannot authorize another cell. It is deliberately excluded from the
+    # v19 server authority. A fresh server-bound release/preclaim is mandatory
+    # after READY and parity, immediately before any scored create.
+    gate.pop("pre_admission", None)
     gate["watchdog_qualification"] = {
         "path": v19.WATCHDOG_QUALIFICATION["receipt_path"],
         "file_sha256": self_hosted.sha256(raw),
@@ -73,6 +78,12 @@ def live_gate(root: Path) -> dict[str, Any]:
         "status": watchdog["status"],
     }
     gate["scored_tasks_launched"] = 0
+    gate["scored_create_gate"] = {
+        "status": "CLOSED",
+        "fresh_uid_bound_parity_required": True,
+        "fresh_server_bound_release_required": True,
+        "fresh_server_bound_preclaim_required": True,
+    }
     gate["receipt_sha256"] = self_hosted.digest_without(gate, "receipt_sha256")
     return gate
 
@@ -119,6 +130,7 @@ def main() -> int:
         "request_sha256": gate["request_sha256"],
         "live_gate_receipt_sha256": gate["receipt_sha256"],
         "watchdog_qualification": gate["watchdog_qualification"],
+        "scored_create_gate": gate["scored_create_gate"],
         "project_resource_shape": gate["project_resource_shape"],
         "selected_priority": gate["selected_priority"],
         "http_status": 202,
