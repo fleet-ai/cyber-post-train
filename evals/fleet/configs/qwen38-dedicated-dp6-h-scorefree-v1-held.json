@@ -1,0 +1,43 @@
+{
+  "config_sha256": "sha256:c12c129f9d25c1e1e3f0d126fe79329c2e3d993ac3e03cb9bed0fcb3a3b1a11e",
+  "create_once": true,
+  "launch_authorized": false,
+  "priority_contract": {
+    "class": "fleet-infra-quiet",
+    "fleet_serve_low_preview_http_status": 422,
+    "fleet_train_high_disallowed_as_preempting": true,
+    "fresh_jobs_api_preview_acceptance_required": true,
+    "highest_jobs_api_admitted_nonpreempting": true,
+    "jobs_api_allowed_classes": [
+      "fleet-train-high",
+      "fleet-infra-quiet"
+    ],
+    "preemption_policy": "Never",
+    "value": -1000
+  },
+  "prompts_traces_flags_or_scores_included": false,
+  "request_binding": {
+    "command_sha256": "sha256:b73d5d4c26a463fecc5b6989bcf11b9049a4361b54ae8d3186d1f4d737109815",
+    "gpus_per_worker": 6,
+    "image": "ghcr.io/fleet-ai/cyber-post-train-glm53-runtime@sha256:ec93ba50613fd13fb4c0b0a9105767ab18209a1e0108dab0923aad694c0206ec",
+    "privileged": false,
+    "resources": {
+      "cpu_limit": "96",
+      "cpu_request": "32",
+      "memory_limit": "768Gi",
+      "memory_request": "256Gi"
+    },
+    "workers": 1
+  },
+  "request_sha256": "sha256:d4777465a8d300b25d585a69f58ec8fb407d54347fb9f876636fb9e4a14ceaa3",
+  "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-q38-dp6-h-v1",
+  "schema_version": "fleet-qwen38-dp6-h-scorefree-config-v1",
+  "scoring_authorized": false,
+  "serving_block": "dedicated-qwen-dp6-h-v1",
+  "side_effects": {
+    "api_mutations": 0,
+    "scored_calls": 0
+  },
+  "status": "HELD_NO_LAUNCH",
+  "title": "chris-cyber-evalserve-q38-dp6-h-v1"
+}

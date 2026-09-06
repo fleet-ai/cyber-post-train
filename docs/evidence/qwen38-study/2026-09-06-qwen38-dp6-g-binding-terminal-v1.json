@@ -1,0 +1,47 @@
+{
+  "api_run_id": "ft-run-e28399e4",
+  "binding_receipt_sha256": "sha256:13a5cebe78ed7faaed16dc73f072c79d1092237649add72d0e2d807127960872",
+  "deterministic_cause": {
+    "binding_path": "/mnt/sfs/jobs/chris-cyber-evalserve-q38-dp6-g-v1/lifecycle/SERVER-BINDING.json",
+    "binding_projection_performed": false,
+    "controller_local_binding_only": true,
+    "qualifier_cannot_supply_prequalifier_binding": true
+  },
+  "fresh_successor_required": true,
+  "head_pod_name": "ft-run-e28399e4-jzkh7-head-8rb6h",
+  "head_pod_uid": "f1732d46-8816-43a3-8158-c7acc6ee81e3",
+  "observed_at_utc": "2026-09-06T13:27:00Z",
+  "observer_status": {
+    "error_type": "FileNotFoundError",
+    "phase": "binding",
+    "receipt_sha256": "sha256:efe308e09e80ffde3bbe163c29662303fcba464f32ac95c4b22f963dfcc502aa",
+    "status": "FAILED"
+  },
+  "prompts_traces_flags_or_scores_included": false,
+  "ray_cluster_name": "ft-run-e28399e4-jzkh7",
+  "ray_cluster_uid": "f5d226e0-d269-4502-b982-4b10774efd68",
+  "rayjob_uid": "06efd837-3b60-4fde-9a45-b3774043a81c",
+  "receipt_sha256": "sha256:d36de0db210f58015fa1310ee98d91b50ffbb804f45b8fcdfd23dae2ac704bb0",
+  "schema_version": "fleet-qwen38-dp6-g-binding-terminal-v1",
+  "scored_calls": 0,
+  "service_uid": "065632ee-13c7-4508-b853-aae8e408c426",
+  "source_commit": "5226ce298f501e96f06c291e17a93f6a03e8720a",
+  "statistical_cells_selected": 0,
+  "status": "TERMINAL_INFRASTRUCTURE_INVALID_NO_IDENTITY_REUSE",
+  "submission_receipt_sha256": "sha256:4ce4ddca174c6c8036e8ad927e11554a13b0e79070db026b640d4a6f3c894d93",
+  "terminal_identity_reuse_authorized": false,
+  "terminal_receipt_sha256": "sha256:c568387e3a91ccf31a8df224ce4fb1dcf04d977902c9ea215add9dea1061a95e",
+  "terminal_reconciliation": {
+    "gpu_nodes": 0,
+    "gpus": 0,
+    "jobs_api_delete": 204,
+    "jobs_api_get_after": 404,
+    "kubernetes_owner_closure_count": 0,
+    "qualifier_configmap_created": false,
+    "qualifier_job_created": false,
+    "qualifier_output_root_exists": false,
+    "request_counter_baseline_exists": false,
+    "request_counter_state_exists": false
+  },
+  "workload_uid": "00278d4c-1442-4142-a383-cb2c5269e56b"
+}
