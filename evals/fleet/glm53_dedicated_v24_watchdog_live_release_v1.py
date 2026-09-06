@@ -898,7 +898,72 @@ def _observe_live(api_run_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
     return binding, live
 
 
-def _release_local(api_run_id: str) -> None:
+def _kubernetes_server_remnants(
+    api_run_id: str, binding: dict[str, Any] | None = None
+) -> list[dict[str, str]]:
+    result = subprocess.run(
+        [
+            "kubectl",
+            "-n",
+            NAMESPACE,
+            "get",
+            (
+                "rayjobs.ray.io,rayclusters.ray.io,workloads.kueue.x-k8s.io,"
+                "pods,services"
+            ),
+            "-o",
+            "json",
+        ],
+        text=True,
+        capture_output=True,
+    )
+    if result.returncode != 0:
+        raise LiveReleaseError("local_kubernetes_inventory_failed")
+    try:
+        rows = json.loads(result.stdout).get("items", [])
+    except (json.JSONDecodeError, AttributeError) as exc:
+        raise LiveReleaseError("local_kubernetes_inventory_invalid") from exc
+    if not isinstance(rows, list):
+        raise LiveReleaseError("local_kubernetes_inventory_invalid")
+    expected_uids = {
+        str(value)
+        for value in (binding or {}).values()
+        if _valid_uuid(value)
+    }
+    tokens = {
+        api_run_id,
+        str((binding or {}).get("server_title", "")),
+        str((binding or {}).get("server_run_dir", "")),
+    } - {""}
+    remnants = []
+    for row in rows:
+        if not isinstance(row, dict):
+            raise LiveReleaseError("local_kubernetes_inventory_invalid")
+        metadata = row.get("metadata", {})
+        owners = metadata.get("ownerReferences", []) or []
+        strings = [str(metadata.get("name", ""))]
+        strings.extend(str(owner.get("name", "")) for owner in owners)
+        strings.extend(
+            str(value)
+            for field in ("labels", "annotations")
+            for value in (metadata.get(field, {}) or {}).values()
+        )
+        if (
+            metadata.get("uid") in expected_uids
+            or any(owner.get("uid") in expected_uids for owner in owners)
+            or any(token in candidate for token in tokens for candidate in strings if candidate)
+        ):
+            remnants.append(
+                {
+                    "kind": str(row.get("kind", "")),
+                    "name": str(metadata.get("name", "")),
+                    "uid": str(metadata.get("uid", "")),
+                }
+            )
+    return remnants
+
+
+def _release_local(api_run_id: str, binding: dict[str, Any] | None = None) -> None:
     token = os.environ.get("FLEET_API_KEY", "")
     if API_RUN_ID_RE.fullmatch(api_run_id) is None or not token:
         raise LiveReleaseError("local_jobs_api_release_identity_absent")
@@ -930,10 +995,10 @@ def _release_local(api_run_id: str) -> None:
     else:
         raise LiveReleaseError("local_jobs_api_absence_unconfirmed")
     for _ in range(12):
-        if _kubectl_optional("rayjobs.ray.io", api_run_id) is None:
+        if not _kubernetes_server_remnants(api_run_id, binding):
             return
         time.sleep(5)
-    raise LiveReleaseError("local_kubernetes_absence_unconfirmed")
+    raise LiveReleaseError("local_kubernetes_remnant_absence_unconfirmed")
 
 
 def observe_live(api_run_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -1284,7 +1349,7 @@ def _release_on_handoff_failure(binding: dict[str, Any], pod_name: str) -> None:
     # not a durable control plane.  The local launcher owns an independent Fleet
     # credential and performs both API and Kubernetes absence confirmation.
     del pod_name
-    _release_local(str(binding["api_run_id"]))
+    _release_local(str(binding["api_run_id"]), binding)
 
 
 def launch(
