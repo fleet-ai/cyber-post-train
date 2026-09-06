@@ -1,0 +1,179 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: chris-cyber-opencode11827-image-publish-v1
+  namespace: fleet-train-jobs
+immutable: true
+data:
+  publish.sh: |
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    : "${GH_TOKEN:?GH_TOKEN must come from the cluster image-build secret}"
+    : "${NODE_NAME:?NODE_NAME must come from the downward API}"
+
+    out=/mnt/sfs/jobs/chris-cyber-opencode11827-image-publish-v1
+    archive="$out/opencode-1.18.27-amd64.tar.gz"
+    ready="$archive.ready"
+    expected_archive_sha=578ff2a933f17a19d22ebf8634533651cec2f0ce611e16f3c5fe8efea7940cd3
+    expected_image_id=sha256:ca4f0b8f50bd051d709c7c0ae5ec47ca31bbff7d2a2ad754c67b9cdf585567cb
+    target=ghcr.io/fleet-ai/cyber-post-train-opencode-runtime:1.18.27-ca4f0b8f-v1
+
+    umask 077
+    mkdir -p "$out"
+    test ! -e "$out/PUBLISHED.json"
+    test "$(command -v docker)" = /docker-cli/bin/docker
+    test "$(sha256sum /docker-cli/bin/docker | awk '{print $1}')" = \
+      242c7a8de606afba2acada7c7af00d77f92c3601678b2f3a60911b49a892c722
+
+    for _ in $(seq 1 600); do
+      test -f "$ready" && break
+      sleep 1
+    done
+    test -f "$ready"
+    test "$(sha256sum "$archive" | awk '{print $1}')" = "$expected_archive_sha"
+
+    for _ in $(seq 1 180); do
+      docker info >/dev/null 2>&1 && break
+      sleep 1
+    done
+    docker info >/dev/null
+    gzip -dc "$archive" | docker load >/dev/null
+    inspect=$(docker image inspect chris/opencode:1.18.27-cyber-v1 --format \
+      '{{.Id}} {{.Os}} {{.Architecture}} {{.Config.User}} {{.Config.WorkingDir}}')
+    test "$inspect" = "$expected_image_id linux amd64 node /workspace"
+    test "$(docker run --rm chris/opencode:1.18.27-cyber-v1 opencode --version)" = 1.18.27
+
+    printf '%s' "$GH_TOKEN" | docker login ghcr.io \
+      --username x-access-token --password-stdin >/dev/null
+    docker tag chris/opencode:1.18.27-cyber-v1 "$target"
+    docker push "$target" >/dev/null
+    repo_digest=$(docker image inspect "$target" --format '{{range .RepoDigests}}{{println .}}{{end}}' \
+      | awk '/^ghcr.io\/fleet-ai\/cyber-post-train-opencode-runtime@sha256:/{print; exit}')
+    case "$repo_digest" in
+      ghcr.io/fleet-ai/cyber-post-train-opencode-runtime@sha256:????????????????????????????????????????????????????????????????) ;;
+      *) echo 'push did not return the expected immutable GHCR digest' >&2; exit 1 ;;
+    esac
+    docker logout ghcr.io >/dev/null
+    docker manifest inspect "$repo_digest" >"$out/manifest.json"
+
+    python3 - "$out" "$repo_digest" "$NODE_NAME" "$expected_archive_sha" \
+      "$expected_image_id" <<'PY'
+    import hashlib
+    import json
+    import pathlib
+    import sys
+
+    out = pathlib.Path(sys.argv[1])
+    receipt = {
+        "schema_version": "fleet-opencode11827-exact-image-publication-v1",
+        "status": "PUBLISHED_IMMUTABLE",
+        "image": sys.argv[2],
+        "publisher_node": sys.argv[3],
+        "source_archive_sha256": "sha256:" + sys.argv[4],
+        "source_image_id": sys.argv[5],
+        "platform": {"architecture": "amd64", "os": "linux"},
+        "runtime": {
+            "opencode_version": "1.18.27",
+            "user": "node",
+            "working_dir": "/workspace",
+        },
+        "credentials_included": False,
+        "prompts_traces_flags_or_scores_included": False,
+    }
+    canonical = json.dumps(receipt, sort_keys=True, separators=(",", ":")).encode()
+    receipt["receipt_sha256"] = "sha256:" + hashlib.sha256(canonical).hexdigest()
+    payload = json.dumps(receipt, sort_keys=True, separators=(",", ":")) + "\n"
+    (out / "PUBLISHED.json").write_text(payload)
+    (out / "PUBLISHED.json.sha256").write_text(
+        hashlib.sha256(payload.encode()).hexdigest() + "  PUBLISHED.json\n"
+    )
+    PY
+    rm -f "$archive" "$ready"
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: chris-cyber-opencode11827-image-publish-v1
+  namespace: fleet-train-jobs
+  labels:
+    cyber-post-train.fleet.ai/experiment: opencode11827-image-publish-v1
+    cyber-post-train.fleet.ai/owner: chris
+spec:
+  activeDeadlineSeconds: 1200
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 604800
+  template:
+    metadata:
+      labels:
+        cyber-post-train.fleet.ai/experiment: opencode11827-image-publish-v1
+        cyber-post-train.fleet.ai/owner: chris
+    spec:
+      priorityClassName: fleet-serve-low
+      preemptionPolicy: Never
+      restartPolicy: Never
+      nodeSelector:
+        kubernetes.io/arch: amd64
+        workload: fleetai-training-ng-cpu
+      tolerations:
+        - key: workload
+          operator: Equal
+          value: fleetai-training-ng-cpu
+          effect: NoSchedule
+      imagePullSecrets:
+        - name: ghcr-pull
+      initContainers:
+        - name: docker-cli
+          image: docker.io/library/docker@sha256:f649ef046008ca7f926a2571c32b0ac22e5c59eb61b959617f9acc2a4c638cf5
+          command: ["/bin/sh", "-ec"]
+          args:
+            - install -D -m 0755 /usr/local/bin/docker /cli/bin/docker
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {cpu: 500m, memory: 512Mi}
+          volumeMounts:
+            - {name: docker-cli, mountPath: /cli}
+        - name: dind
+          image: docker.io/library/docker@sha256:f649ef046008ca7f926a2571c32b0ac22e5c59eb61b959617f9acc2a4c638cf5
+          restartPolicy: Always
+          args: ["--host=unix:///var/run/docker.sock", "--tls=false"]
+          securityContext: {privileged: true}
+          readinessProbe:
+            exec: {command: ["docker", "info"]}
+            periodSeconds: 2
+          resources:
+            requests: {cpu: "1", memory: 2Gi, ephemeral-storage: 20Gi}
+            limits: {cpu: "2", memory: 4Gi, ephemeral-storage: 30Gi}
+          volumeMounts:
+            - {name: docker-socket, mountPath: /var/run}
+            - {name: docker-data, mountPath: /var/lib/docker}
+      containers:
+        - name: publisher
+          image: ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
+          command: ["/bin/bash", "/bootstrap/publish.sh"]
+          env:
+            - {name: PATH, value: "/docker-cli/bin:/usr/local/bin:/usr/bin:/bin"}
+            - {name: DOCKER_HOST, value: "unix:///var/run/docker.sock"}
+            - name: GH_TOKEN
+              valueFrom:
+                secretKeyRef: {name: img-build-secrets, key: GH_TOKEN}
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef: {fieldPath: spec.nodeName}
+          resources:
+            requests: {cpu: "1", memory: 2Gi, ephemeral-storage: 2Gi}
+            limits: {cpu: "2", memory: 4Gi, ephemeral-storage: 4Gi}
+          volumeMounts:
+            - {name: docker-cli, mountPath: /docker-cli, readOnly: true}
+            - {name: docker-socket, mountPath: /var/run}
+            - {name: bootstrap, mountPath: /bootstrap, readOnly: true}
+            - {name: sfs, mountPath: /mnt/sfs}
+      volumes:
+        - name: bootstrap
+          configMap:
+            name: chris-cyber-opencode11827-image-publish-v1
+            defaultMode: 0555
+        - {name: docker-cli, emptyDir: {sizeLimit: 256Mi}}
+        - {name: docker-data, emptyDir: {sizeLimit: 30Gi}}
+        - {name: docker-socket, emptyDir: {}}
+        - {name: sfs, persistentVolumeClaim: {claimName: sfs-shared}}
