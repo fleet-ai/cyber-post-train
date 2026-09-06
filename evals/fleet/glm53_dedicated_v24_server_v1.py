@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import re
 import shlex
 import uuid
@@ -170,20 +171,51 @@ def validate_binding(binding: dict[str, Any]) -> None:
         raise ServerPlanError("v24_server_binding_invalid")
 
 
+def render_server_command(
+    *,
+    observer_source: str = READY_OBSERVER,
+    server_argv: tuple[str, ...] = SERVER_ARGV,
+) -> str:
+    """Render one command that survives the Jobs API's outer ``/bin/sh -c``."""
+
+    if not observer_source or not server_argv or any(not item for item in server_argv):
+        raise ServerPlanError("v24_server_command_input_invalid")
+    observer_b64 = base64.b64encode(observer_source.encode("utf-8")).decode("ascii")
+    observer_runner = shlex.join(
+        (
+            "python3",
+            "-c",
+            (
+                "import base64,sys; "
+                "source=base64.b64decode(sys.argv[1], validate=True); "
+                "exec(compile(source, '<glm53-ready-observer>', 'exec'))"
+            ),
+            observer_b64,
+        )
+    )
+    shell_program = "\n".join(
+        (
+            "set -euo pipefail",
+            '"$@" &',
+            "server_pid=$!",
+            "export GLM53_SERVER_PID=$server_pid",
+            'cleanup() { kill "$server_pid" 2>/dev/null || true; }',
+            "trap cleanup EXIT",
+            observer_runner,
+            'wait "$server_pid"',
+            "trap - EXIT",
+        )
+    )
+    return shlex.join(("bash", "-lc", shell_program, "--", *server_argv))
+
+
 def payload() -> dict[str, Any]:
     """Return the exact preview-only Jobs API request body."""
 
     return {
         "title": TITLE,
         "image": IMAGE,
-        "command": (
-            "bash -lc 'set -euo pipefail; \"$@\" & server_pid=$!; "
-            "export GLM53_SERVER_PID=$server_pid; "
-            "trap '\"'\"'kill \"$server_pid\" 2>/dev/null || true'\"'\"' EXIT; "
-            f"python3 -c {shlex.quote(READY_OBSERVER)}; "
-            "wait \"$server_pid\"; trap - EXIT' -- "
-            + shlex.join(SERVER_ARGV)
-        ),
+        "command": render_server_command(),
         "workers": 1,
         "gpus_per_worker": 8,
         "run_dir": RUN_DIR,
@@ -220,8 +252,9 @@ def validate_payload(value: dict[str, Any]) -> None:
         or "IDLE_SECONDS" in command
         or "metrics_digest" in command
         or "MODEL-TRAFFIC" in command
-        or "READY.json" not in command
-        or "APPLICATION_HEALTH_HTTP_200" not in command
+        or base64.b64encode(READY_OBSERVER.encode("utf-8")).decode("ascii") not in command
+        or READY_PATH not in READY_OBSERVER
+        or "APPLICATION_HEALTH_HTTP_200" not in READY_OBSERVER
     ):
         raise ServerPlanError("v24_payload_or_idle_authority_invalid")
 
