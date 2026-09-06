@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import statistics
+import uuid
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -121,6 +122,24 @@ def _validate_binding(binding: dict[str, Any]) -> None:
         raise QualificationError("v23_server_binding_invalid")
 
 
+def canonical_model_binding(binding: dict[str, Any]) -> dict[str, Any]:
+    """Project expanded v23 identity to the parity runner's exact seven keys."""
+
+    _validate_binding(binding)
+    return {
+        key: binding[key]
+        for key in (
+            "api_run_id",
+            "rayjob_uid",
+            "head_pod_uid",
+            "service_uid",
+            "served_id",
+            "model_revision",
+            "context_length",
+        )
+    }
+
+
 def authorize(
     binding: dict[str, Any],
     parity: dict[str, Any],
@@ -133,7 +152,7 @@ def authorize(
     if (
         parity.get("receipt_sha256") != crypto.digest_without(parity, "receipt_sha256")
         or parity.get("status") != "PASSED_NON_SCORED"
-        or parity.get("endpoint", {}).get("server_binding") != binding
+        or parity.get("endpoint", {}).get("server_binding") != canonical_model_binding(binding)
         or parity.get("execution", {}).get("task_instance_session_verifier_scoring_calls") != 0
     ):
         raise QualificationError("v23_parity_invalid")
@@ -187,6 +206,7 @@ Observer = Callable[[Path, int, dict[str, Any]], dict[str, Any]]
 
 def validate_gpu_wave(observed: dict[str, Any], concurrency: int, server: dict[str, Any]) -> None:
     utilization = observed.get("max_utilization_percent_by_device")
+    identity = observed.get("identity")
     if (
         observed.get("schema_version") != GPU_OBSERVER_SCHEMA
         or observed.get("status") != "OBSERVED_SCORE_FREE_WAVE"
@@ -196,11 +216,60 @@ def validate_gpu_wave(observed: dict[str, Any], concurrency: int, server: dict[s
         or not isinstance(utilization, list)
         or len(utilization) != 8
         or any(type(value) not in {int, float} or not 0 < value <= 100 for value in utilization)
+        or not isinstance(identity, dict)
+        or set(identity)
+        != {
+            "server_rayjob_uid",
+            "server_head_pod_uid",
+            "qualifier_job_uid",
+            "qualifier_pod_uid",
+        }
+        or any(not _valid_uuid(value) for value in identity.values())
         or observed.get("server_identity_unchanged") is not True
         or observed.get("qualifier_identity_unchanged") is not True
         or observed.get("receipt_sha256") != crypto.digest_without(observed, "receipt_sha256")
     ):
         raise QualificationError("v23_gpu_wave_invalid")
+
+
+def _valid_uuid(value: object) -> bool:
+    try:
+        return uuid.UUID(str(value)).int != 0
+    except ValueError:
+        return False
+
+
+def validate_raw(raw: dict[str, Any]) -> None:
+    authorization = raw.get("authorization")
+    binding = raw.get("server_binding")
+    if not isinstance(authorization, dict) or not isinstance(binding, dict):
+        raise QualificationError("v23_raw_authority_invalid")
+    _validate_binding(binding)
+    if (
+        raw.get("schema_version") != RAW_SCHEMA
+        or raw.get("status") != "COMPLETED_SCORE_FREE_WAVES"
+        or raw.get("receipt_sha256") != crypto.digest_without(raw, "receipt_sha256")
+        or authorization.get("schema_version") != AUTH_SCHEMA
+        or authorization.get("receipt_sha256")
+        != crypto.digest_without(authorization, "receipt_sha256")
+        or raw.get("authorization_receipt_sha256") != authorization.get("receipt_sha256")
+        or authorization.get("server_binding") != binding
+        or authorization.get("qualification_launch_authorized") is not True
+        or authorization.get("scored_launch_authorized") is not False
+        or any(
+            raw.get(field) != 0
+            for field in (
+                "fleet_task_instance_calls",
+                "fleet_session_calls",
+                "verifier_calls",
+                "scoring_calls",
+            )
+        )
+        or raw.get("scored_launch_authorized") is not False
+        or not isinstance(raw.get("waves"), list)
+        or not isinstance(raw.get("gpu_waves"), list)
+    ):
+        raise QualificationError("v23_raw_authority_invalid")
 
 
 def evaluate(waves: list[dict[str, Any]], gpu_waves: list[dict[str, Any]]) -> dict[str, Any]:
@@ -274,7 +343,7 @@ def execute(
             wave = engine.run_wave(
                 concurrency,
                 origin=origin,
-                binding=binding,
+                binding=canonical_model_binding(binding),
                 runner=runner,
                 counter=counter,
             )
@@ -287,6 +356,7 @@ def execute(
         "schema_version": RAW_SCHEMA,
         "status": "COMPLETED_SCORE_FREE_WAVES",
         "authorization_receipt_sha256": authorization["receipt_sha256"],
+        "authorization": authorization,
         "server_binding": binding,
         "waves": waves,
         "gpu_waves": gpu_waves,
@@ -330,6 +400,7 @@ def main() -> int:
         if args.raw is None or args.out is None:
             parser.error("validate requires raw and out")
         raw = load(args.raw)
+        validate_raw(raw)
         verdict = {
             "schema_version": VERDICT_SCHEMA,
             **evaluate(raw["waves"], raw["gpu_waves"]),

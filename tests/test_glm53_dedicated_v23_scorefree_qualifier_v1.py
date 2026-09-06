@@ -7,6 +7,7 @@ import pytest
 from evals.fleet import exact_pass4_crypto as crypto
 from evals.fleet import glm53_dedicated_v23_scorefree_package_v1 as package
 from evals.fleet import glm53_dedicated_v23_scorefree_qualifier_v1 as qualifier
+from evals.fleet import opencode_actual_harness_parity_v1 as actual_harness
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -31,7 +32,7 @@ def _evidence() -> tuple[dict, dict, dict]:
     binding = _binding()
     parity = {
         "status": "PASSED_NON_SCORED",
-        "endpoint": {"server_binding": binding},
+        "endpoint": {"server_binding": qualifier.canonical_model_binding(binding)},
         "execution": {"task_instance_session_verifier_scoring_calls": 0},
     }
     parity["receipt_sha256"] = crypto.digest_without(parity, "receipt_sha256")
@@ -102,6 +103,22 @@ def test_authorization_binds_uid_parity_watchdog_and_live_state() -> None:
     )
 
 
+def test_real_parity_validator_accepts_only_canonical_seven_key_binding() -> None:
+    canonical = qualifier.canonical_model_binding(_binding())
+    assert set(canonical) == {
+        "api_run_id",
+        "rayjob_uid",
+        "head_pod_uid",
+        "service_uid",
+        "served_id",
+        "model_revision",
+        "context_length",
+    }
+    assert actual_harness.validate_server_binding(canonical, "glm-5.3") == canonical
+    with pytest.raises(actual_harness.ActualHarnessParityError):
+        actual_harness.validate_server_binding(_binding(), "glm-5.3")
+
+
 @pytest.mark.parametrize(
     ("source", "field", "value", "message"),
     [
@@ -158,6 +175,7 @@ def test_execute_keeps_fleet_calls_zero_and_runs_frozen_waves(tmp_path, monkeypa
     calls = []
 
     def wave(concurrency, **_kwargs):
+        assert _kwargs["binding"] == qualifier.canonical_model_binding(_binding())
         calls.append(concurrency)
         return {
             "concurrency": concurrency,
@@ -187,6 +205,12 @@ def test_execute_keeps_fleet_calls_zero_and_runs_frozen_waves(tmp_path, monkeypa
             "server": qualifier.build_held()["server"],
             "devices_seen": 8,
             "max_utilization_percent_by_device": [50] * 8,
+            "identity": {
+                "server_rayjob_uid": "11111111-1111-4111-8111-111111111111",
+                "server_head_pod_uid": "22222222-2222-4222-8222-222222222222",
+                "qualifier_job_uid": "33333333-3333-4333-8333-333333333333",
+                "qualifier_pod_uid": "44444444-4444-4444-8444-444444444444",
+            },
             "server_identity_unchanged": True,
             "qualifier_identity_unchanged": True,
         }
@@ -208,3 +232,38 @@ def test_execute_keeps_fleet_calls_zero_and_runs_frozen_waves(tmp_path, monkeypa
     assert result["scoring_calls"] == 0
     assert result["scored_launch_authorized"] is False
     assert result["receipt_sha256"] == crypto.digest_without(result, "receipt_sha256")
+    qualifier.validate_raw(result)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("status", "FAILED"),
+        ("authorization_receipt_sha256", "sha256:" + "0" * 64),
+        ("fleet_session_calls", 1),
+        ("scored_launch_authorized", True),
+    ],
+)
+def test_raw_validation_fails_closed(field: str, value: object) -> None:
+    parity, watchdog, live = _evidence()
+    authorization = qualifier.authorize(_binding(), parity, watchdog, live)
+    raw = {
+        "schema_version": qualifier.RAW_SCHEMA,
+        "status": "COMPLETED_SCORE_FREE_WAVES",
+        "authorization_receipt_sha256": authorization["receipt_sha256"],
+        "authorization": authorization,
+        "server_binding": _binding(),
+        "waves": [],
+        "gpu_waves": [],
+        "fleet_task_instance_calls": 0,
+        "fleet_session_calls": 0,
+        "verifier_calls": 0,
+        "scoring_calls": 0,
+        "scored_launch_authorized": False,
+    }
+    raw["receipt_sha256"] = crypto.digest_without(raw, "receipt_sha256")
+    raw[field] = value
+    if field != "authorization_receipt_sha256":
+        raw["receipt_sha256"] = crypto.digest_without(raw, "receipt_sha256")
+    with pytest.raises(qualifier.QualificationError, match="raw_authority"):
+        qualifier.validate_raw(raw)
