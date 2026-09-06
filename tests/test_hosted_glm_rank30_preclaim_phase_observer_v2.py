@@ -89,7 +89,15 @@ def prior_file_sha256(payload: bytes) -> str:
 
 
 def test_held_receipt_is_digest_valid_and_forbids_launch() -> None:
-    held = package.build_held(ROOT, "package-commit-placeholder")
+    held = package.build_held(ROOT, "a03c5c80fddce915bc05ce7171189653f1aad962")
+    tracked = json.loads(
+        (
+            ROOT
+            / "docs/evidence/glm53-study/"
+            "2026-09-06-glm53-hosted-rank30-preclaim-phase-observer-held-v2.json"
+        ).read_text()
+    )
+    assert tracked == held
     assert held["status"] == "PASSED_HELD_NO_LAUNCH"
     assert held["observer_launch_authorized"] is False
     assert held["scored_successor_launch_authorized"] is False
