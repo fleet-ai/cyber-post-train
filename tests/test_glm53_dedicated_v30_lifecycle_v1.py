@@ -19,7 +19,7 @@ from evals.fleet import glm53_dedicated_v30_watchdog_live_release_v1 as adapter
 from evals.fleet import glm53_dedicated_v30_watchdog_package_v1 as watchdog
 
 ROOT = Path(__file__).resolve().parents[1]
-COMMIT = "0" * 40
+COMMIT = "74836f25c0ef3625fe58f071e6f2de0404a25110"
 
 
 def authorization() -> dict[str, object]:
@@ -144,6 +144,21 @@ def test_parity_authorization_binds_ready_and_active_watchdog() -> None:
     assert value["scored_launch_authorized"] is False
 
 
+def test_v30_observe_live_binds_the_underlying_runtime_engine(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sentinel = (binding(), live_state())
+
+    def observe(api_run_id: str) -> tuple[dict[str, object], dict[str, object]]:
+        assert api_run_id == "ft-run-1234abcd"
+        assert adapter.engine.server is server
+        assert adapter.engine.package is watchdog
+        return sentinel
+
+    monkeypatch.setattr(adapter.engine, "observe_live", observe)
+    assert adapter.observe_live("ft-run-1234abcd") == sentinel
+
+
 def test_controller_orders_watchdog_before_parity(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -257,3 +272,21 @@ def test_v30_watchdog_and_parity_contracts_are_600s_score_free() -> None:
     assert held["server_launch_authorized"] is False
     assert held["watchdog_launch_authorized"] is False
     assert held["scored_launch_authorized"] is False
+
+
+def test_v30_composite_held_receipt_is_digest_valid_and_no_launch() -> None:
+    expected = package.build_held(COMMIT)
+    path = (
+        ROOT
+        / "docs/evidence/glm53-study"
+        / "2026-09-06-glm53-dedicated-v30-zero-state-lifecycle-held-v1.json"
+    )
+    observed = json.loads(path.read_text())
+    assert observed == expected
+    assert observed["receipt_sha256"] == crypto.digest_without(
+        observed, "receipt_sha256"
+    )
+    assert observed["server_launch_authorized"] is False
+    assert observed["qualification_launch_authorized"] is False
+    assert observed["scored_launch_authorized"] is False
+    assert observed["api_mutation_calls"] == 0
