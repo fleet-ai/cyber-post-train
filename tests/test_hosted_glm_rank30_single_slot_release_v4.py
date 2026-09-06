@@ -1,6 +1,9 @@
 import copy
 import json
+import os
 import re
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -17,6 +20,32 @@ V6 = (
     / "docs/evidence/glm53-study"
     / "2026-09-06-glm53-hosted-rank30-release-diagnostic-v6-passed.json"
 )
+
+
+def _materialize(configmap: dict, root: Path) -> Path:
+    fleet = root / "evals/fleet"
+    configs = fleet / "configs"
+    configs.mkdir(parents=True)
+    (root / "evals/__init__.py").write_text("")
+    (fleet / "__init__.py").write_text("")
+    config_names = {
+        "campaign.json",
+        "selection.json",
+        "glm-template.json",
+        "qwen-template.json",
+        "bulk-qwen-a.json",
+        "bulk-qwen-b.json",
+        "bulk-glm-a.json",
+        "bulk-glm-b.json",
+    }
+    for source, target in re.findall(
+        r"([\w.-]+):([\w.-]+)", configmap["data"]["run.sh"]
+    ):
+        if source not in configmap["data"]:
+            continue
+        destination = configs / target if source in config_names else fleet / target
+        destination.write_text(configmap["data"][source])
+    return root
 
 
 def test_v6_pass_receipt_is_exact_and_score_free() -> None:
@@ -82,12 +111,18 @@ def test_scored_package_closure_materializes_every_imported_successor() -> None:
     configmap = scored_package.render(ROOT)["objects"]["items"][0]
     mappings = dict(re.findall(r"([\w.-]+):([\w.-]+)", configmap["data"]["run.sh"]))
     assert mappings["single_slot_v1.py"] == "hosted_glm_rank30_single_slot_v1.py"
+    assert mappings["bulk_source.py"] == "hosted_glm_exact_bulk_v1.py"
+    assert mappings["source_runtime.py"] == "hosted_glm_exact_bulk_runtime_v1.py"
+    assert mappings["whole.py"] == "hosted_glm_whole_task_successor_v1.py"
     assert mappings["single_slot_v3.py"] == "hosted_glm_rank30_single_slot_v3.py"
     assert mappings["single_slot_v4.py"] == "hosted_glm_rank30_single_slot_v4.py"
     assert mappings["bulk.py"] == "hosted_glm_rank30_single_slot_v5.py"
     assert mappings["bulk_runtime.py"] == "hosted_glm_rank30_single_slot_runtime_v4.py"
     assert {
         "single_slot_v1.py",
+        "bulk_source.py",
+        "source_runtime.py",
+        "whole.py",
         "single_slot_v3.py",
         "single_slot_v4.py",
         "bulk.py",
@@ -116,6 +151,32 @@ def test_release_package_is_fresh_held_and_binds_scored_and_v6_bytes() -> None:
     assert "hosted_glm_rank30_single_slot_v5" in configmap["data"]["run.sh"]
     assert "hosted_glm_rank30_single_slot_release_v4" in configmap["data"]["run.sh"]
     assert "runtime_gate_diagnostic" in configmap["data"]["release.py"]
+
+
+@pytest.mark.parametrize("kind", ["scored", "release"])
+def test_materialized_packages_import_exact_entrypoint(
+    tmp_path: Path, kind: str
+) -> None:
+    rendered = (
+        scored_package.render(ROOT)
+        if kind == "scored"
+        else release_package.render(ROOT)
+    )
+    root = _materialize(rendered["objects"]["items"][0], tmp_path / kind)
+    module = (
+        "evals.fleet.hosted_glm_rank30_single_slot_runtime_v4"
+        if kind == "scored"
+        else "evals.fleet.hosted_glm_rank30_single_slot_release_v4"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", f"import {module}"],
+        cwd=root,
+        env={**os.environ, "PYTHONPATH": str(root)},
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 def test_release_validator_requires_exact_v6_binding(

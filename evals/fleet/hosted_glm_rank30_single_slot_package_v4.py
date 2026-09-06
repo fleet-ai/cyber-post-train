@@ -10,6 +10,9 @@ from evals.fleet import hosted_glm_rank30_single_slot_v5 as successor
 
 PATHS = {
     **prior.PATHS,
+    "bulk_source.py": "evals/fleet/hosted_glm_exact_bulk_v1.py",
+    "source_runtime.py": "evals/fleet/hosted_glm_exact_bulk_runtime_v1.py",
+    "whole.py": "evals/fleet/hosted_glm_whole_task_successor_v1.py",
     "single_slot_v3.py": "evals/fleet/hosted_glm_rank30_single_slot_v3.py",
     "single_slot_v4.py": "evals/fleet/hosted_glm_rank30_single_slot_v4.py",
     "bulk.py": "evals/fleet/hosted_glm_rank30_single_slot_v5.py",

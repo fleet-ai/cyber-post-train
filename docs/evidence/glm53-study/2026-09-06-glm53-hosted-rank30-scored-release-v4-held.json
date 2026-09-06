@@ -38,8 +38,8 @@
     "job_name": "chris-glm53-r030-single-slot-release-v4",
     "sfs_root": "/mnt/sfs/jobs/chris-glm53-r030-single-slot-release-v4"
   },
-  "held_release_package_sha256": "sha256:0e981851ed862964d5619a4ec4be24996109ba66f0467718362ab4fd0216962f",
-  "held_scored_package_sha256": "sha256:bd5cc15b79fd076bb38c53c45719d2937d18fce7c95f1bd614ee13c274a7c2b9",
+  "held_release_package_sha256": "sha256:7835d00fe1ec34dfbd41637949d878347e0382c411f6aba42b35eb189807bf43",
+  "held_scored_package_sha256": "sha256:7d50e93176ca83852c3df4585e6f252dbfda681cdbe0981fe2d3fe95d73337cd",
   "launch_authorized": false,
   "model_calls_authorized": false,
   "rank29_peer": {
@@ -52,9 +52,9 @@
   },
   "rank30_cells_changed": false,
   "rank31_held": true,
-  "receipt_sha256": "sha256:ccb06624ab1d03dc934df1795e3745a28ba24ddefaee5f6229de3a91319b19d4",
+  "receipt_sha256": "sha256:49b6b0e34d0fe6d701f63ccca7409e1ca00c5071f93fccc2ca34d952c1d9528d",
   "schema_version": "fleet-hosted-glm-rank30-scored-release-held-v4",
-  "scored_source_package_sha256": "sha256:d0e695e56539abf074c7c13c5d6e231663b4d6025a5d4030d4d7caa06330d9d0",
+  "scored_source_package_sha256": "sha256:f94237a58819eba51def73e3f9645ad75f3abf5b4de9b2df96a9292f4994c052",
   "scoring_authorized": false,
   "status": "HELD_FOR_INDEPENDENT_REVIEW",
   "v6_runtime_gate_diagnostic": {
