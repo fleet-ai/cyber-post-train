@@ -26,6 +26,7 @@ FILES = tuple(
         | {
             "evals/fleet/glm53_dedicated_v32_controller_v1.py",
             "evals/fleet/glm53_dedicated_v32_create_v1.py",
+            "evals/fleet/glm53_dedicated_v32_live_authorization_v1.py",
             "evals/fleet/glm53_dedicated_v32_watchdog_live_release_v1.py",
             "evals/fleet/glm53_dedicated_v32_watchdog_package_v1.py",
         }
@@ -143,15 +144,28 @@ def build_held(root: Path, package_commit: str) -> dict[str, Any]:
             "evals.fleet.glm53_dedicated_v32_incluster_parity_v1"
         ),
         "parity_authorization_schema": parity.SCHEMA,
-        "required_active_dedicated_nodes": 0,
-        "required_active_dedicated_gpus": 0,
-        "planned_nodes_after_create": 1,
-        "planned_gpus_after_create": 8,
-        "allowed_footprints": [
-            "zero_to_one_node_8gpu",
-            "exact_q_dp6_l_to_two_nodes_14gpu",
+        "admissible_footprints": [
+            {
+                "mode": "ZERO_PROJECT_SERVER",
+                "required_active_nodes": 0,
+                "required_active_gpus": 0,
+                "projected_nodes": 1,
+                "projected_gpus": 8,
+            },
+            {
+                "mode": "LIVE_QUALIFIED_QWEN_DP6_COEXISTENCE",
+                "required_active_nodes": 1,
+                "required_active_gpus": 6,
+                "projected_nodes": 2,
+                "projected_gpus": 14,
+                "terminal_score_free_qualification_authority_required": True,
+                "exact_live_uid_chain_match_required": True,
+            },
         ],
-        "exact_qwen_coexistence": server.EXACT_QWEN_COEXISTENCE,
+        "current_qwen_qualification_claimed": False,
+        "live_authorization_builder": (
+            "evals.fleet.glm53_dedicated_v32_live_authorization_v1"
+        ),
         "server_priority_class": server.payload()["priority_class"],
         "server_preemption_policy": "Never",
         "idle_release_seconds": 600,

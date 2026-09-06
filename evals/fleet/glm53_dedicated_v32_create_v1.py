@@ -18,6 +18,7 @@ from typing import Any
 from evals.fleet import exact_pass4_crypto as crypto
 from evals.fleet import glm53_dedicated_v24_watchdog_live_release_v1 as live_release
 from evals.fleet import glm53_dedicated_v31_create_v1 as engine
+from evals.fleet import glm53_dedicated_v32_live_authorization_v1 as live_authorization
 
 SCHEMA = "fleet-glm53-dedicated-v32-create-authorization-v1"
 RESULT_SCHEMA = "fleet-glm53-dedicated-v32-create-result-v1"
@@ -29,7 +30,7 @@ CONTROL_DIR = "/mnt/sfs/jobs/chris-cyber-evalserve-glm53-tp8-a-v32-create-contro
 AUTHORIZATION_PATH = CONTROL_DIR + "/CREATE-AUTHORIZED.json"
 RESULT_PATH = CONTROL_DIR + "/CREATED.json"
 
-AUTH_KEYS = engine.AUTH_KEYS | {"coexisting_qwen_server"}
+AUTH_KEYS = engine.AUTH_KEYS | {"coexisting_qwen_server", "live_observation"}
 API_URL = engine.API_URL
 AUTH_MAX_AGE_SECONDS = engine.AUTH_MAX_AGE_SECONDS
 SERVED_ID = engine.SERVED_ID
@@ -38,27 +39,6 @@ CONTEXT_LENGTH = engine.CONTEXT_LENGTH
 CreateError = engine.CreateError
 ServerPlanError = CreateError
 _LOCK = threading.Lock()
-EXACT_QWEN_COEXISTENCE = {
-    "api_run_id": "ft-run-2e206a48",
-    "rayjob_name": "ft-run-2e206a48",
-    "rayjob_uid": "33e73b7b-d038-4a79-a884-54811906ec27",
-    "workload_name": "rayjob-ft-run-2e206a48-23cf4",
-    "workload_uid": "351dbab9-fc60-487a-a83c-219044242de8",
-    "raycluster_name": "ft-run-2e206a48-lpx8f",
-    "raycluster_uid": "dfb2772a-2b2d-4d6b-86ac-82b7ec92415d",
-    "head_pod_name": "ft-run-2e206a48-lpx8f-head-mm4qp",
-    "head_pod_uid": "f60f47d7-d218-4a81-b740-c5578ff750e4",
-    "head_pod_node": "computeinstance-e04q707wzj5z9c6a2r",
-    "service_name": "ft-run-2e206a48-lpx8f-head-svc",
-    "service_uid": "e886a1a8-3899-4f7f-963c-16ed15417561",
-    "nodes": 1,
-    "gpus": 6,
-    "qualified_score_free": True,
-    "healthy": True,
-    "head_pod_restarts": 0,
-}
-
-
 @contextmanager
 def bound_engine() -> Iterator[None]:
     if not _LOCK.acquire(blocking=False):
@@ -120,10 +100,14 @@ def validate_authorization(value: dict[str, Any]) -> None:
         value.get("planned_gpus_after_create"),
     )
     coexistence = value.get("coexisting_qwen_server")
-    footprint_valid = (
-        footprint == (0, 0, 1, 8) and coexistence is None
-    ) or (
-        footprint == (1, 6, 2, 14) and coexistence == EXACT_QWEN_COEXISTENCE
+    footprint_valid = (footprint == (0, 0, 1, 8) and coexistence is None) or (
+        footprint == (1, 6, 2, 14)
+        and isinstance(coexistence, dict)
+        and coexistence.get("requested_nodes") == 1
+        and coexistence.get("requested_gpus") == 6
+        and coexistence.get("qualified_score_free") is True
+        and coexistence.get("head_pod_running_ready") is True
+        and coexistence.get("head_pod_restarts") == 0
     )
     if (
         set(value) != AUTH_KEYS
@@ -154,6 +138,13 @@ def validate_authorization(value: dict[str, Any]) -> None:
         or value.get("receipt_sha256") != crypto.digest_without(value, "receipt_sha256")
     ):
         raise CreateError("v32_create_authorization_invalid")
+    live = value.get("live_observation")
+    if not isinstance(live, dict):
+        raise CreateError("v32_create_authorization_invalid")
+    try:
+        live_authorization.validate_live_observation(live, value)
+    except live_authorization.LiveAuthorizationError as exc:
+        raise CreateError("v32_create_authorization_invalid") from exc
 
 
 def create_once(
@@ -227,12 +218,28 @@ def build_held() -> dict[str, Any]:
         "server_title": TITLE,
         "server_run_dir": RUN_DIR,
         "request_sha256": request_sha256(),
-        "required_active_dedicated_nodes": 0,
-        "required_active_dedicated_gpus": 0,
-        "planned_nodes_after_create": 1,
-        "planned_gpus_after_create": 8,
-        "allowed_footprints": ["zero_to_one_node_8gpu", "exact_q_dp6_l_to_two_nodes_14gpu"],
-        "exact_qwen_coexistence": EXACT_QWEN_COEXISTENCE,
+        "admissible_footprints": [
+            {
+                "mode": "ZERO_PROJECT_SERVER",
+                "required_active_nodes": 0,
+                "required_active_gpus": 0,
+                "projected_nodes": 1,
+                "projected_gpus": 8,
+            },
+            {
+                "mode": "LIVE_QUALIFIED_QWEN_DP6_COEXISTENCE",
+                "required_active_nodes": 1,
+                "required_active_gpus": 6,
+                "projected_nodes": 2,
+                "projected_gpus": 14,
+                "terminal_score_free_qualification_authority_required": True,
+                "exact_live_uid_chain_match_required": True,
+            },
+        ],
+        "current_qwen_qualification_claimed": False,
+        "live_authorization_builder": (
+            "evals.fleet.glm53_dedicated_v32_live_authorization_v1"
+        ),
         "priority_class": payload()["priority_class"],
         "preemption_policy": "Never",
         "single_live_observation_required": True,
