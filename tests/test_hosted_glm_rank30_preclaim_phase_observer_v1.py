@@ -89,16 +89,6 @@ def test_materialized_exact_scored_package_imports_in_isolation(tmp_path: Path) 
         bootstrap.materialize(projected, repo)
 
 
-def _phases(failure: int | None = None, secret: str = "") -> tuple[diagnostic.Phase, ...]:
-    result = []
-    for index, (name, _function) in enumerate(diagnostic.PHASES, start=1):
-        if index == failure:
-            result.append((name, lambda _root, _state: (_ for _ in ()).throw(RuntimeError(secret))))
-        else:
-            result.append((name, lambda _root, _state: None))
-    return tuple(result)
-
-
 def test_observer_receipt_exposes_only_sanitized_phase_and_zero_call_state(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -106,13 +96,27 @@ def test_observer_receipt_exposes_only_sanitized_phase_and_zero_call_state(
     monkeypatch.setenv("POD_UID", "22222222-2222-4222-8222-222222222222")
     output = tmp_path / "failure" / "DIAGNOSTIC.json"
     secret = "do-not-serialize-this-runtime-detail"
-    assert diagnostic.run(ROOT, output_path=output, phases=_phases(6, secret)) == 1
+    completed = [name for name, _fn in diagnostic.PHASES[:5]]
+    receipt = diagnostic._receipt(  # noqa: SLF001
+        completed,
+        "06-frozen-release-replay",
+        True,
+        {},
+    )
+    with pytest.raises(TypeError):
+        diagnostic._receipt(  # type: ignore[call-arg]  # noqa: SLF001
+            completed,
+            "06-frozen-release-replay",
+            True,
+            {},
+            error=RuntimeError(secret),
+        )
+    diagnostic._write_receipt_once(output, receipt)  # noqa: SLF001
     payload = output.read_text()
     assert secret not in payload
     receipt = json.loads(payload)
     assert receipt["failed_phase"] == "06-frozen-release-replay"
-    assert receipt["error_type"] == "RuntimeError"
-    assert receipt["error_sha256"].startswith("sha256:")
+    assert receipt["failure_code"] == "FROZEN_RELEASE_INVARIANT_FAILED"
     assert receipt["completed_phases"] == [name for name, _fn in diagnostic.PHASES[:5]]
     assert receipt["provider_constructed"] is False
     assert receipt["session_model_boundary_crossed"] is False
@@ -126,7 +130,27 @@ def test_observer_receipt_exposes_only_sanitized_phase_and_zero_call_state(
         receipt, "receipt_sha256"
     )
     with pytest.raises(FileExistsError):
-        diagnostic.run(ROOT, output_path=output, phases=_phases())
+        diagnostic._write_receipt_once(output, receipt)  # noqa: SLF001
+
+
+@pytest.mark.parametrize("replace_all", [False, True])
+def test_noop_or_replaced_phase_callables_cannot_pass(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, replace_all: bool
+) -> None:
+    phases = list(diagnostic.PHASES)
+
+    def noop(_root: Path, _state: dict[str, object]) -> None:
+        return None
+
+    if replace_all:
+        phases = [(name, noop) for name, _function in phases]
+    else:
+        phases[4] = (phases[4][0], noop)
+    monkeypatch.setattr(diagnostic, "PHASES", tuple(phases))
+    output = tmp_path / "diagnostic" / "DIAGNOSTIC.json"
+    with pytest.raises(RuntimeError, match="phase binding drifted"):
+        diagnostic.run(ROOT, output_path=output)
+    assert not output.exists()
 
 
 def test_frozen_release_replay_uses_failed_execution_clock_and_exact_inputs(

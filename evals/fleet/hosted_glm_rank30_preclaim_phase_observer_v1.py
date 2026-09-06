@@ -6,7 +6,7 @@ import hashlib
 import json
 import os
 import uuid
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
@@ -219,15 +219,37 @@ PHASES: tuple[Phase, ...] = (
     ("06-frozen-release-replay", _validate_frozen_release),
     ("07-strict-current-peer", _validate_strict_current_peer),
 )
+_CANONICAL_PHASES = PHASES
+FAILURE_CODES = {
+    "01-frozen-source-package": "FROZEN_SOURCE_INVARIANT_FAILED",
+    "02-failed-controller-zero-effect": "FAILED_CONTROLLER_INVARIANT_FAILED",
+    "03-observer-identity": "OBSERVER_IDENTITY_INVARIANT_FAILED",
+    "04-inventory-load": "INVENTORY_INVARIANT_FAILED",
+    "05-runtime-plan": "RUNTIME_PLAN_INVARIANT_FAILED",
+    "06-frozen-release-replay": "FROZEN_RELEASE_INVARIANT_FAILED",
+    "07-strict-current-peer": "CURRENT_PEER_INVARIANT_FAILED",
+}
+
+
+def _validate_phase_bindings() -> None:
+    if PHASES is not _CANONICAL_PHASES or len(PHASES) != len(_CANONICAL_PHASES):
+        raise RuntimeError("rank-30 observer phase binding drifted")
+    for actual, expected in zip(PHASES, _CANONICAL_PHASES, strict=True):
+        if actual[0] != expected[0] or actual[1] is not expected[1]:
+            raise RuntimeError("rank-30 observer phase binding drifted")
 
 
 def _receipt(
-    completed: list[str], failed_phase: str | None, error: Exception | None,
+    completed: list[str],
+    failed_phase: str | None,
+    failed: bool,
     state: dict[str, Any],
 ) -> dict[str, Any]:
+    if failed != (failed_phase is not None):
+        raise RuntimeError("rank-30 observer failure classification is invalid")
     body: dict[str, Any] = {
         "schema_version": SCHEMA,
-        "status": "FAILED" if error is not None else "PASSED_TO_PROVIDER_BOUNDARY",
+        "status": "FAILED" if failed else "PASSED_TO_PROVIDER_BOUNDARY",
         "observer_identity": {
             "job_name": JOB_NAME,
             "configmap_name": CONFIGMAP_NAME,
@@ -244,16 +266,7 @@ def _receipt(
         "completed_phases": completed,
         "last_completed_phase": completed[-1] if completed else None,
         "failed_phase": failed_phase,
-        "error_type": type(error).__name__ if error is not None else None,
-        "error_sha256": (
-            self_hosted.sha256(
-                self_hosted.canonical_json(
-                    {"phase": failed_phase, "type": type(error).__name__, "message": str(error)}
-                )
-            )
-            if error is not None
-            else None
-        ),
+        "failure_code": FAILURE_CODES[failed_phase] if failed_phase else None,
         "input_digests": _input_digests(state),
         "zero_call_counters": {
             "model_calls": 0,
@@ -275,28 +288,29 @@ def _receipt(
     return body
 
 
-def run(
-    root: Path, *, output_path: Path = OUTPUT_PATH, phases: Sequence[Phase] = PHASES
-) -> int:
-    if [name for name, _function in phases] != [name for name, _function in PHASES]:
-        raise RuntimeError("rank-30 observer phase order drifted")
-    completed: list[str] = []
-    failed_phase: str | None = None
-    error: Exception | None = None
-    state: dict[str, Any] = {}
-    for name, function in phases:
-        try:
-            function(root, state)
-        except Exception as exc:  # a sanitized terminal receipt is the purpose
-            failed_phase, error = name, exc
-            break
-        completed.append(name)
-    receipt = _receipt(completed, failed_phase, error, state)
+def _write_receipt_once(output_path: Path, receipt: dict[str, Any]) -> None:
     output_path.parent.mkdir(mode=0o700, parents=True, exist_ok=False)
     descriptor = os.open(output_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(descriptor, "wb") as handle:
         handle.write(self_hosted.canonical_json(receipt) + b"\n")
-    return int(error is not None)
+
+
+def run(root: Path, *, output_path: Path = OUTPUT_PATH) -> int:
+    _validate_phase_bindings()
+    completed: list[str] = []
+    failed_phase: str | None = None
+    failed = False
+    state: dict[str, Any] = {}
+    for name, function in PHASES:
+        try:
+            function(root, state)
+        except Exception:  # exact errors are deliberately discarded before receipt
+            failed_phase, failed = name, True
+            break
+        completed.append(name)
+    receipt = _receipt(completed, failed_phase, failed, state)
+    _write_receipt_once(output_path, receipt)
+    return int(failed)
 
 
 def main() -> int:
