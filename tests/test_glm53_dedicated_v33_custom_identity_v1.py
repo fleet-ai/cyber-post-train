@@ -17,7 +17,7 @@ from evals.fleet import glm53_dedicated_v33_watchdog_package_v1 as watchdog
 
 ROOT = Path(__file__).resolve().parents[1]
 OBSERVED_RUN_ID = "glm53-tp8-v33-e4888aa7"
-PACKAGE_COMMIT = "9aa7e3dd311f11373b1eb76923489d85255d2c77"
+PACKAGE_COMMIT = "5087b2754be38b64aa403df1b6689218ebe018ae"
 
 
 class FakeResponse:
