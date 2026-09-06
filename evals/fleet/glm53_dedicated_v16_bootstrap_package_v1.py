@@ -13,7 +13,7 @@ import yaml
 from evals.fleet import glm53_dedicated_v14_scored_canary_package_v1 as controller
 from evals.fleet import self_hosted
 
-JOB_NAME = "chris-glm53-dedicated-v17-r051-bootstrap-v2"
+JOB_NAME = "chris-glm53-dedicated-v18-r051-bootstrap-v3"
 SOURCE_CONFIGMAP = JOB_NAME + "-source"
 EVIDENCE_CONFIGMAP = JOB_NAME + "-evidence"
 SFS_ROOT = f"/mnt/sfs/jobs/{JOB_NAME}"

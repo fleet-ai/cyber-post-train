@@ -14,7 +14,7 @@ from evals.fleet import glm53_dedicated_v14_scored_canary_v1 as canary
 from evals.fleet import hosted_glm_exact_bulk_runtime_v1 as inventory
 from evals.fleet import self_hosted
 
-OUTPUT = Path("/mnt/sfs/jobs/chris-glm53-dedicated-v17-r051-runtime-gate-v1/GATE.json")
+OUTPUT = Path("/mnt/sfs/jobs/chris-glm53-dedicated-v18-r051-runtime-gate-v2/GATE.json")
 
 
 def main() -> int:

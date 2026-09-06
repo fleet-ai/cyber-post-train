@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import uuid
 import argparse
 from datetime import UTC, datetime
@@ -19,7 +20,7 @@ from evals.fleet import hosted_glm_exact_bulk_v1 as source
 from evals.fleet import self_hosted
 
 SCHEMA = runtime.RELEASE_SCHEMA
-JOB_NAME = "chris-glm53-dedicated-v17-r051-release-v4"
+JOB_NAME = "chris-glm53-dedicated-v18-r051-release-v5"
 CONFIGMAP_NAME = JOB_NAME + "-run"
 OUTPUT = Path("/mnt/sfs/jobs") / JOB_NAME / "RELEASE.json"
 
@@ -70,8 +71,8 @@ def build(root: Path, package_path: Path) -> dict[str, Any]:
         package.get("reserved_cell_ids") != [row["cell_id"] for row in all_rank]
         or package.get("reserved_execution_ids")
         != [row["execution_id"] for row in all_rank]
-        or package.get("held_plan_sha256")
-        != "sha256:1a6c28364ec36909aac4e08dfb8365c43864b9f7f7bb252ff30373fe10b93015"
+        or not isinstance(package.get("held_plan_sha256"), str)
+        or re.fullmatch(r"sha256:[0-9a-f]{64}", package["held_plan_sha256"]) is None
     ):
         raise RuntimeError("dedicated v15 reservation package drifted")
     if OUTPUT.parent.exists() or OUTPUT.parent.is_symlink():

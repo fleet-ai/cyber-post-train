@@ -11,7 +11,7 @@ import yaml
 from evals.fleet import glm53_dedicated_v14_scored_canary_package_v1 as controller
 from evals.fleet import hosted_glm_exact_canary_package_v1 as base
 
-JOB = "chris-glm53-dedicated-v17-r051-runtime-gate-v1"
+JOB = "chris-glm53-dedicated-v18-r051-runtime-gate-v2"
 
 
 def render(root: Path, parity: Path, binding: Path, release: Path, origin: str) -> dict:

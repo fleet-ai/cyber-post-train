@@ -19,14 +19,14 @@ from evals.fleet import self_hosted
 
 SCHEMA = "fleet-glm53-dedicated-v14-scored-canary-plan-v1"
 CONTROLLER = "glm-hosted-s3"
-JOB_NAME = "chris-glm53-dedicated-v14-r051-a1-canary-v1"
+JOB_NAME = "chris-glm53-dedicated-v18-r051-a1-canary-v2"
 CONFIGMAP_NAME = JOB_NAME + "-run"
 SFS_ROOT = Path("/mnt/sfs/jobs") / JOB_NAME
 CLAIM_ROOT = Path(source.CLAIM_ROOT)
-LEASE_ROOT = Path("/mnt/sfs/endpoint-leases/opencode11827-dedicated-v14-v1")
+LEASE_ROOT = Path("/mnt/sfs/endpoint-leases/opencode11827-dedicated-v18-v1")
 SELECTION_RANK = 51
 CANARY_ATTEMPT = 1
-SERVING_BLOCK = "glm-dedicated-v14-r051-v1"
+SERVING_BLOCK = "glm-dedicated-v18-r051-v2"
 PARITY_SCHEMA = "fleet-opencode-actual-harness-hosted-parity-v1"
 MODEL_REVISION = "30333038ada1f1dacb294a93270305a890b50c14"
 SERVICE_RE = re.compile(
@@ -139,7 +139,7 @@ def _transform(
         "maximum_streams": 1,
     }
     serving_run_dir = binding.get(
-        "run_dir", "/mnt/sfs/jobs/chris-cyber-evalserve-glm53-tp8-a-v14"
+        "run_dir", "/mnt/sfs/jobs/chris-cyber-evalserve-glm53-tp8-a-v18"
     )
     if not str(serving_run_dir).startswith("/mnt/sfs/jobs/chris-cyber-evalserve-glm53-"):
         raise ValueError("dedicated v14 serving run directory drifted")

@@ -117,7 +117,7 @@ def test_live_rows_reconciles_stale_list_state() -> None:
         assert [row["name"] for row in live._live_rows(client, rows)] == ["ft-run-qwen"]
 
 
-def test_v17_release_package_binds_bootstrap_qualified_controller() -> None:
+def test_v18_release_package_binds_bootstrap_qualified_controller() -> None:
     parity = ROOT / "docs/evidence/glm53-study/2026-09-05-glm53-dedicated-v14-actual-opencode-parity.json"
     binding = ROOT / "docs/evidence/glm53-study/2026-09-05-glm53-dedicated-v14-server-binding.json"
     built = release_package.render(
@@ -128,7 +128,7 @@ def test_v17_release_package_binds_bootstrap_qualified_controller() -> None:
     )
     assert built["controller_package_sha256"] == release_package.CONTROLLER_PACKAGE_SHA256
     configmap, job = built["objects"]["items"]
-    assert configmap["metadata"]["name"].endswith("release-v4-run")
+    assert configmap["metadata"]["name"].endswith("release-v5-run")
     assert job["spec"]["template"]["spec"]["preemptionPolicy"] == "Never"
 
 
@@ -263,7 +263,12 @@ def test_v17_preserves_server_runtime_and_binds_both_admission_receipts() -> Non
     assert new["run_dir"] == v17.RUN_DIR
     assert new["env"] == {**old["env"], "GLM53_RUN_DIR": v17.RUN_DIR}
     assert v17.PRE_ADMISSION["controller_package_sha256"] == v17.CONTROLLER_BOOTSTRAP["controller_package_sha256"]
-    assert v17.CONTROLLER_BOOTSTRAP["controller_package_sha256"] == release_package.CONTROLLER_PACKAGE_SHA256
+    assert v17.CONTROLLER_BOOTSTRAP["controller_package_sha256"] == (
+        "sha256:86468d5893a7f8be20315a82b44532fcfa9d53fc5fff937f431197aca9a0b249"
+    )
+    assert release_package.CONTROLLER_PACKAGE_SHA256 != v17.CONTROLLER_BOOTSTRAP[
+        "controller_package_sha256"
+    ]
     assert v17.CONTROLLER_BOOTSTRAP["receipt_sha256"].endswith("e3661333")
     assert v17.RUNTIME_GATE["receipt_sha256"].endswith("9c7930")
 
