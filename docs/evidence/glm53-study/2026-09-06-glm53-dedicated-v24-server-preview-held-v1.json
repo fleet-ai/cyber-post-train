@@ -1,0 +1,70 @@
+{
+  "api_mutation_calls": 0,
+  "capacity_gate": {
+    "eligible_eight_gpu_nodes": 6,
+    "must_recheck_immediately_before_create": true,
+    "requested": {
+      "cpu": "64",
+      "memory": "768Gi",
+      "nvidia.com/gpu": 8
+    }
+  },
+  "create_request_sha256": "sha256:9dfc5cb1bd4d42ae1a2aea765d092bbe69c1398a62c678612a1ce62562ad24d5",
+  "duplicate_gate": {
+    "jobs_api_run_dir_matches": 0,
+    "jobs_api_title_matches": 0,
+    "kubernetes_identity_or_remnant_matches": 0,
+    "sfs_run_dir_absent": true,
+    "sfs_observer_pod_uid": "72ce8163-fb2d-40ac-92da-da0dd578658d"
+  },
+  "held_plan_receipt_sha256": "sha256:313c41ef07b92a9e90fc0eb12de992125e0c343d27ad5123e38356f0c5da97c0",
+  "idle_release_authority": {
+    "active_request_or_queue_refreshes": true,
+    "activity_metrics": [
+      "sglang:num_requests_total",
+      "sglang:num_running_reqs",
+      "sglang:num_queue_reqs"
+    ],
+    "external_watchdog_required": true,
+    "idle_release_seconds": 600,
+    "implementation_sha256": "sha256:cdc791f6c78b579e45da65f0bc5d6e8d3c0415132dfb0b7a1d0e99b7065708dd",
+    "server_internal_idle_killer_present": false,
+    "uid_bound_jobs_api_release_required": true,
+    "uid_bound_kubernetes_absence_confirmation_required": true
+  },
+  "observed_at_utc": "2026-09-06T10:35:17Z",
+  "package_commit": "6914d674d7764af9b6e06e3d60aed01b44cf40ae",
+  "preview": {
+    "command_sha256": "sha256:3f51651bc8e7bc3520d1f6378dd263f1fdf8c78e88079064336d1e7c1fa6806b",
+    "gpus": 8,
+    "http_status": 200,
+    "image": "ghcr.io/fleet-ai/cyber-post-train-glm53-runtime@sha256:ec93ba50613fd13fb4c0b0a9105767ab18209a1e0108dab0923aad694c0206ec",
+    "preemption_policy": "Never",
+    "priority_class": "fleet-infra-quiet",
+    "priority_selection": "highest_jobs_api_admitted_nonpreempting",
+    "privileged": true,
+    "queue": "training-lq",
+    "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-glm53-tp8-a-v24",
+    "suspended_for_admission": true,
+    "title": "chris-cyber-evalserve-glm53-tp8-a-v24"
+  },
+  "project_dedicated_footprint": {
+    "active_gpus": 0,
+    "active_nodes": 0,
+    "max_gpus": 16,
+    "max_nodes": 2,
+    "planned_gpus_after_create": 8,
+    "planned_nodes_after_create": 1
+  },
+  "prompts_traces_flags_scores_or_model_outputs_included": false,
+  "qualification_launch_authorized": false,
+  "receipt_sha256": "sha256:05dc224460e680ae9bdb0728da9f1ae03aa36ed7ff328e989bcb49a5c4958fc2",
+  "renderer": {
+    "function": "payload",
+    "module": "evals.fleet.glm53_dedicated_v24_server_v1"
+  },
+  "schema_version": "fleet-glm53-dedicated-v24-server-preview-held-v1",
+  "scored_launch_authorized": false,
+  "server_launch_authorized": false,
+  "status": "PASSED_PREVIEW_ONLY_HELD"
+}
