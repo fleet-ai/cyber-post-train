@@ -161,14 +161,14 @@ def main() -> None:
             ):
                 before = candidate
         phase = "counter_state"
+        if before is not None and any(after[index] < before[index] for index in range(RANKS)):
+            raise ValueError("request counters decreased")
         legacy._atomic_json(  # noqa: SLF001 - same immutable observer package
             args.state_path, {"request_counters_by_rank": after}
         )
         if before is None:
             _write_status(args.status_path, "COUNTER_STATE_INITIALIZED", phase)
             return
-        if any(after[index] < before[index] for index in range(RANKS)):
-            raise ValueError("request counters decreased")
         if after == before:
             phase = "stable_baseline"
             baseline = legacy.baseline_observation(
