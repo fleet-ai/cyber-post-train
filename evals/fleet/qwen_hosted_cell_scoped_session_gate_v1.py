@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Mapping
 from typing import Any
 
 from evals.fleet import self_hosted
 
-SHA256_RE = re.compile(r"sha256:[0-9a-f]{64}")
 SESSION_IDENTITY_FIELDS = {
     "session_id",
     "eval_task_id",
@@ -16,9 +14,6 @@ SESSION_IDENTITY_FIELDS = {
     "task_key",
     "model_identity",
     "model_identity_status",
-    "cell_id",
-    "execution_id",
-    "run_id",
     "status",
 }
 
@@ -27,32 +22,12 @@ class IdentityAmbiguous(ValueError):
     """The metadata-only identity is insufficient to classify safely."""
 
 
-def _identity_tuple(value: Mapping[str, Any]) -> tuple[str, str, str] | None:
-    cell_id = value.get("cell_id")
-    execution_id = value.get("execution_id")
-    run_id = value.get("run_id")
-    if cell_id is execution_id is run_id is None:
-        return None
-    if (
-        not isinstance(cell_id, str)
-        or SHA256_RE.fullmatch(cell_id) is None
-        or not isinstance(execution_id, str)
-        or SHA256_RE.fullmatch(execution_id) is None
-        or not isinstance(run_id, str)
-        or not run_id
-    ):
-        raise IdentityAmbiguous("session statistical identity is malformed")
-    return cell_id, execution_id, run_id
-
-
 def classify(
     value: Mapping[str, Any],
     *,
     task_key: str,
     task_version_id: str,
     session_model: str,
-    planned_cell_ids: set[str],
-    known_non_target_executions: set[tuple[str, str, str]],
 ) -> str:
     """Classify one strict metadata-only row without looking at task content."""
     row = dict(value)
@@ -72,9 +47,6 @@ def classify(
     if not isinstance(version_id, str) or not version_id:
         raise IdentityAmbiguous("session task version is missing")
 
-    identity = _identity_tuple(row)
-    if identity is not None and identity[0] in planned_cell_ids:
-        return "TARGET_CELL_COLLISION"
     if version_id != task_version_id:
         return "NON_TARGET_VERSION"
 
@@ -86,8 +58,6 @@ def classify(
         return "TARGET_TREATMENT_COLLISION" if model == session_model else "NON_TARGET_MODEL"
     if model_status != "ambiguous" or model is not None:
         raise IdentityAmbiguous("model identity status is invalid")
-    if identity is not None and identity in known_non_target_executions:
-        return "KNOWN_NON_TARGET_EXECUTION"
     raise IdentityAmbiguous("exact target-version session identity is ambiguous")
 
 
@@ -106,18 +76,16 @@ def contract() -> dict[str, Any]:
             "metadata_only_session_identity_projection",
         ],
         "session_rule_order": [
-            "planned_cell_id_collision",
             "different_exact_task_version_is_non_target",
             "exact_version_and_exact_model_is_collision",
             "exact_version_and_different_resolved_model_is_non_target",
-            "exact_known_non_target_execution_tuple_is_non_target",
             "otherwise_fail_ambiguous",
         ],
         "null_model_policy": {
             "blanket_task_level_block_forbidden": True,
             "different_exact_task_version_may_be_ignored": True,
-            "known_non_target_execution_tuple_may_be_ignored": True,
-            "exact_target_version_without_known_cell_identity_still_blocks": True,
+            "caller_cell_execution_run_metadata_is_untrusted": True,
+            "exact_target_version_without_immutable_model_identity_blocks": True,
         },
         "required_projection_fields": sorted(SESSION_IDENTITY_FIELDS),
         "forbidden_projection_fields": [
@@ -131,6 +99,9 @@ def contract() -> dict[str, Any]:
             "flag",
             "metadata",
             "workflow_input_json",
+            "cell_id",
+            "execution_id",
+            "run_id",
         ],
         "authoritative_tally": {
             "accepted": 51,
@@ -143,6 +114,7 @@ def contract() -> dict[str, Any]:
             "behavioral_probe_passed": False,
             "fresh_observer_required": True,
             "rank_walk_forbidden": True,
+            "trusted_claim_and_accepted_paths_remain_required_for_cell_identity": True,
         },
         "privacy": {
             "methods": ["GET"],
