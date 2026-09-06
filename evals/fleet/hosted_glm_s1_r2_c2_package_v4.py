@@ -8,7 +8,7 @@ from typing import Any
 
 from evals.fleet import hosted_glm_exact_bulk_package_v1 as base
 from evals.fleet import hosted_glm_s1_r2_c2_package_v3 as closure
-from evals.fleet import hosted_glm_s1_r2_c2_release_v5 as release
+from evals.fleet import hosted_glm_s1_r2_c2_release_v6 as release
 from evals.fleet import hosted_glm_s1_r2_c2_successor_v4 as successor
 from evals.fleet import self_hosted
 
@@ -28,7 +28,7 @@ def render(root: Path, *, release_path: Path | None = None, bootstrap_path: Path
         "prior_release.py": "evals/fleet/hosted_glm_s1_r2_c2_release_v1.py",
         "release_v2.py": "evals/fleet/hosted_glm_s1_r2_c2_release_v2.py",
         "successor.py": "evals/fleet/hosted_glm_s1_r2_c2_successor_v4.py",
-        "successor_release.py": "evals/fleet/hosted_glm_s1_r2_c2_release_v5.py",
+        "successor_release.py": "evals/fleet/hosted_glm_s1_r2_c2_release_v6.py",
         "successor_runtime.py": "evals/fleet/hosted_glm_s1_r2_c2_runtime_v4.py",
         "run.sh": "evals/fleet/scripts/run_hosted_glm_s1_r2_c2_successor_v4.sh",
     }

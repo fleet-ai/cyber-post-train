@@ -56,7 +56,10 @@ def build(root: Path, *, target: Any = successor) -> dict[str, Any]:
     if occupied not in (0, 1):
         raise RuntimeError("rank-2 v2 has no free cap-two endpoint slot")
     inventory = target.load(bulk_runtime.INVENTORY_PATH)
-    plan = target.build_runtime_plan(inventory, root)
+    if getattr(target, "ENGINE_ADAPTER_V1", False):
+        plan = target.build_runtime_plan(target.CONTROLLER, inventory, root)
+    else:
+        plan = target.build_runtime_plan(inventory, root)
     if target.SFS_ROOT.exists() or target.SFS_ROOT.is_symlink():
         raise RuntimeError("rank-2 v2 output collision")
     for kind, name in (("jobs", target.JOB_NAME), ("configmaps", target.CONFIGMAP_NAME)):

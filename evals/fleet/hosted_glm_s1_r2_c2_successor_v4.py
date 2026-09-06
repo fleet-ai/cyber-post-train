@@ -25,6 +25,7 @@ RECONCILIATION_GATE_SCHEMA = base.predecessor.RECONCILIATION_GATE_SCHEMA
 COMMIT_RE = base.COMMIT_RE
 SHA256_RE = base.SHA256_RE
 CONTROLLERS = {CONTROLLER: base.CONTROLLERS[CONTROLLER]}
+ENGINE_ADAPTER_V1 = True
 load = prior.load
 validate_inventory_gate = prior.validate_inventory_gate
 

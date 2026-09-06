@@ -9,7 +9,7 @@ from typing import Any
 from evals.fleet import exact_pass4_bulk_runtime_v3 as engine
 from evals.fleet import hosted_glm_exact_bulk_runtime_v1 as bulk_runtime
 from evals.fleet import hosted_glm_s1_r2_c2_release_v1 as lease_state
-from evals.fleet import hosted_glm_s1_r2_c2_release_v5 as release
+from evals.fleet import hosted_glm_s1_r2_c2_release_v6 as release
 from evals.fleet import hosted_glm_s1_r2_c2_successor_v4 as successor
 from evals.fleet import self_hosted
 

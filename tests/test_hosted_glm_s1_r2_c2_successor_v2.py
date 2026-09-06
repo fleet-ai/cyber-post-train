@@ -10,6 +10,7 @@ from evals.fleet import hosted_glm_s1_r2_c2_bootstrap_package_v1 as bootstrap_pa
 from evals.fleet import hosted_glm_s1_r2_c2_bootstrap_package_v2 as bootstrap_package_v2
 from evals.fleet import hosted_glm_s1_r2_c2_package_v4 as package_v4
 from evals.fleet import hosted_glm_s1_r2_c2_release_package_v5 as release_package_v5
+from evals.fleet import hosted_glm_s1_r2_c2_release_package_v6 as release_package_v6
 from evals.fleet import hosted_glm_s1_r2_c2_successor_v4 as successor_v4
 from evals.fleet import exact_pass4_bulk_runtime_v3 as engine
 
@@ -117,3 +118,4 @@ def test_v4_packages_have_complete_projected_install_closure():
     package_v3.validate_install_closure(data)
     release_data = release_package_v5.render(ROOT)["objects"]["items"][0]["data"]
     package_v3.validate_install_closure(release_data)
+    package_v3.validate_install_closure(release_package_v6.render(ROOT)["objects"]["items"][0]["data"])
