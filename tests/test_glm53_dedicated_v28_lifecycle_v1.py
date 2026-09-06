@@ -1,5 +1,7 @@
 import json
 import os
+import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -17,7 +19,7 @@ from evals.fleet import glm53_dedicated_v28_watchdog_package_v1 as watchdog_pack
 
 ROOT = Path(__file__).resolve().parents[1]
 NOW = 2_000_000_000.0
-COMMIT = "ed5ac1488754607ed45dd0e6caef501d31df0dab"
+COMMIT = "8c875af2126d4794843bee2fd06946dc25984415"
 EVIDENCE_ROOT = ROOT / "docs/evidence/glm53-study"
 
 
@@ -89,6 +91,11 @@ def test_controller_job_keeps_credential_through_ready_and_handoff() -> None:
     assert any(row["name"] == "FLEET_API_KEY" for row in container["env"])
     assert "glm53_dedicated_v28_controller_v1" in command
     assert "uv sync --project /workspace --frozen" in command
+    assert "export PYTHONPATH=/workspace" in command
+    assert command.index("cd /workspace") < command.index(
+        "python -m evals.fleet.glm53_dedicated_v28_controller_v1"
+    )
+    assert controller_package.JOB_NAME.endswith("controller-v2")
     assert spec["volumes"][2]["persistentVolumeClaim"]["claimName"] == "sfs-shared"
     held = controller_package.build_held()
     assert held["credentialed_release_required"] is True
@@ -96,7 +103,7 @@ def test_controller_job_keeps_credential_through_ready_and_handoff() -> None:
     assert held["receipt_sha256"] == crypto.digest_without(held, "receipt_sha256")
 
 
-def test_controller_package_is_exact_commit_closed_and_create_once() -> None:
+def test_controller_package_is_exact_commit_closed_and_create_once(tmp_path: Path) -> None:
     rendered = controller_package.render(ROOT, COMMIT, authorization())
     source, auth, job = rendered["objects"]["items"]
     package = json.loads(source["data"]["package.json"])
@@ -105,6 +112,22 @@ def test_controller_package_is_exact_commit_closed_and_create_once() -> None:
     assert package["credentialed_release_required"] is True
     assert package["score_free"] is True
     assert len(json.dumps(source)) < 1_000_000
+    assert job["metadata"]["name"].endswith("controller-v2")
+    assert "export PYTHONPATH=/workspace" in job["spec"]["template"]["spec"][
+        "containers"
+    ][0]["command"][-1]
+    for relative in controller_package.FILES:
+        target = tmp_path / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(source["data"][relative.replace("/", "__SLASH__")])
+    result = subprocess.run(
+        [sys.executable, "-c", "import evals.fleet.glm53_dedicated_v28_controller_v1"],
+        cwd=tmp_path,
+        env={**os.environ, "PYTHONPATH": str(tmp_path)},
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
     assert auth["immutable"] is True
     assert job["metadata"]["name"] == controller_package.JOB_NAME
     assert rendered["server_launch_authorized"] is True
@@ -182,11 +205,11 @@ def test_controller_source_closure_has_no_protected_or_scoring_artifacts() -> No
     [
         ("2026-09-06-glm53-dedicated-v28-create-wrapper-held-v1.json", server.build_held()),
         (
-            "2026-09-06-glm53-dedicated-v28-watchdog-adapter-held-v1.json",
+            "2026-09-06-glm53-dedicated-v28-watchdog-adapter-held-v2.json",
             adapter.build_held(COMMIT),
         ),
         (
-            "2026-09-06-glm53-dedicated-v28-controller-held-v1.json",
+            "2026-09-06-glm53-dedicated-v28-controller-held-v2.json",
             controller_package.build_held(),
         ),
     ],
@@ -194,6 +217,24 @@ def test_controller_source_closure_has_no_protected_or_scoring_artifacts() -> No
 def test_tracked_held_receipts_are_exact(name: str, expected: dict[str, object]) -> None:
     observed = json.loads((EVIDENCE_ROOT / name).read_text())
     assert observed == expected
+    assert observed["receipt_sha256"] == crypto.digest_without(
+        observed, "receipt_sha256"
+    )
+
+
+def test_failed_controller_v1_is_a_zero_effect_tombstone() -> None:
+    observed = json.loads(
+        (
+            EVIDENCE_ROOT
+            / "2026-09-06-glm53-dedicated-v28-controller-bootstrap-v1-failure.json"
+        ).read_text()
+    )
+    assert observed["status"] == "FAILED_PRECREATE_ZERO_EFFECT"
+    assert observed["failed_controller_job"].endswith("controller-v1")
+    assert observed["server_gpu_objects_present"] is False
+    assert observed["gpu_allocation_count"] == 0
+    assert observed["task_session_verifier_scoring_calls"] == 0
+    assert observed["retry_same_identity"] is False
     assert observed["receipt_sha256"] == crypto.digest_without(
         observed, "receipt_sha256"
     )
