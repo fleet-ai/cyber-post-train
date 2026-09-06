@@ -13,8 +13,7 @@ from evals.fleet import self_hosted
 
 ROOT = Path(__file__).resolve().parents[1]
 LAPTOP_QWEN_RECEIPT = ROOT / (
-    "docs/evidence/qwen38-study/"
-    "2026-09-05-qwen38-laptop-hosted-actual-opencode-parity-v2.json"
+    "docs/evidence/qwen38-study/2026-09-05-qwen38-laptop-hosted-actual-opencode-parity-v2.json"
 )
 
 
@@ -137,6 +136,27 @@ def test_rendered_settings_preserve_exact_runtime_and_only_repoint_transport() -
     assert all(value is False for value in settings["tools"].values())
 
 
+def test_cluster_dind_argv_adds_explicit_host_gateway_without_changing_default() -> None:
+    home = Path("/workspace/tmp/parity/home")
+    workspace = Path("/workspace/tmp/parity/workspace")
+    default = parity._docker_run_argv(  # noqa: SLF001 - exact execution boundary
+        home, workspace, "qwen3.8-27b", "benign", cluster_dind=False
+    )
+    cluster = parity._docker_run_argv(  # noqa: SLF001 - exact execution boundary
+        home, workspace, "qwen3.8-27b", "benign", cluster_dind=True
+    )
+    assert "host.docker.internal:host-gateway" not in default
+    assert cluster[cluster.index("--add-host") + 1] == "host.docker.internal:host-gateway"
+    stripped = cluster.copy()
+    index = stripped.index("--add-host")
+    del stripped[index : index + 2]
+    assert stripped == default
+    preflight = parity._cluster_dind_connectivity_argv(18080, 18081)  # noqa: SLF001
+    assert preflight[preflight.index("--add-host") + 1] == ("host.docker.internal:host-gateway")
+    assert preflight[-2:] == ["18080", "18081"]
+    assert "host.docker.internal" in preflight[-3]
+
+
 def test_local_image_inspection_requires_exact_immutable_amd64_image(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -187,6 +207,4 @@ def test_committed_laptop_qwen_parity_receipt_is_digest_valid_and_non_scored() -
         "user": "node",
         "working_dir": "/workspace",
     }
-    assert receipt["receipt_sha256"] == self_hosted.digest_without(
-        receipt, "receipt_sha256"
-    )
+    assert receipt["receipt_sha256"] == self_hosted.digest_without(receipt, "receipt_sha256")

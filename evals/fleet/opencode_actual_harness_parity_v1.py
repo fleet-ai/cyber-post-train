@@ -377,12 +377,84 @@ def _serve(server: ThreadingHTTPServer) -> threading.Thread:
     return thread
 
 
+def _docker_run_argv(
+    home: Path,
+    workspace: Path,
+    served_id: str,
+    prompt: str,
+    *,
+    cluster_dind: bool,
+) -> list[str]:
+    network = ["--add-host", "host.docker.internal:host-gateway"] if cluster_dind else []
+    return [
+        "docker",
+        "run",
+        "--rm",
+        "--platform",
+        "linux/amd64",
+        *network,
+        "-e",
+        "OPENCODE_DISABLE_MODELS_FETCH=true",
+        "-e",
+        "OPENCODE_DISABLE_DEFAULT_PLUGINS=true",
+        "-e",
+        "OPENCODE_DISABLE_AUTOUPDATE=true",
+        "-v",
+        f"{home}:/home/node",
+        "-v",
+        f"{workspace}:/workspace",
+        IMAGE,
+        "opencode",
+        "run",
+        "--format",
+        "json",
+        "--thinking",
+        "--model",
+        f"fleet-cluster/{served_id}",
+        "--dir",
+        "/workspace",
+        "--auto",
+        "--",
+        prompt,
+    ]
+
+
+def _cluster_dind_connectivity_argv(model_port: int, mcp_port: int) -> list[str]:
+    script = """
+const net = require('net');
+const ports = process.argv.slice(1).map(Number);
+Promise.all(ports.map(port => new Promise((resolve, reject) => {
+  const socket = net.createConnection({host: 'host.docker.internal', port}, () => {
+    socket.destroy(); resolve();
+  });
+  socket.setTimeout(5000, () => { socket.destroy(); reject(new Error('timeout')); });
+  socket.on('error', reject);
+}))).then(() => process.exit(0), () => process.exit(1));
+""".strip()
+    return [
+        "docker",
+        "run",
+        "--rm",
+        "--platform",
+        "linux/amd64",
+        "--add-host",
+        "host.docker.internal:host-gateway",
+        IMAGE,
+        "node",
+        "-e",
+        script,
+        str(model_port),
+        str(mcp_port),
+    ]
+
+
 def run(
     model_key: str,
     api_key: str,
     *,
     upstream_origin: str = HOSTED_ORIGIN,
     server_binding: Mapping[str, Any] | None = None,
+    cluster_dind: bool = False,
 ) -> dict[str, Any]:
     observed_image = inspect_local_image()
     is_hosted = upstream_origin.rstrip("/") == HOSTED_ORIGIN
@@ -396,11 +468,22 @@ def run(
     config = treatment_config(model_key)
     served_id = config["model"]["served_id"]
     state = _State(served_id, upstream_origin, api_key)
-    model_server = ThreadingHTTPServer(("127.0.0.1", 0), _model_handler(state))
-    mcp_server = ThreadingHTTPServer(("127.0.0.1", 0), _mcp_handler(state))
+    bind_host = "0.0.0.0" if cluster_dind else "127.0.0.1"
+    model_server = ThreadingHTTPServer((bind_host, 0), _model_handler(state))
+    mcp_server = ThreadingHTTPServer((bind_host, 0), _mcp_handler(state))
     settings = render_settings(model_key, model_server.server_port, mcp_server.server_port)
     threads = [_serve(model_server), _serve(mcp_server)]
     try:
+        if cluster_dind:
+            connectivity = subprocess.run(
+                _cluster_dind_connectivity_argv(model_server.server_port, mcp_server.server_port),
+                capture_output=True,
+                text=True,
+                timeout=30,
+                check=False,
+            )
+            if connectivity.returncode != 0:
+                raise ActualHarnessParityError("cluster_dind_proxy_connectivity_failed")
         with tempfile.TemporaryDirectory(prefix="opencode-parity-") as temp:
             root = Path(temp)
             home = root / "home"
@@ -415,36 +498,13 @@ def run(
                 f"benign explanation. After both tools complete, reply {FINAL_MARKER}."
             )
             completed = subprocess.run(
-                [
-                    "docker",
-                    "run",
-                    "--rm",
-                    "--platform",
-                    "linux/amd64",
-                    "-e",
-                    "OPENCODE_DISABLE_MODELS_FETCH=true",
-                    "-e",
-                    "OPENCODE_DISABLE_DEFAULT_PLUGINS=true",
-                    "-e",
-                    "OPENCODE_DISABLE_AUTOUPDATE=true",
-                    "-v",
-                    f"{home}:/home/node",
-                    "-v",
-                    f"{workspace}:/workspace",
-                    IMAGE,
-                    "opencode",
-                    "run",
-                    "--format",
-                    "json",
-                    "--thinking",
-                    "--model",
-                    f"fleet-cluster/{served_id}",
-                    "--dir",
-                    "/workspace",
-                    "--auto",
-                    "--",
+                _docker_run_argv(
+                    home,
+                    workspace,
+                    served_id,
                     prompt,
-                ],
+                    cluster_dind=cluster_dind,
+                ),
                 capture_output=True,
                 text=True,
                 timeout=TIMEOUT_SECONDS,
