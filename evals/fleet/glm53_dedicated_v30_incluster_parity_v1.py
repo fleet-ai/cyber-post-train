@@ -172,7 +172,38 @@ def validate_parity_receipt(value: dict[str, Any], binding: dict[str, Any]) -> N
     execution = value.get("execution") or {}
     privacy = value.get("privacy") or {}
     if (
-        value.get("receipt_sha256") != crypto.digest_without(value, "receipt_sha256")
+        set(value)
+        != {
+            "schema_version",
+            "status",
+            "classification",
+            "model",
+            "endpoint",
+            "harness",
+            "tool_contract",
+            "execution",
+            "privacy",
+            "receipt_sha256",
+        }
+        or set(execution)
+        != {
+            "harness_exit_code",
+            "model_requests",
+            "final_marker_observed",
+            "docker_host_gateway_added",
+            "task_instance_session_verifier_scoring_calls",
+            "scored_launch_authorized",
+        }
+        or set(privacy)
+        != {
+            "credentials_included",
+            "prompt_included",
+            "responses_or_model_outputs_included",
+            "tool_arguments_included",
+            "stderr_or_stdout_included",
+            "benchmark_content_included",
+        }
+        or value.get("receipt_sha256") != crypto.digest_without(value, "receipt_sha256")
         or value.get("schema_version") != parity.SCHEMA
         or value.get("status") != "PASSED_NON_SCORED"
         or value.get("classification") != "ACTUAL_HARNESS_PARITY"
@@ -256,24 +287,20 @@ def _key(path: str) -> str:
 def build_configmap(root: Path, commit: str) -> dict[str, Any]:
     data = {_key(path): _source(root, commit, path).decode() for path in FILES}
     manifest = {path: crypto.sha256(_source(root, commit, path)) for path in FILES}
-    package: dict[str, Any] = {
-        "schema_version": PACKAGE_SCHEMA,
-        "package_commit": commit,
-        "files": manifest,
-        "job_name": JOB_NAME,
-        "result_root": str(RESULT_ROOT),
-        "server_title": SERVER_TITLE,
-        "server_run_dir": SERVER_RUN_DIR,
-        "nested_container_network": "host",
-        "local_proxy_bind_address": "127.0.0.1",
-        "score_free": True,
-    }
-    package["package_sha256"] = crypto.digest_without(package, "package_sha256")
-    data["package.json"] = json.dumps(package, sort_keys=True, separators=(",", ":")) + "\n"
-    data["run.sh"] = """#!/usr/bin/env bash
+    run = """#!/usr/bin/env bash
 set -euo pipefail
 test "${DOCKER_HOST:-}" = unix:///var/run/docker.sock
 test ! -e "$PARITY_RESULT_ROOT"
+observed_commit="$(
+  uv run python -c \
+    'import json; print(json.load(open("/bootstrap/package.json"))["package_commit"])'
+)"
+test "$observed_commit" = "$PACKAGE_COMMIT"
+expected_run_sha="$(
+  uv run python -c \
+    'import json; print(json.load(open("/bootstrap/package.json"))["run_sha256"][7:])'
+)"
+test "$(sha256sum /bootstrap/run.sh | cut -d' ' -f1)" = "$expected_run_sha"
 mkdir -p /work/evals/fleet/configs
 for source in /bootstrap/*__SLASH__*; do
   target="/work/$(basename "$source" | sed 's,__SLASH__,/,g')"
@@ -290,6 +317,22 @@ exec uv run --with httpx==0.28.1 --with pyyaml==6.0.2 \
   python -m evals.fleet.glm53_dedicated_v30_incluster_parity_v1 run \
   --authorization /authorization/authorization.json
 """
+    package: dict[str, Any] = {
+        "schema_version": PACKAGE_SCHEMA,
+        "package_commit": commit,
+        "files": manifest,
+        "run_sha256": crypto.sha256(run.encode()),
+        "job_name": JOB_NAME,
+        "result_root": str(RESULT_ROOT),
+        "server_title": SERVER_TITLE,
+        "server_run_dir": SERVER_RUN_DIR,
+        "nested_container_network": "host",
+        "local_proxy_bind_address": "127.0.0.1",
+        "score_free": True,
+    }
+    package["package_sha256"] = crypto.digest_without(package, "package_sha256")
+    data["package.json"] = json.dumps(package, sort_keys=True, separators=(",", ":")) + "\n"
+    data["run.sh"] = run
     return {
         "apiVersion": "v1",
         "kind": "ConfigMap",
@@ -412,10 +455,10 @@ def build_job(configmap: dict[str, Any], authorization: dict[str, Any]) -> dict[
                                     "name": "JOB_UID",
                                     "valueFrom": {
                                         "fieldRef": {
-                                        "fieldPath": (
-                                            "metadata.labels["
-                                            "'batch.kubernetes.io/controller-uid']"
-                                        )
+                                            "fieldPath": (
+                                                "metadata.labels["
+                                                "'batch.kubernetes.io/controller-uid']"
+                                            )
                                         }
                                     },
                                 },
