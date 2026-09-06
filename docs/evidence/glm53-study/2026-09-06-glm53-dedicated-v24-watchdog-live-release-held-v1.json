@@ -2,10 +2,10 @@
   "api_mutation_calls": 0,
   "base_merge_commit": "f397c6d2abf8c8e7b2621e7297741ea4e8f1b6f1",
   "implementation": {
-    "commit": "e7f16e652b9e1134bb46b408e0039ed204f7b74b",
+    "commit": "3ab82e4fd2cda65a331b1b1668ff610b908eff9d",
     "module": "evals.fleet.glm53_dedicated_v24_watchdog_live_release_v1",
-    "module_sha256": "sha256:bcd413540a72f609b580ed59d7c068e4e20e9f893b9b3f03243ba0500a3cbba1",
-    "test_sha256": "sha256:1bb6a434098fc3c5d81cabb14878a84b595c48c273d1f788afb2545d4a324be4",
+    "module_sha256": "sha256:ada1371c33115e60741acb3ce27b45b0a93690e9c3a447187801f744373a5363",
+    "test_sha256": "sha256:9323354a1a432e890b508fdcd9a528cdb30c1ce2c24273a64b285c39b19eca92",
     "watchdog_runtime_sha256": "sha256:b81bbf62cbc1f257f1836404846038cb7c5aa93585a10cafdb18efd7c0c66ae0"
   },
   "live_release_requirements": {
@@ -20,14 +20,14 @@
   },
   "prompts_traces_flags_scores_or_model_outputs_included": false,
   "qualification_launch_authorized": false,
-  "receipt_sha256": "sha256:6363c29b7cc4ddee0e965e1bfc5333c499d3a6b668637f415ca7697748ec2cbf",
+  "receipt_sha256": "sha256:ab49c79856f7c2442226d4edc2dc7e1d7698bc8e0dd4fdecc64027617700af50",
   "schema_version": "fleet-glm53-dedicated-v24-watchdog-live-release-held-v1",
   "scored_launch_authorized": false,
   "server_launch_authorized": false,
   "status": "READY_HELD_FOR_EXACT_POST_CREATE_BINDING",
   "tests": {
-    "focused_passed": 105,
-    "live_release_tests_passed": 61,
+    "focused_passed": 106,
+    "live_release_tests_passed": 62,
     "ruff_passed": true
   },
   "watchdog_launch_authorized": false
