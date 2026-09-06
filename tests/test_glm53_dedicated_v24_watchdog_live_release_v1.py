@@ -255,3 +255,18 @@ def test_rehashed_live_release_mutations_fail_closed(field: str, bad: object) ->
     _rehash(mutated)
     with pytest.raises(live_release.LiveReleaseError, match="live_release"):
         live_release.validate_release(mutated, live, binding, now_epoch=NOW)
+
+
+def test_tracked_live_release_receipt_is_self_digested_and_held() -> None:
+    path = (
+        ROOT
+        / "docs/evidence/glm53-study/"
+        "2026-09-06-glm53-dedicated-v24-watchdog-live-release-held-v1.json"
+    )
+    value = json.loads(path.read_text())
+    assert value["status"] == "READY_HELD_FOR_EXACT_POST_CREATE_BINDING"
+    assert value["watchdog_launch_authorized"] is False
+    assert value["server_launch_authorized"] is False
+    assert value["qualification_launch_authorized"] is False
+    assert value["scored_launch_authorized"] is False
+    assert value["receipt_sha256"] == crypto.digest_without(value, "receipt_sha256")
