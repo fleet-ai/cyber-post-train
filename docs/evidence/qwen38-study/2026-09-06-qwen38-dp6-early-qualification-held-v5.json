@@ -21,8 +21,8 @@
     "unknown_or_preempting_gpu_workload_fails_closed": true
   },
   "jobs_api_config": {
-    "config_sha256": "sha256:fb7c461c29d17e781e36b8394c4efb3fd4b86f317544513ea6a219132974a87d",
-    "path": "evals/fleet/configs/qwen38-dedicated-dp6-early-qualification-v2-held.json"
+    "config_sha256": "sha256:2ab8336340ea952e5b4f7b85bc012126a6c0c16ef7d06b4f819e96399288e792",
+    "path": "evals/fleet/configs/qwen38-dedicated-dp6-early-qualification-v3-held.json"
   },
   "launch_authorized": false,
   "lifecycle": {
@@ -176,7 +176,7 @@
     "tmpdir": "/workspace/tmp",
     "zero_dind_oom_throttle_and_protocol_errors_required": true
   },
-  "receipt_sha256": "sha256:8789e722d1058531aa19115f4f24436d1dfd9f015089b28093f052411a8c4c1c",
+  "receipt_sha256": "sha256:909bf527ab0b57adaf00e7b5c16930df043a0f8489f6298d434a11d65780a92e",
   "schema_version": "fleet-qwen38-dp6-early-qualification-held-v5",
   "scoring_authorized": false,
   "server": {
@@ -185,7 +185,7 @@
     "data_parallel_size": 6,
     "gpus_per_worker": 6,
     "image": "ghcr.io/fleet-ai/cyber-post-train-glm53-runtime@sha256:ec93ba50613fd13fb4c0b0a9105767ab18209a1e0108dab0923aad694c0206ec",
-    "jobs_api_payload_sha256": "sha256:aec36d1dcab38d3101b6c7835a98d987dd78dd6ea7b1ba1bccefa7ccad5c2211",
+    "jobs_api_payload_sha256": "sha256:0869e2ee998cab2c55105289b4d40cf3ef498a3a468b1484754ceaaca5a5e913",
     "load_balance_method": "total_tokens",
     "model_path": "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2",
     "model_repository": "Qwen/Qwen3.8-27B",
@@ -193,19 +193,19 @@
     "preemption_policy": "Never",
     "priority_class": "fleet-infra-quiet",
     "privileged": false,
-    "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-q38-dp6-a-v1",
+    "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-q38-dp6-b-v1",
     "served_id": "qwen3.8-27b",
     "server_arguments_sha256": "sha256:85abc2d00c387bbd194be02c077a56541af7f2ee90e156cddda97a28fef65f0a",
-    "serving_block": "dedicated-qwen-dp6-a-v1",
+    "serving_block": "dedicated-qwen-dp6-b-v1",
     "tensor_parallel_size": 1,
-    "title": "chris-cyber-evalserve-q38-dp6-a-v1",
+    "title": "chris-cyber-evalserve-q38-dp6-b-v1",
     "workers": 1
   },
   "status": "HELD_PENDING_ROOT_REVIEW",
   "superseded_held_plan": {
     "path": "docs/evidence/qwen38-study/2026-09-06-qwen38-dp6-early-qualification-held-v4.json",
     "predecessor_rewritten": false,
-    "reason": "install_staged_validator_runtime_dependencies",
+    "reason": "install_staged_validator_runtime_dependencies_and_use_fresh_server_identity",
     "receipt_sha256": "sha256:2f32b5fcc0ef333363abd8dccbe87093de48c8d36648ad5671a4f8ba6c768846"
   },
   "superseded_v1_incident": {
