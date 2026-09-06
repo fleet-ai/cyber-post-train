@@ -1,4 +1,5 @@
 import copy
+import datetime
 import inspect
 import json
 import subprocess
@@ -56,6 +57,27 @@ def _priority_classes() -> list[dict]:
     ]
 
 
+def _application_ready() -> dict:
+    ready = NOW - 15
+    value = {
+        "schema_version": "fleet-glm53-dedicated-v24-application-ready-v1",
+        "status": "APPLICATION_HEALTH_HTTP_200",
+        "server_title": server.TITLE,
+        "server_run_dir": server.RUN_DIR,
+        "served_id": server.SERVED_ID,
+        "model_revision": server.MODEL_REVISION,
+        "context_length": server.CONTEXT_LENGTH,
+        "ready_at_epoch": ready,
+        "ready_at_utc": datetime.datetime.fromtimestamp(
+            ready, datetime.UTC
+        ).isoformat().replace("+00:00", "Z"),
+        "health_http_status": 200,
+        "prompts_traces_flags_scores_or_model_outputs_included": False,
+    }
+    value["receipt_sha256"] = crypto.digest_without(value, "receipt_sha256")
+    return value
+
+
 def _live(binding: dict | None = None) -> dict:
     binding = binding or _binding()
     value = {
@@ -66,12 +88,15 @@ def _live(binding: dict | None = None) -> dict:
         "server_binding": binding,
         "request_sha256": crypto.sha256(crypto.canonical_json(server.payload())),
         "api_get_http_status": 200,
+        "api_run_id_match_count": 1,
         "api_run_state": "RUNNING",
         "api_title_match_count": 1,
         "api_run_dir_match_count": 1,
         "rayjob_running": True,
         "rayjob_name": binding["api_run_id"],
         "rayjob_uid_match_count": 1,
+        "raycluster_name": "ft-run-deadbeef-abcde",
+        "raycluster_uid": "66666666-6666-4666-8666-666666666666",
         "workload_admitted": True,
         "workload_name": "rayjob-workload-deadbeef",
         "workload_finished": False,
@@ -85,6 +110,9 @@ def _live(binding: dict | None = None) -> dict:
         "service_present": True,
         "service_name": "ft-run-deadbeef-abcde-head-svc",
         "service_uid_match_count": 1,
+        "sfs_pvc_name": "sfs-claim",
+        "sfs_pvc_uid": "77777777-7777-4777-8777-777777777777",
+        "head_pod_sfs_mount_path": "/mnt/sfs",
         "metrics_http_status": 200,
         "activity_metric_families": list(runtime.ACTIVITY_METRICS),
         "jobs_api_credential_secret_name": "ft-run-deadbeef-fleet-key",
@@ -96,6 +124,7 @@ def _live(binding: dict | None = None) -> dict:
         "watchdog_configmap_match_count": 0,
         "server_run_dir_exists": True,
         "watchdog_result_root_absent": True,
+        "application_ready_receipt_sha256": _application_ready()["receipt_sha256"],
         "fleet_task_instance_calls": 0,
         "fleet_session_calls": 0,
         "verifier_calls": 0,
@@ -157,7 +186,9 @@ def test_public_renderer_and_validators_have_no_caller_controlled_clock() -> Non
     [
         ("status", "HELD"),
         ("request_sha256", "sha256:" + "0" * 64),
+        ("head_pod_sfs_mount_path", "/tmp"),
         ("api_get_http_status", 503),
+        ("api_run_id_match_count", 0),
         ("api_run_state", "FAILED"),
         ("api_title_match_count", True),
         ("api_title_match_count", 2),
@@ -165,6 +196,8 @@ def test_public_renderer_and_validators_have_no_caller_controlled_clock() -> Non
         ("rayjob_running", False),
         ("rayjob_name", "wrong"),
         ("rayjob_uid_match_count", 0),
+        ("raycluster_name", ""),
+        ("raycluster_uid", "not-a-uid"),
         ("workload_admitted", False),
         ("workload_finished", True),
         ("workload_preemption_events", 1),
@@ -175,16 +208,19 @@ def test_public_renderer_and_validators_have_no_caller_controlled_clock() -> Non
         ("head_pod_uid_match_count", 0),
         ("service_present", False),
         ("service_uid_match_count", 2),
+        ("sfs_pvc_name", ""),
+        ("sfs_pvc_uid", "not-a-uid"),
+        ("head_pod_sfs_mount_path", "/tmp"),
         ("metrics_http_status", 500),
         ("activity_metric_families", ["sglang:num_requests_total"]),
         ("jobs_api_credential_secret_name", "github-token"),
         ("jobs_api_credential_secret_uid", "not-a-uid"),
         ("jobs_api_credential_key", "GH_TOKEN"),
         ("jobs_api_credential_probe_http_status", 403),
-        ("watchdog_job_match_count", 1),
-        ("watchdog_configmap_match_count", 1),
+        ("watchdog_job_match_count", 2),
+        ("watchdog_configmap_match_count", 3),
         ("server_run_dir_exists", False),
-        ("watchdog_result_root_absent", False),
+        ("watchdog_result_root_absent", "false"),
         ("fleet_task_instance_calls", 1),
         ("fleet_session_calls", 1),
         ("verifier_calls", 1),
@@ -272,6 +308,12 @@ def test_live_renderer_mounts_exact_authorization_and_fleet_secret(
         ("server_binding_sha256", "sha256:" + "0" * 64),
         ("live_state_receipt_sha256", "sha256:" + "0" * 64),
         ("request_sha256", "sha256:" + "0" * 64),
+        ("raycluster_name", "wrong"),
+        ("raycluster_uid", "66666666-6666-4666-8666-000000000000"),
+        ("sfs_pvc_name", "wrong"),
+        ("sfs_pvc_uid", "77777777-7777-4777-8777-000000000000"),
+        ("head_pod_sfs_mount_path", "/tmp"),
+        ("application_ready_receipt_sha256", "sha256:" + "0" * 64),
         ("watchdog_job_name", "wrong"),
         ("watchdog_result_root", "/wrong"),
         ("watchdog_package_commit", "0" * 40),
@@ -362,19 +404,37 @@ def _kubernetes_fixture() -> dict[tuple[str, str | None], dict]:
         },
         ("rayclusters.ray.io", cluster_name): {
             "metadata": {
+                "name": cluster_name,
                 "uid": cluster_uid,
                 "ownerReferences": [{"kind": "RayJob", "uid": rayjob_uid}],
             }
         },
         ("pods", pod_name): {
             "metadata": {
+                "name": pod_name,
                 "uid": binding["head_pod_uid"],
                 "labels": {"ray.io/node-type": "head"},
                 "ownerReferences": [{"kind": "RayCluster", "uid": cluster_uid}],
             },
+            "spec": {
+                "containers": [
+                    {
+                        "name": "ray-head",
+                        "volumeMounts": [{"name": "shared-sfs", "mountPath": "/mnt/sfs"}],
+                    }
+                ],
+                "volumes": [
+                    {
+                        "name": "shared-sfs",
+                        "persistentVolumeClaim": {"claimName": "sfs-claim"},
+                    }
+                ],
+            },
             "status": {
                 "phase": "Running",
-                "containerStatuses": [{"ready": True, "restartCount": 0}],
+                "containerStatuses": [
+                    {"name": "ray-head", "ready": True, "restartCount": 0}
+                ],
             },
         },
         ("services", service_name): {
@@ -383,6 +443,12 @@ def _kubernetes_fixture() -> dict[tuple[str, str | None], dict]:
                 "ownerReferences": [{"kind": "RayCluster", "uid": cluster_uid}],
             },
             "spec": {"selector": {"ray.io/node-type": "head"}},
+        },
+        ("persistentvolumeclaims", "sfs-claim"): {
+            "metadata": {
+                "name": "sfs-claim",
+                "uid": "77777777-7777-4777-8777-777777777777",
+            }
         },
     }
 
@@ -448,13 +514,226 @@ def test_observer_binds_randomized_object_names_without_secret_read(
             }
         if "/metrics" in source:
             return {"http_status": 200, "families": list(runtime.ACTIVITY_METRICS)}
-        return {"server_run_dir_exists": True, "watchdog_result_root_absent": True}
+        return {
+            "server_run_dir_exists": True,
+            "watchdog_result_root_absent": True,
+            "application_ready": _application_ready(),
+        }
 
     monkeypatch.setattr(live_release, "_pod_python", pod_python)
     binding, live = live_release.observe_live("ft-run-deadbeef")
     assert binding == _binding()
     assert live["jobs_api_credential_secret_name"] == "ft-run-deadbeef-fleet-key"
     assert all("FLEET_API_KEY" not in source or "os.environ" in source for source in seen_sources)
+
+
+def test_application_ready_requires_matching_real_timestamp_and_digest() -> None:
+    live_release._validate_application_ready(_application_ready())
+    for field, bad in (
+        ("ready_at_utc", "2020-01-01T00:00:00Z"),
+        ("health_http_status", 503),
+        ("prompts_traces_flags_scores_or_model_outputs_included", True),
+    ):
+        value = _application_ready()
+        value[field] = bad
+        _rehash(value)
+        with pytest.raises(live_release.LiveReleaseError, match="application_ready"):
+            live_release._validate_application_ready(value)
+
+
+def test_observation_failure_releases_the_exact_server(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        live_release,
+        "_observe_live",
+        lambda _run: (_ for _ in ()).throw(live_release.LiveReleaseError("bad")),
+    )
+    monkeypatch.setattr(
+        live_release,
+        "_kubectl_optional",
+        lambda kind, _name: (
+            {
+                "status": {
+                    "rayClusterStatus": {"head": {"podName": "exact-head-pod"}}
+                }
+            }
+            if kind == "rayjobs.ray.io"
+            else None
+        ),
+    )
+    released: list[tuple[dict, str]] = []
+    monkeypatch.setattr(
+        live_release,
+        "_release_on_handoff_failure",
+        lambda binding, pod: released.append((binding, pod)),
+    )
+    with pytest.raises(live_release.LiveReleaseError, match="bad"):
+        live_release.observe_live("ft-run-deadbeef")
+    assert released == [({"api_run_id": "ft-run-deadbeef"}, "exact-head-pod")]
+
+
+def test_exact_partial_objects_are_adopted_without_deletion(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(live_release.time, "time", lambda: NOW)
+    binding = _binding()
+    rendered = live_release.render(
+        ROOT,
+        PACKAGE_COMMIT,
+        binding,
+        _live(binding),
+        priority_classes=_priority_classes(),
+    )
+    first = copy.deepcopy(rendered["objects"]["items"][0])
+    monkeypatch.setattr(
+        live_release,
+        "_kubectl_optional",
+        lambda kind, name: (
+            copy.deepcopy(first)
+            if (kind, name) == (first["kind"], first["metadata"]["name"])
+            else None
+        ),
+    )
+    monkeypatch.setattr(
+        live_release,
+        "_delete_exact",
+        lambda _value: (_ for _ in ()).throw(AssertionError("must not delete")),
+    )
+    outcomes = live_release._reconcile_existing_watcher_objects(
+        rendered,
+        binding,
+        _live(binding),
+        head_pod_name="head",
+    )
+    assert outcomes[0]["outcome"] == "ADOPTED_EXACT_PARTIAL_OR_ACTIVE"
+
+
+def test_inert_different_run_partial_configmap_is_cleaned_exactly(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(live_release.time, "time", lambda: NOW)
+    binding = _binding()
+    rendered = live_release.render(
+        ROOT,
+        PACKAGE_COMMIT,
+        binding,
+        _live(binding),
+        priority_classes=_priority_classes(),
+    )
+    stale = copy.deepcopy(rendered["objects"]["items"][0])
+    prior = copy.deepcopy(binding)
+    prior["api_run_id"] = "ft-run-cafebabe"
+    prior["service_origin"] = (
+        "http://ft-run-cafebabe-abcde-head-svc.fleet-train-jobs.svc:8000"
+    )
+    stale["data"]["binding.json"] = json.dumps(
+        prior, sort_keys=True, separators=(",", ":")
+    )
+    present = {(stale["kind"], stale["metadata"]["name"]): stale}
+
+    def optional(kind: str, name: str) -> dict | None:
+        return copy.deepcopy(present.get((kind, name)))
+
+    deleted: list[tuple[str, str]] = []
+    monkeypatch.setattr(live_release, "_kubectl_optional", optional)
+    monkeypatch.setattr(
+        live_release,
+        "_pod_python",
+        lambda _pod, _source: {"http_status": 404},
+    )
+
+    def delete(value: dict) -> str:
+        identity = (value["kind"], value["metadata"]["name"])
+        deleted.append(identity)
+        present.pop(identity)
+        return "DELETED_EXACT"
+
+    monkeypatch.setattr(live_release, "_delete_exact", delete)
+    outcomes = live_release._reconcile_existing_watcher_objects(
+        rendered,
+        binding,
+        _live(binding),
+        head_pod_name="head",
+    )
+    assert deleted == [(stale["kind"], stale["metadata"]["name"])]
+    assert outcomes[0]["outcome"] == "DELETED_EXACT"
+
+
+def test_wait_requires_uid_bound_active_and_runtime_authorization_receipts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    binding, _, release = _release(monkeypatch)
+    job_uid = "88888888-8888-4888-8888-888888888888"
+    pod_uid = "99999999-9999-4999-8999-999999999999"
+    job = {
+        "metadata": {
+            "uid": job_uid,
+            "annotations": {
+                "cyber-post-train.fleet.ai/live-release-receipt-sha256": release[
+                    "receipt_sha256"
+                ]
+            },
+        },
+        "status": {"active": 1},
+    }
+    pod = {
+        "metadata": {
+            "uid": pod_uid,
+            "ownerReferences": [{"kind": "Job", "uid": job_uid}],
+        },
+        "status": {
+            "phase": "Running",
+            "containerStatuses": [{"ready": True, "restartCount": 0}],
+        },
+    }
+    active = runtime.build_active_receipt(
+        binding, watcher_job_uid=job_uid, watcher_pod_uid=pod_uid
+    )
+    active.update(
+        {
+            "initial_request_counter": 0,
+            "initial_running_requests": 0,
+            "initial_queued_requests": 0,
+            "ready_at_epoch": release["ready_at_epoch"],
+            "terminal_receipt_required": True,
+        }
+    )
+    _rehash(active)
+    authorization = runtime.build_runtime_authorization_receipt(
+        release,
+        binding,
+        watcher_job_uid=job_uid,
+        watcher_pod_uid=pod_uid,
+        package_commit=release["watchdog_package_commit"],
+        package_sha256=release["watchdog_package_sha256"],
+    )
+    monkeypatch.setattr(
+        live_release,
+        "_kubectl_optional",
+        lambda kind, _name: copy.deepcopy(job) if kind == "jobs.batch" else None,
+    )
+    monkeypatch.setattr(
+        live_release,
+        "_kubectl_json",
+        lambda kind, _name=None: {"items": [copy.deepcopy(pod)]}
+        if kind == "pods"
+        else {},
+    )
+    monkeypatch.setattr(
+        live_release,
+        "_pod_python",
+        lambda pod_name, _source: (
+            {"active": active, "authorization": authorization}
+            if pod_name == "head-pod"
+            else {}
+        ),
+    )
+    value = live_release._wait_for_watchdog_active(
+        binding, release, head_pod_name="head-pod", attempts=1
+    )
+    assert value["watchdog_job_uid"] == job_uid
+    assert value["watchdog_pod_uid"] == pod_uid
 
 
 def test_create_once_recovers_partial_success_and_rejects_collision(
