@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -257,3 +258,45 @@ def test_observer_v5_failure_incident_is_sanitized_and_digest_valid() -> None:
         "scores_included": False,
         "source_logs_read": False,
     }
+
+
+def test_terminal_release_v6_binds_exact_fresh_observer_and_canary() -> None:
+    path = (
+        ROOT
+        / "docs/evidence/qwen38-study/"
+        "2026-09-06-qwen38-hosted-rank15-rank16-release-v6.json"
+    )
+    release = successor.load(path)
+    plans = successor.build_plans(ROOT)
+    sources, _ = package.package_sources(ROOT, plans)
+    terminal_validation_time = datetime(2026, 9, 6, 11, 36, 0, tzinfo=UTC)
+    successor.validate_release(
+        release,
+        plans,
+        sources,
+        now=terminal_validation_time,
+    )
+    observed_at = datetime.strptime(
+        release["release_gate_observation"]["observed_at_utc"], "%Y-%m-%dT%H:%M:%SZ"
+    ).replace(tzinfo=UTC)
+    assert 0 <= (terminal_validation_time - observed_at).total_seconds() <= 3600
+    assert release["receipt_sha256"] == (
+        "sha256:e056cc61667434df920d66782d2145bc886d4c255a05ac83daa4a98ff242df01"
+    )
+    assert release["release_gate_observation"]["receipt_sha256"] == (
+        "sha256:f36d00826f51c6e9dd19990ab936d3db062cb9a8729c41145d7a2b4ca89d49e5"
+    )
+    assert release["observer_job_uid"] == "34d9f295-3d42-4595-b82c-2aa12967aa81"
+    assert release["observer_pod_uid"] == "2aef36c5-be9b-42f4-917c-e15218e4016a"
+    canary = release["runtime_gate_v3_canary"]
+    assert canary["job_uid"] == "cead2a84-afe3-4b77-b38e-b1d513db4183"
+    assert canary["pod_uid"] == "ae6ea4bc-a2cc-4797-b231-7f1814f8ea92"
+    assert canary["sanitized_runtime_receipt"]["receipt_sha256"] == (
+        "sha256:1dc6526dc90575f0837dce6be00744e39eda732086fb3bfdd603655a4fd12bc1"
+    )
+    for receipt in (release["release_gate_observation"], canary["sanitized_runtime_receipt"]):
+        assert receipt["model_calls"] == 0
+        assert receipt["scoring_calls"] == 0
+        assert receipt["api_mutations"] == 0
+        assert receipt["scores_included"] is False
+        assert receipt["credentials_included"] is False
