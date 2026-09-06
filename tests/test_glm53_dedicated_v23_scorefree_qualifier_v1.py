@@ -75,6 +75,21 @@ def test_held_contract_removes_false_acceptance_gate_and_forbids_scoring() -> No
     assert value["receipt_sha256"] == crypto.digest_without(value, "receipt_sha256")
 
 
+def test_tracked_held_receipt_is_self_digested_and_never_authorizes_launch() -> None:
+    path = (
+        ROOT
+        / "docs/evidence/glm53-study/"
+        "2026-09-06-glm53-dedicated-v23-scorefree-qualifier-held-v1.json"
+    )
+    value = json.loads(path.read_text())
+    assert value["status"] == "READY_HELD_NO_LAUNCH"
+    assert value["request_counter_watchdog"]["idle_release_seconds"] == 600
+    assert value["server_launch_authorized"] is False
+    assert value["qualification_launch_authorized"] is False
+    assert value["scored_launch_authorized"] is False
+    assert value["receipt_sha256"] == crypto.digest_without(value, "receipt_sha256")
+
+
 def test_authorization_binds_uid_parity_watchdog_and_live_state() -> None:
     parity, watchdog, live = _evidence()
     authorization = qualifier.authorize(_binding(), parity, watchdog, live)
