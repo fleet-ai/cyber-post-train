@@ -34,7 +34,7 @@
             "configmap_name": "chris-q38-hosted-r015-whole-task-g20-package-v2",
             "controller": "qwen-a",
             "job_name": "chris-q38-hosted-r015-whole-task-g20-v2",
-            "package_source_receipt_sha256": "sha256:cb78d5c15efb437b8b3a90859bba27760aec80dc24dc3ce6b49a2ed326d46ef9",
+      "package_source_receipt_sha256": "sha256:14e927ed97f31126dacb1db8f999160111557ee7db32b9efba319a09a1bbe5ae",
             "plan_sha256": "sha256:9f3b402b3f6ab261018d86bbe2cbc81e48a1f839d7a02b0e1b4112a458c069ce",
             "selection_rank": 15,
             "sfs_root": "/mnt/sfs/jobs/chris-q38-hosted-r015-whole-task-g20-v2",
@@ -74,7 +74,7 @@
             "configmap_name": "chris-q38-hosted-r016-whole-task-g20-package-v2",
             "controller": "qwen-b",
             "job_name": "chris-q38-hosted-r016-whole-task-g20-v2",
-            "package_source_receipt_sha256": "sha256:c85441a9568b39bf2e837ea03b7fbe02ea64ba7feffb380bcf2fd04bbb0b9c66",
+      "package_source_receipt_sha256": "sha256:8d9e6337b58393161be5e7b91931f05edfac9b3e09474d65ff2c6c45b6233b50",
             "plan_sha256": "sha256:d0571a1edec58f79fbdd27367d9bb27323e662e9513662a54f73213aa2b9c8e2",
             "selection_rank": 16,
             "sfs_root": "/mnt/sfs/jobs/chris-q38-hosted-r016-whole-task-g20-v2",
@@ -92,7 +92,7 @@
         "prompts_traces_flags_read": false,
         "scores_read": false
     },
-    "receipt_sha256": "sha256:f77557ac8ab7c414059d9614828b1c075e32c64f7910884bfe1d3a60c70f0959",
+  "receipt_sha256": "sha256:7223357495fbabcd7ee7bb07730c98576e82b1fa2b1b854ae40411d85733c3ba",
     "required_release_gate": {
         "accepted_receipts_clear": true,
         "all_eight_statistical_cells_clear": true,

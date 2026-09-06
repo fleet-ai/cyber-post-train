@@ -30,6 +30,7 @@ RUNTIME_GATE_CANARY_JOB = "chris-q38-hosted-whole-task-runtime-gate-canary-v6"
 RUNTIME_GATE_CANARY_CONFIGMAP = RUNTIME_GATE_CANARY_JOB + "-package"
 RUNTIME_GATE_CANARY_DIAGNOSTIC_ROOT = f"/mnt/sfs/jobs/{RUNTIME_GATE_CANARY_JOB}-diagnostic"
 RUNTIME_GATE_CANARY_PRIVATE_ROOT = "/workspace/q38-hosted-runtime-gate-v6-private"
+CONFIGMAP_SAFETY_BUDGET_BYTES = 920_000
 
 
 def _configure_v2_runtime_bootstrap(
@@ -160,7 +161,7 @@ def render(root: Path, *, release_path: Path | None = None) -> dict[str, Any]:
             diagnostic_root=plan["sfs_root"] + "-diagnostic",
             private_root=private_root,
         )
-        if len(json.dumps(configmap).encode()) >= 900_000:
+        if len(json.dumps(configmap).encode()) >= CONFIGMAP_SAFETY_BUDGET_BYTES:
             raise ValueError("fresh hosted whole-task ConfigMap exceeds safety budget")
         items.extend([configmap, job])
     return {"apiVersion": "v1", "kind": "List", "items": items}

@@ -114,21 +114,72 @@ def run(
         engine.bulk = prior_bulk
 
 
-def main() -> int:
+def run_gate_canary(
+    plan: dict[str, Any],
+    *,
+    receipt_path: Path,
+    package_source_path: Path,
+) -> dict[str, Any]:
+    """Validate the exact v2 held authority and stop before every scored boundary."""
+    plans, package_source = _load_bound_inputs(plan, package_source_path)
+    raw_release = os.environ.get("QWEN_HOSTED_WHOLE_TASK_RELEASE_PATH")
+    expected_release = os.environ.get("QWEN_HOSTED_WHOLE_TASK_RELEASE_SHA256")
+    if not raw_release or not expected_release:
+        raise RuntimeError("fresh hosted whole-task canary held binding is required")
+    release_path = Path(raw_release)
+    authority = _load_private_regular(release_path)
+    if authority.get("receipt_sha256") != expected_release:
+        raise RuntimeError("fresh hosted whole-task canary held digest drifted")
+    projected = {row["controller"]: row for row in authority.get("controllers") or []}
+    sources = {
+        name: package_source
+        if name == plan["controller"]
+        else {"receipt_sha256": projected.get(name, {}).get("package_source_receipt_sha256")}
+        for name in plans
+    }
+    successor.validate_held(authority, plans, sources)
+    receipt = successor.runtime_gate_v2_receipt(
+        plan,
+        authority,
+        package_source,
+        job_uid=os.environ.get("JOB_UID"),
+        pod_uid=os.environ.get("POD_UID"),
+    )
+    successor.validate_runtime_gate_v2_receipt(
+        receipt,
+        plans,
+        sources,
+        held_receipt_sha256=authority["receipt_sha256"],
+    )
+    receipt_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    self_hosted.write_json_once(receipt_path, receipt)
+    return receipt
+
+
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--plan", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--proxy", type=Path, required=True)
     parser.add_argument("--diagnostic-root", type=Path, required=True)
     parser.add_argument("--package-source", type=Path, required=True)
-    args = parser.parse_args()
-    run(
-        successor.load(args.plan),
-        out=args.out,
-        proxy=args.proxy,
-        diagnostic_root=args.diagnostic_root,
-        package_source_path=args.package_source,
-    )
+    parser.add_argument("--runtime-gate-canary-receipt", type=Path)
+    args = parser.parse_args(argv)
+    plan = successor.load(args.plan)
+    if args.runtime_gate_canary_receipt is not None:
+        run_gate_canary(
+            plan,
+            receipt_path=args.runtime_gate_canary_receipt,
+            package_source_path=args.package_source,
+        )
+    else:
+        run(
+            plan,
+            out=args.out,
+            proxy=args.proxy,
+            diagnostic_root=args.diagnostic_root,
+            package_source_path=args.package_source,
+        )
     return 0
 
 

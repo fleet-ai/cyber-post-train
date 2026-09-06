@@ -14,6 +14,7 @@ from evals.fleet import qwen_hosted_whole_task_release_gate_v1 as gate
 from evals.fleet import qwen_hosted_whole_task_successor_v1 as prior
 from evals.fleet import qwen_hosted_whole_task_successor_v2 as successor
 from evals.fleet import qwen_hosted_whole_task_successor_v2_package as package
+from evals.fleet import qwen_hosted_whole_task_successor_v2_runtime as runtime
 from evals.fleet import self_hosted
 
 ROOT = Path(__file__).parents[1]
@@ -246,6 +247,79 @@ def test_v2_canary_uses_exact_production_package_bytes_and_runtime_entry() -> No
     raw = json.dumps(job)
     assert "run_qwen_hosted_whole_task_successor_v2.sh" in raw
     assert "FLEET_API_KEY" not in raw
+
+
+def test_v2_runtime_canary_cli_accepts_flag_and_exits_before_scored_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    plans = successor.build_plans(ROOT)
+    sources, _ = package.package_sources(ROOT, plans)
+    held = successor.expected_held(plans, sources)
+    private = tmp_path / "private"
+    private.mkdir(mode=0o700)
+    paths = {
+        "plan": (plans["qwen-a"], private / "plan.json"),
+        "source": (sources["qwen-a"], private / "package-source.json"),
+        "release": (held, private / "release.json"),
+    }
+    for value, path in paths.values():
+        path.write_text(json.dumps(value))
+        path.chmod(0o600)
+    receipt = tmp_path / "diagnostic" / "RUNTIME-GATE-CANARY.json"
+    monkeypatch.setenv("JOB_UID", "11111111-1111-4111-8111-111111111111")
+    monkeypatch.setenv("POD_UID", "22222222-2222-4222-8222-222222222222")
+    monkeypatch.setenv("QWEN_HOSTED_WHOLE_TASK_RELEASE_PATH", str(paths["release"][1]))
+    monkeypatch.setenv("QWEN_HOSTED_WHOLE_TASK_RELEASE_SHA256", held["receipt_sha256"])
+    monkeypatch.setenv(
+        "QWEN_HOSTED_WHOLE_TASK_PACKAGE_SOURCE_SHA256", sources["qwen-a"]["receipt_sha256"]
+    )
+    monkeypatch.setattr(runtime, "run", lambda *_args, **_kwargs: pytest.fail("scored run"))
+    assert (
+        runtime.main(
+            [
+                "--plan",
+                str(paths["plan"][1]),
+                "--out",
+                str(tmp_path / "out"),
+                "--proxy",
+                str(tmp_path / "proxy.py"),
+                "--diagnostic-root",
+                str(tmp_path / "diagnostic"),
+                "--package-source",
+                str(paths["source"][1]),
+                "--runtime-gate-canary-receipt",
+                str(receipt),
+            ]
+        )
+        == 0
+    )
+    value = successor.load(receipt)
+    successor.validate_runtime_gate_v2_receipt(
+        value, plans, sources, held_receipt_sha256=held["receipt_sha256"]
+    )
+
+
+def test_v2_runtime_canary_requires_v9_authority() -> None:
+    plans = successor.build_plans(ROOT)
+    sources, _ = package.package_sources(ROOT, plans)
+    held = successor.expected_held(plans, sources)
+    valid = successor.runtime_gate_v2_receipt(
+        plans["qwen-a"],
+        held,
+        sources["qwen-a"],
+        job_uid="11111111-1111-4111-8111-111111111111",
+        pod_uid="22222222-2222-4222-8222-222222222222",
+    )
+    successor.validate_runtime_gate_v2_receipt(
+        valid, plans, sources, held_receipt_sha256=held["receipt_sha256"]
+    )
+    invalid = copy.deepcopy(valid)
+    invalid["authority_schema_version"] = prior.HELD_SCHEMA
+    invalid["receipt_sha256"] = self_hosted.digest_without(invalid, "receipt_sha256")
+    with pytest.raises(RuntimeError, match="v2 runtime canary evidence drifted"):
+        successor.validate_runtime_gate_v2_receipt(
+            invalid, plans, sources, held_receipt_sha256=held["receipt_sha256"]
+        )
 
 
 def test_last_moment_claim_scan_rejects_alternate_generation_same_cell(tmp_path: Path) -> None:

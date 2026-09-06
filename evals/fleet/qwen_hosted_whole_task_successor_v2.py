@@ -24,6 +24,7 @@ SCHEMA = "fleet-qwen38-hosted-atomic-whole-task-plan-v3"
 HELD_SCHEMA = "fleet-qwen38-hosted-atomic-whole-task-held-v9"
 RELEASE_SCHEMA = "fleet-qwen38-hosted-atomic-whole-task-release-v5"
 PACKAGE_SOURCE_SCHEMA = "fleet-qwen38-hosted-package-source-v2"
+RUNTIME_GATE_V2_CANARY_SCHEMA = "fleet-qwen38-hosted-whole-task-runtime-gate-canary-v2"
 EXECUTION_GENERATION = 20
 RUNTIME_GATE_V2_CANARY_JOB = "chris-q38-hosted-whole-task-runtime-gate-canary-v6"
 RELEASE_GATE_MAX_AGE_SECONDS = 3600
@@ -403,7 +404,12 @@ def validate_runtime_gate_v2_canary(
     runtime = value.get("sanitized_runtime_receipt")
     if not isinstance(runtime, dict):
         raise RuntimeError("fresh hosted whole-task v2 runtime canary evidence drifted")
-    prior.validate_runtime_gate_canary(runtime)
+    validate_runtime_gate_v2_receipt(
+        runtime,
+        plans,
+        package_sources,
+        held_receipt_sha256=held_receipt_sha256,
+    )
     if any(
         (
             value.get("schema_version")
@@ -416,12 +422,6 @@ def validate_runtime_gate_v2_canary(
             engine_uuid(value.get("pod_uid")) is None,
             runtime.get("job_uid") != value.get("job_uid"),
             runtime.get("pod_uid") != value.get("pod_uid"),
-            runtime.get("controller") != "qwen-a",
-            runtime.get("plan_sha256") != plans["qwen-a"]["plan_sha256"],
-            runtime.get("authority_schema_version") != HELD_SCHEMA,
-            runtime.get("authority_receipt_sha256") != held_receipt_sha256,
-            runtime.get("package_source_receipt_sha256")
-            != package_sources["qwen-a"]["receipt_sha256"],
             value.get("source_logs_read") is not False,
             value.get("scores_included") is not False,
             value.get("prompts_or_traces_included") is not False,
@@ -430,6 +430,73 @@ def validate_runtime_gate_v2_canary(
         )
     ):
         raise RuntimeError("fresh hosted whole-task v2 runtime canary evidence drifted")
+
+
+def validate_runtime_gate_v2_receipt(
+    runtime: dict[str, Any],
+    plans: dict[str, dict[str, Any]],
+    package_sources: dict[str, dict[str, Any]],
+    *,
+    held_receipt_sha256: str,
+) -> None:
+    if any(
+        (
+            engine_uuid(runtime.get("job_uid")) is None,
+            engine_uuid(runtime.get("pod_uid")) is None,
+        )
+    ):
+        raise RuntimeError("fresh hosted whole-task v2 runtime canary evidence drifted")
+    expected = runtime_gate_v2_receipt(
+        plans["qwen-a"],
+        {"schema_version": HELD_SCHEMA, "receipt_sha256": held_receipt_sha256},
+        package_sources["qwen-a"],
+        job_uid=runtime["job_uid"],
+        pod_uid=runtime["pod_uid"],
+    )
+    if runtime != expected:
+        raise RuntimeError("fresh hosted whole-task v2 runtime canary evidence drifted")
+
+
+def runtime_gate_v2_receipt(
+    plan: dict[str, Any],
+    authority: dict[str, Any],
+    package_source: dict[str, Any],
+    *,
+    job_uid: Any,
+    pod_uid: Any,
+) -> dict[str, Any]:
+    zeros = {
+        field: 0
+        for field in (
+            "output_roots_created",
+            "endpoint_leases_acquired",
+            "canonical_claims_created",
+            "model_calls",
+            "task_calls",
+            "session_calls",
+            "verifier_calls",
+            "scoring_calls",
+            "api_mutations",
+        )
+    }
+    return _seal(
+        {
+            "schema_version": RUNTIME_GATE_V2_CANARY_SCHEMA,
+            "status": "PASS",
+            "controller": plan["controller"],
+            "plan_sha256": plan["plan_sha256"],
+            "job_uid": job_uid,
+            "pod_uid": pod_uid,
+            "authority_schema_version": authority["schema_version"],
+            "authority_receipt_sha256": authority["receipt_sha256"],
+            "package_source_receipt_sha256": package_source["receipt_sha256"],
+            "bootstrap_stage_reached": "06-runtime-exec",
+            **zeros,
+            "scores_included": False,
+            "prompts_or_traces_included": False,
+            "credentials_included": False,
+        }
+    )
 
 
 def engine_uuid(value: Any) -> str | None:
