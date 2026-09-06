@@ -13,6 +13,7 @@ from evals.fleet import glm53_dedicated_v23_request_counter_watchdog_v1 as watch
 SCHEMA = "fleet-glm53-dedicated-v24-server-held-v1"
 TITLE = "chris-cyber-evalserve-glm53-tp8-a-v24"
 RUN_DIR = "/mnt/sfs/jobs/chris-cyber-evalserve-glm53-tp8-a-v24"
+READY_PATH = RUN_DIR + "/READY.json"
 IMAGE = (
     "ghcr.io/fleet-ai/cyber-post-train-glm53-runtime@"
     "sha256:ec93ba50613fd13fb4c0b0a9105767ab18209a1e0108dab0923aad694c0206ec"
@@ -79,6 +80,56 @@ SERVER_ARGV = (
     "--enable-metrics-for-all-schedulers",
 )
 
+READY_OBSERVER = f"""
+import datetime
+import hashlib
+import json
+import os
+import pathlib
+import time
+import urllib.request
+
+pid = int(os.environ["GLM53_SERVER_PID"])
+deadline = time.time() + 7200
+while True:
+    state = pathlib.Path(f"/proc/{{pid}}/stat")
+    if not state.exists() or state.read_text().split()[2] == "Z":
+        raise SystemExit("server exited before application readiness")
+    try:
+        with urllib.request.urlopen("http://127.0.0.1:8000/health", timeout=5) as response:
+            if response.status == 200:
+                break
+    except OSError:
+        pass
+    if time.time() >= deadline:
+        raise SystemExit("application readiness deadline exceeded")
+    time.sleep(2)
+ready_at = time.time()
+body = {{
+    "schema_version": "fleet-glm53-dedicated-v24-application-ready-v1",
+    "status": "APPLICATION_HEALTH_HTTP_200",
+    "server_title": {TITLE!r},
+    "server_run_dir": {RUN_DIR!r},
+    "served_id": {SERVED_ID!r},
+    "model_revision": {MODEL_REVISION!r},
+    "context_length": {CONTEXT_LENGTH},
+    "ready_at_epoch": ready_at,
+    "ready_at_utc": datetime.datetime.fromtimestamp(
+        ready_at, datetime.UTC
+    ).isoformat().replace("+00:00", "Z"),
+    "health_http_status": 200,
+    "prompts_traces_flags_scores_or_model_outputs_included": False,
+}}
+canonical = json.dumps(body, sort_keys=True, separators=(",", ":")).encode()
+body["receipt_sha256"] = "sha256:" + hashlib.sha256(canonical).hexdigest()
+target = pathlib.Path({READY_PATH!r})
+target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o400)
+with os.fdopen(fd, "w") as handle:
+    json.dump(body, handle, sort_keys=True, separators=(",", ":"))
+    handle.write("\\n")
+""".strip()
+
 
 class ServerPlanError(RuntimeError):
     """The held v24 server contract is inconsistent."""
@@ -125,7 +176,14 @@ def payload() -> dict[str, Any]:
     return {
         "title": TITLE,
         "image": IMAGE,
-        "command": "bash -lc 'exec \"$@\"' -- " + shlex.join(SERVER_ARGV),
+        "command": (
+            "bash -lc 'set -euo pipefail; \"$@\" & server_pid=$!; "
+            "export GLM53_SERVER_PID=$server_pid; "
+            "trap '\"'\"'kill \"$server_pid\" 2>/dev/null || true'\"'\"' EXIT; "
+            f"python3 -c {shlex.quote(READY_OBSERVER)}; "
+            "wait \"$server_pid\"; trap - EXIT' -- "
+            + shlex.join(SERVER_ARGV)
+        ),
         "workers": 1,
         "gpus_per_worker": 8,
         "run_dir": RUN_DIR,
@@ -162,7 +220,8 @@ def validate_payload(value: dict[str, Any]) -> None:
         or "IDLE_SECONDS" in command
         or "metrics_digest" in command
         or "MODEL-TRAFFIC" in command
-        or "kill -TERM" in command
+        or "READY.json" not in command
+        or "APPLICATION_HEALTH_HTTP_200" not in command
     ):
         raise ServerPlanError("v24_payload_or_idle_authority_invalid")
 
