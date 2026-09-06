@@ -62,17 +62,27 @@ def _validate_sources(root: Path, state: dict[str, Any]) -> None:
     state["source_manifest_sha256"] = prior._file_sha256(raw)  # noqa: SLF001
 
 
-PHASES = ((prior.PHASES[0][0], _validate_sources), *prior.PHASES[1:])
+_CANONICAL_PHASES = ((prior.PHASES[0][0], _validate_sources), *prior.PHASES[1:])
+PHASES = _CANONICAL_PHASES
+
+
+def _validate_phase_bindings() -> None:
+    if PHASES is not _CANONICAL_PHASES or len(PHASES) != len(_CANONICAL_PHASES):
+        raise RuntimeError("rank-30 v2 observer phase binding drifted")
+    for actual, expected in zip(PHASES, _CANONICAL_PHASES, strict=True):
+        if actual[0] != expected[0] or actual[1] is not expected[1]:
+            raise RuntimeError("rank-30 v2 observer phase binding drifted")
 
 
 def _activate() -> None:
+    _validate_phase_bindings()
     prior.SCHEMA = SCHEMA
     prior.JOB_NAME = JOB_NAME
     prior.CONFIGMAP_NAME = CONFIGMAP_NAME
     prior.OUTPUT_PATH = OUTPUT_PATH
     prior.MANIFEST_PATH = MANIFEST_PATH
     prior.PHASES = PHASES
-    prior._CANONICAL_PHASES = PHASES  # noqa: SLF001
+    prior._CANONICAL_PHASES = _CANONICAL_PHASES  # noqa: SLF001
 
 
 def run(root: Path, *, output_path: Path = OUTPUT_PATH) -> int:

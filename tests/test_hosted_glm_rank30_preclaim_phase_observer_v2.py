@@ -84,6 +84,29 @@ def test_v2_source_phase_accepts_projected_symlinks(
     )
 
 
+@pytest.mark.parametrize("replace_all", [False, True])
+def test_noop_or_replaced_v2_phase_callables_cannot_pass(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    replace_all: bool,
+) -> None:
+    phases = list(observer.PHASES)
+
+    def noop(_root: Path, _state: dict[str, object]) -> None:
+        return None
+
+    if replace_all:
+        phases = [(name, noop) for name, _function in phases]
+    else:
+        phases[0] = (phases[0][0], noop)
+    monkeypatch.setattr(observer, "PHASES", tuple(phases))
+    output = tmp_path / "diagnostic" / "DIAGNOSTIC.json"
+
+    with pytest.raises(RuntimeError, match="phase binding drifted"):
+        observer.run(ROOT, output_path=output)
+    assert not output.exists()
+
+
 def prior_file_sha256(payload: bytes) -> str:
     return "sha256:" + hashlib.sha256(payload).hexdigest()
 
