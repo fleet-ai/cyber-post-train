@@ -126,7 +126,7 @@ def build_held(root: Path, package_commit: str) -> dict[str, Any]:
         "release_file_sha256": diagnostic.RELEASE_FILE_SHA256,
         "release_receipt_sha256": diagnostic.RELEASE_RECEIPT_SHA256,
         "runtime_plan_sha256": diagnostic.RUNTIME_PLAN_SHA256,
-        "phase_order": [name for name, _function in diagnostic.PHASES],
+        "phase_order": list(diagnostic.PHASE_ORDER),
         "stops_before_provider_session_model": True,
         "create_once": True,
         "model_calls": 0,

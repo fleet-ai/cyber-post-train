@@ -89,35 +89,59 @@ def test_materialized_exact_scored_package_imports_in_isolation(tmp_path: Path) 
         bootstrap.materialize(projected, repo)
 
 
+@pytest.mark.parametrize(
+    ("failed_phase", "failure_code", "completed_phase_count"),
+    [
+        ("01-frozen-source-package", "FROZEN_SOURCE_INVARIANT_FAILED", 0),
+        (
+            "02-failed-controller-zero-effect",
+            "FAILED_CONTROLLER_INVARIANT_FAILED",
+            1,
+        ),
+        ("03-observer-identity", "OBSERVER_IDENTITY_INVARIANT_FAILED", 2),
+        ("06-frozen-release-replay", "FROZEN_RELEASE_INVARIANT_FAILED", 5),
+    ],
+)
 def test_observer_receipt_exposes_only_sanitized_phase_and_zero_call_state(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failed_phase: str,
+    failure_code: str,
+    completed_phase_count: int,
 ) -> None:
     monkeypatch.setenv("JOB_UID", "11111111-1111-4111-8111-111111111111")
     monkeypatch.setenv("POD_UID", "22222222-2222-4222-8222-222222222222")
     output = tmp_path / "failure" / "DIAGNOSTIC.json"
     secret = "do-not-serialize-this-runtime-detail"
-    completed = [name for name, _fn in diagnostic.PHASES[:5]]
+    completed = [diagnostic.PREVALIDATION_PHASE]
+    completed.extend(name for name, _fn in diagnostic.PHASES[:completed_phase_count])
+    state = {
+        "observer_identity": {
+            "job_uid": "11111111-1111-4111-8111-111111111111",
+            "pod_uid": "22222222-2222-4222-8222-222222222222",
+        }
+    }
     receipt = diagnostic._receipt(  # noqa: SLF001
         completed,
-        "06-frozen-release-replay",
+        failed_phase,
         True,
-        {},
+        state,
     )
     with pytest.raises(TypeError):
         diagnostic._receipt(  # type: ignore[call-arg]  # noqa: SLF001
             completed,
-            "06-frozen-release-replay",
+            failed_phase,
             True,
-            {},
+            state,
             error=RuntimeError(secret),
         )
     diagnostic._write_receipt_once(output, receipt)  # noqa: SLF001
     payload = output.read_text()
     assert secret not in payload
     receipt = json.loads(payload)
-    assert receipt["failed_phase"] == "06-frozen-release-replay"
-    assert receipt["failure_code"] == "FROZEN_RELEASE_INVARIANT_FAILED"
-    assert receipt["completed_phases"] == [name for name, _fn in diagnostic.PHASES[:5]]
+    assert receipt["failed_phase"] == failed_phase
+    assert receipt["failure_code"] == failure_code
+    assert receipt["completed_phases"] == completed
     assert receipt["provider_constructed"] is False
     assert receipt["session_model_boundary_crossed"] is False
     assert set(receipt["zero_call_counters"].values()) == {0}
@@ -131,6 +155,27 @@ def test_observer_receipt_exposes_only_sanitized_phase_and_zero_call_state(
     )
     with pytest.raises(FileExistsError):
         diagnostic._write_receipt_once(output, receipt)  # noqa: SLF001
+
+
+def test_secret_shaped_invalid_identity_is_redacted_before_phase_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    job_secret = "secret-shaped-job-uid-value"
+    pod_secret = "secret-shaped-pod-uid-value"
+    monkeypatch.setenv("JOB_UID", job_secret)
+    monkeypatch.setenv("POD_UID", pod_secret)
+    output = tmp_path / "diagnostic" / "DIAGNOSTIC.json"
+
+    assert diagnostic.run(ROOT, output_path=output) == 1
+    raw = output.read_text()
+    assert job_secret not in raw
+    assert pod_secret not in raw
+    receipt = json.loads(raw)
+    assert receipt["failed_phase"] == diagnostic.PREVALIDATION_PHASE
+    assert receipt["failure_code"] == "OBSERVER_IDENTITY_PREVALIDATION_FAILED"
+    assert receipt["completed_phases"] == []
+    assert receipt["observer_identity"]["job_uid"] is None
+    assert receipt["observer_identity"]["pod_uid"] is None
 
 
 @pytest.mark.parametrize("replace_all", [False, True])

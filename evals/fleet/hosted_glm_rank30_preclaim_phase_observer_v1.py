@@ -147,12 +147,31 @@ def _validate_failed_controller(_root: Path, _state: dict[str, Any]) -> None:
 
 
 def _validate_observer_identity(_root: Path, _state: dict[str, Any]) -> None:
-    for name in ("JOB_UID", "POD_UID"):
+    captured = _state.get("observer_identity")
+    if not isinstance(captured, dict):
+        raise RuntimeError("rank-30 observer identity is invalid")
+    for name, key in (("JOB_UID", "job_uid"), ("POD_UID", "pod_uid")):
         try:
-            if uuid.UUID(os.environ.get(name, "")).int == 0:
+            if (
+                uuid.UUID(os.environ.get(name, "")).int == 0
+                or captured.get(key) != os.environ.get(name)
+            ):
                 raise ValueError
         except ValueError:
             raise RuntimeError("rank-30 observer identity is invalid") from None
+
+
+def _capture_observer_identity() -> dict[str, str]:
+    captured: dict[str, str] = {}
+    for name, key in (("JOB_UID", "job_uid"), ("POD_UID", "pod_uid")):
+        value = os.environ.get(name, "")
+        try:
+            if uuid.UUID(value).int == 0:
+                raise ValueError
+        except ValueError:
+            raise RuntimeError("rank-30 observer identity is invalid") from None
+        captured[key] = value
+    return captured
 
 
 def _load_inventory(_root: Path, state: dict[str, Any]) -> None:
@@ -220,7 +239,10 @@ PHASES: tuple[Phase, ...] = (
     ("07-strict-current-peer", _validate_strict_current_peer),
 )
 _CANONICAL_PHASES = PHASES
+PREVALIDATION_PHASE = "00-observer-identity-prevalidation"
+PHASE_ORDER = (PREVALIDATION_PHASE, *(name for name, _function in PHASES))
 FAILURE_CODES = {
+    PREVALIDATION_PHASE: "OBSERVER_IDENTITY_PREVALIDATION_FAILED",
     "01-frozen-source-package": "FROZEN_SOURCE_INVARIANT_FAILED",
     "02-failed-controller-zero-effect": "FAILED_CONTROLLER_INVARIANT_FAILED",
     "03-observer-identity": "OBSERVER_IDENTITY_INVARIANT_FAILED",
@@ -253,8 +275,8 @@ def _receipt(
         "observer_identity": {
             "job_name": JOB_NAME,
             "configmap_name": CONFIGMAP_NAME,
-            "job_uid": os.environ.get("JOB_UID"),
-            "pod_uid": os.environ.get("POD_UID"),
+            "job_uid": (state.get("observer_identity") or {}).get("job_uid"),
+            "pod_uid": (state.get("observer_identity") or {}).get("pod_uid"),
         },
         "failed_controller_identity": {
             "job_name": FAILED_JOB,
@@ -262,7 +284,7 @@ def _receipt(
             "pod_name": FAILED_POD,
             "pod_uid": FAILED_POD_UID,
         },
-        "phase_order": [name for name, _function in PHASES],
+        "phase_order": list(PHASE_ORDER),
         "completed_phases": completed,
         "last_completed_phase": completed[-1] if completed else None,
         "failed_phase": failed_phase,
@@ -301,7 +323,14 @@ def run(root: Path, *, output_path: Path = OUTPUT_PATH) -> int:
     failed_phase: str | None = None
     failed = False
     state: dict[str, Any] = {}
+    try:
+        state["observer_identity"] = _capture_observer_identity()
+        completed.append(PREVALIDATION_PHASE)
+    except Exception:
+        failed_phase, failed = PREVALIDATION_PHASE, True
     for name, function in PHASES:
+        if failed:
+            break
         try:
             function(root, state)
         except Exception:  # exact errors are deliberately discarded before receipt
