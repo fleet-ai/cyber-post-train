@@ -15,6 +15,7 @@ from evals.fleet import glm53_dedicated_v16_bootstrap_package_v1 as bootstrap
 from evals.fleet import glm53_dedicated_v16_canary_launch_v1 as launch
 from evals.fleet import glm53_dedicated_v17 as v17
 from evals.fleet import glm53_dedicated_v17_live as v17_live
+from evals.fleet import glm53_dedicated_runtime_gate_package_v1 as runtime_gate_package
 from evals.fleet import self_hosted
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -291,3 +292,18 @@ def test_v17_bootstrap_validator_is_fail_closed(monkeypatch: pytest.MonkeyPatch)
         stdout = raw
     monkeypatch.setattr(v17_live.subprocess, "run", lambda *a, **k: Done())
     assert v17_live._bootstrap()[1]["status"] == "PASSED_PRE_MODEL"
+
+
+def test_runtime_gate_observer_is_non_scored_and_uses_actual_evidence() -> None:
+    parity = ROOT / "docs/evidence/glm53-study/2026-09-05-glm53-dedicated-v14-actual-opencode-parity.json"
+    binding = ROOT / "docs/evidence/glm53-study/2026-09-05-glm53-dedicated-v14-server-binding.json"
+    release = ROOT / "docs/evidence/glm53-study/2026-09-05-glm53-dedicated-v14-actual-opencode-parity.json"
+    objects = runtime_gate_package.render(
+        ROOT, parity, binding, release,
+        "http://glm-v17-head-svc.fleet-train-jobs.svc.cluster.local:8000",
+    )
+    source, job = objects["items"]
+    assert source["data"]["parity.json"] == parity.read_text()
+    assert "_runtime_gate(plan)" in source["data"]["gate.py"]
+    assert "run_controller" not in source["data"]["gate.py"]
+    assert job["metadata"]["annotations"]["cyber-post-train.fleet.ai/launch-authorized"] == "false"
