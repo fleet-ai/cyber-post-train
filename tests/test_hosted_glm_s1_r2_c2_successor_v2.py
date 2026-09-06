@@ -55,6 +55,18 @@ def test_v3_controller_and_release_have_complete_rendered_install_closure():
     package_v3.validate_install_closure(release_data)
 
 
+def test_v3_scored_package_requires_exact_bootstrap_receipt():
+    release = ROOT / "docs/evidence/glm53-study/2026-09-06-glm53-hosted-rank2-c2-release-v4.json"
+    bootstrap = ROOT / "docs/evidence/glm53-study/2026-09-06-glm53-hosted-rank2-c2-bootstrap-v1.json"
+    assert package_v3.render(ROOT, release_path=release, bootstrap_path=bootstrap)["launch_authorized"] is True
+    try:
+        package_v3.render(ROOT, release_path=release)
+    except ValueError as exc:
+        assert "release and exact bootstrap" in str(exc)
+    else:
+        raise AssertionError("scored package was authorized without CPU bootstrap")
+
+
 def test_install_closure_rejects_the_exact_v2_omission():
     data = package_v3.render(ROOT)["objects"]["items"][0]["data"].copy()
     del data["original_release.py"]

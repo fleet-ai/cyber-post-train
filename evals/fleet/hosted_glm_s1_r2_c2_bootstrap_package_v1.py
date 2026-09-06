@@ -15,7 +15,9 @@ SFS_ROOT = "/mnt/sfs/jobs/" + JOB_NAME
 
 
 def render(root: Path, *, release_path: Path) -> dict[str, Any]:
-    configmap, job = copy.deepcopy(controller.render(root, release_path=release_path)["objects"]["items"])
+    configmap, job = copy.deepcopy(
+        controller.render(root, release_path=release_path, bootstrap_mode=True)["objects"]["items"]
+    )
     configmap["metadata"]["name"] = CONFIGMAP_NAME
     job["metadata"]["name"] = JOB_NAME
     job["metadata"]["labels"]["cyber-post-train.fleet.ai/experiment"] = JOB_NAME
