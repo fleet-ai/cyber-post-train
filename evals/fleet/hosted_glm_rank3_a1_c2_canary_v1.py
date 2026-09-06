@@ -56,6 +56,8 @@ CONTROLLERS = {
 }
 SHA256_RE = source.SHA256_RE
 COMMIT_RE = source.COMMIT_RE
+CANARY_GATE_SCHEMA = source.predecessor.CANARY_GATE_SCHEMA
+RECONCILIATION_GATE_SCHEMA = source.predecessor.RECONCILIATION_GATE_SCHEMA
 
 
 def load(path: Path) -> dict[str, Any]:

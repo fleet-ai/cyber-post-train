@@ -1,6 +1,8 @@
 from pathlib import Path
 
 from evals.fleet import hosted_glm_rank3_a1_c2_canary_v1 as canary
+from evals.fleet import hosted_glm_rank3_a1_c2_canary_runtime_v1 as runtime
+from evals.fleet import exact_pass4_bulk_runtime_v3 as engine
 from evals.fleet import self_hosted
 
 
@@ -35,3 +37,50 @@ def test_rank3_canary_binds_exact_live_s2_runner_and_failure_evidence() -> None:
     assert plan["failure_authority"]["commit"] == "640f430"
     assert plan["execution"]["endpoint_lease"]["maximum_streams"] == 2
     assert plan["execution"]["preemption_policy"] == "Never"
+
+
+def test_rank3_runtime_release_is_fail_closed(tmp_path, monkeypatch) -> None:
+    plan = canary.validate_all(ROOT)[canary.CONTROLLER]
+    receipt = {
+        "schema_version": runtime.RELEASE_SCHEMA,
+        "status": "CLEAR",
+        "successor_job": canary.JOB_NAME,
+        "successor_configmap": canary.CONFIGMAP_NAME,
+        "plan_sha256": plan["plan_sha256"],
+        "selection_rank": 3,
+        "attempt": 1,
+        "whole_task_boundary_clear": True,
+        "base_configmap_uid": canary.KNOWN_GOOD_BASE_CONFIGMAP["uid"],
+        "active_scored_lease_slots_before_create": 1,
+        "maximum_scored_streams": 2,
+        "fleet_session_collisions": 0,
+        "global_claim_collisions": 0,
+        "kubernetes_object_collisions": 0,
+        "sfs_output_collisions": 0,
+        "mutation_calls": 0,
+        "scores_read": False,
+        "prompts_traces_flags_read": False,
+        "cell_id": plan["attempts"][0]["cell_id"],
+        "execution_id": plan["attempts"][0]["execution_id"],
+    }
+    receipt["receipt_sha256"] = self_hosted.digest_without(receipt, "receipt_sha256")
+    path = tmp_path / "release.json"
+    self_hosted.write_json_once(path, receipt)
+    monkeypatch.setattr(runtime, "RELEASE_PATH", path)
+    runtime.validate_release(plan)
+    receipt["fleet_session_collisions"] = 1
+    receipt["receipt_sha256"] = self_hosted.digest_without(receipt, "receipt_sha256")
+    path.write_bytes(self_hosted.canonical_json(receipt) + b"\n")
+    import pytest
+
+    with pytest.raises(RuntimeError):
+        runtime.validate_release(plan)
+
+
+def test_rank3_adapter_is_complete_for_the_exact_s2_engine() -> None:
+    engine.validate_bulk_adapter(canary)
+
+
+def test_v2_copies_projected_release_to_a_private_regular_file() -> None:
+    script = (ROOT / "evals/fleet/scripts/run_hosted_glm_rank3_a1_c2_canary_v2.sh").read_text()
+    assert 'install -m 0600 /bootstrap/release.json "$ROOT/.runtime/release.json"' in script
