@@ -495,4 +495,3 @@ def test_partial_qualifier_create_retains_configmap_uid(
     with pytest.raises(RuntimeError, match="Job create failed"):
         postcreate.create_qualifier({}, {}, {}, ROOT, created)
     assert created == {"ConfigMap": "77777777-7777-4777-8777-777777777777"}
-
