@@ -158,20 +158,33 @@ def test_execute_keeps_fleet_calls_zero_and_runs_frozen_waves(tmp_path, monkeypa
 
     monkeypatch.setattr(qualifier.engine, "run_wave", wave)
     monkeypatch.setattr(qualifier.engine, "validate_runtime_ramp", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(qualifier.engine, "validate_gpu_wave", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
         qualifier.endpoint_lease,
         "acquire_endpoint_lease",
         lambda **_kwargs: __import__("contextlib").nullcontext(),
     )
     out = tmp_path / "RAW.json"
+    def observed(_root, concurrency, _server):
+        value = {
+            "schema_version": qualifier.GPU_OBSERVER_SCHEMA,
+            "status": "OBSERVED_SCORE_FREE_WAVE",
+            "concurrency": concurrency,
+            "server": qualifier.build_held()["server"],
+            "devices_seen": 8,
+            "max_utilization_percent_by_device": [50] * 8,
+            "server_identity_unchanged": True,
+            "qualifier_identity_unchanged": True,
+        }
+        value["receipt_sha256"] = crypto.digest_without(value, "receipt_sha256")
+        return value
+
     result = qualifier.execute(
         authorization,
         out,
         origin="http://v23.invalid:8000",
         runner=lambda *_args, **_kwargs: {},
         counter=lambda _origin: 0,
-        observer=lambda *_args: {},
+        observer=observed,
     )
     assert calls == [1, 2, 4]
     assert result["fleet_task_instance_calls"] == 0
