@@ -69,6 +69,7 @@ SAFE_FAILURE_CODES = frozenset(
         "release_gate_binding_invalid",
         "release_gate_observation_invalid",
         "release_gate_package_file_drifted",
+        "release_gate_package_source_escape",
         "release_gate_package_source_invalid",
         "release_gate_runtime_namespace_invalid",
         "scan_directory_symlink_forbidden",
@@ -541,7 +542,14 @@ def validate_observation(
 
 
 def validate_package_source(path: Path, package_root: Path) -> None:
-    value = load(path)
+    try:
+        root = package_root.resolve(strict=True)
+        source = path.resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise GateError("release_gate_package_source_invalid") from exc
+    if not source.is_relative_to(root):
+        raise GateError("release_gate_package_source_escape")
+    value = load(source)
     files = value.get("files") or {}
     if any(
         (
@@ -554,13 +562,16 @@ def validate_package_source(path: Path, package_root: Path) -> None:
     ):
         raise GateError("release_gate_package_source_invalid")
     for name, expected in files.items():
-        target = package_root / name
-        if target.is_symlink():
-            # Kubernetes ConfigMap projection uses symlinks by design.  This
-            # score-free reader consumes bytes only and never treats the path
-            # as private authority.
-            target = target.resolve(strict=True)
-        if not target.is_file() or sha256(target.read_bytes()) != expected:
+        try:
+            target = (package_root / name).resolve(strict=True)
+        except (OSError, RuntimeError) as exc:
+            raise GateError("release_gate_package_file_drifted") from exc
+        if (
+            not target.is_relative_to(root)
+            or not target.is_file()
+            or target.stat().st_size > MAX_JSON_BYTES
+            or sha256(target.read_bytes()) != expected
+        ):
             raise GateError("release_gate_package_file_drifted")
 
 
