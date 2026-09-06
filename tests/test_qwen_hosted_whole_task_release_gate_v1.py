@@ -11,6 +11,7 @@ import pytest
 
 from evals.fleet import qwen_hosted_whole_task_release_gate_package_v1 as gate_package
 from evals.fleet import qwen_hosted_whole_task_release_gate_package_v2 as gate_package_v2
+from evals.fleet import qwen_hosted_whole_task_release_gate_package_v3 as gate_package_v3
 from evals.fleet import qwen_hosted_whole_task_release_gate_v1 as gate
 from evals.fleet import qwen_hosted_whole_task_successor_v1 as prior
 from evals.fleet import qwen_hosted_whole_task_successor_v2 as successor
@@ -239,6 +240,84 @@ def test_observer_failure_receipt_collision_does_not_mask_original(
                 str(output),
             ]
         )
+
+
+def test_package_source_accepts_in_mount_projection_symlink_and_rejects_escape(
+    tmp_path: Path,
+) -> None:
+    package_root = tmp_path / "bootstrap"
+    revision = package_root / "..2026_09_06"
+    revision.mkdir(parents=True)
+    (package_root / "..data").symlink_to(revision.name)
+    files = {
+        "binding.json": "{}\n",
+        "qwen_hosted_whole_task_release_gate_v1.py": "# source\n",
+    }
+    body = {
+        "schema_version": "fleet-qwen38-hosted-whole-task-release-gate-package-v1",
+        "files": {name: gate.sha256(value.encode()) for name, value in files.items()},
+        "file_count": 2,
+    }
+    receipt = gate._seal(body)  # noqa: SLF001
+    for name, value in files.items():
+        (revision / name).write_text(value)
+        (package_root / name).symlink_to(Path("..data") / name)
+    (revision / "package-source.json").write_text(json.dumps(receipt))
+    projected = package_root / "package-source.json"
+    projected.symlink_to(Path("..data") / "package-source.json")
+    gate.validate_package_source(projected, package_root)
+
+    outside = tmp_path / "outside.json"
+    outside.write_text(json.dumps(receipt))
+    escaped = package_root / "escaped.json"
+    escaped.symlink_to(outside)
+    with pytest.raises(gate.GateError, match="package_source_escape"):
+        gate.validate_package_source(escaped, package_root)
+
+    (package_root / "binding.json").unlink()
+    outside_binding = tmp_path / "outside-binding.json"
+    outside_binding.write_text(files["binding.json"])
+    (package_root / "binding.json").symlink_to(outside_binding)
+    with pytest.raises(gate.GateError, match="package_file_drifted"):
+        gate.validate_package_source(projected, package_root)
+
+
+def test_package_source_rejects_broken_loop_and_oversize_declared_files(tmp_path: Path) -> None:
+    root = tmp_path / "bootstrap"
+    root.mkdir()
+    body = {
+        "schema_version": "fleet-qwen38-hosted-whole-task-release-gate-package-v1",
+        "files": {
+            "binding.json": gate.sha256(b"{}"),
+            "qwen_hosted_whole_task_release_gate_v1.py": gate.sha256(b"# source"),
+        },
+        "file_count": 2,
+    }
+    source = root / "package-source.json"
+    source.write_text(json.dumps(gate._seal(body)))  # noqa: SLF001
+    (root / "qwen_hosted_whole_task_release_gate_v1.py").write_bytes(b"# source")
+    target = root / "binding.json"
+    target.symlink_to("missing.json")
+    with pytest.raises(gate.GateError, match="package_file_drifted"):
+        gate.validate_package_source(source, root)
+    target.unlink()
+    target.symlink_to("binding.json")
+    with pytest.raises(gate.GateError, match="package_file_drifted"):
+        gate.validate_package_source(source, root)
+    target.unlink()
+    target.write_bytes(b"x" * (gate.MAX_JSON_BYTES + 1))
+    with pytest.raises(gate.GateError, match="package_file_drifted"):
+        gate.validate_package_source(source, root)
+
+
+def test_observer_v3_preserves_binding_and_uses_third_fresh_identity() -> None:
+    old = gate_package_v2.render(ROOT)
+    new = gate_package_v3.render(ROOT)
+    assert new["items"][0]["data"] == old["items"][0]["data"]
+    raw = json.dumps(new["items"][1])
+    assert gate_package_v3.JOB_NAME in raw
+    assert gate_package_v2.JOB_NAME not in raw
+    assert gate_package_v2.OUTPUT_ROOT not in raw
 
 
 def test_release_stays_closed_without_real_observer_receipt() -> None:
