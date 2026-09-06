@@ -93,10 +93,20 @@ def _fresh_attempt(row: Mapping[str, Any]) -> dict[str, Any]:
     return item
 
 
-def build_plan(root: Path) -> dict[str, Any]:
-    source = _load(root / SOURCE_PATH)
-    if source.get("plan_sha256") != SOURCE_PLAN_SHA256:
+def _validate_source(source: Mapping[str, Any]) -> None:
+    source_value = dict(source)
+    if any(
+        (
+            source_value.get("plan_sha256") != SOURCE_PLAN_SHA256,
+            self_hosted.digest_without(source_value, "plan_sha256")
+            != SOURCE_PLAN_SHA256,
+        )
+    ):
         raise ValueError("rank17 source plan digest drifted")
+
+
+def _expected_plan(source: Mapping[str, Any]) -> dict[str, Any]:
+    _validate_source(source)
     tasks = [copy.deepcopy(row) for row in source.get("tasks", []) if row.get("rank") == RANK]
     prior_attempts = [
         copy.deepcopy(row)
@@ -133,69 +143,20 @@ def build_plan(root: Path) -> dict[str, Any]:
             "fresh_execution_and_output_identities_required": True,
         },
     )
-    plan = {**body, "plan_sha256": self_hosted.digest_without(body, "plan_sha256")}
+    return {**body, "plan_sha256": self_hosted.digest_without(body, "plan_sha256")}
+
+
+def build_plan(root: Path) -> dict[str, Any]:
+    source = _load(root / SOURCE_PATH)
+    plan = _expected_plan(source)
     validate_plan(plan, source)
     return plan
 
 
 def validate_plan(plan: Mapping[str, Any], source: Mapping[str, Any]) -> None:
-    source_rows = [row for row in source.get("attempts", []) if row.get("selection_rank") == RANK]
-    rows = plan.get("attempts")
-    tasks = plan.get("tasks")
-    if any(
-        (
-            plan.get("receipt_sha256") is not None,
-            plan.get("schema_version") != SCHEMA,
-            plan.get("controller") != CONTROLLER,
-            plan.get("campaign_id") != JOB_NAME,
-            plan.get("source_job_id") != JOB_NAME,
-            plan.get("sfs_root") != SFS_ROOT,
-            plan.get("predecessor_plan_sha256") != SOURCE_PLAN_SHA256,
-            plan.get("launch_authorized") is not False,
-            plan.get("release_required") is not True,
-            plan.get("model") != EXPECTED_MODEL,
-            plan.get("harness") != EXPECTED_HARNESS,
-            plan.get("treatment", {}).get("tools") != ["bash", "submit_report"],
-            plan.get("treatment", {}).get("context_management")
-            != "opencode_1.18.27_native_compaction_autocontinue_v1",
-            plan.get("execution", {}).get("global_execution_claim_before_model_call") is not True,
-            plan.get("execution", {}).get("automatic_retry") is not False,
-            plan.get("execution", {}).get("same_task_max_inflight") != 1,
-            plan.get("execution", {}).get("endpoint_lease", {}).get("maximum_streams") != 2,
-            not isinstance(tasks, list),
-            len(tasks or []) != 1,
-            (tasks or [{}])[0].get("rank") != RANK,
-            not isinstance(rows, list),
-            len(rows or []) != 4,
-            [row.get("attempt") for row in rows or []] != [1, 2, 3, 4],
-            any(row.get("selection_rank") != RANK for row in rows or []),
-            any(row.get("task_version_id") != TASK_VERSION_ID for row in rows or []),
-            plan.get("plan_sha256") != self_hosted.digest_without(dict(plan), "plan_sha256"),
-        )
-    ):
+    expected = _expected_plan(source)
+    if dict(plan) != expected:
         raise ValueError("held rank17 hosted plan drifted")
-    for row, old in zip(rows or [], source_rows, strict=True):
-        stable = {
-            key: value
-            for key, value in row.items()
-            if key not in {"execution_generation", "execution_id", "run_id", "network"}
-        }
-        old_stable = {
-            key: value
-            for key, value in old.items()
-            if key not in {"execution_generation", "execution_id", "run_id", "network"}
-        }
-        expected = exact.execution_for(str(row["cell_id"]), EXECUTION_GENERATION)
-        if any(
-            (
-                stable != old_stable,
-                row.get("execution_generation") != EXECUTION_GENERATION,
-                row.get("execution_id") != expected["execution_id"],
-                row.get("execution_id") == old.get("execution_id"),
-                row.get("run_id") == old.get("run_id"),
-            )
-        ):
-            raise ValueError("held rank17 execution identity drifted")
 
 
 def held_receipt(root: Path) -> dict[str, Any]:
