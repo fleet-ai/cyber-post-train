@@ -116,16 +116,19 @@ def test_live_rows_reconciles_stale_list_state() -> None:
         assert [row["name"] for row in live._live_rows(client, rows)] == ["ft-run-qwen"]
 
 
-def test_v15_release_package_rejects_controller_changed_after_pre_admission() -> None:
+def test_v17_release_package_binds_bootstrap_qualified_controller() -> None:
     parity = ROOT / "docs/evidence/glm53-study/2026-09-05-glm53-dedicated-v14-actual-opencode-parity.json"
     binding = ROOT / "docs/evidence/glm53-study/2026-09-05-glm53-dedicated-v14-server-binding.json"
-    with pytest.raises(ValueError, match="pre-admitted controller package drifted"):
-        release_package.render(
-            ROOT,
-            parity,
-            binding,
-            "http://glm-v15-head-svc.fleet-train-jobs.svc.cluster.local:8000",
-        )
+    built = release_package.render(
+        ROOT,
+        parity,
+        binding,
+        "http://glm-v17-head-svc.fleet-train-jobs.svc.cluster.local:8000",
+    )
+    assert built["controller_package_sha256"] == v17.CONTROLLER_BOOTSTRAP["controller_package_sha256"]
+    configmap, job = built["objects"]["items"]
+    assert configmap["metadata"]["name"].endswith("release-v4-run")
+    assert job["spec"]["template"]["spec"]["preemptionPolicy"] == "Never"
 
 
 def test_v15_heartbeat_is_uid_bound_and_nonpreempting() -> None:
@@ -185,10 +188,10 @@ def test_v16_preserves_v15_runtime_and_binds_corrected_preflight() -> None:
     assert new["run_dir"] == v16.RUN_DIR
     assert new["env"] == {**old["env"], "GLM53_RUN_DIR": v16.RUN_DIR}
     assert v16.PRE_ADMISSION["receipt_sha256"].endswith("5f9339d")
-    assert v16.PRE_ADMISSION["controller_package_sha256"] == release_package.CONTROLLER_PACKAGE_SHA256
+    assert v16.PRE_ADMISSION["controller_package_sha256"] != release_package.CONTROLLER_PACKAGE_SHA256
 
 
-def test_v16_canary_launch_rejects_changed_controller(tmp_path: Path) -> None:
+def test_v16_canary_launch_binds_current_controller(tmp_path: Path) -> None:
     parity = ROOT / "docs/evidence/glm53-study/2026-09-05-glm53-dedicated-v14-actual-opencode-parity.json"
     binding = ROOT / "docs/evidence/glm53-study/2026-09-05-glm53-dedicated-v14-server-binding.json"
     origin = "http://glm-v16-head-svc.fleet-train-jobs.svc.cluster.local:8000"
@@ -214,14 +217,14 @@ def test_v16_canary_launch_rejects_changed_controller(tmp_path: Path) -> None:
     release["receipt_sha256"] = self_hosted.digest_without(release, "receipt_sha256")
     release_path = tmp_path / "release.json"
     release_path.write_text(json.dumps(release))
-    with pytest.raises(ValueError, match="controller package drifted"):
-        launch.render(
-            ROOT,
-            parity_path=parity,
-            binding_path=binding,
-            release_path=release_path,
-            service_origin=origin,
-        )
+    built = launch.render(
+        ROOT,
+        parity_path=parity,
+        binding_path=binding,
+        release_path=release_path,
+        service_origin=origin,
+    )
+    assert built["controller_package_sha256"] == v17.CONTROLLER_BOOTSTRAP["controller_package_sha256"]
 
 
 def test_v16_bootstrap_runs_exact_controller_source_and_stops_pre_model() -> None:

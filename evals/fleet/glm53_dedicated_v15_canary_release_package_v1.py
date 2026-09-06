@@ -16,7 +16,7 @@ from evals.fleet import glm53_dedicated_v15_canary_release_v1 as release
 from evals.fleet import self_hosted
 
 CONTROLLER_PACKAGE_SHA256 = (
-    "sha256:e6a7ea5a5831c737f1610269cf6deeaf3194895c14f2c15e333bdb0a62f47471"
+    "sha256:99727999b55f8be21decad799a994314e0068ec7cd390f1a72a3656889bfccc8"
 )
 
 
