@@ -1,0 +1,25 @@
+{
+  "api_mutation_calls": 0,
+  "diagnostic_configmap": "chris-glm53-exact100-hosted-r029-a3a4-release-diagnostic-v1-run",
+  "diagnostic_job": "chris-glm53-exact100-hosted-r029-a3a4-release-diagnostic-v1",
+  "failed_release_terminal_receipt_sha256": "sha256:0936ccfeb0aa41e142ed0657c6652069d43eaae09e15951186d6cdb5d86d4133",
+  "launch_authorized": false,
+  "model_calls_authorized": false,
+  "package_sha256": "sha256:664ff9d38e6d3256384069fe2f84058c3c0a5c1e631a783be8fb7df757f0426f",
+  "prompts_traces_flags_scores_or_model_outputs_included": false,
+  "receipt_sha256": "sha256:ae3e3f4ff8d37658578c851f1fc6aa06bb1377a0ead98bdba80faf6bf29ddd4b",
+  "schema_version": "fleet-hosted-glm-rank29-release-phase-diagnostic-held-v1",
+  "scored_launch_authorized": false,
+  "source_commit": "193f660ec80420cd26f49757e67169a13ed63d12",
+  "source_sha256s": {
+    "evals/fleet/hosted_glm_rank29_a3a4_c2_package_v1.py": "sha256:ee6b62143036b90e400ee669a47b7dfcf7a03f35ef96a23616116199e1123fc6",
+    "evals/fleet/hosted_glm_rank29_a3a4_c2_release_v1.py": "sha256:55d90c700fde74706c69a80700eabee7ebbe1d24620159dffb313934f2eb09d5",
+    "evals/fleet/hosted_glm_rank29_a3a4_c2_runtime_v1.py": "sha256:a944c8f829f203d6f12f2815f75dee89e62161f81c71fa22f9c42db41361d458",
+    "evals/fleet/hosted_glm_rank29_a3a4_c2_successor_v1.py": "sha256:7b6e5d7360280db7f1341144ad8612d7f00f5c345e728744636421ebb28f0333"
+  },
+  "status": "READY_HELD_FOR_INDEPENDENT_REVIEW",
+  "task_calls_authorized": false,
+  "session_calls_authorized": false,
+  "verifier_calls_authorized": false,
+  "scoring_calls_authorized": false
+}
