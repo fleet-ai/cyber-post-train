@@ -21,6 +21,9 @@ all pass; the observation binds the unchanged server identity and proves
 activity on every expected device. Any failed or missing requirement stops the
 ramp. See the [enforcement](./glm53_dedicated_v22_concurrency_qualification_v1.py)
 and the [stop-before-next-wave regression](../../tests/test_glm53_dedicated_v22_concurrency_qualification_v1.py).
+The per-wave GPU receipt is produced by the
+[UID-bound content-free observer](./glm53_dedicated_v22_concurrency_gpu_observer_v1.py),
+not by an assumed shared-filesystem side effect.
 
 The companion HELD bulk authority is
 `exact_pass4_dedicated_bulk_v4.py`. It freezes Qwen's 399 remaining cells on

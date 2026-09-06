@@ -33,6 +33,8 @@ CONCURRENCY = (1, 2, 4)
 STREAM_IDS = ("synthetic-a", "synthetic-b", "synthetic-c", "synthetic-d")
 GPU_OBSERVER_SCHEMA = "fleet-glm53-dedicated-v22-concurrency-gpu-wave-v1"
 GPU_OBSERVER_WAIT_SECONDS = 300
+GPU_OBSERVER_MODULE = "evals.fleet.glm53_dedicated_v22_concurrency_gpu_observer_v1"
+UUID_RE = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}")
 
 
 class QualificationError(RuntimeError):
@@ -183,6 +185,7 @@ def validate_gpu_wave(
     observed: dict[str, Any], concurrency: int, expected_server: dict[str, Any] | None
 ) -> None:
     utilization = observed.get("max_utilization_percent_by_device")
+    identity = observed.get("identity")
     if (
         observed.get("schema_version") != GPU_OBSERVER_SCHEMA
         or observed.get("status") != "OBSERVED_SCORE_FREE_WAVE"
@@ -194,7 +197,17 @@ def validate_gpu_wave(
         or not isinstance(utilization, list)
         or len(utilization) != 8
         or any(type(value) not in {int, float} or not 0 < value <= 100 for value in utilization)
+        or not isinstance(identity, dict)
+        or set(identity)
+        != {
+            "server_rayjob_uid",
+            "server_head_pod_uid",
+            "qualifier_job_uid",
+            "qualifier_pod_uid",
+        }
+        or any(UUID_RE.fullmatch(value) is None for value in identity.values())
         or observed.get("server_identity_unchanged") is not True
+        or observed.get("qualifier_identity_unchanged") is not True
         or observed.get("receipt_sha256") != self_hosted.digest_without(observed, "receipt_sha256")
     ):
         raise QualificationError("gpu_wave_observer_invalid")
@@ -376,6 +389,15 @@ def render(root: Path) -> dict[str, Any]:
             "gpu_utilization_percent_per_device": True,
             "gpu_memory_mib_per_device": True,
             "response_or_tool_argument_content": False,
+        },
+        "gpu_observer_execution": {
+            "mode": "local_operator_uid_bound_kubectl",
+            "module": GPU_OBSERVER_MODULE,
+            "phase_files_observed_by_existence_only": True,
+            "server_rayjob_and_head_pod_uids_revalidated": True,
+            "qualifier_job_and_pod_uids_revalidated": True,
+            "atomic_receipt_write_via_stdin": True,
+            "response_prompt_trace_tool_or_score_content_read": False,
         },
         "fail_closed_ramp": {
             "ramp_2_requires": {

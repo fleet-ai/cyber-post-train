@@ -25,6 +25,8 @@ def test_concurrency_qualification_is_score_free_and_fail_closed() -> None:
     assert value["fail_closed_ramp"]["never_overlap_scored_controller"] is True
     assert value["fail_closed_ramp"]["gpu_observer_receipt_required_before_next_wave"] is True
     assert value["fail_closed_ramp"]["ramp_2_requires"]["all_eight_gpus_active_in_wave"] is True
+    assert value["gpu_observer_execution"]["mode"] == "local_operator_uid_bound_kubectl"
+    assert value["gpu_observer_execution"]["atomic_receipt_write_via_stdin"] is True
     assert str(held.LEASE_ROOT).endswith("/opencode11827-dedicated-v22-v1")
     assert value["launch_prerequisites"]["rank51_attempt2_terminal_accepted"] is True
     assert value["scored_concurrency_change_authorized"] is False
@@ -106,7 +108,14 @@ def test_evaluator_passes_c1_c2_c4_and_fails_closed() -> None:
             "devices_seen": 8,
             "samples_per_device": 3,
             "max_utilization_percent_by_device": [50] * 8,
+            "identity": {
+                "server_rayjob_uid": "11111111-1111-4111-8111-111111111111",
+                "server_head_pod_uid": "22222222-2222-4222-8222-222222222222",
+                "qualifier_job_uid": "33333333-3333-4333-8333-333333333333",
+                "qualifier_pod_uid": "44444444-4444-4444-8444-444444444444",
+            },
             "server_identity_unchanged": True,
+            "qualifier_identity_unchanged": True,
         }
         row["receipt_sha256"] = self_hosted.digest_without(row, "receipt_sha256")
         gpu_waves.append(row)
@@ -170,7 +179,14 @@ def test_execute_stops_before_c4_when_c2_gate_fails(
             "devices_seen": 8,
             "samples_per_device": 2,
             "max_utilization_percent_by_device": [50] * 8,
+            "identity": {
+                "server_rayjob_uid": "11111111-1111-4111-8111-111111111111",
+                "server_head_pod_uid": "22222222-2222-4222-8222-222222222222",
+                "qualifier_job_uid": "33333333-3333-4333-8333-333333333333",
+                "qualifier_pod_uid": "44444444-4444-4444-8444-444444444444",
+            },
             "server_identity_unchanged": True,
+            "qualifier_identity_unchanged": True,
         }
         row["receipt_sha256"] = self_hosted.digest_without(row, "receipt_sha256")
         return row
@@ -242,6 +258,17 @@ def test_package_job_is_cpu_only_dind_and_create_once() -> None:
             "privileged"
         ]
         is True
+    )
+
+
+def test_immutable_package_binds_external_uid_observer_sources(monkeypatch) -> None:
+    monkeypatch.setattr(package, "_source", lambda _root, _commit, path: path.encode())
+    configmap = package.build_configmap(ROOT, "a" * 40)
+    value = json.loads(configmap["data"]["package.json"])
+    assert set(value["external_uid_bound_operator_files"]) == set(package.OPERATOR_FILES)
+    assert all(
+        digest.startswith("sha256:") and len(digest) == 71
+        for digest in value["external_uid_bound_operator_files"].values()
     )
 
 

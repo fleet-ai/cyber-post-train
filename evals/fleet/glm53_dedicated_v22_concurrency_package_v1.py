@@ -40,6 +40,10 @@ FILES = (
     "docs/evidence/glm53-study/2026-09-06-glm53-dedicated-v22-actual-opencode-parity.json",
 )
 RUN = "evals/fleet/scripts/run_glm53_dedicated_v22_concurrency_qualification_v1.sh"
+OPERATOR_FILES = (
+    "evals/fleet/glm53_dedicated_v22_concurrency_gpu_observer_v1.py",
+    "evals/fleet/scripts/observe_glm53_dedicated_v22_concurrency_gpu_v1.sh",
+)
 
 
 class PackageError(RuntimeError):
@@ -74,6 +78,9 @@ def build_configmap(root: Path, commit: str) -> dict[str, Any]:
     run = _source(root, commit, RUN)
     data["run.sh"] = run.decode()
     manifest[RUN] = self_hosted.sha256(run)
+    operator_manifest = {
+        path: self_hosted.sha256(_source(root, commit, path)) for path in OPERATOR_FILES
+    }
     package = {
         "schema_version": SCHEMA,
         "package_commit": commit,
@@ -83,6 +90,7 @@ def build_configmap(root: Path, commit: str) -> dict[str, Any]:
         "concurrency_waves": [1, 2, 4],
         "score_free": True,
         "launch_authorized": False,
+        "external_uid_bound_operator_files": operator_manifest,
     }
     package["package_sha256"] = self_hosted.digest_without(package, "package_sha256")
     data["package.json"] = json.dumps(package, sort_keys=True, separators=(",", ":")) + "\n"

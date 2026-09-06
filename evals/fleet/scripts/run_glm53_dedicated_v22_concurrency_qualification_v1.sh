@@ -6,7 +6,7 @@ test -n "${QUALIFICATION_PACKAGE_COMMIT:-}"
 test -n "${QUALIFICATION_OUTPUT_ROOT:-}"
 test ! -e "$QUALIFICATION_OUTPUT_ROOT"
 
-mkdir -p /work/evals/fleet/configs "$QUALIFICATION_OUTPUT_ROOT"
+mkdir -p /work/evals/fleet/configs "$QUALIFICATION_OUTPUT_ROOT/gpu-observer"
 for source in /bootstrap/*__SLASH__*; do
   target="/work/$(basename "$source" | sed 's,__SLASH__,/,g')"
   install -D -m 0444 "$source" "$target"
