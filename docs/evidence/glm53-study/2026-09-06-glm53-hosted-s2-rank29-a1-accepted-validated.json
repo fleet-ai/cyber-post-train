@@ -1,0 +1,47 @@
+{
+  "accepted": {
+    "accepted": true,
+    "cell_id": "sha256:77dde32eb233a7bfae8594b2873caff0279d7e67600d51f2ce384dd486cb1361",
+    "execution_id": "sha256:0312a3507bbf4f6763a7ea84815053c6d89c540632458a143e3e5e9a61eda9a4",
+    "file_sha256": "sha256:f20de0d84d279fda48684231b6eceaaff00193e740eedfd28995b6b7148bb636",
+    "path": "/mnt/sfs/jobs/chris-glm53-exact100-hosted-s2-c2-bulk-v1/accepted/chris-glm53-ac-bulk-b-r029-a1-g1-b51782f9.json",
+    "receipt_sha256": "sha256:8240130bdfb7367a4977bab918c4f793341f39e00c237eb16b8d3eca3dba95b6",
+    "run_id": "chris-glm53-ac-bulk-b-r029-a1-g1-b51782f9"
+  },
+  "cleanup": {
+    "containers_removed": true,
+    "file_sha256": "sha256:a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+    "instance_closed": true,
+    "instance_created": true,
+    "path": "/mnt/sfs/jobs/chris-glm53-exact100-hosted-s2-c2-bulk-v1/attempts/chris-glm53-ac-bulk-b-r029-a1-g1-b51782f9/cleanup.json"
+  },
+  "evidence_files": {
+    "result_file_sha256": "sha256:d904d27c4494c732140c9566ad279fc56f731e4b14101f3b11dd893646605304",
+    "reward_result_file_sha256": "sha256:a1c943c6aa6db6fb0612efca097cc571417a4694f1468db4fd828b8e1a19fb03",
+    "session_ingest_file_sha256": "sha256:fcd27f68fdce702bfe8bef7a2a39586761cfecf403a896e6fa5e1b6fd7666731"
+  },
+  "job": {
+    "name": "chris-glm53-exact100-hosted-s2-c2-bulk-v1",
+    "pod_uid": "72ce8163-fb2d-40ac-92da-da0dd578658d",
+    "uid": "faf01255-0696-43e6-a47f-67802184986e"
+  },
+  "observed_at_utc": "2026-09-06T10:52:15Z",
+  "privacy": {
+    "prompts_traces_flags_or_scores_read": false
+  },
+  "receipt_sha256": "sha256:507e52d3ceb3d435cc7749f489ad0b40092ca8c0afb3b1a4dd05729eb492d859",
+  "schema_version": "fleet-hosted-glm-accepted-validated-v1",
+  "session_inventory": {
+    "matching_count": 1,
+    "route": "/v1/sessions?task_key=<exact-task-key>",
+    "session_id": "4671b38e-74ed-4af6-b137-4ec906555da8",
+    "status": "completed",
+    "task_session_count": 22
+  },
+  "status": "ACCEPTED_VALIDATED",
+  "verifier": {
+    "id": "e1d23444-85ca-4937-a5e2-09c482fd64a8",
+    "matches_accepted_receipt": true,
+    "present": true
+  }
+}
