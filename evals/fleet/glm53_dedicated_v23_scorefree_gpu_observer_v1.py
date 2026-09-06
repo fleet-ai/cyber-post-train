@@ -41,6 +41,42 @@ def qualifier_pod_owned_by_job(pod: dict[str, Any], job: dict[str, Any]) -> bool
     ]
 
 
+def _is_v23_remnant(row: dict[str, Any], binding: dict[str, Any]) -> bool:
+    """Match exact UIDs, owner UIDs, and name/label remnants of one v23 server."""
+
+    metadata = row.get("metadata") or {}
+    expected_uids = {
+        binding["rayjob_uid"],
+        binding["workload_uid"],
+        binding["head_pod_uid"],
+        binding["service_uid"],
+    }
+    if metadata.get("uid") in expected_uids or any(
+        owner.get("uid") in expected_uids for owner in metadata.get("ownerReferences") or []
+    ):
+        return True
+    identity_tokens = (
+        binding["api_run_id"],
+        binding["server_title"],
+        binding["server_run_dir"],
+    )
+    safe_metadata_strings = [metadata.get("name", "")]
+    safe_metadata_strings.extend(
+        str(owner.get("name", "")) for owner in metadata.get("ownerReferences") or []
+    )
+    safe_metadata_strings.extend(
+        str(value)
+        for field in ("labels", "annotations")
+        for value in (metadata.get(field) or {}).values()
+    )
+    return any(
+        token in candidate
+        for token in identity_tokens
+        for candidate in safe_metadata_strings
+        if candidate
+    )
+
+
 def build_release_confirmation(
     binding: dict[str, Any], terminal: dict[str, Any], inventory: dict[str, Any]
 ) -> dict[str, Any]:
@@ -67,15 +103,7 @@ def build_release_confirmation(
         "receipt_sha256",
     }
     failed_keys = (released_keys - {"active_receipt_sha256"}) | {"reason"}
-    owned_rows = [
-        row
-        for row in rows or []
-        if row.get("metadata", {}).get("uid") in expected_uids
-        or any(
-            owner.get("uid") in expected_uids
-            for owner in row.get("metadata", {}).get("ownerReferences") or []
-        )
-    ]
+    owned_rows = [row for row in rows or [] if _is_v23_remnant(row, binding)]
     if (
         len(expected_uids) != 4
         or any(not isinstance(value, str) or not value for value in expected_uids)

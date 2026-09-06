@@ -170,6 +170,8 @@ def test_held_contract_removes_false_acceptance_gate_and_forbids_scoring() -> No
     assert value["score_free_boundary"]["verifier_calls"] == 0
     assert value["score_free_boundary"]["scoring_calls"] == 0
     assert value["required_live_evidence"]["idle_release_seconds"] == 600
+    assert value["server"]["priority_class"] == "fleet-infra-quiet"
+    assert value["server"]["priority_selection"] == "highest_jobs_api_admitted_nonpreempting"
     assert value["qualification_launch_authorized"] is False
     assert value["scored_launch_authorized"] is False
     assert value["receipt_sha256"] == crypto.digest_without(value, "receipt_sha256")
@@ -486,6 +488,21 @@ def test_release_confirmation_distinguishes_api_delete_from_uid_absence() -> Non
                         "metadata": {
                             "uid": "99999999-9999-4999-8999-999999999999",
                             "ownerReferences": [{"uid": _binding()["rayjob_uid"]}],
+                        }
+                    }
+                ]
+            },
+        )
+    with pytest.raises(gpu_observer.ObserverError, match="unconfirmed"):
+        gpu_observer.build_release_confirmation(
+            _binding(),
+            terminal,
+            {
+                "items": [
+                    {
+                        "metadata": {
+                            "name": "ft-run-freshv23-deadbeef-head-svc",
+                            "uid": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
                         }
                     }
                 ]

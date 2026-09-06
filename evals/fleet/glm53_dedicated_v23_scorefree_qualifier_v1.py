@@ -146,6 +146,7 @@ def build_held() -> dict[str, Any]:
             "model_revision": MODEL_REVISION,
             "context_length": CONTEXT_LENGTH,
             "priority_class": "fleet-infra-quiet",
+            "priority_selection": "highest_jobs_api_admitted_nonpreempting",
             "preemption_policy": "Never",
         },
         "score_free_boundary": {

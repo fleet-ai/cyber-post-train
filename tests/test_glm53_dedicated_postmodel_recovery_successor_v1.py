@@ -71,6 +71,8 @@ def test_recovery_successor_is_create_once_and_unconditionally_held() -> None:
     value = recovery.build_held(_ledger(), _candidate())
     assert value["server"]["jobs_api_create_once"] is True
     assert value["server"]["preemption_policy"] == "Never"
+    assert value["server"]["priority_class"] == "fleet-infra-quiet"
+    assert value["server"]["priority_selection"] == "highest_jobs_api_admitted_nonpreempting"
     assert value["controller"]["same_task_max_inflight"] == 1
     assert value["controller"]["authoritative_acceptance_before_next_attempt"] is True
     assert value["gpu_server_submit_permitted"] is False
@@ -117,8 +119,7 @@ def test_recovery_successor_rejects_consumed_identity_and_incomplete_ledger() ->
 
 def test_v23_authenticated_preview_is_digest_valid_and_still_held() -> None:
     path = (
-        ROOT
-        / "docs/evidence/glm53-study/"
+        ROOT / "docs/evidence/glm53-study/"
         "2026-09-06-glm53-dedicated-v23-jobs-api-preview-held-v1.json"
     )
     value = json.loads(path.read_bytes())
@@ -140,10 +141,34 @@ def test_v23_authenticated_preview_is_digest_valid_and_still_held() -> None:
     assert value["receipt_sha256"] == crypto.digest_without(value, "receipt_sha256")
 
 
+def test_v23_priority_is_highest_jobs_api_admitted_nonpreempting_class() -> None:
+    path = (
+        ROOT / "docs/evidence/glm53-study/"
+        "2026-09-06-glm53-dedicated-v23-priority-intersection-preview-v1.json"
+    )
+    value = json.loads(path.read_bytes())
+    assert value["status"] == "PASSED_PREVIEW_ONLY_HELD"
+    assert value["priority_selection"] == {
+        "name": "fleet-infra-quiet",
+        "policy": "highest_jobs_api_admitted_nonpreempting",
+        "preemption_policy": "Never",
+        "value": -1000,
+    }
+    assert value["previews"][0] == {
+        "http_status": 422,
+        "priority_class": "fleet-serve-low",
+        "result": "REJECTED_NOT_IN_JOBS_API_ALLOWLIST",
+    }
+    assert value["previews"][1]["http_status"] == 200
+    assert value["previews"][1]["priority_class"] == "fleet-infra-quiet"
+    assert value["server_launch_authorized"] is False
+    assert value["api_mutation_calls"] == 0
+    assert value["receipt_sha256"] == crypto.digest_without(value, "receipt_sha256")
+
+
 def test_root_review_checklist_keeps_all_live_gates_explicit() -> None:
     text = (
-        ROOT
-        / "docs/evidence/glm53-study/"
+        ROOT / "docs/evidence/glm53-study/"
         "2026-09-06-glm53-dedicated-recovery-root-review-checklist-v1.md"
     ).read_text()
     for gate in (
