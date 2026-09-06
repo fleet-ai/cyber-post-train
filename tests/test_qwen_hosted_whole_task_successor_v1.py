@@ -14,6 +14,7 @@ from evals.fleet import exact_pass4_bulk_runtime_v3 as engine
 from evals.fleet import qwen_hosted_generation19_v4 as source
 from evals.fleet import qwen_hosted_whole_task_successor_v1 as successor
 from evals.fleet import qwen_hosted_whole_task_successor_v1_package as package
+from evals.fleet import qwen_hosted_whole_task_successor_v1_runtime as runtime
 from evals.fleet import self_hosted
 
 ROOT = Path(__file__).parents[1]
@@ -69,6 +70,35 @@ def _lease_observer() -> dict:
     )
 
 
+def _runtime_gate_canary(plans: dict[str, dict], sources: dict[str, dict]) -> dict:
+    return successor._seal(  # noqa: SLF001
+        {
+            "schema_version": successor.RUNTIME_GATE_CANARY_SCHEMA,
+            "status": "PASS",
+            "controller": "qwen-a",
+            "plan_sha256": plans["qwen-a"]["plan_sha256"],
+            "job_uid": "44444444-4444-4444-8444-444444444444",
+            "pod_uid": "55555555-5555-4555-8555-555555555555",
+            "authority_schema_version": successor.HELD_SCHEMA,
+            "authority_receipt_sha256": "sha256:" + "a" * 64,
+            "package_source_receipt_sha256": sources["qwen-a"]["receipt_sha256"],
+            "bootstrap_stage_reached": "06-runtime-exec",
+            "output_roots_created": 0,
+            "endpoint_leases_acquired": 0,
+            "canonical_claims_created": 0,
+            "model_calls": 0,
+            "task_calls": 0,
+            "session_calls": 0,
+            "verifier_calls": 0,
+            "scoring_calls": 0,
+            "api_mutations": 0,
+            "scores_included": False,
+            "prompts_or_traces_included": False,
+            "credentials_included": False,
+        }
+    )
+
+
 def _release(plans: dict[str, dict], sources: dict[str, dict] | None = None) -> dict:
     sources = sources or _sources(plans)
     body = {
@@ -85,6 +115,7 @@ def _release(plans: dict[str, dict], sources: dict[str, dict] | None = None) -> 
         "ledger_snapshot_file_sha256": successor.LEDGER_FILE_SHA256,
         "predecessor_tombstones": successor.PREDECESSOR_TOMBSTONES,
         "endpoint_lease_observer": _lease_observer(),
+        "runtime_gate_canary": _runtime_gate_canary(plans, sources),
         "predecessor_disposition": {
             "retry_forbidden_selection_ranks": [13, 14],
             "prior_job_uids": [
@@ -159,29 +190,102 @@ def test_held_evidence_is_digest_valid_and_never_launches() -> None:
     assert held["retry_forbidden_selection_ranks"] == [13, 14]
 
 
-def test_release_validator_fails_closed_on_every_collision_class() -> None:
+def test_preclaim_failure_receipt_is_score_blind_and_retry_closed() -> None:
+    receipt = successor.load(ROOT / successor.PRECLAIM_FAILURE["path"])
+    assert receipt["receipt_sha256"] == successor.PRECLAIM_FAILURE["receipt_sha256"]
+    assert receipt["receipt_sha256"] == self_hosted.digest_without(receipt, "receipt_sha256")
+    assert receipt["status"] == "INFRASTRUCTURE_INVALID_PRECLAIM"
+    assert receipt["observed_failure_stage"] == {
+        "classification": "PRE_RUNTIME_UNCLASSIFIED",
+        "runtime_failed_receipts_present": 0,
+        "bootstrap_stage_receipts_present": 0,
+        "possible_boundaries": [
+            "package-source-validation",
+            "source-install",
+            "docker-readiness",
+            "image-build",
+            "harness-version-validation",
+            "pre-try-runtime-construction",
+        ],
+    }
+    assert receipt["latent_runtime_gate_defect"]["classification"] == (
+        "PROVEN_BY_STATIC_CODE_AND_REGRESSION"
+    )
+    assert receipt["latent_runtime_gate_defect"]["established_as_observed_exit"] is False
+    assert receipt["score_blind_reconciliation"] == {
+        "observer_pod_uid": "35a00aeb-fb66-4bc5-a7d2-1056337ade69",
+        "canonical_claims_present": 0,
+        "output_roots_present": 0,
+        "accepted_evidence_matches": 0,
+        "authoritative_session_matches": 0,
+        "verifier_execution_matches": 0,
+        "diagnostic_failure_receipts_present": 0,
+        "model_calls": 0,
+        "task_calls": 0,
+        "session_calls": 0,
+        "verifier_calls": 0,
+        "scoring_calls": 0,
+        "api_mutations": 0,
+    }
+    assert receipt["disposition"]["failed_job_identities_retry_authorized"] is False
+    assert receipt["disposition"]["launch_authorized"] is False
+
+
+def test_score_free_runtime_gate_canary_stops_before_any_scored_boundary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    plans = successor.build_plans(ROOT)
+    plan = plans["qwen-a"]
+    package_source = _sources(plans)["qwen-a"]
+    held = successor.load(ROOT / successor.HELD_PATH)
+    monkeypatch.setattr(runtime, "_load_bound_inputs", lambda _plan: (plans, package_source))
+    monkeypatch.setattr(
+        runtime,
+        "runtime_gate_check",
+        lambda actual_plans, actual_source, *, canary=False: (
+            held
+            if actual_plans == plans and actual_source == package_source and canary
+            else pytest.fail("runtime gate canary did not use the exact held gate")
+        ),
+    )
+    monkeypatch.setattr(
+        engine,
+        "run_controller",
+        lambda *_args, **_kwargs: pytest.fail("canary crossed into the scored engine"),
+    )
+    monkeypatch.setenv("JOB_UID", "11111111-1111-4111-8111-111111111111")
+    monkeypatch.setenv("POD_UID", "22222222-2222-4222-8222-222222222222")
+    receipt_path = tmp_path / "diagnostic" / "RUNTIME-GATE-CANARY.json"
+    receipt = runtime.run_gate_canary(plan, receipt_path=receipt_path)
+    successor.validate_runtime_gate_canary(receipt)
+    assert successor.load(receipt_path) == receipt
+    assert receipt["bootstrap_stage_reached"] == "06-runtime-exec"
+    assert receipt["output_roots_created"] == 0
+    assert receipt["endpoint_leases_acquired"] == 0
+    assert receipt["canonical_claims_created"] == 0
+
+
+def test_runtime_gate_canary_rejects_any_nonexact_held_authority_digest(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    plans = successor.build_plans(ROOT)
+    package_source = _sources(plans)["qwen-a"]
+    held = successor.load(ROOT / successor.HELD_PATH)
+    monkeypatch.setattr(successor, "load", lambda _path: held)
+    monkeypatch.setenv("QWEN_HOSTED_WHOLE_TASK_RELEASE_PATH", "/bootstrap/release.json")
+    monkeypatch.setenv("QWEN_HOSTED_WHOLE_TASK_RELEASE_SHA256", "sha256:" + "b" * 64)
+    with pytest.raises(RuntimeError, match="canary held digest drifted"):
+        runtime.runtime_gate_check(plans, package_source, canary=True)
+
+
+def test_scored_release_is_unconditionally_closed_for_consumed_identities() -> None:
     plans = successor.build_plans(ROOT)
     sources = _sources(plans)
     release = _release(plans, sources)
-    successor.validate_release(release, plans, sources)
-    for field in (
-        "canonical_claim_collisions",
-        "authoritative_session_collisions",
-        "accepted_evidence_collisions",
-        "output_root_collisions",
-    ):
-        bad = copy.deepcopy(release)
-        bad["fresh_collision_reconciliation"][field] = 1
-        bad["receipt_sha256"] = self_hosted.digest_without(bad, "receipt_sha256")
-        with pytest.raises(RuntimeError, match="release drifted"):
-            successor.validate_release(bad, plans, sources)
-    with pytest.raises(RuntimeError, match="drifted"):
+    with pytest.raises(RuntimeError, match="closed for consumed object and execution identities"):
+        successor.validate_release(release, plans, sources)
+    with pytest.raises(RuntimeError, match="closed for consumed object and execution identities"):
         successor.validate_release(successor.load(ROOT / successor.HELD_PATH), plans, sources)
-    extra = copy.deepcopy(release)
-    extra["score"] = 0
-    extra["receipt_sha256"] = self_hosted.digest_without(extra, "receipt_sha256")
-    with pytest.raises(RuntimeError, match="release drifted"):
-        successor.validate_release(extra, plans, sources)
 
 
 def _lease_root(tmp_path: Path) -> tuple[Path, list[Path]]:
@@ -269,7 +373,9 @@ def test_release_requires_zero_relevant_active_hosted_objects() -> None:
         bad = copy.deepcopy(release)
         bad["predecessor_disposition"][field] = 1
         bad["receipt_sha256"] = self_hosted.digest_without(bad, "receipt_sha256")
-        with pytest.raises(RuntimeError, match="release drifted"):
+        with pytest.raises(
+            RuntimeError, match="closed for consumed object and execution identities"
+        ):
             successor.validate_release(bad, plans, sources)
 
 
@@ -597,6 +703,60 @@ def test_engine_reaches_model_boundary_only_after_four_claims(
         engine.bulk = prior
 
 
+def test_production_runtime_gate_revalidates_exact_release_signature(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    plans = successor.build_plans(ROOT)
+    plan = plans["qwen-a"]
+    sources = _sources(plans)
+    package_source = sources["qwen-a"]
+    release = _release(plans, sources)
+    calls: list[str] = []
+    validator_calls: list[tuple[dict, dict, dict]] = []
+
+    def load(path: Path) -> dict:
+        if path == Path("/bootstrap/package-source.json"):
+            return package_source
+        if path == Path("/release.json"):
+            return release
+        raise AssertionError(path)
+
+    def run_controller(actual_plan: dict, *, runtime_gate_check: object, **_kwargs: object) -> dict:
+        assert actual_plan == plan
+        runtime_gate_check(actual_plan)  # type: ignore[operator]
+        calls.append("production-runtime-gate")
+        return {"status": "gate-passed"}
+
+    monkeypatch.setattr(successor, "load", load)
+    monkeypatch.setattr(successor, "build_plans", lambda _root: plans)
+    monkeypatch.setattr(
+        successor,
+        "validate_release",
+        lambda actual_release, actual_plans, actual_sources: validator_calls.append(
+            (actual_release, actual_plans, actual_sources)
+        ),
+    )
+    monkeypatch.setattr(engine, "run_controller", run_controller)
+    monkeypatch.setenv("FLEET_API_KEY", "test-only")
+    monkeypatch.setenv("QWEN_HOSTED_WHOLE_TASK_RELEASE_PATH", "/release.json")
+    monkeypatch.setenv("QWEN_HOSTED_WHOLE_TASK_RELEASE_SHA256", release["receipt_sha256"])
+    monkeypatch.setenv(
+        "QWEN_HOSTED_WHOLE_TASK_PACKAGE_SOURCE_SHA256",
+        package_source["receipt_sha256"],
+    )
+    result = runtime.run(
+        plan,
+        out=tmp_path / "out",
+        proxy=tmp_path / "proxy.py",
+        diagnostic_root=tmp_path / "diagnostic",
+    )
+    assert result == {"status": "gate-passed"}
+    assert calls == ["production-runtime-gate"]
+    assert len(validator_calls) == 2
+    assert all(call[0] == release and call[1] == plans for call in validator_calls)
+    assert all(set(call[2]) == set(plans) for call in validator_calls)
+
+
 def test_restart_never_repeats_a_durable_model_boundary(tmp_path: Path) -> None:
     plan = successor.build_plans(ROOT)["qwen-a"]
     out = tmp_path / "out"
@@ -728,6 +888,12 @@ def test_held_package_is_closed_create_once_and_cap_two(tmp_path: Path) -> None:
         assert plan["execution"]["endpoint_lease"]["maximum_streams"] == 2
         assert [row["attempt"] for row in plan["attempts"]] == [1, 2, 3, 4]
         assert {row["selection_rank"] for row in plan["attempts"]}.isdisjoint({13, 14})
+        bootstrap = cm["data"]["run_qwen_hosted_whole_task_successor_v1.sh"]
+        assert "bootstrap_stage 00-started" in bootstrap
+        assert "bootstrap_stage 06-runtime-exec" in bootstrap
+        assert "fleet-qwen38-hosted-whole-task-bootstrap-stage-v1" in bootstrap
+        assert "os.O_WRONLY | os.O_CREAT | os.O_EXCL" in bootstrap
+        assert "QWEN_HOSTED_WHOLE_TASK_RUNTIME_GATE_CANARY" in bootstrap
 
         module_root = tmp_path / cm["metadata"]["name"] / "evals" / "fleet"
         config_root = module_root / "configs"
@@ -764,15 +930,36 @@ def test_held_package_is_closed_create_once_and_cap_two(tmp_path: Path) -> None:
         )
 
 
-def test_released_render_binds_exact_release_without_changing_plans(tmp_path: Path) -> None:
+def test_runtime_gate_canary_package_is_new_score_free_create_once_identity() -> None:
+    rendered = package.render_runtime_gate_canary(ROOT)
+    assert [item["kind"] for item in rendered["items"]] == ["ConfigMap", "Job"]
+    cm, job = rendered["items"]
+    assert cm["metadata"]["name"] == package.RUNTIME_GATE_CANARY_CONFIGMAP
+    assert cm["immutable"] is True
+    assert job["metadata"]["name"] == package.RUNTIME_GATE_CANARY_JOB
+    assert job["metadata"]["annotations"] == {
+        "cyber-post-train.fleet.ai/create-once": "true",
+        "cyber-post-train.fleet.ai/diagnostic-only": "true",
+        "cyber-post-train.fleet.ai/launch-authorized": "false",
+    }
+    assert job["spec"]["backoffLimit"] == 0
+    container = job["spec"]["template"]["spec"]["containers"][0]
+    env = {row["name"]: row for row in container["env"]}
+    assert "FLEET_API_KEY" not in env
+    assert env["QWEN_HOSTED_WHOLE_TASK_RUNTIME_GATE_CANARY"]["value"] == "true"
+    assert env["QWEN_HOSTED_WHOLE_TASK_OUTPUT_ROOT"]["value"] == "/dev/null"
+    assert env["QWEN_HOSTED_WHOLE_TASK_DIAGNOSTIC_ROOT"]["value"] == (
+        package.RUNTIME_GATE_CANARY_DIAGNOSTIC_ROOT
+    )
+    held = json.loads(cm["data"]["release.json"])
+    assert held["launch_authorized"] is False
+    assert env["QWEN_HOSTED_WHOLE_TASK_RELEASE_SHA256"]["value"] == held["receipt_sha256"]
+
+
+def test_released_render_is_closed_for_consumed_identities(tmp_path: Path) -> None:
     plans = successor.build_plans(ROOT)
     release = _release(plans)
     release_path = tmp_path / "release.json"
     release_path.write_text(json.dumps(release))
-    rendered = package.render(ROOT, release_path=release_path)
-    for cm, job in zip(rendered["items"][::2], rendered["items"][1::2], strict=True):
-        assert (
-            job["metadata"]["annotations"]["cyber-post-train.fleet.ai/launch-authorized"] == "true"
-        )
-        assert json.loads(cm["data"]["release.json"]) == release
-        assert json.loads(cm["data"]["plan.json"])["launch_authorized"] is False
+    with pytest.raises(RuntimeError, match="closed for consumed object and execution identities"):
+        package.render(ROOT, release_path=release_path)

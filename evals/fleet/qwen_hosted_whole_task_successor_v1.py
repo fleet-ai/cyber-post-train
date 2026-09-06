@@ -25,25 +25,33 @@ from evals.fleet import qwen_hosted_generation19_v4 as source
 from evals.fleet import self_hosted
 
 SCHEMA = "fleet-qwen38-hosted-atomic-whole-task-plan-v2"
-HELD_SCHEMA = "fleet-qwen38-hosted-atomic-whole-task-held-v3"
-RELEASE_SCHEMA = "fleet-qwen38-hosted-atomic-whole-task-release-v3"
+HELD_SCHEMA = "fleet-qwen38-hosted-atomic-whole-task-held-v4"
+RELEASE_SCHEMA = "fleet-qwen38-hosted-atomic-whole-task-release-v4"
 RESERVATION_SCHEMA = "fleet-qwen38-hosted-four-claim-reservation-v2"
 PREPARING_SCHEMA = "fleet-qwen38-hosted-four-claim-preparing-v1"
 MODEL_BOUNDARY_SCHEMA = "fleet-qwen38-hosted-model-boundary-v1"
 PACKAGE_SOURCE_SCHEMA = "fleet-qwen38-hosted-package-source-v1"
 LEASE_OBSERVER_SCHEMA = "fleet-qwen38-hosted-endpoint-lease-observer-v1"
+RUNTIME_GATE_CANARY_SCHEMA = "fleet-qwen38-hosted-whole-task-runtime-gate-canary-v1"
 LEDGER_PATH = "docs/evidence/qwen38-study/2026-09-05-exact-pass4-ledger-evidence-snapshot-v47.json"
 LEDGER_SELF_SHA256 = "sha256:bf0b9086dd97eecafe20fa9a4cf3b5d643f0ce8f6abad60fae6e3cba3e3e2e29"
 LEDGER_FILE_SHA256 = "sha256:0a2baba7c16745a4d69f0f5aafc04010734eacbace8f6d712d44011c4a36d0dd"
 HELD_PATH = (
-    "docs/evidence/qwen38-study/2026-09-06-qwen38-hosted-rank15-rank16-whole-task-held-v3.json"
+    "docs/evidence/qwen38-study/2026-09-06-qwen38-hosted-rank15-rank16-whole-task-held-v4.json"
 )
 SUPERSEDED_HELD = {
     "path": (
-        "docs/evidence/qwen38-study/2026-09-06-qwen38-hosted-rank15-rank16-whole-task-held-v2.json"
+        "docs/evidence/qwen38-study/2026-09-06-qwen38-hosted-rank15-rank16-whole-task-held-v3.json"
     ),
-    "receipt_sha256": "sha256:dccd9f8724ffd7d104c986d1b3b2309b516c361ecad49edc0c528521c75aa772",
-    "file_sha256": "sha256:3c74c4af457c03e9559ac08050e826e62a04b439b8f01e066211193174be158b",
+    "receipt_sha256": "sha256:658b3abd494cf4a36254a4731cedfb4cd28360ba2eacdaf7a57aa5fd95bd207b",
+    "file_sha256": "sha256:eef7b1bdf5c7a0db8239c02bb4472db0611b9e3094dd414e49ee643715a843a6",
+}
+PRECLAIM_FAILURE = {
+    "path": (
+        "docs/evidence/qwen38-study/2026-09-06-qwen38-hosted-rank15-rank16-preclaim-failure-v2.json"
+    ),
+    "receipt_sha256": "sha256:5d51c5e8bd0009c8f01462087c11e6cf1531e87588517fea251e96d7c4030f60",
+    "file_sha256": "sha256:e423007ca58b69462d7fdd3a13a9f325a34a1a0f828473882c5b72d574dc560d",
 }
 CLAIM_ROOT = Path("/mnt/sfs/cell-execution-claims/opencode11827-autocontinue-v1")
 RESERVATION_ROOT = Path("/mnt/sfs/cell-execution-reservations/opencode11827-autocontinue-v1")
@@ -359,6 +367,68 @@ def validate_endpoint_lease_observer(value: dict[str, Any]) -> None:
         raise RuntimeError("hosted whole-task endpoint lease observer drifted")
 
 
+def validate_runtime_gate_canary(value: dict[str, Any]) -> None:
+    if any(
+        (
+            set(value)
+            != {
+                "schema_version",
+                "status",
+                "controller",
+                "plan_sha256",
+                "job_uid",
+                "pod_uid",
+                "authority_schema_version",
+                "authority_receipt_sha256",
+                "package_source_receipt_sha256",
+                "bootstrap_stage_reached",
+                "output_roots_created",
+                "endpoint_leases_acquired",
+                "canonical_claims_created",
+                "model_calls",
+                "task_calls",
+                "session_calls",
+                "verifier_calls",
+                "scoring_calls",
+                "api_mutations",
+                "scores_included",
+                "prompts_or_traces_included",
+                "credentials_included",
+                "receipt_sha256",
+            },
+            value.get("schema_version") != RUNTIME_GATE_CANARY_SCHEMA,
+            value.get("status") != "PASS",
+            value.get("controller") not in CONTROLLERS,
+            SHA256_RE.fullmatch(str(value.get("plan_sha256"))) is None,
+            engine.UUID_RE.fullmatch(str(value.get("job_uid"))) is None,
+            engine.UUID_RE.fullmatch(str(value.get("pod_uid"))) is None,
+            value.get("authority_schema_version") != HELD_SCHEMA,
+            SHA256_RE.fullmatch(str(value.get("authority_receipt_sha256"))) is None,
+            SHA256_RE.fullmatch(str(value.get("package_source_receipt_sha256"))) is None,
+            value.get("bootstrap_stage_reached") != "06-runtime-exec",
+            any(
+                value.get(field) != 0
+                for field in (
+                    "output_roots_created",
+                    "endpoint_leases_acquired",
+                    "canonical_claims_created",
+                    "model_calls",
+                    "task_calls",
+                    "session_calls",
+                    "verifier_calls",
+                    "scoring_calls",
+                    "api_mutations",
+                )
+            ),
+            value.get("scores_included") is not False,
+            value.get("prompts_or_traces_included") is not False,
+            value.get("credentials_included") is not False,
+            value.get("receipt_sha256") != self_hosted.digest_without(value, "receipt_sha256"),
+        )
+    ):
+        raise RuntimeError("hosted whole-task runtime-gate canary receipt drifted")
+
+
 def package_source_receipt(
     controller: str, plan: dict[str, Any], data: dict[str, str]
 ) -> dict[str, Any]:
@@ -467,6 +537,7 @@ def validate_held(
                 "endpoint_maximum_streams",
                 "controllers",
                 "supersedes",
+                "preclaim_failure",
                 "ledger_snapshot_path",
                 "ledger_snapshot_receipt_sha256",
                 "ledger_snapshot_file_sha256",
@@ -485,6 +556,7 @@ def validate_held(
             held.get("endpoint_maximum_streams") != 2,
             held.get("controllers") != release_projection(plans, package_sources),
             held.get("supersedes") != SUPERSEDED_HELD,
+            held.get("preclaim_failure") != PRECLAIM_FAILURE,
             held.get("ledger_snapshot_path") != LEDGER_PATH,
             held.get("ledger_snapshot_receipt_sha256") != LEDGER_SELF_SHA256,
             held.get("ledger_snapshot_file_sha256") != LEDGER_FILE_SHA256,
@@ -503,6 +575,7 @@ def validate_held(
                 "crash_recovery_before_model_boundary",
                 "atomic_four_claim_publication_and_validation",
                 "immutable_package_source_digest_binding",
+                "score_free_stage06_runtime_gate_canary_pass",
             ],
             held.get("privacy")
             != {
@@ -521,108 +594,10 @@ def validate_release(
     plans: dict[str, dict[str, Any]],
     package_sources: dict[str, dict[str, Any]],
 ) -> None:
-    privacy = release.get("privacy") or {}
-    collision = release.get("fresh_collision_reconciliation") or {}
-    predecessor = release.get("predecessor_disposition") or {}
-    lease_observer = release.get("endpoint_lease_observer") or {}
-    validate_endpoint_lease_observer(lease_observer)
-    if any(
-        (
-            set(release)
-            != {
-                "schema_version",
-                "status",
-                "checked_at_utc",
-                "launch_authorized",
-                "scoring_authorized",
-                "controller_cap",
-                "endpoint_maximum_streams",
-                "controllers",
-                "ledger_snapshot_path",
-                "ledger_snapshot_receipt_sha256",
-                "ledger_snapshot_file_sha256",
-                "predecessor_disposition",
-                "predecessor_tombstones",
-                "endpoint_lease_observer",
-                "fresh_collision_reconciliation",
-                "privacy",
-                "receipt_sha256",
-            },
-            release.get("schema_version") != RELEASE_SCHEMA,
-            release.get("status") != "CLEAR",
-            engine.ISO_UTC_RE.fullmatch(str(release.get("checked_at_utc"))) is None,
-            release.get("launch_authorized") is not True,
-            release.get("scoring_authorized") is not True,
-            release.get("controller_cap") != 2,
-            release.get("endpoint_maximum_streams") != 2,
-            release.get("controllers") != release_projection(plans, package_sources),
-            release.get("ledger_snapshot_path") != LEDGER_PATH,
-            release.get("ledger_snapshot_receipt_sha256") != LEDGER_SELF_SHA256,
-            release.get("ledger_snapshot_file_sha256") != LEDGER_FILE_SHA256,
-            release.get("predecessor_tombstones") != PREDECESSOR_TOMBSTONES,
-            predecessor.get("retry_forbidden_selection_ranks") != [13, 14],
-            set(predecessor)
-            != {
-                "retry_forbidden_selection_ranks",
-                "prior_job_uids",
-                "prior_pod_uids",
-                "prior_jobs_terminal",
-                "prior_pods_absent",
-                "relevant_active_hosted_q_jobs",
-                "relevant_active_hosted_q_pods",
-                "new_jobs_absent",
-                "new_configmaps_absent",
-                "kubernetes_api_mutations",
-            },
-            predecessor.get("prior_job_uids")
-            != [
-                "515c370a-ecb4-4c41-a349-46a328c8fa68",
-                "f23805b5-516b-4828-a3b5-82673a1b3e2f",
-            ],
-            predecessor.get("prior_pod_uids")
-            != [
-                "4d86f0c5-7cef-4f8a-a798-ea5c725e4955",
-                "d5d7b7cf-d639-4ad6-b012-3001c4935b2d",
-            ],
-            predecessor.get("prior_jobs_terminal") is not True,
-            predecessor.get("prior_pods_absent") is not True,
-            predecessor.get("relevant_active_hosted_q_jobs") != 0,
-            predecessor.get("relevant_active_hosted_q_pods") != 0,
-            predecessor.get("new_jobs_absent") is not True,
-            predecessor.get("new_configmaps_absent") is not True,
-            predecessor.get("kubernetes_api_mutations") != 0,
-            collision.get("checked_immediately_before_release") is not True,
-            set(collision)
-            != {
-                "checked_immediately_before_release",
-                "checked_from_uid_bound_sfs_pod",
-                "observer_pod_uid",
-                "observed_cells",
-                "canonical_claim_collisions",
-                "authoritative_session_collisions",
-                "accepted_evidence_collisions",
-                "output_root_collisions",
-                "api_mutations",
-            },
-            collision.get("checked_from_uid_bound_sfs_pod") is not True,
-            engine.UUID_RE.fullmatch(str(collision.get("observer_pod_uid"))) is None,
-            collision.get("observer_pod_uid") != lease_observer.get("observer_pod_uid"),
-            collision.get("observed_cells") != 8,
-            collision.get("canonical_claim_collisions") != 0,
-            collision.get("authoritative_session_collisions") != 0,
-            collision.get("accepted_evidence_collisions") != 0,
-            collision.get("output_root_collisions") != 0,
-            collision.get("api_mutations") != 0,
-            privacy
-            != {
-                "scores_read": False,
-                "prompts_traces_flags_read": False,
-                "credentials_included": False,
-            },
-            release.get("receipt_sha256") != self_hosted.digest_without(release, "receipt_sha256"),
-        )
-    ):
-        raise RuntimeError("hosted whole-task release drifted")
+    del release, plans, package_sources
+    raise RuntimeError(
+        "hosted whole-task scored release is closed for consumed object and execution identities"
+    )
 
 
 def load_runtime_release(
