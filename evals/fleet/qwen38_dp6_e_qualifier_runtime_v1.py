@@ -51,6 +51,8 @@ BINDING_KEYS = {
     "title",
     "run_dir",
     "serving_block",
+    "ray_cluster_name",
+    "ray_cluster_uid",
     "service_name",
     "service_origin",
     "rayjob_uid",
@@ -169,22 +171,31 @@ def validate_binding(
         )
     ):
         raise ValueError("early DP6 server binding drifted")
-    try:
-        workload_uid = uuid.UUID(str(value.get("workload_uid")))
-    except (AttributeError, TypeError, ValueError) as exc:
-        raise ValueError("early DP6 Workload UID drifted") from exc
-    if workload_uid.int == 0:
-        raise ValueError("early DP6 Workload UID drifted")
+    for field in ("workload_uid", "ray_cluster_uid"):
+        try:
+            parsed_uid = uuid.UUID(str(value.get(field)))
+        except (AttributeError, TypeError, ValueError) as exc:
+            raise ValueError(f"early DP6 {field} drifted") from exc
+        if parsed_uid.int == 0:
+            raise ValueError(f"early DP6 {field} drifted")
     if not isinstance(value.get("head_pod_name"), str) or not value.get("head_pod_name"):
         raise ValueError("early DP6 head Pod name drifted")
     service_name = value.get("service_name")
     api_run_id = value.get("api_run_id")
+    ray_cluster_name = value.get("ray_cluster_name")
     expected_origin = f"http://{service_name}.{NAMESPACE}.svc.cluster.local:8000"
+    expected_service_name = f"{ray_cluster_name}-head-svc"
+    expected_head_pod_prefix = f"{ray_cluster_name}-head-"
+    head_pod_suffix = str(value["head_pod_name"]).removeprefix(expected_head_pod_prefix)
     if (
         not isinstance(service_name, str)
         or not isinstance(api_run_id, str)
-        or not service_name.startswith(f"{api_run_id}-")
-        or not service_name.endswith("-head-svc")
+        or not isinstance(ray_cluster_name, str)
+        or not ray_cluster_name.startswith(f"{api_run_id}-")
+        or service_name != expected_service_name
+        or not str(value["head_pod_name"]).startswith(expected_head_pod_prefix)
+        or not head_pod_suffix
+        or value["head_pod_name"] == service_name
         or value.get("service_origin") != expected_origin
     ):
         raise ValueError("early DP6 UID-bound Service identity drifted")
@@ -199,6 +210,8 @@ def validate_binding(
     return {
         **validated,
         "workload_uid": value["workload_uid"],
+        "ray_cluster_name": ray_cluster_name,
+        "ray_cluster_uid": value["ray_cluster_uid"],
         "service_name": service_name,
         "service_origin": origin,
         "head_pod_name": value["head_pod_name"],
