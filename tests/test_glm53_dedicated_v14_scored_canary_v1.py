@@ -6,6 +6,7 @@ from evals.fleet import glm53_dedicated_v14_scored_canary_v1 as canary
 from evals.fleet import glm53_dedicated_v14_scored_canary_package_v1 as package
 from evals.fleet import glm53_dedicated_v14_scored_canary_preflight_package_v1 as preflight_package
 from evals.fleet import self_hosted
+from evals.fleet import exact_pass4_bulk_runtime_v3 as engine
 
 ROOT = Path(__file__).resolve().parents[1]
 PARITY = ROOT / "docs/evidence/glm53-study/2026-09-05-glm53-dedicated-v14-actual-opencode-parity.json"
@@ -63,6 +64,7 @@ def test_canary_source_package_is_closed_but_held() -> None:
     assert preview["package_sha256"] == self_hosted.digest_without(
         preview, "package_sha256"
     )
+    engine.validate_bulk_adapter(canary)
 
 
 def test_canary_source_package_rejects_missing_install_mapping(monkeypatch) -> None:

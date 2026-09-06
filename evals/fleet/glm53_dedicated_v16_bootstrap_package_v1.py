@@ -13,7 +13,7 @@ import yaml
 from evals.fleet import glm53_dedicated_v14_scored_canary_package_v1 as controller
 from evals.fleet import self_hosted
 
-JOB_NAME = "chris-glm53-dedicated-v16-r051-bootstrap-v1"
+JOB_NAME = "chris-glm53-dedicated-v17-r051-bootstrap-v2"
 SOURCE_CONFIGMAP = JOB_NAME + "-source"
 EVIDENCE_CONFIGMAP = JOB_NAME + "-evidence"
 SFS_ROOT = f"/mnt/sfs/jobs/{JOB_NAME}"
@@ -30,8 +30,8 @@ def render(root: Path) -> dict[str, Any]:
         "metadata": {"name": EVIDENCE_CONFIGMAP, "namespace": "fleet-train-jobs"},
         "immutable": True,
         "data": {
-            "parity.json": "{}\n",
-            "binding.json": "{}\n",
+            "parity.json": (root / controller.PARITY).read_text(),
+            "binding.json": (root / controller.BINDING).read_text(),
             "release.json": "{}\n",
         },
     }
@@ -52,7 +52,7 @@ def render(root: Path) -> dict[str, Any]:
             env["value"] = JOB_NAME
         elif env["name"] == "DEDICATED_SERVICE_ORIGIN":
             env.pop("valueFrom", None)
-            env["value"] = "http://bootstrap.invalid.fleet-train-jobs.svc.cluster.local:8000"
+            env["value"] = controller.OLD_SERVICE_ORIGIN
     evaluator["env"].extend(
         [
             {"name": "DEDICATED_BOOTSTRAP_ONLY", "value": "1"},

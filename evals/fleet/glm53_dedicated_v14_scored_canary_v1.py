@@ -37,6 +37,8 @@ SERVICE_RE = re.compile(
 CONTROLLERS = {CONTROLLER: copy.deepcopy(source.CONTROLLERS[CONTROLLER])}
 SHA256_RE = source.SHA256_RE
 COMMIT_RE = source.COMMIT_RE
+CANARY_GATE_SCHEMA = source.predecessor.CANARY_GATE_SCHEMA
+RECONCILIATION_GATE_SCHEMA = source.predecessor.RECONCILIATION_GATE_SCHEMA
 
 
 def load(path: Path) -> dict[str, Any]:
@@ -45,6 +47,11 @@ def load(path: Path) -> dict[str, Any]:
 
 def validate_inventory_gate(value: dict[str, Any], root: Path) -> None:
     source.validate_inventory_gate(value, root)
+
+
+def validate_all(root: Path) -> dict[str, dict[str, Any]]:
+    """Expose the complete frozen universe required by the bulk adapter contract."""
+    return source.validate_all(root)
 
 
 def _validate_evidence(

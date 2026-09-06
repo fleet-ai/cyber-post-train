@@ -49,6 +49,14 @@ def _bootstrap_only(root: Path) -> dict[str, Any]:
         if path.is_symlink() or not path.is_file():
             raise RuntimeError(f"bootstrap install closure is absent: {name}")
         compile(path.read_text(), name, "exec")
+    engine.validate_bulk_adapter(canary)
+    inventory_receipt = canary.load(inventory.INVENTORY_PATH)
+    plan = canary.build_runtime_plan(canary.CONTROLLER, inventory_receipt, root)
+    rebuilt = canary.build_runtime_plan(
+        canary.CONTROLLER, plan["inventory_receipt"], root
+    )
+    if plan != rebuilt:
+        raise RuntimeError("bootstrap runtime plan rebuild drifted")
     image = os.environ.get("AGENT_HARNESS_IMAGE")
     package_sha256 = os.environ.get("DEDICATED_CONTROLLER_PACKAGE_SHA256")
     if image != "chris/opencode:1.18.27-cyber-v1":
@@ -75,6 +83,9 @@ def _bootstrap_only(root: Path) -> dict[str, Any]:
         "projected_evidence_copied_to_private_regular_files": True,
         "evidence_file_sha256": evidence,
         "runtime_import_closure_valid": True,
+        "bulk_adapter_interface_valid": True,
+        "runtime_plan_rebuilt_exactly": True,
+        "runtime_plan_sha256": plan["plan_sha256"],
         "docker_build_and_version_check_completed_by_exact_run_sh": True,
         "claim_calls": 0,
         "model_requests": 0,

@@ -125,7 +125,7 @@ def test_v17_release_package_binds_bootstrap_qualified_controller() -> None:
         binding,
         "http://glm-v17-head-svc.fleet-train-jobs.svc.cluster.local:8000",
     )
-    assert built["controller_package_sha256"] == v17.CONTROLLER_BOOTSTRAP["controller_package_sha256"]
+    assert built["controller_package_sha256"] == release_package.CONTROLLER_PACKAGE_SHA256
     configmap, job = built["objects"]["items"]
     assert configmap["metadata"]["name"].endswith("release-v4-run")
     assert job["spec"]["template"]["spec"]["preemptionPolicy"] == "Never"
@@ -224,7 +224,7 @@ def test_v16_canary_launch_binds_current_controller(tmp_path: Path) -> None:
         release_path=release_path,
         service_origin=origin,
     )
-    assert built["controller_package_sha256"] == v17.CONTROLLER_BOOTSTRAP["controller_package_sha256"]
+    assert built["controller_package_sha256"] == release_package.CONTROLLER_PACKAGE_SHA256
 
 
 def test_v16_bootstrap_runs_exact_controller_source_and_stops_pre_model() -> None:
@@ -249,6 +249,8 @@ def test_v16_bootstrap_runs_exact_controller_source_and_stops_pre_model() -> Non
     assert job["metadata"]["annotations"]["cyber-post-train.fleet.ai/launch-authorized"] == "false"
     assert job["spec"]["template"]["spec"]["priorityClassName"] == "fleet-infra-quiet"
     assert job["spec"]["template"]["spec"]["preemptionPolicy"] == "Never"
+    assert evidence["data"]["parity.json"] != "{}\n"
+    assert evidence["data"]["binding.json"] != "{}\n"
 
 
 def test_v17_preserves_server_runtime_and_binds_both_admission_receipts() -> None:
@@ -260,6 +262,7 @@ def test_v17_preserves_server_runtime_and_binds_both_admission_receipts() -> Non
     assert new["run_dir"] == v17.RUN_DIR
     assert new["env"] == {**old["env"], "GLM53_RUN_DIR": v17.RUN_DIR}
     assert v17.PRE_ADMISSION["controller_package_sha256"] == v17.CONTROLLER_BOOTSTRAP["controller_package_sha256"]
+    assert v17.CONTROLLER_BOOTSTRAP["controller_package_sha256"] != release_package.CONTROLLER_PACKAGE_SHA256
     assert v17.CONTROLLER_BOOTSTRAP["receipt_sha256"].endswith("200cea5")
 
 
