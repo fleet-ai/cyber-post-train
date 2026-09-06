@@ -35,6 +35,11 @@ def _clear_state() -> dict:
         "claim_receipts_examined": 1,
         "accepted_receipts_examined": 1,
         "session_rows_examined": 1,
+        "session_inventory_scans": 1,
+        "archived_sessions_included": True,
+        "stable_session_snapshot": True,
+        "session_identity_projection": "/v1/sessions/identities",
+        "session_snapshot_sha256": "sha256:" + "3" * 64,
         "fleet_gets": 2,
         "new_job_collisions": 0,
         "new_pod_collisions": 0,
@@ -82,21 +87,112 @@ def test_binding_rejects_rehashed_mutation() -> None:
         observer.validate_binding(binding)
 
 
-def test_session_collision_finds_predecessor_run_without_cell_id(
+def test_session_collision_finds_exact_version_and_model_without_caller_metadata(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     binding = release_package.build_binding(ROOT)
-    predecessor_run = next(iter(observer.EXPECTED_SESSION_IDENTITIES["run_id"]))
+    requests: list[tuple[str, dict]] = []
+
+    def identity_page(path: str, _key: str, params: dict) -> dict:
+        requests.append((path, params))
+        return {
+            "sessions": [
+                {
+                    "session_id": "archived-session",
+                    "eval_task_id": "task-id",
+                    "eval_task_version_id": observer.EXPECTED_TASK_VERSION_ID,
+                    "task_key": observer.EXPECTED_TASK_KEYS[0],
+                    "model_identity": observer.EXPECTED_SESSION_MODEL,
+                    "model_identity_status": "resolved",
+                    "status": "completed",
+                }
+            ],
+            "limit": 500,
+            "has_more": False,
+            "next_cursor": None,
+            "snapshot": "immutable-snapshot",
+        }
+
+    monkeypatch.setattr(
+        observer,
+        "_fleet_get",
+        identity_page,
+    )
+    rows, gets, collisions, snapshot_sha = observer._session_collisions(
+        binding, "not-persisted"
+    )
+    assert (rows, gets, collisions) == (1, 1, 1)
+    assert observer.SHA_RE.fullmatch(snapshot_sha)
+    assert requests == [
+        (
+            "/v1/sessions/identities",
+            {"task_key": observer.EXPECTED_TASK_KEYS[0], "limit": 500},
+        )
+    ]
+
+
+def test_exact_version_ambiguous_model_identity_fails_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    binding = release_package.build_binding(ROOT)
     monkeypatch.setattr(
         observer,
         "_fleet_get",
         lambda *_args, **_kwargs: {
-            "sessions": [{"metadata": {"run_id": predecessor_run}}],
+            "sessions": [
+                {
+                    "session_id": "ambiguous-session",
+                    "eval_task_id": "task-id",
+                    "eval_task_version_id": observer.EXPECTED_TASK_VERSION_ID,
+                    "task_key": observer.EXPECTED_TASK_KEYS[0],
+                    "model_identity": None,
+                    "model_identity_status": "ambiguous",
+                    "status": "completed",
+                }
+            ],
+            "limit": 500,
             "has_more": False,
+            "next_cursor": None,
+            "snapshot": "immutable-snapshot",
         },
     )
-    rows, gets, collisions = observer._session_collisions(binding, "not-persisted")
-    assert (rows, gets, collisions) == (1, 1, 1)
+    with pytest.raises(observer.ObserverError, match="model_identity_ambiguous"):
+        observer._session_collisions(binding, "not-persisted")
+
+
+def test_session_inventory_requires_stable_keyset_snapshot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    binding = release_package.build_binding(ROOT)
+    calls: list[dict] = []
+
+    def changing(_path: str, _key: str, params: dict) -> dict:
+        calls.append(params)
+        page = len(calls)
+        return {
+            "sessions": [
+                {
+                    "session_id": f"session-{page}",
+                    "eval_task_id": "task-id",
+                    "eval_task_version_id": "different-version",
+                    "task_key": observer.EXPECTED_TASK_KEYS[0],
+                    "model_identity": None,
+                    "model_identity_status": "ambiguous",
+                    "status": "completed",
+                }
+            ],
+            "limit": 500,
+            "has_more": page == 1,
+            "next_cursor": "cursor-2" if page == 1 else None,
+            "snapshot": "snapshot-1" if page == 1 else "snapshot-drift",
+        }
+
+    monkeypatch.setattr(observer, "_fleet_get", changing)
+    with pytest.raises(observer.ObserverError, match="snapshot_cursor_changed"):
+        observer._session_collisions(binding, "not-persisted")
+    assert len(calls) == 2
+    assert "cursor" not in calls[0]
+    assert calls[1]["cursor"] == "cursor-2"
 
 
 def test_observer_emits_exact_valid_release(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -15,19 +15,26 @@
     "job_name": "chris-glm53-peer-free-release-observer-v1",
     "configmap_name": "chris-glm53-peer-free-release-observer-v1-package",
     "output": "/mnt/sfs/jobs/chris-glm53-peer-free-release-observer-v1/RELEASE.json",
-    "binding_sha256": "sha256:90aede31607a70f4dfebec0eb031585a0ba4c71015dcb83311c64d481b674e48",
-    "configmap_sha256": "sha256:b2468a401c20cb622313056561f7f675884a38c2c15d7c4b7ff47aaa243ef9e0",
-    "rendered_list_sha256": "sha256:698a397a29698acab6aa85ca4606a9a50c14270213092efab373ded15f914968",
+    "binding_sha256": "sha256:1dcf0063396afa2925272b9e6e80cbe058f2f8085c67c0dee546e69382eed125",
+    "configmap_sha256": "sha256:2879d1300991b00b38a4e2c4ba8a5d0d251a8318cdb1daeecb5fba5c3db5fa0f",
+    "rendered_list_sha256": "sha256:aafdc14f0c50edd90622209b63f9cd998115e4bbf2ee0953e67fa8db3d2b18ac",
     "file_count": 27,
     "launch_authorized": false,
     "score_free": true,
     "api_mutations": 0
   },
+  "deployment_gate": {
+    "session_identity_projection": "/v1/sessions/identities",
+    "includes_archived_sessions": true,
+    "stable_keyset_snapshot_required": true,
+    "behavioral_probe_passed": false,
+    "observer_launch_authorized": false
+  },
   "controller": {
     "job_name": "chris-glm53-exact100-hosted-r030-whole-task-g2-v2",
     "configmap_name": "chris-glm53-exact100-hosted-r030-whole-task-g2-package-v2",
     "sfs_root": "/mnt/sfs/jobs/chris-glm53-exact100-hosted-r030-whole-task-g2-v2",
-    "source_package_sha256": "sha256:f6571a3c1c535eb249e3831d068d05f30cbb3d3709a025d6aead6ce53b649efc",
+    "source_package_sha256": "sha256:6e9c2c7fa57d748f09150b07e86f2d4fe148f557477d44abaaee5b0b6b44dae0",
     "create_once": true,
     "launch_authorized": false,
     "scoring_authorized": false
@@ -43,6 +50,8 @@
     "strict_json_duplicate_key_rejection": true,
     "all_four_cells_all_generations_clear_required": true,
     "authoritative_sessions_clear_required": true,
+    "session_identity_projection_required": "/v1/sessions/identities",
+    "stable_keyset_session_snapshot_required": true,
     "accepted_receipts_clear_required": true,
     "controller_job_configmap_pod_output_clear_required": true,
     "both_endpoint_slots_simultaneously_free_required": true,
@@ -57,5 +66,5 @@
     "credentials_included": false
   },
   "workload_mutations": 0,
-  "receipt_sha256": "sha256:e1f468f6842534710f15d0e5bd495cfeca9f6099869b96a02e894138d00c8efc"
+  "receipt_sha256": "sha256:d2d02f989993ed166c13555550075c8f84998adf8cd6e3cea664e0c639025d88"
 }

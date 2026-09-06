@@ -70,28 +70,17 @@ EXPECTED_TASK_KEYS = ["cysec1-2-fira-gen_blackbox-df372d5a31676a815c9f0751__blac
 EXPECTED_ALLOWED_PATHS = [
     "/mnt/sfs/jobs/chris-glm53-r030-preclaim-phase-observer-v2"
 ]
-EXPECTED_SESSION_IDENTITIES = {
-    "cell_id": set(EXPECTED_CELL_IDS),
-    "execution_id": {
-        "sha256:e406c5be7a74ca76dcef590dc93ccc185f5d75f8aeab340582fa742e98db8d66",
-        "sha256:8266f16bf278ff8d854349351f98dcb3bd2ce5d3a55ab04bdb477c114e1552ae",
-        "sha256:01e32805da63f6d94b0455d24674f01087dbedbb8202cab88cc8eea379a652b5",
-        "sha256:cb72b074761f906fcd5e4f5849d10ab0d21d23df6cae48ea49eeb7fa89a045dc",
-        "sha256:eb5945fdab0567dfadcc9f4b1aa76d8edf2fe9ae27695202bc6a884613c0be21",
-        "sha256:aeea2d30f6c4fd425ea4d4c87af3301a9dcfc839618dafd2e4bb1ddc97a86432",
-        "sha256:54cb087f456a4284a87860dad4463c476bedf8508abdc7083076e673918b2a1d",
-        "sha256:4296e8b9300a114686794dce795cec010f601430e2ac13594cfaa650431b4c72",
-    },
-    "run_id": {
-        "chris-glm53-ac-bulk-a-r030-a1-g1-a0cacaaf",
-        "chris-glm53-ac-bulk-a-r030-a2-g1-a0cacaaf",
-        "chris-glm53-ac-bulk-a-r030-a3-g1-a0cacaaf",
-        "chris-glm53-ac-bulk-a-r030-a4-g1-a0cacaaf",
-        "chris-glm53-ac-bulk-a-r030-a1-g2-eb5945fd",
-        "chris-glm53-ac-bulk-a-r030-a2-g2-aeea2d30",
-        "chris-glm53-ac-bulk-a-r030-a3-g2-54cb087f",
-        "chris-glm53-ac-bulk-a-r030-a4-g2-4296e8b9",
-    },
+EXPECTED_TASK_VERSION_ID = "a0cacaaf-480b-4a4c-9ed7-6b6192bb6783"
+EXPECTED_SESSION_MODEL = "fleet-cluster-opencode-1.18.27/glm-5.3-opencode11827-autocontinue-v1"
+SESSION_IDENTITY_PATH = "/v1/sessions/identities"
+SESSION_IDENTITY_KEYS = {
+    "session_id",
+    "eval_task_id",
+    "eval_task_version_id",
+    "task_key",
+    "model_identity",
+    "model_identity_status",
+    "status",
 }
 
 
@@ -442,35 +431,75 @@ def _fleet_get(path: str, key: str, params: dict[str, Any] | None = None) -> dic
     )
 
 
-def _session_collisions(binding: dict[str, Any], key: str) -> tuple[int, int, int]:
+def _session_collisions(binding: dict[str, Any], key: str) -> tuple[int, int, int, str]:
     rows_examined = gets = collisions = 0
+    snapshot: list[dict[str, Any]] = []
     for task_key in binding["task_keys"]:
-        offset = 0
+        cursor: str | None = None
+        snapshot_cursor: str | None = None
         while True:
+            params: dict[str, Any] = {"task_key": task_key, "limit": 500}
+            if cursor is not None:
+                params["cursor"] = cursor
             page = _fleet_get(
-                "/v1/sessions", key, {"task_key": task_key, "limit": 500, "offset": offset}
+                SESSION_IDENTITY_PATH,
+                key,
+                params,
             )
             gets += 1
+            if set(page) != {"sessions", "limit", "has_more", "next_cursor", "snapshot"}:
+                raise ObserverError("session_identity_page_shape_invalid")
             rows = page.get("sessions")
-            if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
+            if any(
+                (
+                    not isinstance(rows, list),
+                    not all(isinstance(row, dict) for row in rows or []),
+                    page.get("limit") != 500,
+                    not isinstance(page.get("has_more"), bool),
+                )
+            ):
                 raise ObserverError("session_inventory_invalid")
+            observed_snapshot = page.get("snapshot")
+            if snapshot_cursor is None:
+                if rows and (not isinstance(observed_snapshot, str) or not observed_snapshot):
+                    raise ObserverError("session_snapshot_cursor_invalid")
+                snapshot_cursor = observed_snapshot
+            elif observed_snapshot != snapshot_cursor:
+                raise ObserverError("session_snapshot_cursor_changed")
             rows_examined += len(rows)
             for row in rows:
-                metadata = row.get("metadata") or {}
-                if not isinstance(metadata, dict):
-                    raise ObserverError("session_metadata_invalid")
-                collisions += int(
-                    any(
-                        metadata.get(field) in expected
-                        for field, expected in EXPECTED_SESSION_IDENTITIES.items()
-                    )
-                )
-            if page.get("has_more") is False:
+                session_id = row.get("session_id")
+                if (
+                    set(row) != SESSION_IDENTITY_KEYS
+                    or not isinstance(session_id, str)
+                    or not session_id
+                    or len(session_id) > 128
+                    or row.get("task_key") != task_key
+                ):
+                    raise ObserverError("session_identity_row_invalid")
+                if row.get("eval_task_version_id") == EXPECTED_TASK_VERSION_ID:
+                    model_status = row.get("model_identity_status")
+                    model_identity = row.get("model_identity")
+                    if model_status == "resolved" and model_identity == EXPECTED_SESSION_MODEL:
+                        collisions += 1
+                    elif model_status != "resolved" or not isinstance(model_identity, str):
+                        raise ObserverError("target_session_model_identity_ambiguous")
+                snapshot.append(row)
+            has_more = page["has_more"]
+            next_cursor = page.get("next_cursor")
+            if not has_more:
+                if next_cursor is not None:
+                    raise ObserverError("session_terminal_cursor_invalid")
                 break
-            if not rows:
+            if not rows or not isinstance(next_cursor, str) or not next_cursor:
                 raise ObserverError("session_pagination_stalled")
-            offset += len(rows)
-    return rows_examined, gets, collisions
+            if next_cursor == cursor:
+                raise ObserverError("session_pagination_stalled")
+            cursor = next_cursor
+    snapshot.sort(key=lambda row: row["session_id"])
+    if len({row["session_id"] for row in snapshot}) != len(snapshot):
+        raise ObserverError("session_inventory_duplicate_id")
+    return rows_examined, gets, collisions, sha256(canonical(snapshot))
 
 
 def validate_binding(value: dict[str, Any]) -> None:
@@ -565,7 +594,9 @@ def _clear_state(
     accepted_examined, accepted_collisions = _receipt_collisions(
         Path(binding["jobs_root"]), cell_ids, accepted_only=True
     )
-    session_rows, session_gets, session_collisions = _session_collisions(binding, api_key)
+    session_rows, session_gets, session_collisions, session_sha = _session_collisions(
+        binding, api_key
+    )
     output_collisions = _output_paths_clear(binding)
     slots = _lease_clear(binding)
     if claim_collisions or accepted_collisions or session_collisions or output_collisions:
@@ -574,6 +605,11 @@ def _clear_state(
         "claim_receipts_examined": claim_examined,
         "accepted_receipts_examined": accepted_examined,
         "session_rows_examined": session_rows,
+        "session_inventory_scans": 1,
+        "archived_sessions_included": True,
+        "stable_session_snapshot": True,
+        "session_identity_projection": SESSION_IDENTITY_PATH,
+        "session_snapshot_sha256": session_sha,
         "fleet_gets": 1 + session_gets,
         **kubernetes,
         "all_generation_claim_collisions": 0,
@@ -618,12 +654,18 @@ def collect(
         "accepted_evidence_collisions": state["accepted_evidence_collisions"],
         "output_root_collisions": state["output_root_collisions"],
         "new_job_collisions": state["new_job_collisions"],
+        "new_pod_collisions": state["new_pod_collisions"],
         "new_configmap_collisions": state["new_configmap_collisions"],
         "active_hosted_controllers": state["active_hosted_controllers"],
         "endpoint_lease_slots_available": state["endpoint_lease_slots_available"],
         "both_endpoint_lease_slots_simultaneously_free": state[
             "both_endpoint_lease_slots_simultaneously_free"
         ],
+        "session_inventory_scans": state["session_inventory_scans"],
+        "archived_sessions_included": state["archived_sessions_included"],
+        "stable_session_snapshot": state["stable_session_snapshot"],
+        "session_identity_projection": state["session_identity_projection"],
+        "session_snapshot_sha256": state["session_snapshot_sha256"],
         "api_mutations": 0,
     }
     body: dict[str, Any] = {
