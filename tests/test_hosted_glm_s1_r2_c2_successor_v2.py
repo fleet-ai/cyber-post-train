@@ -7,6 +7,11 @@ from evals.fleet import hosted_glm_s1_r2_c2_successor_v2 as successor
 from evals.fleet import hosted_glm_s1_r2_c2_package_v3 as package_v3
 from evals.fleet import hosted_glm_s1_r2_c2_release_package_v4 as release_package_v4
 from evals.fleet import hosted_glm_s1_r2_c2_bootstrap_package_v1 as bootstrap_package
+from evals.fleet import hosted_glm_s1_r2_c2_bootstrap_package_v2 as bootstrap_package_v2
+from evals.fleet import hosted_glm_s1_r2_c2_package_v4 as package_v4
+from evals.fleet import hosted_glm_s1_r2_c2_release_package_v5 as release_package_v5
+from evals.fleet import hosted_glm_s1_r2_c2_successor_v4 as successor_v4
+from evals.fleet import exact_pass4_bulk_runtime_v3 as engine
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -96,3 +101,19 @@ def test_bootstrap_executes_exact_controller_package_with_claims_disabled(tmp_pa
     env = {row["name"]: row.get("value") for row in rendered["objects"]["items"][1]["spec"]["template"]["spec"]["containers"][0]["env"]}
     assert env["HOSTED_BOOTSTRAP_ONLY"] == "1"
     assert env["HOSTED_BOOTSTRAP_RECEIPT"].endswith("/BOOTSTRAP.json")
+
+
+def test_v4_is_a_complete_engine_adapter_with_real_signatures(monkeypatch):
+    engine.validate_bulk_adapter(successor_v4)
+    plans = successor_v4.validate_all(ROOT)
+    assert list(plans) == [successor_v4.CONTROLLER]
+    held = plans[successor_v4.CONTROLLER]
+    assert held["job_name"].endswith("successor-v4")
+    assert held["execution"]["endpoint_lease"]["maximum_streams"] == 2
+
+
+def test_v4_packages_have_complete_projected_install_closure():
+    data = package_v4.render(ROOT)["objects"]["items"][0]["data"]
+    package_v3.validate_install_closure(data)
+    release_data = release_package_v5.render(ROOT)["objects"]["items"][0]["data"]
+    package_v3.validate_install_closure(release_data)
