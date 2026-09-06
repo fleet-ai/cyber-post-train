@@ -12,6 +12,7 @@ import pytest
 from evals.fleet import qwen_hosted_whole_task_release_gate_package_v1 as gate_package
 from evals.fleet import qwen_hosted_whole_task_release_gate_package_v2 as gate_package_v2
 from evals.fleet import qwen_hosted_whole_task_release_gate_package_v3 as gate_package_v3
+from evals.fleet import qwen_hosted_whole_task_release_gate_package_v4 as gate_package_v4
 from evals.fleet import qwen_hosted_whole_task_release_gate_v1 as gate
 from evals.fleet import qwen_hosted_whole_task_successor_v1 as prior
 from evals.fleet import qwen_hosted_whole_task_successor_v2 as successor
@@ -266,6 +267,7 @@ def test_package_source_accepts_in_mount_projection_symlink_and_rejects_escape(
     projected = package_root / "package-source.json"
     projected.symlink_to(Path("..data") / "package-source.json")
     gate.validate_package_source(projected, package_root)
+    assert gate.load_projected(package_root / "binding.json", package_root) == {}
 
     outside = tmp_path / "outside.json"
     outside.write_text(json.dumps(receipt))
@@ -318,6 +320,16 @@ def test_observer_v3_preserves_binding_and_uses_third_fresh_identity() -> None:
     assert gate_package_v3.JOB_NAME in raw
     assert gate_package_v2.JOB_NAME not in raw
     assert gate_package_v2.OUTPUT_ROOT not in raw
+
+
+def test_observer_v4_preserves_binding_and_uses_fourth_fresh_identity() -> None:
+    old = gate_package_v3.render(ROOT)
+    new = gate_package_v4.render(ROOT)
+    assert new["items"][0]["data"] == old["items"][0]["data"]
+    raw = json.dumps(new["items"][1])
+    assert gate_package_v4.JOB_NAME in raw
+    assert gate_package_v3.JOB_NAME not in raw
+    assert gate_package_v3.OUTPUT_ROOT not in raw
 
 
 def test_release_stays_closed_without_real_observer_receipt() -> None:
