@@ -1,0 +1,65 @@
+{
+  "controller_cap": 2,
+  "controllers": [
+    {
+      "cells": [
+        {"attempt": 1, "cell_id": "sha256:5af2152499b8af043a847707e47cc3c04b81d24c47aa99c33c04a8688cbcafa6", "execution_id": "sha256:e406c5be7a74ca76dcef590dc93ccc185f5d75f8aeab340582fa742e98db8d66", "run_id": "chris-glm53-ac-bulk-a-r030-a1-g1-a0cacaaf"},
+        {"attempt": 2, "cell_id": "sha256:7e2fffc5a21d93d76e97ab387800a687669bf39e69763d8a5b874dfea4da1f41", "execution_id": "sha256:8266f16bf278ff8d854349351f98dcb3bd2ce5d3a55ab04bdb477c114e1552ae", "run_id": "chris-glm53-ac-bulk-a-r030-a2-g1-a0cacaaf"},
+        {"attempt": 3, "cell_id": "sha256:b77c81587baee31eabe1bf65903749e8a89cf7719c38e8f527fd5bc53e087121", "execution_id": "sha256:01e32805da63f6d94b0455d24674f01087dbedbb8202cab88cc8eea379a652b5", "run_id": "chris-glm53-ac-bulk-a-r030-a3-g1-a0cacaaf"},
+        {"attempt": 4, "cell_id": "sha256:2b6f93f57e1862f339e55ff758ce6258a9665c66df80ad6d67fee21fa9fbe66f", "execution_id": "sha256:cb72b074761f906fcd5e4f5849d10ab0d21d23df6cae48ea49eeb7fa89a045dc", "run_id": "chris-glm53-ac-bulk-a-r030-a4-g1-a0cacaaf"}
+      ],
+      "configmap_name": "chris-glm53-exact100-hosted-r030-whole-task-g1-package-v1",
+      "controller": "glm-hosted-r30-whole-task",
+      "job_name": "chris-glm53-exact100-hosted-r030-whole-task-g1-v1",
+      "plan_sha256": "sha256:1db7a9fc033b93f1bf7f152793bbc0338181d559890d1b5ac30c48d98ae5cb95",
+      "selection_rank": 30,
+      "sfs_root": "/mnt/sfs/jobs/chris-glm53-exact100-hosted-r030-whole-task-g1-v1",
+      "task_version_id": "a0cacaaf-480b-4a4c-9ed7-6b6192bb6783"
+    },
+    {
+      "cells": [
+        {"attempt": 1, "cell_id": "sha256:a432fedf8c7698a95bb5f0af6c93d3ad8b42de7b7f2049e25254ec9e70f3cb63", "execution_id": "sha256:eca0b079b9e01849d9942d5268f0c9901a1fb58e250b4fbea4e8c3801a22217e", "run_id": "chris-glm53-ac-bulk-b-r031-a1-g1-51b23680"},
+        {"attempt": 2, "cell_id": "sha256:5c0c9dd638233c314fe71e6e4f6154cfc98c52c4e270cb207003e1597f4ead13", "execution_id": "sha256:0b8a3d67d94871679286db345d913354297ebed2ba3f2b2541a4b5ed7bfccd37", "run_id": "chris-glm53-ac-bulk-b-r031-a2-g1-51b23680"},
+        {"attempt": 3, "cell_id": "sha256:debb0df658849b3af576852d65a0237056f231b3b01dcef73cff37cb02073cf0", "execution_id": "sha256:e6a74652906f226e638f796c5bde9e9edc9e390940ded2b784aa78f7aa13ea81", "run_id": "chris-glm53-ac-bulk-b-r031-a3-g1-51b23680"},
+        {"attempt": 4, "cell_id": "sha256:8712942282c3755cd5ce49bdb2d24fdcf43856a9e1a22d78595663878aa8776d", "execution_id": "sha256:5dfa2db40905507ccce24baa7d9ea16f3d403413f7d379b1fff68983f82da171", "run_id": "chris-glm53-ac-bulk-b-r031-a4-g1-51b23680"}
+      ],
+      "configmap_name": "chris-glm53-exact100-hosted-r031-whole-task-g1-package-v1",
+      "controller": "glm-hosted-r31-whole-task",
+      "job_name": "chris-glm53-exact100-hosted-r031-whole-task-g1-v1",
+      "plan_sha256": "sha256:efcd50225378517bb3c67d0cf2361787ef2356e7f89fc13e032c03d50e7b72d6",
+      "selection_rank": 31,
+      "sfs_root": "/mnt/sfs/jobs/chris-glm53-exact100-hosted-r031-whole-task-g1-v1",
+      "task_version_id": "51b23680-27fa-4bdd-a077-16669f3f0e18"
+    }
+  ],
+  "fresh_score_blind_reconciliation": {
+    "accepted_evidence_collisions": 0,
+    "accepted_files_examined": 57,
+    "api_mutations": 0,
+    "authoritative_session_collisions": 0,
+    "canonical_claim_collisions": 0,
+    "canonical_claim_files_examined": 93,
+    "endpoint_lease_probe_released": true,
+    "endpoint_lease_slots_available": 2,
+    "new_configmap_collisions": 0,
+    "new_job_collisions": 0,
+    "observed_cells": 8,
+    "observer_pod_name": "chris-q38-hosted-r015-whole-task-g21-v1-gwq95",
+    "observer_pod_uid": "fe524d28-033b-47b6-aacc-0c5d088ca6a4",
+    "output_root_collisions": 0,
+    "session_rows_examined": 47
+  },
+  "held_package_sha256": "sha256:96cce72406232eaad0b2dba5802af75e24c26c6eb87cd491c9a1d2b3dc9dd4e6",
+  "launch_authorized": false,
+  "ledger_authority": {"file_sha256": "sha256:0a2baba7c16745a4d69f0f5aafc04010734eacbace8f6d712d44011c4a36d0dd", "path": "docs/evidence/qwen38-study/2026-09-05-exact-pass4-ledger-evidence-snapshot-v47.json", "receipt_sha256": "sha256:bf0b9086dd97eecafe20fa9a4cf3b5d643f0ce8f6abad60fae6e3cba3e3e2e29"},
+  "privacy": {"credentials_included": false, "prompts_traces_flags_read": false, "scores_read": false},
+  "rank29_disposition": {"preserved": true, "retry_or_supersession_authorized": false, "selected": false},
+  "receipt_sha256": "sha256:c750f10407b532f74f2188fc8f041ddc4602deb5931553e04e439d69e1bc4e20",
+  "release_requirements": {"all_four_claims_each_task_before_model_call": true, "create_once": true, "fresh_uid_bound_observer": true, "maximum_age_seconds": 600},
+  "schema_version": "fleet-hosted-glm-atomic-whole-task-held-v1",
+  "scoring_authorized": false,
+  "selection_authority": {"file_sha256": "sha256:9f5e83123cfe7d8a3f4cc0b791ac1dc9032a3d5faf5eba2a431c7246069255df", "path": "evals/fleet/configs/opencode-easiest-train100-selection-v2.json", "semantic_sha256": "sha256:38bd544c74f4e45cb67b271849d657f49e356ccf41f97acca9fb6cd7eb7f56b8"},
+  "source_package_sha256": "sha256:1755c10ceb3611ab79eba4a52ed1fe7d0689d6cc885e8ba699ade4c5d3186cd3",
+  "source_plan_sha256": "sha256:c42551064b3c384399405ffbb374832b6d1a1d623ed209d6a0b51009421a0320",
+  "status": "HELD_FOR_INDEPENDENT_REVIEW"
+}
