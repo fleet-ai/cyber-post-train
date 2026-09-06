@@ -15,6 +15,7 @@ INCIDENT = ROOT / (
 HELD = ROOT / (
     "docs/evidence/qwen38-study/2026-09-06-qwen38-dp6-observer-v4-held-successor-v1.json"
 )
+IDLE_RELEASE = ROOT / ("docs/evidence/qwen38-study/2026-09-06-qwen38-tp1-j-v1-idle-release.json")
 
 
 def _metrics(*, false: int = 0, true: int | None = None) -> str:
@@ -176,3 +177,26 @@ def test_held_successor_is_fresh_score_free_and_not_launchable() -> None:
         "task_instance_calls": 0,
         "verifier_calls": 0,
     }
+
+
+def test_idle_tp1_was_released_before_successor_work() -> None:
+    value = json.loads(IDLE_RELEASE.read_text())
+    assert value["receipt_sha256"] == self_hosted.digest_without(value, "receipt_sha256")
+    assert value["status"] == "RELEASED_IDLE_GPU_AFTER_600_SECOND_TRAFFIC_TIMEOUT"
+    assert (
+        value["idle_gate"]["observed_traffic_age_seconds"]
+        > value["idle_gate"]["maximum_idle_seconds"]
+    )
+    assert value["idle_gate"]["active_chris_qwen_scored_controller_count"] == 0
+    assert value["release"] == {
+        "gpu_quota_released": True,
+        "head_pod_absent_after": True,
+        "http_status": 204,
+        "jobs_api_mutations": 1,
+        "rayjob_absent_after": True,
+        "route": "DELETE /v1/runs/ft-run-e87e2bd4",
+        "service_absent_after": True,
+        "workload_absent_after": True,
+    }
+    assert all(value["effects"][key] == 0 for key in value["effects"])
+    assert value["privacy"]["prompts_traces_flags_scores_logs_or_credentials_included"] is False
