@@ -41,8 +41,7 @@ CONSUMED_INCIDENTS = [
     {
         "lane": "hosted",
         "authority_path": (
-            "docs/evidence/glm53-study/"
-            "2026-09-06-glm53-hosted-s1-rank1-a4-request-abort.json"
+            "docs/evidence/glm53-study/2026-09-06-glm53-hosted-s1-rank1-a4-request-abort.json"
         ),
         "authority_receipt_sha256": (
             "sha256:8a0c02065c5bcbdb140eeb5250f37954920b0840502828caed6e92b8d2184996"
@@ -51,9 +50,7 @@ CONSUMED_INCIDENTS = [
             "sha256:72c59d169eea74ede8ae5348b2ce7cbc1f1ac7afe9b13e20f74610906c83e8a7"
         ),
         "cell_id": "sha256:f3921b5927bcf73a0df58ff991841db52f9b23f04cae5d482c5f7e8630308250",
-        "execution_id": (
-            "sha256:b475fceb1fa1875953ab08c7d769962c6b6c57c7a919d56b658140b37adaed78"
-        ),
+        "execution_id": ("sha256:b475fceb1fa1875953ab08c7d769962c6b6c57c7a919d56b658140b37adaed78"),
     },
     {
         "lane": "dedicated",
@@ -68,9 +65,7 @@ CONSUMED_INCIDENTS = [
             "sha256:383fa9cbe3c5d9252316b311b48e9d99933e07c0c6c2d2c21a930cacb60073d2"
         ),
         "cell_id": "sha256:2aed501bd3b6db1176ea03687f7bc91c88d205997b00e3a0747dc6a1e1e8b5df",
-        "execution_id": (
-            "sha256:a9be25eab3efd65f86a832b3c9681dd992d40b51cc1d6d4046212e6797e0ec81"
-        ),
+        "execution_id": ("sha256:a9be25eab3efd65f86a832b3c9681dd992d40b51cc1d6d4046212e6797e0ec81"),
     },
 ]
 
@@ -178,6 +173,7 @@ def build_held(ledger: dict[str, Any], candidate: dict[str, Any]) -> dict[str, A
             "nodes": 1,
             "gpus": 8,
             "priority_class": "fleet-infra-quiet",
+            "priority_selection": "highest_jobs_api_admitted_nonpreempting",
             "preemption_policy": "Never",
             "jobs_api_create_once": True,
             "fresh_uid_bound_parity_required": True,

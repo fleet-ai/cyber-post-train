@@ -1,0 +1,65 @@
+{
+  "api_mutation_calls": 0,
+  "concurrency_waves": [
+    1,
+    2,
+    4
+  ],
+  "package_commit": "d2364be5c7b837edd1b820215c7dc3c044ce1ac5",
+  "package_sha256": "sha256:f82d0763738783757fb89dccb1b6c20a5888ce332a6b78666ecaac4018181175",
+  "plan_receipt_sha256": "sha256:247e601a80e6d671d480878dbc1c739c4160b46ec246523587d1acc5f53ff639",
+  "prompts_traces_flags_scores_or_model_outputs_included": false,
+  "qualification_launch_authorized": false,
+  "receipt_sha256": "sha256:78593687314d107c3b95b64c893b9fce8882f78a14130ca40d27eca0d20a707b",
+  "removed_false_prerequisite": {
+    "rank51_attempt2_accepted_required": false,
+    "reason": "rank51_attempt2_is_sealed_nonrepeatable_uncredited"
+  },
+  "request_counter_watchdog": {
+    "active_request_metrics": [
+      "sglang:num_running_reqs",
+      "sglang:num_queue_reqs"
+    ],
+    "active_request_or_queue_refreshes": true,
+    "health_or_process_liveness_refreshes": false,
+    "idle_release_seconds": 600,
+    "implementation_id": "glm53-v23-sglang-request-counter-watchdog-v1",
+    "implementation_module": "evals.fleet.glm53_dedicated_v23_request_counter_watchdog_v1",
+    "implementation_sha256": "sha256:cdc791f6c78b579e45da65f0bc5d6e8d3c0415132dfb0b7a1d0e99b7065708dd",
+    "metric": "sglang_num_requests_total",
+    "metric_contract_commit": "97c6978369ac1e04c91fcc01c98acc25129a6000",
+    "metric_contract_source": "https://github.com/sgl-project/sglang/blob/97c6978369ac1e04c91fcc01c98acc25129a6000/docs/docs/references/production_metrics.mdx",
+    "release_route": "DELETE /v1/runs/{api_run_id}",
+    "release_via_jobs_api": true,
+    "terminal_receipt_required": true,
+    "watcher_job_and_pod_uids_required": true
+  },
+  "schema_version": "fleet-glm53-dedicated-v23-scorefree-held-receipt-v1",
+  "score_free_calls": {
+    "fleet_session": 0,
+    "fleet_task_instance": 0,
+    "scoring": 0,
+    "verifier": 0
+  },
+  "score_free_cpu_priority": {
+    "class": "fleet-serve-low",
+    "preemption_policy": "Never",
+    "value": 100
+  },
+  "scored_launch_authorized": false,
+  "server": {
+    "context_length": 262144,
+    "gpus": 8,
+    "model_revision": "30333038ada1f1dacb294a93270305a890b50c14",
+    "nodes": 1,
+    "preemption_policy": "Never",
+    "priority_class": "fleet-infra-quiet",
+    "priority_selection": "highest_jobs_api_admitted_nonpreempting",
+    "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-glm53-tp8-a-v23",
+    "served_id": "glm-5.3",
+    "title": "chris-cyber-evalserve-glm53-tp8-a-v23"
+  },
+  "server_launch_authorized": false,
+  "status": "READY_HELD_NO_LAUNCH",
+  "uid_bound_live_evidence_required": true
+}
