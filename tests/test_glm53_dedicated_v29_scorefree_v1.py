@@ -8,7 +8,7 @@ from evals.fleet import glm53_dedicated_v29_scorefree_package_v1 as package
 from evals.fleet import glm53_dedicated_v29_scorefree_qualifier_v1 as qualifier
 
 ROOT = Path(__file__).resolve().parents[1]
-COMMIT = "f813100466af6a61b90c82c1fd22ccdfab454463"
+COMMIT = "0a0d029f0edee3170b879c11e46b338106fb8f6a"
 
 
 def binding() -> dict[str, object]:
