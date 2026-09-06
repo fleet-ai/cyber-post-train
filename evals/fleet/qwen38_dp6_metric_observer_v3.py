@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import socket
@@ -14,9 +15,9 @@ from typing import Any
 
 from evals.fleet import qwen38_dp6_metric_observer_v1 as legacy
 from evals.fleet import qwen38_dp6_metric_observer_v2 as prior
-from evals.fleet import self_hosted
 
 RANKS = 6
+BASELINE_SCHEMA = prior.BASELINE_SCHEMA
 STATUS_SCHEMA = prior.STATUS_SCHEMA
 SCHEMA_OBSERVATION = "fleet-qwen38-dp6-metric-schema-observation-v1"
 TARGET_FAMILIES = (prior.REQUEST_FAMILY, prior.STARTUP_ANCHOR_FAMILY)
@@ -26,6 +27,13 @@ METRIC_SCHEMA_POLL_SECONDS = 1
 
 class MetricSchemaWarmupTimeout(ValueError):
     """The target metric families never converged inside the bounded window."""
+
+
+def _digest(value: dict[str, Any]) -> str:
+    payload = {key: item for key, item in value.items() if key != "receipt_sha256"}
+    return "sha256:" + hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
 
 
 def schema_observation(
@@ -67,7 +75,7 @@ def schema_observation(
         "request_or_response_bodies_included": False,
         "prompts_traces_flags_or_scores_included": False,
     }
-    value["receipt_sha256"] = self_hosted.digest_without(value, "receipt_sha256")
+    value["receipt_sha256"] = _digest(value)
     return value
 
 

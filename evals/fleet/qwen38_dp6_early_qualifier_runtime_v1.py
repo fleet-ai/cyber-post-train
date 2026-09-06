@@ -15,7 +15,7 @@ from typing import Any
 from evals.fleet import opencode_actual_harness_parity_v1 as parity
 from evals.fleet import opencode_staged_image_v1 as staged_image
 from evals.fleet import qwen38_dp6_early_qualification_v1 as early
-from evals.fleet import qwen38_dp6_metric_observer_v2 as metric_observer
+from evals.fleet import qwen38_dp6_metric_observer_v3 as metric_observer
 from evals.fleet import qwen38_dp8_post_rank99_launch_v1 as core
 from evals.fleet import self_hosted
 
@@ -35,7 +35,7 @@ COUNTER_STATE_PATH = Path(early.RUN_DIR) / "lifecycle/.request-counters.json"
 COUNTER_BASELINE_PATH = Path(early.RUN_DIR) / "lifecycle/REQUEST-COUNTER-BASELINE.json"
 EVENT_DIR = Path(early.RUN_DIR) / "lifecycle/real-traffic-events"
 DIND_RESOURCE_SAMPLES_PATH = Path("/workspace/dind-resource-samples.tsv")
-QUALIFIER_RELEASE_SCHEMA = "fleet-qwen38-dp6-early-qualifier-release-v5"
+QUALIFIER_RELEASE_SCHEMA = "fleet-qwen38-dp6-early-qualifier-release-v6"
 DRAIN_PATH = Path(early.RUN_DIR) / "lifecycle/DRAIN"
 BASELINE_WAIT_SECONDS = 30
 DRAIN_SCHEMA = "fleet-qwen38-dp6-qualifier-drain-request-v1"
@@ -197,9 +197,9 @@ def validate_runtime_release(
         or value.get("status") != "RELEASED_FOR_ONE_NON_SCORED_QUALIFIER"
         or value.get("launch_authorized") is not True
         or value.get("scoring_authorized") is not False
-        or value.get("job_name") != "chris-cyber-q38-dp6-c-qualifier-v5"
-        or value.get("configmap_name") != "chris-cyber-q38-dp6-c-qualifier-v5"
-        or value.get("output_root") != "/mnt/sfs/jobs/chris-cyber-q38-dp6-c-qualifier-v5"
+        or value.get("job_name") != "chris-cyber-q38-dp6-d-qualifier-v6"
+        or value.get("configmap_name") != "chris-cyber-q38-dp6-d-qualifier-v6"
+        or value.get("output_root") != "/mnt/sfs/jobs/chris-cyber-q38-dp6-d-qualifier-v6"
         or value.get("serving_block") != early.SERVING_BLOCK
         or value.get("submission_receipt_sha256") != submission.get("receipt_sha256")
         or value.get("server_binding_receipt_sha256") != binding.get("receipt_sha256")
