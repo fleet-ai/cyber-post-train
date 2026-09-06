@@ -62,6 +62,9 @@ GENERATION15_ACCEPTED_GATE_SCHEMA = "fleet-qwen38-generation15-accepted-gate-v1"
 DEDICATED_QWEN_ACCEPTED_SCHEMA = "fleet-qwen38-dedicated-tp1-cell-accepted-v1"
 DEDICATED_QWEN_VALIDATED_SCHEMA = "fleet-qwen38-dedicated-tp1-accepted-validated-v1"
 DEDICATED_QWEN_VALIDATED_V2_SCHEMA = "fleet-qwen38-dedicated-tp1-accepted-validated-v2"
+DEDICATED_QWEN_ROLLFORWARD_VALIDATED_SCHEMA = (
+    "fleet-qwen38-dedicated-rollforward-accepted-validated-v1"
+)
 GLM_C2_ACCEPTED_VALIDATED_SCHEMA = "fleet-glm53-hosted-c2-accepted-validated-v1"
 GLM_C2_RUNTIME_AUTHORITY_SCHEMA = "fleet-glm53-hosted-c2-runtime-authority-v1"
 GLM_C2_RUNTIME_AUTHORITY_PATH = Path(
@@ -140,6 +143,7 @@ ACCEPTED_SCHEMAS = {
     DEDICATED_QWEN_ACCEPTED_SCHEMA,
     DEDICATED_QWEN_VALIDATED_SCHEMA,
     DEDICATED_QWEN_VALIDATED_V2_SCHEMA,
+    DEDICATED_QWEN_ROLLFORWARD_VALIDATED_SCHEMA,
     GENERATION15_ACCEPTED_GATE_SCHEMA,
     GLM_C2_ACCEPTED_VALIDATED_SCHEMA,
 }
@@ -511,6 +515,63 @@ DEDICATED_QWEN_VALIDATED_V2_FIELDS = {
     "validator_pod_uid",
     "fleet_api_mutations",
     "fresh_authoritative_session_reconciled",
+    "scores_included",
+    "prompts_or_traces_included",
+    "credentials_included",
+    "receipt_sha256",
+}
+DEDICATED_QWEN_ROLLFORWARD_VALIDATED_FIELDS = {
+    "schema_version",
+    "status",
+    "accepted",
+    "credited",
+    "retry_allowed",
+    "serving_block",
+    "cell_id",
+    "execution_id",
+    "execution_generation",
+    "run_id",
+    "selection_rank",
+    "attempt",
+    "task_version_id",
+    "session_id",
+    "verifier_execution_id",
+    "agent_exit_code",
+    "agent_process_exit_success",
+    "controller",
+    "controller_job_uid",
+    "controller_pod_uid",
+    "claim_path",
+    "claim_receipt_sha256",
+    "claim_sha256",
+    "config_sha256",
+    "plan_path",
+    "plan_sha256",
+    "accepted_path",
+    "accepted_receipt_sha256",
+    "accepted_file_sha256",
+    "release_path",
+    "release_receipt_sha256",
+    "release_file_sha256",
+    "parity_path",
+    "parity_receipt_sha256",
+    "parity_file_sha256",
+    "server_binding_receipt_sha256",
+    "server_rayjob_uid",
+    "server_head_pod_uid",
+    "server_service_uid",
+    "artifact_file_sha256",
+    "all_artifact_byte_digests_matched",
+    "cleanup_completed",
+    "session_ingest_completed",
+    "fresh_authoritative_session_reconciled",
+    "authoritative_session_match_count",
+    "authoritative_session_status",
+    "authoritative_session_task_key_matched",
+    "authoritative_projection_omissions",
+    "authoritative_projection_rule",
+    "verifier_execution_matched",
+    "api_mutations",
     "scores_included",
     "prompts_or_traces_included",
     "credentials_included",
@@ -1688,6 +1749,156 @@ def _accepted_validated_dedicated_qwen_v2(
     )
 
 
+def _accepted_validated_dedicated_qwen_rollforward(
+    value: dict[str, Any], path: Path, authority: Authority
+) -> Evidence:
+    """Admit a successor generation only through its sealed plan and server chain."""
+    _require_exact_fields(value, DEDICATED_QWEN_ROLLFORWARD_VALIDATED_FIELDS, path)
+    key = (value.get("cell_id"), value.get("execution_id"))
+    pair = authority.supplemental_bulk_items.get(key)
+    if pair is None:
+        raise LedgerError(f"roll-forward Qwen acceptance lacks exact plan authority: {path}")
+    plan, item = pair
+    precedence = authority.rollforward_precedence.get(str(value.get("cell_id")))
+    if precedence is None or precedence[1] != value.get("execution_id"):
+        raise LedgerError(f"roll-forward Qwen acceptance lacks successor precedence: {path}")
+    cell, generation = _require_cell_execution(
+        authority, *key, value.get("execution_generation"), path
+    )
+    expected = {
+        "controller": plan["controller"],
+        "plan_sha256": plan["plan_sha256"],
+        "cell_id": item["cell_id"],
+        "execution_id": item["execution_id"],
+        "execution_generation": item["execution_generation"],
+        "run_id": item["run_id"],
+        "selection_rank": item["selection_rank"],
+        "attempt": item["attempt"],
+        "task_version_id": item["task_version_id"],
+        "accepted_path": f"/mnt/sfs/jobs/{item['run_id']}/ACCEPTED.json",
+        "plan_path": f"/mnt/sfs/jobs/{item['run_id']}/PLAN.json",
+        "claim_path": (
+            "/mnt/sfs/cell-execution-claims/opencode11827-autocontinue-v1/"
+            f"{item['execution_id'].removeprefix('sha256:')}.json"
+        ),
+    }
+    if any(value.get(field) != expected_value for field, expected_value in expected.items()):
+        raise LedgerError(f"roll-forward Qwen acceptance identity or plan drifted: {path}")
+
+    def bound_repo_receipt(prefix: str) -> dict[str, Any]:
+        supplied = value.get(f"{prefix}_path")
+        if not isinstance(supplied, str):
+            raise LedgerError(f"roll-forward Qwen {prefix} path is invalid: {path}")
+        relative = Path(supplied)
+        if relative.is_absolute() or ".." in relative.parts:
+            raise LedgerError(f"roll-forward Qwen {prefix} path escapes repository: {path}")
+        source = authority.repo_root / relative
+        receipt = load_receipt(source)
+        if (
+            receipt.get("receipt_sha256") != value.get(f"{prefix}_receipt_sha256")
+            or self_hosted.sha256(source.read_bytes()) != value.get(f"{prefix}_file_sha256")
+        ):
+            raise LedgerError(f"roll-forward Qwen {prefix} evidence drifted: {path}")
+        return receipt
+
+    release = bound_repo_receipt("release")
+    parity = bound_repo_receipt("parity")
+    release_cells = {
+        (row.get("cell_id"), row.get("execution_id"))
+        for row in release.get("cells", [])
+        if isinstance(row, dict)
+    }
+    server = ((parity.get("endpoint") or {}).get("server_binding") or {})
+    if (
+        release.get("status") != "RELEASED_TO_DEDICATED"
+        or release.get("scoring_launch_authorized") is not True
+        or key not in release_cells
+        or release.get("serving_block") != value.get("serving_block")
+        or release.get("server_binding_sha256")
+        != value.get("server_binding_receipt_sha256")
+        or parity.get("status") != "PASSED_NON_SCORED"
+        or parity.get("receipt_sha256") != value.get("parity_receipt_sha256")
+        or server.get("rayjob_uid") != value.get("server_rayjob_uid")
+        or server.get("head_pod_uid") != value.get("server_head_pod_uid")
+        or server.get("service_uid") != value.get("server_service_uid")
+    ):
+        raise LedgerError(f"roll-forward Qwen server or release chain drifted: {path}")
+    for field in (
+        "accepted_receipt_sha256",
+        "accepted_file_sha256",
+        "claim_receipt_sha256",
+        "claim_sha256",
+        "config_sha256",
+        "plan_sha256",
+        "release_receipt_sha256",
+        "release_file_sha256",
+        "parity_receipt_sha256",
+        "parity_file_sha256",
+        "server_binding_receipt_sha256",
+    ):
+        _require_sha256(value.get(field), field, path)
+    if value.get("claim_sha256") != value.get("claim_receipt_sha256"):
+        raise LedgerError(f"roll-forward Qwen claim chain drifted: {path}")
+    artifacts = value.get("artifact_file_sha256")
+    if not isinstance(artifacts, dict) or set(artifacts) != {
+        "claim_file_sha256",
+        "cleanup_file_sha256",
+        "plan_file_sha256",
+        "result_file_sha256",
+        "reward_file_sha256",
+        "session_ingest_file_sha256",
+    }:
+        raise LedgerError(f"roll-forward Qwen artifact digest chain drifted: {path}")
+    for field, digest in artifacts.items():
+        _require_sha256(digest, field, path)
+    omissions = value.get("authoritative_projection_omissions")
+    if omissions != ["metadata", "model", "task_version_id"]:
+        raise LedgerError(f"roll-forward Qwen API omission evidence drifted: {path}")
+    if any(
+        (
+            value.get("status") != "ACCEPTED_VALIDATED",
+            value.get("accepted") is not True,
+            value.get("credited") is not True,
+            value.get("retry_allowed") is not False,
+            value.get("agent_exit_code") != 0,
+            value.get("agent_process_exit_success") is not True,
+            value.get("all_artifact_byte_digests_matched") is not True,
+            value.get("cleanup_completed") is not True,
+            value.get("session_ingest_completed") is not True,
+            value.get("fresh_authoritative_session_reconciled") is not True,
+            value.get("authoritative_session_match_count") != 1,
+            value.get("authoritative_session_status") != "completed",
+            value.get("authoritative_session_task_key_matched") is not True,
+            value.get("authoritative_projection_rule")
+            != "legacy_list_fields_may_be_null_but_never_mismatched_v1",
+            value.get("verifier_execution_matched") is not True,
+            value.get("api_mutations") != 0,
+            value.get("scores_included") is not False,
+            value.get("prompts_or_traces_included") is not False,
+            value.get("credentials_included") is not False,
+        )
+    ):
+        raise LedgerError(f"roll-forward Qwen outcome is not authoritative: {path}")
+    for field in (
+        "controller_job_uid",
+        "controller_pod_uid",
+        "server_rayjob_uid",
+        "server_head_pod_uid",
+        "server_service_uid",
+        "session_id",
+        "verifier_execution_id",
+    ):
+        _require_uuid(value.get(field), field, path)
+    return Evidence(
+        "accepted",
+        cell["cell_id"],
+        item["execution_id"],
+        generation,
+        value["receipt_sha256"],
+        path,
+    )
+
+
 def _accepted_validated_glm_c2(
     value: dict[str, Any], path: Path, authority: Authority
 ) -> Evidence:
@@ -1872,6 +2083,8 @@ def accepted_evidence(path: Path, authority: Authority) -> Evidence:
         return _accepted_validated_dedicated_qwen(value, path, authority)
     if schema == DEDICATED_QWEN_VALIDATED_V2_SCHEMA:
         return _accepted_validated_dedicated_qwen_v2(value, path, authority)
+    if schema == DEDICATED_QWEN_ROLLFORWARD_VALIDATED_SCHEMA:
+        return _accepted_validated_dedicated_qwen_rollforward(value, path, authority)
     if schema == GLM_C2_ACCEPTED_VALIDATED_SCHEMA:
         return _accepted_validated_glm_c2(value, path, authority)
     if schema == GENERATION15_ACCEPTED_GATE_SCHEMA:

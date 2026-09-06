@@ -1235,6 +1235,22 @@ def test_duplicate_json_keys_and_symlinks_are_rejected(tmp_path: Path) -> None:
         ledger.load_receipt(link)
 
 
+def test_rank99_rollforward_acceptance_binds_plan_server_and_session_chain(
+    authority: ledger.Authority,
+) -> None:
+    path = (
+        ROOT
+        / "docs/evidence/qwen38-study/"
+        "2026-09-05-qwen38-dedicated-rank99-g23-a1-accepted-validated-v1.json"
+    )
+    evidence = ledger.accepted_evidence(path, authority)
+    assert evidence.state == "accepted"
+    assert evidence.cell_id == (
+        "sha256:bf9f6d8aee8d775f6ce5dbd238d0b3a7abc544da0687c9cb943b3ba090408b2a"
+    )
+    assert evidence.execution_generation == 23
+
+
 def test_cli_is_read_only_and_emits_json_summary(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
