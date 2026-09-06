@@ -27,6 +27,10 @@ FILES = tuple(
     "evals/fleet/glm53_dedicated_v23_scorefree_qualifier_v1.py",
 )
 RUN = "evals/fleet/scripts/run_glm53_dedicated_v23_scorefree_qualification_v1.sh"
+OPERATOR_FILES = (
+    "evals/fleet/glm53_dedicated_v23_scorefree_gpu_observer_v1.py",
+    "evals/fleet/scripts/observe_glm53_dedicated_v23_scorefree_gpu_v1.sh",
+)
 
 
 class PackageError(RuntimeError):
@@ -72,6 +76,9 @@ def build_configmap(root: Path, commit: str) -> dict[str, Any]:
         "server_launch_authorized": False,
         "qualification_launch_authorized": False,
         "scored_launch_authorized": False,
+        "external_uid_bound_operator_files": {
+            path: crypto.sha256(_source(root, commit, path)) for path in OPERATOR_FILES
+        },
     }
     package["package_sha256"] = crypto.digest_without(package, "package_sha256")
     data["package.json"] = json.dumps(package, sort_keys=True, separators=(",", ":")) + "\n"

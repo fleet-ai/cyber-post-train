@@ -127,6 +127,10 @@ def test_package_is_exact_create_once_nonpreempting_and_scorefree() -> None:
     package_manifest = json.loads(configmap["data"]["package.json"])
     assert package_manifest["score_free"] is True
     assert package_manifest["scored_launch_authorized"] is False
+    assert set(package_manifest["external_uid_bound_operator_files"]) == {
+        "evals/fleet/glm53_dedicated_v23_scorefree_gpu_observer_v1.py",
+        "evals/fleet/scripts/observe_glm53_dedicated_v23_scorefree_gpu_v1.sh",
+    }
     assert "glm53_dedicated_v23_scorefree_qualifier_v1 run" in configmap["data"]["run.sh"]
     container = job["spec"]["template"]["spec"]["containers"][0]
     env = {row["name"]: row["value"] for row in container["env"]}
