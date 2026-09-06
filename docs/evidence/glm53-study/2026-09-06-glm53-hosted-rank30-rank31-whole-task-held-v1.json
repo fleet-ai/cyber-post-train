@@ -49,17 +49,17 @@
     "output_root_collisions": 0,
     "session_rows_examined": 47
   },
-  "held_package_sha256": "sha256:96cce72406232eaad0b2dba5802af75e24c26c6eb87cd491c9a1d2b3dc9dd4e6",
+  "held_package_sha256": "sha256:d24c230118a4c3ead38496b970d794b04582d90ab3321560529dc6a99a1d119c",
   "launch_authorized": false,
   "ledger_authority": {"file_sha256": "sha256:0a2baba7c16745a4d69f0f5aafc04010734eacbace8f6d712d44011c4a36d0dd", "path": "docs/evidence/qwen38-study/2026-09-05-exact-pass4-ledger-evidence-snapshot-v47.json", "receipt_sha256": "sha256:bf0b9086dd97eecafe20fa9a4cf3b5d643f0ce8f6abad60fae6e3cba3e3e2e29"},
   "privacy": {"credentials_included": false, "prompts_traces_flags_read": false, "scores_read": false},
   "rank29_disposition": {"preserved": true, "retry_or_supersession_authorized": false, "selected": false},
-  "receipt_sha256": "sha256:c750f10407b532f74f2188fc8f041ddc4602deb5931553e04e439d69e1bc4e20",
+  "receipt_sha256": "sha256:c7f9426df799bf1941b184a374c3e4dfc94b9e8dfcae6a63097a74118ce8f850",
   "release_requirements": {"all_four_claims_each_task_before_model_call": true, "create_once": true, "fresh_uid_bound_observer": true, "maximum_age_seconds": 600},
   "schema_version": "fleet-hosted-glm-atomic-whole-task-held-v1",
   "scoring_authorized": false,
   "selection_authority": {"file_sha256": "sha256:9f5e83123cfe7d8a3f4cc0b791ac1dc9032a3d5faf5eba2a431c7246069255df", "path": "evals/fleet/configs/opencode-easiest-train100-selection-v2.json", "semantic_sha256": "sha256:38bd544c74f4e45cb67b271849d657f49e356ccf41f97acca9fb6cd7eb7f56b8"},
-  "source_package_sha256": "sha256:1755c10ceb3611ab79eba4a52ed1fe7d0689d6cc885e8ba699ade4c5d3186cd3",
+  "source_package_sha256": "sha256:77f76150eec35bcd8c6336699bed67708fcedf2f573f54000a22f32685965e68",
   "source_plan_sha256": "sha256:c42551064b3c384399405ffbb374832b6d1a1d623ed209d6a0b51009421a0320",
   "status": "HELD_FOR_INDEPENDENT_REVIEW"
 }
