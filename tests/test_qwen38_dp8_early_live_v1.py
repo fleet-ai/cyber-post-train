@@ -63,6 +63,10 @@ def _gate(payload: dict, release: dict, source_commit: str) -> dict:
             "projected_gpus": 9,
             "maximum_gpu_nodes": 2,
             "maximum_gpus": 16,
+            "project_object_inventory": {
+                "orphan_project_rayjobs": 0,
+                "orphan_project_gpu_pods": 0,
+            },
         },
         "jobs_api_title_matches": 0,
         "jobs_api_run_dir_matches": 0,
@@ -106,7 +110,17 @@ def test_kubernetes_gate_requires_exact_tp1_peer_and_one_gpu(
         "metadata": {"name": "tp1-head", "uid": binding["head_pod_uid"]},
         "spec": {
             "nodeName": "gpu-node-a",
-            "containers": [{"resources": {"requests": {"nvidia.com/gpu": "1"}}}],
+            "containers": [
+                {
+                    "env": [
+                        {
+                            "name": "RUN_DIR",
+                            "value": "/mnt/sfs/jobs/chris-cyber-evalserve-q38-tp1-j-v1",
+                        }
+                    ],
+                    "resources": {"requests": {"nvidia.com/gpu": "1"}},
+                }
+            ],
         },
         "status": {
             "phase": "Running",
@@ -115,7 +129,11 @@ def test_kubernetes_gate_requires_exact_tp1_peer_and_one_gpu(
     }
     inventory = {
         "items": [
-            {"kind": "RayJob", "metadata": {"uid": binding["rayjob_uid"]}},
+            {
+                "kind": "RayJob",
+                "metadata": {"name": binding["api_run_id"], "uid": binding["rayjob_uid"]},
+                "status": {"jobStatus": "RUNNING"},
+            },
             {"kind": "Workload", "metadata": {"uid": binding["workload_uid"]}},
             pod,
             {"kind": "Service", "metadata": {"uid": binding["service_uid"]}},
@@ -131,7 +149,14 @@ def test_kubernetes_gate_requires_exact_tp1_peer_and_one_gpu(
         ]
     }
     monkeypatch.setattr(live.shared, "_kubectl", lambda *_args: json.dumps(inventory))
-    shape, observer = live._kubernetes_gate(binding)  # noqa: SLF001
+    active = [
+        {
+            "api_run_id": binding["api_run_id"],
+            "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-q38-tp1-j-v1",
+            "status": "RUNNING",
+        }
+    ]
+    shape, observer = live._kubernetes_gate(binding, active)  # noqa: SLF001
     assert observer == "tp1-head"
     assert shape["projected_gpu_nodes"] == 2
     assert shape["projected_gpus"] == 9
@@ -139,10 +164,68 @@ def test_kubernetes_gate_requires_exact_tp1_peer_and_one_gpu(
     assert shape["maximum_gpus"] == 16
     assert shape["scope"] == "project_chris_cyber_evalserve_runs_only"
     assert shape["unrelated_namespace_gpu_pods_counted"] is False
+    assert shape["project_object_inventory"]["gpu_requests"] == 1
+    assert shape["project_object_inventory"]["orphan_project_gpu_pods"] == 0
 
     pod["status"]["containerStatuses"][0]["restartCount"] = 1
     with pytest.raises(RuntimeError, match="not Running/Ready/restart0"):
-        live._kubernetes_gate(binding)  # noqa: SLF001
+        live._kubernetes_gate(binding, active)  # noqa: SLF001
+
+
+def test_kubernetes_gate_rejects_orphan_project_gpu_pod(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    binding = json.loads((ROOT / live.TP1_BINDING_PATH).read_text())
+    pod = {
+        "kind": "Pod",
+        "metadata": {"name": "tp1", "uid": binding["head_pod_uid"]},
+        "spec": {
+            "nodeName": "node-a",
+            "containers": [
+                {
+                    "env": [
+                        {
+                            "name": "RUN_DIR",
+                            "value": "/mnt/sfs/jobs/chris-cyber-evalserve-q38-tp1-j-v1",
+                        }
+                    ],
+                    "resources": {"requests": {"nvidia.com/gpu": "1"}},
+                }
+            ],
+        },
+        "status": {"phase": "Running", "containerStatuses": [{"ready": True, "restartCount": 0}]},
+    }
+    orphan = copy.deepcopy(pod)
+    orphan["metadata"] = {"name": "orphan", "uid": "orphan-uid"}
+    orphan["spec"]["containers"][0]["env"][0]["value"] = (
+        "/mnt/sfs/jobs/chris-cyber-evalserve-orphan-v1"
+    )
+    inventory = {
+        "items": [
+            {
+                "kind": "RayJob",
+                "metadata": {
+                    "name": binding["api_run_id"],
+                    "uid": binding["rayjob_uid"],
+                },
+                "status": {"jobStatus": "RUNNING"},
+            },
+            {"kind": "Workload", "metadata": {"uid": binding["workload_uid"]}},
+            pod,
+            orphan,
+            {"kind": "Service", "metadata": {"uid": binding["service_uid"]}},
+        ]
+    }
+    monkeypatch.setattr(live.shared, "_kubectl", lambda *_args: json.dumps(inventory))
+    active = [
+        {
+            "api_run_id": binding["api_run_id"],
+            "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-q38-tp1-j-v1",
+            "status": "RUNNING",
+        }
+    ]
+    with pytest.raises(RuntimeError, match="orphan project serving"):
+        live._kubernetes_gate(binding, active)  # noqa: SLF001
 
 
 def test_unknown_active_chris_serving_run_is_not_an_allowed_peer(

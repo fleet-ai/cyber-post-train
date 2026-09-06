@@ -16,9 +16,9 @@ from evals.fleet import glm53_dedicated_v8_live as shared
 from evals.fleet import qwen38_dp8_early_qualification_v1 as early
 from evals.fleet import self_hosted
 
-SERVER_RELEASE_SCHEMA = "fleet-qwen38-dp8-early-server-launch-release-v1"
-LIVE_GATE_SCHEMA = "fleet-qwen38-dp8-early-live-submit-gate-v1"
-SUBMISSION_SCHEMA = "fleet-qwen38-dp8-early-submission-v1"
+SERVER_RELEASE_SCHEMA = "fleet-qwen38-dp8-early-server-launch-release-v2"
+LIVE_GATE_SCHEMA = "fleet-qwen38-dp8-early-live-submit-gate-v2"
+SUBMISSION_SCHEMA = "fleet-qwen38-dp8-early-submission-v2"
 TP1_BINDING_PATH = Path(
     "docs/evidence/qwen38-study/2026-09-05-qwen38-dedicated-tp1-j-v1-server-binding.json"
 )
@@ -86,7 +86,30 @@ def _active_serving_runs(client: httpx.Client) -> list[dict[str, Any]]:
     return active
 
 
-def _kubernetes_gate(binding: Mapping[str, Any]) -> tuple[dict[str, Any], str]:
+def _pod_run_dir(pod: Mapping[str, Any]) -> str | None:
+    values = [
+        env.get("value")
+        for container in pod.get("spec", {}).get("containers") or []
+        for env in container.get("env") or []
+        if env.get("name") == "RUN_DIR"
+    ]
+    return values[0] if len(values) == 1 and isinstance(values[0], str) else None
+
+
+def _pod_gpu_requests(pod: Mapping[str, Any]) -> int:
+    values = [
+        (container.get("resources", {}).get("requests") or {}).get("nvidia.com/gpu", 0)
+        for container in pod.get("spec", {}).get("containers") or []
+    ]
+    try:
+        return sum(int(value) for value in values)
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError("project GPU request shape drifted") from exc
+
+
+def _kubernetes_gate(
+    binding: Mapping[str, Any], active_runs: list[dict[str, Any]]
+) -> tuple[dict[str, Any], str]:
     inventory = json.loads(
         shared._kubectl(  # noqa: SLF001 - GET-only cluster authority
             "get",
@@ -124,16 +147,76 @@ def _kubernetes_gate(binding: Mapping[str, Any]) -> tuple[dict[str, Any], str]:
     serialized = json.dumps(inventory, sort_keys=True)
     if early.TITLE in serialized or early.RUN_DIR in serialized:
         raise RuntimeError("early DP8 Kubernetes identity already exists")
+    active_ids = {str(row["api_run_id"]) for row in active_runs}
+    active_dirs = {str(row["run_dir"]) for row in active_runs}
+    project_pods = []
+    orphan_pods = []
+    for row in items:
+        if row.get("kind") != "Pod" or row.get("status", {}).get("phase") not in {
+            "Pending",
+            "Running",
+        }:
+            continue
+        run_dir = _pod_run_dir(row)
+        if not isinstance(run_dir, str) or not run_dir.startswith(
+            "/mnt/sfs/jobs/chris-cyber-evalserve-"
+        ):
+            continue
+        if _pod_gpu_requests(row) <= 0:
+            continue
+        project_pods.append(row)
+        if run_dir not in active_dirs:
+            orphan_pods.append(row)
+    terminal_statuses = {"SUCCEEDED", "FAILED", "STOPPED"}
+    all_project_rayjobs = [
+        row
+        for row in items
+        if row.get("kind") == "RayJob"
+        and (
+            row.get("metadata", {}).get("name") in active_ids
+            or "/mnt/sfs/jobs/chris-cyber-evalserve-" in json.dumps(row, sort_keys=True)
+        )
+    ]
+    project_rayjobs = [
+        row
+        for row in all_project_rayjobs
+        if row.get("metadata", {}).get("name") in active_ids
+        or str(row.get("status", {}).get("jobStatus") or "").upper() not in terminal_statuses
+    ]
+    orphan_rayjobs = [
+        row for row in project_rayjobs if row.get("metadata", {}).get("name") not in active_ids
+    ]
+    if orphan_pods or orphan_rayjobs:
+        raise RuntimeError("orphan project serving Kubernetes object exists")
+    if len(project_pods) != len(active_runs) or len(project_rayjobs) != len(active_runs):
+        raise RuntimeError("project serving API/Kubernetes cardinality drifted")
+    current_gpus = sum(_pod_gpu_requests(row) for row in project_pods)
+    current_nodes = {row.get("spec", {}).get("nodeName") for row in project_pods}
+    if None in current_nodes or not current_nodes:
+        raise RuntimeError("project serving GPU node placement is incomplete")
+    if pod not in project_pods or current_gpus != 1 or len(current_nodes) != 1:
+        raise RuntimeError("exact TP1-j project GPU shape drifted")
     return {
-        "current_gpu_nodes": 1,
-        "current_gpus": 1,
-        "projected_gpu_nodes": 2,
-        "projected_gpus": 9,
+        "current_gpu_nodes": len(current_nodes),
+        "current_gpus": current_gpus,
+        "projected_gpu_nodes": len(current_nodes) + 1,
+        "projected_gpus": current_gpus + 8,
         "maximum_gpu_nodes": 2,
         "maximum_gpus": 16,
         "tp1_head_pod_uid": binding["head_pod_uid"],
         "scope": "project_chris_cyber_evalserve_runs_only",
         "unrelated_namespace_gpu_pods_counted": False,
+        "project_object_inventory": {
+            "active_jobs_api_run_ids": sorted(active_ids),
+            "active_run_dirs": sorted(active_dirs),
+            "rayjob_uids": sorted(row["metadata"]["uid"] for row in project_rayjobs),
+            "gpu_pod_uids": sorted(row["metadata"]["uid"] for row in project_pods),
+            "gpu_node_names": sorted(str(value) for value in current_nodes),
+            "gpu_requests": current_gpus,
+            "orphan_project_rayjobs": 0,
+            "orphan_project_gpu_pods": 0,
+            "terminal_project_rayjobs_ignored": len(all_project_rayjobs) - len(project_rayjobs),
+        },
     }, pod["metadata"]["name"]
 
 
@@ -174,7 +257,7 @@ def live_gate(
     preview = client.post("/v1/runs/preview", json=payload)
     preview.raise_for_status()
     rendered = early.preview_identity(preview.json()["manifest_yaml"], root)
-    project_shape, observer_pod = _kubernetes_gate(binding)
+    project_shape, observer_pod = _kubernetes_gate(binding, active)
     absent = subprocess.run(
         [
             "kubectl",
@@ -225,6 +308,7 @@ def submit_create_once(
     release: Mapping[str, Any],
     source_commit: str,
 ) -> str:
+    shape = gate.get("project_resource_shape")
     if gate.get("receipt_sha256") != self_hosted.digest_without(dict(gate), "receipt_sha256") or (
         gate.get("schema_version") != LIVE_GATE_SCHEMA
         or gate.get("status") != "PASSED_IMMEDIATELY_BEFORE_CREATE"
@@ -240,6 +324,15 @@ def submit_create_once(
         or gate.get("statistical_cells_selected") != 0
         or gate.get("request_sha256")
         != self_hosted.sha256(self_hosted.canonical_json(dict(payload)))
+        or not isinstance(shape, dict)
+        or shape.get("current_gpu_nodes") != 1
+        or shape.get("current_gpus") != 1
+        or shape.get("projected_gpu_nodes") != 2
+        or shape.get("projected_gpus") != 9
+        or shape.get("maximum_gpu_nodes") != 2
+        or shape.get("maximum_gpus") != 16
+        or (shape.get("project_object_inventory") or {}).get("orphan_project_rayjobs") != 0
+        or (shape.get("project_object_inventory") or {}).get("orphan_project_gpu_pods") != 0
     ):
         raise ValueError("early DP8 live submit gate is not clear")
     response = client.post("/v1/runs", json=dict(payload))

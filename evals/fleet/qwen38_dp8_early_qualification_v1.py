@@ -17,26 +17,38 @@ from evals.fleet import qwen38_dp8_post_rank99_plan_v1 as predecessor
 from evals.fleet import self_hosted
 
 PLAN_PATH = Path(
-    "docs/evidence/qwen38-study/2026-09-06-qwen38-dp8-early-qualification-held-v1.json"
+    "docs/evidence/qwen38-study/2026-09-06-qwen38-dp8-early-qualification-held-v2.json"
 )
-CONFIG_PATH = Path("evals/fleet/configs/qwen38-dedicated-dp8-early-qualification-v1-held.json")
+CONFIG_PATH = Path("evals/fleet/configs/qwen38-dedicated-dp8-early-qualification-v2-held.json")
 PREVIEW_PATH = Path(
-    "docs/evidence/qwen38-study/2026-09-06-qwen38-dp8-early-qualification-preview-v1.json"
+    "docs/evidence/qwen38-study/2026-09-06-qwen38-dp8-early-qualification-preview-v2.json"
 )
 INVENTORY_PATH = Path(
-    "docs/evidence/qwen38-study/2026-09-06-qwen38-dp8-early-qualification-node-inventory-v1.json"
+    "docs/evidence/qwen38-study/2026-09-06-qwen38-dp8-early-qualification-node-inventory-v2.json"
 )
 RELEASE_PATH = Path(
-    "docs/evidence/qwen38-study/2026-09-06-qwen38-dp8-early-qualification-held-release-v1.json"
+    "docs/evidence/qwen38-study/2026-09-06-qwen38-dp8-early-qualification-held-release-v2.json"
 )
-SCHEMA = "fleet-qwen38-dp8-early-qualification-held-v1"
-CONFIG_SCHEMA = "fleet-qwen38-dp8-early-qualification-config-v1"
-PREVIEW_SCHEMA = "fleet-qwen38-dp8-early-qualification-preview-v1"
-INVENTORY_SCHEMA = "fleet-qwen38-dp8-early-qualification-node-inventory-v1"
-RELEASE_SCHEMA = "fleet-qwen38-dp8-early-qualification-held-release-v1"
-TITLE = "chris-cyber-evalserve-q38-dp8-c-v1"
-RUN_DIR = "/mnt/sfs/jobs/chris-cyber-evalserve-q38-dp8-c-v1"
-SERVING_BLOCK = "dedicated-qwen-dp8-c-v1"
+V1_INCIDENT_PATH = Path(
+    "docs/evidence/qwen38-study/"
+    "2026-09-06-qwen38-dp8-early-v1-infrastructure-failure-release-v1.json"
+)
+PRIORITY_CONTRACT_PATH = Path(
+    "docs/evidence/qwen38-study/2026-09-06-qwen38-dp8-priority-contract-v1.json"
+)
+SCHEMA = "fleet-qwen38-dp8-early-qualification-held-v2"
+CONFIG_SCHEMA = "fleet-qwen38-dp8-early-qualification-config-v2"
+PREVIEW_SCHEMA = "fleet-qwen38-dp8-early-qualification-preview-v2"
+INVENTORY_SCHEMA = "fleet-qwen38-dp8-early-qualification-node-inventory-v2"
+RELEASE_SCHEMA = "fleet-qwen38-dp8-early-qualification-held-release-v2"
+TITLE = "chris-cyber-evalserve-q38-dp8-c-v2"
+RUN_DIR = "/mnt/sfs/jobs/chris-cyber-evalserve-q38-dp8-c-v2"
+SERVING_BLOCK = "dedicated-qwen-dp8-c-v2"
+SERVER_PRIORITY_CLASS = "fleet-infra-quiet"
+QUALIFIER_PRIORITY_CLASS = "fleet-serve-low"
+QUALIFIER_PRIORITY_VALUE = 100
+LOWER_NONPREEMPTING_PRIORITY_CLASS = "fleet-infra-quiet"
+LOWER_NONPREEMPTING_PRIORITY_VALUE = -1000
 LIFECYCLE_V2_PATH = Path("evals/fleet/scripts/qwen38_dedicated_dp8_lifecycle_v2.sh")
 OBSERVER_V2_PATH = Path("evals/fleet/qwen38_dp8_metric_observer_v2.py")
 QUALIFIER_RUNTIME_PATH = Path("evals/fleet/qwen38_dp8_early_qualifier_runtime_v1.py")
@@ -82,7 +94,7 @@ def jobs_payload(root: Path) -> dict[str, Any]:
             "memory_request": "256Gi",
             "memory_limit": "768Gi",
         },
-        "priority_class": runtime.PRIORITY_CLASS,
+        "priority_class": SERVER_PRIORITY_CLASS,
         "privileged": False,
         "run_dir": RUN_DIR,
         "title": TITLE,
@@ -107,12 +119,62 @@ def validate_config(value: Mapping[str, Any], root: Path) -> None:
         "create_once": True,
         "request": payload,
         "request_sha256": self_hosted.sha256(self_hosted.canonical_json(payload)),
+        "priority_contract": {
+            "requested": SERVER_PRIORITY_CLASS,
+            "preemption_policy": "Never",
+            "jobs_api_allowed": ["fleet-train-high", "fleet-infra-quiet"],
+            "higher_nonpreempting_class_rejected": QUALIFIER_PRIORITY_CLASS,
+            "rejection_http_status": 422,
+            "fleet_train_high_disallowed_as_preempting": True,
+        },
         "privacy": {
             "credentials_included": False,
             "prompts_traces_flags_or_scores_included": False,
         },
     }:
         raise ValueError("early DP8 config contract drifted")
+
+
+def validate_priority_contract(value: Mapping[str, Any]) -> None:
+    if value.get("receipt_sha256") != self_hosted.digest_without(
+        dict(value), "receipt_sha256"
+    ):
+        raise ValueError("early DP8 priority contract digest drifted")
+    if {key: item for key, item in value.items() if key != "receipt_sha256"} != {
+        "schema_version": "fleet-qwen38-dp8-priority-contract-v1",
+        "status": "VALIDATED_NON_MUTATING",
+        "observed_at": value.get("observed_at"),
+        "route": "POST /v1/runs/preview",
+        "server_preview_attempts": [
+            {
+                "priority_class": QUALIFIER_PRIORITY_CLASS,
+                "http_status": 422,
+                "error_type": "validation_error",
+                "allowed_classes_extracted": ["fleet-infra-quiet", "fleet-train-high"],
+            },
+            {
+                "priority_class": SERVER_PRIORITY_CLASS,
+                "http_status": 200,
+                "rendered_kind_count": 1,
+            },
+        ],
+        "server_selection": {
+            "selected": SERVER_PRIORITY_CLASS,
+            "preemption_policy": "Never",
+            "fleet_train_high_rejected_by_project_policy_as_preempting": True,
+        },
+        "qualifier_cpu_priority": {
+            "selected": QUALIFIER_PRIORITY_CLASS,
+            "priority_value": QUALIFIER_PRIORITY_VALUE,
+            "preemption_policy": "Never",
+            "submission_path": "kubernetes_create_once_not_jobs_api",
+        },
+        "api_mutations": 0,
+        "credentials_included": False,
+        "response_bodies_included": False,
+        "prompts_traces_flags_or_scores_included": False,
+    }:
+        raise ValueError("early DP8 priority contract drifted")
 
 
 def validate_plan(value: Mapping[str, Any], root: Path) -> None:
@@ -133,6 +195,17 @@ def validate_plan(value: Mapping[str, Any], root: Path) -> None:
             "immutable_plan_receipt_sha256": predecessor.load_held(root)["receipt_sha256"],
             "changed_contract": "qualification_may_coexist_with_productive_tp1",
             "predecessor_rewritten": False,
+        },
+        "superseded_v1_incident": {
+            "path": str(V1_INCIDENT_PATH),
+            "receipt_sha256": _load(root / V1_INCIDENT_PATH)["receipt_sha256"],
+            "v1_identity_reusable": False,
+            "qualification_or_scoring_occurred": False,
+        },
+        "priority_contract_evidence": {
+            "path": str(PRIORITY_CONTRACT_PATH),
+            "receipt_sha256": _load(root / PRIORITY_CONTRACT_PATH)["receipt_sha256"],
+            "api_mutations": 0,
         },
         "coexistence_gate": {
             "max_project_gpu_nodes": 2,
@@ -161,7 +234,7 @@ def validate_plan(value: Mapping[str, Any], root: Path) -> None:
             "server_arguments_sha256": runtime.SERVER_ARGUMENTS_SHA256,
             "workers": 1,
             "gpus_per_worker": 8,
-            "priority_class": runtime.PRIORITY_CLASS,
+            "priority_class": SERVER_PRIORITY_CLASS,
             "preemption_policy": "Never",
             "privileged": False,
             "jobs_api_payload_sha256": self_hosted.sha256(
@@ -171,9 +244,19 @@ def validate_plan(value: Mapping[str, Any], root: Path) -> None:
         "qualifier_controller": {
             "placement": "fleet-train-jobs_cpu_job",
             "namespace": "fleet-train-jobs",
-            "job_name": "chris-cyber-q38-dp8-c-qualifier-v1",
-            "configmap_name": "chris-cyber-q38-dp8-c-qualifier-v1",
-            "output_root": "/mnt/sfs/jobs/chris-cyber-q38-dp8-c-qualifier-v1",
+            "job_name": "chris-cyber-q38-dp8-c-qualifier-v2",
+            "configmap_name": "chris-cyber-q38-dp8-c-qualifier-v2",
+            "output_root": "/mnt/sfs/jobs/chris-cyber-q38-dp8-c-qualifier-v2",
+            "priority_class": QUALIFIER_PRIORITY_CLASS,
+            "priority_value": QUALIFIER_PRIORITY_VALUE,
+            "preemption_policy": "Never",
+            "priority_selection": {
+                "selected": QUALIFIER_PRIORITY_CLASS,
+                "selected_value": QUALIFIER_PRIORITY_VALUE,
+                "lower_nonpreempting_alternative": LOWER_NONPREEMPTING_PRIORITY_CLASS,
+                "lower_nonpreempting_value": LOWER_NONPREEMPTING_PRIORITY_VALUE,
+                "reason": "highest_reviewed_nonpreempting_class_avoids_qualification_starvation",
+            },
             "evaluator_image": (
                 "ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:"
                 "9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7"
@@ -238,6 +321,8 @@ def validate_plan(value: Mapping[str, Any], root: Path) -> None:
             "metric_observer_file_sha256": self_hosted.sha256(
                 (root / OBSERVER_V2_PATH).read_bytes()
             ),
+            "stable_post_binding_counter_baseline_required_before_every_wave": True,
+            "historical_request_counters_must_not_refresh_idle": True,
             "concurrency_ladder": [1, 2, 4, 8],
             "strictly_ascending_stop_before_next_on_failure": True,
             "actual_opencode_version": "1.18.27",
@@ -252,6 +337,9 @@ def validate_plan(value: Mapping[str, Any], root: Path) -> None:
             "exact_tool_names_order_and_arguments_required": True,
             "uid_bound_request_and_gpu_distribution_required": True,
             "all_eight_devices_active_at_c8_required": True,
+            "model_request_count_derived_from_stream_receipts": True,
+            "server_request_delta_must_equal_observed_model_requests": True,
+            "per_wave_latency_and_timeout_headroom_recorded": True,
             "task_instance_session_verifier_scoring_calls": 0,
             "statistical_cells_selected": 0,
         },
@@ -339,7 +427,7 @@ def validate_preview(value: Mapping[str, Any], root: Path) -> None:
         "image": jobs_payload(root)["image"],
         "command_sha256": self_hosted.sha256(jobs_payload(root)["command"].encode()),
         "gpus": 8,
-        "priority_class": runtime.PRIORITY_CLASS,
+        "priority_class": SERVER_PRIORITY_CLASS,
         "privileged": False,
         "run_dir": RUN_DIR,
         "queue": "training-lq",
@@ -383,7 +471,7 @@ def preview_identity(manifest_yaml: str, root: Path) -> dict[str, Any]:
         "image": payload["image"],
         "command_sha256": self_hosted.sha256(payload["command"].encode()),
         "gpus": 8,
-        "priority_class": runtime.PRIORITY_CLASS,
+        "priority_class": SERVER_PRIORITY_CLASS,
         "privileged": False,
         "run_dir": RUN_DIR,
         "queue": "training-lq",
@@ -409,6 +497,8 @@ def validate_inventory(value: Mapping[str, Any]) -> None:
         "projected_gpu_nodes_after_create",
         "projected_gpus_after_create",
         "unknown_active_dedicated_runs",
+        "project_serving_inventory",
+        "priority_class_contract",
         "active_peer",
         "cpu_qualifier_placement",
         "title_matches",
@@ -440,6 +530,33 @@ def validate_inventory(value: Mapping[str, Any]) -> None:
         or value.get("prompts_traces_flags_or_scores_included") is not False
     ):
         raise ValueError("early DP8 inventory is not review-clear")
+    project = value.get("project_serving_inventory")
+    if not isinstance(project, dict) or (
+        project.get("active_jobs_api_run_ids") != ["ft-run-e87e2bd4"]
+        or project.get("active_run_dirs")
+        != ["/mnt/sfs/jobs/chris-cyber-evalserve-q38-tp1-j-v1"]
+        or project.get("gpu_requests") != 1
+        or project.get("gpu_nodes") != 1
+        or project.get("orphan_project_rayjobs") != 0
+        or project.get("orphan_project_gpu_pods") != 0
+        or project.get("superseded_v1_jobs_api_http_status") != 404
+        or project.get("superseded_v1_kubernetes_object_matches") != 0
+    ):
+        raise ValueError("early DP8 project serving inventory drifted")
+    priority = value.get("priority_class_contract")
+    if priority != {
+        "server_priority_class": SERVER_PRIORITY_CLASS,
+        "server_preemption_policy": "Never",
+        "jobs_api_preview_http_status": 200,
+        "jobs_api_allowed_priority_classes": ["fleet-train-high", "fleet-infra-quiet"],
+        "fleet_serve_low_preview_http_status": 422,
+        "fleet_train_high_disallowed_as_preempting": True,
+        "qualifier_priority_class": QUALIFIER_PRIORITY_CLASS,
+        "qualifier_priority_value": QUALIFIER_PRIORITY_VALUE,
+        "qualifier_preemption_policy": "Never",
+        "fleet_infra_quiet_priority_value": LOWER_NONPREEMPTING_PRIORITY_VALUE,
+    }:
+        raise ValueError("early DP8 priority contract drifted")
     peer = value.get("active_peer")
     if not isinstance(peer, dict) or (
         peer.get("serving_block") != "dedicated-qwen-tp1-j-v1"
@@ -533,7 +650,9 @@ def load_all(root: Path) -> tuple[dict[str, Any], ...]:
     preview = _load(root / PREVIEW_PATH)
     inventory = _load(root / INVENTORY_PATH)
     release = _load(root / RELEASE_PATH)
+    priority = _load(root / PRIORITY_CONTRACT_PATH)
     validate_config(config, root)
+    validate_priority_contract(priority)
     validate_plan(plan, root)
     validate_preview(preview, root)
     validate_inventory(inventory)

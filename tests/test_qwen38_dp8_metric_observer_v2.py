@@ -41,7 +41,7 @@ def test_real_counter_increase_is_the_only_traffic_observation() -> None:
             before,
             memory_mib=[250_000] * 8,
             utilization_percent=[0] * 8,
-            server_run_dir="/mnt/sfs/jobs/chris-cyber-evalserve-q38-dp8-c-v1",
+            server_run_dir=early.RUN_DIR,
             pod_name="example-head",
             pod_uid=BINDING["head_pod_uid"],
             api_run_id=BINDING["api_run_id"],
@@ -56,7 +56,7 @@ def test_real_counter_increase_is_the_only_traffic_observation() -> None:
         [1] + [0] * 7,
         memory_mib=[250_000] * 8,
         utilization_percent=[100] + [0] * 7,
-        server_run_dir="/mnt/sfs/jobs/chris-cyber-evalserve-q38-dp8-c-v1",
+        server_run_dir=early.RUN_DIR,
         pod_name="example-head",
         pod_uid=BINDING["head_pod_uid"],
         api_run_id=BINDING["api_run_id"],
@@ -77,7 +77,7 @@ def test_counter_decrease_and_invalid_gpu_samples_fail_closed() -> None:
             [0] * 8,
             memory_mib=[250_000] * 8,
             utilization_percent=[0] * 8,
-            server_run_dir="/mnt/sfs/jobs/chris-cyber-evalserve-q38-dp8-c-v1",
+            server_run_dir=early.RUN_DIR,
             pod_name="example-head",
             pod_uid=BINDING["head_pod_uid"],
             api_run_id=BINDING["api_run_id"],
@@ -99,7 +99,7 @@ def test_receipt_digest_changes_if_safe_evidence_is_tampered() -> None:
         [1] * 8,
         memory_mib=[250_000] * 8,
         utilization_percent=[100] * 8,
-        server_run_dir="/mnt/sfs/jobs/chris-cyber-evalserve-q38-dp8-c-v1",
+        server_run_dir=early.RUN_DIR,
         pod_name="example-head",
         pod_uid=BINDING["head_pod_uid"],
         api_run_id=BINDING["api_run_id"],
@@ -113,14 +113,34 @@ def test_receipt_digest_changes_if_safe_evidence_is_tampered() -> None:
     assert changed != receipt
 
 
+def test_stable_bound_baseline_is_score_free_and_not_traffic() -> None:
+    receipt = observer.baseline_observation(
+        list(range(8)),
+        server_run_dir=early.RUN_DIR,
+        pod_name="example-head",
+        pod_uid=BINDING["head_pod_uid"],
+        api_run_id=BINDING["api_run_id"],
+        service_uid=BINDING["service_uid"],
+        server_binding_receipt_sha256=BINDING["receipt_sha256"],
+        observed_at_epoch=5,
+    )
+    assert receipt["status"] == "STABLE_BOUND_COUNTER_BASELINE"
+    assert receipt["request_counters_by_rank"] == list(range(8))
+    assert receipt["request_delta_since_prior_sample"] == 0
+    assert receipt["traffic_refresh_performed"] is False
+
+
 def test_lifecycle_refreshes_idle_only_via_real_counter_observer() -> None:
     lifecycle = (ROOT / early.LIFECYCLE_V2_PATH).read_text()
     assert 'python3 "$QWEN38_OBSERVER_SCRIPT"' in lifecycle
     assert '--traffic-path "$TRAFFIC_FILE"' in lifecycle
     assert '--binding-path "$SERVER_BINDING"' in lifecycle
+    assert '--baseline-path "$COUNTER_BASELINE"' in lifecycle
     assert '--event-dir "$TRAFFIC_EVENT_DIR"' in lifecycle
     assert 'urlopen("http://127.0.0.1:8000/health"' in lifecycle
     assert 'touch "$TRAFFIC_FILE"' not in lifecycle
+    source = (ROOT / early.OBSERVER_V2_PATH).read_text()
+    assert "The first post-binding sample establishes state only" in source
     payload = early.jobs_payload(ROOT)
     assert str(early.RUNTIME_OBSERVER_PATH) in payload["command"]
     assert observer.__file__ is not None

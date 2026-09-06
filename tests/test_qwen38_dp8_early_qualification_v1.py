@@ -34,14 +34,23 @@ def test_held_packet_is_valid_and_authorizes_nothing() -> None:
 
 def test_jobs_payload_is_exact_one_node_eight_gpu_nonpreempting_server() -> None:
     payload = early.jobs_payload(ROOT)
-    assert payload["title"] == "chris-cyber-evalserve-q38-dp8-c-v1"
-    assert payload["run_dir"] == "/mnt/sfs/jobs/chris-cyber-evalserve-q38-dp8-c-v1"
+    assert payload["title"] == "chris-cyber-evalserve-q38-dp8-c-v2"
+    assert payload["run_dir"] == "/mnt/sfs/jobs/chris-cyber-evalserve-q38-dp8-c-v2"
     assert payload["workers"] == 1
     assert payload["gpus_per_worker"] == 8
     assert payload["priority_class"] == "fleet-infra-quiet"
     assert payload["privileged"] is False
     assert "--tp-size 1" in payload["command"]
     assert "--dp-size 8" in payload["command"]
+    assert early.QUALIFIER_PRIORITY_CLASS == "fleet-serve-low"
+    assert early.QUALIFIER_PRIORITY_VALUE == 100
+    plan = early.load_all(ROOT)[1]
+    assert plan["qualifier_controller"]["preemption_policy"] == "Never"
+    priority = early._load(ROOT / early.PRIORITY_CONTRACT_PATH)
+    early.validate_priority_contract(priority)
+    assert priority["server_preview_attempts"][0]["http_status"] == 422
+    assert priority["server_preview_attempts"][1]["http_status"] == 200
+    assert priority["api_mutations"] == 0
 
 
 def test_preview_parser_binds_rendered_identity() -> None:

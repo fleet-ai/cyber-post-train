@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 RANKS = 8
+BASELINE_SCHEMA = "fleet-qwen38-dp8-request-counter-baseline-v1"
 METRIC_RE = re.compile(r"^(?P<head>[^\s{]+)(?:\{(?P<labels>[^}]*)\})?\s+(?P<value>[0-9.eE+-]+)$")
 LABEL_RE = re.compile(r'(\w+)="([^"]*)"')
 
@@ -118,6 +119,56 @@ def observation(
     return body
 
 
+def baseline_observation(
+    counters: list[int],
+    *,
+    server_run_dir: str,
+    pod_name: str,
+    pod_uid: str,
+    api_run_id: str,
+    service_uid: str,
+    server_binding_receipt_sha256: str,
+    observed_at_epoch: int,
+) -> dict[str, Any]:
+    """Seal a no-delta baseline after binding, without claiming request traffic."""
+    if len(counters) != RANKS or any(type(value) is not int or value < 0 for value in counters):
+        raise ValueError("request counter baseline shape drifted")
+    # Reuse the UID and route validation in observation without emitting an event.
+    if observation(
+        counters,
+        counters,
+        memory_mib=[0] * RANKS,
+        utilization_percent=[0] * RANKS,
+        server_run_dir=server_run_dir,
+        pod_name=pod_name,
+        pod_uid=pod_uid,
+        api_run_id=api_run_id,
+        service_uid=service_uid,
+        server_binding_receipt_sha256=server_binding_receipt_sha256,
+        observed_at_epoch=observed_at_epoch,
+    ) is not None:
+        raise AssertionError("stable baseline unexpectedly emitted traffic")
+    body = {
+        "schema_version": BASELINE_SCHEMA,
+        "status": "STABLE_BOUND_COUNTER_BASELINE",
+        "server_run_dir": server_run_dir,
+        "api_run_id": api_run_id,
+        "pod_name": pod_name,
+        "pod_uid": pod_uid,
+        "service_uid": service_uid,
+        "server_binding_receipt_sha256": server_binding_receipt_sha256,
+        "observed_at_epoch": observed_at_epoch,
+        "request_counters_by_rank": counters,
+        "request_delta_since_prior_sample": 0,
+        "traffic_refresh_performed": False,
+        "prompts_traces_flags_or_scores_included": False,
+    }
+    body["receipt_sha256"] = "sha256:" + hashlib.sha256(
+        json.dumps(body, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    return body
+
+
 def server_binding(path: Path, server_run_dir: str, pod_name: str) -> dict[str, str]:
     """Load the create-once UID binding projected by the qualifier controller."""
     if not path.is_file() or path.is_symlink():
@@ -176,6 +227,7 @@ def main() -> None:
     parser.add_argument("--receipt-path", type=Path, required=True)
     parser.add_argument("--traffic-path", type=Path, required=True)
     parser.add_argument("--binding-path", type=Path, required=True)
+    parser.add_argument("--baseline-path", type=Path, required=True)
     parser.add_argument("--event-dir", type=Path, required=True)
     parser.add_argument("--server-run-dir", required=True)
     args = parser.parse_args()
@@ -185,17 +237,34 @@ def main() -> None:
     with urllib.request.urlopen(args.metrics_url, timeout=3) as response:
         metrics = response.read().decode("utf-8")
     after = request_counters(metrics)
-    before = [0] * RANKS
+    before: list[int] | None = None
     if args.state_path.is_file() and not args.state_path.is_symlink():
         previous = json.loads(args.state_path.read_text())
         if isinstance(previous, dict) and previous.get("request_counters_by_rank") == [
             int(value) for value in previous.get("request_counters_by_rank", [])
         ]:
             before = previous["request_counters_by_rank"]
+    if before is None:
+        # The first post-binding sample establishes state only.  Historical parity
+        # requests must never be reclassified as fresh qualification traffic.
+        _atomic_json(args.state_path, {"request_counters_by_rank": after})
+        return
     if any(after[index] < before[index] for index in range(RANKS)):
         raise SystemExit("request counters decreased")
     _atomic_json(args.state_path, {"request_counters_by_rank": after})
     if after == before:
+        now = int(__import__("time").time())
+        baseline = baseline_observation(
+            after,
+            server_run_dir=args.server_run_dir,
+            pod_name=socket.gethostname(),
+            pod_uid=binding["head_pod_uid"],
+            api_run_id=binding["api_run_id"],
+            service_uid=binding["service_uid"],
+            server_binding_receipt_sha256=binding["receipt_sha256"],
+            observed_at_epoch=now,
+        )
+        _atomic_json(args.baseline_path, baseline)
         return
     raw = subprocess.run(
         [

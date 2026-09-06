@@ -12,6 +12,7 @@ IDLE_FILE=$LIFECYCLE_DIR/IDLE-TIMEOUT
 DRAIN_FILE=$LIFECYCLE_DIR/DRAIN
 TRAFFIC_FILE=$LIFECYCLE_DIR/traffic
 COUNTER_STATE=$LIFECYCLE_DIR/.request-counters.json
+COUNTER_BASELINE=$LIFECYCLE_DIR/REQUEST-COUNTER-BASELINE.json
 TRAFFIC_OBSERVATION=$LIFECYCLE_DIR/REAL-TRAFFIC.json
 TRAFFIC_EVENT_DIR=$LIFECYCLE_DIR/real-traffic-events
 SERVER_BINDING=$LIFECYCLE_DIR/SERVER-BINDING.json
@@ -86,6 +87,7 @@ while kill -0 "$server_pid" 2>/dev/null; do
     --receipt-path "$TRAFFIC_OBSERVATION" \
     --traffic-path "$TRAFFIC_FILE" \
     --binding-path "$SERVER_BINDING" \
+    --baseline-path "$COUNTER_BASELINE" \
     --event-dir "$TRAFFIC_EVENT_DIR" \
     --server-run-dir "$QWEN38_RUN_DIR" || true
   now=$(date +%s)

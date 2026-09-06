@@ -29,7 +29,7 @@ def _inputs() -> tuple[dict[str, object], dict[str, object], dict[str, object]]:
     source_commit = "8" * 40
     live_gate = _receipt(
         {
-            "schema_version": "fleet-qwen38-dp8-early-live-submit-gate-v1",
+            "schema_version": "fleet-qwen38-dp8-early-live-submit-gate-v2",
             "status": "PASSED_IMMEDIATELY_BEFORE_CREATE",
             "source_commit": source_commit,
             "server_release_receipt_sha256": server_release_sha256,
@@ -159,6 +159,8 @@ def test_renderer_is_create_once_score_free_and_needs_no_kubectl() -> None:
     pod = job["spec"]["template"]["spec"]
     assert pod["restartPolicy"] == "Never"
     assert pod["preemptionPolicy"] == "Never"
+    assert pod["priorityClassName"] == package.QUALIFIER_PRIORITY_CLASS
+    assert package.QUALIFIER_PRIORITY_VALUE == 100
     command = pod["containers"][0]["args"][0]
     assert "kubectl" not in command
     assert "qwen38_dp8_early_qualifier_runtime_v1" in command
@@ -246,6 +248,22 @@ def test_server_local_events_are_uid_bound_and_aggregated(
     samples = tmp_path / "dind-resource-samples.tsv"
     samples.write_text("1 0 0 0\n")
     monkeypatch.setattr(runtime, "DIND_RESOURCE_SAMPLES_PATH", samples)
+    state = tmp_path / "state.json"
+    state.write_text(json.dumps({"request_counters_by_rank": [0] * 8}))
+    baseline_path = tmp_path / "baseline.json"
+    baseline = observer.baseline_observation(
+        [0] * 8,
+        server_run_dir=early.RUN_DIR,
+        pod_name=str(binding["head_pod_name"]),
+        pod_uid=str(binding["head_pod_uid"]),
+        api_run_id=str(binding["api_run_id"]),
+        service_uid=str(binding["service_uid"]),
+        server_binding_receipt_sha256=str(binding["receipt_sha256"]),
+        observed_at_epoch=1,
+    )
+    baseline_path.write_text(json.dumps(baseline))
+    monkeypatch.setattr(runtime, "COUNTER_STATE_PATH", state)
+    monkeypatch.setattr(runtime, "COUNTER_BASELINE_PATH", baseline_path)
 
     plan = {
         "receipt_sha256": "sha256:" + "a" * 64,
@@ -272,7 +290,9 @@ def test_server_local_events_are_uid_bound_and_aggregated(
         samples.write_text("1 0 0 0\n2 0 0 0\n")
         return [{"receipt_sha256": f"sha256:{index:064x}"} for index in range(8)]
 
-    rows, distribution, resource = runtime.observe_wave(8, execute, plan, binding)
+    rows, distribution, resource, observed_baseline = runtime.observe_wave(
+        8, execute, plan, binding
+    )
     assert len(rows) == 8
     assert distribution["request_deltas_by_rank"] == [1] * 8
     assert distribution["gpu_peak_utilization_percent_by_rank"] == [100] * 8
@@ -282,6 +302,7 @@ def test_server_local_events_are_uid_bound_and_aggregated(
     assert resource["dind_oom_kill_delta"] == 0
     assert resource["dind_nr_throttled_delta"] == 0
     assert resource["dind_throttled_usec_delta"] == 0
+    assert observed_baseline == baseline
 
 
 def test_controller_resource_control_fails_closed_on_oom_or_throttle() -> None:
@@ -296,3 +317,62 @@ def test_controller_resource_control_fails_closed_on_oom_or_throttle() -> None:
         receipt = runtime._dind_resource_control(before, after)  # noqa: SLF001
         assert receipt["status"] == "FAILED_CONTROLLER_RESOURCE_ERROR"
         assert receipt["receipt_sha256"] == self_hosted.digest_without(receipt, "receipt_sha256")
+
+
+def test_result_uses_observed_requests_and_records_latency_headroom() -> None:
+    submission, binding, _ = _inputs()
+    reduced = runtime.validate_binding(binding, submission, ROOT)
+    plan = runtime.qualification_plan(reduced, str(binding["service_origin"]), ROOT)
+    baseline = observer.baseline_observation(
+        [4] * 8,
+        server_run_dir=early.RUN_DIR,
+        pod_name=str(binding["head_pod_name"]),
+        pod_uid=str(binding["head_pod_uid"]),
+        api_run_id=str(binding["api_run_id"]),
+        service_uid=str(binding["service_uid"]),
+        server_binding_receipt_sha256=str(binding["receipt_sha256"]),
+        observed_at_epoch=1,
+    )
+    resource = _receipt(
+        {
+            "status": "PASSED_NO_CONTROLLER_RESOURCE_ERROR",
+            "dind_oom_kill_delta": 0,
+            "dind_nr_throttled_delta": 0,
+            "dind_throttled_usec_delta": 0,
+            "protocol_errors": 0,
+        }
+    )
+    streams = [{"execution": {"model_requests": 4}}]
+    distribution = {"request_deltas_by_rank": [4] + [0] * 7}
+    level = {
+        "concurrency": 1,
+        "status": "PASSED",
+        "completed_stream_count": 1,
+        "observed_model_request_count": 4,
+        "observed_server_request_delta": 4,
+        "elapsed_milliseconds": 1_000,
+        "timeout_budget_milliseconds": runtime.parity.TIMEOUT_SECONDS * 1_000,
+        "latency_headroom_milliseconds": runtime.parity.TIMEOUT_SECONDS * 1_000 - 1_000,
+        "error_count": 0,
+        "tool_order_exact": True,
+        "tool_arguments_exact": True,
+        "stream_receipts": streams,
+        "distribution_receipt": distribution,
+        "controller_resource_receipt": resource,
+        "stable_counter_baseline_receipt": baseline,
+    }
+    result = {
+        "schema_version": runtime.RESULT_SCHEMA,
+        "plan_receipt_sha256": plan["receipt_sha256"],
+        "qualification_plan": plan,
+        "levels": [level],
+        "highest_passing_concurrency": 1,
+        "scored_calls": 0,
+        "prompts_traces_flags_or_scores_included": False,
+    }
+    result["receipt_sha256"] = self_hosted.digest_without(result, "receipt_sha256")
+    assert runtime.validate_result(result, plan, ROOT) == 1
+    level["observed_model_request_count"] = 2
+    result["receipt_sha256"] = self_hosted.digest_without(result, "receipt_sha256")
+    with pytest.raises(ValueError, match="request/latency"):
+        runtime.validate_result(result, plan, ROOT)

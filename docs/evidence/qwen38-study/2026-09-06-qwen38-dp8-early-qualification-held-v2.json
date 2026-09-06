@@ -1,0 +1,188 @@
+{
+  "coexistence_gate": {
+    "allowed_existing_serving_block": "dedicated-qwen-tp1-j-v1",
+    "existing_tp1_must_be_running_ready_restart0_and_productive": true,
+    "fresh_jobs_api_kubernetes_gpu_inventory_required": true,
+    "max_project_gpu_nodes": 2,
+    "max_project_gpus": 16,
+    "maximum_gpus_before_create": 8,
+    "required_gpu_nodes_before_create": 1,
+    "unknown_or_preempting_gpu_workload_fails_closed": true
+  },
+  "jobs_api_config": {
+    "config_sha256": "sha256:fdcba2b16102d64d6bfea31fbabb92e0e2dab922e0f18f2e7aa5b45447aa0a22",
+    "path": "evals/fleet/configs/qwen38-dedicated-dp8-early-qualification-v2-held.json"
+  },
+  "launch_authorized": false,
+  "lifecycle": {
+    "artificial_heartbeat_forbidden": true,
+    "model_loading_counts_as_productive": true,
+    "post_ready_idle_seconds": 600,
+    "real_traffic_only_refreshes_idle_deadline": true,
+    "release_on_failure_or_idle": true
+  },
+  "post_qualification_gate": {
+    "all_four_statistical_cells_reserved_atomically": true,
+    "canonical_claims_before_model_call": true,
+    "fresh_wholly_unstarted_task_required": true,
+    "g19_hosted_controllers_must_skip_all_four": true,
+    "one_scored_a1_canary_before_bulk": true,
+    "passing_capacity_receipt_does_not_authorize_scoring": true,
+    "separate_server_bound_release_required": true
+  },
+  "predecessor": {
+    "changed_contract": "qualification_may_coexist_with_productive_tp1",
+    "immutable_plan_path": "docs/evidence/qwen38-study/2026-09-06-qwen38-dp8-post-rank99-held-plan-v1.json",
+    "immutable_plan_receipt_sha256": "sha256:d573fd2b145032be2315e5c11eb8ba31583255b16f920ae0b20461958a30d64d",
+    "predecessor_rewritten": false
+  },
+  "priority_contract_evidence": {
+    "api_mutations": 0,
+    "path": "docs/evidence/qwen38-study/2026-09-06-qwen38-dp8-priority-contract-v1.json",
+    "receipt_sha256": "sha256:74286a54528faed8ac5130bbf9267bb06657c39ec06220e45c5a0d7150585628"
+  },
+  "privacy": {
+    "credentials_included": false,
+    "prompts_traces_flags_or_scores_included": false,
+    "request_or_response_bodies_included": false
+  },
+  "purpose": "parallel_score_free_dp8_capacity_qualification",
+  "qualification": {
+    "actual_opencode_version": "1.18.27",
+    "all_eight_devices_active_at_c8_required": true,
+    "compaction_headroom_tokens": 20000,
+    "concurrency_ladder": [
+      1,
+      2,
+      4,
+      8
+    ],
+    "context_management": "opencode_1.18.27_native_compaction_autocontinue_v1",
+    "exact_tool_names_order_and_arguments_required": true,
+    "existing_runner_file_sha256": "sha256:8d14d54a4dc144ef539237e037530471293e42c14a415d5526c3bb661f614992",
+    "existing_runner_path": "evals/fleet/qwen38_dp8_early_qualifier_runtime_v1.py",
+    "historical_request_counters_must_not_refresh_idle": true,
+    "lifecycle_file_sha256": "sha256:0f17ba5c90f5c7bc264560b18dc1cc7a9390d5007d534e5ba2f5d8981411ec5e",
+    "max_model_requests": 600,
+    "max_output_tokens": 32768,
+    "metric_observer_file_sha256": "sha256:69eac7f61b17f6b0c5dceb1f83d52702e76b346b3d5ed97be839cd51c6c3305a",
+    "model_request_count_derived_from_stream_receipts": true,
+    "per_wave_latency_and_timeout_headroom_recorded": true,
+    "server_request_delta_must_equal_observed_model_requests": true,
+    "stable_post_binding_counter_baseline_required_before_every_wave": true,
+    "statistical_cells_selected": 0,
+    "strictly_ascending_stop_before_next_on_failure": true,
+    "task_instance_session_verifier_scoring_calls": 0,
+    "tool_catalog_sha256": "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a",
+    "tools": [
+      "bash",
+      "submit_report"
+    ],
+    "uid_bound_request_and_gpu_distribution_required": true
+  },
+  "qualifier_controller": {
+    "actual_opencode_runs_in_pinned_dind": true,
+    "cluster_dind_host_gateway_required": true,
+    "cluster_dns_only_no_port_forward": true,
+    "cluster_proxy_bind_host": "0.0.0.0",
+    "configmap_name": "chris-cyber-q38-dp8-c-qualifier-v2",
+    "controller_package_ready": true,
+    "controller_resource_observer": "dind_cgroup_v2_per_second_v1",
+    "create_only_renderer_file_sha256": "sha256:1741f32448ac574907b7ac7feb6227fede10b24c8eb523daf08e1538cba374f0",
+    "create_only_renderer_path": "evals/fleet/qwen38_dp8_early_qualifier_package_v1.py",
+    "create_only_renderer_required_before_launch": true,
+    "dind_resources": {
+      "limits": {
+        "cpu": "10",
+        "ephemeral-storage": "80Gi",
+        "memory": "24Gi"
+      },
+      "requests": {
+        "cpu": "4",
+        "ephemeral-storage": "40Gi",
+        "memory": "8Gi"
+      }
+    },
+    "docker_build_pull_exact_digest_intended": true,
+    "docker_buildx_sha256": "sha256:8c38f60308a895fa570f1410e453c5de11aafd65a99fa99965d96d24b6225a78",
+    "docker_cli_emptydir_size": "256Mi",
+    "docker_cli_sha256": "sha256:242c7a8de606afba2acada7c7af00d77f92c3601678b2f3a60911b49a892c722",
+    "docker_cli_total_bytes": 105594160,
+    "docker_image": "docker.io/library/docker@sha256:f649ef046008ca7f926a2571c32b0ac22e5c59eb61b959617f9acc2a4c638cf5",
+    "evaluator_image": "ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7",
+    "evaluator_resources": {
+      "limits": {
+        "cpu": "4",
+        "ephemeral-storage": "40Gi",
+        "memory": "8Gi"
+      },
+      "requests": {
+        "cpu": "1",
+        "ephemeral-storage": "10Gi",
+        "memory": "2Gi"
+      }
+    },
+    "gpu_distribution_source": "server_local_signed_sfs_observation_v2",
+    "job_name": "chris-cyber-q38-dp8-c-qualifier-v2",
+    "kubectl_access_required": false,
+    "namespace": "fleet-train-jobs",
+    "output_root": "/mnt/sfs/jobs/chris-cyber-q38-dp8-c-qualifier-v2",
+    "placement": "fleet-train-jobs_cpu_job",
+    "preemption_policy": "Never",
+    "priority_class": "fleet-serve-low",
+    "priority_selection": {
+      "lower_nonpreempting_alternative": "fleet-infra-quiet",
+      "lower_nonpreempting_value": -1000,
+      "reason": "highest_reviewed_nonpreempting_class_avoids_qualification_starvation",
+      "selected": "fleet-serve-low",
+      "selected_value": 100
+    },
+    "priority_value": 100,
+    "runtime_file_sha256": "sha256:8d14d54a4dc144ef539237e037530471293e42c14a415d5526c3bb661f614992",
+    "runtime_path": "evals/fleet/qwen38_dp8_early_qualifier_runtime_v1.py",
+    "separate_uid_bound_qualifier_release_required": true,
+    "server_pod_name_and_uid_cross_binding_required": true,
+    "server_submitter_allowed_peer": "dedicated-qwen-tp1-j-v1",
+    "server_submitter_create_once_post_limit": 1,
+    "server_submitter_file_sha256": "sha256:7684b57568fc594edc6c564d25f6c4d9305bc2a10ee05617fe5ea64848dcc5ac",
+    "server_submitter_path": "evals/fleet/qwen38_dp8_early_live_v1.py",
+    "server_submitter_requires_clean_exact_commit": true,
+    "service_origin_from_uid_bound_binding_only": true,
+    "sfs_claim_and_evidence_mount": "sfs-shared",
+    "shared_workspace_between_evaluator_and_dind": true,
+    "tmpdir": "/workspace/tmp",
+    "zero_dind_oom_throttle_and_protocol_errors_required": true
+  },
+  "receipt_sha256": "sha256:5b7ad47f21fa82c57470ca8b4bc8b128e8e6b2b19472e15951d23af99a763183",
+  "schema_version": "fleet-qwen38-dp8-early-qualification-held-v2",
+  "scoring_authorized": false,
+  "server": {
+    "context_length": 262144,
+    "create_once": true,
+    "data_parallel_size": 8,
+    "gpus_per_worker": 8,
+    "image": "ghcr.io/fleet-ai/cyber-post-train-glm53-runtime@sha256:ec93ba50613fd13fb4c0b0a9105767ab18209a1e0108dab0923aad694c0206ec",
+    "jobs_api_payload_sha256": "sha256:c7d985968e2fe348ef23f2d1e7d1694f52d03384fde48a0e2bcc9e36fb4ae8e4",
+    "load_balance_method": "total_tokens",
+    "model_path": "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2",
+    "model_repository": "Qwen/Qwen3.8-27B",
+    "model_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "preemption_policy": "Never",
+    "priority_class": "fleet-infra-quiet",
+    "privileged": false,
+    "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-q38-dp8-c-v2",
+    "served_id": "qwen3.8-27b",
+    "server_arguments_sha256": "sha256:eb9bad72213ed782c720a52f2bcf7dd04721fd1f69ef3adf1d65d00ca47110d1",
+    "serving_block": "dedicated-qwen-dp8-c-v2",
+    "tensor_parallel_size": 1,
+    "title": "chris-cyber-evalserve-q38-dp8-c-v2",
+    "workers": 1
+  },
+  "status": "HELD_PENDING_ROOT_REVIEW",
+  "superseded_v1_incident": {
+    "path": "docs/evidence/qwen38-study/2026-09-06-qwen38-dp8-early-v1-infrastructure-failure-release-v1.json",
+    "qualification_or_scoring_occurred": false,
+    "receipt_sha256": "sha256:b51ace018a97001708569a8c0b997fbb43e887ea84b90e1dd65c3e255c457ff5",
+    "v1_identity_reusable": false
+  }
+}

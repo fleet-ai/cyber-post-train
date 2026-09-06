@@ -14,19 +14,23 @@ from typing import Any
 
 from evals.fleet import opencode_actual_harness_parity_v1 as parity
 from evals.fleet import qwen38_dp8_early_qualification_v1 as early
+from evals.fleet import qwen38_dp8_metric_observer_v2 as metric_observer
 from evals.fleet import qwen38_dp8_post_rank99_launch_v1 as core
 from evals.fleet import self_hosted
 
-SCHEMA = "fleet-qwen38-dp8-early-qualification-plan-v1"
-RESULT_SCHEMA = "fleet-qwen38-dp8-early-qualification-result-v1"
-SUBMISSION_SCHEMA = "fleet-qwen38-dp8-early-submission-v1"
-BINDING_SCHEMA = "fleet-qwen38-dp8-early-server-binding-v1"
+SCHEMA = "fleet-qwen38-dp8-early-qualification-plan-v2"
+RESULT_SCHEMA = "fleet-qwen38-dp8-early-qualification-result-v2"
+SUBMISSION_SCHEMA = "fleet-qwen38-dp8-early-submission-v2"
+BINDING_SCHEMA = "fleet-qwen38-dp8-early-server-binding-v2"
 EVENT_SCHEMA = "fleet-qwen38-dp8-real-traffic-observation-v2"
 LEVELS = (1, 2, 4, 8)
 SERVER_BINDING_PATH = Path(early.RUN_DIR) / "lifecycle/SERVER-BINDING.json"
+COUNTER_STATE_PATH = Path(early.RUN_DIR) / "lifecycle/.request-counters.json"
+COUNTER_BASELINE_PATH = Path(early.RUN_DIR) / "lifecycle/REQUEST-COUNTER-BASELINE.json"
 EVENT_DIR = Path(early.RUN_DIR) / "lifecycle/real-traffic-events"
 DIND_RESOURCE_SAMPLES_PATH = Path("/workspace/dind-resource-samples.tsv")
-QUALIFIER_RELEASE_SCHEMA = "fleet-qwen38-dp8-early-qualifier-release-v1"
+QUALIFIER_RELEASE_SCHEMA = "fleet-qwen38-dp8-early-qualifier-release-v2"
+BASELINE_WAIT_SECONDS = 30
 
 
 def _load(path: Path) -> dict[str, Any]:
@@ -136,9 +140,9 @@ def validate_runtime_release(
         or value.get("status") != "RELEASED_FOR_ONE_NON_SCORED_QUALIFIER"
         or value.get("launch_authorized") is not True
         or value.get("scoring_authorized") is not False
-        or value.get("job_name") != "chris-cyber-q38-dp8-c-qualifier-v1"
-        or value.get("configmap_name") != "chris-cyber-q38-dp8-c-qualifier-v1"
-        or value.get("output_root") != "/mnt/sfs/jobs/chris-cyber-q38-dp8-c-qualifier-v1"
+        or value.get("job_name") != "chris-cyber-q38-dp8-c-qualifier-v2"
+        or value.get("configmap_name") != "chris-cyber-q38-dp8-c-qualifier-v2"
+        or value.get("output_root") != "/mnt/sfs/jobs/chris-cyber-q38-dp8-c-qualifier-v2"
         or value.get("serving_block") != early.SERVING_BLOCK
         or value.get("submission_receipt_sha256") != submission.get("receipt_sha256")
         or value.get("server_binding_receipt_sha256") != binding.get("receipt_sha256")
@@ -176,8 +180,8 @@ def qualification_plan(binding: Mapping[str, Any], origin: str, root: Path) -> d
             {
                 "concurrency": level,
                 "parallel_streams": level,
-                "requests_per_stream": 2,
-                "request_count": level * 2,
+                "model_requests_per_stream": "observed_from_validated_stream_receipt",
+                "server_request_delta": "observed_from_uid_bound_metrics",
                 "tool_order": ["bash", "submit_report"],
                 "strict_tool_arguments_required": True,
             }
@@ -252,6 +256,41 @@ def _new_events(before: set[Path], binding_receipt: Mapping[str, Any]) -> list[d
     return sorted(values, key=lambda row: (row["observed_at_epoch"], row["receipt_sha256"]))
 
 
+def _stable_counter_baseline(binding_receipt: Mapping[str, Any]) -> dict[str, Any]:
+    """Wait for a post-binding no-delta observer sample before any model probe."""
+    deadline = time.monotonic() + BASELINE_WAIT_SECONDS
+    while time.monotonic() < deadline:
+        try:
+            baseline = _load(COUNTER_BASELINE_PATH)
+            state = _load(COUNTER_STATE_PATH)
+        except (FileNotFoundError, json.JSONDecodeError, ValueError):
+            time.sleep(1)
+            continue
+        counters = baseline.get("request_counters_by_rank")
+        if (
+            baseline.get("receipt_sha256") == _digest(baseline)
+            and baseline.get("schema_version") == metric_observer.BASELINE_SCHEMA
+            and baseline.get("status") == "STABLE_BOUND_COUNTER_BASELINE"
+            and baseline.get("server_run_dir") == early.RUN_DIR
+            and baseline.get("api_run_id") == binding_receipt.get("api_run_id")
+            and baseline.get("pod_name") == binding_receipt.get("head_pod_name")
+            and baseline.get("pod_uid") == binding_receipt.get("head_pod_uid")
+            and baseline.get("service_uid") == binding_receipt.get("service_uid")
+            and baseline.get("server_binding_receipt_sha256")
+            == binding_receipt.get("receipt_sha256")
+            and isinstance(counters, list)
+            and len(counters) == 8
+            and all(type(item) is int and item >= 0 for item in counters)
+            and state == {"request_counters_by_rank": counters}
+            and baseline.get("request_delta_since_prior_sample") == 0
+            and baseline.get("traffic_refresh_performed") is False
+            and baseline.get("prompts_traces_flags_or_scores_included") is False
+        ):
+            return baseline
+        time.sleep(1)
+    raise RuntimeError("stable post-binding request-counter baseline unavailable")
+
+
 def _dind_resource_sample() -> dict[str, int]:
     try:
         lines = [line.split() for line in DIND_RESOURCE_SAMPLES_PATH.read_text().splitlines()]
@@ -299,7 +338,8 @@ def observe_wave(
     execute: Any,
     plan: Mapping[str, Any],
     binding_receipt: Mapping[str, Any],
-) -> tuple[list[dict[str, Any]], dict[str, Any], dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], dict[str, Any], dict[str, Any], dict[str, Any]]:
+    baseline = _stable_counter_baseline(binding_receipt)
     before_paths = set(EVENT_DIR.glob("*.json")) if EVENT_DIR.is_dir() else set()
     resource_before = _dind_resource_sample()
     rows = execute()
@@ -355,7 +395,7 @@ def observe_wave(
         "prompts_traces_flags_or_scores_included": False,
     }
     receipt["receipt_sha256"] = _digest(receipt)
-    return rows, receipt, resource_control
+    return rows, receipt, resource_control, baseline
 
 
 def run(plan: Mapping[str, Any], binding_receipt: Mapping[str, Any], root: Path) -> dict[str, Any]:
@@ -389,27 +429,48 @@ def run(plan: Mapping[str, Any], binding_receipt: Mapping[str, Any], root: Path)
             with concurrent.futures.ThreadPoolExecutor(max_workers=wave_level) as executor:
                 return list(executor.map(lambda _: safe_probe(), range(wave_level)))
 
+        started = time.monotonic()
         try:
-            rows, distribution, resource_control = observe_wave(
+            rows, distribution, resource_control, baseline = observe_wave(
                 level, execute, plan, binding_receipt
             )
             streams_ok = all(_valid_stream(row, plan) for row in rows)
             core.validate_distribution_receipt(distribution, plan, level, rows)
-            passed = len(rows) == level and streams_ok
+            observed_model_requests = sum(
+                int((row.get("execution") or {}).get("model_requests") or 0) for row in rows
+            )
+            observed_server_requests = sum(distribution["request_deltas_by_rank"])
+            passed = (
+                len(rows) == level
+                and streams_ok
+                and observed_model_requests > 0
+                and observed_server_requests == observed_model_requests
+            )
         except (RuntimeError, ValueError):
-            rows, distribution, resource_control, passed = [], {}, {}, False
+            rows, distribution, resource_control, baseline, passed = [], {}, {}, {}, False
+            observed_model_requests = 0
+            observed_server_requests = 0
+        elapsed_milliseconds = int((time.monotonic() - started) * 1000)
+        timeout_budget_milliseconds = parity.TIMEOUT_SECONDS * 1000
         observations.append(
             {
                 "concurrency": level,
                 "status": "PASSED" if passed else "FAILED",
-                "request_count": level * 2,
-                "completed_count": level * 2 if passed else 0,
+                "completed_stream_count": len(rows) if passed else 0,
+                "observed_model_request_count": observed_model_requests,
+                "observed_server_request_delta": observed_server_requests,
+                "elapsed_milliseconds": elapsed_milliseconds,
+                "timeout_budget_milliseconds": timeout_budget_milliseconds,
+                "latency_headroom_milliseconds": (
+                    timeout_budget_milliseconds - elapsed_milliseconds
+                ),
                 "error_count": 0 if passed else 1,
                 "tool_order_exact": passed,
                 "tool_arguments_exact": passed,
                 "stream_receipts": rows,
                 "distribution_receipt": distribution,
                 "controller_resource_receipt": resource_control,
+                "stable_counter_baseline_receipt": baseline,
             }
         )
         if not passed:
@@ -467,6 +528,37 @@ def validate_result(value: Mapping[str, Any], plan: Mapping[str, Any], root: Pat
             or resource.get("protocol_errors") != 0
         ):
             raise ValueError("early DP8 controller resource control drifted")
+        if row.get("status") == "PASSED":
+            baseline = row.get("stable_counter_baseline_receipt")
+            distribution = row.get("distribution_receipt")
+            streams = row.get("stream_receipts")
+            model_requests = sum(
+                int((stream.get("execution") or {}).get("model_requests") or 0)
+                for stream in streams
+                if isinstance(stream, dict)
+            ) if isinstance(streams, list) else -1
+            server_requests = (
+                sum(distribution.get("request_deltas_by_rank") or [])
+                if isinstance(distribution, dict)
+                else -1
+            )
+            if (
+                not isinstance(baseline, dict)
+                or baseline.get("receipt_sha256") != _digest(baseline)
+                or baseline.get("schema_version") != metric_observer.BASELINE_SCHEMA
+                or row.get("completed_stream_count") != row.get("concurrency")
+                or row.get("observed_model_request_count") != model_requests
+                or row.get("observed_server_request_delta") != server_requests
+                or model_requests <= 0
+                or server_requests != model_requests
+                or type(row.get("elapsed_milliseconds")) is not int
+                or row["elapsed_milliseconds"] < 0
+                or row.get("timeout_budget_milliseconds") != parity.TIMEOUT_SECONDS * 1000
+                or row.get("latency_headroom_milliseconds")
+                != row["timeout_budget_milliseconds"] - row["elapsed_milliseconds"]
+                or row["latency_headroom_milliseconds"] <= 0
+            ):
+                raise ValueError("early DP8 observed request/latency evidence drifted")
         if row.get("status") == "FAILED":
             seen_failure = True
             failure_count += 1
