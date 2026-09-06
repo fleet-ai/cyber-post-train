@@ -5,14 +5,15 @@ DOCKERFILE = ROOT / "evals/fleet/images/sglang-ray/Dockerfile.jobs-api-dind"
 WORKFLOW = ROOT / ".github/workflows/publish-jobs-api-dind-runtime.yml"
 
 
-def test_runtime_is_derived_from_exact_qualified_parent() -> None:
+def test_runtime_reproduces_exact_qualified_base_and_ray() -> None:
     text = DOCKERFILE.read_text()
-    parent = (
-        "ghcr.io/fleet-ai/cyber-post-train-glm53-runtime@"
-        "sha256:ec93ba50613fd13fb4c0b0a9105767ab18209a1e0108dab0923aad694c0206ec"
-    )
-    assert f"FROM {parent}" in text
-    assert f'fleet.cyber.parent-image="{parent}"' in text
+    base = "lmsysorg/sglang@sha256:9e148f5ac788e856a06166bd6347a831831eb9fcfab4d1770874823a7c29a1a1"
+    assert f"FROM {base}" in text
+    assert f'fleet.cyber.base-image="{base}"' in text
+    assert "RAY_VERSION=2.56.0" in text
+    assert 'fleet.cyber.ray-version="2.56.0"' in text
+    assert '"ray[default]==${RAY_VERSION}"' in text
+    assert 'importlib.metadata.version("ray") == "2.56.0"' in text
     assert "DOCKER_VERSION=27.5.1" in text
     assert (
         "DOCKER_STATIC_SHA256=4f798b3ee1e0140eab5bf30b0edc4e84f4cdb53255a429dc3bbae9524845d640"

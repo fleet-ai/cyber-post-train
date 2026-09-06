@@ -1,16 +1,19 @@
 # syntax=docker/dockerfile:1.7
 
-# Keep the already-qualified SGLang and Ray runtime byte-identical, and add
-# only the daemon/tooling needed to run the frozen OpenCode sandbox image from
-# a privileged, eight-GPU Jobs API head pod.
-FROM ghcr.io/fleet-ai/cyber-post-train-glm53-runtime@sha256:ec93ba50613fd13fb4c0b0a9105767ab18209a1e0108dab0923aad694c0206ec
+# Reproduce the qualified SGLang + Ray runtime directly from its public,
+# immutable base so GitHub Actions does not need read access to an intermediate
+# private package. Add only the daemon/tooling needed to run the frozen
+# OpenCode sandbox image from a privileged, eight-GPU Jobs API head pod.
+FROM lmsysorg/sglang@sha256:9e148f5ac788e856a06166bd6347a831831eb9fcfab4d1770874823a7c29a1a1
 
+ARG RAY_VERSION=2.56.0
 ARG DOCKER_VERSION=27.5.1
 ARG DOCKER_STATIC_SHA256=4f798b3ee1e0140eab5bf30b0edc4e84f4cdb53255a429dc3bbae9524845d640
 
 LABEL org.opencontainers.image.title="Fleet cyber Jobs API SGLang + Ray + Docker runtime"
 LABEL org.opencontainers.image.description="Exact qualified Fleet cyber serving runtime with a pinned Docker daemon for the frozen OpenCode sandbox"
-LABEL fleet.cyber.parent-image="ghcr.io/fleet-ai/cyber-post-train-glm53-runtime@sha256:ec93ba50613fd13fb4c0b0a9105767ab18209a1e0108dab0923aad694c0206ec"
+LABEL fleet.cyber.base-image="lmsysorg/sglang@sha256:9e148f5ac788e856a06166bd6347a831831eb9fcfab4d1770874823a7c29a1a1"
+LABEL fleet.cyber.ray-version="2.56.0"
 LABEL fleet.cyber.docker-version="27.5.1"
 LABEL fleet.cyber.docker-static-sha256="4f798b3ee1e0140eab5bf30b0edc4e84f4cdb53255a429dc3bbae9524845d640"
 LABEL fleet.cyber.opencode-image-id="sha256:ca4f0b8f50bd051d709c7c0ae5ec47ca31bbff7d2a2ad754c67b9cdf585567cb"
@@ -31,6 +34,15 @@ RUN apt-get update \
     && tar --extract --gzip --file /tmp/docker.tgz \
         --directory /usr/local/bin --strip-components=1 \
     && rm /tmp/docker.tgz \
+    && python3 -m pip install --no-cache-dir "ray[default]==${RAY_VERSION}" \
     && test "$(docker --version)" = "Docker version 27.5.1, build 9f9e405" \
-    && test "$(dockerd --version)" = "Docker version 27.5.1, build 4c9b3b0"
+    && test "$(dockerd --version)" = "Docker version 27.5.1, build 4c9b3b0" \
+    && python3 - <<'PY'
+import importlib.metadata
+import sglang
+import torch
 
+assert importlib.metadata.version("ray") == "2.56.0"
+assert sglang is not None
+assert torch.cuda.is_available() or torch.version.cuda is not None
+PY
