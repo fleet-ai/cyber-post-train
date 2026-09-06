@@ -167,3 +167,19 @@ def test_package_job_is_cpu_only_dind_and_create_once() -> None:
         ]
         is True
     )
+
+
+def test_authenticated_jobs_api_preview_is_fail_closed_for_cpu_qualifier() -> None:
+    path = (
+        ROOT / "docs/evidence/glm53-study/"
+        "2026-09-06-glm53-v22-concurrency-jobs-api-preview-held-v1.json"
+    )
+    value = json.loads(path.read_text())
+    assert value["receipt_sha256"] == self_hosted.digest_without(value, "receipt_sha256")
+    assert value["status"] == "HELD_API_CONTRACT_MISMATCH"
+    assert value["authenticated_jobs_api_contract"]["preview_request_schema"] == "RLJobConfig"
+    assert value["authenticated_jobs_api_contract"]["gpus_per_worker_minimum"] == 1
+    assert value["package_contract"]["cpu_only"] is True
+    assert value["preview_post_calls"] == 0
+    assert value["api_mutation_calls"] == 0
+    assert value["qualification_launch_authorized"] is False
