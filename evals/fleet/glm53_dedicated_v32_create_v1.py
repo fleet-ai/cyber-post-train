@@ -23,6 +23,7 @@ from evals.fleet import glm53_dedicated_v32_live_authorization_v1 as live_author
 SCHEMA = "fleet-glm53-dedicated-v32-create-authorization-v1"
 RESULT_SCHEMA = "fleet-glm53-dedicated-v32-create-result-v1"
 TITLE = "chris-cyber-evalserve-glm53-tp8-a-v32"
+API_NAME = "glm53-tp8-v32"
 RUN_DIR = "/mnt/sfs/jobs/chris-cyber-evalserve-glm53-tp8-a-v32"
 READY_PATH = RUN_DIR + "/READY.json"
 READY_SCHEMA = "fleet-glm53-dedicated-v32-application-ready-v1"
@@ -72,17 +73,22 @@ def _observer_source() -> str:
 
 def payload() -> dict[str, Any]:
     with bound_engine():
-        return engine.payload()
+        value = engine.payload()
+    value["name"] = API_NAME
+    return value
 
 
 def validate_payload(value: dict[str, Any]) -> None:
+    if value != payload():
+        raise CreateError("v32_create_payload_invalid")
+    legacy = dict(value)
+    legacy.pop("name")
     with bound_engine():
-        engine.validate_payload(value)
+        engine.validate_payload(legacy)
 
 
 def request_sha256() -> str:
-    with bound_engine():
-        return engine.request_sha256()
+    return crypto.sha256(crypto.canonical_json(payload()))
 
 
 def validate_binding(binding: dict[str, Any]) -> None:
@@ -179,6 +185,7 @@ def create_once(
         "api_run_id": api_run_id,
         "http_status": status,
         "server_title": TITLE,
+        "server_api_name": API_NAME,
         "server_run_dir": RUN_DIR,
         "request_sha256": request_sha256(),
         "authorization_receipt_sha256": authorization["receipt_sha256"],
@@ -203,6 +210,7 @@ def build_held() -> dict[str, Any]:
         "schema_version": "fleet-glm53-dedicated-v32-create-wrapper-held-v1",
         "status": "PASSED_HELD_NO_LAUNCH",
         "server_title": TITLE,
+        "server_api_name": API_NAME,
         "server_run_dir": RUN_DIR,
         "request_sha256": request_sha256(),
         "required_active_dedicated_nodes": 0,

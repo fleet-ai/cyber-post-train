@@ -1,4 +1,5 @@
 import copy
+import hashlib
 import json
 import os
 import subprocess
@@ -14,11 +15,12 @@ from evals.fleet import glm53_dedicated_v32_controller_package_v1 as package
 from evals.fleet import glm53_dedicated_v32_create_v1 as server
 from evals.fleet import glm53_dedicated_v32_incluster_parity_v1 as parity
 from evals.fleet import glm53_dedicated_v32_live_authorization_v1 as live_auth
+from evals.fleet import glm53_dedicated_v32_stale_run_reconciliation_v1 as stale_runs
 from evals.fleet import glm53_dedicated_v32_watchdog_live_release_v1 as adapter
 from evals.fleet import glm53_dedicated_v32_watchdog_package_v1 as watchdog
 
 ROOT = Path(__file__).resolve().parents[1]
-COMMIT = "7f0f07e38e6d15fa2e2fdd9299c888db9b56e1b1"
+COMMIT = "630fbc20c1d11e3036ed4e94057c3ac4efccf520"
 
 
 class FakeBackend:
@@ -55,16 +57,47 @@ class FakeBackend:
     def preview(self, _payload: object) -> int:
         return self.preview_status
 
+    def sfs_evidence(self, run_dirs: tuple[str, ...]) -> dict[str, object]:
+        return {
+            "observer_pod_name": live_auth.SFS_OBSERVER_POD_NAME,
+            "observer_pod_uid": live_auth.SFS_OBSERVER_POD_UID,
+            "observer_sfs_mount_path": live_auth.SFS_OBSERVER_MOUNT_PATH,
+            "roots": {
+                run_dir: {
+                    "root_exists": False,
+                    "unsafe_symlink": False,
+                    "terminal_evidence": [],
+                }
+                for run_dir in run_dirs
+            },
+        }
+
 
 def create_authorization(backend: FakeBackend | None = None) -> dict[str, object]:
+    selected = backend or FakeBackend()
+    stale_backend = copy.deepcopy(selected)
+    stale_backend.exact = {}
+    stale_backend.items = [
+        item
+        for item in stale_backend.items
+        if stale_runs._terminal_kubernetes_object(item)  # noqa: SLF001
+    ]
+    try:
+        reconciliation = stale_runs.build_reconciliation(
+            backend=stale_backend,
+            now=time.time(),
+        )
+    except stale_runs.ReconciliationError as exc:
+        raise live_auth.LiveAuthorizationError(str(exc)) from exc
     return live_auth.build_live_authorization(
-        backend=backend or FakeBackend(),
+        backend=selected,
         payload=server.payload(),
         title=server.TITLE,
         run_dir=server.RUN_DIR,
         control_result_path=server.RESULT_PATH,
         request_sha256=server.request_sha256(),
         priority_class=v24.PRIORITY_CLASS,
+        stale_run_reconciliation=reconciliation,
         now=time.time(),
     )
 
@@ -147,6 +180,7 @@ def test_v32_create_gate_requires_fresh_zero_state() -> None:
     assert server.TITLE.endswith("-v32")
     assert server.RUN_DIR.endswith("-v32")
     assert server.payload()["gpus_per_worker"] == 8
+    assert server.payload()["name"] == server.API_NAME == "glm53-tp8-v32"
     assert server.payload()["priority_class"] == "fleet-infra-quiet"
 
 
@@ -224,12 +258,12 @@ def test_v32_live_builder_pages_and_rejects_hidden_active_server() -> None:
     backend.rows = [{"name": "history", "run_dir": "/tmp/history"}, hidden]
     backend.exact["ft-run-deadbeef"] = hidden
     with pytest.raises(
-        live_auth.LiveAuthorizationError, match="requires_zero_project_server"
+        live_auth.LiveAuthorizationError, match="current_server_present"
     ):
         create_authorization(backend)
 
 
-def test_v32_live_builder_rejects_active_list_row_when_exact_get_is_404() -> None:
+def test_v32_live_builder_accepts_reconciled_submitted_list_row_with_exact_404() -> None:
     backend = FakeBackend()
     backend.rows = [
         {
@@ -239,10 +273,7 @@ def test_v32_live_builder_rejects_active_list_row_when_exact_get_is_404() -> Non
             "status": "RUNNING",
         }
     ]
-    with pytest.raises(
-        live_auth.LiveAuthorizationError, match="history_live_drift"
-    ):
-        create_authorization(backend)
+    server.validate_authorization(create_authorization(backend))
 
 
 @pytest.mark.parametrize("status", ["PENDING", "CREATED", "ADMITTED", "MYSTERY", None, 7])
@@ -299,6 +330,31 @@ def test_v32_create_gate_rejects_rehashed_sfs_identity_drift(mutation: str) -> N
         server.validate_authorization(changed)
 
 
+def test_v32_create_gate_rejects_rehashed_stale_reconciliation_drift() -> None:
+    backend = FakeBackend()
+    backend.rows = [
+        {
+            "name": "ft-run-deadbeef",
+            "title": "chris-cyber-evalserve-old-v1",
+            "run_dir": "/mnt/sfs/jobs/chris-cyber-evalserve-old-v1",
+            "status": "FAILED",
+        }
+    ]
+    value = create_authorization(backend)
+    changed = copy.deepcopy(value)
+    reconciliation = changed["live_observation"]["stale_run_reconciliation"]
+    reconciliation["reconciled_rows"][0]["exact_get_status"] = "RUNNING"
+    reconciliation["receipt_sha256"] = crypto.digest_without(
+        reconciliation, "receipt_sha256"
+    )
+    changed["live_observation"]["receipt_sha256"] = crypto.digest_without(
+        changed["live_observation"], "receipt_sha256"
+    )
+    changed["receipt_sha256"] = crypto.digest_without(changed, "receipt_sha256")
+    with pytest.raises(server.CreateError, match="authorization_invalid"):
+        server.validate_authorization(changed)
+
+
 def test_v32_live_builder_rejects_malformed_project_api_identity() -> None:
     backend = FakeBackend()
     backend.rows = [
@@ -310,9 +366,45 @@ def test_v32_live_builder_rejects_malformed_project_api_identity() -> None:
         }
     ]
     with pytest.raises(
-        live_auth.LiveAuthorizationError, match="project_identity_invalid"
+        live_auth.LiveAuthorizationError, match="identity_invalid"
     ):
         create_authorization(backend)
+
+
+def test_v32_live_builder_accepts_only_exact_reconciled_terminal_objects() -> None:
+    backend = FakeBackend()
+    backend.items = [
+        _object(
+            "RayJob",
+            "ft-run-deadbeef",
+            "11111111-1111-4111-8111-111111111111",
+            status={"jobStatus": "FAILED"},
+        )
+    ]
+    server.validate_authorization(create_authorization(backend))
+
+    stale_backend = copy.deepcopy(backend)
+    reconciliation = stale_runs.build_reconciliation(
+        backend=stale_backend,
+        now=time.time(),
+    )
+    backend.items[0]["metadata"]["uid"] = (
+        "22222222-2222-4222-8222-222222222222"
+    )
+    with pytest.raises(
+        live_auth.LiveAuthorizationError, match="terminal_kubernetes_drift"
+    ):
+        live_auth.build_live_authorization(
+            backend=backend,
+            payload=server.payload(),
+            title=server.TITLE,
+            run_dir=server.RUN_DIR,
+            control_result_path=server.RESULT_PATH,
+            request_sha256=server.request_sha256(),
+            priority_class=v24.PRIORITY_CLASS,
+            stale_run_reconciliation=reconciliation,
+            now=time.time(),
+        )
 
 
 def test_v32_system_backend_pagination_progress_and_second_page(
@@ -485,3 +577,36 @@ def test_v32_held_and_v31_terminal_receipts_are_digest_valid() -> None:
     assert terminal["fleet_session_calls"] == 0
     assert terminal["verifier_calls"] == 0
     assert terminal["scoring_calls"] == 0
+
+
+def test_v32_live_create_review_receipts_are_immutable_and_held() -> None:
+    evidence = ROOT / "docs/evidence/glm53-study"
+    auth_path = (
+        evidence
+        / "2026-09-06-glm53-dedicated-v32-live-create-authorization-review-v1.json"
+    )
+    review = json.loads(
+        (
+            evidence
+            / "2026-09-06-glm53-dedicated-v32-live-create-review-held-v1.json"
+        ).read_text()
+    )
+    auth = json.loads(auth_path.read_text())
+    live_auth.validate_live_observation(auth["live_observation"], auth)
+    assert review["live_authorization_receipt_sha256"] == auth["receipt_sha256"]
+    assert review["live_authorization_file_sha256"] == (
+        "sha256:" + hashlib.sha256(auth_path.read_bytes()).hexdigest()
+    )
+    assert review["server_api_name"] == server.API_NAME
+    assert review["request_sha256"] == server.request_sha256()
+    assert review["preview_http_status"] == 200
+    assert review["active_dedicated_nodes"] == 0
+    assert review["active_dedicated_gpus"] == 0
+    assert review["planned_nodes_after_create"] == 1
+    assert review["planned_gpus_after_create"] == 8
+    assert review["server_post_authorized_by_review"] is False
+    assert review["qualification_launch_authorized"] is False
+    assert review["scored_launch_authorized"] is False
+    assert review["receipt_sha256"] == crypto.digest_without(
+        review, "receipt_sha256"
+    )

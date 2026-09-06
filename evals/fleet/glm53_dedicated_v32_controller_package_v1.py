@@ -28,6 +28,7 @@ FILES = tuple(
             "evals/fleet/glm53_dedicated_v32_controller_v1.py",
             "evals/fleet/glm53_dedicated_v32_create_v1.py",
             "evals/fleet/glm53_dedicated_v32_live_authorization_v1.py",
+            "evals/fleet/glm53_dedicated_v32_stale_run_reconciliation_v1.py",
             "evals/fleet/glm53_dedicated_v32_watchdog_live_release_v1.py",
             "evals/fleet/glm53_dedicated_v32_watchdog_package_v1.py",
         }
@@ -137,6 +138,7 @@ def build_held(root: Path, package_commit: str) -> dict[str, Any]:
         "package_commit": package_commit,
         "package_sha256": package["package_sha256"],
         "server_title": server.TITLE,
+        "server_api_name": server.API_NAME,
         "server_run_dir": server.RUN_DIR,
         "controller_job_name": JOB_NAME,
         "watchdog_job_name": "chris-glm53-dedicated-v32-request-watchdog-v1",
@@ -152,6 +154,8 @@ def build_held(root: Path, package_commit: str) -> dict[str, Any]:
         "live_authorization_builder": (
             "evals.fleet.glm53_dedicated_v32_live_authorization_v1"
         ),
+        "stale_run_reconciliation_schema": live_authorization.stale_runs.SCHEMA,
+        "stale_run_reconciliation_required": True,
         "sfs_observer_pod_name": live_authorization.SFS_OBSERVER_POD_NAME,
         "sfs_observer_pod_uid": live_authorization.SFS_OBSERVER_POD_UID,
         "sfs_observer_mount_path": live_authorization.SFS_OBSERVER_MOUNT_PATH,

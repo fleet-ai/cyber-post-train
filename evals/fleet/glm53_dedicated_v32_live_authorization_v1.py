@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from evals.fleet import exact_pass4_crypto as crypto
+from evals.fleet import glm53_dedicated_v32_stale_run_reconciliation_v1 as stale_runs
 
 LIVE_SCHEMA = "fleet-glm53-dedicated-v32-live-create-observation-v1"
 NAMESPACE = "fleet-train-jobs"
@@ -37,6 +38,7 @@ LIVE_KEYS = {
     "mode",
     "jobs_api_pages",
     "active_project_runs",
+    "stale_run_reconciliation",
     "project_object_count",
     "project_gpu_pod_count",
     "sfs_observation",
@@ -139,9 +141,24 @@ def _api_status(value: object) -> str:
 
 
 def _active_project_runs(
-    backend: Backend, rows: list[dict[str, Any]], title: str, run_dir: str
+    backend: Backend,
+    rows: list[dict[str, Any]],
+    title: str,
+    run_dir: str,
+    reconciliation: Mapping[str, Any],
+    observed_at: float,
 ) -> list[dict[str, Any]]:
-    active: list[dict[str, Any]] = []
+    try:
+        stale_runs.validate_reconciliation(
+            reconciliation,
+            rows=rows,
+            now=observed_at,
+        )
+    except stale_runs.ReconciliationError as exc:
+        raise LiveAuthorizationError("v32_stale_run_reconciliation_invalid") from exc
+    reconciled = {
+        row["api_run_id"]: row for row in reconciliation["reconciled_rows"]
+    }
     for row in rows:
         name = row.get("name")
         row_run_dir = row.get("run_dir")
@@ -153,22 +170,34 @@ def _active_project_runs(
             continue
         if not isinstance(name, str) or not _is_project_run_dir(row_run_dir):
             raise LiveAuthorizationError("v32_jobs_api_project_identity_invalid")
-        row_status = _api_status(row.get("status"))
+        _api_status(row.get("status"))
+        evidence = reconciled.get(name)
+        if evidence is None:
+            raise LiveAuthorizationError("v32_stale_run_reconciliation_invalid")
         current = backend.get_run(name)
         if current is None:
-            if row_status in TERMINAL_API_STATUSES:
-                continue
-            raise LiveAuthorizationError("v32_jobs_api_history_live_drift")
-        if current.get("run_dir") != row_run_dir:
-            raise LiveAuthorizationError("v32_jobs_api_history_live_drift")
+            if evidence.get("exact_get_http_status") != 404:
+                raise LiveAuthorizationError("v32_jobs_api_history_live_drift")
+            continue
         current_status = _api_status(current.get("status"))
         if current_status in ACTIVE_API_STATUSES:
-            active.append({**current, "_observed_api_run_id": name})
-    return active
+            raise LiveAuthorizationError("v32_jobs_api_current_server_present")
+        if (
+            evidence.get("exact_get_http_status") != 200
+            or evidence.get("exact_get_status") != current_status
+            or current.get("name") != name
+            or current.get("title") != row.get("title")
+            or current.get("run_dir") != row_run_dir
+        ):
+            raise LiveAuthorizationError("v32_jobs_api_history_live_drift")
+    return []
 
 
 def _project_kubernetes(
-    inventory: Mapping[str, Any], title: str, run_dir: str
+    inventory: Mapping[str, Any],
+    title: str,
+    run_dir: str,
+    reconciliation: Mapping[str, Any],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     rows = inventory.get("items")
     if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
@@ -176,15 +205,10 @@ def _project_kubernetes(
     serialized = json.dumps(inventory, sort_keys=True)
     if title in serialized or run_dir in serialized:
         raise LiveAuthorizationError("v32_kubernetes_identity_already_exists")
-    project_objects = [
+    all_project_objects = [
         row
         for row in rows
         if row.get("kind") in {"RayJob", "RayCluster", "Workload", "Service"}
-        and not (
-            row.get("kind") == "RayJob"
-            and str((row.get("status") or {}).get("jobStatus") or "").upper()
-            in {"SUCCEEDED", "FAILED", "STOPPED"}
-        )
         and (
             "/mnt/sfs/jobs/chris-cyber-evalserve-"
             in json.dumps(row, sort_keys=True)
@@ -193,6 +217,21 @@ def _project_kubernetes(
             )
             == "chris"
         )
+    ]
+    terminal_projection = sorted(
+        [
+            stale_runs._terminal_object_projection(row)  # noqa: SLF001
+            for row in all_project_objects
+            if stale_runs._terminal_kubernetes_object(row)  # noqa: SLF001
+        ],
+        key=lambda row: (str(row["kind"]), str(row["name"])),
+    )
+    if terminal_projection != reconciliation.get("terminal_project_objects"):
+        raise LiveAuthorizationError("v32_stale_terminal_kubernetes_drift")
+    project_objects = [
+        row
+        for row in all_project_objects
+        if not stale_runs._terminal_kubernetes_object(row)  # noqa: SLF001
     ]
     gpu_pods = [
         row
@@ -220,6 +259,7 @@ def build_live_authorization(
     control_result_path: str,
     request_sha256: str,
     priority_class: str,
+    stale_run_reconciliation: Mapping[str, Any],
     now: float | None = None,
 ) -> dict[str, Any]:
     """Observe live state once and produce a zero-footprint authorization."""
@@ -228,9 +268,16 @@ def build_live_authorization(
         raise LiveAuthorizationError("v32_control_result_path_invalid")
     observed_at = time.time() if now is None else now
     rows, page_count = backend.list_runs()
-    active = _active_project_runs(backend, rows, title, run_dir)
+    active = _active_project_runs(
+        backend,
+        rows,
+        title,
+        run_dir,
+        stale_run_reconciliation,
+        observed_at,
+    )
     project_objects, project_gpu_pods = _project_kubernetes(
-        backend.kubernetes_inventory(), title, run_dir
+        backend.kubernetes_inventory(), title, run_dir, stale_run_reconciliation
     )
     sfs = backend.sfs_observation(absent_paths=(run_dir, control_result_path))
     if (
@@ -261,6 +308,7 @@ def build_live_authorization(
         "mode": "ZERO_PROJECT_SERVER",
         "jobs_api_pages": page_count,
         "active_project_runs": [],
+        "stale_run_reconciliation": dict(stale_run_reconciliation),
         "project_object_count": 0,
         "project_gpu_pod_count": 0,
         "sfs_observation": sfs,
@@ -317,6 +365,7 @@ def validate_live_observation(
 ) -> None:
     sfs = value.get("sfs_observation")
     absent_paths = sfs.get("absent_paths") if isinstance(sfs, dict) else None
+    reconciliation = value.get("stale_run_reconciliation")
     if (
         set(value) != LIVE_KEYS
         or value.get("schema_version") != LIVE_SCHEMA
@@ -369,6 +418,16 @@ def validate_live_observation(
         )
     ):
         raise LiveAuthorizationError("v32_live_observation_invalid")
+    if not isinstance(reconciliation, dict):
+        raise LiveAuthorizationError("v32_live_observation_invalid")
+    try:
+        stale_runs.validate_reconciliation(
+            reconciliation,
+            rows=reconciliation.get("project_rows"),
+            now=float(authorization["observed_at_epoch"]),
+        )
+    except (KeyError, TypeError, ValueError, stale_runs.ReconciliationError) as exc:
+        raise LiveAuthorizationError("v32_live_observation_invalid") from exc
 
 
 class SystemBackend:
@@ -560,9 +619,16 @@ def main(argv: list[str] | None = None) -> int:
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--stale-reconciliation", type=Path, required=True)
     args = parser.parse_args(argv)
     from evals.fleet import glm53_dedicated_v32_create_v1 as server
 
+    try:
+        stale_reconciliation = json.loads(args.stale_reconciliation.read_text())
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise LiveAuthorizationError("v32_stale_run_reconciliation_invalid") from exc
+    if not isinstance(stale_reconciliation, dict):
+        raise LiveAuthorizationError("v32_stale_run_reconciliation_invalid")
     value = build_live_authorization(
         backend=SystemBackend(),
         payload=server.payload(),
@@ -571,6 +637,7 @@ def main(argv: list[str] | None = None) -> int:
         control_result_path=server.RESULT_PATH,
         request_sha256=server.request_sha256(),
         priority_class=server.payload()["priority_class"],
+        stale_run_reconciliation=stale_reconciliation,
     )
     server.validate_authorization(value)
     _write_once(args.output, value)
