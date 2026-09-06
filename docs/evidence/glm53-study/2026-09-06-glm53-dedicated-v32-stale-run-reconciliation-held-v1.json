@@ -1,0 +1,16 @@
+{
+  "api_mutation_calls": 0,
+  "kubernetes_and_gpu_remnants_block": true,
+  "maximum_age_seconds": 300,
+  "package_commit": "c71506a1269ac636064c982ff600720225d99ab6",
+  "protected_content_included": false,
+  "receipt_sha256": "sha256:c7e730eed662680972439406263d54a14f25da6f3464d68b4974fbda57bf5958",
+  "reconciliation_module": "evals.fleet.glm53_dedicated_v32_stale_run_reconciliation_v1",
+  "schema_version": "fleet-glm53-dedicated-v32-stale-run-reconciliation-held-v1",
+  "scoring_calls": 0,
+  "server_launch_authorized": false,
+  "sfs_terminal_files_hashed_not_read_into_receipt": true,
+  "status": "PASSED_HELD_NO_LAUNCH",
+  "submitted_exact_404_requires_per_row_evidence": true,
+  "unknown_statuses_block": true
+}
