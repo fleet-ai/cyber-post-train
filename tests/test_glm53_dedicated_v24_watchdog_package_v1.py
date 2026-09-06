@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from evals.fleet import exact_pass4_crypto as crypto
 from evals.fleet import glm53_dedicated_v24_server_v1 as server
 from evals.fleet import glm53_dedicated_v24_watchdog_package_v1 as package
 
@@ -81,3 +82,18 @@ def test_v24_watcher_package_is_uid_bound_create_once_and_score_free() -> None:
     assert rendered["server_launch_authorized"] is False
     assert rendered["qualification_launch_authorized"] is False
     assert rendered["scored_launch_authorized"] is False
+
+
+def test_tracked_watcher_package_receipt_is_self_digested_and_held() -> None:
+    path = (
+        ROOT / "docs/evidence/glm53-study/"
+        "2026-09-06-glm53-dedicated-v24-watchdog-package-held-v1.json"
+    )
+    value = json.loads(path.read_text())
+    assert value["status"] == "READY_HELD_FOR_EXACT_LIVE_BINDING"
+    assert value["watchdog_launch_authorized"] is False
+    assert value["server_launch_authorized"] is False
+    assert value["qualification_launch_authorized"] is False
+    assert value["scored_launch_authorized"] is False
+    assert value["rendered_sentinel"]["uses_non_live_sentinel_uids"] is True
+    assert value["receipt_sha256"] == crypto.digest_without(value, "receipt_sha256")
