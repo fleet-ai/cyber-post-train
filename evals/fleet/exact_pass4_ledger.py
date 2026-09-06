@@ -68,11 +68,11 @@ GLM_C2_RUNTIME_AUTHORITY_PATH = Path(
     "docs/evidence/qwen38-study/2026-09-05-glm53-hosted-c2-runtime-authority-v1.json"
 )
 SUPPLEMENTAL_RUNTIME_AUTHORITY_SCHEMA = (
-    "fleet-exact-pass4-supplemental-runtime-authority-v2"
+    "fleet-exact-pass4-supplemental-runtime-authority-v3"
 )
 SUPPLEMENTAL_RUNTIME_AUTHORITY_PATH = Path(
     "docs/evidence/qwen38-study/"
-    "2026-09-05-exact-pass4-supplemental-runtime-authority-v2.json"
+    "2026-09-05-exact-pass4-supplemental-runtime-authority-v3.json"
 )
 DEDICATED_QWEN_ATTEMPT1_BINDING = {
     "plan_sha256": "sha256:5358ae8d0c81fd18d815f5289eabf771274101e099c799c49a85d0713687aa67",
