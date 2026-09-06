@@ -14,6 +14,7 @@ import pytest
 from evals.fleet import qwen38_dp6_m_qualifier_package_v1 as package
 from evals.fleet import qwen38_dp6_m_qualifier_runtime_v1 as runtime
 from evals.fleet import qwen38_dp6_metric_observer_v5 as observer
+from evals.fleet import self_hosted
 
 
 def test_runtime_loader_rejects_duplicate_json_keys(tmp_path: Path) -> None:
@@ -45,6 +46,62 @@ def test_qualifier_archive_imports_in_isolated_materialization(tmp_path: Path) -
         text=True,
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_archive_rejects_rehashed_protected_static_receipt(tmp_path: Path) -> None:
+    root = Path(__file__).resolve().parents[1]
+    for source in package.source_paths(root):
+        target = tmp_path / source
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes((root / source).read_bytes())
+    preview_path = tmp_path / package.early.PREVIEW_PATH
+    preview = package.early._load(preview_path)  # noqa: SLF001
+    preview["protected_score"] = "SECRET_MARKER"
+    preview["receipt_sha256"] = self_hosted.digest_without(preview, "receipt_sha256")
+    preview_path.write_text(json.dumps(preview, sort_keys=True, separators=(",", ":")))
+    with pytest.raises(ValueError):
+        package.archive_bytes(tmp_path)
+
+
+def test_package_renderer_rejects_rehashed_protected_release(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = Path(__file__).resolve().parents[1]
+    submission = {"receipt_sha256": "sha256:" + "a" * 64}
+    binding = {"receipt_sha256": "sha256:" + "b" * 64}
+    package_digest = "sha256:" + "c" * 64
+    image = "sha256:" + "d" * 64
+    release = {
+        "schema_version": package.RELEASE_SCHEMA,
+        "status": "RELEASED_FOR_ONE_NON_SCORED_QUALIFIER",
+        "launch_authorized": True,
+        "scoring_authorized": False,
+        "job_name": package.JOB_NAME,
+        "configmap_name": package.CONFIGMAP_NAME,
+        "output_root": package.OUTPUT_ROOT,
+        "serving_block": package.early.SERVING_BLOCK,
+        "submission_receipt_sha256": submission["receipt_sha256"],
+        "server_binding_receipt_sha256": binding["receipt_sha256"],
+        "package_sha256": package_digest,
+        "harness_runtime_image": image,
+        "fresh_job_matches": 0,
+        "fresh_configmap_matches": 0,
+        "fresh_output_root_exists": False,
+        "server_running_ready_restart0": True,
+        "api_mutations_before_create": 0,
+        "task_instance_session_verifier_scoring_calls": 0,
+        "prompts_traces_flags_or_scores_included": False,
+    }
+    release["receipt_sha256"] = self_hosted.digest_without(release, "receipt_sha256")
+    monkeypatch.setattr(package.runtime, "validate_binding", lambda *_args: None)
+    monkeypatch.setattr(package, "package_sha256", lambda _root: package_digest)
+    monkeypatch.setattr(package.staged_image, "identity", lambda: image)
+    package.validate_release(release, submission, binding, root)
+    protected = copy.deepcopy(release)
+    protected["protected_score"] = "SECRET_MARKER"
+    protected["receipt_sha256"] = self_hosted.digest_without(protected, "receipt_sha256")
+    with pytest.raises(ValueError, match="release is not clear"):
+        package.render(root, submission, binding, protected)
 
 
 def test_cgroup_leaf_producer_to_shared_consumer_end_to_end(
@@ -160,9 +217,7 @@ def test_pre_request_resource_failure_is_classified_without_content(
     monkeypatch.setattr(
         runtime,
         "observe_wave",
-        lambda *_args: (_ for _ in ()).throw(
-            runtime.PreRequestResourceSampleError("classified")
-        ),
+        lambda *_args: (_ for _ in ()).throw(runtime.PreRequestResourceSampleError("classified")),
     )
     value = runtime.run(plan, {}, Path("."))
     row = value["levels"][0]
@@ -182,9 +237,7 @@ def test_failure_metadata_rejects_unstructured_text(
     monkeypatch.setattr(
         runtime,
         "observe_wave",
-        lambda *_args: (_ for _ in ()).throw(
-            runtime.PreRequestResourceSampleError("classified")
-        ),
+        lambda *_args: (_ for _ in ()).throw(runtime.PreRequestResourceSampleError("classified")),
     )
     value = runtime.run(plan, {}, Path("."))
     value["levels"][0]["failure_code"] = "secret-like unstructured text"

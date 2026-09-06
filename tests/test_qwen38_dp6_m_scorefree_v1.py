@@ -44,6 +44,13 @@ def _resign(value: dict[str, object]) -> None:
     value["receipt_sha256"] = self_hosted.digest_without(value, "receipt_sha256")
 
 
+def test_scorefree_loader_rejects_duplicate_json_keys(tmp_path: Path) -> None:
+    path = tmp_path / "duplicate.json"
+    path.write_text('{"status":"safe","status":"SECRET_PROTECTED_VALUE"}')
+    with pytest.raises(ValueError, match="duplicate JSON key"):
+        held._load(path)  # noqa: SLF001
+
+
 def _project_shape() -> dict[str, object]:
     return {
         "current_gpu_nodes": 0,
@@ -107,9 +114,7 @@ def test_held_packet_is_append_only_score_free_and_exact() -> None:
     assert plan["qualification"]["controller_resource_sample_advance_wait_seconds"] == 5
     assert plan["qualification"]["controller_resource_producer_consumer_end_to_end_tested"] is True
     assert plan["qualification"]["http_failure_method_path_status_required"] is True
-    assert (
-        plan["qualification"]["http_failure_structured_code_fixed_allowlist_only"] is True
-    )
+    assert plan["qualification"]["http_failure_structured_code_fixed_allowlist_only"] is True
     assert plan["qualification"]["http_failure_response_shape_and_class_hash_required"] is True
     assert plan["qualification"]["http_failure_free_text_forbidden"] is True
     assert plan["qualification"]["observer_sfs_mount_path_must_be_derived_from_pod_spec"]
@@ -131,9 +136,7 @@ def test_payload_installs_metric_observer_v5_and_uses_600_second_rail() -> None:
     assert "PRE_READY_TIMEOUT_SECONDS=600" in payload["command"]
     assert payload["env"]["QWEN38_DP6_OBSERVER_SCRIPT"].endswith("observer_v5.py")
     assert payload["env"]["PYTHONPATH"] == "/tmp"
-    lifecycle_guard.validate_observer_environment(
-        payload["env"], held.RUNTIME_DEPENDENCY_DIR
-    )
+    lifecycle_guard.validate_observer_environment(payload["env"], held.RUNTIME_DEPENDENCY_DIR)
     priority = held.config(ROOT)["priority_contract"]
     assert priority == {
         "class": "fleet-infra-quiet",
@@ -173,6 +176,26 @@ def test_artifacts_fail_closed(
             validator(value, ROOT)
     else:
         with pytest.raises(ValueError):
+            validator(value)
+
+
+@pytest.mark.parametrize(
+    ("artifact", "validator"),
+    [
+        (held.PREVIEW_PATH, held.validate_preview),
+        (held.INVENTORY_PATH, held.validate_inventory),
+    ],
+)
+def test_archived_receipts_reject_rehashed_protected_fields(
+    artifact: Path, validator: object
+) -> None:
+    value = copy.deepcopy(held._load(ROOT / artifact))  # noqa: SLF001
+    value["protected_score"] = "SECRET_MARKER"
+    _resign(value)
+    with pytest.raises(ValueError):
+        if validator is held.validate_preview:
+            validator(value, ROOT)
+        else:
             validator(value)
 
 
@@ -271,9 +294,7 @@ def test_live_sfs_absence_uses_selected_observer_mount(
     monkeypatch.setattr(
         live,
         "_global",
-        lambda *_args: {"items": [copy.deepcopy(pod)]}
-        if "pods" in _args
-        else copy.deepcopy(pod),
+        lambda *_args: {"items": [copy.deepcopy(pod)]} if "pods" in _args else copy.deepcopy(pod),
     )
     observed: list[str] = []
 

@@ -101,6 +101,9 @@ def source_paths(root: Path) -> list[Path]:
 
 
 def archive_bytes(root: Path) -> bytes:
+    # Every JSON receipt added through STATIC_PATHS is validated before its
+    # raw bytes can enter the immutable package archive.
+    early.load_all(root)
     output = io.BytesIO()
     with (
         gzip.GzipFile(fileobj=output, mode="wb", mtime=0) as compressed,
@@ -129,26 +132,30 @@ def validate_release(
     root: Path,
 ) -> None:
     runtime.validate_binding(binding, submission, root)
-    if value.get("receipt_sha256") != self_hosted.digest_without(dict(value), "receipt_sha256") or (
-        value.get("schema_version") != RELEASE_SCHEMA
-        or value.get("status") != "RELEASED_FOR_ONE_NON_SCORED_QUALIFIER"
-        or value.get("launch_authorized") is not True
-        or value.get("scoring_authorized") is not False
-        or value.get("job_name") != JOB_NAME
-        or value.get("configmap_name") != CONFIGMAP_NAME
-        or value.get("output_root") != OUTPUT_ROOT
-        or value.get("serving_block") != early.SERVING_BLOCK
-        or value.get("submission_receipt_sha256") != submission.get("receipt_sha256")
-        or value.get("server_binding_receipt_sha256") != binding.get("receipt_sha256")
-        or value.get("package_sha256") != package_sha256(root)
-        or value.get("harness_runtime_image") != staged_image.identity()
-        or value.get("fresh_job_matches") != 0
-        or value.get("fresh_configmap_matches") != 0
-        or value.get("fresh_output_root_exists") is not False
-        or value.get("server_running_ready_restart0") is not True
-        or value.get("api_mutations_before_create") != 0
-        or value.get("task_instance_session_verifier_scoring_calls") != 0
-        or value.get("prompts_traces_flags_or_scores_included") is not False
+    if (
+        set(value) != runtime.RUNTIME_RELEASE_KEYS
+        or value.get("receipt_sha256") != self_hosted.digest_without(dict(value), "receipt_sha256")
+        or (
+            value.get("schema_version") != RELEASE_SCHEMA
+            or value.get("status") != "RELEASED_FOR_ONE_NON_SCORED_QUALIFIER"
+            or value.get("launch_authorized") is not True
+            or value.get("scoring_authorized") is not False
+            or value.get("job_name") != JOB_NAME
+            or value.get("configmap_name") != CONFIGMAP_NAME
+            or value.get("output_root") != OUTPUT_ROOT
+            or value.get("serving_block") != early.SERVING_BLOCK
+            or value.get("submission_receipt_sha256") != submission.get("receipt_sha256")
+            or value.get("server_binding_receipt_sha256") != binding.get("receipt_sha256")
+            or value.get("package_sha256") != package_sha256(root)
+            or value.get("harness_runtime_image") != staged_image.identity()
+            or value.get("fresh_job_matches") != 0
+            or value.get("fresh_configmap_matches") != 0
+            or value.get("fresh_output_root_exists") is not False
+            or value.get("server_running_ready_restart0") is not True
+            or value.get("api_mutations_before_create") != 0
+            or value.get("task_instance_session_verifier_scoring_calls") != 0
+            or value.get("prompts_traces_flags_or_scores_included") is not False
+        )
     ):
         raise ValueError("early DP6 qualifier release is not clear")
 
@@ -464,9 +471,9 @@ def main() -> int:
     args = parser.parse_args()
     value = render(
         args.repo_root,
-        json.loads(args.submission.read_text()),
-        json.loads(args.server_binding.read_text()),
-        json.loads(args.release.read_text()),
+        early._load(args.submission),  # noqa: SLF001
+        early._load(args.server_binding),  # noqa: SLF001
+        early._load(args.release),  # noqa: SLF001
     )
     manifest = {
         "apiVersion": "v1",

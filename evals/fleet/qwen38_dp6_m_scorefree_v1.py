@@ -28,6 +28,9 @@ RELEASE_PATH = Path("docs/evidence/qwen38-study/2026-09-06-qwen38-dp6-m-held-rel
 SUCCESSOR_AUTHORITY_PATH = Path(
     "docs/evidence/qwen38-study/2026-09-06-qwen38-dp6-l-scorefree-held-plan-v1.json"
 )
+SUCCESSOR_AUTHORITY_RECEIPT_SHA256 = (
+    "sha256:1dfb18260d44cc7e282c93232b6622a3822db0698fd168e807be50446546b581"
+)
 
 CONFIG_SCHEMA = "fleet-qwen38-dp6-m-scorefree-config-v1"
 PLAN_SCHEMA = "fleet-qwen38-dp6-m-scorefree-held-plan-v1"
@@ -48,6 +51,34 @@ MAX_PROJECT_GPUS = 16
 IDLE_SECONDS = 600
 SERVER_PRE_READY_TIMEOUT_SECONDS = 600
 COUNTER_PRODUCER_STARTUP_GRACE_SECONDS = 120
+MAX_JSON_BYTES = 16 * 1024 * 1024
+PREVIEW_KEYS = {
+    "schema_version",
+    "status",
+    "http_status",
+    "title",
+    "run_dir",
+    "priority_class",
+    "config_sha256",
+    "request_sha256",
+    "api_mutations",
+    "scored_calls",
+    "prompts_traces_flags_or_scores_included",
+    "receipt_sha256",
+}
+INVENTORY_KEYS = {
+    "schema_version",
+    "status",
+    "active_project_serving_runs",
+    "active_project_gpu_nodes",
+    "active_project_gpus",
+    "target_identity_matches",
+    "capacity",
+    "api_mutations",
+    "scored_calls",
+    "prompts_traces_flags_or_scores_included",
+    "receipt_sha256",
+}
 
 LIFECYCLE_PATH = Path("evals/fleet/scripts/qwen38_dedicated_dp6_lifecycle_v2.sh")
 OBSERVER_V1_PATH = Path("evals/fleet/qwen38_dp6_metric_observer_v1.py")
@@ -64,7 +95,18 @@ RUNTIME_DEPENDENCY_DIR = "/tmp/evals/fleet"
 
 
 def _load(path: Path) -> dict[str, Any]:
-    value = json.loads(path.read_text())
+    if path.is_symlink() or not path.is_file() or path.stat().st_size > MAX_JSON_BYTES:
+        raise ValueError(f"{path} is not a safe bounded JSON input")
+
+    def pairs(rows: list[tuple[str, Any]]) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for key, item in rows:
+            if key in result:
+                raise ValueError("duplicate JSON key")
+            result[key] = item
+        return result
+
+    value = json.loads(path.read_bytes(), object_pairs_hook=pairs)
     if not isinstance(value, dict):
         raise ValueError(f"{path} must contain an object")
     return value
@@ -72,6 +114,18 @@ def _load(path: Path) -> dict[str, Any]:
 
 def _receipt_valid(value: Mapping[str, Any], field: str = "receipt_sha256") -> bool:
     return value.get(field) == self_hosted.digest_without(dict(value), field)
+
+
+def _validate_successor_authority(value: Mapping[str, Any]) -> None:
+    # The predecessor plan is immutable input authority.  Pinning its canonical
+    # self-digest rejects both re-signed extra fields and any historical-plan
+    # rewrite without recursively depending on the predecessor's mutable source
+    # reconstruction code.
+    if (
+        not _receipt_valid(value)
+        or value.get("receipt_sha256") != SUCCESSOR_AUTHORITY_RECEIPT_SHA256
+    ):
+        raise ValueError("DP6-m successor authority drifted")
 
 
 def jobs_payload(root: Path) -> dict[str, Any]:
@@ -223,6 +277,7 @@ def validate_config(value: Mapping[str, Any], root: Path) -> None:
 
 def plan(root: Path) -> dict[str, Any]:
     successor = _load(root / SUCCESSOR_AUTHORITY_PATH)
+    _validate_successor_authority(successor)
     value = {
         "schema_version": PLAN_SCHEMA,
         "status": "HELD_PENDING_INDEPENDENT_REVIEW",
@@ -298,9 +353,7 @@ def plan(root: Path) -> dict[str, Any]:
             "sampler_state_forbidden_as_wave_counter_authority": True,
             "server_health_precedes_counter_producer": True,
             "server_pre_ready_timeout_seconds": SERVER_PRE_READY_TIMEOUT_SECONDS,
-            "counter_producer_startup_grace_seconds": (
-                COUNTER_PRODUCER_STARTUP_GRACE_SECONDS
-            ),
+            "counter_producer_startup_grace_seconds": (COUNTER_PRODUCER_STARTUP_GRACE_SECONDS),
             "counter_producer_wait_must_cover_pre_ready_plus_grace": True,
             "controller_resource_sample_wait_seconds": 30,
             "controller_resource_sample_ready_before_probe": True,
@@ -365,33 +418,42 @@ def validate_plan(value: Mapping[str, Any], root: Path) -> None:
 
 
 def validate_preview(value: Mapping[str, Any], root: Path) -> None:
-    if not _receipt_valid(value) or (
-        value.get("schema_version") != PREVIEW_SCHEMA
-        or value.get("status") != "HELD_NOT_RUN"
-        or value.get("http_status") is not None
-        or value.get("title") != TITLE
-        or value.get("run_dir") != RUN_DIR
-        or value.get("priority_class") != SERVER_PRIORITY_CLASS
-        or value.get("config_sha256") != config(root)["config_sha256"]
-        or value.get("request_sha256") != config(root)["request_sha256"]
-        or value.get("api_mutations") != 0
-        or value.get("scored_calls") != 0
-        or value.get("prompts_traces_flags_or_scores_included") is not False
+    if (
+        set(value) != PREVIEW_KEYS
+        or not _receipt_valid(value)
+        or (
+            value.get("schema_version") != PREVIEW_SCHEMA
+            or value.get("status") != "HELD_NOT_RUN"
+            or value.get("http_status") is not None
+            or value.get("title") != TITLE
+            or value.get("run_dir") != RUN_DIR
+            or value.get("priority_class") != SERVER_PRIORITY_CLASS
+            or value.get("config_sha256") != config(root)["config_sha256"]
+            or value.get("request_sha256") != config(root)["request_sha256"]
+            or value.get("api_mutations") != 0
+            or value.get("scored_calls") != 0
+            or value.get("prompts_traces_flags_or_scores_included") is not False
+        )
     ):
         raise ValueError("DP6-m preview receipt drifted")
 
 
 def validate_inventory(value: Mapping[str, Any]) -> None:
-    if not _receipt_valid(value) or (
-        value.get("schema_version") != INVENTORY_SCHEMA
-        or value.get("status") != "HELD_NOT_QUERIED"
-        or value.get("active_project_serving_runs") is not None
-        or value.get("active_project_gpu_nodes") is not None
-        or value.get("active_project_gpus") is not None
-        or value.get("target_identity_matches") is not None
-        or value.get("capacity") is not None
-        or value.get("api_mutations") != 0
-        or value.get("scored_calls") != 0
+    if (
+        set(value) != INVENTORY_KEYS
+        or not _receipt_valid(value)
+        or (
+            value.get("schema_version") != INVENTORY_SCHEMA
+            or value.get("status") != "HELD_NOT_QUERIED"
+            or value.get("active_project_serving_runs") is not None
+            or value.get("active_project_gpu_nodes") is not None
+            or value.get("active_project_gpus") is not None
+            or value.get("target_identity_matches") is not None
+            or value.get("capacity") is not None
+            or value.get("api_mutations") != 0
+            or value.get("scored_calls") != 0
+            or value.get("prompts_traces_flags_or_scores_included") is not False
+        )
     ):
         raise ValueError("DP6-m review inventory is not clear")
 
