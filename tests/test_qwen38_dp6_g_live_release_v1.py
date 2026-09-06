@@ -20,6 +20,21 @@ HELD_PATH = (
 )
 
 
+class Response:
+    status_code = 200
+
+    def raise_for_status(self) -> None:
+        return None
+
+    def json(self) -> dict:
+        return {"manifest_yaml": "preview"}
+
+
+class Client:
+    def post(self, _path: str, *, json: dict) -> Response:  # noqa: ARG002
+        return Response()
+
+
 def _shape() -> dict:
     return {
         "current_gpu_nodes": 0,
@@ -107,6 +122,37 @@ def test_current_inventory_is_fresh_zero_and_release_binds_it() -> None:
     release.validate_server_release(value, ROOT, SOURCE_COMMIT)
     assert value["current_inventory_receipt_sha256"] == current["receipt_sha256"]
     assert postcreate.server_live is release
+
+
+def test_actual_current_inventory_and_live_gate_round_trip_submission(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sfs = {
+        "observer_pod_name": "observer",
+        "observer_pod_uid": "44444444-4444-4444-8444-444444444444",
+        "observer_sfs_mount_path": "/shared",
+        "run_dir_exists": False,
+    }
+    monkeypatch.setattr(release.base, "_active_project_runs", lambda _client: [])
+    monkeypatch.setattr(release.base, "_kubernetes_gate", lambda _active: _shape())
+    monkeypatch.setattr(
+        release.base,
+        "_observer_pod",
+        lambda: ("observer", "44444444-4444-4444-8444-444444444444", "/shared"),
+    )
+    monkeypatch.setattr(release.base, "_sfs_absence", lambda _observer: copy.deepcopy(sfs))
+    rendered = held._load(ROOT / held.PREVIEW_PATH)["rendered"]  # noqa: SLF001
+    monkeypatch.setattr(held, "preview_identity", lambda *_args: copy.deepcopy(rendered))
+    client = Client()
+    current = release.current_inventory(client, SOURCE_COMMIT)
+    release.validate_current_inventory(current, SOURCE_COMMIT)
+    server_release = _server_release(current)
+    _, gate = release.live_gate(client, server_release, ROOT, SOURCE_COMMIT)
+    receipt = release.base.submission_receipt(
+        "ft-run-dp6g", gate, server_release, SOURCE_COMMIT, ROOT
+    )
+    release.validate_submission(receipt, server_release, ROOT, SOURCE_COMMIT)
+    assert gate["sfs_observation"] == sfs
 
 
 def test_live_release_successor_is_held_and_source_bound() -> None:

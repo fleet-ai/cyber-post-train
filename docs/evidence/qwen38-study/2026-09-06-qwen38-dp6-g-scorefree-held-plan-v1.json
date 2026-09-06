@@ -50,7 +50,7 @@
     "priority_value": 100,
     "task_instance_session_verifier_scoring_calls": 0
   },
-  "receipt_sha256": "sha256:bf7833af7472526dacbd45f5a0c122d104f63484c5163d3267e7629f0db5d0e8",
+  "receipt_sha256": "sha256:f8a0467155df0b620904f8b21c10cd2399a16671a193136fcea1ad538339a71a",
   "release_first_gate": {
     "active_project_gpu_nodes_required": 0,
     "active_project_gpus_required": 0,
@@ -83,14 +83,14 @@
     "title": "chris-cyber-evalserve-q38-dp6-g-v1"
   },
   "source_digests": {
-    "evals/fleet/qwen38_dp6_g_live_v1.py": "sha256:2a6fe9e903fab6c669a3e0e0206ef7ba1d4e64ce225f8523c4a0ef96a136cd8e",
+    "evals/fleet/qwen38_dp6_g_live_v1.py": "sha256:56ddd3ef11d8717a25bb3dc66758f25f7fcd2ba7ab41e1c0cb69b4946e7c235d",
     "evals/fleet/qwen38_dp6_g_qualifier_package_v1.py": "sha256:b49f7d9a8cf11339ddbcc6505c22cd37ae93c86a50eeb1c8047313e549ae4053",
     "evals/fleet/qwen38_dp6_g_qualifier_runtime_v1.py": "sha256:41ab93ddb5b4e83d59e0a60271e128a7427fc07d684e111f4b18f6cc4b0df0b8",
     "evals/fleet/qwen38_dp6_metric_observer_v1.py": "sha256:4921dea0d25392ba98a678eb58e74ff952fb9331647bdf0579028e5b18fd89c8",
     "evals/fleet/qwen38_dp6_metric_observer_v2.py": "sha256:5628072295f26ef7aaba02e239dcbca3945dd8e3d830f2443f2ef148cb723b90",
     "evals/fleet/qwen38_dp6_metric_observer_v3.py": "sha256:7cb57d7c01103550ea91e83d2c8b8ce8d8ccc9ed2362f7ae046bdb45d68df3c9",
     "evals/fleet/qwen38_dp6_metric_observer_v4.py": "sha256:2448d14d776f857aa09b67d73641d772fbc67c7ede04ed775eebc30fb9ab1eb3",
-    "evals/fleet/qwen38_dp6_qualification_guard_v2.py": "sha256:0ff8b35c86e02171e9ea6789fc4a52bd35ec83f45aa1c61bc5f2bfa8dcd48740",
+    "evals/fleet/qwen38_dp6_qualification_guard_v2.py": "sha256:d5fc53c3d76656ac2f3aa2753a94a5dc4f672487877fbca43f77b487eb7eb240",
     "evals/fleet/scripts/qwen38_dedicated_dp6_lifecycle_v2.sh": "sha256:78eb2f4766b6794fe77d2ee4cddd418899dd1ec05e7a0b89412869fe4980455b"
   },
   "statistical_cells_selected": 0,

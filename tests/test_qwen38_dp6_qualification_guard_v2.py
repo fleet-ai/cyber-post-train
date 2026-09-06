@@ -169,6 +169,12 @@ def test_observer_path_translates_canonical_sfs_to_bound_mount() -> None:
             guard.observer_sfs_path(mount, path)
 
 
+@pytest.mark.parametrize("mount", ["/shared/../escape", "/shared/./nested", "//shared"])
+def test_observer_path_rejects_non_normalized_mount(mount: str) -> None:
+    with pytest.raises(ValueError, match="normalized and bounded"):
+        guard.observer_sfs_path(mount, "/mnt/sfs/jobs/example")
+
+
 def test_observer_selection_rejects_unmounted_or_ambiguous_sfs() -> None:
     missing_mount = _pod("stable", "stable-uid")
     missing_mount["spec"]["containers"][0]["volumeMounts"] = []

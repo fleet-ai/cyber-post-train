@@ -10,6 +10,21 @@ from evals.fleet import qwen38_dp6_metric_observer_v4 as metric_observer
 from evals.fleet import self_hosted
 
 
+def _normalized_mount_path(value: str) -> Path:
+    raw = value.rstrip("/")
+    path = Path(raw)
+    if (
+        not raw
+        or raw == "/"
+        or raw.startswith("//")
+        or not path.is_absolute()
+        or str(path) != raw
+        or ".." in path.parts
+    ):
+        raise ValueError("SFS observer mount path is not normalized and bounded")
+    return path
+
+
 def observer_pythonpath(dependency_dir: str) -> str:
     path = Path(dependency_dir)
     if path.name != "fleet" or path.parent.name != "evals" or not path.is_absolute():
@@ -33,6 +48,7 @@ def select_stable_sfs_observer(
         metadata = item.get("metadata", {})
         uid = metadata.get("uid")
         statuses = item.get("status", {}).get("containerStatuses") or []
+        containers = item.get("spec", {}).get("containers") or []
         volumes = item.get("spec", {}).get("volumes") or []
         sfs_volume_names = {
             str(volume.get("name"))
@@ -41,7 +57,7 @@ def select_stable_sfs_observer(
         }
         mount_paths = {
             str(mount.get("mountPath"))
-            for container in item.get("spec", {}).get("containers") or []
+            for container in containers
             for mount in container.get("volumeMounts") or []
             if mount.get("name") in sfs_volume_names
         }
@@ -52,25 +68,25 @@ def select_stable_sfs_observer(
             and len(sfs_volume_names) == 1
             and len(mount_paths) == 1
             and statuses
+            and len(statuses) == len(containers)
             and all(row.get("ready") is True for row in statuses)
             and sum(int(row.get("restartCount") or 0) for row in statuses) == 0
         ):
             name = metadata.get("name")
             mount_path = next(iter(mount_paths))
-            if (
-                isinstance(name, str)
-                and name
-                and Path(mount_path).is_absolute()
-                and mount_path != "/"
-            ):
-                candidates.append((name, uid, mount_path.rstrip("/")))
+            try:
+                normalized_mount = str(_normalized_mount_path(mount_path))
+            except ValueError:
+                continue
+            if isinstance(name, str) and name:
+                candidates.append((name, uid, normalized_mount))
     if not candidates:
         raise RuntimeError("no stable non-target SFS observer exists")
     return sorted(candidates)[0]
 
 
 def observer_sfs_path(observer_mount: str, canonical_path: str) -> str:
-    mount = Path(observer_mount)
+    mount = _normalized_mount_path(observer_mount)
     canonical_root = Path("/mnt/sfs")
     target = Path(canonical_path)
     if not mount.is_absolute() or str(mount) == "/" or not target.is_absolute():

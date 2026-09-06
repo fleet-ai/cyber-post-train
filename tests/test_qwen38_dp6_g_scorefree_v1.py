@@ -170,6 +170,12 @@ def test_create_once_repeats_complete_release_first_gate(
         "server_release_receipt_sha256": release["receipt_sha256"],
         "active_project_serving_runs": 0,
         "target_identity_matches": {"jobs_api": 0, "kubernetes": 0, "sfs": 0},
+        "sfs_observation": {
+            "observer_pod_name": "observer",
+            "observer_pod_uid": "44444444-4444-4444-8444-444444444444",
+            "observer_sfs_mount_path": "/shared",
+            "run_dir_exists": False,
+        },
         "project_resource_shape": shape,
         "rendered": {},
         "api_mutations": 0,
@@ -179,7 +185,11 @@ def test_create_once_repeats_complete_release_first_gate(
     monkeypatch.setattr(live, "_active_project_runs", lambda _client: [])
     monkeypatch.setattr(live, "_kubernetes_gate", lambda _active: shape)
     monkeypatch.setattr(live, "_observer_pod", lambda: ("observer", "uid", "/shared"))
-    monkeypatch.setattr(live, "_sfs_absence", lambda _observer: {"run_dir_exists": False})
+    monkeypatch.setattr(
+        live,
+        "_sfs_absence",
+        lambda _observer: copy.deepcopy(gate["sfs_observation"]),
+    )
     monkeypatch.setattr(held, "preview_identity", lambda *_args: {})
     client = Client()
     assert (
@@ -274,6 +284,7 @@ def test_submission_validator_binds_complete_nested_gate_and_rejects_drift() -> 
         "sfs_observation": {
             "observer_pod_name": "observer",
             "observer_pod_uid": "44444444-4444-4444-8444-444444444444",
+            "observer_sfs_mount_path": "/shared",
             "run_dir_exists": False,
         },
         "rendered": held._load(ROOT / held.PREVIEW_PATH)["rendered"],  # noqa: SLF001

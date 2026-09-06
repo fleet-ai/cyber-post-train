@@ -59,7 +59,7 @@ def validate_current_inventory(value: Mapping[str, Any], source_commit: str) -> 
         or value.get("source_commit") != source_commit
         or value.get("active_project_serving_runs") != 0
         or value.get("target_identity_matches") != {"jobs_api": 0, "kubernetes": 0, "sfs": 0}
-        or value.get("sfs_observation", {}).get("run_dir_exists") is not False
+        or not base._sfs_observation_valid(value.get("sfs_observation"))  # noqa: SLF001
         or not base._shape_safe(value.get("project_resource_shape"))
         or value.get("api_mutations") != 0
         or value.get("scored_calls") != 0

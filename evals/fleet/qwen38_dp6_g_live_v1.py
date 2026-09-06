@@ -277,6 +277,28 @@ def _sfs_absence(observer: tuple[str, str, str]) -> dict[str, Any]:
     }
 
 
+def _sfs_observation_valid(value: object) -> bool:
+    if not isinstance(value, dict) or set(value) != {
+        "observer_pod_name",
+        "observer_pod_uid",
+        "observer_sfs_mount_path",
+        "run_dir_exists",
+    }:
+        return False
+    try:
+        lifecycle_guard.observer_sfs_path(
+            str(value.get("observer_sfs_mount_path")), held.RUN_DIR
+        )
+    except ValueError:
+        return False
+    return (
+        isinstance(value.get("observer_pod_name"), str)
+        and bool(value.get("observer_pod_name"))
+        and _nonzero_uuid(value.get("observer_pod_uid"))
+        and value.get("run_dir_exists") is False
+    )
+
+
 def _kubernetes_gate(active_runs: list[dict[str, str]]) -> dict[str, Any]:
     if active_runs:
         raise RuntimeError("release-first requires zero active project serving runs")
@@ -413,6 +435,7 @@ def submit_create_once(
         or gate.get("target_identity_matches") != {"jobs_api": 0, "kubernetes": 0, "sfs": 0}
         or gate.get("api_mutations") != 0
         or gate.get("scored_calls") != 0
+        or not _sfs_observation_valid(gate.get("sfs_observation"))
         or not _shape_safe(gate.get("project_resource_shape"))
     ):
         raise ValueError("DP6-g live gate is not clear")
@@ -422,7 +445,7 @@ def submit_create_once(
     late_shape = _kubernetes_gate(late_active)
     if not _shape_safe(late_shape):
         raise RuntimeError("DP6-g capacity changed before create")
-    if _sfs_absence(_observer_pod()).get("run_dir_exists") is not False:
+    if not _sfs_observation_valid(_sfs_absence(_observer_pod())):
         raise RuntimeError("DP6-g SFS state changed before create")
     preview = client.post("/v1/runs/preview", json=dict(payload))
     preview.raise_for_status()
@@ -531,11 +554,7 @@ def validate_submission(
         or gate.get("request_sha256") != config["request_sha256"]
         or gate.get("active_project_serving_runs") != 0
         or gate.get("target_identity_matches") != {"jobs_api": 0, "kubernetes": 0, "sfs": 0}
-        or set(sfs) != {"observer_pod_name", "observer_pod_uid", "run_dir_exists"}
-        or not isinstance(sfs.get("observer_pod_name"), str)
-        or not sfs.get("observer_pod_name")
-        or not _nonzero_uuid(sfs.get("observer_pod_uid"))
-        or sfs.get("run_dir_exists") is not False
+        or not _sfs_observation_valid(sfs)
         or gate.get("rendered") != preview.get("rendered")
         or gate.get("api_mutations") != 0
         or gate.get("scored_calls") != 0
@@ -543,6 +562,38 @@ def validate_submission(
         or not _shape_safe(gate.get("project_resource_shape"))
     ):
         raise ValueError("DP6-g nested live gate is not executable evidence")
+
+
+def submission_receipt(
+    api_run_id: str,
+    gate: Mapping[str, Any],
+    release: Mapping[str, Any],
+    source_commit: str,
+    root: Path,
+) -> dict[str, Any]:
+    receipt = {
+        "schema_version": SUBMISSION_SCHEMA,
+        "status": "SUBMITTED_SCORE_FREE_DP6_G_SERVER",
+        "api_run_id": api_run_id,
+        "source_commit": source_commit,
+        "title": held.TITLE,
+        "run_dir": held.RUN_DIR,
+        "serving_block": held.SERVING_BLOCK,
+        "config_sha256": held.config(root)["config_sha256"],
+        "server_release_receipt_sha256": release["receipt_sha256"],
+        "live_gate_receipt_sha256": gate["receipt_sha256"],
+        "live_gate": dict(gate),
+        "request_sha256": held.config(root)["request_sha256"],
+        "project_resource_shape": gate["project_resource_shape"],
+        "route": "POST /v1/runs",
+        "http_status": 202,
+        "server_instances_created": 1,
+        "scored_calls": 0,
+        "prompts_traces_flags_or_scores_included": False,
+    }
+    receipt["receipt_sha256"] = self_hosted.digest_without(receipt, "receipt_sha256")
+    validate_submission(receipt, release, root, source_commit)
+    return receipt
 
 
 def main() -> int:
@@ -568,27 +619,7 @@ def main() -> int:
             shared._write_once(args.output, gate)  # noqa: SLF001
             return 0
         api_run_id = submit_create_once(client, payload, gate, release, source_commit, root)
-    receipt = {
-        "schema_version": SUBMISSION_SCHEMA,
-        "status": "SUBMITTED_SCORE_FREE_DP6_G_SERVER",
-        "api_run_id": api_run_id,
-        "source_commit": source_commit,
-        "title": held.TITLE,
-        "run_dir": held.RUN_DIR,
-        "serving_block": held.SERVING_BLOCK,
-        "config_sha256": held.config(root)["config_sha256"],
-        "server_release_receipt_sha256": release["receipt_sha256"],
-        "live_gate_receipt_sha256": gate["receipt_sha256"],
-        "live_gate": gate,
-        "request_sha256": held.config(root)["request_sha256"],
-        "project_resource_shape": gate["project_resource_shape"],
-        "route": "POST /v1/runs",
-        "http_status": 202,
-        "server_instances_created": 1,
-        "scored_calls": 0,
-        "prompts_traces_flags_or_scores_included": False,
-    }
-    receipt["receipt_sha256"] = self_hosted.digest_without(receipt, "receipt_sha256")
+    receipt = submission_receipt(api_run_id, gate, release, source_commit, root)
     shared._write_once(args.output, receipt)  # noqa: SLF001
     return 0
 
