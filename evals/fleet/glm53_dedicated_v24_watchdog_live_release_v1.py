@@ -1361,6 +1361,14 @@ def _wait_for_watchdog_active(
                         watcher_pod_uid=pod_uid,
                         package_commit=release["watchdog_package_commit"],
                         package_sha256=release["watchdog_package_sha256"],
+                        expected_runtime_auth_schema=getattr(
+                            package,
+                            "RUNTIME_AUTH_SCHEMA",
+                            runtime.RUNTIME_AUTH_SCHEMA,
+                        ),
+                        expected_live_release_schema=RELEASE_SCHEMA,
+                        expected_watchdog_job_name=package.JOB_NAME,
+                        expected_watchdog_result_root=package.RESULT_ROOT,
                     )
                     return {
                         "watchdog_job_uid": job_uid,

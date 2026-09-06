@@ -261,3 +261,75 @@ def test_v26_wrong_generation_contract_fails_closed(
             expected_watchdog_job_name=package.JOB_NAME,
             expected_watchdog_result_root=package.RESULT_ROOT,
         )
+
+
+def test_live_engine_validates_active_receipts_with_bound_v26_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    server_binding = binding()
+    release = {
+        "watchdog_package_commit": "a" * 40,
+        "watchdog_package_sha256": "sha256:" + "b" * 64,
+        "receipt_sha256": "sha256:" + "c" * 64,
+    }
+    job_uid = "88888888-8888-4888-8888-888888888888"
+    pod_uid = "99999999-9999-4999-8999-999999999999"
+    job = {
+        "metadata": {
+            "uid": job_uid,
+            "annotations": {
+                "cyber-post-train.fleet.ai/live-release-receipt-sha256": release[
+                    "receipt_sha256"
+                ]
+            },
+        },
+        "status": {},
+    }
+    pod = {
+        "metadata": {
+            "uid": pod_uid,
+            "ownerReferences": [{"kind": "Job", "uid": job_uid}],
+        },
+        "status": {
+            "phase": "Running",
+            "containerStatuses": [{"ready": True, "restartCount": 0}],
+        },
+    }
+    observed: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        engine,
+        "_kubectl_optional",
+        lambda kind, _name: job if kind == "jobs.batch" else None,
+    )
+    monkeypatch.setattr(
+        engine,
+        "_kubectl_json",
+        lambda kind: {"items": [pod]} if kind == "pods" else {"items": []},
+    )
+    monkeypatch.setattr(
+        engine,
+        "_pod_python",
+        lambda *_args: {
+            "active": {"receipt_sha256": "active"},
+            "authorization": {"receipt_sha256": "authorization"},
+        },
+    )
+    monkeypatch.setattr(runtime, "validate_active_receipt", lambda *_args, **_kwargs: None)
+
+    def validate(*_args: object, **kwargs: object) -> None:
+        observed.update(kwargs)
+
+    monkeypatch.setattr(runtime, "validate_runtime_authorization_receipt", validate)
+    with adapter.bound_engine():
+        result = engine._wait_for_watchdog_active(
+            server_binding,
+            release,
+            head_pod_name="head",
+            attempts=1,
+        )
+    assert result["watchdog_job_uid"] == job_uid
+    assert observed["expected_runtime_auth_schema"] == package.RUNTIME_AUTH_SCHEMA
+    assert observed["expected_live_release_schema"] == package.LIVE_RELEASE_SCHEMA
+    assert observed["expected_watchdog_job_name"] == package.JOB_NAME
+    assert observed["expected_watchdog_result_root"] == package.RESULT_ROOT
