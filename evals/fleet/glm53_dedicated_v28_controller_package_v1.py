@@ -31,6 +31,7 @@ FILES = tuple(
     sorted(
         set(prior.FILES)
         | {
+            "evals/fleet/glm53_dedicated_v23_scorefree_package_v1.py",
             "evals/fleet/glm53_dedicated_v24_server_v1.py",
             "evals/fleet/glm53_dedicated_v24_watchdog_live_release_v1.py",
             "evals/fleet/glm53_dedicated_v24_watchdog_package_v1.py",
