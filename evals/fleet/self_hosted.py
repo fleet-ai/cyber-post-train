@@ -137,6 +137,18 @@ def _request(client: httpx.Client, method: str, path: str, **kwargs: Any) -> Any
     raise AssertionError("unreachable")
 
 
+def fleet_request_failure_evidence(exc: BaseException) -> dict[str, Any]:
+    """Project only non-sensitive transport facts from a Fleet request failure."""
+    if not isinstance(exc, FleetRequestError):
+        return {}
+    return {
+        "error_code": "fleet_http_error",
+        "method": exc.method,
+        "route": exc.route,
+        "http_status": exc.status_code,
+    }
+
+
 def load_and_verify_task(client: httpx.Client, config: dict[str, Any]) -> dict[str, Any]:
     expected = config["task"]
     # The legacy source-job roster is large and is provenance only. Read the
@@ -1051,6 +1063,26 @@ def assert_authoritative_routes_deployed(
     }
 
 
+def preflight_scoring_route(client: httpx.Client, config: dict[str, Any]) -> dict[str, Any]:
+    """Re-probe the concrete scoring route without crossing its POST boundary."""
+    route = authoritative_route(config, "scoring")
+    with client.stream("GET", f"{ORCHESTRATOR}{route}") as response:
+        status_code = response.status_code
+    if status_code != 405:
+        raise FleetRequestError("GET", route, status_code)
+    receipt = {
+        "schema_version": "fleet-selfhosted-scoring-route-preflight-v1",
+        "method": "GET",
+        "route": route,
+        "http_status": 405,
+        "mutation_calls": 0,
+        "checked_immediately_before_scoring": True,
+        "response_body_read": False,
+    }
+    receipt["receipt_sha256"] = digest_without(receipt, "receipt_sha256")
+    return receipt
+
+
 def _docker(
     *args: str,
     check: bool = True,
@@ -1546,6 +1578,8 @@ def run(
             "fidelity": trace_fidelity,
         }
         (out_dir / "trace-manifest.json").write_bytes(canonical_json(trace_manifest) + b"\n")
+        scoring_route_preflight = preflight_scoring_route(client, config)
+        write_json_once(out_dir / "scoring-route-preflight.json", scoring_route_preflight)
         scoring_payload = build_scoring_payload(
             config,
             instance_id=instance_id,
@@ -1642,16 +1676,13 @@ def run(
         return result_record
     except BaseException as exc:
         if out_dir.exists():
-            (out_dir / "failure.json").write_bytes(
-                canonical_json(
-                    {
-                        "error_type": type(exc).__name__,
-                        "elapsed_seconds": round(time.time() - started_at, 3),
-                        "run_id": config["run_id"],
-                    }
-                )
-                + b"\n"
-            )
+            failure = {
+                "error_type": type(exc).__name__,
+                "elapsed_seconds": round(time.time() - started_at, 3),
+                "run_id": config["run_id"],
+                **fleet_request_failure_evidence(exc),
+            }
+            (out_dir / "failure.json").write_bytes(canonical_json(failure) + b"\n")
         raise
     finally:
         _docker("rm", "-f", agent_container, check=False, capture=True)

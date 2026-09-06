@@ -163,6 +163,15 @@ The raw Qwen chat JSONL is the canonical trace. A normalized copy retaining
 assistant thinking, tool calls, and tool observations is supplied to scoring
 and Fleet trace ingestion. All artifacts are marked ineligible for training.
 
+Post-model Fleet request failures are never automatically retried: the claim is
+already consumed even when no result, verifier execution, or session-ingest row
+exists. Immediately before the one-shot scoring POST, the runner performs a
+body-blind `GET` against that exact route and requires `405`; this distinguishes
+late route/authentication failures without scoring. Any subsequent request
+failure records only its method, route, and HTTP status. A successor must use a
+fresh, wholly unstarted task proven disjoint from every accepted, ingested,
+claimed, and ambiguous cell by a self-digested global-ledger reconciliation.
+
 ```bash
 # Read-only task identity plus deployed-route gate.
 evals/fleet/scripts/submit_selfhosted_qwen_smoke.sh preview

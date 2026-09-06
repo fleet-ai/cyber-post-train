@@ -721,6 +721,90 @@ def test_authority_gate_prefers_openapi_without_behavioral_probe() -> None:
     }
 
 
+def test_scoring_route_preflight_is_body_blind_and_score_free() -> None:
+    class Response:
+        status_code = 405
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        @property
+        def content(self) -> bytes:
+            raise AssertionError("preflight must not read the response body")
+
+        def json(self) -> dict:
+            raise AssertionError("preflight must not decode the response body")
+
+    class Client:
+        calls: list[tuple[str, str]] = []
+
+        def stream(self, method: str, url: str, **kwargs):
+            assert not kwargs
+            self.calls.append((method, url))
+            return Response()
+
+    client = Client()
+    config = _config()
+    receipt = self_hosted.preflight_scoring_route(client, config)
+    assert client.calls == [
+        (
+            "GET",
+            self_hosted.ORCHESTRATOR + self_hosted.authoritative_route(config, "scoring"),
+        )
+    ]
+    assert receipt["mutation_calls"] == 0
+    assert receipt["response_body_read"] is False
+    assert receipt["checked_immediately_before_scoring"] is True
+    assert receipt["receipt_sha256"] == self_hosted.digest_without(
+        receipt, "receipt_sha256"
+    )
+
+
+def test_scoring_route_preflight_preserves_sanitized_failure_discriminator() -> None:
+    class Response:
+        status_code = 503
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+    class Client:
+        def stream(self, method: str, url: str, **kwargs):
+            assert method == "GET"
+            assert not kwargs
+            return Response()
+
+    config = _config()
+    route = self_hosted.authoritative_route(config, "scoring")
+    with pytest.raises(self_hosted.FleetRequestError) as caught:
+        self_hosted.preflight_scoring_route(Client(), config)
+    assert self_hosted.fleet_request_failure_evidence(caught.value) == {
+        "error_code": "fleet_http_error",
+        "method": "GET",
+        "route": route,
+        "http_status": 503,
+    }
+    assert self_hosted.fleet_request_failure_evidence(RuntimeError("local")) == {}
+
+
+def test_runner_reprobes_scoring_route_at_the_last_pre_mutation_boundary() -> None:
+    source = Path(self_hosted.__file__).read_text()
+    trace_written = source.index('(out_dir / "trace-manifest.json").write_bytes')
+    late_preflight = source.index("preflight_scoring_route(client, config)", trace_written)
+    intent_written = source.index(
+        'write_json_once(out_dir / "scoring-intent.json", scoring_intent)', late_preflight
+    )
+    scoring_post = source.index('authoritative_route(config, "scoring")', intent_written)
+    assert trace_written < late_preflight < intent_written < scoring_post
+    failure_write = source.index('out_dir / "failure.json"', scoring_post)
+    assert source.index("fleet_request_failure_evidence(exc)", scoring_post) < failure_write
+
+
 def test_qwen_trace_normalization_preserves_calls_results_and_thinking() -> None:
     events = [
         {
