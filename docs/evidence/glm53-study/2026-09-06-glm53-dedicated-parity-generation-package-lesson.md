@@ -11,3 +11,31 @@ Every fresh generation must now prove all of the following from the exact render
 5. Keep Fleet task, session, verifier, and scoring calls at zero; release the exact server through the UID-bound rail on any pre-request failure.
 
 The v31 identity is frozen and must never be retried. The v32 package remains held until independent review.
+
+## Jobs API create-response identity
+
+The v33 controller later proved a separate boundary: the deployed Jobs API can
+return HTTP 202 with no documented response body even though it has created the
+requested run. A controller must not infer the run identity from that response
+body. It must instead:
+
+1. exhaustively list the score-blind run index immediately before POST and
+   reject any exact title, run-directory, or requested-prefix collision;
+2. issue POST exactly once;
+3. exhaustively poll the same index for the unique newly matching row, then
+   confirm its exact fields through an exact GET;
+4. release every safely identified candidate and confirm absence whenever the
+   post-create identity is ambiguous or disagrees; and
+5. freeze the generation with a do-not-retry failure when no identity can be
+   reconciled, rather than guessing from an undocumented response shape.
+
+Materialized-package tests must exercise an empty, malformed, and irrelevant
+202 response body so a later API-client refactor cannot reintroduce response
+body authority. The v33 identity is frozen and must never be retried.
+
+Once POST has been attempted, every later failure belongs to one cleanup
+envelope. That includes transient inventory or exact-GET failures and local
+receipt-directory or receipt-write failures. Cleanup must boundedly reconcile
+the generation again, attempt release and absence confirmation for every safe
+candidate even when an earlier candidate's delete fails, and emit only a fixed
+do-not-retry failure class if complete absence cannot be proved.
