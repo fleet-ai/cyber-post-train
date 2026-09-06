@@ -182,6 +182,34 @@ def test_public_renderer_and_validators_have_no_caller_controlled_clock() -> Non
         assert "now_epoch" not in inspect.signature(function).parameters
 
 
+def test_jobs_api_create_response_uses_exact_name_run_identity() -> None:
+    response = {
+        "image": "immutable",
+        "job_id": "ray-submit-id",
+        "message": "submitted",
+        "name": "ft-run-e3f8c138",
+        "run_dir": server.RUN_DIR,
+        "status": "Initializing",
+    }
+    assert live_release.extract_jobs_api_run_id(response) == "ft-run-e3f8c138"
+
+
+def test_jobs_api_run_identity_rejects_absent_or_ambiguous_variants() -> None:
+    with pytest.raises(live_release.LiveReleaseError, match="ambiguous_or_absent"):
+        live_release.extract_jobs_api_run_id({"name": server.TITLE})
+    with pytest.raises(live_release.LiveReleaseError, match="ambiguous_or_absent"):
+        live_release.extract_jobs_api_run_id(
+            {"name": "ft-run-deadbeef", "run": {"id": "ft-run-cafebabe"}}
+        )
+
+
+def test_server_bound_probe_accepts_name_field_only_under_exact_ft_run_regex() -> None:
+    source = live_release._api_probe_source("ft-run-deadbeef")
+    assert "for key in ('id', 'run_id', 'name')" in source
+    assert "ft-run-[0-9a-f]{8}" in source
+    assert "len(run_ids) == 1" in source
+
+
 @pytest.mark.parametrize(
     ("field", "bad"),
     [

@@ -163,6 +163,31 @@ def _valid_uuid(value: Any) -> bool:
         return False
 
 
+def extract_jobs_api_run_id(value: dict[str, Any]) -> str:
+    """Extract one exact ft-run identity from create/get response variants."""
+
+    if not isinstance(value, dict):
+        raise LiveReleaseError("jobs_api_response_invalid")
+    candidates = [value]
+    for key in ("run", "config", "request"):
+        child = value.get(key)
+        if isinstance(child, dict):
+            candidates.append(child)
+            nested = child.get("config")
+            if isinstance(nested, dict):
+                candidates.append(nested)
+    matches = {
+        item
+        for candidate in candidates
+        for key in ("id", "run_id", "name")
+        for item in (candidate.get(key),)
+        if isinstance(item, str) and API_RUN_ID_RE.fullmatch(item) is not None
+    }
+    if len(matches) != 1:
+        raise LiveReleaseError("jobs_api_run_identity_ambiguous_or_absent")
+    return matches.pop()
+
+
 def _validate_application_ready(value: dict[str, Any]) -> None:
     try:
         ready_utc = datetime.datetime.fromisoformat(
@@ -644,7 +669,7 @@ def _owned_by(value: dict[str, Any], *, kind: str, uid: str) -> bool:
 
 def _api_probe_source(api_run_id: str) -> str:
     return f"""
-import json, os, urllib.parse, urllib.request
+import json, os, re, urllib.parse, urllib.request
 url = 'https://api.ft.flt.build/v1/runs/' + urllib.parse.quote({api_run_id!r}, safe='')
 request = urllib.request.Request(
     url,
@@ -670,9 +695,16 @@ def first(*keys):
             if candidate.get(key) is not None:
                 return candidate[key]
     return None
+run_ids = {{
+    candidate.get(key)
+    for candidate in candidates
+    for key in ('id', 'run_id', 'name')
+    if isinstance(candidate.get(key), str)
+    and re.fullmatch(r'ft-run-[0-9a-f]{{8}}', candidate[key])
+}}
 print(json.dumps({{
     'http_status': response.status,
-    'api_run_id': first('id', 'run_id'),
+    'api_run_id': next(iter(run_ids)) if len(run_ids) == 1 else None,
     'title': first('title', 'name'),
     'run_dir': first('run_dir'),
     'state': first('state', 'status'),
