@@ -17,7 +17,7 @@ from evals.fleet import glm53_dedicated_v32_watchdog_live_release_v1 as adapter
 from evals.fleet import glm53_dedicated_v32_watchdog_package_v1 as watchdog
 
 ROOT = Path(__file__).resolve().parents[1]
-COMMIT = "f370770520a3d872de6e04929ceb862f9504e382"
+COMMIT = "c1f5301d1cf26f3b854e314e5d5f2c40b0169d04"
 
 
 def create_authorization() -> dict[str, object]:
