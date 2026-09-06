@@ -32,9 +32,7 @@ class SubmitError(RuntimeError):
 
 def preview_digest(value: dict[str, Any]) -> str:
     return observer.sha256(
-        observer.canonical(
-            {key: item for key, item in value.items() if key != "preview_sha256"}
-        )
+        observer.canonical({key: item for key, item in value.items() if key != "preview_sha256"})
     )
 
 
@@ -94,9 +92,10 @@ def render(root: Path, release_path: Path, *, api_key: str) -> dict[str, Any]:
             [row.get("metadata", {}).get("name") for row in items or []]
             != [successor.CONFIGMAP_NAME, successor.JOB_NAME],
             items[0].get("immutable") is not True if items else True,
-            items[1].get("metadata", {}).get("annotations", {}).get(
-                "cyber-post-train.fleet.ai/create-once"
-            )
+            items[1]
+            .get("metadata", {})
+            .get("annotations", {})
+            .get("cyber-post-train.fleet.ai/create-once")
             != "true"
             if items
             else True,
@@ -160,20 +159,22 @@ def validate_preview(manifest: dict[str, Any]) -> None:
             configmap.get("metadata", {}).get("name") != successor.CONFIGMAP_NAME,
             configmap.get("metadata", {}).get("namespace") != observer.NAMESPACE,
             configmap.get("immutable") is not True,
-            embedded_release.get("receipt_sha256")
-            != manifest.get("release_receipt_sha256"),
+            embedded_release.get("receipt_sha256") != manifest.get("release_receipt_sha256"),
             job.get("apiVersion") != "batch/v1",
             job.get("metadata", {}).get("name") != successor.JOB_NAME,
             job.get("metadata", {}).get("namespace") != observer.NAMESPACE,
-            job.get("metadata", {}).get("annotations", {}).get(
-                "cyber-post-train.fleet.ai/create-once"
-            )
+            job.get("metadata", {})
+            .get("annotations", {})
+            .get("cyber-post-train.fleet.ai/create-once")
             != "true",
-            job.get("metadata", {}).get("annotations", {}).get(
-                "cyber-post-train.fleet.ai/launch-authorized"
-            )
+            job.get("metadata", {})
+            .get("annotations", {})
+            .get("cyber-post-train.fleet.ai/launch-authorized")
             != "true",
-            job.get("spec", {}).get("template", {}).get("spec", {}).get("volumes", [{}])[0]
+            job.get("spec", {})
+            .get("template", {})
+            .get("spec", {})
+            .get("volumes", [{}])[0]
             .get("configMap", {})
             .get("name")
             != successor.CONFIGMAP_NAME,
@@ -181,9 +182,7 @@ def validate_preview(manifest: dict[str, Any]) -> None:
     ):
         raise SubmitError("create_preview_objects_invalid")
     try:
-        observed = datetime.fromisoformat(
-            str(manifest["previewed_at_utc"]).replace("Z", "+00:00")
-        )
+        observed = datetime.fromisoformat(str(manifest["previewed_at_utc"]).replace("Z", "+00:00"))
         age = (datetime.now(UTC) - observed).total_seconds()
     except (KeyError, TypeError, ValueError):
         raise SubmitError("create_preview_timestamp_invalid") from None
