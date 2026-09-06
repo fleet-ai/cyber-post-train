@@ -1,0 +1,59 @@
+{
+  "controllers": [
+    {
+      "cells": [
+        {"attempt": 1, "cell_id": "sha256:154ea5b3f132cff779ee42d79f7d787bcb48eaa8b90c7f5851e03bfe698457b2", "execution_generation": 21, "execution_id": "sha256:a167536764f96b93bf833574f6138d603acafb01e887bf7aa2f07473871dd9a9", "run_id": "chris-q38-ac-g21v1-a-r015-a1-a1675367"},
+        {"attempt": 2, "cell_id": "sha256:84e50468e938989a23d301ee7a099cf6eba7a70c9f5ed4f27aeac63a67950aee", "execution_generation": 21, "execution_id": "sha256:ab71acfdfbffd15bbf902e424406a680195a3e02d5a21b529ecda6fbf8a851de", "run_id": "chris-q38-ac-g21v1-a-r015-a2-ab71acfd"},
+        {"attempt": 3, "cell_id": "sha256:f34439505333624a27411105aa3eb8b61c6b841a0193e7ac39b4632131da656c", "execution_generation": 21, "execution_id": "sha256:23cfba6680e3e1e2e385cd40bbd6848f36719cfa4498da49220c0b4842d06dc7", "run_id": "chris-q38-ac-g21v1-a-r015-a3-23cfba66"},
+        {"attempt": 4, "cell_id": "sha256:27e3d90cfbfa2bc0f6e3e8b7e823d3ee265345ed8e0695cd1063717fec5dac1c", "execution_generation": 21, "execution_id": "sha256:63d3bec9639c0ab8e255e4792467a8beb62c82c99a95f2af98bb9a38f1ca3f78", "run_id": "chris-q38-ac-g21v1-a-r015-a4-63d3bec9"}
+      ],
+      "configmap_name": "chris-q38-hosted-r015-whole-task-g21-package-v1",
+      "controller": "qwen-a",
+      "job_name": "chris-q38-hosted-r015-whole-task-g21-v1",
+      "package_source_receipt_sha256": "sha256:426339bcb7c19f1cfd536c7813268138787c89cff420c0f4f04bc5c0e1f9dd1c",
+      "plan_sha256": "sha256:6ead08fe513d2dc6755d9217d3d46222aaa869807c8f1912d08f0dc783d039af",
+      "selection_rank": 15,
+      "sfs_root": "/mnt/sfs/jobs/chris-q38-hosted-r015-whole-task-g21-v1",
+      "task_version_id": "fb8f2178-7dd8-429a-8d3c-f14b21a51e02"
+    },
+    {
+      "cells": [
+        {"attempt": 1, "cell_id": "sha256:bb1eb87b817eb015533d59880b3d16fc9768f910237009ff7730b6b85d65e89d", "execution_generation": 21, "execution_id": "sha256:553d55f6326b17f1121418be3515d24aae4751713cd402a879ea4702e70e368b", "run_id": "chris-q38-ac-g21v1-b-r016-a1-553d55f6"},
+        {"attempt": 2, "cell_id": "sha256:f8a05b93a8de548cfcb1eb36dbf78ace2fa2647d3eee5e3d5b41894f3dc26dba", "execution_generation": 21, "execution_id": "sha256:acfaafe0a42fc7f98917ce768e33449189fc665f41adc436cd9a9deac0f0d3b9", "run_id": "chris-q38-ac-g21v1-b-r016-a2-acfaafe0"},
+        {"attempt": 3, "cell_id": "sha256:47b41dbbdcad5126c1a2813f14b40213bebf8c99e8b42e4b1c89c98fd1722cd6", "execution_generation": 21, "execution_id": "sha256:a6f437fdf40f7ec4a6783597363f45442778c608df8ad35d0ea1734b1683c326", "run_id": "chris-q38-ac-g21v1-b-r016-a3-a6f437fd"},
+        {"attempt": 4, "cell_id": "sha256:16152cb6dc73f034124cb4bb03e08d2ec35acafcb0e9a9ef06c713fc4c3def3c", "execution_generation": 21, "execution_id": "sha256:0d50e2043238ffa2ce2074d052a22bf816fa4263e4a6d56a709603c1bfb5a52f", "run_id": "chris-q38-ac-g21v1-b-r016-a4-0d50e204"}
+      ],
+      "configmap_name": "chris-q38-hosted-r016-whole-task-g21-package-v1",
+      "controller": "qwen-b",
+      "job_name": "chris-q38-hosted-r016-whole-task-g21-v1",
+      "package_source_receipt_sha256": "sha256:60055c854e388b1f397f512c9fd49e3fa41104b8f69527967e4dc53bf6809a65",
+      "plan_sha256": "sha256:d824cbda61ee8f45d59fb8ed8b0da98ce19588b85e19c62fc3ce5b0f2480a194",
+      "selection_rank": 16,
+      "sfs_root": "/mnt/sfs/jobs/chris-q38-hosted-r016-whole-task-g21-v1",
+      "task_version_id": "fd07b96f-7aa4-4041-862b-5aa7411eff4b"
+    }
+  ],
+  "incident_evidence": {"file_sha256": "sha256:ec9c915bdec6e8dce387c8d9e373cf2d88bca5c0f541a4455cecfe249e53bbdb", "path": "docs/evidence/qwen38-study/2026-09-06-qwen38-hosted-g20v2-adapter-failure-v1.json", "receipt_sha256": "sha256:6705c63327e3c9829171a4708fee58eca356a65f1a3004dd5de8966dbc1c327f"},
+  "launch_authorized": false,
+  "preclaim_failure": {"file_sha256": "sha256:e423007ca58b69462d7fdd3a13a9f325a34a1a0f828473882c5b72d574dc560d", "path": "docs/evidence/qwen38-study/2026-09-06-qwen38-hosted-rank15-rank16-preclaim-failure-v2.json", "receipt_sha256": "sha256:5d51c5e8bd0009c8f01462087c11e6cf1531e87588517fea251e96d7c4030f60"},
+  "prior_runtime_gate_canary_pass": {"path": "docs/evidence/qwen38-study/2026-09-06-qwen38-hosted-runtime-gate-canary-v5-pass.json", "receipt_sha256": "sha256:0d06e9bbb97c08bcb34588ddb093549a2d02d7508b53c42b11362502e4580902"},
+  "privacy": {"credentials_included": false, "prompts_traces_flags_read": false, "scores_read": false},
+  "receipt_sha256": "sha256:e387b7a117be8297dd5e76b68609b66a1e19432e29932d16ebd07109a2fabf19",
+  "required_release_gate": {
+    "accepted_receipts_clear": true,
+    "all_eight_statistical_cells_clear": true,
+    "authoritative_sessions_clear": true,
+    "both_endpoint_lease_slots_simultaneously_free": true,
+    "canonical_claims_clear": true,
+    "fresh_uid_bound_score_blind_observer": true,
+    "fresh_v3_runtime_gate_canary_pass": true,
+    "independent_terminal_validation_required": true,
+    "new_job_pod_configmap_and_sfs_identities_absent": true,
+    "observer_job_must_succeed": true,
+    "old_execution_identities_reconciled": true
+  },
+  "schema_version": "fleet-qwen38-hosted-atomic-whole-task-held-v10",
+  "scoring_authorized": false,
+  "status": "HELD_PENDING_FRESH_SCORE_BLIND_GATES",
+  "supersedes": {"file_sha256": "sha256:a262e757a9f981ac6e5560ead543221ec023555b24f47a608545658ac6c562ed", "path": "docs/evidence/qwen38-study/2026-09-06-qwen38-hosted-rank15-rank16-whole-task-held-v9.json", "receipt_sha256": "sha256:7223357495fbabcd7ee7bb07730c98576e82b1fa2b1b854ae40411d85733c3ba"}
+}
