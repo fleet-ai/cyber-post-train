@@ -251,8 +251,13 @@ def test_v32_create_gate_requires_fresh_zero_state() -> None:
     value = create_authorization()
     server.validate_authorization(value)
     authority = qwen_authority()
+    backend = qualified_qwen_backend(authority)
+    # Workload/cluster/Service owner labels are not a stable deployed API
+    # contract. Exact authority UIDs remain sufficient; they are not inferred.
+    for index in (1, 2, 3):
+        backend.items[index]["metadata"]["labels"] = {}
     changed = live_auth.build_live_authorization(
-        backend=qualified_qwen_backend(authority),
+        backend=backend,
         payload=server.payload(),
         title=server.TITLE,
         run_dir=server.RUN_DIR,

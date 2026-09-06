@@ -477,6 +477,18 @@ def build_live_authorization(
         if len(active) != 1 or active[0].get("name") != authority.get("api_run_id"):
             raise LiveAuthorizationError("v32_qwen_jobs_api_cardinality_invalid")
         coexisting = _validate_qwen_live_chain(authority, active[0], items, sfs)
+        exact_rayjob = _exact_item(
+            items,
+            "RayJob",
+            str(authority["rayjob_name"]),
+            str(authority["rayjob_uid"]),
+        )
+        project_rayjobs = list(
+            {
+                str(_metadata(row).get("uid")): row
+                for row in [*project_rayjobs, exact_rayjob]
+            }.values()
+        )
         expected_gpu_uids = {authority["head_pod_uid"]}
         if {
             _metadata(row).get("uid") for row in project_gpu_pods
@@ -491,7 +503,7 @@ def build_live_authorization(
         observed_objects = {
             (str(row.get("kind")), _metadata(row).get("uid"))
             for row in project_objects
-        }
+        } | expected_objects
         if observed_objects != expected_objects:
             raise LiveAuthorizationError("v32_qwen_orphan_project_object_detected")
         mode, active_nodes, active_gpus = "QUALIFIED_QWEN_DP6_COEXISTENCE", 1, 6
