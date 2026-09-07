@@ -1,5 +1,9 @@
 # Fleet blackbox baseline
 
+For multi-worker rollout coordination, use the SQLite-backed
+[`ROLLOUT_LEDGER.md`](ROLLOUT_LEDGER.md) workflow. It exposes a CSV progress view
+while keeping claims atomic and retries review-gated.
+
 This evaluator runs the 160 registered tasks from Fleet job
 `a62dd51f-a52b-4941-8207-4679e4b25b51` with GLM-5.2 on hosted Agent Runtime v1.
 
