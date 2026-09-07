@@ -1,0 +1,77 @@
+{
+  "schema_version": "fleet-exact-easiest100-pass4-campaign-v1",
+  "campaign_id": "chris-cyber-q38-glm53-exact-easiest100-pass4-v1",
+  "status": "HELD",
+  "launch_authorized": false,
+  "selection": {
+    "path": "evals/fleet/configs/opencode-easiest-train100-selection-v2.json",
+    "file_sha256": "sha256:9f5e83123cfe7d8a3f4cc0b791ac1dc9032a3d5faf5eba2a431c7246069255df",
+    "selection_sha256": "sha256:38bd544c74f4e45cb67b271849d657f49e356ccf41f97acca9fb6cd7eb7f56b8",
+    "source_job_id": "a62dd51f-a52b-4941-8207-4679e4b25b51",
+    "split_manifest_digest": "sha256:fb09668f8de77e6baee37dc1e3162a7617ca9a0a450da9ca53422c17bfbc942a",
+    "selected_count": 100,
+    "source_aggregate": {"task_count": 160, "session_count": 1280},
+    "ranking": [
+      "historical_pass_rate_desc",
+      "historical_passes_desc",
+      "historical_sessions_desc",
+      "task_key_asc",
+      "task_version_id_asc"
+    ],
+    "interpretation": "historical_strong_model_lineage_ease_proxy_not_target_model_outcome; execution_uses_the_frozen_split_version",
+    "prior_qwen_task_versions_excluded": 5,
+    "eligibility": {
+      "required_cyber_contract": {
+        "evidence_schema": "1.0.0",
+        "submission_protocol": "2.0.0",
+        "verifier_contract": "3.0.0"
+      },
+      "runtime_seed_overlay_required": true,
+      "excluded_count": 8
+    }
+  },
+  "models": {
+    "qwen3.8-27b": {
+      "repository": "Qwen/Qwen3.8-27B",
+      "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+      "served_id": "qwen3.8-27b",
+      "session_model": "qwen/qwen3.8-27b"
+    },
+    "glm-5.3": {
+      "repository": "zai-org/GLM-5.3",
+      "revision": "30333038ada1f1dacb294a93270305a890b50c14",
+      "served_id": "glm-5.3",
+      "session_model": "z-ai/glm-5.3"
+    }
+  },
+  "treatment": {
+    "harness": "opencode",
+    "harness_version": "1.18.27",
+    "release_asset_sha256": "sha256:4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702",
+    "provider_adapter": "@ai-sdk/openai-compatible",
+    "context_management": "opencode_1.18.27_native_compaction_autocontinue_v1",
+    "context_window_size": 262144,
+    "compaction_headroom_tokens": 20000,
+    "max_output_tokens": 32768,
+    "max_model_requests": 600,
+    "timeout_seconds": 28800,
+    "tools": ["bash", "submit_report"],
+    "tool_catalog_sha256": "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a"
+  },
+  "pass_k": 4,
+  "attempts": [1, 2, 3, 4],
+  "task_count_per_model": 100,
+  "cell_count": 800,
+  "execution_generation_policy": {
+    "schema_version": "fleet-statistical-cell-execution-v1",
+    "initial_generation": 1,
+    "statistical_cell_identity_excludes_execution_generation": true,
+    "one_open_generation_per_cell": true,
+    "retry_requires_terminal_pre_model_infrastructure_tombstone": true,
+    "model_started_generation_is_nonrepeatable": true,
+    "session_created_generation_is_nonrepeatable": true,
+    "authoritative_outcome_generation_is_nonrepeatable": true,
+    "automatic_retry": false
+  },
+  "expected_universe_sha256": "sha256:b9bf7798f42a4818a960be5d004d3f6732815c69446ce16f6284dbe7c0c3cf28"
+}

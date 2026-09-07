@@ -11,6 +11,7 @@ import csv
 import hashlib
 import io
 import json
+import math
 import os
 import re
 import sqlite3
@@ -85,6 +86,7 @@ EXPORT_COLUMNS = (
 )
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 FAILURE_CODE_RE = re.compile(r"^[a-z0-9][a-z0-9_.:-]{0,127}$")
+EXECUTION_ID_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 
 
 class LedgerError(RuntimeError):
@@ -120,6 +122,23 @@ def _require_failure_code(value: object) -> str:
     if not FAILURE_CODE_RE.fullmatch(code):
         raise LedgerError("failure_code must be a short sanitized machine code")
     return code
+
+
+def _require_relative_path(value: object, name: str) -> str:
+    text = _require_text(value, name)
+    path = Path(text)
+    if path.is_absolute() or ".." in path.parts:
+        raise LedgerError(f"{name} must be a relative path without parent traversal")
+    return path.as_posix()
+
+
+def _require_score(value: object) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise LedgerError("score must be numeric")
+    score = float(value)
+    if not math.isfinite(score) or not 0.0 <= score <= 1.0:
+        raise LedgerError("score must be finite and inside [0, 1]")
+    return score
 
 
 def _cell_id(row: dict[str, Any]) -> str:
@@ -200,6 +219,38 @@ def _schema(connection: sqlite3.Connection) -> None:
             detail_json TEXT NOT NULL,
             CHECK (json_valid(detail_json))
         );
+
+        CREATE TABLE IF NOT EXISTS rollout_local_results (
+            execution_id TEXT PRIMARY KEY,
+            cell_id TEXT NOT NULL REFERENCES rollout_cells(cell_id),
+            execution_generation INTEGER NOT NULL CHECK (execution_generation > 0),
+            run_id TEXT NOT NULL,
+            session_id TEXT,
+            verifier_execution_id TEXT NOT NULL,
+            score REAL NOT NULL CHECK (score >= 0.0 AND score <= 1.0),
+            config_sha256 TEXT NOT NULL,
+            artifact_directory TEXT NOT NULL,
+            trace_path TEXT NOT NULL,
+            trace_sha256 TEXT NOT NULL,
+            result_path TEXT NOT NULL,
+            result_sha256 TEXT NOT NULL,
+            reward_path TEXT NOT NULL,
+            reward_sha256 TEXT NOT NULL,
+            session_ingest_path TEXT NOT NULL,
+            session_ingest_sha256 TEXT NOT NULL,
+            cleanup_path TEXT NOT NULL,
+            cleanup_sha256 TEXT NOT NULL,
+            session_ingest_status TEXT NOT NULL,
+            agent_exit_code INTEGER NOT NULL,
+            agent_termination TEXT NOT NULL,
+            elapsed_seconds REAL NOT NULL CHECK (elapsed_seconds >= 0.0),
+            record_sha256 TEXT NOT NULL,
+            recorded_at TEXT NOT NULL,
+            UNIQUE (cell_id, execution_generation)
+        );
+
+        CREATE INDEX IF NOT EXISTS rollout_local_results_cell
+            ON rollout_local_results (cell_id);
         """
     )
 
@@ -368,6 +419,13 @@ def initialize(database: Path, plan: Path) -> dict[str, Any]:
                 ]
                 if _plan_digest(stored_rows) != digest:
                     raise LedgerError("database immutable cell bindings differ from its plan")
+                connection.execute(
+                    """
+                    INSERT INTO ledger_metadata (key, value)
+                    VALUES ('schema_version', 'fleet_cyber_rollout_ledger_v2')
+                    ON CONFLICT(key) DO UPDATE SET value = excluded.value
+                    """
+                )
                 connection.execute("COMMIT")
                 return {"created": False, "cells": existing_count, "plan_sha256": digest}
 
@@ -408,7 +466,7 @@ def initialize(database: Path, plan: Path) -> dict[str, Any]:
             connection.executemany(
                 "INSERT INTO ledger_metadata (key, value) VALUES (?, ?)",
                 (
-                    ("schema_version", "fleet_cyber_rollout_ledger_v1"),
+                    ("schema_version", "fleet_cyber_rollout_ledger_v2"),
                     ("plan_sha256", digest),
                     ("created_at", now),
                 ),
@@ -422,6 +480,138 @@ def initialize(database: Path, plan: Path) -> dict[str, Any]:
 
 def _row_dict(row: sqlite3.Row | None) -> dict[str, Any] | None:
     return dict(row) if row is not None else None
+
+
+def record_local_result(
+    database: Path,
+    *,
+    cell_id: str,
+    worker_id: str,
+    claim_id: str,
+    record: dict[str, Any],
+) -> dict[str, Any]:
+    """Create one private local-result index before Fleet session acceptance.
+
+    Large or sensitive artifacts remain immutable files beside the ledger.  This
+    table stores the score plus exact relative paths and digests so a Fleet
+    session-catalog defect cannot make the experiment's own result disappear.
+    """
+
+    execution_id = _require_text(record.get("execution_id"), "execution_id")
+    if EXECUTION_ID_RE.fullmatch(execution_id) is None:
+        raise LedgerError("execution_id must be a sha256 identity")
+    generation = record.get("execution_generation")
+    if isinstance(generation, bool) or not isinstance(generation, int) or generation < 1:
+        raise LedgerError("execution_generation must be a positive integer")
+    exit_code = record.get("agent_exit_code")
+    if isinstance(exit_code, bool) or not isinstance(exit_code, int):
+        raise LedgerError("agent_exit_code must be an integer")
+    elapsed = record.get("elapsed_seconds")
+    if isinstance(elapsed, bool) or not isinstance(elapsed, (int, float)):
+        raise LedgerError("elapsed_seconds must be numeric")
+    elapsed = float(elapsed)
+    if not math.isfinite(elapsed) or elapsed < 0:
+        raise LedgerError("elapsed_seconds must be finite and non-negative")
+
+    normalized: dict[str, Any] = {
+        "execution_id": execution_id,
+        "cell_id": _require_text(cell_id, "cell_id"),
+        "execution_generation": generation,
+        "run_id": _require_text(record.get("run_id"), "run_id"),
+        "session_id": (
+            _require_text(record["session_id"], "session_id")
+            if record.get("session_id") is not None
+            else None
+        ),
+        "verifier_execution_id": _require_text(
+            record.get("verifier_execution_id"), "verifier_execution_id"
+        ),
+        "score": _require_score(record.get("score")),
+        "config_sha256": _require_digest(record.get("config_sha256", ""), "config_sha256"),
+        "artifact_directory": _require_relative_path(
+            record.get("artifact_directory"), "artifact_directory"
+        ),
+        "trace_path": _require_relative_path(record.get("trace_path"), "trace_path"),
+        "trace_sha256": _require_digest(record.get("trace_sha256", ""), "trace_sha256"),
+        "result_path": _require_relative_path(record.get("result_path"), "result_path"),
+        "result_sha256": _require_digest(record.get("result_sha256", ""), "result_sha256"),
+        "reward_path": _require_relative_path(record.get("reward_path"), "reward_path"),
+        "reward_sha256": _require_digest(record.get("reward_sha256", ""), "reward_sha256"),
+        "session_ingest_path": _require_relative_path(
+            record.get("session_ingest_path"), "session_ingest_path"
+        ),
+        "session_ingest_sha256": _require_digest(
+            record.get("session_ingest_sha256", ""), "session_ingest_sha256"
+        ),
+        "cleanup_path": _require_relative_path(record.get("cleanup_path"), "cleanup_path"),
+        "cleanup_sha256": _require_digest(record.get("cleanup_sha256", ""), "cleanup_sha256"),
+        "session_ingest_status": _require_text(
+            record.get("session_ingest_status"), "session_ingest_status"
+        ),
+        "agent_exit_code": exit_code,
+        "agent_termination": _require_text(record.get("agent_termination"), "agent_termination"),
+        "elapsed_seconds": elapsed,
+    }
+    record_sha256 = hashlib.sha256(
+        json.dumps(normalized, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    timestamp = _timestamp()
+    columns = [*normalized, "record_sha256", "recorded_at"]
+    values = [*(normalized[column] for column in normalized), record_sha256, timestamp]
+
+    with closing(_connect(database)) as connection:
+        _schema(connection)
+        connection.execute("BEGIN IMMEDIATE")
+        try:
+            cell = connection.execute(
+                "SELECT state, worker_id, claim_id FROM rollout_cells WHERE cell_id = ?",
+                (normalized["cell_id"],),
+            ).fetchone()
+            if cell is None:
+                raise LedgerError("rollout cell does not exist")
+            if (
+                cell["state"] not in ACTIVE_STATES
+                or cell["worker_id"] != _require_text(worker_id, "worker_id")
+                or cell["claim_id"] != _require_text(claim_id, "claim_id")
+            ):
+                raise LedgerError("worker does not own the active rollout cell")
+            existing = connection.execute(
+                "SELECT * FROM rollout_local_results WHERE execution_id = ?",
+                (execution_id,),
+            ).fetchone()
+            if existing is not None:
+                if existing["record_sha256"] != record_sha256:
+                    raise LedgerError("local result identity already has different evidence")
+                connection.execute("COMMIT")
+                return {"created": False, **dict(existing)}
+            placeholders = ", ".join("?" for _ in columns)
+            connection.execute(
+                f"INSERT INTO rollout_local_results ({', '.join(columns)}) VALUES ({placeholders})",  # noqa: S608
+                values,
+            )
+            _event(
+                connection,
+                cell_id=normalized["cell_id"],
+                name="local_result_recorded",
+                from_state=cell["state"],
+                to_state=cell["state"],
+                worker_id=worker_id,
+                claim_id=claim_id,
+                detail={"execution_id": execution_id, "record_sha256": record_sha256},
+                recorded_at=timestamp,
+            )
+            created = connection.execute(
+                "SELECT * FROM rollout_local_results WHERE execution_id = ?",
+                (execution_id,),
+            ).fetchone()
+            connection.execute("COMMIT")
+            return {"created": True, **dict(created)}
+        except sqlite3.IntegrityError as exc:
+            connection.execute("ROLLBACK")
+            raise LedgerError("cell generation already has different local evidence") from exc
+        except Exception:
+            connection.execute("ROLLBACK")
+            raise
 
 
 def claim(
@@ -759,6 +949,82 @@ def approve_retry(database: Path, *, cell_id: str, reconciliation_digest: str) -
             raise
 
 
+def accept_reviewed(
+    database: Path,
+    *,
+    cell_id: str,
+    session_id: str,
+    receipt_digest: str,
+    reconciliation_digest: str,
+) -> dict[str, Any]:
+    """Accept a held cell only after an external evidence reconciliation.
+
+    This is deliberately separate from retry approval: a verifier-backed outcome
+    that already exists must be credited, never returned to the claim queue.
+    Neither the score nor any trace content is copied into the public ledger.
+    """
+    session_id = _require_text(session_id, "session_id")
+    receipt = _require_digest(receipt_digest, "receipt_digest")
+    reconciliation = _require_digest(reconciliation_digest, "reconciliation_digest")
+    with closing(_connect(database)) as connection:
+        _schema(connection)
+        connection.execute("BEGIN IMMEDIATE")
+        try:
+            row = connection.execute(
+                "SELECT * FROM rollout_cells WHERE cell_id = ?", (cell_id,)
+            ).fetchone()
+            if row is None:
+                raise LedgerError("rollout cell does not exist")
+            if row["state"] != "retry_review":
+                raise LedgerError("only a retry_review cell may be accepted by reconciliation")
+            if row["session_id"] not in (None, session_id):
+                raise LedgerError("reviewed session identity conflicts with the held cell")
+            timestamp = _timestamp()
+            connection.execute(
+                """
+                UPDATE rollout_cells
+                SET state = 'accepted', session_id = ?, completed_at = ?,
+                    heartbeat_at = ?, lease_expires_at = NULL, result_class = 'valid',
+                    receipt_digest = ?, failure_code = NULL,
+                    reconciliation_digest = ?, updated_at = ?
+                WHERE cell_id = ?
+                """,
+                (
+                    session_id,
+                    timestamp,
+                    timestamp,
+                    receipt,
+                    reconciliation,
+                    timestamp,
+                    cell_id,
+                ),
+            )
+            _event(
+                connection,
+                cell_id=cell_id,
+                name="reviewed_outcome_accepted",
+                from_state="retry_review",
+                to_state="accepted",
+                worker_id=row["worker_id"],
+                claim_id=row["claim_id"],
+                detail={
+                    "session_id": session_id,
+                    "receipt_digest": receipt,
+                    "reconciliation_digest": reconciliation,
+                    "prior_failure_code": row["failure_code"],
+                },
+                recorded_at=timestamp,
+            )
+            updated = connection.execute(
+                "SELECT * FROM rollout_cells WHERE cell_id = ?", (cell_id,)
+            ).fetchone()
+            connection.execute("COMMIT")
+            return dict(updated)
+        except Exception:
+            connection.execute("ROLLBACK")
+            raise
+
+
 def mark_terminal(
     database: Path,
     *,
@@ -825,7 +1091,11 @@ def stale_cells(database: Path, *, now: datetime | None = None) -> list[dict[str
 
 def summary(database: Path) -> dict[str, Any]:
     with closing(_connect(database)) as connection:
+        _schema(connection)
         total = connection.execute("SELECT COUNT(*) FROM rollout_cells").fetchone()[0]
+        local_results = connection.execute("SELECT COUNT(*) FROM rollout_local_results").fetchone()[
+            0
+        ]
         by_state = {
             row["state"]: row["count"]
             for row in connection.execute(
@@ -848,6 +1118,7 @@ def summary(database: Path) -> dict[str, Any]:
         ).fetchone()
     return {
         "total": total,
+        "local_results": local_results,
         "by_state": {state: by_state.get(state, 0) for state in STATES},
         "by_serving_block": by_block,
         "stale_active": len(stale_cells(database)),
@@ -963,6 +1234,14 @@ def _parser() -> argparse.ArgumentParser:
     retry_parser.add_argument("--cell-id", required=True)
     retry_parser.add_argument("--reconciliation-digest", required=True)
 
+    reviewed_parser = commands.add_parser(
+        "accept-reviewed", help="Accept a held valid outcome after digest-bound reconciliation"
+    )
+    reviewed_parser.add_argument("--cell-id", required=True)
+    reviewed_parser.add_argument("--session-id", required=True)
+    reviewed_parser.add_argument("--receipt-digest", required=True)
+    reviewed_parser.add_argument("--reconciliation-digest", required=True)
+
     terminal_parser = commands.add_parser(
         "terminal", help="Close a retry-review cell without another attempt"
     )
@@ -1036,6 +1315,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             result = approve_retry(
                 arguments.db,
                 cell_id=arguments.cell_id,
+                reconciliation_digest=arguments.reconciliation_digest,
+            )
+        elif arguments.command == "accept-reviewed":
+            result = accept_reviewed(
+                arguments.db,
+                cell_id=arguments.cell_id,
+                session_id=arguments.session_id,
+                receipt_digest=arguments.receipt_digest,
                 reconciliation_digest=arguments.reconciliation_digest,
             )
         elif arguments.command == "terminal":
