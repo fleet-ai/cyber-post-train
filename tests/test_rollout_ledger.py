@@ -20,6 +20,7 @@ from evals.fleet.rollout_ledger import (
     initialize,
     mark_grading,
     mark_terminal,
+    record_local_result,
     request_retry_review,
     stale_cells,
     start,
@@ -286,11 +287,79 @@ def test_failure_code_rejects_free_form_or_multiline_content(tmp_path: Path) -> 
         request_retry_review(database, **owner, failure_code="raw error details are forbidden")
 
 
-def test_database_contains_no_score_or_trace_columns(tmp_path: Path) -> None:
+def _local_result_record(*, score: float = 0.5) -> dict[str, object]:
+    return {
+        "execution_id": "sha256:" + "1" * 64,
+        "execution_generation": 1,
+        "run_id": "chris-cyber-cell-example-g1",
+        "session_id": "fleet-session-1",
+        "verifier_execution_id": "verifier-execution-1",
+        "score": score,
+        "config_sha256": "2" * 64,
+        "artifact_directory": "attempts/execution-1",
+        "trace_path": "agent/opencode.json",
+        "trace_sha256": "3" * 64,
+        "result_path": "result.json",
+        "result_sha256": "4" * 64,
+        "reward_path": "reward-result.json",
+        "reward_sha256": "5" * 64,
+        "session_ingest_path": "session-ingest.json",
+        "session_ingest_sha256": "6" * 64,
+        "cleanup_path": "cleanup.json",
+        "cleanup_sha256": "7" * 64,
+        "session_ingest_status": "completed",
+        "agent_exit_code": 0,
+        "agent_termination": "completed",
+        "elapsed_seconds": 12.5,
+    }
+
+
+def test_private_local_result_is_create_once_and_not_exported(tmp_path: Path) -> None:
     database = tmp_path / "ledger.sqlite3"
     initialize(database, _plan(tmp_path / "plan.csv", [_row(1)]))
+    cell = _claim_one(database)
+    owner = {
+        "cell_id": str(cell["cell_id"]),
+        "worker_id": "worker-1",
+        "claim_id": str(cell["claim_id"]),
+    }
+    first = record_local_result(database, **owner, record=_local_result_record())
+    second = record_local_result(database, **owner, record=_local_result_record())
+
+    assert first["created"] is True
+    assert second["created"] is False
+    assert first["score"] == 0.5
+    assert summary(database)["local_results"] == 1
+    with pytest.raises(LedgerError, match="different evidence"):
+        record_local_result(database, **owner, record=_local_result_record(score=0.75))
+
+    csv_path = tmp_path / "progress.csv"
+    events_path = tmp_path / "events.jsonl"
+    export(database, csv_path=csv_path, events_path=events_path)
+    assert "score" not in csv_path.read_text(encoding="utf-8")
+    assert "0.5" not in events_path.read_text(encoding="utf-8")
+
     with sqlite3.connect(database) as connection:
-        columns = {row[1] for row in connection.execute("PRAGMA table_info(rollout_cells)")}
-    assert "score" not in columns
-    assert "trace" not in columns
+        cell_columns = {row[1] for row in connection.execute("PRAGMA table_info(rollout_cells)")}
+        result_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(rollout_local_results)")
+        }
+    assert "score" not in cell_columns
+    assert "trace" not in cell_columns
+    assert {"score", "trace_path", "trace_sha256"} <= result_columns
     assert os.path.exists(database)
+
+
+def test_private_local_result_rejects_parent_path_traversal(tmp_path: Path) -> None:
+    database = tmp_path / "ledger.sqlite3"
+    initialize(database, _plan(tmp_path / "plan.csv", [_row(1)]))
+    cell = _claim_one(database)
+    owner = {
+        "cell_id": str(cell["cell_id"]),
+        "worker_id": "worker-1",
+        "claim_id": str(cell["claim_id"]),
+    }
+    record = _local_result_record()
+    record["trace_path"] = "../private-trace.json"
+    with pytest.raises(LedgerError, match="parent traversal"):
+        record_local_result(database, **owner, record=record)

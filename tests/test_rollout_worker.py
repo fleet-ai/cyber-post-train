@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from pathlib import Path
 
-from evals.fleet import opencode_self_hosted, rollout_worker
+from evals.fleet import opencode_self_hosted, rollout_ledger, rollout_worker
 
 ROOT = Path(__file__).resolve().parents[1]
 CAMPAIGN = ROOT / "evals/fleet/configs/q38-glm53-exact-easiest100-pass4-campaign-v1.json"
@@ -107,3 +108,72 @@ def test_claim_receipt_is_score_and_content_blind() -> None:
     assert receipt["receipt_sha256"].startswith("sha256:")
     for forbidden in ("prompt", "trace", "flag", "reward", "score", "response"):
         assert forbidden not in receipt
+
+
+def test_local_result_indexes_private_artifacts_before_catalog_acceptance(
+    tmp_path: Path,
+) -> None:
+    plan = tmp_path / "plan.csv"
+    plan.write_text(
+        "experiment_id,task_key,task_version_id,model_id,model_revision,"
+        "serving_block,endpoint_model_id,harness_id,attempt,max_retries\n"
+        "experiment,task,task-version,qwen3.8-27b,revision,qwen-shared,"
+        "qwen3.8-27b,opencode-1.18.27,1,1\n",
+        encoding="utf-8",
+    )
+    database = tmp_path / "ledger.sqlite3"
+    rollout_ledger.initialize(database, plan)
+    cell = rollout_ledger.claim(database, worker_id="worker", serving_block="qwen-shared")
+    assert cell is not None
+
+    output_root = tmp_path / "outputs"
+    out_dir = output_root / "attempts" / ("1" * 64)
+    (out_dir / "agent").mkdir(parents=True)
+    trace = out_dir / "agent" / "opencode.json"
+    trace.write_text('{"type":"message"}\n', encoding="utf-8")
+    (out_dir / "trace-manifest.json").write_text(
+        json.dumps(
+            {
+                "canonical_trace": "agent/opencode.json",
+                "canonical_trace_sha256": opencode_self_hosted.sha256(trace.read_bytes()),
+            }
+        ),
+        encoding="utf-8",
+    )
+    (out_dir / "result.json").write_text("{}", encoding="utf-8")
+    (out_dir / "reward-result.json").write_text("{}", encoding="utf-8")
+    (out_dir / "session-ingest.json").write_text(
+        json.dumps({"status": "completed"}), encoding="utf-8"
+    )
+    (out_dir / "cleanup.json").write_text("{}", encoding="utf-8")
+    config = {
+        "run_id": "chris-cyber-cell-example-g1",
+        "config_sha256": "sha256:" + "2" * 64,
+        "execution": {
+            "execution_id": "sha256:" + "1" * 64,
+            "execution_generation": 1,
+        },
+    }
+    result = {
+        "session_id": "session-1",
+        "verifier_execution_id": "verifier-1",
+        "score": 0.25,
+        "agent_exit_code": 0,
+        "agent_termination": "completed",
+        "elapsed_seconds": 10.0,
+    }
+
+    stored = rollout_worker._record_local_result(
+        database=database,
+        config=config,
+        ledger_cell=cell,
+        result=result,
+        out_dir=out_dir,
+        output_root=output_root,
+    )
+
+    assert stored["created"] is True
+    assert stored["score"] == 0.25
+    assert stored["trace_path"] == "agent/opencode.json"
+    with sqlite3.connect(database) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM rollout_local_results").fetchone()[0] == 1

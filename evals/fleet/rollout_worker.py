@@ -8,6 +8,7 @@ and the campaign's global immutable execution-claim file.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import threading
@@ -53,6 +54,81 @@ def _safe_write_once(path: Path, value: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     value = {**value, "receipt_sha256": crypto.digest_without(value, "receipt_sha256")}
     self_hosted.write_json_once(path, value)
+
+
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return f"sha256:{digest.hexdigest()}"
+
+
+def _record_local_result(
+    *,
+    database: Path,
+    config: dict[str, Any],
+    ledger_cell: dict[str, Any],
+    result: dict[str, Any],
+    out_dir: Path,
+    output_root: Path,
+) -> dict[str, Any]:
+    """Index private rollout evidence before the Fleet catalog acceptance gate."""
+
+    artifact_directory = out_dir.resolve().relative_to(output_root.resolve()).as_posix()
+    manifest = _load(out_dir / "trace-manifest.json")
+    ingest = _load(out_dir / "session-ingest.json")
+    trace_relative = Path(str(manifest.get("canonical_trace") or ""))
+    if not trace_relative.parts or trace_relative.is_absolute() or ".." in trace_relative.parts:
+        raise RuntimeError("canonical trace manifest path is unsafe")
+    trace = (out_dir / trace_relative).resolve()
+    trace.relative_to(out_dir.resolve())
+    if not trace.is_file():
+        raise RuntimeError("canonical trace file is missing")
+    trace_sha256 = _file_sha256(trace)
+    if trace_sha256 != manifest.get("canonical_trace_sha256"):
+        raise RuntimeError("canonical trace digest differs from its manifest")
+
+    files = {
+        "result": out_dir / "result.json",
+        "reward": out_dir / "reward-result.json",
+        "session_ingest": out_dir / "session-ingest.json",
+        "cleanup": out_dir / "cleanup.json",
+    }
+    if any(not path.is_file() for path in files.values()):
+        raise RuntimeError("complete local rollout evidence is missing")
+    execution = config["execution"]
+    record = {
+        "execution_id": execution["execution_id"],
+        "execution_generation": execution["execution_generation"],
+        "run_id": config["run_id"],
+        "session_id": result.get("session_id"),
+        "verifier_execution_id": result["verifier_execution_id"],
+        "score": result["score"],
+        "config_sha256": config["config_sha256"],
+        "artifact_directory": artifact_directory,
+        "trace_path": trace_relative.as_posix(),
+        "trace_sha256": trace_sha256,
+        "result_path": files["result"].name,
+        "result_sha256": _file_sha256(files["result"]),
+        "reward_path": files["reward"].name,
+        "reward_sha256": _file_sha256(files["reward"]),
+        "session_ingest_path": files["session_ingest"].name,
+        "session_ingest_sha256": _file_sha256(files["session_ingest"]),
+        "cleanup_path": files["cleanup"].name,
+        "cleanup_sha256": _file_sha256(files["cleanup"]),
+        "session_ingest_status": ingest["status"],
+        "agent_exit_code": result["agent_exit_code"],
+        "agent_termination": result["agent_termination"],
+        "elapsed_seconds": result["elapsed_seconds"],
+    }
+    return rollout_ledger.record_local_result(
+        database,
+        cell_id=ledger_cell["cell_id"],
+        worker_id=ledger_cell["worker_id"],
+        claim_id=ledger_cell["claim_id"],
+        record=record,
+    )
 
 
 def _selection_index(selection: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -340,6 +416,14 @@ def run_one(
             out_dir = output_root / "attempts" / execution_name
             with _Heartbeat(database, cell):
                 result = self_hosted.run(config, out_dir, proxy_script)
+            _record_local_result(
+                database=database,
+                config=config,
+                ledger_cell=cell,
+                result=result,
+                out_dir=out_dir,
+                output_root=output_root,
+            )
             accepted = _accepted_receipt(client, config, cell, result, out_dir)
             _safe_write_once(out_dir / "ACCEPTED.json", accepted)
             rollout_ledger.start(

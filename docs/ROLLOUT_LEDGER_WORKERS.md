@@ -13,6 +13,15 @@ CSV/JSONL status files are human-readable projections only. A cell is one exact
 model + task version + attempt. All four attempts for one model/task stay on the
 same serving route.
 
+The private `rollout_local_results` table indexes every completed local result
+before Fleet session-catalog acceptance. It stores the numeric score, session and
+verifier IDs, and the relative paths plus SHA-256 digests of the trace, result,
+reward, ingestion, and cleanup files. Large traces remain immutable files under
+the attempt directory rather than SQLite blobs. This preserves our own result if
+Fleet catalog ingestion or model attribution fails, while the public progress CSV
+and event stream remain score- and trace-free. Existing artifacts are not
+automatically backfilled; this contract applies to workers launched with schema v2.
+
 States are:
 
 - `pending`: safe to claim
@@ -33,8 +42,8 @@ same stochastic cell.
 - 262,144-token context, 32,768-token output, 20,000-token compaction headroom
 - only Fleet `bash` and `submit_report`; all local OpenCode tools are disabled
 - exact task version, runtime seed, verifier version, model revision, and endpoint
-- scores remain private; coordination receipts contain no prompts, traces, flags,
-  answers, or scores
+- scores remain private in `rollout_local_results`; coordination receipts and
+  exports contain no prompts, traces, flags, answers, or scores
 
 ## Serving routes
 
