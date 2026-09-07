@@ -17,6 +17,13 @@ Read this file before acting. Then select only the skill matching the work and r
 | Compose or change a model × harness × data × benchmark experiment | [`cyber-experiment-operator`](skills/cyber-experiment-operator/SKILL.md) |
 | Observe, drain, release, or replace experiment-owned dedicated GPU capacity | [`cyber-gpu-steward`](skills/cyber-gpu-steward/SKILL.md) |
 
+Before creating any Kubernetes Job, RayJob, or persistent inference service on the
+Nebius training cluster, read
+[`docs/CLUSTER_ALERTS_AND_INFERENCE_SERVING.md`](docs/CLUSTER_ALERTS_AND_INFERENCE_SERVING.md).
+Normal experiment operation must not manufacture failed-Job pages or hold unconsumed
+GPUs. Do not evade or suppress a genuine platform alert; choose the supported resource
+lifecycle and make expected terminal states clean and explicit.
+
 For current experiment state, read `docs/QWEN36_STUDY_EVIDENCE.md`. For scientific controls, read `docs/SCIENTIFIC_PROTOCOL.md`. Chronological status notes and early example configs are context, not authority.
 
 ## Source-of-truth order
