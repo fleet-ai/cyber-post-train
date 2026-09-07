@@ -1,0 +1,25 @@
+FROM docker.io/library/node@sha256:4d676821dff059fd00d277ee4261ef34ea712317fed0737c03941481b5760c96
+
+ARG OPENCODE_VERSION=1.18.27
+ARG OPENCODE_SHA256=4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702
+
+USER root
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && curl --fail --location --silent --show-error \
+       "https://github.com/anomalyco/opencode/releases/download/v${OPENCODE_VERSION}/opencode-linux-x64.tar.gz" \
+       --output /tmp/opencode.tar.gz \
+    && echo "${OPENCODE_SHA256}  /tmp/opencode.tar.gz" | sha256sum --check --strict \
+    && tar --extract --gzip --file /tmp/opencode.tar.gz --directory /usr/local/bin opencode \
+    && rm /tmp/opencode.tar.gz \
+    && test "$(opencode --version)" = "${OPENCODE_VERSION}"
+
+RUN mkdir -p /workspace /home/node/.config/opencode /home/node/.local/share/opencode \
+    && chown -R node:node /workspace /home/node
+
+USER node
+WORKDIR /workspace
+ENTRYPOINT []
+CMD ["opencode", "--version"]
+
