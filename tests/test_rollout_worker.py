@@ -68,7 +68,7 @@ def test_config_keeps_exact_autocontinue_treatment_and_route(monkeypatch) -> Non
     }
     config = rollout_worker.build_config(campaign, ledger_cell, scientific, {}, object())
     assert config["model"]["served_id"] == "chris-cyber-qwen38-27b-dedicated-v1"
-    assert config["model"]["session_model"].endswith("opencode11827-autocontinue-v1")
+    assert config["model"]["session_model"] == "qwen/qwen3.8-27b"
     assert config["harness"]["context_management"].endswith("autocontinue_v1")
     assert config["harness"]["context_window_size"] == 262144
     assert config["harness"]["compaction_headroom_tokens"] == 20000

@@ -13,6 +13,7 @@ import pytest
 from evals.fleet.rollout_ledger import (
     LedgerError,
     accept,
+    accept_reviewed,
     approve_retry,
     claim,
     export,
@@ -207,6 +208,43 @@ def test_retry_requires_review_receipt_and_obeys_allowance(tmp_path: Path) -> No
         reconciliation_digest=RECONCILIATION_DIGEST,
     )
     assert terminal["state"] == "terminal"
+
+
+def test_reviewed_valid_outcome_is_accepted_without_reentering_queue(tmp_path: Path) -> None:
+    database = tmp_path / "ledger.sqlite3"
+    initialize(database, _plan(tmp_path / "plan.csv", [_row(1)]))
+    cell = _claim_one(database)
+    owner = {
+        "cell_id": str(cell["cell_id"]),
+        "worker_id": "worker-1",
+        "claim_id": str(cell["claim_id"]),
+    }
+    request_retry_review(database, **owner, failure_code="post_score_catalog_mismatch")
+
+    accepted = accept_reviewed(
+        database,
+        cell_id=owner["cell_id"],
+        session_id="fleet-session-reviewed-1",
+        receipt_digest=RECEIPT_DIGEST,
+        reconciliation_digest=RECONCILIATION_DIGEST,
+    )
+
+    assert accepted["state"] == "accepted"
+    assert accepted["session_id"] == "fleet-session-reviewed-1"
+    assert accepted["result_class"] == "valid"
+    assert accepted["failure_code"] is None
+    assert accepted["receipt_digest"] == RECEIPT_DIGEST
+    assert accepted["reconciliation_digest"] == RECONCILIATION_DIGEST
+    assert claim(database, worker_id="replacement", serving_block="shared-qwen") is None
+
+    with pytest.raises(LedgerError, match="only a retry_review"):
+        accept_reviewed(
+            database,
+            cell_id=owner["cell_id"],
+            session_id="fleet-session-reviewed-1",
+            receipt_digest=RECEIPT_DIGEST,
+            reconciliation_digest=RECONCILIATION_DIGEST,
+        )
 
 
 def test_csv_and_event_exports_are_atomic_human_views(tmp_path: Path) -> None:

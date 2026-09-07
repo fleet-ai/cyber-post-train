@@ -58,15 +58,15 @@ EXPECTED_MODELS = {
         "repository": "Qwen/Qwen3.8-27B",
         "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
         "served_id": "qwen3.8-27b",
-        "session_model": (
-            "fleet-cluster-opencode-1.18.27/qwen3.8-27b-opencode11827-autocontinue-v1"
-        ),
+        # Fleet's session catalog stores the unprefixed ID.  The exact endpoint,
+        # model revision, harness and compaction treatment remain separately bound.
+        "session_model": "qwen/qwen3.8-27b",
     },
     "glm-5.3": {
         "repository": "zai-org/GLM-5.3",
         "revision": "30333038ada1f1dacb294a93270305a890b50c14",
         "served_id": "glm-5.3",
-        "session_model": "fleet-cluster-opencode-1.18.27/glm-5.3-opencode11827-autocontinue-v1",
+        "session_model": "z-ai/glm-5.3",
     },
 }
 EXPECTED_TREATMENT = {
@@ -481,4 +481,3 @@ def _main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(_main())
-

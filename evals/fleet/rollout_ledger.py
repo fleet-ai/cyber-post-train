@@ -949,6 +949,82 @@ def approve_retry(database: Path, *, cell_id: str, reconciliation_digest: str) -
             raise
 
 
+def accept_reviewed(
+    database: Path,
+    *,
+    cell_id: str,
+    session_id: str,
+    receipt_digest: str,
+    reconciliation_digest: str,
+) -> dict[str, Any]:
+    """Accept a held cell only after an external evidence reconciliation.
+
+    This is deliberately separate from retry approval: a verifier-backed outcome
+    that already exists must be credited, never returned to the claim queue.
+    Neither the score nor any trace content is copied into the public ledger.
+    """
+    session_id = _require_text(session_id, "session_id")
+    receipt = _require_digest(receipt_digest, "receipt_digest")
+    reconciliation = _require_digest(reconciliation_digest, "reconciliation_digest")
+    with closing(_connect(database)) as connection:
+        _schema(connection)
+        connection.execute("BEGIN IMMEDIATE")
+        try:
+            row = connection.execute(
+                "SELECT * FROM rollout_cells WHERE cell_id = ?", (cell_id,)
+            ).fetchone()
+            if row is None:
+                raise LedgerError("rollout cell does not exist")
+            if row["state"] != "retry_review":
+                raise LedgerError("only a retry_review cell may be accepted by reconciliation")
+            if row["session_id"] not in (None, session_id):
+                raise LedgerError("reviewed session identity conflicts with the held cell")
+            timestamp = _timestamp()
+            connection.execute(
+                """
+                UPDATE rollout_cells
+                SET state = 'accepted', session_id = ?, completed_at = ?,
+                    heartbeat_at = ?, lease_expires_at = NULL, result_class = 'valid',
+                    receipt_digest = ?, failure_code = NULL,
+                    reconciliation_digest = ?, updated_at = ?
+                WHERE cell_id = ?
+                """,
+                (
+                    session_id,
+                    timestamp,
+                    timestamp,
+                    receipt,
+                    reconciliation,
+                    timestamp,
+                    cell_id,
+                ),
+            )
+            _event(
+                connection,
+                cell_id=cell_id,
+                name="reviewed_outcome_accepted",
+                from_state="retry_review",
+                to_state="accepted",
+                worker_id=row["worker_id"],
+                claim_id=row["claim_id"],
+                detail={
+                    "session_id": session_id,
+                    "receipt_digest": receipt,
+                    "reconciliation_digest": reconciliation,
+                    "prior_failure_code": row["failure_code"],
+                },
+                recorded_at=timestamp,
+            )
+            updated = connection.execute(
+                "SELECT * FROM rollout_cells WHERE cell_id = ?", (cell_id,)
+            ).fetchone()
+            connection.execute("COMMIT")
+            return dict(updated)
+        except Exception:
+            connection.execute("ROLLBACK")
+            raise
+
+
 def mark_terminal(
     database: Path,
     *,
@@ -1158,6 +1234,14 @@ def _parser() -> argparse.ArgumentParser:
     retry_parser.add_argument("--cell-id", required=True)
     retry_parser.add_argument("--reconciliation-digest", required=True)
 
+    reviewed_parser = commands.add_parser(
+        "accept-reviewed", help="Accept a held valid outcome after digest-bound reconciliation"
+    )
+    reviewed_parser.add_argument("--cell-id", required=True)
+    reviewed_parser.add_argument("--session-id", required=True)
+    reviewed_parser.add_argument("--receipt-digest", required=True)
+    reviewed_parser.add_argument("--reconciliation-digest", required=True)
+
     terminal_parser = commands.add_parser(
         "terminal", help="Close a retry-review cell without another attempt"
     )
@@ -1231,6 +1315,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             result = approve_retry(
                 arguments.db,
                 cell_id=arguments.cell_id,
+                reconciliation_digest=arguments.reconciliation_digest,
+            )
+        elif arguments.command == "accept-reviewed":
+            result = accept_reviewed(
+                arguments.db,
+                cell_id=arguments.cell_id,
+                session_id=arguments.session_id,
+                receipt_digest=arguments.receipt_digest,
                 reconciliation_digest=arguments.reconciliation_digest,
             )
         elif arguments.command == "terminal":
