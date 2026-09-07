@@ -1,0 +1,125 @@
+{
+  "id": "chris-cyber-glm53-dedicated-v1",
+  "spec": {
+    "displayName": "Chris Cyber GLM-5.3 Dedicated v1",
+    "capabilities": [
+      "chat_completions",
+      "streaming",
+      "reasoning",
+      "tool_calling"
+    ],
+    "model": {
+      "sourcePath": "/models/glm-5.3/30333038ada1f1dacb294a93270305a890b50c14",
+      "path": "/scratch/models/glm-5.3/30333038ada1f1dacb294a93270305a890b50c14",
+      "revision": "30333038ada1f1dacb294a93270305a890b50c14",
+      "precision": "fp8",
+      "tensorParallelSize": 8
+    },
+    "runtime": {
+      "engine": "sglang",
+      "image": {
+        "repository": "lmsysorg/sglang",
+        "digest": "sha256:9e148f5ac788e856a06166bd6347a831831eb9fcfab4d1770874823a7c29a1a1"
+      },
+      "command": [
+        "python3",
+        "-m",
+        "sglang.launch_server"
+      ],
+      "args": [
+        "--model-path",
+        "/scratch/models/glm-5.3/30333038ada1f1dacb294a93270305a890b50c14",
+        "--served-model-name",
+        "chris-cyber-glm53-dedicated-v1",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+        "--trust-remote-code",
+        "--tp-size",
+        "8",
+        "--dp-size",
+        "8",
+        "--ep-size",
+        "8",
+        "--enable-dp-attention",
+        "--context-length",
+        "262144",
+        "--quantization",
+        "fp8",
+        "--kv-cache-dtype",
+        "bfloat16",
+        "--mem-fraction-static",
+        "0.85",
+        "--attention-backend",
+        "dsa",
+        "--dsa-prefill-backend",
+        "trtllm",
+        "--dsa-decode-backend",
+        "trtllm",
+        "--moe-a2a-backend",
+        "deepep",
+        "--speculative-algorithm",
+        "EAGLE",
+        "--speculative-draft-model-path",
+        "/scratch/models/glm-5.3/30333038ada1f1dacb294a93270305a890b50c14",
+        "--speculative-num-steps",
+        "1",
+        "--speculative-eagle-topk",
+        "1",
+        "--speculative-num-draft-tokens",
+        "2",
+        "--reasoning-parser",
+        "glm45",
+        "--tool-call-parser",
+        "glm47",
+        "--enable-metrics",
+        "--enable-mfu-metrics",
+        "--enable-metrics-for-all-schedulers"
+      ],
+      "port": 8000,
+      "healthPath": "/health",
+      "lockMemory": true,
+      "env": [
+        {
+          "name": "HF_HUB_OFFLINE",
+          "value": "1"
+        },
+        {
+          "name": "TRANSFORMERS_OFFLINE",
+          "value": "1"
+        },
+        {
+          "name": "NVSHMEM_REMOTE_TRANSPORT",
+          "value": "none"
+        }
+      ]
+    },
+    "scaling": {
+      "minReplicas": 1
+    },
+    "placement": {
+      "nodeGroup": "fleetai-training-ng-gpu",
+      "topologyTier1": "e96a0620bd3618dc13a7c1ba80e9fbbd",
+      "priorityClassName": "fleet-serve-low"
+    },
+    "resources": {
+      "requests": {
+        "cpu": "96",
+        "memory": "1Ti"
+      },
+      "limits": {
+        "cpu": "192",
+        "memory": "2Ti",
+        "nvidia.com/gpu": 8
+      }
+    },
+    "cache": {
+      "enabled": true,
+      "workers": 16
+    },
+    "routing": {
+      "enabled": true
+    }
+  }
+}
