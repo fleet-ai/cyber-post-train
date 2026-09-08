@@ -199,6 +199,32 @@ The Job is `chris-cyber-qwen36-qcode-fleet-test20-base-v1`. It plans exactly
 runtime receipt, and keeps every artifact ineligible for training. A per-task
 infrastructure failure is recorded separately and does not become a model zero.
 
+### Sealed 20-task Qwen3.8 base baseline
+
+The Qwen3.8 baseline inherits the same exact untouched `test` task-version rows
+without reading prompt or verifier bodies into source control. It pins
+`Qwen/Qwen3.8-27B` revision
+`1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0`, Qwen Code 0.22.3, the exact
+tokenizer/chat-template digests, the live SGLang serving contract, the ordered
+`bash`/`submit_report` tool catalog, a 600-request ceiling, and a 262,144-token
+context. The run is evaluation-only and sequential pass@1.
+
+```bash
+# Live identity, exact-version task hydration, and server-side manifest preview.
+evals/fleet/scripts/submit_selfhosted_qwen38_test20.sh preview
+```
+
+The create-only `submit` path is deliberately blocked until the exact active V3
+reward canary has one authoritative model outcome with a nonzero verifier UUID
+and complete cleanup. At that point the operator supplies the immutable V3
+campaign root and frozen receipt through `Q38_CALIBRATION_ROOT` and
+`Q38_CALIBRATION_RECEIPT`. The launcher derives a self-digesting sanitized gate
+receipt, rechecks the live model and all 20 exact task versions, refuses an
+existing Job or ConfigMap, and uses Kubernetes `create` rather than replacement.
+The gate accepts a valid zero because it establishes harness/verifier execution;
+it does not reinterpret that zero as capability or release any V3 train/dev
+tasks. This protocol change does not itself authorize or submit the holdout Job.
+
 ### Interrupted-attempt reconciliation
 
 The self-hosted runner writes `resource-plan.json` before starting local

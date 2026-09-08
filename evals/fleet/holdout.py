@@ -6,6 +6,7 @@ import argparse
 import copy
 import json
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -18,6 +19,15 @@ HOLDOUT_SCHEMA = "fleet-qwen-code-test20-plan-v1"
 RECEIPT_SCHEMA = "fleet-qwen-code-test20-receipt-v1"
 EXPECTED_SPLIT_SCHEMA = "fleet_rl_task_split_v1"
 EXPECTED_TASK_COUNT = 20
+BASE_EXECUTION_CONTROLS = {
+    "pass_k": 1,
+    "max_concurrent": 1,
+    "training_data_eligible": False,
+}
+OPTIONAL_EXECUTION_CONTROLS = {
+    "required_task_tools",
+    "required_task_tool_catalog_sha256",
+}
 
 
 def _digest_without(value: dict[str, Any], field: str) -> str:
@@ -45,12 +55,27 @@ def validate_plan(plan: dict[str, Any], split: dict[str, Any]) -> list[dict[str,
         raise ValueError("holdout plan must declare exactly 20 tasks")
     if plan.get("source_job_id") != (split.get("source") or {}).get("job_id"):
         raise ValueError("holdout plan source job does not match split provenance")
-    if plan.get("execution") != {
-        "pass_k": 1,
-        "max_concurrent": 1,
-        "training_data_eligible": False,
-    }:
+    execution = plan.get("execution") or {}
+    if any(execution.get(key) != value for key, value in BASE_EXECUTION_CONTROLS.items()):
         raise ValueError("holdout execution controls drifted")
+    if set(execution) - (set(BASE_EXECUTION_CONTROLS) | OPTIONAL_EXECUTION_CONTROLS):
+        raise ValueError("holdout execution controls contain unsupported fields")
+    required_tools = execution.get("required_task_tools")
+    required_tool_digest = execution.get("required_task_tool_catalog_sha256")
+    if (required_tools is None) != (required_tool_digest is None):
+        raise ValueError("holdout exact tool controls must be provided together")
+    if required_tools is not None:
+        if required_tools != ["bash", "submit_report"]:
+            raise ValueError("holdout exact tool surface drifted")
+        if not isinstance(required_tool_digest, str) or not required_tool_digest.startswith(
+            "sha256:"
+        ):
+            raise ValueError("holdout exact tool catalog digest is invalid")
+    resource_prefix = plan.get("resource_prefix", "q36qcode-test20-b1")
+    if not isinstance(resource_prefix, str) or not re.fullmatch(
+        r"[a-z0-9][a-z0-9-]{0,39}", resource_prefix
+    ):
+        raise ValueError("holdout resource prefix is invalid")
 
     rows = [row for row in split.get("tasks", []) if row.get("split") == "test"]
     if len(rows) != EXPECTED_TASK_COUNT:
@@ -76,6 +101,138 @@ def validate_plan(plan: dict[str, Any], split: dict[str, Any]) -> list[dict[str,
     if {row["task_key"] for row in rows} & {row["task_key"] for row in non_test}:
         raise ValueError("test task lineage overlaps another split")
     return sorted(rows, key=lambda row: row["task_key"])
+
+
+def _gateway_request(
+    client: httpx.Client, method: str, path: str, *, model: str | None = None, **kwargs: Any
+) -> dict[str, Any]:
+    headers = dict(kwargs.pop("headers", {}))
+    if model:
+        headers["X-Fleet-Model"] = model
+    response = client.request(method, path, headers=headers, **kwargs)
+    if response.status_code >= 400:
+        raise RuntimeError(
+            f"inference gateway {method} {path} failed with HTTP {response.status_code}"
+        )
+    value = response.json()
+    if not isinstance(value, dict):
+        raise RuntimeError("inference gateway returned a non-object response")
+    return value
+
+
+def live_model_identity(api_key: str, model: dict[str, Any]) -> dict[str, Any] | None:
+    """Validate an optional exact self-hosted serving contract without exposing model output."""
+
+    contract = model.get("live_identity")
+    if contract is None:
+        return None
+    if not isinstance(contract, dict):
+        raise ValueError("holdout live model identity contract is malformed")
+    served_id = model["served_id"]
+    origin = model["endpoint_origin"].rstrip("/")
+    with httpx.Client(
+        base_url=origin,
+        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        timeout=180,
+    ) as client:
+        catalog = _gateway_request(client, "GET", "/fleet/v1/model-catalog")
+        matches = [row for row in catalog.get("data", []) if row.get("id") == served_id]
+        if len(matches) != 1:
+            raise RuntimeError("holdout served model is missing or duplicated in the catalog")
+        catalog_row = matches[0]
+        expected_catalog = contract.get("catalog") or {}
+        actual_catalog = {field: catalog_row.get(field) for field in expected_catalog}
+        if actual_catalog != expected_catalog or int(catalog_row.get("ready_replicas") or 0) < 1:
+            raise RuntimeError("holdout catalog model identity drifted")
+        if "tool_calling" not in (catalog_row.get("capabilities") or []):
+            raise RuntimeError("holdout served model no longer declares tool calling")
+
+        model_info = _gateway_request(client, "GET", "/model_info", model=served_id)
+        server_info = _gateway_request(client, "GET", "/server_info", model=served_id)
+        expected_model_info = contract.get("model_info") or {}
+        expected_server_info = contract.get("server_info") or {}
+        actual_model_info = {field: model_info.get(field) for field in expected_model_info}
+        actual_server_info = {field: server_info.get(field) for field in expected_server_info}
+        if actual_model_info != expected_model_info:
+            raise RuntimeError("holdout model_info identity drifted")
+        if actual_server_info != expected_server_info:
+            raise RuntimeError("holdout server_info identity drifted")
+
+        probe = _gateway_request(
+            client,
+            "POST",
+            "/v1/chat/completions",
+            json={
+                "model": served_id,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": (
+                            "For this protocol probe, call submit_report exactly once with "
+                            "an empty flags list and explanation identity probe."
+                        ),
+                    }
+                ],
+                "tools": [
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "bash",
+                            "description": "Run a shell command in an isolated challenge sandbox.",
+                            "parameters": {
+                                "type": "object",
+                                "properties": {"command": {"type": "string"}},
+                                "required": ["command"],
+                                "additionalProperties": False,
+                            },
+                        },
+                    },
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "submit_report",
+                            "description": "Submit recovered flags and an explanation.",
+                            "parameters": {
+                                "type": "object",
+                                "properties": {
+                                    "flags": {"type": "array", "items": {"type": "string"}},
+                                    "explanation": {"type": "string"},
+                                },
+                                "required": ["flags", "explanation"],
+                                "additionalProperties": False,
+                            },
+                        },
+                    },
+                ],
+                "tool_choice": "auto",
+                "temperature": 0,
+                "max_tokens": 256,
+            },
+        )
+    choices = probe.get("choices") or []
+    calls = (
+        (choices[0].get("message") or {}).get("tool_calls") or []
+        if len(choices) == 1
+        else []
+    )
+    call_names = [call.get("function", {}).get("name") for call in calls]
+    if (
+        len(choices) != 1
+        or probe.get("model") != served_id
+        or choices[0].get("finish_reason") != "tool_calls"
+        or call_names != ["submit_report"]
+    ):
+        raise RuntimeError("holdout structured-tool identity probe failed")
+    return {
+        "catalog": actual_catalog,
+        "model_info": actual_model_info,
+        "server_info": actual_server_info,
+        "structured_tool_probe": {
+            "response_model": probe.get("model"),
+            "finish_reason": choices[0].get("finish_reason"),
+            "tool_names": call_names,
+        },
+    }
 
 
 def _task_receipt(client: httpx.Client, row: dict[str, Any], index: int) -> dict[str, Any]:
@@ -130,7 +287,10 @@ def _task_receipt(client: httpx.Client, row: dict[str, Any], index: int) -> dict
 
 
 def build_live_receipt(
-    client: httpx.Client, plan: dict[str, Any], split: dict[str, Any]
+    client: httpx.Client,
+    plan: dict[str, Any],
+    split: dict[str, Any],
+    api_key: str | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     rows = validate_plan(plan, split)
     account = self_hosted._request(client, "GET", "/v1/account")
@@ -140,6 +300,9 @@ def build_live_receipt(
     }:
         raise RuntimeError("FLEET_API_KEY is not scoped to the Fleet team")
     authority_gate = self_hosted.assert_authoritative_routes_deployed(client, plan)
+    model_identity = live_model_identity(api_key, plan["model"]) if api_key else None
+    if plan["model"].get("live_identity") is not None and model_identity is None:
+        raise RuntimeError("holdout live model identity was not validated")
     tasks = [_task_receipt(client, row, index) for index, row in enumerate(rows, 1)]
     receipt = {
         "schema_version": RECEIPT_SCHEMA,
@@ -154,6 +317,12 @@ def build_live_receipt(
         "execution": copy.deepcopy(plan["execution"]),
         "tasks": tasks,
     }
+    if model_identity is not None:
+        receipt["live_model_identity"] = model_identity
+    if "resource_prefix" in plan:
+        receipt["resource_prefix"] = plan["resource_prefix"]
+    if "launch_gate" in plan:
+        receipt["launch_gate"] = copy.deepcopy(plan["launch_gate"])
     receipt["receipt_sha256"] = self_hosted.sha256(self_hosted.canonical_json(receipt))
     return receipt, authority_gate
 
@@ -176,6 +345,7 @@ def validate_frozen_receipt(receipt: dict[str, Any]) -> None:
 
 def task_config(plan: dict[str, Any], row: dict[str, Any]) -> dict[str, Any]:
     key_digest = self_hosted.sha256(row["task_key"].encode()).split(":", 1)[1][:8]
+    resource_prefix = plan.get("resource_prefix", "q36qcode-test20-b1")
     return {
         "schema_version": "fleet-selfhosted-qwen-code-protocol-v1",
         "run_id": f"{plan['campaign_id']}-t{row['index']:02d}-{key_digest}",
@@ -201,7 +371,7 @@ def task_config(plan: dict[str, Any], row: dict[str, Any]) -> dict[str, Any]:
         "harness": copy.deepcopy(plan["harness"]),
         "execution": {
             **copy.deepcopy(plan["execution"]),
-            "network": f"q36qcode-test20-b1-{row['index']:02d}-{key_digest}",
+            "network": f"{resource_prefix}-{row['index']:02d}-{key_digest}",
         },
     }
 
@@ -302,7 +472,7 @@ def main() -> int:
         headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
         timeout=180,
     ) as client:
-        live_receipt, authority_gate = build_live_receipt(client, plan, split)
+        live_receipt, authority_gate = build_live_receipt(client, plan, split, api_key)
     if args.receipt_out:
         args.receipt_out.write_bytes(self_hosted.canonical_json(live_receipt) + b"\n")
     if args.receipt:
