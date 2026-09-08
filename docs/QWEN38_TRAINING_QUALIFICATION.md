@@ -74,6 +74,17 @@ create-only `chris-cyber-qwen38-canonical-link` job exposes that exact tree as
 `/mnt/sfs/models/qwen3.8-27b`; it refuses to replace any existing nonmatching
 path. Both checked-in manifests remain suspended plans and were not submitted.
 
+The later storage-topology audit refines this into a reusable, stricter dry-run
+bridge. The inference cache and training SFS are different namespace-scoped
+PVCs and different PVs, so a single Pod cannot legally mount both claims.
+[`QWEN38_MODEL_STAGING_BRIDGE.md`](QWEN38_MODEL_STAGING_BRIDGE.md) selects
+immutable upstream rematerialization instead: the training-side CPU Job
+downloads the same exact Hugging Face commit, rehashes every allowlisted model
+and tokenizer byte, writes a self-digested acceptance sidecar, and publishes
+with `renameat2(RENAME_NOREPLACE)`. Its launcher is deliberately preview-only;
+the older embedded-shell stage manifest is retained as historical design input,
+not the preferred future execution rail.
+
 The end-to-end correction is:
 
 1. add `Qwen3.8-27B` as a base-model catalog row with provider `Qwen`, exact
