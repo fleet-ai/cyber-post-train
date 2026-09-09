@@ -1,0 +1,95 @@
+# Historical recovery reference, not an onboarding or active-campaign launch template.
+# Do not apply: a new archive Job requires separate explicit authorization and review.
+# Preserve existing objects; see docs/ROLLOUT_POSTGRES.md for the current contract.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: chris-cyber-rollout-archive-v1
+  namespace: fleet-train-jobs
+  labels:
+    owner: chris
+    cyber-post-train.fleet.ai/purpose: rollout-recovery-archive
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: compute-csi-default-sc
+  resources:
+    requests:
+      storage: 200Gi
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: chris-cyber-rollout-archive-r7-v1
+  namespace: fleet-train-jobs
+  labels:
+    owner: chris
+    fleet.ai/submitted-by: chris
+    cyber-post-train.fleet.ai/purpose: rollout-recovery-archive
+    kueue.x-k8s.io/queue-name: training-lq
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        owner: chris
+        cyber-post-train.fleet.ai/purpose: rollout-recovery-archive
+    spec:
+      restartPolicy: Never
+      priorityClassName: fleet-train-high
+      nodeSelector:
+        kubernetes.io/hostname: computeinstance-e04fw0f2anvp0de74v
+        workload: fleetai-training-ng-cpu
+      containers:
+        - name: archive
+          image: ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
+          imagePullPolicy: IfNotPresent
+          command:
+            - python
+            - /bootstrap/rollout_archive.py
+            - --source
+            - /source-sfs/jobs/chris-cyber-q38-glm53-pass4-ledger-v1
+            - --destination
+            - /archive/campaign-v1
+            - --terminal-worker
+            - chris-glm-shared-load16-r40-v1
+            - --terminal-worker
+            - chris-glm-shared-load16-r42-v1
+            - --status-output
+            - /dev/termination-log
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+              ephemeral-storage: 1Gi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+              ephemeral-storage: 5Gi
+          securityContext:
+            runAsUser: 0
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+              add:
+                - DAC_READ_SEARCH
+          volumeMounts:
+            - name: bootstrap
+              mountPath: /bootstrap
+              readOnly: true
+            - name: source
+              mountPath: /source-sfs
+              readOnly: true
+            - name: archive
+              mountPath: /archive
+      volumes:
+        - name: bootstrap
+          configMap:
+            name: chris-cyber-rollout-archive-r7-v1
+        - name: source
+          persistentVolumeClaim:
+            claimName: sfs-shared
+        - name: archive
+          persistentVolumeClaim:
+            claimName: chris-cyber-rollout-archive-v1

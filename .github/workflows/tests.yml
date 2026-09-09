@@ -1,0 +1,42 @@
+name: Repository tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16.10@sha256:21f6013073bc6b92830a2129570e2f5ec42a6c734b5a985a41e83aa58f54c3c1
+        env:
+          POSTGRES_DB: cyber_post_train_test
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 127.0.0.1:5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d cyber_post_train_test"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      TEST_POSTGRES_DSN: postgresql://postgres@127.0.0.1:5432/cyber_post_train_test
+      TEST_POSTGRES_DISPOSABLE: "1"
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.12.6"
+          python-version: "3.12"
+      - run: uv sync --locked --extra dev --extra train
+      - run: uv run --locked ruff check .
+      - run: uv run --locked pytest
+      - run: uv run --locked cyber-post-train doctor

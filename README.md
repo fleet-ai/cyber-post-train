@@ -28,13 +28,21 @@ the evaluator and trainer directories remain the authoritative command surfaces.
 ## Local setup
 
 ```bash
-cd /Users/christan/Desktop/cyber-post-train
-uv sync --extra dev
-cp .env.example .env
+cd cyber-post-train  # your clone or dedicated worktree
+uv sync --locked --extra dev
 ```
 
 Export credentials in the shell or use a local untracked `.env`; do not put them in
 commands, source files, logs or committed configuration.
+Use `.env.example` as a template without overwriting an existing local environment.
+Credentials are not needed for local diagnostics or synthetic unit tests.
+
+New collaborators should start with [CONTRIBUTING.md](CONTRIBUTING.md), then
+[AGENTS.md](AGENTS.md) and the relevant scientific protocol. For the distributed
+Fleet rollout campaign, **PostgreSQL is the coordination authority**; SQLite is
+legacy/local storage and preserved migration evidence, not a second live queue.
+See the [PostgreSQL operator runbook](docs/ROLLOUT_POSTGRES.md) and
+[worker/evidence contract](docs/ROLLOUT_LEDGER_WORKERS.md).
 
 Check the local installation and inspect the supported adapter lifecycle without any
 credentials or network access:

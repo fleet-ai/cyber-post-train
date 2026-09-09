@@ -26,6 +26,10 @@ lifecycle and make expected terminal states clean and explicit.
 
 For current experiment state, read `docs/QWEN36_STUDY_EVIDENCE.md`. For scientific controls, read `docs/SCIENTIFIC_PROTOCOL.md`. Chronological status notes and early example configs are context, not authority.
 
+For distributed Fleet rollout coordination, read `docs/ROLLOUT_POSTGRES.md`.
+PostgreSQL is the migrated campaign's sole queue authority; preserved SQLite and
+CSV exports are not live fallbacks. Do not infer current state from this runbook.
+
 ## Source-of-truth order
 
 When sources disagree, use this order and preserve the disagreement:
@@ -51,7 +55,15 @@ Mutable names, tags, catalog `current` pointers, a Ready Pod, or a dashboard lab
 
 - Status, diagnosis, and review requests are read-only. Do not infer permission to fix, deploy, submit, rerun, cancel, or mutate.
 - Default mutating or paid operations to preview. Recheck duplicates, exact identity, cost/session count, queue, and stop conditions immediately before execution.
-- Use meaningful `chris-cyber-*` ownership names, normal queues, and default priority. Never bypass admission, unsuspend manually, cancel, preempt, or change peer workloads.
+- Use meaningful ownership names, normal queues, and default priority. A current,
+  explicit owner-authorized priority exception may change the owned workload's
+  supported queue-priority fields after preview and immutable-identity checks.
+  Verify effective Workload priority separately from Job labels. Never bypass
+  admission, unsuspend manually, cancel, directly preempt, or change peer workloads.
+- Designate one live rollout creator across humans and automations. Queued and
+  initializing successors occupy slots; wait for UID-bound readiness and a matching
+  distinct pending-row claim before another create. Reconcile terminal evidence
+  without mutating preserved objects/results or existing `retry_review` rows.
 - Do not mutate an immutable failed Job to retry it. Preserve it and create a reviewed successor only when authorized.
 - An experiment-owned dedicated GPU serving or evaluation allocation needs an observed useful rollout consumer or a bounded, predeclared loading, warmup, or handoff exception. When neither holds, stop new claims, preserve in-flight evidence, release the owned allocation through its supported lifecycle, diagnose off-node, and create a fresh successor only after its gates pass. This does not apply to shared or hosted endpoints and never authorizes peer-workload mutation. Follow [`docs/GPU_RESOURCE_LIFECYCLE.md`](docs/GPU_RESOURCE_LIFECYCLE.md).
 - Merge authority follows the user's current instruction and repository ownership. Historical approval is not permanent authorization for a new shared-repository merge or deployment.
