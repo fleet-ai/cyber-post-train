@@ -5,6 +5,7 @@ description = "Reproducible evaluation and post-training for execution-grounded 
 requires-python = ">=3.11,<3.13"
 dependencies = [
   "httpx>=0.28,<1",
+  "psycopg[binary]>=3.2,<4",
   "pydantic>=2.11,<3",
   "pyyaml>=6.0,<7",
   "rich>=14,<15",

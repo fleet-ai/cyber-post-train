@@ -13,6 +13,10 @@ dist/
 *.egg-info/
 *.py[cod]
 *.log
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+*.dump
 artifacts/
 checkpoints/
 data/raw/

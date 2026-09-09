@@ -1,8 +1,9 @@
 """Run exact Fleet cyber rollout cells from the atomic campaign ledger.
 
-One process owns the SQLite database. Worker threads may serve independent endpoint
-blocks, but every stochastic execution is fenced first by both an atomic ledger claim
-and the campaign's global immutable execution-claim file.
+The current distributed path uses PostgreSQL for cross-host coordination. Every
+stochastic execution is fenced first by both an atomic ledger claim and the campaign's
+global immutable execution-claim file. SQLite remains available only for historical
+replay and local tests where one process owns the database.
 """
 
 from __future__ import annotations
@@ -22,7 +23,7 @@ import httpx
 from evals.fleet import exact_pass4_crypto as crypto
 from evals.fleet import exact_pass4_universe as universe
 from evals.fleet import opencode_self_hosted as self_hosted
-from evals.fleet import rollout_campaign, rollout_ledger
+from evals.fleet import rollout_campaign, rollout_ledger, rollout_postgres
 
 AUTHORITY = {
     "multi_app_aggregation_mode": "fractional",
@@ -66,7 +67,8 @@ def _file_sha256(path: Path) -> str:
 
 def _record_local_result(
     *,
-    database: Path,
+    database: Path | str,
+    ledger: Any = rollout_ledger,
     config: dict[str, Any],
     ledger_cell: dict[str, Any],
     result: dict[str, Any],
@@ -122,7 +124,7 @@ def _record_local_result(
         "agent_termination": result["agent_termination"],
         "elapsed_seconds": result["elapsed_seconds"],
     }
-    return rollout_ledger.record_local_result(
+    return ledger.record_local_result(
         database,
         cell_id=ledger_cell["cell_id"],
         worker_id=ledger_cell["worker_id"],
@@ -294,16 +296,23 @@ def _claim_receipt(config: dict[str, Any], ledger_cell: dict[str, Any]) -> dict[
 
 
 class _Heartbeat:
-    def __init__(self, database: Path, cell: dict[str, Any], interval: int = 60) -> None:
+    def __init__(
+        self,
+        database: Path | str,
+        cell: dict[str, Any],
+        ledger: Any = rollout_ledger,
+        interval: int = 60,
+    ) -> None:
         self.database = database
         self.cell = cell
+        self.ledger = ledger
         self.interval = interval
         self.stop = threading.Event()
         self.thread = threading.Thread(target=self._run, daemon=True)
 
     def _run(self) -> None:
         while not self.stop.wait(self.interval):
-            rollout_ledger.heartbeat(
+            self.ledger.heartbeat(
                 self.database,
                 cell_id=self.cell["cell_id"],
                 worker_id=self.cell["worker_id"],
@@ -380,7 +389,8 @@ def _accepted_receipt(
 
 def run_one(
     *,
-    database: Path,
+    database: Path | str,
+    ledger: Any = rollout_ledger,
     campaign: dict[str, Any],
     selection: dict[str, Any],
     universe_index: dict[tuple[str, str, int], dict[str, Any]],
@@ -390,16 +400,17 @@ def run_one(
     claim_root: Path,
     proxy_script: Path,
 ) -> dict[str, Any]:
-    cell = rollout_ledger.claim(
-        database, worker_id=worker_id, serving_block=serving_block, lease_seconds=300
-    )
-    if cell is None:
-        return {"serving_block": serving_block, "claimed": False, "accepted": False}
-    key = (cell["model_id"], cell["task_version_id"], int(cell["attempt"]))
-    scientific = universe_index.get(key)
-    selected = _selection_index(selection).get(cell["task_version_id"])
+    cell: dict[str, Any] | None = None
     out_dir: Path | None = None
     try:
+        cell = ledger.claim(
+            database, worker_id=worker_id, serving_block=serving_block, lease_seconds=300
+        )
+        if cell is None:
+            return {"serving_block": serving_block, "claimed": False, "accepted": False}
+        key = (cell["model_id"], cell["task_version_id"], int(cell["attempt"]))
+        scientific = universe_index.get(key)
+        selected = _selection_index(selection).get(cell["task_version_id"])
         if scientific is None or selected is None:
             raise RuntimeError("ledger cell is absent from the frozen universe")
         api_key = os.environ.get("FLEET_API_KEY")
@@ -414,10 +425,11 @@ def run_one(
             claim = _claim_receipt(config, cell)
             self_hosted.write_json_once(claim_root / f"{execution_name}.json", claim)
             out_dir = output_root / "attempts" / execution_name
-            with _Heartbeat(database, cell):
+            with _Heartbeat(database, cell, ledger):
                 result = self_hosted.run(config, out_dir, proxy_script)
             _record_local_result(
                 database=database,
+                ledger=ledger,
                 config=config,
                 ledger_cell=cell,
                 result=result,
@@ -426,7 +438,7 @@ def run_one(
             )
             accepted = _accepted_receipt(client, config, cell, result, out_dir)
             _safe_write_once(out_dir / "ACCEPTED.json", accepted)
-            rollout_ledger.start(
+            ledger.start(
                 database,
                 cell_id=cell["cell_id"],
                 worker_id=cell["worker_id"],
@@ -434,13 +446,13 @@ def run_one(
                 session_id=result["session_id"],
                 lease_seconds=300,
             )
-            rollout_ledger.mark_grading(
+            ledger.mark_grading(
                 database,
                 cell_id=cell["cell_id"],
                 worker_id=cell["worker_id"],
                 claim_id=cell["claim_id"],
             )
-            rollout_ledger.accept(
+            ledger.accept(
                 database,
                 cell_id=cell["cell_id"],
                 worker_id=cell["worker_id"],
@@ -455,6 +467,13 @@ def run_one(
                 "receipt_sha256": accepted["receipt_sha256"],
             }
     except BaseException as exc:  # noqa: BLE001
+        if cell is None:
+            return {
+                "serving_block": serving_block,
+                "claimed": False,
+                "accepted": False,
+                "controller_failure_code": type(exc).__name__.lower(),
+            }
         stage = "post_claim"
         if out_dir and (out_dir / "scoring-intent.json").is_file():
             stage = "authoritative_scoring_started"
@@ -462,7 +481,7 @@ def run_one(
             stage = "model_trace_created"
         code = f"{stage}.{type(exc).__name__.lower()}"[:128]
         with suppress(Exception):
-            rollout_ledger.request_retry_review(
+            ledger.request_retry_review(
                 database,
                 cell_id=cell["cell_id"],
                 worker_id=cell["worker_id"],
@@ -481,7 +500,7 @@ def run_one(
 def run_batch(
     *,
     repo_root: Path,
-    database: Path,
+    database: Path | str,
     plan: Path,
     campaign_path: Path,
     selection_path: Path,
@@ -492,11 +511,15 @@ def run_batch(
     cells_per_block: int,
     worker_id: str,
 ) -> dict[str, Any]:
+    ledger = rollout_postgres if isinstance(database, str) else rollout_ledger
     campaign = _load(campaign_path)
     selection = _load(selection_path)
     rollout_campaign.build_plan_rows(campaign_path, selection_path, snapshot_path)
-    rollout_ledger.initialize(database, plan)
-    rollout_campaign.import_snapshot(database, snapshot_path)
+    if isinstance(database, str):
+        rollout_postgres.verify_plan(database, plan)
+    else:
+        rollout_ledger.initialize(database, plan)
+        rollout_campaign.import_snapshot(database, snapshot_path)
     expanded = _universe_index(campaign, repo_root)
     jobs = [(block, index) for block in serving_blocks for index in range(cells_per_block)]
     results: list[dict[str, Any]] = []
@@ -505,6 +528,7 @@ def run_batch(
             pool.submit(
                 run_one,
                 database=database,
+                ledger=ledger,
                 campaign=campaign,
                 selection=selection,
                 universe_index=expanded,
@@ -518,7 +542,7 @@ def run_batch(
         }
         for future in as_completed(active):
             results.append(future.result())
-    status = rollout_ledger.summary(database)
+    status = ledger.summary(database)
     body = {
         "schema_version": TERMINAL_SCHEMA,
         "accepted": bool(results) and all(row.get("accepted") is True for row in results),
@@ -539,7 +563,9 @@ def run_batch(
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo-root", type=Path, default=Path.cwd())
-    parser.add_argument("--database", type=Path, required=True)
+    database_group = parser.add_mutually_exclusive_group(required=True)
+    database_group.add_argument("--database", type=Path)
+    database_group.add_argument("--postgres-dsn-env")
     parser.add_argument("--plan", type=Path, required=True)
     parser.add_argument("--campaign", type=Path, required=True)
     parser.add_argument("--selection", type=Path, required=True)
@@ -558,9 +584,16 @@ def main() -> int:
         parser.error("--cells-per-block must be positive")
     blocks = args.serving_block or sorted({value[0] for value in rollout_campaign.BLOCKS.values()})
     try:
+        database: Path | str
+        if args.postgres_dsn_env:
+            database = os.environ.get(args.postgres_dsn_env, "")
+            if not database:
+                raise RuntimeError(f"{args.postgres_dsn_env} is required")
+        else:
+            database = args.database
         result = run_batch(
             repo_root=args.repo_root.resolve(),
-            database=args.database,
+            database=database,
             plan=args.plan,
             campaign_path=args.campaign,
             selection_path=args.selection,

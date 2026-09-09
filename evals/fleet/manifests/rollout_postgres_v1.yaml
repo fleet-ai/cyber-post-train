@@ -1,0 +1,175 @@
+# Single-instance deployment reference, not an instruction to change the live database.
+# Review exact image/platform, storage, access, backup and restore before any new deployment.
+# Never apply this over the preserved campaign; see docs/ROLLOUT_POSTGRES.md.
+apiVersion: v1
+kind: Service
+metadata:
+  name: chris-cyber-rollout-postgres-v1
+  namespace: fleet-train-jobs
+  labels:
+    owner: chris
+    cyber-post-train.fleet.ai/component: rollout-postgres
+spec:
+  selector:
+    cyber-post-train.fleet.ai/component: rollout-postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: chris-cyber-rollout-postgres-v1
+  namespace: fleet-train-jobs
+  labels:
+    owner: chris
+    cyber-post-train.fleet.ai/component: rollout-postgres
+spec:
+  serviceName: chris-cyber-rollout-postgres-v1
+  replicas: 1
+  selector:
+    matchLabels:
+      cyber-post-train.fleet.ai/component: rollout-postgres
+  template:
+    metadata:
+      labels:
+        owner: chris
+        cyber-post-train.fleet.ai/component: rollout-postgres
+    spec:
+      nodeSelector:
+        kubernetes.io/arch: amd64
+        workload: fleetai-training-ng-cpu
+      securityContext:
+        fsGroup: 999
+        fsGroupChangePolicy: OnRootMismatch
+      terminationGracePeriodSeconds: 60
+      initContainers:
+        - name: initialize-data-permissions
+          image: postgres:16.10@sha256:21f6013073bc6b92830a2129570e2f5ec42a6c734b5a985a41e83aa58f54c3c1
+          imagePullPolicy: IfNotPresent
+          command:
+            - install
+            - -d
+            - -o
+            - "999"
+            - -g
+            - "999"
+            - -m
+            - "0700"
+            - /var/lib/postgresql/data/pgdata
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+          securityContext:
+            runAsUser: 0
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+              add:
+                - CHOWN
+                - DAC_OVERRIDE
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+      containers:
+        - name: postgres
+          image: postgres:16.10@sha256:21f6013073bc6b92830a2129570e2f5ec42a6c734b5a985a41e83aa58f54c3c1
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: rollout
+            - name: POSTGRES_USER
+              value: rollout
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: chris-cyber-rollout-postgres-v1
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_INITDB_ARGS
+              value: --data-checksums --auth-host=scram-sha-256
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+              ephemeral-storage: 1Gi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+              ephemeral-storage: 5Gi
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - --username=rollout
+                - --dbname=rollout
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 12
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - --username=rollout
+                - --dbname=rollout
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 6
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 999
+            runAsGroup: 999
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          owner: chris
+          cyber-post-train.fleet.ai/component: rollout-postgres
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        storageClassName: compute-csi-default-sc
+        resources:
+          requests:
+            storage: 20Gi
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: chris-cyber-rollout-postgres-v1
+  namespace: fleet-train-jobs
+  labels:
+    owner: chris
+spec:
+  podSelector:
+    matchLabels:
+      cyber-post-train.fleet.ai/component: rollout-postgres
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              cyber-post-train.fleet.ai/postgres-client: "true"
+      ports:
+        - protocol: TCP
+          port: 5432

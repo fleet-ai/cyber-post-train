@@ -1,0 +1,83 @@
+# Historical migration reference. The existing campaign is already migrated.
+# Do not apply or rerun against a populated database or preserved receipt path.
+# New migrations require separate authorization; see docs/ROLLOUT_POSTGRES.md.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: chris-cyber-rollout-postgres-migrate-v1
+  namespace: fleet-train-jobs
+  labels:
+    owner: chris
+    fleet.ai/submitted-by: chris
+    cyber-post-train.fleet.ai/purpose: rollout-postgres-migration
+    kueue.x-k8s.io/queue-name: training-lq
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        owner: chris
+        cyber-post-train.fleet.ai/purpose: rollout-postgres-migration
+        cyber-post-train.fleet.ai/postgres-client: "true"
+    spec:
+      restartPolicy: Never
+      priorityClassName: fleet-train-high
+      nodeSelector:
+        kubernetes.io/arch: amd64
+        workload: fleetai-training-ng-cpu
+      containers:
+        - name: migrate
+          image: ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7
+          imagePullPolicy: IfNotPresent
+          command:
+            - bash
+            - -eu
+            - -c
+            - |
+              root=/workspace/cyber-post-train
+              mkdir -p "$root/evals/fleet"
+              touch "$root/evals/__init__.py" "$root/evals/fleet/__init__.py"
+              for name in rollout_ledger.py rollout_postgres.py rollout_postgres_migrate.py; do
+                install -m 0644 "/bootstrap/$name" "$root/evals/fleet/$name"
+              done
+              cd "$root"
+              exec uv run --no-project --with 'psycopg[binary]==3.3.5' \
+                python -m evals.fleet.rollout_postgres_migrate \
+                --sqlite /archive/campaign-v1/ledger-consolidated.sqlite3 \
+                --archive-root /archive/campaign-v1 \
+                --dsn-env ROLLOUT_DATABASE_URL \
+                --receipt /archive/campaign-v1/postgresql-migration-receipt.json \
+                --status-output /dev/termination-log
+          env:
+            - name: ROLLOUT_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: chris-cyber-rollout-postgres-v1
+                  key: ROLLOUT_DATABASE_URL
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+              ephemeral-storage: 1Gi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+              ephemeral-storage: 5Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: bootstrap
+              mountPath: /bootstrap
+              readOnly: true
+            - name: archive
+              mountPath: /archive
+      volumes:
+        - name: bootstrap
+          configMap:
+            name: chris-cyber-rollout-postgres-migrate-v1
+        - name: archive
+          persistentVolumeClaim:
+            claimName: chris-cyber-rollout-archive-v1

@@ -1,10 +1,19 @@
-# Rollout coordination ledger
+# Legacy/local SQLite rollout ledger
+
+This page documents SQLite for local experiments and historical replay.
+**Do not use these mutation commands against the migrated distributed campaign.**
+Its live authority is PostgreSQL: follow the
+[PostgreSQL runbook](../../docs/ROLLOUT_POSTGRES.md). Preserved SQLite files, CSVs,
+and archives must not be used to refill or repair the PostgreSQL campaign.
 
 `rollout_ledger.py` is the small shared work queue for concurrent cyber-evaluation
-workers. The SQLite file is authoritative; `progress.csv` is a human-readable snapshot.
+workers in a local, SQLite-backed experiment. In that mode only, the SQLite file
+is authoritative; `progress.csv` is a human-readable snapshot.
 Workers must never select or update work by editing the CSV.
 
-The ledger stores no prompt, trace, flag, score, credential, or model response. One row is
+The coordination tables store no prompt, trace, flag, score, credential, or model response.
+The separate private local-result index does contain restricted result metadata and
+numeric outcomes; never dump the database for monitoring. One coordination row is
 one scientific cell: exact task version × logical model × pass@k attempt. Shared and
 dedicated replicas are recorded as distinct serving blocks. Use one database per
 experiment; initialization rejects a mixed-experiment plan.
