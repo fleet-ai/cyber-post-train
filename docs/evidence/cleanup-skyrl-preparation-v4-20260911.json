@@ -30,6 +30,7 @@
     "sha256": "e59c1eb5f915230dd74140ef1fc4513a91183350231292f1a4d7c0bf97afc92a",
     "installed_outside_checkout": true,
     "public_help_commands_passed": 8,
+    "current_runtime_files_byte_identical": 22,
     "root_preflight_rejected": true,
     "bundled_entrypoint_and_replay_checks": "passed",
     "qualification_limit": "Minimal installation has no native GPU training dependencies; this is not a GPU readiness claim."
