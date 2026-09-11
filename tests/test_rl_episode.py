@@ -566,7 +566,13 @@ def native(fixture, tmp_path, monkeypatch):
             rollout_max_context_len=32768,
         ),
         sample=NS(
-            metadata={"cyber_config": fixture.config, "split": "train"}, rollout_id=2, index=3
+            metadata={
+                "cyber_config": fixture.config,
+                "split": "train",
+                "cyber_batch": {"kind": "train", "rollout_id": 2},
+            },
+            rollout_id=3,
+            index=3,
         ),
         state=NS(aborted=False, tokenizer=NS(chat_template="synthetic-template")),
         sampling_params={},
@@ -590,10 +596,12 @@ def native(fixture, tmp_path, monkeypatch):
 async def test_native_hook_exact_attempt_and_split(native, fixture, dev):
     native.evaluation = dev
     native.sample.metadata["split"] = "dev" if dev else "train"
+    kind = "dev-baseline" if dev else "train"
+    native.sample.metadata["cyber_batch"]["kind"] = kind
     output = await rl.generate(native)
     assert output.samples == "native-sample"
     config, directory = fixture.inputs[0]
-    assert config["run_id"].endswith(f"{'dev' if dev else 'train'}-r2-s3")
+    assert config["run_id"].endswith(f"{kind}-r2-s3")
     assert config["config_sha256"] == fleet.digest_without(config, "config_sha256")
     assert directory.name == config["run_id"]
     assert fixture.config["run_id"] == "synthetic-episode-001"  # Deep copy, no template mutation.
@@ -639,6 +647,31 @@ async def test_native_preflight_stops_before_environment(native, fixture, fault,
     with pytest.raises(rl.InvalidEpisode):
         await rl.generate(native)
     assert fixture.inputs == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "batch",
+    [
+        {},
+        {"kind": "train", "rollout_id": -1},
+        {"kind": "train", "rollout_id": True},
+        {"kind": "dev-after", "rollout_id": 2},
+    ],
+)
+async def test_hook_rejects_missing_or_cross_split_batch_identity(native, fixture, batch):
+    native.sample.metadata["cyber_batch"] = batch
+    with pytest.raises(rl.InvalidEpisode, match="missing_native_batch_identity"):
+        await rl.generate(native)
+    assert not fixture.inputs
+
+
+@pytest.mark.asyncio
+async def test_hook_rejects_batch_number_used_as_episode_identity(native, fixture):
+    native.sample.rollout_id = 2  # index 3 is this unique native episode, not batch 2.
+    with pytest.raises(rl.InvalidEpisode, match="missing_native_attempt_identity"):
+        await rl.generate(native)
+    assert not fixture.inputs
 
 
 @pytest.mark.asyncio
@@ -689,6 +722,8 @@ def test_native_flags_are_required_and_typed():
             "fixture",
             "--cyber-output-root",
             "/private/fixture",
+            "--cyber-data-manifest",
+            "/private/data/manifest.json",
             "--fleet-tito-model",
             "qwen35",
             "--fleet-max-tokens-per-turn",

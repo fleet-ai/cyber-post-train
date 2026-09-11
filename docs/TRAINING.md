@@ -341,13 +341,12 @@ an optimizer update and a recoverable checkpoint before scaling either backend.
 `training.rl_episode.generate` is the new internal Miles hook, not yet a public
 RL launcher or a qualified training recipe. It reuses FTI's native recorder and
 parser, but opens exact V1 cyber tasks and enforces `bash`, `submit_report` at
-execution. Each native rollout/sample index owns one private directory; replay
+execution. Each run/phase/batch/sample identity owns one private directory; replay
 is rejected. Grading evidence, conversation, sampled tokens, masks and log
 probabilities are saved privately, and samples are returned only after confirmed
 environment release. An ambiguous response is held, never resampled or converted
 to zero reward. Context/turn exhaustion is excluded; a normally stopped, fully
-graded zero remains a valid zero. The native request must disable automatic
-replacement of invalid groups. The pinned Miles image passed 82 CPU tests with
+graded zero remains a valid zero. The pinned Miles image passed 82 CPU tests with
 real MCP 2.1.1 transport, native FTI recording and the exact Qwen tokenizer;
 [evidence](evidence/cleanup-miles-single-attempt-20260911.json). Task/engine responses were
 synthetic: live sampling, Fleet reward, GPU optimization and resume remain open.
@@ -368,11 +367,29 @@ module globals across concurrent episodes. Likewise, do not call the stock
 `execute_train` launcher: even its external-Ray mode runs broad `pkill` commands.
 The Jobs API already owns Ray; native training must attach to that allocation.
 
-`training.miles.arguments` now builds a bounded native Qwen argument vector:
-one optimizer step per rollout batch, no oversampling/filter-driven replacement,
+`training.miles.arguments` builds a bounded native Qwen argument vector:
+one optimizer step per rollout batch,
 recoverable checkpoints and dev evaluation before training and at the final
 step. It reads the pinned image's model/topology recipe; it does not call its
 download or process-killing launch helpers. W&B credentials stay in the environment.
 The [128-test CPU gate](evidence/cleanup-miles-arguments-20260911.json) also exercises
 the real recipe and native offline W&B run-ID handling. This is still an internal
 integration component, not a qualified RL launch command or full-GLM recipe.
+
+Both rollout-function arguments select `training.miles_rollout.Rollout`, using
+the class-based Miles interface. This advances the native dataset cursor once
+per batch; a failed episode stops the batch after all sibling cleanup is awaited.
+Disabling dynamic filters alone is insufficient: the pinned Miles default
+collector catches group exceptions and fills the gap with new groups. The cyber
+adapter never uses that refill loop or modifies native optimizer code.
+
+Native `Sample.rollout_id` identifies one episode (and any segments belonging to
+it), **not the training batch**. Sharing a batch number across competing attempts
+would merge their reward-normalization identities. The adapter uses unique native
+sample indices and records the batch separately. Baseline and post-update dev
+calls also need different durable identities: Miles calls both with batch zero
+on the first step. Dev rewards count episodes, not segments; native sample-length
+diagnostics use the first segment, while complete recordings remain private.
+`COLLECTED.json` proves a completed batch, never an optimizer update. The future
+launcher must set `MILES_USE_LEGACY_ROLLOUT_V1=0` and `WANDB_RUN_ID` explicitly;
+native primary W&B initialization does not forward the similarly named CLI field.

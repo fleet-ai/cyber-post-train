@@ -454,8 +454,18 @@ async def generate(input):
         raise InvalidEpisode("partial_or_aborted_rollout")
     if sample.metadata.get("split") != ("dev" if input.evaluation else "train"):
         raise InvalidEpisode("task_split_mismatch")
-    if any(type(x) is not int or x < 0 for x in (sample.rollout_id, sample.index)):
+    if any(type(x) is not int or x < 0 for x in (sample.rollout_id, sample.index)) or (
+        sample.rollout_id != sample.index
+    ):
         raise InvalidEpisode("missing_native_attempt_identity")
+    batch = sample.metadata.get("cyber_batch", {})
+    kinds = {"dev-baseline", "dev-after"} if input.evaluation else {"train"}
+    if (
+        set(batch) != {"kind", "rollout_id"}
+        or batch["kind"] not in kinds
+        or (type(batch["rollout_id"]) is not int or batch["rollout_id"] < 0)
+    ):
+        raise InvalidEpisode("missing_native_batch_identity")
     config = copy.deepcopy(sample.metadata["cyber_config"])
     _validate(config)
     if config["run_id"] != args.cyber_run_id:
@@ -478,8 +488,8 @@ async def generate(input):
         or fleet.sha256(template.encode()) != config["model"]["runtime_chat_template_sha256"]
     ):
         raise InvalidEpisode("native_chat_template_drift")
-    mode = "dev" if input.evaluation else "train"
-    config["run_id"] += f"-{mode}-r{sample.rollout_id}-s{sample.index}"
+    config["run_id"] += f"-{batch['kind']}-r{batch['rollout_id']}-s{sample.index}"
+    config["native_batch"] = copy.deepcopy(batch)
     config["sampling"] = copy.deepcopy(input.sampling_params)
     config["config_sha256"] = fleet.digest_without(config, "config_sha256")
     root = Path(args.cyber_output_root)
@@ -521,6 +531,7 @@ async def generate(input):
 def _add_arguments(parser):
     parser.add_argument("--cyber-run-id", required=True)
     parser.add_argument("--cyber-output-root", required=True)
+    parser.add_argument("--cyber-data-manifest", required=True)
     parser.add_argument("--fleet-tito-model", required=True)
     parser.add_argument("--fleet-max-tokens-per-turn", required=True, type=int)
 

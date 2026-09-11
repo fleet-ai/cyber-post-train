@@ -3,6 +3,11 @@
 Status as of 2026-09-11. This checklist is not launch authority. Historical
 campaigns and other worktrees remain untouched.
 
+Chris's current execution preference is Qwen first: prioritize its end-to-end
+SFT/recovery, Miles/SkyRL RL and evaluation qualification. Full GLM remains a
+completion requirement; prioritizing Qwen does not cancel the already-submitted
+GLM qualification or narrow the final model/backend scope.
+
 ## Interface and sources
 
 The public CLI prepares data, pins model metadata, prepares/preflights/previews/
@@ -39,8 +44,9 @@ and trace analysis` were inspected. Original commits/worktrees remain recoverabl
 | Miles native argument builder | 128 combined CPU tests, zero failures/skips/restarts/GPUs; real Qwen TP4/CP2 recipe, bounded batches, checkpoint/dev controls and native offline W&B identity. Both argument and episode modules have full focused statement/branch coverage; [receipt](evidence/cleanup-miles-arguments-20260911.json). Generic API preview passed without allocation; GPU training and public RL launch integration remain open |
 | Miles data preparation | Public `rl-data` command; 174 combined pinned-image tests pass without skips/failures/restarts/GPUs. Real Qwen tokenizer/TITO and native Dataset retain every selected task; all three RL modules have complete focused line/branch coverage. [Receipt](evidence/cleanup-rl-data-20260911.json). Fleet HTTP replies are synthetic; no live reward or optimizer qualification |
 | Miles checkpoint preparation | Public `miles-convert`/`miles-seal`, reusing preflight/preview/submit. 228 pinned-image tests pass; all 28 staged Qwen files and native converter arguments independently verified on CPU. [Receipt](evidence/cleanup-miles-conversion-cpu-20260911.json). One-node/eight-GPU API preview passes; real conversion, native checkpoint reload and RL optimization remain unqualified |
-| Local regression suite | 1,148 tests plus seven subtests pass using disposable PostgreSQL and MCP 2.1.1; 50 native-only cases explicitly skip locally. Native-only RL branches are covered by the pinned-image test above. This is not real RL qualification. Ruff/whitespace checks pass |
-| Installation | Wheel rebuilt after `1585910`, SHA-256 `80759f13316cfc623d44bc036f533bd42ec1dc2fed5e42e3e45e778a29590293`, installed outside the checkout; public commands and seven recovery/checkpoint/GLM/Miles/RL-hook imports work; five retired modules are absent. The minimal environment intentionally lacks Torch/PyArrow; `doctor` correctly reports those missing dependencies, not training readiness |
+| Strict Miles batches | Native batch/episode identities, no exception-driven refill, and awaited sibling cleanup implemented. A frozen native return-object fixture defect was reproduced and fixed locally. The corrected pinned-image rerun did not start because image extraction failed; [evidence](evidence/cleanup-miles-batches-20260911.json). No new native or RL qualification is claimed |
+| Local regression suite | 1,190 tests plus seven subtests pass using disposable PostgreSQL and MCP 2.1.1; 87 native-only cases explicitly skip locally. The new batch tests still require a successful pinned-image rerun. Ruff lint, changed-file formatting and whitespace checks pass; 35 pre-existing files remain unformatted by the current formatter |
+| Installation | Wheel SHA-256 `9a580448f433c0607c6c6ccc9bf7198391cb46c20e5535bf2a228f8924284164` installed outside the checkout; seven command help paths and six module imports pass. The minimal environment intentionally lacks Torch/PyArrow; installation is not training readiness |
 
 The newer `rl-data` wheel was independently installed outside the checkout;
 command help and RL module imports pass. Its digest is in the data-preparation
@@ -58,11 +64,13 @@ The conversion was subsequently submitted once at effective priority 10,000 and
 is queued without GPU allocation; [submission evidence](evidence/cleanup-miles-conversion-submission-20260911.json).
 That historical receipt records the resource limit at submission, not current
 authority. Chris replaced that limit on 2026-09-11 UTC: **at most eight actively
-allocated experiment-owned GPU nodes at once**. Queued, unallocated work does not
+allocated experiment-owned nodes at once**. Queued, unallocated work does not
 count and has no fixed numerical cap. Count admitted/startup allocations and
-dedicated serving as well as training/evaluation nodes; CPU-only work requesting
-no GPU is not a GPU-node allocation. With eight-GPU nodes this is at most 64 GPUs.
-The old four-node/32-GPU limit including queued work is superseded.
+dedicated serving as well as training/evaluation nodes. Whether CPU-only nodes
+are exempt has not been explicitly confirmed; until clarified, use the stricter
+total-node interpretation rather than assume an exemption. Shared endpoints
+owned by colleagues are not our experiment-owned allocations. The old
+four-node/32-GPU limit including queued work is superseded.
 
 Reconcile allocation before submission and admission. The Jobs API admits queued
 work independently, so observing eight active nodes is not an enforcement
@@ -89,6 +97,16 @@ helper. Both now use the same single-attempt request boundary; tests exercise th
 actual runner/preflight against HTTP 404 and 503, assert persisted safe diagnostics
 and prove there is exactly one POST. This repairs future evidence collection, not
 the unresolved server-side 404 or an already-held attempt.
+
+A separate non-scored diagnostic used exactly one POST to
+`/v1/rollout-rewards/<task>/versions/<version>/instances` and reproduced the 404;
+no instance ID, model call or score resulted. Read-only probing confirms the route
+exists (405 with `Allow: POST`) and exact task lookup succeeds under explicit
+Fleet-team scope. The body fingerprint is retained but its cause remains
+unclassified. Exhaustive queued/pending/running instance listings found no newly
+created matching environment. [Diagnostic evidence](evidence/cleanup-eval-provisioning-20260911.json).
+This is not the generic `/v1/env/instances` create route. Do not repeat the held
+eval rows or infer a fix from the HTTP status alone.
 
 ## Remaining completion gates
 

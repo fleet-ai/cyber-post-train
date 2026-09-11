@@ -16,6 +16,7 @@ def test_real_qwen_recipe_generates_a_bounded_argument_vector():
         torch_dist_root="/mnt/sfs/models/synthetic-dist",
         train_data="/mnt/sfs/data/synthetic/train.jsonl",
         dev_data="/mnt/sfs/data/synthetic/dev.jsonl",
+        data_manifest="/mnt/sfs/data/synthetic/manifest.json",
         wandb_entity="synthetic",
         wandb_project="synthetic",
         wandb_run_id="synthetic",

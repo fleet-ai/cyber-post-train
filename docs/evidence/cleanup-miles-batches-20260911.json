@@ -1,0 +1,54 @@
+{
+  "schema": "cyber_cleanup_qualification_v1",
+  "classification": "local_batch_adapter_checks_passed_native_rerun_not_executed",
+  "source_sha256": {
+    "training/miles.py": "02c62e22175528d2b57a1d9ac857242a730c7b5375114ccc6fbf77775b37ecbc",
+    "training/miles_rollout.py": "87af2fccfb486a84e85c9a8684ee19d841e4e77826018cad3cbd91fbbb553ca6",
+    "training/rl_episode.py": "09dd78d517458c7e0ea3cd931b5766c39d63540bea094d6e2bef95ac15ea0508",
+    "tests/test_miles_rollout.py": "753a8b09e2c2fc2d623ff263703ea6e3f1b4b662c36e8a945888a4eece1b814d"
+  },
+  "native_source_commit": "9e178ca16839b0600155f3927f57ce0670b8f453",
+  "requested_image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/miles-trainer@sha256:d1d37c584e2aafdd47df1e1f3492ff3343eb3b83a5f658cf7ce2432ee8d6ef33",
+  "invariants": [
+    "One dataset cursor advance per training batch, with no failed-group replacement.",
+    "Native rollout_id identifies an episode and its segments, not competing attempts in a batch.",
+    "Baseline and post-update development episodes use distinct create-once identities.",
+    "Sibling environment cleanup is awaited before an exception propagates.",
+    "Development reward counts episodes rather than compacted segments.",
+    "Collected episodes are not optimizer-step evidence."
+  ],
+  "prior_native_selftests": [
+    {"pod": "chris-cpt-miles-cpu-selftest-v13", "uid": "ef430f53-fb76-4133-bf88-d1bfcaf6bf0b", "passed": 306, "failed": 1, "receipt_sha256": "c7b39c5c4590b3cad09747ae508faeeb32a18a322674548b0f19b7368c8f141f"},
+    {"pod": "chris-cpt-miles-cpu-selftest-v14", "uid": "d87c7cc1-9f32-4f44-954a-2ccc1122c962", "passed": 306, "failed": 1, "receipt_sha256": "0a6e03a3c5a12f7fe851bcc53da72912eff7f5d5b2bc30cc210675bebd1dfc4e"}
+  ],
+  "fixture_correction": "GenerateFnOutput is frozen. The compacted-sample test mutated output.samples; the local mutable double hid this defect. A frozen local double reproduced it, and fixtures now construct replacement output objects. Production already constructs the native object.",
+  "corrected_selftest": {
+    "pod": "chris-cpt-miles-cpu-selftest-v16",
+    "uid": "f7e3099e-68ac-430a-9880-9ed3958ad308",
+    "node": "computeinstance-e04a737eqtfvpnyx08",
+    "created_at": "2026-09-11T06:11:59Z",
+    "gpus": 0,
+    "restarts": 0,
+    "container_started": false,
+    "tests_executed": 0,
+    "bundle_sha256": "1684c753c06980f51e41734c59347b6f7115c2a694150800b0844a7f9fc4b8d0",
+    "manifest_sha256": "4893fb324a287ccffbe04de43aeb8b331ca58d9cba91ec29f8762b88bbd15a84",
+    "failure": "containerd image-layer extraction context canceled; ImagePullBackOff",
+    "layer_sha256": "2a1bbaa931dc865d353a503d2ce9e32dc50d27ab3af4316555d15268e3cba0f1",
+    "startup_allowance_seconds": 600,
+    "uid_guarded_deletion_requested_at": "2026-09-11T06:28:00Z",
+    "normal_grace_did_not_remove_object": true,
+    "zero_grace_uid_precondition_delete": true,
+    "subsequent_pod_api_object_absent": true,
+    "limit": "No container ever started. API object absence does not independently prove whether containerd finished or abandoned its image-cache operation."
+  },
+  "local_suite": {"passed": 1190, "native_only_skips": 87, "subtests_passed": 7},
+  "checks": {"ruff_lint": "passed", "changed_file_format": "passed", "preexisting_unformatted_files": 35},
+  "wheel": {
+    "sha256": "9a580448f433c0607c6c6ccc9bf7198391cb46c20e5535bf2a228f8924284164",
+    "installed_outside_checkout": true,
+    "command_help_passed": ["train", "rl-data", "miles-convert", "miles-seal", "preflight", "preview", "submit"],
+    "module_imports_passed": 6
+  },
+  "remaining": ["Successful corrected pinned-image test run", "Live Fleet reward acquisition", "Native RL optimization and checkpoint recovery"]
+}

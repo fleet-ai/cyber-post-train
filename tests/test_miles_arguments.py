@@ -20,6 +20,7 @@ def config():
         torch_dist_root="/mnt/sfs/models/synthetic-dist",
         train_data="/mnt/sfs/data/synthetic/train.jsonl",
         dev_data="/mnt/sfs/data/synthetic/dev.jsonl",
+        data_manifest="/mnt/sfs/data/synthetic/manifest.json",
         wandb_entity="synthetic",
         wandb_project="synthetic",
         wandb_run_id="synthetic",
@@ -117,6 +118,12 @@ def test_bounded_counts_and_native_optimizer(config, native_boundary):
     assert value(argv, "lr") == "3e-06"
     assert value(argv, "eval-prompt-data") == "fleet-dev" and cfg.dev_data in argv
     assert value(argv, "custom-generate-function-path") == "training.rl_episode.generate"
+    assert (
+        value(argv, "rollout-function-path")
+        == value(argv, "eval-function-path")
+        == "training.miles_rollout.Rollout"
+    )
+    assert value(argv, "cyber-data-manifest") == cfg.data_manifest
     assert "--use-wandb" in argv and "--wandb-key" not in argv
     assert "--dynamic-sampling-filter-path" not in argv and "--use-fault-tolerance" not in argv
     assert "--no-save-optim" not in argv and "--no-save-rng" not in argv

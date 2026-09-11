@@ -29,6 +29,7 @@ class MilesConfig:
     torch_dist_root: str
     train_data: str
     dev_data: str
+    data_manifest: str
     wandb_entity: str
     wandb_project: str
     wandb_run_id: str
@@ -52,7 +53,14 @@ class MilesConfig:
             if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,100}", getattr(self, key)):
                 raise ValueError("invalid run or W&B identifier")
         paths = []
-        for key in ("output_root", "model_root", "torch_dist_root", "train_data", "dev_data"):
+        for key in (
+            "output_root",
+            "model_root",
+            "torch_dist_root",
+            "train_data",
+            "dev_data",
+            "data_manifest",
+        ):
             value = getattr(self, key)
             path = PurePosixPath(value)
             if (
@@ -143,8 +151,11 @@ def arguments(config: MilesConfig) -> list[str]:
         "seed": config.seed,
         "rollout-seed": config.seed,
         "custom-generate-function-path": "training.rl_episode.generate",
+        "rollout-function-path": "training.miles_rollout.Rollout",
+        "eval-function-path": "training.miles_rollout.Rollout",
         "cyber-run-id": config.name,
         "cyber-output-root": config.output_root + "/episodes",
+        "cyber-data-manifest": config.data_manifest,
         "fleet-tito-model": profile.tito_model,
         "fleet-max-tokens-per-turn": config.tokens_per_turn,
         "chat-template-path": str(template),
