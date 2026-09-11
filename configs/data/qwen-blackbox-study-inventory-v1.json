@@ -1,0 +1,3844 @@
+{
+  "schema": "cyber_study_inventory_v1",
+  "origin": "fleet_cyber",
+  "campaign_id": "qwen38-blackbox-sft-study-20260911-v1",
+  "model_initialization": {
+    "repo": "Qwen/Qwen3.8-27B",
+    "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
+  },
+  "source_evidence": {
+    "eligible_allowlist_sha256": "sha256:c45c9cc420a3dbf1aa6b635b84ed1ca3c404254f046ffdac234e053929a1bf12",
+    "current_binding_audit_sha256": "sha256:15ff4a85bc67279d021c9f1a21a82f4b6751d19b6df3ba8aa214ced4c277a5f2",
+    "atom_taxonomy_projection_sha256": "sha256:ba3636a6ae22ad7d2a839df247bf750e81220019ffdf07ec2b1ef0b18119a304",
+    "presplit_exposure_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+  },
+  "tasks": [
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-0708aea62e0d8ccf09331568__blackbox_ctf_v1",
+      "task_version_id": "54425601-6fd2-43d8-8cb9-e565b767676a",
+      "lineage_id": "cysec1-2-current-gen_blackbox-0708aea62e0d8ccf09331568__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "current",
+          "evidence_sha256": "sha256:eb682786be7999d92d5ad174910dce55f8072f42dbe753562f9b35424bcc8e15"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-current-gen",
+          "evidence_sha256": "sha256:eb682786be7999d92d5ad174910dce55f8072f42dbe753562f9b35424bcc8e15"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:request-smuggling",
+            "class:HTTP-request-desync"
+          ],
+          "evidence_sha256": "sha256:eb682786be7999d92d5ad174910dce55f8072f42dbe753562f9b35424bcc8e15"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "hard",
+          "evidence_sha256": "sha256:eb682786be7999d92d5ad174910dce55f8072f42dbe753562f9b35424bcc8e15"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/current/checkout-original-uri-desync@0",
+          "evidence_sha256": "sha256:eb682786be7999d92d5ad174910dce55f8072f42dbe753562f9b35424bcc8e15"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:5ec552f3a4b2d12faf04803169c6e7caf07dfd4c0207e7ae03d0e19e3c509e11"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-124bb98758975c4aa3ebbe82__blackbox_ctf_v1",
+      "task_version_id": "1fdbcb5b-4582-47dc-a794-29e7a40682da",
+      "lineage_id": "cysec1-2-current-gen_blackbox-124bb98758975c4aa3ebbe82__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "current",
+          "evidence_sha256": "sha256:35e912d8583da09add29ce272847c1fe05a19b4e0368efd9d65a2cf4e3669727"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-current-gen",
+          "evidence_sha256": "sha256:35e912d8583da09add29ce272847c1fe05a19b4e0368efd9d65a2cf4e3669727"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:csrf",
+            "class:CSRF"
+          ],
+          "evidence_sha256": "sha256:35e912d8583da09add29ce272847c1fe05a19b4e0368efd9d65a2cf4e3669727"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:35e912d8583da09add29ce272847c1fe05a19b4e0368efd9d65a2cf4e3669727"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/current/webhook-endpoint-check-csrf@0",
+          "evidence_sha256": "sha256:35e912d8583da09add29ce272847c1fe05a19b4e0368efd9d65a2cf4e3669727"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:4b977a4dc4641916743037eca39f1301a0bff0742a038272e4219b6b21615483"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-16d922dbbfaa21f0f6fa5b97__blackbox_ctf_v1",
+      "task_version_id": "e53d70e2-c129-422a-b878-033bfb5556ab",
+      "lineage_id": "cysec1-2-current-gen_blackbox-16d922dbbfaa21f0f6fa5b97__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "current",
+          "evidence_sha256": "sha256:74cb9379648a815371c0a7d5dee0923a8d9994c7e745dfbe2f0f46a1cdef81c2"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-current-gen",
+          "evidence_sha256": "sha256:74cb9379648a815371c0a7d5dee0923a8d9994c7e745dfbe2f0f46a1cdef81c2"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:output-neutralization",
+            "class:improper-output-neutralization-stored"
+          ],
+          "evidence_sha256": "sha256:74cb9379648a815371c0a7d5dee0923a8d9994c7e745dfbe2f0f46a1cdef81c2"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:74cb9379648a815371c0a7d5dee0923a8d9994c7e745dfbe2f0f46a1cdef81c2"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/current/payment-link-hosted-page-note-xss@0",
+          "evidence_sha256": "sha256:74cb9379648a815371c0a7d5dee0923a8d9994c7e745dfbe2f0f46a1cdef81c2"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:0f52a188590050b9cc0237daa3472644d6947055950a78ca92d0d62ef583c104"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-34787f9b18ae651884289538__blackbox_ctf_v1",
+      "task_version_id": "2e363dca-e74d-4855-a002-6761dc7f9f0f",
+      "lineage_id": "cysec1-2-current-gen_blackbox-34787f9b18ae651884289538__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "current",
+          "evidence_sha256": "sha256:27719a30cb04fc520fb8b54b15edf30d34fbc30aceb098b1c0272608f7761f7e"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-current-gen",
+          "evidence_sha256": "sha256:27719a30cb04fc520fb8b54b15edf30d34fbc30aceb098b1c0272608f7761f7e"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:sensitive-data-exposure",
+            "class:open-redirect"
+          ],
+          "evidence_sha256": "sha256:27719a30cb04fc520fb8b54b15edf30d34fbc30aceb098b1c0272608f7761f7e"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:27719a30cb04fc520fb8b54b15edf30d34fbc30aceb098b1c0272608f7761f7e"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/current/identity-return-target-open-redirect@0",
+          "evidence_sha256": "sha256:27719a30cb04fc520fb8b54b15edf30d34fbc30aceb098b1c0272608f7761f7e"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:5d42245155c29586a7158a0fae709b4c5aa3e4c08be30821d5f816b1cc1994e9"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-3a1c4858db3e787986bfb723__blackbox_ctf_v1",
+      "task_version_id": "65c8cc68-6ada-421f-ad0a-eb1d81fc9141",
+      "lineage_id": "cysec1-2-current-gen_blackbox-3a1c4858db3e787986bfb723__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "current",
+          "evidence_sha256": "sha256:7e6dc7e96f9542d0419d2cb4fc8b2c9485fe1b5976535e2ce3a741c6b9fb3b0e"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-current-gen",
+          "evidence_sha256": "sha256:7e6dc7e96f9542d0419d2cb4fc8b2c9485fe1b5976535e2ce3a741c6b9fb3b0e"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:broken-access-control",
+            "class:auth-bypass"
+          ],
+          "evidence_sha256": "sha256:7e6dc7e96f9542d0419d2cb4fc8b2c9485fe1b5976535e2ce3a741c6b9fb3b0e"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:7e6dc7e96f9542d0419d2cb4fc8b2c9485fe1b5976535e2ce3a741c6b9fb3b0e"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/current/rpc-transport-action-downgrade@0",
+          "evidence_sha256": "sha256:7e6dc7e96f9542d0419d2cb4fc8b2c9485fe1b5976535e2ce3a741c6b9fb3b0e"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:fbdc9963f6fc3f107a2bf37b9b09f24900248cd30b2eed1891ace5c1dd3bedef"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-3a7455937196b81cf5999fb5__blackbox_ctf_v1",
+      "task_version_id": "18079a9c-cb79-4013-aa08-54092c415165",
+      "lineage_id": "cysec1-2-current-gen_blackbox-3a7455937196b81cf5999fb5__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "current",
+          "evidence_sha256": "sha256:6466679d74999285c6b0ca6a45eacb2265e2b201a59b08db22f0b98ee5897407"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-current-gen",
+          "evidence_sha256": "sha256:6466679d74999285c6b0ca6a45eacb2265e2b201a59b08db22f0b98ee5897407"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:cors-browser-origin-trust",
+            "class:origin-validation"
+          ],
+          "evidence_sha256": "sha256:6466679d74999285c6b0ca6a45eacb2265e2b201a59b08db22f0b98ee5897407"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:6466679d74999285c6b0ca6a45eacb2265e2b201a59b08db22f0b98ee5897407"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/current/connect-dashboard-origin-customer-read@0",
+          "evidence_sha256": "sha256:6466679d74999285c6b0ca6a45eacb2265e2b201a59b08db22f0b98ee5897407"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:138c0a378daea2aef042ccb334a9ce25be0369d2ec92644e514c758b56e0bd4c"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-46ee1c53981e8b0f027052aa__blackbox_ctf_v1",
+      "task_version_id": "ac6a6cfa-ea44-4c11-bb2e-c2bb2d142c8e",
+      "lineage_id": "cysec1-2-current-gen_blackbox-46ee1c53981e8b0f027052aa__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "current",
+          "evidence_sha256": "sha256:e23f9432793254b99441061fb3aa6b67d066cc40a5a41a529a3f083aa317b314"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-current-gen",
+          "evidence_sha256": "sha256:e23f9432793254b99441061fb3aa6b67d066cc40a5a41a529a3f083aa317b314"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:http-desync",
+            "class:request-smuggling"
+          ],
+          "evidence_sha256": "sha256:e23f9432793254b99441061fb3aa6b67d066cc40a5a41a529a3f083aa317b314"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "hard",
+          "evidence_sha256": "sha256:e23f9432793254b99441061fb3aa6b67d066cc40a5a41a529a3f083aa317b314"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/current/connect-account-header-desync@0",
+          "evidence_sha256": "sha256:e23f9432793254b99441061fb3aa6b67d066cc40a5a41a529a3f083aa317b314"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:2670b65b20e9033b32746c101d02ef0ccaaf6047e7954f9692b31ad299853c96"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-568ad16844c3398d57ef1eaa__blackbox_ctf_v1",
+      "task_version_id": "09a3fea6-f691-4841-9218-d04459041a1f",
+      "lineage_id": "cysec1-2-current-gen_blackbox-568ad16844c3398d57ef1eaa__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "current",
+          "evidence_sha256": "sha256:6c0a12e040299a7b0836a787f335902d0facc4cc9b5b2cd49381f8288f2fc113"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-current-gen",
+          "evidence_sha256": "sha256:6c0a12e040299a7b0836a787f335902d0facc4cc9b5b2cd49381f8288f2fc113"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:secret-disclosure",
+            "class:sensitive-information-disclosure"
+          ],
+          "evidence_sha256": "sha256:6c0a12e040299a7b0836a787f335902d0facc4cc9b5b2cd49381f8288f2fc113"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:6c0a12e040299a7b0836a787f335902d0facc4cc9b5b2cd49381f8288f2fc113"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/current/webhook-endpoint-detail-secret-disclosure@0",
+          "evidence_sha256": "sha256:6c0a12e040299a7b0836a787f335902d0facc4cc9b5b2cd49381f8288f2fc113"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:ccbfaa9b1431cbf75e03bea59e215550de22204d8f078cdc5b911124feae7319"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-58a4ac6886feda0738f2feb8__blackbox_ctf_v1",
+      "task_version_id": "e33aaed0-491b-46e8-8891-55d99c80ef56",
+      "lineage_id": "cysec1-2-current-gen_blackbox-58a4ac6886feda0738f2feb8__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "current",
+          "evidence_sha256": "sha256:1a74b8812739191d0d797fc54797970991a3974b0732a97fbde08eda3d6baa93"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-current-gen",
+          "evidence_sha256": "sha256:1a74b8812739191d0d797fc54797970991a3974b0732a97fbde08eda3d6baa93"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:unauthenticated-pii-disclosure",
+            "class:sensitive-data-disclosure"
+          ],
+          "evidence_sha256": "sha256:1a74b8812739191d0d797fc54797970991a3974b0732a97fbde08eda3d6baa93"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:1a74b8812739191d0d797fc54797970991a3974b0732a97fbde08eda3d6baa93"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/current/checkout-billing-details-echo@0",
+          "evidence_sha256": "sha256:1a74b8812739191d0d797fc54797970991a3974b0732a97fbde08eda3d6baa93"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:9e2a8bf46b6831eacf37baa1cd4caad997da7fbbff6113b58a966e254f7717e5"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-58a5b481cf56ffb7954e7396__blackbox_ctf_v1",
+      "task_version_id": "d6c906fc-ef92-4ce6-ab9c-54a9b7eb9037",
+      "lineage_id": "cysec1-2-current-gen_blackbox-58a5b481cf56ffb7954e7396__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "current",
+          "evidence_sha256": "sha256:3012f47f8ab868a8d24fdb28591f7a8559ba50e4ff96da5e5b70ae217ce4a1ce"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-current-gen",
+          "evidence_sha256": "sha256:3012f47f8ab868a8d24fdb28591f7a8559ba50e4ff96da5e5b70ae217ce4a1ce"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:injection",
+            "class:SQLi"
+          ],
+          "evidence_sha256": "sha256:3012f47f8ab868a8d24fdb28591f7a8559ba50e4ff96da5e5b70ae217ce4a1ce"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:3012f47f8ab868a8d24fdb28591f7a8559ba50e4ff96da5e5b70ae217ce4a1ce"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/current/sigma-schema-hql-injection@0",
+          "evidence_sha256": "sha256:3012f47f8ab868a8d24fdb28591f7a8559ba50e4ff96da5e5b70ae217ce4a1ce"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:28533629e9cdfbab23d492f89a8d8747b0d96ac77fc37b12b60c8f48e367644b"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-6e75d5980fc7f883ad6c80ae__blackbox_ctf_v1",
+      "task_version_id": "d73098dc-4f03-4761-8a81-cc9ec914286c",
+      "lineage_id": "cysec1-2-current-gen_blackbox-6e75d5980fc7f883ad6c80ae__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "current",
+          "evidence_sha256": "sha256:1dd5646c2b0b2f01d5d4bc86f588d4b0840c19bb4c86cfb808a40442667f6d00"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-current-gen",
+          "evidence_sha256": "sha256:1dd5646c2b0b2f01d5d4bc86f588d4b0840c19bb4c86cfb808a40442667f6d00"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:xss",
+            "class:reflected-xss"
+          ],
+          "evidence_sha256": "sha256:1dd5646c2b0b2f01d5d4bc86f588d4b0840c19bb4c86cfb808a40442667f6d00"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:1dd5646c2b0b2f01d5d4bc86f588d4b0840c19bb4c86cfb808a40442667f6d00"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/current/checkout-receipt-html-reflect@0",
+          "evidence_sha256": "sha256:1dd5646c2b0b2f01d5d4bc86f588d4b0840c19bb4c86cfb808a40442667f6d00"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:f1ef30bc7a676f17dcd193da12ce097ad6de1482df78b63d4f5fb14d047df7f6"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-72f3c039c2ee3e89c7e5bf6a__blackbox_ctf_v1",
+      "task_version_id": "386dff0d-6a22-4654-ba05-5262f61483b9",
+      "lineage_id": "cysec1-2-current-gen_blackbox-72f3c039c2ee3e89c7e5bf6a__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "current",
+          "evidence_sha256": "sha256:52e3e3de324dafa94412cc70372051230c6f0d0c321a1802ccb602c5b4233215"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-current-gen",
+          "evidence_sha256": "sha256:52e3e3de324dafa94412cc70372051230c6f0d0c321a1802ccb602c5b4233215"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:broken-tenant-isolation",
+            "class:path-traversal"
+          ],
+          "evidence_sha256": "sha256:52e3e3de324dafa94412cc70372051230c6f0d0c321a1802ccb602c5b4233215"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:52e3e3de324dafa94412cc70372051230c6f0d0c321a1802ccb602c5b4233215"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/current/sigma-saved-report-path-traversal@0",
+          "evidence_sha256": "sha256:52e3e3de324dafa94412cc70372051230c6f0d0c321a1802ccb602c5b4233215"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:7bbcf0805279532bbed63251c06810a707c3762f350ca7e9479bff2c0a69b530"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-734b2d86c51fb16ffe102235__blackbox_ctf_v1",
+      "task_version_id": "daa5bbbb-0f63-481f-be8e-1d217c12740e",
+      "lineage_id": "cysec1-2-current-gen_blackbox-734b2d86c51fb16ffe102235__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "current",
+          "evidence_sha256": "sha256:d23b5386ead619f0e1bd141e6cc1809e8535cdd900b9a6d3099cce6127a103cc"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-current-gen",
+          "evidence_sha256": "sha256:d23b5386ead619f0e1bd141e6cc1809e8535cdd900b9a6d3099cce6127a103cc"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:sensitive-data-disclosure",
+            "class:info-disclosure"
+          ],
+          "evidence_sha256": "sha256:d23b5386ead619f0e1bd141e6cc1809e8535cdd900b9a6d3099cce6127a103cc"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:d23b5386ead619f0e1bd141e6cc1809e8535cdd900b9a6d3099cce6127a103cc"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/current/webhook-catalog-unauth-preview@0",
+          "evidence_sha256": "sha256:d23b5386ead619f0e1bd141e6cc1809e8535cdd900b9a6d3099cce6127a103cc"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:1e8b234960c0858e68de6b00740d308c2254188dd8fbf322e903f988a4ef136e"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-8b929ebef54fb6207d898e95__blackbox_ctf_v1",
+      "task_version_id": "02dd4e3f-d85d-4bf8-9976-eae2f102384d",
+      "lineage_id": "cysec1-2-current-gen_blackbox-8b929ebef54fb6207d898e95__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "current",
+          "evidence_sha256": "sha256:405d59392999378ea24ec63eae83b0c58d3458656807235f9314c98a396af453"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-current-gen",
+          "evidence_sha256": "sha256:405d59392999378ea24ec63eae83b0c58d3458656807235f9314c98a396af453"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:sensitive-data-exposure",
+            "class:information-disclosure"
+          ],
+          "evidence_sha256": "sha256:405d59392999378ea24ec63eae83b0c58d3458656807235f9314c98a396af453"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:405d59392999378ea24ec63eae83b0c58d3458656807235f9314c98a396af453"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/current/webhook-settings-secret-read-disclosure@0",
+          "evidence_sha256": "sha256:405d59392999378ea24ec63eae83b0c58d3458656807235f9314c98a396af453"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:ca60defb39b9fa0d834c8da1d319159ddd241b8572dbe194fc045038be14dae2"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-92984d2033e2e0b2f9df1861__blackbox_ctf_v1",
+      "task_version_id": "037704a7-fc03-4cf6-a8da-3f3e3933717e",
+      "lineage_id": "cysec1-2-current-gen_blackbox-92984d2033e2e0b2f9df1861__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "current",
+          "evidence_sha256": "sha256:1e344ab89638dce36bbc974e4b7e0c52f882b024ef03b86f257a5674cee27468"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-current-gen",
+          "evidence_sha256": "sha256:1e344ab89638dce36bbc974e4b7e0c52f882b024ef03b86f257a5674cee27468"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:information-disclosure",
+            "class:sensitive-data-exposure"
+          ],
+          "evidence_sha256": "sha256:1e344ab89638dce36bbc974e4b7e0c52f882b024ef03b86f257a5674cee27468"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:1e344ab89638dce36bbc974e4b7e0c52f882b024ef03b86f257a5674cee27468"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/current/webhook-endpoint-secret-retrieve-disclosure@0",
+          "evidence_sha256": "sha256:1e344ab89638dce36bbc974e4b7e0c52f882b024ef03b86f257a5674cee27468"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:b30c4b375a68f300d154404d5a0ef5b9f86716765e526d2ebd8b73d4a6a25568"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-9afe9e08da314948b573657e__blackbox_ctf_v1",
+      "task_version_id": "dd8dd22e-75c0-4b93-8f8e-ea8a292d92bb",
+      "lineage_id": "cysec1-2-current-gen_blackbox-9afe9e08da314948b573657e__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "current",
+          "evidence_sha256": "sha256:c1b0ff020c8a5dec64decd4f0f571cb4f090ed902008c1fb8dc98901e38c1bde"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-current-gen",
+          "evidence_sha256": "sha256:c1b0ff020c8a5dec64decd4f0f571cb4f090ed902008c1fb8dc98901e38c1bde"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:authorization-classification",
+            "class:request-authenticity-bypass"
+          ],
+          "evidence_sha256": "sha256:c1b0ff020c8a5dec64decd4f0f571cb4f090ed902008c1fb8dc98901e38c1bde"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:c1b0ff020c8a5dec64decd4f0f571cb4f090ed902008c1fb8dc98901e38c1bde"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/current/sigma-report-run-read-verb-downgrade@0",
+          "evidence_sha256": "sha256:c1b0ff020c8a5dec64decd4f0f571cb4f090ed902008c1fb8dc98901e38c1bde"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:4c3630a186cb6200e6512c011b7ad79c435ea0e7834973ce6b03125ba50e022f"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-9d641429faef16a05bff575e__blackbox_ctf_v1",
+      "task_version_id": "2f2681bf-c1f7-4056-b6e4-cb2e5058f027",
+      "lineage_id": "cysec1-2-current-gen_blackbox-9d641429faef16a05bff575e__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "current",
+          "evidence_sha256": "sha256:b69e71bef0709a1871b5acf1ee0c653c30be23bf71d4ec8e6c9bcce3a2219b0e"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-current-gen",
+          "evidence_sha256": "sha256:b69e71bef0709a1871b5acf1ee0c653c30be23bf71d4ec8e6c9bcce3a2219b0e"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:broken-authentication",
+            "class:auth-bypass"
+          ],
+          "evidence_sha256": "sha256:b69e71bef0709a1871b5acf1ee0c653c30be23bf71d4ec8e6c9bcce3a2219b0e"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:b69e71bef0709a1871b5acf1ee0c653c30be23bf71d4ec8e6c9bcce3a2219b0e"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/current/connect-acting-account-header-trust@0",
+          "evidence_sha256": "sha256:b69e71bef0709a1871b5acf1ee0c653c30be23bf71d4ec8e6c9bcce3a2219b0e"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:12f728130114d4c2038e9c941d426b41af8fe0fba58f7b110a89b8e0cea5f0d8"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-ac3376172d9071d3d519f24e__blackbox_ctf_v1",
+      "task_version_id": "139ff10d-8c00-4bd6-9437-e6fbcccf2f4d",
+      "lineage_id": "cysec1-2-current-gen_blackbox-ac3376172d9071d3d519f24e__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "current",
+          "evidence_sha256": "sha256:4643b967795ab64ef17b70d692b276a348e3c993438473eec0dcb74bc12a6778"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-current-gen",
+          "evidence_sha256": "sha256:4643b967795ab64ef17b70d692b276a348e3c993438473eec0dcb74bc12a6778"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:webhook-integration-trust",
+            "class:information-disclosure"
+          ],
+          "evidence_sha256": "sha256:4643b967795ab64ef17b70d692b276a348e3c993438473eec0dcb74bc12a6778"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:4643b967795ab64ef17b70d692b276a348e3c993438473eec0dcb74bc12a6778"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/current/webhook-dispatch-existence-leak@0",
+          "evidence_sha256": "sha256:4643b967795ab64ef17b70d692b276a348e3c993438473eec0dcb74bc12a6778"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:7e0e64cbf8f1358da79affa8c131d2a4ca9aee81c02f9ad68ac6312d9d6d7c9b"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-bc363f8239aeeaa3f648046a__blackbox_ctf_v1",
+      "task_version_id": "ba912601-1184-4dcd-9e9d-2fce22543e4b",
+      "lineage_id": "cysec1-2-current-gen_blackbox-bc363f8239aeeaa3f648046a__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "current",
+          "evidence_sha256": "sha256:1810e1cf79e96c41f843a6513f34029fdb920b31a38f3177a28e12c76180d02a"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-current-gen",
+          "evidence_sha256": "sha256:1810e1cf79e96c41f843a6513f34029fdb920b31a38f3177a28e12c76180d02a"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:credential-disclosure",
+            "class:sensitive-data-exposure"
+          ],
+          "evidence_sha256": "sha256:1810e1cf79e96c41f843a6513f34029fdb920b31a38f3177a28e12c76180d02a"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:1810e1cf79e96c41f843a6513f34029fdb920b31a38f3177a28e12c76180d02a"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/current/csrf-token-credential-hash-leak@0",
+          "evidence_sha256": "sha256:1810e1cf79e96c41f843a6513f34029fdb920b31a38f3177a28e12c76180d02a"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:6ebfcb9f13396959c8ebe2c05dcfa3c0044d0cf940a9e70d38cfb0a72c1c31f1"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-c17f94bad9b70de3dfa6f05c__blackbox_ctf_v1",
+      "task_version_id": "f31ebe83-0ff1-4660-bcba-59ffa4b82d5a",
+      "lineage_id": "cysec1-2-current-gen_blackbox-c17f94bad9b70de3dfa6f05c__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "current",
+          "evidence_sha256": "sha256:6abcd08389ec33bc64a3e261b9ed1a338e2a15b9e3c1b71b79c742810daa98da"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-current-gen",
+          "evidence_sha256": "sha256:6abcd08389ec33bc64a3e261b9ed1a338e2a15b9e3c1b71b79c742810daa98da"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:uncontrolled-resource-consumption",
+            "class:resource-bound-fail-open"
+          ],
+          "evidence_sha256": "sha256:6abcd08389ec33bc64a3e261b9ed1a338e2a15b9e3c1b71b79c742810daa98da"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:6abcd08389ec33bc64a3e261b9ed1a338e2a15b9e3c1b71b79c742810daa98da"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/current/invoice-list-scan-budget-scope-fallback@0",
+          "evidence_sha256": "sha256:6abcd08389ec33bc64a3e261b9ed1a338e2a15b9e3c1b71b79c742810daa98da"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:742eb544a81587454f23f6ba82076660faa4748ade2f7d227f6f113a1fe8afe5"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-c5ba6fa280b5731a06d45214__blackbox_ctf_v1",
+      "task_version_id": "63e6ea95-1b08-44ec-aea7-244d9c6253af",
+      "lineage_id": "cysec1-2-current-gen_blackbox-c5ba6fa280b5731a06d45214__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "current",
+          "evidence_sha256": "sha256:a7ff88069c0fc45c1ef32e912b8f2ade6e8545dee3e6bd8fe325c3588b51db2a"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-current-gen",
+          "evidence_sha256": "sha256:a7ff88069c0fc45c1ef32e912b8f2ade6e8545dee3e6bd8fe325c3588b51db2a"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:path-traversal",
+            "class:path-traversal"
+          ],
+          "evidence_sha256": "sha256:a7ff88069c0fc45c1ef32e912b8f2ade6e8545dee3e6bd8fe325c3588b51db2a"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:a7ff88069c0fc45c1ef32e912b8f2ade6e8545dee3e6bd8fe325c3588b51db2a"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/current/statement-archive-encoded-separator-traversal@0",
+          "evidence_sha256": "sha256:a7ff88069c0fc45c1ef32e912b8f2ade6e8545dee3e6bd8fe325c3588b51db2a"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:ac2665ac7e6d1d19b661f9c4d22ae4afae04e00bc1a73023738dd739942ec1a6"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-f294215ad60b41799b9f7bac__blackbox_ctf_v1",
+      "task_version_id": "e4068901-ba6e-4faf-b30c-7535aa11f0fc",
+      "lineage_id": "cysec1-2-current-gen_blackbox-f294215ad60b41799b9f7bac__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "current",
+          "evidence_sha256": "sha256:26c8d2b1739aaeef02367a6f6aa11e70aaa7322f7c9d651f7e0875321d8f7643"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-current-gen",
+          "evidence_sha256": "sha256:26c8d2b1739aaeef02367a6f6aa11e70aaa7322f7c9d651f7e0875321d8f7643"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:hydration",
+            "class:unsafe-deserialization"
+          ],
+          "evidence_sha256": "sha256:26c8d2b1739aaeef02367a6f6aa11e70aaa7322f7c9d651f7e0875321d8f7643"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:26c8d2b1739aaeef02367a6f6aa11e70aaa7322f7c9d651f7e0875321d8f7643"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/current/event-snapshot-live-object-hydrate@0",
+          "evidence_sha256": "sha256:26c8d2b1739aaeef02367a6f6aa11e70aaa7322f7c9d651f7e0875321d8f7643"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:af0e629dcdb2e40b76af1e85108da3b9cade2224f736218a535a843c635e9816"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-034abd32497f89b7ceafe6a3__blackbox_ctf_v1",
+      "task_version_id": "3981d848-0689-47da-8f44-9f7e2132c3ce",
+      "lineage_id": "cysec1-2-fakelook-gen_blackbox-034abd32497f89b7ceafe6a3__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fakelook",
+          "evidence_sha256": "sha256:5d94c510e2c91008bd02baa8d4cd6133b5b24fc96cf26ce1a9770a02c3ca2923"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fakelook-gen",
+          "evidence_sha256": "sha256:5d94c510e2c91008bd02baa8d4cd6133b5b24fc96cf26ce1a9770a02c3ca2923"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:xss",
+            "class:stored-xss"
+          ],
+          "evidence_sha256": "sha256:5d94c510e2c91008bd02baa8d4cd6133b5b24fc96cf26ce1a9770a02c3ca2923"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:5d94c510e2c91008bd02baa8d4cd6133b5b24fc96cf26ce1a9770a02c3ca2923"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fakelook/rule-test-stationery-html-reflect@0",
+          "evidence_sha256": "sha256:5d94c510e2c91008bd02baa8d4cd6133b5b24fc96cf26ce1a9770a02c3ca2923"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:de222acbbeffcf31f794e3e026ed47e05d4a4fe90f0931e57f62eba203169944"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-03faebe1772eea3cd1e8e2cb__blackbox_ctf_v1",
+      "task_version_id": "f1ce26fc-39b6-442c-a03c-3c18f99e119f",
+      "lineage_id": "cysec1-2-fakelook-gen_blackbox-03faebe1772eea3cd1e8e2cb__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fakelook",
+          "evidence_sha256": "sha256:dc526f0241ebc9081516510fe3fcb725910b8a8aa30c682735892d510c1d7e50"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fakelook-gen",
+          "evidence_sha256": "sha256:dc526f0241ebc9081516510fe3fcb725910b8a8aa30c682735892d510c1d7e50"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:broken-object-level-authorization",
+            "class:path-traversal"
+          ],
+          "evidence_sha256": "sha256:dc526f0241ebc9081516510fe3fcb725910b8a8aa30c682735892d510c1d7e50"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:dc526f0241ebc9081516510fe3fcb725910b8a8aa30c682735892d510c1d7e50"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fakelook/drive-path-address-traversal@0",
+          "evidence_sha256": "sha256:dc526f0241ebc9081516510fe3fcb725910b8a8aa30c682735892d510c1d7e50"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:b04a2c8ce39f45fe447ce09c7b6f06d07e1b7ab4855fac2758585638468d6a58"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-136118e493e2e587151adbad__blackbox_ctf_v1",
+      "task_version_id": "45c6cd9f-afef-4e63-b1f8-496c52e98f01",
+      "lineage_id": "cysec1-2-fakelook-gen_blackbox-136118e493e2e587151adbad__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fakelook",
+          "evidence_sha256": "sha256:656426f426e01fb607776671d0fc4bd7d53a47aa1f3dd976cd29aff469b636e7"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fakelook-gen",
+          "evidence_sha256": "sha256:656426f426e01fb607776671d0fc4bd7d53a47aa1f3dd976cd29aff469b636e7"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:broken-object-level-authorization",
+            "class:IDOR"
+          ],
+          "evidence_sha256": "sha256:656426f426e01fb607776671d0fc4bd7d53a47aa1f3dd976cd29aff469b636e7"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:656426f426e01fb607776671d0fc4bd7d53a47aa1f3dd976cd29aff469b636e7"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fakelook/todo-task-list-containment-bypass@0",
+          "evidence_sha256": "sha256:656426f426e01fb607776671d0fc4bd7d53a47aa1f3dd976cd29aff469b636e7"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:eedf6f5163600dc6fdfc2274fa297874411a411245a4a6156363e900a2feebf4"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-1c280f0d27547720dc6b4287__blackbox_ctf_v1",
+      "task_version_id": "5144890e-3515-497e-aaff-044d062eb664",
+      "lineage_id": "cysec1-2-fakelook-gen_blackbox-1c280f0d27547720dc6b4287__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fakelook",
+          "evidence_sha256": "sha256:7afbb90e08c1af75ad5610f9abcae3c907bde27fdb4e5b62f543b4feb7748a64"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fakelook-gen",
+          "evidence_sha256": "sha256:7afbb90e08c1af75ad5610f9abcae3c907bde27fdb4e5b62f543b4feb7748a64"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:injection",
+            "class:code-injection"
+          ],
+          "evidence_sha256": "sha256:7afbb90e08c1af75ad5610f9abcae3c907bde27fdb4e5b62f543b4feb7748a64"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:7afbb90e08c1af75ad5610f9abcae3c907bde27fdb4e5b62f543b4feb7748a64"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fakelook/signature-template-expression-injection@0",
+          "evidence_sha256": "sha256:7afbb90e08c1af75ad5610f9abcae3c907bde27fdb4e5b62f543b4feb7748a64"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:38366e59073cc05450665ac8e574aa7820ebd455ef707f7e2fb7f3aeb28f791e"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-2bd5f9fdee284564d8ce5ea4__blackbox_ctf_v1",
+      "task_version_id": "25afa659-5e00-4c5a-9ad4-39779b59c5ef",
+      "lineage_id": "cysec1-2-fakelook-gen_blackbox-2bd5f9fdee284564d8ce5ea4__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fakelook",
+          "evidence_sha256": "sha256:37f7fc8180da10c26d50c7b63b41816b4e733e963c1cabd941541c7d816ca1dc"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fakelook-gen",
+          "evidence_sha256": "sha256:37f7fc8180da10c26d50c7b63b41816b4e733e963c1cabd941541c7d816ca1dc"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:broken-object-level-authorization",
+            "class:IDOR"
+          ],
+          "evidence_sha256": "sha256:37f7fc8180da10c26d50c7b63b41816b4e733e963c1cabd941541c7d816ca1dc"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:37f7fc8180da10c26d50c7b63b41816b4e733e963c1cabd941541c7d816ca1dc"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fakelook/search-history-owner-scope-bypass@0",
+          "evidence_sha256": "sha256:37f7fc8180da10c26d50c7b63b41816b4e733e963c1cabd941541c7d816ca1dc"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:7fe4766534d44a2825bb3ba0635fb49d547c46e14122f33f806d849d6930de43"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-2be01f831d54fff2f9038e9d__blackbox_ctf_v1",
+      "task_version_id": "78971e60-851b-4f6a-85d8-ecb3391d2af2",
+      "lineage_id": "cysec1-2-fakelook-gen_blackbox-2be01f831d54fff2f9038e9d__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fakelook",
+          "evidence_sha256": "sha256:dfdb2ff6e94ca10144a0b63cae1f89b27bbd4cd737f84012e8409e94b8dd8723"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fakelook-gen",
+          "evidence_sha256": "sha256:dfdb2ff6e94ca10144a0b63cae1f89b27bbd4cd737f84012e8409e94b8dd8723"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:xss-javascript-url",
+            "class:stored-xss"
+          ],
+          "evidence_sha256": "sha256:dfdb2ff6e94ca10144a0b63cae1f89b27bbd4cd737f84012e8409e94b8dd8723"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:dfdb2ff6e94ca10144a0b63cae1f89b27bbd4cd737f84012e8409e94b8dd8723"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fakelook/meeting-join-javascript-url@0",
+          "evidence_sha256": "sha256:dfdb2ff6e94ca10144a0b63cae1f89b27bbd4cd737f84012e8409e94b8dd8723"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:c2c0a0ef588cf9bef51b02cd6e9635e8dc8d6e715b57a124910358a8e0b095d3"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-2c504442adc773ca9a82c247__blackbox_ctf_v1",
+      "task_version_id": "53d2f089-6502-4208-9795-d6ba7277fa9a",
+      "lineage_id": "cysec1-2-fakelook-gen_blackbox-2c504442adc773ca9a82c247__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fakelook",
+          "evidence_sha256": "sha256:4659a26c06e34dcc98f0cecc0ffada247f8b34f176a755144c1c05eff9914aa0"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fakelook-gen",
+          "evidence_sha256": "sha256:4659a26c06e34dcc98f0cecc0ffada247f8b34f176a755144c1c05eff9914aa0"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:resource-exhaustion",
+            "class:CWE-770"
+          ],
+          "evidence_sha256": "sha256:4659a26c06e34dcc98f0cecc0ffada247f8b34f176a755144c1c05eff9914aa0"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:4659a26c06e34dcc98f0cecc0ffada247f8b34f176a755144c1c05eff9914aa0"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fakelook/search-history-retention-bypass@0",
+          "evidence_sha256": "sha256:4659a26c06e34dcc98f0cecc0ffada247f8b34f176a755144c1c05eff9914aa0"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:760abf17e519b45655424626a7a12c0e992b6cef3e5f835212e3a73cdf27059e"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-5863ceeee099e5f9247cc2c6__blackbox_ctf_v1",
+      "task_version_id": "8d84b316-d741-44f8-aaa5-7a0f0d7b8d3a",
+      "lineage_id": "cysec1-2-fakelook-gen_blackbox-5863ceeee099e5f9247cc2c6__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fakelook",
+          "evidence_sha256": "sha256:5b1f8b14eef986c919217eabd6e4e4b6b57f42e0487ce967506ee4d080f640dd"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fakelook-gen",
+          "evidence_sha256": "sha256:5b1f8b14eef986c919217eabd6e4e4b6b57f42e0487ce967506ee4d080f640dd"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:cryptographic-signature-verification",
+            "class:jwt-alg-confusion"
+          ],
+          "evidence_sha256": "sha256:5b1f8b14eef986c919217eabd6e4e4b6b57f42e0487ce967506ee4d080f640dd"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "hard",
+          "evidence_sha256": "sha256:5b1f8b14eef986c919217eabd6e4e4b6b57f42e0487ce967506ee4d080f640dd"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fakelook/federation-jwk-alg-confusion@0",
+          "evidence_sha256": "sha256:5b1f8b14eef986c919217eabd6e4e4b6b57f42e0487ce967506ee4d080f640dd"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:135d4650e0fb525be804801bb6c64615c07b66879e574a467430ab002f1c4dbc"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-58a0a253d85d53703781bb50__blackbox_ctf_v1",
+      "task_version_id": "6e565e4d-2cb9-402f-a492-457d6802cee6",
+      "lineage_id": "cysec1-2-fakelook-gen_blackbox-58a0a253d85d53703781bb50__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fakelook",
+          "evidence_sha256": "sha256:b6802ae53cf5fcecb574877ddae68459d3df92aa51eeac95e51c0b62ecbc724d"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fakelook-gen",
+          "evidence_sha256": "sha256:b6802ae53cf5fcecb574877ddae68459d3df92aa51eeac95e51c0b62ecbc724d"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:injection",
+            "class:SQLi"
+          ],
+          "evidence_sha256": "sha256:b6802ae53cf5fcecb574877ddae68459d3df92aa51eeac95e51c0b62ecbc724d"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:b6802ae53cf5fcecb574877ddae68459d3df92aa51eeac95e51c0b62ecbc724d"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fakelook/contacts-category-filter-sqli@0",
+          "evidence_sha256": "sha256:b6802ae53cf5fcecb574877ddae68459d3df92aa51eeac95e51c0b62ecbc724d"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:be70f7dbc7fe2c325c356413636773b9a65eeb100f1ffb69267b4a9c4d4007dd"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-63daa3971bcc9a8c52e3ff4c__blackbox_ctf_v1",
+      "task_version_id": "6324fee5-2e3f-4538-a9e2-026d82ebb8a3",
+      "lineage_id": "cysec1-2-fakelook-gen_blackbox-63daa3971bcc9a8c52e3ff4c__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fakelook",
+          "evidence_sha256": "sha256:81288adf8e671f5904b599f2bd3974e923deae887cd2809802753288a236010b"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fakelook-gen",
+          "evidence_sha256": "sha256:81288adf8e671f5904b599f2bd3974e923deae887cd2809802753288a236010b"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:origin-validation",
+            "class:origin-validation"
+          ],
+          "evidence_sha256": "sha256:81288adf8e671f5904b599f2bd3974e923deae887cd2809802753288a236010b"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:81288adf8e671f5904b599f2bd3974e923deae887cd2809802753288a236010b"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fakelook/directory-trusted-origin-notes-disclosure@0",
+          "evidence_sha256": "sha256:81288adf8e671f5904b599f2bd3974e923deae887cd2809802753288a236010b"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:ca41782ff3b4f1978485e58cfbc4061a77352ac266160e2c7eae355b1f5b24b3"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-7317189e8fefb9033c5be097__blackbox_ctf_v1",
+      "task_version_id": "2fdc9511-f5fe-4386-a4a5-a5a16a30f359",
+      "lineage_id": "cysec1-2-fakelook-gen_blackbox-7317189e8fefb9033c5be097__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fakelook",
+          "evidence_sha256": "sha256:4c663e3ad85d265a313fe92cf75fa4f42aba35512312b7105394d453aa476166"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fakelook-gen",
+          "evidence_sha256": "sha256:4c663e3ad85d265a313fe92cf75fa4f42aba35512312b7105394d453aa476166"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:broken-access-control",
+            "class:IDOR"
+          ],
+          "evidence_sha256": "sha256:4c663e3ad85d265a313fe92cf75fa4f42aba35512312b7105394d453aa476166"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:4c663e3ad85d265a313fe92cf75fa4f42aba35512312b7105394d453aa476166"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fakelook/user-signature-read-owner-check-dropped@0",
+          "evidence_sha256": "sha256:4c663e3ad85d265a313fe92cf75fa4f42aba35512312b7105394d453aa476166"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:f682d1913d4327eeda1b842e14cf06a6883f4790e07d380e86bbf49ad305f677"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-7647df87d82993fdb4d8942d__blackbox_ctf_v1",
+      "task_version_id": "96977ecb-4d8c-4c4f-a5e0-02d925bdc724",
+      "lineage_id": "cysec1-2-fakelook-gen_blackbox-7647df87d82993fdb4d8942d__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fakelook",
+          "evidence_sha256": "sha256:472627f7a44a6d747dae9995a6e1023d589ee49c6d7011947a24ce54ec0e41ae"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fakelook-gen",
+          "evidence_sha256": "sha256:472627f7a44a6d747dae9995a6e1023d589ee49c6d7011947a24ce54ec0e41ae"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:resource-consumption",
+            "class:resource-consumption"
+          ],
+          "evidence_sha256": "sha256:472627f7a44a6d747dae9995a6e1023d589ee49c6d7011947a24ce54ec0e41ae"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:472627f7a44a6d747dae9995a6e1023d589ee49c6d7011947a24ce54ec0e41ae"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fakelook/mime-gzip-transfer-decode-skip@0",
+          "evidence_sha256": "sha256:472627f7a44a6d747dae9995a6e1023d589ee49c6d7011947a24ce54ec0e41ae"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:2a96c7d04ba6206e27e590be8358c00615685874bec2654000cd327e61208c6b"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-77c0e8243397223c34010670__blackbox_ctf_v1",
+      "task_version_id": "d05fbffb-db7e-4d27-b6d1-5a854b74e6cd",
+      "lineage_id": "cysec1-2-fakelook-gen_blackbox-77c0e8243397223c34010670__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fakelook",
+          "evidence_sha256": "sha256:9ea25f9cad4b1e2908b15600baef9cff4cc1e4e578c1afbe0fbb9c59a02c70b0"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fakelook-gen",
+          "evidence_sha256": "sha256:9ea25f9cad4b1e2908b15600baef9cff4cc1e4e578c1afbe0fbb9c59a02c70b0"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:server-side-request-forgery",
+            "class:SSRF"
+          ],
+          "evidence_sha256": "sha256:9ea25f9cad4b1e2908b15600baef9cff4cc1e4e578c1afbe0fbb9c59a02c70b0"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:9ea25f9cad4b1e2908b15600baef9cff4cc1e4e578c1afbe0fbb9c59a02c70b0"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fakelook/attachment-reference-url-fetch-ssrf@0",
+          "evidence_sha256": "sha256:9ea25f9cad4b1e2908b15600baef9cff4cc1e4e578c1afbe0fbb9c59a02c70b0"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:44c25b9f95c17e6d8bf4eb5c7a2f3f6948cd862221634614d178dddef34b4e1d"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-8095d44c3871865064a0702c__blackbox_ctf_v1",
+      "task_version_id": "e13f62eb-170a-40c6-86bf-3c3f3829e3d8",
+      "lineage_id": "cysec1-2-fakelook-gen_blackbox-8095d44c3871865064a0702c__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fakelook",
+          "evidence_sha256": "sha256:fc38dec5e905abb9a81deb9e830bc1253026e4a58f6c253345fd5c4dca1d758e"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fakelook-gen",
+          "evidence_sha256": "sha256:fc38dec5e905abb9a81deb9e830bc1253026e4a58f6c253345fd5c4dca1d758e"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:template-second-pass-evaluation",
+            "class:code-injection"
+          ],
+          "evidence_sha256": "sha256:fc38dec5e905abb9a81deb9e830bc1253026e4a58f6c253345fd5c4dca1d758e"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:fc38dec5e905abb9a81deb9e830bc1253026e4a58f6c253345fd5c4dca1d758e"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fakelook/signature-merge-second-pass@0",
+          "evidence_sha256": "sha256:fc38dec5e905abb9a81deb9e830bc1253026e4a58f6c253345fd5c4dca1d758e"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:2b6d22a16fd20b007da60e89a3daa9f215c66554bbdc1efc7ece7a849f21dfaa"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-9063fa10a36b73f9044c608f__blackbox_ctf_v1",
+      "task_version_id": "dcf2aefc-e34d-4a4a-8aa9-b18a3b754d5a",
+      "lineage_id": "cysec1-2-fakelook-gen_blackbox-9063fa10a36b73f9044c608f__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fakelook",
+          "evidence_sha256": "sha256:8018667160e11eda013301a2787d2b4f56670a608e1c6381179273518acaa5d5"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fakelook-gen",
+          "evidence_sha256": "sha256:8018667160e11eda013301a2787d2b4f56670a608e1c6381179273518acaa5d5"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:authentication-and-identity",
+            "class:auth-bypass"
+          ],
+          "evidence_sha256": "sha256:8018667160e11eda013301a2787d2b4f56670a608e1c6381179273518acaa5d5"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:8018667160e11eda013301a2787d2b4f56670a608e1c6381179273518acaa5d5"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fakelook/ambient-identity-header-trust@0",
+          "evidence_sha256": "sha256:8018667160e11eda013301a2787d2b4f56670a608e1c6381179273518acaa5d5"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:a330685aadb3a54d8888860b7ba17049612e5cf8f472597edba4cc680f80dfb7"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-96331d7b7fd4a38983ccab2b__blackbox_ctf_v1",
+      "task_version_id": "47483c98-ec42-4543-89f3-555a33e8f820",
+      "lineage_id": "cysec1-2-fakelook-gen_blackbox-96331d7b7fd4a38983ccab2b__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fakelook",
+          "evidence_sha256": "sha256:767747cfcb5930734983a97dc77d8b9315cc2bcf33814b14a0b613f5e1e21b9a"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fakelook-gen",
+          "evidence_sha256": "sha256:767747cfcb5930734983a97dc77d8b9315cc2bcf33814b14a0b613f5e1e21b9a"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:function-level-privilege",
+            "class:privilege-escalation"
+          ],
+          "evidence_sha256": "sha256:767747cfcb5930734983a97dc77d8b9315cc2bcf33814b14a0b613f5e1e21b9a"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:767747cfcb5930734983a97dc77d8b9315cc2bcf33814b14a0b613f5e1e21b9a"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fakelook/team-first-owner-bootstrap@0",
+          "evidence_sha256": "sha256:767747cfcb5930734983a97dc77d8b9315cc2bcf33814b14a0b613f5e1e21b9a"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:f338c6e9cc815f3c03c0c1bbbf1110cddf492b45409df3b6d25a4e3b69c8e946"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-9db42d6bba9934e37106b1cf__blackbox_ctf_v1",
+      "task_version_id": "1407dcf7-46ad-4b82-8aa1-f88307dd8264",
+      "lineage_id": "cysec1-2-fakelook-gen_blackbox-9db42d6bba9934e37106b1cf__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fakelook",
+          "evidence_sha256": "sha256:fa8007bdc91034c5b3a32ae535a802fdff28f2db3c08060d3d6d96a4db742497"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fakelook-gen",
+          "evidence_sha256": "sha256:fa8007bdc91034c5b3a32ae535a802fdff28f2db3c08060d3d6d96a4db742497"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:path-traversal",
+            "class:path-traversal"
+          ],
+          "evidence_sha256": "sha256:fa8007bdc91034c5b3a32ae535a802fdff28f2db3c08060d3d6d96a4db742497"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:fa8007bdc91034c5b3a32ae535a802fdff28f2db3c08060d3d6d96a4db742497"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fakelook/signature-stationery-preview-traversal@3",
+          "evidence_sha256": "sha256:fa8007bdc91034c5b3a32ae535a802fdff28f2db3c08060d3d6d96a4db742497"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:6d92f33ca0e3564b4c1621ac66ca5fdf45968fa7ef4c77cd93e0623b62ba4dca"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-ab56dfb6116356c402290fa8__blackbox_ctf_v1",
+      "task_version_id": "9375a9b9-04e5-4f6f-ad47-286121278992",
+      "lineage_id": "cysec1-2-fakelook-gen_blackbox-ab56dfb6116356c402290fa8__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fakelook",
+          "evidence_sha256": "sha256:104df19887b498f7b510e67585cf16c820a05a25e39277df9f7174a2a5f745fc"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fakelook-gen",
+          "evidence_sha256": "sha256:104df19887b498f7b510e67585cf16c820a05a25e39277df9f7174a2a5f745fc"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:authentication-and-session",
+            "class:auth-bypass"
+          ],
+          "evidence_sha256": "sha256:104df19887b498f7b510e67585cf16c820a05a25e39277df9f7174a2a5f745fc"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:104df19887b498f7b510e67585cf16c820a05a25e39277df9f7174a2a5f745fc"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fakelook/password-reset-token-any-session@0",
+          "evidence_sha256": "sha256:104df19887b498f7b510e67585cf16c820a05a25e39277df9f7174a2a5f745fc"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:1b83dd63e9763ff7df899f47af5d0e227f99274a17dba0a3c0ab8f285757169d"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-c067bea84afaa8b8aa093234__blackbox_ctf_v1",
+      "task_version_id": "50ab8f20-7fc5-4e9f-afad-9fb03fae9b4d",
+      "lineage_id": "cysec1-2-fakelook-gen_blackbox-c067bea84afaa8b8aa093234__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fakelook",
+          "evidence_sha256": "sha256:e85317d8cf0b7cc945c4fecc90ea1073ba6a571588a73be3e371d083a5c70c78"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fakelook-gen",
+          "evidence_sha256": "sha256:e85317d8cf0b7cc945c4fecc90ea1073ba6a571588a73be3e371d083a5c70c78"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:authorization",
+            "class:sensitive-data-exposure"
+          ],
+          "evidence_sha256": "sha256:e85317d8cf0b7cc945c4fecc90ea1073ba6a571588a73be3e371d083a5c70c78"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:e85317d8cf0b7cc945c4fecc90ea1073ba6a571588a73be3e371d083a5c70c78"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fakelook/meeting-join-host-notes-cookie-scope@0",
+          "evidence_sha256": "sha256:e85317d8cf0b7cc945c4fecc90ea1073ba6a571588a73be3e371d083a5c70c78"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:0c3d396da42a0b872c55a982f38417cc8cd879f4fff58d4002057aa8da57ecaa"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-d59f9f2960c2fdb1e2cdd8e1__blackbox_ctf_v1",
+      "task_version_id": "5287e180-64ea-487b-982a-d08a38c05fa2",
+      "lineage_id": "cysec1-2-fakelook-gen_blackbox-d59f9f2960c2fdb1e2cdd8e1__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fakelook",
+          "evidence_sha256": "sha256:69269150e78dcc121807c0ac90f13dd17b2485e671f5a98358ec3ae7ac7db3a5"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fakelook-gen",
+          "evidence_sha256": "sha256:69269150e78dcc121807c0ac90f13dd17b2485e671f5a98358ec3ae7ac7db3a5"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:broken-file-access",
+            "class:path-traversal"
+          ],
+          "evidence_sha256": "sha256:69269150e78dcc121807c0ac90f13dd17b2485e671f5a98358ec3ae7ac7db3a5"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:69269150e78dcc121807c0ac90f13dd17b2485e671f5a98358ec3ae7ac7db3a5"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fakelook/attachment-content-location-path-traversal@2",
+          "evidence_sha256": "sha256:69269150e78dcc121807c0ac90f13dd17b2485e671f5a98358ec3ae7ac7db3a5"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:197a851ccbedba8bd07a9ce601dce9dfe5dd190b611f6155484f13af31ac3528"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-fb581ab1aa4a347bb5f6fd65__blackbox_ctf_v1",
+      "task_version_id": "d6634975-2918-4037-9cd2-467f365e39b0",
+      "lineage_id": "cysec1-2-fakelook-gen_blackbox-fb581ab1aa4a347bb5f6fd65__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fakelook",
+          "evidence_sha256": "sha256:bf280cde97d40dce0fd51a89fd1835e2870229f1c92d9f78761fa2f38250000e"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fakelook-gen",
+          "evidence_sha256": "sha256:bf280cde97d40dce0fd51a89fd1835e2870229f1c92d9f78761fa2f38250000e"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:object-level-authz",
+            "class:incorrect-authorization"
+          ],
+          "evidence_sha256": "sha256:bf280cde97d40dce0fd51a89fd1835e2870229f1c92d9f78761fa2f38250000e"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:bf280cde97d40dce0fd51a89fd1835e2870229f1c92d9f78761fa2f38250000e"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fakelook/attachment-content-mailbox-skip@0",
+          "evidence_sha256": "sha256:bf280cde97d40dce0fd51a89fd1835e2870229f1c92d9f78761fa2f38250000e"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:13b8b8e2a6eeff6696704005bcc97504ab0d6b298e3cab495dfcf0db47782b22"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fentry-gen_blackbox-0a841d6127c4042fd3d99f68__blackbox_ctf_v1",
+      "task_version_id": "056f0e20-cd7d-40c8-b3c8-369fcee838be",
+      "lineage_id": "cysec1-2-fentry-gen_blackbox-0a841d6127c4042fd3d99f68__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fentry",
+          "evidence_sha256": "sha256:d170dfc2f80278ba5cfa0cc0cff15aaa9fb9879c2e9cc8cebb5899a034c7fcbc"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fentry-gen",
+          "evidence_sha256": "sha256:d170dfc2f80278ba5cfa0cc0cff15aaa9fb9879c2e9cc8cebb5899a034c7fcbc"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:injection",
+            "class:SQLi"
+          ],
+          "evidence_sha256": "sha256:d170dfc2f80278ba5cfa0cc0cff15aaa9fb9879c2e9cc8cebb5899a034c7fcbc"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:d170dfc2f80278ba5cfa0cc0cff15aaa9fb9879c2e9cc8cebb5899a034c7fcbc"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fentry/release-search-sqli@0",
+          "evidence_sha256": "sha256:d170dfc2f80278ba5cfa0cc0cff15aaa9fb9879c2e9cc8cebb5899a034c7fcbc"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:8e89d9faebc783476dd9a018a7cd7f85ade977c3d491c523b891a81e6d0f55b3"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fentry-gen_blackbox-229f415d73156f279e7b6825__blackbox_ctf_v1",
+      "task_version_id": "8c0b249c-8946-4ec3-8609-d74631af547e",
+      "lineage_id": "cysec1-2-fentry-gen_blackbox-229f415d73156f279e7b6825__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fentry",
+          "evidence_sha256": "sha256:372a609fb2562992fdac3f1fb181175cf416bf818e0204e6f8df68d5e330b6fa"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fentry-gen",
+          "evidence_sha256": "sha256:372a609fb2562992fdac3f1fb181175cf416bf818e0204e6f8df68d5e330b6fa"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:object-hydration-authz-bypass",
+            "class:prototype-pollution"
+          ],
+          "evidence_sha256": "sha256:372a609fb2562992fdac3f1fb181175cf416bf818e0204e6f8df68d5e330b6fa"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "hard",
+          "evidence_sha256": "sha256:372a609fb2562992fdac3f1fb181175cf416bf818e0204e6f8df68d5e330b6fa"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fentry/ingest-metadata-prototype-pollution@1",
+          "evidence_sha256": "sha256:372a609fb2562992fdac3f1fb181175cf416bf818e0204e6f8df68d5e330b6fa"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:0481d9df941cd3c35588c7e768809bf40454711cb2bd2f00b42f1989eb9620e5"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fentry-gen_blackbox-2bbcc2384a83e6635b6971dc__blackbox_ctf_v1",
+      "task_version_id": "195b1fca-b418-4920-983b-90c5bdfb904f",
+      "lineage_id": "cysec1-2-fentry-gen_blackbox-2bbcc2384a83e6635b6971dc__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fentry",
+          "evidence_sha256": "sha256:aa1de4870466da21b6b43eba9e4b92575cb2539dbf52a98c2307c808ca79f678"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fentry-gen",
+          "evidence_sha256": "sha256:aa1de4870466da21b6b43eba9e4b92575cb2539dbf52a98c2307c808ca79f678"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:oauth-code-injection",
+            "class:auth-bypass"
+          ],
+          "evidence_sha256": "sha256:aa1de4870466da21b6b43eba9e4b92575cb2539dbf52a98c2307c808ca79f678"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:aa1de4870466da21b6b43eba9e4b92575cb2539dbf52a98c2307c808ca79f678"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fentry/oauth-authorization-code-injection@1",
+          "evidence_sha256": "sha256:aa1de4870466da21b6b43eba9e4b92575cb2539dbf52a98c2307c808ca79f678"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:99e5031443f0c768cac107164bd093253aa3716e2d22fb06c743f76576c25f6c"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fentry-gen_blackbox-34652ac7eb0d3cc85ab093a6__blackbox_ctf_v1",
+      "task_version_id": "a0e4a473-b544-4006-b4fa-8e6b6bfb0a50",
+      "lineage_id": "cysec1-2-fentry-gen_blackbox-34652ac7eb0d3cc85ab093a6__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fentry",
+          "evidence_sha256": "sha256:6f2c81ff157c129c54cdfeb460172f88f168e42ad7cef5aa5dfd578a4da5c89d"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fentry-gen",
+          "evidence_sha256": "sha256:6f2c81ff157c129c54cdfeb460172f88f168e42ad7cef5aa5dfd578a4da5c89d"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:filesystem-path-traversal",
+            "class:path-traversal"
+          ],
+          "evidence_sha256": "sha256:6f2c81ff157c129c54cdfeb460172f88f168e42ad7cef5aa5dfd578a4da5c89d"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:6f2c81ff157c129c54cdfeb460172f88f168e42ad7cef5aa5dfd578a4da5c89d"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fentry/notification-preview-template-path-traversal@0",
+          "evidence_sha256": "sha256:6f2c81ff157c129c54cdfeb460172f88f168e42ad7cef5aa5dfd578a4da5c89d"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:c3d1736ba05f519d17df0fab6c866bc3cf76ea797584d96d563a78185af0540c"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fentry-gen_blackbox-38f07564c9639347d11eca37__blackbox_ctf_v1",
+      "task_version_id": "05d09c55-ccdf-4d26-b06d-b851a2314a35",
+      "lineage_id": "cysec1-2-fentry-gen_blackbox-38f07564c9639347d11eca37__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fentry",
+          "evidence_sha256": "sha256:f920d714b321c8b21982b4a6c9b37f6086c3d3d3eb327a54f21014ed7afd448b"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fentry-gen",
+          "evidence_sha256": "sha256:f920d714b321c8b21982b4a6c9b37f6086c3d3d3eb327a54f21014ed7afd448b"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:object-authorization",
+            "class:IDOR"
+          ],
+          "evidence_sha256": "sha256:f920d714b321c8b21982b4a6c9b37f6086c3d3d3eb327a54f21014ed7afd448b"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:f920d714b321c8b21982b4a6c9b37f6086c3d3d3eb327a54f21014ed7afd448b"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fentry/event-detail-org-scope-bypass@0",
+          "evidence_sha256": "sha256:f920d714b321c8b21982b4a6c9b37f6086c3d3d3eb327a54f21014ed7afd448b"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:ab3853f46f8da1e2f19109a65612de3428eeafe1483511b3740ed9c2fa73900b"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fentry-gen_blackbox-46793210126eea4722e90448__blackbox_ctf_v1",
+      "task_version_id": "fb8f2178-7dd8-429a-8d3c-f14b21a51e02",
+      "lineage_id": "cysec1-2-fentry-gen_blackbox-46793210126eea4722e90448__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fentry",
+          "evidence_sha256": "sha256:419d921ec6350bc956e71b3d9129407ae19eccd7da15631e3b00063baf92c237"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fentry-gen",
+          "evidence_sha256": "sha256:419d921ec6350bc956e71b3d9129407ae19eccd7da15631e3b00063baf92c237"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:CWE-200",
+            "class:sensitive-data-exposure"
+          ],
+          "evidence_sha256": "sha256:419d921ec6350bc956e71b3d9129407ae19eccd7da15631e3b00063baf92c237"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:419d921ec6350bc956e71b3d9129407ae19eccd7da15631e3b00063baf92c237"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fentry/totp-status-secret-leak@0",
+          "evidence_sha256": "sha256:419d921ec6350bc956e71b3d9129407ae19eccd7da15631e3b00063baf92c237"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:d98247ced2dac77e59ecd6d8b3ea18a6a9a06cf5d65c583d264a66cae6af5900"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fentry-gen_blackbox-54997075dbb8019cd6e2e0ba__blackbox_ctf_v1",
+      "task_version_id": "d4f5e664-d4fd-4492-a103-429260ad9e99",
+      "lineage_id": "cysec1-2-fentry-gen_blackbox-54997075dbb8019cd6e2e0ba__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fentry",
+          "evidence_sha256": "sha256:d64d30adf142ecea9a395d2f6b70f383a08b51aba650a77bfc720542554f4d66"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fentry-gen",
+          "evidence_sha256": "sha256:d64d30adf142ecea9a395d2f6b70f383a08b51aba650a77bfc720542554f4d66"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:protocol-desync",
+            "class:http-request-smuggling"
+          ],
+          "evidence_sha256": "sha256:d64d30adf142ecea9a395d2f6b70f383a08b51aba650a77bfc720542554f4d66"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "hard",
+          "evidence_sha256": "sha256:d64d30adf142ecea9a395d2f6b70f383a08b51aba650a77bfc720542554f4d66"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fentry/envelope-clte-ingest-desync@0",
+          "evidence_sha256": "sha256:d64d30adf142ecea9a395d2f6b70f383a08b51aba650a77bfc720542554f4d66"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:b141b80f82618236e36b5ba49732496e3a837112d090c5472f4b022789c752af"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fentry-gen_blackbox-5a6f99394fadd1aea40875d9__blackbox_ctf_v1",
+      "task_version_id": "6a3023fd-4022-47a4-9ae5-6d15a892bd9b",
+      "lineage_id": "cysec1-2-fentry-gen_blackbox-5a6f99394fadd1aea40875d9__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fentry",
+          "evidence_sha256": "sha256:c039a1bb1eaf98cbec7f36e75054f4176965231400c2e13943d148bee85e9d52"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fentry-gen",
+          "evidence_sha256": "sha256:c039a1bb1eaf98cbec7f36e75054f4176965231400c2e13943d148bee85e9d52"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:credential-in-response-leak",
+            "class:credential-disclosure"
+          ],
+          "evidence_sha256": "sha256:c039a1bb1eaf98cbec7f36e75054f4176965231400c2e13943d148bee85e9d52"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:c039a1bb1eaf98cbec7f36e75054f4176965231400c2e13943d148bee85e9d52"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fentry/password-reset-token-response-leak@0",
+          "evidence_sha256": "sha256:c039a1bb1eaf98cbec7f36e75054f4176965231400c2e13943d148bee85e9d52"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:f86187468ba487d57bc7adf262bf99b7a8bb0ee9b528f2196976f0469f568870"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fentry-gen_blackbox-625d795f54976fc78cc5255f__blackbox_ctf_v1",
+      "task_version_id": "2cb87286-a35e-4ba0-a949-1d93dfbd229a",
+      "lineage_id": "cysec1-2-fentry-gen_blackbox-625d795f54976fc78cc5255f__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fentry",
+          "evidence_sha256": "sha256:fbba024fa79b8a2a318cbb591ba376821a76f6fa8d436a027faa6e22d6594ea4"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fentry-gen",
+          "evidence_sha256": "sha256:fbba024fa79b8a2a318cbb591ba376821a76f6fa8d436a027faa6e22d6594ea4"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:credential-disclosure",
+            "class:sensitive-data-exposure"
+          ],
+          "evidence_sha256": "sha256:fbba024fa79b8a2a318cbb591ba376821a76f6fa8d436a027faa6e22d6594ea4"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:fbba024fa79b8a2a318cbb591ba376821a76f6fa8d436a027faa6e22d6594ea4"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fentry/csrf-cookie-password-hash-leak@0",
+          "evidence_sha256": "sha256:fbba024fa79b8a2a318cbb591ba376821a76f6fa8d436a027faa6e22d6594ea4"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:a4530ee80d21c345c23680fbeb3bdec39b5c1ac0cae7fdfe96d08f558f1503b3"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fentry-gen_blackbox-8b7c28d59cbc439114db9a56__blackbox_ctf_v1",
+      "task_version_id": "fd07b96f-7aa4-4041-862b-5aa7411eff4b",
+      "lineage_id": "cysec1-2-fentry-gen_blackbox-8b7c28d59cbc439114db9a56__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fentry",
+          "evidence_sha256": "sha256:4d3b6bf58383d3eae54b81354c1485c82fb0eabb38bf5ccc151e973099f24a0b"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fentry-gen",
+          "evidence_sha256": "sha256:4d3b6bf58383d3eae54b81354c1485c82fb0eabb38bf5ccc151e973099f24a0b"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:session-lifecycle"
+          ],
+          "evidence_sha256": "sha256:4d3b6bf58383d3eae54b81354c1485c82fb0eabb38bf5ccc151e973099f24a0b"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:4d3b6bf58383d3eae54b81354c1485c82fb0eabb38bf5ccc151e973099f24a0b"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fentry/session-revocation-not-enforced@3",
+          "evidence_sha256": "sha256:4d3b6bf58383d3eae54b81354c1485c82fb0eabb38bf5ccc151e973099f24a0b"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:126890bb30e98fba6ec3dc05a706f80878cc63f0118cac9f73bf4fc780466881"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fentry-gen_blackbox-c91d9987f2668308939c8e1a__blackbox_ctf_v1",
+      "task_version_id": "2df3b04b-87bd-4012-b5aa-e16d50698288",
+      "lineage_id": "cysec1-2-fentry-gen_blackbox-c91d9987f2668308939c8e1a__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fentry",
+          "evidence_sha256": "sha256:3dd0d8c36f6b95f028accbec537577abf78a4e1a1b3e9fda1ad600603ec6f1c2"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fentry-gen",
+          "evidence_sha256": "sha256:3dd0d8c36f6b95f028accbec537577abf78a4e1a1b3e9fda1ad600603ec6f1c2"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:authentication-boundary",
+            "class:auth-bypass"
+          ],
+          "evidence_sha256": "sha256:3dd0d8c36f6b95f028accbec537577abf78a4e1a1b3e9fda1ad600603ec6f1c2"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:3dd0d8c36f6b95f028accbec537577abf78a4e1a1b3e9fda1ad600603ec6f1c2"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fentry/recovery-code-replay@0",
+          "evidence_sha256": "sha256:3dd0d8c36f6b95f028accbec537577abf78a4e1a1b3e9fda1ad600603ec6f1c2"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:3f76eb5bdcd48335f3427856ab8f0b7ef509b2193bd5a0f2e01fb2a30d976d66"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fentry-gen_blackbox-ce65143165164b6f99df040c__blackbox_ctf_v1",
+      "task_version_id": "fa04ef0d-3341-4b5f-8a13-d2955feaadc1",
+      "lineage_id": "cysec1-2-fentry-gen_blackbox-ce65143165164b6f99df040c__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fentry",
+          "evidence_sha256": "sha256:52662fc636a6f4ae2a783995e5b580aa3ce2a4fffdf5b6e3a2cd90e6f4febd67"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fentry-gen",
+          "evidence_sha256": "sha256:52662fc636a6f4ae2a783995e5b580aa3ce2a4fffdf5b6e3a2cd90e6f4febd67"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:broken-object-level-authorization",
+            "class:IDOR"
+          ],
+          "evidence_sha256": "sha256:52662fc636a6f4ae2a783995e5b580aa3ce2a4fffdf5b6e3a2cd90e6f4febd67"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:52662fc636a6f4ae2a783995e5b580aa3ce2a4fffdf5b6e3a2cd90e6f4febd67"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fentry/issue-annotation-cross-org-read@0",
+          "evidence_sha256": "sha256:52662fc636a6f4ae2a783995e5b580aa3ce2a4fffdf5b6e3a2cd90e6f4febd67"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:a76a1af8400c3efb25f67e65b882cb320e0a1c3081490b9e23c7f5b692fd3111"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fentry-gen_blackbox-d9b1e451e727ec6ec4b610f0__blackbox_ctf_v1",
+      "task_version_id": "8ad6a73f-7ec8-4435-b868-a84327ed4c85",
+      "lineage_id": "cysec1-2-fentry-gen_blackbox-d9b1e451e727ec6ec4b610f0__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fentry",
+          "evidence_sha256": "sha256:74ffaa9bd960cbf3f742aac82c33a4ecde0330b36381f2ac63f7b1f49bf1a9c7"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fentry-gen",
+          "evidence_sha256": "sha256:74ffaa9bd960cbf3f742aac82c33a4ecde0330b36381f2ac63f7b1f49bf1a9c7"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:authentication-replay",
+            "class:auth-bypass"
+          ],
+          "evidence_sha256": "sha256:74ffaa9bd960cbf3f742aac82c33a4ecde0330b36381f2ac63f7b1f49bf1a9c7"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:74ffaa9bd960cbf3f742aac82c33a4ecde0330b36381f2ac63f7b1f49bf1a9c7"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fentry/password-reset-grant-replay@0",
+          "evidence_sha256": "sha256:74ffaa9bd960cbf3f742aac82c33a4ecde0330b36381f2ac63f7b1f49bf1a9c7"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:de283177eaef050adcba23c865ee76998c48a6b2ae0b119452812350b1b84a52"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fentry-gen_blackbox-ebd29ca3d4ae284704202ebc__blackbox_ctf_v1",
+      "task_version_id": "3aafc5a8-2144-4bc3-919f-fcbbebd9f0d7",
+      "lineage_id": "cysec1-2-fentry-gen_blackbox-ebd29ca3d4ae284704202ebc__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fentry",
+          "evidence_sha256": "sha256:1446eedc07fffd20efd30e67c8b58c97491327f263c28a91032afa03e91e9387"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fentry-gen",
+          "evidence_sha256": "sha256:1446eedc07fffd20efd30e67c8b58c97491327f263c28a91032afa03e91e9387"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:session-replay",
+            "class:insufficient-session-expiration"
+          ],
+          "evidence_sha256": "sha256:1446eedc07fffd20efd30e67c8b58c97491327f263c28a91032afa03e91e9387"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "hard",
+          "evidence_sha256": "sha256:1446eedc07fffd20efd30e67c8b58c97491327f263c28a91032afa03e91e9387"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fentry/logout-session-replay@0",
+          "evidence_sha256": "sha256:1446eedc07fffd20efd30e67c8b58c97491327f263c28a91032afa03e91e9387"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:dcb53789d9f596351ecb90e2db82d426d798c8a2e34027645c4cbdbb49617291"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-075644943172978687d45528__blackbox_ctf_v1",
+      "task_version_id": "b164ad89-7b40-4baf-a9e8-2eb880c61730",
+      "lineage_id": "cysec1-2-fira-gen_blackbox-075644943172978687d45528__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fira",
+          "evidence_sha256": "sha256:ddb972b28fd0f41fd2596d529aa78f175eaeb20f173877fbc0a46236055fdb4c"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fira-gen",
+          "evidence_sha256": "sha256:ddb972b28fd0f41fd2596d529aa78f175eaeb20f173877fbc0a46236055fdb4c"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:denial-of-service",
+            "class:uncontrolled-resource-consumption"
+          ],
+          "evidence_sha256": "sha256:ddb972b28fd0f41fd2596d529aa78f175eaeb20f173877fbc0a46236055fdb4c"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:ddb972b28fd0f41fd2596d529aa78f175eaeb20f173877fbc0a46236055fdb4c"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fira/ws-ticket-cookie-exhaustion@1",
+          "evidence_sha256": "sha256:ddb972b28fd0f41fd2596d529aa78f175eaeb20f173877fbc0a46236055fdb4c"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:657ca8362d331cf4c9fee5b880e1d94a3e80d656888f2c92a91ba66f077084ea"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-1865d9918e1ac5d264706d43__blackbox_ctf_v1",
+      "task_version_id": "eefe304c-499d-4c9e-b09c-8aa0fab87213",
+      "lineage_id": "cysec1-2-fira-gen_blackbox-1865d9918e1ac5d264706d43__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fira",
+          "evidence_sha256": "sha256:743fc0c80d386ae61f6a7077db2058e74c96ac6f4720e3313197020f49a13b90"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fira-gen",
+          "evidence_sha256": "sha256:743fc0c80d386ae61f6a7077db2058e74c96ac6f4720e3313197020f49a13b90"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:xss",
+            "class:reflected-xss"
+          ],
+          "evidence_sha256": "sha256:743fc0c80d386ae61f6a7077db2058e74c96ac6f4720e3313197020f49a13b90"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:743fc0c80d386ae61f6a7077db2058e74c96ac6f4720e3313197020f49a13b90"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fira/password-reset-continue-xss@0",
+          "evidence_sha256": "sha256:743fc0c80d386ae61f6a7077db2058e74c96ac6f4720e3313197020f49a13b90"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:777e8c93893da2ea0e9bacea8619edca82d9ce0a16e69f0aa3763aeeb5623f5a"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-2637dbd94a61305dbd406c3c__blackbox_ctf_v1",
+      "task_version_id": "f8533754-39ad-4683-b9c1-d26bc24dfd14",
+      "lineage_id": "cysec1-2-fira-gen_blackbox-2637dbd94a61305dbd406c3c__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fira",
+          "evidence_sha256": "sha256:9e3b8bc546e6a13682bbc65307f931a4a27707d5cdcbb70e7c4ec70463bdde0f"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fira-gen",
+          "evidence_sha256": "sha256:9e3b8bc546e6a13682bbc65307f931a4a27707d5cdcbb70e7c4ec70463bdde0f"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:broken-access-control",
+            "class:missing-authorization"
+          ],
+          "evidence_sha256": "sha256:9e3b8bc546e6a13682bbc65307f931a4a27707d5cdcbb70e7c4ec70463bdde0f"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:9e3b8bc546e6a13682bbc65307f931a4a27707d5cdcbb70e7c4ec70463bdde0f"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fira/comment-visibility-list-bypass@0",
+          "evidence_sha256": "sha256:9e3b8bc546e6a13682bbc65307f931a4a27707d5cdcbb70e7c4ec70463bdde0f"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:be0427fd3ca4dad56535deb5d092dc4f96e023a2b42b1785c10f3f82f507da64"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-27c8a0277302ae68d188882a__blackbox_ctf_v1",
+      "task_version_id": "5990a2c6-0986-4c6f-85db-ca764425d8c5",
+      "lineage_id": "cysec1-2-fira-gen_blackbox-27c8a0277302ae68d188882a__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fira",
+          "evidence_sha256": "sha256:c66cbbbe0f5d397d442187d21e2c9bda1d7e5ddc033d42d39490aebb4555b92f"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fira-gen",
+          "evidence_sha256": "sha256:c66cbbbe0f5d397d442187d21e2c9bda1d7e5ddc033d42d39490aebb4555b92f"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:access-control",
+            "class:broken-object-scope"
+          ],
+          "evidence_sha256": "sha256:c66cbbbe0f5d397d442187d21e2c9bda1d7e5ddc033d42d39490aebb4555b92f"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:c66cbbbe0f5d397d442187d21e2c9bda1d7e5ddc033d42d39490aebb4555b92f"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fira/attachment-reference-escapes-issue-scope@0",
+          "evidence_sha256": "sha256:c66cbbbe0f5d397d442187d21e2c9bda1d7e5ddc033d42d39490aebb4555b92f"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:27a823f85a55cbd5bd50b7de91f25c7ed351b835f495c38905b13c50222d9b03"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-30fe0df0968b9561fa5f987b__blackbox_ctf_v1",
+      "task_version_id": "4b134baa-bbd7-4448-894d-2444e89a46e7",
+      "lineage_id": "cysec1-2-fira-gen_blackbox-30fe0df0968b9561fa5f987b__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fira",
+          "evidence_sha256": "sha256:f896ddb7589f23c79d64493300dec2a83c21706a2a28787fd4cdc0e6e07526b2"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fira-gen",
+          "evidence_sha256": "sha256:f896ddb7589f23c79d64493300dec2a83c21706a2a28787fd4cdc0e6e07526b2"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:session",
+            "class:session-expiration"
+          ],
+          "evidence_sha256": "sha256:f896ddb7589f23c79d64493300dec2a83c21706a2a28787fd4cdc0e6e07526b2"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:f896ddb7589f23c79d64493300dec2a83c21706a2a28787fd4cdc0e6e07526b2"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fira/logout-session-replay@0",
+          "evidence_sha256": "sha256:f896ddb7589f23c79d64493300dec2a83c21706a2a28787fd4cdc0e6e07526b2"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:391c734179ffaf7d634f3710edb9057175b9e3527632f187c2df1ecae8a5cc4e"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-322896ad3182769453b9944a__blackbox_ctf_v1",
+      "task_version_id": "8e5c7c45-7259-420d-ba12-0381465d864e",
+      "lineage_id": "cysec1-2-fira-gen_blackbox-322896ad3182769453b9944a__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fira",
+          "evidence_sha256": "sha256:f4aa38fed3dfd4f823bcbfb6b7ee709391113354271116f56a12e18810717606"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fira-gen",
+          "evidence_sha256": "sha256:f4aa38fed3dfd4f823bcbfb6b7ee709391113354271116f56a12e18810717606"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:url-validation-canonicalization",
+            "class:open-redirect"
+          ],
+          "evidence_sha256": "sha256:f4aa38fed3dfd4f823bcbfb6b7ee709391113354271116f56a12e18810717606"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:f4aa38fed3dfd4f823bcbfb6b7ee709391113354271116f56a12e18810717606"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fira/login-confirm-continue-open-redirect@1",
+          "evidence_sha256": "sha256:f4aa38fed3dfd4f823bcbfb6b7ee709391113354271116f56a12e18810717606"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:3e60c476398e89bdb74a2512fab5c8eedcf127913178ff65676ada96edbde26a"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-3b29fc5db0365e6e61c585c4__blackbox_ctf_v1",
+      "task_version_id": "fb68f600-9850-4cc2-86e7-a4f554e5f93f",
+      "lineage_id": "cysec1-2-fira-gen_blackbox-3b29fc5db0365e6e61c585c4__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fira",
+          "evidence_sha256": "sha256:f9854d3666eb8e0305d6140dc5dc401fa9d2f801c9db635d7ea50234200a83aa"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fira-gen",
+          "evidence_sha256": "sha256:f9854d3666eb8e0305d6140dc5dc401fa9d2f801c9db635d7ea50234200a83aa"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:authentication-boundary",
+            "class:auth-bypass"
+          ],
+          "evidence_sha256": "sha256:f9854d3666eb8e0305d6140dc5dc401fa9d2f801c9db635d7ea50234200a83aa"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:f9854d3666eb8e0305d6140dc5dc401fa9d2f801c9db635d7ea50234200a83aa"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fira/resend-clears-email-confirmation-gate@0",
+          "evidence_sha256": "sha256:f9854d3666eb8e0305d6140dc5dc401fa9d2f801c9db635d7ea50234200a83aa"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:62fc7cde46b78aa2f44a239be31e684699ed0187b15dde79cf2c3a1d966ecd2f"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-3edc7da783b72884f0bc932d__blackbox_ctf_v1",
+      "task_version_id": "2b6f2798-c405-4724-9d33-e867ba616fc3",
+      "lineage_id": "cysec1-2-fira-gen_blackbox-3edc7da783b72884f0bc932d__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fira",
+          "evidence_sha256": "sha256:5482fb3e9d017695e43dca5932740ab107556bfaa07c8bb8da761ead44291191"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fira-gen",
+          "evidence_sha256": "sha256:5482fb3e9d017695e43dca5932740ab107556bfaa07c8bb8da761ead44291191"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:broken-access-control",
+            "class:path-traversal"
+          ],
+          "evidence_sha256": "sha256:5482fb3e9d017695e43dca5932740ab107556bfaa07c8bb8da761ead44291191"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:5482fb3e9d017695e43dca5932740ab107556bfaa07c8bb8da761ead44291191"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fira/vault-space-content-path-traversal@0",
+          "evidence_sha256": "sha256:5482fb3e9d017695e43dca5932740ab107556bfaa07c8bb8da761ead44291191"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:39c86e6cb256ead27eb3746a4f268fd92f4d8e64fdfeef2acbdba5f5677b0aa6"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-529751381aa5ed41b3935adb__blackbox_ctf_v1",
+      "task_version_id": "2c62b98d-61e8-4216-bc84-c61bc4cd5ccb",
+      "lineage_id": "cysec1-2-fira-gen_blackbox-529751381aa5ed41b3935adb__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fira",
+          "evidence_sha256": "sha256:bdec6ac70535b3bbdd42a2a69051cfa7e658af6fb042ee1ae620c4f93f61c123"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fira-gen",
+          "evidence_sha256": "sha256:bdec6ac70535b3bbdd42a2a69051cfa7e658af6fb042ee1ae620c4f93f61c123"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:authorization-principal-self-assignment",
+            "class:privilege-management"
+          ],
+          "evidence_sha256": "sha256:bdec6ac70535b3bbdd42a2a69051cfa7e658af6fb042ee1ae620c4f93f61c123"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:bdec6ac70535b3bbdd42a2a69051cfa7e658af6fb042ee1ae620c4f93f61c123"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fira/vault-group-principal-derived-from-owned-issues@0",
+          "evidence_sha256": "sha256:bdec6ac70535b3bbdd42a2a69051cfa7e658af6fb042ee1ae620c4f93f61c123"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:32649afe11059df1845aacba4830ecd536395dd0606a46a70e961cb5d022de50"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-5b51b6dcb4193e59b96b1b13__blackbox_ctf_v1",
+      "task_version_id": "b6efa2e4-7743-4b8b-a014-832d90cd5e39",
+      "lineage_id": "cysec1-2-fira-gen_blackbox-5b51b6dcb4193e59b96b1b13__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fira",
+          "evidence_sha256": "sha256:d0d1a34af6d110f784e8bb8092a330074e8689ce0182c8628ff1789db5bdf2cf"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fira-gen",
+          "evidence_sha256": "sha256:d0d1a34af6d110f784e8bb8092a330074e8689ce0182c8628ff1789db5bdf2cf"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:broken-access-control",
+            "class:auth-bypass"
+          ],
+          "evidence_sha256": "sha256:d0d1a34af6d110f784e8bb8092a330074e8689ce0182c8628ff1789db5bdf2cf"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:d0d1a34af6d110f784e8bb8092a330074e8689ce0182c8628ff1789db5bdf2cf"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fira/restricted-comment-listing-skip@0",
+          "evidence_sha256": "sha256:d0d1a34af6d110f784e8bb8092a330074e8689ce0182c8628ff1789db5bdf2cf"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:078b81ecf6df99c9d872c85e23f706040e2508eecfc91d907a380cacfe5418c5"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-5ea6bdcd678f45f8cc0ba673__blackbox_ctf_v1",
+      "task_version_id": "ab2fd90d-1ee5-4451-a866-260ddf5c336d",
+      "lineage_id": "cysec1-2-fira-gen_blackbox-5ea6bdcd678f45f8cc0ba673__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fira",
+          "evidence_sha256": "sha256:dadf846f3bfea4faa747111a1a2ff732c5cf752208df9af2f60a6696b59fcda4"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fira-gen",
+          "evidence_sha256": "sha256:dadf846f3bfea4faa747111a1a2ff732c5cf752208df9af2f60a6696b59fcda4"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:input-validation-and-canonicalization",
+            "class:path-traversal"
+          ],
+          "evidence_sha256": "sha256:dadf846f3bfea4faa747111a1a2ff732c5cf752208df9af2f60a6696b59fcda4"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:dadf846f3bfea4faa747111a1a2ff732c5cf752208df9af2f60a6696b59fcda4"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fira/attachment-export-bundle-traversal@0",
+          "evidence_sha256": "sha256:dadf846f3bfea4faa747111a1a2ff732c5cf752208df9af2f60a6696b59fcda4"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:9afcaa5d4e9cedbc70834380215003800446bd274d3641bfb0f9518fa64275ce"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-7a43a87d867eca1312af0a8f__blackbox_ctf_v1",
+      "task_version_id": "43dc2c52-f283-4454-8987-69c6cbbd4160",
+      "lineage_id": "cysec1-2-fira-gen_blackbox-7a43a87d867eca1312af0a8f__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fira",
+          "evidence_sha256": "sha256:edf73b4bafc1fa43209cc0f0eed74d9c9fd51e27784a85b2b9a3b9b7b3812edb"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fira-gen",
+          "evidence_sha256": "sha256:edf73b4bafc1fa43209cc0f0eed74d9c9fd51e27784a85b2b9a3b9b7b3812edb"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:information-exposure",
+            "class:sensitive-data-disclosure"
+          ],
+          "evidence_sha256": "sha256:edf73b4bafc1fa43209cc0f0eed74d9c9fd51e27784a85b2b9a3b9b7b3812edb"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "easy",
+          "evidence_sha256": "sha256:edf73b4bafc1fa43209cc0f0eed74d9c9fd51e27784a85b2b9a3b9b7b3812edb"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fira/user-search-raw-row-disclosure@0",
+          "evidence_sha256": "sha256:edf73b4bafc1fa43209cc0f0eed74d9c9fd51e27784a85b2b9a3b9b7b3812edb"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:33827e19a8563a59f1b40c79b9284660643239c173d69b020e05cbccc0ca8c65"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-aacc90d872cf2f38171417b8__blackbox_ctf_v1",
+      "task_version_id": "493bc3d8-7806-4e38-9bc3-e964a5c26f5b",
+      "lineage_id": "cysec1-2-fira-gen_blackbox-aacc90d872cf2f38171417b8__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fira",
+          "evidence_sha256": "sha256:10996e9a196eadaa4d5a78d8d714c2154aa5bb1939ede6e59885e8d30f8f729b"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fira-gen",
+          "evidence_sha256": "sha256:10996e9a196eadaa4d5a78d8d714c2154aa5bb1939ede6e59885e8d30f8f729b"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:access-control",
+            "class:path-traversal"
+          ],
+          "evidence_sha256": "sha256:10996e9a196eadaa4d5a78d8d714c2154aa5bb1939ede6e59885e8d30f8f729b"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:10996e9a196eadaa4d5a78d8d714c2154aa5bb1939ede6e59885e8d30f8f729b"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fira/vault-ancestor-breadcrumb-scope-leak@0",
+          "evidence_sha256": "sha256:10996e9a196eadaa4d5a78d8d714c2154aa5bb1939ede6e59885e8d30f8f729b"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:4f0618611afbb29f3a5173a3296020851364ce21cfb8d40daa795db57d1e6e9d"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-ae047f45e37c42a1ad5b09ca__blackbox_ctf_v1",
+      "task_version_id": "f50eee68-84c7-44d1-b4de-4c554ecc3e2e",
+      "lineage_id": "cysec1-2-fira-gen_blackbox-ae047f45e37c42a1ad5b09ca__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fira",
+          "evidence_sha256": "sha256:1eb2a940590dcf0c8f4744414c669d61d83ff6f84c11950243444144a54734bf"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fira-gen",
+          "evidence_sha256": "sha256:1eb2a940590dcf0c8f4744414c669d61d83ff6f84c11950243444144a54734bf"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:credential-disclosure-on-account-recovery",
+            "class:info-disclosure"
+          ],
+          "evidence_sha256": "sha256:1eb2a940590dcf0c8f4744414c669d61d83ff6f84c11950243444144a54734bf"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:1eb2a940590dcf0c8f4744414c669d61d83ff6f84c11950243444144a54734bf"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fira/auth-resend-account-record-disclosure@0",
+          "evidence_sha256": "sha256:1eb2a940590dcf0c8f4744414c669d61d83ff6f84c11950243444144a54734bf"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:fe41900bd71b666342753ffc9c404f71e61e7a2e82a8679badb1c96310f042c9"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-c68da3536fee9b4c6f6ef490__blackbox_ctf_v1",
+      "task_version_id": "36dd3619-68f1-464a-859a-9eccd7c70994",
+      "lineage_id": "cysec1-2-fira-gen_blackbox-c68da3536fee9b4c6f6ef490__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fira",
+          "evidence_sha256": "sha256:041158c95720d7a465e61139b356c9cfcfa38f93940855f600e72f9f9f319e9d"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fira-gen",
+          "evidence_sha256": "sha256:041158c95720d7a465e61139b356c9cfcfa38f93940855f600e72f9f9f319e9d"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:capture-replay",
+            "class:replay"
+          ],
+          "evidence_sha256": "sha256:041158c95720d7a465e61139b356c9cfcfa38f93940855f600e72f9f9f319e9d"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:041158c95720d7a465e61139b356c9cfcfa38f93940855f600e72f9f9f319e9d"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fira/email-confirm-token-replay@0",
+          "evidence_sha256": "sha256:041158c95720d7a465e61139b356c9cfcfa38f93940855f600e72f9f9f319e9d"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:a23f10b6f1294b230c187df7b6c1c9931cc0177a6791e67b2c50068ff7365480"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-d15d056570961f463e4e6ba8__blackbox_ctf_v1",
+      "task_version_id": "c3fbe2bd-b9e6-41b1-a47f-5342fdc28053",
+      "lineage_id": "cysec1-2-fira-gen_blackbox-d15d056570961f463e4e6ba8__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fira",
+          "evidence_sha256": "sha256:13d22c59238ca02dc9692c9fda858fe0c07ef36faaf0f9297a5030c955b4b9f0"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fira-gen",
+          "evidence_sha256": "sha256:13d22c59238ca02dc9692c9fda858fe0c07ef36faaf0f9297a5030c955b4b9f0"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:url-validation-canonicalization",
+            "class:open-redirect"
+          ],
+          "evidence_sha256": "sha256:13d22c59238ca02dc9692c9fda858fe0c07ef36faaf0f9297a5030c955b4b9f0"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:13d22c59238ca02dc9692c9fda858fe0c07ef36faaf0f9297a5030c955b4b9f0"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fira/login-continue-untrusted-redirect@0",
+          "evidence_sha256": "sha256:13d22c59238ca02dc9692c9fda858fe0c07ef36faaf0f9297a5030c955b4b9f0"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:f8fbde511774303086f58d70ade673f817c9d23192ba83a331f4cb58f4223aba"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-d2740f59f9308860692b1ded__blackbox_ctf_v1",
+      "task_version_id": "60f864ae-49bc-43ee-ae54-4ff8a8e71226",
+      "lineage_id": "cysec1-2-fira-gen_blackbox-d2740f59f9308860692b1ded__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fira",
+          "evidence_sha256": "sha256:77649d53f8b80074fe886294ad2f7cce83415286ee1d67724aba1b9f383a25a6"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fira-gen",
+          "evidence_sha256": "sha256:77649d53f8b80074fe886294ad2f7cce83415286ee1d67724aba1b9f383a25a6"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:missing-resource-limit",
+            "class:resource-exhaustion"
+          ],
+          "evidence_sha256": "sha256:77649d53f8b80074fe886294ad2f7cce83415286ee1d67724aba1b9f383a25a6"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:77649d53f8b80074fe886294ad2f7cce83415286ee1d67724aba1b9f383a25a6"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fira/activity-batch-unbounded-issue-ids@0",
+          "evidence_sha256": "sha256:77649d53f8b80074fe886294ad2f7cce83415286ee1d67724aba1b9f383a25a6"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:c1579ebbd41318cf1c835c3a8670a40b634142c47fcb70ba84d87b7ea3d4f529"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-d2c7c52bd034f85240037110__blackbox_ctf_v1",
+      "task_version_id": "b51782f9-cb9f-4603-be81-a16eab4b8a36",
+      "lineage_id": "cysec1-2-fira-gen_blackbox-d2c7c52bd034f85240037110__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fira",
+          "evidence_sha256": "sha256:61850a80327fddd931f7ac86b52b2952e82aca91a832ce889949c53689bce476"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fira-gen",
+          "evidence_sha256": "sha256:61850a80327fddd931f7ac86b52b2952e82aca91a832ce889949c53689bce476"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:credential-disclosure",
+            "class:sensitive-data-exposure"
+          ],
+          "evidence_sha256": "sha256:61850a80327fddd931f7ac86b52b2952e82aca91a832ce889949c53689bce476"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:61850a80327fddd931f7ac86b52b2952e82aca91a832ce889949c53689bce476"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fira/directory-search-password-hash-disclosure@0",
+          "evidence_sha256": "sha256:61850a80327fddd931f7ac86b52b2952e82aca91a832ce889949c53689bce476"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:916848251284001cdd5511c00844b93b7f647f0a2e8a611b7f916cbabeaa4d75"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-e4a4c937398b5b5a45958e7a__blackbox_ctf_v1",
+      "task_version_id": "a1b92843-ca06-4852-9f09-f2730da9124d",
+      "lineage_id": "cysec1-2-fira-gen_blackbox-e4a4c937398b5b5a45958e7a__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fira",
+          "evidence_sha256": "sha256:02aabbbf1f0d31638fae44beb2e631f61796cb0580cd6595a27ec83024a524e5"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fira-gen",
+          "evidence_sha256": "sha256:02aabbbf1f0d31638fae44beb2e631f61796cb0580cd6595a27ec83024a524e5"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:auth-protocol",
+            "class:open-redirect"
+          ],
+          "evidence_sha256": "sha256:02aabbbf1f0d31638fae44beb2e631f61796cb0580cd6595a27ec83024a524e5"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:02aabbbf1f0d31638fae44beb2e631f61796cb0580cd6595a27ec83024a524e5"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fira/oauth-callback-origin-prefix@0",
+          "evidence_sha256": "sha256:02aabbbf1f0d31638fae44beb2e631f61796cb0580cd6595a27ec83024a524e5"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:b94554bc9de2bad4da1542a5ebc2489af6b1941cba45bdb57b0485bce4c6b4d7"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-e65cdc976b0a6686b51ce423__blackbox_ctf_v1",
+      "task_version_id": "51b23680-27fa-4bdd-a077-16669f3f0e18",
+      "lineage_id": "cysec1-2-fira-gen_blackbox-e65cdc976b0a6686b51ce423__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fira",
+          "evidence_sha256": "sha256:4c38d7d10dde935ce4474372bd0ba892062551c8312afe15ccee79a3ddb2e041"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fira-gen",
+          "evidence_sha256": "sha256:4c38d7d10dde935ce4474372bd0ba892062551c8312afe15ccee79a3ddb2e041"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:comment-visibility-bypass",
+            "class:incorrect-authorization"
+          ],
+          "evidence_sha256": "sha256:4c38d7d10dde935ce4474372bd0ba892062551c8312afe15ccee79a3ddb2e041"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:4c38d7d10dde935ce4474372bd0ba892062551c8312afe15ccee79a3ddb2e041"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fira/activity-feed-visibility-skip@0",
+          "evidence_sha256": "sha256:4c38d7d10dde935ce4474372bd0ba892062551c8312afe15ccee79a3ddb2e041"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:d4be91d8eb81567a0a7fdf7f382f9fe6404ac788f9ad68b3a5845a3c6ecab5a1"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-f1d8a0c49352bdf40faf015f__blackbox_ctf_v1",
+      "task_version_id": "33527414-ced7-4005-9c5a-eb9c211a32da",
+      "lineage_id": "cysec1-2-fira-gen_blackbox-f1d8a0c49352bdf40faf015f__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fira",
+          "evidence_sha256": "sha256:998b85119d586b3a125635265427dfa81b5c1ef7dc26ddfc2316c6e8416a8658"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fira-gen",
+          "evidence_sha256": "sha256:998b85119d586b3a125635265427dfa81b5c1ef7dc26ddfc2316c6e8416a8658"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:resource-consumption",
+            "class:unbounded-batch-work"
+          ],
+          "evidence_sha256": "sha256:998b85119d586b3a125635265427dfa81b5c1ef7dc26ddfc2316c6e8416a8658"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:998b85119d586b3a125635265427dfa81b5c1ef7dc26ddfc2316c6e8416a8658"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fira/activity-batch-unbounded@0",
+          "evidence_sha256": "sha256:998b85119d586b3a125635265427dfa81b5c1ef7dc26ddfc2316c6e8416a8658"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:96b7e777c57f2ad3552556a3266f135560973441cd6a0a9fdc1436fbede55f0a"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-f464547baf18c14b28013c66__blackbox_ctf_v1",
+      "task_version_id": "4b48f9cf-a5c4-4e86-814d-ebe86957e725",
+      "lineage_id": "cysec1-2-fira-gen_blackbox-f464547baf18c14b28013c66__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fira",
+          "evidence_sha256": "sha256:100e6ee1270c80ad5a316104869693e739e962c4d8de0197be56e9aaf15df734"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fira-gen",
+          "evidence_sha256": "sha256:100e6ee1270c80ad5a316104869693e739e962c4d8de0197be56e9aaf15df734"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:information-disclosure",
+            "class:sensitive-data-exposure"
+          ],
+          "evidence_sha256": "sha256:100e6ee1270c80ad5a316104869693e739e962c4d8de0197be56e9aaf15df734"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:100e6ee1270c80ad5a316104869693e739e962c4d8de0197be56e9aaf15df734"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fira/user-detail-credential-insertion@0",
+          "evidence_sha256": "sha256:100e6ee1270c80ad5a316104869693e739e962c4d8de0197be56e9aaf15df734"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:b302acc05e5174e3ad7ab88594f646fa2bc2a5ee4e15bbe5cf5222a7d7c1e62d"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-f8d6badcc03f916a8d15b9d0__blackbox_ctf_v1",
+      "task_version_id": "0920e798-c7e7-4da6-9d5e-ebeba45ec05a",
+      "lineage_id": "cysec1-2-fira-gen_blackbox-f8d6badcc03f916a8d15b9d0__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fira",
+          "evidence_sha256": "sha256:885276bb5cd97751a7dd6629ab5cf7e00a933ab736bf44ed156a425afb2cfe0a"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fira-gen",
+          "evidence_sha256": "sha256:885276bb5cd97751a7dd6629ab5cf7e00a933ab736bf44ed156a425afb2cfe0a"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:stored-xss",
+            "class:stored-xss"
+          ],
+          "evidence_sha256": "sha256:885276bb5cd97751a7dd6629ab5cf7e00a933ab736bf44ed156a425afb2cfe0a"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:885276bb5cd97751a7dd6629ab5cf7e00a933ab736bf44ed156a425afb2cfe0a"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fira/login-parameter-preview-stored-xss@0",
+          "evidence_sha256": "sha256:885276bb5cd97751a7dd6629ab5cf7e00a933ab736bf44ed156a425afb2cfe0a"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:73740c3d71209d0a1ea83a9d7f31a9dfc58ce48fd82fe36de6a1be1fedbd7ccb"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fubspot-gen_blackbox-2c4543c99976ddc656588bfe__blackbox_ctf_v1",
+      "task_version_id": "bf88b387-f5b5-4452-b539-4ad48f0c177e",
+      "lineage_id": "cysec1-2-fubspot-gen_blackbox-2c4543c99976ddc656588bfe__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fubspot",
+          "evidence_sha256": "sha256:775a9542801cb8926e898665194e84cbc50d359744199a5e609f464f57667a54"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fubspot-gen",
+          "evidence_sha256": "sha256:775a9542801cb8926e898665194e84cbc50d359744199a5e609f464f57667a54"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:availability",
+            "class:resource-exhaustion"
+          ],
+          "evidence_sha256": "sha256:775a9542801cb8926e898665194e84cbc50d359744199a5e609f464f57667a54"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:775a9542801cb8926e898665194e84cbc50d359744199a5e609f464f57667a54"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fubspot/search-filter-budget-bypass@0",
+          "evidence_sha256": "sha256:775a9542801cb8926e898665194e84cbc50d359744199a5e609f464f57667a54"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:86f3745b6e6985635483c31c8731b72b8f5162d4e52129cba4232f648e1e5541"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fubspot-gen_blackbox-3e95b3814ffa6ad7be96940b__blackbox_ctf_v1",
+      "task_version_id": "484625a1-a0ee-4e12-b566-40eccc26802e",
+      "lineage_id": "cysec1-2-fubspot-gen_blackbox-3e95b3814ffa6ad7be96940b__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fubspot",
+          "evidence_sha256": "sha256:684027b04df33d9c068623bd05a04087603b996af4cb07748fa4280648e20aa7"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fubspot-gen",
+          "evidence_sha256": "sha256:684027b04df33d9c068623bd05a04087603b996af4cb07748fa4280648e20aa7"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:credential-disclosure",
+            "class:csrf-unprotected-credential-echo"
+          ],
+          "evidence_sha256": "sha256:684027b04df33d9c068623bd05a04087603b996af4cb07748fa4280648e20aa7"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:684027b04df33d9c068623bd05a04087603b996af4cb07748fa4280648e20aa7"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fubspot/password-reset-token-get-echo@0",
+          "evidence_sha256": "sha256:684027b04df33d9c068623bd05a04087603b996af4cb07748fa4280648e20aa7"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:0a8eeff7694a8c9eca1a04d958425d941deb07235f43327457d255a9548714a1"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fubspot-gen_blackbox-401a45aae0038d8f9cb6420b__blackbox_ctf_v1",
+      "task_version_id": "5f0c9b28-fe2f-41e0-b73f-0e7749f64195",
+      "lineage_id": "cysec1-2-fubspot-gen_blackbox-401a45aae0038d8f9cb6420b__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fubspot",
+          "evidence_sha256": "sha256:b556b58912fb0a9773a1be98f556f5d7699e42fabffbed35a8615ddda1faf643"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fubspot-gen",
+          "evidence_sha256": "sha256:b556b58912fb0a9773a1be98f556f5d7699e42fabffbed35a8615ddda1faf643"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:identity-and-session-management",
+            "class:session-expiration"
+          ],
+          "evidence_sha256": "sha256:b556b58912fb0a9773a1be98f556f5d7699e42fabffbed35a8615ddda1faf643"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:b556b58912fb0a9773a1be98f556f5d7699e42fabffbed35a8615ddda1faf643"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fubspot/federated-session-revocation-bypass@0",
+          "evidence_sha256": "sha256:b556b58912fb0a9773a1be98f556f5d7699e42fabffbed35a8615ddda1faf643"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:f350bc5661359097d810550f0f0bb4a21461d49bd6fd913fbf11198841226d8a"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fubspot-gen_blackbox-438e3127ab9af7efad692398__blackbox_ctf_v1",
+      "task_version_id": "383a2b61-e82b-4426-9a2b-d5372c92e346",
+      "lineage_id": "cysec1-2-fubspot-gen_blackbox-438e3127ab9af7efad692398__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fubspot",
+          "evidence_sha256": "sha256:bdfdaeaf7a835aff1d3fbb2d3d7ad7bfee8c2aec2de8c0b38b0bcfa6129613c4"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fubspot-gen",
+          "evidence_sha256": "sha256:bdfdaeaf7a835aff1d3fbb2d3d7ad7bfee8c2aec2de8c0b38b0bcfa6129613c4"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:credential-disclosure",
+            "class:info-disclosure"
+          ],
+          "evidence_sha256": "sha256:bdfdaeaf7a835aff1d3fbb2d3d7ad7bfee8c2aec2de8c0b38b0bcfa6129613c4"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:bdfdaeaf7a835aff1d3fbb2d3d7ad7bfee8c2aec2de8c0b38b0bcfa6129613c4"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fubspot/settings-users-totp-secret-disclosure@0",
+          "evidence_sha256": "sha256:bdfdaeaf7a835aff1d3fbb2d3d7ad7bfee8c2aec2de8c0b38b0bcfa6129613c4"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:f57387b863a18fa0bfe822776d945e01c5fa84150060c505e846fb661f212f69"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fubspot-gen_blackbox-6c0962e92122d89a62d04a45__blackbox_ctf_v1",
+      "task_version_id": "ee77cfbf-ceed-487f-a19d-3922aaaf4bad",
+      "lineage_id": "cysec1-2-fubspot-gen_blackbox-6c0962e92122d89a62d04a45__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fubspot",
+          "evidence_sha256": "sha256:dc632920cdf4cdc83533f35fb303a0307b0b00530e0de7d4a78ffff35d705249"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fubspot-gen",
+          "evidence_sha256": "sha256:dc632920cdf4cdc83533f35fb303a0307b0b00530e0de7d4a78ffff35d705249"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:xss",
+            "class:stored-xss"
+          ],
+          "evidence_sha256": "sha256:dc632920cdf4cdc83533f35fb303a0307b0b00530e0de7d4a78ffff35d705249"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:dc632920cdf4cdc83533f35fb303a0307b0b00530e0de7d4a78ffff35d705249"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fubspot/ticket-document-preview-xss@1",
+          "evidence_sha256": "sha256:dc632920cdf4cdc83533f35fb303a0307b0b00530e0de7d4a78ffff35d705249"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:82a770bbf7250f7b06cb2be74b1151b6700b1afd0b2633a1863c6389df3a532f"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fubspot-gen_blackbox-bb3f496e48b40493bee8aa92__blackbox_ctf_v1",
+      "task_version_id": "b66062df-4c6a-419f-8568-82e152e9df73",
+      "lineage_id": "cysec1-2-fubspot-gen_blackbox-bb3f496e48b40493bee8aa92__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fubspot",
+          "evidence_sha256": "sha256:67a630879ea31d19bcb8ab8871f0de5cf8ebcb189c1236d7e19b78a6f719f669"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fubspot-gen",
+          "evidence_sha256": "sha256:67a630879ea31d19bcb8ab8871f0de5cf8ebcb189c1236d7e19b78a6f719f669"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:authorization-boundary",
+            "class:broken-object-authorization"
+          ],
+          "evidence_sha256": "sha256:67a630879ea31d19bcb8ab8871f0de5cf8ebcb189c1236d7e19b78a6f719f669"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:67a630879ea31d19bcb8ab8871f0de5cf8ebcb189c1236d7e19b78a6f719f669"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fubspot/saved-view-detail-ownership-bypass@0",
+          "evidence_sha256": "sha256:67a630879ea31d19bcb8ab8871f0de5cf8ebcb189c1236d7e19b78a6f719f669"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:7be4871ec8c41979ff1f4710b80095a0dbc7a447b721542d4ca02784ffa4a37b"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fubspot-gen_blackbox-bb5206a5ee510a8c571e6336__blackbox_ctf_v1",
+      "task_version_id": "2632322c-007c-42b2-9c93-d5b66850d6cb",
+      "lineage_id": "cysec1-2-fubspot-gen_blackbox-bb5206a5ee510a8c571e6336__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fubspot",
+          "evidence_sha256": "sha256:31b352065c269854a83b97e429a6062eaf9d240a4d286e148580bfe51f650123"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fubspot-gen",
+          "evidence_sha256": "sha256:31b352065c269854a83b97e429a6062eaf9d240a4d286e148580bfe51f650123"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:broken-object-namespace-containment",
+            "class:path-traversal"
+          ],
+          "evidence_sha256": "sha256:31b352065c269854a83b97e429a6062eaf9d240a4d286e148580bfe51f650123"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:31b352065c269854a83b97e429a6062eaf9d240a4d286e148580bfe51f650123"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fubspot/engagement-attachment-key-prefix-escape@0",
+          "evidence_sha256": "sha256:31b352065c269854a83b97e429a6062eaf9d240a4d286e148580bfe51f650123"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:5bb39598735331eea2c9033a02bce0376a78ff1ebadbae77e45e06e60720096c"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fubspot-gen_blackbox-cace9d0a59a8bd2f56076c63__blackbox_ctf_v1",
+      "task_version_id": "e32f1402-ec95-4df3-9c04-8e5e0400242c",
+      "lineage_id": "cysec1-2-fubspot-gen_blackbox-cace9d0a59a8bd2f56076c63__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fubspot",
+          "evidence_sha256": "sha256:4faf67cb52196bb0686e04746d13d2283672fed743ddc575df3911ad3d837ea3"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-fubspot-gen",
+          "evidence_sha256": "sha256:4faf67cb52196bb0686e04746d13d2283672fed743ddc575df3911ad3d837ea3"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:credential-disclosure",
+            "class:sensitive-data-exposure"
+          ],
+          "evidence_sha256": "sha256:4faf67cb52196bb0686e04746d13d2283672fed743ddc575df3911ad3d837ea3"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:4faf67cb52196bb0686e04746d13d2283672fed743ddc575df3911ad3d837ea3"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fubspot/csrf-cookie-password-hash-disclosure@0",
+          "evidence_sha256": "sha256:4faf67cb52196bb0686e04746d13d2283672fed743ddc575df3911ad3d837ea3"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:29ae120e714804df24f1d5229bef06dafe47bff583bb5d8a02efd10e1cd22938"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    },
+    {
+      "task_key": "cysec1-2-rops-gen_single-atom-confluence-refusal-title-disclosure__blackbox_ctf_v1",
+      "task_version_id": "47180c40-447d-4b8c-9387-ca8bae891e46",
+      "lineage_id": "cysec1-2-rops-gen_single-atom-confluence-refusal-title-disclosure__blackbox_ctf_v1",
+      "taxonomy": {
+        "application": {
+          "status": "verified",
+          "value": "fira",
+          "evidence_sha256": "sha256:d710414618126cc47d4e88cb087f855db38be6b57ea325e04664f68cf368a81a"
+        },
+        "environment": {
+          "status": "verified",
+          "value": "cysec1-2-rops-gen",
+          "evidence_sha256": "sha256:d710414618126cc47d4e88cb087f855db38be6b57ea325e04664f68cf368a81a"
+        },
+        "vulnerability_family": {
+          "status": "verified",
+          "value": [
+            "category:observable-discrepancy",
+            "class:information-disclosure"
+          ],
+          "evidence_sha256": "sha256:d710414618126cc47d4e88cb087f855db38be6b57ea325e04664f68cf368a81a"
+        },
+        "difficulty": {
+          "status": "verified",
+          "value": "medium",
+          "evidence_sha256": "sha256:d710414618126cc47d4e88cb087f855db38be6b57ea325e04664f68cf368a81a"
+        },
+        "task_family": {
+          "status": "verified",
+          "value": "cyber/atoms/fira/confluence-refusal-title-disclosure@0",
+          "evidence_sha256": "sha256:d710414618126cc47d4e88cb087f855db38be6b57ea325e04664f68cf368a81a"
+        }
+      },
+      "certification": {
+        "status": "accepted",
+        "receipt_sha256": "sha256:17df4a70a1df583c4ee50daad9382f3424283242d98ff150baeca4f3ecf6fd74"
+      },
+      "exposure": {
+        "status": "unexposed",
+        "receipt_sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+      }
+    }
+  ],
+  "sha256": "sha256:2b099f359bd5e3c1c42804c3f9a277c534f9bdbbadfae79e1ef928d4d2f700a9"
+}

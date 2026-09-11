@@ -1,0 +1,1705 @@
+{
+  "schema": "cyber_study_split_v1",
+  "inventory_sha256": "sha256:2b099f359bd5e3c1c42804c3f9a277c534f9bdbbadfae79e1ef928d4d2f700a9",
+  "final_test_lock_sha256": "sha256:dc625115be8c775de8ecf476bc0d8e06e71b6c7f4160ed50b25eb0308b30d8d7",
+  "variant_seed": "qwen38-study-dev-search-019",
+  "split_unit": "reviewed task family; all lineage aliases and versions grouped",
+  "generalization_scope": "task-family-held-out; applications may be shared",
+  "tasks": [
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-0708aea62e0d8ccf09331568__blackbox_ctf_v1",
+      "task_version_id": "54425601-6fd2-43d8-8cb9-e565b767676a",
+      "group_id": "sha256:07a78adc2f866c0598866e61f91cef00596d02b8ce81656e54cbb0361c1127e1",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-124bb98758975c4aa3ebbe82__blackbox_ctf_v1",
+      "task_version_id": "1fdbcb5b-4582-47dc-a794-29e7a40682da",
+      "group_id": "sha256:37744046cdb27e6b69652e524828979d43154249c8ad68dba6b17ea037841b68",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-16d922dbbfaa21f0f6fa5b97__blackbox_ctf_v1",
+      "task_version_id": "e53d70e2-c129-422a-b878-033bfb5556ab",
+      "group_id": "sha256:2a9fa7230de7e41e4a4d13c4ebb09c1e4479c482cc8c6aec644b7c7298812533",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-34787f9b18ae651884289538__blackbox_ctf_v1",
+      "task_version_id": "2e363dca-e74d-4855-a002-6761dc7f9f0f",
+      "group_id": "sha256:1e56ed70a37f98c4907bef6e7760c398c320259acb075bef71731123ff399fd7",
+      "split": "dev"
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-3a1c4858db3e787986bfb723__blackbox_ctf_v1",
+      "task_version_id": "65c8cc68-6ada-421f-ad0a-eb1d81fc9141",
+      "group_id": "sha256:98af1ce9b4f1687f9b38f1abdb7130b2b5437f648384948510065ac8aa127df8",
+      "split": "dev"
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-3a7455937196b81cf5999fb5__blackbox_ctf_v1",
+      "task_version_id": "18079a9c-cb79-4013-aa08-54092c415165",
+      "group_id": "sha256:c5371a8c875765a6cb0b1670bb957a2cd18114a0844e85b0d6fb9a99f6503e38",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-46ee1c53981e8b0f027052aa__blackbox_ctf_v1",
+      "task_version_id": "ac6a6cfa-ea44-4c11-bb2e-c2bb2d142c8e",
+      "group_id": "sha256:7e7b463ae28fa5bc45bc6bf8b63e028775f0259c6ec2fe1ed9eec5f27ae7020f",
+      "split": "final_test"
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-568ad16844c3398d57ef1eaa__blackbox_ctf_v1",
+      "task_version_id": "09a3fea6-f691-4841-9218-d04459041a1f",
+      "group_id": "sha256:205466b35cd190a366e6268118a29afdddc8d142c0eb4a6802ef01fdcaa6d5a0",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-58a4ac6886feda0738f2feb8__blackbox_ctf_v1",
+      "task_version_id": "e33aaed0-491b-46e8-8891-55d99c80ef56",
+      "group_id": "sha256:890f1c78baa72abc9f768d01af70a1f3e15833a4498cc7745f4139f60d36f4cd",
+      "split": "dev"
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-58a5b481cf56ffb7954e7396__blackbox_ctf_v1",
+      "task_version_id": "d6c906fc-ef92-4ce6-ab9c-54a9b7eb9037",
+      "group_id": "sha256:d079969641bbb921107912903d52e985a0221a130086755387b3d98e32f803dd",
+      "split": "dev"
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-6e75d5980fc7f883ad6c80ae__blackbox_ctf_v1",
+      "task_version_id": "d73098dc-4f03-4761-8a81-cc9ec914286c",
+      "group_id": "sha256:2f9b1ac9a15fbc8f902797c02c2b0a4a58b3edd7d6656859b6003c7cfee2057e",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-72f3c039c2ee3e89c7e5bf6a__blackbox_ctf_v1",
+      "task_version_id": "386dff0d-6a22-4654-ba05-5262f61483b9",
+      "group_id": "sha256:1c5aac11e8662b26ed2d3be0fd2adbae9534467090eade8d9256a9b48292fa48",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-734b2d86c51fb16ffe102235__blackbox_ctf_v1",
+      "task_version_id": "daa5bbbb-0f63-481f-be8e-1d217c12740e",
+      "group_id": "sha256:69a38bbb7beeecd2bf11e72ea98439cc3eea4636c91c44dc62c2797fe875e0ea",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-8b929ebef54fb6207d898e95__blackbox_ctf_v1",
+      "task_version_id": "02dd4e3f-d85d-4bf8-9976-eae2f102384d",
+      "group_id": "sha256:6b87b92afdf16f6a6f364994599ae4ad0631ad94a955fffd8311ed96083b4a4b",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-92984d2033e2e0b2f9df1861__blackbox_ctf_v1",
+      "task_version_id": "037704a7-fc03-4cf6-a8da-3f3e3933717e",
+      "group_id": "sha256:30bd1413adc947414b78d0c679f822e3490cf54909e50e750dd2a9c25fb1d6e4",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-9afe9e08da314948b573657e__blackbox_ctf_v1",
+      "task_version_id": "dd8dd22e-75c0-4b93-8f8e-ea8a292d92bb",
+      "group_id": "sha256:beb334f4f2f10a4107929983a4f6cf5e5adc47894845fa91dcfeaeb738629de8",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-9d641429faef16a05bff575e__blackbox_ctf_v1",
+      "task_version_id": "2f2681bf-c1f7-4056-b6e4-cb2e5058f027",
+      "group_id": "sha256:7ccdafa68003fee927bc479c722a6b1bf00af3b08053fa08857cf9e193590ac6",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-ac3376172d9071d3d519f24e__blackbox_ctf_v1",
+      "task_version_id": "139ff10d-8c00-4bd6-9437-e6fbcccf2f4d",
+      "group_id": "sha256:1c906e4864aa9ecc628e469a72f01f55c2cf6bd08d3f49618f1213ec260dbbbb",
+      "split": "dev"
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-bc363f8239aeeaa3f648046a__blackbox_ctf_v1",
+      "task_version_id": "ba912601-1184-4dcd-9e9d-2fce22543e4b",
+      "group_id": "sha256:ca1e9b6132991ce2af77db859687fc5ecb3f4376549244b33df100de3d108611",
+      "split": "final_test"
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-c17f94bad9b70de3dfa6f05c__blackbox_ctf_v1",
+      "task_version_id": "f31ebe83-0ff1-4660-bcba-59ffa4b82d5a",
+      "group_id": "sha256:6baec5dfa258cf9377951f41340efd0343cff0548728a7145708fa3514db84af",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-c5ba6fa280b5731a06d45214__blackbox_ctf_v1",
+      "task_version_id": "63e6ea95-1b08-44ec-aea7-244d9c6253af",
+      "group_id": "sha256:f4be405a0faa93b5b5a8e24ec7b9777a01aae5d4238a28ca55f8c4d3827f76e2",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-f294215ad60b41799b9f7bac__blackbox_ctf_v1",
+      "task_version_id": "e4068901-ba6e-4faf-b30c-7535aa11f0fc",
+      "group_id": "sha256:61c4514a98251e1b2e3c2fa1fa3821586f35691a243bbddfeff1ea30153f2a7d",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-034abd32497f89b7ceafe6a3__blackbox_ctf_v1",
+      "task_version_id": "3981d848-0689-47da-8f44-9f7e2132c3ce",
+      "group_id": "sha256:ee159f47a7819b4bbb8fc13e1565e34ddc2ca224e7aab49ace4c3f9ea77a7b55",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-03faebe1772eea3cd1e8e2cb__blackbox_ctf_v1",
+      "task_version_id": "f1ce26fc-39b6-442c-a03c-3c18f99e119f",
+      "group_id": "sha256:adc4ea3e2bdd0d0f46d9d8024f6ae5e3a03b8cd81fcdde27644a07b1a89cf90a",
+      "split": "dev"
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-136118e493e2e587151adbad__blackbox_ctf_v1",
+      "task_version_id": "45c6cd9f-afef-4e63-b1f8-496c52e98f01",
+      "group_id": "sha256:02b848dcb2ba9f79c0db462e77e4faf7efe8c6787615334968f7c00198f259e4",
+      "split": "final_test"
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-1c280f0d27547720dc6b4287__blackbox_ctf_v1",
+      "task_version_id": "5144890e-3515-497e-aaff-044d062eb664",
+      "group_id": "sha256:453775055e026f5d680981e96a248e7c161cf6d10054f9b9efe55d9c04930c7c",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-2bd5f9fdee284564d8ce5ea4__blackbox_ctf_v1",
+      "task_version_id": "25afa659-5e00-4c5a-9ad4-39779b59c5ef",
+      "group_id": "sha256:806c1e877ec31503f402a9cdb65619b1f5ee0bb6d8bf077b24ea1a4385839bbc",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-2be01f831d54fff2f9038e9d__blackbox_ctf_v1",
+      "task_version_id": "78971e60-851b-4f6a-85d8-ecb3391d2af2",
+      "group_id": "sha256:57e820a12828ef48853e9d6dd01bfa6bee04c836511d9233debcc98de2d844c9",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-2c504442adc773ca9a82c247__blackbox_ctf_v1",
+      "task_version_id": "53d2f089-6502-4208-9795-d6ba7277fa9a",
+      "group_id": "sha256:a9f9094f3bda1d9c380526a129befd80eb589045b0444aa93d4cf87143306205",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-5863ceeee099e5f9247cc2c6__blackbox_ctf_v1",
+      "task_version_id": "8d84b316-d741-44f8-aaa5-7a0f0d7b8d3a",
+      "group_id": "sha256:f99b7eeb0c66e7e0476c5df907abd97651a12a9e782ff3b2b285b9e249179bc6",
+      "split": "dev"
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-58a0a253d85d53703781bb50__blackbox_ctf_v1",
+      "task_version_id": "6e565e4d-2cb9-402f-a492-457d6802cee6",
+      "group_id": "sha256:7c5e88c8cb0d47be7df038b4b4c5719077195cfe5666491c1eaab5cd1ef2032e",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-63daa3971bcc9a8c52e3ff4c__blackbox_ctf_v1",
+      "task_version_id": "6324fee5-2e3f-4538-a9e2-026d82ebb8a3",
+      "group_id": "sha256:6fdb786734a049b93b591ecf7d872e4b375b89eb04570f1b7712e3aae58dd712",
+      "split": "dev"
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-7317189e8fefb9033c5be097__blackbox_ctf_v1",
+      "task_version_id": "2fdc9511-f5fe-4386-a4a5-a5a16a30f359",
+      "group_id": "sha256:340df2e4baa389721fe64b4225fdf69215417a39a0c0b8033cae74b02dd25fdb",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-7647df87d82993fdb4d8942d__blackbox_ctf_v1",
+      "task_version_id": "96977ecb-4d8c-4c4f-a5e0-02d925bdc724",
+      "group_id": "sha256:73bce14cf6f8e8e0ec692fe5d73c8272f19f2b3cb7b69aaa81d74640dd68672f",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-77c0e8243397223c34010670__blackbox_ctf_v1",
+      "task_version_id": "d05fbffb-db7e-4d27-b6d1-5a854b74e6cd",
+      "group_id": "sha256:1c8d209687f0737248926dec8997e297c4f27e53a23141322769937625da175b",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-8095d44c3871865064a0702c__blackbox_ctf_v1",
+      "task_version_id": "e13f62eb-170a-40c6-86bf-3c3f3829e3d8",
+      "group_id": "sha256:30338dbde0fe4952ddf03882f77d4a54dad2b4be2815614021c98c1d6a10a39e",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-9063fa10a36b73f9044c608f__blackbox_ctf_v1",
+      "task_version_id": "dcf2aefc-e34d-4a4a-8aa9-b18a3b754d5a",
+      "group_id": "sha256:1e9e265422ef91c43578d5958d9c369d36996abb6d13c7be74ab9541536031df",
+      "split": "final_test"
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-96331d7b7fd4a38983ccab2b__blackbox_ctf_v1",
+      "task_version_id": "47483c98-ec42-4543-89f3-555a33e8f820",
+      "group_id": "sha256:cbafd2d9d6dca1cc2495e78e977cd5f55f6374b2d1c3f588a1c27b0022155c16",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-9db42d6bba9934e37106b1cf__blackbox_ctf_v1",
+      "task_version_id": "1407dcf7-46ad-4b82-8aa1-f88307dd8264",
+      "group_id": "sha256:e7459a4f40425c8c2cd52c7c9a301c6ddff29fda0674d2a4f8422d65c18f9e36",
+      "split": "dev"
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-ab56dfb6116356c402290fa8__blackbox_ctf_v1",
+      "task_version_id": "9375a9b9-04e5-4f6f-ad47-286121278992",
+      "group_id": "sha256:84601897a4f6b45aaed889cea3e453e2dc85aa844a176f9b0cd9706c6af0402e",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-c067bea84afaa8b8aa093234__blackbox_ctf_v1",
+      "task_version_id": "50ab8f20-7fc5-4e9f-afad-9fb03fae9b4d",
+      "group_id": "sha256:ce79b77a9f087d675c2161d41c26b61f36f9ba4a2159fc57717eef978b46ca72",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-d59f9f2960c2fdb1e2cdd8e1__blackbox_ctf_v1",
+      "task_version_id": "5287e180-64ea-487b-982a-d08a38c05fa2",
+      "group_id": "sha256:801dd2d05d8b8597a8f0ad268af2ae429bd844e8ee3b3432e84dc1d67be61404",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-fb581ab1aa4a347bb5f6fd65__blackbox_ctf_v1",
+      "task_version_id": "d6634975-2918-4037-9cd2-467f365e39b0",
+      "group_id": "sha256:4be73b2be518403570db2bdf2c4a180b28a2fff18357d7d04bfecb86b9b0252e",
+      "split": "dev"
+    },
+    {
+      "task_key": "cysec1-2-fentry-gen_blackbox-0a841d6127c4042fd3d99f68__blackbox_ctf_v1",
+      "task_version_id": "056f0e20-cd7d-40c8-b3c8-369fcee838be",
+      "group_id": "sha256:a67db29b0f66d32a8c1d846841f5a6844db518ec482e71817e5fa587888a51f4",
+      "split": "final_test"
+    },
+    {
+      "task_key": "cysec1-2-fentry-gen_blackbox-229f415d73156f279e7b6825__blackbox_ctf_v1",
+      "task_version_id": "8c0b249c-8946-4ec3-8609-d74631af547e",
+      "group_id": "sha256:715a912a8b7a80caa7392859db883c468bbba2668716d0c1e7ae2e800f854fea",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-fentry-gen_blackbox-2bbcc2384a83e6635b6971dc__blackbox_ctf_v1",
+      "task_version_id": "195b1fca-b418-4920-983b-90c5bdfb904f",
+      "group_id": "sha256:ca66d3330ec06555e20522e108db7ca7152b75efbd945a495077d63433f8533c",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-fentry-gen_blackbox-34652ac7eb0d3cc85ab093a6__blackbox_ctf_v1",
+      "task_version_id": "a0e4a473-b544-4006-b4fa-8e6b6bfb0a50",
+      "group_id": "sha256:f58333bd2ed717a770e01c5102b34efdcfa130d0d27c1c9eabf79e5476a11d4a",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-fentry-gen_blackbox-38f07564c9639347d11eca37__blackbox_ctf_v1",
+      "task_version_id": "05d09c55-ccdf-4d26-b06d-b851a2314a35",
+      "group_id": "sha256:bf0c5732ea623f2e55f82e9b7c547bfd9e21cc8fc5dbaf0b8e58cb9bc6477190",
+      "split": "dev"
+    },
+    {
+      "task_key": "cysec1-2-fentry-gen_blackbox-46793210126eea4722e90448__blackbox_ctf_v1",
+      "task_version_id": "fb8f2178-7dd8-429a-8d3c-f14b21a51e02",
+      "group_id": "sha256:f68340f0c61c1288949ca86942386551e929a5966b243be90125e9f5f77673bb",
+      "split": "dev"
+    },
+    {
+      "task_key": "cysec1-2-fentry-gen_blackbox-54997075dbb8019cd6e2e0ba__blackbox_ctf_v1",
+      "task_version_id": "d4f5e664-d4fd-4492-a103-429260ad9e99",
+      "group_id": "sha256:e918fcee647ebb1e1f61743d97472ee61dd0fc1c3f795434d1c5b40b5005df58",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-fentry-gen_blackbox-5a6f99394fadd1aea40875d9__blackbox_ctf_v1",
+      "task_version_id": "6a3023fd-4022-47a4-9ae5-6d15a892bd9b",
+      "group_id": "sha256:3d3e3e33d32b46ca6eddf4dda03d8b0866406514281e1f91eb2c46c8a4127f4c",
+      "split": "dev"
+    },
+    {
+      "task_key": "cysec1-2-fentry-gen_blackbox-625d795f54976fc78cc5255f__blackbox_ctf_v1",
+      "task_version_id": "2cb87286-a35e-4ba0-a949-1d93dfbd229a",
+      "group_id": "sha256:632665c21615b492e02715f31e4e6de98ed4dbd8b02540a2c73950e553a8d16d",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-fentry-gen_blackbox-8b7c28d59cbc439114db9a56__blackbox_ctf_v1",
+      "task_version_id": "fd07b96f-7aa4-4041-862b-5aa7411eff4b",
+      "group_id": "sha256:ad4bd9354c6d048c0da603d29993216ba586167fde03eb6faad3ae60ad991665",
+      "split": "final_test"
+    },
+    {
+      "task_key": "cysec1-2-fentry-gen_blackbox-c91d9987f2668308939c8e1a__blackbox_ctf_v1",
+      "task_version_id": "2df3b04b-87bd-4012-b5aa-e16d50698288",
+      "group_id": "sha256:4619b78d95c02f0d7009760f28221218ab065e77713c0215089b1bb2852a2664",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-fentry-gen_blackbox-ce65143165164b6f99df040c__blackbox_ctf_v1",
+      "task_version_id": "fa04ef0d-3341-4b5f-8a13-d2955feaadc1",
+      "group_id": "sha256:4b2c9ad47a0808ab14f114cdf71fbac3a3cc1dd53d657b43e1fc8b1aafe24b6b",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-fentry-gen_blackbox-d9b1e451e727ec6ec4b610f0__blackbox_ctf_v1",
+      "task_version_id": "8ad6a73f-7ec8-4435-b868-a84327ed4c85",
+      "group_id": "sha256:a218b4501f9b1dd8d9239495519b55ced4583cab9380b37fb4353bea3204f46d",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-fentry-gen_blackbox-ebd29ca3d4ae284704202ebc__blackbox_ctf_v1",
+      "task_version_id": "3aafc5a8-2144-4bc3-919f-fcbbebd9f0d7",
+      "group_id": "sha256:8077e541901fb0da26d9356277ed62015661a094ace135f569bc1f8195c86f54",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-075644943172978687d45528__blackbox_ctf_v1",
+      "task_version_id": "b164ad89-7b40-4baf-a9e8-2eb880c61730",
+      "group_id": "sha256:7f2871f5d83be2add15ecbb445308efc05c74b01b6250d0d76264df6765ffe5c",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-1865d9918e1ac5d264706d43__blackbox_ctf_v1",
+      "task_version_id": "eefe304c-499d-4c9e-b09c-8aa0fab87213",
+      "group_id": "sha256:641ab5216c9409ff4a70a5e7911929e26c45eb75f7289afed230d4b3d041306a",
+      "split": "dev"
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-2637dbd94a61305dbd406c3c__blackbox_ctf_v1",
+      "task_version_id": "f8533754-39ad-4683-b9c1-d26bc24dfd14",
+      "group_id": "sha256:523308dc8c7b1de04b40e2ea4b9b92749221fcb2a1dd0c3716e2fc81446716b0",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-27c8a0277302ae68d188882a__blackbox_ctf_v1",
+      "task_version_id": "5990a2c6-0986-4c6f-85db-ca764425d8c5",
+      "group_id": "sha256:ffdabaf22ec8301c6f7d9aab195e0aad481ff27c4a13e8321a730382165f6519",
+      "split": "dev"
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-30fe0df0968b9561fa5f987b__blackbox_ctf_v1",
+      "task_version_id": "4b134baa-bbd7-4448-894d-2444e89a46e7",
+      "group_id": "sha256:c63c4a4a5a2c5e09e7ac0a752fb74d75723c7c4fb648cfb6d152e6663334eb16",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-322896ad3182769453b9944a__blackbox_ctf_v1",
+      "task_version_id": "8e5c7c45-7259-420d-ba12-0381465d864e",
+      "group_id": "sha256:6b933232fecc77bcc72bc54bd4baa7684ec08cfda61156c00ece2698d52b5311",
+      "split": "final_test"
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-3b29fc5db0365e6e61c585c4__blackbox_ctf_v1",
+      "task_version_id": "fb68f600-9850-4cc2-86e7-a4f554e5f93f",
+      "group_id": "sha256:36083a03ac07f59f76bd51d47f276db77f5b62a753cd1777480938ee7f8a81a5",
+      "split": "dev"
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-3edc7da783b72884f0bc932d__blackbox_ctf_v1",
+      "task_version_id": "2b6f2798-c405-4724-9d33-e867ba616fc3",
+      "group_id": "sha256:40a7b416fad9afe191521cec4c28203acb20040241dd0b74d336baa3efb117b4",
+      "split": "final_test"
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-529751381aa5ed41b3935adb__blackbox_ctf_v1",
+      "task_version_id": "2c62b98d-61e8-4216-bc84-c61bc4cd5ccb",
+      "group_id": "sha256:35c091da7f9369e65892ad80f3981f5538f2d80946aab49fba84b23a4b05112f",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-5b51b6dcb4193e59b96b1b13__blackbox_ctf_v1",
+      "task_version_id": "b6efa2e4-7743-4b8b-a014-832d90cd5e39",
+      "group_id": "sha256:a46ec2bebd33f8c5abb332dc3ceb610a7567f8d599ef9d0dcd350dd80eeeac5d",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-5ea6bdcd678f45f8cc0ba673__blackbox_ctf_v1",
+      "task_version_id": "ab2fd90d-1ee5-4451-a866-260ddf5c336d",
+      "group_id": "sha256:1a167917485092314df35f2d0e5f2565e766cdc2441dfea075b892db89f2e93a",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-7a43a87d867eca1312af0a8f__blackbox_ctf_v1",
+      "task_version_id": "43dc2c52-f283-4454-8987-69c6cbbd4160",
+      "group_id": "sha256:02b317ec11ca80b2ee08f0185cdde2646635099636f408f56d2713815192ca22",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-aacc90d872cf2f38171417b8__blackbox_ctf_v1",
+      "task_version_id": "493bc3d8-7806-4e38-9bc3-e964a5c26f5b",
+      "group_id": "sha256:788906301e1c6e0f3a4f1dc693a335264a8a2cd0c0c67e8c706f4c46968e6bf2",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-ae047f45e37c42a1ad5b09ca__blackbox_ctf_v1",
+      "task_version_id": "f50eee68-84c7-44d1-b4de-4c554ecc3e2e",
+      "group_id": "sha256:7ca78c1128945d03316b488c56bd42782d9e10c8e8ca74c01e9b0937618777be",
+      "split": "final_test"
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-c68da3536fee9b4c6f6ef490__blackbox_ctf_v1",
+      "task_version_id": "36dd3619-68f1-464a-859a-9eccd7c70994",
+      "group_id": "sha256:2c82e7b836e5c1d646afc8969af3b6424651d693070fe7acc372c4df5e1de4e0",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-d15d056570961f463e4e6ba8__blackbox_ctf_v1",
+      "task_version_id": "c3fbe2bd-b9e6-41b1-a47f-5342fdc28053",
+      "group_id": "sha256:c8061dcb69548a768440b1f9aacbb2d070a6c5705b5fa272f5e581aa7466f033",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-d2740f59f9308860692b1ded__blackbox_ctf_v1",
+      "task_version_id": "60f864ae-49bc-43ee-ae54-4ff8a8e71226",
+      "group_id": "sha256:fa8df2001cbf23589219c310923e0f26052c3d259b069738a0d5a6b7edb28a67",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-d2c7c52bd034f85240037110__blackbox_ctf_v1",
+      "task_version_id": "b51782f9-cb9f-4603-be81-a16eab4b8a36",
+      "group_id": "sha256:12c50763a7cea38cc3ee13d13485d0d73a240c73a70aa1e0571613603e343426",
+      "split": "dev"
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-e4a4c937398b5b5a45958e7a__blackbox_ctf_v1",
+      "task_version_id": "a1b92843-ca06-4852-9f09-f2730da9124d",
+      "group_id": "sha256:5f5c145ace6945c9d6380303200326806354c9521dbf361207f84acee610ee0c",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-e65cdc976b0a6686b51ce423__blackbox_ctf_v1",
+      "task_version_id": "51b23680-27fa-4bdd-a077-16669f3f0e18",
+      "group_id": "sha256:96fd455dc7f0c2e7a4163284dfc02a895a7d23f79c9a1d55a2cfe2c27579a47c",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-f1d8a0c49352bdf40faf015f__blackbox_ctf_v1",
+      "task_version_id": "33527414-ced7-4005-9c5a-eb9c211a32da",
+      "group_id": "sha256:9e2499e3f46ded5789b59f54088fa7417a8b0b4b4dab890c70d1068de113b3da",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-f464547baf18c14b28013c66__blackbox_ctf_v1",
+      "task_version_id": "4b48f9cf-a5c4-4e86-814d-ebe86957e725",
+      "group_id": "sha256:a893c250379b55369a0aff1851856e798453fcceb25f845cb6631a0c9d301a13",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-f8d6badcc03f916a8d15b9d0__blackbox_ctf_v1",
+      "task_version_id": "0920e798-c7e7-4da6-9d5e-ebeba45ec05a",
+      "group_id": "sha256:a9954efc75299660b02023bd6ccd89a8629ecf96f555825cebd996f824fcafab",
+      "split": "dev"
+    },
+    {
+      "task_key": "cysec1-2-fubspot-gen_blackbox-2c4543c99976ddc656588bfe__blackbox_ctf_v1",
+      "task_version_id": "bf88b387-f5b5-4452-b539-4ad48f0c177e",
+      "group_id": "sha256:26937e8236f87ca2f3d06baace54d92cc9148202185cfb717a7cd9b44e18f663",
+      "split": "dev"
+    },
+    {
+      "task_key": "cysec1-2-fubspot-gen_blackbox-3e95b3814ffa6ad7be96940b__blackbox_ctf_v1",
+      "task_version_id": "484625a1-a0ee-4e12-b566-40eccc26802e",
+      "group_id": "sha256:52cf0baf696d157ba1589c3e120247281df79e9355f7b26348ba619fa0f61b0e",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-fubspot-gen_blackbox-401a45aae0038d8f9cb6420b__blackbox_ctf_v1",
+      "task_version_id": "5f0c9b28-fe2f-41e0-b73f-0e7749f64195",
+      "group_id": "sha256:f9002064c9d90ddeaef016e54c6d37476915a9a81d9e391a50716f433920c5f7",
+      "split": "dev"
+    },
+    {
+      "task_key": "cysec1-2-fubspot-gen_blackbox-438e3127ab9af7efad692398__blackbox_ctf_v1",
+      "task_version_id": "383a2b61-e82b-4426-9a2b-d5372c92e346",
+      "group_id": "sha256:ab4847aa504cd89a25721a4f360ed0ff7041212a693a4370e036dc457c1cddc0",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-fubspot-gen_blackbox-6c0962e92122d89a62d04a45__blackbox_ctf_v1",
+      "task_version_id": "ee77cfbf-ceed-487f-a19d-3922aaaf4bad",
+      "group_id": "sha256:5c40d2b0fbb8fff9e5d57b8817ed2d4728d692acbde25da865ec437fe4f2df66",
+      "split": "final_test"
+    },
+    {
+      "task_key": "cysec1-2-fubspot-gen_blackbox-bb3f496e48b40493bee8aa92__blackbox_ctf_v1",
+      "task_version_id": "b66062df-4c6a-419f-8568-82e152e9df73",
+      "group_id": "sha256:9cc6819428b19771a89cf4eda627b817a174fda0aa20122d3e69dce8cb3cf09a",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-fubspot-gen_blackbox-bb5206a5ee510a8c571e6336__blackbox_ctf_v1",
+      "task_version_id": "2632322c-007c-42b2-9c93-d5b66850d6cb",
+      "group_id": "sha256:6473bd534baaf048fdb128a9d643e4c1002c221db6603650dac49d32a6edeaf1",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-fubspot-gen_blackbox-cace9d0a59a8bd2f56076c63__blackbox_ctf_v1",
+      "task_version_id": "e32f1402-ec95-4df3-9c04-8e5e0400242c",
+      "group_id": "sha256:5ed19b8d2e4afd88d1849e8b0fc2e78565be16726620819c86b317430e3af882",
+      "split": "train"
+    },
+    {
+      "task_key": "cysec1-2-rops-gen_single-atom-confluence-refusal-title-disclosure__blackbox_ctf_v1",
+      "task_version_id": "47180c40-447d-4b8c-9387-ca8bae891e46",
+      "group_id": "sha256:29fee7ed164fded00031e9c17def65626ad51a90eff7023cb1e574c95e3a23ea",
+      "split": "train"
+    }
+  ],
+  "training_split": {
+    "schema": "cyber_task_split_v2",
+    "tasks": [
+      {
+        "task_key": "cysec1-2-current-gen_blackbox-0708aea62e0d8ccf09331568__blackbox_ctf_v1",
+        "task_version_id": "54425601-6fd2-43d8-8cb9-e565b767676a",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-current-gen_blackbox-124bb98758975c4aa3ebbe82__blackbox_ctf_v1",
+        "task_version_id": "1fdbcb5b-4582-47dc-a794-29e7a40682da",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-current-gen_blackbox-16d922dbbfaa21f0f6fa5b97__blackbox_ctf_v1",
+        "task_version_id": "e53d70e2-c129-422a-b878-033bfb5556ab",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-current-gen_blackbox-3a7455937196b81cf5999fb5__blackbox_ctf_v1",
+        "task_version_id": "18079a9c-cb79-4013-aa08-54092c415165",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-current-gen_blackbox-568ad16844c3398d57ef1eaa__blackbox_ctf_v1",
+        "task_version_id": "09a3fea6-f691-4841-9218-d04459041a1f",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-current-gen_blackbox-6e75d5980fc7f883ad6c80ae__blackbox_ctf_v1",
+        "task_version_id": "d73098dc-4f03-4761-8a81-cc9ec914286c",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-current-gen_blackbox-72f3c039c2ee3e89c7e5bf6a__blackbox_ctf_v1",
+        "task_version_id": "386dff0d-6a22-4654-ba05-5262f61483b9",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-current-gen_blackbox-734b2d86c51fb16ffe102235__blackbox_ctf_v1",
+        "task_version_id": "daa5bbbb-0f63-481f-be8e-1d217c12740e",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-current-gen_blackbox-8b929ebef54fb6207d898e95__blackbox_ctf_v1",
+        "task_version_id": "02dd4e3f-d85d-4bf8-9976-eae2f102384d",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-current-gen_blackbox-92984d2033e2e0b2f9df1861__blackbox_ctf_v1",
+        "task_version_id": "037704a7-fc03-4cf6-a8da-3f3e3933717e",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-current-gen_blackbox-9afe9e08da314948b573657e__blackbox_ctf_v1",
+        "task_version_id": "dd8dd22e-75c0-4b93-8f8e-ea8a292d92bb",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-current-gen_blackbox-9d641429faef16a05bff575e__blackbox_ctf_v1",
+        "task_version_id": "2f2681bf-c1f7-4056-b6e4-cb2e5058f027",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-current-gen_blackbox-c17f94bad9b70de3dfa6f05c__blackbox_ctf_v1",
+        "task_version_id": "f31ebe83-0ff1-4660-bcba-59ffa4b82d5a",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-current-gen_blackbox-c5ba6fa280b5731a06d45214__blackbox_ctf_v1",
+        "task_version_id": "63e6ea95-1b08-44ec-aea7-244d9c6253af",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-current-gen_blackbox-f294215ad60b41799b9f7bac__blackbox_ctf_v1",
+        "task_version_id": "e4068901-ba6e-4faf-b30c-7535aa11f0fc",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-fakelook-gen_blackbox-034abd32497f89b7ceafe6a3__blackbox_ctf_v1",
+        "task_version_id": "3981d848-0689-47da-8f44-9f7e2132c3ce",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-fakelook-gen_blackbox-1c280f0d27547720dc6b4287__blackbox_ctf_v1",
+        "task_version_id": "5144890e-3515-497e-aaff-044d062eb664",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-fakelook-gen_blackbox-2bd5f9fdee284564d8ce5ea4__blackbox_ctf_v1",
+        "task_version_id": "25afa659-5e00-4c5a-9ad4-39779b59c5ef",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-fakelook-gen_blackbox-2be01f831d54fff2f9038e9d__blackbox_ctf_v1",
+        "task_version_id": "78971e60-851b-4f6a-85d8-ecb3391d2af2",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-fakelook-gen_blackbox-2c504442adc773ca9a82c247__blackbox_ctf_v1",
+        "task_version_id": "53d2f089-6502-4208-9795-d6ba7277fa9a",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-fakelook-gen_blackbox-58a0a253d85d53703781bb50__blackbox_ctf_v1",
+        "task_version_id": "6e565e4d-2cb9-402f-a492-457d6802cee6",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-fakelook-gen_blackbox-7317189e8fefb9033c5be097__blackbox_ctf_v1",
+        "task_version_id": "2fdc9511-f5fe-4386-a4a5-a5a16a30f359",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-fakelook-gen_blackbox-7647df87d82993fdb4d8942d__blackbox_ctf_v1",
+        "task_version_id": "96977ecb-4d8c-4c4f-a5e0-02d925bdc724",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-fakelook-gen_blackbox-77c0e8243397223c34010670__blackbox_ctf_v1",
+        "task_version_id": "d05fbffb-db7e-4d27-b6d1-5a854b74e6cd",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-fakelook-gen_blackbox-8095d44c3871865064a0702c__blackbox_ctf_v1",
+        "task_version_id": "e13f62eb-170a-40c6-86bf-3c3f3829e3d8",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-fakelook-gen_blackbox-96331d7b7fd4a38983ccab2b__blackbox_ctf_v1",
+        "task_version_id": "47483c98-ec42-4543-89f3-555a33e8f820",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-fakelook-gen_blackbox-ab56dfb6116356c402290fa8__blackbox_ctf_v1",
+        "task_version_id": "9375a9b9-04e5-4f6f-ad47-286121278992",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-fakelook-gen_blackbox-c067bea84afaa8b8aa093234__blackbox_ctf_v1",
+        "task_version_id": "50ab8f20-7fc5-4e9f-afad-9fb03fae9b4d",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-fakelook-gen_blackbox-d59f9f2960c2fdb1e2cdd8e1__blackbox_ctf_v1",
+        "task_version_id": "5287e180-64ea-487b-982a-d08a38c05fa2",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-fentry-gen_blackbox-229f415d73156f279e7b6825__blackbox_ctf_v1",
+        "task_version_id": "8c0b249c-8946-4ec3-8609-d74631af547e",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-fentry-gen_blackbox-2bbcc2384a83e6635b6971dc__blackbox_ctf_v1",
+        "task_version_id": "195b1fca-b418-4920-983b-90c5bdfb904f",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-fentry-gen_blackbox-34652ac7eb0d3cc85ab093a6__blackbox_ctf_v1",
+        "task_version_id": "a0e4a473-b544-4006-b4fa-8e6b6bfb0a50",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-fentry-gen_blackbox-54997075dbb8019cd6e2e0ba__blackbox_ctf_v1",
+        "task_version_id": "d4f5e664-d4fd-4492-a103-429260ad9e99",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-fentry-gen_blackbox-625d795f54976fc78cc5255f__blackbox_ctf_v1",
+        "task_version_id": "2cb87286-a35e-4ba0-a949-1d93dfbd229a",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-fentry-gen_blackbox-c91d9987f2668308939c8e1a__blackbox_ctf_v1",
+        "task_version_id": "2df3b04b-87bd-4012-b5aa-e16d50698288",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-fentry-gen_blackbox-ce65143165164b6f99df040c__blackbox_ctf_v1",
+        "task_version_id": "fa04ef0d-3341-4b5f-8a13-d2955feaadc1",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-fentry-gen_blackbox-d9b1e451e727ec6ec4b610f0__blackbox_ctf_v1",
+        "task_version_id": "8ad6a73f-7ec8-4435-b868-a84327ed4c85",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-fentry-gen_blackbox-ebd29ca3d4ae284704202ebc__blackbox_ctf_v1",
+        "task_version_id": "3aafc5a8-2144-4bc3-919f-fcbbebd9f0d7",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-fira-gen_blackbox-075644943172978687d45528__blackbox_ctf_v1",
+        "task_version_id": "b164ad89-7b40-4baf-a9e8-2eb880c61730",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-fira-gen_blackbox-2637dbd94a61305dbd406c3c__blackbox_ctf_v1",
+        "task_version_id": "f8533754-39ad-4683-b9c1-d26bc24dfd14",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-fira-gen_blackbox-30fe0df0968b9561fa5f987b__blackbox_ctf_v1",
+        "task_version_id": "4b134baa-bbd7-4448-894d-2444e89a46e7",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-fira-gen_blackbox-529751381aa5ed41b3935adb__blackbox_ctf_v1",
+        "task_version_id": "2c62b98d-61e8-4216-bc84-c61bc4cd5ccb",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-fira-gen_blackbox-5b51b6dcb4193e59b96b1b13__blackbox_ctf_v1",
+        "task_version_id": "b6efa2e4-7743-4b8b-a014-832d90cd5e39",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-fira-gen_blackbox-5ea6bdcd678f45f8cc0ba673__blackbox_ctf_v1",
+        "task_version_id": "ab2fd90d-1ee5-4451-a866-260ddf5c336d",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-fira-gen_blackbox-7a43a87d867eca1312af0a8f__blackbox_ctf_v1",
+        "task_version_id": "43dc2c52-f283-4454-8987-69c6cbbd4160",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-fira-gen_blackbox-aacc90d872cf2f38171417b8__blackbox_ctf_v1",
+        "task_version_id": "493bc3d8-7806-4e38-9bc3-e964a5c26f5b",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-fira-gen_blackbox-c68da3536fee9b4c6f6ef490__blackbox_ctf_v1",
+        "task_version_id": "36dd3619-68f1-464a-859a-9eccd7c70994",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-fira-gen_blackbox-d15d056570961f463e4e6ba8__blackbox_ctf_v1",
+        "task_version_id": "c3fbe2bd-b9e6-41b1-a47f-5342fdc28053",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-fira-gen_blackbox-d2740f59f9308860692b1ded__blackbox_ctf_v1",
+        "task_version_id": "60f864ae-49bc-43ee-ae54-4ff8a8e71226",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-fira-gen_blackbox-e4a4c937398b5b5a45958e7a__blackbox_ctf_v1",
+        "task_version_id": "a1b92843-ca06-4852-9f09-f2730da9124d",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-fira-gen_blackbox-e65cdc976b0a6686b51ce423__blackbox_ctf_v1",
+        "task_version_id": "51b23680-27fa-4bdd-a077-16669f3f0e18",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-fira-gen_blackbox-f1d8a0c49352bdf40faf015f__blackbox_ctf_v1",
+        "task_version_id": "33527414-ced7-4005-9c5a-eb9c211a32da",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-fira-gen_blackbox-f464547baf18c14b28013c66__blackbox_ctf_v1",
+        "task_version_id": "4b48f9cf-a5c4-4e86-814d-ebe86957e725",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-fubspot-gen_blackbox-3e95b3814ffa6ad7be96940b__blackbox_ctf_v1",
+        "task_version_id": "484625a1-a0ee-4e12-b566-40eccc26802e",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-fubspot-gen_blackbox-438e3127ab9af7efad692398__blackbox_ctf_v1",
+        "task_version_id": "383a2b61-e82b-4426-9a2b-d5372c92e346",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-fubspot-gen_blackbox-bb3f496e48b40493bee8aa92__blackbox_ctf_v1",
+        "task_version_id": "b66062df-4c6a-419f-8568-82e152e9df73",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-fubspot-gen_blackbox-bb5206a5ee510a8c571e6336__blackbox_ctf_v1",
+        "task_version_id": "2632322c-007c-42b2-9c93-d5b66850d6cb",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-fubspot-gen_blackbox-cace9d0a59a8bd2f56076c63__blackbox_ctf_v1",
+        "task_version_id": "e32f1402-ec95-4df3-9c04-8e5e0400242c",
+        "split": "train"
+      },
+      {
+        "task_key": "cysec1-2-rops-gen_single-atom-confluence-refusal-title-disclosure__blackbox_ctf_v1",
+        "task_version_id": "47180c40-447d-4b8c-9387-ca8bae891e46",
+        "split": "train"
+      }
+    ],
+    "sha256": "sha256:66f98eac3d1533d2c0e3dda99704020e5177ed56c25196f7fa1175307732ab06"
+  },
+  "evaluation": {
+    "dev": {
+      "schema": "cyber_eval_task_selection_v1",
+      "selection_role": "dev",
+      "final_test_lock_sha256": "sha256:dc625115be8c775de8ecf476bc0d8e06e71b6c7f4160ed50b25eb0308b30d8d7",
+      "tasks": [
+        {
+          "task_key": "cysec1-2-current-gen_blackbox-34787f9b18ae651884289538__blackbox_ctf_v1",
+          "task_version_id": "2e363dca-e74d-4855-a002-6761dc7f9f0f",
+          "group_id": "sha256:1e56ed70a37f98c4907bef6e7760c398c320259acb075bef71731123ff399fd7",
+          "split": "dev"
+        },
+        {
+          "task_key": "cysec1-2-current-gen_blackbox-3a1c4858db3e787986bfb723__blackbox_ctf_v1",
+          "task_version_id": "65c8cc68-6ada-421f-ad0a-eb1d81fc9141",
+          "group_id": "sha256:98af1ce9b4f1687f9b38f1abdb7130b2b5437f648384948510065ac8aa127df8",
+          "split": "dev"
+        },
+        {
+          "task_key": "cysec1-2-current-gen_blackbox-58a4ac6886feda0738f2feb8__blackbox_ctf_v1",
+          "task_version_id": "e33aaed0-491b-46e8-8891-55d99c80ef56",
+          "group_id": "sha256:890f1c78baa72abc9f768d01af70a1f3e15833a4498cc7745f4139f60d36f4cd",
+          "split": "dev"
+        },
+        {
+          "task_key": "cysec1-2-current-gen_blackbox-58a5b481cf56ffb7954e7396__blackbox_ctf_v1",
+          "task_version_id": "d6c906fc-ef92-4ce6-ab9c-54a9b7eb9037",
+          "group_id": "sha256:d079969641bbb921107912903d52e985a0221a130086755387b3d98e32f803dd",
+          "split": "dev"
+        },
+        {
+          "task_key": "cysec1-2-current-gen_blackbox-ac3376172d9071d3d519f24e__blackbox_ctf_v1",
+          "task_version_id": "139ff10d-8c00-4bd6-9437-e6fbcccf2f4d",
+          "group_id": "sha256:1c906e4864aa9ecc628e469a72f01f55c2cf6bd08d3f49618f1213ec260dbbbb",
+          "split": "dev"
+        },
+        {
+          "task_key": "cysec1-2-fakelook-gen_blackbox-03faebe1772eea3cd1e8e2cb__blackbox_ctf_v1",
+          "task_version_id": "f1ce26fc-39b6-442c-a03c-3c18f99e119f",
+          "group_id": "sha256:adc4ea3e2bdd0d0f46d9d8024f6ae5e3a03b8cd81fcdde27644a07b1a89cf90a",
+          "split": "dev"
+        },
+        {
+          "task_key": "cysec1-2-fakelook-gen_blackbox-5863ceeee099e5f9247cc2c6__blackbox_ctf_v1",
+          "task_version_id": "8d84b316-d741-44f8-aaa5-7a0f0d7b8d3a",
+          "group_id": "sha256:f99b7eeb0c66e7e0476c5df907abd97651a12a9e782ff3b2b285b9e249179bc6",
+          "split": "dev"
+        },
+        {
+          "task_key": "cysec1-2-fakelook-gen_blackbox-63daa3971bcc9a8c52e3ff4c__blackbox_ctf_v1",
+          "task_version_id": "6324fee5-2e3f-4538-a9e2-026d82ebb8a3",
+          "group_id": "sha256:6fdb786734a049b93b591ecf7d872e4b375b89eb04570f1b7712e3aae58dd712",
+          "split": "dev"
+        },
+        {
+          "task_key": "cysec1-2-fakelook-gen_blackbox-9db42d6bba9934e37106b1cf__blackbox_ctf_v1",
+          "task_version_id": "1407dcf7-46ad-4b82-8aa1-f88307dd8264",
+          "group_id": "sha256:e7459a4f40425c8c2cd52c7c9a301c6ddff29fda0674d2a4f8422d65c18f9e36",
+          "split": "dev"
+        },
+        {
+          "task_key": "cysec1-2-fakelook-gen_blackbox-fb581ab1aa4a347bb5f6fd65__blackbox_ctf_v1",
+          "task_version_id": "d6634975-2918-4037-9cd2-467f365e39b0",
+          "group_id": "sha256:4be73b2be518403570db2bdf2c4a180b28a2fff18357d7d04bfecb86b9b0252e",
+          "split": "dev"
+        },
+        {
+          "task_key": "cysec1-2-fentry-gen_blackbox-38f07564c9639347d11eca37__blackbox_ctf_v1",
+          "task_version_id": "05d09c55-ccdf-4d26-b06d-b851a2314a35",
+          "group_id": "sha256:bf0c5732ea623f2e55f82e9b7c547bfd9e21cc8fc5dbaf0b8e58cb9bc6477190",
+          "split": "dev"
+        },
+        {
+          "task_key": "cysec1-2-fentry-gen_blackbox-46793210126eea4722e90448__blackbox_ctf_v1",
+          "task_version_id": "fb8f2178-7dd8-429a-8d3c-f14b21a51e02",
+          "group_id": "sha256:f68340f0c61c1288949ca86942386551e929a5966b243be90125e9f5f77673bb",
+          "split": "dev"
+        },
+        {
+          "task_key": "cysec1-2-fentry-gen_blackbox-5a6f99394fadd1aea40875d9__blackbox_ctf_v1",
+          "task_version_id": "6a3023fd-4022-47a4-9ae5-6d15a892bd9b",
+          "group_id": "sha256:3d3e3e33d32b46ca6eddf4dda03d8b0866406514281e1f91eb2c46c8a4127f4c",
+          "split": "dev"
+        },
+        {
+          "task_key": "cysec1-2-fira-gen_blackbox-1865d9918e1ac5d264706d43__blackbox_ctf_v1",
+          "task_version_id": "eefe304c-499d-4c9e-b09c-8aa0fab87213",
+          "group_id": "sha256:641ab5216c9409ff4a70a5e7911929e26c45eb75f7289afed230d4b3d041306a",
+          "split": "dev"
+        },
+        {
+          "task_key": "cysec1-2-fira-gen_blackbox-27c8a0277302ae68d188882a__blackbox_ctf_v1",
+          "task_version_id": "5990a2c6-0986-4c6f-85db-ca764425d8c5",
+          "group_id": "sha256:ffdabaf22ec8301c6f7d9aab195e0aad481ff27c4a13e8321a730382165f6519",
+          "split": "dev"
+        },
+        {
+          "task_key": "cysec1-2-fira-gen_blackbox-3b29fc5db0365e6e61c585c4__blackbox_ctf_v1",
+          "task_version_id": "fb68f600-9850-4cc2-86e7-a4f554e5f93f",
+          "group_id": "sha256:36083a03ac07f59f76bd51d47f276db77f5b62a753cd1777480938ee7f8a81a5",
+          "split": "dev"
+        },
+        {
+          "task_key": "cysec1-2-fira-gen_blackbox-d2c7c52bd034f85240037110__blackbox_ctf_v1",
+          "task_version_id": "b51782f9-cb9f-4603-be81-a16eab4b8a36",
+          "group_id": "sha256:12c50763a7cea38cc3ee13d13485d0d73a240c73a70aa1e0571613603e343426",
+          "split": "dev"
+        },
+        {
+          "task_key": "cysec1-2-fira-gen_blackbox-f8d6badcc03f916a8d15b9d0__blackbox_ctf_v1",
+          "task_version_id": "0920e798-c7e7-4da6-9d5e-ebeba45ec05a",
+          "group_id": "sha256:a9954efc75299660b02023bd6ccd89a8629ecf96f555825cebd996f824fcafab",
+          "split": "dev"
+        },
+        {
+          "task_key": "cysec1-2-fubspot-gen_blackbox-2c4543c99976ddc656588bfe__blackbox_ctf_v1",
+          "task_version_id": "bf88b387-f5b5-4452-b539-4ad48f0c177e",
+          "group_id": "sha256:26937e8236f87ca2f3d06baace54d92cc9148202185cfb717a7cd9b44e18f663",
+          "split": "dev"
+        },
+        {
+          "task_key": "cysec1-2-fubspot-gen_blackbox-401a45aae0038d8f9cb6420b__blackbox_ctf_v1",
+          "task_version_id": "5f0c9b28-fe2f-41e0-b73f-0e7749f64195",
+          "group_id": "sha256:f9002064c9d90ddeaef016e54c6d37476915a9a81d9e391a50716f433920c5f7",
+          "split": "dev"
+        }
+      ],
+      "sha256": "sha256:4e2e6401d2f808fcde54a02e2c31ee630e8d5a1a8b8bf11ef7648e2b9d256a75"
+    },
+    "final_test": {
+      "schema": "cyber_eval_task_selection_v1",
+      "selection_role": "final_test",
+      "final_test_lock_sha256": "sha256:dc625115be8c775de8ecf476bc0d8e06e71b6c7f4160ed50b25eb0308b30d8d7",
+      "tasks": [
+        {
+          "task_key": "cysec1-2-current-gen_blackbox-46ee1c53981e8b0f027052aa__blackbox_ctf_v1",
+          "task_version_id": "ac6a6cfa-ea44-4c11-bb2e-c2bb2d142c8e",
+          "group_id": "sha256:7e7b463ae28fa5bc45bc6bf8b63e028775f0259c6ec2fe1ed9eec5f27ae7020f",
+          "split": "final_test"
+        },
+        {
+          "task_key": "cysec1-2-current-gen_blackbox-bc363f8239aeeaa3f648046a__blackbox_ctf_v1",
+          "task_version_id": "ba912601-1184-4dcd-9e9d-2fce22543e4b",
+          "group_id": "sha256:ca1e9b6132991ce2af77db859687fc5ecb3f4376549244b33df100de3d108611",
+          "split": "final_test"
+        },
+        {
+          "task_key": "cysec1-2-fakelook-gen_blackbox-136118e493e2e587151adbad__blackbox_ctf_v1",
+          "task_version_id": "45c6cd9f-afef-4e63-b1f8-496c52e98f01",
+          "group_id": "sha256:02b848dcb2ba9f79c0db462e77e4faf7efe8c6787615334968f7c00198f259e4",
+          "split": "final_test"
+        },
+        {
+          "task_key": "cysec1-2-fakelook-gen_blackbox-9063fa10a36b73f9044c608f__blackbox_ctf_v1",
+          "task_version_id": "dcf2aefc-e34d-4a4a-8aa9-b18a3b754d5a",
+          "group_id": "sha256:1e9e265422ef91c43578d5958d9c369d36996abb6d13c7be74ab9541536031df",
+          "split": "final_test"
+        },
+        {
+          "task_key": "cysec1-2-fentry-gen_blackbox-0a841d6127c4042fd3d99f68__blackbox_ctf_v1",
+          "task_version_id": "056f0e20-cd7d-40c8-b3c8-369fcee838be",
+          "group_id": "sha256:a67db29b0f66d32a8c1d846841f5a6844db518ec482e71817e5fa587888a51f4",
+          "split": "final_test"
+        },
+        {
+          "task_key": "cysec1-2-fentry-gen_blackbox-8b7c28d59cbc439114db9a56__blackbox_ctf_v1",
+          "task_version_id": "fd07b96f-7aa4-4041-862b-5aa7411eff4b",
+          "group_id": "sha256:ad4bd9354c6d048c0da603d29993216ba586167fde03eb6faad3ae60ad991665",
+          "split": "final_test"
+        },
+        {
+          "task_key": "cysec1-2-fira-gen_blackbox-322896ad3182769453b9944a__blackbox_ctf_v1",
+          "task_version_id": "8e5c7c45-7259-420d-ba12-0381465d864e",
+          "group_id": "sha256:6b933232fecc77bcc72bc54bd4baa7684ec08cfda61156c00ece2698d52b5311",
+          "split": "final_test"
+        },
+        {
+          "task_key": "cysec1-2-fira-gen_blackbox-3edc7da783b72884f0bc932d__blackbox_ctf_v1",
+          "task_version_id": "2b6f2798-c405-4724-9d33-e867ba616fc3",
+          "group_id": "sha256:40a7b416fad9afe191521cec4c28203acb20040241dd0b74d336baa3efb117b4",
+          "split": "final_test"
+        },
+        {
+          "task_key": "cysec1-2-fira-gen_blackbox-ae047f45e37c42a1ad5b09ca__blackbox_ctf_v1",
+          "task_version_id": "f50eee68-84c7-44d1-b4de-4c554ecc3e2e",
+          "group_id": "sha256:7ca78c1128945d03316b488c56bd42782d9e10c8e8ca74c01e9b0937618777be",
+          "split": "final_test"
+        },
+        {
+          "task_key": "cysec1-2-fubspot-gen_blackbox-6c0962e92122d89a62d04a45__blackbox_ctf_v1",
+          "task_version_id": "ee77cfbf-ceed-487f-a19d-3922aaaf4bad",
+          "group_id": "sha256:5c40d2b0fbb8fff9e5d57b8817ed2d4728d692acbde25da865ec437fe4f2df66",
+          "split": "final_test"
+        }
+      ],
+      "sha256": "sha256:55da148547400290cf49445fbb28eba99afa420d59e8e4a30cc978460aca616a"
+    }
+  },
+  "counts": {
+    "train": {
+      "groups": 59,
+      "task_versions": 59
+    },
+    "dev": {
+      "groups": 20,
+      "task_versions": 20
+    },
+    "final_test": {
+      "groups": 10,
+      "task_versions": 10
+    }
+  },
+  "inventory_audit": {
+    "inventory_task_versions": 89,
+    "eligible_task_versions": 89,
+    "reviewed_task_families": 89,
+    "quarantined_task_versions": {},
+    "missing_or_unverified_taxonomy_task_versions": {
+      "application": 0,
+      "environment": 0,
+      "vulnerability_family": 0,
+      "difficulty": 0
+    },
+    "full_taxonomy_available": true,
+    "evidence_scope": "metadata claims bound by digests; unavailable upstream receipts are not re-certified"
+  },
+  "representation": {
+    "train": {
+      "application": {
+        "population_group_counts": {
+          "current": 22,
+          "fakelook": 21,
+          "fentry": 14,
+          "fira": 24,
+          "fubspot": 8
+        },
+        "split_group_counts": {
+          "current": 15,
+          "fakelook": 14,
+          "fentry": 9,
+          "fira": 16,
+          "fubspot": 5
+        },
+        "max_abs_group_share_gap": 0.00704627689963816
+      },
+      "environment": {
+        "population_group_counts": {
+          "cysec1-2-current-gen": 22,
+          "cysec1-2-fakelook-gen": 21,
+          "cysec1-2-fentry-gen": 14,
+          "cysec1-2-fira-gen": 23,
+          "cysec1-2-fubspot-gen": 8,
+          "cysec1-2-rops-gen": 1
+        },
+        "split_group_counts": {
+          "cysec1-2-current-gen": 15,
+          "cysec1-2-fakelook-gen": 14,
+          "cysec1-2-fentry-gen": 9,
+          "cysec1-2-fira-gen": 15,
+          "cysec1-2-fubspot-gen": 5,
+          "cysec1-2-rops-gen": 1
+        },
+        "max_abs_group_share_gap": 0.00704627689963816
+      },
+      "vulnerability_family": {
+        "population_group_counts": {
+          "category:CWE-200": 1,
+          "category:access-control": 2,
+          "category:auth-protocol": 1,
+          "category:authentication-and-identity": 1,
+          "category:authentication-and-session": 1,
+          "category:authentication-boundary": 2,
+          "category:authentication-replay": 1,
+          "category:authorization": 1,
+          "category:authorization-boundary": 1,
+          "category:authorization-classification": 1,
+          "category:authorization-principal-self-assignment": 1,
+          "category:availability": 1,
+          "category:broken-access-control": 5,
+          "category:broken-authentication": 1,
+          "category:broken-file-access": 1,
+          "category:broken-object-level-authorization": 4,
+          "category:broken-object-namespace-containment": 1,
+          "category:broken-tenant-isolation": 1,
+          "category:capture-replay": 1,
+          "category:comment-visibility-bypass": 1,
+          "category:cors-browser-origin-trust": 1,
+          "category:credential-disclosure": 6,
+          "category:credential-disclosure-on-account-recovery": 1,
+          "category:credential-in-response-leak": 1,
+          "category:cryptographic-signature-verification": 1,
+          "category:csrf": 1,
+          "category:denial-of-service": 1,
+          "category:filesystem-path-traversal": 1,
+          "category:function-level-privilege": 1,
+          "category:http-desync": 1,
+          "category:hydration": 1,
+          "category:identity-and-session-management": 1,
+          "category:information-disclosure": 2,
+          "category:information-exposure": 1,
+          "category:injection": 4,
+          "category:input-validation-and-canonicalization": 1,
+          "category:missing-resource-limit": 1,
+          "category:oauth-code-injection": 1,
+          "category:object-authorization": 1,
+          "category:object-hydration-authz-bypass": 1,
+          "category:object-level-authz": 1,
+          "category:observable-discrepancy": 1,
+          "category:origin-validation": 1,
+          "category:output-neutralization": 1,
+          "category:path-traversal": 2,
+          "category:protocol-desync": 1,
+          "category:request-smuggling": 1,
+          "category:resource-consumption": 2,
+          "category:resource-exhaustion": 1,
+          "category:secret-disclosure": 1,
+          "category:sensitive-data-disclosure": 1,
+          "category:sensitive-data-exposure": 2,
+          "category:server-side-request-forgery": 1,
+          "category:session": 1,
+          "category:session-lifecycle": 1,
+          "category:session-replay": 1,
+          "category:stored-xss": 1,
+          "category:template-second-pass-evaluation": 1,
+          "category:unauthenticated-pii-disclosure": 1,
+          "category:uncontrolled-resource-consumption": 1,
+          "category:url-validation-canonicalization": 2,
+          "category:webhook-integration-trust": 1,
+          "category:xss": 4,
+          "category:xss-javascript-url": 1,
+          "class:CSRF": 1,
+          "class:CWE-770": 1,
+          "class:HTTP-request-desync": 1,
+          "class:IDOR": 5,
+          "class:SQLi": 3,
+          "class:SSRF": 1,
+          "class:auth-bypass": 9,
+          "class:broken-object-authorization": 1,
+          "class:broken-object-scope": 1,
+          "class:code-injection": 2,
+          "class:credential-disclosure": 1,
+          "class:csrf-unprotected-credential-echo": 1,
+          "class:http-request-smuggling": 1,
+          "class:improper-output-neutralization-stored": 1,
+          "class:incorrect-authorization": 2,
+          "class:info-disclosure": 3,
+          "class:information-disclosure": 3,
+          "class:insufficient-session-expiration": 1,
+          "class:jwt-alg-confusion": 1,
+          "class:missing-authorization": 1,
+          "class:open-redirect": 4,
+          "class:origin-validation": 2,
+          "class:path-traversal": 10,
+          "class:privilege-escalation": 1,
+          "class:privilege-management": 1,
+          "class:prototype-pollution": 1,
+          "class:reflected-xss": 2,
+          "class:replay": 1,
+          "class:request-authenticity-bypass": 1,
+          "class:request-smuggling": 1,
+          "class:resource-bound-fail-open": 1,
+          "class:resource-consumption": 1,
+          "class:resource-exhaustion": 2,
+          "class:sensitive-data-disclosure": 2,
+          "class:sensitive-data-exposure": 8,
+          "class:sensitive-information-disclosure": 1,
+          "class:session-expiration": 2,
+          "class:stored-xss": 4,
+          "class:unbounded-batch-work": 1,
+          "class:uncontrolled-resource-consumption": 1,
+          "class:unsafe-deserialization": 1
+        },
+        "split_group_counts": {
+          "category:access-control": 1,
+          "category:auth-protocol": 1,
+          "category:authentication-and-session": 1,
+          "category:authentication-boundary": 1,
+          "category:authentication-replay": 1,
+          "category:authorization": 1,
+          "category:authorization-boundary": 1,
+          "category:authorization-classification": 1,
+          "category:authorization-principal-self-assignment": 1,
+          "category:broken-access-control": 3,
+          "category:broken-authentication": 1,
+          "category:broken-file-access": 1,
+          "category:broken-object-level-authorization": 2,
+          "category:broken-object-namespace-containment": 1,
+          "category:broken-tenant-isolation": 1,
+          "category:capture-replay": 1,
+          "category:comment-visibility-bypass": 1,
+          "category:cors-browser-origin-trust": 1,
+          "category:credential-disclosure": 4,
+          "category:csrf": 1,
+          "category:denial-of-service": 1,
+          "category:filesystem-path-traversal": 1,
+          "category:function-level-privilege": 1,
+          "category:hydration": 1,
+          "category:information-disclosure": 2,
+          "category:information-exposure": 1,
+          "category:injection": 2,
+          "category:input-validation-and-canonicalization": 1,
+          "category:missing-resource-limit": 1,
+          "category:oauth-code-injection": 1,
+          "category:object-hydration-authz-bypass": 1,
+          "category:observable-discrepancy": 1,
+          "category:output-neutralization": 1,
+          "category:path-traversal": 1,
+          "category:protocol-desync": 1,
+          "category:request-smuggling": 1,
+          "category:resource-consumption": 2,
+          "category:resource-exhaustion": 1,
+          "category:secret-disclosure": 1,
+          "category:sensitive-data-disclosure": 1,
+          "category:sensitive-data-exposure": 1,
+          "category:server-side-request-forgery": 1,
+          "category:session": 1,
+          "category:session-replay": 1,
+          "category:template-second-pass-evaluation": 1,
+          "category:uncontrolled-resource-consumption": 1,
+          "category:url-validation-canonicalization": 1,
+          "category:xss": 2,
+          "category:xss-javascript-url": 1,
+          "class:CSRF": 1,
+          "class:CWE-770": 1,
+          "class:HTTP-request-desync": 1,
+          "class:IDOR": 3,
+          "class:SQLi": 1,
+          "class:SSRF": 1,
+          "class:auth-bypass": 6,
+          "class:broken-object-authorization": 1,
+          "class:code-injection": 2,
+          "class:csrf-unprotected-credential-echo": 1,
+          "class:http-request-smuggling": 1,
+          "class:improper-output-neutralization-stored": 1,
+          "class:incorrect-authorization": 1,
+          "class:info-disclosure": 2,
+          "class:information-disclosure": 2,
+          "class:insufficient-session-expiration": 1,
+          "class:missing-authorization": 1,
+          "class:open-redirect": 2,
+          "class:origin-validation": 1,
+          "class:path-traversal": 7,
+          "class:privilege-escalation": 1,
+          "class:privilege-management": 1,
+          "class:prototype-pollution": 1,
+          "class:reflected-xss": 1,
+          "class:replay": 1,
+          "class:request-authenticity-bypass": 1,
+          "class:resource-bound-fail-open": 1,
+          "class:resource-consumption": 1,
+          "class:resource-exhaustion": 1,
+          "class:sensitive-data-disclosure": 1,
+          "class:sensitive-data-exposure": 5,
+          "class:sensitive-information-disclosure": 1,
+          "class:session-expiration": 1,
+          "class:stored-xss": 2,
+          "class:unbounded-batch-work": 1,
+          "class:uncontrolled-resource-consumption": 1,
+          "class:unsafe-deserialization": 1
+        },
+        "max_abs_group_share_gap": 0.016758712626166444
+      },
+      "difficulty": {
+        "population_group_counts": {
+          "easy": 1,
+          "hard": 6,
+          "medium": 82
+        },
+        "split_group_counts": {
+          "easy": 1,
+          "hard": 4,
+          "medium": 54
+        },
+        "max_abs_group_share_gap": 0.006094077318606006
+      }
+    },
+    "dev": {
+      "application": {
+        "population_group_counts": {
+          "current": 22,
+          "fakelook": 21,
+          "fentry": 14,
+          "fira": 24,
+          "fubspot": 8
+        },
+        "split_group_counts": {
+          "current": 5,
+          "fakelook": 5,
+          "fentry": 3,
+          "fira": 5,
+          "fubspot": 2
+        },
+        "max_abs_group_share_gap": 0.0196629213483146
+      },
+      "environment": {
+        "population_group_counts": {
+          "cysec1-2-current-gen": 22,
+          "cysec1-2-fakelook-gen": 21,
+          "cysec1-2-fentry-gen": 14,
+          "cysec1-2-fira-gen": 23,
+          "cysec1-2-fubspot-gen": 8,
+          "cysec1-2-rops-gen": 1
+        },
+        "split_group_counts": {
+          "cysec1-2-current-gen": 5,
+          "cysec1-2-fakelook-gen": 5,
+          "cysec1-2-fentry-gen": 3,
+          "cysec1-2-fira-gen": 5,
+          "cysec1-2-fubspot-gen": 2
+        },
+        "max_abs_group_share_gap": 0.014044943820224726
+      },
+      "vulnerability_family": {
+        "population_group_counts": {
+          "category:CWE-200": 1,
+          "category:access-control": 2,
+          "category:auth-protocol": 1,
+          "category:authentication-and-identity": 1,
+          "category:authentication-and-session": 1,
+          "category:authentication-boundary": 2,
+          "category:authentication-replay": 1,
+          "category:authorization": 1,
+          "category:authorization-boundary": 1,
+          "category:authorization-classification": 1,
+          "category:authorization-principal-self-assignment": 1,
+          "category:availability": 1,
+          "category:broken-access-control": 5,
+          "category:broken-authentication": 1,
+          "category:broken-file-access": 1,
+          "category:broken-object-level-authorization": 4,
+          "category:broken-object-namespace-containment": 1,
+          "category:broken-tenant-isolation": 1,
+          "category:capture-replay": 1,
+          "category:comment-visibility-bypass": 1,
+          "category:cors-browser-origin-trust": 1,
+          "category:credential-disclosure": 6,
+          "category:credential-disclosure-on-account-recovery": 1,
+          "category:credential-in-response-leak": 1,
+          "category:cryptographic-signature-verification": 1,
+          "category:csrf": 1,
+          "category:denial-of-service": 1,
+          "category:filesystem-path-traversal": 1,
+          "category:function-level-privilege": 1,
+          "category:http-desync": 1,
+          "category:hydration": 1,
+          "category:identity-and-session-management": 1,
+          "category:information-disclosure": 2,
+          "category:information-exposure": 1,
+          "category:injection": 4,
+          "category:input-validation-and-canonicalization": 1,
+          "category:missing-resource-limit": 1,
+          "category:oauth-code-injection": 1,
+          "category:object-authorization": 1,
+          "category:object-hydration-authz-bypass": 1,
+          "category:object-level-authz": 1,
+          "category:observable-discrepancy": 1,
+          "category:origin-validation": 1,
+          "category:output-neutralization": 1,
+          "category:path-traversal": 2,
+          "category:protocol-desync": 1,
+          "category:request-smuggling": 1,
+          "category:resource-consumption": 2,
+          "category:resource-exhaustion": 1,
+          "category:secret-disclosure": 1,
+          "category:sensitive-data-disclosure": 1,
+          "category:sensitive-data-exposure": 2,
+          "category:server-side-request-forgery": 1,
+          "category:session": 1,
+          "category:session-lifecycle": 1,
+          "category:session-replay": 1,
+          "category:stored-xss": 1,
+          "category:template-second-pass-evaluation": 1,
+          "category:unauthenticated-pii-disclosure": 1,
+          "category:uncontrolled-resource-consumption": 1,
+          "category:url-validation-canonicalization": 2,
+          "category:webhook-integration-trust": 1,
+          "category:xss": 4,
+          "category:xss-javascript-url": 1,
+          "class:CSRF": 1,
+          "class:CWE-770": 1,
+          "class:HTTP-request-desync": 1,
+          "class:IDOR": 5,
+          "class:SQLi": 3,
+          "class:SSRF": 1,
+          "class:auth-bypass": 9,
+          "class:broken-object-authorization": 1,
+          "class:broken-object-scope": 1,
+          "class:code-injection": 2,
+          "class:credential-disclosure": 1,
+          "class:csrf-unprotected-credential-echo": 1,
+          "class:http-request-smuggling": 1,
+          "class:improper-output-neutralization-stored": 1,
+          "class:incorrect-authorization": 2,
+          "class:info-disclosure": 3,
+          "class:information-disclosure": 3,
+          "class:insufficient-session-expiration": 1,
+          "class:jwt-alg-confusion": 1,
+          "class:missing-authorization": 1,
+          "class:open-redirect": 4,
+          "class:origin-validation": 2,
+          "class:path-traversal": 10,
+          "class:privilege-escalation": 1,
+          "class:privilege-management": 1,
+          "class:prototype-pollution": 1,
+          "class:reflected-xss": 2,
+          "class:replay": 1,
+          "class:request-authenticity-bypass": 1,
+          "class:request-smuggling": 1,
+          "class:resource-bound-fail-open": 1,
+          "class:resource-consumption": 1,
+          "class:resource-exhaustion": 2,
+          "class:sensitive-data-disclosure": 2,
+          "class:sensitive-data-exposure": 8,
+          "class:sensitive-information-disclosure": 1,
+          "class:session-expiration": 2,
+          "class:stored-xss": 4,
+          "class:unbounded-batch-work": 1,
+          "class:uncontrolled-resource-consumption": 1,
+          "class:unsafe-deserialization": 1
+        },
+        "split_group_counts": {
+          "category:CWE-200": 1,
+          "category:access-control": 1,
+          "category:authentication-boundary": 1,
+          "category:availability": 1,
+          "category:broken-access-control": 1,
+          "category:broken-object-level-authorization": 1,
+          "category:credential-disclosure": 1,
+          "category:credential-in-response-leak": 1,
+          "category:cryptographic-signature-verification": 1,
+          "category:identity-and-session-management": 1,
+          "category:injection": 1,
+          "category:object-authorization": 1,
+          "category:object-level-authz": 1,
+          "category:origin-validation": 1,
+          "category:path-traversal": 1,
+          "category:sensitive-data-exposure": 1,
+          "category:stored-xss": 1,
+          "category:unauthenticated-pii-disclosure": 1,
+          "category:webhook-integration-trust": 1,
+          "category:xss": 1,
+          "class:IDOR": 1,
+          "class:SQLi": 1,
+          "class:auth-bypass": 2,
+          "class:broken-object-scope": 1,
+          "class:credential-disclosure": 1,
+          "class:incorrect-authorization": 1,
+          "class:information-disclosure": 1,
+          "class:jwt-alg-confusion": 1,
+          "class:open-redirect": 1,
+          "class:origin-validation": 1,
+          "class:path-traversal": 2,
+          "class:reflected-xss": 1,
+          "class:resource-exhaustion": 1,
+          "class:sensitive-data-disclosure": 1,
+          "class:sensitive-data-exposure": 2,
+          "class:session-expiration": 1,
+          "class:stored-xss": 1
+        },
+        "max_abs_group_share_gap": 0.03876404494382023
+      },
+      "difficulty": {
+        "population_group_counts": {
+          "easy": 1,
+          "hard": 6,
+          "medium": 82
+        },
+        "split_group_counts": {
+          "hard": 1,
+          "medium": 19
+        },
+        "max_abs_group_share_gap": 0.028651685393258353
+      }
+    },
+    "final_test": {
+      "application": {
+        "population_group_counts": {
+          "current": 22,
+          "fakelook": 21,
+          "fentry": 14,
+          "fira": 24,
+          "fubspot": 8
+        },
+        "split_group_counts": {
+          "current": 2,
+          "fakelook": 2,
+          "fentry": 2,
+          "fira": 3,
+          "fubspot": 1
+        },
+        "max_abs_group_share_gap": 0.04719101123595504
+      },
+      "environment": {
+        "population_group_counts": {
+          "cysec1-2-current-gen": 22,
+          "cysec1-2-fakelook-gen": 21,
+          "cysec1-2-fentry-gen": 14,
+          "cysec1-2-fira-gen": 23,
+          "cysec1-2-fubspot-gen": 8,
+          "cysec1-2-rops-gen": 1
+        },
+        "split_group_counts": {
+          "cysec1-2-current-gen": 2,
+          "cysec1-2-fakelook-gen": 2,
+          "cysec1-2-fentry-gen": 2,
+          "cysec1-2-fira-gen": 3,
+          "cysec1-2-fubspot-gen": 1
+        },
+        "max_abs_group_share_gap": 0.04719101123595504
+      },
+      "vulnerability_family": {
+        "population_group_counts": {
+          "category:CWE-200": 1,
+          "category:access-control": 2,
+          "category:auth-protocol": 1,
+          "category:authentication-and-identity": 1,
+          "category:authentication-and-session": 1,
+          "category:authentication-boundary": 2,
+          "category:authentication-replay": 1,
+          "category:authorization": 1,
+          "category:authorization-boundary": 1,
+          "category:authorization-classification": 1,
+          "category:authorization-principal-self-assignment": 1,
+          "category:availability": 1,
+          "category:broken-access-control": 5,
+          "category:broken-authentication": 1,
+          "category:broken-file-access": 1,
+          "category:broken-object-level-authorization": 4,
+          "category:broken-object-namespace-containment": 1,
+          "category:broken-tenant-isolation": 1,
+          "category:capture-replay": 1,
+          "category:comment-visibility-bypass": 1,
+          "category:cors-browser-origin-trust": 1,
+          "category:credential-disclosure": 6,
+          "category:credential-disclosure-on-account-recovery": 1,
+          "category:credential-in-response-leak": 1,
+          "category:cryptographic-signature-verification": 1,
+          "category:csrf": 1,
+          "category:denial-of-service": 1,
+          "category:filesystem-path-traversal": 1,
+          "category:function-level-privilege": 1,
+          "category:http-desync": 1,
+          "category:hydration": 1,
+          "category:identity-and-session-management": 1,
+          "category:information-disclosure": 2,
+          "category:information-exposure": 1,
+          "category:injection": 4,
+          "category:input-validation-and-canonicalization": 1,
+          "category:missing-resource-limit": 1,
+          "category:oauth-code-injection": 1,
+          "category:object-authorization": 1,
+          "category:object-hydration-authz-bypass": 1,
+          "category:object-level-authz": 1,
+          "category:observable-discrepancy": 1,
+          "category:origin-validation": 1,
+          "category:output-neutralization": 1,
+          "category:path-traversal": 2,
+          "category:protocol-desync": 1,
+          "category:request-smuggling": 1,
+          "category:resource-consumption": 2,
+          "category:resource-exhaustion": 1,
+          "category:secret-disclosure": 1,
+          "category:sensitive-data-disclosure": 1,
+          "category:sensitive-data-exposure": 2,
+          "category:server-side-request-forgery": 1,
+          "category:session": 1,
+          "category:session-lifecycle": 1,
+          "category:session-replay": 1,
+          "category:stored-xss": 1,
+          "category:template-second-pass-evaluation": 1,
+          "category:unauthenticated-pii-disclosure": 1,
+          "category:uncontrolled-resource-consumption": 1,
+          "category:url-validation-canonicalization": 2,
+          "category:webhook-integration-trust": 1,
+          "category:xss": 4,
+          "category:xss-javascript-url": 1,
+          "class:CSRF": 1,
+          "class:CWE-770": 1,
+          "class:HTTP-request-desync": 1,
+          "class:IDOR": 5,
+          "class:SQLi": 3,
+          "class:SSRF": 1,
+          "class:auth-bypass": 9,
+          "class:broken-object-authorization": 1,
+          "class:broken-object-scope": 1,
+          "class:code-injection": 2,
+          "class:credential-disclosure": 1,
+          "class:csrf-unprotected-credential-echo": 1,
+          "class:http-request-smuggling": 1,
+          "class:improper-output-neutralization-stored": 1,
+          "class:incorrect-authorization": 2,
+          "class:info-disclosure": 3,
+          "class:information-disclosure": 3,
+          "class:insufficient-session-expiration": 1,
+          "class:jwt-alg-confusion": 1,
+          "class:missing-authorization": 1,
+          "class:open-redirect": 4,
+          "class:origin-validation": 2,
+          "class:path-traversal": 10,
+          "class:privilege-escalation": 1,
+          "class:privilege-management": 1,
+          "class:prototype-pollution": 1,
+          "class:reflected-xss": 2,
+          "class:replay": 1,
+          "class:request-authenticity-bypass": 1,
+          "class:request-smuggling": 1,
+          "class:resource-bound-fail-open": 1,
+          "class:resource-consumption": 1,
+          "class:resource-exhaustion": 2,
+          "class:sensitive-data-disclosure": 2,
+          "class:sensitive-data-exposure": 8,
+          "class:sensitive-information-disclosure": 1,
+          "class:session-expiration": 2,
+          "class:stored-xss": 4,
+          "class:unbounded-batch-work": 1,
+          "class:uncontrolled-resource-consumption": 1,
+          "class:unsafe-deserialization": 1
+        },
+        "split_group_counts": {
+          "category:authentication-and-identity": 1,
+          "category:broken-access-control": 1,
+          "category:broken-object-level-authorization": 1,
+          "category:credential-disclosure": 1,
+          "category:credential-disclosure-on-account-recovery": 1,
+          "category:http-desync": 1,
+          "category:injection": 1,
+          "category:session-lifecycle": 1,
+          "category:url-validation-canonicalization": 1,
+          "category:xss": 1,
+          "class:IDOR": 1,
+          "class:SQLi": 1,
+          "class:auth-bypass": 1,
+          "class:info-disclosure": 1,
+          "class:open-redirect": 1,
+          "class:path-traversal": 1,
+          "class:request-smuggling": 1,
+          "class:sensitive-data-exposure": 1,
+          "class:stored-xss": 1
+        },
+        "max_abs_group_share_gap": 0.08876404494382023
+      },
+      "difficulty": {
+        "population_group_counts": {
+          "easy": 1,
+          "hard": 6,
+          "medium": 82
+        },
+        "split_group_counts": {
+          "hard": 1,
+          "medium": 9
+        },
+        "max_abs_group_share_gap": 0.032584269662921356
+      }
+    }
+  },
+  "limitations": [
+    "Missing taxonomy remains explicit; representative marginals do not ensure equal difficulty.",
+    "Greedy grouped balancing is deterministic, not globally optimal."
+  ],
+  "sha256": "sha256:282f2dec7912364c0f7c1db7ceaac39eb66d552ab226d7617a412fa8e881a50f"
+}
