@@ -232,3 +232,9 @@ and malformed counters, physical I/O aggregation, checkpoint-rotation races,
 terminal result handling and cancellation of a confirmed idle task. They also
 verify missing W&B injection fails before creating its output directory. Tests
 use synthetic telemetry and Ray replies; no live workload is cancelled.
+
+The subsequent minimal wheel (`c8c8994ac0cc93e22d1d1ac03568a5cf1e1324c63ff177855fa45cebcbeebe35`)
+also passes the same eight public/two legacy help paths outside the checkout,
+redirect/user guards, numeric JSON, module identity and replay rejection. Its
+installed episode module matches current source bytes; it rejects 120/300-second
+deadlines against the declared 300-second bash budget and accepts 330 seconds.

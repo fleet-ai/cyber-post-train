@@ -21,6 +21,14 @@
   "owned_rayclusters": 0,
   "owned_gpu_pods": 0,
   "gpus_held": 0,
+  "queue_diagnosis": {
+    "observed_at_utc_minute": "2026-09-11T13:24Z",
+    "compatible_ready_gpu_nodes": 24,
+    "gpu_requests_per_node": 8,
+    "whole_unrequested_nodes": 0,
+    "queue_preemption_policies": "Never for withinClusterQueue, reclaimWithinCohort and borrowWithinCohort",
+    "interpretation": "Physical node reservations explain waiting despite unused nominal queue quota. The pending message also lists topology-incompatible fallback flavors; that alone does not establish an unschedulable request. No peer or scheduler mutation."
+  },
   "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/miles-trainer@sha256:d1d37c584e2aafdd47df1e1f3492ff3343eb3b83a5f658cf7ce2432ee8d6ef33",
   "runtime_image_id": null,
   "output_root": "/mnt/sfs/jobs/chris-cpt-cleanup-q38-miles-rl-v7",
