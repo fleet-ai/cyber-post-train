@@ -1,0 +1,63 @@
+{
+  "schema": "cyber_cleanup_qualification_v1",
+  "classification": "cpu_preparation_passed_gpu_run_queued",
+  "observed_date_utc": "2026-09-11",
+  "purpose": "Independent two-step recovery fixture: pause after step one, then continue the unchanged recipe in a separate allocation",
+  "cpu_preparation": {
+    "pod_name": "chris-cpt-q38-continuation-prepare-v1",
+    "pod_uid": "74b8df28-928b-4825-ab22-ecd4040bee71",
+    "node": "computeinstance-e04a737eqtfvpnyx08",
+    "started_at": "2026-09-11T06:57:52Z",
+    "finished_at": "2026-09-11T06:58:52Z",
+    "phase": "Succeeded",
+    "exit_code": 0,
+    "restarts": 0,
+    "gpus": 0,
+    "runtime_image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "bundle_sha256": "3e3b2a36d637b76e412dae0e0d68880c8c0944f23f6c592c71b12386f8484bd3",
+    "receipt_sha256": "11cb14238ee466c8e031787a798c51c2deb039f352dede9f5f6e0008724ce24c",
+    "preflight_sha256": "f64501ef97dbda95b67a9d01238578944dd22f7e70e4ca4f7fcfb3d24fad9a81"
+  },
+  "plan_sha256": "228488d39e11ae0fdd27f097d5e2bc488ef77a4542c4a67e1b457187c33442ac",
+  "request_sha256": "b76007b302036f0dfbdae407cfe790d0753d5ce33f9f75468d9b824a10cf56e3",
+  "preview_manifest_sha256": "d434f0a0262f89c881859e45f12235aa6cb4c274f2faa0c88abae9f5a3413fd9",
+  "prepared": "/mnt/sfs/jobs/chris-cpt-cleanup-q38-continuation-inputs-v1/prepared",
+  "output": "/mnt/sfs/jobs/chris-cpt-cleanup-q38-pause-v1",
+  "recipe": {
+    "nodes": 1, "gpus_per_node": 8, "epochs": 2,
+    "planned_optimizer_steps": 2, "pause_after_step": 1,
+    "global_batch": 8, "microbatch_per_gpu": 1, "learning_rate": 0.000003,
+    "max_length": 16384, "seed": 42, "checkpoint_interval": 1,
+    "eval_interval": 1, "keep_checkpoints": 2,
+    "train_windows": 8, "train_supervised_tokens_per_epoch": 7770,
+    "dev_tasks": 2, "dev_supervised_tokens": 74
+  },
+  "submission": {
+    "posts": 1,
+    "api_name": "chris-cpt-q38-pause-v1-a63a91e6",
+    "api_uuid_not_returned_in_safe_response": true,
+    "rayjob_uid": "b76ae5a9-3d76-4945-9982-fcf30edcab8f",
+    "workload_name": "rayjob-chris-cpt-q38-pause-v1-a63a91e6-87692",
+    "workload_uid": "6ae0ab9f-8c86-4129-a5d1-8880a413171d",
+    "created_at": "2026-09-11T07:03:25Z",
+    "priority_class": "c1", "workload_priority": 10000,
+    "queued_without_allocation": true,
+    "allocated_gpus_at_observation": 0,
+    "shared_journal": "/mnt/sfs/jobs/chris-cpt-cleanup-q38-continuation-inputs-v1/prepared/SUBMISSION.jsonl"
+  },
+  "wandb": "https://wandb.ai/thefleet/cyber-post-train/runs/cpt-q38-pause-v1",
+  "resource_check_before_submit": {
+    "active_owned_cpu_nodes": 4,
+    "other_queued_cpu_pod_max_additional_nodes": 1,
+    "queued_full_glm_nodes": 2,
+    "this_qwen_nodes": 1,
+    "conservative_simultaneous_nodes": 8,
+    "peer_workloads_modified": false
+  },
+  "limits": [
+    "This is a plumbing/recovery fixture, not a capability experiment.",
+    "No completed historical training progress was resumed or replayed.",
+    "GPU optimizer continuation and separate BF16 export reload remain unverified.",
+    "Do not repeat this submission or erase/copy its shared submission journal."
+  ]
+}
