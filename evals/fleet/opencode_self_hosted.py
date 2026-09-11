@@ -1330,16 +1330,13 @@ def runtime_preflight(
         payload = build_instance_payload(config, task)
         payload["run_id"] = config["run_id"] + "-runtime-preflight"
         payload["ttl_seconds"] = min(int(payload["ttl_seconds"]), 1800)
-        response = client.post(
-            f"{ORCHESTRATOR}/v1/env/instances",
+        instance = _request(
+            client,
+            "POST",
+            "/v1/env/instances",
             headers={"X-Request-ID": str(uuid.uuid4())},
             json=payload,
         )
-        if response.status_code >= 400:
-            raise RuntimeError(
-                f"Fleet runtime preflight create failed with HTTP {response.status_code}"
-            )
-        instance = response.json()
         instance_id = instance["instance_id"]
         actual = {
             "env_key": instance.get("env_key"),
@@ -1517,16 +1514,13 @@ def run(
         (out_dir / "binding.json").write_bytes(canonical_json(binding) + b"\n")
         write_agent_prompt(out_dir / "prompt.txt", task["prompt"])
 
-        response = client.post(
-            f"{ORCHESTRATOR}{authoritative_route(config, 'provisioning')}",
+        rollout_instance = _request(
+            client,
+            "POST",
+            authoritative_route(config, "provisioning"),
             headers={"X-Request-ID": provisioning_request_id(config)},
             json={},
         )
-        if response.status_code >= 400:
-            raise FleetRequestError(
-                "POST", authoritative_route(config, "provisioning"), response.status_code
-            )
-        rollout_instance = response.json()
         if isinstance(rollout_instance, dict):
             # Bind this before validating any other response field so that a
             # later contract failure cannot orphan an already-created instance.

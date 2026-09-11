@@ -52,6 +52,11 @@ tokens, scored or produced a local result. All held rows are preserved in the
 separate qualification databases. Server-side diagnosis is requested; HTTP
 status alone does not prove the cause. Future errors retain an allowlisted
 category and response digest, never raw server text or an automatic POST retry.
+The runner's two direct instance-create calls initially bypassed that diagnostic
+helper. Both now use the same single-attempt request boundary; tests exercise the
+actual runner/preflight against HTTP 404 and 503, assert persisted safe diagnostics
+and prove there is exactly one POST. This repairs future evidence collection, not
+the unresolved server-side 404 or an already-held attempt.
 
 ## Remaining completion gates
 
