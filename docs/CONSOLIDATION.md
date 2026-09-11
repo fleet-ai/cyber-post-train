@@ -54,6 +54,21 @@ Its digest is in the conversion receipt. Native conversion uses the pinned Miles
 converter, not a new optimizer or model implementation. Its fixed 30-minute
 deadline covers source validation and the owned child process group. Sealing is
 CPU-only after resource release and does not claim GPU reload.
+The conversion was subsequently submitted once at effective priority 10,000 and
+is queued without GPU allocation; [submission evidence](evidence/cleanup-miles-conversion-submission-20260911.json).
+That historical receipt records the resource limit at submission, not current
+authority. Chris replaced that limit on 2026-09-11 UTC: **at most eight actively
+allocated experiment-owned GPU nodes at once**. Queued, unallocated work does not
+count and has no fixed numerical cap. Count admitted/startup allocations and
+dedicated serving as well as training/evaluation nodes; CPU-only work requesting
+no GPU is not a GPU-node allocation. With eight-GPU nodes this is at most 64 GPUs.
+The old four-node/32-GPU limit including queued work is superseded.
+
+Reconcile allocation before submission and admission. The Jobs API admits queued
+work independently, so observing eight active nodes is not an enforcement
+mechanism: do not queue an unguarded batch that could simultaneously start above
+the active limit. Use supported admission control or bounded waves until an
+owner-scoped admission cap is proven. Never modify peer queues or bypass admission.
 
 Split, checkpoint, export and model-pinning checks have
 100% focused line/branch coverage; this is **not whole-repository coverage**.
