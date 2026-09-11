@@ -233,9 +233,10 @@ to an uninterrupted multi-epoch run. GPU recovery qualification is tracked in
 
 ## RL integration status
 
-The public training command currently runs **SFT**, not RL. Historical
-`training.rl_config` / `rl_preview` files describe the retired typed API and are
-not a current launch shortcut. RL qualification remains a completion gate.
+The public training command currently runs **SFT**, not RL. The old typed-API
+RL builders and commands are retired; their source is recoverable from Git.
+Historical requests are not launch shortcuts. RL qualification remains a
+completion gate.
 
 Use the native trainers, not a new optimizer implementation. The inspected
 [Theseus FTI integration](https://github.com/fleet-ai/theseus/tree/cc18d2cd3e9370abf4f6f19df317d96ce6b619e4/services/fti/src/fti/trainers/miles)

@@ -36,10 +36,10 @@ and trace analysis` were inspected. Original commits/worktrees remain recoverabl
 | Native recovery CPU tests | 41 tests in the pinned image, zero skips/failures/restarts/GPUs; exact model/Adam state through the resumed epoch, complete later-epoch coverage, strict state checks and no-optimizer validation. [Receipt](evidence/cleanup-recovery-cpu-20260911.json). Native later-epoch reshuffles are explicitly not bit-identical; full-size GPU reload remains pending |
 | Real checkpoint recovery preflight | CPU validation rehashed the accepted eight-rank checkpoint and exact model; [receipt](evidence/cleanup-qwen-recovery-preparation-20260911.json). One zero-optimizer eight-GPU reload request is queued, priority 10000, no allocation yet |
 | Miles native CPU integration | 74 tests pass with zero failures/skips/restarts/GPUs; real MCP 2 transport, native FTI recorder/parser, exact Qwen tokenizer and corrected template; [receipt](evidence/cleanup-miles-cpu-20260911.json). Synthetic engine/task replies only, not real RL optimization |
-| Local regression suite | 1,062 tests plus seven subtests pass with disposable PostgreSQL and MCP 2.1.1; 36 native-only cases explicitly skip locally. The RL lifecycle/Miles-hook tests cover all 225 statements and 76 branches in that module. This is not real RL qualification. Ruff/whitespace checks pass |
+| Local regression suite | 997 tests plus seven subtests pass after retiring obsolete typed-API cases, using disposable PostgreSQL and MCP 2.1.1; 36 native-only cases explicitly skip locally. The RL lifecycle/Miles-hook tests cover all 225 statements and 76 branches in that module. This is not real RL qualification. Ruff/whitespace checks pass |
 | Installation | Built wheel installed outside the checkout; public commands and recovery/checkpoint/GLM/RL-hook imports work; retired modules are absent. The minimal wheel-test environment intentionally lacks Torch/PyArrow; `doctor` correctly reports those missing training dependencies, not training readiness |
 
-Split, checkpoint, export, model-pinning and historical RL-preview checks have
+Split, checkpoint, export and model-pinning checks have
 100% focused line/branch coverage; this is **not whole-repository coverage**.
 Model-pinning tests exercise real HTTP parsing, pagination, tampering, download
 bounds, errors and create-once output. The dependency lock now resolves 75
@@ -101,3 +101,10 @@ Removed files are recoverable from base commit `bac2a4c`. Historical receipts
 and their source pointers are unchanged and refer to their original revisions,
 not current launch instructions. No accepted checkpoint, dataset, campaign
 database or unrelated worktree was deleted.
+
+Retired the typed-API RL split/request builders and preview checker, their two
+CLI commands and tests that existed only to reproduce the old Qwen3.6 requests.
+Caller checks found no maintained runtime dependency. Historical requests and
+receipts remain untouched; current split, tool-identity, token-integrity and
+Jobs API safeguards remain tested in their supported paths. The public CLI
+explicitly rejects the removed commands instead of presenting them as RL support.

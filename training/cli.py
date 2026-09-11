@@ -15,16 +15,6 @@ from .fleet import (
 )
 from .io import atomic_write_json, atomic_write_jsonl, file_sha256
 from .normalize import build_datasets
-from .rl_config import (
-    FleetTrainingTaskCatalog,
-    build_full_rl_config,
-    build_treatment_set,
-    freeze_task_split,
-    read_json,
-    read_trajectories,
-    write_full_rl_config,
-    write_task_snapshot,
-)
 from .secrets import secret_values
 
 
@@ -103,58 +93,6 @@ def _normalize(args: argparse.Namespace) -> int:
     return 0
 
 
-def _rl_snapshot(args: argparse.Namespace) -> int:
-    bearer = os.environ.get("FLEET_TRAINING_API_TOKEN")
-    if not bearer:
-        raise ValueError("FLEET_TRAINING_API_TOKEN must be injected through the environment")
-    manifest = read_json(args.dataset_manifest)
-    catalog = FleetTrainingTaskCatalog(bearer, base_url=args.base_url)
-    snapshot = freeze_task_split(
-        read_trajectories(args.trajectories),
-        catalog.options,
-        source_job_id=args.source_job_id,
-        dataset_manifest_digest=str(manifest.get("manifest_digest") or ""),
-        workers=args.workers,
-        fetch_environment_versions=catalog.environment_versions,
-    )
-    write_task_snapshot(args.output, snapshot)
-    print(json.dumps({"output": str(args.output), **snapshot["counts"]}, indent=2))
-    return 0
-
-
-def _rl_config(args: argparse.Namespace) -> int:
-    snapshot = read_json(args.task_split)
-    treatment = None
-    if args.exclusions:
-        exclusions = read_json(args.exclusions)
-        if exclusions.get("schema") != "fleet_rl_task_exclusions_v1" or not isinstance(
-            exclusions.get("exclusions"), list
-        ):
-            raise ValueError("invalid RL exclusions file")
-        if not args.treatment_receipt:
-            raise ValueError("--exclusions requires --treatment-receipt")
-        treatment = build_treatment_set(snapshot, exclusions["exclusions"])
-        atomic_write_json(args.treatment_receipt, treatment)
-    elif args.treatment_receipt:
-        raise ValueError("--treatment-receipt requires --exclusions")
-    config = build_full_rl_config(read_json(args.template), snapshot, treatment)
-    write_full_rl_config(args.output, config)
-    print(
-        json.dumps(
-            {
-                "output": str(args.output),
-                "train_tasks": len(config["tasks"]["task_versions"]),
-                "dev_tasks": len(config["eval"]["task_versions"]),
-                "treatment_receipt": str(args.treatment_receipt)
-                if args.treatment_receipt
-                else None,
-            },
-            indent=2,
-        )
-    )
-    return 0
-
-
 def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(description="Fleet cyber post-training utilities")
     commands = root.add_subparsers(dest="command", required=True)
@@ -177,27 +115,6 @@ def parser() -> argparse.ArgumentParser:
     normalize.add_argument("--input", type=Path, required=True)
     normalize.add_argument("--output-dir", type=Path, required=True)
     normalize.set_defaults(run=_normalize)
-
-    rl_snapshot = commands.add_parser(
-        "rl-snapshot", help="freeze exact Fleet task/environment IDs without task payloads"
-    )
-    rl_snapshot.add_argument("--trajectories", type=Path, required=True)
-    rl_snapshot.add_argument("--dataset-manifest", type=Path, required=True)
-    rl_snapshot.add_argument("--source-job-id", required=True)
-    rl_snapshot.add_argument("--output", type=Path, required=True)
-    rl_snapshot.add_argument("--base-url", default="https://api.ft.flt.build")
-    rl_snapshot.add_argument("--workers", type=int, default=8)
-    rl_snapshot.set_defaults(run=_rl_snapshot)
-
-    rl_config = commands.add_parser(
-        "rl-config", help="bind a frozen task split into a full typed RL request"
-    )
-    rl_config.add_argument("--task-split", type=Path, required=True)
-    rl_config.add_argument("--template", type=Path, required=True)
-    rl_config.add_argument("--output", type=Path, required=True)
-    rl_config.add_argument("--exclusions", type=Path)
-    rl_config.add_argument("--treatment-receipt", type=Path)
-    rl_config.set_defaults(run=_rl_config)
 
     return root
 

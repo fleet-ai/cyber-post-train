@@ -217,7 +217,7 @@ def test_checkpoint_command_uses_original_bound_plan(prepared, monkeypatch, tmp_
     assert len(calls) == 1
 
 
-@pytest.mark.parametrize("command", ["jobs-run", "jobs-status"])
+@pytest.mark.parametrize("command", ["jobs-run", "jobs-status", "rl-snapshot", "rl-config"])
 def test_retired_submission_commands_are_not_exposed(command):
     from training.cli import parser
 
