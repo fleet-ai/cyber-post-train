@@ -424,6 +424,10 @@ batch saves index `0`, not an assertion of zero optimizer steps.
 
 For **SkyRL**, use the same YAML and commands, with these differences:
 
+- Run CPU preflight as the pinned image's user `1000:100`, not root. Keep private
+  staged data owned/readable by that user and its parent directories traversable.
+  Root-only `0700` staging passed an earlier root preflight but failed on GPU.
+  Do not make private data world-readable; prepare a correctly owned successor.
 - Set `backend: skyrl` and prepare a matching `rl-data` manifest with that backend.
 - Omit `checkpoint`: this initial profile loads the exact HF base directly. It
   does not consume Miles checkpoints or automatically resume old SkyRL runs.

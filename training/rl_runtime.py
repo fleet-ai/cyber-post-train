@@ -8,6 +8,7 @@ import signal
 import subprocess
 import sys
 import time
+import traceback
 from contextlib import suppress
 from pathlib import Path
 
@@ -44,6 +45,10 @@ def native_failure(plan, error):
                 ),
                 "remote_frames": [
                     {"file": f, "line": int(n), "function": name} for f, n, name in frames
+                ],
+                "local_frames": [
+                    {"file": Path(f.filename).name, "line": f.lineno, "function": f.name}
+                    for f in traceback.extract_tb(error.__traceback__)[-20:]
                 ],
             }
         )

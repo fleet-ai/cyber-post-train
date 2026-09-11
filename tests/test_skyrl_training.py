@@ -243,6 +243,8 @@ def test_native_dataset_cannot_filter_or_edit(artifacts, prepared, monkeypatch, 
 
 @pytest.mark.parametrize("fault", [None, "gpu", "output", "template"])
 def test_cpu_preflight_dispatch_never_starts_ray(artifacts, monkeypatch, fault):
+    monkeypatch.setattr(os, "geteuid", lambda: 1000)
+    monkeypatch.setattr(os, "getegid", lambda: 100)
     plan, root = artifacts
     plan["output_root"] = str(root / "new-output")
     if fault == "output":
@@ -267,6 +269,18 @@ def test_cpu_preflight_dispatch_never_starts_ray(artifacts, monkeypatch, fault):
         proof = train.preflight(plan)
         assert proof["status"] == "passed" and proof["gpus"] == 0
         assert proof["native_parser_checked"] and not proof["rl_qualified"]
+        assert proof["runtime_user"] == {"uid": 1000, "gid": 100}
+
+
+@pytest.mark.parametrize("uid,gid", [(0, 0), (0, 100), (1000, 0)])
+def test_preflight_rejects_privileged_or_different_file_access(monkeypatch, uid, gid):
+    monkeypatch.setattr(os, "geteuid", lambda: uid)
+    monkeypatch.setattr(os, "getegid", lambda: gid)
+    monkeypatch.setattr(
+        train, "job_request", lambda _: pytest.fail("read artifacts before user gate")
+    )
+    with pytest.raises(ValueError, match="1000:100"):
+        train.preflight({})
 
 
 @pytest.fixture
@@ -521,6 +535,38 @@ def test_shared_supervisor_uses_importable_skyrl_module(prepared, monkeypatch):
     assert result["status"] == "native_loop_returned"
     assert calls[0][2] == "training.skyrl_training" and calls[0][-1] == "--native"
     assert (root / "private-skyrl.log").stat().st_mode & 0o777 == 0o600
+
+
+@pytest.mark.parametrize("receipt_io_failure", [False, True])
+def test_native_main_preserves_sanitized_failure(prepared, monkeypatch, capsys, receipt_io_failure):
+    from training import rl_runtime
+
+    plan, root = prepared.plan, prepared.state.tmp
+    plan["output_root"] = str(root)
+    path = root / "native-plan.json"
+    path.write_text(json.dumps(plan))
+    monkeypatch.setattr(train, "job_request", lambda _: None)
+    monkeypatch.setattr(
+        sys, "argv", [train.MODULE, "--plan", str(path), "--sha256", digest(plan), "--native"]
+    )
+
+    def fail(_):
+        raise PermissionError("private input contents")
+
+    monkeypatch.setattr(train, "_native", fail)
+    if receipt_io_failure:
+        monkeypatch.setattr(rl_runtime, "native_failure", lambda *a: fail(None))
+    with pytest.raises(SystemExit) as error:
+        train.main()
+    assert error.value.code == 1
+    assert json.loads(capsys.readouterr().out) == {
+        "status": "failed",
+        "error_class": "PermissionError",
+    }
+    if not receipt_io_failure:
+        receipt = json.loads((root / "NATIVE_FAILURE.json").read_text())
+        assert receipt["causes"][0]["error_class"] == "PermissionError"
+        assert "private input contents" not in json.dumps(receipt)
 
 
 def test_module_entry_rejects_missing_plan_without_private_path(tmp_path, monkeypatch, capsys):

@@ -16,6 +16,7 @@ import os
 import re
 import sys
 import time
+from contextlib import suppress
 from pathlib import Path
 
 from cyber_post_train.jobs import bundled_request, digest, quantity
@@ -289,6 +290,10 @@ def dataset(plan, tokenizer, split, rows):
 
 
 def preflight(plan):
+    # The pinned GPU image is UID 1000/GID 100. Root can read private staging
+    # files that its trainer cannot; such a preflight is not representative.
+    if (os.geteuid(), os.getegid()) != (1000, 100):
+        raise ValueError("SkyRL CPU preflight must use the pinned image user 1000:100, not root")
     import torch
     from transformers import AutoTokenizer
 
@@ -311,6 +316,7 @@ def preflight(plan):
         "schema": "cyber_skyrl_training_cpu_preflight_v1",
         "status": "passed",
         "gpus": 0,
+        "runtime_user": {"uid": os.geteuid(), "gid": os.getegid()},
         "plan_sha256": digest(plan),
         "request_sha256": digest(request),
         "native_parser_checked": True,
@@ -512,7 +518,14 @@ def main():
             raise ValueError("plan digest mismatch")
         job_request(plan)
         if args.native:
-            _native(plan)
+            try:
+                _native(plan)
+            except BaseException as exc:
+                from .rl_runtime import native_failure
+
+                with suppress(Exception):
+                    native_failure(plan, exc)
+                raise
         else:
             result = run(plan, args.plan)
             print(json.dumps({k: result[k] for k in ("status", "sha256")}))

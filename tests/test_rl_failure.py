@@ -20,12 +20,14 @@ def test_remote_error_chain_is_sanitized_bounded_and_sealed(tmp_path):
             "actor_init_failed": True,
             "remote_error_classes": [],
             "remote_frames": [],
+            "local_frames": [],
         },
         {
             "error_class": "AssertionError",
             "actor_init_failed": False,
             "remote_error_classes": [],
             "remote_frames": [{"file": "data.py", "line": 235, "function": "__init__"}],
+            "local_frames": [],
         },
     ]
     assert "private" not in json.dumps(receipt)
@@ -39,6 +41,19 @@ def test_long_error_chain_has_a_fixed_bound(tmp_path):
         current = current.__cause__
     receipt = native_failure({"output_root": str(tmp_path)}, error)
     assert len(receipt["causes"]) == 8
+
+
+def test_local_exception_retains_locations_without_payload(tmp_path):
+    try:
+        raise PermissionError("private path and credential")
+    except PermissionError as error:
+        receipt = native_failure({"output_root": str(tmp_path)}, error)
+    frame = receipt["causes"][0]["local_frames"][0]
+    assert frame["file"] == "test_rl_failure.py"
+    assert frame["function"] == "test_local_exception_retains_locations_without_payload"
+    assert frame["line"] > 0
+    assert "private" not in json.dumps(receipt)
+    assert "credential" not in json.dumps(receipt)
 
 
 def test_actual_ray_actor_error_flattens_cause_to_message(tmp_path):
