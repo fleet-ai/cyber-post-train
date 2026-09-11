@@ -1,0 +1,208 @@
+{
+  "schema": "cyber_fleet_base_control_certification_plan_v1",
+  "purpose": "Prepare exact current shared-Qwen base-route certification for the frozen split-A v2 matched evaluation without launching an evaluation",
+  "split_variant": "a",
+  "references": {
+    "base_control": {
+      "path": "configs/evaluation/qwen38-blackbox-fleet-dev-a-base-control-v1.json",
+      "sha256": "sha256:b1ceef2ad9072c3bc1b283aa74c663928162568327f6166b15b3aafd685a3e86",
+      "file_sha256": "sha256:f686a420a7a95a5a50931228718b98ba8ab44d71942b722c1e237983f7afa3b5"
+    },
+    "parent_protocol": {
+      "path": "configs/evaluation/qwen38-blackbox-fleet-dev-a-outcome-protocol-v1.json",
+      "sha256": "sha256:d9423651420dcf1c39f7b870daafe8a74dec18db6eac8684b3845d881dc61019",
+      "file_sha256": "sha256:6f102334d77ae0c57cf79bd0f92d52b837001f16724c93cb3ad1e4d44557c72e"
+    },
+    "task_set": {
+      "path": "configs/evaluation/qwen38-blackbox-fleet-dev-a-task-set-v1.json",
+      "sha256": "sha256:914a67b587a8d2f5a523ab652eeaec15f8f9d5dbec559c25ff176b01777a6c96",
+      "file_sha256": "sha256:c83fbb2291898351b6a99f6f4f25dff30aeff295cee503031ff606d97a1c88f4"
+    },
+    "model_lock": {
+      "path": "configs/models/qwen38-27b-1d4bf0f2.lock.json",
+      "file_sha256": "sha256:f3926fe675263b25dc79c2b3881a9c463d6b7931e9d61aeb777d15efc61e35ac"
+    },
+    "route_audit": {
+      "path": "docs/evidence/inference/2026-09-11-qwen38-fleet-dev-base-route-audit.json",
+      "sha256": "sha256:bcb35283f1cc6d98c8415ac8ecb3a08276118d5b63aabed8882a1b6906764a0a",
+      "file_sha256": "sha256:4815a1462aa4dc89f08546a31684d74aeeca4838cffaa7ef5f13b52675d28f2b"
+    }
+  },
+  "candidate_base_route": {
+    "endpoint_origin": "https://inference.flt.build",
+    "served_model_id": "qwen3.8-27b",
+    "serving_block_kind": "shared",
+    "model": {
+      "repository": "Qwen/Qwen3.8-27B",
+      "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
+    },
+    "cluster": {
+      "context": "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6",
+      "namespace": "inference"
+    },
+    "object_identity": {
+      "inference_model_uid": "d06c0531-7181-41ad-a3fd-cd8e3e774ab9",
+      "inference_model_resource_version": "19847885",
+      "inference_model_generation": 5,
+      "deployment_uid": "c4dff72c-3c99-4b31-adee-a13ba153676a",
+      "deployment_generation": 6,
+      "pod_uid": "eb52ba96-7b1c-44ce-9495-498151fc5827",
+      "service_uid": "311a866c-7010-4eed-ab81-e1453e222029",
+      "endpoint_slice_uid": "8aa2340c-015d-4396-bb41-df0bd4c094ba"
+    },
+    "runtime": {
+      "engine": "sglang",
+      "precision": "bf16",
+      "quantization": "none",
+      "tensor_parallel_size": 1,
+      "data_parallel_size": 8,
+      "context_length": 262144,
+      "kv_cache_dtype": "fp8_e4m3",
+      "reasoning_parser": "qwen3",
+      "tool_call_parser": "qwen3_coder",
+      "serving_image_digest": "sha256:febfb971c7352570fc445c466ebd6ffc9d896024958e544a60f2137fd85856b1",
+      "normalized_server_arguments_sha256": "sha256:e873d511c6f880a14916ac6346bcc9e38eb15972e50a2a371b5dfc4e305f8f4c"
+    }
+  },
+  "harness_runtime": {
+    "harness_sha256": "sha256:cc289a5221a6bfdaf57bf24652c3a8e67d1469d21149e6af889628207a5172bb",
+    "sampling_sha256": "sha256:a951d413c68d375e9c1ee8dd2cf46734085fd87b1076747f206ac3c35391767e",
+    "pass_k": 4,
+    "runtime_files": {
+      "evaluate.py": "03dac1d8b5947d877bde4671522c9d45dff75e6a1c51d605c63b7f547032fcd6",
+      "exact_pass4_crypto.py": "477b0531fbc34103ed91ff03668616a56f05687ede8c2c9ebb4e9dd2106337d5",
+      "fixed_proxy.py": "a65270cb021cbc8e2fe9b00d901b4b70e9ddc98dd58d93e9f695b1768dfb984d",
+      "opencode_self_hosted.py": "b28e267d02024ac979f4a0f39ee778e68331da490f5084c3e5a34136eff04707",
+      "rollout_ledger.py": "633914e92d6a0fde6f7040f1fddf9a056c43ed9a41301f0baab1ae856397518c",
+      "rollout_postgres.py": "e11706b384dd9caaae7895a8bd95e3300772a737b5493c9dca55ed15191b5873",
+      "rollout_worker.py": "d8db03245561baade77a4bfdb8fcbd853145fbe2a365245eb9b8ca53b186df2b"
+    },
+    "runtime_files_sha256": "sha256:33face1f37fe25603d8257362b4da2c64ad11cde1006f2501fd5981c9443992e"
+  },
+  "workflow": {
+    "order": [
+      {
+        "id": "base_route",
+        "availability": "available_now",
+        "new_gpu_count": 0,
+        "producer": "Fresh read-only current-object and live-mount observation; rehash the complete mounted base payload against the exact model lock and bind current UIDs, image, arguments, catalog, model_info and server_info without a prompt or completion"
+      },
+      {
+        "id": "harness_images",
+        "availability": "available_now",
+        "new_gpu_count": 0,
+        "producer": "Build or reuse only digest-pinned linux/amd64 agent and proxy images, then run clean-pull offline startup, fixed-policy, native-compaction and automatic-continuation checks for the exact v2 treatment"
+      },
+      {
+        "id": "post_sft_route",
+        "availability": "wait_for_accepted_post_sft_export",
+        "new_gpu_count": 0,
+        "producer": "Bind an accepted checkpoint/export, create-once staging receipt and current serving-registration receipt for a post-SFT route cloned from the base runtime"
+      },
+      {
+        "id": "live_pair",
+        "availability": "wait_for_both_routes_live",
+        "new_gpu_count": 0,
+        "producer": "Within one 15-minute window, revalidate both registrations and run only non-scored tokenizer, structured-tool, deterministic-finite-logit and v2 compaction/continuation parity probes; create no task instance and make no grading request"
+      },
+      {
+        "id": "certificate",
+        "availability": "wait_for_all_receipts",
+        "new_gpu_count": 0,
+        "producer": "Assemble the three accepted receipt digests into a launch-identity certificate; a separate reviewed study child remains required before any scored work"
+      }
+    ]
+  },
+  "receipt_templates": {
+    "base_route": {
+      "schema": "cyber_fleet_existing_base_route_receipt_v1",
+      "status": "template_not_evidence",
+      "plan_sha256": null,
+      "observed_at": null,
+      "model_artifact": {
+        "repository": null,
+        "revision": null,
+        "base_snapshot_manifest_sha256": null,
+        "weights_manifest_sha256": null,
+        "tokenizer_manifest_sha256": null,
+        "chat_template_sha256": null,
+        "staging_receipt_sha256": null,
+        "payload_rehashed": null,
+        "symlinks_absent": null
+      },
+      "registration": {
+        "endpoint_origin": null,
+        "served_model_id": null,
+        "serving_block_kind": null,
+        "object_identity": null,
+        "runtime": null,
+        "serving_route_profile_sha256": null,
+        "serving_registration_receipt_sha256": null
+      },
+      "readiness": {
+        "catalog_ready": null,
+        "routed": null,
+        "ready_endpoint_count": null,
+        "model_info_http_status": null,
+        "server_info_http_status": null,
+        "prompt_requests": 0,
+        "completion_requests": 0,
+        "scoring_requests": 0
+      },
+      "sha256": null
+    },
+    "harness_images": {
+      "schema": "cyber_fleet_harness_qualification_receipt_v1",
+      "status": "template_not_evidence",
+      "plan_sha256": null,
+      "qualified_at": null,
+      "platform": null,
+      "agent_image_digest": null,
+      "proxy_image_digest": null,
+      "harness_sha256": null,
+      "sampling_sha256": null,
+      "runtime_files": null,
+      "runtime_files_sha256": null,
+      "checks": {
+        "fresh_digest_pull": null,
+        "opencode_release_and_label": null,
+        "private_home_startup": null,
+        "ordered_bash_submit_report_tools": null,
+        "native_compaction_trigger": null,
+        "automatic_continuation_after_compaction": null,
+        "fixed_sampling_seed_and_32768_output": null,
+        "proxy_path_auth_size_and_request_limits": null,
+        "zero_prompt_completion_and_scoring_requests": null
+      },
+      "sha256": null
+    },
+    "live_pair": {
+      "schema": "cyber_fleet_base_post_live_parity_receipt_v1",
+      "status": "template_not_evidence",
+      "plan_sha256": null,
+      "observed_at": null,
+      "base_route_receipt_sha256": null,
+      "harness_receipt_sha256": null,
+      "post_sft": null,
+      "base_runtime": null,
+      "post_runtime": null,
+      "checks": null,
+      "observations": null,
+      "sha256": null
+    }
+  },
+  "final_gate": {
+    "required_receipts": [
+      "cyber_fleet_existing_base_route_receipt_v1",
+      "cyber_fleet_harness_qualification_receipt_v1",
+      "cyber_fleet_base_post_live_parity_receipt_v1"
+    ],
+    "output_schema": "cyber_fleet_base_control_certificate_v1",
+    "only_scientific_difference": "weights_manifest_sha256",
+    "base_control_template_remains_immutable": true,
+    "certificate_does_not_authorize_scored_work": true
+  },
+  "launchable": false,
+  "paid_or_scored_work_authorized": false,
+  "sha256": "sha256:c7d3e8ecdd24107eb63fb13c8d0afe96b6c6a4959f999dae10194c26340a8834"
+}

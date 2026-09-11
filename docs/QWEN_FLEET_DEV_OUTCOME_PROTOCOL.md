@@ -63,6 +63,9 @@ base/post live-parity receipt for this study. An existing endpoint may be bound
 only after those exact current proofs exist; a catalog entry, model revision
 label, Ready replica, or historical acceptance note is insufficient.
 
+The prepared, zero-new-GPU path for producing those proofs is the
+[matched-base certification workflow](QWEN_FLEET_DEV_BASE_CERTIFICATION.md).
+
 Fleet grader outcomes are stored in the private evaluation ledger and accepted
 receipts. Evaluation metrics and scores must never be sent to W&B, and
 teacher-reference cross-entropy is forbidden. W&B remains limited to the
