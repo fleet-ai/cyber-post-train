@@ -198,11 +198,20 @@ The API injects W&B from the existing `wandb-api` Secret. Never put its value in
 YAML or argv. Track scalars, configuration identities and checkpoint metadata;
 do not upload task text, traces or source code. Reuse neither a W&B run ID nor a
 training output directory for a new treatment.
-Outcome-only runs export just `train/loss` and `train/global_step` as W&B history;
-automatic W&B system telemetry is disabled. Identity/selection metadata remains
-in config/summary. LR, gradient norm, supervised tokens/update, cumulative target
-tokens and timing stay in the private local scalar stream for diagnosis. Legacy
-CE runs retain their existing richer scalar/validation telemetry.
+Outcome-only runs export only a fixed scalar W&B allowlist: `train/loss`,
+`train/global_step`, per-update and cumulative supervised-token counts, learning
+rate, finite gradient norm/status, and supervised-token throughput. Automatic
+W&B system telemetry is disabled; examples, prompts, traces, scores and generic
+timing payloads never enter history. Loss and the other per-update series use
+cumulative supervised tokens as their W&B step axis, so arms with different batch
+sizes can be compared at matched learning signal; global step remains a logged
+scalar. The same scalars remain in the private local stream. A transient SDK/logging
+failure cannot discard optimizer or checkpoint
+progress, but the run then emits `TRAINING_TRACKING_INCOMPLETE.json` and is not an
+accepted arm. Acceptance requires the exact W&B identity, complete per-step scalar
+coverage and a successful SDK finish/sync acknowledgement. The pinned-image CPU
+preflight must prove secret injection and SDK availability before GPUs are used.
+Legacy CE runs retain their existing scalar/validation telemetry.
 
 ## Checkpoints and completion
 

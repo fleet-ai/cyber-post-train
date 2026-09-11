@@ -281,14 +281,16 @@ def test_terminal_result_requires_bound_save_and_validation(tmp_path, paused, ki
             training_result(trainer, paused=paused)
 
 
-@pytest.mark.parametrize("outcome", ["complete", "pause", "unexpected", "bad_pause"])
+@pytest.mark.parametrize(
+    "outcome", ["complete", "pause", "tracking_incomplete", "unexpected", "bad_pause"]
+)
 def test_outer_runtime_only_accepts_valid_planned_pause(tmp_path, monkeypatch, outcome):
     from training import sft_runtime as runtime
 
     value = plan(tmp_path)
     if outcome == "pause":
         value["pause_after_step"] = 1
-    step = 6 if outcome == "complete" else 1
+    step = 6 if outcome in {"complete", "tracking_incomplete"} else 1
     (tmp_path / "checkpoints").mkdir()
     (tmp_path / "checkpoints/latest_ckpt_global_step.txt").write_text(str(step))
     for name in ("checkpoint_receipts", "validation"):
@@ -317,6 +319,13 @@ def test_outer_runtime_only_accepts_valid_planned_pause(tmp_path, monkeypatch, o
         setup=lambda: calls.append("setup"),
         train=train,
         shutdown=lambda: calls.append("shutdown"),
+        tracker=SimpleNamespace(finish=lambda: calls.append("finish")),
+        _update_wandb_summary=lambda values: summary.update(values),
+        wandb_evidence=lambda result: {
+            "status": "unavailable" if outcome == "tracking_incomplete" else "synced",
+            "acceptance_ready": outcome != "tracking_incomplete",
+            "scalar_coverage_complete": outcome != "tracking_incomplete",
+        },
     )
     monkeypatch.setattr(runtime, "_configure_wandb", lambda _: None)
     monkeypatch.setattr(
@@ -327,14 +336,16 @@ def test_outer_runtime_only_accepts_valid_planned_pause(tmp_path, monkeypatch, o
     monkeypatch.setattr(runtime, "_make_trainer_class", lambda: lambda *args: trainer)
     monkeypatch.setattr(runtime, "finalize_failed_run", lambda *args: calls.append("failed") or [])
     monkeypatch.setitem(sys.modules, "wandb", SimpleNamespace(run=SimpleNamespace(summary=summary)))
-    if outcome in {"complete", "pause"}:
+    if outcome in {"complete", "pause", "tracking_incomplete"}:
         result = runtime._run_training(value)
-        assert (
-            result["status"]
-            == summary["status"]
-            == ("training_paused" if outcome == "pause" else "training_complete")
+        base_status = "training_paused" if outcome == "pause" else "training_complete"
+        assert summary["status"] == base_status
+        assert result["status"] == (
+            base_status + "_tracking_incomplete"
+            if outcome == "tracking_incomplete"
+            else base_status
         )
-        assert calls == ["setup", "shutdown"]
+        assert calls == ["setup", "shutdown", "finish"]
     else:
         with pytest.raises(RuntimeError, match="SFT runtime failed"):
             runtime._run_training(value)

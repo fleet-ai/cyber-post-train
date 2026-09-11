@@ -15,9 +15,12 @@ from test_sft_runtime import plan
 from training import checkpoints, recovery
 from training.corpus import select_sources
 from training.sft_runtime import (
+    OUTCOME_WANDB_HISTORY_KEYS,
     PlannedPause,
+    ResilientTracking,
     _configure_wandb,
     _make_trainer_class,
+    _preflight_wandb_environment,
     _unsigned_digest,
     selection_evidence,
     sft_overrides,
@@ -178,16 +181,23 @@ def event(step=1, total=6, logs=None):
 def test_callback_exports_only_loss_step_and_keeps_private_diagnostics(trainer, pause):
     if pause:
         trainer.plan["pause_after_step"] = 1
-    trainer.extra_train_metrics = {"train/supervised_tokens": 16, "train/lr": 1e-6}
+    trainer.extra_train_metrics = {
+        "train/supervised_tokens": 16,
+        "train/total_supervised_tokens": 16,
+        "train/lr": 1e-6,
+        "train/grad_norm": 2,
+        "train/grad_norm_finite": 1,
+        "train/supervised_tokens_per_second": 32.0,
+    }
     record = event(logs={"train/loss": 1.5, "train/grad_norm": 2, "timing/step": 0.1})
     callback = trainer.callbacks[0]
     if pause:
         with pytest.raises(PlannedPause):
             callback.on_log(trainer, record, None)
-        assert trainer.tracker.logs == [{"train/loss": 1.5, "train/global_step": 1}]
+        assert trainer.tracker.logs == [record.logs]
     else:
         callback.on_log(trainer, record, None)
-    assert record.logs == {"train/loss": 1.5, "train/global_step": 1}
+    assert tuple(record.logs) == OUTCOME_WANDB_HISTORY_KEYS
     local = json.loads((trainer.output / "metrics.jsonl").read_text())
     assert local["train/supervised_tokens"] == 16 and local["train/lr"] == 1e-6
     assert local["train/grad_norm"] == 2
@@ -217,17 +227,124 @@ def test_tracker_defines_only_training_series_and_explicit_selection(trainer, mo
         entity="thefleet",
         project="cyber-post-train",
         url="https://example.invalid/synthetic",
-        define_metric=lambda key, **kwargs: definitions.append(key),
+        define_metric=lambda key, **kwargs: definitions.append((key, kwargs)),
         config=SimpleNamespace(update=lambda values, **kwargs: config.update(values)),
     )
     monkeypatch.setitem(sys.modules, "wandb", SimpleNamespace(run=run))
+    monkeypatch.setenv("WANDB_API_KEY", "synthetic-not-a-real-key")
     trainer._init_tracker()
-    assert definitions == ["train/global_step", "train/loss"]
+    assert [key for key, _ in definitions] == [
+        "train/global_step",
+        "train/total_supervised_tokens",
+        *[
+            key
+            for key in OUTCOME_WANDB_HISTORY_KEYS
+            if key not in {"train/global_step", "train/total_supervised_tokens"}
+        ],
+    ]
+    assert all(
+        options.get("step_metric") == "train/total_supervised_tokens"
+        for key, options in definitions
+        if key not in {"train/global_step", "train/total_supervised_tokens"}
+    )
     assert config["selection"] == POLICY and config["reference_ce_enabled"] is False
     assert config["checkpoint_selection"] == "external_fleet_dev_task_outcomes"
     assert config["checkpoint_retention"] == "latest_by_step"
     assert config["dev_rows"] == 0 and config["dev_tasks"] == 0
     assert config["dev_target_policy"] == "none_fresh_task_outcomes_after_training"
+    receipt = json.loads((trainer.output / "WANDB.json").read_text())
+    assert receipt["receipt_sha256"] == _unsigned_digest(
+        {key: value for key, value in receipt.items() if key != "receipt_sha256"}
+    )
+    assert receipt["identity"] == {
+        "entity": "thefleet",
+        "project": "cyber-post-train",
+        "run_id": trainer.plan["wandb"]["run_id"],
+    }
+
+
+def test_resilient_tracking_never_uploads_unreviewed_fields_and_records_sync():
+    calls, changes = [], []
+    state = {
+        "outcome_only": True,
+        "status": "active",
+        "reason_codes": [],
+        "attempted_training_events": 0,
+        "accepted_training_events": 0,
+        "last_accepted_global_step": None,
+        "last_accepted_total_supervised_tokens": None,
+        "finish_acknowledged": False,
+    }
+    delegate = SimpleNamespace(
+        log=lambda values, **kwargs: calls.append(dict(values)),
+        finish=lambda: calls.append("finish"),
+    )
+    tracking = ResilientTracking(delegate, state, lambda: changes.append(dict(state)))
+    values = {
+        "train/global_step": 1,
+        "train/loss": 1.5,
+        "train/total_supervised_tokens": 16,
+        "train/supervised_tokens": 16,
+        "train/lr": 1e-6,
+        "train/grad_norm": 2.0,
+        "train/grad_norm_finite": 1,
+        "train/supervised_tokens_per_second": 32.0,
+        "private/example": "must-not-upload",
+    }
+    tracking.log(values, step=1)
+    tracking.finish()
+    assert tuple(calls[0]) == OUTCOME_WANDB_HISTORY_KEYS
+    assert calls[0].keys().isdisjoint({"private/example"})
+    assert calls[1] == "finish"
+    assert state["status"] == "synced" and state["finish_acknowledged"] is True
+    assert state["accepted_training_events"] == state["attempted_training_events"] == 1
+    assert changes[-1]["status"] == "synced"
+
+
+def test_resilient_tracking_preserves_progress_after_sdk_log_failure():
+    state = {
+        "outcome_only": True,
+        "status": "active",
+        "reason_codes": [],
+        "attempted_training_events": 0,
+        "accepted_training_events": 0,
+        "last_accepted_global_step": None,
+        "last_accepted_total_supervised_tokens": None,
+        "finish_acknowledged": False,
+    }
+    values = dict.fromkeys(OUTCOME_WANDB_HISTORY_KEYS, 1)
+    tracking = ResilientTracking(
+        SimpleNamespace(
+            log=lambda *args, **kwargs: (_ for _ in ()).throw(OSError("synthetic network")),
+            finish=lambda: pytest.fail("disabled tracker must not finish"),
+        ),
+        state,
+        lambda: None,
+    )
+    tracking.log(values, step=1)
+    tracking.log(values, step=2)
+    tracking.finish()
+    assert state["status"] == "unavailable"
+    assert state["reason_codes"] == ["history_log_failed"]
+    assert state["attempted_training_events"] == 2
+    assert state["accepted_training_events"] == 0
+
+
+def test_train_step_emits_finite_token_normalized_scalar_metrics(trainer):
+    trainer._torch_profiler_enabled = False
+    trainer.dispatch = SimpleNamespace(
+        forward_backward=lambda *args, **kwargs: SimpleNamespace(
+            metrics={"final_loss": 1.25, "lr": 3e-6}
+        ),
+        optim_step=lambda *args, **kwargs: 0.75,
+    )
+    result = trainer.train_step({"loss_mask": torch.tensor([[1, 1, 0], [1, 0, 0]])}, 1)
+    assert result["loss"] == 1.25 and result["grad_norm"] == 0.75
+    assert trainer.extra_train_metrics["train/supervised_tokens"] == 3
+    assert trainer.extra_train_metrics["train/total_supervised_tokens"] == 3
+    assert trainer.extra_train_metrics["train/lr"] == 3e-6
+    assert trainer.extra_train_metrics["train/grad_norm_finite"] == 1
+    assert trainer.extra_train_metrics["train/supervised_tokens_per_second"] > 0
 
 
 def test_outcome_wandb_disables_automatic_system_history(tmp_path, monkeypatch):
@@ -235,6 +352,32 @@ def test_outcome_wandb_disables_automatic_system_history(tmp_path, monkeypatch):
     monkeypatch.setenv("WANDB_API_KEY", "synthetic-not-a-real-key")
     _configure_wandb(outcome_plan(tmp_path))
     assert __import__("os").environ["WANDB__DISABLE_STATS"] == "true"
+
+
+def test_cluster_preflight_requires_wandb_secret_and_sdk(monkeypatch):
+    monkeypatch.delenv("WANDB_API_KEY", raising=False)
+    with pytest.raises(ValueError, match="secret injection missing"):
+        _preflight_wandb_environment()
+    monkeypatch.setenv("WANDB_API_KEY", "synthetic-not-a-real-key")
+    monkeypatch.setitem(sys.modules, "wandb", ModuleType("wandb"))
+    _preflight_wandb_environment()
+
+
+def test_terminal_wandb_evidence_requires_exact_synced_scalar_coverage(trainer):
+    trainer.wandb_state.update(
+        status="synced",
+        finish_acknowledged=True,
+        receipt_written=True,
+        url="https://example.invalid/synthetic",
+        attempted_training_events=2,
+        accepted_training_events=2,
+        last_accepted_global_step=2,
+        last_accepted_total_supervised_tokens=32,
+    )
+    result = {"optimizer_steps_executed": 2, "optimizer_step": 2, "supervised_tokens": 32}
+    assert trainer.wandb_evidence(result)["acceptance_ready"] is True
+    trainer.wandb_state["accepted_training_events"] = 1
+    assert trainer.wandb_evidence(result)["acceptance_ready"] is False
 
 
 def test_installed_wandb_resolves_outcome_system_history_setting():

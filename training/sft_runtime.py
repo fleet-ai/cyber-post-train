@@ -95,6 +95,18 @@ SOURCE_SHA256 = {
     ),
 }
 
+OUTCOME_WANDB_HISTORY_KEYS = (
+    "train/global_step",
+    "train/loss",
+    "train/total_supervised_tokens",
+    "train/supervised_tokens",
+    "train/lr",
+    "train/grad_norm",
+    "train/grad_norm_finite",
+    "train/supervised_tokens_per_second",
+)
+OUTCOME_WANDB_STEP_KEYS = frozenset(OUTCOME_WANDB_HISTORY_KEYS)
+
 
 def digest(path: Path) -> str:
     with path.open("rb") as stream:
@@ -118,6 +130,92 @@ def write_receipt(path: Path, value: dict, *, replace: bool = False) -> None:
         os.fsync(stream.fileno())
     if replace:
         temporary.replace(path)
+
+
+def _scalar_outcome_history(values: dict, *, require_complete: bool = True) -> dict:
+    """Return only the finite, non-sensitive scalars allowed in W&B history."""
+    history = {}
+    for key in OUTCOME_WANDB_HISTORY_KEYS:
+        if key not in values:
+            continue
+        value = values[key]
+        if type(value) not in (int, float) or not math.isfinite(float(value)):
+            if require_complete:
+                raise ValueError("outcome W&B history must contain finite numeric scalars")
+            continue
+        history[key] = value
+    if require_complete and "train/loss" in history and history.keys() != OUTCOME_WANDB_STEP_KEYS:
+        raise ValueError("outcome W&B training event lacks required scalar coverage")
+    return history
+
+
+class ResilientTracking:
+    """Keep optimizer progress independent from a transient W&B SDK failure."""
+
+    def __init__(self, delegate, state: dict, on_change):
+        self.delegate = delegate
+        self.state = state
+        self.on_change = on_change
+        self.finished = False
+
+    def _unavailable(self, reason: str) -> None:
+        self.delegate = None
+        self.state["status"] = "unavailable"
+        if reason not in self.state["reason_codes"]:
+            self.state["reason_codes"].append(reason)
+        self.on_change()
+
+    def log(self, values, *args, **kwargs):
+        try:
+            history = _scalar_outcome_history(values) if self.state["outcome_only"] else values
+        except Exception:
+            self._unavailable("invalid_scalar_history")
+            return
+        is_step = "train/loss" in history
+        if is_step:
+            self.state["attempted_training_events"] += 1
+        if self.delegate is None:
+            return
+        try:
+            result = self.delegate.log(history, *args, **kwargs)
+        except Exception:
+            self._unavailable("history_log_failed")
+            return
+        if is_step:
+            self.state["accepted_training_events"] += 1
+            self.state["last_accepted_global_step"] = history["train/global_step"]
+            self.state["last_accepted_total_supervised_tokens"] = history[
+                "train/total_supervised_tokens"
+            ]
+        return result
+
+    def finish(self, *args, **kwargs):
+        if self.finished:
+            return None
+        self.finished = True
+        if self.delegate is None:
+            self.on_change()
+            return None
+        try:
+            result = self.delegate.finish(*args, **kwargs)
+        except Exception:
+            self._unavailable("sdk_finish_failed")
+            return None
+        self.state["finish_acknowledged"] = True
+        self.state["status"] = "synced"
+        self.on_change()
+        return result
+
+    def disable(self, reason: str) -> None:
+        self._unavailable(reason)
+
+    def __getattr__(self, name):
+        if self.delegate is None:
+            raise AttributeError(name)
+        return getattr(self.delegate, name)
+
+    def __del__(self):
+        pass
 
 
 def _checked_file(path: Path, expected: str) -> None:
@@ -803,6 +901,16 @@ def _configure_wandb(plan: dict) -> None:
     Path(os.environ["WANDB_DIR"]).mkdir(parents=True, exist_ok=True, mode=0o700)
 
 
+def _preflight_wandb_environment() -> None:
+    """Prove the cluster preflight received the secret and pinned-image SDK."""
+    if not os.environ.get("WANDB_API_KEY"):
+        raise ValueError("W&B secret injection missing")
+    try:
+        import wandb  # noqa: F401
+    except ImportError as exc:
+        raise ValueError("W&B SDK missing from pinned training image") from exc
+
+
 def explicit_tracking_class(base):
     """Native Tracking.__del__ assumes success; only our outer outcome may finish."""
 
@@ -890,10 +998,8 @@ def _make_trainer_class():
             )
             if not reference_ce:
                 # Native Tracking.log consumes this same dictionary after the
-                # callback. Keep rich diagnostics private and upload only two series.
-                history = {
-                    k: event.logs[k] for k in ("train/global_step", "train/loss") if k in event.logs
-                }
+                # callback. Upload only the reviewed scalar allowlist.
+                history = _scalar_outcome_history(event.logs, require_complete=False)
                 event.logs.clear()
                 event.logs.update(history)
             if "train/loss" in event.logs and event.global_step == trainer.plan.get(
@@ -949,6 +1055,68 @@ def _make_trainer_class():
             self.best = None
             self.extra_train_metrics = {}
             self.target_tokens_seen = 0
+            self.wandb_state = {
+                "requested": True,
+                "outcome_only": not uses_reference_ce(plan),
+                "status": "initializing",
+                "reason_codes": [],
+                "identity": {key: plan["wandb"][key] for key in ("entity", "project", "run_id")},
+                "history_metrics": list(OUTCOME_WANDB_HISTORY_KEYS),
+                "automatic_system_telemetry": False,
+                "attempted_training_events": 0,
+                "accepted_training_events": 0,
+                "last_accepted_global_step": None,
+                "last_accepted_total_supervised_tokens": None,
+                "finish_acknowledged": False,
+                "receipt_written": False,
+            }
+
+        def _write_wandb_receipt(self):
+            self.wandb_state["receipt_written"] = True
+            receipt = {
+                **self.wandb_state,
+                "plan_sha256": self.plan["plan_sha256"],
+                "observed_at_unix": time.time(),
+            }
+            try:
+                write_receipt(self.output / "WANDB.json", receipt, replace=True)
+            except Exception:
+                self.wandb_state["receipt_written"] = False
+                if "receipt_write_failed" not in self.wandb_state["reason_codes"]:
+                    self.wandb_state["reason_codes"].append("receipt_write_failed")
+                self.wandb_state["status"] = "unavailable"
+
+        def _update_wandb_summary(self, values):
+            if not isinstance(self.tracker, ResilientTracking) or self.tracker.delegate is None:
+                return
+            try:
+                import wandb
+
+                if wandb.run is None:
+                    raise ValueError("missing active run")
+                wandb.run.summary.update(values)
+            except Exception:
+                self.tracker.disable("summary_update_failed")
+
+        def wandb_evidence(self, result):
+            state = dict(self.wandb_state)
+            expected = result["optimizer_steps_executed"]
+            coverage = (
+                not state["reason_codes"]
+                and state["status"] == "synced"
+                and state["finish_acknowledged"] is True
+                and state["receipt_written"] is True
+                and isinstance(state.get("url"), str)
+                and bool(state["url"])
+                and state["attempted_training_events"] == expected
+                and state["accepted_training_events"] == expected
+                and state["last_accepted_global_step"] == result["optimizer_step"]
+                and state["last_accepted_total_supervised_tokens"] == result["supervised_tokens"]
+            )
+            state["expected_training_events"] = expected
+            state["scalar_coverage_complete"] = coverage
+            state["acceptance_ready"] = coverage
+            return state
 
         def _init_workers(self):
             selection = contextlib.nullcontext()
@@ -989,80 +1157,98 @@ def _make_trainer_class():
                 )
 
         def _init_tracker(self):
-            self.tracker = explicit_tracking_class(Tracking)(
-                project_name=self.cfg.trainer.project_name,
-                experiment_name=self.cfg.trainer.run_name,
-                backend=self.cfg.trainer.logger,
-                config=self.sft_cfg,
-                tags=self.cfg.trainer.tags,
-            )
-            import wandb
-
-            run = wandb.run
             expected = self.plan["wandb"]
-            if (
-                run is None
-                or run.id != expected["run_id"]
-                or run.entity != expected["entity"]
-                or run.project != expected["project"]
-            ):
-                raise ValueError("W&B run identity mismatch")
-            run.define_metric("train/global_step")
-            reference_ce = uses_reference_ce(self.plan)
-            if reference_ce:
-                run.define_metric("train/*", step_metric="train/global_step")
-                run.define_metric("eval/*", step_metric="train/global_step")
-                run.define_metric("eval/task_macro_loss", summary="min")
+            delegate = None
+            run = None
+            if not os.environ.get("WANDB_API_KEY"):
+                self.wandb_state.update(status="unavailable", reason_codes=["missing_api_key"])
             else:
-                run.define_metric("train/loss", step_metric="train/global_step")
-            run.config.update(
-                {
-                    "experiment_plan_sha256": self.plan["plan_sha256"],
-                    "model_repo": self.plan["model"]["repo"],
-                    "model_revision": self.plan["model"]["revision"],
-                    "split_manifest_sha256": self.plan.get("split_manifest_sha256"),
-                    "train_rows": self.plan["datasets"]["train"]["rows"],
-                    "dev_rows": self.plan["datasets"].get("dev", {}).get("rows", 0),
-                    "dev_tasks": len(self.plan["datasets"].get("dev", {}).get("task_keys", [])),
-                    "target_policy": (
-                        "visible_all_assistant_once"
-                        if self.plan["schema"] == DENSE_SCHEMA
-                        else "visible_last_assistant_message"
-                    ),
-                    "dev_target_policy": (
-                        "visible_last_assistant_message"
-                        if "dev" in self.plan["datasets"]
-                        else "none_fresh_task_outcomes_after_training"
-                    ),
-                    "train_expected_supervised_tokens": self.plan["datasets"]["train"].get(
-                        "supervised_tokens"
-                    ),
-                    "train_source_sessions": self.plan["datasets"]["train"].get("source_sessions"),
-                    "train_assistant_responses": self.plan["datasets"]["train"].get(
-                        "assistant_responses"
-                    ),
-                    "train_original_assistant_responses": self.plan["datasets"]["train"].get(
-                        "source_total_assistant_responses"
-                    ),
-                    "train_excluded_assistant_responses": self.plan["datasets"]["train"].get(
-                        "excluded_assistant_responses"
-                    ),
-                    "corpus_manifest_sha256": self.plan.get("corpus_manifest_sha256"),
-                    "execution_resources": self.plan.get("execution", {}).get("resources"),
-                    "selection_metric": (
-                        "eval/task_macro_loss"
-                        if "dev" in self.plan["datasets"]
-                        else "external_fleet_dev_task_outcomes"
-                    ),
-                    "inline_hf_export": False,
-                    **selection_evidence(self.plan),
-                },
-                allow_val_change=False,
-            )
-            write_receipt(
-                self.output / "WANDB.json",
-                {"url": run.url, "run_id": run.id, "project": run.project, "entity": run.entity},
-            )
+                try:
+                    delegate = explicit_tracking_class(Tracking)(
+                        project_name=self.cfg.trainer.project_name,
+                        experiment_name=self.cfg.trainer.run_name,
+                        backend=self.cfg.trainer.logger,
+                        config=self.sft_cfg,
+                        tags=self.cfg.trainer.tags,
+                    )
+                    import wandb
+
+                    run = wandb.run
+                    if (
+                        run is None
+                        or run.id != expected["run_id"]
+                        or run.entity != expected["entity"]
+                        or run.project != expected["project"]
+                    ):
+                        raise ValueError("W&B run identity mismatch")
+                    run.define_metric("train/global_step")
+                    reference_ce = uses_reference_ce(self.plan)
+                    if reference_ce:
+                        run.define_metric("train/*", step_metric="train/global_step")
+                        run.define_metric("eval/*", step_metric="train/global_step")
+                        run.define_metric("eval/task_macro_loss", summary="min")
+                    else:
+                        run.define_metric("train/total_supervised_tokens")
+                        for key in OUTCOME_WANDB_HISTORY_KEYS:
+                            if key not in {"train/global_step", "train/total_supervised_tokens"}:
+                                run.define_metric(key, step_metric="train/total_supervised_tokens")
+                    run.config.update(
+                        {
+                            "experiment_plan_sha256": self.plan["plan_sha256"],
+                            "model_repo": self.plan["model"]["repo"],
+                            "model_revision": self.plan["model"]["revision"],
+                            "split_manifest_sha256": self.plan.get("split_manifest_sha256"),
+                            "train_rows": self.plan["datasets"]["train"]["rows"],
+                            "dev_rows": self.plan["datasets"].get("dev", {}).get("rows", 0),
+                            "dev_tasks": len(
+                                self.plan["datasets"].get("dev", {}).get("task_keys", [])
+                            ),
+                            "target_policy": (
+                                "visible_all_assistant_once"
+                                if self.plan["schema"] == DENSE_SCHEMA
+                                else "visible_last_assistant_message"
+                            ),
+                            "dev_target_policy": (
+                                "visible_last_assistant_message"
+                                if "dev" in self.plan["datasets"]
+                                else "none_fresh_task_outcomes_after_training"
+                            ),
+                            "train_expected_supervised_tokens": self.plan["datasets"]["train"].get(
+                                "supervised_tokens"
+                            ),
+                            "train_source_sessions": self.plan["datasets"]["train"].get(
+                                "source_sessions"
+                            ),
+                            "train_assistant_responses": self.plan["datasets"]["train"].get(
+                                "assistant_responses"
+                            ),
+                            "train_original_assistant_responses": self.plan["datasets"][
+                                "train"
+                            ].get("source_total_assistant_responses"),
+                            "train_excluded_assistant_responses": self.plan["datasets"][
+                                "train"
+                            ].get("excluded_assistant_responses"),
+                            "corpus_manifest_sha256": self.plan.get("corpus_manifest_sha256"),
+                            "execution_resources": self.plan.get("execution", {}).get("resources"),
+                            "selection_metric": (
+                                "eval/task_macro_loss"
+                                if "dev" in self.plan["datasets"]
+                                else "external_fleet_dev_task_outcomes"
+                            ),
+                            "inline_hf_export": False,
+                            **selection_evidence(self.plan),
+                        },
+                        allow_val_change=False,
+                    )
+                except Exception:
+                    delegate = None
+                    self.wandb_state.update(
+                        status="unavailable", reason_codes=["initialization_failed"]
+                    )
+            self.tracker = ResilientTracking(delegate, self.wandb_state, self._write_wandb_receipt)
+            if delegate is not None:
+                self.wandb_state.update(status="active", url=run.url)
+            self._write_wandb_receipt()
 
         def _load_split(self, split):
             import pyarrow.parquet as pq
@@ -1129,6 +1315,7 @@ def _make_trainer_class():
 
         def train_step(self, batch, step):
             # Exact upstream calls, preserving the LR scalar it otherwise drops.
+            started = time.perf_counter()
             timings = {}
             with Timer("forward_backward", timings):
                 output = self.dispatch.forward_backward("policy", batch, loss_fn="cross_entropy")
@@ -1138,7 +1325,9 @@ def _make_trainer_class():
                 self.dispatch.profile_step("policy")
             loss = float(output.metrics.get("final_loss", output.metrics.get("loss", float("nan"))))
             lr = float(output.metrics["lr"])
-            if not all(math.isfinite(x) for x in (loss, lr, float(grad_norm))):
+            grad_norm = float(grad_norm)
+            elapsed = time.perf_counter() - started
+            if not all(math.isfinite(x) for x in (loss, lr, grad_norm, elapsed)) or elapsed <= 0:
                 raise ValueError("nonfinite training metric")
             targets = int((batch["loss_mask"] > 0).sum().item())
             self.target_tokens_seen += targets
@@ -1146,6 +1335,9 @@ def _make_trainer_class():
                 "train/lr": lr,
                 "train/supervised_tokens": targets,
                 "train/total_supervised_tokens": self.target_tokens_seen,
+                "train/grad_norm": grad_norm,
+                "train/grad_norm_finite": 1,
+                "train/supervised_tokens_per_second": targets / elapsed,
             }
             return {"loss": loss, "grad_norm": grad_norm, "timings": timings}
 
@@ -1302,9 +1494,7 @@ def _run_training(plan: dict) -> dict:
         except PlannedPause:
             paused = True
         result = training_result(trainer, paused=paused)
-        import wandb
-
-        wandb.run.summary.update(
+        trainer._update_wandb_summary(
             {
                 "completed_optimizer_steps": result["optimizer_step"],
                 "status": result["status"],
@@ -1315,6 +1505,13 @@ def _run_training(plan: dict) -> dict:
             }
         )
         trainer.shutdown()
+        # Native shutdown normally finishes tracking. This idempotent call makes
+        # the SDK sync acknowledgement explicit if that implementation changes.
+        trainer.tracker.finish()
+        tracking = trainer.wandb_evidence(result)
+        result["wandb_tracking"] = tracking
+        if not tracking["acceptance_ready"]:
+            result["status"] += "_tracking_incomplete"
         return result
     except BaseException as exc:
         # Do not use native log_exception: it uploads raw traceback and finishes exit0.
@@ -1340,6 +1537,8 @@ def main():
     validate_plan(plan)
     validate_runtime_sources()
     if args.preflight_tokenize:
+        _configure_wandb(plan)
+        _preflight_wandb_environment()
         import pyarrow.parquet as pq
         from skyrl.train.sft_trainer import tokenize_chat_example
         from transformers import AutoTokenizer
@@ -1400,7 +1599,14 @@ def main():
             else "TRAINING_PAUSED.json"
             if result["status"] == "training_paused"
             else "TRAINING_COMPLETE.json"
+            if result["status"] == "training_complete"
+            else "TRAINING_TRACKING_INCOMPLETE.json"
+            if result["status"]
+            in {"training_paused_tracking_incomplete", "training_complete_tracking_incomplete"}
+            else None
         )
+        if terminal is None:
+            raise ValueError("unknown SFT terminal status")
         write_receipt(output / terminal, result)
         print(json.dumps({"status": result["status"], "optimizer_step": result["optimizer_step"]}))
     except BaseException as exc:
