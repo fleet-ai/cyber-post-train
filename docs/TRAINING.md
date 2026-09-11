@@ -238,7 +238,7 @@ The public training command currently runs **SFT**, not RL. Historical
 not a current launch shortcut. RL qualification remains a completion gate.
 
 Use the native trainers, not a new optimizer implementation. The inspected
-[Theseus FTI integration](https://github.com/fleet-ai/theseus/tree/6b7e1304e0782b9586d0fb03e955f2264a8f32db/services/fti/src/fti/trainers/miles)
+[Theseus FTI integration](https://github.com/fleet-ai/theseus/tree/cc18d2cd3e9370abf4f6f19df317d96ce6b619e4/services/fti/src/fti/trainers/miles)
 provides Miles token recording and a Qwen3.8 text recipe (Megatron TP4/CP2,
 one or two eight-GPU nodes; TP1 SGLang engines). Its GLM recipe is **Flash**,
 not our full GLM5.3. Its stock agent uses Platform V2 and `fleet_submit`, so it
@@ -267,5 +267,15 @@ probabilities are saved privately, and samples are returned only after confirmed
 environment release. An ambiguous response is held, never resampled or converted
 to zero reward. Context/turn exhaustion is excluded; a normally stopped, fully
 graded zero remains a valid zero. The native request must disable automatic
-replacement of invalid groups. CPU tests do not qualify the trainer/image,
-sampling engine, or live Fleet path; those gates remain open.
+replacement of invalid groups. The pinned Miles image passed 74 CPU tests with
+real MCP 2.1.1 transport, native FTI recording and the exact Qwen tokenizer;
+[evidence](evidence/cleanup-miles-cpu-20260911.json). Task/engine responses were
+synthetic: live sampling, Fleet reward, GPU optimization and resume remain open.
+
+Use FTI's digest-bound `qwen3.8_fixed.jinja` on both training and sampling sides.
+The original HF template rejects Miles' incremental tool-history prefix. The
+hook checks `model.runtime_chat_template_sha256` against the actual loaded
+tokenizer before opening an environment. It does not rewrite templates or
+re-tokenize generated history. MCP 2.x uses `httpx2`, two transport streams,
+timeouts in seconds and `is_error`; a passing mock of the old API was not a
+compatibility proof. These checks belong in the pinned-image CPU gate.

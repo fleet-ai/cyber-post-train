@@ -1,0 +1,118 @@
+{
+  "schema": "cyber_cleanup_miles_cpu_qualification_v1",
+  "classification": "operational_gate_cpu_only",
+  "observed_at": "2026-09-11T04:21:07Z",
+  "pod": {
+    "name": "chris-cpt-miles-cpu-selftest-v2",
+    "uid": "594f9587-5b34-43ab-a394-1da89c3397f9",
+    "phase": "Succeeded",
+    "node": "computeinstance-e04az8ppqdsr7e9pah",
+    "created": "2026-09-11T04:19:11Z",
+    "priority": "c2",
+    "resources": {
+      "limits": {
+        "cpu": "4",
+        "memory": "16Gi"
+      },
+      "requests": {
+        "cpu": "2",
+        "memory": "8Gi"
+      }
+    },
+    "containers": [
+      {
+        "name": "selftest",
+        "restartCount": 0,
+        "imageID": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/miles-trainer@sha256:d1d37c584e2aafdd47df1e1f3492ff3343eb3b83a5f658cf7ce2432ee8d6ef33",
+        "exitCode": 0,
+        "startedAt": "2026-09-11T04:19:13Z",
+        "finishedAt": "2026-09-11T04:19:29Z"
+      }
+    ]
+  },
+  "receipt": {
+    "bundle_sha256": "9e488452b2ba49d1c697300bb0f403b3bc4a508aab5db104508b1451c67d1ea9",
+    "counts": {
+      "errors": 0,
+      "failures": 0,
+      "skipped": 0,
+      "tests": 74
+    },
+    "files": {
+      "configs/models/qwen38-27b-1d4bf0f2.lock.json": "f3926fe675263b25dc79c2b3881a9c463d6b7931e9d61aeb777d15efc61e35ac",
+      "evals/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "evals/fleet/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "evals/fleet/opencode_self_hosted.py": "ee3a603a3be7e21ab71267cb676c1741bdfc12c440f26f7b0c6a0922b2014a9f",
+      "test-wheels.json": "e51b711acd70111ddb902456447bd3225c4f42a552b46a6cf3e4667e2b316d9d",
+      "tests/test_rl_episode.py": "368522962bdc77977b7c2053b19afa59435a0d3e66770141a5e641fa2ee5eda6",
+      "tests/test_rl_native.py": "f8dcfa290b77e26982def745c36af508f7fa65d74830d0aabbb78476501df6b4",
+      "training/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "training/rl_episode.py": "9be4bf14977da8991f83f15baced1741bd351c9b06ac80a7709254cfafe39493"
+    },
+    "gpus": 0,
+    "schema": "cyber_miles_native_selftest_v1",
+    "sha256": "238d0020a9f4195f1c74098bf81f8fd909124048a809af86662348c0063591ce",
+    "status": "passed",
+    "test_output_sha256": "1d6ac1870027bdc92f24aa70ea5bd9d6f942cf95e2806c65bae726ab65f93d88"
+  },
+  "manifest_sha256": "808350303cfcf3a3eb36ee15a8218c0f093dcb6387533a1b1f0643b4419208f7",
+  "independently_verified": [
+    "receipt_self_digest",
+    "current_module_and_test_hashes",
+    "exact_image_id",
+    "terminal_exit_zero",
+    "zero_restarts",
+    "zero_gpu_request"
+  ],
+  "runtime": {
+    "fti": "0.7.4",
+    "miles": "0.1.0",
+    "mcp": "2.1.1",
+    "torch": "2.13.0+cu130",
+    "transformers": "5.12.1",
+    "fti_source_commit": "cc18d2cd3e9370abf4f6f19df317d96ce6b619e4",
+    "recorder_sha256": "593698b7e12ad97eee37804d5dba7f36ad9d73c8cb9e8c06ae20328d3bd18b48",
+    "mcp_transport_sha256": "6cc73f8ec7d270bf30433a85c5b05a6384afdd08d543368c54187f94840e04e5",
+    "qwen_runtime_template_sha256": "38d42166599348d47ded69776c5389c89924045e6827089923a031379f8a3dfe"
+  },
+  "qualified": [
+    "real_MCP2_initialize_list_call_and_session_close_with_synthetic_HTTP",
+    "native_GenerateFnInput_args_property",
+    "exact_Qwen_tokenizer_hashes",
+    "native_FTI_Qwen_runtime_template",
+    "native_Recorder_TITO_and_Sample_token_mask_logprob_alignment",
+    "synthetic_valid_zero_and_nonzero_rewards",
+    "truncated_or_aborted_generation_exclusion",
+    "existing_single_attempt_lifecycle_and_cleanup_regressions"
+  ],
+  "corrections": [
+    {
+      "stage": "image_inspection",
+      "issue": "Two CPU-node pulls failed at the same layer; original container never started",
+      "resolution": "UID-bound original Pod removed after normal then force deletion; separate zero-GPU probe used spare CPU on a healthy node already caching the exact digest",
+      "original_uid": "124b7c54-91a6-47a1-950e-0400e2bd3727"
+    },
+    {
+      "stage": "image_interface",
+      "issue": "UID1000 could not import native Miles; old MCP1 function was absent",
+      "resolution": "Matched the image's normal user and explicitly used the pinned MCP2 httpx2/two-stream/seconds/is_error contract",
+      "failed_uid": "d2ff3f74-d600-498b-b4e8-77871a9bde17",
+      "accepted_uid": "d9727625-5efc-4785-bcbc-57e3ace96630",
+      "accepted_receipt_sha256": "00ca1dc12287439aafb8920874aec2d07d5f7aacbad6b174bab04c5d7c7ba32f"
+    },
+    {
+      "stage": "native_tokenizer",
+      "issue": "Original HF template rejects Miles' system/assistant incremental prefix",
+      "resolution": "Used the exact existing FTI Qwen3.8 corrected template and added runtime template-hash enforcement before instance creation",
+      "failed_uid": "f21fdc8d-46ce-4946-8e06-2f0e612856fe",
+      "failed_receipt_sha256": "a44bd79395d2bf9c2920a260b6d531574ca778a796e3ef9b11ffd5144d69f08d"
+    }
+  ],
+  "limitations": [
+    "All task and inference replies are synthetic.",
+    "No model weights loaded; no GPU, real Fleet environment, scored rollout or optimizer update.",
+    "Not a production RL qualification or public RL launch authorization.",
+    "SkyRL RL remains separately unqualified."
+  ],
+  "resource_release": "The terminal CPU-only Pod has exited; no GPU was ever requested. Peer workloads and live campaigns were not mutated."
+}

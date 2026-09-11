@@ -39,18 +39,20 @@ async def _request(client: httpx.AsyncClient, method, path, **kwargs):
 
 @asynccontextmanager
 async def _mcp(root, auth, timeout):
-    # Provided by the pinned native trainer image, not installed at GPU startup.
+    # MCP 2.x in the pinned Miles image uses httpx2 and a two-stream transport.
+    import httpx2
     from mcp import ClientSession
-    from mcp.client.streamable_http import streamablehttp_client
+    from mcp.client.streamable_http import streamable_http_client
 
     async with (
-        streamablehttp_client(
-            root.rstrip("/") + "/mcp",
+        httpx2.AsyncClient(
             headers={auth["header"]: auth["token"]},
-            timeout=timedelta(seconds=timeout),
-            sse_read_timeout=timedelta(seconds=timeout),
-        ) as (reader, writer, _),
-        ClientSession(reader, writer) as session,
+            timeout=timeout,
+            follow_redirects=False,
+            transport=httpx2.AsyncHTTPTransport(retries=0),
+        ) as client,
+        streamable_http_client(root.rstrip("/") + "/mcp", http_client=client) as (reader, writer),
+        ClientSession(reader, writer, read_timeout_seconds=timeout) as session,
     ):
         await session.initialize()
         yield session
@@ -190,7 +192,7 @@ async def _agent(recorder, session, messages, tools, limits, parse):
                 result = await session.call_tool(call["name"], arguments=call["arguments"])
             if any(block.type != "text" for block in result.content):
                 raise InvalidEpisode("non_text_tool_result")
-            text, error = "\n".join(block.text for block in result.content), result.isError
+            text, error = "\n".join(block.text for block in result.content), result.is_error
         env_time += time.monotonic() - start
         if len(text) > limits["tool_result_chars"]:
             raise InvalidEpisode("tool_result_exceeds_budget")
@@ -414,6 +416,12 @@ async def generate(input):
         or args.rollout_max_context_len != config["rl"]["context_tokens"]
     ):
         raise InvalidEpisode("native_model_or_budget_drift")
+    template = input.state.tokenizer.chat_template
+    if (
+        not isinstance(template, str)
+        or fleet.sha256(template.encode()) != config["model"]["runtime_chat_template_sha256"]
+    ):
+        raise InvalidEpisode("native_chat_template_drift")
     mode = "dev" if input.evaluation else "train"
     config["run_id"] += f"-{mode}-r{sample.rollout_id}-s{sample.index}"
     config["sampling"] = copy.deepcopy(input.sampling_params)

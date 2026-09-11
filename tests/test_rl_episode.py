@@ -36,7 +36,10 @@ def fixture(monkeypatch):
         {
             "run_id": "synthetic-episode-001",
             "task": {"key": "synthetic", "version_id": TASK},
-            "model": {"root": "/model", "tito_family": "qwen35"},
+            "model": {
+                "root": "/model", "tito_family": "qwen35",
+                "runtime_chat_template_sha256": fleet.sha256(b"synthetic-template"),
+            },
             "environment": {
                 "id": "env",
                 "version": "v1",
@@ -175,7 +178,7 @@ def fixture(monkeypatch):
             state.tool_calls.append((name, arguments))
             if state.tool_text == "timeout":
                 raise TimeoutError("private tool error")
-            return NS(content=[NS(type="text", text=state.tool_text)], isError=state.tool_error)
+            return NS(content=[NS(type="text", text=state.tool_text)], is_error=state.tool_error)
 
     @asynccontextmanager
     async def mcp(root, auth, timeout):
@@ -487,16 +490,27 @@ async def test_native_mcp_connection_contract(monkeypatch):
     events = []
 
     @asynccontextmanager
+    async def client(**kwargs):
+        assert kwargs == {
+            "headers": {"x-auth": "fixture"},
+            "timeout": 5,
+            "follow_redirects": False,
+            "transport": 0,
+        }
+        yield "client"
+        events.append("client_closed")
+
+    @asynccontextmanager
     async def stream(url, **kwargs):
         assert url == "https://fixture.invalid/mcp"
-        assert kwargs["headers"] == {"x-auth": "fixture"}
-        assert kwargs["timeout"] == kwargs["sse_read_timeout"] == timedelta(seconds=5)
-        yield "reader", "writer", None
+        assert kwargs == {"http_client": "client"}
+        yield "reader", "writer"
         events.append("stream_closed")
 
     class Session:
-        def __init__(self, reader, writer):
+        def __init__(self, reader, writer, *, read_timeout_seconds):
             assert (reader, writer) == ("reader", "writer")
+            assert read_timeout_seconds == 5
 
         async def __aenter__(self):
             return self
@@ -507,13 +521,15 @@ async def test_native_mcp_connection_contract(monkeypatch):
         async def __aexit__(self, *args):
             events.append("session_closed")
 
-    for name in ("mcp", "mcp.client", "mcp.client.streamable_http"):
+    for name in ("httpx2", "mcp", "mcp.client", "mcp.client.streamable_http"):
         monkeypatch.setitem(sys.modules, name, ModuleType(name))
+    sys.modules["httpx2"].AsyncClient = client
+    sys.modules["httpx2"].AsyncHTTPTransport = lambda *, retries: retries
     sys.modules["mcp"].ClientSession = Session
-    sys.modules["mcp.client.streamable_http"].streamablehttp_client = stream
+    sys.modules["mcp.client.streamable_http"].streamable_http_client = stream
     async with rl._mcp("https://fixture.invalid/", {"header": "x-auth", "token": "fixture"}, 5):
         assert events == ["initialized"]
-    assert events == ["initialized", "session_closed", "stream_closed"]
+    assert events == ["initialized", "session_closed", "stream_closed", "client_closed"]
 
 
 @pytest.fixture
@@ -545,7 +561,7 @@ def native(fixture, tmp_path, monkeypatch):
         sample=NS(
             metadata={"cyber_config": fixture.config, "split": "train"}, rollout_id=2, index=3
         ),
-        state=NS(aborted=False),
+        state=NS(aborted=False, tokenizer=NS(chat_template="synthetic-template")),
         sampling_params={},
         evaluation=False,
     )
@@ -577,7 +593,9 @@ async def test_native_hook_exact_attempt_and_split(native, fixture, dev):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("fault", ["partial", "split", "identity", "run", "path", "auth", "model"])
+@pytest.mark.parametrize(
+    "fault", ["partial", "split", "identity", "run", "path", "auth", "model", "template", "dict"]
+)
 async def test_native_preflight_stops_before_environment(native, fixture, fault, monkeypatch):
     if fault == "partial":
         native.args.partial_rollout = True
@@ -591,6 +609,10 @@ async def test_native_preflight_stops_before_environment(native, fixture, fault,
         native.args.cyber_output_root = "relative"
     elif fault == "model":
         native.args.hf_checkpoint = "/other"
+    elif fault == "template":
+        native.state.tokenizer.chat_template = "changed"
+    elif fault == "dict":
+        native.state.tokenizer.chat_template = {"default": "synthetic-template"}
     else:
         monkeypatch.delenv("FLEET_API_KEY")
     with pytest.raises(rl.InvalidEpisode):
