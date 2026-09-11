@@ -1,0 +1,61 @@
+{
+  "active_evaluation_wheel_changed": false,
+  "change": "Share one private-result normalizer; preserve SQLite/PostgreSQL result digests and database lifecycle. Remove the duplicated PostgreSQL normalizer.",
+  "focused_suite": {
+    "passed": 110,
+    "reason": "optional native Docker image test not selected in this focused invocation",
+    "skipped": 1
+  },
+  "full_suite": {
+    "coverage": {
+      "covered_branches": 4451,
+      "covered_lines": 13708,
+      "num_branches": 6950,
+      "num_statements": 17926
+    },
+    "native_opencode_startup_test": "passed using staged immutable image",
+    "passed": 1739,
+    "skipped": 111,
+    "subtests_passed": 7
+  },
+  "historical_campaign_mutated": false,
+  "limitations": "Whole-repository coverage is incomplete. These tests do not establish new training reward/update, full GLM qualification or model capability.",
+  "observed_at": "2026-09-11T14:04:17.393958+00:00",
+  "postgres_coverage": {
+    "covered_branches": 40,
+    "covered_lines": 157,
+    "num_branches": 40,
+    "num_statements": 157
+  },
+  "real_postgresql_tests": {
+    "cases": 46,
+    "checks": [
+      "concurrent SKIP LOCKED claims and exclusions",
+      "worker/claim fencing and terminal immutability",
+      "expired heartbeat and trigger-rejected claim transaction rollback",
+      "independent plan metadata/count/binding drift",
+      "private local-result idempotency, generation collision and catalog-failure retention",
+      "SQLite/PostgreSQL record equality and exact record digest parity"
+    ],
+    "database": "explicit opt-in local disposable database; per-test isolated schema",
+    "failures": 0,
+    "skips": 0
+  },
+  "schema": "cleanup_ledger_contract_v1",
+  "sha256": "c742fe6ff38727b58e0579536eb6188a2a6642b6bffe670ae063c4ede2380ca3",
+  "source_sha256": {
+    "evals/fleet/rollout_ledger.py": "633914e92d6a0fde6f7040f1fddf9a056c43ed9a41301f0baab1ae856397518c",
+    "evals/fleet/rollout_postgres.py": "e11706b384dd9caaae7895a8bd95e3300772a737b5493c9dca55ed15191b5873",
+    "tests/test_rollout_postgres.py": "779e341b0db326c67dacdb76da63222dd3abeff25b59250c28755cf4e063c4b3"
+  },
+  "status": "passed",
+  "wheel": {
+    "bundle_replay_rejected": true,
+    "installed_outside_checkout": true,
+    "legacy_help_commands": 2,
+    "public_help_commands": 8,
+    "python": "3.12.14",
+    "queue_modules_byte_identical": true,
+    "sha256": "fff868287a7523e3d081bbfb9417bac15a9300719f1d9c63ec2b2ee6bfc6e68e"
+  }
+}

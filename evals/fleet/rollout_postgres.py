@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import math
 import uuid
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
@@ -513,64 +512,6 @@ def request_retry_review(
     )
 
 
-def _normalized_local_result(record: dict[str, Any], *, cell_id: str) -> dict[str, Any]:
-    generation = record.get("execution_generation")
-    if isinstance(generation, bool) or not isinstance(generation, int) or generation < 1:
-        raise rollout_ledger.LedgerError("execution_generation must be a positive integer")
-    exit_code = record.get("agent_exit_code")
-    if isinstance(exit_code, bool) or not isinstance(exit_code, int):
-        raise rollout_ledger.LedgerError("agent_exit_code must be an integer")
-    elapsed = record.get("elapsed_seconds")
-    if isinstance(elapsed, bool) or not isinstance(elapsed, int | float):
-        raise rollout_ledger.LedgerError("elapsed_seconds must be numeric")
-    elapsed = float(elapsed)
-    if not math.isfinite(elapsed) or elapsed < 0:
-        raise rollout_ledger.LedgerError("elapsed_seconds must be finite and non-negative")
-    require_text = rollout_ledger._require_text  # noqa: SLF001
-    require_digest = rollout_ledger._require_digest  # noqa: SLF001
-    require_path = rollout_ledger._require_relative_path  # noqa: SLF001
-    normalized = {
-        "execution_id": require_text(record.get("execution_id"), "execution_id"),
-        "cell_id": require_text(cell_id, "cell_id"),
-        "execution_generation": generation,
-        "run_id": require_text(record.get("run_id"), "run_id"),
-        "session_id": (
-            require_text(record["session_id"], "session_id")
-            if record.get("session_id") is not None
-            else None
-        ),
-        "verifier_execution_id": require_text(
-            record.get("verifier_execution_id"), "verifier_execution_id"
-        ),
-        "score": rollout_ledger._require_score(record.get("score")),  # noqa: SLF001
-        "config_sha256": require_digest(record.get("config_sha256", ""), "config_sha256"),
-        "artifact_directory": require_path(record.get("artifact_directory"), "artifact_directory"),
-        "trace_path": require_path(record.get("trace_path"), "trace_path"),
-        "trace_sha256": require_digest(record.get("trace_sha256", ""), "trace_sha256"),
-        "result_path": require_path(record.get("result_path"), "result_path"),
-        "result_sha256": require_digest(record.get("result_sha256", ""), "result_sha256"),
-        "reward_path": require_path(record.get("reward_path"), "reward_path"),
-        "reward_sha256": require_digest(record.get("reward_sha256", ""), "reward_sha256"),
-        "session_ingest_path": require_path(
-            record.get("session_ingest_path"), "session_ingest_path"
-        ),
-        "session_ingest_sha256": require_digest(
-            record.get("session_ingest_sha256", ""), "session_ingest_sha256"
-        ),
-        "cleanup_path": require_path(record.get("cleanup_path"), "cleanup_path"),
-        "cleanup_sha256": require_digest(record.get("cleanup_sha256", ""), "cleanup_sha256"),
-        "session_ingest_status": require_text(
-            record.get("session_ingest_status"), "session_ingest_status"
-        ),
-        "agent_exit_code": exit_code,
-        "agent_termination": require_text(record.get("agent_termination"), "agent_termination"),
-        "elapsed_seconds": elapsed,
-    }
-    if rollout_ledger.EXECUTION_ID_RE.fullmatch(normalized["execution_id"]) is None:
-        raise rollout_ledger.LedgerError("execution_id must be a sha256 identity")
-    return normalized
-
-
 def record_local_result(
     dsn: str,
     *,
@@ -579,7 +520,7 @@ def record_local_result(
     claim_id: str,
     record: dict[str, Any],
 ) -> dict[str, Any]:
-    normalized = _normalized_local_result(record, cell_id=cell_id)
+    normalized = rollout_ledger.normalize_local_result(record, cell_id=cell_id)
     record_sha256 = hashlib.sha256(
         json.dumps(normalized, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()

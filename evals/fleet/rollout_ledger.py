@@ -482,21 +482,8 @@ def _row_dict(row: sqlite3.Row | None) -> dict[str, Any] | None:
     return dict(row) if row is not None else None
 
 
-def record_local_result(
-    database: Path,
-    *,
-    cell_id: str,
-    worker_id: str,
-    claim_id: str,
-    record: dict[str, Any],
-) -> dict[str, Any]:
-    """Create one private local-result index before Fleet session acceptance.
-
-    Large or sensitive artifacts remain immutable files beside the ledger.  This
-    table stores the score plus exact relative paths and digests so a Fleet
-    session-catalog defect cannot make the experiment's own result disappear.
-    """
-
+def normalize_local_result(record: dict[str, Any], *, cell_id: str) -> dict[str, Any]:
+    """One private-result contract for PostgreSQL and preserved SQLite workflows."""
     execution_id = _require_text(record.get("execution_id"), "execution_id")
     if EXECUTION_ID_RE.fullmatch(execution_id) is None:
         raise LedgerError("execution_id must be a sha256 identity")
@@ -552,6 +539,20 @@ def record_local_result(
         "agent_termination": _require_text(record.get("agent_termination"), "agent_termination"),
         "elapsed_seconds": elapsed,
     }
+    return normalized
+
+
+def record_local_result(
+    database: Path,
+    *,
+    cell_id: str,
+    worker_id: str,
+    claim_id: str,
+    record: dict[str, Any],
+) -> dict[str, Any]:
+    """Index immutable private artifacts before Fleet catalog acceptance, without retry."""
+    normalized = normalize_local_result(record, cell_id=cell_id)
+    execution_id = normalized["execution_id"]
     record_sha256 = hashlib.sha256(
         json.dumps(normalized, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
