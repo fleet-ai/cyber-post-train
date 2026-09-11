@@ -142,6 +142,25 @@ optimizer and random-state files, and writes a create-once manifest without
 changing the checkpoint. Only use trusted checkpoints from the bound run: native
 PyTorch metadata uses pickle. Sealing proves file identity, **not GPU reload**.
 
+The CPU-only export command consumes the sealed manifest, with its externally
+recorded **file** SHA-256 (not the embedded receipt digest):
+
+```sh
+uv run cyber-post-train checkpoint-export /shared/checkpoint-step-50.json \
+  --sha256 <manifest-file-sha256> --output /shared/qwen-step-50-bf16
+```
+
+This path currently targets Qwen3.8 only. It rechecks all source files, joins
+native rank shards one tensor at a time, casts trained FP32 weights to BF16,
+restores only the exact frozen-base MTP allowlist and runtime sidecars, then
+reopens every written tensor before atomic no-replace publication. It writes
+`EXPORT.json`, **not a GPU reload acceptance**. Use the pinned training image on
+CPU; the implementation bounds a source tensor to 8 GiB and output shards to
+3 GiB. A 32 GiB request / 48 GiB limit is the qualification shape, not permission
+to occupy a GPU. A leftover `.partial` directory is preserved for diagnosis and
+blocks reuse; do not remove it automatically. Real-checkpoint export/reload
+qualification remains recorded separately in `docs/CONSOLIDATION.md`.
+
 The runtime has fixed startup, no-progress and hard-runtime bounds. A confirmed
 stall preserves evidence and exits truthfully; the Jobs API releases the allocation.
 An independent monitor must confirm release and handle access failures explicitly.

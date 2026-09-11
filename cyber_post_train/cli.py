@@ -197,6 +197,33 @@ def doctor() -> None:
         raise typer.Exit(2)
 
 
+@app.command("checkpoint-export")
+def checkpoint_export(
+    manifest: Path,
+    sha256: Annotated[str, typer.Option("--sha256")],
+    output: Annotated[Path, typer.Option("--output")],
+) -> None:
+    """CPU-only: export a sealed Qwen native checkpoint to exact-base-compatible BF16."""
+    from training.export import export
+
+    try:
+        result = export(manifest, sha256, output)
+        _print(
+            {
+                k: result[k]
+                for k in (
+                    "output_root",
+                    "optimizer_step",
+                    "tensor_bytes",
+                    "receipt_sha256",
+                    "gpu_reload_verified",
+                )
+            }
+        )
+    except Exception as exc:
+        _fail(exc)
+
+
 eval_app = typer.Typer(
     help="Fleet evaluations: prepare, check, initialize, then run bounded workers."
 )

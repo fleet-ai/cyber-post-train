@@ -200,3 +200,22 @@ it did not hash all payloads a second time. Both Pods are terminal. See
 diff whitespace checks pass. A broad formatter check found 24 legacy files with
 formatting drift; they have not been mechanically rewritten because some are
 bound by historical evidence. Changed/new modules are checked separately.
+
+The public `checkpoint-export` path passed 33 pinned-image CPU tests, including
+an actual native-writer → export roundtrip. The real step-one checkpoint then
+exported successfully at 2026-09-11 02:01:04 UTC, without GPUs or restarts. An
+independent read-only CPU audit rehashed all 29 output files (55,586,032,099 bytes),
+checked all 1,199 tensor keys/shapes/dtypes against the exact base, verified nine
+sidecars and reloaded configuration/tokenizer. It also instantiated the full HF
+loader on meta: 1,184 state tensors plus the 15 preserved base MTP tensors in the
+export. GPU model/optimizer reload remains unverified. Evidence is in
+`docs/evidence/cleanup-qwen-export-20260911.json`.
+
+Removed the old run-specific `post_sft_cli.py`, its shell collector, four
+launcher-only tests and the long Qwen3.6 execution runbook. Their integrity and
+tamper-detection tests and historical receipts remain. The short replacement
+guide points to the real CPU seal/export commands and separate inference gate.
+After these removals, 999 tests plus seven subtests pass with PostgreSQL enabled;
+17 native-only tests are skipped locally, not claimed as local passes. A fresh
+wheel installation outside the checkout confirms the new export command works
+and the retired CLI is absent. Ruff lint and changed-file formatting pass.

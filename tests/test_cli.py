@@ -194,6 +194,39 @@ def test_retired_submission_commands_are_not_exposed(command):
     assert exc.value.code == 2
 
 
+def test_export_command_requires_explicit_manifest_identity(tmp_path, monkeypatch):
+    from training import export as module
+
+    manifest, out, sha = tmp_path / "sealed.json", tmp_path / "export", "a" * 64
+    calls = []
+
+    def export(path, expected, destination):
+        calls.append((path, expected, destination))
+        return {
+            "output_root": str(destination),
+            "optimizer_step": 2,
+            "tensor_bytes": 16,
+            "receipt_sha256": "b" * 64,
+            "gpu_reload_verified": False,
+        }
+
+    monkeypatch.setattr(module, "export", export)
+    base = ["checkpoint-export", str(manifest), "--output", str(out)]
+    assert RUNNER.invoke(cli.app, base).exit_code == 2
+    assert not calls
+    result = RUNNER.invoke(cli.app, [*base, "--sha256", sha])
+    assert result.exit_code == 0
+    assert calls == [(manifest, sha, out)]
+    assert json.loads(result.stdout)["gpu_reload_verified"] is False
+
+    def failed(*args):
+        raise RuntimeError("private trainer internals")
+
+    monkeypatch.setattr(module, "export", failed)
+    result = RUNNER.invoke(cli.app, [*base, "--sha256", sha])
+    assert result.exit_code == 2 and "private trainer internals" not in result.output
+
+
 @pytest.mark.parametrize(
     "command",
     [
@@ -205,6 +238,7 @@ def test_retired_submission_commands_are_not_exposed(command):
         ["submit"],
         ["status"],
         ["checkpoint-seal"],
+        ["checkpoint-export"],
     ],
 )
 def test_help_is_accessible(command):

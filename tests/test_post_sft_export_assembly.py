@@ -4,9 +4,7 @@ import json
 from pathlib import Path
 
 import pytest
-from typer.testing import CliRunner
 
-import training.post_sft_cli as post_sft_cli
 from training.io import digest_json
 from training.post_sft import (
     assemble_hf_export_receipt,
@@ -16,10 +14,7 @@ from training.post_sft import (
     render_zero_step_sft_command,
     validate_hf_export_receipt,
 )
-from training.post_sft_cli import app
 from training.post_sft_export_observation import collect_zero_step_export_run_observation
-from training.post_sft_staging import STAGING_COMMAND_SHA256 as REAL_STAGING_COMMAND_SHA256
-from training.post_sft_staging import STAGING_IMAGE as REAL_STAGING_IMAGE
 
 RUN = "ft-run-574bd7b3"
 IMAGE = "registry.example/trainer@sha256:" + "1" * 64
@@ -215,15 +210,13 @@ def _tamper_base_artifact_manifest(manifest: dict, kind: str) -> None:
     elif kind == "duplicate_path":
         rows.append(copy.deepcopy(rows[0]))
     elif kind == "changed_index_hash":
-        next(
-            row for row in rows if row["path"] == "model.safetensors.index.json"
-        )["sha256"] = "1" * 64
+        next(row for row in rows if row["path"] == "model.safetensors.index.json")["sha256"] = (
+            "1" * 64
+        )
     elif kind == "changed_sidecar_hash":
         next(row for row in rows if row["path"] == "config.json")["sha256"] = "0" * 64
     elif kind == "wrong_shard_aggregate":
-        next(row for row in rows if row["path"].endswith(".safetensors"))[
-            "sha256"
-        ] = "3" * 64
+        next(row for row in rows if row["path"].endswith(".safetensors"))["sha256"] = "3" * 64
     elif kind == "wrong_exclusions":
         manifest["excluded_non_artifact_files"] = []
     rows.sort(key=lambda row: row["path"])
@@ -316,9 +309,12 @@ def _stage_execution_plan(image=STAGING_IMAGE, command_sha256=STAGING_COMMAND_SH
 def _stage_runtime_execution(
     stage_input, image=STAGING_IMAGE, command_sha256=STAGING_COMMAND_SHA256
 ):
-    stage_input_file_sha256 = "sha256:" + hashlib.sha256(
-        (json.dumps(stage_input, indent=2, sort_keys=True) + "\n").encode()
-    ).hexdigest()
+    stage_input_file_sha256 = (
+        "sha256:"
+        + hashlib.sha256(
+            (json.dumps(stage_input, indent=2, sort_keys=True) + "\n").encode()
+        ).hexdigest()
+    )
     return {
         "schema": "cyber_sft_inference_stage_execution_v1",
         "image": image,
@@ -418,18 +414,14 @@ def _binding():
             "raw_export_parameter_count": 1,
             "missing_tensor_count": 1,
             "missing_parameter_count": 1,
-            "tensors": [
-                {"key": "mtp.fc.weight", "shape": [1], "dtype": "BF16", "elements": 1}
-            ],
+            "tensors": [{"key": "mtp.fc.weight", "shape": [1], "dtype": "BF16", "elements": 1}],
         },
     }
 
 
 def _collector_inputs_for_request(request):
     entrypoint = render_zero_step_sft_command(request["request"], "ft-run-export")
-    stored_config = normalize_zero_step_stored_config(
-        request["request"], request["export_run"]
-    )
+    stored_config = normalize_zero_step_stored_config(request["request"], request["export_run"])
     stored_config_env = [
         {
             "name": "FLEET_RUN_CONFIG",
@@ -747,9 +739,7 @@ def _artifacts():
                         "base_shard": "base.safetensors",
                     }
                 ],
-                "missing_tensors_sha256": raw_inspection[
-                    "exact_auxiliary_omission_sha256"
-                ],
+                "missing_tensors_sha256": raw_inspection["exact_auxiliary_omission_sha256"],
                 "unexpected_key_count": 0,
                 "shape_mismatch_count": 0,
                 "candidate_wrong_dtype_count": 0,
@@ -768,9 +758,7 @@ def _artifacts():
         },
         "observation_sha256",
     )
-    cast_payload_rows = [
-        {"path": "model.safetensors", "size": 10, "sha256": "e" * 64}
-    ]
+    cast_payload_rows = [{"path": "model.safetensors", "size": 10, "sha256": "e" * 64}]
     cast_payload_sha256 = digest_json(cast_payload_rows)
     cast_inspection = {
         "root": _binding()["bf16_cast_destination"],
@@ -834,22 +822,14 @@ def _artifacts():
                 "revision": "base-revision",
                 "weights_manifest_sha256": BASE_WEIGHTS_SHA256,
                 "inference_artifact_surface": _base_artifact_surface(),
-                "inference_artifact_surface_sha256": digest_json(
-                    _base_artifact_surface()
-                ),
+                "inference_artifact_surface_sha256": digest_json(_base_artifact_surface()),
                 "inference_artifact_manifest_before": _base_artifact_manifest(),
                 "inference_artifact_manifest_after": _base_artifact_manifest(),
                 "manifest_scope": "exact_inference_artifact_surface_v1",
-                "full_manifest_before_sha256": _base_artifact_manifest()[
-                    "manifest_sha256"
-                ],
-                "full_manifest_after_sha256": _base_artifact_manifest()[
-                    "manifest_sha256"
-                ],
+                "full_manifest_before_sha256": _base_artifact_manifest()["manifest_sha256"],
+                "full_manifest_after_sha256": _base_artifact_manifest()["manifest_sha256"],
                 "base_source_stable_during_cast": True,
-                "exact_omission_evidence_sha256": raw_inspection[
-                    "exact_auxiliary_omission_sha256"
-                ],
+                "exact_omission_evidence_sha256": raw_inspection["exact_auxiliary_omission_sha256"],
                 "role": "speculative_draft_heads",
                 "serving_inference_effect": "inert_without_speculative_decoding",
                 "serving_registration_sha256": "sha256:" + "d" * 64,
@@ -860,9 +840,7 @@ def _artifacts():
             },
             "conversion": {
                 "schema": "cyber_sft_fp32_to_bf16_cast_and_restore_proof_v2",
-                "policy": (
-                    "deterministic_trained_fp32_to_bf16_plus_frozen_base_mtp_restore_v1"
-                ),
+                "policy": ("deterministic_trained_fp32_to_bf16_plus_frozen_base_mtp_restore_v1"),
                 "source_dtype": "F32",
                 "destination_dtype": "BF16",
                 "trained_parameter_count": 1,
@@ -873,9 +851,7 @@ def _artifacts():
                 "final_tensor_count": 2,
                 "source_layout_sha256": RAW_LAYOUT_SHA256,
                 "final_layout_sha256": BASE_LAYOUT_SHA256,
-                "exact_omission_evidence_sha256": raw_inspection[
-                    "exact_auxiliary_omission_sha256"
-                ],
+                "exact_omission_evidence_sha256": raw_inspection["exact_auxiliary_omission_sha256"],
                 "cast_rows_sha256": digest_json(cast_rows),
                 "cast_rows": cast_rows,
                 "restoration_rows_sha256": digest_json(restoration_rows),
@@ -934,12 +910,8 @@ def _artifacts():
                 "bf16_inspection": cast_inspection,
                 "observation_sha256": export_observation["observation_sha256"],
                 "cast_receipt_sha256": cast_receipt["cast_receipt_sha256"],
-                "trained_cast_rows_sha256": cast_receipt["conversion"][
-                    "cast_rows_sha256"
-                ],
-                "restoration_rows_sha256": cast_receipt["conversion"][
-                    "restoration_rows_sha256"
-                ],
+                "trained_cast_rows_sha256": cast_receipt["conversion"]["cast_rows_sha256"],
+                "restoration_rows_sha256": cast_receipt["conversion"]["restoration_rows_sha256"],
                 "exact_auxiliary_omission_sha256": raw_inspection[
                     "exact_auxiliary_omission_sha256"
                 ],
@@ -1042,18 +1014,17 @@ def test_assembly_builds_and_self_validates_final_export_receipt():
     assert receipt["schema"] == "cyber_sft_hf_export_v1"
     assert receipt["conversion"]["optimizer_steps"] == 0
     assert receipt["output"]["weights_manifest_sha256"] == CAST_WEIGHTS_SHA256
-    assert receipt["precision_correction"]["source_weights_manifest_sha256"] == (
-        RAW_WEIGHTS_SHA256
-    )
+    assert receipt["precision_correction"]["source_weights_manifest_sha256"] == (RAW_WEIGHTS_SHA256)
     assert receipt["output"]["sidecar_sha256"] == SIDECARS
     assert receipt["staging"]["acceptance_manifest_sha256"].startswith("sha256:")
     assert receipt["export_receipt_sha256"] == digest_json(
         {key: value for key, value in receipt.items() if key != "export_receipt_sha256"}
     )
     run_observation = _artifacts()[2]
-    assert run_observation["rayjob"]["entrypoint_sha256"] == run_observation[
-        "request_identity"
-    ]["command_sha256"]
+    assert (
+        run_observation["rayjob"]["entrypoint_sha256"]
+        == run_observation["request_identity"]["command_sha256"]
+    )
     assert run_observation["pod"]["resolved_image_digest"] == "sha256:" + "1" * 64
     assert run_observation["zero_step_evidence"]["metrics"] == {
         "api_observation_sha256": run_observation["zero_step_evidence"]["metrics"][
@@ -1062,9 +1033,9 @@ def test_assembly_builds_and_self_validates_final_export_receipt():
         "request_owned_config_sha256": run_observation["zero_step_evidence"]["metrics"][
             "request_owned_config_sha256"
         ],
-        "rayjob_fleet_run_config_sha256": run_observation["zero_step_evidence"][
-            "metrics"
-        ]["rayjob_fleet_run_config_sha256"],
+        "rayjob_fleet_run_config_sha256": run_observation["zero_step_evidence"]["metrics"][
+            "rayjob_fleet_run_config_sha256"
+        ],
         "checked_step_fields": {
             "current_step": 318,
             "latest_metrics.global_step": 318,
@@ -1100,11 +1071,7 @@ def test_final_assembly_rejects_resigned_base_artifact_manifest_tamper(kind):
     base_source["full_manifest_before_sha256"] = tampered["manifest_sha256"]
     base_source["full_manifest_after_sha256"] = tampered["manifest_sha256"]
     cast_receipt["cast_receipt_sha256"] = digest_json(
-        {
-            key: value
-            for key, value in cast_receipt.items()
-            if key != "cast_receipt_sha256"
-        }
+        {key: value for key, value in cast_receipt.items() if key != "cast_receipt_sha256"}
     )
 
     with pytest.raises(ValueError, match="base inference artifact"):
@@ -1123,15 +1090,9 @@ def test_final_receipt_rejects_re_signed_frozen_omission_binding_tamper(field):
         {
             "restoration_rows_sha256": correction["restoration_rows_sha256"],
             "omission_policy_sha256": correction["omission_policy_sha256"],
-            "base_weights_manifest_sha256": correction[
-                "base_weights_manifest_sha256"
-            ],
-            "serving_registration_sha256": correction[
-                "serving_registration_sha256"
-            ],
-            "restored_auxiliary_tensors": correction[
-                "restored_auxiliary_tensors"
-            ],
+            "base_weights_manifest_sha256": correction["base_weights_manifest_sha256"],
+            "serving_registration_sha256": correction["serving_registration_sha256"],
+            "restored_auxiliary_tensors": correction["restored_auxiliary_tensors"],
         }
     )
     receipt["export_receipt_sha256"] = digest_json(
@@ -1149,9 +1110,7 @@ def test_final_receipt_rejects_re_signed_frozen_omission_binding_tamper(field):
         )
 
 
-@pytest.mark.parametrize(
-    "field", ("restoration_rows_sha256", "exact_omission_evidence_sha256")
-)
+@pytest.mark.parametrize("field", ("restoration_rows_sha256", "exact_omission_evidence_sha256"))
 def test_final_receipt_rejects_re_signed_omission_evidence_digest_tamper(field):
     receipt = copy.deepcopy(_assemble(_artifacts()))
     receipt["precision_correction"][field] = "sha256:" + "f" * 64
@@ -1183,7 +1142,7 @@ def test_final_receipt_rejects_re_signed_omission_evidence_digest_tamper(field):
         ),
         (
             7,
-                lambda value: value["composition"]["inspection"].__setitem__(
+            lambda value: value["composition"]["inspection"].__setitem__(
                 "weights_manifest_sha256", "sha256:" + "1" * 64
             ),
             "weights differ",
@@ -1313,15 +1272,15 @@ def test_export_observation_collector_fails_closed_on_runtime_or_metric_drift():
         ),
         (lambda v: v[1]["spec"].__setitem__("entrypoint", "python wrong.py"), "entrypoint"),
         (
-            lambda v: v[1]["spec"]["rayClusterSpec"]["headGroupSpec"]["template"][
-                "spec"
-            ]["containers"][0].__setitem__("image", "wrong/image@sha256:" + "f" * 64),
+            lambda v: v[1]["spec"]["rayClusterSpec"]["headGroupSpec"]["template"]["spec"][
+                "containers"
+            ][0].__setitem__("image", "wrong/image@sha256:" + "f" * 64),
             "head image",
         ),
         (
-            lambda v: v[1]["spec"]["rayClusterSpec"]["headGroupSpec"]["template"][
-                "spec"
-            ]["containers"][0].__setitem__("command", ["python", "wrong.py"]),
+            lambda v: v[1]["spec"]["rayClusterSpec"]["headGroupSpec"]["template"]["spec"][
+                "containers"
+            ][0].__setitem__("command", ["python", "wrong.py"]),
             "unreviewed container command",
         ),
         (
@@ -1337,9 +1296,9 @@ def test_export_observation_collector_fails_closed_on_runtime_or_metric_drift():
             "worker replicas",
         ),
         (
-            lambda v: v[1]["spec"]["rayClusterSpec"]["workerGroupSpecs"][0]["template"][
-                "spec"
-            ]["containers"][0]["resources"]["requests"].__setitem__("nvidia.com/gpu", "7"),
+            lambda v: v[1]["spec"]["rayClusterSpec"]["workerGroupSpecs"][0]["template"]["spec"][
+                "containers"
+            ][0]["resources"]["requests"].__setitem__("nvidia.com/gpu", "7"),
             "worker resources",
         ),
         (
@@ -1422,168 +1381,13 @@ def test_export_observation_accepts_exact_ray_cli_terminal_success_marker():
     assert receipt["zero_step_evidence"]["optimizer_step_events"] == 0
 
 
-def test_export_collector_shell_keeps_bearer_token_out_of_argv_and_logs_exact_pod():
-    script = (
-        Path(__file__).resolve().parents[1]
-        / "evals/post_sft/scripts/collect_export_run_observation.sh"
-    ).read_text(encoding="utf-8")
-    assert '--header "Authorization: Bearer $FLEET_TRAINING_API_TOKEN"' not in script
-    assert '--config "$CURL_CONFIG"' in script
-    assert 'chmod 0600 "$CURL_CONFIG"' in script
-    assert 'logs "pod/$SUBMITTER_POD" -c ray-job-submitter' in script
-    assert "terminal-capture)" in script
-    assert 'mkdir -m 0700 -- "$SNAPSHOT_DIR/terminal"' in script
-    assert 'ln -- "$TEMP_DIR/$name" "$SNAPSHOT_DIR/terminal/$name"' in script
-    assert '--terminal-rayjob "$SNAPSHOT_DIR/terminal/rayjob-terminal.json"' in script
-    assert '--api-run "$SNAPSHOT_DIR/terminal/api-run.json"' in script
-    assert '--driver-log "$SNAPSHOT_DIR/terminal/driver.log"' in script
-    for snapshot in (
-        "raycluster-runtime.json",
-        "submitter-job.json",
-        "submitter-pod.json",
-    ):
-        assert snapshot in script
-
-
-def test_assemble_export_cli_writes_the_only_validated_aggregate(tmp_path):
-    artifacts = list(_artifacts())
-    artifacts[6]["execution"] = _stage_execution_plan(
-        REAL_STAGING_IMAGE, REAL_STAGING_COMMAND_SHA256
-    )
-    artifacts[6]["stage_input_sha256"] = digest_json(
-        {key: value for key, value in artifacts[6].items() if key != "stage_input_sha256"}
-    )
-    artifacts[7]["stage_input_sha256"] = artifacts[6]["stage_input_sha256"]
-    artifacts[7]["execution"] = _stage_runtime_execution(
-        artifacts[6], REAL_STAGING_IMAGE, REAL_STAGING_COMMAND_SHA256
-    )
-    artifacts[7]["staging_receipt_sha256"] = digest_json(
-        {key: value for key, value in artifacts[7].items() if key != "staging_receipt_sha256"}
-    )
-    plan = {
-        "schema": "cyber_post_sft_eval_plan_v1",
-        "base_model": {
-            "tokenizer_manifest_sha256": TOKENIZER_SHA256,
-            "chat_template_sha256": CHAT_SHA256,
-            "config_sha256": CONFIG_SHA256,
-            "runtime_sidecar_sha256": SIDECARS,
-            "tokenizer_equivalence_evidence": {"sha256": "sha256:" + "0" * 64},
-            },
-            "serving": {"engine_image": REAL_STAGING_IMAGE},
-            "cast_execution": _cast_execution_plan(),
-            "evidence_execution": {
-                "sfs_export_inspector": _evidence_execution_plan()
-            },
-            "source_checkpoint_evidence": {
-                "structural_manifest_before_sha256": STRUCTURAL_SHA256
-            },
-            "export": _binding(),
-    }
-    names = (
-        "selection",
-        "export-request",
-        "export-run-observation",
-        "export-observation",
-        "cast-receipt",
-        "cast-full-manifest",
-        "stage-input",
-        "staging-receipt",
-    )
-    paths = {}
-    for name, value in zip(names, artifacts, strict=True):
-        path = tmp_path / f"{name}.json"
-        path.write_text(json.dumps(value), encoding="utf-8")
-        paths[name] = path
-    plan_path = tmp_path / "plan.json"
-    plan_path.write_text(json.dumps(plan), encoding="utf-8")
-    output = tmp_path / "final-export.json"
-
-    cli_args = [
-        "assemble-export",
-        "--plan",
-        str(plan_path),
-        "--selection",
-        str(paths["selection"]),
-        "--export-request",
-        str(paths["export-request"]),
-        "--export-run-observation",
-        str(paths["export-run-observation"]),
-        "--export-observation",
-        str(paths["export-observation"]),
-        "--cast-receipt",
-        str(paths["cast-receipt"]),
-        "--cast-full-manifest",
-        str(paths["cast-full-manifest"]),
-        "--stage-input",
-        str(paths["stage-input"]),
-        "--staging-receipt",
-        str(paths["staging-receipt"]),
-        "--output",
-        str(output),
-    ]
-    result = CliRunner().invoke(app, cli_args)
-    assert result.exit_code == 0, result.exception
-    assert json.loads(output.read_text())["schema"] == "cyber_sft_hf_export_v1"
-
-    original = output.read_bytes()
-    collision = CliRunner().invoke(app, cli_args)
-    assert collision.exit_code != 0
-    assert "pre-existing output path" in str(collision.exception)
-    assert output.read_bytes() == original
-
-    for name, make_collision in (
-        ("directory", lambda path: path.mkdir()),
-        ("symlink", lambda path: path.symlink_to(output)),
-        ("broken-symlink", lambda path: path.symlink_to(tmp_path / "missing")),
-    ):
-        target = tmp_path / name
-        make_collision(target)
-        args = list(cli_args)
-        args[-1] = str(target)
-        blocked = CliRunner().invoke(app, args)
-        assert blocked.exit_code != 0
-        assert "pre-existing output path" in str(blocked.exception)
-
-
-def test_immutable_output_publication_loses_a_creation_race_without_overwrite(
-    tmp_path, monkeypatch
-):
-    output = tmp_path / "receipt.json"
-
-    def competing_link(_source, destination):
-        destination = type(output)(destination)
-        destination.write_text("competitor\n")
-        raise FileExistsError(destination)
-
-    monkeypatch.setattr(post_sft_cli.os, "link", competing_link)
-    with pytest.raises(ValueError, match="pre-existing output path"):
-        post_sft_cli._atomic_write_json_new(output, {"ours": True})
-    assert output.read_text() == "competitor\n"
-
-
-def test_multi_output_preflight_rejects_files_directories_and_dangling_symlinks(tmp_path):
-    available = tmp_path / "available.json"
-    for name, make_collision in (
-        ("file", lambda path: path.write_text("immutable\n")),
-        ("directory", lambda path: path.mkdir()),
-        ("broken-symlink", lambda path: path.symlink_to(tmp_path / "missing")),
-    ):
-        collision = tmp_path / name
-        make_collision(collision)
-        with pytest.raises(ValueError, match="pre-existing output path"):
-            post_sft_cli._require_outputs_absent([available, collision])
-        assert not available.exists()
-
-
 def test_export_evidence_submission_is_create_only_and_immutable():
     root = Path(__file__).resolve().parents[1]
     script = (root / "evals/post_sft/scripts/submit_evidence_v4.sh").read_text()
-    manifest = (
-        root / "evals/post_sft/cluster/qwen36-sft-evidence-v4-job.yaml"
-    ).read_text()
+    manifest = (root / "evals/post_sft/cluster/qwen36-sft-evidence-v4-job.yaml").read_text()
     assert "kubectl apply" not in script
     assert 'value["immutable"]=True' in script
-    assert script.count('kubectl create --dry-run=server') >= 2
+    assert script.count("kubectl create --dry-run=server") >= 2
     assert 'kubectl create -f "$config_map"' in script
     assert 'kubectl create -f "$JOB"' in script
     assert script.count("require_absent") >= 3
@@ -1592,9 +1396,7 @@ def test_export_evidence_submission_is_create_only_and_immutable():
     assert "structural_after=" in manifest
     assert "latest_before=" in manifest
     assert "latest_after=" in manifest
-    assert manifest.index("raw-export-full-manifest.json") < manifest.index(
-        "structural_after="
-    )
+    assert manifest.index("raw-export-full-manifest.json") < manifest.index("structural_after=")
     assert 'test "$structural_after" = "$structural_before"' in manifest
     assert 'test "$latest_after" = "$latest_before"' in manifest
     assert "runtime-provenance.json" in manifest
