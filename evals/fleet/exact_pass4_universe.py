@@ -188,9 +188,7 @@ def validate_selection(campaign: dict[str, Any], repo_root: Path) -> list[dict[s
     selection = read_object(selection_path)
     if selection.get("schema_version") != SELECTION_SCHEMA:
         raise ValueError("selection schema drifted")
-    if selection.get("selection_sha256") != crypto.digest_without(
-        selection, "selection_sha256"
-    ):
+    if selection.get("selection_sha256") != crypto.digest_without(selection, "selection_sha256"):
         raise ValueError("selection semantic digest mismatch")
     if selection.get("selection_sha256") != binding["selection_sha256"]:
         raise ValueError("selection semantic binding drifted")

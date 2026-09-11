@@ -99,8 +99,9 @@ owner-scoped admission cap is proven. Never modify peer queues or bypass admissi
 Split, checkpoint, export and model-pinning checks have
 100% focused line/branch coverage; this is **not whole-repository coverage**.
 Model-pinning tests exercise real HTTP parsing, pagination, tampering, download
-bounds, errors and create-once output. The dependency lock now resolves 75
-packages, 19 fewer after removing unused desktop `datasets`/`trl`.
+bounds, errors and create-once output. Unused desktop `datasets`/`trl` were removed.
+The lock now resolves 96 packages including the real MCP transport's test-only
+dependencies; these do not expand the minimal installed CLI dependency set.
 
 Earlier evaluation qualification attempts did not complete a rollout. The first check
 exposed a claim-directory defect before instance creation; that is fixed and
@@ -208,3 +209,9 @@ statement/branch coverage: HTTPS-only, no authorization-bearing redirects,
 bounded GET retries, private files/digests and non-disclosing errors. Temporary
 AWS session tokens are included in exact normalization redaction. These tests
 use synthetic HTTP/data only, not live transcript reads or training qualification.
+
+Formatting now passes in CI. Twenty-eight files were mechanically formatted with
+identical parsed Python syntax trees. Seven historical source files remain
+format-excluded because execution plans bind their exact bytes; their integrity
+tests are unchanged. The dev dependency set now includes the tested MCP 2.1.1
+client so CI exercises the real transport boundary instead of silently skipping it.

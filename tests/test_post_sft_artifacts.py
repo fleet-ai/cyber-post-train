@@ -27,24 +27,17 @@ def test_pinned_registration_programmatically_disables_speculative_decoding():
         (root / "configs/evaluation/qwen36-27b-ft-run-574bd7b3-post-sft.json").read_text()
     )
     registration = json.loads(
-        (
-            root
-            / "evals/webexploitbench/serving/qwen36-27b-6a9e13bd-registration.json"
-        ).read_text()
+        (root / "evals/webexploitbench/serving/qwen36-27b-6a9e13bd-registration.json").read_text()
     )
     proof = prove_speculative_decoding_disabled(registration, plan["serving"])
     assert proof["prohibited_runtime_args_absent"] is True
     tampered = json.loads(json.dumps(registration))
-    tampered["spec"]["runtime"]["args"].extend(
-        ["--speculative-algorithm", "EAGLE"]
-    )
+    tampered["spec"]["runtime"]["args"].extend(["--speculative-algorithm", "EAGLE"])
     with pytest.raises(ValueError, match="enables speculative"):
         prove_speculative_decoding_disabled(tampered, plan["serving"])
 
 
-def test_sfs_evidence_runtime_binds_live_job_pod_image_and_immutable_bundle(
-    tmp_path, monkeypatch
-):
+def test_sfs_evidence_runtime_binds_live_job_pod_image_and_immutable_bundle(tmp_path, monkeypatch):
     root = Path(__file__).resolve().parents[1]
     plan_path = root / "configs/evaluation/qwen36-27b-ft-run-574bd7b3-post-sft.json"
     plan = json.loads(plan_path.read_text())
@@ -82,9 +75,7 @@ def test_sfs_evidence_runtime_binds_live_job_pod_image_and_immutable_bundle(
     }
     documents = list(
         yaml.safe_load_all(
-            (
-                root / "evals/post_sft/cluster/qwen36-sft-evidence-v4-job.yaml"
-            ).read_text()
+            (root / "evals/post_sft/cluster/qwen36-sft-evidence-v4-job.yaml").read_text()
         )
     )
     job_document = next(value for value in documents if value.get("kind") == "Job")
@@ -147,9 +138,7 @@ def test_sfs_evidence_runtime_binds_live_job_pod_image_and_immutable_bundle(
     result = artifacts.collect_sfs_evidence_runtime_provenance(plan)
     assert result["job"]["uid"] == "job-uid"
     assert result["config_map"]["immutable"] is True
-    assert result["no_speculative_decoding_proof"][
-        "no_speculative_or_draft_argument"
-    ] is True
+    assert result["no_speculative_decoding_proof"]["no_speculative_or_draft_argument"] is True
 
 
 def _write_safetensors(root: Path, tensors: dict[str, torch.Tensor]) -> None:
@@ -399,22 +388,16 @@ def test_exact_auxiliary_omission_accepts_only_all_15_frozen_mtp_tensors(tmp_pat
         "missing_parameter_count": 15,
         "tensors": rows,
     }
-    result = compare_safetensor_layout_with_exact_auxiliary_omission(
-        base, candidate, omission
-    )
+    result = compare_safetensor_layout_with_exact_auxiliary_omission(base, candidate, omission)
     assert result["exact_allowlist_match"] is True
     assert result["missing_parameter_count"] == 15
 
     missing_row = json.loads(json.dumps(omission))
     missing_row["tensors"].pop()
     with pytest.raises(ValueError, match="exact frozen Qwen3.6 MTP set"):
-        compare_safetensor_layout_with_exact_auxiliary_omission(
-            base, candidate, missing_row
-        )
+        compare_safetensor_layout_with_exact_auxiliary_omission(base, candidate, missing_row)
 
     wrong_key_candidate = tmp_path / "wrong-key-candidate"
     _write_safetensors(wrong_key_candidate, {"other": torch.ones(2, dtype=torch.float32)})
     with pytest.raises(ValueError, match="missing keys differ"):
-        compare_safetensor_layout_with_exact_auxiliary_omission(
-            base, wrong_key_candidate, omission
-        )
+        compare_safetensor_layout_with_exact_auxiliary_omission(base, wrong_key_candidate, omission)

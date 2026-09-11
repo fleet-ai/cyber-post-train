@@ -28,9 +28,7 @@ def _fp32_export(root: Path, tensors: dict[str, torch.Tensor] | None = None) -> 
         json.dumps(
             {
                 "metadata": {"total_size": sum(t.numel() * 4 for t in tensors.values())},
-                "weight_map": {
-                    key: "model-00001-of-00001.safetensors" for key in sorted(tensors)
-                },
+                "weight_map": {key: "model-00001-of-00001.safetensors" for key in sorted(tensors)},
             },
             sort_keys=True,
         )
@@ -62,9 +60,7 @@ def _bf16_base(root: Path, trained: dict[str, torch.Tensor]) -> dict[str, torch.
         json.dumps(
             {
                 "metadata": {"total_size": sum(t.numel() * 2 for t in tensors.values())},
-                "weight_map": {
-                    key: "model-00001-of-00001.safetensors" for key in sorted(tensors)
-                },
+                "weight_map": {key: "model-00001-of-00001.safetensors" for key in sorted(tensors)},
             },
             sort_keys=True,
         )
@@ -137,9 +133,7 @@ def _execution(source: Path, destination: Path, base: Path | None = None) -> dic
         "final_parameter_count": cast.FINAL_PARAMETER_COUNT,
         "image_id_max_attempts": cast.IMAGE_ID_MAX_ATTEMPTS,
         "image_id_retry_seconds": cast.IMAGE_ID_RETRY_SECONDS,
-        "base_inference_artifact_surface": (
-            cast._expected_base_inference_artifact_surface()
-        ),
+        "base_inference_artifact_surface": (cast._expected_base_inference_artifact_surface()),
         "config_map_code_sha256": {
             path: "sha256:" + f"{index + 1:x}" * 64
             for index, path in enumerate(cast.MOUNTED_CODE_FILES.values())
@@ -172,9 +166,7 @@ def _install_test_base_surface(monkeypatch, base: Path) -> dict:
     return cast._expected_base_inference_artifact_surface()
 
 
-def test_cast_is_deterministic_and_every_tensor_is_exact_direct_bf16(
-    tmp_path: Path, monkeypatch
-):
+def test_cast_is_deterministic_and_every_tensor_is_exact_direct_bf16(tmp_path: Path, monkeypatch):
     source = tmp_path / "source"
     tensors = _fp32_export(source)
     base = tmp_path / "base"
@@ -198,9 +190,10 @@ def test_cast_is_deterministic_and_every_tensor_is_exact_direct_bf16(
     assert proof["cast_rows_sha256"] == repeated["cast_rows_sha256"]
     assert proof["all_restored_auxiliary_bits_equal_frozen_base"] is True
     assert proof["restored_auxiliary_tensor_count"] == 15
-    assert full_file_manifest(first)["manifest_sha256"] == full_file_manifest(second)[
-        "manifest_sha256"
-    ]
+    assert (
+        full_file_manifest(first)["manifest_sha256"]
+        == full_file_manifest(second)["manifest_sha256"]
+    )
     assert set(first.iterdir()).issubset(set(synced))
     assert set(second.iterdir()).issubset(set(synced))
     index = json.loads((first / "model.safetensors.index.json").read_text())
@@ -224,24 +217,18 @@ def test_cast_is_deterministic_and_every_tensor_is_exact_direct_bf16(
 
 def test_cast_fails_closed_on_nonfinite_mixed_dtype_and_memory_bound(tmp_path: Path):
     nonfinite = tmp_path / "nonfinite"
-    trained = _fp32_export(
-        nonfinite, {"weight": torch.tensor([float("nan")], dtype=torch.float32)}
-    )
+    trained = _fp32_export(nonfinite, {"weight": torch.tensor([float("nan")], dtype=torch.float32)})
     base = tmp_path / "nonfinite-base"
     _bf16_base(base, trained)
     with pytest.raises(ValueError, match="non-finite"):
-        cast.cast_fp32_export(
-            nonfinite, base, tmp_path / "nonfinite-out", _omission(trained)
-        )
+        cast.cast_fp32_export(nonfinite, base, tmp_path / "nonfinite-out", _omission(trained))
 
     mixed = tmp_path / "mixed"
     mixed_tensors = _fp32_export(mixed, {"weight": torch.ones(1, dtype=torch.bfloat16)})
     mixed_base = tmp_path / "mixed-base"
     _bf16_base(mixed_base, mixed_tensors)
     with pytest.raises(ValueError, match="uniformly F32|trained tensors are not uniformly F32"):
-        cast.cast_fp32_export(
-            mixed, mixed_base, tmp_path / "mixed-out", _omission(mixed_tensors)
-        )
+        cast.cast_fp32_export(mixed, mixed_base, tmp_path / "mixed-out", _omission(mixed_tensors))
 
     bounded = tmp_path / "bounded"
     bounded_tensors = _fp32_export(bounded, {"weight": torch.ones(8, dtype=torch.float32)})
@@ -259,9 +246,7 @@ def test_cast_fails_closed_on_nonfinite_mixed_dtype_and_memory_bound(tmp_path: P
     dangling = tmp_path / "dangling"
     dangling.symlink_to(tmp_path / "missing")
     with pytest.raises(FileExistsError, match="pre-existing"):
-        cast.cast_fp32_export(
-            bounded, bounded_base, dangling, _omission(bounded_tensors)
-        )
+        cast.cast_fp32_export(bounded, bounded_base, dangling, _omission(bounded_tensors))
 
 
 def test_base_inference_surface_excludes_cache_without_reading_it(tmp_path, monkeypatch):
@@ -290,9 +275,7 @@ def test_base_inference_surface_excludes_cache_without_reading_it(tmp_path, monk
     assert all(not row["path"].startswith(".cache/") for row in manifest["files"])
 
 
-def test_base_inference_surface_fails_on_unreadable_required_artifact(
-    tmp_path, monkeypatch
-):
+def test_base_inference_surface_fails_on_unreadable_required_artifact(tmp_path, monkeypatch):
     base = tmp_path / "base"
     _bf16_base(base, {"weight": torch.ones(1, dtype=torch.float32)})
     surface = _install_test_base_surface(monkeypatch, base)
@@ -309,9 +292,7 @@ def test_base_inference_surface_fails_on_unreadable_required_artifact(
 
 
 @pytest.mark.parametrize("cache_kind", ("file", "symlink"))
-def test_base_inference_surface_rejects_invalid_cache_entry(
-    tmp_path, monkeypatch, cache_kind
-):
+def test_base_inference_surface_rejects_invalid_cache_entry(tmp_path, monkeypatch, cache_kind):
     base = tmp_path / "base"
     _bf16_base(base, {"weight": torch.ones(1, dtype=torch.float32)})
     surface = _install_test_base_surface(monkeypatch, base)
@@ -500,9 +481,7 @@ def test_execute_cast_is_atomic_recoverable_and_never_accepts_incomplete_output(
 
     wrong_base = json.loads(json.dumps(value))
     wrong_base_digest = "sha256:" + "c" * 64
-    wrong_base["frozen_base_auxiliary_source"]["weights_manifest_sha256"] = (
-        wrong_base_digest
-    )
+    wrong_base["frozen_base_auxiliary_source"]["weights_manifest_sha256"] = wrong_base_digest
     wrong_base["cast_input_sha256"] = digest_json(
         {key: item for key, item in wrong_base.items() if key != "cast_input_sha256"}
     )
@@ -580,9 +559,7 @@ def test_cast_runtime_provenance_binds_live_job_pod_image_and_configmap(tmp_path
             "name": "cast-pod",
             "uid": "pod-uid",
             "resourceVersion": "2",
-            "ownerReferences": [
-                {"kind": "Job", "name": cast.JOB_NAME, "uid": "job-uid"}
-            ],
+            "ownerReferences": [{"kind": "Job", "name": cast.JOB_NAME, "uid": "job-uid"}],
         },
         "spec": {
             "serviceAccountName": cast.SERVICE_ACCOUNT_NAME,
@@ -656,11 +633,7 @@ def test_cast_image_id_retries_only_while_empty(monkeypatch):
     expected = "containerd://" + cast.CAST_IMAGE.rsplit("@", 1)[1]
     empty = {"status": {"containerStatuses": [{"name": cast.CONTAINER_NAME}]}}
     resolved = {
-        "status": {
-            "containerStatuses": [
-                {"name": cast.CONTAINER_NAME, "imageID": expected}
-            ]
-        }
+        "status": {"containerStatuses": [{"name": cast.CONTAINER_NAME, "imageID": expected}]}
     }
     reads = []
     sleeps = []
@@ -716,9 +689,10 @@ def test_cast_job_is_queued_cpu_only_digest_pinned_and_create_only():
     plan = json.loads(
         (root / "configs/evaluation/qwen36-27b-ft-run-574bd7b3-post-sft.json").read_text()
     )
-    assert cast.validate_local_cast_bundle(plan, root) == plan["cast_execution"][
-        "config_map_code_sha256"
-    ]
+    assert (
+        cast.validate_local_cast_bundle(plan, root)
+        == plan["cast_execution"]["config_map_code_sha256"]
+    )
     manifest_path = root / "evals/post_sft/cluster/qwen36-sft-bf16-cast-v5-job.yaml"
     documents = list(yaml.safe_load_all(manifest_path.read_text()))
     job = next(value for value in documents if value.get("kind") == "Job")
@@ -740,14 +714,14 @@ def test_historical_cast_destinations_remain_distinct():
     assert "bf16-cast-v3" in v3_job.read_text()
     assert "bf16-cast-v4" in v4_job.read_text()
     assert "bf16-cast-v5" in v5_job.read_text()
-    assert Path(
-        "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-bf16-v3/"
-        "global_step_318/policy"
-    ) != cast.DESTINATION_PATH
-    assert Path(
-        "/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-bf16-v4/"
-        "global_step_318/policy"
-    ) != cast.DESTINATION_PATH
+    assert (
+        Path("/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-bf16-v3/global_step_318/policy")
+        != cast.DESTINATION_PATH
+    )
+    assert (
+        Path("/mnt/sfs/exports/cyber-sft/ft-run-574bd7b3/step-318-bf16-v4/global_step_318/policy")
+        != cast.DESTINATION_PATH
+    )
 
 
 def test_exact_lm_head_fits_v5_bound_but_not_v4_bound():
@@ -756,6 +730,4 @@ def test_exact_lm_head_fits_v5_bound_but_not_v4_bound():
     }
     with pytest.raises(ValueError, match="lm_head.weight exceeds"):
         cast._shard_groups(layout, 2 * 1024**3)
-    assert cast._shard_groups(layout, cast.DEFAULT_MAX_SHARD_BYTES) == [
-        ["lm_head.weight"]
-    ]
+    assert cast._shard_groups(layout, cast.DEFAULT_MAX_SHARD_BYTES) == [["lm_head.weight"]]

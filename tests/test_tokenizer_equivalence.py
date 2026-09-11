@@ -58,9 +58,7 @@ def test_mapping_requires_declared_append_only_tokens(tmp_path: Path):
     candidate = tmp_path / "candidate.json"
     _tokenizer(base)
     _tokenizer(candidate, [_addition("<new>", 4)])
-    receipt = compare_tokenizer_mappings(
-        base, candidate, expected_append_only_tokens={"<new>": 4}
-    )
+    receipt = compare_tokenizer_mappings(base, candidate, expected_append_only_tokens={"<new>": 4})
     assert receipt["candidate_additions_append_only"] is True
     assert "content" not in receipt["candidate_only_tokens"][0]
 
@@ -87,9 +85,7 @@ def test_special_token_fields_must_match(tmp_path: Path):
     candidate = tmp_path / "candidate-config.json"
     base.write_text(json.dumps({"eos_token": "<special>", "pad_token_id": 2}))
     candidate.write_text(json.dumps({"eos_token": "<special>", "pad_token_id": 2}))
-    assert compare_special_token_ids(base, candidate)[
-        "common_special_token_fields_identical"
-    ]
+    assert compare_special_token_ids(base, candidate)["common_special_token_fields_identical"]
     candidate.write_text(json.dumps({"eos_token": "changed", "pad_token_id": 2}))
     with pytest.raises(ValueError, match="special-token"):
         compare_special_token_ids(base, candidate)

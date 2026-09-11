@@ -17,4 +17,3 @@ def sha256(value: bytes) -> str:
 
 def digest_without(value: dict[str, Any], field: str) -> str:
     return sha256(canonical_json({key: item for key, item in value.items() if key != field}))
-

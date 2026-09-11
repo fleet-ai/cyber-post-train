@@ -72,9 +72,7 @@ def test_base_artifact_inspector_v9_binds_ecr_auth_and_minimal_package():
     )
     job = next(value for value in manifests if value["kind"] == "Job")
     assert job["metadata"]["name"] == "chris-cyber-qwen36-base-artifact-inspect-6a9e13bd-v9"
-    assert job["spec"]["template"]["spec"]["imagePullSecrets"] == [
-        {"name": "ecr-pull"}
-    ]
+    assert job["spec"]["template"]["spec"]["imagePullSecrets"] == [{"name": "ecr-pull"}]
     mounted_items = {
         row["key"]: row["path"]
         for row in job["spec"]["template"]["spec"]["volumes"][0]["configMap"]["items"]

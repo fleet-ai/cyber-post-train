@@ -38,6 +38,8 @@ STEP_PATTERNS = (
         re.IGNORECASE,
     ),
 )
+
+
 def _mapping(value: Any, field: str) -> Mapping[str, Any]:
     if not isinstance(value, Mapping):
         raise ValueError(f"{field} must be an object")
@@ -71,9 +73,7 @@ def _container(spec: Mapping[str, Any], expected_image: str, field: str) -> Mapp
     if not isinstance(containers, list):
         raise ValueError(f"{field} containers must be an array")
     matches = [
-        row
-        for row in containers
-        if isinstance(row, Mapping) and row.get("image") == expected_image
+        row for row in containers if isinstance(row, Mapping) and row.get("image") == expected_image
     ]
     if len(matches) != 1:
         raise ValueError(f"{field} must contain exactly one pinned trainer container")
@@ -89,9 +89,7 @@ def _validated_stored_config(
     expected = normalize_zero_step_stored_config(request, export_run)
     if dict(observed) != expected:
         differing = sorted(
-            key
-            for key in set(expected) | set(observed)
-            if expected.get(key) != observed.get(key)
+            key for key in set(expected) | set(observed) if expected.get(key) != observed.get(key)
         )
         raise ValueError(f"{field} differs from exact server-normalized config at {differing}")
     return copy.deepcopy(dict(observed))
@@ -108,9 +106,7 @@ def _fleet_run_config(cluster_spec: Mapping[str, Any], field: str) -> Mapping[st
     if not isinstance(env, list):
         raise ValueError(f"{field} head container has no environment")
     matches = [
-        row
-        for row in env
-        if isinstance(row, Mapping) and row.get("name") == "FLEET_RUN_CONFIG"
+        row for row in env if isinstance(row, Mapping) and row.get("name") == "FLEET_RUN_CONFIG"
     ]
     if len(matches) != 1 or not isinstance(matches[0].get("value"), str):
         raise ValueError(f"{field} has no exact FLEET_RUN_CONFIG value")
@@ -121,9 +117,7 @@ def _fleet_run_config(cluster_spec: Mapping[str, Any], field: str) -> Mapping[st
     return _mapping(value, f"{field} FLEET_RUN_CONFIG")
 
 
-def _owner(
-    metadata: Mapping[str, Any], *, kind: str, name: str, uid: str, field: str
-) -> None:
+def _owner(metadata: Mapping[str, Any], *, kind: str, name: str, uid: str, field: str) -> None:
     owners = metadata.get("ownerReferences")
     matches = [
         row
@@ -147,9 +141,7 @@ def _resources(container: Mapping[str, Any], field: str) -> Mapping[str, Any]:
     return _mapping(container.get("resources"), f"{field} resources")
 
 
-def _exact_resources(
-    container: Mapping[str, Any], expected: Mapping[str, Any], field: str
-) -> None:
+def _exact_resources(container: Mapping[str, Any], expected: Mapping[str, Any], field: str) -> None:
     if dict(_resources(container, field)) != dict(expected):
         raise ValueError(f"{field} resources differ from the reviewed execution policy")
 
@@ -181,8 +173,10 @@ def _ray_cluster_projection(
     }
     head = _mapping(cluster_spec.get("headGroupSpec"), "RayCluster head group")
     head_spec = _mapping(
-        _mapping(_mapping(head.get("template"), "RayCluster head template").get("spec"),
-                 "RayCluster head Pod spec"),
+        _mapping(
+            _mapping(head.get("template"), "RayCluster head template").get("spec"),
+            "RayCluster head Pod spec",
+        ),
         "RayCluster head Pod spec",
     )
     head_container = _container_by_name(head_spec, "ray-head", "RayCluster head")
@@ -243,9 +237,10 @@ def _ray_cluster_projection(
             "resources": copy.deepcopy(dict(_resources(worker_container, "RayCluster worker"))),
         },
     }
-    if projection["head"]["service_account_name"] != DEFAULT_SERVICE_ACCOUNT or projection[
-        "worker"
-    ]["service_account_name"] != DEFAULT_SERVICE_ACCOUNT:
+    if (
+        projection["head"]["service_account_name"] != DEFAULT_SERVICE_ACCOUNT
+        or projection["worker"]["service_account_name"] != DEFAULT_SERVICE_ACCOUNT
+    ):
         raise ValueError("RayCluster service account differs from the reviewed policy")
     return projection
 
@@ -387,9 +382,7 @@ def collect_zero_step_export_run_observation(
     command_sha256 = digest_json({"entrypoint": entrypoint})
     expected_identity = {
         "request_config_sha256": digest_json(request),
-        "stored_config_sha256": digest_json(
-            normalize_zero_step_stored_config(request, export_run)
-        ),
+        "stored_config_sha256": digest_json(normalize_zero_step_stored_config(request, export_run)),
         "kind": "sft",
         "model_precision": "bf16",
         "strategy": "fsdp",
@@ -488,9 +481,7 @@ def collect_zero_step_export_run_observation(
     if not isinstance(statuses, list):
         raise ValueError("runtime Pod containerStatuses must be an array")
     matches = [
-        row
-        for row in statuses
-        if isinstance(row, Mapping) and row.get("name") == container_name
+        row for row in statuses if isinstance(row, Mapping) and row.get("name") == container_name
     ]
     if len(matches) != 1:
         raise ValueError("runtime Pod has no unique trainer container status")
@@ -531,9 +522,7 @@ def collect_zero_step_export_run_observation(
     expected_submitter_resources = cluster_projection["submitter"]["resources"]
     _exact_resources(submitter_container, expected_submitter_resources, "submitter Job")
 
-    submitter_pod_metadata = _mapping(
-        submitter_pod.get("metadata"), "submitter Pod metadata"
-    )
+    submitter_pod_metadata = _mapping(submitter_pod.get("metadata"), "submitter Pod metadata")
     if submitter_pod_metadata.get("namespace") != NAMESPACE:
         raise ValueError("submitter Pod namespace differs from the frozen export run")
     _owner(
@@ -544,16 +533,13 @@ def collect_zero_step_export_run_observation(
         field="submitter Pod",
     )
     submitter_pod_spec = _mapping(submitter_pod.get("spec"), "submitter Pod spec")
-    live_submitter = _container_by_name(
-        submitter_pod_spec, "ray-job-submitter", "submitter Pod"
-    )
+    live_submitter = _container_by_name(submitter_pod_spec, "ray-job-submitter", "submitter Pod")
     if live_submitter.get("image") != SUBMITTER_IMAGE:
         raise ValueError("submitter Pod image differs from the reviewed policy")
     _exact_resources(live_submitter, expected_submitter_resources, "submitter Pod")
-    if (
-        live_submitter.get("command") != submitter_container.get("command")
-        or live_submitter.get("args") != submitter_container.get("args")
-    ):
+    if live_submitter.get("command") != submitter_container.get("command") or live_submitter.get(
+        "args"
+    ) != submitter_container.get("args"):
         raise ValueError("submitter Pod command differs from its owning Job")
 
     stored_config = _mapping(api_run.get("config"), "Jobs API stored config")
@@ -561,9 +547,10 @@ def collect_zero_step_export_run_observation(
         raise ValueError("Jobs API run identity differs from the frozen export run")
     if stored_config.get("run_id") != run_id or stored_config.get("name") != run_name:
         raise ValueError("Jobs API stored config run identity differs from the frozen export run")
-    if not isinstance(stored_config.get("submitted_by_email"), str) or not stored_config[
-        "submitted_by_email"
-    ]:
+    if (
+        not isinstance(stored_config.get("submitted_by_email"), str)
+        or not stored_config["submitted_by_email"]
+    ):
         raise ValueError("Jobs API stored config lacks the reviewed server-owned submitter field")
     if api_run.get("kind") != "sft" or str(api_run.get("status", "")).lower() != "succeeded":
         raise ValueError("Jobs API run is not terminally succeeded SFT")

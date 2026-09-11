@@ -295,9 +295,7 @@ def tool_schema_receipt(tools: list[dict[str, Any]], *, required: list[str]) -> 
             raise ValueError("runtime tool schemas must have unique non-empty function names")
         by_name[name] = tool
     if set(by_name) != set(required):
-        raise ValueError(
-            f"runtime tool set must be exactly {required!r}, got {sorted(by_name)!r}"
-        )
+        raise ValueError(f"runtime tool set must be exactly {required!r}, got {sorted(by_name)!r}")
     canonical = [by_name[name] for name in required]
     encoded = json.dumps(canonical, sort_keys=True, separators=(",", ":")).encode()
     return {
@@ -329,9 +327,7 @@ def main() -> None:
     manifest = json.loads(args.manifest.read_text()) if args.manifest else None
     print(
         json.dumps(
-            analyze_export(
-                args.export, treatment_task_keys=keys, export_manifest=manifest
-            ),
+            analyze_export(args.export, treatment_task_keys=keys, export_manifest=manifest),
             indent=2,
             sort_keys=True,
         )

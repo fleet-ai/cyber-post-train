@@ -58,13 +58,9 @@ IMAGE = "registry.example/trainer@sha256:" + "2" * 64
 ENTRYPOINT_SHA = "sha256:" + "3" * 64
 
 
-def test_base_artifact_inspection_uses_only_validated_inference_surface(
-    tmp_path, monkeypatch
-):
+def test_base_artifact_inspection_uses_only_validated_inference_surface(tmp_path, monkeypatch):
     plan = json.loads(
-        (
-            ROOT / "configs/evaluation/qwen36-27b-ft-run-574bd7b3-post-sft.json"
-        ).read_text()
+        (ROOT / "configs/evaluation/qwen36-27b-ft-run-574bd7b3-post-sft.json").read_text()
     )
     model = plan["base_model"]
     root = tmp_path / "model"
@@ -89,9 +85,7 @@ def test_base_artifact_inspection_uses_only_validated_inference_surface(
     (cache / "must-not-be-read.json").write_text("control metadata")
     surface_manifest = {
         "files": [{"path": name} for name in sorted(required_names | runtime_names)],
-        "excluded_non_artifact_files": [
-            {"path": name} for name in sorted(control_names)
-        ],
+        "excluded_non_artifact_files": [{"path": name} for name in sorted(control_names)],
     }
 
     def validate_surface(observed_root, _surface):
@@ -128,6 +122,7 @@ def test_base_artifact_inspection_uses_only_validated_inference_surface(
     )
     monkeypatch.setattr(evidence, "inspect_hf_export", inspect_view)
     monkeypatch.setattr(evidence, "_artifact_execution_provenance", lambda _plan: {})
+
     def read_base_fixture(path):
         if str(path).endswith(".cyber-post-train-lock.json"):
             return lock
@@ -529,12 +524,15 @@ def test_live_export_job_server_normalization_fixture_matches_frozen_plan():
     )
     stored = normalize_zero_step_stored_config(request, export_run)
     assert digest_json(stored) == fixture["fleet_run_config_sha256"]
-    assert _validated_stored_config(
-        request,
-        export_run,
-        stored,
-        "prompt-free live FLEET_RUN_CONFIG fixture",
-    ) == stored
+    assert (
+        _validated_stored_config(
+            request,
+            export_run,
+            stored,
+            "prompt-free live FLEET_RUN_CONFIG fixture",
+        )
+        == stored
+    )
     assert stored["title"] == fixture["title"]
     assert stored["node_pool"] == "fleetai-training-ng-gpu"
     normalized_data = fixture["server_normalization"]["data_defaults"]
@@ -704,8 +702,7 @@ def test_export_receipt_rejects_wrong_run_identity_and_missing_output_hash():
 def test_webexploit_config_changes_only_model_and_run_id():
     base = json.loads(
         (
-            ROOT
-            / "evals/webexploitbench/configs/qwen36-27b-6a9e13bd-level0-qwen-code-full.json"
+            ROOT / "evals/webexploitbench/configs/qwen36-27b-6a9e13bd-level0-qwen-code-full.json"
         ).read_text()
     )
     candidate = derive_webexploit_config(
@@ -767,8 +764,7 @@ def _paired_inputs(tmp_path):
         / "evals/webexploitbench/manifests/qwen36-27b-qwen-code-protocol-v3.json",
         "baseline_config_path": base_config_path,
         "post_config_path": post_path,
-        "harness_lock_path": ROOT
-        / "evals/webexploitbench/harnesses/qwen-code-0.22.3.lock.json",
+        "harness_lock_path": ROOT / "evals/webexploitbench/harnesses/qwen-code-0.22.3.lock.json",
         "base_registration": base_registration,
         "post_serving_receipt": serving,
     }
@@ -811,9 +807,7 @@ def test_webexploit_pair_binds_exact_qwen_code_baseline_and_runtime(tmp_path):
         ("benchmark", "max_model_requests_per_target", 151, "execution budgets"),
     ],
 )
-def test_webexploit_pair_rejects_terminal_protocol_drift(
-    tmp_path, section, field, value, message
-):
+def test_webexploit_pair_rejects_terminal_protocol_drift(tmp_path, section, field, value, message):
     inputs = _paired_inputs(tmp_path)
     terminal = json.loads(Path(inputs["baseline_terminal_path"]).read_text())
     terminal[section][field] = value
@@ -899,9 +893,7 @@ def _post_sft_launch_evidence(paired_identity, post_registration):
                 "immutable": True,
                 "data_sha256": "sha256:" + "2" * 64,
                 "mounted_file_sha256": {"training/register_post_sft.py": "sha256:" + "3" * 64},
-                "serving_receipt_sha256": paired_identity["post_sft"][
-                    "serving_contract_sha256"
-                ],
+                "serving_receipt_sha256": paired_identity["post_sft"]["serving_contract_sha256"],
             },
         },
         "api_result": {
@@ -918,8 +910,7 @@ def _post_sft_launch_evidence(paired_identity, post_registration):
     }
     registration["registration_completion_sha256"] = digest_json(registration)
     runtime_image = (
-        "lmsysorg/sglang@"
-        "sha256:febfb971c7352570fc445c466ebd6ffc9d896024958e544a60f2137fd85856b1"
+        "lmsysorg/sglang@sha256:febfb971c7352570fc445c466ebd6ffc9d896024958e544a60f2137fd85856b1"
     )
     server_info = {
         "tokenizer_mode": "auto",
@@ -1014,19 +1005,14 @@ def _post_sft_launch_evidence(paired_identity, post_registration):
     post_artifacts["full_non_weight_manifest_sha256"] = digest_json(
         [
             {"path": name, "sha256": digest}
-            for name, digest in sorted(
-                post_artifacts["serving_non_weight_file_sha256"].items()
-            )
-        ] + [{"path": ".fleet-acceptance.json", "sha256": acceptance_sha256}]
+            for name, digest in sorted(post_artifacts["serving_non_weight_file_sha256"].items())
+        ]
+        + [{"path": ".fleet-acceptance.json", "sha256": acceptance_sha256}]
     )
     live = {
         "schema": "webexploitbench_post_sft_live_parity_v1",
-        "paired_identity_receipt_sha256": paired_identity[
-            "paired_identity_receipt_sha256"
-        ],
-        "registration_completion_sha256": registration[
-            "registration_completion_sha256"
-        ],
+        "paired_identity_receipt_sha256": paired_identity["paired_identity_receipt_sha256"],
+        "registration_completion_sha256": registration["registration_completion_sha256"],
         "arms": {
             "base": arm("baseline", base_registration),
             "post_sft": arm("post_sft", post_registration),
@@ -1095,9 +1081,7 @@ def test_post_sft_launch_requires_registration_and_live_weights_only_parity(tmp_
     [
         (lambda registration, live: registration["job"].update(complete=False), "complete"),
         (
-            lambda registration, live: registration["job"]["spec"].update(
-                activeDeadlineSeconds=1
-            ),
+            lambda registration, live: registration["job"]["spec"].update(activeDeadlineSeconds=1),
             "exact spec digest differs",
         ),
         (
@@ -1119,9 +1103,7 @@ def test_post_sft_launch_requires_registration_and_live_weights_only_parity(tmp_
             "non-weight artifact",
         ),
         (
-            lambda registration, live: live["probes"]["fixed_prompt_logits"].update(
-                finite=False
-            ),
+            lambda registration, live: live["probes"]["fixed_prompt_logits"].update(finite=False),
             "not finite and deterministic",
         ),
     ],
@@ -1140,9 +1122,7 @@ def test_post_sft_launch_evidence_fails_closed(tmp_path, mutation, message):
             if key != "registration_completion_sha256"
         }
     )
-    live["registration_completion_sha256"] = registration[
-        "registration_completion_sha256"
-    ]
+    live["registration_completion_sha256"] = registration["registration_completion_sha256"]
     live["live_parity_sha256"] = digest_json(
         {key: value for key, value in live.items() if key != "live_parity_sha256"}
     )
@@ -1249,7 +1229,7 @@ def _registration_job_observation(serving):
                 "template": {
                     "metadata": {"labels": copy.deepcopy(contract["pod_labels"])},
                     "spec": copy.deepcopy(pod_spec),
-                }
+                },
             },
             "status": {
                 "conditions": [{"type": "Complete", "status": "True"}],
@@ -1267,11 +1247,7 @@ def _registration_job_observation(serving):
                 ],
             },
             "spec": copy.deepcopy(pod_spec),
-            "status": {
-                "containerStatuses": [
-                    {"name": "register", "imageID": REGISTRATION_IMAGE}
-                ]
-            },
+            "status": {"containerStatuses": [{"name": "register", "imageID": REGISTRATION_IMAGE}]},
         },
         "config_map": {
             "metadata": {
@@ -1322,9 +1298,7 @@ def test_registration_accepts_only_the_exact_server_owned_region_label(tmp_path)
         "registration": copy.deepcopy(serving["registration"]),
     }
     observation = _registration_job_observation(serving)
-    observation["pod"]["metadata"]["labels"]["topology.kubernetes.io/region"] = (
-        "eu-west2"
-    )
+    observation["pod"]["metadata"]["labels"]["topology.kubernetes.io/region"] = "eu-west2"
     observation["pod"]["spec"]["imagePullSecrets"] = [{"name": "ecr-pull"}]
     observation["pod"]["spec"]["tolerations"].extend(
         [
@@ -1350,9 +1324,7 @@ def test_registration_accepts_only_the_exact_server_owned_region_label(tmp_path)
         _export(_selection()),
     )
 
-    observation["pod"]["metadata"]["labels"]["topology.kubernetes.io/region"] = (
-        "unexpected-region"
-    )
+    observation["pod"]["metadata"]["labels"]["topology.kubernetes.io/region"] = "unexpected-region"
     with pytest.raises(ValueError, match="server-owned label .* differs"):
         assemble_registration_completion(
             paired_identity,
@@ -1362,9 +1334,7 @@ def test_registration_accepts_only_the_exact_server_owned_region_label(tmp_path)
             _export(_selection()),
         )
 
-    observation["pod"]["metadata"]["labels"]["topology.kubernetes.io/region"] = (
-        "eu-west2"
-    )
+    observation["pod"]["metadata"]["labels"]["topology.kubernetes.io/region"] = "eu-west2"
     observation["pod"]["spec"]["imagePullSecrets"] = [{"name": "unreviewed"}]
     with pytest.raises(ValueError, match="execution spec differs"):
         assemble_registration_completion(
@@ -1432,9 +1402,7 @@ def _base_artifact_receipt():
                                 for key, value in contract["pod_spec"].items()
                                 if key != "container"
                             },
-                            "containers": [
-                                copy.deepcopy(contract["pod_spec"]["container"])
-                            ],
+                            "containers": [copy.deepcopy(contract["pod_spec"]["container"])],
                         }
                     }
                 },
@@ -1546,9 +1514,7 @@ def _live_observations(paired_identity, expected_live, post_registration):
 def test_production_evidence_builders_bind_job_export_and_live_routes(tmp_path):
     inputs = _paired_inputs(tmp_path)
     _, paired_identity = derive_post_sft_qwen_pair(**inputs)
-    registration = _assembled_registration(
-        paired_identity, inputs["post_serving_receipt"]
-    )
+    registration = _assembled_registration(paired_identity, inputs["post_serving_receipt"])
     _, expected_live = _post_sft_launch_evidence(
         paired_identity, inputs["post_serving_receipt"]["registration"]
     )
@@ -1565,9 +1531,10 @@ def test_production_evidence_builders_bind_job_export_and_live_routes(tmp_path):
         expected_live["probes"]["tokenizer"],
     )
     assert registration["api_result"]["weights_manifest_sha256"] == "sha256:" + "6" * 64
-    assert registration["source_receipts"]["export_receipt_sha256"] == _export(
-        _selection()
-    )["export_receipt_sha256"]
+    assert (
+        registration["source_receipts"]["export_receipt_sha256"]
+        == _export(_selection())["export_receipt_sha256"]
+    )
     assert live["artifact_identity"]["only_difference"] == "checkpoint_weights"
     assert "parity" not in json.dumps(live["probes"]["fixed_prompt_logits"])
     validate_post_sft_launch_evidence(paired_identity, registration, live)
@@ -1584,14 +1551,10 @@ def test_base_artifact_receipt_is_digest_bound_and_names_runtime_provenance():
 
 def test_base_artifact_config_map_files_match_the_frozen_execution_contract():
     plan = json.loads(
-        (
-            ROOT / "configs/evaluation/qwen36-27b-ft-run-574bd7b3-post-sft.json"
-        ).read_text()
+        (ROOT / "configs/evaluation/qwen36-27b-ft-run-574bd7b3-post-sft.json").read_text()
     )
     contract = plan["evidence_execution"]["base_artifact_inspector"]
-    assert set(ARTIFACT_CONFIG_MAP_FILES.values()) == set(
-        contract["config_map_code_sha256"]
-    )
+    assert set(ARTIFACT_CONFIG_MAP_FILES.values()) == set(contract["config_map_code_sha256"])
     assert set(ARTIFACT_CONFIG_MAP_FILES) | {"post-sft-plan.json"} == {
         item["key"]
         for volume in contract["pod_spec"]["volumes"]
@@ -1698,9 +1661,7 @@ def test_registration_builder_rejects_unreviewed_workload_and_mutable_configmap(
         )
 
     observation = _registration_job_observation(serving)
-    observation["job"]["spec"]["template"]["spec"]["imagePullSecrets"] = [
-        {"name": "unreviewed"}
-    ]
+    observation["job"]["spec"]["template"]["spec"]["imagePullSecrets"] = [{"name": "unreviewed"}]
     observation["pod"]["spec"]["imagePullSecrets"] = [{"name": "unreviewed"}]
     with pytest.raises(ValueError, match="execution spec differs"):
         assemble_registration_completion(
@@ -1734,9 +1695,7 @@ def test_artifact_evidence_rejects_unexpected_sidecars_and_self_asserted_executi
         )
 
     base = _base_artifact_receipt()
-    base["execution"]["config_map"]["mounted_file_sha256"] = {
-        "untrusted.py": "sha256:" + "0" * 64
-    }
+    base["execution"]["config_map"]["mounted_file_sha256"] = {"untrusted.py": "sha256:" + "0" * 64}
     base["base_artifact_receipt_sha256"] = digest_json(
         {key: value for key, value in base.items() if key != "base_artifact_receipt_sha256"}
     )
@@ -1747,18 +1706,14 @@ def test_artifact_evidence_rejects_unexpected_sidecars_and_self_asserted_executi
 def test_live_builder_rejects_changed_cr_spec_and_nondeterminism(tmp_path):
     inputs = _paired_inputs(tmp_path)
     _, paired_identity = derive_post_sft_qwen_pair(**inputs)
-    registration = _assembled_registration(
-        paired_identity, inputs["post_serving_receipt"]
-    )
+    registration = _assembled_registration(paired_identity, inputs["post_serving_receipt"])
     _, expected_live = _post_sft_launch_evidence(
         paired_identity, inputs["post_serving_receipt"]["registration"]
     )
     observations = _live_observations(
         paired_identity, expected_live, inputs["post_serving_receipt"]["registration"]
     )
-    observations["arms"]["base"]["inference_model"]["spec"]["runtime"]["args"].append(
-        "--drifted"
-    )
+    observations["arms"]["base"]["inference_model"]["spec"]["runtime"]["args"].append("--drifted")
     with pytest.raises(ValueError, match="spec differs"):
         assemble_live_parity(
             paired_identity,
@@ -1774,9 +1729,9 @@ def test_live_builder_rejects_changed_cr_spec_and_nondeterminism(tmp_path):
     observations = _live_observations(
         paired_identity, expected_live, inputs["post_serving_receipt"]["registration"]
     )
-    observations["arms"]["post_sft"]["logit_responses"][1]["choices"][0][
-        "logprobs"
-    ]["content"][0]["logprob"] = -0.5
+    observations["arms"]["post_sft"]["logit_responses"][1]["choices"][0]["logprobs"]["content"][0][
+        "logprob"
+    ] = -0.5
     with pytest.raises(ValueError, match="not deterministic"):
         assemble_live_parity(
             paired_identity,

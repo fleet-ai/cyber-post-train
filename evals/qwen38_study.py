@@ -146,18 +146,20 @@ def live_probe(api_key: str) -> dict[str, Any]:
     payload = {
         "model": MODEL,
         "messages": [{"role": "user", "content": "Call identity exactly once with value parity."}],
-        "tools": [{
-            "type": "function",
-            "function": {
-                "name": "identity",
-                "description": "Return a value",
-                "parameters": {
-                    "type": "object",
-                    "properties": {"value": {"type": "string"}},
-                    "required": ["value"],
+        "tools": [
+            {
+                "type": "function",
+                "function": {
+                    "name": "identity",
+                    "description": "Return a value",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {"value": {"type": "string"}},
+                        "required": ["value"],
+                    },
                 },
-            },
-        }],
+            }
+        ],
         "tool_choice": {"type": "function", "function": {"name": "identity"}},
         "temperature": 0,
         "max_tokens": 256,

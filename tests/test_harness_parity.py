@@ -52,9 +52,7 @@ def test_analyzer_emits_hashes_and_counts_but_no_private_trace_content(tmp_path:
     )
     rendered = json.dumps(evidence)
     assert secret not in rendered
-    assert evidence["task_tool_surfaces"] == [
-        {"tools": ["bash", "submit_report"], "sessions": 1}
-    ]
+    assert evidence["task_tool_surfaces"] == [{"tools": ["bash", "submit_report"], "sessions": 1}]
     assert evidence["as_treated_train"]["passes"] == 1
     assert evidence["task_prompt_hydration"]["mismatches"] == 0
     assert evidence["privacy"]["tool_arguments_emitted"] is False

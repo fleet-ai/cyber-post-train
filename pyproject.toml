@@ -24,6 +24,7 @@ packages = ["cyber_post_train", "training", "evals"]
 
 [project.optional-dependencies]
 dev = [
+  "mcp==2.1.1",
   "pytest>=9.0.3,<10",
   "pytest-asyncio>=1.1,<2",
   "pytest-cov>=6,<8",
@@ -48,3 +49,16 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.format]
+# Historical execution plans pin these source bytes. Keep their replay checks
+# intact; a functional revision needs a new plan, not a rewritten old digest.
+exclude = [
+  "evals/webexploitbench/post_sft_evidence.py",
+  "training/post_sft_artifacts.py",
+  "training/post_sft_base_surface.py",
+  "training/post_sft_cast.py",
+  "training/post_sft_staging.py",
+  "training/register_post_sft.py",
+  "training/tokenizer_equivalence.py",
+]

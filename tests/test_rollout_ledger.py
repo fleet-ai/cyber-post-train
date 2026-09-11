@@ -352,9 +352,7 @@ def _local_result_record(*, score: float = 0.5) -> dict[str, object]:
     }
 
 
-def test_private_local_result_is_create_once_and_not_exported(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_private_local_result_is_create_once_and_not_exported(tmp_path: Path, monkeypatch) -> None:
     # The score's text can legitimately occur in a timestamp. Inspect the
     # structured export, not a substring that flaps with the wall clock.
     monkeypatch.setattr(

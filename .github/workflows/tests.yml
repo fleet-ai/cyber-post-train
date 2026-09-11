@@ -38,5 +38,6 @@ jobs:
           python-version: "3.12"
       - run: uv sync --locked --extra dev --extra train
       - run: uv run --locked ruff check .
+      - run: uv run --locked ruff format --check .
       - run: uv run --locked pytest
       - run: uv run --locked cyber-post-train doctor

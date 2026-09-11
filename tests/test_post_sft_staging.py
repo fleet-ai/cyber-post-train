@@ -18,9 +18,7 @@ def _hf_root(root: Path) -> tuple[dict[str, str], dict]:
     root.mkdir(parents=True)
     save_file({"weight": torch.ones((1,), dtype=torch.bfloat16)}, root / "model.safetensors")
     (root / "model.safetensors.index.json").write_text(
-        json.dumps(
-            {"metadata": {"total_size": 2}, "weight_map": {"weight": "model.safetensors"}}
-        )
+        json.dumps({"metadata": {"total_size": 2}, "weight_map": {"weight": "model.safetensors"}})
         + "\n"
     )
     payloads = {
@@ -80,8 +78,7 @@ def _test_base_surface_and_manifest() -> tuple[dict, dict]:
         "vocab.json",
     )
     sidecars = {
-        name: "sha256:" + f"{index:x}" * 64
-        for index, name in enumerate(sidecar_names, start=1)
+        name: "sha256:" + f"{index:x}" * 64 for index, name in enumerate(sidecar_names, start=1)
     }
     weight_rows = [
         {
@@ -104,9 +101,7 @@ def _test_base_surface_and_manifest() -> tuple[dict, dict]:
         }
         for index, (name, digest) in enumerate(sidecars.items())
     ]
-    rows = sorted(
-        [*weight_rows, index_row, *sidecar_rows], key=lambda row: row["path"]
-    )
+    rows = sorted([*weight_rows, index_row, *sidecar_rows], key=lambda row: row["path"])
     surface = {
         "schema": "cyber_sft_base_inference_artifact_surface_v1",
         "policy": "exact_top_level_inference_artifacts_with_reviewed_control_exclusions_v1",
@@ -163,15 +158,13 @@ def _tamper_base_artifact_manifest(manifest: dict, kind: str) -> None:
     elif kind == "duplicate_path":
         rows.append(copy.deepcopy(rows[0]))
     elif kind == "changed_index_hash":
-        next(
-            row for row in rows if row["path"] == "model.safetensors.index.json"
-        )["sha256"] = "1" * 64
+        next(row for row in rows if row["path"] == "model.safetensors.index.json")["sha256"] = (
+            "1" * 64
+        )
     elif kind == "changed_sidecar_hash":
         next(row for row in rows if row["path"] == "config.json")["sha256"] = "0" * 64
     elif kind == "wrong_shard_aggregate":
-        next(row for row in rows if row["path"].endswith(".safetensors"))[
-            "sha256"
-        ] = "3" * 64
+        next(row for row in rows if row["path"].endswith(".safetensors"))["sha256"] = "3" * 64
     elif kind == "wrong_exclusions":
         manifest["excluded_non_artifact_directory_prefixes"] = []
     rows.sort(key=lambda row: row["path"])
@@ -198,9 +191,7 @@ def _cast_receipt_and_manifest(
         "frozen_base_auxiliary_source": {
             "revision": "base-revision",
             "weights_manifest_sha256": "sha256:" + "8" * 64,
-            "restoration_semantics": (
-                "frozen_base_auxiliary_head_restoration_not_trained_weights"
-            ),
+            "restoration_semantics": ("frozen_base_auxiliary_head_restoration_not_trained_weights"),
         },
         "conversion": {
             "schema": "cyber_sft_fp32_to_bf16_cast_and_restore_proof_v2",
@@ -234,9 +225,9 @@ def _cast_receipt_and_manifest(
 def _fake_runtime_provenance(stage_input: dict) -> dict:
     execution = stage_input["execution"]
     stage_input_sha256 = stage_input["stage_input_sha256"]
-    stage_input_file_sha256 = "sha256:" + hashlib.sha256(
-        staging.canonical_stage_input_bytes(stage_input)
-    ).hexdigest()
+    stage_input_file_sha256 = (
+        "sha256:" + hashlib.sha256(staging.canonical_stage_input_bytes(stage_input)).hexdigest()
+    )
     mounted = {
         **execution["config_map_code_sha256"],
         staging.STAGE_INPUT_MOUNT_PATH: stage_input_file_sha256,
@@ -284,9 +275,10 @@ def test_manifest_verification_and_weights_only_composition(tmp_path, monkeypatc
     base_sidecars, _ = _hf_root(base)
     (raw / "config.json").write_text('{"trainer":"drift"}\n')
     manifest = full_file_manifest(raw)
-    assert staging.verify_full_manifest(raw, manifest)["manifest_sha256"] == manifest[
-        "manifest_sha256"
-    ]
+    assert (
+        staging.verify_full_manifest(raw, manifest)["manifest_sha256"]
+        == manifest["manifest_sha256"]
+    )
 
     output = tmp_path / "composed"
     synced = []
@@ -351,9 +343,7 @@ def test_stage_input_binds_observation_manifest_and_tokenizer_evidence():
             "serving_registration_sha256": "sha256:" + "4" * 64,
             "omission_policy_sha256": digest_json(omission),
             "exact_auxiliary_omission_policy": omission,
-            "restoration_semantics": (
-                "frozen_base_auxiliary_head_restoration_not_trained_weights"
-            ),
+            "restoration_semantics": ("frozen_base_auxiliary_head_restoration_not_trained_weights"),
         },
         "conversion": {
             "schema": "cyber_sft_fp32_to_bf16_cast_and_restore_proof_v2",
@@ -436,9 +426,7 @@ def test_stage_input_binds_observation_manifest_and_tokenizer_evidence():
         "staging_execution": _execution_plan(),
         "base_model": {
             "tokenizer_equivalence_evidence": {"sha256": evidence_sha},
-            "runtime_sidecar_sha256": artifact_surface[
-                "required_runtime_sidecar_sha256"
-            ],
+            "runtime_sidecar_sha256": artifact_surface["required_runtime_sidecar_sha256"],
             "parameter_count": 1,
             "tokenizer_manifest_sha256": "sha256:" + "d" * 64,
             "chat_template_sha256": "sha256:" + "e" * 64,
@@ -473,22 +461,14 @@ def test_stage_input_binds_observation_manifest_and_tokenizer_evidence():
         tampered_manifest = copy.deepcopy(cast_manifest)
         mutate(tampered_receipt)
         tampered_receipt["cast_receipt_sha256"] = digest_json(
-            {
-                key: value
-                for key, value in tampered_receipt.items()
-                if key != "cast_receipt_sha256"
-            }
+            {key: value for key, value in tampered_receipt.items() if key != "cast_receipt_sha256"}
         )
-        tampered_bytes = (
-            json.dumps(tampered_receipt, indent=2, sort_keys=True) + "\n"
-        ).encode()
+        tampered_bytes = (json.dumps(tampered_receipt, indent=2, sort_keys=True) + "\n").encode()
         tampered_manifest["files"][0].update(
             size=len(tampered_bytes), sha256=hashlib.sha256(tampered_bytes).hexdigest()
         )
         tampered_manifest["total_bytes"] = 2 + len(tampered_bytes)
-        tampered_manifest["manifest_sha256"] = digest_json(
-            tampered_manifest["files"]
-        )
+        tampered_manifest["manifest_sha256"] = digest_json(tampered_manifest["files"])
         try:
             staging.build_stage_input(
                 plan,
@@ -516,40 +496,22 @@ def test_stage_input_binds_observation_manifest_and_tokenizer_evidence():
     ):
         tampered_receipt = copy.deepcopy(cast_receipt)
         base_source = tampered_receipt["frozen_base_auxiliary_source"]
-        tampered_base_manifest = copy.deepcopy(
-            base_source["inference_artifact_manifest_before"]
-        )
+        tampered_base_manifest = copy.deepcopy(base_source["inference_artifact_manifest_before"])
         _tamper_base_artifact_manifest(tampered_base_manifest, kind)
         base_source["inference_artifact_manifest_before"] = tampered_base_manifest
-        base_source["inference_artifact_manifest_after"] = copy.deepcopy(
-            tampered_base_manifest
-        )
-        base_source["full_manifest_before_sha256"] = tampered_base_manifest[
-            "manifest_sha256"
-        ]
-        base_source["full_manifest_after_sha256"] = tampered_base_manifest[
-            "manifest_sha256"
-        ]
+        base_source["inference_artifact_manifest_after"] = copy.deepcopy(tampered_base_manifest)
+        base_source["full_manifest_before_sha256"] = tampered_base_manifest["manifest_sha256"]
+        base_source["full_manifest_after_sha256"] = tampered_base_manifest["manifest_sha256"]
         tampered_receipt["cast_receipt_sha256"] = digest_json(
-            {
-                key: value
-                for key, value in tampered_receipt.items()
-                if key != "cast_receipt_sha256"
-            }
+            {key: value for key, value in tampered_receipt.items() if key != "cast_receipt_sha256"}
         )
-        tampered_bytes = (
-            json.dumps(tampered_receipt, indent=2, sort_keys=True) + "\n"
-        ).encode()
+        tampered_bytes = (json.dumps(tampered_receipt, indent=2, sort_keys=True) + "\n").encode()
         tampered_manifest = copy.deepcopy(cast_manifest)
         tampered_manifest["files"][0].update(
             size=len(tampered_bytes), sha256=hashlib.sha256(tampered_bytes).hexdigest()
         )
-        tampered_manifest["total_bytes"] = sum(
-            row["size"] for row in tampered_manifest["files"]
-        )
-        tampered_manifest["manifest_sha256"] = digest_json(
-            tampered_manifest["files"]
-        )
+        tampered_manifest["total_bytes"] = sum(row["size"] for row in tampered_manifest["files"])
+        tampered_manifest["manifest_sha256"] = digest_json(tampered_manifest["files"])
         with pytest.raises(ValueError, match="base inference artifact"):
             staging.build_stage_input(
                 plan,
@@ -685,12 +647,11 @@ def test_execute_stage_streams_verifies_composes_and_promotes_atomically(tmp_pat
     acceptance = final / staging.ACCEPTANCE_RECEIPT_NAME
     assert acceptance.is_file()
     assert receipt["destination"]["acceptance_receipt_path"] == str(acceptance)
-    assert receipt["destination"]["payload_manifest_excludes"] == [
-        staging.ACCEPTANCE_RECEIPT_NAME
-    ]
-    assert staging._payload_manifest(final)["manifest_sha256"] == receipt["composition"][
-        "inspection"
-    ]["files_manifest_sha256"]
+    assert receipt["destination"]["payload_manifest_excludes"] == [staging.ACCEPTANCE_RECEIPT_NAME]
+    assert (
+        staging._payload_manifest(final)["manifest_sha256"]
+        == receipt["composition"]["inspection"]["files_manifest_sha256"]
+    )
     assert not any(path.name.startswith(".partial-") for path in final.parent.iterdir())
 
     recovered = staging.execute_stage(
@@ -785,9 +746,7 @@ def test_runtime_provenance_binds_live_kubernetes_and_configmap_bytes(tmp_path, 
             "name": "stage-pod",
             "uid": "pod-uid",
             "resourceVersion": "12",
-            "ownerReferences": [
-                {"kind": "Job", "name": staging.JOB_NAME, "uid": "job-uid"}
-            ],
+            "ownerReferences": [{"kind": "Job", "name": staging.JOB_NAME, "uid": "job-uid"}],
         },
         "spec": {
             "serviceAccountName": staging.SERVICE_ACCOUNT_NAME,
