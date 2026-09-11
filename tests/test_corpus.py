@@ -316,6 +316,7 @@ def add_study_selection(data_config, tmp_path, selected=("train-a",)):
             "status": "ready",
             "study_split_sha256": study["sha256"],
             "training_split_sha256": training_split["sha256"],
+            "target_policy_sha256": "sha256:" + "c" * 64,
             "selected_episode_ids": list(selected),
             "selected_evidence": [
                 {
@@ -339,6 +340,15 @@ def add_study_selection(data_config, tmp_path, selected=("train-a",)):
     )
 
 
+@pytest.fixture(autouse=True)
+def exact_synthetic_target_policy(monkeypatch):
+    monkeypatch.setattr(
+        corpus,
+        "coverage_target_policy",
+        lambda *args, **kwargs: {"sha256": "sha256:" + "c" * 64},
+    )
+
+
 def test_outcome_corpus_enforces_exact_certified_source_selection(data_config, tmp_path):
     add_study_selection(data_config, tmp_path)
     result = corpus.build(data_config, relative_to=tmp_path)
@@ -348,6 +358,7 @@ def test_outcome_corpus_enforces_exact_certified_source_selection(data_config, t
         "study_split_sha256": json.loads((tmp_path / "study.json").read_text())["sha256"],
         "source_selection_sha256": json.loads((tmp_path / "selection.json").read_text())["sha256"],
         "selected_episode_count": 1,
+        "target_policy_sha256": "sha256:" + "c" * 64,
     }
     assert (tmp_path / "data/study-split.json").stat().st_mode & 0o777 == 0o600
     assert (tmp_path / "data/source-selection.json").stat().st_mode & 0o777 == 0o600
@@ -361,6 +372,16 @@ def test_outcome_corpus_rejects_selected_private_record_drift(data_config, tmp_p
     source.write_text("\n".join(json.dumps(row) for row in rows))
     data_config["source"]["sha256"] = file_sha256(source)
     with pytest.raises(ValueError, match="differs from certified metadata"):
+        corpus.build(data_config, relative_to=tmp_path)
+    assert not (tmp_path / "data").exists()
+
+
+def test_outcome_corpus_rejects_selection_policy_drift(data_config, tmp_path):
+    add_study_selection(data_config, tmp_path)
+    selection = json.loads((tmp_path / "selection.json").read_text())
+    selection["target_policy_sha256"] = "sha256:" + "e" * 64
+    (tmp_path / "selection.json").write_text(json.dumps(seal(selection)))
+    with pytest.raises(ValueError, match="target policy differs"):
         corpus.build(data_config, relative_to=tmp_path)
     assert not (tmp_path / "data").exists()
 

@@ -21,6 +21,7 @@ from .dense import segment_record as segments
 from .io import atomic_write_json, file_sha256, iter_jsonl
 from .sft import _known, read_mapping
 from .sft_runtime import DENSE_FORMAT, dense_rows, selection_policy
+from .source_coverage import target_policy as coverage_target_policy
 from .splits import split_key
 from .study_data import filter_records
 
@@ -228,6 +229,16 @@ def build(config: dict, *, relative_to: Path) -> dict:
         or (not reference_validation and targets != 0)
     ):
         raise ValueError("invalid data window bounds")
+    if selection_binding is not None:
+        executed_policy = coverage_target_policy(
+            identity,
+            relative_to / config["native_helper"],
+            max_length=maximum,
+            context_tokens=context,
+        )
+        if source_selection.get("target_policy_sha256") != executed_policy["sha256"]:
+            raise ValueError("source selection target policy differs from corpus execution")
+        selection_binding["target_policy_sha256"] = executed_policy["sha256"]
     rows, included, exclusions = [], [], collections.Counter()
     for record in train:
         try:
