@@ -113,6 +113,20 @@ def test_compile_uses_exact_model_manifest_and_complete_epochs(config, tmp_path)
     assert hashlib.sha256(content["runtime"].encode()).hexdigest() == plan["runtime_sha256"]
 
 
+def test_compile_preserves_legacy_schedule_and_binds_explicit_cosine(config, tmp_path):
+    source, _, _ = config
+    legacy = sft.compile_sft(source, relative_to=tmp_path)
+    assert "scheduler" not in legacy["recipe"]
+    assert "warmup_ratio" not in legacy["recipe"]
+
+    source["recipe"] = {"scheduler": "cosine", "warmup_ratio": 0.05}
+    cosine = sft.compile_sft(source, relative_to=tmp_path)
+    assert cosine["recipe"]["scheduler"] == "cosine"
+    assert cosine["recipe"]["warmup_ratio"] == 0.05
+    assert cosine["recipe"]["max_steps"] == 3
+    assert sft.job_request(cosine) != sft.job_request(legacy)
+
+
 def test_compile_training_loss_only_plan_has_no_reference_dev_dataset(config, tmp_path):
     source, manifest, save = config
     manifest["validation_mode"] = "task_outcomes_only"
@@ -205,9 +219,7 @@ def test_compiler_binds_narrow_numeric_rejection_policy(config, tmp_path):
     content = json.loads(
         gzip.decompress(base64.b64decode(sft.job_request(plan)["env"]["CYBER_SFT_BUNDLE"]))
     )
-    assert json.loads(content["plan"])["scientific_rejection"] == source[
-        "scientific_rejection"
-    ]
+    assert json.loads(content["plan"])["scientific_rejection"] == source["scientific_rejection"]
 
 
 @pytest.fixture
@@ -357,6 +369,8 @@ def test_unknown_fields_fail_instead_of_silently_ignoring_overrides(config, tmp_
         ("lr", 1),
         ("checkpoint_interval", 10),
         ("keep_checkpoints", 0),
+        ("scheduler", "linear"),
+        ("warmup_ratio", 0.05),
     ],
 )
 def test_bad_recipe_fails_before_network(config, tmp_path, key, value):

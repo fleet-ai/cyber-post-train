@@ -48,6 +48,24 @@ def test_recovery_binds_exact_sealed_source_and_never_changes_recipe(tmp_path):
     assert not Path(p["output_root"]).exists()
 
 
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"scheduler": "cosine", "warmup_ratio": 0.05},
+        {"scheduler": "constant_with_warmup", "warmup_ratio": 0.0},
+    ],
+)
+def test_recovery_cannot_add_or_change_schedule(tmp_path, change):
+    value, _, path = source(tmp_path)
+    value["recipe"].update(change)
+    with pytest.raises(ValueError, match="scientific recipe"):
+        recovery.bind(
+            value,
+            {"manifest": path.name, "sha256": recovery.digest(path), "mode": "resume"},
+            relative_to=tmp_path,
+        )
+
+
 def test_legacy_recovery_accepts_explicit_default_ce_mode(tmp_path):
     value, _, path = source(tmp_path)
     value["validation_mode"] = "teacher_cross_entropy"

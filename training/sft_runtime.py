@@ -108,6 +108,7 @@ OUTCOME_WANDB_HISTORY_KEYS = (
 OUTCOME_WANDB_STEP_KEYS = frozenset(OUTCOME_WANDB_HISTORY_KEYS)
 NUMERIC_REJECTION_SCHEMA = "cyber_sft_numeric_rejection_policy_v1"
 NUMERIC_REJECTION_REASONS = ("nonfinite_loss", "nonfinite_gradient_norm")
+SFT_SCHEDULERS = {"constant_with_warmup", "cosine"}
 
 
 class ScientificNumericRejection(Exception):
@@ -253,6 +254,32 @@ def uses_reference_ce(plan: dict) -> bool:
     return selection_policy(plan)["mode"] == "teacher_cross_entropy"
 
 
+def optimizer_schedule(recipe: dict) -> dict:
+    """Resolve the legacy schedule or validate one explicit immutable pair."""
+    present = {key for key in ("scheduler", "warmup_ratio") if key in recipe}
+    if not present:
+        return {
+            "scheduler": "constant_with_warmup",
+            "warmup_ratio": 0.0,
+            "num_warmup_steps": 0,
+        }
+    if present != {"scheduler", "warmup_ratio"}:
+        raise ValueError("scheduler and warmup_ratio must be specified together")
+    scheduler, ratio = recipe["scheduler"], recipe["warmup_ratio"]
+    if not isinstance(scheduler, str) or scheduler not in SFT_SCHEDULERS:
+        raise ValueError("unsupported SFT scheduler")
+    if type(ratio) not in {int, float} or not math.isfinite(ratio) or not 0 <= ratio < 1:
+        raise ValueError("warmup_ratio must be a finite number in [0, 1)")
+    if scheduler == "constant_with_warmup" and ratio != 0:
+        raise ValueError("the qualified constant schedule requires zero warmup")
+    if scheduler == "cosine" and ratio == 0:
+        raise ValueError("the qualified cosine schedule requires positive warmup")
+    steps = math.ceil(recipe["max_steps"] * ratio)
+    if scheduler == "cosine" and not 0 < steps < recipe["max_steps"]:
+        raise ValueError("cosine warmup must leave at least one decay step")
+    return {"scheduler": scheduler, "warmup_ratio": ratio, "num_warmup_steps": steps}
+
+
 def numeric_rejection_policy(plan: dict) -> dict | None:
     """Validate the narrow opt-in that makes numeric canary rejection exit cleanly."""
     policy = plan.get("scientific_rejection")
@@ -325,6 +352,7 @@ def validate_plan(plan: dict, *, check_files: bool = True) -> None:
         or not 0 < recipe["lr"] <= 1e-4
     ):
         raise ValueError("learning rate outside reviewed SFT range")
+    optimizer_schedule(recipe)
     if recipe["batch_size"] % (
         recipe["nodes"] * recipe["gpus_per_node"] * recipe["microbatch_per_gpu"]
     ):
@@ -453,6 +481,7 @@ def validate_runtime_sources(root: Path | None = None) -> None:
 
 def sft_overrides(plan: dict) -> dict:
     r, w = plan["recipe"], plan["wandb"]
+    schedule = optimizer_schedule(r)
     output = Path(plan["output_root"])
     training_only = not uses_reference_ce(plan)
     options = {
@@ -465,8 +494,8 @@ def sft_overrides(plan: dict) -> dict:
         "batch_size": r["batch_size"],
         "micro_train_batch_size_per_gpu": r["microbatch_per_gpu"],
         "optimizer_config.lr": r["lr"],
-        "optimizer_config.scheduler": "constant_with_warmup",
-        "optimizer_config.num_warmup_steps": 0,
+        "optimizer_config.scheduler": schedule["scheduler"],
+        "optimizer_config.num_warmup_steps": schedule["num_warmup_steps"],
         "placement.num_nodes": r["nodes"],
         "placement.num_gpus_per_node": r["gpus_per_node"],
         "sequence_parallel_size": 1,

@@ -38,6 +38,7 @@ RECIPE = {
     "keep_checkpoints": 3,
     "seed": 42,
 }
+SCHEDULE_FIELDS = {"scheduler", "warmup_ratio"}
 RESOURCES = {
     "cpu_request": "64",
     "cpu_limit": "64",
@@ -136,7 +137,7 @@ def compile_sft(config: dict, *, relative_to: Path) -> dict:
             "path": str(PurePosixPath(_sfs_root(data["root"], "data root")) / path),
         }
     overrides = config.get("recipe", {})
-    _known(overrides, set(RECIPE), "recipe")
+    _known(overrides, set(RECIPE) | SCHEDULE_FIELDS, "recipe")
     recipe = {
         **RECIPE,
         **({"eval_interval": 0} if validation_mode == "task_outcomes_only" else {}),

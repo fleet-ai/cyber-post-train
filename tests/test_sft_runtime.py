@@ -22,6 +22,7 @@ from training.sft_runtime import (
     dense_rows,
     explicit_tracking_class,
     finalize_failed_run,
+    optimizer_schedule,
     retention_steps,
     selection_evidence,
     sft_overrides,
@@ -95,6 +96,60 @@ def test_recipe_keeps_tail_batch_and_disables_inline_export(tmp_path):
     assert options["eval_interval"] == 2
     assert options["max_ckpts_to_keep"] == -1  # custom latest-plus-best retention
     assert options["logger"] == "wandb"
+    assert options["optimizer_config.scheduler"] == "constant_with_warmup"
+    assert options["optimizer_config.num_warmup_steps"] == 0
+
+
+def test_explicit_constant_and_cosine_schedules_map_exactly(tmp_path):
+    constant = plan(tmp_path)
+    constant["recipe"].update(scheduler="constant_with_warmup", warmup_ratio=0.0)
+    validate_plan(constant, check_files=False)
+    assert optimizer_schedule(constant["recipe"]) == {
+        "scheduler": "constant_with_warmup",
+        "warmup_ratio": 0.0,
+        "num_warmup_steps": 0,
+    }
+
+    cosine = plan(tmp_path)
+    cosine["recipe"].update(scheduler="cosine", warmup_ratio=0.05)
+    validate_plan(cosine, check_files=False)
+    assert optimizer_schedule(cosine["recipe"]) == {
+        "scheduler": "cosine",
+        "warmup_ratio": 0.05,
+        "num_warmup_steps": 1,
+    }
+    options = sft_overrides(cosine)
+    assert options["optimizer_config.scheduler"] == "cosine"
+    assert options["optimizer_config.num_warmup_steps"] == 1
+
+
+@pytest.mark.parametrize(
+    "updates",
+    [
+        {"scheduler": "cosine"},
+        {"warmup_ratio": 0.05},
+        {"scheduler": "linear", "warmup_ratio": 0.05},
+        {"scheduler": ["cosine"], "warmup_ratio": 0.05},
+        {"scheduler": "constant_with_warmup", "warmup_ratio": 0.05},
+        {"scheduler": "cosine", "warmup_ratio": 0},
+        {"scheduler": "cosine", "warmup_ratio": True},
+        {"scheduler": "cosine", "warmup_ratio": float("nan")},
+        {"scheduler": "cosine", "warmup_ratio": 1.0},
+    ],
+)
+def test_invalid_schedule_contract_is_rejected(tmp_path, updates):
+    value = plan(tmp_path)
+    value["recipe"].update(updates)
+    with pytest.raises(ValueError):
+        validate_plan(value, check_files=False)
+
+
+def test_cosine_warmup_requires_a_decay_step(tmp_path):
+    value = plan(tmp_path)
+    value["recipe"].update(epochs=1, max_steps=3, scheduler="cosine", warmup_ratio=0.99)
+    value["datasets"]["train"]["rows"] = 17
+    with pytest.raises(ValueError, match="decay step"):
+        validate_plan(value, check_files=False)
 
 
 def test_task_outcome_mode_logs_training_only_and_keeps_checkpointing(tmp_path):
