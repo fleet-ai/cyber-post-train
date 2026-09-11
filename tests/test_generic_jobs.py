@@ -345,6 +345,50 @@ def test_pod_resource_and_runtime_drift(change):
         validate_preview(config(), preview(obj))
 
 
+@pytest.mark.parametrize("worker", [False, True])
+@pytest.mark.parametrize(
+    "fault", ["duplicate-env", "optional-secret", "prefixed-secret", "duplicate-secret"]
+)
+def test_ambiguous_environment_blocks_the_actual_submit_boundary(tmp_path, worker, fault):
+    request = {**config(), "workers": 2}
+    obj = manifest(request)
+    cluster = obj["spec"]["rayClusterSpec"]
+    group = cluster["workerGroupSpecs"][0] if worker else cluster["headGroupSpec"]
+    container = group["template"]["spec"]["containers"][0]
+    if fault == "duplicate-env":
+        # The old dict projection hid a conflicting earlier entry.
+        container["env"].insert(0, {"name": "RUN_DIR", "value": "/mnt/sfs/jobs/other"})
+    elif fault == "optional-secret":
+        container["envFrom"][0]["secretRef"]["optional"] = True
+    elif fault == "prefixed-secret":
+        container["envFrom"][0]["prefix"] = "RENAMED_"
+    else:
+        container["envFrom"].append(deepcopy(container["envFrom"][0]))
+    calls = []
+
+    def handler(req):
+        calls.append((req.method, req.url.path))
+        if req.method == "GET":
+            return httpx.Response(200, json={"items": [], "has_more": False})
+        if req.url.path.endswith("/preview"):
+            return httpx.Response(200, json=preview(obj))
+        return httpx.Response(202, json={"name": "researcher-sft-1234abcd"})
+
+    journal = tmp_path / "intent.jsonl"
+    with client(handler) as api, pytest.raises(JobsError, match="environment|Secret"):
+        api.submit_once(request, journal)
+    assert calls == [("GET", "/v1/runs"), ("POST", "/v1/runs/preview")]
+    assert not journal.exists()
+
+
+def test_required_secret_can_explicitly_remain_nonoptional_without_renaming():
+    obj = manifest()
+    container = obj["spec"]["rayClusterSpec"]["headGroupSpec"]["template"]["spec"]["containers"][0]
+    container["envFrom"][0].update(prefix="")
+    container["envFrom"][0]["secretRef"]["optional"] = False
+    assert validate_preview(config(), preview(obj))["gpus"] == 8
+
+
 @pytest.mark.parametrize(
     "payload",
     [{}, {"manifest_yaml": "bad"}, {"manifest_yaml": "["}, {**preview(), "warnings": ["review"]}],

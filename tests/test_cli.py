@@ -130,6 +130,17 @@ def test_module_entrypoint_exposes_public_help(monkeypatch, capsys):
     assert "checkpoint-seal" in capsys.readouterr().out
 
 
+def test_package_entrypoint_exposes_the_same_public_help(monkeypatch, capsys):
+    import runpy
+    import sys
+
+    monkeypatch.setattr(sys, "argv", ["cyber_post_train", "--help"])
+    with pytest.raises(SystemExit) as exc:
+        runpy.run_module("cyber_post_train", run_name="__main__")
+    assert exc.value.code == 0
+    assert "checkpoint-seal" in capsys.readouterr().out
+
+
 def test_submit_requires_bound_cpu_proof(prepared, monkeypatch):
     output, plan, request, _ = prepared
     monkeypatch.setattr(

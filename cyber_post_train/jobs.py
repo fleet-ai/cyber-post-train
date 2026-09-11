@@ -232,14 +232,26 @@ def validate_preview(config: dict, preview: dict) -> dict:
                     expected = config["resources"][f"{name}_{k[:-1]}"]
                     if quantity(resources[name]) != quantity(expected):
                         raise JobsError("preview CPU/memory resource drift")
-            env = {v["name"]: v.get("value") for v in c.get("env", [])}
+            entries = c.get("env", [])
+            env = {v["name"]: v.get("value") for v in entries}
+            if len(env) != len(entries):
+                raise JobsError("preview has duplicate runtime environment names")
             if env.get("RUN_DIR") != config["run_dir"] or any(
                 env.get(k) != v for k, v in config.get("env", {}).items()
             ):
                 raise JobsError("preview runtime environment drift")
-            refs = {v.get("secretRef", {}).get("name") for v in c.get("envFrom", [])}
-            if not set(config.get("secrets", [])).issubset(refs):
-                raise JobsError("preview workload Secret reference missing")
+            for name in config.get("secrets", []):
+                refs = [
+                    v for v in c.get("envFrom", []) if v.get("secretRef", {}).get("name") == name
+                ]
+                if (
+                    len(refs) != 1
+                    or refs[0].get("prefix", "") != ""
+                    or refs[0]["secretRef"].get("optional", False) is not False
+                ):
+                    raise JobsError(
+                        "preview workload Secret must be unique, required and unprefixed"
+                    )
             pulls = {v["name"] for v in pod.get("imagePullSecrets", [])}
             if not set(config.get("image_pull_secrets", [])).issubset(pulls):
                 raise JobsError("preview image-pull Secret reference missing")

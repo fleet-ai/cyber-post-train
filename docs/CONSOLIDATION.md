@@ -106,6 +106,9 @@ Never fake success or suppress real alerts. Full controls:
   held-out validation; external benchmarks never enter training or tuning.
 - Create-once submission journals, immutable model/data/runtime identities and
   source-preserving checkpoint seal/export/reload.
+- Rendered head and worker environments reject duplicate variable names and
+  missing, optional, renamed or duplicated required Secret imports before a run
+  POST. These local regressions strengthen preview; they do not qualify GPU work.
 - Exact task GET rejects missing starting-data bindings before instance creation.
   New errors retain safe classes/digests, not private server bodies.
 - OpenCode checks its actual UID/HOME and offline startup, not just its version.
@@ -128,8 +131,11 @@ records 46 real-PostgreSQL cases, complete focused module coverage and exact
 cross-backend result-digest parity. That integration-enabled suite passed 1,780
 tests plus seven subtests, with 157 explicit skips. The subsequent local-only
 stop-contract revision passed 1,790 tests plus seven subtests, with 189 skips
-(optional services/native runtimes were not enabled). Whole-repository coverage
-is **not complete**.
+(optional services/native runtimes were not enabled). The latest preview-boundary
+revision passes 1,800 tests plus seven subtests, with the same 189 skips.
+The public CLI and Jobs client have complete statement/branch coverage in the
+338-test focused suite; that excludes the training and evaluation engines.
+Whole-repository coverage is **not complete**.
 Optional native dependencies need
 the pinned trainer images; local skips are never counted as passing training
 qualification. Installed-wheel checks run outside the checkout. The active
