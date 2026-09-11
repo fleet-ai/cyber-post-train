@@ -154,9 +154,31 @@ Queued work with no allocation consumes zero nodes. Failed, ambiguous or stalled
 work is never blindly repeated, and a broken owned allocation is released before
 off-node repair.
 
-No paid study arm had been submitted when these manifests were frozen. Source
-coverage, train-only runtime qualification, dev checkpoint serving and the real
-Tensorlake lifecycle remain explicit pre-production gates.
+No capability/HPO arm had been submitted when these manifests were frozen. Two
+bounded four-GPU development canaries were subsequently run; they are runtime
+qualification evidence, not model-quality observations. Source coverage,
+checkpoint serving and the real Tensorlake lifecycle remain explicit
+pre-production gates.
+
+### Accepted enhanced-metrics canary
+
+Development run `chris-q38-ta4m-dev1-c69c000a` completed at
+`2026-09-11T22:45:37Z` with RayJob UID
+`d00dcd6b-8c7e-4ce8-b09b-6e2fef1fadb7` and Workload UID
+`2cf5b047-df8d-401d-a22b-d9a7fa9f2460`. The Workload finished successfully,
+the RayCluster and Pod are absent, and all four GPUs were released.
+
+A separate zero-GPU, read-only verifier (Pod UID
+`de7d57a8-94c2-4b04-a1ae-fa152187daa3`, deleted after success) proved one real
+optimizer step, one complete W&B scalar event over the eight-field allowlist,
+finite loss/gradient/throughput scalars, acknowledged W&B sync, no evaluation
+telemetry, and a nonempty 21-file, 324,621,264,731-byte checkpoint. The terminal,
+W&B and checkpoint-receipt digests are respectively
+`f2c3c73ee64bbe576c361adce48665fd150d6f18dfa4f498670bb62d38810207`,
+`a9fa8f6a6419eff871ae84f36c5d2a0b4ba6a966967845c2fc484ae6a9c28d1f`,
+and `d8d18835c8b3b36e2155c85caa1c40b2d09bd16983ab8bc006b8ccdac595fc59`.
+No `FAILED.json` or tracking-incomplete receipt exists. This accepts scalar
+tracking and checkpoint creation only; it is not evidence of task uplift.
 
 ### Four-GPU metrics-canary recovery gate
 
