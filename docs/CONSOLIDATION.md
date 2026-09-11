@@ -89,6 +89,12 @@ pilot, Qwen Code calibration launcher and raw-Kubernetes Qwen Code smoke/test20
 scripts. Their only code callers were their own obsolete launch paths and tests;
 the OpenCode/PostgreSQL worker imports none of them. Historical configs and
 receipts remain readable at their recorded revisions, not executable recipes.
+The duplicate Qwen-only runner and fixed-20-task sequential launcher are also
+retired. Read-only historical reconciliation now imports the maintained runner's
+identical trace-normalization functions; all 34 reconciliation/runner tests pass
+against it, with fixtures updated to the actual task-version and ingest response
+contracts. The configurable PostgreSQL evaluation command replaces the old
+sequential launch surface. Historical reconciliation still never runs a model.
 
 Removed files are recoverable from base commit `bac2a4c`. Historical receipts
 and their source pointers are unchanged and refer to their original revisions,

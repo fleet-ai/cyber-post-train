@@ -230,3 +230,30 @@ sampler can reshuffle **later epochs differently** after recovery, while still
 covering each example once. This is not a promise of bit-identical final weights
 to an uninterrupted multi-epoch run. GPU recovery qualification is tracked in
 `docs/CONSOLIDATION.md`; CPU tests alone do not establish it.
+
+## RL integration status
+
+The public training command currently runs **SFT**, not RL. Historical
+`training.rl_config` / `rl_preview` files describe the retired typed API and are
+not a current launch shortcut. RL qualification remains a completion gate.
+
+Use the native trainers, not a new optimizer implementation. The inspected
+[Theseus FTI integration](https://github.com/fleet-ai/theseus/tree/6b7e1304e0782b9586d0fb03e955f2264a8f32db/services/fti/src/fti/trainers/miles)
+provides Miles token recording and a Qwen3.8 text recipe (Megatron TP4/CP2,
+one or two eight-GPU nodes; TP1 SGLang engines). Its GLM recipe is **Flash**,
+not our full GLM5.3. Its stock agent uses Platform V2 and `fleet_submit`, so it
+must not silently replace our exact V1 `bash`, `submit_report` contract.
+Reuse its token recorder and native training recipe only with a qualified cyber
+adapter. Never call its W&B argv helper, which places a key in process arguments;
+use workload Secret injection. Stage exact model bytes before GPU startup rather
+than calling its unpinned model-download helper.
+
+The inspected [SkyRL adapter](https://github.com/fleet-ai/theseus/tree/6b7e1304e0782b9586d0fb03e955f2264a8f32db/services/rl-rollout/rl_rollout)
+already supports exact V1 cyber tasks and authoritative verifier execution IDs.
+Its default episode/SDK retries and best-effort cleanup still need a bounded
+cyber policy: never replay an ambiguous create/score request or train an
+infrastructure failure as reward zero. Both backends must retain per-episode
+verifier IDs, confirmed cleanup, sampled-token/log-probability alignment and
+masked tool observations. A group with identical valid rewards is a valid
+zero-signal group, not proof of useful learning. Require real reward acquisition,
+an optimizer update and a recoverable checkpoint before scaling either backend.

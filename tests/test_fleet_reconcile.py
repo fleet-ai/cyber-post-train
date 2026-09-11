@@ -7,7 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from evals.fleet import reconcile, self_hosted
+from evals.fleet import opencode_self_hosted as self_hosted
+from evals.fleet import reconcile
 
 
 def _write(path: Path, value: dict) -> None:

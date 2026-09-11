@@ -8,11 +8,10 @@ from pathlib import Path
 import httpx
 import pytest
 
-from evals.fleet import fixed_proxy, self_hosted
+from evals.fleet import fixed_proxy
+from evals.fleet import opencode_self_hosted as self_hosted
 
-CONFIG_PATH = Path(
-    "evals/fleet/configs/qwen36-27b-qwen-code-selfhosted-smoke-v1.json"
-)
+CONFIG_PATH = Path("evals/fleet/configs/qwen36-27b-qwen-code-selfhosted-smoke-v1.json")
 
 
 def _config() -> dict:
@@ -60,7 +59,7 @@ def test_request_does_not_retry_mutating_requests(monkeypatch: pytest.MonkeyPatc
         def request(self, method: str, url: str, **kwargs):
             nonlocal calls
             calls += 1
-            return type("Response", (), {"status_code": 503})()
+            return httpx.Response(503, json={"detail": "fixture"})
 
     monkeypatch.setattr(self_hosted.time, "sleep", lambda _: pytest.fail("must not sleep"))
     with pytest.raises(RuntimeError, match="HTTP 503"):
@@ -72,6 +71,8 @@ def test_task_receipt_uses_targeted_version_and_never_source_job_roster() -> Non
     config = _config()
     expected_route = f"/v1/tasks/{config['task']['key']}"
     fixture = {
+        "id": config["task"]["id"],
+        "eval_task_version_id": config["task"]["version_id"],
         "key": config["task"]["key"],
         "environment_id": config["environment"]["id"],
         "version": config["environment"]["version"],
@@ -94,9 +95,7 @@ def test_task_receipt_uses_targeted_version_and_never_source_job_roster() -> Non
         },
     }
     config["task"]["prompt_sha256"] = self_hosted.sha256(b"")
-    config["task"]["env_variables_sha256"] = self_hosted.sha256(
-        self_hosted.canonical_json({})
-    )
+    config["task"]["env_variables_sha256"] = self_hosted.sha256(self_hosted.canonical_json({}))
     config["task"]["output_json_schema_sha256"] = self_hosted.sha256(
         self_hosted.canonical_json(None)
     )
@@ -115,6 +114,7 @@ def test_task_receipt_uses_targeted_version_and_never_source_job_roster() -> Non
 def test_build_instance_payload_preserves_exact_runtime_binding() -> None:
     config = _config()
     task = {
+        "id": config["task"]["id"],
         "env_variables": {"VISIBLE": "value"},
         "metadata": {
             "runtime_seed_manifest": {
@@ -158,9 +158,7 @@ def test_qwen_trace_loader_counts_malformed_lines_without_losing_raw_trace(
     trace = tmp_path / "projects" / "workspace" / "chats" / "trace.jsonl"
     trace.parent.mkdir(parents=True)
     trace.write_text(
-        json.dumps({"type": "assistant", "message": {"parts": []}})
-        + "\n"
-        + "not-json\n"
+        json.dumps({"type": "assistant", "message": {"parts": []}}) + "\n" + "not-json\n"
     )
     events, canonical_trace, malformed = self_hosted.load_qwen_chat_trace(tmp_path)
     assert len(events) == 1
@@ -179,30 +177,26 @@ def test_authority_paths_are_exact_task_version_routes() -> None:
     assert self_hosted.authoritative_route(config, "scoring") == prefix
 
 
-def test_authority_gate_accepts_exact_behavioral_guard_when_openapi_lags() -> None:
-    class Response:
-        status_code = 422
-        content = b"yes"
+def test_authority_gate_uses_only_reads_when_openapi_lags() -> None:
+    calls = []
 
-        def json(self) -> dict:
-            return {"detail": "Authoritative RL rollout rewards support report-only tasks"}
+    def handler(request):
+        calls.append(request)
+        assert request.method == "GET"
+        if request.url.path == "/openapi.json":
+            return httpx.Response(200, json={"paths": {}})
+        return httpx.Response(405, content=b"unread private response")
 
-    class Client:
-        def request(self, method: str, url: str, **kwargs):
-            assert method == "GET"
-            return type(
-                "OpenAPIResponse",
-                (),
-                {"status_code": 200, "json": lambda self: {"paths": {}}},
-            )()
-
-        def post(self, url: str, **kwargs):
-            return Response()
-
-    result = self_hosted.assert_authoritative_routes_deployed(Client(), _config())
+    config = _config()
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        result = self_hosted.assert_authoritative_routes_deployed(client, config)
+    assert [r.url.path for r in calls[1:]] == [
+        self_hosted.authoritative_route(config, kind) for kind in ("provisioning", "scoring")
+    ]
     assert result == {
-        "mode": "behavioral_report_only_guard",
-        "statuses": {"provisioning": 422, "scoring": 422},
+        "mode": "behavioral_method_not_allowed",
+        "method": "GET",
+        "statuses": {"provisioning": 405, "scoring": 405},
     }
 
 
@@ -258,11 +252,15 @@ def test_session_trace_ingest_is_bounded_ordered_and_scores_only_final_chunk() -
             assert method == "POST"
             assert url.endswith("/v1/sessions/ingest")
             calls.append(kwargs["json"])
-            return type(
-                "Response",
-                (),
-                {"status_code": 200, "json": lambda self: {"session_id": "session-1"}},
-            )()
+            return httpx.Response(
+                200,
+                json={
+                    "session_id": "session-1",
+                    "success": True,
+                    "message_count": len(kwargs["json"]["messages"]),
+                    "created_new_session": len(calls) == 1,
+                },
+            )
 
     messages = [{"role": "tool", "content": str(index)} for index in range(65)]
     receipt = self_hosted.ingest_session_trace(
@@ -301,14 +299,15 @@ def test_session_trace_ingest_preserves_partial_receipt_without_mutation_retry()
             nonlocal calls
             calls += 1
             status = 200 if calls == 1 else 413
-            return type(
-                "Response",
-                (),
-                {
-                    "status_code": status,
-                    "json": lambda self: {"session_id": "session-1"},
+            return httpx.Response(
+                status,
+                json={
+                    "session_id": "session-1",
+                    "success": True,
+                    "message_count": len(kwargs["json"]["messages"]),
+                    "created_new_session": calls == 1,
                 },
-            )()
+            )
 
     with pytest.raises(self_hosted.SessionIngestError) as caught:
         self_hosted.ingest_session_trace(
@@ -327,7 +326,11 @@ def test_session_trace_ingest_preserves_partial_receipt_without_mutation_retry()
         "message_count": 33,
         "chunks_completed": 1,
         "chunk_count": 2,
-        "error_type": "RuntimeError",
+        "error_type": "FleetRequestError",
+        "error_code": "fleet_http_error",
+        "http_status": 413,
+        "method": "POST",
+        "route": "/v1/sessions/ingest",
     }
 
 
@@ -339,11 +342,15 @@ def test_session_trace_ingest_also_bounds_serialized_payload_bytes(
     class Client:
         def request(self, method: str, url: str, **kwargs):
             payloads.append(kwargs["json"])
-            return type(
-                "Response",
-                (),
-                {"status_code": 200, "json": lambda self: {"session_id": "session-1"}},
-            )()
+            return httpx.Response(
+                200,
+                json={
+                    "session_id": "session-1",
+                    "success": True,
+                    "message_count": len(kwargs["json"]["messages"]),
+                    "created_new_session": len(payloads) == 1,
+                },
+            )
 
     monkeypatch.setattr(self_hosted, "SESSION_INGEST_CHUNK_BYTES", 90)
     self_hosted.ingest_session_trace(

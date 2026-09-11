@@ -15,7 +15,7 @@ import math
 from pathlib import Path
 from typing import Any
 
-from evals.fleet import self_hosted
+from evals.fleet import opencode_self_hosted as self_hosted
 
 OBSERVATION_SCHEMA = "fleet-selfhosted-authority-observation-v1"
 PLAN_SCHEMA = "fleet-selfhosted-reconcile-plan-v1"
