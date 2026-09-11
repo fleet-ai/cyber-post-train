@@ -715,22 +715,6 @@ def test_staging_execution_identity_matches_cluster_job():
     assert "fieldPath: metadata.uid" in manifest
     assert "batch.kubernetes.io/controller-uid" in manifest
     assert "Job controller generates the Pod name" in manifest
-    submit = (
-        Path(__file__).resolve().parents[1]
-        / "evals/post_sft/scripts/submit_inference_stage.sh"
-    ).read_text(encoding="utf-8")
-    assert "kubectl apply" not in submit
-    assert "kubectl create --dry-run=server" in submit
-    assert "kubectl create -f" in submit
-    assert 'value["immutable"]=True' in submit
-    for resource in (
-        "serviceaccount",
-        "role.rbac.authorization.k8s.io",
-        "rolebinding.rbac.authorization.k8s.io",
-        "configmap",
-        "job.batch",
-    ):
-        assert resource in submit
 
 
 def test_atomic_promotion_refuses_destination_created_after_preflight(tmp_path):

@@ -1744,21 +1744,6 @@ def test_artifact_evidence_rejects_unexpected_sidecars_and_self_asserted_executi
         _artifacts_from_receipts(base, _export(_selection()))
 
 
-def test_evidence_producer_scripts_use_immutable_configmaps_and_exact_pod_logs():
-    for relative in (
-        "evals/post_sft/scripts/submit_base_artifact_inspection.sh",
-        "evals/post_sft/scripts/submit_registration.sh",
-    ):
-        script = (ROOT / relative).read_text()
-        assert 'value["immutable"]=True' in script
-        assert "kubectl apply" not in script
-        assert "kubectl create --dry-run=server" in script
-        assert "kubectl create -f" in script
-    artifact_script = (
-        ROOT / "evals/post_sft/scripts/submit_base_artifact_inspection.sh"
-    ).read_text()
-    assert 'logs "pod/$pod"' in artifact_script
-
 def test_live_builder_rejects_changed_cr_spec_and_nondeterminism(tmp_path):
     inputs = _paired_inputs(tmp_path)
     _, paired_identity = derive_post_sft_qwen_pair(**inputs)

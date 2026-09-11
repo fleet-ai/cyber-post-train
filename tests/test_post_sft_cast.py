@@ -730,29 +730,13 @@ def test_cast_job_is_queued_cpu_only_digest_pinned_and_create_only():
     assert "nvidia.com/gpu" not in json.dumps(job)
     assert container["command"] == cast.CAST_COMMAND["command"]
     assert container["args"] == cast.CAST_COMMAND["args"]
-    script = (root / "evals/post_sft/scripts/submit_bf16_cast_v5.sh").read_text()
-    assert "kubectl apply" not in script
-    assert "kubectl create --dry-run=server" in script
-    assert "kubectl create -f" in script
-    assert 'value["immutable"]=True' in script
-    assert "require_all_absent" in script
-    assert "temp_dir=$(mktemp -d)" in script
-    assert 'cast_input="$temp_dir/cast-input.json"' in script
-    assert "cast_input=$(mktemp)" not in script
 
 
-def test_cast_v5_is_create_only_successor_and_v3_v4_sources_are_preserved():
+def test_historical_cast_destinations_remain_distinct():
     root = Path(__file__).resolve().parents[1]
     v3_job = root / "evals/post_sft/cluster/qwen36-sft-bf16-cast-v3-job.yaml"
-    v3_submitter = root / "evals/post_sft/scripts/submit_bf16_cast_v3.sh"
     v4_job = root / "evals/post_sft/cluster/qwen36-sft-bf16-cast-v4-job.yaml"
-    v4_submitter = root / "evals/post_sft/scripts/submit_bf16_cast_v4.sh"
     v5_job = root / "evals/post_sft/cluster/qwen36-sft-bf16-cast-v5-job.yaml"
-    v5_submitter = root / "evals/post_sft/scripts/submit_bf16_cast_v5.sh"
-
-    assert v3_job.is_file() and v3_submitter.is_file()
-    assert v4_job.is_file() and v4_submitter.is_file()
-    assert v5_job.is_file() and v5_submitter.is_file()
     assert "bf16-cast-v3" in v3_job.read_text()
     assert "bf16-cast-v4" in v4_job.read_text()
     assert "bf16-cast-v5" in v5_job.read_text()

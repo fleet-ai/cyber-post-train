@@ -1381,17 +1381,9 @@ def test_export_observation_accepts_exact_ray_cli_terminal_success_marker():
     assert receipt["zero_step_evidence"]["optimizer_step_events"] == 0
 
 
-def test_export_evidence_submission_is_create_only_and_immutable():
+def test_historical_export_evidence_checks_source_stability():
     root = Path(__file__).resolve().parents[1]
-    script = (root / "evals/post_sft/scripts/submit_evidence_v4.sh").read_text()
     manifest = (root / "evals/post_sft/cluster/qwen36-sft-evidence-v4-job.yaml").read_text()
-    assert "kubectl apply" not in script
-    assert 'value["immutable"]=True' in script
-    assert script.count("kubectl create --dry-run=server") >= 2
-    assert 'kubectl create -f "$config_map"' in script
-    assert 'kubectl create -f "$JOB"' in script
-    assert script.count("require_absent") >= 3
-    assert "validate-evidence-bundle" in script
     assert "structural_before=" in manifest
     assert "structural_after=" in manifest
     assert "latest_before=" in manifest

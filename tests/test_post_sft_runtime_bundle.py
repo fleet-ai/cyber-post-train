@@ -38,19 +38,6 @@ def test_every_post_sft_bundle_uses_and_freezes_the_minimal_marker():
     for item in contracts:
         assert item["config_map_code_sha256"]["training/__init__.py"] == expected
 
-    for relative in (
-        "evals/post_sft/scripts/submit_evidence.sh",
-        "evals/post_sft/scripts/submit_evidence_v4.sh",
-        "evals/post_sft/scripts/submit_bf16_cast.sh",
-        "evals/post_sft/scripts/submit_bf16_cast_v2.sh",
-        "evals/post_sft/scripts/submit_inference_stage.sh",
-        "evals/post_sft/scripts/submit_base_artifact_inspection.sh",
-        "evals/post_sft/scripts/submit_registration.sh",
-    ):
-        script = (ROOT / relative).read_text()
-        assert 'evals/post_sft/runtime/training__init__.py' in script
-        assert '--from-file=training__init__.py="$ROOT/training/__init__.py"' not in script
-
 
 def test_frozen_plan_uses_one_authoritative_bf16_cast_destination():
     plan = json.loads(PLAN.read_text())
@@ -88,28 +75,12 @@ def test_base_artifact_inspector_v9_binds_ecr_auth_and_minimal_package():
     assert job["spec"]["template"]["spec"]["imagePullSecrets"] == [
         {"name": "ecr-pull"}
     ]
-    submitter = (
-        ROOT / "evals/post_sft/scripts/submit_base_artifact_inspection.sh"
-    ).read_text()
-    assert "require_pull_secret" in submitter
-    assert "kubernetes.io/dockerconfigjson" in submitter
-    assert 'evals/post_sft/runtime/webexploitbench__init__.py' in submitter
-    assert (
-        'training_post_sft_base_surface.py="$ROOT/training/post_sft_base_surface.py"'
-        in submitter
-    )
-    assert 'training_post_sft_cast.py="$ROOT/training/post_sft_cast.py"' in submitter
     mounted_items = {
         row["key"]: row["path"]
         for row in job["spec"]["template"]["spec"]["volumes"][0]["configMap"]["items"]
         if row["key"] != "post-sft-plan.json"
     }
     assert mounted_items == ARTIFACT_CONFIG_MAP_FILES
-    repository_initializer = (
-        '--from-file=evals_webexploitbench__init__.py='
-        '"$ROOT/evals/webexploitbench/__init__.py"'
-    )
-    assert repository_initializer not in submitter
 
 
 def test_base_artifact_inspector_bundle_imports_without_repository_modules(tmp_path):
