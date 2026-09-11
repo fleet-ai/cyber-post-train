@@ -74,7 +74,18 @@ def _sfs_root(value: str, label: str) -> str:
 def compile_sft(config: dict, *, relative_to: Path) -> dict:
     _known(
         config,
-        {"backend", "name", "output_root", "model", "data", "recipe", "wandb", "cluster", "lora"},
+        {
+            "backend",
+            "name",
+            "output_root",
+            "model",
+            "data",
+            "recipe",
+            "wandb",
+            "cluster",
+            "lora",
+            "recovery",
+        },
         "SFT",
     )
     if config.get("backend", "skyrl") != "skyrl":
@@ -181,6 +192,10 @@ def compile_sft(config: dict, *, relative_to: Path) -> dict:
         ).hexdigest()
     elif "lora" in config or lock["repo"] not in {"Qwen/Qwen3.8-27B", "Qwen/Qwen3.6-27B"}:
         raise ValueError("model needs a qualified SkyRL loader profile before GPU submission")
+    if "recovery" in config:
+        from .recovery import bind
+
+        bind(plan, config["recovery"], relative_to=relative_to)
     validate_plan(plan, check_files=False)
     validate_request(job_request(plan))
     return plan
@@ -205,6 +220,17 @@ def job_request(plan: dict) -> dict:
             "training/__init__.py": "",
             "training/glm_runtime.py": helper.decode(),
         }
+    if "recovery" in plan:
+        extras = contents.setdefault("extra_files", {})
+        for name in ("__init__.py", "recovery.py", "checkpoints.py", "sft_runtime.py"):
+            extras["training/" + name] = (
+                "" if name == "__init__.py" else Path(__file__).with_name(name).read_text()
+            )
+        if (
+            hashlib.sha256(extras["training/recovery.py"].encode()).hexdigest()
+            != plan["recovery_runtime_sha256"]
+        ):
+            raise ValueError("recovery runtime changed since this plan was compiled")
     bundle = json.dumps(
         contents,
         sort_keys=True,
@@ -242,7 +268,7 @@ def job_request(plan: dict) -> dict:
             "CYBER_SFT_BUNDLE": base64.b64encode(compressed).decode(),
             **(
                 {"PYTHONPATH": str(Path(plan["output_root"]) / ".runtime")}
-                if "lora" in plan
+                if "extra_files" in contents
                 else {}
             ),
             "HF_HUB_OFFLINE": "1",

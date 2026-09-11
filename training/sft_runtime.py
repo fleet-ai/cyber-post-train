@@ -161,6 +161,10 @@ def validate_plan(plan: dict, *, check_files: bool = True) -> None:
         raise ValueError(
             "v2 arms start from their exact base; resume needs a separately bound plan"
         )
+    if "recovery" in plan:
+        from training.recovery import validate
+
+        validate(plan, check_files=check_files)
     train, dev = (plan["datasets"][key] for key in ("train", "dev"))
     for dataset in (train, dev):
         if not re.fullmatch(r"(?:sha256:)?[a-f0-9]{64}", dataset["sha256"]):
@@ -856,7 +860,11 @@ def _make_trainer_class():
 
         def _init_workers(self):
             selection = contextlib.nullcontext()
-            if "lora" in self.plan:
+            if "recovery" in self.plan:
+                from training.recovery import use_worker
+
+                selection = use_worker(self.plan)
+            elif "lora" in self.plan:
                 from training.glm_runtime import use_worker
 
                 selection = use_worker(self.plan)
@@ -972,6 +980,13 @@ def _make_trainer_class():
             self.dev_rows = self._load_split("dev")
             return self.dev_rows
 
+        def load_checkpoint(self):
+            if "recovery" in self.plan:
+                from training.recovery import load
+
+                return load(self)
+            return super().load_checkpoint()
+
         def run_eval(self):
             accumulator = EvalAccumulator()
             cursor = batches = 0
@@ -1038,6 +1053,10 @@ def _make_trainer_class():
                     "checkpoint_path": str(path),
                     "plan_sha256": self.plan["plan_sha256"],
                     "saved_at_unix": time.time(),
+                    "training_progress": {
+                        "supervised_tokens": self.target_tokens_seen,
+                        "best": self.best,
+                    },
                 },
             )
             self.prune_checkpoints()
@@ -1069,6 +1088,8 @@ def _make_trainer_class():
 
 
 def plan_checkpoint(plan: dict, step: int) -> str:
+    if "recovery" in plan and step == plan["recovery"]["checkpoint"]["optimizer_step"]:
+        return plan["recovery"]["checkpoint"]["checkpoint_path"]
     return (
         plan["model"]["root"]
         if step == 0
@@ -1083,6 +1104,10 @@ def _run_training(plan: dict) -> dict:
     trainer = _make_trainer_class()(cfg, skyrl_cfg, plan)
     try:
         trainer.setup()
+        if plan.get("recovery", {}).get("mode") == "validate":
+            from training.recovery import validate_only
+
+            return validate_only(trainer)
         trainer.train()
         expected = plan["recipe"]["max_steps"]
         pointer = Path(cfg.ckpt_path) / "latest_ckpt_global_step.txt"
@@ -1188,10 +1213,13 @@ def main():
         initialize_ray(cfg)
         task = ray.remote(num_cpus=1)(_run_training).remote(plan)
         result = _wait_for_training(ray, task, output)
-        write_receipt(output / "TRAINING_COMPLETE.json", result)
-        print(
-            json.dumps({"status": "training_complete", "optimizer_step": result["optimizer_step"]})
+        terminal = (
+            "RELOAD_VALIDATED.json"
+            if result["status"] == "reload_validated"
+            else "TRAINING_COMPLETE.json"
         )
+        write_receipt(output / terminal, result)
+        print(json.dumps({"status": result["status"], "optimizer_step": result["optimizer_step"]}))
     except BaseException as exc:
         write_receipt(
             output / "FAILED.json",

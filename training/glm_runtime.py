@@ -574,7 +574,9 @@ def worker_class(plan: dict):
                 self.optimizer,
                 self.scheduler,
                 identity=identity,
-                plan_sha256=plan["plan_sha256"],
+                plan_sha256=plan.get("recovery", {})
+                .get("checkpoint", {})
+                .get("source_plan_sha256", plan["plan_sha256"]),
             )
             self._completed_optimizer_steps = result["optimizer_step"]
             return result

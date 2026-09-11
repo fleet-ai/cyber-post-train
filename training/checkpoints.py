@@ -171,6 +171,9 @@ def seal(plan: dict, step: int, output: Path, *, progress=None) -> dict:
         "total_bytes": total,
         "gpu_reload_verified": False,
     }
+    if "training_progress" in saved:
+        result["training_progress"] = saved["training_progress"]
+        _validate_progress(result)
     write_receipt(output, result)
     return receipt(output)
 
@@ -211,6 +214,8 @@ def verify(manifest: dict, *, check_files: bool = True) -> None:
         if not re.fullmatch(r"[a-f0-9]{64}", spec["sha256"]):
             raise ValueError("invalid checkpoint file digest")
     adapter = "lora" in plan
+    if "training_progress" in manifest:
+        _validate_progress(manifest)
     _validate_names(set(manifest["files"]), size, adapter=adapter)
     if check_files:
         files = checkpoint_files(expected, size, adapter=adapter)
@@ -222,3 +227,31 @@ def verify(manifest: dict, *, check_files: bool = True) -> None:
                 raise ValueError("checkpoint file digest/size mismatch")
         if adapter:
             _adapter_binding(plan, step, expected, manifest["files"])
+
+
+def _validate_progress(manifest: dict) -> None:
+    progress = manifest["training_progress"]
+    if not isinstance(progress, dict) or set(progress) != {"supervised_tokens", "best"}:
+        raise ValueError("invalid checkpoint training progress")
+    tokens = progress["supervised_tokens"]
+    source = manifest["source_plan"]
+    if type(tokens) is not int or tokens <= 0:
+        raise ValueError("checkpoint supervised-token count must be positive")
+    per_epoch = source["datasets"]["train"].get("supervised_tokens")
+    if per_epoch is not None and tokens > per_epoch * source["recipe"]["epochs"]:
+        raise ValueError("checkpoint supervised-token count exceeds the frozen corpus budget")
+    best = progress["best"]
+    if best is not None and (
+        not isinstance(best, dict)
+        or set(best)
+        != {"optimizer_step", "task_macro_loss", "token_weighted_loss", "checkpoint_path"}
+        or type(best["optimizer_step"]) is not int
+        or not 0 <= best["optimizer_step"] <= manifest["optimizer_step"]
+        or any(
+            type(best[key]) not in (int, float) or not math.isfinite(best[key]) or best[key] < 0
+            for key in ("task_macro_loss", "token_weighted_loss")
+        )
+        or not isinstance(best["checkpoint_path"], str)
+        or not Path(best["checkpoint_path"]).is_absolute()
+    ):
+        raise ValueError("invalid checkpoint selection progress")

@@ -202,5 +202,31 @@ Do not suppress alerts or hold GPUs while debugging a failed allocation.
 `TRAINING_COMPLETE.json` means optimization and checkpoint production completed;
 it does not mean the checkpoint is inference-ready or improves task success.
 Export/reload is a separate no-optimizer operation. Resume must bind the exact
-source checkpoint and consumed-data cursor; the compiler currently rejects an
-unreviewed resume instead of starting from the base and pretending to resume.
+source checkpoint and consumed-data cursor.
+
+### Validate or resume a saved run
+
+Copy the original training YAML, give it a **new name, output directory and W&B
+run ID**, and add:
+
+```yaml
+recovery:
+  manifest: /shared/checkpoint-step-50.json
+  sha256: <manifest-file-sha256>
+  mode: validate  # resume continues training; validate performs no optimizer step
+```
+
+Use the same prepare/preflight/preview/submit commands. Model, data, recipe,
+topology and trainer image must stay unchanged. Both modes restore every rank's
+optimizer/scheduler and the saved sampler cursor; a missing state is an error,
+never a warning followed by a fresh start. Validation performs held-out forward
+passes and writes `RELOAD_VALIDATED.json`, without saving or updating the model.
+Continuation requires recorded supervised-token progress and starts at the next
+step; completed runs and older checkpoints without that progress cannot be
+silently continued. Never run a source trainer and its recovery concurrently.
+
+SkyRL restores the remainder of the interrupted epoch exactly. Its native random
+sampler can reshuffle **later epochs differently** after recovery, while still
+covering each example once. This is not a promise of bit-identical final weights
+to an uninterrupted multi-epoch run. GPU recovery qualification is tracked in
+`docs/CONSOLIDATION.md`; CPU tests alone do not establish it.

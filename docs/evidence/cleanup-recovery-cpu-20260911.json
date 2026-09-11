@@ -1,0 +1,69 @@
+{
+  "checks": [
+    "exact sealed checkpoint binding",
+    "all-rank worker acknowledgements",
+    "optimizer counters, scheduler and RNG validation",
+    "strict sampler restoration without warning fallback",
+    "same model and Adam state after remaining interrupted epoch",
+    "complete once-per-epoch coverage after later native reshuffles",
+    "zero-optimizer validation bypasses train/save",
+    "new run/output/W&B identity required"
+  ],
+  "classification": "operational_gate",
+  "finished_at": "2026-09-11T03:11:08Z",
+  "gpus": 0,
+  "image_id": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+  "limits": [
+    "CPU fixture replaces distributed workers with tiny model; not GPU or full-model reload proof",
+    "Native random sampler does not promise bit-identical later-epoch reshuffles"
+  ],
+  "namespace": "fleet-train-jobs",
+  "pod_name": "chris-cpt-recovery-selftest-v3",
+  "pod_uid": "98e3b6b3-ef25-42c0-8796-4436dcf43571",
+  "prior_selftests": [
+    {
+      "finding": "CPU fixture shared driver and model RNG unlike separate Ray workers; fixed fixture isolation",
+      "pod_uid": "477fae87-020c-467e-989f-b026357e6a30",
+      "receipt_sha256": "4d481bd235529a145c28ed9aa3c1f4c68f5ac4ecc038de7e3012234edd04695f"
+    },
+    {
+      "finding": "Full multi-epoch bitwise expectation exceeds native documented sampler contract; now asserts exact resumed epoch and complete later-epoch coverage",
+      "pod_uid": "070870f0-95fa-4d3c-a840-3de012eaab84",
+      "receipt_sha256": "a05db699775903413f281ab7ba89bbe8be92d9447bf6b8f60ddc1918d5d83529"
+    }
+  ],
+  "receipt": {
+    "bundle_sha256": "703a8381333be5f86247ad351f78963d3f059965b16f233b2bbf6cb0ef58558c",
+    "counts": {
+      "errors": 0,
+      "failures": 0,
+      "skipped": 0,
+      "tests": 41
+    },
+    "files": {
+      "cyber_post_train/__init__.py": "3e70d0bf91f68f0190f2eb6d08e4e83d1ba58c1cbff29eb78e600c24e89c96a6",
+      "cyber_post_train/cli.py": "8ee1f01ece85b6a83c9325bbed3e814a4c215975a8dbbbdd2caaad921c8258e2",
+      "cyber_post_train/jobs.py": "ba8699cf49d6f8275d5b9e6b3222509a94a605d56e52d8e8917527f77df24b9c",
+      "test-wheels.json": "8c508f8727bf2769393be9d23bcac2109db17cb8489bb18878c9a66a33ed5fc6",
+      "tests/test_checkpoints.py": "1c79bc7d6e4019ca618235c131975588854c3b1fffe92d1aeff49d5ed9314e27",
+      "tests/test_glm_runtime.py": "02a732fa76183d70d2b3c4fe8916d42970e821e587eb630c3171ebabc5540eb5",
+      "tests/test_recovery.py": "d8cafb0663f6cabadab038ea0b414ab1db3fb81661567e7eb3ee97f850d4d478",
+      "tests/test_sft_runtime.py": "5cf164cf877e67dc245ec0bc92046111af60cfb7d2f96c8e2821fdce4966e33b",
+      "training/__init__.py": "ecf358039bbb9b6cbab6546c9b1e61b9bc06c5b2d5b19907ff303a9277d77e27",
+      "training/checkpoints.py": "8e35c127a6bdb97b129644b31ae59f9bc4ce58f8075aacfc28e72c39de901afe",
+      "training/glm_runtime.py": "b847236743d0c07f6459bdf6a728a32d1b39df1fb0d89362a4ed924b272b8d08",
+      "training/recovery.py": "99958c9a3633df9ed753c7d227ccb19e18e3da2e4ee9ecd83f160ba23a82117c",
+      "training/sft_runtime.py": "5e2050d8f5d12dfe50e1707222710306ae075ce226c47db0c2372a0f481f9d34"
+    },
+    "gpus": 0,
+    "node": "computeinstance-e04a737eqtfvpnyx08",
+    "pod_uid": "98e3b6b3-ef25-42c0-8796-4436dcf43571",
+    "schema": "cyber-native-sft-selftest-v1",
+    "sha256": "e69ec54f278b15dc750bc886e95002fdab6a11c47a978fdb3243d13340915217",
+    "status": "passed",
+    "test_output_path": "/tmp/cyber-native-test-xncd8w6p/test-output.txt",
+    "test_output_sha256": "bae205e53a9d053d43e94d1340e2831ceb797679fa67f8093c7a492cc3ea72b3"
+  },
+  "restarts": 0,
+  "schema": "cleanup_native_recovery_cpu_evidence_v1"
+}

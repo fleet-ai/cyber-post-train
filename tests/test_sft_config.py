@@ -152,7 +152,7 @@ def test_glm_bootstrap_imports_worker_in_child_without_checkout(glm_config, tmp_
         "import os,subprocess,sys\nfrom training import glm_runtime\n"
         "assert glm_runtime.__file__.startswith(os.environ['RUN_DIR']), glm_runtime.__file__\n"
         "subprocess.run([sys.executable,'-S','-c',"
-        "\"from training import glm_runtime; "
+        '"from training import glm_runtime; '
         "assert glm_runtime.TARGETS[0]=='q_a_proj'\"],check=True)\n"
     )
     monkeypatch.setattr(sft, "__file__", str(tmp_path / "sft.py"))
@@ -168,6 +168,45 @@ def test_glm_bootstrap_imports_worker_in_child_without_checkout(glm_config, tmp_
     result = subprocess.run(argv, cwd=run, env=env, capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
     assert (run / ".runtime/training/glm_runtime.py").read_text() == helper
+
+
+def test_recovery_bootstrap_imports_complete_package_without_checkout(
+    config, tmp_path, monkeypatch
+):
+    from training import recovery
+
+    plan = sft.compile_sft(config[0], relative_to=tmp_path)
+    # Bootstrap import boundary only; manifest validity has independent tests.
+    plan["recovery"] = {"mode": "validate"}
+    plan["recovery_runtime_sha256"] = recovery.digest(Path(recovery.__file__))
+    request = sft.job_request(plan)
+    files = json.loads(gzip.decompress(base64.b64decode(request["env"]["CYBER_SFT_BUNDLE"])))
+    assert files["extra_files"]["training/sft_runtime.py"] == files["runtime"]
+    # Replace only the executable entrypoint, retaining the real recovery,
+    # checkpoint and runtime modules for both parent and fresh child imports.
+    entry = (
+        "import subprocess,sys\nfrom training import recovery\n"
+        "assert callable(recovery.worker_class)\n"
+        "subprocess.run([sys.executable,'-S','-c',"
+        "'from training import recovery; assert callable(recovery.load)'],check=True)\n"
+    )
+    original = Path.read_bytes
+    runtime_file = Path(sft.__file__).with_name("sft_runtime.py")
+    monkeypatch.setattr(
+        Path, "read_bytes", lambda p: entry.encode() if p == runtime_file else original(p)
+    )
+    plan["runtime_sha256"] = hashlib.sha256(entry.encode()).hexdigest()
+    request = sft.job_request(plan)
+    run = tmp_path / "run"
+    run.mkdir()
+    argv = shlex.split(request["command"])
+    argv[:1] = [sys.executable, "-S"]
+    env = {**os.environ, **request["env"], "RUN_DIR": str(run), "PYTHONPATH": str(run / ".runtime")}
+    result = subprocess.run(argv, cwd=run, env=env, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    plan["recovery_runtime_sha256"] = "0" * 64
+    with pytest.raises(ValueError, match="recovery runtime changed"):
+        sft.job_request(plan)
 
 
 @pytest.mark.parametrize(
