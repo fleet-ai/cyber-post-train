@@ -491,6 +491,42 @@ def test_empty_recording():
         rl.validate_samples([])
 
 
+@pytest.mark.parametrize("maximum", [None, True, 0, -1, "300000", 300000.5])
+def test_advertised_bash_timeout_requires_an_exact_bound(maximum):
+    catalog = copy.deepcopy(CATALOG)
+    catalog[0]["inputSchema"]["properties"] = {"timeoutMs": {"maximum": maximum}}
+    with pytest.raises(rl.InvalidEpisode, match="bash_timeout_maximum_unresolved"):
+        rl.validate_tool_budget(catalog, 330)
+
+
+@pytest.mark.parametrize("seconds", [120, 300, 301, 330])
+def test_tool_budget_covers_every_advertised_timeout_with_transport_margin(seconds):
+    catalog = copy.deepcopy(CATALOG)
+    catalog[0]["inputSchema"]["properties"] = {"timeoutMs": {"maximum": 300000}}
+    original = copy.deepcopy(catalog)
+    if seconds <= 300:
+        with pytest.raises(rl.InvalidEpisode, match="tool_timeout_below_advertised_budget"):
+            rl.validate_tool_budget(catalog, seconds)
+    else:
+        rl.validate_tool_budget(catalog, seconds)
+    assert catalog == original
+
+
+@pytest.mark.asyncio
+async def test_live_tool_budget_mismatch_stops_before_sampling_and_releases(fixture, tmp_path):
+    fixture.catalog = copy.deepcopy(CATALOG)
+    fixture.catalog[0]["inputSchema"]["properties"] = {"timeoutMs": {"maximum": 5000}}
+    fixture.config["execution"]["required_task_tool_catalog_sha256"] = fleet.sha256(
+        fleet.canonical_json(fixture.catalog)
+    )
+    seal(fixture.config)
+    with pytest.raises(rl.InvalidEpisode, match="tool_timeout_below_advertised_budget"):
+        await collect(fixture, tmp_path)
+    assert fixture.deleted and not fixture.tool_calls
+    assert not (tmp_path / "episode/conversation.json").exists()
+    assert not (tmp_path / "episode/score-intent.json").exists()
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("version", ["1.28.0", "2.1.1"])
 @pytest.mark.parametrize("fault", [None, "version", "streams"])

@@ -60,6 +60,8 @@ def _failure(error, *, run_id, elapsed_seconds, phase):
                 "non_text_tool_result",
                 "tool_error_status_missing",
                 "tool_result_exceeds_budget",
+                "bash_timeout_maximum_unresolved",
+                "tool_timeout_below_advertised_budget",
                 "turn_budget_exhausted",
             }
         ):
@@ -242,6 +244,19 @@ def validate_samples(samples):
             raise InvalidEpisode("token_recording_invalid")
 
 
+def validate_tool_budget(catalog, seconds):
+    """Allow every advertised bash timeout plus transport time; do not edit tools."""
+    bash = next(tool for tool in catalog if tool["name"] == "bash")
+    properties = bash["inputSchema"].get("properties", {})
+    if "timeoutMs" not in properties:
+        return
+    maximum = properties["timeoutMs"].get("maximum")
+    if type(maximum) is not int or maximum <= 0:
+        raise InvalidEpisode("bash_timeout_maximum_unresolved")
+    if seconds * 1000 <= maximum:
+        raise InvalidEpisode("tool_timeout_below_advertised_budget")
+
+
 async def _agent(recorder, session, messages, tools, limits, parse):
     recorder.begin_segment(messages, tools)
     env_time = 0.0
@@ -355,6 +370,7 @@ async def collect(config, directory: Path, recorder, parse, *, client):
                     sorted(t.name for t in catalog),
                     fleet.sha256(fleet.canonical_json(raw)),
                 )
+                validate_tool_budget(raw, config["rl"]["tool_seconds"])
                 by_name = {t["name"]: t for t in raw}
                 tools = [
                     {

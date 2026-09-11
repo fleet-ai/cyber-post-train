@@ -170,6 +170,21 @@ def build(state):
         return data.build(state.config, relative_to=state.tmp, client=client)
 
 
+@pytest.mark.parametrize("backend", ["miles", "skyrl"])
+def test_tool_budget_preflight_precedes_native_runtime_and_network(setup, monkeypatch, backend):
+    setup.config["backend"] = backend
+    setup.catalog[0]["inputSchema"]["properties"] = {"timeoutMs": {"maximum": 300000}}
+    setup.selection["tool_catalog_sha256"] = fleet.sha256(fleet.canonical_json(setup.catalog))
+    seal(setup.selection)
+    monkeypatch.setattr(data, "_native", lambda *args: pytest.fail("native runtime reached"))
+    monkeypatch.setattr(data, "_native_skyrl", lambda *args: pytest.fail("native runtime reached"))
+    with pytest.raises(
+        data.rl_episode.InvalidEpisode, match="tool_timeout_below_advertised_budget"
+    ):
+        build(setup)
+    assert not setup.calls and not (setup.tmp / "out").exists()
+
+
 def test_exact_task_set_get_only_native_retention_and_private_files(setup):
     result = build(setup)
     assert len(setup.calls) == 3

@@ -59,7 +59,7 @@ and trace analysis` were inspected. Original commits/worktrees remain recoverabl
 | Real evaluation lifecycle | Qwen generated, authoritative grading and catalog ingestion completed, local result persisted, and all resources cleaned. OpenCode ended at its output limit, so the frozen natural-stop gate holds the result: zero accepted, one review, no retry. [Evidence](evidence/cleanup-eval-terminal-20260911.json). This qualifies lifecycle execution, not a complete model outcome |
 | Evaluation V6 | Terminal: one private result, complete authoritative grading/catalog ingestion and cleanup, but final output-limit stop. Zero accepted and one review; no active worker or retry. This separate operational treatment used 65,536 output tokens per request. [Evidence](evidence/cleanup-eval-v6-20260911.json). Not a capability comparison or training input |
 | Latest native regressions | 329 Miles and 472 SkyRL CPU tests pass in their exact images with zero skips, including real MCP transport fault propagation. The episode module covers all 317 statements/116 branches in Miles. Two invalid Miles self-test setups are retained separately, not hidden. [Evidence](evidence/cleanup-runtime-regression-20260911.json). No new RL reward/update qualification |
-| Local regression suite | 1,644 tests plus seven subtests pass using disposable PostgreSQL and MCP 2.1.1; 105 native/optional-dependency cases explicitly skip locally. Whole-repo coverage is 13,587/17,917 statements and 4,406/6,950 branches. Native-image and GPU qualification remain separate |
+| Local regression suite | 1,657 tests plus seven subtests pass using disposable PostgreSQL and MCP 2.1.1; 105 native/optional-dependency cases explicitly skip locally. Whole-repo coverage is 13,603/17,929 statements and 4,412/6,956 branches. Native-image and GPU qualification remain separate |
 | Installation | Wheel with current episode/GLM fixes, SHA-256 `3524d5eb28013f8971a5a3f71b8a9e1a6f6425118f1f6b9b997db5a4920c2c18`, installed outside the checkout on Python 3.12.14. Eight public and two legacy data help paths, redirect/user guards, numeric JSON, module identity, replay rejection and nested-error privacy pass. [Evidence](evidence/cleanup-runtime-regression-20260911.json). No Torch/PyArrow in this minimal environment; installation is not training readiness |
 
 The newer `rl-data` wheel was independently installed outside the checkout;
@@ -215,3 +215,12 @@ identical parsed Python syntax trees. Seven historical source files remain
 format-excluded because execution plans bind their exact bytes; their integrity
 tests are unchanged. The dev dependency set now includes the tested MCP 2.1.1
 client so CI exercises the real transport boundary instead of silently skipping it.
+
+The exact RL tool catalog (`85fad6bd…15b44a`) advertises a 300,000ms bash maximum.
+The old 120-second client deadline could interrupt an allowed call. Both RL data
+preparation and live catalog checks now reject that mismatch; the documented
+example uses 330 seconds. Thirteen added tests cover the bound, both backends'
+pre-network rejection, unchanged schemas and live cleanup before any sampling.
+This is an independent configuration defect, not proof of the V6 episode's lost
+root cause: its final call did not specify `timeoutMs`. Existing input bundles,
+episodes and outcomes remain unchanged; a new preparation is required.

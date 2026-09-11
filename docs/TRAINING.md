@@ -289,7 +289,7 @@ limits:
   max_tokens_per_turn: 4096
   max_turns: 80
   episode_seconds: 2400
-  tool_seconds: 120
+  tool_seconds: 330
   tool_result_chars: 50000
 ```
 
@@ -302,6 +302,13 @@ the exact canonical MCP `tool_catalog_sha256`, and `tasks`. Each task has
 `cyber_task_split_v1` format. Both files must cover the same complete set so
 lineage can be checked across train/dev/test; test and reserved-dev tasks are
 never fetched. Do not approve external benchmark tasks for this input.
+
+`tool_seconds` must exceed the catalog's maximum `bash.timeoutMs` value, leaving
+time for transport. For the five-minute tool maximum, 330 seconds leaves 30 seconds
+of headroom. Preparation rejects a smaller/equal client deadline before network
+or native model loading; runtime rechecks the live catalog. It never changes the
+advertised tools to fit a short client timeout. Changing this budget requires a
+new prepared run; existing episodes and their outcomes stay unchanged.
 
 The catalog must be the exact previously observed task-facing MCP catalog, in
 `bash`, `submit_report` order—not an invented tool schema. Runtime checks it

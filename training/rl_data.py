@@ -195,6 +195,7 @@ def build(config: dict, *, relative_to: Path, client) -> dict:
     }
     episode["config_sha256"] = fleet.digest_without(episode, "config_sha256")
     rl_episode._validate(episode)
+    rl_episode.validate_tool_budget(catalog, limits["tool_seconds"])
     if type(response_tokens) is not int or not (
         limits["max_tokens_per_turn"] <= response_tokens < limits["context_tokens"] <= 98304
     ):
