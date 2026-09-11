@@ -44,6 +44,17 @@ uv sync --locked --extra dev --extra train
 uv run --locked pytest
 ```
 
+CI also installs the non-editable package in a separate environment and checks
+the packaged runtime files plus every public command's help outside the checkout,
+with an empty home directory and no credentials:
+
+```sh
+uv run --isolated --locked --no-editable python -I tests/check_installed.py
+```
+
+This installation check needs no model, credential, GPU or running service. It
+does not replace native trainer or real-task qualification.
+
 PostgreSQL integration tests skip unless **both** `TEST_POSTGRES_DSN` and
 `TEST_POSTGRES_DISPOSABLE=1` are explicitly set. Use only a fresh local test instance
 bound to loopback, database name `cyber_post_train_test`, never a tunnel or production

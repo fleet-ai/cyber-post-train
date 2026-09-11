@@ -3,6 +3,44 @@
 Status: 2026-09-11. This is a qualification index, not live state or launch
 authority. Qwen is first; **full GLM5.3 and both RL backends remain required**.
 
+## Paused-goal handoff
+
+Chris paused the cleanup goal on September 11 and requested publication of the
+completed work plus an explicit WIP record. This snapshot is **not** a claim that
+the original goal or all supported model/backend combinations are complete.
+
+- **Usable, with real operational evidence:** the configurable Qwen SFT path,
+  held-out loss, W&B, native checkpoints, resumed optimization and BF16 export
+  reload. The small qualification runs do not establish a capability improvement.
+- **Implemented but WIP:** full GLM5.3 SFT, both native RL backends, and an accepted
+  complete outcome through the new configurable evaluation path. The table below
+  identifies the evidence and missing gate for each.
+- **Local validation at handoff:** 1,823 tests and seven subtests passed with the
+  disposable PostgreSQL integration database enabled; 166 tests explicitly
+  skipped. The public CLI/Jobs client has complete statement/branch coverage.
+  Across production Python files, this local run covers 71.9% of combined
+  statements and branches, excluding test files. Native-image evidence is separate;
+  whole-repository coverage is not complete.
+- **Installation:** the isolated non-editable package check passed for 105 Python
+  modules and all 22 command-help paths, without checkout imports or credentials.
+  [CI](../.github/workflows/tests.yml) now runs the repeatable
+  [installation check](../tests/check_installed.py).
+- **Still running at 2026-09-11T16:35:17Z:** local evaluation V8, Docker container
+  `agent-runtime-3f73210f`, one claimed session, zero accepted/local results and
+  no stale lease. It had completed 212 model steps and was progressing. Its exact
+  identities and bounded, no-retry treatment are in the
+  [launch receipt](evidence/cleanup-eval-v8-20260911.json). No new cluster nodes
+  were allocated for it. Pausing this goal did not cancel that existing process.
+- **Preserved outside Git:** private data, results, ignored qualification tools
+  and runtime outputs remain in the existing worktrees/stores. Do not delete them
+  or replay their attempts when starting from a fresh clone.
+
+No new cluster submissions, successor runs or monitors are part of this handoff.
+Before resuming live qualification, resolve the alert-safe development/reporting
+path with the cluster maintainers and obtain current authorization; publication
+does not lift the submission hold. Then finish Qwen evaluation/RL qualification,
+full GLM qualification, and the remaining simplification/coverage gates below.
+
 **Submission gate — 2026-09-11 user alert review:** Chris explicitly reauthorized
 submissions, conditional on checking that the intended path works first, then
 reported another alert. Miles V7 was already running and failed at 15:46:54Z;
@@ -138,7 +176,8 @@ The public CLI and Jobs client have complete statement/branch coverage in the
 Whole-repository coverage is **not complete**.
 Optional native dependencies need
 the pinned trainer images; local skips are never counted as passing training
-qualification. Installed-wheel checks run outside the checkout. The active
+qualification. Installed-wheel checks run outside the checkout in CI, with a
+fresh home and credential-free environment for command help. The active
 evaluation deliberately stays on its frozen installed wheel while source evolves.
 
 ## Remaining completion gates
@@ -148,7 +187,8 @@ evaluation deliberately stays on its frozen installed wheel while source evolves
 - [ ] Full GLM5.3 distributed SFT and artifact/recovery qualification.
 - [ ] Miles **and** SkyRL on both required models: real reward acquisition, optimizer update and checkpoint recovery.
 - [ ] Complete model outcomes through the configurable evaluation path.
-- [ ] Final caller-checked retirement, meaningful coverage, current-main review and wheel/CLI qualification.
+- [x] Repeatable installed-wheel/runtime-resource and CLI-help qualification.
+- [ ] Remaining caller-checked simplification and meaningful whole-repository coverage.
 
 ## Consolidated sources and retained history
 

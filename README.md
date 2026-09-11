@@ -15,6 +15,10 @@ uv run --locked cyber-post-train --help
 No credentials or model downloads are needed for local tests. `doctor` checks
 installed modules only, not cluster access or model readiness.
 
+Read the [ready/WIP handoff](docs/CONSOLIDATION.md) before using a training or
+evaluation path. The cleanup goal is paused; publishing code does not authorize
+new cluster submissions or imply that every model/backend is qualified.
+
 ## Training
 
 Use one editable YAML file for model/data manifests, hyperparameters, resources

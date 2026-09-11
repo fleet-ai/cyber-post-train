@@ -41,3 +41,5 @@ jobs:
       - run: uv run --locked ruff format --check .
       - run: uv run --locked pytest
       - run: uv run --locked cyber-post-train doctor
+      - name: Check the installed package, not the source checkout
+        run: uv run --isolated --locked --no-editable python -I tests/check_installed.py
