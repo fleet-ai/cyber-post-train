@@ -1,0 +1,54 @@
+{
+  "schema": "cyber_cleanup_qualification_v1",
+  "classification": "cpu_launch_boundary_tested_native_parser_unqualified",
+  "observed_date_utc": "2026-09-11",
+  "native_cpu_probe": {
+    "pod_name": "chris-cpt-miles-training-selftest-v1",
+    "pod_uid": "1e0b2572-2b23-47f5-8dd2-da872efb3638",
+    "node": "computeinstance-e04a737eqtfvpnyx08",
+    "image_id": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/miles-trainer@sha256:d1d37c584e2aafdd47df1e1f3492ff3343eb3b83a5f658cf7ce2432ee8d6ef33",
+    "started_at": "2026-09-11T07:23:34Z",
+    "finished_at": "2026-09-11T07:24:51Z",
+    "exit_code": 1,
+    "restarts": 0,
+    "gpus_requested": 0,
+    "tests": 50,
+    "passed": 49,
+    "failed": 1,
+    "skipped": 0,
+    "receipt_sha256": "7b72918c3caa7397c908dfef640a69ef1ba3de02ff6ea4e83e123c250022e3e5",
+    "receipt_digest_independently_verified": true,
+    "bundle_sha256": "ee04fde1d32ad1f9b1e0bf2a07805e7c291e88583cabd5d1d7382e898d1be575",
+    "test_output_sha256": "91927b87f954ed7d4afae40984fbc10a3a51e5965f01d565c778ba149f3b1823",
+    "failure": "Native Megatron argument parsing imports Transformer Engine, which requires libcuda.so.1. The CPU-only node has no CUDA driver library. No model loading, optimizer, Fleet request or scored episode occurred."
+  },
+  "correction": [
+    "CPU preflight validates the exact native FTI argument builder, dataset and artifact bindings, and explicitly records native_parser_checked=false.",
+    "The real native parser remains the first training-stage check inside the bounded GPU child. Its GPU/runtime qualification is still required.",
+    "Do not inject CUDA stubs, suppress the original failed receipt, or describe CPU tests as successful GPU parsing.",
+    "Slow artifact hashing is in the child covered by the watchdog; W&B cleanup cannot prevent Ray disconnect."
+  ],
+  "native_checkpoint_semantics": {
+    "source_commit": "9e178ca16839b0600155f3927f57ce0670b8f453",
+    "driver_sha256": "85dbfd31d41a84f9c2e79a2918583851fb53925630afa229e9cd0a154b170f46",
+    "save_argument": "zero-based rollout_id, not independent optimizer-step evidence",
+    "first_training_batch_checkpoint_index": 0
+  },
+  "post_correction_local_validation": {
+    "focused_passed": 57,
+    "native_only_skipped": 1,
+    "module_statements_covered": 261,
+    "module_statements_total": 261,
+    "module_branches_covered": 86,
+    "module_branches_total": 86,
+    "whole_repository_tests_passed": 1273,
+    "whole_repository_native_tests_skipped": 94,
+    "subtests_passed": 7,
+    "isolated_wheel_sha256": "f0d13d19a9c07cde4e4116af3cdfff3c6b14e65eef91348caf089fa6dd6d9726",
+    "isolated_wheel_help_paths_passed": 8,
+    "limits": "Local tests mock unavailable native runtime boundaries. This is not new native-image, CUDA or RL qualification."
+  },
+  "rl_gpu_runs_submitted": 0,
+  "optimizer_update_verified": false,
+  "native_checkpoint_reload_verified": false
+}

@@ -244,10 +244,10 @@ to an uninterrupted multi-epoch run. GPU recovery qualification is tracked in
 
 ## RL integration status
 
-The public training command currently runs **SFT**, not RL. The old typed-API
-RL builders and commands are retired; their source is recoverable from Git.
-Historical requests are not launch shortcuts. RL qualification remains a
-completion gate.
+The `train` command prepares **SFT**. `rl` prepares a native **Miles RL** plan;
+live reward, optimizer and recovery qualification remains open. SkyRL RL is not
+yet exposed by this CLI. The old typed-API builders are retired; historical
+requests are not launch shortcuts.
 
 `cyber-post-train rl-data rl-data.yaml` prepares private Miles input files on
 CPU in the pinned Miles image. It performs only Fleet account/task GETs, never
@@ -328,6 +328,60 @@ and subsequent native reload remain required before using a new checkpoint in RL
 
 ### Native training integration
 
+After preparing the exact prompts and sealing the base conversion, use:
+
+```yaml
+backend: miles
+name: my-qwen-rl  # must match rl-data's name
+output_root: /mnt/sfs/jobs/my-qwen-rl
+model:
+  lock: configs/models/qwen38-27b-1d4bf0f2.lock.json
+  weights: configs/models/qwen38-27b-1d4bf0f2.weights.json
+  root: /mnt/sfs/models/qwen3.8-27b-1d4bf0f2
+data:
+  manifest: /shared/rl-data/manifest.json
+  root: /mnt/sfs/data/my-qwen-rl
+checkpoint:
+  manifest: /shared/miles-checkpoint.json
+  sha256: <manifest-file-sha256>
+recipe:
+  nodes: 1
+  steps: 1
+  groups: 1
+  samples_per_prompt: 2
+  lr: 0.000001
+  eval_interval: 1
+  checkpoint_interval: 1
+wandb:
+  entity: <your-team>
+  project: cyber-post-train
+  run_id: <new-run-id>
+cluster:
+  priority: c1
+```
+
+`cyber-post-train rl rl.yaml --output output/my-rl` prepares only. The same
+`preflight`, `preview`, explicit `submit`, and `status` commands apply. All input
+roots must be staged and disjoint from the new output; the preparation manifest's
+paths and target hashes are rechecked before native training sees any data.
+
+CPU preflight checks the native FTI argument builder and Dataset, not CUDA.
+Megatron's actual parser imports Transformer Engine and `libcuda.so.1`; it is
+not usable on a driver-less CPU node. The receipt explicitly records
+`native_parser_checked: false`. The bounded GPU child then runs the unchanged
+native parser and driver; no stub driver or fake GPU is used to claim readiness.
+This distinction was found by a real pinned-image CPU test, not a training failure.
+
+The wrapper attaches to Jobs API's Ray allocation and never calls native FTI's
+process-killing launcher. Its watchdog covers input I/O as well as training and
+cleans only its own child process group. W&B is configured for scalar telemetry with
+console/code capture disabled. `NATIVE_TRAINING_COMPLETE.json` means the native
+loop returned and expected batch/checkpoint records exist, **not independently
+verified learning or recoverability**. Preserve the private recordings, verify
+optimizer changes and reload the checkpoint before accepting/scaling the run.
+Native checkpoint numbers are zero-based rollout indices: the first training
+batch saves index `0`, not an assertion of zero optimizer steps.
+
 Use the native trainers, not a new optimizer implementation. The inspected
 [Theseus FTI integration](https://github.com/fleet-ai/theseus/tree/cc18d2cd3e9370abf4f6f19df317d96ce6b619e4/services/fti/src/fti/trainers/miles)
 provides Miles token recording and a Qwen3.8 text recipe (Megatron TP4/CP2,
@@ -349,8 +403,8 @@ masked tool observations. A group with identical valid rewards is a valid
 zero-signal group, not proof of useful learning. Require real reward acquisition,
 an optimizer update and a recoverable checkpoint before scaling either backend.
 
-`training.rl_episode.generate` is the new internal Miles hook, not yet a public
-RL launcher or a qualified training recipe. It reuses FTI's native recorder and
+`training.rl_episode.generate` is the internal Miles hook used by `rl`, not a
+qualified training recipe. It reuses FTI's native recorder and
 parser, but opens exact V1 cyber tasks and enforces `bash`, `submit_report` at
 execution. Each run/phase/batch/sample identity owns one private directory; replay
 is rejected. Grading evidence, conversation, sampled tokens, masks and log
@@ -401,6 +455,6 @@ sample indices and records the batch separately. Baseline and post-update dev
 calls also need different durable identities: Miles calls both with batch zero
 on the first step. Dev rewards count episodes, not segments; native sample-length
 diagnostics use the first segment, while complete recordings remain private.
-`COLLECTED.json` proves a completed batch, never an optimizer update. The future
-launcher must set `MILES_USE_LEGACY_ROLLOUT_V1=0` and `WANDB_RUN_ID` explicitly;
+`COLLECTED.json` proves a completed batch, never an optimizer update. The
+launcher sets `MILES_USE_LEGACY_ROLLOUT_V1=0` and `WANDB_RUN_ID` explicitly;
 native primary W&B initialization does not forward the similarly named CLI field.

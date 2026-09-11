@@ -11,7 +11,11 @@
     "identical_task_response_sha256": "e0e6e0598db909539110a681b880a8d2616e90ed1b79f67ce90d3cd0fcbe8415",
     "get_exact_create_route_status": 405,
     "allow": "POST",
-    "get_nonexistent_control_route_status": 404
+    "get_nonexistent_control_route_status": 404,
+    "environment_catalog_get_status": 200,
+    "environment_catalog_response_sha256": "6cbcf82aa86aeaa63ae0a870683cb1a6c5f315406f4dfcafb8b220729420f713",
+    "exact_environment_version_listed": "v0.0.3",
+    "listed_environment_image": "661864827319.dkr.ecr.us-west-1.amazonaws.com/theseus/cysec1-2-current-gen:build-0a6f976b"
   },
   "separate_non_scored_probe": {
     "route": "/v1/rollout-rewards/cysec1-2-current-gen_blackbox-1a36d9c4959e23d01025a6d2__blackbox_ctf_v1/versions/2b9ba166-6f43-44aa-894d-75761314c150/instances",
@@ -38,6 +42,8 @@
     "all_terminal_history_exhaustive": false
   },
   "limits": [
+    "Read-only source review at Theseus 6b7e1304e0782b9586d0fb03e955f2264a8f32db shows hydration ValueErrors become HTTP 404. Permission denial has a separate HTTP 403 path. Neither identifies the actual live 404 cause.",
+    "Only training-cluster Kubernetes contexts are configured here; AWS STS reports no configured credentials. Fleet API access works, but public-API server log access is not established.",
     "No newly matching active instance was observed; no specific instance was returned to delete.",
     "Route presence and successful task lookup do not identify the failing server-side hydration or provisioning check.",
     "No raw error body, prompt, trace, flag, score or credential is retained here.",

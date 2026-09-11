@@ -147,6 +147,28 @@ def train(config: Path, output: Annotated[Path, typer.Option("--output")]) -> No
 
 
 @app.command()
+def rl(config: Path, output: Annotated[Path, typer.Option("--output")]) -> None:
+    """Prepare exact native Miles RL. No GPU, environment creation or submission."""
+    from training.miles_training import compile_rl, job_request
+    from training.sft import read_mapping
+
+    try:
+        plan = compile_rl(read_mapping(config), relative_to=config.resolve().parent)
+        request = job_request(plan)
+        _prepare(output, plan, request)
+        _print(
+            {
+                "prepared": str(output),
+                "steps": plan["arguments"]["steps"],
+                "gpus": request["workers"] * request["gpus_per_worker"],
+                "submitted": False,
+            }
+        )
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command()
 def preflight(directory: Path) -> None:
     """Validate staged training/conversion inputs in the pinned image, without GPUs."""
 
@@ -154,6 +176,8 @@ def preflight(directory: Path) -> None:
         plan, _ = _prepared(directory)
         if plan.get("schema") == "cyber_miles_conversion_v1":
             from training.miles_conversion import preflight as check
+        elif plan.get("schema") == "cyber_miles_training_v1":
+            from training.miles_training import preflight as check
         else:
             from training.sft import preflight as check
         if (directory / "PREFLIGHT.json").exists():
@@ -190,6 +214,8 @@ def submit(directory: Path) -> None:
         expected = {
             "schema": "cyber_miles_conversion_cpu_preflight_v1"
             if plan.get("schema") == "cyber_miles_conversion_v1"
+            else "cyber_miles_training_cpu_preflight_v1"
+            if plan.get("schema") == "cyber_miles_training_v1"
             else "cyber_sft_cpu_preflight_v1",
             "status": "passed",
             "gpus": 0,
