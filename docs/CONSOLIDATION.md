@@ -44,9 +44,10 @@ and trace analysis` were inspected. Original commits/worktrees remain recoverabl
 | Miles native argument builder | 128 combined CPU tests, zero failures/skips/restarts/GPUs; real Qwen TP4/CP2 recipe, bounded batches, checkpoint/dev controls and native offline W&B identity. Both argument and episode modules have full focused statement/branch coverage; [receipt](evidence/cleanup-miles-arguments-20260911.json). Generic API preview passed without allocation; GPU training and public RL launch integration remain open |
 | Miles data preparation | Public `rl-data` command; 174 combined pinned-image tests pass without skips/failures/restarts/GPUs. Real Qwen tokenizer/TITO and native Dataset retain every selected task; all three RL modules have complete focused line/branch coverage. [Receipt](evidence/cleanup-rl-data-20260911.json). Fleet HTTP replies are synthetic; no live reward or optimizer qualification |
 | Miles checkpoint preparation | Public `miles-convert`/`miles-seal`, reusing preflight/preview/submit. 228 pinned-image tests pass; all 28 staged Qwen files and native converter arguments independently verified on CPU. [Receipt](evidence/cleanup-miles-conversion-cpu-20260911.json). One-node/eight-GPU API preview passes; real conversion, native checkpoint reload and RL optimization remain unqualified |
-| Strict Miles batches | Native batch/episode identities, no exception-driven refill, and awaited sibling cleanup implemented. A frozen native return-object fixture defect was reproduced and fixed locally. The corrected pinned-image rerun did not start because image extraction failed; [evidence](evidence/cleanup-miles-batches-20260911.json). No new native or RL qualification is claimed |
-| Local regression suite | 1,190 tests plus seven subtests pass using disposable PostgreSQL and MCP 2.1.1; 87 native-only cases explicitly skip locally. The new batch tests still require a successful pinned-image rerun. Ruff lint, changed-file formatting and whitespace checks pass; 35 pre-existing files remain unformatted by the current formatter |
-| Installation | Wheel SHA-256 `9a580448f433c0607c6c6ccc9bf7198391cb46c20e5535bf2a228f8924284164` installed outside the checkout; seven command help paths and six module imports pass. The minimal environment intentionally lacks Torch/PyArrow; installation is not training readiness |
+| Strict Miles batches | 307 pinned-image tests pass with zero failures/skips/restarts/GPUs; all five RL integration modules have complete focused statement/branch coverage. Native batch/episode identities, no exception-driven refill, and awaited sibling cleanup are exercised with synthetic task/engine replies; [evidence](evidence/cleanup-miles-batches-native-20260911.json). No live RL qualification is claimed |
+| Real Miles base conversion | Native GPU conversion succeeded 06:17:40 UTC and released all eight GPUs/quota. CPU `miles-seal` then hashed 11 checkpoint files/53,794,115,609 bytes; [evidence](evidence/cleanup-miles-conversion-result-20260911.json). Zero optimizer steps; native checkpoint GPU reload and RL optimization remain open. The removed GPU Pod's imageID/exit/restart fields were not captured and are explicitly unknown |
+| Local regression suite | 1,194 tests plus seven subtests pass using disposable PostgreSQL and MCP 2.1.1; 87 native-only cases explicitly skip locally. The native batch tests additionally passed in the pinned-image gate above. Ruff lint, changed-file formatting and whitespace checks pass; 35 pre-existing files remain unformatted by the current formatter |
+| Installation | Wheel SHA-256 `e118b06b91912b73ade493a3e738aaadac01390d4e37f925213df7a92083c0ca` installed outside the checkout; seven command help paths and six module imports pass. The minimal environment intentionally lacks Torch/PyArrow; installation is not training readiness |
 
 The newer `rl-data` wheel was independently installed outside the checkout;
 command help and RL module imports pass. Its digest is in the data-preparation
@@ -60,8 +61,9 @@ Its digest is in the conversion receipt. Native conversion uses the pinned Miles
 converter, not a new optimizer or model implementation. Its fixed 30-minute
 deadline covers source validation and the owned child process group. Sealing is
 CPU-only after resource release and does not claim GPU reload.
-The conversion was subsequently submitted once at effective priority 10,000 and
-is queued without GPU allocation; [submission evidence](evidence/cleanup-miles-conversion-submission-20260911.json).
+The conversion was submitted once at effective priority 10,000, then succeeded
+and released its allocation; [submission evidence](evidence/cleanup-miles-conversion-submission-20260911.json)
+and [terminal/seal evidence](evidence/cleanup-miles-conversion-result-20260911.json).
 That historical receipt records the resource limit at submission, not current
 authority. Chris replaced that limit on 2026-09-11 UTC: **at most eight actively
 allocated experiment-owned nodes at once**. Queued, unallocated work does not
