@@ -1,0 +1,79 @@
+{
+  "schema": "cyber_cleanup_native_checkpoint_reload_evidence_v1",
+  "classification": "operational_gate_accepted",
+  "model": "Qwen/Qwen3.8-27B",
+  "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+  "api_name": "chris-cpt-q38-reload-v1-9cecd424",
+  "api_run_id": "9cecd424-da4d-4856-9453-794a43d61596",
+  "api_status": "SUCCEEDED",
+  "rayjob_uid": "a8dc93fe-1aa6-4389-af8b-de6539775c46",
+  "workload_uid": "f43b2754-897d-430b-b07f-18e6640b9584",
+  "raycluster_uid_observed_before_cleanup": "d296d97b-706a-4f62-ab50-08c322467230",
+  "pod_uid_observed_before_cleanup": "95799fcc-fb10-449a-ad0a-882acc88a7db",
+  "image_sha256": "ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+  "plan_sha256": "20ca6de3e8575f01cf88a61550a11e31521288efca7072bd3d55c84884da0398",
+  "request_sha256": "6b986a66c9bdd2e749eb6365f7017b3de9927c60529db1bbb02cd3d42315db09",
+  "output_root": "/mnt/sfs/jobs/chris-cpt-cleanup-q38-reload-v1",
+  "admitted_at": "2026-09-11T04:17:44Z",
+  "completed_at": "2026-09-11T04:34:51Z",
+  "effective_priority": 10000,
+  "gpus": 8,
+  "restarts_observed": 0,
+  "pod_terminal_exit_code": null,
+  "pod_terminal_observation_limit": "The GPU Pod was already cleaned up; controller completion and independently verified artifacts establish the result.",
+  "release": {
+    "workload_finished": true,
+    "quota_reserved": false,
+    "admission": null,
+    "raycluster_absent": true,
+    "pod_absent": true,
+    "gpus_held": 0
+  },
+  "reload": {
+    "source_optimizer_step": 1,
+    "optimizer_steps_executed": 0,
+    "ranks_restored": 8,
+    "model_optimizer_scheduler_rng_restored": true,
+    "sampler_restored": true,
+    "reload_receipt_file_sha256": "f06d7cb919b1ce256a0fb7260c687fecd4983bd1c94f89d3a9b8f63526aae0aa",
+    "reload_receipt_sha256": "117be30a1dc1866393bd8dce2a9fcec12ae3ffe0ede474c2bf2bdadef259588b",
+    "recovered_receipt_file_sha256": "2e847aa5af8c615a0d328571ff8b2d5ebdbfaeb09107aa167b427a4f1b525ce0",
+    "recovered_receipt_sha256": "d1ac78874125db3a7bfc94714be9f323cba7ecbc69ba7984c20a6ae34b48506d"
+  },
+  "held_out": {
+    "supervised_tokens": 74,
+    "token_weighted_loss": 0.7186988076726415,
+    "task_macro_loss": 0.918878417312091,
+    "exactly_equal_to_post_step_before_shutdown": true,
+    "reference": "cleanup-qwen-sft-20260911.json"
+  },
+  "independent_cpu_audit": {
+    "name": "chris-cpt-q38-reload-audit-v2",
+    "uid": "43ac6e38-1f31-4d99-80df-17a72ea7614d",
+    "started_at": "2026-09-11T04:41:50Z",
+    "finished_at": "2026-09-11T04:51:12Z",
+    "exit_code": 0,
+    "restarts": 0,
+    "gpus": 0,
+    "receipt_sha256": "251969f5689083a3e14dd1c68eba29bb0c96044fced431b4977654a6ff89bed2",
+    "script_sha256": "f787a8fe7ffbaf2911a049fc210602e4f0e424a6900c2cb211d5e22c0e9961d5",
+    "manifest_sha256": "d5519fc562bb2e8f869c56fe4d688c7d6cd954ef0248d602bf9ed661cfd2dc6d",
+    "source_manifest_sha256": "333899f9b032d17fb35c1f44bc9c3e52338ece5607608a0b475ee423214fb1c9",
+    "source_files": 33,
+    "source_bytes": 324627486731,
+    "all_source_file_hashes_unchanged": true,
+    "source_mounts_read_only": true,
+    "receipt_self_digest_and_plan_runtime_binding_verified": true
+  },
+  "audit_correction": {
+    "retired_pod_uid": "0ef58ab8-03a6-4dfe-80e0-ffb059b6ad94",
+    "failure": "Audit v1 assumed the token count was in datasets.dev; this input format records it in the preflight counts instead.",
+    "fix": "Bind and verify the existing PREFLIGHT.json digest, then read counts.dev.supervised_tokens. No source checkpoint or GPU run was changed.",
+    "gpus": 0
+  },
+  "limitations": [
+    "This is a native training-checkpoint reload, not a GPU reload of the separate BF16 inference export.",
+    "No optimizer update after recovery was executed; continuation is independently CPU-tested but not yet GPU-qualified.",
+    "Two tiny fixed dev references qualify recovery behavior, not generalization or cyber capability."
+  ]
+}

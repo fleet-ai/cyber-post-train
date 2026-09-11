@@ -37,8 +37,9 @@ authorization and the total experiment-owned resource budget before submitting.
 
 Current consolidation status: the Qwen SFT runtime comes from a successful
 full-model run; its new wrapper has completed a real one-step run with held-out
-loss, W&B and a native checkpoint. CPU export is independently verified; GPU
-reload remains pending. Full GLM5.3,
+loss, W&B and a native checkpoint. CPU export and native GPU checkpoint reload
+are independently verified; the separate BF16 inference-export GPU reload remains
+pending. Full GLM5.3,
 Miles RL and SkyRL RL must pass their exact-model training/reward gates before
 being described as production-ready. GLM Flash is not full GLM5.3.
 
