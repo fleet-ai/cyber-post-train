@@ -1,0 +1,37 @@
+{
+  "receipt": {
+    "bundle_sha256": "23b2d5e17de7a955e4736cb141fe3f2b9f67e64d01e9a84dd14af72bdfbbc8b5",
+    "data": {
+      "dev": {
+        "rows": 2,
+        "tasks": 2
+      },
+      "manifest_sha256": "sha256:f80b36e6acb66a04fca3f738743665f2c8b6105d2ac21ea2dd4ab313db033f9b",
+      "output": "/mnt/sfs/jobs/chris-cpt-cleanup-q38-inputs-v1/data",
+      "train": {
+        "rows": 8,
+        "source_sessions": 1,
+        "supervised_tokens": 7770
+      },
+      "whole_source_exclusions": {}
+    },
+    "gpus": 0,
+    "plan_sha256": "a0645e240912615c755ceea2de05959728c31bccb8e41b81cf6d36761923877f",
+    "pod_uid": "83879680-569f-4b7e-91e5-65b3345ae851",
+    "preflight_sha256": "f617f72636f02bf3cd6340c9842ecd0d7f247560155b1a6bb7e8eb44778c7bde",
+    "prepared": "/mnt/sfs/jobs/chris-cpt-cleanup-q38-inputs-v1/prepared",
+    "request_sha256": "0a46ffaa75cf0abb9958afcf9fc645065af758e8e758738c4b97d47650435348",
+    "schema": "cleanup_qwen_cpu_qualification_v1",
+    "sha256": "386a19e2ad6c59ebd89144a4a9052b6a81000feda705f186468c04158f1e3296",
+    "source_manifest_sha256": "sha256:323a20fba88c22a87836a67f547e2ce7770d771434cb5ce3eff1b0f46ba28f36",
+    "status": "passed",
+    "steps": 1
+  },
+  "image_id": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+  "pod_uid": "83879680-569f-4b7e-91e5-65b3345ae851",
+  "finished_at": "2026-09-11T00:37:08Z",
+  "restarts": 0,
+  "allocated_gpus": 0,
+  "code_commit": "5d20d02",
+  "interpretation": "CPU input/runtime qualification only; no optimizer step or task-capability result"
+}

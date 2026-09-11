@@ -512,6 +512,8 @@ def load_qwen_chat_trace(qwen_home: Path) -> tuple[list[dict[str, Any]], Path, i
             continue
         if isinstance(value, dict):
             events.append(value)
+        else:
+            malformed_line_count += 1
     if not events:
         raise RuntimeError("Qwen Code chat trace contained no JSON events")
     return events, paths[0], malformed_line_count
@@ -606,9 +608,45 @@ def load_opencode_trace(path: Path) -> tuple[list[dict[str, Any]], int]:
             continue
         if isinstance(value, dict):
             events.append(value)
+        else:
+            malformed_line_count += 1
     if not events:
         raise RuntimeError("OpenCode trace contained no JSON events")
     return events, malformed_line_count
+
+
+def opencode_termination(
+    events: list[dict[str, Any]], *, malformed_lines: int, exit_code: int, timed_out: bool
+) -> str:
+    """Classify execution, never the task score, using the pinned JSON contract.
+
+    v1.18.27 emits error and step_finish events (cli/cmd/run.ts). A tool error
+    can be a legitimate task observation; it is not a session/provider error.
+    Only a final natural stop is complete. Preserve other endings for review.
+    """
+    if timed_out:
+        return "execution_timeout"
+    if exit_code != 0:
+        return "process_error"
+    if malformed_lines:
+        return "malformed_trace"
+    if any(event.get("type") == "error" for event in events):
+        return "harness_error"
+    finishes = [
+        (index, event["part"].get("reason"))
+        for index, event in enumerate(events)
+        if event.get("type") == "step_finish" and isinstance(event.get("part"), dict)
+    ]
+    if not finishes:
+        return "missing_terminal_step"
+    index, reason = finishes[-1]
+    if any(event.get("type") == "step_start" for event in events[index + 1 :]):
+        return "incomplete_terminal_step"
+    if reason == "stop":
+        return "completed"
+    if reason == "length":
+        return "output_limit"
+    return "incomplete_terminal_step"
 
 
 def normalize_opencode_timestamp(value: Any) -> str | None:
@@ -1324,6 +1362,8 @@ def opencode_settings(config: dict[str, Any]) -> dict[str, Any]:
     elif headroom is not None:
         raise ValueError("OpenCode no-autocontinue treatment forbids compaction headroom")
     model_id = config["model"]["served_id"]
+    if not isinstance(model_id, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/-]*", model_id):
+        raise ValueError("unsafe served model identifier")
     settings = {
         "$schema": "https://opencode.ai/config.json",
         "provider": {
@@ -1518,6 +1558,8 @@ def run(
             "FIXED_MAX_REQUESTS",
             "-e",
             "FIXED_MAX_REQUEST_BYTES",
+            "-e",
+            "FIXED_COMPLETION_JSON",
             "-v",
             proxy_mount,
             proxy_image,
@@ -1529,8 +1571,19 @@ def run(
                 "FIXED_AUTH_VALUE": f"Bearer {api_key}",
                 "FIXED_PROXY_PORT": "8877",
                 "FIXED_ALLOWED_PATHS": "/v1/chat/completions,/v1/models",
-                "FIXED_MAX_REQUESTS": str(config["harness"]["max_model_requests"] + 30),
+                "FIXED_MAX_REQUESTS": str(
+                    config["harness"]["max_model_requests"] + (0 if "sampling" in config else 30)
+                ),
                 "FIXED_MAX_REQUEST_BYTES": "16777216",
+                "FIXED_COMPLETION_JSON": json.dumps(
+                    {
+                        "model": config["model"]["served_id"],
+                        "max_tokens": config["harness"]["max_output_tokens"],
+                        **config["sampling"],
+                    }
+                )
+                if "sampling" in config
+                else "",
             },
         )
         _docker("network", "connect", "--alias", "model-proxy", network, model_proxy)
@@ -1679,6 +1732,12 @@ def run(
         if harness_name == "opencode":
             canonical_trace = trace
             events, malformed_line_count = load_opencode_trace(trace)
+            agent_termination = opencode_termination(
+                events,
+                malformed_lines=malformed_line_count,
+                exit_code=result.returncode,
+                timed_out=agent_termination == "execution_timeout",
+            )
             messages = normalize_opencode_conversation(events)
             trace_fidelity = (
                 "full_opencode_json_normalized_with_tool_calls_and_observations"
@@ -1707,6 +1766,7 @@ def run(
             "malformed_line_count": malformed_line_count,
             "normalized_message_count": len(messages),
             "fidelity": trace_fidelity,
+            "agent_termination": agent_termination,
         }
         (out_dir / "trace-manifest.json").write_bytes(canonical_json(trace_manifest) + b"\n")
         scoring_payload = build_scoring_payload(

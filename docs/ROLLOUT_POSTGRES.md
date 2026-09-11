@@ -95,11 +95,13 @@ observer/renderer is not a distributed launch lock; serialize handoffs explicitl
    Ready/zero restarts and its matching distinct PostgreSQL claim before another
    successor. Recount all routes. Stop on drift, restart, failure or any missing gate.
 
-The renderer preserves the clean-exit wrapper, annotation
+The **historical campaign renderer** preserves its clean-exit wrapper, annotation
 `cyber-post-train.fleet.ai/alert-safe-job-policy=retry-without-terminal-failure-v1`,
 backoff limit `2147483647`, and absence of `activeDeadlineSeconds` and
-`podFailurePolicy`. Handled outcomes still require truthful receipts; never suppress
-or manufacture a platform alert.
+`podFailurePolicy`. These are preserved deployment bindings, **not a policy for new
+controllers**. New controllers return nonzero for unexpected controller defects;
+handled cell outcomes require truthful private results and sanitized terminal
+receipts. Do not hide defects behind unlimited restart loops or suppress alerts.
 
 Normal queue/default priority remains the default. A current, explicit priority
 exception can use `--workload-priority-class <name>` together with

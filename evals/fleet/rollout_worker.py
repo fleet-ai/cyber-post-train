@@ -137,10 +137,10 @@ def _record_local_result(
 
 def _selection_index(selection: dict[str, Any]) -> dict[str, dict[str, Any]]:
     tasks = selection.get("tasks")
-    if not isinstance(tasks, list) or len(tasks) != 100:
-        raise RuntimeError("frozen selection must contain exactly 100 tasks")
+    if not isinstance(tasks, list) or not tasks:
+        raise RuntimeError("frozen selection must contain tasks")
     result = {str(task["task_version_id"]): task for task in tasks}
-    if len(result) != 100:
+    if len(result) != len(tasks):
         raise RuntimeError("frozen selection task versions are not unique")
     return result
 
@@ -240,13 +240,17 @@ def build_config(
     client: httpx.Client,
 ) -> dict[str, Any]:
     task, environment, verifier = _task_binding(client, scientific_cell, selected)
+    frozen = campaign.get("task_bindings", {}).get(scientific_cell["task_version_id"])
+    if frozen is not None and frozen != [task, environment, verifier]:
+        raise RuntimeError("task binding changed after evaluation preflight")
     execution = scientific_cell["initial_execution"]
     treatment = campaign["treatment"]
     model = campaign["models"][ledger_cell["model_id"]]
+    route = campaign.get("routes", {}).get(ledger_cell.get("serving_block"), {})
     run_suffix = execution["execution_id"].removeprefix("sha256:")[:12]
     config = {
         "schema_version": "fleet-selfhosted-opencode-ledger-cell-v1",
-        "run_id": f"chris-cyber-cell-{run_suffix}-g1",
+        "run_id": f"{campaign.get('run_prefix', 'chris-cyber-cell')}-{run_suffix}-g1",
         "campaign_id": campaign["campaign_id"],
         "source_job_id": campaign["selection"]["source_job_id"],
         "task": task,
@@ -255,7 +259,7 @@ def build_config(
         "authority": AUTHORITY,
         "model": {
             **model,
-            "endpoint_origin": "https://inference.flt.build",
+            "endpoint_origin": route.get("endpoint_origin", "https://inference.flt.build"),
             "served_id": ledger_cell["endpoint_model_id"],
         },
         "harness": {
@@ -274,13 +278,18 @@ def build_config(
             **execution,
             "network": f"cyber-cell-{run_suffix}",
             "pass_k": 1,
-            "planned_full_pass_k": 4,
+            "planned_full_pass_k": campaign.get("pass_k", 4),
             "max_concurrent": 1,
-            "training_data_eligible": True,
+            "training_data_eligible": campaign.get("training_data_eligible", True),
             "required_task_tools": treatment["tools"],
             "required_task_tool_catalog_sha256": treatment["tool_catalog_sha256"],
         },
     }
+    if "sampling" in campaign:
+        config["sampling"] = {
+            **campaign["sampling"],
+            "seed": (campaign["sampling"]["seed"] + int(scientific_cell["attempt"]) - 1) % 2**31,
+        }
     config["config_sha256"] = self_hosted.digest_without(config, "config_sha256")
     return config
 
@@ -690,10 +699,10 @@ def main() -> int:
             worker_id=args.worker_id,
         )
         print(json.dumps(result, indent=2, sort_keys=True))
+        return int(any("controller_failure_code" in row for row in result["results"]))
     except BaseException as exc:  # noqa: BLE001
-        # Kubernetes batch completion is operational evidence, not scientific
-        # acceptance. Emit a sanitized terminal receipt and exit successfully so
-        # an expected canary rejection never pages the cluster-wide failed-Job bot.
+        # A reviewed cell outcome is not a controller exception. Preserve the
+        # sanitized failure and return nonzero; never hide a real runtime defect.
         body = {
             "schema_version": TERMINAL_SCHEMA,
             "accepted": False,
@@ -706,7 +715,7 @@ def main() -> int:
         with suppress(FileExistsError):
             _safe_write_once(terminal, body)
         print(json.dumps(body, indent=2, sort_keys=True))
-    return 0
+        return 1
 
 
 if __name__ == "__main__":

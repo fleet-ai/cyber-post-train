@@ -2,13 +2,54 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import sys
 from pathlib import Path
+
+import pytest
 
 from evals.fleet import opencode_self_hosted, rollout_ledger, rollout_worker
 
 ROOT = Path(__file__).resolve().parents[1]
 CAMPAIGN = ROOT / "evals/fleet/configs/q38-glm53-exact-easiest100-pass4-campaign-v1.json"
 SNAPSHOT = ROOT / "docs/evidence/qwen38-study/2026-09-06-exact-pass4-ledger-v50.json"
+
+
+@pytest.mark.parametrize(
+    "outcome,exit_code",
+    [
+        ({"accepted": True}, 0),
+        (
+            {
+                "claimed": True,
+                "accepted": False,
+                "failure_code": "model_trace_created.runtimeerror",
+            },
+            0,
+        ),
+        ({"claimed": False, "controller_failure_code": "connectionerror"}, 1),
+        (RuntimeError("private diagnostic"), 1),
+    ],
+)
+def test_cli_reports_controller_defects_truthfully(
+    monkeypatch, tmp_path, capsys, outcome, exit_code
+):
+    args = ["worker", "--database", str(tmp_path / "unused"), "--worker-id", "test"]
+    for option in ("plan", "campaign", "selection", "snapshot", "output-root", "claim-root"):
+        args += [f"--{option}", str(tmp_path)]
+    monkeypatch.setattr(sys, "argv", args)
+
+    def run(**kwargs):
+        if isinstance(outcome, Exception):
+            raise outcome
+        return {"results": [outcome]}
+
+    monkeypatch.setattr(rollout_worker, "run_batch", run)
+    assert rollout_worker.main() == exit_code
+    output = capsys.readouterr().out
+    assert "private diagnostic" not in output
+    if isinstance(outcome, Exception):
+        receipt = json.loads((tmp_path / "TERMINAL-test.json").read_text())
+        assert receipt["controller_failure_code"] == "runtimeerror"
 
 
 def _campaign() -> dict:
@@ -85,6 +126,19 @@ def test_config_keeps_exact_autocontinue_treatment_and_route(monkeypatch) -> Non
     }
     assert settings["permission"] == {"*": "deny", "fleet_*": "allow"}
     assert all(enabled is False for enabled in settings["tools"].values())
+
+    campaign.update(
+        pass_k=7,
+        training_data_eligible=False,
+        sampling={"temperature": 0.6, "top_p": 0.95, "seed": 42},
+    )
+    scientific["attempt"] = 2
+    custom = rollout_worker.build_config(campaign, ledger_cell, scientific, {}, object())
+    assert custom["sampling"]["seed"] == 43
+    assert campaign["sampling"]["seed"] == 42
+    assert custom["execution"]["planned_full_pass_k"] == 7
+    assert custom["execution"]["training_data_eligible"] is False
+    assert custom["config_sha256"] != config["config_sha256"]
 
 
 def test_claim_receipt_is_score_and_content_blind() -> None:

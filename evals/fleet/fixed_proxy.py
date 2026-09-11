@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import http.client
 import json
+import math
 import os
 import threading
 import time
@@ -20,6 +21,25 @@ _HOP_BY_HOP = {
     "transfer-encoding",
     "upgrade",
 }
+
+
+def completion_overrides(value: dict) -> dict:
+    """Validate operator-owned sampling; never let agent requests change the arm."""
+    if set(value) != {"model", "temperature", "top_p", "seed", "max_tokens"}:
+        raise ValueError("incomplete fixed completion policy")
+    if not isinstance(value["model"], str) or not value["model"]:
+        raise ValueError("fixed model required")
+    for field, minimum, maximum in (("temperature", 0, 2), ("top_p", 0, 1)):
+        v = value[field]
+        if type(v) not in (int, float) or not math.isfinite(v) or not minimum <= v <= maximum:
+            raise ValueError("invalid sampling value")
+    if value["top_p"] == 0:
+        raise ValueError("top_p must be positive")
+    if type(value["seed"]) is not int or not 0 <= value["seed"] < 2**31:
+        raise ValueError("seed must be a nonnegative int32")
+    if type(value["max_tokens"]) is not int or value["max_tokens"] <= 0:
+        raise ValueError("positive max_tokens required")
+    return value
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -71,6 +91,19 @@ class Handler(BaseHTTPRequestHandler):
         prefix = upstream.path.rstrip("/")
         path = f"{prefix}{self.path}"
         body = self.rfile.read(length) if length else None
+        policy = os.environ.get("FIXED_COMPLETION_JSON")
+        if policy and bare_path == "/v1/chat/completions":
+            try:
+                overrides = completion_overrides(json.loads(policy))
+                payload = json.loads(body or b"")
+                if not isinstance(payload, dict):
+                    raise ValueError("completion request must be an object")
+                payload.pop("max_completion_tokens", None)
+                payload.update(overrides)
+                body = json.dumps(payload, allow_nan=False).encode()
+            except (ValueError, TypeError):
+                self.send_error(400)
+                return
         headers = {
             key: value
             for key, value in self.headers.items()

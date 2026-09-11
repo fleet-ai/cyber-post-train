@@ -138,3 +138,42 @@ def test_observation_transaction_cannot_write(pg_dsn: str) -> None:
         )
         with pytest.raises(psycopg.errors.ReadOnlySqlTransaction):
             connection.execute("CREATE TABLE forbidden_test_write (id int)")
+
+
+def test_fresh_initialization_is_exact_and_never_replaces(tmp_path, pg_dsn):
+    plan = _plan(tmp_path / "plan.csv", count=3)
+    created = rollout_postgres.initialize(pg_dsn, plan)
+    assert created["created"] and created["cells"] == 3
+    assert rollout_postgres.verify_plan(pg_dsn, plan) == {**created, "created": False}
+    assert rollout_postgres.summary(pg_dsn)["by_state"]["pending"] == 3
+    for candidate in (plan, _plan(tmp_path / "other.csv", count=4)):
+        with pytest.raises(rollout_ledger.LedgerError, match="empty dedicated"):
+            rollout_postgres.initialize(pg_dsn, candidate)
+    with psycopg.connect(pg_dsn) as connection:
+        assert connection.execute("SELECT count(*) FROM rollout_events").fetchone()[0] == 3
+        assert connection.execute("SELECT count(*) FROM rollout_local_results").fetchone()[0] == 0
+
+
+def test_concurrent_initializers_cannot_duplicate_rows(tmp_path, pg_dsn):
+    plan = _plan(tmp_path / "plan.csv", count=3)
+
+    def create(_):
+        try:
+            return rollout_postgres.initialize(pg_dsn, plan)["created"]
+        except rollout_ledger.LedgerError:
+            return False
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        assert sum(pool.map(create, range(4))) == 1
+    assert rollout_postgres.verify_plan(pg_dsn, plan)["cells"] == 3
+
+
+def test_metadata_without_cells_is_not_empty_target(tmp_path, pg_dsn):
+    with psycopg.connect(pg_dsn) as connection:
+        rollout_postgres.ensure_schema(connection)
+        connection.execute("INSERT INTO ledger_metadata VALUES ('old', 'preserve')")
+    with pytest.raises(rollout_ledger.LedgerError, match="empty dedicated"):
+        rollout_postgres.initialize(pg_dsn, _plan(tmp_path / "plan.csv"))
+    with psycopg.connect(pg_dsn) as connection:
+        assert connection.execute("SELECT count(*) FROM rollout_cells").fetchone()[0] == 0
+        assert connection.execute("SELECT value FROM ledger_metadata").fetchone()[0] == "preserve"

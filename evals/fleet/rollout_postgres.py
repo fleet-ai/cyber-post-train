@@ -221,6 +221,52 @@ def verify_plan(dsn: str, plan: Path) -> dict[str, Any]:
     return {"created": False, "cells": count, "plan_sha256": digest}
 
 
+def initialize(dsn: str, plan: Path) -> dict[str, Any]:
+    """Create one fresh campaign atomically; never reset or replace an old one.
+
+    Existing campaigns use verify_plan(), not this initializer. The advisory
+    lock serializes simultaneous schema/plan creation in a dedicated database.
+    No session, outcome, or migration is manufactured by initialization.
+    """
+    rows = rollout_ledger._plan_rows(plan)  # noqa: SLF001
+    digest = rollout_ledger._plan_digest(rows)  # noqa: SLF001
+    with _transaction(dsn) as connection:
+        connection.execute("SELECT pg_advisory_xact_lock(hashtext('cyber-rollout-plan-init-v1'))")
+        ensure_schema(connection)
+        for table in (
+            "ledger_metadata",
+            "rollout_cells",
+            "rollout_events",
+            "rollout_local_results",
+            "ledger_migrations",
+            "ledger_reconciliations",
+        ):
+            if connection.execute(f"SELECT EXISTS(SELECT 1 FROM {table}) AS present").fetchone()[  # noqa: S608
+                "present"
+            ]:
+                raise rollout_ledger.LedgerError(
+                    "initialization requires an empty dedicated ledger"
+                )
+        columns = rollout_ledger.PLAN_STORED_COLUMNS
+        with connection.cursor() as cursor:
+            cursor.executemany(
+                f"INSERT INTO rollout_cells ({', '.join(columns)}, state, created_at, updated_at) "
+                f"VALUES ({', '.join(['%s'] * len(columns))}, 'pending', CURRENT_TIMESTAMP, "
+                "CURRENT_TIMESTAMP)",  # noqa: S608
+                [tuple(row[field] for field in columns) for row in rows],
+            )
+            cursor.executemany(
+                "INSERT INTO rollout_events (cell_id, recorded_at, event, to_state, detail_json) "
+                "VALUES (%s, CURRENT_TIMESTAMP, 'initialized', 'pending', '{}')",
+                [(row["cell_id"],) for row in rows],
+            )
+            cursor.executemany(
+                "INSERT INTO ledger_metadata (key, value) VALUES (%s, %s)",
+                [("schema_version", "fleet_cyber_rollout_ledger_v3"), ("plan_sha256", digest)],
+            )
+    return {"created": True, "cells": len(rows), "plan_sha256": digest}
+
+
 def claim(
     dsn: str,
     *,

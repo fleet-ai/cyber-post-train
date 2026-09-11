@@ -24,7 +24,6 @@ from .jobs_api import (
     run_kind,
 )
 from .normalize import build_datasets
-from .plan import create_run_plan
 from .rl_config import (
     FleetTrainingTaskCatalog,
     build_full_rl_config,
@@ -35,7 +34,6 @@ from .rl_config import (
     write_full_rl_config,
     write_task_snapshot,
 )
-from .runner import run_plan
 from .secrets import secret_values
 
 
@@ -111,24 +109,6 @@ def _export(args: argparse.Namespace) -> int:
 def _normalize(args: argparse.Namespace) -> int:
     manifest = build_datasets(args.input, args.output_dir, secrets=secret_values())
     print(json.dumps(manifest["counts"], indent=2))
-    return 0
-
-
-def _plan(args: argparse.Namespace) -> int:
-    plan = create_run_plan(
-        args.config,
-        args.manifest,
-        args.compatibility_receipt,
-        args.evaluation_protocol,
-        args.output,
-    )
-    print(json.dumps({"plan": str(args.output), "digest": plan["plan_digest"]}, indent=2))
-    return 0
-
-
-def _run(args: argparse.Namespace) -> int:
-    outcomes = run_plan(args.plan, args.work_dir, execute=args.execute)
-    print(json.dumps(outcomes, indent=2))
     return 0
 
 
@@ -247,24 +227,6 @@ def parser() -> argparse.ArgumentParser:
     normalize.add_argument("--input", type=Path, required=True)
     normalize.add_argument("--output-dir", type=Path, required=True)
     normalize.set_defaults(run=_normalize)
-
-    plan = commands.add_parser("plan", help="validate gates and seal a run plan")
-    plan.add_argument("--config", type=Path, required=True)
-    plan.add_argument("--manifest", type=Path, required=True)
-    plan.add_argument("--compatibility-receipt", type=Path, required=True)
-    plan.add_argument("--evaluation-protocol", type=Path, required=True)
-    plan.add_argument("--output", type=Path, required=True)
-    plan.set_defaults(run=_plan)
-
-    run = commands.add_parser("run", help="dry-run or execute a sealed run plan")
-    run.add_argument("--plan", type=Path, required=True)
-    run.add_argument("--work-dir", type=Path, required=True)
-    run.add_argument(
-        "--execute",
-        action="store_true",
-        help="execute cluster commands; default only prints the planned argv",
-    )
-    run.set_defaults(run=_run)
 
     rl_snapshot = commands.add_parser(
         "rl-snapshot", help="freeze exact Fleet task/environment IDs without task payloads"

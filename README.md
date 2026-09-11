@@ -42,6 +42,19 @@ being described as production-ready. GLM Flash is not full GLM5.3.
 
 ## Evaluation
 
+```sh
+uv run cyber-post-train eval prepare my-eval.yaml --output /shared/my-eval
+# On the authorized Docker worker with the exact images staged:
+uv run cyber-post-train eval preflight /shared/my-eval
+uv run cyber-post-train eval init /shared/my-eval
+uv run cyber-post-train eval run /shared/my-eval shared worker-001 --limit 4
+uv run cyber-post-train eval status
+```
+
+`ROLLOUT_DATABASE_URL` and `FLEET_API_KEY` come from your secret manager. Init
+requires a fresh dedicated PostgreSQL database; run only claims its pending rows.
+See the [Fleet guide](evals/fleet/README.md) for configuration and execution scope.
+
 - [Fleet](evals/fleet/README.md): exact task versions, OpenCode, private results,
   and PostgreSQL coordination for distributed workers.
 - [WebExploitBench](evals/webexploitbench/README.md) and

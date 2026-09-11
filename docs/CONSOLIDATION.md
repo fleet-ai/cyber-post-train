@@ -28,7 +28,7 @@ recoverable in their original commits/worktrees. No blanket worktree deletion.
 ## Completion checklist
 
 - [x] Fix reproducible data-split leakage, with synthetic regression tests.
-- [ ] Consolidate the proven SFT runtime and dense-data preparation.
+- [x] Consolidate the proven SFT runtime and dense-data preparation.
 - [ ] Provide usable configurable training/eval/status commands with one submission boundary.
 - [ ] Integrate Miles and SkyRL without pretending GLM-5.3-Flash is GLM-5.3.
 - [ ] Consolidate active evaluator improvements without modifying live campaigns.
@@ -88,6 +88,43 @@ recoverable in their original commits/worktrees. No blanket worktree deletion.
   one node/eight GPUs, the exact training image and the `wandb-api` Secret
   reference. No GPU run was created by preview. Missing Secret references
   produced a warning, which the client correctly treated as a blocked preview.
+- Committed the first consolidation as `5d20d02`. The exact-image CPU builder
+  then processed one complete teacher demonstration into eight training windows
+  with 7,770 supervised tokens and two fixed held-out task windows. Its data,
+  tokenizer and native-runtime preflight passed without GPU allocation;
+  `docs/evidence/cleanup-qwen-cpu-20260911.json` binds the verified receipt.
+- The new CLI submitted `chris-cpt-q38-qual-v1-7eab6d07` exactly once through a
+  durable SFS journal. RayJob UID `b6e0d69b-3e23-47fe-939d-1dedfea85d67`, Workload
+  UID `2f4ab61c-5b24-450d-b052-12bc9ce24312`, effective priority 10000. At the
+  2026-09-11 00:45 UTC observation it remained queued, holding zero GPUs. This
+  is a one-step operational qualification, not a new capability experiment.
+- Added transactional initialization for a fresh PostgreSQL campaign, concurrent
+  initialization tests, and explicit OpenCode terminal-event classification.
+  None of these changes were deployed into the active rollout campaign.
+- Added generic `eval prepare/preflight/init/run/status` commands. Synthetic
+  tests cover arbitrary task counts, configurable pass@k, complete-task route
+  partitions, manifest/CSV/runtime drift, bounded workers and no duplicate worker
+  identity. Model sampling is enforced by the credential-holding proxy and tested
+  through real loopback HTTP. Real evaluation qualification is still pending.
+- Removed the unused hardcoded Job-pair generator/runtime, GLM5.2-specific plan
+  and command wrapper, their tests and two generated Qwen3.6 Job manifests.
+  Their retained callers were removed or routed to the actual configurable API
+  path. No historical checkpoints, datasets or accepted evidence were deleted.
+- The Qwen qualification was admitted at 2026-09-11 00:51:37 UTC. RayCluster UID
+  `76ab1133-e9c9-43a6-8723-05a27a9165a7`, Pod UID
+  `ffd5ea72-d88f-406e-a5fc-ea29c6910868`, exact pinned image, zero restarts and
+  eight GPUs. Initial held-out validation completed; checkpoint writing was
+  observed. Neither fact alone is terminal acceptance. W&B run `cpt-q38-qual-v1`
+  is in `thefleet/cyber-post-train`.
+- Local suite after the generic evaluation boundary: 901 passed, 15 native-only
+  skips, seven subtests. Ruff and wheel build/install passed. Execution-host
+  image bytes, architecture, OpenCode release label and actual executable version
+  are checked before claims. Synthetic loopback tests prove sampling/output
+  limits override agent-provided values without exposing credentials.
+- Real evaluation preflight passed for one train-only task outside the active
+  100-task campaign, on both exact shared model revisions. It created no task
+  environment or scored session. The two planned operational attempts remain
+  separate from the campaign and are ineligible for training.
 
 ## Removed surfaces
 

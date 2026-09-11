@@ -58,6 +58,14 @@ results and environment cleanup for a valid evaluation outcome. Distinguish
 genuine model failures from infrastructure-invalid, interrupted and unknown
 outcomes. Preserve originals and follow the predeclared retry policy.
 
+OpenCode acceptance checks its JSON terminal events as well as process status.
+The final model step must end normally, with no later unfinished step, malformed
+event stream or harness error. A final output-limit stop is held, not a capability
+zero. Ordinary failed tool commands remain valid observations within a rollout.
+This follows the pinned [run command](https://github.com/anomalyco/opencode/blob/v1.18.27/packages/opencode/src/cli/cmd/run.ts)
+and [session processor](https://github.com/anomalyco/opencode/blob/v1.18.27/packages/opencode/src/session/processor.ts).
+It does not retroactively reclassify historical outcomes.
+
 Report paired task-level changes and uncertainty over tasks. Report training-seed
 variance separately. Pre-register exclusions, the primary metric and stopping
 rule. Never reinterpret a timeout or missing reward as model incapability.

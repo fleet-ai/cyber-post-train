@@ -182,5 +182,78 @@ def doctor() -> None:
         raise typer.Exit(2)
 
 
+eval_app = typer.Typer(
+    help="Fleet evaluations: prepare, check, initialize, then run bounded workers."
+)
+app.add_typer(eval_app, name="eval")
+
+
+@eval_app.command("prepare")
+def eval_prepare(config: Path, output: Annotated[Path, typer.Option("--output")]) -> None:
+    """Freeze task/model/route identities and plan CSV. No network or execution."""
+    from evals.fleet.evaluate import prepare
+    from training.sft import read_mapping
+
+    try:
+        _print(prepare(read_mapping(config), output, relative_to=config.resolve().parent))
+    except Exception as exc:
+        _fail(exc)
+
+
+@eval_app.command("preflight")
+def eval_preflight(directory: Path) -> None:
+    """Check staged Docker images and live Fleet task/endpoint metadata. No scored tasks."""
+    from evals.fleet.evaluate import preflight
+
+    try:
+        _print(preflight(directory))
+    except Exception as exc:
+        _fail(exc)
+
+
+@eval_app.command("init")
+def eval_init(directory: Path) -> None:
+    """Initialize an EMPTY dedicated PostgreSQL database. Never reset an existing campaign."""
+    from evals.fleet.evaluate import checked_preflight
+    from evals.fleet.rollout_postgres import initialize
+
+    try:
+        checked_preflight(directory)
+        _print(initialize(os.environ["ROLLOUT_DATABASE_URL"], directory / "plan.csv"))
+    except Exception as exc:
+        _fail(exc)
+
+
+@eval_app.command("run")
+def eval_run(directory: Path, route: str, worker_id: str, limit: int = 1) -> None:
+    """Execute at most LIMIT pending sessions on ROUTE, on an authorized Docker worker."""
+    from evals.fleet.evaluate import run
+
+    try:
+        result = run(
+            directory,
+            dsn=os.environ["ROLLOUT_DATABASE_URL"],
+            route=route,
+            worker_id=worker_id,
+            limit=limit,
+        )
+        _print(result)
+    except Exception as exc:
+        _fail(exc)
+    if any("controller_failure_code" in row for row in result["results"]):
+        raise typer.Exit(1)
+
+
+@eval_app.command("status")
+def eval_status() -> None:
+    """Read score-blind PostgreSQL counts. Does not initialize or repair anything."""
+    from evals.fleet.rollout_postgres import summary
+
+    try:
+        _print(summary(os.environ["ROLLOUT_DATABASE_URL"]))
+    except Exception as exc:
+        _fail(exc)
+
+
 if __name__ == "__main__":
     app()
