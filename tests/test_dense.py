@@ -250,6 +250,8 @@ def test_original_direct_tool_contract_and_reasoning_omission():
     "tool,reason",
     [
         ("context_compaction", "opaque_compaction"),
+        ("fleet_bash", "unsupported_or_unproven_tool_interface"),
+        ("fleet_submit_report", "unsupported_or_unproven_tool_interface"),
         ("search_tool", "unsupported_or_unproven_tool_interface"),
         ("use_tool", "unsupported_or_unproven_tool_interface"),
         ("read_file", "unsupported_or_unproven_tool_interface"),
@@ -273,6 +275,13 @@ def test_invalid_argument_and_missing_result_rejected():
     src = record()
     src["messages"].pop(3)
     with pytest.raises(Excluded, match="missing_tool_result_before_next_assistant"):
+        compatible_messages(src)
+
+
+def test_user_only_opencode_trace_cannot_invent_a_system_anchor():
+    src = record()
+    src["messages"].pop(0)
+    with pytest.raises(Excluded, match="missing_original_system_and_task_anchor"):
         compatible_messages(src)
 
 
