@@ -1,0 +1,138 @@
+{
+  "name": "q38-study-v1",
+  "model": {
+    "repo": "Qwen/Qwen3.8-27B",
+    "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "lock_sha256": "sha256:f3926fe675263b25dc79c2b3881a9c463d6b7931e9d61aeb777d15efc61e35ac"
+  },
+  "splits": {
+    "a": {
+      "variant_seed": "qwen38-study-dev-search-002",
+      "study_split_sha256": "sha256:9ce5ba7f4cb9c52f6adfdbe615ca2258358dc602d6a9bb665c2ccc29dc04f4b8",
+      "training_split_sha256": "sha256:2d20dac7d5b9bb29f6aa44369c5dd2efed9c78bd3ca4d32ed021f04843ae6863",
+      "dev_task_set_sha256": "sha256:168f4d583a988f492340d32c83d1bdddf2312f339915ffe6228697b690e70ff2",
+      "final_test_lock_sha256": "sha256:dc625115be8c775de8ecf476bc0d8e06e71b6c7f4160ed50b25eb0308b30d8d7",
+      "fleet_dev_protocol_sha256": "PENDING_FROZEN_FLEET_DEV_PROTOCOL_A"
+    },
+    "b": {
+      "variant_seed": "qwen38-study-dev-search-019",
+      "study_split_sha256": "sha256:282f2dec7912364c0f7c1db7ceaac39eb66d552ab226d7617a412fa8e881a50f",
+      "training_split_sha256": "sha256:66f98eac3d1533d2c0e3dda99704020e5177ed56c25196f7fa1175307732ab06",
+      "dev_task_set_sha256": "sha256:4e2e6401d2f808fcde54a02e2c31ee630e8d5a1a8b8bf11ef7648e2b9d256a75",
+      "final_test_lock_sha256": "sha256:dc625115be8c775de8ecf476bc0d8e06e71b6c7f4160ed50b25eb0308b30d8d7",
+      "fleet_dev_protocol_sha256": "PENDING_FROZEN_FLEET_DEV_PROTOCOL_B"
+    }
+  },
+  "sources": {
+    "a": {
+      "teacher": {
+        "status": "pending_private_corpus_and_qualification",
+        "source_sessions": 71,
+        "qualification_sha256": "PENDING_TEACHER_A_QUALIFICATION_RECEIPT",
+        "corpus_sha256": "PENDING_PRIVATE_TEACHER_A_CORPUS",
+        "source_selection_sha256": "PENDING_EXACT_TEACHER_A_SOURCE_SELECTION",
+        "study_split_sha256": "sha256:9ce5ba7f4cb9c52f6adfdbe615ca2258358dc602d6a9bb665c2ccc29dc04f4b8",
+        "training_split_sha256": "sha256:2d20dac7d5b9bb29f6aa44369c5dd2efed9c78bd3ca4d32ed021f04843ae6863",
+        "fleet_dev_protocol_sha256": "PENDING_FROZEN_FLEET_DEV_PROTOCOL_A"
+      },
+      "self": {
+        "status": "blocked_no_compatible_sources",
+        "source_sessions": 0,
+        "qualification_sha256": "PENDING_SELF_A_QUALIFICATION_RECEIPT",
+        "corpus_sha256": "PENDING_PRIVATE_SELF_A_CORPUS",
+        "source_selection_sha256": "PENDING_EXACT_SELF_A_SOURCE_SELECTION",
+        "study_split_sha256": "sha256:9ce5ba7f4cb9c52f6adfdbe615ca2258358dc602d6a9bb665c2ccc29dc04f4b8",
+        "training_split_sha256": "sha256:2d20dac7d5b9bb29f6aa44369c5dd2efed9c78bd3ca4d32ed021f04843ae6863",
+        "fleet_dev_protocol_sha256": "PENDING_FROZEN_FLEET_DEV_PROTOCOL_A"
+      }
+    },
+    "b": {
+      "teacher": {
+        "status": "pending_private_corpus_and_qualification",
+        "source_sessions": 74,
+        "qualification_sha256": "PENDING_TEACHER_B_QUALIFICATION_RECEIPT",
+        "corpus_sha256": "PENDING_PRIVATE_TEACHER_B_CORPUS",
+        "source_selection_sha256": "PENDING_EXACT_TEACHER_B_SOURCE_SELECTION",
+        "study_split_sha256": "sha256:282f2dec7912364c0f7c1db7ceaac39eb66d552ab226d7617a412fa8e881a50f",
+        "training_split_sha256": "sha256:66f98eac3d1533d2c0e3dda99704020e5177ed56c25196f7fa1175307732ab06",
+        "fleet_dev_protocol_sha256": "PENDING_FROZEN_FLEET_DEV_PROTOCOL_B"
+      },
+      "self": {
+        "status": "blocked_no_compatible_sources",
+        "source_sessions": 0,
+        "qualification_sha256": "PENDING_SELF_B_QUALIFICATION_RECEIPT",
+        "corpus_sha256": "PENDING_PRIVATE_SELF_B_CORPUS",
+        "source_selection_sha256": "PENDING_EXACT_SELF_B_SOURCE_SELECTION",
+        "study_split_sha256": "sha256:282f2dec7912364c0f7c1db7ceaac39eb66d552ab226d7617a412fa8e881a50f",
+        "training_split_sha256": "sha256:66f98eac3d1533d2c0e3dda99704020e5177ed56c25196f7fa1175307732ab06",
+        "fleet_dev_protocol_sha256": "PENDING_FROZEN_FLEET_DEV_PROTOCOL_B"
+      }
+    }
+  },
+  "wandb": {
+    "entity": "thefleet",
+    "project": "cyber-post-train"
+  },
+  "capacity": {
+    "max_active_nodes": 8,
+    "other_active_study_nodes": 0,
+    "excluded_inference_endpoints": 4
+  },
+  "evaluation": {
+    "final_fleet": {
+      "task_set_sha256": "sha256:55da148547400290cf49445fbb28eba99afa420d59e8e4a30cc978460aca616a",
+      "protocol_sha256": "PENDING_FROZEN_FLEET_FINAL_PROTOCOL",
+      "lock_sha256": "sha256:dc625115be8c775de8ecf476bc0d8e06e71b6c7f4160ed50b25eb0308b30d8d7"
+    },
+    "final_webexploitbench": {
+      "task_set_sha256": "PENDING_SEALED_WEBEXPLOITBENCH_TASK_SET",
+      "protocol_sha256": "PENDING_FROZEN_WEBEXPLOITBENCH_PROTOCOL"
+    }
+  },
+  "stages": [
+    {
+      "id": "a-lr-screen",
+      "decision_sha256": null,
+      "arms": [
+        {"id": "t-a-lr1", "split": "a", "source": "teacher", "lr": 0.000001, "batch_size": 8, "epochs": 1, "seed": 42},
+        {"id": "t-a-lr3", "split": "a", "source": "teacher", "lr": 0.000003, "batch_size": 8, "epochs": 1, "seed": 42},
+        {"id": "t-a-lr10", "split": "a", "source": "teacher", "lr": 0.00001, "batch_size": 8, "epochs": 1, "seed": 42},
+        {"id": "t-a-lr30", "split": "a", "source": "teacher", "lr": 0.00003, "batch_size": 8, "epochs": 1, "seed": 42},
+        {"id": "s-a-lr1", "split": "a", "source": "self", "lr": 0.000001, "batch_size": 8, "epochs": 1, "seed": 42},
+        {"id": "s-a-lr3", "split": "a", "source": "self", "lr": 0.000003, "batch_size": 8, "epochs": 1, "seed": 42},
+        {"id": "s-a-lr10", "split": "a", "source": "self", "lr": 0.00001, "batch_size": 8, "epochs": 1, "seed": 42},
+        {"id": "s-a-lr30", "split": "a", "source": "self", "lr": 0.00003, "batch_size": 8, "epochs": 1, "seed": 42}
+      ]
+    },
+    {
+      "id": "split-and-seed",
+      "decision_sha256": "PENDING_FRESH_FLEET_DEV_SCREEN_DECISION",
+      "arms": [
+        {"id": "t-b-check", "split": "b", "source": "teacher", "lr": "SELECTED_TEACHER_LR_FROM_FLEET_DEV", "batch_size": 8, "epochs": 1, "seed": 42},
+        {"id": "s-b-check", "split": "b", "source": "self", "lr": "SELECTED_SELF_LR_FROM_FLEET_DEV", "batch_size": 8, "epochs": 1, "seed": 42},
+        {"id": "t-a-seed43", "split": "a", "source": "teacher", "lr": "SELECTED_TEACHER_LR_FROM_FLEET_DEV", "batch_size": 8, "epochs": 1, "seed": 43},
+        {"id": "s-a-seed43", "split": "a", "source": "self", "lr": "SELECTED_SELF_LR_FROM_FLEET_DEV", "batch_size": 8, "epochs": 1, "seed": 43}
+      ]
+    },
+    {
+      "id": "batch-robustness",
+      "decision_sha256": "PENDING_FRESH_FLEET_DEV_SCREEN_DECISION",
+      "arms": [
+        {"id": "t-a-b16", "split": "a", "source": "teacher", "lr": "SELECTED_TEACHER_LR_FROM_FLEET_DEV", "batch_size": 16, "epochs": 1, "seed": 42},
+        {"id": "t-a-b32", "split": "a", "source": "teacher", "lr": "SELECTED_TEACHER_LR_FROM_FLEET_DEV", "batch_size": 32, "epochs": 1, "seed": 42},
+        {"id": "s-a-b16", "split": "a", "source": "self", "lr": "SELECTED_SELF_LR_FROM_FLEET_DEV", "batch_size": 16, "epochs": 1, "seed": 42},
+        {"id": "s-a-b32", "split": "a", "source": "self", "lr": "SELECTED_SELF_LR_FROM_FLEET_DEV", "batch_size": 32, "epochs": 1, "seed": 42}
+      ]
+    },
+    {
+      "id": "epoch-robustness",
+      "decision_sha256": "PENDING_FRESH_FLEET_DEV_SCREEN_DECISION",
+      "arms": [
+        {"id": "t-a-e2", "split": "a", "source": "teacher", "lr": "SELECTED_TEACHER_LR_FROM_FLEET_DEV", "batch_size": 8, "epochs": 2, "seed": 42},
+        {"id": "t-a-e4", "split": "a", "source": "teacher", "lr": "SELECTED_TEACHER_LR_FROM_FLEET_DEV", "batch_size": 8, "epochs": 4, "seed": 42},
+        {"id": "s-a-e2", "split": "a", "source": "self", "lr": "SELECTED_SELF_LR_FROM_FLEET_DEV", "batch_size": 8, "epochs": 2, "seed": 42},
+        {"id": "s-a-e4", "split": "a", "source": "self", "lr": "SELECTED_SELF_LR_FROM_FLEET_DEV", "batch_size": 8, "epochs": 4, "seed": 42}
+      ]
+    }
+  ]
+}
