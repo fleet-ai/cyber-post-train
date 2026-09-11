@@ -9,7 +9,7 @@ import pytest
 
 from cyber_post_train.jobs import digest
 from training import corpus
-from training.io import file_sha256
+from training.io import digest_json, file_sha256
 
 
 def record(name, split):
@@ -258,6 +258,98 @@ def test_outcome_only_corpus_contains_no_teacher_reference_dev_data(data_config,
     assert set(manifest["files"]) == {"train"}
     assert not (tmp_path / "data/dev.parquet").exists()
     assert result["dev"] == {"rows": 0, "tasks": 0}
+
+
+def add_study_selection(data_config, tmp_path, selected=("train-a",)):
+    rows = [json.loads(line) for line in (tmp_path / "source.jsonl").read_text().splitlines()]
+    training_split = seal(
+        {
+            "schema": "cyber_task_split_v2",
+            "tasks": [
+                {
+                    "task_key": row["lineage"]["task_key"],
+                    "task_version_id": row["lineage"]["eval_task_version_id"],
+                    "split": "train",
+                }
+                for row in rows
+                if row["record_id"].startswith("train-")
+            ],
+        }
+    )
+    lock = "sha256:" + "1" * 64
+    empty_evaluation = {
+        name: seal(
+            {
+                "schema": "cyber_eval_task_selection_v1",
+                "selection_role": name,
+                "final_test_lock_sha256": lock,
+                "tasks": [],
+            }
+        )
+        for name in ("dev", "final_test")
+    }
+    study = seal(
+        {
+            "schema": "cyber_study_split_v1",
+            "final_test_lock_sha256": lock,
+            "tasks": [{**task, "group_id": task["task_key"]} for task in training_split["tasks"]],
+            "training_split": training_split,
+            "evaluation": empty_evaluation,
+        }
+    )
+    by_id = {row["record_id"]: row for row in rows}
+    selection = seal(
+        {
+            "schema": "cyber_sft_source_selection_v1",
+            "status": "ready",
+            "study_split_sha256": study["sha256"],
+            "training_split_sha256": training_split["sha256"],
+            "selected_episode_ids": list(selected),
+            "selected_evidence": [
+                {
+                    "episode_id": sid,
+                    "normalized_record_sha256": digest_json(by_id[sid]),
+                }
+                for sid in selected
+            ],
+        }
+    )
+    (tmp_path / "split-v2.json").write_text(json.dumps(training_split))
+    (tmp_path / "study.json").write_text(json.dumps(study))
+    (tmp_path / "selection.json").write_text(json.dumps(selection))
+    data_config.update(
+        split="split-v2.json",
+        study_split="study.json",
+        source_selection="selection.json",
+        validation_mode="task_outcomes_only",
+        dev_windows=0,
+    )
+
+
+def test_outcome_corpus_enforces_exact_certified_source_selection(data_config, tmp_path):
+    add_study_selection(data_config, tmp_path)
+    result = corpus.build(data_config, relative_to=tmp_path)
+    manifest = json.loads((tmp_path / "data/manifest.json").read_text())
+    assert result["train"]["source_sessions"] == 1
+    assert manifest["source_selection"] == {
+        "study_split_sha256": json.loads((tmp_path / "study.json").read_text())["sha256"],
+        "source_selection_sha256": json.loads((tmp_path / "selection.json").read_text())["sha256"],
+        "selected_episode_count": 1,
+    }
+    assert (tmp_path / "data/study-split.json").stat().st_mode & 0o777 == 0o600
+    assert (tmp_path / "data/source-selection.json").stat().st_mode & 0o777 == 0o600
+
+
+def test_outcome_corpus_rejects_selected_private_record_drift(data_config, tmp_path):
+    add_study_selection(data_config, tmp_path)
+    source = tmp_path / "source.jsonl"
+    rows = [json.loads(line) for line in source.read_text().splitlines()]
+    rows[0]["outcome"]["score"] = 0
+    source.write_text("\n".join(json.dumps(row) for row in rows))
+    data_config["source"]["sha256"] = file_sha256(source)
+    with pytest.raises(ValueError, match="differs from certified metadata"):
+        corpus.build(data_config, relative_to=tmp_path)
+    assert not (tmp_path / "data").exists()
 
 
 @pytest.mark.parametrize("defect", ["source", "unknown", "bounds", "incompatible_dev"])

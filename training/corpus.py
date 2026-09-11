@@ -22,6 +22,7 @@ from .io import atomic_write_json, file_sha256, iter_jsonl
 from .sft import _known, read_mapping
 from .sft_runtime import DENSE_FORMAT, dense_rows
 from .splits import split_key
+from .study_data import filter_records
 
 
 def _eligible(row: Mapping) -> bool:
@@ -160,6 +161,8 @@ def build(config: dict, *, relative_to: Path) -> dict:
             "context_tokens",
             "dev_windows",
             "validation_mode",
+            "study_split",
+            "source_selection",
             "output",
         },
         "data",
@@ -177,8 +180,29 @@ def build(config: dict, *, relative_to: Path) -> dict:
     if validation_mode not in {"teacher_cross_entropy", "task_outcomes_only"}:
         raise ValueError("unknown validation mode")
     reference_validation = validation_mode == "teacher_cross_entropy"
+    records = list(iter_jsonl(source))
+    selection_binding = None
+    if "study_split" in config or "source_selection" in config:
+        if (
+            validation_mode != "task_outcomes_only"
+            or not config.get("study_split")
+            or not config.get("source_selection")
+        ):
+            raise ValueError(
+                "study_split and source_selection are paired and require task_outcomes_only"
+            )
+        study_split = read_mapping(relative_to / config["study_split"])
+        source_selection = read_mapping(relative_to / config["source_selection"])
+        if study_split.get("training_split") != split:
+            raise ValueError("corpus split differs from the study's exact training split")
+        records = filter_records(records, source_selection, study_split)
+        selection_binding = {
+            "study_split_sha256": study_split["sha256"],
+            "source_selection_sha256": source_selection["sha256"],
+            "selected_episode_count": len(source_selection["selected_episode_ids"]),
+        }
     train, dev, split_exclusions = select_sources(
-        list(iter_jsonl(source)),
+        records,
         split,
         config["train_models"],
         reference_validation=reference_validation,
@@ -275,7 +299,7 @@ def build(config: dict, *, relative_to: Path) -> dict:
         "whole_source_exclusions": dict(exclusions),
         "builder_sha256": {
             name: file_sha256(Path(__file__).with_name(name))
-            for name in ("corpus.py", "dense.py", "splits.py")
+            for name in ("corpus.py", "dense.py", "splits.py", "study_data.py")
         },
         "limitations": [
             "Visible actions only; private reasoning is omitted.",
@@ -283,9 +307,14 @@ def build(config: dict, *, relative_to: Path) -> dict:
             "Family-held-out tasks can share applications.",
         ],
     }
+    if selection_binding is not None:
+        manifest["source_selection"] = selection_binding
     manifest["sha256"] = "sha256:" + digest(manifest)
     atomic_write_json(output / "manifest.json", manifest, private=True)
     atomic_write_json(output / "split.json", split, private=True)
+    if selection_binding is not None:
+        atomic_write_json(output / "study-split.json", study_split, private=True)
+        atomic_write_json(output / "source-selection.json", source_selection, private=True)
     return {
         "output": str(output),
         "manifest_sha256": manifest["sha256"],
