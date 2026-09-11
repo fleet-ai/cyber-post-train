@@ -1,6 +1,7 @@
 # Fleet cyber task supply — 2026-09-11
 
-Read-only metadata audit, observed **2026-09-11 18:14–18:22 UTC**. No jobs,
+Read-only metadata census, observed **2026-09-11 18:14–18:22 UTC**, with a
+separate authenticated-admin follow-up completed **18:27 UTC**. No jobs,
 environments, source publications, catalog edits, or training were started.
 No task prompts, source bundles, traces, answers, flags, or scores were opened.
 
@@ -20,9 +21,11 @@ No task prompts, source bundles, traces, answers, flags, or scores were opened.
   Oracle EPM**, which are absent from the historical roster's environment names.
 - The precise count of newly accepted, runnable, independent blackbox tasks is
   **not established**. Current generation uses modular ATG (mATG), separate from
-  the older Pipeline Lanes. Its authenticated admin view requires a GitHub login
-  that was not present in the available browser session. This is the remaining
-  readiness-census gap, not a reason to call every published product usable.
+  the older Pipeline Lanes. **GitHub admin login is now verified working**. The
+  remaining census limitations are unavailable structured browser transport and
+  a closed-batch status endpoint that does not return entry status—not missing
+  user access. The admin search reports **153 `matg-cyber`-prefixed top-level
+  workflows**, which must not be counted as 153 accepted tasks.
 
 ## What the historical 160 actually contains
 
@@ -198,16 +201,62 @@ The current source contract explicitly separates **mATG** from Pipeline Lanes.
 The mATG preset routes authoring → build → intended-path solvability → blinded
 evaluation → accepted, with separate semantic-rejection and infrastructure-error
 outcomes. Its admin view is [Task Lifecycle Manager](https://admin.flt.build/modular-atg).
-The attempted read reached **Fleet Admin sign-in**, so no authenticated mATG
-run/entry census was possible in this session. The existing standard Fleet
-login did work for Registry, projects, and lanes and confirmed team `fleet`
+The original read reached **Fleet Admin sign-in**. The later follow-up below
+supersedes that access blocker. The existing standard Fleet login also worked
+for Registry, projects, and lanes and confirmed team `fleet`
 (`a1025f0b-ad67-49fc-a023-51800ab43e84`).
+
+### Authenticated admin follow-up — 18:27 UTC
+
+Chris completed GitHub sign-in. Native Chrome then showed the authenticated
+Task Lifecycle Manager, signed in as `chrisisaverted`, with Production selected.
+The unfiltered page reported **1,003 top-level workflows**. Applying the visible
+Temporal filter **`WorkflowId STARTS_WITH "matg-cyber"`**, retaining **Top-level
+runs only**, reported **153 matches**. This scope excludes differently named
+cyber workflows and batch children; it is neither an exhaustive cyber-task
+count nor an accepted-entry count. No claim of full workflow-page enumeration
+is made.
+
+Two bounded metadata-only status checks establish why a completed-workflow
+counter cannot substitute for task acceptance:
+
+| Exact workflow / run identity | Observed evidence |
+|---|---|
+| `matg-cyber-chain-fubspot-fira-v2-recovery-20260911-b`, run `01a09033-c40d-7b71-b242-ba735d3e61e8` | Admin list says completed batch; its `/status?environment=prod` response is `{"detail":"Run status is not available"}`. No accepted-entry count can be recovered from this response. |
+| `matg-cyber-whitebox-lean-e2e-20260905-022613`, run `01a06f63-e8e7-72a7-bab1-42d06cc80a86` | Admin list says completed single workflow. The safe status response contains **one entry, `status=errored`, phase `author_finalize`**, 17 completed work items and 16 receipt references. It does not demonstrate an accepted task. |
+
+The single-run snapshot still says `state=finalizing`; its dated work timestamps
+are September 5. That is historical workflow-query state, **not proof it is
+currently executing**. Its one errored entry must not be generalized to the
+other 152 workflows or to all Fleet cyber production.
+
+The source implementation deliberately projects the safe single-run endpoint
+to `entry_id`, `phase`, `status`, and `visits`, without source content. For closed
+batches, however, the batch query rejects closed executions and falls through
+to the single-run query; the observed batch consequently had no safe status
+available. The browser automation transport was unavailable in this resumed
+session, while native Chrome access worked; native accessibility text truncates
+large JSON responses. Therefore **exhaustive accepted-entry pagination and a
+catalog/projection/family join were not completed**. No `/result`,
+`/live-result`, private receipt body, task source, or credential was read to work
+around these restrictions. A score-blind structured metadata export/transport,
+including closed-batch accepted entry identities and source/runtime references,
+is the remaining requirement; another GitHub login is not.
+
+This does not establish that the platform lacks every possible metadata path.
+Current Theseus source also projects **batch-schema** `/result` responses through
+`_batch_snapshot`, with aggregate counts and child references. The same route can
+return raw content for other schemas and includes free-text error fields, so it
+was not opened unfiltered in the native browser. A restored structured transport
+could read an allowlisted projection of known batch results and then child status
+metadata; it must not expose raw results or confuse aggregate counts with exact
+task/family identities. A new platform feature may not be necessary.
 
 ### What is needed before expanding the Qwen dataset
 
-1. Obtain metadata-only mATG accepted-entry inventory through the authenticated
-   admin run list/status surface; distinguish accepted task entries from
-   successful infrastructure workflows. Bind exact source and runtime receipts.
+1. Obtain a score-blind structured mATG accepted-entry inventory, including
+   closed batches (admin login already works). Distinguish accepted task entries
+   from successful infrastructure workflows; bind exact source/runtime receipts.
 2. Join accepted blackbox products to exact catalog task-version and environment
    version UUIDs. Exclude unfinished, superseded, semantically rejected, and
    infrastructure-ambiguous products; publication alone is insufficient.
@@ -251,10 +300,13 @@ GET /v1/projects/63d6fda8-48c4-4726-9ec3-d1028f2c47f5/tasks
 GET /v1/pipeline-lanes?namespace=cyber&limit=500&offset=N
   Project only immutable IDs, app, projection, stage/status, archive and dates.
 
-# Separate GitHub-authenticated admin gate; not completed in this session:
+# Separate GitHub-authenticated admin gate: login verified at 18:27 UTC.
 GET https://admin.flt.build/api/v1/modular-atg/runs?environment=prod&page_size=100&roots_only=true
+  Observed UI query: WorkflowId STARTS_WITH "matg-cyber" -> 153 matches.
 GET https://admin.flt.build/api/v1/modular-atg/runs/<workflow-id>/status?environment=prod
-  Page all cursors; count accepted entries, not just succeeded workflows.
+  For a full census, page all cursors and resolve accepted entry identities,
+  not just succeeded workflows. This audit did not complete that enumeration;
+  the sampled closed batch's safe status endpoint was unavailable.
   Avoid result/live-result/receipt bodies containing private task content.
 ```
 
