@@ -422,6 +422,11 @@ The internal `training.skyrl_rollout.Generator` validates frozen native row and
 repetition identities, retains complete groups and uses bounded concurrency.
 It awaits sibling cleanup on failure and never replaces invalid episodes.
 Its output passes the native validator; [CPU evidence](evidence/cleanup-skyrl-batches-native-20260911.json).
+`training.skyrl` adds a small native configuration builder. The exact-image
+parser and trainer method confirm one optimizer call per configured batch,
+complete task groups, baseline/final dev evaluation and recoverable-save settings;
+[CPU evidence](evidence/cleanup-skyrl-arguments-native-20260911.json). These tests
+use synthetic dispatch, not a real RL update.
 This is **not yet a public SkyRL RL launcher**: launch integration, real reward,
 weight synchronization and optimizer/recovery qualification remain open.
 Multiple tool calls per turn are rejected, not silently discarded.

@@ -1,0 +1,41 @@
+{
+  "schema": "cyber_training_operational_evidence_v1",
+  "classification": "native_skyrl_configuration_cpu_verified_not_rl_qualified",
+  "observed_at": "2026-09-11T08:55:37Z",
+  "pod": "chris-cpt-skyrl-episode-selftest-v6",
+  "pod_uid": "c09c3b1b-b8dd-4d72-ad47-7f72c1af2538",
+  "namespace": "fleet-train-jobs",
+  "node": "computeinstance-e04a737eqtfvpnyx08",
+  "started_at": "2026-09-11T08:52:07Z",
+  "finished_at": "2026-09-11T08:53:50Z",
+  "phase": "Succeeded",
+  "exit_code": 0,
+  "restarts": 0,
+  "gpus": 0,
+  "fleet_requests": 0,
+  "image_sha256": "ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+  "bundle_sha256": "27f81d5d585937c4227fe9d9b9fca87e7f9a5ebe67ff0149b057b69ba4904e14",
+  "manifest_sha256": "f6504e0c02334494627b9d150b236c5db54cb093f47a610376214d38ec42fc57",
+  "receipt_sha256": "56dfdd54e5f2e8963c51fd4f0a2f093f507ab05485b2fd3cf342aaea0a43a14f",
+  "receipt_digest_independently_validated": true,
+  "test_output_sha256": "3f39ca9786c4462787d34ed6eb408f5d8c4d4c481acdfbd4b76b0a457d3527ea",
+  "tests": {"passed": 275, "failed": 0, "errors": 0, "skipped": 0},
+  "configuration_module_coverage": {"statements": 73, "branches": 26, "missing": 0},
+  "checks": [
+    "Actual pinned SkyRL dataclass parser and native configuration validation.",
+    "Native training method performs exactly one optimizer call per configured global mini-batch, using synthetic dispatch.",
+    "Whole prompt batches, sample divisibility and bounded epochs/steps.",
+    "Native checkpoint retention, baseline/final dev evaluation and disabled example uploads.",
+    "No dynamic replacement, reward filtering or implicit checkpoint resume.",
+    "Existing native episode, tokenizer, MCP and strict batch tests continue to pass."
+  ],
+  "local_tests": {"passed": 1425, "skipped_native_only": 99, "subtests_passed": 7},
+  "wheel_sha256": "edcca4dd9ea963d9ec9731f2fb41de1c3ae954e998c6779ae29d4cc8efb8f2c0",
+  "wheel_imports_and_cli_help_verified_outside_checkout": true,
+  "limits": [
+    "No real RL rollout, reward, GPU optimizer, checkpoint or weight synchronization was executed.",
+    "Public SkyRL RL launch integration is still pending.",
+    "Full GLM has no qualified RL loader here and is explicitly rejected.",
+    "Focused module coverage is not whole-repository coverage."
+  ]
+}
