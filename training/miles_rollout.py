@@ -50,6 +50,9 @@ class Rollout:
         ):
             raise InvalidEpisode("unsupported_native_batch_policy")
         self.state = GenerateState(args)
+        # Prompts already contain the frozen text template; no image processor
+        # may reinterpret them, including the independently loaded dev dataset.
+        self.state.processor = None
         manifest_path = Path(args.cyber_data_manifest)
         manifest = json.loads(manifest_path.read_bytes())
         if (
@@ -92,6 +95,7 @@ class Rollout:
                     s.prompt != row["input"]
                     or s.metadata != row["metadata"]
                     or s.metadata.get("split") != split
+                    or getattr(s, "multimodal_inputs", None) is not None
                     for s, row in zip(dataset.origin_samples, rows, strict=True)
                 )
             ):

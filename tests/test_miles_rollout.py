@@ -42,12 +42,16 @@ def runtime(request, monkeypatch):
         from miles.utils.eval_config import EvalDatasetConfig
         from miles.utils.types import Sample
 
-        for module in (common, data_source):
+        from training import miles_text
+
+        for module in (common, data_source, miles_text):
             monkeypatch.setattr(module, "load_tokenizer", lambda *a, **k: Tokenizer())
-            monkeypatch.setattr(module, "load_processor", lambda *a, **k: None)
+        for module in (common, data_source):
+            # Real Qwen AutoProcessor is truthy despite the text-only recipe.
+            monkeypatch.setattr(module, "load_processor", lambda *a, **k: object())
         return NS(
             native=True,
-            Source=data_source.RolloutDataSource,
+            Source=miles_text.TextDataSource,
             Sample=Sample,
             Eval=RolloutFnEvalInput,
             Train=RolloutFnTrainInput,
@@ -71,6 +75,8 @@ def runtime(request, monkeypatch):
 
     class Dataset:
         def __init__(self, path, *a, **kw):
+            if len(a) > 1:
+                assert a[1] is None
             self.origin_samples = [
                 Sample(prompt=row["input"], metadata=row["metadata"])
                 for row in map(json.loads, Path(path).read_text().splitlines())
@@ -99,7 +105,7 @@ def runtime(request, monkeypatch):
 
     class State:
         def __init__(self, args):
-            self.args, self.tokenizer, self.processor = args, Tokenizer(), None
+            self.args, self.tokenizer, self.processor = args, Tokenizer(), object()
             self.sampling_params, self.aborted = {"temperature": 1}, False
 
     @dataclass(frozen=True)

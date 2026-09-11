@@ -1,6 +1,7 @@
 """Launch boundaries use synthetic metadata, never real GPU or Fleet requests."""
 
 import ctypes
+import hashlib
 import json
 import os
 import runpy
@@ -383,8 +384,9 @@ def test_native_source_is_exact(tmp_path, monkeypatch):
 
 def test_parsed_native_semantics_and_argv_restoration(plan, monkeypatch):
     monkeypatch.setattr(train, "native_source", lambda: Path("synthetic.py"))
-    monkeypatch.setattr(miles, "arguments", lambda cfg: ["--synthetic"])
+    monkeypatch.setattr(miles, "arguments", lambda cfg: ["--chat-template-path", "synthetic"])
     args = NS(
+        data_source_path="training.miles_text.TextDataSource",
         start_rollout_id=0,
         load=plan["checkpoint"]["root"],
         ref_load=plan["checkpoint"]["root"],
@@ -425,7 +427,8 @@ def preflight_inputs(artifacts, tmp_path, monkeypatch):
     monkeypatch.setattr(train, "job_request", lambda p: {"synthetic": True})
     monkeypatch.setattr(train, "check_artifacts", lambda p: rows)
     monkeypatch.setattr(rl_data, "selection", lambda *a: expected)
-    monkeypatch.setattr(miles, "arguments", lambda cfg: ["--synthetic"])
+    monkeypatch.setattr(miles, "arguments", lambda cfg: ["--chat-template-path", "synthetic"])
+    monkeypatch.setattr(miles, "TEMPLATE_SHA256", hashlib.sha256(b"synthetic").hexdigest())
     monkeypatch.setattr(train, "native_source", lambda: Path("synthetic.py"))
     monkeypatch.setitem(sys.modules, "torch", NS(cuda=NS(is_available=lambda: False)))
     monkeypatch.setitem(
@@ -443,6 +446,17 @@ def preflight_inputs(artifacts, tmp_path, monkeypatch):
             return len(self.origin_samples)
 
     monkeypatch.setitem(sys.modules, "miles.utils.data", NS(Dataset=Dataset))
+
+    class TextDataSource:
+        def __init__(self, args):
+            from miles.utils.data import Dataset
+
+            assert args.rollout_global_dataset and not args.apply_chat_template
+            assert args.multimodal_keys is None and args.chat_template_path == "synthetic"
+            self.tokenizer = NS(chat_template="synthetic")
+            self.dataset = Dataset(args.prompt_data, apply_chat_template=False)
+
+    monkeypatch.setitem(sys.modules, "training.miles_text", NS(TextDataSource=TextDataSource))
     return plan, rows, expected, directory
 
 
@@ -454,6 +468,7 @@ def test_preflight_checks_split_native_parsing_and_dataset_without_qualification
     assert proof["plan_sha256"] == digest(plan)
     assert proof["planned_steps"] == proof["planned_global_batch"] == 2
     assert proof["native_parser_checked"] is False
+    assert proof["native_text_source_checked"] is True
 
 
 @pytest.mark.parametrize(
@@ -468,6 +483,7 @@ def test_preflight_checks_split_native_parsing_and_dataset_without_qualification
         "filtered",
         "prompt",
         "metadata",
+        "template",
     ],
 )
 def test_preflight_rejects_native_or_split_drift(preflight_inputs, monkeypatch, fault):
@@ -482,6 +498,8 @@ def test_preflight_rejects_native_or_split_drift(preflight_inputs, monkeypatch, 
         rows["train"] *= 2
     elif fault == "lineage":
         expected.pop()
+    elif fault == "template":
+        monkeypatch.setattr(miles, "TEMPLATE_SHA256", "changed")
     else:
 
         class AlteredDataset:

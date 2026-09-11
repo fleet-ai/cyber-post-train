@@ -136,6 +136,7 @@ def arguments(config: MilesConfig) -> list[str]:
         "save": config.output_root + "/checkpoints",
         "save-interval": config.checkpoint_interval,
         "prompt-data": config.train_data,
+        "data-source-path": "training.miles_text.TextDataSource",
         "input-key": "input",
         "metadata-key": "metadata",
         "num-rollout": config.steps,

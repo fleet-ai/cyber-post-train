@@ -1,0 +1,50 @@
+{
+  "schema": "cyber_cleanup_eval_terminal_v1",
+  "observed_at_utc": "2026-09-11T10:49:17Z",
+  "campaign": "chris-cpt-eval-qual-v5",
+  "classification": "incomplete generation; held and not accepted",
+  "purpose": "operational qualification, not a capability study",
+  "historical_campaign_repeated": false,
+  "training_data_eligible": false,
+  "plan_sha256": "7381ff9480444c19514993e79c470b007105fbb0deb0d3626ce2fbf2153bdb5f",
+  "ledger_plan_sha256": "7f77d7511873ea5268244b39c8910f7c1f7869035f18f166225bdd9e7a7247f2",
+  "route": "qwen-shared",
+  "task_version_id": "53669bab-1389-48cf-9d08-68e411f9cd78",
+  "instance_id": "ijrnx0riazqk-n",
+  "session_id": "486b2e30-4dd0-45a3-a4d8-800596b9e491",
+  "verifier_execution_id": "cc48de5d-a881-46ae-9c88-0669567cc442",
+  "agent_exit_code": 0,
+  "agent_termination": "output_limit",
+  "elapsed_seconds": 3132.736,
+  "harness": {
+    "name": "opencode",
+    "version": "1.18.27",
+    "context_window_size": 262144,
+    "max_output_tokens": 32768,
+    "max_model_requests": 600,
+    "timeout_seconds": 28800,
+    "compaction_headroom_tokens": 20000,
+    "context_management": "opencode_1.18.27_native_compaction_autocontinue_v1"
+  },
+  "independent_catalog_read": {
+    "matching_sessions": 1,
+    "status": "completed",
+    "model": "qwen3.8-27b",
+    "verifier_execution_matches": true
+  },
+  "session_ingest_completed": true,
+  "instance_closed": true,
+  "containers_removed": true,
+  "ledger": {"accepted": 0, "retry_review": 1, "active": 0, "local_results": 1},
+  "files_sha256": {
+    "result.json": "c0890ac70b2bf52035583cf754cf2b8c245b28b258b152e966acb9bf94d69f83",
+    "reward-result.json": "2d40da129c9afe50750fc70212dfa20dec25b4c6793c4e6e29b5fa35ed29194d",
+    "session-ingest.json": "9e866f75e575d0905d34645f66599ff709ddc5877298e69aa21b608bd2a1f280",
+    "trace-manifest.json": "8f18f4750dc430d2dfa751c8eb5a34f073a1b30b74262b8dc006160cb433ec79",
+    "cleanup.json": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+    "runtime-binding.json": "9342dfaac63623179af8a55a702faccb2b94181e06b97d732fd16c7ee46a6460"
+  },
+  "interpretation": "The controller's generic authoritative_scoring_started.runtimeerror is not proof of grader or ingest failure. The completed result fails the frozen natural-stop requirement because the final step ended with length. Preserve it without automatic retry or capability acceptance.",
+  "scores_or_private_content_exposed": false,
+  "mutated_or_retried": false
+}

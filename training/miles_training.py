@@ -15,7 +15,9 @@ import json
 import os
 import sys
 import time
+from contextlib import suppress
 from pathlib import Path
+from types import SimpleNamespace
 
 from cyber_post_train.jobs import bundled_request, digest, quantity
 
@@ -31,6 +33,7 @@ RUNTIME_FILES = (
     "training/miles.py",
     "training/miles_conversion.py",
     "training/miles_rollout.py",
+    "training/miles_text.py",
     "training/rl_episode.py",
     "training/rl_runtime.py",
     "training/sft_runtime.py",
@@ -272,6 +275,7 @@ def native_args(plan):
         sys.argv = [str(native_source()), *miles.arguments(miles.MilesConfig(**plan["arguments"]))]
         args = parse_args()
         expected = {
+            "data_source_path": "training.miles_text.TextDataSource",
             "start_rollout_id": 0,
             "load": plan["checkpoint"]["root"],
             "ref_load": plan["checkpoint"]["root"],
@@ -290,8 +294,8 @@ def native_args(plan):
 def preflight(plan):
     import torch
     from miles.utils.data import Dataset
-    from transformers import AutoTokenizer
 
+    from .miles_text import TextDataSource
     from .rl_data import selection
 
     if torch.cuda.is_available():
@@ -329,19 +333,39 @@ def preflight(plan):
     config = miles.MilesConfig(**plan["arguments"])
     argv = miles.arguments(config)
     native_source()
-    tokenizer = AutoTokenizer.from_pretrained(
-        plan["model"]["root"], trust_remote_code=False, local_files_only=True
+    source = TextDataSource(
+        SimpleNamespace(
+            rollout_global_dataset=True,
+            apply_chat_template=False,
+            multimodal_keys=None,
+            tool_key=None,
+            label_key=None,
+            input_key="input",
+            metadata_key="metadata",
+            hf_checkpoint=config.model_root,
+            chat_template_path=argv[argv.index("--chat-template-path") + 1],
+            prompt_data=config.train_data,
+            rollout_max_prompt_len=config.context_tokens - config.response_tokens,
+            rollout_seed=config.seed,
+            rollout_shuffle=True,
+        )
     )
+    if hashlib.sha256(source.tokenizer.chat_template.encode()).hexdigest() != miles.TEMPLATE_SHA256:
+        raise ValueError("loaded Miles chat template changed")
     for split in ("train", "dev"):
         path = plan["arguments"][split + "_data"]
-        dataset = Dataset(
-            path,
-            tokenizer,
-            None,
-            config.context_tokens - config.response_tokens,
-            prompt_key="input",
-            metadata_key="metadata",
-            apply_chat_template=False,
+        dataset = (
+            source.dataset
+            if split == "train"
+            else Dataset(
+                path,
+                source.tokenizer,
+                None,
+                config.context_tokens - config.response_tokens,
+                prompt_key="input",
+                metadata_key="metadata",
+                apply_chat_template=False,
+            )
         )
         if len(dataset) != len(rows[split]) or any(
             sample.prompt != row["input"] or sample.metadata != row["metadata"]
@@ -358,6 +382,7 @@ def preflight(plan):
         "planned_global_batch": config.groups * config.samples_per_prompt,
         "native_arguments_sha256": digest(argv),
         "native_parser_checked": False,
+        "native_text_source_checked": True,
         "counts": {k: len(v) for k, v in rows.items()},
         "rl_qualified": False,
     }
@@ -389,6 +414,12 @@ def _native(plan):
     )
     try:
         asyncio.run(module.train(args))
+    except BaseException as exc:
+        from .rl_runtime import native_failure
+
+        with suppress(Exception):
+            native_failure(plan, exc)
+        raise
     finally:
         try:
             finish_tracking()

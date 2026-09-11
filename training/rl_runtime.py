@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -20,6 +21,31 @@ def sealed(value, schema):
         {k: v for k, v in value.items() if k != "sha256"}
     ):
         raise ValueError("input receipt schema/digest mismatch")
+
+
+def native_failure(plan, error):
+    """Keep Ray's nested error types/code locations, never its private messages."""
+    causes, seen = [], set()
+    while isinstance(error, BaseException) and id(error) not in seen and len(causes) < 8:
+        seen.add(id(error))
+        frames = re.findall(
+            r'File "[^"\n]*/([\w.-]+\.py)", line (\d+), in ([\w<>]+)',
+            getattr(error, "traceback_str", ""),
+        )
+        causes.append(
+            {
+                "error_class": type(error).__name__,
+                "actor_init_failed": getattr(error, "actor_init_failed", False) is True,
+                "remote_frames": [
+                    {"file": f, "line": int(n), "function": name} for f, n, name in frames
+                ],
+            }
+        )
+        error = getattr(error, "cause", None) or error.__cause__ or error.__context__
+    return _write(
+        Path(plan["output_root"]) / "NATIVE_FAILURE.json",
+        {"plan_sha256": digest(plan), "causes": causes},
+    )
 
 
 def progress(root):
