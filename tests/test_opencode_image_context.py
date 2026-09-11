@@ -1,11 +1,15 @@
 import hashlib
 import io
+import json
 import tarfile
 from pathlib import Path
 
 import pytest
 
 from evals.fleet import opencode_image_context as context
+
+ROOT = Path(__file__).parents[1]
+PLAN = ROOT / "configs/evaluation/opencode11827-agent-image-publication-plan-v2.json"
 
 
 def _root(tmp_path: Path) -> Path:
@@ -98,6 +102,7 @@ def test_build_request_is_exact_and_create_once() -> None:
     assert request["platform"] == "linux/amd64"
     assert request["no_cache"] is True
     assert request["pull"] is False
+    assert request["rewrite_timestamp"] is True
     assert request["build_args"]["SOURCE_DATE_EPOCH"] == context.SOURCE_DATE_EPOCH
     assert request["build_args"]["OPENCODE_BINARY_SHA256"] == context.OPENCODE_BINARY_SHA256
     context.validate_request(request, context_sha256="b" * 64, source_commit="c" * 40)
@@ -116,3 +121,50 @@ def test_real_dockerfile_has_no_build_network_or_mutable_packages() -> None:
     assert "RUN " not in dockerfile
     assert "cyber.opencode.release-sha256" in dockerfile
     assert "cyber.opencode.binary-sha256" in dockerfile
+
+
+def test_openapi_gate_requires_timestamp_rewrite() -> None:
+    schema = {
+        "paths": {
+            context.LOCAL_BUILD_PATH: {
+                "post": {
+                    "requestBody": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": f"#/components/schemas/{context.LOCAL_BUILD_SCHEMA}"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "components": {
+            "schemas": {
+                context.LOCAL_BUILD_SCHEMA: {
+                    "properties": {
+                        "rewrite_timestamp": {
+                            "type": "boolean",
+                            "title": "Rewrite Timestamp",
+                            "default": False,
+                        }
+                    }
+                }
+            }
+        },
+    }
+    context.validate_image_api_schema(schema)
+    del schema["components"]["schemas"][context.LOCAL_BUILD_SCHEMA]["properties"][
+        "rewrite_timestamp"
+    ]
+    with pytest.raises(context.ContextError, match="does not support"):
+        context.validate_image_api_schema(schema)
+
+
+def test_publication_plan_is_sealed_and_remains_blocked() -> None:
+    plan = json.loads(PLAN.read_text())
+    context.validate_publication_plan(plan, root=ROOT)
+    plan["launchable"] = True
+    with pytest.raises(context.ContextError, match="seal"):
+        context.validate_publication_plan(plan, root=ROOT)

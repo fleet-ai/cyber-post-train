@@ -1,0 +1,151 @@
+{
+  "schema": "cyber_opencode_agent_image_publication_plan_v2",
+  "status": "blocked_exact_infrastructure_change",
+  "observed_at": "2026-09-11T23:35:55Z",
+  "purpose": "Publish and dev-qualify one immutable OpenCode 1.18.27 linux/amd64 agent image without using a trainer repository or creating a predictably failing build",
+  "supersedes": {
+    "path": "configs/evaluation/opencode11827-agent-image-publication-plan-v1.json",
+    "file_sha256": "sha256:c716b68e9e84a69e04ad79d5964cc543136db46266f412b90bd2679fa51d0f5f",
+    "sha256": "sha256:2d2c48b1331850e87bd02cd5bebb33337c3402c3715e83e2f5d241baab58b1fb"
+  },
+  "source": {
+    "repository_commit": "43c6a22e14fc09c9f108cd4efea350323198c0f4",
+    "dockerfile": "evals/fleet/images/opencode11827/Dockerfile",
+    "dockerfile_sha256": "sha256:10dfc0603bade545b63eaa493f6cffe17e173f84f1c85d11d3f546e5d6866e15",
+    "base_image": "docker.io/library/node@sha256:4d676821dff059fd00d277ee4261ef34ea712317fed0737c03941481b5760c96",
+    "opencode_version": "1.18.27",
+    "release_asset_sha256": "sha256:4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702",
+    "opencode_binary_sha256": "sha256:bddf894e5c2bc3d8cf452bd6e5ab2273bbe4a37eeeb9aec848d3d7d20db1f256",
+    "source_date_epoch": "1788385261",
+    "network_fetches_in_dockerfile": 0,
+    "run_instructions_in_dockerfile": 0
+  },
+  "deterministic_context": {
+    "archive_sha256": "sha256:e1d143706870c0a283c4d816d6f36c30095cc7dba08d20a90a9dbf09d27ed27e",
+    "archive_size_bytes": 60233450,
+    "entries": [
+      "Dockerfile",
+      "opencode",
+      "workspace"
+    ],
+    "receipt_sha256": "sha256:9919ec70bfa2a486047aa6b98046a28c3a6672378a522be942e6594b04f536f0",
+    "second_preparation_byte_identical": true
+  },
+  "local_qualification": {
+    "oci_manifest_digest": "sha256:da79f78e4af129913f313614003bf929068b52db599f32fc915e60046712e16f",
+    "oci_archive_sha256": "sha256:1b339118db263bde7ab5d69bab91e730e53ea40ed8e9e2e300b13f65d20851d6",
+    "second_uncached_oci_archive_byte_identical": true,
+    "required_output_option": "rewrite-timestamp=true",
+    "platform": "linux/amd64",
+    "user": "node",
+    "working_directory": "/workspace",
+    "offline_version_check": "passed",
+    "native_compaction_autocontinue_v1": "passed",
+    "native_compaction_autocontinue_v2": "passed",
+    "pullable_registry_reference_proven": false,
+    "scope": {
+      "gpu_requests": 0,
+      "model_requests": 0,
+      "prompt_requests": 0,
+      "completion_requests": 0,
+      "scoring_requests": 0,
+      "task_or_grading_requests": 0,
+      "evaluation_submissions": 0
+    }
+  },
+  "dev_builder": {
+    "cluster_context": "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb",
+    "api_origin": "https://api.ft.dev.flt.build",
+    "openapi_sha256": "sha256:44d1488cb0b1573ab446ed6c882dcde5d3d73460a1404790596d546ac625e48f",
+    "theseus_main_commit": "b27e82aa874e7745946a54500a2200247339929e",
+    "theseus_source_sha256": {
+      "services/fleet-train-api/src/fleet_train_api/local_image_build.py": "sha256:0a505b6da9acb76b4e84d8d3802665289afecac8ec33784065f023666f902834",
+      "services/fleet-train-api/src/fleet_train_api/image_build.py": "sha256:1dfd1db5790b837aad693048e34c5725b643d0d624d78e78dba2d48f62ea32ed",
+      "services/fleet-train-api/src/fleet_train_api/api/images_build.py": "sha256:c4819c2478447815e87caf24d3a8a90737030a21bf4b378827f620591f256e3f",
+      "k8s/training/terraform/buildkit-role/fleetai-training-dev.tfvars": "sha256:1a45b0a692a7ad6627171a74b1b6feb2c19dbdfeaf792237d989c2b15e81797d"
+    },
+    "api_deployment": {
+      "namespace": "fleet-train-control-plane",
+      "name": "image-build-api",
+      "uid": "d0826c48-f784-4c87-be90-7c60cd7bdb6f",
+      "generation": 10,
+      "ready_replicas": 1,
+      "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/training-api:f749c7df"
+    },
+    "buildkit_deployment": {
+      "namespace": "buildkit",
+      "name": "buildkit-buildkit-service",
+      "uid": "462b461a-abc7-43bc-a9e8-87b94567140e",
+      "generation": 1,
+      "ready_replicas": 1
+    },
+    "buildkit_pod": {
+      "name": "buildkit-buildkit-service-6cc445497d-ztqwp",
+      "uid": "9a8baeab-31f2-421a-84fa-ad625a306828",
+      "phase": "Running",
+      "restart_count": 0
+    },
+    "buildkit_service_account_role": "arn:aws:iam::661864827319:role/fleetai-training-dev-buildkit",
+    "configured_push_repository_prefixes": [
+      "fleet/miles-trainer"
+    ],
+    "configured_pull_repository_prefixes": [
+      "fleet/miles-trainer",
+      "docker-hub/*"
+    ],
+    "current_output_argument": "--output=type=image,name=<image>,push=true",
+    "rewrite_timestamp_request_field_present": false,
+    "proposed_repository": "fleet/cyber-post-train-opencode-runtime",
+    "proposed_repository_exists": "not_established_without_registry_credentials",
+    "proposed_repository_builder_iam_authorized": false,
+    "must_not_repurpose_trainer_repository": true
+  },
+  "required_infrastructure_change": [
+    "Provision fleet/cyber-post-train-opencode-runtime as an immutable-tag ECR repository if it is absent, with pull permission for dev execution nodes.",
+    "Add fleet/cyber-post-train-opencode-runtime to the dev BuildKit role push_repository_prefixes and apply that Terraform change.",
+    "Add rewrite_timestamp: bool = false to LocalImageBuildRequest and, when true, append rewrite-timestamp=true to the BuildKit image output value; deploy it and require the OpenAPI gate to pass."
+  ],
+  "exact_future_request": {
+    "context_id": "server_returned_context_id",
+    "dockerfile": "Dockerfile",
+    "ecr_repository": "fleet/cyber-post-train-opencode-runtime",
+    "tag": "opencode11827-e1d143706870c0a2",
+    "build_args": {
+      "BUILD_CONTEXT_SHA256": "e1d143706870c0a283c4d816d6f36c30095cc7dba08d20a90a9dbf09d27ed27e",
+      "OPENCODE_BINARY_SHA256": "bddf894e5c2bc3d8cf452bd6e5ab2273bbe4a37eeeb9aec848d3d7d20db1f256",
+      "OPENCODE_SHA256": "4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702",
+      "OPENCODE_VERSION": "1.18.27",
+      "SOURCE_COMMIT": "43c6a22e14fc09c9f108cd4efea350323198c0f4",
+      "SOURCE_DATE_EPOCH": "1788385261"
+    },
+    "platform": "linux/amd64",
+    "no_cache": true,
+    "pull": false,
+    "rewrite_timestamp": true
+  },
+  "future_qualification_gate": [
+    "Submit exactly one local-context build only after all infrastructure changes are deployed and the OpenAPI gate passes.",
+    "Require terminal succeeded and bind the returned repository@sha256 digest; never infer it from the local manifest digest.",
+    "Server-dry-run then create one direct zero-GPU dev Pod with imagePullPolicy Always and the immutable digest.",
+    "Require clean pull, linux/amd64, exact labels, OpenCode 1.18.27, private HOME, ordered tools, both native compaction/autocontinuation treatments, exit zero and zero restarts.",
+    "Delete that Pod and prove absence before opening any evaluation plan."
+  ],
+  "forbidden_shortcuts": [
+    "Do not submit the current request: the API rejects rewrite_timestamp and the builder role cannot push the dedicated repository.",
+    "Do not publish into fleet/miles-trainer; that repository is the trainer catalog identity.",
+    "Do not omit timestamp rewrite and call a merely dependency-pinned rebuild byte-reproducible.",
+    "Do not use the user-pasted AWS credentials, a production Job, a GPU Job, or a scored/model request for this gate.",
+    "Do not treat a local Docker/OCI digest as a pullable registry reference."
+  ],
+  "mutations_performed": {
+    "context_uploads": 0,
+    "image_build_jobs": 0,
+    "registry_publications": 0,
+    "dev_qualification_pods": 0,
+    "gpu_jobs": 0,
+    "production_resources": 0,
+    "evaluation_submissions": 0
+  },
+  "launchable": false,
+  "sha256": "sha256:cc98ea5816b8537f771d659cbdec759b57949710a71484f0532fd0592925ffe1"
+}
