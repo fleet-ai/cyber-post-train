@@ -31,12 +31,10 @@ dev = [
 ]
 train = [
   "accelerate>=1.9,<2",
-  "datasets>=4,<5",
   "peft>=0.17,<1",
   "pyarrow>=20,<26",
   "safetensors>=0.6,<1",
   "transformers>=4.55,<6",
-  "trl>=0.21,<1",
 ]
 
 [tool.pytest.ini_options]

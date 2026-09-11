@@ -7,7 +7,7 @@ Use this checklist at the transition named in the request. Do not execute later 
 - Exact base model revision, shard manifest, tokenizer, and chat template are immutable.
 - Train/dev/test split is lineage-safe; external benchmarks are absent from training and recipe selection.
 - Run config, dataset, trainer, reward, evaluation protocol, and expected output identities have digests.
-- Model adapter proves architecture, precision, topology, and export compatibility.
+- Exact-model qualification proves architecture, precision, topology, and export compatibility.
 
 ## Preview and admission
 

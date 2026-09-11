@@ -9,12 +9,10 @@ import pytest
 import yaml
 
 from training.io import digest_json, file_sha256
-from training.model_adapter import load_model_adapter
 
 ROOT = Path(__file__).resolve().parents[1]
 QUALIFICATION = ROOT / "configs/qualification/qwen38-27b-v1.json"
 MODEL_LOCK = ROOT / "configs/models/qwen38-27b-1d4bf0f2.lock.json"
-ADAPTER = ROOT / "training/configs/models/qwen38-27b.json"
 Q38_SFT_GATE = ROOT / "configs/runs/qwen38-27b-sft-capability-gate.template.json"
 Q38_SFT_FULL = ROOT / "configs/runs/qwen38-27b-sft-full.template.json"
 Q38_RL_CANARY = ROOT / "configs/runs/qwen38-27b-native-rl-reward-acquisition-canary.template.json"
@@ -125,18 +123,14 @@ def _write_tiny_lock(
     return lock
 
 
-def test_exact_model_lock_adapter_and_qualification_agree() -> None:
+def test_historical_qualification_agrees_with_exact_model_lock() -> None:
     qualification = _read(QUALIFICATION)
     lock = _read(MODEL_LOCK)
-    adapter = load_model_adapter(ADAPTER)
     model = qualification["model"]
 
     assert qualification["status"] == "blocked_pre_submission"
     assert qualification["paid_training_authorized"] is False
     assert (model["repository"], model["revision"]) == (lock["repo"], lock["revision"])
-    assert adapter.model_id == lock["repo"]
-    assert adapter.revision == lock["revision"]
-    assert adapter.weights_manifest_sha256 == lock["weights"]["manifest_sha256"]
     assert model["weights_manifest_sha256"] == lock["weights"]["manifest_sha256"]
     assert model["weights_index_sha256"] == lock["weights"]["index_sha256"]
     assert model["tokenizer_manifest_sha256"] == lock["tokenizer"]["manifest_sha256"]

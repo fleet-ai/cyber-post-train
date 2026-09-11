@@ -163,6 +163,32 @@ def test_doctor_checks_installation_without_claiming_cluster_readiness(monkeypat
     assert RUNNER.invoke(cli.app, ["doctor"]).exit_code == 2
 
 
+def test_model_lock_is_create_once_and_not_qualification(tmp_path, monkeypatch):
+    from training import models
+
+    calls = []
+    lock, weights = {"weights": {"shards": 2}}, {"files": []}
+
+    def freeze(repo, revision, client):
+        calls.append((repo, revision))
+        return lock, weights
+
+    monkeypatch.setattr(models, "freeze", freeze)
+    output = tmp_path / "model"
+    command = ["model-lock", "Example/Model", "a" * 40, "--output", str(output)]
+    result = RUNNER.invoke(cli.app, command)
+    assert result.exit_code == 0
+    assert json.loads(result.stdout)["model_qualified"] is False
+    assert cli._read(output / "model.lock.json") == lock
+    assert cli._read(output / "model.weights.json") == weights
+    assert cli._read(output / "COMPLETE.json") == {
+        "lock_sha256": digest(lock),
+        "weights_sha256": digest(weights),
+    }
+    assert RUNNER.invoke(cli.app, command).exit_code == 2
+    assert calls == [("Example/Model", "a" * 40)]
+
+
 def test_checkpoint_command_uses_original_bound_plan(prepared, monkeypatch, tmp_path):
     from training import checkpoints
 

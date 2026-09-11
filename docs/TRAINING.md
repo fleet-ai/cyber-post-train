@@ -5,6 +5,24 @@ request. There is no component factory or separate experiment-description langua
 The current compiler uses the qualified Qwen SkyRL loader; other model/backend
 combinations remain gated until their real-model tests pass.
 
+## Pin a model
+
+```sh
+uv run cyber-post-train model-lock zai-org/GLM-5.3 \
+  30333038ada1f1dacb294a93270305a890b50c14 --output output/my-model
+```
+
+This downloads public configuration/tokenizer metadata, not weights. It follows
+the complete exact-revision inventory, checks Git-blob/LFS identities and writes
+`model.lock.json`, `model.weights.json` and a final `COMPLETE.json` into a new
+directory. Use those paths in the configuration below. The model must have indexed
+safetensors and a standard tokenizer/chat template; remote model code is not
+executed. Pinning does not stage weights or establish training compatibility.
+Private/gated models need a separately reviewed authenticated staging path.
+
+Reviewed Qwen and full-GLM5.3 locks are under `configs/models/`. Changing model
+identity never silently changes the data split, precision or training method.
+
 ## Prepare data
 
 Run `cyber-post-train data data.yaml` on CPU with the pinned SkyRL image and

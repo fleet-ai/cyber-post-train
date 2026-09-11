@@ -69,6 +69,28 @@ def data(config: Path) -> None:
         _fail(exc)
 
 
+@app.command("model-lock")
+def model_lock(repo: str, revision: str, output: Annotated[Path, typer.Option("--output")]) -> None:
+    """Pin public HF model metadata. No weights, GPUs, remote code or compatibility claim."""
+    import httpx
+
+    from training.models import freeze
+
+    try:
+        if output.exists():
+            raise ValueError("model-lock output must be new")
+        with httpx.Client(timeout=60) as client:
+            lock, weights = freeze(repo, revision, client)
+        output.mkdir(parents=True, exist_ok=False, mode=0o700)
+        _write(output / "model.lock.json", lock)
+        _write(output / "model.weights.json", weights)
+        receipt = {"lock_sha256": digest(lock), "weights_sha256": digest(weights)}
+        _write(output / "COMPLETE.json", receipt)
+        _print({**receipt, "shards": lock["weights"]["shards"], "model_qualified": False})
+    except Exception as exc:
+        _fail(exc)
+
+
 @app.command()
 def train(config: Path, output: Annotated[Path, typer.Option("--output")]) -> None:
     """Prepare an immutable SkyRL SFT launch from editable YAML. No network/GPU."""

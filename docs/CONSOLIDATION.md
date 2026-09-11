@@ -219,3 +219,22 @@ After these removals, 999 tests plus seven subtests pass with PostgreSQL enabled
 17 native-only tests are skipped locally, not claimed as local passes. A fresh
 wheel installation outside the checkout confirms the new export command works
 and the retired CLI is absent. Ruff lint and changed-file formatting pass.
+
+Removed the unused model-adapter dataclass/template layer, its two generated
+configs and facade-only tests. The public compiler already reads exact model
+locks directly; no training or evaluation caller used the adapter. Historical
+qualification JSON remains unchanged, including its old source pointers, which
+resolve in base commit `bac2a4c`. Its model/weight/tokenizer identity checks remain.
+
+Added `model-lock` to replace manual metadata assembly. It downloads only bounded
+public sidecars/indexes, validates their Git/LFS identities, pages the full exact
+revision inventory and never downloads weights. Local tests cover every line and
+branch. Live Qwen and full-GLM5.3 metadata reads reproduced the existing Qwen weight
+manifest and pinned GLM's 141 shards/755,632,050,320 bytes independently of external
+benchmark files. Neither is a GLM loader or GPU qualification. Removed unused
+desktop `datasets`/`trl` dependencies; pinned cluster images still own their native
+training installations.
+After removal, the lock resolves 75 packages (19 fewer). The synchronized local
+environment passes 1,040 tests plus seven subtests with PostgreSQL enabled;
+17 native-image cases remain explicitly skipped locally. Ruff and whitespace
+checks pass. Model metadata qualification requested no cluster resources.
