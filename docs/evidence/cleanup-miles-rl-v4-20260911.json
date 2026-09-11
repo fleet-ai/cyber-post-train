@@ -1,6 +1,6 @@
 {
   "schema": "cyber_cleanup_miles_rl_submission_v1",
-  "observed_at_utc": "2026-09-11T11:11:05Z",
+  "observed_at_utc": "2026-09-11T11:18:01Z",
   "name": "chris-cpt-q38-miles-rl-v4-68547176",
   "api_run_id": "68547176-b94d-42b8-bb70-85ef067492c3",
   "rayjob_uid": "b0b74457-3bb6-40f0-9417-f6c4b8727f78",
@@ -30,8 +30,11 @@
   "one_post": true,
   "duplicate_history_rows_checked": 623,
   "duplicates": 0,
-  "state": "RUNNING",
-  "ready": true,
+  "state": "FAILED",
+  "finished_at": "2026-09-11T11:17:15Z",
+  "raycluster_and_pods_absent": true,
+  "quota_released": true,
+  "ready_during_startup": true,
   "restarts": 0,
   "observed_gpu_memory_mib_each": 4,
   "observed_gpu_utilization_percent_each": 0,
@@ -41,6 +44,22 @@
   "planned_dev_episodes": 2,
   "observed_episode_files": 0,
   "observed_checkpoint_files": 0,
+  "terminal_audit": {
+    "pod_uid": "6d0be705-f88d-467c-ad86-fbf3f5a3face",
+    "finished_at": "2026-09-11T11:18:01Z",
+    "gpus": 0,
+    "exit_code": 0,
+    "restarts": 0,
+    "receipt_sha256": "33431919552d751dd2c52c459d0bca4d87f16508cbc586cca288223edb9a10b4",
+    "failed_receipt_sha256": "7ecd375283fe9c8b9da51be44bd7f8208d75b74408f56c1564d775f8beecb1f0",
+    "native_failure_sha256": "52bfe42e1be5c9371438cd18cd974e32e1e8b39427a5e92ce4acf731fe4166d6",
+    "error_class": "RayTaskError(ModuleNotFoundError)",
+    "actor_init_failed": false,
+    "deepest_public_frame": {"file": "training.py", "function": "get_model", "line": 2128},
+    "episode_files": 0,
+    "checkpoint_files": 0,
+    "private_trainer_logs_read": false
+  },
   "wandb_run_id": "cpt-q38-miles-rl-v4",
   "wandb_dashboard_independently_verified": false,
   "cpu_preparation": {
@@ -56,7 +75,32 @@
   },
   "change_from_v3": "Allow the actual native tool_key=tools default for already-rendered text with chat templating disabled; reproduce the former rejection on CPU and preserve sanitized Ray actor error frames.",
   "source_fix_commit": "3ba3c5d",
+  "root_cause": {
+    "missing_namespace": "megatron.post_training",
+    "native_training_source_sha256": "52168b80e3dde83bdc3609ed4eb4edd95c3bbb1be51f078c8ae8eba328a354a4",
+    "checkpointing_source_sha256": "3f2302cebb0c2f10f82629e5f1ea64cea80abf175be3681b8415cb798ce6fe02",
+    "namespace_probe_pod_uid": "6611df49-99e5-45d9-8413-b191024c1d05",
+    "before_source_path_added": "megatron.post_training absent",
+    "after_source_path_added": "/root/Megatron-LM/megatron/post_training resolves",
+    "actual_import_probe_pod_uid": "9c86b2a1-dee0-4122-8157-020fdf4ba260",
+    "actual_import_before": "ModuleNotFoundError: megatron.post_training",
+    "actual_import_after": "OSError in CPU-only runtime; native GPU import not yet qualified",
+    "probe_finished_at": "2026-09-11T11:25:06Z",
+    "probe_gpus": 0,
+    "regression_selftest": {
+      "pod_uid": "0b2edbbb-36b6-491b-b6e1-bf7bb35acf23",
+      "finished_at": "2026-09-11T11:26:04Z",
+      "gpus": 0,
+      "restarts": 0,
+      "exit_code": 0,
+      "tests_passed": 147,
+      "cuda_only_tests_skipped": 1,
+      "receipt_sha256": "e71ce49c8f3eb470adf037428c1d31b5f69502b5fa13b2d5b45cb6b6e91c9cc2",
+      "bundle_sha256": "d73aaf8e32c3305a1605c3607263bfc540231ad257b5b055c23995c161541b21"
+    },
+    "fix": "Bind PYTHONPATH=/root/Megatron-LM in the request, preserve it in Ray workers, and check source namespace resolution in CPU preflight."
+  },
   "peer_workloads_mutated": false,
   "resource_budget": "Six existing owned nodes plus this one, with one unassigned CPU allocation potentially adding an eighth. No concurrent SkyRL GPU submission.",
-  "qualification": "Startup only; no reward, optimizer update or recoverable RL checkpoint has been qualified."
+  "qualification": "Infrastructure-invalid trainer initialization. The rollout manager and eight SGLang engines initialized; native Megatron model initialization then raised ModuleNotFoundError. No reward, optimizer update or recoverable RL checkpoint is qualified."
 }

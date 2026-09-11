@@ -13,6 +13,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import subprocess
 import sys
 import time
 from contextlib import suppress
@@ -191,6 +192,9 @@ def job_request(plan):
             "requeueIfPreempted": False,
             "secrets": ["fleet-api", "wandb-api"],
             "env": {
+                # The editable Megatron install omits post_training. Native
+                # conversion and training both need the complete source tree.
+                "PYTHONPATH": "/root/Megatron-LM",
                 "HF_HUB_OFFLINE": "1",
                 "TRANSFORMERS_OFFLINE": "1",
                 "TOKENIZERS_PARALLELISM": "false",
@@ -292,6 +296,24 @@ def native_args(plan):
         sys.argv = previous
 
 
+def check_native_namespace(pythonpath):
+    """Resolve the native namespace in a fresh child without importing CUDA."""
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import importlib.util;"
+            "assert importlib.util.find_spec('megatron.post_training.checkpointing');"
+            "assert importlib.util.find_spec('model_provider')",
+        ],
+        env={**os.environ, "PYTHONPATH": pythonpath},
+        capture_output=True,
+        timeout=30,
+    )
+    if result.returncode:
+        raise ValueError("native Megatron source namespace unavailable")
+
+
 def preflight(plan):
     import torch
     from miles.utils.data import Dataset
@@ -302,6 +324,7 @@ def preflight(plan):
     if torch.cuda.is_available():
         raise ValueError("Miles preflight is CPU-only")
     request = job_request(plan)
+    check_native_namespace(request["env"]["PYTHONPATH"])
     if Path(plan["output_root"]).exists():
         raise FileExistsError("RL output already exists")
     rows = check_artifacts(plan)
@@ -383,6 +406,7 @@ def preflight(plan):
         "planned_global_batch": config.groups * config.samples_per_prompt,
         "native_arguments_sha256": digest(argv),
         "native_parser_checked": False,
+        "native_megatron_namespace_checked": True,
         "native_text_source_checked": True,
         "counts": {k: len(v) for k, v in rows.items()},
         "rl_qualified": False,

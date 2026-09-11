@@ -84,6 +84,7 @@ def test_compiler_and_portable_job_have_native_identity(plan):
     assert request["env"]["MILES_USE_LEGACY_ROLLOUT_V1"] == "0"
     assert request["env"]["WANDB_RUN_ID"] == "synthetic"
     assert request["env"]["WANDB_CONSOLE"] == "off"
+    assert request["env"]["PYTHONPATH"] == "/root/Megatron-LM"
     assert request["priority_class"] == "c1" and request["requeueIfPreempted"] is False
     assert plan["arguments"]["steps"] == 2
     assert "FLEET_API_KEY" not in request["env"]
@@ -382,6 +383,17 @@ def test_native_source_is_exact(tmp_path, monkeypatch):
         train.native_source()
 
 
+def test_native_namespace_uses_request_environment_and_fails_before_gpu(tmp_path):
+    namespace = tmp_path / "megatron/post_training"
+    namespace.mkdir(parents=True)
+    (namespace / "checkpointing.py").write_text("raise AssertionError('must not import CUDA')")
+    (tmp_path / "model_provider.py").write_text("raise AssertionError('must not import CUDA')")
+    train.check_native_namespace(str(tmp_path))
+    (namespace / "checkpointing.py").unlink()
+    with pytest.raises(ValueError, match="source namespace unavailable"):
+        train.check_native_namespace(str(tmp_path))
+
+
 def test_parsed_native_semantics_and_argv_restoration(plan, monkeypatch):
     monkeypatch.setattr(train, "native_source", lambda: Path("synthetic.py"))
     monkeypatch.setattr(miles, "arguments", lambda cfg: ["--chat-template-path", "synthetic"])
@@ -425,7 +437,8 @@ def preflight_inputs(artifacts, tmp_path, monkeypatch):
         for split, values in rows.items()
         for row in values
     ]
-    monkeypatch.setattr(train, "job_request", lambda p: {"synthetic": True})
+    monkeypatch.setattr(train, "job_request", lambda p: {"env": {"PYTHONPATH": "synthetic"}})
+    monkeypatch.setattr(train, "check_native_namespace", lambda path: None)
     monkeypatch.setattr(train, "check_artifacts", lambda p: rows)
     monkeypatch.setattr(rl_data, "selection", lambda *a: expected)
     monkeypatch.setattr(miles, "arguments", lambda cfg: ["--chat-template-path", "synthetic"])
@@ -471,6 +484,7 @@ def test_preflight_checks_split_native_parsing_and_dataset_without_qualification
     assert proof["planned_steps"] == proof["planned_global_batch"] == 2
     assert proof["native_parser_checked"] is False
     assert proof["native_text_source_checked"] is True
+    assert proof["native_megatron_namespace_checked"] is True
 
 
 @pytest.mark.parametrize(
@@ -573,6 +587,7 @@ def test_native_wrapper_calls_real_driver_boundary_once_and_finishes_tracking(
         "    if args.fails == 'train': raise RuntimeError('synthetic')\n"
     )
     calls = []
+    monkeypatch.setenv("PYTHONPATH", "/root/Megatron-LM")
     args = NS(calls=calls, fails=fails)
     monkeypatch.setattr(train, "check_artifacts", lambda p: None)
     monkeypatch.setattr(train, "native_source", lambda: source)
@@ -599,6 +614,7 @@ def test_native_wrapper_calls_real_driver_boundary_once_and_finishes_tracking(
     else:
         train._native(plan)
     assert calls[0]["address"] == "auto" and calls[0]["log_to_driver"] is False
+    assert calls[0]["runtime_env"]["env_vars"]["PYTHONPATH"].endswith(":/root/Megatron-LM")
     assert calls[1:] == ["train", "finish", "disconnect"]
 
 
