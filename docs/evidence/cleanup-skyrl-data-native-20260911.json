@@ -1,0 +1,75 @@
+{
+  "schema": "cyber_native_cpu_qualification_v1",
+  "classification": "operational_gate",
+  "observed_at": "2026-09-11T08:21:00Z",
+  "feature": "Shared rl-data command with native SkyRL PromptDataset and exact Qwen token binding",
+  "image_sha256": "ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+  "native_skyrl_revision": "f5bc3b78dfddfb352870d5d7430cd226e5785838",
+  "native_dataset_module_sha256": "ff041e24a24e7d99c9c20052ae643b137acb0f1777016ddba79260a42226466c",
+  "model_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+  "failed_cpu_check": {
+    "pod": "chris-cpt-skyrl-episode-selftest-v3",
+    "uid": "f643d073-d966-49dd-a777-79f51baf3754",
+    "finished_at": "2026-09-11T08:16:49Z",
+    "exit_code": 1,
+    "passed": 188,
+    "failed": 1,
+    "skipped": 0,
+    "restarts": 0,
+    "gpus": 0,
+    "bundle_sha256": "3b0a56f3365d71557a541c34231f4f95ad1c943ae4289d75e6cbca6ffd643e70",
+    "receipt_sha256": "826f57f42b84b188f88143892d76abf4b22bbc5dd85e2c2feced7435dad96a35",
+    "cause": "Transformers 5.8 defaults to BatchEncoding; list(return_value) yielded mapping keys rather than token IDs.",
+    "fix": "Explicit return_dict=False for SkyRL tokenization, matching its native helper and our recorder. A local regression now reproduces the dictionary default."
+  },
+  "accepted_cpu_check": {
+    "pod": "chris-cpt-skyrl-episode-selftest-v4",
+    "uid": "119ca764-816c-47bb-92ec-174974ef6de0",
+    "node": "computeinstance-e04a737eqtfvpnyx08",
+    "started_at": "2026-09-11T08:17:45Z",
+    "finished_at": "2026-09-11T08:19:26Z",
+    "phase": "Succeeded",
+    "exit_code": 0,
+    "passed": 189,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 0,
+    "restarts": 0,
+    "gpus": 0,
+    "manifest_sha256": "5daa8611578cdbe094c2bc9a5089658e15c5cc0517f96e602ef8d07117973f08",
+    "bundle_sha256": "26167059a360dc05e17ce68eebbfb98f23a58fee2bed2105bcebe1515dbcfb5a",
+    "receipt_sha256": "3aa3d56d6c861dd8e48ef3c21fc074e9f23477a49c8a993ecb3f1effd022f2fd",
+    "test_output_sha256": "79553b1411a1a8e60748f6cda4ea819384d6af4866a2a616296263b636968718",
+    "receipt_digest_independently_verified": true,
+    "rl_data_covered_statements": 147,
+    "rl_data_total_statements": 159,
+    "rl_data_covered_branches": 66,
+    "rl_data_total_branches": 70
+  },
+  "verified": [
+    "Actual pinned Qwen tokenizer and SkyRL PromptDataset retain both synthetic train/dev rows without changing prompt, environment, split or canonical binding",
+    "Initial prompt text and token-sequence hashes independently match the recorder contract",
+    "Common family split, exact task/environment/verifier binding and GET-only Fleet request boundary",
+    "Native filtering or row mutation fails without publishing a manifest",
+    "Actual SkyRL client and MCP 1.28.0 transport with synthetic replies"
+  ],
+  "local_regression": {
+    "passed": 1342,
+    "native_only_skipped": 96,
+    "subtests_passed": 7,
+    "disposable_postgresql": true,
+    "mcp_version": "2.1.1"
+  },
+  "wheel": {
+    "sha256": "ee644778c6e136e219c2acbe3bb819134c1fdd505aa12d5129f648c19457c29d",
+    "installed_outside_checkout": true,
+    "help_commands_passed": 8,
+    "module_imports_passed": 5
+  },
+  "limits": [
+    "Synthetic Fleet replies; zero live Fleet requests, environments, rewards or optimizer steps",
+    "Miles-only native data cases are excluded from this SkyRL-image run; their prior qualification is separate",
+    "Focused coverage is not whole-repository coverage",
+    "No public SkyRL RL launcher, distributed weight synchronization, optimizer or recovery qualification yet"
+  ]
+}

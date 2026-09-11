@@ -103,7 +103,7 @@ def model_lock(repo: str, revision: str, output: Annotated[Path, typer.Option("-
 
 @app.command("rl-data")
 def rl_data(config: Path) -> None:
-    """CPU-only Miles data preparation from reviewed Fleet versions. GET only; no training."""
+    """CPU-only Miles/SkyRL data from reviewed Fleet versions. GET only; no training."""
     import httpx
 
     from training.rl_data import build

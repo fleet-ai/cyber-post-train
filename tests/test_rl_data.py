@@ -115,10 +115,18 @@ def setup(tmp_path, monkeypatch):
         def encode(self, text, **kw):
             return list(text.encode())
 
-        def apply_chat_template(self, messages, *, tools, tokenize, add_generation_prompt):
+        def apply_chat_template(
+            self, messages, *, tools, tokenize, add_generation_prompt, return_dict=None
+        ):
             assert add_generation_prompt and len(messages) == 1
             text = "synthetic-header " + json.dumps(tools) + messages[0]["content"]
-            return ([0] if state.bad_tokens else self.encode(text)) if tokenize else text
+            if not tokenize:
+                return text
+            tokens = [0] if state.bad_tokens else self.encode(text)
+            # Transformers 5.8 defaults to BatchEncoding, unlike native Miles.
+            if config.get("backend") == "skyrl" and return_dict is not False:
+                return {"input_ids": tokens, "attention_mask": [1] * len(tokens)}
+            return tokens
 
     class Dataset(list):
         def __init__(self, path, tokenizer, processor, budget, **kwargs):

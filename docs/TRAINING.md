@@ -245,16 +245,17 @@ to an uninterrupted multi-epoch run. GPU recovery qualification is tracked in
 ## RL integration status
 
 The `train` command prepares **SFT**. `rl` prepares a native **Miles RL** plan;
-live reward, optimizer and recovery qualification remains open. SkyRL RL is not
-yet exposed by this CLI. The old typed-API builders are retired; historical
+live reward, optimizer and recovery qualification remains open. SkyRL RL data
+preparation is supported, but its training launcher is not yet exposed. The old typed-API builders are retired; historical
 requests are not launch shortcuts.
 
-`cyber-post-train rl-data rl-data.yaml` prepares private Miles input files on
-CPU in the pinned Miles image. It performs only Fleet account/task GETs, never
+`cyber-post-train rl-data rl-data.yaml` prepares private native-trainer input files on
+CPU in the selected backend's pinned image. It performs only Fleet account/task GETs, never
 creates an environment, generates tokens or submits a training job:
 
 ```yaml
 name: my-qwen-rl
+backend: miles  # or skyrl; use that backend's exact runtime image
 task_set: reviewed-tasks.json
 split: reviewed-split.json
 tool_catalog: reviewed-mcp-tools.json
@@ -285,11 +286,18 @@ The catalog must be the exact previously observed task-facing MCP catalog, in
 `bash`, `submit_report` order—not an invented tool schema. Runtime checks it
 again. The command writes `train.jsonl`, `dev.jsonl`, split/task-set copies and
 a final self-digesting manifest. It renders actual task prompts plus tools with
-Miles' native Qwen tokenizer, checks recorder-prefill token equality, reserves
+the selected backend's native Qwen tokenizer, checks recorder-prefill token equality, reserves
 the full response budget and proves the native dataset retains every row.
 It fails instead of truncating/filtering a task or moving its split. Output is
 create-once and private; no prompts or task responses are printed. Reuse neither
 a partial destination nor data bound to a different run name/model/budget.
+
+SkyRL keeps chat messages and a canonical JSON binding in each native dataset
+row; Miles keeps rendered text and its native metadata. They use different
+templates and cannot share a prepared data manifest. SkyRL additionally binds
+the initial token sequence, explicitly requests token-list output from
+Transformers, and checks the actual `PromptDataset` preserves every prompt,
+environment and binding. Preparing data is not a real rollout or RL qualification.
 
 ### Prepare a native Miles checkpoint
 
@@ -410,7 +418,7 @@ pinned image contains an older JSON-only parser, so a small corrected Theseus
 Qwen XML parser is included until that image is updated. Exact-image CPU tests
 exercise the actual tokenizer, client and MCP 1.28.0 transport (Miles uses
 MCP 2.1.1); [evidence](evidence/cleanup-skyrl-episode-native-20260911.json).
-This is **not yet a public SkyRL RL launcher**: native batch/data integration,
+This is **not yet a public SkyRL RL launcher**: native batch integration,
 real reward, weight synchronization and optimizer/recovery qualification remain
 open. Multiple tool calls per turn are rejected, not silently discarded.
 

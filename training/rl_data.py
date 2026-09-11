@@ -1,4 +1,4 @@
-"""Prepare private Miles prompts from reviewed Fleet task versions. CPU/GET only.
+"""Prepare private native-trainer prompts from Fleet task versions. CPU/GET only.
 
 No task selection by score, random holdout, environment creation or optimizer.
 All versions of one family stay together; test/reserved tasks are never fetched.
@@ -109,12 +109,28 @@ def _native(lock, root):
     return tokenizer, get_tito_tokenizer(tokenizer, "qwen35"), Dataset, identity
 
 
+def _native_skyrl(lock, root):
+    import torch
+
+    from .skyrl_episode import _module
+
+    if torch.cuda.is_available():
+        raise ValueError("RL data preparation must not hold a GPU")
+    module = _module(
+        "skyrl.train.dataset.dataset",
+        "ff041e24a24e7d99c9c20052ae643b137acb0f1777016ddba79260a42226466c",
+    )
+    tokenizer, identity = local_tokenizer(lock, Path(root))
+    return tokenizer, tokenizer, module.PromptDataset, identity
+
+
 def build(config: dict, *, relative_to: Path, client) -> dict:
     """Return counts/digests only. The supplied client is authenticated; GET only."""
     _known(
         config,
         {
             "name",
+            "backend",
             "task_set",
             "split",
             "tool_catalog",
@@ -125,6 +141,9 @@ def build(config: dict, *, relative_to: Path, client) -> dict:
         },
         "RL data",
     )
+    backend = config.get("backend", "miles")
+    if backend not in {"miles", "skyrl"}:
+        raise ValueError("RL data backend must be miles or skyrl")
     if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,30}", config["name"]):
         raise ValueError("invalid RL run name")
     output = relative_to / config["output"]
@@ -153,7 +172,7 @@ def build(config: dict, *, relative_to: Path, client) -> dict:
     ]
     lock = read_mapping(relative_to / config["model_lock"])
     if lock["repo"] != "Qwen/Qwen3.8-27B":
-        raise ValueError("native Miles data profile currently targets Qwen3.8-27B")
+        raise ValueError("native RL data profile currently targets Qwen3.8-27B")
     root = _sfs_root(config["model_root"], "model root")
     limits = copy.deepcopy(config["limits"])
     response_tokens = limits.pop("response_tokens")
@@ -181,7 +200,14 @@ def build(config: dict, *, relative_to: Path, client) -> dict:
     ):
         raise ValueError("response/context budget outside native Qwen profile")
     prompt_budget = limits["context_tokens"] - response_tokens
-    tokenizer, tito, Dataset, tokenizer_identity = _native(lock, root)
+    tokenizer, tito, Dataset, tokenizer_identity = (
+        _native(lock, root) if backend == "miles" else _native_skyrl(lock, root)
+    )
+    if backend == "skyrl":
+        episode["model"].pop("tito_family")
+        episode["model"]["runtime_chat_template_sha256"] = fleet.sha256(
+            tokenizer.chat_template.encode()
+        )
     account = fleet._request(client, "GET", "/v1/account")
     if account.get("team_id") != fleet.FLEET_TEAM_ID or account.get("team_name") != "fleet":
         raise ValueError("RL data requires Fleet team identity")
@@ -211,7 +237,11 @@ def build(config: dict, *, relative_to: Path, client) -> dict:
         )
         tokens = list(
             tito.apply_chat_template(
-                messages, tools=tools, tokenize=True, add_generation_prompt=True
+                messages,
+                tools=tools,
+                tokenize=True,
+                add_generation_prompt=True,
+                **({"return_dict": False} if backend == "skyrl" else {}),
             )
         )
         if tokenizer.encode(rendered, add_special_tokens=False) != tokens:
@@ -219,6 +249,8 @@ def build(config: dict, *, relative_to: Path, client) -> dict:
         if not 0 < len(tokens) <= prompt_budget:
             raise ValueError("task prompt/tools exceed budget; no silent filtering")
         frozen["initial_prompt_sha256"] = fleet.sha256(rendered.encode())
+        if backend == "skyrl":
+            frozen["initial_prompt_tokens_sha256"] = fleet.sha256(fleet.canonical_json(tokens))
         frozen["config_sha256"] = fleet.digest_without(frozen, "config_sha256")
         row = {
             "input": rendered,
@@ -228,6 +260,15 @@ def build(config: dict, *, relative_to: Path, client) -> dict:
                 "cyber_config": frozen,
             },
         }
+        if backend == "skyrl":
+            # A JSON string survives Arrow/Dataset round trips without schema
+            # union adding null fields to the signed, task-specific binding.
+            row = {
+                "prompt": messages,
+                "env_class": environment["id"],
+                "split": selected_task["split"],
+                "cyber_config_json": fleet.canonical_json(frozen).decode(),
+            }
         rows[selected_task["split"]].append(row)
         lengths[selected_task["split"]].append(len(tokens))
     # No output before every task validates. A partial publication is never
@@ -241,20 +282,35 @@ def build(config: dict, *, relative_to: Path, client) -> dict:
             f.write(payload)
             f.flush()
             os.fsync(f.fileno())
-        native = Dataset(
-            str(path),
-            tokenizer,
-            None,
-            prompt_budget,
-            prompt_key="input",
-            metadata_key="metadata",
-            apply_chat_template=False,
-        )
-        if len(native) != len(values) or any(
-            s.prompt != row["input"] or s.metadata != row["metadata"]
-            for s, row in zip(native, values, strict=True)
-        ):
-            raise ValueError("native Miles dataset dropped or changed a selected task")
+        if backend == "miles":
+            native = Dataset(
+                str(path),
+                tokenizer,
+                None,
+                prompt_budget,
+                prompt_key="input",
+                metadata_key="metadata",
+                apply_chat_template=False,
+            )
+            preserved = len(native) == len(values) and all(
+                s.prompt == row["input"] and s.metadata == row["metadata"]
+                for s, row in zip(native, values, strict=True)
+            )
+        else:
+            native = Dataset(str(path), tokenizer, prompt_budget, num_workers=1)
+            preserved = len(native) == len(values) and all(
+                native[index]
+                == (
+                    row["prompt"],
+                    row["env_class"],
+                    {k: v for k, v in row.items() if k not in {"prompt", "env_class"}},
+                    str(index),
+                )
+                for index, row in enumerate(values)
+            )
+        if not preserved:
+            label = "Miles" if backend == "miles" else "SkyRL"
+            raise ValueError(f"native {label} dataset dropped or changed a selected task")
         files[group] = {
             "path": path.name,
             "sha256": fleet.sha256(payload),
@@ -262,12 +318,12 @@ def build(config: dict, *, relative_to: Path, client) -> dict:
             "max_prompt_tokens": max(lengths[group]),
         }
     manifest = {
-        "schema": "cyber_miles_data_v1",
+        "schema": f"cyber_{backend}_data_v1",
         "name": config["name"],
         "selection_sha256": task_set["sha256"],
         "split_sha256": split["sha256"],
         "tokenizer": tokenizer_identity,
-        "template_sha256": "sha256:" + miles.TEMPLATE_SHA256,
+        "template_sha256": episode["model"]["runtime_chat_template_sha256"],
         "tool_catalog_sha256": task_set["tool_catalog_sha256"],
         "limits": config["limits"],
         "files": files,
