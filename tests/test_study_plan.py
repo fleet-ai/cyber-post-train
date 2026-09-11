@@ -408,3 +408,22 @@ def test_tracked_template_is_explicit_and_gated_against_current_split_metadata()
         len(s["arms"]) == 4 and s["decision_sha256"].startswith("PENDING_") for s in followups
     )
     assert all(isinstance(r["lr"], str) for s in followups for r in s["arms"])
+
+
+def test_frozen_teacher_lr_screen_recompiles_exactly():
+    root = Path(__file__).resolve().parents[1]
+    source = read_study(
+        root / "configs/studies/qwen-blackbox-teacher-a-lr-screen-v1.json"
+    )
+    frozen = json.loads(
+        (root / "configs/studies/qwen-blackbox-teacher-a-lr-screen-v1.plan.json").read_text()
+    )
+    assert compile_study(source) == frozen
+    assert len(frozen["stages"]) == 1
+    assert [arm["lr"] for arm in frozen["stages"][0]["arms"]] == [
+        1e-6,
+        3e-6,
+        1e-5,
+        3e-5,
+    ]
+    assert frozen["capacity"]["peak_planned_study_nodes"] == 4

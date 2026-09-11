@@ -1,0 +1,214 @@
+{
+  "capacity": {
+    "excluded_inference_endpoints": 4,
+    "live_aggregate_capacity_recheck_required": true,
+    "max_active_nodes": 8,
+    "other_active_study_nodes": 0,
+    "peak_planned_study_nodes": 4,
+    "stage_barrier": "all_previous_stages_terminal_and_allocations_released",
+    "stage_barriers_required": true
+  },
+  "evaluation": {
+    "final_fleet": {
+      "lock_sha256": "sha256:dc625115be8c775de8ecf476bc0d8e06e71b6c7f4160ed50b25eb0308b30d8d7",
+      "protocol_sha256": "sha256:2fc74ff4daaf3b1cde5d806df6e4ccbf00c4ffa9742444c74a5c18d907a2f72d",
+      "task_set_sha256": "sha256:718936798883348fe16570561679e49d7725e174a1cee4fa0f7821225675548e"
+    },
+    "final_webexploitbench": {
+      "protocol_sha256": "sha256:281f9f5b9a5bc2f0297d38165f9209a63420f856bcac19950341dc4b3106bf4e",
+      "task_set_sha256": "sha256:baf31b218ad4e512e9d65c742e44cee16aa3cd6f869f549491c009171d20f74f"
+    }
+  },
+  "execution": {
+    "dev_cluster_qualification_required": true,
+    "kind": "metadata_only_not_a_job_request",
+    "new_jobs_authorized": false
+  },
+  "input_sha256": "sha256:690ac4de60a0434edf699ec379d7022008cae5606c9968282b043f5b8620d18c",
+  "model": {
+    "initialization": "fresh_base",
+    "lock_sha256": "sha256:f3926fe675263b25dc79c2b3881a9c463d6b7931e9d61aeb777d15efc61e35ac",
+    "repo": "Qwen/Qwen3.8-27B",
+    "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
+  },
+  "name": "q38-teacher-a1",
+  "schema": "cyber_qwen_sft_study_v2",
+  "selection": {
+    "final_fleet_and_webexploitbench": "sealed_until_selection_decision_is_frozen",
+    "primary_metric": "fleet_dev_pass_at_1",
+    "source": "fresh_fleet_dev_task_outcomes_only",
+    "teacher_reference_ce": "not_computed_or_used_for_selection",
+    "tie_rule": "retain_all_ties_for_fresh_dev_confirmation",
+    "training_loss": "diagnostic_only"
+  },
+  "sha256": "sha256:97ee6d6ecc07db6e13235bc1a964cf74e780e884d5737450d574295c7636551f",
+  "sources": {
+    "a": {
+      "teacher": {
+        "corpus_sha256": "sha256:019d795f4b59b9faee799feac613c8fd3fd3e69774ccc419a0ffcf7960e7df62",
+        "fleet_dev_protocol_sha256": "sha256:d9423651420dcf1c39f7b870daafe8a74dec18db6eac8684b3845d881dc61019",
+        "qualification_sha256": "sha256:12e22e910788406521fb59723130429c81ee5fc9c31cd5c72bcc540e6559fd9b",
+        "source_selection_sha256": "sha256:12e22e910788406521fb59723130429c81ee5fc9c31cd5c72bcc540e6559fd9b",
+        "source_sessions": 71,
+        "status": "qualified",
+        "study_split_sha256": "sha256:9ce5ba7f4cb9c52f6adfdbe615ca2258358dc602d6a9bb665c2ccc29dc04f4b8",
+        "training_split_sha256": "sha256:2d20dac7d5b9bb29f6aa44369c5dd2efed9c78bd3ca4d32ed021f04843ae6863"
+      }
+    }
+  },
+  "splits": {
+    "a": {
+      "dev_task_set_sha256": "sha256:914a67b587a8d2f5a523ab652eeaec15f8f9d5dbec559c25ff176b01777a6c96",
+      "final_test_lock_sha256": "sha256:dc625115be8c775de8ecf476bc0d8e06e71b6c7f4160ed50b25eb0308b30d8d7",
+      "fleet_dev_protocol_sha256": "sha256:d9423651420dcf1c39f7b870daafe8a74dec18db6eac8684b3845d881dc61019",
+      "study_split_sha256": "sha256:9ce5ba7f4cb9c52f6adfdbe615ca2258358dc602d6a9bb665c2ccc29dc04f4b8",
+      "training_split_sha256": "sha256:2d20dac7d5b9bb29f6aa44369c5dd2efed9c78bd3ca4d32ed021f04843ae6863",
+      "variant_seed": "qwen38-study-dev-search-002"
+    }
+  },
+  "stages": [
+    {
+      "arms": [
+        {
+          "batch_size": 8,
+          "data": {
+            "corpus_sha256": "sha256:019d795f4b59b9faee799feac613c8fd3fd3e69774ccc419a0ffcf7960e7df62",
+            "fleet_dev_protocol_sha256": "sha256:d9423651420dcf1c39f7b870daafe8a74dec18db6eac8684b3845d881dc61019",
+            "qualification_sha256": "sha256:12e22e910788406521fb59723130429c81ee5fc9c31cd5c72bcc540e6559fd9b",
+            "source_selection_sha256": "sha256:12e22e910788406521fb59723130429c81ee5fc9c31cd5c72bcc540e6559fd9b",
+            "source_sessions": 71,
+            "status": "qualified",
+            "study_split_sha256": "sha256:9ce5ba7f4cb9c52f6adfdbe615ca2258358dc602d6a9bb665c2ccc29dc04f4b8",
+            "training_split_sha256": "sha256:2d20dac7d5b9bb29f6aa44369c5dd2efed9c78bd3ca4d32ed021f04843ae6863"
+          },
+          "epochs": 1,
+          "eval_interval": 0,
+          "fleet_dev_protocol_sha256": "sha256:d9423651420dcf1c39f7b870daafe8a74dec18db6eac8684b3845d881dc61019",
+          "gpus_per_node": 8,
+          "id": "lr1",
+          "lr": 1e-06,
+          "microbatch_per_gpu": 1,
+          "nodes": 1,
+          "output_root": "/mnt/sfs/jobs/q38-teacher-a1-lr1",
+          "run_name": "q38-teacher-a1-lr1",
+          "seed": 42,
+          "source": "teacher",
+          "split": "a",
+          "validation_mode": "task_outcomes_only",
+          "wandb": {
+            "entity": "thefleet",
+            "group": "q38-teacher-a1",
+            "name": "q38-teacher-a1-lr1",
+            "project": "cyber-post-train",
+            "run_id": "q38-teacher-a1-lr1"
+          }
+        },
+        {
+          "batch_size": 8,
+          "data": {
+            "corpus_sha256": "sha256:019d795f4b59b9faee799feac613c8fd3fd3e69774ccc419a0ffcf7960e7df62",
+            "fleet_dev_protocol_sha256": "sha256:d9423651420dcf1c39f7b870daafe8a74dec18db6eac8684b3845d881dc61019",
+            "qualification_sha256": "sha256:12e22e910788406521fb59723130429c81ee5fc9c31cd5c72bcc540e6559fd9b",
+            "source_selection_sha256": "sha256:12e22e910788406521fb59723130429c81ee5fc9c31cd5c72bcc540e6559fd9b",
+            "source_sessions": 71,
+            "status": "qualified",
+            "study_split_sha256": "sha256:9ce5ba7f4cb9c52f6adfdbe615ca2258358dc602d6a9bb665c2ccc29dc04f4b8",
+            "training_split_sha256": "sha256:2d20dac7d5b9bb29f6aa44369c5dd2efed9c78bd3ca4d32ed021f04843ae6863"
+          },
+          "epochs": 1,
+          "eval_interval": 0,
+          "fleet_dev_protocol_sha256": "sha256:d9423651420dcf1c39f7b870daafe8a74dec18db6eac8684b3845d881dc61019",
+          "gpus_per_node": 8,
+          "id": "lr3",
+          "lr": 3e-06,
+          "microbatch_per_gpu": 1,
+          "nodes": 1,
+          "output_root": "/mnt/sfs/jobs/q38-teacher-a1-lr3",
+          "run_name": "q38-teacher-a1-lr3",
+          "seed": 42,
+          "source": "teacher",
+          "split": "a",
+          "validation_mode": "task_outcomes_only",
+          "wandb": {
+            "entity": "thefleet",
+            "group": "q38-teacher-a1",
+            "name": "q38-teacher-a1-lr3",
+            "project": "cyber-post-train",
+            "run_id": "q38-teacher-a1-lr3"
+          }
+        },
+        {
+          "batch_size": 8,
+          "data": {
+            "corpus_sha256": "sha256:019d795f4b59b9faee799feac613c8fd3fd3e69774ccc419a0ffcf7960e7df62",
+            "fleet_dev_protocol_sha256": "sha256:d9423651420dcf1c39f7b870daafe8a74dec18db6eac8684b3845d881dc61019",
+            "qualification_sha256": "sha256:12e22e910788406521fb59723130429c81ee5fc9c31cd5c72bcc540e6559fd9b",
+            "source_selection_sha256": "sha256:12e22e910788406521fb59723130429c81ee5fc9c31cd5c72bcc540e6559fd9b",
+            "source_sessions": 71,
+            "status": "qualified",
+            "study_split_sha256": "sha256:9ce5ba7f4cb9c52f6adfdbe615ca2258358dc602d6a9bb665c2ccc29dc04f4b8",
+            "training_split_sha256": "sha256:2d20dac7d5b9bb29f6aa44369c5dd2efed9c78bd3ca4d32ed021f04843ae6863"
+          },
+          "epochs": 1,
+          "eval_interval": 0,
+          "fleet_dev_protocol_sha256": "sha256:d9423651420dcf1c39f7b870daafe8a74dec18db6eac8684b3845d881dc61019",
+          "gpus_per_node": 8,
+          "id": "lr10",
+          "lr": 1e-05,
+          "microbatch_per_gpu": 1,
+          "nodes": 1,
+          "output_root": "/mnt/sfs/jobs/q38-teacher-a1-lr10",
+          "run_name": "q38-teacher-a1-lr10",
+          "seed": 42,
+          "source": "teacher",
+          "split": "a",
+          "validation_mode": "task_outcomes_only",
+          "wandb": {
+            "entity": "thefleet",
+            "group": "q38-teacher-a1",
+            "name": "q38-teacher-a1-lr10",
+            "project": "cyber-post-train",
+            "run_id": "q38-teacher-a1-lr10"
+          }
+        },
+        {
+          "batch_size": 8,
+          "data": {
+            "corpus_sha256": "sha256:019d795f4b59b9faee799feac613c8fd3fd3e69774ccc419a0ffcf7960e7df62",
+            "fleet_dev_protocol_sha256": "sha256:d9423651420dcf1c39f7b870daafe8a74dec18db6eac8684b3845d881dc61019",
+            "qualification_sha256": "sha256:12e22e910788406521fb59723130429c81ee5fc9c31cd5c72bcc540e6559fd9b",
+            "source_selection_sha256": "sha256:12e22e910788406521fb59723130429c81ee5fc9c31cd5c72bcc540e6559fd9b",
+            "source_sessions": 71,
+            "status": "qualified",
+            "study_split_sha256": "sha256:9ce5ba7f4cb9c52f6adfdbe615ca2258358dc602d6a9bb665c2ccc29dc04f4b8",
+            "training_split_sha256": "sha256:2d20dac7d5b9bb29f6aa44369c5dd2efed9c78bd3ca4d32ed021f04843ae6863"
+          },
+          "epochs": 1,
+          "eval_interval": 0,
+          "fleet_dev_protocol_sha256": "sha256:d9423651420dcf1c39f7b870daafe8a74dec18db6eac8684b3845d881dc61019",
+          "gpus_per_node": 8,
+          "id": "lr30",
+          "lr": 3e-05,
+          "microbatch_per_gpu": 1,
+          "nodes": 1,
+          "output_root": "/mnt/sfs/jobs/q38-teacher-a1-lr30",
+          "run_name": "q38-teacher-a1-lr30",
+          "seed": 42,
+          "source": "teacher",
+          "split": "a",
+          "validation_mode": "task_outcomes_only",
+          "wandb": {
+            "entity": "thefleet",
+            "group": "q38-teacher-a1",
+            "name": "q38-teacher-a1-lr30",
+            "project": "cyber-post-train",
+            "run_id": "q38-teacher-a1-lr30"
+          }
+        }
+      ],
+      "decision_sha256": null,
+      "id": "a-lr-screen",
+      "requires_completed_stages": []
+    }
+  ]
+}
