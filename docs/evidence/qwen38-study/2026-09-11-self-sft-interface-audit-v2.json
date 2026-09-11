@@ -1,0 +1,98 @@
+{
+  "catalog_corroboration": {
+    "completed_verifier_healthy_qwen38_sessions": 302,
+    "distinct_sessions_on_eligible_task_keys": 2672,
+    "exact_ledger_successes_found": 87,
+    "exact_ledger_successes_missing": 0,
+    "limitations": [
+      "The task-key session listing does not expose the exact task version, model revision, complete model-request prefix, ordered tool schemas, or harness image.",
+      "Twenty-two additional positive Qwen3.8 summaries therefore remain candidates only and are not SFT sources."
+    ],
+    "positive_qwen38_candidates": 109,
+    "positive_qwen38_candidates_after_prior_audit": 0,
+    "positive_qwen38_candidates_without_exact_ledger_binding": 22,
+    "queried_task_keys": 89,
+    "query_errors": 0,
+    "safe_projection_sha256": "sha256:0c10f6e98fde832abd1478783c4441801f7628beafe9bf3822c878c158e1fe55",
+    "team": "fleet"
+  },
+  "eligible_universe": {
+    "path": "configs/data/qwen-blackbox-eligible-v1.json",
+    "sha256": "c45c9cc420a3dbf1aa6b635b84ed1ca3c404254f046ffdac234e053929a1bf12",
+    "task_versions": 89
+  },
+  "execution": {
+    "cluster_or_api_mutations_performed": false,
+    "model_requests_performed": 0,
+    "prompts_or_transcripts_read": 0,
+    "scores_persisted_or_reported": 0,
+    "training_or_scored_evaluation_submitted": false
+  },
+  "exact_ledger_audit": {
+    "authority": {
+      "experiment_id": "chris-cyber-q38-glm53-exact-easiest100-pass4-v1",
+      "ledger_schema": "fleet_cyber_rollout_ledger_v2",
+      "postgres_pod_uid": "dff2a054-eca2-441d-bd19-028dc9e7c446"
+    },
+    "definition": "Accepted direct ledger cell with the exact Qwen revision, valid result class, positive authoritative outcome, successful completed agent process and ingest, and nonempty trace/result/cleanup/record digests.",
+    "harness_ids": [
+      "opencode-1.18.27-autocontinue-v1"
+    ],
+    "model": {
+      "id": "qwen3.8-27b",
+      "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
+    },
+    "observed": {
+      "eligible_89": {
+        "sessions": 87,
+        "task_versions": 43
+      },
+      "split_a_train_59": {
+        "sessions": 63,
+        "task_versions": 29
+      },
+      "split_b_train_59": {
+        "sessions": 58,
+        "task_versions": 28
+      },
+      "split_train_union_74": {
+        "sessions": 76,
+        "task_versions": 37
+      },
+      "successes_completed_after_prior_audit": 0
+    },
+    "query_mode": "repeatable_read_read_only",
+    "serving_blocks": [
+      "qwen-dedicated",
+      "qwen-shared"
+    ]
+  },
+  "interface_gate": {
+    "admitted_native_compatible_sessions": 0,
+    "historical_open_code_sources_admitted": false,
+    "reason": "Neither the ledger nor the session summary catalog binds the complete original model-request system prefix or complete model-visible tool schemas. The 35-record private historical audit proves the older OpenCode surface used namespaced tools and omitted its original system prompt. The other records bind the same OpenCode harness but were not opened to invent missing parity evidence.",
+    "required_for_admission": [
+      "exact original system and user prefix digest for every assistant target",
+      "complete ordered model-visible bash and submit_report schemas and their digest",
+      "exact direct tool-call names and argument shapes without post-hoc rewriting",
+      "exact tokenizer and chat-template identity",
+      "exact task, environment, verifier, model, route, harness-image and trace bindings",
+      "exact post-compaction model request for every target, or no compaction"
+    ]
+  },
+  "observed_at": "2026-09-11T23:30:44Z",
+  "prepared_historical_sources": {
+    "prepared_records_total": 35,
+    "strict_current_split_union_records": 28,
+    "usable_direct_interface_records": 0,
+    "warning": "The historical 175-window Parquet remains excluded and must not be rewritten or reused."
+  },
+  "prior_audit": {
+    "commit": "e77a44454020073ed3c10f61d62e5842966af461",
+    "observed_cutoff": "2026-09-11T21:35:51Z",
+    "path": "docs/evidence/qwen38-study/2026-09-11-self-sft-interface-audit.md"
+  },
+  "schema": "cyber_qwen_self_sft_interface_audit_v2",
+  "sha256": "sha256:b478d515e08ce371101d27208e49ac212f03388135e2c131eabbbc8c5b75fa2f",
+  "status": "blocked_no_native_compatible_source"
+}

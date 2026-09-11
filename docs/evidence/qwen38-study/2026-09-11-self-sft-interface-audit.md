@@ -3,6 +3,33 @@
 Status: **blocked before corpus compilation**. No training, evaluation, serving,
 or cluster job was submitted by this audit.
 
+## Metadata-only re-audit at 23:30 UTC
+
+The additive, self-digesting
+[`v2 receipt`](2026-09-11-self-sft-interface-audit-v2.json) rechecked every
+currently eligible exact task version after this audit. The exact ledger has
+87 clean Qwen3.8 successes on 43/89 task versions. Split A can use 63 successes
+on 29/59 training versions, split B can use 58 on 28/59, and their 74-version
+training union has 76 successes on 37 versions. All 87 are corroborated by the
+session catalog. The catalog has 22 additional positive Qwen3.8 summaries, but
+its summary route cannot bind their exact task version, model revision or
+request interface, so they remain candidates only.
+
+No exact ledger or catalog success was created after commit `e77a4445`. All 87
+exact sources bind the same OpenCode 1.18.27 harness. The original 35-record
+private audit proves that surface was namespaced and omitted the original
+system prompt; the remaining records were deliberately not opened to invent
+missing evidence. Therefore the native-compatible source count remains zero.
+
+The nonlaunchable
+[`direct recollection plan`](../../../configs/studies/qwen-blackbox-self-recollection-v1.json)
+uses only the 74-version union of the representative A/B training splits and
+keeps every held-out version excluded. It remains blocked on an immutable
+direct-collector image, one exact base-route certificate, a frozen direct
+system-prompt digest and synthetic recorder/compiler token parity. Shared and
+dedicated endpoint sources are explicit separate treatments and may not be
+silently pooled.
+
 ## Conclusion
 
 The 35 previously prepared, verified-success Qwen3.8 records cannot be

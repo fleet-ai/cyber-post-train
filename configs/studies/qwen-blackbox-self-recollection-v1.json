@@ -1,0 +1,118 @@
+{
+  "acceptance": {
+    "episode": [
+      "exact eligible task version and current environment/verifier binding",
+      "exact Qwen3.8-27B base revision and tokenizer/chat template",
+      "authoritative valid positive outcome and verifier execution identity",
+      "completed ingest and cleanup with no possible environment leak",
+      "complete private request-prefix, ordered-tool-schema, trace and normalization digests",
+      "unchanged direct-interface dense compiler admission"
+    ],
+    "pre_collection": [
+      "immutable pullable direct collector image passes local and zero-GPU dev checks",
+      "one exact base route is certified for model, tokenizer, chat template and direct structured tools",
+      "synthetic recorder-versus-dense token and loss-mask parity passes through the first tool observation",
+      "exact request, output roots and duplicate/capacity checks are frozen"
+    ]
+  },
+  "collection": {
+    "attempts_per_task_version": 4,
+    "maximum_sessions": 296,
+    "primary_unit": "one exact native direct-interface episode",
+    "task_selection": "union of representative split A and split B training task versions only",
+    "task_versions": 74,
+    "tool_order": [
+      "bash",
+      "submit_report"
+    ],
+    "transcript_policy": {
+      "compaction": "disabled unless every exact post-compaction request prefix is retained as a separate target segment",
+      "private_capture": [
+        "complete system and user request prefix",
+        "complete ordered OpenAI tool schemas",
+        "assistant sampled token ids and direct tool calls",
+        "tool observations and per-target context transition"
+      ],
+      "public_receipts": "digests and structural counts only",
+      "tool_rewriting": "prohibited"
+    }
+  },
+  "execution": {
+    "active_study_node_ceiling": 8,
+    "cluster_or_api_mutations_performed": false,
+    "existing_four_inference_endpoints_counted": false,
+    "kind": "metadata_only_not_a_job_request",
+    "launchable": false,
+    "new_jobs_authorized": false,
+    "promotion": "local_then_zero_gpu_dev_synthetic_qualification_then_bounded_reviewed_collection"
+  },
+  "historical_source_gate": {
+    "audit_path": "docs/evidence/qwen38-study/2026-09-11-self-sft-interface-audit-v2.json",
+    "audit_sha256": "sha256:b478d515e08ce371101d27208e49ac212f03388135e2c131eabbbc8c5b75fa2f",
+    "exact_success_sessions": 87,
+    "native_compatible_sessions": 0,
+    "old_175_window_parquet_admitted": false
+  },
+  "model": {
+    "lock_file_sha256": "sha256:f3926fe675263b25dc79c2b3881a9c463d6b7931e9d61aeb777d15efc61e35ac",
+    "lock_path": "configs/models/qwen38-27b-1d4bf0f2.lock.json",
+    "repo": "Qwen/Qwen3.8-27B",
+    "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
+  },
+  "post_collection": {
+    "corpus_policy": "compile every compatible assistant target once; mask copied context and tool observations; keep only verified successes",
+    "heldout_teacher_cross_entropy": "not_computed",
+    "split_outputs": {
+      "a": "only sources whose exact task version is in split A train",
+      "b": "only sources whose exact task version is in split B train"
+    },
+    "training_gate": "normal source-coverage, dev optimizer, checkpoint and zero-update reload gates",
+    "warning": "Teacher and self treatments remain unmatched unless task and supervised-token exposure are explicitly matched."
+  },
+  "route_treatments": {
+    "policy": "Select one exact route for the primary recollection treatment. Shared and dedicated sources must remain separate explicit treatments and must never be silently pooled.",
+    "selected": null,
+    "shared": {
+      "existing_component_receipt": "docs/evidence/inference/2026-09-11-qwen38-shared-base-route-component-v2.json",
+      "existing_component_sha256": "sha256:6b636b1c05e735bbf1678d98865ddfdd82954e53bdb3cc386c41184948c450aa",
+      "ready_for_direct_recollection": false
+    },
+    "dedicated": {
+      "exact_direct_route_certificate_sha256": null,
+      "ready_for_direct_recollection": false
+    }
+  },
+  "schema": "cyber_qwen_self_sft_recollection_plan_v1",
+  "sha256": "sha256:b65d055bc0f2a00f327f2c36935428ddee6ab11742f44a13b85580afcb0dd28c",
+  "splits": {
+    "a": {
+      "path": "configs/data/qwen-blackbox-study-split-a-v1.json",
+      "sha256": "sha256:9ce5ba7f4cb9c52f6adfdbe615ca2258358dc602d6a9bb665c2ccc29dc04f4b8",
+      "train_task_versions": 59,
+      "training_split_sha256": "sha256:2d20dac7d5b9bb29f6aa44369c5dd2efed9c78bd3ca4d32ed021f04843ae6863"
+    },
+    "b": {
+      "path": "configs/data/qwen-blackbox-study-split-b-v1.json",
+      "sha256": "sha256:282f2dec7912364c0f7c1db7ceaac39eb66d552ab226d7617a412fa8e881a50f",
+      "train_task_versions": 59,
+      "training_split_sha256": "sha256:66f98eac3d1533d2c0e3dda99704020e5177ed56c25196f7fa1175307732ab06"
+    },
+    "overlap": {
+      "train_intersection_task_versions": 44,
+      "train_union_task_versions": 74
+    }
+  },
+  "status": "blocked_missing_exact_direct_collector_image_and_route",
+  "task_universe": {
+    "path": "configs/data/qwen-blackbox-eligible-v1.json",
+    "sha256": "c45c9cc420a3dbf1aa6b635b84ed1ca3c404254f046ffdac234e053929a1bf12",
+    "task_versions": 89
+  },
+  "unresolved": {
+    "collection_request_sha256": null,
+    "direct_base_route_certificate_sha256": null,
+    "direct_collector_image_digest": null,
+    "direct_system_prompt_sha256": null,
+    "synthetic_token_parity_receipt_sha256": null
+  }
+}
