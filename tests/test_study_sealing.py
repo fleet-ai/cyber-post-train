@@ -172,6 +172,10 @@ def test_launchable_child_requires_an_existing_private_result_root(tmp_path):
         sealing.validate_child(value, root=ROOT)
 
     private_root.mkdir(mode=0o755)
+    # The operator environment intentionally uses a restrictive umask. Force
+    # the unsafe mode so this test checks the validator rather than the caller's
+    # ambient process policy.
+    private_root.chmod(0o755)
     with pytest.raises(ValueError, match="private directory"):
         sealing.validate_child(value, root=ROOT)
 
