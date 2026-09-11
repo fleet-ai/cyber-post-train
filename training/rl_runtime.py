@@ -28,14 +28,20 @@ def native_failure(plan, error):
     causes, seen = [], set()
     while isinstance(error, BaseException) and id(error) not in seen and len(causes) < 8:
         seen.add(id(error))
+        # ActorDiedError flattens RayTaskError into its message, not .cause.
+        # Parse only code locations/types; never persist that private message.
+        detail = getattr(error, "traceback_str", "") or str(error)
         frames = re.findall(
             r'File "[^"\n]*/([\w.-]+\.py)", line (\d+), in ([\w<>]+)',
-            getattr(error, "traceback_str", ""),
+            detail,
         )
         causes.append(
             {
                 "error_class": type(error).__name__,
                 "actor_init_failed": getattr(error, "actor_init_failed", False) is True,
+                "remote_error_classes": sorted(
+                    set(re.findall(r"(?m)^\s*(\w+(?:Error|Exception)):", detail))
+                ),
                 "remote_frames": [
                     {"file": f, "line": int(n), "function": name} for f, n, name in frames
                 ],

@@ -64,9 +64,11 @@ def loader(monkeypatch):
 
 
 @pytest.mark.parametrize("shuffle", [False, True])
-def test_only_loading_changes_native_save_and_load_are_inherited(loader, shuffle):
+@pytest.mark.parametrize("tool_key", [None, "tools"])
+def test_only_loading_changes_native_save_and_load_are_inherited(loader, shuffle, tool_key):
     source, base, args, calls, tokenizer = loader
     args.rollout_shuffle = shuffle
+    args.tool_key = tool_key
     instance = source(args)
     assert args.rollout_global_dataset and instance.args is args
     assert instance.sample_index == instance.sample_offset == 0
@@ -94,7 +96,7 @@ def test_only_loading_changes_native_save_and_load_are_inherited(loader, shuffle
         ("rollout_global_dataset", False),
         ("apply_chat_template", True),
         ("multimodal_keys", {}),
-        ("tool_key", "tools"),
+        ("tool_key", "other"),
         ("label_key", "label"),
         ("input_key", "prompt"),
         ("metadata_key", "other"),

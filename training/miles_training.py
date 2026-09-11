@@ -276,6 +276,7 @@ def native_args(plan):
         args = parse_args()
         expected = {
             "data_source_path": "training.miles_text.TextDataSource",
+            "tool_key": "tools",
             "start_rollout_id": 0,
             "load": plan["checkpoint"]["root"],
             "ref_load": plan["checkpoint"]["root"],
@@ -338,7 +339,7 @@ def preflight(plan):
             rollout_global_dataset=True,
             apply_chat_template=False,
             multimodal_keys=None,
-            tool_key=None,
+            tool_key="tools",
             label_key=None,
             input_key="input",
             metadata_key="metadata",

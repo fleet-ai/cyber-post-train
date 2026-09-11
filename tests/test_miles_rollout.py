@@ -190,7 +190,7 @@ def fixture(tmp_path, runtime):
         rollout_seed=42,
         rollout_max_prompt_len=1000,
         label_key=None,
-        tool_key=None,
+        tool_key="tools",
         multimodal_keys=None,
         dump_details=None,
         apply_chat_template=False,

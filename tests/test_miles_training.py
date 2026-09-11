@@ -387,6 +387,7 @@ def test_parsed_native_semantics_and_argv_restoration(plan, monkeypatch):
     monkeypatch.setattr(miles, "arguments", lambda cfg: ["--chat-template-path", "synthetic"])
     args = NS(
         data_source_path="training.miles_text.TextDataSource",
+        tool_key="tools",
         start_rollout_id=0,
         load=plan["checkpoint"]["root"],
         ref_load=plan["checkpoint"]["root"],
@@ -453,6 +454,7 @@ def preflight_inputs(artifacts, tmp_path, monkeypatch):
 
             assert args.rollout_global_dataset and not args.apply_chat_template
             assert args.multimodal_keys is None and args.chat_template_path == "synthetic"
+            assert args.tool_key == "tools"
             self.tokenizer = NS(chat_template="synthetic")
             self.dataset = Dataset(args.prompt_data, apply_chat_template=False)
 

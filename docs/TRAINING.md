@@ -394,12 +394,15 @@ cluster:
 roots must be staged and disjoint from the new output; the preparation manifest's
 paths and target hashes are rechecked before native training sees any data.
 
-CPU preflight checks the native FTI argument builder and Dataset, not CUDA.
+CPU preflight checks the native FTI argument builder and actual text-only data
+source, including template identity and train/dev row retention. Qwen's automatic
+vision processor must not reinterpret Miles' already-rendered text prompts;
+the adapter preserves native cursor/checkpoint behavior and passes no processor.
 Megatron's actual parser imports Transformer Engine and `libcuda.so.1`; it is
 not usable on a driver-less CPU node. The receipt explicitly records
 `native_parser_checked: false`. The bounded GPU child then runs the unchanged
 native parser and driver; no stub driver or fake GPU is used to claim readiness.
-This distinction was found by a real pinned-image CPU test, not a training failure.
+CPU constructor checks and GPU startup are separate qualification gates.
 
 The wrapper attaches to Jobs API's Ray allocation and never calls native FTI's
 process-killing launcher. Its watchdog covers input I/O as well as training and
