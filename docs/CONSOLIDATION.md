@@ -3,13 +3,16 @@
 Status: 2026-09-11. This is a qualification index, not live state or launch
 authority. Qwen is first; **full GLM5.3 and both RL backends remain required**.
 
-**Submission pause — 2026-09-11 user alert review:** do not create new cluster
-runs or successors until Chris reviews the incident and explicitly resumes
-submissions. The seven failed RL runs and monitoring evidence are recorded in
-[the incident review](incidents/2026-09-11-cleanup-rl-alerts.md). Existing useful
-work remains untouched; this pause does not authorize cancellation, alert
-suppression, or replay. Read-only diagnosis and local fixes may continue within
-the user's scope. A long-running goal is not permission to bypass this boundary.
+**Submission gate — 2026-09-11 user alert review:** Chris explicitly reauthorized
+submissions, conditional on checking that the intended path works first, then
+reported another alert. Miles V7 was already running and failed at 15:46:54Z;
+no new run was submitted during this investigation. The
+[incident review](incidents/2026-09-11-cleanup-rl-alerts.md) now records eight
+failed RL runs. Hold the next RL GPU submission until the generation-stop
+handling is resolved and tested through the real recorder/batch boundary.
+Do not simply submit another run to obtain the missing diagnostic. Existing
+useful work remains untouched. This gate does not authorize alert suppression,
+false success, cancellation of healthy work, or replay of preserved outcomes.
 
 ## Supported interface
 
@@ -39,12 +42,14 @@ readiness. All detailed IDs, digests, test counts and earlier failures remain in
 
 ### Current execution boundary
 
-- **Miles V7:** admitted at 15:09:46Z, effective priority 10,000, one eight-GPU
-  node. Exact image and zero restarts verified; model memory and GPU/CPU activity
-  are present. No reward/update/checkpoint qualification yet. Preserve the
-  [submission](evidence/cleanup-miles-rl-v7-20260911.json) and
-  [startup identity](evidence/cleanup-miles-rl-v7-startup-20260911.json); never
-  repeat its POST. The fixed startup allowance ends at 15:39:46Z.
+- **Miles V7:** failed at 15:46:54Z during the initial dev-baseline episode with
+  `generation_incomplete`, before grading or optimization. The old diagnostic
+  does not distinguish length, context exhaustion or abort. No accepted reward,
+  optimizer update or checkpoint. Its Pod/RayCluster and all eight GPUs are
+  released; Workload admission/quota are cleared. The exact Fleet environment
+  is independently confirmed stopped. Preserve the
+  [terminal evidence](evidence/cleanup-miles-rl-v7-terminal-20260911.json); never
+  repeat its POST or infer a specific generation-stop cause from the generic code.
 - **SkyRL V5:** CPU-prepared only; no GPU submission. It shares the episode
   lifecycle still being qualified with Miles.
 - **Evaluation V7:** terminal context-overflow error after 209 completed model
@@ -101,7 +106,7 @@ Never fake success or suppress real alerts. Full controls:
   classes, awaits sibling/environment cleanup and uses bounded checkpoint drain.
   Grouped errors are retained at both the episode and native trainer boundaries;
   the [alert incident](incidents/2026-09-11-cleanup-rl-alerts.md) records the local
-  regression evidence and the continuing submission pause.
+  regression evidence and the current conditional submission gate.
 - Miles cursor saves/reloads reject silent resets and counter drift. All 82
   cursor tests, including 41 using native Miles, pass in the exact image;
   [evidence](evidence/cleanup-miles-cursor-20260911.json). This is not yet complete RL recovery.

@@ -1,8 +1,9 @@
 # Cleanup RL failures and alerts — 2026-09-11
 
-Observed through 15:40 UTC. New cluster submissions and successors are paused
-following Chris's complaint, pending his explicit resumption. No monitor,
-failure record, peer workload, or healthy active workload was changed.
+Initial audit through 15:40 UTC; follow-up through 15:57 UTC. Chris subsequently
+reauthorized submissions only after checking the intended path, then reported
+another alert. No new cluster job was created during this investigation.
+No monitor, failure record, peer workload, or healthy active workload was changed.
 
 ## What is established
 
@@ -84,3 +85,37 @@ not complete repository coverage or GPU qualification. Ruff and formatting pass.
 A prior test invocation exposed a pinned-image GLM test placed outside the
 native test group; it is now collected under the existing pinned-runtime gate.
 No production GLM source guard was weakened, and no new native-image job was run.
+
+## Eighth failure: the already-running Miles V7
+
+The exact V7 RayJob failed at 15:46:54 UTC (08:46:54 PDT). Its UID is also in
+the status monitor's processed-failure list. This was another real failure, not
+a duplicate of an earlier alert or a new submission after the complaint.
+
+The digest-checked native receipts and hashed episode records locate the failure
+in the initial `dev-baseline` episode, after 1,377.21 seconds, before grading or
+optimization. The specific recorded reason is `generation_incomplete` from
+`rl_episode._agent`. That branch combines a per-turn length stop, full context,
+aborted generation and missing text; the frozen bundle did not retain which one.
+Do not claim it was definitely a token limit, tool timeout or cluster fault.
+There is no accepted reward, optimizer update or checkpoint from V7.
+
+The Pod and RayCluster are gone; the exact Workload has `admission: null`,
+`QuotaReserved=False` and `Admitted=False`, with reason `Finished`. Its eight
+GPUs are released. The cleanup receipt records the owned Fleet instance closed,
+and a separate authenticated GET confirms that same instance is `stopped`.
+[Terminal evidence](../evidence/cleanup-miles-rl-v7-terminal-20260911.json)
+
+The next RL GPU submission remains held on an unresolved generation-stop
+contract, not on missing user authorization. Test that boundary before another
+run; do not submit a replacement just to learn which stop occurred. Distinguish
+an expected bounded/incomplete canary from a real runtime defect without
+pretending either produced a valid reward or update. Any clean-rejection design
+must remain explicit in receipts and must not swallow unexpected errors.
+
+A local regression reproduced the diagnostic ambiguity before the correction.
+The runner now preserves separate allowlisted reasons for length, context,
+abort and non-text stops, without exposing output text or arbitrary finish values.
+All retain the same no-scoring/no-optimization rejection; no error exit was
+silenced, budget changed or live bundle patched. This is a diagnostic repair,
+not proof that the incomplete-generation path is resolved.

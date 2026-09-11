@@ -53,6 +53,10 @@ def _failure(error, *, run_id, elapsed_seconds, phase):
             and item.args[0]
             in {
                 "generation_incomplete",
+                "generation_incomplete_length",
+                "generation_incomplete_context_full",
+                "generation_incomplete_aborted",
+                "generation_incomplete_nontext",
                 "generation_transport_failure",
                 "generation_invalid_json",
                 "generation_finish_invalid",
@@ -263,7 +267,13 @@ async def _agent(recorder, session, messages, tools, limits, parse):
     for index in range(limits["max_turns"]):
         turn = await recorder.sample()
         if turn.finish != "ok" or not isinstance(turn.text, str):
-            raise InvalidEpisode("generation_incomplete")
+            reason = {
+                "length": "generation_incomplete_length",
+                "context_full": "generation_incomplete_context_full",
+                "aborted": "generation_incomplete_aborted",
+                "ok": "generation_incomplete_nontext",
+            }.get(turn.finish if isinstance(turn.finish, str) else None, "generation_incomplete")
+            raise InvalidEpisode(reason)
         call = parse(turn.text)
         if call is not None and (
             not isinstance(call, dict)

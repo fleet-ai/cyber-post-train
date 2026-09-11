@@ -290,12 +290,25 @@ async def test_mutations_once_never_become_zero(fixture, tmp_path, phase, error)
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("finish", ["length", "context_full", "aborted", "unexpected"])
-async def test_incomplete_generation_is_not_scored(fixture, tmp_path, finish):
+@pytest.mark.parametrize(
+    "finish,text,reason",
+    [
+        ("length", "submit_report", "generation_incomplete_length"),
+        ("context_full", None, "generation_incomplete_context_full"),
+        ("aborted", None, "generation_incomplete_aborted"),
+        ("ok", None, "generation_incomplete_nontext"),
+        ("private_unknown_finish", "private output", "generation_incomplete"),
+        ({"private": "unexpected type"}, None, "generation_incomplete"),
+    ],
+)
+async def test_incomplete_generation_is_not_scored(fixture, tmp_path, finish, text, reason):
     with pytest.raises(rl.InvalidEpisode, match="generation_incomplete"):
-        await collect(fixture, tmp_path, Recorder([NS(text="submit_report", finish=finish)]))
+        await collect(fixture, tmp_path, Recorder([NS(text=text, finish=finish)]))
     assert fixture.deleted
     assert not (tmp_path / "episode/score-intent.json").exists()
+    receipt = json.loads((tmp_path / "episode/failure.json").read_text())
+    assert receipt["causes"][0]["reason"] == reason
+    assert "private" not in json.dumps(receipt)
 
 
 @pytest.mark.asyncio
