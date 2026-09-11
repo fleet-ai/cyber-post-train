@@ -126,6 +126,25 @@ recoverable in their original commits/worktrees. No blanket worktree deletion.
   environment or scored session. The two planned operational attempts remain
   separate from the campaign and are ineligible for training.
 
+## Latest qualification
+
+The real Qwen qualification completed one optimizer step at 2026-09-11 01:03:32
+UTC. API, controller and independently verified receipts agree; its RayCluster
+and Pod are gone and all eight GPUs are released. See
+`docs/evidence/cleanup-qwen-sft-20260911.json`. A separate CPU-only audit found
+353 changed tensors among 574 small rank-zero tensors compared with the exact
+base, with no unmatched keys or shape mismatches. Full reload remains pending.
+
+Evaluation qualification exposed a missing claim-directory initialization before
+any instance creation. That defect is fixed and covered through the real worker
+boundary. A fresh separate qualification then stopped at Fleet's instance-create
+API with HTTP 404, despite successful exact task lookup. Neither attempt created
+an instance, generated tokens, scored, or produced a local result. All held rows
+are preserved in their separate qualification databases; the live campaign was
+not changed. HTTP status alone does not establish the server's rejection reason.
+The request boundary now retains a response digest and allowlisted diagnostic
+category without printing server text; it still never retries a POST.
+
 ## Removed surfaces
 
 The unused component-spec/catalog layer, its tests, the future-interface design
@@ -141,3 +160,9 @@ The old `training/NEBIUS_ACCESS.md` prescribed retired GLM-5.2 naming, prioritie
 and direct Kubernetes launch rules. It was removed in favor of the maintained
 cluster guide. `training/README.md` now points at the actual commands and labels
 historical recipes explicitly, instead of presenting Qwen3.6 as the global default.
+
+Removed the old GLM5.2/Nemo compatibility and model-probe generators, their
+dedicated tests, eight generated GLM5.2 cluster manifests and the fixed GLM5.2
+training config (15 files). There were no retained code callers. Dated run
+evidence remains; the removed sources are recoverable from `bac2a4c`. These
+retired model-specific probes do not qualify full GLM5.3.

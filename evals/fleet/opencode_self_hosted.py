@@ -54,11 +54,46 @@ class SessionIngestError(RuntimeError):
 class FleetRequestError(RuntimeError):
     """A Fleet request failed, retaining only non-sensitive routing facts."""
 
-    def __init__(self, method: str, route: str, status_code: int) -> None:
+    def __init__(
+        self, method: str, route: str, status_code: int, *, diagnostic: dict | None = None
+    ) -> None:
         super().__init__(f"Fleet {method} {route} failed with HTTP {status_code}")
         self.method = method
         self.route = route
         self.status_code = status_code
+        self.diagnostic = diagnostic or {}
+
+
+def request_diagnostic(response: httpx.Response) -> dict:
+    """Keep a fingerprint and allowlisted category, never server-supplied text.
+
+    Fleet may embed task text or private logs in an error body. Dropping the body
+    entirely, however, made a real provisioning 404 impossible to distinguish
+    from a missing route. Classification is diagnostic only, never retry authority.
+    """
+    raw = response.content
+    result = {"response_sha256": sha256(raw), "reason": "unclassified"}
+    try:
+        detail = response.json().get("detail")
+    except (ValueError, AttributeError):
+        return result
+    if not isinstance(detail, str):
+        return result
+    if detail == "Not Found":
+        result["reason"] = "route_not_found"
+    elif detail.startswith("Task not found for team_id="):
+        result["reason"] = "task_not_found_for_team"
+    elif detail.startswith("Task version not found for task_key="):
+        result["reason"] = "task_version_not_found"
+    elif detail.startswith("Pinned task-version environment_version_id did not resolve:"):
+        result["reason"] = "environment_version_unresolved"
+    elif re.match(
+        r"^\d+ task version\(s\) declare a verifier but have no verifier_version_id pin:", detail
+    ):
+        result["reason"] = "verifier_version_unpinned"
+    elif detail == "Exact task hydration did not resolve environment and data versions":
+        result["reason"] = "environment_or_data_version_unresolved"
+    return result
 
 
 def canonical_json(value: Any) -> bytes:
@@ -87,6 +122,7 @@ def sanitized_failure_receipt(
             method=error.method,
             route=error.route,
             http_status=error.status_code,
+            **error.diagnostic,
         )
     return receipt
 
@@ -149,7 +185,9 @@ def _request(client: httpx.Client, method: str, path: str, **kwargs: Any) -> Any
             return response.json()
         if response.status_code not in TRANSIENT_READ_STATUS_CODES or attempt + 1 == attempts:
             route = path.split("?")[0]
-            raise FleetRequestError(method, route, response.status_code)
+            raise FleetRequestError(
+                method, route, response.status_code, diagnostic=request_diagnostic(response)
+            )
         time.sleep(2**attempt)
     raise AssertionError("unreachable")
 
