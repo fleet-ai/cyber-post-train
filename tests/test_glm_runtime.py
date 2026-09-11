@@ -336,6 +336,33 @@ class TestGlm53LoraCompatibility(unittest.TestCase):
             raise ValueError("synthetic rejection")
         assert Fp8Dequantize._dequantize_one is original
 
+    def test_partial_fp8_blocks_follow_declared_block_size(self):
+        from transformers.integrations.finegrained_fp8 import Fp8Dequantize
+
+        # 258 is divisible by its three scale rows; deriving an 86-row block
+        # would silently use the wrong scale even though native code accepts it.
+        for rows, cols in ((576, 128), (258, 256), (129, 255), (64, 64)):
+            with self.subTest(shape=(rows, cols)):
+                weight = (
+                    torch.linspace(-4, 4, rows * cols).reshape(rows, cols).to(torch.float8_e4m3fn)
+                )
+                sr, sc = (rows + 127) // 128, (cols + 127) // 128
+                scale = torch.linspace(0.5, 1.5, sr * sc).reshape(sr, sc)
+                expected = torch.empty((rows, cols), dtype=torch.bfloat16)
+                for i in range(sr):
+                    for j in range(sc):
+                        section = (slice(i * 128, (i + 1) * 128), slice(j * 128, (j + 1) * 128))
+                        expected[section] = (weight[section].float() * scale[i, j]).to(
+                            torch.bfloat16
+                        )
+                with bf16_fp8_conversion():
+                    actual = Fp8Dequantize(None)._dequantize_one(weight, scale)
+                assert torch.equal(actual, expected)
+        with self.assertRaisesRegex(ValueError, "scale grid"), bf16_fp8_conversion():
+            Fp8Dequantize(None)._dequantize_one(
+                torch.ones((256, 256), dtype=torch.bfloat16), torch.ones((4, 4))
+            )
+
     def plan(self):
         from test_sft_runtime import plan
 

@@ -117,6 +117,18 @@ def bf16_fp8_conversion():
             # Source E4M3 provenance is checked by the caller's payload audit.
             if weight.dtype not in {torch.float8_e4m3fn, torch.bfloat16, torch.float32}:
                 raise ValueError("only the bound E4M3 FP8 payload is qualified")
+            # The pinned integration infers block size by dividing weight/grid
+            # dimensions. GLM's 576-row KV projection has five 128-row blocks:
+            # its final block has 64 rows, so that inference raises. Apply the
+            # exact base's declared 128x128 scales, cropping only the edge block.
+            if weight.ndim == scale.ndim == 2:
+                rows, cols = weight.shape
+                sr, sc = scale.shape
+                if (sr, sc) != (math.ceil(rows / 128), math.ceil(cols / 128)):
+                    raise ValueError("FP8 scale grid does not match the bound 128x128 blocks")
+                if rows % 128 or cols % 128:
+                    expanded = scale.float().repeat_interleave(128, 0).repeat_interleave(128, 1)
+                    return (weight.float() * expanded[:rows, :cols]).to(torch.bfloat16)
             return original(operation, weight, scale).to(torch.bfloat16)
 
         finegrained_fp8.Fp8Dequantize._dequantize_one = convert

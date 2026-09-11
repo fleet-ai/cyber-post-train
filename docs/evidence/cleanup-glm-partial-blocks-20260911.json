@@ -1,0 +1,55 @@
+{
+  "schema": "cyber_glm_partial_block_diagnosis_v1",
+  "model": "zai-org/GLM-5.3",
+  "revision": "30333038ada1f1dacb294a93270305a890b50c14",
+  "state": "CPU_CORRECTION_VERIFIED_NOT_FULL_MODEL_QUALIFIED",
+  "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+  "native_fp8_source_sha256": "cad925d1ceae22b1bf9ad769971e5d53b7829b73fd00ddf0959a8818763dec4b",
+  "failed_diagnostic": {
+    "pod_name": "chris-cpt-glm-real-shard-cpu-v1",
+    "pod_uid": "db808f7e-9fa0-49cb-8c17-78cdcd96768b",
+    "started_at": "2026-09-11T12:25:21Z",
+    "finished_at": "2026-09-11T12:25:35Z",
+    "exit_code": 1,
+    "error_class": "ValueError",
+    "restarts": 0,
+    "gpus": 0
+  },
+  "diagnosis": {
+    "weight_shape": [576, 6144],
+    "scale_grid": [5, 48],
+    "declared_block_size": [128, 128],
+    "last_row_block_size": 64,
+    "cause": "The pinned native decoder derives block size from weight/grid divisibility. A valid partial final block is rejected.",
+    "reproduced_against_actual_tensors": 2,
+    "note": "This is an additional deterministic loader defect. It does not by itself explain the prior full-model run's slow startup."
+  },
+  "correction": {
+    "module_sha256": "e1d7e72a3d0d716422cad54c0033be1114a504238dc12dadd3ebe98a89f4dd21",
+    "method": "For exact 2-D E4M3 weights, validate the declared 128x128 scale grid; crop expanded scales at partial edges; preserve FP32 multiplication followed by BF16 rounding. Aligned matrices still use the pinned native method.",
+    "source_weights_changed": false,
+    "installed_transformers_changed": false,
+    "process_hook_restored": true,
+    "synthetic_shapes": [[576, 128], [258, 256], [129, 255], [64, 64], [256, 256]],
+    "malformed_grid_rejected": true,
+    "actual_tensors_match_independent_block_reference_bitwise": true,
+    "thread_counts": [1, 4],
+    "proof_sha256": "834d1583df9223e03d4db26be01432b2715e7aecd14c19657be044feab26e157",
+    "inspector_pod_uid": "07d16c28-756c-4b0e-b8f3-6bf12903dd82",
+    "gpus": 0,
+    "optimizer_steps": 0
+  },
+  "full_header_audit": {
+    "shards": 141,
+    "bytes": 755632050320,
+    "tensor_count": 118629,
+    "fp8_tensor_count": 59044,
+    "partial_block_tensors": 79,
+    "native_rejected_grids": 79,
+    "unsupported_grid_count": 0,
+    "header_manifest_sha256": "de8edcc96c769ad967f6b2bafe48459f457071495fc5a126d26a98d8dcf08926",
+    "proof_sha256": "150fd2bbe08ed1119c6e3aff68ef62dbe0326be2cccaca76c6621de79852f6da",
+    "weight_payloads_read": false
+  },
+  "next_gate": "Broader pinned-image model/adapter tests and real-shard throughput measurement, then a fresh exact-model/resource preview. No GLM GPU run was submitted by this diagnosis."
+}
