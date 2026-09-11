@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import importlib.metadata
 import math
 import os
 import re
@@ -39,23 +40,33 @@ async def _request(client: httpx.AsyncClient, method, path, **kwargs):
 
 @asynccontextmanager
 async def _mcp(root, auth, timeout):
-    # MCP 2.x in the pinned Miles image uses httpx2 and a two-stream transport.
-    import httpx2
     from mcp import ClientSession
     from mcp.client.streamable_http import streamable_http_client
 
+    version = importlib.metadata.version("mcp")
+    if version == "2.1.1":
+        import httpx2 as transport
+
+        stream_count, read_timeout = 2, timeout
+    elif version == "1.28.0":
+        transport = httpx
+        stream_count, read_timeout = 3, timedelta(seconds=timeout)
+    else:
+        raise InvalidEpisode("unqualified_mcp_version")
     async with (
-        httpx2.AsyncClient(
+        transport.AsyncClient(
             headers={auth["header"]: auth["token"]},
             timeout=timeout,
             follow_redirects=False,
-            transport=httpx2.AsyncHTTPTransport(retries=0),
+            transport=transport.AsyncHTTPTransport(retries=0),
         ) as client,
-        streamable_http_client(root.rstrip("/") + "/mcp", http_client=client) as (reader, writer),
-        ClientSession(reader, writer, read_timeout_seconds=timeout) as session,
+        streamable_http_client(root.rstrip("/") + "/mcp", http_client=client) as streams,
     ):
-        await session.initialize()
-        yield session
+        if len(streams) != stream_count:
+            raise InvalidEpisode("mcp_transport_contract_drift")
+        async with ClientSession(*streams[:2], read_timeout_seconds=read_timeout) as session:
+            await session.initialize()
+            yield session
 
 
 def _live_instance(config, instance, instance_id):
@@ -192,7 +203,10 @@ async def _agent(recorder, session, messages, tools, limits, parse):
                 result = await session.call_tool(call["name"], arguments=call["arguments"])
             if any(block.type != "text" for block in result.content):
                 raise InvalidEpisode("non_text_tool_result")
-            text, error = "\n".join(block.text for block in result.content), result.is_error
+            text = "\n".join(block.text for block in result.content)
+            error = getattr(result, "is_error", getattr(result, "isError", None))
+            if type(error) is not bool:
+                raise InvalidEpisode("tool_error_status_missing")
         env_time += time.monotonic() - start
         if len(text) > limits["tool_result_chars"]:
             raise InvalidEpisode("tool_result_exceeds_budget")

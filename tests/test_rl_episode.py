@@ -487,8 +487,10 @@ def test_empty_recording():
 
 
 @pytest.mark.asyncio
-async def test_native_mcp_connection_contract(monkeypatch):
+@pytest.mark.parametrize("version", ["1.28.0", "2.1.1"])
+async def test_native_mcp_connection_contract(monkeypatch, version):
     events = []
+    monkeypatch.setattr(rl.importlib.metadata, "version", lambda name: version)
 
     @asynccontextmanager
     async def client(**kwargs):
@@ -505,13 +507,13 @@ async def test_native_mcp_connection_contract(monkeypatch):
     async def stream(url, **kwargs):
         assert url == "https://fixture.invalid/mcp"
         assert kwargs == {"http_client": "client"}
-        yield "reader", "writer"
+        yield ("reader", "writer", "session_id") if version == "1.28.0" else ("reader", "writer")
         events.append("stream_closed")
 
     class Session:
         def __init__(self, reader, writer, *, read_timeout_seconds):
             assert (reader, writer) == ("reader", "writer")
-            assert read_timeout_seconds == 5
+            assert read_timeout_seconds == (timedelta(seconds=5) if version == "1.28.0" else 5)
 
         async def __aenter__(self):
             return self
@@ -526,6 +528,9 @@ async def test_native_mcp_connection_contract(monkeypatch):
         monkeypatch.setitem(sys.modules, name, ModuleType(name))
     sys.modules["httpx2"].AsyncClient = client
     sys.modules["httpx2"].AsyncHTTPTransport = lambda *, retries: retries
+    if version == "1.28.0":
+        monkeypatch.setattr(rl.httpx, "AsyncClient", client)
+        monkeypatch.setattr(rl.httpx, "AsyncHTTPTransport", lambda *, retries: retries)
     sys.modules["mcp"].ClientSession = Session
     sys.modules["mcp.client.streamable_http"].streamable_http_client = stream
     async with rl._mcp("https://fixture.invalid/", {"header": "x-auth", "token": "fixture"}, 5):

@@ -17,7 +17,9 @@ from training import rl_episode as rl
 @pytest.mark.asyncio
 async def test_real_mcp_transport_initializes_calls_and_closes(monkeypatch):
     pytest.importorskip("mcp")
-    http = pytest.importorskip("httpx2")
+    from importlib.metadata import version
+
+    http = pytest.importorskip("httpx2") if version("mcp") == "2.1.1" else httpx
     calls = []
 
     def handler(request):
@@ -63,7 +65,8 @@ async def test_real_mcp_transport_initializes_calls_and_closes(monkeypatch):
         ) as session:
             assert [t.name for t in (await session.list_tools()).tools] == ["submit_report"]
             result = await session.call_tool("submit_report", arguments={})
-            assert result.content[0].text == "synthetic result" and not result.is_error
+            assert result.content[0].text == "synthetic result"
+            assert not getattr(result, "is_error", getattr(result, "isError", None))
     assert calls == [
         "initialize",
         "notifications/initialized",

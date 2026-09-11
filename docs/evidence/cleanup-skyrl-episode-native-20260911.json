@@ -1,0 +1,81 @@
+{
+  "schema": "cyber_cleanup_qualification_v1",
+  "classification": "native_cpu_episode_integration_only",
+  "observed_date_utc": "2026-09-11",
+  "image_id": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+  "native_source": {
+    "skyrl_commit": "f5bc3b78dfddfb352870d5d7430cd226e5785838",
+    "remote_client_sha256": "7a798659decf8a49b9ab28c5fc299cdb0f3b1eedaa1db791e7a023f467bda174",
+    "token_helper_sha256": "55c15b660067749febda00d4fb1c2110ff436717bbd4b73bf66055a73d0b87d5",
+    "mcp_version": "1.28.0",
+    "parser_in_image_sha256": "86a020412ff279a84b8a0faae69d138b538a100c51e815a55fdbbe73e73f4f75",
+    "corrected_parser_source": "fleet-ai/theseus@6b7e1304e0782b9586d0fb03e955f2264a8f32db:services/rl-rollout/rl_rollout/tool_protocol.py",
+    "corrected_parser_source_sha256": "5f75c00ae9e7c0cafb5c6e622bd6451ade73d37e994e973810cd71cd32cc8651"
+  },
+  "inspection": {
+    "pod_name": "chris-cpt-skyrl-rl-inspect-v1",
+    "pod_uid": "0d37ce2e-f0a1-411d-89cc-1d7381117900",
+    "receipt_sha256": "f84c164b2b5246022abc90a7dadb104b7623fc71fe7f9a236dae22f5574b3817",
+    "exit_code": 0,
+    "finding": "Pinned SkyRL uses MCP 1.28.0's three-stream/httpx transport, whereas pinned Miles uses MCP 2.1.1's two-stream/httpx2 transport. The installed SkyRL parser predates Theseus' Qwen XML fix."
+  },
+  "preserved_fixture_failure": {
+    "pod_name": "chris-cpt-skyrl-episode-selftest-v1",
+    "pod_uid": "4f99603d-ecce-4192-8534-06116e6a89ef",
+    "started_at": "2026-09-11T07:53:48Z",
+    "finished_at": "2026-09-11T07:54:09Z",
+    "exit_code": 1,
+    "passed": 139,
+    "failed": 1,
+    "skipped": 0,
+    "receipt_sha256": "5cbca584e67b845603f7ad1d64b3a45478c1b52b717716574e2f15bced5467b1",
+    "cause": "The test environment selected /model but its manifest mounted the tokenizer at /mnt/sfs. The actual-tokenizer test failed with FileNotFoundError. No model execution or Fleet request occurred.",
+    "deterministic_fix": "Restore the read-only /model mount of sfs-shared/models/qwen3.8-27b-1d4bf0f2. No code-bundle change or retry of the failed Pod."
+  },
+  "accepted_cpu_selftest": {
+    "pod_name": "chris-cpt-skyrl-episode-selftest-v2",
+    "pod_uid": "9cfaa721-14f0-427b-8a83-da9364fc8dda",
+    "node": "computeinstance-e04a737eqtfvpnyx08",
+    "started_at": "2026-09-11T07:56:07Z",
+    "finished_at": "2026-09-11T07:56:28Z",
+    "exit_code": 0,
+    "restarts": 0,
+    "gpus": 0,
+    "passed": 140,
+    "failed": 0,
+    "skipped": 0,
+    "receipt_sha256": "db1e6b9ae6c053aa92ca4067ea3279786cfe243341c86b02269b453235a0f883",
+    "bundle_sha256": "4e88d0039e0b20d2bd7d7df6c72e2675cc03fd0a04673ce4272fcdf4fc77b7d5",
+    "manifest_sha256": "c804cfcb1a077ee3f13b5ef4745a53fbf28cceaaf311556c0c53605785a1f97c",
+    "test_output_sha256": "d11b94f523f2fd5e1c6811bf19161d8cc588613c41776b6c30562a11ec9630d0",
+    "all_receipt_digests_independently_verified": true,
+    "focused_coverage": {
+      "training.skyrl_episode": {"statements_covered": 127, "statements_total": 127, "branches_covered": 38, "branches_total": 38},
+      "training.qwen_tools": {"statements_covered": 35, "statements_total": 35, "branches_covered": 10, "branches_total": 10}
+    },
+    "tested": [
+      "Actual Qwen tokenizer and pinned native SkyRL client/helper interfaces",
+      "Sampled token/log-probability preservation, including noncanonical tokenization",
+      "Masked tool observations and native ChatML continuation",
+      "Single-attempt generation transport without changing the trainer's weight-sync client",
+      "Real MCP 1.28.0 initialization/tool-call/cleanup with synthetic HTTP responses",
+      "Corrected upstream Qwen XML and Hermes JSON parsing",
+      "No fallback reward or replay after an ambiguous episode"
+    ]
+  },
+  "local_validation": {
+    "whole_repository_passed": 1334,
+    "native_only_skipped": 95,
+    "subtests_passed": 7,
+    "mcp_transport_versions_tested": ["1.28.0", "2.1.1"],
+    "isolated_wheel_sha256": "f5e813c92900bd04a98475df3a47594946a607eea08df3a00b02708ca927ff88",
+    "installed_help_paths_passed": 8,
+    "installed_module_imports_passed": 5
+  },
+  "limits": [
+    "Task and inference responses were synthetic; zero live Fleet requests, scored episodes, optimizer steps or GPUs.",
+    "This is an internal Qwen episode recorder, not a public SkyRL RL launcher or a full-GLM qualification.",
+    "Multiple tool calls per turn, LoRA synchronization and routed experts are explicitly unqualified.",
+    "SkyRL data/batch integration, live reward acquisition, weight synchronization, optimizer update and checkpoint recovery remain open."
+  ]
+}

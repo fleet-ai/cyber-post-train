@@ -403,6 +403,17 @@ masked tool observations. A group with identical valid rewards is a valid
 zero-signal group, not proof of useful learning. Require real reward acquisition,
 an optimizer update and a recoverable checkpoint before scaling either backend.
 
+The internal `training.skyrl_episode` recorder now reuses the single-attempt
+Fleet lifecycle, native sampling payloads and tokenizer helpers. It preserves
+sampled IDs/log probabilities and masks only template/tool observations. The
+pinned image contains an older JSON-only parser, so a small corrected Theseus
+Qwen XML parser is included until that image is updated. Exact-image CPU tests
+exercise the actual tokenizer, client and MCP 1.28.0 transport (Miles uses
+MCP 2.1.1); [evidence](evidence/cleanup-skyrl-episode-native-20260911.json).
+This is **not yet a public SkyRL RL launcher**: native batch/data integration,
+real reward, weight synchronization and optimizer/recovery qualification remain
+open. Multiple tool calls per turn are rejected, not silently discarded.
+
 `training.rl_episode.generate` is the internal Miles hook used by `rl`, not a
 qualified training recipe. It reuses FTI's native recorder and
 parser, but opens exact V1 cyber tasks and enforces `bash`, `submit_report` at
