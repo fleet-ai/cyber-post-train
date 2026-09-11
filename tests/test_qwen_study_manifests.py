@@ -53,8 +53,14 @@ def test_split_variants_share_sealed_final_but_materially_vary_dev():
         load("qwen-blackbox-study-split-a-v1.json"),
         load("qwen-blackbox-study-split-b-v1.json"),
     ]
-    for split in splits:
+    trains = [
+        load("qwen-blackbox-study-train-a-v1.json"),
+        load("qwen-blackbox-study-train-b-v1.json"),
+    ]
+    for split, train in zip(splits, trains, strict=True):
         _check_split(split)
+        check_seal(train, "cyber_task_split_v2")
+        assert train == split["training_split"]
         assert split["final_test_lock_sha256"] == final["sha256"]
         assert split["counts"] == {
             "train": {"groups": 59, "task_versions": 59},

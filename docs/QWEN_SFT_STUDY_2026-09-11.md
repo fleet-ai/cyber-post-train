@@ -42,6 +42,12 @@ are:
 - [`qwen-blackbox-study-final-test-v1.json`](../configs/data/qwen-blackbox-study-final-test-v1.json)
 - [`qwen-blackbox-study-split-a-v1.json`](../configs/data/qwen-blackbox-study-split-a-v1.json)
 - [`qwen-blackbox-study-split-b-v1.json`](../configs/data/qwen-blackbox-study-split-b-v1.json)
+- [`qwen-blackbox-study-train-a-v1.json`](../configs/data/qwen-blackbox-study-train-a-v1.json)
+- [`qwen-blackbox-study-train-b-v1.json`](../configs/data/qwen-blackbox-study-train-b-v1.json)
+
+The two smaller `train-*` files are byte-equivalent projections of each outer
+split's embedded `training_split`. Corpus and coverage commands consume those
+train-only schemas while binding the full outer study split separately.
 
 The 20-task Fleet development set is the per-arm model-selection signal. The
 10-task final set stays sealed until a configuration is selected. WebExploitBench
