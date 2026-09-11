@@ -26,6 +26,11 @@ all their versions **before** selecting demonstrations or generating windows.
 Only training-split verified successes are SFT targets; held-out data never
 enters SFT, preference pairs or online-RL prompts.
 
+Export uses credential-free HTTPS endpoints, refuses redirects and retries only
+transient GET failures (at most five attempts). It prints counts and safe error
+categories, never transcript/error bodies. Files and their digest manifests are
+private; normalization also redacts injected temporary AWS session tokens.
+
 Normalization is not tokenization. Dense SFT preparation must account for each
 eligible assistant target exactly once, mask copied context and tool observations,
 and record excluded overlong targets. The old fixed-five-window corpora are

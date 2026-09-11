@@ -124,5 +124,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         return int(args.run(args))
     except (FleetExportError, ValueError, OSError) as exc:
-        print(f"error: {exc}", file=os.sys.stderr)
+        # Parsing/filesystem errors may include private records or credentials.
+        detail = str(exc) if isinstance(exc, FleetExportError) else type(exc).__name__
+        print(f"error: {detail}", file=os.sys.stderr)
         return 2

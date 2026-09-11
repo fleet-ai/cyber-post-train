@@ -8,15 +8,14 @@ from __future__ import annotations
 
 import concurrent.futures
 import datetime as dt
-import json
 import random
 import time
-import urllib.error
 import urllib.parse
-import urllib.request
 from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from typing import Any
+
+import httpx
 
 
 class FleetExportError(RuntimeError):
@@ -57,35 +56,47 @@ class FleetClient:
     ):
         if not api_key:
             raise ValueError("FLEET_API_KEY is required")
+        parsed = urllib.parse.urlsplit(base_url)
+        if (
+            parsed.scheme != "https"
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise ValueError("export base URL must be credential-free HTTPS")
         self._api_key = api_key
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
 
     def _get(self, path: str, params: Mapping[str, Any] | None = None) -> dict[str, Any]:
-        query = urllib.parse.urlencode({k: v for k, v in (params or {}).items() if v is not None})
-        url = f"{self.base_url}{path}" + (f"?{query}" if query else "")
-        request = urllib.request.Request(
-            url,
-            headers={"Accept": "application/json", "Authorization": f"Bearer {self._api_key}"},
-        )
-        last: BaseException | None = None
         for attempt in range(5):
             try:
-                with urllib.request.urlopen(request, timeout=self.timeout) as response:
-                    payload = json.load(response)
-                if not isinstance(payload, dict):
-                    raise FleetExportError(f"GET {path} returned non-object JSON")
-                return payload
-            except urllib.error.HTTPError as exc:
-                last = exc
-                if exc.code not in {429, 500, 502, 503, 504}:
-                    detail = exc.read(1000).decode("utf-8", "replace")
-                    raise FleetExportError(f"GET {path} failed ({exc.code}): {detail}") from exc
-            except (urllib.error.URLError, TimeoutError) as exc:
-                last = exc
+                # Do not forward authorization to a redirected origin or print
+                # response bodies: they can contain private transcripts/secrets.
+                response = httpx.get(
+                    f"{self.base_url}{path}",
+                    params={k: v for k, v in (params or {}).items() if v is not None},
+                    headers={
+                        "Accept": "application/json",
+                        "Authorization": f"Bearer {self._api_key}",
+                    },
+                    timeout=self.timeout,
+                    follow_redirects=False,
+                )
+                if 200 <= response.status_code < 300:
+                    payload = response.json()
+                    if not isinstance(payload, dict):
+                        raise FleetExportError("export GET returned non-object JSON")
+                    return payload
+                if response.status_code not in {429, 500, 502, 503, 504}:
+                    raise FleetExportError(f"export GET failed (HTTP {response.status_code})")
+            except httpx.RequestError:
+                pass
             if attempt < 4:
                 time.sleep(min(8.0, 0.5 * 2**attempt) + random.random() * 0.2)
-        raise FleetExportError(f"GET {path} failed after retries: {last}")
+        raise FleetExportError("export GET failed after five read-only attempts")
 
     def job(self, job_id: str) -> dict[str, Any]:
         return self._get(f"/v1/jobs/{urllib.parse.quote(job_id, safe='')}")

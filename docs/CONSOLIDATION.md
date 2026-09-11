@@ -57,7 +57,7 @@ and trace analysis` were inspected. Original commits/worktrees remain recoverabl
 | Public SkyRL RL preparation | `rl` now selects Miles or SkyRL and shares the bounded process/submission lifecycle. Corrected exact-image CPU run passed 420 tests, zero skips/failures/restarts/GPUs. It checks native driver/parser/data identities, actual sampling-to-recorder compatibility, Linux bundle transport and scalar-only tracking. [Evidence](evidence/cleanup-skyrl-training-native-20260911.json) preserves two earlier failures and their fixes. No real RL update, reward or checkpoint-reload claim |
 | Real RL preparation/startup | Five Miles starts failed before episodes/checkpoints and released their GPUs. Text-loader and Megatron namespace defects are fixed. V5 then exhausted its inherited 768-GiB host-RAM cap; independent larger RAM defaults and regressions pass CPU preparation. V6 is admitted at priority 10,000 with 1,536 GiB reserved and 2,048 GiB limit. [V5 diagnosis](evidence/cleanup-miles-rl-v5-20260911.json), [RAM preflight](evidence/cleanup-miles-memory-preparation-20260911.json), [V6 submission](evidence/cleanup-miles-rl-v6-20260911.json). SkyRL's first GPU attempt stopped on private staging permissions and released eight GPUs. CPU reproduction proved root preflight did not match image user 1000:100; a new user gate and privately owned successor now pass real CPU preflight as that user. [SkyRL diagnosis](evidence/cleanup-skyrl-rl-v3-20260911.json), [corrected preparation](evidence/cleanup-skyrl-preparation-v4-20260911.json). No RL reward, update or recovery is qualified |
 | Real evaluation lifecycle | Qwen generated, authoritative grading and catalog ingestion completed, local result persisted, and all resources cleaned. OpenCode ended at its output limit, so the frozen natural-stop gate holds the result: zero accepted, one review, no retry. [Evidence](evidence/cleanup-eval-terminal-20260911.json). This qualifies lifecycle execution, not a complete model outcome |
-| Local regression suite | 1,586 tests plus seven subtests pass using disposable PostgreSQL and MCP 2.1.1; 104 native/optional-dependency cases explicitly skip locally. Whole-repo coverage is about 75% of statements and 63% of branches; both RL launchers and their shared lifecycle have complete focused coverage. Native-image and GPU qualification remain separate |
+| Local regression suite | 1,625 tests plus seven subtests pass using disposable PostgreSQL and MCP 2.1.1; 104 native/optional-dependency cases explicitly skip locally. Whole-repo coverage is 13,544/17,869 statements and 4,385/6,926 branches; both RL launchers, their shared lifecycle and transcript export have complete focused coverage. Native-image and GPU qualification remain separate |
 | Installation | User/RAM-corrected wheel SHA-256 `e59c1eb5f915230dd74140ef1fc4513a91183350231292f1a4d7c0bf97afc92a` installed outside the checkout on Python 3.12.14; eight public command-help paths, privileged-preflight rejection, numeric JSON readback, bundled module identity and replay rejection pass. The minimal environment intentionally lacks Torch/PyArrow; installation is not training readiness |
 
 The newer `rl-data` wheel was independently installed outside the checkout;
@@ -195,3 +195,14 @@ Caller checks found no maintained runtime dependency. Historical requests and
 receipts remain untouched; current split, tool-identity, token-integrity and
 Jobs API safeguards remain tested in their supported paths. The public CLI
 explicitly rejects the removed commands instead of presenting them as RL support.
+
+Caller review also retired three fixed Qwen3.6/B300 kernel investigation scripts
+and their unused FLA launch override (380 lines). No maintained launcher, runtime,
+test or guide referenced them. Current pinned-image GDN checks and real Qwen
+training/recovery evidence remain; the old probes are recoverable from `bac2a4c`.
+The read-only transcript export/normalization CLI is retained because it is the
+documented source-data utility. Its HTTP and command paths now have full focused
+statement/branch coverage: HTTPS-only, no authorization-bearing redirects,
+bounded GET retries, private files/digests and non-disclosing errors. Temporary
+AWS session tokens are included in exact normalization redaction. These tests
+use synthetic HTTP/data only, not live transcript reads or training qualification.
