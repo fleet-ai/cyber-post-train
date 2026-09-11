@@ -1065,10 +1065,25 @@ def _make_trainer_class():
             return {"loss": loss, "grad_norm": grad_norm, "timings": timings}
 
         def save_checkpoint(self):
+            import torch
+
             path = Path(super().save_checkpoint())
-            # Native save catches dataloader-save errors: require it explicitly.
-            if not (path / "data.pt").is_file() or not (path / "trainer_state.pt").is_file():
-                raise ValueError("checkpoint lacks sampler/trainer resume state")
+            # Native save catches sampler-write errors, including a partially
+            # written file. Reopen only the two small, trusted metadata files;
+            # hashing the full model remains a separate CPU sealing operation.
+            metadata = []
+            for name in ("data.pt", "trainer_state.pt"):
+                source = path / name
+                if source.is_symlink() or not source.is_file():
+                    raise ValueError("checkpoint lacks sampler/trainer resume state")
+                metadata.append(torch.load(source, map_location="cpu", weights_only=False))
+            batches = math.ceil(
+                self.plan["datasets"]["train"]["rows"] / self.plan["recipe"]["batch_size"]
+            )
+            if metadata[0].get("_num_yielded") != (self.global_step - 1) % batches + 1 or (
+                metadata[1].get("global_step") != self.global_step
+            ):
+                raise ValueError("checkpoint sampler/trainer counters differ from completed step")
             self.saved_steps.add(self.global_step)
             write_receipt(
                 self.output / "checkpoint_receipts" / f"step-{self.global_step:06d}.json",
@@ -1130,21 +1145,27 @@ def training_result(trainer, *, paused: bool) -> dict:
     pointer = trainer.output / "checkpoints/latest_ckpt_global_step.txt"
     if int(pointer.read_text()) != expected or trainer.global_step != expected:
         raise ValueError("final checkpoint optimizer step mismatch")
-    if paused:
-        for path in (
-            trainer.output / "checkpoint_receipts" / f"step-{expected:06d}.json",
-            trainer.output / "validation" / f"step-{expected:06d}.json",
+    # A native step counter/pointer alone does not prove a saved, evaluated
+    # checkpoint. Both complete and deliberately paused runs need the receipts.
+    for kind in ("checkpoint_receipts", "validation"):
+        path = trainer.output / kind / f"step-{expected:06d}.json"
+        if path.is_symlink():
+            raise ValueError("terminal receipt must not be a symlink")
+        proof = json.loads(path.read_text())
+        if (
+            proof.get("receipt_sha256")
+            != _unsigned_digest({k: v for k, v in proof.items() if k != "receipt_sha256"})
+            or proof.get("optimizer_step") != expected
+            or proof.get("plan_sha256") != plan["plan_sha256"]
+            or (
+                kind == "checkpoint_receipts"
+                and proof.get("checkpoint_path") != plan_checkpoint(plan, expected)
+            )
         ):
-            proof = json.loads(path.read_text())
-            if (
-                proof.get("receipt_sha256")
-                != _unsigned_digest({k: v for k, v in proof.items() if k != "receipt_sha256"})
-                or proof.get("optimizer_step") != expected
-                or proof.get("plan_sha256") != plan["plan_sha256"]
-            ):
-                raise ValueError("planned pause lacks a matching save or validation receipt")
-    elif (
-        plan["schema"] == DENSE_SCHEMA
+            raise ValueError("terminal result lacks a matching save or validation receipt")
+    if (
+        not paused
+        and plan["schema"] == DENSE_SCHEMA
         and trainer.target_tokens_seen
         != plan["datasets"]["train"]["supervised_tokens"] * plan["recipe"]["epochs"]
     ):

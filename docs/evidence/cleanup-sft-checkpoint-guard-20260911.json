@@ -1,0 +1,80 @@
+{
+  "schema": "cyber_sft_checkpoint_guard_qualification_v1",
+  "observed_date": "2026-09-11",
+  "scope": "Prospective SFT save/completion integrity; no historical outcome changes or GPU submission",
+  "native_source": {
+    "repository": "NovaSky-AI/SkyRL",
+    "revision": "f5bc3b78dfddfb352870d5d7430cd226e5785838",
+    "path": "skyrl/train/sft_trainer.py",
+    "sha256": "a5ef8a2e22de785b6760abffdd9353f1246a5898983b4d27b4aadd8089a3579a",
+    "finding": "Native save catches sampler-write exceptions and continues to write the latest-step pointer. File existence alone does not prove complete sampler state."
+  },
+  "corrections": [
+    "Reopen the two small trusted sampler/trainer metadata files before recording a checkpoint; require their saved counters to match the completed optimizer step.",
+    "Require matching final save and validation receipt digests, plan and step for completed runs as well as planned pauses; reject symlink receipts and a wrong saved checkpoint path.",
+    "Keep full checkpoint hashing and GPU reload as separate handoff gates."
+  ],
+  "source_sha256": {
+    "training/sft_runtime.py": "5e531f465236c7ba104df4f656e43276c4da4f7413b36583caa09f491ea942d8",
+    "tests/test_sft_runtime.py": "725de0e0683f649e244def3d49fcb7eb40551243b36a59aaeaa085892511fde4"
+  },
+  "pre_fix_reproduction": {
+    "boundary": "training_result with real temporary files and deliberately invalid receipts",
+    "failed_assertions": 14,
+    "cases": 24,
+    "finding": "The old code accepted invalid completed-run receipts and some invalid paused-run bindings."
+  },
+  "native_cpu": {
+    "pod": "chris-cpt-runtime-regression-v5",
+    "pod_uid": "d82863e4-29f2-470c-963b-1291c1dffb1e",
+    "namespace": "fleet-train-jobs",
+    "node": "computeinstance-e04a737eqtfvpnyx08",
+    "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "started_at": "2026-09-11T13:46:22Z",
+    "finished_at": "2026-09-11T13:48:51Z",
+    "status": "Succeeded",
+    "exit_code": 0,
+    "restarts": 0,
+    "gpus": 0,
+    "new_nodes": 0,
+    "tests": 630,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "bundle_sha256": "72eeccda48fef8981afe017ff73876fd5d3eb0b8ec98c089769222ab3b33568b",
+    "manifest_sha256": "62021ccf54a67bd3d09dd0c381d525c8e91a95bc6df48e7d5bf0aee1c19795c4",
+    "receipt_sha256": "a6537709da7a7cd40375fc9fc04b12b22d44c7b29a0f5a53c76fd7054a52ed7d",
+    "independent_collection_sha256": "c1f4ba347f8a4332e61fcf9d9ac6cc96205a3ed9f00e6abd6f29e92f4b69e909",
+    "boundary": "Actual pinned native checkpoint writer/metadata reader and training loop; synthetic CPU data and GPU dispatch substitutes, not a real GPU training run",
+    "new_checkpoint_cases": ["valid later-epoch cursor", "missing sampler", "empty sampler", "nonempty truncated sampler", "wrong sampler cursor", "wrong trainer step", "symlink sampler"],
+    "preceding_check": {
+      "pod": "chris-cpt-runtime-regression-v4",
+      "pod_uid": "d1caa743-d5cc-4126-8e86-428955567e6b",
+      "tests": 490,
+      "status": "Succeeded",
+      "gpus": 0,
+      "receipt_sha256": "54eabd359748e04ebcde92e3b408579a4f7d588859f47712e196923c1a75e468",
+      "qualification_limit": "The reused command selected RL/GLM regressions, not the new SFT tests; V5 explicitly added SFT and watchdog tests. V4 alone does not qualify this fix."
+    }
+  },
+  "local_suite": {
+    "passed": 1702,
+    "skipped": 112,
+    "subtests_passed": 7,
+    "duration_seconds": 23.97,
+    "statements": [13651, 17943],
+    "branches": [4424, 6960],
+    "full_repository_coverage": false
+  },
+  "wheel": {
+    "sha256": "d11824ba9b09298cafb08efc06d7e3e5c03e237bc0ffc49b30ad313b5bc65c4f",
+    "python": "3.12.14",
+    "installed_outside_checkout": true,
+    "runtime_source_bytes_match": true,
+    "public_help_commands_passed": 8,
+    "legacy_data_help_commands_passed": 2,
+    "checks": ["redirect/user guards", "numeric JSON", "bundled module identity", "replay rejection", "tool deadline", "obsolete launcher absence"]
+  },
+  "remaining_gates": ["real Miles and SkyRL RL reward/update/checkpoint/recovery", "full GLM qualification", "valid real evaluation outcome", "remaining repository coverage and retirement"],
+  "sha256": "ee18e5c355cf0a11d04b025088dee0640f44fe5db20379b1d249ecacd328c03f"
+}

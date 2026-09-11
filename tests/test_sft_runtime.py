@@ -3,6 +3,7 @@
 import copy
 import importlib.util
 import json
+import pickle
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -126,7 +127,11 @@ def test_training_result_distinguishes_partial_and_complete(tmp_path, paused):
     for name in ("checkpoint_receipts", "validation"):
         write_receipt(
             tmp_path / name / f"step-{step:06d}.json",
-            {"optimizer_step": step, "plan_sha256": value["plan_sha256"]},
+            {
+                "optimizer_step": step,
+                "plan_sha256": value["plan_sha256"],
+                "checkpoint_path": str(tmp_path / "checkpoints" / f"global_step_{step}"),
+            },
         )
     result = training_result(trainer, paused=paused)
     assert result["status"] == ("training_paused" if paused else "training_complete")
@@ -154,7 +159,11 @@ def test_partial_result_requires_exact_evidence(tmp_path, defect):
     for name in ("checkpoint_receipts", "validation"):
         write_receipt(
             tmp_path / name / "step-000001.json",
-            {"optimizer_step": 1, "plan_sha256": value["plan_sha256"]},
+            {
+                "optimizer_step": 1,
+                "plan_sha256": value["plan_sha256"],
+                "checkpoint_path": str(tmp_path / "checkpoints/global_step_1"),
+            },
         )
     path = tmp_path / "validation/step-000001.json"
     proof = json.loads(path.read_text())
@@ -179,6 +188,54 @@ def test_partial_result_requires_exact_evidence(tmp_path, defect):
         training_result(trainer, paused=defect not in {"unhonored", "targets"})
 
 
+@pytest.mark.parametrize("paused", [False, True])
+@pytest.mark.parametrize("kind", ["checkpoint_receipts", "validation"])
+@pytest.mark.parametrize("defect", ["missing", "digest", "step", "plan", "symlink", "path"])
+def test_terminal_result_requires_bound_save_and_validation(tmp_path, paused, kind, defect):
+    value = plan(tmp_path)
+    step = 1 if paused else value["recipe"]["max_steps"]
+    if paused:
+        value["pause_after_step"] = step
+    trainer = SimpleNamespace(
+        plan=value, output=tmp_path, global_step=step, target_tokens_seen=16, best=None
+    )
+    root = tmp_path / "checkpoints" / f"global_step_{step}"
+    root.mkdir(parents=True)
+    (root.parent / "latest_ckpt_global_step.txt").write_text(str(step))
+    proof = {
+        "optimizer_step": step,
+        "plan_sha256": value["plan_sha256"],
+        "checkpoint_path": str(root),
+    }
+    for directory in ("checkpoint_receipts", "validation"):
+        write_receipt(tmp_path / directory / f"step-{step:06d}.json", proof)
+    path = tmp_path / kind / f"step-{step:06d}.json"
+    if defect == "missing":
+        path.unlink()
+    elif defect == "symlink":
+        other = tmp_path / "synthetic-other.json"
+        path.rename(other)
+        path.symlink_to(other)
+    else:
+        key = {
+            "digest": "receipt_sha256",
+            "step": "optimizer_step",
+            "plan": "plan_sha256",
+            "path": "checkpoint_path",
+        }[defect]
+        proof[key] = "synthetic-wrong-value"
+        proof["receipt_sha256"] = _unsigned_digest(proof)
+        if defect == "digest":
+            proof["receipt_sha256"] = "not-a-digest"
+        path.write_text(json.dumps(proof))
+    if defect == "path" and kind == "validation":
+        # Validation does not select a checkpoint; the save receipt does.
+        assert training_result(trainer, paused=paused)["optimizer_step"] == step
+    else:
+        with pytest.raises((ValueError, FileNotFoundError)):
+            training_result(trainer, paused=paused)
+
+
 @pytest.mark.parametrize("outcome", ["complete", "pause", "unexpected", "bad_pause"])
 def test_outer_runtime_only_accepts_valid_planned_pause(tmp_path, monkeypatch, outcome):
     from training import sft_runtime as runtime
@@ -192,7 +249,11 @@ def test_outer_runtime_only_accepts_valid_planned_pause(tmp_path, monkeypatch, o
     for name in ("checkpoint_receipts", "validation"):
         write_receipt(
             tmp_path / name / f"step-{step:06d}.json",
-            {"optimizer_step": step, "plan_sha256": value["plan_sha256"]},
+            {
+                "optimizer_step": step,
+                "plan_sha256": value["plan_sha256"],
+                "checkpoint_path": str(tmp_path / "checkpoints" / f"global_step_{step}"),
+            },
         )
     calls, summary = [], {}
 
@@ -818,6 +879,62 @@ def test_dense_wandb_config_has_only_bound_metadata(tmp_path, monkeypatch):
     assert updates["execution_resources"] == value["execution"]["resources"]
     assert not any(key in updates for key in ("messages", "input_ids", "loss_mask", "target_spans"))
     assert (tmp_path / "WANDB.json").is_file()
+
+
+@pytest.mark.skipif(
+    importlib.util.find_spec("skyrl") is None, reason="requires pinned training image; CPU-only"
+)
+@pytest.mark.parametrize(
+    "defect", [None, "missing", "empty", "partial", "cursor", "step", "symlink"]
+)
+def test_native_checkpoint_reopens_metadata_before_recording_success(tmp_path, monkeypatch, defect):
+    """Native SkyRL swallows sampler-save errors; file existence is not enough."""
+    import torch
+
+    validate_runtime_sources()
+    value = plan(tmp_path)
+    cfg, backend = build_runtime_configs(value)
+    trainer = _make_trainer_class()(cfg, backend, value)
+    trainer.global_step = 4  # First batch of epoch two, not cursor four.
+    trainer.tokenizer = None
+    trainer.train_dataloader = SimpleNamespace(state_dict=lambda: {"_num_yielded": 1})
+    trainer.dispatch = SimpleNamespace(save_checkpoint=lambda *args: None)
+    native_save = torch.save
+
+    def save(obj, stream, *args, **kwargs):
+        path = Path(stream.name)
+        if path.name == "data.pt":
+            if defect == "missing":
+                path.unlink()
+                raise OSError("synthetic sampler storage defect")
+            if defect in {"empty", "partial"}:
+                if defect == "partial":
+                    stream.write(b"PK")
+                raise OSError("synthetic sampler storage defect")
+            if defect == "cursor":
+                obj = {"_num_yielded": 999}
+        elif path.name == "trainer_state.pt" and defect == "step":
+            obj = {**obj, "global_step": 999}
+        native_save(obj, stream, *args, **kwargs)
+        if path.name == "data.pt" and defect == "symlink":
+            other = path.with_name("synthetic-other.pt")
+            path.rename(other)
+            path.symlink_to(other)
+
+    monkeypatch.setattr(torch, "save", save)
+    if defect is None:
+        trainer.save_checkpoint()
+        proof = json.loads((tmp_path / "checkpoint_receipts/step-000004.json").read_text())
+        assert proof.pop("receipt_sha256") == _unsigned_digest(proof)
+        assert proof["optimizer_step"] == 4
+        assert trainer.saved_steps == {4}
+    else:
+        with pytest.raises((ValueError, EOFError, RuntimeError, pickle.UnpicklingError)):
+            trainer.save_checkpoint()
+        assert not (tmp_path / "checkpoint_receipts/step-000004.json").exists()
+        assert trainer.saved_steps == set()
+    # Upstream wrote its pointer even after swallowing the sampler failure.
+    assert (tmp_path / "checkpoints/latest_ckpt_global_step.txt").read_text() == "4"
 
 
 @pytest.mark.skipif(

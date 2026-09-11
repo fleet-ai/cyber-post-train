@@ -264,3 +264,16 @@ to the tested source; retired launchers are absent and the paired launcher remai
 The shared RL supervisor now covers all 77 statements/20 branches in the local
 suite. Neither that focused coverage nor wheel installation qualifies RL rewards,
 optimization or checkpoint recovery on GPUs.
+
+SFT save/completion checks now reopen the small native sampler/trainer files and
+require matching final checkpoint/validation receipts for both full completion
+and a planned pause. This closes the native writer's swallowed partial-sampler
+failure and the wrapper's weaker completion check. The exact trainer image passed
+630 CPU tests, including interrupted writes and later-epoch cursor checks, with
+zero skips/failures/restarts/GPUs. [Evidence](evidence/cleanup-sft-checkpoint-guard-20260911.json)
+also records the preceding test-selection omission rather than treating that
+earlier check as SFT proof. Local tests: 1,702 passed, 112 skipped; full-repository
+coverage remains incomplete. The latest minimal wheel
+(`d11824ba9b09298cafb08efc06d7e3e5c03e237bc0ffc49b30ad313b5bc65c4f`)
+passes the public command and byte-identity checks outside the checkout. This is
+a prospective guard, not a new GPU run or reinterpretation of historical results.

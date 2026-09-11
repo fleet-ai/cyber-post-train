@@ -156,7 +156,11 @@ Validation runs before training, at the configured interval and at the final ste
 Periodic validation and checkpoint intervals must agree. Keep the latest N
 checkpoints plus the best checkpoint by fixed held-out loss. Saves include native
 optimizer, scheduler, sampler and trainer state; a weights-only file is not a
-recoverable checkpoint.
+recoverable checkpoint. Before recording a save, the wrapper reopens the small
+sampler/trainer files and checks their counters—SkyRL can catch a sampler-write
+error after creating a partial file. Both paused and completed runs require
+digest-valid final checkpoint and validation receipts bound to the same plan and
+step. Full payload hashing and GPU reload remain separate handoff checks.
 
 For a planned interruption/recovery check, add top-level `pause_after_step: 1`
 to a plan whose full recipe has more than one step. This does not shorten the
