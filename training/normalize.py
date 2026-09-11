@@ -11,7 +11,7 @@ from .io import atomic_write_json, atomic_write_jsonl, digest_json, file_sha256,
 from .lineage import extract_lineage, leakage_group
 from .rewards import compute_reward
 from .secrets import redact_exact
-from .splits import apply_splits
+from .splits import SPLIT_SEED, apply_splits
 
 TERMINAL = {"completed", "succeeded", "success"}
 
@@ -149,7 +149,7 @@ def build_datasets(
         )
     rl_prompts_by_group: dict[tuple[str, str], dict[str, Any]] = {}
     for row in normalized:
-        if not row["eligibility"]["online_rl_prompt"]:
+        if row["split"] != "train" or not row["eligibility"]["online_rl_prompt"]:
             continue
         key = (row["leakage_group"], row["lineage"]["prompt_sha256"])
         rl_prompts_by_group.setdefault(
@@ -162,13 +162,18 @@ def build_datasets(
                     "task_version": row["lineage"]["task_version"],
                     "environment": row["environment"],
                 },
-                "metadata": {"leakage_group": row["leakage_group"], "lineage": row["lineage"]},
+                "metadata": {
+                    "leakage_group": row["leakage_group"],
+                    "lineage": row["lineage"],
+                    "split": "train",
+                    "split_unit": row["split_unit"],
+                },
             },
         )
 
     grouped: dict[tuple[str, str], list[dict[str, Any]]] = collections.defaultdict(list)
     for row in normalized:
-        if row["eligibility"]["preference"]:
+        if row["split"] == "train" and row["eligibility"]["preference"]:
             grouped[(row["leakage_group"], row["lineage"]["prompt_sha256"])].append(row)
     preferences: list[dict[str, Any]] = []
     for rows in grouped.values():
@@ -187,6 +192,8 @@ def build_datasets(
                 "metadata": {
                     "lineage": chosen["lineage"],
                     "leakage_group": chosen["leakage_group"],
+                    "split": "train",
+                    "split_unit": chosen["split_unit"],
                 },
             }
         )
@@ -210,10 +217,10 @@ def build_datasets(
         "policy": {
             "fleet_scope": "all_eligible_exported_sessions",
             "sft": "execution-verified successes, lineage-safe train/dev/test",
-            "split_unit": "application + vulnerability family + task lineage",
-            "split_seed": "fleet-cyber-split-v1",
-            "preferences": "best-vs-worst within exact prompt and leakage group",
-            "online_rl": "one prompt per exact prompt and leakage group",
+            "split_unit": "application + task family (all versions together; not app-disjoint)",
+            "split_seed": SPLIT_SEED,
+            "preferences": "train only; best-vs-worst within exact prompt and leakage group",
+            "online_rl": "train only; one prompt per exact prompt and leakage group",
             "grader_output_included": False,
         },
         "counts": {

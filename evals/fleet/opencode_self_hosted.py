@@ -13,7 +13,7 @@ import sys
 import time
 import uuid
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -32,10 +32,9 @@ TRANSIENT_READ_STATUS_CODES = {429, 502, 503, 504}
 MAX_READ_ATTEMPTS = 6
 SESSION_INGEST_CHUNK_MESSAGES = 32
 SESSION_INGEST_CHUNK_BYTES = 512 * 1024
+PROVISIONED_DATA_VALIDATION = "exact-version-provisioned-instance-v1"
 OPENCODE_CONTEXT_MANAGEMENT = "opencode_1.18.27_native_compaction_autocontinue_v1"
-OPENCODE_NO_AUTOCONTINUE_CONTEXT_MANAGEMENT = (
-    "opencode_1.18.27_native_compaction_no_autocontinue"
-)
+OPENCODE_NO_AUTOCONTINUE_CONTEXT_MANAGEMENT = "opencode_1.18.27_native_compaction_no_autocontinue"
 OPENCODE_NO_AUTOCONTINUE_PLUGIN = (
     "export const DisableCompactionAutocontinue = async () => ({\n"
     '  "experimental.compaction.autocontinue": async (_input, output) => '
@@ -155,6 +154,137 @@ def _request(client: httpx.Client, method: str, path: str, **kwargs: Any) -> Any
     raise AssertionError("unreachable")
 
 
+def _instance_time(value: Any) -> datetime:
+    if not isinstance(value, str) or not value:
+        raise RuntimeError("instance lifetime timestamp is missing")
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        raise RuntimeError("instance lifetime timestamp is invalid") from None
+    return parsed.replace(tzinfo=UTC) if parsed.tzinfo is None else parsed.astimezone(UTC)
+
+
+def ensure_instance_lifetime(
+    client: httpx.Client, config: dict[str, Any], instance: dict[str, Any]
+) -> dict[str, Any]:
+    """Enforce the frozen runtime budget through the supported, bounded TTL API.
+
+    Version-scoped provisioning can use a shorter platform default than the
+    configured harness horizon. Extend only the exact owned live instance, to
+    an absolute deadline derived from its original creation time. No retries of
+    the mutation, resurrection, unbounded lifetime, or moving harness deadline.
+    """
+    instance_id = _instance_identifier(instance.get("instance_id"))
+    environment = config["environment"]
+    ttl = environment.get("ttl_seconds")
+    horizon = config["harness"].get("timeout_seconds")
+    if (
+        isinstance(ttl, bool)
+        or not isinstance(ttl, int)
+        or ttl <= 0
+        or isinstance(horizon, bool)
+        or not isinstance(horizon, (int, float))
+        or not math.isfinite(horizon)
+        or horizon <= 0
+        or ttl <= horizon
+    ):
+        raise RuntimeError("instance lifetime must cover the bounded harness budget")
+
+    def validate(observed: dict[str, Any]) -> None:
+        if (
+            observed.get("instance_id") != instance_id
+            or observed.get("team_id") != FLEET_TEAM_ID
+            or observed.get("status") != "running"
+            or observed.get("terminated_at") is not None
+        ):
+            raise RuntimeError("instance is not the exact live Fleet-owned runtime")
+        for field, expected in (
+            ("env_key", environment["id"]),
+            ("version", environment["version"]),
+            ("data_key", environment["data_id"]),
+            ("data_version", environment["data_version"]),
+        ):
+            if observed.get(field) != expected:
+                raise RuntimeError("instance runtime binding differs before TTL update")
+
+    validate(instance)
+    created = _instance_time(instance.get("created_at"))
+    target = created + timedelta(seconds=ttl)
+    now = datetime.now(UTC)
+    if target < now + timedelta(seconds=horizon) or created > now + timedelta(minutes=5):
+        raise RuntimeError("instance lifetime is outside its original bounded budget")
+    previous = _instance_time(instance.get("expires_at"))
+    if previous <= now:
+        raise RuntimeError("expired instance must not be revived by a TTL update")
+    changed = previous < target
+    if changed:
+        updated = _request(
+            client,
+            "POST",
+            f"/v1/env/instances/{instance_id}/extend_ttl",
+            json={"absolute_expires_at": target.isoformat()},
+        )
+        validate(updated)
+    readback = _request(client, "GET", f"/v1/env/instances/{instance_id}")
+    validate(readback)
+    if _instance_time(readback.get("created_at")) != created:
+        raise RuntimeError("instance creation identity changed during TTL update")
+    actual = _instance_time(readback.get("expires_at"))
+    if actual < target or (changed and actual != target):
+        raise RuntimeError("instance lifetime readback does not cover the frozen budget")
+    receipt = {
+        "schema_version": "fleet-instance-lifetime-evidence-v1",
+        "run_id": config["run_id"],
+        "instance_id": instance_id,
+        "created_at": created.isoformat(),
+        "prior_expires_at": previous.isoformat(),
+        "minimum_expires_at": target.isoformat(),
+        "expires_at": actual.isoformat(),
+        "configured_ttl_seconds": ttl,
+        "harness_timeout_seconds": horizon,
+        "ttl_updated": changed,
+        "runtime_binding_verified": True,
+        "readback_verified": True,
+        "scores_included": False,
+        "prompts_or_traces_included": False,
+    }
+    receipt["receipt_sha256"] = digest_without(receipt, "receipt_sha256")
+    return receipt
+
+
+def task_data_binding(task: dict[str, Any]) -> dict[str, str] | None:
+    """Read versioned seed references without borrowing a mutable task default.
+
+    The task API intentionally clears legacy data fields on non-current
+    versions. Modern versions expose seed_config; legacy versions may have
+    neither. The latter require an explicit, later exact-instance data gate.
+    """
+    data_id, data_version = task.get("data_id"), task.get("data_version")
+    if (data_id is None) != (data_version is None):
+        raise RuntimeError("task data identity is only partially specified")
+    legacy = None
+    if data_id is not None:
+        if not all(isinstance(v, str) and v for v in (data_id, data_version)):
+            raise RuntimeError("task data identity is invalid")
+        legacy = {"data_id": data_id, "data_version": data_version}
+    seeds = task.get("seed_config")
+    if seeds is None or seeds == {}:
+        return legacy
+    if not isinstance(seeds, dict) or len(seeds) != 1:
+        raise RuntimeError("single-environment task seed binding is ambiguous")
+    seed = next(iter(seeds.values()))
+    if (
+        not isinstance(seed, dict)
+        or seed.get("env_key") != task.get("environment_id")
+        or not all(isinstance(seed.get(k), str) and seed[k] for k in ("data_key", "data_version"))
+    ):
+        raise RuntimeError("versioned task seed binding is incomplete")
+    versioned = {"data_id": seed["data_key"], "data_version": seed["data_version"]}
+    if legacy is not None and legacy != versioned:
+        raise RuntimeError("legacy and versioned task data bindings disagree")
+    return versioned
+
+
 def load_and_verify_task(client: httpx.Client, config: dict[str, Any]) -> dict[str, Any]:
     expected = config["task"]
     # The legacy source-job roster is large and is provenance only. Read the
@@ -167,14 +297,21 @@ def load_and_verify_task(client: httpx.Client, config: dict[str, Any]) -> dict[s
         params={"version_id": expected["version_id"]},
     )
     _validate_task_identifiers(task, expected)
+    runtime_data = task_data_binding(task)
+    if runtime_data is None and (
+        expected.get("data_binding_validation") != PROVISIONED_DATA_VALIDATION
+        or not config["environment"].get("version_id")
+        or task.get("environment_version_id") != config["environment"]["version_id"]
+    ):
+        raise RuntimeError("missing task data needs an exact provisioned-instance gate")
     verifier = task.get("verifier") or {}
     metadata = task.get("metadata") or {}
     actual = {
         "key": task.get("key"),
         "environment_id": task.get("environment_id"),
         "environment_version": task.get("version"),
-        "data_id": task.get("data_id"),
-        "data_version": task.get("data_version"),
+        "data_id": runtime_data["data_id"] if runtime_data else None,
+        "data_version": runtime_data["data_version"] if runtime_data else None,
         "prompt_sha256": sha256((task.get("prompt") or "").encode()),
         "env_variables_sha256": sha256(canonical_json(task.get("env_variables") or {})),
         "output_json_schema_sha256": sha256(canonical_json(task.get("output_json_schema"))),
@@ -203,6 +340,12 @@ def load_and_verify_task(client: httpx.Client, config: dict[str, Any]) -> dict[s
         "cyber_contract": config["task"].get("cyber_contract"),
     }
     actual["cyber_contract"] = (task.get("metadata") or {}).get("cyber_contract")
+    if runtime_data is None:
+        # Do not assert equality from absent metadata. The exact-version
+        # provisioned instance is checked below, before runner/model setup.
+        for field in ("data_id", "data_version"):
+            actual.pop(field)
+            wanted.pop(field)
     if "code_sha256" in config["verifier"]:
         actual["verifier_code_sha256"] = sha256((verifier.get("code") or "").encode())
         wanted["verifier_code_sha256"] = config["verifier"]["code_sha256"]
@@ -568,9 +711,7 @@ def normalize_opencode_conversation(events: list[dict[str, Any]]) -> list[dict[s
             or state.get("name")
             or "tool"
         )
-        arguments = state.get(
-            "input", state.get("args", part.get("input", part.get("args", {})))
-        )
+        arguments = state.get("input", state.get("args", part.get("input", part.get("args", {}))))
         output = state.get(
             "output",
             state.get("result", state.get("error", part.get("output", part.get("result")))),
@@ -857,9 +998,7 @@ def _validate_task_identifiers(
     task: dict[str, Any], expected: dict[str, Any]
 ) -> tuple[str | None, str]:
     """Validate deployed version identity and optional legacy task identity."""
-    live_version_id = _nonzero_uuid(
-        task.get("eval_task_version_id"), "Fleet task version ID"
-    )
+    live_version_id = _nonzero_uuid(task.get("eval_task_version_id"), "Fleet task version ID")
     expected_version_id = _nonzero_uuid(
         expected.get("version_id"), "configured Fleet task version ID"
     )
@@ -1219,17 +1358,25 @@ def opencode_settings(config: dict[str, Any]) -> dict[str, Any]:
         "tools": {
             name: False
             for name in (
-                "bash", "edit", "read", "glob", "grep", "list", "task", "webfetch",
-                "websearch", "skill",
+                "bash",
+                "edit",
+                "read",
+                "glob",
+                "grep",
+                "list",
+                "task",
+                "webfetch",
+                "websearch",
+                "skill",
             )
         },
     }
     if policy == OPENCODE_CONTEXT_MANAGEMENT:
         settings["compaction"] = {"auto": True, "reserved": headroom}
         # v1.18.27 honors compaction.reserved only with limit.input.
-        settings["provider"]["fleet-cluster"]["models"][model_id]["limit"][
-            "input"
-        ] = context - output
+        settings["provider"]["fleet-cluster"]["models"][model_id]["limit"]["input"] = (
+            context - output
+        )
     else:
         settings["plugin"] = [
             "file:///home/node/.config/opencode/fleet-disable-compaction-autocontinue.mjs"
@@ -1252,9 +1399,7 @@ def run(
         raise RuntimeError("self-hosted harness must be qwen_code or opencode")
     settings = opencode_settings(config) if harness_name == "opencode" else None
     if not api_key or not agent_image or not proxy_image:
-        raise RuntimeError(
-            "FLEET_API_KEY, AGENT_HARNESS_IMAGE, and FIXED_PROXY_IMAGE are required"
-        )
+        raise RuntimeError("FLEET_API_KEY, AGENT_HARNESS_IMAGE, and FIXED_PROXY_IMAGE are required")
     out_dir.mkdir(parents=True, exist_ok=False)
     out_dir.chmod(0o700)
     client = httpx.Client(
@@ -1318,6 +1463,8 @@ def run(
             or instance.get("data_version") != config["environment"]["data_version"]
         ):
             raise RuntimeError("created instance does not match exact environment/data pins")
+        lifetime = ensure_instance_lifetime(client, config, instance)
+        write_json_once(out_dir / "instance-lifetime.json", lifetime)
         token_payload = _request(client, "GET", "/v1/runner-auth/token")
         tool_names, tool_digest = discover_tools(
             instance["urls"]["root"], token_payload["header"], token_payload["token"]
@@ -1527,9 +1674,7 @@ def run(
             )
         except subprocess.TimeoutExpired:
             agent_termination = "execution_timeout"
-            _docker(
-                "stop", "--time", "5", agent_container, check=False, capture=True, timeout=15
-            )
+            _docker("stop", "--time", "5", agent_container, check=False, capture=True, timeout=15)
             result = subprocess.CompletedProcess(args=["docker", "run"], returncode=124)
         if harness_name == "opencode":
             canonical_trace = trace
@@ -1618,9 +1763,7 @@ def run(
                     score=score,
                     verifier_execution_id=reward_result.get("verifier_execution_id"),
                     metadata={
-                        "self_hosted_harness": (
-                            f"{harness_name}-{config['harness']['version']}"
-                        ),
+                        "self_hosted_harness": (f"{harness_name}-{config['harness']['version']}"),
                         "run_id": config["run_id"],
                         **session_execution_metadata(config),
                         "tool_catalog_sha256": tool_digest,
@@ -1990,18 +2133,14 @@ def _partial_recovery_source(
         "message_count": len(messages),
         "persisted_prefix_message_count": sum(len(chunk) for chunk in chunks[:completed]),
         "local_prefix_sha256": sha256(
-            canonical_json(
-                [message for chunk in chunks[:completed] for message in chunk]
-            )
+            canonical_json([message for chunk in chunks[:completed] for message in chunk])
         ),
         "trace_sha256": trace_digest,
         "trace_fidelity": trace_manifest.get("fidelity"),
         "tool_catalog_sha256": runtime["tool_catalog_sha256"],
         "source_result_sha256": sha256((source_dir / "result.json").read_bytes()),
         "source_reward_sha256": sha256((source_dir / "reward-result.json").read_bytes()),
-        "original_ingest_sha256": sha256(
-            (source_dir / "session-ingest.json").read_bytes()
-        ),
+        "original_ingest_sha256": sha256((source_dir / "session-ingest.json").read_bytes()),
     }
 
 
@@ -2023,16 +2162,10 @@ def _inspect_partial_session_prefix(
         or row.get("verifier_execution") is not None
     ):
         raise RuntimeError("partial recovery session inventory is not authoritative")
-    response = _request(
-        client, "GET", f"/v1/sessions/{source['session_id']}/transcript"
-    )
+    response = _request(client, "GET", f"/v1/sessions/{source['session_id']}/transcript")
     transcript = response.get("transcript")
     expected_keys = ["harness", "instance", "task", "transcript", "verifier_execution"]
-    local_prefix = [
-        message
-        for chunk in chunks[: source["chunks_completed"]]
-        for message in chunk
-    ]
+    local_prefix = [message for chunk in chunks[: source["chunks_completed"]] for message in chunk]
     if sorted(response) != expected_keys or not isinstance(transcript, list):
         raise RuntimeError("partial recovery transcript schema drifted")
     server_bytes = canonical_json(transcript)
@@ -2052,10 +2185,8 @@ def _inspect_partial_session_prefix(
     }
     del transcript, response, local_prefix, server_bytes, local_bytes
     if (
-        sanitized["server_prefix_message_count"]
-        != source["persisted_prefix_message_count"]
-        or sanitized["local_prefix_message_count"]
-        != source["persisted_prefix_message_count"]
+        sanitized["server_prefix_message_count"] != source["persisted_prefix_message_count"]
+        or sanitized["local_prefix_message_count"] != source["persisted_prefix_message_count"]
         or sanitized["prefix_bytes_equal"] is not True
         or sanitized["server_prefix_sha256"] != source["local_prefix_sha256"]
     ):
@@ -2152,17 +2283,13 @@ def diagnose_partial_session_prefix_mismatch(
             or row.get("verifier_execution") is not None
         ):
             raise RuntimeError("partial diagnostic session inventory is not authoritative")
-        response = _request(
-            client, "GET", f"/v1/sessions/{source['session_id']}/transcript"
-        )
+        response = _request(client, "GET", f"/v1/sessions/{source['session_id']}/transcript")
         transcript = response.get("transcript")
         expected_keys = ["harness", "instance", "task", "transcript", "verifier_execution"]
         if sorted(response) != expected_keys or not isinstance(transcript, list):
             raise RuntimeError("partial diagnostic transcript schema drifted")
         local_prefix = [
-            message
-            for chunk in chunks[: source["chunks_completed"]]
-            for message in chunk
+            message for chunk in chunks[: source["chunks_completed"]] for message in chunk
         ]
         if len(transcript) != len(local_prefix):
             raise RuntimeError("partial diagnostic transcript count drifted")
@@ -2185,8 +2312,7 @@ def diagnose_partial_session_prefix_mismatch(
                 "container_type": "dict",
                 "keys": sorted(str(key) for key in value),
                 "field_types": {
-                    str(key): type(value[key]).__name__
-                    for key in sorted(value, key=str)
+                    str(key): type(value[key]).__name__ for key in sorted(value, key=str)
                 },
                 "role": role if role in {"system", "user", "assistant", "tool"} else None,
             }
@@ -2278,15 +2404,11 @@ def diagnose_partial_session_timestamp_projection(
             or row.get("verifier_execution") is not None
         ):
             raise RuntimeError("timestamp projection session inventory is not authoritative")
-        response = _request(
-            client, "GET", f"/v1/sessions/{source['session_id']}/transcript"
-        )
+        response = _request(client, "GET", f"/v1/sessions/{source['session_id']}/transcript")
         transcript = response.get("transcript")
         expected_keys = ["harness", "instance", "task", "transcript", "verifier_execution"]
         local_prefix = [
-            message
-            for chunk in chunks[: source["chunks_completed"]]
-            for message in chunk
+            message for chunk in chunks[: source["chunks_completed"]] for message in chunk
         ]
         if (
             sorted(response) != expected_keys
@@ -2321,9 +2443,7 @@ def diagnose_partial_session_timestamp_projection(
             "verifier_execution_id": source["verifier_execution_id"],
             "server_prefix_message_count": len(transcript),
             "local_prefix_message_count": len(local_prefix),
-            "timestamp_fields_removed": sum(
-                "timestamp" in message for message in local_prefix
-            ),
+            "timestamp_fields_removed": sum("timestamp" in message for message in local_prefix),
             "structural_mismatch_count_after_projection": mismatch_count,
             "projection_bytes_equal": local_bytes == server_bytes,
             "server_prefix_sha256": sha256(server_bytes),
@@ -2387,22 +2507,16 @@ def resume_partial_session_trace(
             or observer_receipt.get("config_sha256") != config["config_sha256"]
             or observer_receipt.get("run_id") != config["run_id"]
             or observer_receipt.get("session_id") != source["session_id"]
-            or observer_receipt.get("verifier_execution_id")
-            != source["verifier_execution_id"]
+            or observer_receipt.get("verifier_execution_id") != source["verifier_execution_id"]
             or observer_receipt.get("message_count") != source["message_count"]
             or observer_receipt.get("chunk_count") != source["chunk_count"]
-            or observer_receipt.get("chunks_completed_before")
-            != source["chunks_completed"]
+            or observer_receipt.get("chunks_completed_before") != source["chunks_completed"]
             or observer_receipt.get("source_trace_manifest_sha256")
             != sha256((source_dir / "trace-manifest.json").read_bytes())
-            or observer_receipt.get("canonical_trace_sha256")
-            != source["trace_sha256"]
-            or observer_receipt.get("source_result_sha256")
-            != source["source_result_sha256"]
-            or observer_receipt.get("source_reward_sha256")
-            != source["source_reward_sha256"]
-            or observer_receipt.get("original_ingest_sha256")
-            != source["original_ingest_sha256"]
+            or observer_receipt.get("canonical_trace_sha256") != source["trace_sha256"]
+            or observer_receipt.get("source_result_sha256") != source["source_result_sha256"]
+            or observer_receipt.get("source_reward_sha256") != source["source_reward_sha256"]
+            or observer_receipt.get("original_ingest_sha256") != source["original_ingest_sha256"]
             or observed_comparison.get("prefix_bytes_equal") is not True
             or observer_receipt.get("transcript_persisted_or_emitted") is not False
             or observer_receipt.get("scores_included") is not False
@@ -2427,13 +2541,9 @@ def resume_partial_session_trace(
             "message_count": source["message_count"],
             "chunk_count": source["chunk_count"],
             "chunks_completed_before": source["chunks_completed"],
-            "persisted_prefix_message_count": comparison[
-                "server_prefix_message_count"
-            ],
+            "persisted_prefix_message_count": comparison["server_prefix_message_count"],
             "transcript_route": "/v1/sessions/{session_id}/transcript",
-            "transcript_response_schema_keys": comparison[
-                "transcript_response_schema_keys"
-            ],
+            "transcript_response_schema_keys": comparison["transcript_response_schema_keys"],
             "server_prefix_sha256": comparison["server_prefix_sha256"],
             "local_prefix_sha256": comparison["local_prefix_sha256"],
             "observer_receipt_sha256": observer_receipt["receipt_sha256"],
@@ -2472,9 +2582,7 @@ def resume_partial_session_trace(
         after = [row for row in after_rows if row.get("session_id") == source["session_id"]]
         authoritative = after[0] if len(after) == 1 else None
         verifier = (authoritative or {}).get("verifier_execution") or {}
-        final_response = _request(
-            client, "GET", f"/v1/sessions/{source['session_id']}/transcript"
-        )
+        final_response = _request(client, "GET", f"/v1/sessions/{source['session_id']}/transcript")
         final_transcript = final_response.get("transcript")
         final_expected = [message for chunk in chunks for message in chunk]
         final_server_bytes = (
@@ -2642,9 +2750,7 @@ def recover_session_trace(
                 "prompts_or_traces_included": False,
             }
             if isinstance(exc, FleetRequestError):
-                failure.update(
-                    http_status=exc.status_code, method=exc.method, route=exc.route
-                )
+                failure.update(http_status=exc.status_code, method=exc.method, route=exc.route)
             failure["receipt_sha256"] = digest_without(failure, "receipt_sha256")
             write_json_once(failure_path, failure)
         raise
@@ -2760,9 +2866,7 @@ def main() -> int:
                             "persisted_prefix_message_count": observed["comparison"][
                                 "server_prefix_message_count"
                             ],
-                            "prefix_bytes_equal": observed["comparison"][
-                                "prefix_bytes_equal"
-                            ],
+                            "prefix_bytes_equal": observed["comparison"]["prefix_bytes_equal"],
                             "receipt_sha256": observed["receipt_sha256"],
                             "scores_included": False,
                             "prompts_or_traces_included": False,
@@ -2782,12 +2886,8 @@ def main() -> int:
                             "resume_allowed": diagnostic["resume_allowed"],
                             "run_id": diagnostic["run_id"],
                             "session_id": diagnostic["session_id"],
-                            "message_count": diagnostic[
-                                "server_prefix_message_count"
-                            ],
-                            "first_mismatch_index": diagnostic[
-                                "first_mismatch_index"
-                            ],
+                            "message_count": diagnostic["server_prefix_message_count"],
+                            "first_mismatch_index": diagnostic["first_mismatch_index"],
                             "receipt_sha256": diagnostic["receipt_sha256"],
                             "content_or_tool_arguments_included": False,
                             "scores_included": False,
@@ -2808,13 +2908,9 @@ def main() -> int:
                             "resume_allowed": diagnostic["resume_allowed"],
                             "run_id": diagnostic["run_id"],
                             "session_id": diagnostic["session_id"],
-                            "message_count": diagnostic[
-                                "server_prefix_message_count"
-                            ],
+                            "message_count": diagnostic["server_prefix_message_count"],
                             "projection": diagnostic["projection"],
-                            "projection_bytes_equal": diagnostic[
-                                "projection_bytes_equal"
-                            ],
+                            "projection_bytes_equal": diagnostic["projection_bytes_equal"],
                             "structural_mismatch_count_after_projection": diagnostic[
                                 "structural_mismatch_count_after_projection"
                             ],

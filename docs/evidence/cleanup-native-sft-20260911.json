@@ -1,0 +1,44 @@
+{
+  "scope": "CPU-only native SFT tests; not a real-model training or capability result",
+  "name": "chris-cpt-native-selftest-v2-20260911",
+  "uid": "9a53ec97-999d-4c19-b8b3-42dc7027060f",
+  "phase": "Succeeded",
+  "image_id": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+  "restarts": 0,
+  "terminal": {
+    "containerID": "containerd://2edb1cba30f5c3427de7df00371f6662dd988b05828f1797419a2a43a5a7ac97",
+    "exitCode": 0,
+    "finishedAt": "2026-09-11T00:24:07Z",
+    "reason": "Completed",
+    "startedAt": "2026-09-11T00:23:50Z"
+  },
+  "receipt": {
+    "bundle_sha256": "05e120d92f41e973e5b46f418e081abfe97f6cc39d34d2237a9739572b9f6a20",
+    "counts": {
+      "errors": 0,
+      "failures": 0,
+      "skipped": 0,
+      "tests": 63
+    },
+    "files": {
+      "test-wheels.json": "8c508f8727bf2769393be9d23bcac2109db17cb8489bb18878c9a66a33ed5fc6",
+      "tests/test_sft_device_residency.py": "637a4ce5105749f035af3a2e37284693883e1cf54bd5583b24ea4ca8c1ca8a6d",
+      "tests/test_sft_runtime.py": "5cf164cf877e67dc245ec0bc92046111af60cfb7d2f96c8e2821fdce4966e33b",
+      "training/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "training/sft_runtime.py": "708dfafedc78308cded111e2d36d842091a75e75ea2503988120626ef1f7aac0"
+    },
+    "gpus": 0,
+    "node": "computeinstance-e04a737eqtfvpnyx08",
+    "pod_uid": "9a53ec97-999d-4c19-b8b3-42dc7027060f",
+    "schema": "cyber-native-sft-selftest-v1",
+    "sha256": "2f03e51637c91c5c0db37e4f540330c7f42376850e09b0fc8ae5c2cb1e647390",
+    "status": "passed",
+    "test_output_path": "/tmp/cyber-native-test-kwn46ndx/test-output.txt",
+    "test_output_sha256": "c43fc69dc1084507b96e04bb5b1a1879796ab12e9ca2073dc24e6933cc43838c"
+  },
+  "prior_selftest": {
+    "uid": "33673f2b-bb79-428f-a6bb-90b58ad5d439",
+    "reason": "pytest absent from immutable trainer image; test launcher corrected with separately hash-pinned wheels",
+    "gpu_count": 0
+  }
+}

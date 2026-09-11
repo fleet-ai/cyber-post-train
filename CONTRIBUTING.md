@@ -11,9 +11,8 @@ another operator's dirty tree, private artifacts and running campaign checkout.
 Use Python 3.11 or 3.12 and the committed `uv.lock`:
 
 ```sh
-uv sync --locked --extra dev
+uv sync --locked --extra dev --extra train
 uv run --locked cyber-post-train doctor
-uv run --locked cyber-post-train catalog
 ```
 
 No credentials are needed for these commands. Use `.env.example` only as a template;
@@ -22,10 +21,10 @@ not Git, chat, issue comments, command arguments or saved shell output.
 
 ## Repository map and authority
 
-- `cyber_post_train/`: incremental facade, experiment identity and local validation.
+- `cyber_post_train/`: small CLI and shared generic Jobs API boundary.
 - `evals/fleet/`: frozen Fleet evaluation treatment, rollout workers and PostgreSQL backend.
 - `training/`: authorized Fleet-data export, normalization, SFT/RL and checkpoint handling.
-- `evals/webexploitbench/`, `evals/secondary/`: evaluation-only external benchmarks.
+- `evals/webexploitbench/`, `evals/exploitgym/`: evaluation-only external benchmarks.
 - `configs/`: versioned model/run controls, not global model defaults.
 - `docs/`: protocols, operator runbooks, dated evidence and historical narrative.
 - `skills/`: reusable decision guidance; exact live IDs and results do not belong here.

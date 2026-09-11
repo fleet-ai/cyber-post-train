@@ -1,90 +1,71 @@
 # cyber-post-train
 
-Reproducible evaluation and post-training for execution-grounded blackbox cyber agents.
+Train open-weight models on authorized Fleet cyber tasks, then evaluate exact
+checkpoints with a pinned harness and verifier. Keep training code thin: SkyRL
+and Miles own the optimizers; Fleet owns the challenge environments and grading.
 
-The repository supports exact, versioned open-weight model experiments. Model choice
-belongs in an immutable experiment config; it is not a repository-wide default. The
-current code has four deliberately separate implementation streams:
+## Start here
 
-1. `evals/webexploitbench/` — evaluation-only WebExploitBench Level 0.
-2. `evals/fleet/` — held-out and full-corpus Fleet blackbox task evaluation.
-3. `training/` — Fleet-data export, normalization, SFT and verifiable-reward RL.
-4. `evals/secondary/` — public XBEN and CVE-Bench fallback evaluations.
-
-The target unified interface and incremental migration plan are documented in
-[`docs/REPOSITORY_DESIGN.md`](docs/REPOSITORY_DESIGN.md). Until that facade is complete,
-the evaluator and trainer directories remain the authoritative command surfaces.
-
-## Safety and experimental integrity
-
-- Secrets are read from environment variables and are never written to artifacts.
-- WebExploitBench is evaluation-only. Its inputs, outputs, traces and derived artifacts
-  must never enter training or agent optimization.
-- Training data is limited to authorized Fleet challenge environments.
-- External benchmark results remain sealed until the training checkpoint is frozen.
-- Dataset splits are by task lineage, vulnerability family and application, not by session.
-- Every run records immutable model, data, prompt, harness and verifier identifiers.
-
-## Local setup
-
-```bash
-cd cyber-post-train  # your clone or dedicated worktree
-uv sync --locked --extra dev
+```sh
+uv sync --locked --extra dev --extra train
+uv run --locked cyber-post-train doctor
+uv run --locked cyber-post-train --help
 ```
 
-Export credentials in the shell or use a local untracked `.env`; do not put them in
-commands, source files, logs or committed configuration.
-Use `.env.example` as a template without overwriting an existing local environment.
-Credentials are not needed for local diagnostics or synthetic unit tests.
+No credentials or model downloads are needed for local tests. `doctor` checks
+installed modules only, not cluster access or model readiness.
 
-New collaborators should start with [CONTRIBUTING.md](CONTRIBUTING.md), then
-[AGENTS.md](AGENTS.md) and the relevant scientific protocol. For the distributed
-Fleet rollout campaign, **PostgreSQL is the coordination authority**; SQLite is
-legacy/local storage and preserved migration evidence, not a second live queue.
-See the [PostgreSQL operator runbook](docs/ROLLOUT_POSTGRES.md) and
-[worker/evidence contract](docs/ROLLOUT_LEDGER_WORKERS.md).
+## Training
 
-Check the local installation and inspect the supported adapter lifecycle without any
-credentials or network access:
+Use one editable YAML file for model/data manifests, hyperparameters, resources
+and W&B. The [training guide](docs/TRAINING.md) explains the fields and gates.
 
-```bash
-uv run cyber-post-train doctor
-uv run cyber-post-train catalog
+```sh
+uv run cyber-post-train data my-data.yaml
+uv run cyber-post-train train my-sft.yaml --output output/my-sft
+# On a CPU worker with the pinned image and staged inputs mounted:
+uv run cyber-post-train preflight output/my-sft
+# Back on the submitting host, using the same prepared directory:
+uv run cyber-post-train preview output/my-sft
+uv run cyber-post-train submit output/my-sft
+uv run cyber-post-train status <returned-run-name>
 ```
 
-The facade currently provides inventory, local diagnostics, create-once experiment
-scaffolding, component locking, validation, and deterministic plan compilation:
+Preparation and preflight do not request GPUs. Submission is explicit and
+create-once; never erase a submission journal to retry a timeout. Check current
+authorization and the total experiment-owned resource budget before submitting.
 
-```bash
-uv run cyber-post-train experiment init --help
-uv run cyber-post-train experiment lock --help
-uv run cyber-post-train experiment validate --help
-uv run cyber-post-train experiment compile --help
-```
+Current consolidation status: the Qwen SFT runtime comes from a successful
+full-model run; its new configurable wrapper is being qualified. Full GLM5.3,
+Miles RL and SkyRL RL must pass their exact-model training/reward gates before
+being described as production-ready. GLM Flash is not full GLM5.3.
 
-Existing evaluator and trainer commands remain authoritative for live
-preview/launch/status/accept operations while those paths are migrated behind the facade.
-The facade never claims to launch an adapter that has not completed that migration.
+## Evaluation
 
-## Experiment identity and execution backends
+- [Fleet](evals/fleet/README.md): exact task versions, OpenCode, private results,
+  and PostgreSQL coordination for distributed workers.
+- [WebExploitBench](evals/webexploitbench/README.md) and
+  [ExploitGym](evals/exploitgym/README.md): separate, evaluation-only adapters.
 
-```text
-model: selected by an exact lock under configs/models/
-revision: immutable commit and weight manifest required
-training: Fleet Training Jobs API with the exact trainer selected in each run config
-formal evaluation: pinned harness, tasks, verifier and serving contract per protocol
-```
+The historical 100-task pass@4 campaign remains on its frozen worker revision.
+Do not copy its run names, reinitialize its database or replay accepted attempts
+to start a new experiment. Shared and dedicated serving remain explicit blocks.
 
-Runnable SFT and RL requests live in `configs/runs/`. They keep the model,
-dataset filters, objective, trainer version, compute shape, and evaluation split
-explicit and independently replaceable. The server preview is always checked
-before submission; the resulting RayJobs enter `training-lq` through Kueue.
+## Rules that matter
 
-Model-specific files are preserved as experiment provenance, not as global defaults.
-Detailed launch commands currently live beside each evaluation and training
-implementation. Evidence-first state and terminal results remain in model-specific
-study reports; `docs/STATUS.md` is chronological narrative and can contain superseded
-intermediate observations.
+- Never train, tune prompts/rewards or select checkpoints on external benchmarks.
+- Hold out complete task families across versions, not random windows. State
+  explicitly whether applications are shared or held out.
+- Bind model, tokenizer, dataset, harness, tools, verifier, runtime and budgets.
+- Track held-out loss, supervised tokens and recoverable checkpoints in W&B;
+  do not upload traces, task text or credentials.
+- Use the Jobs API for GPU batch work and the inference control plane for serving.
+  Release broken or idle experiment-owned capacity; never alter peer workloads.
+- A running process is not a valid result. Require optimizer/checkpoint evidence
+  for training and authoritative grading plus cleanup for evaluation.
 
-The fail-closed checkpoint selection, export, serving-parity, and paired-evaluation
-handoff for the active SFT run is documented in `docs/POST_SFT_EVALUATION.md`.
+See [AGENTS.md](AGENTS.md), [CONTRIBUTING.md](CONTRIBUTING.md),
+[scientific controls](docs/SCIENTIFIC_PROTOCOL.md),
+[cluster policy and alerts](docs/CLUSTER_ALERTS_AND_INFERENCE_SERVING.md), and
+[consolidation status](docs/CONSOLIDATION.md). Dated evidence is historical, not
+live state. Raw outputs, datasets, checkpoints and secrets belong outside Git.

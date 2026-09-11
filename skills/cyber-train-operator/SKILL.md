@@ -9,7 +9,7 @@ Produce a reproducible training artifact without mistaking infrastructure activi
 
 ## Orient before acting
 
-1. Read the repository `AGENTS.md`, then `docs/QWEN36_STUDY_EVIDENCE.md` for the living state and `training/README.md` for the supported launch rails.
+1. Read `AGENTS.md` and `README.md`, then the selected run's exact configuration and latest sanitized evidence. No model-specific historical report is global live state.
 2. Fetch current `origin/main` and work in a clean, dedicated worktree. Preserve unrelated user artifacts and branches.
 3. Separate immutable experiment identity from live scheduler state. A config or receipt proves intent; the API, Kubernetes objects, resolved image IDs, logs, and durable artifacts prove execution.
 4. Identify whether the request authorizes planning, read-only monitoring, or an external mutation. Historical permission does not authorize a new paid launch, deployment, cancellation, or peer-workload change.
@@ -18,8 +18,8 @@ Read [references/gates.md](references/gates.md) before submitting training, expo
 
 ## Operate through the supported rail
 
-- Prefer the typed Fleet Jobs API and repository CLIs. Preview is the default; submission requires an explicit execute path and a duplicate-title check.
-- Use the configured namespace, normal queue, default priority, and a meaningful `chris-cyber-*` name. Never bypass admission, unsuspend manually, preempt, cancel, or modify another owner's workload.
+- Use the generic Jobs API through the repository CLI. Run CPU preflight in the pinned image; preview the rendered request; explicitly submit once with a shared durable journal. Reconcile ambiguous POSTs instead of retrying.
+- Use normal admission and meaningful owner-specific names. Request `c1` when authorized or `c2` for backfill; the current API derives queue priority. Recheck live policy. Never bypass admission, unsuspend manually, preempt, cancel, or modify another owner's workload.
 - Resolve images to immutable digests and record both the requested image and runtime `imageID`. A tag, Ready Pod, or catalog row alone is insufficient evidence.
 - For experiment-owned dedicated GPU serving, freeze consumer-liveness and lifecycle bounds before launch and follow [`docs/GPU_RESOURCE_LIFECYCLE.md`](../../docs/GPU_RESOURCE_LIFECYCLE.md). Drain and release idle owned capacity while diagnosing off-node; never apply that policy to shared or hosted endpoints.
 - Keep credentials in environment or workload-secret injection. Never print, serialize, commit, or pass them as command arguments.
@@ -27,8 +27,11 @@ Read [references/gates.md](references/gates.md) before submitting training, expo
 
 ## SFT gates
 
-- Train only on verified-success demonstrations from the training split. Split by application, vulnerability family, and task lineage before selecting windows.
+- Train only on verified-success demonstrations from the training split. Group task families across versions before selecting windows; report whether applications are shared or independently held out.
 - Prove tokenizer, chat-template, windowing, target coverage, model revision, precision, topology, trainer image, dataset digest, and stopping rule before launch.
+- Count supervised assistant tokens, not just window count. Mask copied context and tool observations; train each eligible target once per epoch. Record exclusions instead of silently truncating.
+- Require held-out loss, scalar-only W&B telemetry, regular recoverable checkpoints and a fixed idle/drain policy. CPU checks do not qualify an untested CUDA kernel or distributed model loader.
+- Full GLM and GLM Flash are different models. Do not claim full GLM training from a Flash recipe or a tiny CPU fixture; qualify the exact loader, resource shape and checkpoint resume.
 - At terminal state, bind the exact run UID, optimizer steps, metrics, and checkpoint files. Export without adding optimizer steps.
 - Do not relabel checkpoint precision. Inspect tensor headers and perform a deterministic conversion when required.
 - Stage weights with exact base runtime sidecars, complete hashes, create-only or atomic no-replace publication, and an embedded acceptance receipt.

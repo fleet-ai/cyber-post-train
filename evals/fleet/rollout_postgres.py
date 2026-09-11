@@ -222,22 +222,33 @@ def verify_plan(dsn: str, plan: Path) -> dict[str, Any]:
 
 
 def claim(
-    dsn: str, *, worker_id: str, serving_block: str, lease_seconds: int = 900
+    dsn: str,
+    *,
+    worker_id: str,
+    serving_block: str,
+    lease_seconds: int = 900,
+    excluded_task_versions: Sequence[str] = (),
 ) -> dict[str, Any] | None:
     worker_id = rollout_ledger._require_text(worker_id, "worker_id")  # noqa: SLF001
     serving_block = rollout_ledger._require_text(serving_block, "serving_block")  # noqa: SLF001
     if lease_seconds < 30:
         raise rollout_ledger.LedgerError("lease_seconds must be at least 30")
+    excluded = [
+        rollout_ledger._require_text(v, "excluded_task_version") for v in excluded_task_versions
+    ]
+    if len(excluded) != len(set(excluded)):
+        raise rollout_ledger.LedgerError("duplicate excluded task versions")
     with _transaction(dsn) as connection:
         row = connection.execute(
             """
             SELECT * FROM rollout_cells
             WHERE state = 'pending' AND serving_block = %s
+              AND NOT (task_version_id = ANY(%s::text[]))
             ORDER BY task_version_id, model_id, attempt
             FOR UPDATE SKIP LOCKED
             LIMIT 1
             """,
-            (serving_block,),
+            (serving_block, excluded),
         ).fetchone()
         if row is None:
             return None
@@ -264,7 +275,7 @@ def claim(
             to_state="claimed",
             worker_id=worker_id,
             claim_id=claim_id,
-            detail={"lease_seconds": lease_seconds},
+            detail={"lease_seconds": lease_seconds, "excluded_task_versions": excluded},
         )
         return claimed
 
@@ -299,6 +310,8 @@ def heartbeat(
     if lease_seconds < 30:
         raise rollout_ledger.LedgerError("lease_seconds must be at least 30")
     with _transaction(dsn) as connection:
+        connection.execute("SET LOCAL statement_timeout = '30s'")
+        connection.execute("SET LOCAL lock_timeout = '5s'")
         row = _owned_active_row(connection, cell_id=cell_id, worker_id=worker_id, claim_id=claim_id)
         updated = connection.execute(
             """
@@ -306,11 +319,13 @@ def heartbeat(
             SET heartbeat_at = CURRENT_TIMESTAMP,
                 lease_expires_at = CURRENT_TIMESTAMP + (%s * INTERVAL '1 second'),
                 updated_at = CURRENT_TIMESTAMP
-            WHERE cell_id = %s
+            WHERE cell_id = %s AND lease_expires_at > clock_timestamp()
             RETURNING *
             """,
             (lease_seconds, cell_id),
         ).fetchone()
+        if updated is None:
+            raise rollout_ledger.LedgerError("active rollout lease has expired")
         _event(
             connection,
             cell_id=cell_id,

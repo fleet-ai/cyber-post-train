@@ -235,11 +235,10 @@ class TrainingJobsClient:
         response = self._client.request(method, path, **kwargs)
         try:
             response.raise_for_status()
-        except httpx.HTTPStatusError as exc:
-            detail = response.text[:500]
+        except httpx.HTTPStatusError:
             raise JobsAPIError(
-                f"Jobs API {method} {path} returned HTTP {response.status_code}: {detail}"
-            ) from exc
+                f"Jobs API {method} {path} returned HTTP {response.status_code}"
+            ) from None
         try:
             return response.json()
         except ValueError as exc:
@@ -297,9 +296,6 @@ def concise_status(run: dict[str, Any]) -> dict[str, Any]:
         "kind": run.get("kind"),
         "title": run.get("title"),
         "status": run.get("status"),
-        "status_detail": run.get("status_detail"),
-        "failure_message": run.get("failure_message"),
-        "failure_signature": run.get("failure_signature"),
         "trainer_version_id": run.get("trainer_version_id"),
         "ray_job_id": run.get("ray_job_id"),
         "steps": len(run.get("steps") or []),

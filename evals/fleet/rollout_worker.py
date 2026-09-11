@@ -13,6 +13,8 @@ import hashlib
 import json
 import os
 import threading
+import time
+import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import suppress
 from pathlib import Path
@@ -175,12 +177,19 @@ def _task_binding(
         "data_id": selected["data_key"],
         "data_version": selected["data_version"],
     }
+    runtime_data = self_hosted.task_data_binding(response)
     actual_runtime = {
         "environment_id": response.get("environment_id"),
         "environment_version": response.get("version"),
-        "data_id": response.get("data_id"),
-        "data_version": response.get("data_version"),
+        "data_id": runtime_data["data_id"] if runtime_data else None,
+        "data_version": runtime_data["data_version"] if runtime_data else None,
     }
+    if runtime_data is None:
+        if response.get("environment_version_id") != selected["environment_version_id"]:
+            raise RuntimeError("legacy task lacks the exact environment version binding")
+        for field in ("data_id", "data_version"):
+            actual_runtime.pop(field)
+            expected_runtime.pop(field)
     if actual_runtime != expected_runtime:
         raise RuntimeError("live task runtime differs from the frozen selection")
     metadata = response.get("metadata") or {}
@@ -200,6 +209,8 @@ def _task_binding(
         ),
         "cyber_contract": metadata.get("cyber_contract"),
     }
+    if runtime_data is None:
+        task_binding["data_binding_validation"] = self_hosted.PROVISIONED_DATA_VALIDATION
     environment_binding = {
         "id": selected["env_key"],
         "version": selected["env_version"],
@@ -307,26 +318,74 @@ class _Heartbeat:
         self.cell = cell
         self.ledger = ledger
         self.interval = interval
+        self.lease_seconds = max(300, self.interval * 4)
+        self.last_success = time.monotonic()
+        self.failure: str | None = None
+        self.closed = False
         self.stop = threading.Event()
         self.thread = threading.Thread(target=self._run, daemon=True)
 
     def _run(self) -> None:
-        while not self.stop.wait(self.interval):
-            self.ledger.heartbeat(
-                self.database,
-                cell_id=self.cell["cell_id"],
-                worker_id=self.cell["worker_id"],
-                claim_id=self.cell["claim_id"],
-                lease_seconds=max(300, self.interval * 4),
-            )
+        delay = self.interval
+        while not self.stop.wait(delay):
+            try:
+                self._renew()
+                delay = self.interval
+            except rollout_ledger.LedgerError as exc:
+                # Ownership/state failures are fences, not transient outages.
+                self.failure = f"heartbeat_failed:{type(exc).__name__.lower()}"
+                return
+            except Exception:  # noqa: BLE001
+                # Never print a driver exception: it may contain connection data.
+                if self.failure is not None:
+                    return
+                delay = min(5, self.interval)
+
+    def _renew(self) -> None:
+        started = time.monotonic()
+        # Leave a full minute for a bounded database operation. Do not revive a
+        # stale lease after a long outage or process suspension.
+        if started - self.last_success >= self.lease_seconds - 60:
+            self.failure = "heartbeat_lease_window_exhausted"
+            self.check()
+        self.ledger.heartbeat(
+            self.database,
+            cell_id=self.cell["cell_id"],
+            worker_id=self.cell["worker_id"],
+            claim_id=self.cell["claim_id"],
+            lease_seconds=self.lease_seconds,
+        )
+        self.last_success = started
+
+    def check(self) -> None:
+        if self.failure is not None:
+            raise RuntimeError(self.failure) from None
+
+    def close(self) -> None:
+        if self.closed:
+            self.check()
+            return
+        self.stop.set()
+        self.thread.join(timeout=10)
+        if self.thread.is_alive():
+            self.failure = "heartbeat_shutdown_incomplete"
+        self.check()
+        # Refresh once after joining, before the short terminal transaction.
+        # No background renewal may race an accepted terminal state.
+        self._renew()
+        self.closed = True
 
     def __enter__(self) -> _Heartbeat:
+        self._renew()
         self.thread.start()
         return self
 
-    def __exit__(self, *_args: object) -> None:
-        self.stop.set()
-        self.thread.join(timeout=10)
+    def __exit__(self, exc_type: object, *_args: object) -> None:
+        if exc_type is None:
+            self.close()
+        else:
+            self.stop.set()
+            self.thread.join(timeout=10)
 
 
 def _accepted_receipt(
@@ -387,6 +446,18 @@ def _accepted_receipt(
     return {**body, "receipt_sha256": crypto.digest_without(body, "receipt_sha256")}
 
 
+def deferred_task_versions() -> list[str]:
+    """Read explicit scheduling deferrals; never change a deferred ledger row."""
+    value = json.loads(os.environ.get("ROLLOUT_DEFERRED_TASK_VERSIONS", "[]"))
+    if (
+        not isinstance(value, list)
+        or any(not isinstance(v, str) or str(uuid.UUID(v)) != v for v in value)
+        or len(value) != len(set(value))
+    ):
+        raise RuntimeError("invalid deferred task version identities")
+    return value
+
+
 def run_one(
     *,
     database: Path | str,
@@ -403,8 +474,16 @@ def run_one(
     cell: dict[str, Any] | None = None
     out_dir: Path | None = None
     try:
+        deferred = deferred_task_versions()
+        if deferred and ledger is not rollout_postgres:
+            raise RuntimeError("task scheduling deferral requires PostgreSQL")
+        claim_options = {"excluded_task_versions": deferred} if ledger is rollout_postgres else {}
         cell = ledger.claim(
-            database, worker_id=worker_id, serving_block=serving_block, lease_seconds=300
+            database,
+            worker_id=worker_id,
+            serving_block=serving_block,
+            lease_seconds=300,
+            **claim_options,
         )
         if cell is None:
             return {"serving_block": serving_block, "claimed": False, "accepted": False}
@@ -416,17 +495,21 @@ def run_one(
         api_key = os.environ.get("FLEET_API_KEY")
         if not api_key:
             raise RuntimeError("FLEET_API_KEY is required")
-        with httpx.Client(
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            timeout=1800,
-        ) as client:
+        with (
+            _Heartbeat(database, cell, ledger) as heartbeat,
+            httpx.Client(
+                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                timeout=1800,
+            ) as client,
+        ):
             config = build_config(campaign, cell, scientific, selected, client)
             execution_name = config["execution"]["execution_id"].removeprefix("sha256:")
             claim = _claim_receipt(config, cell)
             self_hosted.write_json_once(claim_root / f"{execution_name}.json", claim)
             out_dir = output_root / "attempts" / execution_name
-            with _Heartbeat(database, cell, ledger):
-                result = self_hosted.run(config, out_dir, proxy_script)
+            heartbeat.check()
+            result = self_hosted.run(config, out_dir, proxy_script)
+            heartbeat.check()
             _record_local_result(
                 database=database,
                 ledger=ledger,
@@ -437,6 +520,7 @@ def run_one(
                 output_root=output_root,
             )
             accepted = _accepted_receipt(client, config, cell, result, out_dir)
+            heartbeat.check()
             _safe_write_once(out_dir / "ACCEPTED.json", accepted)
             ledger.start(
                 database,
@@ -452,6 +536,7 @@ def run_one(
                 worker_id=cell["worker_id"],
                 claim_id=cell["claim_id"],
             )
+            heartbeat.close()
             ledger.accept(
                 database,
                 cell_id=cell["cell_id"],

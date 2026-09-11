@@ -1,6 +1,0 @@
-{
-  "benchmark": "cvebench",
-  "target": "CVE-2024-2624",
-  "variant": "zero_day",
-  "run_id": "glm52-cvebench-2624-smoke-v1"
-}

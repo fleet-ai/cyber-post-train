@@ -1,59 +1,63 @@
-# Scientific protocol
+# Scientific controls
 
-## Causal question
+## Comparison
 
-Does post-training the exact Qwen3.6-27B base checkpoint on authorized Fleet
-blackbox-exploit tasks improve performance on a frozen, external blackbox web
-exploitation benchmark?
+Freeze the question, exact base model, training data, recipe, checkpoint-selection
+rule and evaluation protocol before unsealing external results. Typical arms are
+base, SFT-only, RL-from-base and SFT→RL; choose only the arms needed for the
+question. Multiple rollout seeds are not independent training replicates.
 
-## Experimental arms
+Teacher SFT imitates verified-success teacher actions with next-token
+cross-entropy. Self-SFT uses verified-success student actions under the same
+quality gates. RL obtains fresh isolated episodes and authoritative verifier
+rewards. Do not confuse declining imitation loss with improved task success.
 
-Use at least three arms: unchanged base, SFT-only, and SFT→online-RL. Add
-RL-from-base when compute permits. Every arm starts from the same immutable base
-checkpoint manifest. Run multiple training seeds; do not treat evaluation
-rollouts from one trained checkpoint as independent training replicates.
+## Data
 
-The planned sequence is SFT followed by online verifier-reward RL, not a choice
-between them. SFT is the low-variance interface/domain adaptation stage and may
-imitate only score-1 trajectories. RL is the main capability-learning stage:
-it obtains fresh isolated rollouts and can learn on the 58 task lineages for
-which the historical corpus has no successful demonstration. Base, SFT-only,
-RL-from-base and SFT-to-RL arms distinguish those effects.
+Split before windowing. Every version and session of a task family belongs to
+one split. The default generic splitter is application×task-family grouped:
+it can share applications across splits and is NOT application-disjoint.
+For an application-held-out study, freeze an explicit app-disjoint manifest.
 
-## Controlled variables
+Keep dev/test out of SFT, preference pairs and RL prompt sets. Do not silently
+rewrite existing frozen splits after a split-policy fix. Choose hyperparameters
+and checkpoints on Fleet dev only; preserve a final untouched test set.
 
-Before any scored baseline, resolve `configs/evaluation_protocol.example.json`.
-Its digest binds all variables other than intervention checkpoint bytes:
+WebExploitBench, ExploitGym and other external benchmarks are evaluation-only.
+Their prompts, traces, applications, answers, outcomes and derived hints must
+not enter training, retrieval, reward design or checkpoint selection.
 
-- every model shard, tokenizer file and rendered chat template;
-- inference engine image/commit, numerical precision and quantization recipe;
-- agent harness image/commit, tool schema and system prompt;
-- benchmark task, environment, prompt and verifier manifests;
-- decoding parameters, agent budgets and random seeds.
+For SFT, count both total context and supervised assistant tokens. Mask tool
+observations and copied context. Preserve target coverage and exclusion counts;
+never hide overlength examples by silent truncation. Keep validation data and
+tokenization fixed across measurements; report token-weighted and task-macro
+loss separately.
 
-The base and intervention endpoints must be deployed from the same serving image
-and protocol. If evaluation uses FP8, export both arms with the same pinned
-quantization recipe and calibration set. If that cannot be proved, evaluate both
-in BF16. A hosted base model with undisclosed bytes is useful for plumbing but is
-not an admissible scientific control for a self-hosted intervention.
+## Matched evaluation
 
-The active base is `Qwen/Qwen3.6-27B` revision
-`6a9e13bd6fc8f0983b9b99948120bc37f49c13e9`. GLM-5.2 locks and cluster
-manifests are retained only as historical provenance from the superseded
-feasibility path; they are not interchangeable controls.
+Bind weights, tokenizer/chat template, numerical precision, quantization,
+serving image/arguments, agent harness, prompt and ordered tool schemas, task and
+environment versions, verifier, decoding, pass@k and all time/token/turn limits.
+Change only the intervention checkpoint for a matched base/post comparison.
 
-## Data and leakage
+Hosted and dedicated endpoints are separate serving blocks. Partition complete
+tasks before execution and report each block before pooling. An opaque shared
+endpoint can support descriptive results, not an exact causal control when its
+bytes/runtime cannot be matched. Extra capacity does not authorize duplicate
+attempts or a silent harness/precision change.
 
-WebExploitBench and all other external benchmarks are evaluation-only. Never use
-their files, traces, scores or failure analyses for training, prompt tuning,
-reward shaping or checkpoint selection. Choose the recipe on lineage-held-out
-Fleet data. The final all-Fleet-data fit is evaluated once on sealed external
-benchmarks. Report Fleet training-distribution performance separately.
+## Acceptance and reporting
 
-## Statistics
+Require finite optimization metrics, changed weights, complete recoverable
+checkpoints and exact reload evidence for a usable training artifact. Run a
+reward-acquisition canary before scaling RL: real verifier IDs, useful rewards,
+a real parameter update and checkpoint—not just a loop returning zeros.
 
-Pre-register primary metric, task set, exclusions and stopping rule. Report
-paired per-task deltas, bootstrap confidence intervals over tasks, and exact
-task-level outcomes. Preserve training-seed variance separately from rollout
-variance. Report infrastructure failures and timeouts rather than silently
-rerunning them; reruns follow a written retry policy and retain original records.
+Require exact task/harness identity, authoritative grading, complete private
+results and environment cleanup for a valid evaluation outcome. Distinguish
+genuine model failures from infrastructure-invalid, interrupted and unknown
+outcomes. Preserve originals and follow the predeclared retry policy.
+
+Report paired task-level changes and uncertainty over tasks. Report training-seed
+variance separately. Pre-register exclusions, the primary metric and stopping
+rule. Never reinterpret a timeout or missing reward as model incapability.

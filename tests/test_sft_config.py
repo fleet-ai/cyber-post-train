@@ -1,0 +1,315 @@
+"""Offline compiler and actual embedded-bootstrap tests: no GPU or network."""
+
+import base64
+import copy
+import gzip
+import hashlib
+import json
+import os
+import shlex
+import subprocess
+import sys
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+
+from cyber_post_train.jobs import digest
+from training import sft
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+@pytest.fixture
+def config(tmp_path):
+    manifest = {
+        "tokenizer": {
+            "repo": "Qwen/Qwen3.8-27B",
+            "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+        },
+        "split_sha256": "sha256:" + "a" * 64,
+        "files": {
+            "train": {
+                "path": "train.parquet",
+                "rows": 17,
+                "sha256": "b" * 64,
+                "task_keys": ["train"],
+            },
+            "dev": {
+                "path": "dev.parquet",
+                "rows": 2,
+                "sha256": "c" * 64,
+                "task_keys": ["dev-a", "dev-b"],
+            },
+        },
+    }
+
+    def save(value):
+        value = {k: v for k, v in value.items() if k != "sha256"}
+        value["sha256"] = "sha256:" + digest(value)
+        (tmp_path / "corpus.json").write_text(json.dumps(value))
+
+    save(manifest)
+    return (
+        {
+            "name": "sft-compiler-test",
+            "output_root": "/mnt/sfs/jobs/sft-compiler-test",
+            "model": {
+                "lock": str(ROOT / "configs/models/qwen38-27b-1d4bf0f2.lock.json"),
+                "weights": str(ROOT / "configs/models/qwen38-27b-1d4bf0f2.weights.json"),
+                "root": "/mnt/sfs/models/test-base",
+            },
+            "data": {"manifest": "corpus.json", "root": "/mnt/sfs/datasets/test-corpus"},
+            "wandb": {
+                "entity": "test-team",
+                "project": "test-project",
+                "group": "test",
+                "run_id": "sft-compiler-test",
+                "name": "test",
+                "tags": ["synthetic"],
+            },
+        },
+        manifest,
+        save,
+    )
+
+
+def test_compile_uses_exact_model_manifest_and_complete_epochs(config, tmp_path):
+    source, _, _ = config
+    source["recipe"] = {"epochs": 3, "batch_size": 16, "lr": 2e-6}
+    plan = sft.compile_sft(source, relative_to=tmp_path)
+    assert plan["recipe"]["max_steps"] == 6
+    assert plan["recipe"]["lr"] == 2e-6
+    assert len(plan["model"]["files"]) == 28
+    assert plan["datasets"]["train"]["path"] == "/mnt/sfs/datasets/test-corpus/train.parquet"
+    request = sft.job_request(plan)
+    assert request["workers"] == 1 and request["gpus_per_worker"] == 8
+    assert request["priority_class"] == "c1"
+    assert "queue_priority_class" not in request
+    assert request["secrets"] == ["wandb-api"]
+    assert request == sft.job_request(plan)
+    content = json.loads(gzip.decompress(base64.b64decode(request["env"]["CYBER_SFT_BUNDLE"])))
+    assert json.loads(content["plan"]) == plan
+    assert hashlib.sha256(content["runtime"].encode()).hexdigest() == plan["runtime_sha256"]
+
+
+@pytest.mark.parametrize(
+    "section,key",
+    [
+        (None, "typo"),
+        ("recipe", "learning_rate"),
+        ("cluster", "queue_priority_class"),
+        ("model", "revision"),
+        ("data", "taskset"),
+    ],
+)
+def test_unknown_fields_fail_instead_of_silently_ignoring_overrides(config, tmp_path, section, key):
+    source, _, _ = config
+    target = source if section is None else source.setdefault(section, {})
+    target[key] = "unexpected"
+    with pytest.raises(ValueError, match="unknown fields"):
+        sft.compile_sft(source, relative_to=tmp_path)
+
+
+@pytest.mark.parametrize(
+    "key,value",
+    [
+        ("batch_size", 0),
+        ("epochs", 1.5),
+        ("nodes", True),
+        ("batch_size", 7),
+        ("lr", float("nan")),
+        ("lr", 1),
+        ("checkpoint_interval", 10),
+        ("keep_checkpoints", 0),
+    ],
+)
+def test_bad_recipe_fails_before_network(config, tmp_path, key, value):
+    source, _, _ = config
+    source["recipe"] = {key: value}
+    with pytest.raises(ValueError):
+        sft.compile_sft(source, relative_to=tmp_path)
+
+
+@pytest.mark.parametrize(
+    "defect",
+    [
+        "unsigned",
+        "tokenizer",
+        "task_overlap",
+        "path_escape",
+        "same_file",
+        "zero_rows",
+        "missing_identity",
+    ],
+)
+def test_corpus_identity_and_split_gates(config, tmp_path, defect):
+    source, manifest, save = config
+    if defect == "unsigned":
+        manifest["sha256"] = "wrong"
+        (tmp_path / "corpus.json").write_text(json.dumps(manifest))
+    else:
+        if defect == "tokenizer":
+            manifest["tokenizer"]["revision"] = "a" * 40
+        elif defect == "task_overlap":
+            manifest["files"]["dev"]["task_keys"] = ["train"]
+        elif defect == "path_escape":
+            manifest["files"]["train"]["path"] = "../outside"
+        elif defect == "same_file":
+            manifest["files"]["dev"]["path"] = "train.parquet"
+        elif defect == "zero_rows":
+            manifest["files"]["train"]["rows"] = 0
+        else:
+            manifest["files"]["dev"]["sha256"] = ""
+        save(manifest)
+    with pytest.raises(ValueError):
+        sft.compile_sft(source, relative_to=tmp_path)
+
+
+@pytest.mark.parametrize(
+    "defect", ["revision", "shard", "sidecar", "duplicate", "unsupported_model"]
+)
+def test_model_must_match_full_file_inventory(config, tmp_path, defect):
+    source, manifest, save = config
+    lock = sft.read_mapping(Path(source["model"]["lock"]))
+    if defect == "revision":
+        lock["revision"] = "a" * 40
+    elif defect == "shard":
+        lock["weights"]["shards"] -= 1
+    elif defect == "sidecar":
+        lock["configuration"]["config_sha256"] = ""
+    elif defect == "duplicate":
+        lock["tokenizer"]["files"].append(copy.deepcopy(lock["tokenizer"]["files"][0]))
+    else:
+        lock["repo"] = "zai-org/GLM-5.3-Flash"
+        manifest["tokenizer"]["repo"] = lock["repo"]
+        save(manifest)
+    (tmp_path / "model.json").write_text(json.dumps(lock))
+    source["model"]["lock"] = "model.json"
+    with pytest.raises(ValueError):
+        sft.compile_sft(source, relative_to=tmp_path)
+
+
+@pytest.mark.parametrize(
+    "section,root",
+    [
+        ("model", "/mnt/sfs"),
+        ("data", "/tmp/data"),
+        ("data", "/mnt/sfs/datasets/../test"),
+        ("model", "/mnt/sfs//models/test"),
+    ],
+)
+def test_roots_are_explicit_and_canonical(config, tmp_path, section, root):
+    source, _, _ = config
+    source[section]["root"] = root
+    with pytest.raises(ValueError):
+        sft.compile_sft(source, relative_to=tmp_path)
+
+
+def test_bootstrap_executes_bound_bytes_and_never_overwrites(config, tmp_path, monkeypatch):
+    source, _, _ = config
+    plan = sft.compile_sft(source, relative_to=tmp_path)
+    fake_module = tmp_path / "compiler.py"
+    runtime = tmp_path / "sft_runtime.py"
+    runtime.write_text("import sys; print('synthetic-bootstrap', sys.argv[4])\n")
+    monkeypatch.setattr(sft, "__file__", str(fake_module))
+    with pytest.raises(ValueError, match="runtime changed"):
+        sft.job_request(plan)
+    plan["runtime_sha256"] = hashlib.sha256(runtime.read_bytes()).hexdigest()
+    request = sft.job_request(plan)
+    argv = shlex.split(request["command"])
+    argv[0] = sys.executable
+    output = tmp_path / "run"
+    output.mkdir()
+    env = {**os.environ, **request["env"], "RUN_DIR": str(output)}
+    result = subprocess.run(argv, env=env, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    assert "synthetic-bootstrap" in result.stdout
+    assert (output / ".runtime/sft_runtime.py").read_bytes() == runtime.read_bytes()
+    assert subprocess.run(argv, env=env, capture_output=True).returncode != 0
+    tampered = tmp_path / "tampered"
+    tampered.mkdir()
+    env.update(RUN_DIR=str(tampered), CYBER_SFT_BUNDLE=base64.b64encode(b"tampered").decode())
+    assert subprocess.run(argv, env=env, capture_output=True).returncode != 0
+    assert not (tampered / ".runtime").exists()
+
+
+@pytest.mark.parametrize("defect", [None, "gpu", "native", "file", "tokens"])
+def test_cpu_preflight_checks_files_and_actual_target_accounting(
+    config, tmp_path, monkeypatch, defect
+):
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+    import torch
+    import transformers
+
+    from training import sft_runtime
+
+    source, _, _ = config
+    plan = sft.compile_sft(source, relative_to=tmp_path)
+    root = tmp_path / "model"
+    root.mkdir()
+    plan["model"]["root"] = str(root)
+    for item in plan["model"]["files"]:
+        (root / item["path"]).write_bytes(b"synthetic-file")
+        item["sha256"] = hashlib.sha256(b"synthetic-file").hexdigest()
+    for split, spec in plan["datasets"].items():
+        rows = [
+            {
+                "messages": [{"role": "assistant", "content": "synthetic"}],
+                "task_key": spec["task_keys"][i % len(spec["task_keys"])],
+                "window_id": str(i),
+                "token_count": 4 if defect != "tokens" else 5,
+            }
+            for i in range(spec["rows"])
+        ]
+        path = tmp_path / f"{split}.parquet"
+        pq.write_table(pa.Table.from_pylist(rows), path)
+        spec.update(path=str(path), sha256=hashlib.sha256(path.read_bytes()).hexdigest())
+    calls = []
+
+    def native():
+        calls.append("native")
+        if defect == "native":
+            raise ValueError("native source mismatch")
+
+    def tokenize(row, tokenizer, max_length):
+        assert max_length is None  # silently truncating is never acceptable
+        return {
+            "input_ids": [1, 2, 3, 4],
+            "attention_mask": [1] * 4,
+            "num_actions": 2,
+            "loss_mask": [1, 1],
+        }
+
+    monkeypatch.setitem(
+        sys.modules, "skyrl.train.sft_trainer", SimpleNamespace(tokenize_chat_example=tokenize)
+    )
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: defect == "gpu")
+    monkeypatch.setattr(sft_runtime, "validate_runtime_sources", native)
+    monkeypatch.setattr(sft_runtime, "build_runtime_configs", lambda p: calls.append("config"))
+
+    def local_loader(path, **kwargs):
+        assert path == str(root)
+        assert kwargs == {"local_files_only": True, "trust_remote_code": False}
+        calls.append("local_model")
+
+    monkeypatch.setattr(transformers.AutoConfig, "from_pretrained", local_loader)
+    monkeypatch.setattr(transformers.AutoTokenizer, "from_pretrained", local_loader)
+    if defect == "file":
+        (root / "config.json").write_bytes(b"tampered")
+    if defect:
+        with pytest.raises(ValueError):
+            sft.preflight(plan)
+        if defect in {"gpu", "file"}:
+            assert calls == []
+    else:
+        receipt = sft.preflight(plan)
+        assert calls == ["native", "config", "local_model", "local_model"]
+        assert receipt["plan_sha256"] == digest(plan)
+        assert receipt["request_sha256"] == digest(sft.job_request(plan))
+        assert receipt["counts"] == {
+            "train": {"rows": 17, "tasks": 1, "supervised_tokens": 34},
+            "dev": {"rows": 2, "tasks": 2, "supervised_tokens": 4},
+        }
+        assert receipt["status"] == "passed" and receipt["gpus"] == 0

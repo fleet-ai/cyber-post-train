@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 
 from training.normalize import build_datasets, normalize_export_row
+from training.splits import SPLIT_SEED, assign_split, split_key
 
 
 def row(
@@ -87,6 +88,60 @@ class NormalizeTests(unittest.TestCase):
             self.assertEqual(manifest["files"]["preferences"]["rows"], 1)
             self.assertEqual(manifest["files"]["rl_prompts"]["rows"], 1)
             self.assertTrue((root / "out" / "manifest.json").exists())
+
+    def test_heldout_never_enters_preference_or_rl_training_exports(self):
+        rows = []
+        for split in ("train", "dev", "test"):
+            for i in range(1000):
+                family = f"synthetic-{i}"
+                unit = split_key({"lineage": {"application": "fira", "task_family": family}})
+                if assign_split(unit) == split:
+                    break
+            else:
+                self.fail("fixture could not find all split partitions")
+            for attempt, score in enumerate((1.0, 0.0)):
+                item = row(
+                    f"{split}-{attempt}",
+                    score,
+                    task_key=f"cysec1-2-fira-gen_{family}__blackbox_ctf_v1",
+                )
+                item["source"]["roster_task_binding"]["eval_task_version_id"] = family
+                rows.append(item)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            raw = root / "raw.jsonl"
+            raw.write_text("\n".join(json.dumps(item) for item in rows) + "\n")
+            manifest = build_datasets(raw, root / "out")
+            self.assertEqual(manifest["policy"]["split_seed"], SPLIT_SEED)
+            self.assertEqual(manifest["counts"]["splits"], {"train": 2, "dev": 2, "test": 2})
+            for name in ("preferences", "rl_prompts"):
+                output = [
+                    json.loads(line)
+                    for line in (root / "out" / f"{name}.jsonl").read_text().splitlines()
+                ]
+                self.assertEqual(len(output), 1)
+                self.assertEqual(output[0]["metadata"]["split"], "train")
+                if name == "preferences":
+                    self.assertEqual(output[0]["id"], "train-0::train-1")
+
+    def test_registry_versions_share_split_but_not_preference_pairs(self):
+        rows = [row("win-v1", 1.0), row("lose-v2", 0.0)]
+        for version, item in enumerate(rows, 1):
+            item["source"]["roster_task_binding"]["task_graph_locator"] = {
+                "artifact_key": "cyber/task-graphs/demo",
+                "version_index": version,
+            }
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            raw = root / "raw.jsonl"
+            raw.write_text("\n".join(json.dumps(item) for item in rows) + "\n")
+            manifest = build_datasets(raw, root / "out")
+            normalized = [
+                json.loads(line)
+                for line in (root / "out" / "trajectories.jsonl").read_text().splitlines()
+            ]
+            self.assertEqual(len({r["split_unit"] for r in normalized}), 1)
+            self.assertEqual(manifest["files"]["preferences"]["rows"], 0)
 
 
 if __name__ == "__main__":

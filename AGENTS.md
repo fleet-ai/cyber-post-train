@@ -14,7 +14,6 @@ Read this file before acting. Then select only the skill matching the work and r
 | Design, launch, or interpret matched evaluations | [`cyber-eval-parity`](skills/cyber-eval-parity/SKILL.md) |
 | Diagnose a job or assemble status/terminal evidence | [`cyber-run-evidence`](skills/cyber-run-evidence/SKILL.md) |
 | Convert a lesson into code, tests, docs, or agent guidance | [`cyber-experiment-maintainer`](skills/cyber-experiment-maintainer/SKILL.md) |
-| Compose or change a model × harness × data × benchmark experiment | [`cyber-experiment-operator`](skills/cyber-experiment-operator/SKILL.md) |
 | Observe, drain, release, or replace experiment-owned dedicated GPU capacity | [`cyber-gpu-steward`](skills/cyber-gpu-steward/SKILL.md) |
 
 Before creating any Kubernetes Job, RayJob, or persistent inference service on the
@@ -24,7 +23,10 @@ Normal experiment operation must not manufacture failed-Job pages or hold uncons
 GPUs. Do not evade or suppress a genuine platform alert; choose the supported resource
 lifecycle and make expected terminal states clean and explicit.
 
-For current experiment state, read `docs/QWEN36_STUDY_EVIDENCE.md`. For scientific controls, read `docs/SCIENTIFIC_PROTOCOL.md`. Chronological status notes and early example configs are context, not authority.
+For supported commands, start at `README.md`. For scientific controls, read
+`docs/SCIENTIFIC_PROTOCOL.md`. Use the exact experiment's latest sanitized receipt
+and live API/UID-bound state for progress; model-specific reports and old configs
+are historical evidence, never repository-wide model or runtime defaults.
 
 For distributed Fleet rollout coordination, read `docs/ROLLOUT_POSTGRES.md`.
 PostgreSQL is the migrated campaign's sole queue authority; preserved SQLite and
@@ -48,17 +50,19 @@ Mutable names, tags, catalog `current` pointers, a Ready Pod, or a dashboard lab
 2. Never commit, print, serialize, forward, or place credentials in command arguments. Read them only from environment variables or the cluster secret manager.
 3. Run offensive workloads only against explicitly authorized isolated challenge environments.
 4. Keep external results sealed until the checkpoint and evaluation protocol are frozen.
-5. Split Fleet data by application, vulnerability family, and task lineage. Sessions from one lineage may not cross train/dev/test boundaries.
+5. Freeze the split unit explicitly. Group every version/session of one task family
+   in one split. Task-family-held-out data may share applications; never describe
+   it as application-held-out. Keep dev/test out of SFT, preferences and RL prompts.
 6. Bind every result to the exact checkpoint, tokenizer, chat template, task, environment, prompt, harness, tool schema, verifier, image, budgets, and retry policy required by its protocol.
 
 ## External-state discipline
 
 - Status, diagnosis, and review requests are read-only. Do not infer permission to fix, deploy, submit, rerun, cancel, or mutate.
 - Default mutating or paid operations to preview. Recheck duplicates, exact identity, cost/session count, queue, and stop conditions immediately before execution.
-- Use meaningful ownership names, normal queues, and default priority. A current,
-  explicit owner-authorized priority exception may change the owned workload's
-  supported queue-priority fields after preview and immutable-identity checks.
-  Verify effective Workload priority separately from Job labels. Never bypass
+- Use meaningful ownership names and normal queues. Request supported pod priority
+  (`c1` for authorized high-priority training, `c2` for backfill); the current API
+  derives queue priority and rejects explicit queue-priority overrides. Recheck
+  live policy and effective Workload priority, not just labels. Never bypass
   admission, unsuspend manually, cancel, directly preempt, or change peer workloads.
 - Designate one live rollout creator across humans and automations. Queued and
   initializing successors occupy slots; wait for UID-bound readiness and a matching

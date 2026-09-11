@@ -1,4 +1,0 @@
-interface:
-  display_name: "Cyber Experiment Operator"
-  short_description: "Plan controlled cyber evaluations and post-training experiments"
-  default_prompt: "Design or operate a cyber experiment through the repository unified interface."

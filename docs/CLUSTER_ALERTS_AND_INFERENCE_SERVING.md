@@ -68,6 +68,32 @@ checking the live deployment.
 
 ## Resource choice
 
+### Jobs API policy checked 2026-09-10
+
+The deployed `https://api.ft.flt.build/v1/openapi.json` exposes generic
+`POST /v1/runs/preview` and `POST /v1/runs`: image, command, workers, resources,
+environment and Secret references are configurable. It is not limited to the old
+typed model catalog. Matching Theseus schema:
+`services/fleet-train-api/src/fleet_train_api/schemas/rl_job.py` at
+`a70a7ee85e34f9858f5897b53c79e0f7f2e07b5e`.
+
+- Request pod priority `c1` for the authorized high-priority training class or
+  `c2` for backfill. Queue priority is now derived; explicit
+  `queue_priority_class` is rejected. Do not copy old `q1` payload overrides.
+- The schema documents Kueue workload preemption as disabled. This is not a
+  guarantee against node failures, administrative cancellation or every other
+  interruption. Keep checkpoints and verify actual rendered/effective policy.
+- The generic API requires at least one GPU per worker. Do not allocate a GPU
+  merely to run CPU data validation or copy files. Use an authorized CPU path.
+- Each POST creates a fresh run name; it is not an idempotency key. Preserve a
+  durable pre-POST intent and exhaustively reconcile uncertain responses.
+- Inject credentials via existing Secret references, never literal request env
+  values or command arguments. Do not print server failure bodies: they may embed
+  private trainer logs.
+
+These are dated observations. The CLI validates the live preview and stops on
+drift; never bypass that stop by manually unsuspending or relabeling a workload.
+
 Use the Fleet inference control plane for a persistent routed model. It owns one
 `InferenceModel`, one ready-only Service, one Deployment, gateway backends and routes,
 exact model staging, explicit pause/resume/retire actions, and serving metrics in the

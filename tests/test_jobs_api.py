@@ -204,15 +204,30 @@ class JobsAPIClientTests(unittest.TestCase):
                 "kind": "rl",
                 "status": "Running",
                 "manifest": {"secret": "large"},
+                "failure_message": "private trainer log",
+                "failure_signature": "private exception data",
+                "status_detail": "private command with credentials",
                 "steps": [{"step": 1}],
                 "checkpoints": [{"step": 1}],
                 "sessions": {"training": [{"id": "s"}], "eval": []},
             }
         )
         self.assertNotIn("manifest", result)
+        self.assertNotIn("private", json.dumps(result))
         self.assertEqual(result["steps"], 1)
         self.assertEqual(result["checkpoints"], 1)
         self.assertEqual(result["training_sessions"], 1)
+
+    def test_http_errors_never_echo_private_response_bodies(self):
+        def handler(request):
+            return httpx.Response(500, text="private-trace-and-secret")
+
+        with TrainingJobsClient(
+            "token", base_url="https://jobs.invalid", transport=httpx.MockTransport(handler)
+        ) as client, self.assertRaises(JobsAPIError) as raised:
+            client.status("test-run")
+        self.assertNotIn("private-trace-and-secret", str(raised.exception))
+        self.assertIn("HTTP 500", str(raised.exception))
 
 
 if __name__ == "__main__":

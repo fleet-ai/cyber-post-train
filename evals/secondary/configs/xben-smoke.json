@@ -1,7 +1,0 @@
-{
-  "benchmark": "xben",
-  "target": "XBEN-019-24",
-  "variant": "blackbox",
-  "target_url": "http://lfi_static_resource:80",
-  "run_id": "glm52-xben-019-smoke-v1"
-}
