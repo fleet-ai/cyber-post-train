@@ -8,6 +8,15 @@
   "teacher_source_models": [
     "gpt-5.6-sol"
   ],
+  "corpus_contract": {
+    "visibility": "private",
+    "file_mode": "0600",
+    "files": [
+      "train.parquet"
+    ],
+    "validation_mode": "task_outcomes_only",
+    "teacher_cross_entropy": "not_computed"
+  },
   "treatment": {
     "role": "teacher_availability_ablation",
     "unit": "whole_certified_native_episode",
@@ -33,13 +42,16 @@
     "a": {
       "study_split_sha256": "sha256:9ce5ba7f4cb9c52f6adfdbe615ca2258358dc602d6a9bb665c2ccc29dc04f4b8",
       "training_split_sha256": "sha256:2d20dac7d5b9bb29f6aa44369c5dd2efed9c78bd3ca4d32ed021f04843ae6863",
-      "target_policy_sha256": "sha256:b06b248dc5b63528c44a604513c9ff54dffb33c896ff0ca036ca76b56d925eec",
-      "candidate_coverage_manifest_sha256": "sha256:78c0fd0f3acb027f62db7f9da9b62bded5c6120a858476965e1d7a4089b4f3bb",
-      "candidate_metadata_sha256": "sha256:58ca41307b190b25860557939880760272b45b8c7c150c32a9ba2053648db15c",
-      "available_source_selection_sha256": "sha256:12e22e910788406521fb59723130429c81ee5fc9c31cd5c72bcc540e6559fd9b",
-      "available_corpus_sha256": "sha256:019d795f4b59b9faee799feac613c8fd3fd3e69774ccc419a0ffcf7960e7df62",
-      "balanced_source_selection_sha256": "sha256:7ab37bc1c6ec97fc14019199c55ddab1a5e38527b20026dc04beb434ba635fae",
-      "balanced_corpus_status": "not_materialized_from_sanitized_metadata",
+      "target_policy_sha256": "sha256:f371e87d02e6a32d32b511d9439caff97540709f17f346830d7989781c550cc1",
+      "candidate_coverage_manifest_sha256": "sha256:3962b73ed171256166e02f54e0b285271005b3300e462d59d3212badf8655b2e",
+      "candidate_metadata_sha256": "sha256:2b4d71b5fc251d571699b9855bd4cee36e247331c7d78fc1cffc631874e0bdc4",
+      "available_source_selection_sha256": "sha256:cdf82a83e423c3de6556b8f0ca5eaf4cb358041cd3015a335250b473e4a5cfc7",
+      "available_corpus_sha256": "sha256:c4945ddb7cd8fd0b7b9ebbd9bad9b96215b0905c059ef1b22d71d4f214b4eb8e",
+      "available_train_parquet_sha256": "sha256:a230b82655ccfea299ba8be12ac271706af89e98f81120e8289eefeeec9d2869",
+      "balanced_source_selection_sha256": "sha256:3b9baf93e9a94a508e3c3193c01ef8d5623c39789cf4fc6fe7a97e4388f88d9b",
+      "balanced_corpus_sha256": "sha256:b8aa6d6f9ae19fd509a90c3d2b6343631386d6bc14b019e620810da274bd9cf8",
+      "balanced_train_parquet_sha256": "sha256:e59e05912bdadbbd0f147a02a5da500fc8242bf565fb0206c0e36c0394289d9b",
+      "balanced_corpus_status": "materialized_private_train_only",
       "available": {
         "families": 29,
         "episodes": 71,
@@ -64,13 +76,16 @@
     "b": {
       "study_split_sha256": "sha256:282f2dec7912364c0f7c1db7ceaac39eb66d552ab226d7617a412fa8e881a50f",
       "training_split_sha256": "sha256:66f98eac3d1533d2c0e3dda99704020e5177ed56c25196f7fa1175307732ab06",
-      "target_policy_sha256": "sha256:b06b248dc5b63528c44a604513c9ff54dffb33c896ff0ca036ca76b56d925eec",
-      "candidate_coverage_manifest_sha256": "sha256:c43a19ddadf19ebdbba1b8e969c3cc511fab694157ebf6672d88a6b3e7546f5f",
-      "candidate_metadata_sha256": "sha256:2db540cdf61918df250c0936dc1a3d9305a582c75094635272846ea851a1b8d9",
-      "available_source_selection_sha256": "sha256:576a34559f7b56fc99dcd1f577f81b4e420e6522a9554ced5550d4ef900f956f",
-      "available_corpus_sha256": "sha256:fe1bcf3dfe81693141092840ae917e7386dbdb9b3e51805a46d4417cf8897c75",
-      "balanced_source_selection_sha256": "sha256:b5b06dc5c72482d8eba4b29ea81d35341c1510e49b50077e526348ff8c81970c",
-      "balanced_corpus_status": "not_materialized_from_sanitized_metadata",
+      "target_policy_sha256": "sha256:f371e87d02e6a32d32b511d9439caff97540709f17f346830d7989781c550cc1",
+      "candidate_coverage_manifest_sha256": "sha256:933ebb657ef025f127359d18fdaccdb12339dfe11aa4850694cd8f705c7ae949",
+      "candidate_metadata_sha256": "sha256:ef7fc7962f7160944fb323ff46664bbb91124bf797e4b565c887d016da42e42a",
+      "available_source_selection_sha256": "sha256:d0d4213c672d97491e70bbe7db7e671a0d83218b55e4b16afee091465d76cd99",
+      "available_corpus_sha256": "sha256:7b43bc25aec1390252b579043199d8a1e3295d29272b565d4c45dddde3cd15de",
+      "available_train_parquet_sha256": "sha256:c0575a063dbbf1dee09a6ac27d5428f80d38e83248d8b10b0ab689822ec594f7",
+      "balanced_source_selection_sha256": "sha256:b0933c71539be3f356f54707981d8b7a66fa88bac80a27781f1f1d6bf05ef007",
+      "balanced_corpus_sha256": "sha256:1650edbb53ee33439311a8338207d95923f72283087e0069b89eb8114fafb194",
+      "balanced_train_parquet_sha256": "sha256:a763aabcf3a16aeb761a7798df268096d9eb10eee788f924bfa0726b91b6272a",
+      "balanced_corpus_status": "materialized_private_train_only",
       "available": {
         "families": 30,
         "episodes": 74,
@@ -94,6 +109,6 @@
     }
   },
   "interpretation": "Compare with an otherwise identical available-teacher arm. This treatment tests sensitivity to uneven successful-teacher availability; it is not a claim that short episodes, equal family exposure, or this target is intrinsically optimal.",
-  "launch_status": "blocked_until_private_balanced_corpora_are_materialized_and_qualified",
-  "sha256": "sha256:04dd156f7e368cff4f44c226181db70fa2afcd6af78f6a2932891c26f19ce2be"
+  "launch_status": "blocked_until_dev_cluster_qualification",
+  "sha256": "sha256:4ab0c428322b57a8f8304072eb718e27a8a9b936c14202d4524c18972cb3de65"
 }

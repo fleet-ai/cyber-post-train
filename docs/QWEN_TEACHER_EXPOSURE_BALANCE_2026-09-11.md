@@ -22,8 +22,8 @@ answers, scores, token arrays, held-out outcomes, or WebExploitBench data.
 
 | Split | Qualified candidates | Covered / train families | Available selection | Balanced selection |
 | --- | ---: | ---: | ---: | ---: |
-| A | 84 | 29 / 59 | 71 episodes, 700,359 tokens | 50 episodes, 419,165 tokens |
-| B | 89 | 30 / 59 | 74 episodes, 684,014 tokens | 53 episodes, 437,537 tokens |
+| A | 84 | 29 / 59 | 71 episodes, 602 windows, 700,359 tokens | 50 episodes, 401 windows, 419,165 tokens |
+| B | 89 | 30 / 59 | 74 episodes, 598 windows, 684,014 tokens | 53 episodes, 402 windows, 437,537 tokens |
 
 Thirty A families and twenty-nine B families have no qualified successful
 teacher episode. Balancing cannot manufacture coverage for them; both arms keep
@@ -100,9 +100,29 @@ Matching total exposure by replaying selected targets would violate this
 treatment's no-duplication rule, while changing epoch count would introduce a
 different optimization treatment. Report the token-budget difference directly.
 
-The private source-selection receipts are materialized with mode `0600` and
-bound by the public config, but balanced Parquet corpora have deliberately not
-been built from this metadata-only audit. Their source records must be joined by
-the existing digest-checking corpus builder, then exact counts, file digest,
-tokenizer identity, target coverage, CPU preflight, and a dev GPU canary must be
-qualified before any study arm can launch.
+The private source-selection receipts and A/B train-only Parquet corpora are now
+materialized with mode `0600` and bound by the public config. There is no dev
+Parquet and no teacher-cross-entropy target. The available controls were also
+rematerialized under the same current target-policy fingerprint; their Parquet
+digests are byte-identical to the earlier controls. This isolates the corpus
+change to whole-episode selection while preserving the exact tokenizer, chat
+template, tool interface, dense target policy, and outcome-evaluation protocols.
+
+| Split / treatment | Corpus manifest | Train Parquet |
+| --- | --- | --- |
+| A available | `sha256:c4945ddb7cd8fd0b7b9ebbd9bad9b96215b0905c059ef1b22d71d4f214b4eb8e` | `sha256:a230b82655ccfea299ba8be12ac271706af89e98f81120e8289eefeeec9d2869` |
+| A balanced | `sha256:b8aa6d6f9ae19fd509a90c3d2b6343631386d6bc14b019e620810da274bd9cf8` | `sha256:e59e05912bdadbbd0f147a02a5da500fc8242bf565fb0206c0e36c0394289d9b` |
+| B available | `sha256:7b43bc25aec1390252b579043199d8a1e3295d29272b565d4c45dddde3cd15de` | `sha256:c0575a063dbbf1dee09a6ac27d5428f80d38e83248d8b10b0ab689822ec594f7` |
+| B balanced | `sha256:1650edbb53ee33439311a8338207d95923f72283087e0069b89eb8114fafb194` | `sha256:a763aabcf3a16aeb761a7798df268096d9eb10eee788f924bfa0726b91b6272a` |
+
+The common current target-policy digest is
+`sha256:f371e87d02e6a32d32b511d9439caff97540709f17f346830d7989781c550cc1`.
+An initial split-B materialization bound an obsolete protocol digest; its
+create-once output is intentionally excluded. The locked split-B manifests
+above bind the current sealed protocol instead.
+
+The [study input](../configs/studies/qwen-blackbox-teacher-balanced-v1.json) and
+[frozen plan](../configs/studies/qwen-blackbox-teacher-balanced-v1.plan.json)
+remain metadata-only and explicitly nonlaunchable. CPU/image preflight and a
+development-cluster GPU canary must qualify the exact corpus/runtime bindings
+before any production study arm can launch.

@@ -1,0 +1,98 @@
+{
+  "name": "q38-teacher-balance",
+  "model": {
+    "repo": "Qwen/Qwen3.8-27B",
+    "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "lock_sha256": "sha256:f3926fe675263b25dc79c2b3881a9c463d6b7931e9d61aeb777d15efc61e35ac"
+  },
+  "splits": {
+    "a": {
+      "variant_seed": "qwen38-study-dev-search-002",
+      "study_split_sha256": "sha256:9ce5ba7f4cb9c52f6adfdbe615ca2258358dc602d6a9bb665c2ccc29dc04f4b8",
+      "training_split_sha256": "sha256:2d20dac7d5b9bb29f6aa44369c5dd2efed9c78bd3ca4d32ed021f04843ae6863",
+      "dev_task_set_sha256": "sha256:914a67b587a8d2f5a523ab652eeaec15f8f9d5dbec559c25ff176b01777a6c96",
+      "fleet_dev_protocol_sha256": "sha256:d9423651420dcf1c39f7b870daafe8a74dec18db6eac8684b3845d881dc61019",
+      "final_test_lock_sha256": "sha256:dc625115be8c775de8ecf476bc0d8e06e71b6c7f4160ed50b25eb0308b30d8d7"
+    },
+    "b": {
+      "variant_seed": "qwen38-study-dev-search-019",
+      "study_split_sha256": "sha256:282f2dec7912364c0f7c1db7ceaac39eb66d552ab226d7617a412fa8e881a50f",
+      "training_split_sha256": "sha256:66f98eac3d1533d2c0e3dda99704020e5177ed56c25196f7fa1175307732ab06",
+      "dev_task_set_sha256": "sha256:6f654f7493fa3803fc014efcfdc1be4a27e6518bc29ad9d401fe3823a59fbab2",
+      "fleet_dev_protocol_sha256": "sha256:9c3bcee8dae6b634844fb9dace5b3cb0c207a3fde861ebd7a8a6bd22e783a334",
+      "final_test_lock_sha256": "sha256:dc625115be8c775de8ecf476bc0d8e06e71b6c7f4160ed50b25eb0308b30d8d7"
+    }
+  },
+  "sources": {
+    "a": {
+      "teacher": {
+        "corpus_sha256": "sha256:b8aa6d6f9ae19fd509a90c3d2b6343631386d6bc14b019e620810da274bd9cf8",
+        "study_split_sha256": "sha256:9ce5ba7f4cb9c52f6adfdbe615ca2258358dc602d6a9bb665c2ccc29dc04f4b8",
+        "training_split_sha256": "sha256:2d20dac7d5b9bb29f6aa44369c5dd2efed9c78bd3ca4d32ed021f04843ae6863",
+        "source_selection_sha256": "sha256:3b9baf93e9a94a508e3c3193c01ef8d5623c39789cf4fc6fe7a97e4388f88d9b",
+        "fleet_dev_protocol_sha256": "sha256:d9423651420dcf1c39f7b870daafe8a74dec18db6eac8684b3845d881dc61019",
+        "status": "qualified",
+        "source_sessions": 50,
+        "qualification_sha256": "sha256:b8aa6d6f9ae19fd509a90c3d2b6343631386d6bc14b019e620810da274bd9cf8"
+      }
+    },
+    "b": {
+      "teacher": {
+        "corpus_sha256": "sha256:1650edbb53ee33439311a8338207d95923f72283087e0069b89eb8114fafb194",
+        "study_split_sha256": "sha256:282f2dec7912364c0f7c1db7ceaac39eb66d552ab226d7617a412fa8e881a50f",
+        "training_split_sha256": "sha256:66f98eac3d1533d2c0e3dda99704020e5177ed56c25196f7fa1175307732ab06",
+        "source_selection_sha256": "sha256:b0933c71539be3f356f54707981d8b7a66fa88bac80a27781f1f1d6bf05ef007",
+        "fleet_dev_protocol_sha256": "sha256:9c3bcee8dae6b634844fb9dace5b3cb0c207a3fde861ebd7a8a6bd22e783a334",
+        "status": "qualified",
+        "source_sessions": 53,
+        "qualification_sha256": "sha256:1650edbb53ee33439311a8338207d95923f72283087e0069b89eb8114fafb194"
+      }
+    }
+  },
+  "wandb": {
+    "entity": "thefleet",
+    "project": "cyber-post-train"
+  },
+  "capacity": {
+    "max_active_nodes": 8,
+    "other_active_study_nodes": 0,
+    "excluded_inference_endpoints": 4
+  },
+  "evaluation": {
+    "final_fleet": {
+      "task_set_sha256": "sha256:718936798883348fe16570561679e49d7725e174a1cee4fa0f7821225675548e",
+      "protocol_sha256": "sha256:2fc74ff4daaf3b1cde5d806df6e4ccbf00c4ffa9742444c74a5c18d907a2f72d",
+      "lock_sha256": "sha256:dc625115be8c775de8ecf476bc0d8e06e71b6c7f4160ed50b25eb0308b30d8d7"
+    },
+    "final_webexploitbench": {
+      "task_set_sha256": "sha256:baf31b218ad4e512e9d65c742e44cee16aa3cd6f869f549491c009171d20f74f",
+      "protocol_sha256": "sha256:281f9f5b9a5bc2f0297d38165f9209a63420f856bcac19950341dc4b3106bf4e"
+    }
+  },
+  "stages": [
+    {
+      "id": "ab-balance",
+      "decision_sha256": null,
+      "arms": [
+        {
+          "id": "balanced-a",
+          "split": "a",
+          "source": "teacher",
+          "lr": 0.000003,
+          "batch_size": 8,
+          "epochs": 1,
+          "seed": 42
+        },
+        {
+          "id": "balanced-b",
+          "split": "b",
+          "source": "teacher",
+          "lr": 0.000003,
+          "batch_size": 8,
+          "epochs": 1,
+          "seed": 42
+        }
+      ]
+    }
+  ]
+}
