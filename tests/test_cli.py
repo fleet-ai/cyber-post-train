@@ -64,9 +64,10 @@ def test_prepare_is_create_once_and_never_networks(prepared, monkeypatch):
 
 
 @pytest.mark.parametrize("name", ["plan.json", "request.json", "PREPARED.json"])
-def test_mutated_prepared_files_are_rejected(prepared, monkeypatch, name):
+@pytest.mark.parametrize("contents", ["{}", "[]", "null"])
+def test_mutated_prepared_files_are_rejected(prepared, monkeypatch, name, contents):
     output, *_ = prepared
-    (output / name).write_text("{}")
+    (output / name).write_text(contents)
     monkeypatch.setattr(cli, "_client", lambda: pytest.fail("invalid preparation reached network"))
     for action in ("preview", "preflight", "submit"):
         assert RUNNER.invoke(cli.app, [action, str(output)]).exit_code == 2
@@ -90,6 +91,43 @@ def test_preflight_records_actual_checker_result_once(prepared, monkeypatch):
     assert RUNNER.invoke(cli.app, ["preflight", str(output)]).exit_code == 0
     assert RUNNER.invoke(cli.app, ["preflight", str(output)]).exit_code == 2
     assert calls == [plan]
+
+
+@pytest.mark.parametrize("backend", ["miles", "skyrl"])
+def test_rl_preflight_dispatch_does_not_use_sft_checker(prepared, monkeypatch, backend):
+    import importlib
+
+    module = importlib.import_module(f"training.{backend}_training")
+
+    output, plan, request, _ = prepared
+    plan["schema"] = f"cyber_{backend}_training_v1"
+    monkeypatch.setattr(cli, "_prepared", lambda _: (plan, request))
+    calls = []
+    monkeypatch.setattr(sft, "preflight", lambda _: pytest.fail("wrong backend"))
+
+    def check(value):
+        calls.append(value)
+        return {"status": "passed", "plan_sha256": digest(value), "gpus": 0}
+
+    monkeypatch.setattr(module, "preflight", check)
+    result = RUNNER.invoke(cli.app, ["preflight", str(output)])
+    assert result.exit_code == 0 and calls == [plan]
+    receipt = cli._read(output / "PREFLIGHT.json")
+    assert receipt["sha256"] == digest({k: v for k, v in receipt.items() if k != "sha256"})
+
+
+def test_module_entrypoint_exposes_public_help(monkeypatch, capsys):
+    import runpy
+    import sys
+
+    monkeypatch.setattr(sys, "argv", ["cyber_post_train.cli", "--help"])
+    with (
+        pytest.warns(RuntimeWarning, match="found in sys.modules"),
+        pytest.raises(SystemExit) as exc,
+    ):
+        runpy.run_module("cyber_post_train.cli", run_name="__main__")
+    assert exc.value.code == 0
+    assert "checkpoint-seal" in capsys.readouterr().out
 
 
 def test_submit_requires_bound_cpu_proof(prepared, monkeypatch):
@@ -235,6 +273,106 @@ def test_rl_data_command_does_not_submit_or_expose_private_content(tmp_path, mon
     assert result.exit_code == (0 if auth else 2)
     assert "synthetic-key" not in result.output
     assert len(calls) == (1 if auth else 0)
+
+
+@pytest.mark.parametrize("fails", [False, True])
+def test_sft_data_command_preserves_numeric_configuration(tmp_path, monkeypatch, fails):
+    from training import corpus
+
+    path = tmp_path / "data.json"
+    path.write_text(json.dumps({"temperature": 1e-6}))
+    calls = []
+
+    def build(value, *, relative_to):
+        calls.append((value, relative_to))
+        if fails:
+            raise ValueError("private data record")
+        return {"train_rows": 2}
+
+    monkeypatch.setattr(corpus, "build", build)
+    result = RUNNER.invoke(cli.app, ["data", str(path)])
+    assert result.exit_code == (2 if fails else 0)
+    assert calls == [({"temperature": 1e-6}, tmp_path)]
+    assert "private data record" not in result.output
+
+
+def test_unknown_rl_backend_does_not_create_output(tmp_path):
+    path, output = tmp_path / "config.json", tmp_path / "prepared"
+    path.write_text(json.dumps({"backend": "unknown"}))
+    result = RUNNER.invoke(cli.app, ["rl", str(path), "--output", str(output)])
+    assert result.exit_code == 2 and not output.exists()
+
+
+@pytest.mark.parametrize("fails", [False, True])
+def test_eval_commands_dispatch_without_exposing_private_errors(tmp_path, monkeypatch, fails):
+    from evals.fleet import evaluate, rollout_postgres
+
+    calls = []
+    dsn = "postgresql://synthetic.invalid/isolated-test"
+    monkeypatch.setenv("ROLLOUT_DATABASE_URL", dsn)
+    source = tmp_path / "config.json"
+    source.write_text(json.dumps({"temperature": 1e-6}))
+
+    def handler(name, result):
+        def call(*args, **kwargs):
+            calls.append((name, args, kwargs))
+            if fails:
+                raise RuntimeError("private prompt or credential")
+            return result
+
+        return call
+
+    for module, name, result in (
+        (evaluate, "prepare", {"submitted": False}),
+        (evaluate, "preflight", {"gpus": 0}),
+        (evaluate, "checked_preflight", {}),
+        (evaluate, "run", {"results": []}),
+        (rollout_postgres, "initialize", {"pending": 1}),
+        (rollout_postgres, "summary", {"accepted": 0}),
+    ):
+        monkeypatch.setattr(module, name, handler(name, result))
+    commands = [
+        ["prepare", str(source), "--output", str(tmp_path)],
+        ["preflight", str(tmp_path)],
+        ["init", str(tmp_path)],
+        ["run", str(tmp_path), "synthetic-route", "worker-001", "--limit", "2"],
+        ["status"],
+    ]
+    for args in commands:
+        result = RUNNER.invoke(cli.app, ["eval", *args])
+        assert result.exit_code == (2 if fails else 0), result.output
+        assert "private prompt or credential" not in result.output
+    if fails:
+        assert "initialize" not in [name for name, _, _ in calls]
+    else:
+        assert calls == [
+            ("prepare", ({"temperature": 1e-6}, tmp_path), {"relative_to": tmp_path}),
+            ("preflight", (tmp_path,), {}),
+            ("checked_preflight", (tmp_path,), {}),
+            ("initialize", (dsn, tmp_path / "plan.csv"), {}),
+            (
+                "run",
+                (tmp_path,),
+                {"dsn": dsn, "route": "synthetic-route", "worker_id": "worker-001", "limit": 2},
+            ),
+            ("summary", (dsn,), {}),
+        ]
+
+
+def test_eval_controller_failure_has_nonzero_exit_without_automatic_retry(tmp_path, monkeypatch):
+    from evals.fleet import evaluate
+
+    calls = []
+
+    def run(*args, **kwargs):
+        calls.append((args, kwargs))
+        return {"results": [{"controller_failure_code": "synthetic-failure"}]}
+
+    monkeypatch.setenv("ROLLOUT_DATABASE_URL", "synthetic")
+    monkeypatch.setattr(evaluate, "run", run)
+    result = RUNNER.invoke(cli.app, ["eval", "run", str(tmp_path), "route", "worker"])
+    assert result.exit_code == 1 and len(calls) == 1
+    assert json.loads(result.stdout)["results"][0]["controller_failure_code"] == "synthetic-failure"
 
 
 def test_doctor_checks_installation_without_claiming_cluster_readiness(monkeypatch):

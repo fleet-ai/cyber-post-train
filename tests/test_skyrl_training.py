@@ -37,7 +37,7 @@ def prepared(data_setup):  # noqa: F811
             "root": data_setup.config["model_root"],
         },
         "data": {"manifest": "out/manifest.json", "root": "/mnt/sfs/data/synthetic-rl"},
-        "recipe": {"groups": 1, "samples_per_prompt": 8, "steps": 2},
+        "recipe": {"groups": 1, "samples_per_prompt": 8, "steps": 2, "lr": 1e-6},
         "wandb": {"entity": "synthetic", "project": "synthetic", "run_id": "synthetic-rl"},
     }
     plan = train.compile_rl(config, relative_to=data_setup.tmp)

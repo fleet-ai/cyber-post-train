@@ -98,7 +98,8 @@ def bundled_request(request: dict, files: dict[str, str], module: str, argv: lis
         "[((p/n).parent.mkdir(parents=True,exist_ok=True),(p/n).write_text(t)) "
         "for n,t in v['files'].items()];"
         "os.chdir(p);sys.path.insert(0,str(p));importlib.invalidate_caches();"
-        "sys.argv=[v['module']]+v['argv'];runpy.run_module(v['module'],run_name='__main__')"
+        "sys.argv=[v['module']]+v['argv'];"
+        "runpy.run_module(v['module'],run_name='__main__',alter_sys=True)"
     )
     result = {
         **request,

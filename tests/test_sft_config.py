@@ -20,6 +20,26 @@ from training import sft
 ROOT = Path(__file__).resolve().parents[1]
 
 
+@pytest.mark.parametrize("suffix", [".json", ".yaml", ""])
+def test_json_numbers_survive_mapping_readback(tmp_path, suffix):
+    value = {"lr": 1e-6, "large": 1e20, "count": 1, "enabled": True, "text": "1e-6"}
+    path = tmp_path / ("configuration" + suffix)
+    path.write_text(json.dumps(value))
+    actual = sft.read_mapping(path)
+    assert actual == value
+    assert {k: type(v) for k, v in actual.items()} == {k: type(v) for k, v in value.items()}
+
+
+def test_mapping_still_accepts_yaml_and_rejects_non_objects(tmp_path):
+    path = tmp_path / "configuration.yaml"
+    path.write_text("# Human-authored configuration\nrecipe:\n  lr: 1.0e-6\n  nodes: 1\n")
+    assert sft.read_mapping(path) == {"recipe": {"lr": 1e-6, "nodes": 1}}
+    for text in ("[]", "null", "- list\n- not-object"):
+        path.write_text(text)
+        with pytest.raises(ValueError, match="must be a mapping"):
+            sft.read_mapping(path)
+
+
 @pytest.fixture
 def config(tmp_path):
     manifest = {

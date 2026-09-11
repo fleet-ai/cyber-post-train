@@ -47,7 +47,13 @@ RESOURCES = {
 
 
 def read_mapping(path: Path) -> dict:
-    value = yaml.safe_load(path.read_text())
+    text = path.read_text()
+    # PyYAML's YAML 1.1 resolver reads JSON's 1e-06 as a string. Preserve
+    # JSON scalar types before falling back to human-authored YAML.
+    try:
+        value = json.loads(text)
+    except json.JSONDecodeError:
+        value = yaml.safe_load(text)
     if not isinstance(value, dict):
         raise ValueError("configuration/manifest must be a mapping")
     return value

@@ -48,7 +48,11 @@ def test_runtime_bundle_executes_exact_bytes_once(tmp_path):
 
     files = {
         "synthetic/__init__.py": "",
-        "synthetic/run.py": "import pathlib,sys;pathlib.Path('result').write_text(sys.argv[1])",
+        "synthetic/run.py": (
+            "import pathlib,sys;TOKEN='qualified-module';"
+            "assert sys.modules[__name__].TOKEN==TOKEN;"
+            "pathlib.Path('result').write_text(sys.argv[1])"
+        ),
     }
     request = bundled_request(config(), files, "synthetic.run", ["literal $not-a-shell-command"])
     assert request == bundled_request(
@@ -249,6 +253,29 @@ def test_privileged_partial_node_is_forbidden():
         validate_request({**config(), "privileged": True, "gpus_per_worker": 1})
 
 
+@pytest.mark.parametrize("value", [None, True, "-1", "NaN", "Infinity", "1e3", "1GiB"])
+def test_invalid_resource_quantities_never_reach_preview(value):
+    with pytest.raises(JobsError, match="unsupported resource quantity"):
+        quantity(value)
+
+
+@pytest.mark.parametrize("kind", ["cpu", "memory"])
+@pytest.mark.parametrize("reserved,limit", [("0", "1"), ("2", "1"), ("1", "0")])
+def test_resource_reservations_are_positive_and_bounded(kind, reserved, limit):
+    value = config()
+    value["resources"].update({kind + "_request": reserved, kind + "_limit": limit})
+    with pytest.raises(JobsError, match="positive and no greater"):
+        validate_request(value)
+
+
+@pytest.mark.parametrize("replicas", [-1, True, "1", None])
+def test_malformed_preview_replicas_fail_before_submission(replicas):
+    obj = manifest()
+    obj["spec"]["rayClusterSpec"]["workerGroupSpecs"][0]["replicas"] = replicas
+    with pytest.raises(JobsError, match="invalid preview replica count"):
+        validate_preview(config(), preview(obj))
+
+
 @pytest.mark.parametrize(
     "path,value",
     [
@@ -367,7 +394,9 @@ def test_incomplete_history_blocks_submission(payload, tmp_path):
     assert not (tmp_path / "intent.jsonl").exists()
 
 
-@pytest.mark.parametrize("outcome", ["ok", "timeout", "http-error", "ambiguous", "wrong-root"])
+@pytest.mark.parametrize(
+    "outcome", ["ok", "timeout", "http-error", "invalid-json", "ambiguous", "wrong-root"]
+)
 def test_one_post_with_durable_intent_even_after_uncertain_failure(tmp_path, outcome):
     seen = []
     journal = tmp_path / "intent.jsonl"
@@ -385,6 +414,8 @@ def test_one_post_with_durable_intent_even_after_uncertain_failure(tmp_path, out
             raise httpx.ReadTimeout("private-trace-and-secret", request=req)
         if outcome == "http-error":
             return httpx.Response(500, text="private-trace-and-secret")
+        if outcome == "invalid-json":
+            return httpx.Response(202, text="private-trace-and-secret")
         response = {
             "name": "researcher-sft-1234abcd",
             "status": "queued",
@@ -410,6 +441,29 @@ def test_one_post_with_durable_intent_even_after_uncertain_failure(tmp_path, out
     assert journal.stat().st_mode & 0o777 == 0o600
 
 
+def test_unrelated_history_does_not_block_a_new_create_once_run(tmp_path):
+    seen = []
+
+    def handler(req):
+        seen.append((req.method, req.url.path))
+        if req.method == "GET":
+            return httpx.Response(
+                200,
+                json={
+                    "items": [{"name": "peer-run", "run_dir": "/mnt/sfs/jobs/peer"}],
+                    "has_more": False,
+                },
+            )
+        if req.url.path.endswith("/preview"):
+            return httpx.Response(200, json=preview())
+        return httpx.Response(202, json={"name": "researcher-sft-1234abcd", "status": "queued"})
+
+    with client(handler) as api:
+        result = api.submit_once(config(), tmp_path / "intent.jsonl")
+    assert result["status"] == "queued"
+    assert seen.count(("POST", "/v1/runs")) == 1
+
+
 @pytest.mark.parametrize(
     "record", [{"name": "old", "run_dir": config()["run_dir"]}, {"name": "researcher-sft-1234abcd"}]
 )
@@ -423,6 +477,8 @@ def test_history_duplicate_is_never_resubmitted(record, tmp_path):
 
 
 def test_status_is_allowlisted_and_name_cannot_inject_route():
+    with pytest.raises(JobsError, match="token is required"):
+        Jobs("")
     assert "private" not in str(safe_status({"name": "safe", "failure_message": "private"}))
     with client(
         lambda req: httpx.Response(200, json={"name": "safe", "status": "SUCCEEDED"})

@@ -264,10 +264,11 @@ to an uninterrupted multi-epoch run. GPU recovery qualification is tracked in
 
 ## RL integration status
 
-The `train` command prepares **SFT**. `rl` prepares a native **Miles RL** plan;
-live reward, optimizer and recovery qualification remains open. SkyRL RL data
-preparation is supported, but its training launcher is not yet exposed. The old typed-API builders are retired; historical
-requests are not launch shortcuts.
+The `train` command prepares **SFT**. `rl-data` and `rl` support native **Miles
+or SkyRL RL** through the same preparation/submission interface. Both RL backends
+still require live reward, optimizer and recovery qualification; implemented and
+CPU-tested does not mean production-ready. Historical typed-API requests are not
+launch shortcuts. See the dated [qualification evidence](CONSOLIDATION.md).
 
 `cyber-post-train rl-data rl-data.yaml` prepares private native-trainer input files on
 CPU in the selected backend's pinned image. It performs only Fleet account/task GETs, never
@@ -426,7 +427,10 @@ The initial SkyRL profile uses Qwen full-weight FSDP with colocated TP4 inferenc
 engines, one native update per prompt batch, and no reward filtering or replacement
 episodes. It is not a qualified full-GLM recipe. CPU preflight checks the actual
 native parser, source versions, complete task-family split and native dataset
-retention. Runtime input checks repeat inside the bounded child before loading.
+retention. Its native validator requires `WANDB_API_KEY` even during CPU preflight;
+inject the existing `wandb-api` Secret and set `WANDB_MODE=disabled` for this
+non-training check. Do not put a key in the saved config. Runtime input checks
+repeat inside the bounded child before loading.
 W&B receives finite scalar metrics and fixed configuration only; native sample
 tables, console capture and private exception uploads are disabled. A durable
 local scalar stream is retained if tracking fails. Completion still requires
@@ -453,81 +457,31 @@ masked tool observations. A group with identical valid rewards is a valid
 zero-signal group, not proof of useful learning. Require real reward acquisition,
 an optimizer update and a recoverable checkpoint before scaling either backend.
 
-The internal `training.skyrl_episode` recorder now reuses the single-attempt
-Fleet lifecycle, native sampling payloads and tokenizer helpers. It preserves
-sampled IDs/log probabilities and masks only template/tool observations. The
-pinned image contains an older JSON-only parser, so a small corrected Theseus
-Qwen XML parser is included until that image is updated. Exact-image CPU tests
-exercise the actual tokenizer, client and MCP 1.28.0 transport (Miles uses
-MCP 2.1.1); [evidence](evidence/cleanup-skyrl-episode-native-20260911.json).
-The internal `training.skyrl_rollout.Generator` validates frozen native row and
-repetition identities, retains complete groups and uses bounded concurrency.
-It awaits sibling cleanup on failure and never replaces invalid episodes.
-Its output passes the native validator; [CPU evidence](evidence/cleanup-skyrl-batches-native-20260911.json).
-`training.skyrl` adds a small native configuration builder. The exact-image
-parser and trainer method confirm one optimizer call per configured batch,
-complete task groups, baseline/final dev evaluation and recoverable-save settings;
-[CPU evidence](evidence/cleanup-skyrl-arguments-native-20260911.json). These tests
-use synthetic dispatch, not a real RL update.
-The public `rl` command now connects this adapter to the native `BasePPOExp`
-and trainer; it does not implement another optimizer. Its corrected exact-image
-CPU integration passed 420 tests with zero skips/failures/GPUs;
-[evidence and repaired boundary defects](evidence/cleanup-skyrl-training-native-20260911.json).
-Real reward, weight synchronization and optimizer/recovery qualification remain open.
-Multiple tool calls per turn are rejected, not silently discarded.
+### Adapter boundaries for maintainers
 
-`training.rl_episode.generate` is the internal Miles hook used by `rl`, not a
-qualified training recipe. It reuses FTI's native recorder and
-parser, but opens exact V1 cyber tasks and enforces `bash`, `submit_report` at
-execution. Each run/phase/batch/sample identity owns one private directory; replay
-is rejected. Grading evidence, conversation, sampled tokens, masks and log
-probabilities are saved privately, and samples are returned only after confirmed
-environment release. An ambiguous response is held, never resampled or converted
-to zero reward. Context/turn exhaustion is excluded; a normally stopped, fully
-graded zero remains a valid zero. The pinned Miles image passed 82 CPU tests with
-real MCP 2.1.1 transport, native FTI recording and the exact Qwen tokenizer;
-[evidence](evidence/cleanup-miles-single-attempt-20260911.json). Task/engine responses were
-synthetic: live sampling, Fleet reward, GPU optimization and resume remain open.
+Both adapters preserve sampled token IDs/log probabilities, mask tool/template
+observations, enforce the exact tool catalog and save private evidence before
+returning a sample. Each run/phase/batch/sample has a create-once identity.
+Ambiguous requests and exhausted budgets are held, never resampled or turned
+into reward zero. A normally stopped, authoritatively graded zero remains valid.
+Multiple tool calls in one turn are rejected, not silently discarded.
 
-Use FTI's digest-bound `qwen3.8_fixed.jinja` on both training and sampling sides.
-The original HF template rejects Miles' incremental tool-history prefix. The
-hook checks `model.runtime_chat_template_sha256` against the actual loaded
-tokenizer before opening an environment. It does not rewrite templates or
-re-tokenize generated history. MCP 2.x uses `httpx2`, two transport streams,
-timeouts in seconds and `is_error`; a passing mock of the old API was not a
-compatibility proof. These checks belong in the pinned-image CPU gate.
+SkyRL uses its native client, tokenizer helpers and `BasePPOExp`; the included
+Qwen XML parser corrects the older JSON-only parser in the pinned image. Miles
+uses FTI's native token recorder and digest-bound `qwen3.8_fixed.jinja` on both
+sampling and training sides. The original HF template cannot encode Miles'
+incremental tool-history prefix. Never re-tokenize sampled history to hide drift.
+Transport tests run against each pinned image's real MCP version, not only mocks.
 
-The native Miles HTTP helper retries generation up to 60 times and logs response
-bodies. Our recorder replaces only that transport: one request, no redirects or
-Fleet credentials sent to the engine, safe error codes, and explicit stop reasons.
-Native token assembly is unchanged. Do not restore the retrying helper or patch
-module globals across concurrent episodes. Likewise, do not call the stock
-`execute_train` launcher: even its external-Ray mode runs broad `pkill` commands.
-The Jobs API already owns Ray; native training must attach to that allocation.
+Do not restore native automatic generation retries, exception-driven replacement
+groups, raw response logging, model downloads or broad process-killing launchers.
+The adapters use single-attempt requests, await sibling cleanup and attach only
+to the Jobs API's Ray allocation. No module-global patching across episodes.
 
-`training.miles.arguments` builds a bounded native Qwen argument vector:
-one optimizer step per rollout batch,
-recoverable checkpoints and dev evaluation before training and at the final
-step. It reads the pinned image's model/topology recipe; it does not call its
-download or process-killing launch helpers. W&B credentials stay in the environment.
-The [128-test CPU gate](evidence/cleanup-miles-arguments-20260911.json) also exercises
-the real recipe and native offline W&B run-ID handling. This is still an internal
-integration component, not a qualified RL launch command or full-GLM recipe.
-
-Both rollout-function arguments select `training.miles_rollout.Rollout`, using
-the class-based Miles interface. This advances the native dataset cursor once
-per batch; a failed episode stops the batch after all sibling cleanup is awaited.
-Disabling dynamic filters alone is insufficient: the pinned Miles default
-collector catches group exceptions and fills the gap with new groups. The cyber
-adapter never uses that refill loop or modifies native optimizer code.
-
-Native `Sample.rollout_id` identifies one episode (and any segments belonging to
-it), **not the training batch**. Sharing a batch number across competing attempts
-would merge their reward-normalization identities. The adapter uses unique native
-sample indices and records the batch separately. Baseline and post-update dev
-calls also need different durable identities: Miles calls both with batch zero
-on the first step. Dev rewards count episodes, not segments; native sample-length
-diagnostics use the first segment, while complete recordings remain private.
-`COLLECTED.json` proves a completed batch, never an optimizer update. The
-launcher sets `MILES_USE_LEGACY_ROLLOUT_V1=0` and `WANDB_RUN_ID` explicitly;
-native primary W&B initialization does not forward the similarly named CLI field.
+Miles uses unique native sample indices for `Sample.rollout_id`; a batch ID would
+incorrectly merge reward-normalization groups. Baseline and post-update dev calls
+also have distinct durable identities even when the native rollout index is zero.
+`COLLECTED.json` proves collection, not optimization. The launcher explicitly sets
+`MILES_USE_LEGACY_ROLLOUT_V1=0` and `WANDB_RUN_ID`; credentials stay in Secret-backed
+environment variables. See [consolidation](CONSOLIDATION.md) for the exact test,
+runtime and real-execution evidence instead of inferring readiness from this guide.

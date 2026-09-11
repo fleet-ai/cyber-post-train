@@ -65,7 +65,7 @@ def config(tmp_path):
             "manifest": "checkpoint.json",
             "sha256": train._hash(tmp_path / "checkpoint.json"),
         },
-        "recipe": {"steps": 2},
+        "recipe": {"steps": 2, "lr": 1e-6},
         "wandb": {"entity": "synthetic", "project": "synthetic", "run_id": "synthetic"},
     }
 
