@@ -1,0 +1,155 @@
+{
+  "CPU_checks": [
+    {
+      "bundle_sha256": "980bd3a7b2d3b22acdc2d3712049b288ba4f1030fd6bb2de86c39b7e33ad7c1e",
+      "counts": {
+        "errors": 0,
+        "failures": 0,
+        "skipped": 1,
+        "tests": 272
+      },
+      "exit_code": 1,
+      "finished_at": "2026-09-11T14:15:06Z",
+      "image_id": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/miles-trainer@sha256:d1d37c584e2aafdd47df1e1f3492ff3343eb3b83a5f658cf7ce2432ee8d6ef33",
+      "name": "chris-cpt-miles-cursor-selftest-v1",
+      "node": "computeinstance-e04a737eqtfvpnyx08",
+      "phase": "Failed",
+      "receipt_sha256": "297f9b8f6f4df8b44485fe0b3ea600f1ec6ee282550fb7c7872e128a1e30a32f",
+      "restarts": 0,
+      "skipped_tests": null,
+      "started_at": "2026-09-11T14:13:48Z",
+      "uid": "43642299-a58c-4444-b9b9-80bac2f2d941"
+    },
+    {
+      "bundle_sha256": "980bd3a7b2d3b22acdc2d3712049b288ba4f1030fd6bb2de86c39b7e33ad7c1e",
+      "counts": {
+        "errors": 0,
+        "failures": 0,
+        "skipped": 1,
+        "tests": 272
+      },
+      "exit_code": 0,
+      "finished_at": "2026-09-11T14:18:22Z",
+      "image_id": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/miles-trainer@sha256:d1d37c584e2aafdd47df1e1f3492ff3343eb3b83a5f658cf7ce2432ee8d6ef33",
+      "name": "chris-cpt-miles-cursor-selftest-v2",
+      "node": "computeinstance-e04a737eqtfvpnyx08",
+      "phase": "Succeeded",
+      "receipt_sha256": "fbcd42b1588c7fde57b3e959365e633a58621f8ab933ea6a6d9523ea177a2f00",
+      "restarts": 0,
+      "skipped_tests": [
+        "test_real_native_parser_from_pinned_image_uses_base_without_resuming"
+      ],
+      "started_at": "2026-09-11T14:17:10Z",
+      "uid": "922b5843-94d2-4706-b641-d69376aeb9c5"
+    },
+    {
+      "bundle_sha256": "0625b95b5bd3471592cb87dc459a51a67bd66d10d86402998749f3173b815971",
+      "counts": {
+        "errors": 0,
+        "failures": 0,
+        "skipped": 1,
+        "tests": 272
+      },
+      "exit_code": 0,
+      "finished_at": "2026-09-11T14:19:53Z",
+      "image_id": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/miles-trainer@sha256:d1d37c584e2aafdd47df1e1f3492ff3343eb3b83a5f658cf7ce2432ee8d6ef33",
+      "name": "chris-cpt-miles-cursor-selftest-v3",
+      "node": "computeinstance-e04a737eqtfvpnyx08",
+      "phase": "Succeeded",
+      "receipt_sha256": "6cdeecf3d8a6ea89dc5ee959de3280157a40b0d22b24429c35ef7311547c250c",
+      "restarts": 0,
+      "skipped_tests": [
+        "test_real_native_parser_from_pinned_image_uses_base_without_resuming"
+      ],
+      "started_at": "2026-09-11T14:18:41Z",
+      "uid": "14060239-22e3-449e-a3ef-b136b9a65983"
+    }
+  ],
+  "checks": [
+    "Missing cursor cannot silently reset a recovery to task zero.",
+    "Native saves are reopened and checked against completed rollout/sample counters.",
+    "Real native cursor advancement before save verifies cross-epoch and exact-end arithmetic.",
+    "Native reload chooses the same next prompts and sample identities as uninterrupted execution.",
+    "Partial files, symlinks, malformed state, boolean counters and finetuning-only loads are rejected."
+  ],
+  "classification": "native_CPU_cursor_guard_qualified_not_RL_checkpoint_recovery",
+  "cursor_cases": {
+    "all_passed": true,
+    "native": 41,
+    "total": 82
+  },
+  "cursor_coverage": {
+    "missing_branches": [],
+    "missing_lines": [],
+    "summary": {
+      "covered_branches": 16,
+      "covered_lines": 50,
+      "excluded_lines": 0,
+      "missing_branches": 0,
+      "missing_lines": 0,
+      "num_branches": 16,
+      "num_partial_branches": 0,
+      "num_statements": 50,
+      "percent_branches_covered": 100.0,
+      "percent_branches_covered_display": "100",
+      "percent_covered": 100.0,
+      "percent_covered_display": "100",
+      "percent_statements_covered": 100.0,
+      "percent_statements_covered_display": "100"
+    }
+  },
+  "live_bundles_unchanged": [
+    "Qwen Miles RL V7",
+    "Qwen evaluation V7"
+  ],
+  "local_suite": {
+    "coverage_sha256": "5c7a7af4c180fbfcde96b6d28a78f033a3252823a1a14ec1829ebdf44bfc9ef2",
+    "passed": 1769,
+    "skipped": 152,
+    "subtests_passed": 7,
+    "totals": {
+      "covered_branches": 4463,
+      "covered_lines": 13742,
+      "excluded_lines": 12,
+      "missing_branches": 2499,
+      "missing_lines": 4218,
+      "num_branches": 6962,
+      "num_partial_branches": 1593,
+      "num_statements": 17960,
+      "percent_branches_covered": 64.1051422005171,
+      "percent_branches_covered_display": "64",
+      "percent_covered": 73.04790947757002,
+      "percent_covered_display": "73",
+      "percent_statements_covered": 76.51447661469933,
+      "percent_statements_covered_display": "77"
+    }
+  },
+  "native_data_source_sha256": "e97d7df23644d231480079d03823c2d72b8f0cc4383f33c528ae17871c09e7e5",
+  "native_source_commit": "9e178ca16839b0600155f3927f57ce0670b8f453",
+  "not_qualified": [
+    "Native CUDA parser on CPU",
+    "RL optimizer/reward/update",
+    "Complete optimizer/RNG checkpoint seal and distributed recovery",
+    "Full GLM training"
+  ],
+  "observed_at": "2026-09-11T14:21:10.597177+00:00",
+  "resource_effect": {
+    "GPUs": 0,
+    "all_test_containers_terminal": true,
+    "new_nodes": 0
+  },
+  "runner_correction": "V1 ran 271 tests without failure but incorrectly rejected one skip. V2 explicitly identifies the sole CUDA-only parser skip; V3 strengthens the native advancement test without changing production source. V1 failure is preserved.",
+  "schema": "cyber_cleanup_miles_cursor_qualification_v1",
+  "sha256": "6f5f6aa74678bb630e45d54b2f21c2292405a44d3a96d545ce7f321175f6f0e4",
+  "source_sha256": {
+    "tests/test_miles_text.py": "871d3ac335f07d9f02c24b42e2177291c4d68ab58c4762889df2d7f35c4a9ea1",
+    "training/miles_text.py": "5d823c4b1847454f9c5a40b47f11322453c495bffd19b83b55714b49368f9987"
+  },
+  "wheel": {
+    "installed_outside_checkout": true,
+    "public_help_checks": 12,
+    "runtime_files_byte_identical": 10,
+    "sha256": "4551637795e16756b63521d94a2424e5a6be48b1b507c17f0f5e994f6a337245",
+    "torch_installed": false
+  }
+}

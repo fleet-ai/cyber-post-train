@@ -47,7 +47,7 @@ readiness. All detailed IDs, digests, test counts and earlier failures remain in
   [Release evidence](evidence/cleanup-glm-startup-release-20260911.json).
 - No new automations, peer mutations or changes to shared/dedicated serving.
 
-The queued/frozen training bundles predate the newest checkpoint-drain correction.
+The queued/frozen training bundles predate the newest checkpoint-drain and cursor guards.
 They remain immutable; a future preparation must bind current tested source.
 
 ## Resource and scientific rules
@@ -77,6 +77,9 @@ Never fake success or suppress real alerts. Full controls:
   Final output-limit stops remain held, even with complete catalog ingestion.
 - RL checks tool deadlines against the real catalog, preserves nested error
   classes, awaits sibling/environment cleanup and uses bounded checkpoint drain.
+- Miles cursor saves/reloads reject silent resets and counter drift. All 82
+  cursor tests, including 41 using native Miles, pass in the exact image;
+  [evidence](evidence/cleanup-miles-cursor-20260911.json). This is not yet complete RL recovery.
 - PostgreSQL claims, ownership fencing, transaction rollback, private-result
   idempotency and no-auto-retry have real disposable-database integration tests.
   One shared result normalizer preserves SQLite/PostgreSQL evidence digests.
@@ -84,8 +87,8 @@ Never fake success or suppress real alerts. Full controls:
 
 The [ledger regression evidence](evidence/cleanup-ledger-contract-20260911.json)
 records 46 real-PostgreSQL cases, complete focused module coverage and exact
-cross-backend result-digest parity. The full suite passes 1,739 tests plus seven
-subtests, with 111 explicit skips. Whole-repository coverage is **not complete**.
+cross-backend result-digest parity. The latest full suite passes 1,769 tests plus seven
+subtests, with 152 explicit skips. Whole-repository coverage is **not complete**.
 Optional native dependencies need
 the pinned trainer images; local skips are never counted as passing training
 qualification. Installed-wheel checks run outside the checkout. The active

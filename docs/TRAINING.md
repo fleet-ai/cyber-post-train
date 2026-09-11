@@ -432,6 +432,12 @@ verified learning or recoverability**. Preserve the private recordings, verify
 optimizer changes and reload the checkpoint before accepting/scaling the run.
 Native checkpoint numbers are zero-based rollout indices: the first training
 batch saves index `0`, not an assertion of zero optimizer steps.
+The text adapter reopens each native cursor save and checks task/sample counters
+against completed batches. Recovery rejects missing, partial or inconsistent
+cursors instead of Miles' silent reset to the first task; the initial base load
+is the sole exception. It also rejects weights-only/finetuning flags as recovery.
+These guards do **not** yet expose an RL resume command: a complete, sealed native
+optimizer/RNG/checkpoint handoff and real distributed restore still need qualification.
 
 For **SkyRL**, use the same YAML and commands, with these differences:
 
