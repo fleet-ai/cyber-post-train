@@ -277,6 +277,36 @@ def test_bounded_worker_does_not_initialize_or_repeat(prepared, monkeypatch):
     assert run_one.call_count == 2
 
 
+def test_real_worker_reaches_harness_with_durable_claim(prepared, monkeypatch):
+    """Exercise the filesystem boundary hidden by the earlier run_one stub."""
+    plan = evaluation.load(prepared)
+    row = evaluation.ledger._plan_rows(prepared / "plan.csv")[0]
+    cell = {**row, "worker_id": "worker", "claim_id": "claim", "cell_id": "cell"}
+    monkeypatch.setattr(evaluation.postgres, "verify_plan", Mock())
+    monkeypatch.setattr(evaluation.postgres, "claim", Mock(return_value=cell))
+    heartbeat = SimpleNamespace(check=lambda: None, close=lambda: None)
+    monkeypatch.setattr(rollout_worker, "_Heartbeat", lambda *a: nullcontext(heartbeat))
+    monkeypatch.setattr(rollout_worker, "_record_local_result", Mock())
+    monkeypatch.setattr(
+        rollout_worker, "_accepted_receipt", lambda *a: {"receipt_sha256": "digest"}
+    )
+    for method in ("start", "mark_grading", "accept"):
+        monkeypatch.setattr(evaluation.postgres, method, Mock())
+
+    def harness_run(config, out, proxy):
+        claims = list((prepared / "claims").glob("*.json"))
+        assert len(claims) == 1
+        claim = json.loads(claims[0].read_text())
+        assert claim["model_call_started_when_claim_written"] is False
+        assert claim["campaign_id"] == plan["campaign_id"]
+        out.mkdir()  # Parent must have been prepared, not supplied by a test fixture.
+        return {"session_id": "synthetic-session"}
+
+    monkeypatch.setattr(rollout_worker.self_hosted, "run", harness_run)
+    result = evaluation.run(prepared, dsn="synthetic", route="shared", worker_id="real", limit=1)
+    assert result["accepted"] == 1
+
+
 def test_endpoint_failure_preserves_terminal_without_claim(prepared, monkeypatch):
     monkeypatch.setattr(evaluation.postgres, "verify_plan", Mock())
     monkeypatch.setattr(evaluation, "check_route", Mock(side_effect=RuntimeError("private")))

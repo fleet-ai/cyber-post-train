@@ -256,6 +256,8 @@ def plan_rows(plan: dict) -> list[dict]:
 def prepare(config: dict, directory: Path, *, relative_to: Path) -> dict:
     plan = compile_eval(config, relative_to=relative_to)
     directory.mkdir(parents=True, exist_ok=False, mode=0o700)
+    for name in ("claims", "attempts"):
+        (directory / name).mkdir(mode=0o700)
     harness.write_json_once(directory / "EVAL.json", plan)
     rows = plan_rows(plan)
     with (directory / "plan.csv").open("x", newline="") as handle:
