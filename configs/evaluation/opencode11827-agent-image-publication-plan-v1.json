@@ -1,0 +1,95 @@
+{
+  "schema": "cyber_opencode_agent_image_publication_plan_v1",
+  "status": "blocked_preparation_only",
+  "purpose": "Prepare an alert-safe immutable publication and CPU/dev clean-pull qualification of the exact Fleet OpenCode v2 agent image",
+  "source": {
+    "repository_commit": "936bbc392d92c28f773bace1e0856b9e3a090ab0",
+    "dockerfile": "evals/fleet/Dockerfile.opencode",
+    "dockerfile_sha256": "sha256:2a44ad204aebbabda967d7a1cb419f428ed25b67d56554facd0f1cdc303c78eb",
+    "dockerfile_git_blob": "ae3e00b2a5a2a8cb1ffcab458f705391b122df90",
+    "base_image": "docker.io/library/node@sha256:4d676821dff059fd00d277ee4261ef34ea712317fed0737c03941481b5760c96",
+    "opencode_version": "1.18.27",
+    "release_asset_sha256": "sha256:4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702",
+    "required_image_label": {
+      "cyber.opencode.release-sha256": "sha256:4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702"
+    },
+    "local_image": {
+      "reference": "cpt-cleanup-opencode@sha256:45424cc2e304e114b26aca916486df6e80fdc57c4f5adddf2bb144d4773d510f",
+      "image_id": "sha256:45424cc2e304e114b26aca916486df6e80fdc57c4f5adddf2bb144d4773d510f",
+      "platform": "linux/amd64",
+      "user": "node",
+      "working_directory": "/workspace",
+      "pullable_registry_reference_proven": false,
+      "source_commit_label_present": false,
+      "dockerfile_digest_label_present": false
+    },
+    "rebuild_byte_reproducible": false,
+    "rebuild_blocker": "The current Dockerfile installs ca-certificates and curl without version pins; a rebuild may legitimately produce a digest other than the local image."
+  },
+  "dev_builder": {
+    "cluster_context": "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb",
+    "api_origin": "https://api.ft.dev.flt.build",
+    "image_api": "/v1/images",
+    "registry_origin": "661864827319.dkr.ecr.us-east-1.amazonaws.com",
+    "buildkit_deployment": {
+      "namespace": "buildkit",
+      "name": "buildkit-buildkit-service",
+      "uid": "462b461a-abc7-43bc-a9e8-87b94567140e",
+      "generation": 1,
+      "ready_replicas": 1
+    },
+    "buildkit_pod": {
+      "name": "buildkit-buildkit-service-6cc445497d-ztqwp",
+      "uid": "9a8baeab-31f2-421a-84fa-ad625a306828",
+      "image_id": "docker.io/moby/buildkit@sha256:de10faf919fc71ba4eb1dd7bd6449566d012b0c9436b1c61bfee21d621b009aa",
+      "ready": true,
+      "restart_count": 0
+    },
+    "proposed_repository": "fleet/cyber-post-train-opencode-runtime",
+    "repository_exists_and_builder_iam_confirmed": false,
+    "currently_documented_builder_repository": "fleet/miles-trainer",
+    "must_not_repurpose_trainer_repository": true
+  },
+  "historical_routes": {
+    "failed_production_publisher_job": {
+      "name": "chris-cyber-opencode11827-image-publish-v1",
+      "uid": "6fb61e37-42ea-41f4-9701-3301982d703c",
+      "terminal_state": "Failed",
+      "reuse": "forbidden"
+    },
+    "failed_production_stage_job": {
+      "name": "chris-cyber-opencode11827-image-stage-v1",
+      "uid": "858aa0db-7500-4e3a-881c-67bf5928741f",
+      "terminal_state": "Failed",
+      "reuse": "forbidden"
+    },
+    "successful_archive_only_stage": {
+      "name": "chris-cyber-opencode11827-image-stage-v2",
+      "archive_sha256": "sha256:578ff2a933f17a19d22ebf8634533651cec2f0ce611e16f3c5fe8efea7940cd3",
+      "is_pullable_registry_identity": false,
+      "is_exact_local_image_identity": false
+    }
+  },
+  "required_preconditions": [
+    "A dedicated ECR repository is created and builder IAM push permission is confirmed out of band.",
+    "Choose exact-byte OCI import of local image sha256:45424cc2... or make the Dockerfile rebuild reproducible and provenance-labelled; never claim a rebuild is the old digest.",
+    "Run local Dockerfile/context and offline startup checks before asking the dev image-build API to create a build Job.",
+    "Bind the returned pullable repository@sha256 digest and linux/amd64 platform in a create-once CPU-only dev Pod manifest.",
+    "Server-dry-run the Pod, clean-resolve with imagePullPolicy Always, exercise version, release label, private HOME, ordered tools and v2 compaction/autocontinuation entirely offline, then delete and confirm absence."
+  ],
+  "forbidden_shortcuts": [
+    "Do not trial-and-error the currently unconfirmed ECR permission.",
+    "Do not publish into fleet/miles-trainer.",
+    "Do not use a production Job or RayJob for image publication or qualification.",
+    "Do not treat the SFS OCI archive or a local Docker repo digest as a pullable registry reference.",
+    "Do not create a dev agent Pod until an immutable registry manifest resolves."
+  ],
+  "authorized_mutations": {
+    "registry_publication": false,
+    "image_build_job": false,
+    "agent_qualification_pod": false,
+    "evaluation_submission": false
+  },
+  "launchable": false,
+  "sha256": "sha256:2d2c48b1331850e87bd02cd5bebb33337c3402c3715e83e2f5d241baab58b1fb"
+}

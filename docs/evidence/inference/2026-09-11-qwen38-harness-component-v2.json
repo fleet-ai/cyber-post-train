@@ -1,0 +1,60 @@
+{
+  "schema": "cyber_fleet_harness_component_evidence_v2",
+  "status": "partial_blocked",
+  "plan_sha256": "sha256:0aec19fb1ea4b832452affa35d1a01ef006fcd2dfaef54a1a7e68f0bd026bf60",
+  "observed_at": "2026-09-11T23:03:56Z",
+  "proxy_receipt_sha256": "sha256:60dd0ff6e2bff9fb30228b8a133333761e412df1071f8d2bf685611ba3a93e22",
+  "fixed_proxy": {
+    "requested_image": "ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7",
+    "observed_image_id": "ghcr.io/astral-sh/uv@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7",
+    "proxy_source_sha256": "sha256:a65270cb021cbc8e2fe9b00d901b4b70e9ddc98dd58d93e9f695b1768dfb984d",
+    "cluster_context": "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb",
+    "namespace": "default",
+    "server_dry_run_passed": true,
+    "rendered_manifest_sha256": "sha256:16b2e3d78284f64cee5df85ad451e3de4be98909ee84b761b298884405ccdafa",
+    "pod": "chris-cpt-q38-fixed-proxy-qual-v1",
+    "pod_uid": "78925571-728b-42f6-b703-c66b389710e0",
+    "node": "computeinstance-e04ksrdacnddrsmxkb",
+    "fresh_pull": true,
+    "started_at": "2026-09-11T22:59:20Z",
+    "finished_at": "2026-09-11T22:59:21Z",
+    "terminal_phase": "Succeeded",
+    "exit_code": 0,
+    "restart_count": 0,
+    "gpu_requests": 0,
+    "deleted": true,
+    "absence_confirmed": true,
+    "cleanup_observed_at": "2026-09-11T23:03:56Z"
+  },
+  "agent": {
+    "status": "blocked_no_pullable_immutable_reference",
+    "local_image_id": "sha256:45424cc2e304e114b26aca916486df6e80fdc57c4f5adddf2bb144d4773d510f",
+    "local_reference": "cpt-cleanup-opencode@sha256:45424cc2e304e114b26aca916486df6e80fdc57c4f5adddf2bb144d4773d510f",
+    "platform": "linux/amd64",
+    "opencode_version": "1.18.27",
+    "release_asset_sha256": "sha256:4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702",
+    "dockerfile_sha256": "sha256:2a44ad204aebbabda967d7a1cb419f428ed25b67d56554facd0f1cdc303c78eb",
+    "publication_plan": {
+      "path": "configs/evaluation/opencode11827-agent-image-publication-plan-v1.json",
+      "sha256": "sha256:2d2c48b1331850e87bd02cd5bebb33337c3402c3715e83e2f5d241baab58b1fb",
+      "file_sha256": "sha256:c716b68e9e84a69e04ad79d5964cc543136db46266f412b90bd2679fa51d0f5f"
+    },
+    "blocker": "No immutable registry manifest for the exact agent image resolves, and dev builder IAM is documented only for fleet/miles-trainer rather than a dedicated OpenCode runtime repository.",
+    "required_next": "Create and authorize a dedicated ECR repository, then follow the immutable dev publication plan before one offline CPU clean-pull qualification Pod.",
+    "dev_pod_created": false,
+    "registry_mutated": false,
+    "image_build_job_created": false
+  },
+  "full_harness_receipt_present": false,
+  "scope": {
+    "gpu_requests": 0,
+    "model_requests": 0,
+    "prompt_requests": 0,
+    "completion_requests": 0,
+    "scoring_requests": 0,
+    "task_or_grading_requests": 0,
+    "evaluation_submissions": 0
+  },
+  "launchable": false,
+  "sha256": "sha256:1ca4ec5a2fd133aae97c7d086b016b0c07e815d5670c03489a9e9a0baa2401ec"
+}

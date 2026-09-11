@@ -1,0 +1,42 @@
+{
+  "helper": {
+    "node": "computeinstance-e04r0z7gp25s85eyb0",
+    "pod": "chris-cpt-q38-base-readback-v1",
+    "pod_uid": "cef2ecdc-b4d8-4d70-9e86-2f3f9661b624"
+  },
+  "model": {
+    "chat_template_sha256": "sha256:c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+    "configuration_manifest_sha256": "sha256:3eea0ba14872cff55d7dfd34fe118e2a964b531c0ba39220cc88520ed9c7eba5",
+    "index_sha256": "sha256:77042094076611b69791a610065f28b7013b8c621795fa86ddccc8bac7d1b9df",
+    "repository": "Qwen/Qwen3.8-27B",
+    "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "tokenizer_manifest_sha256": "sha256:3938a9a8172f2738fed1be44efc11e2562059269d50d3721213f44802b53b4e1",
+    "weights_manifest_sha256": "sha256:06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352"
+  },
+  "observed_at": "2026-09-11T22:54:16.552802+00:00",
+  "payload": {
+    "file_count": 34,
+    "manifest_sha256": "sha256:b194e14d1af53f6e8f321ce4e8cf8d54f629ce6679f4b0d39dcdbd8698d2bb15",
+    "payload_rehashed": true,
+    "symlinks_absent": true,
+    "total_bytes": 55586115591
+  },
+  "plan_sha256": "sha256:c7d3e8ecdd24107eb63fb13c8d0afe96b6c6a4959f999dae10194c26340a8834",
+  "schema": "cyber_fleet_base_payload_readback_v1",
+  "scope": {
+    "completion_requests": 0,
+    "gpu_requests": 0,
+    "prompt_requests": 0,
+    "read_only_host_path": true,
+    "scoring_requests": 0,
+    "task_or_grading_requests": 0
+  },
+  "sha256": "sha256:9ca76194c3c745bca1c3006847508b3a036603558a890e193da50d3a3bfe34fa",
+  "source": {
+    "node": "computeinstance-e04r0z7gp25s85eyb0",
+    "root": "/scratch/models/qwen3.8-27b/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "serving_pod": "inference-qwen3-8-27b-66fc7c05-7bb446945-qvqwg",
+    "serving_pod_uid": "eb52ba96-7b1c-44ce-9495-498151fc5827"
+  },
+  "status": "passed"
+}

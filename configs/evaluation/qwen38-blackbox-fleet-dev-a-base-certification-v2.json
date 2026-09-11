@@ -1,0 +1,76 @@
+{
+  "schema": "cyber_fleet_base_control_certification_plan_v2",
+  "purpose": "Certify current base-route components without treating status-only Kubernetes resourceVersion changes as scientific identity or opening scored split-A work",
+  "split_variant": "a",
+  "supersedes": {
+    "path": "configs/evaluation/qwen38-blackbox-fleet-dev-a-base-certification-v1.json",
+    "sha256": "sha256:c7d3e8ecdd24107eb63fb13c8d0afe96b6c6a4959f999dae10194c26340a8834",
+    "file_sha256": "sha256:26330b859e8c9a1de02afa6301eddab93d309204a20c7b979d3706bc948b8fd1"
+  },
+  "identity_policy": {
+    "stable_fields": [
+      "inference_model_uid",
+      "inference_model_generation",
+      "deployment_uid",
+      "deployment_generation",
+      "pod_uid",
+      "service_uid",
+      "endpoint_slice_uid"
+    ],
+    "status_only_observation_fields": [
+      "inference_model_resource_version"
+    ],
+    "resource_version_is_scientific_identity": false,
+    "fresh_resource_version_observation_required": true
+  },
+  "stable_candidate_base_route": {
+    "endpoint_origin": "https://inference.flt.build",
+    "served_model_id": "qwen3.8-27b",
+    "serving_block_kind": "shared",
+    "model": {
+      "repository": "Qwen/Qwen3.8-27B",
+      "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
+    },
+    "cluster": {
+      "context": "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6",
+      "namespace": "inference"
+    },
+    "object_identity": {
+      "inference_model_uid": "d06c0531-7181-41ad-a3fd-cd8e3e774ab9",
+      "inference_model_generation": 5,
+      "deployment_uid": "c4dff72c-3c99-4b31-adee-a13ba153676a",
+      "deployment_generation": 6,
+      "pod_uid": "eb52ba96-7b1c-44ce-9495-498151fc5827",
+      "service_uid": "311a866c-7010-4eed-ab81-e1453e222029",
+      "endpoint_slice_uid": "8aa2340c-015d-4396-bb41-df0bd4c094ba"
+    },
+    "runtime": {
+      "engine": "sglang",
+      "precision": "bf16",
+      "quantization": "none",
+      "tensor_parallel_size": 1,
+      "data_parallel_size": 8,
+      "context_length": 262144,
+      "kv_cache_dtype": "fp8_e4m3",
+      "reasoning_parser": "qwen3",
+      "tool_call_parser": "qwen3_coder",
+      "serving_image_digest": "sha256:febfb971c7352570fc445c466ebd6ffc9d896024958e544a60f2137fd85856b1",
+      "normalized_server_arguments_sha256": "sha256:e873d511c6f880a14916ac6346bcc9e38eb15972e50a2a371b5dfc4e305f8f4c"
+    }
+  },
+  "component_schemas": {
+    "base_payload": "cyber_fleet_base_payload_readback_v1",
+    "base_route": "cyber_fleet_base_route_component_evidence_v2",
+    "harness_partial": "cyber_fleet_harness_component_evidence_v2"
+  },
+  "final_gate": {
+    "certificate_schema": "cyber_fleet_base_control_certificate_v2",
+    "requires_complete_harness_receipt": "cyber_fleet_harness_qualification_receipt_v1",
+    "requires_simultaneous_live_pair_receipt": "cyber_fleet_base_post_live_parity_receipt_v2",
+    "base_and_post_runtime_must_match_except_weights": true,
+    "certificate_does_not_authorize_scored_work": true
+  },
+  "launchable": false,
+  "paid_or_scored_work_authorized": false,
+  "sha256": "sha256:0aec19fb1ea4b832452affa35d1a01ef006fcd2dfaef54a1a7e68f0bd026bf60"
+}

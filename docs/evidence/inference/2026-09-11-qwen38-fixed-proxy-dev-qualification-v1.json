@@ -1,0 +1,37 @@
+{
+  "checks": {
+    "allowed_path_enforced": true,
+    "fixed_sampling_seed_and_32768_output": true,
+    "health_endpoint": true,
+    "loopback_only": true,
+    "request_count_enforced": true,
+    "request_size_enforced": true,
+    "synthetic_auth_replaced": true,
+    "upstream_path_fixed": true
+  },
+  "helper": {
+    "node": "computeinstance-e04ksrdacnddrsmxkb",
+    "pod": "chris-cpt-q38-fixed-proxy-qual-v1",
+    "pod_uid": "78925571-728b-42f6-b703-c66b389710e0"
+  },
+  "image_pull_policy": "Always",
+  "plan_sha256": "sha256:c7d3e8ecdd24107eb63fb13c8d0afe96b6c6a4959f999dae10194c26340a8834",
+  "platform": "linux/amd64",
+  "proxy_source_sha256": "sha256:a65270cb021cbc8e2fe9b00d901b4b70e9ddc98dd58d93e9f695b1768dfb984d",
+  "qualified_at": "2026-09-11T22:59:21.816904+00:00",
+  "requested_image": "ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7",
+  "sampling_policy_sha256": "sha256:e733828fd55fc670c0560fc793527f03e2f64e383a44ae01573bd4ae4e7910ef",
+  "schema": "cyber_fleet_fixed_proxy_cpu_qualification_v1",
+  "scope": {
+    "completion_requests": 0,
+    "external_network_requests": 0,
+    "gpu_requests": 0,
+    "model_requests": 0,
+    "prompt_requests": 0,
+    "scoring_requests": 0,
+    "synthetic_loopback_requests": 5,
+    "task_or_grading_requests": 0
+  },
+  "sha256": "sha256:60dd0ff6e2bff9fb30228b8a133333761e412df1071f8d2bf685611ba3a93e22",
+  "status": "passed"
+}

@@ -1,0 +1,158 @@
+{
+  "schema": "cyber_fleet_base_route_component_evidence_v2",
+  "status": "passed_component_only",
+  "plan_sha256": "sha256:0aec19fb1ea4b832452affa35d1a01ef006fcd2dfaef54a1a7e68f0bd026bf60",
+  "observed_at": "2026-09-11T23:01:00Z",
+  "payload_receipt_sha256": "sha256:9ca76194c3c745bca1c3006847508b3a036603558a890e193da50d3a3bfe34fa",
+  "model_artifact": {
+    "repository": "Qwen/Qwen3.8-27B",
+    "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "base_snapshot_manifest_sha256": "sha256:b194e14d1af53f6e8f321ce4e8cf8d54f629ce6679f4b0d39dcdbd8698d2bb15",
+    "weights_manifest_sha256": "sha256:06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352",
+    "tokenizer_manifest_sha256": "sha256:3938a9a8172f2738fed1be44efc11e2562059269d50d3721213f44802b53b4e1",
+    "chat_template_sha256": "sha256:c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+    "payload_rehashed": true,
+    "symlinks_absent": true
+  },
+  "registration": {
+    "stable_route": {
+      "endpoint_origin": "https://inference.flt.build",
+      "served_model_id": "qwen3.8-27b",
+      "serving_block_kind": "shared",
+      "model": {
+        "repository": "Qwen/Qwen3.8-27B",
+        "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
+      },
+      "cluster": {
+        "context": "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6",
+        "namespace": "inference"
+      },
+      "object_identity": {
+        "inference_model_uid": "d06c0531-7181-41ad-a3fd-cd8e3e774ab9",
+        "inference_model_generation": 5,
+        "deployment_uid": "c4dff72c-3c99-4b31-adee-a13ba153676a",
+        "deployment_generation": 6,
+        "pod_uid": "eb52ba96-7b1c-44ce-9495-498151fc5827",
+        "service_uid": "311a866c-7010-4eed-ab81-e1453e222029",
+        "endpoint_slice_uid": "8aa2340c-015d-4396-bb41-df0bd4c094ba"
+      },
+      "runtime": {
+        "engine": "sglang",
+        "precision": "bf16",
+        "quantization": "none",
+        "tensor_parallel_size": 1,
+        "data_parallel_size": 8,
+        "context_length": 262144,
+        "kv_cache_dtype": "fp8_e4m3",
+        "reasoning_parser": "qwen3",
+        "tool_call_parser": "qwen3_coder",
+        "serving_image_digest": "sha256:febfb971c7352570fc445c466ebd6ffc9d896024958e544a60f2137fd85856b1",
+        "normalized_server_arguments_sha256": "sha256:e873d511c6f880a14916ac6346bcc9e38eb15972e50a2a371b5dfc4e305f8f4c"
+      }
+    },
+    "stable_route_sha256": "sha256:214a5e6c756d855bba85f695c3472e43c97f18606325edd49054e2ae71cf59cb",
+    "status_observation": {
+      "inference_model_resource_version": "19874392",
+      "inference_model_observed_generation": 5,
+      "deployment_observed_generation": 6,
+      "inference_model_phase": "ready",
+      "inference_model_ready_replicas": 1,
+      "deployment_ready_replicas": 1,
+      "pod_phase": "Running",
+      "pod_ready": true,
+      "pod_restart_count": 0,
+      "ready_endpoint_count": 1
+    }
+  },
+  "readiness": {
+    "catalog_status": "ready",
+    "catalog_ready_replicas": 1,
+    "catalog_routed": true,
+    "catalog_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "models_listed_once": true,
+    "model_info_http_status": 200,
+    "model_info_repository_type": "qwen3_5",
+    "model_info_architecture": "Qwen3_5ForConditionalGeneration",
+    "server_info_http_status": 200,
+    "server_info_runtime_matches": true
+  },
+  "gateway_projections": {
+    "catalog": {
+      "id": "qwen3.8-27b",
+      "model_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+      "engine": "sglang",
+      "precision": "bf16",
+      "tensor_parallel_size": 8,
+      "data_parallel_size": 1,
+      "status": "ready",
+      "ready_replicas": 1,
+      "routed": true,
+      "capabilities": [
+        "chat_completions",
+        "reasoning",
+        "streaming",
+        "tool_calling"
+      ]
+    },
+    "models": {
+      "id": "qwen3.8-27b",
+      "object": "model",
+      "match_count": 1
+    },
+    "model_info": {
+      "model_path": "/scratch/models/qwen3.8-27b/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+      "model_type": "qwen3_5",
+      "architectures": [
+        "Qwen3_5ForConditionalGeneration"
+      ]
+    },
+    "server_info": {
+      "model_path": "/scratch/models/qwen3.8-27b/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+      "served_model_name": "qwen3.8-27b",
+      "context_length": 262144,
+      "tp_size": 1,
+      "dp_size": 8,
+      "load_balance_method": "total_tokens",
+      "quantization": null,
+      "kv_cache_dtype": "fp8_e4m3",
+      "reasoning_parser": "qwen3",
+      "tool_call_parser": "qwen3_coder"
+    }
+  },
+  "payload_execution": {
+    "cluster_context": "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6",
+    "namespace": "inference",
+    "server_dry_run_passed": true,
+    "pod": "chris-cpt-q38-base-readback-v1",
+    "pod_uid": "cef2ecdc-b4d8-4d70-9e86-2f3f9661b624",
+    "node": "computeinstance-e04r0z7gp25s85eyb0",
+    "image_id": "docker.io/lmsysorg/sglang@sha256:febfb971c7352570fc445c466ebd6ffc9d896024958e544a60f2137fd85856b1",
+    "started_at": "2026-09-11T22:53:36Z",
+    "finished_at": "2026-09-11T22:54:16Z",
+    "terminal_phase": "Succeeded",
+    "exit_code": 0,
+    "restart_count": 0,
+    "gpu_requests": 0,
+    "deleted": true,
+    "absence_confirmed": true,
+    "cleanup_observed_at": "2026-09-11T23:03:56Z"
+  },
+  "scope": {
+    "gateway_gets": 4,
+    "cluster_reads": true,
+    "prompt_requests": 0,
+    "completion_requests": 0,
+    "scoring_requests": 0,
+    "task_or_grading_requests": 0,
+    "evaluation_submissions": 0,
+    "gpu_mutations": 0
+  },
+  "launchable": false,
+  "remaining_gates": [
+    "complete_agent_image_qualification",
+    "accepted_post_sft_checkpoint_export_staging_and_serving",
+    "simultaneous_base_post_live_parity",
+    "final_v2_certificate"
+  ],
+  "sha256": "sha256:6b636b1c05e735bbf1678d98865ddfdd82954e53bdb3cc386c41184948c450aa"
+}

@@ -93,3 +93,51 @@ reviewed, immutable split-A child must reference it, pass fresh exact task and
 route preflight, use a new private result root, and preserve sealed outcome
 handling. Evaluation scores remain outside W&B; teacher-reference CE remains
 forbidden.
+
+## September 11 zero-GPU component evidence
+
+The available safe legs have now been executed without a model request:
+
+- The existing shared serving node rehashed all 34 mounted files
+  (55,586,115,591 bytes). The weights, tokenizer, chat template, index and
+  configuration agree with exact Qwen3.8 revision
+  `1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0`. The immutable probe receipt is
+  [`2026-09-11-qwen38-shared-base-payload-readback-v1.json`](evidence/inference/2026-09-11-qwen38-shared-base-payload-readback-v1.json).
+- Fresh Kubernetes reads and authenticated GET-only gateway reads bind the same
+  stable UIDs, generations, SGLang image/arguments and ready route. The
+  nonlaunchable component receipt is
+  [`2026-09-11-qwen38-shared-base-route-component-v2.json`](evidence/inference/2026-09-11-qwen38-shared-base-route-component-v2.json).
+- A digest-pinned Python proxy image was clean-resolved on a CPU-only dev node
+  and passed loopback-only path, auth, size, request-count and fixed-sampling
+  checks. Its immutable receipt is
+  [`2026-09-11-qwen38-fixed-proxy-dev-qualification-v1.json`](evidence/inference/2026-09-11-qwen38-fixed-proxy-dev-qualification-v1.json).
+
+Each helper Pod passed server dry-run, requested zero GPUs, exited zero without
+a restart, was deleted, and was confirmed absent. No Fleet task, grader,
+scoring, prompt or completion endpoint was contacted.
+
+The v1 plan included the InferenceModel `resourceVersion` in object identity.
+That value changes on status-only writes even when the UID, generation, serving
+bytes and runtime do not. The additive
+[`qwen38-blackbox-fleet-dev-a-base-certification-v2.json`](../configs/evaluation/qwen38-blackbox-fleet-dev-a-base-certification-v2.json)
+therefore requires a fresh `resourceVersion` observation but excludes it from
+scientific identity. It does not modify or reinterpret the frozen v1 plan.
+
+The full harness gate remains closed: the exact OpenCode 1.18.27 image is
+verified locally, but no pullable immutable registry reference has been proven
+for a clean dev-cluster qualification. Do not create a likely-to-fail Pod or
+publish to an unapproved registry merely to fill that field. A complete harness
+receipt, accepted post-SFT export/staging/serving, simultaneous base/post live
+parity and a final v2 certificate are still required. The base control remains
+nonlaunchable.
+
+The supported dev BuildKit service is healthy, but the currently documented
+builder permission covers `fleet/miles-trainer`, not a dedicated OpenCode
+runtime repository. Two older production publisher/stager Jobs failed and are
+explicitly forbidden as a retry path. The non-executable
+[`opencode11827-agent-image-publication-plan-v1.json`](../configs/evaluation/opencode11827-agent-image-publication-plan-v1.json)
+requires the repository and IAM permission to be confirmed first. It then
+requires either an authorized exact-byte OCI import of the local image or a
+new, provenance-labelled reproducible build; a rebuilt image must use its newly
+returned digest. No registry, BuildKit Job, or agent Pod was created during this
+certification pass.
