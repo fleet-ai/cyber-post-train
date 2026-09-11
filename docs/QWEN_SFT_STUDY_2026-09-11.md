@@ -117,6 +117,33 @@ shared base endpoint is operational, but not an exact matched causal control, so
 it does not open any outcome or uplift gate. No stage in this plan is presently
 launchable and the file is not a job request.
 
+### Two-step learning-rate boundary canaries
+
+The inert
+[`qwen38-teacher-lr-extremes-dev-v1.template.json`](../configs/qualification/qwen38-teacher-lr-extremes-dev-v1.template.json)
+freezes the next dev-only numerical checks at `1e-6` and `3e-5`. Each arm uses
+one four-GPU worker, global batch eight (two accumulation rounds), the exact
+available-A teacher corpus, per-step checkpoints, scalar-only W&B, and a planned
+pause after exactly two optimizer steps. The names, output roots, prepared roots
+and W&B IDs are distinct, but neither arm is currently a runnable CLI input.
+
+The changed runtime has one narrow clean-rejection path. Only a plan that
+explicitly opts into the bounded numeric policy can record non-finite loss or
+gradient norm as `TRAINING_REJECTED.json` with controller exit zero. A rejected
+update is never checkpointed or accepted and never opens the next study gate.
+Loader/CUDA exceptions, invalid LR or clock state, storage/checkpoint faults,
+W&B tracking or sync faults, watchdog expiry, and unknown terminal states still
+write `FAILED.json` and exit nonzero. This prevents an expected scientific
+boundary result from being reported as a broken cluster job without hiding an
+actual runtime defect.
+
+Before either config may be materialized, bind independently verified terminal
+and clean-release evidence for the enhanced-metrics canary and its exact
+four-rank zero-update checkpoint reload. Then run the changed runtime's pinned
+image CPU preflight, create exact per-arm plan/request digests, preview each
+against the dev Jobs API, and recheck duplicate destinations and the aggregate
+eight-study-node ceiling. One reviewed POST per arm is the only launch path.
+
 ## Operational gates
 
 New or changed training, serving and Tensorlake paths qualify on the dev cluster

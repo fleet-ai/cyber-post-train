@@ -41,6 +41,23 @@ def test_staged_search_is_self_digested_evidence_bound_and_nonlaunchable():
         evidence = plan["evidence"][evidence_name]
         assert evidence["file_sha256"] == file_sha256(ROOT / evidence["path"])
 
+    numeric_template_evidence = plan["evidence"]["numeric_lr_canary_template"]
+    numeric_template = read(ROOT / numeric_template_evidence["path"])
+    assert numeric_template["sha256"] == numeric_template_evidence["sha256"]
+    assert numeric_template["sha256"] == digest_json(
+        {key: value for key, value in numeric_template.items() if key != "sha256"}
+    )
+    assert numeric_template["launchable"] is False
+    assert (
+        numeric_template["runtime"]["sha256"]
+        == numeric_template_evidence["runtime_sha256"]
+    )
+    assert (
+        numeric_template["runtime"]["implementation_commit"]
+        == numeric_template_evidence["runtime_implementation_commit"]
+        == plan["evidence"]["wandb_scalar_contract"]["implementation_commit"]
+    )
+
     assert plan["evidence"]["base_route_audit"][
         "accepted_as_serving_or_parity_evidence"
     ] is False

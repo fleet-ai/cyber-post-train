@@ -25,9 +25,9 @@
       "file_sha256": "sha256:5c66ac140f8d0afa3c4ea58d36f0f561cad7fc68a7e839a52333ce95ab81cab0"
     },
     "wandb_scalar_contract": {
-      "implementation_commit": "0b073bab8d93753b350e979f642e787a9ebc8056",
+      "implementation_commit": "699fa577e96180695dad00d85b152f5302964699",
       "path": "training/sft_runtime.py",
-      "file_sha256": "sha256:fc5db40437923800730d38b9bc9a0872cdd64dd8a92c64fc03ecfdeb0ac2b2e3",
+      "file_sha256": "sha256:14448fc710ceb6105f54fbb9558f3d42e7fc96a193ba593390cca3f33c7e3db8",
       "history_keys": [
         "train/global_step",
         "train/loss",
@@ -57,6 +57,14 @@
         "pinned_image_dev_preflight_with_secret_injection_and_sdk"
       ],
       "dev_gpu_qualification_receipt_sha256": null
+    },
+    "numeric_lr_canary_template": {
+      "path": "configs/qualification/qwen38-teacher-lr-extremes-dev-v1.template.json",
+      "sha256": "sha256:12f8dd410fdcac37f8200afec3f98539b1f4edd625d8de7d8b0e14df2e71188c",
+      "runtime_implementation_commit": "699fa577e96180695dad00d85b152f5302964699",
+      "runtime_sha256": "sha256:14448fc710ceb6105f54fbb9558f3d42e7fc96a193ba593390cca3f33c7e3db8",
+      "launchable": false,
+      "classification": "two_step_numeric_qualification_only"
     }
   },
   "splits": {
@@ -178,8 +186,9 @@
       "wave_nodes": 2,
       "launchable": false,
       "unresolved_dependencies": [
-        "enhanced_wandb_dev_gpu_qualification",
-        "exact_dev_model_data_and_secret_preflight",
+        "enhanced_wandb_dev_gpu_terminal_verification",
+        "four_gpu_checkpoint_reload_acceptance_and_release",
+        "numeric_rejection_runtime_pinned_image_cpu_preflight",
         "reviewed_create_once_job_requests"
       ],
       "arms": [
@@ -191,7 +200,8 @@
           "epochs": 1,
           "seed": 42,
           "pause_after_optimizer_step": 2,
-          "acceptance": "two_finite_updates_checkpoint_tracking_receipt_and_clean_release"
+          "acceptance": "two_finite_updates_checkpoint_tracking_receipt_and_clean_release",
+          "scientific_rejection": "nonfinite_loss_or_gradient_is_cleanly_receipted_but_does_not_advance"
         },
         {
           "id": "numeric-lr-3e-5",
@@ -201,7 +211,8 @@
           "epochs": 1,
           "seed": 42,
           "pause_after_optimizer_step": 2,
-          "acceptance": "two_finite_updates_checkpoint_tracking_receipt_and_clean_release"
+          "acceptance": "two_finite_updates_checkpoint_tracking_receipt_and_clean_release",
+          "scientific_rejection": "nonfinite_loss_or_gradient_is_cleanly_receipted_but_does_not_advance"
         }
       ]
     },
@@ -435,5 +446,5 @@
     "all_arms_currently_launchable": false,
     "promotion": "dev_qualification_then_reviewed_prod_preview_and_explicit_submit"
   },
-  "sha256": "sha256:7bf2f0695dfccd5b22dafe23cb916efb3fb37c7f4c201ae068097b58a2427058"
+  "sha256": "sha256:06f7bfe841dac2d896062b6f284cb223d5c3f220f1638ea271e2a3894bec873c"
 }
