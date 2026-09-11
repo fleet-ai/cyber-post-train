@@ -113,7 +113,9 @@ def validate_request(config: dict) -> None:
         or str(root) != config["run_dir"]
     ):
         raise JobsError("run_dir must be a canonical per-run path under /mnt/sfs/jobs/")
-    for key, upper in (("workers", 4), ("gpus_per_worker", 8)):
+    # Per-request ceiling, not an experiment-wide admission controller. Operators
+    # must also count other active allocations before submitting a new request.
+    for key, upper in (("workers", 8), ("gpus_per_worker", 8)):
         if type(config.get(key)) is not int or not 1 <= config[key] <= upper:
             raise JobsError(f"{key} must be a positive integer no greater than {upper}")
     if config.get("priority_class") not in {"c1", "c2"}:

@@ -71,6 +71,9 @@ are exempt has not been explicitly confirmed; until clarified, use the stricter
 total-node interpretation rather than assume an exemption. Shared endpoints
 owned by colleagues are not our experiment-owned allocations. The old
 four-node/32-GPU limit including queued work is superseded.
+The generic request validator now accepts up to eight nodes per request and
+rejects nine. This removes the obsolete four-worker ceiling; it does not qualify
+new model topologies or enforce the sum across independently admitted runs.
 
 Reconcile allocation before submission and admission. The Jobs API admits queued
 work independently, so observing eight active nodes is not an enforcement

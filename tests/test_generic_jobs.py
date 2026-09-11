@@ -170,7 +170,7 @@ def preview(obj=None):
     return {"manifest_yaml": yaml.safe_dump(obj or manifest()), "warnings": []}
 
 
-@pytest.mark.parametrize("nodes", [1, 2, 4])
+@pytest.mark.parametrize("nodes", [1, 2, 4, 5, 8])
 @pytest.mark.parametrize("priority", ["c1", "c2"])
 def test_resource_preview(nodes, priority):
     request = {**config(), "workers": nodes, "priority_class": priority}
@@ -188,7 +188,7 @@ def test_resource_preview(nodes, priority):
         ("command", ""),
         ("workers", True),
         ("workers", 0),
-        ("workers", 5),
+        ("workers", 9),
         ("gpus_per_worker", 0),
         ("gpus_per_worker", 9),
         ("priority_class", "c0"),
