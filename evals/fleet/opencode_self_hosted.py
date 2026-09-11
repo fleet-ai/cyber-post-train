@@ -548,10 +548,11 @@ def assert_required_task_tools(
 
 
 def agent_container_user_args() -> list[str]:
-    """Use the invoking uid/gid for Docker Desktop bind mounts."""
+    """Pin HOME too: arbitrary host UIDs may have no passwd entry in the image."""
+    args = ["-e", "HOME=/home/node"]
     if os.geteuid() == 0:
-        return []
-    return ["--user", f"{os.getuid()}:{os.getgid()}"]
+        return args
+    return [*args, "--user", f"{os.getuid()}:{os.getgid()}"]
 
 
 def write_agent_prompt(path: Path, prompt: str) -> None:
@@ -1814,6 +1815,14 @@ def run(
             agent_termination = "execution_timeout"
             _docker("stop", "--time", "5", agent_container, check=False, capture=True, timeout=15)
             result = subprocess.CompletedProcess(args=["docker", "run"], returncode=124)
+        write_json_once(
+            out_dir / "agent-process.json",
+            {
+                "harness": harness_name,
+                "exit_code": result.returncode,
+                "timed_out": agent_termination == "execution_timeout",
+            },
+        )
         if harness_name == "opencode":
             canonical_trace = trace
             events, malformed_line_count = load_opencode_trace(trace)

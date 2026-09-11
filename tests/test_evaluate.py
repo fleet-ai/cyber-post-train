@@ -2,6 +2,7 @@
 
 import copy
 import json
+import os
 from contextlib import nullcontext
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -244,7 +245,7 @@ def prepared(configuration, tmp_path, monkeypatch):
         lambda args, **kwargs: SimpleNamespace(
             returncode=0,
             stdout=(
-                "1.18.27\n"
+                "1.18.27\n/home/node/.local/share/opencode/opencode.db\n"
                 if args[1] == "run"
                 else json.dumps(
                     {
@@ -335,6 +336,34 @@ def test_preflight_rejects_historical_missing_seed_using_only_gets(
     assert not (directory / "EVAL_PREFLIGHT.json").exists()
 
 
+@pytest.mark.parametrize("root", [False, True])
+def test_agent_uid_always_has_explicit_home(monkeypatch, root):
+    monkeypatch.setattr(os, "geteuid", lambda: 0 if root else 501)
+    monkeypatch.setattr(os, "getuid", lambda: 501)
+    monkeypatch.setattr(os, "getgid", lambda: 20)
+    expected = ["-e", "HOME=/home/node"]
+    if not root:
+        expected += ["--user", "501:20"]
+    assert evaluation.harness.agent_container_user_args() == expected
+
+
+def test_native_image_initializes_home_offline_as_actual_controller_user():
+    image = os.environ.get("CYBER_TEST_OPENCODE_IMAGE")
+    if not image:
+        pytest.skip("set CYBER_TEST_OPENCODE_IMAGE to a staged pinned Docker image")
+    evaluation.check_images(
+        {
+            "images": {"agent": image},
+            "treatment": {
+                "harness_version": "1.18.27",
+                "release_asset_sha256": (
+                    "sha256:4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702"
+                ),
+            },
+        }
+    )
+
+
 def test_bounded_worker_does_not_initialize_or_repeat(prepared, monkeypatch):
     monkeypatch.setattr(evaluation.postgres, "verify_plan", Mock())
     monkeypatch.setattr(
@@ -392,14 +421,16 @@ def test_endpoint_failure_preserves_terminal_without_claim(prepared, monkeypatch
     assert "private" not in json.dumps(result)
 
 
-@pytest.mark.parametrize("defect", ["missing", "platform", "digest", "release", "version"])
+@pytest.mark.parametrize("defect", ["missing", "platform", "digest", "release", "version", "home"])
 def test_execution_host_images_checked_before_claim(prepared, monkeypatch, defect):
     monkeypatch.setattr(evaluation.postgres, "verify_plan", Mock())
     monkeypatch.setattr(rollout_worker, "run_one", lambda **k: pytest.fail("claimed after drift"))
 
     def inspect(args, **kwargs):
         if args[1] == "run":
-            return SimpleNamespace(returncode=0, stdout="different-version")
+            assert args[args.index("-e") : args.index("-e") + 2] == ["-e", "HOME=/home/node"]
+            assert args[-1] == "opencode --version && opencode db path"
+            return SimpleNamespace(returncode=int(defect == "home"), stdout="different-version")
         info = {
             "RepoDigests": [args[3]],
             "Os": "linux",

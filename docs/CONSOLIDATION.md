@@ -132,6 +132,15 @@ train versions outside the active campaign still bind correctly. These are
 eligible for a separately frozen operational qualification, not replacement
 credits for the held rows. [Diagnosis and source fingerprint](evidence/cleanup-eval-seed-diagnosis-20260911.json).
 
+The next qualification (`eval-prepared-v4`) successfully provisioned and bound an
+exact challenge and tool catalog, then stopped during OpenCode startup. A fully
+offline synthetic reproduction produced the identical stderr fingerprint:
+Docker's arbitrary host UID had no home directory, causing an attempted write
+under `/`. Set HOME explicitly and test data-directory initialization under the
+same user/mount before claims. This native image check passes. The environment
+and containers are released, and the unscored row remains held—not accepted or
+automatically retried. [Runtime evidence](evidence/cleanup-eval-runtime-20260911.json).
+
 ## Remaining completion gates
 
 - [x] Fix task-family leakage across versions and consolidate dense preparation.

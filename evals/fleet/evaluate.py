@@ -13,6 +13,7 @@ import json
 import os
 import re
 import subprocess
+import tempfile
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -361,26 +362,40 @@ def check_images(plan: dict) -> None:
                 != plan["treatment"]["release_asset_sha256"]
             ):
                 raise RuntimeError("harness release identity differs")
-    version = subprocess.run(
-        [
-            "docker",
-            "run",
-            "--rm",
-            "--network",
-            "none",
-            "--pull",
-            "never",
-            plan["images"]["agent"],
-            "opencode",
-            "--version",
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=60,
-    )
-    if version.returncode or version.stdout.strip() != plan["treatment"]["harness_version"]:
-        raise RuntimeError("harness executable version differs")
+    # Version alone never initializes OpenCode's data directories. Exercise the
+    # same uid, HOME and private mount as a real agent, offline and before claims.
+    with tempfile.TemporaryDirectory(prefix="cpt-agent-preflight-") as home:
+        if os.geteuid() == 0:
+            os.chown(home, 1000, 1000)
+        startup = subprocess.run(
+            [
+                "docker",
+                "run",
+                "--rm",
+                "--platform",
+                "linux/amd64",
+                "--network",
+                "none",
+                "--pull",
+                "never",
+                *harness.agent_container_user_args(),
+                "-v",
+                f"{home}:/home/node",
+                plan["images"]["agent"],
+                "bash",
+                "-lc",
+                "opencode --version && opencode db path",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=60,
+        )
+    if startup.returncode or startup.stdout.splitlines() != [
+        plan["treatment"]["harness_version"],
+        "/home/node/.local/share/opencode/opencode.db",
+    ]:
+        raise RuntimeError("harness version or writable agent-home startup differs")
 
 
 def preflight(directory: Path) -> dict:

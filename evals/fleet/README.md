@@ -17,7 +17,9 @@ cyber-post-train eval status
 Prepare is offline. Preflight uses GETs to verify Fleet-team access, exact
 task/runtime/verifier bindings, ready inference routes and staged Linux/amd64
 Docker images, including the release label and actual OpenCode version. The
-execution host checks its images again before claims. Build the agent with
+execution host checks its images again before claims. Its offline startup check
+uses the actual controller UID, an explicitly set HOME and a private mounted
+directory; `--version` alone misses startup permission errors. Build the agent with
 `evals/fleet/Dockerfile.opencode` and freeze its resulting digest. Preflight
 creates no challenge or scored session. Init writes only
 an empty dedicated PostgreSQL database; it is not a migration/reset command.
