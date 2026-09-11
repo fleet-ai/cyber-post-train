@@ -84,7 +84,7 @@
     "after_source_path_added": "/root/Megatron-LM/megatron/post_training resolves",
     "actual_import_probe_pod_uid": "9c86b2a1-dee0-4122-8157-020fdf4ba260",
     "actual_import_before": "ModuleNotFoundError: megatron.post_training",
-    "actual_import_after": "OSError in CPU-only runtime; native GPU import not yet qualified",
+    "actual_import_after": "Source namespace resolves; only missing libcuda.so remains on the CPU-only node. Verified by preparation Pod 9daea754-829e-47ff-896d-fcb1dd8ee8b0, digest 104315e526fb3113f0f82b9202e3e12d3c23e511c7f6f46d15fa64109107b146. Native GPU import not yet qualified.",
     "probe_finished_at": "2026-09-11T11:25:06Z",
     "probe_gpus": 0,
     "regression_selftest": {
