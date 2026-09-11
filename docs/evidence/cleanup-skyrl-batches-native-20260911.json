@@ -1,0 +1,48 @@
+{
+  "schema": "cyber_native_cpu_integration_evidence_v1",
+  "classification": "synthetic_native_batch_qualification_not_rl_training",
+  "pod": "chris-cpt-skyrl-episode-selftest-v5",
+  "pod_uid": "e840ae74-9e1b-43cd-b268-a1d042dc68c8",
+  "node": "computeinstance-e04a737eqtfvpnyx08",
+  "started_at": "2026-09-11T08:38:23Z",
+  "finished_at": "2026-09-11T08:39:59Z",
+  "exit_code": 0,
+  "restarts": 0,
+  "gpus": 0,
+  "image_sha256": "ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+  "bundle_sha256": "6febb840029bcb074401c46bfcbd5a70fe0c0c079b970c2250ffdf22f29eda5f",
+  "manifest_sha256": "131c34f60ae5c320f8c1daecda3a771bea8c7869911a1f80574f47a0a0685bfa",
+  "receipt_sha256": "9becd01ca03d58969794d7fe082da2038d6c0acd506a4bf82b4620c5e9bb4537",
+  "receipt_digest_independently_verified": true,
+  "test_output_sha256": "97eb2fba0fe21a4c386688af5e272979d9707a22c89178f7dbef16c474691798",
+  "tests": 227,
+  "failures": 0,
+  "errors": 0,
+  "skips": 0,
+  "skyrl_batch_coverage": {"statements": 116, "covered_statements": 116, "branches": 38, "covered_branches": 38},
+  "real_boundaries": [
+    "Native SkyRL TrajectoryID and BatchMetadata types",
+    "Native output validator in both ordinary and step-wise modes",
+    "Exact pinned Qwen tokenizer and native PromptDataset from the existing combined suite",
+    "Native inference-client payload and MCP 1.28.0 transport from the existing combined suite"
+  ],
+  "batch_gates": [
+    "Frozen train/dev rows, prompts, environment metadata, run and manifest identity",
+    "Complete repetition groups with unique immutable attempt IDs",
+    "Original sampled token IDs, masked tool observations and aligned log probabilities",
+    "Genuine zero reward is preserved; malformed samples are rejected",
+    "One durable batch claim; replay and reentry are rejected",
+    "Failed or cancelled siblings are awaited through cleanup, without replacement samples",
+    "No raw exception details in the native batch failure"
+  ],
+  "local_regression": {"passed": 1379, "native_only_skipped": 97, "subtests_passed": 7},
+  "wheel_sha256": "b07fe660e1db80eddc392e0e15431ebddc7e02763d011434a73ac9f061a55c55",
+  "wheel_verified_outside_checkout": true,
+  "wheel_checks": ["skyrl_rollout import", "skyrl_episode import", "rl_data import", "rl-data help"],
+  "limits": [
+    "Synthetic Fleet and inference responses only; zero live Fleet requests or optimizer steps.",
+    "The internal generator is not yet wired to a public SkyRL RL launcher.",
+    "Real reward acquisition, weight synchronization, optimizer update and checkpoint recovery remain required.",
+    "Coverage is complete for the batch module, not the whole repository or every shared Miles branch."
+  ]
+}

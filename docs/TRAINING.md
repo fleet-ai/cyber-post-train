@@ -418,9 +418,13 @@ pinned image contains an older JSON-only parser, so a small corrected Theseus
 Qwen XML parser is included until that image is updated. Exact-image CPU tests
 exercise the actual tokenizer, client and MCP 1.28.0 transport (Miles uses
 MCP 2.1.1); [evidence](evidence/cleanup-skyrl-episode-native-20260911.json).
-This is **not yet a public SkyRL RL launcher**: native batch integration,
-real reward, weight synchronization and optimizer/recovery qualification remain
-open. Multiple tool calls per turn are rejected, not silently discarded.
+The internal `training.skyrl_rollout.Generator` validates frozen native row and
+repetition identities, retains complete groups and uses bounded concurrency.
+It awaits sibling cleanup on failure and never replaces invalid episodes.
+Its output passes the native validator; [CPU evidence](evidence/cleanup-skyrl-batches-native-20260911.json).
+This is **not yet a public SkyRL RL launcher**: launch integration, real reward,
+weight synchronization and optimizer/recovery qualification remain open.
+Multiple tool calls per turn are rejected, not silently discarded.
 
 `training.rl_episode.generate` is the internal Miles hook used by `rl`, not a
 qualified training recipe. It reuses FTI's native recorder and
