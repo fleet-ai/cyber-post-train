@@ -92,7 +92,11 @@ def select_sources(
             skipped["outside_exact_split"] += 1
             continue
         assigned = task["split"]
-        family = split_key(record)
+        # The reviewed study split already groups exact versions before it emits
+        # the train-only v2 projection.  Self-rollout records intentionally keep
+        # only immutable task/version lineage, so do not require legacy mutable
+        # application/family labels a second time here.
+        family = split_key(record) if reference_validation else key
         if families.setdefault(family, assigned) != assigned:
             raise ValueError("one task family crosses frozen splits")
         if sid in refs:

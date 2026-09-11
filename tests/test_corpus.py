@@ -104,6 +104,9 @@ def test_select_sources_is_order_independent_and_never_uses_test(source_split):
 
 def test_outcome_only_selection_never_reads_dev_reference(source_split):
     rows, split = source_split
+    for row in rows:
+        row["lineage"].pop("application")
+        row["lineage"].pop("task_family")
     split["schema"] = "cyber_task_split_v2"
     for task in split["tasks"]:
         task.pop("reference_session_id")
