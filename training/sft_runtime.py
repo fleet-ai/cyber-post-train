@@ -165,6 +165,16 @@ def validate_plan(plan: dict, *, check_files: bool = True) -> None:
         from training.recovery import validate
 
         validate(plan, check_files=check_files)
+    if "pause_after_step" in plan:
+        pause = plan["pause_after_step"]
+        recovery = plan.get("recovery", {})
+        start = recovery.get("checkpoint", {}).get("optimizer_step", 0)
+        if (
+            type(pause) is not int
+            or not start < pause < recipe["max_steps"]
+            or recovery.get("mode") == "validate"
+        ):
+            raise ValueError("planned pause must follow new work and precede full completion")
     train, dev = (plan["datasets"][key] for key in ("train", "dev"))
     for dataset in (train, dev):
         if not re.fullmatch(r"(?:sha256:)?[a-f0-9]{64}", dataset["sha256"]):
@@ -788,6 +798,10 @@ def finalize_failed_run(trainer, output: Path, error: BaseException) -> list[str
     return failures
 
 
+class PlannedPause(Exception):
+    """Exit the native loop only after the requested save, validation and log."""
+
+
 def _make_trainer_class():
     from skyrl.backends.skyrl_train.training_batch import pad_training_input_batch
     from skyrl.train.sft_trainer import SFTTrainer, tokenize_chat_example
@@ -819,11 +833,21 @@ def _make_trainer_class():
                 },
                 replace=True,
             )
+            if "train/loss" in event.logs and event.global_step == trainer.plan.get(
+                "pause_after_step"
+            ):
+                # Native on_log runs after checkpoint + evaluation, but before
+                # tracker.log. Commit this scalar event exactly once, then leave
+                # the native loop without changing its scheduler/epoch horizon.
+                trainer.tracker.log(event.logs, step=event.global_step, commit=True)
+                raise PlannedPause
 
         def on_step_end(self, trainer, event, control):
             # Final checkpoint exists before final validation, including a tail batch.
             if event.global_step == event.total_steps:
                 control.should_save = True
+            if event.global_step == trainer.plan.get("pause_after_step"):
+                control.should_save = control.should_evaluate = True
 
         def on_eval_end(self, trainer, event, control):
             metrics = event.metrics
@@ -1097,6 +1121,48 @@ def plan_checkpoint(plan: dict, step: int) -> str:
     )
 
 
+def training_result(trainer, *, paused: bool) -> dict:
+    """A planned pause is a recoverable partial run, never full completion."""
+    plan = trainer.plan
+    expected = plan.get("pause_after_step") if paused else plan["recipe"]["max_steps"]
+    if expected is None or ("pause_after_step" in plan and not paused):
+        raise ValueError("native loop did not honor the planned lifecycle")
+    pointer = trainer.output / "checkpoints/latest_ckpt_global_step.txt"
+    if int(pointer.read_text()) != expected or trainer.global_step != expected:
+        raise ValueError("final checkpoint optimizer step mismatch")
+    if paused:
+        for path in (
+            trainer.output / "checkpoint_receipts" / f"step-{expected:06d}.json",
+            trainer.output / "validation" / f"step-{expected:06d}.json",
+        ):
+            proof = json.loads(path.read_text())
+            if (
+                proof.get("receipt_sha256")
+                != _unsigned_digest({k: v for k, v in proof.items() if k != "receipt_sha256"})
+                or proof.get("optimizer_step") != expected
+                or proof.get("plan_sha256") != plan["plan_sha256"]
+            ):
+                raise ValueError("planned pause lacks a matching save or validation receipt")
+    elif (
+        plan["schema"] == DENSE_SCHEMA
+        and trainer.target_tokens_seen
+        != plan["datasets"]["train"]["supervised_tokens"] * plan["recipe"]["epochs"]
+    ):
+        raise ValueError("completed epochs did not train every assistant target once per epoch")
+    return {
+        "optimizer_step": expected,
+        "planned_optimizer_steps": plan["recipe"]["max_steps"],
+        "optimizer_steps_executed": expected
+        - plan.get("recovery", {}).get("checkpoint", {}).get("optimizer_step", 0),
+        "checkpoint_path": plan_checkpoint(plan, expected),
+        "best": trainer.best,
+        "export_status": "pending_separate_zero_step_export",
+        "supervised_tokens": trainer.target_tokens_seen,
+        "plan_sha256": plan["plan_sha256"],
+        "status": "training_paused" if paused else "training_complete",
+    }
+
+
 def _run_training(plan: dict) -> dict:
     _configure_wandb(plan)
     cfg, skyrl_cfg = build_runtime_configs(plan)
@@ -1108,31 +1174,19 @@ def _run_training(plan: dict) -> dict:
             from training.recovery import validate_only
 
             return validate_only(trainer)
-        trainer.train()
-        expected = plan["recipe"]["max_steps"]
-        pointer = Path(cfg.ckpt_path) / "latest_ckpt_global_step.txt"
-        if int(pointer.read_text()) != expected or trainer.global_step != expected:
-            raise ValueError("final checkpoint optimizer step mismatch")
-        if (
-            plan["schema"] == DENSE_SCHEMA
-            and trainer.target_tokens_seen
-            != plan["datasets"]["train"]["supervised_tokens"] * plan["recipe"]["epochs"]
-        ):
-            raise ValueError("completed epochs did not train every assistant target once per epoch")
-        result = {
-            "optimizer_step": expected,
-            "checkpoint_path": plan_checkpoint(plan, expected),
-            "best": trainer.best,
-            "export_status": "pending_separate_zero_step_export",
-            "supervised_tokens": trainer.target_tokens_seen,
-            "plan_sha256": plan["plan_sha256"],
-            "status": "training_complete",
-        }
+        paused = False
+        try:
+            trainer.train()
+        except PlannedPause:
+            paused = True
+        result = training_result(trainer, paused=paused)
         import wandb
 
         wandb.run.summary.update(
             {
-                "completed_optimizer_steps": expected,
+                "completed_optimizer_steps": result["optimizer_step"],
+                "status": result["status"],
+                "planned_optimizer_steps": result["planned_optimizer_steps"],
                 "best_checkpoint": trainer.best,
                 "export_status": result["export_status"],
             }
@@ -1216,6 +1270,8 @@ def main():
         terminal = (
             "RELOAD_VALIDATED.json"
             if result["status"] == "reload_validated"
+            else "TRAINING_PAUSED.json"
+            if result["status"] == "training_paused"
             else "TRAINING_COMPLETE.json"
         )
         write_receipt(output / terminal, result)

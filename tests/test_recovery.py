@@ -286,14 +286,20 @@ def test_native_worker_requires_loaded_optimizer_scheduler_and_rng(tmp_path, mon
     importlib.util.find_spec("skyrl") is None, reason="pinned native image; CPU only"
 )
 @pytest.mark.parametrize("epochs", [1, 2])
+@pytest.mark.parametrize("planned_pause", [False, True])
 def test_native_resume_restores_exact_update_and_complete_epoch_coverage(
-    tmp_path, monkeypatch, epochs
+    tmp_path, monkeypatch, epochs, planned_pause
 ):
     import ray
     from skyrl.train.dataset.collators import DefaultCollator
     from test_sft_runtime import plan
 
-    from training.sft_runtime import _make_trainer_class, build_runtime_configs
+    from training.sft_runtime import (
+        PlannedPause,
+        _make_trainer_class,
+        build_runtime_configs,
+        training_result,
+    )
 
     monkeypatch.setattr(ray, "get", lambda value: value)
     completed_batches = {}
@@ -307,6 +313,8 @@ def test_native_resume_restores_exact_update_and_complete_epoch_coverage(
         p["recipe"]["gpus_per_node"] = 1
         p["recipe"].update(epochs=epochs, max_steps=3 * epochs)
         p["wandb"]["run_id"] = output.name
+        if stop is not None and planned_pause:
+            p["pause_after_step"] = stop - 1
         if manifest:
             p["recovery"] = {"mode": "resume", "checkpoint": manifest}
             p["recovery_runtime_sha256"] = recovery.digest(Path(recovery.__file__))
@@ -431,8 +439,13 @@ def test_native_resume_restores_exact_update_and_complete_epoch_coverage(
     whole, _, whole_model, whole_optim = trainer_at(tmp_path / "whole")
     whole.train()
     interrupted, p, _, _ = trainer_at(tmp_path / "interrupted", stop=3)
-    with pytest.raises(RuntimeError, match="synthetic interruption"):
-        interrupted.train()
+    if planned_pause:
+        with pytest.raises(PlannedPause):
+            interrupted.train()
+        assert training_result(interrupted, paused=True)["status"] == "training_paused"
+    else:
+        with pytest.raises(RuntimeError, match="synthetic interruption"):
+            interrupted.train()
     manifest = checkpoints.seal(p, 2, tmp_path / "source.json")
     source_files = {
         name: recovery.digest(Path(manifest["checkpoint_path"]) / name)

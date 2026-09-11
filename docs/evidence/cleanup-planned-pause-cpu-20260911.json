@@ -1,0 +1,51 @@
+{
+  "schema": "cyber_cleanup_qualification_v1",
+  "classification": "native_cpu_planned_pause_and_recovery_not_gpu_continuation",
+  "pod": "chris-cpt-pause-selftest-v3",
+  "uid": "318e6ea3-c898-4ff5-abde-a671ecb66c8c",
+  "node": "computeinstance-e04a737eqtfvpnyx08",
+  "started_at": "2026-09-11T06:55:05Z",
+  "finished_at": "2026-09-11T06:55:26Z",
+  "phase": "Succeeded",
+  "exit_code": 0,
+  "restarts": 0,
+  "gpus": 0,
+  "priority": 10000,
+  "image_id": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+  "bundle_sha256": "09c21dcde91d23c02936448801aca33615c921a62c42771bbffa970d6b52aaa9",
+  "manifest_sha256": "3a26077aa490dd719ca00e3df9dee9e065512c42999723d7f618965893cc3d88",
+  "receipt_sha256": "41c2075448a1d8a450e87412300532222636a4dc2c576b881d45175ba2b7d88e",
+  "test_output_sha256": "43871b22ef77c92948efe7772a00b6ffd1808a313e8245325ac42f113dd25f39",
+  "runtime_sha256": "f3696f8af32448add67fc3aeb4b445817bdd27d04e991a9e6f6e4563a74dff07",
+  "counts": {"tests": 181, "failures": 0, "errors": 0, "skipped": 0},
+  "gates": [
+    "Native SkyRL loop saves, evaluates and logs the requested pause step exactly once.",
+    "The full epoch and scheduler horizon are unchanged; partial completion is labelled training_paused.",
+    "The native stateful sampler and CPU optimizer resume without replaying completed batches; all later-epoch targets remain covered.",
+    "The outer runtime rejects unplanned pauses and propagates unexpected errors as failures.",
+    "Compiler and immutable bootstrap tests run inside the pinned image."
+  ],
+  "prior_attempts": [
+    {
+      "name": "chris-cpt-pause-selftest-v1",
+      "submitted": false,
+      "reason": "Server dry-run rejected explicit Never preemptionPolicy with c1; no object or allocation created."
+    },
+    {
+      "name": "chris-cpt-pause-selftest-v2",
+      "uid": "53d20998-d393-4e7e-af6d-b8015211c5cf",
+      "phase": "Failed",
+      "exit_code": 1,
+      "restarts": 0,
+      "gpus": 0,
+      "finished_at": "2026-09-11T06:52:52Z",
+      "receipt_sha256": "1069b6e2ea6964c25235fd8df924ff78ab6c4234b7eaf11766829c2f8d5b0073",
+      "reason": "Test bundle omitted training.io; collection stopped before functional tests. Corrected bundle imports were then checked outside the checkout before the sole successor."
+    }
+  ],
+  "limits": [
+    "Synthetic data and CPU workers only; no Fleet task or GPU optimizer executed.",
+    "A separate real two-step fixture with a pause after step one and exact resumed GPU optimization remains required.",
+    "No prior completed Qwen training or accepted checkpoint was replayed or modified."
+  ]
+}

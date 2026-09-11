@@ -13,6 +13,7 @@ from training.sft_runtime import (
     DENSE_FORMAT,
     DENSE_SCHEMA,
     EvalAccumulator,
+    PlannedPause,
     ProgressWatchdog,
     _make_trainer_class,
     _unsigned_digest,
@@ -23,6 +24,7 @@ from training.sft_runtime import (
     retention_steps,
     sft_overrides,
     tokenize_rows,
+    training_result,
     validate_plan,
     validate_runtime_sources,
     write_receipt,
@@ -91,6 +93,147 @@ def test_recipe_keeps_tail_batch_and_disables_inline_export(tmp_path):
     assert options["eval_interval"] == 2
     assert options["max_ckpts_to_keep"] == -1  # custom latest-plus-best retention
     assert options["logger"] == "wandb"
+
+
+@pytest.mark.parametrize("pause", [0, -1, True, 1.5, 6, 7, None])
+def test_invalid_planned_pause_is_rejected(tmp_path, pause):
+    value = plan(tmp_path)
+    value["pause_after_step"] = pause
+    with pytest.raises(ValueError, match="planned pause"):
+        validate_plan(value, check_files=False)
+
+
+def test_planned_pause_preserves_native_recipe_horizon(tmp_path):
+    value = plan(tmp_path)
+    before = sft_overrides(value)
+    value["pause_after_step"] = 1
+    validate_plan(value, check_files=False)
+    assert sft_overrides(value) == before
+    assert before["max_training_steps"] == 6
+
+
+@pytest.mark.parametrize("paused", [False, True])
+def test_training_result_distinguishes_partial_and_complete(tmp_path, paused):
+    value = plan(tmp_path)
+    if paused:
+        value["pause_after_step"] = 1
+    step = 1 if paused else 6
+    trainer = SimpleNamespace(
+        plan=value, output=tmp_path, global_step=step, target_tokens_seen=16, best=None
+    )
+    (tmp_path / "checkpoints").mkdir()
+    (tmp_path / "checkpoints/latest_ckpt_global_step.txt").write_text(str(step))
+    for name in ("checkpoint_receipts", "validation"):
+        write_receipt(
+            tmp_path / name / f"step-{step:06d}.json",
+            {"optimizer_step": step, "plan_sha256": value["plan_sha256"]},
+        )
+    result = training_result(trainer, paused=paused)
+    assert result["status"] == ("training_paused" if paused else "training_complete")
+    assert result["planned_optimizer_steps"] == 6
+    assert result["optimizer_steps_executed"] == step
+    assert result["checkpoint_path"].endswith(f"global_step_{step}")
+    value["recovery"] = {"checkpoint": {"optimizer_step": 0}}
+    assert training_result(trainer, paused=paused) == result
+    trainer.global_step += 1
+    with pytest.raises(ValueError, match="optimizer step mismatch"):
+        training_result(trainer, paused=paused)
+
+
+@pytest.mark.parametrize(
+    "defect", ["missing", "digest", "step", "plan", "unhonored", "unplanned", "targets"]
+)
+def test_partial_result_requires_exact_evidence(tmp_path, defect):
+    value = plan(tmp_path)
+    value["pause_after_step"] = 1
+    trainer = SimpleNamespace(
+        plan=value, output=tmp_path, global_step=1, target_tokens_seen=16, best=None
+    )
+    (tmp_path / "checkpoints").mkdir()
+    (tmp_path / "checkpoints/latest_ckpt_global_step.txt").write_text("1")
+    for name in ("checkpoint_receipts", "validation"):
+        write_receipt(
+            tmp_path / name / "step-000001.json",
+            {"optimizer_step": 1, "plan_sha256": value["plan_sha256"]},
+        )
+    path = tmp_path / "validation/step-000001.json"
+    proof = json.loads(path.read_text())
+    if defect == "missing":
+        path.unlink()
+    elif defect in {"digest", "step", "plan"}:
+        key = {"digest": "receipt_sha256", "step": "optimizer_step", "plan": "plan_sha256"}[defect]
+        proof[key] = "wrong"
+        if defect != "digest":
+            proof["receipt_sha256"] = _unsigned_digest(
+                {k: v for k, v in proof.items() if k != "receipt_sha256"}
+            )
+        path.write_text(json.dumps(proof))
+    elif defect == "unplanned":
+        del value["pause_after_step"]
+    elif defect == "targets":
+        del value["pause_after_step"]
+        value.update(schema=DENSE_SCHEMA)
+        value["recipe"]["max_steps"] = 1
+        value["datasets"]["train"]["supervised_tokens"] = 999
+    with pytest.raises((ValueError, FileNotFoundError)):
+        training_result(trainer, paused=defect not in {"unhonored", "targets"})
+
+
+@pytest.mark.parametrize("outcome", ["complete", "pause", "unexpected", "bad_pause"])
+def test_outer_runtime_only_accepts_valid_planned_pause(tmp_path, monkeypatch, outcome):
+    from training import sft_runtime as runtime
+
+    value = plan(tmp_path)
+    if outcome == "pause":
+        value["pause_after_step"] = 1
+    step = 6 if outcome == "complete" else 1
+    (tmp_path / "checkpoints").mkdir()
+    (tmp_path / "checkpoints/latest_ckpt_global_step.txt").write_text(str(step))
+    for name in ("checkpoint_receipts", "validation"):
+        write_receipt(
+            tmp_path / name / f"step-{step:06d}.json",
+            {"optimizer_step": step, "plan_sha256": value["plan_sha256"]},
+        )
+    calls, summary = [], {}
+
+    def train():
+        if outcome in {"pause", "bad_pause"}:
+            raise PlannedPause
+        if outcome == "unexpected":
+            raise RuntimeError("synthetic unexpected defect")
+
+    trainer = SimpleNamespace(
+        plan=value,
+        output=tmp_path,
+        global_step=step,
+        target_tokens_seen=16,
+        best=None,
+        setup=lambda: calls.append("setup"),
+        train=train,
+        shutdown=lambda: calls.append("shutdown"),
+    )
+    monkeypatch.setattr(runtime, "_configure_wandb", lambda _: None)
+    monkeypatch.setattr(
+        runtime,
+        "build_runtime_configs",
+        lambda _: (None, SimpleNamespace(trainer=SimpleNamespace())),
+    )
+    monkeypatch.setattr(runtime, "_make_trainer_class", lambda: lambda *args: trainer)
+    monkeypatch.setattr(runtime, "finalize_failed_run", lambda *args: calls.append("failed") or [])
+    monkeypatch.setitem(sys.modules, "wandb", SimpleNamespace(run=SimpleNamespace(summary=summary)))
+    if outcome in {"complete", "pause"}:
+        result = runtime._run_training(value)
+        assert (
+            result["status"]
+            == summary["status"]
+            == ("training_paused" if outcome == "pause" else "training_complete")
+        )
+        assert calls == ["setup", "shutdown"]
+    else:
+        with pytest.raises(RuntimeError, match="SFT runtime failed"):
+            runtime._run_training(value)
+        assert calls == ["setup", "failed"]
+        assert summary == {}
 
 
 @pytest.mark.parametrize(
@@ -682,7 +825,8 @@ def test_dense_wandb_config_has_only_bound_metadata(tmp_path, monkeypatch):
 )
 @pytest.mark.parametrize("interval", [2, 4])
 @pytest.mark.parametrize("dense", [False, True])
-def test_exact_native_loop_eval_never_optimizes_and_saves_final(tmp_path, interval, dense):
+@pytest.mark.parametrize("pause", [None, 1])
+def test_exact_native_loop_eval_never_optimizes_and_saves_final(tmp_path, interval, dense, pause):
     """Exercise the real SkyRL loop/collator with synthetic CPU worker outputs."""
     import torch
     from skyrl.train.config.sft_config import SFTConfig, build_skyrl_config_for_sft
@@ -697,6 +841,8 @@ def test_exact_native_loop_eval_never_optimizes_and_saves_final(tmp_path, interv
             format=DENSE_FORMAT, supervised_tokens=51, assistant_responses=34, source_sessions=17
         )
     value["recipe"]["eval_interval"] = value["recipe"]["checkpoint_interval"] = interval
+    if pause is not None:
+        value["pause_after_step"] = pause
     cfg = SFTConfig.from_cli_overrides(sft_overrides(value))
     cls = _make_trainer_class()
     trainer = cls(cfg, build_skyrl_config_for_sft(cfg), value)
@@ -771,8 +917,12 @@ def test_exact_native_loop_eval_never_optimizes_and_saves_final(tmp_path, interv
     trainer.tracker = SimpleNamespace(
         log=lambda data, step, commit: logs.append((step, dict(data)))
     )
-    trainer.train()
-    final_step = value["recipe"]["max_steps"]
+    if pause:
+        with pytest.raises(PlannedPause):
+            trainer.train()
+    else:
+        trainer.train()
+    final_step = pause or value["recipe"]["max_steps"]
     assert trainer.dispatch.steps == final_step
     expected_steps = sorted({0, final_step} | set(range(interval, final_step + 1, interval)))
     assert sorted(set(trainer.dispatch.eval_at)) == expected_steps
@@ -789,8 +939,13 @@ def test_exact_native_loop_eval_never_optimizes_and_saves_final(tmp_path, interv
     assert len([item for _, item in logs if "train/loss" in item]) == final_step
     assert all("train/lr" in item for _, item in logs if "train/loss" in item)
     assert logs[-1][1]["train/global_step"] == final_step
-    assert logs[-1][0] == final_step + int(final_step % interval != 0)  # native W&B commit ordering
-    assert trainer.target_tokens_seen == (51 if dense else 17 * 2 * 2)
+    assert logs[-1][0] == final_step + int(not pause and final_step % interval != 0)
+    assert trainer.target_tokens_seen == (
+        8 * (3 if dense else 2) if pause else 51 if dense else 17 * 2 * 2
+    )
+    result = training_result(trainer, paused=bool(pause))
+    assert result["status"] == ("training_paused" if pause else "training_complete")
+    assert result["planned_optimizer_steps"] == value["recipe"]["max_steps"]
     assert not (tmp_path / "hf_exports").exists()
 
 

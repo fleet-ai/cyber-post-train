@@ -91,6 +91,14 @@ typed model catalog. Matching Theseus schema:
   values or command arguments. Do not print server failure bodies: they may embed
   private trainer logs.
 
+The 2026-09-11 PriorityClass readback gives `c1` value 10,000 with
+`PreemptLowerPriority`, and `c2` value 5,000 with `Never`. Pod admission rejects
+an explicit `preemptionPolicy: Never` paired with `c1`; a server dry-run catches
+this without creating anything. This field controls whether a Pod can displace
+others, not whether it is protected from interruption. It is separate from
+Kueue's workload-preemption policy. Do not claim immunity from either label or
+override the class policy; keep normal admission and check actual free capacity.
+
 These are dated observations. The CLI validates the live preview and stops on
 drift; never bypass that stop by manually unsuspending or relabeling a workload.
 

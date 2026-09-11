@@ -93,6 +93,19 @@ def test_compile_uses_exact_model_manifest_and_complete_epochs(config, tmp_path)
     assert hashlib.sha256(content["runtime"].encode()).hexdigest() == plan["runtime_sha256"]
 
 
+def test_compiler_binds_planned_pause_without_shortening_recipe(config, tmp_path):
+    source, _, _ = config
+    original = sft.compile_sft(source, relative_to=tmp_path)
+    source["pause_after_step"] = 1
+    paused = sft.compile_sft(source, relative_to=tmp_path)
+    assert paused["recipe"] == original["recipe"]
+    assert paused["pause_after_step"] == 1
+    request = sft.job_request(paused)
+    content = json.loads(gzip.decompress(base64.b64decode(request["env"]["CYBER_SFT_BUNDLE"])))
+    assert json.loads(content["plan"])["pause_after_step"] == 1
+    assert request["requeueIfPreempted"] is False
+
+
 @pytest.fixture
 def glm_config(config):
     source, manifest, save = config

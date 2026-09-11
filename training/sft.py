@@ -84,6 +84,7 @@ def compile_sft(config: dict, *, relative_to: Path) -> dict:
             "cluster",
             "lora",
             "recovery",
+            "pause_after_step",
         },
         "SFT",
     )
@@ -171,6 +172,8 @@ def compile_sft(config: dict, *, relative_to: Path) -> dict:
         from .recovery import bind
 
         bind(plan, config["recovery"], relative_to=relative_to)
+    if "pause_after_step" in config:
+        plan["pause_after_step"] = config["pause_after_step"]
     validate_plan(plan, check_files=False)
     validate_request(job_request(plan))
     return plan

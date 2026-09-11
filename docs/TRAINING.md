@@ -158,6 +158,17 @@ checkpoints plus the best checkpoint by fixed held-out loss. Saves include nativ
 optimizer, scheduler, sampler and trainer state; a weights-only file is not a
 recoverable checkpoint.
 
+For a planned interruption/recovery check, add top-level `pause_after_step: 1`
+to a plan whose full recipe has more than one step. This does not shorten the
+epoch or scheduler horizon. It saves, validates and logs that step, then shuts
+down cleanly with `TRAINING_PAUSED.json`, **not** `TRAINING_COMPLETE.json`.
+Seal that checkpoint and use the exact recovery procedure below in a new run,
+omitting `pause_after_step` to finish the original recipe. A pause must be after
+the source checkpoint and before full completion; it cannot extend a finished
+run or turn an unexpected failure into success. Native CPU qualification and
+real resumed-GPU qualification are reported separately in the consolidation
+checklist.
+
 Before handing a native checkpoint to an export or resume operation, seal it on
 CPU using the original prepared directory:
 
