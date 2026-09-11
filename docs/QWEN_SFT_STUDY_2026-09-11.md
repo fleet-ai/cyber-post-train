@@ -94,6 +94,29 @@ region is narrowed in a later wave. Split A/B is a separate robustness factor.
 Every arm has unique output and W&B identities and binds exact corpus, source,
 split, model and evaluation digests.
 
+The teacher study's current sequencing contract is the self-digested,
+non-executable
+[`qwen-blackbox-teacher-staged-search-v2.json`](../configs/studies/qwen-blackbox-teacher-staged-search-v2.json).
+It first qualifies the `1e-6` and `3e-5` extremes numerically on dev, then the
+exact one-node/eight-GPU production layout. Only after those gates and a fresh
+matched split-A base control does it open the four-arm split-A LR bracket
+(`1e-6`, `3e-6`, `1e-5`, `3e-5`). A whole-episode balanced-exposure A arm uses
+the selected LR, followed by split-B/second-seed confirmation. Global batches 16
+and 32 and horizons of two and four epochs remain blocked until those outcome
+barriers resolve. Stages are serial and each wave is at most four nodes, below
+the eight-active-study-node ceiling.
+
+This order is outcome-only: training loss is diagnostic, teacher-reference CE is
+absent, and only fresh sealed Fleet dev pass@1 outcomes select an arm. The
+balanced arm is explicitly a teacher-availability treatment; because it removes
+whole episodes and therefore reduces total supervised-token exposure, it is not
+interpreted as a pure weighting effect. The enhanced W&B contract exports only
+its fixed scalar allowlist, uses cumulative supervised tokens as the series axis,
+and requires complete finish/sync evidence. The current route audit proves the
+shared base endpoint is operational, but not an exact matched causal control, so
+it does not open any outcome or uplift gate. No stage in this plan is presently
+launchable and the file is not a job request.
+
 ## Operational gates
 
 New or changed training, serving and Tensorlake paths qualify on the dev cluster

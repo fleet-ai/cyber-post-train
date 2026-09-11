@@ -1,0 +1,439 @@
+{
+  "schema": "cyber_qwen_sft_staged_search_v1",
+  "study_id": "qwen38-blackbox-teacher-staged-search-v2",
+  "model": {
+    "repo": "Qwen/Qwen3.8-27B",
+    "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "lock_sha256": "sha256:f3926fe675263b25dc79c2b3881a9c463d6b7931e9d61aeb777d15efc61e35ac",
+    "initialization": "fresh_base"
+  },
+  "evidence": {
+    "balanced_exposure_treatment": {
+      "path": "configs/studies/qwen-blackbox-teacher-balanced-exposure-v1.json",
+      "sha256": "sha256:4ab0c428322b57a8f8304072eb718e27a8a9b936c14202d4524c18972cb3de65",
+      "role": "teacher_availability_ablation"
+    },
+    "base_route_audit": {
+      "path": "docs/evidence/inference/2026-09-11-qwen38-fleet-dev-base-route-audit.json",
+      "sha256": "sha256:bcb35283f1cc6d98c8415ac8ecb3a08276118d5b63aabed8882a1b6906764a0a",
+      "classification": "operational_route_ready_but_exact_matched_control_blocked",
+      "accepted_as_serving_or_parity_evidence": false
+    },
+    "outcome_sealing": {
+      "implementation_commit": "351d8a0a460cd0a9f76a5c0e04a01a380a7cf312",
+      "path": "evals/study_sealing.py",
+      "file_sha256": "sha256:5c66ac140f8d0afa3c4ea58d36f0f561cad7fc68a7e839a52333ce95ab81cab0"
+    },
+    "wandb_scalar_contract": {
+      "implementation_commit": "0b073bab8d93753b350e979f642e787a9ebc8056",
+      "path": "training/sft_runtime.py",
+      "file_sha256": "sha256:fc5db40437923800730d38b9bc9a0872cdd64dd8a92c64fc03ecfdeb0ac2b2e3",
+      "history_keys": [
+        "train/global_step",
+        "train/loss",
+        "train/total_supervised_tokens",
+        "train/supervised_tokens",
+        "train/lr",
+        "train/grad_norm",
+        "train/grad_norm_finite",
+        "train/supervised_tokens_per_second"
+      ],
+      "series_step_axis": "train/total_supervised_tokens",
+      "automatic_system_telemetry": false,
+      "forbidden_payloads": [
+        "prompts",
+        "messages",
+        "traces",
+        "flags",
+        "token_ids",
+        "task_scores",
+        "evaluation_outcomes"
+      ],
+      "acceptance_requires": [
+        "exact_unique_run_identity",
+        "complete_per_step_scalar_coverage",
+        "successful_finish_and_sync_acknowledgement",
+        "no_training_tracking_incomplete_receipt",
+        "pinned_image_dev_preflight_with_secret_injection_and_sdk"
+      ],
+      "dev_gpu_qualification_receipt_sha256": null
+    }
+  },
+  "splits": {
+    "a": {
+      "variant_seed": "qwen38-study-dev-search-002",
+      "study_split_sha256": "sha256:9ce5ba7f4cb9c52f6adfdbe615ca2258358dc602d6a9bb665c2ccc29dc04f4b8",
+      "training_split_sha256": "sha256:2d20dac7d5b9bb29f6aa44369c5dd2efed9c78bd3ca4d32ed021f04843ae6863",
+      "dev_task_set_sha256": "sha256:914a67b587a8d2f5a523ab652eeaec15f8f9d5dbec559c25ff176b01777a6c96",
+      "fleet_dev_protocol_sha256": "sha256:d9423651420dcf1c39f7b870daafe8a74dec18db6eac8684b3845d881dc61019",
+      "base_control_sha256": "sha256:b1ceef2ad9072c3bc1b283aa74c663928162568327f6166b15b3aafd685a3e86"
+    },
+    "b": {
+      "variant_seed": "qwen38-study-dev-search-019",
+      "study_split_sha256": "sha256:282f2dec7912364c0f7c1db7ceaac39eb66d552ab226d7617a412fa8e881a50f",
+      "training_split_sha256": "sha256:66f98eac3d1533d2c0e3dda99704020e5177ed56c25196f7fa1175307732ab06",
+      "dev_task_set_sha256": "sha256:6f654f7493fa3803fc014efcfdc1be4a27e6518bc29ad9d401fe3823a59fbab2",
+      "fleet_dev_protocol_sha256": "sha256:9c3bcee8dae6b634844fb9dace5b3cb0c207a3fde861ebd7a8a6bd22e783a334",
+      "base_control_sha256": "sha256:fa1b13c962bc42aecdbceb075c7df589b9d0741854f0f778b66e6fb20de5a5cc"
+    }
+  },
+  "teacher_corpora": {
+    "available_a": {
+      "split": "a",
+      "treatment": "all_available_certified_teacher_episodes",
+      "manifest_sha256": "sha256:c4945ddb7cd8fd0b7b9ebbd9bad9b96215b0905c059ef1b22d71d4f214b4eb8e",
+      "source_selection_sha256": "sha256:cdf82a83e423c3de6556b8f0ca5eaf4cb358041cd3015a335250b473e4a5cfc7",
+      "sessions": 71,
+      "training_rows": 602,
+      "supervised_tokens": 700359
+    },
+    "balanced_a": {
+      "split": "a",
+      "treatment": "teacher_availability_balanced_whole_episodes",
+      "manifest_sha256": "sha256:b8aa6d6f9ae19fd509a90c3d2b6343631386d6bc14b019e620810da274bd9cf8",
+      "source_selection_sha256": "sha256:3b9baf93e9a94a508e3c3193c01ef8d5623c39789cf4fc6fe7a97e4388f88d9b",
+      "sessions": 50,
+      "training_rows": 401,
+      "supervised_tokens": 419165
+    },
+    "available_b": {
+      "split": "b",
+      "treatment": "all_available_certified_teacher_episodes",
+      "manifest_sha256": "sha256:7b43bc25aec1390252b579043199d8a1e3295d29272b565d4c45dddde3cd15de",
+      "source_selection_sha256": "sha256:d0d4213c672d97491e70bbe7db7e671a0d83218b55e4b16afee091465d76cd99",
+      "sessions": 74,
+      "training_rows": 598,
+      "supervised_tokens": 684014
+    },
+    "balanced_b": {
+      "split": "b",
+      "treatment": "teacher_availability_balanced_whole_episodes",
+      "manifest_sha256": "sha256:1650edbb53ee33439311a8338207d95923f72283087e0069b89eb8114fafb194",
+      "source_selection_sha256": "sha256:b0933c71539be3f356f54707981d8b7a66fa88bac80a27781f1f1d6bf05ef007",
+      "sessions": 53,
+      "training_rows": 402,
+      "supervised_tokens": 437537
+    }
+  },
+  "fresh_base_controls": {
+    "a": {
+      "required_before": [
+        "split_a_outcome_access",
+        "split_a_uplift_claims"
+      ],
+      "accepted_result_sha256": null,
+      "state": "blocked_missing_exact_serving_and_live_pair_parity"
+    },
+    "b": {
+      "required_before": [
+        "split_b_outcome_access",
+        "split_b_uplift_claims"
+      ],
+      "accepted_result_sha256": null,
+      "state": "blocked_missing_exact_serving_and_live_pair_parity"
+    }
+  },
+  "study_invariants": {
+    "selection_signal": "fresh_fleet_dev_pass_at_1_task_outcomes_only",
+    "teacher_reference_cross_entropy": "not_computed_or_used",
+    "training_loss": "diagnostic_only",
+    "external_benchmarks": "sealed_and_never_used_for_hpo",
+    "stage_concurrency": "one_stage_wave_at_a_time_after_prior_allocations_release",
+    "max_active_study_nodes": 8,
+    "excluded_existing_inference_endpoint_nodes": 4,
+    "active_node_count_must_be_rechecked_before_every_submit": true,
+    "arm_topology": {
+      "nodes": 1,
+      "gpus_per_node": 8,
+      "global_batch": 8,
+      "microbatch_per_gpu": 1
+    },
+    "priority": {
+      "cli_class": "c1",
+      "expected_queue_class": "q1",
+      "expected_value": 10000
+    },
+    "source_interface": [
+      "native_episode_boundaries",
+      "dense_eligible_assistant_turn_supervision",
+      "exact_tokenizer_chat_template_and_tool_interface",
+      "one_target_occurrence_per_selected_episode_per_epoch"
+    ],
+    "prohibited": [
+      "teacher_cross_entropy_selection",
+      "training_loss_selection",
+      "wandb_task_outcomes",
+      "duplicated_token_targets",
+      "partial_episode_rebalancing",
+      "concurrent_stage_waves",
+      "automatic_production_promotion"
+    ]
+  },
+  "stages": [
+    {
+      "id": "dev-lr-extreme-numeric-canaries",
+      "order": 1,
+      "purpose": "Bound the two learning-rate extremes on the exact model and available-A corpus before broad training.",
+      "cluster": "dev",
+      "wave_nodes": 2,
+      "launchable": false,
+      "unresolved_dependencies": [
+        "enhanced_wandb_dev_gpu_qualification",
+        "exact_dev_model_data_and_secret_preflight",
+        "reviewed_create_once_job_requests"
+      ],
+      "arms": [
+        {
+          "id": "numeric-lr-1e-6",
+          "split": "a",
+          "corpus": "available_a",
+          "lr": 1e-06,
+          "epochs": 1,
+          "seed": 42,
+          "pause_after_optimizer_step": 2,
+          "acceptance": "two_finite_updates_checkpoint_tracking_receipt_and_clean_release"
+        },
+        {
+          "id": "numeric-lr-3e-5",
+          "split": "a",
+          "corpus": "available_a",
+          "lr": 3e-05,
+          "epochs": 1,
+          "seed": 42,
+          "pause_after_optimizer_step": 2,
+          "acceptance": "two_finite_updates_checkpoint_tracking_receipt_and_clean_release"
+        }
+      ]
+    },
+    {
+      "id": "dev-production-layout-canary",
+      "order": 2,
+      "purpose": "Qualify the exact one-node/eight-GPU production layout, checkpoint lifecycle, W&B contract and release path.",
+      "cluster": "dev",
+      "wave_nodes": 1,
+      "launchable": false,
+      "unresolved_dependencies": [
+        "dev-lr-extreme-numeric-canaries.accepted_receipt_sha256"
+      ],
+      "arms": [
+        {
+          "id": "layout-lr-3e-6",
+          "split": "a",
+          "corpus": "available_a",
+          "lr": 3e-06,
+          "epochs": 1,
+          "seed": 42,
+          "pause_after_optimizer_step": 2,
+          "acceptance": "exact_8_gpu_checkpoint_pause_zero_step_reload_tracking_and_clean_release"
+        }
+      ]
+    },
+    {
+      "id": "split-a-broad-lr",
+      "order": 3,
+      "purpose": "Bracket learning rate broadly while holding split, source, batch, horizon and seed fixed.",
+      "cluster": "prod_after_dev_qualification",
+      "wave_nodes": 4,
+      "launchable": false,
+      "unresolved_dependencies": [
+        "dev-production-layout-canary.accepted_receipt_sha256",
+        "fresh_base_controls.a.accepted_result_sha256",
+        "per_arm_dev_preview_and_duplicate_gates"
+      ],
+      "outcome_barrier": {
+        "metric": "fresh_fleet_dev_a_pass_at_1",
+        "sealed_result_set_sha256": null,
+        "selection_decision_sha256": null,
+        "tie_rule": "retain_ties_for_confirmation"
+      },
+      "arms": [
+        {
+          "id": "available-a-lr-1e-6",
+          "split": "a",
+          "corpus": "available_a",
+          "lr": 1e-06,
+          "epochs": 1,
+          "seed": 42
+        },
+        {
+          "id": "available-a-lr-3e-6",
+          "split": "a",
+          "corpus": "available_a",
+          "lr": 3e-06,
+          "epochs": 1,
+          "seed": 42
+        },
+        {
+          "id": "available-a-lr-1e-5",
+          "split": "a",
+          "corpus": "available_a",
+          "lr": 1e-05,
+          "epochs": 1,
+          "seed": 42
+        },
+        {
+          "id": "available-a-lr-3e-5",
+          "split": "a",
+          "corpus": "available_a",
+          "lr": 3e-05,
+          "epochs": 1,
+          "seed": 42
+        }
+      ]
+    },
+    {
+      "id": "split-a-balanced-exposure",
+      "order": 4,
+      "purpose": "Test sensitivity to uneven teacher availability using whole-episode downsampling at the selected broad-search LR.",
+      "cluster": "prod_after_dev_qualification",
+      "wave_nodes": 1,
+      "launchable": false,
+      "unresolved_dependencies": [
+        "split-a-broad-lr.selection_decision_sha256",
+        "fresh_base_controls.a.accepted_result_sha256",
+        "balanced_treatment_dev_qualification"
+      ],
+      "outcome_barrier": {
+        "metric": "fresh_fleet_dev_a_pass_at_1",
+        "sealed_result_set_sha256": null,
+        "treatment_decision_sha256": null,
+        "comparison": "matched_selected_lr_available_a_arm"
+      },
+      "arms": [
+        {
+          "id": "balanced-a-selected-lr",
+          "split": "a",
+          "corpus": "balanced_a",
+          "lr": null,
+          "lr_binding": "split-a-broad-lr.selection_decision_sha256:selected_lr",
+          "epochs": 1,
+          "seed": 42
+        }
+      ],
+      "interpretation": "Teacher-availability treatment only: whole-episode balancing changes total supervised-token exposure and must not be reported as a pure weighting effect or an intrinsic optimum."
+    },
+    {
+      "id": "split-b-and-seed-confirmation",
+      "order": 5,
+      "purpose": "Confirm the selected LR/source treatment across split B and a second optimizer seed.",
+      "cluster": "prod_after_dev_qualification",
+      "wave_nodes": 3,
+      "launchable": false,
+      "unresolved_dependencies": [
+        "split-a-balanced-exposure.treatment_decision_sha256",
+        "fresh_base_controls.b.accepted_result_sha256",
+        "selected_corpus_b_materialization_receipt_sha256"
+      ],
+      "reused_upstream_arm": "selected_split_a_seed_42_arm",
+      "outcome_barrier": {
+        "metric": "fresh_fleet_dev_pass_at_1_by_split_and_seed",
+        "sealed_result_set_sha256": null,
+        "confirmation_decision_sha256": null
+      },
+      "arms": [
+        {
+          "id": "selected-a-seed-20260911",
+          "split": "a",
+          "corpus": null,
+          "corpus_binding": "split-a-balanced-exposure.treatment_decision_sha256:selected_treatment_a",
+          "lr": null,
+          "lr_binding": "split-a-broad-lr.selection_decision_sha256:selected_lr",
+          "epochs": 1,
+          "seed": 20260911
+        },
+        {
+          "id": "selected-b-seed-42",
+          "split": "b",
+          "corpus": null,
+          "corpus_binding": "split-a-balanced-exposure.treatment_decision_sha256:matched_treatment_b",
+          "lr": null,
+          "lr_binding": "split-a-broad-lr.selection_decision_sha256:selected_lr",
+          "epochs": 1,
+          "seed": 42
+        },
+        {
+          "id": "selected-b-seed-20260911",
+          "split": "b",
+          "corpus": null,
+          "corpus_binding": "split-a-balanced-exposure.treatment_decision_sha256:matched_treatment_b",
+          "lr": null,
+          "lr_binding": "split-a-broad-lr.selection_decision_sha256:selected_lr",
+          "epochs": 1,
+          "seed": 20260911
+        }
+      ]
+    },
+    {
+      "id": "batch-and-horizon-refinement",
+      "order": 6,
+      "purpose": "Vary global batch and epoch horizon only after LR, source, split and seed robustness are resolved.",
+      "cluster": "prod_after_dev_qualification",
+      "wave_nodes": 4,
+      "launchable": false,
+      "unresolved_dependencies": [
+        "split-b-and-seed-confirmation.confirmation_decision_sha256",
+        "fresh_base_controls.a.accepted_result_sha256",
+        "batch_and_horizon_dev_numeric_qualification"
+      ],
+      "outcome_barrier": {
+        "metric": "fresh_fleet_dev_a_pass_at_1",
+        "sealed_result_set_sha256": null,
+        "refinement_decision_sha256": null
+      },
+      "arms": [
+        {
+          "id": "selected-a-batch-16-epoch-1",
+          "split": "a",
+          "corpus": null,
+          "corpus_binding": "split-b-and-seed-confirmation.confirmation_decision_sha256:selected_treatment_a",
+          "lr": null,
+          "lr_binding": "split-b-and-seed-confirmation.confirmation_decision_sha256:selected_lr",
+          "global_batch": 16,
+          "epochs": 1,
+          "seed": 42
+        },
+        {
+          "id": "selected-a-batch-32-epoch-1",
+          "split": "a",
+          "corpus": null,
+          "corpus_binding": "split-b-and-seed-confirmation.confirmation_decision_sha256:selected_treatment_a",
+          "lr": null,
+          "lr_binding": "split-b-and-seed-confirmation.confirmation_decision_sha256:selected_lr",
+          "global_batch": 32,
+          "epochs": 1,
+          "seed": 42
+        },
+        {
+          "id": "selected-a-batch-8-epoch-2",
+          "split": "a",
+          "corpus": null,
+          "corpus_binding": "split-b-and-seed-confirmation.confirmation_decision_sha256:selected_treatment_a",
+          "lr": null,
+          "lr_binding": "split-b-and-seed-confirmation.confirmation_decision_sha256:selected_lr",
+          "global_batch": 8,
+          "epochs": 2,
+          "seed": 42
+        },
+        {
+          "id": "selected-a-batch-8-epoch-4",
+          "split": "a",
+          "corpus": null,
+          "corpus_binding": "split-b-and-seed-confirmation.confirmation_decision_sha256:selected_treatment_a",
+          "lr": null,
+          "lr_binding": "split-b-and-seed-confirmation.confirmation_decision_sha256:selected_lr",
+          "global_batch": 8,
+          "epochs": 4,
+          "seed": 42
+        }
+      ]
+    }
+  ],
+  "execution": {
+    "kind": "sealed_metadata_only_not_a_job_request",
+    "new_jobs_authorized": false,
+    "cluster_or_api_mutations_performed": false,
+    "all_arms_currently_launchable": false,
+    "promotion": "dev_qualification_then_reviewed_prod_preview_and_explicit_submit"
+  },
+  "sha256": "sha256:7bf2f0695dfccd5b22dafe23cb916efb3fb37c7f4c201ae068097b58a2427058"
+}
