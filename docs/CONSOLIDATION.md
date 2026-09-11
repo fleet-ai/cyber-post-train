@@ -31,10 +31,12 @@ readiness. All detailed IDs, digests, test counts and earlier failures remain in
 
 ### Current execution boundary
 
-- **Miles V7:** one create-once Jobs API submission, effective priority 10,000.
-  Last observed queued without GPU allocation. Monitor its exact UIDs in
-  [submission evidence](evidence/cleanup-miles-rl-v7-20260911.json); do not repeat
-  the POST or infer a stuck job from an observation timeout.
+- **Miles V7:** admitted at 15:09:46Z, effective priority 10,000, one eight-GPU
+  node. Exact image and zero restarts verified; model memory and GPU/CPU activity
+  are present. No reward/update/checkpoint qualification yet. Preserve the
+  [submission](evidence/cleanup-miles-rl-v7-20260911.json) and
+  [startup identity](evidence/cleanup-miles-rl-v7-startup-20260911.json); never
+  repeat its POST. The fixed startup allowance ends at 15:39:46Z.
 - **SkyRL V5:** CPU-prepared only; no GPU submission. It shares the episode
   lifecycle still being qualified with Miles.
 - **Evaluation V7:** terminal context-overflow error after 209 completed model
@@ -43,9 +45,17 @@ readiness. All detailed IDs, digests, test counts and earlier failures remain in
   The new v2 compaction treatment reserves a full response's growth before the
   native post-response check; exact-binary synthetic tests prove compaction and
   continuation. It does not modify V7 or the historical campaign.
+- **Evaluation V8:** one new unused task under v2, from the installed public CLI;
+  [launch evidence](evidence/cleanup-eval-v8-20260911.json). Local Docker only,
+  pass@1/concurrency one, no retry or training reuse. No accepted outcome yet.
 - **Full GLM:** the two-node loading attempt was released without an optimizer
   step. Keep GPUs released while the CPU loading repair is qualified.
   [Release evidence](evidence/cleanup-glm-startup-release-20260911.json).
+  Native fused-format save/reload preserves every synthetic tensor, including
+  strict FP32 buffers, without adapters or requantization; all 51 native tests
+  pass. [CPU staging research](evidence/cleanup-glm-native-staging-probe-20260911.json)
+  records full-model memory and the native ignored-input layer. Full-size CPU
+  materialization remains unqualified; no such job was submitted.
 - No new automations, peer mutations or changes to shared/dedicated serving.
 
 The queued/frozen training bundles predate the newest checkpoint-drain and cursor guards.

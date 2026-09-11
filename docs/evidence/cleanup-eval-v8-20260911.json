@@ -1,0 +1,124 @@
+{
+  "attempt_id": "c88f7a5381db88bf25cb4074e5a5354ee36573b43d4fca7e1b376bc42e4da750",
+  "automatic_retry": false,
+  "classification": "operational_evaluation_in_progress_not_accepted",
+  "concurrency": 1,
+  "containers": [
+    {
+      "id": "3f56fdc71815b68a70321d803d3ae277e4d9bd7fcbdaffdb5764ecdf652f217a",
+      "image_id": "sha256:45424cc2e304e114b26aca916486df6e80fdc57c4f5adddf2bb144d4773d510f",
+      "name": "agent-runtime-3f73210f",
+      "restarts": 0,
+      "status": "running"
+    },
+    {
+      "id": "c976ed545fc3c0ba1bbc8b826fed9eeb5ff08743af652e2c2a53e87a1e1d0a31",
+      "image_id": "sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7",
+      "name": "agent-model-proxy-3f73210f",
+      "restarts": 0,
+      "status": "running"
+    },
+    {
+      "id": "1483976a530c71e4d538e3c92890dc276a20bdf8bec1baf33ce27ed488f2e911",
+      "image_id": "sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7",
+      "name": "agent-mcp-proxy-3f73210f",
+      "restarts": 0,
+      "status": "running"
+    }
+  ],
+  "controller": "installed public CLI on local Docker worker",
+  "event_counts": {
+    "reasoning": 4,
+    "step_finish": 4,
+    "step_start": 4,
+    "text": 4,
+    "tool_use": 8
+  },
+  "excluded": "historical campaign, previous qualification tasks, all train/dev tasks in both current RL preparation bundles",
+  "instance_id": "xdr7q25ujskk-n",
+  "instance_lifetime_receipt_sha256": "sha256:ca5ced5ee92e3f91620e7b39cb923566c78e9cdf39589e1766118b4a47e1c419",
+  "limitations": "Not a matched capability comparison, training input, or accepted outcome. Preserve output-limit outcomes under the frozen natural-stop gate.",
+  "models": {
+    "qwen3.8-27b": {
+      "repository": "Qwen/Qwen3.8-27B",
+      "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+      "session_model": "qwen/qwen3.8-27b"
+    }
+  },
+  "name": "chris-cpt-eval-qual-v8",
+  "new_cluster_gpus": 0,
+  "new_cluster_nodes": 0,
+  "observed_at": "2026-09-11T15:15:21.776613+00:00",
+  "pass_k": 1,
+  "plan_sha256": "d8794d5c0d26a5b8f173f7601752a738f5ab98b74332f52962f4c013508609e4",
+  "planned_sessions": 1,
+  "preflight_sha256": "7036cddd860cb3e353842dc15520c6cd74623582b7513643c26572c39342fdad",
+  "prior_held_trials_preserved": true,
+  "route": "qwen-shared",
+  "run_id": "chris-cpt-eval-qual-v8-c88f7a5381db-g1",
+  "runtime_files": {
+    "evaluate.py": "03dac1d8b5947d877bde4671522c9d45dff75e6a1c51d605c63b7f547032fcd6",
+    "exact_pass4_crypto.py": "477b0531fbc34103ed91ff03668616a56f05687ede8c2c9ebb4e9dd2106337d5",
+    "fixed_proxy.py": "a65270cb021cbc8e2fe9b00d901b4b70e9ddc98dd58d93e9f695b1768dfb984d",
+    "opencode_self_hosted.py": "b28e267d02024ac979f4a0f39ee778e68331da490f5084c3e5a34136eff04707",
+    "rollout_ledger.py": "633914e92d6a0fde6f7040f1fddf9a056c43ed9a41301f0baab1ae856397518c",
+    "rollout_postgres.py": "e11706b384dd9caaae7895a8bd95e3300772a737b5493c9dca55ed15191b5873",
+    "rollout_worker.py": "d8db03245561baade77a4bfdb8fcbd853145fbe2a365245eb9b8ca53b186df2b"
+  },
+  "sampling": {
+    "seed": 42,
+    "temperature": 0.6,
+    "top_p": 0.95
+  },
+  "schema": "cleanup_eval_v8_launch_v1",
+  "selection_file_sha256": "a57bb79c227d2ddb9dc364e1028072c98e0a1bc630c5b8eccecd9bc6fdd87d6a",
+  "sha256": "221b8552890c6fab27213df9d7a808ef917e645c4bed5227fb2e70b7400df330",
+  "state": {
+    "by_serving_block": [
+      {
+        "count": 1,
+        "serving_block": "qwen-shared",
+        "state": "claimed"
+      }
+    ],
+    "by_state": {
+      "accepted": 0,
+      "claimed": 1,
+      "grading": 0,
+      "pending": 0,
+      "retry_review": 0,
+      "running": 0,
+      "terminal": 0
+    },
+    "local_results": 0,
+    "plan_sha256": "96cda4ddc2655d04978e9cb0f18f3f5dcc00cd2dbd9a35741d7499abd02122f4",
+    "stale_active": 0,
+    "total": 1
+  },
+  "stream_age_seconds": 8,
+  "stream_bytes": 28003,
+  "task_selection": "lexicographic eligible unused train family; no outcome ranking",
+  "task_version_id": "611014e8-6787-43a0-87a1-5c70fb69e3e1",
+  "terminal_receipt_present": false,
+  "tool_catalog_sha256": "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a",
+  "training_data_eligible": false,
+  "treatment": {
+    "compaction_headroom_tokens": 20000,
+    "context_management": "opencode_1.18.27_native_compaction_autocontinue_v2",
+    "context_window_size": 262144,
+    "harness": "opencode",
+    "harness_version": "1.18.27",
+    "max_model_requests": 600,
+    "max_output_tokens": 65536,
+    "provider_adapter": "@ai-sdk/openai-compatible",
+    "release_asset_sha256": "sha256:4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702",
+    "timeout_seconds": 28800,
+    "tool_catalog_sha256": "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a",
+    "tools": [
+      "bash",
+      "submit_report"
+    ]
+  },
+  "wheel_sha256": "6fe0e976d2c56d2ab43b30f8f9fb02346a219eb53252b6ea7d3b12c59220755a",
+  "worker_id": "cleanup-v8-001"
+}

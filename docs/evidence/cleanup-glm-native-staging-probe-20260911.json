@@ -1,0 +1,274 @@
+{
+  "decision": "Use the native save_pretrained(save_original_format=False) API for prospective BF16 training-format staging, without changing native quantizer attributes or introducing another conversion engine.",
+  "limitations": [
+    "Only synthetic weights were saved and reloaded; the full model was instantiated on meta only.",
+    "The full runtime state requires 1487945158656 bytes before temporary conversion buffers. Full CPU memory/I/O materialization is not qualified.",
+    "Native GLM ignores model.layers.78.* on input. A production training-format receipt must bind this explicit omission and preserve original source provenance; this is not an interchangeable full serving artifact.",
+    "No full GLM staging job or GPU successor was submitted. Real distributed optimization and checkpoint recovery remain unqualified."
+  ],
+  "observed_at": "2026-09-11T15:16:06.151347+00:00",
+  "probe": {
+    "bundle_sha256": "af27eac5226b9e8b84f678c0f09422fc43f8bcfc40691bcaf4b0063b47747508",
+    "exit_code": 0,
+    "finished_at": "2026-09-11T15:05:46Z",
+    "gpus": 0,
+    "image_id": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "manifest_sha256": "7af4d1384407da12b5fe6a9cdd87074e1535569dfa360a2861e5f7df029cabf0",
+    "name": "chris-cpt-glm-native-stage-probe-v2",
+    "node": "computeinstance-e04a737eqtfvpnyx08",
+    "receipt": {
+      "branches": [
+        {
+          "action": "native_save",
+          "already_dequantized": false,
+          "error_type": "ValueError",
+          "known_reverse_conversion_rejection": false,
+          "status": "rejected"
+        },
+        {
+          "action": "native_fused_save",
+          "all_tensor_values_equal": true,
+          "bytes_saved": 361004,
+          "layout_equal": true,
+          "loading_issue_counts": {
+            "error_msgs": 0,
+            "mismatched_keys": 0,
+            "missing_keys": 0,
+            "unexpected_keys": 0
+          },
+          "saved_quantization_config": null,
+          "status": "loaded"
+        },
+        {
+          "action": "native_dequantize_then_save",
+          "already_dequantized": true,
+          "error_type": "ValueError",
+          "known_reverse_conversion_rejection": false,
+          "status": "rejected"
+        }
+      ],
+      "full_meta": {
+        "config_sha256": "3ac72612095574542f7fff847ada8e59d9199dd8af44bdf625d7e02615572e69",
+        "dtype_counts": {
+          "torch.bfloat16": 1554,
+          "torch.float32": 75
+        },
+        "ignored_missing_patterns": null,
+        "ignored_unexpected_patterns": [
+          "model\\.layers\\.78.*"
+        ],
+        "layout_sha256": "06d2755256907ad0cda5f75b9eda1e030e3e17bab1b37fd7b646e4353f7b98be",
+        "parameter_count": 743972540928,
+        "runtime_mtp_keys": 0,
+        "source_keys": 118629,
+        "source_mtp_keys": 0,
+        "state_bytes": 1487945158656,
+        "tensors": 1629
+      },
+      "gpus": 0,
+      "initial": {
+        "hf_quantizer": "NoneType",
+        "is_quantized": false,
+        "layout_sha256": "ea66de78e1e4fc8a0982138e2ec9848df6685827dee2d9588702d5f29ef7fd41",
+        "quantization_config": null
+      },
+      "pod_uid": "f56131a1-3c6f-4bd9-86df-2e9352b99a7a",
+      "quantizer_source_sha256": "124a6a75c141f88a96e5ac2d4cc74f47bef9df72875a54f4a4af6a15297c4d1f",
+      "schema": "cyber_glm_native_staging_probe_v1",
+      "sha256": "51168c4d201228f76387c5b6c22a758ca57fe28707dc4ded0e895ded5bdb9e36",
+      "status": "observed",
+      "synthetic_optimizer_steps": 0
+    },
+    "restarts": 0,
+    "uid": "f56131a1-3c6f-4bd9-86df-2e9352b99a7a"
+  },
+  "regression": {
+    "bundle_sha256": "c3c93b8ee1062a5835aa53fcacc52a3e8ebc5d74cd39d28b8efe6163fc28955d",
+    "exit_code": 0,
+    "finished_at": "2026-09-11T15:14:08Z",
+    "gpus": 0,
+    "image_id": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "manifest_sha256": "bd783c487e8e8f3747be2be5def258f26970702170f9c5784b515e13d89f535f",
+    "name": "chris-cpt-glm-native-coverage-v3",
+    "node": "computeinstance-e04a737eqtfvpnyx08",
+    "receipt": {
+      "bundle_sha256": "c3c93b8ee1062a5835aa53fcacc52a3e8ebc5d74cd39d28b8efe6163fc28955d",
+      "counts": {
+        "errors": 0,
+        "failures": 0,
+        "skipped": 0,
+        "tests": 51
+      },
+      "coverage": {
+        "training/glm_runtime.py": {
+          "covered_branches": 101,
+          "covered_lines": 320,
+          "excluded_lines": 0,
+          "missing_branches": 17,
+          "missing_lines": 14,
+          "num_branches": 118,
+          "num_partial_branches": 17,
+          "num_statements": 334,
+          "percent_branches_covered": 85.59322033898304,
+          "percent_branches_covered_display": "86",
+          "percent_covered": 93.14159292035399,
+          "percent_covered_display": "93",
+          "percent_statements_covered": 95.80838323353294,
+          "percent_statements_covered_display": "96"
+        }
+      },
+      "failures": [],
+      "files": {
+        "cyber_post_train/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "cyber_post_train/cli.py": "2eb34d472f01d543d44261823819228ca34f59af53ba778c5ee9df575590eef3",
+        "cyber_post_train/jobs.py": "6b9f4b9aeb3679b1622b0a785924260ac84063da2f1dc6167a684f3eaddd5e1c",
+        "evals/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "evals/fleet/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "evals/fleet/opencode_self_hosted.py": "e8bc1002ba65190d5b0f6b7d8c933c9e0b54d476ad0910cd34ec2fb8a6fae897",
+        "glm_benchmark.py": "06ff1bb53838badba16735c2ff49426f4cb53567343fe690caebde96426a13d6",
+        "tests/test_generic_jobs.py": "fbf6f56dcb203ff33b49df7abe25a8d1ca4d6bf7e435c091f689a1b84daad8c8",
+        "tests/test_glm_runtime.py": "fde03cd744d28cf8ca924f37e75fb0b10a1ba68a9771f98fed31cd3c3ca62872",
+        "tests/test_rl_data.py": "c9e933452a485f0e17cb43dc2ce5fb3291a8ae75fd27f327f3baa0debc61128d",
+        "tests/test_rl_episode.py": "2cc119d7006dfe427874c3bf2aa303126917e385b09102501241d9884d44418c",
+        "tests/test_rl_native.py": "2b9d630be2e2cb855cc1982154cbc52d87bfef94faf0775d6fcda8eb353d8b3d",
+        "tests/test_sft_runtime.py": "725de0e0683f649e244def3d49fcb7eb40551243b36a59aaeaa085892511fde4",
+        "tests/test_skyrl_arguments.py": "748dcce9b3f2723ff17e1da76d8b8532f7e8d8121a10e1d0c336e080457e0846",
+        "tests/test_skyrl_data.py": "ac4f41ee09d6dcfda22adafa8035174d4eccb909cde1abb9bc284a09f1867670",
+        "tests/test_skyrl_episode.py": "18fcb58143e1fac814e15478615d6d048c562feacfe56804ded5e113304604d5",
+        "tests/test_skyrl_rollout.py": "4348140ffe8054921ca2201314032451ffea07c480f6451b33cbed64e93d8f7c",
+        "tests/test_skyrl_training.py": "98a1027946464d7f6c3a783832eba1904f2f905f0abb19caac12eeb4bbb149f4",
+        "tests/test_training_watchdog.py": "31fb5e72aa421f5bb8451a9aefda98f2e3ed156fd691140c36b576ec2753978c",
+        "training/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "training/corpus.py": "28669e75e71323252765da81b8bd605e5dafaeecda55782a6316f3a0eb39f809",
+        "training/dense.py": "712038f1abf4f461cf471afc50f7fbbfe90c9d2d7b9e0be1a81583378c933012",
+        "training/glm_runtime.py": "2b35b5c0675edcb6d9160dbf98f3816106f48fc416d81f1d7e3f61d857a630d0",
+        "training/io.py": "7a0b734a4ab7fb8b702430094c58c72f19ac8fc7cc5e056eb8410267e6bfdfe3",
+        "training/miles.py": "53d6bcc006e175bb2bff0011196f89759c34bed039dbaf14eff6209e98f31851",
+        "training/miles_conversion.py": "34a3d68554715ff8f8e013a53c1a1e4bfcc07c2e22d8a01aef89429ca01e7a11",
+        "training/models.py": "712adce5f073de13d02168cd17c2f7c396ba094a1ebc9a34decafb8639b8375e",
+        "training/qwen_tools.py": "00e0c3f322d5416c0697d2bb4504766bfa32f1436b3b5122f6dd7326c7698fd9",
+        "training/rl_data.py": "f0c327d2ecc464610a5fd86e11b112870d28feb43d9155d7507d8fedbd87632b",
+        "training/rl_episode.py": "9e9cb57e9d47c60ce840fa61084125708dcade7eaeadb125b5c9478a7e52f158",
+        "training/rl_runtime.py": "4256fe051b5a445b4c6c29f7f16000c6a91acce281a77c3ce67f5ddd2d99cdd9",
+        "training/sft.py": "d82e365b3bbfae5530b727239d96b157b3e84c9e3dd2c9b9dbfd44b9013994f8",
+        "training/sft_runtime.py": "5e531f465236c7ba104df4f656e43276c4da4f7413b36583caa09f491ea942d8",
+        "training/skyrl.py": "c5093bf5043438dccabb74b22fd9128ea13ffa8f510142e442e17d8035ad7e7b",
+        "training/skyrl_episode.py": "859d852cc4d24ec854351192001dfccf7eec1855eff2ab2d10007dddd15218a8",
+        "training/skyrl_rollout.py": "ba88366374336d97a08faf6175b2d44f4e6f67160dc2618fdcca7284396a0c2c",
+        "training/skyrl_training.py": "a7b7079238a1c3a3f129cfcd20c8cbdf2d038ed8893bf4621c4fe01fb4f9a7a9",
+        "training/splits.py": "b3b5dd76e9307edb7572b5d71e192a4ae7846ac78e34f61cd19b57289bfda1c5"
+      },
+      "fleet_requests": 0,
+      "gpus": 0,
+      "missing_branches": {
+        "training/glm_runtime.py": [
+          [
+            130,
+            138
+          ],
+          [
+            211,
+            215
+          ],
+          [
+            237,
+            238
+          ],
+          [
+            262,
+            267
+          ],
+          [
+            267,
+            268
+          ],
+          [
+            334,
+            337
+          ],
+          [
+            344,
+            345
+          ],
+          [
+            346,
+            342
+          ],
+          [
+            353,
+            354
+          ],
+          [
+            398,
+            399
+          ],
+          [
+            479,
+            480
+          ],
+          [
+            493,
+            494
+          ],
+          [
+            527,
+            528
+          ],
+          [
+            529,
+            530
+          ],
+          [
+            534,
+            535
+          ],
+          [
+            554,
+            555
+          ],
+          [
+            565,
+            566
+          ]
+        ]
+      },
+      "missing_lines": {
+        "training/glm_runtime.py": [
+          215,
+          238,
+          268,
+          337,
+          345,
+          354,
+          399,
+          480,
+          494,
+          528,
+          530,
+          535,
+          555,
+          566
+        ]
+      },
+      "pod_uid": "cfb37a8b-92f6-4b45-9e4d-61de0bdb43cf",
+      "runtime_user": {
+        "gid": 100,
+        "uid": 1000
+      },
+      "schema": "cyber_skyrl_episode_native_selftest_v1",
+      "sha256": "28446991c9e6064d6969c3ab26efcaaa08946344074ba161a6cad75c076425a7",
+      "status": "passed",
+      "test_output_sha256": "e2edb2451866593559257cfccb27b02cfafeffd805a81b52d49ebe4e3671da25",
+      "training_executed": false
+    },
+    "restarts": 0,
+    "uid": "cfb37a8b-92f6-4b45-9e4d-61de0bdb43cf"
+  },
+  "resources": {
+    "additional_nodes": 0,
+    "all_containers_released": true,
+    "gpus": 0
+  },
+  "schema": "cyber_glm_native_fused_staging_research_v1",
+  "sha256": "772bcf794bafdf382b177fb7b36e728320d93b7dd9ed4286df436362b49bc5ba"
+}

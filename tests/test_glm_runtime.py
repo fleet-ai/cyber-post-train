@@ -176,6 +176,37 @@ def check_fp8_cpu_dequantization_bf16_and_strict_router_meta_parity(base):
         assert torch.equal(parameter, expected)
 
 
+def test_native_fused_base_save_reload_has_no_adapters_or_requantization(tmp_path):
+    from transformers import AutoModelForCausalLM
+
+    base = synthetic_base(tmp_path)
+    source_sha = sha_file(base[0] / "model.safetensors")
+    # Remove the untouched adapters, without merging or taking an optimizer step.
+    model = loaded(base).base_model.unload()
+    expected = {name: tensor.clone() for name, tensor in model.state_dict().items()}
+    assert not any("lora_" in name for name in expected)
+    destination = tmp_path / "native-bf16"
+    model.save_pretrained(destination, save_original_format=False, max_shard_size="64KB")
+    assert (destination / "model.safetensors.index.json").is_file()
+    assert not json.loads((destination / "config.json").read_text()).get("quantization_config")
+    reread, info = AutoModelForCausalLM.from_pretrained(
+        destination,
+        local_files_only=True,
+        trust_remote_code=False,
+        dtype=torch.bfloat16,
+        device_map={"": "cpu"},
+        attn_implementation="eager",
+        output_loading_info=True,
+    )
+    assert not any(info.values())
+    actual = reread.state_dict()
+    assert actual.keys() == expected.keys()
+    assert all(
+        t.dtype == actual[n].dtype and torch.equal(t, actual[n]) for n, t in expected.items()
+    )
+    assert sha_file(base[0] / "model.safetensors") == source_sha
+
+
 def check_adapter_optimizer_checkpoint_exact_next_update_without_base_save(base, tmp_path):
     random.seed(42)
     torch.manual_seed(42)
