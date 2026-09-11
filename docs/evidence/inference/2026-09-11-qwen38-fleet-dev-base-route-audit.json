@@ -1,0 +1,230 @@
+{
+  "schema": "cyber_fleet_dev_base_route_audit_v1",
+  "observed_at": "2026-09-11T22:28:52.790931+00:00",
+  "cluster": {
+    "context": "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6",
+    "namespace": "inference"
+  },
+  "scope": {
+    "read_only": true,
+    "gateway_gets": [
+      "/fleet/v1/model-catalog",
+      "/v1/models",
+      "/model_info",
+      "/server_info"
+    ],
+    "prompt_or_completion_requests": 0,
+    "scoring_requests": 0,
+    "cluster_or_api_mutations": 0,
+    "evaluation_submissions": 0
+  },
+  "frozen_inputs": {
+    "base_control": {
+      "path": "configs/evaluation/qwen38-blackbox-fleet-dev-a-base-control-v1.json",
+      "sha256": "sha256:b1ceef2ad9072c3bc1b283aa74c663928162568327f6166b15b3aafd685a3e86",
+      "file_sha256": "sha256:f686a420a7a95a5a50931228718b98ba8ab44d71942b722c1e237983f7afa3b5"
+    },
+    "parent_protocol": {
+      "path": "configs/evaluation/qwen38-blackbox-fleet-dev-a-outcome-protocol-v1.json",
+      "sha256": "sha256:d9423651420dcf1c39f7b870daafe8a74dec18db6eac8684b3845d881dc61019",
+      "file_sha256": "sha256:6f102334d77ae0c57cf79bd0f92d52b837001f16724c93cb3ad1e4d44557c72e"
+    },
+    "model_lock": {
+      "path": "configs/models/qwen38-27b-1d4bf0f2.lock.json",
+      "file_sha256": "sha256:f3926fe675263b25dc79c2b3881a9c463d6b7931e9d61aeb777d15efc61e35ac",
+      "repository": "Qwen/Qwen3.8-27B",
+      "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+      "weights_manifest_sha256": "sha256:06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352",
+      "tokenizer_manifest_sha256": "sha256:3938a9a8172f2738fed1be44efc11e2562059269d50d3721213f44802b53b4e1",
+      "chat_template_sha256": "sha256:c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041"
+    }
+  },
+  "prior_serving_evidence": {
+    "dedicated_registration_input": {
+      "path": "evals/fleet/serving/qwen38-27b-dedicated-v1.registration.json",
+      "file_sha256": "sha256:43e586e505887e00251362e580a8cf8f0fe8b4c303d6447f7d0839a134db35d0"
+    },
+    "historical_acceptance_note": {
+      "path": "docs/evidence/inference/2026-09-06-dedicated-serving-acceptance.md",
+      "file_sha256": "sha256:98cfab50eed791860e58165bada975e821f1d3c1994e9090af42779f13c04ea6"
+    },
+    "self_digesting_git_history_receipts": [
+      {
+        "path": "docs/evidence/qwen38-study/2026-09-05-qwen38-hosted-actual-opencode-parity-v1.json",
+        "commit": "18ef1ad5f0d116dedc3263a9f974657e92f13cde",
+        "receipt_sha256": "sha256:8b20eeb810f229439ab80409ecf317dfc21b1c92075ae06d3f7f039978099fac",
+        "self_digest_valid": true,
+        "reuse_blocker": "The receipt has no exact server binding and used the retired native-compaction-autocontinue-v1 treatment rather than the frozen v2 treatment."
+      },
+      {
+        "path": "docs/evidence/qwen38-study/2026-09-05-qwen38-dedicated-dp8-v1-actual-opencode-parity.json",
+        "commit": "c66b44e030ee0997eb16a49018dcde5f1cdf5056",
+        "receipt_sha256": "sha256:22b33d598baab0a35f9d8340110e0f2783aba824894c3efda97298226d729966",
+        "self_digest_valid": true,
+        "reuse_blocker": "The receipt binds a retired loopback RayJob route and the retired v1 compaction treatment, not the current shared gateway object or the split-A v2 protocol."
+      },
+      {
+        "path": "docs/evidence/qwen38-study/2026-09-05-qwen38-dedicated-tp1-j-v1-actual-opencode-parity.json",
+        "commit": "34291f1c6c9748fe14898ca22d935dbc35c383d5",
+        "receipt_sha256": "sha256:44257eb863919471c73f63f5f7555d465613e96e9f450ea787709e6e58518f37",
+        "self_digest_valid": true,
+        "reuse_blocker": "The receipt binds a retired loopback RayJob route and the retired v1 compaction treatment, not the paused persistent dedicated route or the split-A v2 protocol."
+      }
+    ],
+    "current_use": "historical_provenance_only",
+    "reason_not_current_receipts": "The note is not a self-digesting registration or live-pair receipt, the shared route is now generation 5 with TP1/DP8 and speculative decoding, and the dedicated route is now generation 3 and paused."
+  },
+  "routes": {
+    "shared": {
+      "served_model_id": "qwen3.8-27b",
+      "serving_block_kind": "shared",
+      "model_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+      "exact_frozen_revision": true,
+      "inference_model": {
+        "uid": "d06c0531-7181-41ad-a3fd-cd8e3e774ab9",
+        "resource_version": "19847885",
+        "generation": 5,
+        "observed_generation": 5,
+        "phase": "ready",
+        "ready_replicas": 1,
+        "projection_sha256": "sha256:d3adeccd12567e0317afc11682ad1f97870159874172e0437e580e340d735b6d"
+      },
+      "deployment": {
+        "uid": "c4dff72c-3c99-4b31-adee-a13ba153676a",
+        "generation": 6,
+        "observed_generation": 6,
+        "ready_replicas": 1,
+        "projection_sha256": "sha256:a20be76533e34368741e7e9c980a8a58418a45b6eb6167916decf1a8ba1bdf79"
+      },
+      "pod": {
+        "uid": "eb52ba96-7b1c-44ce-9495-498151fc5827",
+        "phase": "Running",
+        "ready": true,
+        "restart_count": 0,
+        "runtime_image_id": "docker.io/lmsysorg/sglang@sha256:febfb971c7352570fc445c466ebd6ffc9d896024958e544a60f2137fd85856b1",
+        "projection_sha256": "sha256:bc5f735b77bd7eef78a7d6924703e72dc3ab730de50b316637fb39649a54b84d"
+      },
+      "service": {
+        "uid": "311a866c-7010-4eed-ab81-e1453e222029",
+        "endpoint_slice_uid": "8aa2340c-015d-4396-bb41-df0bd4c094ba",
+        "ready_endpoint_count": 1,
+        "service_projection_sha256": "sha256:312b48d4ddad48ca67a3be124334a3a6dbd73d24eec9f3f0224d8422db9ee0fc",
+        "endpoint_projection_sha256": "sha256:3e377ffe03a06ebb06d87d1544b34590af31025a36838826fe310561e62ee40f"
+      },
+      "gateway": {
+        "catalog_status": "ready",
+        "ready_replicas": 1,
+        "routed": true,
+        "listed": true,
+        "model_info_http_status": 200,
+        "server_info_http_status": 200,
+        "projection_sha256": "sha256:a5d314d76f52f9cf7ba85e6a065f9c610263eff6a3e17d90aa850e0cbaf032d7"
+      },
+      "runtime": {
+        "engine": "sglang",
+        "precision": "bf16",
+        "quantization": "none",
+        "catalog_tensor_parallel_size": 8,
+        "runtime_tensor_parallel_size": 1,
+        "runtime_data_parallel_size": 8,
+        "load_balance_method": "total_tokens",
+        "context_length": 262144,
+        "kv_cache_dtype": "fp8_e4m3",
+        "reasoning_parser": "qwen3",
+        "tool_call_parser": "qwen3_coder",
+        "serving_image_digest": "sha256:febfb971c7352570fc445c466ebd6ffc9d896024958e544a60f2137fd85856b1",
+        "normalized_server_arguments_sha256": "sha256:e873d511c6f880a14916ac6346bcc9e38eb15972e50a2a371b5dfc4e305f8f4c",
+        "speculative_decoding": "NEXTN_steps3_topk1_draft4"
+      },
+      "assessment": {
+        "readiness_and_catalog_identity_passed": true,
+        "individual_route_metadata_matches_parent_constraints": true,
+        "live_mounted_model_bytes_bound_to_upstream_manifest": false,
+        "current_self_digesting_registration_receipt_present": false,
+        "post_sft_route_available_for_pairing": false,
+        "fresh_live_pair_parity_present": false,
+        "eligible_as_exact_causal_base_control": false
+      }
+    },
+    "dedicated": {
+      "served_model_id": "chris-cyber-qwen38-27b-dedicated-v1",
+      "serving_block_kind": "dedicated",
+      "model_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+      "exact_frozen_revision": true,
+      "inference_model": {
+        "uid": "54beeb64-c498-4e7d-a504-05a8d694808b",
+        "resource_version": "18092378",
+        "generation": 3,
+        "observed_generation": 3,
+        "phase": "paused",
+        "ready_replicas": 0,
+        "projection_sha256": "sha256:f4a42eaeec2dd02898b5a1555d8bed6ddb98fc38b767611fdae579097fd8edac"
+      },
+      "deployment": {
+        "uid": "47db8bac-005b-43ce-992e-889a8273d50a",
+        "generation": 4,
+        "observed_generation": 4,
+        "ready_replicas": 0,
+        "projection_sha256": "sha256:3fa056f7921fe275a7d0d3c492129a30fe36419f84e061690f90227d0742c6df"
+      },
+      "service": {
+        "uid": "41cccb67-12fa-4213-a7d6-9391f5a4e0e6",
+        "endpoint_slice_uid": "d1025ea8-652f-48d1-8792-0005d0333a15",
+        "ready_endpoint_count": 0,
+        "service_projection_sha256": "sha256:6629770c6554a90ad3c2487ec46b86917d3095a00f144991842a4ee41f03d458",
+        "endpoint_projection_sha256": "sha256:bb50e62c78fad10c7f99bfaf5f6e73eefe1bf65b5917ae8e463faf17776887b8"
+      },
+      "gateway": {
+        "catalog_status": "paused",
+        "ready_replicas": 0,
+        "routed": false,
+        "listed": false,
+        "model_info_http_status": 404,
+        "server_info_http_status": 404,
+        "projection_sha256": "sha256:3d4c6881dc2bae5039e4507394d6acf5745eda74b46b098068e777ca08b371a3"
+      },
+      "runtime": {
+        "engine": "sglang",
+        "precision": "bf16",
+        "tensor_parallel_size": 1,
+        "context_length": 262144,
+        "kv_cache_dtype": "fp8_e4m3",
+        "reasoning_parser": "qwen3",
+        "tool_call_parser": "qwen3_coder",
+        "serving_image_digest": "sha256:febfb971c7352570fc445c466ebd6ffc9d896024958e544a60f2137fd85856b1",
+        "normalized_server_arguments_sha256": "sha256:3dec042067c1f21c80e592bc021c541142450c776b42d6843e61838a4854746b"
+      },
+      "assessment": {
+        "readiness_and_catalog_identity_passed": false,
+        "reason": "The route is paused with zero replicas, zero ready endpoints, and no model_info or server_info route.",
+        "eligible_as_exact_causal_base_control": false
+      }
+    }
+  },
+  "unresolved_base_serving_binding": {
+    "base_snapshot_manifest_sha256": "The upstream lock is known, but no current live-cache snapshot receipt binds the shared Pod bytes to it.",
+    "weights_manifest_sha256": "The upstream manifest is known, but the live mounted payload was not rehashed or bound by an accepted receipt.",
+    "tokenizer_manifest_sha256": "The upstream manifest is known, but live tokenizer bytes were not independently bound.",
+    "chat_template_sha256": "The upstream digest is known, but live chat-template bytes were not independently bound.",
+    "serving_image_digest": "The current image digest is observed, but it is not yet joined to an accepted current registration and pair receipt.",
+    "normalized_server_arguments_sha256": "The current shared argument projection is observed, but no post-SFT route exists to prove an exact normalized match.",
+    "staging_receipt_sha256": "No accepted create-once staging receipt for the current live base payload was found.",
+    "serving_registration_receipt_sha256": "No self-digesting receipt binds the current shared generation 5 object and runtime; historical evidence predates it.",
+    "live_pair_parity_receipt_sha256": "No post-SFT route is available and no fresh base/post metadata or behavioral parity receipt exists.",
+    "served_model_id": "qwen3.8-27b is observed, but partial binding is not written into the immutable all-or-nothing control template.",
+    "serving_route_profile_sha256": "A current metadata projection exists, but it is not an accepted pair-qualified route profile.",
+    "serving_block_kind": "shared is observed, but hosted and dedicated treatments remain separate and the full shared binding is incomplete.",
+    "agent_image_digest": "No immutable agent image receipt was found for the parent's exact OpenCode v2 compaction and 32768-output treatment.",
+    "proxy_image_digest": "No immutable proxy image receipt was found for the parent's exact OpenCode v2 compaction and 32768-output treatment."
+  },
+  "decision": {
+    "classification": "operational_route_ready_but_exact_matched_control_blocked",
+    "selected_existing_route": null,
+    "base_control_modified": false,
+    "base_control_launchable": false,
+    "fresh_live_pair_parity_receipt_created": false,
+    "next_gate": "After one accepted post-SFT export is staged and served, create current self-digesting base and post registration receipts, bind exact harness images, and run one fresh metadata plus allowed non-scored live-pair parity procedure before creating a launchable child.",
+    "evaluation_submitted": false
+  },
+  "sha256": "sha256:bcb35283f1cc6d98c8415ac8ecb3a08276118d5b63aabed8882a1b6906764a0a"
+}
