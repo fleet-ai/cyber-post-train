@@ -61,7 +61,7 @@ and trace analysis` were inspected. Original commits/worktrees remain recoverabl
 | Real evaluation lifecycle | Qwen generated, authoritative grading and catalog ingestion completed, local result persisted, and all resources cleaned. OpenCode ended at its output limit, so the frozen natural-stop gate holds the result: zero accepted, one review, no retry. [Evidence](evidence/cleanup-eval-terminal-20260911.json). This qualifies lifecycle execution, not a complete model outcome |
 | Evaluation V6 | Terminal: one private result, complete authoritative grading/catalog ingestion and cleanup, but final output-limit stop. Zero accepted and one review; no active worker or retry. This separate operational treatment used 65,536 output tokens per request. [Evidence](evidence/cleanup-eval-v6-20260911.json). Not a capability comparison or training input |
 | Latest native regressions | 329 Miles and 472 SkyRL CPU tests pass in their exact images with zero skips, including real MCP transport fault propagation. The episode module covers all 317 statements/116 branches in Miles. Two invalid Miles self-test setups are retained separately, not hidden. [Evidence](evidence/cleanup-runtime-regression-20260911.json). No new RL reward/update qualification |
-| Local regression suite | 1,675 tests plus seven subtests pass using disposable PostgreSQL and MCP 2.1.1; 105 native/optional-dependency cases explicitly skip locally. Whole-repo coverage is 13,645/17,929 statements and 4,424/6,956 branches. Native-image and GPU qualification remain separate |
+| Local regression suite | 1,678 tests plus seven subtests pass using disposable PostgreSQL and MCP 2.1.1; 105 native/optional-dependency cases explicitly skip locally. Whole-repo coverage is 13,649/17,933 statements and 4,424/6,956 branches. Native-image and GPU qualification remain separate |
 | Installation | Wheel with current episode/GLM fixes, SHA-256 `3524d5eb28013f8971a5a3f71b8a9e1a6f6425118f1f6b9b997db5a4920c2c18`, installed outside the checkout on Python 3.12.14. Eight public and two legacy data help paths, redirect/user guards, numeric JSON, module identity, replay rejection and nested-error privacy pass. [Evidence](evidence/cleanup-runtime-regression-20260911.json). No Torch/PyArrow in this minimal environment; installation is not training readiness |
 
 The newer `rl-data` wheel was independently installed outside the checkout;
@@ -246,3 +246,21 @@ also passes the same eight public/two legacy help paths outside the checkout,
 redirect/user guards, numeric JSON, module identity and replay rejection. Its
 installed episode module matches current source bytes; it rejects 120/300-second
 deadlines against the declared 300-second bash budget and accepts 330 seconds.
+
+Retired seven completed Qwen3.6 ExploitGym smoke/pilot launchers and manifests
+(848 lines). Caller checks found only those launch paths, their literal tests
+and onboarding commands; the paired evaluator/acceptance code imports none of
+them. Historical protocols, terminal evidence, grader/firewall bindings and
+paired output-integrity tests remain. The shorter adapter guide now states its
+actual scope rather than presenting an old run as a configurable new launcher.
+Thirty-three focused checks and both retained lifecycle CLI help paths pass.
+Removed sources remain recoverable at `bac2a4c`; no live run or result was removed.
+
+The current wheel (`5c363db4a14b2b388fdcea5cd32595a5afe61dc6d2128074b8f09dc11417fd27`)
+was installed outside the checkout on Python 3.12.14. All eight public/two legacy
+help paths, redirect/user guards, numeric JSON, bundled module identity, replay
+rejection and tool-budget checks pass. The installed RL supervisor is byte-equal
+to the tested source; retired launchers are absent and the paired launcher remains.
+The shared RL supervisor now covers all 77 statements/20 branches in the local
+suite. Neither that focused coverage nor wheel installation qualifies RL rewards,
+optimization or checkpoint recovery on GPUs.
