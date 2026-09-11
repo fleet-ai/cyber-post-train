@@ -130,3 +130,27 @@ off-node repair.
 No paid study arm had been submitted when these manifests were frozen. Source
 coverage, train-only runtime qualification, dev checkpoint serving and the real
 Tensorlake lifecycle remain explicit pre-production gates.
+
+### Four-GPU metrics-canary recovery gate
+
+The create-once
+[`qwen38-ta4m-dev1-reload-v1.template.json`](../configs/qualification/qwen38-ta4m-dev1-reload-v1.template.json)
+binds the planned recovery check for dev metrics canary `chris-q38-ta4m-dev1`.
+It is deliberately non-launchable: terminal Job/RayJob identities, the paused
+receipt digests, a CPU checkpoint-seal digest, and unique recovery run/output/W&B
+identities are unresolved. Do not fill them from names or chat summaries.
+
+After the exact source Job has succeeded with a digest-valid step-one
+`TRAINING_PAUSED.json` and released its allocation, seal `global_step_1` once on
+CPU with the command recorded in the template. Materialize a private recovery
+config by copying the source scientific plan, removing `pause_after_step`,
+assigning new run/output/W&B identities, and adding the exact manifest file hash
+under `recovery` with `mode: validate`. Run the normal pinned-image CPU preflight
+and dev Jobs API preview before any submission.
+
+`validate` is the only zero-additional-step recovery mode. It restores the model,
+optimizer, scheduler, RNG and sampler on every original rank, then exits without
+training or teacher-reference CE. The source checkpoint has world size four, so
+one four-GPU worker is the exact and sufficient qualification shape; eight GPUs
+would be a topology mismatch, while a true `resume` would execute later optimizer
+steps and answer a different question.

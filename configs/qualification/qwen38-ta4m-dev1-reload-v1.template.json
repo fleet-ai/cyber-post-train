@@ -1,0 +1,170 @@
+{
+  "schema": "cyber_qwen_sft_reload_qualification_template_v1",
+  "status": "blocked_waiting_source_terminal_and_checkpoint_seal",
+  "launchable": false,
+  "source": {
+    "cluster": "dev",
+    "run_name": "chris-q38-ta4m-dev1",
+    "prepared_dir": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/metrics-canary-ta4m-v1",
+    "output_root": "/mnt/sfs/jobs/chris-q38-ta4m-dev1",
+    "plan_sha256": "sha256:883ba74af9e36c19be8a6683e0a1a16fdbfc074e4555ee17a780c472d41662b3",
+    "runtime_sha256": "sha256:fc5db40437923800730d38b9bc9a0872cdd64dd8a92c64fc03ecfdeb0ac2b2e3",
+    "model": {
+      "repo": "Qwen/Qwen3.8-27B",
+      "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+      "weight_manifest_sha256": "sha256:06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352"
+    },
+    "selection": {
+      "mode": "task_outcomes_only",
+      "fleet_dev_protocol_sha256": "sha256:d9423651420dcf1c39f7b870daafe8a74dec18db6eac8684b3845d881dc61019",
+      "reference_ce_enabled": false
+    },
+    "data": {
+      "split_manifest_sha256": "sha256:2d20dac7d5b9bb29f6aa44369c5dd2efed9c78bd3ca4d32ed021f04843ae6863",
+      "corpus_manifest_sha256": "sha256:019d795f4b59b9faee799feac613c8fd3fd3e69774ccc419a0ffcf7960e7df62"
+    },
+    "recipe": {
+      "epochs": 1,
+      "batch_size": 8,
+      "microbatch_per_gpu": 1,
+      "nodes": 1,
+      "gpus_per_node": 4,
+      "lr": 0.000003,
+      "max_length": 16384,
+      "eval_interval": 0,
+      "checkpoint_interval": 1,
+      "keep_checkpoints": 3,
+      "seed": 42,
+      "max_steps": 76
+    },
+    "pause_after_step": 1,
+    "terminal_gate": {
+      "filename": "TRAINING_PAUSED.json",
+      "status": "training_paused",
+      "optimizer_step": 1,
+      "optimizer_steps_executed": 1,
+      "file_sha256": null,
+      "receipt_sha256": null,
+      "api_run_id": null,
+      "rayjob_uid": null,
+      "workload_uid": null,
+      "resource_release_verified": false
+    }
+  },
+  "checkpoint_seal": {
+    "operation": "cpu_only_create_once",
+    "source_checkpoint_path": "/mnt/sfs/jobs/chris-q38-ta4m-dev1/checkpoints/global_step_1",
+    "source_checkpoint_receipt_path": "/mnt/sfs/jobs/chris-q38-ta4m-dev1/checkpoint_receipts/step-000001.json",
+    "manifest_path": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/metrics-canary-ta4m-reload-v1/checkpoint-step-1.json",
+    "manifest_file_sha256": null,
+    "manifest_receipt_sha256": null,
+    "world_size": 4,
+    "gpu_reload_verified": false,
+    "command": [
+      "uv",
+      "run",
+      "cyber-post-train",
+      "checkpoint-seal",
+      "/mnt/sfs/jobs/chris-q38-study-corpora-v1/metrics-canary-ta4m-v1",
+      "1",
+      "--output",
+      "/mnt/sfs/jobs/chris-q38-study-corpora-v1/metrics-canary-ta4m-reload-v1/checkpoint-step-1.json"
+    ],
+    "requires": [
+      "digest_valid_training_paused_receipt_bound_to_source_plan",
+      "source_api_and_uid_bound_controller_terminal_success",
+      "source_gpu_allocation_released",
+      "source_checkpoint_and_receipt_present_and_stable",
+      "pinned_training_image_cpu_execution",
+      "create_once_manifest_destination_absent"
+    ]
+  },
+  "reload": {
+    "operation": "native_all_rank_checkpoint_reload",
+    "cluster": "dev",
+    "mode": "validate",
+    "optimizer_steps_authorized": 0,
+    "new_run_name": null,
+    "new_output_root": null,
+    "new_wandb_run_id": null,
+    "recovery_config": {
+      "manifest": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/metrics-canary-ta4m-reload-v1/checkpoint-step-1.json",
+      "sha256": null,
+      "mode": "validate"
+    },
+    "source_plan_transform": {
+      "remove": [
+        "pause_after_step"
+      ],
+      "replace_with_new_unique_values": [
+        "run_name",
+        "output_root",
+        "wandb.run_id",
+        "wandb.name"
+      ],
+      "preserve_exactly": [
+        "schema",
+        "model",
+        "datasets",
+        "recipe",
+        "validation_mode",
+        "fleet_dev_protocol_sha256",
+        "split_manifest_sha256",
+        "corpus_manifest_sha256",
+        "runtime_sha256",
+        "execution.image",
+        "execution.resources",
+        "execution.priority"
+      ]
+    },
+    "resources": {
+      "workers": 1,
+      "gpus_per_worker": 4,
+      "total_gpus": 4,
+      "cpu_request": "64",
+      "cpu_limit": "64",
+      "memory_request": "512Gi",
+      "memory_limit": "768Gi",
+      "priority_class": "c1",
+      "expected_queue_priority": "q1",
+      "expected_priority_value": 10000,
+      "requeueIfPreempted": false
+    },
+    "pre_submit_gates": [
+      "all_terminal_and_seal_placeholders_resolved_from_exact_receipts",
+      "new_run_output_and_wandb_id_are_unique",
+      "new_output_and_prepared_destinations_are_absent",
+      "pinned_image_cpu_preflight_passed_on_dev",
+      "dev_jobs_api_preview_matches_four_gpu_c1_request",
+      "duplicate_run_and_active_node_checks_are_clean"
+    ],
+    "acceptance": [
+      "jobs_api_and_rayjob_terminal_success",
+      "digest_valid_RELOAD_VALIDATED_json",
+      "optimizer_steps_executed_equals_zero",
+      "optimizer_step_equals_one",
+      "validation_scope_equals_checkpoint_and_sampler_reload_only_no_ce",
+      "all_four_rank_model_optimizer_scheduler_and_rng_states_restored",
+      "sampler_cursor_restored_exactly",
+      "source_checkpoint_file_inventory_and_hashes_unchanged",
+      "zero_restarts",
+      "gpu_release_verified"
+    ]
+  },
+  "unresolved_bindings": [
+    "source.terminal_gate.file_sha256",
+    "source.terminal_gate.receipt_sha256",
+    "source.terminal_gate.api_run_id",
+    "source.terminal_gate.rayjob_uid",
+    "source.terminal_gate.workload_uid",
+    "source.terminal_gate.resource_release_verified",
+    "checkpoint_seal.manifest_file_sha256",
+    "checkpoint_seal.manifest_receipt_sha256",
+    "reload.new_run_name",
+    "reload.new_output_root",
+    "reload.new_wandb_run_id",
+    "reload.recovery_config.sha256"
+  ],
+  "interpretation": "Four GPUs are both necessary and sufficient for exact native recovery validation because the source checkpoint world size is four. This gate restores model, optimizer, scheduler, RNG and sampler state on all source ranks but performs no optimizer step and no teacher-reference CE evaluation.",
+  "sha256": "sha256:8d15fc572d0db04cba51fe42c850479d2c04fb7491b2038d0a393c11b6f37f52"
+}
