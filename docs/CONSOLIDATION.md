@@ -3,6 +3,14 @@
 Status: 2026-09-11. This is a qualification index, not live state or launch
 authority. Qwen is first; **full GLM5.3 and both RL backends remain required**.
 
+**Submission pause — 2026-09-11 user alert review:** do not create new cluster
+runs or successors until Chris reviews the incident and explicitly resumes
+submissions. The seven failed RL runs and monitoring evidence are recorded in
+[the incident review](incidents/2026-09-11-cleanup-rl-alerts.md). Existing useful
+work remains untouched; this pause does not authorize cancellation, alert
+suppression, or replay. Read-only diagnosis and local fixes may continue within
+the user's scope. A long-running goal is not permission to bypass this boundary.
+
 ## Supported interface
 
 One public CLI and plain YAML configure data, model, hyperparameters, W&B,
@@ -54,8 +62,11 @@ readiness. All detailed IDs, digests, test counts and earlier failures remain in
   Native fused-format save/reload preserves every synthetic tensor, including
   strict FP32 buffers, without adapters or requantization; all 51 native tests
   pass. [CPU staging research](evidence/cleanup-glm-native-staging-probe-20260911.json)
-  records full-model memory and the native ignored-input layer. Full-size CPU
-  materialization remains unqualified; no such job was submitted.
+  records full-model memory and the native ignored-input layer. One
+  [full-size CPU/RAM staging pilot](evidence/cleanup-glm-native-stage-pilot-20260911.json)
+  was admitted at 15:31:41Z after the complete synthetic transaction passed.
+  It reserves no GPUs and preserves all source bytes. Full-size materialization,
+  training integration and GPU qualification remain unproven; no GLM GPU successor.
 - No new automations, peer mutations or changes to shared/dedicated serving.
 
 The queued/frozen training bundles predate the newest checkpoint-drain and cursor guards.
@@ -88,6 +99,9 @@ Never fake success or suppress real alerts. Full controls:
   Final output-limit stops remain held, even with complete catalog ingestion.
 - RL checks tool deadlines against the real catalog, preserves nested error
   classes, awaits sibling/environment cleanup and uses bounded checkpoint drain.
+  Grouped errors are retained at both the episode and native trainer boundaries;
+  the [alert incident](incidents/2026-09-11-cleanup-rl-alerts.md) records the local
+  regression evidence and the continuing submission pause.
 - Miles cursor saves/reloads reject silent resets and counter drift. All 82
   cursor tests, including 41 using native Miles, pass in the exact image;
   [evidence](evidence/cleanup-miles-cursor-20260911.json). This is not yet complete RL recovery.
@@ -98,8 +112,8 @@ Never fake success or suppress real alerts. Full controls:
 
 The [ledger regression evidence](evidence/cleanup-ledger-contract-20260911.json)
 records 46 real-PostgreSQL cases, complete focused module coverage and exact
-cross-backend result-digest parity. The latest full suite passes 1,776 tests plus seven
-subtests, with 156 explicit skips. Whole-repository coverage is **not complete**.
+cross-backend result-digest parity. The latest full suite passes 1,780 tests plus seven
+subtests, with 157 explicit skips. Whole-repository coverage is **not complete**.
 Optional native dependencies need
 the pinned trainer images; local skips are never counted as passing training
 qualification. Installed-wheel checks run outside the checkout. The active
