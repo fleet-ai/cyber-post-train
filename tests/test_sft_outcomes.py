@@ -15,15 +15,21 @@ from test_sft_runtime import plan
 from training import checkpoints, recovery
 from training.corpus import select_sources
 from training.sft_runtime import (
+    NUMERIC_REJECTION_REASONS,
+    NUMERIC_REJECTION_SCHEMA,
     OUTCOME_WANDB_HISTORY_KEYS,
     PlannedPause,
     ResilientTracking,
+    ScientificNumericRejection,
     _configure_wandb,
     _make_trainer_class,
     _preflight_wandb_environment,
     _unsigned_digest,
+    numeric_rejection_policy,
+    scientific_rejection_result,
     selection_evidence,
     sft_overrides,
+    terminal_receipt_name,
     training_result,
     uses_reference_ce,
     validate_plan,
@@ -39,6 +45,18 @@ def outcome_plan(root):
     value["fleet_dev_protocol_sha256"] = POLICY["fleet_dev_protocol_sha256"]
     value["datasets"].pop("dev")
     value["recipe"]["eval_interval"] = 0
+    return value
+
+
+def numeric_canary_plan(root):
+    value = outcome_plan(root)
+    value["pause_after_step"] = 2
+    value["recipe"]["checkpoint_interval"] = 1
+    value["scientific_rejection"] = {
+        "schema": NUMERIC_REJECTION_SCHEMA,
+        "reason_codes": list(NUMERIC_REJECTION_REASONS),
+        "latest_attempted_optimizer_step": 2,
+    }
     return value
 
 
@@ -168,6 +186,7 @@ def trainer(tmp_path, monkeypatch):
     )
     trainer = _make_trainer_class()(None, cfg, value)
     trainer.tracker = Tracking()
+    trainer.global_step = 0
     return trainer
 
 
@@ -345,6 +364,113 @@ def test_train_step_emits_finite_token_normalized_scalar_metrics(trainer):
     assert trainer.extra_train_metrics["train/lr"] == 3e-6
     assert trainer.extra_train_metrics["train/grad_norm_finite"] == 1
     assert trainer.extra_train_metrics["train/supervised_tokens_per_second"] > 0
+
+
+@pytest.mark.parametrize("reason", NUMERIC_REJECTION_REASONS)
+def test_opted_in_numeric_canary_rejects_only_nonfinite_model_metrics(trainer, reason):
+    trainer.plan = numeric_canary_plan(trainer.output)
+    trainer.global_step = 0
+    optimizer_calls = []
+    loss = float("nan") if reason == "nonfinite_loss" else 1.25
+    grad_norm = float("nan") if reason == "nonfinite_gradient_norm" else 0.75
+    trainer.dispatch = SimpleNamespace(
+        forward_backward=lambda *args, **kwargs: SimpleNamespace(
+            metrics={"final_loss": loss, "lr": 3e-6}
+        ),
+        optim_step=lambda *args, **kwargs: optimizer_calls.append(True) or grad_norm,
+    )
+    trainer._torch_profiler_enabled = False
+    with pytest.raises(ScientificNumericRejection) as caught:
+        trainer.train_step({"loss_mask": torch.tensor([[1, 0]])}, 0)
+    assert caught.value.reason_code == reason
+    assert caught.value.attempted_optimizer_step == 1
+    assert optimizer_calls == ([] if reason == "nonfinite_loss" else [True])
+
+
+def test_nonfinite_metric_without_narrow_opt_in_remains_runtime_failure(trainer):
+    trainer.global_step = 0
+    trainer.dispatch = SimpleNamespace(
+        forward_backward=lambda *args, **kwargs: SimpleNamespace(
+            metrics={"final_loss": float("nan"), "lr": 3e-6}
+        ),
+        optim_step=lambda *args, **kwargs: pytest.fail("bad loss must not be applied"),
+    )
+    trainer._torch_profiler_enabled = False
+    with pytest.raises(ValueError, match="nonfinite training metric"):
+        trainer.train_step({"loss_mask": torch.tensor([[1]])}, 0)
+
+
+@pytest.mark.parametrize(
+    "defect",
+    ["schema", "reason", "boundary", "pause", "checkpoint", "reference_ce", "recovery"],
+)
+def test_numeric_rejection_policy_is_explicit_bounded_and_fresh(tmp_path, defect):
+    value = numeric_canary_plan(tmp_path)
+    policy = value["scientific_rejection"]
+    if defect == "schema":
+        policy["schema"] = "unknown"
+    elif defect == "reason":
+        policy["reason_codes"] = ["any_exception"]
+    elif defect == "boundary":
+        policy["latest_attempted_optimizer_step"] = 5
+        value["pause_after_step"] = 5
+    elif defect == "pause":
+        value["pause_after_step"] = 1
+    elif defect == "checkpoint":
+        value["recipe"]["checkpoint_interval"] = 2
+    elif defect == "reference_ce":
+        value = plan(tmp_path)
+        value.update(
+            pause_after_step=2,
+            scientific_rejection=policy,
+        )
+        value["recipe"]["checkpoint_interval"] = 1
+    else:
+        value["recovery"] = {"mode": "resume"}
+    with pytest.raises(ValueError, match="scientific rejection"):
+        numeric_rejection_policy(value)
+
+
+def test_numeric_rejection_receipt_requires_synced_history_and_prior_checkpoint(trainer):
+    trainer.plan = numeric_canary_plan(trainer.output)
+    trainer.global_step = 1
+    trainer.target_tokens_seen = 3
+    trainer.save_checkpoint()
+    trainer.wandb_state.update(
+        status="synced",
+        reason_codes=[],
+        finish_acknowledged=True,
+        receipt_written=True,
+        url="https://example.invalid/synthetic",
+        attempted_training_events=1,
+        accepted_training_events=1,
+        last_accepted_global_step=1,
+        last_accepted_total_supervised_tokens=3,
+    )
+    result = scientific_rejection_result(
+        trainer, ScientificNumericRejection("nonfinite_gradient_norm", 2)
+    )
+    assert result["status"] == "training_rejected"
+    assert result["classification"] == "scientific_numeric_rejection"
+    assert result["attempted_optimizer_step"] == 2
+    assert result["last_finite_optimizer_step"] == 1
+    assert result["training_artifact_accepted"] is False
+    assert result["canary_outcome_valid"] is True
+    assert result["rejected_update_checkpointed"] is False
+    assert result["wandb_tracking"]["scientific_rejection_evidence_complete"] is True
+    assert result["wandb_tracking"]["acceptance_ready"] is False
+    assert terminal_receipt_name(result) == "TRAINING_REJECTED.json"
+
+    trainer.wandb_state["reason_codes"] = ["history_log_failed"]
+    with pytest.raises(RuntimeError, match="tracking evidence"):
+        scientific_rejection_result(
+            trainer, ScientificNumericRejection("nonfinite_gradient_norm", 2)
+        )
+
+
+def test_unrecognized_sft_terminal_state_remains_a_failure():
+    with pytest.raises(ValueError, match="unknown SFT terminal status"):
+        terminal_receipt_name({"status": "unexpected_runtime_defect"})
 
 
 def test_outcome_wandb_disables_automatic_system_history(tmp_path, monkeypatch):

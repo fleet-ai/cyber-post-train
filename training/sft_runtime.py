@@ -106,6 +106,17 @@ OUTCOME_WANDB_HISTORY_KEYS = (
     "train/supervised_tokens_per_second",
 )
 OUTCOME_WANDB_STEP_KEYS = frozenset(OUTCOME_WANDB_HISTORY_KEYS)
+NUMERIC_REJECTION_SCHEMA = "cyber_sft_numeric_rejection_policy_v1"
+NUMERIC_REJECTION_REASONS = ("nonfinite_loss", "nonfinite_gradient_norm")
+
+
+class ScientificNumericRejection(Exception):
+    """A predeclared numeric-canary outcome, not an infrastructure failure."""
+
+    def __init__(self, reason_code: str, attempted_optimizer_step: int):
+        super().__init__(reason_code)
+        self.reason_code = reason_code
+        self.attempted_optimizer_step = attempted_optimizer_step
 
 
 def digest(path: Path) -> str:
@@ -242,6 +253,36 @@ def uses_reference_ce(plan: dict) -> bool:
     return selection_policy(plan)["mode"] == "teacher_cross_entropy"
 
 
+def numeric_rejection_policy(plan: dict) -> dict | None:
+    """Validate the narrow opt-in that makes numeric canary rejection exit cleanly."""
+    policy = plan.get("scientific_rejection")
+    if policy is None:
+        return None
+    if not isinstance(policy, dict) or set(policy) != {
+        "schema",
+        "reason_codes",
+        "latest_attempted_optimizer_step",
+    }:
+        raise ValueError("scientific rejection policy has unknown or missing fields")
+    if (
+        policy["schema"] != NUMERIC_REJECTION_SCHEMA
+        or policy["reason_codes"] != list(NUMERIC_REJECTION_REASONS)
+        or type(policy["latest_attempted_optimizer_step"]) is not int
+        or not 1 <= policy["latest_attempted_optimizer_step"] <= 4
+    ):
+        raise ValueError("scientific rejection policy is outside the bounded numeric canary")
+    if (
+        uses_reference_ce(plan)
+        or "recovery" in plan
+        or plan.get("pause_after_step") != policy["latest_attempted_optimizer_step"]
+        or plan["recipe"]["checkpoint_interval"] != 1
+    ):
+        raise ValueError(
+            "scientific rejection is limited to a fresh outcome-only canary with per-step saves"
+        )
+    return policy
+
+
 def selection_evidence(plan: dict) -> dict:
     reference_ce = uses_reference_ce(plan)
     return {
@@ -308,6 +349,7 @@ def validate_plan(plan: dict, *, check_files: bool = True) -> None:
             or recovery.get("mode") == "validate"
         ):
             raise ValueError("planned pause must follow new work and precede full completion")
+    numeric_rejection_policy(plan)
     if training_only != (recipe["eval_interval"] == 0):
         raise ValueError("task-outcome evaluation and zero CE interval must be selected together")
     if training_only and set(plan["datasets"]) != {"train"}:
@@ -1319,15 +1361,26 @@ def _make_trainer_class():
             timings = {}
             with Timer("forward_backward", timings):
                 output = self.dispatch.forward_backward("policy", batch, loss_fn="cross_entropy")
+            attempted_step = self.global_step + 1
+            loss = float(output.metrics.get("final_loss", output.metrics.get("loss", float("nan"))))
+            lr = float(output.metrics["lr"])
+            if not math.isfinite(loss):
+                if numeric_rejection_policy(self.plan) is not None:
+                    raise ScientificNumericRejection("nonfinite_loss", attempted_step)
+                raise ValueError("nonfinite training metric")
+            if not math.isfinite(lr):
+                raise ValueError("nonfinite training metric")
             with Timer("optim_step", timings):
                 grad_norm = self.dispatch.optim_step("policy")
             if self._torch_profiler_enabled:
                 self.dispatch.profile_step("policy")
-            loss = float(output.metrics.get("final_loss", output.metrics.get("loss", float("nan"))))
-            lr = float(output.metrics["lr"])
             grad_norm = float(grad_norm)
             elapsed = time.perf_counter() - started
-            if not all(math.isfinite(x) for x in (loss, lr, grad_norm, elapsed)) or elapsed <= 0:
+            if not math.isfinite(grad_norm):
+                if numeric_rejection_policy(self.plan) is not None:
+                    raise ScientificNumericRejection("nonfinite_gradient_norm", attempted_step)
+                raise ValueError("nonfinite training metric")
+            if not math.isfinite(elapsed) or elapsed <= 0:
                 raise ValueError("nonfinite training metric")
             targets = int((batch["loss_mask"] > 0).sum().item())
             self.target_tokens_seen += targets
@@ -1477,6 +1530,92 @@ def training_result(trainer, *, paused: bool) -> dict:
     }
 
 
+def scientific_rejection_result(trainer, rejection: ScientificNumericRejection) -> dict:
+    """Prove a numeric rejection was bounded, tracked, and left no accepted bad update."""
+    plan = trainer.plan
+    policy = numeric_rejection_policy(plan)
+    if (
+        policy is None
+        or rejection.reason_code not in policy["reason_codes"]
+        or rejection.attempted_optimizer_step > policy["latest_attempted_optimizer_step"]
+        or rejection.attempted_optimizer_step != trainer.global_step + 1
+    ):
+        raise ValueError("numeric rejection does not match its predeclared canary boundary")
+    state = dict(trainer.wandb_state)
+    safe_step = trainer.global_step
+    tracking_complete = (
+        not state["reason_codes"]
+        and state["status"] == "synced"
+        and state["finish_acknowledged"] is True
+        and state["receipt_written"] is True
+        and isinstance(state.get("url"), str)
+        and bool(state["url"])
+        and state["attempted_training_events"] == safe_step
+        and state["accepted_training_events"] == safe_step
+        and state["last_accepted_global_step"] == (safe_step or None)
+        and state["last_accepted_total_supervised_tokens"]
+        == (trainer.target_tokens_seen if safe_step else None)
+    )
+    if not tracking_complete:
+        raise RuntimeError("numeric rejection lacks complete scalar tracking evidence")
+
+    checkpoint_path = None
+    if safe_step:
+        pointer = trainer.output / "checkpoints/latest_ckpt_global_step.txt"
+        if int(pointer.read_text()) != safe_step:
+            raise ValueError("numeric rejection prior checkpoint pointer mismatch")
+        checkpoint_path = plan_checkpoint(plan, safe_step)
+        receipt = json.loads(
+            (trainer.output / "checkpoint_receipts" / f"step-{safe_step:06d}.json").read_text()
+        )
+        if (
+            receipt.get("receipt_sha256")
+            != _unsigned_digest({k: v for k, v in receipt.items() if k != "receipt_sha256"})
+            or receipt.get("optimizer_step") != safe_step
+            or receipt.get("checkpoint_path") != checkpoint_path
+            or receipt.get("plan_sha256") != plan["plan_sha256"]
+            or any(receipt.get(k) != v for k, v in selection_evidence(plan).items())
+        ):
+            raise ValueError("numeric rejection lacks a valid prior finite checkpoint")
+
+    state["scientific_rejection_evidence_complete"] = True
+    state["acceptance_ready"] = False
+    return {
+        "schema": "cyber_sft_numeric_rejection_v1",
+        "status": "training_rejected",
+        "classification": "scientific_numeric_rejection",
+        "reason_code": rejection.reason_code,
+        "attempted_optimizer_step": rejection.attempted_optimizer_step,
+        "last_finite_optimizer_step": safe_step,
+        "optimizer_step": safe_step,
+        "optimizer_steps_executed": safe_step,
+        "latest_finite_checkpoint_path": checkpoint_path,
+        "rejected_update_checkpointed": False,
+        "training_artifact_accepted": False,
+        "canary_outcome_valid": True,
+        "supervised_tokens": trainer.target_tokens_seen,
+        "plan_sha256": plan["plan_sha256"],
+        "scientific_rejection_policy": policy,
+        "wandb_tracking": state,
+        **selection_evidence(plan),
+    }
+
+
+def terminal_receipt_name(result: dict) -> str:
+    status = result.get("status")
+    terminal = {
+        "reload_validated": "RELOAD_VALIDATED.json",
+        "training_paused": "TRAINING_PAUSED.json",
+        "training_complete": "TRAINING_COMPLETE.json",
+        "training_paused_tracking_incomplete": "TRAINING_TRACKING_INCOMPLETE.json",
+        "training_complete_tracking_incomplete": "TRAINING_TRACKING_INCOMPLETE.json",
+        "training_rejected": "TRAINING_REJECTED.json",
+    }.get(status)
+    if terminal is None:
+        raise ValueError("unknown SFT terminal status")
+    return terminal
+
+
 def _run_training(plan: dict) -> dict:
     _configure_wandb(plan)
     cfg, skyrl_cfg = build_runtime_configs(plan)
@@ -1493,6 +1632,17 @@ def _run_training(plan: dict) -> dict:
             trainer.train()
         except PlannedPause:
             paused = True
+        except ScientificNumericRejection as rejection:
+            trainer._update_wandb_summary(
+                {
+                    "status": "training_rejected",
+                    "scientific_rejection_reason": rejection.reason_code,
+                    "attempted_optimizer_step": rejection.attempted_optimizer_step,
+                }
+            )
+            trainer.shutdown()
+            trainer.tracker.finish()
+            return scientific_rejection_result(trainer, rejection)
         result = training_result(trainer, paused=paused)
         trainer._update_wandb_summary(
             {
@@ -1593,20 +1743,7 @@ def main():
         initialize_ray(cfg)
         task = ray.remote(num_cpus=1)(_run_training).remote(plan)
         result = _wait_for_training(ray, task, output)
-        terminal = (
-            "RELOAD_VALIDATED.json"
-            if result["status"] == "reload_validated"
-            else "TRAINING_PAUSED.json"
-            if result["status"] == "training_paused"
-            else "TRAINING_COMPLETE.json"
-            if result["status"] == "training_complete"
-            else "TRAINING_TRACKING_INCOMPLETE.json"
-            if result["status"]
-            in {"training_paused_tracking_incomplete", "training_complete_tracking_incomplete"}
-            else None
-        )
-        if terminal is None:
-            raise ValueError("unknown SFT terminal status")
+        terminal = terminal_receipt_name(result)
         write_receipt(output / terminal, result)
         print(json.dumps({"status": result["status"], "optimizer_step": result["optimizer_step"]}))
     except BaseException as exc:

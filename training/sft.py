@@ -91,6 +91,7 @@ def compile_sft(config: dict, *, relative_to: Path) -> dict:
             "lora",
             "recovery",
             "pause_after_step",
+            "scientific_rejection",
             "validation_mode",
             "fleet_dev_protocol_sha256",
         },
@@ -207,6 +208,8 @@ def compile_sft(config: dict, *, relative_to: Path) -> dict:
         bind(plan, config["recovery"], relative_to=relative_to)
     if "pause_after_step" in config:
         plan["pause_after_step"] = config["pause_after_step"]
+    if "scientific_rejection" in config:
+        plan["scientific_rejection"] = config["scientific_rejection"]
     validate_plan(plan, check_files=False)
     validate_request(job_request(plan))
     return plan

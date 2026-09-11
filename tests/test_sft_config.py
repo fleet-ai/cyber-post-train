@@ -181,6 +181,35 @@ def test_compiler_binds_planned_pause_without_shortening_recipe(config, tmp_path
     assert request["requeueIfPreempted"] is False
 
 
+def test_compiler_binds_narrow_numeric_rejection_policy(config, tmp_path):
+    source, manifest, save = config
+    manifest.update(
+        validation_mode="task_outcomes_only",
+        fleet_dev_protocol_sha256="sha256:" + "d" * 64,
+    )
+    manifest["files"].pop("dev")
+    save(manifest)
+    source.update(
+        pause_after_step=2,
+        scientific_rejection={
+            "schema": "cyber_sft_numeric_rejection_policy_v1",
+            "reason_codes": ["nonfinite_loss", "nonfinite_gradient_norm"],
+            "latest_attempted_optimizer_step": 2,
+        },
+    )
+    source["recipe"] = {"checkpoint_interval": 1}
+    plan = sft.compile_sft(source, relative_to=tmp_path)
+    assert plan["scientific_rejection"] == source["scientific_rejection"]
+    assert plan["pause_after_step"] == 2
+    assert plan["recipe"]["max_steps"] == 3
+    content = json.loads(
+        gzip.decompress(base64.b64decode(sft.job_request(plan)["env"]["CYBER_SFT_BUNDLE"]))
+    )
+    assert json.loads(content["plan"])["scientific_rejection"] == source[
+        "scientific_rejection"
+    ]
+
+
 @pytest.fixture
 def glm_config(config):
     source, manifest, save = config
