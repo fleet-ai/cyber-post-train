@@ -22,7 +22,7 @@ Start with [README](../README.md), [training](TRAINING.md) or
 | GLM loader repair | All 141 headers audited; partial blocks match independent arithmetic. Sixteen threads improve the measured 64-expert load/merge by 3.3× over four; a complete 256-expert gate/up group also passes. Fifty native GLM cases cover 320/334 statements and 101/118 branches; [block proof](evidence/cleanup-glm-partial-blocks-20260911.json), [throughput/guard proof](evidence/cleanup-glm-loader-throughput-20260911.json) | Full-model loading/merging/distribution; no GPU resubmission |
 | Miles RL | Real native base conversion and CPU seal completed, GPUs released; exact-image parser, TITO, MCP, batching and preparation tests pass; [conversion](evidence/cleanup-miles-conversion-result-20260911.json), [native tests](evidence/cleanup-runtime-regression-20260911.json) | Authoritative live reward, real RL update and recoverable RL checkpoint |
 | SkyRL RL | Exact-image native parser, data, trajectory/batch, MCP and training-dispatch tests; real-user CPU preparation passes; [integration](evidence/cleanup-skyrl-training-native-20260911.json), [preparation](evidence/cleanup-skyrl-preparation-v5-20260911.json) | Real GPU reward/update and checkpoint recovery |
-| Fleet evaluation | Real Qwen execution, grading, catalog ingestion, private local result and complete cleanup; [V5](evidence/cleanup-eval-terminal-20260911.json), [V6](evidence/cleanup-eval-v6-20260911.json) | Both ended at output limits and remain held. Lifecycle success is **not** an accepted model outcome |
+| Fleet evaluation | Real Qwen execution, grading, catalog ingestion, private local result and complete cleanup; [V5](evidence/cleanup-eval-terminal-20260911.json), [V6](evidence/cleanup-eval-v6-20260911.json), [V7](evidence/cleanup-eval-v7-terminal-20260911.json) | V5/V6 ended at output limits; V7 at context overflow. All remain held. Lifecycle success is **not** an accepted model outcome |
 | Checkpoint completion guards | 630 exact-image CPU tests including partial writes, later-epoch cursor checks and final validation/save receipt binding; [proof](evidence/cleanup-sft-checkpoint-guard-20260911.json) | Does not create new GPU or capability evidence |
 
 These small runs qualify mechanisms, not a sufficient experiment or production
@@ -37,11 +37,12 @@ readiness. All detailed IDs, digests, test counts and earlier failures remain in
   the POST or infer a stuck job from an observation timeout.
 - **SkyRL V5:** CPU-prepared only; no GPU submission. It shares the episode
   lifecycle still being qualified with Miles.
-- **Evaluation V7:** one separate unused train task, unchanged V6 treatment,
-  pass@1, concurrency one, no retry, no training reuse. It uses the installed CLI
-  and a new local ledger; historical campaign and held attempts are untouched.
-  Its dated [launch evidence](evidence/cleanup-eval-v7-20260911.json) is separate
-  from terminal acceptance.
+- **Evaluation V7:** terminal context-overflow error after 209 completed model
+  steps. Exact grading/catalog identity, one private local result and full cleanup
+  are verified; accepted zero, review one, active zero. No retry or training reuse.
+  The new v2 compaction treatment reserves a full response's growth before the
+  native post-response check; exact-binary synthetic tests prove compaction and
+  continuation. It does not modify V7 or the historical campaign.
 - **Full GLM:** the two-node loading attempt was released without an optimizer
   step. Keep GPUs released while the CPU loading repair is qualified.
   [Release evidence](evidence/cleanup-glm-startup-release-20260911.json).
@@ -87,7 +88,7 @@ Never fake success or suppress real alerts. Full controls:
 
 The [ledger regression evidence](evidence/cleanup-ledger-contract-20260911.json)
 records 46 real-PostgreSQL cases, complete focused module coverage and exact
-cross-backend result-digest parity. The latest full suite passes 1,770 tests plus seven
+cross-backend result-digest parity. The latest full suite passes 1,776 tests plus seven
 subtests, with 156 explicit skips. Whole-repository coverage is **not complete**.
 Optional native dependencies need
 the pinned trainer images; local skips are never counted as passing training

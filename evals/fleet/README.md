@@ -91,7 +91,7 @@ harness:
   harness_version: 1.18.27
   release_asset_sha256: sha256:4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702
   provider_adapter: "@ai-sdk/openai-compatible"
-  context_management: opencode_1.18.27_native_compaction_autocontinue_v1
+  context_management: opencode_1.18.27_native_compaction_autocontinue_v2
   context_window_size: 262144
   compaction_headroom_tokens: 20000
   max_output_tokens: 32768
@@ -111,6 +111,16 @@ credentials remain outside its network boundary. The model proxy enforces
 sampling/model/output limits. Attempt N uses base seed + N − 1 (modulo 2³¹), so
 pass@k does not deliberately repeat the same seed. A seed does not guarantee deterministic
 GPU execution.
+
+The v2 compaction policy reserves one full response of growth **plus** the declared
+headroom before the native post-response overflow check. Its trigger is
+`context − 2 × max_output_tokens − compaction_headroom_tokens`; room must remain
+for input. This prevents a long response from consuming the space reserved for
+the next compaction request. The headroom still must cover tool-result and summary
+overhead; this is not a guarantee against arbitrary request growth. Native-binary
+tests prove both compaction and automatic continuation with synthetic responses.
+Existing v1 plans retain their earlier trigger and cannot be silently migrated.
+See the [observed context-overflow incident](../../docs/evidence/cleanup-eval-v7-terminal-20260911.json).
 
 ## Results and interpretation
 

@@ -1,0 +1,173 @@
+{
+  "schema": "cyber_cleanup_eval_terminal_audit_v1",
+  "observed_at": "2026-09-11T15:09:43.931249+00:00",
+  "classification": "infrastructure_invalid_context_overflow_held_not_retried",
+  "name": "chris-cpt-eval-qual-v7",
+  "attempt_id": "f6e189575886ee0a1841eac1f09f2581d93d1a5ba998245bd6bc40cdcb5c5034",
+  "run_id": "chris-cpt-eval-qual-v7-f6e189575886-g1",
+  "plan_sha256": "8bcaf03bb9cbed1833f708733b676b3eae0f1c5aa026f657c2f7d8111484eef4",
+  "terminal_receipt_sha256": "sha256:a84f622697e324e79d3e6cc89ed2a7758feb3a297629f0e21fd7b076f0df6f3c",
+  "result": {
+    "agent_exit_code": 1,
+    "agent_termination": "process_error",
+    "elapsed_seconds": 3864.293,
+    "session_ingest_status": "completed",
+    "session_id": "4d3f524a-2c42-42e4-84d7-50adeaca5d32",
+    "verifier_execution_id": "8acaaa06-5db8-4e06-8680-7f71a3e1eab7",
+    "instance_id": "z5dg2cboyiht-n"
+  },
+  "file_sha256": {
+    "result.json": "1574d37a5b7e7aaca50071b1085057b332b8eefa8a56d5799493090f5b7653c7",
+    "agent-process.json": "781a549bb83c3a673e2fe74bcb87bef304fa535642ecb083f81593cb9424f936",
+    "cleanup.json": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+    "session-ingest.json": "80141a398f717ac87949d32326389eaf9ffa18a44904a8ad8af720e6a712f836",
+    "agent-output/opencode-stream.jsonl": "fe47b893701006716efb525b8b6edfc237d8edfb7bda7cab6f5fd3f311273627"
+  },
+  "cleanup": {
+    "containers_removed": true,
+    "instance_closed": true,
+    "instance_created": true
+  },
+  "state": {
+    "total": 1,
+    "local_results": 1,
+    "by_state": {
+      "pending": 0,
+      "claimed": 0,
+      "running": 0,
+      "grading": 0,
+      "accepted": 0,
+      "retry_review": 1,
+      "terminal": 0
+    },
+    "by_serving_block": [
+      {
+        "serving_block": "qwen-shared",
+        "state": "retry_review",
+        "count": 1
+      }
+    ],
+    "stale_active": 0,
+    "plan_sha256": "72ff359a88abfc8320c6c15640e7a8ea34fe6a6c63ef4e489cc24e700edbd9bd"
+  },
+  "automatic_retry": false,
+  "training_data_eligible": false,
+  "event_counts": {
+    "step_start": 209,
+    "reasoning": 209,
+    "text": 209,
+    "tool_use": 228,
+    "step_finish": 209,
+    "error": 1
+  },
+  "finish_reason_counts": {
+    "tool-calls": 207,
+    "stop": 1,
+    "length": 1
+  },
+  "last_steps": [
+    {
+      "reason": "tool-calls",
+      "tokens": {
+        "total": 115277,
+        "input": 108608,
+        "output": 6669,
+        "reasoning": 0
+      }
+    },
+    {
+      "reason": "tool-calls",
+      "tokens": {
+        "total": 116496,
+        "input": 115580,
+        "output": 916,
+        "reasoning": 0
+      }
+    },
+    {
+      "reason": "tool-calls",
+      "tokens": {
+        "total": 129658,
+        "input": 116617,
+        "output": 13041,
+        "reasoning": 0
+      }
+    },
+    {
+      "reason": "tool-calls",
+      "tokens": {
+        "total": 174939,
+        "input": 129934,
+        "output": 45005,
+        "reasoning": 0
+      }
+    },
+    {
+      "reason": "length",
+      "tokens": {
+        "total": 240585,
+        "input": 175049,
+        "output": 65536,
+        "reasoning": 0
+      }
+    }
+  ],
+  "errors": [
+    {
+      "type": "ContextOverflowError",
+      "sha256": "f439a58448c364373b94819afce9073d9035e87582bb5c88971ef52624d9bdfa",
+      "context_tokens": 262144,
+      "requested_tokens": 293127,
+      "completion_budget": 65536
+    }
+  ],
+  "catalog": {
+    "session_id": "4d3f524a-2c42-42e4-84d7-50adeaca5d32",
+    "status": "completed",
+    "model": "qwen3.8-27b",
+    "verifier_execution_id": "8acaaa06-5db8-4e06-8680-7f71a3e1eab7",
+    "model_matches": true
+  },
+  "instance": {
+    "instance_id": "z5dg2cboyiht-n",
+    "status": "stopped",
+    "terminated_at": "2026-09-11T15:02:56.095635"
+  },
+  "local_containers_absent": true,
+  "failed_request_metadata": {
+    "agent": "compaction",
+    "summary": true,
+    "finish": "error",
+    "error_type": "ContextOverflowError",
+    "source": "read-only native message metadata; content not exposed"
+  },
+  "prospective_repair": {
+    "policy": "opencode_1.18.27_native_compaction_autocontinue_v2",
+    "legacy_unchanged": true,
+    "v7_mutated_or_retried": false,
+    "legacy_trigger_tokens": 176608,
+    "new_trigger_tokens": 111072,
+    "formula": "context - 2 * maximum_output - headroom",
+    "native_docker_image": "sha256:45424cc2e304e114b26aca916486df6e80fdc57c4f5adddf2bb144d4773d510f",
+    "native_tests": "synthetic usage between v2/v1 thresholds: v1 finishes directly; v2 compacts once then makes another normal model request and ends naturally",
+    "focused_tests_passed": 6,
+    "full_suite": {
+      "passed": 1776,
+      "skipped": 156,
+      "subtests_passed": 7
+    },
+    "coverage_sha256": "ac846dd648783f6e31cb2d36970e67bdf30db986040e0429e3fa7b4c7c55eb89",
+    "wheel_sha256": "6fe0e976d2c56d2ab43b30f8f9fb02346a219eb53252b6ea7d3b12c59220755a",
+    "outside_checkout_help_checks": 11,
+    "source_sha256": {
+      "evals/fleet/opencode_self_hosted.py": "b28e267d02024ac979f4a0f39ee778e68331da490f5084c3e5a34136eff04707",
+      "tests/test_opencode_compaction.py": "9b60608250e5f2042c278e7ce3c6ab9ef56f24ca3de8b55125e5638ea6d8f1ea"
+    },
+    "upstream": [
+      "https://github.com/anomalyco/opencode/blob/v1.18.27/packages/opencode/src/session/overflow.ts",
+      "https://github.com/anomalyco/opencode/blob/v1.18.27/packages/opencode/src/session/compaction.ts"
+    ],
+    "limitations": "The next response is reserved, not arbitrary tool/serialization growth. No new accepted model outcome yet; no prior protocol or held result is changed."
+  },
+  "sha256": "06a3e04302d2bfac44ae02487c4897327979af8cc3767c492abeadc54bcde6bc"
+}

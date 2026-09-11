@@ -33,6 +33,7 @@ MAX_READ_ATTEMPTS = 6
 SESSION_INGEST_CHUNK_MESSAGES = 32
 SESSION_INGEST_CHUNK_BYTES = 512 * 1024
 OPENCODE_CONTEXT_MANAGEMENT = "opencode_1.18.27_native_compaction_autocontinue_v1"
+OPENCODE_GROWTH_AWARE_CONTEXT_MANAGEMENT = "opencode_1.18.27_native_compaction_autocontinue_v2"
 OPENCODE_NO_AUTOCONTINUE_CONTEXT_MANAGEMENT = "opencode_1.18.27_native_compaction_no_autocontinue"
 OPENCODE_NO_AUTOCONTINUE_PLUGIN = (
     "export const DisableCompactionAutocontinue = async () => ({\n"
@@ -1433,6 +1434,7 @@ def opencode_settings(config: dict[str, Any]) -> dict[str, Any]:
     policy = harness.get("context_management")
     if policy not in {
         OPENCODE_CONTEXT_MANAGEMENT,
+        OPENCODE_GROWTH_AWARE_CONTEXT_MANAGEMENT,
         OPENCODE_NO_AUTOCONTINUE_CONTEXT_MANAGEMENT,
     }:
         raise ValueError("OpenCode requires an explicitly supported context policy")
@@ -1443,10 +1445,14 @@ def opencode_settings(config: dict[str, Any]) -> dict[str, Any]:
     if output >= context:
         raise ValueError("OpenCode output limit must leave room for input")
     headroom = harness.get("compaction_headroom_tokens")
-    if policy == OPENCODE_CONTEXT_MANAGEMENT:
+    if policy != OPENCODE_NO_AUTOCONTINUE_CONTEXT_MANAGEMENT:
         if type(headroom) is not int or headroom <= 0:
             raise ValueError("OpenCode autocontinue headroom must be a positive integer")
-        if output + headroom >= context:
+        # Native overflow is checked AFTER a completed response. Reserve one
+        # further response's growth so the subsequent compaction request can
+        # still fit its own output budget. Preserve v1's frozen treatment.
+        reserve = headroom + (output if policy == OPENCODE_GROWTH_AWARE_CONTEXT_MANAGEMENT else 0)
+        if output + reserve >= context:
             raise ValueError("OpenCode output and compaction headroom must leave room for input")
     elif headroom is not None:
         raise ValueError("OpenCode no-autocontinue treatment forbids compaction headroom")
@@ -1500,8 +1506,8 @@ def opencode_settings(config: dict[str, Any]) -> dict[str, Any]:
             )
         },
     }
-    if policy == OPENCODE_CONTEXT_MANAGEMENT:
-        settings["compaction"] = {"auto": True, "reserved": headroom}
+    if policy != OPENCODE_NO_AUTOCONTINUE_CONTEXT_MANAGEMENT:
+        settings["compaction"] = {"auto": True, "reserved": reserve}
         # v1.18.27 honors compaction.reserved only with limit.input.
         settings["provider"]["fleet-cluster"]["models"][model_id]["limit"]["input"] = (
             context - output
