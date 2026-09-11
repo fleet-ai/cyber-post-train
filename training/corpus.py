@@ -38,9 +38,16 @@ def _eligible(row: Mapping) -> bool:
     )
 
 
-def select_sources(records: list[dict], split: dict, models: list[str]) -> tuple[list, list, dict]:
-    """Honor the frozen reference session and group every family across versions."""
-    if split.get("schema") != "cyber_task_split_v1" or split.get("sha256") != "sha256:" + digest(
+def select_sources(
+    records: list[dict],
+    split: dict,
+    models: list[str],
+    *,
+    reference_validation: bool = True,
+) -> tuple[list, list, dict]:
+    """Select verified train successes without crossing frozen family splits."""
+    expected_schema = "cyber_task_split_v1" if reference_validation else "cyber_task_split_v2"
+    if split.get("schema") != expected_schema or split.get("sha256") != "sha256:" + digest(
         {k: v for k, v in split.items() if k != "sha256"}
     ):
         raise ValueError("invalid frozen task split")
@@ -49,9 +56,20 @@ def select_sources(records: list[dict], split: dict, models: list[str]) -> tuple
         raise ValueError("empty or duplicate split bindings")
     if any(t["split"] not in {"train", "dev", "test", "reserved_dev"} for t in tasks.values()):
         raise ValueError("unknown split assignment")
-    refs = {t["reference_session_id"]: key for key, t in tasks.items() if t["split"] == "dev"}
-    if not refs or len(refs) != sum(t["split"] == "dev" for t in tasks.values()) or not all(refs):
-        raise ValueError("dev tasks require unique frozen reference sessions")
+    if reference_validation:
+        refs = {
+            t.get("reference_session_id"): key for key, t in tasks.items() if t["split"] == "dev"
+        }
+        if (
+            not refs
+            or len(refs) != sum(t["split"] == "dev" for t in tasks.values())
+            or not all(refs)
+        ):
+            raise ValueError("dev tasks require unique frozen reference sessions")
+    else:
+        if any("reference_session_id" in task for task in tasks.values()):
+            raise ValueError("outcome-evaluation split must not bind teacher reference sessions")
+        refs = {}
     if (
         not isinstance(models, list)
         or not models
@@ -88,8 +106,10 @@ def select_sources(records: list[dict], split: dict, models: list[str]) -> tuple
             skipped["not_verified_success"] += 1
         else:
             train.append(record)
-    if set(dev) != set(refs) or not train:
-        raise ValueError("missing held-out reference or empty eligible training set")
+    if set(dev) != set(refs):
+        raise ValueError("missing held-out reference")
+    if not train:
+        raise ValueError("empty eligible training set")
     return sorted(train, key=lambda r: r["record_id"]), [dev[k] for k in sorted(dev)], dict(skipped)
 
 
@@ -139,6 +159,7 @@ def build(config: dict, *, relative_to: Path) -> dict:
             "max_length",
             "context_tokens",
             "dev_windows",
+            "validation_mode",
             "output",
         },
         "data",
@@ -152,8 +173,15 @@ def build(config: dict, *, relative_to: Path) -> dict:
     if source_sha != "sha256:" + config["source"]["sha256"].removeprefix("sha256:"):
         raise ValueError("source digest mismatch")
     split = read_mapping(relative_to / config["split"])
+    validation_mode = config.get("validation_mode", "teacher_cross_entropy")
+    if validation_mode not in {"teacher_cross_entropy", "task_outcomes_only"}:
+        raise ValueError("unknown validation mode")
+    reference_validation = validation_mode == "teacher_cross_entropy"
     train, dev, split_exclusions = select_sources(
-        list(iter_jsonl(source)), split, config["train_models"]
+        list(iter_jsonl(source)),
+        split,
+        config["train_models"],
+        reference_validation=reference_validation,
     )
     tokenizer, identity = local_tokenizer(
         read_mapping(relative_to / config["model_lock"]), relative_to / config["tokenizer_root"]
@@ -162,13 +190,14 @@ def build(config: dict, *, relative_to: Path) -> dict:
     maximum, context, targets = (
         config.get("max_length", 16384),
         config.get("context_tokens", 4096),
-        config.get("dev_windows", 5),
+        config.get("dev_windows", 5 if reference_validation else 0),
     )
     if (
         any(type(v) is not int for v in (maximum, context, targets))
         or maximum < 2
         or context < 0
-        or targets < 1
+        or targets < (1 if reference_validation else 0)
+        or (not reference_validation and targets != 0)
     ):
         raise ValueError("invalid data window bounds")
     rows, included, exclusions = [], [], collections.Counter()
@@ -183,9 +212,15 @@ def build(config: dict, *, relative_to: Path) -> dict:
         rows.extend(packed)
         included.append(packed[0])
     # A bad dev reference is a blocker, not permission to substitute another task.
-    dev_rows = [
-        w for r in dev for w in clean_dev_windows(r, tokenizer, max_tokens=maximum, targets=targets)
-    ]
+    dev_rows = (
+        [
+            w
+            for r in dev
+            for w in clean_dev_windows(r, tokenizer, max_tokens=maximum, targets=targets)
+        ]
+        if reference_validation
+        else []
+    )
     if not rows:
         raise ValueError("no compatible training sources")
     counts = {
@@ -205,18 +240,20 @@ def build(config: dict, *, relative_to: Path) -> dict:
         raise ValueError("source changed during preparation")
     output.mkdir(parents=True, mode=0o700)
     files = {}
-    for name, values, metadata in (
-        ("train", rows, counts),
-        (
-            "dev",
-            dev_rows,
-            {
-                "rows": len(dev_rows),
-                "task_keys": sorted({r["task_key"] for r in dev_rows}),
-                "format": "chat_messages_last_assistant_v2",
-            },
-        ),
-    ):
+    outputs = [("train", rows, counts)]
+    if reference_validation:
+        outputs.append(
+            (
+                "dev",
+                dev_rows,
+                {
+                    "rows": len(dev_rows),
+                    "task_keys": sorted({r["task_key"] for r in dev_rows}),
+                    "format": "chat_messages_last_assistant_v2",
+                },
+            )
+        )
+    for name, values, metadata in outputs:
         path = output / f"{name}.parquet"
         pq.write_table(pa.Table.from_pylist(values), path, compression="zstd")
         os.chmod(path, 0o600)
@@ -233,6 +270,7 @@ def build(config: dict, *, relative_to: Path) -> dict:
         "max_length": maximum,
         "context_tokens": context,
         "dev_windows": targets,
+        "validation_mode": validation_mode,
         "split_exclusions": split_exclusions,
         "whole_source_exclusions": dict(exclusions),
         "builder_sha256": {

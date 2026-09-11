@@ -102,6 +102,33 @@ def test_select_sources_is_order_independent_and_never_uses_test(source_split):
     assert len(train) == 1 and excluded["not_verified_success"] == 1
 
 
+def test_outcome_only_selection_never_reads_dev_reference(source_split):
+    rows, split = source_split
+    split["schema"] = "cyber_task_split_v2"
+    for task in split["tasks"]:
+        task.pop("reference_session_id")
+    seal(split)
+    train, dev, excluded = corpus.select_sources(
+        rows,
+        split,
+        ["synthetic-teacher"],
+        reference_validation=False,
+    )
+    assert [row["record_id"] for row in train] == ["train-a", "train-b"]
+    assert dev == []
+    assert excluded == {"heldout_or_reserved": 2}
+
+    split["tasks"][2]["reference_session_id"] = "dev-a"
+    seal(split)
+    with pytest.raises(ValueError, match="must not bind"):
+        corpus.select_sources(
+            rows,
+            split,
+            ["synthetic-teacher"],
+            reference_validation=False,
+        )
+
+
 @pytest.mark.parametrize(
     "score", [True, False, None, "1", float("nan"), float("inf"), float("-inf"), 0.99]
 )
@@ -214,6 +241,23 @@ def test_actual_dense_parquet_and_manifest_are_private_create_once(data_config, 
         assert len(pq.read_table(path)) == manifest["files"][split]["rows"]
     with pytest.raises(FileExistsError):
         corpus.build(data_config, relative_to=tmp_path)
+
+
+def test_outcome_only_corpus_contains_no_teacher_reference_dev_data(data_config, tmp_path):
+    split_path = tmp_path / data_config["split"]
+    split = json.loads(split_path.read_text())
+    split["schema"] = "cyber_task_split_v2"
+    for task in split["tasks"]:
+        task.pop("reference_session_id")
+    split_path.write_text(json.dumps(seal(split)))
+    data_config.update(validation_mode="task_outcomes_only", dev_windows=0)
+
+    result = corpus.build(data_config, relative_to=tmp_path)
+    manifest = json.loads((tmp_path / "data/manifest.json").read_text())
+    assert manifest["validation_mode"] == "task_outcomes_only"
+    assert set(manifest["files"]) == {"train"}
+    assert not (tmp_path / "data/dev.parquet").exists()
+    assert result["dev"] == {"rows": 0, "tasks": 0}
 
 
 @pytest.mark.parametrize("defect", ["source", "unknown", "bounds", "incompatible_dev"])
