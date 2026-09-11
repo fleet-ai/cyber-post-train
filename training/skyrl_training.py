@@ -58,6 +58,8 @@ RUNTIME_FILES = (
     "training/sft.py",
     "training/models.py",
     "training/corpus.py",
+    "training/source_coverage.py",
+    "training/study_data.py",
     "training/splits.py",
     "training/qwen_tools.py",
     "training/miles_conversion.py",
