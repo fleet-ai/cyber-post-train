@@ -14,10 +14,10 @@ starting-data version, runtime-seed digest, verifier/version/source digest, task
 contract and hashes of the prompt/schema/environment-variable projections. They
 contain no prompt text, trace, flag, answer, historical outcome, or score.
 
-| Split | Task set | Parent protocol |
-|---|---|---|
-| A | [`qwen38-blackbox-fleet-dev-a-task-set-v1.json`](../configs/evaluation/qwen38-blackbox-fleet-dev-a-task-set-v1.json) | [`qwen38-blackbox-fleet-dev-a-outcome-protocol-v1.json`](../configs/evaluation/qwen38-blackbox-fleet-dev-a-outcome-protocol-v1.json) |
-| B | [`qwen38-blackbox-fleet-dev-b-task-set-v1.json`](../configs/evaluation/qwen38-blackbox-fleet-dev-b-task-set-v1.json) | [`qwen38-blackbox-fleet-dev-b-outcome-protocol-v1.json`](../configs/evaluation/qwen38-blackbox-fleet-dev-b-outcome-protocol-v1.json) |
+| Split | Task set | Parent protocol | Matched base control |
+|---|---|---|---|
+| A | [`qwen38-blackbox-fleet-dev-a-task-set-v1.json`](../configs/evaluation/qwen38-blackbox-fleet-dev-a-task-set-v1.json) | [`qwen38-blackbox-fleet-dev-a-outcome-protocol-v1.json`](../configs/evaluation/qwen38-blackbox-fleet-dev-a-outcome-protocol-v1.json) | [`qwen38-blackbox-fleet-dev-a-base-control-v1.json`](../configs/evaluation/qwen38-blackbox-fleet-dev-a-base-control-v1.json) |
+| B | [`qwen38-blackbox-fleet-dev-b-task-set-v1.json`](../configs/evaluation/qwen38-blackbox-fleet-dev-b-task-set-v1.json) | [`qwen38-blackbox-fleet-dev-b-outcome-protocol-v1.json`](../configs/evaluation/qwen38-blackbox-fleet-dev-b-outcome-protocol-v1.json) | [`qwen38-blackbox-fleet-dev-b-base-control-v1.json`](../configs/evaluation/qwen38-blackbox-fleet-dev-b-base-control-v1.json) |
 
 The task-set format compiles through `evals/fleet/evaluate.py`. Live preflight
 and execution must still refetch the exact version and reject any runtime or
@@ -42,6 +42,31 @@ Infrastructure-invalid, interrupted, output-limited and unknown attempts never
 become model failures. Valid outcomes are never retried. The parent protocol
 does not authorize replacement attempts; a symmetric reviewed amendment would
 be required before any replacement execution.
+
+## Matched base controls
+
+Each base-control file binds the exact 20 task-version UUIDs and immutable
+`Qwen/Qwen3.8-27B` revision
+`1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0` to its parent protocol. The
+parent's OpenCode treatment, ordered tools, decoding, seeds, pass@4 and
+concurrency are referenced by digest, so the post-SFT arm cannot change them.
+The base outcome set may be reused across several post-SFT arms only when every
+arm references the same parent and fresh live-pair evidence proves the same
+serving engine, precision, quantization, parallelism, context, parsers, runtime
+image and arguments, tokenizer/template, and agent/proxy images. Served IDs and
+filesystem paths may differ as labels; the only scientific difference is the
+weight manifest. Hosted and dedicated serving blocks are never pooled.
+
+Both controls intentionally remain non-launchable. The repository has historical
+Qwen serving observations, but no current immutable registration plus fresh
+base/post live-parity receipt for this study. An existing endpoint may be bound
+only after those exact current proofs exist; a catalog entry, model revision
+label, Ready replica, or historical acceptance note is insufficient.
+
+Fleet grader outcomes are stored in the private evaluation ledger and accepted
+receipts. Evaluation metrics and scores must never be sent to W&B, and
+teacher-reference cross-entropy is forbidden. W&B remains limited to the
+training-loss diagnostics defined by the training study.
 
 ## Checkpoint binding
 

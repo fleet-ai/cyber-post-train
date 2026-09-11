@@ -49,6 +49,46 @@ def test_frozen_protocol_and_task_set_are_exact_and_nonlaunchable(variant):
     )
 
 
+@pytest.mark.parametrize("variant", ["a", "b"])
+def test_base_control_is_exact_outcome_only_and_nonlaunchable(variant):
+    task_set = load(CONFIG / f"qwen38-blackbox-fleet-dev-{variant}-task-set-v1.json")
+    parent = load(CONFIG / f"qwen38-blackbox-fleet-dev-{variant}-outcome-protocol-v1.json")
+    control = load(CONFIG / f"qwen38-blackbox-fleet-dev-{variant}-base-control-v1.json")
+
+    protocol.validate_base_control(control, parent, task_set)
+    assert control["task_set"]["task_version_ids"] == sorted(
+        row["task_version_id"] for row in task_set["tasks"]
+    )
+    assert control["model"]["revision"] == protocol.MODEL_REVISION
+    assert control["frozen_treatment"]["harness_sha256"] == digest_json(parent["harness"])
+    assert control["frozen_treatment"]["sampling_sha256"] == digest_json(parent["sampling"])
+    assert control["frozen_treatment"]["attempt_seeds"] == [42, 43, 44, 45]
+    assert control["pairing_contract"]["scientific_difference_allowed"] == [
+        "weights_manifest_sha256"
+    ]
+    assert control["serving_binding"]["launchable"] is False
+    assert set(control["serving_binding"]["fields"]) == set(
+        protocol.UNBOUND_BASE_SERVING_FIELDS
+    )
+    assert all(value is None for value in control["serving_binding"]["fields"].values())
+    assert control["result_policy"]["outcome_only"] is True
+    assert control["result_policy"]["wandb_evaluation_metrics_or_scores"] == "forbidden"
+    assert control["result_policy"]["teacher_reference_cross_entropy"] == "forbidden"
+
+
+def test_base_control_rejects_route_parity_drift_even_when_resealed():
+    task_set = load(CONFIG / "qwen38-blackbox-fleet-dev-a-task-set-v1.json")
+    parent = load(CONFIG / "qwen38-blackbox-fleet-dev-a-outcome-protocol-v1.json")
+    control = load(CONFIG / "qwen38-blackbox-fleet-dev-a-base-control-v1.json")
+    tampered = copy.deepcopy(control)
+    tampered["pairing_contract"]["same_runtime_fields"].remove("serving_image_digest")
+    tampered["sha256"] = digest_json(
+        {key: value for key, value in tampered.items() if key != "sha256"}
+    )
+    with pytest.raises(ValueError, match="differs from its frozen parent"):
+        protocol.validate_base_control(tampered, parent, task_set)
+
+
 def test_split_variants_match_frozen_dev_membership_and_preserve_final_test():
     task_sets = {
         variant: load(CONFIG / f"qwen38-blackbox-fleet-dev-{variant}-task-set-v1.json")

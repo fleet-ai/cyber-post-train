@@ -20,6 +20,7 @@ from training.io import atomic_write_json, canonical_json, digest_json
 
 TASK_SET_SCHEMA = "cyber_fleet_eval_task_set_v1"
 PROTOCOL_SCHEMA = "cyber_fleet_dev_outcome_protocol_v1"
+BASE_CONTROL_SCHEMA = "cyber_fleet_dev_base_control_v1"
 FINAL_PROTOCOL_SCHEMA = "cyber_fleet_final_outcome_protocol_v1"
 MODEL_REPOSITORY = "Qwen/Qwen3.8-27B"
 MODEL_REVISION = "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
@@ -64,6 +65,41 @@ UNBOUND_CHECKPOINT_FIELDS = (
     "live_parity_receipt_sha256",
     "served_model_id",
     "serving_route_profile_sha256",
+    "agent_image_digest",
+    "proxy_image_digest",
+)
+UNBOUND_BASE_SERVING_FIELDS = (
+    "base_snapshot_manifest_sha256",
+    "weights_manifest_sha256",
+    "tokenizer_manifest_sha256",
+    "chat_template_sha256",
+    "serving_image_digest",
+    "normalized_server_arguments_sha256",
+    "staging_receipt_sha256",
+    "serving_registration_receipt_sha256",
+    "live_pair_parity_receipt_sha256",
+    "served_model_id",
+    "serving_route_profile_sha256",
+    "serving_block_kind",
+    "agent_image_digest",
+    "proxy_image_digest",
+)
+MATCHED_SERVING_FIELDS = (
+    "endpoint_origin",
+    "serving_block_kind",
+    "engine",
+    "precision",
+    "quantization",
+    "tensor_parallel_size",
+    "data_parallel_size",
+    "context_length",
+    "kv_cache_dtype",
+    "reasoning_parser",
+    "tool_call_parser",
+    "serving_image_digest",
+    "normalized_server_arguments_sha256",
+    "tokenizer_manifest_sha256",
+    "chat_template_sha256",
     "agent_image_digest",
     "proxy_image_digest",
 )
@@ -373,6 +409,92 @@ def build_protocol(task_set: dict[str, Any], *, variant: str, task_set_path: str
     )
 
 
+def build_base_control(
+    protocol: dict[str, Any],
+    task_set: dict[str, Any],
+    *,
+    protocol_path: str,
+) -> dict[str, Any]:
+    """Freeze a reusable base arm without claiming an unproven serving route."""
+    validate_protocol(protocol, task_set)
+    if not isinstance(protocol_path, str) or not protocol_path.startswith("configs/"):
+        raise ValueError("parent protocol needs a repository-relative configs/ path")
+    variant = protocol["split_variant"]
+    versions = sorted(row["task_version_id"] for row in task_set["tasks"])
+    unbound = {field: None for field in UNBOUND_BASE_SERVING_FIELDS}
+    return _sealed(
+        {
+            "schema": BASE_CONTROL_SCHEMA,
+            "role": "matched_base_control",
+            "split_variant": variant,
+            "parent_protocol": {
+                "path": protocol_path,
+                "sha256": protocol["sha256"],
+                "file_sha256": _pretty_file_sha256(protocol),
+            },
+            "task_set": {
+                **protocol["task_set"],
+                "task_version_ids": versions,
+            },
+            "model": {
+                "repository": MODEL_REPOSITORY,
+                "revision": MODEL_REVISION,
+                "tokenizer_revision": MODEL_REVISION,
+                "checkpoint_kind": "immutable_upstream_base_revision",
+            },
+            "frozen_treatment": {
+                "harness_sha256": digest_json(protocol["harness"]),
+                "sampling_sha256": digest_json(protocol["sampling"]),
+                "pass_k": protocol["pass_k"],
+                "attempt_seeds": protocol["sampling"]["attempt_seeds"],
+                "concurrency_per_worker": protocol["concurrency_per_worker"],
+                "endpoint_origin": "https://inference.flt.build",
+            },
+            "pairing_contract": {
+                "pairing_unit": "exact task_version_id and attempt seed",
+                "post_sft_arm_must_reference_parent_sha256": protocol["sha256"],
+                "same_runtime_fields": list(MATCHED_SERVING_FIELDS),
+                "scientific_difference_allowed": ["weights_manifest_sha256"],
+                "nonsemantic_identity_label_differences_allowed": [
+                    "served_model_id",
+                    "model_path",
+                ],
+                "hosted_and_dedicated_routes_may_not_be_pooled": True,
+                "reuse_scope": (
+                    "One accepted base outcome set may be reused across post-SFT arms only when "
+                    "every arm references this parent and independently proves the same runtime "
+                    "fields through one fresh live-pair parity receipt."
+                ),
+            },
+            "serving_binding": {
+                "state": "unbound",
+                "launchable": False,
+                "fields": unbound,
+                "existing_endpoint_reuse": (
+                    "forbidden until exact current base bytes, immutable serving runtime, route "
+                    "readiness and fresh base/post live parity fill every field"
+                ),
+            },
+            "result_policy": {
+                "outcome_authority": "exact version-bound Fleet grader",
+                "outcome_only": True,
+                "wandb_evaluation_metrics_or_scores": "forbidden",
+                "teacher_reference_cross_entropy": "forbidden",
+                "training_loss": "not_applicable",
+                "training_data_eligible": False,
+                "private_results_required": True,
+                "valid_outcome_retry": "forbidden",
+            },
+            "launch_gate": {
+                "status": "not_launchable_until_exact_base_and_pair_serving_evidence_exists",
+                "prepare_must_reject_unbound_serving_fields": True,
+                "fresh_exact_task_binding_preflight_required": True,
+                "paid_or_scored_work_authorized_by_this_file": False,
+            },
+        }
+    )
+
+
 def build_final_protocol(task_set: dict[str, Any], *, task_set_path: str) -> dict[str, Any]:
     """Build the sealed final-test parent without binding either serving arm."""
     validate_final_task_set(task_set)
@@ -599,6 +721,18 @@ def validate_protocol(protocol: dict[str, Any], task_set: dict[str, Any]) -> Non
     heldout = protocol.get("heldout_policy", {})
     if heldout.get("teacher_reference_cross_entropy") != "forbidden":
         raise ValueError("teacher-reference CE must not select blackbox capability")
+
+
+def validate_base_control(
+    control: dict[str, Any], protocol: dict[str, Any], task_set: dict[str, Any]
+) -> None:
+    """Reject any base-control drift from its exact non-launchable parent."""
+    _check_seal(control, BASE_CONTROL_SCHEMA)
+    validate_protocol(protocol, task_set)
+    parent = control.get("parent_protocol", {})
+    expected = build_base_control(protocol, task_set, protocol_path=parent.get("path"))
+    if control != expected:
+        raise ValueError("base control differs from its frozen parent or task set")
 
 
 def validate_final_protocol(protocol: dict[str, Any], task_set: dict[str, Any]) -> None:
