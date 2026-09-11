@@ -257,3 +257,15 @@ verifier IDs, confirmed cleanup, sampled-token/log-probability alignment and
 masked tool observations. A group with identical valid rewards is a valid
 zero-signal group, not proof of useful learning. Require real reward acquisition,
 an optimizer update and a recoverable checkpoint before scaling either backend.
+
+`training.rl_episode.generate` is the new internal Miles hook, not yet a public
+RL launcher or a qualified training recipe. It reuses FTI's native recorder and
+parser, but opens exact V1 cyber tasks and enforces `bash`, `submit_report` at
+execution. Each native rollout/sample index owns one private directory; replay
+is rejected. Grading evidence, conversation, sampled tokens, masks and log
+probabilities are saved privately, and samples are returned only after confirmed
+environment release. An ambiguous response is held, never resampled or converted
+to zero reward. Context/turn exhaustion is excluded; a normally stopped, fully
+graded zero remains a valid zero. The native request must disable automatic
+replacement of invalid groups. CPU tests do not qualify the trainer/image,
+sampling engine, or live Fleet path; those gates remain open.

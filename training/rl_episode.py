@@ -1,0 +1,455 @@
+"""One exact V1 cyber episode for native token recorders; no optimizer or retries.
+
+Internal integration boundary, not a launch command. The caller must have frozen
+train-only task selection and native model/tokenizer/recorder identities. All
+outputs here are private. An uncertain create, score, or cleanup raises; it never
+becomes a zero-reward sample or an automatically replaced episode.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import copy
+import math
+import os
+import re
+import time
+from contextlib import asynccontextmanager
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+
+import httpx
+
+from evals.fleet import opencode_self_hosted as fleet
+
+
+class InvalidEpisode(RuntimeError):
+    """Safe reason code only: underlying SDK exceptions may contain task data."""
+
+
+async def _request(client: httpx.AsyncClient, method, path, **kwargs):
+    kwargs.setdefault("timeout", 120)
+    response = await client.request(method, fleet.ORCHESTRATOR + path, **kwargs)
+    if not 200 <= response.status_code < 300:
+        raise fleet.FleetRequestError(
+            method, path, response.status_code, diagnostic=fleet.request_diagnostic(response)
+        )
+    return response.json() if response.content else {}
+
+
+@asynccontextmanager
+async def _mcp(root, auth, timeout):
+    # Provided by the pinned native trainer image, not installed at GPU startup.
+    from mcp import ClientSession
+    from mcp.client.streamable_http import streamablehttp_client
+
+    async with (
+        streamablehttp_client(
+            root.rstrip("/") + "/mcp",
+            headers={auth["header"]: auth["token"]},
+            timeout=timedelta(seconds=timeout),
+            sse_read_timeout=timedelta(seconds=timeout),
+        ) as (reader, writer, _),
+        ClientSession(reader, writer) as session,
+    ):
+        await session.initialize()
+        yield session
+
+
+def _live_instance(config, instance, instance_id):
+    expected = {
+        "instance_id": instance_id,
+        "team_id": fleet.FLEET_TEAM_ID,
+        "status": "running",
+        "env_key": config["environment"]["id"],
+        "version": config["environment"]["version"],
+        "data_key": config["environment"]["data_id"],
+        "data_version": config["environment"]["data_version"],
+        "terminated_at": None,
+    }
+    if any(instance.get(k) != v for k, v in expected.items()):
+        raise InvalidEpisode("instance_binding_drift")
+
+
+async def _lifetime(client, config, instance, instance_id):
+    _live_instance(config, instance, instance_id)
+    created = fleet._instance_time(instance.get("created_at"))
+    now = datetime.now(UTC)
+    expires = fleet._instance_time(instance.get("expires_at"))
+    target = created + timedelta(seconds=config["environment"]["ttl_seconds"])
+    if created > now + timedelta(minutes=5) or expires <= now:
+        raise InvalidEpisode("instance_lifetime_invalid")
+    if target < now + timedelta(seconds=config["rl"]["episode_seconds"] + 240):
+        raise InvalidEpisode("instance_budget_insufficient")
+    changed = expires < target
+    if changed:
+        await _request(
+            client,
+            "POST",
+            f"/v1/env/instances/{instance_id}/extend_ttl",
+            json={"absolute_expires_at": target.isoformat()},
+        )
+    result = await _request(client, "GET", f"/v1/env/instances/{instance_id}")
+    _live_instance(config, result, instance_id)
+    actual = fleet._instance_time(result.get("expires_at"))
+    if (
+        fleet._instance_time(result.get("created_at")) != created
+        or actual < target
+        or (changed and actual != target)
+    ):
+        raise InvalidEpisode("instance_lifetime_readback_mismatch")
+    return result
+
+
+def _validate(config):
+    if config.get("config_sha256") != fleet.digest_without(config, "config_sha256"):
+        raise InvalidEpisode("config_digest_mismatch")
+    if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,100}", config["run_id"]):
+        raise InvalidEpisode("unsafe_episode_id")
+    authority = config["authority"]
+    prefix = "/v1/rollout-rewards/{task_key}/versions/{task_version_id}"
+    if (
+        authority["provisioning_route_template"] != prefix + "/instances"
+        or authority["scoring_route_template"] != prefix
+        or authority["scoring_payload_mode"] != fleet.RUNTIME_EVIDENCE_ONLY_V3
+        or config["execution"]["required_task_tools"] != ["bash", "submit_report"]
+    ):
+        raise InvalidEpisode("unsupported_cyber_contract")
+    tool_sha = config["execution"]["required_task_tool_catalog_sha256"]
+    if not re.fullmatch(r"sha256:[a-f0-9]{64}", tool_sha):
+        raise InvalidEpisode("unpinned_tool_catalog")
+    limits = config["rl"]
+    if set(limits) != {
+        "max_turns",
+        "episode_seconds",
+        "tool_seconds",
+        "tool_result_chars",
+        "max_tokens_per_turn",
+        "context_tokens",
+    }:
+        raise InvalidEpisode("incomplete_episode_limits")
+    if any(type(v) is not int or v <= 0 for v in limits.values()):
+        raise InvalidEpisode("invalid_episode_limits")
+    if limits["max_tokens_per_turn"] >= limits["context_tokens"]:
+        raise InvalidEpisode("generation_budget_exceeds_context")
+    ttl = config["environment"]["ttl_seconds"]
+    if type(ttl) is not int or not limits["episode_seconds"] + 240 < ttl <= 32400:
+        raise InvalidEpisode("invalid_instance_ttl")
+
+
+def validate_samples(samples):
+    """Reject token/mask/log-probability drift before native optimization sees it."""
+    if not samples:
+        raise InvalidEpisode("empty_recording")
+    for sample in samples:
+        n = sample.response_length
+        if (
+            type(n) is not int
+            or not 0 < n < len(sample.tokens)
+            or len(sample.loss_mask) != n
+            or len(sample.rollout_log_probs) != n
+            or not any(sample.loss_mask)
+            or getattr(getattr(sample, "status", None), "name", None) != "COMPLETED"
+            or any(type(t) is not int or t < 0 for t in sample.tokens)
+            or any(type(m) is not int or m not in (0, 1) for m in sample.loss_mask)
+            or any(
+                type(p) not in (int, float) or not math.isfinite(p) or p > 1e-6
+                for p in sample.rollout_log_probs
+            )
+            or any(
+                p != 0
+                for p, m in zip(sample.rollout_log_probs, sample.loss_mask, strict=True)
+                if not m
+            )
+        ):
+            raise InvalidEpisode("token_recording_invalid")
+
+
+async def _agent(recorder, session, messages, tools, limits, parse):
+    recorder.begin_segment(messages, tools)
+    env_time = 0.0
+    for index in range(limits["max_turns"]):
+        turn = await recorder.sample()
+        if turn.finish != "ok" or not isinstance(turn.text, str):
+            raise InvalidEpisode("generation_incomplete")
+        call = parse(turn.text)
+        if call is not None and (
+            not isinstance(call, dict)
+            or not isinstance(call.get("name"), str)
+            or not isinstance(call.get("arguments"), dict)
+        ):
+            raise InvalidEpisode("tool_parser_contract_invalid")
+        messages.append(recorder.append_assistant(turn.text, call, index))
+        if call is None:
+            return messages, "model_stop", env_time
+        start = time.monotonic()
+        if call["name"] not in {"bash", "submit_report"}:
+            text, error = "Tool unavailable: only bash and submit_report are permitted.", True
+        else:
+            async with asyncio.timeout(limits["tool_seconds"]):
+                result = await session.call_tool(call["name"], arguments=call["arguments"])
+            if any(block.type != "text" for block in result.content):
+                raise InvalidEpisode("non_text_tool_result")
+            text, error = "\n".join(block.text for block in result.content), result.isError
+        env_time += time.monotonic() - start
+        if len(text) > limits["tool_result_chars"]:
+            raise InvalidEpisode("tool_result_exceeds_budget")
+        message = {
+            "role": "tool",
+            "tool_call_id": f"call_{index:06d}",
+            "name": call["name"],
+            "content": text,
+        }
+        messages.append(recorder.append_observation(message, []))
+        if call["name"] == "submit_report" and not error:
+            return messages, "report_submitted", env_time
+    raise InvalidEpisode("turn_budget_exhausted")
+
+
+async def collect(config, directory: Path, recorder, parse, *, client):
+    """Return native samples only after authoritative grading AND confirmed release.
+
+    `client` is an authenticated httpx.AsyncClient with no transport retries.
+    `directory` must be a unique, durable episode claim on shared private storage.
+    """
+    _validate(config)
+    directory.mkdir(parents=True, exist_ok=False, mode=0o700)
+    fleet.write_json_once(directory / "binding.json", config)
+    instance_id = None
+    owned = False
+    messages = []
+    reward = None
+    cleanup = {"create_attempted": False, "instance_created": False, "instance_closed": False}
+    try:
+        account = await _request(client, "GET", "/v1/account")
+        if account.get("team_id") != fleet.FLEET_TEAM_ID or account.get("team_name") != "fleet":
+            raise InvalidEpisode("wrong_fleet_team")
+        task = await _request(
+            client,
+            "GET",
+            f"/v1/tasks/{config['task']['key']}",
+            params={"version_id": config["task"]["version_id"]},
+        )
+        fleet.verify_task(config, task)
+        fleet.write_json_once(directory / "create-intent.json", {"run_id": config["run_id"]})
+        cleanup["create_attempted"] = True
+        created = await _request(
+            client,
+            "POST",
+            fleet.authoritative_route(config, "provisioning"),
+            headers={"X-Request-ID": fleet.provisioning_request_id(config)},
+            json={},
+            timeout=1200,
+        )
+        # Retain the ID for reconciliation; a mismatched response must not
+        # authorize deletion of a potentially unrelated instance.
+        if isinstance(created, dict):
+            instance_id = fleet._instance_identifier(created.get("instance_id"))
+            cleanup["instance_created"] = True
+            cleanup["instance_id"] = instance_id
+        instance_id, evidence_id = fleet.validate_rollout_instance_response(config, created)
+        owned = True
+        cleanup["instance_created"] = True
+        cleanup["instance_id"] = instance_id
+        fleet.write_json_once(
+            directory / "instance.json",
+            {
+                "instance_id": instance_id,
+                "evidence_run_id": evidence_id,
+            },
+        )
+        instance = await _request(client, "GET", f"/v1/env/instances/{instance_id}")
+        instance = await _lifetime(client, config, instance, instance_id)
+        auth = await _request(client, "GET", "/v1/runner-auth/token")
+        async with asyncio.timeout(config["rl"]["episode_seconds"]):
+            async with _mcp(instance["urls"]["root"], auth, config["rl"]["tool_seconds"]) as mcp:
+                catalog = (await mcp.list_tools()).tools
+                raw = [t.model_dump(mode="json", by_alias=True, exclude_none=True) for t in catalog]
+                fleet.assert_required_task_tools(
+                    config,
+                    sorted(t.name for t in catalog),
+                    fleet.sha256(fleet.canonical_json(raw)),
+                )
+                by_name = {t["name"]: t for t in raw}
+                tools = [
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": name,
+                            "description": by_name[name].get("description", ""),
+                            "parameters": by_name[name]["inputSchema"],
+                        },
+                    }
+                    for name in config["execution"]["required_task_tools"]
+                ]
+                messages.append({"role": "user", "content": task["prompt"]})
+                messages, reason, env_time = await _agent(
+                    recorder,
+                    mcp,
+                    messages,
+                    tools,
+                    config["rl"],
+                    parse,
+                )
+        fleet.write_json_once(directory / "conversation.json", {"messages": messages})
+        payload = fleet.build_scoring_payload(
+            config, instance_id=instance_id, final_answer="", messages=[]
+        )
+        fleet.write_json_once(directory / "score-intent.json", payload)
+        response = await _request(
+            client, "POST", fleet.authoritative_route(config, "scoring"), json=payload, timeout=120
+        )
+        reward = fleet.sanitize_authoritative_reward_response(
+            config,
+            response,
+            instance_id=instance_id,
+            evidence_run_id=evidence_id,
+        )
+        fleet.write_json_once(directory / "reward.json", reward)
+    except BaseException as exc:
+        fleet.write_json_once(
+            directory / "failure.json",
+            fleet.sanitized_failure_receipt(
+                exc,
+                run_id=config["run_id"],
+                elapsed_seconds=0,
+            ),
+        )
+        raise
+    finally:
+        if instance_id is not None and owned:
+            try:
+                async with asyncio.timeout(120):
+                    await _request(client, "DELETE", f"/v1/env/instances/{instance_id}")
+                    response = await client.get(
+                        fleet.ORCHESTRATOR + f"/v1/env/instances/{instance_id}"
+                    )
+                    cleanup["instance_closed"] = response.status_code == 404 or (
+                        response.status_code == 200
+                        and response.json().get("instance_id") == instance_id
+                        and response.json().get("status") in {"terminated", "closed"}
+                    )
+            except BaseException as exc:
+                cleanup["error_type"] = type(exc).__name__
+        cleanup["possible_instance_leak"] = (
+            cleanup["create_attempted"] and not cleanup["instance_closed"]
+        )
+        fleet.write_json_once(directory / "cleanup.json", cleanup)
+        if messages and not (directory / "conversation.json").exists():
+            fleet.write_json_once(directory / "conversation.json", {"messages": messages})
+    if not cleanup["instance_closed"]:
+        raise InvalidEpisode("instance_release_unconfirmed")
+    meta = {
+        "task_version_id": config["task"]["version_id"],
+        "instance_id": instance_id,
+        "verifier_execution_id": reward["verifier_execution_id"],
+        "done_reason": reason,
+    }
+    samples = recorder.finalize(reward["reward"], meta, env_time)
+    validate_samples(samples)
+    recording = {
+        "samples": [
+            {
+                "tokens": s.tokens,
+                "response_length": s.response_length,
+                "loss_mask": s.loss_mask,
+                "rollout_log_probs": s.rollout_log_probs,
+            }
+            for s in samples
+        ]
+    }
+    fleet.write_json_once(directory / "recording.json", recording)
+    receipt = {
+        **meta,
+        "config_sha256": config["config_sha256"],
+        "sample_count": len(samples),
+        "files": {
+            name: fleet.sha256((directory / name).read_bytes())
+            for name in (
+                "binding.json",
+                "instance.json",
+                "conversation.json",
+                "reward.json",
+                "cleanup.json",
+                "recording.json",
+            )
+        },
+    }
+    fleet.write_json_once(
+        directory / "ACCEPTED.json",
+        {
+            **receipt,
+            "sha256": fleet.sha256(fleet.canonical_json(receipt)),
+        },
+    )
+    return samples
+
+
+async def generate(input):
+    """Miles custom-generate hook; reuse FTI's native token recorder and parser.
+
+    No oversampling/replacement policy is implemented here. The bounded trainer
+    request must stop on invalid groups, not install check_no_aborted's retry loop.
+    Dataset split and exact config bytes must pass CPU preflight before launch.
+    """
+    from fti.trainers.miles.parser import parse_tool_call
+    from fti.trainers.miles.recording import Recorder
+    from miles.rollout.base_types import GenerateFnOutput
+
+    args, sample = input.args, input.sample
+    if getattr(args, "partial_rollout", False) or input.state.aborted:
+        raise InvalidEpisode("partial_or_aborted_rollout")
+    if sample.metadata.get("split") != ("dev" if input.evaluation else "train"):
+        raise InvalidEpisode("task_split_mismatch")
+    if any(type(x) is not int or x < 0 for x in (sample.rollout_id, sample.index)):
+        raise InvalidEpisode("missing_native_attempt_identity")
+    config = copy.deepcopy(sample.metadata["cyber_config"])
+    _validate(config)
+    if config["run_id"] != args.cyber_run_id:
+        raise InvalidEpisode("run_identity_mismatch")
+    if (
+        args.hf_checkpoint != config["model"]["root"]
+        or args.fleet_tito_model != config["model"]["tito_family"]
+        or args.fleet_max_tokens_per_turn != config["rl"]["max_tokens_per_turn"]
+        or args.rollout_max_context_len != config["rl"]["context_tokens"]
+    ):
+        raise InvalidEpisode("native_model_or_budget_drift")
+    mode = "dev" if input.evaluation else "train"
+    config["run_id"] += f"-{mode}-r{sample.rollout_id}-s{sample.index}"
+    config["sampling"] = copy.deepcopy(input.sampling_params)
+    config["config_sha256"] = fleet.digest_without(config, "config_sha256")
+    root = Path(args.cyber_output_root)
+    if not root.is_absolute():
+        raise InvalidEpisode("output_root_must_be_absolute")
+    key = os.environ.get("FLEET_API_KEY")
+    if not key:
+        raise InvalidEpisode("missing_fleet_auth")
+    try:
+        recorder = Recorder(args, input.state, copy.deepcopy(sample), input.sampling_params)
+        async with httpx.AsyncClient(
+            headers={"Authorization": f"Bearer {key}"},
+            timeout=120,
+            transport=httpx.AsyncHTTPTransport(retries=0),
+            follow_redirects=False,
+        ) as client:
+            samples = await collect(
+                config, root / config["run_id"], recorder, parse_tool_call, client=client
+            )
+    except asyncio.CancelledError:
+        raise
+    except InvalidEpisode:
+        raise
+    except Exception as exc:
+        # Native trainer/Ray logs must not render MCP/HTTP exception bodies.
+        raise InvalidEpisode("episode_failure_" + type(exc).__name__) from None
+    return GenerateFnOutput(samples=samples[0] if len(samples) == 1 else samples)
+
+
+def _add_arguments(parser):
+    parser.add_argument("--cyber-run-id", required=True)
+    parser.add_argument("--cyber-output-root", required=True)
+    parser.add_argument("--fleet-tito-model", required=True)
+    parser.add_argument("--fleet-max-tokens-per-turn", required=True, type=int)
+
+
+generate.add_arguments = _add_arguments

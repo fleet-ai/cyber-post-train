@@ -334,6 +334,12 @@ def load_and_verify_task(client: httpx.Client, config: dict[str, Any]) -> dict[s
         f"/v1/tasks/{expected['key']}",
         params={"version_id": expected["version_id"]},
     )
+    return verify_task(config, task)
+
+
+def verify_task(config: dict[str, Any], task: dict[str, Any]) -> dict[str, Any]:
+    """Check a fetched task without IO; shared by sync eval and async RL clients."""
+    expected = config["task"]
     _validate_task_identifiers(task, expected)
     runtime_data = task_data_binding(task)
     if runtime_data is None and (
