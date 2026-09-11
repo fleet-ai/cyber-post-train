@@ -166,3 +166,37 @@ dedicated tests, eight generated GLM5.2 cluster manifests and the fixed GLM5.2
 training config (15 files). There were no retained code callers. Dated run
 evidence remains; the removed sources are recoverable from `bac2a4c`. These
 retired model-specific probes do not qualify full GLM5.3.
+
+The old fixed-five-window corpus builder, its dedicated tests and eight unused
+generated corpus/model-staging manifests were removed after caller checks. The
+three still-used normalization/eligibility helpers now live beside their actual
+dense-data callers. Historical corpus receipts remain unchanged and refer to
+their original code revision, recoverable from `bac2a4c`; new corpora bind the
+new builder files. Existing training data and running campaigns were not changed.
+
+The competing typed Jobs HTTP client and its `training jobs-run/jobs-status`
+commands were removed. All new submissions use the generic Jobs boundary with
+shared durable journals and exhaustive duplicate checks. Historical RL preview
+checks remain read-only in `training/rl_preview.py`; 52 regression cases pass,
+with 100% line/branch coverage of that module. Old requests remain provenance,
+not a second launch interface.
+
+The new `checkpoint-seal` command checks native trainer/sampler state and hashes
+all checkpoint files on CPU. An initial synthetic fixture repeated an incorrect
+`fsdp2` serialization assumption; the real checkpoint correctly rejected it
+before hashing or writing output. The corrected test uses the pinned SkyRL
+checkpoint writer itself, which serializes `fsdp`. All 26 pinned-image tests
+passed with zero skips, restarts or GPUs. CPU file validation is not GPU reload.
+The checkpoint checker also has 100% local line/branch coverage. A fresh wheel
+installation outside the checkout passed 14 help checks without a training-extra
+dependency; the retired fixed-window corpus module is absent from the wheel.
+
+The real seal completed at 2026-09-11 01:33:30 UTC: 33 files, 324,627,486,731
+bytes, step one, eight ranks, zero restarts/GPUs. A separate read-only CPU audit
+verified the manifest digest, source receipt, complete inventory and live sizes;
+it did not hash all payloads a second time. Both Pods are terminal. See
+`docs/evidence/cleanup-checkpoint-seal-20260911.json`. The local suite now passes
+969 tests plus seven subtests, with 16 native-only local skips. Ruff lint and
+diff whitespace checks pass. A broad formatter check found 24 legacy files with
+formatting drift; they have not been mechanically rewritten because some are
+bound by historical evidence. Changed/new modules are checked separately.

@@ -402,9 +402,8 @@ def test_readiness_snapshot_is_self_digested_and_remains_fail_closed() -> None:
     assert receipt["sft_corpus"]["included_splits"] == ["train"]
     assert receipt["sft_corpus"]["all_corpus_tasks_in_exact_train_allowlist"] is True
     assert receipt["sft_corpus"]["staged"] is False
-    assert receipt["sft_corpus"]["builder_sha256"] == file_sha256(
-        ROOT / "training/stage_sft_corpus.py"
-    )
+    # This self-digesting historical receipt binds the retired fixed-window builder at
+    # its original revision, not today's dense-data implementation.
     assert receipt["recommended_first_paid_run"]["execute_authorized"] is False
     assert receipt["recommended_first_paid_run"]["shape"] == {
         "workers": 1,

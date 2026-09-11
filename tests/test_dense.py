@@ -1,10 +1,34 @@
 import copy
+from collections import UserDict
 
 import pytest
 
 from training import dense
 from training.dense import Excluded, compatible_messages, segment_record
 from training.io import file_sha256
+
+
+@pytest.mark.parametrize("mapping", [False, True])
+def test_template_normalization_and_count_match_tokenizer_return_shapes(mapping):
+    message = {
+        "role": "assistant",
+        "content": {"z": 2, "a": 1},
+        "tool_calls": [{"id": "a", "function": {"name": "bash", "arguments": '{"script":"true"}'}}],
+    }
+    original = copy.deepcopy(message)
+    normalized = dense._normalized_for_template(message)
+    assert normalized["content"] == '{"a": 1, "z": 2}'
+    assert normalized["tool_calls"][0]["function"]["arguments"] == {"script": "true"}
+    assert message == original
+    assert dense._normalized_for_template({"role": "assistant", "content": None})["content"] == ""
+
+    class Tokenizer:
+        def apply_chat_template(self, messages, **kwargs):
+            assert messages == [normalized]
+            assert kwargs == {"tokenize": True, "add_generation_prompt": False}
+            return UserDict(input_ids=[1, 2, 3]) if mapping else [1, 2, 3]
+
+    assert dense._chat_token_count(Tokenizer(), [message]) == 3
 
 
 def test_native_helper_checks_digest_and_executes_only_selected_functions(tmp_path, monkeypatch):

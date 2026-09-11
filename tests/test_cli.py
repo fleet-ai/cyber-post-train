@@ -163,8 +163,49 @@ def test_doctor_checks_installation_without_claiming_cluster_readiness(monkeypat
     assert RUNNER.invoke(cli.app, ["doctor"]).exit_code == 2
 
 
+def test_checkpoint_command_uses_original_bound_plan(prepared, monkeypatch, tmp_path):
+    from training import checkpoints
+
+    directory, plan, *_ = prepared
+    output = tmp_path / "checkpoint.json"
+    calls = []
+
+    def seal(value, step, path):
+        calls.append((value, step, path))
+        return {"optimizer_step": step, "total_bytes": 17, "receipt_sha256": "a" * 64}
+
+    monkeypatch.setattr(checkpoints, "seal", seal)
+    command = ["checkpoint-seal", str(directory), "1", "--output", str(output)]
+    result = RUNNER.invoke(cli.app, command)
+    assert result.exit_code == 0
+    assert calls == [(plan, 1, output)]
+    assert json.loads(result.stdout)["total_bytes"] == 17
+    (directory / "plan.json").write_text("{}")
+    assert RUNNER.invoke(cli.app, command).exit_code == 2
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("command", ["jobs-run", "jobs-status"])
+def test_retired_submission_commands_are_not_exposed(command):
+    from training.cli import parser
+
+    with pytest.raises(SystemExit) as exc:
+        parser().parse_args([command])
+    assert exc.value.code == 2
+
+
 @pytest.mark.parametrize(
-    "command", [[], ["data"], ["train"], ["preflight"], ["preview"], ["submit"], ["status"]]
+    "command",
+    [
+        [],
+        ["data"],
+        ["train"],
+        ["preflight"],
+        ["preview"],
+        ["submit"],
+        ["status"],
+        ["checkpoint-seal"],
+    ],
 )
 def test_help_is_accessible(command):
     result = RUNNER.invoke(cli.app, [*command, "--help"])

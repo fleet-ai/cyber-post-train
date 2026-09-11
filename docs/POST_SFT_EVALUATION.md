@@ -181,9 +181,10 @@ uv run python -m training.post_sft_cli render-export \
   --receipt-output /restricted/ft-run-574bd7b3-export-request-receipt.json
 ```
 
-The receipt is a `submit: false` review artifact, and the separate run config is suitable for the
-repository's normal `training jobs-run` preview. Do not execute that preview until the source path
-exists and the source run is terminal. Before any execution, inspect the server-rendered entrypoint
+The receipt is a historical `submit: false` review artifact. The old typed
+`training jobs-run` launcher is retired; do not submit this historical request.
+New work uses the generic Jobs API commands in `docs/TRAINING.md`, after proving
+that the source path exists and the source run is terminal. Inspect the server-rendered entrypoint
 and require `resume_from=.../global_step_N` and `num_steps=N`. The run must report zero optimizer
 steps. A post-export staging step is still needed because training SFS and the inference `/models`
 PVC are different filesystems.

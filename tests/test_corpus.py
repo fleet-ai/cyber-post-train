@@ -103,6 +103,17 @@ def test_select_sources_is_order_independent_and_never_uses_test(source_split):
 
 
 @pytest.mark.parametrize(
+    "score", [True, False, None, "1", float("nan"), float("inf"), float("-inf"), 0.99]
+)
+def test_non_numeric_or_nonfinite_scores_cannot_enter_sft(source_split, score):
+    rows, split = source_split
+    rows[0]["outcome"]["score"] = score
+    train, _, excluded = corpus.select_sources(rows, split, ["synthetic-teacher"])
+    assert [r["record_id"] for r in train] == ["train-b"]
+    assert excluded["not_verified_success"] == 1
+
+
+@pytest.mark.parametrize(
     "defect",
     [
         "digest",

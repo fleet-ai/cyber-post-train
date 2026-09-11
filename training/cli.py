@@ -14,15 +14,6 @@ from .fleet import (
     roster_session_refs,
 )
 from .io import atomic_write_json, atomic_write_jsonl, file_sha256
-from .jobs_api import (
-    DEFAULT_BASE_URL,
-    JobsAPIError,
-    TrainingJobsClient,
-    concise_status,
-    load_run_config,
-    rl_paid_launch_blockers,
-    run_kind,
-)
 from .normalize import build_datasets
 from .rl_config import (
     FleetTrainingTaskCatalog,
@@ -164,47 +155,6 @@ def _rl_config(args: argparse.Namespace) -> int:
     return 0
 
 
-def _jobs_run(args: argparse.Namespace) -> int:
-    bearer = os.environ.get("FLEET_TRAINING_API_TOKEN")
-    if not bearer:
-        raise ValueError("FLEET_TRAINING_API_TOKEN must be injected through the environment")
-    config = load_run_config(args.config)
-    with TrainingJobsClient(bearer, base_url=args.base_url) as client:
-        if args.execute:
-            receipt = client.submit(config)
-            print(json.dumps({"submitted": True, **receipt}, indent=2, sort_keys=True))
-            return 0
-        preview = client.preview(config)
-        duplicates = client.runs_with_title(str(config["title"]))
-    launch_blockers = rl_paid_launch_blockers(config, preview)
-    print(
-        json.dumps(
-            {
-                "submitted": False,
-                "kind": run_kind(config),
-                "title": config["title"],
-                "duplicate_names": [row.get("name") for row in duplicates],
-                "errors": preview.get("errors") or [],
-                "launch_blockers": launch_blockers,
-                "warnings": preview.get("warnings") or [],
-            },
-            indent=2,
-            sort_keys=True,
-        )
-    )
-    return 0
-
-
-def _jobs_status(args: argparse.Namespace) -> int:
-    bearer = os.environ.get("FLEET_TRAINING_API_TOKEN")
-    if not bearer:
-        raise ValueError("FLEET_TRAINING_API_TOKEN must be injected through the environment")
-    with TrainingJobsClient(bearer, base_url=args.base_url) as client:
-        run = client.status(args.name)
-    print(json.dumps(concise_status(run), indent=2, sort_keys=True))
-    return 0
-
-
 def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(description="Fleet cyber post-training utilities")
     commands = root.add_subparsers(dest="command", required=True)
@@ -235,7 +185,7 @@ def parser() -> argparse.ArgumentParser:
     rl_snapshot.add_argument("--dataset-manifest", type=Path, required=True)
     rl_snapshot.add_argument("--source-job-id", required=True)
     rl_snapshot.add_argument("--output", type=Path, required=True)
-    rl_snapshot.add_argument("--base-url", default=DEFAULT_BASE_URL)
+    rl_snapshot.add_argument("--base-url", default="https://api.ft.flt.build")
     rl_snapshot.add_argument("--workers", type=int, default=8)
     rl_snapshot.set_defaults(run=_rl_snapshot)
 
@@ -249,22 +199,6 @@ def parser() -> argparse.ArgumentParser:
     rl_config.add_argument("--treatment-receipt", type=Path)
     rl_config.set_defaults(run=_rl_config)
 
-    jobs_run = commands.add_parser(
-        "jobs-run", help="preview or submit a typed SFT/RL request through the Jobs API"
-    )
-    jobs_run.add_argument("--config", type=Path, required=True)
-    jobs_run.add_argument("--base-url", default=DEFAULT_BASE_URL)
-    jobs_run.add_argument(
-        "--execute",
-        action="store_true",
-        help="submit after preview and duplicate-title checks; default is preview only",
-    )
-    jobs_run.set_defaults(run=_jobs_run)
-
-    jobs_status = commands.add_parser("jobs-status", help="read concise Jobs API run status")
-    jobs_status.add_argument("name")
-    jobs_status.add_argument("--base-url", default=DEFAULT_BASE_URL)
-    jobs_status.set_defaults(run=_jobs_status)
     return root
 
 
@@ -272,6 +206,6 @@ def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
     try:
         return int(args.run(args))
-    except (FleetExportError, JobsAPIError, ValueError, OSError) as exc:
+    except (FleetExportError, ValueError, OSError) as exc:
         print(f"error: {exc}", file=os.sys.stderr)
         return 2

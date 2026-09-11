@@ -1,0 +1,73 @@
+{
+  "schema": "cyber_cleanup_checkpoint_qualification_v1",
+  "classification": "operational_gate",
+  "source_run": "chris-cpt-q38-qual-v1-7eab6d07",
+  "source_plan_sha256": "a0645e240912615c755ceea2de05959728c31bccb8e41b81cf6d36761923877f",
+  "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+  "checkpoint_code_sha256": "4ef5cd63ac6228edd63970f276a471e2112751b2ab0d49cfa78c999125de1a11",
+  "native_selftest": {
+    "pod": "chris-cpt-checkpoint-selftest-v2",
+    "pod_uid": "ab8da5aa-97d5-470a-bf72-6bbb85dc11f6",
+    "completed_at": "2026-09-11T01:25:59Z",
+    "tests_passed": 26,
+    "tests_skipped": 0,
+    "failures": 0,
+    "restarts": 0,
+    "gpus": 0,
+    "uses_actual_pinned_skyrl_checkpoint_writer": true,
+    "receipt_sha256": "b89c22da2858831162f8e565cc7126b36b1dd28c2c5c3676dfe99951d3755717"
+  },
+  "seal": {
+    "pod": "chris-cpt-q38-checkpoint-seal-v2",
+    "pod_uid": "8f033ecc-e899-4223-97fe-026fb130869f",
+    "namespace": "fleet-train-jobs",
+    "node": "computeinstance-e04a737eqtfvpnyx08",
+    "started_at": "2026-09-11T01:27:27Z",
+    "completed_at": "2026-09-11T01:33:30Z",
+    "phase": "Succeeded",
+    "exit_code": 0,
+    "restarts": 0,
+    "gpus": 0,
+    "bundle_sha256": "5e1e43c84e1fa1b5e368dbeca6d556bfd8232f4ac25ca22962d0e227dc842633",
+    "manifest": "/mnt/sfs/jobs/chris-cpt-cleanup-q38-sft-v1/checkpoint-step-1.json",
+    "manifest_file_sha256": "8a9a7789fe30fa1aa4d67101af6ac073bd9d38fd8d69a69c577f3d8f30cc5ea5",
+    "receipt_sha256": "333899f9b032d17fb35c1f44bc9c3e52338ece5607608a0b475ee423214fb1c9",
+    "optimizer_step": 1,
+    "world_size": 8,
+    "sampler_batches_in_epoch": 1,
+    "all_checkpoint_files_hashed": true,
+    "total_bytes": 324627486731,
+    "source_inventory_sizes_mtimes_unchanged": true,
+    "gpu_reload_verified": false
+  },
+  "independent_audit": {
+    "pod": "chris-cpt-q38-checkpoint-audit-v1",
+    "pod_uid": "eac235f0-544e-4d4a-88cc-55b380011d1b",
+    "completed_at": "2026-09-11T01:35:02Z",
+    "phase": "Succeeded",
+    "exit_code": 0,
+    "restarts": 0,
+    "gpus": 0,
+    "file_count": 33,
+    "receipt_sha256": "e32cd9193ed92370c50e5296bf63a228188e9120cdac2f6be0a6241f97383447",
+    "manifest_digest_valid": true,
+    "source_receipt_valid": true,
+    "inventory_and_sizes_match": true,
+    "all_file_hashes_recomputed_by_this_audit": false
+  },
+  "retired_failure": {
+    "pod": "chris-cpt-q38-checkpoint-seal-v1",
+    "pod_uid": "e6203b2a-ee5c-4f75-a525-aaea027de4f1",
+    "completed_at": "2026-09-11T01:23:52Z",
+    "gpus": 0,
+    "restarts": 0,
+    "reason": "checker_expected_fsdp2_but_native_serialization_is_fsdp",
+    "checkpoint_modified": false,
+    "manifest_created": false,
+    "corrective_test": "native_FSDPStrategy_save_checkpoint_CPU"
+  },
+  "limitations": [
+    "CPU file identity and cursor validation do not prove full model/optimizer GPU reload.",
+    "No optimizer steps, model export, evaluation or scientific performance claim is made by sealing."
+  ]
+}

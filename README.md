@@ -36,7 +36,8 @@ create-once; never erase a submission journal to retry a timeout. Check current
 authorization and the total experiment-owned resource budget before submitting.
 
 Current consolidation status: the Qwen SFT runtime comes from a successful
-full-model run; its new configurable wrapper is being qualified. Full GLM5.3,
+full-model run; its new wrapper has completed a real one-step run with held-out
+loss, W&B and a native checkpoint. Export/reload qualification is pending. Full GLM5.3,
 Miles RL and SkyRL RL must pass their exact-model training/reward gates before
 being described as production-ready. GLM Flash is not full GLM5.3.
 

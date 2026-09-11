@@ -163,6 +163,21 @@ def status(name: str) -> None:
         _fail(exc)
 
 
+@app.command("checkpoint-seal")
+def checkpoint_seal(
+    directory: Path, step: int, output: Annotated[Path, typer.Option("--output")]
+) -> None:
+    """CPU-only: hash a trusted run's native checkpoint for export/resume. No GPU reload."""
+    from training.checkpoints import seal
+
+    try:
+        plan, _ = _prepared(directory)
+        result = seal(plan, step, output)
+        _print({k: result[k] for k in ("optimizer_step", "total_bytes", "receipt_sha256")})
+    except Exception as exc:
+        _fail(exc)
+
+
 @app.command()
 def doctor() -> None:
     """Check installed modules only; NOT model, cluster or scientific readiness."""

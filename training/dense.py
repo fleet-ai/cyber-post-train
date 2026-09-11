@@ -9,12 +9,13 @@ from __future__ import annotations
 
 import ast
 import collections
+import contextlib
 import json
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
 from .io import digest_json, file_sha256
-from .stage_sft_corpus import _chat_token_count, _normalized_for_template
 
 FORMAT = "pretokenized_assistant_segments_v1"
 MAX_TOKENS = 16384
@@ -26,6 +27,38 @@ HELPER_NAMES = (
     "_find_generation_prompt_boundary",
     "get_response_ids_and_loss_mask_from_messages",
 )
+
+
+def _normalized_for_template(message: Mapping[str, Any]) -> dict[str, Any]:
+    """Preserve the qualified Qwen-facing normalization for exact length checks."""
+    content = message.get("content")
+    if content is not None and not isinstance(content, str):
+        content = json.dumps(content, ensure_ascii=False, sort_keys=True)
+    normalized = {"role": str(message.get("role") or ""), "content": content or ""}
+    if message.get("tool_calls"):
+        calls = []
+        for raw_call in message["tool_calls"]:
+            call = dict(raw_call)
+            function = dict(call.get("function") or {})
+            arguments = function.get("arguments")
+            if isinstance(arguments, str):
+                with contextlib.suppress(ValueError):
+                    arguments = json.loads(arguments)
+            function["arguments"] = arguments
+            call["function"] = function
+            calls.append(call)
+        normalized["tool_calls"] = calls
+    return normalized
+
+
+def _chat_token_count(tokenizer, messages: list[dict[str, Any]]) -> int:
+    encoded = tokenizer.apply_chat_template(
+        [_normalized_for_template(message) for message in messages],
+        tokenize=True,
+        add_generation_prompt=False,
+    )
+    # Transformers 5 returns BatchEncoding; older versions return token IDs.
+    return len(encoded["input_ids"] if isinstance(encoded, Mapping) else encoded)
 
 
 class Excluded(ValueError):

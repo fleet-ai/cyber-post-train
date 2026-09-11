@@ -78,6 +78,7 @@
       "pod": "chris-cpt-q38-checkpoint-probe-v1",
       "pod_uid": "0c03768c-023e-4aef-bead-e16ceb166016",
       "status": "Succeeded",
+      "completed_at": "2026-09-11T01:13:22Z",
       "gpus": 0,
       "restarts": 0,
       "rank": 0,

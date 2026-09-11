@@ -129,6 +129,19 @@ checkpoints plus the best checkpoint by fixed held-out loss. Saves include nativ
 optimizer, scheduler, sampler and trainer state; a weights-only file is not a
 recoverable checkpoint.
 
+Before handing a native checkpoint to an export or resume operation, seal it on
+CPU using the original prepared directory:
+
+```sh
+uv run cyber-post-train checkpoint-seal /shared/prepared-run 50 \
+  --output /shared/checkpoint-step-50.json
+```
+
+This verifies the saved step and sampler cursor, hashes every rank's model,
+optimizer and random-state files, and writes a create-once manifest without
+changing the checkpoint. Only use trusted checkpoints from the bound run: native
+PyTorch metadata uses pickle. Sealing proves file identity, **not GPU reload**.
+
 The runtime has fixed startup, no-progress and hard-runtime bounds. A confirmed
 stall preserves evidence and exits truthfully; the Jobs API releases the allocation.
 An independent monitor must confirm release and handle access failures explicitly.

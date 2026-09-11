@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 from training.io import digest_json
-from training.jobs_api import rl_paid_launch_blockers
+from training.rl_preview import rl_paid_launch_blockers
 
 ROOT = Path(__file__).resolve().parents[1]
 PLAN_PATH = ROOT / "configs/runs/qwen36-27b-native-rl-reward-acquisition-canary.pre-submit.json"

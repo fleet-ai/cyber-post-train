@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import collections
 import hashlib
+import math
 import os
 import re
+from collections.abc import Mapping
 from pathlib import Path
 
 from cyber_post_train.jobs import digest
@@ -20,7 +22,20 @@ from .io import atomic_write_json, file_sha256, iter_jsonl
 from .sft import _known, read_mapping
 from .sft_runtime import DENSE_FORMAT, dense_rows
 from .splits import split_key
-from .stage_sft_corpus import _eligible
+
+
+def _eligible(row: Mapping) -> bool:
+    eligibility, outcome = row.get("eligibility"), row.get("outcome")
+    return bool(
+        isinstance(eligibility, Mapping)
+        and eligibility.get("sft") is True
+        and isinstance(outcome, Mapping)
+        and outcome.get("infra_valid") is True
+        and outcome.get("success") is True
+        and type(outcome.get("score")) in (int, float)
+        and math.isfinite(outcome["score"])
+        and outcome["score"] >= 1.0
+    )
 
 
 def select_sources(records: list[dict], split: dict, models: list[str]) -> tuple[list, list, dict]:
@@ -222,7 +237,7 @@ def build(config: dict, *, relative_to: Path) -> dict:
         "whole_source_exclusions": dict(exclusions),
         "builder_sha256": {
             name: file_sha256(Path(__file__).with_name(name))
-            for name in ("corpus.py", "dense.py", "stage_sft_corpus.py", "splits.py")
+            for name in ("corpus.py", "dense.py", "splits.py")
         },
         "limitations": [
             "Visible actions only; private reasoning is omitted.",
