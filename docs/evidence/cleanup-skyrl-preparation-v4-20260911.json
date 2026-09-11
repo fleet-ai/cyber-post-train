@@ -35,5 +35,14 @@
     "bundled_entrypoint_and_replay_checks": "passed",
     "qualification_limit": "Minimal installation has no native GPU training dependencies; this is not a GPU readiness claim."
   },
-  "next_gate": "Wait for the current Miles GPU allocation to release, then live preview, duplicate and total-node checks before one SkyRL successor. No RL update/reward/recovery is qualified."
+  "gpu_submission_withheld": {
+    "reason": "Miles V6 failed in the shared episode lifecycle with an unrecoverable nested error, and cleanup omitted the actual stopped final state. Diagnose and qualify the shared boundary before allocating SkyRL GPUs.",
+    "preview_passed": true,
+    "preview_manifest_sha256": "d48de222fbd2d183034b0dbbbe86e069997dcd9105a627663849b765789b64ec",
+    "preview_history_rows": 627,
+    "preview_duplicates": 0,
+    "cpu_handoff_uid": "ef8c2c05-2eaf-4c57-a82b-3c71bef4ab4d",
+    "handoff_closed_without_post": true
+  },
+  "next_gate": "Preserve V4 unsubmitted. Freeze and CPU-qualify a new runtime after the shared episode diagnostics/cleanup correction; do not claim the correction recovers the unknown Miles episode cause. No RL update/reward/recovery is qualified."
 }

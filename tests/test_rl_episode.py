@@ -308,7 +308,7 @@ async def test_unavailable_tool_never_executes(fixture, tmp_path):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("fault", ["missing_id", "nan", "crosslink", "cleanup", "tool_schema"])
-async def test_invalid_evidence_never_reaches_trainer(fixture, tmp_path, fault):
+async def test_invalid_evidence_never_reaches_trainer(fixture, tmp_path, fault, monkeypatch):
     if fault == "missing_id":
         fixture.reward.pop("verifier_execution_id")
     elif fault == "nan":
@@ -317,6 +317,11 @@ async def test_invalid_evidence_never_reaches_trainer(fixture, tmp_path, fault):
         fixture.reward["cyber_evidence"]["direct_verifier"]["execution_id"] = EVIDENCE
     elif fault == "cleanup":
         fixture.cleanup_status = 200  # Still running despite DELETE returning 204.
+
+        async def deadline(_):
+            raise TimeoutError("synthetic shutdown deadline")
+
+        monkeypatch.setattr(rl.asyncio, "sleep", deadline)
     else:
         fixture.catalog[0]["description"] = "drifted schema"
     recorder = Recorder()
@@ -768,3 +773,118 @@ async def test_nonobject_create_has_unknown_resource_state(fixture, tmp_path):
         await collect(fixture, tmp_path)
     cleanup = json.loads((tmp_path / "episode/cleanup.json").read_text())
     assert cleanup["possible_instance_leak"] and not cleanup["instance_closed"]
+
+
+def test_nested_episode_failure_keeps_only_safe_evidence():
+    try:
+        raise rl.InvalidEpisode("generation_incomplete")
+    except rl.InvalidEpisode as error:
+        inner = error
+    group = ExceptionGroup("private task text", [ValueError("private credential"), inner])
+    receipt = rl._failure(group, run_id="fixture", elapsed_seconds=2.125, phase="agent_interaction")
+    text = json.dumps(receipt)
+    assert "private" not in text
+    assert receipt["elapsed_seconds"] == 2.125
+    assert [r["error_type"] for r in receipt["causes"]] == [
+        "ExceptionGroup",
+        "ValueError",
+        "InvalidEpisode",
+    ]
+    assert receipt["causes"][-1]["reason"] == "generation_incomplete"
+    assert receipt["causes"][-1]["frames"][-1]["file"] == "test_rl_episode.py"
+
+
+@pytest.mark.parametrize("args", [(), ("private_reason",), ({"credential": "private"},)])
+def test_unknown_invalid_episode_details_are_not_exposed(args):
+    value = rl._failure(
+        rl.InvalidEpisode(*args), run_id="fixture", elapsed_seconds=0, phase="fixture"
+    )
+    assert "reason" not in value["causes"][0]
+    assert "private" not in json.dumps(value)
+
+
+def test_episode_failure_bounds_groups_and_cycles():
+    shared = ValueError("private")
+    shared.__cause__ = shared
+    value = rl._failure(
+        ExceptionGroup("private", [shared, shared]),
+        run_id="fixture",
+        elapsed_seconds=0,
+        phase="fixture",
+    )
+    assert len(value["causes"]) == 2
+    value = rl._failure(
+        ExceptionGroup("private", [ValueError() for _ in range(50)]),
+        run_id="fixture",
+        elapsed_seconds=0,
+        phase="fixture",
+    )
+    assert len(value["causes"]) == 16
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["stopped", "terminated", "closed"])
+async def test_release_observes_terminal_record_after_one_delete(status):
+    calls = []
+
+    def handler(request):
+        calls.append(request.method)
+        return (
+            httpx.Response(204)
+            if request.method == "DELETE"
+            else httpx.Response(200, json={"instance_id": "fixture", "status": status})
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        assert await rl._release(client, "fixture") is True
+    assert calls == ["DELETE", "GET"]
+
+
+@pytest.mark.asyncio
+async def test_release_polls_without_repeating_delete(monkeypatch):
+    calls, delays = [], []
+
+    async def pause(delay):
+        delays.append(delay)
+
+    def handler(request):
+        calls.append(request.method)
+        if request.method == "DELETE":
+            return httpx.Response(204)
+        status = "stopping" if calls.count("GET") == 1 else "stopped"
+        return httpx.Response(200, json={"instance_id": "fixture", "status": status})
+
+    monkeypatch.setattr(rl.asyncio, "sleep", pause)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        assert await rl._release(client, "fixture") is True
+    assert calls == ["DELETE", "GET", "GET"] and delays == [2]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "reply",
+    [httpx.Response(503), httpx.Response(200, json={"instance_id": "other", "status": "stopped"})],
+)
+async def test_release_does_not_accept_unbound_or_unavailable_readback(reply):
+    def handler(request):
+        return httpx.Response(204) if request.method == "DELETE" else reply
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        assert await rl._release(client, "fixture") is False
+
+
+@pytest.mark.asyncio
+async def test_collect_preserves_nested_mcp_failure(fixture, tmp_path, monkeypatch):
+    @asynccontextmanager
+    async def mcp(*args):
+        raise ExceptionGroup("private transport details", [httpx.ReadTimeout("private URL")])
+        yield  # pragma: no cover
+
+    monkeypatch.setattr(rl, "_mcp", mcp)
+    with pytest.raises(ExceptionGroup):
+        await collect(fixture, tmp_path)
+    receipt = json.loads((tmp_path / "episode/failure.json").read_bytes())
+    assert receipt["phase"] == "mcp_initialization"
+    assert receipt["causes"][1]["error_type"] == "ReadTimeout"
+    assert receipt["elapsed_seconds"] >= 0 and "private" not in json.dumps(receipt)
+    assert fixture.deleted

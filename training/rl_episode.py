@@ -15,6 +15,7 @@ import math
 import os
 import re
 import time
+import traceback
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -26,6 +27,69 @@ from evals.fleet import opencode_self_hosted as fleet
 
 class InvalidEpisode(RuntimeError):
     """Safe reason code only: underlying SDK exceptions may contain task data."""
+
+
+def _failure(error, *, run_id, elapsed_seconds, phase):
+    """Retain nested MCP failure locations without serializing exception messages."""
+    result = fleet.sanitized_failure_receipt(error, run_id=run_id, elapsed_seconds=elapsed_seconds)
+    result["phase"] = phase
+    pending, seen, causes = [error], set(), []
+    while pending and len(causes) < 16:
+        item = pending.pop(0)
+        if id(item) in seen:
+            continue
+        seen.add(id(item))
+        cause = {
+            "error_type": type(item).__name__,
+            "frames": [
+                {"file": Path(f.filename).name, "line": f.lineno, "function": f.name}
+                for f in traceback.extract_tb(item.__traceback__)[-10:]
+            ],
+        }
+        if (
+            isinstance(item, InvalidEpisode)
+            and item.args
+            and isinstance(item.args[0], str)
+            and item.args[0]
+            in {
+                "generation_incomplete",
+                "generation_transport_failure",
+                "generation_invalid_json",
+                "generation_finish_invalid",
+                "tool_parser_contract_invalid",
+                "non_text_tool_result",
+                "tool_error_status_missing",
+                "tool_result_exceeds_budget",
+                "turn_budget_exhausted",
+            }
+        ):
+            cause["reason"] = item.args[0]
+        causes.append(cause)
+        if isinstance(item, BaseExceptionGroup):
+            pending.extend(item.exceptions)
+        chained = item.__cause__ or item.__context__
+        if chained is not None:
+            pending.append(chained)
+    result["causes"] = causes
+    return result
+
+
+async def _release(client, instance_id):
+    """Delete once; observe the same instance through asynchronous shutdown."""
+    async with asyncio.timeout(120):
+        await _request(client, "DELETE", f"/v1/env/instances/{instance_id}")
+        while True:
+            response = await client.get(fleet.ORCHESTRATOR + f"/v1/env/instances/{instance_id}")
+            if response.status_code == 404:
+                return True
+            if response.status_code != 200:
+                return False
+            instance = response.json()
+            if instance.get("instance_id") != instance_id:
+                return False
+            if instance.get("status") in {"stopped", "terminated", "closed"}:
+                return True
+            await asyncio.sleep(2)
 
 
 async def _request(client: httpx.AsyncClient, method, path, **kwargs):
@@ -236,10 +300,12 @@ async def collect(config, directory: Path, recorder, parse, *, client):
     messages = []
     reward = None
     cleanup = {"create_attempted": False, "instance_created": False, "instance_closed": False}
+    started, phase = time.monotonic(), "account"
     try:
         account = await _request(client, "GET", "/v1/account")
         if account.get("team_id") != fleet.FLEET_TEAM_ID or account.get("team_name") != "fleet":
             raise InvalidEpisode("wrong_fleet_team")
+        phase = "task_binding"
         task = await _request(
             client,
             "GET",
@@ -249,6 +315,7 @@ async def collect(config, directory: Path, recorder, parse, *, client):
         fleet.verify_task(config, task)
         fleet.write_json_once(directory / "create-intent.json", {"run_id": config["run_id"]})
         cleanup["create_attempted"] = True
+        phase = "provisioning"
         created = await _request(
             client,
             "POST",
@@ -274,10 +341,12 @@ async def collect(config, directory: Path, recorder, parse, *, client):
                 "evidence_run_id": evidence_id,
             },
         )
+        phase = "instance_lifetime"
         instance = await _request(client, "GET", f"/v1/env/instances/{instance_id}")
         instance = await _lifetime(client, config, instance, instance_id)
         auth = await _request(client, "GET", "/v1/runner-auth/token")
         async with asyncio.timeout(config["rl"]["episode_seconds"]):
+            phase = "mcp_initialization"
             async with _mcp(instance["urls"]["root"], auth, config["rl"]["tool_seconds"]) as mcp:
                 catalog = (await mcp.list_tools()).tools
                 raw = [t.model_dump(mode="json", by_alias=True, exclude_none=True) for t in catalog]
@@ -299,6 +368,7 @@ async def collect(config, directory: Path, recorder, parse, *, client):
                     for name in config["execution"]["required_task_tools"]
                 ]
                 messages.append({"role": "user", "content": task["prompt"]})
+                phase = "agent_interaction"
                 messages, reason, env_time = await _agent(
                     recorder,
                     mcp,
@@ -308,6 +378,7 @@ async def collect(config, directory: Path, recorder, parse, *, client):
                     parse,
                 )
         fleet.write_json_once(directory / "conversation.json", {"messages": messages})
+        phase = "scoring"
         payload = fleet.build_scoring_payload(
             config, instance_id=instance_id, final_answer="", messages=[]
         )
@@ -325,26 +396,18 @@ async def collect(config, directory: Path, recorder, parse, *, client):
     except BaseException as exc:
         fleet.write_json_once(
             directory / "failure.json",
-            fleet.sanitized_failure_receipt(
+            _failure(
                 exc,
                 run_id=config["run_id"],
-                elapsed_seconds=0,
+                elapsed_seconds=time.monotonic() - started,
+                phase=phase,
             ),
         )
         raise
     finally:
         if instance_id is not None and owned:
             try:
-                async with asyncio.timeout(120):
-                    await _request(client, "DELETE", f"/v1/env/instances/{instance_id}")
-                    response = await client.get(
-                        fleet.ORCHESTRATOR + f"/v1/env/instances/{instance_id}"
-                    )
-                    cleanup["instance_closed"] = response.status_code == 404 or (
-                        response.status_code == 200
-                        and response.json().get("instance_id") == instance_id
-                        and response.json().get("status") in {"terminated", "closed"}
-                    )
+                cleanup["instance_closed"] = await _release(client, instance_id)
             except BaseException as exc:
                 cleanup["error_type"] = type(exc).__name__
         cleanup["possible_instance_leak"] = (

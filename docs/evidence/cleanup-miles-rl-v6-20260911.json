@@ -1,6 +1,39 @@
 {
   "schema": "cyber_cleanup_miles_rl_submission_v1",
-  "state": "RUNNING_FIRST_EPISODE",
+  "state": "INFRASTRUCTURE_INVALID_EPISODE_CAUSE_UNRECOVERED",
+  "terminal_at": "2026-09-11T12:26:55Z",
+  "terminal_evidence": {
+    "rayjob_status": "FAILED",
+    "failed_receipt_file_sha256": "3464b5653d6cd343b0e269bb0aa1b4f57ff9be088f25f4adcd3ed7d4c5a998fe",
+    "native_failure_file_sha256": "daf6685ba4b1ac72f060105e9ec53f325353f550d7a0a72d44d66320340a4a59",
+    "episode_failure_file_sha256": "882ccc07d8f61211c9911a46e4500d5d2b40fc5e43075c4b22f93e84b0457f8d",
+    "outer_error": "RayTaskError(InvalidEpisode)",
+    "episode_error": "ExceptionGroup",
+    "underlying_cause": "unknown: the old episode receipt omitted nested errors and the batch boundary suppressed their messages",
+    "private_log_code_frame_audit": "No recoverable nested code frames; raw log content was not exposed.",
+    "reward_receipts": 0,
+    "accepted_episodes": 0,
+    "checkpoint_files": 0,
+    "optimizer_steps_verified": 0,
+    "terminal_pod_exit_code": null,
+    "terminal_pod_exit_detail": "The Pod was already removed when the terminal transition was sampled. No exit code is inferred."
+  },
+  "release_verified": {
+    "raycluster_absent": true,
+    "owned_pods_absent": true,
+    "workload_admission": null,
+    "quota_reserved": false,
+    "gpus_held": 0,
+    "workload_finished_at": "2026-09-11T12:26:55Z"
+  },
+  "environment_release_reconciliation": {
+    "instance_id": "sdcjm37oumvs-n",
+    "api_status": "stopped",
+    "terminated_at": "2026-09-11T12:26:00.361565",
+    "fleet_team_id_verified": "a1025f0b-ad67-49fc-a023-51800ab43e84",
+    "original_cleanup_receipt": "Preserved unchanged; it incorrectly recognized only terminated/closed, not the platform's stopped final state.",
+    "source_evidence": "theseus 0fff262678a80901fee6aa398e0142039e8a40bc services/environment-api/models/models.py InstanceStatus.STOPPED"
+  },
   "source_fix_commit": "04ec41a",
   "api_name": "chris-cpt-q38-miles-rl-v6-daa26380",
   "api_run_id": "daa26380-954d-4894-84cc-94ba0d361cdd",
@@ -41,5 +74,5 @@
   "planned_dev_episodes": 2,
   "scientific_recipe_changed": false,
   "wandb_run_id": "cpt-q38-miles-rl-v6",
-  "qualification": "CPU prerequisites and admission only. Wait for actual rollout, verifier, optimizer and recoverable-checkpoint evidence."
+  "qualification": "Model initialization reached a real Fleet dev episode, then the episode failed before grading. No RL update/reward/checkpoint is qualified. Do not replay this run or claim that the separate cleanup-status fix resolves the unrecovered episode cause."
 }
