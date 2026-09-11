@@ -1,7 +1,8 @@
 # Fleet cyber task supply — 2026-09-11
 
 Read-only metadata census, observed **2026-09-11 18:14–18:22 UTC**, with a
-separate authenticated-admin follow-up completed **18:27 UTC**. No jobs,
+separate authenticated-admin follow-up completed **18:27 UTC** and a final
+score-blind exact-version census at **21:54–21:57 UTC**. No jobs,
 environments, source publications, catalog edits, or training were started.
 No task prompts, source bundles, traces, answers, flags, or scores were opened.
 
@@ -10,22 +11,29 @@ No task prompts, source bundles, traces, answers, flags, or scores were opened.
 - Our historical **160** is one frozen experiment roster: 160 distinct task keys
   and 160 exact task-version UUIDs. It is not the size of Fleet's current cyber
   library, nor proof of 160 independent vulnerability families.
-- Fleet's Registry now has **2,697 cyber task-graph source keys**. **487** were
-  created since September 1: **135 explicitly named blackbox products, 80
-  whitebox products, and 272 unsuffixed source products**. These are publications,
-  **not 487 additional certified, independent, runnable blackbox tasks**.
+- Fleet's Registry now has **2,699 cyber task-graph source keys**. **489** were
+  created since September 1: **135 explicitly named blackbox products, 81
+  whitebox products, and 273 unsuffixed source products**. These are publications,
+  **not 489 additional certified, independent, runnable blackbox tasks**.
 - The canonical **OTS Cyber** project contains **1,593 distinct catalog task
   IDs**. This is another unit: catalog membership, not Registry source count or
   readiness. The two totals must not be added or directly compared as growth.
 - Recent sources span **seven application labels**, including **Stratum and
   Oracle EPM**, which are absent from the historical roster's environment names.
+- A complete score-blind status read found **1,210 production, 379 staging, and
+  4 discarded** catalog members; every row had an exact current-version UUID and
+  attached verifier. This is an exact platform-state tier, not proof of the
+  blackbox projection, runtime receipt, or genuine accepted execution.
 - The precise count of newly accepted, runnable, independent blackbox tasks is
-  **not established**. Current generation uses modular ATG (mATG), separate from
-  the older Pipeline Lanes. **GitHub admin login is now verified working**. The
+  therefore still **not established**. Current generation uses modular ATG
+  (mATG), separate from the older Pipeline Lanes. **GitHub admin login is now
+  verified working**. The
   remaining census limitations are unavailable structured browser transport and
   a closed-batch status endpoint that does not return entry status—not missing
   user access. The admin search reports **153 `matg-cyber`-prefixed top-level
-  workflows**, which must not be counted as 153 accepted tasks.
+  workflows**, which must not be counted as 153 accepted tasks. The strict
+  receipt-proven task-version set remains the **89 exact versions** frozen in
+  `configs/data/qwen-blackbox-eligible-v1.json`; this audit did not enlarge it.
 
 ## What the historical 160 actually contains
 
@@ -252,6 +260,60 @@ could read an allowlisted projection of known batch results and then child statu
 metadata; it must not expose raw results or confuse aggregate counts with exact
 task/family identities. A new platform feature may not be necessary.
 
+### Exact-version, score-blind follow-up — 21:54–21:57 UTC
+
+The private task-status route is a safe, DB-backed projection. For one task it
+returns only task ID, current-version UUID, lifecycle status, latest instance
+status, and verifier identity/presence. Paging the OTS Cyber membership and
+querying this route for every member completed with **1,593/1,593 responses and
+zero errors**:
+
+| Evidence tier | Exact count | What it proves |
+|---|---:|---|
+| Registry source publication | 2,699 source keys; 887 explicitly suffixed `blackbox_ctf_v1` | Immutable source keys exist. It does not prove catalog registration or execution. |
+| OTS Cyber catalog membership | 1,593 task IDs | The task belongs to the project. It does not prove projection or readiness. |
+| Catalog current-version + attached verifier | 1,593 exact task/version pairs | Every current catalog row has a selected version and verifier pin. |
+| Production current-version + attached verifier | 1,210 exact task/version pairs | The platform labels the selected version production and verifier-backed. It still does not expose source projection, environment receipt, or terminal execution evidence. |
+| Staging current-version + attached verifier | 379 exact task/version pairs | The selected version remains staging; do not treat it as accepted/runnable. |
+| Discarded current-version + attached verifier | 4 exact task/version pairs | The selected version is explicitly excluded from live use. |
+| Exact runnable + terminal-receipt-proven training set | **89 task versions** | Existing direct terminal receipts and matching exact task/runtime/verifier bindings passed the stricter eligibility audit. |
+
+Of the 1,210 production current-version UUIDs, **130** are members of the frozen
+historical 160-version roster and **1,080 are not**. This is a version-identity
+comparison only: an updated version of an older logical task also lands in the
+1,080, so it is not evidence for 1,080 new vulnerability families or 1,080 new
+accepted blackbox tasks. Likewise, 80 of the strict 89 receipt-proven version
+UUIDs are current versions in OTS Cyber; the other nine need not be failures or
+drift because OTS membership is not part of that manifest's selection contract.
+
+Registry metadata provides a third, non-joinable signal. At 21:57 UTC it exposed
+514 current artifacts labelled `stage=eval`: 433 `measured`, 39 `blocked`, 34
+`retry_infrastructure`, 3 `dispatched`, 2 `error`, 2 legacy `ok`, and 1
+`unmeasurable`. Of the 433 measured rows, 306 use the Fi mATG-stage handoff path.
+The current mATG preset routes a consumed `measured` eval outcome to an accepted
+terminal state, regardless of outcome bucket. But the Registry label records the
+stage handoff before the scheduler's final transition, and its safe summary does
+not expose the exact platform task-version ID. It is therefore supporting
+pipeline evidence, not an accepted-task roster.
+
+The three safe surfaces have no common evidence-complete join key:
+
+- Registry source summaries expose exact source versions/projection labels but
+  no platform task-version UUID.
+- DB task status exposes exact task/version/verifier state but no task-graph
+  source locator, projection, promoted environment, or terminal run receipt.
+- mATG eval summaries expose terminal stage/status labels but keep the exact
+  task/source/session handoff in the receipt body. That body is score-bearing
+  and was deliberately not opened for this score-blind audit.
+
+Consequently the **89-version manifest remains the only exact
+runnable-and-receipt-proven selection**. The 1,210 production rows are useful as
+a candidate ceiling, not as launch authorization. Expanding the strict roster
+requires a server-projected, score-free join containing exact task/version,
+`blackbox_ctf_v1` source locator, promoted environment/runtime receipt, verifier
+pin, and final mATG acceptance. Publication, `production`, verifier presence, or
+`measured` alone must not be promoted to that tier.
+
 ### What is needed before expanding the Qwen dataset
 
 1. Obtain a score-blind structured mATG accepted-entry inventory, including
@@ -297,6 +359,11 @@ GET /v1/registry/artifacts/<artifact-key>/versions?limit=1&summary=true
 GET /v1/registry/artifacts?kind=cyber_task_graph_source&label=app:<app>&sort=created_at&order=desc&limit=200&offset=N
   Filter artifact creation time >= 2026-09-01; classify known suffixes.
 GET /v1/projects/63d6fda8-48c4-4726-9ec3-d1028f2c47f5/tasks
+GET /v1/pipeline/tasks/<each-project-task-id>/status
+  Project only eval_task_id/current_version_id/lifecycle_status/instance_status/
+  verifier_attached/verifier_id; require one response per project member.
+GET /v1/registry/artifacts?kind=cyber_run&label=stage:eval&sort=created_at&order=asc&limit=200&offset=N
+  Read current-version summary labels only. Do not open score-bearing run.json.
 GET /v1/pipeline-lanes?namespace=cyber&limit=500&offset=N
   Project only immutable IDs, app, projection, stage/status, archive and dates.
 
@@ -313,10 +380,20 @@ GET https://admin.flt.build/api/v1/modular-atg/runs/<workflow-id>/status?environ
 The compact metadata census checksums below are audit fingerprints, **not task
 acceptance receipts**. Sorted keys/IDs use compact JSON before SHA-256:
 
-- Final 2,697 Registry keys: `32ed53cafd5fb5f1bcd7528ed91fbc46973e63435709734f1dc7141d837c58aa`.
+- Latest 2,699-key Registry metadata tuples
+  `(id, key, current_version_id, created_at)`:
+  `ee5a3260183cfe4c2a12998bc145c3fbca88322ddc8392729f3140f52e805e31`.
+- Latest 2,699 sorted Registry keys:
+  `ebee527836d3bbb713178c047a28a0e1a22fe8f52763c9a78de24b77c90f6e7c`.
+- Earlier 2,697 Registry keys: `32ed53cafd5fb5f1bcd7528ed91fbc46973e63435709734f1dc7141d837c58aa`.
 - Earlier 2,696 keys: `ad9f764472fd9ec2601ebd01a3512622906568301c2b081b360a7c48ee235cca`.
 - Earlier 486-key selected-version metadata manifest: `8de81a6f08d936e3e8850b7e007279e66ee76ac4ab9344930d7cc00e9731b44f`.
 - OTS Cyber's 1,593 sorted task IDs: `0cc65b7d25d11f301d547b79a740498efa4fc85a299d051cc238ea0fde1c4ea8`.
+- OTS Cyber's 1,593 sorted safe status tuples
+  `(task_id, current_version_id, lifecycle, instance_status, verifier_attached, verifier_id)`:
+  `fa91ee2d5a4a1aa6a067e6962654cb4743034bc47ce7115b9bd25e516f25cd79`.
+- The 514 eval-stage artifact/current-version/allowlisted-label tuples:
+  `01169dc1440f2f829c50518fa194e81dc883b7d633095f08a6050dfca4786144`.
 - Historical 734-lane sorted `(id, stage, status, updated_at)` tuples: `84a737a7fe6af78b20dff442402e03843f1e67ea4c20ca0b8647a5339e53ed5b`.
 
 Source-code authority for interpretation: vulnerability-tracking
