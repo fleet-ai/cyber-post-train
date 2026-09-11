@@ -277,3 +277,28 @@ No new eval script/config was added: without the missing immutable checkpoint,
 route, snapshot and task bindings, a runnable-looking config would be misleading.
 The next deliverable is a reviewed exact plan and qualification receipts, not a
 duplicate campaign or a replay of historical launch commands.
+
+## September 11 implementation follow-up — still unlaunched
+
+After the audit above, the requested preparation work added a configurable
+[exact-checkpoint registration transaction](SERVING_REGISTRATION.md) and selectively
+imported PR #209's Tensorlake/OpenCode paths. The Tensorlake follow-up now binds
+the v2 context policy into both the protocol and actual image probe, reports
+unexpected/scored failures nonzero, and holds attempt capacity until the exact
+owned sandbox is positively terminated. Process exit and sandbox termination
+are not benchmark acceptance.
+
+The registration path binds selected export/GPU-check/staging evidence, requires
+measured dev-serving qualification, checks duplicate identities/paths through
+GETs, and journals exactly one explicit POST attempt. The historical hardcoded
+mutation is retired; its receipt validator and frozen source fixture remain
+readable. No endpoint or workload was submitted during this implementation.
+
+The combined synthetic suite passed **149 tests** under Python 3.12, including
+the historical receipt tests. Ruff and shell/JavaScript syntax checks passed.
+These results do not establish real image, mount, dev-serving, Tensorlake
+snapshot, compaction/continuation, benchmark-result or cleanup qualification.
+The checkpoint/route/snapshot/task bindings and measured acceptance gates above
+remain required before any scored launch; WebExploitBench remains external and
+sealed, never an HPO signal. This branch preparation does not mean PR #209 was
+merged into remote main.

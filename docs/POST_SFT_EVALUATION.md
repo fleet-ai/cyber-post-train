@@ -5,6 +5,10 @@ checkpoint on CPU, export it without an optimizer step, then qualify reload and
 the exact serving route before evaluating. An export receipt is not a capability
 result or a substitute for a successful model reload.
 
+For new configurable SGLang/Qwen3.8 registrations, use the guarded
+[serving-registration handoff](SERVING_REGISTRATION.md). It is prepared and
+synthetically tested, not a completed dev serving qualification or live route.
+
 ## Required boundaries
 
 - Select the checkpoint by the frozen training/development protocol, never by

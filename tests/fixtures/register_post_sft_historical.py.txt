@@ -1,13 +1,13 @@
-"""Historical receipt validator; configurable guarded V2 registration entrypoint.
-
-The legacy checkpoint-specific validator remains read-only for frozen evidence.
-New registration uses ``prepare/preview/execute/reconcile`` in serving_registration.
-"""
+"""Validate and register the one rendered post-SFT inference contract."""
 
 from __future__ import annotations
 
+import argparse
 import json
+import os
+import urllib.request
 from collections.abc import Mapping
+from pathlib import Path
 from typing import Any
 
 from .io import digest_json
@@ -74,13 +74,56 @@ def validate_registration_receipt(receipt: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def register(receipt: Mapping[str, Any], api_key: str) -> dict[str, Any]:
-    raise ValueError("legacy direct registration is retired; prepare a guarded V2 registration")
+    registration = validate_registration_receipt(receipt)
+    if not api_key:
+        raise ValueError("FLEET_API_KEY is required")
+    headers = {"Authorization": "Bearer " + api_key}
+    account_request = urllib.request.Request(
+        "https://orchestrator.fleetai.com/v1/account", headers=headers
+    )
+    with urllib.request.urlopen(account_request, timeout=30) as response:
+        account = json.load(response)
+    team_id = str(
+        account.get("team_id") or account.get("team", {}).get("id") or account.get("id") or ""
+    )
+    if team_id != TEAM_ID:
+        raise ValueError("Fleet account resolved to an unexpected team")
+    payload = json.dumps(registration, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    request = urllib.request.Request(
+        "https://inference.flt.build/fleet/v1/models",
+        data=payload,
+        method="POST",
+        headers={
+            **headers,
+            "Content-Type": "application/json",
+            "Idempotency-Key": "post-sft-" + str(receipt["serving_receipt_sha256"])[7:31],
+        },
+    )
+    with urllib.request.urlopen(request, timeout=60) as response:
+        result = json.load(response)
+    result_spec = _mapping(result.get("spec"), "registration API result spec")
+    result_model = _mapping(result_spec.get("model"), "registration API result model")
+    if result.get("id") != MODEL_ID or result_model.get("revision") != registration["spec"][
+        "model"
+    ]["revision"]:
+        raise ValueError("registration API result differs from the submitted immutable identity")
+    if _canonical_spec(result_spec) != _canonical_spec(registration["spec"]):
+        raise ValueError("registration API returned a different full serving spec")
+    return {
+        "id": result.get("id"),
+        "object": result.get("object"),
+        "phase": result.get("status", {}).get("phase"),
+        "registration": {"id": result.get("id"), "spec": result_spec},
+    }
 
 
 def main() -> None:
-    from .serving_registration import main as guarded_main
-
-    raise SystemExit(guarded_main())
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--receipt", type=Path, required=True)
+    args = parser.parse_args()
+    receipt = json.loads(args.receipt.read_text(encoding="utf-8"))
+    result = register(receipt, os.environ.get("FLEET_API_KEY", ""))
+    print(json.dumps(result, sort_keys=True))
 
 
 if __name__ == "__main__":

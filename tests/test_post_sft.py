@@ -1263,7 +1263,7 @@ def _registration_job_observation(serving):
                 ).read_text(),
                 "training_io.py": (ROOT / "training/io.py").read_text(),
                 "training_register_post_sft.py": (
-                    ROOT / "training/register_post_sft.py"
+                    ROOT / "tests/fixtures/register_post_sft_historical.py.txt"
                 ).read_text(),
                 "serving-registration-receipt.json": json.dumps(serving),
             },
