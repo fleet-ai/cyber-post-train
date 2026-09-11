@@ -81,7 +81,7 @@ def run(plan, plan_path, *, backend):
     if any((root / name).exists() for name in ("checkpoints", "episodes")):
         raise FileExistsError("RL-from-base cannot consume an existing run directory")
     _write(root / "STARTED.json", {"plan_sha256": digest(plan), "started_at": time.time()})
-    process = None
+    process, reason = None, None
     try:
         backend.native_source()
         name = backend.MODULE.removeprefix("training.").removesuffix("_training")
@@ -103,12 +103,22 @@ def run(plan, plan_path, *, backend):
                 start_new_session=True,
             )
             watchdog = ProgressWatchdog(time.monotonic())
+            previous_checkpoint = ()
             while process.poll() is None:
                 try:
                     process.wait(timeout=WATCHDOG_POLL_SECONDS)
                 except subprocess.TimeoutExpired:
                     gpu, io = _utilization_snapshot()
-                    reason = watchdog.observe(time.monotonic(), progress(root), gpu, io)
+                    marker = progress(root)
+                    checkpoint = tuple(row for row in marker if row[0].startswith("checkpoints/"))
+                    reason = watchdog.observe(
+                        time.monotonic(),
+                        marker,
+                        gpu,
+                        io,
+                        checkpoint_advancing=bool(checkpoint) and checkpoint != previous_checkpoint,
+                    )
+                    previous_checkpoint = checkpoint
                     if reason:
                         raise TimeoutError(reason) from None
             if process.returncode != 0:
@@ -117,7 +127,12 @@ def run(plan, plan_path, *, backend):
     except BaseException as exc:
         _write(
             root / "FAILED.json",
-            {"status": "failed", "plan_sha256": digest(plan), "error_class": type(exc).__name__},
+            {
+                "status": "failed",
+                "plan_sha256": digest(plan),
+                "error_class": type(exc).__name__,
+                "watchdog_reason": reason,
+            },
         )
         raise RuntimeError(
             "RL run failed; private evidence preserved; no automatic retry"

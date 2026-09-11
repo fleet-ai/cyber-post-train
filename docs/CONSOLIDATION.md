@@ -233,6 +233,14 @@ terminal result handling and cancellation of a confirmed idle task. They also
 verify missing W&B injection fails before creating its output directory. Tests
 use synthetic telemetry and Ray replies; no live workload is cancelled.
 
+The shared RL supervisor now forwards actual checkpoint-file progression to the
+existing watchdog: only an advancing save receives its final five-minute drain,
+and it still stops at the absolute drain deadline. Four regression cases exercise
+that supervisor with the real watchdog, including stale checkpoints, episode-only
+activity and high GPU utilization. Failure receipts now retain the safe watchdog
+reason. This fixes future preparations only; queued Miles V7 and already-frozen
+SkyRL V5 bundles are unchanged and do not contain this correction.
+
 The subsequent minimal wheel (`c8c8994ac0cc93e22d1d1ac03568a5cf1e1324c63ff177855fa45cebcbeebe35`)
 also passes the same eight public/two legacy help paths outside the checkout,
 redirect/user guards, numeric JSON, module identity and replay rejection. Its

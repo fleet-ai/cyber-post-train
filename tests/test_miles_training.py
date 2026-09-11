@@ -599,7 +599,9 @@ def test_watchdog_bounds_native_startup_and_only_cleans_own_process(
     monkeypatch.setattr(
         sft_runtime,
         "ProgressWatchdog",
-        lambda started: NS(observe=lambda *a: "confirmed_no_progress_idle" if stalled else None),
+        lambda started: NS(
+            observe=lambda *a, **kw: "confirmed_no_progress_idle" if stalled else None
+        ),
     )
     if stalled:
         with pytest.raises(RuntimeError):

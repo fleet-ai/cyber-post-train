@@ -163,3 +163,57 @@ def test_wandb_configuration_requires_injection_before_creating_output(tmp_path,
     with pytest.raises(ValueError, match="secret injection missing"):
         runtime._configure_wandb(plan)
     assert not (tmp_path / "wandb").exists()
+
+
+@pytest.mark.parametrize("activity", ["checkpoint", "stale_checkpoint", "episode", "none"])
+def test_rl_runtime_grants_only_checkpoint_writes_a_bounded_final_drain(
+    tmp_path, monkeypatch, activity
+):
+    from training import rl_runtime
+
+    hard, drain = runtime.WATCHDOG_HARD_SECONDS, runtime.WATCHDOG_DRAIN_SECONDS
+    clock = SimpleNamespace(now=0)
+    monkeypatch.setattr(rl_runtime.time, "monotonic", lambda: clock.now)
+    monkeypatch.setenv("RUN_DIR", str(tmp_path))
+    monkeypatch.setattr(runtime, "_utilization_snapshot", lambda: (100, 100))
+    backend = SimpleNamespace(
+        MODULE="training.synthetic_training",
+        native_source=Mock(),
+        native_result=Mock(side_effect=AssertionError("must not accept an unfinished run")),
+    )
+    samples = []
+    child = SimpleNamespace(pid=123456, returncode=None, poll=lambda: None)
+    terminate = Mock()
+    monkeypatch.setattr(rl_runtime.os, "killpg", terminate)
+
+    def wait(*, timeout):
+        if timeout == 30:  # bounded cleanup, not a watchdog sample
+            return -15
+        assert timeout == runtime.WATCHDOG_POLL_SECONDS
+        moments = [hard - 1, hard, hard + drain]
+        clock.now = moments[len(samples)]
+        samples.append(clock.now)
+        if activity != "none" and (activity != "stale_checkpoint" or len(samples) == 1):
+            folder = "checkpoints" if "checkpoint" in activity else "episodes"
+            path = tmp_path / folder / "synthetic-state"
+            path.parent.mkdir(exist_ok=True)
+            path.write_bytes(b"x" * len(samples))
+        raise subprocess.TimeoutExpired("synthetic", timeout)
+
+    child.wait = wait
+    monkeypatch.setattr(rl_runtime.subprocess, "Popen", Mock(return_value=child))
+    with pytest.raises(RuntimeError, match="no automatic retry"):
+        rl_runtime.run({"output_root": str(tmp_path)}, tmp_path / "plan.json", backend=backend)
+    assert samples == (
+        [hard - 1, hard, hard + drain] if activity == "checkpoint" else [hard - 1, hard]
+    )
+    proof = json.loads((tmp_path / "FAILED.json").read_text())
+    assert proof["error_class"] == "TimeoutError"
+    assert proof["watchdog_reason"] == "hard_runtime_bound"
+    assert proof.pop("sha256") == rl_runtime.digest(proof)
+    backend.native_result.assert_not_called()
+    assert not (tmp_path / "NATIVE_TRAINING_COMPLETE.json").exists()
+    assert terminate.call_args_list == [
+        ((child.pid, rl_runtime.signal.SIGTERM),),
+        ((child.pid, rl_runtime.signal.SIGKILL),),
+    ]
