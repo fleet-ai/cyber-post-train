@@ -4,6 +4,7 @@ import dataclasses
 import importlib.util
 import json
 import random
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -345,7 +346,7 @@ class TestGlm53LoraCompatibility(unittest.TestCase):
         scales = torch.linspace(0.5, 1.5, 10).reshape(5, 2)
         with bf16_fp8_conversion(cpu_threads=1):
             expected = Fp8Dequantize(None)._dequantize_one(weight, scales)
-        for threads in (None, 1, 4):
+        for threads in (None, 1, 4, 16):
             with self.subTest(threads=threads):
                 with bf16_fp8_conversion(cpu_threads=threads):
                     assert torch.get_num_threads() == (threads or initial_threads)
@@ -360,7 +361,7 @@ class TestGlm53LoraCompatibility(unittest.TestCase):
                     raise RuntimeError("load failed")
                 assert torch.get_num_threads() == initial_threads
                 assert Fp8Dequantize._dequantize_one is original
-        for invalid in (True, False, 0, -1, 5, 4.0, "4"):
+        for invalid in (True, False, 0, -1, 17, 4.0, "4"):
             with (
                 self.subTest(invalid=invalid),
                 self.assertRaisesRegex(ValueError, "threads"),
@@ -370,7 +371,7 @@ class TestGlm53LoraCompatibility(unittest.TestCase):
             assert torch.get_num_threads() == initial_threads
             assert Fp8Dequantize._dequantize_one is original
 
-    def test_real_loader_uses_four_threads_then_restores(self):
+    def test_real_loader_uses_sixteen_threads_then_restores(self):
         from transformers import AutoModelForCausalLM
 
         initial_threads = torch.get_num_threads()
@@ -384,7 +385,7 @@ class TestGlm53LoraCompatibility(unittest.TestCase):
         with patch.object(AutoModelForCausalLM, "from_pretrained", side_effect=load):
             loaded(self.base)
             loaded(self.base, meta=True)
-        assert observed == [4]  # Meta-only ranks do not enter the CPU payload loader.
+        assert observed == [16]  # Meta-only ranks do not enter the CPU payload loader.
         assert torch.get_num_threads() == initial_threads
         with (
             patch.object(AutoModelForCausalLM, "from_pretrained", side_effect=RuntimeError),
@@ -392,6 +393,130 @@ class TestGlm53LoraCompatibility(unittest.TestCase):
         ):
             loaded(self.base)
         assert torch.get_num_threads() == initial_threads
+
+    def test_invalid_loader_inputs_fail_before_reading_weights(self):
+        from transformers import AutoConfig, AutoModelForCausalLM
+
+        from training import glm_runtime
+
+        for kwargs in ({"rank": 0}, {"rank": True}, {"alpha": -1}, {"attention": "unknown"}):
+            with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
+                load_lora_model(*self.base, meta_init=False, **kwargs)
+        for change in (
+            {"model_type": "qwen3_5"},
+            {"quantization_config": {"quant_method": "int8"}},
+            {"quantization_config": {"quant_method": "fp8", "weight_block_size": [64, 128]}},
+        ):
+            cfg = AutoConfig.from_pretrained(self.base[0], local_files_only=True)
+            for key, value in change.items():
+                setattr(cfg, key, value)
+            with (
+                self.subTest(change=change),
+                patch.object(AutoConfig, "from_pretrained", return_value=cfg),
+                patch.object(AutoModelForCausalLM, "from_pretrained") as payload,
+                self.assertRaises(ValueError),
+            ):
+                loaded(self.base)
+            payload.assert_not_called()
+        with (
+            patch.object(glm_runtime, "FP8_INTEGRATION_SHA256", "0" * 64),
+            self.assertRaisesRegex(ValueError, "unqualified"),
+            bf16_fp8_conversion(),
+        ):
+            self.fail("a different native integration entered the loader")
+        from transformers.integrations.finegrained_fp8 import Fp8Dequantize
+
+        with self.assertRaisesRegex(ValueError, "E4M3"), bf16_fp8_conversion():
+            Fp8Dequantize(None)._dequantize_one(
+                torch.ones((2, 2), dtype=torch.int8), torch.ones((1, 1))
+            )
+        for lr in (0, -1, float("nan"), float("inf"), 0.011):
+            with self.subTest(lr=lr), self.assertRaisesRegex(ValueError, "learning rate"):
+                make_optimizer(None, lr=lr)
+        for sha in (None, "short", "z" * 64):
+            with self.subTest(sha=sha), self.assertRaisesRegex(ValueError, "SHA-256"):
+                BaseIdentity("zai-org/GLM-5.3", "3" * 40, sha, "b" * 64, "c" * 64)
+
+    def test_checkpoint_decode_rejects_structural_and_numeric_defects_before_restore(self):
+        import hashlib
+
+        from training.glm_runtime import canonical
+
+        model = loaded(self.base)
+        optimizer = make_optimizer(model, lr=1e-3)
+        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lambda _: 1)
+        step(model, optimizer, scheduler, torch.arange(3, 19).reshape(1, 16))
+        source = self.root / "original"
+        save_checkpoint(
+            source,
+            model,
+            optimizer,
+            scheduler,
+            identity=self.base[1],
+            plan_sha256="b" * 64,
+            optimizer_step=1,
+            next_batch=1,
+            epoch=0,
+            at_optimizer_boundary=True,
+        )
+        unchanged = {n: p.detach().clone() for n, p in adapter_parameters(model).items()}
+        for case in (
+            "receipt_digest",
+            "extra_file",
+            "payload_set",
+            "tensor_names",
+            "tensor_shape",
+            "nonfinite",
+            "state_keys",
+            "rng_count",
+            "cuda_rng_count",
+        ):
+            path = self.root / case
+            shutil.copytree(source, path)
+            receipt = json.loads((path / "COMPLETE.json").read_text())
+            if case in {"tensor_names", "tensor_shape", "nonfinite"}:
+                payload = path / "adapter_tensors.safetensors"
+                tensors = load_file(str(payload))
+                key = next(iter(tensors))
+                if case == "tensor_names":
+                    del tensors[key]
+                elif case == "tensor_shape":
+                    tensors[key] = tensors[key].flatten()
+                else:
+                    tensors[key].fill_(float("nan"))
+                save_file(tensors, str(payload))
+            elif case in {"state_keys", "rng_count", "cuda_rng_count"}:
+                payload = path / "training_state.pt"
+                state = torch.load(payload, map_location="cpu", weights_only=True)
+                if case == "state_keys":
+                    state["extra"] = 1
+                elif case == "rng_count":
+                    state["rng_by_rank"] = []
+                else:
+                    state["rng_by_rank"][0]["cuda"] = [torch.zeros(1, dtype=torch.uint8)]
+                torch.save(state, payload)
+            elif case == "extra_file":
+                (path / "unexpected").touch()
+            elif case == "payload_set":
+                receipt["payloads"].pop("training_state.pt")
+            for name in receipt["payloads"]:
+                payload = path / name
+                receipt["payloads"][name] = {
+                    "bytes": payload.stat().st_size,
+                    "sha256": sha_file(payload),
+                }
+            receipt.pop("receipt_sha256")
+            receipt["receipt_sha256"] = (
+                "0" * 64
+                if case == "receipt_digest"
+                else hashlib.sha256(canonical(receipt)).hexdigest()
+            )
+            (path / "COMPLETE.json").write_bytes(canonical(receipt))
+            with self.subTest(case=case), self.assertRaises(ValueError):
+                load_checkpoint(
+                    path, model, optimizer, scheduler, identity=self.base[1], plan_sha256="b" * 64
+                )
+            assert all(torch.equal(unchanged[n], p) for n, p in adapter_parameters(model).items())
 
     def test_partial_fp8_blocks_follow_declared_block_size(self):
         from transformers.integrations.finegrained_fp8 import Fp8Dequantize

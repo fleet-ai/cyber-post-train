@@ -162,7 +162,7 @@ def test_glm_compiler_binds_full_base_adapter_and_worker_bundle(glm_config, tmp_
         sft.job_request(plan)
 
 
-@pytest.mark.parametrize("defect", ["rank", "alpha", "missing", "extra", "memory", "nodes"])
+@pytest.mark.parametrize("defect", ["rank", "alpha", "missing", "extra", "memory", "nodes", "cpu"])
 def test_glm_rejects_unsafe_or_ambiguous_configuration(glm_config, tmp_path, defect):
     if defect == "missing":
         glm_config.pop("lora")
@@ -170,6 +170,8 @@ def test_glm_rejects_unsafe_or_ambiguous_configuration(glm_config, tmp_path, def
         glm_config.pop("cluster")
     elif defect == "nodes":
         glm_config["recipe"]["nodes"] = 1
+    elif defect == "cpu":
+        glm_config["cluster"]["resources"]["cpu_request"] = "15999m"
     else:
         glm_config["lora"][defect] = 0
     with pytest.raises(ValueError):

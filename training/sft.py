@@ -165,8 +165,11 @@ def compile_sft(config: dict, *, relative_to: Path) -> dict:
             recipe["nodes"] < 2
             or recipe["gpus_per_node"] != 8
             or quantity(plan["execution"]["resources"]["memory_request"]) < quantity("2048Gi")
+            or quantity(plan["execution"]["resources"]["cpu_request"]) < 16
         ):
-            raise ValueError("full GLM LoRA requires at least two 8-GPU nodes and 2048Gi per node")
+            raise ValueError(
+                "full GLM LoRA requires at least two 8-GPU nodes, 2048Gi and 16 CPUs per node"
+            )
         plan["lora"] = config.get("lora")
         plan["model"]["tokenizer_manifest_sha256"] = lock["tokenizer"]["manifest_sha256"]
         plan["glm_runtime_sha256"] = hashlib.sha256(

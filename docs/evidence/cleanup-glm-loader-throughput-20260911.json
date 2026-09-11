@@ -1,0 +1,268 @@
+{
+  "benchmark_to_production": "Exact source comparison proves only the bounded thread limit, selected count and corresponding documentation changed; conversion arithmetic is identical. The modified loader passed independent native tests.",
+  "classification": "CPU_loader_improvement_not_full_model_training_qualification",
+  "decision": "Use sixteen threads only during rank-zero CPU loading; restore the prior thread setting before native training. The compiler requires at least sixteen requested CPUs. Thirty-two threads add little measured benefit.",
+  "full_expert_group": {
+    "evidence": {
+      "experts": 256,
+      "finished_at": "2026-09-11T14:50:56.980198+00:00",
+      "full_model_loaded": false,
+      "gpus": 0,
+      "layer": 3,
+      "limits": [
+        "All 256 gate/up experts from one layer; excludes down projections, other layers and distributed FSDP initialization.",
+        "Read-only source hashes warm the OS/SFS cache before timing."
+      ],
+      "max_rss_kib": 32232376,
+      "model": "zai-org/GLM-5.3",
+      "optimizer_steps": 0,
+      "output_bytes": 12884901888,
+      "output_shape": [
+        256,
+        4096,
+        6144
+      ],
+      "results": [
+        {
+          "all_512_expert_projections_equal": true,
+          "independent_reference_seconds": 29.800648977980018,
+          "native_dequant_merge_concat_seconds": 12.366980635095388,
+          "output_sha256": "ba45a9e71d530f0b97e24cbdc0f7e6da82d2822292b82d2063ec1ae09ac00c2d",
+          "payload_load_and_widen_seconds": 2.480194865958765,
+          "threads": 16
+        }
+      ],
+      "revision": "30333038ada1f1dacb294a93270305a890b50c14",
+      "schema": "cyber_glm_full_expert_group_cpu_v1",
+      "sha256": "92199e066e4838ddbf454bcb02481f9f8ba82a7cdce062fc7715cba42fdab8e2",
+      "source_hash_seconds": 13.53516100696288,
+      "source_shards": [
+        {
+          "path": "model-00038-of-00141.safetensors",
+          "sha256": "e97f6e12233173645263c8cb25ae809c8393c19545669dd0f116a27282c781d1"
+        },
+        {
+          "path": "model-00039-of-00141.safetensors",
+          "sha256": "fb6f9c9987cf738974a55869fdb4299d3ae04addf3c0a38903178f94a7cbe3ae"
+        },
+        {
+          "path": "model-00040-of-00141.safetensors",
+          "sha256": "77db405ecf43966c2be50ce6dbb5cdd7992e6aefc1c6b666917dfe4ac16fcc92"
+        }
+      ],
+      "source_unchanged": true,
+      "started_at": "2026-09-11T14:49:32.467632+00:00",
+      "thread_setting_restored": true
+    },
+    "execution": {
+      "bundle_sha256": "0643a2efbc38df47cba708d5ee47579c396307db2e9564bbb0a6d651ea2608fc",
+      "exit_code": 0,
+      "finished_at": "2026-09-11T14:50:57Z",
+      "image_id": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+      "manifest_sha256": "15bb40700cd459886c3c252256e97cae015305b16cccc455c8569f14e9772994",
+      "name": "chris-cpt-glm-full-expert-group-cpu-v1",
+      "node": "computeinstance-e04xqkxk3gs7cxe88t",
+      "phase": "Succeeded",
+      "receipt_sha256": "92199e066e4838ddbf454bcb02481f9f8ba82a7cdce062fc7715cba42fdab8e2",
+      "resources": {
+        "limits": {
+          "cpu": "16",
+          "memory": "80Gi"
+        },
+        "requests": {
+          "cpu": "16",
+          "memory": "64Gi"
+        }
+      },
+      "restarts": 0,
+      "started_at": "2026-09-11T14:49:15Z",
+      "uid": "3a217c13-0389-4420-842a-1632028ae397"
+    }
+  },
+  "limitations": [
+    "Full-group timing includes all 256 gate/up experts from one layer, not all layers, down projections, distributed placement or an optimizer step.",
+    "Source hashing warms the OS/SFS cache; these are not cold-start end-to-end measurements.",
+    "Full-model startup remains unqualified. No GLM GPU successor or new serving endpoint was submitted.",
+    "Native coverage is 320/334 statements and 101/118 branches, not full distributed/GPU coverage.",
+    "The active Qwen evaluation and queued Miles run retain their immutable older bundles."
+  ],
+  "local_tests": {
+    "coverage_sha256": "19a2d3bb31caeae6c4c2e2761f63abe231b623ef3a4ea9ca1cfa8192b48b6f0b",
+    "passed": 1770,
+    "skipped": 156,
+    "subtests_passed": 7
+  },
+  "native_tests": {
+    "counts": {
+      "errors": 0,
+      "failures": 0,
+      "skipped": 0,
+      "tests": 50
+    },
+    "coverage": {
+      "training/glm_runtime.py": {
+        "covered_branches": 101,
+        "covered_lines": 320,
+        "excluded_lines": 0,
+        "missing_branches": 17,
+        "missing_lines": 14,
+        "num_branches": 118,
+        "num_partial_branches": 17,
+        "num_statements": 334,
+        "percent_branches_covered": 85.59322033898304,
+        "percent_branches_covered_display": "86",
+        "percent_covered": 93.14159292035399,
+        "percent_covered_display": "93",
+        "percent_statements_covered": 95.80838323353294,
+        "percent_statements_covered_display": "96"
+      }
+    },
+    "execution": {
+      "bundle_sha256": "a9a3ebd83e46ea7fcccb2f4bf51fdf792f58077be6b3e17af564a3687c8ef019",
+      "exit_code": 0,
+      "finished_at": "2026-09-11T14:51:40Z",
+      "image_id": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+      "manifest_sha256": "1aaf08a29c5b3e5ad04d97cd4cf88c4b44c4153e64c8c0572cecdf14839a60e5",
+      "name": "chris-cpt-glm-native-coverage-v2",
+      "node": "computeinstance-e04a737eqtfvpnyx08",
+      "phase": "Succeeded",
+      "receipt_sha256": "713021854b1aa8789a7fa5affda83a391be52fc30f49f22bbcec5eced4161fb9",
+      "resources": {
+        "limits": {
+          "cpu": "4",
+          "memory": "16Gi"
+        },
+        "requests": {
+          "cpu": "1",
+          "memory": "4Gi"
+        }
+      },
+      "restarts": 0,
+      "started_at": "2026-09-11T14:51:17Z",
+      "uid": "7cc825df-9ccc-4111-a51e-454d3d972097"
+    }
+  },
+  "observed_at": "2026-09-11T14:55:21.409115+00:00",
+  "resources": {
+    "GPUs": 0,
+    "all_test_containers_terminal": true,
+    "maximum_additional_nodes": 1
+  },
+  "schema": "cyber_glm_loader_throughput_qualification_v1",
+  "sha256": "f5982f30217d71e0392398adee46cc65b16edfd751d0b3fbe2275502499e08e5",
+  "sixteen_vs_four_speedup": 3.301230320268581,
+  "source_sha256": {
+    "tests/test_glm_runtime.py": "4997f84bb5f22cb03fd2cbba0f827ca2f9a0ef151694cac66b699f064e22238f",
+    "tests/test_sft_config.py": "6a01da02d6bbeea6167c9ff4ee5b6acc6eb9bdf4783c99aec5d40fbec6bb4cac",
+    "training/glm_runtime.py": "2b35b5c0675edcb6d9160dbf98f3816106f48fc416d81f1d7e3f61d857a630d0",
+    "training/sft.py": "8a566e53994818fdc5c4a3dfd37cc6caf184d18e65d2d3ba06a3e0b2e30087b4"
+  },
+  "thread_sweep": {
+    "evidence": {
+      "experts": 64,
+      "finished_at": "2026-09-11T14:47:23.345034+00:00",
+      "full_model_loaded": false,
+      "gpus": 0,
+      "layer": 3,
+      "limits": [
+        "64 of 256 experts from one layer, not a complete layer/full model or distributed FSDP initialization.",
+        "Read-only source hashes warm the OS/SFS cache before timing."
+      ],
+      "max_rss_kib": 13409828,
+      "model": "zai-org/GLM-5.3",
+      "optimizer_steps": 0,
+      "output_bytes": 3221225472,
+      "output_shape": [
+        64,
+        4096,
+        6144
+      ],
+      "results": [
+        {
+          "all_128_expert_projections_equal": true,
+          "independent_reference_seconds": 7.662729048868641,
+          "native_dequant_merge_concat_seconds": 5.422343813115731,
+          "output_sha256": "815fddc186de2c9d020f11ae2e4999204769e93518f71e3e0b2fd3e0d6224251",
+          "payload_load_and_widen_seconds": 2.3861225289292634,
+          "threads": 4
+        },
+        {
+          "all_128_expert_projections_equal": true,
+          "independent_reference_seconds": 5.476853094063699,
+          "native_dequant_merge_concat_seconds": 3.285456656012684,
+          "output_sha256": "815fddc186de2c9d020f11ae2e4999204769e93518f71e3e0b2fd3e0d6224251",
+          "payload_load_and_widen_seconds": 1.2203269279561937,
+          "threads": 8
+        },
+        {
+          "all_128_expert_projections_equal": true,
+          "independent_reference_seconds": 5.538027968956158,
+          "native_dequant_merge_concat_seconds": 1.8425982100889087,
+          "output_sha256": "815fddc186de2c9d020f11ae2e4999204769e93518f71e3e0b2fd3e0d6224251",
+          "payload_load_and_widen_seconds": 0.522721862886101,
+          "threads": 16
+        },
+        {
+          "all_128_expert_projections_equal": true,
+          "independent_reference_seconds": 5.55136773083359,
+          "native_dequant_merge_concat_seconds": 1.8753149209078401,
+          "output_sha256": "815fddc186de2c9d020f11ae2e4999204769e93518f71e3e0b2fd3e0d6224251",
+          "payload_load_and_widen_seconds": 0.3031570890452713,
+          "threads": 32
+        }
+      ],
+      "revision": "30333038ada1f1dacb294a93270305a890b50c14",
+      "schema": "cyber_glm_training_node_thread_sweep_v1",
+      "sha256": "b163bbf211ac49f5042bbe3eb059854529d6d56ed9c195ef75ffe919919e0a68",
+      "source_hash_seconds": 18.011061907047406,
+      "source_shards": [
+        {
+          "path": "model-00038-of-00141.safetensors",
+          "sha256": "e97f6e12233173645263c8cb25ae809c8393c19545669dd0f116a27282c781d1"
+        },
+        {
+          "path": "model-00039-of-00141.safetensors",
+          "sha256": "fb6f9c9987cf738974a55869fdb4299d3ae04addf3c0a38903178f94a7cbe3ae"
+        },
+        {
+          "path": "model-00040-of-00141.safetensors",
+          "sha256": "77db405ecf43966c2be50ce6dbb5cdd7992e6aefc1c6b666917dfe4ac16fcc92"
+        }
+      ],
+      "source_unchanged": true,
+      "started_at": "2026-09-11T14:45:54.013155+00:00",
+      "thread_setting_restored": true
+    },
+    "execution": {
+      "bundle_sha256": "af3b2dddf5b3e29cadb48fcec6c7cc87aaa213cb78183b757bb14b6c3cfc7c96",
+      "exit_code": 0,
+      "finished_at": "2026-09-11T14:47:29Z",
+      "image_id": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+      "manifest_sha256": "4391a1e64aa0b8eb433a85d589f2772093a1dc5a5c85bbb66c88ed1fc3579f1b",
+      "name": "chris-cpt-glm-thread-sweep-cpu-v1",
+      "node": "computeinstance-e04xqkxk3gs7cxe88t",
+      "phase": "Succeeded",
+      "receipt_sha256": "b163bbf211ac49f5042bbe3eb059854529d6d56ed9c195ef75ffe919919e0a68",
+      "resources": {
+        "limits": {
+          "cpu": "32",
+          "memory": "20Gi"
+        },
+        "requests": {
+          "cpu": "32",
+          "memory": "16Gi"
+        }
+      },
+      "restarts": 0,
+      "started_at": "2026-09-11T14:45:31Z",
+      "uid": "02bd9c64-eb14-4631-a449-9fbd56e8ccf3"
+    }
+  },
+  "wheel": {
+    "outside_checkout": true,
+    "public_help_checks": 12,
+    "sha256": "e5f41cc6e8f299dafaa1c75475101e10167f1075802cb982fba8039f8a3f331f",
+    "source_byte_identity": true,
+    "torch_installed": false
+  }
+}

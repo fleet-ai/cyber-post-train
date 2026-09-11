@@ -105,13 +105,13 @@ def bf16_fp8_conversion(*, cpu_threads: int | None = None):
     this does not modify installed files, and the original method is restored.
     Ray's one-CPU actors otherwise constrain rank-zero conversion to one thread.
     The optional bounded thread setting covers conversion and expert merging,
-    and is restored before training. Four threads are measured, not a full-load gate.
+    and is restored before training. Sixteen threads are measured, not a full-load gate.
     """
     import torch
     from transformers.integrations import finegrained_fp8
 
-    if cpu_threads is not None and (type(cpu_threads) is not int or not 1 <= cpu_threads <= 4):
-        raise ValueError("CPU conversion threads must be an integer between one and four")
+    if cpu_threads is not None and (type(cpu_threads) is not int or not 1 <= cpu_threads <= 16):
+        raise ValueError("CPU conversion threads must be an integer between one and sixteen")
     if sha_file(Path(inspect.getfile(finegrained_fp8))) != FP8_INTEGRATION_SHA256:
         raise ValueError("unqualified FP8 integration source; revalidate before use")
     with _DEQUANTIZE_LOCK:
@@ -196,7 +196,7 @@ def load_lora_model(
         dequant = FineGrainedFP8Config(
             dequantize=True, weight_block_size=(128, 128), activation_scheme="dynamic"
         )
-        with bf16_fp8_conversion(cpu_threads=4):
+        with bf16_fp8_conversion(cpu_threads=16):
             model, loading = AutoModelForCausalLM.from_pretrained(
                 str(root),
                 config=config,
