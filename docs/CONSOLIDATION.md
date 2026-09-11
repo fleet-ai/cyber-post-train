@@ -34,6 +34,11 @@ the original goal or all supported model/backend combinations are complete.
 - **Preserved outside Git:** private data, results, ignored qualification tools
   and runtime outputs remain in the existing worktrees/stores. Do not delete them
   or replay their attempts when starting from a fresh clone.
+- **Dependency follow-up:** GitHub's pre-existing September 8
+  [Accelerate advisory](https://github.com/fleet-ai/cyber-post-train/security/dependabot/2)
+  remains open at handoff (medium severity; sharded-checkpoint path traversal/DoS,
+  `GHSA-4j2p-28q2-5m79`). The alert lists no patched version. Do not load untrusted
+  checkpoint inputs; this note does not claim the dependency defect is fixed.
 
 No new cluster submissions, successor runs or monitors are part of this handoff.
 Before resuming live qualification, resolve the alert-safe development/reporting
