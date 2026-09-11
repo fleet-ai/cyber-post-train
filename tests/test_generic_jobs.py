@@ -38,6 +38,80 @@ def config():
     }
 
 
+def test_runtime_bundle_executes_exact_bytes_once(tmp_path):
+    import os
+    import shlex
+    import subprocess
+    import sys
+
+    from cyber_post_train.jobs import bundled_request
+
+    files = {
+        "synthetic/__init__.py": "",
+        "synthetic/run.py": "import pathlib,sys;pathlib.Path('result').write_text(sys.argv[1])",
+    }
+    request = bundled_request(config(), files, "synthetic.run", ["literal $not-a-shell-command"])
+    assert request == bundled_request(
+        config(), files, "synthetic.run", ["literal $not-a-shell-command"]
+    )
+    env = {**os.environ, **request["env"], "RUN_DIR": str(tmp_path)}
+    command = [sys.executable, *shlex.split(request["command"])[1:]]
+    assert subprocess.run(command, env=env, capture_output=True).returncode == 0
+    assert (tmp_path / ".runtime/result").read_text() == "literal $not-a-shell-command"
+    assert subprocess.run(command, env=env, capture_output=True).returncode != 0
+    broken = {**env, "CYBER_RUNTIME_BUNDLE": "YQ=="}
+    assert subprocess.run(command, env=broken, capture_output=True).returncode != 0
+
+
+@pytest.mark.parametrize("fault", ["missing", "escape", "absolute", "text"])
+def test_runtime_bundle_rejects_bad_content(fault):
+    from cyber_post_train.jobs import bundled_request
+
+    files = {"run.py": "pass"}
+    if fault == "missing":
+        files = {}
+    elif fault == "escape":
+        files["../escape"] = "pass"
+    elif fault == "absolute":
+        files["/absolute"] = "pass"
+    else:
+        files["run.py"] = None
+    with pytest.raises(JobsError):
+        bundled_request(config(), files, "run", [])
+
+
+def test_environment_size_limit_counts_utf8_bytes_and_name():
+    value = config()
+    value["env"]["DATA"] = "a" * (131072 - len("DATA") - 2)
+    validate_request(value)
+    value["env"]["DATA"] += "a"
+    with pytest.raises(JobsError, match="process-start limit"):
+        validate_request(value)
+    value["env"]["DATA"] = "é" * 70000
+    with pytest.raises(JobsError, match="process-start limit"):
+        validate_request(value)
+
+
+def test_gzip_header_is_reproducible_across_platforms(monkeypatch):
+    import gzip
+
+    from cyber_post_train.jobs import canonical_gzip
+
+    original = gzip.compress
+    results = []
+    for os_byte in (3, 19, 255):
+
+        def compress(payload, mtime, selected_os=os_byte):
+            blob = original(payload, mtime=mtime)
+            return blob[:9] + bytes([selected_os]) + blob[10:]
+
+        monkeypatch.setattr(gzip, "compress", compress)
+        result = canonical_gzip(b"synthetic immutable payload")
+        assert result[9] == 255 and gzip.decompress(result) == b"synthetic immutable payload"
+        results.append(result)
+    assert results[0] == results[1] == results[2]
+
+
 def manifest(request=None):
     c = request or config()
     pod = {

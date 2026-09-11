@@ -1,0 +1,103 @@
+{
+  "schema": "cyber_cleanup_qualification_v1",
+  "classification": "cpu_operational_gate_not_gpu_conversion_or_rl_training",
+  "runtime_sha256": "34a3d68554715ff8f8e013a53c1a1e4bfcc07c2e22d8a01aef89429ca01e7a11",
+  "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/miles-trainer@sha256:d1d37c584e2aafdd47df1e1f3492ff3343eb3b83a5f658cf7ce2432ee8d6ef33",
+  "native_converter_sha256": "0c2541d30073777a30344273a3773844a70ca1961287520c0496a1cec18d43f6",
+  "native_default_function_source_sha256": "07725785aed8545096eaa6c66bbc8c7c5ec51c0dd68b7d7953e22674798d24ed",
+  "selftest": {
+    "pod": "chris-cpt-miles-cpu-selftest-v12",
+    "uid": "aa7284cb-b287-4d83-878f-c07a0e12c691",
+    "terminal": "Succeeded",
+    "finished_at": "2026-09-11T05:31:28Z",
+    "exit_code": 0,
+    "restarts": 0,
+    "gpus": 0,
+    "tests": 228,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "bundle_sha256": "eee043d28deadb9a0a975d2ac345ded8ab5245ea73c6e84bb822159e0b8c9e77",
+    "manifest_sha256": "5f75ade3a353d128c35d6d11bce65811b16a2074be8dea7090a5f6126cfa8c7f",
+    "receipt_sha256": "e0031be1c077ef956a2f679742795d6a3c6589a7b84e803aa89f6ef65bd3ab37",
+    "test_output_sha256": "efeae9402304ae37e4798269f30d4b00cea3462e7ebd2f921aefb715942e54e5",
+    "coverage": {
+      "training.miles_conversion": {"statements": 202, "branches": 68, "missing": 0},
+      "training.miles": {"statements": 88, "branches": 38, "missing": 0},
+      "training.rl_data": {"statements": 136, "branches": 58, "missing": 0},
+      "training.rl_episode": {"statements": 258, "branches": 88, "missing": 0}
+    }
+  },
+  "exact_model_preflight": {
+    "pod": "chris-cpt-miles-base-preflight-v2",
+    "uid": "f02e1f59-5aee-435d-8cfb-7492e46fd2e0",
+    "terminal": "Succeeded",
+    "finished_at": "2026-09-11T05:31:18Z",
+    "exit_code": 0,
+    "restarts": 0,
+    "gpus": 0,
+    "model_files": 28,
+    "model_root": "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2",
+    "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "plan_sha256": "0517139bc755843f9413b7f3e02cf86ed499a1361e096913203cbb14f321c5f0",
+    "request_sha256": "e68a9ae2e75a679a29c9f77779be3873f0ac0ba23fccf6291c1ae4a4e2db6009",
+    "native_argv_sha256": "b1cfe5c8e9579896c5d9c644b142d212eaceafa21124b37d8a31e69223348bda",
+    "receipt_sha256": "30a4067959ce5d82f5ee9dfcba121627b55bf45a497966ff167e18135821ebbf",
+    "bundle_sha256": "f6dda6ed1f94c328d0b7c320699f65bbbbf7cb134ee83309f91b942081613557",
+    "manifest_sha256": "3250061c3bab97536508626dd1041b074c7014283965fd33cb067e48cfdb827a"
+  },
+  "prior_cpu_failures": [
+    {
+      "uid": "c8b36417-c828-41f9-ae8f-2a01c43343bb",
+      "pod": "chris-cpt-miles-cpu-selftest-v9",
+      "finished_at": "2026-09-11T05:22:06Z",
+      "exit_code": 255,
+      "gpus": 0,
+      "cause": "runc rejected 144676-byte TEST_BUNDLE environment value before Python started",
+      "correction": "split test payload into 48000-byte chunks; validate Linux per-environment-string limit before Jobs API preview"
+    },
+    {
+      "uid": "10b758f9-cc69-4efc-b35f-561a08ab8f48",
+      "pod": "chris-cpt-miles-cpu-selftest-v11",
+      "finished_at": "2026-09-11T05:25:57Z",
+      "exit_code": 1,
+      "gpus": 0,
+      "tests": 228,
+      "failures": 1,
+      "receipt_sha256": "733658d88feb67202d6b4b54064312512e9e3df464561faaa19bcb949c343a8c",
+      "cause": "test incorrectly expected explicit --bf16; native defaults set bf16 = not fp16",
+      "correction": "execute the unchanged digest-pinned native default function on CPU; no converter or scientific recipe change"
+    },
+    {
+      "uid": "5c56f278-0ba9-4cbe-8ccd-c9309ebbfb34",
+      "pod": "chris-cpt-miles-base-preflight-v1",
+      "finished_at": "2026-09-11T05:27:17Z",
+      "exit_code": 1,
+      "gpus": 0,
+      "observed_error": "AssertionError; original receipt did not identify assertion stage",
+      "correction": "normalize descriptive gzip OS header byte across macOS/Linux, retain stage diagnostics; v2 exact model/request preflight passed"
+    }
+  ],
+  "local_suite": {"passed": 1148, "skipped_native_only": 50, "subtests_passed": 7},
+  "api_preview": {
+    "manifest_sha256": "9aaf9a8d39b381ac638b1750d59f98058ad7cbea4702d7c621b3bd245cef9db0",
+    "nodes": 1,
+    "gpus": 8,
+    "priority_class": "c1",
+    "submitted": false
+  },
+  "wheel": {
+    "sha256": "484d9496f5ebccbd93f1c45945b20b81f1428e01e465d071926b10556151b0a2",
+    "installed_outside_checkout": true,
+    "command_help_passed": ["miles-convert", "miles-seal", "rl-data", "train", "preview", "submit"],
+    "imports_passed": ["training.miles_conversion", "training.miles", "training.rl_data", "training.rl_episode", "training.sft"],
+    "canonical_gzip_passed": true
+  },
+  "remaining": [
+    "verify shared submission journal and complete experiment-wide resource budget before any GPU create",
+    "execute native conversion on one eight-GPU node and independently confirm release",
+    "seal and reload the real native checkpoint",
+    "complete native Miles and SkyRL RL launch, reward acquisition, optimizer and recovery qualification",
+    "complete queued full-GLM qualification and real evaluation qualification"
+  ]
+}

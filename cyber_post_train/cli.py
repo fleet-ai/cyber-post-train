@@ -36,6 +36,16 @@ def _read(path: Path) -> dict:
     return value
 
 
+def _prepare(output: Path, plan: dict, request: dict) -> None:
+    output.mkdir(parents=True, exist_ok=False, mode=0o700)
+    _write(output / "plan.json", plan)
+    _write(output / "request.json", request)
+    _write(
+        output / "PREPARED.json",
+        {"plan_sha256": digest(plan), "request_sha256": digest(request)},
+    )
+
+
 def _prepared(directory: Path) -> tuple[dict, dict]:
     plan, request, receipt = (
         _read(directory / name) for name in ("plan.json", "request.json", "PREPARED.json")
@@ -122,13 +132,7 @@ def train(config: Path, output: Annotated[Path, typer.Option("--output")]) -> No
     try:
         plan = compile_sft(read_mapping(config), relative_to=config.resolve().parent)
         request = job_request(plan)
-        output.mkdir(parents=True, exist_ok=False, mode=0o700)
-        _write(output / "plan.json", plan)
-        _write(output / "request.json", request)
-        _write(
-            output / "PREPARED.json",
-            {"plan_sha256": digest(plan), "request_sha256": digest(request)},
-        )
+        _prepare(output, plan, request)
         _print(
             {
                 "prepared": str(output),
@@ -144,11 +148,14 @@ def train(config: Path, output: Annotated[Path, typer.Option("--output")]) -> No
 
 @app.command()
 def preflight(directory: Path) -> None:
-    """Validate staged SFT data and runtime in the pinned image, without GPUs."""
-    from training.sft import preflight as check
+    """Validate staged training/conversion inputs in the pinned image, without GPUs."""
 
     try:
         plan, _ = _prepared(directory)
+        if plan.get("schema") == "cyber_miles_conversion_v1":
+            from training.miles_conversion import preflight as check
+        else:
+            from training.sft import preflight as check
         if (directory / "PREFLIGHT.json").exists():
             raise ValueError("preflight already recorded")
         receipt = check(plan)
@@ -181,7 +188,9 @@ def submit(directory: Path) -> None:
         plan, request = _prepared(directory)
         proof = _read(directory / "PREFLIGHT.json")
         expected = {
-            "schema": "cyber_sft_cpu_preflight_v1",
+            "schema": "cyber_miles_conversion_cpu_preflight_v1"
+            if plan.get("schema") == "cyber_miles_conversion_v1"
+            else "cyber_sft_cpu_preflight_v1",
             "status": "passed",
             "gpus": 0,
             "plan_sha256": digest(plan),
@@ -194,6 +203,33 @@ def submit(directory: Path) -> None:
         with _client() as client:
             result = client.submit_once(request, directory / "SUBMISSION.jsonl")
         _print(result)
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command("miles-convert")
+def miles_convert(config: Path, output: Annotated[Path, typer.Option("--output")]) -> None:
+    """Prepare native Qwen checkpoint conversion. No submission, download or optimization."""
+    from training.miles_conversion import compile_conversion, job_request
+    from training.sft import read_mapping
+
+    try:
+        plan = compile_conversion(read_mapping(config), relative_to=config.resolve().parent)
+        _prepare(output, plan, job_request(plan))
+        _print({"prepared": str(output), "optimizer_steps": 0, "gpus": 8, "submitted": False})
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command("miles-seal")
+def miles_seal(directory: Path, output: Annotated[Path, typer.Option("--output")]) -> None:
+    """CPU-only integrity seal after terminal native conversion and verified GPU release."""
+    from training.miles_conversion import seal
+
+    try:
+        plan, _ = _prepared(directory)
+        result = seal(plan, output)
+        _print({"sha256": result["sha256"], "files": len(result["files"]), "gpu_reload": False})
     except Exception as exc:
         _fail(exc)
 

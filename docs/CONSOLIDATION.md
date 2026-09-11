@@ -38,7 +38,8 @@ and trace analysis` were inspected. Original commits/worktrees remain recoverabl
 | Miles native CPU integration | 82 tests pass with zero failures/skips/restarts/GPUs; real MCP 2 transport, native FTI token assembly, exact Qwen tokenizer and corrected template. The single-attempt generation boundary covers all 256 module statements and 86 branches; [receipt](evidence/cleanup-miles-single-attempt-20260911.json). Synthetic engine/task replies only, not real RL optimization |
 | Miles native argument builder | 128 combined CPU tests, zero failures/skips/restarts/GPUs; real Qwen TP4/CP2 recipe, bounded batches, checkpoint/dev controls and native offline W&B identity. Both argument and episode modules have full focused statement/branch coverage; [receipt](evidence/cleanup-miles-arguments-20260911.json). Generic API preview passed without allocation; GPU training and public RL launch integration remain open |
 | Miles data preparation | Public `rl-data` command; 174 combined pinned-image tests pass without skips/failures/restarts/GPUs. Real Qwen tokenizer/TITO and native Dataset retain every selected task; all three RL modules have complete focused line/branch coverage. [Receipt](evidence/cleanup-rl-data-20260911.json). Fleet HTTP replies are synthetic; no live reward or optimizer qualification |
-| Local regression suite | 1,087 tests plus seven subtests pass using disposable PostgreSQL and MCP 2.1.1; 49 native-only cases explicitly skip locally. Native-only RL branches are covered by the pinned-image test above. This is not real RL qualification. Ruff/whitespace checks pass |
+| Miles checkpoint preparation | Public `miles-convert`/`miles-seal`, reusing preflight/preview/submit. 228 pinned-image tests pass; all 28 staged Qwen files and native converter arguments independently verified on CPU. [Receipt](evidence/cleanup-miles-conversion-cpu-20260911.json). One-node/eight-GPU API preview passes; real conversion, native checkpoint reload and RL optimization remain unqualified |
+| Local regression suite | 1,148 tests plus seven subtests pass using disposable PostgreSQL and MCP 2.1.1; 50 native-only cases explicitly skip locally. Native-only RL branches are covered by the pinned-image test above. This is not real RL qualification. Ruff/whitespace checks pass |
 | Installation | Wheel rebuilt after `1585910`, SHA-256 `80759f13316cfc623d44bc036f533bd42ec1dc2fed5e42e3e45e778a29590293`, installed outside the checkout; public commands and seven recovery/checkpoint/GLM/Miles/RL-hook imports work; five retired modules are absent. The minimal environment intentionally lacks Torch/PyArrow; `doctor` correctly reports those missing dependencies, not training readiness |
 
 The newer `rl-data` wheel was independently installed outside the checkout;
@@ -46,6 +47,13 @@ command help and RL module imports pass. Its digest is in the data-preparation
 receipt. A local Finder `.DS_Store` exposed a portability bug in the skill-content
 scan; it now ignores only that OS metadata file and still tests real skill content.
 The metadata file was not deleted or committed.
+
+The conversion wheel was rebuilt and installed outside the checkout; six public
+command help paths, five training-module imports and portable bundle hashes pass.
+Its digest is in the conversion receipt. Native conversion uses the pinned Miles
+converter, not a new optimizer or model implementation. Its fixed 30-minute
+deadline covers source validation and the owned child process group. Sealing is
+CPU-only after resource release and does not claim GPU reload.
 
 Split, checkpoint, export and model-pinning checks have
 100% focused line/branch coverage; this is **not whole-repository coverage**.

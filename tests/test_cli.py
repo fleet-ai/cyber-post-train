@@ -160,6 +160,60 @@ def test_jobs_use_standard_fleet_identity_not_a_second_token(monkeypatch):
     assert cli._client() == {"received": "synthetic-operator-key"}
 
 
+def test_conversion_uses_same_prepare_preflight_submit_rail(prepared, monkeypatch, tmp_path):
+    from training import miles_conversion
+
+    _, _, request, config = prepared
+    output = tmp_path / "conversion"
+    plan = {"schema": miles_conversion.SCHEMA, "optimizer_steps": 0}
+    monkeypatch.setattr(miles_conversion, "compile_conversion", lambda *a, **k: plan)
+    monkeypatch.setattr(miles_conversion, "job_request", lambda _: request)
+    result = RUNNER.invoke(cli.app, ["miles-convert", str(config), "--output", str(output)])
+    assert result.exit_code == 0 and json.loads(result.stdout)["optimizer_steps"] == 0
+    assert cli._prepared(output) == (plan, request)
+    assert (
+        RUNNER.invoke(cli.app, ["miles-convert", str(config), "--output", str(output)]).exit_code
+        == 2
+    )
+    proof = {
+        "schema": "cyber_miles_conversion_cpu_preflight_v1",
+        "status": "passed",
+        "gpus": 0,
+        "plan_sha256": digest(plan),
+        "request_sha256": digest(request),
+    }
+    monkeypatch.setattr(miles_conversion, "preflight", lambda _: proof)
+    assert RUNNER.invoke(cli.app, ["preflight", str(output)]).exit_code == 0
+    calls = []
+    monkeypatch.setattr(
+        cli,
+        "_client",
+        lambda: nullcontext(
+            SimpleNamespace(
+                submit_once=lambda *args: calls.append(args) or {"name": "synthetic-12345678"},
+            )
+        ),
+    )
+    assert RUNNER.invoke(cli.app, ["submit", str(output)]).exit_code == 0
+    assert calls == [(request, output / "SUBMISSION.jsonl")]
+    monkeypatch.setattr(
+        miles_conversion, "seal", lambda *a: {"sha256": "a" * 64, "files": [{}, {}]}
+    )
+    result = RUNNER.invoke(
+        cli.app, ["miles-seal", str(output), "--output", str(tmp_path / "seal.json")]
+    )
+    assert result.exit_code == 0 and json.loads(result.stdout)["files"] == 2
+
+    def fail(*args):
+        raise ValueError("private error")
+
+    monkeypatch.setattr(miles_conversion, "seal", fail)
+    result = RUNNER.invoke(
+        cli.app, ["miles-seal", str(output), "--output", str(tmp_path / "seal.json")]
+    )
+    assert result.exit_code == 2 and "private error" not in result.output
+
+
 @pytest.mark.parametrize("auth", ["synthetic-key", ""])
 def test_rl_data_command_does_not_submit_or_expose_private_content(tmp_path, monkeypatch, auth):
     from training import rl_data

@@ -280,6 +280,43 @@ It fails instead of truncating/filtering a task or moving its split. Output is
 create-once and private; no prompts or task responses are printed. Reuse neither
 a partial destination nor data bound to a different run name/model/budget.
 
+### Prepare a native Miles checkpoint
+
+Miles' Megatron backend needs a distributed checkpoint, not the SkyRL checkpoint
+format. `miles-convert` prepares this separate, zero-optimizer operation:
+
+```yaml
+name: my-qwen-miles-base
+output_root: /mnt/sfs/jobs/my-qwen-miles-base
+model:
+  lock: configs/models/qwen38-27b-1d4bf0f2.lock.json
+  weights: configs/models/qwen38-27b-1d4bf0f2.weights.json
+  root: /mnt/sfs/models/qwen3.8-27b-1d4bf0f2
+cluster:
+  priority: c1
+```
+
+Run `cyber-post-train miles-convert conversion.yaml --output output/conversion`,
+then the same CPU `preflight`, Jobs API `preview`, and explicit `submit` commands
+described above. This uses one eight-GPU node, the pinned Miles image and its
+unchanged native converter, with a 64 CPU / 512 GiB minimum loading reservation.
+The Jobs API's driver attaches to its existing Ray cluster and assigns exactly
+eight GPUs to one conversion task; it does not start or stop node-wide Ray.
+Native automatic pipeline splitting avoids loading eight full model copies.
+No downloads, source-model edits, Fleet sessions, optimizer steps or training
+W&B run are involved. Conversion output and private logs are create-once. The
+fixed 30-minute execution limit includes input I/O, with bounded cleanup of only
+the converter's child process group. A partial output cannot be replayed.
+
+After exact terminal success **and independently confirmed GPU release**, run
+`cyber-post-train miles-seal output/conversion --output /shared/miles-checkpoint.json`
+on CPU. It rechecks source identity, the native release tracker and complete file
+inventory, then hashes the checkpoint without modifying it. This is a candidate
+checkpoint, not an RL optimizer or GPU reload qualification. Actual conversion
+and subsequent native reload remain required before using a new checkpoint in RL.
+
+### Native training integration
+
 Use the native trainers, not a new optimizer implementation. The inspected
 [Theseus FTI integration](https://github.com/fleet-ai/theseus/tree/cc18d2cd3e9370abf4f6f19df317d96ce6b619e4/services/fti/src/fti/trainers/miles)
 provides Miles token recording and a Qwen3.8 text recipe (Megatron TP4/CP2,

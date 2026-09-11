@@ -100,6 +100,13 @@ the old typed launcher's Ray 2.56 default on every generic image. Verify the
 actual preview and the image's installed Ray/runtime on every node; this preview
 alone did not qualify Miles GPU startup or training.
 
+Runtime bundles prepared on macOS must reproduce byte-identically during Linux
+preflight. Python 3.12's gzip header includes an OS byte; the shared bundler
+normalizes it before hashing. Keep each environment string below Linux's 128-KiB
+process-start limit (including its name and terminator). The request validator
+rejects oversized values before preview; a large CPU-test bundle must be chunked
+or staged, not passed as one environment value.
+
 Use the Fleet inference control plane for a persistent routed model. It owns one
 `InferenceModel`, one ready-only Service, one Deployment, gateway backends and routes,
 exact model staging, explicit pause/resume/retire actions, and serving metrics in the

@@ -9,10 +9,13 @@ key. An uncertain POST is recorded and must be reconciled, never replayed.
 
 from __future__ import annotations
 
+import base64
+import gzip
 import hashlib
 import json
 import os
 import re
+import shlex
 from decimal import Decimal
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -47,6 +50,49 @@ def quantity(value: Any) -> Decimal:
         "Ti": 1024**4,
     }
     return Decimal(match[1]) * factors[match[2]]
+
+
+def canonical_gzip(payload: bytes) -> bytes:
+    """Python 3.12 delegates mtime=0 headers to zlib: macOS=19, Linux=3.
+
+    Normalize the descriptive OS byte so CPU validation can reproduce a request
+    prepared on the desktop. This does not change the decompressed payload.
+    """
+    blob = gzip.compress(payload, mtime=0)
+    return blob[:9] + b"\xff" + blob[10:]
+
+
+def bundled_request(request: dict, files: dict[str, str], module: str, argv: list[str]) -> dict:
+    """Embed small, public runtime inputs in a create-once Jobs API entrypoint."""
+    if module.replace(".", "/") + ".py" not in files or not files:
+        raise JobsError("entry module is absent from runtime bundle")
+    for name in files:
+        path = PurePosixPath(name)
+        if path.is_absolute() or ".." in path.parts or str(path) != name:
+            raise JobsError("runtime bundle path escapes its directory")
+    if any(not isinstance(t, str) for t in [*files.values(), *argv]):
+        raise JobsError("runtime bundle must contain text")
+    blob = canonical_gzip(
+        json.dumps({"files": files, "module": module, "argv": argv}, sort_keys=True).encode()
+    )
+    bootstrap = (
+        "import base64,gzip,hashlib,importlib,json,os,pathlib,runpy,sys;"
+        "b=base64.b64decode(os.environ.pop('CYBER_RUNTIME_BUNDLE'),validate=True);"
+        f"assert hashlib.sha256(b).hexdigest()=={hashlib.sha256(blob).hexdigest()!r};"
+        "v=json.loads(gzip.decompress(b));"
+        "p=pathlib.Path(os.environ['RUN_DIR'])/'.runtime';p.mkdir(mode=0o700);"
+        "[((p/n).parent.mkdir(parents=True,exist_ok=True),(p/n).write_text(t)) "
+        "for n,t in v['files'].items()];"
+        "os.chdir(p);sys.path.insert(0,str(p));importlib.invalidate_caches();"
+        "sys.argv=[v['module']]+v['argv'];runpy.run_module(v['module'],run_name='__main__')"
+    )
+    result = {
+        **request,
+        "command": "python -c " + shlex.quote(bootstrap),
+        "env": {**request.get("env", {}), "CYBER_RUNTIME_BUNDLE": base64.b64encode(blob).decode()},
+    }
+    validate_request(result)
+    return result
 
 
 def validate_request(config: dict) -> None:
@@ -87,6 +133,8 @@ def validate_request(config: dict) -> None:
     env = config.get("env", {})
     if not isinstance(env, dict) or any(not isinstance(v, str) for v in env.values()):
         raise JobsError("env must contain string values")
+    if any(len(str(k).encode()) + len(v.encode()) + 2 > 131072 for k, v in env.items()):
+        raise JobsError("one environment value exceeds the Linux process-start limit")
     if any(
         not isinstance(k, str)
         or re.search(r"(?:^|_)(?:TOKEN|PASSWORD|CREDENTIALS|SECRET|API_KEY|ACCESS_KEY)(?:_|$)", k)

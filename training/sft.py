@@ -8,18 +8,17 @@ data path alone, or recipe override is resolved after submission.
 from __future__ import annotations
 
 import base64
-import gzip
 import hashlib
 import json
 import math
-import re
 import shlex
 from pathlib import Path, PurePosixPath
 
 import yaml
 
-from cyber_post_train.jobs import digest, quantity, validate_request
+from cyber_post_train.jobs import canonical_gzip, digest, quantity, validate_request
 
+from .models import bound_model
 from .sft_runtime import DENSE_FORMAT, DENSE_SCHEMA, validate_plan
 
 IMAGE = (
@@ -94,25 +93,7 @@ def compile_sft(config: dict, *, relative_to: Path) -> dict:
     _known(model, {"lock", "weights", "root"}, "model")
     lock = read_mapping(relative_to / model["lock"])
     weights = read_mapping(relative_to / model["weights"])
-    if (
-        weights["revision"] != lock["revision"]
-        or "sha256:" + digest(weights["files"]) != lock["weights"]["manifest_sha256"]
-        or len(weights["files"]) != lock["weights"]["shards"]
-    ):
-        raise ValueError("weight inventory differs from the exact model lock")
-    files = [
-        *lock["tokenizer"]["files"],
-        *weights["files"],
-        {"path": "model.safetensors.index.json", "sha256": lock["weights"]["index_sha256"]},
-    ]
-    for key, sha in lock["configuration"].items():
-        if not key.endswith("_sha256"):
-            raise ValueError("configuration identity must contain exact file digests")
-        files.append({"path": key.removesuffix("_sha256") + ".json", "sha256": sha})
-    if len({f["path"] for f in files}) != len(files):
-        raise ValueError("duplicate model inventory file")
-    if any(not re.fullmatch(r"(?:sha256:)?[a-f0-9]{64}", f["sha256"]) for f in files):
-        raise ValueError("model files require SHA-256 identities")
+    bound = bound_model(lock, weights, _sfs_root(model["root"], "model root"))
     data = config["data"]
     _known(data, {"manifest", "root"}, "data")
     manifest = read_mapping(relative_to / data["manifest"])
@@ -154,13 +135,7 @@ def compile_sft(config: dict, *, relative_to: Path) -> dict:
         else "cyber_sft_runtime_v2",
         "run_name": config["name"],
         "output_root": config["output_root"],
-        "model": {
-            "repo": lock["repo"],
-            "revision": lock["revision"],
-            "root": _sfs_root(model["root"], "model root"),
-            "files": files,
-            "weight_manifest_sha256": lock["weights"]["manifest_sha256"],
-        },
+        "model": bound,
         "datasets": datasets,
         "recipe": recipe,
         "wandb": dict(config["wandb"]),
@@ -236,7 +211,7 @@ def job_request(plan: dict) -> dict:
         sort_keys=True,
         separators=(",", ":"),
     ).encode()
-    compressed = gzip.compress(bundle, mtime=0)
+    compressed = canonical_gzip(bundle)
     bundle_sha = hashlib.sha256(compressed).hexdigest()
     bootstrap = (
         "import base64,gzip,hashlib,importlib,json,os,pathlib,runpy,sys;"

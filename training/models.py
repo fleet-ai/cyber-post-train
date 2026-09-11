@@ -34,6 +34,38 @@ CONFIG_FILES = {
 MAX_METADATA_BYTES = 64 * 1024 * 1024
 
 
+def bound_model(lock: dict, weights: dict, root: str) -> dict:
+    """One exact model inventory shared by SFT and native format conversion."""
+    if (
+        weights["revision"] != lock["revision"]
+        or digest_json(weights["files"]) != lock["weights"]["manifest_sha256"]
+        or len(weights["files"]) != lock["weights"]["shards"]
+    ):
+        raise ValueError("weight inventory differs from the exact model lock")
+    files = [
+        *lock["tokenizer"]["files"],
+        *weights["files"],
+        {"path": "model.safetensors.index.json", "sha256": lock["weights"]["index_sha256"]},
+    ]
+    for key, sha in lock["configuration"].items():
+        if not key.endswith("_sha256"):
+            raise ValueError("configuration identity must contain exact file digests")
+        files.append({"path": key.removesuffix("_sha256") + ".json", "sha256": sha})
+    if len({f["path"] for f in files}) != len(files):
+        raise ValueError("duplicate model inventory file")
+    for item in files:
+        _path(item["path"])
+        if not re.fullmatch(r"(?:sha256:)?[a-f0-9]{64}", item["sha256"]):
+            raise ValueError("model files require SHA-256 identities")
+    return {
+        "repo": lock["repo"],
+        "revision": lock["revision"],
+        "root": root,
+        "files": files,
+        "weight_manifest_sha256": lock["weights"]["manifest_sha256"],
+    }
+
+
 def _path(value: str) -> str:
     path = PurePosixPath(value)
     if not value or path.is_absolute() or ".." in path.parts or str(path) != value:
