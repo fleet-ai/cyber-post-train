@@ -203,3 +203,13 @@ training or teacher-reference CE. The source checkpoint has world size four, so
 one four-GPU worker is the exact and sufficient qualification shape; eight GPUs
 would be a topology mismatch, while a true `resume` would execute later optimizer
 steps and answer a different question.
+
+The CPU seal subsequently completed successfully. Create-once helper Pod UID
+`0fcd52a5-433e-4f46-8f26-a918c0d13884` verified all 21 files and
+324,621,264,731 bytes twice, then was deleted with its ConfigMap and confirmed
+absent. The canonical checkpoint-manifest file SHA-256 is
+`306740464dd13cfb96691ea69ccd65f2ba835a2146aeca8b7934f3d5f6186b32` and
+its embedded receipt SHA-256 is
+`ae009aa5790bdff2f4025962facf7db57c09955a0fc09c72459e926d6a03ee07`.
+This proves CPU integrity only: `gpu_reload_verified` remains false until the
+four-rank, zero-update development reload finishes and releases its allocation.
