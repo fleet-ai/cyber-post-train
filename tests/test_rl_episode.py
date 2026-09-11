@@ -600,6 +600,20 @@ async def test_native_hook_exact_attempt_and_split(native, fixture, dev):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("prompt", ["synthetic rendered prompt", "drift", []])
+async def test_frozen_native_input_prompt_is_verified(native, fixture, prompt):
+    fixture.config["initial_prompt_sha256"] = fleet.sha256(b"synthetic rendered prompt")
+    seal(fixture.config)
+    native.sample.prompt = prompt
+    if prompt == "synthetic rendered prompt":
+        assert (await rl.generate(native)).samples == "native-sample"
+    else:
+        with pytest.raises(rl.InvalidEpisode, match="native_input_prompt_drift"):
+            await rl.generate(native)
+        assert fixture.inputs == []
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "fault", ["partial", "split", "identity", "run", "path", "auth", "model", "template", "dict"]
 )

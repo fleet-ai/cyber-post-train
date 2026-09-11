@@ -160,6 +160,29 @@ def test_jobs_use_standard_fleet_identity_not_a_second_token(monkeypatch):
     assert cli._client() == {"received": "synthetic-operator-key"}
 
 
+@pytest.mark.parametrize("auth", ["synthetic-key", ""])
+def test_rl_data_command_does_not_submit_or_expose_private_content(tmp_path, monkeypatch, auth):
+    from training import rl_data
+
+    calls = []
+
+    def build(config, *, relative_to, client):
+        calls.append(config)
+        assert relative_to == tmp_path and not client.follow_redirects
+        assert client.headers["Authorization"] == "Bearer synthetic-key"
+        return {"submitted": False, "files": {"train": {"rows": 2}}}
+
+    monkeypatch.setattr(rl_data, "build", build)
+    monkeypatch.setattr(cli, "_client", lambda: pytest.fail("data preparation used Jobs API"))
+    monkeypatch.setenv("FLEET_API_KEY", auth)
+    config = tmp_path / "data.yaml"
+    config.write_text("name: synthetic-rl\n")
+    result = RUNNER.invoke(cli.app, ["rl-data", str(config)])
+    assert result.exit_code == (0 if auth else 2)
+    assert "synthetic-key" not in result.output
+    assert len(calls) == (1 if auth else 0)
+
+
 def test_doctor_checks_installation_without_claiming_cluster_readiness(monkeypatch):
     result = RUNNER.invoke(cli.app, ["doctor"])
     assert result.exit_code == 0

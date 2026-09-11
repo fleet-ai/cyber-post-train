@@ -337,6 +337,68 @@ def load_and_verify_task(client: httpx.Client, config: dict[str, Any]) -> dict[s
     return verify_task(config, task)
 
 
+def bind_task(response: dict, selected: dict) -> tuple[dict, dict, dict]:
+    """Freeze one exact API task response; shared by eval and RL preparation."""
+    _validate_task_identifiers(response, {"version_id": selected["task_version_id"]})
+    if response.get("key") != selected["task_key"]:
+        raise RuntimeError("live task key differs from the frozen selection")
+    expected_runtime = {
+        "environment_id": selected["env_key"],
+        "environment_version": selected["env_version"],
+        "data_id": selected["data_key"],
+        "data_version": selected["data_version"],
+    }
+    runtime_data = task_data_binding(response)
+    actual_runtime = {
+        "environment_id": response.get("environment_id"),
+        "environment_version": response.get("version"),
+        "data_id": runtime_data["data_id"] if runtime_data else None,
+        "data_version": runtime_data["data_version"] if runtime_data else None,
+    }
+    if runtime_data is None:
+        if response.get("environment_version_id") != selected["environment_version_id"]:
+            raise RuntimeError("legacy task lacks the exact environment version binding")
+        for field in ("data_id", "data_version"):
+            actual_runtime.pop(field)
+            expected_runtime.pop(field)
+    if actual_runtime != expected_runtime:
+        raise RuntimeError("live task runtime differs from the frozen selection")
+    metadata = response.get("metadata") or {}
+    runtime_seed = (metadata.get("runtime_seed_manifest") or {}).get("content_sha256")
+    verifier = response.get("verifier") or {}
+    if not runtime_seed or not verifier.get("verifier_version_id"):
+        raise RuntimeError("live task lacks an immutable runtime seed or verifier version")
+    task = {
+        "key": selected["task_key"],
+        "version_id": selected["task_version_id"],
+        "prompt_sha256": sha256((response.get("prompt") or "").encode()),
+        "env_variables_sha256": sha256(canonical_json(response.get("env_variables") or {})),
+        "output_json_schema_sha256": sha256(canonical_json(response.get("output_json_schema"))),
+        "cyber_contract": metadata.get("cyber_contract"),
+    }
+    if runtime_data is None:
+        task["data_binding_validation"] = PROVISIONED_DATA_VALIDATION
+    environment = {
+        "id": selected["env_key"],
+        "version": selected["env_version"],
+        "version_id": selected["environment_version_id"],
+        "data_id": selected["data_key"],
+        "data_version": selected["data_version"],
+        "runtime_seed_content_sha256": runtime_seed,
+        "ttl_seconds": 32400,
+    }
+    verifier = {
+        "id": response.get("verifier_id"),
+        "version_id": verifier.get("verifier_version_id"),
+        "version": verifier.get("version"),
+        "sha256": verifier.get("sha256"),
+        "function_name": "verify",
+    }
+    if any(value in (None, "") for value in verifier.values()):
+        raise RuntimeError("live verifier binding is incomplete")
+    return task, environment, verifier
+
+
 def verify_task(config: dict[str, Any], task: dict[str, Any]) -> dict[str, Any]:
     """Check a fetched task without IO; shared by sync eval and async RL clients."""
     expected = config["task"]

@@ -238,6 +238,48 @@ RL builders and commands are retired; their source is recoverable from Git.
 Historical requests are not launch shortcuts. RL qualification remains a
 completion gate.
 
+`cyber-post-train rl-data rl-data.yaml` prepares private Miles input files on
+CPU in the pinned Miles image. It performs only Fleet account/task GETs, never
+creates an environment, generates tokens or submits a training job:
+
+```yaml
+name: my-qwen-rl
+task_set: reviewed-tasks.json
+split: reviewed-split.json
+tool_catalog: reviewed-mcp-tools.json
+model_lock: configs/models/qwen38-27b-1d4bf0f2.lock.json
+model_root: /mnt/sfs/models/qwen3.8-27b-1d4bf0f2
+output: /private/data/my-qwen-rl
+limits:
+  context_tokens: 98304
+  response_tokens: 81920
+  max_tokens_per_turn: 4096
+  max_turns: 80
+  episode_seconds: 2400
+  tool_seconds: 120
+  tool_result_chars: 50000
+```
+
+These are explicit budgets, not a claim that every task fits. The task set is a
+self-digesting `cyber_rl_task_set_v1` object with `training_data_eligible: true`,
+the exact canonical MCP `tool_catalog_sha256`, and `tasks`. Each task has
+`task_key`, `task_version_id`, `env_key`, `env_version`,
+`environment_version_id`, `data_key`, `data_version`, and reviewed
+`lineage: {application, task_family}`. The split uses the existing
+`cyber_task_split_v1` format. Both files must cover the same complete set so
+lineage can be checked across train/dev/test; test and reserved-dev tasks are
+never fetched. Do not approve external benchmark tasks for this input.
+
+The catalog must be the exact previously observed task-facing MCP catalog, in
+`bash`, `submit_report` order—not an invented tool schema. Runtime checks it
+again. The command writes `train.jsonl`, `dev.jsonl`, split/task-set copies and
+a final self-digesting manifest. It renders actual task prompts plus tools with
+Miles' native Qwen tokenizer, checks recorder-prefill token equality, reserves
+the full response budget and proves the native dataset retains every row.
+It fails instead of truncating/filtering a task or moving its split. Output is
+create-once and private; no prompts or task responses are printed. Reuse neither
+a partial destination nor data bound to a different run name/model/budget.
+
 Use the native trainers, not a new optimizer implementation. The inspected
 [Theseus FTI integration](https://github.com/fleet-ai/theseus/tree/cc18d2cd3e9370abf4f6f19df317d96ce6b619e4/services/fti/src/fti/trainers/miles)
 provides Miles token recording and a Qwen3.8 text recipe (Megatron TP4/CP2,

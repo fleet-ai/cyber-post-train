@@ -460,6 +460,11 @@ async def generate(input):
     _validate(config)
     if config["run_id"] != args.cyber_run_id:
         raise InvalidEpisode("run_identity_mismatch")
+    if "initial_prompt_sha256" in config and (
+        not isinstance(sample.prompt, str)
+        or fleet.sha256(sample.prompt.encode()) != config["initial_prompt_sha256"]
+    ):
+        raise InvalidEpisode("native_input_prompt_drift")
     if (
         args.hf_checkpoint != config["model"]["root"]
         or args.fleet_tito_model != config["model"]["tito_family"]

@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -64,7 +65,7 @@ def test_agent_skill_packages_are_complete_and_routed() -> None:
 def test_skills_contain_no_ephemeral_or_secret_material() -> None:
     forbidden_literals = ("FLEET_API_KEY=", "FLEET_TRAINING_API_TOKEN=")
     for path in sorted((ROOT / "skills").rglob("*")):
-        if not path.is_file():
+        if not path.is_file() or path.name == ".DS_Store":
             continue
         text = path.read_text()
         assert not UUID.search(text), f"ephemeral UUID in {path}"
@@ -72,3 +73,15 @@ def test_skills_contain_no_ephemeral_or_secret_material() -> None:
         assert "ft-run-" not in text, f"ephemeral run name in {path}"
         for literal in forbidden_literals:
             assert literal not in text, f"secret-like literal {literal!r} in {path}"
+
+
+def test_skill_scan_ignores_finder_metadata_but_still_checks_content(tmp_path, monkeypatch):
+    monkeypatch.setattr(__import__(__name__, fromlist=["ROOT"]), "ROOT", tmp_path)
+    skills = tmp_path / "skills"
+    skills.mkdir()
+    (skills / ".DS_Store").write_bytes(b"\x80Finder metadata")
+    (skills / "SKILL.md").write_text("Stable guidance.")
+    test_skills_contain_no_ephemeral_or_secret_material()
+    (skills / "SKILL.md").write_text("ft-run-ephemeral")
+    with pytest.raises(AssertionError, match="ephemeral run name"):
+        test_skills_contain_no_ephemeral_or_secret_material()

@@ -138,8 +138,10 @@ def arguments(config: MilesConfig) -> list[str]:
         "global-batch-size": batch,
         "rollout-max-context-len": config.context_tokens,
         "rollout-max-response-len": config.response_tokens,
+        "rollout-max-prompt-len": config.context_tokens - config.response_tokens,
         "rollout-temperature": 1,
         "seed": config.seed,
+        "rollout-seed": config.seed,
         "custom-generate-function-path": "training.rl_episode.generate",
         "cyber-run-id": config.name,
         "cyber-output-root": config.output_root + "/episodes",
@@ -206,6 +208,8 @@ def arguments(config: MilesConfig) -> list[str]:
         "--no-save-optim",
         "--no-save-rng",
         "--skip-eval-before-train",
+        "--apply-chat-template",
+        "--disable-rollout-global-dataset",
     }
     if forbidden.intersection(flags):
         raise ValueError("native profile enables forbidden retries, credentials or lost state")

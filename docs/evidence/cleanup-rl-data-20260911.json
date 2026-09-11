@@ -1,0 +1,53 @@
+{
+  "schema": "cyber_cleanup_qualification_v1",
+  "classification": "operational gate; synthetic Fleet replies, no RL optimization",
+  "observed_at": "2026-09-11T05:05:33Z",
+  "public_command": "cyber-post-train rl-data",
+  "pod": {
+    "name": "chris-cpt-miles-cpu-selftest-v7",
+    "namespace": "fleet-train-jobs",
+    "uid": "4858f490-8d74-46b6-b4f1-c56d137bf816",
+    "created_at": "2026-09-11T05:03:36Z",
+    "started_at": "2026-09-11T05:03:37Z",
+    "finished_at": "2026-09-11T05:04:46Z",
+    "phase": "Succeeded",
+    "exit_code": 0,
+    "restarts": 0,
+    "gpus": 0,
+    "runtime_image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/miles-trainer@sha256:d1d37c584e2aafdd47df1e1f3492ff3343eb3b83a5f658cf7ce2432ee8d6ef33"
+  },
+  "bundle_sha256": "8cff0ccb4d969da0845cb9951287032742133d1f185f6dec8494a39b4f59fd89",
+  "manifest_sha256": "bdb3153b665c6ebec6a1cc4e1529daf94188df3f762c1fcb022cc90ef7293766",
+  "receipt_sha256": "6a67082b13245209fa1918858beecf7588abc16ecc94abd7288f7d8ddcb8fa61",
+  "test_output_sha256": "63ffc2177f14290bda8e172ad2adf0cd22369c359bf8feaadf035ba8255b5db8",
+  "counts": {"tests": 174, "failures": 0, "errors": 0, "skipped": 0},
+  "complete_focused_coverage": {
+    "training/rl_data.py": {"statements": 136, "branches": 58},
+    "training/miles.py": {"statements": 88, "branches": 38},
+    "training/rl_episode.py": {"statements": 258, "branches": 88}
+  },
+  "verified": [
+    "independent receipt self-digest and current source/test hashes",
+    "task-family split integrity across every selected version",
+    "no test or reserved task fetch; GET-only Fleet boundary",
+    "shared exact task/environment/data/verifier binding used by eval and RL",
+    "native Qwen TITO and dataset prefill token equality",
+    "full response budget reserved; no silent prompt filtering",
+    "native dataset retains every row and its split/binding metadata",
+    "private create-once output; no accepted manifest on partial publication",
+    "generation hook rejects drifted frozen input prompts"
+  ],
+  "local_suite": {"passed": 1087, "skipped_native_only": 49, "subtests_passed": 7},
+  "installation": {
+    "wheel_sha256": "b1cb0b1f36af1f70eaa8582c9568b7834fd4a46bebbde2adab3e7447a8180d0b",
+    "outside_checkout": true,
+    "rl_data_help_and_module_imports": true
+  },
+  "not_proven": [
+    "live Fleet reward acquisition",
+    "native Miles GPU startup, optimizer update or checkpoint",
+    "public RL launch integration",
+    "SkyRL RL or full GLM qualification"
+  ],
+  "resource_release": "CPU process exited. No GPU requested; no peer workload or campaign mutation."
+}

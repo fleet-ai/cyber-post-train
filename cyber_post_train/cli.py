@@ -91,6 +91,29 @@ def model_lock(repo: str, revision: str, output: Annotated[Path, typer.Option("-
         _fail(exc)
 
 
+@app.command("rl-data")
+def rl_data(config: Path) -> None:
+    """CPU-only Miles data preparation from reviewed Fleet versions. GET only; no training."""
+    import httpx
+
+    from training.rl_data import build
+    from training.sft import read_mapping
+
+    try:
+        token = os.environ["FLEET_API_KEY"]
+        if not token:
+            raise ValueError("Fleet API key required")
+        with httpx.Client(
+            headers={"Authorization": "Bearer " + token},
+            timeout=60,
+            follow_redirects=False,
+            transport=httpx.HTTPTransport(retries=0),
+        ) as client:
+            _print(build(read_mapping(config), relative_to=config.resolve().parent, client=client))
+    except Exception as exc:
+        _fail(exc)
+
+
 @app.command()
 def train(config: Path, output: Annotated[Path, typer.Option("--output")]) -> None:
     """Prepare an immutable SkyRL SFT launch from editable YAML. No network/GPU."""
