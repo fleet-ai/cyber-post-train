@@ -1,0 +1,91 @@
+{
+  "classification": "operational_CPU_gates_not_distributed_training",
+  "verified_at_utc": "2026-09-11T02:56:00Z",
+  "checks": [
+    {
+      "pod": "chris-cpt-glm-cpu-prepare-v1",
+      "uid": "cd78c399-bcfc-4ee2-a2a7-964327dcf573",
+      "finished_at": "2026-09-11T02:50:35Z",
+      "exit_code": 0,
+      "restarts": 0,
+      "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+      "receipt_sha256": "8f13fe7218838bd9ed9fccdd3893d68d02deb98bf5fe629f12bb808afa4601b4",
+      "result": {
+        "bundle_sha256": "46b6127dd1313c2f065fe246db9de5076dff2eb9c0fd562b4810d061eaa42725",
+        "data": {
+          "dev": {
+            "rows": 2,
+            "tasks": 2
+          },
+          "manifest_sha256": "sha256:81357b99a8d72f319e30bf7bdc4630db4919c065e8f42eb7d40e77f6cefc077c",
+          "output": "/mnt/sfs/jobs/chris-cpt-cleanup-glm-inputs-v1/data",
+          "train": {
+            "rows": 8,
+            "source_sessions": 1,
+            "supervised_tokens": 6287
+          },
+          "whole_source_exclusions": {}
+        },
+        "gpus": 0,
+        "meta_geometry": {
+          "adapter_parameter_values": 106309632,
+          "all_parameter_values": 744078850560,
+          "base_repository": "zai-org/GLM-5.3",
+          "base_revision": "30333038ada1f1dacb294a93270305a890b50c14",
+          "full_model_weights_loaded": false,
+          "gpu_reload_verified": false
+        },
+        "plan_sha256": "38e41800b8e4145b3ade4ca97a268e65231b18630625c8ac830c2f38675451f4",
+        "pod_uid": "cd78c399-bcfc-4ee2-a2a7-964327dcf573",
+        "preflight_sha256": "98f037ea97b3d7273a97bdf618e0affefbcc5c0e69365361e9360a99890121ae",
+        "prepared": "/mnt/sfs/jobs/chris-cpt-cleanup-glm-inputs-v1/prepared",
+        "request_sha256": "a2a407333ee3d10a7c9a6cf427cab2bb23a484e1af7de03f3759d83f458a2688",
+        "schema": "cleanup_glm_cpu_qualification_v1",
+        "source_manifest_sha256": "sha256:323a20fba88c22a87836a67f547e2ce7770d771434cb5ce3eff1b0f46ba28f36",
+        "status": "passed",
+        "steps": 1
+      }
+    },
+    {
+      "pod": "chris-cpt-glm-seal-selftest-v2",
+      "uid": "cb308973-104a-4f72-9271-b1442eb82580",
+      "finished_at": "2026-09-11T02:51:41Z",
+      "exit_code": 0,
+      "restarts": 0,
+      "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+      "receipt_sha256": "8d7884b0cb7c875f023d217a8442586268fb554bb3ea3ba184c62dbb09b5f666",
+      "result": {
+        "bundle_sha256": "03588a9f29d98be6b4755e0a4aef712fd8f47c95da586665606b51d7263013cb",
+        "counts": {
+          "errors": 0,
+          "failures": 0,
+          "skipped": 0,
+          "tests": 34
+        },
+        "gpus": 0,
+        "node": "computeinstance-e04a737eqtfvpnyx08",
+        "pod_uid": "cb308973-104a-4f72-9271-b1442eb82580",
+        "schema": "cyber-native-sft-selftest-v1",
+        "status": "passed",
+        "test_output_sha256": "ea2756c0fb00d8a92bf0a9256c04b70141e8f803f387fa0fc3a1daf94861f0bb"
+      }
+    }
+  ],
+  "training": {
+    "name": "chris-cpt-glm-qual-v1-506dcdba",
+    "run_id": "506dcdba-721c-43ff-93a8-e058885238a2",
+    "rayjob_uid": "e84f5b71-1737-410f-9246-860bcee29c07",
+    "workload_uid": "cb2c7419-d717-4f06-8a5e-ca3e6d1f559f",
+    "effective_priority": 10000,
+    "status": "queued_unadmitted",
+    "allocated_gpus": 0,
+    "requested_nodes": 2,
+    "requested_gpus": 16,
+    "planned_optimizer_steps": 1,
+    "output_root": "/mnt/sfs/jobs/chris-cpt-cleanup-glm-sft-v1",
+    "prepared": "/mnt/sfs/jobs/chris-cpt-cleanup-glm-inputs-v1/prepared",
+    "request_sha256": "a2a407333ee3d10a7c9a6cf427cab2bb23a484e1af7de03f3759d83f458a2688",
+    "preview_sha256": "ef19fab00462949ebf36aecb9fe9c5e1e4b794c098b2e6a0a3a4177fcf3e791f",
+    "post_count": 1
+  }
+}

@@ -133,7 +133,7 @@ counts. Train and dev are distinct immutable artifacts and task families.
    target accounting. Preserve its `PREFLIGHT.json` in the prepared directory.
    CPU validation cannot prove CUDA kernels or distributed startup; changes to
    those require a bounded exact-model canary before a full run.
-3. Set `FLEET_TRAINING_API_TOKEN` via your secret manager. Run
+3. Set the standard `FLEET_API_KEY` via your secret manager. Run
    `cyber-post-train preview output/my-run`. It checks the actual image, command,
    resources, normal queue, derived priority, Secret references and release policy.
 4. Review ownership, access expiry, experiment-wide allocated resources and the

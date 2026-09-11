@@ -142,7 +142,7 @@ def test_preview_and_status_are_read_only(prepared, monkeypatch):
 
 
 def test_missing_auth_and_sdk_errors_never_print_sensitive_contents(monkeypatch):
-    monkeypatch.delenv("FLEET_TRAINING_API_TOKEN", raising=False)
+    monkeypatch.delenv("FLEET_API_KEY", raising=False)
     result = RUNNER.invoke(cli.app, ["status", "synthetic"])
     assert result.exit_code == 2 and "token is required" in result.stderr
 
@@ -152,6 +152,12 @@ def test_missing_auth_and_sdk_errors_never_print_sensitive_contents(monkeypatch)
     monkeypatch.setattr(cli, "_client", broken)
     result = RUNNER.invoke(cli.app, ["status", "synthetic"])
     assert result.exit_code == 2 and "private SDK response" not in result.output
+
+
+def test_jobs_use_standard_fleet_identity_not_a_second_token(monkeypatch):
+    monkeypatch.setenv("FLEET_API_KEY", "synthetic-operator-key")
+    monkeypatch.setattr(cli, "Jobs", lambda token: {"received": token})
+    assert cli._client() == {"received": "synthetic-operator-key"}
 
 
 def test_doctor_checks_installation_without_claiming_cluster_readiness(monkeypatch):

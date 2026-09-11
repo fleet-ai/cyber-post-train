@@ -47,7 +47,7 @@ def _prepared(directory: Path) -> tuple[dict, dict]:
 
 
 def _client() -> Jobs:
-    return Jobs(os.environ.get("FLEET_TRAINING_API_TOKEN", ""))
+    return Jobs(os.environ.get("FLEET_API_KEY", ""))
 
 
 def _fail(exc: Exception) -> None:
