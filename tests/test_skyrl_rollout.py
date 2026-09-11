@@ -252,13 +252,18 @@ async def test_invalid_native_input_creates_no_episodes(setup, monkeypatch, muta
 
 
 @pytest.mark.asyncio
-async def test_failed_episode_cancels_and_awaits_sibling_cleanup_without_refill(setup, monkeypatch):
+@pytest.mark.parametrize("budget,cleanup_fault", [(False, False), (True, False), (True, True)])
+async def test_failed_episode_cancels_and_awaits_sibling_cleanup_without_refill(
+    setup, monkeypatch, budget, cleanup_fault
+):
     ready = asyncio.Event()
 
     async def collect(config, directory, *args, **kwargs):
         setup.calls.append(directory.name)
         if directory.name == "episode-0":
             await ready.wait()
+            if budget:
+                raise batch.rl_episode.EpisodeBudgetExceeded("generation_incomplete_length")
             raise RuntimeError("private server content")
         try:
             ready.set()
@@ -266,15 +271,21 @@ async def test_failed_episode_cancels_and_awaits_sibling_cleanup_without_refill(
         finally:
             await asyncio.sleep(0)
             setup.cleaned.append(directory.name)
+            if cleanup_fault:
+                raise batch.rl_episode.InvalidEpisode("instance_release_unconfirmed")
 
     monkeypatch.setattr(batch.rl_episode, "collect", collect)
     value = generator(setup)
     with pytest.raises(batch.rl_episode.InvalidEpisode) as error:
         await value.generate(input_batch(setup))
     assert "private" not in str(error.value)
+    rejected = budget and not cleanup_fault
+    assert isinstance(error.value, batch.rl_episode.EpisodeBudgetExceeded) == rejected
     assert sorted(setup.calls) == ["episode-0", "episode-1"]
     assert setup.cleaned == ["episode-1"]
     assert not list(setup.root.glob("batches/*/COLLECTED.json"))
+    assert bool(list(setup.root.glob("batches/*/REJECTED.json"))) == rejected
+    assert bool(list(setup.root.glob("batches/*/FAILED.json"))) == (not rejected)
 
 
 @pytest.mark.asyncio

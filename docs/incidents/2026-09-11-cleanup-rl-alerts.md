@@ -119,3 +119,63 @@ abort and non-text stops, without exposing output text or arbitrary finish value
 All retain the same no-scoring/no-optimization rejection; no error exit was
 silenced, budget changed or live bundle patched. This is a diagnostic repair,
 not proof that the incomplete-generation path is resolved.
+
+## Follow-up: source verification and the pre-existing GLM CPU pilot
+
+At 16:10:04Z the already-running `chris-cpt-glm-native-stage-v1` container
+(Pod UID `ae29a922-9aba-4c58-9f5b-cce12fea665a`) exited 1 with zero restarts.
+Job UID `9289aa28-bb9e-4bc3-a6ae-aa2302cef3ff` became `Failed=True` at
+16:10:07Z. The Workload is absent; the CPU/RAM reservation is released, and
+the Job requested no GPUs. The last process sample observed `FAILED.json`
+present, `MODEL_LOADED.json` and `STAGED.json` absent, and zero cgroup OOM or
+OOM-kill events. Do not infer the application cause from memory usage: its
+receipt was not retrieved before the container exited. No successor was submitted.
+Chris supplied the 09:10 PDT Slack notification, independently establishing
+delivery for this failure. This is a ninth failed Job in this incident, not an
+additional RL optimizer failure.
+
+The live CronJobs still select `fleet/ftl:91212928`: failure polling every five
+minutes and idle checking every thirty minutes, with the 1%/30-minute/one-hour
+idle policy. The exact revision's `failed_jobs` and `pending_failures` functions
+were executed locally against synthetic objects, without any delivery function.
+CPU Jobs with `fleet-infra-quiet` or `c1` and a GPU RayJob all qualify when failed;
+the same UID is deduplicated. The source SHA-256 is
+`d1272982db8cece4c58cb72ecef4d1d106be42a91f387717ba8275c5aa8e89bc`.
+There is no current per-job quiet annotation. The root operational mistake
+remains live qualification on monitored Jobs, not ignorance of a priority flag.
+
+New cluster submissions are held while the development/reporting path is
+resolved. Work can continue locally. A supported owner-only development route
+requires platform-maintainer approval; never evade the monitor through another
+namespace/resource kind, altered deduplication state, or false success.
+
+## Local stop-contract correction, not deployed
+
+The exact installed FTI recorder source was matched by SHA-256 to Theseus
+`a170ed0d5cff13de3f0abe56445d5cdd4bba696f`:
+`services/fti/src/fti/trainers/miles/recording.py`, SHA-256
+`593698b7e12ad97eee37804d5dba7f36ad9d73c8cb9e8c06ae20328d3bd18b48`.
+Its agent treats known horizon limits as explicit episode endings. Our adapter
+had converted them into job-fatal generic exceptions. This does not establish
+which stop occurred in the old V7 bundle.
+
+The local correction distinguishes explicitly typed known budget stops from
+aborts, unknown finishes, malformed responses and runtime faults. Budget-limited
+batches stop without scoring incomplete episodes, refilling samples or feeding
+them to optimization. They record `REJECTED`, never `ACCEPTED` or training
+completion. Mixed failures, uncertain instance release and process teardown
+failure stay hard failures. Native and supervisor receipts must match the plan
+and digest; a nonzero child exit cannot be reclassified as rejection.
+
+Regression tests caught and fixed two additional boundaries before deployment:
+Ray replaces exception arguments during transport, and native Miles group
+cleanup discards sibling exceptions after awaiting them. The adapter preserves
+typed reasons through real Ray 2.58 serialization and observes each episode
+error so a sibling cleanup failure cannot disappear. Process teardown now
+precedes any supervisor completion/rejection marker.
+
+Focused local tests with Ray 2.58: 415 passed, 45 explicitly skipped. The broad
+local suite without optional services/native runtimes: 1,790 passed, 189 skipped,
+seven subtests passed. Native Miles image/GPU paths remain unqualified by these
+new tests; these results do not authorize a replacement launch. No live bundle,
+alert monitor, failure state, credential, peer or rollout campaign was modified.

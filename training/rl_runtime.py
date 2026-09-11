@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import signal
@@ -64,6 +65,23 @@ def native_failure(plan, error):
     )
 
 
+def native_rejection(plan, error):
+    from .rl_episode import budget_stop
+
+    if not (reason := budget_stop(error)):
+        return False
+    _write(
+        Path(plan["output_root"]) / "NATIVE_REJECTED.json",
+        {
+            "schema": "cyber_rl_native_rejection_v1",
+            "status": "rejected",
+            "reason": reason,
+            "plan_sha256": digest(plan),
+        },
+    )
+    return True
+
+
 def progress(root):
     files = []
     for parent in (root / "checkpoints", root / "episodes"):
@@ -88,46 +106,86 @@ def run(plan, plan_path, *, backend):
     _write(root / "STARTED.json", {"plan_sha256": digest(plan), "started_at": time.time()})
     process, reason = None, None
     try:
-        backend.native_source()
-        name = backend.MODULE.removeprefix("training.").removesuffix("_training")
-        with (root / f"private-{name}.log").open("x") as log:
-            os.chmod(log.name, 0o600)
-            process = subprocess.Popen(
-                [
-                    sys.executable,
-                    "-m",
-                    backend.MODULE,
-                    "--plan",
-                    str(plan_path.resolve()),
-                    "--sha256",
-                    digest(plan),
-                    "--native",
-                ],
-                stdout=log,
-                stderr=subprocess.STDOUT,
-                start_new_session=True,
-            )
-            watchdog = ProgressWatchdog(time.monotonic())
-            previous_checkpoint = ()
-            while process.poll() is None:
-                try:
-                    process.wait(timeout=WATCHDOG_POLL_SECONDS)
-                except subprocess.TimeoutExpired:
-                    gpu, io = _utilization_snapshot()
-                    marker = progress(root)
-                    checkpoint = tuple(row for row in marker if row[0].startswith("checkpoints/"))
-                    reason = watchdog.observe(
-                        time.monotonic(),
-                        marker,
-                        gpu,
-                        io,
-                        checkpoint_advancing=bool(checkpoint) and checkpoint != previous_checkpoint,
+        try:
+            backend.native_source()
+            name = backend.MODULE.removeprefix("training.").removesuffix("_training")
+            with (root / f"private-{name}.log").open("x") as log:
+                os.chmod(log.name, 0o600)
+                process = subprocess.Popen(
+                    [
+                        sys.executable,
+                        "-m",
+                        backend.MODULE,
+                        "--plan",
+                        str(plan_path.resolve()),
+                        "--sha256",
+                        digest(plan),
+                        "--native",
+                    ],
+                    stdout=log,
+                    stderr=subprocess.STDOUT,
+                    start_new_session=True,
+                )
+                watchdog = ProgressWatchdog(time.monotonic())
+                previous_checkpoint = ()
+                while process.poll() is None:
+                    try:
+                        process.wait(timeout=WATCHDOG_POLL_SECONDS)
+                    except subprocess.TimeoutExpired:
+                        gpu, io = _utilization_snapshot()
+                        marker = progress(root)
+                        checkpoint = tuple(
+                            row for row in marker if row[0].startswith("checkpoints/")
+                        )
+                        reason = watchdog.observe(
+                            time.monotonic(),
+                            marker,
+                            gpu,
+                            io,
+                            checkpoint_advancing=bool(checkpoint)
+                            and checkpoint != previous_checkpoint,
+                        )
+                        previous_checkpoint = checkpoint
+                        if reason:
+                            raise TimeoutError(reason) from None
+                if process.returncode != 0:
+                    raise RuntimeError("native RL did not finish")
+        finally:
+            # Teardown must complete before any terminal success/rejection marker.
+            if process is not None:
+                with suppress(ProcessLookupError):
+                    os.killpg(process.pid, signal.SIGTERM)
+                with suppress(subprocess.TimeoutExpired):
+                    process.wait(timeout=30)
+                with suppress(ProcessLookupError):
+                    os.killpg(process.pid, signal.SIGKILL)
+                process.wait(timeout=30)
+        rejection = root / "NATIVE_REJECTED.json"
+        if rejection.exists():
+            from .rl_episode import BUDGET_STOPS
+
+            result = json.loads(rejection.read_bytes())
+            sealed(result, "cyber_rl_native_rejection_v1")
+            if (
+                result.get("plan_sha256") != digest(plan)
+                or result.get("status") != "rejected"
+                or result.get("reason") not in BUDGET_STOPS
+                or any(
+                    (root / name).exists()
+                    for name in (
+                        "FAILED.json",
+                        "NATIVE_FAILURE.json",
+                        "NATIVE_TRAINING_COMPLETE.json",
+                        "ACCEPTED.json",
                     )
-                    previous_checkpoint = checkpoint
-                    if reason:
-                        raise TimeoutError(reason) from None
-            if process.returncode != 0:
-                raise RuntimeError("native RL did not finish")
+                )
+            ):
+                raise ValueError("native rejection is conflicting or not plan-bound")
+            # Zero exit means the bounded operation shut down cleanly, not that
+            # training completed. Do not fabricate a checkpoint or acceptance.
+            return _write(
+                root / "REJECTED.json", {k: v for k, v in result.items() if k != "sha256"}
+            )
         return _write(root / "NATIVE_TRAINING_COMPLETE.json", backend.native_result(plan))
     except BaseException as exc:
         _write(
@@ -142,12 +200,3 @@ def run(plan, plan_path, *, backend):
         raise RuntimeError(
             "RL run failed; private evidence preserved; no automatic retry"
         ) from None
-    finally:
-        if process is not None:
-            with suppress(ProcessLookupError):
-                os.killpg(process.pid, signal.SIGTERM)
-            with suppress(subprocess.TimeoutExpired):
-                process.wait(timeout=30)
-            with suppress(ProcessLookupError):
-                os.killpg(process.pid, signal.SIGKILL)
-            process.wait(timeout=30)

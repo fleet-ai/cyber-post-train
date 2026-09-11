@@ -29,6 +29,34 @@ class InvalidEpisode(RuntimeError):
     """Safe reason code only: underlying SDK exceptions may contain task data."""
 
 
+class EpisodeBudgetExceeded(InvalidEpisode):
+    """A declared horizon ended; no reward or optimizer input may be fabricated."""
+
+    def __init__(self, reason):
+        super().__init__(reason)
+        # Ray's dual exception replaces .args but delegates custom attributes.
+        self.reason = reason
+
+
+BUDGET_STOPS = {
+    "generation_incomplete_length",
+    "generation_incomplete_context_full",
+    "turn_budget_exhausted",
+    "response_budget_exhausted",
+}
+
+
+def budget_stop(error):
+    """Only explicitly typed budget stops qualify, never an arbitrary cause chain."""
+    if isinstance(error, EpisodeBudgetExceeded):
+        reason = error.reason
+        return reason if isinstance(reason, str) and reason in BUDGET_STOPS else None
+    if isinstance(error, BaseExceptionGroup):
+        reasons = [budget_stop(child) for child in error.exceptions]
+        return reasons[0] if all(reasons) else None
+    return None
+
+
 def _failure(error, *, run_id, elapsed_seconds, phase):
     """Retain nested MCP failure locations without serializing exception messages."""
     result = fleet.sanitized_failure_receipt(error, run_id=run_id, elapsed_seconds=elapsed_seconds)
@@ -67,6 +95,8 @@ def _failure(error, *, run_id, elapsed_seconds, phase):
                 "bash_timeout_maximum_unresolved",
                 "tool_timeout_below_advertised_budget",
                 "turn_budget_exhausted",
+                "response_budget_exhausted",
+                "instance_release_unconfirmed",
             }
         ):
             cause["reason"] = item.args[0]
@@ -273,7 +303,9 @@ async def _agent(recorder, session, messages, tools, limits, parse):
                 "aborted": "generation_incomplete_aborted",
                 "ok": "generation_incomplete_nontext",
             }.get(turn.finish if isinstance(turn.finish, str) else None, "generation_incomplete")
-            raise InvalidEpisode(reason)
+            if turn.finish == "length" and not isinstance(turn.text, str):
+                reason = "generation_incomplete_nontext"
+            raise (EpisodeBudgetExceeded if reason in BUDGET_STOPS else InvalidEpisode)(reason)
         call = parse(turn.text)
         if call is not None and (
             not isinstance(call, dict)
@@ -308,7 +340,7 @@ async def _agent(recorder, session, messages, tools, limits, parse):
         messages.append(recorder.append_observation(message, []))
         if call["name"] == "submit_report" and not error:
             return messages, "report_submitted", env_time
-    raise InvalidEpisode("turn_budget_exhausted")
+    raise EpisodeBudgetExceeded("turn_budget_exhausted")
 
 
 async def collect(config, directory: Path, recorder, parse, *, client):
@@ -442,6 +474,11 @@ async def collect(config, directory: Path, recorder, parse, *, client):
         fleet.write_json_once(directory / "cleanup.json", cleanup)
         if messages and not (directory / "conversation.json").exists():
             fleet.write_json_once(directory / "conversation.json", {"messages": messages})
+        if cleanup["possible_instance_leak"]:
+            # Also fail during exception/cancellation unwinding. A cancelled
+            # sibling with an uncertain create/release must not disappear from
+            # a TaskGroup and let another episode look cleanly budget-limited.
+            raise InvalidEpisode("instance_release_unconfirmed") from None
     if not cleanup["instance_closed"]:
         raise InvalidEpisode("instance_release_unconfirmed")
     meta = {
@@ -626,6 +663,8 @@ async def generate(input):
     except InvalidEpisode:
         raise
     except Exception as exc:
+        if reason := budget_stop(exc):
+            raise EpisodeBudgetExceeded(reason) from None
         # Native trainer/Ray logs must not render MCP/HTTP exception bodies.
         raise InvalidEpisode("episode_failure_" + type(exc).__name__) from None
     return GenerateFnOutput(samples=samples[0] if len(samples) == 1 else samples)

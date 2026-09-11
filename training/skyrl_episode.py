@@ -22,7 +22,7 @@ from evals.fleet import opencode_self_hosted as fleet
 
 from .dense import native_helper
 from .qwen_tools import parse_tool_calls
-from .rl_episode import InvalidEpisode, validate_samples
+from .rl_episode import EpisodeBudgetExceeded, InvalidEpisode, validate_samples
 
 CLIENT_MODULE = "skyrl.backends.skyrl_train.inference_servers.remote_inference_client"
 CLIENT_SHA256 = "7a798659decf8a49b9ab28c5fc299cdb0f3b1eedaa1db791e7a023f467bda174"
@@ -165,7 +165,7 @@ class Recorder:
         record = self.recording
         remaining = self.response_tokens - record.response_length
         if remaining <= 0:
-            raise InvalidEpisode("response_budget_exhausted")
+            raise EpisodeBudgetExceeded("response_budget_exhausted")
         cap = min(self.config["rl"]["max_tokens_per_turn"], remaining)
         params = dict(self.sampling, max_tokens=min(self.sampling.get("max_tokens", cap), cap))
         if type(params["max_tokens"]) is not int or params["max_tokens"] <= 0:
@@ -184,11 +184,9 @@ class Recorder:
                 for key in ("responses", "response_ids", "response_logprobs", "stop_reasons")
             )
             if (
-                stop != "stop"
-                or not isinstance(text, str)
+                not isinstance(text, str)
                 or not ids
                 or len(ids) > params["max_tokens"]
-                or ids[-1] != self.tokenizer.eos_token_id
                 or not isinstance(probabilities, list)
                 or len(probabilities) != len(ids)
                 or any(type(t) is not int or t < 0 for t in ids)
@@ -197,6 +195,14 @@ class Recorder:
                     for p in probabilities
                 )
             ):
+                raise InvalidEpisode("generation_tokens_or_stop_invalid")
+            if (
+                stop == "length"
+                and len(ids) == params["max_tokens"]
+                and ids[-1] != self.tokenizer.eos_token_id
+            ):
+                raise EpisodeBudgetExceeded("generation_incomplete_length")
+            if stop != "stop" or ids[-1] != self.tokenizer.eos_token_id:
                 raise InvalidEpisode("generation_tokens_or_stop_invalid")
         except InvalidEpisode:
             raise
@@ -208,7 +214,7 @@ class Recorder:
 
     def _append(self, ids, mask, probabilities):
         if self.recording.response_length + len(ids) > self.response_tokens:
-            raise InvalidEpisode("response_budget_exhausted")
+            raise EpisodeBudgetExceeded("response_budget_exhausted")
         self.recording.tokens.extend(ids)
         self.recording.loss_mask.extend(mask)
         self.recording.rollout_log_probs.extend(probabilities)

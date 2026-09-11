@@ -294,6 +294,7 @@ async def test_mutations_once_never_become_zero(fixture, tmp_path, phase, error)
     "finish,text,reason",
     [
         ("length", "submit_report", "generation_incomplete_length"),
+        ("length", None, "generation_incomplete_nontext"),
         ("context_full", None, "generation_incomplete_context_full"),
         ("aborted", None, "generation_incomplete_aborted"),
         ("ok", None, "generation_incomplete_nontext"),
@@ -302,13 +303,37 @@ async def test_mutations_once_never_become_zero(fixture, tmp_path, phase, error)
     ],
 )
 async def test_incomplete_generation_is_not_scored(fixture, tmp_path, finish, text, reason):
-    with pytest.raises(rl.InvalidEpisode, match="generation_incomplete"):
+    with pytest.raises(rl.InvalidEpisode, match="generation_incomplete") as caught:
         await collect(fixture, tmp_path, Recorder([NS(text=text, finish=finish)]))
+    assert rl.budget_stop(caught.value) == (reason if reason in rl.BUDGET_STOPS else None)
     assert fixture.deleted
     assert not (tmp_path / "episode/score-intent.json").exists()
     receipt = json.loads((tmp_path / "episode/failure.json").read_text())
     assert receipt["causes"][0]["reason"] == reason
     assert "private" not in json.dumps(receipt)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("cancelled", [False, True])
+async def test_uncertain_cleanup_overrides_budget_or_sibling_cancellation(
+    fixture, tmp_path, cancelled, monkeypatch
+):
+    class Stop(Recorder):
+        async def sample(self):
+            if cancelled:
+                raise asyncio.CancelledError()
+            raise rl.EpisodeBudgetExceeded("generation_incomplete_length")
+
+    async def failed_release(*args):
+        return False
+
+    monkeypatch.setattr(rl, "_release", failed_release)
+    with pytest.raises(rl.InvalidEpisode, match="instance_release_unconfirmed") as caught:
+        await collect(fixture, tmp_path, Stop())
+    assert rl.budget_stop(caught.value) is None
+    root = tmp_path / "episode"
+    assert json.loads((root / "cleanup.json").read_bytes())["possible_instance_leak"]
+    assert not (root / "score-intent.json").exists() and not (root / "ACCEPTED.json").exists()
 
 
 @pytest.mark.asyncio
@@ -455,7 +480,7 @@ async def test_mismatched_create_does_not_delete_potential_peer(fixture, tmp_pat
             },
         )
     )
-    with pytest.raises(RuntimeError, match="binding drifted"):
+    with pytest.raises(rl.InvalidEpisode, match="instance_release_unconfirmed"):
         await collect(fixture, tmp_path)
     assert not any(method == "DELETE" for method, _ in fixture.calls)
     cleanup = json.loads((tmp_path / "episode/cleanup.json").read_text())
@@ -836,7 +861,7 @@ async def test_nonobject_create_has_unknown_resource_state(fixture, tmp_path):
     fixture.overrides["POST", f"/v1/rollout-rewards/synthetic/versions/{TASK}/instances"] = (
         httpx.Response(200, json=[])
     )
-    with pytest.raises(RuntimeError, match="not an object"):
+    with pytest.raises(rl.InvalidEpisode, match="instance_release_unconfirmed"):
         await collect(fixture, tmp_path)
     cleanup = json.loads((tmp_path / "episode/cleanup.json").read_text())
     assert cleanup["possible_instance_leak"] and not cleanup["instance_closed"]

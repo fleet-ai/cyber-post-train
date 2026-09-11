@@ -16,7 +16,7 @@ from pathlib import Path
 
 from evals.fleet import opencode_self_hosted as fleet
 
-from .rl_episode import InvalidEpisode, validate_samples
+from .rl_episode import EpisodeBudgetExceeded, InvalidEpisode, budget_stop, validate_samples
 
 
 class Rollout:
@@ -145,6 +145,21 @@ class Rollout:
         directory = self.root / batch_id
         self.busy = True
         owned = False
+        generate = self.state.generate_function
+        episode_errors = []
+
+        async def observed_generate(input):
+            try:
+                return await generate(input)
+            except asyncio.CancelledError:
+                raise
+            except BaseException as error:
+                # Native group cleanup gathers sibling errors then rethrows only
+                # the first. Retain each leaf so a cleanup defect cannot vanish.
+                episode_errors.append(error)
+                raise
+
+        self.state.generate_function = observed_generate
         try:
             directory.mkdir(parents=True, mode=0o700, exist_ok=False)
             owned = True
@@ -270,10 +285,19 @@ class Rollout:
             raise
         except Exception as exc:
             self.failed = True
+            if (
+                owned
+                and episode_errors
+                and all(budget_stop(error) for error in episode_errors)
+                and (reason := budget_stop(exc))
+            ):
+                fleet.write_json_once(directory / "REJECTED.json", {"reason": reason})
+                raise EpisodeBudgetExceeded(reason) from None
             if owned:
                 fleet.write_json_once(directory / "FAILED.json", {"error_type": type(exc).__name__})
             # TaskGroup has awaited every cancelled sibling's environment cleanup.
             # Never propagate its private ExceptionGroup into native/Ray logs.
             raise InvalidEpisode("batch_failed_no_replacement") from None
         finally:
+            self.state.generate_function = generate
             self.busy = False

@@ -259,6 +259,54 @@ def test_unexpected_exit_or_checkpoint_defect_is_not_success(execution, monkeypa
     assert len(calls) == 2
 
 
+@pytest.mark.parametrize(
+    "fault",
+    [None, "nonzero", "digest", "plan", "reason", "failure", "complete", "cleanup"],
+)
+def test_rejected_native_child_is_not_training_completion(execution, monkeypatch, fault):
+    from training import rl_runtime
+    from training.rl_episode import EpisodeBudgetExceeded
+
+    plan, root, calls = execution
+
+    def spawn(*args, **kwargs):
+        rl_runtime.native_rejection(plan, EpisodeBudgetExceeded("generation_incomplete_length"))
+        path = root / "NATIVE_REJECTED.json"
+        receipt = json.loads(path.read_bytes())
+        if fault == "plan":
+            receipt["plan_sha256"] = "b" * 64
+        elif fault == "reason":
+            receipt["reason"] = "unexpected_engine_error"
+        receipt["sha256"] = digest({k: v for k, v in receipt.items() if k != "sha256"})
+        if fault == "digest":
+            receipt["sha256"] = "b" * 64
+        path.write_text(json.dumps(receipt))
+        if fault in {"failure", "complete"}:
+            (
+                root
+                / ("NATIVE_FAILURE.json" if fault == "failure" else "NATIVE_TRAINING_COMPLETE.json")
+            ).write_text("{}")
+
+        def wait(**kwargs):
+            if fault == "cleanup":
+                raise subprocess.TimeoutExpired("synthetic", 30)
+            return 1 if fault == "nonzero" else 0
+
+        return NS(pid=9876543, poll=lambda: 0, wait=wait, returncode=1 if fault == "nonzero" else 0)
+
+    monkeypatch.setattr(subprocess, "Popen", spawn)
+    monkeypatch.setattr(train, "native_result", lambda _: pytest.fail("rejection cannot train"))
+    if fault is None:
+        result = train.run(plan, root / "plan.json")
+        assert result["status"] == "rejected" and not (root / "FAILED.json").exists()
+    else:
+        with pytest.raises(RuntimeError, match="no automatic retry"):
+            train.run(plan, root / "plan.json")
+        assert (root / "FAILED.json").exists() and not (root / "REJECTED.json").exists()
+    assert not (root / "ACCEPTED.json").exists() and not (root / "checkpoints").exists()
+    assert len(calls) == 2 and {pid for pid, _ in calls} == {9876543}
+
+
 def test_existing_intent_is_never_replayed(execution, monkeypatch):
     plan, root, _ = execution
     (root / "STARTED.json").write_text("preserve")
@@ -612,15 +660,19 @@ def test_watchdog_bounds_native_startup_and_only_cleans_own_process(
     assert len(calls) == 2 and {pid for pid, _ in calls} == {9876543}
 
 
-@pytest.mark.parametrize("fails", [None, "train", "tracking"])
+@pytest.mark.parametrize("fails", [None, "train", "tracking", "budget", "budget_cleanup"])
 def test_native_wrapper_calls_real_driver_boundary_once_and_finishes_tracking(
     plan, tmp_path, monkeypatch, fails
 ):
     source = tmp_path / "train.py"
     source.write_text(
+        "from training.rl_episode import EpisodeBudgetExceeded\n"
         "async def train(args):\n    args.calls.append('train')\n"
         "    if args.fails == 'train': raise RuntimeError('synthetic')\n"
+        "    if args.fails in {'budget', 'budget_cleanup'}:\n"
+        "        raise EpisodeBudgetExceeded('generation_incomplete_length')\n"
     )
+    plan["output_root"] = str(tmp_path)
     calls = []
     monkeypatch.setenv("PYTHONPATH", "/root/Megatron-LM")
     args = NS(calls=calls, fails=fails)
@@ -635,7 +687,7 @@ def test_native_wrapper_calls_real_driver_boundary_once_and_finishes_tracking(
 
     def finish():
         calls.append("finish")
-        if fails == "tracking":
+        if fails in {"tracking", "budget_cleanup"}:
             raise RuntimeError("synthetic tracking failure")
 
     monkeypatch.setitem(
@@ -643,7 +695,7 @@ def test_native_wrapper_calls_real_driver_boundary_once_and_finishes_tracking(
         "miles.utils.tracking_utils.tracking",
         NS(finish_tracking=finish),
     )
-    if fails:
+    if fails not in {None, "budget"}:
         with pytest.raises(RuntimeError):
             train._native(plan)
     else:
@@ -651,6 +703,8 @@ def test_native_wrapper_calls_real_driver_boundary_once_and_finishes_tracking(
     assert calls[0]["address"] == "auto" and calls[0]["log_to_driver"] is False
     assert calls[0]["runtime_env"]["env_vars"]["PYTHONPATH"].endswith(":/root/Megatron-LM")
     assert calls[1:] == ["train", "finish", "disconnect"]
+    assert (tmp_path / "NATIVE_REJECTED.json").exists() == (fails in {"budget", "budget_cleanup"})
+    assert not (tmp_path / "ACCEPTED.json").exists()
 
 
 def test_native_result_requires_every_expected_batch(execution):

@@ -521,8 +521,10 @@ def main():
             try:
                 _native(plan)
             except BaseException as exc:
-                from .rl_runtime import native_failure
+                from .rl_runtime import native_failure, native_rejection
 
+                if native_rejection(plan, exc):
+                    return
                 with suppress(Exception):
                     native_failure(plan, exc)
                 raise

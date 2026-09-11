@@ -569,6 +569,28 @@ def test_native_main_preserves_sanitized_failure(prepared, monkeypatch, capsys, 
         assert "private input contents" not in json.dumps(receipt)
 
 
+def test_native_main_records_budget_rejection_without_acceptance(prepared, monkeypatch, capsys):
+    from training.rl_episode import EpisodeBudgetExceeded
+
+    plan, root = prepared.plan, prepared.state.tmp
+    plan["output_root"] = str(root)
+    path = root / "native-plan.json"
+    path.write_text(json.dumps(plan))
+    monkeypatch.setattr(train, "job_request", lambda _: None)
+    monkeypatch.setattr(
+        sys, "argv", [train.MODULE, "--plan", str(path), "--sha256", digest(plan), "--native"]
+    )
+
+    def reject(_):
+        raise EpisodeBudgetExceeded("generation_incomplete_length")
+
+    monkeypatch.setattr(train, "_native", reject)
+    train.main()
+    assert (root / "NATIVE_REJECTED.json").exists()
+    assert not (root / "NATIVE_FAILURE.json").exists() and not (root / "ACCEPTED.json").exists()
+    assert capsys.readouterr().out == ""
+
+
 def test_module_entry_rejects_missing_plan_without_private_path(tmp_path, monkeypatch, capsys):
     import runpy
 

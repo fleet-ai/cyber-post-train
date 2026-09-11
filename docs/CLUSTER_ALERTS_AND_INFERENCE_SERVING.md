@@ -32,6 +32,25 @@ accepted incidents by UID. Ownership comes from `fleet.ai/submitted-by`, then th
 `owner` label, then an explicitly mapped job-name prefix. A `chris-*` or
 `chrisisaverted-*` prefix maps to Chris when no stronger owner metadata exists.
 
+**Rechecked 2026-09-11 after repeated experiment failures:** the live monitor
+still selects `fleet/ftl:91212928` and the five-minute schedule. Its
+[`failed_jobs` selector](https://github.com/fleet-ai/theseus/blob/91212928e107ff949899f37a563d7cd0b9c9d123/services/ftl/src/ftl/report_status.py#L82)
+does not inspect GPU count, queue or priority and has no per-job quiet/opt-out
+annotation. `fleet-infra-quiet` is **not** a notification exemption; CPU-only
+Kubernetes Jobs also page on failure. Running the exact selector locally with
+synthetic failed CPU Jobs and a failed RayJob confirms this without sending
+anything. New immutable UIDs mean new incidents, not duplicate notifications.
+
+Do not use a monitored production Job as the next debugging environment merely
+because unit tests passed. Exercise the packaged entrypoint, real runtime user,
+native dependencies and failure/cleanup paths locally first. Explicit, handled
+validation rejection is not training success; unexpected faults still fail.
+No preflight can guarantee a GPU/distributed run never fails. If zero team-channel
+noise is required for unqualified GPU work, obtain a platform-maintainer-approved
+development/owner-only reporting route first. The current deployment does not
+provide one. Do not create an exemption by changing resource kind, namespace,
+labels, deduplication state or exit status to evade the monitor.
+
 Do not hide a real failure by deleting it before the monitor observes it, relabeling it,
 moving it to an unrelated namespace, or forcing a false zero exit. Prevent avoidable
 alerts by previewing the exact entrypoint, making expected handled outcomes exit cleanly,

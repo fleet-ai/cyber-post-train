@@ -18,7 +18,7 @@ import pytest
 
 from evals.fleet import opencode_self_hosted as fleet
 from training.miles_rollout import Rollout
-from training.rl_episode import InvalidEpisode
+from training.rl_episode import EpisodeBudgetExceeded, InvalidEpisode
 
 
 class Tokenizer:
@@ -325,8 +325,9 @@ async def test_baseline_training_final_and_native_competing_reward_groups(fixtur
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("evaluation", [True, False])
+@pytest.mark.parametrize("budget,cleanup_fault", [(False, False), (True, False), (True, True)])
 async def test_failure_cancels_and_awaits_all_groups_without_refilling(
-    fixture, runtime, evaluation
+    fixture, runtime, evaluation, budget, cleanup_fault
 ):
     rollout = build(fixture, runtime)
     if not evaluation:
@@ -342,22 +343,30 @@ async def test_failure_cancels_and_awaits_all_groups_without_refilling(
         try:
             await all_started.wait()
             if input.sample.index == 0:
+                if budget:
+                    raise EpisodeBudgetExceeded("generation_incomplete_length")
                 raise ValueError("PRIVATE SDK RESPONSE")
             await asyncio.Event().wait()
         finally:
             await asyncio.sleep(0)
             released.append(input.sample.index)
+            if cleanup_fault and input.sample.index == 1:
+                raise InvalidEpisode("instance_release_unconfirmed")
 
     rollout.state.generate_function = fail
     async with asyncio.timeout(5):
-        with pytest.raises(InvalidEpisode, match="batch_failed_no_replacement") as caught:
+        with pytest.raises(InvalidEpisode) as caught:
             await rollout(runtime.Eval(0) if evaluation else runtime.Train(0))
+    rejected = budget and not cleanup_fault
+    assert isinstance(caught.value, EpisodeBudgetExceeded) == rejected
     assert "PRIVATE" not in str(caught.value)
     assert sorted(started) == sorted(released) == list(range(count))
     assert fixture.data_source.sample_index == (0 if evaluation else 4)
     assert rollout.failed and not rollout.busy
     path = rollout.root / ("dev-baseline-r0" if evaluation else "train-r0")
-    assert (path / "FAILED.json").exists() and not (path / "COLLECTED.json").exists()
+    assert (path / "FAILED.json").exists() == (not rejected)
+    assert (path / "REJECTED.json").exists() == rejected
+    assert not (path / "COLLECTED.json").exists()
     with pytest.raises(InvalidEpisode):
         await rollout(runtime.Train(1))
     assert len(started) == count

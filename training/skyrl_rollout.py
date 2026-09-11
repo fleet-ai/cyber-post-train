@@ -219,6 +219,9 @@ class Generator:
             raise
         except Exception as exc:
             self.failed = True
+            if owned and (reason := rl_episode.budget_stop(exc)):
+                fleet.write_json_once(directory / "REJECTED.json", {"reason": reason})
+                raise rl_episode.EpisodeBudgetExceeded(reason) from None
             if owned:
                 fleet.write_json_once(directory / "FAILED.json", {"error_type": type(exc).__name__})
             raise rl_episode.InvalidEpisode("skyrl_batch_failed_no_replacement") from None

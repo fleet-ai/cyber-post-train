@@ -4,7 +4,56 @@ import json
 
 import pytest
 
-from training.rl_runtime import native_failure
+from training.rl_episode import BUDGET_STOPS, EpisodeBudgetExceeded, InvalidEpisode, budget_stop
+from training.rl_runtime import native_failure, native_rejection, sealed
+
+
+@pytest.mark.parametrize("reason", sorted(BUDGET_STOPS))
+@pytest.mark.parametrize("grouped", [False, True])
+def test_explicit_budget_rejection_is_private_and_not_training(tmp_path, reason, grouped):
+    error = EpisodeBudgetExceeded(reason)
+    if grouped:
+        error = ExceptionGroup("private transport context", [error, error])
+    assert budget_stop(error) == reason
+    assert native_rejection({"output_root": str(tmp_path)}, error)
+    receipt = json.loads((tmp_path / "NATIVE_REJECTED.json").read_bytes())
+    sealed(receipt, "cyber_rl_native_rejection_v1")
+    assert receipt["status"] == "rejected" and receipt["reason"] == reason
+    assert "private" not in json.dumps(receipt)
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["NATIVE_REJECTED.json"]
+
+
+@pytest.mark.parametrize("fault", ["generic", "unknown", "nonstring", "mixed", "cause"])
+def test_real_errors_cannot_be_clean_rejections(tmp_path, fault):
+    limit = EpisodeBudgetExceeded("generation_incomplete_length")
+    error = {
+        "generic": InvalidEpisode("generation_incomplete_length"),
+        "unknown": EpisodeBudgetExceeded("private unknown stop"),
+        "nonstring": EpisodeBudgetExceeded({"private": "data"}),
+        "mixed": ExceptionGroup("private", [limit, OSError("private")]),
+        "cause": RuntimeError("private"),
+    }[fault]
+    error.__cause__ = limit
+    assert budget_stop(error) is None
+    assert not native_rejection({"output_root": str(tmp_path)}, error)
+    assert not list(tmp_path.iterdir())
+
+
+@pytest.mark.parametrize("grouped", [False, True])
+def test_actual_ray_serialization_preserves_only_typed_budget_stops(tmp_path, grouped):
+    ray = pytest.importorskip("ray.exceptions")
+    pickle = pytest.importorskip("ray.cloudpickle")
+    cause = EpisodeBudgetExceeded("generation_incomplete_length")
+    if grouped:
+        cause = ExceptionGroup("private", [cause])
+    wrapped = ray.RayTaskError("generate", "private remote text", cause).as_instanceof_cause()
+    restored = pickle.loads(pickle.dumps(wrapped))
+    assert budget_stop(restored) == "generation_incomplete_length"
+    assert native_rejection({"output_root": str(tmp_path)}, restored)
+    assert "private" not in (tmp_path / "NATIVE_REJECTED.json").read_text()
+    # Actor death or another runtime failure must never unwrap a budget cause.
+    died = ray.ActorDiedError(ray.RayTaskError("generate", "private", cause))
+    assert budget_stop(died) is None
 
 
 def test_remote_error_chain_is_sanitized_bounded_and_sealed(tmp_path):

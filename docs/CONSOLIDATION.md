@@ -13,6 +13,12 @@ handling is resolved and tested through the real recorder/batch boundary.
 Do not simply submit another run to obtain the missing diagnostic. Existing
 useful work remains untouched. This gate does not authorize alert suppression,
 false success, cancellation of healthy work, or replay of preserved outcomes.
+The already-running GLM CPU staging Job subsequently failed at 16:10:07Z;
+its container exited and its Workload is gone. The final CPU sample reported
+zero cgroup OOM events, but the specific application failure is not yet recovered.
+Following Chris's renewed alert complaint, **hold all new cluster submissions**
+while resolving the development/reporting path. Continue local code and tests;
+do not count CPU-only Jobs or priority labels as notification exemptions.
 
 ## Supported interface
 
@@ -70,8 +76,10 @@ readiness. All detailed IDs, digests, test counts and earlier failures remain in
   records full-model memory and the native ignored-input layer. One
   [full-size CPU/RAM staging pilot](evidence/cleanup-glm-native-stage-pilot-20260911.json)
   was admitted at 15:31:41Z after the complete synthetic transaction passed.
-  It reserves no GPUs and preserves all source bytes. Full-size materialization,
-  training integration and GPU qualification remain unproven; no GLM GPU successor.
+  It failed at 16:10:07Z before a model-loaded/staged receipt was observed;
+  its CPU/RAM allocation is released and it never reserved GPUs. No production
+  artifact is accepted. Full-size materialization, training integration and GPU
+  qualification remain unproven; no staging retry or GLM GPU successor.
 - No new automations, peer mutations or changes to shared/dedicated serving.
 
 The queued/frozen training bundles predate the newest checkpoint-drain and cursor guards.
@@ -117,8 +125,11 @@ Never fake success or suppress real alerts. Full controls:
 
 The [ledger regression evidence](evidence/cleanup-ledger-contract-20260911.json)
 records 46 real-PostgreSQL cases, complete focused module coverage and exact
-cross-backend result-digest parity. The latest full suite passes 1,780 tests plus seven
-subtests, with 157 explicit skips. Whole-repository coverage is **not complete**.
+cross-backend result-digest parity. That integration-enabled suite passed 1,780
+tests plus seven subtests, with 157 explicit skips. The subsequent local-only
+stop-contract revision passed 1,790 tests plus seven subtests, with 189 skips
+(optional services/native runtimes were not enabled). Whole-repository coverage
+is **not complete**.
 Optional native dependencies need
 the pinned trainer images; local skips are never counted as passing training
 qualification. Installed-wheel checks run outside the checkout. The active

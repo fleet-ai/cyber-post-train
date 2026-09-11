@@ -182,9 +182,24 @@ async def test_invalid_generation_never_becomes_reward_zero(setup, field, value)
     setup.engine.reply[field] = value
     value = recorder(setup)
     value.begin_segment([], [])
-    with pytest.raises(rl_episode.InvalidEpisode):
+    with pytest.raises(rl_episode.InvalidEpisode) as caught:
         await value.sample()
+    assert rl_episode.budget_stop(caught.value) is None
     assert value.recording.response_length == 0 and len(setup.engine.requests) == 1
+
+
+@pytest.mark.asyncio
+async def test_exact_length_stop_is_rejected_without_sample_or_reward(setup):
+    setup.engine.reply.update(
+        response_ids=[[77] * 8], response_logprobs=[[-0.2] * 8], stop_reasons=["length"]
+    )
+    value = recorder(setup)
+    value.begin_segment([], [])
+    with pytest.raises(rl_episode.EpisodeBudgetExceeded) as caught:
+        await value.sample()
+    assert rl_episode.budget_stop(caught.value) == "generation_incomplete_length"
+    assert value.recording.response_length == 0 and not value.finalized
+    assert len(setup.engine.requests) == 1
 
 
 @pytest.mark.asyncio
