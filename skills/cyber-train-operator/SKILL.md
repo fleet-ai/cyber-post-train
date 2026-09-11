@@ -18,7 +18,8 @@ Read [references/gates.md](references/gates.md) before submitting training, expo
 
 ## Operate through the supported rail
 
-- Use the generic Jobs API through the repository CLI. Run CPU preflight in the pinned image; preview the rendered request; explicitly submit once with a shared durable journal. Reconcile ambiguous POSTs instead of retrying.
+- Use the generic Jobs API through the repository CLI. Every new/changed job configuration must pass local and pinned-image CPU checks, then a bounded **dev-cluster** canary before production. `preview`/`submit` default to `--cluster dev`; production is explicit `--cluster prod`, not a kubecontext switch. Review the promotion gates and cluster-specific storage, secrets and topology in [`docs/CLUSTER_ALERTS_AND_INFERENCE_SERVING.md`](../../docs/CLUSTER_ALERTS_AND_INFERENCE_SERVING.md).
+- Preview the rendered request, then explicitly submit once with a shared durable journal. Preserve the exact API origin in the intent. Use distinct prepared/output directories, run names and W&B identities per cluster; reconcile ambiguous POSTs instead of retrying or switching clusters with the same journal.
 - Use normal admission and meaningful owner-specific names. Request `c1` when authorized or `c2` for backfill; the current API derives queue priority. Recheck live policy. Never bypass admission, unsuspend manually, preempt, cancel, or modify another owner's workload.
 - Resolve images to immutable digests and record both the requested image and runtime `imageID`. A tag, Ready Pod, or catalog row alone is insufficient evidence.
 - For experiment-owned dedicated GPU serving, freeze consumer-liveness and lifecycle bounds before launch and follow [`docs/GPU_RESOURCE_LIFECYCLE.md`](../../docs/GPU_RESOURCE_LIFECYCLE.md). Drain and release idle owned capacity while diagnosing off-node; never apply that policy to shared or hosted endpoints.

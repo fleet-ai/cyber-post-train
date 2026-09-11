@@ -5,14 +5,20 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+from enum import StrEnum
 from pathlib import Path
 from typing import Annotated
 
 import typer
 
-from .jobs import Jobs, JobsError, digest, validate_preview, validate_request
+from .jobs import API_URLS, Jobs, JobsError, digest, validate_preview, validate_request
 
 app = typer.Typer(no_args_is_help=True, pretty_exceptions_enable=False)
+
+
+class Cluster(StrEnum):
+    dev = "dev"
+    prod = "prod"
 
 
 def _print(value: object) -> None:
@@ -56,8 +62,8 @@ def _prepared(directory: Path) -> tuple[dict, dict]:
     return plan, request
 
 
-def _client() -> Jobs:
-    return Jobs(os.environ.get("FLEET_API_KEY", ""))
+def _client(cluster: Cluster) -> Jobs:
+    return Jobs(os.environ.get("FLEET_API_KEY", ""), base_url=API_URLS[cluster])
 
 
 def _fail(exc: Exception) -> None:
@@ -198,23 +204,40 @@ def preflight(directory: Path) -> None:
 
 
 @app.command()
-def preview(directory: Path) -> None:
-    """Read the Jobs API's exact resource/queue render; does not create a run."""
+def preview(
+    directory: Path,
+    cluster: Annotated[
+        Cluster, typer.Option(help="Jobs API target; independent of kube context.")
+    ] = Cluster.dev,
+) -> None:
+    """Read the selected cluster's render (dev by default); does not create a run."""
     try:
         _, request = _prepared(directory)
-        with _client() as client:
+        with _client(cluster) as client:
             result = client.preview(request)
-        _print({"submitted": False, **validate_preview(request, result)})
+        _print(
+            {
+                "submitted": False,
+                "api_base_url": API_URLS[cluster],
+                **validate_preview(request, result),
+            }
+        )
     except Exception as exc:
         _fail(exc)
 
 
 @app.command()
-def submit(directory: Path) -> None:
-    """Submit once after CPU preflight and operator approval/resource checks.
+def submit(
+    directory: Path,
+    cluster: Annotated[
+        Cluster, typer.Option(help="Jobs API target; prod requires reviewed dev-run evidence.")
+    ] = Cluster.dev,
+) -> None:
+    """Submit once to dev by default, after CPU preflight and operator resource checks.
 
     Keep this directory on the experiment's shared durable storage. A timeout
     leaves SUBMISSION.jsonl: reconcile it instead of copying or deleting it.
+    --cluster prod is explicit routing, not automatic dev-qualification proof.
     """
     try:
         plan, request = _prepared(directory)
@@ -236,9 +259,9 @@ def submit(directory: Path) -> None:
             proof.get(k) != v for k, v in expected.items()
         ):
             raise ValueError("missing or mismatched CPU preflight")
-        with _client() as client:
+        with _client(cluster) as client:
             result = client.submit_once(request, directory / "SUBMISSION.jsonl")
-        _print(result)
+        _print({"api_base_url": API_URLS[cluster], **result})
     except Exception as exc:
         _fail(exc)
 
@@ -271,11 +294,16 @@ def miles_seal(directory: Path, output: Annotated[Path, typer.Option("--output")
 
 
 @app.command()
-def status(name: str) -> None:
-    """Read sanitized Jobs API state. Does not return private trainer logs."""
+def status(
+    name: str,
+    cluster: Annotated[
+        Cluster, typer.Option(help="Jobs API target; defaults to prod for historical runs.")
+    ] = Cluster.prod,
+) -> None:
+    """Read sanitized state; use --cluster dev for new dev runs. No private logs."""
     try:
-        with _client() as client:
-            _print(client.status(name))
+        with _client(cluster) as client:
+            _print({"api_base_url": API_URLS[cluster], **client.status(name)})
     except Exception as exc:
         _fail(exc)
 

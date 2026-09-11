@@ -11,6 +11,22 @@ Use this checklist at the transition named in the request. Do not execute later 
 
 ## Preview and admission
 
+- New or changed executable configurations have local/pinned-image checks and a
+  successful bounded dev canary. Review actual update, held-out validation,
+  checkpoint save/reload, telemetry and release evidence before production;
+  RL additionally needs authoritative reward acquisition. CPU preflight alone
+  is not dev GPU qualification.
+- Record the explicit API origin and matching Kubernetes context. The CLI
+  defaults preview/submit to dev but status to prod for historical runs; pass
+  `--cluster` explicitly in operational instructions. A context change does not
+  change the HTTP destination.
+- Dev/prod have separate immutable run/output/W&B/journal identities. Bind the
+  promoted source/image/model/data/recipe to dev evidence and enumerate allowed
+  differences (duration, output, topology). Do not promote an unrelated canary.
+- Confirm target-local input mounts, Secret references, topology and available
+  resources. Dev may have preemptible nodes and no InfiniBand; a priority label
+  is not protection from cloud reclamation. Account for the aggregate authorized
+  active-node ceiling across clusters, not only one request's size.
 - Authenticated server preview is HTTP-successful and has no errors.
 - Preview binds exact task versions, environment versions, verifiers, ordered tools, step semantics, resources, queue, image, and output roots.
 - Planned session and GPU cost match the requested canary or run.

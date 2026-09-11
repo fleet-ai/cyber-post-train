@@ -4,6 +4,98 @@ This guide records the stable operational boundary between Fleet training Jobs a
 persistent inference services. Recheck the deployed monitor and inference-control-plane
 versions before acting; thresholds and delivery routing can change.
 
+## Dev first: cluster selection and promotion
+
+**Policy adopted 2026-09-11:** every new or changed executable job configuration
+must be tested on Fleet's dev cluster before production. Do not use production
+as the next debugging environment. This includes image, command, dependency,
+model loader, data/windowing, optimizer, resource and distributed-config changes;
+an unrelated earlier successful run is not qualification.
+
+| Target | Intended use | Submission/control endpoint |
+| --- | --- | --- |
+| Nebius dev | Bounded GPU functional tests; BuildKit image builds | Jobs API `https://api.ft.dev.flt.build`; UI `https://ft.dev.flt.build` |
+| Nebius production | Qualified longer training runs | Jobs API `https://api.ft.flt.build` |
+| EKS data | CPU-only Ray Data and compatible data preparation | Standing Ray dashboard/Jobs API `https://ray.fleetai-training-data.fleetai.com` |
+
+Kubeconfigs are available through `https://admin.flt.build/clusters`. Authentication,
+input mounts and workload Secrets must be checked **on the target cluster**;
+neither credentials nor `/mnt/sfs` contents should be assumed shared.
+
+The CLI accepts only `--cluster dev|prod` on `preview`, `submit` and `status`.
+New previews/submissions default to **dev**. Status defaults to **prod** for
+existing historical run names; use an explicit selector in runbooks. The selected
+API base is printed with results and saved in the pre-POST intent journal.
+**`kubectl config use-context` does not change an HTTP Jobs API destination.**
+There is no `cluster` field in the live generic run schema; the API origin selects
+the cluster. Do not work around this with an arbitrary URL or a modified request.
+
+The developer-cluster announcement mentioned **18 B300 GPUs**. Reviewed Theseus
+configuration at `f22c7cdd8460c2e76c82c54f11e10a7c4caa0ea2` instead declares a
+**two-node, 16-B300 training pool/quota**. A live readback at 2026-09-11 18:21 UTC
+confirmed two Ready `gpu-b300-sxm` nodes, eight allocatable GPUs each (16 total),
+plus three CPU nodes. Allocatable is not currently free: this audit did not
+reserve or claim capacity. Recheck nodes and admission before a paid test.
+That configuration also declares preemptible GPU nodes and Ethernet-only
+multi-node communication, without the production InfiniBand fabric. Dev success
+proves the exercised path, not production-scale throughput or every fabric path.
+Use target-appropriate topology and record differences explicitly. High priority
+does not protect a preemptible cloud node from reclamation.
+
+The data cluster is not another GPU Jobs API: the reviewed deployment is a
+standing CPU Ray cluster, without Kueue/RayJob training infrastructure. It has
+on-demand worker autoscaling configured up to 20 nodes; the Slack discussion of
+spot preference/10,000 CPUs is not a live capacity guarantee. Its S3-backed
+`/mnt/sfs` mounts do **not** have ordinary shared POSIX filesystem semantics.
+Do not move SQLite, file-locking or atomic-rename checkpoint transactions there
+unchanged. Prefer explicit immutable object exchange for compatible CPU work.
+
+### Required promotion sequence
+
+1. Local tests, exact packaged entrypoint/failure-path tests and pinned-image
+   CPU preflight pass. Use BuildKit for new images; record a pullable immutable
+   digest, not a mutable build tag.
+2. Prepare a **separate bounded dev run**. Check target auth, inputs/Secrets,
+   resources/topology, duplicate state and preview. Keep production inputs and
+   journals untouched. A test must have a predeclared startup/idle/drain bound.
+3. For SFT, prove real forward/backward/optimizer work, fixed held-out loss,
+   scalar W&B tracking, checkpoint save and reload/recovery, and resource release.
+   For RL, also prove real task interaction and exact authoritative reward before
+   an update. For serving/eval, test the exact request/tool/cleanup path. Synthetic
+   fixtures qualify only what they actually exercise.
+4. Review digest-bound evidence against the proposed production source, image,
+   model, data, masks and recipe. Enumerate every deliberate difference, such as
+   output identity, longer duration or production fabric. Changed executable
+   behavior returns to dev. A duration cap must exercise periodic/final paths;
+   successful startup alone is insufficient.
+5. Prepare production with a new name, output, prepared directory, W&B ID and
+   submission journal. Rerun its CPU preflight and `preview --cluster prod`, then
+   submit explicitly only with current authorization and reviewed dev evidence.
+   Do not copy or forge preflight/acceptance receipts between changed plans.
+6. Monitor progress and release owned broken/idle allocations before further
+   debugging. Never alter peer work. The user's aggregate **eight active-node**
+   ceiling still applies across our work; dev capacity and current admission can
+   impose a smaller limit. A per-request ceiling is not an aggregate controller.
+
+**Enforcement boundary:** the CLI enforces explicit finite target routing and
+create-once submission, not an automatic dev-to-prod certification service.
+Reviewing successful dev GPU evidence remains mandatory operator work. No test
+can guarantee a distributed job never fails; do not promise zero alerts or
+silence a real failure. A separate dev site is the supported place to find defects,
+not an exemption to manufacture false success or suppress its alerts.
+
+Evidence: [Theseus dev guide](https://github.com/fleet-ai/theseus/blob/f22c7cdd8460c2e76c82c54f11e10a7c4caa0ea2/k8s/training/README.md),
+[dev API deployment](https://github.com/fleet-ai/theseus/blob/f22c7cdd8460c2e76c82c54f11e10a7c4caa0ea2/k8s/training/clusters/fleetai-training-dev/apps/fleet-train-api.yaml),
+[data-cluster guide](https://github.com/fleet-ai/theseus/blob/f22c7cdd8460c2e76c82c54f11e10a7c4caa0ea2/k8s/training/clusters/fleetai-training-data/README.md).
+Both [dev](https://api.ft.dev.flt.build/v1/openapi.json) and
+[production](https://api.ft.flt.build/v1/openapi.json) public schemas were reachable
+on September 11. Authenticated dev Kubernetes readback subsequently succeeded;
+`fleet-train-api` had three Ready replicas at 18:22 UTC and requested image tag
+`d37dc2ab` (not a resolved image-digest proof). The dev CronJob census had no
+`ft-idle-monitor`/failed-job reporter, but did include a vLLM alert-rule reconciler.
+That is not proof of absent alert delivery through other controllers/services.
+No admission request, job, build or workload mutation was made in this audit.
+
 ## Alert sources
 
 The implementation lives in `fleet-ai/theseus`:
@@ -45,11 +137,11 @@ Do not use a monitored production Job as the next debugging environment merely
 because unit tests passed. Exercise the packaged entrypoint, real runtime user,
 native dependencies and failure/cleanup paths locally first. Explicit, handled
 validation rejection is not training success; unexpected faults still fail.
-No preflight can guarantee a GPU/distributed run never fails. If zero team-channel
-noise is required for unqualified GPU work, obtain a platform-maintainer-approved
-development/owner-only reporting route first. The current deployment does not
-provide one. Do not create an exemption by changing resource kind, namespace,
-labels, deduplication state or exit status to evade the monitor.
+The September 11 dev-cluster policy above supersedes the earlier lack of a
+supported GPU development route. Test there before production; its notification
+routing still requires verification and is not a zero-alert guarantee. Do not
+create an exemption by changing resource kind, namespace, labels, deduplication
+state or exit status to evade the monitor.
 
 Do not hide a real failure by deleting it before the monitor observes it, relabeling it,
 moving it to an unrelated namespace, or forcing a false zero exit. Prevent avoidable

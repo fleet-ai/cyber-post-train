@@ -164,7 +164,9 @@ def test_submit_uses_shared_boundary_and_journal(prepared, monkeypatch):
         calls.append((config, journal))
         return {"name": "synthetic-12345678", "status": "pending"}
 
-    monkeypatch.setattr(cli, "_client", lambda: nullcontext(SimpleNamespace(submit_once=submit)))
+    monkeypatch.setattr(
+        cli, "_client", lambda cluster: nullcontext(SimpleNamespace(submit_once=submit))
+    )
     result = RUNNER.invoke(cli.app, ["submit", str(output)])
     assert result.exit_code == 0
     assert calls == [(request, output / "SUBMISSION.jsonl")]
@@ -177,13 +179,17 @@ def test_preview_and_status_are_read_only(prepared, monkeypatch):
         preview=lambda config: {"synthetic": config},
         status=lambda name: {"name": name, "status": "RUNNING"},
     )
-    monkeypatch.setattr(cli, "_client", lambda: nullcontext(fake))
+    monkeypatch.setattr(cli, "_client", lambda cluster: nullcontext(fake))
     monkeypatch.setattr(
         cli, "validate_preview", lambda config, result: {"nodes": config["workers"]}
     )
     result = RUNNER.invoke(cli.app, ["preview", str(output)])
     assert result.exit_code == 0
-    assert json.loads(result.stdout) == {"submitted": False, "nodes": request["workers"]}
+    assert json.loads(result.stdout) == {
+        "submitted": False,
+        "nodes": request["workers"],
+        "api_base_url": "https://api.ft.dev.flt.build",
+    }
     assert not (output / "SUBMISSION.jsonl").exists()
     result = RUNNER.invoke(cli.app, ["status", "synthetic-12345678"])
     assert result.exit_code == 0
@@ -195,7 +201,7 @@ def test_missing_auth_and_sdk_errors_never_print_sensitive_contents(monkeypatch)
     result = RUNNER.invoke(cli.app, ["status", "synthetic"])
     assert result.exit_code == 2 and "token is required" in result.stderr
 
-    def broken():
+    def broken(cluster):
         raise RuntimeError("private SDK response")
 
     monkeypatch.setattr(cli, "_client", broken)
@@ -205,8 +211,13 @@ def test_missing_auth_and_sdk_errors_never_print_sensitive_contents(monkeypatch)
 
 def test_jobs_use_standard_fleet_identity_not_a_second_token(monkeypatch):
     monkeypatch.setenv("FLEET_API_KEY", "synthetic-operator-key")
-    monkeypatch.setattr(cli, "Jobs", lambda token: {"received": token})
-    assert cli._client() == {"received": "synthetic-operator-key"}
+    monkeypatch.setattr(
+        cli, "Jobs", lambda token, base_url: {"received": token, "target": base_url}
+    )
+    assert cli._client(cli.Cluster.dev) == {
+        "received": "synthetic-operator-key",
+        "target": "https://api.ft.dev.flt.build",
+    }
 
 
 def test_conversion_uses_same_prepare_preflight_submit_rail(prepared, monkeypatch, tmp_path):
@@ -237,7 +248,7 @@ def test_conversion_uses_same_prepare_preflight_submit_rail(prepared, monkeypatc
     monkeypatch.setattr(
         cli,
         "_client",
-        lambda: nullcontext(
+        lambda cluster: nullcontext(
             SimpleNamespace(
                 submit_once=lambda *args: calls.append(args) or {"name": "synthetic-12345678"},
             )

@@ -4,7 +4,9 @@ from copy import deepcopy
 import httpx
 import pytest
 import yaml
+from typer.testing import CliRunner
 
+from cyber_post_train import cli
 from cyber_post_train.jobs import (
     Jobs,
     JobsError,
@@ -413,6 +415,96 @@ def client(handler):
     )
 
 
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://private-user:private-password@jobs.invalid",
+        "https://jobs.invalid?token=private-token",
+        "https://jobs.invalid#private-fragment",
+    ],
+)
+def test_base_url_cannot_leak_credentials_into_submission_journal(url):
+    with pytest.raises(JobsError) as error:
+        Jobs("synthetic-token", base_url=url)
+    assert "must not contain credentials" in str(error.value)
+    assert "private-" not in str(error.value)
+
+
+@pytest.mark.parametrize("command", ["preview", "submit", "status"])
+@pytest.mark.parametrize("cluster", [None, "dev", "prod"])
+def test_cli_routes_to_exact_cluster_and_journals_submission(
+    tmp_path, monkeypatch, command, cluster
+):
+    request = config()
+    directory = tmp_path / "prepared"
+    plan = {"schema": "cyber_sft_v1"}
+    cli._prepare(directory, plan, request)
+    proof = {
+        "schema": "cyber_sft_cpu_preflight_v1",
+        "status": "passed",
+        "gpus": 0,
+        "plan_sha256": cli.digest(plan),
+        "request_sha256": cli.digest(request),
+    }
+    cli._write(directory / "PREFLIGHT.json", {**proof, "sha256": cli.digest(proof)})
+    selected = cluster or ("prod" if command == "status" else "dev")
+    expected = "https://api.ft.dev.flt.build" if selected == "dev" else "https://api.ft.flt.build"
+    journal = directory / "SUBMISSION.jsonl"
+    seen = []
+
+    def handler(req):
+        seen.append((req.method, req.url.path))
+        assert str(req.url).startswith(expected + "/v1/runs")
+        assert req.headers["Authorization"] == "Bearer synthetic-operator-key"
+        if req.url.path.endswith("/preview"):
+            assert json.loads(req.content) == request
+            return httpx.Response(200, json=preview())
+        if req.method == "POST":
+            assert json.loads(req.content) == request
+            assert json.loads(journal.read_text())["api_base_url"] == expected
+            return httpx.Response(202, json={"name": "researcher-sft-1234abcd", "status": "queued"})
+        if req.url.path == "/v1/runs":
+            return httpx.Response(200, json={"items": [], "has_more": False})
+        return httpx.Response(200, json={"name": "researcher-sft-1234abcd", "status": "RUNNING"})
+
+    monkeypatch.setenv("FLEET_API_KEY", "synthetic-operator-key")
+    monkeypatch.setattr(
+        cli,
+        "Jobs",
+        lambda token, **kwargs: Jobs(token, transport=httpx.MockTransport(handler), **kwargs),
+    )
+    arguments = [command, "researcher-sft-1234abcd" if command == "status" else str(directory)]
+    if cluster is not None:
+        arguments += ["--cluster", cluster]
+    result = CliRunner().invoke(cli.app, arguments)
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout)["api_base_url"] == expected
+    if command == "submit":
+        assert seen == [("GET", "/v1/runs"), ("POST", "/v1/runs/preview"), ("POST", "/v1/runs")]
+        assert "synthetic-operator-key" not in journal.read_text()
+        # The same prepared directory cannot be submitted again, even to the other cluster.
+        other = "prod" if selected == "dev" else "dev"
+        second = CliRunner().invoke(cli.app, ["submit", str(directory), "--cluster", other])
+        assert second.exit_code == 2 and len(seen) == 3
+    else:
+        assert not journal.exists()
+        assert seen == (
+            [("POST", "/v1/runs/preview")]
+            if command == "preview"
+            else [("GET", "/v1/runs/researcher-sft-1234abcd")]
+        )
+
+
+@pytest.mark.parametrize("command", ["preview", "submit", "status"])
+@pytest.mark.parametrize("cluster", ["prdo", "data", "https://untrusted.invalid"])
+def test_cli_rejects_unknown_cluster_before_client_creation(monkeypatch, command, cluster):
+    calls = []
+    monkeypatch.setattr(cli, "Jobs", lambda *args, **kwargs: calls.append(args))
+    result = CliRunner().invoke(cli.app, [command, "unused", "--cluster", cluster])
+    assert result.exit_code == 2 and calls == []
+    assert "Invalid value for '--cluster'" in result.output
+
+
 def test_exhaustive_pagination():
     offsets = []
 
@@ -453,7 +545,9 @@ def test_one_post_with_durable_intent_even_after_uncertain_failure(tmp_path, out
         if req.url.path.endswith("/preview"):
             return httpx.Response(200, json=preview())
         assert journal.exists()
-        assert json.loads(journal.read_text())["state"] == "POST_INTENT_DO_NOT_RETRY"
+        intent = json.loads(journal.read_text())
+        assert intent["state"] == "POST_INTENT_DO_NOT_RETRY"
+        assert intent["api_base_url"] == "https://jobs.invalid"
         if outcome == "timeout":
             raise httpx.ReadTimeout("private-trace-and-secret", request=req)
         if outcome == "http-error":

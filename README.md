@@ -30,14 +30,20 @@ uv run cyber-post-train train my-sft.yaml --output output/my-sft
 # On a CPU worker with the pinned image and staged inputs mounted:
 uv run cyber-post-train preflight output/my-sft
 # Back on the submitting host, using the same prepared directory:
-uv run cyber-post-train preview output/my-sft
-uv run cyber-post-train submit output/my-sft
-uv run cyber-post-train status <returned-run-name>
+uv run cyber-post-train preview output/my-sft --cluster dev
+uv run cyber-post-train submit output/my-sft --cluster dev
+uv run cyber-post-train status <returned-run-name> --cluster dev
 ```
 
 Preparation and preflight do not request GPUs. Submission is explicit and
 create-once; never erase a submission journal to retry a timeout. Check current
 authorization and the total experiment-owned resource budget before submitting.
+
+**New or changed jobs must work on dev before production.** Preview/submit now
+default to dev; production needs explicit `--cluster prod`, separate prepared/run
+identities and reviewed successful dev evidence. A kubecontext switch does not
+redirect the Jobs API. See the [cluster and promotion guide](docs/CLUSTER_ALERTS_AND_INFERENCE_SERVING.md#dev-first-cluster-selection-and-promotion).
+CPU data processing has a separate EKS Ray Data cluster; it is not a GPU target.
 
 Current consolidation status: the Qwen SFT runtime comes from a successful
 full-model run; its new wrapper has completed a real one-step run with held-out
@@ -97,3 +103,9 @@ See [AGENTS.md](AGENTS.md), [CONTRIBUTING.md](CONTRIBUTING.md),
 [cluster policy and alerts](docs/CLUSTER_ALERTS_AND_INFERENCE_SERVING.md), and
 [consolidation status](docs/CONSOLIDATION.md). Dated evidence is historical, not
 live state. Raw outputs, datasets, checkpoints and secrets belong outside Git.
+
+September 11 research snapshots: [new Fleet task inventory](docs/FLEET_TASK_INVENTORY_2026-09-11.md),
+[training/HPO readiness](docs/TRAINING_SEARCH_READINESS_2026-09-11.md), and
+[literature-backed Qwen experiment proposal](docs/QWEN_TRAINING_LITERATURE_2026-09-11.md).
+These distinguish measured facts, remaining access/qualification gaps and proposed
+experiments; they do not authorize a launch.

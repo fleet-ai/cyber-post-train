@@ -25,6 +25,7 @@ import httpx
 import yaml
 
 API_URL = "https://api.ft.flt.build"
+API_URLS = {"dev": "https://api.ft.dev.flt.build", "prod": API_URL}
 
 
 class JobsError(ValueError):
@@ -279,8 +280,11 @@ class Jobs:
     def __init__(self, token: str, *, base_url: str = API_URL, transport=None):
         if not token:
             raise JobsError("a Jobs API token is required")
+        target = httpx.URL(base_url)
+        if target.userinfo or target.query or target.fragment:
+            raise JobsError("Jobs API base URL must not contain credentials, query or fragment")
         self.client = httpx.Client(
-            base_url=base_url.rstrip("/"),
+            base_url=target,
             timeout=60,
             headers={"Authorization": "Bearer " + token},
             transport=transport,
@@ -354,7 +358,12 @@ class Jobs:
         with os.fdopen(fd, "w") as stream:
             stream.write(
                 json.dumps(
-                    {"state": "POST_INTENT_DO_NOT_RETRY", "request_sha256": digest(config), **proof}
+                    {
+                        "state": "POST_INTENT_DO_NOT_RETRY",
+                        "api_base_url": str(self.client.base_url).rstrip("/"),
+                        "request_sha256": digest(config),
+                        **proof,
+                    }
                 )
                 + "\n"
             )

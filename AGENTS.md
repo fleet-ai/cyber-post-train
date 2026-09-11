@@ -23,6 +23,15 @@ Normal experiment operation must not manufacture failed-Job pages or hold uncons
 GPUs. Do not evade or suppress a genuine platform alert; choose the supported resource
 lifecycle and make expected terminal states clean and explicit.
 
+**Dev before production:** every new or changed executable job configuration must
+pass local/pinned-image checks and an appropriately bounded dev-cluster canary
+before production submission. The CLI defaults new `preview`/`submit` calls to
+`--cluster dev`; production requires explicit `--cluster prod` and reviewed dev
+evidence. Changing a Kubernetes context does not redirect the Jobs API. Keep
+cluster-specific outputs, journals and W&B identities separate. Use the CPU data
+cluster for compatible CPU preparation, not GPU training. See the cluster guide
+for target URLs, storage/topology differences and the promotion checklist.
+
 For supported commands, start at `README.md`. For scientific controls, read
 `docs/SCIENTIFIC_PROTOCOL.md`. Use the exact experiment's latest sanitized receipt
 and live API/UID-bound state for progress; model-specific reports and old configs

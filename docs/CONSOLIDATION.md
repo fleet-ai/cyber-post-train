@@ -3,6 +3,21 @@
 Status: 2026-09-11. This is a qualification index, not live state or launch
 authority. Qwen is first; **full GLM5.3 and both RL backends remain required**.
 
+**September 11 follow-up:** Fleet now provides a dev GPU cluster. New/changed
+job configurations must qualify there before production; the launcher defaults
+new preview/submit calls to dev. This resolves the earlier missing development
+route below, not the outstanding runtime/scientific gates or the need for current
+launch authority. See [cluster policy](CLUSTER_ALERTS_AND_INFERENCE_SERVING.md),
+[training-search audit](TRAINING_SEARCH_READINESS_2026-09-11.md) and
+[Qwen study proposal](QWEN_TRAINING_LITERATURE_2026-09-11.md). No jobs were submitted
+for this follow-up. The paused-goal handoff below is preserved historical state.
+The dev-routing patch passed **1,844 local tests and seven subtests** with
+disposable PostgreSQL enabled (166 native/runtime tests skipped), plus the
+isolated installed-wheel check of 105 modules and 22 command helps. These are
+software checks, not a newly completed dev GPU canary. Direct low-level `Jobs()`
+retains its historical production default; public CLI commands always pass the
+explicitly selected origin.
+
 ## Paused-goal handoff
 
 Chris paused the cleanup goal on September 11 and requested publication of the

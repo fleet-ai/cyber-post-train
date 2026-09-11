@@ -639,7 +639,7 @@ def test_skyrl_preflight_cli_and_submission_proof_dispatch(prepared, monkeypatch
             calls.append((value, path))
             return {"status": "synthetic-only"}
 
-    monkeypatch.setattr(cli, "_client", Client)
+    monkeypatch.setattr(cli, "_client", lambda cluster: Client())
     assert CliRunner().invoke(cli.app, ["submit", str(root)]).exit_code == 0
     assert calls == [(request, root / "SUBMISSION.jsonl")]
     proof["schema"] = "cyber_miles_training_cpu_preflight_v1"

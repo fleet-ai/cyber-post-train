@@ -128,7 +128,12 @@ The corpus manifest binds `tokenizer: {repo, revision}`, `split_sha256`, and
 prefixed `sha256:`. Generate it with the data-preparation pipeline, not hand-edited
 counts. Train and dev are distinct immutable artifacts and task families.
 
-## Prepare → preflight → preview → submit
+## Prepare → CPU preflight → dev canary → production
+
+Every new/changed job configuration must pass the
+[dev-first promotion checklist](CLUSTER_ALERTS_AND_INFERENCE_SERVING.md#dev-first-cluster-selection-and-promotion).
+The following first submission is to **dev**, not production. Use a separately
+prepared production plan only after reviewing the dev run's functional evidence.
 
 1. `cyber-post-train train config.yaml --output output/my-run` resolves the model,
    data and recipe, embeds the small runtime, and writes `plan.json`, `request.json`
@@ -140,16 +145,29 @@ counts. Train and dev are distinct immutable artifacts and task families.
    CPU validation cannot prove CUDA kernels or distributed startup; changes to
    those require a bounded exact-model canary before a full run.
 3. Set the standard `FLEET_API_KEY` via your secret manager. Run
-   `cyber-post-train preview output/my-run`. It checks the actual image, command,
+   `cyber-post-train preview output/my-run --cluster dev`. It checks the actual image, command,
    resources, normal queue, derived priority, Secret references and release policy.
-4. Review ownership, access expiry, experiment-wide allocated resources and the
-   canary evidence. Use a shared durable prepared directory with one submitter.
-   `cyber-post-train submit output/my-run` checks preflight, exhaustively checks API
+4. Review ownership, access expiry, experiment-wide allocated resources, canary
+   scope and stop conditions. Use a shared durable prepared directory with one submitter.
+   `cyber-post-train submit output/my-run --cluster dev` checks preflight, exhaustively checks API
    duplicates, previews again and records a fsynced intent before its only POST.
    An uncertain POST blocks reuse: reconcile it, never delete the journal or make
    a differently named copy to retry.
-5. `cyber-post-train status <returned-name>` reads sanitized state. Monitor the
+5. `cyber-post-train status <returned-name> --cluster dev` reads sanitized state. Monitor the
    exact API/Kubernetes UIDs, progress receipts, utilization and checkpoints too.
+6. After dev qualification and review, prepare a production run with distinct
+   name/output/W&B/journal identities, rerun its CPU preflight, then explicitly
+   `preview output/my-prod-run --cluster prod` and
+   `submit output/my-prod-run --cluster prod` through `cyber-post-train`.
+   Review exact scientific bindings and all dev/prod differences; changing
+   executable behavior requires another dev test. The CLI does not automatically
+   certify or enforce that scientific promotion decision.
+
+`preview` and `submit` default to dev; `status` defaults to prod for historical
+run compatibility. Always specify the cluster in operational instructions.
+Switching the local kubecontext does not redirect these HTTP API calls. Check
+target-local model/data mounts and Secrets rather than assuming dev/prod share
+them. EKS Ray Data is a separate CPU service, not a third training-CLI target.
 
 The API injects W&B from the existing `wandb-api` Secret. Never put its value in
 YAML or argv. Track scalars, configuration identities and checkpoint metadata;
