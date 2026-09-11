@@ -164,3 +164,10 @@ completed-run launchers and obsolete kernel probes. Caller checks preserved the
 maintained public CLI, paired evaluators, integrity tests and read-only historical
 reconciliation. Removed source is recoverable at `bac2a4c`; no accepted checkpoint,
 dataset, campaign database or unrelated worktree was deleted.
+
+The September 11 caller check also retired four fixed Qwen3.6 ExploitGym submit
+wrappers: paired study, acceptance collector, failure observer and control-image
+publication. No matching Job/RayJob remained at the read-only cluster check.
+Their frozen bootstrap bytes, historical manifests, protocols and functional
+receipt/UID validation tests remain intact. Only tests of the deleted wrappers
+and stale launch instructions were removed; no cluster resource was changed.
