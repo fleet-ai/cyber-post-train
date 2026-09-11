@@ -336,6 +336,63 @@ class TestGlm53LoraCompatibility(unittest.TestCase):
             raise ValueError("synthetic rejection")
         assert Fp8Dequantize._dequantize_one is original
 
+    def test_cpu_threads_are_scoped_and_arithmetic_is_identical(self):
+        from transformers.integrations.finegrained_fp8 import Fp8Dequantize
+
+        original = Fp8Dequantize._dequantize_one
+        initial_threads = torch.get_num_threads()
+        weight = torch.linspace(-4, 4, 576 * 256).reshape(576, 256).to(torch.float8_e4m3fn)
+        scales = torch.linspace(0.5, 1.5, 10).reshape(5, 2)
+        with bf16_fp8_conversion(cpu_threads=1):
+            expected = Fp8Dequantize(None)._dequantize_one(weight, scales)
+        for threads in (None, 1, 4):
+            with self.subTest(threads=threads):
+                with bf16_fp8_conversion(cpu_threads=threads):
+                    assert torch.get_num_threads() == (threads or initial_threads)
+                    assert torch.equal(
+                        Fp8Dequantize(None)._dequantize_one(weight, scales), expected
+                    )
+                assert torch.get_num_threads() == initial_threads
+                with (
+                    self.assertRaisesRegex(RuntimeError, "load failed"),
+                    bf16_fp8_conversion(cpu_threads=threads),
+                ):
+                    raise RuntimeError("load failed")
+                assert torch.get_num_threads() == initial_threads
+                assert Fp8Dequantize._dequantize_one is original
+        for invalid in (True, False, 0, -1, 5, 4.0, "4"):
+            with (
+                self.subTest(invalid=invalid),
+                self.assertRaisesRegex(ValueError, "threads"),
+                bf16_fp8_conversion(cpu_threads=invalid),
+            ):
+                self.fail("invalid thread setting entered the loader")
+            assert torch.get_num_threads() == initial_threads
+            assert Fp8Dequantize._dequantize_one is original
+
+    def test_real_loader_uses_four_threads_then_restores(self):
+        from transformers import AutoModelForCausalLM
+
+        initial_threads = torch.get_num_threads()
+        native = AutoModelForCausalLM.from_pretrained
+        observed = []
+
+        def load(*args, **kwargs):
+            observed.append(torch.get_num_threads())
+            return native(*args, **kwargs)
+
+        with patch.object(AutoModelForCausalLM, "from_pretrained", side_effect=load):
+            loaded(self.base)
+            loaded(self.base, meta=True)
+        assert observed == [4]  # Meta-only ranks do not enter the CPU payload loader.
+        assert torch.get_num_threads() == initial_threads
+        with (
+            patch.object(AutoModelForCausalLM, "from_pretrained", side_effect=RuntimeError),
+            self.assertRaises(RuntimeError),
+        ):
+            loaded(self.base)
+        assert torch.get_num_threads() == initial_threads
+
     def test_partial_fp8_blocks_follow_declared_block_size(self):
         from transformers.integrations.finegrained_fp8 import Fp8Dequantize
 

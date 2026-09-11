@@ -109,6 +109,9 @@ Flash. Explicitly request at least two eight-GPU nodes, global batch 16, and
 Rank zero must first materialize the roughly 1.5 TB BF16 base on CPU. These are
 preflight resource minimums, **not a completed full-model capacity proof**; a
 bounded exact-model canary is required before production use.
+The pinned loader uses four CPU threads only while loading/converting/merging,
+then restores the prior setting. [Real-weight CPU checks](evidence/cleanup-glm-loader-threads-20260911.json)
+prove identical values and a bounded speedup, not full-model startup feasibility.
 
 Global batch must be divisible by nodes × GPUs/node × microbatch/GPU. Native SkyRL
 keeps the tail batch, so optimizer steps are `ceil(train_rows / batch_size) × epochs`.

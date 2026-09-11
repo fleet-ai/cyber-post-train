@@ -95,7 +95,7 @@ def bf16_meta_parameters(model):
 
 
 @contextlib.contextmanager
-def bf16_fp8_conversion():
+def bf16_fp8_conversion(*, cpu_threads: int | None = None):
     """Exact-runtime, process-scoped per-tensor cast before HF expert merging.
 
     Transformers 5.8 chooses scale dtype, not requested model dtype. FP32
@@ -103,14 +103,20 @@ def bf16_fp8_conversion():
     This hook preserves the official FP32 arithmetic then rounds each result to
     BF16 before it enters the model. Use a dedicated single-loader process;
     this does not modify installed files, and the original method is restored.
+    Ray's one-CPU actors otherwise constrain rank-zero conversion to one thread.
+    The optional bounded thread setting covers conversion and expert merging,
+    and is restored before training. Four threads are measured, not a full-load gate.
     """
     import torch
     from transformers.integrations import finegrained_fp8
 
+    if cpu_threads is not None and (type(cpu_threads) is not int or not 1 <= cpu_threads <= 4):
+        raise ValueError("CPU conversion threads must be an integer between one and four")
     if sha_file(Path(inspect.getfile(finegrained_fp8))) != FP8_INTEGRATION_SHA256:
         raise ValueError("unqualified FP8 integration source; revalidate before use")
     with _DEQUANTIZE_LOCK:
         original = finegrained_fp8.Fp8Dequantize._dequantize_one
+        original_threads = torch.get_num_threads()
 
         def convert(operation, weight, scale):
             # HF may already widen E4M3 to BF16 before the conversion op.
@@ -131,11 +137,15 @@ def bf16_fp8_conversion():
                     return (weight.float() * expanded[:rows, :cols]).to(torch.bfloat16)
             return original(operation, weight, scale).to(torch.bfloat16)
 
-        finegrained_fp8.Fp8Dequantize._dequantize_one = convert
         try:
+            if cpu_threads is not None:
+                torch.set_num_threads(cpu_threads)
+            finegrained_fp8.Fp8Dequantize._dequantize_one = convert
             yield
         finally:
             finegrained_fp8.Fp8Dequantize._dequantize_one = original
+            if cpu_threads is not None:
+                torch.set_num_threads(original_threads)
 
 
 def load_lora_model(
@@ -186,7 +196,7 @@ def load_lora_model(
         dequant = FineGrainedFP8Config(
             dequantize=True, weight_block_size=(128, 128), activation_scheme="dynamic"
         )
-        with bf16_fp8_conversion():
+        with bf16_fp8_conversion(cpu_threads=4):
             model, loading = AutoModelForCausalLM.from_pretrained(
                 str(root),
                 config=config,

@@ -1,0 +1,134 @@
+{
+  "benchmark": {
+    "experts": 64,
+    "finished_at": "2026-09-11T14:34:50.542090+00:00",
+    "full_model_loaded": false,
+    "gpus": 0,
+    "layer": 3,
+    "limits": [
+      "64 of 256 experts from one layer, not a complete layer/full model or distributed FSDP initialization.",
+      "Read-only source hashes warm the OS/SFS cache before timing."
+    ],
+    "max_rss_kib": 10210104,
+    "model": "zai-org/GLM-5.3",
+    "optimizer_steps": 0,
+    "output_bytes": 3221225472,
+    "output_shape": [
+      64,
+      4096,
+      6144
+    ],
+    "results": [
+      {
+        "all_128_expert_projections_equal": true,
+        "independent_reference_seconds": 6.394370852969587,
+        "native_dequant_merge_concat_seconds": 13.289946890901774,
+        "output_sha256": "815fddc186de2c9d020f11ae2e4999204769e93518f71e3e0b2fd3e0d6224251",
+        "payload_load_and_widen_seconds": 8.004342294065282,
+        "threads": 1
+      },
+      {
+        "all_128_expert_projections_equal": true,
+        "independent_reference_seconds": 3.5777230709791183,
+        "native_dequant_merge_concat_seconds": 5.826665840810165,
+        "output_sha256": "815fddc186de2c9d020f11ae2e4999204769e93518f71e3e0b2fd3e0d6224251",
+        "payload_load_and_widen_seconds": 2.0302801800426096,
+        "threads": 4
+      }
+    ],
+    "revision": "30333038ada1f1dacb294a93270305a890b50c14",
+    "schema": "cyber_glm_real_expert_subset_cpu_benchmark_v1",
+    "sha256": "ac38f7c15ebfe21cdc5278a9632ae8e5fe9c7714ffa04d922179aaa5023f6963",
+    "source_hash_seconds": 15.15050879609771,
+    "source_shards": [
+      {
+        "path": "model-00038-of-00141.safetensors",
+        "sha256": "e97f6e12233173645263c8cb25ae809c8393c19545669dd0f116a27282c781d1"
+      },
+      {
+        "path": "model-00039-of-00141.safetensors",
+        "sha256": "fb6f9c9987cf738974a55869fdb4299d3ae04addf3c0a38903178f94a7cbe3ae"
+      },
+      {
+        "path": "model-00040-of-00141.safetensors",
+        "sha256": "77db405ecf43966c2be50ce6dbb5cdd7992e6aefc1c6b666917dfe4ac16fcc92"
+      }
+    ],
+    "source_unchanged": true,
+    "started_at": "2026-09-11T14:33:35.567657+00:00",
+    "thread_setting_restored": true
+  },
+  "change": "Rank-zero CPU model loading uses four intra-op threads inside the exact-runtime conversion scope; the previous thread count is restored on success or exception. Meta-only ranks and the training recipe are unchanged.",
+  "classification": "bounded_CPU_loading_improvement_not_full_GLM_qualification",
+  "conversion_merging_speedup": 2.280883656965281,
+  "limits": [
+    "Does not qualify all 78 layers, full 256-expert peak memory, distributed transfer, GPU startup or a GLM optimizer step.",
+    "The measurements do not establish that full-model loading fits the fixed startup allowance. No GLM GPU successor was submitted.",
+    "Qwen Miles RL V7 and Qwen eval V7 retain their frozen source and treatment."
+  ],
+  "load_conversion_merging_speedup": 2.7102501567976693,
+  "local_suite": {
+    "coverage_sha256": "59880476ebf22f8bfeb575e4790f070e0baed9cf1a7b84b8a7dac1d60d637015",
+    "passed": 1769,
+    "skipped": 154,
+    "subtests_passed": 7
+  },
+  "native_conversion_chain": [
+    "Fp8Dequantize",
+    "MergeModulelist(dim=0)",
+    "Concatenate(dim=1)"
+  ],
+  "native_tests": {
+    "bundle_sha256": "0a412ce09417a1fc6c4a34ef2a492b341c6726c7431daff2b244e22fb3dd9f7a",
+    "counts": {
+      "errors": 0,
+      "failures": 0,
+      "skipped": 0,
+      "tests": 642
+    },
+    "exit_code": 0,
+    "finished_at": "2026-09-11T14:30:33Z",
+    "image_id": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "name": "chris-cpt-runtime-regression-v6",
+    "node": "computeinstance-e04a737eqtfvpnyx08",
+    "phase": "Succeeded",
+    "receipt_sha256": "499e9e3129c177784cc4dd2138dec88930d644b789931ebddfd720ad3add48e5",
+    "restarts": 0,
+    "started_at": "2026-09-11T14:28:09Z",
+    "uid": "a8687529-92ed-494f-b2b6-df76340e5604"
+  },
+  "observed_at": "2026-09-11T14:36:23.150847+00:00",
+  "real_expert_merge": {
+    "bundle_sha256": "65e9c705201332da9c45429e203b2b7d582d9884b654441ca84fb296b3b6aeed",
+    "exit_code": 0,
+    "finished_at": "2026-09-11T14:34:53Z",
+    "image_id": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "manifest_sha256": "5e7a788685473735a00a0bd2a7aca0e085213e47f58e63ce72e49743c0754f92",
+    "name": "chris-cpt-glm-expert-merge64-cpu-v1",
+    "node": "computeinstance-e04a737eqtfvpnyx08",
+    "phase": "Succeeded",
+    "receipt_sha256": "ac38f7c15ebfe21cdc5278a9632ae8e5fe9c7714ffa04d922179aaa5023f6963",
+    "restarts": 0,
+    "started_at": "2026-09-11T14:33:32Z",
+    "uid": "4e3a14b1-bbe7-42d0-8153-02bc5ef48f6d"
+  },
+  "resource_decision": "A full 256-expert CPU benchmark was previewed but never submitted; current shared-node memory use justified limiting this test to 64 experts, 16Gi request/20Gi limit and four CPUs on an already experiment-owned node.",
+  "resources": {
+    "GPUs": 0,
+    "new_nodes": 0,
+    "test_containers_terminal": true
+  },
+  "schema": "cyber_glm_loader_threads_qualification_v1",
+  "sha256": "1a810ea3a1b59a5b8ec42a0dc5bdf1855a8dfa220bf7cc55dccb343a2cb283dc",
+  "source_sha256": {
+    "tests/test_glm_runtime.py": "573031f8199ed5c2d482aca2c973ac736035befabed85799a1577746bccb0f49",
+    "training/glm_runtime.py": "42af9f9f06a9283a45dea7c5a0823d0f3be080498e3d6be87bbad8908561b4cd"
+  },
+  "wheel": {
+    "outside_checkout": true,
+    "public_help_checks": 12,
+    "sha256": "34f5ddb4eeb5f6f0986d47b1b28cd755b0e76e7b7985fcced0cabed9a1bb7176",
+    "source_byte_identity": true,
+    "torch_installed": false
+  }
+}
