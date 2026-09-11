@@ -94,6 +94,12 @@ typed model catalog. Matching Theseus schema:
 These are dated observations. The CLI validates the live preview and stops on
 drift; never bypass that stop by manually unsuspending or relabeling a workload.
 
+A 2026-09-11 generic preview for the pinned Miles image rendered `HTTPMode`
+without a `rayVersion` field or a separate submitter Pod template. Do not impose
+the old typed launcher's Ray 2.56 default on every generic image. Verify the
+actual preview and the image's installed Ray/runtime on every node; this preview
+alone did not qualify Miles GPU startup or training.
+
 Use the Fleet inference control plane for a persistent routed model. It owns one
 `InferenceModel`, one ready-only Service, one Deployment, gateway backends and routes,
 exact model staging, explicit pause/resume/retire actions, and serving metrics in the

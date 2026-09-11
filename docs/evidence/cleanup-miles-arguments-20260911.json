@@ -1,0 +1,53 @@
+{
+  "schema": "cyber_cleanup_miles_arguments_qualification_v1",
+  "classification": "operational_gate_cpu_only",
+  "observed_at": "2026-09-11T04:50:03Z",
+  "pod": {
+    "name": "chris-cpt-miles-cpu-selftest-v6",
+    "uid": "303cb7dc-4a34-4116-af52-7d72d1405b2a",
+    "phase": "Succeeded",
+    "started_at": "2026-09-11T04:47:48Z",
+    "finished_at": "2026-09-11T04:48:51Z",
+    "exit_code": 0,
+    "restarts": 0,
+    "gpus": 0,
+    "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/miles-trainer@sha256:d1d37c584e2aafdd47df1e1f3492ff3343eb3b83a5f658cf7ce2432ee8d6ef33"
+  },
+  "receipt_sha256": "32d7460c6f4164270fea39f13da7773a7f7ccfc661ffc56d05f226c81b47d144",
+  "bundle_sha256": "b677938f438a136cf4b0ad3366395d57b921332d04db3750e874f633f4c43a52",
+  "manifest_sha256": "2224841e42e7f8c427e34bbb0fb5d8b2dc550f629d7df27d10aefdf45ac4213e",
+  "test_output_sha256": "9878ad33b1a3e30ca55bfaabf5c781be87407dbf470eab5d258d6abbac21997b",
+  "module_sha256": "410ff198cbf6dbde020f03c303278f7fb1ec8b0311ad7f7ce88f309529fde87f",
+  "counts": {"tests": 128, "failures": 0, "errors": 0, "skipped": 0},
+  "coverage": {
+    "training/miles.py": {"statements": 88, "covered_statements": 88, "branches": 38, "covered_branches": 38},
+    "training/rl_episode.py": {"statements": 256, "covered_statements": 256, "branches": 86, "covered_branches": 86}
+  },
+  "verified": [
+    "receipt_self_digest_and_current_source_hashes",
+    "native_Qwen_model_arguments_and_TP4_CP2_recipe",
+    "single_optimizer_step_per_bounded_rollout_batch",
+    "no_oversampling_or_failed_group_replacement_filter",
+    "no_broad_process_kill_or_Ray_restart_launcher",
+    "native_optimizer_and_RNG_checkpoint_saving_not_disabled",
+    "held_out_evaluation_before_training_and_at_final_step",
+    "native_WandB_SDK_offline_run_id_from_environment_without_credential_argument",
+    "previous_MCP2_and_token_recording_regressions"
+  ],
+  "generic_api_preview": {
+    "submitted": false,
+    "request_sha256": "613edaf3b9afe429dabcdd8e8f00029a9c27b1602995078db4176b3a95f51f29",
+    "manifest_sha256": "c800f05ea5076e70d88faf0b82bad8dd2c5eb182c08d39caaf6c87474897c8f8",
+    "submission_mode": "HTTPMode",
+    "ray_version_field": null,
+    "submitter_pod_template": null,
+    "image_matches": true,
+    "warnings": []
+  },
+  "limitations": [
+    "The new module builds native arguments only; the public training CLI still supports SFT, not RL.",
+    "Native Megatron GPU parsing, model load, Fleet reward acquisition, optimization and recovery remain unqualified.",
+    "The preview used a version-printing command, not a complete RL training request, and allocated no GPUs.",
+    "Offline W&B identity testing is not proof of authenticated online logging in a real RL run."
+  ]
+}

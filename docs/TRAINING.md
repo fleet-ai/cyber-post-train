@@ -288,3 +288,12 @@ Native token assembly is unchanged. Do not restore the retrying helper or patch
 module globals across concurrent episodes. Likewise, do not call the stock
 `execute_train` launcher: even its external-Ray mode runs broad `pkill` commands.
 The Jobs API already owns Ray; native training must attach to that allocation.
+
+`training.miles.arguments` now builds a bounded native Qwen argument vector:
+one optimizer step per rollout batch, no oversampling/filter-driven replacement,
+recoverable checkpoints and dev evaluation before training and at the final
+step. It reads the pinned image's model/topology recipe; it does not call its
+download or process-killing launch helpers. W&B credentials stay in the environment.
+The [128-test CPU gate](evidence/cleanup-miles-arguments-20260911.json) also exercises
+the real recipe and native offline W&B run-ID handling. This is still an internal
+integration component, not a qualified RL launch command or full-GLM recipe.
