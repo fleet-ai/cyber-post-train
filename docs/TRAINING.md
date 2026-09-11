@@ -38,6 +38,8 @@ source:
   path: /private/data/trajectories.jsonl
   sha256: <exact-source-file-sha256>
 split: /private/data/split.json
+study_split: /private/data/study-split-a.json
+source_selection: /private/data/teacher-source-selection-a.json
 model_lock: configs/models/qwen38-27b-1d4bf0f2.lock.json
 tokenizer_root: /mnt/sfs/models/qwen3.8-27b-1d4bf0f2
 native_helper: /opt/skyrl/skyrl/train/generators/utils.py
@@ -55,10 +57,15 @@ entries contain only exact training `task_key`, `task_version_id` and `split`.
 It must not contain a teacher `reference_session_id`; development and final-test
 identities live in separate outcome-evaluation manifests. Freeze complete task
 families and one common untouched final test before preparing any arm. The
-builder never moves tasks between splits. It rejects family leakage across
+builder never moves tasks between splits. Study corpora require `study_split`
+and `source_selection` together. The selection receipt binds the same tokenizer,
+native helper, window bounds and target-coverage policy that corpus compilation
+executes; a mismatched policy is rejected. It also rejects family leakage across
 versions, duplicate sessions, unverified successes and unsupported tool
-transitions. External benchmark data is prohibited. A new split cannot make an
-already-exposed checkpoint held out.
+transitions. A successful self session remains blocked when its complete original
+model-request prefix or model-visible tool interface is unproven—renaming tool
+calls after the fact is not parity. External benchmark data is prohibited. A new
+split cannot make an already-exposed checkpoint held out.
 
 Outputs are private `train.parquet`, `manifest.json` and a copy of the split.
 Training covers each fitting assistant response once; tool observations and
@@ -100,7 +107,7 @@ wandb:
   name: my-qwen-sft
   tags: [teacher, sft]
 cluster:
-  priority: c1
+  priority: c1                   # preview must derive q1 / value 10000
 ```
 
 Relative manifest paths resolve beside the YAML file. Model and data roots are
@@ -183,6 +190,9 @@ run compatibility. Always specify the cluster in operational instructions.
 Switching the local kubecontext does not redirect these HTTP API calls. Check
 target-local model/data mounts and Secrets rather than assuming dev/prod share
 them. EKS Ray Data is a separate CPU service, not a third training-CLI target.
+Do not use production to discover executable defects, and never suppress or
+evade a real alert. Diagnose released dev failures off-node, then qualify a new
+create-once dev successor before production promotion.
 
 The API injects W&B from the existing `wandb-api` Secret. Never put its value in
 YAML or argv. Track scalars, configuration identities and checkpoint metadata;
