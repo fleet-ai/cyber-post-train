@@ -493,9 +493,12 @@ def test_empty_recording():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("version", ["1.28.0", "2.1.1"])
-async def test_native_mcp_connection_contract(monkeypatch, version):
+@pytest.mark.parametrize("fault", [None, "version", "streams"])
+async def test_native_mcp_connection_contract(monkeypatch, version, fault):
     events = []
-    monkeypatch.setattr(rl.importlib.metadata, "version", lambda name: version)
+    monkeypatch.setattr(
+        rl.importlib.metadata, "version", lambda name: "unknown" if fault == "version" else version
+    )
 
     @asynccontextmanager
     async def client(**kwargs):
@@ -512,7 +515,10 @@ async def test_native_mcp_connection_contract(monkeypatch, version):
     async def stream(url, **kwargs):
         assert url == "https://fixture.invalid/mcp"
         assert kwargs == {"http_client": "client"}
-        yield ("reader", "writer", "session_id") if version == "1.28.0" else ("reader", "writer")
+        streams = (
+            ("reader", "writer", "session_id") if version == "1.28.0" else ("reader", "writer")
+        )
+        yield streams[:1] if fault == "streams" else streams
         events.append("stream_closed")
 
     class Session:
@@ -538,6 +544,15 @@ async def test_native_mcp_connection_contract(monkeypatch, version):
         monkeypatch.setattr(rl.httpx, "AsyncHTTPTransport", lambda *, retries: retries)
     sys.modules["mcp"].ClientSession = Session
     sys.modules["mcp.client.streamable_http"].streamable_http_client = stream
+    if fault:
+        reason = "unqualified_mcp_version" if fault == "version" else "mcp_transport_contract_drift"
+        with pytest.raises(rl.InvalidEpisode, match=reason):
+            async with rl._mcp(
+                "https://fixture.invalid/", {"header": "x-auth", "token": "fixture"}, 5
+            ):
+                pytest.fail("unqualified transport reached the caller")
+        assert "initialized" not in events
+        return
     async with rl._mcp("https://fixture.invalid/", {"header": "x-auth", "token": "fixture"}, 5):
         assert events == ["initialized"]
     assert events == ["initialized", "session_closed", "stream_closed", "client_closed"]
@@ -744,7 +759,8 @@ def test_native_flags_are_required_and_typed():
 
 
 @pytest.mark.asyncio
-async def test_nontext_observation_is_rejected(fixture, tmp_path, monkeypatch):
+@pytest.mark.parametrize("fault", ["non_text_tool_result", "tool_error_status_missing"])
+async def test_invalid_observation_is_rejected(fixture, tmp_path, monkeypatch, fault):
     @asynccontextmanager
     async def mcp(*args):
         class Session:
@@ -754,12 +770,14 @@ async def test_nontext_observation_is_rejected(fixture, tmp_path, monkeypatch):
                 )
 
             async def call_tool(self, *args, **kwargs):
-                return NS(content=[NS(type="image")], isError=False)
+                if fault == "non_text_tool_result":
+                    return NS(content=[NS(type="image")], isError=False)
+                return NS(content=[NS(type="text", text="synthetic")])
 
         yield Session()
 
     monkeypatch.setattr(rl, "_mcp", mcp)
-    with pytest.raises(rl.InvalidEpisode, match="non_text_tool_result"):
+    with pytest.raises(rl.InvalidEpisode, match=fault):
         await collect(fixture, tmp_path)
     assert fixture.deleted
 

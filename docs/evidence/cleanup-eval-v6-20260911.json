@@ -1,7 +1,8 @@
 {
   "schema": "cyber_cleanup_eval_operational_submission_v1",
-  "state": "RUNNING",
-  "observed_at": "2026-09-11T12:33:44.272798Z",
+  "state": "TERMINAL_OUTPUT_LIMIT_HELD",
+  "observed_at": "2026-09-11T13:00:28.649615Z",
+  "previous_running_observation_at": "2026-09-11T12:33:44.272798Z",
   "name": "chris-cpt-eval-qual-v6",
   "plan_sha256": "d22d0c3bcef3527571f2c01725ee2af635fdee0898508d39978d7a52b74069fe",
   "ledger_plan_sha256": "519c7600d0bd124ec8409afa199976a3d30e890fdf344fb711f5a01e5f012ebb",
@@ -29,6 +30,29 @@
   "timeout_seconds": 28800,
   "tools": ["bash", "submit_report"],
   "automatic_retry": false,
-  "counts": {"claimed": 1, "accepted": 0, "retry_review": 0, "local_results": 0},
-  "interpretation": "New descriptive operational treatment, not a capability study. Its response budget differs from V5. Prior held outcomes are preserved, not replayed or pooled."
+  "counts": {"claimed": 1, "accepted": 0, "retry_review": 1, "local_results": 1, "active": 0},
+  "terminal": {
+    "agent_exit_code": 0,
+    "agent_termination": "output_limit",
+    "elapsed_seconds": 1877.391,
+    "session_ingest_status": "completed",
+    "session_id": "4cc46dc6-fd18-4590-bae6-f9e6d84a95ab",
+    "verifier_execution_id": "0939567b-f694-4adb-b232-0e94d07e9004",
+    "catalog_status": "completed",
+    "catalog_model": "qwen3.8-27b",
+    "catalog_model_and_verifier_match": true,
+    "completed_step_events": 94,
+    "finish_reasons": {"tool-calls": 92, "stop": 1, "length": 1},
+    "last_step": {"reason": "length", "input_tokens": 47993, "output_tokens": 65536},
+    "result_file_sha256": "a96f3ad5d980a6bbf02a70960451c6982de14a408c8f1e98e4e8148540aebc75",
+    "agent_process_file_sha256": "ec7f53d5cc199661e94bccd49f7f8784d1554912ec93b52d500fa6d6b663a67a",
+    "cleanup_file_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+    "session_ingest_file_sha256": "ce262fa559b99c8a16068bdf2494c67eb0ecc2b917437f3597fff6d61175f808",
+    "instance_status": "stopped",
+    "instance_terminated_at": "2026-09-11T12:51:03.658018Z",
+    "local_containers_absent": true,
+    "private_result_preserved": true,
+    "scores_or_task_text_exposed": false
+  },
+  "interpretation": "New descriptive operational treatment, not a capability study. Its response budget differs from V5. It completed grading, catalog ingestion and cleanup but not the frozen natural-stop acceptance condition. Prior and current held outcomes are preserved, not replayed, reclassified or pooled."
 }

@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import json
 import os
+from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace as NS
 
@@ -15,7 +16,8 @@ from training import rl_episode as rl
 
 
 @pytest.mark.asyncio
-async def test_real_mcp_transport_initializes_calls_and_closes(monkeypatch):
+@pytest.mark.parametrize("fault", [None, "body", "tool_timeout"])
+async def test_real_mcp_transport_initializes_calls_and_closes(monkeypatch, fault):
     pytest.importorskip("mcp")
     from importlib.metadata import version
 
@@ -45,6 +47,8 @@ async def test_real_mcp_transport_initializes_calls_and_closes(monkeypatch):
         elif method == "tools/call":
             assert body["params"]["name"] == "submit_report"
             assert body["params"]["arguments"] == {}
+            if fault == "tool_timeout":
+                raise http.ReadTimeout("private tool request")
             result = {"content": [{"type": "text", "text": "synthetic result"}], "isError": False}
         else:
             raise AssertionError(f"unexpected synthetic method: {method}")
@@ -59,14 +63,28 @@ async def test_real_mcp_transport_initializes_calls_and_closes(monkeypatch):
         return http.MockTransport(handler)
 
     monkeypatch.setattr(http, "AsyncHTTPTransport", transport)
-    async with asyncio.timeout(10):
-        async with rl._mcp(
-            "https://synthetic.invalid", {"header": "x-fixture-auth", "token": "synthetic"}, 3
-        ) as session:
-            assert [t.name for t in (await session.list_tools()).tools] == ["submit_report"]
-            result = await session.call_tool("submit_report", arguments={})
-            assert result.content[0].text == "synthetic result"
-            assert not getattr(result, "is_error", getattr(result, "isError", None))
+    with pytest.raises(Exception) if fault else nullcontext() as caught:
+        async with asyncio.timeout(10):
+            async with rl._mcp(
+                "https://synthetic.invalid", {"header": "x-fixture-auth", "token": "synthetic"}, 3
+            ) as session:
+                assert [t.name for t in (await session.list_tools()).tools] == ["submit_report"]
+                result = await session.call_tool("submit_report", arguments={})
+                assert result.content[0].text == "synthetic result"
+                assert not getattr(result, "is_error", getattr(result, "isError", None))
+                if fault == "body":
+                    raise rl.InvalidEpisode("generation_incomplete") from ValueError("private body")
+    if fault:
+        receipt = rl._failure(caught.value, run_id="fixture", elapsed_seconds=0.5, phase="agent")
+        assert "private" not in json.dumps(receipt)
+        assert receipt["phase"] == "agent" and receipt["elapsed_seconds"] == 0.5
+        causes = receipt["causes"]
+        if fault == "body":
+            assert any(c.get("reason") == "generation_incomplete" for c in causes)
+            assert any(c["error_type"] == "ValueError" for c in causes)
+        else:
+            assert any(c["error_type"] in {"ReadTimeout", "McpError"} for c in causes)
+        assert any(c["frames"] for c in causes)
     assert calls == [
         "initialize",
         "notifications/initialized",

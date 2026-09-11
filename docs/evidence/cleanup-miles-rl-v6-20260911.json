@@ -34,6 +34,21 @@
     "original_cleanup_receipt": "Preserved unchanged; it incorrectly recognized only terminated/closed, not the platform's stopped final state.",
     "source_evidence": "theseus 0fff262678a80901fee6aa398e0142039e8a40bc services/environment-api/models/models.py InstanceStatus.STOPPED"
   },
+  "content_blind_episode_audit": {
+    "observed_at": "2026-09-11T12:55:53Z",
+    "audit_pod_uid": "b5294548-dc0f-4768-8847-6b0c67383dda",
+    "audit_receipt_sha256": "10048a76bef1c911814f48454160ea8fe1b04b8f439604559426175eedd00044",
+    "conversation_file_sha256": "5b56794911306e2981bd8c27dc9cd04cc4cd8477d63966f5306676146abab6bd",
+    "messages": 92,
+    "roles": {"user": 1, "assistant": 46, "tool": 45},
+    "completed_tools": {"bash": 45},
+    "last_message_role": "assistant",
+    "last_tool_call_name": "bash",
+    "last_tool_timeout_ms_present": false,
+    "requests_with_timeout_ms_over_120000": 0,
+    "maximum_completed_tool_reply_characters": 14461,
+    "interpretation": "Failure occurred after the 46th assistant message and before its bash observation was retained. This narrows the phase but does not distinguish transport, timeout, response-size or other tool-boundary failures. No task text was exposed; no root-cause claim or replay."
+  },
   "source_fix_commit": "04ec41a",
   "api_name": "chris-cpt-q38-miles-rl-v6-daa26380",
   "api_run_id": "daa26380-954d-4894-84cc-94ba0d361cdd",

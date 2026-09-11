@@ -1,0 +1,161 @@
+{
+  "schema": "cyber_runtime_regression_evidence_v1",
+  "source_evidence_sha256": "b58e620f7cb3308b9bda793535a3d5903575e966ca7a30cc0a72770b2c0a9471",
+  "gpus": 0,
+  "new_nodes": 0,
+  "checks": [
+    {
+      "bundle_sha256": "1fc79475838dd4e45c4b81270f037b4c0defa55d635fc179d1c8d1476ac80aea",
+      "classification": "invalid_selftest_user",
+      "container": "miles",
+      "counts": {
+        "errors": 49,
+        "failures": 6,
+        "skipped": 0,
+        "tests": 324
+      },
+      "exit_code": 1,
+      "finished_at": "2026-09-11T12:47:49Z",
+      "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/miles-trainer@sha256:d1d37c584e2aafdd47df1e1f3492ff3343eb3b83a5f658cf7ce2432ee8d6ef33",
+      "node": "computeinstance-e04a737eqtfvpnyx08",
+      "pod": "chris-cpt-runtime-regression-v1",
+      "pod_phase": "Failed",
+      "pod_uid": "c3343545-5c6b-4978-acfe-f3598b62c194",
+      "receipt_sha256": "6e44b263cd7d56b8e0634b5ba4de3dea4593b5270a2d53a74fb25ce0bbc3f870",
+      "restarts": 0,
+      "started_at": "2026-09-11T12:47:23Z"
+    },
+    {
+      "bundle_sha256": "95dc00d756ebeee3b9524cf3b5095504bd4f1c1b834745ef038fe3c5b0a432d3",
+      "classification": "pinned_image_cpu_tests_passed",
+      "container": "skyrl",
+      "counts": {
+        "errors": 0,
+        "failures": 0,
+        "skipped": 0,
+        "tests": 472
+      },
+      "exit_code": 0,
+      "finished_at": "2026-09-11T12:49:42Z",
+      "glm_benchmark": {
+        "bit_identical_bf16": true,
+        "comparison_seconds": 0.5315693237353116,
+        "conversion_seconds_by_threads": {
+          "1": 11.862705359002575,
+          "4": 4.287087565055117
+        },
+        "finished_at": "2026-09-11T12:49:41.389153+00:00",
+        "fp8_elements": 1556348928,
+        "fp8_tensors": 80,
+        "gpus": 0,
+        "hash_read_seconds": 4.196015264838934,
+        "limitations": [
+          "One shard only; initial hash warms the OS/SFS cache.",
+          "Does not measure full expert merging, distributed transfer or full-model load."
+        ],
+        "max_rss_kib": 2527244,
+        "model": "zai-org/GLM-5.3",
+        "model_loaded": false,
+        "native_source_sha256": "cad925d1ceae22b1bf9ad769971e5d53b7829b73fd00ddf0959a8818763dec4b",
+        "optimizer_steps": 0,
+        "other_entries": 97,
+        "revision": "30333038ada1f1dacb294a93270305a890b50c14",
+        "runtime_user": {
+          "gid": 100,
+          "uid": 1000
+        },
+        "schema": "cyber_glm_corrected_real_shard_cpu_benchmark_v2",
+        "sha256": "98370afd704960606e70fa4937eae4a60f2a6182c655e65837a10943f95a0697",
+        "shard_bytes": 5363940952,
+        "shard_sha256": "29c537abddf4fc94689defddbdd03694b287385c620072a7805d63a3dcd7d5b6",
+        "source_unchanged": true,
+        "started_at": "2026-09-11T12:49:16.440402+00:00",
+        "tensor_read_seconds": 0.012820105766877532
+      },
+      "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+      "node": "computeinstance-e04a737eqtfvpnyx08",
+      "pod": "chris-cpt-runtime-regression-v1",
+      "pod_phase": "Failed",
+      "pod_uid": "c3343545-5c6b-4978-acfe-f3598b62c194",
+      "receipt_sha256": "c30d9ab7fb0fbbffbe6c403e767c5500dfe7b41b8e33faf0a4d330ecb9fe2b17",
+      "restarts": 0,
+      "started_at": "2026-09-11T12:47:23Z"
+    },
+    {
+      "bundle_sha256": "1fc79475838dd4e45c4b81270f037b4c0defa55d635fc179d1c8d1476ac80aea",
+      "classification": "incomplete_selftest_bundle",
+      "container": "miles",
+      "counts": {
+        "errors": 37,
+        "failures": 0,
+        "skipped": 0,
+        "tests": 324
+      },
+      "exit_code": 1,
+      "finished_at": "2026-09-11T12:51:06Z",
+      "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/miles-trainer@sha256:d1d37c584e2aafdd47df1e1f3492ff3343eb3b83a5f658cf7ce2432ee8d6ef33",
+      "node": "computeinstance-e04a737eqtfvpnyx08",
+      "pod": "chris-cpt-runtime-regression-v2",
+      "pod_phase": "Failed",
+      "pod_uid": "1361e985-6bca-4bca-ab1b-95e2d717f12c",
+      "receipt_sha256": "0ba49ccbee310883fe4fddec29cf301695580b072f8f9bc24c716dcb3301eb56",
+      "restarts": 0,
+      "started_at": "2026-09-11T12:49:32Z"
+    },
+    {
+      "bundle_sha256": "6307d0f9384a1e0710c89a876e64850e00d78bfeb3cfed81dae75c09fd3bcac1",
+      "classification": "pinned_image_cpu_tests_passed",
+      "container": "miles",
+      "counts": {
+        "errors": 0,
+        "failures": 0,
+        "skipped": 0,
+        "tests": 329
+      },
+      "exit_code": 0,
+      "finished_at": "2026-09-11T12:54:33Z",
+      "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/miles-trainer@sha256:d1d37c584e2aafdd47df1e1f3492ff3343eb3b83a5f658cf7ce2432ee8d6ef33",
+      "node": "computeinstance-e04a737eqtfvpnyx08",
+      "pod": "chris-cpt-runtime-regression-v3",
+      "pod_phase": "Succeeded",
+      "pod_uid": "b19d7eac-50a0-4807-a04c-4df9caaf0064",
+      "receipt_sha256": "12933759f26e9f97e1a960d66620fbb3e0614668e709f6c83b928bf43a85c7b0",
+      "restarts": 0,
+      "started_at": "2026-09-11T12:53:05Z"
+    }
+  ],
+  "limits": [
+    "Synthetic native tests and one actual GLM shard only; no new GPU allocation, RL reward, optimizer step, full GLM load, or production-readiness claim.",
+    "V1 Pod failed overall because its Miles container used the wrong user. Its SkyRL container independently passed. V2 Miles used a stale self-test bundle; V3 fixed only the self-test bundle and passed."
+  ],
+  "miles_v3_episode_coverage": {
+    "statements": [
+      317,
+      317
+    ],
+    "branches": [
+      116,
+      116
+    ]
+  },
+  "installation": {
+    "wheel_sha256": "3524d5eb28013f8971a5a3f71b8a9e1a6f6425118f1f6b9b997db5a4920c2c18",
+    "python": "3.12.14",
+    "outside_checkout": true,
+    "public_help_paths": 8,
+    "legacy_data_help_paths": 2,
+    "source_identity_checked": [
+      "training/rl_episode.py",
+      "training/glm_runtime.py"
+    ],
+    "checks": [
+      "HTTPS redirect refusal",
+      "runtime-user gate",
+      "numeric JSON readback",
+      "bundle identity",
+      "replay refusal",
+      "nested-failure privacy"
+    ],
+    "limitation": "Minimal wheel test has no Torch/PyArrow; native qualification is separate."
+  }
+}
