@@ -155,6 +155,17 @@ ceilings, not a guarantee of equal exposure when source availability is sparse.
 Teacher/self source counts alone do not make a matched comparison:
 compare shared task coverage and supervised-token budgets as well.
 
+An explicit teacher-availability ablation may additionally set
+`balance_target_supervised_tokens_per_family`. The deterministic selector then
+chooses complete certified episodes toward that target, adding an episode only
+when it strictly reduces the family's distance to the target. The existing
+episode and hard token ceilings still apply; source-model diversity breaks only
+equal-distance ties. This never slices an episode, duplicates a token target, or
+changes its native messages/masks. Because it can lower total token exposure,
+label and interpret it as a teacher-availability treatment rather than a pure
+importance-weighting estimate. See the frozen Qwen audit in
+[`QWEN_TEACHER_EXPOSURE_BALANCE_2026-09-11.md`](QWEN_TEACHER_EXPOSURE_BALANCE_2026-09-11.md).
+
 Pass the ready selection through
 `filter_records(private_records, selection, study_split)`. It validates the
 complete chosen set and each canonical record digest before returning any

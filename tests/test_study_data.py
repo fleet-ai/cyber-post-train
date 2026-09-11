@@ -449,6 +449,76 @@ def test_family_supervised_token_ceiling_selects_whole_episodes_without_truncati
     assert next(iter(result["per_family"].values()))["supervised_tokens"] == 100
 
 
+def test_balanced_exposure_uses_whole_episodes_nearest_the_family_token_target():
+    split = study()
+    tasks, seen = [], set()
+    for task in split["tasks"]:
+        if task["split"] == "train" and task["group_id"] not in seen:
+            tasks.append(task)
+            seen.add(task["group_id"])
+        if len(tasks) == 2:
+            break
+
+    candidates = []
+    for family, tokens in enumerate(((3000, 9000, 10000), (6000, 6000, 25000))):
+        for index, token_count in enumerate(tokens):
+            private = record(tasks[family], sid=f"family-{family}-episode-{index}")
+            item = episode(private)
+            item["coverage"]["supervised_tokens"] = token_count
+            candidates.append(reseal(item))
+
+    kwargs = {
+        "models": ["synthetic-teacher"],
+        "target_policy_sha256": EVIDENCE,
+        "max_episodes_per_family": 3,
+        "max_supervised_tokens_per_family": 49152,
+        "balance_target_supervised_tokens_per_family": 10000,
+        "source_seed": "balanced-exposure-v1",
+    }
+    result = select_metadata_sources(candidates, split, **kwargs)
+    assert result == select_metadata_sources(list(reversed(candidates)), split, **kwargs)
+    assert result["policy"] == {
+        "min_non_submit_decisions": 1,
+        "min_completed_tool_rounds": 1,
+        "max_submit_token_share": 0.5,
+        "max_submit_response_share": 0.5,
+        "max_episodes_per_family": 3,
+        "max_supervised_tokens_per_family": 49152,
+        "source_seed": "balanced-exposure-v1",
+        "family_selection": (
+            "greedy nearest supervised-token target; model-diverse seeded ties; whole episodes"
+        ),
+        "balance_target_supervised_tokens_per_family": 10000,
+    }
+    assert sorted(row["supervised_tokens"] for row in result["per_family"].values()) == [
+        10000,
+        12000,
+    ]
+    assert result["totals"]["episodes"] == 3
+    assert result["excluded"] == {"family_balance_target": 3}
+
+
+def test_balance_is_opt_in_and_does_not_change_the_existing_selection_receipt_shape():
+    split = study()
+    result = select_sources([episode(train_record(split))], split, models=["synthetic-teacher"])
+    assert "balance_target_supervised_tokens_per_family" not in result["policy"]
+    assert result["policy"]["family_selection"] == (
+        "model-diverse round robin; seeded identity order; whole episodes"
+    )
+
+
+@pytest.mark.parametrize("target", [0, -1, True, 49153])
+def test_balanced_exposure_target_must_fit_the_hard_family_ceiling(target):
+    split = study()
+    with pytest.raises(ValueError):
+        select_sources(
+            [episode(train_record(split))],
+            split,
+            models=["synthetic-teacher"],
+            balance_target_supervised_tokens_per_family=target,
+        )
+
+
 def test_family_episode_cap_spans_all_versions_not_separate_version_buckets():
     split = study()
     rows = split["training_split"]["tasks"][:2]

@@ -1,0 +1,99 @@
+{
+  "schema": "cyber_teacher_availability_ablation_v1",
+  "model": {
+    "repo": "Qwen/Qwen3.8-27B",
+    "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
+  },
+  "inventory_sha256": "sha256:2b099f359bd5e3c1c42804c3f9a277c534f9bdbbadfae79e1ef928d4d2f700a9",
+  "teacher_source_models": [
+    "gpt-5.6-sol"
+  ],
+  "treatment": {
+    "role": "teacher_availability_ablation",
+    "unit": "whole_certified_native_episode",
+    "selection": "greedy nearest supervised-token target; model-diverse seeded ties; whole episodes",
+    "target_supervised_tokens_per_family": 16384,
+    "max_episodes_per_family": 3,
+    "max_supervised_tokens_per_family": 49152,
+    "seed": "qwen-blackbox-teacher-balanced-exposure-v1",
+    "preserved": [
+      "exact tokenizer and chat template",
+      "native episode message and ordered tool interface",
+      "dense eligible assistant-turn supervision",
+      "one training target occurrence per selected episode per epoch"
+    ],
+    "prohibited": [
+      "partial episode truncation",
+      "duplicated token targets",
+      "score or model-outcome based selection",
+      "held-out or external benchmark input"
+    ]
+  },
+  "variants": {
+    "a": {
+      "study_split_sha256": "sha256:9ce5ba7f4cb9c52f6adfdbe615ca2258358dc602d6a9bb665c2ccc29dc04f4b8",
+      "training_split_sha256": "sha256:2d20dac7d5b9bb29f6aa44369c5dd2efed9c78bd3ca4d32ed021f04843ae6863",
+      "target_policy_sha256": "sha256:b06b248dc5b63528c44a604513c9ff54dffb33c896ff0ca036ca76b56d925eec",
+      "candidate_coverage_manifest_sha256": "sha256:78c0fd0f3acb027f62db7f9da9b62bded5c6120a858476965e1d7a4089b4f3bb",
+      "candidate_metadata_sha256": "sha256:58ca41307b190b25860557939880760272b45b8c7c150c32a9ba2053648db15c",
+      "available_source_selection_sha256": "sha256:12e22e910788406521fb59723130429c81ee5fc9c31cd5c72bcc540e6559fd9b",
+      "available_corpus_sha256": "sha256:019d795f4b59b9faee799feac613c8fd3fd3e69774ccc419a0ffcf7960e7df62",
+      "balanced_source_selection_sha256": "sha256:7ab37bc1c6ec97fc14019199c55ddab1a5e38527b20026dc04beb434ba635fae",
+      "balanced_corpus_status": "not_materialized_from_sanitized_metadata",
+      "available": {
+        "families": 29,
+        "episodes": 71,
+        "supervised_tokens": 700359,
+        "family_token_gini": 0.326475,
+        "family_token_coefficient_of_variation": 0.570147,
+        "family_token_min": 4630,
+        "family_token_median": 21990,
+        "family_token_max": 48544
+      },
+      "balanced": {
+        "families": 29,
+        "episodes": 50,
+        "supervised_tokens": 419165,
+        "family_token_gini": 0.187766,
+        "family_token_coefficient_of_variation": 0.350191,
+        "family_token_min": 4630,
+        "family_token_median": 15224,
+        "family_token_max": 30126
+      }
+    },
+    "b": {
+      "study_split_sha256": "sha256:282f2dec7912364c0f7c1db7ceaac39eb66d552ab226d7617a412fa8e881a50f",
+      "training_split_sha256": "sha256:66f98eac3d1533d2c0e3dda99704020e5177ed56c25196f7fa1175307732ab06",
+      "target_policy_sha256": "sha256:b06b248dc5b63528c44a604513c9ff54dffb33c896ff0ca036ca76b56d925eec",
+      "candidate_coverage_manifest_sha256": "sha256:c43a19ddadf19ebdbba1b8e969c3cc511fab694157ebf6672d88a6b3e7546f5f",
+      "candidate_metadata_sha256": "sha256:2db540cdf61918df250c0936dc1a3d9305a582c75094635272846ea851a1b8d9",
+      "available_source_selection_sha256": "sha256:576a34559f7b56fc99dcd1f577f81b4e420e6522a9554ced5550d4ef900f956f",
+      "available_corpus_sha256": "sha256:fe1bcf3dfe81693141092840ae917e7386dbdb9b3e51805a46d4417cf8897c75",
+      "balanced_source_selection_sha256": "sha256:b5b06dc5c72482d8eba4b29ea81d35341c1510e49b50077e526348ff8c81970c",
+      "balanced_corpus_status": "not_materialized_from_sanitized_metadata",
+      "available": {
+        "families": 30,
+        "episodes": 74,
+        "supervised_tokens": 684014,
+        "family_token_gini": 0.333823,
+        "family_token_coefficient_of_variation": 0.584778,
+        "family_token_min": 2721,
+        "family_token_median": 20071.5,
+        "family_token_max": 47841
+      },
+      "balanced": {
+        "families": 30,
+        "episodes": 53,
+        "supervised_tokens": 437537,
+        "family_token_gini": 0.19408,
+        "family_token_coefficient_of_variation": 0.364851,
+        "family_token_min": 2721,
+        "family_token_median": 15901.5,
+        "family_token_max": 30126
+      }
+    }
+  },
+  "interpretation": "Compare with an otherwise identical available-teacher arm. This treatment tests sensitivity to uneven successful-teacher availability; it is not a claim that short episodes, equal family exposure, or this target is intrinsically optimal.",
+  "launch_status": "blocked_until_private_balanced_corpora_are_materialized_and_qualified",
+  "sha256": "sha256:04dd156f7e368cff4f44c226181db70fa2afcd6af78f6a2932891c26f19ce2be"
+}

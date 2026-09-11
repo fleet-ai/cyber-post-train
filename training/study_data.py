@@ -472,6 +472,7 @@ def select_sources(
     max_episodes_per_family: int,
     max_supervised_tokens_per_family: int,
     source_seed: str,
+    balance_target_supervised_tokens_per_family: int | None = None,
     max_submit_token_share: float = 0.5,
     max_submit_response_share: float = 0.5,
 ) -> dict:
@@ -495,6 +496,15 @@ def select_sources(
         or any(
             type(v) is not int or v <= 0
             for v in (max_episodes_per_family, max_supervised_tokens_per_family)
+        )
+        or (
+            balance_target_supervised_tokens_per_family is not None
+            and (
+                type(balance_target_supervised_tokens_per_family) is not int
+                or not 0
+                < balance_target_supervised_tokens_per_family
+                <= max_supervised_tokens_per_family
+            )
         )
         or any(
             type(v) not in (float, int) or not math.isfinite(v) or not 0 <= v <= 1
@@ -574,6 +584,7 @@ def select_sources(
         max_episodes_per_family,
         max_supervised_tokens_per_family,
         source_seed,
+        balance_target_supervised_tokens_per_family,
     )
     excluded.update(cap_excluded)
     per_family = {}
@@ -645,6 +656,26 @@ def select_sources(
         stats["submission_response_share"] = (
             stats["submit_report_responses"] / stats["assistant_responses"]
         )
+    family_selection = "model-diverse round robin; seeded identity order; whole episodes"
+    policy = {
+        "min_non_submit_decisions": 1,
+        "min_completed_tool_rounds": 1,
+        "max_submit_token_share": max_submit_token_share,
+        "max_submit_response_share": max_submit_response_share,
+        "max_episodes_per_family": max_episodes_per_family,
+        "max_supervised_tokens_per_family": max_supervised_tokens_per_family,
+        "source_seed": source_seed,
+        "family_selection": family_selection,
+    }
+    if balance_target_supervised_tokens_per_family is not None:
+        policy.update(
+            balance_target_supervised_tokens_per_family=(
+                balance_target_supervised_tokens_per_family
+            ),
+            family_selection=(
+                "greedy nearest supervised-token target; model-diverse seeded ties; whole episodes"
+            ),
+        )
     return seal(
         {
             "schema": "cyber_sft_source_selection_v1",
@@ -654,18 +685,7 @@ def select_sources(
             "status": "ready" if not blockers else "blocked",
             "blockers": blockers,
             "models": sorted(models),
-            "policy": {
-                "min_non_submit_decisions": 1,
-                "min_completed_tool_rounds": 1,
-                "max_submit_token_share": max_submit_token_share,
-                "max_submit_response_share": max_submit_response_share,
-                "max_episodes_per_family": max_episodes_per_family,
-                "max_supervised_tokens_per_family": max_supervised_tokens_per_family,
-                "source_seed": source_seed,
-                "family_selection": (
-                    "model-diverse round robin; seeded identity order; whole episodes"
-                ),
-            },
+            "policy": policy,
             "selected_episode_ids": sorted(r["episode_id"] for r in kept),
             "selected_evidence": sorted(
                 [
@@ -717,7 +737,7 @@ def select_sources(
     )
 
 
-def _cap_sources(candidates, assignments, episode_cap, token_cap, seed):
+def _cap_sources(candidates, assignments, episode_cap, token_cap, seed, balance_target=None):
     """Whole-source, per-family ceilings with deterministic model diversity."""
     families = collections.defaultdict(lambda: collections.defaultdict(list))
     for row in candidates:
@@ -728,6 +748,47 @@ def _cap_sources(candidates, assignments, episode_cap, token_cap, seed):
         models = sorted(pools, key=lambda model: _rank(seed, family + ":" + model))
         for pool in pools.values():
             pool.sort(key=lambda row: _rank(seed, family + ":" + row["episode_id"]))
+        if balance_target is not None:
+            pool = [row for model in models for row in pools[model]]
+            used_models, episodes_used, tokens_used = set(), 0, 0
+            while episodes_used < episode_cap and pool:
+                fitting = [
+                    row
+                    for row in pool
+                    if tokens_used + row["coverage"]["supervised_tokens"] <= token_cap
+                ]
+                if not fitting:
+                    break
+                candidate = min(
+                    fitting,
+                    key=lambda row: (
+                        abs(tokens_used + row["coverage"]["supervised_tokens"] - balance_target),
+                        row["source_kind"] + ":" + row["model_id"] in used_models,
+                        _rank(seed, family + ":" + row["episode_id"]),
+                    ),
+                )
+                new_total = tokens_used + candidate["coverage"]["supervised_tokens"]
+                if tokens_used and abs(new_total - balance_target) >= abs(
+                    tokens_used - balance_target
+                ):
+                    break
+                selected.append(candidate)
+                pool.remove(candidate)
+                episodes_used += 1
+                tokens_used = new_total
+                used_models.add(candidate["source_kind"] + ":" + candidate["model_id"])
+            for row in pool:
+                reason = (
+                    "family_episode_cap"
+                    if episodes_used == episode_cap
+                    else (
+                        "family_supervised_token_cap"
+                        if tokens_used + row["coverage"]["supervised_tokens"] > token_cap
+                        else "family_balance_target"
+                    )
+                )
+                excluded[reason] += 1
+            continue
         episodes_used, tokens_used = 0, 0
         while episodes_used < episode_cap and any(pools.values()):
             for model in models:
