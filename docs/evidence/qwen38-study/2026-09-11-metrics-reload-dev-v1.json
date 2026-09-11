@@ -1,0 +1,74 @@
+{
+  "schema": "cyber_qwen38_sft_checkpoint_reload_evidence_v1",
+  "classification": "accepted_operational_gate",
+  "cluster": "dev",
+  "api_base_url": "https://api.ft.dev.flt.build",
+  "run": {
+    "api_name": "chris-q38-ta4m-rldev1-7f96870c",
+    "jobs_job_id": "chris-q38-ta4m-rldev1-7f96870c-p5fss",
+    "rayjob_uid": "a2d77067-7b28-4fac-be87-f18f028e0369",
+    "workload_uid": "6eddb483-e7b4-47ba-bc55-7668b875cdb0",
+    "raycluster_uid": "5a8d6f12-b960-4ed3-8bae-41165f4573ed",
+    "pod_uid": "cbf4f30b-17f0-4d24-90d2-efaf1a604e4e",
+    "output_root": "/mnt/sfs/jobs/chris-q38-ta4m-rldev1",
+    "created_at": "2026-09-11T23:23:39Z",
+    "finished_at": "2026-09-11T23:34:00Z",
+    "status": "SUCCEEDED",
+    "priority_class": "c1",
+    "queue_priority_class": "q1",
+    "priority_value": 10000,
+    "requeue_if_preempted": false,
+    "nodes": 1,
+    "gpus": 4,
+    "restarts": 0,
+    "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "plan_sha256": "6a96a8946d1cfaaca97fddc548e027501da41a702865a41a53b9d5eacb74a57c",
+    "request_sha256": "378e3612b65f93bbb8eda4dc8c0f9a30baab4ea5eb7911de88d2582028b4a4a4",
+    "runtime_sha256": "fc5db40437923800730d38b9bc9a0872cdd64dd8a92c64fc03ecfdeb0ac2b2e3"
+  },
+  "source_checkpoint": {
+    "optimizer_step": 1,
+    "world_size": 4,
+    "files": 21,
+    "bytes": 324621264731,
+    "manifest_file_sha256": "306740464dd13cfb96691ea69ccd65f2ba835a2146aeca8b7934f3d5f6186b32",
+    "manifest_receipt_sha256": "ae009aa5790bdff2f4025962facf7db57c09955a0fc09c72459e926d6a03ee07",
+    "post_run_full_rehash": "passed",
+    "post_run_files": 21,
+    "post_run_bytes": 324621264731,
+    "source_unchanged": true
+  },
+  "receipts": {
+    "started_file_sha256": "5f581827d000c0b46a75a4774eb17937734be780f16befd40d5a409b09ef0acf",
+    "started_receipt_sha256": "82666510160267d1ebd640567af6ef92a4019adab0cad50d22e81dccb42090ba",
+    "recovered_file_sha256": "08c21ce07e664577d44126c2bd1c4ab346db34e7d58464c36f0f45088489f420",
+    "recovered_receipt_sha256": "2726e53668d812435fe48c407bb6e1046058e2de8aca8dc72a5a01a10af96b87",
+    "reload_validated_file_sha256": "fd18325e24c7e150ad57ec5d268466c442ec7e9ca475890e55a1cf7b5c4a0dac",
+    "reload_validated_receipt_sha256": "683caa27c9211da2420f5630d6c010cc8774795a7b94b178b650fc82d9f4cf80"
+  },
+  "acceptance": {
+    "all_four_ranks_restored": true,
+    "model_restored": true,
+    "optimizer_restored": true,
+    "scheduler_restored": true,
+    "rng_restored": true,
+    "sampler_restored": true,
+    "optimizer_steps_executed": 0,
+    "reference_ce_enabled": false,
+    "validation_scope": "checkpoint_and_sampler_reload_only_no_ce",
+    "failed_receipt_absent": true,
+    "terminal_job_success": true,
+    "gpu_quota_released": true
+  },
+  "independent_verifier": {
+    "pod_uid": "03fed65e-7c8c-4651-bf29-e0817979f3cb",
+    "gpu_request": 0,
+    "restarts": 0,
+    "deleted_after_success": true,
+    "confirmed_absent": true
+  },
+  "limits": [
+    "This is an optimizer/checkpoint recovery gate, not an inference-export reload or capability evaluation.",
+    "No additional optimizer update and no held-out teacher cross-entropy were executed."
+  ]
+}
