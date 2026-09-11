@@ -276,6 +276,14 @@ def safe_status(run: dict) -> dict:
     }
 
 
+def _validate_run_name(name: str) -> str:
+    if not isinstance(name, str) or not re.fullmatch(
+        r"[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?", name
+    ):
+        raise JobsError("invalid exact run name")
+    return name
+
+
 class Jobs:
     def __init__(self, token: str, *, base_url: str = API_URL, transport=None):
         if not token:
@@ -336,9 +344,30 @@ class Jobs:
         return result
 
     def status(self, name: str) -> dict:
-        if not re.fullmatch(r"[a-z0-9-]+", name):
-            raise JobsError("invalid run name")
+        name = _validate_run_name(name)
         return safe_status(self.request("GET", "/v1/runs/" + quote(name, safe="")))
+
+    def cancel_once(self, name: str) -> dict:
+        """Request deletion of one exact run without retrying or reading its body.
+
+        The API's documented 204 confirms only that it accepted the DELETE. Callers
+        must separately reconcile API and UID-bound Kubernetes state before treating
+        the run's allocation as released.
+        """
+        name = _validate_run_name(name)
+        try:
+            # Do not route through request(): a successful DELETE has no JSON body.
+            # Do not retry an uncertain mutation.
+            response = self.client.request("DELETE", "/v1/runs/" + quote(name, safe=""))
+        except httpx.RequestError:
+            raise JobsError(
+                "Jobs API DELETE transport failed; reconcile the exact run before any repeat"
+            ) from None
+        if response.status_code != 204:
+            raise JobsError(
+                f"Jobs API DELETE returned HTTP {response.status_code}; reconcile the exact run"
+            )
+        return {"name": name, "delete_http_status": 204, "reconcile_required": True}
 
     def submit_once(self, config: dict, journal: Path) -> dict:
         validate_request(config)

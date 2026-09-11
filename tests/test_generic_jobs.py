@@ -624,3 +624,45 @@ def test_status_is_allowlisted_and_name_cannot_inject_route():
         assert api.status("safe")["status"] == "SUCCEEDED"
         with pytest.raises(JobsError):
             api.status("../runs")
+
+
+def test_cancel_once_accepts_documented_empty_204_and_requires_reconciliation():
+    calls = []
+
+    def handler(request):
+        calls.append((request.method, request.url.path))
+        return httpx.Response(204, text="")
+
+    with client(handler) as api:
+        assert api.cancel_once("researcher-sft-1234abcd") == {
+            "name": "researcher-sft-1234abcd",
+            "delete_http_status": 204,
+            "reconcile_required": True,
+        }
+    assert calls == [("DELETE", "/v1/runs/researcher-sft-1234abcd")]
+
+
+@pytest.mark.parametrize("name", ["", "-run", "run-", "../runs", "RUN", "a" * 64])
+def test_cancel_once_rejects_nonexact_run_names_without_a_request(name):
+    calls = []
+    with client(lambda request: calls.append(request)) as api, pytest.raises(
+        JobsError, match="exact run name"
+    ):
+        api.cancel_once(name)
+    assert calls == []
+
+
+@pytest.mark.parametrize("outcome", ["unexpected-status", "transport-failure"])
+def test_cancel_once_never_retries_or_exposes_a_response_body(outcome):
+    calls = []
+
+    def handler(request):
+        calls.append((request.method, request.url.path))
+        if outcome == "transport-failure":
+            raise httpx.ReadTimeout("private-response-body", request=request)
+        return httpx.Response(200, text="private-response-body")
+
+    with client(handler) as api, pytest.raises(JobsError) as error:
+        api.cancel_once("researcher-sft-1234abcd")
+    assert calls == [("DELETE", "/v1/runs/researcher-sft-1234abcd")]
+    assert "private-response-body" not in str(error.value)
