@@ -387,6 +387,58 @@ async def collect(config, directory: Path, recorder, parse, *, client):
     return samples
 
 
+def _make_recorder(args, state, sample, sampling, engine_client):
+    from fti.trainers.miles import recording
+
+    class SingleAttemptRecorder(recording.Recorder):
+        # Keep native TITO, payload construction and sample updates. Only the
+        # HTTP boundary differs: Miles' default post retries 60 times and logs
+        # response bodies. Never patch its module globals across concurrent tasks.
+        async def sample(self):
+            if self.state.aborted:
+                return recording.Turn(text=None, finish="aborted")
+            segment = self.segments[-1]
+            params = dict(self.sampling_params)
+            per_turn = self.args.fleet_max_tokens_per_turn
+            params["max_new_tokens"] = min(per_turn, params.get("max_new_tokens") or per_turn)
+            payload, halt = recording.compute_request_payload(
+                self.args,
+                segment.sample.tokens,
+                params,
+                multimodal_inputs=segment.sample.multimodal_inputs,
+            )
+            if payload is None:
+                segment.sample.status = halt
+                return recording.Turn(text=None, finish="context_full")
+            try:
+                response = await engine_client.post(
+                    self.url,
+                    json=payload,
+                    headers=recording.compute_routing_headers(self.args, segment.sample),
+                )
+            except httpx.HTTPError:
+                raise InvalidEpisode("generation_transport_failure") from None
+            if not 200 <= response.status_code < 300:
+                raise InvalidEpisode(f"generation_http_{response.status_code}")
+            try:
+                output = response.json()
+            except ValueError:
+                raise InvalidEpisode("generation_invalid_json") from None
+            finish = output["meta_info"]["finish_reason"]["type"]
+            if finish not in {"stop", "length", "abort"}:
+                raise InvalidEpisode("generation_finish_invalid")
+            await recording.update_sample_from_response(
+                self.args, segment.sample, payload=payload, output=output, update_loss_mask=True
+            )
+            if finish == "abort":
+                return recording.Turn(text=None, finish="aborted")
+            return recording.Turn(
+                text=output["text"], finish="length" if finish == "length" else "ok"
+            )
+
+    return SingleAttemptRecorder(args, state, sample, sampling)
+
+
 async def generate(input):
     """Miles custom-generate hook; reuse FTI's native token recorder and parser.
 
@@ -395,7 +447,6 @@ async def generate(input):
     Dataset split and exact config bytes must pass CPU preflight before launch.
     """
     from fti.trainers.miles.parser import parse_tool_call
-    from fti.trainers.miles.recording import Recorder
     from miles.rollout.base_types import GenerateFnOutput
 
     args, sample = input.args, input.sample
@@ -433,13 +484,22 @@ async def generate(input):
     if not key:
         raise InvalidEpisode("missing_fleet_auth")
     try:
-        recorder = Recorder(args, input.state, copy.deepcopy(sample), input.sampling_params)
-        async with httpx.AsyncClient(
-            headers={"Authorization": f"Bearer {key}"},
-            timeout=120,
-            transport=httpx.AsyncHTTPTransport(retries=0),
-            follow_redirects=False,
-        ) as client:
+        async with (
+            httpx.AsyncClient(
+                headers={"Authorization": f"Bearer {key}"},
+                timeout=120,
+                transport=httpx.AsyncHTTPTransport(retries=0),
+                follow_redirects=False,
+            ) as client,
+            httpx.AsyncClient(
+                timeout=config["rl"]["episode_seconds"],
+                transport=httpx.AsyncHTTPTransport(retries=0),
+                follow_redirects=False,
+            ) as engine_client,
+        ):
+            recorder = _make_recorder(
+                args, input.state, copy.deepcopy(sample), input.sampling_params, engine_client
+            )
             samples = await collect(
                 config, root / config["run_id"], recorder, parse_tool_call, client=client
             )

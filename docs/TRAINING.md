@@ -268,9 +268,9 @@ probabilities are saved privately, and samples are returned only after confirmed
 environment release. An ambiguous response is held, never resampled or converted
 to zero reward. Context/turn exhaustion is excluded; a normally stopped, fully
 graded zero remains a valid zero. The native request must disable automatic
-replacement of invalid groups. The pinned Miles image passed 74 CPU tests with
+replacement of invalid groups. The pinned Miles image passed 82 CPU tests with
 real MCP 2.1.1 transport, native FTI recording and the exact Qwen tokenizer;
-[evidence](evidence/cleanup-miles-cpu-20260911.json). Task/engine responses were
+[evidence](evidence/cleanup-miles-single-attempt-20260911.json). Task/engine responses were
 synthetic: live sampling, Fleet reward, GPU optimization and resume remain open.
 
 Use FTI's digest-bound `qwen3.8_fixed.jinja` on both training and sampling sides.
@@ -280,3 +280,11 @@ tokenizer before opening an environment. It does not rewrite templates or
 re-tokenize generated history. MCP 2.x uses `httpx2`, two transport streams,
 timeouts in seconds and `is_error`; a passing mock of the old API was not a
 compatibility proof. These checks belong in the pinned-image CPU gate.
+
+The native Miles HTTP helper retries generation up to 60 times and logs response
+bodies. Our recorder replaces only that transport: one request, no redirects or
+Fleet credentials sent to the engine, safe error codes, and explicit stop reasons.
+Native token assembly is unchanged. Do not restore the retrying helper or patch
+module globals across concurrent episodes. Likewise, do not call the stock
+`execute_train` launcher: even its external-Ray mode runs broad `pkill` commands.
+The Jobs API already owns Ray; native training must attach to that allocation.

@@ -7,7 +7,9 @@ import os
 from pathlib import Path
 from types import SimpleNamespace as NS
 
+import httpx
 import pytest
+import pytest_asyncio
 
 from training import rl_episode as rl
 
@@ -63,12 +65,16 @@ async def test_real_mcp_transport_initializes_calls_and_closes(monkeypatch):
             result = await session.call_tool("submit_report", arguments={})
             assert result.content[0].text == "synthetic result" and not result.is_error
     assert calls == [
-        "initialize", "notifications/initialized", "tools/list", "tools/call", "DELETE"
+        "initialize",
+        "notifications/initialized",
+        "tools/list",
+        "tools/call",
+        "DELETE",
     ]
 
 
-@pytest.fixture
-def native_recorder(monkeypatch):
+@pytest_asyncio.fixture
+async def native_recorder(monkeypatch):
     recording = pytest.importorskip("fti.trainers.miles.recording")
     from miles.rollout.base_types import GenerateFnInput
     from miles.utils.types import Sample
@@ -109,11 +115,17 @@ def native_recorder(monkeypatch):
     input = GenerateFnInput(state, sample, {"temperature": 1.0}, evaluation=False)
     assert input.args is args  # Native property, not a permissive Namespace mock.
     recording._TITO_CACHE.clear()
-    recorder = recording.Recorder(args, state, sample, input.sampling_params)
-    fixture = NS(recorder=recorder, tokens=[], calls=0, finish="stop", state=state)
+    fixture = NS(tokens=[], calls=0, requests=0, finish="stop", state=state, response=None)
 
-    async def post(url, payload, *, headers):
-        assert url == "http://127.0.0.1:9/generate" and headers is None
+    async def post(request):
+        assert str(request.url) == "http://127.0.0.1:9/generate"
+        assert "Authorization" not in request.headers
+        fixture.requests += 1
+        if isinstance(fixture.response, Exception):
+            raise fixture.response
+        if fixture.response is not None:
+            return fixture.response
+        payload = json.loads(request.content)
         assert payload["return_logprob"] is True
         assert payload["sampling_params"]["max_new_tokens"] == 4096
         function = (
@@ -125,18 +137,28 @@ def native_recorder(monkeypatch):
         ids = tokenizer.encode(text, add_special_tokens=False)
         fixture.tokens.extend(ids)
         fixture.calls += 1
-        return {
-            "text": text,
-            "meta_info": {
-                "finish_reason": {"type": fixture.finish},
-                "output_token_logprobs": [[-0.1, token, None] for token in ids],
-                "weight_version": "synthetic-weight-0",
-                "completion_tokens": len(ids),
+        return httpx.Response(
+            200,
+            json={
+                "text": text,
+                "meta_info": {
+                    "finish_reason": {"type": fixture.finish},
+                    "output_token_logprobs": [[-0.1, token, None] for token in ids],
+                    "weight_version": "synthetic-weight-0",
+                    "completion_tokens": len(ids),
+                },
             },
-        }
+        )
 
-    monkeypatch.setattr(recording, "post", post)  # Only the synthetic engine, not token assembly.
-    yield fixture
+    async def forbidden(*args, **kwargs):
+        raise AssertionError("native retrying HTTP helper must not be used")
+
+    monkeypatch.setattr(recording, "post", forbidden)
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(post), timeout=3, follow_redirects=False
+    ) as client:
+        fixture.recorder = rl._make_recorder(args, state, sample, input.sampling_params, client)
+        yield fixture
     recording._TITO_CACHE.clear()
 
 
@@ -184,11 +206,11 @@ async def test_real_recorder_preserves_sampled_tokens_and_masks_tools(native_rec
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("finish", ["length", "abort"])
+@pytest.mark.parametrize("finish", ["length", "abort", "error"])
 async def test_real_recorder_rejects_incomplete_generation(native_recorder, finish):
     fixture = native_recorder
     fixture.finish = finish
-    with pytest.raises(rl.InvalidEpisode, match="generation_incomplete"):
+    with pytest.raises(rl.InvalidEpisode, match="generation_"):
         await rl._agent(
             fixture.recorder,
             None,
@@ -198,3 +220,46 @@ async def test_real_recorder_rejects_incomplete_generation(native_recorder, fini
             lambda text: None,
         )
     assert fixture.calls == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("fault", ["http", "redirect", "json", "timeout", "connection"])
+async def test_native_generation_is_single_attempt_and_sanitized(native_recorder, fault, caplog):
+    fixture = native_recorder
+    fixture.response = {
+        "http": httpx.Response(503, text="private response"),
+        "redirect": httpx.Response(307, headers={"Location": "https://private.invalid"}),
+        "json": httpx.Response(200, text="private response"),
+        "timeout": httpx.ReadTimeout("private request"),
+        "connection": httpx.ConnectError("private request"),
+    }[fault]
+    with pytest.raises(rl.InvalidEpisode) as caught:
+        await rl._agent(
+            fixture.recorder,
+            None,
+            [{"role": "user", "content": "Synthetic transport fixture."}],
+            [],
+            {"max_turns": 2},
+            lambda text: None,
+        )
+    assert fixture.requests == 1
+    assert "private" not in str(caught.value) + caplog.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("aborted", [True, False])
+async def test_native_halted_recording_never_calls_engine(native_recorder, aborted):
+    fixture = native_recorder
+    fixture.state.aborted = aborted
+    if not aborted:
+        fixture.recorder.args.rollout_max_context_len = 1
+    with pytest.raises(rl.InvalidEpisode, match="generation_incomplete"):
+        await rl._agent(
+            fixture.recorder,
+            None,
+            [{"role": "user", "content": "Synthetic context fixture."}],
+            [],
+            {"max_turns": 2},
+            lambda text: None,
+        )
+    assert fixture.requests == 0

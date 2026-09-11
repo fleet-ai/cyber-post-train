@@ -1,0 +1,30 @@
+{
+  "schema": "cyber_cleanup_miles_transport_qualification_v1",
+  "classification": "operational_gate_cpu_only",
+  "observed_at": "2026-09-11T04:35:00Z",
+  "pod": {
+    "name": "chris-cpt-miles-cpu-selftest-v4",
+    "uid": "f0b150e8-5ee4-4532-ba46-43bf6614c5b4",
+    "phase": "Succeeded",
+    "started_at": "2026-09-11T04:33:52Z",
+    "finished_at": "2026-09-11T04:34:38Z",
+    "exit_code": 0,
+    "restarts": 0,
+    "gpus": 0,
+    "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/miles-trainer@sha256:d1d37c584e2aafdd47df1e1f3492ff3343eb3b83a5f658cf7ce2432ee8d6ef33"
+  },
+  "receipt_sha256": "6f3b04caaf5216665dce4def9bb72366d24fe7166d032e331919dc61809d031b",
+  "bundle_sha256": "55bca158f3893fe600c06f7b7c594fbe7e7f1544c19b2d42e5a162a1d34f21e0",
+  "manifest_sha256": "e5ff2f32415f3882933db6c31bda5d69aac488822c257dbd5ba5ea4c438e531f",
+  "test_output_sha256": "91d905c1df6bb86e1a4133f021d820539103c83b4f4629c58e37a4ca0db31d43",
+  "source_sha256": "f51c5e1d6b864935e2236417b71fe012f770ae80b16bfe62eb5682ba2f068e44",
+  "counts": {"tests": 82, "failures": 0, "errors": 0, "skipped": 0},
+  "coverage": {"statements": 256, "covered_statements": 256, "branches": 86, "covered_branches": 86},
+  "runtime": {"ray": "2.58.0", "fti": "0.7.4", "torch": "2.13.0+cu130", "transformers": "5.12.1", "mcp": "2.1.1", "httpx": "0.28.1"},
+  "native_source": "radixark/miles@9e178ca16839b0600155f3927f57ce0670b8f453",
+  "finding": "The native HTTP helper defaults to 60 retries and logs response bodies; unknown finish reasons leave samples pending and could later be finalized as complete.",
+  "correction": "A per-instance Recorder subclass replaces only sample transport, retaining native payload, TITO and sample-update functions. Exactly one request, no redirects, no Fleet authorization at the engine, sanitized errors, explicit finish-reason allowlist. No shared module monkeypatch.",
+  "verified": ["receipt_self_digest", "current_source_and_test_hashes", "real_native_token_mask_logprob_assembly", "real_MCP2_transport", "single_attempt_on_HTTP_redirect_timeout_connection_and_invalid_JSON", "unknown_finish_excluded", "all_module_lines_and_branches"],
+  "limitations": ["Task and engine replies are synthetic.", "No real Fleet environment, reward, GPU optimizer or checkpoint was produced.", "Native GPU Ray/Megatron integration remains unqualified."],
+  "resource_release": "CPU process exited; no GPU requested; peer workloads unchanged."
+}

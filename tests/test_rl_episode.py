@@ -37,7 +37,8 @@ def fixture(monkeypatch):
             "run_id": "synthetic-episode-001",
             "task": {"key": "synthetic", "version_id": TASK},
             "model": {
-                "root": "/model", "tito_family": "qwen35",
+                "root": "/model",
+                "tito_family": "qwen35",
                 "runtime_chat_template_sha256": fleet.sha256(b"synthetic-template"),
             },
             "environment": {
@@ -546,7 +547,13 @@ def native(fixture, tmp_path, monkeypatch):
     ):
         monkeypatch.setitem(sys.modules, name, ModuleType(name))
     sys.modules["fti.trainers.miles.parser"].parse_tool_call = parse
-    sys.modules["fti.trainers.miles.recording"].Recorder = lambda *args: Recorder()
+
+    def recorder(*args):
+        engine = args[-1]
+        assert "Authorization" not in engine.headers and not engine.follow_redirects
+        return Recorder()
+
+    monkeypatch.setattr(rl, "_make_recorder", recorder)
     sys.modules["miles.rollout.base_types"].GenerateFnOutput = NS
     input = NS(
         args=NS(
@@ -634,7 +641,7 @@ async def test_native_recorder_errors_are_sanitized(native, monkeypatch):
     def fail(*args):
         raise ValueError("private prompt data")
 
-    monkeypatch.setattr(sys.modules["fti.trainers.miles.recording"], "Recorder", fail)
+    monkeypatch.setattr(rl, "_make_recorder", fail)
     with pytest.raises(rl.InvalidEpisode) as caught:
         await rl.generate(native)
     assert str(caught.value) == "episode_failure_ValueError"
