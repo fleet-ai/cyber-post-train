@@ -2,8 +2,9 @@
 
 The public command compiles YAML directly to an exact plan and a generic Jobs API
 request. There is no component factory or separate experiment-description language.
-The current compiler uses the qualified Qwen SkyRL loader; other model/backend
-combinations remain gated until their real-model tests pass.
+Qwen's SkyRL path has a real training/checkpoint qualification. Full GLM5.3
+LoRA has passed pinned-image CPU prerequisites; its full-size GPU qualification
+is still pending. Other model/backend combinations remain gated.
 
 ## Pin a model
 
@@ -99,6 +100,16 @@ Relative manifest paths resolve beside the YAML file. Model and data roots are
 specific staged SFS directories, not names to download during GPU startup. Unknown
 fields are errors. Hyperparameters do not authorize a larger resource budget.
 
+For full GLM5.3, select `configs/models/glm53-30333038/model.lock.json` and
+`model.weights.json`, use a corpus built with that exact tokenizer, and add
+`lora: {rank: 16, alpha: 32}`. The loader converts the FP8 base to frozen BF16
+weights and updates only attention adapters—not all model weights and not GLM
+Flash. Explicitly request at least two eight-GPU nodes, global batch 16, and
+`cluster.resources: {memory_request: 2048Gi, memory_limit: 2304Gi}` per node.
+Rank zero must first materialize the roughly 1.5 TB BF16 base on CPU. These are
+preflight resource minimums, **not a completed full-model capacity proof**; a
+bounded exact-model canary is required before production use.
+
 Global batch must be divisible by nodes × GPUs/node × microbatch/GPU. Native SkyRL
 keeps the tail batch, so optimizer steps are `ceil(train_rows / batch_size) × epochs`.
 One row is a bounded token window, not one task or one rollout. The dense format
@@ -159,6 +170,10 @@ This verifies the saved step and sampler cursor, hashes every rank's model,
 optimizer and random-state files, and writes a create-once manifest without
 changing the checkpoint. Only use trusted checkpoints from the bound run: native
 PyTorch metadata uses pickle. Sealing proves file identity, **not GPU reload**.
+The GLM LoRA path seals adapters plus optimizer/scheduler, per-rank random state,
+sampler and trainer state. It cross-checks the exact base, adapter configuration
+and consumed-data cursor; frozen base weights are never copied into checkpoints.
+It does not use the Qwen full-weight export command below.
 
 The CPU-only export command consumes the sealed manifest, with its externally
 recorded **file** SHA-256 (not the embedded receipt digest):

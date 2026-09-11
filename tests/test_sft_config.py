@@ -93,6 +93,83 @@ def test_compile_uses_exact_model_manifest_and_complete_epochs(config, tmp_path)
     assert hashlib.sha256(content["runtime"].encode()).hexdigest() == plan["runtime_sha256"]
 
 
+@pytest.fixture
+def glm_config(config):
+    source, manifest, save = config
+    model_dir = ROOT / "configs/models/glm53-30333038"
+    source["model"].update(
+        lock=str(model_dir / "model.lock.json"),
+        weights=str(model_dir / "model.weights.json"),
+        root="/mnt/sfs/models/glm-5.3-30333038",
+    )
+    manifest["tokenizer"] = {
+        "repo": "zai-org/GLM-5.3",
+        "revision": "30333038ada1f1dacb294a93270305a890b50c14",
+    }
+    save(manifest)
+    source["lora"] = {"rank": 16, "alpha": 32}
+    source["recipe"] = {"nodes": 2, "batch_size": 16}
+    source["cluster"] = {"resources": {"memory_request": "2048Gi", "memory_limit": "2304Gi"}}
+    return source
+
+
+def test_glm_compiler_binds_full_base_adapter_and_worker_bundle(glm_config, tmp_path):
+    plan = sft.compile_sft(glm_config, relative_to=tmp_path)
+    request = sft.job_request(plan)
+    assert plan["model"]["repo"] == "zai-org/GLM-5.3"
+    assert plan["lora"] == {"rank": 16, "alpha": 32}
+    assert request["workers"] == 2 and request["gpus_per_worker"] == 8
+    content = json.loads(gzip.decompress(base64.b64decode(request["env"]["CYBER_SFT_BUNDLE"])))
+    assert content["extra_files"]["training/__init__.py"] == ""
+    helper = content["extra_files"]["training/glm_runtime.py"]
+    assert hashlib.sha256(helper.encode()).hexdigest() == plan["glm_runtime_sha256"]
+    assert request["env"]["PYTHONPATH"] == plan["output_root"] + "/.runtime"
+    plan["glm_runtime_sha256"] = "0" * 64
+    with pytest.raises(ValueError, match="GLM runtime changed"):
+        sft.job_request(plan)
+
+
+@pytest.mark.parametrize("defect", ["rank", "alpha", "missing", "extra", "memory", "nodes"])
+def test_glm_rejects_unsafe_or_ambiguous_configuration(glm_config, tmp_path, defect):
+    if defect == "missing":
+        glm_config.pop("lora")
+    elif defect == "memory":
+        glm_config.pop("cluster")
+    elif defect == "nodes":
+        glm_config["recipe"]["nodes"] = 1
+    else:
+        glm_config["lora"][defect] = 0
+    with pytest.raises(ValueError):
+        sft.compile_sft(glm_config, relative_to=tmp_path)
+
+
+def test_glm_bootstrap_imports_worker_in_child_without_checkout(glm_config, tmp_path, monkeypatch):
+    plan = sft.compile_sft(glm_config, relative_to=tmp_path)
+    helper = Path(sft.__file__).with_name("glm_runtime.py").read_text()
+    (tmp_path / "glm_runtime.py").write_text(helper)
+    runtime = tmp_path / "sft_runtime.py"
+    runtime.write_text(
+        "import os,subprocess,sys\nfrom training import glm_runtime\n"
+        "assert glm_runtime.__file__.startswith(os.environ['RUN_DIR']), glm_runtime.__file__\n"
+        "subprocess.run([sys.executable,'-S','-c',"
+        "\"from training import glm_runtime; "
+        "assert glm_runtime.TARGETS[0]=='q_a_proj'\"],check=True)\n"
+    )
+    monkeypatch.setattr(sft, "__file__", str(tmp_path / "sft.py"))
+    plan["runtime_sha256"] = hashlib.sha256(runtime.read_bytes()).hexdigest()
+    request = sft.job_request(plan)
+    run = tmp_path / "run"
+    run.mkdir()
+    argv = shlex.split(request["command"])
+    argv[0] = sys.executable
+    # Exclude this desktop's editable-install import hook as well as the cwd.
+    argv.insert(1, "-S")
+    env = {**os.environ, **request["env"], "RUN_DIR": str(run), "PYTHONPATH": str(run / ".runtime")}
+    result = subprocess.run(argv, cwd=run, env=env, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    assert (run / ".runtime/training/glm_runtime.py").read_text() == helper
+
+
 @pytest.mark.parametrize(
     "section,key",
     [

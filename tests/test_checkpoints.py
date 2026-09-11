@@ -1,5 +1,7 @@
 import copy
 import json
+from dataclasses import asdict
+from pathlib import Path
 
 import pytest
 import torch
@@ -7,6 +9,85 @@ from test_sft_runtime import plan
 
 from training import checkpoints as c
 from training.sft_runtime import _unsigned_digest, write_receipt
+
+
+def adapter_fixture(tmp_path, defect=None):
+    from safetensors.torch import save_file
+
+    from training import glm_runtime as g
+
+    p = plan(tmp_path)
+    p.pop("plan_sha256")
+    p["recipe"]["nodes"] = p["recipe"]["gpus_per_node"] = 1
+    p["model"].update(
+        repo="zai-org/GLM-5.3",
+        weight_manifest_sha256="sha256:" + "c" * 64,
+        tokenizer_manifest_sha256="sha256:" + "d" * 64,
+    )
+    p["lora"] = {"rank": 4, "alpha": 8}
+    p["glm_runtime_sha256"] = g.sha_file(Path(g.__file__))
+    root = tmp_path / "checkpoints/global_step_2"
+    policy = root / "policy"
+    policy.mkdir(parents=True)
+    torch.save({"global_step": 2}, root / "trainer_state.pt")
+    torch.save({"_num_yielded": 2}, root / "data.pt")
+    save_file(
+        {"synthetic.lora_A.weight": torch.ones(4, 4)}, str(policy / "adapter_tensors.safetensors")
+    )
+    torch.save({"synthetic": torch.ones(2)}, policy / "training_state.pt")
+    peft = {"r": 4, "lora_alpha": 8, "target_modules": sorted(g.TARGETS)}
+    if defect == "peft":
+        peft["r"] = 16
+    (policy / "peft_config.json").write_text(json.dumps(peft))
+    inner = {
+        "schema": "glm53_lora_resumable_checkpoint_v1",
+        "base": asdict(g.identity_from_plan(p)),
+        "plan_sha256": _unsigned_digest(p),
+        "world_size": 1,
+        "optimizer_step": 2,
+        "next_batch": 2,
+        "epoch": 0,
+        "frozen_base_saved": False,
+        "peft_config": peft,
+        "payloads": {
+            f.name: {"bytes": f.stat().st_size, "sha256": g.sha_file(f)} for f in policy.iterdir()
+        },
+    }
+    if defect == "cursor":
+        inner["next_batch"] = 1
+    elif defect == "base":
+        inner["base"]["revision"] = "0" * 40
+    elif defect == "payload":
+        inner["payloads"]["training_state.pt"]["sha256"] = "0" * 64
+    elif defect == "frozen":
+        inner["frozen_base_saved"] = True
+    write_receipt(policy / "COMPLETE.json", inner)
+    write_receipt(
+        tmp_path / "checkpoint_receipts/step-000002.json",
+        {"plan_sha256": _unsigned_digest(p), "optimizer_step": 2, "checkpoint_path": str(root)},
+    )
+    return p, root, tmp_path / "sealed.json"
+
+
+def test_adapter_checkpoint_seals_only_adapter_and_resume_state(tmp_path):
+    p, root, out = adapter_fixture(tmp_path)
+    result = c.seal(p, 2, out)
+    c.verify(result)
+    c.verify(result, check_files=False)
+    assert len(result["files"]) == 6
+    assert result["total_bytes"] < 20_000
+    assert result["gpu_reload_verified"] is False
+    (root / "policy/base.safetensors").write_bytes(b"unexpected frozen base")
+    with pytest.raises(ValueError, match="adapter checkpoint layout"):
+        c.verify(result)
+
+
+@pytest.mark.parametrize("defect", ["cursor", "base", "payload", "frozen", "peft"])
+def test_adapter_receipt_must_match_plan_cursor_and_payload(tmp_path, defect):
+    p, _, out = adapter_fixture(tmp_path, defect)
+    with pytest.raises(ValueError, match="adapter"):
+        c.seal(p, 2, out)
+    assert not out.exists()
 
 
 def fixture(tmp_path):

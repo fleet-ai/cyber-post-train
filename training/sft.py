@@ -18,7 +18,7 @@ from pathlib import Path, PurePosixPath
 
 import yaml
 
-from cyber_post_train.jobs import digest, validate_request
+from cyber_post_train.jobs import digest, quantity, validate_request
 
 from .sft_runtime import DENSE_FORMAT, DENSE_SCHEMA, validate_plan
 
@@ -74,7 +74,7 @@ def _sfs_root(value: str, label: str) -> str:
 def compile_sft(config: dict, *, relative_to: Path) -> dict:
     _known(
         config,
-        {"backend", "name", "output_root", "model", "data", "recipe", "wandb", "cluster"},
+        {"backend", "name", "output_root", "model", "data", "recipe", "wandb", "cluster", "lora"},
         "SFT",
     )
     if config.get("backend", "skyrl") != "skyrl":
@@ -165,7 +165,21 @@ def compile_sft(config: dict, *, relative_to: Path) -> dict:
     # The native GDN compatibility hook is currently qualified only for these
     # Qwen architectures. Do not silently substitute the GLM Flash model or
     # claim the full GLM FP8 checkpoint uses this ordinary full-weight loader.
-    if lock["repo"] not in {"Qwen/Qwen3.8-27B", "Qwen/Qwen3.6-27B"}:
+    if lock["repo"] == "zai-org/GLM-5.3":
+        # Rank zero materializes the full BF16 base before FSDP sharding. Never
+        # inherit the much smaller Qwen CPU reservation for this ~1.5 TB load.
+        if (
+            recipe["nodes"] < 2
+            or recipe["gpus_per_node"] != 8
+            or quantity(plan["execution"]["resources"]["memory_request"]) < quantity("2048Gi")
+        ):
+            raise ValueError("full GLM LoRA requires at least two 8-GPU nodes and 2048Gi per node")
+        plan["lora"] = config.get("lora")
+        plan["model"]["tokenizer_manifest_sha256"] = lock["tokenizer"]["manifest_sha256"]
+        plan["glm_runtime_sha256"] = hashlib.sha256(
+            Path(__file__).with_name("glm_runtime.py").read_bytes()
+        ).hexdigest()
+    elif "lora" in config or lock["repo"] not in {"Qwen/Qwen3.8-27B", "Qwen/Qwen3.6-27B"}:
         raise ValueError("model needs a qualified SkyRL loader profile before GPU submission")
     validate_plan(plan, check_files=False)
     validate_request(job_request(plan))
@@ -182,20 +196,32 @@ def job_request(plan: dict) -> dict:
     if hashlib.sha256(runtime).hexdigest() != plan["runtime_sha256"]:
         raise ValueError("local runtime changed since this plan was compiled")
     plan_bytes = json.dumps(plan, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+    contents = {"runtime": runtime.decode(), "plan": plan_bytes.decode()}
+    if "lora" in plan:
+        helper = Path(__file__).with_name("glm_runtime.py").read_bytes()
+        if hashlib.sha256(helper).hexdigest() != plan["glm_runtime_sha256"]:
+            raise ValueError("GLM runtime changed since this plan was compiled")
+        contents["extra_files"] = {
+            "training/__init__.py": "",
+            "training/glm_runtime.py": helper.decode(),
+        }
     bundle = json.dumps(
-        {"runtime": runtime.decode(), "plan": plan_bytes.decode()},
+        contents,
         sort_keys=True,
         separators=(",", ":"),
     ).encode()
     compressed = gzip.compress(bundle, mtime=0)
     bundle_sha = hashlib.sha256(compressed).hexdigest()
     bootstrap = (
-        "import base64,gzip,hashlib,json,os,pathlib,runpy,sys;"
+        "import base64,gzip,hashlib,importlib,json,os,pathlib,runpy,sys;"
         "b=base64.b64decode(os.environ.pop('CYBER_SFT_BUNDLE'),validate=True);"
         f"assert hashlib.sha256(b).hexdigest()=={bundle_sha!r};"
         "v=json.loads(gzip.decompress(b));"
         "p=pathlib.Path(os.environ['RUN_DIR'])/'.runtime';p.mkdir(mode=0o700);"
         "(p/'sft_runtime.py').write_text(v['runtime']);(p/'plan.json').write_text(v['plan']);"
+        "[((p/n).parent.mkdir(parents=True,exist_ok=True),(p/n).write_text(t)) "
+        "for n,t in v.get('extra_files',{}).items()];"
+        "sys.path.insert(0,str(p));importlib.invalidate_caches();"
         f"sys.argv=['sft_runtime','--plan',str(p/'plan.json'),'--plan-sha256',{hashlib.sha256(plan_bytes).hexdigest()!r}];"
         "runpy.run_path(str(p/'sft_runtime.py'),run_name='__main__')"
     )
@@ -214,6 +240,11 @@ def job_request(plan: dict) -> dict:
         "secrets": ["wandb-api"],
         "env": {
             "CYBER_SFT_BUNDLE": base64.b64encode(compressed).decode(),
+            **(
+                {"PYTHONPATH": str(Path(plan["output_root"]) / ".runtime")}
+                if "lora" in plan
+                else {}
+            ),
             "HF_HUB_OFFLINE": "1",
             "TRANSFORMERS_OFFLINE": "1",
             "TOKENIZERS_PARALLELISM": "false",

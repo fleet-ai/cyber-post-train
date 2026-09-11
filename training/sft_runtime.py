@@ -13,6 +13,7 @@ Run as a staged module with --plan and its externally bound --plan-sha256.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import importlib.util
 import json
@@ -56,6 +57,9 @@ SOURCE_SHA256 = {
     ),
     "skyrl/backends/skyrl_train/workers/worker.py": (
         "a3db942bcfb8f4a2f9cb6eae5717a2adde6699592ed469e164d60173e2bb2eab"
+    ),
+    "skyrl/backends/skyrl_train/workers/fsdp/fsdp_worker.py": (
+        "20710cfa5ac38bdc2333c05cc8d141ef03c9544ddfc73ffa58d719c01c355760"
     ),
     # The ba288751 image adds the already-approved opt-in Torch GDN constructor
     # patch to f5bc3b78. Its forward/loss implementation remains unchanged.
@@ -199,6 +203,26 @@ def validate_plan(plan: dict, *, check_files: bool = True) -> None:
     if recipe["max_steps"] != math.ceil(train["rows"] / recipe["batch_size"]) * recipe["epochs"]:
         raise ValueError("max_steps must equal complete epochs with the native kept tail batch")
     model = plan["model"]
+    if "lora" in plan:
+        lora = plan["lora"]
+        if (
+            model["repo"] != "zai-org/GLM-5.3"
+            or not isinstance(lora, dict)
+            or set(lora) != {"rank", "alpha"}
+            or type(lora["rank"]) is not int
+            or not 1 <= lora["rank"] <= 64
+            or type(lora["alpha"]) is not int
+            or lora["alpha"] <= 0
+            or not re.fullmatch(r"[a-f0-9]{64}", plan.get("glm_runtime_sha256", ""))
+            or not re.fullmatch(r"sha256:[a-f0-9]{64}", model.get("tokenizer_manifest_sha256", ""))
+        ):
+            raise ValueError("GLM LoRA needs an exact bounded adapter/runtime identity")
+        if check_files:
+            from training import glm_runtime
+
+            _checked_file(Path(glm_runtime.__file__), plan["glm_runtime_sha256"])
+    elif model["repo"] == "zai-org/GLM-5.3":
+        raise ValueError("full GLM requires the separately qualified LoRA loader")
     if not re.fullmatch(r"[a-f0-9]{40}", model["revision"]) or not model["files"]:
         raise ValueError("exact model revision and file bindings required")
     if not {"config.json", "tokenizer_config.json"}.issubset({x["path"] for x in model["files"]}):
@@ -276,6 +300,22 @@ def sft_overrides(plan: dict) -> dict:
         options.update(
             {"fsdp_config.cpu_offload": False, "optimizer_config.offload_after_step": False}
         )
+    if "lora" in plan:
+        from training.glm_runtime import TARGETS
+
+        options.pop("model_config_kwargs.fleet_force_qwen35_torch_gdn")
+        options.update(
+            {
+                "model.lora.rank": plan["lora"]["rank"],
+                "model.lora.alpha": plan["lora"]["alpha"],
+                "model.lora.dropout": 0.0,
+                "model.lora.target_modules": list(TARGETS),
+                "remove_microbatch_padding": False,
+                "use_sequence_packing": False,
+                "fsdp_config.cpu_offload": False,
+                "optimizer_config.offload_after_step": False,
+            }
+        )
     return options
 
 
@@ -285,7 +325,11 @@ def build_runtime_configs(plan: dict):
 
     cfg = SFTConfig.from_cli_overrides(sft_overrides(plan))
     skyrl_cfg = build_skyrl_config_for_sft(cfg)
-    if plan["schema"] == DENSE_SCHEMA:
+    if "lora" in plan:
+        # SFTConfig has no flash_attn field; this is an explicit native bridge
+        # setting, not an ignored CLI override. The GLM loader uses HF SDPA.
+        skyrl_cfg.trainer.flash_attn = False
+    if plan["schema"] == DENSE_SCHEMA or "lora" in plan:
         # The native bridge disables colocate_all but inherits the RL default
         # colocate_policy_ref=True. This arm has no reference/inference actor.
         skyrl_cfg.trainer.placement.colocate_policy_ref = False
@@ -811,8 +855,14 @@ def _make_trainer_class():
             self.target_tokens_seen = 0
 
         def _init_workers(self):
-            super()._init_workers()
-            if self.plan["schema"] == DENSE_SCHEMA:
+            selection = contextlib.nullcontext()
+            if "lora" in self.plan:
+                from training.glm_runtime import use_worker
+
+                selection = use_worker(self.plan)
+            with selection:
+                super()._init_workers()
+            if self.plan["schema"] == DENSE_SCHEMA or "lora" in self.plan:
                 # Pinned FSDP2 initialization broadcasts non-persistent buffers
                 # (including RoPE inv_freq) back to CPU. Turning off colocation
                 # skips the dispatcher's usual initial backload as well as its

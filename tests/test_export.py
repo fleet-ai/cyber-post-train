@@ -175,7 +175,7 @@ def test_export_rejects_unknown_or_broken_weight_contract(tmp_path, defect):
         tmp_path,
         state=state,
         base_dtype=torch.float32 if defect == "base_dtype" else torch.bfloat16,
-        model="zai-org/GLM-5.3" if defect == "model" else "Qwen/Qwen3.8-27B",
+        model="Qwen/Qwen3.6-27B" if defect == "model" else "Qwen/Qwen3.8-27B",
     )
     with pytest.raises(ValueError):
         e.export(manifest, sha, out)

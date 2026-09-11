@@ -1,0 +1,43 @@
+{
+  "schema": "cyber_cleanup_qualification_v1",
+  "scope": "Pinned-image CPU prerequisites for full GLM5.3 LoRA SFT",
+  "status": "passed",
+  "pod": {
+    "name": "chris-cpt-glm-native-selftest-v1",
+    "namespace": "fleet-train-jobs",
+    "uid": "49561a83-fc38-4a4a-aaf3-3bd19b2e3123",
+    "node": "computeinstance-e04a737eqtfvpnyx08",
+    "created_at": "2026-09-11T02:33:09Z",
+    "finished_at": "2026-09-11T02:33:25Z",
+    "phase": "Succeeded",
+    "exit_code": 0,
+    "restarts": 0,
+    "gpus": 0,
+    "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4"
+  },
+  "tests": {"tests": 68, "failures": 0, "errors": 0, "skipped": 0},
+  "bundle_sha256": "35037cf49e4f11982fc48c1b112522f9861609f5b2cf0f4f33f91bae0320bfd9",
+  "manifest_sha256": "ac828588a282173ecc4fb646cb39999fc15e0561e306a1e66a528e102b2bc3a9",
+  "verified_receipt_sha256": "af99120d8210f6accf0f651c6bbe818c0133354be783765afaade4c2916be078",
+  "source_files": {
+    "training/glm_runtime.py": "1b777cdef2fa7c6c306e4c1c64e423d126d0f2e143efdfcd05375694d4b098eb",
+    "training/sft_runtime.py": "b60248287b273852a1431ceb240c82cb32e5d1793d5f1466100c6d276ec01c80",
+    "tests/test_glm_runtime.py": "02a732fa76183d70d2b3c4fe8916d42970e821e587eb630c3171ebabc5540eb5",
+    "tests/test_sft_runtime.py": "5cf164cf877e67dc245ec0bc92046111af60cfb7d2f96c8e2821fdce4966e33b"
+  },
+  "verified": [
+    "Actual installed GLM-MoE-DSA model and synthetic block-FP8 weights",
+    "Official FP32 dequantization arithmetic followed by BF16 rounding",
+    "CPU/meta parameter and strict-router dtype parity",
+    "Only attention LoRA parameters enter the optimizer",
+    "Adapter-only checkpoint and exact next CPU update after optimizer/scheduler/RNG reload",
+    "Real SkyRL configuration and worker wrapper/optimizer/checkpoint dispatch integration",
+    "Source-hash guards, tampering rejection and process-local hook restoration"
+  ],
+  "not_proven": [
+    "Full 755 GB GLM base load or GPU memory feasibility",
+    "Distributed FSDP2 adapter checkpoint/resume",
+    "Real Fleet-data GLM training or held-out capability improvement",
+    "Miles or RL qualification"
+  ]
+}

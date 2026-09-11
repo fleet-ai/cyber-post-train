@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import math
 import re
+from dataclasses import asdict
 from pathlib import Path
 
 from .sft_runtime import _unsigned_digest, digest, validate_plan, write_receipt
@@ -27,7 +28,7 @@ def receipt(path: Path) -> dict:
     return value
 
 
-def checkpoint_files(root: Path, world_size: int) -> dict[str, Path]:
+def checkpoint_files(root: Path, world_size: int, *, adapter: bool = False) -> dict[str, Path]:
     if root.is_symlink() or not root.is_dir():
         raise ValueError("checkpoint root must be a real directory")
     files = {}
@@ -36,18 +37,32 @@ def checkpoint_files(root: Path, world_size: int) -> dict[str, Path]:
             raise ValueError("checkpoint contains a symlink")
         if path.is_file():
             files[str(path.relative_to(root))] = path
-    _validate_names(set(files), world_size)
-    config = json.loads(files["policy/fsdp_config.json"].read_text())
+    _validate_names(set(files), world_size, adapter=adapter)
     # The pinned implementation uses FSDP2, but its serialized strategy enum is
     # "fsdp". This is checked against the native producer in CPU tests.
-    if config != {"fsdp_strategy": "fsdp", "world_size": world_size}:
-        raise ValueError("checkpoint topology differs from the plan")
+    if not adapter:
+        config = json.loads(files["policy/fsdp_config.json"].read_text())
+        if config != {"fsdp_strategy": "fsdp", "world_size": world_size}:
+            raise ValueError("checkpoint topology differs from the plan")
     if any(path.stat().st_size <= 0 for path in files.values()):
         raise ValueError("empty checkpoint payload")
     return dict(sorted(files.items()))
 
 
-def _validate_names(names: set[str], world_size: int) -> None:
+def _validate_names(names: set[str], world_size: int, *, adapter: bool = False) -> None:
+    if adapter:
+        required = {"data.pt", "trainer_state.pt"} | {
+            "policy/" + name
+            for name in (
+                "COMPLETE.json",
+                "adapter_tensors.safetensors",
+                "training_state.pt",
+                "peft_config.json",
+            )
+        }
+        if names != required:
+            raise ValueError("incomplete or unexpected adapter checkpoint layout")
+        return
     required = {"data.pt", "trainer_state.pt", "policy/fsdp_config.json"}
     required |= {
         f"policy/{kind}_world_size_{world_size}_rank_{rank}.pt"
@@ -61,6 +76,38 @@ def _validate_names(names: set[str], world_size: int) -> None:
         raise ValueError("incomplete or unexpected native checkpoint layout")
     if "policy/huggingface/config.json" not in names:
         raise ValueError("missing native model configuration")
+
+
+def _adapter_binding(plan: dict, step: int, root: Path, inventory: dict) -> None:
+    from .glm_runtime import TARGETS, identity_from_plan
+
+    inner = receipt(root / "policy/COMPLETE.json")
+    per_epoch = math.ceil(plan["datasets"]["train"]["rows"] / plan["recipe"]["batch_size"])
+    expected = {
+        "schema": "glm53_lora_resumable_checkpoint_v1",
+        "base": asdict(identity_from_plan(plan)),
+        "plan_sha256": _unsigned_digest(plan),
+        "world_size": plan["recipe"]["nodes"] * plan["recipe"]["gpus_per_node"],
+        "optimizer_step": step,
+        "next_batch": (step - 1) % per_epoch + 1,
+        "epoch": (step - 1) // per_epoch,
+        "frozen_base_saved": False,
+        "payloads": {
+            name.removeprefix("policy/"): spec
+            for name, spec in inventory.items()
+            if name.startswith("policy/") and name != "policy/COMPLETE.json"
+        },
+    }
+    if any(inner.get(k) != v for k, v in expected.items()):
+        raise ValueError("adapter receipt differs from bound base, step, cursor or payloads")
+    peft = json.loads((root / "policy/peft_config.json").read_text())
+    if (
+        peft != inner.get("peft_config")
+        or peft.get("r") != plan["lora"]["rank"]
+        or peft.get("lora_alpha") != plan["lora"]["alpha"]
+        or set(peft.get("target_modules", [])) != set(TARGETS)
+    ):
+        raise ValueError("adapter configuration differs from the plan")
 
 
 def seal(plan: dict, step: int, output: Path, *, progress=None) -> dict:
@@ -86,7 +133,8 @@ def seal(plan: dict, step: int, output: Path, *, progress=None) -> dict:
     if any(saved.get(k) != v for k, v in expected.items()):
         raise ValueError("checkpoint receipt differs from source plan/step/path")
     size = plan["recipe"]["nodes"] * plan["recipe"]["gpus_per_node"]
-    files = checkpoint_files(root, size)
+    adapter = "lora" in plan
+    files = checkpoint_files(root, size, adapter=adapter)
     before = {name: (p.stat().st_size, p.stat().st_mtime_ns) for name, p in files.items()}
     # Only the two small, trusted producer metadata files are deserialized.
     trainer = torch.load(files["trainer_state.pt"], map_location="cpu", weights_only=False)
@@ -104,7 +152,9 @@ def seal(plan: dict, step: int, output: Path, *, progress=None) -> dict:
         total += before[name][0]
         if progress:
             progress(len(inventory), total)
-    after = checkpoint_files(root, size)
+    if adapter:
+        _adapter_binding(plan, step, root, inventory)
+    after = checkpoint_files(root, size, adapter=adapter)
     if set(after) != set(files) or any(
         (p.stat().st_size, p.stat().st_mtime_ns) != before[name] for name, p in after.items()
     ):
@@ -160,12 +210,15 @@ def verify(manifest: dict, *, check_files: bool = True) -> None:
             raise ValueError("invalid checkpoint file size")
         if not re.fullmatch(r"[a-f0-9]{64}", spec["sha256"]):
             raise ValueError("invalid checkpoint file digest")
-    _validate_names(set(manifest["files"]), size)
+    adapter = "lora" in plan
+    _validate_names(set(manifest["files"]), size, adapter=adapter)
     if check_files:
-        files = checkpoint_files(expected, size)
+        files = checkpoint_files(expected, size, adapter=adapter)
         if set(files) != set(manifest["files"]):
             raise ValueError("checkpoint inventory changed")
         for name, path in files.items():
             spec = manifest["files"][name]
             if path.stat().st_size != spec["bytes"] or digest(path) != spec["sha256"]:
                 raise ValueError("checkpoint file digest/size mismatch")
+        if adapter:
+            _adapter_binding(plan, step, expected, manifest["files"])
