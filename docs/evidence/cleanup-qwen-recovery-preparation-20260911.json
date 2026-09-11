@@ -1,0 +1,79 @@
+{
+  "schema": "cleanup_qwen_recovery_operator_evidence_v1",
+  "observed_at": "2026-09-11T03:25:00Z",
+  "classification": "cpu_preflight_passed_gpu_reload_queued",
+  "cpu_preparation": {
+    "name": "chris-cpt-q38-recovery-prepare-v2",
+    "pod_uid": "d27f9e6a-399d-4fe5-b3dc-0ebc1b1c55c2",
+    "started_at": "2026-09-11T03:15:07Z",
+    "finished_at": "2026-09-11T03:21:39Z",
+    "exit_code": 0,
+    "restarts": 0,
+    "gpus": 0,
+    "bundle_sha256": "06d39df355a5ca40b80e6438d51e1a5e3d27df653d62128a0ca3f58cec527d1e",
+    "receipt_sha256": "3a52b846b06e0ab489c46f95a7e8ba89f873d5e16f1f14f607bc7a172b576a8c",
+    "preflight_sha256": "1d5eae277aab71e603044bc9ac0fba0b7c9b03c3a61c1e984cbada4ff757e532",
+    "independent_readback_pod_uid": "e9a67922-554c-4718-b18d-0c86793eebc9",
+    "independent_readback_passed": true
+  },
+  "source": {
+    "run_name": "chris-cpt-q38-qual-v1-7eab6d07",
+    "api_status": "SUCCEEDED",
+    "optimizer_step": 1,
+    "world_size": 8,
+    "manifest": "/mnt/sfs/jobs/chris-cpt-cleanup-q38-sft-v1/checkpoint-step-1.json",
+    "manifest_file_sha256": "8a9a7789fe30fa1aa4d67101af6ac073bd9d38fd8d69a69c577f3d8f30cc5ea5",
+    "receipt_sha256": "333899f9b032d17fb35c1f44bc9c3e52338ece5607608a0b475ee423214fb1c9"
+  },
+  "gpu_validation": {
+    "name": "chris-cpt-q38-reload-v1-9cecd424",
+    "api_run_id": "9cecd424-da4d-4856-9453-794a43d61596",
+    "rayjob_uid": "a8dc93fe-1aa6-4389-af8b-de6539775c46",
+    "workload_name": "rayjob-chris-cpt-q38-reload-v1-9cecd424-44540",
+    "workload_uid": "f43b2754-897d-430b-b07f-18e6640b9584",
+    "created_at": "2026-09-11T03:24:36Z",
+    "namespace": "fleet-train-jobs",
+    "output_root": "/mnt/sfs/jobs/chris-cpt-cleanup-q38-reload-v1",
+    "prepared": "/mnt/sfs/jobs/chris-cpt-cleanup-q38-recovery-inputs-v2/prepared",
+    "plan_sha256": "20ca6de3e8575f01cf88a61550a11e31521288efca7072bd3d55c84884da0398",
+    "request_sha256": "6b986a66c9bdd2e749eb6365f7017b3de9927c60529db1bbb02cd3d42315db09",
+    "preview_sha256": "e47f26881b8a0cae0acb6554ee48b49dced2d8e6e7dd75bbcaa1e13ffa83dcdc",
+    "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "requested_nodes": 1,
+    "requested_gpus": 8,
+    "priority_class": "c1",
+    "effective_workload_priority": 10000,
+    "optimizer_steps_authorized": 0,
+    "post_count": 1,
+    "journal_records": 2,
+    "admitted": false,
+    "raycluster_uid": null,
+    "pod_uids": [],
+    "allocated_gpus": 0
+  },
+  "budget_before_post": {
+    "all_jobs_api_rows_checked": 592,
+    "matching_runs": 0,
+    "existing_glm_qualification_nodes": 2,
+    "existing_glm_qualification_gpus": 16,
+    "existing_dedicated_glm_pending_nodes": 1,
+    "existing_dedicated_glm_pending_gpus": 8,
+    "total_including_new_pending_request_nodes": 4,
+    "total_including_new_pending_request_gpus": 32
+  },
+  "retired_preparation": {
+    "name": "chris-cpt-q38-recovery-prepare-v1",
+    "pod_uid": "b6725518-c24f-414b-aa37-ddaed0dae292",
+    "receipt_sha256": "1c73bc51b04ea2708fdd11f27fb1cb071f3f8416c86dd95da3ef965fd88dfbcc",
+    "classification": "copied_manifest_digest_typo_rejected_before_preparation",
+    "gpus": 0,
+    "source_modified": false,
+    "fix": "Read the exact digest directly from the committed seal receipt, not a chat summary."
+  },
+  "limitations": [
+    "Queued without admission is not GPU idleness or successful reload.",
+    "The GPU gate must restore all eight rank optimizer states and the sampler, execute held-out forward passes and no optimizer steps.",
+    "The separate BF16 inference export has not yet completed GPU model reload.",
+    "Source checkpoint immutability must be independently rechecked after validation."
+  ]
+}

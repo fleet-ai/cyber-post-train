@@ -34,7 +34,8 @@ and trace analysis` were inspected. Original commits/worktrees remain recoverabl
 | GLM LoRA CPU prerequisites | 68 pinned-image tests, zero failures/skips/restarts/GPUs; actual tiny GLM FP8 load, adapter updates, exact CPU resume and native worker integration; [receipt](evidence/cleanup-glm-native-20260911.json). **Not full-size or distributed GPU qualification** |
 | Full GLM data/model preflight | All 141 staged weight shards verified, exact 744B model constructed on meta, 8 train windows/6,287 targets and two fixed dev tasks; 34 native checkpoint/seal tests also passed. [Receipt](evidence/cleanup-glm-preparation-20260911.json). One two-node/16-GPU one-step run was submitted once and is queued without allocation |
 | Native recovery CPU tests | 41 tests in the pinned image, zero skips/failures/restarts/GPUs; exact model/Adam state through the resumed epoch, complete later-epoch coverage, strict state checks and no-optimizer validation. [Receipt](evidence/cleanup-recovery-cpu-20260911.json). Native later-epoch reshuffles are explicitly not bit-identical; full-size GPU reload remains pending |
-| Local regression suite | 1,085 tests plus seven subtests pass with disposable PostgreSQL; 32 native-only cases explicitly skip locally. Ruff/whitespace checks pass |
+| Real checkpoint recovery preflight | CPU validation rehashed the accepted eight-rank checkpoint and exact model; [receipt](evidence/cleanup-qwen-recovery-preparation-20260911.json). One zero-optimizer eight-GPU reload request is queued, priority 10000, no allocation yet |
+| Local regression suite | 992 tests plus seven subtests pass with disposable PostgreSQL after retiring obsolete launchers/tests; 32 native-only cases explicitly skip locally. Ruff/whitespace checks pass |
 | Installation | Built wheel installed outside the checkout; public commands and recovery/checkpoint/GLM imports work; retired modules are absent |
 
 Split, checkpoint, export, model-pinning and historical RL-preview checks have
@@ -77,6 +78,12 @@ behavioral tests. Historical model contracts and receipts remain unchanged.
 The maintained surface is the public CLI plus Fleet/WebExploitBench/ExploitGym
 adapters. Artifact-integrity, tamper, concurrency and scientific-control tests
 remain; external benchmark material never entered training.
+
+Retired the isolated GLM5.2 Agent Runtime launcher, prompt-curriculum authoring
+pilot, Qwen Code calibration launcher and raw-Kubernetes Qwen Code smoke/test20
+scripts. Their only code callers were their own obsolete launch paths and tests;
+the OpenCode/PostgreSQL worker imports none of them. Historical configs and
+receipts remain readable at their recorded revisions, not executable recipes.
 
 Removed files are recoverable from base commit `bac2a4c`. Historical receipts
 and their source pointers are unchanged and refer to their original revisions,

@@ -352,7 +352,15 @@ def _local_result_record(*, score: float = 0.5) -> dict[str, object]:
     }
 
 
-def test_private_local_result_is_create_once_and_not_exported(tmp_path: Path) -> None:
+def test_private_local_result_is_create_once_and_not_exported(
+    tmp_path: Path, monkeypatch
+) -> None:
+    # The score's text can legitimately occur in a timestamp. Inspect the
+    # structured export, not a substring that flaps with the wall clock.
+    monkeypatch.setattr(
+        "evals.fleet.rollout_ledger._now",
+        lambda: datetime(2026, 9, 11, 3, 21, 50, 512836, tzinfo=UTC),
+    )
     database = tmp_path / "ledger.sqlite3"
     initialize(database, _plan(tmp_path / "plan.csv", [_row(1)]))
     cell = _claim_one(database)
@@ -375,7 +383,16 @@ def test_private_local_result_is_create_once_and_not_exported(tmp_path: Path) ->
     events_path = tmp_path / "events.jsonl"
     export(database, csv_path=csv_path, events_path=events_path)
     assert "score" not in csv_path.read_text(encoding="utf-8")
-    assert "0.5" not in events_path.read_text(encoding="utf-8")
+    events = [json.loads(line) for line in events_path.read_text().splitlines()]
+    recorded = [event for event in events if event["event"] == "local_result_recorded"]
+    assert len(recorded) == 1
+    assert json.loads(recorded[0]["detail_json"]) == {
+        "execution_id": first["execution_id"],
+        "record_sha256": first["record_sha256"],
+    }
+    for event in events:
+        assert "score" not in event
+        assert "score" not in json.loads(event["detail_json"])
 
     with sqlite3.connect(database) as connection:
         cell_columns = {row[1] for row in connection.execute("PRAGMA table_info(rollout_cells)")}
