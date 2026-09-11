@@ -1,0 +1,3407 @@
+{
+  "sha256": "c45c9cc420a3dbf1aa6b635b84ed1ca3c404254f046ffdac234e053929a1bf12",
+  "schema_version": "fleet-cyber-task-version-eligibility-v1",
+  "observed_through": "2026-09-11T21:06:51.564110+00:00",
+  "source_job_id": "a62dd51f-a52b-4941-8207-4679e4b25b51",
+  "projection_id": "blackbox_ctf_v1",
+  "selection_policy": "At least one clean direct accepted terminal execution with independently digest-validated exact task/runtime/verifier and cleanup/ingest evidence, plus matching current exact bindings. Genuine model failure remains eligible; representatives were not selected by model outcome.",
+  "purpose": "Evidence-backed task-version inventory, not launch authorization, a new split, an SFT-source acceptance receipt, or proof of present endpoint readiness.",
+  "source_split": {
+    "id": "teacher-dense-v4",
+    "sha256": "cc55a6e7aca2cc56ec1987f6aba8b04e0a6bc5da67b380adfa3786cecc3b6a76",
+    "unit": "exact_task_version_inherited_existing_quarantine",
+    "vulnerability_family_disjointness_verified": false
+  },
+  "evidence": {
+    "ledger_observed_at": "2026-09-11T20:38:36Z",
+    "ledger_plan_sha256": "e88dca0419b10b50dc5b8d6b1313e8ea18408221185be279c5ce66c47853f9b3",
+    "train_receipt_validation": {
+      "path": "/private/tmp/cpt-qwen-receipt-evidence-20260911T2100Z.json",
+      "sha256": "722fe6fed4b43be9b1dd855e95292e89e6e3c7fd29d117c7d0cd4f4c44c4f619"
+    },
+    "heldout_receipt_validation": {
+      "path": "/private/tmp/cpt-qwen-heldout-receipt-evidence-20260911T2106Z.json",
+      "sha256": "ae18edf68878603573375fd72a6c7b51126b198f1d76ffd140a23174ea904a60"
+    },
+    "current_bindings": {
+      "path": "data/private/qwen-study-20260911/current-bindings.json",
+      "sha256": "15ff4a85bc67279d021c9f1a21a82f4b6751d19b6df3ba8aa214ced4c277a5f2",
+      "all_160_individual_row_selfdigests_valid": true
+    }
+  },
+  "counts": {
+    "source_versions": 160,
+    "historical_direct_accepted_versions_verified": 98,
+    "current_binding_valid_versions": 132,
+    "eligible_versions": 89,
+    "eligible_by_split": {
+      "train": 74,
+      "dev": 13,
+      "test": 0,
+      "reserved_dev": 2
+    },
+    "excluded_versions": 71,
+    "historical_verified_but_current_starting_data_absent": 9,
+    "dev_target": 20,
+    "dev_qualified": 13,
+    "dev_evidence_gap": 7
+  },
+  "restrictions": {
+    "preserve_existing_split": true,
+    "never_train_on_dev_test_reserved": true,
+    "no_model_success_filter_for_task_eligibility": true,
+    "raw_trace_digest_independently_rechecked": false,
+    "compaction_occurrence_or_context_replay_qualified": false,
+    "sft_source_eligibility_granted": false,
+    "no_jobs_or_ledger_mutations": true
+  },
+  "task_versions": [
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-8b929ebef54fb6207d898e95__blackbox_ctf_v1",
+      "task_version_id": "02dd4e3f-d85d-4bf8-9976-eae2f102384d",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-current-gen",
+        "version": "v0.0.3",
+        "version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+        "data_id": "commercial",
+        "data_version": "v0.0.9",
+        "runtime_seed_content_sha256": "c828dd0e888f2557c50079f334195527421138761269427cb21840033da1fac7"
+      },
+      "verifier": {
+        "id": "01c289b3-e348-4314-8324-03d1d9c91942",
+        "version_id": "e9624e43-c545-4e9f-8da9-eff5bca84252",
+        "version": 1,
+        "sha256": "94e5ccfb3e3dd74eaebaeef458dd6825b0d8aec75cd58ca3990c5f719a1dfcd0"
+      },
+      "current_binding_sha256": "sha256:81514077e0bf96becfd188e1be2385eabcdc0b942fd2363f5efa64bd0f1715f3",
+      "execution_evidence": {
+        "cell_id": "fc90921b-3e4a-5372-bcd8-3512e165170c",
+        "session_id": "1333eb9a-e129-4746-8b0d-89f016656c3a",
+        "verifier_execution_id": "f6c3fe62-4528-46d7-8ede-80aa453f5d4f",
+        "receipt_sha256": "ef8f99fc6a71ac50e99a214f877bcce5cfcf33f60441dac290af61c1b9ead198",
+        "config_sha256": "7d7d0a797cce4dace04e81b6bd024f95570bdb32315e11b7c2bb2708c8d2a7d9",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "755d67ca06740f96ce90d43bf56f9a3bde4e68d04cf2227c6ea759789ef7a20f",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-92984d2033e2e0b2f9df1861__blackbox_ctf_v1",
+      "task_version_id": "037704a7-fc03-4cf6-a8da-3f3e3933717e",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-current-gen",
+        "version": "v0.0.3",
+        "version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+        "data_id": "commercial",
+        "data_version": "v0.0.9",
+        "runtime_seed_content_sha256": "959183fd70d35543fed225f8a2b107a513f7db445124844c3d8a7c542ad623a3"
+      },
+      "verifier": {
+        "id": "83e8a12f-997a-4814-a460-c42bafab12dc",
+        "version_id": "b15ccef8-03db-413c-a4b2-e18fc5a7e51d",
+        "version": 1,
+        "sha256": "59aa14923c3b4efff424ce1048ef66b9e9123a1963eb42e896b0a01b6315dc40"
+      },
+      "current_binding_sha256": "sha256:46d515bc035479c82ba14b4f0bd36f1c076da1209f48d87b6e8cdac0f156a78b",
+      "execution_evidence": {
+        "cell_id": "f18ae0e4-b9bf-5244-ac53-68c889942782",
+        "session_id": "ebd25c57-1eec-4b65-a529-570da49365a6",
+        "verifier_execution_id": "4a918992-9797-48ff-882a-94485e4b3499",
+        "receipt_sha256": "41dec16a654e583654175c89646a3e10e8730261d95308b36c29e71129cf50d5",
+        "config_sha256": "1fbfdee17a6317197fa690b352a93e798f62cabf2e8371de8aa7b3f7ed597d70",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "8f6aa4fb4dae613df4442b23cebb33eaad6f579c84a1f3cfd755016eb73ae278",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fentry-gen_blackbox-0a841d6127c4042fd3d99f68__blackbox_ctf_v1",
+      "task_version_id": "056f0e20-cd7d-40c8-b3c8-369fcee838be",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-fentry-gen",
+        "version": "v0.0.3",
+        "version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595",
+        "data_id": "fentry-current-gen",
+        "data_version": "v0.0.3",
+        "runtime_seed_content_sha256": "538ba7c51e8053bcf0f8fe6d04019cc2f44cce5b3674274293115ac12003b2ec"
+      },
+      "verifier": {
+        "id": "822feeb0-690c-40b0-be10-4ae9f2ac772f",
+        "version_id": "e6b95420-2f78-441a-bea8-f877333a0ffa",
+        "version": 1,
+        "sha256": "106f035d5b4e546b785d52b8f62417081dbd2741bfcf10063fc8dac8578da1ad"
+      },
+      "current_binding_sha256": "sha256:16bafc307613f6dfe635d89792e47eab4a252649962ad6a661cbef42a0fa2e32",
+      "execution_evidence": {
+        "cell_id": "0175cea3-b308-5749-b01e-680220e360b2",
+        "session_id": "799e21cf-060d-4672-acac-91a9d3a6a323",
+        "verifier_execution_id": "c9e2145e-bacb-40b7-93ed-92b5d619bfbd",
+        "receipt_sha256": "40e050a247cf9ecccc6b657d678f4ff52cd3bacfe4ce6d9b6f9ac92a17fb6942",
+        "config_sha256": "4db4e6832ede8be3513e95b6933c7f79b36519c340f2de62bb48793111198e31",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "894903a002e1bf75d3847b9ae50979e51af1350dfbe88b8c632a9baed7fe78d9",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fentry-gen_blackbox-38f07564c9639347d11eca37__blackbox_ctf_v1",
+      "task_version_id": "05d09c55-ccdf-4d26-b06d-b851a2314a35",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-fentry-gen",
+        "version": "v0.0.3",
+        "version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595",
+        "data_id": "fentry-current-gen",
+        "data_version": "v0.0.3",
+        "runtime_seed_content_sha256": "588ad7513a70fcb7b9a6297b2f334a4a811c70e009b8c780726572c38fd0a50c"
+      },
+      "verifier": {
+        "id": "8a395522-62a1-4c24-8c66-eb8b88af3c7b",
+        "version_id": "c0e9bac9-3c14-400f-bc0c-9173a4c7abaa",
+        "version": 1,
+        "sha256": "9a070a5b1688d5d7b7c9022d49a12251697ec64a0191af7b7e280b678a5bb034"
+      },
+      "current_binding_sha256": "sha256:c118939275d4fa6618dc8f6ff089b98c2b1fd32f46e542ba1109031e1b1dfc5b",
+      "execution_evidence": {
+        "cell_id": "3e7e6426-0ccb-5142-9316-51012b2fa51e",
+        "session_id": "ff8f169a-be4a-42f6-a299-604d06201ba1",
+        "verifier_execution_id": "362f3144-95b8-46c4-8975-f42fa9a4db93",
+        "receipt_sha256": "b14eca65e3e451d832bf08ddf2e5c1ef41098963a1e6f0b6ca338931ff0d8d94",
+        "config_sha256": "6601da933bdf2a305de26a0073adf2634f58bb8c8eaa2399a993ff8397decb6f",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "463252263e4bdef57ff593e31cd1825badcc37fa950a61ed581f5378a2837c6e",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-f8d6badcc03f916a8d15b9d0__blackbox_ctf_v1",
+      "task_version_id": "0920e798-c7e7-4da6-9d5e-ebeba45ec05a",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-fira-gen",
+        "version": "v0.0.3",
+        "version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+        "data_id": "cultivacore",
+        "data_version": "v0.0.61",
+        "runtime_seed_content_sha256": "44fa2a84ce1195d69fa1a15683c9b523754d47236af0aea83be833d0091c36da"
+      },
+      "verifier": {
+        "id": "cd39a98c-e58f-4ab7-92da-50b099660aac",
+        "version_id": "9356b7ca-43b4-4926-a871-d9a95b41f6e5",
+        "version": 1,
+        "sha256": "a77c012521464da49eee1cfbd6441038bcf777c0145a63e0864bd46e3712803f"
+      },
+      "current_binding_sha256": "sha256:329549fe2dbf95b1f88d85b27bf505595e4312cca76c81dc7c8e4c0bc6333141",
+      "execution_evidence": {
+        "cell_id": "17596dd4-e3b2-58f5-9dc1-bd320a2af676",
+        "session_id": "a2df36b5-5e1c-4fde-9932-35f75079c6e0",
+        "verifier_execution_id": "4c5bf44b-37e1-478d-b615-bb2efa3f7b72",
+        "receipt_sha256": "5e10bd913ea42d36d806d132fd109b8ca806bbf46fade68a53e98bd89d3a249d",
+        "config_sha256": "d6155c48ca3a6b9960653f91f3729fe6299c6949889dac8e4624a5b879854082",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "241a2cad9c89e7c2cfd0cd11f19dee6c0ad279a202ff6c281aabbfc016a1c2d1",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-568ad16844c3398d57ef1eaa__blackbox_ctf_v1",
+      "task_version_id": "09a3fea6-f691-4841-9218-d04459041a1f",
+      "split": "dev",
+      "environment": {
+        "id": "cysec1-2-current-gen",
+        "version": "v0.0.3",
+        "version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+        "data_id": "commercial",
+        "data_version": "v0.0.9",
+        "runtime_seed_content_sha256": "732feb8ace71d524427d517478b2747451bd6a3949acfab3c720e97701b25d93"
+      },
+      "verifier": {
+        "id": "1c442e9e-0f19-4136-85f8-50098f07abda",
+        "version_id": "a5ca8451-f9cc-4799-bb75-f51fb753cd37",
+        "version": 1,
+        "sha256": "ad0d9f568022cbd0fc678dbb482b494bc4d9a36dbfaf700ee197418545be35b1"
+      },
+      "current_binding_sha256": "sha256:9f4446bc10dc49d96defb9a25aec46230fed8a440474271eb1a5694d0d8ba57b",
+      "execution_evidence": {
+        "cell_id": "405d23a7-a55b-54db-a6a6-2f731f4223d3",
+        "session_id": "dd4b2baf-f3fc-4ba1-bf64-188ca2802530",
+        "verifier_execution_id": "1af48efd-4932-44c1-9f6e-2d82ed59d124",
+        "receipt_sha256": "5a50f8135908af2fe22742213c0b0426afd83437cd74c69d17cd25f78025f4f1",
+        "config_sha256": "fbc40e1a4223d0a25aaa4cb6555640a08ce63c8ca5d8136570b480ca5fb67391",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "dd6da862f2a36505e118e06b1021f0b7bd06a39c5f0b9725b9a634e2ef15af26",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-ac3376172d9071d3d519f24e__blackbox_ctf_v1",
+      "task_version_id": "139ff10d-8c00-4bd6-9437-e6fbcccf2f4d",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-current-gen",
+        "version": "v0.0.3",
+        "version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+        "data_id": "commercial",
+        "data_version": "v0.0.9",
+        "runtime_seed_content_sha256": "99c9cdb47d8a18163f23cbfc4a97e98eb2868e3953c5803674ea04cd489116b2"
+      },
+      "verifier": {
+        "id": "fa2eedcb-ef04-4d3c-ada4-eda4ff53e34d",
+        "version_id": "07cd955e-acce-4807-84c3-b1eb5ee1a0c8",
+        "version": 1,
+        "sha256": "6ef0adaa4871435c5d1a36a5b2f2041188426a1243ff416112dbc1de67ac6543"
+      },
+      "current_binding_sha256": "sha256:d190d6883a85f28b0a8e3ea3bc51cf5438596e093cf746e393fb4495dc39250c",
+      "execution_evidence": {
+        "cell_id": "402c185c-b562-54ff-994b-e07a4f10179b",
+        "session_id": "3f2fdc8c-6638-4ae2-9838-a24afeb36977",
+        "verifier_execution_id": "cf5f8fb7-49ff-42f8-a233-42b474b7fed9",
+        "receipt_sha256": "836301c54221c2a5642c4d5c0613e536cf34006b7a2747c6ef0e7f815abed7f0",
+        "config_sha256": "0ee0c77796fd56a894bb5e6468504d7fd24b746399d4d7f5282cbbc22dbae6a6",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "3c56630adbda90f8dda281fba0f00311e015b05bff2263e14dc296e0a8a3190d",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-9db42d6bba9934e37106b1cf__blackbox_ctf_v1",
+      "task_version_id": "1407dcf7-46ad-4b82-8aa1-f88307dd8264",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-fakelook-gen",
+        "version": "v0.0.3",
+        "version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+        "data_id": "fakelook-cyber-gen",
+        "data_version": "v0.0.2",
+        "runtime_seed_content_sha256": "0bb85012055db5dbe82ccd000a97eeccd4096a24fb20f4f93681cdaa2a9e3ce4"
+      },
+      "verifier": {
+        "id": "fcda4d1d-f1bd-47be-b246-571addc1b33c",
+        "version_id": "67e0bb97-9aa8-43af-a8d6-141b3b35bcdb",
+        "version": 1,
+        "sha256": "1e9a7292ee116d1425dabd0033b8c933087eff3c80159f09d1dba25cb5ac47dd"
+      },
+      "current_binding_sha256": "sha256:77e51b9360525272bc8572d1774bc0304bc69d5c2faad8d8c65a47b9983bfcaa",
+      "execution_evidence": {
+        "cell_id": "ace818d1-87df-50d1-ba8c-32b2bfbf9a25",
+        "session_id": "8fa3a348-bdc3-4a7b-9b74-4825c292b476",
+        "verifier_execution_id": "2f021d26-5a74-41b3-b961-cfdf6930cef0",
+        "receipt_sha256": "ab9439c02d7fd101ae8c4e1c9231528566e7b392b422913bc3838eb95908c259",
+        "config_sha256": "8fb801a61d7e53f60c8bd85af2f00f391d83972dbeea49135dc17931fe1e24c6",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "98b564ed0ffff3a3ca91fbab0c51e1e2a7c3e99ddfac9936959d7826f303a6c7",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-3a7455937196b81cf5999fb5__blackbox_ctf_v1",
+      "task_version_id": "18079a9c-cb79-4013-aa08-54092c415165",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-current-gen",
+        "version": "v0.0.3",
+        "version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+        "data_id": "commercial",
+        "data_version": "v0.0.9",
+        "runtime_seed_content_sha256": "f11a84fb88c2b858bf96e441630bb8ccdb2f71222b723ea9365ae94f47869fc5"
+      },
+      "verifier": {
+        "id": "a040365f-9163-4252-9765-a79e042cfb84",
+        "version_id": "85238493-0d71-4058-8e70-dbc1e16393dc",
+        "version": 1,
+        "sha256": "11f1b6c43b9d062ad71d43ae7839d622da0d7415bf5bce5aff3b91fe5adf0588"
+      },
+      "current_binding_sha256": "sha256:f1c459f489afdd1cfdf14e9b2be1891d1a8c14d78b34ec1c49d5aa95201dba52",
+      "execution_evidence": {
+        "cell_id": "058fd69a-26bf-59ef-bb12-5824dd34f90c",
+        "session_id": "93cb5de9-ded2-4bd9-9364-3b6dd21bb1aa",
+        "verifier_execution_id": "7dac072a-6bb1-4958-bdd3-c80f023c9a19",
+        "receipt_sha256": "9b784ba458208106b7651ba4daa6a5a285c3826f933462c419bc907d31f4fcb9",
+        "config_sha256": "aa3929ad5bc09ac17639b9f0456ca0718642805625627e3b8e200f5fc5275c6e",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "92849e7a551c896547a28acfc6004629155dfe8d91f5d5f7963d4625709bbeec",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fentry-gen_blackbox-2bbcc2384a83e6635b6971dc__blackbox_ctf_v1",
+      "task_version_id": "195b1fca-b418-4920-983b-90c5bdfb904f",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-fentry-gen",
+        "version": "v0.0.3",
+        "version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595",
+        "data_id": "fentry-current-gen",
+        "data_version": "v0.0.3",
+        "runtime_seed_content_sha256": "bfe5fd298b5a0dce452ae44367e43ee5c8c8f0ac7e8b5160cda4037e4d13935e"
+      },
+      "verifier": {
+        "id": "9cfb75bc-4918-48be-be39-1d4a465915d5",
+        "version_id": "e3c4835d-45d8-45bf-b813-0e85ce2947cd",
+        "version": 1,
+        "sha256": "f7ec540c2f594971225be4076056b70e6ed02726c6a75de4c5ad53f2b69f3384"
+      },
+      "current_binding_sha256": "sha256:5cedcf550605d6e551380178e35d17080b8638607b401ccfcb3ed43147ec826d",
+      "execution_evidence": {
+        "cell_id": "7375c6ef-0eb1-543b-8f8c-85b79bc9c0fd",
+        "session_id": "f881a157-e49d-4c01-a5a4-2fb2ae63773a",
+        "verifier_execution_id": "dd8e950b-1bbb-490a-b9e6-b6744c21631c",
+        "receipt_sha256": "aac0e18947a6198cca05f4c7448ae1aebccb7038bbcd46b1edb0756deea7d47d",
+        "config_sha256": "375de4bac1a3b5471e98832530a6691ffd5e4a8d791547ec43627ce2d0bae009",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "9b6e303af749d12b764a961413b6c0ed0270c41b6d5f4b7b4e05c3937a86274f",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-124bb98758975c4aa3ebbe82__blackbox_ctf_v1",
+      "task_version_id": "1fdbcb5b-4582-47dc-a794-29e7a40682da",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-current-gen",
+        "version": "v0.0.3",
+        "version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+        "data_id": "commercial",
+        "data_version": "v0.0.9",
+        "runtime_seed_content_sha256": "9ad6f02e53e3327e21bd41e2499125d08f467bd28ca1fddf30592507bc69b8a1"
+      },
+      "verifier": {
+        "id": "6d16552f-d9d4-4fff-a124-3251092168ec",
+        "version_id": "f3b78302-9a1d-4651-8ea0-f9033c00c26a",
+        "version": 1,
+        "sha256": "543cc9ca9a9819b6745d5f436c58614687b155d732d9167d69d628ef9fad20e2"
+      },
+      "current_binding_sha256": "sha256:14cf2c6b3648b68896f1b1541c1d09c7d151702422cd87d68830bfb96e19a697",
+      "execution_evidence": {
+        "cell_id": "41fa4425-40b1-5557-a237-916bb2a34e04",
+        "session_id": "44557c59-a506-4de7-bf20-e2c4c74fbfaa",
+        "verifier_execution_id": "a139814c-939a-4851-baea-d7d50e4a268f",
+        "receipt_sha256": "3b3ff06a8ea9955cf2d1511b2c1c9b893b7b6982d559fceba197e281a8532c14",
+        "config_sha256": "571fcaa27090078af59c96331187e51ed7e25253cda39ac31d2a4d2b68751f41",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "ea03a86c524603412fefe286afb49d1669cfccebb3e9e023b8852ab58745d884",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-2bd5f9fdee284564d8ce5ea4__blackbox_ctf_v1",
+      "task_version_id": "25afa659-5e00-4c5a-9ad4-39779b59c5ef",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-fakelook-gen",
+        "version": "v0.0.3",
+        "version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+        "data_id": "fakelook-cyber-gen",
+        "data_version": "v0.0.2",
+        "runtime_seed_content_sha256": "8bbcdf1ba88a948107f107295dad37eeb59e68ff8fcbf1e6f00c3c9dd33fdae0"
+      },
+      "verifier": {
+        "id": "3e61bc15-e19b-43b1-abb6-4285ddd3ac36",
+        "version_id": "3e606747-2a59-4369-b97c-132868e0d4ac",
+        "version": 1,
+        "sha256": "3520b5218ee7b46cf7d1e910a0f59a593009ce95eef7c947ae1ecf6af6638a24"
+      },
+      "current_binding_sha256": "sha256:2fa0cd272e34615d22bc7c48cadb95e6f8ec34f1e8f9b1cac62a035ed8294319",
+      "execution_evidence": {
+        "cell_id": "04632084-ce17-58a6-8849-62cd0abcd4ad",
+        "session_id": "e85c2f65-ac7d-4e0b-a167-2f59709c0b5e",
+        "verifier_execution_id": "f20de482-a34a-4aeb-a739-143412f696a4",
+        "receipt_sha256": "f50e6a54dd2bacbc512662884161d215d8803ed57465e338e59f7efdccaba3cb",
+        "config_sha256": "79a80e31b397056808044f6249c64c03b4fbaeb2b37cc1beab1621f77d87a189",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "bcb8d145035ffe5f716b9f30228f11167c437603277593d84bb5d8b30bb9912a",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fubspot-gen_blackbox-bb5206a5ee510a8c571e6336__blackbox_ctf_v1",
+      "task_version_id": "2632322c-007c-42b2-9c93-d5b66850d6cb",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-fubspot-gen",
+        "version": "v0.0.3",
+        "version_id": "a1532a5c-6ec9-45bd-899d-24c0fe3d1df5",
+        "data_id": "current-fubspot-gen",
+        "data_version": "v0.0.3",
+        "runtime_seed_content_sha256": "e3cfbec21dae9985b747cd1c120627c870ee4d4b4f8190c24f08eef6e8a5b1c2"
+      },
+      "verifier": {
+        "id": "896edcac-d902-4e3f-9c5b-4f3bdf9adc17",
+        "version_id": "56ff1a72-4edc-4c92-9a2e-69030c94d2ff",
+        "version": 1,
+        "sha256": "fdf2a40aa4581a66d826f96906f2b4e7c1f5a6baacb6491489845bb2eb350c0e"
+      },
+      "current_binding_sha256": "sha256:06371d62c8889a683397ee82e6fbd21165994dfbfc963cfd9d13b62e3aa008da",
+      "execution_evidence": {
+        "cell_id": "090962e9-a56e-5c49-a061-5d5a70528f50",
+        "session_id": "dbfb070a-5410-4d9a-bac0-1f4c5b32fe4b",
+        "verifier_execution_id": "900fbfc7-2266-4fb9-80b7-7894fe5f7f8b",
+        "receipt_sha256": "4c7caa62274b04688200a684115ddbe716e5d99a5fc85287884ad86ed605a328",
+        "config_sha256": "9fcf74561e00f0c070db0b05832ed7dffd88a76add0ffb14db1f6a2a4b2cbaf0",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "c772df9e9f4d8e76ce7beb0904df067163e958bd061040ee0ca534480de7419c",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-3edc7da783b72884f0bc932d__blackbox_ctf_v1",
+      "task_version_id": "2b6f2798-c405-4724-9d33-e867ba616fc3",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-fira-gen",
+        "version": "v0.0.3",
+        "version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+        "data_id": "cultivacore",
+        "data_version": "v0.0.61",
+        "runtime_seed_content_sha256": "2cb3c5607ce785f7f0b6c22d1eb817546f3527e37ff68432ba6f0b6c6a1d145d"
+      },
+      "verifier": {
+        "id": "9d8542f9-6a0c-4523-8c03-8ba918f80386",
+        "version_id": "a2faae59-ec4e-4589-9d9f-ac8db91bf887",
+        "version": 1,
+        "sha256": "1d9c74957e688d5089618962a59e07afcdf35b8f6d2dd2f82f5c836bb9cf7ea8"
+      },
+      "current_binding_sha256": "sha256:24d44a1d8036fc12a2f4be37971fa3b6f46f85c87c42c87cf8c982ef9a566a8d",
+      "execution_evidence": {
+        "cell_id": "0525fcea-2f61-5da6-ba03-a0d04f494549",
+        "session_id": "f01edab8-7bf9-4c87-bc7e-d912e376836f",
+        "verifier_execution_id": "46dd9e78-32f7-4c7d-9cf7-4b1d1e37f851",
+        "receipt_sha256": "26bfaf6df5cefbdec5c91c1750929b57079137cf5de75cfd6b00dd1d720c8802",
+        "config_sha256": "f40c64aef95e357d3925ede14ffb859a93b857fe0f3b8f50a8ccf0c15f86eb18",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "f5c7f7f4b1008829cb21ebe30c3b2c9dc60ee0db28068b057135d6d023244a5f",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-529751381aa5ed41b3935adb__blackbox_ctf_v1",
+      "task_version_id": "2c62b98d-61e8-4216-bc84-c61bc4cd5ccb",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-fira-gen",
+        "version": "v0.0.3",
+        "version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+        "data_id": "cultivacore",
+        "data_version": "v0.0.61",
+        "runtime_seed_content_sha256": "1cc32c2499e95da078068c03cb109cafd6599faa51bbb3cc30c30901e7f1840d"
+      },
+      "verifier": {
+        "id": "5c17f6b7-ef79-4b6e-8dd3-29d2ba4f822e",
+        "version_id": "b369ae24-b8cf-4ba4-a6e5-2dfbc63c9178",
+        "version": 1,
+        "sha256": "efc92dc73244e5fbe5a20310bfd8340e5832b2b7be29e20ca863cffc60125031"
+      },
+      "current_binding_sha256": "sha256:28204fccf372bcef8240c32f6d0c3da5681c296f0fa0713a68d90b8304f880a0",
+      "execution_evidence": {
+        "cell_id": "047414e0-cb09-50e8-a0ff-de44116706fd",
+        "session_id": "7dcfb8ac-aeca-4e2f-9263-5b595e09f910",
+        "verifier_execution_id": "0312834f-b654-4cd7-a967-bc195f8b579a",
+        "receipt_sha256": "d7406dcb081e3ba9bf5506d9044eef0901f1bb27d4dcad9ee2d17bc844d889b4",
+        "config_sha256": "9743e12e99ba353c2a6f9357c0bec42cb9725899d3f016203b92a2d112db8af6",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "67757294ab8ff5254c5d082116204c7507fa7ebbe793049a04f393a0a796cb2e",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fentry-gen_blackbox-625d795f54976fc78cc5255f__blackbox_ctf_v1",
+      "task_version_id": "2cb87286-a35e-4ba0-a949-1d93dfbd229a",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-fentry-gen",
+        "version": "v0.0.3",
+        "version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595",
+        "data_id": "fentry-current-gen",
+        "data_version": "v0.0.3",
+        "runtime_seed_content_sha256": "3342354074486ef37ffab8bffc5c0568209e4a7814609a6364ba1a55625db3c6"
+      },
+      "verifier": {
+        "id": "9df2c7e1-dbd1-4fce-96ab-05b512336b22",
+        "version_id": "a4595e13-a325-4e54-84b2-b06886c170a9",
+        "version": 1,
+        "sha256": "1faa48becf2ef7b84feeb83c8750ce3a98f8c238eb543349029ba5ee6f84f36a"
+      },
+      "current_binding_sha256": "sha256:657a022ce4700e1c173f6eed3df29481bdb0a36161372a5789616beddd7133bc",
+      "execution_evidence": {
+        "cell_id": "22f5543e-d579-56a6-81ba-2816a0753ae5",
+        "session_id": "bef6e550-7847-4c5a-a8bb-7ab456b6bf05",
+        "verifier_execution_id": "97b162d2-9327-4fd8-a18e-04767b21c06d",
+        "receipt_sha256": "d96a3f56289b5619601b25e55ba7c9580e88452e92f79af7133303745f115312",
+        "config_sha256": "4196f70240139f6ab1307e6a617636d6e29fd017c99d9a88035ebefa691afd7e",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "aec8a747ac7b896bf0b37331552e64bf7776b28abb3f31c54beb4ede1aa69dc5",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fentry-gen_blackbox-c91d9987f2668308939c8e1a__blackbox_ctf_v1",
+      "task_version_id": "2df3b04b-87bd-4012-b5aa-e16d50698288",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-fentry-gen",
+        "version": "v0.0.3",
+        "version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595",
+        "data_id": "fentry-current-gen",
+        "data_version": "v0.0.3",
+        "runtime_seed_content_sha256": "67c62f637158659bcfc45e472d13ad15d97e8bd0123b30ff8b1cbabaf874a156"
+      },
+      "verifier": {
+        "id": "c712224f-3a2c-4aeb-9160-b5f38ea61ba1",
+        "version_id": "3dd483dc-bcf9-45c8-9164-4ed45c7fd2da",
+        "version": 1,
+        "sha256": "19bab31b803ca0c25bf982952ac09cb57c4f68465e2a6a43cafd615063088a35"
+      },
+      "current_binding_sha256": "sha256:847b1488f34775d0172b4875ad5f033183e7efdbf95438e7363ae18c27033ee6",
+      "execution_evidence": {
+        "cell_id": "09f0baad-d4ab-508a-bab0-a171b5cb4c1a",
+        "session_id": "7e8f49ce-f9c7-4d01-add1-d326f0f15e6b",
+        "verifier_execution_id": "357a24fb-4f7c-4b53-ad2d-f1c3cc77af23",
+        "receipt_sha256": "13ff75b0e49c0730c3f7a51beb01fdf89c64937b173931a64f37f31920879146",
+        "config_sha256": "fd04794b4a5f7c40f478140fe6a2ceb7d71eeb5505c8d3025a26606668ef7d85",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "5ed6f9953c8a060a600e6cdc063794c5b916178bab0f36702c632720e2087e6e",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-34787f9b18ae651884289538__blackbox_ctf_v1",
+      "task_version_id": "2e363dca-e74d-4855-a002-6761dc7f9f0f",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-current-gen",
+        "version": "v0.0.3",
+        "version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+        "data_id": "commercial",
+        "data_version": "v0.0.9",
+        "runtime_seed_content_sha256": "1feacdf9d76b44e0f9a7cab5b1c6b5d1021a94012458902794af7ead5fe1bcc9"
+      },
+      "verifier": {
+        "id": "b6ee61e0-e5c2-4336-809c-23ca70f8ef42",
+        "version_id": "35e0232c-0dd5-4726-9f9a-9ff1f892788a",
+        "version": 1,
+        "sha256": "b4e1ed59cf3a153e1b5133db929bf1c272d6f6fc33714633b7cf883d919caaa4"
+      },
+      "current_binding_sha256": "sha256:f4bb69ac2d258bef24f4e8435019c1c38675e7d1ad36c9eba22d943726621446",
+      "execution_evidence": {
+        "cell_id": "39e83a1b-3331-5011-b1be-3a94c982f277",
+        "session_id": "4cddd83d-6f6e-4844-98a9-c8841b4ba25b",
+        "verifier_execution_id": "fcb3371c-f054-43f9-9b5c-36e928eae52c",
+        "receipt_sha256": "e6c50c965412b98e0a270a4951589d89524bf882045cb3289481bc05982e9d14",
+        "config_sha256": "7e0ea8be50dc79753872cc05accced7046acd368a7f46a1d5c6c792385f89d56",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "39d87376163921d5fb0609a08622f7884063ce1e2bf5598ee06a06e5c5e617d9",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-9d641429faef16a05bff575e__blackbox_ctf_v1",
+      "task_version_id": "2f2681bf-c1f7-4056-b6e4-cb2e5058f027",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-current-gen",
+        "version": "v0.0.3",
+        "version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+        "data_id": "commercial",
+        "data_version": "v0.0.9",
+        "runtime_seed_content_sha256": "6d383be7392aea6862d7174184bae3a89d86c91f5df50a4ef5c89fd56975aaa3"
+      },
+      "verifier": {
+        "id": "c1a25a89-8cab-4647-a23b-f9a05ab66f57",
+        "version_id": "34fc0b2f-6434-4a15-a295-bb5c9315c1eb",
+        "version": 1,
+        "sha256": "578af4378493ec9a2ddaa20b1d7d9becd2ddcbd554bbca1da0e305be2eda2417"
+      },
+      "current_binding_sha256": "sha256:0e5c85c495fd814a3dbc8330a67becfd37629a2a07360cc14acfc1a5d19e5dc1",
+      "execution_evidence": {
+        "cell_id": "0c3cf11c-b0bc-57e7-a61e-0ee1f2b2c338",
+        "session_id": "04f3c9db-15c3-44df-b966-5e4e2760a1b2",
+        "verifier_execution_id": "f0147dd8-b4e1-4839-8a0e-ec1311f88b97",
+        "receipt_sha256": "a9bf523ef91783e3d9bfae492b2349ab028a96a1f57fa03c9c4e6f758982a850",
+        "config_sha256": "6c639cd66b9c4d25452ab10ae22e60aca2002095879f0f58de328da31bb14c48",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "46925d944765b0bbf3ad5c995e7054b223b898976d990fa03b78490a9a1de37b",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-7317189e8fefb9033c5be097__blackbox_ctf_v1",
+      "task_version_id": "2fdc9511-f5fe-4386-a4a5-a5a16a30f359",
+      "split": "dev",
+      "environment": {
+        "id": "cysec1-2-fakelook-gen",
+        "version": "v0.0.3",
+        "version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+        "data_id": "fakelook-cyber-gen",
+        "data_version": "v0.0.2",
+        "runtime_seed_content_sha256": "a82704e9234d6c22355f72beb22203df3bd502a3237531a718625a4505f1c82d"
+      },
+      "verifier": {
+        "id": "d02d8fe4-9ea0-4c0c-916a-10db357f5fb5",
+        "version_id": "928e5c13-b15a-412d-a037-fbed7389572a",
+        "version": 1,
+        "sha256": "69186bf09e5f1db90263a22f22c3d7960581495480cc7f739d07f888d2e3845b"
+      },
+      "current_binding_sha256": "sha256:5fb54058607259ad3d496d4ea6cd40c586df2f23f62682a353537c03bae8784f",
+      "execution_evidence": {
+        "cell_id": "c8190bc2-fe98-5fc3-bc0d-4a2067b277a3",
+        "session_id": "e29b7798-4c7f-4740-95b9-12236cbb87e6",
+        "verifier_execution_id": "4aa72d57-a5b4-4af7-ad09-7de70a7f3478",
+        "receipt_sha256": "306717301f54c434b4087e01f2d4ca16d82493aa01bd56c86ef51725641c3f4e",
+        "config_sha256": "84ebfaa4546e5530cee04c54b53b34c5a361a05e89169cd66b749c59ebd6b163",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "477b39e8f4252bbfff431a4e996b96ddbf48c889041a5373b01376dcd644a333",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-f1d8a0c49352bdf40faf015f__blackbox_ctf_v1",
+      "task_version_id": "33527414-ced7-4005-9c5a-eb9c211a32da",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-fira-gen",
+        "version": "v0.0.3",
+        "version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+        "data_id": "cultivacore",
+        "data_version": "v0.0.61",
+        "runtime_seed_content_sha256": "9da5603574d29a96a87cd9dca812ff1d8d089f713ef1dff0e6417ee1c9d2c851"
+      },
+      "verifier": {
+        "id": "252eb5ce-7383-46e1-ac1d-f1a389362d7d",
+        "version_id": "db631382-f3ed-4c97-b887-27a510cb63c2",
+        "version": 1,
+        "sha256": "d77228dd5ad954a5ffc99c6eadf49f896288d9ef7836f87b09d0fed9e2d3a788"
+      },
+      "current_binding_sha256": "sha256:afc5fd2ce5efd52ef1fa0f9ff4e0f00c060a568fda7a557630190cb3378bb9f5",
+      "execution_evidence": {
+        "cell_id": "8fb23c3c-4fbe-599d-b496-272c29017775",
+        "session_id": "ce16f2ee-ffe1-47ca-aea6-afde605f197b",
+        "verifier_execution_id": "be80758e-12f2-4496-90ee-61f5da7d41f6",
+        "receipt_sha256": "88557129f05095feff31a867581338fe2013544309015f01bc8e8634d451ed71",
+        "config_sha256": "835843386c22bdec30b8885e6b4782a6f696fc530e6f2463f9b0d87461434210",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "1fc9075bfc07d8794e7c81c7758f1e65b0b61c7f765151602e89a2c7f8a76d81",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-c68da3536fee9b4c6f6ef490__blackbox_ctf_v1",
+      "task_version_id": "36dd3619-68f1-464a-859a-9eccd7c70994",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-fira-gen",
+        "version": "v0.0.3",
+        "version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+        "data_id": "cultivacore",
+        "data_version": "v0.0.61",
+        "runtime_seed_content_sha256": "310f9a3c487beb5158d0af3bac87445975785b79be7661ea146e57c601e74c62"
+      },
+      "verifier": {
+        "id": "3ca8da6d-11b4-4fb7-8e06-cd1ae4d527fc",
+        "version_id": "6ed473d0-945a-4ef2-8288-689231181a1d",
+        "version": 1,
+        "sha256": "eddedf5848cb6d4d05d0dd6f226cd4df3138463d727a4ff02f8d5a39252fb235"
+      },
+      "current_binding_sha256": "sha256:6a40739225c47008e1655262c1d29e88764fdfddc09708a4ad69b54a042d1973",
+      "execution_evidence": {
+        "cell_id": "3cee91e3-ad02-5018-9dc0-c66330edbe1f",
+        "session_id": "c3ec9c42-3130-4514-acfa-21cbab3aba3b",
+        "verifier_execution_id": "cdf2197e-bc77-448b-95d8-acc137482168",
+        "receipt_sha256": "138bc302ca11ff02dc155f11f1367d749c53a9749628598349523f11e5f72cbf",
+        "config_sha256": "67a844b1bcbb6667c5d5f053c38bd32df91db934788b87cf93b05a4d31ad8e07",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "4488c04c82b2ebe1e605c152962f4e084f6423c10ba59284279cefe73b4b2496",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fubspot-gen_blackbox-438e3127ab9af7efad692398__blackbox_ctf_v1",
+      "task_version_id": "383a2b61-e82b-4426-9a2b-d5372c92e346",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-fubspot-gen",
+        "version": "v0.0.3",
+        "version_id": "a1532a5c-6ec9-45bd-899d-24c0fe3d1df5",
+        "data_id": "current-fubspot-gen",
+        "data_version": "v0.0.3",
+        "runtime_seed_content_sha256": "12927a1806dea8bc3535eda3c6810f121829005849a2be81e991b4ac04b567c6"
+      },
+      "verifier": {
+        "id": "29b6c287-f289-4a2b-83db-e03e95f7a916",
+        "version_id": "17cce977-3fa0-4676-8ca6-c7abbde2dc67",
+        "version": 1,
+        "sha256": "01d96fc01f198d4d66b51821c4a3b82b2e43d4b1b2b84a1d1136d6b9dff33536"
+      },
+      "current_binding_sha256": "sha256:f640c5e521e4c137a5fa44eb71e5a6e3186450cb4fc9384ebf982e23b35754bd",
+      "execution_evidence": {
+        "cell_id": "13bcac43-d498-53bc-ab37-fc8f4b273975",
+        "session_id": "b9e16949-06b9-4cdd-8801-9b3911929fb7",
+        "verifier_execution_id": "2e318964-7b42-4724-b716-445ed4071250",
+        "receipt_sha256": "e3bd8895f7c7138f66ee35dff4f876cf2f9a780e07887673f1e46892fe0f1e87",
+        "config_sha256": "800bf791b857f765a6c2ab29c888ccebd1cdd8d41a52fb5ceb20f6cb16b9ba8f",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "a0e57e0ed0bbe9fc41cef08a69af381dcdc5ab500b5e6081761699fafbc70e33",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-72f3c039c2ee3e89c7e5bf6a__blackbox_ctf_v1",
+      "task_version_id": "386dff0d-6a22-4654-ba05-5262f61483b9",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-current-gen",
+        "version": "v0.0.3",
+        "version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+        "data_id": "commercial",
+        "data_version": "v0.0.9",
+        "runtime_seed_content_sha256": "6a588099190e6cdf852fd8490f375535ed303d0c407d1b7a19074900fcf48e09"
+      },
+      "verifier": {
+        "id": "9cb35a9b-894e-4b1f-b558-4888adc195fc",
+        "version_id": "13d7018c-6615-4339-a31d-1af9f4c0fe20",
+        "version": 1,
+        "sha256": "e93e91611a866585318e52eb5f78486c7e0f0f7e45eb4b2e6bd84bf169060584"
+      },
+      "current_binding_sha256": "sha256:a54203bc0def0443dca3fe14902ed040d7eed510f7ffea1b12b8ed5659019928",
+      "execution_evidence": {
+        "cell_id": "24527277-5e79-5afe-a1a0-e1d6ce7a59bf",
+        "session_id": "64f93e59-509c-4ef0-8496-d93822466def",
+        "verifier_execution_id": "3c1b0190-acf9-46a8-aa85-60c92d86cb56",
+        "receipt_sha256": "ed0be33a5fd67c17506703807502219b1f595c4f0b61cb8cf25c1a28b0eccd44",
+        "config_sha256": "e0ea23b59b05e9efbd45e551981bb0d362b28fd1a80345d272837e0bac153ae3",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "faef986deac31606dd3ceb41cd62f22f6da970506b0151afebb79960363b2083",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-034abd32497f89b7ceafe6a3__blackbox_ctf_v1",
+      "task_version_id": "3981d848-0689-47da-8f44-9f7e2132c3ce",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-fakelook-gen",
+        "version": "v0.0.3",
+        "version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+        "data_id": "fakelook-cyber-gen",
+        "data_version": "v0.0.2",
+        "runtime_seed_content_sha256": "537b69603479168c5ad8cc64f570803c630a7ca87bc7c9df55760ffafedf5d9b"
+      },
+      "verifier": {
+        "id": "ec471908-d6f9-4fc7-989e-5b97e0399f8a",
+        "version_id": "1df3619c-742a-453f-8c2a-c9ff70ea3875",
+        "version": 1,
+        "sha256": "b09cce025034471a4a0366dfea509122b85f0e15813d500c9283a2c05492bb8b"
+      },
+      "current_binding_sha256": "sha256:ee7b5adff141338b9b2a0e8f5f39ecb636dd4cbb0babe278d4fb036260d1d407",
+      "execution_evidence": {
+        "cell_id": "4b53260d-c7da-595c-9497-55671dc977c8",
+        "session_id": "10ae8544-a3b4-4a99-9e7c-2dc020d56167",
+        "verifier_execution_id": "cf2f424e-2d02-4137-b017-a5abb86cb87b",
+        "receipt_sha256": "b527dc53fe124a50d2bdc40a563e155661a34ffa29641a17d2e63e296029e6ea",
+        "config_sha256": "832fe2765a72c8ea11c898f709bbde389c744a9d92646b25fb15cd76b6e1851a",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "219637f8d8b212981077ae21de49a3c626c9f23eea8a81fca0e2a901e9ab9e3b",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fentry-gen_blackbox-ebd29ca3d4ae284704202ebc__blackbox_ctf_v1",
+      "task_version_id": "3aafc5a8-2144-4bc3-919f-fcbbebd9f0d7",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-fentry-gen",
+        "version": "v0.0.3",
+        "version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595",
+        "data_id": "fentry-current-gen",
+        "data_version": "v0.0.3",
+        "runtime_seed_content_sha256": "8e363a79ba982d48af51443c6c43264e034bf5242390a31f14178a199b667d2c"
+      },
+      "verifier": {
+        "id": "4453ceb2-53bd-4684-8c7f-8f9400e04e9c",
+        "version_id": "a6b7d56e-9e40-47ec-b484-152fa7661ca7",
+        "version": 1,
+        "sha256": "fe772f7a6daeee1c34def9f4661c93b25302eb0157b50d9806f7021bc3ccdc1d"
+      },
+      "current_binding_sha256": "sha256:182a5d0ae85bcf6196de110e3be5f0769ec704ced55b4ba4a9115eb8a3eaefa0",
+      "execution_evidence": {
+        "cell_id": "df1525fb-70a7-5b14-ba5f-fc60268a1a00",
+        "session_id": "e0f5ce92-3e43-4a0c-9f9e-bc18d3c24765",
+        "verifier_execution_id": "ceb6e241-4cba-4aa0-936c-2300c6a85b3a",
+        "receipt_sha256": "42400cf2905d4d77e61b8e9d10f88c3a7e18890dc1172685b8031acd4ff40b64",
+        "config_sha256": "3049a7d881c31ab1bea74cfe82478f34a819ca3c6e052c8fd00f0a9af98b5420",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "94c4a4a27d980a8909f61070e3c0fe47a77c64aab62912b634e4b8c574e72d6a",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-7a43a87d867eca1312af0a8f__blackbox_ctf_v1",
+      "task_version_id": "43dc2c52-f283-4454-8987-69c6cbbd4160",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-fira-gen",
+        "version": "v0.0.3",
+        "version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+        "data_id": "cultivacore",
+        "data_version": "v0.0.61",
+        "runtime_seed_content_sha256": "619764e6797089dfe9633e129b60dd612867ca53df031e72fe94ccae9fc026ba"
+      },
+      "verifier": {
+        "id": "25054606-c53e-426b-9ab0-f87ab5bd771a",
+        "version_id": "f8f59a37-630d-4046-bb66-39f3d50a27f5",
+        "version": 1,
+        "sha256": "593f52405c29d4e64081ce8aa178f94d0c2794fdccb38eb9c0792c763bf219fc"
+      },
+      "current_binding_sha256": "sha256:4db83d4c2a65e7ce25b1ff22c91b1e8b8b15adea26883aeacc3f14023c2dc57c",
+      "execution_evidence": {
+        "cell_id": "93e4a959-26fe-5c47-99b0-5e9bada174ec",
+        "session_id": "800e1fe7-8cd4-4c6f-a956-230cbdbceada",
+        "verifier_execution_id": "fe363993-d60e-44f4-8dfa-435f30356272",
+        "receipt_sha256": "dc88b82ae7c1a9846ea622719f1e9a8d7f9b1776724e9bdc0ab3ecb1eb7f9a22",
+        "config_sha256": "b5901eb090c3a9a3bf843ebc25e9649b994edb88a226ade616fa17d0f01499d9",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "56cf379202852c3f061a4aaf8b897985e9d75d855785e81f641ef2c9b062e018",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-136118e493e2e587151adbad__blackbox_ctf_v1",
+      "task_version_id": "45c6cd9f-afef-4e63-b1f8-496c52e98f01",
+      "split": "reserved_dev",
+      "environment": {
+        "id": "cysec1-2-fakelook-gen",
+        "version": "v0.0.3",
+        "version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+        "data_id": "fakelook-cyber-gen",
+        "data_version": "v0.0.2",
+        "runtime_seed_content_sha256": "cec9205f77ed676118f30edd1994378d4b2cccbb41c1837a2a7aa9c8a11b1f1e"
+      },
+      "verifier": {
+        "id": "a7a7aade-7dbf-4b1c-8102-6c09d2536c16",
+        "version_id": "d253ab14-8ab8-4656-8f64-293a4d91badc",
+        "version": 1,
+        "sha256": "b5292526e938cf1d172598927ae2638e56cfea5e533589723f388fc1e28f80c6"
+      },
+      "current_binding_sha256": "sha256:db2c94e02fd3911e8b417c38f10c73ce6beeeafeb74d29ac5aec008ffb80e6ba",
+      "execution_evidence": {
+        "cell_id": "7ec1b2f2-13f8-5204-b900-7632b672138d",
+        "session_id": "eea82ea8-6c4a-4d78-9717-3f79dc58e23d",
+        "verifier_execution_id": "f9caaccc-9faa-4764-bebf-a2ac90a283c1",
+        "receipt_sha256": "2a902699cae93605e9d3524cd9ba9ba9576632e84650cb963d7e556716d1bd57",
+        "config_sha256": "d28262e67e09eb145206d4a9002d9cf534e29a003ff340cd941dd19d84b36d13",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "a60676c067cea47c8cca74b151e1e94cd0fa6c61bead2d31447fc9a8b053fd4b",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-rops-gen_single-atom-confluence-refusal-title-disclosure__blackbox_ctf_v1",
+      "task_version_id": "47180c40-447d-4b8c-9387-ca8bae891e46",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-rops-gen",
+        "version": "v0.0.984",
+        "version_id": "5d180319-567a-492b-8c34-b24baab505cc",
+        "data_id": "current-fubspot-gen",
+        "data_version": "v0.0.3",
+        "runtime_seed_content_sha256": "b05e174cebb64627290bc6166161b14bd050568c7376836ddbab06277bb69feb"
+      },
+      "verifier": {
+        "id": "a7010648-386f-402f-b9ff-05e984749e34",
+        "version_id": "7551e63e-8160-432e-b273-8d759d7df871",
+        "version": 1,
+        "sha256": "1f9925f4fb575b7653bc499a09c5997aa350d0ea242ea6ef13c0c1be65ce21dd"
+      },
+      "current_binding_sha256": "sha256:25b275143c1c02c55ded11241572c1c971d5ebd72525997c7a27b12c4e517c7b",
+      "execution_evidence": {
+        "cell_id": "7f7c968c-380a-5faa-9080-8a48347a649c",
+        "session_id": "19009ec7-124a-4921-959c-5a31ebb4b6ce",
+        "verifier_execution_id": "bf682372-af19-4301-b0f0-da8a347d9f20",
+        "receipt_sha256": "0bfc249ee63aa8b00dd90f13c389ea13af05c17f6278e79c700923b3e0f270d8",
+        "config_sha256": "40a64f11a1416a9a01e7d124d73cbaefe83c170c155164917d211618f2b50a0f",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "c64f215221267e13f9ade01f00a7d403f1b1a09b6343fb044056937756c034b1",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-96331d7b7fd4a38983ccab2b__blackbox_ctf_v1",
+      "task_version_id": "47483c98-ec42-4543-89f3-555a33e8f820",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-fakelook-gen",
+        "version": "v0.0.3",
+        "version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+        "data_id": "fakelook-cyber-gen",
+        "data_version": "v0.0.2",
+        "runtime_seed_content_sha256": "acf011daa6465a80683fb74e8bf3653592ace1ef0e8ff1206bce331e96ea77b4"
+      },
+      "verifier": {
+        "id": "c0df80bf-3162-43ec-9dac-81251301b9c8",
+        "version_id": "d26d2cf1-624e-441b-9904-0202b1df24fd",
+        "version": 1,
+        "sha256": "b76a862c44e1e3efb8d92a2c0aece3f01a5897a814371bb8a994dcab8ac1a683"
+      },
+      "current_binding_sha256": "sha256:e19952a2360552cc9a65b6a6797877375e76c9810fe5c90e12ed4ec2f7f3ff9d",
+      "execution_evidence": {
+        "cell_id": "f6baf1fe-af0b-5ac7-9562-34e059c29e24",
+        "session_id": "ba7fae93-408d-4e15-a872-a26e997c0144",
+        "verifier_execution_id": "6f73758b-315a-46e9-9d1c-ce94615fdadd",
+        "receipt_sha256": "5fc8e90985c5a912d7676ddbe10b8d86bce4dff21796d1894459ed329238bf94",
+        "config_sha256": "30e692a5482b0d2d8ef84c874a7c168a3fbdd094ad9affb4daf0e2e526ad7447",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "faf5848b7bb011463f57ee9a10f03bdad5b88d3b5d2233e760ecefa536b1e320",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fubspot-gen_blackbox-3e95b3814ffa6ad7be96940b__blackbox_ctf_v1",
+      "task_version_id": "484625a1-a0ee-4e12-b566-40eccc26802e",
+      "split": "dev",
+      "environment": {
+        "id": "cysec1-2-fubspot-gen",
+        "version": "v0.0.3",
+        "version_id": "a1532a5c-6ec9-45bd-899d-24c0fe3d1df5",
+        "data_id": "current-fubspot-gen",
+        "data_version": "v0.0.3",
+        "runtime_seed_content_sha256": "49d7927aae9ff03b6128ebd8772d982b6f99b299fbe9b23e20931951b8114373"
+      },
+      "verifier": {
+        "id": "0505d80e-e2ca-444c-92bc-89c620abe61e",
+        "version_id": "0e172037-620d-4d69-8822-016f79a7884b",
+        "version": 1,
+        "sha256": "89c96129651266be6fa25d42433026435dba18bd2433775bcaf2fb4418eb9554"
+      },
+      "current_binding_sha256": "sha256:5c45df3f98d73bf5feb99e1cd0894b6cec0b4ba61799f660e4c252531efa7842",
+      "execution_evidence": {
+        "cell_id": "04cf13d1-f073-5392-8232-d4be35afa385",
+        "session_id": "fdb8c1e3-a0a4-472b-8476-de03620a2a51",
+        "verifier_execution_id": "8400ab34-007e-4e99-a92a-5180cac65301",
+        "receipt_sha256": "67897ee45d73c60221b62fc04edb7e38c00dfa7d04e7ac8df09982cbdcacee23",
+        "config_sha256": "95bc94cd4408100d00a6ad990118cb1b53937a930cb9d1ebf2fa776b9f23fbc4",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "273a5ad1e8cc4d233c2fc6e6dc96706f155b54fe3f94834e329fddfc2056a24d",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-aacc90d872cf2f38171417b8__blackbox_ctf_v1",
+      "task_version_id": "493bc3d8-7806-4e38-9bc3-e964a5c26f5b",
+      "split": "dev",
+      "environment": {
+        "id": "cysec1-2-fira-gen",
+        "version": "v0.0.3",
+        "version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+        "data_id": "cultivacore",
+        "data_version": "v0.0.61",
+        "runtime_seed_content_sha256": "7361b66ac4f5f12a9c7b2528cc72f0bc88aeba4ba30522638d731338966bbfe4"
+      },
+      "verifier": {
+        "id": "26fe0668-fe6b-4ea5-8294-7df74fa32d62",
+        "version_id": "198b936e-8e77-4fc9-b4a0-54a5ee36226b",
+        "version": 1,
+        "sha256": "44194416b2068c8eac3bfa9be9e37328180c5c4d008b15a0bf9826fdecbc01fa"
+      },
+      "current_binding_sha256": "sha256:fb43fa35ac48a09423f1100921a319b6ed82f467f7056abcd131b02698ac0d68",
+      "execution_evidence": {
+        "cell_id": "2313e46e-38a4-5d95-abfe-da6ffd30ad0b",
+        "session_id": "fe05cd36-d75c-4616-ac46-9016b6fc052e",
+        "verifier_execution_id": "63a8302a-f4e1-4492-8c6a-a2872b5c1e91",
+        "receipt_sha256": "ea6da6febe963da1246e1d1069c9791a444da8d77b766b1e3de2910a70495a7a",
+        "config_sha256": "5699be3eeb82d950df153bd6cc8376a876420cde9e5218783dfd20eb76aa5a07",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "ff98fb6f21812bd27e610c22247b2b11df451651a93e200f6decda4bef71e2a3",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-30fe0df0968b9561fa5f987b__blackbox_ctf_v1",
+      "task_version_id": "4b134baa-bbd7-4448-894d-2444e89a46e7",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-fira-gen",
+        "version": "v0.0.3",
+        "version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+        "data_id": "cultivacore",
+        "data_version": "v0.0.61",
+        "runtime_seed_content_sha256": "f6b3eb0d41321bf7525d52b0d75155f1ae051d77d877d7cf4c2188dd7949e733"
+      },
+      "verifier": {
+        "id": "d969e6bb-c693-495c-b1ae-5ac3fdfbeb51",
+        "version_id": "ff54c4d3-0b28-4a41-bb0a-220f8b1ede89",
+        "version": 1,
+        "sha256": "e26c02f8568a9fe8fd1c2edc6ee3171c56cd2abf4aaa661e119b98ad5e85d9c9"
+      },
+      "current_binding_sha256": "sha256:2138224fc355d5f5355fc69103dbc200364a67de389bc5b4b6ec3a63e0d3588b",
+      "execution_evidence": {
+        "cell_id": "3079a015-b07e-59bd-8397-e607500d563c",
+        "session_id": "725d273d-b56b-4220-a531-f996bf49e4c8",
+        "verifier_execution_id": "fef68f47-cbef-4094-93c9-dd194588bfd8",
+        "receipt_sha256": "70608e8c811acc220cb20cfb16ed025eb1461299533a51c74a946a336b70988f",
+        "config_sha256": "b5f66c2bded1ac30a5ae7d98d469639ccb2f142f873ff9a70fafd5aebf8dc3b0",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "559b76789e174df96be452302cd9bf081267c495f6c50d895950566d265efa39",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-f464547baf18c14b28013c66__blackbox_ctf_v1",
+      "task_version_id": "4b48f9cf-a5c4-4e86-814d-ebe86957e725",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-fira-gen",
+        "version": "v0.0.3",
+        "version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+        "data_id": "cultivacore",
+        "data_version": "v0.0.61",
+        "runtime_seed_content_sha256": "e0389ad150f488ec2d188d64285080c20c7b506afb70c6b3a4fe152855f04cea"
+      },
+      "verifier": {
+        "id": "99a8808a-2f05-431d-97f9-e0bb417d58c0",
+        "version_id": "cd51e6bf-ae76-435f-ad2a-a0f5c4bdeca3",
+        "version": 1,
+        "sha256": "f61b8d315a315407eb3782123ce6affadf51917f02608d8d58f372bb9f6d1a3f"
+      },
+      "current_binding_sha256": "sha256:16642d90f95cf82d63117af8f7b591282e2beaac33bb70fbd86804a5f16826a6",
+      "execution_evidence": {
+        "cell_id": "24dec206-7f67-5f4d-ba6a-0be9791688eb",
+        "session_id": "f0b5aab7-0ebb-49f8-86c0-22201312b3c7",
+        "verifier_execution_id": "87e47e27-1b30-47da-a987-782fc33f9811",
+        "receipt_sha256": "6361038587968a61b045caf91568d751dd389de788d6f9e2920bc21d8aefb600",
+        "config_sha256": "b1acde438f73e2a9a0a0b9ec5959a6b6a3f312b0037514034dde54ee4ebc4d1b",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "bc6838cdfd70233e7aca18ec942ac20c9235a4ab95a34b3b6be199b507e6db84",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-c067bea84afaa8b8aa093234__blackbox_ctf_v1",
+      "task_version_id": "50ab8f20-7fc5-4e9f-afad-9fb03fae9b4d",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-fakelook-gen",
+        "version": "v0.0.3",
+        "version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+        "data_id": "fakelook-cyber-gen",
+        "data_version": "v0.0.2",
+        "runtime_seed_content_sha256": "a952ec07b8c3fd63ad5ac3e7e1f4fc6d4b04e85a7f52493c8bff4942a6eca4c3"
+      },
+      "verifier": {
+        "id": "262b579e-92cd-4ec7-9a3d-3e02df49b9ce",
+        "version_id": "09410628-cabf-4855-ae0f-f3a7a20dd2da",
+        "version": 1,
+        "sha256": "d46612fb69656a073d1a91e7ba2d01c43469c4b0f39376a98f90552f1a0d62ae"
+      },
+      "current_binding_sha256": "sha256:3961f085bde8a7229f5c5d841ab8fa4579b36a7b6ad882d3cfe3279821068107",
+      "execution_evidence": {
+        "cell_id": "3eedbbd5-4db3-5a9c-b315-671fcd0cb8f1",
+        "session_id": "aeff5c91-37b5-4e22-bf58-d13ac26e474b",
+        "verifier_execution_id": "db22034a-7439-47ad-ac0e-04edc927bbc0",
+        "receipt_sha256": "b6fba6b0bbcb20ca2bbfbea6230ab31dbc7bd8c2e728b2c4c2b82709a5f64963",
+        "config_sha256": "19725902b80881ab615b32a9fceaa5bc2fa44ca1abcc4b52f8a12190c87d2475",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "10b4d8d3fbb2b76fb2837d30cc3e4c734d5edd09a6ed05931b2a0058840ccd58",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-1c280f0d27547720dc6b4287__blackbox_ctf_v1",
+      "task_version_id": "5144890e-3515-497e-aaff-044d062eb664",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-fakelook-gen",
+        "version": "v0.0.3",
+        "version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+        "data_id": "fakelook-cyber-gen",
+        "data_version": "v0.0.2",
+        "runtime_seed_content_sha256": "0a7ee314d5cff7ecc54f729fba8c58d1a394f292a55a27584e74317547bba06d"
+      },
+      "verifier": {
+        "id": "4f707030-b10c-439d-a625-b3c62f1ef685",
+        "version_id": "c7926270-0587-4f14-98f7-d24fba4e898e",
+        "version": 1,
+        "sha256": "5609084b5bbce8e87b34d9da6f75436483ddbe2a8d4d19c8be7ab9102206ceb2"
+      },
+      "current_binding_sha256": "sha256:46303fb5a069e9ada508ce25ab183c5d8fa729dc9a8e3ecfc6a3dabc2a0afcb2",
+      "execution_evidence": {
+        "cell_id": "3a18753a-8bfc-5e01-b927-f4a994aee593",
+        "session_id": "05b31651-43ff-4311-863d-497678fe3b32",
+        "verifier_execution_id": "6f9d84ec-1068-4c15-93c6-e6c30567ec0f",
+        "receipt_sha256": "f2e41345a35d995472d28601619cfd905d1a727a85a23e3537b243292bc73973",
+        "config_sha256": "21eace81f5373fc5235cbe7406049a1fdd4830faea5b639e29494d36b995bf81",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "826d7b8ea0d5956d3272895582d1ed00c01f836495a95fd249cab6cb285c28d6",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-e65cdc976b0a6686b51ce423__blackbox_ctf_v1",
+      "task_version_id": "51b23680-27fa-4bdd-a077-16669f3f0e18",
+      "split": "dev",
+      "environment": {
+        "id": "cysec1-2-fira-gen",
+        "version": "v0.0.3",
+        "version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+        "data_id": "cultivacore",
+        "data_version": "v0.0.61",
+        "runtime_seed_content_sha256": "0e429669e329ac1267f322038b01e5d0acb546f53c8fa55fed0e9055e497de1c"
+      },
+      "verifier": {
+        "id": "c7824cf9-c33b-4c7e-b616-fcdab137e610",
+        "version_id": "a6d22d82-48df-4631-a37b-a6046e6da8df",
+        "version": 1,
+        "sha256": "3b2a7f7d2914103059eb56c98d6a003d331d002a7f2876fdcc5b7284e74a14cb"
+      },
+      "current_binding_sha256": "sha256:f676d7727872428c6cf1356f543bf9d27af68264f1763b75a18917a03c777b53",
+      "execution_evidence": {
+        "cell_id": "0f3f1414-2c82-5aa3-8d90-cd4b736c0307",
+        "session_id": "4127ad83-0535-4449-80b9-6bf719b68833",
+        "verifier_execution_id": "35858aea-9eda-4263-8559-2ab558d986ef",
+        "receipt_sha256": "e80be3a663c4fde4fecb4a79161492ccdf57a49bbdccb5dedc3d068fc76f5f08",
+        "config_sha256": "b5ae54e2e7a8a1b6efc94d49182c800f10211cfbc972ba040c7142dc978ab4d0",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "f7e037451c86372de01bccd486adb5d06ee85d0deae80300b493d41ebc5e3b70",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-d59f9f2960c2fdb1e2cdd8e1__blackbox_ctf_v1",
+      "task_version_id": "5287e180-64ea-487b-982a-d08a38c05fa2",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-fakelook-gen",
+        "version": "v0.0.3",
+        "version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+        "data_id": "fakelook-cyber-gen",
+        "data_version": "v0.0.2",
+        "runtime_seed_content_sha256": "99a4192b9211396d64f42e393c05b9aedc8fbd7e7b5e09b1a90550365bf18a9a"
+      },
+      "verifier": {
+        "id": "f49281a8-2413-4577-8b38-a34a0353a593",
+        "version_id": "1798c6d6-2dc2-47f2-a68d-1098550acb5d",
+        "version": 1,
+        "sha256": "d581167a2aeed4f3a5f51894e74ac305c2c5297fc9d04a8e00ad757c9afa7ad8"
+      },
+      "current_binding_sha256": "sha256:da1de921e9ccb141e0b4b04b7ac284e22f22b327a9fccbee97d573d0d1014553",
+      "execution_evidence": {
+        "cell_id": "ce13580d-3ef2-5cc9-9acb-0c79f5e8710b",
+        "session_id": "a8f66487-a580-4bb4-ba6e-64ee8464235d",
+        "verifier_execution_id": "d10466a0-9d93-4e04-8a10-ddb72dffcaeb",
+        "receipt_sha256": "934993f2308b927c59b23af6f7ae42cef719bfd289acec05c2322715339ae779",
+        "config_sha256": "866849e4ea77a802e2bf4be0d0ec52b94a83ceea6caf9bb61258f30ce8c7c7e9",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "0a713452b665093e0461996bf136472d1796b2157c1ddfaa31fb02526172daaf",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-2c504442adc773ca9a82c247__blackbox_ctf_v1",
+      "task_version_id": "53d2f089-6502-4208-9795-d6ba7277fa9a",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-fakelook-gen",
+        "version": "v0.0.3",
+        "version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+        "data_id": "fakelook-cyber-gen",
+        "data_version": "v0.0.2",
+        "runtime_seed_content_sha256": "bec4caeff7b335c99b37ad695ac1362e49b7bfbd01eae07907ef8181d9134c26"
+      },
+      "verifier": {
+        "id": "36494e12-6036-4167-ae13-76dc4a48520c",
+        "version_id": "b0738f59-3dd6-464b-b7f6-633cab4496b4",
+        "version": 1,
+        "sha256": "c7efdabebd6da31e6e7a5ffb8d55523e20ee52c919523bfb7cf3d5bc8b62e1f6"
+      },
+      "current_binding_sha256": "sha256:8cf3e8a072336ac9e8773aca45c8a62515e143c1efbfbad9661b8e2215b93513",
+      "execution_evidence": {
+        "cell_id": "3e5997f6-3c6f-5c81-92c1-a900cfb1e96f",
+        "session_id": "50030355-5daf-4fa0-90dc-2ff3d54cd40b",
+        "verifier_execution_id": "b54150b2-485e-4cc0-bb89-b8da4d61a5aa",
+        "receipt_sha256": "4041b56219bee9f3c6078a8de6045af92f3c41d6867e23e4e824e51a05c61d5f",
+        "config_sha256": "bb8c199fc18b9e5157dfd6fd7728ce25fae7c9a6af0d441bb77d88ffc32121b5",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "01490354838db09a9829975ab610b6bdad07b7ca29026bfea9ca75ff2799d83a",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-0708aea62e0d8ccf09331568__blackbox_ctf_v1",
+      "task_version_id": "54425601-6fd2-43d8-8cb9-e565b767676a",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-current-gen",
+        "version": "v0.0.3",
+        "version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+        "data_id": "commercial",
+        "data_version": "v0.0.9",
+        "runtime_seed_content_sha256": "d96b271c6f44f1cc40d1c6a1ebf344f26366dfbaf278b8f133c71313082f3159"
+      },
+      "verifier": {
+        "id": "71687232-bce9-4c95-a807-bdeb0389d5bc",
+        "version_id": "14c6b6dd-f189-416c-b34d-29bf55ff1b87",
+        "version": 1,
+        "sha256": "51eedfc9a10f987ea7475eb49405f8940977e32ea2f3610c21cc4008fb3919c3"
+      },
+      "current_binding_sha256": "sha256:35533b58a12b810e789b4c0acdddbb169c23c038bb8757253f8a348076030444",
+      "execution_evidence": {
+        "cell_id": "6ac8c80c-39c8-5084-be12-7e1d0a58e286",
+        "session_id": "129b2b63-9219-400e-bf05-e29b1265bdf5",
+        "verifier_execution_id": "e9a6887c-eed3-45b5-a6c6-7221dee08eb2",
+        "receipt_sha256": "ffe906d0990f7e9e127964c69061c49538614d3896945db0f12d7709c9fd39c7",
+        "config_sha256": "eb28ea10c8d354e6607910dc54a0281217440b1777ca7e5d182807f65a29534e",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "e8fcebb12c2862f1dea7bd75dde1fa8b3789bf20e8b34a931d4fdc8a08a898f1",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-27c8a0277302ae68d188882a__blackbox_ctf_v1",
+      "task_version_id": "5990a2c6-0986-4c6f-85db-ca764425d8c5",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-fira-gen",
+        "version": "v0.0.3",
+        "version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+        "data_id": "cultivacore",
+        "data_version": "v0.0.61",
+        "runtime_seed_content_sha256": "228bed3385c39653f6a62a3213d78339c52f264a66e987cf7e319654ffe70f57"
+      },
+      "verifier": {
+        "id": "61310180-b246-47cf-ba99-10ee7a1d30e1",
+        "version_id": "f700d7f1-5ad6-41ed-b0ca-0101be4992d6",
+        "version": 1,
+        "sha256": "e99ea873054b713e74d59ef7bf46401f24489642929ed4017de21fc3cee06c7f"
+      },
+      "current_binding_sha256": "sha256:d0b215049500553e0f2fda328c682b5cbbca9dab95f578832796660c08309a26",
+      "execution_evidence": {
+        "cell_id": "05eb2d9b-2a66-5629-ba2b-d9c1614ea6fa",
+        "session_id": "b0e76492-75d4-4e5f-99e5-4ae6f6de21d9",
+        "verifier_execution_id": "03288a59-6e29-4514-94f1-3085d47a927a",
+        "receipt_sha256": "99f9a2789a0374fcf5ff9e8eced567fb65b0fe5639487cbfdc2cd8dbb4a4bb79",
+        "config_sha256": "89b7520fff7a7aa783b322f00bed00d9fd5fe143ea1080afbc5e029533da8c5b",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "d182ae754f702d5cf4a5cbefd4f3436d308519b3bfe3a410999d24fed5054b7c",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fubspot-gen_blackbox-401a45aae0038d8f9cb6420b__blackbox_ctf_v1",
+      "task_version_id": "5f0c9b28-fe2f-41e0-b73f-0e7749f64195",
+      "split": "dev",
+      "environment": {
+        "id": "cysec1-2-fubspot-gen",
+        "version": "v0.0.3",
+        "version_id": "a1532a5c-6ec9-45bd-899d-24c0fe3d1df5",
+        "data_id": "current-fubspot-gen",
+        "data_version": "v0.0.3",
+        "runtime_seed_content_sha256": "cd9b3c5ec161141076d89b27a050437aa04c05d0e4af628487aa561215adc30b"
+      },
+      "verifier": {
+        "id": "05de97a7-7119-47b8-9950-b51402ddb1b6",
+        "version_id": "fb261b14-e211-4632-95e1-7499969e7054",
+        "version": 1,
+        "sha256": "18a0902df2461aca43ab7972d74172f4a8811be4bc146996164c2e0ad52d499b"
+      },
+      "current_binding_sha256": "sha256:afe19e4bc6a11bfb9c6d09c8665cb8e0553d18d99f4635549ca5f0f10e17937c",
+      "execution_evidence": {
+        "cell_id": "21db0b42-d24f-5db1-bf89-fac9daec7893",
+        "session_id": "1da46e9f-7c20-4c38-8d7c-45463a52a072",
+        "verifier_execution_id": "3d0bf84b-c1f5-4089-b037-383efe494a38",
+        "receipt_sha256": "c676792c8ab0f938721df3e53a1a9abce31343b3436ddd1b556be1143df3b121",
+        "config_sha256": "e32ad26ce545e56f3d039ace9f2278338970c58fb2f25d2c048958bb5c07ff88",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "d928daa74371617eb0de1f13f63650cf52c7200ee46de947be1bf0ab9ce7b8c6",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-d2740f59f9308860692b1ded__blackbox_ctf_v1",
+      "task_version_id": "60f864ae-49bc-43ee-ae54-4ff8a8e71226",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-fira-gen",
+        "version": "v0.0.3",
+        "version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+        "data_id": "cultivacore",
+        "data_version": "v0.0.61",
+        "runtime_seed_content_sha256": "398aa2faecf1e5235165d556186631539578415f0063d38cdfb96a4b0af42528"
+      },
+      "verifier": {
+        "id": "bea63b0b-92d0-401d-ae4e-b9a80e883a8d",
+        "version_id": "005558b4-853d-4096-93aa-d6db490d8ca9",
+        "version": 1,
+        "sha256": "a14f9385f2573d7da836ee8864487ce168cf2c52c8c1965ceeb195ed98ff5b39"
+      },
+      "current_binding_sha256": "sha256:ff4cf6b995f926902a88601e4a4245b03f5e51403ba787c4b1b9ff149094dc7d",
+      "execution_evidence": {
+        "cell_id": "0ffb83f7-c663-542d-87a9-ac4ade5d71e3",
+        "session_id": "c770da33-bcda-4d78-878f-61260ca3a26c",
+        "verifier_execution_id": "141c0274-5738-48f7-8180-38bb7094ae71",
+        "receipt_sha256": "c48dee1688f30598f9acc90ebaf96344305cd1ed6ab43ef61429ef8864d8aa44",
+        "config_sha256": "abd248f589610ca1df747ed443a9887c30b519404d14cff78e37496adda1d3cc",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "06888993a7ea70a3e31a0676204339374d781521d113edbc5e99f6895c4d2ea1",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-63daa3971bcc9a8c52e3ff4c__blackbox_ctf_v1",
+      "task_version_id": "6324fee5-2e3f-4538-a9e2-026d82ebb8a3",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-fakelook-gen",
+        "version": "v0.0.3",
+        "version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+        "data_id": "fakelook-cyber-gen",
+        "data_version": "v0.0.2",
+        "runtime_seed_content_sha256": "dfe0964c9f73969e7a7cac5c54932ef347913ef54781bad339f9091795cedb6e"
+      },
+      "verifier": {
+        "id": "fcd52b68-5e11-467e-a8af-20d063dc2d14",
+        "version_id": "5e18a206-238f-4b30-a37f-05b464e7fc10",
+        "version": 1,
+        "sha256": "f1cbefdaad7d43323c1f214c428165ca5a3ee3fc03c48b0e5d6b06462b254ab9"
+      },
+      "current_binding_sha256": "sha256:492b61cbdfe06ed8aee1c131a580b83b4192bd32790c4ecf08692e064e67c3a4",
+      "execution_evidence": {
+        "cell_id": "509a9b62-585a-5a76-97ee-bbdcd22b27d3",
+        "session_id": "d60a2683-7863-4e5c-9598-d9adbbe4ba94",
+        "verifier_execution_id": "03496e4c-ae16-4d13-b692-e364f10fb847",
+        "receipt_sha256": "be2683da200fe6ef7ac678886c561711c9ced86676aaed16a20cf4ce3a12324d",
+        "config_sha256": "a682a8464d6a5b198fda090a947c06a30c8c4934281de98a4d0a4f99987f7afd",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "296cfcc29a9eb9d3986da241d3f6011e98056bd22d01608791e8c1a207ef7c5f",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-c5ba6fa280b5731a06d45214__blackbox_ctf_v1",
+      "task_version_id": "63e6ea95-1b08-44ec-aea7-244d9c6253af",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-current-gen",
+        "version": "v0.0.3",
+        "version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+        "data_id": "commercial",
+        "data_version": "v0.0.9",
+        "runtime_seed_content_sha256": "454929b8a3524541e327b3b4fb0d1ab2dc54f480706795fdbbf135fb3044afe7"
+      },
+      "verifier": {
+        "id": "652014bd-8205-432b-a8fb-381691a52fd7",
+        "version_id": "05dd731f-36ed-4c33-8d4a-c67c48f306f8",
+        "version": 1,
+        "sha256": "fbc9f0d7615a294e5bdaedb5aceb69d9609c27a3dfe8afaf9c232240f026d3f4"
+      },
+      "current_binding_sha256": "sha256:67df60bb8698088065e20c5ae23b09c8d0a6bfb8c35c5e892145b18447e636f8",
+      "execution_evidence": {
+        "cell_id": "3eb49790-90d6-5df0-91db-afdbaf3c940f",
+        "session_id": "418c36d8-82b4-4e2a-9682-2132b7059cbc",
+        "verifier_execution_id": "ba41d0fb-f479-4679-b492-4c7d26d45ade",
+        "receipt_sha256": "0cf1909ef33b3b6589e7a3f1f0efeefecaa3043162cbba3665df5f589eefff1c",
+        "config_sha256": "93e2ebdebd7c38b4ea1a69d1bed324c21f46665f557965a1a1d64487ee30cd03",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "92d8a8eb99c08c413e31028654ea52ae78c07f4d5ea28a28413b3c9bb4ef6455",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-3a1c4858db3e787986bfb723__blackbox_ctf_v1",
+      "task_version_id": "65c8cc68-6ada-421f-ad0a-eb1d81fc9141",
+      "split": "dev",
+      "environment": {
+        "id": "cysec1-2-current-gen",
+        "version": "v0.0.3",
+        "version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+        "data_id": "commercial",
+        "data_version": "v0.0.9",
+        "runtime_seed_content_sha256": "fce8addeee1f9748de870ae6e9fd7a632baa50beb2bcc87f4d1595c79574c41f"
+      },
+      "verifier": {
+        "id": "ca081fbf-c092-4895-a209-eb22c905ed5c",
+        "version_id": "6055d87d-3f58-49e0-a711-ffa5ba1e2e89",
+        "version": 1,
+        "sha256": "3051466f320bf2595bb42e1dfad6cf10701c605e347c76e1dbfea245a39a1c09"
+      },
+      "current_binding_sha256": "sha256:2c9efb1f8a4fdb7db90d248e5051b59d93cec987a047d3235ab502639f9e4860",
+      "execution_evidence": {
+        "cell_id": "240ca190-fa31-5551-814f-0e72c007a2c0",
+        "session_id": "edf1e766-90e6-43cc-b492-67bc0e002547",
+        "verifier_execution_id": "08cefd20-b310-4203-b4dd-0b8b0c96dce0",
+        "receipt_sha256": "cafea7677e184d309adc104f1f243072d1f375f5bdf399268d6e46c18c88f5d8",
+        "config_sha256": "cffe49f45ae6fb6282cdea81ef66a5ab72fa766c24b7f74f352b87834d913419",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "46ad772522bbee28f50eb9f64047d8005df8fe6490fb98261e870126561fcf2c",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fentry-gen_blackbox-5a6f99394fadd1aea40875d9__blackbox_ctf_v1",
+      "task_version_id": "6a3023fd-4022-47a4-9ae5-6d15a892bd9b",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-fentry-gen",
+        "version": "v0.0.3",
+        "version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595",
+        "data_id": "fentry-current-gen",
+        "data_version": "v0.0.3",
+        "runtime_seed_content_sha256": "ca5992bff6f14e5a5afb3c002e7d455f46847e902e4cc8f52d97ce9a99099ef9"
+      },
+      "verifier": {
+        "id": "64959277-bcd9-4242-9ab7-866cda2bea25",
+        "version_id": "16b593ff-7888-4d9e-9c50-b9fd879d01ae",
+        "version": 1,
+        "sha256": "0683dd174aeea519ddc822addc5050a32f8b3e1864f1455db2a0e0b25523dc3c"
+      },
+      "current_binding_sha256": "sha256:326f1e22c0a2a84c17e3720b04b567a4aa2e0b7b937178a8c05266de06bceb68",
+      "execution_evidence": {
+        "cell_id": "53ad0de0-6cc7-5700-aa55-e4779a7781de",
+        "session_id": "95f3a7d2-0489-44aa-8ebc-270ae563bcf6",
+        "verifier_execution_id": "edf2f453-e258-4735-b7bc-df04e8ddeaba",
+        "receipt_sha256": "519d8e0cfceab774647551ab67a907f0798e1e82247f5593168fc2c2260dce51",
+        "config_sha256": "a89347b55f155c3cbc7fd3172ee5866f6abf4e9fcd0227d709ef8ebdc39af217",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "1c1aa7093cf0905fb4903d8fa90ac08b532b7d4e150e595908d8f5eea6b58d7a",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-58a0a253d85d53703781bb50__blackbox_ctf_v1",
+      "task_version_id": "6e565e4d-2cb9-402f-a492-457d6802cee6",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-fakelook-gen",
+        "version": "v0.0.3",
+        "version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+        "data_id": "fakelook-cyber-gen",
+        "data_version": "v0.0.2",
+        "runtime_seed_content_sha256": "b3cebf52309b63a1b17ced6afdc15b4daba06695f86fd572a6348f436781d5da"
+      },
+      "verifier": {
+        "id": "70044946-1e95-4500-88f9-63dd4a47db83",
+        "version_id": "704241a5-d5c7-43f2-8dfa-d0bc5db61eb2",
+        "version": 1,
+        "sha256": "79baad0962a886cca7c064b5141bce79d55014a6813cbdf9f69de203a141c4f3"
+      },
+      "current_binding_sha256": "sha256:21dd784b7e7c4ea47f044f17d17076fca57fca3f137e06ea245dc82da029b469",
+      "execution_evidence": {
+        "cell_id": "2a915db8-e76d-51b5-b02b-b9d431106104",
+        "session_id": "c4c8dce1-58ef-4155-800b-915678e4ad5c",
+        "verifier_execution_id": "6b24ed7d-b736-4f2c-8aa2-d2b9867cca9b",
+        "receipt_sha256": "962424e6c57655a2bbb07ff15d14243224b2381198eb3ff67bc5abd83031b299",
+        "config_sha256": "e54a7b37978be125fca611365a5a9de028f0eec95b78507b8dc4dc9594b808fa",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "9aa9e911e2a75dd65bec51280cf0ca008a78354c70bbb662cfa260b6a6a0f479",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-2be01f831d54fff2f9038e9d__blackbox_ctf_v1",
+      "task_version_id": "78971e60-851b-4f6a-85d8-ecb3391d2af2",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-fakelook-gen",
+        "version": "v0.0.3",
+        "version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+        "data_id": "fakelook-cyber-gen",
+        "data_version": "v0.0.2",
+        "runtime_seed_content_sha256": "49c0bcdc1c22f5aaaaf9a2ce627c0c6a82268e263f95ca56a59304c731efadb9"
+      },
+      "verifier": {
+        "id": "52ac9942-370c-4f5f-abac-82cb5bdcc8fd",
+        "version_id": "d2ee82db-d3ca-43e8-965e-396e94b63de6",
+        "version": 1,
+        "sha256": "bb084cce032cbb3b58bb9ebf5d3d33370464e0172f583914ba5b20e53abadd30"
+      },
+      "current_binding_sha256": "sha256:a6fb187b96066a5123b4697830d24a8165cce92c89c5bcddd964713c2cdc9e71",
+      "execution_evidence": {
+        "cell_id": "986edd15-90ed-5fb6-a9ba-19c84dd4b18d",
+        "session_id": "33df325b-d03c-4f86-8cf4-2e8776425e70",
+        "verifier_execution_id": "9a119869-4b00-4007-888d-2c3b265d1954",
+        "receipt_sha256": "2966c42af73fbeac7fd204b5eb3fc4241a73aa801bc531324e2ddc6ab32d91b9",
+        "config_sha256": "ce40aeb1058da5367cec26c8c2c83047b1c11af01541c815ae0d6c53e59665fb",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "ba4dd7079861c14cc851f710c360188c0fa901f6465878368d92254b8267a1bf",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fentry-gen_blackbox-d9b1e451e727ec6ec4b610f0__blackbox_ctf_v1",
+      "task_version_id": "8ad6a73f-7ec8-4435-b868-a84327ed4c85",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-fentry-gen",
+        "version": "v0.0.3",
+        "version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595",
+        "data_id": "fentry-current-gen",
+        "data_version": "v0.0.3",
+        "runtime_seed_content_sha256": "3d54de08a28001742ab8c70c34df28c762c4c5c54e480a10a0c2e5984b0a5bd5"
+      },
+      "verifier": {
+        "id": "c94914c0-b2de-41c5-8826-3d9ed1653ec0",
+        "version_id": "0e683a1b-0b86-45e7-a698-ce019c5bcdea",
+        "version": 1,
+        "sha256": "d0e675be20ff148aaabdeb874554f59b0a8594c5935a467dfe54a13e05cb8268"
+      },
+      "current_binding_sha256": "sha256:8f1a472a112d92e3da34db9cc42ca6b6da177883f1b708137c3c5715c2fe69c5",
+      "execution_evidence": {
+        "cell_id": "2cab2d2c-d8ee-55c5-a9ee-e21a6ea7da15",
+        "session_id": "cf4cf860-4321-41da-8c68-70280e2241ac",
+        "verifier_execution_id": "32ee906f-45b0-4431-b144-bbebe73ccd29",
+        "receipt_sha256": "f44b6b898391096cf25224f6fd2c618aff21dc337f4f522756548ffe96e2eb8f",
+        "config_sha256": "8ba4f9700c5d62f0b29c533ffbda54c2abd2acdcb4977d16af210d7461e5efc2",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "ae5daaa1eef596881192b23e16439e6d2e662e724808a04c28c8db86940c8517",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fentry-gen_blackbox-229f415d73156f279e7b6825__blackbox_ctf_v1",
+      "task_version_id": "8c0b249c-8946-4ec3-8609-d74631af547e",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-fentry-gen",
+        "version": "v0.0.3",
+        "version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595",
+        "data_id": "fentry-current-gen",
+        "data_version": "v0.0.3",
+        "runtime_seed_content_sha256": "863519284a07e08cfb3a253d0d0fdcf4b6c866714bc0e9d37d497a7cff83a136"
+      },
+      "verifier": {
+        "id": "c6a3b1f9-05c7-48cc-ad8d-eec9b5111ea9",
+        "version_id": "e64115d3-650c-448a-b17e-89da21feca99",
+        "version": 1,
+        "sha256": "da4d9d4b52617fe703bd5d8961e8af05d0aed194e9647c68d2a05f307687d0fd"
+      },
+      "current_binding_sha256": "sha256:359800ff01b39eff7f5e1eab66d69cf33624b01469487e6aabb79c4ddf570d73",
+      "execution_evidence": {
+        "cell_id": "1db2a015-eaf0-5946-9a3a-fd7afa975d73",
+        "session_id": "e8bba94f-bdd6-4a43-9392-83ce16218e3a",
+        "verifier_execution_id": "2eb2dcba-2335-4567-9c0e-b1919c1d03dd",
+        "receipt_sha256": "8749dbc7adc7bf4bf18c88534a96b4f4ee059e0fc366cf60427966cdc5ea1205",
+        "config_sha256": "5d6610d139fe10bc8b358dff4198af829c21ebc8252d224f28fdace558adf1e1",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "3ce43ebeeeb195b3dfe0c71da3f9f6d2c8730d3533a2707c4116df1570c3a8d5",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-5863ceeee099e5f9247cc2c6__blackbox_ctf_v1",
+      "task_version_id": "8d84b316-d741-44f8-aaa5-7a0f0d7b8d3a",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-fakelook-gen",
+        "version": "v0.0.3",
+        "version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+        "data_id": "fakelook-cyber-gen",
+        "data_version": "v0.0.2",
+        "runtime_seed_content_sha256": "920a29650065862060349536eced605a25b46da1eaa6ae3a82333313970931a3"
+      },
+      "verifier": {
+        "id": "4cd1c508-d0a0-4ce2-9fc5-a4091485a334",
+        "version_id": "604ca332-e627-42c2-9f87-e6c4ddcad0cd",
+        "version": 1,
+        "sha256": "0c087192cd870d58b2ad8f8b496ac18b70461a985f5a8863c3b52bfacc73b781"
+      },
+      "current_binding_sha256": "sha256:5844fe5ac22cb8dcc03976f75979b60c292531cd4b6c583c8b3a626cbf1cab6d",
+      "execution_evidence": {
+        "cell_id": "3fe2a00f-a7ec-5f43-8bf2-e0a9cd4bb0c1",
+        "session_id": "df91c416-a496-429a-8518-3059cf3c89c4",
+        "verifier_execution_id": "bb403e80-befc-4041-bfdc-e5c19ddb5656",
+        "receipt_sha256": "e42711010b7f0a443a1244fe20bcda0b4ef1407b09a43fa99efbb0af94f48dfa",
+        "config_sha256": "781597c4c0e97491869c51e0efb38885dc1a925cd358f1e955f8ed660dc5fe56",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "f1848c9341f5aa2109a4ead43c8b83f7f66f634d16c887ed80adf584dfb8999e",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-322896ad3182769453b9944a__blackbox_ctf_v1",
+      "task_version_id": "8e5c7c45-7259-420d-ba12-0381465d864e",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-fira-gen",
+        "version": "v0.0.3",
+        "version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+        "data_id": "cultivacore",
+        "data_version": "v0.0.61",
+        "runtime_seed_content_sha256": "7e9053044fd11354ddd71538befb76451cbba3fa54183bc226001fb623897743"
+      },
+      "verifier": {
+        "id": "9f38c49e-ddf6-49c5-9e94-d14378b2acaa",
+        "version_id": "fe82f68e-ae2b-432d-adbc-206fd20b9b8c",
+        "version": 1,
+        "sha256": "8d14f1e255c679ae9a9136a694f9753c566f06afd47fed6dbbc95675816da080"
+      },
+      "current_binding_sha256": "sha256:3f854b91a3fa1e6bf2329328b142b7da5037b35cacd28e0814fe80807853993a",
+      "execution_evidence": {
+        "cell_id": "3936e2a3-4aa5-5133-ba77-c73a5d46f49c",
+        "session_id": "e8c30984-d9df-4dbf-ba14-1d03c8b8a0d2",
+        "verifier_execution_id": "f572604b-e469-45a4-a4b7-5dd3e1befd5b",
+        "receipt_sha256": "81569e36cda94a4d6529c34f95317caed8443b4366ddc684b59ee5e9c126fe0e",
+        "config_sha256": "d7116a9348233f04a93d94449e8be8d94f43f4e0412c70841b571b51a0e436f2",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "9bad084f1b1d8fc64a83e4383edae19e6d90aba135da85df98286e87143e9fab",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-ab56dfb6116356c402290fa8__blackbox_ctf_v1",
+      "task_version_id": "9375a9b9-04e5-4f6f-ad47-286121278992",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-fakelook-gen",
+        "version": "v0.0.3",
+        "version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+        "data_id": "fakelook-cyber-gen",
+        "data_version": "v0.0.2",
+        "runtime_seed_content_sha256": "bc61fa38225eb0eaccac044c2e8e49411032405f109e2fdc2951530fc0e9168e"
+      },
+      "verifier": {
+        "id": "3ed8b746-15c4-43cf-9947-a54c325f6f3d",
+        "version_id": "41a1f7fb-0319-4eb0-80de-4fb40ad9bb74",
+        "version": 1,
+        "sha256": "519b4a2654cd7c9632f348575eb708103ea01ef0e48488e6ee04e3f136786ebf"
+      },
+      "current_binding_sha256": "sha256:24faaade2e2d6abaecde28942f0ead099c32324f80a02d93777b95c1013cb6a0",
+      "execution_evidence": {
+        "cell_id": "be547dd0-ae52-5e6c-96f6-740f9bf89605",
+        "session_id": "86bfafba-0c09-470e-8aba-5ef035411d13",
+        "verifier_execution_id": "c1ceed70-b151-469a-bb11-ff91e57f69da",
+        "receipt_sha256": "ca30de9988d3bccc1b0607278ef28f279f087bc6e07fcbaa6020b048c6466f53",
+        "config_sha256": "08755b7edf9958700e21befe541b7b75f43b1bcbc4a78829887f9c5957d6177d",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "3a76da34efb39c637d72d03ada8b72d658be6152c806c29a04c890eb1d53ffab",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-7647df87d82993fdb4d8942d__blackbox_ctf_v1",
+      "task_version_id": "96977ecb-4d8c-4c4f-a5e0-02d925bdc724",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-fakelook-gen",
+        "version": "v0.0.3",
+        "version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+        "data_id": "fakelook-cyber-gen",
+        "data_version": "v0.0.2",
+        "runtime_seed_content_sha256": "d0526e0ec07d8e1978ecbc8ae4ca465a2232d9af01cf4fa85c67d22e3929f061"
+      },
+      "verifier": {
+        "id": "fe01c8d1-be91-493f-acab-0d0f88822782",
+        "version_id": "6ad7575e-de1a-41da-a121-a86b81df7884",
+        "version": 1,
+        "sha256": "14b3c83e8aa362806b559a066cf42a697bbfa7645d6c7b05c5e91f355149892a"
+      },
+      "current_binding_sha256": "sha256:3a905042ca77216c1b65cb768adff434bdbd57b632bde22070133686eb9698b9",
+      "execution_evidence": {
+        "cell_id": "3b82e0de-70fd-51d6-9d0b-9fa15c0be9c6",
+        "session_id": "2710575f-a6ff-4593-ae5f-396f37520029",
+        "verifier_execution_id": "69e288d0-0bed-47e9-8689-6052729b81bb",
+        "receipt_sha256": "356af4e684a06d0f05c3b69386f5e749634a75f7d3c5133128bdf952302a2ccf",
+        "config_sha256": "6bb1fca775545ac97b98ec31c06e4c0f8c08d3272ebfedd260f46e1686161054",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "cd3ba6083cc7049bc7571cd1d75a0a41c97cd1fdae3f6e4c31dc37cff945d8c8",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fentry-gen_blackbox-34652ac7eb0d3cc85ab093a6__blackbox_ctf_v1",
+      "task_version_id": "a0e4a473-b544-4006-b4fa-8e6b6bfb0a50",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-fentry-gen",
+        "version": "v0.0.3",
+        "version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595",
+        "data_id": "fentry-current-gen",
+        "data_version": "v0.0.3",
+        "runtime_seed_content_sha256": "dc0829a8a85f2845216b10bbccfccde8caad6812b9b96f7daeb0a257f6e0fdc2"
+      },
+      "verifier": {
+        "id": "f091b287-a229-48f0-826f-5cd8414d687d",
+        "version_id": "12c01dad-dfcd-4f4e-9568-531e8c3f8410",
+        "version": 1,
+        "sha256": "bf925d045bbf2a9287809e4819d1eea9f324cac3b98bea5138e8161cff340cce"
+      },
+      "current_binding_sha256": "sha256:7a3aff720e54afdf9105e817431de6c0bd2edeeb4ee1b4df224bdf18280f5e25",
+      "execution_evidence": {
+        "cell_id": "bc4706df-5f15-5142-8131-d49e0ca8331d",
+        "session_id": "9ac94c88-fb3f-4dd6-b9f1-e1c6e0c7831e",
+        "verifier_execution_id": "2562bdd2-f8a8-44b9-aebc-9a147b875d9c",
+        "receipt_sha256": "40428094c61dcc6f1bdef59f3470d3994954375de9ea3cc0bb0f4600dcb51dbb",
+        "config_sha256": "b0bdba923b38b56202031eec15151da14df6231c37888f56cbb03e79e3da73a4",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "e3bed5b244857f6502397453369368f158f523db4f37fcfda8cab9447f9113ee",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-e4a4c937398b5b5a45958e7a__blackbox_ctf_v1",
+      "task_version_id": "a1b92843-ca06-4852-9f09-f2730da9124d",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-fira-gen",
+        "version": "v0.0.3",
+        "version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+        "data_id": "cultivacore",
+        "data_version": "v0.0.61",
+        "runtime_seed_content_sha256": "41b0c0b4338c7ce4ec6e04845eddeb0204ce7fb7b0c9e008a3f73a795840bf8b"
+      },
+      "verifier": {
+        "id": "4ca35adc-a15a-4301-b5cc-d6acf6ddb589",
+        "version_id": "32b83394-2ff8-4e4e-a227-2d2548395622",
+        "version": 1,
+        "sha256": "8c8cfbe44c44e609fa0954906c529456035a61b8cd493e680a2380920bb5a8d7"
+      },
+      "current_binding_sha256": "sha256:d2575b2f55b43d2f7162df5f67971d9b808e5aea43c1d1781fed5e27a865464c",
+      "execution_evidence": {
+        "cell_id": "1d269892-5f22-5bdc-82a7-2cd2f2de2aa5",
+        "session_id": "0ae9b836-14ef-4313-8aa3-271af0c87ab0",
+        "verifier_execution_id": "59373fca-db18-456a-bdfa-253d20f10227",
+        "receipt_sha256": "9a9cdca6a0c23f02f0c4adacbeb28130c960cd7afa7a93887de21a59623898d0",
+        "config_sha256": "046a30b197b705be379efb5787bd97d1ad5ab100a43d5b98c6898692e7dfb3fe",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "69776a477748829fcc47d7d3f64e3b1dba917a9d4d3db875807aefe0ae1056eb",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-5ea6bdcd678f45f8cc0ba673__blackbox_ctf_v1",
+      "task_version_id": "ab2fd90d-1ee5-4451-a866-260ddf5c336d",
+      "split": "dev",
+      "environment": {
+        "id": "cysec1-2-fira-gen",
+        "version": "v0.0.3",
+        "version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+        "data_id": "cultivacore",
+        "data_version": "v0.0.61",
+        "runtime_seed_content_sha256": "47b36dcb96224c897d3548d8f7f64b1081cf00861a153010a258e6c13345719b"
+      },
+      "verifier": {
+        "id": "a58daef5-0aa9-416a-81d0-0c3c7c70c09f",
+        "version_id": "088165b2-d696-48ea-b3d2-72567a7a80b9",
+        "version": 1,
+        "sha256": "f08b016626953aeafba2553f4550e35c1e110c0859f35fb4dfc64eb471d45611"
+      },
+      "current_binding_sha256": "sha256:f831886410d6ef16b0b9fbebe6e9ebafee2f4c187ea29dd37803765be45fbccd",
+      "execution_evidence": {
+        "cell_id": "61bdc80f-b32f-51ef-83ae-bae33efe2be2",
+        "session_id": "86885fd9-ed77-4f62-915c-b6d79c11eb98",
+        "verifier_execution_id": "ea02d93e-4e72-4e2c-81fd-194c63f6d211",
+        "receipt_sha256": "db36211099b5c5f84246bd8723ef75836ce1fa6fef7d8775a8f51b39ed28e341",
+        "config_sha256": "97679081681af79ea89d4b539a537a5298a8be3943697a4e66f9dc13b658e8fb",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "377fc88fcb243d229255c724204832bd87690923094e45aae3c850e58bf9b984",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-46ee1c53981e8b0f027052aa__blackbox_ctf_v1",
+      "task_version_id": "ac6a6cfa-ea44-4c11-bb2e-c2bb2d142c8e",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-current-gen",
+        "version": "v0.0.3",
+        "version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+        "data_id": "commercial",
+        "data_version": "v0.0.9",
+        "runtime_seed_content_sha256": "7adaa574d587eb13cd8cc3ae6b9db55c22e05900d1b00706e4025158d2b71193"
+      },
+      "verifier": {
+        "id": "51e7c8a7-9e6d-4800-814c-c4e9654961ea",
+        "version_id": "aa706558-56f6-4c0e-9ed3-abcd1831d227",
+        "version": 1,
+        "sha256": "62230d4f562a9cee47176485fb3b52bef3571cbb568af11fb5a7a5d41b270be4"
+      },
+      "current_binding_sha256": "sha256:379509ed635d4892dddac44551ad5af7b0bea235879654332d71df051a0efd58",
+      "execution_evidence": {
+        "cell_id": "043a0d76-9336-5cb2-8636-7b4b5e3369b0",
+        "session_id": "37fa3d36-747b-4d3f-a6e4-badae31c6d92",
+        "verifier_execution_id": "6fe107d8-0c84-4704-81b0-0fe9edf4b0b1",
+        "receipt_sha256": "bd4f3c2ede6c02964c83d0b34de5ebb25e5bfe42a5b84e31d859310c8a8fc520",
+        "config_sha256": "fc2cb8c7ecb6756803df1fa9529e7431e1045920bac0aed0c9b36cf83c3d8894",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "df8eb3001033785eff97c5613063c8e40b908287e9a6583c2a4c66d55bb921b5",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-075644943172978687d45528__blackbox_ctf_v1",
+      "task_version_id": "b164ad89-7b40-4baf-a9e8-2eb880c61730",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-fira-gen",
+        "version": "v0.0.3",
+        "version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+        "data_id": "cultivacore",
+        "data_version": "v0.0.61",
+        "runtime_seed_content_sha256": "49ded86cb98d5bfd9423c1924c8357a662aace79b82049088e0fc20ee2cff48e"
+      },
+      "verifier": {
+        "id": "5d8aa19b-4939-474a-8985-f6a2cf078d90",
+        "version_id": "ca77b41a-60dc-4e0a-93d6-2d0326bc9853",
+        "version": 1,
+        "sha256": "2e197c54e8614c0a6415d564db5f7672e890fec22a6db53919dd73ac6fe78fd7"
+      },
+      "current_binding_sha256": "sha256:8f525c3e0e9637b98c3fdbf449427d03862cd50c95179b9da6882490e2e3a18c",
+      "execution_evidence": {
+        "cell_id": "8e8463a0-370b-5577-8b68-288daaa43536",
+        "session_id": "2dca568f-11a3-47c4-afa0-4d5a1bb866fd",
+        "verifier_execution_id": "b38b7db1-58a7-485b-8401-f53bfe88f35d",
+        "receipt_sha256": "ad3009fad08a20775a9580416f5ffff91797f75afc181d7807f103487558e889",
+        "config_sha256": "733b64f49294d802b1dc984f111ffc0b584fcadd3814afbfc0bacd14496b72e0",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "1637baf6f437dab2e7060e8f899f0c6339b98270cbc2d76d9b6e022a2acb78eb",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-d2c7c52bd034f85240037110__blackbox_ctf_v1",
+      "task_version_id": "b51782f9-cb9f-4603-be81-a16eab4b8a36",
+      "split": "dev",
+      "environment": {
+        "id": "cysec1-2-fira-gen",
+        "version": "v0.0.3",
+        "version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+        "data_id": "cultivacore",
+        "data_version": "v0.0.61",
+        "runtime_seed_content_sha256": "3870e461e683c8babd4604e06fa0a196089513de76bb714b0671c708d0595cc0"
+      },
+      "verifier": {
+        "id": "be181eb9-23c0-4cf8-b3c8-2649363ab570",
+        "version_id": "58910eab-1eb3-4a84-9bc9-fce5eaea4f8c",
+        "version": 1,
+        "sha256": "48ee3ccc55ec9528e62d0944523dd190d0c739d3ccd8c25e7982b40fcb1f54cb"
+      },
+      "current_binding_sha256": "sha256:3de35714394985b3930eb0981a6adf0548ffb9cc2fa1df8d170b36f6f93fbd40",
+      "execution_evidence": {
+        "cell_id": "9259f7ed-a0f8-57db-ad5f-982baa9006fe",
+        "session_id": "4529ce25-31f6-4174-aa54-37fe682731ae",
+        "verifier_execution_id": "39b79c64-f8ac-4846-9216-f96809215bc8",
+        "receipt_sha256": "5123b5dc0ac675700e67001a531f72497e0a7c6a859967952b22b26a8af1bdd3",
+        "config_sha256": "73259589ae1db405acc275e0eb06478dd1a52deea77038a092038b0f3f3c878e",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "e8db450fe2982b43ffed84b77a2506f61c715a517313ce9d9f5ace830b0b8e99",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fubspot-gen_blackbox-bb3f496e48b40493bee8aa92__blackbox_ctf_v1",
+      "task_version_id": "b66062df-4c6a-419f-8568-82e152e9df73",
+      "split": "dev",
+      "environment": {
+        "id": "cysec1-2-fubspot-gen",
+        "version": "v0.0.3",
+        "version_id": "a1532a5c-6ec9-45bd-899d-24c0fe3d1df5",
+        "data_id": "current-fubspot-gen",
+        "data_version": "v0.0.3",
+        "runtime_seed_content_sha256": "6754d837153f8c2ff8e146ba094445eb6b00f4da92dabe30dfecb7a628bb1072"
+      },
+      "verifier": {
+        "id": "74d532d6-c45d-4437-93af-53869e1ebcea",
+        "version_id": "400a7245-e6fc-41e8-a698-8a244afe96b7",
+        "version": 1,
+        "sha256": "95a6554d6df2f14e14512ced378d62872ad36fcc82aee31d2ca4621be8fbf20a"
+      },
+      "current_binding_sha256": "sha256:dd4fdfbc7f14842a2cf0c1ccb7fbf9375693ae78cadb1ff08f09b17831254439",
+      "execution_evidence": {
+        "cell_id": "7e879e36-2d23-5128-ac97-858ea24d7582",
+        "session_id": "d38446ec-8b80-4480-9bc3-1a1c299f29ef",
+        "verifier_execution_id": "c1499132-2400-4b41-a9c8-0def36f61ddc",
+        "receipt_sha256": "40e7fdabfc703df88530425f1c8c2bbba321f5467db9689052f8e3964514d5f2",
+        "config_sha256": "013b64fff2d00a72cc55ae2f4d5fffe6de61c25887c3ccff384fd6541106ae6d",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "562fa5b69c61f170e10698be83da14c4af53bdfab39e3e9ca981ea076cfca1a9",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-5b51b6dcb4193e59b96b1b13__blackbox_ctf_v1",
+      "task_version_id": "b6efa2e4-7743-4b8b-a014-832d90cd5e39",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-fira-gen",
+        "version": "v0.0.3",
+        "version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+        "data_id": "cultivacore",
+        "data_version": "v0.0.61",
+        "runtime_seed_content_sha256": "c9a741562ebfd6fade744222f9dba4e0c617374ffdbe7a801436a46536cdce1f"
+      },
+      "verifier": {
+        "id": "f3e3802c-fc68-4e7c-a7a5-690d2a21c921",
+        "version_id": "a1f768bc-f9eb-4fa1-834e-67a9fdd86a87",
+        "version": 1,
+        "sha256": "61e64184a4f624992a3b38daf20337d8ca732d5d9612568f51b5fb189a506fcd"
+      },
+      "current_binding_sha256": "sha256:75fda289ea1797315cee8fe70ab9c4e189f208ac665263b082a53182de4d6993",
+      "execution_evidence": {
+        "cell_id": "09d2b85d-b8fe-5931-9363-cdd37e8c2e9f",
+        "session_id": "753ba6d6-26de-4a5e-a20e-96a7c4b73162",
+        "verifier_execution_id": "32e02ccc-2ea7-4601-87a8-1a2db896cc6a",
+        "receipt_sha256": "8c15c39dce14fed70e73588d0703846bca0f87de0fd5d6c7e0df072a8b3b64d4",
+        "config_sha256": "65c6292117fd3daa4068ce4c80305ecb577d69ef615d6e50da2d1bbdfbb30bc9",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "a830b2f26a53c9893ae044027bb623fb7738f81c8c978f20ccc5e032edf17e45",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-bc363f8239aeeaa3f648046a__blackbox_ctf_v1",
+      "task_version_id": "ba912601-1184-4dcd-9e9d-2fce22543e4b",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-current-gen",
+        "version": "v0.0.3",
+        "version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+        "data_id": "commercial",
+        "data_version": "v0.0.9",
+        "runtime_seed_content_sha256": "39f9a6be75526d9bfd7132c8f60f6ba0a18244eae28894adc8d48394b08e0755"
+      },
+      "verifier": {
+        "id": "03a7f57a-1716-49b0-b2f6-d639106d3f55",
+        "version_id": "01c28abd-d357-4bc5-ae73-d17e0cd030f8",
+        "version": 1,
+        "sha256": "47c56ab45a2a98537988b997f9897c658ae4bce631c1e4f8c1f12a8659966095"
+      },
+      "current_binding_sha256": "sha256:5a05100e0bb9f2717f952218b1a6c6a0cbd70e48818eb5b802ab92405ed21210",
+      "execution_evidence": {
+        "cell_id": "7d548758-3330-5dc7-a1fe-941365801614",
+        "session_id": "01f8a6ba-4548-4994-9ffa-7fa7bb82cd72",
+        "verifier_execution_id": "b93b4c33-b3ba-4ecc-83ac-daea205cbc69",
+        "receipt_sha256": "c8758d7f25c8be7061593da9de760a620324ee93c519906b039a7c8f5108cfdc",
+        "config_sha256": "c0b9a5425a51c2183e42eb5556fa5023a22f1a81f3f27b10e4a02bf088adcdf3",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "b2bdde67fe25009f6ff5fe4ea2154fb7e541522649902e00cababf81d9090532",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fubspot-gen_blackbox-2c4543c99976ddc656588bfe__blackbox_ctf_v1",
+      "task_version_id": "bf88b387-f5b5-4452-b539-4ad48f0c177e",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-fubspot-gen",
+        "version": "v0.0.3",
+        "version_id": "a1532a5c-6ec9-45bd-899d-24c0fe3d1df5",
+        "data_id": "current-fubspot-gen",
+        "data_version": "v0.0.3",
+        "runtime_seed_content_sha256": "eb050c791894cc7c4d11de119d78b4d51363c9d5710981ff0ef50600393108b8"
+      },
+      "verifier": {
+        "id": "b5b10de4-6cd5-4ca4-8c12-da08f44ceba6",
+        "version_id": "69f4315a-a96e-4324-b0b3-4ef7f7b77690",
+        "version": 1,
+        "sha256": "cd998313b43539d1b0c58243dc0f9ca8fb676158c27e36bd5c8cddb8f971d9a9"
+      },
+      "current_binding_sha256": "sha256:741854c01e05093ee2971c5360f12576fbfe947af5f8dc81328f8fbcbad913a3",
+      "execution_evidence": {
+        "cell_id": "161b5a0b-3cde-5176-aeab-4abe1ea9ef35",
+        "session_id": "5983504a-9d96-43ae-8f72-48e21208ab42",
+        "verifier_execution_id": "27ea5b15-d087-455a-903a-8f08a8d7e292",
+        "receipt_sha256": "6f41a551e7d5c7f2119e64df6f53e2014aa8352e9208fd2e066c7655b8ff47e9",
+        "config_sha256": "950c1d266bb997c7737cb7f3f6225e3cb371afa605db0d41eab9dde1d7efc778",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "4f9ce7fed34d7af5c7bd24149fa742b8b551592c78e6c7cb004fdd2f4c6c9511",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-d15d056570961f463e4e6ba8__blackbox_ctf_v1",
+      "task_version_id": "c3fbe2bd-b9e6-41b1-a47f-5342fdc28053",
+      "split": "dev",
+      "environment": {
+        "id": "cysec1-2-fira-gen",
+        "version": "v0.0.3",
+        "version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+        "data_id": "cultivacore",
+        "data_version": "v0.0.61",
+        "runtime_seed_content_sha256": "b06f9f7f6ffe034b016e72d1c59dc1b12624f58b503f306093a887abf608a703"
+      },
+      "verifier": {
+        "id": "1d8fc234-06f3-4761-84b6-c6ee1faadd05",
+        "version_id": "4aba006b-3e30-4424-b89b-aaefadb22498",
+        "version": 1,
+        "sha256": "4c93488a5d17ab94fb15e4c65e8df9e5e78f7effacbe57ef11460fe68a88d6a4"
+      },
+      "current_binding_sha256": "sha256:09ea8dafea354f5f07eec759a614a6966ca23bc70c9c279ad1fa8d523923fafc",
+      "execution_evidence": {
+        "cell_id": "4a1707b6-5c58-5eb9-a038-0f127c72f34d",
+        "session_id": "1d5e4916-82db-4b16-a311-bc9621e77c5b",
+        "verifier_execution_id": "8d05a5ec-7d44-4721-b24f-a5eab5ebb1b5",
+        "receipt_sha256": "1a8533e98f7c289c569655a4c04618ad04236ec46d9ed5d9b4507764d5b8b67e",
+        "config_sha256": "1a23220edd69c8e100aab1ea70793e7bc479aeef611c4d3748a9057e272ace63",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "2484a603fa3dc7f803292ee299b73cce2d2844824b0d1a280a2ee0753c5d81bd",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-77c0e8243397223c34010670__blackbox_ctf_v1",
+      "task_version_id": "d05fbffb-db7e-4d27-b6d1-5a854b74e6cd",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-fakelook-gen",
+        "version": "v0.0.3",
+        "version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+        "data_id": "fakelook-cyber-gen",
+        "data_version": "v0.0.2",
+        "runtime_seed_content_sha256": "b7b70a6604a6734a7ea4901427f4fda60f1cdbeb15f86dcd010eb18692d94b4a"
+      },
+      "verifier": {
+        "id": "beff3988-5782-4054-b003-226a44c14cbe",
+        "version_id": "7f152c8a-50df-4577-82a5-210504411987",
+        "version": 1,
+        "sha256": "8b8ced38a3a1fae28d6877ea88c0bcfb59751844f56a887a13e2405cc8f2f8bb"
+      },
+      "current_binding_sha256": "sha256:027ff5e69796364d7ca210b0e4e897ba0c314f97f24a53ed2f74432ed90d3469",
+      "execution_evidence": {
+        "cell_id": "52fab18b-0cfe-5faa-9cfd-7689d32dba85",
+        "session_id": "e5af5e80-a5c3-4bf0-8faa-e3c6e1a38603",
+        "verifier_execution_id": "d255beba-1d90-4c21-947b-cdbb9ee47a85",
+        "receipt_sha256": "3e6a2f749ba7919826c52cf901edbab4b3f10e98695ff3b6fbb3cca737211856",
+        "config_sha256": "71ed428136ce3b699eb9ac546702b20a983769e6962463ea509500ddd3dfc2a8",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "830d31e7497456d3d5c4c1742cb8cec73c5426221fc406e4efe811dfcd057039",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fentry-gen_blackbox-54997075dbb8019cd6e2e0ba__blackbox_ctf_v1",
+      "task_version_id": "d4f5e664-d4fd-4492-a103-429260ad9e99",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-fentry-gen",
+        "version": "v0.0.3",
+        "version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595",
+        "data_id": "fentry-current-gen",
+        "data_version": "v0.0.3",
+        "runtime_seed_content_sha256": "cf9e273abe39e9d06c0d9e4ea4134b39cabae404fb114a0b8b31d8ebdb5e02b5"
+      },
+      "verifier": {
+        "id": "fa8b350b-8f33-408d-a893-b483cd50f801",
+        "version_id": "19e772d7-8039-40eb-95d9-69b1d0eb88ea",
+        "version": 1,
+        "sha256": "7d80e46b2eab6c2f881e75f717771616ae3e366d5435571096939e144a0b6365"
+      },
+      "current_binding_sha256": "sha256:5878e338800b61959bdafcdd4ce9d690fd3f9a232487c0f7085515dcca8ba632",
+      "execution_evidence": {
+        "cell_id": "6db79335-83a6-5ba8-9f72-83cc765590cc",
+        "session_id": "5f5fb2eb-1497-4205-ba86-594be7561564",
+        "verifier_execution_id": "d22a31dd-7d3f-4baf-b607-6bc72b9f9f02",
+        "receipt_sha256": "853a31ea84652a3a6cc4dce88e68fce4e186b8e6556d1271890aa1e3051f5aad",
+        "config_sha256": "a37da115af5544e051386f6cc277558fb32d0bef82b6627aef934378481de25d",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "69b0faf45a2205a8e439a4f17466222c14eb8f1bc301075c197d0c6efe4f1a37",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-fb581ab1aa4a347bb5f6fd65__blackbox_ctf_v1",
+      "task_version_id": "d6634975-2918-4037-9cd2-467f365e39b0",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-fakelook-gen",
+        "version": "v0.0.3",
+        "version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+        "data_id": "fakelook-cyber-gen",
+        "data_version": "v0.0.2",
+        "runtime_seed_content_sha256": "ebd5af0e97ce2c45f236ae2837b32dbaa31dd3aed738a07e05edae736b2bc7c2"
+      },
+      "verifier": {
+        "id": "1472d621-2504-4355-b6c8-5a6ee5cd49e8",
+        "version_id": "e9c7ee54-fc4e-4323-ae19-cc4925373b52",
+        "version": 1,
+        "sha256": "2a59c187459c094056644ab7a463dc292b600489c69ecb46701d63f2df961ed5"
+      },
+      "current_binding_sha256": "sha256:b5959ba1261c610f83d2d05deab9edb8116b1f90358b37bb03b0af582a48e4f6",
+      "execution_evidence": {
+        "cell_id": "8b90c1f1-630c-524e-9199-bb038efe5633",
+        "session_id": "0cdbeb68-f7af-424e-8428-4c99ad054e5a",
+        "verifier_execution_id": "72b63c0c-d733-42f2-a765-ee30c81c8749",
+        "receipt_sha256": "9e6ea4302294c7aca844e7f1039f3e7cab6d3381b246265f6e9f4c2cd828ccf6",
+        "config_sha256": "f2f4b5d82ef13c317279d8d906725faed81cdc0134fef34af2092344bf6e8968",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "4e589ffc662ebf69d6e282f192704d751ce05e5699dfd49e56079f8b2a7c035e",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-58a5b481cf56ffb7954e7396__blackbox_ctf_v1",
+      "task_version_id": "d6c906fc-ef92-4ce6-ab9c-54a9b7eb9037",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-current-gen",
+        "version": "v0.0.3",
+        "version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+        "data_id": "commercial",
+        "data_version": "v0.0.9",
+        "runtime_seed_content_sha256": "91b610a5e3d5e34c5a948f4afdffbee1fc1380da9651d00fdcc8498768ecbefb"
+      },
+      "verifier": {
+        "id": "300d5237-437b-40f7-9444-afe9707edeba",
+        "version_id": "cd4f9311-141a-413f-b0f9-fe57e27470e4",
+        "version": 1,
+        "sha256": "4b4e7eb028a07993a81c13e3798318914f9a4591ac2725948d20fde35f426dfd"
+      },
+      "current_binding_sha256": "sha256:d9ba6595f9f8261a39bdbfe39a7c5bf2e320789562d5e99332012ee10dffab65",
+      "execution_evidence": {
+        "cell_id": "1f062cfc-4575-50aa-81ee-7623f36de9d6",
+        "session_id": "5d957caa-e7ae-47f0-ad01-7fdb401a663e",
+        "verifier_execution_id": "f05badab-4ddb-425b-901b-ad811e7ddf50",
+        "receipt_sha256": "0fe3d3d8a6ee138097a1cbdbd64e97379d69dfb7253e5dc652718b854620a485",
+        "config_sha256": "9fa14fa0c93a03b02de0cabf97991be22f07d0ef1da67e972652d9829fdb4a93",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "09bad4d294d9cae54684a4e648223f9098ca7b361c9cb0e1347d9929fb6e4983",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-6e75d5980fc7f883ad6c80ae__blackbox_ctf_v1",
+      "task_version_id": "d73098dc-4f03-4761-8a81-cc9ec914286c",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-current-gen",
+        "version": "v0.0.3",
+        "version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+        "data_id": "commercial",
+        "data_version": "v0.0.9",
+        "runtime_seed_content_sha256": "3169f724142b1bdd353a24f1aa46c5952a06bc49a15420ff94a6af779a523413"
+      },
+      "verifier": {
+        "id": "eee387f2-3553-4455-b39d-17e16f4cf6db",
+        "version_id": "fe8ddbfa-9deb-41d7-8f15-78a075b7f22c",
+        "version": 1,
+        "sha256": "442a2f06d79452fb8cbf4524f64aede7d43f248f03182cd8ee990aef9a8e46bc"
+      },
+      "current_binding_sha256": "sha256:dc6768c3481a6a794208d6bacf69bc9cbab58dd143d8208513f312893f9dfb95",
+      "execution_evidence": {
+        "cell_id": "205ab572-dda8-5317-bedf-80e53f0954a7",
+        "session_id": "0bf1368d-1176-47ad-8642-ee571ecbdea6",
+        "verifier_execution_id": "28ec4172-64ee-4182-be67-ff53d979d65e",
+        "receipt_sha256": "9968e8b6a785c357af0a8cd67ceddcfa88740dff586691435dd2aacc30e45ede",
+        "config_sha256": "f5809a708d3636b3d020f3d82e96da7f402294885fdbf4b4081c9eb2bfbe8451",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "ddc778cc58a60f7e277799ece1e000d3eb45350e1f54156b9d2880d2f0b0705b",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-734b2d86c51fb16ffe102235__blackbox_ctf_v1",
+      "task_version_id": "daa5bbbb-0f63-481f-be8e-1d217c12740e",
+      "split": "dev",
+      "environment": {
+        "id": "cysec1-2-current-gen",
+        "version": "v0.0.3",
+        "version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+        "data_id": "commercial",
+        "data_version": "v0.0.9",
+        "runtime_seed_content_sha256": "d46b9197d04ed990589d4aa46f18f5c966c52cec17fb0282e716387a13d785e7"
+      },
+      "verifier": {
+        "id": "d2dd4603-b85a-47ab-98f3-686395dc0e75",
+        "version_id": "ec4d8067-2962-4565-8006-cbedf9e41a35",
+        "version": 1,
+        "sha256": "b173844b5a383f89178a10a85aa9493aa5c6c8d90e3a3e2bad94fe3e110d223d"
+      },
+      "current_binding_sha256": "sha256:69fd359ec35664a62bbf9c0fe6104ac9af5709cb65465a4cb20d723632042335",
+      "execution_evidence": {
+        "cell_id": "1f2df3a3-608f-5a87-ba1b-4ebae2a3c294",
+        "session_id": "3da93442-b171-437d-bd9c-1b6a9e68f814",
+        "verifier_execution_id": "a2b6d719-b5cf-4cec-ac67-9cd20786f6e4",
+        "receipt_sha256": "9f073fa0ec0cd6de5e4cfe360df92dff5d99770084ed616f5befc92f85b71307",
+        "config_sha256": "85d00766f49d09f3f395adb189cdb59046cc9d2673a942db04d6bbf846baec6a",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "6e16ca70e2e755736daaf9b41cdebbe12e2ab4caba8e2e5bd3698597979f621c",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-9063fa10a36b73f9044c608f__blackbox_ctf_v1",
+      "task_version_id": "dcf2aefc-e34d-4a4a-8aa9-b18a3b754d5a",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-fakelook-gen",
+        "version": "v0.0.3",
+        "version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+        "data_id": "fakelook-cyber-gen",
+        "data_version": "v0.0.2",
+        "runtime_seed_content_sha256": "fc737d32579f2873f9e021d0e0450ea257919d5a543519f7398b9050cb91b168"
+      },
+      "verifier": {
+        "id": "4c656d8b-6426-4c74-ad9f-3f66f17709f5",
+        "version_id": "96929b24-99ac-4806-b115-8bd4af4c1dbb",
+        "version": 1,
+        "sha256": "ddd63655efcd5a5275e28a8fe4a55974ac7f64ddcdd903bd91aa84252559491f"
+      },
+      "current_binding_sha256": "sha256:8b33ba7590c6df8db556d41a19e80edb04b6045da11ae1fb8f7cf571915c351a",
+      "execution_evidence": {
+        "cell_id": "9bedacd7-1a8c-5121-b090-befbf47b3b7b",
+        "session_id": "f0558747-f7d2-4fd6-affd-7f9a68b96fa7",
+        "verifier_execution_id": "e7ab1cf9-5d31-420c-87aa-9c663098205e",
+        "receipt_sha256": "78aed11942cefd2447cf09394c33a37491ebba75ff83106788a55e645091c303",
+        "config_sha256": "14c254687be752fe155a623161168464877f2878b329d994a79aa871aeee6539",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "3aeb83731f4d56ff5ae65fe0d1d7c801f4885234f29bbc35d1e3276a4f78d213",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-9afe9e08da314948b573657e__blackbox_ctf_v1",
+      "task_version_id": "dd8dd22e-75c0-4b93-8f8e-ea8a292d92bb",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-current-gen",
+        "version": "v0.0.3",
+        "version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+        "data_id": "commercial",
+        "data_version": "v0.0.9",
+        "runtime_seed_content_sha256": "372e7d9a2e705f944213a8fe1f24caf92f5f040b152fe16e263729a3a4999865"
+      },
+      "verifier": {
+        "id": "d42d96e8-690c-45ef-bf86-f03b064ed3c5",
+        "version_id": "e380dd5d-121a-4c53-a866-74a4adf57706",
+        "version": 1,
+        "sha256": "fd4f7612e00c76913e7ab80572aaffd987483169c8502be99550ce305a3b5713"
+      },
+      "current_binding_sha256": "sha256:4d503eb81c242510199bf4457a44516a106f1c547efeeae3f56cd36e5d14f38f",
+      "execution_evidence": {
+        "cell_id": "77d2db4e-8cd1-54f6-a403-238fbc7404d7",
+        "session_id": "32a7437c-9cd9-403d-934b-1420d2ae56f4",
+        "verifier_execution_id": "33a268d3-c311-484a-89ee-2101e4fad740",
+        "receipt_sha256": "3b2c8e47c6cfaa574e294afcd846e00f5e2bb11c0740105155a5fd1f093f60d0",
+        "config_sha256": "dcfb7db03c3bb160f2458f92da614887696dd1b6ce64447424f1a6c1847d2fff",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "45c8539142617f3371fe4e39a11b8e22edd80655df7811c682789b01c6cd7a4c",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-8095d44c3871865064a0702c__blackbox_ctf_v1",
+      "task_version_id": "e13f62eb-170a-40c6-86bf-3c3f3829e3d8",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-fakelook-gen",
+        "version": "v0.0.3",
+        "version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+        "data_id": "fakelook-cyber-gen",
+        "data_version": "v0.0.2",
+        "runtime_seed_content_sha256": "570f5e55ba890f46cdc1e7fa1287469427e82f93fa3647f76b282b0d01c8a062"
+      },
+      "verifier": {
+        "id": "11a70fa0-b8b4-4070-9f53-63774b776e57",
+        "version_id": "0c51f20b-1c7e-4f02-b06a-7e84bc6b2b59",
+        "version": 1,
+        "sha256": "3939eada5fe74176a8a38330cf48556d98baa0f7744332b32df0be7c8897403c"
+      },
+      "current_binding_sha256": "sha256:3280f1361ae46bd0afc244e743412a546540e54a102f634271142ea8dee1f8e8",
+      "execution_evidence": {
+        "cell_id": "f332b8fe-4af5-5b00-a091-6fd7bc12318d",
+        "session_id": "566b0f6b-985a-4c3d-950c-9d9f6b5f94aa",
+        "verifier_execution_id": "51d6f1b4-9cfe-441f-a460-912428685219",
+        "receipt_sha256": "6ad1d29f7f91b65ba00c8effc2703a5f8fb43eb201284794240ba49149aec5a9",
+        "config_sha256": "b4b1db5b4e5c0509e830080389ecd4376f9b0e72d285b6ae57077877dd59f463",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "8b1ed32cbd2055460ce50e0dfba55fd060cc89af2d5d021973930e3446ffbb68",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fubspot-gen_blackbox-cace9d0a59a8bd2f56076c63__blackbox_ctf_v1",
+      "task_version_id": "e32f1402-ec95-4df3-9c04-8e5e0400242c",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-fubspot-gen",
+        "version": "v0.0.3",
+        "version_id": "a1532a5c-6ec9-45bd-899d-24c0fe3d1df5",
+        "data_id": "current-fubspot-gen",
+        "data_version": "v0.0.3",
+        "runtime_seed_content_sha256": "a117cb25b90d3adc2a7032f32b86f162c9c1123b2230ca6ab8754690c8640de7"
+      },
+      "verifier": {
+        "id": "5efaf977-b387-4ab9-bf29-df087e743f7a",
+        "version_id": "16cd2330-3d55-4568-85e4-e5a242880daf",
+        "version": 1,
+        "sha256": "1f626c7562d957a6fda808d5250819f8d41a17e610eb6ff7188858600e790fc3"
+      },
+      "current_binding_sha256": "sha256:e18c22b03ff5bf5cefee4ea2c566ad7e18bfa33cb17ca56a9040c1aa06a07073",
+      "execution_evidence": {
+        "cell_id": "22fb6273-a075-5586-b698-5fa75b6af645",
+        "session_id": "edbf9ef7-e80a-4e14-9be5-05138191c188",
+        "verifier_execution_id": "01ad3719-3c13-4550-b51b-e395c29af437",
+        "receipt_sha256": "cd180736c63b9398a99efe6227617e1f69deeabb1fdb897b7fc940e1287b5068",
+        "config_sha256": "c90d326bc9634ab98543c04c21a423bed4b3b77639da1283eeace67ec6f7eaa3",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "74438d5bbc5520288b542d1889d2283476d05f5f76c8864ccc0204fb8e7af654",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-58a4ac6886feda0738f2feb8__blackbox_ctf_v1",
+      "task_version_id": "e33aaed0-491b-46e8-8891-55d99c80ef56",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-current-gen",
+        "version": "v0.0.3",
+        "version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+        "data_id": "commercial",
+        "data_version": "v0.0.9",
+        "runtime_seed_content_sha256": "90e2f77c94754d14a146a155abbeb046bbdee87c898386948427823533497ed6"
+      },
+      "verifier": {
+        "id": "3d076392-c095-4865-b7b8-c8d2b235ad32",
+        "version_id": "30583195-28bf-4a2a-b0c9-e64a492f6d57",
+        "version": 1,
+        "sha256": "765d0dabc046b411da43b344800f6561bec62a8e0e5908ef6a60a9de41f78a48"
+      },
+      "current_binding_sha256": "sha256:cf5abb34932b27f0c0dd0b89d2b5b07861afb66ccadbbd849acf657cea35adb7",
+      "execution_evidence": {
+        "cell_id": "53136a71-88a7-5354-b27c-0150a509191d",
+        "session_id": "a17b589f-8a0a-40f2-b14b-3198baa35888",
+        "verifier_execution_id": "ba27c8aa-9559-4353-b4be-c74a3a08fc44",
+        "receipt_sha256": "db73393ad306e962aa1b1b815b90ac623b3a8dd15bba50c252ccbde570e70230",
+        "config_sha256": "b3a3b33af971b6b1c199f19be2fc8be064b33b4baf8d36c0cbb01570c088d503",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "783832bffb01ca301ddd274ee4a20af1a0b91dd4e195964d26360dc5a592f824",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-f294215ad60b41799b9f7bac__blackbox_ctf_v1",
+      "task_version_id": "e4068901-ba6e-4faf-b30c-7535aa11f0fc",
+      "split": "dev",
+      "environment": {
+        "id": "cysec1-2-current-gen",
+        "version": "v0.0.3",
+        "version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+        "data_id": "commercial",
+        "data_version": "v0.0.9",
+        "runtime_seed_content_sha256": "2f6fcfbf89379caf57171c00120d6adab99efde23e2fc81c42a4a6dac4b39272"
+      },
+      "verifier": {
+        "id": "3c92bffc-acef-45e0-8525-b53b3ddbb435",
+        "version_id": "e99e97eb-5ad6-49d6-bcd9-40cedb863c97",
+        "version": 1,
+        "sha256": "545519808df26fa0e2379d4a0f880cd413853e4f5ca1b961cd74bbd8c2a61f08"
+      },
+      "current_binding_sha256": "sha256:9b757bdb0b816a6ed8023b91b6b3131c3173f28b4d10a7f1a7d16217596308cf",
+      "execution_evidence": {
+        "cell_id": "59cd7027-17a5-55cb-8cdf-d5148a96c116",
+        "session_id": "f7b60dae-3ffd-40fb-827e-c22e3b283fc4",
+        "verifier_execution_id": "c2b0a329-c3f5-4bab-837c-1bcc146505e5",
+        "receipt_sha256": "87af332b8c11a4bf65d5b19e0c320d6123c92a31052ce62e152c74198b6ca009",
+        "config_sha256": "c62c5561ed5a0da98791e761adb343093b89eb6e12c51bbba4768d6dfb126d68",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "a63dbdb6c4da86172ebdfa88c804b537c35efdceb7ef6172b839349a3382997d",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-16d922dbbfaa21f0f6fa5b97__blackbox_ctf_v1",
+      "task_version_id": "e53d70e2-c129-422a-b878-033bfb5556ab",
+      "split": "reserved_dev",
+      "environment": {
+        "id": "cysec1-2-current-gen",
+        "version": "v0.0.3",
+        "version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+        "data_id": "commercial",
+        "data_version": "v0.0.9",
+        "runtime_seed_content_sha256": "f618c9ab4dccd8c3b625db3a79bde46cf7a94730078df597b5eb5ee9b3286d4e"
+      },
+      "verifier": {
+        "id": "688a8bd7-1489-4951-a89f-4d6e495d60f4",
+        "version_id": "6dfe8513-890c-4b9c-8b85-f383d3520710",
+        "version": 1,
+        "sha256": "74f64fff42540983502c0c6d67ff2b6bd475dd1a848cac864686fabb99f78e76"
+      },
+      "current_binding_sha256": "sha256:200218d53a10c5e9301739c43aad28d71798aedc9418cdbe25ebdc1c97500352",
+      "execution_evidence": {
+        "cell_id": "29f09251-c63f-5097-9084-444518b8fadc",
+        "session_id": "ff3b3774-0600-410c-8987-060ac4d7ed44",
+        "verifier_execution_id": "4afaf8d1-79e7-46ae-bbb2-8f738f44274d",
+        "receipt_sha256": "ca3797e935701fc642ba68886d543a6f2992b60f0c5b7b92777f899afe2c489c",
+        "config_sha256": "550fe6a28437e5ddbee85ab6f0bf40eba6c977a6224e8a118cca0c72d130d907",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "6350eb926a9b1ce50854339557541a6487a0fe7d001d693b1a529cb36103ea66",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fubspot-gen_blackbox-6c0962e92122d89a62d04a45__blackbox_ctf_v1",
+      "task_version_id": "ee77cfbf-ceed-487f-a19d-3922aaaf4bad",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-fubspot-gen",
+        "version": "v0.0.3",
+        "version_id": "a1532a5c-6ec9-45bd-899d-24c0fe3d1df5",
+        "data_id": "current-fubspot-gen",
+        "data_version": "v0.0.3",
+        "runtime_seed_content_sha256": "9b9c8a95a492e2573ae28e872f564e44bcc57336c23aa7e760e09b56d1b006b5"
+      },
+      "verifier": {
+        "id": "cd62bc10-999f-4da0-900a-7053d0fd3a1a",
+        "version_id": "a5fd66a0-115e-45a2-8d3e-1f5c757e0060",
+        "version": 1,
+        "sha256": "37023c3a14631cb1a79c19bad4ebdb45256c3c1ac23dd27200defada8f475a77"
+      },
+      "current_binding_sha256": "sha256:81d441841f05490bb9b3b23ee1023969130ad83c170e764e8495f8f593ac8200",
+      "execution_evidence": {
+        "cell_id": "0dff3274-58d5-53f7-9123-5af89bb827b7",
+        "session_id": "df8cc03c-fa54-4ba3-a5fb-4c8424de89af",
+        "verifier_execution_id": "50f4f859-faba-4d4d-a107-e9d43e72552d",
+        "receipt_sha256": "8bdb7acb30801e74ec9a732dce445fb04567af3c4519ab6b03003a701a8a35b2",
+        "config_sha256": "9ae956a96dbbcad8dc5bb5fcc3d9b09f17a97e014622fcc316a2642fccf92769",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "7f710fab81b4b10af38c3863530c84b54a5d77788e55697396e49841b9fe5380",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-1865d9918e1ac5d264706d43__blackbox_ctf_v1",
+      "task_version_id": "eefe304c-499d-4c9e-b09c-8aa0fab87213",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-fira-gen",
+        "version": "v0.0.3",
+        "version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+        "data_id": "cultivacore",
+        "data_version": "v0.0.61",
+        "runtime_seed_content_sha256": "056582d4a0cec32de1406b0d8b42821b47ee0a7448e30dce56392155e1fa449d"
+      },
+      "verifier": {
+        "id": "fb656ad6-a53e-42d4-aee0-f703495f4cd4",
+        "version_id": "dde2818d-a999-4665-ada5-82a23a476c6d",
+        "version": 1,
+        "sha256": "4cbdfb810753ff9dcb1b3a96673f604ae74ea52ace5a1f65234e5083aca1da98"
+      },
+      "current_binding_sha256": "sha256:2d413dd5b9b2d6207d79e95cdc4a39f61f51ca75c86cc274e467bdc7b551d4be",
+      "execution_evidence": {
+        "cell_id": "f901c207-5b7d-5b60-b1aa-9d20671f99f4",
+        "session_id": "4c91240c-1a0a-4e64-a9f1-e9f528787ce2",
+        "verifier_execution_id": "6e61551e-8612-44ca-8451-c060e5b26bfb",
+        "receipt_sha256": "1f038b7f56206ed2cb3597574ce9a803dd44b681d3e5ca1d39fafe26096e0cc7",
+        "config_sha256": "72eecc241d0a5a846350406ce2571bdee9efa7a2a1a836e2f9738f83174a8df3",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "a5b240b23342a9d908aff30d0beee1f3573f37b98fa62e6830645df91a60df48",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-03faebe1772eea3cd1e8e2cb__blackbox_ctf_v1",
+      "task_version_id": "f1ce26fc-39b6-442c-a03c-3c18f99e119f",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-fakelook-gen",
+        "version": "v0.0.3",
+        "version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+        "data_id": "fakelook-cyber-gen",
+        "data_version": "v0.0.2",
+        "runtime_seed_content_sha256": "f509bb876930c5bd5e5a09d61372a72ba9afeab2174f2d87d3cfcf81121a1766"
+      },
+      "verifier": {
+        "id": "7eca69bc-6272-4384-ac7c-9b544f284ea9",
+        "version_id": "0622ecef-bace-43bc-a832-433ddbb0bbdf",
+        "version": 1,
+        "sha256": "db27db17c70387e7af090758f791d1e960baa0826a9ea8d5372b4327d9e56422"
+      },
+      "current_binding_sha256": "sha256:e3622c310457816d6fd5b3868e03204638d620ac47bb13aa84cfccfcad280a71",
+      "execution_evidence": {
+        "cell_id": "06284f6f-a4d8-5ad1-928a-2c4ec42603c0",
+        "session_id": "da8fcd9c-1591-43ec-b706-2ba86fc44952",
+        "verifier_execution_id": "42af194d-ff4c-4ad4-bbe4-c5644b1e4fd2",
+        "receipt_sha256": "0cd2fc13925e8cee2b03878d57460d82b16bd4677f1fc0468fc70a62b56cd6d7",
+        "config_sha256": "b14c7c904c8d3b75fb2be835c9b8d5bf241a2cd56d85f9d192e7199e59cf44df",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "1a8d9d6d89336918082f6d2faac5ac02808893826fe6ede8092f75addb10e140",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-c17f94bad9b70de3dfa6f05c__blackbox_ctf_v1",
+      "task_version_id": "f31ebe83-0ff1-4660-bcba-59ffa4b82d5a",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-current-gen",
+        "version": "v0.0.3",
+        "version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+        "data_id": "commercial",
+        "data_version": "v0.0.9",
+        "runtime_seed_content_sha256": "8790a7cc422929834d0cf25dd26ba58a400a28fd0c127f8ebc815cebde5d1266"
+      },
+      "verifier": {
+        "id": "f7e0530d-4d17-4beb-a376-83a83ec6510f",
+        "version_id": "3158d910-f91d-4c22-83b9-70ddc678d572",
+        "version": 1,
+        "sha256": "6d349f3106c2ff1c9419adfae8df0ff683b3ba72fcf486f34de50a36dcc5738b"
+      },
+      "current_binding_sha256": "sha256:1b878bc0b8643b1c5894d868f3dd9c765e46ab4078b43ac202e943b0ddf894e0",
+      "execution_evidence": {
+        "cell_id": "31a4f3cc-c1cf-5092-a3b4-8cb4e637c598",
+        "session_id": "be3bef9f-ec7b-4f79-b021-4393ae4729ee",
+        "verifier_execution_id": "65521cc0-5f6f-4e04-8b86-88f290bc98df",
+        "receipt_sha256": "18f65707653a3fef0df96f046e918215041f4d555d5bc9c4e149ca1531c85429",
+        "config_sha256": "73eb950378ab597d0ae65fa06ff45b53c59843495b329ce812b1b4ec924e37f9",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "c7aa78d7dae80d4d0c47a5d817805f57e553306300da67840c83f3c9409a4d00",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-ae047f45e37c42a1ad5b09ca__blackbox_ctf_v1",
+      "task_version_id": "f50eee68-84c7-44d1-b4de-4c554ecc3e2e",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-fira-gen",
+        "version": "v0.0.3",
+        "version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+        "data_id": "cultivacore",
+        "data_version": "v0.0.61",
+        "runtime_seed_content_sha256": "0b6d0dd5a5116c940cb8f0bfddd1283b71de8f9478e489c3d7ee1a250b252286"
+      },
+      "verifier": {
+        "id": "7af54f6a-dc4d-4f69-b4ed-b197433f28b1",
+        "version_id": "ac420b35-7c74-4e48-b216-8cd2b64581d3",
+        "version": 1,
+        "sha256": "2f37941e5ceccce0d7fecd5bbb6ae12024edf6830045bf93b42583d5b8ec82cd"
+      },
+      "current_binding_sha256": "sha256:c87525c7867144c83c814b56f52de19502b418d9c9c71c61f8ae252d4d6ec711",
+      "execution_evidence": {
+        "cell_id": "5c3b90c1-1442-5a4c-a63c-c657cbd7897c",
+        "session_id": "13e2f6e6-7940-4290-ab05-ecb9c01ef012",
+        "verifier_execution_id": "30304d65-34b1-4d0e-a0c2-c172cb21bff8",
+        "receipt_sha256": "42be148d92d9848e2573ace52c09996cbf8666f5f3c6fa3eac5c7006d8004602",
+        "config_sha256": "3054d3a50be704d5e780d0874739d9a652d268c37b59dc5c7e44b38b01759a4b",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "e27a4bab1d63ca9a9026c8b00580f6a16a588554985a613487e8edd6fb4efbae",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-2637dbd94a61305dbd406c3c__blackbox_ctf_v1",
+      "task_version_id": "f8533754-39ad-4683-b9c1-d26bc24dfd14",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-fira-gen",
+        "version": "v0.0.3",
+        "version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+        "data_id": "cultivacore",
+        "data_version": "v0.0.61",
+        "runtime_seed_content_sha256": "bd33e335e12ee6060a4f0a562e4d5dbf0a77bc28dac40c4fde498c247b35337a"
+      },
+      "verifier": {
+        "id": "453d73b7-bef2-4442-9228-a93a81e398b1",
+        "version_id": "135d7a7c-5e61-4267-a977-20fe4581d5d7",
+        "version": 1,
+        "sha256": "ca4787d3042152925c0c0926243be8a9d1fb676e645f4f8631cbd522696845cc"
+      },
+      "current_binding_sha256": "sha256:b63a8331e97da9fa5e96321c9f952bc06522355e8ccecf64cacc17e2010cf3fb",
+      "execution_evidence": {
+        "cell_id": "5de3863b-ed7c-513b-b461-1d9ddcfdbfc7",
+        "session_id": "2a09c05b-2f76-488e-adf7-2ac98f07371f",
+        "verifier_execution_id": "3e3f1f55-1d69-4510-9474-6631b691bddf",
+        "receipt_sha256": "fcf155113b5dd25ca6e2c7f495040bb14347821372772b1dd5045b9dcf2575ca",
+        "config_sha256": "a02cdda9277f5b3075e865083aab2a152bf803a8b60b526b96636114ab856fd5",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "125f800b0868ade01d07274880021bf71d46ec5c26cb635e921bedf173534be2",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fentry-gen_blackbox-ce65143165164b6f99df040c__blackbox_ctf_v1",
+      "task_version_id": "fa04ef0d-3341-4b5f-8a13-d2955feaadc1",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-fentry-gen",
+        "version": "v0.0.3",
+        "version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595",
+        "data_id": "fentry-current-gen",
+        "data_version": "v0.0.3",
+        "runtime_seed_content_sha256": "7693352a2ed1b9a62d29bbad84d728b1e3475cf503c6d5adfe5ac5054e4dfb28"
+      },
+      "verifier": {
+        "id": "8109229c-ea8d-414b-80c1-ab6a6512ce5f",
+        "version_id": "d3e21b3e-c4f5-4c2d-b045-ce90b7fd1e3b",
+        "version": 1,
+        "sha256": "5f990670f9815f92cb4b5e59be3f5065676daf2bb78a2398ed25b49c6198611d"
+      },
+      "current_binding_sha256": "sha256:ac40ac95ccafb812be17c435de749924cc16a69a0ec3d0f70b6a9f18e6dfad12",
+      "execution_evidence": {
+        "cell_id": "2d1da17e-9676-5e81-a8ce-3ea950c574e4",
+        "session_id": "700cf0af-ec56-4b95-9ce1-dd4f472c7291",
+        "verifier_execution_id": "a686ca5e-5ab6-492f-9b37-5f0ba9d6f19a",
+        "receipt_sha256": "21439a9fa88715cdfdbb9b46ce53c091ca4845ee20e2107a8b4cbdcee29f3c1a",
+        "config_sha256": "3bb61598db2dbe1b54039b082f3283a26bba3c7aa9bf4686b7c576da865635f8",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "655b6ce8b9ee0ad8046b1135ba41c09359bbff9f91559c3ee3393b62c7abe6f0",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-3b29fc5db0365e6e61c585c4__blackbox_ctf_v1",
+      "task_version_id": "fb68f600-9850-4cc2-86e7-a4f554e5f93f",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-fira-gen",
+        "version": "v0.0.3",
+        "version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+        "data_id": "cultivacore",
+        "data_version": "v0.0.61",
+        "runtime_seed_content_sha256": "dd66c26b341db43c57d1bfc4f6e35aeb3adb8f076fd6c9b51d5d8251a74c5672"
+      },
+      "verifier": {
+        "id": "c102d7ce-de01-4eb9-b50b-20f1d106a7ee",
+        "version_id": "54b005d8-787b-4210-bd47-a149a93f82f8",
+        "version": 1,
+        "sha256": "1bcb355da10888ccbc99678b3581222b32956e08cd84e349d220aff55c12b4d0"
+      },
+      "current_binding_sha256": "sha256:7be979b1b7b38e6aea5dac39935c4f6929b9316562df3a8f3b2071652f3fe871",
+      "execution_evidence": {
+        "cell_id": "48bc2ca5-309e-5fec-b96c-78b5208c07c4",
+        "session_id": "b0b2a80a-960a-47df-b03d-be3409f96943",
+        "verifier_execution_id": "2c88a995-5177-41f7-918e-1dad6513c51d",
+        "receipt_sha256": "be8e37807942a772e6a2c339890423fd5bb2039efbaf6e38a648f6451b7b6b12",
+        "config_sha256": "d951b221c251f7cfea01ff5ac23881dabcbadb051cdd8059e3c74cade8b28cfa",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "e4a82aea95312e71ab9668c76a8e3181aab228364c11143c94ba82be43431a33",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fentry-gen_blackbox-46793210126eea4722e90448__blackbox_ctf_v1",
+      "task_version_id": "fb8f2178-7dd8-429a-8d3c-f14b21a51e02",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-fentry-gen",
+        "version": "v0.0.3",
+        "version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595",
+        "data_id": "fentry-current-gen",
+        "data_version": "v0.0.3",
+        "runtime_seed_content_sha256": "7ee489cd8e1d209e35767e1bb22c2bc7e9c8ec1c0cbaaab722c1b6b265225bba"
+      },
+      "verifier": {
+        "id": "a562c980-f541-4b8a-84fe-f24ab317f2b9",
+        "version_id": "cdb8b942-e8e7-4e27-b41f-bc5eae554621",
+        "version": 1,
+        "sha256": "46f322dd587887949c7ffdd63fc71db9f2e1e1d4ad7fcac03e79927f88b9744e"
+      },
+      "current_binding_sha256": "sha256:9873b3d13b86c39c533a45627b8bd64f410beee3542a308d5b1c05ab3981d1a8",
+      "execution_evidence": {
+        "cell_id": "172cc623-c302-591f-947d-ed9d0c20f2c4",
+        "session_id": "2b39e291-eb6b-4740-8471-e3c7b6af4763",
+        "verifier_execution_id": "7ebabd70-f17f-4338-bfe8-4aa162684845",
+        "receipt_sha256": "5d62a50d7404d7410ddd3edeaa79be7df846bac946c7e275f754cd60f6793d55",
+        "config_sha256": "826468606b9bd9fec8c91d7722a03a19f560463c892763ec8ba926f538853f1b",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "c160d260732f697c0a163728845c4fd15b3ffae2afd7c71a7d92d821ebe3de8a",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    },
+    {
+      "task_key": "cysec1-2-fentry-gen_blackbox-8b7c28d59cbc439114db9a56__blackbox_ctf_v1",
+      "task_version_id": "fd07b96f-7aa4-4041-862b-5aa7411eff4b",
+      "split": "train",
+      "environment": {
+        "id": "cysec1-2-fentry-gen",
+        "version": "v0.0.3",
+        "version_id": "318b8fee-da06-4b20-a28f-3009d6cf8595",
+        "data_id": "fentry-current-gen",
+        "data_version": "v0.0.3",
+        "runtime_seed_content_sha256": "e248cfe7a46f466abc8919e669643cae10fb09d5cb094ed5ee2036085229a82a"
+      },
+      "verifier": {
+        "id": "6cff3ec4-9469-4cfa-a962-e30cd2721841",
+        "version_id": "d4573141-68da-4005-8319-f6e7f3bc9081",
+        "version": 1,
+        "sha256": "afbcd7e400df5425102426d83fd1c738b81f071d9ef1614ef134da843e204892"
+      },
+      "current_binding_sha256": "sha256:fac17e4ecd6432add36b24da4ee17a4f8ff0a4eb3a2b791a625c9457bcb5046a",
+      "execution_evidence": {
+        "cell_id": "457e46db-29c8-514f-94ba-a1f1c9db1fc5",
+        "session_id": "98bc4b65-e8a8-402d-a879-cf03591261d5",
+        "verifier_execution_id": "bf2dfeed-fe4b-4a42-848b-3da418274b98",
+        "receipt_sha256": "4727cb9c2b6057cfb73eda8c5ab22b8c69410368bf1001b52c188d74b7a3a43a",
+        "config_sha256": "b9ddffea5868c11603bfc2458f339692060536833600bdbf0b055712142341a4",
+        "cleanup_sha256": "a2b8b54bd9eeb559c978e31b0ae889923e39d411a468d1af205b16486bbd290c",
+        "ingest_sha256": "cf850ce8470a605a4f5d9b082c2ee21770d6e363f0a424a0bc3b6160349e81f5",
+        "execution_digest_valid": true,
+        "config_reconstructed_to_receipt_digest": true,
+        "exact_current_environment_and_verifier_match": true
+      }
+    }
+  ],
+  "excluded_versions": [
+    {
+      "task_version_id": "032b6acc-13bc-4a9f-a57f-e3cd932988d4",
+      "split": "train",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "valid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "05733731-8dfc-44b6-b9ed-231af79f2d53",
+      "split": "test",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "invalid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "0b192133-c9b8-4211-b0a1-dbf98be46fe3",
+      "split": "train",
+      "historical_direct_receipt_verified": true,
+      "current_binding_status": "invalid",
+      "reason": "current_starting_data_absent"
+    },
+    {
+      "task_version_id": "11f420a0-65a4-4819-93f8-8a042c512da8",
+      "split": "dev",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "valid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "1456ccf2-5992-4a7c-9763-75248ef7b732",
+      "split": "test",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "invalid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "21baee36-dc26-4dcd-983e-ae58a665dfa9",
+      "split": "train",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "valid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "24030b60-cb61-4366-a3be-b3b808cad8ba",
+      "split": "train",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "valid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "242227d2-065f-46da-8229-dbdecd99c46e",
+      "split": "test",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "valid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "25b185c5-6aee-479d-97ba-d94ed9df1f42",
+      "split": "train",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "valid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "2b841931-a8ff-4f5c-b32b-6824ea5b4429",
+      "split": "train",
+      "historical_direct_receipt_verified": true,
+      "current_binding_status": "invalid",
+      "reason": "current_starting_data_absent"
+    },
+    {
+      "task_version_id": "2b9ba166-6f43-44aa-894d-75761314c150",
+      "split": "train",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "invalid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "2c47ef51-29f9-4736-9916-18b748059cc6",
+      "split": "dev",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "valid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "2d62ff6e-92d4-4b85-8741-14bc78209e03",
+      "split": "test",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "valid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "2de89322-296d-42dd-8038-06c8aee262bd",
+      "split": "test",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "valid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "32d32c35-52f1-43a1-8d3d-3faaf01aa6a5",
+      "split": "train",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "valid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "33d37078-0669-478e-af39-43cd245f0da8",
+      "split": "train",
+      "historical_direct_receipt_verified": true,
+      "current_binding_status": "invalid",
+      "reason": "current_starting_data_absent"
+    },
+    {
+      "task_version_id": "34fd6ab4-43f6-4f6d-a51e-7f55fb35b878",
+      "split": "train",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "invalid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "390e360e-ad44-43c2-91fd-8e7c9801b0be",
+      "split": "train",
+      "historical_direct_receipt_verified": true,
+      "current_binding_status": "invalid",
+      "reason": "current_starting_data_absent"
+    },
+    {
+      "task_version_id": "3ffeac73-fff8-49d8-b156-e726275edc2f",
+      "split": "train",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "valid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "4283ed2c-bd4e-4ce8-b92c-80d46d5729e4",
+      "split": "train",
+      "historical_direct_receipt_verified": true,
+      "current_binding_status": "invalid",
+      "reason": "current_starting_data_absent"
+    },
+    {
+      "task_version_id": "49789232-945c-43f9-b25f-a16f82457b5c",
+      "split": "train",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "invalid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "4a4aba06-38d4-4fc7-83ee-b625fc934d00",
+      "split": "train",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "valid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "4b40f0b0-a8b7-465c-94f6-fce0a4acd2cb",
+      "split": "reserved_dev",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "valid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "53669bab-1389-48cf-9d08-68e411f9cd78",
+      "split": "train",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "valid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "560890d1-66cc-4fdc-b191-513797e763b1",
+      "split": "test",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "valid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "5806d715-26cf-4aeb-a4b8-8ec692d79b33",
+      "split": "reserved_dev",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "valid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "588b521c-74c2-4670-a38c-e4d4fd981c38",
+      "split": "test",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "valid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "5fdde785-acb4-4140-b234-5811ab1f8d1e",
+      "split": "test",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "valid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "60bd1c32-506e-4df7-884e-f804b6da27bb",
+      "split": "test",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "valid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "611014e8-6787-43a0-87a1-5c70fb69e3e1",
+      "split": "train",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "valid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "61ff6681-c1e6-44cc-814c-02c43edce687",
+      "split": "train",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "valid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "62ed9ac8-478d-45a2-a09b-6750f5946d97",
+      "split": "train",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "invalid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "66051718-314a-4dad-86ab-c7b9b72fa514",
+      "split": "train",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "valid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "6a0e9f5f-dd72-40cc-a50d-6906b8f62c28",
+      "split": "train",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "invalid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "7e1fc9f6-7717-49bf-aee5-c09686dca297",
+      "split": "train",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "valid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "7ec7aeca-0c69-4df6-989e-81278980d0a9",
+      "split": "train",
+      "historical_direct_receipt_verified": true,
+      "current_binding_status": "invalid",
+      "reason": "current_starting_data_absent"
+    },
+    {
+      "task_version_id": "877f451f-29b2-48ab-bdcb-3c05aade4ccb",
+      "split": "test",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "valid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "90338ce0-194b-4cea-bef4-d64e5d426319",
+      "split": "train",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "valid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "91369354-e904-405e-9b86-8c793fbae289",
+      "split": "test",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "valid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "941c1062-2ecd-4263-9d5c-f364eca44c46",
+      "split": "test",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "valid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "9c3de7a0-90eb-470d-b6b8-c8bb2e86467c",
+      "split": "train",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "invalid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "9d37921b-5ec7-413f-be13-986b1c2d66e8",
+      "split": "dev",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "invalid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "9fd14da1-efd5-4852-81aa-e6020219b75f",
+      "split": "train",
+      "historical_direct_receipt_verified": true,
+      "current_binding_status": "invalid",
+      "reason": "current_starting_data_absent"
+    },
+    {
+      "task_version_id": "9ff9f2eb-3359-4321-9f65-d42accfdcace",
+      "split": "test",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "invalid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "a05eb7c4-3107-4f19-b4bb-4a6d90fea614",
+      "split": "reserved_dev",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "valid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "a0cacaaf-480b-4a4c-9ed7-6b6192bb6783",
+      "split": "train",
+      "historical_direct_receipt_verified": true,
+      "current_binding_status": "invalid",
+      "reason": "current_starting_data_absent"
+    },
+    {
+      "task_version_id": "b26ec4e6-c86f-4005-8f6c-b2473b6de3bd",
+      "split": "train",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "invalid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "b2f61fae-a07b-42c7-92ec-eeb4fa2064b6",
+      "split": "train",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "valid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "b51ee7e6-78ce-4358-895d-ecebf43cc582",
+      "split": "test",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "valid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "b571037f-bec1-4d59-b987-2d86fd8e0f19",
+      "split": "test",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "valid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "b66aad3c-0225-46ab-a8fa-c616e9d3f3ff",
+      "split": "train",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "valid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "b6f2349e-fcb1-4a18-9c8d-3278d3f72991",
+      "split": "train",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "valid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "b7b452c2-af1e-4c11-acf3-3d855c846e74",
+      "split": "train",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "invalid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "b8b0644b-db81-4d6a-a420-0416eb3dbb66",
+      "split": "test",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "valid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "b90a33ad-c4b6-4ce6-9757-5009bc3b3b17",
+      "split": "reserved_dev",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "invalid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "bdb3778f-33da-4eb6-96ef-6b9a7a828d41",
+      "split": "train",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "invalid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "be398179-b809-441f-85d0-b981c64faf43",
+      "split": "train",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "valid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "c07d363e-b67b-4e0b-8669-8c75bd3eb773",
+      "split": "dev",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "invalid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "c0d14c8f-5f33-4957-8e38-af075bbf3df9",
+      "split": "train",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "valid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "c3aeb7aa-d823-4b81-9373-3762539b36b7",
+      "split": "test",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "valid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "e42d481e-e0eb-42b2-a4dc-62b1a57ce93d",
+      "split": "test",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "invalid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "e7a41e55-2a4e-48d0-931b-eb4d002ccd43",
+      "split": "dev",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "valid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "e856de31-fe15-4aab-8519-6ae4554561d7",
+      "split": "test",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "valid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "e90d9673-7260-4460-9eb5-6ec2e9e24329",
+      "split": "train",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "invalid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "eae5337c-eeba-48f8-b5b0-a0310a690a05",
+      "split": "dev",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "invalid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "eb5a91b3-b2ac-446c-93ee-c4f57f5da0a4",
+      "split": "dev",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "valid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "f0366278-f58b-4a63-bcd1-55da55ad59a9",
+      "split": "reserved_dev",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "valid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "f7b9d881-c718-488c-8e36-f9cdf62afa38",
+      "split": "train",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "valid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "f956619f-ab6d-4851-b45d-496a331f90c6",
+      "split": "train",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "invalid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    },
+    {
+      "task_version_id": "fa83b3a7-be02-4193-9670-2cd794fa28b4",
+      "split": "train",
+      "historical_direct_receipt_verified": true,
+      "current_binding_status": "invalid",
+      "reason": "current_starting_data_absent"
+    },
+    {
+      "task_version_id": "fe274b85-707f-4a84-ada9-9470f84e39ea",
+      "split": "test",
+      "historical_direct_receipt_verified": false,
+      "current_binding_status": "valid",
+      "reason": "exact_historical_execution_receipt_not_verified"
+    }
+  ]
+}

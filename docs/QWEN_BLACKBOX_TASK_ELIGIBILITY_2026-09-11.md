@@ -3,17 +3,25 @@
 Read-only evidence census. PostgreSQL snapshot: **2026-09-11 20:38:36 UTC**.
 Live training-key session census: **20:45:06–20:47:44 UTC**.
 Local source manifests, source-ID projections and opaque file hashes checked
-through **20:51 UTC**. No jobs, environments, retries, reconciliations, dataset
+through **20:51 UTC**; direct receipt and current-binding validation completed
+through **21:06:51 UTC**. No jobs, environments, retries, reconciliations, dataset
 exports or catalog writes were performed. No prompts, trace/message contents,
 flags, answers, grader source/result bodies, or held-out scores were displayed.
 
 ## Decision
 
-**Do not publish `configs/data/qwen-blackbox-eligible-v1.json` yet.** This audit
-establishes substantial real execution and source availability, but cannot
-independently certify an exact-version runnable allowlist under the requested
-environment + functioning grader + genuine terminal outcome + cleanup standard.
-The strict-qualified task count is **not established**, not “zero working tasks.”
+**89 exact task versions now pass the task-version evidence gate: 74 train,
+13 dev and 2 reserved-dev.** The digest-bound
+[eligible task manifest](../configs/data/qwen-blackbox-eligible-v1.json) records
+their exact environment/verifier and independently validated execution receipts.
+The initial receipt-access gap was closed using an **already-running read-only
+reader**, not a new job. This is evidence of a genuine previous terminal run plus
+matching current immutable bindings, not a new live health test or launch approval.
+
+**The 20-task dev set is not fully qualified yet:** 7 original dev versions still
+lack the required historical proof. The 2 reserved-dev versions stay reserved;
+none of these 15 non-training versions may enter training. SFT trace-context and
+compaction qualification is a separate, still-open gate.
 
 - The frozen a62 roster contains **160 distinct blackbox task keys and exact
   task-version UUIDs**, not 160 proven independent vulnerability families.
@@ -31,8 +39,10 @@ The strict-qualified task count is **not established**, not “zero working task
   lineage.
 - The exact ledger/catalog join corroborates **361 direct accepted sessions on
   83 training task versions**, and **74 successful Qwen source candidates on 38
-  training versions**. Receipt bytes, exact runtime-verifier/environment bindings
-  and replayable training context remain independent gates.
+  training versions**. Direct receipt-byte checks now cover every one of those
+  83 task versions and all 74 Qwen candidates. Of the latter, **73 have clean
+  trace manifests**; **67** also match current valid runtime bindings. These are
+  candidates, not 67 newly accepted SFT sources.
 - Existing private data is recoverable: **35 prepared Qwen self traces**, the
   older **442 teacher traces**, and the newer **186 GPT-only dense teacher
   sources** have verified local metadata/file bindings. All 35 Qwen and 186
@@ -51,6 +61,113 @@ The strict-qualified task count is **not established**, not “zero working task
 Infrastructure-invalid, truncated, grader-ambiguous and unresolved sessions must
 not enter either denominator as genuine failures or become automatic retries.
 No ambiguous/accepted session was repeated during this audit.
+
+## Follow-up: direct receipt and exact-runtime gate closed for 98 versions
+
+The first census below remains frozen at its original timestamps. The bounded
+follow-up read **119 accepted training cells**, covering all **83 direct-accepted
+train versions** and all **74 Qwen source candidates**, plus one clean,
+outcome-blind representative for each of **15 non-training versions**.
+No model-success predicate was applied to task eligibility. A functioning grader
+that records a genuine failed solve is as valid for this gate as a successful solve.
+
+The existing reader was Job `chris-cyber-rollout-receipt-reader-r5-v1`, UID
+`cb56b728-653a-42c2-a885-d9f063cf3311`; Pod
+`chris-cyber-rollout-receipt-reader-r5-v1-65s9n`, UID
+`3ff27834-d128-4043-8917-50e3e6dd6587`. Its `/campaign` mount is read-only and
+selects only `jobs/chris-cyber-q38-glm53-pass4-ledger-v1` on SFS. It was Running,
+Ready with zero restarts, with UID rechecked around the reads. The PostgreSQL Pod
+does **not** mount this SFS tree. No observer/reader resource was created or changed.
+
+For all **134 checked cells**, the audit independently:
+
+1. Recomputed `ACCEPTED.json`'s canonical self-digest and matched the exact ledger
+   receipt, cell, execution, run, session, verifier execution and configuration IDs.
+2. Read only allowlisted binding metadata. Reconstructed the original complete
+   per-cell configuration from its stored binding and versioned worker recipe;
+   **all 134 reconstructed configuration digests match the accepted digest**.
+   Thus the historical environment, data, verifier and harness fields are bound
+   to the accepted execution—not merely inferred from today's catalog or a
+   same-directory JSON file.
+3. Verified exact runtime environment/data versions and UUIDs, the private
+   runtime-seed content digest, and verifier UUID/version/digest; checked the
+   scoring-intent self-digest and exact execution IDs without reading result bodies.
+4. Matched the cleanup and completed session-ingest file digests to the stored
+   ledger evidence, and verified the expected cleanup booleans and session ID.
+5. Compared metadata-only trace manifests with the stored canonical trace digest.
+   **Trace bytes were not opened or independently rehashed.** A manifest hash
+   match is not a new claim that every recorded tool/context event is usable for SFT.
+
+All 15 non-training session summaries also independently matched their exact
+session/verifier-execution IDs and task keys with completed, ended, healthy
+verifier-process state at **21:06:51 UTC**. No scores or model-success outcomes
+were read for these dev/reserved sessions.
+
+Private, restricted evidence artifacts (canonical self-digests exclude `sha256`):
+
+| Artifact | Coverage | Self SHA-256 |
+|---|---|---|
+| `/private/tmp/cpt-qwen-receipt-evidence-20260911T2100Z.json` | 119 cells / 83 train versions / 74 Qwen candidates | `722fe6fed4b43be9b1dd855e95292e89e6e3c7fd29d117c7d0cd4f4c44c4f619` |
+| `/private/tmp/cpt-qwen-heldout-receipt-evidence-20260911T2106Z.json` | 15 cells / 13 dev + 2 reserved-dev versions | `ae18edf68878603573375fd72a6c7b51126b198f1d76ffd140a23174ea904a60` |
+
+Both artifacts contain only IDs, digests, metadata and validity booleans; both
+are mode 0600 and are not committed. The first is historical receipt evidence;
+its later current-binding join is recorded in the eligible manifest, not implied
+by its earlier timestamp.
+
+### Present bindings are a separate check
+
+The current-binding audit at **21:04:03 UTC** is
+`data/private/qwen-study-20260911/current-bindings.json`, self-digest
+`15ff4a85bc67279d021c9f1a21a82f4b6751d19b6df3ba8aa214ced4c277a5f2`.
+Its complete-file and all **160 individual row self-digests** were independently
+verified. **132/160** selected versions have complete current immutable bindings;
+**17 lack starting-data binding**, and **11 lack an immutable runtime-seed or
+verifier pin**. A valid present binding by itself is not an execution proof.
+
+Intersecting those 132 with the **98 receipt-proven versions** gives **89**;
+their current environment and verifier fields exactly match the historical
+accepted configuration. Nine receipt-proven train versions currently lack a
+starting-data binding and are explicitly excluded from the runnable selection.
+That does not invalidate their proved historical executions.
+
+| Dense-v4 split | Receipt-proven exact versions | Also match complete current bindings | Still lack receipt proof |
+|---|---:|---:|---:|
+| Train | 83 | 74 | 30 |
+| Dev | 13 | 13 | 7 |
+| Original test | 0 | 0 | 20 |
+| Reserved dev | 2 | 2 | 5 |
+| **Total** | **98** | **89** | **62** |
+
+The eligible manifest preserves the dense-v4 split unchanged, explicitly lists
+all **71 exclusions**, and grants **no SFT-source acceptance or job-launch
+authority**. Its self-digest is
+`c45c9cc420a3dbf1aa6b635b84ed1ca3c404254f046ffdac234e053929a1bf12`.
+Current binding validity intersects 49/61 dense teacher task versions and 17/20
+prepared-self task versions; this is not a new teacher-session runtime lineage proof.
+
+### Qwen source-quality exception and the compaction limit
+
+All 35 prepared Qwen source trace manifests are clean. Of the 74 direct Qwen
+candidates, one is excluded from SFT: session
+`dd0fc50a-e29b-4154-947b-00121dfec0a0`, cell
+`c2d818b5-ad40-58bd-aa9b-7d6ab11c4ea3`, task version
+`47180c40-447d-4b8c-9387-ca8bae891e46`. Its manifest records **3 malformed lines**
+and only partial valid-JSON normalization. It is **not** in the prepared 35.
+Two other clean checked receipts cover that same task version, so the task remains
+eligible while this specific session does not.
+
+After the present-binding intersection there are **68 Qwen candidates on 33
+versions**, of which **67** have clean manifests. **31/35 prepared Qwen sources**
+are on the 17 currently bound prepared-self versions. Do not confuse these counts
+with 68/67/31 new strict SFT acceptances.
+
+The accepted configuration pins OpenCode **1.18.27**, asset digest
+`4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702`, native
+compaction/autocontinue, context window **262,144**, and **20,000** token compaction
+headroom. This proves the configured context policy, **not whether a particular
+session compacted or whether its post-compaction context is faithfully replayable**.
+That SFT-context check remains open; no trace contents were inspected to bypass it.
 
 ## Historical roster and split quarantine
 
@@ -143,8 +260,9 @@ Two further direct accepted cells were reconciled but have no matching
 `eb9a61f4-e92f-5702-a88d-6136d9c86f0b`.
 Both carry reconciliation digest
 `42b4cdef3f1287172b67b924b65cb740891bd1453545b70974b0c7a31baf7581`.
-All accepted cells have receipt digests; this audit did not read the remote
-receipt bodies to independently revalidate them.
+All accepted cells have receipt digests. The initial 20:38 census did not read
+the remote receipt bodies; the follow-up above independently validated 134
+selected direct receipts, not every accepted or reconciled campaign cell.
 
 There are **578 local-result records**: 316 Qwen and 262 GLM. Qwen's 58
 nonaccepted local records remain review-only: 30 exit-0/ingest-failed,
@@ -244,9 +362,10 @@ hundreds of new Qwen examples.
 The historical staged data location is
 `/mnt/sfs/jobs/chris-cyber-sft-dev20-20260910-inputs-v1/data/{qwen-teacher,qwen-self}/`.
 The September 10 handoff records independent cluster file-hash checks.
-**Current remote existence was not revalidated**: the only running owned Pod in
-the inspected namespace was PostgreSQL, which mounts its database PVC and not
-SFS. No observer/reader Job was created.
+**Current remote existence of these staged SFT files was not revalidated.** The
+initial source-path audit inspected PostgreSQL, which mounts its database PVC,
+not SFS. The later existing read-only reader mounts only the rollout campaign
+subtree, not these separate SFT input paths. No observer/reader Job was created.
 
 Exact source rosters are reproducible without reading text: project only
 `source_session_id` and `task_key` from the hash-bound Parquet files; deduplicate
@@ -282,21 +401,22 @@ No new Registry product was promoted into the experiment on publication alone.
 
 ## Remaining gates; no inferred authorization
 
-1. Recover the existing sanitized acceptance/reconciliation receipts and their
-   immutable task, environment, verifier, model and harness bindings through a
-   supported read-only artifact path; independently verify the digests. Do not
-   create an archive reader under a no-submission audit.
-2. For the 60 a62 versions outside this campaign, recover exact-session runtime
+1. The direct-receipt gate is closed for 98 versions, with 89 matching complete
+   current bindings. Recover or repair exact current starting-data bindings for
+   the nine historical-only exclusions through the normal task owner workflow;
+   this read-only audit does not authorize those mutations.
+2. For the 60 a62 versions outside this campaign, plus the two versions with
+   only historical acceptance metadata, recover exact-session runtime
    pins and terminal/cleanup evidence from the historical source job or a
    score-blind catalog projection. The current summary API cannot answer this
    exact-version question. Preserve all 47 non-training identities as quarantined.
 3. Resolve the new mATG accepted-entry/catalog/runtime join independently of
    model success, including genuine graded failures.
-4. For SFT, check exact teacher/student session provenance and usable context/
-   compaction boundaries. The 39 additional direct Qwen candidates are not
-   automatically an expansion of the prepared 35.
-5. Only then publish a digest-bound eligible selection, with all unknowns
-   explicitly excluded. Do not choose “easy” tasks solely because existing
+4. For SFT, check exact teacher-session runtime provenance and usable teacher/
+   student context and compaction boundaries. Exclude the malformed Qwen session;
+   the remaining candidates are not automatically an expansion of the prepared 35.
+5. The published eligible selection is a qualified **subset**, not a full-roster
+   or full-20-dev-set certificate. Do not choose “easy” tasks solely because existing
    models solved them or call a source-key split vulnerability-family-held-out.
 
 ## Reproducible, score-blind evidence queries
@@ -346,7 +466,9 @@ manifest. The UUID below is the task-version selection identity, not a claim tha
 the summary API returned that session pin. Q/G columns are accepted-attempt
 counts, **not solve scores**. `D` = direct accepted metadata exists;
 `H` = only historical accepted metadata; `N` = outside this ledger.
-All rows still need the strict independent runtime/receipt gate above.
+This original disposition table remains the 20:38 ledger snapshot. The later
+eligible manifest independently identifies the 89 versions that pass both
+historical receipt and current-binding gates; `D` alone is not that certificate.
 
 | Exact task-version UUID | Current split | Q accepted | G accepted | Ledger evidence |
 |---|---|---:|---:|---|
