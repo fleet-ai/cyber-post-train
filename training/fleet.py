@@ -107,6 +107,17 @@ class FleetClient:
     def transcript(self, session_id: str) -> dict[str, Any]:
         return self._get(f"/v1/sessions/{urllib.parse.quote(session_id, safe='')}/transcript")
 
+    def task(self, task_key: str, version_id: str) -> dict[str, Any]:
+        """Read one exact task version.
+
+        Callers must project the response before persisting it: the task route
+        contains private prompt and grader-adjacent fields.
+        """
+        return self._get(
+            f"/v1/tasks/{urllib.parse.quote(task_key, safe='')}",
+            {"version_id": version_id},
+        )
+
     def completed_jobs(self, *, created_after: dt.datetime) -> Iterator[dict[str, Any]]:
         """Page the inclusive `created_before` cursor without duplicating rows."""
         cursor: dt.datetime | None = None

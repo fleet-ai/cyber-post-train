@@ -21,6 +21,7 @@ artifacts/
 checkpoints/
 data/raw/
 data/processed/
+data/private/
 output/
 results/
 wandb/
