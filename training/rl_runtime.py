@@ -26,8 +26,11 @@ def sealed(value, schema):
 
 def native_failure(plan, error):
     """Keep Ray's nested error types/code locations, never its private messages."""
-    causes, seen = [], set()
-    while isinstance(error, BaseException) and id(error) not in seen and len(causes) < 8:
+    causes, seen, pending = [], set(), [error]
+    while pending and len(causes) < 8:
+        error = pending.pop(0)
+        if not isinstance(error, BaseException) or id(error) in seen:
+            continue
         seen.add(id(error))
         # ActorDiedError flattens RayTaskError into its message, not .cause.
         # Parse only code locations/types; never persist that private message.
@@ -52,7 +55,9 @@ def native_failure(plan, error):
                 ],
             }
         )
-        error = getattr(error, "cause", None) or error.__cause__ or error.__context__
+        if isinstance(error, BaseExceptionGroup):
+            pending.extend(error.exceptions)
+        pending.append(getattr(error, "cause", None) or error.__cause__ or error.__context__)
     return _write(
         Path(plan["output_root"]) / "NATIVE_FAILURE.json",
         {"plan_sha256": digest(plan), "causes": causes},

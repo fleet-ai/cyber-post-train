@@ -2,6 +2,8 @@
 
 import json
 
+import pytest
+
 from training.rl_runtime import native_failure
 
 
@@ -56,9 +58,42 @@ def test_local_exception_retains_locations_without_payload(tmp_path):
     assert "credential" not in json.dumps(receipt)
 
 
-def test_actual_ray_actor_error_flattens_cause_to_message(tmp_path):
-    import pytest
+@pytest.mark.parametrize("wrapper", [None, "__cause__", "cause"])
+def test_grouped_failures_retain_leaf_types_without_messages(tmp_path, wrapper):
+    error = ExceptionGroup(
+        "private group message",
+        [TimeoutError("private tool"), ExceptionGroup("private inner", [ValueError("private")])],
+    )
+    if wrapper:
+        outer = RuntimeError("private wrapper")
+        setattr(outer, wrapper, error)
+        error = outer
+    receipt = native_failure({"output_root": str(tmp_path)}, error)
+    classes = [cause["error_class"] for cause in receipt["causes"]]
+    assert classes.count("ExceptionGroup") == 2
+    assert "TimeoutError" in classes and "ValueError" in classes
+    assert "private" not in json.dumps(receipt)
 
+
+def test_grouped_failures_are_bounded_and_cycle_safe(tmp_path):
+    leaf = TimeoutError("private")
+    error = ExceptionGroup("private", [leaf] * 20 + [ValueError("private")])
+    leaf.__context__ = error
+    receipt = native_failure({"output_root": str(tmp_path)}, error)
+    assert [cause["error_class"] for cause in receipt["causes"]] == [
+        "ExceptionGroup",
+        "TimeoutError",
+        "ValueError",
+    ]
+    # The existing bound applies to groups as well as ordinary cause chains.
+    other = tmp_path / "wide"
+    other.mkdir()
+    group = ExceptionGroup("private", [RuntimeError("private") for _ in range(20)])
+    receipt = native_failure({"output_root": str(other)}, group)
+    assert len(receipt["causes"]) == 8
+
+
+def test_actual_ray_actor_error_flattens_cause_to_message(tmp_path):
     ray = pytest.importorskip("ray.exceptions")
     detail = 'File "/root/training/miles_text.py", line 27, in __init__\nValueError: private data'
     error = ray.ActorDiedError(ray.RayTaskError("Actor.__init__", detail, ValueError("private")))

@@ -176,10 +176,9 @@ def check_fp8_cpu_dequantization_bf16_and_strict_router_meta_parity(base):
         assert torch.equal(parameter, expected)
 
 
-def test_native_fused_base_save_reload_has_no_adapters_or_requantization(tmp_path):
+def check_native_fused_base_save_reload_has_no_adapters_or_requantization(base, tmp_path):
     from transformers import AutoModelForCausalLM
 
-    base = synthetic_base(tmp_path)
     source_sha = sha_file(base[0] / "model.safetensors")
     # Remove the untouched adapters, without merging or taking an optimizer step.
     model = loaded(base).base_model.unload()
@@ -342,6 +341,9 @@ class TestGlm53LoraCompatibility(unittest.TestCase):
 
     def test_fp8_dequantization_and_meta_parity(self):
         check_fp8_cpu_dequantization_bf16_and_strict_router_meta_parity(self.base)
+
+    def test_native_fused_base_save_reload_has_no_adapters_or_requantization(self):
+        check_native_fused_base_save_reload_has_no_adapters_or_requantization(self.base, self.root)
 
     def test_checkpoint_exact_next_update(self):
         check_adapter_optimizer_checkpoint_exact_next_update_without_base_save(self.base, self.root)

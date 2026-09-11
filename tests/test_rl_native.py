@@ -17,7 +17,7 @@ from training import rl_episode as rl
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("fault", [None, "body", "tool_timeout"])
-async def test_real_mcp_transport_initializes_calls_and_closes(monkeypatch, fault):
+async def test_real_mcp_transport_initializes_calls_and_closes(tmp_path, monkeypatch, fault):
     pytest.importorskip("mcp")
     from importlib.metadata import version
 
@@ -85,6 +85,16 @@ async def test_real_mcp_transport_initializes_calls_and_closes(monkeypatch, faul
         else:
             assert any(c["error_type"] in {"ReadTimeout", "McpError"} for c in causes)
         assert any(c["frames"] for c in causes)
+        # Exercise the same grouped exception at the native trainer boundary too.
+        # Keeping only the outer ExceptionGroup lost the useful cause in a live run.
+        from training.rl_runtime import native_failure
+
+        native = native_failure({"output_root": str(tmp_path)}, caught.value)
+        classes = {c["error_class"] for c in native["causes"]}
+        assert classes & (
+            {"InvalidEpisode", "ValueError"} if fault == "body" else {"ReadTimeout", "McpError"}
+        )
+        assert "private" not in json.dumps(native)
     assert calls == [
         "initialize",
         "notifications/initialized",
