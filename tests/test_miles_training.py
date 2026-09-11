@@ -91,6 +91,39 @@ def test_compiler_and_portable_job_have_native_identity(plan):
     assert "WANDB_API_KEY" not in request["env"]
 
 
+def test_miles_has_independent_colocated_memory_defaults(plan):
+    from training.sft import RESOURCES as sft_resources
+
+    request = train.job_request(plan)
+    assert request["resources"] == train.RESOURCES
+    assert request["resources"] is not sft_resources
+    assert request["resources"]["memory_request"] == "1536Gi"
+    assert request["resources"]["memory_limit"] == "2048Gi"
+    assert sft_resources["memory_limit"] == "768Gi"
+
+
+@pytest.mark.parametrize(
+    "resources",
+    [
+        {"memory_request": "512Gi", "memory_limit": "768Gi"},
+        {"memory_request": "512Gi"},
+        {"memory_limit": "768Gi"},
+        {"cpu_request": "32"},
+    ],
+)
+def test_miles_rejects_underreserved_or_known_oom_shape(config, tmp_path, resources):
+    config["cluster"] = {"resources": resources}
+    with pytest.raises(ValueError, match="colocated RAM"):
+        train.compile_rl(config, relative_to=tmp_path)
+
+
+def test_miles_allows_larger_explicit_resources(config, tmp_path):
+    config["cluster"] = {"resources": {"memory_request": "2Ti", "memory_limit": "2304Gi"}}
+    request = train.job_request(train.compile_rl(config, relative_to=tmp_path))
+    assert request["resources"]["memory_request"] == "2Ti"
+    assert request["resources"]["memory_limit"] == "2304Gi"
+
+
 @pytest.mark.parametrize(
     "fault",
     [

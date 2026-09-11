@@ -28,6 +28,14 @@ from .rl_runtime import sealed as _sealed
 
 SCHEMA = "cyber_miles_training_v1"
 MODULE = "training.miles_training"
+# Colocated generation, Megatron and CPU offload have a different RAM peak
+# from SFT. The real Qwen canary exhausted its inherited 768-GiB limit.
+RESOURCES = {
+    "cpu_request": "64",
+    "cpu_limit": "128",
+    "memory_request": "1536Gi",
+    "memory_limit": "2048Gi",
+}
 NATIVE_DRIVER_SHA256 = "85dbfd31d41a84f9c2e79a2918583851fb53925630afa229e9cd0a154b170f46"
 RUNTIME_FILES = (
     "training/miles_training.py",
@@ -50,7 +58,7 @@ def _runtime():
 
 def compile_rl(config: dict, *, relative_to: Path) -> dict:
     from .models import bound_model
-    from .sft import RESOURCES, _known, _sfs_root, read_mapping
+    from .sft import _known, _sfs_root, read_mapping
 
     _known(
         config,
@@ -170,10 +178,11 @@ def job_request(plan):
     ):
         raise ValueError("Miles plan/runtime drift")
     resources = plan["execution"]["resources"]
-    if quantity(resources["cpu_request"]) < 64 or quantity(resources["memory_request"]) < quantity(
-        "512Gi"
+    if any(
+        quantity(resources[key]) < quantity(RESOURCES[key])
+        for key in ("cpu_request", "memory_request", "memory_limit")
     ):
-        raise ValueError("native Qwen RL requires its reviewed loading reservation")
+        raise ValueError("native Qwen RL requires its reviewed colocated RAM reservation and limit")
     files = _runtime()
     files.update(
         {p + "/__init__.py": "" for p in ("training", "evals", "evals/fleet", "cyber_post_train")}

@@ -394,6 +394,14 @@ cluster:
 roots must be staged and disjoint from the new output; the preparation manifest's
 paths and target hashes are rechecked before native training sees any data.
 
+The current Qwen Miles profile reserves 1,536 GiB host RAM and caps it at
+2,048 GiB per node (64 CPUs requested). Its colocated rollout engines, trainer
+and CPU offload exhausted the former SFT-derived 768-GiB cap before any episode.
+Smaller reservations/limits are rejected; larger ones remain configurable via
+`cluster.resources`. These are conservative startup bounds, not a completed
+capacity proof. Check the node's allocatable RAM and normal admission before
+submitting. This change does not alter the model, task split or optimizer recipe.
+
 CPU preflight checks the native FTI argument builder and actual text-only data
 source, including template identity and train/dev row retention. Qwen's automatic
 vision processor must not reinterpret Miles' already-rendered text prompts;

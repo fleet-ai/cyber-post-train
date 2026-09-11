@@ -1,0 +1,31 @@
+{
+  "schema": "cyber_cleanup_miles_memory_preparation_v1",
+  "state": "CPU_QUALIFIED_NOT_GPU_SUBMITTED",
+  "reason": "V5 recorded one container OOM event and peaked near its inherited 768Gi cap before any episode or checkpoint.",
+  "change": "Independent Miles host-RAM defaults: request 1536Gi, limit 2048Gi per node. Reject undersized overrides before preview.",
+  "capacity_limit": "Conservative reservation, not a proven peak or completed GPU startup. Prior node allocatable RAM was 2791576432Ki.",
+  "scientific_recipe_changed": false,
+  "local_tests": {"passed": 162, "native_only_skipped": 2},
+  "cpu_preparation": {
+    "name": "chris-cpt-q38-rl-cpu-prepare-v7",
+    "pod_uid": "bd77e408-ace3-4c88-ab24-fa591d441399",
+    "finished_at": "2026-09-11T11:56:49Z",
+    "exit_code": 0,
+    "restarts": 0,
+    "gpus": 0,
+    "environment_creates": 0,
+    "receipt_digest_independently_verified": true,
+    "receipt_sha256": "c64b3dceb526397fced7438a819faf9c408111d4dfa86efd66147c085282a1d3",
+    "bundle_sha256": "30fbbdfe4ae393e7d18122558d60f7a665501c1ece5af5ef54adf173f9ddf3dc",
+    "actual_bundled_entrypoint_selftest": "passed",
+    "native_namespace_check": "passed; GPU-only libcuda import remains untested on CPU",
+    "prepared": "/mnt/sfs/jobs/chris-cpt-cleanup-q38-rl-inputs-v6/miles/prepared",
+    "plan_sha256": "9eef5a4e7b206f032cd178c547c947f053b2bef1aa13827223161ce029e7c721",
+    "request_sha256": "f024aef6651a8687d17fae520ba9766cecb72005315149e4d5279889500aad59",
+    "preflight_sha256": "348fcb8d4027b7317d108c2cb15561d94cae833ee3db56622f1d470ab5906e9d",
+    "train_rows": 2,
+    "dev_rows": 1,
+    "data_sha256": "5d66a2e066a2c4d31e382c6529a4ffc31d53686f049fd5c78271fd22c779f91f"
+  },
+  "next_gate": "Exact API preview, duplicate and total-node budget checks before a single corrected GPU canary. Never replay V5."
+}

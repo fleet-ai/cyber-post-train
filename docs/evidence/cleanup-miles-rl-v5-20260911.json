@@ -1,7 +1,8 @@
 {
   "schema": "cyber_cleanup_miles_rl_submission_v1",
   "source_fix_commit": "7ca83be",
-  "state": "RUNNING_STARTUP",
+  "state": "INFRASTRUCTURE_INVALID_HOST_RAM_OOM",
+  "terminal_at": "2026-09-11T11:44:54Z",
   "api_name": "chris-cpt-q38-miles-rl-v5-f81a2a88",
   "api_run_id": "f81a2a88-6936-4d0e-afe2-84169c32261d",
   "rayjob_uid": "dd024af6-2807-4aef-95e2-ad135ad125bd",
@@ -17,8 +18,38 @@
   "one_post": true,
   "journal": "/mnt/sfs/jobs/chris-cpt-cleanup-q38-rl-inputs-v5/miles/prepared/SUBMISSION.jsonl",
   "effective_priority": 10000,
-  "ready": true,
-  "restarts": 0,
+  "ready": false,
+  "restarts": 1,
+  "first_container_exit_code": null,
+  "first_container_termination_reason": null,
+  "termination_detail_limit": "The first container lastState was not retained before controller cleanup. No exit code is inferred.",
+  "release_verified": {
+    "raycluster_absent": true,
+    "owned_pods_absent": true,
+    "workload_admission": null,
+    "quota_reserved": false,
+    "gpus_held": 0
+  },
+  "host_memory_evidence": {
+    "source": "Historical Prometheus metrics selected by exact namespace, Pod name and container; observed Pod UID is recorded above",
+    "container_oom_events_total": 1,
+    "peak_usage_bytes": 813818380288,
+    "peak_working_set_bytes": 761296236544,
+    "peak_rss_bytes": 517882388480,
+    "limit_bytes": 824633720832,
+    "interpretation": "Container host-RAM OOM, not GPU VRAM exhaustion. The inherited SFT 512Gi request/768Gi limit was insufficient."
+  },
+  "terminal_receipt_audit": {
+    "pod_uid": "6efa12a7-972d-461f-8913-6abcb8a5049b",
+    "finished_at": "2026-09-11T11:47:30Z",
+    "exit_code": 0,
+    "restarts": 0,
+    "gpus": 0,
+    "receipt_sha256": "0540eafb3ce947527359a92e294e619731873de7784a94240cec52bd11fccd6c",
+    "present_receipts": ["STARTED.json"],
+    "episode_files": 0,
+    "checkpoint_files": 0
+  },
   "runtime_image_id_verified": true,
   "started_receipt_sha256": "8089ce962adacd62b2df71c69e1ccb356d95a9911f3f73600393316abe95112b",
   "job_environment_megatron_source_path_verified": true,
@@ -38,7 +69,7 @@
   "wandb_run_id": "cpt-q38-miles-rl-v5",
   "wandb_dashboard_independently_verified": true,
   "wandb_url": "https://wandb.ai/thefleet/cyber-post-train/runs/cpt-q38-miles-rl-v5",
-  "wandb_observed_state": "running",
+  "wandb_observed_state_before_failure": "running",
   "startup_observation": {
     "observed_at_utc": "2026-09-11T11:43:06Z",
     "trainer_actors_alive": 8,
@@ -68,5 +99,5 @@
   "preview_duplicates": 0,
   "scientific_recipe_changed": false,
   "change_from_v4": "Supply the complete native Megatron source path in the job environment and preserve it in Ray workers; validate namespace resolution before allocation.",
-  "qualification": "CPU prerequisites only. No real reward, optimizer update or RL checkpoint recovery is qualified."
+  "qualification": "The namespace fix advanced to live rollout and trainer actors, but initialization ended in host-RAM OOM. Zero episode/checkpoint files; no real reward, optimizer update or RL checkpoint recovery is qualified."
 }
