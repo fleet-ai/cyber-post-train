@@ -38,6 +38,7 @@ SERVER_FIELDS = {
     "reasoning_parser",
     "tool_call_parser",
 }
+SERVER_OPTIONAL_FIELDS = {"dp_size", "load_balance_method"}
 TASK_FIELDS = {
     "task_key",
     "task_version_id",
@@ -189,7 +190,9 @@ def compile_eval(config: dict, *, relative_to: Path) -> dict:
             ("model_info", MODEL_FIELDS),
             ("server_info", SERVER_FIELDS),
         ):
-            if set(route[field]) != keys:
+            actual = set(route[field])
+            optional = SERVER_OPTIONAL_FIELDS if field == "server_info" else set()
+            if not keys <= actual or actual - keys - optional:
                 raise ValueError("serving profile must bind every required runtime field")
         if route["server_info"]["context_length"] != treatment["context_window_size"]:
             raise ValueError("serving and harness context lengths differ")

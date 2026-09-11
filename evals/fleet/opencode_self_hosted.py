@@ -32,7 +32,6 @@ TRANSIENT_READ_STATUS_CODES = {429, 502, 503, 504}
 MAX_READ_ATTEMPTS = 6
 SESSION_INGEST_CHUNK_MESSAGES = 32
 SESSION_INGEST_CHUNK_BYTES = 512 * 1024
-PROVISIONED_DATA_VALIDATION = "exact-version-provisioned-instance-v1"
 OPENCODE_CONTEXT_MANAGEMENT = "opencode_1.18.27_native_compaction_autocontinue_v1"
 OPENCODE_NO_AUTOCONTINUE_CONTEXT_MANAGEMENT = "opencode_1.18.27_native_compaction_no_autocontinue"
 OPENCODE_NO_AUTOCONTINUE_PLUGIN = (
@@ -93,6 +92,10 @@ def request_diagnostic(response: httpx.Response) -> dict:
         result["reason"] = "verifier_version_unpinned"
     elif detail == "Exact task hydration did not resolve environment and data versions":
         result["reason"] = "environment_or_data_version_unresolved"
+    elif detail == (
+        "Historical task version has no recorded seed selection; cannot reproduce starting data"
+    ):
+        result["reason"] = "historical_seed_selection_absent"
     return result
 
 
@@ -290,12 +293,12 @@ def ensure_instance_lifetime(
     return receipt
 
 
-def task_data_binding(task: dict[str, Any]) -> dict[str, str] | None:
+def task_data_binding(task: dict[str, Any]) -> dict[str, str]:
     """Read versioned seed references without borrowing a mutable task default.
 
     The task API intentionally clears legacy data fields on non-current
-    versions. Modern versions expose seed_config; legacy versions may have
-    neither. The latter require an explicit, later exact-instance data gate.
+    versions. Modern versions expose seed_config. If both are absent, Fleet
+    refuses hydration: an instance POST cannot recover the missing provenance.
     """
     data_id, data_version = task.get("data_id"), task.get("data_version")
     if (data_id is None) != (data_version is None):
@@ -307,6 +310,8 @@ def task_data_binding(task: dict[str, Any]) -> dict[str, str] | None:
         legacy = {"data_id": data_id, "data_version": data_version}
     seeds = task.get("seed_config")
     if seeds is None or seeds == {}:
+        if legacy is None:
+            raise RuntimeError("exact task version has no recorded starting-data binding")
         return legacy
     if not isinstance(seeds, dict) or len(seeds) != 1:
         raise RuntimeError("single-environment task seed binding is ambiguous")
@@ -352,15 +357,9 @@ def bind_task(response: dict, selected: dict) -> tuple[dict, dict, dict]:
     actual_runtime = {
         "environment_id": response.get("environment_id"),
         "environment_version": response.get("version"),
-        "data_id": runtime_data["data_id"] if runtime_data else None,
-        "data_version": runtime_data["data_version"] if runtime_data else None,
+        "data_id": runtime_data["data_id"],
+        "data_version": runtime_data["data_version"],
     }
-    if runtime_data is None:
-        if response.get("environment_version_id") != selected["environment_version_id"]:
-            raise RuntimeError("legacy task lacks the exact environment version binding")
-        for field in ("data_id", "data_version"):
-            actual_runtime.pop(field)
-            expected_runtime.pop(field)
     if actual_runtime != expected_runtime:
         raise RuntimeError("live task runtime differs from the frozen selection")
     metadata = response.get("metadata") or {}
@@ -376,8 +375,6 @@ def bind_task(response: dict, selected: dict) -> tuple[dict, dict, dict]:
         "output_json_schema_sha256": sha256(canonical_json(response.get("output_json_schema"))),
         "cyber_contract": metadata.get("cyber_contract"),
     }
-    if runtime_data is None:
-        task["data_binding_validation"] = PROVISIONED_DATA_VALIDATION
     environment = {
         "id": selected["env_key"],
         "version": selected["env_version"],
@@ -404,20 +401,14 @@ def verify_task(config: dict[str, Any], task: dict[str, Any]) -> dict[str, Any]:
     expected = config["task"]
     _validate_task_identifiers(task, expected)
     runtime_data = task_data_binding(task)
-    if runtime_data is None and (
-        expected.get("data_binding_validation") != PROVISIONED_DATA_VALIDATION
-        or not config["environment"].get("version_id")
-        or task.get("environment_version_id") != config["environment"]["version_id"]
-    ):
-        raise RuntimeError("missing task data needs an exact provisioned-instance gate")
     verifier = task.get("verifier") or {}
     metadata = task.get("metadata") or {}
     actual = {
         "key": task.get("key"),
         "environment_id": task.get("environment_id"),
         "environment_version": task.get("version"),
-        "data_id": runtime_data["data_id"] if runtime_data else None,
-        "data_version": runtime_data["data_version"] if runtime_data else None,
+        "data_id": runtime_data["data_id"],
+        "data_version": runtime_data["data_version"],
         "prompt_sha256": sha256((task.get("prompt") or "").encode()),
         "env_variables_sha256": sha256(canonical_json(task.get("env_variables") or {})),
         "output_json_schema_sha256": sha256(canonical_json(task.get("output_json_schema"))),
@@ -446,12 +437,6 @@ def verify_task(config: dict[str, Any], task: dict[str, Any]) -> dict[str, Any]:
         "cyber_contract": config["task"].get("cyber_contract"),
     }
     actual["cyber_contract"] = (task.get("metadata") or {}).get("cyber_contract")
-    if runtime_data is None:
-        # Do not assert equality from absent metadata. The exact-version
-        # provisioned instance is checked below, before runner/model setup.
-        for field in ("data_id", "data_version"):
-            actual.pop(field)
-            wanted.pop(field)
     if "code_sha256" in config["verifier"]:
         actual["verifier_code_sha256"] = sha256((verifier.get("code") or "").encode())
         wanted["verifier_code_sha256"] = config["verifier"]["code_sha256"]

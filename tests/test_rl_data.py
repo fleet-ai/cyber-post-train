@@ -321,16 +321,41 @@ def test_no_receipt_when_native_loader_drops_or_changes_a_row(setup, drift):
     assert not (setup.tmp / "out" / "manifest.json").exists()
 
 
-@pytest.mark.parametrize("legacy", [False, True])
-def test_shared_binding_preserves_exact_runtime_and_legacy_data_gate(setup, legacy):
+@pytest.mark.parametrize("versioned", [False, True])
+def test_shared_binding_preserves_exact_runtime_with_recorded_data(setup, versioned):
     task, selected = setup.responses["synthetic-1"], setup.selection["tasks"][0]
-    if legacy:
+    if versioned:
+        task["seed_config"] = {
+            "seed": {
+                "env_key": task["environment_id"],
+                "data_key": task["data_id"],
+                "data_version": task["data_version"],
+            }
+        }
         task.pop("data_id")
         task.pop("data_version")
     binding, env, verifier = fleet.bind_task(task, selected)
-    assert ("data_binding_validation" in binding) == legacy
+    assert "data_binding_validation" not in binding
     config = {"task": binding, "environment": env, "verifier": verifier}
     assert fleet.verify_task(config, task) == task
+
+
+def test_rl_preparation_rejects_missing_seed_before_any_instance_or_output(setup):
+    task = setup.responses["synthetic-1"]
+    task.update(data_id=None, data_version=None, seed_config=None)
+    with pytest.raises(RuntimeError, match="no recorded starting-data binding"):
+        build(setup)
+    assert setup.calls and all(r.method == "GET" for r in setup.calls)
+    assert not (setup.tmp / "out").exists()
+
+
+def test_old_provisioned_data_exception_cannot_bypass_reload_gate(setup):
+    task, selected = setup.responses["synthetic-1"], setup.selection["tasks"][0]
+    binding, env, verifier = fleet.bind_task(task, selected)
+    binding["data_binding_validation"] = "exact-version-provisioned-instance-v1"
+    task.update(data_id=None, data_version=None, seed_config=None)
+    with pytest.raises(RuntimeError, match="no recorded starting-data binding"):
+        fleet.verify_task({"task": binding, "environment": env, "verifier": verifier}, task)
 
 
 @pytest.mark.parametrize("fault", ["key", "runtime", "legacy_version", "seed", "verifier"])

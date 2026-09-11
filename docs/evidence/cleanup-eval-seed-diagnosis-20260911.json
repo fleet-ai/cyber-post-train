@@ -1,0 +1,50 @@
+{
+  "schema": "cyber_cleanup_diagnostic_v1",
+  "classification": "historical_seed_selection_absent",
+  "observed_date_utc": "2026-09-11",
+  "supersedes_diagnosis_not_original_evidence": "cleanup-eval-provisioning-20260911.json",
+  "method": "Hash the exact static error in current platform source and compare with the preserved HTTP response fingerprint; no new POST and no private response text read",
+  "platform_source_commit": "1bffa43b7c6f44281c74300b47588976c413dd4f",
+  "introducing_commit": "7fdd63fe28313aa28e9b948007ae9c84b068f82e",
+  "introducing_commit_date": "2026-09-10T02:42:15Z",
+  "source": "orchestrator/temporal/activities.py::_build_task_payload",
+  "error_translation": "orchestrator/public_api/rollout_rewards.py::_hydrate_exact_task converts ValueError to HTTP 404",
+  "static_source_error": "Historical task version has no recorded seed selection; cannot reproduce starting data",
+  "json_serialization": "UTF-8 JSON object with one detail string, separators comma and colon, no trailing newline",
+  "candidate_and_observed_response_sha256": "46f5cc8721d03502e826bf47e673d5f8ee3bf37e0b916b38dfdb98f6583ab4b1",
+  "hashes_equal": true,
+  "exact_task_readback": {
+    "task_key": "cysec1-2-current-gen_blackbox-1a36d9c4959e23d01025a6d2__blackbox_ctf_v1",
+    "task_version_id": "2b9ba166-6f43-44aa-894d-75761314c150",
+    "response_sha256": "e0e6e0598db909539110a681b880a8d2616e90ed1b79f67ce90d3cd0fcbe8415",
+    "seed_config_present": false,
+    "data_id_present": false,
+    "data_version_present": false
+  },
+  "catalog_inspection_only": {
+    "task_version_id": "5997ba9e-ca66-4720-a3c6-230fddd2a908",
+    "prompt_differs_from_selected": true,
+    "silently_substituted": false
+  },
+  "bounded_read_only_census": {
+    "observed_at_unix": 1789119769.8807812,
+    "policy": "First 20 lexicographic train task keys in the frozen dense-dev20-v4 split outside the historical 100-task campaign; exact selected versions, no score selection",
+    "tasks": 20,
+    "http_200": 20,
+    "accepted_bindings": 16,
+    "missing_seed_bindings": 2,
+    "other_binding_drift": 2,
+    "post_count": 0,
+    "first_eligible_task_key": "cysec1-2-current-gen_blackbox-251f25f9d3de08f3da6c9184__blackbox_ctf_v1",
+    "first_eligible_task_version_id": "25b185c5-6aee-479d-97ba-d94ed9df1f42",
+    "first_eligible_response_sha256": "b43e2370f4f71274c4e228815f49979da20351608ea6a28bd49892302f6ac6e5",
+    "first_eligible_binding_sha256": "6a3b47c4d58bbfb6be060cb6faedd7bc49e61bb72be529321acc5dd85967785a"
+  },
+  "repair": "Reject absent starting-data identity during GET-only eval/RL preflight and runtime revalidation. Remove the obsolete exception that deferred missing provenance to instance creation.",
+  "limits": [
+    "The exact old task is not repaired or replayed; held results remain unchanged.",
+    "A matching error fingerprint diagnoses this rejection, not every possible future provisioning failure.",
+    "A newly selected qualification task is a separate descriptive treatment, never pooled with the old selection or campaign.",
+    "Legacy current-version data fields remain supported only when the exact GET exposes them and they match the frozen tuple; runtime readback remains mandatory."
+  ]
+}

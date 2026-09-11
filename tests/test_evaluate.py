@@ -202,6 +202,37 @@ def test_live_route_projection(configuration, drift, status):
             assert evaluation.check_route(route, model, client)["ready"] is True
 
 
+@pytest.mark.parametrize("drift", [None, "dp_size", "load_balance_method"])
+def test_data_parallel_profile_is_bound_without_reinterpreting_catalog(
+    configuration, tmp_path, drift
+):
+    route, model = configuration["routes"]["shared"], configuration["models"]["student"]
+    # Some catalog entries describe allocated GPUs here, not the runtime TP.
+    # Preserve both observed values; never silently equate them.
+    route["catalog"]["tensor_parallel_size"] = 8
+    route["server_info"].update(dp_size=8, load_balance_method="total_tokens")
+    plan = evaluation.compile_eval(configuration, relative_to=tmp_path)
+    assert plan["routes"]["shared"]["server_info"]["tp_size"] == 1
+    with endpoint_client(route, model, drift=drift) as client:
+        if drift:
+            with pytest.raises(RuntimeError, match="serving runtime drift"):
+                evaluation.check_route(route, model, client)
+        else:
+            assert evaluation.check_route(route, model, client)["ready"]
+
+
+@pytest.mark.parametrize("fault", ["missing_required", "unknown"])
+def test_optional_parallel_profile_does_not_relax_required_fields(configuration, tmp_path, fault):
+    profile = configuration["routes"]["shared"]["server_info"]
+    profile["dp_size"] = 8
+    if fault == "missing_required":
+        profile.pop("tp_size")
+    else:
+        profile["unreviewed"] = "value"
+    with pytest.raises(ValueError, match="every required runtime field"):
+        evaluation.compile_eval(configuration, relative_to=tmp_path)
+
+
 @pytest.fixture
 def prepared(configuration, tmp_path, monkeypatch):
     directory = tmp_path / "prepared"
@@ -258,6 +289,50 @@ def test_preflight_is_once_and_requires_all_task_bindings(prepared):
     path.write_text(json.dumps(proof))
     with pytest.raises(ValueError, match="incomplete"):
         evaluation.checked_preflight(prepared)
+
+
+def test_preflight_rejects_historical_missing_seed_using_only_gets(
+    configuration, tmp_path, monkeypatch
+):
+    directory = tmp_path / "prepared"
+    evaluation.prepare(configuration, directory, relative_to=tmp_path)
+    monkeypatch.setenv("FLEET_API_KEY", "synthetic-not-a-secret")
+    monkeypatch.setattr(evaluation, "check_images", lambda *_: None)
+    monkeypatch.setattr(evaluation, "check_route", lambda *_: {"ready": True})
+    calls = []
+
+    def respond(request):
+        calls.append(request)
+        assert request.method == "GET"
+        if request.url.path == "/v1/account":
+            return httpx.Response(
+                200,
+                json={
+                    "team_name": "fleet",
+                    "team_id": evaluation.harness.FLEET_TEAM_ID,
+                },
+            )
+        assert request.url.params["version_id"] == VERSION
+        return httpx.Response(
+            200,
+            json={
+                "key": "synthetic-" + VERSION[:8],
+                "eval_task_version_id": VERSION,
+                "environment_id": "synthetic-env",
+                "version": "v1",
+                "environment_version_id": VERSION,
+                "data_id": None,
+                "data_version": None,
+                "seed_config": None,
+            },
+        )
+
+    client = httpx.Client(transport=httpx.MockTransport(respond))
+    monkeypatch.setattr(evaluation.httpx, "Client", lambda **kwargs: client)
+    with pytest.raises(RuntimeError, match="no recorded starting-data binding"):
+        evaluation.preflight(directory)
+    assert len(calls) == 2
+    assert not (directory / "EVAL_PREFLIGHT.json").exists()
 
 
 def test_bounded_worker_does_not_initialize_or_repeat(prepared, monkeypatch):

@@ -55,6 +55,12 @@ The task set's `tasks` rows require `task_key`, `task_version_id`, `env_key`,
 Use reviewed UUIDs and versioned runtime tuples, never mutable current selectors.
 Historical outcome fields are not copied into the new plan.
 
+Exact task GET must also expose starting data (`seed_config` or both legacy
+data fields). Fleet deliberately rejects historical versions missing this
+record; an instance POST cannot recover it. Preflight fails before any rollout.
+Preserve the held attempt and review a new exact selection, never borrow a
+mutable current version or silently replace the task.
+
 Each route requires `model` (one alias above), `served_id`, `task_versions`,
 `endpoint_origin: https://inference.flt.build`, and these expected projections:
 
@@ -62,6 +68,12 @@ Each route requires `model` (one alias above), `served_id`, `task_versions`,
 - `model_info`: model_path, model_type, architectures.
 - `server_info`: model_path, context_length, tp_size, quantization,
   kv_cache_dtype, reasoning_parser, tool_call_parser.
+
+For data-parallel servers, additionally bind `dp_size` and `load_balance_method`
+in `server_info`. Catalog `tensor_parallel_size` is a control-plane declaration,
+not a substitute for the runtime's TP/DP values. Investigate disagreements against
+the exact Pod arguments, then freeze the observed profile in a new plan; do not
+edit a running plan or treat a changed serving topology as a matched control.
 
 Obtain profiles from the exact deployment and read-only gateway endpoints.
 Preflight and each new session compare them; never update a profile simply to

@@ -119,8 +119,18 @@ exists (405 with `Allow: POST`) and exact task lookup succeeds under explicit
 Fleet-team scope. The body fingerprint is retained but its cause remains
 unclassified. Exhaustive queued/pending/running instance listings found no newly
 created matching environment. [Diagnostic evidence](evidence/cleanup-eval-provisioning-20260911.json).
-This is not the generic `/v1/env/instances` create route. Do not repeat the held
-eval rows or infer a fix from the HTTP status alone.
+This is not the generic `/v1/env/instances` create route.
+
+**Resolved diagnosis, 2026-09-11:** the saved response fingerprint exactly matches
+the platform's static error for a historical task version without recorded
+starting data. The original source review predated that September 10 change.
+Current task GET confirms missing seed/data fields. Its mutable current version
+has a different prompt and was not substituted. Shared eval/RL preflight now
+rejects missing starting-data identity on GET, removing the unsupported deferred
+instance-check exception. A score-blind census found 16 of the first 20 exact
+train versions outside the active campaign still bind correctly. These are
+eligible for a separately frozen operational qualification, not replacement
+credits for the held rows. [Diagnosis and source fingerprint](evidence/cleanup-eval-seed-diagnosis-20260911.json).
 
 ## Remaining completion gates
 

@@ -25,6 +25,11 @@ from evals.fleet import opencode_self_hosted as runner
             "Exact task hydration did not resolve environment and data versions",
             "environment_or_data_version_unresolved",
         ),
+        (
+            "Historical task version has no recorded seed selection; "
+            "cannot reproduce starting data",
+            "historical_seed_selection_absent",
+        ),
         ("private prompt, credential and traceback", "unclassified"),
         ({"private": "content"}, "unclassified"),
         (None, "unclassified"),

@@ -131,12 +131,14 @@ def test_versioned_and_legacy_seed_binding_must_agree():
     task["data_id"], task["data_version"] = "data", "v2"
     with pytest.raises(RuntimeError, match="disagree"):
         runtime.task_data_binding(task)
-    assert runtime.task_data_binding({}) is None  # requires later exact-instance gate
 
 
 @pytest.mark.parametrize(
     "task",
     [
+        {},
+        {"seed_config": {}},
+        {"data_id": None, "data_version": None, "seed_config": None},
         {"data_id": "partial"},
         {"data_id": "", "data_version": "v1"},
         {"seed_config": []},
