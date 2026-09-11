@@ -12,7 +12,13 @@ import json
 from pathlib import Path
 
 from . import checkpoints
-from .sft_runtime import digest, write_receipt
+from .sft_runtime import (
+    digest,
+    selection_evidence,
+    selection_policy,
+    uses_reference_ce,
+    write_receipt,
+)
 
 
 def bind(plan: dict, config: dict, *, relative_to: Path) -> None:
@@ -45,10 +51,11 @@ def validate(plan: dict, *, check_files: bool) -> None:
         "lora",
         "split_manifest_sha256",
         "corpus_manifest_sha256",
-        "validation_mode",
     ):
         if plan.get(key) != source.get(key):
             raise ValueError("recovery cannot change model, data, topology or scientific recipe")
+    if selection_policy(plan) != selection_policy(source):
+        raise ValueError("recovery cannot change selection mode or the Fleet dev protocol")
     if plan["execution"]["image"] != source["execution"]["image"]:
         raise ValueError("recovery requires the source trainer image")
     if any(plan[k] == source[k] for k in ("run_name", "output_root")) or (
@@ -210,22 +217,31 @@ def load(trainer) -> int:
             "optimizer_step": manifest["optimizer_step"],
             "ranks": replies,
             "sampler_restored": True,
+            **selection_evidence(plan),
         },
     )
     return manifest["optimizer_step"]
 
 
 def validate_only(trainer) -> dict:
-    """Load and evaluate; deliberately never call train(), save() or optimizer.step()."""
+    """Restore state, with CE only for legacy plans; never train/save/optimize."""
     trainer.train_dataloader = trainer.build_train_dataloader(trainer.load_dataset())
-    trainer.eval_dataloader = trainer.build_eval_dataloader(trainer.load_eval_dataset())
+    reference_ce = uses_reference_ce(trainer.plan)
+    if reference_ce:
+        trainer.eval_dataloader = trainer.build_eval_dataloader(trainer.load_eval_dataset())
     trainer.global_step = load(trainer)
-    metrics, _ = trainer.run_eval()
+    metrics = trainer.run_eval()[0] if reference_ce else {}
     result = {
         "status": "reload_validated",
         "optimizer_steps_executed": 0,
         "optimizer_step": trainer.global_step,
-        "held_out": metrics,
+        **({"held_out": metrics} if reference_ce else {}),
+        "validation_scope": (
+            "checkpoint_sampler_reload_and_reference_ce"
+            if reference_ce
+            else "checkpoint_and_sampler_reload_only_no_ce"
+        ),
+        **selection_evidence(trainer.plan),
         "plan_sha256": trainer.plan["plan_sha256"],
         "source_manifest_sha256": trainer.plan["recovery"]["checkpoint"]["receipt_sha256"],
     }

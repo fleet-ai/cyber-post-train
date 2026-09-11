@@ -125,9 +125,43 @@ def _checked_file(path: Path, expected: str) -> None:
         raise ValueError("immutable file missing or digest mismatch")
 
 
+def selection_policy(plan: dict) -> dict:
+    """Normalize legacy defaults; outcome-only runs bind an external dev protocol."""
+    mode = plan.get("validation_mode", "teacher_cross_entropy")
+    protocol = plan.get("fleet_dev_protocol_sha256")
+    if mode == "teacher_cross_entropy" and protocol is None:
+        return {"mode": mode}
+    if (
+        mode == "task_outcomes_only"
+        and isinstance(protocol, str)
+        and re.fullmatch(r"sha256:[a-f0-9]{64}", protocol)
+    ):
+        return {"mode": mode, "fleet_dev_protocol_sha256": protocol}
+    raise ValueError("selection mode requires its exact Fleet dev protocol digest; no reference CE")
+
+
+def uses_reference_ce(plan: dict) -> bool:
+    return selection_policy(plan)["mode"] == "teacher_cross_entropy"
+
+
+def selection_evidence(plan: dict) -> dict:
+    reference_ce = uses_reference_ce(plan)
+    return {
+        "selection": selection_policy(plan),
+        "reference_ce_enabled": reference_ce,
+        "checkpoint_selection": (
+            "fixed_teacher_reference_task_macro_ce"
+            if reference_ce
+            else "external_fleet_dev_task_outcomes"
+        ),
+        "checkpoint_retention": "latest_plus_best_ce" if reference_ce else "latest_by_step",
+    }
+
+
 def validate_plan(plan: dict, *, check_files: bool = True) -> None:
     if plan.get("schema") not in ("cyber_sft_runtime_v2", DENSE_SCHEMA):
         raise ValueError("unsupported SFT runtime plan")
+    training_only = not uses_reference_ce(plan)
     recipe = plan["recipe"]
     for key in (
         "epochs",
@@ -176,15 +210,12 @@ def validate_plan(plan: dict, *, check_files: bool = True) -> None:
             or recovery.get("mode") == "validate"
         ):
             raise ValueError("planned pause must follow new work and precede full completion")
-    training_only = plan.get("validation_mode") == "task_outcomes_only"
     if training_only != (recipe["eval_interval"] == 0):
         raise ValueError("task-outcome evaluation and zero CE interval must be selected together")
     if training_only and set(plan["datasets"]) != {"train"}:
         raise ValueError("task-outcome training must not load a teacher-reference dev artifact")
     if not training_only and set(plan["datasets"]) != {"train", "dev"}:
         raise ValueError("teacher CE validation requires train and dev artifacts")
-    if training_only and plan.get("recovery", {}).get("mode") == "validate":
-        raise ValueError("zero-step CE validation is unavailable without a dev artifact")
     train = plan["datasets"]["train"]
     dev = plan["datasets"].get("dev")
     for dataset in plan["datasets"].values():
@@ -261,7 +292,7 @@ def validate_plan(plan: dict, *, check_files: bool = True) -> None:
         if not isinstance(plan["wandb"][key], str) or not plan["wandb"][key].strip():
             raise ValueError("complete W&B run identity required")
     if check_files:
-        for spec in (train, dev):
+        for spec in plan["datasets"].values():
             _checked_file(Path(spec["path"]), spec["sha256"])
         for item in model["files"]:
             _checked_file(Path(model["root"]) / item["path"], item["sha256"])
@@ -283,7 +314,7 @@ def validate_runtime_sources(root: Path | None = None) -> None:
 def sft_overrides(plan: dict) -> dict:
     r, w = plan["recipe"], plan["wandb"]
     output = Path(plan["output_root"])
-    training_only = plan.get("validation_mode") == "task_outcomes_only"
+    training_only = not uses_reference_ce(plan)
     options = {
         "strategy": "fsdp",
         "model.path": plan["model"]["root"],
@@ -311,7 +342,7 @@ def sft_overrides(plan: dict) -> dict:
         "eval_interval": r["eval_interval"],
         "ckpt_path": str(output / "checkpoints"),
         "ckpt_interval": r["checkpoint_interval"],
-        # This module retains latest N plus best; native deletion must be disabled.
+        # This module owns recency/legacy CE retention; disable native deletion.
         "max_ckpts_to_keep": -1,
         "hf_save_interval": 0,
         "cache_dir": str(output / "tokenized_cache"),
@@ -764,6 +795,9 @@ def _configure_wandb(plan: dict) -> None:
         "WANDB_DIR": str(Path(plan["output_root"]) / "wandb"),
     }.items():
         os.environ[key] = value
+    if not uses_reference_ce(plan):
+        # SDK x_disable_stats uses WANDB__ (two underscores), not WANDB_ .
+        os.environ["WANDB__DISABLE_STATS"] = "true"
     if not os.environ.get("WANDB_API_KEY"):
         raise ValueError("W&B secret injection missing")
     Path(os.environ["WANDB_DIR"]).mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -829,6 +863,9 @@ def _make_trainer_class():
 
     class EvidenceCallback(TrainingCallback):
         def on_log(self, trainer, event, control):
+            reference_ce = uses_reference_ce(trainer.plan)
+            if not reference_ce and any(k.startswith("eval/") for k in event.logs):
+                raise ValueError("reference CE telemetry is disabled for task-outcome selection")
             event.logs["train/global_step"] = event.global_step
             event.logs["train/epoch_fraction"] = event.global_step / max(event.steps_per_epoch, 1)
             event.logs.update(trainer.extra_train_metrics if "train/loss" in event.logs else {})
@@ -851,6 +888,14 @@ def _make_trainer_class():
                 },
                 replace=True,
             )
+            if not reference_ce:
+                # Native Tracking.log consumes this same dictionary after the
+                # callback. Keep rich diagnostics private and upload only two series.
+                history = {
+                    k: event.logs[k] for k in ("train/global_step", "train/loss") if k in event.logs
+                }
+                event.logs.clear()
+                event.logs.update(history)
             if "train/loss" in event.logs and event.global_step == trainer.plan.get(
                 "pause_after_step"
             ):
@@ -867,8 +912,12 @@ def _make_trainer_class():
             if event.global_step == trainer.plan.get("pause_after_step"):
                 control.should_save = True
                 control.should_evaluate = "dev" in trainer.plan["datasets"]
+            if not uses_reference_ce(trainer.plan):
+                control.should_evaluate = False
 
         def on_eval_end(self, trainer, event, control):
+            if not uses_reference_ce(trainer.plan):
+                raise ValueError("reference CE checkpoint selection is disabled")
             metrics = event.metrics
             selected = (
                 trainer.best is None or metrics["task_macro_loss"] < trainer.best["task_macro_loss"]
@@ -959,9 +1008,13 @@ def _make_trainer_class():
             ):
                 raise ValueError("W&B run identity mismatch")
             run.define_metric("train/global_step")
-            run.define_metric("train/*", step_metric="train/global_step")
-            run.define_metric("eval/*", step_metric="train/global_step")
-            run.define_metric("eval/task_macro_loss", summary="min")
+            reference_ce = uses_reference_ce(self.plan)
+            if reference_ce:
+                run.define_metric("train/*", step_metric="train/global_step")
+                run.define_metric("eval/*", step_metric="train/global_step")
+                run.define_metric("eval/task_macro_loss", summary="min")
+            else:
+                run.define_metric("train/loss", step_metric="train/global_step")
             run.config.update(
                 {
                     "experiment_plan_sha256": self.plan["plan_sha256"],
@@ -999,9 +1052,10 @@ def _make_trainer_class():
                     "selection_metric": (
                         "eval/task_macro_loss"
                         if "dev" in self.plan["datasets"]
-                        else "fresh_fleet_dev_task_success_rate"
+                        else "external_fleet_dev_task_outcomes"
                     ),
                     "inline_hf_export": False,
+                    **selection_evidence(self.plan),
                 },
                 allow_val_change=False,
             )
@@ -1028,6 +1082,8 @@ def _make_trainer_class():
             return self._load_split("train")
 
         def load_eval_dataset(self):
+            if not uses_reference_ce(self.plan):
+                return None
             self.dev_rows = self._load_split("dev")
             return self.dev_rows
 
@@ -1039,6 +1095,8 @@ def _make_trainer_class():
             return super().load_checkpoint()
 
         def run_eval(self):
+            if not uses_reference_ce(self.plan):
+                raise ValueError("reference CE evaluation is disabled")
             accumulator = EvalAccumulator()
             cursor = batches = 0
             for batch in self.eval_dataloader:
@@ -1123,6 +1181,7 @@ def _make_trainer_class():
                         "supervised_tokens": self.target_tokens_seen,
                         "best": self.best,
                     },
+                    **selection_evidence(self.plan),
                 },
             )
             self.prune_checkpoints()
@@ -1131,7 +1190,7 @@ def _make_trainer_class():
         def prune_checkpoints(self):
             keep = retention_steps(
                 self.saved_steps,
-                self.best["optimizer_step"] if self.best else 0,
+                self.best["optimizer_step"] if self.best and uses_reference_ce(self.plan) else 0,
                 self.plan["recipe"]["keep_checkpoints"],
             )
             for step in sorted(self.saved_steps - keep):
@@ -1166,6 +1225,13 @@ def plan_checkpoint(plan: dict, step: int) -> str:
 def training_result(trainer, *, paused: bool) -> dict:
     """A planned pause is a recoverable partial run, never full completion."""
     plan = trainer.plan
+    reference_ce = uses_reference_ce(plan)
+    if not reference_ce and (
+        trainer.best is not None
+        or (trainer.output / "BEST_CHECKPOINT.json").exists()
+        or (trainer.output / "validation").exists()
+    ):
+        raise ValueError("task-outcome training unexpectedly produced reference CE selection")
     expected = plan.get("pause_after_step") if paused else plan["recipe"]["max_steps"]
     if expected is None or ("pause_after_step" in plan and not paused):
         raise ValueError("native loop did not honor the planned lifecycle")
@@ -1175,7 +1241,7 @@ def training_result(trainer, *, paused: bool) -> dict:
     # A native step counter/pointer alone does not prove a saved, evaluated
     # checkpoint. Both complete and deliberately paused runs need the receipts.
     terminal_receipts = ["checkpoint_receipts"]
-    if "dev" in plan["datasets"]:
+    if reference_ce:
         terminal_receipts.append("validation")
     for kind in terminal_receipts:
         path = trainer.output / kind / f"step-{expected:06d}.json"
@@ -1190,6 +1256,10 @@ def training_result(trainer, *, paused: bool) -> dict:
             or (
                 kind == "checkpoint_receipts"
                 and proof.get("checkpoint_path") != plan_checkpoint(plan, expected)
+            )
+            or (
+                not reference_ce
+                and any(proof.get(k) != v for k, v in selection_evidence(plan).items())
             )
         ):
             raise ValueError("terminal result lacks a matching save or validation receipt")
@@ -1211,6 +1281,7 @@ def training_result(trainer, *, paused: bool) -> dict:
         "supervised_tokens": trainer.target_tokens_seen,
         "plan_sha256": plan["plan_sha256"],
         "status": "training_paused" if paused else "training_complete",
+        **selection_evidence(plan),
     }
 
 
@@ -1240,6 +1311,7 @@ def _run_training(plan: dict) -> dict:
                 "planned_optimizer_steps": result["planned_optimizer_steps"],
                 "best_checkpoint": trainer.best,
                 "export_status": result["export_status"],
+                **selection_evidence(plan),
             }
         )
         trainer.shutdown()
@@ -1306,7 +1378,11 @@ def main():
     output.mkdir(parents=True, exist_ok=True, mode=0o700)
     write_receipt(
         output / "STARTED.json",
-        {"plan_sha256": plan["plan_sha256"], "started_at_unix": time.time()},
+        {
+            "plan_sha256": plan["plan_sha256"],
+            "started_at_unix": time.time(),
+            **selection_evidence(plan),
+        },
     )
     ray = None
     try:

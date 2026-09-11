@@ -20,7 +20,7 @@ from .dense import Excluded, clean_dev_windows, compatible_messages, encode_reco
 from .dense import segment_record as segments
 from .io import atomic_write_json, file_sha256, iter_jsonl
 from .sft import _known, read_mapping
-from .sft_runtime import DENSE_FORMAT, dense_rows
+from .sft_runtime import DENSE_FORMAT, dense_rows, selection_policy
 from .splits import split_key
 from .study_data import filter_records
 
@@ -165,6 +165,7 @@ def build(config: dict, *, relative_to: Path) -> dict:
             "context_tokens",
             "dev_windows",
             "validation_mode",
+            "fleet_dev_protocol_sha256",
             "study_split",
             "source_selection",
             "output",
@@ -180,9 +181,8 @@ def build(config: dict, *, relative_to: Path) -> dict:
     if source_sha != "sha256:" + config["source"]["sha256"].removeprefix("sha256:"):
         raise ValueError("source digest mismatch")
     split = read_mapping(relative_to / config["split"])
-    validation_mode = config.get("validation_mode", "teacher_cross_entropy")
-    if validation_mode not in {"teacher_cross_entropy", "task_outcomes_only"}:
-        raise ValueError("unknown validation mode")
+    policy = selection_policy(config)
+    validation_mode = policy["mode"]
     reference_validation = validation_mode == "teacher_cross_entropy"
     records = list(iter_jsonl(source))
     selection_binding = None
@@ -313,6 +313,8 @@ def build(config: dict, *, relative_to: Path) -> dict:
     }
     if selection_binding is not None:
         manifest["source_selection"] = selection_binding
+    if not reference_validation:
+        manifest["fleet_dev_protocol_sha256"] = policy["fleet_dev_protocol_sha256"]
     manifest["sha256"] = "sha256:" + digest(manifest)
     atomic_write_json(output / "manifest.json", manifest, private=True)
     atomic_write_json(output / "split.json", split, private=True)

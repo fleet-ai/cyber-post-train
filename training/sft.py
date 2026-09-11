@@ -19,7 +19,7 @@ import yaml
 from cyber_post_train.jobs import canonical_gzip, digest, quantity, validate_request
 
 from .models import bound_model
-from .sft_runtime import DENSE_FORMAT, DENSE_SCHEMA, validate_plan
+from .sft_runtime import DENSE_FORMAT, DENSE_SCHEMA, selection_policy, validate_plan
 
 IMAGE = (
     "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:"
@@ -91,6 +91,8 @@ def compile_sft(config: dict, *, relative_to: Path) -> dict:
             "lora",
             "recovery",
             "pause_after_step",
+            "validation_mode",
+            "fleet_dev_protocol_sha256",
         },
         "SFT",
     )
@@ -113,9 +115,12 @@ def compile_sft(config: dict, *, relative_to: Path) -> dict:
         lock["revision"],
     ):
         raise ValueError("corpus tokenizer differs from model")
-    validation_mode = manifest.get("validation_mode", "teacher_cross_entropy")
-    if validation_mode not in {"teacher_cross_entropy", "task_outcomes_only"}:
-        raise ValueError("unsupported corpus validation mode")
+    policy = selection_policy(manifest)
+    validation_mode = policy["mode"]
+    for key in ("validation_mode", "fleet_dev_protocol_sha256"):
+        expected = validation_mode if key == "validation_mode" else policy.get(key)
+        if key in config and config[key] != expected:
+            raise ValueError("SFT selection mode/protocol differs from the corpus")
     required_splits = ("train", "dev") if validation_mode == "teacher_cross_entropy" else ("train",)
     if set(manifest["files"]) != set(required_splits):
         raise ValueError("corpus files differ from its validation mode")
@@ -131,7 +136,11 @@ def compile_sft(config: dict, *, relative_to: Path) -> dict:
         }
     overrides = config.get("recipe", {})
     _known(overrides, set(RECIPE), "recipe")
-    recipe = {**RECIPE, **overrides}
+    recipe = {
+        **RECIPE,
+        **({"eval_interval": 0} if validation_mode == "task_outcomes_only" else {}),
+        **overrides,
+    }
     if any(
         type(recipe[k]) is not int or recipe[k] < (0 if k == "eval_interval" else 1)
         for k in RECIPE
@@ -168,6 +177,8 @@ def compile_sft(config: dict, *, relative_to: Path) -> dict:
             "resources": {**RESOURCES, **cluster.get("resources", {})},
         },
     }
+    if validation_mode == "task_outcomes_only":
+        plan["fleet_dev_protocol_sha256"] = policy["fleet_dev_protocol_sha256"]
     # The native GDN compatibility hook is currently qualified only for these
     # Qwen architectures. Do not silently substitute the GLM Flash model or
     # claim the full GLM FP8 checkpoint uses this ordinary full-weight loader.

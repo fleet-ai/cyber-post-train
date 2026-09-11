@@ -107,6 +107,10 @@ def test_outcome_only_selection_never_reads_dev_reference(source_split):
     for row in rows:
         row["lineage"].pop("application")
         row["lineage"].pop("task_family")
+        if row["split"] != "train":
+            # Held-out payloads are neither needed nor inspected by this selector.
+            for key in ("messages", "outcome", "eligibility", "source"):
+                row.pop(key)
     split["schema"] = "cyber_task_split_v2"
     for task in split["tasks"]:
         task.pop("reference_session_id")
@@ -253,11 +257,16 @@ def test_outcome_only_corpus_contains_no_teacher_reference_dev_data(data_config,
     for task in split["tasks"]:
         task.pop("reference_session_id")
     split_path.write_text(json.dumps(seal(split)))
-    data_config.update(validation_mode="task_outcomes_only", dev_windows=0)
+    data_config.update(
+        validation_mode="task_outcomes_only",
+        fleet_dev_protocol_sha256="sha256:" + "d" * 64,
+        dev_windows=0,
+    )
 
     result = corpus.build(data_config, relative_to=tmp_path)
     manifest = json.loads((tmp_path / "data/manifest.json").read_text())
     assert manifest["validation_mode"] == "task_outcomes_only"
+    assert manifest["fleet_dev_protocol_sha256"] == data_config["fleet_dev_protocol_sha256"]
     assert set(manifest["files"]) == {"train"}
     assert not (tmp_path / "data/dev.parquet").exists()
     assert result["dev"] == {"rows": 0, "tasks": 0}
@@ -325,6 +334,7 @@ def add_study_selection(data_config, tmp_path, selected=("train-a",)):
         study_split="study.json",
         source_selection="selection.json",
         validation_mode="task_outcomes_only",
+        fleet_dev_protocol_sha256="sha256:" + "d" * 64,
         dev_windows=0,
     )
 

@@ -48,6 +48,17 @@ def test_recovery_binds_exact_sealed_source_and_never_changes_recipe(tmp_path):
     assert not Path(p["output_root"]).exists()
 
 
+def test_legacy_recovery_accepts_explicit_default_ce_mode(tmp_path):
+    value, _, path = source(tmp_path)
+    value["validation_mode"] = "teacher_cross_entropy"
+    recovery.bind(
+        value,
+        {"manifest": path.name, "sha256": recovery.digest(path), "mode": "resume"},
+        relative_to=tmp_path,
+    )
+    recovery.validate(value, check_files=True)
+
+
 @pytest.mark.parametrize(
     "defect",
     [
@@ -287,8 +298,9 @@ def test_native_worker_requires_loaded_optimizer_scheduler_and_rng(tmp_path, mon
 )
 @pytest.mark.parametrize("epochs", [1, 2])
 @pytest.mark.parametrize("planned_pause", [False, True])
+@pytest.mark.parametrize("outcomes_only", [False, True])
 def test_native_resume_restores_exact_update_and_complete_epoch_coverage(
-    tmp_path, monkeypatch, epochs, planned_pause
+    tmp_path, monkeypatch, epochs, planned_pause, outcomes_only
 ):
     import ray
     from skyrl.train.dataset.collators import DefaultCollator
@@ -312,6 +324,11 @@ def test_native_resume_restores_exact_update_and_complete_epoch_coverage(
         p.update(run_name=output.name, execution={"image": "synthetic-pinned-image"})
         p["recipe"]["gpus_per_node"] = 1
         p["recipe"].update(epochs=epochs, max_steps=3 * epochs)
+        if outcomes_only:
+            p["validation_mode"] = "task_outcomes_only"
+            p["fleet_dev_protocol_sha256"] = "sha256:" + "d" * 64
+            p["datasets"].pop("dev")
+            p["recipe"]["eval_interval"] = 0
         p["wandb"]["run_id"] = output.name
         if stop is not None and planned_pause:
             p["pause_after_step"] = stop - 1
@@ -341,7 +358,8 @@ def test_native_resume_restores_exact_update_and_complete_epoch_coverage(
             t.dev_rows = [{**rows[0], "task_key": f"dev{i}"} for i in range(20)]
             return t.dev_rows
 
-        t.load_eval_dataset = dev
+        if not outcomes_only:
+            t.load_eval_dataset = dev
         torch.manual_seed(77)
         model = torch.nn.Sequential(torch.nn.Linear(1, 1), torch.nn.Dropout(0.2))
         optimizer = torch.optim.AdamW(model.parameters(), lr=p["recipe"]["lr"])
@@ -384,6 +402,7 @@ def test_native_resume_restores_exact_update_and_complete_epoch_coverage(
                 return 1.0
 
             def forward(self, role, batch, **kwargs):
+                assert not outcomes_only, "outcome-only recovery must not evaluate CE"
                 mask = batch["loss_mask"]
                 return SimpleNamespace(
                     metrics={"loss": float(mask.sum())},

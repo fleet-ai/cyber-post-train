@@ -116,15 +116,38 @@ def test_compile_uses_exact_model_manifest_and_complete_epochs(config, tmp_path)
 def test_compile_training_loss_only_plan_has_no_reference_dev_dataset(config, tmp_path):
     source, manifest, save = config
     manifest["validation_mode"] = "task_outcomes_only"
+    manifest["fleet_dev_protocol_sha256"] = "sha256:" + "d" * 64
     manifest["files"].pop("dev")
     save(manifest)
-    source["recipe"] = {"eval_interval": 0, "checkpoint_interval": 2}
+    source["recipe"] = {"checkpoint_interval": 2}
 
     plan = sft.compile_sft(source, relative_to=tmp_path)
     assert plan["validation_mode"] == "task_outcomes_only"
+    assert plan["fleet_dev_protocol_sha256"] == manifest["fleet_dev_protocol_sha256"]
     assert set(plan["datasets"]) == {"train"}
     assert plan["recipe"]["eval_interval"] == 0
     assert sft.job_request(plan)["env"]["WANDB_MODE"] == "online"
+
+
+@pytest.mark.parametrize("defect", ["missing", "malformed", "mismatch", "mode", "dev"])
+def test_compiler_requires_exact_outcome_protocol_and_no_ce(config, tmp_path, defect):
+    source, manifest, save = config
+    manifest.update(
+        validation_mode="task_outcomes_only", fleet_dev_protocol_sha256="sha256:" + "d" * 64
+    )
+    if defect != "dev":
+        manifest["files"].pop("dev")
+    if defect == "missing":
+        manifest.pop("fleet_dev_protocol_sha256")
+    elif defect == "malformed":
+        manifest["fleet_dev_protocol_sha256"] = "unbound"
+    elif defect == "mismatch":
+        source["fleet_dev_protocol_sha256"] = "sha256:" + "e" * 64
+    elif defect == "mode":
+        source["validation_mode"] = "teacher_cross_entropy"
+    save(manifest)
+    with pytest.raises(ValueError):
+        sft.compile_sft(source, relative_to=tmp_path)
 
 
 @pytest.mark.parametrize(
@@ -137,6 +160,7 @@ def test_corpus_validation_mode_and_ce_interval_must_agree(
     source, manifest, save = config
     manifest["validation_mode"] = validation_mode
     if validation_mode == "task_outcomes_only":
+        manifest["fleet_dev_protocol_sha256"] = "sha256:" + "d" * 64
         manifest["files"].pop("dev")
     save(manifest)
     source["recipe"] = {"eval_interval": eval_interval}

@@ -14,7 +14,14 @@ import re
 from dataclasses import asdict
 from pathlib import Path
 
-from .sft_runtime import _unsigned_digest, digest, validate_plan, write_receipt
+from .sft_runtime import (
+    _unsigned_digest,
+    digest,
+    selection_evidence,
+    uses_reference_ce,
+    validate_plan,
+    write_receipt,
+)
 
 
 def receipt(path: Path) -> dict:
@@ -130,6 +137,8 @@ def seal(plan: dict, step: int, output: Path, *, progress=None) -> dict:
         "optimizer_step": step,
         "checkpoint_path": str(root),
     }
+    if not uses_reference_ce(plan):
+        expected.update(selection_evidence(plan))
     if any(saved.get(k) != v for k, v in expected.items()):
         raise ValueError("checkpoint receipt differs from source plan/step/path")
     size = plan["recipe"]["nodes"] * plan["recipe"]["gpus_per_node"]
@@ -170,6 +179,7 @@ def seal(plan: dict, step: int, output: Path, *, progress=None) -> dict:
         "files": inventory,
         "total_bytes": total,
         "gpu_reload_verified": False,
+        **selection_evidence(plan),
     }
     if "training_progress" in saved:
         result["training_progress"] = saved["training_progress"]
@@ -187,6 +197,10 @@ def verify(manifest: dict, *, check_files: bool = True) -> None:
         raise ValueError("checkpoint manifest digest/schema mismatch")
     plan = manifest["source_plan"]
     validate_plan(plan, check_files=False)
+    if not uses_reference_ce(plan) and any(
+        manifest.get(k) != v for k, v in selection_evidence(plan).items()
+    ):
+        raise ValueError("checkpoint selection mode/protocol bindings disagree")
     step = manifest["optimizer_step"]
     size = plan["recipe"]["nodes"] * plan["recipe"]["gpus_per_node"]
     expected = Path(plan["output_root"]) / "checkpoints" / f"global_step_{step}"
@@ -241,6 +255,8 @@ def _validate_progress(manifest: dict) -> None:
     if per_epoch is not None and tokens > per_epoch * source["recipe"]["epochs"]:
         raise ValueError("checkpoint supervised-token count exceeds the frozen corpus budget")
     best = progress["best"]
+    if not uses_reference_ce(source) and best is not None:
+        raise ValueError("task-outcome checkpoints must not contain reference CE selection")
     if best is not None and (
         not isinstance(best, dict)
         or set(best)

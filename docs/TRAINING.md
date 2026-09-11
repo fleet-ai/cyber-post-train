@@ -45,6 +45,7 @@ train_models: [gpt-5.6-sol]       # or the exact student ID in normalized record
 max_length: 16384
 context_tokens: 4096
 validation_mode: task_outcomes_only
+fleet_dev_protocol_sha256: sha256:<exact-frozen-Fleet-dev-outcome-protocol-digest>
 dev_windows: 0
 output: /private/data/new-corpus # must not exist
 ```
@@ -133,8 +134,14 @@ The corpus manifest binds `validation_mode`, `tokenizer: {repo, revision}`,
 `sha256` is the SHA-256 of canonical compact sorted JSON excluding that field,
 prefixed `sha256:`. Generate it with the data-preparation pipeline, not hand-edited
 counts. For `task_outcomes_only`, `files.dev` is forbidden and `eval_interval`
-must be zero; checkpoint cadence remains independent. Fresh Fleet development
-outcomes are recorded outside the trainer.
+must be zero (the compiler defaults it to zero); checkpoint cadence remains
+independent. `fleet_dev_protocol_sha256` is mandatory and passes unchanged from
+the data YAML through corpus, plan, checkpoint and recovery receipts. Optional
+top-level mode/protocol fields in the training YAML must match the corpus.
+Fresh Fleet development outcomes are recorded outside the trainer; they alone
+select checkpoints/treatments under that frozen protocol. Training loss is a
+diagnostic, never a selection metric or tie-breaker. Final Fleet and external
+benchmark outcomes stay sealed until selection is frozen.
 
 ## Prepare → CPU preflight → dev canary → production
 
@@ -181,11 +188,19 @@ The API injects W&B from the existing `wandb-api` Secret. Never put its value in
 YAML or argv. Track scalars, configuration identities and checkpoint metadata;
 do not upload task text, traces or source code. Reuse neither a W&B run ID nor a
 training output directory for a new treatment.
+Outcome-only runs export just `train/loss` and `train/global_step` as W&B history;
+automatic W&B system telemetry is disabled. Identity/selection metadata remains
+in config/summary. LR, gradient norm, supervised tokens/update, cumulative target
+tokens and timing stay in the private local scalar stream for diagnosis. Legacy
+CE runs retain their existing richer scalar/validation telemetry.
 
 ## Checkpoints and completion
 
 In `task_outcomes_only` mode the trainer performs no teacher-reference CE
 validation; checkpoints still run at their configured interval and final step.
+Retention keeps the latest configured number by optimizer step, never a
+CE-selected best checkpoint. No `validation/` or `BEST_CHECKPOINT.json` artifact
+may appear, and terminal receipts explicitly identify external Fleet selection.
 Legacy CE mode validates before training, periodically and at the final step,
 and requires checkpoint/validation intervals to agree. Saves include native
 optimizer, scheduler, sampler and trainer state; a weights-only file is not a
@@ -198,7 +213,8 @@ reload remain separate handoff checks.
 
 For a planned interruption/recovery check, add top-level `pause_after_step: 1`
 to a plan whose full recipe has more than one step. This does not shorten the
-epoch or scheduler horizon. It saves, validates and logs that step, then shuts
+epoch or scheduler horizon. It saves and logs that step (also validating in
+legacy CE mode), then shuts
 down cleanly with `TRAINING_PAUSED.json`, **not** `TRAINING_COMPLETE.json`.
 Seal that checkpoint and use the exact recovery procedure below in a new run,
 omitting `pause_after_step` to finish the original recipe. A pause must be after
@@ -288,10 +304,13 @@ recovery:
 Use the same prepare/preflight/preview/submit commands. Model, data, recipe,
 topology and trainer image must stay unchanged. Both modes restore every rank's
 optimizer/scheduler and the saved sampler cursor; a missing state is an error,
-never a warning followed by a fresh start. Zero-step CE validation performs
-held-out forward passes and writes `RELOAD_VALIDATED.json`, without saving or
-updating the model. It is unavailable for train-only outcome mode; use the
-checkpoint/export reload checks instead.
+never a warning followed by a fresh start. In legacy mode zero-step validation
+also performs reference-CE forward passes. Outcome-only mode instead verifies
+checkpoint/rank/sampler restoration with **no CE dataset or forward evaluation**;
+its receipt explicitly declares `checkpoint_and_sampler_reload_only_no_ce`.
+Both write `RELOAD_VALIDATED.json` without saving or updating the model. This
+recovery check does not measure task success or qualify a serving export.
+Recovery cannot change the selection mode or Fleet development protocol.
 Continuation requires recorded supervised-token progress and starts at the next
 step; completed runs and older checkpoints without that progress cannot be
 silently continued. Never run a source trainer and its recovery concurrently.
