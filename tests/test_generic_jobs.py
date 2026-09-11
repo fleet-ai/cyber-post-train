@@ -80,6 +80,36 @@ def test_runtime_bundle_rejects_bad_content(fault):
         bundled_request(config(), files, "run", [])
 
 
+def test_large_runtime_bundle_is_chunked_and_digest_checked(tmp_path):
+    import os
+    import random
+    import shlex
+    import subprocess
+    import sys
+
+    from cyber_post_train.jobs import bundled_request
+
+    noise = random.Random(42).randbytes(160000).hex()
+    request = bundled_request(config(), {"run.py": "pass", "noise.txt": noise}, "run", [])
+    assert "CYBER_RUNTIME_BUNDLE" not in request["env"]
+    assert max(len(v) for v in request["env"].values()) <= 48000
+    env = {**os.environ, **request["env"], "RUN_DIR": str(tmp_path)}
+    command = [sys.executable, *shlex.split(request["command"])[1:]]
+    assert subprocess.run(command, env=env, capture_output=True).returncode == 0
+    assert (tmp_path / ".runtime/noise.txt").read_text() == noise
+    other = tmp_path / "new"
+    other.mkdir()
+    env.update(RUN_DIR=str(other), CYBER_RUNTIME_BUNDLE_0="YQ==")
+    assert subprocess.run(command, env=env, capture_output=True).returncode != 0
+    assert not (other / ".runtime").exists()
+    with pytest.raises(JobsError, match="too large"):
+        bundled_request(config(), {"run.py": "pass", "noise": noise * 8 + noise[::-1]}, "run", [])
+    value = config()
+    value["env"]["CYBER_RUNTIME_BUNDLE_0"] = "unreviewed"
+    with pytest.raises(JobsError, match="reserved"):
+        bundled_request(value, {"run.py": "pass"}, "run", [])
+
+
 def test_environment_size_limit_counts_utf8_bytes_and_name():
     value = config()
     value["env"]["DATA"] = "a" * (131072 - len("DATA") - 2)

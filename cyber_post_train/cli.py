@@ -148,13 +148,19 @@ def train(config: Path, output: Annotated[Path, typer.Option("--output")]) -> No
 
 @app.command()
 def rl(config: Path, output: Annotated[Path, typer.Option("--output")]) -> None:
-    """Prepare exact native Miles RL. No GPU, environment creation or submission."""
-    from training.miles_training import compile_rl, job_request
+    """Prepare native Miles or SkyRL RL. No GPU, environment creation or submission."""
     from training.sft import read_mapping
 
     try:
-        plan = compile_rl(read_mapping(config), relative_to=config.resolve().parent)
-        request = job_request(plan)
+        value = read_mapping(config)
+        if value["backend"] == "miles":
+            from training import miles_training as backend
+        elif value["backend"] == "skyrl":
+            from training import skyrl_training as backend
+        else:
+            raise ValueError("unsupported RL backend")
+        plan = backend.compile_rl(value, relative_to=config.resolve().parent)
+        request = backend.job_request(plan)
         _prepare(output, plan, request)
         _print(
             {
@@ -178,6 +184,8 @@ def preflight(directory: Path) -> None:
             from training.miles_conversion import preflight as check
         elif plan.get("schema") == "cyber_miles_training_v1":
             from training.miles_training import preflight as check
+        elif plan.get("schema") == "cyber_skyrl_training_v1":
+            from training.skyrl_training import preflight as check
         else:
             from training.sft import preflight as check
         if (directory / "PREFLIGHT.json").exists():
@@ -216,6 +224,8 @@ def submit(directory: Path) -> None:
             if plan.get("schema") == "cyber_miles_conversion_v1"
             else "cyber_miles_training_cpu_preflight_v1"
             if plan.get("schema") == "cyber_miles_training_v1"
+            else "cyber_skyrl_training_cpu_preflight_v1"
+            if plan.get("schema") == "cyber_skyrl_training_v1"
             else "cyber_sft_cpu_preflight_v1",
             "status": "passed",
             "gpus": 0,

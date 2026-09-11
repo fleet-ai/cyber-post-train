@@ -87,7 +87,7 @@ class SkyRLConfig:
         ):
             if type(getattr(self, key)) is not int or getattr(self, key) < 1:
                 raise ValueError("SkyRL counts must be positive integers")
-        if self.nodes not in (1, 2) or self.samples_per_prompt < 2:
+        if self.nodes not in (1, 2) or self.samples_per_prompt < 2 or self.max_turns < 2:
             raise ValueError("profile requires 1–2 whole nodes and grouped GRPO samples")
         if self.train_rows % self.groups or self.groups * self.samples_per_prompt % (
             8 * self.nodes
@@ -117,7 +117,7 @@ def overrides(config: SkyRLConfig) -> dict:
         "temperature": 1.0,
         "top_p": 1.0,
         "top_k": -1,
-        "logprobs": 1,
+        "logprobs": 0,
     }
     return {
         "data.train_data": [config.train_data],

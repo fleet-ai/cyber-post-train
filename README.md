@@ -43,8 +43,10 @@ pending. Full GLM5.3,
 Miles RL and SkyRL RL must pass their exact-model training/reward gates before
 being described as production-ready. GLM Flash is not full GLM5.3.
 
-`rl-data` prepares exact Fleet prompts for Miles or SkyRL. The Miles commands
-(`miles-convert`, `miles-seal`, `rl`) bind a native checkpoint and launch plan. Preparation does not train;
+`rl-data` prepares exact Fleet prompts for Miles or SkyRL. `rl` selects either
+native backend from YAML and uses the same preflight/preview/submit commands.
+Miles additionally needs `miles-convert` and `miles-seal` to prepare its native
+base checkpoint; SkyRL loads the pinned HF base directly. Preparation does not train;
 the [qualification status](docs/CONSOLIDATION.md) distinguishes tested plumbing
 from real reward/optimizer evidence.
 

@@ -264,9 +264,9 @@ def test_parser_never_silently_drops_multiple_calls():
 @pytest.mark.parametrize("score", [0.0, 1.0])
 async def test_shared_lifecycle_grades_once_and_confirms_release(
     setup,
-    fleet_fixture,
+    fleet_fixture,  # noqa: F811
     tmp_path,
-    score,  # noqa: F811
+    score,
 ):
     state = fleet_fixture
     state.config["model"] = setup.config["model"]

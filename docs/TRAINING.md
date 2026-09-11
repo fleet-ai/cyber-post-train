@@ -390,6 +390,28 @@ optimizer changes and reload the checkpoint before accepting/scaling the run.
 Native checkpoint numbers are zero-based rollout indices: the first training
 batch saves index `0`, not an assertion of zero optimizer steps.
 
+For **SkyRL**, use the same YAML and commands, with these differences:
+
+- Set `backend: skyrl` and prepare a matching `rl-data` manifest with that backend.
+- Omit `checkpoint`: this initial profile loads the exact HF base directly. It
+  does not consume Miles checkpoints or automatically resume old SkyRL runs.
+- Use complete prompt batches, for example `groups: 2` and
+  `samples_per_prompt: 4` on one eight-GPU node. The training-row count must be
+  divisible by `groups`, and `groups × samples_per_prompt` by the GPU count.
+- `keep_checkpoints` defaults to two. Native SkyRL saves model/optimizer/sampler
+  state and performs dev evaluation before training, at the configured interval
+  and at the final step. A missing sampler save is a terminal evidence defect.
+
+The initial SkyRL profile uses Qwen full-weight FSDP with colocated TP4 inference
+engines, one native update per prompt batch, and no reward filtering or replacement
+episodes. It is not a qualified full-GLM recipe. CPU preflight checks the actual
+native parser, source versions, complete task-family split and native dataset
+retention. Runtime input checks repeat inside the bounded child before loading.
+W&B receives finite scalar metrics and fixed configuration only; native sample
+tables, console capture and private exception uploads are disabled. A durable
+local scalar stream is retained if tracking fails. Completion still requires
+independent real reward, optimizer and checkpoint-reload evidence before scaling.
+
 Use the native trainers, not a new optimizer implementation. The inspected
 [Theseus FTI integration](https://github.com/fleet-ai/theseus/tree/cc18d2cd3e9370abf4f6f19df317d96ce6b619e4/services/fti/src/fti/trainers/miles)
 provides Miles token recording and a Qwen3.8 text recipe (Megatron TP4/CP2,
@@ -427,8 +449,11 @@ parser and trainer method confirm one optimizer call per configured batch,
 complete task groups, baseline/final dev evaluation and recoverable-save settings;
 [CPU evidence](evidence/cleanup-skyrl-arguments-native-20260911.json). These tests
 use synthetic dispatch, not a real RL update.
-This is **not yet a public SkyRL RL launcher**: launch integration, real reward,
-weight synchronization and optimizer/recovery qualification remain open.
+The public `rl` command now connects this adapter to the native `BasePPOExp`
+and trainer; it does not implement another optimizer. Its corrected exact-image
+CPU integration passed 420 tests with zero skips/failures/GPUs;
+[evidence and repaired boundary defects](evidence/cleanup-skyrl-training-native-20260911.json).
+Real reward, weight synchronization and optimizer/recovery qualification remain open.
 Multiple tool calls per turn are rejected, not silently discarded.
 
 `training.rl_episode.generate` is the internal Miles hook used by `rl`, not a

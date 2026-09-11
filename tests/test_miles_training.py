@@ -16,6 +16,7 @@ from cyber_post_train import cli
 from cyber_post_train.jobs import digest
 from training import miles, miles_conversion
 from training import miles_training as train
+from training.rl_runtime import progress
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -597,7 +598,7 @@ def test_progress_uses_only_metadata(tmp_path):
     path = tmp_path / "episodes/synthetic/receipt.json"
     path.parent.mkdir(parents=True)
     path.write_text("synthetic")
-    result = train._progress(tmp_path)
+    result = progress(tmp_path)
     assert len(result) == 1 and result[0][:2] == ("episodes/synthetic/receipt.json", 9)
 
 
@@ -679,7 +680,7 @@ def test_checkpoint_rotation_during_progress_sample_is_safe(tmp_path, monkeypatc
         return original(p, *args, **kwargs)
 
     monkeypatch.setattr(Path, "stat", stat)
-    assert train._progress(tmp_path) == ()
+    assert progress(tmp_path) == ()
 
 
 def test_module_entrypoint_rejects_bad_plan_before_any_runtime(tmp_path, monkeypatch, capsys):

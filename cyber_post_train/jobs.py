@@ -75,9 +75,23 @@ def bundled_request(request: dict, files: dict[str, str], module: str, argv: lis
     blob = canonical_gzip(
         json.dumps({"files": files, "module": module, "argv": argv}, sort_keys=True).encode()
     )
+    encoded = base64.b64encode(blob).decode()
+    if len(encoded) > 512000 or any(
+        key.startswith("CYBER_RUNTIME_BUNDLE") for key in request.get("env", {})
+    ):
+        raise JobsError("runtime bundle is too large or overrides reserved transport fields")
+    transport = {"CYBER_RUNTIME_BUNDLE": encoded}
+    expression = "os.environ.pop('CYBER_RUNTIME_BUNDLE')"
+    if len(encoded) > 120000:
+        # Linux limits EACH argument/env value, even when total ARG_MAX is free.
+        parts = [encoded[i : i + 48000] for i in range(0, len(encoded), 48000)]
+        transport = {f"CYBER_RUNTIME_BUNDLE_{i}": part for i, part in enumerate(parts)}
+        expression = (
+            f"''.join(os.environ.pop('CYBER_RUNTIME_BUNDLE_'+str(i)) for i in range({len(parts)}))"
+        )
     bootstrap = (
         "import base64,gzip,hashlib,importlib,json,os,pathlib,runpy,sys;"
-        "b=base64.b64decode(os.environ.pop('CYBER_RUNTIME_BUNDLE'),validate=True);"
+        f"b=base64.b64decode({expression},validate=True);"
         f"assert hashlib.sha256(b).hexdigest()=={hashlib.sha256(blob).hexdigest()!r};"
         "v=json.loads(gzip.decompress(b));"
         "p=pathlib.Path(os.environ['RUN_DIR'])/'.runtime';p.mkdir(mode=0o700);"
@@ -89,7 +103,7 @@ def bundled_request(request: dict, files: dict[str, str], module: str, argv: lis
     result = {
         **request,
         "command": "python -c " + shlex.quote(bootstrap),
-        "env": {**request.get("env", {}), "CYBER_RUNTIME_BUNDLE": base64.b64encode(blob).decode()},
+        "env": {**request.get("env", {}), **transport},
     }
     validate_request(result)
     return result

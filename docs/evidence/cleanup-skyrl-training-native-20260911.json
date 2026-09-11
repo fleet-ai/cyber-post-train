@@ -1,0 +1,86 @@
+{
+  "schema": "cyber_training_operational_evidence_v1",
+  "classification": "native_skyrl_launch_cpu_verified_not_rl_qualified",
+  "observed_at": "2026-09-11T09:18:10Z",
+  "image_sha256": "ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+  "corrected_selftest": {
+    "pod": "chris-cpt-skyrl-episode-selftest-v8",
+    "uid": "358daea4-2891-43a6-9de9-9ebbb8e0c41b",
+    "namespace": "fleet-train-jobs",
+    "node": "computeinstance-e04a737eqtfvpnyx08",
+    "started_at": "2026-09-11T09:15:57Z",
+    "finished_at": "2026-09-11T09:17:52Z",
+    "phase": "Succeeded",
+    "exit_code": 0,
+    "restarts": 0,
+    "gpus": 0,
+    "tests": {"passed": 420, "failed": 0, "errors": 0, "skipped": 0},
+    "bundle_sha256": "59ec2f89ece401f3493328e26cf43beb18301294d81a6e02d5456442cc264ea1",
+    "manifest_sha256": "06f82a9b7c586d648fe901d6091cda12ee245053384158d059266b8c4a27fd52",
+    "receipt_sha256": "37c6be612fda01594e587caa9046bdc6236f4cc35ec9f0ed5b33036b35fa9537",
+    "receipt_digest_independently_validated": true,
+    "test_output_sha256": "c32e2f15b2c047ee840bf2f479cc366eef01ed3118a88bdadbf414f6aeced07e",
+    "native_boundary_checks": [
+      "Actual image source identities for native parser, trainer, driver and dataset.",
+      "Real native train/eval sampling conversion reaches the strict token recorder.",
+      "Native Qwen tokenizer and PromptDataset preserve selected rows and identities.",
+      "Portable runtime imports and real chunked bootstrap execution succeed on Linux.",
+      "Synthetic driver wiring, finite scalar-only W&B, strict batches and checkpoint-result checks."
+    ]
+  },
+  "initial_selftest": {
+    "pod": "chris-cpt-skyrl-episode-selftest-v7",
+    "uid": "0683da7b-8f97-439f-80dc-b7b686d181ad",
+    "started_at": "2026-09-11T09:09:44Z",
+    "finished_at": "2026-09-11T09:11:43Z",
+    "phase": "Failed",
+    "exit_code": 1,
+    "restarts": 0,
+    "gpus": 0,
+    "tests": {"passed": 417, "failed": 2, "errors": 0, "skipped": 0},
+    "bundle_sha256": "c7c5c3c34bc8ad5ae0652c6e2b1a5ac42abd56f0c77d8f98d325fb6d30979b0c",
+    "manifest_sha256": "2de267410bcdc2c1aece5ce89d2e667dea7fe2b7bd82b0b714a1aad19fb2ff1d",
+    "receipt_sha256": "a3e89f260c2425081e3373b2bb27a203bef14890bfed2ce4861d106867f08beb",
+    "receipt_digest_independently_validated": true,
+    "test_output_sha256": "05a4dda9608ebb5550db75b6033bee8e3e0f87c920be77b2fb2650f330b63793",
+    "causes": [
+      "The SkyRL CLI imported the unrelated Miles launcher, absent from the minimal staged SkyRL bundle.",
+      "The expected trainer hash came from upstream source rather than the installed immutable image."
+    ]
+  },
+  "source_audit": {
+    "pod": "chris-cpt-skyrl-source-audit-v1",
+    "uid": "e8f429b0-8de1-4447-9233-e7e0fcf5d37c",
+    "finished_at": "2026-09-11T09:14:48Z",
+    "phase": "Succeeded",
+    "exit_code": 0,
+    "restarts": 0,
+    "gpus": 0,
+    "manifest_sha256": "16b0e9f2e6149880aadcff3f26268c1aad9517c31e2c8c342c11ebc46885d085",
+    "receipt_sha256": "ddb6318409cc1e3c76aece13b87617d83160765e494d44840e54697649016dce",
+    "receipt_digest_independently_validated": true,
+    "upstream_trainer_sha256": "73c584dc6ce9a247b6708c1284aecbf38ffb0b1c85f7b1277e12679eefb4acf0",
+    "image_trainer_sha256": "0e3e2e4d1bbe28f8920ddd3c73999fae27308f949b60c8ea8062d41527dc3b21",
+    "difference": "Only inference/training phase utilization hooks and three log-probability difference quantiles. No optimizer/checkpoint algorithm changes. Native driver and dataset files match upstream exactly."
+  },
+  "corrections": [
+    "Import only the selected backend in the public CLI.",
+    "Pin the audited installed trainer code; keep source-drift rejection enabled.",
+    "Use chosen-token logprobs=0 consistently across native configuration and strict episode recording; test the real sampling conversion boundary.",
+    "Chunk larger portable runtime bundles below Linux's per-environment-string limit; verify the reassembled digest before creating output."
+  ],
+  "local_tests": {"passed": 1486, "skipped_native_only": 102, "subtests_passed": 7},
+  "focused_local_coverage": {
+    "training.rl_runtime": {"statements": 62, "branches": 18, "missing": 0},
+    "training.skyrl_training": {"statements": 220, "branches": 58, "missing": 0}
+  },
+  "wheel_sha256": "a305829eaff7ddfe856cf55ea2c4ef8fe1bcae24e4e955e1b564533d80027feb",
+  "wheel_imports_and_rl_help_verified_outside_checkout": true,
+  "source_and_installed_runtime_sha256": "6b8215bd506241ba96df3a1915054b757e091e137c11569d3b17a4388d83e1f7",
+  "limits": [
+    "Synthetic task/engine/HTTP replies; no real Fleet request, RL rollout, reward, GPU optimizer or weight synchronization in these tests.",
+    "CPU preflight and native-loop return do not certify independent optimizer changes or checkpoint reload.",
+    "Exact Fleet instance provisioning remains blocked by HTTP 404; no new GPU RL run was submitted.",
+    "Full GLM RL and whole-repository coverage remain unqualified."
+  ]
+}

@@ -13,19 +13,18 @@ import hashlib
 import importlib.util
 import json
 import os
-import signal
-import subprocess
 import sys
 import time
-from contextlib import suppress
 from pathlib import Path
 
 from cyber_post_train.jobs import bundled_request, digest, quantity
 
 from . import miles
-from .miles_conversion import _hash, _write, check_inputs, inventory
+from .miles_conversion import _hash, check_inputs, inventory
+from .rl_runtime import sealed as _sealed
 
 SCHEMA = "cyber_miles_training_v1"
+MODULE = "training.miles_training"
 NATIVE_DRIVER_SHA256 = "85dbfd31d41a84f9c2e79a2918583851fb53925630afa229e9cd0a154b170f46"
 RUNTIME_FILES = (
     "training/miles_training.py",
@@ -33,17 +32,11 @@ RUNTIME_FILES = (
     "training/miles_conversion.py",
     "training/miles_rollout.py",
     "training/rl_episode.py",
+    "training/rl_runtime.py",
     "training/sft_runtime.py",
     "evals/fleet/opencode_self_hosted.py",
     "cyber_post_train/jobs.py",
 )
-
-
-def _sealed(value, schema):
-    if value.get("schema") != schema or value.get("sha256", "").removeprefix("sha256:") != digest(
-        {k: v for k, v in value.items() if k != "sha256"}
-    ):
-        raise ValueError("input receipt schema/digest mismatch")
 
 
 def _runtime():
@@ -440,81 +433,10 @@ def native_result(plan):
     }
 
 
-def _progress(root):
-    files = []
-    for parent in (root / "checkpoints", root / "episodes"):
-        for path in parent.rglob("*"):
-            try:
-                stat = path.stat()
-                if path.is_file():
-                    files.append((str(path.relative_to(root)), stat.st_size, stat.st_mtime_ns))
-            except FileNotFoundError:
-                pass  # native checkpoint rotation may race a read-only sample
-    return tuple(sorted(files))
-
-
 def run(plan, plan_path):
-    from .sft_runtime import WATCHDOG_POLL_SECONDS, ProgressWatchdog, _utilization_snapshot
+    from .rl_runtime import run as supervised_run
 
-    root = Path(plan["output_root"])
-    if os.environ.get("RUN_DIR") != str(root):
-        raise ValueError("Jobs API output binding mismatch")
-    if any((root / name).exists() for name in ("checkpoints", "episodes")):
-        raise FileExistsError("RL-from-base cannot consume an existing run directory")
-    _write(root / "STARTED.json", {"plan_sha256": digest(plan), "started_at": time.time()})
-    process = None
-    try:
-        native_source()
-        with (root / "private-miles.log").open("x") as log:
-            os.chmod(log.name, 0o600)
-            process = subprocess.Popen(
-                [
-                    sys.executable,
-                    "-m",
-                    "training.miles_training",
-                    "--plan",
-                    str(plan_path.resolve()),
-                    "--sha256",
-                    digest(plan),
-                    "--native",
-                ],
-                stdout=log,
-                stderr=subprocess.STDOUT,
-                start_new_session=True,
-            )
-            watchdog = ProgressWatchdog(time.monotonic())
-            while process.poll() is None:
-                try:
-                    process.wait(timeout=WATCHDOG_POLL_SECONDS)
-                except subprocess.TimeoutExpired:
-                    files = _progress(root)
-                    gpu, io = _utilization_snapshot()
-                    reason = watchdog.observe(time.monotonic(), files, gpu, io)
-                    if reason:
-                        raise TimeoutError(reason) from None
-            if process.returncode != 0:
-                raise RuntimeError("native Miles did not finish")
-        return _write(
-            root / "NATIVE_TRAINING_COMPLETE.json",
-            native_result(plan),
-        )
-    except BaseException as exc:
-        _write(
-            root / "FAILED.json",
-            {"status": "failed", "plan_sha256": digest(plan), "error_class": type(exc).__name__},
-        )
-        raise RuntimeError(
-            "Miles run failed; private evidence preserved; no automatic retry"
-        ) from None
-    finally:
-        if process is not None:
-            with suppress(ProcessLookupError):
-                os.killpg(process.pid, signal.SIGTERM)
-            with suppress(subprocess.TimeoutExpired):
-                process.wait(timeout=30)
-            with suppress(ProcessLookupError):
-                os.killpg(process.pid, signal.SIGKILL)
-            process.wait(timeout=30)
+    return supervised_run(plan, plan_path, backend=sys.modules[__name__])
 
 
 def main():

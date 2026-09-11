@@ -6,6 +6,8 @@ from dataclasses import replace
 from types import SimpleNamespace as NS
 
 import pytest
+from test_skyrl_episode import recorder
+from test_skyrl_episode import setup as recorder_setup  # noqa: F401
 
 from training import skyrl
 
@@ -64,6 +66,7 @@ def config():
         {"response_tokens": 1},
         {"tokens_per_turn": 0},
         {"max_turns": 0},
+        {"max_turns": 1},
         {"output_root": "/mnt/sfs/models/output"},
         {"model_root": "/"},
         {"model_root": "/mnt/sfs/models/../source"},
@@ -96,7 +99,7 @@ def test_bounded_native_recipe(config, nodes, groups, repetitions):
     assert values["trainer.resume_mode"] == "none"
     assert values["trainer.max_ckpts_to_keep"] == 2
     assert values["trainer.policy.optimizer_config.lr"] == config.lr
-    assert values["generator.sampling_params"]["logprobs"] == 1
+    assert values["generator.sampling_params"]["logprobs"] == 0
     assert values["generator.eval_sampling_params"]["temperature"] == 0
     assert values["trainer.max_prompt_length"] == config.context_tokens - config.response_tokens
     assert (
@@ -176,3 +179,26 @@ def test_real_native_config_and_optimizer_step_semantics(config, monkeypatch, st
         ("optimizer", "policy"),
     ]
     assert output["loss"] == 0.5 and output["grad_norm"] == 1.0
+
+
+@pytest.mark.skipif(importlib.util.find_spec("skyrl") is None, reason="pinned SkyRL image only")
+@pytest.mark.asyncio
+@pytest.mark.parametrize("phase", ["train", "eval"])
+async def test_native_sampling_settings_reach_recorder(config, recorder_setup, monkeypatch, phase):  # noqa: F811
+    from skyrl.backends.skyrl_train.inference_servers.engine_utils import (
+        get_sampling_params_for_backend,
+    )
+
+    monkeypatch.setenv("WANDB_API_KEY", "synthetic-offline-test-only")
+    monkeypatch.setenv("WANDB_MODE", "offline")
+    cfg = skyrl.native_config(config)
+    params = (
+        cfg.generator.sampling_params if phase == "train" else cfg.generator.eval_sampling_params
+    )
+    recorder_setup.sampling = get_sampling_params_for_backend("vllm", params)
+    instance = recorder(recorder_setup)
+    instance.begin_segment([], [])
+    await instance.sample()
+    sent = recorder_setup.engine.requests[0]["sampling_params"]
+    assert sent["logprobs"] == 0 and sent["max_tokens"] == 8
+    assert sent["temperature"] == (1.0 if phase == "train" else 0.0)

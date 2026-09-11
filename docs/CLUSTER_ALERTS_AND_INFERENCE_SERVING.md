@@ -112,8 +112,10 @@ Runtime bundles prepared on macOS must reproduce byte-identically during Linux
 preflight. Python 3.12's gzip header includes an OS byte; the shared bundler
 normalizes it before hashing. Keep each environment string below Linux's 128-KiB
 process-start limit (including its name and terminator). The request validator
-rejects oversized values before preview; a large CPU-test bundle must be chunked
-or staged, not passed as one environment value.
+rejects oversized values before preview. The shared runtime bundler splits larger
+payloads into 48,000-character fields and verifies the reassembled digest before
+creating the runtime directory. Oversized total bundles are rejected; never bypass
+the limit by passing a large blob as one command argument instead.
 
 Use the Fleet inference control plane for a persistent routed model. It owns one
 `InferenceModel`, one ready-only Service, one Deployment, gateway backends and routes,
