@@ -5,8 +5,8 @@ campaigns and other worktrees remain untouched.
 
 Chris's current execution preference is Qwen first: prioritize its end-to-end
 SFT/recovery, Miles/SkyRL RL and evaluation qualification. Full GLM remains a
-completion requirement; prioritizing Qwen does not cancel the already-submitted
-GLM qualification or narrow the final model/backend scope.
+completion requirement. Its first full-size allocation was released after a
+loading bottleneck; prioritizing Qwen does not narrow the final model/backend scope.
 
 ## Interface and sources
 
@@ -38,6 +38,7 @@ and trace analysis` were inspected. Original commits/worktrees remain recoverabl
 | Public model pinning | Live exact-revision reads reproduced Qwen's existing 18-shard weight/sidecar hashes and pinned full GLM5.3's 141 shards/755,632,050,320 bytes in `configs/models/glm53-30333038`. No weights downloaded or GPUs requested |
 | GLM LoRA CPU prerequisites | 68 pinned-image tests, zero failures/skips/restarts/GPUs; actual tiny GLM FP8 load, adapter updates, exact CPU resume and native worker integration; [receipt](evidence/cleanup-glm-native-20260911.json). **Not full-size or distributed GPU qualification** |
 | Full GLM data/model preflight | All 141 staged weight shards verified, exact 744B model constructed on meta, 8 train windows/6,287 targets and two fixed dev tasks; 34 native checkpoint/seal tests also passed. [CPU receipt](evidence/cleanup-glm-preparation-20260911.json). The two-node qualification exposed slow rank-zero CPU dequantization while GPUs waited; released all 16 GPUs before off-node repair, with no optimizer step. [Startup/release evidence](evidence/cleanup-glm-startup-release-20260911.json) |
+| GLM loading diagnosis | Zero-GPU synthetic native dequantization test succeeded; four CPU threads were 3.10× faster than one with bit-identical BF16 results. Native SkyRL assigns one CPU per GPU actor. [Evidence](evidence/cleanup-glm-cpu-loading-20260911.json). This does not qualify full-model loading or justify resubmission; shard I/O, expert merging and distribution remain unmeasured |
 | Native recovery CPU tests | 41 tests in the pinned image, zero skips/failures/restarts/GPUs; exact model/Adam state through the resumed epoch, complete later-epoch coverage, strict state checks and no-optimizer validation. [Receipt](evidence/cleanup-recovery-cpu-20260911.json). Native later-epoch reshuffles are explicitly not bit-identical |
 | Planned pause/recovery | 181 pinned-image CPU tests pass. The real fixture paused successfully after optimizer step one at 08:05:31 UTC and released all eight GPUs. CPU sealing verified 33 files/324,627,486,731 bytes and preserved training progress; one exact continuation to step two was submitted once and admitted at 08:22:59, priority 10,000. [Pause/resume evidence](evidence/cleanup-qwen-pause-resume-20260911.json). Resumed GPU optimization remains unverified |
 | Real native checkpoint reload | Succeeded 04:34:51 UTC and released all eight GPUs/quota. Eight ranks restored model/optimizer/scheduler/RNG plus sampler; zero new optimizer steps; both held-out losses exactly match before shutdown. Independent CPU audit rehashed all 33 source files/324,627,486,731 bytes unchanged at 04:51:12 UTC; [receipt](evidence/cleanup-qwen-recovery-20260911.json). This is not the separate BF16 export or a resumed GPU optimizer step |

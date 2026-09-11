@@ -1,0 +1,42 @@
+{
+  "schema": "cyber_cpu_loading_diagnostic_v1",
+  "classification": "synthetic_cpu_benchmark_not_full_model_qualification",
+  "pod": "chris-cpt-glm-dequant-benchmark-v1",
+  "pod_uid": "fc160c61-6d38-47a5-b4be-215493a1be61",
+  "node": "computeinstance-e04a737eqtfvpnyx08",
+  "started_at": "2026-09-11T08:32:33Z",
+  "finished_at": "2026-09-11T08:32:43Z",
+  "exit_code": 0,
+  "restarts": 0,
+  "gpus": 0,
+  "cpu_limit": 4,
+  "image_sha256": "ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+  "manifest_sha256": "f80934ca74990c364c3d96f2bdcb5384ccf3c40c021a2999f43f9e874827de55",
+  "script_sha256": "6ea0717a63bec41ea9e4bf8fa36070ba5d6ab8cf78adb607f356e35d36054c4c",
+  "native_fp8_integration_sha256": "cad925d1ceae22b1bf9ad769971e5d53b7829b73fd00ddf0959a8818763dec4b",
+  "receipt_sha256": "24f963bfad83e682e9a75d32ce4d0c07502b5c148bdc75a142ed31f0a1885aea",
+  "receipt_digest_independently_verified": true,
+  "torch_version": "2.11.0+cu128",
+  "synthetic_weight_shape": [2048, 7168],
+  "input_dtype": "float8_e4m3fn",
+  "scale_dtype": "float32",
+  "output_dtype": "bfloat16",
+  "timing": [
+    {"threads": 1, "median_seconds": 0.11281908699311316, "measured_repeats": 5},
+    {"threads": 2, "median_seconds": 0.06476371083408594, "measured_repeats": 5},
+    {"threads": 4, "median_seconds": 0.03635688195936382, "measured_repeats": 5}
+  ],
+  "all_outputs_bit_identical": true,
+  "four_thread_speedup": 3.103101281325812,
+  "native_scheduling_finding": {
+    "skyrl_commit": "f5bc3b78dfddfb352870d5d7430cd226e5785838",
+    "path": "skyrl/backends/skyrl_train/workers/worker.py",
+    "finding": "The native actor group requests one CPU per one-GPU actor; raising Kubernetes CPU requests alone does not change the actor request."
+  },
+  "limits": [
+    "Synthetic per-tensor arithmetic only: no full model, shard I/O, expert merging, network broadcast or optimizer executed.",
+    "The timing does not prove that four CPU threads can load the full 744B model inside the frozen startup allowance.",
+    "No GLM successor was submitted; its previously released GPU allocation remains released.",
+    "A future loading change must preserve exact FP32 dequantization arithmetic and BF16 output, and be tested at its actual resource boundary before GPU qualification."
+  ]
+}
