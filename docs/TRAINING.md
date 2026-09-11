@@ -205,6 +205,26 @@ to occupy a GPU. A leftover `.partial` directory is preserved for diagnosis and
 blocks reuse; do not remove it automatically. Real-checkpoint export/reload
 qualification remains recorded separately in `docs/CONSOLIDATION.md`.
 
+Check the exported model with the same pinned image before handing it to serving:
+
+```sh
+# CPU-only: hashes all files and checks the complete HF model's meta layout.
+cyber-post-train checkpoint-check /shared/qwen-step-50-bf16/EXPORT.json \
+  --sha256 <export-file-sha256> --output /shared/export-cpu-check.json
+# In a separately authorized, bounded one-GPU Jobs API run:
+cyber-post-train checkpoint-check /shared/qwen-step-50-bf16/EXPORT.json \
+  --sha256 <same-export-file-sha256> --output /shared/export-gpu-check.json --gpu
+```
+
+The GPU check loads the complete BF16 model, applies the training image's exact
+Qwen Torch GDN patch, runs a finite forward pass and generates two tokens from a
+fixed synthetic input, then rehashes the export unchanged. It logs counts, not
+tokens. Receipt paths must be new and outside the export. The loaded model's
+parameters and artifact-only MTP tensors are checked separately; HF warning text
+and `hf_device_map` representations are not parameter-identity evidence. This
+eager-attention smoke test does **not** qualify optimizer recovery, a serving
+engine, tool behavior, throughput, or model quality.
+
 The runtime has fixed startup, no-progress and hard-runtime bounds. A confirmed
 stall preserves evidence and exits truthfully; the Jobs API releases the allocation.
 An independent monitor must confirm release and handle access failures explicitly.

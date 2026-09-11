@@ -341,6 +341,22 @@ def checkpoint_export(
         _fail(exc)
 
 
+@app.command("checkpoint-check")
+def checkpoint_check(
+    export: Path,
+    sha256: Annotated[str, typer.Option("--sha256")],
+    output: Annotated[Path, typer.Option("--output")],
+    gpu: Annotated[bool, typer.Option("--gpu")] = False,
+) -> None:
+    """CPU export integrity/meta check; --gpu runs a one-GPU synthetic reload check."""
+    from training.export_check import check
+
+    try:
+        _print(check(export, sha256, output, gpu=gpu))
+    except Exception as exc:
+        _fail(exc)
+
+
 eval_app = typer.Typer(
     help="Fleet evaluations: prepare, check, initialize, then run bounded workers."
 )

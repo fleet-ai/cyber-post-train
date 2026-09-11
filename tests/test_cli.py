@@ -336,6 +336,36 @@ def test_export_command_requires_explicit_manifest_identity(tmp_path, monkeypatc
     assert result.exit_code == 2 and "private trainer internals" not in result.output
 
 
+def test_checkpoint_check_explicit_gpu_and_redacted_failure(tmp_path, monkeypatch):
+    from training import export_check
+
+    calls = []
+
+    def check(*args, **kwargs):
+        calls.append((args, kwargs))
+        return {"gpu_reload_verified": kwargs["gpu"]}
+
+    monkeypatch.setattr(export_check, "check", check)
+    args = [
+        "checkpoint-check",
+        str(tmp_path / "EXPORT.json"),
+        "--sha256",
+        "a" * 64,
+        "--output",
+        str(tmp_path / "CHECK.json"),
+    ]
+    assert RUNNER.invoke(cli.app, args).exit_code == 0 and calls[-1][1] == {"gpu": False}
+    result = RUNNER.invoke(cli.app, [*args, "--gpu"])
+    assert result.exit_code == 0 and json.loads(result.stdout)["gpu_reload_verified"]
+
+    def fail(*args, **kwargs):
+        raise RuntimeError("private details")
+
+    monkeypatch.setattr(export_check, "check", fail)
+    result = RUNNER.invoke(cli.app, args)
+    assert result.exit_code == 2 and "private details" not in result.output
+
+
 @pytest.mark.parametrize(
     "command",
     [
@@ -348,6 +378,7 @@ def test_export_command_requires_explicit_manifest_identity(tmp_path, monkeypatc
         ["status"],
         ["checkpoint-seal"],
         ["checkpoint-export"],
+        ["checkpoint-check"],
     ],
 )
 def test_help_is_accessible(command):
