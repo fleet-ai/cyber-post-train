@@ -29,7 +29,9 @@ identity never silently changes the data split, precision or training method.
 Run `cyber-post-train data data.yaml` on CPU with the pinned SkyRL image and
 locally staged tokenizer. This uses normalized Fleet records, not raw model
 responses. Teacher and self-distillation differ only in the source file/model
-filter; use the same frozen dev references when comparing them.
+filter. The current outcome-selected study uses a train-only corpus plus
+separate frozen Fleet development/final-test manifests; it does not load
+teacher-reference dev transcripts into the trainer.
 
 ```yaml
 source:
@@ -42,23 +44,27 @@ native_helper: /opt/skyrl/skyrl/train/generators/utils.py
 train_models: [gpt-5.6-sol]       # or the exact student ID in normalized records
 max_length: 16384
 context_tokens: 4096
-dev_windows: 5
+validation_mode: task_outcomes_only
+dev_windows: 0
 output: /private/data/new-corpus # must not exist
 ```
 
-The split is a self-digesting JSON object with schema `cyber_task_split_v1` and
-`tasks` entries containing `task_key`, `task_version_id`, `split`, and, for every
-dev task, one fixed `reference_session_id`. It must be reviewed before data
-preparation. The builder never moves tasks between splits or replaces missing
-references. It rejects family leakage across versions, duplicate sessions,
-unverified successes and unsupported tool transitions. External benchmark data
-is prohibited. A new split cannot make an already-exposed checkpoint held out.
+The outcome-selected split is a self-digesting `cyber_task_split_v2` object whose
+entries contain only exact training `task_key`, `task_version_id` and `split`.
+It must not contain a teacher `reference_session_id`; development and final-test
+identities live in separate outcome-evaluation manifests. Freeze complete task
+families and one common untouched final test before preparing any arm. The
+builder never moves tasks between splits. It rejects family leakage across
+versions, duplicate sessions, unverified successes and unsupported tool
+transitions. External benchmark data is prohibited. A new split cannot make an
+already-exposed checkpoint held out.
 
-Outputs are private `train.parquet`, `dev.parquet`, `manifest.json` and a copy of
-the split. Training covers each fitting assistant response once; tool observations
-and copied earlier responses receive no loss. Complete recent tool rounds must
-fit; exclusions remain accounted for. Dev uses a deterministic bounded spread
-of last-response windows, not whichever windows happen to have the lowest loss.
+Outputs are private `train.parquet`, `manifest.json` and a copy of the split.
+Training covers each fitting assistant response once; tool observations and
+copied earlier responses receive no loss. Complete recent tool rounds must fit;
+exclusions remain accounted for. A legacy `teacher_cross_entropy` mode retains
+the v1 train/dev format for historical replay, but its teacher-distribution loss
+is not the selection metric for this study.
 
 ## Configuration
 
@@ -81,7 +87,7 @@ recipe:
   gpus_per_node: 8
   lr: 0.000003
   max_length: 16384
-  eval_interval: 50
+  eval_interval: 0             # no teacher-reference CE inside the trainer
   checkpoint_interval: 50
   keep_checkpoints: 3
   seed: 42
@@ -121,12 +127,14 @@ keeps the tail batch, so optimizer steps are `ceil(train_rows / batch_size) × e
 One row is a bounded token window, not one task or one rollout. The dense format
 trains every eligible assistant response once per epoch, masking copied context.
 
-The corpus manifest binds `tokenizer: {repo, revision}`, `split_sha256`, and
-`files.train`/`files.dev`. Each file entry has relative `path`, `sha256`, `rows`,
+The corpus manifest binds `validation_mode`, `tokenizer: {repo, revision}`,
+`split_sha256`, and `files.train`. Each file entry has relative `path`, `sha256`, `rows`,
 `task_keys` and the format-specific token/response inventory. Its top-level
 `sha256` is the SHA-256 of canonical compact sorted JSON excluding that field,
 prefixed `sha256:`. Generate it with the data-preparation pipeline, not hand-edited
-counts. Train and dev are distinct immutable artifacts and task families.
+counts. For `task_outcomes_only`, `files.dev` is forbidden and `eval_interval`
+must be zero; checkpoint cadence remains independent. Fresh Fleet development
+outcomes are recorded outside the trainer.
 
 ## Prepare → CPU preflight → dev canary → production
 
@@ -176,15 +184,17 @@ training output directory for a new treatment.
 
 ## Checkpoints and completion
 
-Validation runs before training, at the configured interval and at the final step.
-Periodic validation and checkpoint intervals must agree. Keep the latest N
-checkpoints plus the best checkpoint by fixed held-out loss. Saves include native
+In `task_outcomes_only` mode the trainer performs no teacher-reference CE
+validation; checkpoints still run at their configured interval and final step.
+Legacy CE mode validates before training, periodically and at the final step,
+and requires checkpoint/validation intervals to agree. Saves include native
 optimizer, scheduler, sampler and trainer state; a weights-only file is not a
 recoverable checkpoint. Before recording a save, the wrapper reopens the small
 sampler/trainer files and checks their counters—SkyRL can catch a sampler-write
-error after creating a partial file. Both paused and completed runs require
-digest-valid final checkpoint and validation receipts bound to the same plan and
-step. Full payload hashing and GPU reload remain separate handoff checks.
+error after creating a partial file. Both paused and completed runs require a
+digest-valid final checkpoint receipt bound to the same plan and step; CE mode
+also requires its matching validation receipt. Full payload hashing and GPU
+reload remain separate handoff checks.
 
 For a planned interruption/recovery check, add top-level `pause_after_step: 1`
 to a plan whose full recipe has more than one step. This does not shorten the
@@ -278,8 +288,10 @@ recovery:
 Use the same prepare/preflight/preview/submit commands. Model, data, recipe,
 topology and trainer image must stay unchanged. Both modes restore every rank's
 optimizer/scheduler and the saved sampler cursor; a missing state is an error,
-never a warning followed by a fresh start. Validation performs held-out forward
-passes and writes `RELOAD_VALIDATED.json`, without saving or updating the model.
+never a warning followed by a fresh start. Zero-step CE validation performs
+held-out forward passes and writes `RELOAD_VALIDATED.json`, without saving or
+updating the model. It is unavailable for train-only outcome mode; use the
+checkpoint/export reload checks instead.
 Continuation requires recorded supervised-token progress and starts at the next
 step; completed runs and older checkpoints without that progress cannot be
 silently continued. Never run a source trainer and its recovery concurrently.

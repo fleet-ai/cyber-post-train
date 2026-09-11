@@ -31,7 +31,7 @@ Read [references/gates.md](references/gates.md) before submitting training, expo
 - Train only on verified-success demonstrations from the training split. Group task families across versions before selecting windows; report whether applications are shared or independently held out.
 - Prove tokenizer, chat-template, windowing, target coverage, model revision, precision, topology, trainer image, dataset digest, and stopping rule before launch.
 - Count supervised assistant tokens, not just window count. Mask copied context and tool observations; train each eligible target once per epoch. Record exclusions instead of silently truncating.
-- Require held-out loss, scalar-only W&B telemetry, regular recoverable checkpoints and a fixed idle/drain policy. CPU checks do not qualify an untested CUDA kernel or distributed model loader.
+- Require scalar-only W&B telemetry, regular recoverable checkpoints and a fixed idle/drain policy. For outcome-selected SFT, log training loss but keep teacher-reference CE artifacts out of the trainer and use fresh Fleet development-task outcomes for selection; a separately declared CE diagnostic is secondary, not exploit capability. CPU checks do not qualify an untested CUDA kernel or distributed model loader.
 - Full GLM and GLM Flash are different models. Do not claim full GLM training from a Flash recipe or a tiny CPU fixture; qualify the exact loader, resource shape and checkpoint resume.
 - At terminal state, bind the exact run UID, optimizer steps, metrics, and checkpoint files. Export without adding optimizer steps.
 - Do not relabel checkpoint precision. Inspect tensor headers and perform a deterministic conversion when required.

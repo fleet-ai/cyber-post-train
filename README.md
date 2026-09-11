@@ -46,8 +46,8 @@ redirect the Jobs API. See the [cluster and promotion guide](docs/CLUSTER_ALERTS
 CPU data processing has a separate EKS Ray Data cluster; it is not a GPU target.
 
 Current consolidation status: the Qwen SFT runtime comes from a successful
-full-model run; its new wrapper has completed a real one-step run with held-out
-loss, W&B and a native checkpoint. CPU export, native GPU checkpoint recovery,
+full-model run; its wrapper has completed a real optimizer update with W&B and a
+native checkpoint. CPU export, native GPU checkpoint recovery,
 resumed optimization and the separate BF16 export's one-GPU synthetic reload
 are independently verified. This does not qualify a production serving engine.
 Full GLM5.3,
@@ -91,8 +91,9 @@ to start a new experiment. Shared and dedicated serving remain explicit blocks.
 - Hold out complete task families across versions, not random windows. State
   explicitly whether applications are shared or held out.
 - Bind model, tokenizer, dataset, harness, tools, verifier, runtime and budgets.
-- Track held-out loss, supervised tokens and recoverable checkpoints in W&B;
-  do not upload traces, task text or credentials.
+- Track training loss, supervised tokens and recoverable checkpoints in W&B;
+  select on fresh Fleet development-task outcomes, not teacher-reference CE or
+  external benchmarks. Do not upload traces, task text or credentials.
 - Use the Jobs API for GPU batch work and the inference control plane for serving.
   Release broken or idle experiment-owned capacity; never alter peer workloads.
 - A running process is not a valid result. Require optimizer/checkpoint evidence

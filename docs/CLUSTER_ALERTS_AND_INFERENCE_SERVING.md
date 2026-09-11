@@ -58,8 +58,10 @@ unchanged. Prefer explicit immutable object exchange for compatible CPU work.
 2. Prepare a **separate bounded dev run**. Check target auth, inputs/Secrets,
    resources/topology, duplicate state and preview. Keep production inputs and
    journals untouched. A test must have a predeclared startup/idle/drain bound.
-3. For SFT, prove real forward/backward/optimizer work, fixed held-out loss,
+3. For SFT, prove real forward/backward/optimizer work, finite training loss,
    scalar W&B tracking, checkpoint save and reload/recovery, and resource release.
+   Outcome-selected studies also require a separate fresh Fleet development eval;
+   an internal CE diagnostic is not a substitute.
    For RL, also prove real task interaction and exact authoritative reward before
    an update. For serving/eval, test the exact request/tool/cleanup path. Synthetic
    fixtures qualify only what they actually exercise.

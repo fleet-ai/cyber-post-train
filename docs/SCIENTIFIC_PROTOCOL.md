@@ -29,9 +29,18 @@ not enter training, retrieval, reward design or checkpoint selection.
 
 For SFT, count both total context and supervised assistant tokens. Mask tool
 observations and copied context. Preserve target coverage and exclusion counts;
-never hide overlength examples by silent truncation. Keep validation data and
-tokenization fixed across measurements; report token-weighted and task-macro
-loss separately.
+never hide overlength examples by silent truncation. Log training loss and
+supervised-token exposure, but select hyperparameters and checkpoints on fresh
+Fleet development-task outcomes. A teacher-reference CE set measures imitation
+of that teacher distribution and must not be presented as blackbox-exploit
+generalization. If a study retains CE diagnostics, keep their data and
+tokenization fixed and treat them as secondary only.
+
+When several split or recipe arms run, freeze one untouched Fleet final test
+before fitting. Split-specific development tasks may guide narrowing. Final-test
+and external-benchmark results may be generated after each frozen checkpoint
+only if they remain sealed from experiment decisions until the selection rule is
+complete. WebExploitBench must never become an HPO signal.
 
 ## Matched evaluation
 
