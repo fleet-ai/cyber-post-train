@@ -286,7 +286,9 @@ imported PR #209's Tensorlake/OpenCode paths. The Tensorlake follow-up now binds
 the v2 context policy into both the protocol and actual image probe, reports
 unexpected/scored failures nonzero, and holds attempt capacity until the exact
 owned sandbox is positively terminated. Process exit and sandbox termination
-are not benchmark acceptance.
+are not benchmark acceptance. The v2 sealer now also binds the exact controller
+source as well as the runner, and the persistent controller rechecks both before
+scored dispatch; a read-only lifecycle failure never starts a fallback process.
 
 The registration path binds selected export/GPU-check/staging evidence, requires
 measured dev-serving qualification, checks duplicate identities/paths through
@@ -294,9 +296,13 @@ GETs, and journals exactly one explicit POST attempt. The historical hardcoded
 mutation is retired; its receipt validator and frozen source fixture remain
 readable. No endpoint or workload was submitted during this implementation.
 
-The combined synthetic suite passed **149 tests** under Python 3.12, including
-the historical receipt tests. Ruff and shell/JavaScript syntax checks passed.
-These results do not establish real image, mount, dev-serving, Tensorlake
+The 2026-09-12 combined WebExploitBench synthetic suite passed **171 tests and
+7 subtests** under Python 3.12, including the historical receipt tests. Ruff and
+shell/JavaScript syntax checks passed. Network-disabled local linux/amd64 audit
+builds verified the ordinary and root adapter variants, pinned OpenCode version,
+context policy, disabled native tools, and exact two-tool MCP boundary. Those
+unpublished local images are not scientific identities. These results do not
+establish real image, mount, dev-serving, Tensorlake
 snapshot, compaction/continuation, benchmark-result or cleanup qualification.
 The checkpoint/route/snapshot/task bindings and measured acceptance gates above
 remain required before any scored launch; WebExploitBench remains external and
