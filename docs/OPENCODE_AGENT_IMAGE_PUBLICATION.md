@@ -14,15 +14,32 @@ and must not be repurposed. The live local-build API also has no
 `rewrite-timestamp=true`. Submitting now would either be rejected before a build
 or create a predictably failing build Job.
 
-The required Theseus changes are small and explicit:
+The required Theseus changes are small and explicit. They span two independently
+applied Terraform states plus the Training API deployment; merging source alone
+does not open this gate:
 
-1. Provision `fleet/cyber-post-train-opencode-runtime` with immutable tags and
-   dev-node pull access, then add it to the dev BuildKit role's
-   `push_repository_prefixes`.
-2. Add `rewrite_timestamp: bool = false` to `LocalImageBuildRequest`. When true,
-   render the image output as
+1. Provision `fleet/cyber-post-train-opencode-runtime` in the account's core ECR
+   state with immutable tags. The dev `ecr-pull` role already grants read access
+   to `fleet/*`; verify that live role after apply rather than adding a second
+   pull credential.
+2. Add `fleet/cyber-post-train-opencode-runtime` to
+   `k8s/training/terraform/buildkit-role/fleetai-training-dev.tfvars` and apply
+   the dev BuildKit-role state. This is the repository-scoped push grant.
+3. Add `rewrite_timestamp: bool = false` to `LocalImageBuildRequest` in
+   `services/fleet-train-api/src/fleet_train_api/local_image_build.py`. When
+   true, render the image output as
    `type=image,name=<image>,push=true,rewrite-timestamp=true`. Include the field
-   in the existing recipe fingerprint and deploy the API.
+   in the existing recipe fingerprint, test both values, build the Training API,
+   and move the dev `image-build-api` pin to that tested image.
+
+The image-build OpenAPI is served at
+`https://api.ft.dev.flt.build/v1/images/openapi.json`; the generic
+`/v1/openapi.json` is a different service and cannot establish this gate. A
+read-only live check on 2026-09-11 found OpenAPI SHA-256
+`44d1488cb0b1573ab446ed6c882dcde5d3d73460a1404790596d546ac625e48f`,
+no `rewrite_timestamp` property, and the same source bytes on current Theseus
+main as the blocked plan. Do not upload a context or submit a build merely to
+reconfirm that schema result.
 
 Do not submit until this command exits zero against a fresh live OpenAPI copy:
 
@@ -30,6 +47,10 @@ Do not submit until this command exits zero against a fresh live OpenAPI copy:
 uv run python -m evals.fleet.opencode_image_context validate-openapi \
   --openapi /path/to/dev-image-openapi.json
 ```
+
+Also require a reviewed Terraform plan for both infrastructure states and a
+live readback of the dedicated repository plus builder push policy. OpenAPI
+success proves only the request/rendering half, not ECR authorization.
 
 ## Recreate the exact context
 
