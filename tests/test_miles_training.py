@@ -487,6 +487,8 @@ def test_parsed_native_semantics_and_argv_restoration(plan, monkeypatch):
         num_rollout=2,
         num_steps_per_rollout=1,
         global_batch_size=2,
+        actor_num_nodes=plan["topology"]["nodes"],
+        actor_num_gpus_per_node=plan["topology"]["gpus_per_node"],
     )
     monkeypatch.setitem(sys.modules, "miles.utils.arguments", NS(parse_args=lambda: args))
     before = sys.argv
@@ -495,6 +497,27 @@ def test_parsed_native_semantics_and_argv_restoration(plan, monkeypatch):
     with pytest.raises(ValueError):
         train.native_args(plan)
     assert sys.argv is before
+
+
+def test_parsed_node_count_must_match_the_prepared_topology(plan, monkeypatch):
+    """A native launch that lands on a different node count is not this plan."""
+    monkeypatch.setattr(train, "native_source", lambda: Path("synthetic.py"))
+    monkeypatch.setattr(miles, "arguments", lambda cfg: ["--chat-template-path", "synthetic"])
+    args = NS(
+        data_source_path="training.miles_text.TextDataSource",
+        tool_key="tools",
+        start_rollout_id=0,
+        load=plan["checkpoint"]["root"],
+        ref_load=plan["checkpoint"]["root"],
+        num_rollout=2,
+        num_steps_per_rollout=1,
+        global_batch_size=2,
+        actor_num_nodes=plan["topology"]["nodes"] + 1,
+        actor_num_gpus_per_node=plan["topology"]["gpus_per_node"],
+    )
+    monkeypatch.setitem(sys.modules, "miles.utils.arguments", NS(parse_args=lambda: args))
+    with pytest.raises(ValueError, match="native parsed training/load semantics changed"):
+        train.native_args(plan)
 
 
 @pytest.fixture

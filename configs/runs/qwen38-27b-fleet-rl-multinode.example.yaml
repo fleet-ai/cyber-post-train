@@ -1,0 +1,52 @@
+# Stage three of the Fleet RL surface: native Miles GRPO on Fleet environments
+# across whole eight-GPU nodes.
+#
+# `recipe.nodes` is the only topology control. The pinned Qwen3.8-27B partition
+# (TP4 x PP1 x CP2) fills exactly one node, so each extra node is a data-parallel
+# replica: data parallelism equals the node count, and `groups x
+# samples_per_prompt` must divide by it. Preparation records the derived layout
+# in plan.json under `topology`, and preflight rejects a native launch that
+# lands on a different node count.
+#
+# Every sample in a rollout batch holds one authorized Fleet environment
+# instance while it runs, so raising nodes raises simultaneous instance demand
+# in step with throughput. `topology.concurrent_environments` in plan.json is
+# that number, including the dev evaluation phase. Check it against the team's
+# live instance headroom and the experiment's allocated-node count before
+# submitting; neither the compiler nor the Jobs API is an admission controller.
+backend: miles
+name: <run-name>  # must match the rl-data name
+output_root: /mnt/sfs/jobs/<run-name>
+model:
+  lock: configs/models/qwen38-27b-1d4bf0f2.lock.json
+  weights: configs/models/qwen38-27b-1d4bf0f2.weights.json
+  root: /mnt/sfs/models/Qwen/Qwen3.8-27B/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0
+data:
+  manifest: <rl-data-output>/manifest.json
+  root: <staged-rl-data-root>
+checkpoint:
+  manifest: <sealed-miles-checkpoint.json>
+  sha256: <manifest-file-sha256>
+recipe:
+  nodes: 2
+  steps: 40
+  # 8 prompts x 4 samples = 32 sequences, divisible by the 2 replicas.
+  groups: 8
+  samples_per_prompt: 4
+  lr: 0.000001
+  eval_interval: 10
+  checkpoint_interval: 10
+  seed: 42
+wandb:
+  entity: <your-team>
+  project: cyber-post-train
+  run_id: <new-run-id>
+cluster:
+  priority: c1
+  # Per node. The colocated engines, trainer and CPU offload need this reviewed
+  # reservation; smaller values are rejected.
+  resources:
+    cpu_request: "64"
+    cpu_limit: "128"
+    memory_request: 1536Gi
+    memory_limit: 2048Gi

@@ -391,10 +391,10 @@ checkpoint:
   manifest: /shared/miles-checkpoint.json
   sha256: <manifest-file-sha256>
 recipe:
-  nodes: 1
+  nodes: 1                   # whole eight-GPU nodes; see the topology notes below
   steps: 1
   groups: 1
-  samples_per_prompt: 2
+  samples_per_prompt: 2      # groups x samples_per_prompt must divide by nodes
   lr: 0.000001
   eval_interval: 1
   checkpoint_interval: 1
@@ -418,6 +418,42 @@ Smaller reservations/limits are rejected; larger ones remain configurable via
 `cluster.resources`. These are conservative startup bounds, not a completed
 capacity proof. Check the node's allocatable RAM and normal admission before
 submitting. This change does not alter the model, task split or optimizer recipe.
+
+### Whole nodes and the Fleet environment budget
+
+`recipe.nodes` is the only topology control, and it counts whole eight-GPU nodes.
+The pinned Qwen3.8-27B partition (TP4 x PP1 x CP2) fills exactly one node, so
+every extra node is a data-parallel replica of that same partition: data
+parallelism equals the node count, and `groups x samples_per_prompt` must divide
+by it. One to eight nodes are accepted, which is the Jobs API's per-request
+worker ceiling, not an allocation this recipe is entitled to. Count the
+experiment's other actively allocated nodes first; see
+[`docs/CONSOLIDATION.md`](CONSOLIDATION.md).
+
+Preparation records the derived layout in `plan.json` under `topology` (nodes,
+GPUs, replica size, data-parallel size, global batch and simultaneous
+environments). The compiler rejects a batch that does not divide across the
+replicas, the native argument builder rejects a recipe whose partition no longer
+fills one node, and CPU preflight rejects a native launch that parses to a
+different node count than the plan. The recipe currently names a one-node and a
+two-node shape; because those pin an identical partition, larger whole-node
+counts reuse it unchanged. A recipe that ever makes the partition depend on the
+node count stops preparation for review instead of being extrapolated.
+
+Extra nodes raise simultaneous Fleet environment demand in step with throughput:
+every sample in a rollout batch holds one authorized environment instance while
+it runs, and dev evaluation holds one per frozen dev row.
+`topology.concurrent_environments` is the larger of the two. Check it against the
+team's live instance headroom before submitting; neither the compiler nor the
+Jobs API is an admission controller for Fleet instances. Checkpoint conversion is
+unaffected: the native distributed checkpoint is parallelism-agnostic, so one
+sealed conversion serves every node count.
+
+Copy-and-edit configurations for the three stages are in `configs/runs/`:
+`qwen38-27b-fleet-rl-data.example.yaml`,
+`qwen38-27b-fleet-miles-convert.example.yaml` and
+`qwen38-27b-fleet-rl-multinode.example.yaml`. They carry placeholders for every
+reviewed private artifact; they are not approved inputs by themselves.
 
 CPU preflight checks the native FTI argument builder and actual text-only data
 source, including template identity and train/dev row retention. Qwen's automatic
@@ -477,7 +513,7 @@ independent real reward, optimizer and checkpoint-reload evidence before scaling
 Use the native trainers, not a new optimizer implementation. The inspected
 [Theseus FTI integration](https://github.com/fleet-ai/theseus/tree/cc18d2cd3e9370abf4f6f19df317d96ce6b619e4/services/fti/src/fti/trainers/miles)
 provides Miles token recording and a Qwen3.8 text recipe (Megatron TP4/CP2,
-one or two eight-GPU nodes; TP1 SGLang engines). Its GLM recipe is **Flash**,
+one whole eight-GPU node per replica; TP1 SGLang engines). Its GLM recipe is **Flash**,
 not our full GLM5.3. Its stock agent uses Platform V2 and `fleet_submit`, so it
 must not silently replace our exact V1 `bash`, `submit_report` contract.
 Reuse its token recorder and native training recipe only with a qualified cyber

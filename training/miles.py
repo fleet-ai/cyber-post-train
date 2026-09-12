@@ -19,6 +19,21 @@ IMAGE = (
     "d1d37c584e2aafdd47df1e1f3492ff3343eb3b83a5f658cf7ce2432ee8d6ef33"
 )
 TEMPLATE_SHA256 = "38d42166599348d47ded69776c5389c89924045e6827089923a031379f8a3dfe"
+# Whole nodes only: the native shape owns every GPU on a node. The ceiling is the
+# experiment's eight actively allocated nodes and the Jobs API's worker ceiling,
+# not an allocation the recipe is entitled to; count other owned capacity first.
+MAX_NODES = 8
+GPUS_PER_NODE = 8
+# One Qwen3.8-27B replica occupies exactly one node under the pinned native shape
+# (TP4 x PP1 x CP2 = 8). Additional nodes are data-parallel replicas of that same
+# partition, so data parallelism equals the node count. `arguments` rechecks this
+# against the native recipe inside the pinned image before any argument is built.
+REPLICA_GPUS = 8
+PARTITION_FLAGS = {
+    "tensor_model_parallel_size": "--tensor-model-parallel-size",
+    "pipeline_model_parallel_size": "--pipeline-model-parallel-size",
+    "context_parallel_size": "--context-parallel-size",
+}
 
 
 @dataclass(frozen=True)
@@ -46,12 +61,8 @@ class MilesConfig:
     response_tokens: int = 81920
     tokens_per_turn: int = 4096
 
-    def validate(self):
-        if self.model != "Qwen/Qwen3.8-27B":
-            raise ValueError("Miles full-model profile unqualified; GLM Flash is not full GLM")
-        for key in ("name", "wandb_entity", "wandb_project", "wandb_run_id"):
-            if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,100}", getattr(self, key)):
-                raise ValueError("invalid run or W&B identifier")
+    def validate_paths(self):
+        """Require canonical, disjoint staged inputs and an owned output directory."""
         paths = []
         for key in (
             "output_root",
@@ -80,6 +91,14 @@ class MilesConfig:
             raise ValueError("Miles input and output paths must not overlap")
         if paths[0].parts[:4] != ("/", "mnt", "sfs", "jobs"):
             raise ValueError("output must be an owned jobs directory")
+
+    def validate(self):
+        if self.model != "Qwen/Qwen3.8-27B":
+            raise ValueError("Miles full-model profile unqualified; GLM Flash is not full GLM")
+        for key in ("name", "wandb_entity", "wandb_project", "wandb_run_id"):
+            if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,100}", getattr(self, key)):
+                raise ValueError("invalid run or W&B identifier")
+        self.validate_paths()
         for key in (
             "nodes",
             "steps",
@@ -93,8 +112,10 @@ class MilesConfig:
         ):
             if type(getattr(self, key)) is not int or getattr(self, key) < 1:
                 raise ValueError("Miles counts must be positive integers")
-        if self.nodes not in (1, 2) or self.samples_per_prompt < 2:
-            raise ValueError("Qwen profile requires 1–2 whole nodes and grouped GRPO samples")
+        if not 1 <= self.nodes <= MAX_NODES or self.samples_per_prompt < 2:
+            raise ValueError("Qwen profile requires 1 to 8 whole nodes and grouped GRPO samples")
+        if (self.groups * self.samples_per_prompt) % self.nodes:
+            raise ValueError("global batch must divide across the data-parallel replicas")
         if self.steps % self.eval_interval:
             raise ValueError(
                 "eval interval must divide steps so native Miles evaluates the final model"
@@ -105,6 +126,60 @@ class MilesConfig:
             raise ValueError("learning rate must be finite and positive")
         if not self.tokens_per_turn <= self.response_tokens < self.context_tokens <= 98304:
             raise ValueError("generation budgets exceed the native Qwen context envelope")
+
+
+def topology(config: MilesConfig) -> dict[str, int]:
+    """Derive the whole-node replica layout and batch fan-out this recipe implies."""
+    config.validate()
+    gpus = config.nodes * GPUS_PER_NODE
+    batch = config.groups * config.samples_per_prompt
+    return {
+        "nodes": config.nodes,
+        "gpus_per_node": GPUS_PER_NODE,
+        "gpus": gpus,
+        "replica_gpus": REPLICA_GPUS,
+        "data_parallel_size": gpus // REPLICA_GPUS,
+        "global_batch_size": batch,
+        # Every sample in a rollout batch holds one authorized Fleet environment
+        # instance while it runs. Check the account's headroom for this number of
+        # simultaneous instances before submitting, not only the GPU budget.
+        "concurrent_train_environments": batch,
+    }
+
+
+def parallel_shape(profile, nodes: int) -> str:
+    """Return the native parallel arguments the recipe pins for this whole-node shape.
+
+    The recipe keys one argument string per (nodes, GPUs) pair. When it does not
+    name this node count, every whole-node shape it does name must be identical:
+    that identity is what makes the extra nodes data-parallel replicas of one
+    partition rather than a different partition. A node-dependent recipe stops
+    here for review instead of being extrapolated.
+    """
+    shapes = profile.parallel_args_by_shape
+    exact = shapes.get((nodes, GPUS_PER_NODE))
+    if exact is not None:
+        return exact
+    whole = {value for (_, gpus), value in shapes.items() if gpus == GPUS_PER_NODE}
+    if len(whole) != 1:
+        raise ValueError("native recipe pins no reviewed whole-node shape for this node count")
+    return whole.pop()
+
+
+def partition(parallel_args: str) -> dict[str, int]:
+    """Read the per-replica model partition sizes out of native parallel arguments."""
+    argv = shlex.split(parallel_args)
+    sizes = {}
+    for key, flag in PARTITION_FLAGS.items():
+        if flag not in argv:
+            sizes[key] = 1
+            continue
+        index = argv.index(flag) + 1
+        value = argv[index] if index < len(argv) else ""
+        if not re.fullmatch(r"[1-9][0-9]*", value):
+            raise ValueError("native parallel shape carries an unreadable partition size")
+        sizes[key] = int(value)
+    return sizes
 
 
 def arguments(config: MilesConfig) -> list[str]:
@@ -124,8 +199,11 @@ def arguments(config: MilesConfig) -> list[str]:
         raise ValueError("native Qwen chat template changed")
     if profile.backend != "megatron" or profile.vision or profile.tito_model != "qwen35":
         raise ValueError("native Qwen profile changed")
+    shape = parallel_shape(profile, config.nodes)
+    if math.prod(partition(shape).values()) != REPLICA_GPUS:
+        raise ValueError("native parallel shape no longer matches the pinned replica size")
     argv = shlex.split(load_model_args(profile.megatron_model_type))
-    argv += shlex.split(profile.parallel_args_by_shape[(config.nodes, 8)])
+    argv += shlex.split(shape)
     argv += shlex.split(profile.extra_train_args + " " + profile.extra_sglang_args)
     batch = config.groups * config.samples_per_prompt
     values = {
@@ -161,8 +239,8 @@ def arguments(config: MilesConfig) -> list[str]:
         "fleet-max-tokens-per-turn": config.tokens_per_turn,
         "chat-template-path": str(template),
         "actor-num-nodes": config.nodes,
-        "actor-num-gpus-per-node": 8,
-        "num-gpus-per-node": 8,
+        "actor-num-gpus-per-node": GPUS_PER_NODE,
+        "num-gpus-per-node": GPUS_PER_NODE,
         "rollout-num-gpus-per-engine": profile.rollout_num_gpus_per_engine,
         "sglang-mem-fraction-static": profile.sglang_mem_fraction_static,
         "router-policy": "round_robin",

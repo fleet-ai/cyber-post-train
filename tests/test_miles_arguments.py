@@ -37,8 +37,10 @@ def config():
         {"wandb_project": "bad name"},
         {"wandb_run_id": "\n"},
         {"nodes": 0},
-        {"nodes": 3},
+        {"nodes": 9},
         {"nodes": True},
+        {"nodes": 3, "groups": 2, "samples_per_prompt": 2},
+        {"nodes": 4, "groups": 3, "samples_per_prompt": 2},
         {"steps": 0},
         {"steps": 1.5},
         {"groups": -1},
@@ -160,3 +162,43 @@ def test_paths_remain_literal_argv(config, native_boundary):
 def test_unknown_configuration_fields_rejected(config):
     with pytest.raises(TypeError):
         miles.MilesConfig(**config.__dict__, extra_args="--arbitrary-override")
+
+
+def test_whole_node_layout_is_data_parallel_over_one_replica(config):
+    layout = miles.topology(replace(config, nodes=4, groups=4, samples_per_prompt=4))
+    assert layout["gpus"] == 32 and layout["data_parallel_size"] == 4
+    assert layout["global_batch_size"] == layout["concurrent_train_environments"] == 16
+
+
+def test_multi_node_arguments_carry_the_requested_whole_nodes(config, native_boundary):
+    cfg = replace(config, nodes=4, steps=2, groups=4, samples_per_prompt=4, eval_interval=2)
+    argv = miles.arguments(cfg)
+    assert value(argv, "actor-num-nodes") == "4"
+    assert value(argv, "actor-num-gpus-per-node") == value(argv, "num-gpus-per-node") == "8"
+    # The recipe names no four-node shape, so the reviewed whole-node partition
+    # is reused unchanged and the extra nodes are data-parallel replicas.
+    assert value(argv, "tensor-model-parallel-size") == "4"
+    assert value(argv, "context-parallel-size") == "2"
+    assert value(argv, "global-batch-size") == "16"
+
+
+def test_node_dependent_recipe_shapes_are_not_extrapolated(config, native_boundary):
+    profile, _ = native_boundary
+    profile.parallel_args_by_shape[(2, 8)] = "--tensor-model-parallel-size 8"
+    with pytest.raises(ValueError, match="no reviewed whole-node shape"):
+        miles.arguments(replace(config, nodes=4, groups=2, samples_per_prompt=2))
+
+
+def test_replica_larger_than_a_node_is_rejected(config, native_boundary):
+    profile, _ = native_boundary
+    shape = "--tensor-model-parallel-size 8 --context-parallel-size 2"
+    profile.parallel_args_by_shape = {(1, 8): shape, (2, 8): shape}
+    with pytest.raises(ValueError, match="pinned replica size"):
+        miles.arguments(replace(config, nodes=2, groups=2, samples_per_prompt=2))
+
+
+def test_unreadable_partition_size_stops_before_launch(config, native_boundary):
+    profile, _ = native_boundary
+    profile.parallel_args_by_shape = {(1, 8): "--tensor-model-parallel-size auto"}
+    with pytest.raises(ValueError, match="unreadable partition size"):
+        miles.arguments(config)

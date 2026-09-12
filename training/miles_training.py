@@ -145,6 +145,12 @@ def compile_rl(config: dict, *, relative_to: Path) -> dict:
     for item in metadata["files"].values():
         if Path(item["path"]).name != item["path"]:
             raise ValueError("data file must be directly inside its immutable root")
+    layout = miles.topology(args)
+    # Dev evaluation runs the whole frozen set at one sample per prompt, so the
+    # larger of the two phases sets the run's simultaneous environment demand.
+    layout["concurrent_environments"] = max(
+        layout["concurrent_train_environments"], metadata["files"]["dev"]["rows"]
+    )
     plan = {
         "schema": SCHEMA,
         "run_name": args.name,
@@ -153,6 +159,7 @@ def compile_rl(config: dict, *, relative_to: Path) -> dict:
         "data": metadata,
         "checkpoint": cp,
         "arguments": dataclasses.asdict(args),
+        "topology": layout,
         "runtime_sha256": digest(_runtime()),
         "native_driver_sha256": NATIVE_DRIVER_SHA256,
         "execution": {
@@ -168,6 +175,7 @@ def compile_rl(config: dict, *, relative_to: Path) -> dict:
 def job_request(plan):
     args = miles.MilesConfig(**plan["arguments"])
     args.validate()
+    layout, derived = plan.get("topology", {}), miles.topology(args)
     if (
         plan["schema"] != SCHEMA
         or plan["runtime_sha256"] != digest(_runtime())
@@ -175,6 +183,8 @@ def job_request(plan):
         or plan["execution"]["image"] != miles.IMAGE
         or plan["run_name"] != args.name
         or plan["output_root"] != args.output_root
+        or any(layout.get(key) != value for key, value in derived.items())
+        or layout.get("concurrent_environments", 0) < derived["concurrent_train_environments"]
     ):
         raise ValueError("Miles plan/runtime drift")
     resources = plan["execution"]["resources"]
@@ -194,8 +204,8 @@ def job_request(plan):
             "title": args.name + " native Miles RL",
             "run_dir": args.output_root,
             "image": miles.IMAGE,
-            "workers": args.nodes,
-            "gpus_per_worker": 8,
+            "workers": layout["nodes"],
+            "gpus_per_worker": layout["gpus_per_node"],
             "resources": resources,
             "priority_class": plan["execution"]["priority"],
             "requeueIfPreempted": False,
@@ -295,6 +305,8 @@ def native_args(plan):
             "ref_load": plan["checkpoint"]["root"],
             "num_rollout": plan["arguments"]["steps"],
             "num_steps_per_rollout": 1,
+            "actor_num_nodes": plan["topology"]["nodes"],
+            "actor_num_gpus_per_node": plan["topology"]["gpus_per_node"],
             "global_batch_size": plan["arguments"]["groups"]
             * plan["arguments"]["samples_per_prompt"],
         }
