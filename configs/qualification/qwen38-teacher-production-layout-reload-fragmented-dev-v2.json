@@ -1,0 +1,59 @@
+{
+  "name": "chris-q38-ta8-cos5-reld4",
+  "output_root": "/mnt/sfs/jobs/chris-q38-ta8-cos5-reload-dev4",
+  "model": {
+    "lock": "../models/qwen38-27b-1d4bf0f2.lock.json",
+    "weights": "../models/qwen38-27b-1d4bf0f2.weights.json",
+    "root": "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2"
+  },
+  "data": {
+    "manifest": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/teacher-a/manifest-outcome-v2.json",
+    "root": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/teacher-a"
+  },
+  "recipe": {
+    "epochs": 1,
+    "batch_size": 8,
+    "microbatch_per_gpu": 1,
+    "nodes": 2,
+    "gpus_per_node": 4,
+    "lr": 0.00001,
+    "scheduler": "cosine",
+    "warmup_ratio": 0.05,
+    "max_length": 16384,
+    "checkpoint_interval": 2,
+    "keep_checkpoints": 3,
+    "seed": 42
+  },
+  "wandb": {
+    "entity": "thefleet",
+    "project": "cyber-post-train",
+    "group": "q38-blackbox-sft-dev-layout-v1",
+    "run_id": "chris-q38-ta8-cos5-reld4",
+    "name": "chris-q38-ta8-cos5-reld4",
+    "tags": [
+      "qwen38",
+      "teacher-sft",
+      "dev-canary",
+      "outcome-only",
+      "fragmented-dev-layout",
+      "scheduler-cosine",
+      "warmup-5pct"
+    ]
+  },
+  "cluster": {
+    "priority": "c1",
+    "resources": {
+      "cpu_request": "64",
+      "cpu_limit": "64",
+      "memory_request": "512Gi",
+      "memory_limit": "768Gi"
+    }
+  },
+  "recovery": {
+    "manifest": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/ta8-cos5-dev3-reload-v1/checkpoint-step-6.json",
+    "sha256": "7b04d753c77855551ae3c3b1a9cf674d55aba609f0b5f82c85b54c1f29a85be4",
+    "mode": "validate"
+  },
+  "validation_mode": "task_outcomes_only",
+  "fleet_dev_protocol_sha256": "sha256:3c2c65eed748b16b50ef992327324b1fcaad84b190456c4aefe69c6efe748f75"
+}

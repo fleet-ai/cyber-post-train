@@ -48,6 +48,72 @@ def test_recovery_binds_exact_sealed_source_and_never_changes_recipe(tmp_path):
     assert not Path(p["output_root"]).exists()
 
 
+def test_validate_allows_only_world_size_preserving_rank_placement_change(tmp_path):
+    source_plan, root, manifest_path = fixture(tmp_path)
+    source_plan.update(run_name="old-run", execution={"image": "image@sha256:" + "a" * 64})
+    source_plan["recipe"].update(nodes=1, gpus_per_node=8)
+    policy = root / "policy"
+    (policy / "fsdp_config.json").write_text(json.dumps({"fsdp_strategy": "fsdp", "world_size": 8}))
+    for kind in ("model", "optim", "extra_state"):
+        original = policy / f"{kind}_world_size_1_rank_0.pt"
+        original.unlink()
+        for rank in range(8):
+            torch.save(
+                {"synthetic": torch.ones(2)},
+                policy / f"{kind}_world_size_8_rank_{rank}.pt",
+            )
+    receipt_path = tmp_path / "checkpoint_receipts/step-000002.json"
+    receipt_path.unlink()
+    write_receipt(
+        receipt_path,
+        {
+            "plan_sha256": _unsigned_digest(source_plan),
+            "optimizer_step": 2,
+            "checkpoint_path": str(root),
+        },
+    )
+    checkpoints.seal(source_plan, 2, manifest_path)
+
+    target = copy.deepcopy(source_plan)
+    target.update(run_name="new-run", output_root=str(tmp_path.parent / "new-run"))
+    target["wandb"]["run_id"] = "new-run"
+    target["recipe"].update(nodes=2, gpus_per_node=4)
+    recovery.bind(
+        target,
+        {
+            "manifest": manifest_path.name,
+            "sha256": recovery.digest(manifest_path),
+            "mode": "validate",
+        },
+        relative_to=tmp_path,
+    )
+    recovery.validate(target, check_files=True)
+    assert target["recovery"]["checkpoint"]["world_size"] == 8
+
+
+@pytest.mark.parametrize(
+    "mode,nodes,gpus_per_node,lr",
+    [
+        ("resume", 2, 4, None),
+        ("validate", 2, 3, None),
+        ("validate", 2, 4, 9e-6),
+    ],
+)
+def test_recovery_rejects_unqualified_topology_or_scientific_change(
+    tmp_path, mode, nodes, gpus_per_node, lr
+):
+    value, _, path = source(tmp_path)
+    value["recipe"].update(nodes=nodes, gpus_per_node=gpus_per_node)
+    if lr is not None:
+        value["recipe"]["lr"] = lr
+    with pytest.raises(ValueError, match="scientific recipe"):
+        recovery.bind(
+            value,
+            {"manifest": path.name, "sha256": recovery.digest(path), "mode": mode},
+            relative_to=tmp_path,
+        )
+
+
 @pytest.mark.parametrize(
     "change",
     [

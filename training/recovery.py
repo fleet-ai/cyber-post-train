@@ -47,12 +47,33 @@ def validate(plan: dict, *, check_files: bool) -> None:
         "schema",
         "model",
         "datasets",
-        "recipe",
         "lora",
         "split_manifest_sha256",
         "corpus_manifest_sha256",
     ):
         if plan.get(key) != source.get(key):
+            raise ValueError("recovery cannot change model, data, topology or scientific recipe")
+    source_recipe, target_recipe = source["recipe"], plan["recipe"]
+    if target_recipe != source_recipe:
+        source_science = {
+            key: value
+            for key, value in source_recipe.items()
+            if key not in {"nodes", "gpus_per_node"}
+        }
+        target_science = {
+            key: value
+            for key, value in target_recipe.items()
+            if key not in {"nodes", "gpus_per_node"}
+        }
+        source_world_size = source_recipe["nodes"] * source_recipe["gpus_per_node"]
+        target_world_size = target_recipe["nodes"] * target_recipe["gpus_per_node"]
+        if (
+            recovery["mode"] != "validate"
+            or "lora" in plan
+            or target_science != source_science
+            or target_world_size != source_world_size
+            or target_world_size != manifest["world_size"]
+        ):
             raise ValueError("recovery cannot change model, data, topology or scientific recipe")
     if selection_policy(plan) != selection_policy(source):
         raise ValueError("recovery cannot change selection mode or the Fleet dev protocol")
