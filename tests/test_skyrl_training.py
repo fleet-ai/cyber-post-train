@@ -370,6 +370,7 @@ def test_engine_diagnostic_shape_rejects_training_topology_substitution(prepared
 
 def test_engine_diagnostic_preflight_never_reads_task_rows(prepared, monkeypatch):
     _without_diagnostic_wandb(monkeypatch)
+    monkeypatch.setattr(train, "_require_engine_start_qualified_image", lambda plan: None)
     monkeypatch.setattr(train.os, "geteuid", lambda: 1000)
     monkeypatch.setattr(train.os, "getegid", lambda: 100)
     monkeypatch.setattr(train, "check_inputs", lambda plan: None)
@@ -410,6 +411,7 @@ def test_engine_diagnostic_preflight_never_reads_task_rows(prepared, monkeypatch
 
 
 def test_engine_diagnostic_preflight_rejects_native_cli_arg_drift(prepared, monkeypatch):
+    monkeypatch.setattr(train, "_require_engine_start_qualified_image", lambda plan: None)
     monkeypatch.setattr(train.os, "geteuid", lambda: 1000)
     monkeypatch.setattr(train.os, "getegid", lambda: 100)
     monkeypatch.setattr(train, "check_inputs", lambda plan: None)
@@ -876,6 +878,7 @@ def test_native_dataset_cannot_filter_or_edit(artifacts, prepared, monkeypatch, 
 
 @pytest.mark.parametrize("fault", [None, "gpu", "output", "template"])
 def test_cpu_preflight_dispatch_never_starts_ray(artifacts, monkeypatch, fault):
+    monkeypatch.setattr(train, "_require_engine_start_qualified_image", lambda plan: None)
     monkeypatch.setattr(os, "geteuid", lambda: 1000)
     monkeypatch.setattr(os, "getegid", lambda: 100)
     plan, root = artifacts
@@ -914,6 +917,27 @@ def test_preflight_rejects_privileged_or_different_file_access(monkeypatch, uid,
     )
     with pytest.raises(ValueError, match="1000:100"):
         train.preflight({})
+
+
+def test_cpu_preflight_rejects_only_the_disqualified_qwen38_image(prepared, monkeypatch):
+    monkeypatch.setattr(train.os, "geteuid", lambda: 1000)
+    monkeypatch.setattr(train.os, "getegid", lambda: 100)
+    with pytest.raises(ValueError, match="dev5/dev6"):
+        train.preflight(prepared.plan)
+
+    replacement = {
+        **prepared.plan,
+        "execution": {
+            **prepared.plan["execution"],
+            "image": "registry.invalid/skyrl@sha256:" + "1" * 64,
+        },
+    }
+    train._require_engine_start_qualified_image(replacement)
+    other_model = {
+        **prepared.plan,
+        "model": {**prepared.plan["model"], "repo": "Qwen/Qwen3.6-27B"},
+    }
+    train._require_engine_start_qualified_image(other_model)
 
 
 @pytest.fixture

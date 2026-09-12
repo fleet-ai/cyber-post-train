@@ -539,6 +539,22 @@ For **SkyRL**, use the same YAML and commands, with these differences:
   state and performs dev evaluation before training, at the configured interval
   and at the final step. A missing sampler save is a terminal evidence defect.
 
+As of 2026-09-12, the exact Qwen3.8/SkyRL image pair pinned in
+`training/skyrl_training.py` is **engine-start disqualified**. Two bounded dev
+diagnostics reached the same vLLM EngineCore-child-exit branch, and the second
+proved that disabling V1 multiprocessing cannot select an in-process core for
+the async server path. The pinned vLLM parent retains only child process names
+and exit codes, so the historical child exception cannot be reconstructed from
+the sanitized receipts. CPU preflight now rejects this exact model/image pair
+before a submission receipt can be produced. Do not work around that gate or
+infer the cause from later upstream Qwen changes: the checkpoint selects
+`Qwen3_5ForConditionalGeneration`, which was already registered in the pinned
+runtime. A successor requires a reviewed Theseus image with an exact Qwen3.8
+engine-start smoke test and either a sanitized child-cause relay or a successful
+bounded dev canary. Merely changing an environment variable or vLLM version is
+not qualification. See the sealed
+[source audit](evidence/qwen38-study/2026-09-12-skyrl-dev6-source-root-cause-audit-v1.json).
+
 The initial SkyRL profile uses Qwen full-weight FSDP with colocated TP4 inference
 engines, one native update per prompt batch, and no reward filtering or replacement
 episodes. It is not a qualified full-GLM recipe. CPU preflight checks the actual

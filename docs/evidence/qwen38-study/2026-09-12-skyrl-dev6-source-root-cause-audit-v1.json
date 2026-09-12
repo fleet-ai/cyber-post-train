@@ -1,0 +1,128 @@
+{
+  "schema": "cyber_skyrl_engine_child_source_audit_v1",
+  "classification": "historical_child_exception_unrecoverable_exact_image_disqualified",
+  "observed_at": "2026-09-12T14:53:21Z",
+  "terminal_evidence": {
+    "dev5": {
+      "path": "docs/evidence/qwen38-study/2026-09-12-skyrl-engine-diagnostic-dev5-terminal-v1.json",
+      "file_sha256": "a859ce6a9379c70814f2448e218ce7f47b3bb9e4d6770d51bfd96d057b4f7ef4",
+      "embedded_sha256": "19e2f384d549a9b12acd2d9ac6ef910bbdf129d410f3a46c916795b3be6ac7eb"
+    },
+    "dev6": {
+      "path": "docs/evidence/qwen38-study/2026-09-12-skyrl-engine-diagnostic-dev6-terminal-v1.json",
+      "file_sha256": "64c95d07ac8b745343d741419d55cddb727bc0787471b33502a837efba2efa4b",
+      "embedded_sha256": "8e9e3380608366e90d0b706873a38f845cfbd4cc7d4577160e69578f2d3ab68e",
+      "api_run_id": "f4bce6ba-d539-41f0-b4da-f12c3c519391",
+      "terminal_status": "engine_start_rejected",
+      "underlying_child_exception_captured": false,
+      "optimizer_steps": 0,
+      "gpus_released": 8
+    },
+    "shared_image_sha256": "ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "conclusion": "Both runs establish only that an EngineCore child exited before its ready handshake. They do not identify the child exception."
+  },
+  "pinned_runtime": {
+    "skyrl": {
+      "commit": "f5bc3b78dfddfb352870d5d7430cd226e5785838",
+      "commit_time": "2026-07-16T19:39:49Z"
+    },
+    "vllm": {
+      "version": "0.23.0+cu129",
+      "commit": "0fc695fc6d1d82e9a5ac6835ac8e4e1c83703665",
+      "commit_time": "2026-06-14T20:35:17-07:00",
+      "source_sha256": {
+        "vllm/v1/engine/core.py": "cf9cbde601afb80925254aae814033abeab3817f9c4fe7bf01ca92edc9d10c2d",
+        "vllm/v1/engine/utils.py": "fc876c506ab019350b59e51dddedce5019a541eb695a6138c079f9a784e3b5b1",
+        "vllm/v1/engine/core_client.py": "e41fe15caa59dfd289ae212b3eaefc20c34be87a72e779df03d970f9714b793d",
+        "vllm/model_executor/models/qwen3_5.py": "04f3de5372973770d71c5c05f2e8a5e221ec52b62cca7a1e302d9201b61b8adc",
+        "vllm/model_executor/models/registry.py": "2365c17e087ba4ae8b77c23dc14d529752c467266e23afda686731469aed34ba"
+      }
+    }
+  },
+  "proven_information_boundary": {
+    "child": "EngineCoreProc.run_engine_core initializes and loads the engine in a spawned child process and logs then reraises a child failure.",
+    "parent": "CoreEngineProcManager retains multiprocessing Process objects; finished_procs returns only process name to exit-code mappings.",
+    "terminal_branch": "wait_for_engine_startup observes a child sentinel and raises a generic RuntimeError with only finished process names and exit codes.",
+    "async_constraint": "AsyncLLM calls EngineCoreClient.make_async_mp_client directly; the pinned in-process client does not support the async path.",
+    "historical_recovery": "No structured child exception crossed IPC, so the exact historical dev6 child class, message and frame cannot be recovered from the parent receipt.",
+    "runtime_monkeypatch": "Not accepted: vLLM forces spawn in the Ray actor and no deterministic propagation or sanitizer contract was proven."
+  },
+  "upstream_relay_check": {
+    "inspected_main_commit": "658c8131c73194f812cd80d493e0409475b94235",
+    "inspected_commit_time": "2026-09-12T10:26:39-04:00",
+    "utils_sha256": "d09f86b107b3c63b62f40a6590036be5b711778ea997fc5a6af6de94fdd2ccd3",
+    "generic_parent_branch_present": true,
+    "conclusion": "The inspected upstream main still tells the parent to find the root cause elsewhere; a bare vLLM version bump is not a proven structured child-cause relay."
+  },
+  "model_support_chronology": {
+    "checkpoint": {
+      "repo": "Qwen/Qwen3.8-27B",
+      "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+      "config_sha256": "sha256:191e0af232104ed8b65258cf3fb2b842e288008baca7633c11b82a1ac7203aab",
+      "architecture": "Qwen3_5ForConditionalGeneration"
+    },
+    "pinned_registration": "The pinned vLLM already registers Qwen3_5ForConditionalGeneration, the outer architecture selected by this checkpoint.",
+    "later_upstream_changes": [
+      {
+        "commit": "ad5d29db702ce5bce78d9d3b2da1a76eab72e9c2",
+        "date": "2026-07-29",
+        "change": "registered native Qwen3.5 text-only dense and MoE causal model classes"
+      },
+      {
+        "commit": "febea17f6aa9141b3a0044e9690d6e6501f5c9d3",
+        "date": "2026-08-06",
+        "change": "fixed native text-only checkpoint weight-prefix mapping"
+      },
+      {
+        "commit": "f2bfad9167a29e963f29f9ea79f2811513566ea6",
+        "date": "2026-08-07",
+        "change": "added Qwen3.8 M-RoPE support to the causal path"
+      }
+    ],
+    "inference_limit": "These later commits prove that the pinned revision predates native text-only Qwen3.8 work. They do not prove the dev6 cause because dev6 used the already-registered outer conditional-generation architecture."
+  },
+  "replacement_image_path": {
+    "authority_repo": "fleet-ai/theseus",
+    "inspected_local_commit": "0fff262678a80901fee6aa398e0142039e8a40bc",
+    "dockerfile": "services/skyrl-train/Dockerfile",
+    "dockerfile_sha256": "28a19471f3062f0cc7b4679d7fc4dd8edf2b67e781e2ccb25033bed8140fdbbc",
+    "build_workflow": ".github/workflows/build-skyrl-train.yml",
+    "build_workflow_sha256": "8e7e35daf7431cde445eae0c0edb71c40090d2e60817d29c6b9e7ccd8219d468",
+    "current_lock": "The Dockerfile pins SkyRL f5bc3b78 and installs its frozen fsdp/ray dependency graph, including vLLM 0.23.0+cu129.",
+    "requirements": [
+      "Make a reviewed SkyRL or vLLM source/lock change in Theseus; do not patch spawned children from the portable cyber runtime.",
+      "If adding a child-cause relay, transmit only an allowlisted structured exception class and public source frame through dedicated IPC; test it under multiprocessing spawn.",
+      "Build an immutable image and pass the existing Theseus image smoke and catalog promotion path.",
+      "Add an exact Qwen3.8 engine-start smoke using the same async, TP4 and two-engine shape.",
+      "Pin the promoted image and native source hashes in this repository, then run one bounded dev engine-start canary before reward or optimizer work."
+    ],
+    "replacement_available_now": false
+  },
+  "alternate_backend_boundary": {
+    "backend": "Miles",
+    "terminal_evidence_path": "docs/evidence/cleanup-miles-rl-v7-terminal-20260911.json",
+    "terminal_evidence_file_sha256": "e2568854d2e1d19231e8b8682293f303e424a9e1c151d6817798d26ad3228ca7",
+    "terminal_evidence_embedded_sha256": "502bf4c576e2fafd91ed6c0107ca68d4da8c61fe43c1b2c7908c9a1e53cb175a",
+    "conclusion": "Miles uses a separate SGLang and Megatron path, not a replacement SkyRL/vLLM image. Its latest preserved Qwen3.8 dev run stopped at incomplete generation before reward or optimization, so it is independently unqualified and cannot bypass this gate."
+  },
+  "durable_local_correction": {
+    "module": "training/skyrl_training.py",
+    "invariant": "CPU preflight rejects only the exact Qwen/Qwen3.8-27B plus disqualified image-digest pair.",
+    "effect": "The supported CLI cannot create a matching preflight receipt, so submit cannot proceed with that stale pair.",
+    "non_effects": [
+      "does not alter or submit a workload",
+      "does not disqualify Qwen3.6 on the same image",
+      "does not claim an unobserved child root cause",
+      "does not qualify a replacement image"
+    ]
+  },
+  "next_gate": "A reviewed, immutable replacement image must pass source/hash checks and an exact Qwen3.8 engine-start smoke, then one fresh bounded dev canary. Reward acquisition, optimizer update and checkpoint recovery remain closed.",
+  "audit_boundaries": {
+    "cluster_or_api_mutated": false,
+    "private_logs_read": false,
+    "prompts_traces_flags_answers_scores_read": false,
+    "credentials_read_or_persisted": false,
+    "historical_child_cause_inferred": false
+  },
+  "sha256": "b72426877dabde0e502c6d6cc6cb70edf970f2a79c721b75c0ab9af5d39c0fbf"
+}

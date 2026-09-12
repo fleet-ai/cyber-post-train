@@ -43,6 +43,15 @@ IMAGE = (
     "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:"
     "ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4"
 )
+_ENGINE_START_DISQUALIFIED = frozenset(
+    {
+        (
+            "Qwen/Qwen3.8-27B",
+            "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:"
+            "ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+        )
+    }
+)
 NATIVE = {
     **skyrl.NATIVE_SOURCES,
     "skyrl.train.entrypoints.main_base": (
@@ -373,11 +382,22 @@ def dataset(plan, tokenizer, split, rows):
     return value
 
 
+def _require_engine_start_qualified_image(plan):
+    """Reject only exact model/image pairs disproven by terminal dev evidence."""
+    identity = (plan["model"]["repo"], plan["execution"]["image"])
+    if identity in _ENGINE_START_DISQUALIFIED:
+        raise ValueError(
+            "Qwen3.8 SkyRL image is engine-start disqualified by the sealed "
+            "dev5/dev6 evidence; qualify and pin a replacement image before GPU submission"
+        )
+
+
 def preflight(plan):
     # The pinned GPU image is UID 1000/GID 100. Root can read private staging
     # files that its trainer cannot; such a preflight is not representative.
     if (os.geteuid(), os.getegid()) != (1000, 100):
         raise ValueError("SkyRL CPU preflight must use the pinned image user 1000:100, not root")
+    _require_engine_start_qualified_image(plan)
     import torch
     from transformers import AutoTokenizer
 
@@ -414,6 +434,7 @@ def engine_diagnostic_preflight(plan):
     """Validate the engine-only request without reading task rows or using GPUs."""
     if (os.geteuid(), os.getegid()) != (1000, 100):
         raise ValueError("SkyRL CPU preflight must use the pinned image user 1000:100, not root")
+    _require_engine_start_qualified_image(plan)
     import torch
 
     if torch.cuda.is_available():
