@@ -1,0 +1,148 @@
+{
+  "schema": "cyber_qwen_sft_scheduler_dev_template_v1",
+  "study_id": "qwen38-blackbox-teacher-staged-search-v2",
+  "status": "prepared_not_launchable_waiting_cpu_preflight_and_exact_bindings",
+  "launchable": false,
+  "cluster_or_api_mutations_performed": false,
+  "cluster": "dev",
+  "historical_two_step_canaries": {
+    "template": "configs/qualification/qwen38-teacher-lr-extremes-dev-v1.template.json",
+    "template_sha256": "sha256:12f8dd410fdcac37f8200afec3f98539b1f4edd625d8de7d8b0e14df2e71188c",
+    "scheduler": "constant_with_warmup",
+    "warmup_ratio": 0.0,
+    "classification": "numeric_stability_only_not_scheduler_qualification_hpo_or_model_quality"
+  },
+  "runtime": {
+    "path": "training/sft_runtime.py",
+    "implementation_commit": "593115cdda6316c29eda0c518a82970fb9e3fd48",
+    "sha256": "sha256:7b0787891acdf9ebe0b07475339248dce64b659a546691a7c445f99b52a20a8f",
+    "dev_cpu_preflight_receipt_sha256": null,
+    "legacy_default": {
+      "scheduler": "constant_with_warmup",
+      "warmup_ratio": 0.0,
+      "num_warmup_steps": 0
+    },
+    "new_qualified_pair": {
+      "scheduler": "cosine",
+      "warmup_ratio": 0.05,
+      "num_warmup_steps": 4
+    }
+  },
+  "immutable_inputs": {
+    "model": {
+      "repo": "Qwen/Qwen3.8-27B",
+      "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+      "lock_sha256": "sha256:f3926fe675263b25dc79c2b3881a9c463d6b7931e9d61aeb777d15efc61e35ac",
+      "weight_manifest_sha256": "sha256:06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352",
+      "root": "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2"
+    },
+    "data": {
+      "treatment": "all_available_certified_teacher_episodes",
+      "split": "a",
+      "corpus_manifest_sha256": "sha256:019d795f4b59b9faee799feac613c8fd3fd3e69774ccc419a0ffcf7960e7df62",
+      "train_file_sha256": "sha256:a230b82655ccfea299ba8be12ac271706af89e98f81120e8289eefeeec9d2869",
+      "split_manifest_sha256": "sha256:2d20dac7d5b9bb29f6aa44369c5dd2efed9c78bd3ca4d32ed021f04843ae6863",
+      "rows": 602,
+      "supervised_tokens": 700359,
+      "root": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/teacher-a"
+    },
+    "execution": {
+      "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+      "workers": 1,
+      "gpus_per_worker": 4,
+      "global_batch_size": 8,
+      "microbatch_per_gpu": 1,
+      "gradient_accumulation_steps": 2,
+      "lr": 0.00001,
+      "epochs": 1,
+      "full_recipe_max_steps": 76,
+      "pause_after_optimizer_step": 6,
+      "checkpoint_interval": 2,
+      "keep_checkpoints": 3,
+      "max_length": 16384,
+      "seed": 42,
+      "priority_class": "c1",
+      "expected_queue_priority": "q1",
+      "expected_priority_value": 10000,
+      "requeueIfPreempted": false
+    },
+    "selection": {
+      "validation_mode": "task_outcomes_only",
+      "fleet_dev_protocol_sha256": "sha256:d9423651420dcf1c39f7b870daafe8a74dec18db6eac8684b3845d881dc61019",
+      "teacher_reference_cross_entropy": "not_computed_or_used"
+    },
+    "wandb": {
+      "entity": "thefleet",
+      "project": "cyber-post-train",
+      "group": "q38-blackbox-sft-dev-scheduler-v1",
+      "series_step_axis": "train/total_supervised_tokens",
+      "automatic_system_telemetry": false,
+      "outcomes_or_private_payloads_uploaded": false
+    }
+  },
+  "arms": [
+    {
+      "id": "explicit-constant-no-warmup",
+      "scheduler": "constant_with_warmup",
+      "warmup_ratio": 0.0,
+      "expected_num_warmup_steps": 0,
+      "run_name": "chris-q38-ta4-sched0-dev1",
+      "output_root": "/mnt/sfs/jobs/chris-q38-ta4-sched0-dev1",
+      "wandb_run_id": "chris-q38-ta4-sched0-dev1",
+      "prepared_dir": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/ta4-sched0-dev1",
+      "plan_sha256": null,
+      "request_sha256": null,
+      "dev_preview_sha256": null
+    },
+    {
+      "id": "cosine-warmup-5pct",
+      "scheduler": "cosine",
+      "warmup_ratio": 0.05,
+      "expected_num_warmup_steps": 4,
+      "run_name": "chris-q38-ta4-cos5-dev1",
+      "output_root": "/mnt/sfs/jobs/chris-q38-ta4-cos5-dev1",
+      "wandb_run_id": "chris-q38-ta4-cos5-dev1",
+      "prepared_dir": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/ta4-cos5-dev1",
+      "plan_sha256": null,
+      "request_sha256": null,
+      "dev_preview_sha256": null
+    }
+  ],
+  "acceptance": {
+    "purpose": "scheduler_runtime_qualification_only_not_hyperparameter_selection",
+    "required": [
+      "pinned_image_cpu_preflight_maps_each_exact_scheduler_pair",
+      "six_finite_optimizer_updates_and_complete_scalar_wandb_events",
+      "cosine_arm_records_four_warmup_steps_and_at_least_two_post_warmup_steps",
+      "constant_arm_records_zero_warmup_steps",
+      "terminal_step_six_checkpoint_is_digest_valid",
+      "four_rank_zero_step_reload_restores_exact_scheduler_state",
+      "all_gpu_allocations_released"
+    ],
+    "forbidden_interpretations": [
+      "heldout_task_uplift",
+      "learning_rate_selection",
+      "scheduler_quality_ranking",
+      "production_qualification_without_exact_dev_receipts"
+    ]
+  },
+  "pre_submit_gates": [
+    "runtime_cpu_preflight_passed_in_pinned_image_on_dev",
+    "each_unique_output_prepared_and_wandb_destination_absent",
+    "dev_jobs_api_preview_matches_exact_four_gpu_c1_request",
+    "duplicate_api_kubernetes_output_and_wandb_checks_clean",
+    "aggregate_active_study_node_count_rechecked_below_eight",
+    "one_create_once_POST_per_arm_after_review"
+  ],
+  "unresolved_bindings": [
+    "runtime.dev_cpu_preflight_receipt_sha256",
+    "arms.0.plan_sha256",
+    "arms.0.request_sha256",
+    "arms.0.dev_preview_sha256",
+    "arms.1.plan_sha256",
+    "arms.1.request_sha256",
+    "arms.1.dev_preview_sha256"
+  ],
+  "interpretation": "These paired six-step dev configs exercise the explicit legacy and cosine scheduler paths through a four-step 5% warmup boundary. They are prepared metadata, not job requests, and do not authorize submission or scientific model selection.",
+  "sha256": "sha256:51cbd814a40d49fcdb4c1c6b47555f447728841ec842f99fdd53fafa8ec941d7"
+}

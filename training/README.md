@@ -6,8 +6,11 @@ Use [the repository README](../README.md) for installation and qualification sta
 
 `sft.py` compiles the editable configuration; `sft_runtime.py` uses the pinned
 SkyRL trainer. Model files, tokenizer, train/dev data, target masks, W&B identity,
-batch size, learning rate, stopping rule and checkpoint policy are bound before
-submission. Never interpret a historical config as a currently supported recipe.
+batch size, learning rate, scheduler/warmup pair, stopping rule and checkpoint
+policy are bound before submission. Omitting both schedule fields preserves the
+legacy constant/no-warmup path; new plans may explicitly select
+`constant_with_warmup` with ratio `0`, or `cosine` with a positive ratio such as
+`0.05`. Never interpret a historical config as a currently supported recipe.
 
 ## Data utilities
 

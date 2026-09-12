@@ -122,6 +122,9 @@ def test_explicit_constant_and_cosine_schedules_map_exactly(tmp_path):
     assert options["optimizer_config.scheduler"] == "cosine"
     assert options["optimizer_config.num_warmup_steps"] == 1
 
+    cosine["recipe"]["max_steps"] = 76
+    assert optimizer_schedule(cosine["recipe"])["num_warmup_steps"] == 4
+
 
 @pytest.mark.parametrize(
     "updates",

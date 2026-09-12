@@ -97,9 +97,12 @@ split, model and evaluation digests.
 The teacher study's current sequencing contract is the self-digested,
 non-executable
 [`qwen-blackbox-teacher-staged-search-v2.json`](../configs/studies/qwen-blackbox-teacher-staged-search-v2.json).
-It first qualifies the `1e-6` and `3e-5` extremes numerically on dev, then the
-exact one-node/eight-GPU production layout. Only after those gates and a fresh
-matched split-A base control does it open the four-arm split-A LR bracket
+It freezes the historical `1e-6` and `3e-5` two-step checks under the legacy
+constant/no-warmup path. Those runs are neither scheduler qualification nor HPO
+evidence, and v2 remains nonlaunchable. A versioned successor must insert the
+separate paired six-step cosine/warmup gate before the exact one-node/eight-GPU
+production layout. Only after those gates and a fresh matched split-A base
+control may it open the four-arm split-A LR bracket
 (`1e-6`, `3e-6`, `1e-5`, `3e-5`). A whole-episode balanced-exposure A arm uses
 the selected LR, followed by split-B/second-seed confirmation. Global batches 16
 and 32 and horizons of two and four epochs remain blocked until those outcome
@@ -126,6 +129,8 @@ one four-GPU worker, global batch eight (two accumulation rounds), the exact
 available-A teacher corpus, per-step checkpoints, scalar-only W&B, and a planned
 pause after exactly two optimizer steps. The names, output roots, prepared roots
 and W&B IDs are distinct, but neither arm is currently a runnable CLI input.
+Both inherited the old constant/no-warmup runtime. Two updates cannot exercise a
+5%-of-76-step warmup boundary, estimate task quality, or identify an optimal LR.
 
 The changed runtime has one narrow clean-rejection path. Only a plan that
 explicitly opts into the bounded numeric policy can record non-finite loss or
@@ -143,6 +148,23 @@ four-rank zero-update checkpoint reload. Then run the changed runtime's pinned
 image CPU preflight, create exact per-arm plan/request digests, preview each
 against the dev Jobs API, and recheck duplicate destinations and the aggregate
 eight-study-node ceiling. One reviewed POST per arm is the only launch path.
+
+### Scheduler qualification canaries
+
+The inert
+[`qwen38-teacher-scheduler-dev-v1.template.json`](../configs/qualification/qwen38-teacher-scheduler-dev-v1.template.json)
+prepares a paired dev-only runtime gate at fixed LR `1e-5`, data, seed, global
+batch and full 76-step horizon. One arm explicitly selects the compatible
+constant/no-warmup pair; the other selects cosine with `warmup_ratio: 0.05`.
+The compiler converts that ratio to `ceil(76 × 0.05) = 4` warmup steps. Both
+pause after step six, so the cosine arm covers four warmup and two post-warmup
+updates without shortening its scheduler horizon.
+
+These configs are not launchable. They still need exact pinned-image CPU
+preflight, per-arm plan/request and dev-preview digests, unique destination/W&B
+checks, and reviewed create-once submission. Acceptance requires complete scalar
+tracking, checkpoint evidence, exact four-rank zero-step scheduler reload and
+GPU release. Their losses must not be used to rank schedulers or learning rates.
 
 ## Operational gates
 

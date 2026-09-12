@@ -36,8 +36,8 @@ immediately scheduling many more epochs.
 | Model | Exact lock, weight inventory, staged root; Qwen3.8/Qwen3.6 qualified loader profiles | Public SFT compiler is SkyRL; arbitrary model identity is not arbitrary loader compatibility. Full GLM remains WIP. |
 | Data source | One immutable normalized-record file plus explicit source-model allowlist | Teacher versus self uses the same builder. There is no automatic teacher mixture weighting, per-family balancing, or per-task success cap. |
 | Windowing | `max_length`, recent `context_tokens`, number of frozen `dev_windows` | Every fitting assistant target once/epoch; copied context/tool observations masked. Changing the cap can change eligible targets and dev windows, not only memory. |
-| Optimization | `lr`, integer `epochs`, `batch_size`, `microbatch_per_gpu`, `seed`, GPU/node shape | Steps are `ceil(train_rows/global_batch) × epochs`; rows are variable-length segments, not tasks. No arbitrary max-step tuning override. |
-| Other optimizer settings | Native AdamW, betas 0.9/0.999, weight decay 0.01, max gradient norm 1.0 | Inherited exact native defaults, not exposed YAML search knobs. Wrapper fixes constant LR schedule and zero warmup. Unknown YAML fields fail rather than silently overriding them. |
+| Optimization | `lr`, integer `epochs`, `batch_size`, `microbatch_per_gpu`, `seed`, GPU/node shape, plus an explicit `scheduler`/`warmup_ratio` pair | Steps are `ceil(train_rows/global_batch) × epochs`; rows are variable-length segments, not tasks. Legacy plans that omit both schedule fields retain constant/no-warmup exactly. The compiler now binds explicit constant/no-warmup or cosine with positive warmup; warmup steps are `ceil(max_steps × ratio)`. The new cosine path still requires its exact dev gate before GPU production use. |
+| Other optimizer settings | Native AdamW, betas 0.9/0.999, weight decay 0.01, max gradient norm 1.0 | Weight decay remains an inherited exact native default, not a YAML search knob. Unknown or partial schedule fields fail rather than silently overriding them. |
 | Validation | Before training, periodically, and final; token-weighted and task-macro loss | Periodic checkpoint and validation intervals must agree. Dev data must be frozen across comparisons. This is reference-action prediction, not live solve rate. |
 | Checkpoints | Latest N plus best by task-macro dev loss, baseline eligible, native optimizer/scheduler/sampler state | Saved receipt is not a full payload hash or serving acceptance. Seal, export, reload and evaluation are separate. |
 | Tracking | W&B entity/project/group/run ID/name/tags; exact config identities and scalar metrics | New treatment requires new output, prepared directory and W&B ID. No automatic sweep ranking or W&B ID reservation across submissions. |
@@ -152,9 +152,11 @@ did not re-read private checkpoint payloads or contact their retired Pods.
    tasks were exposed to older SFT. Prepare teacher and self with identical
    window semantics and a common dev artifact. Report all-available-data arms
    separately from matched-common-task/equal-token arms.
-4. **Add only the missing high-value controls.** Expose and test warmup,
-   scheduler and weight decay in the existing recipe, rather than adding a new
-   trainer abstraction. Record effective native optimizer defaults explicitly.
+4. **Qualify the new schedule control, then add only the remaining high-value
+   control.** Scheduler and warmup ratio are now bound in the existing recipe;
+   the paired six-step dev configs must pass before production. Weight decay
+   remains the missing search control. Record effective native optimizer
+   defaults explicitly.
    Add unequal-target-count, multi-microbatch/same-global-batch gradient checks.
    Publish per-task/source supervised-token shares before changing balancing.
 5. **Use a small frozen trial manifest, not an unattended sweep yet.** Each

@@ -94,6 +94,8 @@ recipe:
   nodes: 1
   gpus_per_node: 8
   lr: 0.000003
+  scheduler: cosine             # new path: qualify the exact config on dev first
+  warmup_ratio: 0.05
   max_length: 16384
   eval_interval: 0             # no teacher-reference CE inside the trainer
   checkpoint_interval: 50
@@ -113,6 +115,14 @@ cluster:
 Relative manifest paths resolve beside the YAML file. Model and data roots are
 specific staged SFS directories, not names to download during GPU startup. Unknown
 fields are errors. Hyperparameters do not authorize a larger resource budget.
+
+`scheduler` and `warmup_ratio` are one atomic recipe choice. Omit both to replay
+the legacy `constant_with_warmup`/zero-warmup behavior exactly. Otherwise select
+either that explicit zero-warmup pair or `cosine` with a positive ratio below
+one. The compiler/runtime derives `num_warmup_steps` as
+`ceil(max_steps × warmup_ratio)` and rejects a cosine plan with no remaining
+decay step. Both fields and the full step horizon are covered by the immutable
+plan digest and therefore cannot change during recovery.
 
 For full GLM5.3, select `configs/models/glm53-30333038/model.lock.json` and
 `model.weights.json`, use a corpus built with that exact tokenizer, and add
