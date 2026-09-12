@@ -1,0 +1,446 @@
+{
+  "schema": "cyber_qwen_sft_staged_search_v2",
+  "study_id": "qwen38-blackbox-teacher-staged-search-v3",
+  "status": "frozen_nonlaunchable_successor",
+  "supersedes": {
+    "path": "configs/studies/qwen-blackbox-teacher-staged-search-v2.json",
+    "file_sha256": "sha256:bea965f32e72fa9feb47b0f386a7f883ebf73dcdcec0858f69100996bd67cb18",
+    "embedded_sha256": "sha256:06f7bfe841dac2d896062b6f284cb223d5c3f220f1638ea271e2a3894bec873c",
+    "reason": "Bind the corrected four-fixed-attempt Fleet-dev estimator and qualify cosine warmup before any capability search without rewriting frozen v2 evidence."
+  },
+  "model": {
+    "repo": "Qwen/Qwen3.8-27B",
+    "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "lock_sha256": "sha256:f3926fe675263b25dc79c2b3881a9c463d6b7931e9d61aeb777d15efc61e35ac",
+    "initialization": "fresh_base_full_parameter_sft"
+  },
+  "evidence": {
+    "literature_snapshot": {
+      "path": "docs/QWEN_TRAINING_LITERATURE_2026-09-11.md",
+      "implementation_commit": "2f8f3d0990c22bd1d6a80295792c76bada792870",
+      "file_sha256": "sha256:e69f3bd3a0343b1995a2bf6f54160b7c21737ef724360bde3cb12e5017bd3fd9",
+      "primary_sources": [
+        {
+          "url": "https://arxiv.org/html/2609.01244v1#S2.SS1",
+          "use": "Full-parameter dense-Qwen search boundary of 3e-6 through 1e-4 and reported optimum near 3e-5; not a Fleet or Qwen3.8 optimum."
+        },
+        {
+          "url": "https://arxiv.org/html/2503.04625v1#S4.SS3",
+          "use": "QwQ-32B self-training used 7e-6 with cosine and 3% warmup; supports testing the 1e-5 order of magnitude, not copying its recipe."
+        },
+        {
+          "url": "https://arxiv.org/html/2412.21139v1#S3.SS2",
+          "use": "Long-horizon Qwen2.5-Coder agent SFT used 1e-4 at global batch 8; supports an explicitly safety-gated upper boundary."
+        },
+        {
+          "url": "https://github.com/QwenLM/Qwen3.8#finetuning",
+          "use": "The official project documents supported finetuning frameworks but no transferable cyber learning-rate optimum."
+        }
+      ]
+    },
+    "fleet_dev_v2": {
+      "implementation_commit": "8c6e52120e7f702eadd8981dd05acf791b194e52",
+      "estimator": {
+        "path": "evals/fleet/dev_outcome_estimator.py",
+        "file_sha256": "sha256:79e265e75508da46d1f9b5622b361e5c95eea1df91cd0773ff9f5200abb3ace9"
+      },
+      "protocols": {
+        "a": {
+          "path": "configs/evaluation/qwen38-blackbox-fleet-dev-a-outcome-protocol-v2.json",
+          "file_sha256": "sha256:008d412bcdee122cd2b4f072e6f242496b3e8de1e8b07ad60e598de59202560e",
+          "embedded_sha256": "sha256:3c2c65eed748b16b50ef992327324b1fcaad84b190456c4aefe69c6efe748f75"
+        },
+        "b": {
+          "path": "configs/evaluation/qwen38-blackbox-fleet-dev-b-outcome-protocol-v2.json",
+          "file_sha256": "sha256:bae310dce0d3ecb0a097640fe14dd943c71a9116fbefd21c45f02a79869d8f09",
+          "embedded_sha256": "sha256:01f9c8b28cdc08ef8c089600b96450d747fe92447a60cbd4d60256b6302e5388"
+        }
+      },
+      "base_controls": {
+        "a": {
+          "path": "configs/evaluation/qwen38-blackbox-fleet-dev-a-base-control-v2.json",
+          "file_sha256": "sha256:14bba8c4fcbeb7c8b289de7e68f33712181ae3a8f31e4095bf545824f35e9144",
+          "embedded_sha256": "sha256:db3a37d00654eb4fdfabaf3f53999a0ef2b82a6c2bf9b9c0851aeb25116ac913",
+          "accepted_result_sha256": null
+        },
+        "b": {
+          "path": "configs/evaluation/qwen38-blackbox-fleet-dev-b-base-control-v2.json",
+          "file_sha256": "sha256:55d1b0a16488b2d250eb397e4adb48ae4086506a264556dd37d44360238c84d2",
+          "embedded_sha256": "sha256:81e093211a15f71b3980420ccbd20652c8d233b82ae795a6a428f6422b6f4f86",
+          "accepted_result_sha256": null
+        }
+      }
+    },
+    "scheduler_qualification": {
+      "template_path": "configs/qualification/qwen38-teacher-scheduler-dev-v1.template.json",
+      "template_file_sha256": "sha256:091a61b9eae4e76e48e44ac38fcb76b9e84661c9c4125675cb8e67026a0f06d5",
+      "template_embedded_sha256": "sha256:51cbd814a40d49fcdb4c1c6b47555f447728841ec842f99fdd53fafa8ec941d7",
+      "implementation_commits": {
+        "runtime_and_compiler": "593115cdda6316c29eda0c518a82970fb9e3fd48",
+        "qualification_template": "16fbfdc56247eea19492aeb402739876eb099b22",
+        "frozen_evidence_pin_tests": "71ac12300b2ecad668d1016b1b871bfc6b2b993b"
+      },
+      "runtime": {
+        "path": "training/sft_runtime.py",
+        "file_sha256": "sha256:7b0787891acdf9ebe0b07475339248dce64b659a546691a7c445f99b52a20a8f"
+      },
+      "compiler": {
+        "path": "training/sft.py",
+        "file_sha256": "sha256:f9e6dadefcdca46217df7027134e0f3ca027295956eee220959127742066c83c"
+      },
+      "candidate_pair_for_scientific_arms": {
+        "scheduler": "cosine",
+        "warmup_ratio": 0.05,
+        "state": "blocked_until_exact_dev_qualification_acceptance"
+      },
+      "accepted_receipt_sha256": null
+    },
+    "completed_numeric_canaries": {
+      "path": "docs/evidence/qwen38-study/2026-09-11-numeric-lr-dev-v1.json",
+      "implementation_commit": "6f4579317ea2418ac84d5c2d939b7619cc17f37e",
+      "file_sha256": "sha256:d2fd66a437ee7431c36a86d3c180b56e1ca22262d4c03371fb4b491c21419ae0",
+      "learning_rates": [
+        0.000001,
+        0.00003
+      ],
+      "classification": "accepted_numeric_runtime_stability_only_not_scheduler_qualification_hpo_or_model_quality",
+      "schedule_used": "historical_constant_no_warmup"
+    },
+    "wandb_scalar_contract": {
+      "accepted_dev_evidence_path": "docs/evidence/qwen38-study/2026-09-11-metrics-reload-dev-v1.json",
+      "accepted_dev_evidence_file_sha256": "sha256:d8cb8b426cc3c092c797fcdbca3f6c3d2bdd49e16f129fef52324b1eccbd2d2b",
+      "history_keys": [
+        "train/global_step",
+        "train/loss",
+        "train/total_supervised_tokens",
+        "train/supervised_tokens",
+        "train/lr",
+        "train/grad_norm",
+        "train/grad_norm_finite",
+        "train/supervised_tokens_per_second"
+      ],
+      "series_step_axis": "train/total_supervised_tokens",
+      "automatic_system_telemetry": false,
+      "teacher_reference_cross_entropy": "not_computed_or_uploaded",
+      "forbidden_payloads": [
+        "prompts",
+        "messages",
+        "traces",
+        "flags",
+        "answers",
+        "token_ids",
+        "task_scores",
+        "evaluation_outcomes"
+      ]
+    },
+    "webexploitbench_parent": {
+      "path": "configs/evaluation/qwen38-sft-webexploitbench-tensorlake-parent-v1.json",
+      "file_sha256": "sha256:321d42cfc837b0cad499e488d77fb675cbcda4715053d781f24a061d157ac527",
+      "embedded_sha256": "sha256:281f9f5b9a5bc2f0297d38165f9209a63420f856bcac19950341dc4b3106bf4e",
+      "state": "sealed_during_hpo_and_checkpoint_selection",
+      "selection_eligible": false
+    },
+    "exposure_matched_control": {
+      "state": "unresolved_pending_committed_teacher_control_artifact",
+      "path": null,
+      "file_sha256": null,
+      "embedded_sha256": null,
+      "required_design": "Match the available-data arm by whole-episode supervised-token exposure with predeclared seeds; never describe the existing downsampled balanced treatment as a pure weighting effect."
+    }
+  },
+  "splits": {
+    "a": {
+      "variant_seed": "qwen38-study-dev-search-002",
+      "training_split_sha256": "sha256:2d20dac7d5b9bb29f6aa44369c5dd2efed9c78bd3ca4d32ed021f04843ae6863",
+      "dev_task_set_sha256": "sha256:914a67b587a8d2f5a523ab652eeaec15f8f9d5dbec559c25ff176b01777a6c96",
+      "fleet_dev_protocol_sha256": "sha256:3c2c65eed748b16b50ef992327324b1fcaad84b190456c4aefe69c6efe748f75"
+    },
+    "b": {
+      "variant_seed": "qwen38-study-dev-search-019",
+      "training_split_sha256": "sha256:66f98eac3d1533d2c0e3dda99704020e5177ed56c25196f7fa1175307732ab06",
+      "dev_task_set_sha256": "sha256:6f654f7493fa3803fc014efcfdc1be4a27e6518bc29ad9d401fe3823a59fbab2",
+      "fleet_dev_protocol_sha256": "sha256:01f9c8b28cdc08ef8c089600b96450d747fe92447a60cbd4d60256b6302e5388"
+    }
+  },
+  "teacher_corpora": {
+    "available_a": {
+      "manifest_sha256": "sha256:c4945ddb7cd8fd0b7b9ebbd9bad9b96215b0905c059ef1b22d71d4f214b4eb8e",
+      "source_selection_sha256": "sha256:cdf82a83e423c3de6556b8f0ca5eaf4cb358041cd3015a335250b473e4a5cfc7",
+      "sessions": 71,
+      "training_rows": 602,
+      "supervised_tokens": 700359
+    },
+    "available_b": {
+      "manifest_sha256": "sha256:7b43bc25aec1390252b579043199d8a1e3295d29272b565d4c45dddde3cd15de",
+      "source_selection_sha256": "sha256:d0d4213c672d97491e70bbe7db7e671a0d83218b55e4b16afee091465d76cd99",
+      "sessions": 74,
+      "training_rows": 598,
+      "supervised_tokens": 684014
+    }
+  },
+  "study_invariants": {
+    "primary_selection_metric": "fleet_dev_paired_mean_success_delta_4fixed",
+    "attempt_seeds": [
+      42,
+      43,
+      44,
+      45
+    ],
+    "pairing_unit": "exact_task_version_id_and_attempt_seed",
+    "per_task_estimator": "mean_of_all_four_fixed_full_task_solve_indicators",
+    "arm_estimator": "equal_weight_mean_of_twenty_task_means",
+    "uncertainty": "paired_task_clustered_percentile_bootstrap_retaining_all_four_pairs_per_sampled_task",
+    "bootstrap_resamples": 10000,
+    "bootstrap_seed": 20260911,
+    "teacher_reference_cross_entropy": "forbidden",
+    "training_loss": "diagnostic_only",
+    "webexploitbench": "sealed_and_forbidden_for_hpo_checkpoint_selection_or_tiebreaking",
+    "scheduler": "cosine",
+    "warmup_ratio": 0.05,
+    "priority": {
+      "cli_class": "c1",
+      "expected_queue_class": "q1",
+      "expected_value": 10000
+    },
+    "requeue_if_preempted": false,
+    "max_active_study_nodes": 8,
+    "excluded_existing_inference_endpoint_nodes": 4,
+    "node_count_rule": "Recheck admitted plus reserved study nodes before every submit; queued-without-allocation is zero active nodes.",
+    "stage_concurrency": "one_stage_wave_at_a_time_after_prior_allocations_release",
+    "arm_topology": {
+      "nodes": 1,
+      "gpus_per_node": 8,
+      "global_batch": 8,
+      "microbatch_per_gpu": 1
+    },
+    "source_interface": [
+      "native_episode_boundaries",
+      "dense_eligible_assistant_turn_supervision",
+      "exact_tokenizer_chat_template_and_tool_interface",
+      "one_target_occurrence_per_selected_episode_per_epoch"
+    ],
+    "prohibited": [
+      "teacher_cross_entropy_selection",
+      "training_loss_selection",
+      "wandb_task_outcomes",
+      "webexploitbench_unsealing_before_fleet_dev_decision",
+      "duplicated_token_targets",
+      "partial_episode_rebalancing",
+      "concurrent_stage_waves",
+      "automatic_production_promotion"
+    ]
+  },
+  "stages": [
+    {
+      "order": 1,
+      "id": "completed-two-step-numeric-boundaries",
+      "state": "accepted_historical_evidence",
+      "cluster": "dev",
+      "wave_nodes": 0,
+      "launchable": false,
+      "classification": "numeric_runtime_stability_only_not_scheduler_qualification_hpo_or_model_quality"
+    },
+    {
+      "order": 2,
+      "id": "dev-scheduler-warmup-qualification",
+      "state": "prepared_not_accepted",
+      "cluster": "dev",
+      "wave_nodes": 2,
+      "launchable": false,
+      "unresolved_dependencies": [
+        "evidence.scheduler_qualification.accepted_receipt_sha256",
+        "exact_per_arm_plan_request_preview_and_duplicate_gates"
+      ],
+      "arms": [
+        {
+          "id": "constant-no-warmup-runtime-control",
+          "lr": 0.00001,
+          "scheduler": "constant_with_warmup",
+          "warmup_ratio": 0.0,
+          "pause_after_optimizer_step": 6
+        },
+        {
+          "id": "cosine-warmup-5pct-runtime-gate",
+          "lr": 0.00001,
+          "scheduler": "cosine",
+          "warmup_ratio": 0.05,
+          "pause_after_optimizer_step": 6
+        }
+      ],
+      "interpretation": "Operational scheduler-state qualification only; losses cannot select a scheduler or learning rate."
+    },
+    {
+      "order": 3,
+      "id": "dev-production-layout-canary",
+      "state": "blocked",
+      "cluster": "dev",
+      "wave_nodes": 1,
+      "launchable": false,
+      "accepted_receipt_sha256": null,
+      "unresolved_dependencies": [
+        "evidence.scheduler_qualification.accepted_receipt_sha256",
+        "exact_8_gpu_checkpoint_pause_reload_tracking_and_release_receipt_sha256"
+      ]
+    },
+    {
+      "order": 4,
+      "id": "split-a-broad-lr",
+      "state": "blocked",
+      "cluster": "prod_after_dev_qualification",
+      "wave_nodes": 4,
+      "launchable": false,
+      "common": {
+        "split": "a",
+        "corpus": "available_a",
+        "epochs": 1,
+        "global_batch": 8,
+        "seed": 42,
+        "scheduler": "cosine",
+        "warmup_ratio": 0.05
+      },
+      "unresolved_dependencies": [
+        "dev-production-layout-canary.accepted_receipt_sha256",
+        "evidence.fleet_dev_v2.base_controls.a.accepted_result_sha256",
+        "lr-1e-4-extended-dev-stability-and-reload_receipt_sha256",
+        "per_arm_dev_preview_duplicate_destination_and_capacity_gates"
+      ],
+      "lr_bracket": [
+        0.000001,
+        0.00001,
+        0.00003,
+        0.0001
+      ],
+      "lr_rationale": {
+        "1e-6": "Accepted lower numeric boundary, deliberately below the cited full-parameter range to measure under-update risk.",
+        "1e-5": "Near the 7e-6 START order of magnitude.",
+        "3e-5": "Near the reported FullFT optimum in the cited dense-Qwen sweep.",
+        "1e-4": "Cited FullFT upper boundary and SWE-Gym long-horizon agent-SFT precedent; requires its own extended dev stability and reload gate."
+      },
+      "arms": [
+        {
+          "id": "available-a-lr-1e-6",
+          "lr": 0.000001
+        },
+        {
+          "id": "available-a-lr-1e-5",
+          "lr": 0.00001
+        },
+        {
+          "id": "available-a-lr-3e-5",
+          "lr": 0.00003
+        },
+        {
+          "id": "available-a-lr-1e-4",
+          "lr": 0.0001
+        }
+      ],
+      "outcome_barrier": {
+        "protocol_sha256": "sha256:3c2c65eed748b16b50ef992327324b1fcaad84b190456c4aefe69c6efe748f75",
+        "metric": "fleet_dev_paired_mean_success_delta_4fixed",
+        "sealed_result_set_sha256": null,
+        "selection_decision_sha256": null,
+        "tie_rule": "retain_ties_for_fresh_predeclared_confirmation"
+      }
+    },
+    {
+      "order": 5,
+      "id": "split-a-exposure-matched-control",
+      "state": "blocked",
+      "cluster": "prod_after_dev_qualification",
+      "wave_nodes": 2,
+      "launchable": false,
+      "unresolved_dependencies": [
+        "split-a-broad-lr.outcome_barrier.selection_decision_sha256",
+        "evidence.exposure_matched_control.embedded_sha256",
+        "exposure_control_dev_qualification_receipt_sha256"
+      ],
+      "outcome_barrier": {
+        "protocol_sha256": "sha256:3c2c65eed748b16b50ef992327324b1fcaad84b190456c4aefe69c6efe748f75",
+        "sealed_result_set_sha256": null,
+        "treatment_decision_sha256": null,
+        "comparison": "matched_supervised_token_exposure_and_predeclared_sampling_seeds"
+      },
+      "interpretation": "Compare whole-episode source composition at matched supervised-token exposure and predeclared seeds; do not reuse the confounded downsampled balanced arm as a pure balance estimate."
+    },
+    {
+      "order": 6,
+      "id": "split-b-and-training-seed-confirmation",
+      "state": "blocked",
+      "cluster": "prod_after_dev_qualification",
+      "wave_nodes": 3,
+      "launchable": false,
+      "unresolved_dependencies": [
+        "split-a-exposure-matched-control.outcome_barrier.treatment_decision_sha256",
+        "evidence.fleet_dev_v2.base_controls.b.accepted_result_sha256",
+        "selected_split_b_corpus_materialization_receipt_sha256"
+      ],
+      "confirmation_arms": [
+        {
+          "split": "a",
+          "seed": 20260911
+        },
+        {
+          "split": "b",
+          "seed": 42
+        },
+        {
+          "split": "b",
+          "seed": 20260911
+        }
+      ],
+      "outcome_protocols": [
+        "sha256:3c2c65eed748b16b50ef992327324b1fcaad84b190456c4aefe69c6efe748f75",
+        "sha256:01f9c8b28cdc08ef8c089600b96450d747fe92447a60cbd4d60256b6302e5388"
+      ],
+      "outcome_barrier": {
+        "sealed_result_set_sha256": null,
+        "confirmation_decision_sha256": null
+      }
+    },
+    {
+      "order": 7,
+      "id": "batch-and-horizon-refinement",
+      "state": "blocked",
+      "cluster": "prod_after_dev_qualification",
+      "wave_nodes": 4,
+      "launchable": false,
+      "unresolved_dependencies": [
+        "split-b-and-training-seed-confirmation.outcome_barrier.confirmation_decision_sha256",
+        "matched_token_exposure_accounting",
+        "batch_and_horizon_dev_numeric_qualification"
+      ],
+      "arms": [
+        {
+          "global_batch": 16,
+          "epochs": 1
+        },
+        {
+          "global_batch": 32,
+          "epochs": 1
+        },
+        {
+          "global_batch": 8,
+          "epochs": 2
+        },
+        {
+          "global_batch": 8,
+          "epochs": 4,
+          "role": "stress_only_after_two_epoch_fleet_dev_gate"
+        }
+      ]
+    }
+  ],
+  "evaluation_policy": {
+    "fleet_dev": "After each terminally accepted and exactly served checkpoint, run all four fixed attempts on the arm's 20-task split and compare to the exact matched base by task+seed; keep task-clustered bootstrap evidence private until complete.",
+    "webexploitbench": "Create one immutable Tensorlake child per accepted checkpoint, but keep all results sealed and ineligible for HPO, checkpoint selection, timing changes or tie breaking until the Fleet-dev decision is frozen.",
+    "wandb": "Training-only scalar diagnostics; never upload Fleet/WebExploitBench outcomes or private payloads."
+  },
+  "execution": {
+    "kind": "sealed_metadata_only_not_a_job_request",
+    "new_jobs_authorized": false,
+    "cluster_or_api_mutations_performed": false,
+    "all_arms_currently_launchable": false,
+    "promotion": "dev_qualification_then_reviewed_prod_preview_and_explicit_submit"
+  },
+  "sha256": "sha256:53b2003deb26cf0c128b76e0c39dbdcd04c01a23ea982cb944ad91d518dc59f2"
+}
