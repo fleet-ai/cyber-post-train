@@ -1,0 +1,158 @@
+{
+  "schema": "cyber_qwen38_teacher_lr1_2x4_dev_fallback_preparation_v1",
+  "recorded_at": "2026-09-12T13:39:30Z",
+  "classification": "offline_create_once_cpu_preparation_contract_no_cluster_or_api_mutation",
+  "purpose": "Prepare one two-node by four-GPU development fallback for the exact LR1 V2 teacher-SFT cell without creating a second live producer.",
+  "canonical_arm": {
+    "config_path": "configs/qualification/qwen38-teacher-lr1-cosine-layout-dev-v2.json",
+    "config_file_sha256": "sha256:b602a85636d343c0f91612858f8835b13abefd1e28c54095787d66ce63aa4725",
+    "name": "chris-q38-ta8-lr1-dev-v2",
+    "output_root": "/mnt/sfs/jobs/chris-q38-ta8-lr1-dev-v2",
+    "wandb_run_id": "chris-q38-ta8-lr1-dev-v2",
+    "layout": {
+      "nodes": 1,
+      "gpus_per_node": 8,
+      "world_size": 8
+    },
+    "reported_scheduler_state": "queued",
+    "reported_state_source": "operator task context",
+    "live_state_observed_by_this_change": false,
+    "preservation": "The canonical config is read only as the immutable comparison source. Its prepared artifacts and submission journals are not read, edited or replaced; no API or scheduler object is observed or mutated."
+  },
+  "fallback": {
+    "config_path": "configs/qualification/qwen38-teacher-lr1-cosine-2x4-dev-fallback-v1.json",
+    "config_file_sha256": "sha256:98196c13337b717bc17ee4711b7545640e4f5123ea40dfe4e5840775a0a25c79",
+    "name": "chris-q38-ta8-lr1-2x4-dev-v1",
+    "output_root": "/mnt/sfs/jobs/chris-q38-ta8-lr1-2x4-dev-v1",
+    "wandb_run_id": "chris-q38-ta8-lr1-2x4-dev-v1",
+    "wandb_name": "chris-q38-ta8-lr1-2x4-dev-v1",
+    "prepared_directory": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/lr-dev-v2-qualified-inputs-v1/lr1-2x4-fallback-v1",
+    "layout": {
+      "nodes": 2,
+      "gpus_per_node": 4,
+      "world_size": 8
+    },
+    "cluster": "dev",
+    "priority_class": "c1",
+    "expected_queue_priority": "q1",
+    "expected_priority_value": 10000,
+    "requeue_if_preempted": false
+  },
+  "scientific_binding": {
+    "source_of_truth": "canonical_arm.config_path",
+    "preserved_exactly": [
+      "model",
+      "data",
+      "recipe.epochs",
+      "recipe.batch_size",
+      "recipe.microbatch_per_gpu",
+      "recipe.lr",
+      "recipe.scheduler",
+      "recipe.warmup_ratio",
+      "recipe.max_length",
+      "recipe.checkpoint_interval",
+      "recipe.keep_checkpoints",
+      "recipe.seed",
+      "cluster",
+      "pause_after_step",
+      "validation_mode",
+      "fleet_dev_protocol_sha256",
+      "wandb.entity",
+      "wandb.project",
+      "wandb.group"
+    ],
+    "changed_only": [
+      "name",
+      "output_root",
+      "recipe.nodes",
+      "recipe.gpus_per_node",
+      "wandb.run_id",
+      "wandb.name",
+      "wandb.tags.production-layout->fragmented-dev-layout"
+    ],
+    "expected_max_steps": 76,
+    "expected_pause_after_step": 6,
+    "expected_checkpoint_interval": 6,
+    "expected_lr": 0.000001,
+    "expected_scheduler": "cosine",
+    "expected_warmup_steps": 4,
+    "expected_corpus_manifest_sha256": "sha256:1b083613c16362daf7c86fd8b458d99d7e167133df919602c21916314142c4dc",
+    "expected_fleet_dev_protocol_sha256": "sha256:3c2c65eed748b16b50ef992327324b1fcaad84b190456c4aefe69c6efe748f75"
+  },
+  "accepted_2x4_cadence_evidence": {
+    "path": "docs/evidence/qwen38-study/2026-09-12-checkpoint-cadence-reload-dev-v1.json",
+    "file_sha256": "sha256:4be26124231067e2040db38c9baa5e9f98bbcf3df22d2acdeceac0886e86d330",
+    "embedded_sha256": "sha256:23c0710bde7410b4f7be496c950ba0bd2f8e86d925f6a1785f88c5c31dff9f71",
+    "source_config_path": "configs/qualification/qwen38-teacher-checkpoint-cadence-dev-v1.json",
+    "source_config_file_sha256": "sha256:fcbd879716217d89e7bbb07bd0d67783682c0b58dddd60b315ddd6942e4ba923",
+    "source_layout": {
+      "nodes": 2,
+      "gpus_per_node": 4,
+      "world_size": 8
+    },
+    "accepted_gate": "checkpoint-cadence-20-training-and-zero-update-reload",
+    "combined_gate_closed_for_bounded_lr_dev_qualification": true,
+    "scope": "Operational support for the exact two-worker, eight-rank Qwen SFT topology and checkpoint/reload path only. LR1 science and available-A data come exclusively from the canonical V2 config.",
+    "limitations_preserved": {
+      "operational_only": true,
+      "full_terminal_provenance_complete": false,
+      "source_zero_restarts_verified": false,
+      "production_training_authorized": false
+    }
+  },
+  "cpu_preparation": {
+    "state": "not_run_by_this_change",
+    "network_required": false,
+    "gpu_required": false,
+    "prepare_command": [
+      "uv",
+      "run",
+      "--locked",
+      "cyber-post-train",
+      "train",
+      "configs/qualification/qwen38-teacher-lr1-cosine-2x4-dev-fallback-v1.json",
+      "--output",
+      "/mnt/sfs/jobs/chris-q38-study-corpora-v1/lr-dev-v2-qualified-inputs-v1/lr1-2x4-fallback-v1"
+    ],
+    "preflight_command": [
+      "uv",
+      "run",
+      "--locked",
+      "cyber-post-train",
+      "preflight",
+      "/mnt/sfs/jobs/chris-q38-study-corpora-v1/lr-dev-v2-qualified-inputs-v1/lr1-2x4-fallback-v1"
+    ],
+    "requirements": [
+      "run preparation and preflight on a CPU-only worker with the immutable pinned training image and exact staged SFS inputs",
+      "prove the prepared directory, fallback output root and fallback runtime subdirectory are absent immediately before create-once preparation",
+      "preserve PREPARED.json and PREFLIGHT.json with exact plan and request digests",
+      "do not reuse or modify the canonical arm prepared directory or submission journal"
+    ]
+  },
+  "submission_gate": {
+    "authorized_by_this_evidence": false,
+    "mutual_exclusion": "Never submit the fallback while the canonical 1x8 arm is queued, admitted, starting, running, ambiguously posted or accepted.",
+    "retire_if": "If the canonical arm executes any optimizer update or becomes an accepted producer, retire this fallback without submission.",
+    "eligible_only_if": [
+      "an authoritative Jobs API and UID-bound Kubernetes reconciliation proves the canonical arm did not execute an optimizer update and has no remaining allocation",
+      "the operator makes a fresh explicit decision to use this topology fallback",
+      "the fallback CPU preflight passes in the pinned image and a dev Jobs API preview renders exactly two workers by four GPUs with no errors or warnings",
+      "duplicate name, title, output, W&B and every shared submission-journal check is clean immediately before the only POST",
+      "the aggregate campaign resource ceiling and authentication monitoring window pass immediately before the only POST"
+    ],
+    "ambiguous_post": "Hold and reconcile; never retry, rename or erase a journal.",
+    "production_authorized": false
+  },
+  "safety": {
+    "cpu_preparation_performed": false,
+    "gpu_training_job_posts": 0,
+    "jobs_api_calls": 0,
+    "kubernetes_calls": 0,
+    "cluster_mutations": 0,
+    "canonical_arm_files_modified": false,
+    "submission_journals_read_or_modified": false,
+    "authentication_material_read_or_modified": false,
+    "private_training_records_read": false
+  },
+  "sha256": "sha256:ff77b5401dbaa9530f7c3f45413d0c1542b40709eae631434ce7dac8eac00d2d"
+}
