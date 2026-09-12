@@ -87,6 +87,19 @@ class _RemoteClass:
         return _Actor(self.value(*args, **kwargs))
 
 
+class _JobID:
+    """Match the pinned Ray 2.56 identity/display split."""
+
+    def __init__(self, value="a1"):
+        self.value = value
+
+    def hex(self):
+        return self.value
+
+    def __str__(self):
+        return f"JobID({self.value})"
+
+
 def _fake_ray(calls, *, credential_count=0, nodes=None):
     actors, actor_options = [], []
 
@@ -138,7 +151,7 @@ def _fake_ray(calls, *, credential_count=0, nodes=None):
     ray = NS(
         init=lambda **kwargs: calls.append(("ray", kwargs)),
         get=get,
-        get_runtime_context=lambda: NS(get_job_id=lambda: "a1"),
+        get_runtime_context=lambda: NS(get_job_id=lambda: _JobID()),
         nodes=lambda: nodes() if callable(nodes) else nodes,
         remote=remote,
         kill=lambda actor, **kwargs: (setattr(actor, "dead", True), calls.append("ray-kill")),
@@ -1779,6 +1792,16 @@ def test_dashboard_free_ray_state_proves_exact_current_job_ownership(monkeypatch
     actor_table["own-restarting"]["State"] = "DEAD"
     rows[0].state = rows[1].state = 3
     assert train._active_owned_resources(job_id, 10) == (0, 0)
+
+
+def test_ray_job_id_uses_raw_hex_not_decorated_display_string():
+    value = _JobID("A1")
+    assert str(value) == "JobID(A1)"
+    assert train._ray_job_id_hex(value) == "a1"
+    assert train._ray_job_id_hex("A1") == "a1"
+    for invalid in ("JobID(A1)", "a", "", object()):
+        with pytest.raises(ValueError, match="Ray job identity changed"):
+            train._ray_job_id_hex(invalid)
 
 
 def test_ray_state_uncertainty_cannot_prove_cleanup(monkeypatch):

@@ -1047,12 +1047,8 @@ def _active_owned_resources(job_id, timeout):
     Treat every state except the one terminal state as active so a new or
     unfamiliar state can never be mistaken for successful cleanup.
     """
-    if (
-        not isinstance(job_id, str)
-        or re.fullmatch(r"[0-9a-fA-F]+", job_id) is None
-        or len(job_id) % 2
-        or timeout <= 0
-    ):
+    job_id = _ray_job_id_hex(job_id)
+    if timeout <= 0:
         raise ValueError("invalid Ray cleanup ownership query")
     ray_state = importlib.import_module("ray._private.state")
     actors = ray_state.actors()
@@ -1062,7 +1058,7 @@ def _active_owned_resources(job_id, timeout):
     for value in actors.values():
         if not isinstance(value, Mapping) or "JobID" not in value or "State" not in value:
             raise ValueError("Ray actor ownership record changed")
-        if str(value["JobID"]).lower() == job_id.lower() and value["State"] != "DEAD":
+        if _ray_job_id_hex(value["JobID"]) == job_id and value["State"] != "DEAD":
             active_actors += 1
 
     gcs_pb2 = importlib.import_module("ray.core.generated.gcs_pb2")
@@ -1074,10 +1070,8 @@ def _active_owned_resources(job_id, timeout):
     active_groups = 0
     for payload in payloads:
         row = gcs_pb2.PlacementGroupTableData.FromString(payload)
-        creator_job_id = binary_to_hex(row.creator_job_id)
-        if not isinstance(creator_job_id, str):
-            raise ValueError("Ray placement-group creator identity changed")
-        if creator_job_id.lower() != job_id.lower():
+        creator_job_id = _ray_job_id_hex(binary_to_hex(row.creator_job_id))
+        if creator_job_id != job_id:
             continue
         try:
             state_name = gcs_pb2.PlacementGroupTableData.PlacementGroupState.Name(row.state)
@@ -1086,6 +1080,28 @@ def _active_owned_resources(job_id, timeout):
         if state_name != "REMOVED":
             active_groups += 1
     return active_actors, active_groups
+
+
+def _ray_job_id_hex(value):
+    """Normalize Ray's JobID object without trusting its display string.
+
+    Ray 2.56 renders ``str(JobID)`` as ``JobID(<hex>)``.  The raw ``hex()``
+    method is the stable identity used by the actor and placement-group tables.
+    """
+    if isinstance(value, str):
+        result = value
+    else:
+        method = getattr(value, "hex", None)
+        if not callable(method):
+            raise ValueError("Ray job identity changed")
+        result = method()
+    if (
+        not isinstance(result, str)
+        or re.fullmatch(r"[0-9a-fA-F]+", result) is None
+        or len(result) % 2
+    ):
+        raise ValueError("Ray job identity changed")
+    return result.lower()
 
 
 def _prove_owned_resources_released(ownership, deadline):
@@ -1314,12 +1330,7 @@ def engine_diagnostic(plan):
                 _bounded_ray_get(ray, startup_deadline),
             ):
                 ray.init(address="auto", log_to_driver=False, runtime_env={"env_vars": env})
-                ownership.job_id = str(ray.get_runtime_context().get_job_id())
-                if (
-                    re.fullmatch(r"[0-9a-fA-F]+", ownership.job_id) is None
-                    or len(ownership.job_id) % 2
-                ):
-                    raise ValueError("Ray job identity changed")
+                ownership.job_id = _ray_job_id_hex(ray.get_runtime_context().get_job_id())
                 startup_phase = "ray_actor_environment_probe"
                 _probe_worker_credentials(
                     ray,
