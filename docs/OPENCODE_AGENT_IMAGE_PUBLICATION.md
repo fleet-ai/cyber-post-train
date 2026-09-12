@@ -29,8 +29,10 @@ does not open this gate:
    `services/fleet-train-api/src/fleet_train_api/local_image_build.py`. When
    true, render the image output as
    `type=image,name=<image>,push=true,rewrite-timestamp=true`. Include the field
-   in the existing recipe fingerprint, test both values, build the Training API,
-   and move the dev `image-build-api` pin to that tested image.
+   in the existing recipe fingerprint only when true; the default false path
+   must retain byte-for-byte legacy fingerprints so existing Miles catalog rows
+   do not conflict. Test both values, build the Training API, and move the dev
+   `image-build-api` pin to that tested image.
 
 The image-build OpenAPI is served at
 `https://api.ft.dev.flt.build/v1/images/openapi.json`; the generic
