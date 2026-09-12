@@ -69,12 +69,26 @@
   },
   "opening_gates": {
     "cadence_training_and_periodic_reload": {
+      "state": "partial_reload_accepted_source_terminal_artifacts_unbound",
       "config_path": "configs/qualification/qwen38-teacher-checkpoint-cadence-dev-v1.json",
       "config_file_sha256": "sha256:fcbd879716217d89e7bbb07bd0d67783682c0b58dddd60b315ddd6942e4ba923",
       "required_optimizer_steps": 21,
       "periodic_checkpoint_step": 20,
       "required_world_size": 8,
       "required_reload_optimizer_updates": 0,
+      "accepted_reload_evidence": {
+        "path": "docs/evidence/qwen38-study/2026-09-12-checkpoint-cadence-reload-dev-v1.json",
+        "file_sha256": "sha256:fa62f69793a79dbeb256e771cf4723d679afd4de21a9ed40298c3991b784768a",
+        "embedded_sha256": "sha256:50e87cfeced3bf11c10199846695b8824fe4e5cd270d724c334e74d9104c82b7",
+        "proof_self_digest": "sha256:6cf2c2431db0b2cd7f87368b775d6891242805cf85a1a1b2eb9e342a59560ad4"
+      },
+      "combined_gate_closed": false,
+      "unresolved_source_terminal_evidence": [
+        "source_pod_uids_and_restart_counts",
+        "digest_valid_training_paused_receipt",
+        "digest_valid_periodic_and_pause_checkpoint_receipts",
+        "complete_scalar_only_wandb_finish_and_sync_receipt"
+      ],
       "accepted_receipt_sha256": null
     },
     "split_a_base_control": {
@@ -360,7 +374,7 @@
     "new_jobs_authorized": false,
     "cluster_or_api_mutations_performed": false,
     "all_cells_currently_launchable": false,
-    "next_safe_transition": "accept cadence step-20 reload and split-A base control, then materialize and preview only the canonical 1e-5 first production cell"
+    "next_safe_transition": "bind the missing source cadence terminal artifacts, close the combined cadence gate and accept the split-A base control, then materialize and preview only the canonical 1e-5 first production cell"
   },
-  "sha256": "sha256:2a3dd4866f4ba12b792ab9712332d1a5bbcc588146e2887d2d337906e2368578"
+  "sha256": "sha256:d4eaaca173bdb26d536d4e29d08d26aa442aab24e8ec917c697d831247f5ebc1"
 }

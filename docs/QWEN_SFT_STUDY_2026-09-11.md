@@ -245,3 +245,25 @@ its embedded receipt SHA-256 is
 `ae009aa5790bdff2f4025962facf7db57c09955a0fc09c72459e926d6a03ee07`.
 This proves CPU integrity only: `gpu_reload_verified` remains false until the
 four-rank, zero-update development reload finishes and releases its allocation.
+
+### Step-20 checkpoint-cadence reload gate
+
+The later eight-rank cadence source run is terminally successful in the Jobs
+API, RayJob and Workload projections and released its RayCluster, Pods and all
+eight GPUs. Its exact step-20 checkpoint seal contains 33 files and
+324,627,486,731 bytes. The zero-update reload
+`chris-q38-ta8-cad20-reld6-db29f2b4` also succeeded and released all eight GPUs.
+A separate zero-GPU verifier rehashed the full source inventory, confirmed all
+eight ranks plus sampler and scheduler restoration, zero optimizer updates and
+no training artifacts, then exited successfully and was deleted.
+
+The sanitized, self-digested evidence is
+[`2026-09-12-checkpoint-cadence-reload-dev-v1.json`](evidence/qwen38-study/2026-09-12-checkpoint-cadence-reload-dev-v1.json).
+It accepts only the operational step-20 reload. The source cadence Pod UIDs,
+restart counts and top-level training, checkpoint and W&B receipt digests have
+not yet been bound into this record. Therefore the combined cadence-training
+and reload gate in
+[`qwen-blackbox-teacher-staged-search-v5.json`](../configs/studies/qwen-blackbox-teacher-staged-search-v5.json)
+remains explicitly partial, no production cell is launchable, and the next
+evidence step is to bind those source artifacts before also accepting the
+split-A base control.

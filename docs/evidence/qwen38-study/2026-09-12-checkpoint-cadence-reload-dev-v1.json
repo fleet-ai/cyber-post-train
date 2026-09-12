@@ -1,0 +1,126 @@
+{
+  "schema": "cyber_qwen38_sft_checkpoint_cadence_reload_evidence_v1",
+  "classification": "accepted_operational_checkpoint_reload_gate_with_partial_source_cadence_evidence",
+  "source_cadence_run": {
+    "config": {
+      "path": "configs/qualification/qwen38-teacher-checkpoint-cadence-dev-v1.json",
+      "file_sha256": "sha256:fcbd879716217d89e7bbb07bd0d67783682c0b58dddd60b315ddd6942e4ba923"
+    },
+    "api_name": "chris-q38-ta8-cad20-dev5-35155f25",
+    "api_run_id": "35155f25-aa37-4c75-9f8a-18af24ccaa79",
+    "api_job_id": "chris-q38-ta8-cad20-dev5-35155f25-n8cwv",
+    "namespace": "fleet-train-jobs",
+    "rayjob_uid": "ae0811e2-ae26-4f3f-b27b-43b1b2a055ba",
+    "workload_uid": "e797dc9e-ae21-4620-bc16-a49b55c50266",
+    "former_raycluster_name": "chris-q38-ta8-cad20-dev5-35155f25-xgfsx",
+    "started_at": "2026-09-12T10:21:25Z",
+    "terminal_at": "2026-09-12T11:05:18Z",
+    "terminal_state": {
+      "jobs_api": "SUCCEEDED",
+      "rayjob": "SUCCEEDED",
+      "workload": "Succeeded",
+      "released_gpus": 8,
+      "raycluster_and_pods_absent": true
+    },
+    "admission": {
+      "requested_priority": "c1",
+      "effective_queue_priority": "q1",
+      "effective_priority_value": 10000,
+      "requeue_if_preempted": false
+    },
+    "requested_image_digest": "sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "evidence_state": "terminal_controller_and_release_facts_bound_source_terminal_artifacts_still_unbound",
+    "unresolved_terminal_evidence": [
+      "source_pod_uids_and_restart_counts",
+      "digest_valid_training_paused_receipt",
+      "digest_valid_periodic_and_pause_checkpoint_receipts",
+      "complete_scalar_only_wandb_finish_and_sync_receipt"
+    ]
+  },
+  "run": {
+    "cluster": "dev",
+    "config": {
+      "path": "configs/qualification/qwen38-teacher-checkpoint-cadence-reload-dev-v1.json",
+      "file_sha256": "sha256:cf3664a5bc4e57d828d482280f0591750707fa6ff5a94aee45185840b553a837"
+    },
+    "config_name": "chris-q38-ta8-cad20-reld6",
+    "api_name": "chris-q38-ta8-cad20-reld6-db29f2b4",
+    "api_run_id": "db29f2b4-e03f-4e7d-99dd-c16f7c811931",
+    "namespace": "fleet-train-jobs",
+    "rayjob_uid": "275e2b3a-7340-4a2e-8837-25f2f1fd9db7",
+    "workload_uid": "c7c63eac-4a94-4805-899a-6fef86740554",
+    "output_root": "/mnt/sfs/jobs/chris-q38-ta8-cad20-reld6",
+    "requested_image_digest": "sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "terminal_state": {
+      "jobs_api": "SUCCEEDED",
+      "rayjob": "SUCCEEDED",
+      "workload": "Succeeded",
+      "released_gpus": 8
+    }
+  },
+  "source_checkpoint": {
+    "manifest_path": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/ta8-cad20-dev5-reload-v1/checkpoint-step-20.json",
+    "manifest_file_sha256": "sha256:0c0f5f4fcb24b6eee79706174705f3bd9d568120644601ca8eb46945e2d3929b",
+    "manifest_receipt_sha256": "sha256:0132d4866f0e9180ce8ec97354501ddf5c06a60365eeb774764b294d4b90c9d6",
+    "optimizer_step": 20,
+    "world_size": 8,
+    "files": 33,
+    "bytes": 324627486731
+  },
+  "terminal_evidence": {
+    "recovered": {
+      "path": "/mnt/sfs/jobs/chris-q38-ta8-cad20-reld6/RECOVERED.json",
+      "file_sha256": "sha256:87c0cd7ac84e3ef602eb39762e1aec09975ca32faba875658267e60934673199"
+    },
+    "reload_validated": {
+      "path": "/mnt/sfs/jobs/chris-q38-ta8-cad20-reld6/RELOAD_VALIDATED.json",
+      "file_sha256": "sha256:9653eff813c2aa79831f61bc88666233d2a596284ce4d16ad5813ac3efd67bf7"
+    },
+    "wandb_sync": {
+      "path": "/mnt/sfs/jobs/chris-q38-ta8-cad20-reld6/WANDB_SYNC_STATUS.json",
+      "file_sha256": "sha256:28896894a1fca05bba566f430626cd6e9b90a459b67ecd9e7451b3c267d9d730",
+      "status": "synced"
+    },
+    "optimizer_step": 20,
+    "optimizer_updates_executed": 0,
+    "validation_scope": "checkpoint_and_sampler_reload_only_no_ce",
+    "rank_count": 8,
+    "sampler_state_restored": true,
+    "scheduler_state_restored": true,
+    "training_artifacts_written": 0
+  },
+  "independent_verifier": {
+    "kind": "Pod",
+    "pod_uid": "0a127b39-4e67-48b2-9c28-a8fa1bf6e624",
+    "namespace": "fleet-train-jobs",
+    "gpus": 0,
+    "phase": "Succeeded",
+    "container_exit_code": 0,
+    "container_restarts": 0,
+    "deleted_after_validation": true,
+    "proof_path": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/ta8-cad20-dev5-reload-v1/post-reload-verify-v1.json",
+    "proof_self_digest": "sha256:6cf2c2431db0b2cd7f87368b775d6891242805cf85a1a1b2eb9e342a59560ad4",
+    "checks": [
+      "rehashed_all_source_checkpoint_files",
+      "source_manifest_file_and_receipt_digests_match",
+      "source_inventory_is_33_files_and_324627486731_bytes",
+      "all_eight_rank_validation_records_present",
+      "sampler_and_scheduler_state_restored",
+      "zero_optimizer_updates_executed",
+      "no_training_checkpoint_or_terminal_training_artifact_written"
+    ]
+  },
+  "accepted_scope": {
+    "conclusion": "The exact eight-rank periodic step-20 checkpoint reload completes on the dev layout with sampler and scheduler state restored, without an optimizer update, while leaving the source checkpoint unchanged and releasing all eight GPUs.",
+    "gate": "checkpoint-cadence-20-zero-update-reload",
+    "operational_only": true,
+    "combined_cadence_training_and_reload_gate_closed": false
+  },
+  "limitations": [
+    "This is an operational checkpoint/recovery gate, not model-quality or task-capability evidence.",
+    "It does not bind the split-A Fleet base control, authorize a production arm or select a hyperparameter.",
+    "The source cadence Job's terminal API, RayJob and Workload identities and release are bound, but its Pod UIDs, restart counts and top-level training, checkpoint and W&B receipt digests are not yet bound; this evidence therefore does not close the combined source-training-and-reload gate.",
+    "The reload does not execute an optimizer update or compute teacher-reference cross-entropy."
+  ],
+  "sha256": "sha256:50e87cfeced3bf11c10199846695b8824fe4e5cd270d724c334e74d9104c82b7"
+}
