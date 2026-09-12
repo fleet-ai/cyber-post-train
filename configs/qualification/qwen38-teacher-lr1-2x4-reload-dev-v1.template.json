@@ -1,0 +1,209 @@
+{
+  "schema": "cyber_qwen_sft_lr1_2x4_reload_template_v1",
+  "status": "blocked_waiting_step6_checkpoint_seal",
+  "launchable": false,
+  "cluster_or_api_mutations_performed": false,
+  "source": {
+    "cluster": "dev",
+    "config_path": "configs/qualification/qwen38-teacher-lr1-cosine-2x4-dev-fallback-v1.json",
+    "config_file_sha256": "sha256:98196c13337b717bc17ee4711b7545640e4f5123ea40dfe4e5840775a0a25c79",
+    "config_name": "chris-q38-ta8-lr1-2x4-dev-v1",
+    "api_name": "chris-q38-ta8-lr1-2x4-dev-v1-0a67736f",
+    "api_run_id": "0a67736f-f40b-4b0c-b4ae-fe494f97235b",
+    "rayjob_uid": "70161760-16ae-4f8e-8809-e6a024a16188",
+    "workload_uid": "f2ee4249-2554-4433-a6c3-53140433f6b8",
+    "raycluster_uid": "08369b1f-956b-46fb-bf5a-aed9a450c180",
+    "pod_uids": [
+      "524ab333-11d9-4dc1-9643-b70595de0d20",
+      "56e3a6b5-d2ad-45c8-84be-30a4f77a9880"
+    ],
+    "output_root": "/mnt/sfs/jobs/chris-q38-ta8-lr1-2x4-dev-v1",
+    "prepared_dir": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/lr-dev-v2-qualified-inputs-v1/lr1-2x4-fallback-v1",
+    "plan_sha256": "3b554d48bb61eeac041415c951f1bc327f70288aa8e2590246bd5eecb2f04e58",
+    "request_sha256": "698dd2804479ad58c19430688b061cd571a64e3324ee2f3eef2cf1c195f79ebd",
+    "preflight_sha256": "da57e6b1ac279d5d7aaf07d07a5be1bbaf3328732556278ee46a86189c908924",
+    "requested_image_digest": "sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "expected_terminal": {
+      "filename": "TRAINING_PAUSED.json",
+      "status": "training_paused",
+      "optimizer_step": 6,
+      "optimizer_steps_executed": 6,
+      "evidence_path": "docs/evidence/qwen38-study/2026-09-12-lr1-2x4-dev-terminal-v1.json",
+      "evidence_file_sha256": "sha256:ee6fd164c26b2bf608e65fc5f3ccd8e4793c8728a108b1943efdf45fa656bbaa",
+      "evidence_receipt_sha256": "sha256:04b9b6a2db71df69dbb383db7483708c84bab64c1d34f22c278ba8f1e4ef5607",
+      "api_run_id": "0a67736f-f40b-4b0c-b4ae-fe494f97235b",
+      "jobs_api_state": "SUCCEEDED",
+      "rayjob_state": "SUCCEEDED",
+      "workload_state": "Succeeded",
+      "file_sha256": "sha256:1d8b65ab5e687adfaa23cc976287b2117d3d1aae5386dccdbebf9a6a024a6a21",
+      "embedded_receipt_digest_valid": true,
+      "wandb_tracking_status": "synced",
+      "wandb_remote_state": "finished",
+      "wandb_local_remote_exact_parity": true,
+      "failure_or_rejection_markers_present": false,
+      "ready_observation_restarts": {
+        "head": 0,
+        "worker": 0
+      },
+      "terminal_final_restart_counts_known": false,
+      "zero_restarts_for_full_lifecycle_claimed": false,
+      "pod_provenance_exception_preserved": true,
+      "resource_release_verified": true
+    }
+  },
+  "checkpoint_seal": {
+    "operation": "cpu_only_create_once",
+    "optimizer_step": 6,
+    "world_size": 8,
+    "source_checkpoint_path": "/mnt/sfs/jobs/chris-q38-ta8-lr1-2x4-dev-v1/checkpoints/global_step_6",
+    "source_checkpoint_receipt_path": "/mnt/sfs/jobs/chris-q38-ta8-lr1-2x4-dev-v1/checkpoint_receipts/step-000006.json",
+    "source_checkpoint_receipt_file_sha256": "sha256:e2db2067685d2875dde79ba36c00ac27624122833d4f4106851517ab61fa1ce8",
+    "source_checkpoint_embedded_receipt_digest_valid": true,
+    "manifest_path": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/lr1-2x4-dev-v1-reload-v1/checkpoint-step-6.json",
+    "manifest_file_sha256": null,
+    "manifest_receipt_sha256": null,
+    "destination_absent_verified": null,
+    "source_inventory_unchanged_after_sealing": null,
+    "pinned_image_digest": "sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "gpus": 0,
+    "command": [
+      "uv",
+      "run",
+      "--locked",
+      "cyber-post-train",
+      "checkpoint-seal",
+      "/mnt/sfs/jobs/chris-q38-study-corpora-v1/lr-dev-v2-qualified-inputs-v1/lr1-2x4-fallback-v1",
+      "6",
+      "--output",
+      "/mnt/sfs/jobs/chris-q38-study-corpora-v1/lr1-2x4-dev-v1-reload-v1/checkpoint-step-6.json"
+    ]
+  },
+  "reload": {
+    "operation": "native_all_rank_checkpoint_reload",
+    "cluster": "dev",
+    "config_path": null,
+    "new_run_name": null,
+    "new_output_root": null,
+    "new_wandb_run_id": null,
+    "new_wandb_name": null,
+    "prepared_dir": null,
+    "identity_policy": {
+      "materialize_only_after_seal_is_independently_verified": true,
+      "must_be_new_and_mutually_disjoint": [
+        "config_path",
+        "new_run_name",
+        "new_output_root",
+        "new_wandb_run_id",
+        "new_wandb_name",
+        "prepared_dir"
+      ],
+      "must_not_reuse_source": [
+        "source.config_name",
+        "source.output_root",
+        "source.prepared_dir"
+      ]
+    },
+    "source_config_transform": {
+      "remove": [
+        "pause_after_step"
+      ],
+      "replace_with_declared_new_identity": [
+        "name",
+        "output_root",
+        "wandb.run_id",
+        "wandb.name"
+      ],
+      "add": {
+        "recovery": {
+          "manifest": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/lr1-2x4-dev-v1-reload-v1/checkpoint-step-6.json",
+          "sha256": null,
+          "mode": "validate"
+        }
+      },
+      "preserve_every_other_field": true
+    },
+    "optimizer_steps_authorized": 0,
+    "expected_world_size": 8,
+    "expected_workers": 2,
+    "expected_gpus_per_worker": 4,
+    "priority_class": "c1",
+    "expected_queue_priority": "q1",
+    "expected_priority_value": 10000,
+    "requeueIfPreempted": false,
+    "plan_sha256": null,
+    "request_sha256": null,
+    "dev_preview_sha256": null,
+    "destinations_absent_verified": null,
+    "wandb_identity_unused_verified": null,
+    "jobs_api_post_calls_performed": 0
+  },
+  "topology_scope": {
+    "source_layout": {
+      "nodes": 2,
+      "gpus_per_node": 4,
+      "world_size": 8
+    },
+    "reload_layout": {
+      "nodes": 2,
+      "gpus_per_node": 4,
+      "world_size": 8
+    },
+    "scope": "exact_lr1_fragmented_dev_cell_only",
+    "operational_only": true,
+    "production_layout_equivalence_claimed": false,
+    "other_lr_cells_covered": false
+  },
+  "pre_materialization_gates": [
+    "source_terminal_evidence_is_self_digest_valid_and_binds_the_exact_api_and_uid_set",
+    "jobs_api_rayjob_and_workload_are_terminal_success_and_all_eight_gpus_are_released",
+    "source_ready_observation_has_zero_restarts_and_no_failure_or_rejection_marker_exists",
+    "source_terminal_pod_restart_and_exit_counts_are_irrecoverable_and_the_provenance_exception_is_preserved",
+    "digest_valid_training_pause_and_step6_checkpoint_receipts_plus_wandb_finished_parity_are_bound",
+    "step6_checkpoint_payload_is_present_stable_and_bound_to_the_exact_source_plan",
+    "checkpoint_seal_destination_is_absent_before_one_cpu_only_create_once_operation",
+    "checkpoint_seal_runs_in_the_exact_pinned_training_image_with_zero_gpus",
+    "manifest_file_and_embedded_receipt_digests_are_independently_verified",
+    "source_checkpoint_inventory_is_unchanged_after_sealing",
+    "reload_identity_fields_remain_null_until_every_prior_gate_passes",
+    "materialized_reload_changes_only_identity_pause_removal_and_validate_mode_recovery",
+    "new_output_prepared_wandb_api_kubernetes_and_journal_identities_are_absent",
+    "pinned_image_cpu_preflight_passes_with_the_exact_seal",
+    "dev_jobs_api_preview_matches_two_workers_four_gpus_each_c1_q1_10000_no_requeue",
+    "aggregate_campaign_node_limit_and_monitoring_window_are_rechecked_before_one_post"
+  ],
+  "acceptance": [
+    "jobs_api_rayjob_and_workload_terminal_success",
+    "digest_valid_RECOVERED_json",
+    "digest_valid_RELOAD_VALIDATED_json",
+    "optimizer_steps_executed_equals_zero",
+    "optimizer_step_equals_six",
+    "validation_scope_equals_checkpoint_and_sampler_reload_only_no_ce",
+    "all_eight_ranks_restore_model_optimizer_scheduler_and_rng_state",
+    "sampler_cursor_and_supervised_token_progress_restore_exactly",
+    "source_checkpoint_inventory_and_hashes_remain_unchanged",
+    "reload_writes_no_training_checkpoint_or_training_completion_receipt",
+    "exact_two_worker_four_gpu_source_and_reload_layout",
+    "zero_restarts",
+    "gpu_release_verified"
+  ],
+  "unresolved_bindings": [
+    "checkpoint_seal.manifest_file_sha256",
+    "checkpoint_seal.manifest_receipt_sha256",
+    "checkpoint_seal.destination_absent_verified",
+    "checkpoint_seal.source_inventory_unchanged_after_sealing",
+    "reload.config_path",
+    "reload.new_run_name",
+    "reload.new_output_root",
+    "reload.new_wandb_run_id",
+    "reload.new_wandb_name",
+    "reload.prepared_dir",
+    "reload.source_config_transform.add.recovery.sha256",
+    "reload.plan_sha256",
+    "reload.request_sha256",
+    "reload.dev_preview_sha256",
+    "reload.destinations_absent_verified",
+    "reload.wandb_identity_unused_verified"
+  ],
+  "interpretation": "This inert template can qualify only the exact LR1 step-6 checkpoint on the two-worker, four-GPU-per-worker development layout. It does not make that layout equivalent to the staged search's literal one-node production-layout gate; it cannot train, continue, select a checkpoint, measure capability, authorize another LR cell, or authorize production.",
+  "sha256": "sha256:092e92fb74ca509fae9e0671d38ddb2ef7de058421a65f015b71edbb410a9278"
+}
