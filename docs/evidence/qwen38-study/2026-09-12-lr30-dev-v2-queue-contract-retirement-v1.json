@@ -1,0 +1,101 @@
+{
+  "schema": "cyber_qwen_lr30_dev_queue_contract_retirement_v1",
+  "observed_at": "2026-09-12T16:32:11Z",
+  "retired_attempt": {
+    "cluster": "dev",
+    "canonical_cell_id": "teacher.available-a.lr-3e-5.batch-8.epoch-1.seed-42",
+    "config": {
+      "path": "configs/qualification/qwen38-teacher-lr30-cosine-layout-dev-v2.json",
+      "file_sha256": "sha256:a10d10e34b3d17b268973329ec2d2d83519eec6e7b9e726483d447302e6af8a2"
+    },
+    "api_name": "chris-q38-ta8-lr30-dev-v2-6637495e",
+    "api_status_at_observation": "Suspended",
+    "rayjob_uid": "29178b95-6cd0-41f3-976d-29d63fcd04cc",
+    "workload_name": "rayjob-chris-q38-ta8-lr30-dev-v2-6637495e-80d1d",
+    "workload_uid": "3b303908-0ed3-4206-b8af-9f158a356e2d",
+    "request_sha256": "sha256:5e9abc089ff2a316f02844a09828ae599ac0fdf83459b8bae2fea98444738eb3",
+    "requested_topology": {
+      "workers": 1,
+      "gpus_per_worker": 8,
+      "total_gpus": 8
+    },
+    "queue_condition": {
+      "type": "QuotaReserved",
+      "status": "False",
+      "reason": "Pending",
+      "message": "couldn't assign flavors to pod set head: Flavor \"cpu-head\" does not support TopologyAwareScheduling",
+      "last_transition_time": "2026-09-12T16:30:00Z"
+    },
+    "execution": {
+      "rayclusters_created": 0,
+      "pods_created": 0,
+      "optimizer_steps": 0,
+      "checkpoints_created": 0,
+      "gpus_allocated": 0
+    },
+    "classification": "dev_queue_contract_mismatch_no_runtime_started"
+  },
+  "terminal_reconciliation": {
+    "observed_at": "2026-09-12T16:33:58Z",
+    "jobs_api_delete_http_status": 204,
+    "jobs_api_exact_get_http_status": 404,
+    "rayjob_absent": true,
+    "workload_absent": true,
+    "raycluster_absent": true,
+    "pods_absent": true,
+    "gpus_held": 0,
+    "all_runs_history_retains_submitted_row": true,
+    "submission_journal_must_never_be_replayed": true
+  },
+  "diagnosis": {
+    "proven": "The exact one-by-eight request could not pass the dev scheduler's topology-aware flavor contract and never created runtime resources.",
+    "not_proven": [
+      "The scientific LR30 cell is invalid.",
+      "The pinned trainer image is invalid.",
+      "A two-by-four successor will be admitted without fresh live checks."
+    ]
+  },
+  "fresh_successor": {
+    "config": {
+      "path": "configs/qualification/qwen38-teacher-lr30-cosine-2x4-dev-v3.json",
+      "file_sha256": "sha256:79211cc2a4f44222215ebfa2f09bfb75ba41f12a838b240397ae2de41a116bf8"
+    },
+    "name": "chris-q38-lr30-2x4-dev-v3",
+    "output_root": "/mnt/sfs/jobs/chris-q38-lr30-2x4-dev-v3",
+    "wandb_run_id": "chris-q38-lr30-2x4-dev-v3",
+    "topology": {
+      "workers": 2,
+      "gpus_per_worker": 4,
+      "total_gpus": 8
+    },
+    "operational_precedent": {
+      "accepted_cell": "teacher.available-a.lr-1e-6.batch-8.epoch-1.seed-42",
+      "scope": "same pinned image and two-by-four dev topology only",
+      "does_not_transfer": [
+        "LR30 runtime acceptance",
+        "checkpoint acceptance",
+        "scientific outcome",
+        "production qualification"
+      ]
+    },
+    "fresh_gates_required": true,
+    "jobs_api_post_authorized_by_this_receipt": false
+  },
+  "immutability": {
+    "retired_config_modified": false,
+    "retired_output_reused": false,
+    "retired_wandb_identity_reused": false,
+    "retired_submission_journal_replayed": false,
+    "canonical_scientific_cell_preserved": true
+  },
+  "authoring_boundaries": {
+    "new_cluster_mutations": 0,
+    "new_jobs_api_calls": 0,
+    "new_kubernetes_calls": 0,
+    "new_submissions": 0,
+    "new_gpu_allocations": 0,
+    "credentials_read_or_persisted": false,
+    "private_training_data_read": false
+  },
+  "sha256": "sha256:e721d54fbdbd57cc79dfe8b2cc6faa9703dddd4d607af46fb55a5d43e260f9e0"
+}

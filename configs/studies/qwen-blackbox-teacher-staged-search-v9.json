@@ -1,0 +1,180 @@
+{
+  "schema": "cyber_qwen_sft_staged_search_lr30_topology_successor_v1",
+  "study_id": "qwen38-blackbox-teacher-staged-search-v9",
+  "status": "lr1_operational_dev_accepted_lr30_v2_retired_lr30_2x4_v3_waiting_fresh_live_gates",
+  "launchable": false,
+  "supersedes": {
+    "path": "configs/studies/qwen-blackbox-teacher-staged-search-v8.json",
+    "file_sha256": "sha256:752f420c80d456cb5634463bc866ca6f848420e35a4cfc1d39d8b21225f50ff7",
+    "embedded_sha256": "sha256:20af79ba9fa72d67c76772a8db4fff7b714e7698a602c1e8f14e2e3bb78e8ed6",
+    "preservation": "V8 remains immutable. V9 retires only the unadmitted LR30 one-by-eight operational attempt and gives that same scientific cell a fresh two-by-four identity. LR1 acceptance, LR100 ordering, every scientific boundary and production closure remain unchanged."
+  },
+  "inherited_state": [
+    {
+      "json_pointer": "/accepted_lr1",
+      "preserve_source_value_verbatim": true
+    },
+    {
+      "json_pointer": "/fresh_gate_contract",
+      "preserve_source_value_verbatim": true
+    },
+    {
+      "json_pointer": "/claim_boundaries",
+      "preserve_source_value_verbatim": true
+    },
+    {
+      "json_pointer": "/production",
+      "preserve_source_value_verbatim": true
+    }
+  ],
+  "retired_lr30_v2": {
+    "canonical_cell_id": "teacher.available-a.lr-3e-5.batch-8.epoch-1.seed-42",
+    "config": {
+      "path": "configs/qualification/qwen38-teacher-lr30-cosine-layout-dev-v2.json",
+      "file_sha256": "sha256:a10d10e34b3d17b268973329ec2d2d83519eec6e7b9e726483d447302e6af8a2"
+    },
+    "evidence": {
+      "path": "docs/evidence/qwen38-study/2026-09-12-lr30-dev-v2-queue-contract-retirement-v1.json",
+      "file_sha256": "sha256:54271dfc47fbeafbbce202dd04109349c27fc24036505542369d321712bfa043",
+      "embedded_sha256": "sha256:e721d54fbdbd57cc79dfe8b2cc6faa9703dddd4d607af46fb55a5d43e260f9e0"
+    },
+    "api_name": "chris-q38-ta8-lr30-dev-v2-6637495e",
+    "rayjob_uid": "29178b95-6cd0-41f3-976d-29d63fcd04cc",
+    "workload_uid": "3b303908-0ed3-4206-b8af-9f158a356e2d",
+    "classification": "dev_queue_contract_mismatch_no_runtime_started",
+    "accepted": false,
+    "active": false,
+    "optimizer_steps": 0,
+    "gpus_allocated": 0,
+    "terminally_reconciled_absent": true,
+    "submission_journal_must_never_be_replayed": true
+  },
+  "successor_lr30_two_by_four": {
+    "canonical_cell_id": "teacher.available-a.lr-3e-5.batch-8.epoch-1.seed-42",
+    "config": {
+      "path": "configs/qualification/qwen38-teacher-lr30-cosine-2x4-dev-v3.json",
+      "file_sha256": "sha256:79211cc2a4f44222215ebfa2f09bfb75ba41f12a838b240397ae2de41a116bf8"
+    },
+    "identity": {
+      "name": "chris-q38-lr30-2x4-dev-v3",
+      "output_root": "/mnt/sfs/jobs/chris-q38-lr30-2x4-dev-v3",
+      "wandb_run_id": "chris-q38-lr30-2x4-dev-v3",
+      "wandb_name": "chris-q38-lr30-2x4-dev-v3"
+    },
+    "topology": {
+      "nodes": 2,
+      "gpus_per_node": 4,
+      "world_size": 8
+    },
+    "scientific_treatment": {
+      "lr": 0.00003,
+      "scheduler": "cosine",
+      "warmup_ratio": 0.05,
+      "epochs": 1,
+      "batch_size": 8,
+      "microbatch_per_gpu": 1,
+      "max_length": 16384,
+      "checkpoint_interval": 6,
+      "pause_after_step": 6,
+      "seed": 42,
+      "data_manifest_sha256": "sha256:1b083613c16362daf7c86fd8b458d99d7e167133df919602c21916314142c4dc",
+      "validation_mode": "task_outcomes_only"
+    },
+    "operational_precedent": {
+      "source_study_path": "configs/studies/qwen-blackbox-teacher-staged-search-v8.json",
+      "json_pointer": "/accepted_lr1/topology",
+      "scope": "two-by-four dev topology and pinned trainer image only",
+      "lr30_runtime_or_scientific_acceptance_transferred": false
+    },
+    "state": "eligible_for_fresh_live_gates_only",
+    "fresh_gates_verified": false,
+    "jobs_api_post_authorized_by_this_document": false
+  },
+  "remaining_dev_waves": [
+    {
+      "order": 1,
+      "inherited_wave_max_nodes": 2,
+      "remaining_cell_count": 1,
+      "cell": {
+        "id": "lr30",
+        "canonical_cell_id": "teacher.available-a.lr-3e-5.batch-8.epoch-1.seed-42",
+        "config_path": "configs/qualification/qwen38-teacher-lr30-cosine-2x4-dev-v3.json",
+        "config_file_sha256": "sha256:79211cc2a4f44222215ebfa2f09bfb75ba41f12a838b240397ae2de41a116bf8",
+        "topology": {
+          "nodes": 2,
+          "gpus_per_node": 4,
+          "world_size": 8
+        },
+        "status": "eligible_for_fresh_live_gates_only",
+        "fresh_gates_verified": false,
+        "jobs_api_post_authorized_by_this_document": false
+      }
+    },
+    {
+      "order": 2,
+      "inherited_wave_max_nodes": 1,
+      "remaining_cell_count": 1,
+      "requires": [
+        "lr30_terminal_reconciliation",
+        "first_wave_allocation_release",
+        "all_fresh_pre_post_gates_rechecked"
+      ],
+      "cell": {
+        "id": "lr100",
+        "canonical_cell_id": "teacher.available-a.lr-1e-4.batch-8.epoch-1.seed-42",
+        "config_path": "configs/qualification/qwen38-teacher-lr100-cosine-layout-dev-v2.json",
+        "config_file_sha256": "sha256:e6b7f197cb716d235ea6054b5620cae70344191508ed707a37fd1fc2f27e8205",
+        "topology": {
+          "nodes": 1,
+          "gpus_per_node": 8,
+          "world_size": 8
+        },
+        "status": "blocked_until_first_wave_terminal_release_and_fresh_gates",
+        "fresh_gates_verified": false,
+        "jobs_api_post_authorized_by_this_document": false
+      }
+    }
+  ],
+  "required_fresh_lr30_gates": [
+    "Run local config, compiler, request and study regression tests from the committed source.",
+    "Run the exact pinned-image CPU preflight against a new create-once prepared directory.",
+    "Obtain a fresh authenticated dev Jobs API preview for the exact two-by-four request.",
+    "Prove the new W&B run ID, output root, prepared directory and API/Kubernetes title are absent.",
+    "Reconcile all durable journals and prove there is no accepted, active or ambiguous LR30 producer.",
+    "Recheck dev capacity for two independently placeable four-GPU workers without touching peers.",
+    "Write one durable pre-POST intent, issue at most one POST and bind returned API/Kubernetes UIDs.",
+    "After admission, bind the exact runtime image IDs and restart counts before accepting progress."
+  ],
+  "claim_boundaries": {
+    "other_lr_cells_accepted": false,
+    "hyperparameter_selected": false,
+    "capability_claim_allowed": false,
+    "production_authorized": false,
+    "literal_one_by_eight_layout_qualified": false,
+    "literal_one_by_eight_gate_waived": false,
+    "topology_equivalence_claimed": false
+  },
+  "invariants": {
+    "one_canonical_cell_one_accepted_or_active_producer": true,
+    "lr1_must_never_be_replayed": true,
+    "retired_lr30_v2_must_never_be_replayed": true,
+    "fresh_identity_and_evidence_required_for_each_later_cell": true,
+    "c1_q1_effective_priority": 10000,
+    "automatic_requeue": false,
+    "maximum_active_experiment_nodes_excluding_inference": 8,
+    "wandb_scalar_only": true,
+    "validation_mode": "task_outcomes_only",
+    "reference_cross_entropy_enabled": false
+  },
+  "production": {
+    "state": "blocked",
+    "authorization_added": false
+  },
+  "execution": {
+    "kind": "metadata_only_not_a_job_request",
+    "cluster_or_api_mutations_performed": false,
+    "new_training_producer_created": false,
+    "production_submission_authorized": false
+  },
+  "sha256": "sha256:be3bdf2de93276f12324480bfb69a6d2f36596f67ba8bbb5810d14ea500656a4"
+}
