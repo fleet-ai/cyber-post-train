@@ -27,6 +27,23 @@ import yaml
 API_URL = "https://api.ft.flt.build"
 API_URLS = {"dev": "https://api.ft.dev.flt.build", "prod": API_URL}
 
+_CREDENTIAL_ENV = re.compile(
+    r"(?:^|_)(?:TOKENS?|PASSWORDS?|CREDENTIALS?|SECRETS?|API_KEYS?|ACCESS_KEYS?)(?:_|$)"
+)
+_PLATFORM_PREVIEW_ENV_NAMES = frozenset(
+    {
+        "FLEET_EXTERNAL_RAY",
+        "FLEET_GPUS_PER_WORKER",
+        "FLEET_RUN_ID",
+        "FLEET_RUN_NAME",
+        "FLEET_TRACE_ROOT",
+        "RAY_memory_usage_threshold",
+        "SKYPILOT_NUM_GPUS_PER_NODE",
+        "WORKERS",
+    }
+)
+_RESERVED_RUNTIME_ENV_NAMES = _PLATFORM_PREVIEW_ENV_NAMES | {"RUN_DIR"}
+
 
 class JobsError(ValueError):
     pass
@@ -153,12 +170,10 @@ def validate_request(config: dict) -> None:
         raise JobsError("env must contain string values")
     if any(len(str(k).encode()) + len(v.encode()) + 2 > 131072 for k, v in env.items()):
         raise JobsError("one environment value exceeds the Linux process-start limit")
-    if any(
-        not isinstance(k, str)
-        or re.search(r"(?:^|_)(?:TOKEN|PASSWORD|CREDENTIALS|SECRET|API_KEY|ACCESS_KEY)(?:_|$)", k)
-        for k in env
-    ):
+    if any(not isinstance(k, str) or _CREDENTIAL_ENV.search(k) for k in env):
         raise JobsError("credentials belong in cluster Secrets, not the saved request env")
+    if _RESERVED_RUNTIME_ENV_NAMES.intersection(env):
+        raise JobsError("platform-managed runtime environment names are reserved")
     for key in ("secrets", "image_pull_secrets"):
         values = config.get(key, [])
         if not isinstance(values, list) or any(
@@ -183,6 +198,11 @@ def validate_preview(config: dict, preview: dict) -> dict:
         meta, spec = obj["metadata"], obj["spec"]
         if obj["kind"] != "RayJob" or meta["namespace"] != "fleet-train-jobs":
             raise JobsError("preview kind/namespace mismatch")
+        manifest_name = meta["name"]
+        if not isinstance(manifest_name, str) or not re.fullmatch(
+            re.escape(config["name"]) + r"-[a-f0-9]{8}", manifest_name
+        ):
+            raise JobsError("preview name differs from requested run identity")
         if meta["labels"].get("kueue.x-k8s.io/queue-name") != "training-lq":
             raise JobsError("preview must use normal training-lq admission")
         if (
@@ -206,19 +226,51 @@ def validate_preview(config: dict, preview: dict) -> dict:
         for replicas, template in groups:
             if type(replicas) is not int or replicas < 0:
                 raise JobsError("invalid preview replica count")
-            if not replicas:
-                continue
             pod = template["spec"]
             if pod.get("nodeName") or pod.get("priorityClassName") != config["priority_class"]:
                 raise JobsError("preview node assignment/priority bypass")
-            gpu_containers = [
-                c
-                for c in pod["containers"]
-                if quantity(c.get("resources", {}).get("limits", {}).get("nvidia.com/gpu", 0)) > 0
-            ]
-            if len(gpu_containers) != 1:
-                raise JobsError("expected exactly one GPU container per worker node")
-            c = gpu_containers[0]
+            containers = pod["containers"]
+            if (
+                not isinstance(containers, list)
+                or len(containers) != 1
+                or not isinstance(containers[0], dict)
+            ):
+                raise JobsError("expected exactly one main container per worker node")
+            if pod.get("ephemeralContainers") not in (None, []):
+                raise JobsError("preview must not add ephemeral containers")
+            init_containers = pod.get("initContainers", [])
+            if init_containers is None:
+                init_containers = []
+            if not isinstance(init_containers, list) or any(
+                not isinstance(container, dict)
+                or container.get("env") not in (None, [])
+                or container.get("envFrom") not in (None, [])
+                for container in init_containers
+            ):
+                raise JobsError("preview init containers must not carry an environment")
+            volumes = pod.get("volumes", [])
+            if volumes is None:
+                volumes = []
+            if not isinstance(volumes, list) or any(
+                not isinstance(volume, dict) for volume in volumes
+            ):
+                raise JobsError("preview volumes are malformed")
+            for volume in volumes:
+                if "secret" in volume:
+                    raise JobsError("preview must not project Secrets through volumes")
+                if "projected" not in volume:
+                    continue
+                projected = volume["projected"]
+                if not isinstance(projected, dict) or not isinstance(
+                    projected.get("sources", []), list
+                ):
+                    raise JobsError("preview projected volume sources are malformed")
+                if any(
+                    not isinstance(source, dict) or "secret" in source
+                    for source in projected.get("sources", [])
+                ):
+                    raise JobsError("preview must not project Secrets through volumes")
+            c = containers[0]
             if c["image"] != config["image"]:
                 raise JobsError("preview image drift")
             if c.get("securityContext", {}).get("privileged", False) != config.get(
@@ -234,25 +286,56 @@ def validate_preview(config: dict, preview: dict) -> dict:
                     if quantity(resources[name]) != quantity(expected):
                         raise JobsError("preview CPU/memory resource drift")
             entries = c.get("env", [])
+            if not isinstance(entries, list) or any(
+                not isinstance(entry, dict)
+                or set(entry) != {"name", "value"}
+                or not isinstance(entry["name"], str)
+                or not isinstance(entry["value"], str)
+                for entry in entries
+            ):
+                raise JobsError("preview environment entries must be literal name/value pairs")
             env = {v["name"]: v.get("value") for v in entries}
             if len(env) != len(entries):
                 raise JobsError("preview has duplicate runtime environment names")
-            if env.get("RUN_DIR") != config["run_dir"] or any(
-                env.get(k) != v for k, v in config.get("env", {}).items()
-            ):
+            expected_env = {
+                **config.get("env", {}),
+                "RUN_DIR": config["run_dir"],
+                "FLEET_EXTERNAL_RAY": "1",
+                "FLEET_GPUS_PER_WORKER": str(config["gpus_per_worker"]),
+                "FLEET_RUN_ID": "00000000-0000-0000-0000-000000000000",
+                "FLEET_RUN_NAME": manifest_name,
+                "FLEET_TRACE_ROOT": "/mnt/fleet/trajectory-spool",
+                "RAY_memory_usage_threshold": "0.98",
+                "SKYPILOT_NUM_GPUS_PER_NODE": str(config["gpus_per_worker"]),
+                "WORKERS": str(config["workers"]),
+            }
+            if env != expected_env:
                 raise JobsError("preview runtime environment drift")
-            for name in config.get("secrets", []):
-                refs = [
-                    v for v in c.get("envFrom", []) if v.get("secretRef", {}).get("name") == name
-                ]
+            sources = c.get("envFrom", [])
+            if not isinstance(sources, list):
+                raise JobsError("preview workload Secret sources are malformed")
+            refs = []
+            for source in sources:
                 if (
-                    len(refs) != 1
-                    or refs[0].get("prefix", "") != ""
-                    or refs[0]["secretRef"].get("optional", False) is not False
+                    not isinstance(source, dict)
+                    or set(source) - {"prefix", "secretRef"}
+                    or source.get("prefix", "") != ""
                 ):
-                    raise JobsError(
-                        "preview workload Secret must be unique, required and unprefixed"
-                    )
+                    raise JobsError("preview workload Secret sources are malformed")
+                ref = source.get("secretRef")
+                if (
+                    not isinstance(ref, dict)
+                    or set(ref) - {"name", "optional"}
+                    or not isinstance(ref.get("name"), str)
+                    or ref.get("optional", False) is not False
+                ):
+                    raise JobsError("preview workload Secret sources are malformed")
+                refs.append(ref["name"])
+            expected_refs = [*config.get("secrets", []), manifest_name + "-fleet-key"]
+            if len(refs) != len(set(refs)) or refs != expected_refs:
+                raise JobsError(
+                    "preview workload Secret sources differ from requested/platform set"
+                )
             pulls = {v["name"] for v in pod.get("imagePullSecrets", [])}
             if not set(config.get("image_pull_secrets", [])).issubset(pulls):
                 raise JobsError("preview image-pull Secret reference missing")
@@ -277,9 +360,7 @@ def safe_status(run: dict) -> dict:
 
 
 def _validate_run_name(name: str) -> str:
-    if not isinstance(name, str) or not re.fullmatch(
-        r"[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?", name
-    ):
+    if not isinstance(name, str) or not re.fullmatch(r"[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?", name):
         raise JobsError("invalid exact run name")
     return name
 

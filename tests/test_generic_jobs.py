@@ -148,8 +148,22 @@ def test_gzip_header_is_reproducible_across_platforms(monkeypatch):
     assert results[0] == results[1] == results[2]
 
 
+def platform_env(c, manifest_name):
+    return {
+        "FLEET_EXTERNAL_RAY": "1",
+        "FLEET_GPUS_PER_WORKER": str(c["gpus_per_worker"]),
+        "FLEET_RUN_ID": "00000000-0000-0000-0000-000000000000",
+        "FLEET_RUN_NAME": manifest_name,
+        "FLEET_TRACE_ROOT": "/mnt/fleet/trajectory-spool",
+        "RAY_memory_usage_threshold": "0.98",
+        "SKYPILOT_NUM_GPUS_PER_NODE": str(c["gpus_per_worker"]),
+        "WORKERS": str(c["workers"]),
+    }
+
+
 def manifest(request=None):
     c = request or config()
+    manifest_name = c["name"] + "-1234abcd"
     pod = {
         "spec": {
             "priorityClassName": c["priority_class"],
@@ -171,9 +185,16 @@ def manifest(request=None):
                     },
                     "env": [
                         {"name": k, "value": v}
-                        for k, v in {**c["env"], "RUN_DIR": c["run_dir"]}.items()
+                        for k, v in {
+                            **c["env"],
+                            "RUN_DIR": c["run_dir"],
+                            **platform_env(c, manifest_name),
+                        }.items()
                     ],
-                    "envFrom": [{"secretRef": {"name": s}} for s in c["secrets"]],
+                    "envFrom": [
+                        *[{"secretRef": {"name": s}} for s in c["secrets"]],
+                        {"secretRef": {"name": manifest_name + "-fleet-key"}},
+                    ],
                     "securityContext": {"privileged": c.get("privileged", False)},
                 }
             ],
@@ -182,6 +203,7 @@ def manifest(request=None):
     return {
         "kind": "RayJob",
         "metadata": {
+            "name": manifest_name,
             "namespace": "fleet-train-jobs",
             "labels": {
                 "kueue.x-k8s.io/queue-name": "training-lq",
@@ -216,6 +238,40 @@ def test_resource_preview(nodes, priority):
 
 
 @pytest.mark.parametrize(
+    "name",
+    [
+        "FLEET_EXTERNAL_RAY",
+        "FLEET_GPUS_PER_WORKER",
+        "FLEET_RUN_ID",
+        "FLEET_RUN_NAME",
+        "FLEET_TRACE_ROOT",
+        "RAY_memory_usage_threshold",
+        "SKYPILOT_NUM_GPUS_PER_NODE",
+        "WORKERS",
+    ],
+)
+def test_platform_environment_is_exact_and_derived(name):
+    request = {**config(), "workers": 3, "gpus_per_worker": 2}
+    obj = manifest(request)
+    container = obj["spec"]["rayClusterSpec"]["headGroupSpec"]["template"]["spec"]["containers"][0]
+    assert validate_preview(request, preview(obj))["gpus"] == 6
+    next(entry for entry in container["env"] if entry["name"] == name)["value"] = "drift"
+    with pytest.raises(JobsError, match="runtime environment drift"):
+        validate_preview(request, preview(obj))
+
+
+def test_zero_replica_template_cannot_hide_environment_drift():
+    obj = manifest()
+    worker = obj["spec"]["rayClusterSpec"]["workerGroupSpecs"][0]
+    assert worker["replicas"] == 0
+    worker["template"]["spec"]["containers"][0]["env"].append(
+        {"name": "UNREVIEWED_MODE", "value": "enabled"}
+    )
+    with pytest.raises(JobsError, match="runtime environment drift"):
+        validate_preview(config(), preview(obj))
+
+
+@pytest.mark.parametrize(
     "field,value",
     [
         ("name", "a" * 32),
@@ -235,7 +291,14 @@ def test_resource_preview(nodes, priority):
         ("run_dir", "/mnt/sfs/jobs/a/../b"),
         ("run_dir", "/mnt/sfs/jobs/a/"),
         ("env", {"WANDB_API_KEY": "synthetic-secret"}),
+        ("env", {"FLEET_CREDENTIAL": "synthetic-secret"}),
         ("env", {"FLEET_CREDENTIALS_B64": "synthetic-secret"}),
+        ("env", {"SERVICE_TOKENS": "synthetic-secret"}),
+        ("env", {"DATABASE_PASSWORDS_FILE": "synthetic-secret"}),
+        ("env", {"DEPLOY_SECRETS_JSON": "synthetic-secret"}),
+        ("env", {"SERVICE_API_KEYS": "synthetic-secret"}),
+        ("env", {"CLOUD_ACCESS_KEYS_JSON": "synthetic-secret"}),
+        ("env", {"WORKERS": "1"}),
         ("env", {"X": 1}),
         ("secrets", "not-a-list"),
         ("image_pull_secrets", ["INVALID"]),
@@ -282,6 +345,7 @@ def test_malformed_preview_replicas_fail_before_submission(replicas):
     "path,value",
     [
         (("kind",), "Job"),
+        (("metadata", "name"), "peer-run-1234abcd"),
         (("metadata", "namespace"), "peer"),
         (("metadata", "labels", "kueue.x-k8s.io/queue-name"), "bypass"),
         (("metadata", "labels", "kueue.x-k8s.io/priority-class"), "q0"),
@@ -317,6 +381,10 @@ def test_manifest_control_plane_drift(path, value):
         "privilege",
         "count",
         "extra_container",
+        "zero_gpu_sidecar",
+        "ephemeral_container",
+        "secret_volume",
+        "projected_secret_volume",
     ],
 )
 def test_pod_resource_and_runtime_drift(change):
@@ -341,15 +409,96 @@ def test_pod_resource_and_runtime_drift(change):
         c["securityContext"]["privileged"] = True
     elif change == "count":
         obj["spec"]["rayClusterSpec"]["workerGroupSpecs"][0]["replicas"] = 1
-    else:
+    elif change == "extra_container":
         pod["containers"].append(deepcopy(c))
+    elif change == "zero_gpu_sidecar":
+        sidecar = deepcopy(c)
+        sidecar["resources"]["requests"]["nvidia.com/gpu"] = 0
+        sidecar["resources"]["limits"]["nvidia.com/gpu"] = 0
+        pod["containers"].append(sidecar)
+    elif change == "ephemeral_container":
+        pod["ephemeralContainers"] = [{"name": "debugger", "image": "debug/image:latest"}]
+    elif change == "secret_volume":
+        pod["volumes"] = [{"name": "private", "secret": {"secretName": "unrequested"}}]
+    else:
+        pod["volumes"] = [
+            {
+                "name": "private",
+                "projected": {"sources": [{"secret": {"name": "unrequested"}}]},
+            }
+        ]
     with pytest.raises(JobsError):
+        validate_preview(config(), preview(obj))
+
+
+def test_platform_init_container_without_environment_or_secret_volume_is_allowed():
+    obj = manifest()
+    pod = obj["spec"]["rayClusterSpec"]["headGroupSpec"]["template"]["spec"]
+    pod["initContainers"] = [
+        {
+            "name": "platform-init",
+            "image": "platform/init:latest",
+            "env": [],
+            "envFrom": [],
+            "volumeMounts": [{"name": "workspace", "mountPath": "/workspace"}],
+        }
+    ]
+    pod["volumes"] = [{"name": "workspace", "emptyDir": {}}]
+    assert validate_preview(config(), preview(obj))["gpus"] == 8
+
+
+@pytest.mark.parametrize("source", ["env", "envFrom"])
+def test_platform_init_container_environment_is_rejected(source):
+    obj = manifest()
+    pod = obj["spec"]["rayClusterSpec"]["headGroupSpec"]["template"]["spec"]
+    init = {"name": "platform-init", "image": "platform/init:latest"}
+    init[source] = (
+        [{"name": "UNREVIEWED", "value": "injected"}]
+        if source == "env"
+        else [{"secretRef": {"name": "unrequested"}}]
+    )
+    pod["initContainers"] = [init]
+    with pytest.raises(JobsError, match="init containers"):
+        validate_preview(config(), preview(obj))
+
+
+@pytest.mark.parametrize("projected", [False, True])
+def test_init_container_cannot_mount_a_secret_volume(projected):
+    obj = manifest()
+    pod = obj["spec"]["rayClusterSpec"]["headGroupSpec"]["template"]["spec"]
+    pod["initContainers"] = [
+        {
+            "name": "platform-init",
+            "image": "platform/init:latest",
+            "volumeMounts": [{"name": "private", "mountPath": "/private"}],
+        }
+    ]
+    source = (
+        {"projected": {"sources": [{"secret": {"name": "unrequested"}}]}}
+        if projected
+        else {"secret": {"secretName": "unrequested"}}
+    )
+    pod["volumes"] = [{"name": "private", **source}]
+    with pytest.raises(JobsError, match="project Secrets"):
         validate_preview(config(), preview(obj))
 
 
 @pytest.mark.parametrize("worker", [False, True])
 @pytest.mark.parametrize(
-    "fault", ["duplicate-env", "optional-secret", "prefixed-secret", "duplicate-secret"]
+    "fault",
+    [
+        "duplicate-env",
+        "value-from-env",
+        "literal-env",
+        "credential-env",
+        "wandb-env",
+        "optional-secret",
+        "prefixed-secret",
+        "duplicate-secret",
+        "extra-secret",
+        "reordered-secret",
+        "missing-platform-secret",
+    ],
 )
 def test_ambiguous_environment_blocks_the_actual_submit_boundary(tmp_path, worker, fault):
     request = {**config(), "workers": 2}
@@ -360,12 +509,28 @@ def test_ambiguous_environment_blocks_the_actual_submit_boundary(tmp_path, worke
     if fault == "duplicate-env":
         # The old dict projection hid a conflicting earlier entry.
         container["env"].insert(0, {"name": "RUN_DIR", "value": "/mnt/sfs/jobs/other"})
+    elif fault == "value-from-env":
+        container["env"].append(
+            {"name": "POD_NAME", "valueFrom": {"fieldRef": {"fieldPath": "metadata.name"}}}
+        )
+    elif fault == "literal-env":
+        container["env"].append({"name": "UNREVIEWED_MODE", "value": "enabled"})
+    elif fault == "credential-env":
+        container["env"].append({"name": "UNREQUESTED_ACCESS_TOKEN", "value": "injected"})
+    elif fault == "wandb-env":
+        container["env"].append({"name": "WANDB_PROJECT", "value": "injected"})
     elif fault == "optional-secret":
         container["envFrom"][0]["secretRef"]["optional"] = True
     elif fault == "prefixed-secret":
         container["envFrom"][0]["prefix"] = "RENAMED_"
-    else:
+    elif fault == "duplicate-secret":
         container["envFrom"].append(deepcopy(container["envFrom"][0]))
+    elif fault == "extra-secret":
+        container["envFrom"].append({"secretRef": {"name": "unrequested-secret"}})
+    elif fault == "reordered-secret":
+        container["envFrom"].reverse()
+    else:
+        container["envFrom"].pop()
     calls = []
 
     def handler(req):
@@ -645,8 +810,9 @@ def test_cancel_once_accepts_documented_empty_204_and_requires_reconciliation():
 @pytest.mark.parametrize("name", ["", "-run", "run-", "../runs", "RUN", "a" * 64])
 def test_cancel_once_rejects_nonexact_run_names_without_a_request(name):
     calls = []
-    with client(lambda request: calls.append(request)) as api, pytest.raises(
-        JobsError, match="exact run name"
+    with (
+        client(lambda request: calls.append(request)) as api,
+        pytest.raises(JobsError, match="exact run name"),
     ):
         api.cancel_once(name)
     assert calls == []
