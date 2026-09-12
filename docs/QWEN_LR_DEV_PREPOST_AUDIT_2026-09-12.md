@@ -51,6 +51,15 @@ Its intended fresh SFS path is
 This audit did not stage it. Local private publication is under
 `data/private/qwen-study-20260911/teacher-corpus-a-available-outcome-v2/`.
 
+After this audit was committed, the exact local manifest was staged once at
+the fresh SFS path by zero-GPU helper Pod
+`chris-q38-manifest-stage-v1` (UID
+`d7283bd4-db5f-4958-90f7-f09ded32d113`). A separate read-only process
+revalidated its file and self digests plus its protocol, source, split,
+tokenizer, train-file, source-selection and target-policy bindings. The helper
+had zero restarts, was deleted, and is absent. The immutable sanitized evidence
+is [the SFS stage receipt](evidence/qwen38-study/2026-09-12-available-a-protocol-successor-stage-v1.json).
+
 `python -m training.corpus_protocol` provides a small metadata-only create-once
 publication utility. It requires exact source/protocol digests and changes no
 Parquet or source record. The SFT compiler now accepts an optional

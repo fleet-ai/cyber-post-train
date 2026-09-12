@@ -1,0 +1,54 @@
+{
+  "schema": "cyber_sft_manifest_stage_receipt_v1",
+  "recorded_at": "2026-09-12T12:43:21Z",
+  "classification": "metadata_only_create_once_sfs_stage",
+  "cluster": "dev",
+  "namespace": "fleet-train-jobs",
+  "helper": {
+    "kind": "Pod",
+    "name": "chris-q38-manifest-stage-v1",
+    "uid": "d7283bd4-db5f-4958-90f7-f09ded32d113",
+    "image_id": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "creation_time": "2026-09-12T12:41:12Z",
+    "phase_before_delete": "Running",
+    "restart_count": 0,
+    "gpu_request": 0,
+    "deleted_and_absent": true
+  },
+  "source": {
+    "path": "data/private/qwen-study-20260911/teacher-corpus-a-available-outcome-v2/manifest.json",
+    "file_sha256": "sha256:d7fcb3e0c8c7726f5d1175f831fa0e88af632f1c6b68c6101c8db3e2cf4b85f7",
+    "bytes": 5467
+  },
+  "destination": {
+    "path": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/teacher-a/manifest-available-a-outcome-v2.json",
+    "absent_before_create": true,
+    "create_once_no_clobber": true,
+    "mode": "0600",
+    "file_sha256": "sha256:d7fcb3e0c8c7726f5d1175f831fa0e88af632f1c6b68c6101c8db3e2cf4b85f7",
+    "embedded_sha256": "sha256:1b083613c16362daf7c86fd8b458d99d7e167133df919602c21916314142c4dc",
+    "protocol_sha256": "sha256:3c2c65eed748b16b50ef992327324b1fcaad84b190456c4aefe69c6efe748f75",
+    "bytes": 5467
+  },
+  "independent_readback": {
+    "separate_process": true,
+    "file_digest_valid": true,
+    "self_digest_valid": true,
+    "protocol_binding_valid": true,
+    "source_binding_valid": true,
+    "split_binding_valid": true,
+    "tokenizer_binding_valid": true,
+    "train_file_rows_and_tokens_valid": true,
+    "selection_and_target_policy_valid": true,
+    "private_mode_valid": true
+  },
+  "safety": {
+    "parquet_or_source_records_read": false,
+    "prompt_trace_flag_answer_score_read": false,
+    "credential_value_read": false,
+    "job_submitted": false,
+    "gpu_allocated": false,
+    "previous_manifest_modified": false
+  },
+  "sha256": "sha256:8d56d5c229a39848547656a261b482abbc4a840439271ebfa981c59d3e8d9827"
+}
