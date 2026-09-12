@@ -1,6 +1,7 @@
 # Qwen3.8 SkyRL reward-acquisition canary
 
-Status: **blocked before data preparation; not submitted or production-qualified**.
+Status: **source-direct data eligible; GPU launch still blocked on the fresh dev9
+engine receipt and is not submitted or production-qualified**.
 
 This is the smallest real RL run that preserves the qualified Qwen3.8 SkyRL
 shape: one dev-cluster node, eight GPUs, two TP4 rollout engines, eight training
@@ -29,17 +30,25 @@ comparison and not authority for a production run.
   relay image is privacy-disqualified for every renamed run. A different image
   is a different experiment and requires a new reviewed diagnostic closure.
 
-The intended training row is a successor of one historically informative exact
-version. It is not currently eligible. The authoritative per-version GET showed
-that the successor lost the source's exact starting-data binding, so the two
-versions are not a metadata-tools-only pair. The committed v1 summaries also do
-not retain the canonical sanitized response bytes and GET acquisition journal
-required by the v2 gate. A pair of newly self-digested summaries cannot repair
-that absence. `training_data_eligible` is therefore false, and both data
-validation and launch compilation fail closed. Enabling this canary requires a
-new immutable successor plus independently retained source/successor sanitized
-GET bodies and journals whose file/self digests are bound by the exact-version
-evidence; historical reward is only a selection prior.
+The train row now pins the original historically informative exact version
+directly. A bounded zero-GPU dev-cluster acquisition on 2026-09-12 retained the
+canonical privacy-safe v2 source and successor responses, GET observations,
+journals and receipts. The source GET proves the reviewed environment,
+`commercial:v0.0.9` starting data and exact verifier pins. The non-current
+successor is retained only as rejected evidence: its authoritative response is
+missing `data_id` and `data_version`, so it cannot be hydrated reproducibly.
+
+No successor is needed for tools. `training/rl_data.py` injects the separately
+reviewed ordered `bash`, `submit_report` catalog into the Qwen prompt, and
+`training/rl_episode.py` obtains the live MCP catalog and requires its exact
+ordered names and canonical digest before model interaction. The reviewed
+Theseus rollout-rewards implementation at commit
+`75228148c57e72fd054007a2593a324c5d6db97f` hydrates and grades by exact task
+version, environment, seed, instance and verifier; it never reads
+`metadata.tools`. The source receipt itself confirms that field is absent. The
+evidence gate binds all three local enforcement files by digest and derives
+`training_data_eligible: true` from this source-direct closure. Historical
+reward remains only a selection prior.
 
 Dev8 is terminal historical evidence and is not a runtime prerequisite for the
 new image. The fresh [dev9 diagnostic](QWEN38_SKYRL_ENGINE_DIAGNOSTIC_DEV9.md)
@@ -113,9 +122,12 @@ Do not submit until all of these are true:
    config. Run `cyber-post-train rl-data` in the pinned image as user `1000:100`
    on CPU. The canary-specific validator in `training/rl_reward_canary.py`
    binds the exact task-set, split, retained authoritative version observations
-   and 600-turn horizon. The currently missing v2 sanitized GET bodies and
-   acquisition journals are a hard blocker; repo-authored hashes or booleans do
-   not substitute. The generic
+   and 600-turn horizon. The v2 sanitized GET bodies and acquisition journals
+   pass their retained-byte gates. The source receipt must match the reviewed
+   runtime and verifier tuple; the rejected successor must still show exactly
+   the `data_id,data_version` loss. The gate also reopens the digest-bound local
+   tool-injection and runtime-catalog enforcement sources. Repo-authored hashes
+   or booleans do not substitute for those authoritative bytes. The generic
    `training/rl_data.py` stays byte-identical for historical frozen receipts.
    Its new output destination must not already exist. Accept only a digest-valid
    `cyber_skyrl_data_v1` manifest with exactly one train row and one dev row.
@@ -131,8 +143,8 @@ Do not submit until all of these are true:
    Engine-only success on fragmented `2 x 4` allocations does not prove the
    one-worker training allocation is schedulable.
 
-This repository change performs none of those external checks and makes no
-submission.
+The zero-GPU authoritative version acquisition is complete. This repository
+change performs no GPU launch and makes no submission.
 
 ## Terminal acceptance
 

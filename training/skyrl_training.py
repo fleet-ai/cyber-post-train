@@ -143,8 +143,8 @@ ENGINE_DIAGNOSTIC_DATA_IDENTITY = {
     },
 }
 REWARD_CANARY_DATA_CONTRACT = {
-    "selection_sha256": "sha256:608b8c47790fd6e9fef6e86115a7b624273589b8b11e920224db54b7b848e965",
-    "split_sha256": "sha256:fe77cff7256c8c7554eceaf228b855ccc506c2035882d459499fe9b5505ea7db",
+    "selection_sha256": "sha256:2d66f88325900d234ad26ef61930d4a5f7597ce96f54bca45bd05a2ed201b35d",
+    "split_sha256": "sha256:8279ea19808ad1accb00d3f3145c3ec087030677786e0188251cfc197f306adf",
     "tool_catalog_sha256": (
         "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a"
     ),

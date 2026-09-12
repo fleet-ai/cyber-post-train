@@ -24,31 +24,52 @@ SPLIT_PATH = "configs/data/qwen38-rl-reward-canary-split-v1.json"
 EXACT_VERSION_EVIDENCE_PATH = "configs/data/qwen38-rl-reward-canary-exact-version-evidence-v1.json"
 SOURCE_IDENTITY = {
     "task_set_file_sha256": (
-        "sha256:113e561e2fa3339670a846e7e76985a0f5d09ce250ebedddbac8408c2c9c8a79"
+        "sha256:14a514e92c8922b42c5a88bfe031062f8b6b9a87adc31d825b4844e44ce11fe4"
     ),
     "task_set_self_sha256": (
-        "sha256:608b8c47790fd6e9fef6e86115a7b624273589b8b11e920224db54b7b848e965"
+        "sha256:2d66f88325900d234ad26ef61930d4a5f7597ce96f54bca45bd05a2ed201b35d"
     ),
     "split_file_sha256": (
-        "sha256:bcdc058dcb5039c5e68781fea939eaaa928a77f0698d5e8802f457b291f4278c"
+        "sha256:c3a34993a932c2b29e2c70f45682ce03ee02d03a9c4493edbab45eb349cb64fa"
     ),
     "split_self_sha256": (
-        "sha256:fe77cff7256c8c7554eceaf228b855ccc506c2035882d459499fe9b5505ea7db"
+        "sha256:8279ea19808ad1accb00d3f3145c3ec087030677786e0188251cfc197f306adf"
     ),
     "exact_version_evidence_file_sha256": (
-        "sha256:f9f9594d36a6bab11b83d2c1c4e213b1ca88fa98b8d42885cbd83c4f7b80851b"
+        "sha256:fd93e1e2c59ec139c5734ea532d7e20b36db9708b0257ed4cab8d97a89e6e0e1"
     ),
     "exact_version_evidence_self_sha256": (
-        "sha256:d83d8ff2ae66ecc945a439c2a6f47f118a19b928d13721faec4cd28d5b87ee77"
+        "sha256:a6a7547fc363d8a02ea49cdbb59a8c526a9fb439297b03191a4f638f5a284c96"
     ),
-    # No authoritative v2 GET packages have been reviewed. These stay null so
-    # a newly self-digested repo package cannot silently authorize training.
-    "eligible_source_observation_file_sha256": None,
-    "eligible_source_response_file_sha256": None,
-    "eligible_source_journal_file_sha256": None,
-    "metadata_only_successor_observation_file_sha256": None,
-    "metadata_only_successor_response_file_sha256": None,
-    "metadata_only_successor_journal_file_sha256": None,
+    # The source package authorizes the direct selection; the successor package
+    # proves why the non-current clone is rejected instead of treated as equal.
+    "eligible_source_observation_file_sha256": (
+        "sha256:2b02d2972463921db79949bd280569155f5c818fc91d8621f69e281ca0dcdebe"
+    ),
+    "eligible_source_response_file_sha256": (
+        "sha256:d575753138844437da893ef9a8c14f88afac922292e5486a24114b89edc55e09"
+    ),
+    "eligible_source_journal_file_sha256": (
+        "sha256:18903bbe35b7cba655efeea6134d8f61300a98a53d804101c54ef7cd86b6ca55"
+    ),
+    "metadata_only_successor_observation_file_sha256": (
+        "sha256:196bc04eedb7aef49faf61c03c17f5ab7ff6c3fd9eb14e2ab697fa7dea043ad6"
+    ),
+    "metadata_only_successor_response_file_sha256": (
+        "sha256:cf9b6e5f8f6fcd7ab75df88fc22049f02348b2744af53d7d540ea62083f70a2b"
+    ),
+    "metadata_only_successor_journal_file_sha256": (
+        "sha256:dc12912799ef5e5420e35c53a1eb9af6bb1a1ea7dcb3f9d1d71530219c697552"
+    ),
+    "data_preparation_file_sha256": (
+        "sha256:f0c327d2ecc464610a5fd86e11b112870d28feb43d9155d7507d8fedbd87632b"
+    ),
+    "episode_runtime_file_sha256": (
+        "sha256:e0a821e98e32e32330ffe4c1b37b63c583fa3bc534b709efc710b0d77fe86569"
+    ),
+    "fleet_binding_file_sha256": (
+        "sha256:b28e267d02024ac979f4a0f39ee778e68331da490f5084c3e5a34136eff04707"
+    ),
 }
 LIMITS = {
     "context_tokens": 98304,
@@ -385,6 +406,79 @@ def _version_receipt(
     return receipt
 
 
+def _validate_tool_surface_authority(
+    authority: object,
+    *,
+    evidence_path: Path,
+    task_set: dict,
+    source_receipt: dict,
+) -> None:
+    """Prove that task metadata is not the canary's tool-catalog authority."""
+    if not isinstance(authority, dict):
+        raise ValueError("reward canary tool-surface authority is missing")
+    expected_code = {
+        "data_preparation": {
+            "path": "../../training/rl_data.py",
+            "file_sha256": SOURCE_IDENTITY["data_preparation_file_sha256"],
+            "symbols": ["build"],
+        },
+        "episode_runtime": {
+            "path": "../../training/rl_episode.py",
+            "file_sha256": SOURCE_IDENTITY["episode_runtime_file_sha256"],
+            "symbols": ["collect", "_agent"],
+        },
+        "fleet_binding": {
+            "path": "../../evals/fleet/opencode_self_hosted.py",
+            "file_sha256": SOURCE_IDENTITY["fleet_binding_file_sha256"],
+            "symbols": ["bind_task", "verify_task", "assert_required_task_tools"],
+        },
+    }
+    expected_route = {
+        "theseus_commit": "75228148c57e72fd054007a2593a324c5d6db97f",
+        "path": "orchestrator/public_api/rollout_rewards.py",
+        "exact_version_hydration": True,
+        "metadata_tools_read": False,
+        "provisioning_route": (
+            "/v1/rollout-rewards/{task_key}/versions/{task_version_id}/instances"
+        ),
+        "scoring_route": "/v1/rollout-rewards/{task_key}/versions/{task_version_id}",
+    }
+    if authority != {
+        "mode": "trainer_injected_reviewed_catalog_plus_runtime_mcp_exact_match",
+        "task_metadata_tools_required": False,
+        "source_metadata_tools": None,
+        "ordered_tools": ["bash", "submit_report"],
+        "tool_catalog_sha256": task_set.get("tool_catalog_sha256"),
+        "local_code": expected_code,
+        "reviewed_server_route": expected_route,
+    } or source_receipt.get("metadata_tools") is not None:
+        raise ValueError("reward canary tool-surface authority changed")
+
+    markers = {
+        "data_preparation": (
+            b'[t.get("name") for t in catalog] != ["bash", "submit_report"]',
+            b"messages, tools=tools, tokenize=False, add_generation_prompt=True",
+        ),
+        "episode_runtime": (
+            b"catalog = (await mcp.list_tools()).tools",
+            b"fleet.assert_required_task_tools(",
+            b'for name in config["execution"]["required_task_tools"]',
+        ),
+        "fleet_binding": (
+            b"def bind_task(",
+            b"def verify_task(",
+            b"def assert_required_task_tools(",
+            b"if tool_names != required:",
+        ),
+    }
+    for name, binding in expected_code.items():
+        payload = _bound_bytes(
+            evidence_path.parent / binding["path"], binding["file_sha256"]
+        )
+        if any(marker not in payload for marker in markers[name]):
+            raise ValueError("reward canary tool enforcement source changed")
+
+
 def validate_exact_version_evidence(
     task_set: dict,
     split: dict,
@@ -392,7 +486,7 @@ def validate_exact_version_evidence(
     *,
     task_set_dir: Path,
 ) -> None:
-    """Validate non-content successor eligibility and the 600-turn-only horizon."""
+    """Validate the exact source-direct eligibility and 600-turn-only horizon."""
     _sealed(task_set, "cyber_rl_task_set_v1")
     _sealed(split, "cyber_task_split_v1")
     _validate_source_identity(task_set, split, limits)
@@ -448,18 +542,20 @@ def validate_exact_version_evidence(
         task_key=source.get("task_key"),
         task_version_id=source.get("task_version_id"),
     )
-    successor = evidence.get("metadata_only_successor", {})
+    successor = evidence.get("rejected_metadata_only_successor", {})
     successor_receipt = _version_receipt(
         successor.get("version_receipt"),
         evidence_path=evidence_path,
         role="metadata_only_successor",
-        task_key=selected_key[0],
-        task_version_id=selected_key[1],
+        task_key=source.get("task_key"),
+        task_version_id=successor.get("successor_task_version_id"),
     )
     if (
-        successor.get("source_task_version_id") != source.get("task_version_id")
-        or successor.get("successor_task_version_id") != selected_key[1]
+        selected_key != (source.get("task_key"), source.get("task_version_id"))
+        or successor.get("source_task_version_id") != source.get("task_version_id")
+        or successor.get("successor_task_version_id") == selected_key[1]
         or successor.get("only_semantic_diff_path") != "/metadata/tools"
+        or successor.get("eligibility_status") != "rejected_missing_versioned_starting_data"
         or successor.get("ordered_tools") != ["bash", "submit_report"]
         or source_receipt.get("metadata_tools") is not None
         or successor_receipt.get("metadata_tools") != ["bash", "submit_report"]
@@ -501,26 +597,30 @@ def validate_exact_version_evidence(
     ):
         raise ValueError("eligible source receipt differs from reviewed runtime identity")
 
-    differing_fields = sorted(
+    successor_differing_fields = sorted(
         key
         for key in _VERSION_FIELD_NAMES
         if source_receipt["field_sha256"][key] != successor_receipt["field_sha256"][key]
     )
-    receipt_equivalent = (
-        not differing_fields
-        and source_receipt["metadata_without_tools_sha256"]
-        == successor_receipt["metadata_without_tools_sha256"]
-    )
-    derived_status = (
-        "eligible_authoritative_metadata_only_successor"
-        if receipt_equivalent
-        else "blocked_authoritative_receipt_mismatch"
+    if (
+        successor_differing_fields != ["data_id", "data_version"]
+        or successor.get("authoritative_differing_fields") != successor_differing_fields
+        or source_receipt["metadata_without_tools_sha256"]
+        != successor_receipt["metadata_without_tools_sha256"]
+    ):
+        raise ValueError("rejected metadata-only successor evidence changed")
+
+    _validate_tool_surface_authority(
+        evidence.get("tool_surface_authority"),
+        evidence_path=evidence_path,
+        task_set=task_set,
+        source_receipt=source_receipt,
     )
     if (
-        selected.get("eligibility_status") != derived_status
-        or task_set.get("training_data_eligible") is not receipt_equivalent
+        selected.get("eligibility_status") != "eligible_authoritative_source_direct"
+        or task_set.get("training_data_eligible") is not True
     ):
-        raise ValueError("reward-canary eligibility assertion is not receipt-derived")
+        raise ValueError("source-direct reward-canary eligibility is not receipt-derived")
 
     horizon = evidence.get("episode_horizon", {})
     fixed_limits = horizon.get("fixed_limits")
@@ -557,11 +657,6 @@ def validate_exact_version_evidence(
     )
     if b"source Fleet job allowed 600 agent steps" not in aggregate or b"p90 154" not in aggregate:
         raise ValueError("aggregate episode-horizon evidence changed")
-    if not receipt_equivalent:
-        raise ValueError(
-            "authoritative source/successor receipts are not metadata-only equivalent: "
-            + ",".join(differing_fields)
-        )
 
 
 def validate_config(config: dict, *, relative_to: Path) -> dict | None:
@@ -639,7 +734,7 @@ def validate_source_proof(proof: object, metadata: dict) -> None:
 
 
 def build(config: dict, *, relative_to: Path, client) -> dict:
-    """Validate the successor/horizon closure, then use the frozen generic builder."""
+    """Validate the source-direct/horizon closure, then use the frozen generic builder."""
     # The generic builder owns required-field errors. This conditional keeps
     # its long-standing test/substitution seam while every real task set is
     # inspected before any authenticated Fleet GET.

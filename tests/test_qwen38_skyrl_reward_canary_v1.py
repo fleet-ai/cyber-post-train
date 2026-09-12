@@ -145,7 +145,7 @@ def diagnostic_preview(*, uid: int = 1000, gid: int = 100, nonroot: bool = True)
     }
 
 
-def test_task_selection_uses_only_exact_receipt_bound_successors() -> None:
+def test_task_selection_uses_the_authoritative_source_directly() -> None:
     task_set, split = load(TASK_SET), load(SPLIT)
     old_task_set, evidence = load(FILTERED_TASK_SET), load(SUCCESSOR_EVIDENCE)
     version_evidence = load(VERSION_EVIDENCE)
@@ -153,7 +153,7 @@ def test_task_selection_uses_only_exact_receipt_bound_successors() -> None:
     assert_self_digest(split)
     assert_self_digest(version_evidence)
     provenance = task_set["reward_signal_provenance"]
-    assert provenance["kind"] == "blocked_historical_source_to_receipt_mismatched_successor"
+    assert provenance["kind"] == "eligible_authoritative_source_direct"
     assert provenance["evidence_path"] == str(SUCCESSOR_EVIDENCE.relative_to(ROOT))
     assert (
         provenance["evidence_file_sha256"]
@@ -167,10 +167,6 @@ def test_task_selection_uses_only_exact_receipt_bound_successors() -> None:
     assert task_set["source_manifest_sha256"] == old_task_set["source_manifest_sha256"]
     assert task_set["tool_catalog_sha256"] == old_task_set["tool_catalog_sha256"]
 
-    successors = {
-        row["source_task_version_id"]: row["metadata_only_successor_task_version_id"]
-        for row in evidence["task_successors"]
-    }
     old_by_key = {row["task_key"]: row for row in old_task_set["tasks"]}
     new_by_key = {row["task_key"]: row for row in task_set["tasks"]}
     assignments = {
@@ -187,35 +183,38 @@ def test_task_selection_uses_only_exact_receipt_bound_successors() -> None:
         if assignments[(row["task_key"], row["task_version_id"])] == "dev"
     ]
     assert len(train) == 1 and len(dev) == 1
-    for row in train:
-        source = old_by_key[row["task_key"]]
-        assert row["task_version_id"] == successors[source["task_version_id"]]
-        assert {key: row[key] for key in row if key != "task_version_id"} == {
-            key: source[key] for key in source if key != "task_version_id"
-        }
+    source = old_by_key[train[0]["task_key"]]
+    assert train[0] == source
     assert dev[0] == old_by_key[dev[0]["task_key"]]
     assert set(new_by_key) < set(old_by_key)
-    with pytest.raises(ValueError, match="not approved for training"):
-        rl_data.selection(task_set, split)
+    assert rl_data.selection(task_set, split) == [
+        {**dev[0], "split": "dev"},
+        {**train[0], "split": "train"},
+    ]
     assert "webexploit" not in json.dumps(task_set).lower()
     assert all(row["reference_session_id"] is None for row in split["tasks"])
 
     selected = version_evidence["selected_version"]
     assert selected["task_version_id"] == train[0]["task_version_id"]
-    assert selected["eligibility_status"] == "blocked_authoritative_receipt_mismatch"
-    assert task_set["training_data_eligible"] is False
+    assert selected["eligibility_status"] == "eligible_authoritative_source_direct"
+    assert task_set["training_data_eligible"] is True
     assert version_evidence["eligible_source"]["task_version_id"] == source["task_version_id"]
-    assert (
-        version_evidence["metadata_only_successor"]["successor_task_version_id"]
-        == (train[0]["task_version_id"])
+    rejected = version_evidence["rejected_metadata_only_successor"]
+    assert rejected["successor_task_version_id"] == (
+        evidence["task_successors"][0]["metadata_only_successor_task_version_id"]
     )
-    with pytest.raises(ValueError, match="retained sanitized authoritative GET observation"):
-        rl_reward_canary.validate_exact_version_evidence(
-            task_set,
-            split,
-            load(DATA)["limits"],
-            task_set_dir=TASK_SET.parent,
-        )
+    assert rejected["eligibility_status"] == "rejected_missing_versioned_starting_data"
+    assert rejected["authoritative_differing_fields"] == ["data_id", "data_version"]
+    tools = version_evidence["tool_surface_authority"]
+    assert tools["task_metadata_tools_required"] is False
+    assert tools["source_metadata_tools"] is None
+    assert tools["ordered_tools"] == ["bash", "submit_report"]
+    rl_reward_canary.validate_exact_version_evidence(
+        task_set,
+        split,
+        load(DATA)["limits"],
+        task_set_dir=TASK_SET.parent,
+    )
 
 
 def test_exact_version_and_horizon_evidence_are_fail_closed() -> None:
@@ -230,7 +229,7 @@ def test_exact_version_and_horizon_evidence_are_fail_closed() -> None:
             "sha256:" + hashlib.sha256(HORIZON_CONTRACT.read_bytes()).hexdigest()
         ),
         "selected_task_row_sha256": (
-            "sha256:1a903c4a73687e957a8aa7d5203bb5111542bfcbc922a0019fd6dca24ef09eab"
+            "sha256:1cda928ba27c57235eafed117db3187c64e984b237ebd8ee56743711c68f07b4"
         ),
         "rollout_contract_sha256": (
             "sha256:5303bc66daa31bff54c6a0d396fd8ada98cf8655078255ffb0cec53588635d9c"
@@ -266,8 +265,9 @@ def test_exact_version_and_horizon_evidence_are_fail_closed() -> None:
             task_set_dir=TASK_SET.parent,
         )
 
-    with pytest.raises(ValueError, match="retained sanitized authoritative GET observation"):
-        rl_reward_canary.validate_config(load(DATA), relative_to=DATA.parent)
+    assert rl_reward_canary.validate_config(load(DATA), relative_to=DATA.parent) == (
+        rl_reward_canary.source_proof()
+    )
     assert hashlib.sha256((ROOT / "training/rl_data.py").read_bytes()).hexdigest() == (
         "f0c327d2ecc464610a5fd86e11b112870d28feb43d9155d7507d8fedbd87632b"
     )
