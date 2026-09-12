@@ -41,34 +41,74 @@ def test_v5_is_inert_and_binds_the_exact_v4_successor() -> None:
         "cluster_or_api_mutations_performed": False,
         "all_cells_currently_launchable": False,
         "next_safe_transition": (
-            "bind the missing source cadence terminal artifacts, close the combined "
-            "cadence gate and accept the split-A base control, then materialize and "
-            "preview only the canonical 1e-5 first production cell"
+            "run offline and pinned-image preflight, then reviewed dev preview and "
+            "duplicate-capacity checks for the first bounded LR qualification wave; "
+            "production remains blocked on the split-A base control and its own exact preview"
         ),
     }
 
 
-def test_v5_binds_only_the_independently_accepted_cadence_reload_scope() -> None:
+def test_v5_opens_only_bounded_lr_dev_work_with_pod_gap_preserved() -> None:
     value = sealed(V5)
     evidence = sealed(CADENCE_RELOAD_EVIDENCE)
     gate = value["opening_gates"]["cadence_training_and_periodic_reload"]
 
-    assert gate["state"] == "partial_reload_accepted_source_terminal_artifacts_unbound"
-    assert gate["accepted_reload_evidence"] == {
+    assert gate["state"] == (
+        "accepted_for_bounded_lr_dev_qualification_with_irrecoverable_source_pod_provenance_gap"
+    )
+    assert gate["accepted_evidence"] == {
         "path": str(CADENCE_RELOAD_EVIDENCE.relative_to(ROOT)),
         "file_sha256": file_sha256(CADENCE_RELOAD_EVIDENCE),
         "embedded_sha256": evidence["sha256"],
         "proof_self_digest": evidence["independent_verifier"]["proof_self_digest"],
     }
-    assert gate["combined_gate_closed"] is False
-    assert gate["accepted_receipt_sha256"] is None
+    assert gate["opens_bounded_lr_dev_qualification"] is True
+    assert gate["full_terminal_provenance_complete"] is False
+    assert gate["source_zero_restarts_verified"] is False
+    assert gate["accepted_receipt_sha256"] == evidence["sha256"]
     assert (
         gate["unresolved_source_terminal_evidence"]
         == evidence["source_cadence_run"]["unresolved_terminal_evidence"]
     )
-    assert (
+    assert gate["unresolved_source_terminal_evidence"] == [
+        "source_pod_uids_and_restart_counts_ttl_cleaned_before_capture"
+    ]
+    cadence_dependency = (
         "opening_gates.cadence_training_and_periodic_reload.accepted_receipt_sha256"
-        in value["first_production_cell"]["unresolved_dependencies"]
+    )
+    assert cadence_dependency not in value["first_production_cell"]["unresolved_dependencies"]
+    qualification = value["remaining_lr_qualification"]
+    assert qualification["state"] == "ready_for_offline_preflight_and_reviewed_dev_preview"
+    assert qualification["opening_gate_binding"].endswith("accepted_receipt_sha256")
+    assert qualification["launchable_by_this_file"] is False
+    assert value["first_production_cell"]["state"] == "blocked"
+    assert value["opening_gates"]["split_a_base_control"]["accepted_result_sha256"] is None
+    assert value["opening_gates"]["production_preview"]["accepted_receipt_sha256"] is None
+
+    cadence = read(ROOT / gate["config_path"])
+    source_receipts = evidence["source_cadence_run"]["terminal_receipts"]
+    assert (
+        gate["required_optimizer_steps"]
+        == cadence["pause_after_step"]
+        == source_receipts["training_paused"]["optimizer_step"]
+        == 21
+    )
+    assert (
+        gate["periodic_checkpoint_step"]
+        == cadence["recipe"]["checkpoint_interval"]
+        == evidence["source_checkpoint"]["optimizer_step"]
+        == 20
+    )
+    assert (
+        gate["required_world_size"]
+        == cadence["recipe"]["nodes"] * cadence["recipe"]["gpus_per_node"]
+        == evidence["source_checkpoint"]["world_size"]
+        == evidence["terminal_evidence"]["rank_count"]
+        == 8
+    )
+    assert (
+        gate["required_reload_optimizer_updates"]
+        == evidence["terminal_evidence"]["optimizer_updates_executed"]
     )
 
 
@@ -94,7 +134,45 @@ def test_cadence_reload_evidence_is_exact_terminal_and_zero_update() -> None:
         "effective_priority_value": 10_000,
         "requeue_if_preempted": False,
     }
-    assert len(source["unresolved_terminal_evidence"]) == 4
+    assert source["unresolved_terminal_evidence"] == [
+        "source_pod_uids_and_restart_counts_ttl_cleaned_before_capture"
+    ]
+    receipts = source["terminal_receipts"]
+    assert receipts["started"] == {
+        "path": "/mnt/sfs/jobs/chris-q38-ta8-cad20-dev5/STARTED.json",
+        "file_sha256": ("sha256:cee4fa8b3fcd97fc66dc9c2f46476cf5f4808fcfce47810753d864eafffccb86"),
+        "receipt_sha256": (
+            "sha256:4511412be3e95b221e4487e3e9921df4270adf209427d620c0e70da5620dc765"
+        ),
+    }
+    assert receipts["training_paused"]["status"] == "training_paused"
+    assert receipts["training_paused"]["optimizer_step"] == 21
+    assert receipts["training_paused"]["file_sha256"] == (
+        "sha256:37cce00706b113cc9be37a9d6433e78ff3c57f8c38e0065eeab74208774f5ec8"
+    )
+    assert receipts["training_paused"]["receipt_sha256"] == (
+        "sha256:80f23447a47d8764bca1014f6ebc49ec621e25bd635f8ec834d67c5400147284"
+    )
+    assert receipts["wandb_sync"]["status"] == "synced"
+    assert receipts["wandb_sync"]["reason_codes"] == []
+    assert receipts["wandb_sync"]["file_sha256"] == (
+        "sha256:922077e109e104b3cea596bc0d8eb09d646add1aadf0b715b5cfbdcbe7e6db54"
+    )
+    assert receipts["wandb_sync"]["receipt_sha256"] == (
+        "sha256:fd29266bb321373d324066408c51b47ac67ac5142de3677e8edaa0b0f8b8890a"
+    )
+    assert receipts["checkpoint_step_20"]["file_sha256"] == (
+        "sha256:b8341932348719cd45f829e29262a775ea9a61c22dd6beeee137cd3209282e07"
+    )
+    assert receipts["checkpoint_step_20"]["receipt_sha256"] == (
+        "sha256:86080ad1a9c3595576a635180405a535cabf8792baf176aa4e658e6211459e0b"
+    )
+    assert receipts["checkpoint_step_21"]["file_sha256"] == (
+        "sha256:840f091afeb4bae3b2fe82457355db4b493023e2147cb32c32663773fa2833a2"
+    )
+    assert receipts["checkpoint_step_21"]["receipt_sha256"] == (
+        "sha256:8cb025040d87b9a0a860a7a1a663c295b8feb8401b8d8b2c5d74ac15389b1f86"
+    )
 
     assert reload["config"]["file_sha256"] == file_sha256(ROOT / reload["config"]["path"])
     assert reload["api_run_id"] == "db29f2b4-e03f-4e7d-99dd-c16f7c811931"
@@ -154,7 +232,11 @@ def test_cadence_reload_evidence_is_exact_terminal_and_zero_update() -> None:
     assert verifier["proof_self_digest"] == (
         "sha256:6cf2c2431db0b2cd7f87368b775d6891242805cf85a1a1b2eb9e342a59560ad4"
     )
-    assert evidence["accepted_scope"]["combined_cadence_training_and_reload_gate_closed"] is False
+    scope = evidence["accepted_scope"]
+    assert scope["combined_gate_closed_for_bounded_lr_dev_qualification"] is True
+    assert scope["full_terminal_provenance_complete"] is False
+    assert scope["source_zero_restarts_verified"] is False
+    assert scope["production_training_authorized"] is False
 
 
 def test_representative_splits_are_exact_lineage_safe_and_share_final_test() -> None:

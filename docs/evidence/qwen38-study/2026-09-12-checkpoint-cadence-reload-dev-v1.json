@@ -1,6 +1,6 @@
 {
   "schema": "cyber_qwen38_sft_checkpoint_cadence_reload_evidence_v1",
-  "classification": "accepted_operational_checkpoint_reload_gate_with_partial_source_cadence_evidence",
+  "classification": "accepted_operational_cadence_and_reload_gate_with_irrecoverable_source_pod_provenance_gap",
   "source_cadence_run": {
     "config": {
       "path": "configs/qualification/qwen38-teacher-checkpoint-cadence-dev-v1.json",
@@ -29,12 +29,40 @@
       "requeue_if_preempted": false
     },
     "requested_image_digest": "sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
-    "evidence_state": "terminal_controller_and_release_facts_bound_source_terminal_artifacts_still_unbound",
+    "terminal_receipts": {
+      "started": {
+        "path": "/mnt/sfs/jobs/chris-q38-ta8-cad20-dev5/STARTED.json",
+        "file_sha256": "sha256:cee4fa8b3fcd97fc66dc9c2f46476cf5f4808fcfce47810753d864eafffccb86",
+        "receipt_sha256": "sha256:4511412be3e95b221e4487e3e9921df4270adf209427d620c0e70da5620dc765"
+      },
+      "training_paused": {
+        "path": "/mnt/sfs/jobs/chris-q38-ta8-cad20-dev5/TRAINING_PAUSED.json",
+        "file_sha256": "sha256:37cce00706b113cc9be37a9d6433e78ff3c57f8c38e0065eeab74208774f5ec8",
+        "receipt_sha256": "sha256:80f23447a47d8764bca1014f6ebc49ec621e25bd635f8ec834d67c5400147284",
+        "status": "training_paused",
+        "optimizer_step": 21
+      },
+      "wandb_sync": {
+        "path": "/mnt/sfs/jobs/chris-q38-ta8-cad20-dev5/WANDB_SYNC_STATUS.json",
+        "file_sha256": "sha256:922077e109e104b3cea596bc0d8eb09d646add1aadf0b715b5cfbdcbe7e6db54",
+        "receipt_sha256": "sha256:fd29266bb321373d324066408c51b47ac67ac5142de3677e8edaa0b0f8b8890a",
+        "status": "synced",
+        "reason_codes": []
+      },
+      "checkpoint_step_20": {
+        "path": "/mnt/sfs/jobs/chris-q38-ta8-cad20-dev5/checkpoint_receipts/step-000020.json",
+        "file_sha256": "sha256:b8341932348719cd45f829e29262a775ea9a61c22dd6beeee137cd3209282e07",
+        "receipt_sha256": "sha256:86080ad1a9c3595576a635180405a535cabf8792baf176aa4e658e6211459e0b"
+      },
+      "checkpoint_step_21": {
+        "path": "/mnt/sfs/jobs/chris-q38-ta8-cad20-dev5/checkpoint_receipts/step-000021.json",
+        "file_sha256": "sha256:840f091afeb4bae3b2fe82457355db4b493023e2147cb32c32663773fa2833a2",
+        "receipt_sha256": "sha256:8cb025040d87b9a0a860a7a1a663c295b8feb8401b8d8b2c5d74ac15389b1f86"
+      }
+    },
+    "evidence_state": "terminal_controller_release_and_self_digest_valid_artifacts_bound_source_pod_provenance_irrecoverable",
     "unresolved_terminal_evidence": [
-      "source_pod_uids_and_restart_counts",
-      "digest_valid_training_paused_receipt",
-      "digest_valid_periodic_and_pause_checkpoint_receipts",
-      "complete_scalar_only_wandb_finish_and_sync_receipt"
+      "source_pod_uids_and_restart_counts_ttl_cleaned_before_capture"
     ]
   },
   "run": {
@@ -111,16 +139,19 @@
     ]
   },
   "accepted_scope": {
-    "conclusion": "The exact eight-rank periodic step-20 checkpoint reload completes on the dev layout with sampler and scheduler state restored, without an optimizer update, while leaving the source checkpoint unchanged and releasing all eight GPUs.",
-    "gate": "checkpoint-cadence-20-zero-update-reload",
+    "conclusion": "The cadence source reached its planned step-21 pause with digest-valid start, training, W&B and step-20/21 checkpoint receipts; the exact eight-rank periodic step-20 checkpoint then reloaded on the dev layout with sampler and scheduler state restored, without an optimizer update, while leaving the source checkpoint unchanged and releasing all GPUs.",
+    "gate": "checkpoint-cadence-20-training-and-zero-update-reload",
     "operational_only": true,
-    "combined_cadence_training_and_reload_gate_closed": false
+    "combined_gate_closed_for_bounded_lr_dev_qualification": true,
+    "full_terminal_provenance_complete": false,
+    "source_zero_restarts_verified": false,
+    "production_training_authorized": false
   },
   "limitations": [
     "This is an operational checkpoint/recovery gate, not model-quality or task-capability evidence.",
     "It does not bind the split-A Fleet base control, authorize a production arm or select a hyperparameter.",
-    "The source cadence Job's terminal API, RayJob and Workload identities and release are bound, but its Pod UIDs, restart counts and top-level training, checkpoint and W&B receipt digests are not yet bound; this evidence therefore does not close the combined source-training-and-reload gate.",
+    "The source cadence RayCluster and Pods were TTL-cleaned before their immutable UIDs and restart counts were captured. Those facts cannot be reconstructed, full terminal provenance remains incomplete and this record makes no zero-restart claim for the source run.",
     "The reload does not execute an optimizer update or compute teacher-reference cross-entropy."
   ],
-  "sha256": "sha256:50e87cfeced3bf11c10199846695b8824fe4e5cd270d724c334e74d9104c82b7"
+  "sha256": "sha256:23c0710bde7410b4f7be496c950ba0bd2f8e86d925f6a1785f88c5c31dff9f71"
 }

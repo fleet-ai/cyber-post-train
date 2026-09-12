@@ -259,11 +259,14 @@ no training artifacts, then exited successfully and was deleted.
 
 The sanitized, self-digested evidence is
 [`2026-09-12-checkpoint-cadence-reload-dev-v1.json`](evidence/qwen38-study/2026-09-12-checkpoint-cadence-reload-dev-v1.json).
-It accepts only the operational step-20 reload. The source cadence Pod UIDs,
-restart counts and top-level training, checkpoint and W&B receipt digests have
-not yet been bound into this record. Therefore the combined cadence-training
-and reload gate in
+It binds digest-valid source start, step-21 pause, W&B sync and step-20/21
+checkpoint receipts as well as the independently verified step-20 reload. The
+source cadence RayCluster and Pods were TTL-cleaned before their immutable UIDs
+and restart counts were captured, so full terminal provenance remains incomplete
+and no zero-restart claim is made for that source run. The combined operational
+gate in
 [`qwen-blackbox-teacher-staged-search-v5.json`](../configs/studies/qwen-blackbox-teacher-staged-search-v5.json)
-remains explicitly partial, no production cell is launchable, and the next
-evidence step is to bind those source artifacts before also accepting the
-split-A base control.
+is accepted narrowly enough to open offline preflight and reviewed dev preview
+for the bounded LR qualification cells. It does not authorize a submission by
+itself. Production remains blocked on the split-A base control and exact
+production preview.

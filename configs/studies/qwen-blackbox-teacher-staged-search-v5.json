@@ -69,27 +69,26 @@
   },
   "opening_gates": {
     "cadence_training_and_periodic_reload": {
-      "state": "partial_reload_accepted_source_terminal_artifacts_unbound",
+      "state": "accepted_for_bounded_lr_dev_qualification_with_irrecoverable_source_pod_provenance_gap",
       "config_path": "configs/qualification/qwen38-teacher-checkpoint-cadence-dev-v1.json",
       "config_file_sha256": "sha256:fcbd879716217d89e7bbb07bd0d67783682c0b58dddd60b315ddd6942e4ba923",
       "required_optimizer_steps": 21,
       "periodic_checkpoint_step": 20,
       "required_world_size": 8,
       "required_reload_optimizer_updates": 0,
-      "accepted_reload_evidence": {
+      "accepted_evidence": {
         "path": "docs/evidence/qwen38-study/2026-09-12-checkpoint-cadence-reload-dev-v1.json",
-        "file_sha256": "sha256:fa62f69793a79dbeb256e771cf4723d679afd4de21a9ed40298c3991b784768a",
-        "embedded_sha256": "sha256:50e87cfeced3bf11c10199846695b8824fe4e5cd270d724c334e74d9104c82b7",
+        "file_sha256": "sha256:4be26124231067e2040db38c9baa5e9f98bbcf3df22d2acdeceac0886e86d330",
+        "embedded_sha256": "sha256:23c0710bde7410b4f7be496c950ba0bd2f8e86d925f6a1785f88c5c31dff9f71",
         "proof_self_digest": "sha256:6cf2c2431db0b2cd7f87368b775d6891242805cf85a1a1b2eb9e342a59560ad4"
       },
-      "combined_gate_closed": false,
+      "opens_bounded_lr_dev_qualification": true,
+      "full_terminal_provenance_complete": false,
+      "source_zero_restarts_verified": false,
       "unresolved_source_terminal_evidence": [
-        "source_pod_uids_and_restart_counts",
-        "digest_valid_training_paused_receipt",
-        "digest_valid_periodic_and_pause_checkpoint_receipts",
-        "complete_scalar_only_wandb_finish_and_sync_receipt"
+        "source_pod_uids_and_restart_counts_ttl_cleaned_before_capture"
       ],
-      "accepted_receipt_sha256": null
+      "accepted_receipt_sha256": "sha256:23c0710bde7410b4f7be496c950ba0bd2f8e86d925f6a1785f88c5c31dff9f71"
     },
     "split_a_base_control": {
       "path": "configs/evaluation/qwen38-blackbox-fleet-dev-a-base-control-v2.json",
@@ -143,13 +142,14 @@
       "wave_nodes": 1
     },
     "unresolved_dependencies": [
-      "opening_gates.cadence_training_and_periodic_reload.accepted_receipt_sha256",
       "opening_gates.split_a_base_control.accepted_result_sha256",
       "opening_gates.production_preview.accepted_receipt_sha256"
     ]
   },
   "remaining_lr_qualification": {
-    "state": "blocked",
+    "state": "ready_for_offline_preflight_and_reviewed_dev_preview",
+    "opening_gate_binding": "opening_gates.cadence_training_and_periodic_reload.accepted_receipt_sha256",
+    "launchable_by_this_file": false,
     "historical_numeric_evidence": {
       "path": "docs/evidence/qwen38-study/2026-09-11-numeric-lr-dev-v1.json",
       "file_sha256": "sha256:d2fd66a437ee7431c36a86d3c180b56e1ca22262d4c03371fb4b491c21419ae0",
@@ -374,7 +374,7 @@
     "new_jobs_authorized": false,
     "cluster_or_api_mutations_performed": false,
     "all_cells_currently_launchable": false,
-    "next_safe_transition": "bind the missing source cadence terminal artifacts, close the combined cadence gate and accept the split-A base control, then materialize and preview only the canonical 1e-5 first production cell"
+    "next_safe_transition": "run offline and pinned-image preflight, then reviewed dev preview and duplicate-capacity checks for the first bounded LR qualification wave; production remains blocked on the split-A base control and its own exact preview"
   },
-  "sha256": "sha256:d4eaaca173bdb26d536d4e29d08d26aa442aab24e8ec917c697d831247f5ebc1"
+  "sha256": "sha256:1806bd9f64eceae9b2a9fb5101337e9c3c9840112367e1cc6a5093235e5bff2c"
 }
