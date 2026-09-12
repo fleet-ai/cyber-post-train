@@ -1,0 +1,130 @@
+{
+  "schema": "cyber_qwen38_sft_numeric_lr_dev_evidence_v1",
+  "classification": "accepted_numeric_runtime_gate_not_hpo_or_model_quality",
+  "cluster": "dev",
+  "api_base_url": "https://api.ft.dev.flt.build",
+  "shared_bindings": {
+    "model": "Qwen/Qwen3.8-27B@1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "runtime_sha256": "14448fc710ceb6105f54fbb9558f3d42e7fc96a193ba593390cca3f33c7e3db8",
+    "priority_class": "c1",
+    "queue_priority_class": "q1",
+    "priority_value": 10000,
+    "requeue_if_preempted": false,
+    "nodes_per_arm": 1,
+    "gpus_per_arm": 4,
+    "global_batch_size": 8,
+    "microbatch_per_gpu": 1,
+    "gradient_accumulation_steps": 2,
+    "pause_after_optimizer_step": 2,
+    "reference_ce_enabled": false,
+    "selection_signal": "none_numeric_qualification_only"
+  },
+  "arms": [
+    {
+      "id": "lr-1e-6",
+      "learning_rate": 0.000001,
+      "api_name": "chris-q38-ta4-lr1-dev1-eda3f195",
+      "jobs_job_id": "chris-q38-ta4-lr1-dev1-eda3f195-kv8v7",
+      "rayjob_uid": "91e93a6d-60e0-4019-ad84-1ba13df020d8",
+      "workload_uid": "c07e95af-5849-4e34-9c29-8012e6189998",
+      "raycluster_uid": "a21600da-94bd-44e0-881d-004b31c395b0",
+      "pod_uid": "ebae85bf-93e8-4779-8bc5-32142959c994",
+      "output_root": "/mnt/sfs/jobs/chris-q38-ta4-lr1-dev1",
+      "wandb_url": "https://wandb.ai/thefleet/cyber-post-train/runs/chris-q38-ta4-lr1-dev1",
+      "created_at": "2026-09-11T23:44:36Z",
+      "pod_ready_at": "2026-09-11T23:44:41Z",
+      "finished_at": "2026-09-12T00:05:34Z",
+      "status": "SUCCEEDED",
+      "restarts": 0,
+      "plan_sha256": "7a171db397649a5828a31b7089db3e7597bf0def2824bfe384e0bff7e5af6caa",
+      "request_sha256": "472395c78f6a0777b9094425d7801d5a44079d741d63894776052ecdd0ea5445",
+      "receipts": {
+        "started_file_sha256": "5e7f895f3bd52676acda47434fa474319b142af24c37c31d4dd9967300b48b94",
+        "started_receipt_sha256": "c926b594c5edf54529430915d6f1f32db51cc805b64d77800e6c57c7a6512c1b",
+        "training_paused_file_sha256": "912e3530c5e07f0efd2357501c629b4f053b1876de5a878abc9536722e0b33fc",
+        "training_paused_receipt_sha256": "5f23918a784e8d20acc85663afaac9aba9f12f14a66abeb8331cabdea1770e8f",
+        "wandb_file_sha256": "9de70d846249975dd69db776011a6c85f9b384737aa98e580c4a53892cd59e78",
+        "wandb_receipt_sha256": "74165cbb24a6644d14c1dde9eef33074fb69ebfe7879d54397782fd673d32fd8",
+        "checkpoint_step2_file_sha256": "5e49a1f5beac61c65a15201036f5f00fb06ae425e36e1c8459e858d54b4533e3",
+        "checkpoint_step2_receipt_sha256": "a602d2272b70b822c199a74e2348736e6df2a5ca0104a8b42a3f147cc9c029d2"
+      },
+      "checkpoint_seal": {
+        "optimizer_step": 2,
+        "world_size": 4,
+        "files": 21,
+        "bytes": 324621264731,
+        "manifest_file_sha256": "2bd96b2da768020fbcb9d9651ba9d7138c8eaf4e1d079b0ffc1b460af4dabf77",
+        "manifest_receipt_sha256": "4f486ce411baf2f5bf2e200849624888a3fe2c22852fb72564a299b9b62276a5",
+        "gpu_reload_verified": false
+      }
+    },
+    {
+      "id": "lr-3e-5",
+      "learning_rate": 0.00003,
+      "api_name": "chris-q38-ta4-lr30-dev1-07fdaf63",
+      "jobs_job_id": "chris-q38-ta4-lr30-dev1-07fdaf63-rvpmg",
+      "rayjob_uid": "eb8145b5-ecf0-4246-9c0d-8b7bc82b9d1a",
+      "workload_uid": "7f5e730c-9e97-4a35-b798-078dfcb6a7ca",
+      "raycluster_uid": "2fcd57ba-8a45-4bdc-8932-f1f4a2425b27",
+      "pod_uid": "d7c9d404-58e4-4621-a36b-999aabac9ece",
+      "output_root": "/mnt/sfs/jobs/chris-q38-ta4-lr30-dev1",
+      "wandb_url": "https://wandb.ai/thefleet/cyber-post-train/runs/chris-q38-ta4-lr30-dev1",
+      "created_at": "2026-09-11T23:44:36Z",
+      "pod_ready_at": "2026-09-11T23:49:53Z",
+      "finished_at": "2026-09-12T00:11:05Z",
+      "status": "SUCCEEDED",
+      "restarts": 0,
+      "plan_sha256": "8283ed3cffb6061b8eccc514849a43a4a5128181fefd8da1aa53ff87f29ed7c3",
+      "request_sha256": "51c39fc499b38dd8469b363a6772e22b272f4f4d13885f8b856867231044b4e2",
+      "receipts": {
+        "started_file_sha256": "2455d40bfa1929235b5c05209e60d92d5b224314eec5cb2de878058246ea52ed",
+        "started_receipt_sha256": "8f88a2e29d0c891a9f8832c2180e35f33d2ac7550ac428150be3d6fb50d72c4b",
+        "training_paused_file_sha256": "fc634bbaf3e79e3ddb94abfe9972a43d72b9af34eb40f35e1b9cb079f69e7ce0",
+        "training_paused_receipt_sha256": "cb12fd6057797c05b3a12fa52a489e72cafb425954a90f3ad9c6bea3b3d3449c",
+        "wandb_file_sha256": "a70887e158f5a322d8a1e61301ad800d00b58afed4bf984beda4efbd10bee187",
+        "wandb_receipt_sha256": "8691d7ff36f83947bc3b3112cff79b2571eeb56a84313f6ffd721aae2ce2692b",
+        "checkpoint_step2_file_sha256": "3b6e895f1bbf11ae1f3fd1cdfc6a2e367457d5381f494b2d4f0dcb19446bf247",
+        "checkpoint_step2_receipt_sha256": "2af328a6a17ff1a963c7b09b7a78ba72f65e8a5925036bf6d2529826b78c5300"
+      },
+      "checkpoint_seal": {
+        "optimizer_step": 2,
+        "world_size": 4,
+        "files": 21,
+        "bytes": 324621264731,
+        "manifest_file_sha256": "d615f6aa1a1485baeeff53103225f37cf6cbb392c8abfcbd976e2f685a0fe146",
+        "manifest_receipt_sha256": "8d2465ca5b6f27af439b1a2f71c0772baf3e04fa65acb1d72455cd2040948638",
+        "gpu_reload_verified": false
+      }
+    }
+  ],
+  "acceptance": {
+    "optimizer_steps_executed_per_arm": 2,
+    "supervised_tokens_per_arm": 19350,
+    "finite_allowlisted_wandb_events_per_arm": 2,
+    "wandb_finish_and_sync_acknowledged": true,
+    "terminal_and_checkpoint_receipt_digests_valid": true,
+    "complete_checkpoint_seals": true,
+    "failed_receipts_absent": true,
+    "tracking_incomplete_receipts_absent": true,
+    "scientific_rejection_receipts_absent": true,
+    "terminal_api_and_rayjob_success": true,
+    "workloads_finished_successfully": true,
+    "rayclusters_and_pods_absent": true,
+    "gpu_quota_released": true
+  },
+  "independent_verifier": {
+    "pod_uid": "46f872d5-32ac-4499-ab0a-46e0be5e9565",
+    "gpu_request": 0,
+    "cuda_hidden_during_checkpoint_hashing": true,
+    "restarts": 0,
+    "deleted_after_success": true,
+    "confirmed_absent": true
+  },
+  "limits": [
+    "The two-step arms qualify numerical/runtime boundaries only; they do not select a learning rate, scheduler or model.",
+    "The runtime used the historical constant/no-warmup schedule and therefore does not qualify cosine or warmup behavior.",
+    "The checkpoint seals prove CPU integrity and producer metadata; they do not prove GPU reload of either step-two checkpoint.",
+    "No held-out teacher cross-entropy or task outcome evaluation was executed."
+  ]
+}
