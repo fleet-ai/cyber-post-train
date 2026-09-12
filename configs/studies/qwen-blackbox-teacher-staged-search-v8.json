@@ -1,0 +1,160 @@
+{
+  "schema": "cyber_qwen_sft_staged_search_lr1_acceptance_successor_v1",
+  "study_id": "qwen38-blackbox-teacher-staged-search-v8",
+  "status": "lr1_operational_dev_accepted_lr30_waiting_fresh_live_gates",
+  "launchable": false,
+  "supersedes": {
+    "path": "configs/studies/qwen-blackbox-teacher-staged-search-v7.json",
+    "file_sha256": "sha256:c8dc24f275b0dea77fecca6f09f9ec3cb718510f40cf2cc11094644811a7114e",
+    "embedded_sha256": "sha256:69ef218833f74d747a3e8706436a54c16d6e37ee72b9441eb58eceeae39fd48e",
+    "preservation": "V7 remains immutable. V8 resolves only the exact LR1 two-by-four checkpoint seal and zero-update reload gates; every scientific, later-cell and production boundary remains in force."
+  },
+  "accepted_lr1": {
+    "canonical_cell_id": "teacher.available-a.lr-1e-6.batch-8.epoch-1.seed-42",
+    "cluster": "dev",
+    "config": {
+      "path": "configs/qualification/qwen38-teacher-lr1-cosine-2x4-dev-fallback-v1.json",
+      "file_sha256": "sha256:98196c13337b717bc17ee4711b7545640e4f5123ea40dfe4e5840775a0a25c79"
+    },
+    "reload_config": {
+      "path": "configs/qualification/qwen38-teacher-lr1-cosine-2x4-reload-dev-v1.json",
+      "file_sha256": "sha256:e18dd2b224ef5fda1808b78ccce6e0ad692207c8d125f09e76332ad7513ffc22"
+    },
+    "topology": {
+      "nodes": 2,
+      "gpus_per_node": 4,
+      "world_size": 8
+    },
+    "common_image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "identities": {
+      "producer_api_run_id": "0a67736f-f40b-4b0c-b4ae-fe494f97235b",
+      "producer_rayjob_uid": "70161760-16ae-4f8e-8809-e6a024a16188",
+      "producer_workload_uid": "f2ee4249-2554-4433-a6c3-53140433f6b8",
+      "reload_api_run_id": "5f3ced34-9b14-4523-95d0-04eea1b7c3a1",
+      "reload_rayjob_uid": "075cef21-3b51-4110-8c48-79521d3791c0",
+      "reload_workload_uid": "ca26d9b5-3202-456a-9990-0a3949dfedd1"
+    },
+    "evidence": {
+      "training_terminal": {
+        "path": "docs/evidence/qwen38-study/2026-09-12-lr1-2x4-dev-terminal-v1.json",
+        "file_sha256": "sha256:ee6fd164c26b2bf608e65fc5f3ccd8e4793c8728a108b1943efdf45fa656bbaa",
+        "embedded_sha256": "sha256:04b9b6a2db71df69dbb383db7483708c84bab64c1d34f22c278ba8f1e4ef5607"
+      },
+      "checkpoint_seal": {
+        "path": "docs/evidence/qwen38-study/2026-09-12-lr1-2x4-dev-checkpoint-seal-v1.json",
+        "file_sha256": "sha256:a638175118559597f4cb89120b9a280bdfe7d171b4c95bb72ddcef6b6f2dc213",
+        "embedded_sha256": "sha256:41a815fbb9a287574ba6514d39a585d5ec5701b50ba83b21ec72cb46c44bfc3e"
+      },
+      "reload_terminal": {
+        "path": "docs/evidence/qwen38-study/2026-09-12-lr1-2x4-reload-terminal-v1.json",
+        "file_sha256": "sha256:c7627f6a78a51114c7682a5247b4af7f55efbfa624e40478163010cec3179c82",
+        "embedded_sha256": "sha256:da1edac5edd5a3134a96ea997bf03b5968391c75b817873cea5f3d443b2195c9"
+      }
+    },
+    "gate_facts": {
+      "finite_optimizer_steps_completed": 6,
+      "planned_optimizer_steps": 76,
+      "checkpoint_step": 6,
+      "checkpoint_manifest_receipt_sha256": "sha256:b6feb7649659e46d494215940c4575dee2de8c5cd6de2dadd30955d043bd72f7",
+      "all_eight_ranks_restored": true,
+      "optimizer_restored_all_ranks": true,
+      "scheduler_restored_all_ranks": true,
+      "rng_restored_all_ranks": true,
+      "sampler_restored": true,
+      "reload_optimizer_steps_executed": 0,
+      "source_checkpoint_unchanged": true,
+      "reload_output_checkpoint_present": false,
+      "all_allocated_gpus_released": true
+    },
+    "accepted_scope": "bounded_step6_operational_dev_checkpoint_and_zero_update_reload_gate_only",
+    "accepted": true,
+    "completed_lr_arm": false,
+    "full_lifecycle_zero_restart_claimed": false
+  },
+  "fresh_gate_contract": {
+    "source": {
+      "path": "configs/studies/qwen-blackbox-teacher-staged-search-v6.json",
+      "file_sha256": "sha256:873dbfcecb733e5aaaecbe18a1b0472c558e10f7ceece8704c773a5d4e5b9878",
+      "embedded_sha256": "sha256:f4f189f5ac786276e01d7e566f4d2805a621fd7cf5a134125e214daa58cbe1e9"
+    },
+    "json_pointer": "/pre_post_gates",
+    "required_gate_count": 11,
+    "preserve_source_gates_verbatim": true
+  },
+  "remaining_dev_waves": [
+    {
+      "order": 1,
+      "inherited_wave_max_nodes": 2,
+      "remaining_cell_count": 1,
+      "cell": {
+        "id": "lr30",
+        "canonical_cell_id": "teacher.available-a.lr-3e-5.batch-8.epoch-1.seed-42",
+        "config_path": "configs/qualification/qwen38-teacher-lr30-cosine-layout-dev-v2.json",
+        "config_file_sha256": "sha256:a10d10e34b3d17b268973329ec2d2d83519eec6e7b9e726483d447302e6af8a2",
+        "topology": {
+          "nodes": 1,
+          "gpus_per_node": 8,
+          "world_size": 8
+        },
+        "status": "eligible_for_fresh_live_gates_only",
+        "fresh_gates_verified": false,
+        "jobs_api_post_authorized_by_this_document": false
+      }
+    },
+    {
+      "order": 2,
+      "inherited_wave_max_nodes": 1,
+      "remaining_cell_count": 1,
+      "requires": [
+        "lr30_terminal_reconciliation",
+        "first_wave_allocation_release",
+        "all_fresh_pre_post_gates_rechecked"
+      ],
+      "cell": {
+        "id": "lr100",
+        "canonical_cell_id": "teacher.available-a.lr-1e-4.batch-8.epoch-1.seed-42",
+        "config_path": "configs/qualification/qwen38-teacher-lr100-cosine-layout-dev-v2.json",
+        "config_file_sha256": "sha256:e6b7f197cb716d235ea6054b5620cae70344191508ed707a37fd1fc2f27e8205",
+        "topology": {
+          "nodes": 1,
+          "gpus_per_node": 8,
+          "world_size": 8
+        },
+        "status": "blocked_until_first_wave_terminal_release_and_fresh_gates",
+        "fresh_gates_verified": false,
+        "jobs_api_post_authorized_by_this_document": false
+      }
+    }
+  ],
+  "claim_boundaries": {
+    "other_lr_cells_accepted": false,
+    "hyperparameter_selected": false,
+    "capability_claim_allowed": false,
+    "production_authorized": false,
+    "literal_one_by_eight_layout_qualified": false,
+    "literal_one_by_eight_gate_waived": false,
+    "topology_equivalence_claimed": false
+  },
+  "invariants": {
+    "one_canonical_cell_one_accepted_or_active_producer": true,
+    "lr1_must_never_be_replayed": true,
+    "fresh_identity_and_evidence_required_for_each_later_cell": true,
+    "c1_q1_effective_priority": 10000,
+    "automatic_requeue": false,
+    "maximum_active_experiment_nodes_excluding_inference": 8,
+    "wandb_scalar_only": true,
+    "validation_mode": "task_outcomes_only",
+    "reference_cross_entropy_enabled": false
+  },
+  "production": {
+    "state": "blocked",
+    "authorization_added": false
+  },
+  "execution": {
+    "kind": "metadata_only_not_a_job_request",
+    "cluster_or_api_mutations_performed": false,
+    "new_training_producer_created": false,
+    "production_submission_authorized": false
+  },
+  "sha256": "sha256:20af79ba9fa72d67c76772a8db4fff7b714e7698a602c1e8f14e2e3bb78e8ed6"
+}

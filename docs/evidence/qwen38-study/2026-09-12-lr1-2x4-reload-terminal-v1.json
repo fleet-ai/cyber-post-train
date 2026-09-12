@@ -1,0 +1,232 @@
+{
+  "schema": "cyber_qwen38_lr1_2x4_zero_update_reload_terminal_v1",
+  "classification": "accepted_operational_checkpoint_reload_gate",
+  "purpose": "Accept only the exact LR1 two-worker-by-four-GPU development checkpoint reload after controller success, all-rank state restoration, zero optimizer updates, an unchanged source checkpoint and complete GPU release. This is not model-quality evidence, hyperparameter selection or production-layout qualification.",
+  "source": {
+    "training_terminal_evidence": {
+      "path": "docs/evidence/qwen38-study/2026-09-12-lr1-2x4-dev-terminal-v1.json",
+      "file_sha256": "sha256:ee6fd164c26b2bf608e65fc5f3ccd8e4793c8728a108b1943efdf45fa656bbaa",
+      "embedded_sha256": "sha256:04b9b6a2db71df69dbb383db7483708c84bab64c1d34f22c278ba8f1e4ef5607"
+    },
+    "checkpoint_seal_evidence": {
+      "path": "docs/evidence/qwen38-study/2026-09-12-lr1-2x4-dev-checkpoint-seal-v1.json",
+      "file_sha256": "sha256:a638175118559597f4cb89120b9a280bdfe7d171b4c95bb72ddcef6b6f2dc213",
+      "embedded_sha256": "sha256:41a815fbb9a287574ba6514d39a585d5ec5701b50ba83b21ec72cb46c44bfc3e"
+    },
+    "checkpoint_manifest": {
+      "path": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/lr1-2x4-dev-v1-reload-v1/checkpoint-step-6.json",
+      "file_sha256": "sha256:0cbdb07de2ffabc928ba8b443a59814266653d658f4190aa81f6d9801a6fbcd2",
+      "receipt_sha256": "sha256:b6feb7649659e46d494215940c4575dee2de8c5cd6de2dadd30955d043bd72f7",
+      "optimizer_step": 6,
+      "world_size": 8,
+      "files": 33,
+      "bytes": 324627486731
+    }
+  },
+  "reload": {
+    "cluster": "dev",
+    "jobs_api_base": "https://api.ft.dev.flt.build",
+    "kube_context": "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb",
+    "namespace": "fleet-train-jobs",
+    "config_path": "configs/qualification/qwen38-teacher-lr1-cosine-2x4-reload-dev-v1.json",
+    "config_file_sha256": "sha256:e18dd2b224ef5fda1808b78ccce6e0ad692207c8d125f09e76332ad7513ffc22",
+    "config_commit": "fd2c18347f3a2abde35c8139f4f55e64347f0473",
+    "prepared_dir": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/lr1-2x4-reload-dev-v1/prepared-v1",
+    "output_root": "/mnt/sfs/jobs/chris-q38-lr1-2x4-reload-v1",
+    "api_name": "chris-q38-lr1-2x4-reload-v1-5f3ced34",
+    "api_run_id": "5f3ced34-9b14-4523-95d0-04eea1b7c3a1",
+    "api_job_id": "chris-q38-lr1-2x4-reload-v1-5f3ced34-lccll",
+    "rayjob_uid": "075cef21-3b51-4110-8c48-79521d3791c0",
+    "workload_name": "rayjob-chris-q38-lr1-2x4-reload-v1-5f3ced34-5ab69",
+    "workload_uid": "ca26d9b5-3202-456a-9990-0a3949dfedd1",
+    "raycluster_name": "chris-q38-lr1-2x4-reload-v1-5f3ced34-5q58f",
+    "raycluster_uid": "f2ed2609-88f4-4f87-b87b-20682c6a5e2d",
+    "head_pod_uid": "99a192e1-436e-4b69-8b3b-7220de23e61d",
+    "worker_pod_uid": "753cbb54-c5f0-4559-ad1a-9efe5a4f963f",
+    "created_at": "2026-09-12T15:02:23Z",
+    "pods_ready_at": "2026-09-12T15:02:56Z",
+    "terminal_at": "2026-09-12T15:13:44Z",
+    "plan_sha256": "sha256:cbfa7cdbfbdda609ce9ac537d5881374e654ae52962c6c64f31f0ff0c1f772d4",
+    "request_sha256": "sha256:7af5e1bf70bc1b260f070e70cdb9f1a19dcdf1fd7398eac48b90d0793bc73d76",
+    "preview_manifest_sha256": "sha256:adce98ccd5ecd7f1fdf8b97912e3f1403b04e28201655c81cc8af7180e6e3219",
+    "preview_receipt_sha256": "sha256:fd306bdeb3a916652ccf3013656bd7eb4612e7b6073f441d7537840e9cc28791",
+    "requested_image_digest": "sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "topology": {
+      "workers": 2,
+      "gpus_per_worker": 4,
+      "world_size": 8
+    },
+    "priority_class": "c1",
+    "queue_priority_class": "q1",
+    "effective_priority": 10000,
+    "automatic_requeue": false,
+    "jobs_api_posts": 1
+  },
+  "terminal_controller_reconciliation": {
+    "jobs_api_status": "SUCCEEDED",
+    "rayjob_status": "SUCCEEDED",
+    "rayjob_deployment_status": "Complete",
+    "rayjob_failed_count": 0,
+    "rayjob_succeeded_count": 1,
+    "workload_finished": true,
+    "workload_terminal_reason": "Succeeded",
+    "workload_quota_reserved": false,
+    "workload_admitted": false,
+    "raycluster_absent": true,
+    "head_pod_absent": true,
+    "worker_pod_absent": true,
+    "released_gpus": 8,
+    "gpus_held": 0,
+    "observed_at": "2026-09-12T15:26:15Z"
+  },
+  "receipts": {
+    "started": {
+      "path": "/mnt/sfs/jobs/chris-q38-lr1-2x4-reload-v1/STARTED.json",
+      "file_sha256": "sha256:b725601c08fa4aa78ff67d0b5e1eda34e9191c3ce8029d093ed271b7b68f9513",
+      "receipt_sha256": "sha256:d74c3b3eaa71782c564bd0172d2233380cc00c13fbe68e1292f78afc20fde399",
+      "digest_valid": true
+    },
+    "recovered": {
+      "path": "/mnt/sfs/jobs/chris-q38-lr1-2x4-reload-v1/RECOVERED.json",
+      "file_sha256": "sha256:33edccd5a994442dc788ff651a2282f10f7c4605fed33c49f27b06b334c535c0",
+      "receipt_sha256": "sha256:167dd38e06135534494a4e7bdc0a8acdabfe6ce0f802a69323f9a954aba4a93e",
+      "digest_valid": true,
+      "optimizer_step": 6,
+      "rank_count": 8,
+      "rank_ids": [0, 1, 2, 3, 4, 5, 6, 7],
+      "rank_optimizer_steps": [6],
+      "optimizer_states_per_rank": [851],
+      "optimizer_restored_all_ranks": true,
+      "scheduler_restored_rank_ids": [0, 1, 2, 3, 4, 5, 6, 7],
+      "scheduler_restored_all_ranks": true,
+      "rng_restored_all_ranks": true,
+      "rng_evidence_kind": "success_through_exact_hash_bound_runtime_guard_before_rank_receipt",
+      "sampler_restored": true,
+      "source_manifest_sha256": "sha256:b6feb7649659e46d494215940c4575dee2de8c5cd6de2dadd30955d043bd72f7",
+      "source_plan_sha256": "sha256:3b554d48bb61eeac041415c951f1bc327f70288aa8e2590246bd5eecb2f04e58"
+    },
+    "reload_validated": {
+      "path": "/mnt/sfs/jobs/chris-q38-lr1-2x4-reload-v1/RELOAD_VALIDATED.json",
+      "file_sha256": "sha256:d7e06c02dc0af2404b5e3fd01c98657c35c3ef1f71ff8e4f6521c6f8714ce69f",
+      "receipt_sha256": "sha256:94c94c21c940a29a2609ec625e57dfff6e69342dc0faebc03c42c3aec22f92ae",
+      "digest_valid": true,
+      "status": "reload_validated",
+      "optimizer_step": 6,
+      "optimizer_steps_executed": 0,
+      "validation_scope": "checkpoint_and_sampler_reload_only_no_ce",
+      "source_manifest_sha256": "sha256:b6feb7649659e46d494215940c4575dee2de8c5cd6de2dadd30955d043bd72f7"
+    }
+  },
+  "recovery_runtime_contract": {
+    "staged_path": "/mnt/sfs/jobs/chris-q38-lr1-2x4-reload-v1/.runtime/training/recovery.py",
+    "repository_path": "training/recovery.py",
+    "repository_commit": "fd2c18347f3a2abde35c8139f4f55e64347f0473",
+    "plan_recovery_runtime_sha256": "sha256:d728b9e6dca0973b3d42e4abe940f0ac4f7f844998e21bc0df974e9510a81533",
+    "staged_file_sha256": "sha256:d728b9e6dca0973b3d42e4abe940f0ac4f7f844998e21bc0df974e9510a81533",
+    "repository_file_sha256_at_commit": "sha256:d728b9e6dca0973b3d42e4abe940f0ac4f7f844998e21bc0df974e9510a81533",
+    "runtime_digest_match": true,
+    "runtime_source_digest_validated_before_reload": true,
+    "guards_before_rank_receipt": {
+      "native_load_requires_optimizer_and_scheduler_states": true,
+      "every_optimizer_counter_must_equal_manifest_step": true,
+      "scheduler_last_epoch_must_equal_manifest_step": true,
+      "scheduler_state_must_exactly_equal_checkpoint_state": true,
+      "rng_state_must_exactly_equal_checkpoint_state": true,
+      "rank_receipt_emitted_only_after_all_guards_pass": true
+    }
+  },
+  "independent_dev_verification": {
+    "helper_kind": "standalone_read_only_cpu_pod",
+    "helper_name": "chris-q38-lr1-reload-terminal-audit-v1",
+    "helper_uid": "27bfa544-dd48-4ebd-9e23-0eea61c1f440",
+    "created_at": "2026-09-12T15:27:33Z",
+    "container_started_at": "2026-09-12T15:27:34Z",
+    "ready_at": "2026-09-12T15:27:35Z",
+    "pinned_image_digest": "sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "gpus": 0,
+    "restarts": 0,
+    "receipt_files_read": true,
+    "private_logs_read": false,
+    "raw_weights_deserialized": false,
+    "source_files_stream_hashed": true,
+    "source_manifest_digest_valid": true,
+    "verified_files": 33,
+    "verified_bytes": 324627486731,
+    "mismatch_count": 0,
+    "source_checkpoint_unchanged_after_reload": true,
+    "reload_output_checkpoint_present": false,
+    "failure_or_rejection_receipt_present": false,
+    "training_terminal_receipt_present": false,
+    "helper_deleted": true,
+    "helper_absence_verified": true
+  },
+  "contract_audit_helpers": [
+    {
+      "name": "chris-q38-lr1-reload-state-audit-v2",
+      "uid": "d11df499-c600-4dbf-9fa8-ef469ecc9372",
+      "purpose": "enumerate_only_sanitized_receipt_scalar_paths",
+      "gpus": 0,
+      "restarts": 0,
+      "exit_code": 0,
+      "deleted": true,
+      "absence_verified": true
+    },
+    {
+      "name": "chris-q38-lr1-reload-contract-audit-v3",
+      "uid": "22a219f2-06b8-446f-89a3-35022a13e07c",
+      "purpose": "first_whitelisted_contract_projection_attempt",
+      "gpus": 0,
+      "restarts": 0,
+      "exit_code": 1,
+      "failure_class": "audit_script_expected_plan_sha256_inside_staged_plan_instead_of_digest_valid_recovered_receipt",
+      "checkpoint_or_reload_mutation": false,
+      "jobs_api_posts": 0,
+      "deleted": true,
+      "absence_verified": true
+    },
+    {
+      "name": "chris-q38-lr1-reload-contract-inspector-v4",
+      "uid": "df18dae2-10a9-4629-985e-127af0b8d29f",
+      "purpose": "whitelisted_runtime_and_rank_contract_projection",
+      "gpus": 0,
+      "restarts": 0,
+      "inspection_command_exit_code": 0,
+      "pod_deleted_while_healthy": true,
+      "deleted": true,
+      "absence_verified": true
+    }
+  ],
+  "context_correction": {
+    "desktop_default_context_was_production": true,
+    "first_read_only_audit_used_default_context": true,
+    "first_audit_used_as_dev_authority": false,
+    "first_helper_deleted_and_confirmed_absent": true,
+    "authoritative_controller_and_receipt_audit_repeated_with_explicit_dev_context": true,
+    "future_kubernetes_calls_must_pass_explicit_context": true
+  },
+  "acceptance": {
+    "lr1_two_by_four_operational_dev_checkpoint_reload_accepted": true,
+    "zero_update_reload_accepted": true,
+    "source_checkpoint_integrity_accepted": true,
+    "next_lr30_dev_cell_may_enter_fresh_live_gates": true,
+    "hyperparameter_selected": false,
+    "capability_claim_allowed": false,
+    "literal_one_by_eight_layout_qualified": false,
+    "production_training_authorized": false
+  },
+  "limitations": [
+    "This is an operational checkpoint/recovery gate, not a model-quality or held-out-task capability result.",
+    "The producer and reload ran on a two-worker-by-four-GPU development layout; this does not prove literal one-node-by-eight-GPU production-layout parity.",
+    "Terminal Pods were deleted before final restart counts and container exit codes were captured. Zero restarts were observed while both Pods were Ready, but no full-lifecycle zero-restart claim is made.",
+    "RECOVERED.json records per-rank optimizer-state counts and scheduler restoration but not a separate RNG boolean. RNG acceptance is the successful outcome of the exact digest-bound runtime guard that compares each rank's native RNG state to its sealed checkpoint before that rank can return its receipt.",
+    "The reload deliberately executed zero cross-entropy, zero optimizer updates and wrote no training checkpoint."
+  ],
+  "privacy": {
+    "private_logs_read": false,
+    "prompts_read_or_persisted": false,
+    "traces_read_or_persisted": false,
+    "flags_answers_or_scores_read_or_persisted": false,
+    "credentials_read_or_persisted": false
+  },
+  "sha256": "sha256:da1edac5edd5a3134a96ea997bf03b5968391c75b817873cea5f3d443b2195c9"
+}

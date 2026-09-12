@@ -32,6 +32,12 @@ cluster-specific outputs, journals and W&B identities separate. Use the CPU data
 cluster for compatible CPU preparation, not GPU training. See the cluster guide
 for target URLs, storage/topology differences and the promotion checklist.
 
+Every live `kubectl` observation or helper-Pod operation must also pass the exact
+reviewed `--context`; never rely on the desktop's current context. Selecting
+`--cluster dev|prod` for the Jobs API does not select a Kubernetes context, and a
+successful read from a similarly named namespace or SFS path on another cluster
+is not evidence about the intended run.
+
 For supported commands, start at `README.md`. For scientific controls, read
 `docs/SCIENTIFIC_PROTOCOL.md`. Use the exact experiment's latest sanitized receipt
 and live API/UID-bound state for progress; model-specific reports and old configs

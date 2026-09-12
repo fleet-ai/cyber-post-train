@@ -27,6 +27,11 @@ New previews/submissions default to **dev**. Status defaults to **prod** for
 existing historical run names; use an explicit selector in runbooks. The selected
 API base is printed with results and saved in the pre-POST intent journal.
 **`kubectl config use-context` does not change an HTTP Jobs API destination.**
+The inverse is equally important: `--cluster dev|prod` does not change the active
+Kubernetes context. Pass the reviewed `kubectl --context <exact-context>` on every
+live observation and helper-Pod operation; a bare `kubectl` command is not valid
+campaign evidence. Record the cluster namespace UID when reconciling a new target,
+and never treat matching object names or SFS paths on another cluster as proof.
 There is no `cluster` field in the live generic run schema; the API origin selects
 the cluster. Do not work around this with an arbitrary URL or a modified request.
 
