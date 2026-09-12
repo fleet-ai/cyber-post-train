@@ -1,0 +1,135 @@
+{
+  "schema": "cyber_skyrl_engine_diagnostic_terminal_v1",
+  "classification": "clean_diagnostic_rejection_hypothesis_falsified",
+  "run": {
+    "config_name": "chris-q38-rldiag-dev6",
+    "api_name": "chris-q38-rldiag-dev6-f4bce6ba",
+    "api_run_id": "f4bce6ba-d539-41f0-b4da-f12c3c519391",
+    "api_job_id": "chris-q38-rldiag-dev6-f4bce6ba-7cfsz",
+    "namespace": "fleet-train-jobs",
+    "output_root": "/mnt/sfs/jobs/chris-q38-rldiag-dev6",
+    "rayjob_uid": "5539fa91-95c1-4895-abf1-fc88f4ddf10f",
+    "workload_name": "rayjob-chris-q38-rldiag-dev6-f4bce6ba-65ea6",
+    "workload_uid": "345c815a-00db-4c13-a9ca-fff697ff70cb",
+    "raycluster_name": "chris-q38-rldiag-dev6-f4bce6ba-26mgj",
+    "raycluster_uid": "0232c9ac-4395-4d85-a772-9124d3e6e9d6",
+    "head_pod_uid": "0504e53d-0242-4997-bd9f-94411e4d1f36",
+    "worker_pod_uid": "c8f5e5aa-1d1d-44f9-8c41-de2904d8fdb6",
+    "started_at": "2026-09-12T13:15:43Z",
+    "finished_at": "2026-09-12T13:19:58Z",
+    "api_status": "SUCCEEDED",
+    "controller_status": "SUCCEEDED",
+    "workload_terminal_reason": "Succeeded",
+    "priority_class": "c1",
+    "queue_priority_class": "q1",
+    "effective_priority": 10000,
+    "automatic_requeue": false,
+    "workers": 2,
+    "gpus_per_worker": 4,
+    "total_gpus": 8,
+    "pod_restarts": 0
+  },
+  "immutable_inputs": {
+    "plan_sha256": "dc34abf5325baff35875893ffec05c28564028d1f0f2ad1aa852e077d3fb9609",
+    "request_sha256": "1923f8fedac4aba5d036acaf26d37cebd94621f6cb47e1d89844249dfda10dde",
+    "runtime_sha256": "217da2023e441ba263a2cbf6c7182b0c5031caaf3cc4c65956afcee36e3ac3f5",
+    "image_sha256": "ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4"
+  },
+  "receipts": {
+    "started": {
+      "file_sha256": "05bbc02d45702f404d47460843886b4c30a290a28989b18fa9dc9df2ce2b1572",
+      "embedded_sha256": "d86cf5ca4fa6650546ea66b01290cdba8de8f06d6f21ff982416f4838c372e05",
+      "digest_valid": true,
+      "vllm_v1_multiprocessing_disabled": true
+    },
+    "terminal": {
+      "file": "ENGINE_DIAGNOSTIC.json",
+      "file_sha256": "ea1a899a9f9c205c6e33fad8fbd69a43254c3cf2fef388500d3786daff0818f5",
+      "embedded_sha256": "1a3a62ed15d610deb2b6259a4e2d054a8804cf5d7aecdc16d1ffc0fea08e4d2e",
+      "digest_valid": true,
+      "status": "engine_start_rejected",
+      "startup_phase": "engine_creation",
+      "engine_start_state": "partial_or_unknown",
+      "engine_started": null,
+      "diagnostic_completed": true,
+      "engine_start_qualified": false,
+      "training_qualified": false,
+      "vllm_v1_multiprocessing_disabled": true
+    }
+  },
+  "sanitized_cause": {
+    "outer_error_class": "RayTaskError(RuntimeError)",
+    "inner_error_class": "RuntimeError",
+    "terminal_frame": {
+      "file": "utils.py",
+      "function": "wait_for_engine_startup",
+      "line": 1249
+    },
+    "proven_branch": "vllm_engine_core_child_process_exited_before_ready_handshake",
+    "underlying_child_exception_captured": false,
+    "same_generic_branch_as_dev5": true,
+    "router_started": false,
+    "deterministic_invalid_argument_proven": false
+  },
+  "diagnostic_hypothesis": {
+    "requested_change": "Set VLLM_ENABLE_V1_MULTIPROCESSING=0 before the diagnostic process and Ray engine actors import vLLM.",
+    "result": "falsified",
+    "reason": "The installed vLLM AsyncLLM constructor calls EngineCoreClient.make_async_mp_client directly, so this environment variable cannot select the in-process client for the async server path.",
+    "installed_source": {
+      "core_client_sha256": "e41fe15caa59dfd289ae212b3eaefc20c34be87a72e779df03d970f9714b793d",
+      "async_llm_sha256": "2128cf018fe136b698c5e89dc7325bc6dced9d516cc9d772695f044716970b64",
+      "async_constructor_call": "EngineCoreClient.make_async_mp_client",
+      "private_log_read": false
+    },
+    "production_native_training_behavior_changed": false
+  },
+  "zero_work": {
+    "task_rows_read": 0,
+    "rollouts": 0,
+    "verifier_calls": 0,
+    "optimizer_steps": 0,
+    "checkpoints_created": 0,
+    "wandb_initialized": false,
+    "checkpoint_artifacts": 0,
+    "episode_artifacts": 0,
+    "task_artifacts": 0,
+    "unexpected_output_artifacts": 0,
+    "runtime_files_unchanged": true
+  },
+  "isolation_and_cleanup": {
+    "credential_environment_isolation_proven": true,
+    "ray_actor_environment_probes_passed": 2,
+    "ray_actor_environment_probe_failures": 0,
+    "ray_actor_nonempty_scrubbed_credentials": 0,
+    "tracked_engine_actors": 2,
+    "tracked_ray_actors": 4,
+    "tracked_placement_groups": 1,
+    "tracked_routers": 0,
+    "active_owned_actors": 0,
+    "active_owned_placement_groups": 0,
+    "cleanup_proven": true
+  },
+  "release": {
+    "workload_finished_at": "2026-09-12T13:19:58Z",
+    "raycluster_absent": true,
+    "pods_absent": true,
+    "gpus_held": 0
+  },
+  "qualification": {
+    "engine_start": "rejected",
+    "reward_acquisition": "closed",
+    "optimizer_update": "closed",
+    "checkpoint_recovery": "closed",
+    "production_rl": "closed",
+    "replay_forbidden": true,
+    "automatic_gpu_successor_forbidden": true
+  },
+  "next_gate": "Do not launch another GPU diagnostic against this unchanged image. RL needs a separately reviewed runtime that relays a sanitized EngineCore child exception or a dev-qualified replacement SkyRL/vLLM image, followed by a fresh bounded engine-start canary. Shared image/BuildKit infrastructure remains an explicit authority gate.",
+  "audit_boundaries": {
+    "private_logs_read": false,
+    "task_or_prompt_content_exposed": false,
+    "credentials_read_or_persisted": false,
+    "observed_at": "2026-09-12T13:20:30Z"
+  },
+  "sha256": "8e9e3380608366e90d0b706873a38f845cfbd4cc7d4577160e69578f2d3ab68e"
+}
