@@ -1,0 +1,134 @@
+{
+  "schema": "cyber_skyrl_engine_diagnostic_prelaunch_v1",
+  "classification": "operational_gate_source_prepared_not_materialized_or_submitted",
+  "predecessor": {
+    "api_name": "chris-q38-rldiag-dev5-7a6fd5d6",
+    "api_run_id": "7a6fd5d6-626b-47b1-9ff2-d53a9437bd88",
+    "api_job_id": "chris-q38-rldiag-dev5-7a6fd5d6-d29v5",
+    "namespace": "fleet-train-jobs",
+    "rayjob_uid": "aa61662e-435f-489b-92ad-4114e155dea5",
+    "workload_uid": "b554dc90-c48a-4e90-8e9b-46a159c917d6",
+    "raycluster_uid": "22aa0abb-b433-45ff-9bd1-f89674183d3c",
+    "head_pod_uid": "d0370ead-af3d-4f2e-aee8-d1f1532b2d43",
+    "worker_pod_uid": "d50d0659-aa54-45d9-8cad-15e83bd943e3",
+    "controller_status": "SUCCEEDED",
+    "controller_finished_at": "2026-09-12T12:53:23Z",
+    "diagnostic_status": "engine_start_rejected",
+    "engine_start_state": "partial_or_unknown",
+    "startup_phase": "engine_creation",
+    "plan_sha256": "c0207301b1ef7e93f7dd3efb8a40fff75329579b4ad6a842987a9cf8f74f3a9a",
+    "request_sha256": "04feacf672b01021fb325301d9dc56ec6b9670179817b0f0d4e54c0e857ed8e3",
+    "terminal_receipt": {
+      "file_sha256": "ad75821cde2f754f8015171503f1cf234af0747bd43e80799d51bd55a189c7eb",
+      "embedded_sha256": "cf4615fd6c937043c63553b5d8a8810c0d4b4db8d5d63a1d39fd03ab3962086b",
+      "digest_valid": true
+    },
+    "terminal_evidence": {
+      "path": "docs/evidence/qwen38-study/2026-09-12-skyrl-engine-diagnostic-dev5-terminal-v1.json",
+      "file_sha256": "a859ce6a9379c70814f2448e218ce7f47b3bb9e4d6770d51bfd96d057b4f7ef4",
+      "embedded_sha256": "19e2f384d549a9b12acd2d9ac6ef910bbdf129d410f3a46c916795b3be6ac7eb"
+    },
+    "sanitized_cause_boundary": {
+      "outer_type": "RayTaskError(RuntimeError)",
+      "remote_components": [
+        "SkyRL VLLMServerActor.start",
+        "SkyRL VLLMServerActor._wait_until_healthy",
+        "SkyRL VLLMServerActor._run_server",
+        "vLLM AsyncLLM/CoreClient startup"
+      ],
+      "terminal_frame": "vLLM utils.py:1249 wait_for_engine_startup",
+      "underlying_engine_core_cause_recovered": false,
+      "private_log_read": false
+    },
+    "qualification": {
+      "task_rows_read": 0,
+      "rollouts": 0,
+      "verifier_calls": 0,
+      "optimizer_steps": 0,
+      "checkpoints_created": 0,
+      "engine_start_qualified": false,
+      "training_qualified": false
+    },
+    "release": {
+      "cleanup_proven_in_receipt": true,
+      "active_owned_actors": 0,
+      "active_owned_placement_groups": 0,
+      "workload_finished": true,
+      "raycluster_absent": true,
+      "pods_absent": true,
+      "gpus_held": 0
+    },
+    "replay_forbidden": true
+  },
+  "correction": {
+    "scope": "dev_engine_diagnostic_only",
+    "environment_variable": "VLLM_ENABLE_V1_MULTIPROCESSING",
+    "value": "0",
+    "injection_points": [
+      "Jobs API diagnostic process environment before Python startup",
+      "explicit Ray and engine-actor runtime environment before actor vLLM import"
+    ],
+    "diagnostic_hypothesis": "Keeping the vLLM V1 EngineCore in the server actor can preserve the underlying typed startup exception in the existing sanitized cause chain instead of reducing it to a child-sentinel exit.",
+    "causal_status": "unqualified_until_dev6_terminal_receipt",
+    "production_native_training_behavior_changed": false,
+    "model_data_image_topology_or_budget_changed": false
+  },
+  "successor": {
+    "name": "chris-q38-rldiag-dev6",
+    "output_root": "/mnt/sfs/jobs/chris-q38-rldiag-dev6",
+    "data_root": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/rldiag-inputs-dev6/data",
+    "prepared_root": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/rldiag-inputs-dev6/prepared-v1",
+    "data_config": "configs/qualification/qwen38-rl-filtered-skyrl-engine-diagnostic-data-dev-v6.json",
+    "data_config_sha256": "8e4e8f166141b6775d9b42de9fe4548e9b2a34b428ff1d5e22a41e03b02bc580",
+    "run_config": "configs/qualification/qwen38-rl-filtered-skyrl-engine-diagnostic-dev-v6.json",
+    "run_config_sha256": "03fdae1bd1d56793dce530f49e84b8d5eb9f69b561227cf99abc203852c11f47",
+    "skyrl_training_source_sha256": "8ae369d84e7d959afff18757cd773f348c7a0c8d1a0918fabd41f4eefa054152",
+    "runtime_sha256": "217da2023e441ba263a2cbf6c7182b0c5031caaf3cc4c65956afcee36e3ac3f5",
+    "plan_sha256": null,
+    "request_sha256": null,
+    "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "allowed_cluster": "dev",
+    "priority_class": "c1",
+    "queue_priority_class": "q1",
+    "required_effective_priority": 10000,
+    "automatic_requeue": false,
+    "workers": 2,
+    "gpus_per_worker": 4,
+    "total_gpus": 8,
+    "task_rows_read": 0,
+    "rollouts": 0,
+    "verifier_calls": 0,
+    "optimizer_steps": 0,
+    "checkpoints_created": 0,
+    "wandb": false,
+    "data_materialized": false,
+    "plan_compiled": false,
+    "pinned_image_cpu_preflight_passed": false,
+    "dev_api_preview_passed": false,
+    "submitted": false,
+    "required_terminal_receipt": "ENGINE_DIAGNOSTIC.json"
+  },
+  "invariants": {
+    "exact_model": "Qwen/Qwen3.8-27B@1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "same_task_set_split_tool_catalog_and_limits_as_dev5": true,
+    "engines": 2,
+    "tensor_parallel_size": 4,
+    "engine_start_timeout_seconds": 1800,
+    "engine_cleanup_timeout_seconds": 300,
+    "no_task_or_training_path": true,
+    "no_secrets": true,
+    "no_wandb": true
+  },
+  "next_gate": "Materialize the fresh dev6 data identity without inspecting task content, compile the exact plan/request, run the exact-image zero-GPU preflight, then require a clean dev API preview plus immediate duplicate/output/capacity checks before any separately authorized one-time submission. If dev6 cannot recover a more specific sanitized EngineCore cause, stop; do not loop another diagnostic.",
+  "audit_boundaries": {
+    "gpu_jobs_submitted": 0,
+    "gpu_resources_created": 0,
+    "cluster_mutations": 0,
+    "private_logs_read": false,
+    "task_rows_read": 0,
+    "task_or_prompt_content_exposed": false,
+    "credentials_read_or_persisted": false,
+    "observed_at": "2026-09-12T13:06:40Z"
+  },
+  "sha256": "2a9f99b6c7f03270f6247e8b81c75975fe0962b9e84b627ea15537fc2c5f828c"
+}

@@ -1,0 +1,19 @@
+{
+  "name": "chris-q38-rldiag-dev6",
+  "backend": "skyrl",
+  "task_set": "../data/qwen38-rl-filtered-canary-task-set-v1.json",
+  "split": "../data/qwen38-rl-filtered-canary-split-v1.json",
+  "tool_catalog": "/mnt/sfs/jobs/chris-q38-rl89-inputs-dev1/tools.json",
+  "model_lock": "../models/qwen38-27b-1d4bf0f2.lock.json",
+  "model_root": "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2",
+  "output": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/rldiag-inputs-dev6/data",
+  "limits": {
+    "context_tokens": 98304,
+    "response_tokens": 81920,
+    "max_tokens_per_turn": 4096,
+    "max_turns": 80,
+    "episode_seconds": 2400,
+    "tool_seconds": 330,
+    "tool_result_chars": 50000
+  }
+}

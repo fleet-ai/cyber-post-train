@@ -320,6 +320,8 @@ def test_engine_diagnostic_request_is_exact_image_no_secret_and_no_training(prep
     }
     assert not request["requeueIfPreempted"]
     assert request["env"]["PYTHONDONTWRITEBYTECODE"] == "1"
+    assert request["env"]["VLLM_ENABLE_V1_MULTIPROCESSING"] == "0"
+    assert "VLLM_ENABLE_V1_MULTIPROCESSING" not in train.job_request(prepared.plan)["env"]
     assert prepared.plan["arguments"]["engine_start_timeout_seconds"] == 1800
     assert prepared.plan["arguments"]["engine_cleanup_timeout_seconds"] == 300
     assert "WANDB" not in json.dumps(request["env"])
@@ -400,6 +402,7 @@ def test_engine_diagnostic_preflight_never_reads_task_rows(prepared, monkeypatch
         )
     } == train._diagnostic_shape(prepared.plan, cfg)
     assert receipt["task_rows_read"] == 0
+    assert receipt["vllm_v1_multiprocessing_disabled"] is True
     assert not any(
         receipt[key]
         for key in ("rollouts", "verifier_calls", "optimizer_updates", "checkpoints", "wandb")
@@ -451,6 +454,7 @@ def test_engine_diagnostic_scrubs_ambient_credentials_but_keeps_them_for_driver(
     assert os.environ["WANDB_API_KEY"] == "synthetic-forbidden-tracking-key"
     assert env["FLEET_API_KEY"] == env["WANDB_API_KEY"] == ""
     assert env["SAFE_NATIVE_SETTING"] == "yes"
+    assert env["VLLM_ENABLE_V1_MULTIPROCESSING"] == "0"
     assert {"FLEET_API_KEY", "WANDB_API_KEY"}.issubset(scrubbed)
 
 
@@ -1226,6 +1230,7 @@ def test_engine_diagnostic_is_bounded_private_clean_and_truthful(prepared, monke
     assert all(
         option["runtime_env"]["env_vars"]["FLEET_API_KEY"] == ""
         and option["runtime_env"]["env_vars"]["WANDB_API_KEY"] == ""
+        and option["runtime_env"]["env_vars"]["VLLM_ENABLE_V1_MULTIPROCESSING"] == "0"
         and option["runtime_env"]["env_vars"]["SKYRL_LOG_FILE"]
         == str(root / "private-native-logs/infra.log")
         for option in ray.actor_options
@@ -1280,6 +1285,7 @@ def test_engine_diagnostic_is_bounded_private_clean_and_truthful(prepared, monke
         )
     )
     assert result["engine_start_qualified"] is (fault is None)
+    assert result["vllm_v1_multiprocessing_disabled"] is True
     assert (
         result["startup_phase"]
         == {
@@ -1302,6 +1308,7 @@ def test_engine_diagnostic_is_bounded_private_clean_and_truthful(prepared, monke
     started_receipt = json.loads((root / "ENGINE_DIAGNOSTIC_STARTED.json").read_text())
     train.sealed(started_receipt, train.ENGINE_DIAGNOSTIC_SCHEMA)
     assert all(started_receipt[key] == result[key] for key in train._diagnostic_shape(plan, cfg))
+    assert started_receipt["vllm_v1_multiprocessing_disabled"] is True
     assert calls[-1] == "ray-shutdown"
 
 

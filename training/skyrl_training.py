@@ -32,6 +32,7 @@ SCHEMA = "cyber_skyrl_training_v1"
 ENGINE_DIAGNOSTIC_SCHEMA = "cyber_skyrl_engine_start_diagnostic_v1"
 ENGINE_DIAGNOSTIC_WORKERS = 2
 ENGINE_DIAGNOSTIC_GPUS_PER_WORKER = 4
+ENGINE_DIAGNOSTIC_VLLM_V1_MULTIPROCESSING = "0"
 _CREDENTIAL_ENV_NAME = re.compile(
     r"(?:^|_)(?:TOKENS?|PASSWORDS?|PASSWD|CREDENTIALS?|SECRETS?|API_KEYS?|"
     r"ACCESS_KEYS?|PRIVATE_KEYS?|DATABASE_URL|AUTH(?:ORIZATION)?)(?:_|$)",
@@ -284,6 +285,11 @@ def engine_diagnostic_request(plan):
                 "HF_HUB_OFFLINE": "1",
                 "TRANSFORMERS_OFFLINE": "1",
                 "TOKENIZERS_PARALLELISM": "false",
+                # Diagnostic-only: keep EngineCore in the server actor so its
+                # typed underlying failure reaches the sanitized cause chain.
+                "VLLM_ENABLE_V1_MULTIPROCESSING": (
+                    ENGINE_DIAGNOSTIC_VLLM_V1_MULTIPROCESSING
+                ),
                 "PYTHONDONTWRITEBYTECODE": "1",
                 "PYTHONUNBUFFERED": "1",
             },
@@ -445,6 +451,7 @@ def engine_diagnostic_preflight(plan):
         "checkpoints": False,
         "wandb": False,
         "engine_start_qualified": False,
+        "vllm_v1_multiprocessing_disabled": True,
         **shape,
     }
 
@@ -660,6 +667,12 @@ def _ray_environment(plan, cfg, native, *, diagnostic=False):
     scrubbed = _credential_names(os.environ, env) if diagnostic else ()
     for name in scrubbed:
         env[name] = ""
+    if diagnostic:
+        # Every engine actor receives this before importing vLLM. Keeping the
+        # override out of the ordinary path preserves native training behavior.
+        env["VLLM_ENABLE_V1_MULTIPROCESSING"] = (
+            ENGINE_DIAGNOSTIC_VLLM_V1_MULTIPROCESSING
+        )
     log = _prepare_infra_log(plan)
     env["SKYRL_LOG_FILE"] = str(log)
     env["PYTHONPATH"] = (
@@ -1378,6 +1391,7 @@ def engine_diagnostic(plan):
                     "checkpoints_created": 0,
                     "engine_start_timeout_seconds": args.engine_start_timeout_seconds,
                     "engine_cleanup_timeout_seconds": args.engine_cleanup_timeout_seconds,
+                    "vllm_v1_multiprocessing_disabled": True,
                     **shape,
                 },
             )
@@ -1545,6 +1559,7 @@ def engine_diagnostic(plan):
             "engine_start_qualified": result["status"] == "passed",
             "training_qualified": False,
             "production_training_shape_qualified": False,
+            "vllm_v1_multiprocessing_disabled": True,
             "engine_start_timeout_seconds": args.engine_start_timeout_seconds,
             "engine_cleanup_timeout_seconds": args.engine_cleanup_timeout_seconds,
             "credential_variables_scrubbed": len(scrubbed),
