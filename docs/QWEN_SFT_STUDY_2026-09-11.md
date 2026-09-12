@@ -270,3 +270,20 @@ is accepted narrowly enough to open offline preflight and reviewed dev preview
 for the bounded LR qualification cells. It does not authorize a submission by
 itself. Production remains blocked on the split-A base control and exact
 production preview.
+
+### Unattended controller reconciliation
+
+The read-only
+[`2026-09-12 overnight-readiness audit`](evidence/qwen38-study/2026-09-12-overnight-readiness-audit-v1.md)
+observed zero live or queued Qwen-study RayJobs, Workloads, RayClusters, Pods,
+GPU nodes or GPUs across development and production. That is deliberately not a
+claim that all experiment-owned Pods are absent: a historical zero-GPU rollout
+PostgreSQL Pod remained Running on one production CPU node and an archive Pod
+remained Pending without allocation.
+
+The same audit found 14 old Jobs API rows still projected as `submitted` despite
+having no UID-bound execution object. They are stale/unknown duplicate-history
+evidence, not active allocations or terminal outcomes. Reconcile both API and
+Kubernetes views immediately before a new create-once POST. The spawn-safe SkyRL
+diagnostic-router correction is committed at `7599706f`; it does not by itself
+authorize an RL successor.
