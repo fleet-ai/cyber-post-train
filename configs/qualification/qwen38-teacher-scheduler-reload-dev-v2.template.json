@@ -1,0 +1,278 @@
+{
+  "schema": "cyber_qwen_sft_scheduler_reload_pair_template_v1",
+  "study_id": "qwen38-blackbox-teacher-scheduler-dev-v2",
+  "status": "blocked_waiting_both_sources_terminal_and_checkpoint_seals",
+  "launchable": false,
+  "cluster_or_api_mutations_performed": false,
+  "cluster": "dev",
+  "common": {
+    "model": {
+      "repo": "Qwen/Qwen3.8-27B",
+      "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+      "weight_manifest_sha256": "sha256:06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352"
+    },
+    "data": {
+      "corpus_manifest_sha256": "sha256:28376c692ec7caf23300b2cd80b85a0d9bbe156eedcc175daef36a0dea327a51",
+      "train_file_sha256": "sha256:a230b82655ccfea299ba8be12ac271706af89e98f81120e8289eefeeec9d2869",
+      "split_manifest_sha256": "sha256:2d20dac7d5b9bb29f6aa44369c5dd2efed9c78bd3ca4d32ed021f04843ae6863"
+    },
+    "selection": {
+      "mode": "task_outcomes_only",
+      "fleet_dev_protocol_sha256": "sha256:3c2c65eed748b16b50ef992327324b1fcaad84b190456c4aefe69c6efe748f75",
+      "reference_ce_enabled": false
+    },
+    "source_runtime": {
+      "path": "training/sft_runtime.py",
+      "sha256": "sha256:7b0787891acdf9ebe0b07475339248dce64b659a546691a7c445f99b52a20a8f"
+    },
+    "recovery_runtime": {
+      "path": "training/recovery.py",
+      "sha256": "sha256:fa83ce5846d438d4b18155a4c51965b3d05d6293c904a4afe9d7d23689e52ed5"
+    },
+    "source_optimizer_step": 6,
+    "source_world_size": 4,
+    "recovery": {
+      "mode": "validate",
+      "optimizer_steps_authorized": 0,
+      "validation_scope": "checkpoint_and_sampler_reload_only_no_ce",
+      "source_plan_transform": {
+        "remove": [
+          "pause_after_step"
+        ],
+        "replace_with_new_unique_values": [
+          "run_name",
+          "output_root",
+          "wandb.run_id",
+          "wandb.name"
+        ],
+        "add": {
+          "recovery.mode": "validate",
+          "recovery.manifest": "arm_checkpoint_seal_manifest_path",
+          "recovery.sha256": "arm_checkpoint_seal_manifest_file_sha256"
+        },
+        "preserve_exactly": [
+          "schema",
+          "model",
+          "datasets",
+          "recipe_including_scheduler_warmup_and_full_horizon",
+          "validation_mode",
+          "fleet_dev_protocol_sha256",
+          "split_manifest_sha256",
+          "corpus_manifest_sha256",
+          "runtime_sha256",
+          "execution.image",
+          "execution.resources",
+          "execution.priority"
+        ]
+      },
+      "tracking": {
+        "requires_new_unique_wandb_identity": true,
+        "automatic_system_telemetry": false,
+        "allowed_scalar": "train/global_step_equals_6",
+        "training_loss_lr_gradient_and_supervised_token_events": 0,
+        "outcomes_or_private_payloads_uploaded": false
+      },
+      "resources": {
+        "workers": 1,
+        "gpus_per_worker": 4,
+        "total_gpus": 4,
+        "priority_class": "c1",
+        "expected_queue_priority": "q1",
+        "expected_priority_value": 10000,
+        "requeueIfPreempted": false
+      }
+    }
+  },
+  "arms": [
+    {
+      "id": "explicit-constant-no-warmup",
+      "source": {
+        "api_name": "chris-q38-ta4-sched0-dev2-bb4aa2a5",
+        "output_root": "/mnt/sfs/jobs/chris-q38-ta4-sched0-dev2",
+        "prepared_dir": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/ta4-sched0-dev2",
+        "wandb_run_id": "chris-q38-ta4-sched0-dev2",
+        "scheduler": "constant_with_warmup",
+        "warmup_ratio": 0.0,
+        "expected_num_warmup_steps": 0,
+        "plan_sha256": null,
+        "terminal": {
+          "filename": "TRAINING_PAUSED.json",
+          "status": "training_paused",
+          "optimizer_step": 6,
+          "optimizer_steps_executed": 6,
+          "file_sha256": null,
+          "receipt_sha256": null,
+          "api_run_id": null,
+          "rayjob_uid": null,
+          "workload_uid": null,
+          "pod_uid": null,
+          "zero_restarts": false,
+          "resource_release_verified": false
+        }
+      },
+      "checkpoint_seal": {
+        "operation": "cpu_only_create_once",
+        "source_checkpoint_path": "/mnt/sfs/jobs/chris-q38-ta4-sched0-dev2/checkpoints/global_step_6",
+        "source_checkpoint_receipt_path": "/mnt/sfs/jobs/chris-q38-ta4-sched0-dev2/checkpoint_receipts/step-000006.json",
+        "manifest_path": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/scheduler-reload-dev2/constant-step-6.json",
+        "manifest_file_sha256": null,
+        "manifest_receipt_sha256": null,
+        "world_size": 4,
+        "gpu_reload_verified": false,
+        "command": [
+          "uv",
+          "run",
+          "cyber-post-train",
+          "checkpoint-seal",
+          "/mnt/sfs/jobs/chris-q38-study-corpora-v1/ta4-sched0-dev2",
+          "6",
+          "--output",
+          "/mnt/sfs/jobs/chris-q38-study-corpora-v1/scheduler-reload-dev2/constant-step-6.json"
+        ]
+      },
+      "reload": {
+        "new_run_name": null,
+        "new_output_root": null,
+        "new_wandb_run_id": null,
+        "prepared_dir": null,
+        "plan_sha256": null,
+        "request_sha256": null,
+        "dev_preview_sha256": null
+      }
+    },
+    {
+      "id": "cosine-warmup-5pct",
+      "source": {
+        "api_name": "chris-q38-ta4-cos5-dev2-9af1c840",
+        "output_root": "/mnt/sfs/jobs/chris-q38-ta4-cos5-dev2",
+        "prepared_dir": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/ta4-cos5-dev2",
+        "wandb_run_id": "chris-q38-ta4-cos5-dev2",
+        "scheduler": "cosine",
+        "warmup_ratio": 0.05,
+        "expected_num_warmup_steps": 4,
+        "plan_sha256": null,
+        "terminal": {
+          "filename": "TRAINING_PAUSED.json",
+          "status": "training_paused",
+          "optimizer_step": 6,
+          "optimizer_steps_executed": 6,
+          "file_sha256": null,
+          "receipt_sha256": null,
+          "api_run_id": null,
+          "rayjob_uid": null,
+          "workload_uid": null,
+          "pod_uid": null,
+          "zero_restarts": false,
+          "resource_release_verified": false
+        }
+      },
+      "checkpoint_seal": {
+        "operation": "cpu_only_create_once",
+        "source_checkpoint_path": "/mnt/sfs/jobs/chris-q38-ta4-cos5-dev2/checkpoints/global_step_6",
+        "source_checkpoint_receipt_path": "/mnt/sfs/jobs/chris-q38-ta4-cos5-dev2/checkpoint_receipts/step-000006.json",
+        "manifest_path": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/scheduler-reload-dev2/cosine-step-6.json",
+        "manifest_file_sha256": null,
+        "manifest_receipt_sha256": null,
+        "world_size": 4,
+        "gpu_reload_verified": false,
+        "command": [
+          "uv",
+          "run",
+          "cyber-post-train",
+          "checkpoint-seal",
+          "/mnt/sfs/jobs/chris-q38-study-corpora-v1/ta4-cos5-dev2",
+          "6",
+          "--output",
+          "/mnt/sfs/jobs/chris-q38-study-corpora-v1/scheduler-reload-dev2/cosine-step-6.json"
+        ]
+      },
+      "reload": {
+        "new_run_name": null,
+        "new_output_root": null,
+        "new_wandb_run_id": null,
+        "prepared_dir": null,
+        "plan_sha256": null,
+        "request_sha256": null,
+        "dev_preview_sha256": null
+      }
+    }
+  ],
+  "pre_submit_gates_per_arm": [
+    "source_terminal_receipt_is_digest_valid_and_bound_to_exact_plan",
+    "source_api_and_uid_bound_controller_are_terminal_success",
+    "source_has_zero_restarts_and_gpu_release_is_verified",
+    "source_wandb_scalar_coverage_is_complete_through_step_six",
+    "source_checkpoint_receipt_and_payload_are_present_and_stable",
+    "checkpoint_seal_runs_cpu_only_in_the_exact_pinned_training_image",
+    "checkpoint_seal_manifest_destination_is_absent_before_create_once_write",
+    "checkpoint_seal_file_digest_and_embedded_receipt_digest_are_independently_bound",
+    "private_recovery_config_preserves_the_complete_source_recipe_and_changes_only_allowed_identity_fields",
+    "recovery_prepared_output_and_wandb_destinations_are_unique_and_absent",
+    "pinned_image_cpu_preflight_passes_with_the_exact_seal",
+    "dev_jobs_api_preview_matches_exact_four_gpu_c1_request",
+    "duplicate_api_kubernetes_output_and_wandb_checks_are_clean",
+    "source_trainer_is_not_running_concurrently"
+  ],
+  "acceptance_per_arm": [
+    "jobs_api_rayjob_and_workload_terminal_success",
+    "digest_valid_RECOVERED_json",
+    "digest_valid_RELOAD_VALIDATED_json",
+    "optimizer_steps_executed_equals_zero",
+    "optimizer_step_equals_six",
+    "validation_scope_equals_checkpoint_and_sampler_reload_only_no_ce",
+    "all_four_ranks_restore_model_and_optimizer_step_counters",
+    "each_rank_scheduler_state_exactly_matches_its_checkpoint_extra_state",
+    "all_four_ranks_restore_exact_rng_state",
+    "sampler_cursor_restored_exactly",
+    "source_checkpoint_inventory_sizes_and_hashes_unchanged_after_reload",
+    "reload_output_contains_no_checkpoint_or_training_receipt",
+    "wandb_contains_no_new_loss_lr_gradient_or_supervised_token_training_events",
+    "zero_restarts",
+    "gpu_release_verified"
+  ],
+  "pair_completion": [
+    "both_arms_independently_meet_every_acceptance_gate",
+    "constant_checkpoint_is_never_cross_bound_to_cosine_reload",
+    "cosine_checkpoint_is_never_cross_bound_to_constant_reload"
+  ],
+  "unresolved_bindings": [
+    "arms.0.source.plan_sha256",
+    "arms.0.source.terminal.file_sha256",
+    "arms.0.source.terminal.receipt_sha256",
+    "arms.0.source.terminal.api_run_id",
+    "arms.0.source.terminal.rayjob_uid",
+    "arms.0.source.terminal.workload_uid",
+    "arms.0.source.terminal.pod_uid",
+    "arms.0.source.terminal.zero_restarts",
+    "arms.0.source.terminal.resource_release_verified",
+    "arms.0.checkpoint_seal.manifest_file_sha256",
+    "arms.0.checkpoint_seal.manifest_receipt_sha256",
+    "arms.0.reload.new_run_name",
+    "arms.0.reload.new_output_root",
+    "arms.0.reload.new_wandb_run_id",
+    "arms.0.reload.prepared_dir",
+    "arms.0.reload.plan_sha256",
+    "arms.0.reload.request_sha256",
+    "arms.0.reload.dev_preview_sha256",
+    "arms.1.source.plan_sha256",
+    "arms.1.source.terminal.file_sha256",
+    "arms.1.source.terminal.receipt_sha256",
+    "arms.1.source.terminal.api_run_id",
+    "arms.1.source.terminal.rayjob_uid",
+    "arms.1.source.terminal.workload_uid",
+    "arms.1.source.terminal.pod_uid",
+    "arms.1.source.terminal.zero_restarts",
+    "arms.1.source.terminal.resource_release_verified",
+    "arms.1.checkpoint_seal.manifest_file_sha256",
+    "arms.1.checkpoint_seal.manifest_receipt_sha256",
+    "arms.1.reload.new_run_name",
+    "arms.1.reload.new_output_root",
+    "arms.1.reload.new_wandb_run_id",
+    "arms.1.reload.prepared_dir",
+    "arms.1.reload.plan_sha256",
+    "arms.1.reload.request_sha256",
+    "arms.1.reload.dev_preview_sha256"
+  ],
+  "interpretation": "This is a paired native scheduler-state recovery gate. It can prove exact step-six model, optimizer-counter, scheduler, RNG and sampler restoration with zero optimizer updates and no teacher-reference CE. It cannot rank schedulers, measure task quality, qualify an inference export or authorize production training.",
+  "sha256": "sha256:9263b5e260f4a9dd44c32ff7db97e4a8967b146f82e9ded015ef8dd1e5bee739"
+}
