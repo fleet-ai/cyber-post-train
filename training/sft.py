@@ -106,12 +106,14 @@ def compile_sft(config: dict, *, relative_to: Path) -> dict:
     weights = read_mapping(relative_to / model["weights"])
     bound = bound_model(lock, weights, _sfs_root(model["root"], "model root"))
     data = config["data"]
-    _known(data, {"manifest", "root"}, "data")
+    _known(data, {"manifest", "manifest_sha256", "root"}, "data")
     manifest = read_mapping(relative_to / data["manifest"])
     if manifest.get("sha256") != "sha256:" + digest(
         {k: v for k, v in manifest.items() if k != "sha256"}
     ):
         raise ValueError("corpus manifest digest mismatch")
+    if "manifest_sha256" in data and data["manifest_sha256"] != manifest["sha256"]:
+        raise ValueError("corpus manifest differs from the configured immutable digest")
     if (manifest["tokenizer"]["repo"], manifest["tokenizer"]["revision"]) != (
         lock["repo"],
         lock["revision"],

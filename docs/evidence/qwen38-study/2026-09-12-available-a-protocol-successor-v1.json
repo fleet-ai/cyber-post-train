@@ -1,0 +1,35 @@
+{
+  "schema": "cyber_sft_protocol_manifest_successor_receipt_v1",
+  "classification": "local_metadata_only_unstaged_no_launch",
+  "source_manifest_sha256": "sha256:c4945ddb7cd8fd0b7b9ebbd9bad9b96215b0905c059ef1b22d71d4f214b4eb8e",
+  "source_manifest_file_sha256": "sha256:023c7e0c6beb9a72b4074d75600fa4af9f9e72e9e5189e1bfea54c93a30f18cb",
+  "successor_manifest_sha256": "sha256:1b083613c16362daf7c86fd8b458d99d7e167133df919602c21916314142c4dc",
+  "successor_manifest_file_sha256": "sha256:d7fcb3e0c8c7726f5d1175f831fa0e88af632f1c6b68c6101c8db3e2cf4b85f7",
+  "previous_protocol_sha256": "sha256:d9423651420dcf1c39f7b870daafe8a74dec18db6eac8684b3845d881dc61019",
+  "protocol_sha256": "sha256:3c2c65eed748b16b50ef992327324b1fcaad84b190456c4aefe69c6efe748f75",
+  "protocol_file_sha256": "sha256:008d412bcdee122cd2b4f072e6f242496b3e8de1e8b07ad60e598de59202560e",
+  "changed_manifest_fields": [
+    "fleet_dev_protocol_sha256",
+    "sha256"
+  ],
+  "preserved": {
+    "source_sha256": "sha256:f3e5e7603e0d8d5014f71d4195547e53adf169e0c3dab5e3fc6a7a403c144d9a",
+    "split_sha256": "sha256:2d20dac7d5b9bb29f6aa44369c5dd2efed9c78bd3ca4d32ed021f04843ae6863",
+    "tokenizer_identity_sha256": "sha256:61463c912eb610ee47b0ade3837572e5c048310b5be04bdf8164b9c15aa149e5",
+    "train_file_sha256": "sha256:a230b82655ccfea299ba8be12ac271706af89e98f81120e8289eefeeec9d2869",
+    "train_rows": 602,
+    "supervised_tokens": 700359,
+    "builder_sha256": {
+      "corpus.py": "sha256:bbc961cec65a352d76007f13e4bb4c941c1ee2dbb233df91d8806c6ed8527d43",
+      "dense.py": "sha256:712038f1abf4f461cf471afc50f7fbbfe90c9d2d7b9e0be1a81583378c933012",
+      "splits.py": "sha256:b3b5dd76e9307edb7572b5d71e192a4ae7846ac78e34f61cd19b57289bfda1c5",
+      "study_data.py": "sha256:e51313e77edb2032024d4a8bc47726010cb4ade1191114bfb5f693c0ba697871"
+    },
+    "source_selection_sha256": "sha256:cdf82a83e423c3de6556b8f0ca5eaf4cb358041cd3015a335250b473e4a5cfc7",
+    "target_policy_sha256": "sha256:f371e87d02e6a32d32b511d9439caff97540709f17f346830d7989781c550cc1"
+  },
+  "parquet_or_source_records_read": false,
+  "remote_operations_performed": false,
+  "launch_authorized": false,
+  "sha256": "sha256:25a8ad7753f380d6cbb86ce5418b81ae71bd6799ffedb03ee55c74a31ec88dde"
+}

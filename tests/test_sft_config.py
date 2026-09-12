@@ -113,6 +113,26 @@ def test_compile_uses_exact_model_manifest_and_complete_epochs(config, tmp_path)
     assert hashlib.sha256(content["runtime"].encode()).hexdigest() == plan["runtime_sha256"]
 
 
+def test_configured_manifest_digest_rejects_valid_but_different_provenance(config, tmp_path):
+    source, manifest, save = config
+    original = sft.read_mapping(tmp_path / "corpus.json")["sha256"]
+    source["data"]["manifest_sha256"] = original
+    assert sft.compile_sft(source, relative_to=tmp_path)["corpus_manifest_sha256"] == original
+    # Dataset bytes/counts can agree while the selected corpus provenance differs.
+    manifest["builder_sha256"] = {"study_data.py": "sha256:" + "e" * 64}
+    save(manifest)
+    with pytest.raises(ValueError, match="configured immutable digest"):
+        sft.compile_sft(source, relative_to=tmp_path)
+
+
+@pytest.mark.parametrize("expected", [None, "", "latest", "a" * 64, "sha256:" + "0" * 64])
+def test_configured_manifest_digest_must_match_exactly(config, tmp_path, expected):
+    source, _, _ = config
+    source["data"]["manifest_sha256"] = expected
+    with pytest.raises(ValueError, match="configured immutable digest"):
+        sft.compile_sft(source, relative_to=tmp_path)
+
+
 def test_compile_preserves_legacy_schedule_and_binds_explicit_cosine(config, tmp_path):
     source, _, _ = config
     legacy = sft.compile_sft(source, relative_to=tmp_path)
