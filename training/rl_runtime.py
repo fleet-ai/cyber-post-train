@@ -8,14 +8,74 @@ import re
 import signal
 import subprocess
 import sys
+import threading
 import time
 import traceback
-from contextlib import suppress
+from contextlib import contextmanager, suppress
 from pathlib import Path
 
 from cyber_post_train.jobs import digest
 
 from .miles_conversion import _write
+
+
+class HardDeadlineExceeded(TimeoutError):
+    """A process-local lifecycle deadline expired."""
+
+    def __init__(self, phase: str):
+        self.phase = phase
+        super().__init__(f"{phase} exceeded its plan-bound hard deadline")
+
+
+class HardDeadline:
+    """Monotonic deadline shared by signal and API-level timeout guards."""
+
+    def __init__(self, seconds: int, phase: str):
+        if type(seconds) is not int or seconds < 1 or not phase:
+            raise ValueError("hard deadline requires positive integer seconds and a phase")
+        self.seconds = seconds
+        self.phase = phase
+        self.started_at = time.monotonic()
+        self.expires_at = self.started_at + seconds
+        self.expired = False
+
+    def remaining(self) -> float:
+        value = self.expires_at - time.monotonic()
+        if value <= 0:
+            self.raise_expired()
+        return value
+
+    def raise_expired(self) -> None:
+        self.expired = True
+        raise HardDeadlineExceeded(self.phase)
+
+
+@contextmanager
+def hard_deadline(seconds: int, phase: str):
+    """Interrupt Python/Ray waits at one plan-bound wall-clock deadline.
+
+    Diagnostic entrypoints run on the main thread of a dedicated Linux process.
+    Refuse to replace an existing alarm or run from another thread: either case
+    would make timeout ownership ambiguous.
+    """
+    if threading.current_thread() is not threading.main_thread():
+        raise RuntimeError("hard lifecycle deadline requires the main thread")
+    previous_timer = signal.getitimer(signal.ITIMER_REAL)
+    if previous_timer != (0.0, 0.0):
+        raise RuntimeError("hard lifecycle deadline cannot replace an existing process alarm")
+    previous_handler = signal.getsignal(signal.SIGALRM)
+    deadline = HardDeadline(seconds, phase)
+
+    def expired(_signum, _frame):
+        deadline.raise_expired()
+
+    signal.signal(signal.SIGALRM, expired)
+    signal.setitimer(signal.ITIMER_REAL, seconds)
+    try:
+        yield deadline
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous_handler)
 
 
 def sealed(value, schema):
@@ -25,8 +85,8 @@ def sealed(value, schema):
         raise ValueError("input receipt schema/digest mismatch")
 
 
-def native_failure(plan, error):
-    """Keep Ray's nested error types/code locations, never its private messages."""
+def sanitized_causes(error):
+    """Keep nested error types/code locations, never private messages."""
     causes, seen, pending = [], set(), [error]
     while pending and len(causes) < 8:
         error = pending.pop(0)
@@ -59,9 +119,14 @@ def native_failure(plan, error):
         if isinstance(error, BaseExceptionGroup):
             pending.extend(error.exceptions)
         pending.append(getattr(error, "cause", None) or error.__cause__ or error.__context__)
+    return causes
+
+
+def native_failure(plan, error):
+    """Persist Ray's sanitized failure chain for a real native training run."""
     return _write(
         Path(plan["output_root"]) / "NATIVE_FAILURE.json",
-        {"plan_sha256": digest(plan), "causes": causes},
+        {"plan_sha256": digest(plan), "causes": sanitized_causes(error)},
     )
 
 

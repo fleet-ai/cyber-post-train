@@ -44,6 +44,8 @@ class SkyRLConfig:
     response_tokens: int = 81920
     tokens_per_turn: int = 4096
     max_turns: int = 64
+    engine_start_timeout_seconds: int = 1800
+    engine_cleanup_timeout_seconds: int = 300
 
     def validate(self):
         if self.model != "Qwen/Qwen3.8-27B":
@@ -84,6 +86,8 @@ class SkyRLConfig:
             "response_tokens",
             "tokens_per_turn",
             "max_turns",
+            "engine_start_timeout_seconds",
+            "engine_cleanup_timeout_seconds",
         ):
             if type(getattr(self, key)) is not int or getattr(self, key) < 1:
                 raise ValueError("SkyRL counts must be positive integers")
@@ -101,6 +105,8 @@ class SkyRLConfig:
             raise ValueError("learning rate must be finite and positive")
         if not self.tokens_per_turn <= self.response_tokens < self.context_tokens <= 98304:
             raise ValueError("generation budgets exceed the reviewed Qwen context envelope")
+        if self.engine_start_timeout_seconds > 3600 or self.engine_cleanup_timeout_seconds > 600:
+            raise ValueError("SkyRL engine lifecycle deadlines exceed the reviewed envelope")
 
 
 def overrides(config: SkyRLConfig) -> dict:
@@ -197,12 +203,31 @@ def overrides(config: SkyRLConfig) -> dict:
     }
 
 
-def native_config(config: SkyRLConfig):
-    """Parse and validate through the exact installed native code, without Ray init."""
+def _parse_native_config(values: dict):
+    """Parse and validate exact native overrides without initializing Ray."""
     from .skyrl_episode import _module
 
-    values = overrides(config)
     modules = {name: _module(name, sha) for name, sha in NATIVE_SOURCES.items()}
     cfg = modules["skyrl.train.config.config"].SkyRLTrainConfig.from_cli_overrides(values)
     modules["skyrl.train.utils.utils"].validate_cfg(cfg)
+    return cfg
+
+
+def native_config(config: SkyRLConfig):
+    """Parse and validate the training configuration through exact native code."""
+    return _parse_native_config(overrides(config))
+
+
+def diagnostic_native_config(config: SkyRLConfig):
+    """Parse the engine-only profile with telemetry side effects disabled."""
+    values = overrides(config)
+    values.update(
+        {
+            "trainer.logger": "console",
+            "trainer.enable_ray_gpu_monitor": False,
+        }
+    )
+    cfg = _parse_native_config(values)
+    if cfg.trainer.logger != "console" or cfg.trainer.enable_ray_gpu_monitor is not False:
+        raise ValueError("native diagnostic telemetry controls changed")
     return cfg

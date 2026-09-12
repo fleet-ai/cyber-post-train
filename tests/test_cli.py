@@ -104,6 +104,9 @@ def test_rl_preflight_dispatch_does_not_use_sft_checker(prepared, monkeypatch, b
     monkeypatch.setattr(cli, "_prepared", lambda _: (plan, request))
     calls = []
     monkeypatch.setattr(sft, "preflight", lambda _: pytest.fail("wrong backend"))
+    if backend == "skyrl":
+        monkeypatch.setattr(module, "job_request", lambda _: request)
+        monkeypatch.setattr(module, "engine_diagnostic_request", lambda _: {"kind": "diagnostic"})
 
     def check(value):
         calls.append(value)
@@ -114,6 +117,86 @@ def test_rl_preflight_dispatch_does_not_use_sft_checker(prepared, monkeypatch, b
     assert result.exit_code == 0 and calls == [plan]
     receipt = cli._read(output / "PREFLIGHT.json")
     assert receipt["sha256"] == digest({k: v for k, v in receipt.items() if k != "sha256"})
+
+
+def test_skyrl_engine_diagnostic_uses_exact_prepare_preflight_submit_rail(
+    prepared, monkeypatch, tmp_path
+):
+    from training import skyrl_training
+
+    _, _, request, config = prepared
+    output = tmp_path / "engine-diagnostic"
+    plan = {"schema": skyrl_training.SCHEMA, "run_name": "diagnostic"}
+    diagnostic = {**request, "name": "diagnostic", "command": "diagnostic"}
+    training = {**request, "name": "training", "command": "training"}
+    monkeypatch.setattr(skyrl_training, "compile_rl", lambda *a, **k: plan)
+    monkeypatch.setattr(skyrl_training, "engine_diagnostic_request", lambda _: diagnostic)
+    monkeypatch.setattr(skyrl_training, "job_request", lambda _: training)
+    config.write_text("backend: skyrl\n")
+
+    result = RUNNER.invoke(cli.app, ["rl-engine-diagnostic", str(config), "--output", str(output)])
+    assert result.exit_code == 0
+    assert cli._prepared(output) == (plan, diagnostic)
+    assert json.loads(result.stdout)["optimizer_steps"] == 0
+
+    proof = {
+        "schema": "cyber_skyrl_engine_diagnostic_cpu_preflight_v1",
+        "status": "passed",
+        "gpus": 0,
+        "plan_sha256": digest(plan),
+        "request_sha256": digest(diagnostic),
+    }
+    monkeypatch.setattr(skyrl_training, "engine_diagnostic_preflight", lambda _: proof)
+    monkeypatch.setattr(
+        skyrl_training, "preflight", lambda _: pytest.fail("used training preflight")
+    )
+    assert RUNNER.invoke(cli.app, ["preflight", str(output)]).exit_code == 0
+
+    calls = []
+    monkeypatch.setattr(
+        cli,
+        "_client",
+        lambda cluster: nullcontext(
+            SimpleNamespace(
+                submit_once=lambda *args: calls.append(args) or {"name": "diagnostic-12345678"}
+            )
+        ),
+    )
+    assert RUNNER.invoke(cli.app, ["submit", str(output)]).exit_code == 0
+    assert calls == [(diagnostic, output / "SUBMISSION.jsonl")]
+
+
+def test_skyrl_request_must_match_plan_before_preflight_or_submit(prepared, monkeypatch):
+    from training import skyrl_training
+
+    output, plan, request, _ = prepared
+    plan["schema"] = skyrl_training.SCHEMA
+    monkeypatch.setattr(cli, "_prepared", lambda _: (plan, request))
+    monkeypatch.setattr(skyrl_training, "engine_diagnostic_request", lambda _: {"kind": "diag"})
+    monkeypatch.setattr(skyrl_training, "job_request", lambda _: {"kind": "train"})
+    monkeypatch.setattr(cli, "_client", lambda cluster: pytest.fail("reached cluster"))
+
+    assert RUNNER.invoke(cli.app, ["preflight", str(output)]).exit_code == 2
+    assert RUNNER.invoke(cli.app, ["submit", str(output)]).exit_code == 2
+
+
+@pytest.mark.parametrize("command", ["preview", "submit"])
+def test_skyrl_engine_diagnostic_cannot_target_production(prepared, monkeypatch, command):
+    from training import skyrl_training
+
+    output, plan, request, _ = prepared
+    plan["schema"] = skyrl_training.SCHEMA
+    monkeypatch.setattr(cli, "_prepared", lambda _: (plan, request))
+    monkeypatch.setattr(skyrl_training, "engine_diagnostic_request", lambda _: request)
+    monkeypatch.setattr(skyrl_training, "job_request", lambda _: {"kind": "training"})
+    calls = []
+    monkeypatch.setattr(cli, "_client", lambda cluster: calls.append(cluster))
+    monkeypatch.setattr(cli, "_read", lambda _: pytest.fail("read proof before cluster gate"))
+
+    result = RUNNER.invoke(cli.app, [command, str(output), "--cluster", "prod"])
+    assert result.exit_code == 2
+    assert "dev-cluster-only" in result.stderr
+    assert calls == []
 
 
 def test_module_entrypoint_exposes_public_help(monkeypatch, capsys):

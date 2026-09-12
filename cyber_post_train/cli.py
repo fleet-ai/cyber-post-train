@@ -180,18 +180,57 @@ def rl(config: Path, output: Annotated[Path, typer.Option("--output")]) -> None:
         _fail(exc)
 
 
+@app.command("rl-engine-diagnostic")
+def rl_engine_diagnostic(config: Path, output: Annotated[Path, typer.Option("--output")]) -> None:
+    """Prepare one dev-only SkyRL engine-start diagnostic. No task execution or submission."""
+    from training.sft import read_mapping
+    from training.skyrl_training import compile_rl, engine_diagnostic_request
+
+    try:
+        value = read_mapping(config)
+        if value.get("backend") != "skyrl":
+            raise ValueError("engine diagnostic requires the SkyRL backend")
+        plan = compile_rl(value, relative_to=config.resolve().parent)
+        request = engine_diagnostic_request(plan)
+        _prepare(output, plan, request)
+        _print(
+            {
+                "prepared": str(output),
+                "gpus": request["workers"] * request["gpus_per_worker"],
+                "task_rows": 0,
+                "optimizer_steps": 0,
+                "submitted": False,
+            }
+        )
+    except Exception as exc:
+        _fail(exc)
+
+
+def _skyrl_mode(plan: dict, request: dict) -> str:
+    from training import skyrl_training as backend
+
+    if request == backend.engine_diagnostic_request(plan):
+        return "engine_diagnostic"
+    if request == backend.job_request(plan):
+        return "training"
+    raise ValueError("prepared SkyRL request does not match its immutable plan")
+
+
 @app.command()
 def preflight(directory: Path) -> None:
     """Validate staged training/conversion inputs in the pinned image, without GPUs."""
 
     try:
-        plan, _ = _prepared(directory)
+        plan, request = _prepared(directory)
         if plan.get("schema") == "cyber_miles_conversion_v1":
             from training.miles_conversion import preflight as check
         elif plan.get("schema") == "cyber_miles_training_v1":
             from training.miles_training import preflight as check
         elif plan.get("schema") == "cyber_skyrl_training_v1":
-            from training.skyrl_training import preflight as check
+            if _skyrl_mode(plan, request) == "engine_diagnostic":
+                from training.skyrl_training import engine_diagnostic_preflight as check
+            else:
+                from training.skyrl_training import preflight as check
         else:
             from training.sft import preflight as check
         if (directory / "PREFLIGHT.json").exists():
@@ -212,7 +251,13 @@ def preview(
 ) -> None:
     """Read the selected cluster's render (dev by default); does not create a run."""
     try:
-        _, request = _prepared(directory)
+        plan, request = _prepared(directory)
+        if (
+            plan.get("schema") == "cyber_skyrl_training_v1"
+            and _skyrl_mode(plan, request) == "engine_diagnostic"
+            and cluster != Cluster.dev
+        ):
+            raise JobsError("SkyRL engine diagnostics are dev-cluster-only")
         with _client(cluster) as client:
             result = client.preview(request)
         _print(
@@ -241,13 +286,22 @@ def submit(
     """
     try:
         plan, request = _prepared(directory)
+        skyrl_mode = (
+            _skyrl_mode(plan, request) if plan.get("schema") == "cyber_skyrl_training_v1" else None
+        )
+        if skyrl_mode == "engine_diagnostic" and cluster != Cluster.dev:
+            raise JobsError("SkyRL engine diagnostics are dev-cluster-only")
         proof = _read(directory / "PREFLIGHT.json")
         expected = {
             "schema": "cyber_miles_conversion_cpu_preflight_v1"
             if plan.get("schema") == "cyber_miles_conversion_v1"
             else "cyber_miles_training_cpu_preflight_v1"
             if plan.get("schema") == "cyber_miles_training_v1"
-            else "cyber_skyrl_training_cpu_preflight_v1"
+            else (
+                "cyber_skyrl_engine_diagnostic_cpu_preflight_v1"
+                if skyrl_mode == "engine_diagnostic"
+                else "cyber_skyrl_training_cpu_preflight_v1"
+            )
             if plan.get("schema") == "cyber_skyrl_training_v1"
             else "cyber_sft_cpu_preflight_v1",
             "status": "passed",

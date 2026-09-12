@@ -1,10 +1,16 @@
 """Offline launch/lifecycle tests; synthetic task data and no paid requests."""
 
+import base64
+import gzip
+import hashlib
 import importlib.util
 import json
 import os
+import signal
 import subprocess
 import sys
+import time
+from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace as NS
 
@@ -20,6 +26,190 @@ from training import rl_data, sft_runtime
 from training import skyrl_training as train
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def _without_diagnostic_wandb(monkeypatch):
+    monkeypatch.delenv("WANDB_API_KEY", raising=False)
+
+
+def _materialize_diagnostic_runtime(plan):
+    root = Path(plan["output_root"])
+    runtime = root / ".runtime"
+    runtime.mkdir()
+    for name, content in train._diagnostic_runtime_files(plan).items():
+        path = runtime / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content)
+
+
+class _Ref:
+    def __init__(self, value=None, error=None):
+        self.value, self.error = value, error
+
+
+class _RemoteMethod:
+    def __init__(self, method):
+        self.method = method
+
+    def remote(self, *args, **kwargs):
+        try:
+            return _Ref(self.method(*args, **kwargs))
+        except BaseException as exc:
+            return _Ref(error=exc)
+
+
+class _Actor:
+    def __init__(self, value):
+        self.value, self.dead = value, False
+
+    def __getattr__(self, name):
+        if name == "shutdown":
+            return _RemoteMethod(lambda: None)
+        return _RemoteMethod(getattr(self.value, name))
+
+
+class _RemoteClass:
+    def __init__(self, value, *, options_kwargs=None, factory=None):
+        self.value = value
+        self.options_kwargs = {} if options_kwargs is None else options_kwargs
+        self.factory = factory
+
+    def options(self, **kwargs):
+        return type(self)(
+            self.value,
+            options_kwargs={**self.options_kwargs, **kwargs},
+            factory=self.factory,
+        )
+
+    def remote(self, *args, **kwargs):
+        if self.factory is not None:
+            return self.factory(self.options_kwargs, *args, **kwargs)
+        return _Actor(self.value(*args, **kwargs))
+
+
+def _fake_ray(calls, *, credential_count=0, nodes=None):
+    actors, actor_options = [], []
+
+    class NodeAffinitySchedulingStrategy:
+        def __init__(self, *, node_id, soft):
+            self.node_id, self.soft = node_id, soft
+
+    def remote(value):
+        def create(options, *args, **kwargs):
+            options = dict(options)
+            actor_options.append(options)
+            strategy = options.get("scheduling_strategy")
+
+            def inspect(names):
+                count = (
+                    credential_count(options, names)
+                    if callable(credential_count)
+                    else credential_count
+                )
+                return {"node_id": strategy.node_id, "nonempty": count}
+
+            actor = (
+                _Actor(NS(inspect=inspect))
+                if value is train._CredentialProbe
+                else _Actor(value(*args, **kwargs))
+            )
+            actors.append(actor)
+            return actor
+
+        return _RemoteClass(value, factory=create)
+
+    def get(refs, *, timeout=None, **kwargs):
+        calls.append(("ray-get", timeout))
+
+        def resolve(ref):
+            if ref.error is not None:
+                raise ref.error
+            return ref.value
+
+        return [resolve(ref) for ref in refs] if isinstance(refs, list) else resolve(refs)
+
+    if nodes is None:
+        nodes = [
+            {"Alive": True, "NodeID": "aa", "Resources": {"GPU": 4.0}},
+            {"Alive": True, "NodeID": "bb", "Resources": {"GPU": 4.0}},
+            {"Alive": True, "NodeID": "dd", "Resources": {"CPU": 16.0}},
+            {"Alive": False, "NodeID": "cc", "Resources": {"GPU": 4.0}},
+        ]
+    ray = NS(
+        init=lambda **kwargs: calls.append(("ray", kwargs)),
+        get=get,
+        get_runtime_context=lambda: NS(get_job_id=lambda: "a1"),
+        nodes=lambda: nodes() if callable(nodes) else nodes,
+        remote=remote,
+        kill=lambda actor, **kwargs: (setattr(actor, "dead", True), calls.append("ray-kill")),
+        shutdown=lambda: calls.append("ray-shutdown"),
+        util=NS(
+            scheduling_strategies=NS(NodeAffinitySchedulingStrategy=NodeAffinitySchedulingStrategy)
+        ),
+        actor_options=actor_options,
+    )
+    return ray, actors
+
+
+def _exact_engine_config():
+    return NS(
+        num_engines=2,
+        tensor_parallel_size=4,
+        pipeline_parallel_size=1,
+        data_parallel_size=1,
+    )
+
+
+def _install_engine_modules(monkeypatch, calls, create):
+    class Group:
+        def __init__(self):
+            self.actor = _Actor(NS())
+
+        def get_actors(self):
+            return [self.actor]
+
+        def _create_actor_class(self, *args, **kwargs):
+            module = sys.modules["skyrl.backends.skyrl_train.inference_servers.server_group"]
+            runtime_env = module.build_engine_runtime_env()
+            return _RemoteClass(train._CredentialProbe).options(runtime_env=runtime_env)
+
+    class Router:
+        def start(self):
+            module = sys.modules["skyrl.backends.skyrl_train.inference_servers.vllm_router"]
+            module._run_router_with_logging()
+            return "http://router"
+
+        def shutdown(self):
+            calls.append("router")
+
+    placement = NS(remove_placement_group=lambda group: calls.append("remove-pg"))
+    monkeypatch.setitem(sys.modules, "ray.util.placement_group", placement)
+    monkeypatch.setitem(
+        sys.modules,
+        "skyrl.backends.skyrl_train.inference_servers.server_group",
+        NS(
+            ServerGroup=Group,
+            build_engine_runtime_env=lambda **kwargs: None,
+            placement_group=lambda *args, **kwargs: object(),
+        ),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "skyrl.backends.skyrl_train.inference_servers.vllm_router",
+        NS(
+            VLLMRouter=Router,
+            _run_router_with_logging=lambda: calls.append("router-target"),
+            multiprocessing=NS(
+                get_start_method=lambda: "fork",
+                RawValue=lambda kind, value: NS(value=value),
+            ),
+        ),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "skyrl.backends.skyrl_train.inference_servers.setup",
+        NS(create_inference_servers=create, ray_placement_group=lambda *args, **kwargs: object()),
+    )
 
 
 @pytest.fixture
@@ -51,7 +241,7 @@ def test_prepare_cli_and_portable_runtime_are_offline(prepared, monkeypatch):
     request = train.job_request(plan)
     assert IMAGE == train.IMAGE == request["image"]
     assert request["priority_class"] == "c1" and not request["requeueIfPreempted"]
-    assert request["workers"] * request["gpus_per_worker"] == 8
+    assert (request["workers"], request["gpus_per_worker"]) == (1, 8)
     assert request["secrets"] == ["fleet-api", "wandb-api"]
     assert "API_KEY" not in str(request["env"])
     assert plan["arguments"]["steps"] == plan["native_overrides"]["trainer.max_training_steps"] == 2
@@ -92,6 +282,422 @@ def test_prepare_cli_and_portable_runtime_are_offline(prepared, monkeypatch):
     assert result.returncode == 0, result.stderr.decode()
 
 
+def test_engine_diagnostic_request_is_exact_image_no_secret_and_no_training(prepared):
+    # The retained failure used Mamba cache mode ``none`` and its exact vLLM
+    # EngineConfig accepted 8192.  The unrelated 2096/align-mode workaround is
+    # not an admitted correction for this model/runtime.
+    overrides = prepared.plan["native_overrides"]
+    assert overrides["generator.inference_engine.enable_prefix_caching"] is False
+    assert "generator.inference_engine.max_num_batched_tokens" not in overrides
+    request = train.engine_diagnostic_request(prepared.plan)
+    assert request["image"] == train.IMAGE
+    assert request["secrets"] == []
+    assert (request["workers"], request["gpus_per_worker"]) == (2, 4)
+    assert request["workers"] * request["gpus_per_worker"] == 8
+    assert train._diagnostic_shape(prepared.plan) == {
+        "diagnostic_workers": 2,
+        "diagnostic_gpus_per_worker": 4,
+        "diagnostic_total_gpus": 8,
+        "num_engines": 2,
+        "tensor_parallel_size": 4,
+    }
+    assert not request["requeueIfPreempted"]
+    assert request["env"]["PYTHONDONTWRITEBYTECODE"] == "1"
+    assert prepared.plan["arguments"]["engine_start_timeout_seconds"] == 1800
+    assert prepared.plan["arguments"]["engine_cleanup_timeout_seconds"] == 300
+    assert "WANDB" not in json.dumps(request["env"])
+    keys = sorted(k for k in request["env"] if k.startswith("CYBER_RUNTIME_BUNDLE"))
+    payload = json.loads(
+        gzip.decompress(base64.b64decode("".join(request["env"][k] for k in keys)))
+    )
+    assert payload["argv"][-1] == "--engine-diagnostic"
+
+
+def test_engine_diagnostic_native_config_disables_tracking_and_gpu_monitor(prepared, monkeypatch):
+    from training import skyrl_episode
+
+    result = NS(trainer=NS(logger="console", enable_ray_gpu_monitor=False))
+    seen = {}
+
+    def module(name, sha):
+        assert train.skyrl.NATIVE_SOURCES[name] == sha
+        if name.endswith(".config"):
+            return NS(
+                SkyRLTrainConfig=NS(
+                    from_cli_overrides=lambda values: (seen.update(values=values), result)[1]
+                )
+            )
+        return NS(validate_cfg=lambda cfg: seen.update(validated=cfg))
+
+    monkeypatch.setattr(skyrl_episode, "_module", module)
+    config = train.skyrl.SkyRLConfig(**prepared.plan["arguments"])
+    assert train.skyrl.diagnostic_native_config(config) is result
+    assert seen["values"]["trainer.logger"] == "console"
+    assert seen["values"]["trainer.enable_ray_gpu_monitor"] is False
+    assert seen["validated"] is result
+    assert prepared.plan["native_overrides"]["trainer.logger"] == "wandb"
+    result.trainer.logger = "wandb"
+    with pytest.raises(ValueError, match="telemetry controls changed"):
+        train.skyrl.diagnostic_native_config(config)
+
+
+def test_engine_diagnostic_shape_rejects_training_topology_substitution(prepared):
+    prepared.plan["arguments"]["nodes"] = 2
+    prepared.plan["native_overrides"]["generator.inference_engine.num_engines"] = 4
+
+    with pytest.raises(ValueError, match="exact one-node"):
+        train._diagnostic_shape(prepared.plan)
+
+
+def test_engine_diagnostic_preflight_never_reads_task_rows(prepared, monkeypatch):
+    _without_diagnostic_wandb(monkeypatch)
+    monkeypatch.setattr(train.os, "geteuid", lambda: 1000)
+    monkeypatch.setattr(train.os, "getegid", lambda: 100)
+    monkeypatch.setattr(train, "check_inputs", lambda plan: None)
+    monkeypatch.setattr(train, "native_source", lambda: {})
+    monkeypatch.setitem(
+        sys.modules,
+        "skyrl.backends.skyrl_train.inference_servers.utils",
+        NS(build_vllm_cli_args=lambda cfg: "exact-vllm-args"),
+    )
+    monkeypatch.setattr(
+        train.skyrl, "native_config", lambda config: pytest.fail("used training config")
+    )
+    cfg = NS(generator=NS(inference_engine=_exact_engine_config()))
+    monkeypatch.setattr(train.skyrl, "diagnostic_native_config", lambda config: cfg)
+    monkeypatch.setattr(train, "check_artifacts", lambda plan: pytest.fail("read task rows"))
+
+    receipt = train.engine_diagnostic_preflight(prepared.plan)
+
+    assert receipt["schema"] == "cyber_skyrl_engine_diagnostic_cpu_preflight_v1"
+    assert receipt["request_sha256"] == digest(train.engine_diagnostic_request(prepared.plan))
+    assert receipt["engine_cli_args_checked"]
+    assert {
+        key: receipt[key]
+        for key in (
+            "diagnostic_workers",
+            "diagnostic_gpus_per_worker",
+            "diagnostic_total_gpus",
+            "num_engines",
+            "tensor_parallel_size",
+        )
+    } == train._diagnostic_shape(prepared.plan, cfg)
+    assert receipt["task_rows_read"] == 0
+    assert not any(
+        receipt[key]
+        for key in ("rollouts", "verifier_calls", "optimizer_updates", "checkpoints", "wandb")
+    )
+
+
+def test_engine_diagnostic_preflight_rejects_native_cli_arg_drift(prepared, monkeypatch):
+    monkeypatch.setattr(train.os, "geteuid", lambda: 1000)
+    monkeypatch.setattr(train.os, "getegid", lambda: 100)
+    monkeypatch.setattr(train, "check_inputs", lambda plan: None)
+    monkeypatch.setattr(train, "native_source", lambda: {})
+    cfg = NS(generator=NS(inference_engine=_exact_engine_config()))
+    monkeypatch.setattr(train.skyrl, "diagnostic_native_config", lambda config: cfg)
+    monkeypatch.setitem(
+        sys.modules,
+        "skyrl.backends.skyrl_train.inference_servers.utils",
+        NS(
+            build_vllm_cli_args=lambda cfg: (_ for _ in ()).throw(
+                ValueError("synthetic native arg drift")
+            )
+        ),
+    )
+
+    with pytest.raises(ValueError, match="native arg drift"):
+        train.engine_diagnostic_preflight(prepared.plan)
+
+
+def test_engine_diagnostic_scrubs_ambient_credentials_but_keeps_them_for_driver(
+    prepared, monkeypatch
+):
+    plan = prepared.plan
+    root = prepared.state.tmp / "credential-rejection"
+    root.mkdir()
+    plan["output_root"] = str(root)
+    monkeypatch.setenv("FLEET_API_KEY", "synthetic-platform-plumbing")
+    monkeypatch.setenv("WANDB_API_KEY", "synthetic-forbidden-tracking-key")
+    native = {
+        "skyrl.train.utils.utils": NS(
+            prepare_runtime_environment=lambda _: {
+                "WANDB_API_KEY": os.environ["WANDB_API_KEY"],
+                "SAFE_NATIVE_SETTING": "yes",
+            }
+        )
+    }
+
+    env, _, scrubbed = train._ray_environment(plan, object(), native, diagnostic=True)
+
+    assert os.environ["FLEET_API_KEY"] == "synthetic-platform-plumbing"
+    assert os.environ["WANDB_API_KEY"] == "synthetic-forbidden-tracking-key"
+    assert env["FLEET_API_KEY"] == env["WANDB_API_KEY"] == ""
+    assert env["SAFE_NATIVE_SETTING"] == "yes"
+    assert {"FLEET_API_KEY", "WANDB_API_KEY"}.issubset(scrubbed)
+
+
+@pytest.mark.parametrize(
+    "key",
+    [
+        "FLEET_API_KEY",
+        "WANDB_API_KEY",
+        "SERVICE_TOKEN",
+        "DATABASE_PASSWORD",
+        "CLIENT_SECRET",
+        "AWS_ACCESS_KEY_ID",
+        "WORKER_CREDENTIAL",
+        "lowercase_api_key",
+    ],
+)
+def test_engine_diagnostic_scrubs_credential_like_ray_environment(prepared, monkeypatch, key):
+    _without_diagnostic_wandb(monkeypatch)
+    root = prepared.state.tmp / "credential-ray-environment"
+    root.mkdir()
+    prepared.plan["output_root"] = str(root)
+    native = {
+        "skyrl.train.utils.utils": NS(
+            prepare_runtime_environment=lambda _: {
+                key: "" if key == "WORKER_CREDENTIAL" else "synthetic-private-value"
+            }
+        )
+    }
+
+    env, _, scrubbed = train._ray_environment(prepared.plan, object(), native, diagnostic=True)
+
+    assert env[key] == "" and key in scrubbed
+
+
+def test_ray_credential_probe_rejects_and_tracks_nonempty_worker_secret():
+    ray, actors = _fake_ray([], credential_count=1)
+    ownership = train._DiagnosticOwnership()
+    environment = {"FLEET_API_KEY": "", "SAFE_NATIVE_SETTING": "yes"}
+
+    with pytest.raises(ValueError, match="retained a scrubbed credential"):
+        train._probe_worker_credentials(
+            ray,
+            ownership,
+            environment,
+            ("FLEET_API_KEY",),
+            expected_nodes=2,
+            expected_gpus_per_node=4,
+        )
+
+    assert ownership.actors == actors and len(actors) == 2
+    assert ownership.ray_gpu_nodes_discovered == ownership.ray_gpu_nodes_probed == 2
+    assert ownership.ray_actor_environment_probes_passed == 0
+    assert ownership.ray_actor_environment_probe_failures == 2
+    assert ownership.ray_actor_nonempty_scrubbed_credentials == 2
+    assert {option["scheduling_strategy"].node_id for option in ray.actor_options} == {
+        "aa",
+        "bb",
+    }
+    assert all(
+        option["runtime_env"]["env_vars"] == {**environment, "WANDB_API_KEY": ""}
+        for option in ray.actor_options
+    )
+
+
+def test_synthetic_ray_jobs_precedence_cannot_bypass_explicit_actor_scrub():
+    job_environment = {
+        "FLEET_API_KEY": "synthetic-job-secret",
+        "SAFE_JOB_SETTING": "job",
+    }
+
+    def inherited_nonempty(options, names):
+        # Model Ray Jobs precedence: the driver-level ``ray.init`` environment is
+        # ignored, while an actor-level runtime environment overrides the job.
+        effective = {**job_environment, **options["runtime_env"]["env_vars"]}
+        return sum(bool(effective.get(name)) for name in names)
+
+    calls = []
+    ray, actors = _fake_ray(calls, credential_count=inherited_nonempty)
+    ownership = train._DiagnosticOwnership()
+    environment = {
+        "FLEET_API_KEY": "synthetic-must-be-blanked",
+        "SAFE_NATIVE_SETTING": "native",
+    }
+    ray.init(runtime_env={"env_vars": {"FLEET_API_KEY": ""}})
+
+    assert (
+        train._probe_worker_credentials(
+            ray,
+            ownership,
+            environment,
+            ("FLEET_API_KEY", "WANDB_API_KEY"),
+            expected_nodes=2,
+            expected_gpus_per_node=4,
+        )
+        == 0
+    )
+    assert ownership.actors == actors and len(actors) == 2
+    assert ownership.ray_gpu_nodes_discovered == ownership.ray_gpu_nodes_probed == 2
+    assert ownership.ray_actor_environment_probes_passed == 2
+    assert ownership.ray_actor_environment_probe_failures == 0
+    assert ownership.ray_actor_nonempty_scrubbed_credentials == 0
+    for option in ray.actor_options:
+        assert option["num_cpus"] == option["num_gpus"] == option["max_restarts"] == 0
+        assert not option["scheduling_strategy"].soft
+        assert option["runtime_env"]["env_vars"] == {
+            "FLEET_API_KEY": "",
+            "SAFE_NATIVE_SETTING": "native",
+            "WANDB_API_KEY": "",
+        }
+
+
+def test_pinned_ray_actor_environment_overrides_inherited_synthetic_credential():
+    """Opt-in exact-image proof; uses logical GPU resources, never real GPUs."""
+    if os.environ.get("CYBER_SKYRL_PINNED_RAY_PROOF") != train.IMAGE:
+        pytest.skip("requires an explicit run inside the exact pinned SkyRL image")
+
+    ray = pytest.importorskip("ray")
+    assert ray.__version__ == "2.56.0"
+    from ray.cluster_utils import Cluster
+
+    key = "SYNTHETIC_DIAGNOSTIC_API_KEY"
+    missing = object()
+    previous = os.environ.get(key, missing)
+    os.environ[key] = "synthetic-inherited-value"
+    cluster = Cluster(initialize_head=False)
+    baseline_actors = []
+    ownership = train._DiagnosticOwnership()
+
+    @ray.remote
+    class InheritedCredentialProbe:
+        def inspect(self):
+            import os
+
+            import ray
+
+            return {
+                "node_id": str(ray.get_runtime_context().get_node_id()),
+                "nonempty": int(bool(os.environ.get(key))),
+            }
+
+    try:
+        cluster.add_node(num_cpus=1, num_gpus=4, include_dashboard=False)
+        cluster.add_node(num_cpus=1, num_gpus=4, include_dashboard=False)
+        ray.init(address=cluster.address, log_to_driver=False)
+        node_ids = train._live_gpu_node_ids(ray, 2, 4)
+        for node_id in node_ids:
+            baseline_actors.append(
+                InheritedCredentialProbe.options(
+                    num_cpus=0,
+                    num_gpus=0,
+                    max_restarts=0,
+                    scheduling_strategy=train._node_affinity_strategy(ray, node_id),
+                ).remote()
+            )
+        inherited = ray.get([actor.inspect.remote() for actor in baseline_actors])
+        assert tuple(sorted(item["node_id"].lower() for item in inherited)) == node_ids
+        assert [item["nonempty"] for item in inherited] == [1, 1]
+
+        assert (
+            train._probe_worker_credentials(
+                ray,
+                ownership,
+                {key: "", "SAFE_NATIVE_SETTING": "native"},
+                train._credential_names({key: ""}),
+                expected_nodes=2,
+                expected_gpus_per_node=4,
+            )
+            == 0
+        )
+        assert ownership.ray_gpu_nodes_discovered == ownership.ray_gpu_nodes_probed == 2
+        assert ownership.ray_actor_environment_probes_passed == 2
+        assert ownership.ray_actor_environment_probe_failures == 0
+        assert ownership.ray_actor_nonempty_scrubbed_credentials == 0
+    finally:
+        if ray.is_initialized():
+            for actor in baseline_actors + ownership.actors:
+                ray.kill(actor, no_restart=True)
+            ray.shutdown()
+        cluster.shutdown()
+        if previous is missing:
+            os.environ.pop(key, None)
+        else:
+            os.environ[key] = previous
+
+
+@pytest.mark.parametrize(
+    "nodes",
+    [
+        [{"Alive": True, "NodeID": "aa", "Resources": {"GPU": 4.0}}],
+        [
+            {"Alive": True, "NodeID": "aa", "Resources": {"GPU": 4.0}},
+            {"Alive": True, "NodeID": "bb", "Resources": {"GPU": 8.0}},
+        ],
+        [
+            {"Alive": True, "NodeID": "aa", "Resources": {"GPU": 4.0}},
+            {"Alive": True, "NodeID": "aa", "Resources": {"GPU": 4.0}},
+        ],
+    ],
+)
+def test_ray_credential_probe_rejects_inexact_gpu_topology_before_actor_creation(nodes):
+    ray, actors = _fake_ray([], nodes=nodes)
+    ownership = train._DiagnosticOwnership()
+
+    with pytest.raises(ValueError, match="GPU node topology differs"):
+        train._probe_worker_credentials(
+            ray,
+            ownership,
+            {"FLEET_API_KEY": ""},
+            ("FLEET_API_KEY",),
+            expected_nodes=2,
+            expected_gpus_per_node=4,
+        )
+
+    assert actors == ownership.actors == []
+
+
+def test_ray_credential_probe_rejects_gpu_node_churn_after_tracking_actors():
+    snapshots = iter(
+        [
+            [
+                {"Alive": True, "NodeID": "aa", "Resources": {"GPU": 4.0}},
+                {"Alive": True, "NodeID": "bb", "Resources": {"GPU": 4.0}},
+            ],
+            [
+                {"Alive": True, "NodeID": "aa", "Resources": {"GPU": 4.0}},
+                {"Alive": True, "NodeID": "cc", "Resources": {"GPU": 4.0}},
+            ],
+        ]
+    )
+    ray, actors = _fake_ray([], nodes=lambda: next(snapshots))
+    ownership = train._DiagnosticOwnership()
+
+    with pytest.raises(ValueError, match="topology changed"):
+        train._probe_worker_credentials(
+            ray,
+            ownership,
+            {"FLEET_API_KEY": ""},
+            ("FLEET_API_KEY",),
+            expected_nodes=2,
+            expected_gpus_per_node=4,
+        )
+
+    assert ownership.actors == actors and len(actors) == 2
+    assert ownership.ray_gpu_nodes_discovered == ownership.ray_gpu_nodes_probed == 2
+    assert ownership.ray_actor_environment_probes_passed == 2
+    assert ownership.ray_actor_environment_probe_failures == 0
+
+
+def test_private_log_evidence_streams_and_detects_cross_chunk_signature(tmp_path):
+    signature = b"Engine core initialization failed. See root cause above."
+    path = tmp_path / "infra.log"
+    payload = b"x" * (1024 * 1024 - len(signature) // 2) + signature + b"tail"
+    path.write_bytes(payload)
+
+    evidence = train._infra_log_evidence(path)
+
+    assert evidence == {
+        "path": "private-native-logs/infra.log",
+        "bytes": len(payload),
+        "sha256": hashlib.sha256(payload).hexdigest(),
+        "engine_failure_signature_present": True,
+    }
+
+
 @pytest.mark.parametrize(
     "fault",
     [
@@ -101,6 +707,8 @@ def test_prepare_cli_and_portable_runtime_are_offline(prepared, monkeypatch):
         "priority",
         "resource",
         "groups",
+        "start_deadline",
+        "cleanup_deadline",
         "model",
         "file",
         "data_name",
@@ -124,6 +732,10 @@ def test_invalid_launch_stops_before_gpu_import(prepared, fault):
         config["cluster"] = {"resources": {"memory_request": "2Gi"}}
     elif fault == "groups":
         config["recipe"]["groups"] = 2
+    elif fault == "start_deadline":
+        config["recipe"]["engine_start_timeout_seconds"] = 3601
+    elif fault == "cleanup_deadline":
+        config["recipe"]["engine_cleanup_timeout_seconds"] = 0
     elif fault in {"model", "file", "data_name", "digest"}:
         path = tmp / "out/manifest.json"
         value = json.loads(path.read_bytes())
@@ -398,6 +1010,9 @@ def test_native_wrapper_keeps_native_loop_and_truthful_finalization(prepared, mo
     result_rows = {"train": ["train"], "dev": ["dev"]}
     monkeypatch.setattr(train, "check_artifacts", lambda _: result_rows)
     monkeypatch.setattr(train.skyrl, "native_config", lambda _: "native-config")
+    infra_log = prepared.state.tmp / "synthetic-infra.log"
+    infra_log.write_text("")
+    monkeypatch.setattr(train, "_prepare_infra_log", lambda _: infra_log)
     monkeypatch.setattr(
         train, "dataset", lambda p, t, split, rows: (calls.append((split, rows)), rows)[1]
     )
@@ -474,9 +1089,716 @@ def test_native_wrapper_keeps_native_loop_and_truthful_finalization(prepared, mo
     assert calls[0][0] == "ray" and calls[0][1]["address"] == "auto"
     assert not calls[0][1]["log_to_driver"]
     assert calls[0][1]["runtime_env"]["env_vars"]["PINNED"] == "yes"
+    assert calls[0][1]["runtime_env"]["env_vars"]["SKYRL_LOG_FILE"] == str(infra_log)
 
 
-@pytest.mark.parametrize("mode", ["parent", "native", "digest", "runtime", "execution"])
+@pytest.mark.parametrize("fault", [None, "pre-engine", "create", "partial", "timeout", "router"])
+def test_engine_diagnostic_is_bounded_private_clean_and_truthful(prepared, monkeypatch, fault):
+    plan, calls = prepared.plan, []
+    root = prepared.state.tmp / "engine-diagnostic"
+    root.mkdir()
+    plan["output_root"] = plan["arguments"]["output_root"] = str(root)
+    _materialize_diagnostic_runtime(plan)
+    monkeypatch.setenv("RUN_DIR", str(root))
+    monkeypatch.setenv("FLEET_API_KEY", "outer-platform-key")
+    monkeypatch.setattr(train, "job_request", lambda _: None)
+    checked = []
+
+    def check_inputs(value):
+        assert value is plan and not (root / "ENGINE_DIAGNOSTIC_STARTED.json").exists()
+        assert signal.getitimer(signal.ITIMER_REAL)[0] > 0
+        checked.append(True)
+
+    monkeypatch.setattr(train, "check_inputs", check_inputs)
+    engine_config = _exact_engine_config()
+    cfg = NS(
+        generator=NS(inference_engine=engine_config),
+        trainer=NS(log_path=str(root / "private-native-logs")),
+    )
+    monkeypatch.setattr(train.skyrl, "diagnostic_native_config", lambda _: cfg)
+    monkeypatch.setattr(
+        train,
+        "native_source",
+        lambda: {
+            "skyrl.train.utils.utils": NS(
+                prepare_runtime_environment=lambda _: {"FLEET_API_KEY": "must-be-scrubbed"}
+            )
+        },
+    )
+    ray, _ = _fake_ray(calls)
+    monkeypatch.setitem(sys.modules, "ray", ray)
+    monkeypatch.setitem(
+        sys.modules,
+        "skyrl.backends.skyrl_train.utils.ppo_utils",
+        NS(sync_registries=lambda: pytest.fail("diagnostic created registry actors")),
+    )
+
+    def build_vllm_cli_args(_):
+        if fault == "pre-engine":
+            raise RuntimeError("private engine argument failure")
+        return "exact-vllm-args"
+
+    monkeypatch.setitem(
+        sys.modules,
+        "skyrl.backends.skyrl_train.inference_servers.utils",
+        NS(build_vllm_cli_args=build_vllm_cli_args),
+    )
+
+    def create(engine, args, log_path):
+        assert (engine, args, log_path) == (
+            engine_config,
+            "exact-vllm-args",
+            str(root / "private-native-logs"),
+        )
+        group_type = sys.modules[
+            "skyrl.backends.skyrl_train.inference_servers.server_group"
+        ].ServerGroup
+        if fault in {"partial", "timeout"}:
+            group_type()
+        if fault == "create":
+            raise PermissionError("private unrelated diagnostic")
+        if fault == "partial":
+            raise RuntimeError("private partial engine failure")
+        if fault == "timeout":
+            ray.get(_Ref(error=TimeoutError("synthetic bare wait")))
+        (root / "private-native-logs/infra.log").write_text(
+            "engine initialized without task rows\n"
+        )
+        groups = [group_type(), group_type()]
+        router_type = sys.modules[
+            "skyrl.backends.skyrl_train.inference_servers.vllm_router"
+        ].VLLMRouter
+        router = router_type()
+        proxy_url = router.start()
+        if fault == "router":
+            raise RuntimeError("private post-probe router failure")
+        return NS(
+            router=router,
+            server_groups=groups,
+            server_urls=["http://engine-0", "http://engine-1"],
+            proxy_url=proxy_url,
+        )
+
+    _install_engine_modules(monkeypatch, calls, create)
+    monkeypatch.setattr(train, "_active_owned_resources", lambda *args: (0, 0))
+
+    result = train.engine_diagnostic(plan)
+
+    train.sealed(result, train.ENGINE_DIAGNOSTIC_SCHEMA)
+    expected = {
+        None: ("passed", "all", True),
+        "pre-engine": ("pre_engine_rejected", "none", False),
+        "create": ("engine_start_rejected", "none", False),
+        "partial": ("engine_start_rejected", "partial_or_unknown", None),
+        "timeout": ("engine_start_timeout", "partial_or_unknown", None),
+        "router": ("engine_start_rejected", "partial_or_unknown", None),
+    }[fault]
+    assert (result["status"], result["engine_start_state"], result["engine_started"]) == expected
+    assert checked == [True]
+    assert result["cleanup"]["cleanup_proven"]
+    assert result["cleanup"]["active_owned_actors"] == 0
+    assert result["cleanup"]["active_owned_placement_groups"] == 0
+    assert result["ray_gpu_nodes_expected"] == 2
+    assert result["ray_gpu_nodes_discovered"] == 2
+    assert result["ray_gpu_nodes_probed"] == 2
+    assert result["ray_actor_environment_probes_passed"] == 2
+    assert result["ray_actor_environment_probe_failures"] == 0
+    assert result["ray_actor_nonempty_scrubbed_credentials"] == 0
+    assert len(ray.actor_options) == 2
+    assert {option["scheduling_strategy"].node_id for option in ray.actor_options} == {"aa", "bb"}
+    assert all(
+        option["runtime_env"]["env_vars"]["FLEET_API_KEY"] == ""
+        and option["runtime_env"]["env_vars"]["WANDB_API_KEY"] == ""
+        and option["runtime_env"]["env_vars"]["SKYRL_LOG_FILE"]
+        == str(root / "private-native-logs/infra.log")
+        for option in ray.actor_options
+    )
+    assert result["credential_environment_isolation_proven"]
+    assert result["ray_actor_environment_isolation_proven"]
+    assert not result["service_account_token_isolation_proven"]
+    assert not result["service_account_rbac_write_access_tested"]
+    assert result["credential_variables_scrubbed"] >= 2
+    assert result["registry_actors_created"] == 0
+    assert result["router_child_credential_environment_isolation"] == (
+        "proven" if fault in {None, "router"} else "not_started"
+    )
+    assert (
+        result["router_start_attempts"]
+        == result["router_environment_probes_passed"]
+        == (1 if fault in {None, "router"} else 0)
+    )
+    assert result["router_environment_probe_failures"] == 0
+    assert {
+        key: result[key]
+        for key in (
+            "diagnostic_workers",
+            "diagnostic_gpus_per_worker",
+            "diagnostic_total_gpus",
+            "num_engines",
+            "tensor_parallel_size",
+        )
+    } == train._diagnostic_shape(plan, cfg)
+    assert result["output_postconditions"] == {
+        "runtime_files_unchanged": True,
+        "unexpected_output_artifacts": 0,
+        "checkpoint_artifacts": 0,
+        "episode_artifacts": 0,
+        "task_artifacts": 0,
+    }
+    assert (
+        result["task_rows_read"]
+        == result["verifier_calls"]
+        == result["optimizer_steps"]
+        == result["rollouts"]
+        == result["checkpoints_created"]
+        == 0
+    )
+    assert not any(
+        result[key]
+        for key in (
+            "checkpoint_created",
+            "wandb_initialized",
+            "training_qualified",
+            "production_training_shape_qualified",
+        )
+    )
+    assert result["engine_start_qualified"] is (fault is None)
+    assert (
+        result["startup_phase"]
+        == {
+            None: "complete",
+            "pre-engine": "engine_argument_build",
+            "create": "engine_creation",
+            "partial": "engine_creation",
+            "timeout": "engine_creation",
+            "router": "engine_creation",
+        }[fault]
+    )
+    serialized = json.dumps(result)
+    assert "outer-platform-key" not in serialized
+    assert "must-be-scrubbed" not in serialized
+    assert "private unrelated diagnostic" not in serialized
+    assert "private partial engine failure" not in serialized
+    assert "private engine argument failure" not in serialized
+    assert "private post-probe router failure" not in serialized
+    assert (root / "ENGINE_DIAGNOSTIC.json").is_file()
+    started_receipt = json.loads((root / "ENGINE_DIAGNOSTIC_STARTED.json").read_text())
+    train.sealed(started_receipt, train.ENGINE_DIAGNOSTIC_SCHEMA)
+    assert all(started_receipt[key] == result[key] for key in train._diagnostic_shape(plan, cfg))
+    assert calls[-1] == "ray-shutdown"
+
+
+def test_engine_diagnostic_input_recheck_precedes_all_output(prepared, monkeypatch):
+    plan = prepared.plan
+    root = prepared.state.tmp / "diagnostic-input-drift"
+    root.mkdir()
+    plan["output_root"] = plan["arguments"]["output_root"] = str(root)
+    _materialize_diagnostic_runtime(plan)
+    monkeypatch.setenv("RUN_DIR", str(root))
+    monkeypatch.setattr(train, "job_request", lambda _: None)
+
+    def reject_inputs(_):
+        assert signal.getitimer(signal.ITIMER_REAL)[0] > 0
+        raise ValueError("staged model changed")
+
+    monkeypatch.setattr(train, "check_inputs", reject_inputs)
+    monkeypatch.setattr(train, "native_source", lambda: pytest.fail("loaded native source"))
+
+    with pytest.raises(ValueError, match="staged model changed"):
+        train.engine_diagnostic(plan)
+
+    assert {path.name for path in root.iterdir()} == {".runtime"}
+    assert signal.getitimer(signal.ITIMER_REAL) == (0.0, 0.0)
+
+
+def test_engine_diagnostic_plan_validation_uses_total_startup_deadline(prepared, monkeypatch):
+    plan = prepared.plan
+    root = prepared.state.tmp / "diagnostic-plan-drift"
+    root.mkdir()
+    plan["output_root"] = plan["arguments"]["output_root"] = str(root)
+    monkeypatch.setenv("RUN_DIR", str(root))
+
+    def reject_plan(_):
+        assert signal.getitimer(signal.ITIMER_REAL)[0] > 0
+        raise ValueError("plan runtime changed")
+
+    monkeypatch.setattr(train, "job_request", reject_plan)
+    monkeypatch.setattr(
+        train,
+        "_diagnostic_output_evidence",
+        lambda *args, **kwargs: pytest.fail("output inspected before plan validation"),
+    )
+
+    with pytest.raises(ValueError, match="plan runtime changed"):
+        train.engine_diagnostic(plan)
+
+    assert list(root.iterdir()) == []
+    assert signal.getitimer(signal.ITIMER_REAL) == (0.0, 0.0)
+
+
+def test_engine_diagnostic_input_recheck_uses_total_startup_deadline(prepared, monkeypatch):
+    plan = prepared.plan
+    root = prepared.state.tmp / "diagnostic-input-timeout"
+    root.mkdir()
+    plan["output_root"] = plan["arguments"]["output_root"] = str(root)
+    plan["arguments"]["engine_start_timeout_seconds"] = 1
+    _materialize_diagnostic_runtime(plan)
+    (root / ".runtime/plan.json").write_text(
+        json.dumps(plan, sort_keys=True, separators=(",", ":"))
+    )
+    monkeypatch.setenv("RUN_DIR", str(root))
+    monkeypatch.setattr(train, "job_request", lambda _: None)
+    monkeypatch.setattr(train, "check_inputs", lambda _: time.sleep(10))
+    monkeypatch.setattr(train, "native_source", lambda: pytest.fail("deadline was not enforced"))
+
+    started = time.monotonic()
+    with pytest.raises(train.HardDeadlineExceeded, match="engine startup"):
+        train.engine_diagnostic(plan)
+
+    assert time.monotonic() - started < 3
+    assert {path.name for path in root.iterdir()} == {".runtime"}
+    assert signal.getitimer(signal.ITIMER_REAL) == (0.0, 0.0)
+
+
+@pytest.mark.parametrize("name", ["checkpoints", "episodes", "task-artifact.json"])
+def test_engine_diagnostic_rejects_every_nonruntime_output_before_start(prepared, name):
+    plan = prepared.plan
+    root = prepared.state.tmp / "diagnostic-forbidden-output"
+    root.mkdir()
+    plan["output_root"] = plan["arguments"]["output_root"] = str(root)
+    _materialize_diagnostic_runtime(plan)
+    path = root / name
+    path.mkdir() if "." not in name else path.write_text("synthetic task data")
+
+    with pytest.raises(ValueError, match="unexpected artifact"):
+        train._diagnostic_output_evidence(plan, started=False)
+
+
+def test_engine_diagnostic_rejects_runtime_bytecode_artifact(prepared):
+    plan = prepared.plan
+    root = prepared.state.tmp / "diagnostic-runtime-bytecode"
+    root.mkdir()
+    plan["output_root"] = plan["arguments"]["output_root"] = str(root)
+    _materialize_diagnostic_runtime(plan)
+    bytecode = root / ".runtime/training/__pycache__/skyrl_training.pyc"
+    bytecode.parent.mkdir()
+    bytecode.write_bytes(b"synthetic bytecode")
+
+    with pytest.raises(ValueError, match="runtime bundle changed"):
+        train._diagnostic_output_evidence(plan, started=False)
+
+
+def test_engine_diagnostic_rejects_empty_runtime_cache_directory(prepared):
+    plan = prepared.plan
+    root = prepared.state.tmp / "diagnostic-runtime-empty-cache"
+    root.mkdir()
+    plan["output_root"] = plan["arguments"]["output_root"] = str(root)
+    _materialize_diagnostic_runtime(plan)
+    (root / ".runtime/training/__pycache__").mkdir()
+
+    with pytest.raises(ValueError, match="runtime bundle changed"):
+        train._diagnostic_output_evidence(plan, started=False)
+
+
+def test_engine_diagnostic_runtime_proof_is_bound_to_plan_digest(prepared):
+    plan = prepared.plan
+    root = prepared.state.tmp / "diagnostic-runtime-digest"
+    root.mkdir()
+    plan["output_root"] = plan["arguments"]["output_root"] = str(root)
+    plan["runtime_sha256"] = "0" * 64
+    _materialize_diagnostic_runtime(plan)
+
+    with pytest.raises(ValueError, match="runtime sources changed"):
+        train._diagnostic_output_evidence(plan, started=False)
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        "startup",
+        "topology",
+        "credential-isolation",
+        "router-credential-isolation",
+        "cleanup-proof",
+        "cleanup-deadline",
+        "artifact",
+    ],
+)
+def test_engine_diagnostic_failures_only_write_nonqualifying_proven_receipts(
+    prepared, monkeypatch, fault
+):
+    plan, calls = prepared.plan, []
+    root = prepared.state.tmp / "engine-diagnostic-failure"
+    root.mkdir()
+    plan["output_root"] = plan["arguments"]["output_root"] = str(root)
+    _materialize_diagnostic_runtime(plan)
+    if fault == "cleanup-deadline":
+        plan["arguments"]["engine_cleanup_timeout_seconds"] = 1
+        # The plan changed, so its exact bundled plan.json changes with it.
+        (root / ".runtime/plan.json").write_text(
+            json.dumps(plan, sort_keys=True, separators=(",", ":"))
+        )
+    monkeypatch.setenv("RUN_DIR", str(root))
+    if fault == "router-credential-isolation":
+        monkeypatch.setenv("FLEET_API_KEY", "synthetic-router-leak")
+        monkeypatch.setattr(train, "_scrubbed_process_environment", lambda names: nullcontext())
+    monkeypatch.setattr(train, "job_request", lambda _: None)
+    monkeypatch.setattr(train, "check_inputs", lambda _: None)
+    engine_config = _exact_engine_config()
+    cfg = NS(
+        generator=NS(inference_engine=engine_config),
+        trainer=NS(log_path=str(root / "private-native-logs")),
+    )
+    monkeypatch.setattr(train.skyrl, "diagnostic_native_config", lambda _: cfg)
+    monkeypatch.setattr(
+        train,
+        "native_source",
+        lambda: {"skyrl.train.utils.utils": NS(prepare_runtime_environment=lambda _: {})},
+    )
+    ray, _ = _fake_ray(
+        calls,
+        credential_count=1 if fault == "credential-isolation" else 0,
+        nodes=(
+            [{"Alive": True, "NodeID": "aa", "Resources": {"GPU": 4.0}}]
+            if fault == "topology"
+            else None
+        ),
+    )
+    if fault == "startup":
+        ray.init = lambda **kwargs: (_ for _ in ()).throw(
+            RuntimeError("private Ray initialization failure")
+        )
+    monkeypatch.setitem(sys.modules, "ray", ray)
+    monkeypatch.setitem(
+        sys.modules,
+        "skyrl.backends.skyrl_train.utils.ppo_utils",
+        NS(sync_registries=lambda: pytest.fail("diagnostic created registry actors")),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "skyrl.backends.skyrl_train.inference_servers.utils",
+        NS(build_vllm_cli_args=lambda _: "args"),
+    )
+
+    def create(*args, **kwargs):
+        if fault == "artifact":
+            (root / "episodes").mkdir()
+        group_type = sys.modules[
+            "skyrl.backends.skyrl_train.inference_servers.server_group"
+        ].ServerGroup
+        if fault == "router-credential-isolation":
+            group_type()
+            router_type = sys.modules[
+                "skyrl.backends.skyrl_train.inference_servers.vllm_router"
+            ].VLLMRouter
+            router_type().start()
+        return NS(
+            router=None,
+            server_groups=[group_type(), group_type()],
+            server_urls=["http://engine-0", "http://engine-1"],
+            proxy_url="http://router",
+        )
+
+    _install_engine_modules(monkeypatch, calls, create)
+    if fault == "cleanup-proof":
+        monkeypatch.setattr(
+            train,
+            "_active_owned_resources",
+            lambda *args: (_ for _ in ()).throw(TimeoutError("state unavailable")),
+        )
+    elif fault == "cleanup-deadline":
+        monkeypatch.setattr(train, "_active_owned_resources", lambda *args: (1, 0))
+    else:
+        monkeypatch.setattr(train, "_active_owned_resources", lambda *args: (0, 0))
+
+    events = []
+    receipt_faults = {"topology", "credential-isolation", "router-credential-isolation"}
+    if fault in receipt_faults:
+        original_cleanup = train._cleanup_engine_diagnostic
+        original_output = train._diagnostic_output_evidence
+        original_write = train._write
+
+        def cleanup(*args, **kwargs):
+            result = original_cleanup(*args, **kwargs)
+            events.append("cleanup-proven")
+            return result
+
+        def output(*args, **kwargs):
+            result = original_output(*args, **kwargs)
+            if kwargs.get("started"):
+                events.append("output-proven")
+            return result
+
+        def write(path, value):
+            result = original_write(path, value)
+            if path.name == "ENGINE_DIAGNOSTIC.json":
+                events.append("receipt-written")
+            return result
+
+        monkeypatch.setattr(train, "_cleanup_engine_diagnostic", cleanup)
+        monkeypatch.setattr(train, "_diagnostic_output_evidence", output)
+        monkeypatch.setattr(train, "_write", write)
+
+    with pytest.raises((RuntimeError, ValueError, TimeoutError, BaseExceptionGroup)):
+        train.engine_diagnostic(plan)
+    events.append("error-propagated")
+
+    receipt = root / "ENGINE_DIAGNOSTIC.json"
+    if fault in receipt_faults:
+        assert events == [
+            "cleanup-proven",
+            "output-proven",
+            "receipt-written",
+            "error-propagated",
+        ]
+        assert receipt.is_file()
+        result = json.loads(receipt.read_text())
+        train.sealed(result, train.ENGINE_DIAGNOSTIC_SCHEMA)
+        assert result["status"] == "environment_isolation_rejected"
+        assert not result["engine_start_qualified"]
+        assert not result["credential_environment_isolation_proven"]
+        assert result["cleanup"]["cleanup_proven"]
+        assert result["cleanup"]["active_owned_actors"] == 0
+        assert result["cleanup"]["active_owned_placement_groups"] == 0
+        assert result["output_postconditions"] == {
+            "runtime_files_unchanged": True,
+            "unexpected_output_artifacts": 0,
+            "checkpoint_artifacts": 0,
+            "episode_artifacts": 0,
+            "task_artifacts": 0,
+        }
+        assert (
+            result["task_rows_read"]
+            == result["verifier_calls"]
+            == result["optimizer_steps"]
+            == result["rollouts"]
+            == result["checkpoints_created"]
+            == 0
+        )
+        assert not any(
+            result[key]
+            for key in (
+                "engine_start_qualified",
+                "training_qualified",
+                "production_training_shape_qualified",
+                "checkpoint_created",
+                "wandb_initialized",
+            )
+        )
+        assert result["startup_phase"] in {
+            "ray_actor_environment_probe",
+            "engine_creation",
+        }
+        if fault == "topology":
+            assert result["ray_gpu_nodes_discovered"] is None
+            assert result["ray_gpu_nodes_probed"] == 0
+            assert result["ray_actor_environment_probes_passed"] is None
+            assert result["ray_actor_environment_probe_failures"] is None
+            assert result["ray_actor_nonempty_scrubbed_credentials"] is None
+        elif fault == "credential-isolation":
+            assert result["ray_gpu_nodes_discovered"] == result["ray_gpu_nodes_probed"] == 2
+            assert result["ray_actor_environment_probes_passed"] == 0
+            assert result["ray_actor_environment_probe_failures"] == 2
+            assert result["ray_actor_nonempty_scrubbed_credentials"] == 2
+        else:
+            assert result["ray_actor_environment_isolation_proven"]
+            assert result["router_environment_probe_failures"] == 1
+        assert "synthetic-router-leak" not in json.dumps(result)
+    else:
+        assert not receipt.exists()
+
+
+def test_engine_instrumentation_tracks_partial_native_objects_and_scrubs_actor_env(
+    monkeypatch,
+):
+    calls = []
+    _install_engine_modules(monkeypatch, calls, lambda *args, **kwargs: None)
+    ownership = train._DiagnosticOwnership()
+    group_module = sys.modules["skyrl.backends.skyrl_train.inference_servers.server_group"]
+    router_module = sys.modules["skyrl.backends.skyrl_train.inference_servers.vllm_router"]
+    setup_module = sys.modules["skyrl.backends.skyrl_train.inference_servers.setup"]
+    monkeypatch.setenv("FLEET_API_KEY", "outer-driver-value")
+    router_module._run_router_with_logging = lambda: calls.append(
+        ("router-child-key", os.environ.get("FLEET_API_KEY"))
+    )
+    group_module.build_engine_runtime_env = lambda **kwargs: {
+        "env_vars": {
+            "ACTOR_SECRET": "synthetic-private-value",
+            "FLEET_API_KEY": "synthetic-overlay-value",
+            "SAFE_SETTING": "yes",
+        }
+    }
+    originals = (group_module.ServerGroup, router_module.VLLMRouter)
+
+    with train._instrument_engine_ownership(
+        ownership,
+        {
+            "FLEET_API_KEY": "synthetic-must-be-blanked",
+            "NATIVE_BASE_SETTING": "base",
+        },
+        ("FLEET_API_KEY", "WANDB_API_KEY"),
+    ):
+        group = group_module.ServerGroup()
+        actor_class = group._create_actor_class()
+        actor_class.remote()
+        router = router_module.VLLMRouter()
+        assert router.start() == "http://router"
+        setup_module.ray_placement_group([])
+        group_module.placement_group([])
+        runtime_env = actor_class._actor_class.options_kwargs["runtime_env"]
+        assert runtime_env["env_vars"] == {
+            "ACTOR_SECRET": "",
+            "FLEET_API_KEY": "",
+            "NATIVE_BASE_SETTING": "base",
+            "SAFE_SETTING": "yes",
+            "WANDB_API_KEY": "",
+        }
+
+    assert len(ownership.groups) == len(ownership.routers) == 1
+    assert len(ownership.actors) == len(ownership.engine_actors) == 1
+    assert len(ownership.placement_groups) == 2
+    assert ownership.router_start_attempts == ownership.router_credential_probes_passed == 1
+    assert ownership.router_credential_probe_failures == 0
+    assert ("router-child-key", "") in calls
+    assert os.environ["FLEET_API_KEY"] == "outer-driver-value"
+    assert (group_module.ServerGroup, router_module.VLLMRouter) == originals
+
+
+@pytest.mark.parametrize(
+    "location", ["absorb", "router", "actor-remote", "actor-kill", "placement-group"]
+)
+def test_cleanup_never_swallows_hard_deadline(monkeypatch, location):
+    calls = []
+    ray, _ = _fake_ray(calls)
+    original_get = ray.get
+    ownership = train._DiagnosticOwnership()
+
+    def expired(*args, **kwargs):
+        raise train.HardDeadlineExceeded("SkyRL engine cleanup")
+
+    if location == "absorb":
+        ownership.groups.append(NS(get_actors=expired))
+    elif location == "router":
+        ownership.routers.append(NS(shutdown=expired))
+    elif location in {"actor-remote", "actor-kill"}:
+        actor = _Actor(NS())
+        if location == "actor-remote":
+            actor.shutdown = NS(remote=expired)
+        else:
+            ray.kill = expired
+        ownership.actors.append(actor)
+    else:
+        ownership.placement_groups.append(object())
+        monkeypatch.setitem(
+            sys.modules,
+            "ray.util.placement_group",
+            NS(remove_placement_group=expired),
+        )
+
+    with pytest.raises(train.HardDeadlineExceeded, match="plan-bound hard deadline"):
+        train._cleanup_engine_diagnostic(None, ray, ownership, 10)
+
+    assert signal.getitimer(signal.ITIMER_REAL) == (0.0, 0.0)
+    assert ray.get is original_get
+
+
+def test_bare_ray_get_timeout_becomes_plan_deadline_and_restores_ray(monkeypatch):
+    from training.rl_runtime import HardDeadline
+
+    def wait(refs, *, timeout=None):
+        assert 0 < timeout <= 10
+        raise TimeoutError("synthetic Ray wait")
+
+    ray = NS(get=wait)
+    original = ray.get
+    deadline = HardDeadline(10, "synthetic startup")
+    with (
+        train._bounded_ray_get(ray, deadline),
+        pytest.raises(train.HardDeadlineExceeded, match="plan-bound"),
+    ):
+        ray.get(object())
+    assert deadline.expired and ray.get is original
+
+
+def test_dashboard_free_ray_state_proves_exact_current_job_ownership(monkeypatch):
+    job_id = "a1"
+    actor_table = {
+        "own-alive": {"JobID": job_id, "State": "ALIVE"},
+        "own-restarting": {"JobID": job_id.upper(), "State": "RESTARTING"},
+        "own-dead": {"JobID": job_id, "State": "DEAD"},
+        "other-alive": {"JobID": "b2", "State": "ALIVE"},
+    }
+    rows = [
+        NS(creator_job_id=b"\xa1", state=1),
+        NS(creator_job_id=b"\xa1", state=2),
+        NS(creator_job_id=b"\xa1", state=3),
+        NS(creator_job_id=b"\xb2", state=1),
+    ]
+
+    class PlacementGroupTableData:
+        class PlacementGroupState:
+            @staticmethod
+            def Name(value):
+                return {1: "CREATED", 2: "RESCHEDULING", 3: "REMOVED"}[value]
+
+        @staticmethod
+        def FromString(value):
+            return value
+
+    accessor = NS(get_placement_group_table=lambda: rows)
+    monkeypatch.setitem(
+        sys.modules,
+        "ray._private.state",
+        NS(
+            actors=lambda: actor_table,
+            state=NS(_connect_and_get_accessor=lambda: accessor),
+        ),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "ray.core.generated.gcs_pb2",
+        NS(PlacementGroupTableData=PlacementGroupTableData),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "ray._common.utils",
+        NS(binary_to_hex=lambda value: value.hex()),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "ray.util.state",
+        NS(
+            list_actors=lambda **kwargs: pytest.fail("dashboard actor API used"),
+            list_placement_groups=lambda **kwargs: pytest.fail("dashboard PG API used"),
+        ),
+    )
+
+    assert train._active_owned_resources(job_id, 10) == (2, 2)
+
+    actor_table["own-alive"]["State"] = "DEAD"
+    actor_table["own-restarting"]["State"] = "DEAD"
+    rows[0].state = rows[1].state = 3
+    assert train._active_owned_resources(job_id, 10) == (0, 0)
+
+
+def test_ray_state_uncertainty_cannot_prove_cleanup(monkeypatch):
+    monkeypatch.setitem(
+        sys.modules,
+        "ray._private.state",
+        NS(
+            actors=lambda: {"actor": {"JobID": "a1"}},
+            state=NS(_connect_and_get_accessor=lambda: pytest.fail("must fail first")),
+        ),
+    )
+
+    with pytest.raises(ValueError, match="actor ownership record changed"):
+        train._active_owned_resources("a1", 10)
+
+
+@pytest.mark.parametrize(
+    "mode",
+    ["parent", "native", "diagnostic", "diagnostic_failure", "digest", "runtime", "execution"],
+)
 def test_main_dispatch_is_digest_bound_and_sanitized(prepared, monkeypatch, capsys, mode):
     plan, tmp = prepared.plan, prepared.state.tmp
     path = tmp / "plan.json"
@@ -491,6 +1813,8 @@ def test_main_dispatch_is_digest_bound_and_sanitized(prepared, monkeypatch, caps
     ]
     if mode == "native":
         argv.append("--native")
+    elif mode in {"diagnostic", "diagnostic_failure"}:
+        argv.append("--engine-diagnostic")
     monkeypatch.setattr(sys, "argv", argv)
 
     def request(p):
@@ -506,7 +1830,15 @@ def test_main_dispatch_is_digest_bound_and_sanitized(prepared, monkeypatch, caps
     monkeypatch.setattr(train, "job_request", request)
     monkeypatch.setattr(train, "run", run)
     monkeypatch.setattr(train, "_native", lambda p: calls.append("native"))
-    if mode in {"digest", "runtime", "execution"}:
+
+    def diagnostic(p):
+        calls.append("diagnostic")
+        if mode == "diagnostic_failure":
+            raise RuntimeError("private diagnostic failure")
+        return {"status": "engine_start_rejected", "sha256": "safe"}
+
+    monkeypatch.setattr(train, "engine_diagnostic", diagnostic)
+    if mode in {"diagnostic_failure", "digest", "runtime", "execution"}:
         with pytest.raises(SystemExit) as error:
             train.main()
         assert error.value.code == 1

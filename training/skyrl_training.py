@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import hashlib
+import importlib
 import json
 import math
 import numbers
@@ -16,17 +17,27 @@ import os
 import re
 import sys
 import time
-from contextlib import suppress
+from collections.abc import Mapping
+from contextlib import contextmanager, suppress
 from pathlib import Path
 
 from cyber_post_train.jobs import bundled_request, digest, quantity
 
 from . import skyrl
-from .miles_conversion import _hash, check_inputs
-from .rl_runtime import sealed
+from .miles_conversion import _hash, _write, check_inputs
+from .rl_runtime import HardDeadlineExceeded, hard_deadline, sealed
 from .skyrl_episode import _module
 
 SCHEMA = "cyber_skyrl_training_v1"
+ENGINE_DIAGNOSTIC_SCHEMA = "cyber_skyrl_engine_start_diagnostic_v1"
+ENGINE_DIAGNOSTIC_WORKERS = 2
+ENGINE_DIAGNOSTIC_GPUS_PER_WORKER = 4
+_CREDENTIAL_ENV_NAME = re.compile(
+    r"(?:^|_)(?:TOKENS?|PASSWORDS?|PASSWD|CREDENTIALS?|SECRETS?|API_KEYS?|"
+    r"ACCESS_KEYS?|PRIVATE_KEYS?|DATABASE_URL|AUTH(?:ORIZATION)?)(?:_|$)",
+    re.IGNORECASE,
+)
+_ALWAYS_SCRUB_WORKER_ENV = frozenset({"FLEET_API_KEY", "WANDB_API_KEY"})
 MODULE = "training.skyrl_training"
 IMAGE = (
     "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:"
@@ -103,6 +114,8 @@ def compile_rl(config, *, relative_to):
             "checkpoint_interval",
             "keep_checkpoints",
             "seed",
+            "engine_start_timeout_seconds",
+            "engine_cleanup_timeout_seconds",
         },
         "SkyRL recipe",
     )
@@ -209,6 +222,75 @@ def job_request(plan):
         files,
         MODULE,
         ["--plan", "plan.json", "--sha256", digest(plan)],
+    )
+
+
+def _diagnostic_shape(plan, cfg=None):
+    """Bind the fragmented-dev diagnostic shape, never the training shape."""
+    overrides = plan["native_overrides"]
+    if (
+        plan["arguments"]["nodes"] != 1
+        or overrides.get("generator.inference_engine.num_engines") != 2
+        or overrides.get("generator.inference_engine.tensor_parallel_size") != 4
+    ):
+        raise ValueError("engine diagnostic requires the exact one-node 2xTP4 engine plan")
+    if cfg is not None:
+        engine = cfg.generator.inference_engine
+        if (
+            engine.num_engines != 2
+            or engine.tensor_parallel_size != 4
+            or engine.pipeline_parallel_size != 1
+            or engine.data_parallel_size != 1
+        ):
+            raise ValueError("native engine shape differs from diagnostic cluster binding")
+    return {
+        "diagnostic_workers": ENGINE_DIAGNOSTIC_WORKERS,
+        "diagnostic_gpus_per_worker": ENGINE_DIAGNOSTIC_GPUS_PER_WORKER,
+        "diagnostic_total_gpus": (ENGINE_DIAGNOSTIC_WORKERS * ENGINE_DIAGNOSTIC_GPUS_PER_WORKER),
+        "num_engines": 2,
+        "tensor_parallel_size": 4,
+    }
+
+
+def engine_diagnostic_request(plan):
+    """Build a no-rollout, no-secret engine-start diagnostic for a fresh plan.
+
+    The caller must compile the source configuration under a new diagnostic
+    name/output root.  Reusing a failed run directory is intentionally not
+    supported.
+    """
+    job_request(plan)  # exact plan/runtime/image/resource validation
+    shape = _diagnostic_shape(plan)
+    args = skyrl.SkyRLConfig(**plan["arguments"])
+    resources = plan["execution"]["resources"]
+    files = _runtime()
+    files.update(
+        {p + "/__init__.py": "" for p in ("training", "evals", "evals/fleet", "cyber_post_train")}
+    )
+    files["plan.json"] = json.dumps(plan, sort_keys=True, separators=(",", ":"))
+    return bundled_request(
+        {
+            "name": args.name,
+            "title": args.name + " SkyRL engine-start diagnostic",
+            "run_dir": args.output_root,
+            "image": IMAGE,
+            "workers": shape["diagnostic_workers"],
+            "gpus_per_worker": shape["diagnostic_gpus_per_worker"],
+            "resources": resources,
+            "priority_class": plan["execution"]["priority"],
+            "requeueIfPreempted": False,
+            "secrets": [],
+            "env": {
+                "HF_HUB_OFFLINE": "1",
+                "TRANSFORMERS_OFFLINE": "1",
+                "TOKENIZERS_PARALLELISM": "false",
+                "PYTHONDONTWRITEBYTECODE": "1",
+                "PYTHONUNBUFFERED": "1",
+            },
+        },
+        files,
+        MODULE,
+        ["--plan", "plan.json", "--sha256", digest(plan), "--engine-diagnostic"],
     )
 
 
@@ -328,6 +410,45 @@ def preflight(plan):
     }
 
 
+def engine_diagnostic_preflight(plan):
+    """Validate the engine-only request without reading task rows or using GPUs."""
+    if (os.geteuid(), os.getegid()) != (1000, 100):
+        raise ValueError("SkyRL CPU preflight must use the pinned image user 1000:100, not root")
+    import torch
+
+    if torch.cuda.is_available():
+        raise ValueError("SkyRL engine diagnostic preflight is CPU-only")
+    from skyrl.backends.skyrl_train.inference_servers.utils import build_vllm_cli_args
+
+    request = engine_diagnostic_request(plan)
+    if Path(plan["output_root"]).exists():
+        raise FileExistsError("RL diagnostic output already exists")
+    check_inputs(plan)
+    native_source()
+    cfg = skyrl.diagnostic_native_config(skyrl.SkyRLConfig(**plan["arguments"]))
+    shape = _diagnostic_shape(plan, cfg)
+    build_vllm_cli_args(cfg)
+    return {
+        "schema": "cyber_skyrl_engine_diagnostic_cpu_preflight_v1",
+        "status": "passed",
+        "gpus": 0,
+        "runtime_user": {"uid": os.geteuid(), "gid": os.getegid()},
+        "plan_sha256": digest(plan),
+        "request_sha256": digest(request),
+        "native_parser_checked": True,
+        "engine_cli_args_checked": True,
+        "model_files": len(plan["model"]["files"]),
+        "task_rows_read": 0,
+        "rollouts": False,
+        "verifier_calls": False,
+        "optimizer_updates": False,
+        "checkpoints": False,
+        "wandb": False,
+        "engine_start_qualified": False,
+        **shape,
+    }
+
+
 def digest_template(tokenizer):
     return hashlib.sha256(tokenizer.chat_template.encode()).hexdigest()
 
@@ -400,6 +521,681 @@ class ScalarTracking:
         raise ValueError("trajectory uploads are disabled")
 
 
+def _prepare_infra_log(plan):
+    """Create the one private shared file used by SkyRL infrastructure actors."""
+    directory = Path(plan["output_root"]) / "private-native-logs"
+    directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+    os.chmod(directory, 0o700)
+    path = directory / "infra.log"
+    with path.open("x"):
+        pass
+    os.chmod(path, 0o600)
+    return path
+
+
+def _infra_log_evidence(path):
+    """Return metadata only; the infrastructure log always remains private."""
+    signature = b"Engine core initialization failed. See root cause above."
+    hasher = hashlib.sha256()
+    size = 0
+    overlap = b""
+    signature_present = False
+    with path.open("rb") as stream:
+        while chunk := stream.read(1024 * 1024):
+            size += len(chunk)
+            hasher.update(chunk)
+            window = overlap + chunk
+            signature_present = signature_present or signature in window
+            overlap = window[-(len(signature) - 1) :]
+    return {
+        "path": "private-native-logs/infra.log",
+        "bytes": size,
+        "sha256": hasher.hexdigest(),
+        "engine_failure_signature_present": signature_present,
+    }
+
+
+def _string_environment(env: Mapping[str, str]) -> dict[str, str]:
+    if not isinstance(env, Mapping) or any(
+        not isinstance(key, str) or not isinstance(value, str) for key, value in env.items()
+    ):
+        raise ValueError("SkyRL Ray environment must contain only string variables")
+    return dict(env)
+
+
+def _credential_names(*environments: Mapping[str, str]) -> tuple[str, ...]:
+    names = set(_ALWAYS_SCRUB_WORKER_ENV)
+    for environment in environments:
+        names.update(
+            key for key in _string_environment(environment) if _CREDENTIAL_ENV_NAME.search(key)
+        )
+    return tuple(sorted(names))
+
+
+def _scrubbed_actor_environment(environment, scrubbed, overlay=None):
+    """Merge an explicit actor environment and blank credentials last."""
+    value = _string_environment(environment)
+    if overlay is not None:
+        value.update(_string_environment(overlay))
+    names = set(scrubbed)
+    names.update(_credential_names(value))
+    value.update(dict.fromkeys(sorted(names), ""))
+    return value
+
+
+@contextmanager
+def _scrubbed_process_environment(names):
+    """Temporarily blank credentials across the router's Linux fork."""
+    missing = object()
+    previous = {name: os.environ.get(name, missing) for name in names}
+    try:
+        for name in names:
+            os.environ[name] = ""
+        yield
+    finally:
+        for name, value in previous.items():
+            if value is missing:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
+
+
+def _ray_environment(plan, cfg, native, *, diagnostic=False):
+    env = _string_environment(native["skyrl.train.utils.utils"].prepare_runtime_environment(cfg))
+    scrubbed = _credential_names(os.environ, env) if diagnostic else ()
+    for name in scrubbed:
+        env[name] = ""
+    log = _prepare_infra_log(plan)
+    env["SKYRL_LOG_FILE"] = str(log)
+    env["PYTHONPATH"] = (
+        str(Path(__file__).resolve().parents[1]) + ":" + os.environ.get("PYTHONPATH", "")
+    )
+    return env, log, scrubbed
+
+
+def _diagnostic_runtime_files(plan):
+    files = _runtime()
+    files.update(
+        {p + "/__init__.py": "" for p in ("training", "evals", "evals/fleet", "cyber_post_train")}
+    )
+    files["plan.json"] = json.dumps(plan, sort_keys=True, separators=(",", ":"))
+    return files
+
+
+def _diagnostic_output_evidence(plan, *, started):
+    """Prove the immutable bundle and absence of task/training artifacts."""
+    root = Path(plan["output_root"])
+    if not root.is_dir() or root.is_symlink():
+        raise ValueError("engine diagnostic output root is not a regular directory")
+    allowed = {".runtime"}
+    if started:
+        allowed.update({"ENGINE_DIAGNOSTIC_STARTED.json", "private-native-logs"})
+    if {path.name for path in root.iterdir()} != allowed:
+        raise ValueError("engine diagnostic output contains an unexpected artifact")
+
+    runtime = root / ".runtime"
+    if runtime.is_symlink() or not runtime.is_dir():
+        raise ValueError("engine diagnostic runtime bundle is not a regular directory")
+    expected = _diagnostic_runtime_files(plan)
+    actual = {}
+    actual_directories = set()
+    for path in runtime.rglob("*"):
+        if path.is_symlink() or (not path.is_dir() and not path.is_file()):
+            raise ValueError("engine diagnostic runtime bundle contains an unsafe entry")
+        if path.is_file():
+            actual[str(path.relative_to(runtime))] = path
+        else:
+            actual_directories.add(str(path.relative_to(runtime)))
+    expected_directories = {
+        str(parent) for name in expected for parent in Path(name).parents if str(parent) != "."
+    }
+    if (
+        set(actual) != set(expected)
+        or actual_directories != expected_directories
+        or any(actual[name].read_text() != value for name, value in expected.items())
+    ):
+        raise ValueError("engine diagnostic runtime bundle changed")
+    if digest({name: actual[name].read_text() for name in RUNTIME_FILES}) != plan.get(
+        "runtime_sha256"
+    ):
+        raise ValueError("engine diagnostic runtime sources changed")
+
+    if started:
+        value = json.loads((root / "ENGINE_DIAGNOSTIC_STARTED.json").read_bytes())
+        sealed(value, ENGINE_DIAGNOSTIC_SCHEMA)
+        if value.get("status") != "started" or value.get("plan_sha256") != digest(plan):
+            raise ValueError("engine diagnostic start receipt changed")
+        logs = root / "private-native-logs"
+        if logs.is_symlink() or not logs.is_dir() or (logs.stat().st_mode & 0o777) != 0o700:
+            raise ValueError("engine diagnostic private log directory changed")
+        for path in logs.rglob("*"):
+            if path.is_symlink() or (not path.is_dir() and not path.is_file()):
+                raise ValueError("engine diagnostic private logs contain an unsafe entry")
+            if path.is_dir() or (
+                path.name != "infra.log"
+                and re.fullmatch(r"router-\d{6}_\d{6}\.log", path.name) is None
+            ):
+                raise ValueError("engine diagnostic private logs contain an unexpected entry")
+        infra = logs / "infra.log"
+        if not infra.is_file() or (infra.stat().st_mode & 0o777) != 0o600:
+            raise ValueError("engine diagnostic infrastructure log changed")
+    return {
+        "runtime_files_unchanged": True,
+        "unexpected_output_artifacts": 0,
+        "checkpoint_artifacts": 0,
+        "episode_artifacts": 0,
+        "task_artifacts": 0,
+    }
+
+
+def _add_identity(values, value):
+    if value is not None and all(existing is not value for existing in values):
+        values.append(value)
+
+
+@dataclasses.dataclass
+class _DiagnosticOwnership:
+    groups: list = dataclasses.field(default_factory=list)
+    routers: list = dataclasses.field(default_factory=list)
+    actors: list = dataclasses.field(default_factory=list)
+    engine_actors: list = dataclasses.field(default_factory=list)
+    placement_groups: list = dataclasses.field(default_factory=list)
+    job_id: str | None = None
+    ray_gpu_nodes_discovered: int | None = None
+    ray_gpu_nodes_probed: int = 0
+    ray_actor_environment_probes_passed: int | None = None
+    ray_actor_environment_probe_failures: int | None = None
+    ray_actor_nonempty_scrubbed_credentials: int | None = None
+    router_start_attempts: int = 0
+    router_credential_probes_passed: int = 0
+    router_credential_probe_failures: int = 0
+
+    def absorb_setup(self, setup):
+        if setup is None:
+            return
+        try:
+            _add_identity(self.routers, setup.router)
+        except HardDeadlineExceeded:
+            raise
+        except Exception:
+            pass
+        try:
+            for group in setup.server_groups:
+                _add_identity(self.groups, group)
+        except HardDeadlineExceeded:
+            raise
+        except Exception:
+            pass
+
+    def absorb_group_resources(self):
+        for group in tuple(self.groups):
+            try:
+                for actor in group.get_actors():
+                    _add_identity(self.actors, actor)
+                    _add_identity(self.engine_actors, actor)
+            except HardDeadlineExceeded:
+                raise
+            except Exception:
+                pass
+            for name in ("_internal_pg", "_external_pg"):
+                try:
+                    value = getattr(group, name)
+                    _add_identity(self.placement_groups, getattr(value, "pg", value))
+                except HardDeadlineExceeded:
+                    raise
+                except Exception:
+                    pass
+
+
+class _TrackedActorClass:
+    def __init__(self, actor_class, ownership):
+        self._actor_class = actor_class
+        self._ownership = ownership
+
+    def remote(self, *args, **kwargs):
+        actor = self._actor_class.remote(*args, **kwargs)
+        _add_identity(self._ownership.actors, actor)
+        _add_identity(self._ownership.engine_actors, actor)
+        return actor
+
+    def options(self, *args, **kwargs):
+        return type(self)(self._actor_class.options(*args, **kwargs), self._ownership)
+
+    def __getattr__(self, name):
+        return getattr(self._actor_class, name)
+
+
+@contextmanager
+def _instrument_engine_ownership(ownership, environment, scrubbed):
+    """Track exact native objects even when setup loses its partial locals."""
+    setup_module = importlib.import_module("skyrl.backends.skyrl_train.inference_servers.setup")
+    group_module = importlib.import_module(
+        "skyrl.backends.skyrl_train.inference_servers.server_group"
+    )
+    router_module = importlib.import_module(
+        "skyrl.backends.skyrl_train.inference_servers.vllm_router"
+    )
+    patches = []
+
+    def patch(module, name, value):
+        patches.append((module, name, getattr(module, name)))
+        setattr(module, name, value)
+
+    original_group = group_module.ServerGroup
+    original_router = router_module.VLLMRouter
+    original_engine_env = group_module.build_engine_runtime_env
+    original_router_target = router_module._run_router_with_logging
+    if router_module.multiprocessing.get_start_method() != "fork":
+        raise ValueError("diagnostic router credential isolation requires Linux fork")
+    router_probe_state = router_module.multiprocessing.RawValue("b", 0)
+
+    class TrackedServerGroup(original_group):
+        def __init__(self, *args, **kwargs):
+            _add_identity(ownership.groups, self)
+            super().__init__(*args, **kwargs)
+
+        def _create_actor_class(self, *args, **kwargs):
+            actor_class = super()._create_actor_class(*args, **kwargs)
+            return _TrackedActorClass(actor_class, ownership)
+
+    class TrackedRouter(original_router):
+        def __init__(self, *args, **kwargs):
+            _add_identity(ownership.routers, self)
+            super().__init__(*args, **kwargs)
+
+        def start(self, *args, **kwargs):
+            ownership.router_start_attempts += 1
+            router_probe_state.value = 0
+            try:
+                with _scrubbed_process_environment(scrubbed):
+                    return super().start(*args, **kwargs)
+            finally:
+                if router_probe_state.value == 1:
+                    ownership.router_credential_probes_passed += 1
+                elif router_probe_state.value == -1:
+                    ownership.router_credential_probe_failures += 1
+
+    def checked_router_target(*args, **kwargs):
+        if any(os.environ.get(name) for name in scrubbed):
+            router_probe_state.value = -1
+            raise RuntimeError("router child credential isolation failed")
+        router_probe_state.value = 1
+        return original_router_target(*args, **kwargs)
+
+    def tracked_placement_group(original):
+        def create(*args, **kwargs):
+            value = original(*args, **kwargs)
+            _add_identity(ownership.placement_groups, value)
+            return value
+
+        return create
+
+    def scrubbed_engine_environment(*args, **kwargs):
+        value = original_engine_env(*args, **kwargs) or {}
+        if not isinstance(value, Mapping):
+            raise ValueError("native engine runtime environment changed")
+        value = dict(value)
+        value["env_vars"] = _scrubbed_actor_environment(
+            environment,
+            scrubbed,
+            value.get("env_vars", {}),
+        )
+        return value
+
+    try:
+        patch(group_module, "ServerGroup", TrackedServerGroup)
+        patch(router_module, "VLLMRouter", TrackedRouter)
+        patch(router_module, "_run_router_with_logging", checked_router_target)
+        # Patch any import-time aliases too.  The pinned implementation reads
+        # these module globals while ``create_inference_servers`` is running.
+        if getattr(setup_module, "ServerGroup", None) is original_group:
+            patch(setup_module, "ServerGroup", TrackedServerGroup)
+        if getattr(setup_module, "VLLMRouter", None) is original_router:
+            patch(setup_module, "VLLMRouter", TrackedRouter)
+        if getattr(group_module, "VLLMRouter", None) is original_router:
+            patch(group_module, "VLLMRouter", TrackedRouter)
+        patch(
+            setup_module,
+            "ray_placement_group",
+            tracked_placement_group(setup_module.ray_placement_group),
+        )
+        patch(
+            group_module,
+            "placement_group",
+            tracked_placement_group(group_module.placement_group),
+        )
+        patch(group_module, "build_engine_runtime_env", scrubbed_engine_environment)
+        yield setup_module
+    finally:
+        for module, name, value in reversed(patches):
+            setattr(module, name, value)
+
+
+@contextmanager
+def _bounded_ray_get(ray, deadline):
+    """Give every native bare ``ray.get`` the current hard-deadline remainder."""
+    original = ray.get
+
+    def bounded(refs, *, timeout=None, **kwargs):
+        remaining = deadline.remaining()
+        plan_limited = timeout is None or remaining <= float(timeout)
+        timeout = remaining if timeout is None else min(remaining, float(timeout))
+        try:
+            return original(refs, timeout=timeout, **kwargs)
+        except BaseException as exc:
+            if plan_limited and (
+                isinstance(exc, TimeoutError)
+                or type(exc).__name__ in {"GetTimeoutError", "RayTimeoutError"}
+            ):
+                deadline.raise_expired()
+            raise
+
+    ray.get = bounded
+    try:
+        yield
+    finally:
+        ray.get = original
+
+
+class _CredentialProbe:
+    def inspect(self, names):
+        import ray
+
+        return {
+            "node_id": str(ray.get_runtime_context().get_node_id()),
+            "nonempty": sum(bool(os.environ.get(name)) for name in names),
+        }
+
+    def shutdown(self):
+        return None
+
+
+def _live_gpu_node_ids(ray, expected_nodes, expected_gpus_per_node):
+    """Return the exact sorted live GPU node IDs or fail on topology uncertainty."""
+    rows = ray.nodes()
+    if not isinstance(rows, (list, tuple)):
+        raise ValueError("Ray node table changed")
+    node_ids = []
+    for row in rows:
+        if not isinstance(row, Mapping) or type(row.get("Alive")) is not bool:
+            raise ValueError("Ray node record changed")
+        if not row["Alive"]:
+            continue
+        resources = row.get("Resources")
+        if not isinstance(resources, Mapping):
+            raise ValueError("Ray live-node resources changed")
+        gpus = resources.get("GPU", 0)
+        if (
+            isinstance(gpus, bool)
+            or not isinstance(gpus, numbers.Real)
+            or not math.isfinite(gpus)
+            or gpus < 0
+        ):
+            raise ValueError("Ray live-node GPU resources changed")
+        if gpus == 0:
+            continue
+        node_id = row.get("NodeID")
+        if (
+            not isinstance(node_id, str)
+            or re.fullmatch(r"[0-9a-fA-F]+", node_id) is None
+            or len(node_id) % 2
+            or gpus != expected_gpus_per_node
+        ):
+            raise ValueError("Ray GPU node topology differs from diagnostic request")
+        node_ids.append(node_id.lower())
+    if len(node_ids) != expected_nodes or len(set(node_ids)) != len(node_ids):
+        raise ValueError("Ray GPU node topology differs from diagnostic request")
+    return tuple(sorted(node_ids))
+
+
+def _node_affinity_strategy(ray, node_id):
+    strategies = getattr(getattr(ray, "util", None), "scheduling_strategies", None)
+    value = getattr(strategies, "NodeAffinitySchedulingStrategy", None)
+    if value is None:
+        value = importlib.import_module(
+            "ray.util.scheduling_strategies"
+        ).NodeAffinitySchedulingStrategy
+    return value(node_id=node_id, soft=False)
+
+
+def _probe_worker_credentials(
+    ray,
+    ownership,
+    environment,
+    scrubbed,
+    *,
+    expected_nodes,
+    expected_gpus_per_node,
+):
+    node_ids = _live_gpu_node_ids(ray, expected_nodes, expected_gpus_per_node)
+    ownership.ray_gpu_nodes_discovered = len(node_ids)
+    actor_environment = _scrubbed_actor_environment(environment, scrubbed)
+    actors = []
+    for node_id in node_ids:
+        actor = (
+            ray.remote(_CredentialProbe)
+            .options(
+                num_cpus=0,
+                num_gpus=0,
+                max_restarts=0,
+                runtime_env={"env_vars": dict(actor_environment)},
+                scheduling_strategy=_node_affinity_strategy(ray, node_id),
+            )
+            .remote()
+        )
+        _add_identity(ownership.actors, actor)
+        actors.append(actor)
+    results = ray.get([actor.inspect.remote(scrubbed) for actor in actors])
+    if not isinstance(results, (list, tuple)) or len(results) != len(node_ids):
+        raise ValueError("Ray credential probe result changed")
+    normalized = []
+    for result in results:
+        if (
+            not isinstance(result, Mapping)
+            or set(result) != {"node_id", "nonempty"}
+            or not isinstance(result["node_id"], str)
+            or re.fullmatch(r"[0-9a-fA-F]+", result["node_id"]) is None
+            or len(result["node_id"]) % 2
+            or type(result["nonempty"]) is not int
+            or not 0 <= result["nonempty"] <= len(scrubbed)
+        ):
+            raise ValueError("Ray credential probe result changed")
+        normalized.append((result["node_id"].lower(), result["nonempty"]))
+    ownership.ray_gpu_nodes_probed = len(normalized)
+    ownership.ray_actor_nonempty_scrubbed_credentials = sum(count for _, count in normalized)
+    ownership.ray_actor_environment_probes_passed = sum(count == 0 for _, count in normalized)
+    ownership.ray_actor_environment_probe_failures = sum(count != 0 for _, count in normalized)
+    if tuple(sorted(node_id for node_id, _ in normalized)) != node_ids:
+        raise ValueError("Ray credential probes did not cover the exact GPU nodes")
+    if _live_gpu_node_ids(ray, expected_nodes, expected_gpus_per_node) != node_ids:
+        raise ValueError("Ray GPU node topology changed during credential probes")
+    if ownership.ray_actor_nonempty_scrubbed_credentials != 0:
+        raise ValueError("Ray actor retained a scrubbed credential value")
+    return 0
+
+
+def _validate_complete_engine_setup(setup, engine_config):
+    expected_groups = engine_config.num_engines
+    expected_servers = expected_groups * engine_config.data_parallel_size
+    groups = tuple(setup.server_groups)
+    urls = tuple(setup.server_urls)
+    actor_counts = tuple(len(tuple(group.get_actors())) for group in groups)
+    if (
+        type(expected_groups) is not int
+        or type(expected_servers) is not int
+        or expected_groups < 1
+        or expected_servers < 1
+        or len(groups) != expected_groups
+        or len(urls) != expected_servers
+        or actor_counts != (engine_config.data_parallel_size,) * expected_groups
+        or any(not isinstance(url, str) or not url for url in urls)
+        or setup.router is None
+        or not isinstance(setup.proxy_url, str)
+        or not setup.proxy_url
+    ):
+        raise ValueError("native engine setup returned a partial topology")
+
+
+def _active_owned_resources(job_id, timeout):
+    """Read exact current-job ownership without Ray's dashboard server.
+
+    Ray 2.56's public state list APIs route through the optional dashboard at
+    port 8265, which the pinned training cluster does not run.  Its internal
+    actor table and raw GCS placement-group table are dashboard-independent.
+    The caller's process alarm bounds both raw calls because they expose no
+    per-request timeout; an error or deadline remains fatal uncertainty.
+    Treat every state except the one terminal state as active so a new or
+    unfamiliar state can never be mistaken for successful cleanup.
+    """
+    if (
+        not isinstance(job_id, str)
+        or re.fullmatch(r"[0-9a-fA-F]+", job_id) is None
+        or len(job_id) % 2
+        or timeout <= 0
+    ):
+        raise ValueError("invalid Ray cleanup ownership query")
+    ray_state = importlib.import_module("ray._private.state")
+    actors = ray_state.actors()
+    if not isinstance(actors, Mapping):
+        raise ValueError("Ray actor ownership table changed")
+    active_actors = 0
+    for value in actors.values():
+        if not isinstance(value, Mapping) or "JobID" not in value or "State" not in value:
+            raise ValueError("Ray actor ownership record changed")
+        if str(value["JobID"]).lower() == job_id.lower() and value["State"] != "DEAD":
+            active_actors += 1
+
+    gcs_pb2 = importlib.import_module("ray.core.generated.gcs_pb2")
+    binary_to_hex = importlib.import_module("ray._common.utils").binary_to_hex
+    accessor = ray_state.state._connect_and_get_accessor()
+    payloads = accessor.get_placement_group_table()
+    if not isinstance(payloads, (list, tuple)):
+        raise ValueError("Ray placement-group ownership table changed")
+    active_groups = 0
+    for payload in payloads:
+        row = gcs_pb2.PlacementGroupTableData.FromString(payload)
+        creator_job_id = binary_to_hex(row.creator_job_id)
+        if not isinstance(creator_job_id, str):
+            raise ValueError("Ray placement-group creator identity changed")
+        if creator_job_id.lower() != job_id.lower():
+            continue
+        try:
+            state_name = gcs_pb2.PlacementGroupTableData.PlacementGroupState.Name(row.state)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Ray placement-group state changed") from exc
+        if state_name != "REMOVED":
+            active_groups += 1
+    return active_actors, active_groups
+
+
+def _prove_owned_resources_released(ownership, deadline):
+    if not ownership.job_id:
+        raise ValueError("Ray job identity unavailable for cleanup proof")
+    while True:
+        actors, groups = _active_owned_resources(ownership.job_id, deadline.remaining())
+        if actors == groups == 0:
+            return {"active_owned_actors": 0, "active_owned_placement_groups": 0}
+        time.sleep(min(0.1, deadline.remaining() / 2))
+
+
+def _router_released(router, shutdown_returned):
+    marker = object()
+    process = getattr(router, "_process", marker)
+    if process is marker:
+        return shutdown_returned
+    if process is not None and process.is_alive():
+        return False
+    return all(
+        getattr(router, name, None) is None
+        for name in ("_port_reservation", "_prometheus_port_reservation")
+    )
+
+
+def _cleanup_engine_diagnostic(setup, ray, ownership, timeout_seconds):
+    """Bound, force, and independently prove all diagnostic-owned cleanup."""
+    with (
+        hard_deadline(timeout_seconds, "SkyRL engine cleanup") as deadline,
+        _bounded_ray_get(ray, deadline),
+    ):
+        ownership.absorb_setup(setup)
+        ownership.absorb_group_resources()
+        router_results = {}
+        for router in ownership.routers:
+            try:
+                router.shutdown()
+            except HardDeadlineExceeded:
+                raise
+            except Exception:
+                router_results[id(router)] = False
+            else:
+                router_results[id(router)] = True
+
+        shutdown_refs = []
+        graceful = True
+        for actor in ownership.actors:
+            try:
+                shutdown_refs.append(actor.shutdown.remote())
+            except HardDeadlineExceeded:
+                raise
+            except Exception:
+                graceful = False
+        if shutdown_refs:
+            try:
+                ray.get(
+                    shutdown_refs,
+                    timeout=min(30.0, max(0.1, deadline.remaining() / 3)),
+                )
+            except HardDeadlineExceeded:
+                raise
+            except Exception:
+                graceful = False
+        for actor in ownership.actors:
+            deadline.remaining()
+            try:
+                ray.kill(actor, no_restart=True)
+            except HardDeadlineExceeded:
+                raise
+            except Exception:
+                pass
+
+        remove_placement_group = importlib.import_module(
+            "ray.util.placement_group"
+        ).remove_placement_group
+        for group in ownership.placement_groups:
+            deadline.remaining()
+            try:
+                remove_placement_group(group)
+            except HardDeadlineExceeded:
+                raise
+            except Exception:
+                pass
+
+        if ownership.job_id:
+            proof = _prove_owned_resources_released(ownership, deadline)
+        elif any(
+            (ownership.actors, ownership.groups, ownership.placement_groups, ownership.routers)
+        ):
+            raise ValueError("Ray job identity unavailable for cleanup proof")
+        else:
+            proof = {"active_owned_actors": 0, "active_owned_placement_groups": 0}
+        if any(
+            not _router_released(router, router_results.get(id(router), False))
+            for router in ownership.routers
+        ):
+            raise ValueError("engine diagnostic router cleanup could not be proven")
+        ray.shutdown()
+        deadline.remaining()
+    return {
+        **proof,
+        "tracked_ray_actors": len(ownership.actors),
+        "tracked_engine_actors": len(ownership.engine_actors),
+        "tracked_placement_groups": len(ownership.placement_groups),
+        "tracked_routers": len(ownership.routers),
+        "graceful_actor_shutdown": graceful,
+        "cleanup_proven": True,
+    }
+
+
 def _native(plan):
     import ray
     import wandb
@@ -437,10 +1233,7 @@ def _native(plan):
         def get_trajectory_logger(self):
             return None
 
-    env = modules["skyrl.train.utils.utils"].prepare_runtime_environment(cfg)
-    env["PYTHONPATH"] = (
-        str(Path(__file__).resolve().parents[1]) + ":" + os.environ.get("PYTHONPATH", "")
-    )
+    env, _, _ = _ray_environment(plan, cfg, modules)
     ray.init(address="auto", log_to_driver=False, runtime_env={"env_vars": env})
     code = 1
     try:
@@ -457,6 +1250,235 @@ def _native(plan):
                 wandb.finish(exit_code=code)
         finally:
             ray.shutdown()
+
+
+def engine_diagnostic(plan):
+    """Start and stop only the exact vLLM engines; never load task rows or train."""
+    root = Path(plan["output_root"])
+    if os.environ.get("RUN_DIR") != str(root):
+        raise ValueError("Jobs API output binding mismatch")
+    args = skyrl.SkyRLConfig(**plan["arguments"])
+    ownership = _DiagnosticOwnership()
+    setup = None
+    ray = None
+    log = None
+    scrubbed = ()
+    shape = None
+    create_called = False
+    startup_error = None
+    startup_deadline = None
+    startup_phase = "plan_validation"
+    ray_actor_environment_isolation_proven = False
+    try:
+        # One wall-clock budget covers all work done after GPU allocation,
+        # including the exact 27B model re-hash.  Cleanup owns a separate alarm
+        # only after this context has restored the process signal state.
+        with hard_deadline(
+            args.engine_start_timeout_seconds, "SkyRL engine startup"
+        ) as startup_deadline:
+            job_request(plan)
+            startup_phase = "runtime_validation"
+            _diagnostic_output_evidence(plan, started=False)
+            startup_phase = "input_validation"
+            check_inputs(plan)
+            startup_phase = "native_validation"
+            modules = native_source()
+            cfg = skyrl.diagnostic_native_config(args)
+            shape = _diagnostic_shape(plan, cfg)
+            _write(
+                root / "ENGINE_DIAGNOSTIC_STARTED.json",
+                {
+                    "schema": ENGINE_DIAGNOSTIC_SCHEMA,
+                    "status": "started",
+                    "plan_sha256": digest(plan),
+                    "optimizer_steps": 0,
+                    "rollouts": 0,
+                    "verifier_calls": 0,
+                    "checkpoints_created": 0,
+                    "engine_start_timeout_seconds": args.engine_start_timeout_seconds,
+                    "engine_cleanup_timeout_seconds": args.engine_cleanup_timeout_seconds,
+                    **shape,
+                },
+            )
+            startup_phase = "ray_environment"
+            import ray as ray_module
+            from skyrl.backends.skyrl_train.inference_servers.utils import (
+                build_vllm_cli_args,
+            )
+
+            ray = ray_module
+            env, log, scrubbed = _ray_environment(plan, cfg, modules, diagnostic=True)
+            startup_phase = "ray_initialization"
+            with (
+                _instrument_engine_ownership(ownership, env, scrubbed) as setup_module,
+                _bounded_ray_get(ray, startup_deadline),
+            ):
+                ray.init(address="auto", log_to_driver=False, runtime_env={"env_vars": env})
+                ownership.job_id = str(ray.get_runtime_context().get_job_id())
+                if (
+                    re.fullmatch(r"[0-9a-fA-F]+", ownership.job_id) is None
+                    or len(ownership.job_id) % 2
+                ):
+                    raise ValueError("Ray job identity changed")
+                startup_phase = "ray_actor_environment_probe"
+                _probe_worker_credentials(
+                    ray,
+                    ownership,
+                    env,
+                    scrubbed,
+                    expected_nodes=shape["diagnostic_workers"],
+                    expected_gpus_per_node=shape["diagnostic_gpus_per_worker"],
+                )
+                ray_actor_environment_isolation_proven = True
+                startup_phase = "engine_argument_build"
+                vllm_args = build_vllm_cli_args(cfg)
+                engine_config = cfg.generator.inference_engine
+                engine_log_path = cfg.trainer.log_path
+                create_called = True
+                startup_phase = "engine_creation"
+                setup = setup_module.create_inference_servers(
+                    engine_config,
+                    vllm_args,
+                    log_path=engine_log_path,
+                )
+                startup_phase = "engine_validation"
+                _validate_complete_engine_setup(setup, engine_config)
+                if (
+                    ownership.router_start_attempts != 1
+                    or ownership.router_credential_probes_passed != 1
+                    or ownership.router_credential_probe_failures != 0
+                ):
+                    raise ValueError("router child credential isolation was not proven")
+                startup_deadline.remaining()
+                startup_phase = "complete"
+    except BaseException as exc:
+        startup_error = exc
+
+    ownership.absorb_setup(setup)
+    if startup_error is None:
+        engine_start_state, engine_started = "all", True
+        status = "passed"
+    elif setup is not None or ownership.groups or ownership.engine_actors or ownership.routers:
+        engine_start_state, engine_started = "partial_or_unknown", None
+        status = None
+    else:
+        engine_start_state, engine_started = "none", False
+        status = None
+
+    timed_out = bool(startup_deadline is not None and startup_deadline.expired)
+    router_isolation_proven = ownership.router_start_attempts == 0 or (
+        ownership.router_start_attempts == ownership.router_credential_probes_passed
+        and ownership.router_credential_probe_failures == 0
+    )
+    terminal_evidence_candidate = isinstance(startup_error, Exception) and bool(ownership.job_id)
+    clean_candidate = (
+        terminal_evidence_candidate
+        and ray_actor_environment_isolation_proven
+        and router_isolation_proven
+    )
+    if terminal_evidence_candidate:
+        if timed_out:
+            status = "engine_start_timeout"
+        elif not ray_actor_environment_isolation_proven or not router_isolation_proven:
+            status = "environment_isolation_rejected"
+        elif create_called:
+            status = "engine_start_rejected"
+        else:
+            status = "pre_engine_rejected"
+
+    if ray is not None:
+        try:
+            cleanup = _cleanup_engine_diagnostic(
+                setup,
+                ray,
+                ownership,
+                args.engine_cleanup_timeout_seconds,
+            )
+        except BaseException as cleanup_error:
+            if startup_error is not None:
+                raise BaseExceptionGroup(
+                    "engine diagnostic startup and cleanup failed",
+                    [startup_error, cleanup_error],
+                ) from None
+            raise
+    elif startup_error is None:
+        raise RuntimeError("engine diagnostic did not initialize Ray")
+
+    if startup_error is not None and not terminal_evidence_candidate:
+        raise startup_error
+
+    from .rl_runtime import sanitized_causes
+
+    output = _diagnostic_output_evidence(plan, started=True)
+    if log is None:
+        raise RuntimeError("engine diagnostic infrastructure log unavailable")
+    if shape is None:
+        raise RuntimeError("engine diagnostic cluster shape unavailable")
+    router_isolation = (
+        "proven"
+        if ownership.router_start_attempts == ownership.router_credential_probes_passed == 1
+        and ownership.router_credential_probe_failures == 0
+        else "not_started"
+        if ownership.router_start_attempts == 0
+        else "failed_or_unknown"
+    )
+    result = {
+        "schema": ENGINE_DIAGNOSTIC_SCHEMA,
+        "status": status,
+        "engine_start_state": engine_start_state,
+        "engine_started": engine_started,
+        "startup_phase": startup_phase,
+        "causes": [] if startup_error is None else sanitized_causes(startup_error),
+    }
+    result.update(
+        {
+            "plan_sha256": digest(plan),
+            "private_log": _infra_log_evidence(log),
+            "task_rows_read": 0,
+            "verifier_calls": 0,
+            "optimizer_steps": 0,
+            "rollouts": 0,
+            "checkpoints_created": 0,
+            "checkpoint_created": False,
+            "wandb_initialized": False,
+            "diagnostic_completed": True,
+            "engine_start_qualified": result["status"] == "passed",
+            "training_qualified": False,
+            "production_training_shape_qualified": False,
+            "engine_start_timeout_seconds": args.engine_start_timeout_seconds,
+            "engine_cleanup_timeout_seconds": args.engine_cleanup_timeout_seconds,
+            "credential_variables_scrubbed": len(scrubbed),
+            "credential_environment_isolation_proven": (
+                ray_actor_environment_isolation_proven and router_isolation_proven
+            ),
+            "ray_actor_environment_isolation_proven": (ray_actor_environment_isolation_proven),
+            "ray_gpu_nodes_expected": shape["diagnostic_workers"],
+            "ray_gpu_nodes_discovered": ownership.ray_gpu_nodes_discovered,
+            "ray_gpu_nodes_probed": ownership.ray_gpu_nodes_probed,
+            "ray_actor_environment_probes_passed": (ownership.ray_actor_environment_probes_passed),
+            "ray_actor_environment_probe_failures": (
+                ownership.ray_actor_environment_probe_failures
+            ),
+            "ray_actor_nonempty_scrubbed_credentials": (
+                ownership.ray_actor_nonempty_scrubbed_credentials
+            ),
+            "router_child_credential_environment_isolation": router_isolation,
+            "router_start_attempts": ownership.router_start_attempts,
+            "router_environment_probes_passed": ownership.router_credential_probes_passed,
+            "router_environment_probe_failures": ownership.router_credential_probe_failures,
+            "registry_actors_created": 0,
+            "service_account_token_isolation_proven": False,
+            "service_account_rbac_write_access_tested": False,
+            **shape,
+            "cleanup": cleanup,
+            "output_postconditions": output,
+            "completed_at": time.time(),
+        }
+    )
+    result = _write(root / "ENGINE_DIAGNOSTIC.json", result)
+    if startup_error is not None and not clean_candidate:
+        raise startup_error
+    return result
 
 
 def native_result(plan):
@@ -512,27 +1534,33 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--plan", type=Path, required=True)
     parser.add_argument("--sha256", required=True)
-    parser.add_argument("--native", action="store_true")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--native", action="store_true")
+    mode.add_argument("--engine-diagnostic", action="store_true")
     args = parser.parse_args()
     try:
         plan = json.loads(args.plan.read_bytes())
         if digest(plan) != args.sha256:
             raise ValueError("plan digest mismatch")
-        job_request(plan)
-        if args.native:
-            try:
-                _native(plan)
-            except BaseException as exc:
-                from .rl_runtime import native_failure, native_rejection
-
-                if native_rejection(plan, exc):
-                    return
-                with suppress(Exception):
-                    native_failure(plan, exc)
-                raise
-        else:
-            result = run(plan, args.plan)
+        if args.engine_diagnostic:
+            result = engine_diagnostic(plan)
             print(json.dumps({k: result[k] for k in ("status", "sha256")}))
+        else:
+            job_request(plan)
+            if args.native:
+                try:
+                    _native(plan)
+                except BaseException as exc:
+                    from .rl_runtime import native_failure, native_rejection
+
+                    if native_rejection(plan, exc):
+                        return
+                    with suppress(Exception):
+                        native_failure(plan, exc)
+                    raise
+            else:
+                result = run(plan, args.plan)
+                print(json.dumps({k: result[k] for k in ("status", "sha256")}))
     except BaseException as exc:
         print(json.dumps({"status": "failed", "error_class": type(exc).__name__}))
         raise SystemExit(1) from None
