@@ -103,9 +103,7 @@ def test_dev6_toggle_is_diagnostic_only_and_precedes_actor_import(
 def test_dev6_prelaunch_evidence_is_self_digesting_and_truthful():
     value = load(EVIDENCE)
     assert value["sha256"] == digest({k: v for k, v in value.items() if k != "sha256"})
-    assert value["classification"] == (
-        "operational_gate_source_prepared_not_materialized_or_submitted"
-    )
+    assert value["classification"] == "operational_gate_qualified_not_submitted"
     assert value["predecessor"]["diagnostic_status"] == "engine_start_rejected"
     assert value["predecessor"]["terminal_receipt"]["digest_valid"] is True
     terminal = load(DEV5_TERMINAL)
@@ -137,7 +135,21 @@ def test_dev6_prelaunch_evidence_is_self_digesting_and_truthful():
     assert successor["required_effective_priority"] == 10000
     assert successor["automatic_requeue"] is False
     assert successor["workers"] * successor["gpus_per_worker"] == 8
-    assert successor["plan_sha256"] is successor["request_sha256"] is None
+    assert successor["plan_sha256"] == (
+        "dc34abf5325baff35875893ffec05c28564028d1f0f2ad1aa852e077d3fb9609"
+    )
+    assert successor["request_sha256"] == (
+        "1923f8fedac4aba5d036acaf26d37cebd94621f6cb47e1d89844249dfda10dde"
+    )
+    assert all(
+        successor[key]
+        for key in (
+            "data_materialized",
+            "plan_compiled",
+            "pinned_image_cpu_preflight_passed",
+            "dev_api_preview_passed",
+        )
+    )
     assert not any(
         successor[key]
         for key in (
@@ -147,12 +159,23 @@ def test_dev6_prelaunch_evidence_is_self_digesting_and_truthful():
             "optimizer_steps",
             "checkpoints_created",
             "wandb",
-            "data_materialized",
-            "plan_compiled",
-            "pinned_image_cpu_preflight_passed",
-            "dev_api_preview_passed",
             "submitted",
         )
     )
-    assert value["audit_boundaries"]["cluster_mutations"] == 0
+    assert value["data_preparation"]["manifest_digest_valid"] is True
+    assert value["data_preparation"]["operator_prompt_content_inspected"] is False
+    assert value["cpu_preflight"]["gpus"] == 0
+    assert value["cpu_preflight"]["status"] == "passed"
+    assert value["cpu_preflight"]["vllm_v1_multiprocessing_disabled"] is True
+    assert value["cpu_preflight"]["engine_start_qualified"] is False
+    assert value["dev_preview"]["status"] == "passed"
+    assert value["dev_preview"]["physical_resources_created"] is False
+    snapshot = value["immediate_readiness_snapshot"]
+    assert snapshot["fleet_team_id"] == "a1025f0b-ad67-49fc-a023-51800ab43e84"
+    assert snapshot["jobs_api_duplicate_matches"] == 0
+    assert snapshot["kubernetes_duplicate_matches"] == 0
+    assert snapshot["output_root_absent"] is snapshot["submission_journal_absent"] is True
+    assert snapshot["nodes_with_at_least_four_free_gpus"] == 2
+    assert value["audit_boundaries"]["cluster_mutations"] == 1
+    assert value["audit_boundaries"]["zero_gpu_helpers_created"] == 1
     assert value["audit_boundaries"]["private_logs_read"] is False

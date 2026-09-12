@@ -1,6 +1,6 @@
 {
   "schema": "cyber_skyrl_engine_diagnostic_prelaunch_v1",
-  "classification": "operational_gate_source_prepared_not_materialized_or_submitted",
+  "classification": "operational_gate_qualified_not_submitted",
   "predecessor": {
     "api_name": "chris-q38-rldiag-dev5-7a6fd5d6",
     "api_run_id": "7a6fd5d6-626b-47b1-9ff2-d53a9437bd88",
@@ -84,8 +84,8 @@
     "run_config_sha256": "03fdae1bd1d56793dce530f49e84b8d5eb9f69b561227cf99abc203852c11f47",
     "skyrl_training_source_sha256": "8ae369d84e7d959afff18757cd773f348c7a0c8d1a0918fabd41f4eefa054152",
     "runtime_sha256": "217da2023e441ba263a2cbf6c7182b0c5031caaf3cc4c65956afcee36e3ac3f5",
-    "plan_sha256": null,
-    "request_sha256": null,
+    "plan_sha256": "dc34abf5325baff35875893ffec05c28564028d1f0f2ad1aa852e077d3fb9609",
+    "request_sha256": "1923f8fedac4aba5d036acaf26d37cebd94621f6cb47e1d89844249dfda10dde",
     "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
     "allowed_cluster": "dev",
     "priority_class": "c1",
@@ -101,12 +101,59 @@
     "optimizer_steps": 0,
     "checkpoints_created": 0,
     "wandb": false,
-    "data_materialized": false,
-    "plan_compiled": false,
-    "pinned_image_cpu_preflight_passed": false,
-    "dev_api_preview_passed": false,
+    "data_materialized": true,
+    "plan_compiled": true,
+    "pinned_image_cpu_preflight_passed": true,
+    "dev_api_preview_passed": true,
     "submitted": false,
     "required_terminal_receipt": "ENGINE_DIAGNOSTIC.json"
+  },
+  "data_preparation": {
+    "manifest_file_sha256": "0f2d9b49996b19f22e35416bc56b25969232a41a31d93e6db40df13d3850e9c9",
+    "manifest_embedded_sha256": "sha256:27811e584077f9edb26896010a2646b0a2adb1b82737ce737a641291abc22430",
+    "manifest_digest_valid": true,
+    "train_rows_staged": 2,
+    "dev_rows_staged": 1,
+    "environment_creates": 0,
+    "operator_prompt_content_inspected": false
+  },
+  "cpu_preflight": {
+    "pod_name": "chris-q38-rldiag-dev6-cpu-v1",
+    "pod_uid": "fa9d58d2-6597-4b36-948d-e4917c1e4f8c",
+    "created_at": "2026-09-12T13:11:09Z",
+    "image_sha256": "ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "restarts": 0,
+    "gpus": 0,
+    "receipt_file_sha256": "8c24943171928aa53041ce58a7f1b7eb3d10cd86f9966a13a8ccffc40d2c75e2",
+    "receipt_embedded_sha256": "44166af5d869f0853999119df92c414a889af353a076d17a2903b5ae23cdd950",
+    "status": "passed",
+    "native_parser_checked": true,
+    "engine_cli_args_checked": true,
+    "vllm_v1_multiprocessing_disabled": true,
+    "engine_start_qualified": false,
+    "active_for_submission": true
+  },
+  "dev_preview": {
+    "api_base_url": "https://api.ft.dev.flt.build",
+    "status": "passed",
+    "manifest_sha256": "757ae44f18fac23afedc4c791664d673b1f0615a341217383b44f2cca688743e",
+    "nodes": 2,
+    "gpus": 8,
+    "physical_resources_created": false
+  },
+  "immediate_readiness_snapshot": {
+    "observed_at": "2026-09-12T13:12:45Z",
+    "fleet_team_id": "a1025f0b-ad67-49fc-a023-51800ab43e84",
+    "fleet_team_name": "fleet",
+    "jobs_api_duplicate_matches": 0,
+    "kubernetes_duplicate_matches": 0,
+    "output_root_absent": true,
+    "submission_journal_absent": true,
+    "ready_schedulable_gpu_nodes": 2,
+    "nodes_with_at_least_four_free_gpus": 2,
+    "free_gpus_by_node": [6, 6],
+    "owned_experiment_gpu_nodes": 0,
+    "nebius_access_expires_at": "2026-09-12T18:28:22Z"
   },
   "invariants": {
     "exact_model": "Qwen/Qwen3.8-27B@1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
@@ -119,16 +166,17 @@
     "no_secrets": true,
     "no_wandb": true
   },
-  "next_gate": "Materialize the fresh dev6 data identity without inspecting task content, compile the exact plan/request, run the exact-image zero-GPU preflight, then require a clean dev API preview plus immediate duplicate/output/capacity checks before any separately authorized one-time submission. If dev6 cannot recover a more specific sanitized EngineCore cause, stop; do not loop another diagnostic.",
+  "next_gate": "Repeat the immediate duplicate, output, capacity, node-budget and auth checks, then submit this exact prepared dev6 diagnostic once through the Jobs API. Delete the zero-GPU helper after its submission journal is durable. If dev6 cannot recover a more specific sanitized EngineCore cause, stop; do not loop another diagnostic.",
   "audit_boundaries": {
     "gpu_jobs_submitted": 0,
     "gpu_resources_created": 0,
-    "cluster_mutations": 0,
+    "cluster_mutations": 1,
+    "zero_gpu_helpers_created": 1,
     "private_logs_read": false,
     "task_rows_read": 0,
     "task_or_prompt_content_exposed": false,
     "credentials_read_or_persisted": false,
-    "observed_at": "2026-09-12T13:06:40Z"
+    "observed_at": "2026-09-12T13:12:45Z"
   },
-  "sha256": "2a9f99b6c7f03270f6247e8b81c75975fe0962b9e84b627ea15537fc2c5f828c"
+  "sha256": "2abce52821379f240077e068ca44aed5a0bf97e4c761e9b0abb8e29baf624302"
 }
