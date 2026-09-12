@@ -404,6 +404,96 @@ def _require_engine_start_qualified_image(plan):
         )
 
 
+def _validate_vllm_startup_error_transport():
+    """Prove the installed safe startup wrapper crosses Ray's pickle boundary.
+
+    vLLM raises this exception inside a Ray actor.  Ray 2.56 checks only that a
+    cause can be serialized before placing it in ``RayTaskError``; the driver
+    can still lose the cause later if reconstructing the exception fails.  A
+    GPU engine smoke cannot be the first place that constructor mismatch is
+    discovered.
+    """
+    import pickle
+
+    ray_errors = importlib.import_module("ray.exceptions")
+    ray_pickle = importlib.import_module("ray.cloudpickle")
+    startup = importlib.import_module("vllm.v1.engine.fleet_startup_error")
+    error_type = getattr(startup, "FleetVllmStartupError", None)
+    schema = getattr(startup, "SCHEMA", None)
+    if not isinstance(error_type, type) or schema != "fleet_vllm_startup_error_v1":
+        raise ValueError("installed vLLM startup exception contract changed")
+
+    expected = {
+        "schema": schema,
+        "exception_class": "TypeError",
+        "frame": {"source_id": "model", "line": 1},
+    }
+    secret = "SYNTHETIC_PRIVATE_STARTUP_TRANSPORT_PROBE"
+    poisoned = {
+        "schema": schema,
+        "exception_class": secret,
+        "frame": {"source_id": secret, "line": secret},
+        "message": secret,
+    }
+    probes = (
+        ("engine_core", expected, expected),
+        (
+            secret,
+            poisoned,
+            {"schema": schema, "exception_class": "Other", "frame": None},
+        ),
+    )
+    for codec_name, codec in (("pickle", pickle), ("ray.cloudpickle", ray_pickle)):
+        for stage, cause, normalized in probes:
+            error = error_type(stage, cause)
+            try:
+                payload = codec.dumps(error)
+                restored = codec.loads(payload)
+            except Exception as exc:
+                raise ValueError(
+                    f"installed vLLM startup exception failed {codec_name} round-trip"
+                ) from exc
+            if (
+                type(restored) is not error_type
+                or getattr(restored, "sanitized_cause", None) != normalized
+                or secret.encode() in payload
+                or secret in str(restored)
+                or secret in repr(getattr(restored, "sanitized_cause", None))
+            ):
+                raise ValueError(
+                    f"installed vLLM startup exception failed {codec_name} privacy contract"
+                )
+    for stage, cause, normalized in probes:
+        error = error_type(stage, cause)
+        envelope = ray_errors.RayTaskError(
+            "engine_start",
+            "synthetic safe traceback",
+            error,
+            proctitle="engine-start-preflight",
+            pid=1,
+            ip="127.0.0.1",
+        )
+        try:
+            payload = envelope.to_bytes()
+            restored = ray_errors.RayError.from_bytes(payload)
+        except Exception as exc:
+            raise ValueError(
+                "installed vLLM startup exception failed RayTaskError round-trip"
+            ) from exc
+        restored_cause = getattr(restored, "cause", None)
+        if (
+            isinstance(restored, ray_errors.UnserializableException)
+            or type(restored_cause) is not error_type
+            or getattr(restored_cause, "sanitized_cause", None) != normalized
+            or secret.encode() in payload
+            or secret in str(restored_cause)
+            or secret in repr(getattr(restored_cause, "sanitized_cause", None))
+        ):
+            raise ValueError(
+                "installed vLLM startup exception failed RayTaskError privacy contract"
+            )
+
+
 def preflight(plan):
     # The pinned GPU image is UID 1000/GID 100. Root can read private staging
     # files that its trainer cannot; such a preflight is not representative.
@@ -420,6 +510,7 @@ def preflight(plan):
         raise FileExistsError("RL output already exists")
     rows = check_artifacts(plan)
     native_source()
+    _validate_vllm_startup_error_transport()
     skyrl.native_config(skyrl.SkyRLConfig(**plan["arguments"]))
     tokenizer = AutoTokenizer.from_pretrained(
         plan["model"]["root"], trust_remote_code=False, local_files_only=True
@@ -436,6 +527,7 @@ def preflight(plan):
         "plan_sha256": digest(plan),
         "request_sha256": digest(request),
         "native_parser_checked": True,
+        "startup_error_transport_checked": True,
         "counts": {k: len(v) for k, v in rows.items()},
         "planned_steps": plan["arguments"]["steps"],
         "rl_qualified": False,
@@ -458,6 +550,7 @@ def engine_diagnostic_preflight(plan):
         raise FileExistsError("RL diagnostic output already exists")
     check_inputs(plan)
     native_source()
+    _validate_vllm_startup_error_transport()
     cfg = skyrl.diagnostic_native_config(skyrl.SkyRLConfig(**plan["arguments"]))
     shape = _diagnostic_shape(plan, cfg)
     build_vllm_cli_args(cfg)
@@ -470,6 +563,7 @@ def engine_diagnostic_preflight(plan):
         "request_sha256": digest(request),
         "native_parser_checked": True,
         "engine_cli_args_checked": True,
+        "startup_error_transport_checked": True,
         "model_files": len(plan["model"]["files"]),
         "task_rows_read": 0,
         "rollouts": False,

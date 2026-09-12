@@ -18,6 +18,81 @@ from cyber_post_train.jobs import digest
 
 from .miles_conversion import _write
 
+_VLLM_STARTUP_ERROR_SCHEMA = "fleet_vllm_startup_error_v1"
+_VLLM_STARTUP_ERROR_CLASSES = frozenset(
+    {
+        "AssertionError",
+        "AttributeError",
+        "ImportError",
+        "KeyError",
+        "MemoryError",
+        "ModuleNotFoundError",
+        "NotImplementedError",
+        "OSError",
+        "Other",
+        "OutOfMemoryError",
+        "RuntimeError",
+        "SafetensorError",
+        "TypeError",
+        "ValueError",
+    }
+)
+_VLLM_STARTUP_SOURCE_IDS = frozenset(
+    {
+        "attention",
+        "config",
+        "distributed",
+        "executor",
+        "model",
+        "model_loader",
+        "platform",
+        "vllm",
+        "worker",
+    }
+)
+_VLLM_STARTUP_MAX_LINE = 10_000_000
+
+
+def _vllm_startup_cause(error):
+    """Copy only the reviewed child-startup payload; reject every extra byte."""
+    error_type = type(error)
+    if (
+        error_type.__module__ != "vllm.v1.engine.fleet_startup_error"
+        or error_type.__name__ != "FleetVllmStartupError"
+    ):
+        return None
+    try:
+        value = getattr(error, "sanitized_cause", None)
+    except BaseException:
+        return None
+    exception_class = value.get("exception_class") if isinstance(value, dict) else None
+    if (
+        not isinstance(value, dict)
+        or set(value) != {"schema", "exception_class", "frame"}
+        or value.get("schema") != _VLLM_STARTUP_ERROR_SCHEMA
+        or not isinstance(exception_class, str)
+        or exception_class not in _VLLM_STARTUP_ERROR_CLASSES
+    ):
+        return None
+    frame = value.get("frame")
+    source_id = frame.get("source_id") if isinstance(frame, dict) else None
+    if frame is not None and (
+        not isinstance(frame, dict)
+        or set(frame) != {"source_id", "line"}
+        or not isinstance(source_id, str)
+        or source_id not in _VLLM_STARTUP_SOURCE_IDS
+        or type(frame.get("line")) is not int
+        or not 0 < frame["line"] <= _VLLM_STARTUP_MAX_LINE
+    ):
+        return None
+    return {
+        "schema": _VLLM_STARTUP_ERROR_SCHEMA,
+        "exception_class": exception_class,
+        "frame": None
+        if frame is None
+        else {"source_id": frame["source_id"], "line": frame["line"]},
+    }
+
 
 class HardDeadlineExceeded(TimeoutError):
     """A process-local lifecycle deadline expired."""
@@ -100,22 +175,23 @@ def sanitized_causes(error):
             r'File "[^"\n]*/([\w.-]+\.py)", line (\d+), in ([\w<>]+)',
             detail,
         )
-        causes.append(
-            {
-                "error_class": type(error).__name__,
-                "actor_init_failed": getattr(error, "actor_init_failed", False) is True,
-                "remote_error_classes": sorted(
-                    set(re.findall(r"(?m)^\s*(\w+(?:Error|Exception)):", detail))
-                ),
-                "remote_frames": [
-                    {"file": f, "line": int(n), "function": name} for f, n, name in frames
-                ],
-                "local_frames": [
-                    {"file": Path(f.filename).name, "line": f.lineno, "function": f.name}
-                    for f in traceback.extract_tb(error.__traceback__)[-20:]
-                ],
-            }
-        )
+        cause = {
+            "error_class": type(error).__name__,
+            "actor_init_failed": getattr(error, "actor_init_failed", False) is True,
+            "remote_error_classes": sorted(
+                set(re.findall(r"(?m)^\s*(\w+(?:Error|Exception)):", detail))
+            ),
+            "remote_frames": [
+                {"file": f, "line": int(n), "function": name} for f, n, name in frames
+            ],
+            "local_frames": [
+                {"file": Path(f.filename).name, "line": f.lineno, "function": f.name}
+                for f in traceback.extract_tb(error.__traceback__)[-20:]
+            ],
+        }
+        if (startup_cause := _vllm_startup_cause(error)) is not None:
+            cause["sanitized_cause"] = startup_cause
+        causes.append(cause)
         if isinstance(error, BaseExceptionGroup):
             pending.extend(error.exceptions)
         pending.append(getattr(error, "cause", None) or error.__cause__ or error.__context__)

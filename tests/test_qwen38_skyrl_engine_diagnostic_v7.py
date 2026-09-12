@@ -137,8 +137,10 @@ def test_dev7_offcluster_evidence_is_self_digesting_and_truthful():
     successor = value["successor"]
     assert successor["data_config_sha256"] == file_sha256(DATA_V7)
     assert successor["run_config_sha256"] == file_sha256(RUN_V7)
-    assert successor["skyrl_training_source_sha256"] == file_sha256(
-        ROOT / "training/skyrl_training.py"
+    # Historical preparation remains bound to the exact runtime it submitted;
+    # later fail-closed guards must not rewrite that immutable provenance.
+    assert successor["skyrl_training_source_sha256"] == (
+        "7ac081a3f595ba4a9cada3dea0b151aa155b3b728286229406ece95004763dec"
     )
     assert successor["plan_sha256"] is successor["request_sha256"] is None
     assert successor["submitted"] is successor["gpu_engine_start_qualified"] is False

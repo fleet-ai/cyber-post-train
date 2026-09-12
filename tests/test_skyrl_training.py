@@ -7,6 +7,7 @@ import importlib.util
 import json
 import multiprocessing
 import os
+import pickle
 import signal
 import subprocess
 import sys
@@ -27,6 +28,118 @@ from training import rl_data, sft_runtime
 from training import skyrl_training as train
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+_STARTUP_SCHEMA = "fleet_vllm_startup_error_v1"
+
+
+def _normalize_startup_error(value):
+    fallback = {"schema": _STARTUP_SCHEMA, "exception_class": "Other", "frame": None}
+    if (
+        not isinstance(value, dict)
+        or set(value) != {"schema", "exception_class", "frame"}
+        or value.get("schema") != _STARTUP_SCHEMA
+        or value.get("exception_class") not in {"TypeError", "Other"}
+    ):
+        return fallback
+    frame = value.get("frame")
+    if frame is not None and frame != {"source_id": "model", "line": 1}:
+        frame = None
+    return {
+        "schema": _STARTUP_SCHEMA,
+        "exception_class": value["exception_class"],
+        "frame": frame,
+    }
+
+
+class _FixedStartupError(RuntimeError):
+    def __init__(self, stage, cause):
+        self.stage = stage if stage == "engine_core" else ""
+        self.sanitized_cause = _normalize_startup_error(cause)
+        super().__init__("safe startup failure")
+
+    def __reduce__(self):
+        return type(self), (self.stage, self.sanitized_cause)
+
+
+class _BrokenStartupError(RuntimeError):
+    def __init__(self, stage, cause):
+        self.sanitized_cause = _normalize_startup_error(cause)
+        super().__init__("safe startup failure")
+
+
+class _FakeUnserializableException(RuntimeError):
+    pass
+
+
+class _FakeRayTaskError:
+    def __init__(
+        self,
+        function_name,
+        traceback_str,
+        cause,
+        proctitle=None,
+        pid=None,
+        ip=None,
+    ):
+        pickle.dumps(cause)  # Ray 2.56 checks dumps but not loads here.
+        self.function_name = function_name
+        self.traceback_str = traceback_str
+        self.cause = cause
+        self.proctitle = proctitle
+        self.pid = pid
+        self.ip = ip
+
+    def to_bytes(self):
+        return pickle.dumps(self)
+
+
+class _FakeRayError:
+    @staticmethod
+    def from_bytes(value):
+        try:
+            return pickle.loads(value)
+        except Exception:
+            return _FakeUnserializableException()
+
+
+def _startup_transport_modules(monkeypatch, error_type, ray_error=_FakeRayError):
+    monkeypatch.setitem(sys.modules, "ray.cloudpickle", pickle)
+    monkeypatch.setitem(
+        sys.modules,
+        "ray.exceptions",
+        NS(
+            RayTaskError=_FakeRayTaskError,
+            RayError=ray_error,
+            UnserializableException=_FakeUnserializableException,
+        ),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "vllm.v1.engine.fleet_startup_error",
+        NS(FleetVllmStartupError=error_type, SCHEMA=_STARTUP_SCHEMA),
+    )
+
+
+def test_startup_error_transport_accepts_safe_pickle_round_trip(monkeypatch):
+    _startup_transport_modules(monkeypatch, _FixedStartupError)
+
+    train._validate_vllm_startup_error_transport()
+
+
+def test_startup_error_transport_rejects_dumpable_but_unloadable_exception(monkeypatch):
+    _startup_transport_modules(monkeypatch, _BrokenStartupError)
+
+    with pytest.raises(ValueError, match="pickle round-trip"):
+        train._validate_vllm_startup_error_transport()
+
+
+def test_startup_error_transport_rejects_ray_envelope_deserialization(monkeypatch):
+    bad_ray_error = NS(from_bytes=lambda _: _FakeUnserializableException())
+    _startup_transport_modules(monkeypatch, _FixedStartupError, bad_ray_error)
+
+    with pytest.raises(ValueError, match="RayTaskError privacy contract"):
+        train._validate_vllm_startup_error_transport()
 
 
 def _without_diagnostic_wandb(monkeypatch):
@@ -378,6 +491,7 @@ def test_engine_diagnostic_preflight_never_reads_task_rows(prepared, monkeypatch
     monkeypatch.setattr(train.os, "getegid", lambda: 100)
     monkeypatch.setattr(train, "check_inputs", lambda plan: None)
     monkeypatch.setattr(train, "native_source", lambda: {})
+    monkeypatch.setattr(train, "_validate_vllm_startup_error_transport", lambda: None)
     monkeypatch.setitem(
         sys.modules,
         "skyrl.backends.skyrl_train.inference_servers.utils",
@@ -395,6 +509,7 @@ def test_engine_diagnostic_preflight_never_reads_task_rows(prepared, monkeypatch
     assert receipt["schema"] == "cyber_skyrl_engine_diagnostic_cpu_preflight_v1"
     assert receipt["request_sha256"] == digest(train.engine_diagnostic_request(prepared.plan))
     assert receipt["engine_cli_args_checked"]
+    assert receipt["startup_error_transport_checked"]
     assert {
         key: receipt[key]
         for key in (
@@ -419,6 +534,7 @@ def test_engine_diagnostic_preflight_rejects_native_cli_arg_drift(prepared, monk
     monkeypatch.setattr(train.os, "getegid", lambda: 100)
     monkeypatch.setattr(train, "check_inputs", lambda plan: None)
     monkeypatch.setattr(train, "native_source", lambda: {})
+    monkeypatch.setattr(train, "_validate_vllm_startup_error_transport", lambda: None)
     cfg = NS(generator=NS(inference_engine=_exact_engine_config()))
     monkeypatch.setattr(train.skyrl, "diagnostic_native_config", lambda config: cfg)
     monkeypatch.setitem(
@@ -899,6 +1015,7 @@ def test_cpu_preflight_dispatch_never_starts_ray(artifacts, monkeypatch, fault):
     )
     monkeypatch.setattr(train, "job_request", lambda _: {"fixture": True})
     monkeypatch.setattr(train, "native_source", lambda: {})
+    monkeypatch.setattr(train, "_validate_vllm_startup_error_transport", lambda: None)
     monkeypatch.setattr(train.skyrl, "native_config", lambda _: NS())
     monkeypatch.setattr(train, "_module", lambda *a: NS(PromptDataset=Dataset))
     if fault:
@@ -907,7 +1024,8 @@ def test_cpu_preflight_dispatch_never_starts_ray(artifacts, monkeypatch, fault):
     else:
         proof = train.preflight(plan)
         assert proof["status"] == "passed" and proof["gpus"] == 0
-        assert proof["native_parser_checked"] and not proof["rl_qualified"]
+        assert proof["native_parser_checked"] and proof["startup_error_transport_checked"]
+        assert not proof["rl_qualified"]
         assert proof["runtime_user"] == {"uid": 1000, "gid": 100}
 
 

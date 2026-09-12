@@ -7,6 +7,12 @@ import pytest
 from training.rl_episode import BUDGET_STOPS, EpisodeBudgetExceeded, InvalidEpisode, budget_stop
 from training.rl_runtime import native_failure, native_rejection, sealed
 
+FleetVllmStartupError = type(
+    "FleetVllmStartupError",
+    (RuntimeError,),
+    {"__module__": "vllm.v1.engine.fleet_startup_error"},
+)
+
 
 @pytest.mark.parametrize("reason", sorted(BUDGET_STOPS))
 @pytest.mark.parametrize("grouped", [False, True])
@@ -83,6 +89,67 @@ def test_remote_error_chain_is_sanitized_bounded_and_sealed(tmp_path):
     ]
     assert "private" not in json.dumps(receipt)
     assert json.loads((tmp_path / "NATIVE_FAILURE.json").read_text()) == receipt
+
+
+def test_vllm_startup_cause_copies_only_reviewed_structured_fields(tmp_path):
+    error = FleetVllmStartupError("private wrapper text")
+    error.sanitized_cause = {
+        "schema": "fleet_vllm_startup_error_v1",
+        "exception_class": "TypeError",
+        "frame": {"source_id": "model", "line": 123},
+    }
+
+    receipt = native_failure({"output_root": str(tmp_path)}, error)
+
+    assert receipt["causes"][0]["sanitized_cause"] == error.sanitized_cause
+    assert "private" not in json.dumps(receipt)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        {
+            "schema": "fleet_vllm_startup_error_v1",
+            "exception_class": "SECRET",
+            "frame": None,
+        },
+        {
+            "schema": "fleet_vllm_startup_error_v1",
+            "exception_class": ["TypeError"],
+            "frame": None,
+        },
+        {
+            "schema": "fleet_vllm_startup_error_v1",
+            "exception_class": "TypeError",
+            "frame": {"source_id": "SECRET", "line": 1},
+        },
+        {
+            "schema": "fleet_vllm_startup_error_v1",
+            "exception_class": "TypeError",
+            "frame": {"source_id": ["model"], "line": 1},
+        },
+        {
+            "schema": "fleet_vllm_startup_error_v1",
+            "exception_class": "TypeError",
+            "frame": {"source_id": "model", "line": True},
+        },
+        {
+            "schema": "fleet_vllm_startup_error_v1",
+            "exception_class": "TypeError",
+            "frame": None,
+            "message": "SECRET",
+        },
+    ],
+)
+def test_vllm_startup_cause_rejects_poisoned_payload_without_reflection(tmp_path, value):
+    error = FleetVllmStartupError("private wrapper text")
+    error.sanitized_cause = value
+
+    receipt = native_failure({"output_root": str(tmp_path)}, error)
+
+    assert "sanitized_cause" not in receipt["causes"][0]
+    assert "SECRET" not in json.dumps(receipt)
+    assert "private" not in json.dumps(receipt)
 
 
 def test_long_error_chain_has_a_fixed_bound(tmp_path):
