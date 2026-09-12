@@ -1,0 +1,177 @@
+{
+  "schema": "cyber_qwen38_skyrl_production_arm_template_v1",
+  "status": "blocked_not_launchable",
+  "launchable": false,
+  "purpose": "Exact production candidate; materialize as a run config only after every dev promotion and live duplicate/resource gate passes.",
+  "source_files": {
+    "task_set": {
+      "path": "configs/data/qwen38-rl-filtered-study-a-task-set-v1.json",
+      "file_sha256": "sha256:a9a1a46a7c7f9a92ad363d50f47a52ecf544e07e54f394136912fc358b534fdb",
+      "self_sha256": "sha256:50d6052187ff2f5f085b9de402982d4421fba0c73bb1bd54fc4bc850516c5d68"
+    },
+    "split": {
+      "path": "configs/data/qwen38-rl-filtered-study-a-split-v1.json",
+      "file_sha256": "sha256:a9344b2cd1b50b6f06090c4f62fb6407953ecc1961a6af92747a079171f70e46",
+      "self_sha256": "sha256:c8c0083e08df55179a5acbd10602dbce5178257484b471c5ba7f4cbb04bdb35c"
+    },
+    "data_config": {
+      "path": "configs/runs/qwen38-rl-filtered-study-a-prod-v1.data.json",
+      "file_sha256": "sha256:b177a6c6784892f1e3c5c32aa8db653db7f9cb3500d86db31e3c5ef37655ba7c"
+    }
+  },
+  "qualification": {
+    "dev8_engine": {
+      "config_path": "configs/qualification/qwen38-rl-filtered-skyrl-engine-diagnostic-dev-v8.json",
+      "config_file_sha256": "sha256:d5d1f3d32abbb674fef4beea85d77b1c48fb99a53ab8672fcb55a469180a7164",
+      "terminal_receipt_path": null,
+      "terminal_receipt_file_sha256": null,
+      "required": [
+        "digest_valid",
+        "exact_corrected_image",
+        "both_tp4_engines_started",
+        "zero_task_rows",
+        "zero_rollouts",
+        "zero_verifier_calls",
+        "zero_optimizer_steps",
+        "zero_checkpoints",
+        "gpu_release"
+      ]
+    },
+    "reward_canary": {
+      "config_path": "configs/qualification/qwen38-rl-reward-canary-dev-v1.json",
+      "config_file_sha256": "sha256:3354ae271ca1252269ec4a3b63593a690110053c1a7d70c8fec1c1c7fc25dcc6",
+      "terminal_receipt_path": null,
+      "terminal_receipt_file_sha256": null,
+      "required": [
+        "digest_valid",
+        "authoritative_nonempty_verifier_execution_ids",
+        "all_rollouts_nontruncated",
+        "single_attempt_identity",
+        "nonzero_training_reward",
+        "within_group_reward_variance",
+        "exactly_one_optimizer_update",
+        "independent_weight_or_optimizer_change",
+        "sealed_step1_checkpoint",
+        "wandb_identity_and_finite_scalars",
+        "gpu_release"
+      ]
+    },
+    "native_reload": {
+      "contract_path": "configs/qualification/qwen38-rl-reward-canary-reload-dev-v1.template.json",
+      "contract_file_sha256": "sha256:bd8d4e6a9c03abe3d7a8d055f4a6475eec6b9e0817f6838197476cd509d5a672",
+      "terminal_receipt_path": null,
+      "terminal_receipt_file_sha256": null,
+      "required": [
+        "digest_valid",
+        "all_eight_ranks_restored",
+        "model_optimizer_scheduler_sampler_rng_restored",
+        "zero_rollouts",
+        "zero_optimizer_updates",
+        "zero_checkpoint_writes",
+        "native_model_forward",
+        "source_checkpoint_unchanged",
+        "gpu_release"
+      ]
+    }
+  },
+  "live_release_gates": {
+    "all_required": true,
+    "must_be_proven_before_data_build": [
+      "prod_data_output_absent"
+    ],
+    "must_be_rechecked_immediately_before_one_post": [
+      "prod_jobs_api_name_absent",
+      "prod_jobs_api_run_id_absent",
+      "prod_output_root_absent",
+      "prod_data_manifest_exists_and_matches_source_digests",
+      "wandb_run_id_absent",
+      "no_submission_journal_or_ambiguous_post",
+      "active_prod_experiment_nodes_plus_one_at_most_eight_excluding_four_inference_endpoints",
+      "preview_exactly_matches_candidate_and_priority_c1_value_10000"
+    ],
+    "expected_request": {
+      "workers": 1,
+      "gpus_per_worker": 8,
+      "priority_class": "c1",
+      "priority_value": 10000,
+      "requeue_if_preempted": false,
+      "secrets": [
+        "fleet-api",
+        "wandb-api"
+      ]
+    }
+  },
+  "candidate_run": {
+    "backend": "skyrl",
+    "name": "chris-q38-rl-prod1",
+    "output_root": "/mnt/sfs/jobs/chris-q38-rl-prod1",
+    "model": {
+      "lock": "../models/qwen38-27b-1d4bf0f2.lock.json",
+      "weights": "../models/qwen38-27b-1d4bf0f2.weights.json",
+      "root": "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2"
+    },
+    "data": {
+      "manifest": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/rl-prod1/data/manifest.json",
+      "root": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/rl-prod1/data"
+    },
+    "recipe": {
+      "nodes": 1,
+      "steps": 59,
+      "groups": 1,
+      "samples_per_prompt": 8,
+      "lr": 1e-06,
+      "eval_interval": 59,
+      "checkpoint_interval": 10,
+      "keep_checkpoints": 3,
+      "seed": 42,
+      "engine_start_timeout_seconds": 1800,
+      "engine_cleanup_timeout_seconds": 300
+    },
+    "wandb": {
+      "entity": "thefleet",
+      "project": "cyber-post-train",
+      "run_id": "chris-q38-rl-prod1"
+    },
+    "cluster": {
+      "target": "prod",
+      "priority": "c1",
+      "resources": {
+        "cpu_request": "64",
+        "cpu_limit": "64",
+        "memory_request": "512Gi",
+        "memory_limit": "768Gi"
+      }
+    }
+  },
+  "candidate_run_sha256": "sha256:e0bd20a352c76a0c25a402cfac3a7098e719642f25018535a0f2ccb97c6188ac",
+  "recipe_relationship": {
+    "same_as_reward_canary": [
+      "exact_base_model",
+      "image_bound_by_compiler",
+      "one_node_eight_gpus",
+      "groups_1",
+      "samples_per_prompt_8",
+      "lr_1e-6",
+      "seed_42",
+      "token_and_tool_budgets",
+      "c1_no_requeue"
+    ],
+    "production_only_differences": {
+      "train_rows": "59 instead of 1",
+      "dev_rows": "20 instead of 1; evaluation only",
+      "steps": "59 instead of 1 (one pass over 59 train prompt groups)",
+      "eval_interval": "59 instead of 1 (pre-train and terminal native evaluation)",
+      "checkpoint_interval": "10 instead of 1",
+      "keep_checkpoints": "3 instead of 2",
+      "cluster_target": "prod instead of dev",
+      "run_output_wandb_and_data_identities": "fresh production-only identities"
+    }
+  },
+  "blocked_reasons": [
+    "No digest-valid dev8 engine terminal receipt is bound.",
+    "No digest-valid real reward canary terminal receipt is bound.",
+    "Native SkyRL checkpoint sealing and zero-update all-rank reload are not implemented or accepted.",
+    "Live production duplicate, output, W&B and aggregate node gates cannot be pre-certified."
+  ],
+  "sha256": "sha256:098c6ef9651e263a5ed8469aa6e270bab3e9c6f4045096c3c256df5941044cd5"
+}
