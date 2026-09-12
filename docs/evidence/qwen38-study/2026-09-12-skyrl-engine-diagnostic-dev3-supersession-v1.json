@@ -1,0 +1,87 @@
+{
+  "schema": "cyber_skyrl_engine_diagnostic_supersession_v1",
+  "classification": "infrastructure_invalid_runtime_identity_adapter",
+  "predecessor": {
+    "api_name": "chris-q38-rldiag-dev3-6db3ead5",
+    "api_job_id": "chris-q38-rldiag-dev3-6db3ead5-p7mx8",
+    "namespace": "fleet-train-jobs",
+    "rayjob_uid": "40b6afe1-9c96-4b2e-9b4e-0856d1ad2668",
+    "workload_name": "rayjob-chris-q38-rldiag-dev3-6db3ead5-cb1ba",
+    "workload_uid": "9eac57f7-4b7c-4d4a-a36a-acbd2e8487ca",
+    "output_root": "/mnt/sfs/jobs/chris-q38-rldiag-dev3",
+    "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "plan_sha256": "1201009189125f493ac98d179e78f5cc7e5904c7fd040f6030326aa9dd946806",
+    "request_sha256": "4efea35ad615a3ea301069a2aa824ebecff48c0ee8d65ac8134136c6111ebddf",
+    "runtime_bundle_sha256": "8ea30080d249115dcabbd59507517cfade54371202fe54914e09c4707f0d0c6d",
+    "frozen_skyrl_training_source_sha256": "178ae82a3cdc7e38512eb9ff43730e82aca229f4579b87a2aee0f00880bff214",
+    "controller_status": "FAILED",
+    "controller_reason": "AppFailed",
+    "sanitized_error_class": "ValueError",
+    "terminal_at": "2026-09-12T11:06:43Z",
+    "start_receipt": {
+      "path": "ENGINE_DIAGNOSTIC_STARTED.json",
+      "file_sha256": "1a3d10dd90b65be742450c81d73e006982cc0f1d573d0c6c617dba9a3e042d33",
+      "embedded_sha256": "84eb5793bdb8798f462284ff9562bf25324c7b17cb7b6454ef9e63d11fcced19",
+      "digest_valid": true
+    },
+    "terminal_receipt_present": false,
+    "private_infrastructure_log_bytes": 0,
+    "private_log_content_read": false,
+    "qualification": {
+      "task_rows_read": 0,
+      "rollouts": 0,
+      "verifier_calls": 0,
+      "optimizer_steps": 0,
+      "checkpoints_created": 0
+    },
+    "reservation_release": {
+      "quota_reserved": false,
+      "admitted": false,
+      "condition_reason": "Finished",
+      "condition_transition_at": "2026-09-12T11:06:43Z"
+    }
+  },
+  "diagnosis": {
+    "frozen_capture": "str(ray.get_runtime_context().get_job_id())",
+    "frozen_validator": "nonempty even-length hexadecimal string",
+    "pinned_image_job_id_display": "JobID(01000000)",
+    "pinned_image_job_id_hex": "01000000",
+    "failure_boundary": "after the start receipt and Ray initialization, before task access or engine creation",
+    "terminal_receipt_absence_explained": "cleanup reused the same decorated display identity and rejected it before a terminal receipt could be written",
+    "causal_status": "reproduced_exact_image_contract_mismatch",
+    "correction_commit": "3627112298af6ef745ca94c3afc5ed55fae91b36",
+    "correction": "normalize Ray JobID objects through their raw hex method and use that normalized identity for actor and placement-group ownership"
+  },
+  "successor": {
+    "name": "chris-q38-rldiag-dev4",
+    "output_root": "/mnt/sfs/jobs/chris-q38-rldiag-dev4",
+    "data_root": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/rldiag-inputs-dev4/data",
+    "data_config": "configs/qualification/qwen38-rl-filtered-skyrl-engine-diagnostic-data-dev-v4.json",
+    "data_config_sha256": "48a091e0af0764f0c19ac9dec5d8e606825ad1645d901ed41a5c0ce5fbfeca88",
+    "run_config": "configs/qualification/qwen38-rl-filtered-skyrl-engine-diagnostic-dev-v4.json",
+    "run_config_sha256": "50ef81adeba6a1530a87ec35bba8c65bc235d9b0b21c4ad270ff200a17e0d0ec",
+    "runtime_sha256": "3e3f5426f36788281afe2e8129a01d65d136bd06e289f6127d1bfb6009724754",
+    "supersedes_api_name": "chris-q38-rldiag-dev3-6db3ead5",
+    "predecessor_replay_forbidden": true,
+    "allowed_cluster": "dev",
+    "priority_class": "c1",
+    "required_effective_priority": 10000,
+    "automatic_requeue": false,
+    "task_rows_read": 0,
+    "rollouts": 0,
+    "verifier_calls": 0,
+    "optimizer_steps": 0,
+    "checkpoints_created": 0,
+    "wandb": false,
+    "submitted": false,
+    "required_terminal_receipt": "ENGINE_DIAGNOSTIC.json"
+  },
+  "next_gate": "Materialize the new data identity with the CPU-only GET rail, prepare the engine diagnostic, run its exact pinned-image CPU preflight, and validate a dev-only preview and duplicate/capacity checks before one authorized create-once submit. Reward acquisition and training remain closed until the terminal receipt passes with cleanup proven.",
+  "audit_boundaries": {
+    "cluster_or_api_mutations_during_successor_preparation": 0,
+    "private_logs_read": false,
+    "task_or_prompt_content_read": false,
+    "credentials_read_or_persisted": false
+  },
+  "sha256": "937eb182578ef8ef8b8dbb5a6464a9a3a61763c4d4b616c7790ed0525384c968"
+}
