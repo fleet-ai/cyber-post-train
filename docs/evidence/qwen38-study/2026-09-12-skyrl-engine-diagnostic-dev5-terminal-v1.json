@@ -1,0 +1,120 @@
+{
+  "schema": "cyber_skyrl_engine_diagnostic_terminal_v1",
+  "classification": "clean_diagnostic_rejection_engine_core_child_exit",
+  "run": {
+    "config_name": "chris-q38-rldiag-dev5",
+    "api_name": "chris-q38-rldiag-dev5-7a6fd5d6",
+    "api_run_id": "7a6fd5d6-626b-47b1-9ff2-d53a9437bd88",
+    "api_job_id": "chris-q38-rldiag-dev5-7a6fd5d6-d29v5",
+    "namespace": "fleet-train-jobs",
+    "output_root": "/mnt/sfs/jobs/chris-q38-rldiag-dev5",
+    "rayjob_uid": "aa61662e-435f-489b-92ad-4114e155dea5",
+    "workload_name": "rayjob-chris-q38-rldiag-dev5-7a6fd5d6-2d6c1",
+    "workload_uid": "b554dc90-c48a-4e90-8e9b-46a159c917d6",
+    "raycluster_uid": "22aa0abb-b433-45ff-9bd1-f89674183d3c",
+    "head_pod_uid": "d0370ead-af3d-4f2e-aee8-d1f1532b2d43",
+    "worker_pod_uid": "d50d0659-aa54-45d9-8cad-15e83bd943e3",
+    "started_at": "2026-09-12T12:49:10Z",
+    "finished_at": "2026-09-12T12:53:23Z",
+    "api_status": "SUCCEEDED",
+    "controller_status": "SUCCEEDED",
+    "workload_terminal_reason": "Succeeded",
+    "priority_class": "c1",
+    "queue_priority_class": "q1",
+    "effective_priority": 10000,
+    "automatic_requeue": false,
+    "workers": 2,
+    "gpus_per_worker": 4,
+    "total_gpus": 8,
+    "pod_restarts": 0
+  },
+  "immutable_inputs": {
+    "plan_sha256": "c0207301b1ef7e93f7dd3efb8a40fff75329579b4ad6a842987a9cf8f74f3a9a",
+    "request_sha256": "04feacf672b01021fb325301d9dc56ec6b9670179817b0f0d4e54c0e857ed8e3",
+    "runtime_sha256": "3cc3fa0e5d2ff56053d478d598a6d5379e6cbbdd053815cebe2bda2b721bd7b3",
+    "image_sha256": "ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4"
+  },
+  "receipts": {
+    "started": {
+      "file_sha256": "9acc7ecdd9263964699ecf8f49782fad17686e1df2816da02e8b924dd5fb6566",
+      "embedded_sha256": "250a190a9e22afa5dcee960b35abecbfc08eb246b6a3011d36c0b445613b5a39",
+      "digest_valid": true
+    },
+    "terminal": {
+      "file": "ENGINE_DIAGNOSTIC.json",
+      "file_sha256": "ad75821cde2f754f8015171503f1cf234af0747bd43e80799d51bd55a189c7eb",
+      "embedded_sha256": "cf4615fd6c937043c63553b5d8a8810c0d4b4db8d5d63a1d39fd03ab3962086b",
+      "digest_valid": true,
+      "status": "engine_start_rejected",
+      "startup_phase": "engine_creation",
+      "engine_start_state": "partial_or_unknown",
+      "engine_started": null,
+      "diagnostic_completed": true,
+      "engine_start_qualified": false,
+      "training_qualified": false
+    }
+  },
+  "sanitized_cause": {
+    "outer_error_class": "RayTaskError(RuntimeError)",
+    "inner_error_class": "RuntimeError",
+    "terminal_frame": {
+      "file": "utils.py",
+      "function": "wait_for_engine_startup",
+      "line": 1249
+    },
+    "proven_branch": "vllm_engine_core_child_process_exited_before_ready_handshake",
+    "underlying_child_exception_captured": false,
+    "health_timeout": false,
+    "router_started": false,
+    "deterministic_invalid_argument_proven": false,
+    "causal_limit": "The child exception is absent from the sanitized receipt. Memory, kernel, CUDA-package and argument changes would be speculative without a stronger diagnostic."
+  },
+  "zero_work": {
+    "task_rows_read": 0,
+    "rollouts": 0,
+    "verifier_calls": 0,
+    "optimizer_steps": 0,
+    "checkpoints_created": 0,
+    "wandb_initialized": false,
+    "checkpoint_artifacts": 0,
+    "episode_artifacts": 0,
+    "task_artifacts": 0,
+    "unexpected_output_artifacts": 0,
+    "runtime_files_unchanged": true
+  },
+  "isolation_and_cleanup": {
+    "credential_environment_isolation_proven": true,
+    "ray_actor_environment_probes_passed": 2,
+    "ray_actor_environment_probe_failures": 0,
+    "ray_actor_nonempty_scrubbed_credentials": 0,
+    "tracked_engine_actors": 2,
+    "tracked_ray_actors": 4,
+    "tracked_placement_groups": 1,
+    "tracked_routers": 0,
+    "active_owned_actors": 0,
+    "active_owned_placement_groups": 0,
+    "cleanup_proven": true
+  },
+  "release": {
+    "workload_finished_at": "2026-09-12T12:53:23Z",
+    "raycluster_absent": true,
+    "pods_absent": true,
+    "gpus_held": 0
+  },
+  "qualification": {
+    "engine_start": "rejected",
+    "reward_acquisition": "closed",
+    "optimizer_update": "closed",
+    "checkpoint_recovery": "closed",
+    "production_rl": "closed",
+    "replay_forbidden": true
+  },
+  "next_gate": "Use one fresh dev-only diagnostic whose only process-topology change makes the EngineCore exception visible to the existing allowlisted sanitizer. It must retain zero training work, exact model/runtime shape, clean exit semantics and proven cleanup. Do not submit production RL until engine start, reward acquisition, an optimizer update and checkpoint recovery each pass on dev.",
+  "audit_boundaries": {
+    "private_logs_read": false,
+    "task_or_prompt_content_exposed": false,
+    "credentials_read_or_persisted": false,
+    "observed_at": "2026-09-12T12:58:42Z"
+  },
+  "sha256": "19e2f384d549a9b12acd2d9ac6ef910bbdf129d410f3a46c916795b3be6ac7eb"
+}
