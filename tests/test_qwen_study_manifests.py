@@ -87,3 +87,34 @@ def test_presplit_receipt_scopes_unexposed_claim_to_this_campaign():
     assert receipt["status"] == "unexposed"
     assert receipt["historical_global_exposure_claimed"] is False
     assert "this exact campaign" in receipt["scope"]
+
+
+def test_filtered_rl_canary_is_sealed_and_drawn_only_from_eligible_tasks():
+    eligible = load("qwen-blackbox-eligible-v1.json")
+    task_set = load("qwen38-rl-filtered-canary-task-set-v1.json")
+    split = load("qwen38-rl-filtered-canary-split-v1.json")
+    catalog = load("qwen38-rl-filtered-canary-tool-catalog-v1.json")
+
+    def sealed_sha(value):
+        body = {key: item for key, item in value.items() if key != "sha256"}
+        return "sha256:" + hashlib.sha256(canonical_json(body).encode()).hexdigest()
+
+    assert task_set["sha256"] == sealed_sha(task_set)
+    assert split["sha256"] == sealed_sha(split)
+    assert task_set["source_manifest_sha256"] == "sha256:" + eligible["sha256"]
+    catalog_bytes = json.dumps(
+        catalog, ensure_ascii=True, sort_keys=True, separators=(",", ":")
+    ).encode()
+    assert task_set["tool_catalog_sha256"] == "sha256:" + hashlib.sha256(
+        catalog_bytes
+    ).hexdigest()
+
+    eligible_ids = {
+        (row["task_key"], row["task_version_id"]) for row in eligible["task_versions"]
+    }
+    selected = {(row["task_key"], row["task_version_id"]) for row in task_set["tasks"]}
+    split_ids = {(row["task_key"], row["task_version_id"]) for row in split["tasks"]}
+    assert selected == split_ids
+    assert selected <= eligible_ids
+    assert [row["split"] for row in split["tasks"]].count("train") == 2
+    assert [row["split"] for row in split["tasks"]].count("dev") == 1
