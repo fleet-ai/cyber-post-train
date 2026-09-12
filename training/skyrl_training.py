@@ -41,8 +41,18 @@ _ALWAYS_SCRUB_WORKER_ENV = frozenset({"FLEET_API_KEY", "WANDB_API_KEY"})
 MODULE = "training.skyrl_training"
 IMAGE = (
     "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:"
-    "ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4"
+    "9b6f43938f9b28aaff7ba91edd59be3d18b01f9a22078ba5475cdac5e6bfcca6"
 )
+ENGINE_IMAGE_CPU_QUALIFICATION = {
+    "schema": "cyber_q38_rl_image_cleanpull_cpu_qualification_v1",
+    "status": "qualified",
+    "classification": "operational_gate",
+    "source_commit": "de9e6b7cf087d12c5ca371c9ec916a54757d369f",
+    "receipt_sha256": "3ebe51bc1c28c9143cc31d1f5271e20badee0a18db0409754880f30164cacfc7",
+    "evidence_path": (
+        "docs/evidence/qwen38-study/2026-09-12-skyrl-replacement-image-cpu-qualification-v1.json"
+    ),
+}
 _ENGINE_START_DISQUALIFIED = frozenset(
     {
         (
@@ -175,6 +185,7 @@ def compile_rl(config, *, relative_to):
         "runtime_sha256": digest(_runtime()),
         "execution": {
             "image": IMAGE,
+            "image_cpu_qualification": dict(ENGINE_IMAGE_CPU_QUALIFICATION),
             "priority": cluster.get("priority", "c1"),
             "resources": {**RESOURCES, **cluster.get("resources", {})},
         },
@@ -191,6 +202,7 @@ def job_request(plan):
         or plan["native_sources"] != NATIVE
         or plan["native_overrides"] != skyrl.overrides(args)
         or plan["execution"]["image"] != IMAGE
+        or plan["execution"].get("image_cpu_qualification") != ENGINE_IMAGE_CPU_QUALIFICATION
         or plan["run_name"] != args.name
         or plan["output_root"] != args.output_root
     ):

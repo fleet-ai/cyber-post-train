@@ -256,7 +256,10 @@ def test_prepare_cli_and_portable_runtime_are_offline(prepared, monkeypatch):
 
     tmp, plan = prepared.state.tmp, prepared.plan
     request = train.job_request(plan)
-    assert IMAGE == train.IMAGE == request["image"]
+    assert request["image"] == train.IMAGE
+    # The startup-cause relay is a reviewed RL-only image variant.  SFT keeps
+    # its independently qualified image until that path is separately changed.
+    assert IMAGE != train.IMAGE
     assert request["priority_class"] == "c1" and not request["requeueIfPreempted"]
     assert (request["workers"], request["gpus_per_worker"]) == (1, 8)
     assert request["secrets"] == ["fleet-api", "wandb-api"]
@@ -922,20 +925,25 @@ def test_preflight_rejects_privileged_or_different_file_access(monkeypatch, uid,
 def test_cpu_preflight_rejects_only_the_disqualified_qwen38_image(prepared, monkeypatch):
     monkeypatch.setattr(train.os, "geteuid", lambda: 1000)
     monkeypatch.setattr(train.os, "getegid", lambda: 100)
-    with pytest.raises(ValueError, match="dev5/dev6"):
-        train.preflight(prepared.plan)
 
-    replacement = {
+    disqualified = {
         **prepared.plan,
         "execution": {
             **prepared.plan["execution"],
-            "image": "registry.invalid/skyrl@sha256:" + "1" * 64,
+            "image": (
+                "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/"
+                "skyrl-train@sha256:"
+                "ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4"
+            ),
         },
     }
-    train._require_engine_start_qualified_image(replacement)
+    with pytest.raises(ValueError, match="dev5/dev6"):
+        train._require_engine_start_qualified_image(disqualified)
+
+    train._require_engine_start_qualified_image(prepared.plan)
     other_model = {
-        **prepared.plan,
-        "model": {**prepared.plan["model"], "repo": "Qwen/Qwen3.6-27B"},
+        **disqualified,
+        "model": {**disqualified["model"], "repo": "Qwen/Qwen3.6-27B"},
     }
     train._require_engine_start_qualified_image(other_model)
 

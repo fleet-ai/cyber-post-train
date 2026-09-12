@@ -1,0 +1,113 @@
+{
+  "schema": "cyber_skyrl_engine_diagnostic_offcluster_preparation_v1",
+  "classification": "local_gate_prepared_not_submitted",
+  "observed_at": "2026-09-12T17:03:58Z",
+  "predecessor": {
+    "terminal_evidence": {
+      "path": "docs/evidence/qwen38-study/2026-09-12-skyrl-engine-diagnostic-dev6-terminal-v1.json",
+      "file_sha256": "64c95d07ac8b745343d741419d55cddb727bc0787471b33502a837efba2efa4b",
+      "embedded_sha256": "8e9e3380608366e90d0b706873a38f845cfbd4cc7d4577160e69578f2d3ab68e"
+    },
+    "source_audit": {
+      "path": "docs/evidence/qwen38-study/2026-09-12-skyrl-dev6-source-root-cause-audit-v1.json",
+      "file_sha256": "f51160184c42e7bd661139a54dabff53ba24d9d2cfd00c8a473a0d105db40793",
+      "embedded_sha256": "b72426877dabde0e502c6d6cc6cb70edf970f2a79c721b75c0ab9af5d39c0fbf"
+    },
+    "exact_model_image_pair_disqualified": true,
+    "disqualified_image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "replay_forbidden": true
+  },
+  "replacement_image": {
+    "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:9b6f43938f9b28aaff7ba91edd59be3d18b01f9a22078ba5475cdac5e6bfcca6",
+    "source_commit": "de9e6b7cf087d12c5ca371c9ec916a54757d369f",
+    "cpu_qualification": {
+      "path": "docs/evidence/qwen38-study/2026-09-12-skyrl-replacement-image-cpu-qualification-v1.json",
+      "file_sha256": "4cb3028160a61c00123493372e7e99e58a15305955c9edb561dc122f9f50a8c8",
+      "receipt_sha256": "3ebe51bc1c28c9143cc31d1f5271e20badee0a18db0409754880f30164cacfc7",
+      "status": "qualified",
+      "gpus": 0,
+      "gpu_engine_start_qualified": false
+    }
+  },
+  "successor": {
+    "version": 7,
+    "name": "chris-q38-rldiag-dev7",
+    "output_root": "/mnt/sfs/jobs/chris-q38-rldiag-dev7",
+    "data_root": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/rldiag-inputs-dev7/data",
+    "data_manifest": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/rldiag-inputs-dev7/data/manifest.json",
+    "data_config": "configs/qualification/qwen38-rl-filtered-skyrl-engine-diagnostic-data-dev-v7.json",
+    "data_config_sha256": "10f061eeb21c01f21e22019081ad15fca55b6f45f03b5d400ecf50f706316919",
+    "run_config": "configs/qualification/qwen38-rl-filtered-skyrl-engine-diagnostic-dev-v7.json",
+    "run_config_sha256": "2bf071356feda27ee362750b1d194d417ce0ab36fe6f41146ed96f85a337f9b8",
+    "skyrl_training_source_sha256": "7ac081a3f595ba4a9cada3dea0b151aa155b3b728286229406ece95004763dec",
+    "runtime_sha256": "87160b4a8e37e6a069ec4fcfe19d0b465e3200354e0d23b84bfacc494fd94be4",
+    "allowed_cluster": "dev",
+    "priority_class": "c1",
+    "queue_priority_class": "q1",
+    "required_effective_priority": 10000,
+    "automatic_requeue": false,
+    "workers": 2,
+    "gpus_per_worker": 4,
+    "total_gpus": 8,
+    "secrets": [],
+    "task_rows_read_at_runtime": 0,
+    "rollouts": 0,
+    "verifier_calls": 0,
+    "optimizer_steps": 0,
+    "checkpoints": 0,
+    "wandb": false,
+    "plan_sha256": null,
+    "request_sha256": null,
+    "plan_request_gate": "Fresh v7 data-manifest bytes do not exist off-cluster yet; no old row hashes were copied or fabricated.",
+    "submitted": false,
+    "gpu_engine_start_qualified": false,
+    "training_qualified": false
+  },
+  "offcluster_package": {
+    "path": ".operator/q38-rldiag-dev7-offcluster-v1",
+    "package_gate_file_sha256": "868b0b6130c61f2ccf2d6018532a96e2d0e60587576af669be600170bc04ceff",
+    "package_gate_embedded_sha256": "ea8b1c6eaf2af46e7c4fff479807d05f7320c844877d5859d1066c8a4ca2ba54",
+    "generator_file_sha256": "cc8c53cc909f7df318e4f6d80d0a634300b562b4241b95fb456d0c6e53519f86",
+    "runbook_file_sha256": "3b50cd2ca2a45664ca301a578db01293625ff3f027738ffea63b41a438a5937a",
+    "create_once_prepared_directory_absent": true,
+    "submission_journal_absent": true
+  },
+  "local_validation": {
+    "pytest": {
+      "status": "passed",
+      "collected": 661,
+      "passed": 648,
+      "skipped": 13,
+      "failed": 0,
+      "scope": "all generic Jobs, RL data/runtime, SkyRL argument/data/episode/rollout/router/training, and dev4-dev7 diagnostic tests"
+    },
+    "ruff": {
+      "format_check": "passed",
+      "check": "passed"
+    }
+  },
+  "clean_terminal_contract": {
+    "engine_ready": "write digest-valid success receipt only after bounded owned cleanup",
+    "recognized_model_contract_rejection": "write digest-valid nonqualifying receipt after cleanup and exit zero",
+    "unexpected_runtime_or_infrastructure_defect": "exit nonzero, preserve sanitized evidence, stop without another diagnostic"
+  },
+  "required_fresh_gates": [
+    "materialize exact v7 GET-only data on a zero-GPU SFS helper and preserve only its manifest",
+    "generate a create-once plan and request from that exact manifest",
+    "run exact-image CPU preflight as uid 1000 gid 100 with zero GPUs",
+    "pass dev Jobs API preview without creating resources",
+    "repeat exact live auth, duplicate, output, W&B, journal, capacity and eight-node-budget checks",
+    "submit exactly once to dev and bind immutable API/Kubernetes identities",
+    "accept only digest-valid terminal evidence after proven cleanup"
+  ],
+  "audit_boundaries": {
+    "external_queries": 0,
+    "external_mutations": 0,
+    "jobs_api_posts": 0,
+    "pods_created": 0,
+    "gpu_jobs_submitted": 0,
+    "task_or_prompt_content_read": false,
+    "credentials_read_or_persisted": false
+  },
+  "sha256": "b112007b12486da4e2507c59a9ae2d6610dad7bc1d8a7127d588157ec3b93c40"
+}
