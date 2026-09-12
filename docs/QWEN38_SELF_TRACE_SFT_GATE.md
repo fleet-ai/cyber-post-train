@@ -1,8 +1,12 @@
 # Qwen3.8 self-trace SFT gate
 
-Status: **blocked before data creation on three external bindings**. No
-self-trace collection or SFT job is ready to preview or submit, and this
-preparation performed no cluster, API, W&B, or registry mutation.
+Status: **v2 is blocked before data creation on two external artifact
+bindings**. The conservative direct-interface prompt policy is resolved; the
+immutable direct collector qualification and collection-time base-route
+certificate do not yet exist. No self-trace collection or SFT job is ready to
+preview or submit, and this preparation performed no cluster, API, W&B, or
+registry mutation. The sealed v1 request remains unchanged and historically
+blocked on its original three fields.
 
 ## Compatibility decision
 
@@ -21,6 +25,54 @@ whose self-digest is
 It admits zero native-compatible historical sessions. The existing split-A and
 split-B self-coverage artifacts independently contain zero episodes. The old
 175-window historical corpus remains prohibited.
+
+## Conservative v2 prompt policy
+
+The scientifically conservative treatment is the repository-defined direct
+default: one `user` message containing the exact bound task prompt and **no
+explicit system message**. This is not a hash of an empty prompt. The message is
+absent. `training/rl_data.py` constructs this user-only prefix for normal
+`skyrl_direct` data, and `training/rl_episode.py` uses the same user-only shape
+when no override is supplied. Adding the tracked GPT-derived anti-refusal system
+prompt would introduce a new treatment rather than recover a missing Qwen3.8
+identity.
+
+The decision is sealed in
+[`qwen-blackbox-self-recollection-v2.json`](../configs/studies/qwen-blackbox-self-recollection-v2.json)
+(self-digest
+`sha256:79da6a71d7fc077cbc67048d32125408def99601763c98a73a38718f1a6e3d2a`)
+and
+[`qwen38-self-trace-collection-request-v2.json`](../configs/qualification/qwen38-self-trace-collection-request-v2.json)
+(self-digest
+`sha256:a9d318fabf10da7547814826f0bd63113c1658ba14546dcd0dc49e00e4be54ea`).
+It preserves the v1 roster, model, limits, sampling, and task/runtime bindings
+by immutable reference. It pins:
+
+- Qwen3.8-27B revision
+  `1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0` and chat-template SHA-256
+  `c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041`;
+- ordered direct tools `bash`, `submit_report` and canonical catalog digest
+  `sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a`;
+- both exact template invocations: the string render uses
+  `tokenize=false, add_generation_prompt=true`; the token render uses
+  `tokenize=true, return_dict=false, add_generation_prompt=true`. The optional
+  Qwen knobs `enable_thinking`, `reasoning_effort`, and `preserve_thinking` are
+  deliberately omitted in both calls, preserving the pinned template's
+  defaults rather than inventing another intervention.
+
+The template may emit its own template-defined system/tool framing even though
+the input message list has no system role. Those emitted bytes are controlled by
+the pinned template and invocation identities. For every attempt, the raw task
+prompt SHA-256 must match the frozen live task binding, the UTF-8 rendered-prefix
+SHA-256 must be stored as `initial_prompt_sha256`, and the canonical token-ID
+sequence SHA-256 must be stored independently as
+`initial_prompt_tokens_sha256`. Re-encoding the rendered bytes must equal those
+token IDs, and the recorder prefill must equal the same token IDs. Text
+rewriting or later retokenization is prohibited.
+
+Consequently, no true human scientific choice remains for the baseline
+self-trace arm. A future explicit-system-message arm is possible, but it must be
+a separately named treatment; the GPT-derived candidate is not silently reused.
 
 ## Offline recorder-to-dense parity
 
@@ -45,7 +97,17 @@ pinned native-helper file, collector image, base route, task prompt, trace,
 flag, answer, score, or credential. Those limits are machine-checked in the
 receipt so the synthetic gate cannot be mistaken for live qualification.
 
-Three external blockers remain explicit in the sealed request:
+The equivalent user-only v2 fixture is
+[`2026-09-12-self-trace-recorder-dense-parity-v2.json`](evidence/qwen38-study/2026-09-12-self-trace-recorder-dense-parity-v2.json).
+Its file SHA-256 is
+`sha256:197b168031cb167a6f60a5797351f2408636138a5570e01cfa61d4a1cb5accb5`
+and its self-digest is
+`sha256:6366f37501876174f94f51ed860259b9fb2a289eb82f19c94f55c6230ef4f151`.
+It changes the required conversation anchor from `system,user` to `user` and
+binds the v2 prompt-policy, template-invocation, and rendered-request contract
+digests. It remains synthetic and makes no collector-image or live-route claim.
+
+The three external blockers below describe the frozen v1 request:
 
 - an immutable collector image digest;
 - the exact fresh-base route certificate digest;
@@ -81,18 +143,47 @@ request fields yet:
   Qwen3.8 self-recollection treatment. Selecting it may be reasonable, but it
   is a scientific treatment decision, not a metadata recovery operation.
 
-The remaining path is consequently precise: deploy and qualify the immutable
-collector image; explicitly freeze the Qwen3.8 direct prompt source; then issue
-one new self-digesting direct-route certificate from those bindings and a fresh
-read-only route observation. Only a new versioned collection request may bind
-that certificate. The sealed v1 request remains a fail-closed historical input.
+V2 supersedes only that unresolved prompt treatment. It does not relabel either
+runtime component as qualified. V2 requires full immutable artifact references
+(`path`, file SHA-256, and self-digest), not a bare image regex match or a bare
+route-certificate hash:
+
+- The **collector qualification artifact** must bind a pullable linux/amd64
+  `repository@sha256` and matching runtime image ID to the exact v2 source
+  closure, SkyRL native helper, model revision, template, prompt policy,
+  template invocations, rendered-byte/token contract, and ordered tool catalog.
+  It must record a successful local synthetic check and clean-pull zero-GPU dev
+  Pod with `imagePullPolicy: Always`, zero restarts, matching image ID, deletion,
+  and confirmed absence. It must not load target model weights, make task or
+  scoring requests, or publish an image during qualification.
+- The **direct-route certificate artifact** must cross-bind that qualification's
+  self-digest and exact collector image. It must bind the exact model lock,
+  rehashed weights/tokenizer/template, immutable serving runtime identity,
+  normalized arguments, ready route identity, and the same v2 interface. A
+  fresh synthetic collector-to-route probe must prove the native
+  `/inference/v1/generate` request/response contract, including response token
+  IDs and logprobs, without prompt/tool rewriting, target task content, or
+  scoring/task requests.
+
+No such artifacts are checked in. Null bindings remain fail-closed, so tests use
+synthetic temporary receipts only to verify the schema and cross-binding logic.
+Theseus [PR #31835](https://github.com/fleet-ai/theseus/pull/31835) concerns an
+OpenCode evaluation image. Even after merge and deployment, that image is not a
+SkyRL-direct collector qualification and cannot fill the v2 collector slot.
+
+The remaining path is consequently precise: build/publish and qualify the exact
+SkyRL-direct collector, then issue one self-digesting direct-route certificate
+from that qualification and a fresh route observation/probe. Populate those two
+artifact references only in a successor of the checked-in blocked v2 request;
+never rewrite v1 or claim the null-bearing v2 request is ready.
 
 This offline closure does not add a live collector/index command:
-`training.self_trace_collection` remains a validator and private-review
-library. Resolving the three external bindings therefore does not itself
-authorize execution. A separately reviewed create-once orchestration must call
-the prepared-attempt and source-review boundaries and bind every qualified
-source receipt into the downstream index before any collection can start.
+`training.self_trace_collection_v2` remains a validator and private
+preparation/review library. Resolving the two external artifacts therefore does
+not itself authorize execution. A separately reviewed create-once orchestration
+must call the prepared-attempt and source-review boundaries and bind every
+qualified source receipt into the downstream index before any collection can
+start.
 
 ## Qualified data contract
 
@@ -101,9 +192,11 @@ Fresh collection must start from exact Qwen3.8-27B revision
 Each source must have a digest-valid accepted receipt, positive authoritative
 reward, confirmed environment release, exact task/version/model/template
 bindings, the complete bounded episode limits and scoring/provisioning routes,
-and the ordered direct tools plus their exact catalog digest. Instance IDs must
-be canonical DNS-safe opaque identifiers; evidence-run, verifier and
-verifier-execution identities must be canonical nonzero UUIDs. The sealed
+and the ordered direct tools plus their exact catalog digest. The first recorded
+message must be the sole user task prompt and no explicit system message may
+appear. Instance IDs must be canonical DNS-safe opaque identifiers; evidence-run,
+verifier, and verifier-execution identities must be canonical nonzero UUIDs.
+The sealed
 binding retains the rendered-prefix digest; the recorded prompt-token digest
 and raw task-prompt digest are independently recomputed at admission.
 Compaction is disabled. The recorded token IDs and native loss mask are
@@ -150,7 +243,8 @@ outcome-only validation, checkpoints every two steps, and a planned pause after
 step 6. It is admissible only when the frozen corpus yields more than six
 optimizer steps. The next paid action is therefore **not an SFT submit**: it is
 an explicitly reviewed, bounded direct-collection canary after the collector
-image, exact base route, and direct system-prompt digest are certified. Only
+qualification and exact base-route certificate are bound in a sealed ready v2
+successor. Only
 after local compilation, zero-GPU preflight, dev preview, and an explicit
 duplicate/capacity check may an operator run
 `cyber-post-train submit ... --cluster dev`.

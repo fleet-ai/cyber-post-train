@@ -1,0 +1,67 @@
+{
+  "schema": "cyber_qwen_direct_recorder_dense_parity_v2",
+  "status": "qualified",
+  "model": {
+    "repo": "Qwen/Qwen3.8-27B",
+    "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "runtime_chat_template_sha256": "sha256:c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041"
+  },
+  "interface": {
+    "roles": [
+      "user"
+    ],
+    "explicit_system_message": "absent",
+    "required_task_tools": [
+      "bash",
+      "submit_report"
+    ],
+    "required_task_tool_catalog_sha256": "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a",
+    "runtime_chat_template_sha256": "sha256:c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+    "prompt_policy_sha256": "sha256:2376ec35bce7a8ead52b5c0b6f93dc65f9f04c2998cea539978ae20ae330773a",
+    "template_invocations_sha256": "sha256:cb8d94e3511efb88141353cf4845c19f80dbee2be676af2794ee59ee816d7da5",
+    "rendered_request_contract_sha256": "sha256:35786456f710c8f572ecb0b8493a3c6116a9a1673a1e62e734d455b955aa94fb",
+    "compaction": "disabled"
+  },
+  "source_closure_sha256": "sha256:716ad30dd468db9e52956c08710138a4bbe8cb959447add47f8b76eddab30afa",
+  "fixture_sha256": "sha256:cf00a2dfe0d88b8f4bbb94366affb0886a61e20f744e31e61e63c5e3bb0a1a89",
+  "native": {
+    "prompt_tokens_sha256": "sha256:a615eeaee21de5179de080de8c3052c8da901138406ba71c38c032845f7d54f4",
+    "recorded_tokens_sha256": "sha256:061c9e366d17e2bf290a5d0b491851acbf3dd5213e74593da116c723d4bfdb2d",
+    "recorded_loss_mask_sha256": "sha256:537a391f61d43812729900d74fa73a7defb43b1fe431cc2ba2e7765c5952a211",
+    "assistant_targets": 2
+  },
+  "dense": {
+    "reference_tokens_sha256": "sha256:061c9e366d17e2bf290a5d0b491851acbf3dd5213e74593da116c723d4bfdb2d",
+    "reference_loss_mask_sha256": "sha256:537a391f61d43812729900d74fa73a7defb43b1fe431cc2ba2e7765c5952a211",
+    "trained_prefix_tokens_sha256": "sha256:b26eb5ca7f7c34ec9cc0775425ffb3976fa1e5af40941fef52fc6f53ffa8d72b",
+    "trained_prefix_loss_mask_sha256": "sha256:b95c612e86c9bb821bd23527957b3bff131da5d7a12edde33e53d2591eac237a",
+    "trained_prefix_tokens": 10,
+    "supervised_tokens": 4
+  },
+  "dense_policy": {
+    "format": "pretokenized_assistant_segments_v1",
+    "max_length": 16384,
+    "context_tokens": 4096
+  },
+  "first_observation": {
+    "tokens": 3,
+    "native_dense_token_ids_equal": true,
+    "native_dense_loss_masks_equal": true,
+    "all_observation_tokens_masked": true
+  },
+  "qualification_scope": {
+    "kind": "skyrl_recorder_adapter_to_dense_synthetic_fixture",
+    "proves": "user_only_recorded_token_and_loss_mask_preservation_across_two_direct_turns",
+    "target_model_weights_loaded": false,
+    "target_runtime_chat_template_loaded": false,
+    "pinned_native_helper_loaded": false,
+    "collector_image_or_base_route_used": false
+  },
+  "privacy": {
+    "synthetic_fixture_only": true,
+    "prompt_or_trace_content_emitted": false,
+    "tool_arguments_or_results_emitted": false,
+    "flags_scores_or_credentials_emitted": false
+  },
+  "sha256": "sha256:6366f37501876174f94f51ed860259b9fb2a289eb82f19c94f55c6230ef4f151"
+}
