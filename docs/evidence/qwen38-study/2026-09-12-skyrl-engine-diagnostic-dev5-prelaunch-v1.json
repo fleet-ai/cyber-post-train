@@ -1,0 +1,115 @@
+{
+  "schema": "cyber_skyrl_engine_diagnostic_prelaunch_v1",
+  "classification": "operational_gate_prepared_not_submitted",
+  "predecessor": {
+    "api_name": "chris-q38-rldiag-dev4-cbb81704",
+    "api_run_id": "cbb81704-0ae8-4771-b6d0-7fbc9c433f8c",
+    "api_job_id": "chris-q38-rldiag-dev4-cbb81704-498zt",
+    "namespace": "fleet-train-jobs",
+    "rayjob_uid": "82373a96-d1ea-46f5-bbc9-d0dabee6fa0d",
+    "workload_uid": "66ef1410-dcfb-4aff-9a25-c6b03d09a16c",
+    "controller_status": "FAILED",
+    "terminal_receipt_present": false,
+    "start_receipt": {
+      "file_sha256": "750deeed1a90b960ccfb41240add7471a462c9fdc625bbc585103debb6eea064",
+      "embedded_sha256": "ffd362e62477cc128be52ebdbf13a8a01f7800fb22166f2d68cb31d60c81867e",
+      "digest_valid": true
+    },
+    "qualification": {
+      "task_rows_read": 0,
+      "rollouts": 0,
+      "verifier_calls": 0,
+      "optimizer_steps": 0,
+      "checkpoints_created": 0
+    },
+    "release": {
+      "workload_finished": true,
+      "workload_finished_at": "2026-09-12T11:47:34Z",
+      "raycluster_absent": true,
+      "pods_absent": true,
+      "gpus_held": 0
+    },
+    "replay_forbidden": true
+  },
+  "correction": {
+    "scope": "spawn_safe_native_router_process_boundary",
+    "commit": "7599706f1b5626d7ad2588804c75ea85ceeb099b",
+    "causal_status": "strong_inference_not_terminally_bound",
+    "qualification_limit": "CPU process-boundary evidence does not prove Ray or GPU engine startup"
+  },
+  "successor": {
+    "name": "chris-q38-rldiag-dev5",
+    "output_root": "/mnt/sfs/jobs/chris-q38-rldiag-dev5",
+    "data_root": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/rldiag-inputs-dev5/data",
+    "prepared_root": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/rldiag-inputs-dev5/prepared-v2",
+    "data_config": "configs/qualification/qwen38-rl-filtered-skyrl-engine-diagnostic-data-dev-v5.json",
+    "data_config_sha256": "281c176e0bed85554a13907d79e713eba3d56bb332125fb45dca078413eab107",
+    "run_config": "configs/qualification/qwen38-rl-filtered-skyrl-engine-diagnostic-dev-v5.json",
+    "run_config_sha256": "52b9508cbe5f3e22668266380d00d951de643eda25b1f1201c8d2cbeb30ca21b",
+    "runtime_source_commit": "ae0f2b71733105074d41806560fe659a2035b9ba",
+    "skyrl_training_source_sha256": "30ff8db9f711665ad733449b5c23ae82c64be64bc7d1d1e6ec3abb8fd4126fb3",
+    "runtime_sha256": "3cc3fa0e5d2ff56053d478d598a6d5379e6cbbdd053815cebe2bda2b721bd7b3",
+    "plan_sha256": "c0207301b1ef7e93f7dd3efb8a40fff75329579b4ad6a842987a9cf8f74f3a9a",
+    "request_sha256": "04feacf672b01021fb325301d9dc56ec6b9670179817b0f0d4e54c0e857ed8e3",
+    "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "allowed_cluster": "dev",
+    "priority_class": "c1",
+    "queue_priority_class": "q1",
+    "required_effective_priority": 10000,
+    "automatic_requeue": false,
+    "workers": 2,
+    "gpus_per_worker": 4,
+    "total_gpus": 8,
+    "task_rows_read": 0,
+    "rollouts": 0,
+    "verifier_calls": 0,
+    "optimizer_steps": 0,
+    "checkpoints_created": 0,
+    "wandb": false,
+    "submitted": false,
+    "required_terminal_receipt": "ENGINE_DIAGNOSTIC.json"
+  },
+  "data_preparation": {
+    "manifest_file_sha256": "2bb7420f2f8156040331e318e64e3d622c4fdc25a241e73faba22f58bfdf9ebd",
+    "manifest_embedded_sha256": "sha256:1059216a0fbb3859fe16ef4a4b2e200db70a72ea11b68f8c42670470197c2e33",
+    "manifest_digest_valid": true,
+    "environment_creates": 0,
+    "train_rows_staged": 2,
+    "dev_rows_staged": 1,
+    "operator_prompt_content_inspected": false
+  },
+  "cpu_preflight": {
+    "pod_name": "chris-q38-rldiag-dev5-cpu-v1",
+    "pod_uid": "2d25f2c7-6f55-4547-b11b-4eb7dd9ab08e",
+    "created_at": "2026-09-12T12:34:35Z",
+    "runtime_image_id": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "restarts": 0,
+    "gpus": 0,
+    "receipt_file_sha256": "13c45c1c5c81b324b40965a465cb45859373624d257441b04bcb8afcc03c264c",
+    "receipt_embedded_sha256": "8ae2c56b7a4571a3bd4729869b5824259d091e2ed74c7942a020b7a6ff5c8320",
+    "status": "passed",
+    "native_parser_checked": true,
+    "engine_cli_args_checked": true,
+    "engine_start_qualified": false,
+    "released_at": "2026-09-12T12:45:48Z",
+    "release_confirmed": true
+  },
+  "dev_preview": {
+    "api_base_url": "https://api.ft.dev.flt.build",
+    "status": "passed",
+    "manifest_sha256": "bbd3b8c441ef102ef720df6882a5e43d49833f9c281e60556e714da0064bd70b",
+    "duplicate_matches": 0,
+    "output_root_absent": true,
+    "physical_resources_created": false
+  },
+  "next_gate": "After current authorization, access-lifetime, aggregate-node and immediate duplicate/output checks pass, submit this exact prepared dev diagnostic once. It may qualify only engine startup and cleanup. Reward acquisition, optimizer updates, checkpoints and production remain closed.",
+  "audit_boundaries": {
+    "gpu_jobs_submitted": 0,
+    "gpu_resources_created": 0,
+    "private_logs_read": false,
+    "task_or_prompt_content_exposed": false,
+    "credentials_read_or_persisted": false,
+    "observed_at": "2026-09-12T12:43:40Z"
+  },
+  "sha256": "cc80f005ba32046cd5ace3dce642fe8dc0bc6d839a5df2aa73d78ecd1cf06968"
+}
