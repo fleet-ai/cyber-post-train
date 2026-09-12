@@ -1,0 +1,17 @@
+{
+  "schema": "cyber_study_presplit_exposure_v1",
+  "campaign_id": "qwen38-blackbox-sft-study-20260911-v1",
+  "model": {
+    "repo": "Qwen/Qwen3.8-27B",
+    "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "model_lock_sha256": "sha256:f3926fe675263b25dc79c2b3881a9c463d6b7931e9d61aeb777d15efc61e35ac"
+  },
+  "eligible_allowlist_sha256": "sha256:c45c9cc420a3dbf1aa6b635b84ed1ca3c404254f046ffdac234e053929a1bf12",
+  "current_binding_audit_sha256": "sha256:15ff4a85bc67279d021c9f1a21a82f4b6751d19b6df3ba8aa214ced4c277a5f2",
+  "atom_taxonomy_projection_sha256": "sha256:ba3636a6ae22ad7d2a839df247bf750e81220019ffdf07ec2b1ef0b18119a304",
+  "scope": "this exact campaign and exact base initialization before any study split, corpus materialization or training submission",
+  "status": "unexposed",
+  "historical_global_exposure_claimed": false,
+  "frozen_at": "2026-09-11T21:15:00Z",
+  "sha256": "sha256:ed1c2c1f5db0b8cf20dc988a9c5429efc6a1affea2116b7dde58101759f0d10a"
+}

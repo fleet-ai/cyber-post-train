@@ -1,0 +1,266 @@
+{
+  "schema": "cyber_final_test_lock_v1",
+  "inventory_sha256": "sha256:2b099f359bd5e3c1c42804c3f9a277c534f9bdbbadfae79e1ef928d4d2f700a9",
+  "seed": "qwen38-study-final-v1-20260911",
+  "group_ids": [
+    "sha256:02b848dcb2ba9f79c0db462e77e4faf7efe8c6787615334968f7c00198f259e4",
+    "sha256:1e9e265422ef91c43578d5958d9c369d36996abb6d13c7be74ab9541536031df",
+    "sha256:40a7b416fad9afe191521cec4c28203acb20040241dd0b74d336baa3efb117b4",
+    "sha256:5c40d2b0fbb8fff9e5d57b8817ed2d4728d692acbde25da865ec437fe4f2df66",
+    "sha256:6b933232fecc77bcc72bc54bd4baa7684ec08cfda61156c00ece2698d52b5311",
+    "sha256:7ca78c1128945d03316b488c56bd42782d9e10c8e8ca74c01e9b0937618777be",
+    "sha256:7e7b463ae28fa5bc45bc6bf8b63e028775f0259c6ec2fe1ed9eec5f27ae7020f",
+    "sha256:a67db29b0f66d32a8c1d846841f5a6844db518ec482e71817e5fa587888a51f4",
+    "sha256:ad4bd9354c6d048c0da603d29993216ba586167fde03eb6faad3ae60ad991665",
+    "sha256:ca1e9b6132991ce2af77db859687fc5ecb3f4376549244b33df100de3d108611"
+  ],
+  "tasks": [
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-46ee1c53981e8b0f027052aa__blackbox_ctf_v1",
+      "task_version_id": "ac6a6cfa-ea44-4c11-bb2e-c2bb2d142c8e",
+      "group_id": "sha256:7e7b463ae28fa5bc45bc6bf8b63e028775f0259c6ec2fe1ed9eec5f27ae7020f"
+    },
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-bc363f8239aeeaa3f648046a__blackbox_ctf_v1",
+      "task_version_id": "ba912601-1184-4dcd-9e9d-2fce22543e4b",
+      "group_id": "sha256:ca1e9b6132991ce2af77db859687fc5ecb3f4376549244b33df100de3d108611"
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-136118e493e2e587151adbad__blackbox_ctf_v1",
+      "task_version_id": "45c6cd9f-afef-4e63-b1f8-496c52e98f01",
+      "group_id": "sha256:02b848dcb2ba9f79c0db462e77e4faf7efe8c6787615334968f7c00198f259e4"
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-9063fa10a36b73f9044c608f__blackbox_ctf_v1",
+      "task_version_id": "dcf2aefc-e34d-4a4a-8aa9-b18a3b754d5a",
+      "group_id": "sha256:1e9e265422ef91c43578d5958d9c369d36996abb6d13c7be74ab9541536031df"
+    },
+    {
+      "task_key": "cysec1-2-fentry-gen_blackbox-0a841d6127c4042fd3d99f68__blackbox_ctf_v1",
+      "task_version_id": "056f0e20-cd7d-40c8-b3c8-369fcee838be",
+      "group_id": "sha256:a67db29b0f66d32a8c1d846841f5a6844db518ec482e71817e5fa587888a51f4"
+    },
+    {
+      "task_key": "cysec1-2-fentry-gen_blackbox-8b7c28d59cbc439114db9a56__blackbox_ctf_v1",
+      "task_version_id": "fd07b96f-7aa4-4041-862b-5aa7411eff4b",
+      "group_id": "sha256:ad4bd9354c6d048c0da603d29993216ba586167fde03eb6faad3ae60ad991665"
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-322896ad3182769453b9944a__blackbox_ctf_v1",
+      "task_version_id": "8e5c7c45-7259-420d-ba12-0381465d864e",
+      "group_id": "sha256:6b933232fecc77bcc72bc54bd4baa7684ec08cfda61156c00ece2698d52b5311"
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-3edc7da783b72884f0bc932d__blackbox_ctf_v1",
+      "task_version_id": "2b6f2798-c405-4724-9d33-e867ba616fc3",
+      "group_id": "sha256:40a7b416fad9afe191521cec4c28203acb20040241dd0b74d336baa3efb117b4"
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-ae047f45e37c42a1ad5b09ca__blackbox_ctf_v1",
+      "task_version_id": "f50eee68-84c7-44d1-b4de-4c554ecc3e2e",
+      "group_id": "sha256:7ca78c1128945d03316b488c56bd42782d9e10c8e8ca74c01e9b0937618777be"
+    },
+    {
+      "task_key": "cysec1-2-fubspot-gen_blackbox-6c0962e92122d89a62d04a45__blackbox_ctf_v1",
+      "task_version_id": "ee77cfbf-ceed-487f-a19d-3922aaaf4bad",
+      "group_id": "sha256:5c40d2b0fbb8fff9e5d57b8817ed2d4728d692acbde25da865ec437fe4f2df66"
+    }
+  ],
+  "selection_basis": "certified inventory taxonomy and unexposed-family evidence only; no outcomes or losses",
+  "protected_task_versions": [],
+  "inventory_audit": {
+    "inventory_task_versions": 89,
+    "eligible_task_versions": 89,
+    "reviewed_task_families": 89,
+    "quarantined_task_versions": {},
+    "missing_or_unverified_taxonomy_task_versions": {
+      "application": 0,
+      "environment": 0,
+      "vulnerability_family": 0,
+      "difficulty": 0
+    },
+    "full_taxonomy_available": true,
+    "evidence_scope": "metadata claims bound by digests; unavailable upstream receipts are not re-certified"
+  },
+  "representation": {
+    "application": {
+      "population_group_counts": {
+        "current": 22,
+        "fakelook": 21,
+        "fentry": 14,
+        "fira": 24,
+        "fubspot": 8
+      },
+      "split_group_counts": {
+        "current": 2,
+        "fakelook": 2,
+        "fentry": 2,
+        "fira": 3,
+        "fubspot": 1
+      },
+      "max_abs_group_share_gap": 0.04719101123595504
+    },
+    "environment": {
+      "population_group_counts": {
+        "cysec1-2-current-gen": 22,
+        "cysec1-2-fakelook-gen": 21,
+        "cysec1-2-fentry-gen": 14,
+        "cysec1-2-fira-gen": 23,
+        "cysec1-2-fubspot-gen": 8,
+        "cysec1-2-rops-gen": 1
+      },
+      "split_group_counts": {
+        "cysec1-2-current-gen": 2,
+        "cysec1-2-fakelook-gen": 2,
+        "cysec1-2-fentry-gen": 2,
+        "cysec1-2-fira-gen": 3,
+        "cysec1-2-fubspot-gen": 1
+      },
+      "max_abs_group_share_gap": 0.04719101123595504
+    },
+    "vulnerability_family": {
+      "population_group_counts": {
+        "category:CWE-200": 1,
+        "category:access-control": 2,
+        "category:auth-protocol": 1,
+        "category:authentication-and-identity": 1,
+        "category:authentication-and-session": 1,
+        "category:authentication-boundary": 2,
+        "category:authentication-replay": 1,
+        "category:authorization": 1,
+        "category:authorization-boundary": 1,
+        "category:authorization-classification": 1,
+        "category:authorization-principal-self-assignment": 1,
+        "category:availability": 1,
+        "category:broken-access-control": 5,
+        "category:broken-authentication": 1,
+        "category:broken-file-access": 1,
+        "category:broken-object-level-authorization": 4,
+        "category:broken-object-namespace-containment": 1,
+        "category:broken-tenant-isolation": 1,
+        "category:capture-replay": 1,
+        "category:comment-visibility-bypass": 1,
+        "category:cors-browser-origin-trust": 1,
+        "category:credential-disclosure": 6,
+        "category:credential-disclosure-on-account-recovery": 1,
+        "category:credential-in-response-leak": 1,
+        "category:cryptographic-signature-verification": 1,
+        "category:csrf": 1,
+        "category:denial-of-service": 1,
+        "category:filesystem-path-traversal": 1,
+        "category:function-level-privilege": 1,
+        "category:http-desync": 1,
+        "category:hydration": 1,
+        "category:identity-and-session-management": 1,
+        "category:information-disclosure": 2,
+        "category:information-exposure": 1,
+        "category:injection": 4,
+        "category:input-validation-and-canonicalization": 1,
+        "category:missing-resource-limit": 1,
+        "category:oauth-code-injection": 1,
+        "category:object-authorization": 1,
+        "category:object-hydration-authz-bypass": 1,
+        "category:object-level-authz": 1,
+        "category:observable-discrepancy": 1,
+        "category:origin-validation": 1,
+        "category:output-neutralization": 1,
+        "category:path-traversal": 2,
+        "category:protocol-desync": 1,
+        "category:request-smuggling": 1,
+        "category:resource-consumption": 2,
+        "category:resource-exhaustion": 1,
+        "category:secret-disclosure": 1,
+        "category:sensitive-data-disclosure": 1,
+        "category:sensitive-data-exposure": 2,
+        "category:server-side-request-forgery": 1,
+        "category:session": 1,
+        "category:session-lifecycle": 1,
+        "category:session-replay": 1,
+        "category:stored-xss": 1,
+        "category:template-second-pass-evaluation": 1,
+        "category:unauthenticated-pii-disclosure": 1,
+        "category:uncontrolled-resource-consumption": 1,
+        "category:url-validation-canonicalization": 2,
+        "category:webhook-integration-trust": 1,
+        "category:xss": 4,
+        "category:xss-javascript-url": 1,
+        "class:CSRF": 1,
+        "class:CWE-770": 1,
+        "class:HTTP-request-desync": 1,
+        "class:IDOR": 5,
+        "class:SQLi": 3,
+        "class:SSRF": 1,
+        "class:auth-bypass": 9,
+        "class:broken-object-authorization": 1,
+        "class:broken-object-scope": 1,
+        "class:code-injection": 2,
+        "class:credential-disclosure": 1,
+        "class:csrf-unprotected-credential-echo": 1,
+        "class:http-request-smuggling": 1,
+        "class:improper-output-neutralization-stored": 1,
+        "class:incorrect-authorization": 2,
+        "class:info-disclosure": 3,
+        "class:information-disclosure": 3,
+        "class:insufficient-session-expiration": 1,
+        "class:jwt-alg-confusion": 1,
+        "class:missing-authorization": 1,
+        "class:open-redirect": 4,
+        "class:origin-validation": 2,
+        "class:path-traversal": 10,
+        "class:privilege-escalation": 1,
+        "class:privilege-management": 1,
+        "class:prototype-pollution": 1,
+        "class:reflected-xss": 2,
+        "class:replay": 1,
+        "class:request-authenticity-bypass": 1,
+        "class:request-smuggling": 1,
+        "class:resource-bound-fail-open": 1,
+        "class:resource-consumption": 1,
+        "class:resource-exhaustion": 2,
+        "class:sensitive-data-disclosure": 2,
+        "class:sensitive-data-exposure": 8,
+        "class:sensitive-information-disclosure": 1,
+        "class:session-expiration": 2,
+        "class:stored-xss": 4,
+        "class:unbounded-batch-work": 1,
+        "class:uncontrolled-resource-consumption": 1,
+        "class:unsafe-deserialization": 1
+      },
+      "split_group_counts": {
+        "category:authentication-and-identity": 1,
+        "category:broken-access-control": 1,
+        "category:broken-object-level-authorization": 1,
+        "category:credential-disclosure": 1,
+        "category:credential-disclosure-on-account-recovery": 1,
+        "category:http-desync": 1,
+        "category:injection": 1,
+        "category:session-lifecycle": 1,
+        "category:url-validation-canonicalization": 1,
+        "category:xss": 1,
+        "class:IDOR": 1,
+        "class:SQLi": 1,
+        "class:auth-bypass": 1,
+        "class:info-disclosure": 1,
+        "class:open-redirect": 1,
+        "class:path-traversal": 1,
+        "class:request-smuggling": 1,
+        "class:sensitive-data-exposure": 1,
+        "class:stored-xss": 1
+      },
+      "max_abs_group_share_gap": 0.08876404494382023
+    },
+    "difficulty": {
+      "population_group_counts": {
+        "easy": 1,
+        "hard": 6,
+        "medium": 82
+      },
+      "split_group_counts": {
+        "hard": 1,
+        "medium": 9
+      },
+      "max_abs_group_share_gap": 0.032584269662921356
+    }
+  },
+  "sha256": "sha256:dc625115be8c775de8ecf476bc0d8e06e71b6c7f4160ed50b25eb0308b30d8d7"
+}
