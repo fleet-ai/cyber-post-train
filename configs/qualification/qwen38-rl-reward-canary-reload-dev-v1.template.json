@@ -1,40 +1,99 @@
 {
-  "schema": "cyber_skyrl_rl_reload_gate_template_v1",
-  "status": "blocked_not_launchable",
+  "schema": "cyber_skyrl_rl_reload_config_template_v2",
+  "status": "waiting_for_runtime_evidence",
   "launchable": false,
-  "purpose": "Zero-update native all-rank reload of the reward-canary checkpoint on the dev cluster",
-  "source": {
-    "run_name": "chris-q38-rlreward-dev1",
-    "plan_sha256": null,
-    "checkpoint_manifest": null,
-    "checkpoint_manifest_file_sha256": null,
-    "checkpoint_global_step": 1
-  },
-  "target": {
-    "run_name": "chris-q38-rlreward-reload-dev1",
+  "purpose": "Create one dev-only, zero-update, native eight-rank reload of the exact reward-canary checkpoint",
+  "resolved_config": {
+    "schema": "cyber_skyrl_rl_reload_config_v1",
+    "name": "chris-q38-rlreward-reload-dev1",
     "output_root": "/mnt/sfs/jobs/chris-q38-rlreward-reload-dev1",
+    "source": {
+      "run_name": "chris-q38-rlreward-dev1",
+      "plan_sha256": null,
+      "request_sha256": null,
+      "checkpoint_global_step": 1,
+      "checkpoint_manifest_path": null,
+      "checkpoint_manifest_file_sha256": null,
+      "checkpoint_manifest_self_sha256": null,
+      "reward_terminal_receipt_path": "/mnt/sfs/jobs/chris-q38-rlreward-dev1/REWARD_CANARY_TERMINAL.json",
+      "reward_terminal_receipt_file_sha256": null,
+      "reward_terminal_receipt_self_sha256": null,
+      "source_external_release_path": "/mnt/sfs/jobs/chris-q38-rlreward-dev1/SOURCE_RELEASE.json",
+      "source_external_release_file_sha256": null,
+      "source_external_release_self_sha256": null
+    },
+    "cluster": {
+      "target": "dev",
+      "priority": "c1",
+      "resources": {
+        "cpu_request": "64",
+        "cpu_limit": "64",
+        "memory_request": "512Gi",
+        "memory_limit": "768Gi"
+      }
+    },
+    "lifecycle": {
+      "startup_timeout_seconds": 1800,
+      "cleanup_timeout_seconds": 300
+    }
+  },
+  "implementation": {
+    "checkpoint_manifest_schema": "cyber_skyrl_rl_checkpoint_manifest_v1",
+    "reward_terminal_schema": "cyber_skyrl_rl_reward_canary_terminal_v1",
+    "reload_plan_schema": "cyber_skyrl_rl_reload_v1",
+    "cpu_preflight_schema": "cyber_skyrl_rl_reload_cpu_preflight_v1",
+    "gpu_result_schema": "cyber_skyrl_rl_reload_validated_v1",
+    "clean_rejection_schema": "cyber_skyrl_rl_reload_rejected_v1",
+    "controller_audit_schema": "cyber_skyrl_controller_audit_v1",
+    "external_release_schema": "cyber_skyrl_external_release_v1",
+    "accepted_schema": "cyber_skyrl_rl_reload_accepted_v1",
+    "commands": [
+      "cyber-post-train rl-checkpoint-seal",
+      "cyber-post-train rl-reload",
+      "cyber-post-train preflight",
+      "cyber-post-train preview --cluster dev",
+      "cyber-post-train submit --cluster dev",
+      "cyber-post-train rl-reload-accept"
+    ]
+  },
+  "fixed_contract": {
     "cluster": "dev",
     "priority_class": "c1",
     "priority_value": 10000,
     "workers": 1,
     "gpus_per_worker": 8,
     "requeue_if_preempted": false,
-    "optimizer_updates_authorized": 0,
+    "secrets": [],
+    "wandb": false,
     "rollouts_authorized": 0,
-    "wandb_run_id": "chris-q38-rlreward-reload-dev1"
+    "verifier_calls_authorized": 0,
+    "optimizer_updates_authorized": 0,
+    "new_checkpoints_authorized": 0
   },
   "required_proofs": [
-    "source_checkpoint_create_once_seal_and_source_stability",
-    "all_eight_ranks_restore_model_optimizer_scheduler_and_rng",
-    "sampler_state_restores_exactly_at_global_step_one",
-    "zero_rollouts_zero_optimizer_updates_zero_new_checkpoints",
-    "native_model_forward_after_restore",
-    "terminal_gpu_release"
+    "source_job_terminal_success_and_all_eight_gpus_released_before_sealing",
+    "source_and_reload_release_bound_to_original_two_line_jobs_api_submission_journal",
+    "source_and_reload_live_controller_audits_bind_exact_dev_kube_context_namespace_namespace_uid_and_complete_rayjob_workload_raycluster_pod_ownership",
+    "observed_api_run_rayjob_image_effective_priority_and_no_requeue_identity",
+    "exact_source_plan_model_tokenizer_image_runtime_and_native_source_binding",
+    "complete_create_once_checkpoint_inventory_with_all_eight_model_optimizer_and_extra_state_ranks",
+    "exact_trainer_step_sampler_cursor_optimizer_scheduler_and_rng_state",
+    "all_eight_ranks_semantically_equal_their_sealed_model_optimizer_scheduler_and_rng_state",
+    "driver_and_all_eight_ranks_run_as_uid_gid_1000_100_with_the_exact_native_source_set",
+    "finite_fixed_token_forward_with_policy_and_optimizer_unchanged",
+    "zero_rollouts_zero_verifier_calls_zero_optimizer_updates_zero_new_checkpoints",
+    "source_manifest_and_checkpoint_unchanged",
+    "internal_ray_resources_released",
+    "recursive_exact_runtime_and_private_log_output_allowlist",
+    "external_job_raycluster_pods_and_all_eight_gpus_released_after_process_exit"
   ],
-  "blockers": [
-    "No cyber_skyrl_training_v1 checkpoint-seal schema exists.",
-    "No SkyRL RL CLI path binds a sealed checkpoint into a zero-update all-rank reload.",
-    "The existing recovery command is compiled through the SFT plan schema and cannot accept this RL plan."
+  "unresolved_before_materialization": [
+    "independently_audited_cyber_skyrl_rl_reward_canary_terminal_v1_receipt",
+    "create-once source and reload live controller ownership audits",
+    "create-once copied source and reload Jobs API submission journals",
+    "create-once checkpoint manifest path plus file and self digests",
+    "fresh reload name/output/API/Kubernetes destination checks",
+    "warning-free dev Jobs API preview and live whole-node availability"
   ],
-  "sha256": "sha256:74973f68e1b356212dfd3f0991ccfc114e783b503b9e0ee9c266bf763340f3ba"
+  "sha256": "sha256:17aed64097ae33fb07718452594eeb317213a857fce89ee36aba89029b6e768a"
 }

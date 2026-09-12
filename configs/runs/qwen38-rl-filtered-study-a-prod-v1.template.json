@@ -16,7 +16,7 @@
     },
     "data_config": {
       "path": "configs/runs/qwen38-rl-filtered-study-a-prod-v1.data.json",
-      "file_sha256": "sha256:b177a6c6784892f1e3c5c32aa8db653db7f9cb3500d86db31e3c5ef37655ba7c"
+      "file_sha256": "sha256:37a13a7484f2d55ff44f51f84d210f217507743ec650a160cefc61d53a510e06"
     }
   },
   "qualification": {
@@ -39,7 +39,7 @@
     },
     "reward_canary": {
       "config_path": "configs/qualification/qwen38-rl-reward-canary-dev-v1.json",
-      "config_file_sha256": "sha256:3354ae271ca1252269ec4a3b63593a690110053c1a7d70c8fec1c1c7fc25dcc6",
+      "config_file_sha256": "sha256:a35b7cc22d3f3a1cd5b398e7afb4e39f995bf00d5b2278295a3a43ba6bd6580a",
       "terminal_receipt_path": null,
       "terminal_receipt_file_sha256": null,
       "required": [
@@ -58,7 +58,7 @@
     },
     "native_reload": {
       "contract_path": "configs/qualification/qwen38-rl-reward-canary-reload-dev-v1.template.json",
-      "contract_file_sha256": "sha256:bd8d4e6a9c03abe3d7a8d055f4a6475eec6b9e0817f6838197476cd509d5a672",
+      "contract_file_sha256": "sha256:cc7120665e9807a091aa029aa1140c423a24285a46f7060bfb3823cdc7dbe8f9",
       "terminal_receipt_path": null,
       "terminal_receipt_file_sha256": null,
       "required": [
@@ -66,6 +66,7 @@
         "all_eight_ranks_restored",
         "model_optimizer_scheduler_sampler_rng_restored",
         "zero_rollouts",
+        "zero_verifier_calls",
         "zero_optimizer_updates",
         "zero_checkpoint_writes",
         "native_model_forward",
@@ -141,7 +142,8 @@
         "memory_request": "512Gi",
         "memory_limit": "768Gi"
       }
-    }
+    },
+    "production_promotion": null
   },
   "candidate_run_sha256": "sha256:e0bd20a352c76a0c25a402cfac3a7098e719642f25018535a0f2ccb97c6188ac",
   "recipe_relationship": {
@@ -154,6 +156,7 @@
       "lr_1e-6",
       "seed_42",
       "token_and_tool_budgets",
+      "max_turns_600_no_rollout_truncation",
       "c1_no_requeue"
     ],
     "production_only_differences": {
@@ -170,8 +173,8 @@
   "blocked_reasons": [
     "No digest-valid dev8 engine terminal receipt is bound.",
     "No digest-valid real reward canary terminal receipt is bound.",
-    "Native SkyRL checkpoint sealing and zero-update all-rank reload are not implemented or accepted.",
+    "No digest-valid production-promotion receipt cross-binding accepted dev8, reward-terminal, native checkpoint and all-rank reload evidence is bound.",
     "Live production duplicate, output, W&B and aggregate node gates cannot be pre-certified."
   ],
-  "sha256": "sha256:098c6ef9651e263a5ed8469aa6e270bab3e9c6f4045096c3c256df5941044cd5"
+  "sha256": "sha256:86ea99cf042b470c14eb30235421a6a614f31f7c83c7528e603e387605d2263e"
 }

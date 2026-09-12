@@ -343,7 +343,7 @@ def _install_engine_modules(monkeypatch, calls, create):
 
 
 @pytest.fixture
-def prepared(data_setup):  # noqa: F811
+def prepared(data_setup, monkeypatch):  # noqa: F811
     lock = ROOT / "configs/models/qwen38-27b-1d4bf0f2.lock.json"
     data_setup.lock.update(json.loads(lock.read_bytes()))
     build(data_setup)
@@ -361,6 +361,10 @@ def prepared(data_setup):  # noqa: F811
         "wandb": {"entity": "synthetic", "project": "synthetic", "run_id": "synthetic-rl"},
     }
     plan = train.compile_rl(config, relative_to=data_setup.tmp)
+    monkeypatch.setenv("CYBER_EXPECTED_RUNTIME_UID", "1000")
+    monkeypatch.setenv("CYBER_EXPECTED_RUNTIME_GID", "100")
+    monkeypatch.setattr(train.os, "geteuid", lambda: 1000)
+    monkeypatch.setattr(train.os, "getegid", lambda: 100)
     return NS(config=config, plan=plan, state=data_setup)
 
 
@@ -1041,13 +1045,25 @@ def test_preflight_rejects_privileged_or_different_file_access(monkeypatch, uid,
 
 
 @pytest.mark.parametrize(
-    "image_sha256",
+    "image_sha256,reason",
     [
-        "ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
-        "9b6f43938f9b28aaff7ba91edd59be3d18b01f9a22078ba5475cdac5e6bfcca6",
+        (
+            "ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+            "terminal dev evidence",
+        ),
+        (
+            "9b6f43938f9b28aaff7ba91edd59be3d18b01f9a22078ba5475cdac5e6bfcca6",
+            "terminal dev evidence",
+        ),
+        (
+            "e48827529b1cf5fafa153b2aed1b774c2eec86905baf5ccb62b36300533e252b",
+            "worker-RPC evidence",
+        ),
     ],
 )
-def test_cpu_preflight_rejects_only_disqualified_qwen38_pairs(prepared, monkeypatch, image_sha256):
+def test_cpu_preflight_rejects_only_disqualified_qwen38_pairs(
+    prepared, monkeypatch, image_sha256, reason
+):
     monkeypatch.setattr(train.os, "geteuid", lambda: 1000)
     monkeypatch.setattr(train.os, "getegid", lambda: 100)
 
@@ -1061,7 +1077,7 @@ def test_cpu_preflight_rejects_only_disqualified_qwen38_pairs(prepared, monkeypa
             ),
         },
     }
-    with pytest.raises(ValueError, match="terminal dev evidence"):
+    with pytest.raises(ValueError, match=reason):
         train._require_engine_start_qualified_image(disqualified)
 
     train._require_engine_start_qualified_image(prepared.plan)

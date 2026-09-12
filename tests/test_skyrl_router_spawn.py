@@ -176,6 +176,11 @@ def test_pre_ray_contract_rejection_is_truthful_and_other_defects_still_fail(
     root = tmp_path / "diagnostic"
     root.mkdir()
     monkeypatch.setenv("RUN_DIR", str(root))
+    monkeypatch.setenv("CYBER_EXPECTED_RUNTIME_UID", "1000")
+    monkeypatch.setenv("CYBER_EXPECTED_RUNTIME_GID", "100")
+    monkeypatch.setattr(train.os, "geteuid", lambda: 1000)
+    monkeypatch.setattr(train.os, "getegid", lambda: 100)
+    monkeypatch.setattr(train, "_require_engine_start_qualified_image", lambda _: None)
     plan = {"output_root": str(root), "arguments": {}}
     monkeypatch.setattr(
         train.skyrl,

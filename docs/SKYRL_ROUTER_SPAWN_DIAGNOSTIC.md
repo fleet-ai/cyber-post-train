@@ -109,6 +109,14 @@ cleanly with zero restarts, and its Pod was deleted.
 
 This corrected-image result remains an operational CPU gate. It proves neither
 Qwen3.8 model loading nor CUDA, two-engine TP4x2 startup, reward, optimization,
-checkpoint recovery, or production readiness. A fresh dev8 diagnostic must
-prove real engine startup and bounded cleanup before later RL gates may open.
-Never edit or replay any earlier diagnostic plan.
+checkpoint recovery, or production readiness. At that point, dev8 still had to
+prove real engine startup and bounded cleanup before later RL gates could open.
+No earlier diagnostic plan was eligible for replay.
+
+Dev8 is now terminal and remains immutable. Its image is also privacy-disqualified
+by the later worker-RPC review, so neither renaming dev8 nor repeating it can
+qualify the corrected runtime. The current successor is the fresh
+[dev9 diagnostic](QWEN38_SKYRL_ENGINE_DIAGNOSTIC_DEV9.md), pinned to the
+worker-RPC-sanitized image and its exact zero-GPU qualification. Dev9 preserves
+the same 2xTP4 zero-work contract and must independently prove engine startup,
+runtime user, exact image IDs, cleanup, terminal state, and GPU release.

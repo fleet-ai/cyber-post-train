@@ -51,13 +51,19 @@ Only the dataset size, step/eval/checkpoint counts, cluster target and
 create-once identities change. There is therefore no unqualified topology or
 GRPO group-scaling change between the canary and production.
 
+The reward canary and inert production data config both permit exactly 600
+turns with the same token, wall-clock, tool-call and tool-output bounds. This
+preserves the canary's anti-truncation contract in production. The engine
+diagnostic's older 80-turn data config is irrelevant to this parity statement:
+that diagnostic is required to read zero task rows and execute zero rollouts.
+
 ## Promotion gates
 
 All gates are conjunctive. A clean Jobs API exit or
 `NATIVE_TRAINING_COMPLETE.json` alone is not acceptance.
 
-1. **Dev8 engine gate.** Bind a digest-valid terminal receipt from the exact
-   corrected-image dev8 diagnostic. It must prove both TP4 engines started,
+1. **Dev9 engine gate.** Bind a digest-valid terminal receipt from the exact
+   worker-RPC-sanitized dev9 diagnostic. It must prove both TP4 engines started,
    zero task/reward/optimizer/checkpoint work and complete GPU release.
 2. **Real reward canary.** Bind the exact prepared dev reward canary and a
    digest-valid independent audit. Every rollout must be nontruncated and
@@ -87,11 +93,15 @@ absence of any gate is visible and machine-tested.
 
 ## Exact remaining gap
 
-The repo still has no SkyRL checkpoint-seal schema or zero-update all-rank
-native RL reload command. The inert reload contract is
+The repo now contains the CPU-only native checkpoint sealer and the dev-only,
+zero-update, eight-rank reload validator. The inert reload contract is
 [`qwen38-rl-reward-canary-reload-dev-v1.template.json`](../configs/qualification/qwen38-rl-reward-canary-reload-dev-v1.template.json).
-That command and its dev acceptance receipt must exist before production can be
-opened. The current SFT recovery path is not a valid substitute.
+This is implementation, not qualification: no digest-valid accepted dev
+reward-terminal evidence or independently release-audited native-reload
+acceptance evidence is bound yet.
+The exact create-once procedure is in
+[`QWEN38_SKYRL_REWARD_CANARY.md`](./QWEN38_SKYRL_REWARD_CANARY.md#native-checkpoint-and-reload-gate).
+The current SFT recovery path is not a valid substitute.
 
 After the dev engine, reward/update and native-reload receipts exist, update the
 production template with their exact paths and file digests, independently

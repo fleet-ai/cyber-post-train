@@ -153,12 +153,15 @@ def test_skyrl_engine_diagnostic_uses_exact_prepare_preflight_submit_rail(
     assert RUNNER.invoke(cli.app, ["preflight", str(output)]).exit_code == 0
 
     calls = []
+    monkeypatch.setattr(cli, "validate_preview", lambda *_: {})
+    monkeypatch.setattr(skyrl_training, "validate_engine_diagnostic_preview", lambda *_: {})
     monkeypatch.setattr(
         cli,
         "_client",
         lambda cluster: nullcontext(
             SimpleNamespace(
-                submit_once=lambda *args: calls.append(args) or {"name": "diagnostic-12345678"}
+                preview=lambda _: {},
+                submit_once=lambda *args: calls.append(args) or {"name": "diagnostic-12345678"},
             )
         ),
     )
@@ -197,6 +200,22 @@ def test_skyrl_engine_diagnostic_cannot_target_production(prepared, monkeypatch,
     assert result.exit_code == 2
     assert "dev-cluster-only" in result.stderr
     assert calls == []
+
+
+def test_targetless_skyrl_plan_cannot_be_routed_to_production() -> None:
+    with pytest.raises(ValueError, match="explicit prod-cluster plan"):
+        cli._require_prepared_cluster(
+            {"schema": "cyber_skyrl_training_v1", "execution": {}},
+            cli.Cluster.prod,
+        )
+
+    cli._require_prepared_cluster(
+        {
+            "schema": "cyber_skyrl_training_v1",
+            "execution": {"cluster_target": "prod"},
+        },
+        cli.Cluster.prod,
+    )
 
 
 def test_module_entrypoint_exposes_public_help(monkeypatch, capsys):

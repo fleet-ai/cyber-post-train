@@ -1,14 +1,19 @@
 {
   "schema": "cyber_rl_task_set_v1",
-  "purpose": "Qwen3.8 SkyRL dev reward-acquisition canary on exact metadata-only successors of receipt-proven informative Fleet blackbox tasks",
+  "purpose": "Blocked Qwen3.8 SkyRL dev reward-acquisition canary pending an exact successor whose authoritative per-version receipt preserves every non-tool runtime binding",
   "source_manifest_sha256": "sha256:c45c9cc420a3dbf1aa6b635b84ed1ca3c404254f046ffdac234e053929a1bf12",
   "tool_catalog_sha256": "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a",
-  "training_data_eligible": true,
+  "training_data_eligible": false,
   "reward_signal_provenance": {
-    "kind": "historically_nonzero_source_to_metadata_only_successor",
+    "kind": "blocked_historical_source_to_receipt_mismatched_successor",
     "evidence_path": "configs/runs/qwen36-27b-native-rl-reward-acquisition-canary.pre-submit.json",
     "evidence_file_sha256": "sha256:f922595c70ce9044280217fd4389a098d64b640fd8577c93edf991b32f7066d0",
-    "successor_rule": "Only metadata.tools changed to the exact ordered bash,submit_report surface; prompt, environment, verifier and data bindings stayed fixed. Historical signal selects tasks but does not predict Qwen3.8 reward."
+    "successor_rule": "Eligibility requires authoritative source and successor receipts to agree on every non-tool field and exact runtime binding. The selected immutable successor currently fails that derived comparison; historical signal alone is never eligibility evidence.",
+    "exact_version_evidence": {
+      "path": "../data/qwen38-rl-reward-canary-exact-version-evidence-v1.json",
+      "file_sha256": "sha256:f9f9594d36a6bab11b83d2c1c4e213b1ca88fa98b8d42885cbd83c4f7b80851b",
+      "self_sha256": "sha256:d83d8ff2ae66ecc945a439c2a6f47f118a19b928d13721faec4cd28d5b87ee77"
+    }
   },
   "tasks": [
     {
@@ -38,5 +43,5 @@
       }
     }
   ],
-  "sha256": "sha256:3546d7a6238c3c50c85322be24eae755a495e4e26f6f5547ab820c0d62589205"
+  "sha256": "sha256:608b8c47790fd6e9fef6e86115a7b624273589b8b11e920224db54b7b848e965"
 }

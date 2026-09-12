@@ -11,6 +11,14 @@
     "manifest": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/rlreward-inputs-dev1/data/manifest.json",
     "root": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/rlreward-inputs-dev1/data"
   },
+  "prerequisites": {
+    "engine_diagnostic": {
+      "config_path": "qwen38-rl-filtered-skyrl-engine-diagnostic-dev-v9.json",
+      "config_file_sha256": "sha256:6b17e668cde7eaded5bb5df5a010568702f8260d2c4f71e61cb9396383515538",
+      "terminal_receipt_path": null,
+      "terminal_receipt_file_sha256": null
+    }
+  },
   "recipe": {
     "nodes": 1,
     "steps": 1,

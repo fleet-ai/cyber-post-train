@@ -112,7 +112,7 @@ def rl_data(config: Path) -> None:
     """CPU-only Miles/SkyRL data from reviewed Fleet versions. GET only; no training."""
     import httpx
 
-    from training.rl_data import build
+    from training.rl_reward_canary import build
     from training.sft import read_mapping
 
     try:
@@ -206,6 +206,155 @@ def rl_engine_diagnostic(config: Path, output: Annotated[Path, typer.Option("--o
         _fail(exc)
 
 
+@app.command("rl-checkpoint-seal")
+def rl_checkpoint_seal(
+    directory: Path,
+    step: int,
+    candidate: Annotated[Path, typer.Option("--candidate")],
+    controller_audit: Annotated[Path, typer.Option("--controller-audit")],
+    sealer_release: Annotated[Path, typer.Option("--sealer-release")],
+    output: Annotated[Path, typer.Option("--output")],
+) -> None:
+    """Finalize a checkpoint seal after its exact zero-GPU sealer Pod exits cleanly."""
+    from training.skyrl_rl_checkpoint import seal
+    from training.skyrl_training import SCHEMA
+
+    try:
+        plan, _ = _prepared(directory)
+        if plan.get("schema") != SCHEMA:
+            raise ValueError("RL checkpoint sealing requires a native SkyRL training plan")
+        result = seal(plan, step, output, candidate, controller_audit, sealer_release)
+        _print(
+            {
+                "sha256": result["sha256"],
+                "checkpoint_step": result["checkpoint"]["step"],
+                "files": len(result["checkpoint"]["files"]),
+                "source_gpu_release_verified": True,
+                "gpu_reload_verified": False,
+            }
+        )
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command("rl-checkpoint-candidate")
+def rl_checkpoint_candidate(
+    directory: Path,
+    step: int,
+    release_evidence: Annotated[Path, typer.Option("--release-evidence")],
+    output: Annotated[Path, typer.Option("--output")],
+) -> None:
+    """Create the native checkpoint candidate inside the exact zero-GPU sealer Pod."""
+    from training.skyrl_rl_checkpoint import checkpoint_candidate
+    from training.skyrl_training import SCHEMA
+
+    try:
+        plan, _ = _prepared(directory)
+        if plan.get("schema") != SCHEMA:
+            raise ValueError("RL checkpoint candidate requires a native SkyRL training plan")
+        result = checkpoint_candidate(plan, step, output, release_evidence)
+        _print(
+            {
+                "sha256": result["sha256"],
+                "checkpoint_step": result["checkpoint"]["step"],
+                "files": len(result["checkpoint"]["files"]),
+                "gpu_reload_verified": False,
+            }
+        )
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command("rl-checkpoint-sealer-contract")
+def rl_checkpoint_sealer_contract(directory: Path, step: int) -> None:
+    """Print the exact dev zero-GPU Job contract an external audit must observe."""
+    from training.skyrl_rl_checkpoint import checkpoint_sealer_contract
+    from training.skyrl_training import SCHEMA
+
+    try:
+        plan, _ = _prepared(directory)
+        if plan.get("schema") != SCHEMA:
+            raise ValueError("RL checkpoint sealer contract requires a native SkyRL plan")
+        _print(checkpoint_sealer_contract(plan, step))
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command("rl-reward-canary-accept")
+def rl_reward_canary_accept(
+    directory: Path,
+    checkpoint_manifest: Annotated[Path, typer.Option("--checkpoint-manifest")],
+    release_evidence: Annotated[Path, typer.Option("--release-evidence")],
+    output: Annotated[Path, typer.Option("--output")],
+) -> None:
+    """Seal the digest-bound reward/update/W&B/checkpoint terminal package."""
+    from training.skyrl_training import SCHEMA, seal_reward_canary_terminal
+
+    try:
+        plan, _ = _prepared(directory)
+        if plan.get("schema") != SCHEMA:
+            raise ValueError("reward acceptance requires a native SkyRL training plan")
+        result = seal_reward_canary_terminal(
+            plan,
+            checkpoint_manifest,
+            release_evidence,
+            output,
+        )
+        _print({"status": result["status"], "sha256": result["sha256"]})
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command("rl-reload")
+def rl_reload(config: Path, output: Annotated[Path, typer.Option("--output")]) -> None:
+    """Prepare one dev-only zero-update all-rank SkyRL RL checkpoint reload."""
+    from training.sft import read_mapping
+    from training.skyrl_rl_checkpoint import compile_reload, reload_request
+
+    try:
+        plan = compile_reload(read_mapping(config), relative_to=config.resolve().parent)
+        request = reload_request(plan)
+        _prepare(output, plan, request)
+        _print(
+            {
+                "prepared": str(output),
+                "checkpoint_step": plan["source_manifest"]["checkpoint"]["step"],
+                "gpus": request["workers"] * request["gpus_per_worker"],
+                "optimizer_updates": 0,
+                "rollouts": 0,
+                "submitted": False,
+            }
+        )
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command("rl-reload-accept")
+def rl_reload_accept(
+    directory: Path,
+    release_evidence: Annotated[Path, typer.Option("--release-evidence")],
+    output: Annotated[Path, typer.Option("--output")],
+) -> None:
+    """Seal reload acceptance after independent terminal Job/Pod GPU-release evidence."""
+    from training.skyrl_rl_checkpoint import RELOAD_SCHEMA, accept_reload
+
+    try:
+        plan, _ = _prepared(directory)
+        if plan.get("schema") != RELOAD_SCHEMA:
+            raise ValueError("reload acceptance requires a prepared RL reload plan")
+        result = accept_reload(plan, release_evidence, output)
+        _print(
+            {
+                "sha256": result["sha256"],
+                "status": result["status"],
+                "optimizer_updates": 0,
+                "external_job_gpu_release_verified": True,
+            }
+        )
+    except Exception as exc:
+        _fail(exc)
+
+
 def _skyrl_mode(plan: dict, request: dict) -> str:
     from training import skyrl_training as backend
 
@@ -221,6 +370,12 @@ def _require_prepared_cluster(plan: dict, cluster: Cluster) -> None:
     target = plan.get("execution", {}).get("cluster_target")
     if target is not None and target != cluster.value:
         raise JobsError(f"prepared plan is {target}-cluster-only")
+    if (
+        cluster == Cluster.prod
+        and plan.get("schema") == "cyber_skyrl_training_v1"
+        and target != Cluster.prod.value
+    ):
+        raise JobsError("production SkyRL requires an explicit prod-cluster plan")
 
 
 @app.command()
@@ -238,6 +393,8 @@ def preflight(directory: Path) -> None:
                 from training.skyrl_training import engine_diagnostic_preflight as check
             else:
                 from training.skyrl_training import preflight as check
+        elif plan.get("schema") == "cyber_skyrl_rl_reload_v1":
+            from training.skyrl_rl_checkpoint import preflight as check
         else:
             from training.sft import preflight as check
         if (directory / "PREFLIGHT.json").exists():
@@ -265,14 +422,37 @@ def preview(
             and cluster != Cluster.dev
         ):
             raise JobsError("SkyRL engine diagnostics are dev-cluster-only")
+        if plan.get("schema") == "cyber_skyrl_rl_reload_v1" and cluster != Cluster.dev:
+            raise JobsError("SkyRL RL reload validators are dev-cluster-only")
         _require_prepared_cluster(plan, cluster)
         with _client(cluster) as client:
             result = client.preview(request)
+        validated = validate_preview(request, result)
+        if (
+            plan.get("schema") == "cyber_skyrl_training_v1"
+            and _skyrl_mode(plan, request) == "engine_diagnostic"
+        ):
+            from training.skyrl_training import validate_engine_diagnostic_preview
+
+            validated.update(validate_engine_diagnostic_preview(plan, request, result))
+        elif (
+            plan.get("schema") == "cyber_skyrl_training_v1"
+            and _skyrl_mode(plan, request) == "training"
+        ):
+            from training.skyrl_promotion import validate_production_preview
+            from training.skyrl_training import validate_reward_canary_preview
+
+            validated.update(validate_reward_canary_preview(plan, request, result))
+            validated.update(validate_production_preview(plan, request, result))
+        if plan.get("schema") == "cyber_skyrl_rl_reload_v1":
+            from training.skyrl_rl_checkpoint import validate_reload_preview
+
+            validated.update(validate_reload_preview(request, result))
         _print(
             {
                 "submitted": False,
                 "api_base_url": API_URLS[cluster],
-                **validate_preview(request, result),
+                **validated,
             }
         )
     except Exception as exc:
@@ -299,6 +479,8 @@ def submit(
         )
         if skyrl_mode == "engine_diagnostic" and cluster != Cluster.dev:
             raise JobsError("SkyRL engine diagnostics are dev-cluster-only")
+        if plan.get("schema") == "cyber_skyrl_rl_reload_v1" and cluster != Cluster.dev:
+            raise JobsError("SkyRL RL reload validators are dev-cluster-only")
         _require_prepared_cluster(plan, cluster)
         proof = _read(directory / "PREFLIGHT.json")
         expected = {
@@ -312,6 +494,8 @@ def submit(
                 else "cyber_skyrl_training_cpu_preflight_v1"
             )
             if plan.get("schema") == "cyber_skyrl_training_v1"
+            else "cyber_skyrl_rl_reload_cpu_preflight_v1"
+            if plan.get("schema") == "cyber_skyrl_rl_reload_v1"
             else "cyber_sft_cpu_preflight_v1",
             "status": "passed",
             "gpus": 0,
@@ -323,6 +507,41 @@ def submit(
         ):
             raise ValueError("missing or mismatched CPU preflight")
         with _client(cluster) as client:
+            if plan.get("schema") == "cyber_skyrl_rl_reload_v1":
+                from training.skyrl_rl_checkpoint import validate_reload_preview
+
+                preview_result = client.preview(request)
+                validate_preview(request, preview_result)
+                validate_reload_preview(request, preview_result)
+            elif skyrl_mode == "engine_diagnostic":
+                from training.skyrl_training import validate_engine_diagnostic_preview
+
+                preview_result = client.preview(request)
+                validate_preview(request, preview_result)
+                validate_engine_diagnostic_preview(plan, request, preview_result)
+            elif skyrl_mode == "training":
+                from training.skyrl_promotion import (
+                    require_live_external,
+                    require_live_files,
+                    requires_production_promotion,
+                    validate_production_preview,
+                )
+                from training.skyrl_training import (
+                    is_reward_canary,
+                    validate_reward_canary_preview,
+                )
+
+                reward_canary = is_reward_canary(plan)
+                production = requires_production_promotion(plan)
+                if reward_canary or production:
+                    preview_result = client.preview(request)
+                    validate_preview(request, preview_result)
+                    if reward_canary:
+                        validate_reward_canary_preview(plan, request, preview_result)
+                    if production:
+                        validate_production_preview(plan, request, preview_result)
+                        require_live_files(plan, directory)
+                        require_live_external(plan, client)
             result = client.submit_once(request, directory / "SUBMISSION.jsonl")
         _print({"api_base_url": API_URLS[cluster], **result})
     except Exception as exc:

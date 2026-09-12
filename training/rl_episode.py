@@ -533,8 +533,10 @@ async def collect(config, directory: Path, recorder, parse, *, client, request_m
             name: fleet.sha256((directory / name).read_bytes())
             for name in (
                 "binding.json",
+                "create-intent.json",
                 "instance.json",
                 "conversation.json",
+                "score-intent.json",
                 "reward.json",
                 "cleanup.json",
                 "recording.json",

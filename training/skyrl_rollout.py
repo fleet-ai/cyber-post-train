@@ -189,6 +189,12 @@ class Generator:
                 async with asyncio.TaskGroup() as group:
                     tasks = [group.create_task(episode(i, c)) for i, c in enumerate(configs)]
             values, durations = zip(*(task.result() for task in tasks), strict=True)
+            rewards = [float(sample.reward) for sample in values]
+            reward_mean = math.fsum(rewards) / len(rewards)
+            reward_variance = math.fsum((reward - reward_mean) ** 2 for reward in rewards) / len(
+                rewards
+            )
+            metric_prefix = f"cyber/{binding['phase']}"
             fleet.write_json_once(
                 directory / "COLLECTED.json",
                 {
@@ -199,14 +205,19 @@ class Generator:
             return {
                 "prompt_token_ids": [s.tokens[: -s.response_length] for s in values],
                 "response_ids": [s.tokens[-s.response_length :] for s in values],
-                "rewards": [s.reward for s in values],
+                "rewards": rewards,
                 "loss_masks": [s.loss_mask for s in values],
                 "rollout_logprobs": [s.rollout_log_probs for s in values],
                 "stop_reasons": ["stop"] * len(values),
                 "trajectory_ids": input_batch["trajectory_ids"],
                 "trajectory_generation_times": list(durations),
                 "is_last_step": [True] * len(values),
-                "rollout_metrics": {"cyber/episodes": len(values)},
+                "rollout_metrics": {
+                    f"{metric_prefix}/episodes": len(values),
+                    f"{metric_prefix}/reward_mean": reward_mean,
+                    f"{metric_prefix}/reward_nonzero_count": sum(reward != 0 for reward in rewards),
+                    f"{metric_prefix}/reward_population_variance": reward_variance,
+                },
                 "rollout_expert_indices": None,
                 "env_metrics": None,
                 "pixel_values": None,

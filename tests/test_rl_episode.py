@@ -253,6 +253,7 @@ async def test_complete_valid_reward_including_genuine_zero(fixture, tmp_path, r
     assert receipt["sha256"] == fleet.sha256(
         fleet.canonical_json({k: v for k, v in receipt.items() if k != "sha256"})
     )
+    assert {"create-intent.json", "instance.json", "score-intent.json"} <= set(receipt["files"])
     for name, sha in receipt["files"].items():
         assert fleet.sha256((tmp_path / "episode" / name).read_bytes()) == sha
     assert "private-token" not in "".join(p.read_text() for p in (tmp_path / "episode").iterdir())

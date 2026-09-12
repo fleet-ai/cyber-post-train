@@ -565,6 +565,13 @@ qualification. See the sealed
 [dev7 terminal evidence](evidence/qwen38-study/2026-09-12-skyrl-engine-diagnostic-dev7-terminal-v1.json),
 [corrected-image qualification](evidence/qwen38-study/2026-09-12-skyrl-startup-relay-image-cpu-qualification-v1.json),
 and its [clean-pull terminal evidence](evidence/qwen38-study/2026-09-12-skyrl-startup-relay-image-terminal-v1.json).
+Those records are historical. The worker-RPC review subsequently disqualified
+that relay image for any renamed Qwen3.8 diagnostic. Dev8 is terminal and must
+never be replayed; the only current fresh engine-start successor is
+[dev9](QWEN38_SKYRL_ENGINE_DIAGNOSTIC_DEV9.md), using a new immutable image and
+its separate exact-image CPU qualification. Dev9 still needs its own CPU
+preflight, dev preview, single create-once POST, terminal audit, and GPU-release
+receipt before it can qualify a reward run.
 
 The initial SkyRL profile uses Qwen full-weight FSDP with colocated TP4 inference
 engines, one native update per prompt batch, and no reward filtering or replacement

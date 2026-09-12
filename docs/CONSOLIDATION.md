@@ -74,9 +74,12 @@ false success, cancellation of healthy work, or replay of preserved outcomes.
 The already-running GLM CPU staging Job subsequently failed at 16:10:07Z;
 its container exited and its Workload is gone. The final CPU sample reported
 zero cgroup OOM events, but the specific application failure is not yet recovered.
-Following Chris's renewed alert complaint, **hold all new cluster submissions**
-while resolving the development/reporting path. Continue local code and tests;
-do not count CPU-only Jobs or priority labels as notification exemptions.
+**Superseded 2026-09-12:** Chris replaced the blanket alert-avoidance hold with
+the repository's dev-first promotion rule. New or changed executables may fail
+truthfully while qualifying on the dev cluster; they must pass the exact local,
+pinned-image, and bounded dev path before any production submission. Do not use
+production for debugging, suppress or falsify a real failure, or treat CPU-only
+Jobs and priority labels as notification exemptions.
 
 ## Supported interface
 

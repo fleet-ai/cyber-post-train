@@ -1,0 +1,58 @@
+{
+  "schema": "cyber_rl_exact_version_evidence_v1",
+  "purpose": "Non-content eligibility, signal-lineage and episode-horizon evidence for the exact Qwen3.8 reward-canary training task version",
+  "selected_version": {
+    "task_key": "cysec1-2-current-gen_blackbox-0708aea62e0d8ccf09331568__blackbox_ctf_v1",
+    "task_version_id": "c99340e2-3801-5c3c-a50c-3b96cee4572f",
+    "eligibility_status": "blocked_authoritative_receipt_mismatch",
+    "signal_interpretation": "Historical reward remains only a task-selection prior. The authoritative per-version receipts do not prove a metadata.tools-only successor because the successor lost its exact starting-data binding, so this immutable version is not training eligible."
+  },
+  "eligible_source": {
+    "manifest_path": "qwen-blackbox-eligible-v1.json",
+    "manifest_file_sha256": "sha256:b12a755c7e65bc04694eab85d9b0c21fadc222207d7bcc6ed8f0c788e032589b",
+    "manifest_self_sha256": "sha256:c45c9cc420a3dbf1aa6b635b84ed1ca3c404254f046ffdac234e053929a1bf12",
+    "task_key": "cysec1-2-current-gen_blackbox-0708aea62e0d8ccf09331568__blackbox_ctf_v1",
+    "task_version_id": "54425601-6fd2-43d8-8cb9-e565b767676a",
+    "row_sha256": "sha256:1c4f01e78d4af80f7894b8221ea80995246ab0fce4152c3695bab26b5cea3efa",
+    "version_receipt": {
+      "path": "qwen38-rl-reward-canary-source-version-receipt-v1.json",
+      "file_sha256": "sha256:da6e339603492b2b6ffa56fbe5532fefa0d55e0c54d7647a71c38763a340ec12",
+      "self_sha256": "sha256:82aa06f1cae6572b0002825ca8d5405e39436515d237c9e4dca5cdf9f9162888",
+      "authority_payload_sha256": "sha256:05fca41c7b988771789812229eba4f7597bb4a51da6da7ede440ab651c8a8f42"
+    }
+  },
+  "metadata_only_successor": {
+    "source_task_version_id": "54425601-6fd2-43d8-8cb9-e565b767676a",
+    "successor_task_version_id": "c99340e2-3801-5c3c-a50c-3b96cee4572f",
+    "only_semantic_diff_path": "/metadata/tools",
+    "ordered_tools": [
+      "bash",
+      "submit_report"
+    ],
+    "version_receipt": {
+      "path": "qwen38-rl-reward-canary-successor-version-receipt-v1.json",
+      "file_sha256": "sha256:dd163af93be007e84cd0116ee9d9697795960c1e2add888dd254e8b9a62f6bdc",
+      "self_sha256": "sha256:25170f50a7f5b6e33ba71f1d76123e6bc78f72c71487e52cbe41a26f606c839b",
+      "authority_payload_sha256": "sha256:84825be7feffbd4c9dfc2ca257402b6e8931c653a58d55d45697761a92e9ca4d"
+    }
+  },
+  "episode_horizon": {
+    "max_turns": 600,
+    "task_specific_contract_path": "../runs/qwen38-27b-native-rl-reward-acquisition-canary.template.json",
+    "task_specific_contract_file_sha256": "sha256:5cb9a24e3afec1e273a56227314ad3e993645bd8a368347df185e5f176c0071d",
+    "selected_task_row_sha256": "sha256:1a903c4a73687e957a8aa7d5203bb5111542bfcbc922a0019fd6dca24ef09eab",
+    "rollout_contract_sha256": "sha256:5303bc66daa31bff54c6a0d396fd8ada98cf8655078255ffb0cec53588635d9c",
+    "aggregate_evidence_path": "../../docs/FLEET_NATIVE_HARNESS_PARITY.md",
+    "aggregate_evidence_file_sha256": "sha256:d6846aa328d4a915464af062b21032d5ea2a0e09bf0dd98d0050a2d498ffa632",
+    "rationale": "The exact task-version contract already used a 600-turn ceiling, and the reviewed Fleet harness audit records source sessions beyond 80 turns. A 600-turn ceiling removes an artificial turn stop while the unchanged response-token and wall-clock limits remain the effective cost bounds.",
+    "fixed_limits": {
+      "context_tokens": 98304,
+      "response_tokens": 81920,
+      "max_tokens_per_turn": 4096,
+      "episode_seconds": 2400,
+      "tool_seconds": 330,
+      "tool_result_chars": 50000
+    }
+  },
+  "sha256": "sha256:d83d8ff2ae66ecc945a439c2a6f47f118a19b928d13721faec4cd28d5b87ee77"
+}

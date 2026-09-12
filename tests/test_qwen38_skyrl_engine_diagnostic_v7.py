@@ -34,7 +34,7 @@ DEV7_IMAGE = (
     "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:"
     "9b6f43938f9b28aaff7ba91edd59be3d18b01f9a22078ba5475cdac5e6bfcca6"
 )
-CORRECTED_IMAGE = (
+DEV8_IMAGE = (
     "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:"
     "e48827529b1cf5fafa153b2aed1b774c2eec86905baf5ccb62b36300533e252b"
 )
@@ -61,7 +61,7 @@ def test_dev7_image_remains_bound_to_its_historical_cpu_qualification():
     assert receipt["classification"] == "operational_gate"
     assert receipt["expected_source_commit"] == ("de9e6b7cf087d12c5ca371c9ec916a54757d369f")
 
-    assert skyrl_training.IMAGE == CORRECTED_IMAGE
+    assert skyrl_training.IMAGE != DEV8_IMAGE
     assert receipt["requested_image"] != skyrl_training.IMAGE
 
 
