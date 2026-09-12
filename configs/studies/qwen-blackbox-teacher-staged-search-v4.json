@@ -1,0 +1,142 @@
+{
+  "schema": "cyber_qwen_sft_staged_search_successor_v1",
+  "study_id": "qwen38-blackbox-teacher-staged-search-v4",
+  "status": "frozen_nonlaunchable_successor",
+  "supersedes": {
+    "path": "configs/studies/qwen-blackbox-teacher-staged-search-v3.json",
+    "file_sha256": "sha256:464144c8eefe22d46e190d6729275e094e360f61e9272c3bb94c723186598078",
+    "embedded_sha256": "sha256:4397b621392778377cf46fe0fa549084b336f2bf0b3083b68cf8254ab574f9a3",
+    "inheritance": "Every model, data, split, estimator, capacity, telemetry, sealing and later-stage decision rule remains exact unless this successor explicitly narrows it."
+  },
+  "accepted_dev_evidence": {
+    "fragmented_layout_reload": {
+      "path": "docs/evidence/qwen38-study/2026-09-12-production-layout-reload-dev-v1.json",
+      "file_sha256": "sha256:c87b938c8b3e12838266cd2cd79af667352fa4737ae5942a75bb969f9a4d2328",
+      "embedded_sha256": "sha256:da86d931682a5ab2930762a94fa9511a5ffc5702ae844c230f97af976c05b135",
+      "accepted_scope": "eight-rank cosine/5%-warmup checkpoint recovery across one-by-eight to two-by-four rank placement with zero optimizer updates"
+    }
+  },
+  "next_dev_gate": {
+    "id": "checkpoint-cadence-20-fragmented-layout",
+    "state": "prepared_not_submitted",
+    "launchable_by_this_file": false,
+    "config": {
+      "path": "configs/qualification/qwen38-teacher-checkpoint-cadence-dev-v1.json",
+      "file_sha256": "sha256:fcbd879716217d89e7bbb07bd0d67783682c0b58dddd60b315ddd6942e4ba923"
+    },
+    "purpose": "Exercise real two-worker forward/backward optimization, the proposed production checkpoint interval and a planned pause without shortening the full scheduler horizon.",
+    "expected": {
+      "full_horizon_steps": 76,
+      "pause_after_optimizer_step": 21,
+      "periodic_checkpoint_step": 20,
+      "checkpoint_interval": 20,
+      "keep_checkpoints": 3,
+      "nodes": 2,
+      "gpus_per_node": 4,
+      "world_size": 8,
+      "global_batch": 8,
+      "microbatch_per_gpu": 1,
+      "scheduler": "cosine",
+      "warmup_ratio": 0.05,
+      "warmup_steps": 4,
+      "validation_mode": "task_outcomes_only",
+      "priority": {
+        "cli_class": "c1",
+        "expected_queue_class": "q1",
+        "expected_value": 10000
+      },
+      "requeue_if_preempted": false
+    },
+    "acceptance": [
+      "twenty-one finite optimizer updates with complete scalar-only W&B history",
+      "digest-valid periodic step-20 and planned-pause step-21 checkpoint receipts",
+      "CPU seal and exact eight-rank zero-update reload of the periodic step-20 checkpoint",
+      "unchanged source checkpoint after reload, zero restarts and verified GPU release"
+    ],
+    "accepted_receipt_sha256": null
+  },
+  "production_gate": {
+    "state": "blocked",
+    "launchable": false,
+    "base_control": {
+      "path": "configs/evaluation/qwen38-blackbox-fleet-dev-a-base-control-v2.json",
+      "file_sha256": "sha256:14bba8c4fcbeb7c8b289de7e68f33712181ae3a8f31e4095bf545824f35e9144",
+      "embedded_sha256": "sha256:db3a37d00654eb4fdfabaf3f53999a0ef2b82a6c2bf9b9c0851aeb25116ac913",
+      "accepted_result_sha256": null
+    },
+    "first_arm": {
+      "state": "frozen_candidate_not_a_job_request",
+      "name": "chris-q38-ta-av-lr10-e1-s42-p1",
+      "output_root": "/mnt/sfs/jobs/chris-q38-ta-av-lr10-e1-s42-p1",
+      "model": {
+        "repo": "Qwen/Qwen3.8-27B",
+        "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+        "lock_sha256": "sha256:f3926fe675263b25dc79c2b3881a9c463d6b7931e9d61aeb777d15efc61e35ac",
+        "initialization": "fresh_base_full_parameter_sft"
+      },
+      "data": {
+        "split": "a",
+        "corpus": "available_a",
+        "manifest": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/teacher-a/manifest-outcome-v2.json",
+        "root": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/teacher-a",
+        "manifest_sha256": "sha256:c4945ddb7cd8fd0b7b9ebbd9bad9b96215b0905c059ef1b22d71d4f214b4eb8e",
+        "source_selection_sha256": "sha256:cdf82a83e423c3de6556b8f0ca5eaf4cb358041cd3015a335250b473e4a5cfc7",
+        "rows": 602,
+        "supervised_tokens": 700359
+      },
+      "recipe": {
+        "epochs": 1,
+        "batch_size": 8,
+        "microbatch_per_gpu": 1,
+        "nodes": 1,
+        "gpus_per_node": 8,
+        "lr": 0.00001,
+        "scheduler": "cosine",
+        "warmup_ratio": 0.05,
+        "warmup_steps": 4,
+        "max_steps": 76,
+        "max_length": 16384,
+        "checkpoint_interval": 20,
+        "keep_checkpoints": 3,
+        "seed": 42
+      },
+      "wandb": {
+        "entity": "thefleet",
+        "project": "cyber-post-train",
+        "group": "q38-blackbox-teacher-v4",
+        "run_id": "chris-q38-ta-av-lr10-e1-s42-p1",
+        "name": "chris-q38-ta-av-lr10-e1-s42-p1",
+        "automatic_system_telemetry": false,
+        "payload_policy": "scalar_allowlist_inherited_from_v3"
+      },
+      "validation_mode": "task_outcomes_only",
+      "fleet_dev_protocol_sha256": "sha256:3c2c65eed748b16b50ef992327324b1fcaad84b190456c4aefe69c6efe748f75",
+      "cluster": {
+        "priority": "c1",
+        "expected_queue_class": "q1",
+        "expected_priority_value": 10000,
+        "nodes": 1,
+        "gpus_per_node": 8,
+        "requeue_if_preempted": false
+      }
+    },
+    "unresolved_dependencies": [
+      "next_dev_gate.accepted_receipt_sha256",
+      "production_gate.base_control.accepted_result_sha256",
+      "exact_production_plan_request_preview_duplicate_destination_wandb_and_capacity_receipts"
+    ]
+  },
+  "later_stages": {
+    "state": "inherited_blocked",
+    "source": "supersedes.stages[split-a-broad-lr..batch-and-horizon-refinement]",
+    "rule": "No later arm opens until the first-arm and inherited outcome barriers are satisfied; WebExploitBench stays sealed and ineligible for selection."
+  },
+  "execution": {
+    "kind": "sealed_metadata_only_not_a_job_request",
+    "new_jobs_authorized": false,
+    "cluster_or_api_mutations_performed": false,
+    "all_arms_currently_launchable": false,
+    "promotion": "accepted_dev_cadence_and_matched_base_control_then_reviewed_prod_preview_and_explicit_submit"
+  },
+  "sha256": "sha256:2dd6e0207f672feb37af1cbfa1741b91f7c4a3762f3719c4948af6d12798a62c"
+}

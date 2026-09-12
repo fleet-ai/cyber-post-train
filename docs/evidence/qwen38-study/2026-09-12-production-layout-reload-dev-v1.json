@@ -1,0 +1,54 @@
+{
+  "schema": "cyber_qwen38_sft_production_layout_reload_evidence_v1",
+  "classification": "accepted_operational_layout_and_recovery_gate",
+  "run": {
+    "config_name": "chris-q38-ta8-cos5-reld4",
+    "output_root": "/mnt/sfs/jobs/chris-q38-ta8-cos5-reload-dev4",
+    "completed_at": "2026-09-12T10:01:32Z",
+    "config": {
+      "path": "configs/qualification/qwen38-teacher-production-layout-reload-fragmented-dev-v2.json",
+      "file_sha256": "sha256:29b36c296e585045258b0d6becbab750ea8d393a0521e72fba0f55320e720fac"
+    }
+  },
+  "source_checkpoint": {
+    "manifest_path": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/ta8-cos5-dev3-reload-v1/checkpoint-step-6.json",
+    "manifest_file_sha256": "sha256:7b04d753c77855551ae3c3b1a9cf674d55aba609f0b5f82c85b54c1f29a85be4",
+    "manifest_receipt_sha256": "sha256:8cbc5ca42dafe6e1137e4c09a8620c207cbc0a60e330226f7dcb43de10ca7af3",
+    "optimizer_step": 6,
+    "world_size": 8
+  },
+  "terminal_evidence": {
+    "recovered_file_sha256": "sha256:59924e458c057e827345840659c430f91f0fd0d49a80b9065db3e3cf5fdb8ccb",
+    "reload_validated_file_sha256": "sha256:08194c425c24a6d4c5175e083495511dedbd7f31f21b9f237f38eb26896ac385",
+    "rank_count": 8,
+    "optimizer_states_per_rank": 851,
+    "scheduler_state_restored": true,
+    "sampler_state_restored": true,
+    "optimizer_updates_executed": 0,
+    "container_restarts": 0,
+    "resources_released": true
+  },
+  "accepted_scope": {
+    "source_layout": {
+      "nodes": 1,
+      "gpus_per_node": 8,
+      "world_size": 8
+    },
+    "validation_layout": {
+      "nodes": 2,
+      "gpus_per_node": 4,
+      "world_size": 8
+    },
+    "scheduler": "cosine",
+    "warmup_ratio": 0.05,
+    "validation_mode": "task_outcomes_only",
+    "recovery_mode": "validate",
+    "conclusion": "The exact eight-rank step-six checkpoint can restore model, optimizer, scheduler and sampler state across the fragmented two-worker placement without an optimizer update."
+  },
+  "limitations": [
+    "This is an operational checkpoint/recovery gate, not model-quality evidence.",
+    "It does not qualify two-worker forward/backward optimization or a changed checkpoint cadence.",
+    "It does not bind a matched Fleet base control or authorize a production arm."
+  ],
+  "sha256": "sha256:da86d931682a5ab2930762a94fa9511a5ffc5702ae844c230f97af976c05b135"
+}
