@@ -548,15 +548,23 @@ the sanitized receipts. CPU preflight rejects that exact historical model/image 
 before a submission receipt can be produced. Do not work around that gate or
 infer the cause from later upstream Qwen changes: the checkpoint selects
 `Qwen3_5ForConditionalGeneration`, which was already registered in the pinned
-runtime. The replacement image now pinned for SkyRL RL adds a reviewed,
-spawn-tested, privacy-safe startup-cause relay and passed a zero-GPU clean-pull
-qualification. That is an operational CPU gate only: it still requires a fresh
-exact Qwen3.8 async two-engine/TP4 dev smoke before reward, optimization or
-production work. The old digest remains rejected in code. Merely changing an
-environment variable or vLLM version is not qualification. See the sealed
+runtime. The first startup-relay image passed its zero-GPU checks, but the later
+dev7 GPU diagnostic proved that Ray could serialize and then could not reconstruct
+its two-argument sanitized exception wrapper. Dev7 is infrastructure-invalid:
+its underlying child failure remains unknown, it performed zero task or training
+work, and all eight GPUs were released. Both the original and first relay-image
+digests are now rejected in code. The corrected image pins a reconstruction-safe
+wrapper and passed a fresh exact-digest, zero-GPU clean-pull qualification that
+covered stdlib pickle, `ray.cloudpickle`, and Ray's real task-error envelope. That
+is still only an operational CPU gate; a fresh Qwen3.8 two-engine/TP4 dev smoke
+must qualify startup and cleanup before any reward, optimizer, checkpoint, or
+production work. Merely changing an environment variable or vLLM version is not
+qualification. See the sealed
 [source audit](evidence/qwen38-study/2026-09-12-skyrl-dev6-source-root-cause-audit-v1.json),
-[replacement-image CPU qualification](evidence/qwen38-study/2026-09-12-skyrl-replacement-image-cpu-qualification-v1.json)
-and [held dev7 gate](evidence/qwen38-study/2026-09-12-skyrl-engine-diagnostic-dev7-offcluster-preparation-v1.json).
+[historical first-relay qualification](evidence/qwen38-study/2026-09-12-skyrl-replacement-image-cpu-qualification-v1.json),
+[dev7 terminal evidence](evidence/qwen38-study/2026-09-12-skyrl-engine-diagnostic-dev7-terminal-v1.json),
+[corrected-image qualification](evidence/qwen38-study/2026-09-12-skyrl-startup-relay-image-cpu-qualification-v1.json),
+and its [clean-pull terminal evidence](evidence/qwen38-study/2026-09-12-skyrl-startup-relay-image-terminal-v1.json).
 
 The initial SkyRL profile uses Qwen full-weight FSDP with colocated TP4 inference
 engines, one native update per prompt batch, and no reward filtering or replacement

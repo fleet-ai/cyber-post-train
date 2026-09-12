@@ -54,10 +54,10 @@ the actual native router start/shutdown methods but a synthetic child target
 and a substituted health check. It performs no Ray initialization, model load,
 engine startup, rollout, task request, verifier call or optimization.
 
-### Exact-image qualification, 2026-09-12
+### Historical process-boundary qualification, 2026-09-12
 
-The root operator's standalone CPU self-test passed in the immutable training
-image, with these exact bindings:
+The root operator's standalone CPU self-test passed in the then-current immutable
+training image, with these exact historical bindings:
 
 - Image SHA-256: `ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4`.
 - Tested `training/skyrl_training.py` SHA-256:
@@ -75,8 +75,40 @@ standalone exact-image check, not a claim that every pytest case ran in that
 image. Router release is also not a claim that the shared CPU helper Pod was
 deleted; its remaining operator work and lifecycle are separate.
 
-Local tests alone are not sufficient evidence for the pinned image. This
-exact-image result qualifies only the tested process boundary. A subsequent
-authorized GPU canary still has to prove real engine startup and cleanup; RL
-remains unqualified until task/reward/update/checkpoint gates are independently
-satisfied. Never edit or replay the old failed plan.
+Local tests alone were not sufficient evidence for that image. This result
+qualified only the tested process boundary. It did not qualify the later first
+relay image or the corrected relay image described below.
+
+### Startup-relay correction and exact-image qualification, 2026-09-12
+
+The first relay image
+`sha256:9b6f43938f9b28aaff7ba91edd59be3d18b01f9a22078ba5475cdac5e6bfcca6`
+passed a zero-GPU image qualification, then dev7 exposed a distinct transport
+defect: Ray could serialize but could not reconstruct the two-argument
+`FleetVllmStartupError`, replacing its already-sanitized cause with
+`UnserializableException`. The
+[dev7 terminal observation](evidence/qwen38-study/2026-09-12-skyrl-engine-diagnostic-dev7-terminal-v1.json)
+classifies that run as infrastructure-invalid, records zero task/training work,
+and proves complete eight-GPU release. It does not identify the underlying vLLM
+child failure. That image is historical and engine-start disqualified.
+
+Theseus commit `34de8d5753b8dfe44460ff9656db4ddc9a85a62c` adds the
+privacy-safe reconstruction contract. Its corrected immutable image is
+`sha256:e48827529b1cf5fafa153b2aed1b774c2eec86905baf5ccb62b36300533e252b`.
+The [exact-image qualification](evidence/qwen38-study/2026-09-12-skyrl-startup-relay-image-cpu-qualification-v1.json)
+binds receipt SHA-256
+`4326ec6a28f1f2deee6d6ebaf9c04f80ec8ba5ac8856ae636e91aca5e4e53837`,
+helper SHA-256
+`077803a51e7c41473315ecf56eb58ecd2e23a5544ae0d3267a7059d3c3b63713`,
+and the reviewed unit/integration test hashes. Nine unit cases and six installed
+vLLM spawn-integration cases passed, including stdlib pickle,
+`ray.cloudpickle`, and the real Ray task-error envelope. The
+[terminal evidence](evidence/qwen38-study/2026-09-12-skyrl-startup-relay-image-terminal-v1.json)
+proves the runtime image ID matched the request, the zero-GPU helper exited
+cleanly with zero restarts, and its Pod was deleted.
+
+This corrected-image result remains an operational CPU gate. It proves neither
+Qwen3.8 model loading nor CUDA, two-engine TP4x2 startup, reward, optimization,
+checkpoint recovery, or production readiness. A fresh dev8 diagnostic must
+prove real engine startup and bounded cleanup before later RL gates may open.
+Never edit or replay any earlier diagnostic plan.

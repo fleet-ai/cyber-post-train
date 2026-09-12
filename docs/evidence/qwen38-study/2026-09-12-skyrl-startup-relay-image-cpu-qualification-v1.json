@@ -1,0 +1,53 @@
+{
+  "checks": {
+    "distribution_module_and_variant_parity": true,
+    "installed_compile_import_and_symbols": true,
+    "installed_patch_helper_and_test_hashes": true,
+    "installed_vllm_real_spawn_integration": true,
+    "privacy_helper_real_spawn_tests": true,
+    "zero_gpu_and_no_service_account": true
+  },
+  "classification": "operational_gate",
+  "details": {
+    "compiled_files": [
+      "v1/engine/core.py",
+      "v1/engine/fleet_startup_error.py",
+      "v1/engine/utils.py",
+      "v1/executor/multiproc_executor.py"
+    ],
+    "cuda_available": false,
+    "cuda_device_count": 0,
+    "fti_distribution_version": "0.8.4",
+    "fti_module_version": "0.8.4",
+    "imported_modules": [
+      "vllm.v1.engine.fleet_startup_error",
+      "vllm.v1.engine.core",
+      "vllm.v1.engine.utils",
+      "vllm.v1.executor.multiproc_executor"
+    ],
+    "installed_file_sha256": {
+      "v1/engine/core.py": "73c72d2762d0cfef6f1fa3624dfb7a02c1b336c217cb3eaa4e9a049d58c0cc3f",
+      "v1/engine/fleet_startup_error.py": "077803a51e7c41473315ecf56eb58ecd2e23a5544ae0d3267a7059d3c3b63713",
+      "v1/engine/utils.py": "60bd9439dd8c8b6d8c0fdabf4962ecfc1c425566ca0155071d6e978fa6098aa8",
+      "v1/executor/multiproc_executor.py": "1d0427649535c922c4c20698cdc1dc7c4688945ecf1574e2f28f09eea7b5510a"
+    },
+    "installed_vllm_spawn_integration_cases": 6,
+    "qualification_source_sha256": {
+      "/tmp/skyrl-fleet-owned/fleet_vllm_startup_error.py": "077803a51e7c41473315ecf56eb58ecd2e23a5544ae0d3267a7059d3c3b63713",
+      "/tmp/skyrl-fleet-owned/integration_test_fleet_vllm_startup_error.py": "735c4216d70ded3de0c2452c7fb94ed45738e2d54b6dbb8e4cb347d7142e5c5b",
+      "/tmp/skyrl-fleet-owned/test_fleet_vllm_startup_error.py": "2e1d229634f85d91249053441355ce4a6aaa7204b711052fd4586232712ff25c"
+    },
+    "service_account_token_present": false,
+    "unit_spawn_cases": 9,
+    "vllm_patch_variant": "startup-error-relay",
+    "vllm_version": "0.23.0+cu129"
+  },
+  "expected_source_commit": "34de8d5753b8dfe44460ff9656db4ddc9a85a62c",
+  "failed_gate": null,
+  "failure_class": null,
+  "observed_at": "2026-09-12T18:51:14.125703+00:00",
+  "receipt_sha256": "4326ec6a28f1f2deee6d6ebaf9c04f80ec8ba5ac8856ae636e91aca5e4e53837",
+  "requested_image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:e48827529b1cf5fafa153b2aed1b774c2eec86905baf5ccb62b36300533e252b",
+  "schema": "cyber_q38_rl_image_cleanpull_cpu_qualification_v1",
+  "status": "qualified"
+}

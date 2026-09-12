@@ -1,13 +1,8 @@
-"""Replacement-image and fresh-identity gates for the SkyRL dev7 smoke."""
-# ruff: noqa: F811
+"""Frozen preparation and terminal evidence for the retired SkyRL dev7 smoke."""
 
 import hashlib
 import json
 from pathlib import Path
-
-from test_rl_data import setup  # noqa: F401
-from test_skyrl_data import skyrl as data_setup  # noqa: F401
-from test_skyrl_training import prepared as skyrl_prepared  # noqa: F401
 
 from cyber_post_train.jobs import digest
 from training import skyrl_training
@@ -28,13 +23,20 @@ PREPARATION = ROOT / (
     "docs/evidence/qwen38-study/"
     "2026-09-12-skyrl-engine-diagnostic-dev7-offcluster-preparation-v1.json"
 )
-OLD_IMAGE = (
+TERMINAL = ROOT / (
+    "docs/evidence/qwen38-study/2026-09-12-skyrl-engine-diagnostic-dev7-terminal-v1.json"
+)
+LEGACY_IMAGE = (
     "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:"
     "ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4"
 )
-NEW_IMAGE = (
+DEV7_IMAGE = (
     "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:"
     "9b6f43938f9b28aaff7ba91edd59be3d18b01f9a22078ba5475cdac5e6bfcca6"
+)
+CORRECTED_IMAGE = (
+    "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:"
+    "e48827529b1cf5fafa153b2aed1b774c2eec86905baf5ccb62b36300533e252b"
 )
 
 
@@ -46,7 +48,7 @@ def file_sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def test_replacement_image_is_bound_to_its_cpu_qualification(skyrl_prepared):
+def test_dev7_image_remains_bound_to_its_historical_cpu_qualification():
     receipt = load(QUALIFICATION)
     canonical = json.dumps(
         {k: v for k, v in receipt.items() if k != "receipt_sha256"},
@@ -54,39 +56,26 @@ def test_replacement_image_is_bound_to_its_cpu_qualification(skyrl_prepared):
         separators=(",", ":"),
     ).encode()
     assert receipt["receipt_sha256"] == hashlib.sha256(canonical).hexdigest()
-    assert receipt["requested_image"] == NEW_IMAGE
+    assert receipt["requested_image"] == DEV7_IMAGE
     assert receipt["status"] == "qualified"
     assert receipt["classification"] == "operational_gate"
     assert receipt["expected_source_commit"] == ("de9e6b7cf087d12c5ca371c9ec916a54757d369f")
 
-    plan = skyrl_prepared.plan
-    assert skyrl_training.IMAGE == plan["execution"]["image"] == NEW_IMAGE
-    assert plan["execution"]["image_cpu_qualification"] == (
-        skyrl_training.ENGINE_IMAGE_CPU_QUALIFICATION
-    )
-    binding = skyrl_training.ENGINE_IMAGE_CPU_QUALIFICATION
-    assert binding["receipt_sha256"] == receipt["receipt_sha256"]
-    assert binding["source_commit"] == receipt["expected_source_commit"]
-    assert binding["evidence_path"] == str(QUALIFICATION.relative_to(ROOT))
+    assert skyrl_training.IMAGE == CORRECTED_IMAGE
+    assert receipt["requested_image"] != skyrl_training.IMAGE
 
 
-def test_old_pair_remains_disqualified_while_replacement_is_only_cpu_qualified(
-    skyrl_prepared,
-):
-    old = {
-        **skyrl_prepared.plan,
-        "execution": {**skyrl_prepared.plan["execution"], "image": OLD_IMAGE},
-    }
-    assert ("Qwen/Qwen3.8-27B", OLD_IMAGE) in skyrl_training._ENGINE_START_DISQUALIFIED
-    try:
-        skyrl_training._require_engine_start_qualified_image(old)
-    except ValueError as error:
-        assert "dev5/dev6" in str(error)
-    else:
-        raise AssertionError("historically disqualified image was accepted")
-
-    skyrl_training._require_engine_start_qualified_image(skyrl_prepared.plan)
-    assert skyrl_training.ENGINE_IMAGE_CPU_QUALIFICATION["status"] == "qualified"
+def test_dev7_and_its_predecessor_are_both_engine_start_disqualified():
+    for image in (LEGACY_IMAGE, DEV7_IMAGE):
+        identity = ("Qwen/Qwen3.8-27B", image)
+        assert identity in skyrl_training._ENGINE_START_DISQUALIFIED
+        plan = {"model": {"repo": identity[0]}, "execution": {"image": image}}
+        try:
+            skyrl_training._require_engine_start_qualified_image(plan)
+        except ValueError as error:
+            assert "terminal dev evidence" in str(error)
+        else:
+            raise AssertionError("historically disqualified image was accepted")
 
 
 def test_dev7_has_fresh_create_once_identities_and_unchanged_science():
@@ -109,26 +98,27 @@ def test_dev7_has_fresh_create_once_identities_and_unchanged_science():
         assert run_v7[key] == run_v6[key]
 
 
-def test_dev7_request_is_exact_zero_work_tp4x2_and_clean_terminal(skyrl_prepared):
-    plan = skyrl_prepared.plan
-    request = skyrl_training.engine_diagnostic_request(plan)
-
-    assert request["image"] == NEW_IMAGE
-    assert (request["workers"], request["gpus_per_worker"]) == (2, 4)
-    assert request["priority_class"] == "c1"
-    assert request["requeueIfPreempted"] is False
-    assert request["secrets"] == []
-    assert "WANDB" not in json.dumps(request["env"])
-    assert digest(request) != digest(skyrl_training.job_request(plan))
-    assert plan["arguments"]["steps"] == 2  # inert in diagnostic mode
-    assert plan["arguments"]["engine_start_timeout_seconds"] == 1800
-    assert plan["arguments"]["engine_cleanup_timeout_seconds"] == 300
-
-    # Runtime tests exercise both success and sanitized-rejection paths.  This
-    # immutable request can qualify engine startup only; it cannot read tasks,
-    # initialize W&B, call a verifier, optimize, or create a checkpoint.
-    assert request["title"].endswith("SkyRL engine-start diagnostic")
-    assert request["run_dir"] == plan["output_root"]
+def test_dev7_terminal_evidence_is_nonqualifying_zero_work_and_released():
+    value = load(TERMINAL)
+    assert value["classification"] == "infrastructure_invalid_relay_transport"
+    assert value["bindings"]["image"] == DEV7_IMAGE
+    assert value["receipt"]["status"] == "engine_start_rejected"
+    assert value["receipt"]["sanitized_error_class"] == "UnserializableException"
+    assert value["receipt"]["engine_start_qualified"] is False
+    assert value["receipt"]["training_qualified"] is False
+    assert value["receipt"]["cleanup_proven"] is True
+    assert value["kubernetes"]["gpu_release_proven"] is True
+    assert all(
+        value["receipt"][key] == 0
+        for key in (
+            "task_rows_read",
+            "rollouts",
+            "verifier_calls",
+            "optimizer_steps",
+            "checkpoints_created",
+        )
+    )
+    assert value["decision"]["production_rl_open"] is False
 
 
 def test_dev7_offcluster_evidence_is_self_digesting_and_truthful():

@@ -1040,7 +1040,14 @@ def test_preflight_rejects_privileged_or_different_file_access(monkeypatch, uid,
         train.preflight({})
 
 
-def test_cpu_preflight_rejects_only_the_disqualified_qwen38_image(prepared, monkeypatch):
+@pytest.mark.parametrize(
+    "image_sha256",
+    [
+        "ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+        "9b6f43938f9b28aaff7ba91edd59be3d18b01f9a22078ba5475cdac5e6bfcca6",
+    ],
+)
+def test_cpu_preflight_rejects_only_disqualified_qwen38_pairs(prepared, monkeypatch, image_sha256):
     monkeypatch.setattr(train.os, "geteuid", lambda: 1000)
     monkeypatch.setattr(train.os, "getegid", lambda: 100)
 
@@ -1050,12 +1057,11 @@ def test_cpu_preflight_rejects_only_the_disqualified_qwen38_image(prepared, monk
             **prepared.plan["execution"],
             "image": (
                 "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/"
-                "skyrl-train@sha256:"
-                "ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4"
+                f"skyrl-train@sha256:{image_sha256}"
             ),
         },
     }
-    with pytest.raises(ValueError, match="dev5/dev6"):
+    with pytest.raises(ValueError, match="terminal dev evidence"):
         train._require_engine_start_qualified_image(disqualified)
 
     train._require_engine_start_qualified_image(prepared.plan)

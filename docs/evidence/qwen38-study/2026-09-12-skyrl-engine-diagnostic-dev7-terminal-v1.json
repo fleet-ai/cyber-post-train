@@ -1,0 +1,67 @@
+{
+  "schema": "cyber_qwen38_skyrl_engine_diagnostic_terminal_observation_v1",
+  "observed_at": "2026-09-12T17:58:00Z",
+  "classification": "infrastructure_invalid_relay_transport",
+  "api": {
+    "cluster": "dev",
+    "name": "chris-q38-rldiag-dev7-d550e2cc",
+    "job_id": "chris-q38-rldiag-dev7-d550e2cc-p5tpd",
+    "status": "SUCCEEDED"
+  },
+  "kubernetes": {
+    "context": "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb",
+    "namespace": "fleet-train-jobs",
+    "rayjob_uid": "39c339dc-8b06-4170-8338-876f780fac23",
+    "workload_uid": "0f8de774-fbf7-458d-808f-7cd5de799254",
+    "raycluster_uid": "b0f729db-b990-4780-a518-43203272f0da",
+    "head_pod_uid": "4d60f977-422f-4284-aa44-c58f2eee8909",
+    "worker_pod_uid": "2b6bb869-a596-4ef1-9e9f-5a723f85c846",
+    "finished_at": "2026-09-12T17:49:22Z",
+    "raycluster_present_after_finish": false,
+    "gpu_pods_present_after_finish": false,
+    "gpu_release_proven": true
+  },
+  "receipt": {
+    "path": "/mnt/sfs/jobs/chris-q38-rldiag-dev7/ENGINE_DIAGNOSTIC.json",
+    "file_sha256": "fae4d8d1c478ebe3ec484d772643e67a9425a1ac13920878ee3c429a775e32c0",
+    "self_digest_valid": true,
+    "schema": "cyber_skyrl_engine_start_diagnostic_v1",
+    "status": "engine_start_rejected",
+    "engine_start_state": "partial_or_unknown",
+    "engine_started": null,
+    "startup_phase": "engine_creation",
+    "sanitized_error_class": "UnserializableException",
+    "engine_start_qualified": false,
+    "training_qualified": false,
+    "production_training_shape_qualified": false,
+    "cleanup_proven": true,
+    "active_owned_actors": 0,
+    "active_owned_placement_groups": 0,
+    "task_rows_read": 0,
+    "rollouts": 0,
+    "verifier_calls": 0,
+    "optimizer_steps": 0,
+    "checkpoints_created": 0,
+    "wandb_initialized": false,
+    "unexpected_output_artifacts": 0
+  },
+  "bindings": {
+    "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:9b6f43938f9b28aaff7ba91edd59be3d18b01f9a22078ba5475cdac5e6bfcca6",
+    "request_sha256": "e1fd6d0aa23888f6361dee334985960f251136384d3b1f33a5516210d65a50b4",
+    "plan_sha256": "f4ea59d070dcba15dc4469f9e8f36080bb17e7e622880e42949645b5a78af1f6",
+    "preflight_receipt_sha256": "507600d249352a289ebdb324ab1ff8f42e3967bca0d14f4a791ccef6d7b76b0a",
+    "preview_manifest_sha256": "a63d4d0ab2b46fccc01a8d2279f19920f19d277ae78655b44ead437cac5c6b8b"
+  },
+  "decision": {
+    "production_rl_open": false,
+    "real_reward_canary_open": false,
+    "reason": "Ray could serialize but not reconstruct the two-argument FleetVllmStartupError wrapper, replacing the already-sanitized child cause with UnserializableException. The underlying child failure remains unknown; a corrected immutable relay image must pass zero-GPU transport checks and a fresh bounded TP4x2 diagnostic before reward or production RL."
+  },
+  "diagnosis": {
+    "masked_underlying_child_failure": true,
+    "proven_transport_defect": "FleetVllmStartupError lacked a reconstruction contract matching its constructor",
+    "theseus_fix_commit": "34de8d5753b8dfe44460ff9656db4ddc9a85a62c",
+    "cyber_post_train_guard_commit": "5ca061ca",
+    "same_image_successor_allowed": false
+  }
+}

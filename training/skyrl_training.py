@@ -41,16 +41,16 @@ _ALWAYS_SCRUB_WORKER_ENV = frozenset({"FLEET_API_KEY", "WANDB_API_KEY"})
 MODULE = "training.skyrl_training"
 IMAGE = (
     "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:"
-    "9b6f43938f9b28aaff7ba91edd59be3d18b01f9a22078ba5475cdac5e6bfcca6"
+    "e48827529b1cf5fafa153b2aed1b774c2eec86905baf5ccb62b36300533e252b"
 )
 ENGINE_IMAGE_CPU_QUALIFICATION = {
     "schema": "cyber_q38_rl_image_cleanpull_cpu_qualification_v1",
     "status": "qualified",
     "classification": "operational_gate",
-    "source_commit": "de9e6b7cf087d12c5ca371c9ec916a54757d369f",
-    "receipt_sha256": "3ebe51bc1c28c9143cc31d1f5271e20badee0a18db0409754880f30164cacfc7",
+    "source_commit": "34de8d5753b8dfe44460ff9656db4ddc9a85a62c",
+    "receipt_sha256": "4326ec6a28f1f2deee6d6ebaf9c04f80ec8ba5ac8856ae636e91aca5e4e53837",
     "evidence_path": (
-        "docs/evidence/qwen38-study/2026-09-12-skyrl-replacement-image-cpu-qualification-v1.json"
+        "docs/evidence/qwen38-study/2026-09-12-skyrl-startup-relay-image-cpu-qualification-v1.json"
     ),
 }
 _ENGINE_START_DISQUALIFIED = frozenset(
@@ -59,7 +59,12 @@ _ENGINE_START_DISQUALIFIED = frozenset(
             "Qwen/Qwen3.8-27B",
             "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:"
             "ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
-        )
+        ),
+        (
+            "Qwen/Qwen3.8-27B",
+            "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:"
+            "9b6f43938f9b28aaff7ba91edd59be3d18b01f9a22078ba5475cdac5e6bfcca6",
+        ),
     }
 )
 NATIVE = {
@@ -399,8 +404,8 @@ def _require_engine_start_qualified_image(plan):
     identity = (plan["model"]["repo"], plan["execution"]["image"])
     if identity in _ENGINE_START_DISQUALIFIED:
         raise ValueError(
-            "Qwen3.8 SkyRL image is engine-start disqualified by the sealed "
-            "dev5/dev6 evidence; qualify and pin a replacement image before GPU submission"
+            "Qwen3.8 SkyRL model/image pair is engine-start disqualified by sealed "
+            "terminal dev evidence; qualify and pin a replacement image before GPU submission"
         )
 
 

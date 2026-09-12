@@ -1,0 +1,100 @@
+{
+  "claim_boundary": {
+    "established": [
+      "the exact corrected immutable image is pullable on the dev cluster",
+      "the requested and resolved runtime image digests match",
+      "the installed privacy-safe relay helper and qualification tests match reviewed hashes",
+      "FTI distribution and imported module both report 0.8.4",
+      "the patched modules compile and import on a CPU node",
+      "stdlib pickle, ray.cloudpickle and real RayTaskError transport pass inside the exact image",
+      "the helper used zero GPUs and its Pod is released"
+    ],
+    "not_established": [
+      "Qwen3.8 model loading",
+      "CUDA or B300 behavior",
+      "two-engine TP4x2 startup",
+      "Fleet task interaction or authoritative reward",
+      "optimizer update or checkpoint recovery",
+      "production readiness"
+    ]
+  },
+  "classification": "operational_gate",
+  "clean_pull": {
+    "event_image_matched_requested_digest": true,
+    "image_size_bytes": 16311693694,
+    "pull_duration_seconds": 488.572,
+    "pulled_event_at": "2026-09-12T18:50:29Z",
+    "pulling_event_at": "2026-09-12T18:42:21Z"
+  },
+  "cleanup": {
+    "absence_confirmed_at": "2026-09-12T19:00:40Z",
+    "absence_reconfirmed_at": "2026-09-12T19:01:06Z",
+    "exact_uid_rechecked_before_delete": true,
+    "pod_absent_after_delete": true,
+    "pod_deleted": true
+  },
+  "observed_through": "2026-09-12T19:01:06Z",
+  "pod": {
+    "container_finished_at": "2026-09-12T18:51:15Z",
+    "container_started_at": "2026-09-12T18:50:31Z",
+    "created_at": "2026-09-12T18:42:21Z",
+    "exit_code": 0,
+    "gpu_request": null,
+    "name": "chris-q38-rl-relay-cleanpull-183924",
+    "preemption_policy": "Never",
+    "priority_class": "c2",
+    "restart_count": 0,
+    "service_account_token_mounted": false,
+    "terminal_phase": "Succeeded",
+    "termination_reason": "Completed",
+    "uid": "7e21fb2a-2eb1-4509-b1fa-13b6050b139e"
+  },
+  "preflight": {
+    "embedded_script_sha256": "abf2965d90452c0fdd60188b3582248c08da4cfea6a0e8c776f3477b8da9b1ab",
+    "local_document_sha256": "6b5610c349efa35f20a2e2d79c388f980395f7f17a870b27c16e6d60f6c41d1c",
+    "local_policy": "passed",
+    "manifest_path": ".operator/q38-rl-image-cleanpull-20260912T183924Z/dev-pod.yaml",
+    "manifest_sha256": "6b5610c349efa35f20a2e2d79c388f980395f7f17a870b27c16e6d60f6c41d1c",
+    "policy_validator_path": ".operator/q38-rl-image-cleanpull-20260912T183924Z/validate_pod_policy.py",
+    "policy_validator_sha256": "f04d7d4b9c4349408b77e4f1199a0f8470a2bcba99e3e5eddbf0699cde013606",
+    "server_dry_run": "passed",
+    "server_dry_run_document_sha256": "dd3140e254305817bd7e2b0d6f5ee043689d9701ba58495663df9e2bb4739584"
+  },
+  "qualification": {
+    "all_six_checks_passed": true,
+    "fti_distribution_version": "0.8.4",
+    "fti_module_version": "0.8.4",
+    "helper_sha256": "077803a51e7c41473315ecf56eb58ecd2e23a5544ae0d3267a7059d3c3b63713",
+    "installed_vllm_spawn_integration_cases": 6,
+    "integration_test_sha256": "735c4216d70ded3de0c2452c7fb94ed45738e2d54b6dbb8e4cb347d7142e5c5b",
+    "observed_at": "2026-09-12T18:51:14.125703+00:00",
+    "receipt_embedded_sha256": "4326ec6a28f1f2deee6d6ebaf9c04f80ec8ba5ac8856ae636e91aca5e4e53837",
+    "receipt_file_sha256": "6890bdcfdd7afcc8526972c65362b9db0d19e3c1288d30a9595ebb396f07c491",
+    "receipt_path": ".operator/q38-rl-image-cleanpull-20260912T183924Z/QUALIFICATION_RECEIPT.json",
+    "receipt_self_digest_valid": true,
+    "unit_spawn_cases": 9,
+    "unit_test_sha256": "2e1d229634f85d91249053441355ce4a6aaa7204b711052fd4586232712ff25c",
+    "vllm_version": "0.23.0+cu129"
+  },
+  "receipt_sha256": "e1698d1c1acb00f76474d98375c8f973aab48d442eeb511439722f948c6b93d6",
+  "schema": "cyber_q38_rl_image_cleanpull_terminal_evidence_v1",
+  "source": {
+    "build_run_id": 34710564708,
+    "build_status": "success",
+    "requested_image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:e48827529b1cf5fafa153b2aed1b774c2eec86905baf5ccb62b36300533e252b",
+    "runtime_image_id": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:e48827529b1cf5fafa153b2aed1b774c2eec86905baf5ccb62b36300533e252b",
+    "theseus_commit": "34de8d5753b8dfe44460ff9656db4ddc9a85a62c"
+  },
+  "status": "qualified_and_released",
+  "target": {
+    "cluster": "nebius_dev",
+    "kubernetes_context": "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb",
+    "namespace": "fleet-train-jobs",
+    "namespace_uid": "10394b76-e1d4-40b1-a8e2-7575e95df216",
+    "node": "computeinstance-e04z8h89sgpw7kq06z",
+    "node_allocatable_gpu": null,
+    "node_gpu_label": null,
+    "node_instance_type": "cpu-d3",
+    "node_uid": "8d632b13-62bb-4dd5-8003-ee39f21658a6"
+  }
+}
