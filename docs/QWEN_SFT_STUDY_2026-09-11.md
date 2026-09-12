@@ -82,8 +82,10 @@ curve.
   receives no prompts, messages, traces, flags, token IDs or scores.
 - Teacher-reference validation CE is not computed or used for checkpoint choice.
 - Checkpoints are written at the configured interval and retained by recency.
-- Arm selection uses fresh Fleet development outcomes only. Ties are retained for
-  a fresh confirmation rather than broken with training loss or teacher CE.
+- Arm selection uses the v2 Fleet development estimator only: all four fixed
+  binary outcomes are averaged within task, candidate and base are paired by
+  exact task+seed, and tasks receive equal weight. Ties are retained for a fresh
+  confirmation rather than broken with pass@4, training loss or teacher CE.
 - The selected configuration is evaluated on the common Fleet final set. Each
   completed checkpoint also runs the requested WebExploitBench protocol through
   the separately qualified Tensorlake adapter, but those results do not tune HPO.
@@ -110,12 +112,16 @@ barriers resolve. Stages are serial and each wave is at most four nodes, below
 the eight-active-study-node ceiling.
 
 This order is outcome-only: training loss is diagnostic, teacher-reference CE is
-absent, and only fresh sealed Fleet dev pass@1 outcomes select an arm. The
-balanced arm is explicitly a teacher-availability treatment; because it removes
-whole episodes and therefore reduces total supervised-token exposure, it is not
-interpreted as a pure weighting effect. The enhanced W&B contract exports only
-its fixed scalar allowlist, uses cumulative supervised tokens as the series axis,
-and requires complete finish/sync evidence. The current route audit proves the
+absent, and only fresh paired Fleet dev mean-success outcomes select an arm.
+The frozen staged-search v2 artifact still binds the historical attempt-1
+protocol; it is retained as evidence and must not launch as the corrected study.
+A new versioned study successor must bind the v2 Fleet-dev protocol digests
+before any capability/HPO arm is prepared. The balanced arm is explicitly a
+teacher-availability treatment; because it removes whole episodes and therefore
+reduces total supervised-token exposure, it is not interpreted as a pure
+weighting effect. The enhanced W&B contract exports only its fixed scalar
+allowlist, uses cumulative supervised tokens as the series axis, and requires
+complete finish/sync evidence. The current route audit proves the
 shared base endpoint is operational, but not an exact matched causal control, so
 it does not open any outcome or uplift gate. No stage in this plan is presently
 launchable and the file is not a job request.

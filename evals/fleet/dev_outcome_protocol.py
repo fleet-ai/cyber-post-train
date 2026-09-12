@@ -19,8 +19,13 @@ from typing import Any
 from training.io import atomic_write_json, canonical_json, digest_json
 
 TASK_SET_SCHEMA = "cyber_fleet_eval_task_set_v1"
-PROTOCOL_SCHEMA = "cyber_fleet_dev_outcome_protocol_v1"
-BASE_CONTROL_SCHEMA = "cyber_fleet_dev_base_control_v1"
+PROTOCOL_SCHEMA_V1 = "cyber_fleet_dev_outcome_protocol_v1"
+PROTOCOL_SCHEMA_V2 = "cyber_fleet_dev_outcome_protocol_v2"
+PROTOCOL_SCHEMA = PROTOCOL_SCHEMA_V2
+PROTOCOL_SCHEMAS = frozenset({PROTOCOL_SCHEMA_V1, PROTOCOL_SCHEMA_V2})
+BASE_CONTROL_SCHEMA_V1 = "cyber_fleet_dev_base_control_v1"
+BASE_CONTROL_SCHEMA_V2 = "cyber_fleet_dev_base_control_v2"
+BASE_CONTROL_SCHEMA = BASE_CONTROL_SCHEMA_V2
 FINAL_PROTOCOL_SCHEMA = "cyber_fleet_final_outcome_protocol_v1"
 MODEL_REPOSITORY = "Qwen/Qwen3.8-27B"
 MODEL_REVISION = "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
@@ -272,17 +277,152 @@ def build_final_task_set(final_lock: dict[str, Any], audit: dict[str, Any]) -> d
     )
 
 
-def build_protocol(task_set: dict[str, Any], *, variant: str, task_set_path: str) -> dict[str, Any]:
+def _development_metric_contract(schema: str) -> tuple[dict[str, Any], dict[str, Any]]:
+    if schema == PROTOCOL_SCHEMA_V1:
+        return (
+            {
+                "primary": {
+                    "name": "fleet_dev_pass_at_1",
+                    "unit": "task_family",
+                    "attempt": 1,
+                    "seed": 42,
+                    "definition": (
+                        "Mean full-task solve indicator across the 20 planned task families, "
+                        "using only attempt 1 authoritative valid outcomes."
+                    ),
+                    "hpo_direction": "maximize",
+                    "eligibility": "all 20 attempt-1 outcomes must be valid",
+                },
+                "descriptive_only": [
+                    "fleet_dev_pass_at_4",
+                    "attempt_1_mean_authoritative_fractional_reward",
+                    "best_of_4_mean_authoritative_fractional_reward",
+                    "valid_outcome_rate",
+                    "infrastructure_invalid_count",
+                    "report_submission_rate",
+                    "model_requests_tokens_and_elapsed_time",
+                ],
+                "uncertainty": {
+                    "method": "paired task-family bootstrap",
+                    "resamples": 10000,
+                    "seed": 20260911,
+                    "interval": 0.95,
+                },
+                "invalid_outcome_policy": (
+                    "Never score infrastructure-invalid, interrupted, output-limited, or "
+                    "unknown attempts as model failures; the affected metric remains incomplete."
+                ),
+            },
+            {
+                "signal": "fleet_dev_pass_at_1 only",
+                "ties": "retain tied arms for a fresh predeclared confirmation",
+                "forbidden_tiebreakers": [
+                    "training loss",
+                    "teacher-reference cross-entropy",
+                    "Fleet pass@4 descriptive metrics",
+                    "Fleet final-test outcomes",
+                    "WebExploitBench outcomes",
+                ],
+            },
+        )
+    if schema != PROTOCOL_SCHEMA_V2:
+        raise ValueError("unsupported Fleet development protocol schema")
+    return (
+        {
+            "primary": {
+                "name": "fleet_dev_paired_mean_success_delta_4fixed",
+                "unit": "task_family",
+                "attempt_seeds": list(SAMPLING["attempt_seeds"]),
+                "per_task_estimator": (
+                    "For each exact task version, average the four full-task solve indicators "
+                    "for the predeclared attempt seeds."
+                ),
+                "arm_estimator": "Mean the 20 per-task means with equal task weight.",
+                "paired_comparison": (
+                    "Candidate minus base on each exact task-version and attempt-seed pair, "
+                    "then mean within task and across tasks."
+                ),
+                "hpo_direction": "maximize candidate-minus-base paired delta",
+                "eligibility": (
+                    "All 80 task-seed pairs must contain authoritative valid outcomes for both "
+                    "base and candidate; no available fixed attempt may be discarded."
+                ),
+            },
+            "secondary_only": [
+                "base_and_candidate_fleet_dev_pass_at_4",
+                "paired_fleet_dev_pass_at_4_delta",
+                "attempt_1_mean_authoritative_fractional_reward",
+                "best_of_4_mean_authoritative_fractional_reward",
+                "valid_outcome_rate",
+                "infrastructure_invalid_count",
+                "report_submission_rate",
+                "model_requests_tokens_and_elapsed_time",
+            ],
+            "uncertainty": {
+                "method": "paired task-clustered percentile bootstrap",
+                "cluster_unit": "exact task_version_id",
+                "within_cluster": "retain all four matched base/candidate seed pairs",
+                "estimand": "candidate-minus-base mean full-task success",
+                "resamples": 10000,
+                "seed": 20260911,
+                "interval": 0.95,
+                "percentile_rule": "linear interpolation at rank (resamples - 1) * quantile",
+            },
+            "invalid_outcome_policy": (
+                "Never score infrastructure-invalid, interrupted, output-limited, or unknown "
+                "attempts as model failures; the paired primary comparison remains incomplete."
+            ),
+        },
+        {
+            "signal": "fleet_dev_paired_mean_success_delta_4fixed only",
+            "base_pairing": "exact task_version_id and attempt seed",
+            "task_weighting": "equal task weight after averaging all four fixed attempts",
+            "ties": "retain tied arms for a fresh predeclared confirmation",
+            "forbidden_tiebreakers": [
+                "training loss",
+                "teacher-reference cross-entropy",
+                "Fleet pass@4 secondary metrics",
+                "Fleet final-test outcomes",
+                "WebExploitBench outcomes",
+            ],
+        },
+    )
+
+
+def build_protocol(
+    task_set: dict[str, Any],
+    *,
+    variant: str,
+    task_set_path: str,
+    schema: str = PROTOCOL_SCHEMA,
+) -> dict[str, Any]:
     """Build the frozen parent protocol used by outcome-only SFT manifests."""
     validate_task_set(task_set)
     if task_set.get("split_variant") != variant or task_set.get("task_count") != DEV_TASKS:
         raise ValueError("task set does not match the requested development split")
     if not isinstance(task_set_path, str) or not task_set_path.startswith("configs/"):
         raise ValueError("task set needs a repository-relative configs/ path")
+    if schema not in PROTOCOL_SCHEMAS:
+        raise ValueError("unsupported Fleet development protocol schema")
     unbound = {field: None for field in UNBOUND_CHECKPOINT_FIELDS}
+    metrics, selection_rule = _development_metric_contract(schema)
+    heldout_policy = {
+        "teacher_reference_cross_entropy": "forbidden",
+        "development_tasks_in_training_preferences_or_rl": False,
+        "training_loss_role": "fitting diagnostic only",
+        "external_benchmarks": (
+            "run after each frozen checkpoint but keep sealed from HPO decisions"
+        ),
+    }
+    if schema == PROTOCOL_SCHEMA_V2:
+        heldout_policy["webexploitbench"] = {
+            "state": "sealed_during_fleet_dev_hpo",
+            "hyperparameter_or_checkpoint_selection_eligible": False,
+            "unseal_only_after": "the Fleet development selection decision is frozen",
+        }
     return _sealed(
         {
-            "schema": PROTOCOL_SCHEMA,
+            "schema": schema,
             "purpose": "Qwen3.8-27B SFT hyperparameter selection on fresh Fleet task outcomes",
             "split_variant": variant,
             "task_set": {
@@ -338,58 +478,9 @@ def build_protocol(task_set: dict[str, Any], *, variant: str, task_set_path: str
                     "challenge environment and all harness containers cleaned",
                 ],
             },
-            "metrics": {
-                "primary": {
-                    "name": "fleet_dev_pass_at_1",
-                    "unit": "task_family",
-                    "attempt": 1,
-                    "seed": 42,
-                    "definition": (
-                        "Mean full-task solve indicator across the 20 planned task families, "
-                        "using only attempt 1 authoritative valid outcomes."
-                    ),
-                    "hpo_direction": "maximize",
-                    "eligibility": "all 20 attempt-1 outcomes must be valid",
-                },
-                "descriptive_only": [
-                    "fleet_dev_pass_at_4",
-                    "attempt_1_mean_authoritative_fractional_reward",
-                    "best_of_4_mean_authoritative_fractional_reward",
-                    "valid_outcome_rate",
-                    "infrastructure_invalid_count",
-                    "report_submission_rate",
-                    "model_requests_tokens_and_elapsed_time",
-                ],
-                "uncertainty": {
-                    "method": "paired task-family bootstrap",
-                    "resamples": 10000,
-                    "seed": 20260911,
-                    "interval": 0.95,
-                },
-                "invalid_outcome_policy": (
-                    "Never score infrastructure-invalid, interrupted, output-limited, or unknown "
-                    "attempts as model failures; the affected metric remains incomplete."
-                ),
-            },
-            "selection_rule": {
-                "signal": "fleet_dev_pass_at_1 only",
-                "ties": "retain tied arms for a fresh predeclared confirmation",
-                "forbidden_tiebreakers": [
-                    "training loss",
-                    "teacher-reference cross-entropy",
-                    "Fleet pass@4 descriptive metrics",
-                    "Fleet final-test outcomes",
-                    "WebExploitBench outcomes",
-                ],
-            },
-            "heldout_policy": {
-                "teacher_reference_cross_entropy": "forbidden",
-                "development_tasks_in_training_preferences_or_rl": False,
-                "training_loss_role": "fitting diagnostic only",
-                "external_benchmarks": (
-                    "run after each frozen checkpoint but keep sealed from HPO decisions"
-                ),
-            },
+            "metrics": metrics,
+            "selection_rule": selection_rule,
+            "heldout_policy": heldout_policy,
             "retry_policy": {
                 "automatic_retry": False,
                 "valid_outcome_retry": "forbidden",
@@ -422,9 +513,38 @@ def build_base_control(
     variant = protocol["split_variant"]
     versions = sorted(row["task_version_id"] for row in task_set["tasks"])
     unbound = {field: None for field in UNBOUND_BASE_SERVING_FIELDS}
+    schema = (
+        BASE_CONTROL_SCHEMA_V2
+        if protocol["schema"] == PROTOCOL_SCHEMA_V2
+        else BASE_CONTROL_SCHEMA_V1
+    )
+    pairing_contract = {
+        "pairing_unit": "exact task_version_id and attempt seed",
+        "post_sft_arm_must_reference_parent_sha256": protocol["sha256"],
+        "same_runtime_fields": list(MATCHED_SERVING_FIELDS),
+        "scientific_difference_allowed": ["weights_manifest_sha256"],
+        "nonsemantic_identity_label_differences_allowed": [
+            "served_model_id",
+            "model_path",
+        ],
+        "hosted_and_dedicated_routes_may_not_be_pooled": True,
+        "reuse_scope": (
+            "One accepted base outcome set may be reused across post-SFT arms only when "
+            "every arm references this parent and independently proves the same runtime "
+            "fields through one fresh live-pair parity receipt."
+        ),
+    }
+    if protocol["schema"] == PROTOCOL_SCHEMA_V2:
+        pairing_contract.update(
+            {
+                "all_predeclared_attempts_required": True,
+                "matched_task_seed_pairs": DEV_TASKS * PASS_K,
+                "primary_comparison": "candidate-minus-base within exact task-seed pair",
+            }
+        )
     return _sealed(
         {
-            "schema": BASE_CONTROL_SCHEMA,
+            "schema": schema,
             "role": "matched_base_control",
             "split_variant": variant,
             "parent_protocol": {
@@ -450,22 +570,7 @@ def build_base_control(
                 "concurrency_per_worker": protocol["concurrency_per_worker"],
                 "endpoint_origin": "https://inference.flt.build",
             },
-            "pairing_contract": {
-                "pairing_unit": "exact task_version_id and attempt seed",
-                "post_sft_arm_must_reference_parent_sha256": protocol["sha256"],
-                "same_runtime_fields": list(MATCHED_SERVING_FIELDS),
-                "scientific_difference_allowed": ["weights_manifest_sha256"],
-                "nonsemantic_identity_label_differences_allowed": [
-                    "served_model_id",
-                    "model_path",
-                ],
-                "hosted_and_dedicated_routes_may_not_be_pooled": True,
-                "reuse_scope": (
-                    "One accepted base outcome set may be reused across post-SFT arms only when "
-                    "every arm references this parent and independently proves the same runtime "
-                    "fields through one fresh live-pair parity receipt."
-                ),
-            },
+            "pairing_contract": pairing_contract,
             "serving_binding": {
                 "state": "unbound",
                 "launchable": False,
@@ -696,7 +801,10 @@ def validate_final_task_set(task_set: dict[str, Any]) -> None:
 
 
 def validate_protocol(protocol: dict[str, Any], task_set: dict[str, Any]) -> None:
-    _check_seal(protocol, PROTOCOL_SCHEMA)
+    schema = protocol.get("schema")
+    if schema not in PROTOCOL_SCHEMAS:
+        raise ValueError("unsupported Fleet development protocol schema")
+    _check_seal(protocol, schema)
     validate_task_set(task_set)
     if task_set.get("selection_role") != "fleet_dev_hpo":
         raise ValueError("development protocol requires a Fleet development task set")
@@ -721,14 +829,32 @@ def validate_protocol(protocol: dict[str, Any], task_set: dict[str, Any]) -> Non
     heldout = protocol.get("heldout_policy", {})
     if heldout.get("teacher_reference_cross_entropy") != "forbidden":
         raise ValueError("teacher-reference CE must not select blackbox capability")
+    expected_metrics, expected_selection = _development_metric_contract(schema)
+    if (
+        protocol.get("metrics") != expected_metrics
+        or protocol.get("selection_rule") != expected_selection
+    ):
+        raise ValueError("Fleet development estimator or selection rule drifted")
+    if schema == PROTOCOL_SCHEMA_V2:
+        web = heldout.get("webexploitbench", {})
+        if (
+            web.get("state") != "sealed_during_fleet_dev_hpo"
+            or web.get("hyperparameter_or_checkpoint_selection_eligible") is not False
+        ):
+            raise ValueError("WebExploitBench must remain sealed and outside HPO")
 
 
 def validate_base_control(
     control: dict[str, Any], protocol: dict[str, Any], task_set: dict[str, Any]
 ) -> None:
     """Reject any base-control drift from its exact non-launchable parent."""
-    _check_seal(control, BASE_CONTROL_SCHEMA)
     validate_protocol(protocol, task_set)
+    expected_schema = (
+        BASE_CONTROL_SCHEMA_V2
+        if protocol["schema"] == PROTOCOL_SCHEMA_V2
+        else BASE_CONTROL_SCHEMA_V1
+    )
+    _check_seal(control, expected_schema)
     parent = control.get("parent_protocol", {})
     expected = build_base_control(protocol, task_set, protocol_path=parent.get("path"))
     if control != expected:
@@ -781,6 +907,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--variant", choices=("a", "b"))
     parser.add_argument("--task-set", type=Path, required=True)
     parser.add_argument("--protocol", type=Path, required=True)
+    parser.add_argument("--dev-protocol-version", choices=("v1", "v2"), default="v2")
     args = parser.parse_args(argv)
     if args.task_set.exists() or args.protocol.exists():
         raise FileExistsError("refusing to replace a frozen task set or protocol")
@@ -788,6 +915,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.final_lock is not None:
         if args.variant is not None:
             parser.error("--variant is only valid with --split")
+        if args.dev_protocol_version != "v2":
+            parser.error("--dev-protocol-version is only valid with --split")
         task_set = build_final_task_set(json.loads(args.final_lock.read_text()), audit)
     else:
         if args.variant is None:
@@ -801,7 +930,16 @@ def main(argv: list[str] | None = None) -> int:
         protocol = build_final_protocol(task_set, task_set_path=task_set_path)
         validate_final_protocol(protocol, task_set)
     else:
-        protocol = build_protocol(task_set, variant=args.variant, task_set_path=task_set_path)
+        schema = {
+            "v1": PROTOCOL_SCHEMA_V1,
+            "v2": PROTOCOL_SCHEMA_V2,
+        }[args.dev_protocol_version]
+        protocol = build_protocol(
+            task_set,
+            variant=args.variant,
+            task_set_path=task_set_path,
+            schema=schema,
+        )
         validate_protocol(protocol, task_set)
     atomic_write_json(args.task_set, task_set)
     atomic_write_json(args.protocol, protocol)

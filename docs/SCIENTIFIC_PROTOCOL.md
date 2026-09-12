@@ -78,3 +78,12 @@ It does not retroactively reclassify historical outcomes.
 Report paired task-level changes and uncertainty over tasks. Report training-seed
 variance separately. Pre-register exclusions, the primary metric and stopping
 rule. Never reinterpret a timeout or missing reward as model incapability.
+
+When a Fleet development protocol predeclares several fixed attempts per task,
+use every valid fixed attempt in the primary estimate: average the binary
+full-task outcomes within task, then average those task means with equal task
+weight. Compare base and intervention on the same exact task-version and seed
+pairs. Bootstrap whole task clusters while retaining all paired attempts inside
+each sampled task; attempts from one task are not independent experimental
+units. Best-of-k/pass@k remains secondary and must not replace or break ties in
+the mean-success estimand.

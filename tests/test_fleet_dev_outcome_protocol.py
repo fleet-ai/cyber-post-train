@@ -50,6 +50,70 @@ def test_frozen_protocol_and_task_set_are_exact_and_nonlaunchable(variant):
 
 
 @pytest.mark.parametrize("variant", ["a", "b"])
+def test_v2_protocol_reuses_exact_split_and_all_four_attempts(variant):
+    task_set = load(CONFIG / f"qwen38-blackbox-fleet-dev-{variant}-task-set-v1.json")
+    v1 = load(CONFIG / f"qwen38-blackbox-fleet-dev-{variant}-outcome-protocol-v1.json")
+    v2 = load(CONFIG / f"qwen38-blackbox-fleet-dev-{variant}-outcome-protocol-v2.json")
+    control = load(CONFIG / f"qwen38-blackbox-fleet-dev-{variant}-base-control-v2.json")
+
+    protocol.validate_protocol(v1, task_set)
+    protocol.validate_protocol(v2, task_set)
+    protocol.validate_base_control(control, v2, task_set)
+    task_path = f"configs/evaluation/qwen38-blackbox-fleet-dev-{variant}-task-set-v1.json"
+    v1_protocol_path = (
+        f"configs/evaluation/qwen38-blackbox-fleet-dev-{variant}-outcome-protocol-v1.json"
+    )
+    protocol_path = (
+        f"configs/evaluation/qwen38-blackbox-fleet-dev-{variant}-outcome-protocol-v2.json"
+    )
+    assert (
+        protocol.build_protocol(
+            task_set,
+            variant=variant,
+            task_set_path=task_path,
+            schema=protocol.PROTOCOL_SCHEMA_V1,
+        )
+        == v1
+    )
+    assert protocol.build_protocol(task_set, variant=variant, task_set_path=task_path) == v2
+    assert protocol.build_base_control(v1, task_set, protocol_path=v1_protocol_path) == load(
+        CONFIG / f"qwen38-blackbox-fleet-dev-{variant}-base-control-v1.json"
+    )
+    assert protocol.build_base_control(v2, task_set, protocol_path=protocol_path) == control
+    assert v1["sha256"] != v2["sha256"]
+    assert v1["task_set"] == v2["task_set"]
+    assert v2["schema"] == protocol.PROTOCOL_SCHEMA_V2
+    assert v2["metrics"]["primary"] == {
+        "name": "fleet_dev_paired_mean_success_delta_4fixed",
+        "unit": "task_family",
+        "attempt_seeds": [42, 43, 44, 45],
+        "per_task_estimator": (
+            "For each exact task version, average the four full-task solve indicators "
+            "for the predeclared attempt seeds."
+        ),
+        "arm_estimator": "Mean the 20 per-task means with equal task weight.",
+        "paired_comparison": (
+            "Candidate minus base on each exact task-version and attempt-seed pair, "
+            "then mean within task and across tasks."
+        ),
+        "hpo_direction": "maximize candidate-minus-base paired delta",
+        "eligibility": (
+            "All 80 task-seed pairs must contain authoritative valid outcomes for both base "
+            "and candidate; no available fixed attempt may be discarded."
+        ),
+    }
+    assert v2["metrics"]["uncertainty"]["cluster_unit"] == "exact task_version_id"
+    assert "fleet_dev_pass_at_4" in v2["metrics"]["secondary_only"][0]
+    assert v2["heldout_policy"]["webexploitbench"] == {
+        "state": "sealed_during_fleet_dev_hpo",
+        "hyperparameter_or_checkpoint_selection_eligible": False,
+        "unseal_only_after": "the Fleet development selection decision is frozen",
+    }
+    assert control["pairing_contract"]["matched_task_seed_pairs"] == 80
+    assert control["pairing_contract"]["all_predeclared_attempts_required"] is True
+
+
+@pytest.mark.parametrize("variant", ["a", "b"])
 def test_base_control_is_exact_outcome_only_and_nonlaunchable(variant):
     task_set = load(CONFIG / f"qwen38-blackbox-fleet-dev-{variant}-task-set-v1.json")
     parent = load(CONFIG / f"qwen38-blackbox-fleet-dev-{variant}-outcome-protocol-v1.json")
@@ -67,9 +131,7 @@ def test_base_control_is_exact_outcome_only_and_nonlaunchable(variant):
         "weights_manifest_sha256"
     ]
     assert control["serving_binding"]["launchable"] is False
-    assert set(control["serving_binding"]["fields"]) == set(
-        protocol.UNBOUND_BASE_SERVING_FIELDS
-    )
+    assert set(control["serving_binding"]["fields"]) == set(protocol.UNBOUND_BASE_SERVING_FIELDS)
     assert all(value is None for value in control["serving_binding"]["fields"].values())
     assert control["result_policy"]["outcome_only"] is True
     assert control["result_policy"]["wandb_evaluation_metrics_or_scores"] == "forbidden"
@@ -186,3 +248,25 @@ def test_binding_or_checkpoint_template_tamper_is_rejected():
     )
     with pytest.raises(ValueError, match="checkpoint placeholder"):
         protocol.validate_protocol(tampered_protocol, task_set)
+
+
+def test_v2_estimator_contract_tamper_is_rejected_even_when_resealed():
+    task_set = load(CONFIG / "qwen38-blackbox-fleet-dev-a-task-set-v1.json")
+    frozen = load(CONFIG / "qwen38-blackbox-fleet-dev-a-outcome-protocol-v2.json")
+    tampered = copy.deepcopy(frozen)
+    tampered["metrics"]["primary"]["attempt_seeds"] = [42]
+    tampered["sha256"] = digest_json(
+        {key: value for key, value in tampered.items() if key != "sha256"}
+    )
+    with pytest.raises(ValueError, match="estimator or selection rule drifted"):
+        protocol.validate_protocol(tampered, task_set)
+
+    tampered = copy.deepcopy(frozen)
+    tampered["heldout_policy"]["webexploitbench"][
+        "hyperparameter_or_checkpoint_selection_eligible"
+    ] = True
+    tampered["sha256"] = digest_json(
+        {key: value for key, value in tampered.items() if key != "sha256"}
+    )
+    with pytest.raises(ValueError, match="WebExploitBench"):
+        protocol.validate_protocol(tampered, task_set)

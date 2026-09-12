@@ -1,0 +1,133 @@
+{
+  "schema": "cyber_fleet_dev_base_control_v2",
+  "role": "matched_base_control",
+  "split_variant": "a",
+  "parent_protocol": {
+    "path": "configs/evaluation/qwen38-blackbox-fleet-dev-a-outcome-protocol-v2.json",
+    "sha256": "sha256:3c2c65eed748b16b50ef992327324b1fcaad84b190456c4aefe69c6efe748f75",
+    "file_sha256": "sha256:008d412bcdee122cd2b4f072e6f242496b3e8de1e8b07ad60e598de59202560e"
+  },
+  "task_set": {
+    "path": "configs/evaluation/qwen38-blackbox-fleet-dev-a-task-set-v1.json",
+    "sha256": "sha256:914a67b587a8d2f5a523ab652eeaec15f8f9d5dbec559c25ff176b01777a6c96",
+    "file_sha256": "sha256:c83fbb2291898351b6a99f6f4f25dff30aeff295cee503031ff606d97a1c88f4",
+    "task_count": 20,
+    "selection_role": "fleet_dev_hpo",
+    "training_data_eligible": false,
+    "exact_task_binding_required_at_preflight_and_execution": true,
+    "task_version_ids": [
+      "02dd4e3f-d85d-4bf8-9976-eae2f102384d",
+      "037704a7-fc03-4cf6-a8da-3f3e3933717e",
+      "18079a9c-cb79-4013-aa08-54092c415165",
+      "2df3b04b-87bd-4012-b5aa-e16d50698288",
+      "33527414-ced7-4005-9c5a-eb9c211a32da",
+      "383a2b61-e82b-4426-9a2b-d5372c92e346",
+      "493bc3d8-7806-4e38-9bc3-e964a5c26f5b",
+      "50ab8f20-7fc5-4e9f-afad-9fb03fae9b4d",
+      "5f0c9b28-fe2f-41e0-b73f-0e7749f64195",
+      "63e6ea95-1b08-44ec-aea7-244d9c6253af",
+      "6a3023fd-4022-47a4-9ae5-6d15a892bd9b",
+      "78971e60-851b-4f6a-85d8-ecb3391d2af2",
+      "8d84b316-d741-44f8-aaa5-7a0f0d7b8d3a",
+      "9375a9b9-04e5-4f6f-ad47-286121278992",
+      "a1b92843-ca06-4852-9f09-f2730da9124d",
+      "b6efa2e4-7743-4b8b-a014-832d90cd5e39",
+      "d6c906fc-ef92-4ce6-ab9c-54a9b7eb9037",
+      "e13f62eb-170a-40c6-86bf-3c3f3829e3d8",
+      "eefe304c-499d-4c9e-b09c-8aa0fab87213",
+      "fa04ef0d-3341-4b5f-8a13-d2955feaadc1"
+    ]
+  },
+  "model": {
+    "repository": "Qwen/Qwen3.8-27B",
+    "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "tokenizer_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "checkpoint_kind": "immutable_upstream_base_revision"
+  },
+  "frozen_treatment": {
+    "harness_sha256": "sha256:cc289a5221a6bfdaf57bf24652c3a8e67d1469d21149e6af889628207a5172bb",
+    "sampling_sha256": "sha256:a951d413c68d375e9c1ee8dd2cf46734085fd87b1076747f206ac3c35391767e",
+    "pass_k": 4,
+    "attempt_seeds": [
+      42,
+      43,
+      44,
+      45
+    ],
+    "concurrency_per_worker": 1,
+    "endpoint_origin": "https://inference.flt.build"
+  },
+  "pairing_contract": {
+    "pairing_unit": "exact task_version_id and attempt seed",
+    "post_sft_arm_must_reference_parent_sha256": "sha256:3c2c65eed748b16b50ef992327324b1fcaad84b190456c4aefe69c6efe748f75",
+    "same_runtime_fields": [
+      "endpoint_origin",
+      "serving_block_kind",
+      "engine",
+      "precision",
+      "quantization",
+      "tensor_parallel_size",
+      "data_parallel_size",
+      "context_length",
+      "kv_cache_dtype",
+      "reasoning_parser",
+      "tool_call_parser",
+      "serving_image_digest",
+      "normalized_server_arguments_sha256",
+      "tokenizer_manifest_sha256",
+      "chat_template_sha256",
+      "agent_image_digest",
+      "proxy_image_digest"
+    ],
+    "scientific_difference_allowed": [
+      "weights_manifest_sha256"
+    ],
+    "nonsemantic_identity_label_differences_allowed": [
+      "served_model_id",
+      "model_path"
+    ],
+    "hosted_and_dedicated_routes_may_not_be_pooled": true,
+    "reuse_scope": "One accepted base outcome set may be reused across post-SFT arms only when every arm references this parent and independently proves the same runtime fields through one fresh live-pair parity receipt.",
+    "all_predeclared_attempts_required": true,
+    "matched_task_seed_pairs": 80,
+    "primary_comparison": "candidate-minus-base within exact task-seed pair"
+  },
+  "serving_binding": {
+    "state": "unbound",
+    "launchable": false,
+    "fields": {
+      "base_snapshot_manifest_sha256": null,
+      "weights_manifest_sha256": null,
+      "tokenizer_manifest_sha256": null,
+      "chat_template_sha256": null,
+      "serving_image_digest": null,
+      "normalized_server_arguments_sha256": null,
+      "staging_receipt_sha256": null,
+      "serving_registration_receipt_sha256": null,
+      "live_pair_parity_receipt_sha256": null,
+      "served_model_id": null,
+      "serving_route_profile_sha256": null,
+      "serving_block_kind": null,
+      "agent_image_digest": null,
+      "proxy_image_digest": null
+    },
+    "existing_endpoint_reuse": "forbidden until exact current base bytes, immutable serving runtime, route readiness and fresh base/post live parity fill every field"
+  },
+  "result_policy": {
+    "outcome_authority": "exact version-bound Fleet grader",
+    "outcome_only": true,
+    "wandb_evaluation_metrics_or_scores": "forbidden",
+    "teacher_reference_cross_entropy": "forbidden",
+    "training_loss": "not_applicable",
+    "training_data_eligible": false,
+    "private_results_required": true,
+    "valid_outcome_retry": "forbidden"
+  },
+  "launch_gate": {
+    "status": "not_launchable_until_exact_base_and_pair_serving_evidence_exists",
+    "prepare_must_reject_unbound_serving_fields": true,
+    "fresh_exact_task_binding_preflight_required": true,
+    "paid_or_scored_work_authorized_by_this_file": false
+  },
+  "sha256": "sha256:db3a37d00654eb4fdfabaf3f53999a0ef2b82a6c2bf9b9c0851aeb25116ac913"
+}

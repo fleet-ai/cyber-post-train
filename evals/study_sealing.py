@@ -127,7 +127,7 @@ def _reference(value: Any, root: Path) -> tuple[dict[str, Any], Path]:
 def _surface_parent(child: dict[str, Any], root: Path) -> tuple[str, dict[str, Any]]:
     parent, _ = _reference(child.get("parent_protocol"), root)
     surface = child.get("surface")
-    if parent.get("schema") == fleet.PROTOCOL_SCHEMA and surface == "fleet_dev":
+    if parent.get("schema") in fleet.PROTOCOL_SCHEMAS and surface == "fleet_dev":
         task_set, _ = _reference(
             {
                 "path": parent["task_set"]["path"],

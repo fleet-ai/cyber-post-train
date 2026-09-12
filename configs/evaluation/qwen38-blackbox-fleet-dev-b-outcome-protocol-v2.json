@@ -1,0 +1,163 @@
+{
+  "schema": "cyber_fleet_dev_outcome_protocol_v2",
+  "purpose": "Qwen3.8-27B SFT hyperparameter selection on fresh Fleet task outcomes",
+  "split_variant": "b",
+  "task_set": {
+    "path": "configs/evaluation/qwen38-blackbox-fleet-dev-b-task-set-v1.json",
+    "sha256": "sha256:6f654f7493fa3803fc014efcfdc1be4a27e6518bc29ad9d401fe3823a59fbab2",
+    "file_sha256": "sha256:1c29fa0618418278d8ce80a2a8f769bc350b0a06251314b6b1da037567c56658",
+    "task_count": 20,
+    "selection_role": "fleet_dev_hpo",
+    "training_data_eligible": false,
+    "exact_task_binding_required_at_preflight_and_execution": true
+  },
+  "model": {
+    "repository": "Qwen/Qwen3.8-27B",
+    "base_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "tokenizer_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "comparison": "matched base versus one post-SFT checkpoint",
+    "only_intended_difference": "post-SFT weight manifest"
+  },
+  "checkpoint_binding_template": {
+    "state": "unbound",
+    "launchable": false,
+    "fields": {
+      "checkpoint_seal_sha256": null,
+      "export_receipt_sha256": null,
+      "weights_manifest_sha256": null,
+      "tokenizer_manifest_sha256": null,
+      "chat_template_sha256": null,
+      "staging_receipt_sha256": null,
+      "serving_registration_receipt_sha256": null,
+      "live_parity_receipt_sha256": null,
+      "served_model_id": null,
+      "serving_route_profile_sha256": null,
+      "agent_image_digest": null,
+      "proxy_image_digest": null
+    },
+    "binding_rule": "An arm-specific immutable child may fill every null exactly once, must reference this parent protocol SHA-256, and may not change any other field.",
+    "acceptance_rule": "Require accepted checkpoint seal, BF16 export and exact reload, create-once staging, serving registration, and live base/post parity before prepare."
+  },
+  "harness": {
+    "harness": "opencode",
+    "harness_version": "1.18.27",
+    "release_asset_sha256": "sha256:4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702",
+    "provider_adapter": "@ai-sdk/openai-compatible",
+    "context_management": "opencode_1.18.27_native_compaction_autocontinue_v2",
+    "context_window_size": 262144,
+    "compaction_headroom_tokens": 20000,
+    "max_output_tokens": 32768,
+    "max_model_requests": 600,
+    "timeout_seconds": 28800,
+    "tools": [
+      "bash",
+      "submit_report"
+    ],
+    "tool_catalog_sha256": "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a"
+  },
+  "sampling": {
+    "temperature": 0.6,
+    "top_p": 0.95,
+    "base_seed": 42,
+    "attempt_seeds": [
+      42,
+      43,
+      44,
+      45
+    ],
+    "seed_rule": "attempt N uses base_seed + N - 1 modulo 2^31"
+  },
+  "pass_k": 4,
+  "concurrency_per_worker": 1,
+  "outcome_authority": {
+    "required_cyber_contract": {
+      "evidence_schema": "1.0.0",
+      "verifier_contract": "3.0.0",
+      "submission_protocol": "2.0.0"
+    },
+    "provisioning_route_template": "/v1/rollout-rewards/{task_key}/versions/{task_version_id}/instances",
+    "scoring_route_template": "/v1/rollout-rewards/{task_key}/versions/{task_version_id}",
+    "valid_outcome_requires": [
+      "exact frozen task, environment, starting-data and verifier bindings",
+      "normal terminal OpenCode event stream without an unfinished final step",
+      "authoritative version-bound grading",
+      "complete private local result evidence",
+      "challenge environment and all harness containers cleaned"
+    ]
+  },
+  "metrics": {
+    "primary": {
+      "name": "fleet_dev_paired_mean_success_delta_4fixed",
+      "unit": "task_family",
+      "attempt_seeds": [
+        42,
+        43,
+        44,
+        45
+      ],
+      "per_task_estimator": "For each exact task version, average the four full-task solve indicators for the predeclared attempt seeds.",
+      "arm_estimator": "Mean the 20 per-task means with equal task weight.",
+      "paired_comparison": "Candidate minus base on each exact task-version and attempt-seed pair, then mean within task and across tasks.",
+      "hpo_direction": "maximize candidate-minus-base paired delta",
+      "eligibility": "All 80 task-seed pairs must contain authoritative valid outcomes for both base and candidate; no available fixed attempt may be discarded."
+    },
+    "secondary_only": [
+      "base_and_candidate_fleet_dev_pass_at_4",
+      "paired_fleet_dev_pass_at_4_delta",
+      "attempt_1_mean_authoritative_fractional_reward",
+      "best_of_4_mean_authoritative_fractional_reward",
+      "valid_outcome_rate",
+      "infrastructure_invalid_count",
+      "report_submission_rate",
+      "model_requests_tokens_and_elapsed_time"
+    ],
+    "uncertainty": {
+      "method": "paired task-clustered percentile bootstrap",
+      "cluster_unit": "exact task_version_id",
+      "within_cluster": "retain all four matched base/candidate seed pairs",
+      "estimand": "candidate-minus-base mean full-task success",
+      "resamples": 10000,
+      "seed": 20260911,
+      "interval": 0.95,
+      "percentile_rule": "linear interpolation at rank (resamples - 1) * quantile"
+    },
+    "invalid_outcome_policy": "Never score infrastructure-invalid, interrupted, output-limited, or unknown attempts as model failures; the paired primary comparison remains incomplete."
+  },
+  "selection_rule": {
+    "signal": "fleet_dev_paired_mean_success_delta_4fixed only",
+    "base_pairing": "exact task_version_id and attempt seed",
+    "task_weighting": "equal task weight after averaging all four fixed attempts",
+    "ties": "retain tied arms for a fresh predeclared confirmation",
+    "forbidden_tiebreakers": [
+      "training loss",
+      "teacher-reference cross-entropy",
+      "Fleet pass@4 secondary metrics",
+      "Fleet final-test outcomes",
+      "WebExploitBench outcomes"
+    ]
+  },
+  "heldout_policy": {
+    "teacher_reference_cross_entropy": "forbidden",
+    "development_tasks_in_training_preferences_or_rl": false,
+    "training_loss_role": "fitting diagnostic only",
+    "external_benchmarks": "run after each frozen checkpoint but keep sealed from HPO decisions",
+    "webexploitbench": {
+      "state": "sealed_during_fleet_dev_hpo",
+      "hyperparameter_or_checkpoint_selection_eligible": false,
+      "unseal_only_after": "the Fleet development selection decision is frozen"
+    }
+  },
+  "retry_policy": {
+    "automatic_retry": false,
+    "valid_outcome_retry": "forbidden",
+    "ambiguous_or_invalid_attempt": "hold for evidence review",
+    "replacement_authority": "none in this parent protocol; a separately reviewed symmetric amendment is required before any replacement execution"
+  },
+  "launch_gate": {
+    "status": "not_launchable_until_checkpoint_and_serving_bindings_are_complete",
+    "dev_first": true,
+    "prepare_must_reject_unbound_checkpoint_fields": true,
+    "paid_or_scored_work_authorized_by_this_file": false
+  },
+  "sha256": "sha256:01f9c8b28cdc08ef8c089600b96450d747fe92447a60cbd4d60256b6302e5388"
+}

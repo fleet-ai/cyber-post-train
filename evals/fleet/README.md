@@ -141,6 +141,14 @@ immutable serving-image/weight receipts and live parity from
 [the evaluation skill](../../skills/cyber-eval-parity/SKILL.md).
 Never silently pool serving blocks or use external benchmark observations to tune.
 
+For Qwen Fleet-development HPO, use the immutable v2 outcome protocol and
+`dev_outcome_estimator.py`. Its primary estimate averages all four fixed binary
+outcomes within each task, compares candidate and base on exact task+seed pairs,
+and bootstraps whole task clusters. Pass@4 is secondary. Private outcome inputs
+and estimates never go to W&B, and sealed WebExploitBench results never enter
+selection or tie-breaking. The v1 attempt-1 protocols remain historical and are
+not silently upgraded.
+
 See [PostgreSQL operations](../../docs/ROLLOUT_POSTGRES.md) for reconciliation
 and backup ownership. Historical Qwen3.6/Qwen Code/exact-800 campaign artifacts
 remain reproducible in Git; their names, ledger and retries are not starter templates.
