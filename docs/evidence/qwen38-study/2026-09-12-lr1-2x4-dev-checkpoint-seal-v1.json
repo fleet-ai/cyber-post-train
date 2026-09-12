@@ -1,0 +1,78 @@
+{
+  "schema": "cyber_qwen38_teacher_lr1_2x4_checkpoint_seal_v1",
+  "classification": "cpu_only_create_once_checkpoint_seal_independently_verified_gpu_reload_pending",
+  "purpose": "Accept the immutable CPU integrity seal for the exact LR1 two-by-four development step-6 checkpoint without claiming GPU reload, continuation, learning-rate selection, production-layout parity or model quality.",
+  "source": {
+    "run_name": "chris-q38-ta8-lr1-2x4-dev-v1",
+    "api_run_id": "0a67736f-f40b-4b0c-b4ae-fe494f97235b",
+    "output_root": "/mnt/sfs/jobs/chris-q38-ta8-lr1-2x4-dev-v1",
+    "checkpoint_path": "/mnt/sfs/jobs/chris-q38-ta8-lr1-2x4-dev-v1/checkpoints/global_step_6",
+    "optimizer_step": 6,
+    "world_size": 8,
+    "files": 33,
+    "bytes": 324627486731,
+    "plan_sha256": "sha256:3b554d48bb61eeac041415c951f1bc327f70288aa8e2590246bd5eecb2f04e58",
+    "terminal_evidence": {
+      "path": "docs/evidence/qwen38-study/2026-09-12-lr1-2x4-dev-terminal-v1.json",
+      "file_sha256": "sha256:ee6fd164c26b2bf608e65fc5f3ccd8e4793c8728a108b1943efdf45fa656bbaa",
+      "embedded_sha256": "sha256:04b9b6a2db71df69dbb383db7483708c84bab64c1d34f22c278ba8f1e4ef5607"
+    }
+  },
+  "seal": {
+    "manifest_path": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/lr1-2x4-dev-v1-reload-v1/checkpoint-step-6.json",
+    "manifest_file_sha256": "sha256:0cbdb07de2ffabc928ba8b443a59814266653d658f4190aa81f6d9801a6fbcd2",
+    "manifest_receipt_sha256": "sha256:b6feb7649659e46d494215940c4575dee2de8c5cd6de2dadd30955d043bd72f7",
+    "manifest_schema": "cyber_skyrl_checkpoint_manifest_v1",
+    "optimizer_step": 6,
+    "world_size": 8,
+    "files": 33,
+    "bytes": 324627486731,
+    "source_plan_sha256_matches": true,
+    "fleet_dev_protocol_matches": true,
+    "validation_mode": "task_outcomes_only",
+    "reference_cross_entropy_enabled": false,
+    "gpu_reload_verified": false,
+    "create_once_destination_absent_before_seal": true,
+    "independent_full_file_rehash_passed": true,
+    "source_inventory_unchanged_after_sealing": true
+  },
+  "execution": {
+    "cluster": "dev",
+    "namespace": "fleet-train-jobs",
+    "helper_kind": "standalone_cpu_pod",
+    "helper_name": "chris-q38-lr1-seal-v1",
+    "helper_uid": "a3c23fc6-666e-491e-9cdb-d7246f6451b5",
+    "scheduled_at": "2026-09-12T14:28:47Z",
+    "container_started_at": "2026-09-12T14:28:48Z",
+    "deleted_at": "2026-09-12T14:42:23Z",
+    "pinned_image_digest": "sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "staged_code_commit": "41e40a9b315acd752b6686dd5343fab256bb0da5",
+    "staged_archive_sha256": "sha256:7444b73364e17cf709884753c0b25c883e2d1fd1ebcd9eadbcb33de5ba1573f0",
+    "gpus_requested": 0,
+    "restarts": 0,
+    "jobs_api_posts": 0,
+    "helper_deleted": true,
+    "helper_absence_verified": true
+  },
+  "acceptance": {
+    "cpu_integrity_seal_accepted": true,
+    "checkpoint_reusable_for_bounded_zero_update_reload_test": true,
+    "checkpoint_gpu_reload_accepted": false,
+    "optimizer_continuation_authorized": false,
+    "learning_rate_selected": false,
+    "production_training_authorized": false,
+    "model_quality_claimed": false
+  },
+  "privacy": {
+    "private_trainer_logs_read": false,
+    "raw_tensor_values_read": false,
+    "prompts_traces_flags_answers_credentials_or_scores_read": false
+  },
+  "next_gate": "Run one exact two-worker-by-four-GPU zero-update native reload on development using the sealed manifest. It must restore all eight ranks and optimizer, scheduler, sampler, RNG and supervised-token progress without CE or an optimizer step, emit digest-valid recovery receipts, preserve the source checkpoint, write no training checkpoint, and release all GPUs.",
+  "limitations": [
+    "CPU hashing proves checkpoint byte integrity and producer binding; it does not prove the training runtime can restore the checkpoint on eight GPUs.",
+    "The source run completed only six of 76 planned optimizer steps and cannot be treated as a completed LR arm.",
+    "The two-by-four topology is not evidence that the original literal one-by-eight production-layout gate passed."
+  ],
+  "sha256": "sha256:41a815fbb9a287574ba6514d39a585d5ec5701b50ba83b21ec72cb46c44bfc3e"
+}
