@@ -58,6 +58,22 @@ def _private_write_once(path: Path, value: dict) -> None:
         os.unlink(temporary)
 
 
+def _write_outputs(
+    selection_path: Path, receipt_path: Path, selection: dict, receipt: dict
+) -> None:
+    """Publish the create-once pair, rolling back a lone selection on failure."""
+    if selection_path.resolve() == receipt_path.resolve():
+        raise ValueError("selection and receipt outputs must be distinct")
+    if any(path.exists() or path.is_symlink() for path in (selection_path, receipt_path)):
+        raise FileExistsError("create-once exposure-control output exists")
+    _private_write_once(selection_path, selection)
+    try:
+        _private_write_once(receipt_path, receipt)
+    except BaseException:
+        selection_path.unlink(missing_ok=True)
+        raise
+
+
 def _unique(rows: list[dict], label: str) -> dict[str, dict]:
     result = {}
     for row in rows:
@@ -591,16 +607,7 @@ def main() -> int:
             seed=args.seed,
             max_search_states=args.max_search_states,
         )
-        if args.output_selection.resolve() == args.output_receipt.resolve():
-            raise ValueError("selection and receipt outputs must be distinct")
-        if args.output_selection.exists() or args.output_receipt.exists():
-            raise FileExistsError("create-once exposure-control output exists")
-        _private_write_once(args.output_selection, selection)
-        try:
-            _private_write_once(args.output_receipt, receipt)
-        except Exception:
-            args.output_selection.unlink(missing_ok=True)
-            raise
+        _write_outputs(args.output_selection, args.output_receipt, selection, receipt)
     except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError) as exc:
         parser.exit(2, f"exposure control not written ({type(exc).__name__})\n")
     print(

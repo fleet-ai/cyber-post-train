@@ -144,8 +144,8 @@
       "state": "frozen_nonlaunchable_control",
       "implementation_commit": "b8471c4c911e2ed676e062518dba794325bada73",
       "path": "configs/studies/qwen-blackbox-teacher-exposure-matched-control-v1.json",
-      "file_sha256": "sha256:ed9626f803c28daae4dbb13f91ff21df03eda3078b42f165a5dcc202c7024e26",
-      "embedded_sha256": "sha256:3e758995989b8a42d7bebb4320e666b5ba21649c61ea79f3b74e5ee6f2be40cc",
+      "file_sha256": "sha256:9e65d8f535948cd9cff31495a63005addd8c936ce5ab3fd324e46cfc3c1d927e",
+      "embedded_sha256": "sha256:85e53884d624bb8ad4c47cd56588242e09650b283b1fff562b6e18c8160a4b88",
       "interpretation": "The matched control and balanced arm have identical whole-episode, dense-window and supervised-output-token counts. They differ in family exposure. Input/context-token exposure remains unmeasured and unmatched, so this is not a fully compute-matched comparison.",
       "variants": {
         "a": {
@@ -153,7 +153,7 @@
           "balanced_corpus_sha256": "sha256:b8aa6d6f9ae19fd509a90c3d2b6343631386d6bc14b019e620810da274bd9cf8",
           "balanced_train_parquet_sha256": "sha256:e59e05912bdadbbd0f147a02a5da500fc8242bf565fb0206c0e36c0394289d9b",
           "matched_source_selection_sha256": "sha256:91af179896e5d4c052abfce13664e3dae46554aa4f6b9cf28c8fe885c516e706",
-          "match_receipt_sha256": "sha256:d7bd21bb94723bbce339c1f7a35d77ed8d2b92f938618c24ca1fae6999cac86d",
+          "match_receipt_sha256": "sha256:3186dc1004ce8ae17a20ad1c94135b621e922481bbb30cbb6d3d3c31c95b76a7",
           "selected_episode_ids_sha256": "sha256:e1d56c191584fddd942109c83fe4c4f60c8a4a58f86f4f09e75e9e2eb26739eb",
           "matched_corpus_sha256": "sha256:8faa6e559c00cc3623a1bc03cc7364ba00611e51caa95d2d845b884ddbd7a93f",
           "matched_train_parquet_sha256": "sha256:e4e388835160ca3c04fb5bd9c2f309756705f452f67daae7284857f965b3541a",
@@ -168,7 +168,7 @@
           "balanced_corpus_sha256": "sha256:1650edbb53ee33439311a8338207d95923f72283087e0069b89eb8114fafb194",
           "balanced_train_parquet_sha256": "sha256:a763aabcf3a16aeb761a7798df268096d9eb10eee788f924bfa0726b91b6272a",
           "matched_source_selection_sha256": "sha256:569c72c5d04c4f4040f41c19218ed6cfad7bf3ab69d72e322c581efc53922626",
-          "match_receipt_sha256": "sha256:4c655e1e70fe00d45dbc2931016ad6832317a038e79064a3bd379656ebb9eb82",
+          "match_receipt_sha256": "sha256:357528b6eed21c6c73e78bc99bda722bb257a917a0d1f656876bfaef6badd1ad",
           "selected_episode_ids_sha256": "sha256:61edb83e394181b2a1cfdb665b962a600bfc706736bf8989d2371c519705e605",
           "matched_corpus_sha256": "sha256:5f659d2aee46a93c42f8e1d52fcfa5a7753e4fea9e7087e2df2242f5eb850a24",
           "matched_train_parquet_sha256": "sha256:8be3a5aec00bf4ad710ac691cf6fd7528952d37a6fae5d28e6e6384d352eedbc",
@@ -474,5 +474,5 @@
     "all_arms_currently_launchable": false,
     "promotion": "dev_qualification_then_reviewed_prod_preview_and_explicit_submit"
   },
-  "sha256": "sha256:8d0a00a9f4376fc45f5c3d23b319dec0d7106fa4dfbaf5a2fd329081d6e90ee2"
+  "sha256": "sha256:4397b621392778377cf46fe0fa549084b336f2bf0b3083b68cf8254ab574f9a3"
 }

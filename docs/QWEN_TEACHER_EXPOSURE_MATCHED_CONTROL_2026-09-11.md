@@ -26,9 +26,15 @@ still change the number of batches. Matching episode count keeps the
 number of independent native trajectories equal. No target is duplicated and
 the epoch count is not changed to manufacture the match.
 
-The private A and B corpora contain only `train.parquet`, are mode `0600`, have
-no teacher-CE development rows, and use the exact frozen tokenizer, chat
-template, ordered tool interface, and dense assistant-turn target policy.
+The private A and B corpora have `train.parquet` as their only training-data
+payload, use mode `0600`, have no teacher-CE development rows, and use the exact
+frozen tokenizer, chat template, ordered tool interface, and dense
+assistant-turn target policy.
+Post-materialization acceptance also requires a non-symlink directory at mode
+`0700`, the exact five-file inventory, regular non-symlink files at mode
+`0600`, sealed selection/split/interface bindings, aggregate counts, and the
+builder fingerprint. The verifier rereads `train.parquet` only as opaque byte
+chunks to recompute SHA-256; it never opens Parquet or decodes token arrays.
 Their manifests retain the outcome-protocol digest current when those source
 corpora were built as provenance. The comparison itself separately binds the
 current v2 A/B Fleet-dev protocols; it does not pretend an older corpus label
@@ -74,10 +80,12 @@ different distribution across families.
 
 ## Evidence and interpretation boundary
 
-The construction read only sealed study splits, sanitized episode metadata,
-aggregate coverage receipts, and corpus manifests. It did not read prompts,
-traces, flags, answers, scores, token arrays, held-out outcomes, or external
-benchmark data.
+The selection construction read only sealed study splits, sanitized episode
+metadata, aggregate coverage receipts, and corpus manifests. It did not read
+prompts, traces, flags, answers, scores, token arrays, held-out outcomes, or
+external benchmark data. The separate materialization check performed the
+opaque SHA-256 byte read described above, without decoding or inspecting the
+private training payload.
 
 Only supervised output tokens are available in the aggregate receipts. Input
 and context-token exposure is therefore not matched, so this must be called an

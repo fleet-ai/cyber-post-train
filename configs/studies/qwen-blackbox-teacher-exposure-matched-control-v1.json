@@ -52,10 +52,25 @@
     "tokenizer_backend_sha256": "ffb7a28b27dabcc333662fd3e0b0005d9e79a1c22e31453ab5a3017fbd5f25c0"
   },
   "implementation": {
-    "selection_code_sha256": "sha256:8443300eeb89d67325641b63773e5dcd02201a2e5343fc14eb8deba56c7d98ed",
+    "selection_code_sha256": "sha256:03c73a68ee9b6f8389a01ff9499a7b2cafea768508757e79ec89cdf2d1662df7",
     "frozen_dense_builder_commit": "8fdd91bffd0cc862b3888e92748ada566010ad57",
     "frozen_sft_runtime_sha256": "sha256:fc5db40437923800730d38b9bc9a0872cdd64dd8a92c64fc03ecfdeb0ac2b2e3",
     "note": "Materialization used the exact code fingerprint bound by the already-frozen coverage policy; later training-control and telemetry changes intentionally do not rewrite that policy."
+  },
+  "materialization_acceptance": {
+    "schema": "cyber_dense_sft_corpus_acceptance_v1",
+    "validator_code_sha256": "sha256:ad11286dfc721b97a53291acc881e0217bc458c58d4729913b22d2da21b25441",
+    "read_policy": "opaque_sha256_only_no_parquet_or_token_decoding",
+    "required_layout": "one regular non-symlink directory at mode 0700 containing exactly four sealed JSON bindings and train.parquet, all regular non-symlink files at mode 0600",
+    "builder_components_sha256": "sha256:57cf98efe8bf327383208a4c6257db8a90bc0ad5edc07fb0c5076f8544cb3ed4",
+    "variants": {
+      "a": {
+        "receipt_sha256": "sha256:e9e60d6f54e5226a5427808a6d4ea33213a5a1b88688f974da7b429285cec987"
+      },
+      "b": {
+        "receipt_sha256": "sha256:b4e205c928fea93b658a72268b4e96a61044c55ccbe4ce4fc570df3d5030629a"
+      }
+    }
   },
   "variants": {
     "a": {
@@ -71,7 +86,7 @@
       "balanced_corpus_sha256": "sha256:b8aa6d6f9ae19fd509a90c3d2b6343631386d6bc14b019e620810da274bd9cf8",
       "balanced_train_parquet_sha256": "sha256:e59e05912bdadbbd0f147a02a5da500fc8242bf565fb0206c0e36c0394289d9b",
       "matched_source_selection_sha256": "sha256:91af179896e5d4c052abfce13664e3dae46554aa4f6b9cf28c8fe885c516e706",
-      "match_receipt_sha256": "sha256:d7bd21bb94723bbce339c1f7a35d77ed8d2b92f938618c24ca1fae6999cac86d",
+      "match_receipt_sha256": "sha256:3186dc1004ce8ae17a20ad1c94135b621e922481bbb30cbb6d3d3c31c95b76a7",
       "selected_episode_ids_sha256": "sha256:e1d56c191584fddd942109c83fe4c4f60c8a4a58f86f4f09e75e9e2eb26739eb",
       "matched_corpus_sha256": "sha256:8faa6e559c00cc3623a1bc03cc7364ba00611e51caa95d2d845b884ddbd7a93f",
       "matched_train_parquet_sha256": "sha256:e4e388835160ca3c04fb5bd9c2f309756705f452f67daae7284857f965b3541a",
@@ -132,7 +147,7 @@
       "balanced_corpus_sha256": "sha256:1650edbb53ee33439311a8338207d95923f72283087e0069b89eb8114fafb194",
       "balanced_train_parquet_sha256": "sha256:a763aabcf3a16aeb761a7798df268096d9eb10eee788f924bfa0726b91b6272a",
       "matched_source_selection_sha256": "sha256:569c72c5d04c4f4040f41c19218ed6cfad7bf3ab69d72e322c581efc53922626",
-      "match_receipt_sha256": "sha256:4c655e1e70fe00d45dbc2931016ad6832317a038e79064a3bd379656ebb9eb82",
+      "match_receipt_sha256": "sha256:357528b6eed21c6c73e78bc99bda722bb257a917a0d1f656876bfaef6badd1ad",
       "selected_episode_ids_sha256": "sha256:61edb83e394181b2a1cfdb665b962a600bfc706736bf8989d2371c519705e605",
       "matched_corpus_sha256": "sha256:5f659d2aee46a93c42f8e1d52fcfa5a7753e4fea9e7087e2df2242f5eb850a24",
       "matched_train_parquet_sha256": "sha256:8be3a5aec00bf4ad710ac691cf6fd7528952d37a6fae5d28e6e6384d352eedbc",
@@ -209,5 +224,5 @@
     "The deterministic control locally preserves family shares subject to exact feasibility; it is not a global minimum-distance solution or an unbiased sample.",
     "No uplift claim is valid without exact dev qualification, a fresh matched base control and matched outcome evaluation."
   ],
-  "sha256": "sha256:3e758995989b8a42d7bebb4320e666b5ba21649c61ea79f3b74e5ee6f2be40cc"
+  "sha256": "sha256:85e53884d624bb8ad4c47cd56588242e09650b283b1fff562b6e18c8160a4b88"
 }
