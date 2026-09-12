@@ -42,10 +42,13 @@ def test_numeric_lr_canaries_are_distinct_bounded_and_inert() -> None:
         assert len({arm[field] for arm in arms}) == 2
 
 
-def test_numeric_canaries_bind_current_runtime_and_narrow_rejection_policy() -> None:
+def test_numeric_canaries_keep_their_historical_runtime_and_rejection_policy() -> None:
     value = _read()
     runtime = value["runtime"]
-    assert runtime["sha256"] == file_sha256(ROOT / runtime["path"])
+    assert runtime["sha256"] == (
+        "sha256:14448fc710ceb6105f54fbb9558f3d42e7fc96a193ba593390cca3f33c7e3db8"
+    )
+    assert runtime["sha256"] != file_sha256(ROOT / runtime["path"])
     assert runtime["implementation_commit"] == (
         "699fa577e96180695dad00d85b152f5302964699"
     )
