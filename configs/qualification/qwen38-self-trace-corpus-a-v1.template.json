@@ -1,0 +1,30 @@
+{
+  "schema": "cyber_qwen_direct_self_trace_corpus_config_v1",
+  "source_root": "/mnt/sfs/jobs/PENDING_EXACT_DIRECT_BASE_COLLECTION",
+  "source_index": {
+    "path": "/mnt/sfs/jobs/PENDING_EXACT_DIRECT_BASE_COLLECTION/SELF_TRACE_INDEX.json",
+    "sha256": "PENDING_DIGEST_VALID_REVIEWED_INDEX"
+  },
+  "split": {
+    "path": "../data/qwen-blackbox-study-train-a-v1.json",
+    "sha256": "sha256:2222dd8475e67f5ccec1a3cfc871d53e06e77295fc996e949db50d3572d5c5e9"
+  },
+  "model_lock": {
+    "path": "../models/qwen38-27b-1d4bf0f2.lock.json",
+    "sha256": "sha256:f3926fe675263b25dc79c2b3881a9c463d6b7931e9d61aeb777d15efc61e35ac"
+  },
+  "model_weights": {
+    "path": "../models/qwen38-27b-1d4bf0f2.weights.json",
+    "sha256": "sha256:80a5e9de066e068abb012a0e9bd144676813a31042bb578226472803f8e0e84f"
+  },
+  "tokenizer_root": "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2",
+  "max_length": 16384,
+  "context_tokens": 4096,
+  "max_episodes_per_task_version": 3,
+  "max_supervised_tokens_per_task_version": 49152,
+  "max_submit_token_share": 0.5,
+  "max_submit_response_share": 0.5,
+  "source_seed": "qwen38-self-trace-split-a-v1",
+  "fleet_dev_protocol_sha256": "sha256:3c2c65eed748b16b50ef992327324b1fcaad84b190456c4aefe69c6efe748f75",
+  "output": "/mnt/sfs/jobs/chris-q38-self-corpus-a-v1"
+}
