@@ -42,6 +42,23 @@ REQUEST_PREFIX_POLICY = {
     "tool_rewriting": "prohibited",
 }
 
+SOURCE_CLOSURE_PATHS = {
+    name: Path(__file__).with_name(name)
+    for name in (
+        "dense.py",
+        "io.py",
+        "qwen_tools.py",
+        "rl_data.py",
+        "rl_episode.py",
+        "self_trace_collection.py",
+        "self_trace_corpus.py",
+        "skyrl_episode.py",
+    )
+}
+SOURCE_CLOSURE_PATHS["opencode_self_hosted.py"] = (
+    Path(__file__).parents[1] / "evals/fleet/opencode_self_hosted.py"
+)
+
 
 class CollectionError(ValueError):
     """A fixed, payload-free collection qualification rejection."""
@@ -131,14 +148,7 @@ def _tool_catalog(reference: object, relative_to: Path) -> tuple[Path, list[dict
 
 
 def _source_closure(value: object, relative_to: Path) -> dict[str, str]:
-    names = {
-        "dense.py",
-        "rl_data.py",
-        "rl_episode.py",
-        "self_trace_collection.py",
-        "self_trace_corpus.py",
-        "skyrl_episode.py",
-    }
+    names = set(SOURCE_CLOSURE_PATHS)
     if not isinstance(value, dict) or set(value) != names:
         raise CollectionError("collector source closure fields differ")
     result = {}
@@ -244,13 +254,20 @@ def derive_roster(
 
 
 def _validate_parity_receipt(
-    parity: dict, *, model: dict, interface: dict, source_closure: dict[str, str]
+    parity: dict,
+    *,
+    model: dict,
+    interface: dict,
+    source_closure: dict[str, str],
+    qualification: dict,
 ) -> None:
     _sealed(parity, PARITY_SCHEMA)
     native = parity.get("native")
     dense_receipt = parity.get("dense")
     observation = parity.get("first_observation")
+    dense_policy = parity.get("dense_policy")
     privacy = parity.get("privacy")
+    scope = parity.get("qualification_scope")
     if (
         set(parity)
         != {
@@ -262,7 +279,9 @@ def _validate_parity_receipt(
             "fixture_sha256",
             "native",
             "dense",
+            "dense_policy",
             "first_observation",
+            "qualification_scope",
             "privacy",
             "sha256",
         }
@@ -322,6 +341,15 @@ def _validate_parity_receipt(
             type(dense_receipt.get(name)) is not int or dense_receipt[name] <= 0
             for name in ("trained_prefix_tokens", "supervised_tokens")
         )
+        or dense_policy
+        != {
+            "format": dense.FORMAT,
+            "max_length": qualification.get("max_length"),
+            "context_tokens": qualification.get("context_tokens"),
+        }
+        or native["recorded_tokens_sha256"] != dense_receipt["reference_tokens_sha256"]
+        or native["recorded_loss_mask_sha256"]
+        != dense_receipt["reference_loss_mask_sha256"]
         or not isinstance(observation, dict)
         or observation
         != {
@@ -332,6 +360,15 @@ def _validate_parity_receipt(
         }
         or type(observation.get("tokens")) is not int
         or observation["tokens"] <= 0
+        or scope
+        != {
+            "kind": "skyrl_recorder_adapter_to_dense_synthetic_fixture",
+            "proves": "recorded_token_and_loss_mask_preservation_across_two_direct_turns",
+            "target_model_weights_loaded": False,
+            "target_runtime_chat_template_loaded": False,
+            "pinned_native_helper_loaded": False,
+            "collector_image_or_base_route_used": False,
+        }
         or privacy
         != {
             "synthetic_fixture_only": True,
@@ -339,6 +376,16 @@ def _validate_parity_receipt(
             "tool_arguments_or_results_emitted": False,
             "flags_scores_or_credentials_emitted": False,
         }
+        or parity.get("fixture_sha256")
+        != digest_json(
+            {
+                "schema": "cyber_qwen_direct_recorder_dense_fixture_v1",
+                "native": native,
+                "dense": dense_receipt,
+                "dense_policy": dense_policy,
+                "first_observation": observation,
+            }
+        )
     ):
         raise CollectionError("synthetic parity receipt fields differ")
 
@@ -369,6 +416,10 @@ def validate_request(
         raise CollectionError("collection request fields differ")
     _, plan = _bound(request["producer_plan"], relative_to, sealed=True)
     _, audit = _bound(request["historical_audit"], relative_to, sealed=True)
+    offline = plan.get("offline_qualification")
+    plan_parity = (
+        offline.get("synthetic_recorder_dense_parity") if isinstance(offline, dict) else None
+    )
     if (
         plan.get("schema") != "cyber_qwen_self_sft_recollection_plan_v1"
         or plan.get("execution", {}).get("launchable") is not False
@@ -376,6 +427,28 @@ def validate_request(
         or audit.get("schema") != "cyber_qwen_self_sft_interface_audit_v2"
         or audit.get("status") != "blocked_no_native_compatible_source"
         or plan.get("historical_source_gate", {}).get("audit_sha256") != audit.get("sha256")
+        or plan.get("status")
+        != "blocked_missing_exact_direct_collector_image_route_and_system_prompt"
+        or plan.get("unresolved")
+        != {
+            "direct_base_route_certificate_sha256": None,
+            "direct_collector_image_digest": None,
+            "direct_system_prompt_sha256": None,
+        }
+        or set(offline or {})
+        != {
+            "synthetic_recorder_dense_parity",
+            "cluster_or_api_mutations_performed",
+            "target_model_or_runtime_used",
+        }
+        or offline.get("cluster_or_api_mutations_performed") is not False
+        or offline.get("target_model_or_runtime_used") is not False
+        or not isinstance(plan_parity, dict)
+        or set(plan_parity) != {"path", "file_sha256", "document_sha256"}
+        or not isinstance(plan_parity.get("path"), str)
+        or not plan_parity["path"]
+        or not _sha(plan_parity.get("file_sha256"))
+        or not _sha(plan_parity.get("document_sha256"))
     ):
         raise CollectionError("collection request does not bind the blocked recollection gate")
     model = request["model"]
@@ -597,7 +670,18 @@ def validate_request(
         parity = _read_json(parity_path)
         if not isinstance(parity, dict):
             raise CollectionError("synthetic parity receipt is not an object")
-        _validate_parity_receipt(parity, model=model, interface=interface, source_closure=closure)
+        _validate_parity_receipt(
+            parity,
+            model=model,
+            interface=interface,
+            source_closure=closure,
+            qualification=qualification,
+        )
+        if (
+            parity_ref["sha256"] != plan_parity["file_sha256"]
+            or parity["sha256"] != plan_parity["document_sha256"]
+        ):
+            raise CollectionError("synthetic parity receipt differs from the frozen study")
     expected_status = "qualified" if not blockers else "blocked_external_bindings"
     if request.get("status") != expected_status:
         raise CollectionError("collection request status differs from its blockers")
@@ -828,7 +912,6 @@ def recorder_dense_parity(
     model: dict,
     interface: dict,
     source_closure: dict[str, str],
-    fixture_sha256: str,
     max_length: int,
     context_tokens: int,
 ) -> dict:
@@ -846,17 +929,8 @@ def recorder_dense_parity(
             "required_task_tool_catalog_sha256": TOOL_CATALOG_SHA256,
             "compaction": "disabled",
         }
-        or set(source_closure)
-        != {
-            "dense.py",
-            "rl_data.py",
-            "rl_episode.py",
-            "self_trace_collection.py",
-            "self_trace_corpus.py",
-            "skyrl_episode.py",
-        }
+        or set(source_closure) != set(SOURCE_CLOSURE_PATHS)
         or any(not _sha(value) for value in source_closure.values())
-        or not _sha(fixture_sha256)
         or type(max_length) is not int
         or max_length <= 1
         or type(context_tokens) is not int
@@ -906,6 +980,8 @@ def recorder_dense_parity(
     if (
         first_observation[0] >= first_observation[1]
         or any(dense_reference_loss_mask[first_observation[0] : first_observation[1]])
+        or tokens != dense_reference_tokens
+        or expected_mask != dense_reference_loss_mask
         or len(tokens) < first_observation[1]
         or tokens[: first_observation[1]] != dense_reference_tokens[: first_observation[1]]
         or expected_mask[: first_observation[1]]
@@ -916,6 +992,40 @@ def recorder_dense_parity(
         or [item["tool"] for item in shape] != ["bash", "submit_report"]
     ):
         raise CollectionError("synthetic token or loss-mask parity differs")
+    native_receipt = {
+        "prompt_tokens_sha256": digest_json(tokens[:prompt_length]),
+        "recorded_tokens_sha256": digest_json(tokens),
+        "recorded_loss_mask_sha256": digest_json([0] * prompt_length + mask),
+        "assistant_targets": len(spans),
+    }
+    dense_receipt = {
+        "reference_tokens_sha256": digest_json(dense_reference_tokens),
+        "reference_loss_mask_sha256": digest_json(dense_reference_loss_mask),
+        "trained_prefix_tokens_sha256": digest_json(row["input_ids"]),
+        "trained_prefix_loss_mask_sha256": digest_json(row["loss_mask"]),
+        "trained_prefix_tokens": len(row["input_ids"]),
+        "supervised_tokens": row["target_token_count"],
+    }
+    dense_policy = {
+        "format": dense.FORMAT,
+        "max_length": max_length,
+        "context_tokens": context_tokens,
+    }
+    observation_receipt = {
+        "tokens": first_observation[1] - first_observation[0],
+        "native_dense_token_ids_equal": True,
+        "native_dense_loss_masks_equal": True,
+        "all_observation_tokens_masked": True,
+    }
+    fixture_sha256 = digest_json(
+        {
+            "schema": "cyber_qwen_direct_recorder_dense_fixture_v1",
+            "native": native_receipt,
+            "dense": dense_receipt,
+            "dense_policy": dense_policy,
+            "first_observation": observation_receipt,
+        }
+    )
     receipt = {
         "schema": PARITY_SCHEMA,
         "status": "qualified",
@@ -923,25 +1033,17 @@ def recorder_dense_parity(
         "interface": interface,
         "source_closure_sha256": digest_json(source_closure),
         "fixture_sha256": fixture_sha256,
-        "native": {
-            "prompt_tokens_sha256": digest_json(tokens[:prompt_length]),
-            "recorded_tokens_sha256": digest_json(tokens),
-            "recorded_loss_mask_sha256": digest_json([0] * prompt_length + mask),
-            "assistant_targets": len(spans),
-        },
-        "dense": {
-            "reference_tokens_sha256": digest_json(dense_reference_tokens),
-            "reference_loss_mask_sha256": digest_json(dense_reference_loss_mask),
-            "trained_prefix_tokens_sha256": digest_json(row["input_ids"]),
-            "trained_prefix_loss_mask_sha256": digest_json(row["loss_mask"]),
-            "trained_prefix_tokens": len(row["input_ids"]),
-            "supervised_tokens": row["target_token_count"],
-        },
-        "first_observation": {
-            "tokens": first_observation[1] - first_observation[0],
-            "native_dense_token_ids_equal": True,
-            "native_dense_loss_masks_equal": True,
-            "all_observation_tokens_masked": True,
+        "native": native_receipt,
+        "dense": dense_receipt,
+        "dense_policy": dense_policy,
+        "first_observation": observation_receipt,
+        "qualification_scope": {
+            "kind": "skyrl_recorder_adapter_to_dense_synthetic_fixture",
+            "proves": "recorded_token_and_loss_mask_preservation_across_two_direct_turns",
+            "target_model_weights_loaded": False,
+            "target_runtime_chat_template_loaded": False,
+            "pinned_native_helper_loaded": False,
+            "collector_image_or_base_route_used": False,
         },
         "privacy": {
             "synthetic_fixture_only": True,
@@ -1142,17 +1244,12 @@ def _validate_expectation(expectation: dict) -> None:
         != "synthetic_content_only_no_task_prompt_trace_flag_score_or_credential"
     ):
         raise CollectionError("source expectation is incomplete or incompatible")
-    if set(expectation.get("source_closure", {})) != {
-        "dense.py",
-        "rl_data.py",
-        "rl_episode.py",
-        "self_trace_collection.py",
-        "self_trace_corpus.py",
-        "skyrl_episode.py",
-    } or any(not _sha(value) for value in expectation["source_closure"].values()):
+    if set(expectation.get("source_closure", {})) != set(SOURCE_CLOSURE_PATHS) or any(
+        not _sha(value) for value in expectation["source_closure"].values()
+    ):
         raise CollectionError("source expectation code closure differs")
     actual_closure = {
-        name: file_sha256(Path(__file__).with_name(name)) for name in expectation["source_closure"]
+        name: file_sha256(SOURCE_CLOSURE_PATHS[name]) for name in expectation["source_closure"]
     }
     if expectation["source_closure"] != actual_closure:
         raise CollectionError("source expectation code bytes differ")

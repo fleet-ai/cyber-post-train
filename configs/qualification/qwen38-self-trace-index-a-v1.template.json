@@ -1,7 +1,7 @@
 {
   "schema": "cyber_qwen_direct_self_trace_index_v1",
   "review_receipt_sha256": "PENDING_REVIEW_RECEIPT_SHA256",
-  "producer_plan_sha256": "sha256:b65d055bc0f2a00f327f2c36935428ddee6ab11742f44a13b85580afcb0dd28c",
+  "producer_plan_sha256": "sha256:75ea082c4a2bf3886170fee30124b524b97036a1de9244677b30d4613e811212",
   "route_certificate_sha256": "PENDING_EXACT_DIRECT_BASE_ROUTE_CERTIFICATE_SHA256",
   "runtime_image": "PENDING_IMMUTABLE_SKYRL_DIRECT_IMAGE@sha256:PENDING",
   "model": {

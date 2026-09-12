@@ -1,0 +1,59 @@
+{
+  "dense": {
+    "reference_loss_mask_sha256": "sha256:537a391f61d43812729900d74fa73a7defb43b1fe431cc2ba2e7765c5952a211",
+    "reference_tokens_sha256": "sha256:061c9e366d17e2bf290a5d0b491851acbf3dd5213e74593da116c723d4bfdb2d",
+    "supervised_tokens": 4,
+    "trained_prefix_loss_mask_sha256": "sha256:b95c612e86c9bb821bd23527957b3bff131da5d7a12edde33e53d2591eac237a",
+    "trained_prefix_tokens": 10,
+    "trained_prefix_tokens_sha256": "sha256:b26eb5ca7f7c34ec9cc0775425ffb3976fa1e5af40941fef52fc6f53ffa8d72b"
+  },
+  "dense_policy": {
+    "context_tokens": 4096,
+    "format": "pretokenized_assistant_segments_v1",
+    "max_length": 16384
+  },
+  "first_observation": {
+    "all_observation_tokens_masked": true,
+    "native_dense_loss_masks_equal": true,
+    "native_dense_token_ids_equal": true,
+    "tokens": 3
+  },
+  "fixture_sha256": "sha256:f5ca33271672461be1e40c663d53af6a5893041b16d16b315b7cff32a8cb742d",
+  "interface": {
+    "compaction": "disabled",
+    "required_task_tool_catalog_sha256": "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a",
+    "required_task_tools": [
+      "bash",
+      "submit_report"
+    ]
+  },
+  "model": {
+    "repo": "Qwen/Qwen3.8-27B",
+    "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "runtime_chat_template_sha256": "sha256:c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041"
+  },
+  "native": {
+    "assistant_targets": 2,
+    "prompt_tokens_sha256": "sha256:a615eeaee21de5179de080de8c3052c8da901138406ba71c38c032845f7d54f4",
+    "recorded_loss_mask_sha256": "sha256:537a391f61d43812729900d74fa73a7defb43b1fe431cc2ba2e7765c5952a211",
+    "recorded_tokens_sha256": "sha256:061c9e366d17e2bf290a5d0b491851acbf3dd5213e74593da116c723d4bfdb2d"
+  },
+  "privacy": {
+    "flags_scores_or_credentials_emitted": false,
+    "prompt_or_trace_content_emitted": false,
+    "synthetic_fixture_only": true,
+    "tool_arguments_or_results_emitted": false
+  },
+  "qualification_scope": {
+    "collector_image_or_base_route_used": false,
+    "kind": "skyrl_recorder_adapter_to_dense_synthetic_fixture",
+    "pinned_native_helper_loaded": false,
+    "proves": "recorded_token_and_loss_mask_preservation_across_two_direct_turns",
+    "target_model_weights_loaded": false,
+    "target_runtime_chat_template_loaded": false
+  },
+  "schema": "cyber_qwen_direct_recorder_dense_parity_v1",
+  "sha256": "sha256:4903ed1580cb8ebc060d859ef746ea12af4d24399e5d2cbc44ba28b771396418",
+  "source_closure_sha256": "sha256:2bc62d3c271d7bdee1b62f190dbc977f9ea3c9310bffc471e783686e2e3e9fd5",
+  "status": "qualified"
+}

@@ -13,6 +13,10 @@ AUDIT = (
     ROOT
     / "docs/evidence/qwen38-study/2026-09-11-self-sft-interface-audit-v2.json"
 )
+PARITY = (
+    ROOT
+    / "docs/evidence/qwen38-study/2026-09-12-self-trace-recorder-dense-parity-v1.json"
+)
 
 
 def read(path: Path) -> dict:
@@ -42,8 +46,8 @@ def test_self_source_audit_is_sealed_metadata_only_and_still_blocked():
     }
 
 
-def test_recollection_plan_is_sealed_nonlaunchable_and_binds_the_audit():
-    plan, audit = read(PLAN), read(AUDIT)
+def test_recollection_plan_is_sealed_nonlaunchable_and_binds_offline_evidence():
+    plan, audit, parity = read(PLAN), read(AUDIT), read(PARITY)
     assert plan["sha256"] == digest_json(
         {key: value for key, value in plan.items() if key != "sha256"}
     )
@@ -52,7 +56,26 @@ def test_recollection_plan_is_sealed_nonlaunchable_and_binds_the_audit():
     assert plan["execution"]["new_jobs_authorized"] is False
     assert plan["historical_source_gate"]["native_compatible_sessions"] == 0
     assert plan["route_treatments"]["selected"] is None
-    assert all(value is None for value in plan["unresolved"].values())
+    assert plan["status"] == (
+        "blocked_missing_exact_direct_collector_image_route_and_system_prompt"
+    )
+    assert plan["unresolved"] == {
+        "direct_base_route_certificate_sha256": None,
+        "direct_collector_image_digest": None,
+        "direct_system_prompt_sha256": None,
+    }
+    offline = plan["offline_qualification"]
+    assert offline["cluster_or_api_mutations_performed"] is False
+    assert offline["target_model_or_runtime_used"] is False
+    binding = offline["synthetic_recorder_dense_parity"]
+    assert binding == {
+        "path": PARITY.relative_to(ROOT).as_posix(),
+        "file_sha256": file_sha256(PARITY),
+        "document_sha256": parity["sha256"],
+    }
+    assert parity["sha256"] == digest_json(
+        {key: value for key, value in parity.items() if key != "sha256"}
+    )
     assert plan["collection"]["tool_order"] == ["bash", "submit_report"]
     assert plan["collection"]["transcript_policy"]["tool_rewriting"] == "prohibited"
 

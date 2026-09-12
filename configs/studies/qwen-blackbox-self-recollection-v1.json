@@ -59,6 +59,15 @@
     "repo": "Qwen/Qwen3.8-27B",
     "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
   },
+  "offline_qualification": {
+    "synthetic_recorder_dense_parity": {
+      "path": "docs/evidence/qwen38-study/2026-09-12-self-trace-recorder-dense-parity-v1.json",
+      "file_sha256": "sha256:43dd6942e6f5b62c175e7b7ec06c088dd319270601b9b8ecaf971551b5966e44",
+      "document_sha256": "sha256:4903ed1580cb8ebc060d859ef746ea12af4d24399e5d2cbc44ba28b771396418"
+    },
+    "cluster_or_api_mutations_performed": false,
+    "target_model_or_runtime_used": false
+  },
   "post_collection": {
     "corpus_policy": "compile every compatible assistant target once; mask copied context and tool observations; keep only verified successes",
     "heldout_teacher_cross_entropy": "not_computed",
@@ -83,7 +92,7 @@
     }
   },
   "schema": "cyber_qwen_self_sft_recollection_plan_v1",
-  "sha256": "sha256:b65d055bc0f2a00f327f2c36935428ddee6ab11742f44a13b85580afcb0dd28c",
+  "sha256": "sha256:75ea082c4a2bf3886170fee30124b524b97036a1de9244677b30d4613e811212",
   "splits": {
     "a": {
       "path": "configs/data/qwen-blackbox-study-split-a-v1.json",
@@ -102,17 +111,15 @@
       "train_union_task_versions": 74
     }
   },
-  "status": "blocked_missing_exact_direct_collector_image_and_route",
+  "status": "blocked_missing_exact_direct_collector_image_route_and_system_prompt",
   "task_universe": {
     "path": "configs/data/qwen-blackbox-eligible-v1.json",
     "sha256": "c45c9cc420a3dbf1aa6b635b84ed1ca3c404254f046ffdac234e053929a1bf12",
     "task_versions": 89
   },
   "unresolved": {
-    "collection_request_sha256": null,
     "direct_base_route_certificate_sha256": null,
     "direct_collector_image_digest": null,
-    "direct_system_prompt_sha256": null,
-    "synthetic_token_parity_receipt_sha256": null
+    "direct_system_prompt_sha256": null
   }
 }

@@ -3,8 +3,8 @@
   "status": "blocked_external_bindings",
   "producer_plan": {
     "path": "../studies/qwen-blackbox-self-recollection-v1.json",
-    "file_sha256": "sha256:c45cc0a7a8b378eab4f02f4a81fbbbe93cf1e986d733aa92fffb4849e102e61b",
-    "document_sha256": "sha256:b65d055bc0f2a00f327f2c36935428ddee6ab11742f44a13b85580afcb0dd28c"
+    "file_sha256": "sha256:57f8610adc1d8158b3c11868a3b5edb6c30f35def27806ee91305568aea04d51",
+    "document_sha256": "sha256:75ea082c4a2bf3886170fee30124b524b97036a1de9244677b30d4613e811212"
   },
   "historical_audit": {
     "path": "../../docs/evidence/qwen38-study/2026-09-11-self-sft-interface-audit-v2.json",
@@ -90,7 +90,10 @@
   "runtime": {
     "collector_image": null,
     "base_route_certificate_sha256": null,
-    "synthetic_parity_receipt": null
+    "synthetic_parity_receipt": {
+      "path": "../../docs/evidence/qwen38-study/2026-09-12-self-trace-recorder-dense-parity-v1.json",
+      "sha256": "sha256:43dd6942e6f5b62c175e7b7ec06c088dd319270601b9b8ecaf971551b5966e44"
+    }
   },
   "qualification": {
     "max_length": 16384,
@@ -102,6 +105,18 @@
       "path": "../../training/dense.py",
       "sha256": "sha256:712038f1abf4f461cf471afc50f7fbbfe90c9d2d7b9e0be1a81583378c933012"
     },
+    "io.py": {
+      "path": "../../training/io.py",
+      "sha256": "sha256:7a0b734a4ab7fb8b702430094c58c72f19ac8fc7cc5e056eb8410267e6bfdfe3"
+    },
+    "opencode_self_hosted.py": {
+      "path": "../../evals/fleet/opencode_self_hosted.py",
+      "sha256": "sha256:b28e267d02024ac979f4a0f39ee778e68331da490f5084c3e5a34136eff04707"
+    },
+    "qwen_tools.py": {
+      "path": "../../training/qwen_tools.py",
+      "sha256": "sha256:00e0c3f322d5416c0697d2bb4504766bfa32f1436b3b5122f6dd7326c7698fd9"
+    },
     "rl_data.py": {
       "path": "../../training/rl_data.py",
       "sha256": "sha256:f0c327d2ecc464610a5fd86e11b112870d28feb43d9155d7507d8fedbd87632b"
@@ -112,7 +127,7 @@
     },
     "self_trace_collection.py": {
       "path": "../../training/self_trace_collection.py",
-      "sha256": "sha256:df6c2187d0a9d8b10a32995ba80aa4c41af9bcb62bb9e833a3c30a7225d686f8"
+      "sha256": "sha256:18d1d42a8524c1b34afdaa8128751e314058c37bec86e9948e6f9433d893c580"
     },
     "self_trace_corpus.py": {
       "path": "../../training/self_trace_corpus.py",
@@ -136,5 +151,5 @@
     "job_submission_performed": false,
     "credentials_required": false
   },
-  "sha256": "sha256:b9adf7dec80c61384dd2e8f146d2b4f64f6da4db6797ab26af68e0c1d7e9703b"
+  "sha256": "sha256:6aebcbb8610879d8d8c66e0a3935bc18fd9a8f990a2453467bb6cc8c34328a82"
 }

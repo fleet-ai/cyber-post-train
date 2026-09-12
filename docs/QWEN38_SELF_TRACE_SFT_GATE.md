@@ -1,7 +1,8 @@
 # Qwen3.8 self-trace SFT gate
 
-Status: **blocked before data creation**. No self-trace SFT job is ready to
-preview or submit, and this preparation performed no cluster mutation.
+Status: **blocked before data creation on three external bindings**. No
+self-trace collection or SFT job is ready to preview or submit, and this
+preparation performed no cluster, API, W&B, or registry mutation.
 
 ## Compatibility decision
 
@@ -20,6 +21,42 @@ whose self-digest is
 It admits zero native-compatible historical sessions. The existing split-A and
 split-B self-coverage artifacts independently contain zero episodes. The old
 175-window historical corpus remains prohibited.
+
+## Offline recorder-to-dense parity
+
+The deterministic synthetic-only recorder-to-dense gate is closed by
+[`2026-09-12-self-trace-recorder-dense-parity-v1.json`](evidence/qwen38-study/2026-09-12-self-trace-recorder-dense-parity-v1.json).
+Its file SHA-256 is
+`sha256:43dd6942e6f5b62c175e7b7ec06c088dd319270601b9b8ecaf971551b5966e44`
+and its self-digest is
+`sha256:4903ed1580cb8ebc060d859ef746ea12af4d24399e5d2cbc44ba28b771396418`.
+The upstream study plan and downstream collection request both bind that
+receipt; the request additionally binds the exact nine-file local recorder,
+episode, parser, hashing, Fleet-helper, and dense-adapter code closure.
+
+The fixture exercises the SkyRL recorder adapter, direct two-tool episode path,
+token-ID and loss-mask preservation across the complete two-turn synthetic
+sequence, including the first masked observation, under the requested dense
+policy (`max_length=16384`, `context_tokens=4096`). The fixture digest is
+derived from the recorded/reference hashes, counts, observation boundary, and
+dense policy rather than from a free-form label. It is deliberately not a
+model/runtime certificate: it loads no Qwen weights, real chat-template bytes,
+pinned native-helper file, collector image, base route, task prompt, trace,
+flag, answer, score, or credential. Those limits are machine-checked in the
+receipt so the synthetic gate cannot be mistaken for live qualification.
+
+Three external blockers remain explicit in the sealed request:
+
+- an immutable collector image digest;
+- the exact fresh-base route certificate digest;
+- the direct system-prompt digest obtained from its authoritative source.
+
+This offline closure does not add a live collector/index command:
+`training.self_trace_collection` remains a validator and private-review
+library. Resolving the three external bindings therefore does not itself
+authorize execution. A separately reviewed create-once orchestration must call
+the prepared-attempt and source-review boundaries and bind every qualified
+source receipt into the downstream index before any collection can start.
 
 ## Qualified data contract
 
@@ -77,6 +114,7 @@ outcome-only validation, checkpoints every two steps, and a planned pause after
 step 6. It is admissible only when the frozen corpus yields more than six
 optimizer steps. The next paid action is therefore **not an SFT submit**: it is
 an explicitly reviewed, bounded direct-collection canary after the collector
-image and exact base route are certified. Only after local compilation,
-zero-GPU preflight, dev preview, and an explicit duplicate/capacity check may an
-operator run `cyber-post-train submit ... --cluster dev`.
+image, exact base route, and direct system-prompt digest are certified. Only
+after local compilation, zero-GPU preflight, dev preview, and an explicit
+duplicate/capacity check may an operator run
+`cyber-post-train submit ... --cluster dev`.

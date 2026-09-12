@@ -633,6 +633,9 @@ def test_recorded_prompt_digest_is_recomputed(tmp_path, monkeypatch):
 
 def test_template_is_inert_but_binds_wandb_loss_and_q1():
     root = Path(__file__).parents[1]
+    plan = json.loads(
+        (root / "configs/studies/qwen-blackbox-self-recollection-v1.json").read_text()
+    )
     index = json.loads(
         (root / "configs/qualification/qwen38-self-trace-index-a-v1.template.json").read_text()
     )
@@ -644,6 +647,7 @@ def test_template_is_inert_but_binds_wandb_loss_and_q1():
     )
     assert corpus["schema"] == self_trace.CONFIG_SCHEMA
     assert index["schema"] == self_trace.INDEX_SCHEMA
+    assert index["producer_plan_sha256"] == plan["sha256"]
     assert index["episodes"] == []
     assert "PENDING" in index["runtime_image"] and "PENDING" in index["sha256"]
     assert "PENDING" in index["route_certificate_sha256"]
