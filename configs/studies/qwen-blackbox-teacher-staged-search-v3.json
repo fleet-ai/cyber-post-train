@@ -141,11 +141,44 @@
       "selection_eligible": false
     },
     "exposure_matched_control": {
-      "state": "unresolved_pending_committed_teacher_control_artifact",
-      "path": null,
-      "file_sha256": null,
-      "embedded_sha256": null,
-      "required_design": "Match the available-data arm by whole-episode supervised-token exposure with predeclared seeds; never describe the existing downsampled balanced treatment as a pure weighting effect."
+      "state": "frozen_nonlaunchable_control",
+      "implementation_commit": "b8471c4c911e2ed676e062518dba794325bada73",
+      "path": "configs/studies/qwen-blackbox-teacher-exposure-matched-control-v1.json",
+      "file_sha256": "sha256:ed9626f803c28daae4dbb13f91ff21df03eda3078b42f165a5dcc202c7024e26",
+      "embedded_sha256": "sha256:3e758995989b8a42d7bebb4320e666b5ba21649c61ea79f3b74e5ee6f2be40cc",
+      "interpretation": "The matched control and balanced arm have identical whole-episode, dense-window and supervised-output-token counts. They differ in family exposure. Input/context-token exposure remains unmeasured and unmatched, so this is not a fully compute-matched comparison.",
+      "variants": {
+        "a": {
+          "outcome_protocol_sha256": "sha256:3c2c65eed748b16b50ef992327324b1fcaad84b190456c4aefe69c6efe748f75",
+          "balanced_corpus_sha256": "sha256:b8aa6d6f9ae19fd509a90c3d2b6343631386d6bc14b019e620810da274bd9cf8",
+          "balanced_train_parquet_sha256": "sha256:e59e05912bdadbbd0f147a02a5da500fc8242bf565fb0206c0e36c0394289d9b",
+          "matched_source_selection_sha256": "sha256:91af179896e5d4c052abfce13664e3dae46554aa4f6b9cf28c8fe885c516e706",
+          "match_receipt_sha256": "sha256:d7bd21bb94723bbce339c1f7a35d77ed8d2b92f938618c24ca1fae6999cac86d",
+          "selected_episode_ids_sha256": "sha256:e1d56c191584fddd942109c83fe4c4f60c8a4a58f86f4f09e75e9e2eb26739eb",
+          "matched_corpus_sha256": "sha256:8faa6e559c00cc3623a1bc03cc7364ba00611e51caa95d2d845b884ddbd7a93f",
+          "matched_train_parquet_sha256": "sha256:e4e388835160ca3c04fb5bd9c2f309756705f452f67daae7284857f965b3541a",
+          "matched_counts": {
+            "episodes": 50,
+            "segments": 401,
+            "supervised_tokens": 419165
+          }
+        },
+        "b": {
+          "outcome_protocol_sha256": "sha256:01f9c8b28cdc08ef8c089600b96450d747fe92447a60cbd4d60256b6302e5388",
+          "balanced_corpus_sha256": "sha256:1650edbb53ee33439311a8338207d95923f72283087e0069b89eb8114fafb194",
+          "balanced_train_parquet_sha256": "sha256:a763aabcf3a16aeb761a7798df268096d9eb10eee788f924bfa0726b91b6272a",
+          "matched_source_selection_sha256": "sha256:569c72c5d04c4f4040f41c19218ed6cfad7bf3ab69d72e322c581efc53922626",
+          "match_receipt_sha256": "sha256:4c655e1e70fe00d45dbc2931016ad6832317a038e79064a3bd379656ebb9eb82",
+          "selected_episode_ids_sha256": "sha256:61edb83e394181b2a1cfdb665b962a600bfc706736bf8989d2371c519705e605",
+          "matched_corpus_sha256": "sha256:5f659d2aee46a93c42f8e1d52fcfa5a7753e4fea9e7087e2df2242f5eb850a24",
+          "matched_train_parquet_sha256": "sha256:8be3a5aec00bf4ad710ac691cf6fd7528952d37a6fae5d28e6e6384d352eedbc",
+          "matched_counts": {
+            "episodes": 53,
+            "segments": 402,
+            "supervised_tokens": 437537
+          }
+        }
+      }
     }
   },
   "splits": {
@@ -351,7 +384,6 @@
       "launchable": false,
       "unresolved_dependencies": [
         "split-a-broad-lr.outcome_barrier.selection_decision_sha256",
-        "evidence.exposure_matched_control.embedded_sha256",
         "exposure_control_dev_qualification_receipt_sha256"
       ],
       "outcome_barrier": {
@@ -360,7 +392,7 @@
         "treatment_decision_sha256": null,
         "comparison": "matched_supervised_token_exposure_and_predeclared_sampling_seeds"
       },
-      "interpretation": "Compare whole-episode source composition at matched supervised-token exposure and predeclared seeds; do not reuse the confounded downsampled balanced arm as a pure balance estimate."
+      "interpretation": "Use the frozen matched-control versus balanced pair to compare family exposure at identical episode/window/supervised-output dose and predeclared seeds. Input/context exposure is not matched, so this is not a fully compute-matched or intrinsic weighting optimum."
     },
     {
       "order": 6,
@@ -442,5 +474,5 @@
     "all_arms_currently_launchable": false,
     "promotion": "dev_qualification_then_reviewed_prod_preview_and_explicit_submit"
   },
-  "sha256": "sha256:53b2003deb26cf0c128b76e0c39dbdcd04c01a23ea982cb944ad91d518dc59f2"
+  "sha256": "sha256:8d0a00a9f4376fc45f5c3d23b319dec0d7106fa4dfbaf5a2fd329081d6e90ee2"
 }

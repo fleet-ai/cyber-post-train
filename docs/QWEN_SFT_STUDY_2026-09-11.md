@@ -98,33 +98,37 @@ split, model and evaluation digests.
 
 The teacher study's current sequencing contract is the self-digested,
 non-executable
-[`qwen-blackbox-teacher-staged-search-v2.json`](../configs/studies/qwen-blackbox-teacher-staged-search-v2.json).
-It freezes the historical `1e-6` and `3e-5` two-step checks under the legacy
-constant/no-warmup path. Those runs are neither scheduler qualification nor HPO
-evidence, and v2 remains nonlaunchable. A versioned successor must insert the
-separate paired six-step cosine/warmup gate before the exact one-node/eight-GPU
-production layout. Only after those gates and a fresh matched split-A base
-control may it open the four-arm split-A LR bracket
-(`1e-6`, `3e-6`, `1e-5`, `3e-5`). A whole-episode balanced-exposure A arm uses
-the selected LR, followed by split-B/second-seed confirmation. Global batches 16
-and 32 and horizons of two and four epochs remain blocked until those outcome
-barriers resolve. Stages are serial and each wave is at most four nodes, below
-the eight-active-study-node ceiling.
+[`qwen-blackbox-teacher-staged-search-v3.json`](../configs/studies/qwen-blackbox-teacher-staged-search-v3.json).
+It supersedes, but does not rewrite, the frozen v2 artifact. The completed
+`1e-6` and `3e-5` two-step checks used the legacy constant/no-warmup path and
+remain numerical runtime-stability evidence only. V3 binds the separate paired
+six-step scheduler/warmup gate before the exact one-node/eight-GPU production
+layout. Only after those gates and a fresh matched split-A base control may it
+open the literature-grounded split-A LR bracket
+(`1e-6`, `1e-5`, `3e-5`, `1e-4`); the `1e-4` arm has an additional extended
+development stability/reload gate. Global batches 16 and 32 and horizons of two
+and four epochs remain blocked until the earlier outcome barriers resolve.
+Stages are serial and each wave is at most four nodes, below the
+eight-active-study-node ceiling.
 
 This order is outcome-only: training loss is diagnostic, teacher-reference CE is
 absent, and only fresh paired Fleet dev mean-success outcomes select an arm.
 The frozen staged-search v2 artifact still binds the historical attempt-1
-protocol; it is retained as evidence and must not launch as the corrected study.
-A new versioned study successor must bind the v2 Fleet-dev protocol digests
-before any capability/HPO arm is prepared. The balanced arm is explicitly a
-teacher-availability treatment; because it removes whole episodes and therefore
-reduces total supervised-token exposure, it is not interpreted as a pure
-weighting effect. The enhanced W&B contract exports only its fixed scalar
-allowlist, uses cumulative supervised tokens as the series axis, and requires
-complete finish/sync evidence. The current route audit proves the
-shared base endpoint is operational, but not an exact matched causal control, so
-it does not open any outcome or uplift gate. No stage in this plan is presently
-launchable and the file is not a job request.
+protocol and is retained as evidence. V3 binds both corrected v2 Fleet-dev
+protocols: all four fixed attempts are averaged within each task and candidate
+and base are paired by exact task+seed, with uncertainty bootstrapped by whole
+task clusters. It also binds the immutable
+[`exposure-matched control`](../configs/studies/qwen-blackbox-teacher-exposure-matched-control-v1.json):
+the matched-control and balanced arms have identical whole-episode,
+dense-window and supervised-output-token counts but different family exposure.
+Input/context-token exposure is not measured or matched, so this is not a fully
+compute-matched comparison or evidence that either weighting is intrinsically
+optimal. The enhanced W&B contract exports only its fixed scalar allowlist,
+uses cumulative supervised tokens as the series axis, and requires complete
+finish/sync evidence. The current route audit proves the shared base endpoint
+is operational, but not an exact matched causal control, so it does not open any
+outcome or uplift gate. WebExploitBench remains sealed and ineligible for HPO.
+No stage in v3 is presently launchable and the file is not a job request.
 
 ### Two-step learning-rate boundary canaries
 

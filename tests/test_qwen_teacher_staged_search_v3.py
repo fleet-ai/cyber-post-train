@@ -163,15 +163,45 @@ def test_v3_preserves_capacity_priority_tracking_and_sealing_boundaries() -> Non
     )
 
 
-def test_v3_keeps_exposure_control_unresolved_until_committed() -> None:
+def test_v3_binds_the_frozen_exposure_matched_control() -> None:
     value = plan()
     exposure = value["evidence"]["exposure_matched_control"]
-    assert exposure["state"] == "unresolved_pending_committed_teacher_control_artifact"
-    assert exposure["path"] is None
-    assert exposure["file_sha256"] is None
-    assert exposure["embedded_sha256"] is None
+    control = assert_bound_json(exposure)
+    assert exposure["state"] == "frozen_nonlaunchable_control"
+    assert exposure["implementation_commit"] == ("b8471c4c911e2ed676e062518dba794325bada73")
+    bound_fields = (
+        "outcome_protocol_sha256",
+        "balanced_corpus_sha256",
+        "balanced_train_parquet_sha256",
+        "matched_source_selection_sha256",
+        "match_receipt_sha256",
+        "selected_episode_ids_sha256",
+        "matched_corpus_sha256",
+        "matched_train_parquet_sha256",
+    )
+    for split in ("a", "b"):
+        source = control["variants"][split]
+        binding = exposure["variants"][split]
+        for field in bound_fields:
+            assert binding[field] == source[field]
+        assert binding["matched_counts"] == {
+            field: source["matched_control"][field]
+            for field in ("episodes", "segments", "supervised_tokens")
+        }
+        assert binding["matched_counts"] == {
+            field: source["balanced"][field]
+            for field in ("episodes", "segments", "supervised_tokens")
+        }
+
     stage = next(
         item for item in value["stages"] if item["id"] == "split-a-exposure-matched-control"
     )
-    assert "evidence.exposure_matched_control.embedded_sha256" in stage["unresolved_dependencies"]
+    assert (
+        "evidence.exposure_matched_control.embedded_sha256" not in stage["unresolved_dependencies"]
+    )
+    assert stage["unresolved_dependencies"] == [
+        "split-a-broad-lr.outcome_barrier.selection_decision_sha256",
+        "exposure_control_dev_qualification_receipt_sha256",
+    ]
     assert stage["launchable"] is False
+    assert "Input/context exposure is not matched" in stage["interpretation"]
