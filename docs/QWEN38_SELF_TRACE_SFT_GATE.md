@@ -51,6 +51,38 @@ Three external blockers remain explicit in the sealed request:
 - the exact fresh-base route certificate digest;
 - the direct system-prompt digest obtained from its authoritative source.
 
+The read-only follow-up
+[`2026-09-12-self-trace-external-binding-audit-v1.json`](evidence/qwen38-study/2026-09-12-self-trace-external-binding-audit-v1.json)
+checked the current candidate evidence without rewriting that immutable request.
+Its self-digest is
+`sha256:a9617d4643d5e722a889ba79114145c49ba0a9bd7a2ba130668392903acb6d1f`.
+It found useful components, but none can truthfully fill one of the three
+request fields yet:
+
+- The exact OpenCode build context and a reproducible local OCI manifest exist,
+  but a local manifest is not a pullable registry identity. Theseus
+  [PR #31835](https://github.com/fleet-ai/theseus/pull/31835) was open and green
+  at the observation time; the live dev image-build OpenAPI still lacked
+  `rewrite_timestamp`, and neither merge/deployment nor the dedicated ECR/IAM
+  binding was proven. A green PR is therefore not a collector-image receipt.
+- The shared Qwen route component proves the exact model payload, tokenizer,
+  chat template, serving runtime and historical readiness. Its own schema says
+  `passed_component_only`, `launchable=false`. It does not bind the eventual
+  pull-qualified collector, collector-visible request prefix, or a fresh
+  collection-time route observation, so its digest must not be relabelled as
+  the direct-route certificate.
+- A tracked prompt artifact has stable bytes and a known digest, but its
+  provenance is one GPT teacher-session variant and a proposed Qwen3.6
+  diagnostic choice. That evidence explicitly does not establish the
+  Qwen3.8 self-recollection treatment. Selecting it may be reasonable, but it
+  is a scientific treatment decision, not a metadata recovery operation.
+
+The remaining path is consequently precise: deploy and qualify the immutable
+collector image; explicitly freeze the Qwen3.8 direct prompt source; then issue
+one new self-digesting direct-route certificate from those bindings and a fresh
+read-only route observation. Only a new versioned collection request may bind
+that certificate. The sealed v1 request remains a fail-closed historical input.
+
 This offline closure does not add a live collector/index command:
 `training.self_trace_collection` remains a validator and private-review
 library. Resolving the three external bindings therefore does not itself

@@ -1,0 +1,126 @@
+{
+  "schema": "cyber_qwen_self_trace_external_binding_audit_v1",
+  "status": "blocked_no_authoritative_direct_runtime_binding",
+  "observed_at": "2026-09-12T12:43:56Z",
+  "frozen_gate": {
+    "study_plan": {
+      "path": "configs/studies/qwen-blackbox-self-recollection-v1.json",
+      "file_sha256": "sha256:57f8610adc1d8158b3c11868a3b5edb6c30f35def27806ee91305568aea04d51",
+      "document_sha256": "sha256:75ea082c4a2bf3886170fee30124b524b97036a1de9244677b30d4613e811212"
+    },
+    "collection_request": {
+      "path": "configs/qualification/qwen38-self-trace-collection-request-v1.json",
+      "file_sha256": "sha256:8a9397e4a7f31edaf4089c5a5dc980373d816cc39b84298d546169d022b3f96f",
+      "document_sha256": "sha256:6aebcbb8610879d8d8c66e0a3935bc18fd9a8f990a2453467bb6cc8c34328a82"
+    },
+    "declared_blockers": [
+      "missing_immutable_collector_image",
+      "missing_exact_base_route_certificate",
+      "missing_direct_system_prompt_digest"
+    ],
+    "immutable_v1_rewritten": false
+  },
+  "collector_image": {
+    "status": "blocked_no_pullable_immutable_reference",
+    "publication_plan": {
+      "path": "configs/evaluation/opencode11827-agent-image-publication-plan-v2.json",
+      "file_sha256": "sha256:75913e17ae25c5b8c36892c9c13af29661bdfc16fb23c9c8cad24070f11b9e3e",
+      "document_sha256": "sha256:cc98ea5816b8537f771d659cbdec759b57949710a71484f0532fd0592925ffe1",
+      "status": "blocked_exact_infrastructure_change",
+      "launchable": false
+    },
+    "candidate_local_oci_manifest_sha256": "sha256:da79f78e4af129913f313614003bf929068b52db599f32fc915e60046712e16f",
+    "candidate_is_pullable_registry_identity": false,
+    "theseus_change": {
+      "url": "https://github.com/fleet-ai/theseus/pull/31835",
+      "head_commit": "cf2a46ae87a521aad8a073012c2ddb9f499cddc5",
+      "state": "open",
+      "mergeable_at_observation": true,
+      "completed_checks": 48,
+      "nonpassing_required_or_reported_checks": 0,
+      "merge_or_deployment_proven": false
+    },
+    "live_dev_image_api": {
+      "url": "https://api.ft.dev.flt.build/v1/images/openapi.json",
+      "http_status": 200,
+      "document_sha256": "sha256:44d1488cb0b1573ab446ed6c882dcde5d3d73460a1404790596d546ac625e48f",
+      "local_build_path_present": true,
+      "rewrite_timestamp_present": false
+    },
+    "required_next": "Merge and deploy the reviewed infrastructure change, prove dedicated ECR and BuildKit authorization, publish once, then clean-pull and qualify the returned repository-at-digest on zero-GPU dev capacity.",
+    "gpu_or_registry_mutation_performed": false
+  },
+  "base_route": {
+    "status": "component_qualified_certificate_absent",
+    "component": {
+      "path": "docs/evidence/inference/2026-09-11-qwen38-shared-base-route-component-v2.json",
+      "file_sha256": "sha256:5daeb38c80610e39f784cc2707236cca59554c1053099f2f73d3265715e8197a",
+      "document_sha256": "sha256:6b636b1c05e735bbf1678d98865ddfdd82954e53bdb3cc386c41184948c450aa",
+      "status": "passed_component_only",
+      "launchable": false
+    },
+    "proven_component_facts": {
+      "exact_model_revision": true,
+      "payload_rehashed": true,
+      "tokenizer_and_chat_template_bound": true,
+      "serving_runtime_bound": true,
+      "tool_calling_capability_advertised": true,
+      "prompt_or_completion_requests": 0
+    },
+    "why_not_certificate": "The component deliberately does not bind a pull-qualified collector, the collector-visible direct request prefix, or a freshly revalidated collection-time route. Relabeling its digest as a direct-route certificate would overclaim its schema and launchable=false scope.",
+    "required_next": "After collector qualification and prompt selection, compose a new self-digesting direct-route certificate and refresh the exact route UID, generation, runtime, payload and readiness immediately before collection."
+  },
+  "direct_system_prompt": {
+    "status": "candidate_present_scientific_choice_unmade",
+    "candidate": {
+      "path": "configs/evaluation/fleet-agent-runtime-system-prompt-v1.txt",
+      "file_sha256": "sha256:8512560b0706f8859774bfe8e93c2c86ecf6a6a4603fe59db004fd04fcc738d1",
+      "git_blob": "4d8ab0506edc1bae14c3be838033f7ad646fc9b0",
+      "character_length": 1036,
+      "utf8_bytes": 1038
+    },
+    "provenance": {
+      "paired_canary_plan": {
+        "path": "configs/evaluation/qwen36-27b-fleet-harness-paired-canary-v1.json",
+        "file_sha256": "sha256:f6515c483ad8efac066d3d4f5185cd41e5b146ce09a1af1773131f5a9840b2f2"
+      },
+      "analysis": {
+        "path": "docs/FLEET_NATIVE_HARNESS_PARITY.md",
+        "file_sha256": "sha256:d6846aa328d4a915464af062b21032d5ea2a0e09bf0dd98d0050a2d498ffa632"
+      },
+      "historical_source": "one GPT teacher-session prompt variant",
+      "prior_qwen_use": "explicit proposed Qwen3.6 diagnostic choice",
+      "qwen38_direct_treatment_authority": false
+    },
+    "why_not_bound": "The tracked bytes are reproducible, but their provenance explicitly says the Qwen use was a new diagnostic choice rather than evidence of an original Qwen request. Selecting them for Qwen3.8 self-recollection changes the treatment and requires an explicit scientific decision; a known digest is not an authoritative binding.",
+    "required_next": "Freeze one reviewed Qwen3.8 direct-treatment prompt source, then bind its path, file digest, source revision and role in a new collection-request version without exposing its bytes."
+  },
+  "decision": {
+    "bindings_resolved": [],
+    "reusable_components": [
+      "deterministic OpenCode build context and local OCI identity",
+      "exact shared Qwen3.8 base payload and serving-route component",
+      "tracked candidate system-prompt bytes and digest",
+      "synthetic recorder-to-dense parity"
+    ],
+    "remaining_blockers": [
+      "pullable immutable collector image with zero-GPU dev qualification",
+      "new exact direct-route certificate composed from a fresh route observation and the qualified collector",
+      "explicit Qwen3.8 direct system-prompt treatment selection and immutable binding"
+    ],
+    "next_executable_action": "none_until_external_image_infrastructure_and_scientific_prompt_choice_are_resolved",
+    "collection_or_training_launchable": false
+  },
+  "scope": {
+    "read_only_cluster_or_api_observations": true,
+    "prompt_artifact_content_emitted": false,
+    "prompt_or_completion_requests": 0,
+    "task_or_grading_requests": 0,
+    "scoring_requests": 0,
+    "evaluation_submissions": 0,
+    "gpu_requests": 0,
+    "registry_publications": 0,
+    "cluster_or_api_mutations": 0
+  },
+  "sha256": "sha256:a9617d4643d5e722a889ba79114145c49ba0a9bd7a2ba130668392903acb6d1f"
+}
