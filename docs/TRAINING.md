@@ -454,13 +454,42 @@ evidence, and never above 256.
 Check it against the team's live instance headroom before submitting; neither the
 compiler nor the Jobs API is an admission controller for Fleet instances.
 Checkpoint conversion is unaffected: the native distributed checkpoint is
-parallelism-agnostic, so one sealed conversion serves every node count.
+parallelism-agnostic, so one sealed conversion serves every node count for a
+given profile.
 
-Copy-and-edit configurations for the three stages are in `configs/runs/`:
+### Profiles and the native 262144-token context
+
+`recipe.profile` selects a reviewed (recipe, trainer image, context ceiling,
+replica shape) tuple. Two profiles ship:
+
+| profile | recipe | replica | nodes | context ceiling |
+| --- | --- | --- | --- | --- |
+| `qwen3.8-27b` (default) | `qwen3.8-27b` | TP4 x CP2 = 8 GPUs = 1 node | 1–8 (data parallel) | 98304 |
+| `qwen3.8-27b-256k` | `qwen3.8-27b-256k` | TP8 x CP4 = 32 GPUs = 4 nodes | 4 (one replica) | 262144 |
+
+The base profile's replica is one node, so extra nodes are data-parallel
+replicas and 1–8 nodes are supported. The 256k profile's replica spans four
+nodes — one copy of the model — so it runs on exactly four nodes at data
+parallelism one; the recipe pins no other node count and none is extrapolated.
+This is the shape `deniz-qwen38-256k-03` ran (113.7 GB peak per GPU, TP8 halving
+the per-GPU share of the 96K row's TP4). The 256k profile needs its own trainer
+image because the recipe does not exist in the base image; its chat template is
+the base row's.
+
+Because the 256k image differs, its pinned native-content hashes
+(`CONVERTER_SHA256`, `NATIVE_DRIVER_SHA256`, `TEMPLATE_SHA256`) must be confirmed
+against that image before a real 256k run. The existing guards reject a mismatch
+rather than run on unverified image content, so a run cannot silently proceed on
+the wrong bytes. Convert and train for the 256k profile use the same profile: the
+RL stage rejects a base sealed under a different image.
+
+Copy-and-edit configurations are in `configs/runs/`:
 `qwen38-27b-fleet-rl-data.example.yaml`,
-`qwen38-27b-fleet-miles-convert.example.yaml` and
-`qwen38-27b-fleet-rl-multinode.example.yaml`. They carry placeholders for every
-reviewed private artifact; they are not approved inputs by themselves.
+`qwen38-27b-fleet-miles-convert.example.yaml`,
+`qwen38-27b-fleet-rl-multinode.example.yaml` (base profile), and
+`qwen38-27b-fleet-rl-256k.example.yaml` (native-context profile). They carry
+placeholders for every reviewed private artifact; they are not approved inputs by
+themselves.
 
 CPU preflight checks the native FTI argument builder and actual text-only data
 source, including template identity and train/dev row retention. Qwen's automatic

@@ -88,6 +88,7 @@ def compile_rl(config: dict, *, relative_to: Path) -> dict:
     _known(
         recipe,
         {
+            "profile",
             "nodes",
             "steps",
             "groups",
@@ -111,8 +112,6 @@ def compile_rl(config: dict, *, relative_to: Path) -> dict:
         raise ValueError("native checkpoint manifest file digest mismatch")
     cp = read_mapping(cp_path)
     _sealed(cp, "cyber_miles_checkpoint_v1")
-    if cp["model"] != bound or cp["image"] != miles.IMAGE or cp["optimizer_steps"] != 0:
-        raise ValueError("RL-from-base requires the exact native base conversion")
     root = Path(_sfs_root(data["root"], "data root"))
     limits = metadata["limits"]
     args = miles.MilesConfig(
@@ -133,6 +132,9 @@ def compile_rl(config: dict, *, relative_to: Path) -> dict:
         **recipe,
     )
     args.validate()
+    image = miles.image_for(args.profile)
+    if cp["model"] != bound or cp["image"] != image or cp["optimizer_steps"] != 0:
+        raise ValueError("RL-from-base requires the exact native base conversion for this profile")
     if (
         metadata["name"] != args.name
         or metadata["tokenizer"]["repo"] != bound["repo"]
@@ -164,7 +166,7 @@ def compile_rl(config: dict, *, relative_to: Path) -> dict:
         "runtime_sha256": digest(_runtime()),
         "native_driver_sha256": NATIVE_DRIVER_SHA256,
         "execution": {
-            "image": miles.IMAGE,
+            "image": image,
             "priority": cluster.get("priority", "c1"),
             "resources": {**RESOURCES, **cluster.get("resources", {})},
         },
@@ -181,7 +183,7 @@ def job_request(plan):
         plan["schema"] != SCHEMA
         or plan["runtime_sha256"] != digest(_runtime())
         or plan["native_driver_sha256"] != NATIVE_DRIVER_SHA256
-        or plan["execution"]["image"] != miles.IMAGE
+        or plan["execution"]["image"] != miles.image_for(args.profile)
         or plan["run_name"] != args.name
         or plan["output_root"] != args.output_root
         or any(layout.get(key) != value for key, value in derived.items())
@@ -204,7 +206,7 @@ def job_request(plan):
             "name": args.name,
             "title": args.name + " native Miles RL",
             "run_dir": args.output_root,
-            "image": miles.IMAGE,
+            "image": plan["execution"]["image"],
             "workers": layout["nodes"],
             "gpus_per_worker": layout["gpus_per_node"],
             "resources": resources,

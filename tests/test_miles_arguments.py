@@ -97,8 +97,25 @@ def native_boundary(tmp_path, monkeypatch):
         max_tokens_per_gpu=49152,
         log_prob_pass_multiplier=2,
     )
+    profile_256k = NS(
+        backend="megatron",
+        vision=False,
+        tito_model="qwen35",
+        chat_template=template.name,
+        megatron_model_type="qwen3.8-27B",
+        parallel_args_by_shape={
+            (4, 8): "--tensor-model-parallel-size 8 --context-parallel-size 4",
+        },
+        extra_train_args="--offload-train-target cpu",
+        extra_sglang_args="--sglang-disable-radix-cache",
+        rollout_num_gpus_per_engine=1,
+        sglang_mem_fraction_static=0.8,
+        max_tokens_per_gpu=65536,
+        log_prob_pass_multiplier=2,
+    )
     runtime = ModuleType("fti.trainers.miles.run_fleet")
-    runtime.TEMPLATES, runtime._RECIPES = tmp_path, {"qwen3.8-27b": profile}
+    runtime.TEMPLATES = tmp_path
+    runtime._RECIPES = {"qwen3.8-27b": profile, "qwen3.8-27b-256k": profile_256k}
     model = ModuleType("miles.utils.external_utils.model_args_utils")
     model.load_model_args = lambda name: "--num-layers 64"
     monkeypatch.setitem(sys.modules, runtime.__name__, runtime)
@@ -202,3 +219,62 @@ def test_unreadable_partition_size_stops_before_launch(config, native_boundary):
     profile.parallel_args_by_shape = {(1, 8): "--tensor-model-parallel-size auto"}
     with pytest.raises(ValueError, match="unreadable partition size"):
         miles.arguments(config)
+
+
+def _cfg_256k(config):
+    return replace(
+        config,
+        profile="qwen3.8-27b-256k",
+        nodes=4,
+        groups=2,
+        samples_per_prompt=2,
+        context_tokens=262144,
+        response_tokens=245760,
+    )
+
+
+def test_256k_profile_is_one_replica_across_four_nodes(config):
+    layout = miles.topology(_cfg_256k(config))
+    assert layout["nodes"] == 4 and layout["gpus"] == 32
+    assert layout["replica_gpus"] == 32 and layout["data_parallel_size"] == 1
+
+
+def test_256k_arguments_match_the_native_shape_and_budgets(config, native_boundary):
+    argv = miles.arguments(_cfg_256k(config))
+    assert value(argv, "actor-num-nodes") == "4"
+    assert value(argv, "tensor-model-parallel-size") == "8"
+    assert value(argv, "context-parallel-size") == "4"
+    assert value(argv, "rollout-max-context-len") == "262144"
+    assert value(argv, "rollout-max-response-len") == "245760"
+    assert value(argv, "max-tokens-per-gpu") == "65536"
+
+
+def test_256k_profile_rejects_node_counts_other_than_four(config):
+    for nodes in (1, 2, 3, 8):
+        with pytest.raises(ValueError):
+            miles.MilesConfig(
+                **{**config.__dict__, "profile": "qwen3.8-27b-256k", "nodes": nodes}
+            ).validate()
+
+
+def test_256k_profile_rejects_context_above_the_native_envelope(config):
+    with pytest.raises(ValueError):
+        replace(_cfg_256k(config), context_tokens=262145, response_tokens=245760).validate()
+
+
+def test_base_profile_still_capped_at_its_own_envelope(config):
+    with pytest.raises(ValueError):
+        replace(config, context_tokens=131072, response_tokens=98304).validate()
+
+
+def test_unknown_profile_is_rejected(config):
+    with pytest.raises(ValueError):
+        replace(config, profile="qwen3.8-27b-1m").validate()
+
+
+def test_profile_images_are_distinct_and_pinned_by_digest():
+    base = miles.image_for("qwen3.8-27b")
+    long = miles.image_for("qwen3.8-27b-256k")
+    assert base != long
+    for image in (base, long):
+        assert image.endswith(tuple("0123456789abcdef")) and "@sha256:" in image

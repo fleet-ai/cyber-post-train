@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1] / "configs/runs"
 DATA = ROOT / "qwen38-27b-fleet-rl-data.example.yaml"
 CONVERT = ROOT / "qwen38-27b-fleet-miles-convert.example.yaml"
 TRAIN = ROOT / "qwen38-27b-fleet-rl-multinode.example.yaml"
+TRAIN_256K = ROOT / "qwen38-27b-fleet-rl-256k.example.yaml"
 MODEL_ROOT = "/mnt/sfs/models/Qwen/Qwen3.8-27B/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
 
 
@@ -20,7 +21,7 @@ def load(path):
     return yaml.safe_load(path.read_text())
 
 
-@pytest.mark.parametrize("path", [DATA, CONVERT, TRAIN])
+@pytest.mark.parametrize("path", [DATA, CONVERT, TRAIN, TRAIN_256K])
 def test_examples_are_placeholders_without_credentials(path):
     text = path.read_text()
     assert not re.search(r"(?i)(api[_-]?key|token|password|secret)\s*:", text)
@@ -78,3 +79,26 @@ def test_example_limits_match_the_native_context_envelope():
         tokens_per_turn=limits["max_tokens_per_turn"],
     )
     config.validate()
+
+
+def test_256k_example_selects_the_native_context_profile():
+    recipe = load(TRAIN_256K)["recipe"]
+    assert recipe["profile"] == "qwen3.8-27b-256k" and recipe["nodes"] == 4
+    config = miles.MilesConfig(
+        name="synthetic-rl",
+        output_root="/mnt/sfs/jobs/synthetic-rl",
+        model_root="/mnt/sfs/models/synthetic-hf",
+        torch_dist_root="/mnt/sfs/models/synthetic-dist",
+        train_data="/mnt/sfs/data/synthetic/train.jsonl",
+        dev_data="/mnt/sfs/data/synthetic/dev.jsonl",
+        data_manifest="/mnt/sfs/data/synthetic/manifest.json",
+        wandb_entity="synthetic",
+        wandb_project="synthetic",
+        wandb_run_id="synthetic",
+        context_tokens=262144,
+        response_tokens=245760,
+        **recipe,
+    )
+    layout = miles.topology(config)
+    assert layout["replica_gpus"] == 32 and layout["data_parallel_size"] == 1
+    assert miles.image_for(config.profile) != miles.image_for("qwen3.8-27b")
