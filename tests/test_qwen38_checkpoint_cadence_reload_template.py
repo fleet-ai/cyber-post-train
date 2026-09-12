@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE = (
     ROOT / "configs/qualification/qwen38-teacher-checkpoint-cadence-reload-dev-v1.template.json"
 )
+MATERIALIZED = ROOT / "configs/qualification/qwen38-teacher-checkpoint-cadence-reload-dev-v1.json"
 
 
 def read(path: Path) -> dict:
@@ -99,6 +100,24 @@ def test_materialized_reload_would_change_only_identity_pause_and_recovery() -> 
     assert "requeueIfPreempted" not in reload
     assert "queue_priority_class" not in reload["cluster"]
     assert reload["cluster"]["priority"] == "c1"
+
+
+def test_materialized_reload_changes_only_the_frozen_transform() -> None:
+    value = load_template()
+    source = read(ROOT / value["source"]["config_path"])
+    actual = read(MATERIALIZED)
+    expected = copy.deepcopy(source)
+    expected["name"] = value["reload"]["new_run_name"]
+    expected["output_root"] = value["reload"]["new_output_root"]
+    expected["wandb"]["run_id"] = value["reload"]["new_wandb_run_id"]
+    expected["wandb"]["name"] = value["reload"]["new_wandb_run_id"]
+    del expected["pause_after_step"]
+    expected["recovery"] = {
+        "manifest": value["checkpoint_seal"]["manifest_path"],
+        "sha256": "0c0f5f4fcb24b6eee79706174705f3bd9d568120644601ca8eb46945e2d3929b",
+        "mode": "validate",
+    }
+    assert actual == expected
 
 
 def test_reload_identities_are_new_create_once_candidates_and_preview_is_exact() -> None:
