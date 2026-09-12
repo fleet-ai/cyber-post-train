@@ -1,0 +1,57 @@
+# Native Miles Fleet RL at the checkpoint's native 262144-token context.
+#
+# The 262k row is a distinct reviewed profile: recipe `qwen3.8-27b-256k`, its own
+# trainer image, and one replica of TP8 x CP4 = 32 GPUs = four whole nodes (data
+# parallelism 1). This is the shape deniz-qwen38-256k-03 ran at 113.7 GB peak per
+# GPU. `recipe.nodes` must be 4; the recipe pins no other node count.
+#
+# The convert stage for this profile must use the SAME profile so the sealed base
+# carries the 256k image; the RL stage rejects a base converted under a different
+# image. Before a real run, the profile's pinned native-content hashes
+# (CONVERTER_SHA256, NATIVE_DRIVER_SHA256, TEMPLATE_SHA256 in training/) must be
+# confirmed against the 256k image; the existing guards reject a mismatch rather
+# than run on unverified image content.
+backend: miles
+name: <run-name>  # must match the rl-data name
+output_root: /mnt/sfs/jobs/<run-name>
+model:
+  lock: configs/models/qwen38-27b-1d4bf0f2.lock.json
+  weights: configs/models/qwen38-27b-1d4bf0f2.weights.json
+  root: /mnt/sfs/models/Qwen/Qwen3.8-27B/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0
+data:
+  # Prepare rl-data with limits.context_tokens 262144 and response_tokens 245760
+  # for this profile: the RL stage reads the context budget from this manifest,
+  # and it must match the recipe's native envelope.
+  manifest: <rl-data-output>/manifest.json
+  root: <staged-rl-data-root>
+checkpoint:
+  manifest: <sealed-miles-checkpoint-256k.json>
+  sha256: <manifest-file-sha256>
+recipe:
+  profile: qwen3.8-27b-256k
+  nodes: 4
+  steps: 20
+  # A few samples, as a canary: 2 prompts x 2 samples = 4 sequences. Data
+  # parallelism is 1 here, so any positive batch divides trivially.
+  groups: 2
+  samples_per_prompt: 2
+  lr: 0.000001
+  eval_interval: 10
+  checkpoint_interval: 10
+  seed: 42
+  # Simultaneous Fleet environments per rollout process, held across
+  # provisioning. Independent of node count.
+  max_concurrent_episodes: 8
+wandb:
+  entity: <your-team>
+  project: cyber-post-train
+  run_id: <new-run-id>
+cluster:
+  priority: c1
+  # Per node. TP8 halves each GPU's share vs the 96K row's TP4; the 256k probe
+  # measured 113.7 GB peak per GPU, so this reservation holds with headroom.
+  resources:
+    cpu_request: "64"
+    cpu_limit: "128"
+    memory_request: 1536Gi
+    memory_limit: 2048Gi

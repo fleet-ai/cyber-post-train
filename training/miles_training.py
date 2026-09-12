@@ -88,6 +88,7 @@ def compile_rl(config: dict, *, relative_to: Path) -> dict:
     _known(
         recipe,
         {
+            "profile",
             "nodes",
             "steps",
             "groups",
@@ -111,8 +112,6 @@ def compile_rl(config: dict, *, relative_to: Path) -> dict:
         raise ValueError("native checkpoint manifest file digest mismatch")
     cp = read_mapping(cp_path)
     _sealed(cp, "cyber_miles_checkpoint_v1")
-    if cp["model"] != bound or cp["image"] != miles.IMAGE or cp["optimizer_steps"] != 0:
-        raise ValueError("RL-from-base requires the exact native base conversion")
     root = Path(_sfs_root(data["root"], "data root"))
     limits = metadata["limits"]
     args = miles.MilesConfig(
@@ -133,6 +132,9 @@ def compile_rl(config: dict, *, relative_to: Path) -> dict:
         **recipe,
     )
     args.validate()
+    image = miles.image_for(args.profile)
+    if cp["model"] != bound or cp["image"] != image or cp["optimizer_steps"] != 0:
+        raise ValueError("RL-from-base requires the exact native base conversion for this profile")
     if (
         metadata["name"] != args.name
         or metadata["tokenizer"]["repo"] != bound["repo"]
@@ -145,6 +147,13 @@ def compile_rl(config: dict, *, relative_to: Path) -> dict:
     for item in metadata["files"].values():
         if Path(item["path"]).name != item["path"]:
             raise ValueError("data file must be directly inside its immutable root")
+    layout = miles.topology(args)
+    # Dev evaluation runs the whole frozen set at one sample per prompt, so the
+    # larger of the two phases sets the run's simultaneous environment demand.
+    layout["concurrent_environments"] = min(
+        layout["max_concurrent_episodes"],
+        max(layout["global_batch_size"], metadata["files"]["dev"]["rows"]),
+    )
     plan = {
         "schema": SCHEMA,
         "run_name": args.name,
@@ -153,10 +162,11 @@ def compile_rl(config: dict, *, relative_to: Path) -> dict:
         "data": metadata,
         "checkpoint": cp,
         "arguments": dataclasses.asdict(args),
+        "topology": layout,
         "runtime_sha256": digest(_runtime()),
         "native_driver_sha256": NATIVE_DRIVER_SHA256,
         "execution": {
-            "image": miles.IMAGE,
+            "image": image,
             "priority": cluster.get("priority", "c1"),
             "resources": {**RESOURCES, **cluster.get("resources", {})},
         },
@@ -168,13 +178,16 @@ def compile_rl(config: dict, *, relative_to: Path) -> dict:
 def job_request(plan):
     args = miles.MilesConfig(**plan["arguments"])
     args.validate()
+    layout, derived = plan.get("topology", {}), miles.topology(args)
     if (
         plan["schema"] != SCHEMA
         or plan["runtime_sha256"] != digest(_runtime())
         or plan["native_driver_sha256"] != NATIVE_DRIVER_SHA256
-        or plan["execution"]["image"] != miles.IMAGE
+        or plan["execution"]["image"] != miles.image_for(args.profile)
         or plan["run_name"] != args.name
         or plan["output_root"] != args.output_root
+        or any(layout.get(key) != value for key, value in derived.items())
+        or layout.get("concurrent_environments", 0) < derived["concurrent_train_environments"]
     ):
         raise ValueError("Miles plan/runtime drift")
     resources = plan["execution"]["resources"]
@@ -193,9 +206,9 @@ def job_request(plan):
             "name": args.name,
             "title": args.name + " native Miles RL",
             "run_dir": args.output_root,
-            "image": miles.IMAGE,
-            "workers": args.nodes,
-            "gpus_per_worker": 8,
+            "image": plan["execution"]["image"],
+            "workers": layout["nodes"],
+            "gpus_per_worker": layout["gpus_per_node"],
             "resources": resources,
             "priority_class": plan["execution"]["priority"],
             "requeueIfPreempted": False,
@@ -295,6 +308,9 @@ def native_args(plan):
             "ref_load": plan["checkpoint"]["root"],
             "num_rollout": plan["arguments"]["steps"],
             "num_steps_per_rollout": 1,
+            "actor_num_nodes": plan["topology"]["nodes"],
+            "actor_num_gpus_per_node": plan["topology"]["gpus_per_node"],
+            "cyber_max_concurrent_episodes": plan["topology"]["max_concurrent_episodes"],
             "global_batch_size": plan["arguments"]["groups"]
             * plan["arguments"]["samples_per_prompt"],
         }
