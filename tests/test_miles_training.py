@@ -489,6 +489,7 @@ def test_parsed_native_semantics_and_argv_restoration(plan, monkeypatch):
         global_batch_size=2,
         actor_num_nodes=plan["topology"]["nodes"],
         actor_num_gpus_per_node=plan["topology"]["gpus_per_node"],
+        cyber_max_concurrent_episodes=plan["topology"]["max_concurrent_episodes"],
     )
     monkeypatch.setitem(sys.modules, "miles.utils.arguments", NS(parse_args=lambda: args))
     before = sys.argv
@@ -514,6 +515,7 @@ def test_parsed_node_count_must_match_the_prepared_topology(plan, monkeypatch):
         global_batch_size=2,
         actor_num_nodes=plan["topology"]["nodes"] + 1,
         actor_num_gpus_per_node=plan["topology"]["gpus_per_node"],
+        cyber_max_concurrent_episodes=plan["topology"]["max_concurrent_episodes"],
     )
     monkeypatch.setitem(sys.modules, "miles.utils.arguments", NS(parse_args=lambda: args))
     with pytest.raises(ValueError, match="native parsed training/load semantics changed"):

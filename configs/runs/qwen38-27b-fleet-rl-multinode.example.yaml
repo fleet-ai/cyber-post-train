@@ -10,10 +10,11 @@
 #
 # Every sample in a rollout batch holds one authorized Fleet environment
 # instance while it runs, so raising nodes raises simultaneous instance demand
-# in step with throughput. `topology.concurrent_environments` in plan.json is
-# that number, including the dev evaluation phase. Check it against the team's
-# live instance headroom and the experiment's allocated-node count before
-# submitting; neither the compiler nor the Jobs API is an admission controller.
+# in step with throughput, which is what `recipe.max_concurrent_episodes` bounds.
+# `topology.concurrent_environments` in plan.json is the resulting number,
+# including the dev evaluation phase. Check it against the team's live instance
+# headroom and the experiment's allocated-node count before submitting; neither
+# the compiler nor the Jobs API is an admission controller.
 backend: miles
 name: <run-name>  # must match the rl-data name
 output_root: /mnt/sfs/jobs/<run-name>
@@ -28,11 +29,14 @@ checkpoint:
   manifest: <sealed-miles-checkpoint.json>
   sha256: <manifest-file-sha256>
 recipe:
-  nodes: 2
+  nodes: 4
   steps: 40
-  # 8 prompts x 4 samples = 32 sequences, divisible by the 2 replicas.
+  # 8 prompts x 4 samples = 32 sequences, divisible by the 4 replicas.
   groups: 8
   samples_per_prompt: 4
+  # Simultaneous Fleet environments per rollout process, held across
+  # provisioning. Independent of node count; raise it only with evidence.
+  max_concurrent_episodes: 32
   lr: 0.000001
   eval_interval: 10
   checkpoint_interval: 10

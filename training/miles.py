@@ -60,6 +60,13 @@ class MilesConfig:
     context_tokens: int = 98304
     response_tokens: int = 81920
     tokens_per_turn: int = 4096
+    # Miles' synchronous path provisions a whole rollout wave at once, so without
+    # a gate the batch size sets simultaneous environment creates. The dataminer
+    # arms measured this: 2,100 simultaneous provisions returned gateway 502s and
+    # left engines idle for two hours (2026-08-28), and their training arms ran at
+    # 32. The slot is held across provisioning, so a queued episode does not burn
+    # its own TTL. Raising nodes raises the batch, not this ceiling.
+    max_concurrent_episodes: int = 32
 
     def validate_paths(self):
         """Require canonical, disjoint staged inputs and an owned output directory."""
@@ -109,6 +116,7 @@ class MilesConfig:
             "context_tokens",
             "response_tokens",
             "tokens_per_turn",
+            "max_concurrent_episodes",
         ):
             if type(getattr(self, key)) is not int or getattr(self, key) < 1:
                 raise ValueError("Miles counts must be positive integers")
@@ -116,6 +124,8 @@ class MilesConfig:
             raise ValueError("Qwen profile requires 1 to 8 whole nodes and grouped GRPO samples")
         if (self.groups * self.samples_per_prompt) % self.nodes:
             raise ValueError("global batch must divide across the data-parallel replicas")
+        if self.max_concurrent_episodes > 256:
+            raise ValueError("simultaneous environment ceiling exceeds any observed safe wave")
         if self.steps % self.eval_interval:
             raise ValueError(
                 "eval interval must divide steps so native Miles evaluates the final model"
@@ -140,10 +150,11 @@ def topology(config: MilesConfig) -> dict[str, int]:
         "replica_gpus": REPLICA_GPUS,
         "data_parallel_size": gpus // REPLICA_GPUS,
         "global_batch_size": batch,
-        # Every sample in a rollout batch holds one authorized Fleet environment
-        # instance while it runs. Check the account's headroom for this number of
-        # simultaneous instances before submitting, not only the GPU budget.
-        "concurrent_train_environments": batch,
+        "max_concurrent_episodes": config.max_concurrent_episodes,
+        # Every sample in flight holds one authorized Fleet environment instance.
+        # Check the account's headroom for this number of simultaneous instances
+        # before submitting, not only the GPU budget.
+        "concurrent_train_environments": min(batch, config.max_concurrent_episodes),
     }
 
 
@@ -237,6 +248,7 @@ def arguments(config: MilesConfig) -> list[str]:
         "cyber-data-manifest": config.data_manifest,
         "fleet-tito-model": profile.tito_model,
         "fleet-max-tokens-per-turn": config.tokens_per_turn,
+        "cyber-max-concurrent-episodes": config.max_concurrent_episodes,
         "chat-template-path": str(template),
         "actor-num-nodes": config.nodes,
         "actor-num-gpus-per-node": GPUS_PER_NODE,

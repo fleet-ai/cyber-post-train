@@ -441,13 +441,20 @@ counts reuse it unchanged. A recipe that ever makes the partition depend on the
 node count stops preparation for review instead of being extrapolated.
 
 Extra nodes raise simultaneous Fleet environment demand in step with throughput:
-every sample in a rollout batch holds one authorized environment instance while
-it runs, and dev evaluation holds one per frozen dev row.
-`topology.concurrent_environments` is the larger of the two. Check it against the
-team's live instance headroom before submitting; neither the compiler nor the
-Jobs API is an admission controller for Fleet instances. Checkpoint conversion is
-unaffected: the native distributed checkpoint is parallelism-agnostic, so one
-sealed conversion serves every node count.
+every sample in flight holds one authorized environment instance, and dev
+evaluation holds one per frozen dev row. Miles provisions a whole rollout wave at
+once, so `recipe.max_concurrent_episodes` bounds how many environments a rollout
+process creates regardless of batch size, and the slot is held across
+provisioning so a queued episode does not burn its own TTL. It defaults to 32,
+the value the comparable Fleet training arms ran; 2,100 simultaneous provisions
+returned gateway errors and left engines idle for two hours. Raise it only with
+evidence, and never above 256.
+
+`topology.concurrent_environments` is the resulting number across both phases.
+Check it against the team's live instance headroom before submitting; neither the
+compiler nor the Jobs API is an admission controller for Fleet instances.
+Checkpoint conversion is unaffected: the native distributed checkpoint is
+parallelism-agnostic, so one sealed conversion serves every node count.
 
 Copy-and-edit configurations for the three stages are in `configs/runs/`:
 `qwen38-27b-fleet-rl-data.example.yaml`,

@@ -24,6 +24,12 @@ import httpx
 
 from evals.fleet import opencode_self_hosted as fleet
 
+# Admission control: at most this many Fleet environments in flight per rollout
+# process, however large a wave the native trainer submits. Bound to the running
+# loop on first use and never resized, so every episode in a process observes the
+# same reviewed ceiling.
+_episode_slots: tuple[int, asyncio.Semaphore] | None = None
+
 
 class InvalidEpisode(RuntimeError):
     """Safe reason code only: underlying SDK exceptions may contain task data."""
@@ -44,6 +50,18 @@ BUDGET_STOPS = {
     "turn_budget_exhausted",
     "response_budget_exhausted",
 }
+
+
+def episode_slots(limit) -> asyncio.Semaphore:
+    """Return this process's episode admission gate, created on first use."""
+    global _episode_slots
+    if type(limit) is not int or not 1 <= limit <= 256:
+        raise InvalidEpisode("invalid_episode_admission_limit")
+    if _episode_slots is None:
+        _episode_slots = (limit, asyncio.Semaphore(limit))
+    if _episode_slots[0] != limit:
+        raise InvalidEpisode("episode_admission_limit_changed")
+    return _episode_slots[1]
 
 
 def budget_stop(error):
@@ -638,8 +656,12 @@ async def generate(input):
     key = os.environ.get("FLEET_API_KEY")
     if not key:
         raise InvalidEpisode("missing_fleet_auth")
+    # Hold a slot across provisioning, not only the turn loop: an environment's
+    # TTL starts when it is created, so a queued episode must not own one yet.
+    slots = episode_slots(args.cyber_max_concurrent_episodes)
     try:
         async with (
+            slots,
             httpx.AsyncClient(
                 headers={"Authorization": f"Bearer {key}"},
                 timeout=120,
@@ -676,6 +698,7 @@ def _add_arguments(parser):
     parser.add_argument("--cyber-data-manifest", required=True)
     parser.add_argument("--fleet-tito-model", required=True)
     parser.add_argument("--fleet-max-tokens-per-turn", required=True, type=int)
+    parser.add_argument("--cyber-max-concurrent-episodes", required=True, type=int)
 
 
 generate.add_arguments = _add_arguments

@@ -148,8 +148,9 @@ def compile_rl(config: dict, *, relative_to: Path) -> dict:
     layout = miles.topology(args)
     # Dev evaluation runs the whole frozen set at one sample per prompt, so the
     # larger of the two phases sets the run's simultaneous environment demand.
-    layout["concurrent_environments"] = max(
-        layout["concurrent_train_environments"], metadata["files"]["dev"]["rows"]
+    layout["concurrent_environments"] = min(
+        layout["max_concurrent_episodes"],
+        max(layout["global_batch_size"], metadata["files"]["dev"]["rows"]),
     )
     plan = {
         "schema": SCHEMA,
@@ -307,6 +308,7 @@ def native_args(plan):
             "num_steps_per_rollout": 1,
             "actor_num_nodes": plan["topology"]["nodes"],
             "actor_num_gpus_per_node": plan["topology"]["gpus_per_node"],
+            "cyber_max_concurrent_episodes": plan["topology"]["max_concurrent_episodes"],
             "global_batch_size": plan["arguments"]["groups"]
             * plan["arguments"]["samples_per_prompt"],
         }
