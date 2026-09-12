@@ -20,6 +20,7 @@ VERIFIER_VERSION = "66666666-6666-4666-8666-666666666666"
 ENVIRONMENT_VERSION = "77777777-7777-4777-8777-777777777777"
 REVISION = "1" * 40
 TEMPLATE = "fixture-chat-template"
+SYSTEM_PROMPT = "synthetic direct system prompt"
 TASK_PROMPT = "private task"
 TOOL_CATALOG_SHA256 = "sha256:" + "8" * 64
 
@@ -34,6 +35,7 @@ class Tokenizer:
 def write(path: Path, value: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(value, sort_keys=True) + "\n")
+    path.chmod(0o600)
 
 
 def seal(value: dict) -> dict:
@@ -45,6 +47,7 @@ def fixture(tmp_path: Path, monkeypatch):
     episode_id = "base-episode-001"
     episode = source / "episodes" / episode_id
     episode.mkdir(parents=True)
+    episode.chmod(0o700)
     binding = {
         "run_id": episode_id,
         "task": {
@@ -92,6 +95,18 @@ def fixture(tmp_path: Path, monkeypatch):
         },
         "initial_prompt_sha256": "sha256:" + "d" * 64,
         "initial_prompt_tokens_sha256": fleet.sha256(fleet.canonical_json([1, 2, 3])),
+        "native_batch": {
+            "phase": "train",
+            "global_step": 0,
+            "trajectory_ids": [["synthetic-trajectory", 0]],
+        },
+        "sampling": {
+            "max_generate_length": 8,
+            "temperature": 1.0,
+            "top_p": 1.0,
+            "top_k": -1,
+            "logprobs": 0,
+        },
     }
     binding["config_sha256"] = fleet.digest_without(binding, "config_sha256")
     payloads = {
@@ -102,6 +117,7 @@ def fixture(tmp_path: Path, monkeypatch):
         },
         "conversation.json": {
             "messages": [
+                {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": TASK_PROMPT},
                 {"role": "assistant", "content": "private first action"},
                 {"role": "tool", "name": "bash", "content": "private observation"},
@@ -176,6 +192,8 @@ def fixture(tmp_path: Path, monkeypatch):
     }
     for name, value in payloads.items():
         write(episode / name, value)
+    write(episode / "create-intent.json", {"run_id": episode_id})
+    write(episode / "score-intent.json", {"synthetic": True})
     receipt = {
         "task_version_id": TASK_VERSION,
         "instance_id": INSTANCE_ID,
@@ -453,7 +471,7 @@ def test_unqualified_or_terminal_only_sources_fail_closed(tmp_path, monkeypatch,
             rollout_log_probs=[-0.1, 0.0],
         )
         conversation = json.loads((episode / "conversation.json").read_text())
-        conversation["messages"] = [conversation["messages"][0], *conversation["messages"][-2:]]
+        conversation["messages"] = [*conversation["messages"][:2], *conversation["messages"][-2:]]
         write(episode / "recording.json", recording)
         write(episode / "conversation.json", conversation)
         _rebind_acceptance(episode, index_path, config)
@@ -552,7 +570,16 @@ def test_instance_identity_validator_matches_fleet_canonical_contract():
 
 @pytest.mark.parametrize(
     "defect",
-    ["tool_catalog", "prompt_digest", "rl_limit", "provisioning_route", "catalog_mismatch"],
+    [
+        "tool_catalog",
+        "prompt_digest",
+        "rl_limit",
+        "provisioning_route",
+        "catalog_mismatch",
+        "native_batch",
+        "sampling",
+        "sampling_extra",
+    ],
 )
 def test_incomplete_or_mismatched_direct_rl_binding_fails_closed(tmp_path, monkeypatch, defect):
     config, index_path, episode = fixture(tmp_path, monkeypatch)
@@ -565,8 +592,12 @@ def test_incomplete_or_mismatched_direct_rl_binding_fails_closed(tmp_path, monke
         binding["rl"].pop("max_turns")
     elif defect == "provisioning_route":
         binding["authority"].pop("provisioning_route_template")
-    else:
+    elif defect == "catalog_mismatch":
         binding["execution"]["required_task_tool_catalog_sha256"] = "sha256:" + "f" * 64
+    elif defect in {"native_batch", "sampling"}:
+        binding.pop(defect)
+    else:
+        binding["sampling"]["unbound"] = True
     binding["config_sha256"] = fleet.digest_without(binding, "config_sha256")
     write(episode / "binding.json", binding)
     _rebind_acceptance(
@@ -582,7 +613,7 @@ def test_incomplete_or_mismatched_direct_rl_binding_fails_closed(tmp_path, monke
 def test_recorded_task_prompt_must_match_exact_task_binding(tmp_path, monkeypatch):
     config, index_path, episode = fixture(tmp_path, monkeypatch)
     conversation = json.loads((episode / "conversation.json").read_text())
-    conversation["messages"][0]["content"] = "different private synthetic task"
+    conversation["messages"][1]["content"] = "different private synthetic task"
     write(episode / "conversation.json", conversation)
     _rebind_acceptance(episode, index_path, config)
     with pytest.raises(self_trace.SelfTraceError, match="task prompt differs"):

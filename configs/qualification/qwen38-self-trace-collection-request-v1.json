@@ -1,0 +1,140 @@
+{
+  "schema": "cyber_qwen_direct_self_trace_collection_request_v1",
+  "status": "blocked_external_bindings",
+  "producer_plan": {
+    "path": "../studies/qwen-blackbox-self-recollection-v1.json",
+    "file_sha256": "sha256:c45cc0a7a8b378eab4f02f4a81fbbbe93cf1e986d733aa92fffb4849e102e61b",
+    "document_sha256": "sha256:b65d055bc0f2a00f327f2c36935428ddee6ab11742f44a13b85580afcb0dd28c"
+  },
+  "historical_audit": {
+    "path": "../../docs/evidence/qwen38-study/2026-09-11-self-sft-interface-audit-v2.json",
+    "file_sha256": "sha256:48990f3e584101d3a53b8db00bb4c0c38945d480a814cba4602d13c573cba9bd",
+    "document_sha256": "sha256:b478d515e08ce371101d27208e49ac212f03388135e2c131eabbbc8c5b75fa2f"
+  },
+  "model": {
+    "repo": "Qwen/Qwen3.8-27B",
+    "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "root": "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2",
+    "lock_file_sha256": "sha256:f3926fe675263b25dc79c2b3881a9c463d6b7931e9d61aeb777d15efc61e35ac",
+    "runtime_chat_template_sha256": "sha256:c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+    "initialization": "exact_fresh_base"
+  },
+  "selection": {
+    "eligible_inventory": {
+      "path": "../data/qwen-blackbox-eligible-v1.json",
+      "file_sha256": "sha256:b12a755c7e65bc04694eab85d9b0c21fadc222207d7bcc6ed8f0c788e032589b",
+      "document_sha256": "sha256:c45c9cc420a3dbf1aa6b635b84ed1ca3c404254f046ffdac234e053929a1bf12"
+    },
+    "representative_splits": {
+      "a": {
+        "path": "../data/qwen-blackbox-study-split-a-v1.json",
+        "file_sha256": "sha256:2558d0346f5edd26d6a7cd85fc1774cb1be2339d588be1f7f967fc14689d6ccc",
+        "document_sha256": "sha256:9ce5ba7f4cb9c52f6adfdbe615ca2258358dc602d6a9bb665c2ccc29dc04f4b8"
+      },
+      "b": {
+        "path": "../data/qwen-blackbox-study-split-b-v1.json",
+        "file_sha256": "sha256:938ab045d07a33611c14ac01c50dda774eca280c1449482af7ba7e292c02e596",
+        "document_sha256": "sha256:282f2dec7912364c0f7c1db7ceaac39eb66d552ab226d7617a412fa8e881a50f"
+      }
+    },
+    "mode": "representative_a_b_training_union",
+    "task_versions": 74,
+    "attempts_per_task_version": 4,
+    "maximum_sessions": 296,
+    "attempt_seed": "qwen38-direct-self-recollection-v1",
+    "attempt_roster_sha256": "sha256:596b35cfc28c3fc2888b9a2cf9904af365b5e667055dc5210f8e6e74f33750d0"
+  },
+  "interface": {
+    "backend": "skyrl_direct",
+    "required_task_tools": [
+      "bash",
+      "submit_report"
+    ],
+    "tool_catalog": {
+      "path": "../data/qwen38-rl-filtered-canary-tool-catalog-v1.json",
+      "file_sha256": "sha256:e4a3c4fb5b5c34cdaf64ec568eb31fcc0d55a63cc0a134808db348c65d7b6858",
+      "canonical_sha256": "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a"
+    },
+    "request_prefix_policy": {
+      "roles": [
+        "system",
+        "user"
+      ],
+      "tool_schema": "complete_ordered_openai_function_catalog",
+      "add_generation_prompt": true,
+      "compaction": "disabled",
+      "tool_rewriting": "prohibited"
+    },
+    "request_prefix_policy_sha256": "sha256:c1e73c038fde815b035894688d35c287ee1e8a114646299b83cd6d1c61e7659a",
+    "system_prompt_sha256": null,
+    "runtime_chat_template_sha256": "sha256:c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+    "native_helper_sha256": "sha256:55c15b660067749febda00d4fb1c2110ff436717bbd4b73bf66055a73d0b87d5"
+  },
+  "limits": {
+    "context_tokens": 98304,
+    "response_tokens": 81920,
+    "max_tokens_per_turn": 4096,
+    "max_turns": 80,
+    "episode_seconds": 2400,
+    "tool_seconds": 330,
+    "tool_result_chars": 50000,
+    "ttl_seconds": 32400
+  },
+  "sampling": {
+    "max_generate_length": 4096,
+    "temperature": 1.0,
+    "top_p": 1.0,
+    "top_k": -1,
+    "logprobs": 0
+  },
+  "runtime": {
+    "collector_image": null,
+    "base_route_certificate_sha256": null,
+    "synthetic_parity_receipt": null
+  },
+  "qualification": {
+    "max_length": 16384,
+    "context_tokens": 4096,
+    "synthetic_fixture_policy": "synthetic_content_only_no_task_prompt_trace_flag_score_or_credential"
+  },
+  "source_closure": {
+    "dense.py": {
+      "path": "../../training/dense.py",
+      "sha256": "sha256:712038f1abf4f461cf471afc50f7fbbfe90c9d2d7b9e0be1a81583378c933012"
+    },
+    "rl_data.py": {
+      "path": "../../training/rl_data.py",
+      "sha256": "sha256:f0c327d2ecc464610a5fd86e11b112870d28feb43d9155d7507d8fedbd87632b"
+    },
+    "rl_episode.py": {
+      "path": "../../training/rl_episode.py",
+      "sha256": "sha256:5044d1b58923f882888ec284488345336b9c40eac952125b07698b2a3192696d"
+    },
+    "self_trace_collection.py": {
+      "path": "../../training/self_trace_collection.py",
+      "sha256": "sha256:df6c2187d0a9d8b10a32995ba80aa4c41af9bcb62bb9e833a3c30a7225d686f8"
+    },
+    "self_trace_corpus.py": {
+      "path": "../../training/self_trace_corpus.py",
+      "sha256": "sha256:6fd10fdf43e9f162035f0402008159715759fa575b03b118a7f8a284b3408c5f"
+    },
+    "skyrl_episode.py": {
+      "path": "../../training/skyrl_episode.py",
+      "sha256": "sha256:fb3a25b38f778b6f12932c271d2e6813f256ba213d179e967e6809b2653b3815"
+    }
+  },
+  "output_policy": {
+    "private": true,
+    "create_once": true,
+    "root_mode": "0700",
+    "file_mode": "0600",
+    "public_receipts": "digests_counts_and_booleans_only"
+  },
+  "execution": {
+    "kind": "offline_qualification_not_a_launcher",
+    "cluster_or_api_mutations_performed": false,
+    "job_submission_performed": false,
+    "credentials_required": false
+  },
+  "sha256": "sha256:b9adf7dec80c61384dd2e8f146d2b4f64f6da4db6797ab26af68e0c1d7e9703b"
+}

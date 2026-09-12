@@ -343,13 +343,37 @@ async def _agent(recorder, session, messages, tools, limits, parse):
     raise EpisodeBudgetExceeded("turn_budget_exhausted")
 
 
-async def collect(config, directory: Path, recorder, parse, *, client):
+def _direct_request_messages(task_prompt, request_messages):
+    """Copy an optional exact system+user prefix without exposing its content."""
+    if request_messages is None:
+        return [{"role": "user", "content": task_prompt}]
+    if (
+        not isinstance(request_messages, list)
+        or len(request_messages) != 2
+        or any(not isinstance(message, dict) for message in request_messages)
+        or [message.get("role") for message in request_messages] != ["system", "user"]
+        or any(set(message) != {"role", "content"} for message in request_messages)
+        or any(
+            not isinstance(message.get("content"), str) or not message["content"]
+            for message in request_messages
+        )
+        or (task_prompt is not None and request_messages[1]["content"] != task_prompt)
+    ):
+        raise InvalidEpisode("direct_request_prefix_invalid")
+    return copy.deepcopy(request_messages)
+
+
+async def collect(config, directory: Path, recorder, parse, *, client, request_messages=None):
     """Return native samples only after authoritative grading AND confirmed release.
 
     `client` is an authenticated httpx.AsyncClient with no transport retries.
     `directory` must be a unique, durable episode claim on shared private storage.
     """
     _validate(config)
+    if request_messages is not None:
+        request_messages = _direct_request_messages(None, request_messages)
+        if fleet.sha256(request_messages[1]["content"].encode()) != config["task"]["prompt_sha256"]:
+            raise InvalidEpisode("direct_request_prefix_invalid")
     directory.mkdir(parents=True, exist_ok=False, mode=0o700)
     fleet.write_json_once(directory / "binding.json", config)
     instance_id = None
@@ -425,7 +449,7 @@ async def collect(config, directory: Path, recorder, parse, *, client):
                     }
                     for name in config["execution"]["required_task_tools"]
                 ]
-                messages.append({"role": "user", "content": task["prompt"]})
+                messages.extend(_direct_request_messages(task["prompt"], request_messages))
                 phase = "agent_interaction"
                 messages, reason, env_time = await _agent(
                     recorder,

@@ -118,19 +118,31 @@ def _runs(mask: list[int]) -> list[tuple[int, int]]:
     return result
 
 
-def _conversation_shape(conversation: dict, spans: list[tuple[int, int]]) -> list[dict]:
+def _conversation_shape(
+    conversation: dict,
+    spans: list[tuple[int, int]],
+    *,
+    required_anchor_roles: tuple[str, ...] | None = None,
+) -> list[dict]:
     """Return only structural assistant/tool metadata; never source content."""
     messages = conversation.get("messages")
     if not isinstance(messages, list) or not messages:
         raise SelfTraceError("direct conversation anchor is missing")
     if any(not isinstance(message, dict) for message in messages):
         raise SelfTraceError("direct conversation structure is invalid")
-    if messages[0].get("role") != "user":
+    roles = tuple(message.get("role") for message in messages)
+    if required_anchor_roles is not None:
+        anchor_roles = required_anchor_roles
+    elif roles[:2] == ("system", "user"):
+        anchor_roles = ("system", "user")
+    else:
+        anchor_roles = ("user",)
+    if roles[: len(anchor_roles)] != anchor_roles:
         raise SelfTraceError("direct conversation anchor is missing")
-    if any(message.get("role") not in {"user", "assistant", "tool"} for message in messages):
+    if any(role not in {"system", "user", "assistant", "tool"} for role in roles):
         raise SelfTraceError("direct conversation contains an unsupported role")
-    if any(message.get("role") == "user" for message in messages[1:]):
-        raise SelfTraceError("direct conversation contains a later user transition")
+    if any(role in {"system", "user"} for role in roles[len(anchor_roles) :]):
+        raise SelfTraceError("direct conversation contains a later request transition")
     assistants = [
         index for index, message in enumerate(messages) if message.get("role") == "assistant"
     ]
@@ -147,6 +159,63 @@ def _conversation_shape(conversation: dict, spans: list[tuple[int, int]]) -> lis
     if messages[-1].get("role") != "tool" or result[-1]["tool"] != "submit_report":
         raise SelfTraceError("verified source lacks terminal direct report submission")
     return result
+
+
+def _native_metadata(binding: dict) -> bool:
+    """Validate producer-added metadata instead of stripping it before review."""
+    batch, sampling = binding.get("native_batch"), binding.get("sampling")
+    if not isinstance(batch, dict) or not isinstance(sampling, dict):
+        return False
+    if (
+        set(sampling) != {"max_generate_length", "temperature", "top_p", "top_k", "logprobs"}
+        or sampling.get("max_generate_length") != binding.get("rl", {}).get("max_tokens_per_turn")
+        or type(sampling.get("temperature")) not in {int, float}
+        or isinstance(sampling.get("temperature"), bool)
+        or not math.isfinite(sampling["temperature"])
+        or sampling["temperature"] < 0
+        or type(sampling.get("top_p")) not in {int, float}
+        or isinstance(sampling.get("top_p"), bool)
+        or not math.isfinite(sampling["top_p"])
+        or not 0 < sampling["top_p"] <= 1
+        or type(sampling.get("top_k")) is not int
+        or sampling["top_k"] < -1
+        or sampling.get("logprobs") != 0
+    ):
+        return False
+    if set(batch) == {"phase", "global_step", "trajectory_ids"}:
+        trajectories = batch.get("trajectory_ids")
+        return (
+            batch.get("phase") in {"train", "eval"}
+            and type(batch.get("global_step")) is int
+            and batch["global_step"] >= 0
+            and isinstance(trajectories, list)
+            and bool(trajectories)
+            and all(
+                isinstance(item, list)
+                and len(item) == 2
+                and isinstance(item[0], str)
+                and item[0]
+                and type(item[1]) is int
+                and item[1] >= 0
+                for item in trajectories
+            )
+            and len({(item[0], item[1]) for item in trajectories}) == len(trajectories)
+        )
+    if set(batch) == {
+        "kind",
+        "attempt_id",
+        "attempt_ordinal",
+        "collection_request_sha256",
+    }:
+        return (
+            batch.get("kind") == "self_trace_recollection"
+            and isinstance(batch.get("attempt_id"), str)
+            and bool(re.fullmatch(r"q38-self-[0-9a-f]{20}-a[1-9][0-9]*", batch["attempt_id"]))
+            and type(batch.get("attempt_ordinal")) is int
+            and batch["attempt_ordinal"] >= 0
+            and _sha(batch.get("collection_request_sha256"))
+        )
+    return False
 
 
 def _segment_native(
@@ -296,6 +365,8 @@ def _episode(
             "verifier",
             "initial_prompt_sha256",
             "initial_prompt_tokens_sha256",
+            "native_batch",
+            "sampling",
             "config_sha256",
         }
         or binding.get("run_id") != entry["episode_id"]
@@ -367,6 +438,7 @@ def _episode(
         or verifier.get("function_name") != "verify"
         or not _sha(binding.get("initial_prompt_sha256"))
         or not _sha(binding.get("initial_prompt_tokens_sha256"))
+        or not _native_metadata(binding)
     ):
         raise SelfTraceError("episode is not the exact direct fresh-base interface")
     attestation = reward.get("direct_authority_attestation")
@@ -494,12 +566,15 @@ def _episode(
     ):
         raise SelfTraceError("recorded prompt token digest differs")
     messages = conversation.get("messages")
+    if not isinstance(messages, list) or not messages:
+        raise SelfTraceError("recorded task prompt differs from the exact task binding")
+    prompt_index = 1 if len(messages) > 1 and messages[0].get("role") == "system" else 0
     if (
-        not isinstance(messages, list)
-        or not messages
-        or not isinstance(messages[0], dict)
-        or not isinstance(messages[0].get("content"), str)
-        or fleet.sha256(messages[0]["content"].encode()) != task["prompt_sha256"]
+        prompt_index >= len(messages)
+        or not isinstance(messages[prompt_index], dict)
+        or messages[prompt_index].get("role") != "user"
+        or not isinstance(messages[prompt_index].get("content"), str)
+        or fleet.sha256(messages[prompt_index]["content"].encode()) != task["prompt_sha256"]
     ):
         raise SelfTraceError("recorded task prompt differs from the exact task binding")
     spans = _runs([0] * (len(tokens) - response) + mask)
