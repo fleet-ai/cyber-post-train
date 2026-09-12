@@ -65,6 +65,10 @@ request fields yet:
   at the observation time; the live dev image-build OpenAPI still lacked
   `rewrite_timestamp`, and neither merge/deployment nor the dedicated ECR/IAM
   binding was proven. A green PR is therefore not a collector-image receipt.
+  The later immutable
+  [live-gate recheck](evidence/qwen38-study/2026-09-12-opencode-agent-image-live-gate-v1.json)
+  reached the same conclusion after binding the newer deployed API image and
+  current PR/main state; no context upload or build was attempted.
 - The shared Qwen route component proves the exact model payload, tokenizer,
   chat template, serving runtime and historical readiness. Its own schema says
   `passed_component_only`, `launchable=false`. It does not bind the eventual

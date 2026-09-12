@@ -43,6 +43,15 @@ no `rewrite_timestamp` property, and the same source bytes on current Theseus
 main as the blocked plan. Do not upload a context or submit a build merely to
 reconfirm that schema result.
 
+The later read-only
+[`2026-09-12-opencode-agent-image-live-gate-v1.json`](evidence/qwen38-study/2026-09-12-opencode-agent-image-live-gate-v1.json)
+recheck found the gate unchanged after the dev API moved to a newer image. The
+dedicated OpenAPI still has the same digest and fails the repository validator
+because `rewrite_timestamp` is absent. Theseus PR #31835 remains open, green and
+unreviewed; current Theseus main and the deployed API commit retain the old
+source and no dedicated-repository Terraform. A rollout of an unrelated API
+revision is therefore not evidence that this change was deployed.
+
 Do not submit until this command exits zero against a fresh live OpenAPI copy:
 
 ```bash

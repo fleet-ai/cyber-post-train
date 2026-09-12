@@ -1,0 +1,191 @@
+{
+  "schema": "cyber_opencode_agent_image_live_gate_v1",
+  "status": "blocked_shared_infrastructure_not_merged_or_deployed",
+  "observed_at": "2026-09-12T12:49:26Z",
+  "purpose": "Recheck the exact pullable OpenCode 1.18.27 collector/base-evaluation image gate without building, publishing, deploying or creating a workload",
+  "predecessors": {
+    "external_binding_audit": {
+      "path": "docs/evidence/qwen38-study/2026-09-12-self-trace-external-binding-audit-v1.json",
+      "file_sha256": "sha256:1ee12486ddc30f5effaf3c6ef54514921ce6d5c2c8bddea341537ea6d1f7cf33",
+      "document_sha256": "sha256:a9617d4643d5e722a889ba79114145c49ba0a9bd7a2ba130668392903acb6d1f"
+    },
+    "publication_plan": {
+      "path": "configs/evaluation/opencode11827-agent-image-publication-plan-v2.json",
+      "file_sha256": "sha256:75913e17ae25c5b8c36892c9c13af29661bdfc16fb23c9c8cad24070f11b9e3e",
+      "document_sha256": "sha256:cc98ea5816b8537f771d659cbdec759b57949710a71484f0532fd0592925ffe1"
+    }
+  },
+  "candidate": {
+    "opencode_version": "1.18.27",
+    "platform": "linux/amd64",
+    "deterministic_context_sha256": "sha256:e1d143706870c0a283c4d816d6f36c30095cc7dba08d20a90a9dbf09d27ed27e",
+    "deterministic_context_size_bytes": 60233450,
+    "local_oci_manifest_sha256": "sha256:da79f78e4af129913f313614003bf929068b52db599f32fc915e60046712e16f",
+    "pullable_registry_reference_proven": false,
+    "local_identity_must_not_be_relabelled_as_registry_digest": true
+  },
+  "upstream_change": {
+    "repository": "fleet-ai/theseus",
+    "pull_request": {
+      "url": "https://github.com/fleet-ai/theseus/pull/31835",
+      "state": "OPEN",
+      "is_draft": false,
+      "head_commit": "cf2a46ae87a521aad8a073012c2ddb9f499cddc5",
+      "recorded_base_commit": "7c8a2b1c87e7e9061494d30dc916908774bdab06",
+      "live_main_commit": "a3f30b6040bb800e82f3e8f100ec0ddfed84281a",
+      "merge_base_commit": "7c8a2b1c87e7e9061494d30dc916908774bdab06",
+      "commits": 1,
+      "files": 5,
+      "additions": 69,
+      "deletions": 3,
+      "mergeable": "MERGEABLE",
+      "merge_state_status": "CLEAN",
+      "rebaseable": false,
+      "auto_merge_requested": false,
+      "formal_reviews": 0,
+      "requested_reviewers_or_teams": 0,
+      "review_decision": "",
+      "checks": {
+        "completed": 48,
+        "successful": 39,
+        "skipped": 9,
+        "pending_or_failed": 0,
+        "required": 8,
+        "required_successful": 7,
+        "required_skipped": 1
+      },
+      "merge_queue_required": true,
+      "merge_or_deployment_proven": false
+    },
+    "changed_source_sha256": {
+      "k8s/training/terraform/buildkit-role/fleetai-training-dev.tfvars": "sha256:000157ef2a2d4e57a0fe93f7c8d616814b84176fa7a65c1c738ad8b4387531de",
+      "services/fleet-train-api/src/fleet_train_api/local_image_build.py": "sha256:89fc37fe0f4f49684b192b6740870562849f751ad9202e95e1251aa6cf7fd331",
+      "services/fleet-train-api/tests/test_local_image_build.py": "sha256:40c595a1b6ebe55f9565c666d3848e829cae7587c95308c8af4d9ed740eab563",
+      "terraform/core/cyber-post-train-opencode-runtime.tf": "sha256:ea0e24f96fafb5712a981dc81ebce000b7d79a89e1a9c76887c049b89b957c8e"
+    },
+    "live_main_source": {
+      "local_image_build_sha256": "sha256:0a505b6da9acb76b4e84d8d3802665289afecac8ec33784065f023666f902834",
+      "buildkit_role_tfvars_sha256": "sha256:1a45b0a692a7ad6627171a74b1b6feb2c19dbdfeaf792237d989c2b15e81797d",
+      "dedicated_repository_terraform_present": false
+    }
+  },
+  "live_dev": {
+    "image_build_openapi": {
+      "url": "https://api.ft.dev.flt.build/v1/images/openapi.json",
+      "http_status": 200,
+      "document_sha256": "sha256:44d1488cb0b1573ab446ed6c882dcde5d3d73460a1404790596d546ac625e48f",
+      "local_build_path_present": true,
+      "local_build_request_schema": "LocalImageBuildRequest",
+      "request_properties": [
+        "build_args",
+        "context_id",
+        "dockerfile",
+        "ecr_repository",
+        "no_cache",
+        "platform",
+        "pull",
+        "tag",
+        "target"
+      ],
+      "rewrite_timestamp_present": false,
+      "repository_validator_result": "rejected_missing_rewrite_timestamp"
+    },
+    "image_build_api": {
+      "namespace": "fleet-train-control-plane",
+      "deployment_name": "image-build-api",
+      "deployment_uid": "d0826c48-f784-4c87-be90-7c60cd7bdb6f",
+      "generation": 13,
+      "observed_generation": 13,
+      "ready_replicas": 1,
+      "updated_replicas": 1,
+      "available_replicas": 1,
+      "requested_image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/training-api:956c17d7",
+      "source_commit_from_tag": "956c17d796fcbb10d3ca773f4fba1b6a972e1622",
+      "runtime_image_id": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/training-api@sha256:df7144a6c1a6626a5513facefe8e32f90978cc6dfb7f72081730acba4aaa0402",
+      "pod_name": "image-build-api-66f6b5bf69-bj8m6",
+      "pod_uid": "dbfcb532-d1ad-40d6-81fc-c346bc29eb40",
+      "pod_phase": "Running",
+      "pod_ready": true,
+      "pod_restarts": 0,
+      "deployed_source_matches_unmodified_main_contract": true,
+      "deployed_source_contains_dedicated_repository_terraform": false
+    },
+    "buildkit": {
+      "namespace": "buildkit",
+      "deployment_name": "buildkit-buildkit-service",
+      "deployment_uid": "462b461a-abc7-43bc-a9e8-87b94567140e",
+      "generation": 1,
+      "ready_replicas": 1,
+      "requested_image": "moby/buildkit:v0.26.2",
+      "runtime_image_id": "docker.io/moby/buildkit@sha256:de10faf919fc71ba4eb1dd7bd6449566d012b0c9436b1c61bfee21d621b009aa",
+      "pod_name": "buildkit-buildkit-service-6cc445497d-ztqwp",
+      "pod_uid": "9a8baeab-31f2-421a-84fa-ad625a306828",
+      "pod_phase": "Running",
+      "pod_ready": true,
+      "pod_restarts": 0,
+      "service_account": "buildkit",
+      "service_account_uid": "101ccba7-6797-4425-8168-fcc5ce0daa7f",
+      "service_account_role": "arn:aws:iam::661864827319:role/fleetai-training-dev-buildkit"
+    },
+    "registry_and_iam_readback": {
+      "status": "unknown_no_aws_read_authority_in_current_environment",
+      "dedicated_repository_exists": null,
+      "dedicated_repository_tag_mutability": null,
+      "builder_role_has_dedicated_push_scope": null,
+      "dev_node_role_has_pull_scope": null,
+      "pr_source_or_kubernetes_annotation_used_as_live_policy_proof": false,
+      "user_pasted_credentials_used": false
+    }
+  },
+  "authority_boundary": {
+    "requires_explicit_shared_infrastructure_authority": [
+      "enqueue or merge fleet-ai/theseus PR 31835 through the required merge queue",
+      "review and apply the core ECR Terraform state",
+      "review and apply the dev BuildKit-role Terraform state",
+      "build and deploy the changed Fleet Training image-build API to dev"
+    ],
+    "requires_separate_post_deploy_execution": [
+      "prove the dedicated immutable ECR repository and exact builder push plus dev-node pull policies by live readback",
+      "re-fetch the dedicated live OpenAPI and require validate-openapi to exit zero",
+      "upload the already-digested deterministic context and create exactly one local BuildKit build",
+      "bind terminal success to the server-returned repository-at-digest reference",
+      "server-dry-run and execute one zero-GPU dev clean-pull qualification Pod with imagePullPolicy Always",
+      "validate the exact OpenCode version, platform, non-root private-home runtime, ordered tools, native v2 compaction and automatic continuation, then delete the Pod and prove absence"
+    ],
+    "not_authorized_by_green_pr_or_campaign_plan": [
+      "shared-repository merge",
+      "Terraform apply",
+      "shared Training API deployment"
+    ]
+  },
+  "decision": {
+    "collector_or_base_eval_image_accepted": false,
+    "self_trace_collection_launchable": false,
+    "base_evaluation_launchable": false,
+    "safe_action_before_authority": "request explicit shared-infrastructure merge and deployment ownership; do not upload a context or submit a build against the known-incompatible API",
+    "first_post_deploy_gate": "both validate-openapi and live ECR/IAM readback must pass before context upload or build submission",
+    "image_acceptance_resolves_all_self_trace_bindings": false,
+    "remaining_non_image_self_trace_bindings": [
+      "exact fresh direct-base route certificate composed after collector qualification",
+      "explicit Qwen3.8 direct system-prompt treatment selection and immutable digest binding"
+    ]
+  },
+  "scope": {
+    "read_only_github_observations": true,
+    "read_only_cluster_observations": true,
+    "openapi_get_requests": 1,
+    "aws_readback_succeeded": false,
+    "prompt_artifact_content_emitted": false,
+    "prompt_or_completion_requests": 0,
+    "task_or_grading_requests": 0,
+    "scoring_requests": 0,
+    "context_uploads": 0,
+    "image_build_jobs": 0,
+    "registry_publications": 0,
+    "dev_qualification_pods": 0,
+    "gpu_requests": 0,
+    "cluster_or_api_mutations": 0,
+    "github_mutations": 0
+  },
+  "sha256": "sha256:37b6e3708ac41dbfdb860b0ba6217815c69b9640bc544342fb59f416ef758884"
+}
