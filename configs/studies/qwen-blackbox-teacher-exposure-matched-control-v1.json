@@ -1,0 +1,213 @@
+{
+  "schema": "cyber_teacher_exposure_matched_study_v1",
+  "model": {
+    "repo": "Qwen/Qwen3.8-27B",
+    "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "lock_sha256": "sha256:f3926fe675263b25dc79c2b3881a9c463d6b7931e9d61aeb777d15efc61e35ac",
+    "initialization": "fresh_base_for_each_arm"
+  },
+  "question": "Does reducing teacher-availability imbalance help when episode count, dense-window count and supervised-token dose are exactly matched?",
+  "treatment": {
+    "control_role": "availability_shaped_exposure_matched_control",
+    "comparison_role": "balanced_teacher_exposure",
+    "unit": "whole_certified_native_episode",
+    "hard_match": [
+      "episodes",
+      "dense_segments",
+      "supervised_tokens"
+    ],
+    "otherwise_matched": [
+      "model initialization",
+      "study split",
+      "learning rate",
+      "batch size",
+      "epoch count",
+      "training seed",
+      "tokenizer and chat template",
+      "ordered tool interface",
+      "dense assistant-turn supervision",
+      "fresh Fleet dev outcome protocol"
+    ],
+    "selection": "lexicographically first family-local availability-share preference with an exact joint completion",
+    "prohibited": [
+      "partial episode truncation",
+      "duplicated target tokens",
+      "epoch-count dose correction",
+      "payload, score or held-out outcome selection"
+    ]
+  },
+  "corpus_contract": {
+    "visibility": "private",
+    "file_mode": "0600",
+    "files": [
+      "train.parquet"
+    ],
+    "format": "pretokenized_assistant_segments_v1",
+    "max_length": 16384,
+    "context_tokens": 4096,
+    "validation_mode": "task_outcomes_only",
+    "teacher_cross_entropy": "not_computed",
+    "target_policy_sha256": "sha256:f371e87d02e6a32d32b511d9439caff97540709f17f346830d7989781c550cc1",
+    "chat_template_sha256": "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+    "tokenizer_backend_sha256": "ffb7a28b27dabcc333662fd3e0b0005d9e79a1c22e31453ab5a3017fbd5f25c0"
+  },
+  "implementation": {
+    "selection_code_sha256": "sha256:8443300eeb89d67325641b63773e5dcd02201a2e5343fc14eb8deba56c7d98ed",
+    "frozen_dense_builder_commit": "8fdd91bffd0cc862b3888e92748ada566010ad57",
+    "frozen_sft_runtime_sha256": "sha256:fc5db40437923800730d38b9bc9a0872cdd64dd8a92c64fc03ecfdeb0ac2b2e3",
+    "note": "Materialization used the exact code fingerprint bound by the already-frozen coverage policy; later training-control and telemetry changes intentionally do not rewrite that policy."
+  },
+  "variants": {
+    "a": {
+      "study_split_sha256": "sha256:9ce5ba7f4cb9c52f6adfdbe615ca2258358dc602d6a9bb665c2ccc29dc04f4b8",
+      "training_split_sha256": "sha256:2d20dac7d5b9bb29f6aa44369c5dd2efed9c78bd3ca4d32ed021f04843ae6863",
+      "dev_task_set_sha256": "sha256:914a67b587a8d2f5a523ab652eeaec15f8f9d5dbec559c25ff176b01777a6c96",
+      "corpus_embedded_fleet_dev_protocol_sha256": "sha256:d9423651420dcf1c39f7b870daafe8a74dec18db6eac8684b3845d881dc61019",
+      "outcome_protocol_sha256": "sha256:3c2c65eed748b16b50ef992327324b1fcaad84b190456c4aefe69c6efe748f75",
+      "coverage_manifest_sha256": "sha256:3962b73ed171256166e02f54e0b285271005b3300e462d59d3212badf8655b2e",
+      "available_source_selection_sha256": "sha256:cdf82a83e423c3de6556b8f0ca5eaf4cb358041cd3015a335250b473e4a5cfc7",
+      "available_corpus_sha256": "sha256:c4945ddb7cd8fd0b7b9ebbd9bad9b96215b0905c059ef1b22d71d4f214b4eb8e",
+      "balanced_source_selection_sha256": "sha256:3b9baf93e9a94a508e3c3193c01ef8d5623c39789cf4fc6fe7a97e4388f88d9b",
+      "balanced_corpus_sha256": "sha256:b8aa6d6f9ae19fd509a90c3d2b6343631386d6bc14b019e620810da274bd9cf8",
+      "balanced_train_parquet_sha256": "sha256:e59e05912bdadbbd0f147a02a5da500fc8242bf565fb0206c0e36c0394289d9b",
+      "matched_source_selection_sha256": "sha256:91af179896e5d4c052abfce13664e3dae46554aa4f6b9cf28c8fe885c516e706",
+      "match_receipt_sha256": "sha256:d7bd21bb94723bbce339c1f7a35d77ed8d2b92f938618c24ca1fae6999cac86d",
+      "selected_episode_ids_sha256": "sha256:e1d56c191584fddd942109c83fe4c4f60c8a4a58f86f4f09e75e9e2eb26739eb",
+      "matched_corpus_sha256": "sha256:8faa6e559c00cc3623a1bc03cc7364ba00611e51caa95d2d845b884ddbd7a93f",
+      "matched_train_parquet_sha256": "sha256:e4e388835160ca3c04fb5bd9c2f309756705f452f67daae7284857f965b3541a",
+      "target": {
+        "episodes": 50,
+        "segments": 401,
+        "supervised_tokens": 419165
+      },
+      "available": {
+        "families": 29,
+        "episodes": 71,
+        "segments": 602,
+        "supervised_tokens": 700359,
+        "supervised_token_gini": 0.326474634,
+        "tv_to_available": {
+          "episodes": 0.0,
+          "segments": 0.0,
+          "supervised_tokens": 0.0
+        }
+      },
+      "matched_control": {
+        "families": 29,
+        "episodes": 50,
+        "segments": 401,
+        "supervised_tokens": 419165,
+        "nominal_batch8_batches": 51,
+        "supervised_token_gini": 0.279557264,
+        "tv_to_available": {
+          "episodes": 0.136056338,
+          "segments": 0.14165997,
+          "supervised_tokens": 0.179544359
+        }
+      },
+      "balanced": {
+        "families": 29,
+        "episodes": 50,
+        "segments": 401,
+        "supervised_tokens": 419165,
+        "nominal_batch8_batches": 51,
+        "supervised_token_gini": 0.187766401,
+        "tv_to_available": {
+          "episodes": 0.183380282,
+          "segments": 0.179952942,
+          "supervised_tokens": 0.197847327
+        }
+      }
+    },
+    "b": {
+      "study_split_sha256": "sha256:282f2dec7912364c0f7c1db7ceaac39eb66d552ab226d7617a412fa8e881a50f",
+      "training_split_sha256": "sha256:66f98eac3d1533d2c0e3dda99704020e5177ed56c25196f7fa1175307732ab06",
+      "dev_task_set_sha256": "sha256:6f654f7493fa3803fc014efcfdc1be4a27e6518bc29ad9d401fe3823a59fbab2",
+      "corpus_embedded_fleet_dev_protocol_sha256": "sha256:9c3bcee8dae6b634844fb9dace5b3cb0c207a3fde861ebd7a8a6bd22e783a334",
+      "outcome_protocol_sha256": "sha256:01f9c8b28cdc08ef8c089600b96450d747fe92447a60cbd4d60256b6302e5388",
+      "coverage_manifest_sha256": "sha256:933ebb657ef025f127359d18fdaccdb12339dfe11aa4850694cd8f705c7ae949",
+      "available_source_selection_sha256": "sha256:d0d4213c672d97491e70bbe7db7e671a0d83218b55e4b16afee091465d76cd99",
+      "available_corpus_sha256": "sha256:7b43bc25aec1390252b579043199d8a1e3295d29272b565d4c45dddde3cd15de",
+      "balanced_source_selection_sha256": "sha256:b0933c71539be3f356f54707981d8b7a66fa88bac80a27781f1f1d6bf05ef007",
+      "balanced_corpus_sha256": "sha256:1650edbb53ee33439311a8338207d95923f72283087e0069b89eb8114fafb194",
+      "balanced_train_parquet_sha256": "sha256:a763aabcf3a16aeb761a7798df268096d9eb10eee788f924bfa0726b91b6272a",
+      "matched_source_selection_sha256": "sha256:569c72c5d04c4f4040f41c19218ed6cfad7bf3ab69d72e322c581efc53922626",
+      "match_receipt_sha256": "sha256:4c655e1e70fe00d45dbc2931016ad6832317a038e79064a3bd379656ebb9eb82",
+      "selected_episode_ids_sha256": "sha256:61edb83e394181b2a1cfdb665b962a600bfc706736bf8989d2371c519705e605",
+      "matched_corpus_sha256": "sha256:5f659d2aee46a93c42f8e1d52fcfa5a7753e4fea9e7087e2df2242f5eb850a24",
+      "matched_train_parquet_sha256": "sha256:8be3a5aec00bf4ad710ac691cf6fd7528952d37a6fae5d28e6e6384d352eedbc",
+      "target": {
+        "episodes": 53,
+        "segments": 402,
+        "supervised_tokens": 437537
+      },
+      "available": {
+        "families": 30,
+        "episodes": 74,
+        "segments": 598,
+        "supervised_tokens": 684014,
+        "supervised_token_gini": 0.333823187,
+        "tv_to_available": {
+          "episodes": 0.0,
+          "segments": 0.0,
+          "supervised_tokens": 0.0
+        }
+      },
+      "matched_control": {
+        "families": 30,
+        "episodes": 53,
+        "segments": 402,
+        "supervised_tokens": 437537,
+        "nominal_batch8_batches": 51,
+        "supervised_token_gini": 0.328607562,
+        "tv_to_available": {
+          "episodes": 0.139214686,
+          "segments": 0.150401837,
+          "supervised_tokens": 0.169538089
+        }
+      },
+      "balanced": {
+        "families": 30,
+        "episodes": 53,
+        "segments": 402,
+        "supervised_tokens": 437537,
+        "nominal_batch8_batches": 51,
+        "supervised_token_gini": 0.194080424,
+        "tv_to_available": {
+          "episodes": 0.182049975,
+          "segments": 0.188447395,
+          "supervised_tokens": 0.195080291
+        }
+      }
+    }
+  },
+  "evaluation": {
+    "selection_source": "fresh_fleet_dev_task_outcomes_only",
+    "primary_metric": "fleet_dev_pass_at_1",
+    "training_loss": "diagnostic_only",
+    "teacher_reference_ce": "not_computed_or_used_for_selection",
+    "split_b_role": "fresh_split_and_seed_confirmation_after_split_a_outcome_barrier",
+    "variants": {
+      "a": {
+        "task_set_sha256": "sha256:914a67b587a8d2f5a523ab652eeaec15f8f9d5dbec559c25ff176b01777a6c96",
+        "protocol_sha256": "sha256:3c2c65eed748b16b50ef992327324b1fcaad84b190456c4aefe69c6efe748f75"
+      },
+      "b": {
+        "task_set_sha256": "sha256:6f654f7493fa3803fc014efcfdc1be4a27e6518bc29ad9d401fe3823a59fbab2",
+        "protocol_sha256": "sha256:01f9c8b28cdc08ef8c089600b96450d747fe92447a60cbd4d60256b6302e5388"
+      }
+    }
+  },
+  "execution": {
+    "kind": "metadata_only_not_a_job_request",
+    "new_jobs_authorized": false,
+    "dev_cluster_qualification_required": true
+  },
+  "interpretation": "The balanced and matched-control arms differ in which whole teacher episodes contribute exposure, not in episode count, optimizer-step count or supervised-token dose. This tests sensitivity to teacher availability weighting; it does not establish that either weighting is intrinsically optimal.",
+  "limitations": [
+    "Aggregate input/context-token exposure is unavailable and therefore not matched.",
+    "The deterministic control locally preserves family shares subject to exact feasibility; it is not a global minimum-distance solution or an unbiased sample.",
+    "No uplift claim is valid without exact dev qualification, a fresh matched base control and matched outcome evaluation."
+  ],
+  "sha256": "sha256:3e758995989b8a42d7bebb4320e666b5ba21649c61ea79f3b74e5ee6f2be40cc"
+}
