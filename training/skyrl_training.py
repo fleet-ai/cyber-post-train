@@ -125,7 +125,7 @@ def compile_rl(config, *, relative_to):
     _known(model, {"lock", "weights", "root"}, "model")
     _known(data, {"manifest", "root"}, "data")
     _known(w, {"entity", "project", "run_id"}, "W&B")
-    _known(cluster, {"priority", "resources"}, "cluster")
+    _known(cluster, {"target", "priority", "resources"}, "cluster")
     _known(
         recipe,
         {
@@ -143,6 +143,9 @@ def compile_rl(config, *, relative_to):
         },
         "SkyRL recipe",
     )
+    target = cluster.get("target")
+    if target not in {None, "dev", "prod"}:
+        raise ValueError("cluster target must be dev or prod")
     bound = bound_model(
         read_mapping(relative_to / model["lock"]),
         read_mapping(relative_to / model["weights"]),
@@ -191,6 +194,7 @@ def compile_rl(config, *, relative_to):
         "execution": {
             "image": IMAGE,
             "image_cpu_qualification": dict(ENGINE_IMAGE_CPU_QUALIFICATION),
+            **({"cluster_target": target} if target is not None else {}),
             "priority": cluster.get("priority", "c1"),
             "resources": {**RESOURCES, **cluster.get("resources", {})},
         },
@@ -210,6 +214,7 @@ def job_request(plan):
         or plan["execution"].get("image_cpu_qualification") != ENGINE_IMAGE_CPU_QUALIFICATION
         or plan["run_name"] != args.name
         or plan["output_root"] != args.output_root
+        or plan["execution"].get("cluster_target") not in {None, "dev", "prod"}
     ):
         raise ValueError("SkyRL plan/runtime drift")
     resources = plan["execution"]["resources"]

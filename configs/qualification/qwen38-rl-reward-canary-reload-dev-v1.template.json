@@ -1,0 +1,40 @@
+{
+  "schema": "cyber_skyrl_rl_reload_gate_template_v1",
+  "status": "blocked_not_launchable",
+  "launchable": false,
+  "purpose": "Zero-update native all-rank reload of the reward-canary checkpoint on the dev cluster",
+  "source": {
+    "run_name": "chris-q38-rlreward-dev1",
+    "plan_sha256": null,
+    "checkpoint_manifest": null,
+    "checkpoint_manifest_file_sha256": null,
+    "checkpoint_global_step": 1
+  },
+  "target": {
+    "run_name": "chris-q38-rlreward-reload-dev1",
+    "output_root": "/mnt/sfs/jobs/chris-q38-rlreward-reload-dev1",
+    "cluster": "dev",
+    "priority_class": "c1",
+    "priority_value": 10000,
+    "workers": 1,
+    "gpus_per_worker": 8,
+    "requeue_if_preempted": false,
+    "optimizer_updates_authorized": 0,
+    "rollouts_authorized": 0,
+    "wandb_run_id": "chris-q38-rlreward-reload-dev1"
+  },
+  "required_proofs": [
+    "source_checkpoint_create_once_seal_and_source_stability",
+    "all_eight_ranks_restore_model_optimizer_scheduler_and_rng",
+    "sampler_state_restores_exactly_at_global_step_one",
+    "zero_rollouts_zero_optimizer_updates_zero_new_checkpoints",
+    "native_model_forward_after_restore",
+    "terminal_gpu_release"
+  ],
+  "blockers": [
+    "No cyber_skyrl_training_v1 checkpoint-seal schema exists.",
+    "No SkyRL RL CLI path binds a sealed checkpoint into a zero-update all-rank reload.",
+    "The existing recovery command is compiled through the SFT plan schema and cannot accept this RL plan."
+  ],
+  "sha256": "sha256:74973f68e1b356212dfd3f0991ccfc114e783b503b9e0ee9c266bf763340f3ba"
+}

@@ -216,6 +216,13 @@ def _skyrl_mode(plan: dict, request: dict) -> str:
     raise ValueError("prepared SkyRL request does not match its immutable plan")
 
 
+def _require_prepared_cluster(plan: dict, cluster: Cluster) -> None:
+    """Fail closed when an immutable training plan names one cluster."""
+    target = plan.get("execution", {}).get("cluster_target")
+    if target is not None and target != cluster.value:
+        raise JobsError(f"prepared plan is {target}-cluster-only")
+
+
 @app.command()
 def preflight(directory: Path) -> None:
     """Validate staged training/conversion inputs in the pinned image, without GPUs."""
@@ -258,6 +265,7 @@ def preview(
             and cluster != Cluster.dev
         ):
             raise JobsError("SkyRL engine diagnostics are dev-cluster-only")
+        _require_prepared_cluster(plan, cluster)
         with _client(cluster) as client:
             result = client.preview(request)
         _print(
@@ -291,6 +299,7 @@ def submit(
         )
         if skyrl_mode == "engine_diagnostic" and cluster != Cluster.dev:
             raise JobsError("SkyRL engine diagnostics are dev-cluster-only")
+        _require_prepared_cluster(plan, cluster)
         proof = _read(directory / "PREFLIGHT.json")
         expected = {
             "schema": "cyber_miles_conversion_cpu_preflight_v1"
