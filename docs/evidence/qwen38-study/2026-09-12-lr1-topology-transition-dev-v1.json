@@ -1,0 +1,147 @@
+{
+  "schema": "cyber_qwen38_teacher_lr1_topology_transition_dev_v1",
+  "classification": "operational_topology_transition_running_terminal_outcome_unknown",
+  "purpose": "Record the UID-bound cancellation and complete absence of the unadmitted one-by-eight LR1 arm before the single admitted two-by-four LR1 successor POST.",
+  "source": {
+    "config_path": "configs/qualification/qwen38-teacher-lr1-cosine-2x4-dev-fallback-v1.json",
+    "config_name": "chris-q38-ta8-lr1-2x4-dev-v1",
+    "config_commit": "97d761d8f5fcb3fa59ba2bbd036e11e911c4a4f5",
+    "config_commit_abbrev": "97d761d8",
+    "config_file_sha256": "sha256:98196c13337b717bc17ee4711b7545640e4f5123ea40dfe4e5840775a0a25c79",
+    "preparation_evidence": {
+      "path": "docs/evidence/qwen38-study/2026-09-12-lr1-2x4-dev-fallback-preparation-v1.json",
+      "file_sha256": "sha256:337b1255223376fc31354d65fa2f861fa4ead8bcbad33104a63fa902571cbe58",
+      "embedded_sha256": "sha256:ff77b5401dbaa9530f7c3f45413d0c1542b40709eae631434ce7dac8eac00d2d"
+    }
+  },
+  "predecessor": {
+    "config_name": "chris-q38-ta8-lr1-dev-v2",
+    "api_name": "chris-q38-ta8-lr1-dev-v2-e9d44c23",
+    "rayjob_name": "chris-q38-ta8-lr1-dev-v2-e9d44c23",
+    "rayjob_uid": "d7aeaa33-7c0f-416f-b231-cdb1f939e654",
+    "workload_uid": "a9fdc7bd-1456-48cc-aa74-cc2d882387ae",
+    "requested_topology": {
+      "workers": 1,
+      "gpus_per_worker": 8,
+      "total_gpus": 8
+    },
+    "queue_observation": {
+      "rayjob_suspended": true,
+      "workload_admitted": false,
+      "free_gpus_by_node": [
+        6,
+        6
+      ],
+      "single_node_eight_gpu_fit": false,
+      "reason": "six_plus_six_gpu_fragmentation_could_not_fit_one_eight_gpu_worker"
+    },
+    "zero_execution": {
+      "rayclusters_created": 0,
+      "pods_created": 0,
+      "optimizer_steps": 0,
+      "gpus_allocated": 0
+    },
+    "cancellation_and_reconciliation": {
+      "sequence": [
+        "one_jobs_api_delete_returned_204",
+        "jobs_api_read_returned_404",
+        "uid_bound_kubernetes_objects_and_descendants_confirmed_absent"
+      ],
+      "jobs_api_delete_calls": 1,
+      "delete_http_status": 204,
+      "delete_retries": 0,
+      "post_delete_api_http_status": 404,
+      "kubernetes_query_binding": "exact_predecessor_name_and_recorded_uids",
+      "kubernetes_absence": {
+        "rayjob": {
+          "name": "chris-q38-ta8-lr1-dev-v2-e9d44c23",
+          "uid": "d7aeaa33-7c0f-416f-b231-cdb1f939e654",
+          "absent": true
+        },
+        "workload": {
+          "uid": "a9fdc7bd-1456-48cc-aa74-cc2d882387ae",
+          "absent": true
+        },
+        "raycluster_descendants": 0,
+        "pod_descendants": 0
+      },
+      "gpus_held_after_reconciliation": 0,
+      "complete_before_successor_post": true
+    }
+  },
+  "successor": {
+    "config_name": "chris-q38-ta8-lr1-2x4-dev-v1",
+    "api_name": "chris-q38-ta8-lr1-2x4-dev-v1-0a67736f",
+    "rayjob_name": "chris-q38-ta8-lr1-2x4-dev-v1-0a67736f",
+    "rayjob_uid": "70161760-16ae-4f8e-8809-e6a024a16188",
+    "workload_name": "rayjob-chris-q38-ta8-lr1-2x4-dev-v1-0a67736f-c5802",
+    "workload_uid": "f2ee4249-2554-4433-a6c3-53140433f6b8",
+    "raycluster_name": "chris-q38-ta8-lr1-2x4-dev-v1-0a67736f-6jdc6",
+    "raycluster_uid": "08369b1f-956b-46fb-bf5a-aed9a450c180",
+    "head_pod_uid": "524ab333-11d9-4dc1-9643-b70595de0d20",
+    "worker_pod_uid": "56e3a6b5-d2ad-45c8-84be-30a4f77a9880",
+    "prepared_artifacts": {
+      "directory": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/lr-dev-v2-qualified-inputs-v1/lr1-2x4-fallback-v1",
+      "plan_sha256": "3b554d48bb61eeac041415c951f1bc327f70288aa8e2590246bd5eecb2f04e58",
+      "request_sha256": "698dd2804479ad58c19430688b061cd571a64e3324ee2f3eef2cf1c195f79ebd",
+      "preflight_sha256": "da57e6b1ac279d5d7aaf07d07a5be1bbaf3328732556278ee46a86189c908924",
+      "preview_manifest_sha256": "cfb644a942d0664a4302f9a91c0a9116cd36e6e4326337d5aef9ad4ad72642aa"
+    },
+    "pre_submit_identity_check": {
+      "wandb_run_id": "chris-q38-ta8-lr1-2x4-dev-v1",
+      "wandb_run_id_absent": true,
+      "observed_before_post": true
+    },
+    "submission": {
+      "jobs_api_post_calls": 1,
+      "posted_at": "2026-09-12T13:52:18Z",
+      "post_retries": 0
+    },
+    "admission": {
+      "requested_topology": {
+        "workers": 2,
+        "gpus_per_worker": 4,
+        "total_gpus": 8
+      },
+      "workload_admitted": true,
+      "distinct_nodes": 2,
+      "gpus_per_node": 4,
+      "rayjob_status": "RUNNING",
+      "ready_pods": 2,
+      "running_and_ready_by": "2026-09-12T13:52:49Z",
+      "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+      "head_pod_restarts": 0,
+      "worker_pod_restarts": 0,
+      "total_restarts": 0
+    },
+    "started_receipt": {
+      "path": "/mnt/sfs/jobs/chris-q38-ta8-lr1-2x4-dev-v1/STARTED.json",
+      "present": true,
+      "plan_sha256": "3b554d48bb61eeac041415c951f1bc327f70288aa8e2590246bd5eecb2f04e58",
+      "bound_to_prepared_plan": true
+    },
+    "terminal": {
+      "outcome_known": false,
+      "outcome": null,
+      "model_or_scientific_outcome_claimed": false
+    }
+  },
+  "transition_invariants": {
+    "predecessor_absent_before_successor_post": true,
+    "predecessor_and_successor_world_size_equal": true,
+    "overlapping_gpu_allocation": false,
+    "successor_posts": 1,
+    "live_lr1_producers_after_transition": 1,
+    "operational_gate_only": true
+  },
+  "evidence_authoring_boundaries": {
+    "jobs_api_calls": 0,
+    "kubernetes_calls": 0,
+    "cluster_mutations": 0,
+    "submissions": 0,
+    "cancellations": 0,
+    "operator_files_modified": false,
+    "credentials_read_or_persisted": false
+  },
+  "sha256": "sha256:a86c9c523bf95c3c2ba46d4d657c24649faeb3ac5fefb0923a7f5be4798cfc36"
+}
