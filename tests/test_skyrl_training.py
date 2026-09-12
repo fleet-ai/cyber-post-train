@@ -5,6 +5,7 @@ import gzip
 import hashlib
 import importlib.util
 import json
+import multiprocessing
 import os
 import signal
 import subprocess
@@ -189,7 +190,9 @@ def _install_engine_modules(monkeypatch, calls, create):
     class Router:
         def start(self):
             module = sys.modules["skyrl.backends.skyrl_train.inference_servers.vllm_router"]
-            module._run_router_with_logging()
+            module.multiprocessing.Process(
+                target=module._run_router_with_logging, args=(), daemon=True, name="vllm-router"
+            ).start()
             return "http://router"
 
         def shutdown(self):
@@ -213,8 +216,9 @@ def _install_engine_modules(monkeypatch, calls, create):
             VLLMRouter=Router,
             _run_router_with_logging=lambda: calls.append("router-target"),
             multiprocessing=NS(
-                get_start_method=lambda: "fork",
+                get_start_method=multiprocessing.get_start_method,
                 RawValue=lambda kind, value: NS(value=value),
+                Process=lambda *, target, args=(), **kwargs: NS(start=lambda: target(*args)),
             ),
         ),
     )
@@ -1641,7 +1645,13 @@ def test_engine_instrumentation_tracks_partial_native_objects_and_scrubs_actor_e
             "SAFE_SETTING": "yes",
         }
     }
-    originals = (group_module.ServerGroup, router_module.VLLMRouter)
+    originals = (
+        group_module.ServerGroup,
+        router_module.VLLMRouter,
+        router_module._run_router_with_logging,
+        router_module.multiprocessing,
+    )
+    scrubbed = train._credential_names(os.environ)
 
     with train._instrument_engine_ownership(
         ownership,
@@ -1649,8 +1659,10 @@ def test_engine_instrumentation_tracks_partial_native_objects_and_scrubs_actor_e
             "FLEET_API_KEY": "synthetic-must-be-blanked",
             "NATIVE_BASE_SETTING": "base",
         },
-        ("FLEET_API_KEY", "WANDB_API_KEY"),
+        scrubbed,
     ):
+        assert router_module._run_router_with_logging is originals[2]
+        assert router_module.multiprocessing is not originals[3]
         group = group_module.ServerGroup()
         actor_class = group._create_actor_class()
         actor_class.remote()
@@ -1660,6 +1672,7 @@ def test_engine_instrumentation_tracks_partial_native_objects_and_scrubs_actor_e
         group_module.placement_group([])
         runtime_env = actor_class._actor_class.options_kwargs["runtime_env"]
         assert runtime_env["env_vars"] == {
+            **dict.fromkeys(scrubbed, ""),
             "ACTOR_SECRET": "",
             "FLEET_API_KEY": "",
             "NATIVE_BASE_SETTING": "base",
@@ -1674,7 +1687,28 @@ def test_engine_instrumentation_tracks_partial_native_objects_and_scrubs_actor_e
     assert ownership.router_credential_probe_failures == 0
     assert ("router-child-key", "") in calls
     assert os.environ["FLEET_API_KEY"] == "outer-driver-value"
-    assert (group_module.ServerGroup, router_module.VLLMRouter) == originals
+    assert (
+        group_module.ServerGroup,
+        router_module.VLLMRouter,
+        router_module._run_router_with_logging,
+        router_module.multiprocessing,
+    ) == originals
+
+
+def test_engine_instrumentation_rejects_forkserver_before_patching_or_starting(monkeypatch):
+    _install_engine_modules(monkeypatch, [], lambda *args, **kwargs: None)
+    router_module = sys.modules["skyrl.backends.skyrl_train.inference_servers.vllm_router"]
+    originals = (router_module.VLLMRouter, router_module._run_router_with_logging)
+    router_module.multiprocessing.get_start_method = lambda: "forkserver"
+    ownership = train._DiagnosticOwnership()
+    with (
+        pytest.raises(train._DiagnosticContractRejected, match="unsupported native router"),
+        train._instrument_engine_ownership(ownership, {}, ()),
+    ):
+        pytest.fail("unsupported context entered instrumentation")
+    assert ownership.router_multiprocessing_start_method == "forkserver"
+    assert not ownership.actors and not ownership.groups and not ownership.routers
+    assert (router_module.VLLMRouter, router_module._run_router_with_logging) == originals
 
 
 @pytest.mark.parametrize(

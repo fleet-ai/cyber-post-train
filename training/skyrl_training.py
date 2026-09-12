@@ -585,7 +585,7 @@ def _scrubbed_actor_environment(environment, scrubbed, overlay=None):
 
 @contextmanager
 def _scrubbed_process_environment(names):
-    """Temporarily blank credentials across the router's Linux fork."""
+    """Temporarily blank credentials while a router child is launched."""
     missing = object()
     previous = {name: os.environ.get(name, missing) for name in names}
     try:
@@ -598,6 +598,61 @@ def _scrubbed_process_environment(names):
                 os.environ.pop(name, None)
             else:
                 os.environ[name] = value
+
+
+class _DiagnosticContractRejected(ValueError):
+    """An explicitly recognized diagnostic incompatibility, not a runtime defect."""
+
+
+def _router_child_entry(target, names, probe_state, start_method, args, kwargs):
+    """Picklable entrypoint: prove isolation before calling the unchanged target.
+
+    The original native target must remain its module's global function so that
+    Python's spawn pickler can resolve it.  No credentials or environment values
+    are copied into the child arguments or the shared, integer-only probe.
+    """
+    import multiprocessing
+
+    if multiprocessing.get_start_method() != start_method:
+        probe_state.value = -2
+        raise RuntimeError("router child process context changed")
+    if any(os.environ.get(name) for name in set(names) | set(_credential_names(os.environ))):
+        probe_state.value = -1
+        raise RuntimeError("router child credential isolation failed")
+    probe_state.value = 1
+    return target(*args, **kwargs)
+
+
+class _RouterMultiprocessing:
+    """Intercept only this native router module's Process constructor."""
+
+    def __init__(self, native, target, names, probe_state, start_method):
+        self._native = native
+        self._target = target
+        self._names = tuple(names)
+        self._probe_state = probe_state
+        self._start_method = start_method
+
+    def __getattr__(self, name):
+        return getattr(self._native, name)
+
+    def Process(self, *, target, args=(), kwargs=None, **options):  # noqa: N802
+        if target is not self._target:
+            raise _DiagnosticContractRejected("native router process target changed")
+        if self._native.get_start_method() != self._start_method:
+            raise _DiagnosticContractRejected("native router process context changed")
+        return self._native.Process(
+            target=_router_child_entry,
+            args=(
+                target,
+                self._names,
+                self._probe_state,
+                self._start_method,
+                args,
+                {} if kwargs is None else kwargs,
+            ),
+            **options,
+        )
 
 
 def _ray_environment(plan, cfg, native, *, diagnostic=False):
@@ -709,6 +764,7 @@ class _DiagnosticOwnership:
     router_start_attempts: int = 0
     router_credential_probes_passed: int = 0
     router_credential_probe_failures: int = 0
+    router_multiprocessing_start_method: str | None = None
 
     def absorb_setup(self, setup):
         if setup is None:
@@ -785,9 +841,14 @@ def _instrument_engine_ownership(ownership, environment, scrubbed):
     original_router = router_module.VLLMRouter
     original_engine_env = group_module.build_engine_runtime_env
     original_router_target = router_module._run_router_with_logging
-    if router_module.multiprocessing.get_start_method() != "fork":
-        raise ValueError("diagnostic router credential isolation requires Linux fork")
-    router_probe_state = router_module.multiprocessing.RawValue("b", 0)
+    original_multiprocessing = router_module.multiprocessing
+    start_method = original_multiprocessing.get_start_method()
+    ownership.router_multiprocessing_start_method = start_method
+    # A pre-existing forkserver can inherit an older, unsanitized environment.
+    # Neither changing the framework's context nor trusting that server is safe.
+    if start_method not in {"fork", "spawn"}:
+        raise _DiagnosticContractRejected("unsupported native router process context")
+    router_probe_state = original_multiprocessing.RawValue("b", 0)
 
     class TrackedServerGroup(original_group):
         def __init__(self, *args, **kwargs):
@@ -812,15 +873,8 @@ def _instrument_engine_ownership(ownership, environment, scrubbed):
             finally:
                 if router_probe_state.value == 1:
                     ownership.router_credential_probes_passed += 1
-                elif router_probe_state.value == -1:
+                elif router_probe_state.value in {-1, -2}:
                     ownership.router_credential_probe_failures += 1
-
-    def checked_router_target(*args, **kwargs):
-        if any(os.environ.get(name) for name in scrubbed):
-            router_probe_state.value = -1
-            raise RuntimeError("router child credential isolation failed")
-        router_probe_state.value = 1
-        return original_router_target(*args, **kwargs)
 
     def tracked_placement_group(original):
         def create(*args, **kwargs):
@@ -845,7 +899,17 @@ def _instrument_engine_ownership(ownership, environment, scrubbed):
     try:
         patch(group_module, "ServerGroup", TrackedServerGroup)
         patch(router_module, "VLLMRouter", TrackedRouter)
-        patch(router_module, "_run_router_with_logging", checked_router_target)
+        patch(
+            router_module,
+            "multiprocessing",
+            _RouterMultiprocessing(
+                original_multiprocessing,
+                original_router_target,
+                scrubbed,
+                router_probe_state,
+                start_method,
+            ),
+        )
         # Patch any import-time aliases too.  The pinned implementation reads
         # these module globals while ``create_inference_servers`` is running.
         if getattr(setup_module, "ServerGroup", None) is original_group:
@@ -1281,6 +1345,7 @@ def engine_diagnostic(plan):
     scrubbed = ()
     shape = None
     create_called = False
+    ray_initialization_attempted = False
     startup_error = None
     startup_deadline = None
     startup_phase = "plan_validation"
@@ -1324,11 +1389,13 @@ def engine_diagnostic(plan):
 
             ray = ray_module
             env, log, scrubbed = _ray_environment(plan, cfg, modules, diagnostic=True)
-            startup_phase = "ray_initialization"
+            startup_phase = "ownership_instrumentation"
             with (
                 _instrument_engine_ownership(ownership, env, scrubbed) as setup_module,
                 _bounded_ray_get(ray, startup_deadline),
             ):
+                startup_phase = "ray_initialization"
+                ray_initialization_attempted = True
                 ray.init(address="auto", log_to_driver=False, runtime_env={"env_vars": env})
                 ownership.job_id = _ray_job_id_hex(ray.get_runtime_context().get_job_id())
                 startup_phase = "ray_actor_environment_probe"
@@ -1381,14 +1448,36 @@ def engine_diagnostic(plan):
         ownership.router_start_attempts == ownership.router_credential_probes_passed
         and ownership.router_credential_probe_failures == 0
     )
-    terminal_evidence_candidate = isinstance(startup_error, Exception) and bool(ownership.job_id)
-    clean_candidate = (
+    # Only a typed, recognized contract rejection before any Ray initialization
+    # is a clean pre-Ray outcome.  Import errors and arbitrary ValueErrors still
+    # fail, and any ambiguous allocation continues to require exact cleanup.
+    pre_ray_contract_rejection = (
+        isinstance(startup_error, _DiagnosticContractRejected)
+        and startup_phase == "ownership_instrumentation"
+        and not ray_initialization_attempted
+        and not any(
+            (
+                ownership.job_id,
+                ownership.groups,
+                ownership.routers,
+                ownership.actors,
+                ownership.engine_actors,
+                ownership.placement_groups,
+            )
+        )
+    )
+    terminal_evidence_candidate = pre_ray_contract_rejection or (
+        isinstance(startup_error, Exception) and bool(ownership.job_id)
+    )
+    clean_candidate = pre_ray_contract_rejection or (
         terminal_evidence_candidate
         and ray_actor_environment_isolation_proven
         and router_isolation_proven
     )
     if terminal_evidence_candidate:
-        if timed_out:
+        if pre_ray_contract_rejection:
+            status = "diagnostic_contract_rejected"
+        elif timed_out:
             status = "engine_start_timeout"
         elif not ray_actor_environment_isolation_proven or not router_isolation_proven:
             status = "environment_isolation_rejected"
@@ -1463,6 +1552,7 @@ def engine_diagnostic(plan):
                 ray_actor_environment_isolation_proven and router_isolation_proven
             ),
             "ray_actor_environment_isolation_proven": (ray_actor_environment_isolation_proven),
+            "ray_initialization_attempted": ray_initialization_attempted,
             "ray_gpu_nodes_expected": shape["diagnostic_workers"],
             "ray_gpu_nodes_discovered": ownership.ray_gpu_nodes_discovered,
             "ray_gpu_nodes_probed": ownership.ray_gpu_nodes_probed,
@@ -1475,6 +1565,7 @@ def engine_diagnostic(plan):
             ),
             "router_child_credential_environment_isolation": router_isolation,
             "router_start_attempts": ownership.router_start_attempts,
+            "router_multiprocessing_start_method": ownership.router_multiprocessing_start_method,
             "router_environment_probes_passed": ownership.router_credential_probes_passed,
             "router_environment_probe_failures": ownership.router_credential_probe_failures,
             "registry_actors_created": 0,

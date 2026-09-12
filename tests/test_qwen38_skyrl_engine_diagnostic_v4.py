@@ -1,8 +1,10 @@
 """Offline identity and supersession gates for the fourth SkyRL diagnostic."""
 # ruff: noqa: F811
 
+import ast
 import hashlib
 import json
+import subprocess
 from pathlib import Path
 
 from test_rl_data import setup  # noqa: F401
@@ -14,19 +16,19 @@ from training import skyrl_training
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA_V2 = ROOT / (
-    "configs/qualification/"
-    "qwen38-rl-filtered-skyrl-engine-diagnostic-data-dev-v2.json"
+    "configs/qualification/qwen38-rl-filtered-skyrl-engine-diagnostic-data-dev-v2.json"
 )
 DATA_V4 = ROOT / (
-    "configs/qualification/"
-    "qwen38-rl-filtered-skyrl-engine-diagnostic-data-dev-v4.json"
+    "configs/qualification/qwen38-rl-filtered-skyrl-engine-diagnostic-data-dev-v4.json"
 )
 RUN_V3 = ROOT / "configs/qualification/qwen38-rl-filtered-skyrl-engine-diagnostic-dev-v3.json"
 RUN_V4 = ROOT / "configs/qualification/qwen38-rl-filtered-skyrl-engine-diagnostic-dev-v4.json"
 EVIDENCE = ROOT / (
-    "docs/evidence/qwen38-study/"
-    "2026-09-12-skyrl-engine-diagnostic-dev3-supersession-v1.json"
+    "docs/evidence/qwen38-study/2026-09-12-skyrl-engine-diagnostic-dev3-supersession-v1.json"
 )
+# Frozen dev4 bytes; a later runtime fix must not rewrite the historical receipt
+# or make that failed run eligible for replay under a new executable.
+V4_SOURCE_COMMIT = "c80ea43f94e5351bc8a43a7918eb1e99b6d7f0a5"
 
 
 def load(path):
@@ -35,6 +37,24 @@ def load(path):
 
 def file_sha256(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def frozen_v4_runtime():
+    def source(path):
+        return subprocess.check_output(
+            ["git", "show", f"{V4_SOURCE_COMMIT}:{path}"], cwd=ROOT, text=True
+        )
+
+    module = ast.parse(source("training/skyrl_training.py"))
+    files = next(
+        ast.literal_eval(node.value)
+        for node in module.body
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name) and target.id == "RUNTIME_FILES" for target in node.targets
+        )
+    )
+    return {path: source(path) for path in files}
 
 
 def test_v4_uses_fresh_create_once_identities_with_unchanged_science():
@@ -98,7 +118,7 @@ def test_dev3_supersession_evidence_is_self_digesting_and_binds_v4_runtime():
     }
     assert value["successor"]["data_config_sha256"] == file_sha256(DATA_V4)
     assert value["successor"]["run_config_sha256"] == file_sha256(RUN_V4)
-    assert value["successor"]["runtime_sha256"] == digest(skyrl_training._runtime())
+    assert value["successor"]["runtime_sha256"] == digest(frozen_v4_runtime())
     assert value["successor"]["submitted"] is False
     assert value["successor"]["allowed_cluster"] == "dev"
     assert value["successor"]["predecessor_replay_forbidden"] is True
