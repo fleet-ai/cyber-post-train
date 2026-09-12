@@ -22,6 +22,18 @@ Kubeconfigs are available through `https://admin.flt.build/clusters`. Authentica
 input mounts and workload Secrets must be checked **on the target cluster**;
 neither credentials nor `/mnt/sfs` contents should be assumed shared.
 
+Nebius federation login is short-lived. A fresh interactive login observed on
+2026-09-12 issued an access token lasting about four hours, not an overnight
+credential. Also, each kubeconfig user invokes a **named** Nebius profile; creating
+or selecting a new CLI default does not retarget an existing kubeconfig entry.
+Before any paid submission, inspect the named profile's expiry without printing its
+token, verify both exact contexts, and require enough remaining time to observe
+startup, terminal state, and release. For a genuinely unattended window longer than
+the interactive token lifetime, obtain an approved service-account-style credential
+instead of assuming browser login will refresh itself. If that is unavailable,
+restrict work to bounded runs that fit inside the verified window and fail closed
+for Kubernetes mutations after expiry.
+
 The CLI accepts only `--cluster dev|prod` on `preview`, `submit` and `status`.
 New previews/submissions default to **dev**. Status defaults to **prod** for
 existing historical run names; use an explicit selector in runbooks. The selected
