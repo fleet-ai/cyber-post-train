@@ -142,3 +142,58 @@ common-final files are byte-identical to it. The shared active branch has separa
 ancestry and was not rebased beneath other agents.
 They do not prove current remote mounts, W&B authentication, CPU execution,
 available GPUs, or that any V2 training step has run.
+
+## Fresh native preflight and dev-preview update — 12:50 UTC
+
+All three V2 plans were independently compiled from the staged successor and
+passed fresh preflight in the exact `ba288751…` image. The native checks covered
+source hashes, model/sidecar files, dataset hashes, resolved config, tokenization
+and target accounting: **602 training rows, 29 tasks, 700,359 supervised tokens**.
+This is CPU qualification, not proof of distributed CUDA execution or model lift.
+
+The create-once durable prepared root is
+`/mnt/sfs/jobs/chris-q38-study-corpora-v1/lr-dev-v2-qualified-inputs-v1`, with
+`lr1`, `lr30` and `lr100` children. The local mirror is
+`.operator/q38-lr-v2-qualified-inputs-v1`. Each child has its own newly produced
+`plan.json`, `request.json`, `PREPARED.json` and `PREFLIGHT.json`; the local mirror
+also holds the authenticated dev-preview receipt. No old preflight, preview or
+submission journal was reused. Exact full digests and producer receipts are in
+[the combined sanitized evidence](evidence/qwen38-study/2026-09-12-lr-v2-cpu-preflight-preview-v1.json).
+
+The only allocation created for this qualification was zero-GPU Pod
+`chris-q38-lr-v2-preflight-cpu-v1`, UID
+`d453956d-b40c-4314-88be-9f5affeda8cf`. It completed at `12:49:29Z` with exit zero,
+zero restarts and no visible CUDA devices. Final allowlisted JSON receipts were
+retrieved and their self-digests checked; no private log was read. Its exact UID
+was rechecked, deletion accepted, and API-object absence confirmed. This helper
+held **zero GPUs throughout**.
+
+The three authenticated **dev preview** calls returned zero errors and warnings,
+one node/eight GPUs per requested arm, normal `training-lq`, c1 → q1, and requeue
+disabled. Live c1 and q1 values were both 10,000. These were preview calls only;
+**no GPU training POST occurred**. At the dated snapshot, exact/prefix run names
+and output roots had no matches across the exhaustively paged dev and production
+Jobs API lists; all three W&B IDs were absent in the authenticated project.
+Eleven locally discoverable journals had no matching name or request digest.
+The CPU helper separately observed each new output and runtime subdirectory
+absent. These are point-in-time checks, not a reservation or global journal lock.
+
+The remaining pre-POST limitations are explicit:
+
+- The API list/detail and RayJob metadata did not expose titles, so independent
+  title absence is **not verified**. Each requested title equals its exact run
+  name. Do not relabel the supported name/output check as a title census.
+- Neither healthy dev GPU node had a whole eight-GPU allocation free: each had
+  six GPUs free at the snapshot. Ordinary queue admission may therefore wait;
+  never alter peer jobs or bypass admission to force a start.
+- Refresh authenticated exact identity/output/W&B checks and campaign-wide
+  allocation accounting immediately before each approved POST. Newly submitted
+  work by another controller can invalidate the dated zero-owned-allocation
+  snapshot. Preserve the first-wave ceiling and LR100's later-wave release gate.
+- Dev acceptance still needs the GPU/runtime, scalar synchronization,
+  checkpoint/reload and release gates above. Production remains blocked.
+
+The focused Python 3.12 suite, including immutable-evidence binding and explicit
+limitation regressions, now passes **325 tests**. No scientific recipe, runtime
+bytes, source records, benchmark outcomes or historical receipts changed in this
+qualification update.

@@ -1,0 +1,395 @@
+{
+  "schema": "cyber_qwen_lr_dev_prepost_evidence_v1",
+  "recorded_at": "2026-09-12T12:51:43.422299+00:00",
+  "classification": "fresh_cpu_preflight_and_dev_preview_passed_no_gpu_training_submission",
+  "authority_reference": {
+    "path": "configs/studies/qwen-blackbox-teacher-staged-search-v6.json",
+    "file_sha256": "sha256:873dbfcecb733e5aaaecbe18a1b0472c558e10f7ceece8704c773a5d4e5b9878",
+    "embedded_sha256": "sha256:f4f189f5ac786276e01d7e566f4d2805a621fd7cf5a134125e214daa58cbe1e9",
+    "scope": "conditional bounded dev LR qualification only; not production"
+  },
+  "staging_reference": {
+    "path": "docs/evidence/qwen38-study/2026-09-12-available-a-protocol-successor-stage-v1.json",
+    "embedded_sha256": "sha256:8d56d5c229a39848547656a261b482abbc4a840439271ebfa981c59d3e8d9827",
+    "manifest_file_sha256": "sha256:d7fcb3e0c8c7726f5d1175f831fa0e88af632f1c6b68c6101c8db3e2cf4b85f7",
+    "manifest_embedded_sha256": "sha256:1b083613c16362daf7c86fd8b458d99d7e167133df919602c21916314142c4dc"
+  },
+  "helper": {
+    "cluster": "dev",
+    "namespace": "fleet-train-jobs",
+    "kind": "Pod",
+    "name": "chris-q38-lr-v2-preflight-cpu-v1",
+    "uid": "d453956d-b40c-4314-88be-9f5affeda8cf",
+    "node": "computeinstance-e04sacc1ch7cqdvg57",
+    "created_at": "2026-09-12T12:46:21Z",
+    "started_at": "2026-09-12T12:46:22Z",
+    "finished_at": "2026-09-12T12:49:29Z",
+    "terminal_observed_at": "2026-09-12T12:50:05.656153+00:00",
+    "phase": "Succeeded",
+    "exit_code": 0,
+    "reason": "Completed",
+    "restarts": 0,
+    "gpu_request": 0,
+    "image_id": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "resources": {
+      "requests": {
+        "cpu": "2",
+        "memory": "8Gi"
+      },
+      "limits": {
+        "cpu": "4",
+        "memory": "16Gi"
+      }
+    },
+    "active_deadline_seconds": 1800,
+    "receipts_retrieved_before_container_exit": "streamed only the explicitly allowlisted JSON receipts; full self-digests verified locally",
+    "exact_uid_rechecked_before_delete": true,
+    "delete_accepted": true,
+    "api_object_absence_verified": true,
+    "private_log_read": false
+  },
+  "cpu_summary": {
+    "completed_at_unix": 1789217368.5104988,
+    "corpus_manifest_sha256": "sha256:1b083613c16362daf7c86fd8b458d99d7e167133df919602c21916314142c4dc",
+    "cuda_available": false,
+    "cuda_device_count": 0,
+    "gpu_training_jobs_submitted": false,
+    "gpus": 0,
+    "pod_uid": "d453956d-b40c-4314-88be-9f5affeda8cf",
+    "prepared": [
+      {
+        "completed_at_unix": 1789217262.2601554,
+        "counts": {
+          "train": {
+            "rows": 602,
+            "supervised_tokens": 700359,
+            "tasks": 29
+          }
+        },
+        "gpus": 0,
+        "label": "lr1",
+        "name": "chris-q38-ta8-lr1-dev-v2",
+        "output_absent": true,
+        "plan_sha256": "2de9b36ce2301dfcde0b3c607c3d686c719e3b447d242381d20f14f8eafaf434",
+        "preflight_sha256": "443870af8892a00d386f6172b46646c549565a918b300bce92cf2e974c4b671d",
+        "preflight_status": "passed",
+        "prepared_directory": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/lr-dev-v2-qualified-inputs-v1/lr1",
+        "request_sha256": "6969e834919a0cad0a2faf82d659a472228102bfa0cc4e401f9c30d06af14d2c",
+        "runtime_subdirectory_absent": true,
+        "started_at_unix": 1789217208.921404
+      },
+      {
+        "completed_at_unix": 1789217315.248302,
+        "counts": {
+          "train": {
+            "rows": 602,
+            "supervised_tokens": 700359,
+            "tasks": 29
+          }
+        },
+        "gpus": 0,
+        "label": "lr30",
+        "name": "chris-q38-ta8-lr30-dev-v2",
+        "output_absent": true,
+        "plan_sha256": "f3061a056daa529f2489cf8dbdccfcdf6c7c2795ac5d695a59fd053f78bf2157",
+        "preflight_sha256": "528057b6bdd8a76fa25e3a2b8c769cb2e387ea5e98e6e48f3e3e23256f76cf1d",
+        "preflight_status": "passed",
+        "prepared_directory": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/lr-dev-v2-qualified-inputs-v1/lr30",
+        "request_sha256": "5e9abc089ff2a316f02844a09828ae599ac0fdf83459b8bae2fea98444738eb3",
+        "runtime_subdirectory_absent": true,
+        "started_at_unix": 1789217262.3066154
+      },
+      {
+        "completed_at_unix": 1789217368.5103457,
+        "counts": {
+          "train": {
+            "rows": 602,
+            "supervised_tokens": 700359,
+            "tasks": 29
+          }
+        },
+        "gpus": 0,
+        "label": "lr100",
+        "name": "chris-q38-ta8-lr100-dev-v2",
+        "output_absent": true,
+        "plan_sha256": "f42894e871ee3ec2204e435cdf240d2641706f4d151bd4484b56edcf6716ada3",
+        "preflight_sha256": "a071eac0f4ee52eac78d43f9340ea16063e45d38d0d0a12450775aabd1181d57",
+        "preflight_status": "passed",
+        "prepared_directory": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/lr-dev-v2-qualified-inputs-v1/lr100",
+        "request_sha256": "47915f4b3720f57817fce91a15f2efa4e4df9d3e4d0dd0c8dcc1bf497a2883da",
+        "runtime_subdirectory_absent": true,
+        "started_at_unix": 1789217315.2896044
+      }
+    ],
+    "runtime_sha256": "7b0787891acdf9ebe0b07475339248dce64b659a546691a7c445f99b52a20a8f",
+    "schema": "cyber_qwen_lr_v2_cpu_preflight_summary_v1",
+    "sha256": "3415294fd1f3376b7da5792d7f4738ff97f2423e06a590b153234d1fba86810a",
+    "source_manifest_sha256": "ea30c00b089e7031108c949d27d1d8d2b8aaa84a6b863f31fc6409f149ad5a66",
+    "status": "passed"
+  },
+  "source_file_manifest": {
+    ".operator/lr_v2_cpu_preflight.py": "02b656c368f96ba07f4ab4204be601dbc4f13c4c528a4ac762524c521138d73f",
+    "configs/models/qwen38-27b-1d4bf0f2.lock.json": "f3926fe675263b25dc79c2b3881a9c463d6b7931e9d61aeb777d15efc61e35ac",
+    "configs/models/qwen38-27b-1d4bf0f2.weights.json": "80a5e9de066e068abb012a0e9bd144676813a31042bb578226472803f8e0e84f",
+    "configs/qualification/qwen38-teacher-lr1-cosine-layout-dev-v2.json": "b602a85636d343c0f91612858f8835b13abefd1e28c54095787d66ce63aa4725",
+    "configs/qualification/qwen38-teacher-lr100-cosine-layout-dev-v2.json": "e6b7f197cb716d235ea6054b5620cae70344191508ed707a37fd1fc2f27e8205",
+    "configs/qualification/qwen38-teacher-lr30-cosine-layout-dev-v2.json": "a10d10e34b3d17b268973329ec2d2d83519eec6e7b9e726483d447302e6af8a2",
+    "cyber_post_train/__init__.py": "3e70d0bf91f68f0190f2eb6d08e4e83d1ba58c1cbff29eb78e600c24e89c96a6",
+    "cyber_post_train/cli.py": "5f9e2ac65a6cfb3b2bf34e0ea7a0617c7abcfc2ac7d02321d2ca3a3f6a98f68c",
+    "cyber_post_train/jobs.py": "1d9b9314f4424a4bc566752677e1aa36e7a9c2959dbbc7e9c882fbc51b2b8854",
+    "training/__init__.py": "ecf358039bbb9b6cbab6546c9b1e61b9bc06c5b2d5b19907ff303a9277d77e27",
+    "training/io.py": "7a0b734a4ab7fb8b702430094c58c72f19ac8fc7cc5e056eb8410267e6bfdfe3",
+    "training/models.py": "712adce5f073de13d02168cd17c2f7c396ba094a1ebc9a34decafb8639b8375e",
+    "training/sft.py": "c94ce592f57c06b365eb03254d0594ea7ccd30a282df1e18d5466b34a9226fcd",
+    "training/sft_runtime.py": "7b0787891acdf9ebe0b07475339248dce64b659a546691a7c445f99b52a20a8f"
+  },
+  "arms": [
+    {
+      "PREFLIGHT": {
+        "checked": [
+          "native_sources",
+          "model_files",
+          "dataset_files",
+          "native_config",
+          "tokenization",
+          "target_accounting"
+        ],
+        "counts": {
+          "train": {
+            "rows": 602,
+            "supervised_tokens": 700359,
+            "tasks": 29
+          }
+        },
+        "gpus": 0,
+        "plan_sha256": "2de9b36ce2301dfcde0b3c607c3d686c719e3b447d242381d20f14f8eafaf434",
+        "request_sha256": "6969e834919a0cad0a2faf82d659a472228102bfa0cc4e401f9c30d06af14d2c",
+        "schema": "cyber_sft_cpu_preflight_v1",
+        "sha256": "443870af8892a00d386f6172b46646c549565a918b300bce92cf2e974c4b671d",
+        "status": "passed"
+      },
+      "PREVIEW": {
+        "api_base_url": "https://api.ft.dev.flt.build",
+        "errors": 0,
+        "gpus": 8,
+        "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+        "manifest_sha256": "a6df4d6042344f89523769f7f2cbff7c38f2398a96269ceaddb861ebed840224",
+        "name": "chris-q38-ta8-lr1-dev-v2",
+        "nodes": 1,
+        "observed_at": "2026-09-12T12:49:35.792305+00:00",
+        "plan_sha256": "2de9b36ce2301dfcde0b3c607c3d686c719e3b447d242381d20f14f8eafaf434",
+        "rendered_queue_class": "q1",
+        "request_sha256": "6969e834919a0cad0a2faf82d659a472228102bfa0cc4e401f9c30d06af14d2c",
+        "requested_priority": "c1",
+        "requeue": false,
+        "schema": "cyber_qwen_lr_v2_dev_preview_v1",
+        "sha256": "da0e9d0ad161d1c23d485a1665a8b7decd055b931a6dd86989741e118e671acf",
+        "submitted": false,
+        "warnings": 0
+      },
+      "PREPARED": {
+        "plan_sha256": "2de9b36ce2301dfcde0b3c607c3d686c719e3b447d242381d20f14f8eafaf434",
+        "request_sha256": "6969e834919a0cad0a2faf82d659a472228102bfa0cc4e401f9c30d06af14d2c"
+      }
+    },
+    {
+      "PREFLIGHT": {
+        "checked": [
+          "native_sources",
+          "model_files",
+          "dataset_files",
+          "native_config",
+          "tokenization",
+          "target_accounting"
+        ],
+        "counts": {
+          "train": {
+            "rows": 602,
+            "supervised_tokens": 700359,
+            "tasks": 29
+          }
+        },
+        "gpus": 0,
+        "plan_sha256": "f3061a056daa529f2489cf8dbdccfcdf6c7c2795ac5d695a59fd053f78bf2157",
+        "request_sha256": "5e9abc089ff2a316f02844a09828ae599ac0fdf83459b8bae2fea98444738eb3",
+        "schema": "cyber_sft_cpu_preflight_v1",
+        "sha256": "528057b6bdd8a76fa25e3a2b8c769cb2e387ea5e98e6e48f3e3e23256f76cf1d",
+        "status": "passed"
+      },
+      "PREVIEW": {
+        "api_base_url": "https://api.ft.dev.flt.build",
+        "errors": 0,
+        "gpus": 8,
+        "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+        "manifest_sha256": "af610fe3a32e3f64430fc2e6883d1592e4c3d49160ce18d7f37f8f1a8e6109e0",
+        "name": "chris-q38-ta8-lr30-dev-v2",
+        "nodes": 1,
+        "observed_at": "2026-09-12T12:49:36.764987+00:00",
+        "plan_sha256": "f3061a056daa529f2489cf8dbdccfcdf6c7c2795ac5d695a59fd053f78bf2157",
+        "rendered_queue_class": "q1",
+        "request_sha256": "5e9abc089ff2a316f02844a09828ae599ac0fdf83459b8bae2fea98444738eb3",
+        "requested_priority": "c1",
+        "requeue": false,
+        "schema": "cyber_qwen_lr_v2_dev_preview_v1",
+        "sha256": "e7396dc51fada48cda31cc2b765a8f772e59698ab5219fe8d836903ab57dfa26",
+        "submitted": false,
+        "warnings": 0
+      },
+      "PREPARED": {
+        "plan_sha256": "f3061a056daa529f2489cf8dbdccfcdf6c7c2795ac5d695a59fd053f78bf2157",
+        "request_sha256": "5e9abc089ff2a316f02844a09828ae599ac0fdf83459b8bae2fea98444738eb3"
+      }
+    },
+    {
+      "PREFLIGHT": {
+        "checked": [
+          "native_sources",
+          "model_files",
+          "dataset_files",
+          "native_config",
+          "tokenization",
+          "target_accounting"
+        ],
+        "counts": {
+          "train": {
+            "rows": 602,
+            "supervised_tokens": 700359,
+            "tasks": 29
+          }
+        },
+        "gpus": 0,
+        "plan_sha256": "f42894e871ee3ec2204e435cdf240d2641706f4d151bd4484b56edcf6716ada3",
+        "request_sha256": "47915f4b3720f57817fce91a15f2efa4e4df9d3e4d0dd0c8dcc1bf497a2883da",
+        "schema": "cyber_sft_cpu_preflight_v1",
+        "sha256": "a071eac0f4ee52eac78d43f9340ea16063e45d38d0d0a12450775aabd1181d57",
+        "status": "passed"
+      },
+      "PREVIEW": {
+        "api_base_url": "https://api.ft.dev.flt.build",
+        "errors": 0,
+        "gpus": 8,
+        "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+        "manifest_sha256": "d600ed4b891a1c58eef0a18f3cc108a32bf1865ef87c391a4e0effff2b1fa5a5",
+        "name": "chris-q38-ta8-lr100-dev-v2",
+        "nodes": 1,
+        "observed_at": "2026-09-12T12:49:37.528905+00:00",
+        "plan_sha256": "f42894e871ee3ec2204e435cdf240d2641706f4d151bd4484b56edcf6716ada3",
+        "rendered_queue_class": "q1",
+        "request_sha256": "47915f4b3720f57817fce91a15f2efa4e4df9d3e4d0dd0c8dcc1bf497a2883da",
+        "requested_priority": "c1",
+        "requeue": false,
+        "schema": "cyber_qwen_lr_v2_dev_preview_v1",
+        "sha256": "a2b726c4364ae8cb1c7cea760533efd1aa65d49e9a4694d4d74e257c996f54d6",
+        "submitted": false,
+        "warnings": 0
+      },
+      "PREPARED": {
+        "plan_sha256": "f42894e871ee3ec2204e435cdf240d2641706f4d151bd4484b56edcf6716ada3",
+        "request_sha256": "47915f4b3720f57817fce91a15f2efa4e4df9d3e4d0dd0c8dcc1bf497a2883da"
+      }
+    }
+  ],
+  "priority_policy": {
+    "observed_at": "2026-09-12T12:50:05Z",
+    "pod_class": {
+      "name": "c1",
+      "uid": "727929f7-80c8-453b-a5d0-9806031f2dae",
+      "value": 10000
+    },
+    "workload_class": {
+      "name": "q1",
+      "uid": "0192fff2-a5b7-4ec4-a413-81add1742067",
+      "value": 10000
+    }
+  },
+  "live_checks": {
+    "snapshot_window_utc": "2026-09-12T12:47:00Z/2026-09-12T12:49:00Z",
+    "jobs_api": {
+      "dev": {
+        "authenticated": true,
+        "rows": 22,
+        "pagination_exhausted": true
+      },
+      "prod": {
+        "authenticated": true,
+        "rows": 678,
+        "pages": 4,
+        "pagination_exhausted": true
+      },
+      "exact_prefix_name_or_output_matches": 0,
+      "title_field_available": false,
+      "independent_title_absence_verified": false,
+      "requested_titles_equal_run_names": true
+    },
+    "wandb": {
+      "observed_at": "2026-09-12T12:48:26Z",
+      "entity": "thefleet",
+      "project": "cyber-post-train",
+      "viewer_authenticated": true,
+      "project_accessible": true,
+      "graphql_errors": 0,
+      "exact_run_ids_absent": [
+        "chris-q38-ta8-lr1-dev-v2",
+        "chris-q38-ta8-lr30-dev-v2",
+        "chris-q38-ta8-lr100-dev-v2"
+      ],
+      "read_only_query": true,
+      "runs_or_metrics_written": false
+    },
+    "local_journals": {
+      "known_locations": [
+        ".operator",
+        "data/private/qwen-study-20260911"
+      ],
+      "journals_checked": 11,
+      "matching_name_or_request_intents": 0,
+      "three_new_prepared_journals_absent": true,
+      "not_a_global_cross_operator_journal_census": true
+    },
+    "capacity": {
+      "contexts_authenticated": [
+        "dev",
+        "prod"
+      ],
+      "campaign_owned_admitted_or_reserved_gpu_nodes": 0,
+      "max_campaign_nodes": 8,
+      "ownership_census_scope": "chris-prefixed or owner-labeled GPU Workloads and nonterminal GPU Pods; existing inference allocations excluded, not an arbitrary numeric deduction",
+      "dev_nodes": [
+        {
+          "name": "computeinstance-e04ab9szsam058qrxp",
+          "free_gpus": 6,
+          "free_cpu": 169.48,
+          "free_memory_gib": 2513.42
+        },
+        {
+          "name": "computeinstance-e04vhewhxwax2j8vqq",
+          "free_gpus": 6,
+          "free_cpu": 175.48,
+          "free_memory_gib": 2533.42
+        }
+      ],
+      "whole_eight_gpu_node_currently_free": false,
+      "normal_queued_submission_is_not_admission": true
+    }
+  },
+  "local_tests": {
+    "python": "3.12",
+    "passed": 323
+  },
+  "remaining_pre_post_review": [
+    "Recheck current user scope and exact plan/request immediately before each GPU POST.",
+    "Recheck monitorable dev API/Kubernetes auth and aggregate admitted/reserved allocation count; this is a dated snapshot.",
+    "Reconcile titles through an authoritative source if available, or explicitly document the supported unique name/output identity boundary; independent title absence was not verified.",
+    "Recheck new destination/runtime absence, W&B identities and all known/shared submission journals before each POST; do not copy an ambiguous intent to a new directory.",
+    "Respect wave1 <=2 nodes and later LR100 only after first-wave allocation release; no peer displacement or forced admission."
+  ],
+  "safety": {
+    "gpu_training_job_posts": 0,
+    "benchmark_or_outcome_calls": 0,
+    "peer_or_serving_mutations": 0,
+    "private_logs_or_prompts_read": false,
+    "credentials_printed_or_persisted": false,
+    "production_authorized": false
+  },
+  "sha256": "sha256:92096067a0962fcebe9acb60954b03bed07720d896927333fdb9edd6724ed987"
+}
