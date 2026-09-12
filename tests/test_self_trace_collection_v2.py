@@ -121,7 +121,7 @@ def route_receipt(request: dict, collector: dict) -> dict:
         "interface": copy.deepcopy(v2.PARITY_INTERFACE),
         "native_transport": {
             "endpoint": "/inference/v1/generate",
-            "request_contract": "messages_tools_sampling_params",
+            "request_contract": "prompt_token_ids_sampling_params",
             "response_contract": "responses_response_ids_response_logprobs_stop_reasons",
             "native_prompt_token_ids": True,
             "native_response_token_ids": True,
@@ -267,6 +267,8 @@ class Engine:
         self.turn = 0
 
     async def generate(self, request):
+        assert set(request) == {"prompt_token_ids", "sampling_params"}
+        assert request["prompt_token_ids"]
         assert request["sampling_params"]["max_tokens"] <= 8
         replies = [
             (
@@ -497,6 +499,25 @@ def test_private_reviewer_accepts_user_only_and_emits_only_bound_digests(monkeyp
     rendered = json.dumps(receipt)
     assert PRIVATE not in rendered
     assert "private task" not in rendered
+
+    for defect in ("producer_plan", "runtime_binding"):
+        broken = copy.deepcopy(expectation)
+        if defect == "producer_plan":
+            broken["producer_plan_sha256"] = "not-a-digest"
+        else:
+            broken["runtime_binding"] = {
+                "environment": {},
+                "verifier": {},
+                "current_binding_sha256": "not-a-digest",
+            }
+        reseal(broken)
+        with pytest.raises(v2.CollectionError, match="expectation"):
+            v2.review_source(
+                broken,
+                episode,
+                tokenizer=ReviewTokenizer(),
+                tool_catalog=catalog,
+            )
 
     conversation["messages"].insert(0, {"role": "system", "content": "synthetic"})
     write(episode / "conversation.json", conversation)

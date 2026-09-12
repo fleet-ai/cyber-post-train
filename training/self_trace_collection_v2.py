@@ -499,7 +499,7 @@ def _validate_route_certificate(
         or transport
         != {
             "endpoint": "/inference/v1/generate",
-            "request_contract": "messages_tools_sampling_params",
+            "request_contract": "prompt_token_ids_sampling_params",
             "response_contract": ("responses_response_ids_response_logprobs_stop_reasons"),
             "native_prompt_token_ids": True,
             "native_response_token_ids": True,
@@ -925,6 +925,86 @@ def source_expectation(validated: dict[str, Any], attempt_id: str) -> dict:
     return {**receipt, "sha256": digest_json(receipt)}
 
 
+def _validate_expectation(expectation: dict) -> None:
+    """Validate common v1 structure plus the user-only v2 bindings."""
+    _sealed(expectation, EXPECTATION_SCHEMA)
+    if set(expectation) != {
+        "schema",
+        "collection_request_sha256",
+        "producer_plan_sha256",
+        "attempt",
+        "model",
+        "interface",
+        "runtime_artifacts",
+        "runtime_binding",
+        "limits",
+        "sampling",
+        "source_closure",
+        "qualification",
+        "required_private_digests",
+        "sha256",
+    }:
+        raise CollectionError("v2 source expectation fields differ")
+
+    # Reuse the frozen v1 validator for the shared model, attempt, runtime,
+    # budget, sampling, qualification and source-closure invariants.  Its
+    # mandatory system-prompt slot is only an internal structural projection;
+    # no system message or digest is admitted into the v2 expectation.
+    legacy = {
+        key: expectation[key]
+        for key in (
+            "collection_request_sha256",
+            "producer_plan_sha256",
+            "attempt",
+            "model",
+            "runtime_binding",
+            "limits",
+            "sampling",
+            "qualification",
+        )
+    }
+    legacy.update(
+        {
+            "schema": v1.EXPECTATION_SCHEMA,
+            "interface": {
+                "required_task_tools": ["bash", "submit_report"],
+                "required_task_tool_catalog_sha256": TOOL_CATALOG_SHA256,
+                "runtime_chat_template_sha256": CHAT_TEMPLATE_SHA256,
+                "system_prompt_sha256": "sha256:" + "0" * 64,
+                "compaction": "disabled",
+            },
+            "source_closure": {
+                name: expectation.get("source_closure", {}).get(name)
+                for name in v1.SOURCE_CLOSURE_PATHS
+            },
+        }
+    )
+    legacy["sha256"] = digest_json(legacy)
+    try:
+        v1._validate_expectation(legacy)
+    except Exception:
+        raise CollectionError("v2 source expectation is incomplete") from None
+
+    artifacts = expectation.get("runtime_artifacts")
+    if (
+        expectation.get("interface") != PARITY_INTERFACE
+        or expectation.get("required_private_digests") != RENDERED_REQUEST_CONTRACT
+        or expectation.get("source_closure")
+        != {name: file_sha256(path) for name, path in SOURCE_CLOSURE_PATHS.items()}
+        or not isinstance(artifacts, dict)
+        or set(artifacts)
+        != {
+            "collector_qualification_sha256",
+            "collector_image",
+            "direct_route_certificate_sha256",
+        }
+        or not _sha(artifacts.get("collector_qualification_sha256"))
+        or IMAGE.fullmatch(str(artifacts.get("collector_image", ""))) is None
+        or not _sha(artifacts.get("direct_route_certificate_sha256"))
+    ):
+        raise CollectionError("v2 source expectation differs")
+
+
 def prepare_attempt(
     validated: dict[str, Any],
     attempt_id: str,
@@ -1032,31 +1112,7 @@ def review_source(
     tool_catalog: list[dict],
 ) -> dict:
     """Review one user-only accepted episode without emitting private content."""
-    _sealed(expectation, EXPECTATION_SCHEMA)
-    if (
-        set(expectation)
-        != {
-            "schema",
-            "collection_request_sha256",
-            "producer_plan_sha256",
-            "attempt",
-            "model",
-            "interface",
-            "runtime_artifacts",
-            "runtime_binding",
-            "limits",
-            "sampling",
-            "source_closure",
-            "qualification",
-            "required_private_digests",
-            "sha256",
-        }
-        or expectation.get("interface") != PARITY_INTERFACE
-        or expectation.get("required_private_digests") != RENDERED_REQUEST_CONTRACT
-        or expectation.get("source_closure")
-        != {name: file_sha256(path) for name, path in SOURCE_CLOSURE_PATHS.items()}
-    ):
-        raise CollectionError("v2 source expectation differs")
+    _validate_expectation(expectation)
     attempt = expectation.get("attempt")
     model = expectation.get("model")
     runtime = expectation.get("runtime_binding")

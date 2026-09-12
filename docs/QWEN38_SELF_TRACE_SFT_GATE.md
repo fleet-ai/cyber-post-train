@@ -44,7 +44,7 @@ The decision is sealed in
 and
 [`qwen38-self-trace-collection-request-v2.json`](../configs/qualification/qwen38-self-trace-collection-request-v2.json)
 (self-digest
-`sha256:a9d318fabf10da7547814826f0bd63113c1658ba14546dcd0dc49e00e4be54ea`).
+`sha256:2c3040c28f6fc474908841e3582fb47cb9a69a5ce6993f2f9bc33ad702c96c22`).
 It preserves the v1 roster, model, limits, sampling, and task/runtime bindings
 by immutable reference. It pins:
 
@@ -100,9 +100,9 @@ receipt so the synthetic gate cannot be mistaken for live qualification.
 The equivalent user-only v2 fixture is
 [`2026-09-12-self-trace-recorder-dense-parity-v2.json`](evidence/qwen38-study/2026-09-12-self-trace-recorder-dense-parity-v2.json).
 Its file SHA-256 is
-`sha256:197b168031cb167a6f60a5797351f2408636138a5570e01cfa61d4a1cb5accb5`
+`sha256:1a31a533ee1c12d8e8cb88ccbf81f73281835ca3a1234e9dc664165854a314b2`
 and its self-digest is
-`sha256:6366f37501876174f94f51ed860259b9fb2a289eb82f19c94f55c6230ef4f151`.
+`sha256:9943b7e8e01199be1e582b8ffcc5a729c3caa7b41e6addeee72ba0e853f764dd`.
 It changes the required conversation anchor from `system,user` to `user` and
 binds the v2 prompt-policy, template-invocation, and rendered-request contract
 digests. It remains synthetic and makes no collector-image or live-route claim.
@@ -161,9 +161,9 @@ route-certificate hash:
   rehashed weights/tokenizer/template, immutable serving runtime identity,
   normalized arguments, ready route identity, and the same v2 interface. A
   fresh synthetic collector-to-route probe must prove the native
-  `/inference/v1/generate` request/response contract, including response token
-  IDs and logprobs, without prompt/tool rewriting, target task content, or
-  scoring/task requests.
+  `/inference/v1/generate` prompt-token-ID plus sampling-parameter request and
+  response contract, including response token IDs and logprobs, without
+  prompt/tool rewriting, target task content, or scoring/task requests.
 
 No such artifacts are checked in. Null bindings remain fail-closed, so tests use
 synthetic temporary receipts only to verify the schema and cross-binding logic.
