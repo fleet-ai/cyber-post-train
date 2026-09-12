@@ -1,0 +1,366 @@
+{
+  "schema": "cyber_qwen_sft_staged_search_successor_v2",
+  "study_id": "qwen38-blackbox-teacher-staged-search-v5",
+  "status": "frozen_nonlaunchable_successor",
+  "supersedes": {
+    "path": "configs/studies/qwen-blackbox-teacher-staged-search-v4.json",
+    "file_sha256": "sha256:f986acf35b7d774febdad4b93baacabc103082ac93f3524d8adbfd22b633b0fa",
+    "embedded_sha256": "sha256:2dd6e0207f672feb37af1cbfa1741b91f7c4a3762f3719c4948af6d12798a62c",
+    "inheritance": "All model, corpus, split, outcome-estimator, scalar-telemetry, sealing and capacity bindings remain exact except where this successor removes an ambiguous duplicate or splits a dependency-bearing wave."
+  },
+  "audit_resolution": {
+    "findings": [
+      {
+        "id": "first-arm-was-not-credited-to-lr-bracket",
+        "resolution": "The V4 first production arm is the one and only realization of V3 cell available-a-lr-1e-5. Its accepted training, checkpoint and outcome receipts must be reused by the broad-LR barrier; the cell must never be launched again."
+      },
+      {
+        "id": "remaining-lr-dev-evidence-did-not-match-production-schedule",
+        "resolution": "The historical 1e-6 and 3e-5 canaries used constant/no-warmup and four GPUs, so they are numeric evidence only. Every remaining cosine/5%-warmup production LR cell requires a new exact bounded dev qualification and zero-update checkpoint reload."
+      },
+      {
+        "id": "four-epoch-arm-shared-wave-with-its-two-epoch-gate",
+        "resolution": "Batch-16, batch-32 and two-epoch arms form refinement wave one. The four-epoch stress arm is a separate later wave and cannot allocate until the two-epoch checkpoint, outcome lifecycle and allocation release are accepted."
+      }
+    ],
+    "canonical_training_cell": [
+      "model lock",
+      "source treatment",
+      "split",
+      "corpus manifest",
+      "learning rate",
+      "scheduler and warmup",
+      "global batch and microbatch",
+      "epoch count",
+      "training seed"
+    ],
+    "duplicate_rule": "One canonical training cell may have exactly one accepted or active producer. A later stage consumes its immutable receipts and cannot mint a second producer with a new name."
+  },
+  "representative_split_bindings": {
+    "a": {
+      "path": "configs/data/qwen-blackbox-study-split-a-v1.json",
+      "file_sha256": "sha256:2558d0346f5edd26d6a7cd85fc1774cb1be2339d588be1f7f967fc14689d6ccc",
+      "embedded_sha256": "sha256:9ce5ba7f4cb9c52f6adfdbe615ca2258358dc602d6a9bb665c2ccc29dc04f4b8",
+      "groups": {
+        "train": 59,
+        "dev": 20,
+        "final_test": 10
+      }
+    },
+    "b": {
+      "path": "configs/data/qwen-blackbox-study-split-b-v1.json",
+      "file_sha256": "sha256:938ab045d07a33611c14ac01c50dda774eca280c1449482af7ba7e292c02e596",
+      "embedded_sha256": "sha256:282f2dec7912364c0f7c1db7ceaac39eb66d552ab226d7617a412fa8e881a50f",
+      "groups": {
+        "train": 59,
+        "dev": 20,
+        "final_test": 10
+      }
+    },
+    "shared_final_test": {
+      "path": "configs/data/qwen-blackbox-study-final-test-v1.json",
+      "file_sha256": "sha256:29ee37dcd34b07874fa0598c8b41dd5cc2875ab355a36be508d592a7f32d75a5",
+      "embedded_sha256": "sha256:dc625115be8c775de8ecf476bc0d8e06e71b6c7f4160ed50b25eb0308b30d8d7",
+      "groups": 10,
+      "selection_state": "sealed_until_configuration_selection_is_frozen"
+    },
+    "scope": "task-family-held-out; applications may be shared",
+    "split_b_role": "fresh split and training-seed confirmation only after the split-A decision"
+  },
+  "opening_gates": {
+    "cadence_training_and_periodic_reload": {
+      "config_path": "configs/qualification/qwen38-teacher-checkpoint-cadence-dev-v1.json",
+      "config_file_sha256": "sha256:fcbd879716217d89e7bbb07bd0d67783682c0b58dddd60b315ddd6942e4ba923",
+      "required_optimizer_steps": 21,
+      "periodic_checkpoint_step": 20,
+      "required_world_size": 8,
+      "required_reload_optimizer_updates": 0,
+      "accepted_receipt_sha256": null
+    },
+    "split_a_base_control": {
+      "path": "configs/evaluation/qwen38-blackbox-fleet-dev-a-base-control-v2.json",
+      "file_sha256": "sha256:14bba8c4fcbeb7c8b289de7e68f33712181ae3a8f31e4095bf545824f35e9144",
+      "embedded_sha256": "sha256:db3a37d00654eb4fdfabaf3f53999a0ef2b82a6c2bf9b9c0851aeb25116ac913",
+      "outcome_protocol_sha256": "sha256:3c2c65eed748b16b50ef992327324b1fcaad84b190456c4aefe69c6efe748f75",
+      "required_outcomes": 80,
+      "accepted_result_sha256": null
+    },
+    "production_preview": {
+      "requirements": [
+        "exact plan and request digest",
+        "clean duplicate-title and create-once destination checks",
+        "unique W&B identity",
+        "c1 request with observed q1 value 10000",
+        "requeue disabled",
+        "live admitted-plus-reserved experiment-node count at or below eight"
+      ],
+      "accepted_receipt_sha256": null
+    }
+  },
+  "first_production_cell": {
+    "state": "blocked",
+    "canonical_id": "teacher.available-a.lr-1e-5.batch-8.epoch-1.seed-42",
+    "v4_source": "supersedes.production_gate.first_arm",
+    "fulfills_inherited_cell": "split-a-broad-lr.available-a-lr-1e-5",
+    "counts_toward_lr_bracket": true,
+    "must_not_be_repeated_in_remaining_lr_wave": true,
+    "data": {
+      "rows": 602,
+      "supervised_tokens": 700359,
+      "manifest_sha256": "sha256:c4945ddb7cd8fd0b7b9ebbd9bad9b96215b0905c059ef1b22d71d4f214b4eb8e",
+      "source_selection_sha256": "sha256:cdf82a83e423c3de6556b8f0ca5eaf4cb358041cd3015a335250b473e4a5cfc7"
+    },
+    "recipe": {
+      "lr": 0.00001,
+      "scheduler": "cosine",
+      "warmup_ratio": 0.05,
+      "epochs": 1,
+      "global_batch": 8,
+      "microbatch_per_gpu": 1,
+      "max_steps": 76,
+      "warmup_steps": 4,
+      "checkpoint_interval": 20,
+      "keep_checkpoints": 3,
+      "seed": 42
+    },
+    "resources": {
+      "nodes": 1,
+      "gpus_per_node": 8,
+      "wave_nodes": 1
+    },
+    "unresolved_dependencies": [
+      "opening_gates.cadence_training_and_periodic_reload.accepted_receipt_sha256",
+      "opening_gates.split_a_base_control.accepted_result_sha256",
+      "opening_gates.production_preview.accepted_receipt_sha256"
+    ]
+  },
+  "remaining_lr_qualification": {
+    "state": "blocked",
+    "historical_numeric_evidence": {
+      "path": "docs/evidence/qwen38-study/2026-09-11-numeric-lr-dev-v1.json",
+      "file_sha256": "sha256:d2fd66a437ee7431c36a86d3c180b56e1ca22262d4c03371fb4b491c21419ae0",
+      "classification": "numeric_runtime_only_constant_no_warmup_not_a_cosine_production_config_qualification"
+    },
+    "dev_waves": [
+      {
+        "order": 1,
+        "max_nodes": 2,
+        "cells": [
+          {
+            "id": "lr-1e-6-cosine-layout",
+            "lr": 0.000001,
+            "pause_after_step": 6,
+            "planned_pause_checkpoint_step": 6
+          },
+          {
+            "id": "lr-3e-5-cosine-layout",
+            "lr": 0.00003,
+            "pause_after_step": 6,
+            "planned_pause_checkpoint_step": 6
+          }
+        ]
+      },
+      {
+        "order": 2,
+        "max_nodes": 1,
+        "cells": [
+          {
+            "id": "lr-1e-4-extended-cosine-layout",
+            "lr": 0.0001,
+            "pause_after_step": 21,
+            "periodic_checkpoint_step": 20,
+            "planned_pause_checkpoint_step": 21
+          }
+        ]
+      }
+    ],
+    "common_acceptance": [
+      "exact one-node eight-GPU production layout and immutable pinned image",
+      "cosine scheduler with 5% warmup over the unchanged 76-step horizon",
+      "finite loss and gradient scalars through the planned pause",
+      "complete scalar-only W&B history and acknowledged finish/sync",
+      "digest-valid checkpoint seal and exact eight-rank zero-update reload",
+      "zero restarts and verified allocation release"
+    ],
+    "accepted_receipts": {
+      "lr-1e-6": null,
+      "lr-3e-5": null,
+      "lr-1e-4": null
+    }
+  },
+  "remaining_lr_production_wave": {
+    "state": "blocked",
+    "wave_nodes": 3,
+    "common": {
+      "source": "teacher",
+      "split": "a",
+      "corpus": "available_a",
+      "epochs": 1,
+      "global_batch": 8,
+      "microbatch_per_gpu": 1,
+      "max_steps": 76,
+      "scheduler": "cosine",
+      "warmup_ratio": 0.05,
+      "warmup_steps": 4,
+      "checkpoint_interval": 20,
+      "keep_checkpoints": 3,
+      "seed": 42,
+      "nodes_per_arm": 1,
+      "gpus_per_node": 8
+    },
+    "cells": [
+      {
+        "id": "available-a-lr-1e-6",
+        "lr": 0.000001,
+        "dev_receipt_binding": "remaining_lr_qualification.accepted_receipts.lr-1e-6"
+      },
+      {
+        "id": "available-a-lr-3e-5",
+        "lr": 0.00003,
+        "dev_receipt_binding": "remaining_lr_qualification.accepted_receipts.lr-3e-5"
+      },
+      {
+        "id": "available-a-lr-1e-4",
+        "lr": 0.0001,
+        "dev_receipt_binding": "remaining_lr_qualification.accepted_receipts.lr-1e-4"
+      }
+    ],
+    "unresolved_dependencies": [
+      "first_production_cell.accepted_training_and_checkpoint_receipt_sha256",
+      "all remaining_lr_qualification.accepted_receipts",
+      "per-cell production preview, duplicate, destination, W&B and aggregate-capacity receipts"
+    ]
+  },
+  "lr_outcome_barrier": {
+    "state": "blocked",
+    "exact_cells": [
+      "teacher.available-a.lr-1e-6.batch-8.epoch-1.seed-42",
+      "teacher.available-a.lr-1e-5.batch-8.epoch-1.seed-42",
+      "teacher.available-a.lr-3e-5.batch-8.epoch-1.seed-42",
+      "teacher.available-a.lr-1e-4.batch-8.epoch-1.seed-42"
+    ],
+    "duplicate_count_per_cell": 1,
+    "metric": "fleet_dev_paired_mean_success_delta_4fixed",
+    "protocol_sha256": "sha256:3c2c65eed748b16b50ef992327324b1fcaad84b190456c4aefe69c6efe748f75",
+    "sealed_result_set_sha256": null,
+    "selection_decision_sha256": null,
+    "tie_rule": "retain ties for fresh predeclared confirmation"
+  },
+  "later_stage_order": [
+    {
+      "order": 1,
+      "id": "split-a-exposure-matched-control-pair",
+      "wave_nodes": 2,
+      "requires": [
+        "lr_outcome_barrier.selection_decision_sha256",
+        "exposure-control exact dev qualification receipt"
+      ],
+      "cells": [
+        "availability-shaped exposure-matched control at selected LR",
+        "balanced exposure treatment at selected LR"
+      ]
+    },
+    {
+      "order": 2,
+      "id": "split-b-and-training-seed-confirmation",
+      "wave_nodes": 3,
+      "requires": [
+        "exposure treatment decision",
+        "split-B matched base result",
+        "split-B corpus materialization receipt"
+      ],
+      "cells": [
+        "selected split-A treatment seed 20260911",
+        "matched split-B treatment seed 42",
+        "matched split-B treatment seed 20260911"
+      ]
+    },
+    {
+      "order": 3,
+      "id": "batch-and-two-epoch-refinement",
+      "wave_nodes": 3,
+      "requires": [
+        "split and seed confirmation decision",
+        "matched supervised-token exposure accounting",
+        "exact per-cell dev numeric, scheduler and reload qualification"
+      ],
+      "cells": [
+        {
+          "id": "batch-16-epoch-1",
+          "global_batch": 16,
+          "epochs": 1,
+          "max_steps": 38,
+          "warmup_steps": 2,
+          "max_checkpoint_interval": 19
+        },
+        {
+          "id": "batch-32-epoch-1",
+          "global_batch": 32,
+          "epochs": 1,
+          "max_steps": 19,
+          "warmup_steps": 1,
+          "max_checkpoint_interval": 9
+        },
+        {
+          "id": "batch-8-epoch-2",
+          "global_batch": 8,
+          "epochs": 2,
+          "max_steps": 152,
+          "warmup_steps": 8,
+          "max_checkpoint_interval": 20
+        }
+      ]
+    },
+    {
+      "order": 4,
+      "id": "four-epoch-stress",
+      "wave_nodes": 1,
+      "requires": [
+        "batch-8-epoch-2 accepted checkpoint and valid Fleet-dev outcome lifecycle",
+        "batch-and-two-epoch-refinement allocations released",
+        "exact four-epoch dev numeric, scheduler and reload qualification"
+      ],
+      "cells": [
+        {
+          "id": "batch-8-epoch-4",
+          "global_batch": 8,
+          "epochs": 4,
+          "max_steps": 304,
+          "warmup_steps": 16,
+          "max_checkpoint_interval": 20
+        }
+      ]
+    }
+  ],
+  "per_accepted_training_cell_lifecycle": [
+    "terminal finite training and complete scalar-only W&B finish/sync receipt",
+    "complete checkpoint seal and zero-update reload",
+    "deterministic export, atomic staging, registration and live serving parity",
+    "all 80 split-matched Fleet-dev task-and-seed outcomes under the frozen protocol",
+    "one create-once Tensorlake WebExploitBench child whose result stays sealed and selection-ineligible",
+    "release temporary training and serving allocations after their bounded consumers finish"
+  ],
+  "capacity_policy": {
+    "max_active_experiment_nodes": 8,
+    "excluded_existing_inference_endpoint_nodes": 4,
+    "largest_training_wave_nodes": 3,
+    "counted_resources": "all admitted or reserved campaign training, export, temporary serving and evaluation nodes; queued work without allocation counts zero",
+    "submission_rule": "Immediately before every POST, recheck the aggregate count and submit only when current plus requested nodes is at most eight."
+  },
+  "telemetry_and_selection": {
+    "wandb": "training-only scalar allowlist with unique immutable run identity; no prompts, traces, flags, answers, token IDs, task outcomes or scores",
+    "training_loss": "diagnostic_only",
+    "teacher_reference_cross_entropy": "not_computed_or_used",
+    "fleet_dev": "only HPO and checkpoint-selection signal, paired by exact task version and attempt seed",
+    "fleet_final": "sealed until one configuration is frozen",
+    "webexploitbench": "run after every accepted checkpoint but remain sealed and ineligible for HPO, checkpoint selection, stopping or tie breaking"
+  },
+  "execution": {
+    "kind": "sealed_metadata_only_not_a_job_request",
+    "new_jobs_authorized": false,
+    "cluster_or_api_mutations_performed": false,
+    "all_cells_currently_launchable": false,
+    "next_safe_transition": "accept cadence step-20 reload and split-A base control, then materialize and preview only the canonical 1e-5 first production cell"
+  },
+  "sha256": "sha256:2a3dd4866f4ba12b792ab9712332d1a5bbcc588146e2887d2d337906e2368578"
+}
