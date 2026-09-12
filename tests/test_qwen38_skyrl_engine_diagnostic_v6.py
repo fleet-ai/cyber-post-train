@@ -1,11 +1,11 @@
-"""Dev6 keeps vLLM EngineCore in-process only for the dev diagnostic."""
+"""Frozen prelaunch gates for the exact, now-retired SkyRL dev6 diagnostic."""
 # ruff: noqa: F811
 
-import copy
+import ast
 import hashlib
 import json
+import subprocess
 from pathlib import Path
-from types import SimpleNamespace as NS
 
 from test_rl_data import setup  # noqa: F401
 from test_skyrl_data import skyrl as data_setup  # noqa: F401
@@ -29,6 +29,7 @@ EVIDENCE = ROOT / (
 DEV5_TERMINAL = ROOT / (
     "docs/evidence/qwen38-study/2026-09-12-skyrl-engine-diagnostic-dev5-terminal-v1.json"
 )
+RUNTIME_SOURCE_COMMIT = "a29c4937a21b49735301e1abfd10fbc9f27bafe7"
 
 
 def load(path):
@@ -37,6 +38,26 @@ def load(path):
 
 def file_sha256(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def frozen_source(path):
+    return subprocess.check_output(
+        ["git", "show", f"{RUNTIME_SOURCE_COMMIT}:{path}"], cwd=ROOT, text=True
+    )
+
+
+def frozen_runtime():
+    module = ast.parse(frozen_source("training/skyrl_training.py"))
+    files = next(
+        ast.literal_eval(node.value)
+        for node in module.body
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name) and target.id == "RUNTIME_FILES"
+            for target in node.targets
+        )
+    )
+    return {path: frozen_source(path) for path in files}
 
 
 def test_dev6_changes_only_create_once_identities_from_dev5():
@@ -58,46 +79,20 @@ def test_dev6_changes_only_create_once_identities_from_dev5():
         assert run_v6[key] == run_v5[key]
 
 
-def test_dev6_toggle_is_diagnostic_only_and_precedes_actor_import(
-    skyrl_prepared, monkeypatch, tmp_path
-):
+def test_dev6_toggle_is_frozen_history_and_absent_from_live_requests(skyrl_prepared):
+    historical = frozen_source("training/skyrl_training.py")
+    assert 'ENGINE_DIAGNOSTIC_VLLM_V1_MULTIPROCESSING = "0"' in historical
+    assert '"VLLM_ENABLE_V1_MULTIPROCESSING"' in historical
+
     diagnostic = skyrl_training.engine_diagnostic_request(skyrl_prepared.plan)
     production = skyrl_training.job_request(skyrl_prepared.plan)
-
-    assert diagnostic["env"]["VLLM_ENABLE_V1_MULTIPROCESSING"] == "0"
+    assert "VLLM_ENABLE_V1_MULTIPROCESSING" not in diagnostic["env"]
     assert "VLLM_ENABLE_V1_MULTIPROCESSING" not in production["env"]
     assert diagnostic["workers"] == 2
     assert diagnostic["gpus_per_worker"] == 4
     assert diagnostic["priority_class"] == "c1"
     assert diagnostic["requeueIfPreempted"] is False
     assert diagnostic["secrets"] == []
-
-    plan = copy.deepcopy(skyrl_prepared.plan)
-    plan["output_root"] = str(tmp_path / "diagnostic")
-    Path(plan["output_root"]).mkdir()
-    native = {
-        "skyrl.train.utils.utils": NS(
-            prepare_runtime_environment=lambda _: {
-                "VLLM_ENABLE_V1_MULTIPROCESSING": "1",
-                "SAFE_NATIVE_SETTING": "yes",
-            }
-        )
-    }
-    env, _, _ = skyrl_training._ray_environment(plan, object(), native, diagnostic=True)
-    assert env["VLLM_ENABLE_V1_MULTIPROCESSING"] == "0"
-    actor_env = skyrl_training._scrubbed_actor_environment(env, (), {})
-    assert actor_env["VLLM_ENABLE_V1_MULTIPROCESSING"] == "0"
-
-    ordinary = copy.deepcopy(skyrl_prepared.plan)
-    ordinary["output_root"] = str(tmp_path / "ordinary")
-    Path(ordinary["output_root"]).mkdir()
-    normal_env, _, _ = skyrl_training._ray_environment(
-        ordinary,
-        object(),
-        {"skyrl.train.utils.utils": NS(prepare_runtime_environment=lambda _: {})},
-        diagnostic=False,
-    )
-    assert "VLLM_ENABLE_V1_MULTIPROCESSING" not in normal_env
 
 
 def test_dev6_prelaunch_evidence_is_self_digesting_and_truthful():
@@ -125,10 +120,10 @@ def test_dev6_prelaunch_evidence_is_self_digesting_and_truthful():
     successor = value["successor"]
     assert successor["data_config_sha256"] == file_sha256(DATA_V6)
     assert successor["run_config_sha256"] == file_sha256(RUN_V6)
-    assert successor["skyrl_training_source_sha256"] == file_sha256(
-        ROOT / "training/skyrl_training.py"
-    )
-    assert successor["runtime_sha256"] == digest(skyrl_training._runtime())
+    assert successor["skyrl_training_source_sha256"] == hashlib.sha256(
+        frozen_source("training/skyrl_training.py").encode()
+    ).hexdigest()
+    assert successor["runtime_sha256"] == digest(frozen_runtime())
     assert successor["allowed_cluster"] == "dev"
     assert successor["priority_class"] == "c1"
     assert successor["queue_priority_class"] == "q1"
