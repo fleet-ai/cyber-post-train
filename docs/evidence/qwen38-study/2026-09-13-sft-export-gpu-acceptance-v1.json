@@ -1,0 +1,161 @@
+{
+  "schema": "cyber_qwen38_sft_export_gpu_acceptance_v1",
+  "observed_at": "2026-09-13T10:30:58Z",
+  "source_commit": "670cfc80991017c587d4415cd9b06052b0ee5597",
+  "namespace": "fleet-train-jobs",
+  "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+  "accepted": {
+    "self": {
+      "source_checkpoint": {
+        "optimizer_step": 44,
+        "manifest_file_sha256": "0094cfeb62f120b55d9e2f7fdfd4217c4c0aab66f369e3c52c89fc5e7ccfff9b",
+        "receipt_sha256": "bf8237a5837dd75bf1163b5a5e134e1349417599c1a28f022b91281c2c7b7885",
+        "source_plan_sha256": "4d97bb2e67f39aedd3bd49f85a49fa9f2c6c147c01628a612b24c3a5132678ed"
+      },
+      "zero_gpu_export": {
+        "pod_uid": "73cadf6b-527a-4e7a-a0e4-72e80618acfb",
+        "finished_at": "2026-09-13T09:43:36Z",
+        "exit_code": 0,
+        "restarts": 0,
+        "gpus": 0,
+        "path": "/mnt/sfs/jobs/chris-cyber-q38-dev20-self-lr1-v2/hf-export-v1/EXPORT.json",
+        "file_sha256": "7d3d56da513488dab485114b49b4fe34c5efe4c2526577c0063a2cbc87413e50",
+        "receipt_sha256": "12f06f12a35f9c0509610f8bed8cb685fc23864490ec5de7739ee1e6aa48f606",
+        "tensor_count": 1199,
+        "tensor_bytes": 55562855904,
+        "dtype": "BF16",
+        "optimizer_steps_executed": 0
+      },
+      "one_gpu_check": {
+        "api_name": "chris-q38-self-hfcheck-v1-4da583be",
+        "api_job_id": "chris-q38-self-hfcheck-v1-4da583be-pbvzv",
+        "rayjob_uid": "ca872fa6-6a2b-46aa-aa48-105e19115c19",
+        "workload_uid": "c04a965a-74cd-4dd5-8b37-42177ea40b13",
+        "raycluster_uid": "db0ee818-28bc-4fa1-8a85-79cfb8f7f3bc",
+        "pod_uid": "b3d13079-86bb-4dfd-b51b-184cfcc4f0e3",
+        "started_at": "2026-09-13T10:15:31Z",
+        "finished_at": "2026-09-13T10:18:59Z",
+        "status": "SUCCEEDED",
+        "restarts": 0,
+        "gpus": 1,
+        "plan_sha256": "cc41d800059605d7633e6c47fd4601165dbe7d07b90925be08d10db7459e395c",
+        "request_sha256": "c2c5d3d09b39d0bca803d90782c50926e997b85035a026522cd896227d4a398c",
+        "path": "/mnt/sfs/jobs/chris-q38-self-sft-hfcheck-v1/GPU_CHECK.json",
+        "file_sha256": "e866e6381a4a79bf1cb759016afde3aa5756bc707e047572e7edc59b18a4653c",
+        "receipt_sha256": "9fed9b8368d58213af9999abe18d73dd5fb83cd273ee7923b57321f6c4d31e12",
+        "checker_sha256": "609a56119743240bebce42497e5a27d24dd6fc531726d500a43a49ac4cfa4203",
+        "finite_logits": true,
+        "synthetic_only": true,
+        "optimizer_steps_executed": 0,
+        "source_unchanged": true,
+        "serving_qualified": false,
+        "resources_released": true
+      }
+    },
+    "teacher": {
+      "source_checkpoint": {
+        "optimizer_step": 186,
+        "manifest_file_sha256": "1b671c6ec4b39d1141e0d28c530243624f6a97a7922f9f222ffcbe20b8434d3e",
+        "receipt_sha256": "1d61918874d59421455577deca70c9784ce09f8f327a5031df9d39dfb5f3d7f2",
+        "source_plan_sha256": "b4543b9173e799bbe155ab416923db57c9796b8734186b834e5109c5be6330fc"
+      },
+      "zero_gpu_export": {
+        "pod_uid": "f43764e4-6e5e-422c-ba0c-7da46db02965",
+        "finished_at": "2026-09-13T09:55:25Z",
+        "exit_code": 0,
+        "restarts": 0,
+        "gpus": 0,
+        "path": "/mnt/sfs/jobs/chris-cyber-q38-teacher-dense-v5/hf-export-v1/EXPORT.json",
+        "file_sha256": "96b3181e05c501343c97cfe803aada6884e406c7a112e0dc6c77461f090b8bab",
+        "receipt_sha256": "e6d59f5a58ce54b913d775cd71b81c64bd54637b53795df82baec0f71efefaf9",
+        "tensor_count": 1199,
+        "tensor_bytes": 55562855904,
+        "dtype": "BF16",
+        "optimizer_steps_executed": 0
+      },
+      "one_gpu_check": {
+        "api_name": "chris-q38-teach-hfcheck-v1-42c915de",
+        "api_job_id": "chris-q38-teach-hfcheck-v1-42c915de-ddq52",
+        "rayjob_uid": "e5288ecc-ca64-41fd-a7a0-f569b4cc03ff",
+        "workload_uid": "7b514827-4ca2-41cb-8993-6cd5396d4710",
+        "raycluster_uid": "c2202783-ee75-4a35-92e9-91cca4a11a9a",
+        "pod_uid": "a367c717-23e2-4f6b-ac11-0ae6548d5bb2",
+        "started_at": "2026-09-13T10:15:46Z",
+        "finished_at": "2026-09-13T10:19:08Z",
+        "status": "SUCCEEDED",
+        "restarts": 0,
+        "gpus": 1,
+        "plan_sha256": "7a20a35913366b91cfc228f69295db5917a09e1e14671adef0ff0a46a16f0ff3",
+        "request_sha256": "f2fbada2d1627f9baddf085b52654b7548de11f53f05c8c72a89bf418a79cfa9",
+        "path": "/mnt/sfs/jobs/chris-q38-teacher-sft-hfcheck-v1/GPU_CHECK.json",
+        "file_sha256": "7fbfcfe16875722012cc2654d979545e22aa1fdca093987495dfff65173dfd8e",
+        "receipt_sha256": "9bd229e3c85a092ccc5fca8c3183f57554f1c8a72b2724221f5c7507718a3392",
+        "checker_sha256": "609a56119743240bebce42497e5a27d24dd6fc531726d500a43a49ac4cfa4203",
+        "finite_logits": true,
+        "synthetic_only": true,
+        "optimizer_steps_executed": 0,
+        "source_unchanged": true,
+        "serving_qualified": false,
+        "resources_released": true
+      }
+    }
+  },
+  "dev_gate": {
+    "cluster_context": "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb",
+    "exact_image_shared_sfs_preflight": {
+      "pod_uid": "a83f60ef-a200-446b-b810-301e8632dcab",
+      "status": "Succeeded",
+      "restarts": 0,
+      "gpus": 0,
+      "exports_present": true,
+      "destinations_absent": true,
+      "required_runtime_imports_present": true
+    },
+    "independent_verifier": {
+      "retired_v1": {
+        "pod_uid": "5e015882-4674-462a-8b0b-1f12e6c91afb",
+        "configmap_uid": "120773e7-e58d-4b6d-8ce0-7ea7df9cba98",
+        "status": "Failed",
+        "restarts": 0,
+        "gpus": 0,
+        "classification": "receipt_destination_permission_failure_after_scientific_validation",
+        "cause": "the direct Pod omitted the Jobs API supplemental group and could not create a new top-level SFS directory",
+        "accepted_output_created": false
+      },
+      "accepted_v2": {
+        "pod_uid": "dcc11fe3-89ce-48a7-822d-f80898be22ad",
+        "configmap_uid": "2bb00da1-f115-47f6-bb14-cd7a7e1700dc",
+        "script_sha256": "c24a3dbe894b3b8cce584115d86e3a991c00393f7c279bc8b0a62cfe8779654e",
+        "status": "Succeeded",
+        "finished_at": "2026-09-13T10:27:01Z",
+        "exit_code": 0,
+        "restarts": 0,
+        "gpus": 0,
+        "path": "/mnt/sfs/jobs/chris-q38-self-sft-hfcheck-v1/INDEPENDENT_VERIFIED.json",
+        "file_sha256": "fb0fb24d0ed14bc9702047f40b1f186467ce9314d04bcf372436efafba53584f",
+        "receipt_sha256": "81ef61d9506ac92331698b9391dcddcfc22853b8ef88ee70f80da433376123c0",
+        "full_payloads_rehashed": true,
+        "both_lifecycle_receipts_validated": true,
+        "both_source_identities_validated": true
+      }
+    }
+  },
+  "acceptance": {
+    "both_complete_bf16_exports": true,
+    "both_one_gpu_reloads": true,
+    "both_synthetic_forwards_finite": true,
+    "both_zero_optimizer_updates": true,
+    "both_sources_unchanged": true,
+    "miles_initial_policy_input_ready": true,
+    "serving_ready": false,
+    "evaluation_ready": false,
+    "capability_claimed": false
+  },
+  "privacy": {
+    "prompts_traces_flags_answers_credentials_scores_read": false,
+    "private_gpu_check_logs_read": false,
+    "generated_token_text_read": false,
+    "tensor_values_read": false
+  },
+  "sha256": "sha256:13becbca46f8f503e2b84bef7b300986358caec4a86c6a31c34dd1e087a397b4"
+}
