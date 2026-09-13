@@ -87,18 +87,15 @@ def test_candidate_is_exact_inert_miles_one_by_eight_production_plan() -> None:
 
 def test_every_dev_proof_and_live_gate_starts_unbound() -> None:
     arm = load(ARM)
-    exact = arm["active_dev3"]
+    binding = arm["qualification"]["active_canary_binding"]
 
-    assert exact["source_plan_sha256"] == (
-        "sha256:245b404f9507ac2603c53969dd4506aee811e1c02ebf468543994cff76e3e95e"
-    )
-    assert exact["source_request_sha256"] == (
-        "sha256:d2f2514a33bdf05610c5765c11efaecfcd6eea39e4297115cc39ce3c86d3f927"
-    )
-    assert exact["runtime_bundle_sha256"] == (
-        "sha256:0e3ff1646344abb1b4be13ea064143014e94c13bc22c6c7e8c1a552f8bbe32a6"
-    )
-    for gate in (arm["qualification"]["reward_terminal"], arm["qualification"]["native_reload"]):
+    assert binding["schema"] == "cyber_qwen38_miles_active_canary_binding_v1"
+    for gate in (
+        binding,
+        arm["qualification"]["reward_terminal"],
+        arm["qualification"]["native_reload"],
+    ):
+        assert gate["path"] is None
         assert gate["file_sha256"] is None
         assert gate["receipt_sha256"] is None
     data = arm["qualification"]["production_data_manifest"]
@@ -109,6 +106,7 @@ def test_every_dev_proof_and_live_gate_starts_unbound() -> None:
         "sha256:0ff63c73d74c47e1fb97865b8b101885236deaf5ee9b92582f544a28abf9d546"
     )
     assert len(arm["blocked_reasons"]) == 3
+    assert "dev3" not in json.dumps(arm).lower()
     assert (
         "active_production_experiment_nodes_plus_candidate_at_most_eight"
         in arm["promotion_requirements"]["live_immediately_before_one_post"]

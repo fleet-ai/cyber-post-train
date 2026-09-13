@@ -1,8 +1,8 @@
 {
-  "schema": "cyber_qwen38_miles_production_arm_template_v1",
+  "schema": "cyber_qwen38_miles_production_arm_template_v2",
   "status": "blocked_not_launchable",
   "launchable": false,
-  "purpose": "Exact Miles production candidate; materialize only after the active dev3 reward and native reload chain is independently accepted.",
+  "purpose": "Exact Miles production candidate; materialize only after an explicitly bound active dev canary reward and native reload chain is independently accepted.",
   "source_files": {
     "task_set": {
       "path": "configs/data/qwen38-rl-filtered-study-a-task-set-v1.json",
@@ -27,23 +27,14 @@
       "file_sha256": "sha256:80a5e9de066e068abb012a0e9bd144676813a31042bb578226472803f8e0e84f"
     }
   },
-  "active_dev3": {
-    "cluster": "dev",
-    "config_path": "configs/qualification/qwen38-miles-rl-reward-canary-dev-v3.json",
-    "config_file_sha256": "sha256:b7f97d80d7d33a408c23f2156e97007393b6fabf446cfe81592e51bdad85a91f",
-    "source_commit": "d69fd01e4b435adc5492c8aedba9cf7f3af5e40e",
-    "source_plan_sha256": "sha256:245b404f9507ac2603c53969dd4506aee811e1c02ebf468543994cff76e3e95e",
-    "source_request_sha256": "sha256:d2f2514a33bdf05610c5765c11efaecfcd6eea39e4297115cc39ce3c86d3f927",
-    "runtime_bundle_sha256": "sha256:0e3ff1646344abb1b4be13ea064143014e94c13bc22c6c7e8c1a552f8bbe32a6",
-    "api_base_url": "https://api.ft.dev.flt.build",
-    "api_run_id": "6be68393-f032-40db-b640-d2d23473e85d",
-    "api_run_name": "chris-q38-miles-rlreward-dev3-6be68393",
-    "rayjob_uid": "803770c7-d830-4f47-8f1a-22d7e75362c3",
-    "workload_uid": "a20b093e-93cd-4c26-b81c-33586d3bf6d3",
-    "output_root": "/mnt/sfs/jobs/chris-q38-miles-rlreward-dev3",
-    "wandb_run_id": "chris-q38-miles-rlreward-dev3"
-  },
   "qualification": {
+    "active_canary_binding": {
+      "schema": "cyber_qwen38_miles_active_canary_binding_v1",
+      "path": null,
+      "file_sha256": null,
+      "receipt_sha256": null,
+      "builder": "training.miles_promotion.accept_active_canary_binding"
+    },
     "reward_terminal": {
       "schema": "cyber_miles_reward_canary_terminal_v1",
       "path": null,
@@ -113,7 +104,7 @@
   "candidate_run_sha256": "sha256:007d60256013bc982c28f59a719b21bb3fc6afed5a123160a9c546959b2d2fce",
   "promotion_requirements": {
     "immutable": [
-      "exact_active_dev3_source_plan_request_bundle_and_api_identity",
+      "exact_digest_valid_active_dev_canary_source_plan_request_bundle_and_api_identity",
       "digest_valid_reward_terminal_with_authoritative_reward_and_one_policy_update",
       "digest_valid_all_rank_zero_update_native_reload",
       "exact_59_train_20_dev_manifest_with_zero_final_test_rows",
@@ -162,9 +153,9 @@
     }
   },
   "blocked_reasons": [
-    "The exact active dev3 run is queued and has no accepted reward/update terminal receipt.",
-    "No accepted all-rank dev3 native reload is bound.",
+    "No digest-valid active-canary binding has been materialized from an accepted reward/update terminal receipt.",
+    "No accepted all-rank native reload cross-bound to that canary terminal is bound.",
     "Live production duplicate, W&B, preview and eight-node gates cannot be pre-certified."
   ],
-  "sha256": "sha256:d53a88c1f28e4b7f9ee4d02caa38e11cd00a58875a394a17ea356ff3beef5b4d"
+  "sha256": "sha256:dfec911c749a9545d605e1bdcfa7943b50aee37aab63a965bd91a159560a2602"
 }

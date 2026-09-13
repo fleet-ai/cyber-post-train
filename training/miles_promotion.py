@@ -9,9 +9,10 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from cyber_post_train.jobs import JobsError, digest
+from cyber_post_train.jobs import API_URLS, JobsError, digest
 
-SCHEMA = "cyber_qwen38_miles_production_promotion_v1"
+SCHEMA = "cyber_qwen38_miles_production_promotion_v2"
+ACTIVE_CANARY_SCHEMA = "cyber_qwen38_miles_active_canary_binding_v1"
 PROD_NAME = "chris-q38-miles-rl-prod1"
 PROD_OUTPUT = "/mnt/sfs/jobs/chris-q38-miles-rl-prod1"
 PROD_DATA_ROOT = "/mnt/sfs/jobs/chris-q38-miles-rl-prod1-inputs/data"
@@ -33,6 +34,9 @@ EXPECTED_RESOURCES = {
     "memory_request": "1536Gi",
     "memory_limit": "2048Gi",
 }
+# Transitional compatibility for the separately-qualified HF export path.  The
+# production-promotion gate below deliberately does not consult this retired
+# identity: it consumes an explicit, digest-valid active-canary binding.
 DEV3 = {
     "source_commit": "d69fd01e4b435adc5492c8aedba9cf7f3af5e40e",
     "source_plan_sha256": "245b404f9507ac2603c53969dd4506aee811e1c02ebf468543994cff76e3e95e",
@@ -107,11 +111,27 @@ LIVE_REQUIREMENTS = [
     "warning_free_one_by_eight_c1_no_requeue_preview",
 ]
 _REF_FIELDS = {"path", "file_sha256", "receipt_sha256"}
+_ACTIVE_CANARY_FIELDS = {
+    "schema",
+    "status",
+    "reward_terminal_receipt_sha256",
+    "source_run_name",
+    "source_commit",
+    "source_plan_sha256",
+    "source_request_sha256",
+    "runtime_bundle_sha256",
+    "api_base_url",
+    "api_run_id",
+    "api_run_name",
+    "rayjob_uid",
+    "workload_uid",
+    "sha256",
+}
 _FIELDS = {
     "schema",
     "status",
     "candidate_run_sha256",
-    "active_dev3",
+    "active_canary_binding",
     "reward_terminal",
     "native_reload",
     "production_data_manifest",
@@ -119,6 +139,11 @@ _FIELDS = {
     "live_requirements",
     "sha256",
 }
+_HEX_SHA = re.compile(r"sha256:[a-f0-9]{64}")
+_GIT_SHA = re.compile(r"[a-f0-9]{40}")
+_UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}")
+_RUN_NAME = re.compile(r"[a-z0-9](?:[-a-z0-9]*[a-z0-9])?")
+DEV_API_BASE_URL = API_URLS["dev"]
 
 
 def _sha256(path: Path) -> str:
@@ -233,33 +258,110 @@ def _exact_candidate(config: dict[str, Any]) -> None:
         raise ValueError("Miles production candidate differs from the exact reviewed run")
 
 
-def _exact_dev3(terminal: dict[str, Any]) -> None:
-    submission = _snapshot(
-        Path(terminal["submission_binding"]["path"]),
-        terminal["submission_binding"]["file_sha256"],
+def validate_active_canary_binding(value: Any) -> dict[str, Any]:
+    """Validate one immutable identity extracted from an accepted dev canary."""
+
+    _sealed(value, ACTIVE_CANARY_SCHEMA)
+    sha_fields = (
+        "reward_terminal_receipt_sha256",
+        "source_plan_sha256",
+        "source_request_sha256",
+        "runtime_bundle_sha256",
     )
-    controller = _snapshot(
-        Path(terminal["controller_observation"]["path"]),
-        terminal["controller_observation"]["file_sha256"],
-    )
+    uuid_fields = ("api_run_id", "rayjob_uid", "workload_uid")
+    if (
+        set(value) != _ACTIVE_CANARY_FIELDS
+        or value.get("status") != "accepted_dev_canary"
+        or value.get("api_base_url") != DEV_API_BASE_URL
+        or _GIT_SHA.fullmatch(str(value.get("source_commit", ""))) is None
+        or any(_HEX_SHA.fullmatch(str(value.get(key, ""))) is None for key in sha_fields)
+        or any(_UUID.fullmatch(str(value.get(key, ""))) is None for key in uuid_fields)
+        or _RUN_NAME.fullmatch(str(value.get("source_run_name", ""))) is None
+        or value.get("api_run_name")
+        != f"{value.get('source_run_name')}-{str(value.get('api_run_id'))[:8]}"
+    ):
+        raise ValueError("Miles active-canary binding is malformed")
+    return value
+
+
+def _active_canary_identity(terminal: dict[str, Any]) -> dict[str, str]:
+    submission = _reopen(terminal.get("submission_binding"), check_files=True)
+    controller = _reopen(terminal.get("controller_observation"), check_files=True)
+    if not isinstance(submission, dict) or not isinstance(controller, dict):
+        raise ValueError("Miles active-canary identity evidence is absent")
     api = submission.get("api", {})
     kube = controller.get("kubernetes", {})
+    return {
+        "reward_terminal_receipt_sha256": "sha256:"
+        + str(terminal.get("sha256", "")).removeprefix("sha256:"),
+        "source_run_name": str(terminal.get("source_run_name", "")),
+        "source_commit": str(submission.get("source_commit", "")),
+        "source_plan_sha256": "sha256:"
+        + str(terminal.get("source_plan_sha256", "")).removeprefix("sha256:"),
+        "source_request_sha256": "sha256:"
+        + str(terminal.get("source_request_sha256", "")).removeprefix("sha256:"),
+        "runtime_bundle_sha256": "sha256:"
+        + str(submission.get("runtime_bundle_sha256", "")).removeprefix("sha256:"),
+        "api_base_url": str(api.get("base_url", "")),
+        "api_run_id": str(api.get("run_id", "")),
+        "api_run_name": str(api.get("run_name", "")),
+        "rayjob_uid": str(kube.get("rayjob", {}).get("uid", "")),
+        "workload_uid": str(kube.get("workload", {}).get("uid", "")),
+    }
+
+
+def _exact_dev3(terminal: dict[str, Any]) -> None:
+    """Retain the retired identity only for the legacy HF-export qualifier."""
+
+    observed = _active_canary_identity(terminal)
     if (
-        terminal.get("source_run_name") != "chris-q38-miles-rlreward-dev3"
-        or terminal.get("source_plan_sha256", "").removeprefix("sha256:")
-        != DEV3["source_plan_sha256"]
-        or terminal.get("source_request_sha256", "").removeprefix("sha256:")
+        observed["source_run_name"] != "chris-q38-miles-rlreward-dev3"
+        or observed["source_plan_sha256"].removeprefix("sha256:") != DEV3["source_plan_sha256"]
+        or observed["source_request_sha256"].removeprefix("sha256:")
         != DEV3["source_request_sha256"]
-        or submission.get("source_commit") != DEV3["source_commit"]
-        or submission.get("runtime_bundle_sha256", "").removeprefix("sha256:")
+        or observed["source_commit"] != DEV3["source_commit"]
+        or observed["runtime_bundle_sha256"].removeprefix("sha256:")
         != DEV3["runtime_bundle_sha256"]
-        or api.get("base_url") != DEV3["api_base_url"]
-        or api.get("run_id") != DEV3["api_run_id"]
-        or api.get("run_name") != DEV3["api_run_name"]
-        or kube.get("rayjob", {}).get("uid") != DEV3["rayjob_uid"]
-        or kube.get("workload", {}).get("uid") != DEV3["workload_uid"]
+        or observed["api_base_url"] != DEV3["api_base_url"]
+        or observed["api_run_id"] != DEV3["api_run_id"]
+        or observed["api_run_name"] != DEV3["api_run_name"]
+        or observed["rayjob_uid"] != DEV3["rayjob_uid"]
+        or observed["workload_uid"] != DEV3["workload_uid"]
     ):
-        raise ValueError("Miles production proof is not the exact active dev3 run")
+        raise ValueError("Miles HF export proof is not the retired dev3 identity")
+
+
+def _exact_active_canary(terminal: dict[str, Any], binding: dict[str, Any]) -> None:
+    validate_active_canary_binding(binding)
+    observed = {
+        "schema": ACTIVE_CANARY_SCHEMA,
+        "status": "accepted_dev_canary",
+        **_active_canary_identity(terminal),
+    }
+    observed["sha256"] = digest(observed)
+    if observed != binding:
+        raise ValueError("Miles production proof differs from its active-canary binding")
+
+
+def accept_active_canary_binding(*, reward_terminal: Path, output: Path) -> dict[str, Any]:
+    """Extract one create-once, sanitized canary identity from accepted evidence."""
+
+    if output.exists() or output.is_symlink():
+        raise FileExistsError("Miles active-canary binding destination already exists")
+    _, terminal = _reference(reward_terminal)
+    from . import miles_acceptance
+
+    miles_acceptance.validate_terminal(terminal, check_files=True)
+    value = {
+        "schema": ACTIVE_CANARY_SCHEMA,
+        "status": "accepted_dev_canary",
+        **_active_canary_identity(terminal),
+    }
+    sealed = {**value, "sha256": digest(value)}
+    validate_active_canary_binding(sealed)
+    from .miles_conversion import _write
+
+    return _write(output, value)
 
 
 def validate_promotion(value: dict[str, Any], *, check_files: bool) -> dict[str, Any]:
@@ -269,26 +371,32 @@ def validate_promotion(value: dict[str, Any], *, check_files: bool) -> dict[str,
         set(value) != _FIELDS
         or value.get("status") != "qualified_for_fresh_live_checks"
         or value.get("candidate_run_sha256") != EXPECTED_CANDIDATE_SHA256
-        or value.get("active_dev3") != DEV3
         or value.get("benchmark_isolation") != BENCHMARK_ISOLATION
         or value.get("live_requirements") != LIVE_REQUIREMENTS
     ):
         raise ValueError("Miles production promotion invariant changed")
     references = {
         name: _reopen(value.get(name), check_files=check_files)
-        for name in ("reward_terminal", "native_reload", "production_data_manifest")
+        for name in (
+            "active_canary_binding",
+            "reward_terminal",
+            "native_reload",
+            "production_data_manifest",
+        )
     }
     if not check_files:
         return {"candidate_run_sha256": EXPECTED_CANDIDATE_SHA256}
 
     from . import miles_acceptance, miles_reload_acceptance
 
+    binding = references["active_canary_binding"]
     terminal = references["reward_terminal"]
     native_reload = references["native_reload"]
     data = references["production_data_manifest"]
+    validate_active_canary_binding(binding)
     miles_acceptance.validate_terminal(terminal, check_files=True)
     miles_reload_acceptance.validate_accepted(native_reload, check_files=True)
-    _exact_dev3(terminal)
+    _exact_active_canary(terminal, binding)
     if str(native_reload.get("source_terminal_acceptance_sha256", "")).removeprefix(
         "sha256:"
     ) != str(terminal["sha256"]).removeprefix("sha256:") or str(
@@ -302,13 +410,14 @@ def validate_promotion(value: dict[str, Any], *, check_files: bool) -> dict[str,
         raise ValueError("Miles production data path changed")
     return {
         "candidate_run_sha256": EXPECTED_CANDIDATE_SHA256,
-        "dev_source_plan_sha256": DEV3["source_plan_sha256"],
+        "dev_source_plan_sha256": binding["source_plan_sha256"].removeprefix("sha256:"),
         "dev_checkpoint": terminal["checkpoint_manifest"],
     }
 
 
 def accept_promotion(
     *,
+    active_canary_binding: Path,
     reward_terminal: Path,
     native_reload: Path,
     production_data_manifest: Path,
@@ -319,6 +428,7 @@ def accept_promotion(
         raise FileExistsError("Miles production promotion destination already exists")
     refs = {}
     for name, path in {
+        "active_canary_binding": active_canary_binding,
         "reward_terminal": reward_terminal,
         "native_reload": native_reload,
         "production_data_manifest": production_data_manifest,
@@ -328,13 +438,11 @@ def accept_promotion(
         "schema": SCHEMA,
         "status": "qualified_for_fresh_live_checks",
         "candidate_run_sha256": EXPECTED_CANDIDATE_SHA256,
-        "active_dev3": DEV3,
         **refs,
         "benchmark_isolation": BENCHMARK_ISOLATION,
         "live_requirements": LIVE_REQUIREMENTS,
     }
-    value["sha256"] = digest(value)
-    validate_promotion(value, check_files=True)
+    validate_promotion({**value, "sha256": digest(value)}, check_files=True)
     from .miles_conversion import _write
 
     return _write(output, value)
