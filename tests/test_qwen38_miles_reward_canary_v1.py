@@ -1,5 +1,6 @@
 """Static identity for the smallest real Qwen3.8 Miles reward/update canary."""
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -8,6 +9,7 @@ DATA = ROOT / "configs/qualification/qwen38-miles-rl-reward-canary-data-dev-v1.j
 RUN = ROOT / "configs/qualification/qwen38-miles-rl-reward-canary-dev-v1.json"
 TASK_SET = ROOT / "configs/data/qwen38-rl-reward-canary-task-set-v1.json"
 SPLIT = ROOT / "configs/data/qwen38-rl-reward-canary-split-v1.json"
+TOOLS = ROOT / "configs/data/qwen38-rl-filtered-canary-tool-catalog-v1.json"
 
 
 def load(path: Path) -> dict:
@@ -22,6 +24,11 @@ def test_miles_reward_canary_is_one_dev_update_on_the_exact_source_task() -> Non
     assert data["name"] == "chris-q38-miles-rlreward-dev1"
     assert data["task_set"] == "../data/qwen38-rl-reward-canary-task-set-v1.json"
     assert data["split"] == "../data/qwen38-rl-reward-canary-split-v1.json"
+    assert data["tool_catalog"] == "../data/qwen38-rl-filtered-canary-tool-catalog-v1.json"
+    catalog = json.loads(TOOLS.read_bytes())
+    canonical = json.dumps(catalog, sort_keys=True, separators=(",", ":")).encode()
+    assert "sha256:" + hashlib.sha256(canonical).hexdigest() == task_set["tool_catalog_sha256"]
+    assert [tool["name"] for tool in catalog] == ["bash", "submit_report"]
     assert task_set["training_data_eligible"] is True
     assert [row["split"] for row in split["tasks"]] == ["train", "dev"]
     assert len(task_set["tasks"]) == 2

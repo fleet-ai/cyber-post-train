@@ -3,7 +3,7 @@
   "backend": "miles",
   "task_set": "../data/qwen38-rl-reward-canary-task-set-v1.json",
   "split": "../data/qwen38-rl-reward-canary-split-v1.json",
-  "tool_catalog": "/mnt/sfs/jobs/chris-q38-rl89-inputs-dev1/tools.json",
+  "tool_catalog": "../data/qwen38-rl-filtered-canary-tool-catalog-v1.json",
   "model_lock": "../models/qwen38-27b-1d4bf0f2.lock.json",
   "model_root": "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2",
   "output": "/mnt/sfs/jobs/chris-q38-miles-rlreward-inputs-dev1/data",
