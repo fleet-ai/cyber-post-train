@@ -110,8 +110,11 @@ CONTROLLER_FIELDS = {"kind", "name", "uid", "status", "workload_uid", "raycluste
 POD_FIELDS = {
     "name",
     "uid",
+    "owner_raycluster_uid",
     "phase",
     "exit_code",
+    "termination_reason",
+    "terminated_at",
     "container_restarts",
     "gpus",
     "runtime_image_id",
@@ -132,6 +135,10 @@ RUNTIME_FILES = (
 _SHA = re.compile(r"(?:sha256:)?[0-9a-f]{64}")
 _PREFIX = re.compile(r"[a-z0-9](?:[-a-z0-9]{0,29}[a-z0-9])?")
 _API_RUN = re.compile(r"[a-z0-9](?:[-a-z0-9]{0,52}[a-z0-9])?-[0-9a-f]{8}")
+_RUNTIME_IMAGE = re.compile(
+    r"(?:(?:containerd|docker-pullable)://(?:[^@\s]+@)?|[^@\s]+@)"
+    r"sha256:([a-f0-9]{64})"
+)
 
 
 def _sha(value: object) -> str:
@@ -269,6 +276,12 @@ def _serving_image(registration: object) -> str:
     if not isinstance(image, dict) or not isinstance(image.get("repository"), str):
         raise ValueError("serving registration image is malformed")
     return image["repository"] + "@" + _sha(image.get("digest"))
+
+
+def _runtime_image_digest(value: object) -> str:
+    if not isinstance(value, str) or (match := _RUNTIME_IMAGE.fullmatch(value)) is None:
+        raise ValueError("runtime imageID is not an immutable observed digest")
+    return match.group(1)
 
 
 def compile_plan(config: dict[str, Any]) -> dict[str, Any]:
@@ -754,9 +767,9 @@ def _wait_ready(process: subprocess.Popen[bytes]) -> None:
     raise TimeoutError("SGLang startup allowance expired")
 
 
-def _stop(process: subprocess.Popen[bytes]) -> None:
+def _stop(process: subprocess.Popen[bytes]) -> int:
     if process.poll() is not None:
-        return
+        raise RuntimeError("SGLang exited before controlled shutdown")
     os.killpg(process.pid, signal.SIGTERM)
     try:
         process.wait(timeout=SHUTDOWN_TIMEOUT_SECONDS)
@@ -765,6 +778,7 @@ def _stop(process: subprocess.Popen[bytes]) -> None:
         process.wait(timeout=10)
     if process.poll() is None:
         raise RuntimeError("SGLang process group did not terminate")
+    return process.returncode
 
 
 def _verify_runtime_payload(plan: dict[str, Any]) -> None:
@@ -808,11 +822,11 @@ def run(plan_path: Path, plan_sha256: str) -> dict[str, Any]:
     api_run_id = os.environ.get("FLEET_RUN_ID", "")
     if not _API_RUN.fullmatch(api_run_name) or str(uuid.UUID(api_run_id)) != api_run_id:
         raise ValueError("Jobs API runtime identity is malformed")
-    _verify_runtime_payload(plan)
     command = [*plan["serving"]["command"], *plan["serving"]["args"]]
     log_path = root / "private-sglang.log"
     process: subprocess.Popen[bytes] | None = None
     try:
+        _verify_runtime_payload(plan)
         with log_path.open("xb") as log:
             process = subprocess.Popen(
                 command,
@@ -822,7 +836,7 @@ def run(plan_path: Path, plan_sha256: str) -> dict[str, Any]:
             )
             _wait_ready(process)
             probes = _probes(plan["run_name"])
-        _stop(process)
+        server_exit_code = _stop(process)
         _verify_runtime_payload(plan)
         result = _sign(
             {
@@ -843,7 +857,7 @@ def run(plan_path: Path, plan_sha256: str) -> dict[str, Any]:
                 "checks": {key: True for key in DEV_CHECKS},
                 "probes": probes,
                 "server_pid": process.pid,
-                "server_exit_code": process.returncode,
+                "server_exit_code": server_exit_code,
                 "server_process_group_stopped": True,
                 "source_export_unchanged": True,
                 "optimizer_updates": 0,
@@ -916,7 +930,7 @@ def accept(
         or result.get("source_export_unchanged") is not True
         or type(result.get("server_pid")) is not int
         or result["server_pid"] < 1
-        or type(result.get("server_exit_code")) is not int
+        or result.get("server_exit_code") not in {0, -signal.SIGTERM, -signal.SIGKILL}
         or result.get("requested_runtime_image") != expected_image
         or not isinstance(probes, dict)
         or set(probes) != PROBE_FIELDS
@@ -961,7 +975,10 @@ def accept(
         or pod.get("exit_code") != 0
         or pod.get("container_restarts") != 0
         or pod.get("gpus") != 1
-        or pod.get("runtime_image_id") != expected_image
+        or pod.get("owner_raycluster_uid") != controller.get("raycluster_uid")
+        or pod.get("termination_reason") != "Completed"
+        or _runtime_image_digest(pod.get("runtime_image_id"))
+        != expected_image.rsplit("@sha256:", 1)[-1]
         or release
         != {
             "api_status": "SUCCEEDED",
@@ -989,6 +1006,7 @@ def accept(
     timestamps = []
     for value in (
         result.get("completed_at"),
+        pod.get("terminated_at"),
         external.get("observed_at"),
         release.get("observed_at"),
     ):
@@ -998,7 +1016,7 @@ def accept(
         ):
             raise ValueError("Miles serving observation lacks timezone")
         timestamps.append(datetime.fromisoformat(value.replace("Z", "+00:00")))
-    if timestamps[1] < timestamps[0]:
+    if timestamps[1] < timestamps[0] or timestamps[2] < timestamps[1]:
         raise ValueError("release observation predates runtime completion")
     evidence_manifest = {
         "plan_sha256": _sha(plan["sha256"]),
@@ -1020,7 +1038,7 @@ def accept(
         "controller_uid": controller["uid"],
         "pod_uid": pod["uid"],
         "observed_at": external["observed_at"],
-        "runtime_image_id": expected_image,
+        "runtime_image_id": pod["runtime_image_id"],
         "evidence_manifest": evidence_manifest,
         "evidence_manifest_sha256": digest_json(evidence_manifest),
         "optimizer_updates": 0,

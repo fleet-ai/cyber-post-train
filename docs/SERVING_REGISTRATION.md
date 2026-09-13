@@ -127,7 +127,8 @@ not merely the Transformers export checker.
 
 Bind `execution_contract_sha256` and `export_receipt_sha256` from the prepared
 plan, canonical controller/Pod UIDs, timezone-qualified `observed_at`, exact
-`runtime_image_id` (`repository@sha256:...`) and `evidence_manifest_sha256`.
+observed `runtime_image_id` (a Kubernetes imageID or `repository@sha256:...` with
+the requested digest) and `evidence_manifest_sha256`.
 Its checks must establish all six of:
 
 - `exact_model_identity`, `full_model_reload`, `finite_forward`;
@@ -135,7 +136,9 @@ Its checks must establish all six of:
 
 For a Miles plan, the same dev qualification must additionally bind the plan's
 exact `source_update_identity_sha256`, `reload_acceptance_receipt_sha256`, and
-`staged_manifest_sha256`. The accepted one-forward HF reload/release receipt is
+`staged_manifest_sha256`, the complete evidence-manifest digest, zero training/
+rollout/verifier/benchmark work, and confirmed GPU release. The accepted
+one-forward HF reload/release receipt is
 an artifact gate, not a serving canary and not serving readiness. Missing any
 generic staging or Miles dev-serving binding stops execution before a POST.
 

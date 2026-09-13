@@ -16,6 +16,16 @@ tokenizer and finite-forward reload plus GPU release. The dev serving canary
 reopens all of that evidence. A different export, reload, model revision or
 tensor inventory requires a new prepared canary.
 
+Dev and production `/mnt/sfs` contents are separate until measured otherwise.
+The current `miles-serving-dev` local preflight reopens the desktop-visible
+artifact; it does **not** prove that the same absolute path exists on the dev
+cluster or that the bundled entrypoint imports inside the pinned SGLang image.
+Before the only GPU POST, require a reviewed zero-GPU Pod on the exact dev
+context to rehash the complete export at that path and execute the bundled
+entrypoint's import/preflight boundary in the exact image. This repository does
+not yet produce that target-local receipt, so preparation and preview alone do
+not authorize submission. Do not spend a GPU to discover a missing dev copy.
+
 The reviewed production behavior is cloned from
 `evals/fleet/serving/qwen38-27b-dedicated-v1.registration.json`: exact
 Qwen3.8-27B revision, BF16, digest-pinned SGLang, Qwen reasoning/tool parsers,
@@ -36,7 +46,8 @@ uv run python -m cyber_post_train.cli preflight <new-prepared-directory>
 uv run python -m cyber_post_train.cli preview <new-prepared-directory> --cluster dev
 ```
 
-Preparation and preflight use no GPU. Preview is GET-only. Review the exact
+Preparation and the CLI preflight use no GPU but are local. Preview is GET-only.
+After the separate target-local dev storage/image preflight above, review the exact
 one-worker/one-GPU `c1` (effective q1/10000), no-requeue render and point-in-time
 dev capacity before the only POST:
 
@@ -55,7 +66,8 @@ exit. Never resubmit a directory with `SUBMISSION.jsonl`.
 ## 2. Accept real terminal and release evidence
 
 While the exact job is live, preserve its API run ID, RayJob UID, Workload UID,
-RayCluster UID, Pod UID and runtime image ID. After it succeeds, verify zero
+RayCluster UID, Pod UID, Pod owner RayCluster UID, termination reason/time and
+the raw observed Kubernetes runtime imageID. After it succeeds, verify zero
 restarts, exit 0 and that its RayCluster, Workload, GPU Pods and active GPU count
 are all absent/zero. Copy
 `configs/qualification/qwen38-miles-serving-dev-external-v1.template.json` to

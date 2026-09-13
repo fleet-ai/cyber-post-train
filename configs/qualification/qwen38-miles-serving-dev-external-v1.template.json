@@ -22,11 +22,14 @@
   "pod": {
     "name": null,
     "uid": null,
+    "owner_raycluster_uid": null,
     "phase": "Succeeded",
     "exit_code": 0,
+    "termination_reason": "Completed",
+    "terminated_at": null,
     "container_restarts": 0,
     "gpus": 1,
-    "runtime_image_id": "lmsysorg/sglang@sha256:febfb971c7352570fc445c466ebd6ffc9d896024958e544a60f2137fd85856b1"
+    "runtime_image_id": null
   },
   "release": {
     "api_status": "SUCCEEDED",

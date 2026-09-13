@@ -40,12 +40,54 @@ DEV_CHECKS = {
     "context_continuation",
     "cleanup_verified",
 }
+MILES_DEV_FIELDS = {
+    "schema",
+    "status",
+    "cluster",
+    "api_base_url",
+    "execution_contract_sha256",
+    "export_receipt_sha256",
+    "source_update_identity_sha256",
+    "reload_acceptance_receipt_sha256",
+    "staged_manifest_sha256",
+    "checks",
+    "controller_uid",
+    "pod_uid",
+    "observed_at",
+    "runtime_image_id",
+    "evidence_manifest",
+    "evidence_manifest_sha256",
+    "optimizer_updates",
+    "rollouts",
+    "verifier_calls",
+    "benchmark_attempts",
+    "gpu_release_verified",
+    "serving_ready",
+    "production_registration_executed",
+    "receipt_sha256",
+}
+MILES_DEV_EVIDENCE_FIELDS = {
+    "plan_sha256",
+    "runtime_result_file_sha256",
+    "runtime_result_receipt_sha256",
+    "external_file_sha256",
+}
+RUNTIME_IMAGE = re.compile(
+    r"(?:(?:containerd|docker-pullable)://(?:[^@\s]+@)?|[^@\s]+@)"
+    r"sha256:([a-f0-9]{64})"
+)
 
 
 def _sha(value: object) -> str:
     if not isinstance(value, str) or not HEX.fullmatch(value.removeprefix("sha256:")):
         raise ValueError("expected exact SHA-256")
     return "sha256:" + value.removeprefix("sha256:")
+
+
+def _runtime_image_digest(value: object) -> str:
+    if not isinstance(value, str) or (match := RUNTIME_IMAGE.fullmatch(value)) is None:
+        raise ValueError("runtime imageID is not an immutable observed digest")
+    return match.group(1)
 
 
 def _signed(value: dict) -> dict:
@@ -744,6 +786,14 @@ def preview(directory: Path, client: Client) -> dict:
 
 def _qualification(plan: dict, path: Path, expected: str) -> dict:
     proof = _read(path, expected, signed=True)
+    image = plan["registration"]["spec"]["runtime"]["image"]
+    expected_image = image["repository"] + "@" + _sha(image["digest"])
+    runtime_image_matches = (
+        _runtime_image_digest(proof.get("runtime_image_id"))
+        == _sha(image["digest"]).removeprefix("sha256:")
+        if plan["schema"] == MILES_SCHEMA
+        else proof.get("runtime_image_id") == expected_image
+    )
     if (
         proof.get("schema") != DEV_SCHEMA
         or proof.get("status") != "passed"
@@ -756,13 +806,26 @@ def _qualification(plan: dict, path: Path, expected: str) -> dict:
         or not proof.get("controller_uid")
         or not proof.get("pod_uid")
         or not proof.get("observed_at")
+        or not runtime_image_matches
     ):
         raise ValueError("reviewed exact dev serving qualification is required")
     if plan["schema"] == MILES_SCHEMA and (
-        _sha(proof.get("source_update_identity_sha256")) != plan["source_update_identity_sha256"]
+        set(proof) != MILES_DEV_FIELDS
+        or _sha(proof.get("source_update_identity_sha256")) != plan["source_update_identity_sha256"]
         or _sha(proof.get("reload_acceptance_receipt_sha256"))
         != plan["reload_acceptance_receipt_sha256"]
         or _sha(proof.get("staged_manifest_sha256")) != plan["staged_manifest_sha256"]
+        or any(
+            type(proof.get(key)) is not int or proof[key] != 0
+            for key in ("optimizer_updates", "rollouts", "verifier_calls", "benchmark_attempts")
+        )
+        or proof.get("gpu_release_verified") is not True
+        or proof.get("serving_ready") is not False
+        or proof.get("production_registration_executed") is not False
+        or not isinstance(proof.get("evidence_manifest"), dict)
+        or set(proof["evidence_manifest"]) != MILES_DEV_EVIDENCE_FIELDS
+        or any(_sha(value) != value for value in proof["evidence_manifest"].values())
+        or digest_json(proof["evidence_manifest"]) != proof.get("evidence_manifest_sha256")
     ):
         raise ValueError("Miles dev qualification does not bind the exact staged update")
     for key in ("controller_uid", "pod_uid"):
@@ -770,9 +833,6 @@ def _qualification(plan: dict, path: Path, expected: str) -> dict:
             raise ValueError("dev object UID is not canonical")
     if datetime.fromisoformat(proof["observed_at"].replace("Z", "+00:00")).tzinfo is None:
         raise ValueError("dev evidence observation must have a timezone")
-    image = plan["registration"]["spec"]["runtime"]["image"]
-    if proof.get("runtime_image_id") != image["repository"] + "@" + _sha(image["digest"]):
-        raise ValueError("dev runtime image differs from registration")
     _sha(proof.get("evidence_manifest_sha256"))
     return proof
 

@@ -254,6 +254,12 @@ def miles_prepared(prepared, tmp_path, monkeypatch):
     directory = tmp_path / "miles-prepared"
     s.prepare(config, directory)
     plan = s.load(directory)
+    evidence_manifest = {
+        "plan_sha256": "sha256:" + "8" * 64,
+        "runtime_result_file_sha256": "sha256:" + "9" * 64,
+        "runtime_result_receipt_sha256": "sha256:" + "a" * 64,
+        "external_file_sha256": "sha256:" + "b" * 64,
+    }
     dev = s._signed(
         {
             "schema": s.DEV_SCHEMA,
@@ -269,8 +275,16 @@ def miles_prepared(prepared, tmp_path, monkeypatch):
             "controller_uid": "11111111-2222-3333-4444-555555555555",
             "pod_uid": "66666666-7777-8888-9999-aaaaaaaaaaaa",
             "observed_at": "2026-09-13T00:00:00Z",
-            "runtime_image_id": "example/sglang@sha256:" + "c" * 64,
-            "evidence_manifest_sha256": "sha256:" + "9" * 64,
+            "runtime_image_id": "containerd://registry.example/sglang@sha256:" + "c" * 64,
+            "evidence_manifest": evidence_manifest,
+            "evidence_manifest_sha256": digest_json(evidence_manifest),
+            "optimizer_updates": 0,
+            "rollouts": 0,
+            "verifier_calls": 0,
+            "benchmark_attempts": 0,
+            "gpu_release_verified": True,
+            "serving_ready": False,
+            "production_registration_executed": False,
         }
     )
     return config, directory, base, write(tmp_path / "miles-dev.json", dev), export, calls
@@ -366,6 +380,41 @@ def test_miles_execute_requires_exact_dev_serving_binding(miles_prepared, field)
     proof = json.loads(path.read_text())
     proof.pop("receipt_sha256")
     proof[field] = "sha256:" + "f" * 64
+    dev = write(path, s._signed(proof))
+    client = FakeClient(base)
+    with pytest.raises(ValueError):
+        execute(directory, client, dev)
+    assert not any(method == "POST" for method, _ in client.calls)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("gpu_release_verified", False),
+        ("benchmark_attempts", 1),
+        ("serving_ready", True),
+        ("production_registration_executed", True),
+    ],
+)
+def test_miles_execute_rejects_false_lifecycle_claims(miles_prepared, field, value):
+    _, directory, base, dev, _, _ = miles_prepared
+    path = Path(dev["path"])
+    proof = json.loads(path.read_text())
+    proof.pop("receipt_sha256")
+    proof[field] = value
+    dev = write(path, s._signed(proof))
+    client = FakeClient(base)
+    with pytest.raises(ValueError):
+        execute(directory, client, dev)
+    assert not any(method == "POST" for method, _ in client.calls)
+
+
+def test_miles_execute_rejects_unbound_evidence_manifest(miles_prepared):
+    _, directory, base, dev, _, _ = miles_prepared
+    path = Path(dev["path"])
+    proof = json.loads(path.read_text())
+    proof.pop("receipt_sha256")
+    proof["evidence_manifest"]["external_file_sha256"] = "sha256:" + "f" * 64
     dev = write(path, s._signed(proof))
     client = FakeClient(base)
     with pytest.raises(ValueError):

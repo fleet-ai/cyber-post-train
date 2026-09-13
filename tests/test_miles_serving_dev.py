@@ -280,11 +280,14 @@ def _external(plan: dict, result: dict) -> dict:
         "pod": {
             "name": result["api_run_name"] + "-worker",
             "uid": "66666666-6666-4666-8666-666666666666",
+            "owner_raycluster_uid": "55555555-5555-4555-8555-555555555555",
             "phase": "Succeeded",
             "exit_code": 0,
+            "termination_reason": "Completed",
+            "terminated_at": "2026-09-13T09:00:30+00:00",
             "container_restarts": 0,
             "gpus": 1,
-            "runtime_image_id": plan["serving"]["image"],
+            "runtime_image_id": "containerd://docker.io/" + plan["serving"]["image"],
         },
         "release": {
             "api_status": "SUCCEEDED",
@@ -359,6 +362,25 @@ def test_accept_rejects_unreleased_or_drifted_runs(
         )
 
 
+def test_accept_rejects_uncontrolled_server_exit(plan: dict, tmp_path: Path) -> None:
+    result = _result(plan)
+    result.pop("sha256")
+    result["server_exit_code"] = 1
+    result = serving._sign(result)
+    external = _external(plan, result)
+    result_path = tmp_path / "result.json"
+    external_path = tmp_path / "external.json"
+    with pytest.raises(ValueError, match="incomplete"):
+        serving.accept(
+            plan,
+            result_path,
+            _write(result_path, result),
+            external_path,
+            _write(external_path, external),
+            tmp_path / "accepted.json",
+        )
+
+
 def test_templates_are_unlaunchable_and_bind_the_reviewed_base() -> None:
     dev = json.loads(
         (ROOT / "configs/qualification/qwen38-miles-serving-dev-v1.template.json").read_text()
@@ -379,6 +401,6 @@ def test_templates_are_unlaunchable_and_bind_the_reviewed_base() -> None:
     assert dev["base_registration"]["file_sha256"] == file_sha256(BASE)
     assert production["base_registration"]["sha256"] == file_sha256(BASE)
     assert dev["name"] is dev["output_root"] is None
-    assert "sha256" not in external and external["pod"]["gpus"] == 1
+    assert "sha256" not in external and external["pod"]["runtime_image_id"] is None
     assert staging["receipt_sha256"] is staging["observer_pod_uid"] is None
     assert production["model_id"] is production["staging"]["sha256"] is None
