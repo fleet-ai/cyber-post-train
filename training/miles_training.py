@@ -89,6 +89,7 @@ def compile_rl(config: dict, *, relative_to: Path) -> dict:
         recipe,
         {
             "nodes",
+            "gpus_per_node",
             "steps",
             "groups",
             "samples_per_prompt",
@@ -195,7 +196,7 @@ def job_request(plan):
             "run_dir": args.output_root,
             "image": miles.IMAGE,
             "workers": args.nodes,
-            "gpus_per_worker": 8,
+            "gpus_per_worker": args.gpus_per_node,
             "resources": resources,
             "priority_class": plan["execution"]["priority"],
             "requeueIfPreempted": False,

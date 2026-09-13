@@ -7,6 +7,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "configs/qualification/qwen38-miles-rl-reward-canary-data-dev-v1.json"
 RUN = ROOT / "configs/qualification/qwen38-miles-rl-reward-canary-dev-v1.json"
+DATA_V2 = ROOT / "configs/qualification/qwen38-miles-rl-reward-canary-data-dev-v2.json"
+RUN_V2 = ROOT / "configs/qualification/qwen38-miles-rl-reward-canary-dev-v2.json"
 TASK_SET = ROOT / "configs/data/qwen38-rl-reward-canary-task-set-v1.json"
 SPLIT = ROOT / "configs/data/qwen38-rl-reward-canary-split-v1.json"
 TOOLS = ROOT / "configs/data/qwen38-rl-filtered-canary-tool-catalog-v1.json"
@@ -76,3 +78,40 @@ def test_miles_reward_canary_keeps_full_horizon_and_no_retry_controls() -> None:
     }
     assert run["output_root"] != data["output"]
     assert "requeue" not in json.dumps(run).lower()
+
+
+def test_v2_changes_only_identity_and_dev_fit_topology() -> None:
+    data_v1, run_v1, data_v2, run_v2 = map(load, (DATA, RUN, DATA_V2, RUN_V2))
+
+    assert data_v2["name"] == run_v2["name"] == run_v2["wandb"]["run_id"]
+    assert data_v2["name"] == "chris-q38-miles-rlreward-dev2"
+    assert data_v2["output"] == "/mnt/sfs/jobs/chris-q38-miles-rlreward-inputs-dev2/data"
+    assert run_v2["output_root"] == "/mnt/sfs/jobs/chris-q38-miles-rlreward-dev2"
+    assert run_v2["data"] == {
+        "manifest": data_v2["output"] + "/manifest.json",
+        "root": data_v2["output"],
+    }
+    assert run_v2["wandb"] == {
+        **run_v1["wandb"],
+        "run_id": "chris-q38-miles-rlreward-dev2",
+    }
+
+    data_identity = (
+        "backend",
+        "task_set",
+        "split",
+        "tool_catalog",
+        "model_lock",
+        "model_root",
+        "limits",
+    )
+    for key in data_identity:
+        assert data_v2[key] == data_v1[key]
+    for key in ("backend", "model", "checkpoint", "cluster"):
+        assert run_v2[key] == run_v1[key]
+
+    expected_recipe = {**run_v1["recipe"], "nodes": 2, "gpus_per_node": 4}
+    assert run_v2["recipe"] == expected_recipe
+    assert run_v2["recipe"]["nodes"] * run_v2["recipe"]["gpus_per_node"] == 8
+    assert run_v2["cluster"]["priority"] == "c1"
+    assert "webexploitbench" not in (DATA_V2.read_text() + RUN_V2.read_text()).lower()

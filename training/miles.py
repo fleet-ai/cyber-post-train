@@ -35,6 +35,7 @@ class MilesConfig:
     wandb_run_id: str
     model: str = "Qwen/Qwen3.8-27B"
     nodes: int = 1
+    gpus_per_node: int = 8
     steps: int = 1
     groups: int = 1
     samples_per_prompt: int = 2
@@ -82,6 +83,7 @@ class MilesConfig:
             raise ValueError("output must be an owned jobs directory")
         for key in (
             "nodes",
+            "gpus_per_node",
             "steps",
             "groups",
             "samples_per_prompt",
@@ -93,8 +95,10 @@ class MilesConfig:
         ):
             if type(getattr(self, key)) is not int or getattr(self, key) < 1:
                 raise ValueError("Miles counts must be positive integers")
-        if self.nodes not in (1, 2) or self.samples_per_prompt < 2:
-            raise ValueError("Qwen profile requires 1–2 whole nodes and grouped GRPO samples")
+        if (self.nodes, self.gpus_per_node) not in {(1, 8), (2, 4), (2, 8)}:
+            raise ValueError("unsupported Qwen Miles node/GPU layout")
+        if self.samples_per_prompt < 2:
+            raise ValueError("Qwen profile requires grouped GRPO samples")
         if self.steps % self.eval_interval:
             raise ValueError(
                 "eval interval must divide steps so native Miles evaluates the final model"
@@ -125,7 +129,18 @@ def arguments(config: MilesConfig) -> list[str]:
     if profile.backend != "megatron" or profile.vision or profile.tito_model != "qwen35":
         raise ValueError("native Qwen profile changed")
     argv = shlex.split(load_model_args(profile.megatron_model_type))
-    argv += shlex.split(profile.parallel_args_by_shape[(config.nodes, 8)])
+    layout = (config.nodes, config.gpus_per_node)
+    if layout == (2, 4):
+        one_by_eight = profile.parallel_args_by_shape.get((1, 8))
+        two_by_eight = profile.parallel_args_by_shape.get((2, 8))
+        if not isinstance(one_by_eight, str) or one_by_eight != two_by_eight:
+            raise ValueError("native profile does not qualify the fragmented eight-rank layout")
+        parallel_args = one_by_eight
+    else:
+        parallel_args = profile.parallel_args_by_shape.get(layout)
+        if not isinstance(parallel_args, str):
+            raise ValueError("native profile lacks the requested node/GPU layout")
+    argv += shlex.split(parallel_args)
     argv += shlex.split(profile.extra_train_args + " " + profile.extra_sglang_args)
     batch = config.groups * config.samples_per_prompt
     values = {
@@ -161,8 +176,8 @@ def arguments(config: MilesConfig) -> list[str]:
         "fleet-max-tokens-per-turn": config.tokens_per_turn,
         "chat-template-path": str(template),
         "actor-num-nodes": config.nodes,
-        "actor-num-gpus-per-node": 8,
-        "num-gpus-per-node": 8,
+        "actor-num-gpus-per-node": config.gpus_per_node,
+        "num-gpus-per-node": config.gpus_per_node,
         "rollout-num-gpus-per-engine": profile.rollout_num_gpus_per_engine,
         "sglang-mem-fraction-static": profile.sglang_mem_fraction_static,
         "router-policy": "round_robin",

@@ -91,6 +91,19 @@ def test_compiler_and_portable_job_have_native_identity(plan):
     assert "WANDB_API_KEY" not in request["env"]
 
 
+def test_two_by_four_layout_is_preserved_in_job_request(config, tmp_path):
+    config["recipe"].update({"nodes": 2, "gpus_per_node": 4})
+    plan = train.compile_rl(config, relative_to=tmp_path)
+    request = train.job_request(plan)
+
+    assert plan["arguments"]["nodes"] == 2
+    assert plan["arguments"]["gpus_per_node"] == 4
+    assert request["workers"] == 2
+    assert request["gpus_per_worker"] == 4
+    assert request["priority_class"] == "c1"
+    assert request["requeueIfPreempted"] is False
+
+
 def test_miles_has_independent_colocated_memory_defaults(plan):
     from training.sft import RESOURCES as sft_resources
 
