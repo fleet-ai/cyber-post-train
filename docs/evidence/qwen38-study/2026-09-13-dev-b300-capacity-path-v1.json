@@ -112,5 +112,70 @@
       "why": "The existing queued canary can then be admitted unchanged if cloud provisioning succeeds. Do not duplicate or resubmit the canary."
     }
   ],
+  "live_recheck": {
+    "observed_at": "2026-09-13T09:21:42Z",
+    "queued_canary": {
+      "rayjob_uid": "74784bff-0fd4-423f-ba8d-2ca7e8a84496",
+      "workload_uid": "85a96f37-218c-4f88-8aad-3bca0ef42ec1",
+      "rayjob_suspended": true,
+      "workload_quota_reserved": false,
+      "workload_admission": null,
+      "raycluster_count": 0,
+      "pod_count": 0,
+      "allocated_gpus": 0
+    },
+    "kueue_reason": {
+      "retained_event_at": "2026-09-13T08:24:16.183718Z",
+      "retained_event": "couldn't assign flavors to pod set head: topology \"node-topology\" doesn't allow to fit any of 1 pod(s). Total nodes: 2; excluded: resource \"nvidia.com/gpu\": 2",
+      "current_condition": "couldn't assign flavors to pod set head: Flavor \"cpu-head\" does not support TopologyAwareScheduling",
+      "interpretation": "The retained scheduler event and controller log establish that the B300 flavor was tried and both GPU nodes were excluded for insufficient free GPUs. The current cpu-head text is the last error from trying the fallback flavor, which has no topology definition and zero GPU quota; it does not supersede the B300 topology failure or establish a malformed GPU request."
+    },
+    "inventory": {
+      "managed_clusters_in_project": [
+        "fleetai-training-dev",
+        "fleetai-training"
+      ],
+      "dev_gpu_node_groups": 1,
+      "dev_b300_nodes": 2,
+      "other_dev_b300_instances": 0,
+      "jobs_api_openapi_sha256": "3e8e1c41603c5d3021189262ebf7a9cf5c6cf2f88bc984eb03929018e43d18a1",
+      "jobs_api_scheduling_surface": [
+        "workers",
+        "gpus_per_worker",
+        "priority_class",
+        "requeueIfPreempted",
+        "topology_mode",
+        "topology_level"
+      ],
+      "unsupported_request_selectors": [
+        "resource flavor",
+        "GPU node group",
+        "region",
+        "alternate cluster"
+      ],
+      "conclusion": "The live dev Jobs API has no request field that can route this exact run to another dev B300 pool, and the Nebius project has no second development GPU node group or development cluster. The other managed cluster is production and cannot substitute for required dev qualification."
+    },
+    "peer_consolidation_feasibility": {
+      "each_judge_request": {
+        "gpus": 2,
+        "cpu": 16,
+        "memory": "128Gi"
+      },
+      "host_network": false,
+      "host_ports": [],
+      "shared_storage": "sfs-shared",
+      "resource_fit_on_one_b300_node": true,
+      "authorization": "Only the peer owner or an explicitly authorized cluster administrator may pause, move or consolidate these Deployments. This audit did not do so."
+    },
+    "capacity_advice": {
+      "observed_at": "2026-09-13T09:20:43Z",
+      "b300_regions_returned": [
+        "uk-south1"
+      ],
+      "eu_west2_b300_entry_present": false,
+      "interpretation": "Scaling the existing eu-west2 node group remains a possible administrator action, but current read-only advice provides no positive physical-capacity proof."
+    },
+    "conclusion": "No already-authorized alternate dev B300 whole-node route exists for the immutable one-by-eight canary. Admission requires either a peer-owner/admin consolidation that frees one existing node or an authorized node-group scale that successfully provisions another eu-west2 B300 node."
+  },
   "mutations_performed": []
 }
