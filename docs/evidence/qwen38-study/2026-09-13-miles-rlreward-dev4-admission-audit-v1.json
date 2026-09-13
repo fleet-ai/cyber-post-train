@@ -1,0 +1,129 @@
+{
+  "schema": "cyber_qwen38_miles_rlreward_dev4_admission_audit_v1",
+  "observed_at": "2026-09-13T11:41:32Z",
+  "source_commit": "e74756bbb6021392c8c164348b444d84d4c24574",
+  "cluster_context": "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb",
+  "namespace": "fleet-train-jobs",
+  "run": {
+    "api_name": "chris-q38-miles-rlreward-dev4-65a2598c",
+    "api_run_id": "65a2598c-13f5-46ce-a8dc-102075547b25",
+    "rayjob_uid": "74784bff-0fd4-423f-ba8d-2ca7e8a84496",
+    "rayjob_generation": 2,
+    "workload_name": "rayjob-chris-q38-miles-rlreward-dev4-65a2598c-47e40",
+    "workload_uid": "85a96f37-218c-4f88-8aad-3bca0ef42ec1",
+    "created_at": "2026-09-13T08:09:42Z",
+    "rayjob_suspend": true,
+    "deployment_status": "Suspended",
+    "admission": null,
+    "raycluster_present": false,
+    "pod_present": false,
+    "gpus_held": 0
+  },
+  "request": {
+    "queue": "training-lq",
+    "priority": 10000,
+    "pod_priority_class": "c1",
+    "pod_sets": 1,
+    "head_count": 1,
+    "head_requests": {
+      "cpu": "64",
+      "memory": "1536Gi",
+      "nvidia.com/gpu": "8"
+    },
+    "topology_preferred": "kubernetes.io/hostname",
+    "gpu_pool_selector": "fleetai-training-ng-gpu"
+  },
+  "queue": {
+    "cluster_queue": "training-cq",
+    "pending_workloads": 1,
+    "admitted_workloads": 0,
+    "b300_flavor": {
+      "name": "b300-training",
+      "topology_name": "node-topology",
+      "nominal_gpu_quota": 16,
+      "reserved_gpus": 0
+    },
+    "fallback_flavor": {
+      "name": "cpu-head",
+      "topology_name": null,
+      "nominal_gpu_quota": 0
+    },
+    "visible_quota_condition": {
+      "status": "False",
+      "reason": "Pending",
+      "message": "couldn't assign flavors to pod set head: Flavor \"cpu-head\" does not support TopologyAwareScheduling",
+      "last_transition_time": "2026-09-13T08:09:42Z"
+    }
+  },
+  "physical_capacity": {
+    "b300_nodes": [
+      {
+        "name": "computeinstance-e04ab9szsam058qrxp",
+        "ready": true,
+        "allocatable_gpus": 8,
+        "peer_gpu_pod": {
+          "name": "tong-judge-vllm-b-566675f58b-wnj62",
+          "owner_kind": "ReplicaSet",
+          "requested_gpus": 2
+        },
+        "remaining_gpus": 6
+      },
+      {
+        "name": "computeinstance-e04vhewhxwax2j8vqq",
+        "ready": true,
+        "allocatable_gpus": 8,
+        "peer_gpu_pod": {
+          "name": "tong-judge-vllm-77ccbd8d67-ntcbf",
+          "owner_kind": "ReplicaSet",
+          "requested_gpus": 2
+        },
+        "remaining_gpus": 6
+      }
+    ],
+    "free_gpu_vector": [
+      6,
+      6
+    ],
+    "contiguous_eight_gpu_node_available": false
+  },
+  "historical_control": {
+    "name": "chris-q38-ta8-cos5-dev3-48326d0c",
+    "rayjob_uid": "ad7fc27d-c4f3-4d6d-b94e-2a04f09a3cab",
+    "queue": "training-lq",
+    "pod_priority_class": "c1",
+    "head_count": 1,
+    "head_gpus": 8,
+    "gpu_pool_selector": "fleetai-training-ng-gpu",
+    "job_status": "SUCCEEDED",
+    "started_at": "2026-09-12T07:27:08Z",
+    "finished_at": "2026-09-12T07:46:25Z"
+  },
+  "interpretation": {
+    "request_shape_proven_admissible": true,
+    "visible_cpu_head_message_is_last_flavor_fallback": true,
+    "structural_jobs_api_or_topology_defect_found": false,
+    "binding_condition": "no_contiguous_eight_gpu_dev_node",
+    "automatic_reconsideration_expected_when_capacity_frees": true,
+    "priority_can_preempt_replica_set_peer_pods": false,
+    "safe_action": "leave_exact_workload_queued_until_one_node_is_fully_free_or_capacity_is_added",
+    "prohibited_actions": [
+      "duplicate_post",
+      "manual_unsuspend",
+      "topology_relaxation",
+      "uncoordinated_peer_mutation"
+    ]
+  },
+  "code_evidence": {
+    "theseus_commit": "8d62868d6dc00eee793d83efe5738dc21e42758d",
+    "last_flavor_behavior_doc": "docs/infra/rl-training/03-emulation-cluster.md:533",
+    "queue_summary_parser": "services/fleet-train-api/src/fleet_train_api/api/cluster.py:458"
+  },
+  "audit": {
+    "cluster_mutations": 0,
+    "jobs_api_posts": 0,
+    "private_logs_read": false,
+    "prompts_traces_flags_answers_credentials_rewards_scores_read": false,
+    "peer_workloads_mutated": false
+  },
+  "sha256": "sha256:b2b3c0c717de1e107a2df1b1b59f31c228072b54367e64e0cdbe74f486567362"
+}
