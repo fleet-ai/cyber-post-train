@@ -1,0 +1,76 @@
+{
+  "schema": "cyber_qwen38_miles_rlreward_dev_terminal_v1",
+  "recorded_at": "2026-09-13T02:45:00Z",
+  "scope": "Qwen3.8-27B Miles one-update reward canary on the Fleet dev cluster",
+  "classification": "dev_runtime_cross_node_communication_failure_before_scientific_execution",
+  "promotion": {
+    "production_authorized": false,
+    "unchanged_retry_authorized": false,
+    "reason": "the two-node four-GPU-per-node process group failed during NCCL initialization before any task, reward, batch, optimizer update or checkpoint"
+  },
+  "run": {
+    "api_run_id": "947fc485-9143-441e-aa85-5e7aa0dc2f56",
+    "api_name": "chris-q38-miles-rlreward-dev2-947fc485",
+    "rayjob_uid": "277354e1-7200-42e7-bd8e-b773c94f8b4b",
+    "workload": "rayjob-chris-q38-miles-rlreward-dev2-947fc485-ddaf9",
+    "workload_uid": "c977500e-a522-451e-a2a9-41f808ca8898",
+    "raycluster": "chris-q38-miles-rlreward-dev2-947fc485-z2bfv",
+    "raycluster_uid": "453807cb-e66c-4000-94ad-dac534521e3c",
+    "head_pod_uid": "ebaec10c-76f0-4a48-b682-6c3623bcb602",
+    "worker_pod_uid": "6b0c0ac3-750f-408e-8835-75de25ff770e",
+    "admitted_at": "2026-09-13T02:20:17Z",
+    "terminal_at": "2026-09-13T02:36:19Z",
+    "terminal_state": "FAILED",
+    "pod_restarts": 0,
+    "gpu_count": 8,
+    "resources_released": true
+  },
+  "immutable_inputs": {
+    "git_commit": "6c290796dce8a3c2ffbf32766ff41fd59391298b",
+    "source_bundle_sha256": "0c2e6e2db9d2f06770c8985860a9a57d63973d9647e4730df417283ff3edf640",
+    "source_manifest_sha256": "a76baaa7c174c7c333ea2e5cd958f742c12cc2a39a1a7875eeec72caa826d463",
+    "plan_sha256": "9d97cfc4a7741a3611c756ed2665d47112b702f2b6f15a0c9866262e2d7c8da2",
+    "topology": {
+      "nodes": 2,
+      "gpus_per_node": 4,
+      "world_size": 8,
+      "tensor_parallel_size": 4,
+      "context_parallel_size": 2
+    }
+  },
+  "terminal_evidence": {
+    "failed_json_file_sha256": "55a95a74b4ee9cb02d413a2f18614cfe4fa378b634a2d2765b7d3728b0a8623c",
+    "failed_json_self_sha256": "c61c4037314e296f985121fd2bdf392fb98c6486497c0a775c0d351a181f2bb7",
+    "native_failure_json_file_sha256": "6896d6da9b3852af66be8d567ccba432189a83951e3339c033962abd35a7788f",
+    "native_failure_json_self_sha256": "054e5e11c182b99e1e6dc3ef68ecdba4978de82e37101d34fcf593231da7efb2",
+    "outer_error_class": "RayTaskError(DistBackendError)",
+    "inner_error_class": "DistBackendError",
+    "distributed_error_class": "ncclSystemError",
+    "failure_stage": [
+      "create_training_models",
+      "actor_group_init",
+      "initialize_model_and_optimizer",
+      "optimizer_parameter_group_construction",
+      "torch.distributed.all_gather_object"
+    ],
+    "watchdog_reason": null
+  },
+  "scientific_accounting": {
+    "task_interactions": 0,
+    "verifier_calls": 0,
+    "reward_batches": 0,
+    "optimizer_updates": 0,
+    "checkpoint_files": 0,
+    "checkpoint_pointer_present": false,
+    "scientific_result": false
+  },
+  "evidence_reader": {
+    "pod": "chris-q38-miles-rlreward-dev2-evidence",
+    "pod_uid": "a2a3f011-92c3-4913-99a9-022fd737138b",
+    "phase": "Succeeded",
+    "restarts": 0,
+    "gpus": 0,
+    "deleted_after_recording": true
+  },
+  "next_gate": "prove a deterministic cross-node NCCL fix in exact-image tests, or wait for one whole eight-GPU dev node; then use fresh run, output, prepared-data and W&B identities for a bounded dev canary"
+}
