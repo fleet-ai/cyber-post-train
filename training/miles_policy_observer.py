@@ -17,6 +17,8 @@ import binascii
 import gzip
 import hashlib
 import json
+import math
+import numbers
 import os
 import re
 import shlex
@@ -26,6 +28,7 @@ import sys
 import time
 from collections.abc import Mapping, Sequence
 from contextlib import suppress
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -201,9 +204,37 @@ def _reference(path: Path, value: Mapping[str, Any], file_sha256: str) -> dict[s
     }
 
 
-def _read(path: Path, schema: str | None = None) -> tuple[dict[str, Any], str]:
-    from .miles_acceptance import _json_snapshot
+def _json_snapshot(path: Path) -> tuple[Any, str]:
+    if path.is_symlink() or not path.is_file():
+        raise ValueError("policy observer input must be a regular file")
+    before = path.stat()
+    payload = path.read_bytes()
+    after = path.stat()
+    stable = ("st_dev", "st_ino", "st_size", "st_mtime_ns", "st_ctime_ns")
+    if any(getattr(before, key) != getattr(after, key) for key in stable):
+        raise ValueError("policy observer input changed while reading")
+    try:
+        return json.loads(payload), hashlib.sha256(payload).hexdigest()
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ValueError("policy observer input is not valid JSON") from error
 
+
+def _time(value: object, label: str) -> float:
+    if isinstance(value, numbers.Real) and not isinstance(value, bool):
+        result = float(value)
+    elif isinstance(value, str):
+        try:
+            result = datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
+        except ValueError as error:
+            raise ValueError(f"{label} is not an RFC3339 timestamp") from error
+    else:
+        raise ValueError(f"{label} is not a timestamp")
+    if not math.isfinite(result) or result <= 0:
+        raise ValueError(f"{label} is not a positive finite timestamp")
+    return result
+
+
+def _read(path: Path, schema: str | None = None) -> tuple[dict[str, Any], str]:
     value, file_sha256 = _json_snapshot(path)
     if not isinstance(value, dict):
         raise ValueError("observer evidence must be a JSON object")
@@ -215,6 +246,38 @@ def _read(path: Path, schema: str | None = None) -> tuple[dict[str, Any], str]:
     else:
         sealed(value, schema)
     return value, file_sha256
+
+
+def _source_canary(plan: Mapping[str, Any]) -> None:
+    args = plan.get("arguments")
+    execution = plan.get("execution")
+    data = plan.get("data")
+    model = plan.get("model")
+    files = data.get("files") if isinstance(data, Mapping) else None
+    if (
+        plan.get("schema") != "cyber_miles_training_v1"
+        or not isinstance(args, Mapping)
+        or not isinstance(execution, Mapping)
+        or not isinstance(model, Mapping)
+        or plan.get("run_name") != args.get("name")
+        or plan.get("output_root") != args.get("output_root")
+        or model.get("repo") != "Qwen/Qwen3.8-27B"
+        or args.get("model") != "Qwen/Qwen3.8-27B"
+        or args.get("nodes") != 1
+        or args.get("gpus_per_node") != WORLD_SIZE
+        or args.get("steps") != 1
+        or args.get("groups") != 1
+        or args.get("samples_per_prompt") != WORLD_SIZE
+        or args.get("eval_interval") != 1
+        or args.get("checkpoint_interval") != 1
+        or execution.get("image") != miles.IMAGE
+        or execution.get("priority") != "c1"
+        or not isinstance(files, Mapping)
+        or set(files) != {"train", "dev"}
+        or files["train"].get("rows") != 1
+        or files["dev"].get("rows") != 1
+    ):
+        raise ValueError("policy observer source is not the exact one-update Miles canary")
 
 
 def _base_checkpoint(plan: Mapping[str, Any], *, hashes: bool) -> list[dict[str, Any]]:
@@ -340,8 +403,6 @@ def compile_observer(config: dict[str, Any], *, relative_to: Path) -> dict[str, 
 def _validate_plan(
     plan: Mapping[str, Any], *, check_files: bool, require_current_runtime: bool
 ) -> None:
-    from . import miles_acceptance
-
     source = plan.get("source_plan")
     trained = plan.get("trained_checkpoint")
     submission_ref = plan.get("source_submission")
@@ -373,7 +434,7 @@ def _validate_plan(
         raise ValueError("Miles policy observer plan drift")
     if require_current_runtime and plan["runtime_sha256"] != digest(_runtime()):
         raise ValueError("Miles policy observer runtime differs from the compiled plan")
-    miles_acceptance._canary(source)
+    _source_canary(source)
     sealed(trained, CHECKPOINT_SCHEMA)
     if (
         trained.get("world_size") != WORLD_SIZE
@@ -393,14 +454,14 @@ def _validate_plan(
         raise ValueError("Miles policy observer trained checkpoint drift")
     if check_files:
         source_path = Path(str(plan["source_plan_path"]))
-        reopened_source, source_file_sha256 = miles_acceptance._json_snapshot(source_path)
+        reopened_source, source_file_sha256 = _json_snapshot(source_path)
         if (
             reopened_source != source
             or source_file_sha256 != plan["source_plan_file_sha256"].removeprefix("sha256:")
         ):
             raise ValueError("source Miles plan file changed")
         submission, submission_file_sha256 = _read(
-            Path(submission_ref["path"]), miles_acceptance.SUBMISSION_SCHEMA
+            Path(submission_ref["path"]), "cyber_miles_submitted_execution_binding_v1"
         )
         if (
             submission_file_sha256 != submission_ref["file_sha256"].removeprefix("sha256:")
@@ -408,7 +469,12 @@ def _validate_plan(
             != submission_ref["receipt_sha256"].removeprefix("sha256:")
         ):
             raise ValueError("source submission evidence changed")
-        miles_acceptance.validate_submission_binding(submission, source, check_files=True)
+        if (
+            submission.get("source_plan_sha256", "").removeprefix("sha256:")
+            != digest(source)
+            or Path(str(submission.get("source_plan_path"))) != source_path
+        ):
+            raise ValueError("source submission does not bind the selected Miles plan")
         checkpoint, checkpoint_file_sha256 = _read(
             Path(checkpoint_ref["path"]), CHECKPOINT_SCHEMA
         )
@@ -898,7 +964,8 @@ def validate_controller_observation(
         set(value)
         != {
             "schema", "status", "observer_plan_sha256", "observer_request_sha256",
-            "api", "kubernetes", "execution", "event_journal", "observed_at", "private_logs_included",
+            "api", "kubernetes", "execution", "event_journal", "observed_at",
+            "private_logs_included",
             "metric_values_included", "task_content_included", "sha256",
         }
         or value.get("status") != "succeeded"
@@ -1271,8 +1338,6 @@ def _rank_rows(
 
 
 def validate_result(plan: dict[str, Any], value: dict[str, Any]) -> list[int]:
-    from .miles_acceptance import _time
-
     _validate_plan(plan, check_files=False, require_current_runtime=False)
     sealed(value, RESULT_SCHEMA)
     rows = value.get("ranks")
@@ -1369,6 +1434,11 @@ def _policy_body(
     source_submission, _ = _read(
         Path(plan["source_submission"]["path"]),
         miles_acceptance.SUBMISSION_SCHEMA,
+    )
+    miles_acceptance.validate_submission_binding(
+        source_submission,
+        plan["source_plan"],
+        check_files=True,
     )
     if submission["api"]["run_id"] == source_submission["api"]["run_id"]:
         raise ValueError("policy observer reused the source training API run")
