@@ -1,5 +1,6 @@
 """No paid calls: exact recovery binding and native sampler/optimizer continuation."""
 
+import base64
 import copy
 import importlib.util
 import json
@@ -13,6 +14,7 @@ import torch
 from test_checkpoints import fixture
 
 from training import checkpoints, recovery
+from training.sft import IMAGE
 from training.sft_runtime import _unsigned_digest, write_receipt
 
 
@@ -35,6 +37,61 @@ def source(tmp_path, *, progress=True, complete=False):
     return new, manifest, out
 
 
+def legacy_source(tmp_path, *, partial_execution=False):
+    source_plan, root, manifest_path = fixture(tmp_path)
+    source_plan.update(run_name="legacy-run", runtime_sha256="f" * 64)
+    if partial_execution:
+        source_plan["execution"] = {"resources": {"memory_request": "1Gi"}}
+    plan_path = tmp_path / "legacy-plan.json"
+    plan_path.write_text(json.dumps(source_plan, indent=2, sort_keys=True) + "\n")
+    plan_sha256 = recovery.digest(plan_path)
+    checkpoint_receipt = tmp_path / "checkpoint_receipts/step-000002.json"
+    checkpoint_receipt.unlink()
+    write_receipt(
+        checkpoint_receipt,
+        {
+            "plan_sha256": plan_sha256,
+            "optimizer_step": 2,
+            "checkpoint_path": str(root),
+        },
+    )
+    manifest = checkpoints.seal(
+        source_plan,
+        2,
+        manifest_path,
+        source_plan_file=plan_path,
+    )
+    tagged_image = IMAGE.replace("skyrl-train@", "skyrl-train:historical@")
+    runtime_sha256 = source_plan["runtime_sha256"]
+    request = {
+        "name": source_plan["run_name"],
+        "run_dir": source_plan["output_root"],
+        "image": tagged_image,
+        "command": f"python trainer.py --plan {plan_sha256} --runtime {runtime_sha256}",
+        "workers": source_plan["recipe"]["nodes"],
+        "gpus_per_worker": source_plan["recipe"]["gpus_per_node"],
+        "requeueIfPreempted": False,
+    }
+    request_path = tmp_path / "legacy-request.json"
+    request_path.write_text(json.dumps(request, indent=1) + "\n")
+    target = copy.deepcopy(source_plan)
+    target.update(
+        run_name="reload-run",
+        output_root=str(tmp_path.parent / "reload-run"),
+        execution={"image": IMAGE},
+    )
+    target["model"]["files"].reverse()
+    target["wandb"]["run_id"] = "reload-run"
+    config = {
+        "manifest": manifest_path.name,
+        "sha256": recovery.digest(manifest_path),
+        "mode": "validate",
+        "source_request": request_path.name,
+        "source_request_sha256": recovery.digest(request_path),
+    }
+    return target, manifest, manifest_path, plan_path, request_path, request, config
+
+
 def test_recovery_binds_exact_sealed_source_and_never_changes_recipe(tmp_path):
     p, manifest, path = source(tmp_path)
     recovery.bind(
@@ -46,6 +103,144 @@ def test_recovery_binds_exact_sealed_source_and_never_changes_recipe(tmp_path):
     assert p["recovery"]["checkpoint"] == manifest
     assert manifest["training_progress"] == {"supervised_tokens": 64, "best": None}
     assert not Path(p["output_root"]).exists()
+
+
+@pytest.mark.parametrize(
+    "partial_execution",
+    [pytest.param(False, id="self-plan"), pytest.param(True, id="teacher-plan")],
+)
+def test_legacy_recovery_carries_exact_producer_request_without_resealing(
+    tmp_path, partial_execution
+):
+    target, manifest, _, plan_path, request_path, request, config = legacy_source(
+        tmp_path, partial_execution=partial_execution
+    )
+    raw = request_path.read_bytes()
+    recovery.bind(target, config, relative_to=tmp_path)
+    binding = target["recovery"]["source_request"]
+    assert binding["path"] == str(request_path.resolve())
+    assert binding["bytes"] == len(raw)
+    assert binding["sha256"] == recovery.digest(request_path)
+    assert binding["canonical_json_sha256"] == _unsigned_digest(request)
+    assert base64.b64decode(binding["raw_base64"], validate=True) == raw
+    assert binding["source_manifest_receipt_sha256"] == manifest["receipt_sha256"]
+
+    # The active v1 sealers recorded an ephemeral source-plan path. Recovery
+    # carries the exact request bytes and never needs to rehash the checkpoint.
+    plan_path.unlink()
+    request_path.write_text("changed after the immutable plan was compiled")
+    recovery.validate(target, check_files=True)
+
+
+@pytest.mark.parametrize(
+    "defect",
+    ["digest", "not_object", "image", "name", "command", "topology", "requeue"],
+)
+def test_legacy_source_request_mismatch_fails_closed(tmp_path, defect):
+    target, _, _, _, request_path, request, config = legacy_source(tmp_path)
+    if defect == "digest":
+        config["source_request_sha256"] = "0" * 64
+    else:
+        if defect == "not_object":
+            value = []
+        else:
+            value = copy.deepcopy(request)
+            if defect == "image":
+                value["image"] = IMAGE.replace("a0323754", "b0323754")
+            elif defect == "name":
+                value["name"] = "another-run"
+            elif defect == "command":
+                value["command"] = "python trainer.py"
+            elif defect == "topology":
+                value["gpus_per_worker"] += 1
+            else:
+                value["requeueIfPreempted"] = True
+        request_path.write_text(json.dumps(value))
+        config["source_request_sha256"] = recovery.digest(request_path)
+    with pytest.raises(ValueError):
+        recovery.bind(target, config, relative_to=tmp_path)
+
+
+@pytest.mark.parametrize("missing", ["source_request", "source_request_sha256"])
+def test_legacy_recovery_requires_complete_request_binding(tmp_path, missing):
+    target, _, _, _, _, _, config = legacy_source(tmp_path)
+    del config[missing]
+    with pytest.raises(ValueError):
+        recovery.bind(target, config, relative_to=tmp_path)
+
+
+@pytest.mark.parametrize(
+    "field",
+    ["raw_base64", "sha256", "image", "source_manifest_receipt_sha256", "binding_sha256"],
+)
+def test_legacy_request_binding_tamper_fails_closed(tmp_path, field):
+    target, _, _, _, _, _, config = legacy_source(tmp_path)
+    recovery.bind(target, config, relative_to=tmp_path)
+    binding = target["recovery"]["source_request"]
+    binding[field] = "0" * 64
+    with pytest.raises(ValueError, match="binding"):
+        recovery.validate(target, check_files=False)
+
+
+@pytest.mark.parametrize("defect", ["duplicate", "missing", "changed_record", "changed_model"])
+def test_legacy_model_file_set_mismatch_fails_closed(tmp_path, defect):
+    target, _, _, _, _, _, config = legacy_source(tmp_path)
+    files = target["model"]["files"]
+    if defect == "duplicate":
+        files[1] = copy.deepcopy(files[0])
+    elif defect == "missing":
+        files.pop()
+    elif defect == "changed_record":
+        files[0]["sha256"] = "0" * 64
+    else:
+        target["model"]["revision"] = "0" * 40
+    with pytest.raises(ValueError, match="model, data, topology"):
+        recovery.bind(target, config, relative_to=tmp_path)
+
+
+def test_current_schema_recovery_still_requires_exact_image_and_no_request(tmp_path):
+    target, _, manifest_path = source(tmp_path)
+    source_image = target["execution"]["image"]
+    target["execution"]["image"] = source_image.replace("image@", "image:tag@")
+    with pytest.raises(ValueError, match="source trainer image"):
+        recovery.bind(
+            target,
+            {
+                "manifest": manifest_path.name,
+                "sha256": recovery.digest(manifest_path),
+                "mode": "validate",
+            },
+            relative_to=tmp_path,
+        )
+
+    target, _, manifest_path = source(tmp_path / "ordered")
+    target["model"]["files"].reverse()
+    with pytest.raises(ValueError, match="model, data, topology"):
+        recovery.bind(
+            target,
+            {
+                "manifest": manifest_path.name,
+                "sha256": recovery.digest(manifest_path),
+                "mode": "validate",
+            },
+            relative_to=manifest_path.parent,
+        )
+
+    target, _, manifest_path = source(tmp_path / "second")
+    request_path = tmp_path / "not-needed.json"
+    request_path.write_text("{}")
+    with pytest.raises(ValueError, match="legacy-only"):
+        recovery.bind(
+            target,
+            {
+                "manifest": str(manifest_path.relative_to(tmp_path)),
+                "sha256": recovery.digest(manifest_path),
+                "mode": "validate",
+                "source_request": request_path.name,
+                "source_request_sha256": recovery.digest(request_path),
+            },
+            relative_to=tmp_path,
+        )
 
 
 def test_validate_allows_only_world_size_preserving_rank_placement_change(tmp_path):

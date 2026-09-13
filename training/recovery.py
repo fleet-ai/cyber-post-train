@@ -7,12 +7,16 @@ output directory. Neither mode writes or deletes the source checkpoint.
 
 from __future__ import annotations
 
+import base64
 import contextlib
+import hashlib
 import json
+import re
 from pathlib import Path
 
 from . import checkpoints
 from .sft_runtime import (
+    _unsigned_digest,
     digest,
     selection_evidence,
     selection_policy,
@@ -20,18 +24,211 @@ from .sft_runtime import (
     write_receipt,
 )
 
+_RECOVERY_FIELDS = {"manifest", "sha256", "mode"}
+_LEGACY_REQUEST_FIELDS = {"source_request", "source_request_sha256"}
+
+
+def _image_identity(value: str) -> str:
+    """Normalize an OCI tag away while retaining the exact repository+digest."""
+    if not isinstance(value, str) or value.count("@sha256:") != 1:
+        raise ValueError("producer request image must be pinned by immutable digest")
+    name, digest_value = value.rsplit("@sha256:", 1)
+    head, separator, leaf = name.rpartition("/")
+    repository_leaf = leaf.split(":", 1)[0]
+    if (
+        not separator
+        or not repository_leaf
+        or not re.fullmatch(r"[a-f0-9]{64}", digest_value)
+        or any(character.isspace() for character in name)
+    ):
+        raise ValueError("producer request image must be pinned by immutable digest")
+    return f"{head}/{repository_leaf}@sha256:{digest_value}"
+
+
+def _validate_request_value(manifest: dict, request: dict, image_identity: str) -> None:
+    source = manifest["source_plan"]
+    plan_file = manifest.get("source_plan_file")
+    recipe = source["recipe"]
+    runtime_sha256 = source.get("runtime_sha256")
+    command = request.get("command")
+    if (
+        not isinstance(plan_file, dict)
+        or not isinstance(runtime_sha256, str)
+        or request.get("name") != source["run_name"]
+        or request.get("run_dir") != source["output_root"]
+        or request.get("workers") != recipe["nodes"]
+        or request.get("gpus_per_worker") != recipe["gpus_per_node"]
+        or request.get("requeueIfPreempted") is not False
+        or not isinstance(command, str)
+        or plan_file["sha256"] not in command
+        or runtime_sha256 not in command
+        or _image_identity(request.get("image")) != image_identity
+    ):
+        raise ValueError("producer request differs from the exact source plan/runtime")
+
+
+def _bind_legacy_request(
+    manifest: dict,
+    path: Path,
+    expected_sha256: str,
+    *,
+    manifest_file_sha256: str,
+    target_image: str,
+) -> dict:
+    """Carry exact producer request bytes into a legacy recovery plan."""
+    if not re.fullmatch(r"[a-f0-9]{64}", expected_sha256):
+        raise ValueError("source request needs an exact raw SHA-256")
+    if path.is_symlink() or not path.is_file():
+        raise ValueError("source request must be a real file")
+    raw = path.read_bytes()
+    if hashlib.sha256(raw).hexdigest() != expected_sha256:
+        raise ValueError("source request file digest mismatch")
+    try:
+        request = json.loads(raw)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ValueError("source request is not valid JSON") from error
+    if not isinstance(request, dict):
+        raise ValueError("source request must contain a JSON object")
+    from .sft import IMAGE
+
+    qualified_identity = _image_identity(IMAGE)
+    if _image_identity(target_image) != qualified_identity:
+        raise ValueError("legacy recovery requires the qualified immutable trainer image")
+    _validate_request_value(manifest, request, qualified_identity)
+    binding = {
+        "schema": "cyber_sft_legacy_producer_request_binding_v1",
+        "path": str(path.resolve()),
+        "bytes": len(raw),
+        "sha256": expected_sha256,
+        "canonical_json_sha256": _unsigned_digest(request),
+        "raw_base64": base64.b64encode(raw).decode("ascii"),
+        "image": request["image"],
+        "image_identity": qualified_identity,
+        "source_manifest_file_sha256": manifest_file_sha256,
+        "source_manifest_receipt_sha256": manifest["receipt_sha256"],
+        "source_plan_file_sha256": manifest["source_plan_file"]["sha256"],
+    }
+    binding["binding_sha256"] = _unsigned_digest(binding)
+    return binding
+
+
+def _validate_legacy_request(plan: dict, recovery: dict, manifest: dict) -> str:
+    binding = recovery.get("source_request")
+    keys = {
+        "schema",
+        "path",
+        "bytes",
+        "sha256",
+        "canonical_json_sha256",
+        "raw_base64",
+        "image",
+        "image_identity",
+        "source_manifest_file_sha256",
+        "source_manifest_receipt_sha256",
+        "source_plan_file_sha256",
+        "binding_sha256",
+    }
+    if (
+        not isinstance(binding, dict)
+        or set(binding) != keys
+        or binding["schema"] != "cyber_sft_legacy_producer_request_binding_v1"
+        or not isinstance(binding["path"], str)
+        or not Path(binding["path"]).is_absolute()
+        or type(binding["bytes"]) is not int
+        or binding["bytes"] <= 0
+        or any(
+            not isinstance(binding[name], str) or not re.fullmatch(r"[a-f0-9]{64}", binding[name])
+            for name in (
+                "sha256",
+                "canonical_json_sha256",
+                "source_manifest_file_sha256",
+                "source_manifest_receipt_sha256",
+                "source_plan_file_sha256",
+                "binding_sha256",
+            )
+        )
+        or binding["binding_sha256"]
+        != _unsigned_digest({k: v for k, v in binding.items() if k != "binding_sha256"})
+        or binding["source_manifest_file_sha256"] != recovery["manifest_file_sha256"]
+        or binding["source_manifest_receipt_sha256"] != manifest["receipt_sha256"]
+        or binding["source_plan_file_sha256"] != manifest["source_plan_file"]["sha256"]
+    ):
+        raise ValueError("legacy producer request binding is invalid")
+    try:
+        raw = base64.b64decode(binding["raw_base64"], validate=True)
+        request = json.loads(raw)
+    except (ValueError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ValueError("legacy producer request binding is invalid") from error
+    if (
+        len(raw) != binding["bytes"]
+        or hashlib.sha256(raw).hexdigest() != binding["sha256"]
+        or not isinstance(request, dict)
+        or _unsigned_digest(request) != binding["canonical_json_sha256"]
+        or _image_identity(binding["image"]) != binding["image_identity"]
+        or request.get("image") != binding["image"]
+        or _image_identity(plan["execution"]["image"]) != binding["image_identity"]
+    ):
+        raise ValueError("legacy producer request binding is invalid")
+    _validate_request_value(manifest, request, binding["image_identity"])
+    return binding["image"]
+
+
+def _legacy_model_equal(target: object, source: object) -> bool:
+    """Legacy producers recorded the same immutable file set in a different order."""
+    if not isinstance(target, dict) or not isinstance(source, dict):
+        return False
+    target_model, source_model = dict(target), dict(source)
+    target_files = target_model.pop("files", None)
+    source_files = source_model.pop("files", None)
+    if (
+        target_model != source_model
+        or not isinstance(target_files, list)
+        or not isinstance(source_files, list)
+    ):
+        return False
+
+    def ordered(files: list) -> list | None:
+        if any(
+            not isinstance(item, dict) or not isinstance(item.get("path"), str) for item in files
+        ):
+            return None
+        paths = [item["path"] for item in files]
+        return (
+            None if len(set(paths)) != len(paths) else sorted(files, key=lambda item: item["path"])
+        )
+
+    return len(target_files) == len(source_files) and ordered(target_files) == ordered(source_files)
+
 
 def bind(plan: dict, config: dict, *, relative_to: Path) -> None:
-    if set(config) != {"manifest", "sha256", "mode"}:
+    fields = set(config)
+    if fields != _RECOVERY_FIELDS and fields != _RECOVERY_FIELDS | _LEGACY_REQUEST_FIELDS:
         raise ValueError("recovery needs manifest, file SHA-256 and validate/resume mode")
     path = relative_to / config["manifest"]
     if digest(path) != config["sha256"]:
         raise ValueError("recovery manifest file digest mismatch")
-    plan["recovery"] = {
+    manifest = json.loads(path.read_text())
+    checkpoints.verify(manifest, check_files=False)
+    source_image = manifest["source_plan"].get("execution", {}).get("image")
+    has_request = fields >= _LEGACY_REQUEST_FIELDS
+    if source_image is None and not has_request:
+        raise ValueError("legacy recovery requires an exact producer request")
+    if source_image is not None and has_request:
+        raise ValueError("producer request compatibility binding is legacy-only")
+    value = {
         "mode": config["mode"],
-        "checkpoint": json.loads(path.read_text()),
+        "checkpoint": manifest,
         "manifest_file_sha256": config["sha256"],
     }
+    if has_request:
+        value["source_request"] = _bind_legacy_request(
+            manifest,
+            relative_to / config["source_request"],
+            config["source_request_sha256"],
+            manifest_file_sha256=config["sha256"],
+            target_image=plan["execution"]["image"],
+        )
+    plan["recovery"] = value
     plan["recovery_runtime_sha256"] = digest(Path(__file__))
     validate(plan, check_files=False)
 
@@ -39,7 +236,16 @@ def bind(plan: dict, config: dict, *, relative_to: Path) -> None:
 def validate(plan: dict, *, check_files: bool) -> None:
     recovery = plan["recovery"]
     manifest = recovery["checkpoint"]
-    checkpoints.verify(manifest, check_files=check_files)
+    source_candidate = manifest.get("source_plan") if isinstance(manifest, dict) else None
+    legacy = (
+        isinstance(source_candidate, dict)
+        and source_candidate.get("execution", {}).get("image") is None
+    )
+    checkpoints.verify(
+        manifest,
+        check_files=check_files,
+        check_source_plan_file=not legacy,
+    )
     source = manifest["source_plan"]
     if recovery["mode"] not in {"validate", "resume"}:
         raise ValueError("recovery mode must be validate or resume")
@@ -51,7 +257,12 @@ def validate(plan: dict, *, check_files: bool) -> None:
         "split_manifest_sha256",
         "corpus_manifest_sha256",
     ):
-        if plan.get(key) != source.get(key):
+        equal = (
+            _legacy_model_equal(plan.get(key), source.get(key))
+            if key == "model" and legacy and "source_request" in recovery
+            else plan.get(key) == source.get(key)
+        )
+        if not equal:
             raise ValueError("recovery cannot change model, data, topology or scientific recipe")
     source_recipe, target_recipe = source["recipe"], plan["recipe"]
     if target_recipe != source_recipe:
@@ -77,7 +288,11 @@ def validate(plan: dict, *, check_files: bool) -> None:
             raise ValueError("recovery cannot change model, data, topology or scientific recipe")
     if selection_policy(plan) != selection_policy(source):
         raise ValueError("recovery cannot change selection mode or the Fleet dev protocol")
-    if plan["execution"]["image"] != source["execution"]["image"]:
+    target_image = plan["execution"]["image"]
+    source_image = source.get("execution", {}).get("image")
+    if source_image is None:
+        source_image = _validate_legacy_request(plan, recovery, manifest)
+    elif "source_request" in recovery or target_image != source_image:
         raise ValueError("recovery requires the source trainer image")
     if any(plan[k] == source[k] for k in ("run_name", "output_root")) or (
         plan["wandb"]["run_id"] == source["wandb"]["run_id"]

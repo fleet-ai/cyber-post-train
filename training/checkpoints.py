@@ -250,7 +250,9 @@ def seal(
     return receipt(output)
 
 
-def verify(manifest: dict, *, check_files: bool = True) -> None:
+def verify(
+    manifest: dict, *, check_files: bool = True, check_source_plan_file: bool = True
+) -> None:
     if (
         manifest.get("receipt_sha256")
         != _unsigned_digest({k: v for k, v in manifest.items() if k != "receipt_sha256"})
@@ -259,7 +261,9 @@ def verify(manifest: dict, *, check_files: bool = True) -> None:
         raise ValueError("checkpoint manifest digest/schema mismatch")
     plan = manifest["source_plan"]
     validate_plan(plan, check_files=False)
-    source_plan_sha256 = _manifest_plan_sha256(manifest, plan, check_files=check_files)
+    source_plan_sha256 = _manifest_plan_sha256(
+        manifest, plan, check_files=check_files and check_source_plan_file
+    )
     if not uses_reference_ce(plan) and any(
         manifest.get(k) != v for k, v in selection_evidence(plan).items()
     ):
