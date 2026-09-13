@@ -371,6 +371,85 @@ def test_cli_prepares_and_dispatches_miles_reload_without_network(tmp_path, monk
     assert runner.invoke(cli.app, ["preflight", str(prepared)]).exit_code == 0
 
 
+def test_submit_requires_complete_zero_work_preflight_receipt(tmp_path, monkeypatch):
+    manifest, path = _manifest(tmp_path)
+    plan = reload.compile_reload(_config(path), relative_to=tmp_path)
+    request = reload.job_request(plan)
+    monkeypatch.setattr(
+        miles,
+        "arguments",
+        lambda _: ["--load", "/mnt/sfs/jobs/base/checkpoint", "--num-rollout", "1"],
+    )
+    argv = reload.reload_arguments(
+        miles.MilesConfig(**manifest["source"]["arguments"]), manifest["root"]
+    )
+    body = reload._preflight_receipt(
+        plan,
+        request,
+        checkpoint_files=len(manifest["files"]),
+        native_arguments=argv,
+    )
+    proof = {**body, "sha256": digest(body)}
+    assert reload.validate_preflight_receipt(plan, request, proof) is None
+
+    for field, value in (
+        ("checkpoint_sha256_verified", False),
+        ("native_arguments_sha256", "0" * 64),
+        ("optimizer_updates", 1),
+        ("rollouts", 1),
+        ("gpu_reload_verified", True),
+    ):
+        changed = {**body, field: value}
+        with pytest.raises(ValueError, match="missing or mismatched"):
+            reload.validate_preflight_receipt(
+                plan, request, {**changed, "sha256": digest(changed)}
+            )
+
+
+def test_cli_submit_enforces_specialized_miles_reload_preflight(tmp_path, monkeypatch):
+    from contextlib import nullcontext
+    from types import SimpleNamespace
+
+    manifest, path = _manifest(tmp_path)
+    plan = reload.compile_reload(_config(path), relative_to=tmp_path)
+    request = reload.job_request(plan)
+    proof_body = {
+        "schema": reload.PREFLIGHT_SCHEMA,
+        "status": "passed",
+        "gpus": 0,
+        "plan_sha256": digest(plan),
+        "request_sha256": digest(request),
+    }
+    proof = {**proof_body, "sha256": digest(proof_body)}
+    calls = []
+    monkeypatch.setattr(cli, "_prepared", lambda _: (plan, request))
+    monkeypatch.setattr(cli, "_read", lambda _: proof)
+    monkeypatch.setattr(cli, "validate_preview", lambda *_: {})
+    monkeypatch.setattr(
+        reload,
+        "validate_preflight_receipt",
+        lambda *args: calls.append(("preflight", args)),
+    )
+    monkeypatch.setattr(
+        cli,
+        "_client",
+        lambda _: nullcontext(
+            SimpleNamespace(
+                preview=lambda value: value,
+                submit_once=lambda value, journal: calls.append(("submit", value, journal))
+                or {"status": "queued"},
+            )
+        ),
+    )
+
+    result = CliRunner().invoke(cli.app, ["submit", str(tmp_path), "--cluster", "dev"])
+    assert result.exit_code == 0
+    assert calls == [
+        ("preflight", (plan, request, proof)),
+        ("submit", request, tmp_path / "SUBMISSION.jsonl"),
+    ]
+
+
 @pytest.mark.parametrize("command", ["preview", "submit"])
 def test_miles_reload_cannot_be_routed_to_production(tmp_path, monkeypatch, command):
     manifest, path = _manifest(tmp_path)

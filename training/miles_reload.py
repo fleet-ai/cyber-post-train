@@ -474,6 +474,25 @@ def job_request(plan: dict) -> dict:
     )
 
 
+def _preflight_receipt(
+    plan: dict, request: dict, *, checkpoint_files: int, native_arguments: Sequence[str]
+) -> dict:
+    return {
+        "schema": PREFLIGHT_SCHEMA,
+        "status": "passed",
+        "gpus": 0,
+        "plan_sha256": digest(plan),
+        "request_sha256": digest(request),
+        "checkpoint_files": checkpoint_files,
+        "checkpoint_sha256_verified": True,
+        "native_arguments_sha256": digest(native_arguments),
+        "native_parser_checked": False,
+        "optimizer_updates": 0,
+        "rollouts": 0,
+        "gpu_reload_verified": False,
+    }
+
+
 def preflight(plan: dict) -> dict:
     import torch
 
@@ -485,20 +504,26 @@ def preflight(plan: dict) -> dict:
     snapshot = _verify_checkpoint(plan["source_manifest"], hashes=True)
     source = miles.MilesConfig(**plan["source_manifest"]["source"]["arguments"])
     argv = reload_arguments(source, plan["source_manifest"]["root"])
-    return {
-        "schema": PREFLIGHT_SCHEMA,
-        "status": "passed",
-        "gpus": 0,
-        "plan_sha256": digest(plan),
-        "request_sha256": digest(request),
-        "checkpoint_files": len(snapshot),
-        "checkpoint_sha256_verified": True,
-        "native_arguments_sha256": digest(argv),
-        "native_parser_checked": False,
-        "optimizer_updates": 0,
-        "rollouts": 0,
-        "gpu_reload_verified": False,
-    }
+    return _preflight_receipt(
+        plan, request, checkpoint_files=len(snapshot), native_arguments=argv
+    )
+
+
+def validate_preflight_receipt(plan: dict, request: dict, proof: dict) -> None:
+    """Require the complete zero-work checkpoint proof before the only POST."""
+    if request != job_request(plan):
+        raise ValueError("Miles reload request does not match its immutable plan")
+    source = miles.MilesConfig(**plan["source_manifest"]["source"]["arguments"])
+    argv = reload_arguments(source, plan["source_manifest"]["root"])
+    expected = _preflight_receipt(
+        plan,
+        request,
+        checkpoint_files=len(plan["source_manifest"]["files"]),
+        native_arguments=argv,
+    )
+    body = {key: value for key, value in proof.items() if key != "sha256"}
+    if body != expected or proof.get("sha256") != digest(body):
+        raise ValueError("missing or mismatched Miles reload CPU preflight")
 
 
 def _state_summary(value: Any, *, depth: int = 0) -> Any:

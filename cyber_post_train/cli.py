@@ -845,6 +845,10 @@ def submit(
             proof.get(k) != v for k, v in expected.items()
         ):
             raise ValueError("missing or mismatched CPU preflight")
+        if plan.get("schema") == "cyber_miles_rl_reload_v1":
+            from training.miles_reload import validate_preflight_receipt
+
+            validate_preflight_receipt(plan, request, proof)
         with _client(cluster) as client:
             if plan.get("schema") == "cyber_skyrl_rl_reload_v1":
                 from training.skyrl_rl_checkpoint import validate_reload_preview
