@@ -448,6 +448,13 @@ def accept_reload(
 
 def validate_accepted(value: dict, *, check_files: bool = True) -> dict:
     """Recompute an accepted receipt before a production-promotion consumer uses it."""
+    from . import miles_policy_observer
+
+    if value.get("schema") == miles_policy_observer.RELOAD_ACCEPTED_SCHEMA:
+        return miles_policy_observer.validate_observer_reload_accepted(
+            value,
+            check_files=check_files,
+        )
     if not check_files:
         raise ValueError("Miles reload promotion requires reopening every referenced file")
     sealed(value, ACCEPTED_SCHEMA)

@@ -58,6 +58,7 @@ SUBMISSION_SCHEMA = "cyber_miles_policy_observer_submission_v1"
 CONTROLLER_SCHEMA = "cyber_miles_policy_observer_controller_v1"
 RELEASE_SCHEMA = "cyber_miles_policy_observer_release_v1"
 POLICY_SCHEMA = "cyber_miles_policy_tensor_delta_observation_v1"
+RELOAD_ACCEPTED_SCHEMA = "cyber_miles_policy_observer_reload_accepted_v1"
 WORLD_SIZE = 8
 DEADLINE_SECONDS = 1800
 COMPARISON_METHOD = "all_rank_named_policy_tensor_value_sha256_v1"
@@ -104,11 +105,48 @@ _RESULT_FIELDS = {
     "comparison_method",
     "ranks",
     "changed_policy_ranks",
+    "restored_next_rollout_id",
     "checkpoint_state_commitment_method",
+    "state_stable_across_zero_updates",
     "work_executed",
     "base_checkpoint_unchanged",
     "trained_checkpoint_unchanged",
     "completed_at",
+    "reward_values_included",
+    "task_content_included",
+    "tensor_values_included",
+    "sha256",
+}
+_RELOAD_ACCEPTED_FIELDS = {
+    "schema",
+    "status",
+    "source_manifest_sha256",
+    "source_terminal_acceptance_sha256",
+    "source_policy_delta_observation_sha256",
+    "terminal_acceptance",
+    "checkpoint_manifest",
+    "policy_delta_observation",
+    "observer_result",
+    "observer_controller",
+    "observer_release",
+    "world_size",
+    "ranks",
+    "restored_rollout_index",
+    "restored_next_rollout_id",
+    "rank_state_commitment_method",
+    "rank_state_commitments_sha256",
+    "all_rank_model_loaded",
+    "all_rank_optimizer_loaded",
+    "all_rank_scheduler_loaded",
+    "all_rank_rng_loaded",
+    "state_stable_across_zero_updates",
+    "exact_checkpoint_payload_reopened_after_release",
+    "source_checkpoint_unchanged_after_release",
+    "work_executed",
+    "observer_gpu_jobs",
+    "additional_reload_gpu_jobs",
+    "external_gpu_release_verified",
+    "production_promotion_requires_this_receipt",
     "reward_values_included",
     "task_content_included",
     "tensor_values_included",
@@ -1244,7 +1282,7 @@ def _trained_probe(self) -> dict[str, Any]:
     import torch.distributed as dist
 
     dist.barrier()
-    result = {
+    first = {
         "rank": dist.get_rank(),
         "world_size": dist.get_world_size(),
         "model": _model_probe(self.model),
@@ -1253,7 +1291,18 @@ def _trained_probe(self) -> dict[str, Any]:
         "rng_sha256": _rng_probe(),
     }
     dist.barrier()
-    return result
+    second = {
+        "rank": dist.get_rank(),
+        "world_size": dist.get_world_size(),
+        "model": _model_probe(self.model),
+        "optimizer": _optimizer_probe(self.optimizer),
+        "scheduler": _scheduler_probe(self.opt_param_scheduler),
+        "rng_sha256": _rng_probe(),
+    }
+    dist.barrier()
+    if first != second:
+        raise ValueError("trained state changed during the zero-update observer")
+    return first
 
 
 async def _probe_group(args, method_name: str, method) -> tuple[list[Any], list[dict[str, Any]]]:
@@ -1351,7 +1400,10 @@ def validate_result(plan: dict[str, Any], value: dict[str, Any]) -> list[int]:
         != plan["trained_checkpoint"]["sha256"]
         or value.get("world_size") != WORLD_SIZE
         or value.get("comparison_method") != COMPARISON_METHOD
+        or value.get("restored_next_rollout_id")
+        != plan["trained_checkpoint"]["next_rollout_id"]
         or value.get("checkpoint_state_commitment_method") != RANK_STATE_COMMITMENT_METHOD
+        or value.get("state_stable_across_zero_updates") is not True
         or value.get("work_executed") != _ZERO_WORK
         or value.get("base_checkpoint_unchanged") is not True
         or value.get("trained_checkpoint_unchanged") is not True
@@ -1597,6 +1649,221 @@ def validate_policy_evidence(
     return len(value["changed_policy_ranks"])
 
 
+def _reopen_reference(
+    reference: Mapping[str, Any], schema: str
+) -> tuple[dict[str, Any], str]:
+    if set(reference) != _REFERENCE_FIELDS:
+        raise ValueError("observer-backed reload reference fields changed")
+    value, file_sha256 = _read(Path(str(reference["path"])), schema)
+    if (
+        file_sha256 != str(reference["file_sha256"]).removeprefix("sha256:")
+        or _sha(value["sha256"], "observer-backed reload receipt digest")
+        != str(reference["receipt_sha256"]).removeprefix("sha256:")
+    ):
+        raise ValueError("observer-backed reload reference changed")
+    return value, file_sha256
+
+
+def _trained_state_commitments(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            "rank": rank,
+            "model_tensor_count": row["policy_tensor_count"],
+            "model_local_numel": row["local_policy_numel"],
+            "model_structure_sha256": row["trained_policy_structure_sha256"],
+            "model_value_sha256": row["trained_policy_value_sha256"],
+            "optimizer_value_sha256": row["trained_optimizer_value_sha256"],
+            "scheduler_value_sha256": row["trained_scheduler_value_sha256"],
+            "rng_value_sha256": row["trained_rng_value_sha256"],
+        }
+        for rank, row in enumerate(rows)
+    ]
+
+
+def _observer_reload_body(terminal_path: Path) -> dict[str, Any]:
+    """Derive reload acceptance from the same released all-rank observer run."""
+    from . import miles_acceptance
+
+    terminal, terminal_file_sha256 = _read(
+        terminal_path,
+        miles_acceptance.TERMINAL_SCHEMA,
+    )
+    miles_acceptance.validate_terminal(terminal, check_files=True)
+    training_submission, _ = _reopen_reference(
+        terminal["submission_binding"],
+        miles_acceptance.SUBMISSION_SCHEMA,
+    )
+    source_plan, _ = _json_snapshot(Path(training_submission["source_plan_path"]))
+    if not isinstance(source_plan, dict):
+        raise ValueError("observer-backed reload source plan is not an object")
+    checkpoint, checkpoint_file_sha256 = _reopen_reference(
+        terminal["checkpoint_manifest"],
+        CHECKPOINT_SCHEMA,
+    )
+    policy, policy_file_sha256 = _reopen_reference(
+        terminal["policy_delta_observation"],
+        POLICY_SCHEMA,
+    )
+    validate_policy_evidence(policy, source_plan, checkpoint)
+
+    observer_submission, _ = _reopen_reference(
+        policy["observer_submission"],
+        SUBMISSION_SCHEMA,
+    )
+    observer_plan, observer_plan_file_sha256 = _json_snapshot(
+        Path(observer_submission["observer_plan_path"])
+    )
+    if not isinstance(observer_plan, dict):
+        raise ValueError("observer-backed reload plan is not an object")
+    _validate_plan(observer_plan, check_files=True, require_current_runtime=False)
+    if (
+        observer_plan_file_sha256
+        != observer_submission["observer_plan_file_sha256"].removeprefix("sha256:")
+        or observer_plan["source_plan"] != source_plan
+        or observer_plan["trained_checkpoint"] != checkpoint
+    ):
+        raise ValueError("observer-backed reload plan changed")
+    result, _ = _reopen_reference(policy["observer_result"], RESULT_SCHEMA)
+    validate_result(observer_plan, result)
+    controller, controller_file_sha256 = _reopen_reference(
+        policy["observer_controller"],
+        CONTROLLER_SCHEMA,
+    )
+    validate_controller_observation(
+        controller,
+        observer_plan,
+        observer_submission,
+        check_files=True,
+    )
+    release, _ = _reopen_reference(policy["observer_release"], RELEASE_SCHEMA)
+    validate_release_observation(
+        release,
+        observer_plan,
+        observer_submission,
+        controller,
+        controller_file_sha256,
+    )
+    _verify_checkpoint(checkpoint, hashes=True)
+    commitments = _trained_state_commitments(result["ranks"])
+    return {
+        "schema": RELOAD_ACCEPTED_SCHEMA,
+        "status": "accepted",
+        "source_manifest_sha256": checkpoint["sha256"],
+        "source_terminal_acceptance_sha256": terminal["sha256"],
+        "source_policy_delta_observation_sha256": policy["sha256"],
+        "terminal_acceptance": _reference(
+            terminal_path,
+            terminal,
+            terminal_file_sha256,
+        ),
+        "checkpoint_manifest": _reference(
+            Path(terminal["checkpoint_manifest"]["path"]),
+            checkpoint,
+            checkpoint_file_sha256,
+        ),
+        "policy_delta_observation": _reference(
+            Path(terminal["policy_delta_observation"]["path"]),
+            policy,
+            policy_file_sha256,
+        ),
+        "observer_result": policy["observer_result"],
+        "observer_controller": policy["observer_controller"],
+        "observer_release": policy["observer_release"],
+        "world_size": WORLD_SIZE,
+        "ranks": list(range(WORLD_SIZE)),
+        "restored_rollout_index": checkpoint["rollout_index"],
+        "restored_next_rollout_id": result["restored_next_rollout_id"],
+        "rank_state_commitment_method": RANK_STATE_COMMITMENT_METHOD,
+        "rank_state_commitments_sha256": "sha256:" + digest(commitments),
+        "all_rank_model_loaded": True,
+        "all_rank_optimizer_loaded": True,
+        "all_rank_scheduler_loaded": True,
+        "all_rank_rng_loaded": True,
+        "state_stable_across_zero_updates": True,
+        "exact_checkpoint_payload_reopened_after_release": True,
+        "source_checkpoint_unchanged_after_release": True,
+        "work_executed": dict(_ZERO_WORK),
+        "observer_gpu_jobs": 1,
+        "additional_reload_gpu_jobs": 0,
+        "external_gpu_release_verified": True,
+        "production_promotion_requires_this_receipt": True,
+        "reward_values_included": False,
+        "task_content_included": False,
+        "tensor_values_included": False,
+    }
+
+
+def accept_observer_reload(*, terminal_path: Path, output: Path) -> dict[str, Any]:
+    """Accept the observer's trained leg as the zero-update native reload gate."""
+    if output.exists() or output.is_symlink():
+        raise FileExistsError("observer-backed reload acceptance already exists")
+    body = _observer_reload_body(terminal_path)
+    expected = Path(body["observer_result"]["path"]).parent / "RELOAD_ACCEPTED.json"
+    if output != expected:
+        raise ValueError("observer-backed reload output is not observer-run-bound")
+    validate_observer_reload_accepted(
+        {**body, "sha256": "sha256:" + digest(body)},
+        check_files=True,
+    )
+    return _write(output, body)
+
+
+def validate_observer_reload_accepted(
+    value: dict[str, Any], *, check_files: bool = True
+) -> dict[str, str]:
+    """Reopen the single-run observer reload chain for production promotion."""
+    if not check_files:
+        raise ValueError("observer-backed reload requires reopening every referenced file")
+    sealed(value, RELOAD_ACCEPTED_SCHEMA)
+    if (
+        set(value) != _RELOAD_ACCEPTED_FIELDS
+        or value.get("status") != "accepted"
+        or value.get("world_size") != WORLD_SIZE
+        or value.get("ranks") != list(range(WORLD_SIZE))
+        or value.get("rank_state_commitment_method") != RANK_STATE_COMMITMENT_METHOD
+        or value.get("all_rank_model_loaded") is not True
+        or value.get("all_rank_optimizer_loaded") is not True
+        or value.get("all_rank_scheduler_loaded") is not True
+        or value.get("all_rank_rng_loaded") is not True
+        or value.get("state_stable_across_zero_updates") is not True
+        or value.get("exact_checkpoint_payload_reopened_after_release") is not True
+        or value.get("source_checkpoint_unchanged_after_release") is not True
+        or value.get("work_executed") != _ZERO_WORK
+        or value.get("observer_gpu_jobs") != 1
+        or value.get("additional_reload_gpu_jobs") != 0
+        or value.get("external_gpu_release_verified") is not True
+        or value.get("production_promotion_requires_this_receipt") is not True
+        or value.get("reward_values_included") is not False
+        or value.get("task_content_included") is not False
+        or value.get("tensor_values_included") is not False
+        or any(
+            not isinstance(value.get(name), dict)
+            or set(value[name]) != _REFERENCE_FIELDS
+            for name in (
+                "terminal_acceptance",
+                "checkpoint_manifest",
+                "policy_delta_observation",
+                "observer_result",
+                "observer_controller",
+                "observer_release",
+            )
+        )
+    ):
+        raise ValueError("observer-backed reload acceptance is incomplete")
+    expected = _observer_reload_body(Path(value["terminal_acceptance"]["path"]))
+    if {key: item for key, item in value.items() if key != "sha256"} != expected:
+        raise ValueError("observer-backed reload differs from rederived evidence")
+    return {
+        "source_manifest_sha256": value["source_manifest_sha256"],
+        "source_terminal_acceptance_sha256": value[
+            "source_terminal_acceptance_sha256"
+        ],
+        "rank_state_commitments_sha256": value[
+            "rank_state_commitments_sha256"
+        ],
+    }
+
+
 def _native(plan: dict[str, Any]) -> dict[str, Any]:
     import ray
 
@@ -1635,7 +1902,9 @@ def _native(plan: dict[str, Any]) -> dict[str, Any]:
         "comparison_method": COMPARISON_METHOD,
         "ranks": rows,
         "changed_policy_ranks": [row["rank"] for row in rows if row["policy_changed"]],
+        "restored_next_rollout_id": plan["trained_checkpoint"]["next_rollout_id"],
         "checkpoint_state_commitment_method": RANK_STATE_COMMITMENT_METHOD,
+        "state_stable_across_zero_updates": True,
         "work_executed": dict(_ZERO_WORK),
         "base_checkpoint_unchanged": True,
         "trained_checkpoint_unchanged": True,
