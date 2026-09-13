@@ -123,21 +123,37 @@ ENGINE_DIAGNOSTIC_SUCCESSOR_CONFIG_FILE_SHA256 = (
 ENGINE_DIAGNOSTIC_SUCCESSOR_DATA_CONFIG_FILE_SHA256 = (
     "sha256:084bb9a65b77482e46f0218ff990a920abed2712de1e8cea4f8053dca594846e"
 )
-ENGINE_DIAGNOSTIC_CURRENT_CONFIG_PATH = "qwen38-rl-filtered-skyrl-engine-diagnostic-dev-v10.json"
-ENGINE_DIAGNOSTIC_CURRENT_CONFIG_NAME = "chris-q38-rldiag-dev10"
-ENGINE_DIAGNOSTIC_CURRENT_WANDB_RUN_ID = "chris-q38-rldiag-dev10"
-ENGINE_DIAGNOSTIC_CURRENT_OUTPUT_ROOT = "/mnt/sfs/jobs/chris-q38-rldiag-dev10"
-ENGINE_DIAGNOSTIC_CURRENT_DATA_ROOT = (
+ENGINE_DIAGNOSTIC_REJECTED_CONFIG_PATH = "qwen38-rl-filtered-skyrl-engine-diagnostic-dev-v10.json"
+ENGINE_DIAGNOSTIC_REJECTED_CONFIG_NAME = "chris-q38-rldiag-dev10"
+ENGINE_DIAGNOSTIC_REJECTED_WANDB_RUN_ID = "chris-q38-rldiag-dev10"
+ENGINE_DIAGNOSTIC_REJECTED_OUTPUT_ROOT = "/mnt/sfs/jobs/chris-q38-rldiag-dev10"
+ENGINE_DIAGNOSTIC_REJECTED_DATA_ROOT = (
     "/mnt/sfs/jobs/chris-q38-study-corpora-v1/rldiag-inputs-dev10/data"
 )
-ENGINE_DIAGNOSTIC_CURRENT_PREPARED_ROOT = (
+ENGINE_DIAGNOSTIC_REJECTED_PREPARED_ROOT = (
     "/mnt/sfs/jobs/chris-q38-study-corpora-v1/rldiag-inputs-dev10/prepared-v1"
 )
-ENGINE_DIAGNOSTIC_CURRENT_CONFIG_FILE_SHA256 = (
+ENGINE_DIAGNOSTIC_REJECTED_CONFIG_FILE_SHA256 = (
     "sha256:9cfbb2b4bbbf97e84c1dc32f5dc4ebad5e6ddf670467b28e2019d4262f85ba9f"
 )
-ENGINE_DIAGNOSTIC_CURRENT_DATA_CONFIG_FILE_SHA256 = (
+ENGINE_DIAGNOSTIC_REJECTED_DATA_CONFIG_FILE_SHA256 = (
     "sha256:b349aa746c333f98bdebcc0d4147b0c85080008c0d0b81bea6050bfcf847083a"
+)
+ENGINE_DIAGNOSTIC_CURRENT_CONFIG_PATH = "qwen38-rl-filtered-skyrl-engine-diagnostic-dev-v11.json"
+ENGINE_DIAGNOSTIC_CURRENT_CONFIG_NAME = "chris-q38-rldiag-dev11"
+ENGINE_DIAGNOSTIC_CURRENT_WANDB_RUN_ID = "chris-q38-rldiag-dev11"
+ENGINE_DIAGNOSTIC_CURRENT_OUTPUT_ROOT = "/mnt/sfs/jobs/chris-q38-rldiag-dev11"
+ENGINE_DIAGNOSTIC_CURRENT_DATA_ROOT = (
+    "/mnt/sfs/jobs/chris-q38-study-corpora-v1/rldiag-inputs-dev11/data"
+)
+ENGINE_DIAGNOSTIC_CURRENT_PREPARED_ROOT = (
+    "/mnt/sfs/jobs/chris-q38-study-corpora-v1/rldiag-inputs-dev11/prepared-v1"
+)
+ENGINE_DIAGNOSTIC_CURRENT_CONFIG_FILE_SHA256 = (
+    "sha256:079160bac1cfd9a900a5d1d3e27236d58e9448c4fa59197c99ad3787ff317478"
+)
+ENGINE_DIAGNOSTIC_CURRENT_DATA_CONFIG_FILE_SHA256 = (
+    "sha256:b95b896a0cee0813751d63d939d73580598d51dc25e06142bfb6cfbae9244dbf"
 )
 ENGINE_DIAGNOSTIC_MODEL_SHA256 = "dcfdcd6ecb6661741cd3a4b24dc5af7259642c8a6824773e0de70d55d7501179"
 ENGINE_DIAGNOSTIC_DATA_IDENTITY = {
@@ -388,7 +404,7 @@ _SHA256 = re.compile(r"sha256:[0-9a-f]{64}")
 
 
 def _require_fresh_engine_diagnostic_identity(plan: object) -> None:
-    """Retire dev8 and reject partial reuse of the reviewed dev9 identities."""
+    """Retire dev8-dev10 and reject partial reuse of the fresh dev11 identity."""
     if not isinstance(plan, Mapping):
         return
     arguments = plan.get("arguments")
@@ -442,6 +458,20 @@ def _require_fresh_engine_diagnostic_identity(plan: object) -> None:
     if any(observed.get(key) == value for key, value in terminal_markers.items()):
         raise ValueError("terminal dev9 identity cannot be replayed")
 
+    terminal_rejected = {
+        "run_name": ENGINE_DIAGNOSTIC_REJECTED_CONFIG_NAME,
+        "argument_name": ENGINE_DIAGNOSTIC_REJECTED_CONFIG_NAME,
+        "data_name": ENGINE_DIAGNOSTIC_REJECTED_CONFIG_NAME,
+        "wandb_run_id": ENGINE_DIAGNOSTIC_REJECTED_WANDB_RUN_ID,
+        "output_root": ENGINE_DIAGNOSTIC_REJECTED_OUTPUT_ROOT,
+        "argument_output_root": ENGINE_DIAGNOSTIC_REJECTED_OUTPUT_ROOT,
+        "train_data": ENGINE_DIAGNOSTIC_REJECTED_DATA_ROOT + "/train.jsonl",
+        "dev_data": ENGINE_DIAGNOSTIC_REJECTED_DATA_ROOT + "/dev.jsonl",
+        "data_manifest": ENGINE_DIAGNOSTIC_REJECTED_DATA_ROOT + "/manifest.json",
+    }
+    if any(observed.get(key) == value for key, value in terminal_rejected.items()):
+        raise ValueError("terminal dev10 identity cannot be replayed")
+
     current = {
         "run_name": ENGINE_DIAGNOSTIC_CURRENT_CONFIG_NAME,
         "argument_name": ENGINE_DIAGNOSTIC_CURRENT_CONFIG_NAME,
@@ -488,7 +518,7 @@ def _require_fresh_engine_diagnostic_identity(plan: object) -> None:
             or execution.get("priority") != "c1"
             or resources != exact_resources
         ):
-            raise ValueError("dev10 identity is incomplete or mixed")
+            raise ValueError("dev11 identity is incomplete or mixed")
 
 
 def _engine_evidence_root() -> Path:
@@ -1270,13 +1300,23 @@ def _accepted_engine_diagnostic(prerequisites, config, *, relative_to):
     ):
         raise ValueError(
             "terminal dev8 is historical and privacy-disqualified; an exact accepted "
-            "dev9 terminal receipt is required"
+            "dev11 terminal receipt is required"
         )
     if (
-        gate.get("config_path") != ENGINE_DIAGNOSTIC_SUCCESSOR_CONFIG_PATH
-        or gate.get("config_file_sha256") != ENGINE_DIAGNOSTIC_SUCCESSOR_CONFIG_FILE_SHA256
+        gate.get("config_path") == ENGINE_DIAGNOSTIC_SUCCESSOR_CONFIG_PATH
+        or gate.get("config_file_sha256") == ENGINE_DIAGNOSTIC_SUCCESSOR_CONFIG_FILE_SHA256
     ):
-        raise ValueError("exact accepted dev9 engine diagnostic prerequisite is not bound")
+        raise ValueError("terminal dev9 engine diagnostic cannot be promoted")
+    if (
+        gate.get("config_path") == ENGINE_DIAGNOSTIC_REJECTED_CONFIG_PATH
+        or gate.get("config_file_sha256") == ENGINE_DIAGNOSTIC_REJECTED_CONFIG_FILE_SHA256
+    ):
+        raise ValueError("terminal rejected dev10 engine diagnostic cannot be promoted")
+    if (
+        gate.get("config_path") != ENGINE_DIAGNOSTIC_CURRENT_CONFIG_PATH
+        or gate.get("config_file_sha256") != ENGINE_DIAGNOSTIC_CURRENT_CONFIG_FILE_SHA256
+    ):
+        raise ValueError("exact accepted dev11 engine diagnostic prerequisite is not bound")
     diagnostic_path = relative_to / gate["config_path"]
     if not diagnostic_path.is_file() or diagnostic_path.is_symlink():
         raise ValueError("exact engine diagnostic config is unavailable")
@@ -1287,8 +1327,8 @@ def _accepted_engine_diagnostic(prerequisites, config, *, relative_to):
     recipe = diagnostic.get("recipe", {})
     if (
         diagnostic.get("backend") != "skyrl"
-        or diagnostic.get("name") != ENGINE_DIAGNOSTIC_SUCCESSOR_CONFIG_NAME
-        or diagnostic.get("output_root") != ENGINE_DIAGNOSTIC_SUCCESSOR_OUTPUT_ROOT
+        or diagnostic.get("name") != ENGINE_DIAGNOSTIC_CURRENT_CONFIG_NAME
+        or diagnostic.get("output_root") != ENGINE_DIAGNOSTIC_CURRENT_OUTPUT_ROOT
         or diagnostic.get("model") != config.get("model")
         or diagnostic.get("cluster", {}).get("target") != "dev"
         or diagnostic.get("cluster", {}).get("priority") != "c1"
@@ -1297,60 +1337,15 @@ def _accepted_engine_diagnostic(prerequisites, config, *, relative_to):
         or recipe.get("engine_start_timeout_seconds", 1800) != 1800
         or recipe.get("engine_cleanup_timeout_seconds", 300) != 300
     ):
-        raise ValueError("engine diagnostic is not the exact dev9 zero-work shape")
+        raise ValueError("engine diagnostic is not the exact dev11 zero-work shape")
 
     receipt_name, receipt_sha = (
         gate.get("terminal_receipt_path"),
         gate.get("terminal_receipt_file_sha256"),
     )
     if not isinstance(receipt_name, str) or not isinstance(receipt_sha, str):
-        raise ValueError("exact accepted dev9 terminal receipt is not bound")
-    raise ValueError("exact dev9 terminal acceptance bindings are not frozen yet")
-    receipt_path = relative_to / receipt_name
-    if not receipt_path.is_file() or receipt_path.is_symlink():
-        raise ValueError("bound dev8 terminal receipt is unavailable")
-    receipt_payload, observed_receipt_sha256 = _snapshot(receipt_path)
-    if observed_receipt_sha256 != receipt_sha:
-        raise ValueError("dev8 terminal receipt file digest mismatch")
-    receipt = json.loads(receipt_payload)
-    if receipt_payload != _canonical_json(receipt):
-        raise ValueError("dev8 terminal receipt must use canonical JSON bytes")
-    immutable = _validate_engine_diagnostic_receipt(
-        receipt,
-        config_file_sha256=gate["config_file_sha256"],
-        expected_plan_sha256=ENGINE_DIAGNOSTIC_PLAN_SHA256,
-        expected_request_sha256=ENGINE_DIAGNOSTIC_REQUEST_SHA256,
-    )
-    image_sha256 = DEV8_ENGINE_IMAGE.rsplit("@sha256:", 1)[1]
-    proof = {
-        "schema": "cyber_skyrl_engine_prerequisite_v1",
-        "status": "accepted",
-        "config_path": gate["config_path"],
-        "config_file_sha256": gate["config_file_sha256"],
-        "terminal_receipt_path": gate["terminal_receipt_path"],
-        "terminal_receipt_file_sha256": gate["terminal_receipt_file_sha256"],
-        "terminal_receipt_self_sha256": receipt["sha256"],
-        "diagnostic_plan_sha256": immutable["plan_sha256"],
-        "diagnostic_request_sha256": immutable["request_sha256"],
-        "image_sha256": image_sha256,
-        "workers": ENGINE_DIAGNOSTIC_WORKERS,
-        "gpus_per_worker": ENGINE_DIAGNOSTIC_GPUS_PER_WORKER,
-        "kubernetes_context": DEV_KUBERNETES_CONTEXT,
-        "namespace": DEV_KUBERNETES_NAMESPACE,
-        "namespace_uid": immutable["namespace_uid"],
-        "api_run_name": immutable["api_run_name"],
-        "api_job_id": immutable["api_job_id"],
-        "rayjob_uid": immutable["rayjob_uid"],
-        "workload_uid": immutable["workload_uid"],
-        "raycluster_uid": immutable["raycluster_uid"],
-        "pod_uids": immutable["pod_uids"],
-        "runtime_user": immutable["runtime_user"],
-        "release_file_sha256": immutable["release_file_sha256"],
-        "gpu_release_proven": True,
-        "terminal_receipt": receipt,
-    }
-    proof["sha256"] = "sha256:" + digest(proof)
-    return proof
+        raise ValueError("exact accepted dev11 terminal receipt is not bound")
+    raise ValueError("exact dev11 terminal acceptance bindings are not frozen yet")
 
 
 def _validate_embedded_engine_prerequisite(proof, *, required=False):
@@ -1364,8 +1359,18 @@ def _validate_embedded_engine_prerequisite(proof, *, required=False):
     ):
         raise ValueError(
             "terminal dev8 prerequisite is historical and privacy-disqualified; "
-            "an exact accepted dev9 terminal receipt is required"
+            "an exact accepted dev11 terminal receipt is required"
         )
+    if isinstance(proof, dict) and (
+        proof.get("config_path") == ENGINE_DIAGNOSTIC_SUCCESSOR_CONFIG_PATH
+        or proof.get("config_file_sha256") == ENGINE_DIAGNOSTIC_SUCCESSOR_CONFIG_FILE_SHA256
+    ):
+        raise ValueError("terminal dev9 engine prerequisite cannot be replayed")
+    if isinstance(proof, dict) and (
+        proof.get("config_path") == ENGINE_DIAGNOSTIC_REJECTED_CONFIG_PATH
+        or proof.get("config_file_sha256") == ENGINE_DIAGNOSTIC_REJECTED_CONFIG_FILE_SHA256
+    ):
+        raise ValueError("terminal rejected dev10 engine prerequisite cannot be replayed")
     fields = {
         "schema",
         "status",

@@ -1,4 +1,4 @@
-"""Current dev10 identity and terminal dev8/dev9 replay gates for the SkyRL smoke."""
+"""Current dev11 identity and terminal dev8-dev10 replay gates for the SkyRL smoke."""
 # ruff: noqa: F811
 
 import copy
@@ -27,9 +27,13 @@ DATA_V9 = ROOT / (
 DATA_V10 = ROOT / (
     "configs/qualification/qwen38-rl-filtered-skyrl-engine-diagnostic-data-dev-v10.json"
 )
+DATA_V11 = ROOT / (
+    "configs/qualification/qwen38-rl-filtered-skyrl-engine-diagnostic-data-dev-v11.json"
+)
 RUN_V8 = ROOT / "configs/qualification/qwen38-rl-filtered-skyrl-engine-diagnostic-dev-v8.json"
 RUN_V9 = ROOT / "configs/qualification/qwen38-rl-filtered-skyrl-engine-diagnostic-dev-v9.json"
 RUN_V10 = ROOT / ("configs/qualification/qwen38-rl-filtered-skyrl-engine-diagnostic-dev-v10.json")
+RUN_V11 = ROOT / ("configs/qualification/qwen38-rl-filtered-skyrl-engine-diagnostic-dev-v11.json")
 IMAGE = (
     "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:"
     "89758df2b5f35cdb19efe948c7f6ef54f11e2e2ab47a45d600c25f36914e308f"
@@ -136,41 +140,48 @@ def test_dev9_is_a_fresh_dev_only_identity_with_unchanged_science():
     )
 
 
-def test_dev10_is_the_current_fresh_identity_with_unchanged_science():
+def test_dev11_is_the_current_fresh_identity_with_unchanged_science():
     data_v9, data_v10 = load(DATA_V9), load(DATA_V10)
-    run_v9, run_v10 = load(RUN_V9), load(RUN_V10)
+    data_v11 = load(DATA_V11)
+    run_v9, run_v10, run_v11 = load(RUN_V9), load(RUN_V10), load(RUN_V11)
 
-    assert RUN_V10.name == skyrl_training.ENGINE_DIAGNOSTIC_CURRENT_CONFIG_PATH
-    assert sha256(RUN_V10) == skyrl_training.ENGINE_DIAGNOSTIC_CURRENT_CONFIG_FILE_SHA256
-    assert sha256(DATA_V10) == skyrl_training.ENGINE_DIAGNOSTIC_CURRENT_DATA_CONFIG_FILE_SHA256
-    assert run_v10["name"] == data_v10["name"] == run_v10["wandb"]["run_id"]
-    assert run_v10["name"] == skyrl_training.ENGINE_DIAGNOSTIC_CURRENT_CONFIG_NAME
-    assert run_v10["output_root"] == skyrl_training.ENGINE_DIAGNOSTIC_CURRENT_OUTPUT_ROOT
-    assert data_v10["output"] == skyrl_training.ENGINE_DIAGNOSTIC_CURRENT_DATA_ROOT
-    assert run_v10["data"]["root"] == data_v10["output"]
-    assert run_v10["data"]["manifest"] == data_v10["output"] + "/manifest.json"
-    assert run_v10["cluster"]["target"] == "dev"
+    assert RUN_V10.name == skyrl_training.ENGINE_DIAGNOSTIC_REJECTED_CONFIG_PATH
+    assert sha256(RUN_V10) == skyrl_training.ENGINE_DIAGNOSTIC_REJECTED_CONFIG_FILE_SHA256
+    assert sha256(DATA_V10) == skyrl_training.ENGINE_DIAGNOSTIC_REJECTED_DATA_CONFIG_FILE_SHA256
+    assert RUN_V11.name == skyrl_training.ENGINE_DIAGNOSTIC_CURRENT_CONFIG_PATH
+    assert sha256(RUN_V11) == skyrl_training.ENGINE_DIAGNOSTIC_CURRENT_CONFIG_FILE_SHA256
+    assert sha256(DATA_V11) == skyrl_training.ENGINE_DIAGNOSTIC_CURRENT_DATA_CONFIG_FILE_SHA256
+    assert run_v11["name"] == data_v11["name"] == run_v11["wandb"]["run_id"]
+    assert run_v11["name"] == skyrl_training.ENGINE_DIAGNOSTIC_CURRENT_CONFIG_NAME
+    assert run_v11["output_root"] == skyrl_training.ENGINE_DIAGNOSTIC_CURRENT_OUTPUT_ROOT
+    assert data_v11["output"] == skyrl_training.ENGINE_DIAGNOSTIC_CURRENT_DATA_ROOT
+    assert run_v11["data"]["root"] == data_v11["output"]
+    assert run_v11["data"]["manifest"] == data_v11["output"] + "/manifest.json"
+    assert run_v11["cluster"]["target"] == "dev"
 
-    assert data_v10["name"] != data_v9["name"]
-    assert data_v10["output"] != data_v9["output"]
-    assert run_v10["output_root"] != run_v9["output_root"]
-    assert run_v10["wandb"]["run_id"] != run_v9["wandb"]["run_id"]
+    assert data_v11["name"] not in {data_v9["name"], data_v10["name"]}
+    assert data_v11["output"] not in {data_v9["output"], data_v10["output"]}
+    assert run_v11["output_root"] not in {run_v9["output_root"], run_v10["output_root"]}
+    assert run_v11["wandb"]["run_id"] not in {
+        run_v9["wandb"]["run_id"],
+        run_v10["wandb"]["run_id"],
+    }
     prepared = Path(skyrl_training.ENGINE_DIAGNOSTIC_CURRENT_PREPARED_ROOT)
     assert prepared.is_absolute()
-    assert prepared != Path(run_v10["output_root"])
-    assert not prepared.is_relative_to(Path(run_v10["output_root"]))
-    assert not Path(run_v10["output_root"]).is_relative_to(prepared)
-    assert prepared != Path(data_v10["output"])
+    assert prepared != Path(run_v11["output_root"])
+    assert not prepared.is_relative_to(Path(run_v11["output_root"]))
+    assert not Path(run_v11["output_root"]).is_relative_to(prepared)
+    assert prepared != Path(data_v11["output"])
 
     for key in ("backend", "task_set", "split", "tool_catalog", "model_lock", "model_root"):
-        assert data_v10[key] == data_v9[key]
-    assert data_v10["limits"] == data_v9["limits"]
+        assert data_v11[key] == data_v10[key]
+    assert data_v11["limits"] == data_v10["limits"]
     for key in ("backend", "model", "recipe"):
-        assert run_v10[key] == run_v9[key]
-    assert run_v10["cluster"] == run_v9["cluster"]
+        assert run_v11[key] == run_v10[key]
+    assert run_v11["cluster"] == run_v10["cluster"]
 
 
-def test_dev9_uses_the_new_qualified_relay_image(skyrl_prepared):
+def test_dev11_uses_the_qualified_relay_image(skyrl_prepared):
     plan = copy.deepcopy(skyrl_prepared.plan)
     request = skyrl_training.engine_diagnostic_request(plan)
 
@@ -190,7 +201,7 @@ def test_absent_context_exception_is_bound_to_the_exact_default_user_receipt():
     payload = DEFAULT_USER_EVIDENCE.read_bytes()
     evidence = json.loads(payload)
     unsigned = {key: value for key, value in evidence.items() if key != "receipt_sha256"}
-    binding = cli._DEV9_ABSENT_RUNTIME_CONTEXT_QUALIFICATION
+    binding = cli._ENGINE_DIAGNOSTIC_ABSENT_RUNTIME_CONTEXT_QUALIFICATION
 
     assert hashlib.sha256(payload).hexdigest() == binding["default_user_evidence_file_sha256"]
     assert (
@@ -211,7 +222,7 @@ def test_absent_context_exception_is_bound_to_the_exact_default_user_receipt():
 
 
 @pytest.mark.parametrize("missing", [None, "runAsUser", "runAsGroup", "runAsNonRoot"])
-def test_dev10_preview_accepts_only_truly_absent_identity_fields(monkeypatch, missing):
+def test_dev11_preview_accepts_only_truly_absent_identity_fields(monkeypatch, missing):
     force_absent_context_fallback(monkeypatch)
     plan, request = fallback_identity()
     expected = {"runAsUser": 1000, "runAsGroup": 100, "runAsNonRoot": True}
@@ -247,7 +258,7 @@ def test_dev10_preview_accepts_only_truly_absent_identity_fields(monkeypatch, mi
         ({"runAsUser": 0}, {"runAsUser": 1000}),
     ],
 )
-def test_dev10_preview_rejects_every_explicit_identity_conflict(
+def test_dev11_preview_rejects_every_explicit_identity_conflict(
     monkeypatch, pod_context, container_context
 ):
     force_absent_context_fallback(monkeypatch)
@@ -346,13 +357,77 @@ def test_terminal_dev9_identity_cannot_be_prepared_or_replayed(skyrl_prepared, f
         skyrl_training.job_request(plan)
 
 
-def test_partial_dev10_identity_is_rejected_before_request_render(skyrl_prepared):
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("run_name", skyrl_training.ENGINE_DIAGNOSTIC_REJECTED_CONFIG_NAME),
+        ("output_root", skyrl_training.ENGINE_DIAGNOSTIC_REJECTED_OUTPUT_ROOT),
+        ("data_root", skyrl_training.ENGINE_DIAGNOSTIC_REJECTED_DATA_ROOT),
+        ("wandb_run_id", skyrl_training.ENGINE_DIAGNOSTIC_REJECTED_WANDB_RUN_ID),
+    ],
+)
+def test_terminal_dev10_identity_cannot_be_prepared_or_replayed(skyrl_prepared, field, value):
+    plan = copy.deepcopy(skyrl_prepared.plan)
+    if field == "run_name":
+        plan["run_name"] = value
+        plan["arguments"]["name"] = value
+    elif field == "output_root":
+        plan["output_root"] = value
+        plan["arguments"]["output_root"] = value
+    elif field == "data_root":
+        plan["arguments"]["train_data"] = value + "/train.jsonl"
+        plan["arguments"]["dev_data"] = value + "/dev.jsonl"
+        plan["arguments"]["data_manifest"] = value + "/manifest.json"
+    else:
+        plan["arguments"]["wandb_run_id"] = value
+
+    with pytest.raises(ValueError, match="terminal dev10 identity cannot be replayed"):
+        skyrl_training.job_request(plan)
+
+
+def test_partial_dev11_identity_is_rejected_before_request_render(skyrl_prepared):
     plan = copy.deepcopy(skyrl_prepared.plan)
     plan["run_name"] = skyrl_training.ENGINE_DIAGNOSTIC_CURRENT_CONFIG_NAME
     plan["arguments"]["name"] = skyrl_training.ENGINE_DIAGNOSTIC_CURRENT_CONFIG_NAME
 
-    with pytest.raises(ValueError, match="dev10 identity is incomplete or mixed"):
+    with pytest.raises(ValueError, match="dev11 identity is incomplete or mixed"):
         skyrl_training.job_request(plan)
+
+
+def test_dev11_cannot_promote_before_an_exact_terminal_receipt():
+    run = load(RUN_V11)
+    gate = {
+        "engine_diagnostic": {
+            "config_path": RUN_V11.name,
+            "config_file_sha256": sha256(RUN_V11),
+            "terminal_receipt_path": None,
+            "terminal_receipt_file_sha256": None,
+        }
+    }
+
+    with pytest.raises(ValueError, match="exact accepted dev11 terminal receipt is not bound"):
+        skyrl_training._accepted_engine_diagnostic(gate, run, relative_to=RUN_V11.parent)
+
+
+def test_terminal_rejected_dev10_cannot_be_promoted_or_embedded():
+    run = load(RUN_V11)
+    gate = {
+        "engine_diagnostic": {
+            "config_path": RUN_V10.name,
+            "config_file_sha256": sha256(RUN_V10),
+            "terminal_receipt_path": None,
+            "terminal_receipt_file_sha256": None,
+        }
+    }
+    proof = {
+        "config_path": RUN_V10.name,
+        "config_file_sha256": sha256(RUN_V10),
+    }
+
+    with pytest.raises(ValueError, match="terminal rejected dev10 engine diagnostic"):
+        skyrl_training._accepted_engine_diagnostic(gate, run, relative_to=RUN_V10.parent)
+    with pytest.raises(ValueError, match="terminal rejected dev10 engine prerequisite"):
+        skyrl_training._validate_embedded_engine_prerequisite(proof, required=True)
 
 
 def test_historical_dev8_embedded_proof_cannot_be_relabelled_as_dev9():

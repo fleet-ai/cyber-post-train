@@ -1,6 +1,6 @@
 # Qwen3.8 SkyRL reward-acquisition canary
 
-Status: **source-direct data eligible; GPU launch still blocked on the fresh dev9
+Status: **source-direct data eligible; GPU launch still blocked on the fresh dev11
 engine receipt and is not submitted or production-qualified**.
 
 This is the smallest real RL run that preserves the qualified Qwen3.8 SkyRL
@@ -24,7 +24,7 @@ comparison and not authority for a production run.
 - Exact ordered tool schema: the existing reviewed `bash`, `submit_report`
   catalog, whose canonical digest is bound in the task set.
 - Model: exact `Qwen/Qwen3.8-27B` lock, revision, weight manifest and staged SFS
-  root shared with the historical dev8 and current dev9 engine diagnostics.
+  root shared with the historical dev8-dev10 and fresh dev11 engine diagnostics.
 - Image: the worker-RPC-sanitized immutable SkyRL image and its exact CPU
   qualification are pinned in `training/skyrl_training.py`. The prior dev8
   relay image is privacy-disqualified for every renamed run. A different image
@@ -50,12 +50,13 @@ evidence gate binds all three local enforcement files by digest and derives
 `training_data_eligible: true` from this source-direct closure. Historical
 reward remains only a selection prior.
 
-Dev8 is terminal historical evidence and is not a runtime prerequisite for the
-new image. The fresh [dev9 diagnostic](QWEN38_SKYRL_ENGINE_DIAGNOSTIC_DEV9.md)
+Dev8-dev10 are terminal historical evidence and are not runtime prerequisites for
+the new image. The fresh
+[dev11 diagnostic](../configs/qualification/qwen38-rl-filtered-skyrl-engine-diagnostic-dev-v11.json)
 must carry the request/preview `1000:100` binding, enforce it inside the
 allocated process, and cross-bind each Pod's observed UID/GID, effective
-security context, imageID and UID ownership through terminal release. Dev8 is
-never modified, retroactively upgraded, or replayed.
+security context, imageID and UID ownership through terminal release. Earlier
+diagnostic identities are never modified, retroactively upgraded, or replayed.
 
 The frozen dev row remains from another family and is never optimized. No
 WebExploitBench, final-test, external-benchmark row, task content or outcome is
@@ -107,17 +108,17 @@ an otherwise in-budget episode.
 
 Do not submit until all of these are true:
 
-1. The exact dev9 diagnostic has a digest-valid sanitized terminal receipt with
+1. The exact dev11 diagnostic has a digest-valid sanitized terminal receipt with
    schema `cyber_skyrl_engine_diagnostic_terminal_v1`. It must reopen and
-   cross-bind the exact dev9 config, plan, request, CPU preflight and two-row
+   cross-bind the exact dev11 config, plan, request, CPU preflight and two-row
    create-once submission journal; the dev API and fresh Kubernetes object UIDs
    and owner chain; both Pods' exact image IDs, `1000:100` runtime identity and
    non-root security context; zero task/reward/optimizer/checkpoint/W&B work;
    clean owned-engine shutdown; terminal success; and absence of the RayCluster
-   and GPU Pods with zero active GPUs. No dev9 API or Kubernetes identity is
-   predeclared before it exists. Until the currently-null dev9 terminal path
-   and digest are replaced by that independently audited receipt, reward-canary
-   compilation fails before a launch request can be prepared.
+   and GPU Pods with zero active GPUs. No dev11 API or Kubernetes identity is
+   predeclared before it exists. Until the reward config's diagnostic config,
+   terminal path and digest are replaced by that independently audited dev11
+   receipt, reward-canary compilation fails before a launch request can be prepared.
 2. Revalidate the immutable reviewed tool catalog at the path named by the data
    config. Run `cyber-post-train rl-data` in the pinned image as user `1000:100`
    on CPU. The canary-specific validator in `training/rl_reward_canary.py`

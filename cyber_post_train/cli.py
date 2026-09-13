@@ -16,7 +16,7 @@ from .jobs import API_URLS, Jobs, JobsError, digest, validate_preview, validate_
 
 app = typer.Typer(no_args_is_help=True, pretty_exceptions_enable=False)
 
-_DEV9_ABSENT_RUNTIME_CONTEXT_QUALIFICATION = {
+_ENGINE_DIAGNOSTIC_ABSENT_RUNTIME_CONTEXT_QUALIFICATION = {
     "image": (
         "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:"
         "89758df2b5f35cdb19efe948c7f6ef54f11e2e2ab47a45d600c25f36914e308f"
@@ -96,7 +96,7 @@ def _fail(exc: Exception) -> None:
 
 
 def _validate_engine_diagnostic_preview(plan: dict, request: dict, preview_result: dict) -> dict:
-    """Accept omitted Pod identity only for the exact qualified dev9 image.
+    """Accept omitted Pod identity only for the exact qualified immutable image.
 
     The deployed dev Jobs API currently has no request field for a Pod security
     context. An omitted field is distinct from an explicit conflict: omission
@@ -124,7 +124,7 @@ def _validate_engine_diagnostic_preview(plan: dict, request: dict, preview_resul
             raise
         context_error = error
 
-    qualified = _DEV9_ABSENT_RUNTIME_CONTEXT_QUALIFICATION
+    qualified = _ENGINE_DIAGNOSTIC_ABSENT_RUNTIME_CONTEXT_QUALIFICATION
     execution = plan.get("execution", {})
     if (
         plan.get("run_name") != ENGINE_DIAGNOSTIC_CURRENT_CONFIG_NAME
@@ -147,7 +147,7 @@ def _validate_engine_diagnostic_preview(plan: dict, request: dict, preview_resul
             key: value for key, value in evidence.items() if key != "receipt_sha256"
         }
     except (OSError, TypeError, ValueError) as error:
-        raise JobsError("exact dev9 image default-user qualification is unavailable") from error
+        raise JobsError("exact engine image default-user qualification is unavailable") from error
     runtime = evidence.get("runtime", {})
     checks = evidence.get("checks", {})
     qualification_scope = evidence.get("qualification_scope", {})
@@ -190,9 +190,7 @@ def _validate_engine_diagnostic_preview(plan: dict, request: dict, preview_resul
         or ENGINE_IMAGE_CPU_QUALIFICATION.get("receipt_sha256")
         != qualified["image_cpu_qualification_receipt_sha256"]
     ):
-        raise JobsError(
-            "absent engine diagnostic runtime user requires the exact qualified dev9 image"
-        )
+        raise JobsError("absent engine diagnostic runtime user requires the exact qualified image")
 
     expected = {"runAsUser": 1000, "runAsGroup": 100, "runAsNonRoot": True}
     try:
@@ -253,7 +251,7 @@ def _validate_engine_diagnostic_preview(plan: dict, request: dict, preview_resul
 
 def _reward_canary_default_user_evidence() -> dict:
     """Reopen the exact clean-pull proof used only by the reward-canary fallback."""
-    qualified = _DEV9_ABSENT_RUNTIME_CONTEXT_QUALIFICATION
+    qualified = _ENGINE_DIAGNOSTIC_ABSENT_RUNTIME_CONTEXT_QUALIFICATION
     evidence_path = Path(__file__).resolve().parents[1] / qualified["default_user_evidence_path"]
     try:
         evidence_bytes = evidence_path.read_bytes()
@@ -332,7 +330,7 @@ def _validate_reward_canary_preview(plan: dict, request: dict, preview_result: d
         if str(error) != "reward canary preview runtime user differs from 1000:100":
             raise
         context_error = error
-    qualified = _DEV9_ABSENT_RUNTIME_CONTEXT_QUALIFICATION
+    qualified = _ENGINE_DIAGNOSTIC_ABSENT_RUNTIME_CONTEXT_QUALIFICATION
     execution = plan.get("execution", {})
     if (
         plan.get("run_name") != REWARD_CANARY_ARGUMENTS["name"]

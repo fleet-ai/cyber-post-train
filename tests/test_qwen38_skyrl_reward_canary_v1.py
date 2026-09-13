@@ -228,8 +228,9 @@ def test_task_selection_uses_the_authoritative_source_directly() -> None:
     assert task_set["training_data_eligible"] is True
     assert version_evidence["eligible_source"]["task_version_id"] == source["task_version_id"]
     rejected = version_evidence["rejected_metadata_only_successor"]
-    assert rejected["successor_task_version_id"] == (
-        evidence["task_successors"][0]["metadata_only_successor_task_version_id"]
+    assert (
+        rejected["successor_task_version_id"]
+        == (evidence["task_successors"][0]["metadata_only_successor_task_version_id"])
     )
     assert rejected["eligibility_status"] == "rejected_missing_versioned_starting_data"
     assert rejected["authoritative_differing_fields"] == ["data_id", "data_version"]
@@ -374,11 +375,11 @@ def test_real_canary_is_one_dev_only_update_with_durable_evidence() -> None:
         "sha256:" + hashlib.sha256(DEV9_RUN.read_bytes()).hexdigest()
     )
     assert gate["terminal_receipt_path"] is gate["terminal_receipt_file_sha256"] is None
-    with pytest.raises(ValueError, match="exact accepted dev9 terminal receipt is not bound"):
+    with pytest.raises(ValueError, match="terminal dev9 engine diagnostic cannot be promoted"):
         skyrl_training._accepted_engine_diagnostic(
             run["prerequisites"], run, relative_to=RUN.parent
         )
-    with pytest.raises(ValueError, match="exact accepted dev9 terminal receipt is not bound"):
+    with pytest.raises(ValueError, match="terminal dev9 engine diagnostic cannot be promoted"):
         skyrl_training.compile_rl(run, relative_to=RUN.parent)
 
 
@@ -1123,11 +1124,9 @@ def test_reward_canary_default_user_fallback_binds_exact_image_and_receipt() -> 
     payload = DEFAULT_USER_EVIDENCE.read_bytes()
     evidence = json.loads(payload)
     unsigned = {key: value for key, value in evidence.items() if key != "receipt_sha256"}
-    qualification = cli._DEV9_ABSENT_RUNTIME_CONTEXT_QUALIFICATION
+    qualification = cli._ENGINE_DIAGNOSTIC_ABSENT_RUNTIME_CONTEXT_QUALIFICATION
 
-    assert hashlib.sha256(payload).hexdigest() == qualification[
-        "default_user_evidence_file_sha256"
-    ]
+    assert hashlib.sha256(payload).hexdigest() == qualification["default_user_evidence_file_sha256"]
     assert (
         hashlib.sha256(
             json.dumps(unsigned, sort_keys=True, separators=(",", ":")).encode() + b"\n"
@@ -1219,7 +1218,7 @@ def test_reward_canary_absent_context_requires_its_exact_qualification(
     changed_path = tmp_path / "changed-default-user-evidence.json"
     changed_path.write_text(json.dumps(changed))
     monkeypatch.setitem(
-        cli._DEV9_ABSENT_RUNTIME_CONTEXT_QUALIFICATION,
+        cli._ENGINE_DIAGNOSTIC_ABSENT_RUNTIME_CONTEXT_QUALIFICATION,
         "default_user_evidence_path",
         str(changed_path),
     )
@@ -1255,7 +1254,7 @@ def test_reward_canary_explicit_context_does_not_use_default_user_fallback(
     allow_synthetic_reward_bindings(monkeypatch)
     request = skyrl_training.job_request(plan)
     monkeypatch.setitem(
-        cli._DEV9_ABSENT_RUNTIME_CONTEXT_QUALIFICATION,
+        cli._ENGINE_DIAGNOSTIC_ABSENT_RUNTIME_CONTEXT_QUALIFICATION,
         "default_user_evidence_path",
         str(tmp_path / "absent.json"),
     )
@@ -1268,11 +1267,14 @@ def test_reward_canary_explicit_context_does_not_use_default_user_fallback(
 
 
 def test_reward_canary_default_user_fallback_is_not_global(skyrl_prepared) -> None:
-    assert cli._validate_reward_canary_preview(
-        skyrl_prepared.plan,
-        {},
-        reward_preview_with_contexts(),
-    ) == {}
+    assert (
+        cli._validate_reward_canary_preview(
+            skyrl_prepared.plan,
+            {},
+            reward_preview_with_contexts(),
+        )
+        == {}
+    )
 
 
 @pytest.mark.parametrize(
