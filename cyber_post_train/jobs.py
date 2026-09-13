@@ -26,6 +26,8 @@ import yaml
 
 API_URL = "https://api.ft.flt.build"
 API_URLS = {"dev": "https://api.ft.dev.flt.build", "prod": API_URL}
+PRIORITY_REASON_ANNOTATION = "fleet.ai/priority-reason"
+_PUBLIC_DOCKERHUB_IMAGES_WITHOUT_PULL_SECRET = frozenset({"lmsysorg/sglang"})
 
 _CREDENTIAL_ENV = re.compile(
     r"(?:^|_)(?:TOKENS?|PASSWORDS?|CREDENTIALS?|SECRETS?|API_KEYS?|ACCESS_KEYS?)(?:_|$)"
@@ -151,10 +153,19 @@ def validate_request(config: dict) -> None:
     for key, upper in (("workers", 8), ("gpus_per_worker", 8)):
         if type(config.get(key)) is not int or not 1 <= config[key] <= upper:
             raise JobsError(f"{key} must be a positive integer no greater than {upper}")
-    if config.get("priority_class") not in {"c1", "c2"}:
-        raise JobsError(
-            "use c1 (normal/high training) or c2 (backfill); c0 needs separate approval"
-        )
+    priority = config.get("priority_class")
+    if priority not in {"c0", "c1", "c2"}:
+        raise JobsError("priority_class must be c0, c1, or c2")
+    reason = config.get("priority_reason")
+    if priority == "c0":
+        if (
+            not isinstance(reason, str)
+            or not 10 <= len(reason) <= 500
+            or reason != " ".join(reason.split())
+        ):
+            raise JobsError("c0 requires a single-line priority_reason of 10 to 500 characters")
+    elif reason is not None:
+        raise JobsError("priority_reason is reserved for c0 requests")
     if config.get("queue_priority_class") is not None:
         raise JobsError("queue priority is derived by the platform; omit queue_priority_class")
     if config.get("requeueIfPreempted") is not False:
@@ -191,7 +202,21 @@ def validate_request(config: dict) -> None:
 
 def validate_preview(config: dict, preview: dict) -> dict:
     validate_request(config)
-    if preview.get("errors") or preview.get("warnings"):
+    warnings = preview.get("warnings", [])
+    if not isinstance(warnings, list) or any(not isinstance(item, str) for item in warnings):
+        raise JobsError("preview warnings are malformed")
+    image_path = config["image"].split("@sha256:", 1)[0]
+    public_pull_warning = (
+        "no pull credential for {host}: the ServiceAccount's is used, which is right for ECR "
+        "and wrong for a private registry. Set image_pull_secrets if the image is private."
+    )
+    allowed_warnings = (
+        [public_pull_warning.format(host=image_path.split("/", 1)[0])]
+        if image_path in _PUBLIC_DOCKERHUB_IMAGES_WITHOUT_PULL_SECRET
+        and not config.get("image_pull_secrets")
+        else []
+    )
+    if preview.get("errors") or warnings != allowed_warnings:
         raise JobsError("preview reported errors/warnings; review before submission")
     try:
         obj = yaml.safe_load(preview["manifest_yaml"])
@@ -212,8 +237,11 @@ def validate_preview(config: dict, preview: dict) -> dict:
             raise JobsError("preview queue priority differs from requested pod priority")
         if meta["labels"].get("fleet.ai/requeue-if-preempted") != "false":
             raise JobsError("preview requeue policy drift")
-        if meta["annotations"].get("fleet.ai/run-dir") != config["run_dir"]:
+        annotations = meta["annotations"]
+        if annotations.get("fleet.ai/run-dir") != config["run_dir"]:
             raise JobsError("preview output directory drift")
+        if annotations.get(PRIORITY_REASON_ANNOTATION) != config.get("priority_reason"):
+            raise JobsError("preview priority reason drift")
         if not (spec["suspend"] is True and spec["shutdownAfterJobFinishes"] is True):
             raise JobsError("preview must queue normally and release on exit")
         if spec["entrypoint"] != config["command"]:

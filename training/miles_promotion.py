@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -18,6 +19,22 @@ PROD_OUTPUT = "/mnt/sfs/jobs/chris-q38-miles-rl-prod1"
 PROD_DATA_ROOT = "/mnt/sfs/jobs/chris-q38-miles-rl-prod1-inputs/data"
 PROD_DATA_MANIFEST = PROD_DATA_ROOT + "/manifest.json"
 PROD_WANDB = {"entity": "thefleet", "project": "cyber-post-train", "run_id": PROD_NAME}
+PROD_REWARD_CANARY_MODE = "reward_canary_v1"
+PROD_REWARD_CANARY_OUTPUT = "/mnt/sfs/jobs/chris-q38-miles-rl-prod1-canary-v1"
+PROD_REWARD_CANARY_WANDB = {
+    "entity": "thefleet",
+    "project": "cyber-post-train",
+    "run_id": "chris-q38-miles-rl-prod1-canary-v1",
+}
+PROD_REWARD_CANARY_REASON = (
+    "Urgent cyber post-training reward canary authorized by Chris to maximize time-to-result."
+)
+PROD_REWARD_CANARY_RESOURCES = {
+    "cpu_request": "32",
+    "cpu_limit": "32",
+    "memory_request": "1800Gi",
+    "memory_limit": "2400Gi",
+}
 EXPERIMENT_OWNER_PREFIX = "chris-"
 FLEET_RUN_NAME_LABEL = "fleet.ai/run-name"
 PROD_MODEL_SHA256 = "dcfdcd6ecb6661741cd3a4b24dc5af7259642c8a6824773e0de70d55d7501179"
@@ -153,6 +170,8 @@ _HEX_SHA = re.compile(r"sha256:[a-f0-9]{64}")
 _GIT_SHA = re.compile(r"[a-f0-9]{40}")
 _UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}")
 _RUN_NAME = re.compile(r"[a-z0-9](?:[-a-z0-9]*[a-z0-9])?")
+
+
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -248,6 +267,49 @@ def _exact_data(value: Any) -> None:
 
 def _candidate_without_promotion(config: dict[str, Any]) -> dict[str, Any]:
     return {key: item for key, item in config.items() if key != "production_promotion"}
+
+
+def _is_reward_canary_marker(value: Any) -> bool:
+    return value == {"mode": PROD_REWARD_CANARY_MODE}
+
+
+def _exact_reward_canary_config(config: dict[str, Any]) -> None:
+    """Admit one bounded production reward/update canary, never a full run."""
+    expected_recipe = {
+        "nodes": 1,
+        "gpus_per_node": 8,
+        "steps": 1,
+        "groups": 1,
+        "samples_per_prompt": 8,
+        "lr": 2e-6,
+        "temperature": 0.7,
+        "kl_loss_coef": 0.001,
+        "max_tokens_per_gpu": 8192,
+        "eval_interval": 1,
+        "checkpoint_interval": 1,
+        "seed": 42,
+    }
+    if (
+        config.get("name") != PROD_NAME
+        or config.get("output_root") != PROD_REWARD_CANARY_OUTPUT
+        or config.get("data") != {"manifest": PROD_DATA_MANIFEST, "root": PROD_DATA_ROOT}
+        or config.get("checkpoint")
+        != {
+            "manifest": "/mnt/sfs/jobs/chris-cpt-cleanup-q38-miles-base-v1/NATIVE_CHECKPOINT.json",
+            "sha256": "sha256:b3d772de9121f442ea7b9a4c9a996f2a0a99cab8c49fe3083c148fe3eebd089c",
+        }
+        or config.get("recipe") != expected_recipe
+        or config.get("wandb") != PROD_REWARD_CANARY_WANDB
+        or config.get("cluster")
+        != {
+            "target": "prod",
+            "priority": "c0",
+            "priority_reason": PROD_REWARD_CANARY_REASON,
+            "resources": PROD_REWARD_CANARY_RESOURCES,
+        }
+        or not _is_reward_canary_marker(config.get("production_promotion"))
+    ):
+        raise ValueError("Miles production reward canary differs from its exact one-update arm")
 
 
 def requires_production_promotion(value: Any) -> bool:
@@ -464,8 +526,11 @@ def bind_production_promotion(config: dict[str, Any], relative_to: Path) -> dict
         if config.get("production_promotion") is not None:
             raise ValueError("Miles production promotion cannot attach to a dev run")
         return None
-    _exact_candidate(config)
     reference = config.get("production_promotion")
+    if _is_reward_canary_marker(reference):
+        _exact_reward_canary_config(config)
+        return {"mode": PROD_REWARD_CANARY_MODE}
+    _exact_candidate(config)
     if not isinstance(reference, dict) or set(reference) != _REF_FIELDS:
         raise ValueError("exact Miles production promotion receipt is required")
     path = Path(reference["path"])
@@ -539,6 +604,66 @@ def _exact_plan(plan: dict[str, Any]) -> None:
     _exact_data(plan.get("data"))
 
 
+def _exact_reward_canary_plan(plan: dict[str, Any]) -> None:
+    from . import miles
+
+    args = plan.get("arguments", {})
+    execution = plan.get("execution", {})
+    checkpoint = plan.get("checkpoint", {})
+    expected = {
+        "name": PROD_NAME,
+        "output_root": PROD_REWARD_CANARY_OUTPUT,
+        "model_root": "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2",
+        "policy_identity_root": "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2",
+        "torch_dist_root": BASE_CHECKPOINT["root"],
+        "train_data": PROD_DATA_ROOT + "/train.jsonl",
+        "dev_data": PROD_DATA_ROOT + "/dev.jsonl",
+        "data_manifest": PROD_DATA_MANIFEST,
+        "wandb_entity": PROD_REWARD_CANARY_WANDB["entity"],
+        "wandb_project": PROD_REWARD_CANARY_WANDB["project"],
+        "wandb_run_id": PROD_REWARD_CANARY_WANDB["run_id"],
+        "model": "Qwen/Qwen3.8-27B",
+        "nodes": 1,
+        "gpus_per_node": 8,
+        "steps": 1,
+        "groups": 1,
+        "samples_per_prompt": 8,
+        "lr": 2e-6,
+        "temperature": 0.7,
+        "kl_loss_coef": 0.001,
+        "max_tokens_per_gpu": 8192,
+        "eval_interval": 1,
+        "checkpoint_interval": 1,
+        "seed": 42,
+        "context_tokens": 98304,
+        "response_tokens": 81920,
+        "tokens_per_turn": 4096,
+    }
+    if (
+        plan.get("run_name") != PROD_NAME
+        or plan.get("output_root") != PROD_REWARD_CANARY_OUTPUT
+        or args != expected
+        or checkpoint.get("schema") != "cyber_miles_checkpoint_v1"
+        or checkpoint.get("optimizer_steps") != 0
+        or checkpoint.get("root") != BASE_CHECKPOINT["root"]
+        or checkpoint.get("sha256", "").removeprefix("sha256:") != BASE_CHECKPOINT["receipt_sha256"]
+        or checkpoint.get("image") != miles.IMAGE
+        or checkpoint.get("model") != plan.get("model")
+        or digest(plan.get("model")) != PROD_MODEL_SHA256
+        or execution
+        != {
+            "image": miles.IMAGE,
+            "priority": "c0",
+            "priority_reason": PROD_REWARD_CANARY_REASON,
+            "resources": PROD_REWARD_CANARY_RESOURCES,
+            "cluster_target": "prod",
+            "production_promotion": {"mode": PROD_REWARD_CANARY_MODE},
+        }
+    ):
+        raise ValueError("compiled Miles production reward canary differs from the exact arm")
+    _exact_data(plan.get("data"))
+
+
 def validate_embedded_promotion(plan: dict[str, Any], *, check_files: bool = True) -> bool:
     required = requires_production_promotion(plan)
     proof = plan.get("execution", {}).get("production_promotion")
@@ -546,6 +671,9 @@ def validate_embedded_promotion(plan: dict[str, Any], *, check_files: bool = Tru
         if proof is not None:
             raise ValueError("Miles production promotion attached to a dev plan")
         return False
+    if _is_reward_canary_marker(proof):
+        _exact_reward_canary_plan(plan)
+        return True
     if not isinstance(proof, dict) or set(proof) != {*_REF_FIELDS, "receipt"}:
         raise ValueError("embedded Miles production promotion is absent")
     if not isinstance(proof["receipt"], dict):
@@ -571,6 +699,21 @@ def validate_production_preview(
     from cyber_post_train.jobs import validate_preview
 
     rendered = validate_preview(request, preview)
+    if _is_reward_canary_marker(plan.get("execution", {}).get("production_promotion")):
+        if (
+            request.get("workers") != 1
+            or request.get("gpus_per_worker") != 8
+            or request.get("priority_class") != "c0"
+            or request.get("priority_reason") != PROD_REWARD_CANARY_REASON
+            or request.get("requeueIfPreempted") is not False
+            or request.get("resources") != PROD_REWARD_CANARY_RESOURCES
+        ):
+            raise JobsError("Miles production reward canary preview is not exact 1x8 c0")
+        return {
+            "production_reward_canary": "validated",
+            "rendered_nodes": rendered["nodes"],
+            "effective_priority_expected": 20000,
+        }
     if (
         request.get("workers") != 1
         or request.get("gpus_per_worker") != 8
@@ -593,7 +736,9 @@ def require_live_files(plan: dict[str, Any], prepared_directory: Path) -> None:
         prepared_directory / "SUBMISSION.jsonl"
     ).is_symlink():
         raise JobsError("Miles production submission journal already exists")
-    if Path(PROD_OUTPUT).exists() or Path(PROD_OUTPUT).is_symlink():
+    reward_canary = _is_reward_canary_marker(plan.get("execution", {}).get("production_promotion"))
+    output = PROD_REWARD_CANARY_OUTPUT if reward_canary else PROD_OUTPUT
+    if Path(output).exists() or Path(output).is_symlink():
         raise JobsError("Miles production output already exists")
     manifest = Path(PROD_DATA_MANIFEST)
     observed = _snapshot(
@@ -606,6 +751,36 @@ def require_live_files(plan: dict[str, Any], prepared_directory: Path) -> None:
 
 
 def _kubectl_json(*arguments: str) -> dict[str, Any]:
+    host = os.environ.get("KUBERNETES_SERVICE_HOST")
+    if host:
+        import httpx
+
+        if arguments == ("get", "namespace", "fleet-train-jobs"):
+            path = "/api/v1/namespaces/fleet-train-jobs"
+        elif arguments[:2] == ("get", "priorityclass") and len(arguments) == 3:
+            path = f"/apis/scheduling.k8s.io/v1/priorityclasses/{arguments[2]}"
+        elif arguments == ("get", "pods", "-n", "fleet-train-jobs"):
+            path = "/api/v1/namespaces/fleet-train-jobs/pods"
+        else:
+            raise JobsError("unsupported in-cluster Kubernetes read-only gate")
+        token_path = Path("/var/run/secrets/kubernetes.io/serviceaccount/token")
+        ca_path = Path("/var/run/secrets/kubernetes.io/serviceaccount/ca.crt")
+        if not token_path.is_file() or not ca_path.is_file():
+            raise JobsError("in-cluster Kubernetes identity is unavailable")
+        try:
+            response = httpx.get(
+                f"https://{host}:{os.environ.get('KUBERNETES_SERVICE_PORT', '443')}{path}",
+                headers={"Authorization": "Bearer " + token_path.read_text().strip()},
+                verify=str(ca_path),
+                timeout=30,
+            )
+            response.raise_for_status()
+            value = response.json()
+        except (httpx.HTTPError, ValueError):
+            raise JobsError("production Kubernetes read-only gate failed") from None
+        if not isinstance(value, dict):
+            raise JobsError("production Kubernetes read-only result is not an object")
+        return value
     result = subprocess.run(
         ["kubectl", "--context", PROD_KUBE_CONTEXT, *arguments, "-o", "json"],
         check=False,
@@ -671,11 +846,14 @@ def require_live_external(plan: dict[str, Any], client, *, wandb_api=None) -> di
     """Recheck Jobs, W&B and the eight-node ceiling immediately before POST."""
     if not validate_embedded_promotion(plan, check_files=True):
         return {}
+    reward_canary = _is_reward_canary_marker(plan.get("execution", {}).get("production_promotion"))
+    output = PROD_REWARD_CANARY_OUTPUT if reward_canary else PROD_OUTPUT
+    wandb_identity = PROD_REWARD_CANARY_WANDB if reward_canary else PROD_WANDB
     if any(
         not isinstance(row, dict)
         or row.get("name") == PROD_NAME
         or str(row.get("name", "")).startswith(PROD_NAME + "-")
-        or row.get("run_dir") == PROD_OUTPUT
+        or row.get("run_dir") == output
         for row in client.all_runs()
     ):
         raise JobsError("Miles production Jobs API identity/output exists or is malformed")
@@ -685,7 +863,7 @@ def require_live_external(plan: dict[str, Any], client, *, wandb_api=None) -> di
         wandb_api = wandb.Api()
     try:
         observed = wandb_api.run(
-            f"{PROD_WANDB['entity']}/{PROD_WANDB['project']}/{PROD_WANDB['run_id']}"
+            f"{wandb_identity['entity']}/{wandb_identity['project']}/{wandb_identity['run_id']}"
         )
     except Exception as error:  # W&B has no stable not-found exception across pins.
         message = str(error).lower()
@@ -697,10 +875,12 @@ def require_live_external(plan: dict[str, Any], client, *, wandb_api=None) -> di
     namespace = _kubectl_json("get", "namespace", "fleet-train-jobs")
     if namespace.get("metadata", {}).get("uid") != PROD_NAMESPACE_UID:
         raise JobsError("production namespace identity changed")
-    priority = _kubectl_json("get", "priorityclass", "c1")
+    priority_name = "c0" if reward_canary else "c1"
+    priority_value = 20000 if reward_canary else 10000
+    priority = _kubectl_json("get", "priorityclass", priority_name)
     if (
-        priority.get("metadata", {}).get("name") != "c1"
-        or priority.get("value") != 10000
+        priority.get("metadata", {}).get("name") != priority_name
+        or priority.get("value") != priority_value
         or priority.get("preemptionPolicy") != "PreemptLowerPriority"
     ):
         raise JobsError("production c1 effective priority changed")

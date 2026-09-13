@@ -210,7 +210,14 @@ def manifest(request=None):
                 "kueue.x-k8s.io/priority-class": "q" + c["priority_class"][1:],
                 "fleet.ai/requeue-if-preempted": "false",
             },
-            "annotations": {"fleet.ai/run-dir": c["run_dir"]},
+            "annotations": {
+                "fleet.ai/run-dir": c["run_dir"],
+                **(
+                    {"fleet.ai/priority-reason": c["priority_reason"]}
+                    if c.get("priority_reason")
+                    else {}
+                ),
+            },
         },
         "spec": {
             "suspend": True,
@@ -235,6 +242,61 @@ def test_resource_preview(nodes, priority):
     result = validate_preview(request, preview(manifest(request)))
     assert result["nodes"] == nodes and result["gpus"] == nodes * 8
     assert len(result["manifest_sha256"]) == 64
+
+
+def test_c0_requires_and_preserves_a_reason():
+    reason = "Urgent cyber post-training experiment authorized by Chris."
+    request = {**config(), "priority_class": "c0", "priority_reason": reason}
+    result = validate_preview(request, preview(manifest(request)))
+    assert result["gpus"] == 8
+    changed = manifest(request)
+    changed["metadata"]["annotations"]["fleet.ai/priority-reason"] += " changed"
+    with pytest.raises(JobsError, match="priority reason drift"):
+        validate_preview(request, preview(changed))
+
+
+@pytest.mark.parametrize(
+    "priority,reason",
+    [
+        ("c0", None),
+        ("c0", "too short"),
+        ("c0", "urgent\ncyber post-training experiment"),
+        ("c0", "urgent  cyber post-training experiment"),
+        ("c0", "x" * 501),
+        ("c1", "unneeded reason"),
+        ("c2", "unneeded reason"),
+    ],
+)
+def test_priority_reason_is_exact_and_level_zero_only(priority, reason):
+    value = {**config(), "priority_class": priority}
+    if reason is not None:
+        value["priority_reason"] = reason
+    with pytest.raises(JobsError):
+        validate_request(value)
+
+
+def test_exact_public_dockerhub_pull_warning_is_informational_only():
+    request = {
+        **config(),
+        "image": "lmsysorg/sglang@sha256:" + "b" * 64,
+        "image_pull_secrets": [],
+    }
+    warning = (
+        "no pull credential for lmsysorg: the ServiceAccount's is used, which is right for ECR "
+        "and wrong for a private registry. Set image_pull_secrets if the image is private."
+    )
+    assert (
+        validate_preview(
+            request,
+            {"manifest_yaml": yaml.safe_dump(manifest(request)), "warnings": [warning]},
+        )["gpus"]
+        == 8
+    )
+    with pytest.raises(JobsError, match="errors/warnings"):
+        validate_preview(
+            {**request, "image": "unreviewed/sglang@sha256:" + "b" * 64},
+            {"manifest_yaml": yaml.safe_dump(manifest(request)), "warnings": [warning]},
+        )
 
 
 @pytest.mark.parametrize(
@@ -283,7 +345,7 @@ def test_zero_replica_template_cannot_hide_environment_drift():
         ("workers", 9),
         ("gpus_per_worker", 0),
         ("gpus_per_worker", 9),
-        ("priority_class", "c0"),
+        ("priority_class", "c3"),
         ("queue_priority_class", "q1"),
         ("requeueIfPreempted", True),
         ("requeueIfPreempted", "false"),
