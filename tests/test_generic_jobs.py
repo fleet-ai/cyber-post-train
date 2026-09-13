@@ -1,5 +1,6 @@
 import json
 from copy import deepcopy
+from pathlib import Path
 
 import httpx
 import pytest
@@ -38,6 +39,29 @@ def config():
         "secrets": ["wandb-api"],
         "image_pull_secrets": ["registry-pull"],
     }
+
+
+def test_every_tracked_config_respects_the_c1_priority_ceiling() -> None:
+    root = Path(__file__).resolve().parents[1]
+    violations: list[str] = []
+
+    def inspect(value, path: Path) -> None:
+        if isinstance(value, dict):
+            for key in ("priority", "priority_class", "queue_priority_class"):
+                observed = value.get(key)
+                if isinstance(observed, str) and observed in {"c0", "q0"}:
+                    violations.append(f"{path.relative_to(root)}:{key}")
+            if "priority_reason" in value:
+                violations.append(f"{path.relative_to(root)}:priority_reason")
+            for item in value.values():
+                inspect(item, path)
+        elif isinstance(value, list):
+            for item in value:
+                inspect(item, path)
+
+    for path in sorted((root / "configs").rglob("*.json")):
+        inspect(json.loads(path.read_text()), path)
+    assert violations == []
 
 
 def test_runtime_bundle_executes_exact_bytes_once(tmp_path):
