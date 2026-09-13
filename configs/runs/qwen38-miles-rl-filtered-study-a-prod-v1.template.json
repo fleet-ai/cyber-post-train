@@ -184,8 +184,8 @@
       "parent_protocol": "configs/evaluation/qwen38-post-training-webexploitbench-tensorlake-parent-v1.json",
       "parent_protocol_file_sha256": "sha256:ead0ede3ab9569e7a5e3b3346bf4b23f81d0a708dd1e4e0078e7f04a0be8d83d",
       "paired_plan_template": "configs/evaluation/qwen38-post-training-webexploitbench-tensorlake-paired-plan-v1.template.json",
-      "paired_plan_template_file_sha256": "sha256:33a2a6dd5764298684dae3221ac637fc396d1bb5fb575df93a1b2e60570e7ae5",
-      "paired_plan_template_sha256": "sha256:ecafbb62ccc631046321555cd5e2452146bf5d4de52b9d4026f69180af01e811",
+      "paired_plan_template_file_sha256": "sha256:e892001a14938eb07fb8cda54be2b07dec215d359fd54dd8bc45bbd9c83ecb88",
+      "paired_plan_template_sha256": "sha256:4ec7e5bf5c0ec8e9b3de1873559b04b3a6aba8827b31fabd7c49b7439bc86d87",
       "provider": "tensorlake_sandbox",
       "child_protocol": null,
       "launch_plan": null,
@@ -199,5 +199,5 @@
     "No accepted all-rank native reload cross-bound to that canary terminal is bound.",
     "Live production duplicate, W&B, preview and eight-node gates cannot be pre-certified."
   ],
-  "sha256": "sha256:c216ba5a586a2cc5abd6cdb3019c3778a07bd30fd9b6a1a2f6840f5717cae679"
+  "sha256": "sha256:bd2b95b13aa00b315610262fd35e3795f21893a6d21253fa60182c3891422dc5"
 }

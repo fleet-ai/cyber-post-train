@@ -21,10 +21,27 @@ launchable only when all of these are exact:
 - a pre-created absolute private result root with mode `0700`, containing the
   claim-journal path.
 
+For the generic post-training WebExploitBench parent, the study child also
+references the private mode-`0600`
+`cyber_webexploitbench_tensorlake_post_training_child_v1` by absolute path,
+file digest, and child digest. The sealer revalidates that child against the
+same parent and requires its checkpoint/serving, Tensorlake qualification,
+training-arm, and campaign identities to match the study child exactly. The
+generic binding artifact remains non-launchable on its own. The current study
+schema deliberately keeps its generic wrapper non-launchable too: it does not
+yet bind and revalidate the mandatory paired checkpoint plan, candidate-specific
+Fleet-final paired child, duplicate-inventory receipt, paired-project parity,
+both controller previews, and fixed schedule. Complete candidate bindings,
+matched-runtime fields, and a private result root are planning evidence only;
+`check-child` must still report `launchable: false` and completion sealing is
+forbidden until those paired artifacts have an exact checked schema here.
+
 The Fleet base and post-SFT arms must differ only in their weight identity.
 Tokenizer, template, harness images, serving runtime, and live parity must
-match. An exact child marked nonlaunchable, or an incomplete child marked
-launchable, is rejected.
+match. For launch-capable and legacy child schemas, an exact child marked
+nonlaunchable, or an incomplete child marked launchable, is rejected. The
+generic wrapper above is the explicit fail-closed exception: it must remain
+nonlaunchable until its paired-launch evidence has a checked schema.
 
 ```sh
 python -m evals.study_sealing check-child /private/path/child.json

@@ -18,6 +18,16 @@ PARENT_PATH = ROOT / "configs/evaluation/qwen38-blackbox-fleet-final-rl-outcome-
 TEACHER_PARENT_PATH = (
     ROOT / "configs/evaluation/qwen38-blackbox-fleet-final-teacher-sft-outcome-protocol-v1.json"
 )
+PARENT_PATHS = {
+    "teacher_sft": TEACHER_PARENT_PATH,
+    "self_sft": (
+        ROOT / "configs/evaluation/qwen38-blackbox-fleet-final-self-sft-outcome-protocol-v1.json"
+    ),
+    "rl": PARENT_PATH,
+    "sft_then_rl": (
+        ROOT / "configs/evaluation/qwen38-blackbox-fleet-final-sft-then-rl-outcome-protocol-v1.json"
+    ),
+}
 LEGACY_PARENT_PATH = (
     ROOT / "configs/evaluation/qwen38-blackbox-fleet-final-outcome-protocol-v1.json"
 )
@@ -126,21 +136,23 @@ def test_parent_templates_are_complete_nulls_and_nonlaunchable() -> None:
     assert all(value is None for value in template["result_isolation"].values())
 
 
-def test_teacher_sft_parent_and_child_use_the_same_generic_sealed_contract(
-    tmp_path: Path,
+@pytest.mark.parametrize("candidate_arm", protocol.SUPPORTED_CANDIDATE_ARMS)
+def test_every_treatment_parent_and_child_use_the_same_generic_sealed_contract(
+    tmp_path: Path, candidate_arm: str
 ) -> None:
     task_set = protocol.load_exact_task_set()
-    parent = _load(TEACHER_PARENT_PATH)
+    parent_path = PARENT_PATHS[candidate_arm]
+    parent = _load(parent_path)
     protocol.validate_parent(parent, task_set)
-    assert parent["candidate_arm"] == "teacher_sft"
+    assert parent["candidate_arm"] == candidate_arm
 
     child = protocol.build_child(
         parent,
-        TEACHER_PARENT_PATH,
-        _bindings(tmp_path, candidate_arm="teacher_sft"),
+        parent_path,
+        _bindings(tmp_path, candidate_arm=candidate_arm),
         task_set,
     )
-    assert child["candidate_arm"] == "teacher_sft"
+    assert child["candidate_arm"] == candidate_arm
     assert child["launchable"] is False
     assert child["external_benchmark_isolation"]["training_input_eligible"] is False
 

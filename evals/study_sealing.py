@@ -25,6 +25,7 @@ FREEZE_SCHEMA = "cyber_study_outcome_access_freeze_v1"
 ROOT = Path(__file__).resolve().parents[1]
 SHA256 = re.compile(r"^sha256:[0-9a-f]{64}$")
 IMAGE = re.compile(r"^[^\s]+@sha256:[0-9a-f]{64}$")
+TAGGED_IMAGE = re.compile(r"^[A-Za-z0-9./_-]+:[A-Za-z0-9._-]+$")
 NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{2,127}$")
 
 RESULT_POLICY = {
@@ -124,8 +125,8 @@ def _reference(value: Any, root: Path) -> tuple[dict[str, Any], Path]:
     return loaded, path
 
 
-def _surface_parent(child: dict[str, Any], root: Path) -> tuple[str, dict[str, Any]]:
-    parent, _ = _reference(child.get("parent_protocol"), root)
+def _surface_parent(child: dict[str, Any], root: Path) -> tuple[str, dict[str, Any], Path]:
+    parent, parent_path = _reference(child.get("parent_protocol"), root)
     surface = child.get("surface")
     if parent.get("schema") in fleet.PROTOCOL_SCHEMAS and surface == "fleet_dev":
         task_set, _ = _reference(
@@ -147,14 +148,23 @@ def _surface_parent(child: dict[str, Any], root: Path) -> tuple[str, dict[str, A
             root,
         )
         fleet.validate_final_protocol(parent, task_set)
-    elif parent.get("schema") == web.SCHEMA and surface == "webexploitbench_tensorlake":
+    elif (
+        parent.get("schema") in {web.SCHEMA, web.POST_TRAINING_SCHEMA}
+        and surface == "webexploitbench_tensorlake"
+    ):
         web.validate_parent(parent)
     else:
         raise ValueError("child surface and parent protocol differ")
-    return surface, parent
+    return surface, parent, parent_path
 
 
-def _exact_fields(value: Any, fields: set[str] | tuple[str, ...], *, allow_null: bool) -> bool:
+def _exact_fields(
+    value: Any,
+    fields: set[str] | tuple[str, ...],
+    *,
+    allow_null: bool,
+    allow_tagged_images: bool = False,
+) -> bool:
     if not isinstance(value, dict) or set(value) != set(fields):
         raise ValueError("binding fields differ from the frozen parent")
     complete = True
@@ -176,12 +186,21 @@ def _exact_fields(value: Any, fields: set[str] | tuple[str, ...], *, allow_null:
                 or any(type(number) is not int or number <= 0 for number in item.values())
             ):
                 raise ValueError("sandbox resources must be exact positive integers")
+        elif key == "sandbox_timeout_secs":
+            if type(item) is not int or item < 60:
+                raise ValueError("sandbox timeout must be at least 60 seconds")
         elif key in {"tensor_parallel_size", "data_parallel_size", "context_length"}:
             if type(item) is not int or item < 1:
                 raise ValueError(f"matched runtime {key} must be a positive integer")
-        elif key in {"evaluator_image", "agent_image", "netproxy_image"}:
+        elif key == "evaluator_image":
             if not isinstance(item, str) or IMAGE.fullmatch(item) is None:
                 raise ValueError(f"{key} must be an immutable image digest")
+        elif key in {"agent_image", "netproxy_image"}:
+            if not isinstance(item, str) or (
+                IMAGE.fullmatch(item) is None
+                and (not allow_tagged_images or TAGGED_IMAGE.fullmatch(item) is None)
+            ):
+                raise ValueError(f"{key} must be an exact image reference")
         elif not isinstance(item, str) or not item:
             raise ValueError(f"exact binding {key} must be a nonempty immutable identity")
     return complete
@@ -214,9 +233,37 @@ def _private_path(value: Any, root: Path) -> Path:
     return path
 
 
+def _post_training_child_reference(
+    value: Any,
+    parent: dict[str, Any],
+    parent_path: Path,
+    root: Path,
+) -> dict[str, Any]:
+    if not isinstance(value, dict) or set(value) != {
+        "path",
+        "child_sha256",
+        "file_sha256",
+    }:
+        raise ValueError("an exact private post-training child reference is required")
+    path = _private_path(value["path"], root)
+    if path.is_symlink() or not path.is_file():
+        raise ValueError("post-training child must be a regular nonsymlink file")
+    info = path.stat()
+    if stat.S_IMODE(info.st_mode) & 0o077:
+        raise ValueError("post-training child must be a private file")
+    loaded = _read(path)
+    if value["child_sha256"] != loaded.get("child_sha256") or value["file_sha256"] != file_sha256(
+        path
+    ):
+        raise ValueError("referenced post-training child identity changed")
+    web.validate_child(loaded, parent, parent_path)
+    return loaded
+
+
 def validate_child(child: dict[str, Any], *, root: Path = ROOT) -> bool:
     """Validate one child and return whether every launch binding is complete."""
     _check_seal(child, CHILD_SCHEMA)
+    surface, parent, parent_path = _surface_parent(child, root)
     expected_keys = {
         "schema",
         "study_id",
@@ -231,16 +278,19 @@ def validate_child(child: dict[str, Any], *, root: Path = ROOT) -> bool:
         "launchable",
         "sha256",
     }
+    if parent.get("schema") == web.POST_TRAINING_SCHEMA:
+        expected_keys.remove("base_control")
+        expected_keys.add("post_training_child")
     if set(child) != expected_keys:
         raise ValueError("study child has unknown or missing fields")
     for key in ("study_id", "arm_id", "blinded_evaluation_id"):
         if not isinstance(child[key], str) or NAME.fullmatch(child[key]) is None:
             raise ValueError(f"invalid {key}")
-    surface, parent = _surface_parent(child, root)
     bindings = child.get("bindings")
     if not isinstance(bindings, dict):
         raise ValueError("child bindings must be an object")
     allow_null = child.get("launchable") is False
+    post_training_child = None
 
     if surface == "fleet_dev":
         base, _ = _reference(child.get("base_control"), root)
@@ -292,7 +342,7 @@ def validate_child(child: dict[str, Any], *, root: Path = ROOT) -> bool:
             ):
                 if base[key] != post[key]:
                     raise ValueError(f"final base/post {key} differs")
-    else:
+    elif parent.get("schema") == web.SCHEMA:
         if child.get("base_control") is not None:
             raise ValueError("WebExploitBench child does not use a Fleet base-control file")
         if set(bindings) != {
@@ -307,6 +357,33 @@ def validate_child(child: dict[str, Any], *, root: Path = ROOT) -> bool:
         complete &= _exact_fields(
             bindings["tensorlake_qualification"], web.TENSORLAKE_FIELDS, allow_null=allow_null
         )
+    else:
+        post_training_child = _post_training_child_reference(
+            child.get("post_training_child"), parent, parent_path, root
+        )
+        if set(bindings) != {
+            "checkpoint_and_serving",
+            "tensorlake_qualification",
+            "matched_runtime",
+        }:
+            raise ValueError("WebExploitBench child bindings differ from its parent")
+        complete = _exact_fields(
+            bindings["checkpoint_and_serving"], web.CHECKPOINT_FIELDS, allow_null=allow_null
+        )
+        complete &= _exact_fields(
+            bindings["tensorlake_qualification"],
+            web.TENSORLAKE_FIELDS,
+            allow_null=allow_null,
+            allow_tagged_images=True,
+        )
+        if (
+            bindings["checkpoint_and_serving"] != post_training_child["checkpoint_and_serving"]
+            or bindings["tensorlake_qualification"]
+            != post_training_child["tensorlake_qualification"]
+        ):
+            raise ValueError("study and post-training child bindings differ")
+        if child["arm_id"] != post_training_child["checkpoint_and_serving"]["training_arm_id"]:
+            raise ValueError("study and post-training child arm identities differ")
 
     complete &= _runtime(bindings["matched_runtime"], allow_null=allow_null)
     execution = child.get("execution")
@@ -316,10 +393,28 @@ def validate_child(child: dict[str, Any], *, root: Path = ROOT) -> bool:
         "claim_journal",
     }:
         raise ValueError("child execution identity is incomplete")
-    if not isinstance(execution["campaign_id"], str) or NAME.fullmatch(
-        execution["campaign_id"]
-    ) is None:
+    if (
+        not isinstance(execution["campaign_id"], str)
+        or NAME.fullmatch(execution["campaign_id"]) is None
+    ):
         raise ValueError("invalid campaign id")
+    if (
+        post_training_child is not None
+        and execution["campaign_id"] != post_training_child["campaign"]["id"]
+    ):
+        raise ValueError("study and post-training child campaign identities differ")
+    if post_training_child is not None:
+        if child.get("launchable") is not False:
+            raise ValueError(
+                "generic post-training study child must remain non-launchable until exact "
+                "paired-plan, preview, and schedule evidence is bound"
+            )
+        # The generic candidate child does not bind the mandatory matched base arm,
+        # Fleet-final paired child, duplicate inventory, project parity, both
+        # controller previews, or fixed schedule.  Until those artifacts have a
+        # checked schema here, complete candidate bindings are planning evidence
+        # only and must never open the study launch gate.
+        complete = False
     result_root = _private_path(execution["private_results_root"], root)
     journal = _private_path(execution["claim_journal"], root)
     if result_root != journal and result_root not in journal.parents:
@@ -358,8 +453,7 @@ def blinded_completion(
     if (
         completion["child_sha256"] != child["sha256"]
         or completion["blinded_evaluation_id"] != child["blinded_evaluation_id"]
-        or completion["private_results_root"]
-        != child["execution"]["private_results_root"]
+        or completion["private_results_root"] != child["execution"]["private_results_root"]
         or completion["terminal_classification"]
         not in {"valid_outcome_set", "infrastructure_invalid"}
         or completion["resources_released"] is not True
@@ -404,9 +498,7 @@ def write_blinded_completion(
     return sealed
 
 
-def validate_outcome_access(
-    blinded: dict[str, Any], freeze: dict[str, Any]
-) -> None:
+def validate_outcome_access(blinded: dict[str, Any], freeze: dict[str, Any]) -> None:
     """Validate the predeclared gate before any private outcome is opened."""
     _check_seal(blinded, BLINDED_SCHEMA)
     _check_seal(freeze, FREEZE_SCHEMA)
