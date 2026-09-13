@@ -1,0 +1,19 @@
+{
+  "source_manifest": "/mnt/sfs/jobs/chris-q38-miles-rlreward-inputs-dev4/data/manifest.json",
+  "source_manifest_file_sha256": "sha256:9951e92d8a673cfce25a931abbf16c2bc37357063bfe48c04f5c850e4d1a7ff2",
+  "source_manifest_sha256": "sha256:990ce422805bb1c8dbc83fc81c6620ea9bc5f65d1a42e86a3fd6b7ce1e5861c9",
+  "source_policy_identity_root": "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2",
+  "expected_limits": {
+    "context_tokens": 98304,
+    "response_tokens": 81920,
+    "max_tokens_per_turn": 4096,
+    "max_turns": 600,
+    "episode_seconds": 2400,
+    "tool_seconds": 330,
+    "tool_result_chars": 50000
+  },
+  "mode": "run_id_rebind",
+  "name": "chris-q38-miles-rlreward-dev5",
+  "policy_identity_root": "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2",
+  "output": "/mnt/sfs/jobs/chris-q38-miles-rlreward-inputs-dev5/data"
+}

@@ -2,18 +2,21 @@
   "schema": "cyber_miles_dev_canary_launch_v1",
   "status": "configuration_only_unsubmitted",
   "cluster_target": "dev",
-  "data_config": "configs/qualification/qwen38-miles-rl-reward-canary-data-dev-v4.json",
+  "data_config": "configs/qualification/qwen38-miles-rl-reward-canary-data-derive-dev-v5.json",
   "run_config": "configs/qualification/qwen38-miles-rl-reward-canary-dev-v5.json",
   "identities": {
     "run_name": "chris-q38-miles-rlreward-dev5",
     "cyber_run_id": "chris-q38-miles-rlreward-dev5",
-    "data_root": "/mnt/sfs/jobs/chris-q38-miles-rlreward-inputs-dev4/data",
+    "data_root": "/mnt/sfs/jobs/chris-q38-miles-rlreward-inputs-dev5/data",
     "output_root": "/mnt/sfs/jobs/chris-q38-miles-rlreward-dev5",
     "wandb_run_id": "chris-q38-miles-rlreward-dev5"
   },
   "source": {
     "base_commit": "294a5f45ee7e23a4a96a66a96183a857b88697e3",
-    "same_accepted_dev4_data": true,
+    "metadata_only_successor_of_accepted_dev4_data": true,
+    "source_data_manifest_file_sha256": "sha256:9951e92d8a673cfce25a931abbf16c2bc37357063bfe48c04f5c850e4d1a7ff2",
+    "source_data_manifest_sha256": "sha256:990ce422805bb1c8dbc83fc81c6620ea9bc5f65d1a42e86a3fd6b7ce1e5861c9",
+    "source_data_limits_sha256": "sha256:3a2ed37ae738321b3c6bf616b92e06b6a809987033b931cb2dda8024624ff32b",
     "same_zero_step_base_native_checkpoint": true
   },
   "parity": {

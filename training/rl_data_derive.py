@@ -2,8 +2,9 @@
 
 The source is an already accepted ``cyber_miles_data_v1`` artifact.  This
 module reopens every byte and every sealed task/config identity, changes only
-the run id and policy-root metadata, and publishes a new create-once artifact.
-It performs no network requests and never returns or logs row payloads.
+the run id and, when explicitly requested, policy-root metadata, and publishes
+a new create-once artifact.  It performs no network requests and never returns
+or logs row payloads.
 """
 
 from __future__ import annotations
@@ -36,9 +37,13 @@ _MANIFEST_FIELDS = {
     "environment_creates",
     "sha256",
 }
-_TRANSFORMED_FIELDS = [
+_POLICY_TRANSFORMED_FIELDS = [
     "metadata.cyber_config.run_id",
     "metadata.cyber_config.model.root",
+    "metadata.cyber_config.config_sha256",
+]
+_RUN_TRANSFORMED_FIELDS = [
+    "metadata.cyber_config.run_id",
     "metadata.cyber_config.config_sha256",
 ]
 
@@ -146,6 +151,7 @@ def derive(config: dict, *, relative_to: Path) -> dict:
             "source_manifest_sha256",
             "source_policy_identity_root",
             "expected_limits",
+            "mode",
             "name",
             "policy_identity_root",
             "output",
@@ -158,8 +164,13 @@ def derive(config: dict, *, relative_to: Path) -> dict:
         config["source_policy_identity_root"], "source policy identity root"
     )
     policy_root = _sfs_root(config["policy_identity_root"], "policy identity root")
-    if policy_root == source_policy_root:
+    mode = config.get("mode", "policy_identity_rebind")
+    if mode not in {"policy_identity_rebind", "run_id_rebind"}:
+        raise ValueError("invalid RL data derivation mode")
+    if mode == "policy_identity_rebind" and policy_root == source_policy_root:
         raise ValueError("derived policy identity must differ from the base policy")
+    if mode == "run_id_rebind" and policy_root != source_policy_root:
+        raise ValueError("run-id-only derivation must preserve policy identity")
 
     declared = Path(config["source_manifest"])
     source_path = declared if declared.is_absolute() else relative_to / declared
@@ -335,7 +346,8 @@ def derive(config: dict, *, relative_to: Path) -> dict:
             row = copy.deepcopy(source_row)
             episode = row["metadata"]["cyber_config"]
             episode["run_id"] = config["name"]
-            episode["model"]["root"] = policy_root
+            if mode == "policy_identity_rebind":
+                episode["model"]["root"] = policy_root
             episode["config_sha256"] = fleet.digest_without(episode, "config_sha256")
             check = copy.deepcopy(row)
             check_config = check["metadata"]["cyber_config"]
@@ -352,7 +364,7 @@ def derive(config: dict, *, relative_to: Path) -> dict:
 
     provenance = {
         "schema": DERIVATION_SCHEMA,
-        "mode": "metadata_only_policy_identity_rebind",
+        "mode": "metadata_only_" + mode,
         "source_manifest_sha256": manifest["sha256"],
         "source_manifest_file_sha256": fleet.sha256(source_payload),
         "source_policy_identity_sha256": fleet.sha256(source_policy_root.encode()),
@@ -360,7 +372,11 @@ def derive(config: dict, *, relative_to: Path) -> dict:
         "source_artifact_files": {
             name: fleet.sha256(payload) for name, payload in sorted(payloads.items())
         },
-        "transformed_fields": _TRANSFORMED_FIELDS,
+        "transformed_fields": (
+            _POLICY_TRANSFORMED_FIELDS
+            if mode == "policy_identity_rebind"
+            else _RUN_TRANSFORMED_FIELDS
+        ),
     }
     provenance["sha256"] = "sha256:" + digest(provenance)
     derived = {

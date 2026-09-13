@@ -15,6 +15,9 @@ LAUNCH_V3 = ROOT / "configs/qualification/qwen38-miles-rl-reward-canary-launch-d
 DATA_V4 = ROOT / "configs/qualification/qwen38-miles-rl-reward-canary-data-dev-v4.json"
 RUN_V4 = ROOT / "configs/qualification/qwen38-miles-rl-reward-canary-dev-v4.json"
 LAUNCH_V4 = ROOT / "configs/qualification/qwen38-miles-rl-reward-canary-launch-dev-v4.json"
+DATA_DERIVE_V5 = (
+    ROOT / "configs/qualification/qwen38-miles-rl-reward-canary-data-derive-dev-v5.json"
+)
 RUN_V5 = ROOT / "configs/qualification/qwen38-miles-rl-reward-canary-dev-v5.json"
 LAUNCH_V5 = ROOT / "configs/qualification/qwen38-miles-rl-reward-canary-launch-dev-v5.json"
 DEV3_RETIRED = (
@@ -198,14 +201,31 @@ def test_v4_preserves_science_but_uses_only_fresh_identities() -> None:
 
 
 def test_v5_reuses_accepted_dev4_data_but_has_fresh_run_identity() -> None:
-    data_v4, run_v4, run_v5, launch = map(load, (DATA_V4, RUN_V4, RUN_V5, LAUNCH_V5))
+    data_v4, run_v4, derivation, run_v5, launch = map(
+        load, (DATA_V4, RUN_V4, DATA_DERIVE_V5, RUN_V5, LAUNCH_V5)
+    )
 
     assert run_v5["name"] == run_v5["wandb"]["run_id"]
     assert run_v5["name"] == "chris-q38-miles-rlreward-dev5"
     assert run_v5["output_root"] == "/mnt/sfs/jobs/chris-q38-miles-rlreward-dev5"
+    assert derivation == {
+        "source_manifest": data_v4["output"] + "/manifest.json",
+        "source_manifest_file_sha256": (
+            "sha256:9951e92d8a673cfce25a931abbf16c2bc37357063bfe48c04f5c850e4d1a7ff2"
+        ),
+        "source_manifest_sha256": (
+            "sha256:990ce422805bb1c8dbc83fc81c6620ea9bc5f65d1a42e86a3fd6b7ce1e5861c9"
+        ),
+        "source_policy_identity_root": data_v4["model_root"],
+        "expected_limits": data_v4["limits"],
+        "mode": "run_id_rebind",
+        "name": run_v5["name"],
+        "policy_identity_root": data_v4["model_root"],
+        "output": "/mnt/sfs/jobs/chris-q38-miles-rlreward-inputs-dev5/data",
+    }
     assert run_v5["data"] == {
-        "manifest": data_v4["output"] + "/manifest.json",
-        "root": data_v4["output"],
+        "manifest": derivation["output"] + "/manifest.json",
+        "root": derivation["output"],
     }
     for key in ("backend", "model", "checkpoint"):
         assert run_v5[key] == run_v4[key]
@@ -238,10 +258,29 @@ def test_v5_reuses_accepted_dev4_data_but_has_fresh_run_identity() -> None:
     assert launch["identities"] == {
         "run_name": run_v5["name"],
         "cyber_run_id": run_v5["name"],
-        "data_root": data_v4["output"],
+        "data_root": derivation["output"],
         "output_root": run_v5["output_root"],
         "wandb_run_id": run_v5["wandb"]["run_id"],
     }
+    assert launch["data_config"] == (
+        "configs/qualification/qwen38-miles-rl-reward-canary-data-derive-dev-v5.json"
+    )
+    assert launch["source"]["metadata_only_successor_of_accepted_dev4_data"] is True
+    assert launch["source"]["source_data_manifest_file_sha256"] == derivation[
+        "source_manifest_file_sha256"
+    ]
+    assert launch["source"]["source_data_manifest_sha256"] == derivation[
+        "source_manifest_sha256"
+    ]
+    assert launch["source"]["source_data_limits_sha256"] == (
+        "sha256:3a2ed37ae738321b3c6bf616b92e06b6a809987033b931cb2dda8024624ff32b"
+    )
+    canonical_limits = json.dumps(
+        derivation["expected_limits"], sort_keys=True, separators=(",", ":")
+    ).encode()
+    assert launch["source"]["source_data_limits_sha256"] == (
+        "sha256:" + hashlib.sha256(canonical_limits).hexdigest()
+    )
     assert launch["parity"]["optimizer_updates"] == 1
     assert launch["parity"]["total_train_samples"] == 8
     assert launch["parity"]["parallelism"] == {
@@ -268,7 +307,9 @@ def test_v5_reuses_accepted_dev4_data_but_has_fresh_run_identity() -> None:
     assert launch["supersedes"]["gpu_allocations"] == 0
     assert launch["supersedes"]["optimizer_updates"] == 0
     assert run_v5["name"] not in json.dumps([data_v4, run_v4])
-    assert "webexploitbench" not in (RUN_V5.read_text() + LAUNCH_V5.read_text()).lower()
+    assert "webexploitbench" not in (
+        DATA_DERIVE_V5.read_text() + RUN_V5.read_text() + LAUNCH_V5.read_text()
+    ).lower()
 
 
 def test_dev3_retirement_is_append_only_and_proves_zero_execution() -> None:

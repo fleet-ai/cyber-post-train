@@ -8,8 +8,8 @@
     "root": "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2"
   },
   "data": {
-    "manifest": "/mnt/sfs/jobs/chris-q38-miles-rlreward-inputs-dev4/data/manifest.json",
-    "root": "/mnt/sfs/jobs/chris-q38-miles-rlreward-inputs-dev4/data"
+    "manifest": "/mnt/sfs/jobs/chris-q38-miles-rlreward-inputs-dev5/data/manifest.json",
+    "root": "/mnt/sfs/jobs/chris-q38-miles-rlreward-inputs-dev5/data"
   },
   "checkpoint": {
     "manifest": "/mnt/sfs/jobs/chris-cpt-cleanup-q38-miles-base-v1/NATIVE_CHECKPOINT.json",

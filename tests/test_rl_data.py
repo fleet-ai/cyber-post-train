@@ -195,6 +195,18 @@ def derivation_config(setup):
     }
 
 
+def run_id_derivation_config(setup):
+    config = derivation_config(setup)
+    config.update(
+        {
+            "mode": "run_id_rebind",
+            "name": "synthetic-rl-successor",
+            "policy_identity_root": setup.config["model_root"],
+        }
+    )
+    return config
+
+
 def test_metadata_only_derivation_reuses_exact_source_without_network_or_payload_output(setup):
     build(setup)
     source = setup.tmp / "out"
@@ -214,7 +226,7 @@ def test_metadata_only_derivation_reuses_exact_source_without_network_or_payload
     provenance = manifest["derivation"]
     assert provenance["schema"] == derive_data.DERIVATION_SCHEMA
     assert provenance["source_manifest_sha256"] == result["source_manifest_sha256"]
-    assert provenance["transformed_fields"] == derive_data._TRANSFORMED_FIELDS
+    assert provenance["transformed_fields"] == derive_data._POLICY_TRANSFORMED_FIELDS
     assert (target / "task-set.json").read_bytes() == before["task-set.json"]
     assert (target / "split.json").read_bytes() == before["split.json"]
     for split in ("train", "dev"):
@@ -237,6 +249,53 @@ def test_metadata_only_derivation_reuses_exact_source_without_network_or_payload
         derive_data.derive(config, relative_to=setup.tmp)
 
 
+def test_run_id_only_derivation_preserves_policy_task_prompt_split_and_tools(setup):
+    build(setup)
+    source = setup.tmp / "out"
+    before = {path.name: path.read_bytes() for path in source.iterdir()}
+    config = run_id_derivation_config(setup)
+
+    result = derive_data.derive(config, relative_to=setup.tmp)
+
+    assert len(setup.calls) == 3  # The derivation itself made no request.
+    assert before == {path.name: path.read_bytes() for path in source.iterdir()}
+    assert result["submitted"] is False
+    assert "Private synthetic prompt" not in json.dumps(result)
+    target = setup.tmp / "derived"
+    manifest = json.loads((target / "manifest.json").read_text())
+    assert manifest["name"] == config["name"]
+    assert manifest["derivation"]["mode"] == "metadata_only_run_id_rebind"
+    assert manifest["derivation"]["transformed_fields"] == derive_data._RUN_TRANSFORMED_FIELDS
+    assert (target / "task-set.json").read_bytes() == before["task-set.json"]
+    assert (target / "split.json").read_bytes() == before["split.json"]
+    for split in ("train", "dev"):
+        original = json.loads(before[split + ".jsonl"])
+        derived = json.loads((target / (split + ".jsonl")).read_text())
+        source_config = original["metadata"]["cyber_config"]
+        target_config = derived["metadata"]["cyber_config"]
+        assert derived["input"] == original["input"]
+        assert derived["metadata"]["split"] == original["metadata"]["split"]
+        assert derived["metadata"]["lineage"] == original["metadata"]["lineage"]
+        assert target_config["run_id"] == config["name"]
+        assert target_config["model"] == source_config["model"]
+        assert target_config["execution"] == source_config["execution"]
+        assert target_config["task"] == source_config["task"]
+        assert target_config["environment"] == source_config["environment"]
+        assert target_config["verifier"] == source_config["verifier"]
+        assert target_config["authority"] == source_config["authority"]
+        assert target_config["rl"] == source_config["rl"]
+        assert target_config["initial_prompt_sha256"] == source_config["initial_prompt_sha256"]
+        assert target_config["config_sha256"] == fleet.digest_without(
+            target_config, "config_sha256"
+        )
+        restored = copy.deepcopy(target_config)
+        restored["run_id"] = source_config["run_id"]
+        restored["config_sha256"] = source_config["config_sha256"]
+        assert restored == source_config
+    with pytest.raises(FileExistsError):
+        derive_data.derive(config, relative_to=setup.tmp)
+
+
 @pytest.mark.parametrize(
     "fault",
     [
@@ -245,6 +304,8 @@ def test_metadata_only_derivation_reuses_exact_source_without_network_or_payload
         "source_policy",
         "source_name",
         "target_policy",
+        "run_mode_policy_drift",
+        "unknown_mode",
         "target_limits",
         "row_bytes",
         "row_split_resigned",
@@ -267,6 +328,10 @@ def test_metadata_only_derivation_fails_closed_before_output(setup, fault):
         config["name"] = setup.config["name"]
     elif fault == "target_policy":
         config["policy_identity_root"] = setup.config["model_root"]
+    elif fault == "run_mode_policy_drift":
+        config["mode"] = "run_id_rebind"
+    elif fault == "unknown_mode":
+        config["mode"] = "metadata_only"
     elif fault == "target_limits":
         config["expected_limits"]["max_turns"] = 80
     elif fault == "row_bytes":
