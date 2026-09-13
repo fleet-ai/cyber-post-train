@@ -1051,6 +1051,33 @@ def _accept(case: dict) -> dict:
     )
 
 
+def test_source_configs_bind_sft_policy_identity_not_runtime_checkpoint(case: dict) -> None:
+    plan = copy.deepcopy(case["plan"])
+    policy_root = "/mnt/sfs/jobs/accepted-sft/hf-export-v1"
+    plan["arguments"]["policy_identity_root"] = policy_root
+    manifest_path = Path(plan["arguments"]["data_manifest"])
+    manifest = json.loads(manifest_path.read_bytes())
+    for split in ("train", "dev"):
+        path = manifest_path.parent / manifest["files"][split]["path"]
+        row = json.loads(path.read_bytes())
+        config = row["metadata"]["cyber_config"]
+        config["model"]["root"] = policy_root
+        config["config_sha256"] = fleet.digest_without(config, "config_sha256")
+        payload = fleet.canonical_json(row) + b"\n"
+        path.write_bytes(payload)
+        manifest["files"][split]["sha256"] = fleet.sha256(payload)
+    manifest = _seal(manifest)
+    _write_json(manifest_path, manifest)
+    plan["data"] = manifest
+
+    configs = acceptance._source_configs(plan)
+
+    assert {config["model"]["root"] for config in configs.values()} == {policy_root}
+    plan["arguments"]["policy_identity_root"] = plan["arguments"]["model_root"]
+    with pytest.raises(ValueError, match="reward canary task binding changed"):
+        acceptance._source_configs(plan)
+
+
 def _observer_files(case: dict) -> tuple[dict, Path, dict]:
     policy = json.loads(case["policy_delta"].read_bytes())
     submission = json.loads(Path(policy["observer_submission"]["path"]).read_bytes())

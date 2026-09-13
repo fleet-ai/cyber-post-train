@@ -614,6 +614,9 @@ def validate_submission_binding(
 
 def _source_configs(plan: dict[str, Any]) -> dict[str, dict[str, Any]]:
     result: dict[str, dict[str, Any]] = {}
+    policy_identity_root = plan["arguments"].get("policy_identity_root") or plan[
+        "arguments"
+    ]["model_root"]
     manifest_path = Path(plan["arguments"]["data_manifest"])
     manifest, _ = _read(manifest_path, schema="cyber_miles_data_v1")
     if manifest != plan["data"]:
@@ -638,7 +641,7 @@ def _source_configs(plan: dict[str, Any]) -> dict[str, dict[str, Any]]:
             or config.get("run_id") != plan["run_name"]
             or config.get("model", {}).get("repo") != plan["model"]["repo"]
             or config.get("model", {}).get("revision") != plan["model"]["revision"]
-            or config.get("model", {}).get("root") != plan["arguments"]["model_root"]
+            or config.get("model", {}).get("root") != policy_identity_root
             or config.get("initial_prompt_sha256") != fleet.sha256(row["input"].encode())
             or config.get("rl")
             != {key: value for key, value in manifest["limits"].items() if key != "response_tokens"}
