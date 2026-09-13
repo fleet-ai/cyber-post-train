@@ -371,14 +371,12 @@ async def test_invalid_evidence_never_reaches_trainer(fixture, tmp_path, fault, 
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("fault", ["ttl", "instance", "tool_size", "tool_timeout", "turn_limit"])
+@pytest.mark.parametrize("fault", ["ttl", "instance", "tool_timeout", "turn_limit"])
 async def test_budgets_and_runtime_bindings(fixture, tmp_path, fault):
     if fault == "ttl":
         fixture.instance["expires_at"] = (datetime.now(UTC) - timedelta(seconds=1)).isoformat()
     elif fault == "instance":
         fixture.instance["data_version"] = "other"
-    elif fault == "tool_size":
-        fixture.tool_text = "x" * 101
     elif fault == "tool_timeout":
         fixture.tool_text = "timeout"
     else:
@@ -387,6 +385,49 @@ async def test_budgets_and_runtime_bindings(fixture, tmp_path, fault):
     with pytest.raises((rl.InvalidEpisode, TimeoutError)):
         await collect(fixture, tmp_path)
     assert fixture.deleted and not (tmp_path / "episode/ACCEPTED.json").exists()
+
+
+@pytest.mark.asyncio
+async def test_50000_char_tool_result_is_clipped_to_4000_without_retry_or_full_persistence(
+    fixture, tmp_path
+):
+    fixture.config["rl"]["tool_result_chars"] = 4_000
+    seal(fixture.config)
+    marker = rl.TOOL_RESULT_TRUNCATION_MARKER
+    kept = fixture.config["rl"]["tool_result_chars"] - len(marker)
+    fixture.tool_text = "x" * 50_000 + "PRIVATE_SUFFIX_NOT_FOR_MODEL_OR_DISK"
+
+    samples = await collect(fixture, tmp_path)
+
+    assert samples[0].reward == 0.5
+    assert fixture.tool_calls == [("bash", {}), ("submit_report", {})]
+    assert fixture.calls.count(("POST", f"/v1/rollout-rewards/synthetic/versions/{TASK}")) == 1
+    assert fixture.calls.count(("DELETE", "/v1/env/instances/synthetic-instance")) == 1
+    conversation = json.loads((tmp_path / "episode/conversation.json").read_bytes())
+    observations = [
+        message["content"] for message in conversation["messages"] if message["role"] == "tool"
+    ]
+    assert observations == [("x" * kept + marker)] * 2
+    assert all(len(value) == fixture.config["rl"]["tool_result_chars"] for value in observations)
+    assert "PRIVATE_SUFFIX_NOT_FOR_MODEL_OR_DISK" not in "".join(
+        path.read_text() for path in (tmp_path / "episode").iterdir()
+    )
+
+
+def test_tool_result_truncation_is_a_stable_prefix_and_leaves_short_results_unchanged():
+    marker = rl.TOOL_RESULT_TRUNCATION_MARKER
+    limit = len(marker) + 4
+    assert rl._truncate_tool_result("safe", limit) == "safe"
+    assert rl._truncate_tool_result("abcd" + "x" * limit, limit) == "abcd" + marker
+
+
+@pytest.mark.asyncio
+async def test_tool_result_cap_must_leave_room_for_visible_truncation_marker(fixture, tmp_path):
+    fixture.config["rl"]["tool_result_chars"] = len(rl.TOOL_RESULT_TRUNCATION_MARKER)
+    seal(fixture.config)
+    with pytest.raises(rl.InvalidEpisode, match="invalid_episode_limits"):
+        await collect(fixture, tmp_path)
+    assert not fixture.calls
 
 
 @pytest.mark.asyncio
