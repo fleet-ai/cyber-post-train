@@ -92,3 +92,25 @@ candidate-only run. The
 checkpoint-selection signal for this arm.
 
 No production job was submitted while preparing this arm.
+
+## Offline prod2 successor scaffold
+
+`configs/runs/qwen38-miles-rl-filtered-study-a-prod-v2.template.json` is the
+nonlaunchable successor scaffold. It preserves the prod1 scientific recipe—59
+train groups, 20 evaluation-only Fleet dev groups, 59 optimizer updates, one
+8-GPU B300 node, eight samples per group, LR `2e-6`, temperature `0.7`, KL
+coefficient `0.001`, and `c1`—while correcting `tool_result_chars` to `4000`.
+Its run, output, data, and W&B identity are all freshly namespaced under
+`chris-q38-miles-rl-prod2`; no prod1 identity or prepared manifest is reused.
+
+The prod2 data prerequisite is complete: a CPU-only dev helper materialized and
+validated the exact 59-train/20-dev manifest under the fresh prod2 SFS root,
+without creating an environment or using a GPU. The template binds its manifest
+and preparation-receipt digests. Dev7 has one accepted create; its exact API,
+RayJob, and Workload identity is recorded so that the POST is never replayed.
+
+The template still records no accepted Dev7 terminal, active-canary binding, or
+native reload. The production promotion module remains deliberately unchanged
+and recognizes only the separately reviewed prod1 arm, so prod2 cannot compile
+or borrow prod1 acceptance. The scaffold contains no external-benchmark rows or
+data. No prod2 W&B run or production job was created while preparing it.

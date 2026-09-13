@@ -1,0 +1,163 @@
+{
+  "schema": "cyber_qwen38_miles_production_arm_template_v4",
+  "status": "blocked_not_launchable",
+  "launchable": false,
+  "purpose": "Offline prod2 successor scaffold. It records the corrected rollout limit and fresh identities but cannot be promoted without a newly accepted Dev7-compatible reward, update, checkpoint, and all-rank reload chain.",
+  "dev7_to_production": {
+    "dev7_submission_identity": {
+      "api_run_name": "chris-q38-miles-rlreward-dev7-fa5c7491",
+      "api_run_id": "fa5c7491-a778-4ac8-965c-82d37be70b4c",
+      "rayjob_uid": "11bc3141-6261-49d5-98f4-a98f95ecf2d5",
+      "workload_uid": "1a73677b-0161-4502-acc1-0ac94c1ce75c"
+    },
+    "dev7_qualification_scope": {
+      "train_rows": 1,
+      "dev_rows": 1,
+      "optimizer_steps": 1
+    },
+    "production_scope": {
+      "train_rows": 59,
+      "dev_rows": 20,
+      "optimizer_steps": 59
+    },
+    "preserved_scientific_recipe": {
+      "initial_policy": "exact_qwen38_27b_base_native_checkpoint",
+      "topology": "one_node_eight_b300",
+      "samples_per_prompt": 8,
+      "lr": 0.000002,
+      "temperature": 0.7,
+      "kl_loss_coef": 0.001,
+      "max_tokens_per_gpu": 8192,
+      "tool_result_chars": 4000,
+      "native_parallelism_and_recompute": "unchanged"
+    },
+    "deliberate_scale_changes_only": [
+      "prepared_data_identity_1_train_1_dev_to_59_train_20_dev",
+      "optimizer_steps_1_to_59",
+      "checkpoint_interval_1_to_10",
+      "native_eval_interval_1_to_59",
+      "separately_reviewed_production_cpu_and_memory_envelope"
+    ]
+  },
+  "source_files": {
+    "task_set": {
+      "path": "configs/data/qwen38-rl-filtered-study-a-task-set-v1.json",
+      "file_sha256": "sha256:a9a1a46a7c7f9a92ad363d50f47a52ecf544e07e54f394136912fc358b534fdb",
+      "self_sha256": "sha256:50d6052187ff2f5f085b9de402982d4421fba0c73bb1bd54fc4bc850516c5d68"
+    },
+    "split": {
+      "path": "configs/data/qwen38-rl-filtered-study-a-split-v1.json",
+      "file_sha256": "sha256:a9344b2cd1b50b6f06090c4f62fb6407953ecc1961a6af92747a079171f70e46",
+      "self_sha256": "sha256:c8c0083e08df55179a5acbd10602dbce5178257484b471c5ba7f4cbb04bdb35c"
+    },
+    "data_config": {
+      "path": "configs/runs/qwen38-miles-rl-filtered-study-a-prod-v2.data.json",
+      "file_sha256": "sha256:6258682996881f0fb54a885649b9f2a91dbe8257e6604f474ef7f1a779c5fe82"
+    },
+    "model_lock": {
+      "path": "configs/models/qwen38-27b-1d4bf0f2.lock.json",
+      "file_sha256": "sha256:f3926fe675263b25dc79c2b3881a9c463d6b7931e9d61aeb777d15efc61e35ac"
+    },
+    "model_weights": {
+      "path": "configs/models/qwen38-27b-1d4bf0f2.weights.json",
+      "file_sha256": "sha256:80a5e9de066e068abb012a0e9bd144676813a31042bb578226472803f8e0e84f"
+    }
+  },
+  "qualification": {
+    "dev7_source_run_name": "chris-q38-miles-rlreward-dev7",
+    "dev7_accepted_terminal": null,
+    "active_canary_binding": null,
+    "reward_terminal": null,
+    "native_reload": null,
+    "production_data_manifest": {
+      "schema": "cyber_miles_data_v1",
+      "path": "/mnt/sfs/jobs/chris-q38-miles-rl-prod2-inputs/data/manifest.json",
+      "file_sha256": "sha256:6d5df2cde536234e69f38bb7d8f89e19d1f4493271fa4a2a7aa28d263fd669cd",
+      "receipt_sha256": "sha256:c07bf3de80683f64735f02f9edb6e536fcfc4dda78e3f9408587a029cd57aa1a",
+      "preparation_receipt": {
+        "path": "/mnt/sfs/jobs/chris-q38-miles-rl-prod2-inputs/DATA_PREPARED.json",
+        "file_sha256": "sha256:72d8f7b94954fc64d5738d0a47a733fd39be2e3cdeaa610c845b1a6a0475bb64",
+        "receipt_sha256": "sha256:3bf0490262723c87ba951be6bfe43ddb3593c25d6edf794f3efa11f1166525d9"
+      },
+      "rows": {
+        "train": 59,
+        "dev": 20
+      },
+      "gpus": 0,
+      "environment_creates": 0
+    }
+  },
+  "candidate_run": {
+    "backend": "miles",
+    "name": "chris-q38-miles-rl-prod2",
+    "output_root": "/mnt/sfs/jobs/chris-q38-miles-rl-prod2",
+    "model": {
+      "lock": "../models/qwen38-27b-1d4bf0f2.lock.json",
+      "weights": "../models/qwen38-27b-1d4bf0f2.weights.json",
+      "root": "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2"
+    },
+    "data": {
+      "manifest": "/mnt/sfs/jobs/chris-q38-miles-rl-prod2-inputs/data/manifest.json",
+      "root": "/mnt/sfs/jobs/chris-q38-miles-rl-prod2-inputs/data"
+    },
+    "checkpoint": {
+      "manifest": "/mnt/sfs/jobs/chris-cpt-cleanup-q38-miles-base-v1/NATIVE_CHECKPOINT.json",
+      "sha256": "sha256:b3d772de9121f442ea7b9a4c9a996f2a0a99cab8c49fe3083c148fe3eebd089c"
+    },
+    "recipe": {
+      "nodes": 1,
+      "gpus_per_node": 8,
+      "steps": 59,
+      "groups": 1,
+      "samples_per_prompt": 8,
+      "lr": 0.000002,
+      "temperature": 0.7,
+      "kl_loss_coef": 0.001,
+      "max_tokens_per_gpu": 8192,
+      "eval_interval": 59,
+      "checkpoint_interval": 10,
+      "seed": 42
+    },
+    "wandb": {
+      "entity": "thefleet",
+      "project": "cyber-post-train",
+      "run_id": "chris-q38-miles-rl-prod2"
+    },
+    "cluster": {
+      "target": "prod",
+      "priority": "c1",
+      "resources": {
+        "cpu_request": "64",
+        "cpu_limit": "128",
+        "memory_request": "1536Gi",
+        "memory_limit": "2048Gi"
+      }
+    },
+    "production_promotion": null
+  },
+  "candidate_run_sha256": "sha256:630ed894595b39657385f33f13d5868f85b5e9598bc77c30457b10df50598843",
+  "scientific_boundaries": {
+    "optimizer_split": "train",
+    "fleet_dev_is_evaluation_only": true,
+    "train_rows": 59,
+    "dev_rows": 20,
+    "final_test_rows": 0,
+    "external_benchmark_training_rows": 0,
+    "external_benchmark_reward_inputs": 0,
+    "external_benchmark_hpo_or_checkpoint_inputs": 0,
+    "external_benchmark_retry_inputs": 0
+  },
+  "live_requirements_if_a_future_successor_is_qualified": [
+    "warning_free_prod_preview_one_worker_eight_gpus_c1_priority_10000_no_requeue",
+    "production_jobs_api_name_and_output_absent",
+    "production_output_and_submission_journal_absent",
+    "production_wandb_run_id_absent",
+    "active_production_experiment_nodes_plus_candidate_at_most_eight"
+  ],
+  "blocked_reasons": [
+    "Dev7 has no accepted reward/update/checkpoint terminal receipt bound to this scaffold.",
+    "No digest-valid active-canary binding or accepted all-rank native reload exists for Dev7.",
+    "Live production duplicate, W&B, preview and capacity gates cannot be pre-certified."
+  ],
+  "sha256": "sha256:589590cbdfb04e2fdf1da8e9425fccc32a98e232350509c4144a0adce86eb590"
+}
