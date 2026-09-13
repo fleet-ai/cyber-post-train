@@ -69,6 +69,7 @@ def _recover_created_run(
         raise ValueError("Jobs API recovery timeout must fit the configured watch deadline")
     expected_name = re.compile(re.escape(request["name"]) + r"-[a-f0-9]{8}")
     deadline = time.monotonic() + timeout_seconds
+    delay = 0.25
     while True:
         try:
             history = jobs.all_runs()
@@ -94,7 +95,8 @@ def _recover_created_run(
                     raise TimeoutError(
                         "ambiguous Jobs API POST remained unreadable through watch deadline"
                     ) from None
-                time.sleep(min(2.0, max(0.0, deadline - time.monotonic())))
+                time.sleep(min(delay, max(0.0, deadline - time.monotonic())))
+                delay = min(delay * 2, 5.0)
                 continue
             run_id = str(observed.get("job_id", ""))
             try:
@@ -134,7 +136,8 @@ def _recover_created_run(
             return observed
         if time.monotonic() >= deadline:
             raise TimeoutError("ambiguous Jobs API POST was not visible during read-only recovery")
-        time.sleep(0.5)
+        time.sleep(min(delay, max(0.0, deadline - time.monotonic())))
+        delay = min(delay * 2, 5.0)
 
 
 def submit_once_or_reconcile(
@@ -205,7 +208,12 @@ def _preflight_submission(args: argparse.Namespace) -> tuple[dict[str, Any], dic
 class WatchBuffer:
     """Open gap-free resource-version watches before the only mutating POST."""
 
-    def __init__(self) -> None:
+    def __init__(self, resources: tuple[str, ...] = _RESOURCES) -> None:
+        if not resources or any(
+            not isinstance(resource, str) or not resource for resource in resources
+        ):
+            raise ValueError("Kubernetes watch resources are absent")
+        self.resources = resources
         self.processes: list[subprocess.Popen[str]] = []
         self.events: queue.Queue[tuple[float, dict[str, Any]] | BaseException] = queue.Queue()
 
@@ -218,7 +226,7 @@ class WatchBuffer:
         )
         if namespace.get("metadata", {}).get("uid") != NAMESPACE_UID:
             raise ValueError("kubectl is not bound to the exact dev3 namespace UID")
-        for resource in _RESOURCES:
+        for resource in self.resources:
             listing = _objects(
                 [
                     "kubectl", "--context", events.DEV_KUBE_CONTEXT,
@@ -398,12 +406,23 @@ class WatchBuffer:
             os.fsync(stream.fileno())
         return value
 
-    def record(self, directory: Path, submission: dict[str, Any], timeout: int = 43200) -> None:
+    def record(
+        self,
+        directory: Path,
+        submission: dict[str, Any],
+        timeout: int = 43200,
+        *,
+        require_deletions: bool = False,
+    ) -> None:
+        if type(require_deletions) is not bool:
+            raise ValueError("watch deletion requirement must be boolean")
         run = submission["api"]
         rayjob_uid = raycluster_identity = None
         pending: list[tuple[float, dict[str, Any]]] = []
         terminal_job = terminal_pod = failed_job = False
+        expected_kinds = {"RayJob", "Workload", "RayCluster", "Pod"}
         seen: set[str] = set()
+        deleted: set[str] = set()
         sequence, last_recorded_at = 0, 0.0
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
@@ -469,18 +488,20 @@ class WatchBuffer:
                         sequence += 1
                         last_recorded_at = recorded_at
                         seen.add(str(kind))
+                        if raw.get("type") == "DELETED":
+                            deleted.add(str(kind))
                         pending.remove((_observed_at, raw))
                         progressed = True
             if failed_job:
                 raise RuntimeError("observer RayJob reached terminal failure on dev")
-            if terminal_job and terminal_pod and seen == {
-                "RayJob",
-                "Workload",
-                "RayCluster",
-                "Pod",
-            }:
+            if (
+                terminal_job
+                and terminal_pod
+                and seen == expected_kinds
+                and (not require_deletions or deleted == expected_kinds)
+            ):
                 return
-        raise TimeoutError("observer watch did not see terminal RayJob and Pod success")
+        raise TimeoutError("observer watch did not see the required terminal lifecycle events")
 
     def close(self) -> None:
         for process in self.processes:

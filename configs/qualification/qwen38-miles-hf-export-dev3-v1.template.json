@@ -1,0 +1,30 @@
+{
+  "schema": "cyber_miles_hf_export_job_config_v1",
+  "stage": "export",
+  "name": "q38-miles-hf-export-dev3-v1",
+  "output_root": "/mnt/sfs/jobs/chris-q38-miles-hf-export-dev3-v1",
+  "source": {
+    "checkpoint": {
+      "path": "/mnt/sfs/jobs/chris-q38-miles-rlreward-dev3-seal/MILES_TRAINING_CHECKPOINT.json",
+      "file_sha256": "sha256:REPLACE_WITH_EXACT_CHECKPOINT_MANIFEST_FILE_SHA256"
+    },
+    "terminal_acceptance": {
+      "path": "/mnt/sfs/jobs/chris-q38-miles-rlreward-dev3/MILES_TERMINAL_ACCEPTED.json",
+      "file_sha256": "sha256:REPLACE_WITH_EXACT_TERMINAL_ACCEPTANCE_FILE_SHA256"
+    },
+    "native_reload_acceptance": {
+      "path": "/mnt/sfs/jobs/chris-q38-miles-reload-dev3/RELOAD_ACCEPTED.json",
+      "file_sha256": "sha256:REPLACE_WITH_EXACT_NATIVE_RELOAD_ACCEPTANCE_FILE_SHA256"
+    }
+  },
+  "cluster": {
+    "target": "dev",
+    "priority": "c2",
+    "resources": {
+      "cpu_request": "64",
+      "cpu_limit": "64",
+      "memory_request": "512Gi",
+      "memory_limit": "768Gi"
+    }
+  }
+}

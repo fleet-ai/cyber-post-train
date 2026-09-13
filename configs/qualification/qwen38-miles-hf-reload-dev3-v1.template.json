@@ -1,0 +1,22 @@
+{
+  "schema": "cyber_miles_hf_export_job_config_v1",
+  "stage": "reload",
+  "name": "q38-miles-hf-reload-dev3-v1",
+  "output_root": "/mnt/sfs/jobs/chris-q38-miles-hf-reload-dev3-v1",
+  "source": {
+    "export_acceptance": {
+      "path": "/mnt/sfs/jobs/chris-q38-miles-hf-export-dev3-v1/HF_EXPORT_ACCEPTED.json",
+      "file_sha256": "sha256:REPLACE_WITH_EXACT_HF_EXPORT_ACCEPTANCE_FILE_SHA256"
+    }
+  },
+  "cluster": {
+    "target": "dev",
+    "priority": "c1",
+    "resources": {
+      "cpu_request": "32",
+      "cpu_limit": "64",
+      "memory_request": "192Gi",
+      "memory_limit": "256Gi"
+    }
+  }
+}

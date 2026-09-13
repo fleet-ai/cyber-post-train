@@ -14,6 +14,7 @@ dependencies = [
 
 [project.scripts]
 cyber-post-train = "cyber_post_train.cli:app"
+cyber-miles-hf-export = "training.miles_hf_export_cli:main"
 cyber-miles-policy-observer = "training.miles_policy_observer_cli:main"
 
 [build-system]

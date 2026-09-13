@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.machinery
 import json
 import shutil
 from pathlib import Path
@@ -14,10 +15,27 @@ from safetensors.torch import save_file
 from cyber_post_train.jobs import digest
 from training import miles
 from training import miles_hf_export as export
+from training.miles_promotion import DEV3
 
 
 def _sealed(value: dict) -> dict:
     return {**value, "sha256": digest(value)}
+
+
+def _prediction_probe(prediction: str = "a" * 64) -> dict:
+    return {
+        "schema": export.PREDICTION_SCHEMA,
+        "probe_id": export.PREDICTION_PROBE_ID,
+        "input_ids_sha256": "sha256:" + digest(list(export.PREDICTION_INPUT_IDS)),
+        "sequence_length": len(export.PREDICTION_INPUT_IDS),
+        "top_k": export.PREDICTION_TOP_K,
+        "selection_margin_threshold": export.PREDICTION_MARGIN,
+        "selection_margin_satisfied": True,
+        "prediction_sha256": "sha256:" + prediction,
+        "logits_included": False,
+        "task_content_included": False,
+        "benchmark_content_included": False,
+    }
 
 
 def _write_json(path: Path, value: dict) -> str:
@@ -100,7 +118,7 @@ def case(tmp_path: Path, monkeypatch) -> dict:
             "source": {
                 "run_name": "synthetic",
                 "output_root": str(checkpoint_root.parent.parent),
-                "plan_sha256": "b" * 64,
+                "plan_sha256": DEV3["source_plan_sha256"],
                 "completion_sha256": "c" * 64,
                 "arguments": {"nodes": 1, "gpus_per_node": 8},
                 "execution": {"image": miles.IMAGE},
@@ -137,6 +155,7 @@ def case(tmp_path: Path, monkeypatch) -> dict:
             "status": "accepted",
             "reload_plan": {"source_manifest": checkpoint},
             "source_manifest_sha256": checkpoint["sha256"],
+            "prediction_probe": _prediction_probe(),
         }
     )
     native_reload_path = tmp_path / "RELOAD_ACCEPTED.json"
@@ -146,8 +165,13 @@ def case(tmp_path: Path, monkeypatch) -> dict:
         lambda value, check_files: {
             "source_manifest_sha256": value["source_manifest_sha256"],
             "source_terminal_acceptance_sha256": terminal["sha256"],
+            "prediction_probe": value["prediction_probe"],
         },
     )
+    monkeypatch.setattr(
+        "training.miles_acceptance.validate_terminal", lambda _value, *, check_files: {}
+    )
+    monkeypatch.setattr("training.miles_promotion._exact_dev3", lambda _value: None)
 
     def invoke(_source: Path, destination: Path, metadata: Path, _log: Path) -> None:
         shutil.copytree(raw, destination)
@@ -156,6 +180,19 @@ def case(tmp_path: Path, monkeypatch) -> dict:
         _log.write_text("synthetic private converter log")
 
     monkeypatch.setattr(export, "_invoke_converter", invoke)
+    monkeypatch.setattr(
+        export,
+        "_source_value_inventory",
+        lambda _generation: [
+            {
+                "name": row["name"],
+                "shape": row["shape"],
+                "dtype": row["dtype"],
+                "value_sha256": row["value_sha256"],
+            }
+            for row in export.tensor_inventory(raw)
+        ],
+    )
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
     return {
         "base": base,
@@ -197,6 +234,13 @@ def test_export_is_exhaustive_bf16_create_once_and_source_bound(case: dict) -> N
     assert result["miles"]["source_commit"] == export.MILES_SOURCE_COMMIT
     assert result["model"]["native_parallelism"] == {"tensor": 4, "context": 2, "world_size": 8}
     assert result["dtype"] == "BF16" and result["optimizer_updates_executed"] == 0
+    assert result["all_tensor_values_finite"] is True
+    assert result["source_equivalence"]["all_trained_values_match_source"] is True
+    assert result["resource_guard"]["converter_passes"] == 1
+    assert result["source_equivalence"]["converter_input"].endswith("iter_0000000")
+    assert result["source_equivalence"]["common_pt_sha256"] == export._hash(
+        case["checkpoint_root"] / "iter_0000000/common.pt"
+    )
     assert result["restored_base_tensor_count"] == 2
     assert {row["source"] for row in result["tensor_inventory"]} == {
         "trained",
@@ -214,6 +258,26 @@ def test_export_is_exhaustive_bf16_create_once_and_source_bound(case: dict) -> N
     assert not case["output"].with_name(case["output"].name + ".partial").exists()
     with pytest.raises(FileExistsError):
         _run(case)
+
+
+@pytest.mark.parametrize("defect", ["extra_field", "sidecar_claim", "source_digest"])
+def test_export_inspector_rejects_self_digested_receipt_false_accepts(
+    case: dict, defect: str
+) -> None:
+    _run(case)
+    path = case["output"] / "EXPORT.json"
+    receipt = json.loads(path.read_text())
+    receipt.pop("sha256")
+    if defect == "extra_field":
+        receipt["unreviewed_claim"] = True
+    elif defect == "sidecar_claim":
+        receipt["sidecars"].pop("tokenizer.json")
+    else:
+        receipt["source_equivalence"]["source_value_inventory_sha256"] = "0" * 64
+    path.write_text(json.dumps(_sealed(receipt), sort_keys=True))
+
+    with pytest.raises(ValueError, match="receipt|inventory"):
+        export.inspect_export(path, export._hash(path))
 
 
 def test_export_refuses_a_preexisting_attempt_directory(case: dict) -> None:
@@ -252,7 +316,144 @@ def test_converter_invocation_is_offline_and_has_no_force_flag(tmp_path: Path, m
     ]
     assert observed["env"]["HF_HUB_OFFLINE"] == "1"
     assert observed["env"]["TRANSFORMERS_OFFLINE"] == "1"
+    assert observed["env"]["WANDB_MODE"] == "disabled"
+    assert observed["env"]["PYTHONPATH"] == str(tmp_path)
+    assert observed["env"]["PYTHONNOUSERSITE"] == "1"
+    assert "FLEET_API_KEY" not in observed["env"]
     assert observed["check"] is False
+
+
+def test_converter_import_closure_is_exact_and_rejects_a_new_eager_module(
+    tmp_path: Path, monkeypatch
+) -> None:
+    assert len(export.MILES_CONVERTER_SOURCES) == 47
+    assert {
+        "miles/backends/megatron_utils/__init__.py",
+        "miles/backends/megatron_utils/sglang.py",
+        "miles/backends/megatron_utils/update_weight/common.py",
+        "miles/utils/fp8_kernel.py",
+        "miles/utils/mxfp8.py",
+        "miles/utils/nvfp4.py",
+        "miles_plugins/megatron_bridge/__init__.py",
+        "miles_plugins/models/qwen3_vl.py",
+    }.issubset(export.MILES_CONVERTER_SOURCES)
+    root = tmp_path / "miles-root"
+    origin = root / "miles/__init__.py"
+    origin.parent.mkdir(parents=True)
+    origin.write_text("")
+    eager = root / "miles/backends/megatron_utils/megatron_to_hf"
+    for name in export.MILES_CONVERTER_SOURCES:
+        path = root / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(name)
+    monkeypatch.setattr(
+        export.importlib.util,
+        "find_spec",
+        lambda _name: importlib.machinery.ModuleSpec("miles", loader=None, origin=str(origin)),
+    )
+    monkeypatch.setattr(
+        export,
+        "_hash",
+        lambda path: export.MILES_CONVERTER_SOURCES[str(path.relative_to(root))],
+    )
+    assert export._miles_root() == root
+
+    (eager / "unreviewed.py").write_text("")
+    with pytest.raises(ValueError, match="import closure"):
+        export._miles_root()
+
+
+def test_export_rejects_terminal_outside_exact_active_dev3(case: dict, monkeypatch) -> None:
+    def reject(_terminal: dict) -> None:
+        raise ValueError("not exact active dev3")
+
+    monkeypatch.setattr("training.miles_promotion._exact_dev3", reject)
+    with pytest.raises(ValueError, match="exact active dev3"):
+        _run(case)
+
+
+def test_observer_backed_native_reload_schema_and_prepared_runtime_reopen(case: dict) -> None:
+    native = json.loads(case["native_reload_path"].read_text())
+    native.pop("sha256")
+    native["schema"] = export.OBSERVER_NATIVE_RELOAD_SCHEMA
+    native["source_terminal_acceptance_sha256"] = json.loads(case["terminal_path"].read_text())[
+        "sha256"
+    ]
+    native = _sealed(native)
+    case["native_reload_path"].write_text(json.dumps(native))
+    case["native_reload_sha256"] = export._hash(case["native_reload_path"])
+
+    prepared = export.bind_source(
+        checkpoint_path=case["checkpoint_path"],
+        checkpoint_sha256=case["checkpoint_sha256"],
+        terminal_path=case["terminal_path"],
+        terminal_sha256=case["terminal_sha256"],
+        native_reload_path=case["native_reload_path"],
+        native_reload_sha256=case["native_reload_sha256"],
+        validate_historical=False,
+    )
+    prepared.pop("checkpoint_manifest")
+    result = export.export(
+        checkpoint_path=case["checkpoint_path"],
+        checkpoint_sha256=case["checkpoint_sha256"],
+        terminal_path=case["terminal_path"],
+        terminal_sha256=case["terminal_sha256"],
+        native_reload_path=case["native_reload_path"],
+        native_reload_sha256=case["native_reload_sha256"],
+        output=case["output"],
+        prepared_source=prepared,
+    )
+    assert result["source"]["native_reload_acceptance"]["receipt_sha256"] == native["sha256"]
+
+
+def test_tensor_inventory_rejects_nonfinite_values_and_false_index_total(tmp_path: Path) -> None:
+    root = tmp_path / "nonfinite"
+    _hf_tree(root, {"weight": torch.tensor([float("nan")], dtype=torch.bfloat16)})
+    with pytest.raises(ValueError, match="non-finite"):
+        export.tensor_inventory(root)
+
+    shutil.rmtree(root)
+    _hf_tree(root, {"weight": torch.ones((2,), dtype=torch.bfloat16)})
+    index = json.loads((root / "model.safetensors.index.json").read_text())
+    index["metadata"]["total_size"] = 0
+    (root / "model.safetensors.index.json").write_text(json.dumps(index))
+    with pytest.raises(ValueError, match="total size"):
+        export.tensor_inventory(root)
+
+
+def test_export_runs_one_create_once_converter_pass(case: dict, monkeypatch) -> None:
+    original = export._invoke_converter
+    calls = 0
+
+    def counted(source: Path, destination: Path, metadata: Path, log: Path) -> None:
+        nonlocal calls
+        original(source, destination, metadata, log)
+        calls += 1
+
+    monkeypatch.setattr(export, "_invoke_converter", counted)
+    result = _run(case)
+
+    assert calls == 1
+    assert result["source_equivalence"]["all_trained_values_match_source"] is True
+
+
+def test_export_rejects_values_that_do_not_match_independent_dcp_reload(
+    case: dict, monkeypatch
+) -> None:
+    monkeypatch.setattr(
+        export,
+        "_source_value_inventory",
+        lambda _generation: [
+            {
+                "name": "model.language_model.weight",
+                "shape": [2, 4],
+                "dtype": "BF16",
+                "value_sha256": "0" * 64,
+            }
+        ],
+    )
+    with pytest.raises(ValueError, match="independent DCP reload"):
+        _run(case)
 
 
 @pytest.mark.parametrize("defect", ["fp32", "missing_language", "extra", "acceptance"])
@@ -294,19 +495,34 @@ def test_export_detects_source_mutation_during_conversion(case: dict, monkeypatc
         _run(case)
 
 
-def test_gpu_reload_is_separate_and_zero_work(case: dict, monkeypatch) -> None:
+def test_prediction_receipt_is_digest_only_and_requires_a_robust_boundary() -> None:
+    logits = torch.arange(32, dtype=torch.float32)
+    receipt = export._prediction_receipt(logits)
+    assert receipt["prediction_sha256"] == "sha256:" + digest(list(range(31, 15, -1)))
+    assert set(receipt) == export._PREDICTION_FIELDS
+    assert receipt["logits_included"] is False
+    assert not any(isinstance(value, list) for value in receipt.values())
+
+    logits[15:17] = 16
+    with pytest.raises(ValueError, match="not numerically robust"):
+        export._prediction_receipt(logits)
+
+
+def test_gpu_reload_is_separate_and_matches_native_prediction(case: dict, monkeypatch) -> None:
     result = _run(case)
     tensor_rows = {row["name"]: row for row in result["tensor_inventory"]}
+    value_observer = export._runtime_value_observation
 
     class Tensor:
         dtype = torch.bfloat16
         device = SimpleNamespace(type="cuda")
 
-        def __init__(self, shape):
+        def __init__(self, shape, value_sha256):
             self.shape = torch.Size(shape)
+            self.value_sha256 = value_sha256
 
     state = {
-        name: Tensor(row["shape"])
+        name: Tensor(row["shape"], row["value_sha256"])
         for name, row in tensor_rows.items()
         if not name.startswith("mtp.")
     }
@@ -318,6 +534,12 @@ def test_gpu_reload_is_separate_and_zero_work(case: dict, monkeypatch) -> None:
     monkeypatch.setattr(torch.cuda, "max_memory_allocated", lambda _device: 123)
     monkeypatch.setattr(torch.cuda, "get_device_name", lambda _device: "synthetic")
     monkeypatch.setattr(torch.cuda, "empty_cache", lambda: None)
+    monkeypatch.setattr(
+        export,
+        "_runtime_value_observation",
+        lambda tensor: (True, tensor.value_sha256),
+    )
+    monkeypatch.setattr(export, "_hf_prediction_probe", lambda _model: _prediction_probe())
     monkeypatch.setattr("transformers.AutoConfig.from_pretrained", lambda *args, **kwargs: config)
     monkeypatch.setattr(
         "transformers.AutoModelForImageTextToText.from_pretrained",
@@ -335,138 +557,51 @@ def test_gpu_reload_is_separate_and_zero_work(case: dict, monkeypatch) -> None:
 
     assert reloaded["schema"] == export.RELOAD_SCHEMA
     assert reloaded["all_runtime_weights_loaded"] is True
+    assert reloaded["all_runtime_values_finite"] is True
+    assert reloaded["all_runtime_values_match_export"] is True
+    assert reloaded["semantic_prediction_match"] is True
+    assert reloaded["hf_prediction_probe"] == reloaded["native_prediction_probe"]
     assert reloaded["external_gpu_release_verified"] is False
-    assert {
-        reloaded[key]
+    assert reloaded["forwards"] == 1
+    assert all(
+        reloaded[key] == 0
         for key in (
             "optimizer_updates",
             "rollouts",
             "verifier_calls",
-            "forwards",
             "backwards",
             "checkpoint_writes",
             "wandb_events",
         )
-    } == {0}
+    )
 
-    result_file_sha256 = export._hash(reload_output)
-    run_id = "11111111-1111-4111-8111-111111111111"
-    rayjob_uid = "22222222-2222-4222-8222-222222222222"
-    workload_uid = "33333333-3333-4333-8333-333333333333"
-    raycluster_uid = "44444444-4444-4444-8444-444444444444"
-    pod_uid = "55555555-5555-4555-8555-555555555555"
-    namespace_uid = "66666666-6666-4666-8666-666666666666"
-    job_name = f"hf-reload-{run_id[:8]}"
-    image_digest = miles.IMAGE.rsplit("@sha256:", 1)[-1]
-    controller = _sealed(
-        {
-            "schema": export.RELOAD_CONTROLLER_SCHEMA,
-            "status": "succeeded",
-            "cluster": "dev",
-            "api_base_url": export.API_URLS["dev"],
-            "kube_context": "synthetic-dev",
-            "namespace": export.RELOAD_NAMESPACE,
-            "namespace_uid": namespace_uid,
-            "run_name": "hf-reload",
-            "reload_result_path": str(reload_output),
-            "reload_result_file_sha256": result_file_sha256,
-            "reload_result_sha256": reloaded["sha256"],
-            "api_run_id": run_id,
-            "api_run_name": job_name,
-            "rayjob_name": job_name,
-            "rayjob_uid": rayjob_uid,
-            "workload_name": "hf-reload-workload",
-            "workload_uid": workload_uid,
-            "workload_owner_rayjob_uid": rayjob_uid,
-            "raycluster_name": "hf-reload-cluster",
-            "raycluster_uid": raycluster_uid,
-            "raycluster_owner_rayjob_uid": rayjob_uid,
-            "pods": [
-                {
-                    "name": "hf-reload-worker",
-                    "uid": pod_uid,
-                    "owner_raycluster_uid": raycluster_uid,
-                    "phase": "Succeeded",
-                    "exit_code": 0,
-                    "termination_reason": "Completed",
-                    "terminated_at": reloaded["completed_at"] + 1,
-                    "runtime_image_id": "containerd://registry/image@sha256:" + image_digest,
-                    "container_restarts": 0,
-                    "gpus": 1,
-                }
-            ],
-            "api_status": "SUCCEEDED",
-            "controller_status": "SUCCEEDED",
-            "effective_priority": 10000,
-            "automatic_requeue": False,
-            "workers": 1,
-            "gpus_per_worker": 1,
-            "total_gpus": 1,
-            "observed_at": reloaded["completed_at"] + 2,
-        }
-    )
-    controller_path = evidence_root / "HF_RELOAD_CONTROLLER_TERMINAL.json"
-    controller_file_sha256 = _write_json(controller_path, controller)
-    release = _sealed(
-        {
-            "schema": export.RELOAD_RELEASE_SCHEMA,
-            "status": "released",
-            "cluster": "dev",
-            "api_base_url": export.API_URLS["dev"],
-            "kube_context": controller["kube_context"],
-            "namespace": export.RELOAD_NAMESPACE,
-            "namespace_uid": namespace_uid,
-            "run_name": "hf-reload",
-            "reload_result_path": str(reload_output),
-            "reload_result_file_sha256": result_file_sha256,
-            "reload_result_sha256": reloaded["sha256"],
-            "controller_terminal_path": str(controller_path),
-            "controller_terminal_file_sha256": controller_file_sha256,
-            "controller_terminal_sha256": controller["sha256"],
-            "api_run_id": run_id,
-            "api_run_name": job_name,
-            "rayjob_name": job_name,
-            "rayjob_uid": rayjob_uid,
-            "workload_name": controller["workload_name"],
-            "workload_uid": workload_uid,
-            "raycluster_name": controller["raycluster_name"],
-            "raycluster_uid": raycluster_uid,
-            "pod_uids": [pod_uid],
-            "api_status": "SUCCEEDED",
-            "controller_status": "SUCCEEDED",
-            "rayjob_present": False,
-            "workload_present": False,
-            "quota_reservation_present": False,
-            "raycluster_present": False,
-            "gpu_pods_present": False,
-            "active_gpu_pod_uids": [],
-            "active_gpus": 0,
-            "observed_at": reloaded["completed_at"] + 3,
-        }
-    )
-    release_path = evidence_root / "HF_RELOAD_RELEASE.json"
-    _write_json(release_path, release)
-    accepted_path = evidence_root / "HF_RELOAD_ACCEPTED.json"
-    accepted = export.accept_gpu_reload(
-        result_path=reload_output,
-        controller_path=controller_path,
-        release_path=release_path,
-        output=accepted_path,
-    )
-    assert accepted["schema"] == export.RELOAD_ACCEPTED_SCHEMA
-    assert accepted["external_gpu_release_verified"] is True
-    assert accepted["serving_qualified"] is False
-    assert export.validate_reload_accepted(accepted)["export_receipt_sha256"] == result["sha256"]
+    changed = _prediction_probe("b" * 64)
+    monkeypatch.setattr(export, "_hf_prediction_probe", lambda _model: changed)
+    with pytest.raises(ValueError, match="differs from the native"):
+        export.gpu_reload(
+            case["output"] / "EXPORT.json",
+            export._hash(case["output"] / "EXPORT.json"),
+            evidence_root / "MISMATCH.json",
+            run_name="hf-reload-mismatch",
+        )
 
-    release_path.unlink()
-    release.pop("sha256")
-    release["active_gpus"] = 1
-    _write_json(release_path, _sealed(release))
-    accepted_path.unlink()
-    with pytest.raises(ValueError, match="external release"):
+    assert value_observer(torch.tensor([1, 2], dtype=torch.bfloat16))[0]
+    assert not value_observer(torch.tensor([float("inf")], dtype=torch.bfloat16))[0]
+
+
+def test_reload_acceptance_requires_bound_plan_and_submission(case: dict) -> None:
+    _run(case)
+    evidence_root = case["output"].parent / "reload-evidence"
+    evidence_root.mkdir()
+    result_path = evidence_root / "HF_RELOAD_VALIDATED.json"
+    result_path.write_text("{}")
+    for name in ("HF_RELOAD_CONTROLLER_TERMINAL.json", "HF_RELOAD_RELEASE.json"):
+        (evidence_root / name).write_text("{}")
+
+    with pytest.raises(TypeError):
         export.accept_gpu_reload(
-            result_path=reload_output,
-            controller_path=controller_path,
-            release_path=release_path,
-            output=accepted_path,
+            result_path=result_path,
+            controller_path=evidence_root / "HF_RELOAD_CONTROLLER_TERMINAL.json",
+            release_path=evidence_root / "HF_RELOAD_RELEASE.json",
+            output=evidence_root / "HF_RELOAD_ACCEPTED.json",
         )

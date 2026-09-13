@@ -80,7 +80,17 @@ def _prepared(directory: Path) -> tuple[dict, dict]:
     )
     if receipt != {"plan_sha256": digest(plan), "request_sha256": digest(request)}:
         raise ValueError("prepared inputs changed; prepare a new directory, never edit a launch")
-    validate_request(request)
+    if (
+        plan.get("schema") == "cyber_miles_hf_export_job_plan_v1"
+        and plan.get("stage") == "export"
+    ):
+        from training.miles_hf_export_job import job_request, validate_plan
+
+        validate_plan(plan, check_files=False)
+        if request != job_request(plan):
+            raise ValueError("prepared Kubernetes Job differs from its immutable plan")
+    else:
+        validate_request(request)
     return plan, request
 
 
@@ -728,6 +738,8 @@ def preflight(directory: Path) -> None:
             from training.miles_training import preflight as check
         elif plan.get("schema") == "cyber_miles_rl_reload_v1":
             from training.miles_reload import preflight as check
+        elif plan.get("schema") == "cyber_miles_hf_export_job_plan_v1":
+            from training.miles_hf_export_job import preflight as check
         elif plan.get("schema") == "cyber_skyrl_training_v1":
             if _skyrl_mode(plan, request) == "engine_diagnostic":
                 from training.skyrl_training import engine_diagnostic_preflight as check
@@ -815,6 +827,11 @@ def submit(
     """
     try:
         plan, request = _prepared(directory)
+        if plan.get("schema") == "cyber_miles_hf_export_job_plan_v1":
+            raise JobsError(
+                "Miles HF jobs require the pre-POST TTL-zero watcher; "
+                "use python -m training.miles_hf_export_cli submit"
+            )
         skyrl_mode = (
             _skyrl_mode(plan, request) if plan.get("schema") == "cyber_skyrl_training_v1" else None
         )
@@ -980,6 +997,107 @@ def miles_rl_reload(config: Path, output: Annotated[Path, typer.Option("--output
                 "submitted": False,
             }
         )
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command("miles-hf-job")
+def miles_hf_job(config: Path, output: Annotated[Path, typer.Option("--output")]) -> None:
+    """Prepare exact active-dev3 HF export or one-GPU value-checked reload."""
+    from training.miles_hf_export_job import _sfs, compile_job, job_request
+    from training.sft import read_mapping
+
+    try:
+        if _sfs(str(output.resolve()), "HF prepared evidence root") != str(output.resolve()):
+            raise ValueError("HF prepared evidence root is not durable SFS")
+        plan = compile_job(read_mapping(config))
+        request = job_request(plan)
+        _prepare(output, plan, request)
+        _print(
+            {
+                "prepared": str(output),
+                "stage": plan["stage"],
+                "gpus_reserved": plan["execution"]["gpus_per_worker"],
+                "cuda_visible": plan["execution"]["cuda_visible"],
+                "submitted": False,
+            }
+        )
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command("miles-hf-bind-submission")
+def miles_hf_bind_submission(
+    directory: Path,
+    source_commit: Annotated[str, typer.Option("--source-commit")],
+    output: Annotated[Path, typer.Option("--output")],
+) -> None:
+    """Seal the prepared bundle and create-once dev API journal after one POST."""
+    from training.miles_hf_export_job import compile_submission_binding
+
+    try:
+        plan, request = _prepared(directory)
+        if plan.get("schema") != "cyber_miles_hf_export_job_plan_v1":
+            raise ValueError("submission binding requires a prepared Miles HF job")
+        result = compile_submission_binding(
+            plan_path=directory / "plan.json",
+            request_path=directory / "request.json",
+            submission_journal_path=directory / "SUBMISSION.jsonl",
+            source_commit=source_commit,
+            output=output.resolve(),
+        )
+        _print({"status": "bound", "api": result["api"], "sha256": result["sha256"]})
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command("miles-hf-accept-export")
+def miles_hf_accept_export(directory: Path, submission: Path) -> None:
+    """Accept an observed dev export only after its exact UIDs are durably released."""
+    from training.miles_hf_export_job import accept_export_job
+
+    try:
+        plan, _ = _prepared(directory)
+        if (
+            plan.get("schema") != "cyber_miles_hf_export_job_plan_v1"
+            or plan.get("stage") != "export"
+        ):
+            raise ValueError("export acceptance requires a prepared Miles HF export job")
+        root = Path(plan["output_root"])
+        result = accept_export_job(
+            plan_path=(directory / "plan.json").resolve(),
+            submission_path=submission.resolve(),
+            controller_path=root / "HF_EXPORT_CONTROLLER_TERMINAL.json",
+            release_path=root / "HF_EXPORT_RELEASE.json",
+            output=root / "HF_EXPORT_ACCEPTED.json",
+        )
+        _print({"status": result["status"], "sha256": result["sha256"], "serving": False})
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command("miles-hf-accept-reload")
+def miles_hf_accept_reload(directory: Path, submission: Path) -> None:
+    """Accept the one-GPU HF load/probe only after exact external GPU release."""
+    from training.miles_hf_export import accept_gpu_reload
+
+    try:
+        plan, _ = _prepared(directory)
+        if (
+            plan.get("schema") != "cyber_miles_hf_export_job_plan_v1"
+            or plan.get("stage") != "reload"
+        ):
+            raise ValueError("reload acceptance requires a prepared Miles HF reload job")
+        root = Path(plan["output_root"])
+        result = accept_gpu_reload(
+            plan_path=(directory / "plan.json").resolve(),
+            submission_path=submission.resolve(),
+            result_path=root / "HF_RELOAD_VALIDATED.json",
+            controller_path=root / "HF_RELOAD_CONTROLLER_TERMINAL.json",
+            release_path=root / "HF_RELOAD_RELEASE.json",
+            output=root / "HF_RELOAD_ACCEPTED.json",
+        )
+        _print({"status": result["status"], "sha256": result["sha256"], "serving": False})
     except Exception as exc:
         _fail(exc)
 
