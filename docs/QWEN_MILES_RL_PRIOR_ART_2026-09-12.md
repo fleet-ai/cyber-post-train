@@ -134,8 +134,10 @@ reload before evaluation consumes it.
 
 Before production Qwen3.8 RL, this repository must still prove, in order:
 
-1. the exact queued one-node/eight-GPU dev canary is admitted on one whole B300
-   node and retains its exact source, image, request, and no-requeue bindings;
+1. a fresh corrected one-node/eight-GPU dev4 canary, explicitly using per-token
+   loss with GRPO standard-deviation normalization disabled, is admitted on one
+   whole B300 node and retains its exact source, image, request, and no-requeue
+   bindings; the retired unallocated dev3 request is not promotion evidence;
 2. a real dev reward canary with authoritative verifier IDs, valid nontruncated
    episodes, nonzero reward and within-group variation;
 3. exactly one independently demonstrated optimizer update plus a value-level

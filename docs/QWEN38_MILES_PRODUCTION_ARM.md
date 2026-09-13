@@ -10,7 +10,7 @@ with no automatic requeue.
 
 Production promotion requires this exact create-once chain:
 
-1. The existing dev3 canary must finish with ten valid episodes (eight train,
+1. The corrected dev4 canary must finish with ten valid episodes (eight train,
    two dev), genuine authoritative rewards with within-group variance, exactly
    one independently verified policy-tensor update, a sealed checkpoint, exact
    W&B identity, and externally verified GPU release. Validate

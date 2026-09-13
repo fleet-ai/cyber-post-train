@@ -506,14 +506,15 @@ collective before any task, reward, batch, update, or checkpoint. Do not add
 NCCL environment guesses to revive that layout; acquire a whole dev node and
 qualify `1x8` first.
 
-The next create-once dev qualification uses the matching dev3 data and run
-configs under `configs/qualification/qwen38-miles-rl-reward-canary-*-dev-v3.json`.
+The current create-once dev qualification uses the corrected dev4 data and run
+configs under `configs/qualification/qwen38-miles-rl-reward-canary-*-dev-v4.json`.
 Its launch binding is
-`configs/qualification/qwen38-miles-rl-reward-canary-launch-dev-v3.json`; it
+`configs/qualification/qwen38-miles-rl-reward-canary-launch-dev-v4.json`; it
 records a fresh data root, prepared root, run/output identity, embedded cyber
-run ID, and W&B run ID. It is configuration only and does not authorize a
-submission until the data build, CPU preflight, dev preview, exact duplicate
-checks, and a topology-compatible whole eight-GPU dev node all pass.
+run ID, W&B run ID, and the exact estimator-fix ancestry requirement. The
+retired dev3 request ran no task, verifier, optimizer, or GPU work and must never
+be replayed. Dev4 is configuration only until the data build, CPU preflight,
+dev preview, exact duplicate checks, and native parsed-argument gate pass.
 
 CPU preflight checks the native FTI argument builder and actual text-only data
 source, including template identity and train/dev row retention. Qwen's automatic
@@ -551,7 +552,7 @@ cyber-post-train miles-rl-checkpoint-seal output/miles-dev-run \
   --output /mnt/sfs/jobs/<distinct-seal-dir>/MILES_TRAINING_CHECKPOINT.json
 ```
 
-For the one-step Qwen3.8 dev3 canary, use
+For the one-step Qwen3.8 dev4 canary, derive a fresh observer config from
 `configs/qualification/qwen38-miles-policy-observer-dev3-v1.template.json` and
 the exact procedure in `QWEN38_MILES_POLICY_OBSERVER.md`. One dev-only `1x8`
 observer loads the exact base and trained checkpoint on all ranks. Its trained
@@ -569,13 +570,14 @@ derive `POLICY_DELTA.json`, the training `MILES_TERMINAL_ACCEPTED.json`, and the
 `RELOAD_ACCEPTED.json`. The last step performs no API call or GPU allocation:
 the same observer load is both the value-sensitive policy-delta observation and
 the native reload proof. The prediction digest is the semantic source binding
-for the later HF reload. Never launch a second eight-GPU dev3 reload job.
+for the later HF reload. Never launch a second eight-GPU reload job for the same
+accepted checkpoint.
 
 The standalone `miles-rl-reload` rail remains available when a genuinely
 separate reload execution is required for another checkpoint. Its legacy dev3
-template is not the active dev3 promotion path. In either mode, never reuse a
-partial seal, edit a prepared request, or retry a failed validator under the
-same name.
+template is only an input for a fresh dev4-bound config. In either mode, never
+reuse a partial seal, edit a prepared request, or retry a failed validator under
+the same name.
 
 For **SkyRL**, use the same YAML and commands, with these differences:
 
