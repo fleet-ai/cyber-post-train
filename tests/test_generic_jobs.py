@@ -824,7 +824,10 @@ def test_one_post_with_durable_intent_even_after_uncertain_failure(tmp_path, out
 
     with client(handler) as api:
         if outcome == "ok":
-            assert api.submit_once(config(), journal)["status"] == "queued"
+            result = api.submit_once(config(), journal)
+            assert result["status"] == "queued"
+            assert result["name"] == "researcher-sft-1234abcd"
+            assert result["job_id"] is None
         else:
             with pytest.raises(JobsError) as error:
                 api.submit_once(config(), journal)

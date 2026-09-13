@@ -115,6 +115,18 @@ on September 11. Authenticated dev Kubernetes readback subsequently succeeded;
 That is not proof of absent alert delivery through other controllers/services.
 No admission request, job, build or workload mutation was made in this audit.
 
+### Queued Jobs API identity
+
+A successful create response can contain the generated run `name` while
+`job_id` is still `null` during `Suspended`/queued state. Do not reject that
+documented shape after the POST or issue a replacement POST. Seal the returned
+name in the submission journal, reconcile it through `GET /v1/runs`, then bind
+the later RayJob, Workload, RayCluster and Pod names and immutable UIDs as those
+objects appear. The generated API name and Kubernetes UIDs are different
+identities; never substitute one for another. If a wrapper stops after writing
+`POST_INTENT_DO_NOT_RETRY`, authoritative history containing the exact generated
+name or output root proves ownership and makes the intent non-repeatable.
+
 ## Alert sources
 
 The implementation lives in `fleet-ai/theseus`:
