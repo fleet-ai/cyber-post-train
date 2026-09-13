@@ -291,6 +291,107 @@ def test_submit_uses_shared_boundary_and_journal(prepared, monkeypatch):
     assert json.loads(result.stdout)["status"] == "pending"
 
 
+def test_miles_dev_submit_fails_before_network_when_no_whole_gpu_node(
+    prepared, monkeypatch
+):
+    output, plan, request, _ = prepared
+    plan["schema"] = "cyber_miles_training_v1"
+    monkeypatch.setattr(cli, "_prepared", lambda _: (plan, request))
+    proof = {
+        "schema": "cyber_miles_training_cpu_preflight_v1",
+        "gpus": 0,
+        "status": "passed",
+        "plan_sha256": digest(plan),
+        "request_sha256": digest(request),
+    }
+    cli._write(output / "PREFLIGHT.json", {**proof, "sha256": digest(proof)})
+    nodes = {
+        "items": [
+            {
+                "metadata": {"name": name},
+                "spec": {},
+                "status": {
+                    "allocatable": {"nvidia.com/gpu": "8"},
+                    "conditions": [{"type": "Ready", "status": "True"}],
+                },
+            }
+            for name in ("gpu-a", "gpu-b")
+        ]
+    }
+    pods = {
+        "items": [
+            {
+                "metadata": {"name": f"peer-{name}"},
+                "spec": {
+                    "nodeName": name,
+                    "containers": [
+                        {"resources": {"requests": {"nvidia.com/gpu": "2"}}}
+                    ],
+                },
+                "status": {"phase": "Running"},
+            }
+            for name in ("gpu-a", "gpu-b")
+        ]
+    }
+    monkeypatch.setattr(
+        cli, "_dev_cluster_json", lambda resource: {"nodes": nodes, "pods": pods}[resource]
+    )
+    monkeypatch.setattr(cli, "_client", lambda _: pytest.fail("fragmented submit reached API"))
+
+    result = RUNNER.invoke(cli.app, ["submit", str(output)])
+    assert result.exit_code == 2
+    assert "[6, 6]" in result.stderr and "each require 8 GPUs" in result.stderr
+    assert not (output / "SUBMISSION.jsonl").exists()
+
+
+def test_dev_gpu_fit_uses_scheduler_style_init_max_and_ignores_terminal_pods():
+    request = {"workers": 2, "gpus_per_worker": 4}
+    nodes = {
+        "items": [
+            {
+                "metadata": {"name": name},
+                "spec": {},
+                "status": {
+                    "allocatable": {"nvidia.com/gpu": "8"},
+                    "conditions": [{"type": "Ready", "status": "True"}],
+                },
+            }
+            for name in ("gpu-a", "gpu-b", "cordoned")
+        ]
+    }
+    nodes["items"][2]["spec"]["unschedulable"] = True
+    pods = {
+        "items": [
+            {
+                "spec": {
+                    "nodeName": "gpu-a",
+                    "containers": [
+                        {"resources": {"requests": {"nvidia.com/gpu": "1"}}},
+                        {"resources": {"limits": {"nvidia.com/gpu": "1"}}},
+                    ],
+                    "initContainers": [
+                        {"resources": {"requests": {"nvidia.com/gpu": "3"}}}
+                    ],
+                },
+                "status": {"phase": "Running"},
+            },
+            {
+                "spec": {
+                    "nodeName": "gpu-b",
+                    "containers": [
+                        {"resources": {"requests": {"nvidia.com/gpu": "8"}}}
+                    ],
+                },
+                "status": {"phase": "Succeeded"},
+            },
+        ]
+    }
+    assert cli._dev_gpu_fit(request, nodes, pods) == {
+        "required": [4, 4],
+        "free_gpus_by_node": [8, 5],
+    }
+
+
 def test_preview_and_status_are_read_only(prepared, monkeypatch):
     output, _, request, _ = prepared
     fake = SimpleNamespace(

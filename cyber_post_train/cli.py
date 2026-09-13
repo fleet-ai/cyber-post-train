@@ -6,6 +6,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import subprocess
 from enum import StrEnum
 from pathlib import Path
 from typing import Annotated
@@ -41,6 +42,9 @@ _ENGINE_DIAGNOSTIC_ABSENT_RUNTIME_CONTEXT_QUALIFICATION = {
 class Cluster(StrEnum):
     dev = "dev"
     prod = "prod"
+
+
+DEV_KUBE_CONTEXT = "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb"
 
 
 def _print(value: object) -> None:
@@ -96,6 +100,95 @@ def _prepared(directory: Path) -> tuple[dict, dict]:
 
 def _client(cluster: Cluster) -> Jobs:
     return Jobs(os.environ.get("FLEET_API_KEY", ""), base_url=API_URLS[cluster])
+
+
+def _dev_cluster_json(resource: str) -> dict:
+    result = subprocess.run(
+        ["kubectl", "--context", DEV_KUBE_CONTEXT, "get", resource, "-A", "-o", "json"],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    if result.returncode:
+        raise JobsError("dev Kubernetes GPU-fit check failed")
+    try:
+        value = json.loads(result.stdout)
+    except json.JSONDecodeError as error:
+        raise JobsError("dev Kubernetes GPU-fit result is invalid") from error
+    if not isinstance(value, dict) or not isinstance(value.get("items"), list):
+        raise JobsError("dev Kubernetes GPU-fit result is malformed")
+    return value
+
+
+def _container_gpus(container: object) -> int:
+    if not isinstance(container, dict):
+        raise JobsError("dev Pod GPU request is malformed")
+    resources = container.get("resources", {})
+    if not isinstance(resources, dict):
+        raise JobsError("dev Pod GPU request is malformed")
+    values = []
+    for field in ("requests", "limits"):
+        quantities = resources.get(field, {})
+        if not isinstance(quantities, dict):
+            raise JobsError("dev Pod GPU request is malformed")
+        try:
+            value = int(quantities.get("nvidia.com/gpu", 0))
+        except (TypeError, ValueError) as error:
+            raise JobsError("dev Pod GPU request is malformed") from error
+        if value < 0:
+            raise JobsError("dev Pod GPU request is malformed")
+        values.append(value)
+    return max(values)
+
+
+def _dev_gpu_fit(request: dict, nodes: dict, pods: dict) -> dict:
+    used: dict[str, int] = {}
+    for pod in pods["items"]:
+        if not isinstance(pod, dict) or not isinstance(pod.get("spec"), dict):
+            raise JobsError("dev Pod inventory is malformed")
+        if pod.get("status", {}).get("phase") in {"Failed", "Succeeded"}:
+            continue
+        node = pod["spec"].get("nodeName")
+        if not node:
+            continue
+        regular = sum(_container_gpus(item) for item in pod["spec"].get("containers", []))
+        initial = max(
+            (_container_gpus(item) for item in pod["spec"].get("initContainers", [])),
+            default=0,
+        )
+        used[node] = used.get(node, 0) + max(regular, initial)
+
+    free = []
+    for node in nodes["items"]:
+        if not isinstance(node, dict):
+            raise JobsError("dev node inventory is malformed")
+        metadata, spec, status = (node.get(key, {}) for key in ("metadata", "spec", "status"))
+        conditions = status.get("conditions", []) if isinstance(status, dict) else []
+        ready = any(
+            isinstance(item, dict) and item.get("type") == "Ready" and item.get("status") == "True"
+            for item in conditions
+        )
+        allocatable = status.get("allocatable", {}) if isinstance(status, dict) else {}
+        try:
+            gpus = int(allocatable.get("nvidia.com/gpu", 0))
+        except (TypeError, ValueError) as error:
+            raise JobsError("dev node GPU capacity is malformed") from error
+        name = metadata.get("name") if isinstance(metadata, dict) else None
+        if ready and not spec.get("unschedulable", False) and isinstance(name, str) and gpus:
+            free.append(max(0, gpus - used.get(name, 0)))
+    free.sort(reverse=True)
+    workers, per_worker = request["workers"], request["gpus_per_worker"]
+    if sum(value >= per_worker for value in free) < workers:
+        raise JobsError(
+            f"dev GPU topology has {free}; {workers} worker(s) each require {per_worker} GPUs"
+        )
+    return {"required": [per_worker] * workers, "free_gpus_by_node": free}
+
+
+def _require_dev_gpu_fit(request: dict) -> dict:
+    """Point-in-time fail-fast gate; it never reserves or mutates cluster capacity."""
+    return _dev_gpu_fit(request, _dev_cluster_json("nodes"), _dev_cluster_json("pods"))
 
 
 def _fail(exc: Exception) -> None:
@@ -870,6 +963,8 @@ def submit(
             from training.miles_reload import validate_preflight_receipt
 
             validate_preflight_receipt(plan, request, proof)
+        if cluster == Cluster.dev and plan.get("schema") == "cyber_miles_training_v1":
+            _require_dev_gpu_fit(request)
         with _client(cluster) as client:
             if plan.get("schema") == "cyber_miles_training_v1":
                 from training.miles_promotion import (
