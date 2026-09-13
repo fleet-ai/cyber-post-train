@@ -1,0 +1,40 @@
+{
+  "schema": "cyber_miles_serving_dev_external_v1",
+  "status": "succeeded_released",
+  "cluster": "dev",
+  "api_base_url": "https://api.ft.dev.flt.build",
+  "kube_context": "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb",
+  "namespace": "fleet-train-jobs",
+  "namespace_uid": null,
+  "run_name": null,
+  "api_run_id": null,
+  "request_sha256": null,
+  "effective_priority": 10000,
+  "automatic_requeue": false,
+  "controller": {
+    "kind": "RayJob",
+    "name": null,
+    "uid": null,
+    "status": "SUCCEEDED",
+    "workload_uid": null,
+    "raycluster_uid": null
+  },
+  "pod": {
+    "name": null,
+    "uid": null,
+    "phase": "Succeeded",
+    "exit_code": 0,
+    "container_restarts": 0,
+    "gpus": 1,
+    "runtime_image_id": "lmsysorg/sglang@sha256:febfb971c7352570fc445c466ebd6ffc9d896024958e544a60f2137fd85856b1"
+  },
+  "release": {
+    "api_status": "SUCCEEDED",
+    "raycluster_present": false,
+    "workload_present": false,
+    "gpu_pods_present": false,
+    "active_gpus": 0,
+    "observed_at": null
+  },
+  "observed_at": null
+}

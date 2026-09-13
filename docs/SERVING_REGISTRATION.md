@@ -142,8 +142,13 @@ generic staging or Miles dev-serving binding stops execution before a POST.
 The execution contract permits dev/prod identity/path/revision and placement
 differences; image, normalized runtime, resource shape, precision, parallelism,
 scaling and other behavior stay exact. Review storage/placement separately.
-This tool generates no dev evidence. Follow the [dev-first policy](CLUSTER_ALERTS_AND_INFERENCE_SERVING.md),
-current authority, live capacity/access checks and lifecycle bounds before:
+For an accepted Miles export, the bounded producer/acceptor for this evidence is
+the [Qwen3.8 Miles serving handoff](QWEN38_MILES_SERVING_HANDOFF.md). It runs one
+dev-only one-GPU SGLang canary, contains no task/benchmark content and accepts
+only after independent UID-bound terminal and GPU-release evidence. The generic
+registration code still does not infer or manufacture dev evidence. Follow the
+[dev-first policy](CLUSTER_ALERTS_AND_INFERENCE_SERVING.md), current authority,
+live capacity/access checks and lifecycle bounds before:
 
 ```bash
 python -m training.register_post_sft execute <prepared-directory> --dev-evidence <measured-dev-receipt.json> --dev-sha256 <receipt-file-sha256>

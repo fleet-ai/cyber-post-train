@@ -1,0 +1,19 @@
+{
+  "schema": "cyber_inference_staging_check_v1",
+  "status": "passed",
+  "namespace": "inference",
+  "pvc_name": null,
+  "pvc_uid": null,
+  "source_path": null,
+  "staged_root": null,
+  "destination_create_once": true,
+  "payload_rehashed": true,
+  "export_receipt_sha256": null,
+  "export_file_sha256": null,
+  "files_manifest_sha256": null,
+  "observer_pod_uid": null,
+  "mount_evidence_sha256": null,
+  "observed_mount_root": "/models",
+  "catalog_root": "/models",
+  "receipt_sha256": null
+}

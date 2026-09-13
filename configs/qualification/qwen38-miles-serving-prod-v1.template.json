@@ -1,0 +1,28 @@
+{
+  "schema": "cyber_exact_miles_serving_registration_v1",
+  "base_registration": {
+    "path": null,
+    "sha256": "sha256:43e586e505887e00251362e580a8cf8f0fe8b4c303d6447f7d0839a134db35d0"
+  },
+  "export": {
+    "path": null,
+    "sha256": null
+  },
+  "reload_acceptance": {
+    "path": null,
+    "sha256": null
+  },
+  "staging": {
+    "path": null,
+    "sha256": null
+  },
+  "storage": {
+    "namespace": "inference",
+    "pvc_name": null,
+    "pvc_uid": null,
+    "staged_root": null,
+    "source_path": null
+  },
+  "model_id": null,
+  "display_name": null
+}

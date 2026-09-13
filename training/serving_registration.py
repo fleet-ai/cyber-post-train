@@ -233,13 +233,18 @@ def execution_contract(registration: dict) -> dict:
     """
     value = _registration(registration)
     model = value["spec"]["model"]
-    replacements = {
-        value["id"]: "MODEL_ID",
-        model["path"]: "MODEL_PATH",
-        model["sourcePath"]: "SOURCE_PATH",
-    }
+    # A bounded dev canary may load directly from one immutable directory, so
+    # sourcePath and path can truthfully be equal. Runtime --model-path denotes
+    # the model path in that case; normalize it before the source-path alias.
     value["spec"]["runtime"]["args"] = [
-        replacements.get(arg, arg) for arg in value["spec"]["runtime"]["args"]
+        "MODEL_ID"
+        if arg == value["id"]
+        else "MODEL_PATH"
+        if arg == model["path"]
+        else "SOURCE_PATH"
+        if arg == model["sourcePath"]
+        else arg
+        for arg in value["spec"]["runtime"]["args"]
     ]
     model.update(sourcePath="SOURCE_PATH", path="MODEL_PATH", revision="CHECKPOINT_REVISION")
     value["spec"].pop("displayName", None)
