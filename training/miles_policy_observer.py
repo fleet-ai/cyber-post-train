@@ -814,12 +814,22 @@ def _submission_journal(path: Path, request: Mapping[str, Any]) -> tuple[list[di
         or response.get("name")
         != str(request["name"]) + "-" + str(response.get("job_id", ""))[:8]
         or response.get("run_dir") != request["run_dir"]
-        or response.get("status") not in {"PENDING", "QUEUED", "RUNNING"}
-        or response.get("finished_at") is not None
+        or response.get("status")
+        not in {"queued", "PENDING", "QUEUED", "RUNNING", "SUCCEEDED", "FAILED", "STOPPED"}
+        or (
+            response.get("status") in {"queued", "PENDING", "QUEUED", "RUNNING"}
+            and response.get("finished_at") is not None
+        )
+        or (
+            response.get("status") in {"SUCCEEDED", "FAILED", "STOPPED"}
+            and response.get("finished_at") is None
+        )
     ):
         raise ValueError("observer Jobs API submission journal is incomplete or mismatched")
     _uuid(response.get("job_id"), "observer API run ID")
     _time(response.get("created_at"), "observer submission time")
+    if response.get("finished_at") is not None:
+        _time(response["finished_at"], "observer recovered terminal time")
     return rows, hashlib.sha256(payload).hexdigest()
 
 
@@ -1800,6 +1810,18 @@ def _instrumented_init(self, *args: Any, **kwargs: Any) -> Any:
     return result
 
 
+def _native_prediction_forward(model: Any, tokens: Any, packed: Any) -> Any:
+    """Call the bound native GPTModel signature without wrapper-only options."""
+    return model(
+        input_ids=tokens,
+        position_ids=None,
+        attention_mask=None,
+        labels=None,
+        packed_seq_params=packed,
+        loss_mask=None,
+    )
+
+
 def _prediction_probe(self) -> dict[str, Any]:
     """One fixed, task-free greedy-order probe over the restored native policy."""
     import torch
@@ -1838,15 +1860,7 @@ def _prediction_probe(self) -> dict[str, Any]:
     packed = get_packed_seq_params(batch, self.args)
     try:
         with torch.no_grad():
-            output = model(
-                input_ids=tokens,
-                position_ids=None,
-                attention_mask=None,
-                labels=None,
-                packed_seq_params=packed,
-                loss_mask=None,
-                fp32_output=True,
-            )
+            output = _native_prediction_forward(model, tokens, packed)
             if not torch.is_tensor(output) or output.ndim != 3:
                 raise ValueError("native fixed prediction probe returned an unexpected shape")
             if parallel_state.get_tensor_model_parallel_world_size() > 1:
@@ -2235,13 +2249,14 @@ def validate_result(plan: dict[str, Any], value: dict[str, Any]) -> list[int]:
             or reference_restored["optimizer"]["state_entries"] < 1
             or reference_restored["optimizer"]["parameter_groups"] < 1
             or reference_restored["scheduler"]["positive_progress_counters"] < 1
-            # This exact one-update recipe guarantees a policy, optimizer, and
-            # scheduler change.  It does not use stochastic model layers, so a
-            # byte-identical RNG state is permitted; RNG is still sentinel-
-            # overwrite checked and independently reproduced above.
+            # This exact one-update recipe guarantees optimizer and scheduler
+            # progress.  A legitimate no/partial policy delta is still an
+            # observed scientific result and is rejected only by promotion.
+            # The no-dropout recipe also permits byte-identical RNG state; RNG
+            # is still sentinel-overwrite checked and independently reproduced.
             or any(
                 values(base_restored)[index] == values(reference_restored)[index]
-                for index in range(3)
+                for index in (1, 2)
             )
         ):
             raise ValueError("policy observer restore commitments are circular or unchanged")
@@ -2253,7 +2268,7 @@ def validate_result(plan: dict[str, Any], value: dict[str, Any]) -> list[int]:
             raise ValueError("policy observer policy-delta marker is invalid")
         if row["policy_changed"]:
             changed.append(rank)
-    if value.get("changed_policy_ranks") != changed or changed != list(range(WORLD_SIZE)):
+    if value.get("changed_policy_ranks") != changed:
         raise ValueError("policy observer changed-rank summary mismatch")
     return changed
 
@@ -2274,8 +2289,10 @@ def _policy_body(
     validate_submission_binding(submission, plan, check_files=True)
     result, result_file_sha256 = _read(result_path, RESULT_SCHEMA)
     changed = validate_result(plan, result)
-    if not changed:
-        raise ValueError("trained checkpoint has no independently observed policy tensor delta")
+    if changed != list(range(WORLD_SIZE)):
+        raise ValueError(
+            "trained checkpoint lacks an all-rank independently observed policy tensor delta"
+        )
     controller, controller_file_sha256 = _read(controller_path, CONTROLLER_SCHEMA)
     validate_controller_observation(controller, plan, submission)
     release, release_file_sha256 = _read(release_path, RELEASE_SCHEMA)

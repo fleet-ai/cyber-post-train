@@ -1153,8 +1153,10 @@ def test_policy_observer_accepts_historical_bundle_after_current_code_changes(
     assert before == after == 8
 
 
-def test_policy_observer_result_can_truthfully_report_no_delta_but_not_accept(
+@pytest.mark.parametrize("changed_ranks", [[], [0, 3]])
+def test_policy_observer_result_can_truthfully_report_no_or_partial_delta_but_not_accept(
     case: dict,
+    changed_ranks: list[int],
 ) -> None:
     policy = json.loads(case["policy_delta"].read_bytes())
     submission_path = Path(policy["observer_submission"]["path"])
@@ -1163,22 +1165,21 @@ def test_policy_observer_result_can_truthfully_report_no_delta_but_not_accept(
     result_path = Path(policy["observer_result"]["path"])
     result = json.loads(result_path.read_bytes())
     for row in result["ranks"]:
+        if row["rank"] in changed_ranks:
+            continue
         value = row["base"]["restored"]["model"]["value_sha256"]
-        row["trained_reference"]["restored"]["model"]["value_sha256"] = value
-        row["trained_reload"]["restored"]["model"]["value_sha256"] = value
+        for label in ("trained_reference", "trained_reload"):
+            row[label]["restored"]["model"]["value_sha256"] = value
+            row[label]["live"]["model"]["value_sha256"] = value
         row["policy_changed"] = False
-    result["changed_policy_ranks"] = []
+    result["changed_policy_ranks"] = changed_ranks
     _write_json(result_path, _seal(result))
-    with pytest.raises(
-        ValueError,
-        match="restore commitments|changed-rank summary|zero-update restore",
-    ):
-        observer.validate_result(plan, json.loads(result_path.read_bytes()))
+    assert observer.validate_result(plan, json.loads(result_path.read_bytes())) == changed_ranks
     case["policy_delta"].unlink()
 
     with pytest.raises(
         ValueError,
-        match="restore commitments|changed-rank summary|zero-update restore",
+        match="all-rank independently observed policy tensor delta",
     ):
         observer.accept_policy_delta(
             plan,
@@ -1189,6 +1190,70 @@ def test_policy_observer_result_can_truthfully_report_no_delta_but_not_accept(
             output=case["policy_delta"],
         )
     assert not case["policy_delta"].exists()
+
+
+def test_native_prediction_forward_matches_bound_gptmodel_signature() -> None:
+    called = {}
+
+    def model(
+        *,
+        input_ids,
+        position_ids,
+        attention_mask,
+        labels,
+        packed_seq_params,
+        loss_mask,
+    ):
+        called.update(
+            {
+                "input_ids": input_ids,
+                "position_ids": position_ids,
+                "attention_mask": attention_mask,
+                "labels": labels,
+                "packed_seq_params": packed_seq_params,
+                "loss_mask": loss_mask,
+            }
+        )
+        return "native-output"
+
+    assert observer._native_prediction_forward(model, "tokens", "packed") == "native-output"
+    assert called == {
+        "input_ids": "tokens",
+        "position_ids": None,
+        "attention_mask": None,
+        "labels": None,
+        "packed_seq_params": "packed",
+        "loss_mask": None,
+    }
+
+
+def test_runtime_exits_cleanly_for_truthful_negative_science(
+    case: dict,
+    monkeypatch,
+) -> None:
+    policy = json.loads(case["policy_delta"].read_bytes())
+    submission = json.loads(Path(policy["observer_submission"]["path"]).read_bytes())
+    plan = json.loads(Path(submission["observer_plan_path"]).read_bytes())
+    result_path = Path(policy["observer_result"]["path"])
+    result = json.loads(result_path.read_bytes())
+    for row in result["ranks"]:
+        value = row["base"]["restored"]["model"]["value_sha256"]
+        for label in ("trained_reference", "trained_reload"):
+            row[label]["restored"]["model"]["value_sha256"] = value
+            row[label]["live"]["model"]["value_sha256"] = value
+        row["policy_changed"] = False
+    result["changed_policy_ranks"] = []
+    result.pop("sha256")
+    result_path.unlink()
+    monkeypatch.setenv("RUN_DIR", plan["output_root"])
+    monkeypatch.setattr(observer, "_native", lambda _plan: copy.deepcopy(result))
+
+    observed = observer.run(plan)
+
+    assert observed["status"] == "observed"
+    assert observed["changed_policy_ranks"] == []
+    assert result_path.is_file()
+    assert not (result_path.parent / "FAILED.json").exists()
 
 
 @pytest.mark.parametrize(

@@ -17,7 +17,7 @@ new evidence fields. Its exact historical authority remains:
 
 Current source is never used to reconstruct those submitted bytes.
 
-## What the one GPU run proves
+## What the one 1x8 GPU job proves
 
 The runtime opens no task or verifier and creates no rollout engine. It performs
 three sequential, isolated all-rank restores: exact base once, then the exact
@@ -47,6 +47,12 @@ pre-admission UID event journal, terminal controller state, zero-restart Pod,
 immutable image, and complete post-terminal absence of the RayJob, Workload,
 RayCluster, GPU Pod, quota reservation, and GPUs. A no-change policy produces
 an honest observer result but cannot produce `POLICY_DELTA.json`.
+
+A genuine zero- or partial-rank policy delta is also an honest terminal
+observation: the job writes `POLICY_OBSERVER_RESULT.json` and exits zero, so a
+negative scientific result does not become a failed-job alert. The later
+`accept_policy_delta` promotion gate rejects anything short of an exact
+all-eight-rank policy delta.
 
 ## Create-once order
 
