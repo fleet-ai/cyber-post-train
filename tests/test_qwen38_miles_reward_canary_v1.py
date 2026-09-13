@@ -221,7 +221,7 @@ def test_v5_reuses_accepted_dev4_data_but_has_fresh_run_identity() -> None:
         "mode": "run_id_rebind",
         "name": run_v5["name"],
         "policy_identity_root": data_v4["model_root"],
-        "output": "/mnt/sfs/jobs/chris-q38-miles-rlreward-inputs-dev5/data",
+        "output": "/mnt/sfs/jobs/chris-q38-miles-rlreward-inputs-dev5-v3/data",
     }
     assert run_v5["data"] == {
         "manifest": derivation["output"] + "/manifest.json",

@@ -15,5 +15,5 @@
   "mode": "run_id_rebind",
   "name": "chris-q38-miles-rlreward-dev5",
   "policy_identity_root": "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2",
-  "output": "/mnt/sfs/jobs/chris-q38-miles-rlreward-inputs-dev5/data"
+  "output": "/mnt/sfs/jobs/chris-q38-miles-rlreward-inputs-dev5-v3/data"
 }

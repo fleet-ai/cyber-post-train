@@ -21,10 +21,15 @@ Tracked inputs:
   `/mnt/sfs/jobs/chris-q38-miles-rlreward-inputs-dev4/data`, bound by both raw
   file and sealed self-digest;
 - dev5 data destination:
-  `/mnt/sfs/jobs/chris-q38-miles-rlreward-inputs-dev5/data`;
+  `/mnt/sfs/jobs/chris-q38-miles-rlreward-inputs-dev5-v3/data`;
 - initial policy: the exact base Qwen3.8 model and digest-bound zero-step Miles
   checkpoint already used by dev4;
 - fresh output and W&B identity: `chris-q38-miles-rlreward-dev5`.
+
+The earlier `/mnt/sfs/jobs/chris-q38-miles-rlreward-inputs-dev5/data` path is
+quarantined: a read-only verifier found that it is not the exact accepted
+run-id-rebound artifact. Never overwrite, delete, or select it. The `-v3` root
+is a new create-once identity.
 
 ## Peer-parity decisions
 

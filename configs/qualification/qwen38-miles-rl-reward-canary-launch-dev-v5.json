@@ -7,7 +7,7 @@
   "identities": {
     "run_name": "chris-q38-miles-rlreward-dev5",
     "cyber_run_id": "chris-q38-miles-rlreward-dev5",
-    "data_root": "/mnt/sfs/jobs/chris-q38-miles-rlreward-inputs-dev5/data",
+    "data_root": "/mnt/sfs/jobs/chris-q38-miles-rlreward-inputs-dev5-v3/data",
     "output_root": "/mnt/sfs/jobs/chris-q38-miles-rlreward-dev5",
     "wandb_run_id": "chris-q38-miles-rlreward-dev5"
   },
