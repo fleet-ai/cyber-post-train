@@ -1,0 +1,104 @@
+{
+  "schema": "cyber_qwen38_sft_checkpoint_seals_v1",
+  "observed_at": "2026-09-13T04:26:06Z",
+  "cluster": "production",
+  "namespace": "fleet-train-jobs",
+  "source_commit": "0540348ee5ede97db7dc3c0bd59ffbeefb6ce22b",
+  "bundle_sha256": "cfc76e8a07c37c01c6aec3ea81407bac87352145d7ec1e9d1725510470711b6b",
+  "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+  "dev_gate": {
+    "pod_uid": "e4856357-b235-4093-83d4-1f382283d724",
+    "exit_code": 0,
+    "restarts": 0,
+    "gpus": 0,
+    "source_preserved": true,
+    "create_once_repeat_rejected": true,
+    "deleted_and_absent": true
+  },
+  "retired_v1": {
+    "classification": "deterministic_destination_permission_failure",
+    "cause": "new sibling destinations under root-owned /mnt/sfs/jobs were not writable by runtime UID 1000",
+    "checkpoint_payload_changed": false,
+    "outputs_created": false,
+    "self": {
+      "pod_uid": "a27ce7f3-6f42-4397-8d52-c14a9d24e834",
+      "exit_code": 2,
+      "restarts": 0,
+      "gpus": 0,
+      "sanitized_error": "PermissionError"
+    },
+    "teacher": {
+      "pod_uid": "5eb70d5d-12c3-4033-a757-51968c999be7",
+      "exit_code": 2,
+      "restarts": 0,
+      "gpus": 0,
+      "sanitized_error": "PermissionError"
+    },
+    "path_audit": {
+      "pod_uid": "bdde9544-9242-40a3-b516-09334c05cfd3",
+      "exit_code": 0,
+      "runtime_uid": 1000,
+      "source_root_uid": 1000,
+      "source_root_gid": 100,
+      "source_root_mode": "0755",
+      "corrected_destinations_absent": true,
+      "deleted_and_absent": true
+    }
+  },
+  "accepted": {
+    "self": {
+      "optimizer_step": 44,
+      "producer_pod_uid": "fefa8ec1-d63c-4013-8e3f-24a110f02e9f",
+      "producer_exit_code": 0,
+      "producer_restarts": 0,
+      "producer_gpus": 0,
+      "producer_finished_at": "2026-09-13T04:16:58Z",
+      "manifest_path": "/mnt/sfs/jobs/chris-cyber-q38-dev20-self-lr1-v2/checkpoint-seals-v1/checkpoint-step-44.json",
+      "manifest_file_sha256": "0094cfeb62f120b55d9e2f7fdfd4217c4c0aab66f369e3c52c89fc5e7ccfff9b",
+      "receipt_sha256": "bf8237a5837dd75bf1163b5a5e134e1349417599c1a28f022b91281c2c7b7885",
+      "checkpoint_files": 33,
+      "checkpoint_bytes": 324627486795,
+      "verifier_pod_uid": "6aad5b3b-a62c-4157-8937-061483bec3f0",
+      "verifier_exit_code": 0,
+      "verifier_restarts": 0,
+      "verifier_gpus": 0,
+      "verifier_finished_at": "2026-09-13T04:25:45Z",
+      "full_payload_rehashed": true,
+      "source_stable": true
+    },
+    "teacher": {
+      "optimizer_step": 186,
+      "producer_pod_uid": "cda507fd-63c2-4d0d-b4ff-e3d51ea057f5",
+      "producer_exit_code": 0,
+      "producer_restarts": 0,
+      "producer_gpus": 0,
+      "producer_finished_at": "2026-09-13T04:17:28Z",
+      "manifest_path": "/mnt/sfs/jobs/chris-cyber-q38-teacher-dense-v5/checkpoint-seals-v1/checkpoint-step-186.json",
+      "manifest_file_sha256": "1b671c6ec4b39d1141e0d28c530243624f6a97a7922f9f222ffcbe20b8434d3e",
+      "receipt_sha256": "1d61918874d59421455577deca70c9784ce09f8f327a5031df9d39dfb5f3d7f2",
+      "checkpoint_files": 33,
+      "checkpoint_bytes": 324627486923,
+      "verifier_pod_uid": "b6c7e2ad-207c-477b-8a85-933e7350bc76",
+      "verifier_exit_code": 0,
+      "verifier_restarts": 0,
+      "verifier_gpus": 0,
+      "verifier_finished_at": "2026-09-13T04:25:45Z",
+      "full_payload_rehashed": true,
+      "source_stable": true
+    }
+  },
+  "acceptance": {
+    "checkpoint_payload_sealed": true,
+    "independent_check_files_verification": true,
+    "gpu_reload_verified": false,
+    "export_accepted": false,
+    "evaluation_ready": false,
+    "capability_claimed": false
+  },
+  "privacy": {
+    "prompts_traces_flags_answers_credentials_scores_read": false,
+    "private_logs_read": false,
+    "tensor_values_read": false
+  },
+  "sha256": "sha256:cf9fc05916162930142f8bb976e7d60040b28760a4700b4ae555a25acf04bf02"
+}
