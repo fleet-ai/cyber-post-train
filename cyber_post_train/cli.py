@@ -963,7 +963,12 @@ def submit(
             from training.miles_reload import validate_preflight_receipt
 
             validate_preflight_receipt(plan, request, proof)
+        submission_journal = directory / "SUBMISSION.jsonl"
         if cluster == Cluster.dev and plan.get("schema") == "cyber_miles_training_v1":
+            # A preserved intent always wins over a fresh capacity observation.
+            # submit_once repeats this check atomically at the actual POST boundary.
+            if submission_journal.exists() or submission_journal.is_symlink():
+                raise JobsError("submission journal already exists; reconcile, never repeat POST")
             _require_dev_gpu_fit(request)
         with _client(cluster) as client:
             if plan.get("schema") == "cyber_miles_training_v1":
@@ -1014,7 +1019,7 @@ def submit(
                         validate_production_preview(plan, request, preview_result)
                         require_live_files(plan, directory)
                         require_live_external(plan, client)
-            result = client.submit_once(request, directory / "SUBMISSION.jsonl")
+            result = client.submit_once(request, submission_journal)
         _print({"api_base_url": API_URLS[cluster], **result})
     except Exception as exc:
         _fail(exc)

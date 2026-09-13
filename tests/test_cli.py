@@ -8,7 +8,7 @@ import pytest
 from typer.testing import CliRunner
 
 from cyber_post_train import cli
-from cyber_post_train.jobs import digest
+from cyber_post_train.jobs import JobsError, digest
 from training import sft
 
 RUNNER = CliRunner()
@@ -342,6 +342,125 @@ def test_miles_dev_submit_fails_before_network_when_no_whole_gpu_node(
     assert result.exit_code == 2
     assert "[6, 6]" in result.stderr and "each require 8 GPUs" in result.stderr
     assert not (output / "SUBMISSION.jsonl").exists()
+
+
+def _eight_gpu_inventory(used_by_node):
+    nodes = {
+        "items": [
+            {
+                "metadata": {"name": f"gpu-{index}"},
+                "spec": {},
+                "status": {
+                    "allocatable": {"nvidia.com/gpu": "8"},
+                    "conditions": [{"type": "Ready", "status": "True"}],
+                },
+            }
+            for index in range(len(used_by_node))
+        ]
+    }
+    pods = {
+        "items": [
+            {
+                "spec": {
+                    "nodeName": f"gpu-{index}",
+                    "containers": [
+                        {"resources": {"limits": {"nvidia.com/gpu": str(used)}}}
+                    ],
+                },
+                "status": {"phase": "Running"},
+            }
+            for index, used in enumerate(used_by_node)
+            if used
+        ]
+    }
+    return nodes, pods
+
+
+@pytest.mark.parametrize(
+    ("workers", "used_by_node", "fits"),
+    [
+        (1, [0, 2], True),
+        (1, [2, 2], False),
+        (2, [0, 0], True),
+        (2, [0, 2], False),
+    ],
+    ids=("1x8-whole", "1x8-fragmented", "2x8-whole", "2x8-one-fragmented"),
+)
+def test_dev_gpu_fit_covers_supported_miles_layouts(workers, used_by_node, fits):
+    nodes, pods = _eight_gpu_inventory(used_by_node)
+    request = {"workers": workers, "gpus_per_worker": 8}
+
+    if fits:
+        assert cli._dev_gpu_fit(request, nodes, pods)["required"] == [8] * workers
+    else:
+        with pytest.raises(JobsError, match=rf"{workers} worker\(s\) each require 8 GPUs"):
+            cli._dev_gpu_fit(request, nodes, pods)
+
+
+@pytest.mark.parametrize("resource", ["nodes", "pods"])
+def test_dev_gpu_inventory_uses_only_exact_context_get(monkeypatch, resource):
+    calls = []
+
+    def run(argv, **kwargs):
+        calls.append((argv, kwargs))
+        return SimpleNamespace(returncode=0, stdout='{"items": []}', stderr="")
+
+    monkeypatch.setattr(cli.subprocess, "run", run)
+    assert cli._dev_cluster_json(resource) == {"items": []}
+    assert calls == [
+        (
+            [
+                "kubectl",
+                "--context",
+                cli.DEV_KUBE_CONTEXT,
+                "get",
+                resource,
+                "-A",
+                "-o",
+                "json",
+            ],
+            {"check": False, "capture_output": True, "text": True, "timeout": 30},
+        )
+    ]
+
+
+def test_dev_gpu_inventory_error_does_not_expose_kubectl_output(monkeypatch):
+    private = "private server address and credential helper output"
+    monkeypatch.setattr(
+        cli.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(
+            returncode=1, stdout=private, stderr=private
+        ),
+    )
+
+    with pytest.raises(JobsError) as exc:
+        cli._dev_cluster_json("nodes")
+    assert str(exc.value) == "dev Kubernetes GPU-fit check failed"
+    assert private not in str(exc.value)
+
+
+def test_miles_dev_existing_submission_journal_wins_before_gpu_inventory(
+    prepared, monkeypatch
+):
+    output, plan, request, _ = prepared
+    plan["schema"] = "cyber_miles_training_v1"
+    monkeypatch.setattr(cli, "_prepared", lambda _: (plan, request))
+    proof = {
+        "schema": "cyber_miles_training_cpu_preflight_v1",
+        "gpus": 0,
+        "status": "passed",
+        "plan_sha256": digest(plan),
+        "request_sha256": digest(request),
+    }
+    cli._write(output / "PREFLIGHT.json", {**proof, "sha256": digest(proof)})
+    cli._write(output / "SUBMISSION.jsonl", {"state": "POST_INTENT_DO_NOT_RETRY"})
+    monkeypatch.setattr(cli, "_require_dev_gpu_fit", lambda _: pytest.fail("read cluster"))
+    monkeypatch.setattr(cli, "_client", lambda _: pytest.fail("repeated submit reached API"))
+
+    result = RUNNER.invoke(cli.app, ["submit", str(output)])
+    assert result.exit_code == 2
+    assert "submission journal already exists; reconcile, never repeat POST" in result.stderr
 
 
 def test_dev_gpu_fit_uses_scheduler_style_init_max_and_ignores_terminal_pods():
