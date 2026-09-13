@@ -41,6 +41,7 @@ RUNTIME_FILES = (
     "training/miles_training.py",
     "training/miles.py",
     "training/miles_conversion.py",
+    "training/miles_promotion.py",
     "training/miles_rollout.py",
     "training/miles_text.py",
     "training/rl_episode.py",
@@ -72,6 +73,7 @@ def compile_rl(config: dict, *, relative_to: Path) -> dict:
             "recipe",
             "wandb",
             "cluster",
+            "production_promotion",
         },
         "RL",
     )
@@ -87,6 +89,9 @@ def compile_rl(config: dict, *, relative_to: Path) -> dict:
     target = cluster.get("target")
     if target not in {None, "dev", "prod"}:
         raise ValueError("Miles cluster target must be dev or prod")
+    from .miles_promotion import bind_production_promotion
+
+    production_promotion = bind_production_promotion(config, relative_to)
     recipe = config.get("recipe", {})
     _known(
         recipe,
@@ -164,6 +169,11 @@ def compile_rl(config: dict, *, relative_to: Path) -> dict:
             "priority": cluster.get("priority", "c1"),
             "resources": {**RESOURCES, **cluster.get("resources", {})},
             **({"cluster_target": target} if target is not None else {}),
+            **(
+                {"production_promotion": production_promotion}
+                if production_promotion is not None
+                else {}
+            ),
         },
     }
     job_request(plan)
@@ -171,6 +181,9 @@ def compile_rl(config: dict, *, relative_to: Path) -> dict:
 
 
 def job_request(plan):
+    from .miles_promotion import validate_embedded_promotion
+
+    validate_embedded_promotion(plan, check_files=True)
     args = miles.MilesConfig(**plan["arguments"])
     args.validate()
     if (
@@ -431,6 +444,13 @@ def preflight(plan):
 def _native(plan):
     import ray
     from miles.utils.tracking_utils.tracking import finish_tracking
+
+    from .miles_promotion import validate_embedded_promotion
+
+    # The immutable receipt and compiled candidate are revalidated inside the
+    # allocated process. Deep evidence reopening already ran immediately before
+    # submission and is intentionally not bundled into the training runtime.
+    validate_embedded_promotion(plan, check_files=False)
 
     # Keep slow payload validation in the child so the parent bounds startup,
     # including stalled storage, before Ray or model loading begins.

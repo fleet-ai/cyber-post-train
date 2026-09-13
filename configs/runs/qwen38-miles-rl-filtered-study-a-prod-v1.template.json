@@ -1,0 +1,174 @@
+{
+  "schema": "cyber_qwen38_miles_production_arm_template_v1",
+  "status": "blocked_not_launchable",
+  "launchable": false,
+  "purpose": "Exact Miles production candidate; materialize only after the active dev3 reward, reload and HF export chain is independently accepted.",
+  "source_files": {
+    "task_set": {
+      "path": "configs/data/qwen38-rl-filtered-study-a-task-set-v1.json",
+      "file_sha256": "sha256:a9a1a46a7c7f9a92ad363d50f47a52ecf544e07e54f394136912fc358b534fdb",
+      "self_sha256": "sha256:50d6052187ff2f5f085b9de402982d4421fba0c73bb1bd54fc4bc850516c5d68"
+    },
+    "split": {
+      "path": "configs/data/qwen38-rl-filtered-study-a-split-v1.json",
+      "file_sha256": "sha256:a9344b2cd1b50b6f06090c4f62fb6407953ecc1961a6af92747a079171f70e46",
+      "self_sha256": "sha256:c8c0083e08df55179a5acbd10602dbce5178257484b471c5ba7f4cbb04bdb35c"
+    },
+    "data_config": {
+      "path": "configs/runs/qwen38-miles-rl-filtered-study-a-prod-v1.data.json",
+      "file_sha256": "sha256:60e58852325a6d7ca6a69a72ba8bc6325442e016677e04d1695a94d3e50faf03"
+    },
+    "model_lock": {
+      "path": "configs/models/qwen38-27b-1d4bf0f2.lock.json",
+      "file_sha256": "sha256:f3926fe675263b25dc79c2b3881a9c463d6b7931e9d61aeb777d15efc61e35ac"
+    },
+    "model_weights": {
+      "path": "configs/models/qwen38-27b-1d4bf0f2.weights.json",
+      "file_sha256": "sha256:80a5e9de066e068abb012a0e9bd144676813a31042bb578226472803f8e0e84f"
+    }
+  },
+  "active_dev3": {
+    "cluster": "dev",
+    "config_path": "configs/qualification/qwen38-miles-rl-reward-canary-dev-v3.json",
+    "config_file_sha256": "sha256:b7f97d80d7d33a408c23f2156e97007393b6fabf446cfe81592e51bdad85a91f",
+    "source_commit": "d69fd01e4b435adc5492c8aedba9cf7f3af5e40e",
+    "source_plan_sha256": "sha256:245b404f9507ac2603c53969dd4506aee811e1c02ebf468543994cff76e3e95e",
+    "source_request_sha256": "sha256:d2f2514a33bdf05610c5765c11efaecfcd6eea39e4297115cc39ce3c86d3f927",
+    "runtime_bundle_sha256": "sha256:0e3ff1646344abb1b4be13ea064143014e94c13bc22c6c7e8c1a552f8bbe32a6",
+    "api_base_url": "https://api.ft.dev.flt.build",
+    "api_run_id": "6be68393-f032-40db-b640-d2d23473e85d",
+    "api_run_name": "chris-q38-miles-rlreward-dev3-6be68393",
+    "rayjob_uid": "803770c7-d830-4f47-8f1a-22d7e75362c3",
+    "workload_uid": "a20b093e-93cd-4c26-b81c-33586d3bf6d3",
+    "output_root": "/mnt/sfs/jobs/chris-q38-miles-rlreward-dev3",
+    "wandb_run_id": "chris-q38-miles-rlreward-dev3"
+  },
+  "qualification": {
+    "reward_terminal": {
+      "schema": "cyber_miles_reward_canary_terminal_v1",
+      "path": null,
+      "file_sha256": null,
+      "receipt_sha256": null,
+      "validator": "training.miles_acceptance.validate_terminal(check_files=True)"
+    },
+    "native_reload": {
+      "schema": "cyber_miles_rl_reload_accepted_v1",
+      "path": null,
+      "file_sha256": null,
+      "receipt_sha256": null,
+      "validator": "training.miles_reload_acceptance.validate_accepted(check_files=True)"
+    },
+    "hf_export": {
+      "schema": "cyber_miles_native_hf_export_v1",
+      "path": null,
+      "file_sha256": null,
+      "receipt_sha256": null,
+      "validator": "training.miles_hf_export.inspect_export"
+    },
+    "production_data_manifest": {
+      "schema": "cyber_miles_data_v1",
+      "path": "/mnt/sfs/jobs/chris-q38-miles-rl-prod1-inputs/data/manifest.json",
+      "file_sha256": null,
+      "receipt_sha256": null
+    }
+  },
+  "candidate_run": {
+    "backend": "miles",
+    "name": "chris-q38-miles-rl-prod1",
+    "output_root": "/mnt/sfs/jobs/chris-q38-miles-rl-prod1",
+    "model": {
+      "lock": "../models/qwen38-27b-1d4bf0f2.lock.json",
+      "weights": "../models/qwen38-27b-1d4bf0f2.weights.json",
+      "root": "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2"
+    },
+    "data": {
+      "manifest": "/mnt/sfs/jobs/chris-q38-miles-rl-prod1-inputs/data/manifest.json",
+      "root": "/mnt/sfs/jobs/chris-q38-miles-rl-prod1-inputs/data"
+    },
+    "checkpoint": {
+      "manifest": "/mnt/sfs/jobs/chris-cpt-cleanup-q38-miles-base-v1/NATIVE_CHECKPOINT.json",
+      "sha256": "sha256:b3d772de9121f442ea7b9a4c9a996f2a0a99cab8c49fe3083c148fe3eebd089c"
+    },
+    "recipe": {
+      "nodes": 1,
+      "gpus_per_node": 8,
+      "steps": 59,
+      "groups": 1,
+      "samples_per_prompt": 8,
+      "lr": 0.000001,
+      "eval_interval": 59,
+      "checkpoint_interval": 10,
+      "seed": 42
+    },
+    "wandb": {
+      "entity": "thefleet",
+      "project": "cyber-post-train",
+      "run_id": "chris-q38-miles-rl-prod1"
+    },
+    "cluster": {
+      "target": "prod",
+      "priority": "c1",
+      "resources": {
+        "cpu_request": "64",
+        "cpu_limit": "128",
+        "memory_request": "1536Gi",
+        "memory_limit": "2048Gi"
+      }
+    },
+    "production_promotion": null
+  },
+  "candidate_run_sha256": "sha256:007d60256013bc982c28f59a719b21bb3fc6afed5a123160a9c546959b2d2fce",
+  "promotion_requirements": {
+    "immutable": [
+      "exact_active_dev3_source_plan_request_bundle_and_api_identity",
+      "digest_valid_reward_terminal_with_authoritative_reward_and_one_policy_update",
+      "digest_valid_all_rank_zero_update_native_reload",
+      "digest_valid_create_once_hf_export_cross_bound_to_the_same_dev_checkpoint",
+      "exact_59_train_20_dev_manifest_with_zero_final_test_rows",
+      "external_benchmarks_absent_from_training_reward_checkpoint_and_retry_decisions"
+    ],
+    "live_immediately_before_one_post": [
+      "warning_free_prod_preview_one_worker_eight_gpus_c1_priority_10000_no_requeue",
+      "production_jobs_api_name_and_output_absent",
+      "production_output_and_submission_journal_absent",
+      "production_wandb_run_id_absent",
+      "active_production_experiment_nodes_plus_candidate_at_most_eight"
+    ]
+  },
+  "post_training_handoff": {
+    "selected_checkpoint": {
+      "native_terminal_acceptance": null,
+      "native_checkpoint_manifest": null,
+      "native_reload_acceptance": null,
+      "hf_export_acceptance": null,
+      "hf_reload_acceptance": null,
+      "serving_registration_acceptance": null,
+      "live_parity_acceptance": null
+    },
+    "fleet_holdout": {
+      "split": "configs/data/qwen38-rl-filtered-study-a-split-v1.json",
+      "rows": 20,
+      "training_rows": 0,
+      "checkpoint_or_hyperparameter_selection_allowed": true,
+      "protocol": null
+    },
+    "external_web_benchmark": {
+      "parent_protocol": "configs/evaluation/qwen38-post-training-webexploitbench-tensorlake-parent-v1.json",
+      "parent_protocol_file_sha256": "sha256:c6f489d80fcab19148bb1c4be1933bf11b0608f4d6e0124c8c15f02efeed7481",
+      "provider": "tensorlake_sandbox",
+      "child_protocol": null,
+      "launch_plan": null,
+      "results_sealed_until_recipe_and_checkpoint_are_frozen": true,
+      "checkpoint_or_hyperparameter_selection_allowed": false,
+      "training_reward_prompt_retry_or_checkpoint_input_allowed": false
+    }
+  },
+  "blocked_reasons": [
+    "The exact active dev3 run is queued and has no accepted reward/update terminal receipt.",
+    "No accepted all-rank dev3 native reload is bound.",
+    "No accepted create-once dev3 HF export is bound.",
+    "The create-once 59-train/20-dev production data manifest does not exist.",
+    "Live production duplicate, W&B, preview and eight-node gates cannot be pre-certified."
+  ],
+  "sha256": "sha256:b625d6b090e54d8c17af6f9322ae8d7ec9f82a5cc4d50762fe4eed77bb0ebe38"
+}

@@ -781,6 +781,10 @@ def preview(
 
             validated.update(_validate_reward_canary_preview(plan, request, result))
             validated.update(validate_production_preview(plan, request, result))
+        elif plan.get("schema") == "cyber_miles_training_v1":
+            from training.miles_promotion import validate_production_preview
+
+            validated.update(validate_production_preview(plan, request, result))
         if plan.get("schema") == "cyber_skyrl_rl_reload_v1":
             from training.skyrl_rl_checkpoint import validate_reload_preview
 
@@ -850,7 +854,21 @@ def submit(
 
             validate_preflight_receipt(plan, request, proof)
         with _client(cluster) as client:
-            if plan.get("schema") == "cyber_skyrl_rl_reload_v1":
+            if plan.get("schema") == "cyber_miles_training_v1":
+                from training.miles_promotion import (
+                    require_live_external,
+                    require_live_files,
+                    requires_production_promotion,
+                    validate_production_preview,
+                )
+
+                if requires_production_promotion(plan):
+                    preview_result = client.preview(request)
+                    validate_preview(request, preview_result)
+                    validate_production_preview(plan, request, preview_result)
+                    require_live_files(plan, directory)
+                    require_live_external(plan, client)
+            elif plan.get("schema") == "cyber_skyrl_rl_reload_v1":
                 from training.skyrl_rl_checkpoint import validate_reload_preview
 
                 preview_result = client.preview(request)
