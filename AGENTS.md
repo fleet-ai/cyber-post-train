@@ -19,9 +19,11 @@ Read this file before acting. Then select only the skill matching the work and r
 Before creating any Kubernetes Job, RayJob, or persistent inference service on the
 Nebius training cluster, read
 [`docs/CLUSTER_ALERTS_AND_INFERENCE_SERVING.md`](docs/CLUSTER_ALERTS_AND_INFERENCE_SERVING.md).
-Normal experiment operation must not manufacture failed-Job pages or hold unconsumed
-GPUs. Do not evade or suppress a genuine platform alert; choose the supported resource
-lifecycle and make expected terminal states clean and explicit.
+Changed executables belong in bounded dev canaries, where a truthful failure and its
+alert are valid qualification evidence. Production is promotion-only: do not debug a
+new path there. Never suppress or falsify an alert, manufacture success, or hold
+unconsumed GPUs; preserve the real dev failure, release its allocation, fix off-node,
+and qualify a reviewed successor.
 
 **Dev before production:** every new or changed executable job configuration must
 pass local/pinned-image checks and an appropriately bounded dev-cluster canary

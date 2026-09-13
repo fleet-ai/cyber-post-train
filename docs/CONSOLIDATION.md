@@ -55,26 +55,9 @@ the original goal or all supported model/backend combinations are complete.
   `GHSA-4j2p-28q2-5m79`). The alert lists no patched version. Do not load untrusted
   checkpoint inputs; this note does not claim the dependency defect is fixed.
 
-No new cluster submissions, successor runs or monitors are part of this handoff.
-Before resuming live qualification, resolve the alert-safe development/reporting
-path with the cluster maintainers and obtain current authorization; publication
-does not lift the submission hold. Then finish Qwen evaluation/RL qualification,
-full GLM qualification, and the remaining simplification/coverage gates below.
-
-**Submission gate — 2026-09-11 user alert review:** Chris explicitly reauthorized
-submissions, conditional on checking that the intended path works first, then
-reported another alert. Miles V7 was already running and failed at 15:46:54Z;
-no new run was submitted during this investigation. The
-[incident review](incidents/2026-09-11-cleanup-rl-alerts.md) now records eight
-failed RL runs. Hold the next RL GPU submission until the generation-stop
-handling is resolved and tested through the real recorder/batch boundary.
-Do not simply submit another run to obtain the missing diagnostic. Existing
-useful work remains untouched. This gate does not authorize alert suppression,
-false success, cancellation of healthy work, or replay of preserved outcomes.
-The already-running GLM CPU staging Job subsequently failed at 16:10:07Z;
-its container exited and its Workload is gone. The final CPU sample reported
-zero cgroup OOM events, but the specific application failure is not yet recovered.
-**Superseded 2026-09-12:** Chris replaced the blanket alert-avoidance hold with
+**Historical 2026-09-11 alert hold, superseded 2026-09-12:** The incident review
+records the failed RL runs and the generation-stop defect that originally stopped
+successor submissions. Chris replaced that blanket alert-avoidance hold with
 the repository's dev-first promotion rule. New or changed executables may fail
 truthfully while qualifying on the dev cluster; they must pass the exact local,
 pinned-image, and bounded dev path before any production submission. Do not use

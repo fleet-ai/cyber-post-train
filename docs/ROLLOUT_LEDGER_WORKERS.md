@@ -62,10 +62,12 @@ receipt. The workers never create or hold a GPU model server.
 For a new campaign, `rollout-ledger-four-route-canary-v1.yaml` illustrates one new cell per route,
 four cells total. Do not widen until all four produce digest-valid accepted
 receipts. A rejected canary writes a sanitized terminal receipt and exits the
-CPU Job normally. New successors require the official renderer's alert-safe
-policy: a clean-exit controller, backoff limit 2147483647, and no active deadline
-or pod-failure policy. A restart or Job `Failed=True` still blocks creates and
-requires notification; this policy must never hide an actual infrastructure failure.
+CPU Job normally. Successors in this preserved historical rollout campaign use
+the official renderer's clean-exit controller, backoff limit 2147483647, and no
+active deadline or pod-failure policy. This is not a policy for new or changed dev
+canaries: their real defects may terminate nonzero and must remain truthful.
+A restart or Job `Failed=True` still blocks creates and requires notification;
+neither policy may hide an actual infrastructure failure.
 Always server-dry-run and verify images, secret references, volumes, and endpoints.
 
 The persistent state root is
