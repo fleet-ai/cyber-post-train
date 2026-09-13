@@ -1,0 +1,90 @@
+{
+  "schema": "cyber_qwen38_miles_rlreward_dev_prelaunch_v1",
+  "recorded_at": "2026-09-13T02:29:00Z",
+  "scope": "Qwen3.8-27B Miles one-update reward canary on the Fleet dev cluster",
+  "policy": {
+    "dev_before_production": true,
+    "production_debugging": false,
+    "priority_class": "c1",
+    "priority_value": 10000,
+    "requeue_if_preempted": false,
+    "webexploitbench_is_training_data": false
+  },
+  "source": {
+    "git_commit": "6c290796dce8a3c2ffbf32766ff41fd59391298b",
+    "bundle_sha256": "0c2e6e2db9d2f06770c8985860a9a57d63973d9647e4730df417283ff3edf640",
+    "source_manifest_sha256": "a76baaa7c174c7c333ea2e5cd958f742c12cc2a39a1a7875eeec72caa826d463",
+    "bundle_receipt_sha256": "201d30aa1e25d0609288277e03f199341b2675e55f8aaf6fc3fc4dc48a5c54db",
+    "validation": [
+      "focused Miles argument, compiler, rollout and episode tests exited zero",
+      "Ruff lint and formatting checks exited zero",
+      "the 2x4 layout is admitted only when the native 1x8 and 2x8 parallel argument strings remain byte-identical"
+    ]
+  },
+  "topology": {
+    "reason": "both two-node dev B300 hosts retained two-GPU peer services, leaving six free GPUs per host and no whole eight-GPU fit",
+    "requested_nodes": 2,
+    "gpus_per_node": 4,
+    "world_size": 8,
+    "tensor_parallel_size": 4,
+    "context_parallel_size": 2,
+    "scientific_change": false,
+    "changed_dimension": "placement only"
+  },
+  "zero_gpu_gates": {
+    "diagnostic": {
+      "pod": "chris-q38-miles-rlreward-dev5-diag",
+      "pod_uid": "5140b26e-bfd1-4e9a-be7b-497c9bb6498d",
+      "phase": "Succeeded",
+      "exit_code": 0,
+      "restarts": 0,
+      "proved": [
+        "fresh identities and output roots",
+        "exact source bundle",
+        "exact native base checkpoint",
+        "tracked tool catalog",
+        "real Fleet task metadata acquisition",
+        "Miles data construction without submission"
+      ]
+    },
+    "preparation": {
+      "pod": "chris-q38-miles-rlreward-dev5-prep",
+      "pod_uid": "d0b696c0-8598-4966-b4b3-6a61205fc694",
+      "phase": "Succeeded",
+      "exit_code": 0,
+      "restarts": 0,
+      "helper_result_sha256": "d9b2a9918dbf13ea2e9a1947b76c413a304c09f079564a633059ca3bc438b299",
+      "proved": [
+        "CPU preflight",
+        "dev Jobs API preview",
+        "Jobs API and W&B duplicate absence",
+        "exactly one Jobs API POST"
+      ]
+    }
+  },
+  "active_run": {
+    "api_run_id": "947fc485-9143-441e-aa85-5e7aa0dc2f56",
+    "api_name": "chris-q38-miles-rlreward-dev2-947fc485",
+    "rayjob_uid": "277354e1-7200-42e7-bd8e-b773c94f8b4b",
+    "workload": "rayjob-chris-q38-miles-rlreward-dev2-947fc485-ddaf9",
+    "workload_uid": "c977500e-a522-451e-a2a9-41f808ca8898",
+    "raycluster": "chris-q38-miles-rlreward-dev2-947fc485-z2bfv",
+    "raycluster_uid": "453807cb-e66c-4000-94ad-dac534521e3c",
+    "head_pod_uid": "ebaec10c-76f0-4a48-b682-6c3623bcb602",
+    "worker_pod_uid": "6b0c0ac3-750f-408e-8835-75de25ff770e",
+    "admitted_at": "2026-09-13T02:20:17Z",
+    "both_pods_ready_at_or_before": "2026-09-13T02:28:12Z",
+    "restarts": 0,
+    "started_receipt_sha256": "1e849c19c00cc34bf98a3ab3f506d4939d2dcc591d9e9062cdbd3519bb5e8944"
+  },
+  "acceptance_remaining": [
+    "real task interaction and authoritative verifier identity",
+    "reward variance evidence without reward values",
+    "exactly one independently reopened optimizer update",
+    "W&B scalar identity",
+    "sealed native checkpoint",
+    "all-rank zero-update reload",
+    "complete GPU release"
+  ],
+  "production_authorized_by_this_record": false
+}
