@@ -1,0 +1,102 @@
+{
+  "schema": "cyber_qwen38_miles_rlreward_dev_queued_v1",
+  "recorded_at": "2026-09-13T03:09:21Z",
+  "scope": "Qwen3.8-27B Miles one-update reward canary on the Fleet dev cluster",
+  "classification": "qualified_native_topology_queued_without_gpu_allocation",
+  "policy": {
+    "dev_before_production": true,
+    "production_debugging": false,
+    "priority_class_requested": "c1",
+    "effective_workload_priority": 10000,
+    "requeue_if_preempted": false,
+    "webexploitbench_is_training_data": false
+  },
+  "source": {
+    "git_commit": "d69fd01e4b435adc5492c8aedba9cf7f3af5e40e",
+    "bundle_sha256": "0e3ff1646344abb1b4be13ea064143014e94c13bc22c6c7e8c1a552f8bbe32a6",
+    "source_manifest_sha256": "a0b2632b696dbb7b4fa75b9621c4820769e0cdfd7bf33ac52df94b8aaf899d61",
+    "bundle_receipt_sha256": "11e70e65dca6a3f167d50fa2b2a9f7a8431d86d95ad6d0c4ff3f2c8e61de9302",
+    "validation": [
+      "Miles-focused Ruff checks exited zero",
+      "all Miles argument, conversion, rollout, reload, text and training tests exited zero",
+      "fragmented 2x4 placement is rejected and only native 1x8 or 2x8 topology is admitted"
+    ]
+  },
+  "topology": {
+    "requested_nodes": 1,
+    "gpus_per_node": 8,
+    "world_size": 8,
+    "tensor_parallel_size": 4,
+    "context_parallel_size": 2,
+    "model_parallel_unit_crosses_hosts": false
+  },
+  "zero_gpu_gates": {
+    "diagnostic": {
+      "pod": "chris-q38-miles-rlreward-dev6-diag",
+      "pod_uid": "41cf692e-d656-4f91-a07d-3e21e6fc1c74",
+      "phase": "Succeeded",
+      "exit_code": 0,
+      "restarts": 0,
+      "source_manifest_sha256": "a0b2632b696dbb7b4fa75b9621c4820769e0cdfd7bf33ac52df94b8aaf899d61",
+      "deleted_after_recording": true
+    },
+    "preparation": {
+      "pod": "chris-q38-miles-rlreward-dev6-prep",
+      "pod_uid": "b758ceea-126c-4f27-95a8-ee48e1165631",
+      "phase": "Succeeded",
+      "exit_code": 0,
+      "restarts": 0,
+      "plan_sha256": "245b404f9507ac2603c53969dd4506aee811e1c02ebf468543994cff76e3e95e",
+      "request_sha256": "d2f2514a33bdf05610c5765c11efaecfcd6eea39e4297115cc39ce3c86d3f927",
+      "preflight_file_sha256": "fb446ec748b062680bd236fa20782adf0ef4316d3079c88df77a2df180366509",
+      "submission_journal_file_sha256": "c0010ef09b9480c9f14634796cffe0b132067c4a4d48587b8a5560adbbdb94da",
+      "helper_result_sha256": "43939f1846168e6f5d6dbb47d5d0068a0675cd1e1a4bc4de784b1a5d00a85566",
+      "jobs_api_posts": 1,
+      "deleted_after_recording": true
+    },
+    "receipt_reader": {
+      "pod": "chris-q38-miles-rlreward-dev6-evidence",
+      "pod_uid": "fdbd9f82-a561-47e3-9409-59a0d2aa8a8a",
+      "phase": "Succeeded",
+      "restarts": 0,
+      "gpus": 0,
+      "deleted_after_recording": true
+    }
+  },
+  "run": {
+    "api_base_url": "https://api.ft.dev.flt.build",
+    "api_run_id": "6be68393-f032-40db-b640-d2d23473e85d",
+    "api_name": "chris-q38-miles-rlreward-dev3-6be68393",
+    "rayjob_uid": "803770c7-d830-4f47-8f1a-22d7e75362c3",
+    "workload": "rayjob-chris-q38-miles-rlreward-dev3-6be68393-c2609",
+    "workload_uid": "a20b093e-93cd-4c26-b81c-33586d3bf6d3",
+    "namespace_uid": "10394b76-e1d4-40b1-a8e2-7575e95df216",
+    "output_root": "/mnt/sfs/jobs/chris-q38-miles-rlreward-dev3",
+    "wandb_run_id": "chris-q38-miles-rlreward-dev3",
+    "created_at": "2026-09-13T03:06:15Z",
+    "state_at_recording": "Suspended",
+    "admitted": false,
+    "raycluster_present": false,
+    "pod_present": false,
+    "gpus_allocated": 0
+  },
+  "capacity_evidence": {
+    "event_time": "2026-09-13T03:06:15.644565Z",
+    "event_reason": "Pending",
+    "event_message": "topology node-topology cannot fit one eight-GPU pod: both of two nodes are excluded by nvidia.com/gpu availability",
+    "observed_peer_occupancy": "one two-GPU tong-judge Deployment pod on each eight-GPU B300 node",
+    "automatic_kueue_preemption_can_release_peer_deployments": false,
+    "allowed_action": "wait for a whole node or request owner-coordinated peer-service release; never mutate peer Deployments from this campaign"
+  },
+  "acceptance_remaining": [
+    "admission onto one whole eight-GPU B300 node",
+    "real task interaction and authoritative verifier identity",
+    "reward variance evidence without reward values",
+    "exactly one independently reopened optimizer update",
+    "W&B scalar identity",
+    "sealed native checkpoint",
+    "all-rank zero-update reload",
+    "complete GPU release"
+  ],
+  "production_authorized_by_this_record": false
+}
