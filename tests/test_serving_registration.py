@@ -160,6 +160,122 @@ def prepared(tmp_path):
     return config, directory, base, dev_ref
 
 
+@pytest.fixture
+def miles_prepared(prepared, tmp_path, monkeypatch):
+    """Synthetic receipts exercise only the serving module's public-validator boundary."""
+    from training import miles_hf_export
+
+    config, _, base, _ = prepared
+    config = copy.deepcopy(config)
+    stage = Path(config["storage"]["staged_root"])
+    files = {
+        path.name: {
+            "bytes": path.stat().st_size,
+            "sha256": file_sha256(path).removeprefix("sha256:"),
+        }
+        for path in stage.iterdir()
+        if path.name != "EXPORT.json"
+    }
+    export = {
+        "schema": miles_hf_export.EXPORT_SCHEMA,
+        "source": {
+            "source_plan_sha256": "1" * 64,
+            "checkpoint": {"receipt_sha256": "2" * 64},
+        },
+        "files": files,
+        "tensor_inventory_sha256": "3" * 64,
+        "optimizer_updates_executed": 0,
+    }
+    export["sha256"] = digest_json(export)
+    raw = tmp_path / "miles-raw"
+    raw.mkdir()
+    export_ref = write(raw / "EXPORT.json", export)
+    staged_ref = write(stage / "EXPORT.json", export)
+    assert staged_ref["sha256"] == export_ref["sha256"]
+
+    reload_receipt = {
+        "schema": miles_hf_export.RELOAD_ACCEPTED_SCHEMA,
+        "export_path": export_ref["path"],
+        "export_file_sha256": export_ref["sha256"],
+        "export_receipt_sha256": export["sha256"],
+        "export_tensor_inventory_sha256": export["tensor_inventory_sha256"],
+        "serving_qualified": False,
+    }
+    reload_receipt["sha256"] = digest_json(reload_receipt)
+    reload_ref = write(tmp_path / "MILES_HF_RELOAD_ACCEPTED.json", reload_receipt)
+    validation = {
+        "export_receipt_sha256": export["sha256"],
+        "prediction_sha256": "4" * 64,
+        "reload_result_sha256": "5" * 64,
+        "controller_terminal_sha256": "6" * 64,
+        "external_release_sha256": "7" * 64,
+    }
+    calls = []
+
+    def inspect(path, sha256):
+        calls.append(("inspect_export", path, sha256))
+        assert path == Path(export_ref["path"]) and sha256 == export_ref["sha256"]
+        return copy.deepcopy(export), []
+
+    def validate(receipt, *, check_files):
+        calls.append(("validate_reload_accepted", check_files))
+        assert receipt == reload_receipt and check_files is True
+        return copy.deepcopy(validation)
+
+    monkeypatch.setattr(miles_hf_export, "inspect_export", inspect)
+    monkeypatch.setattr(miles_hf_export, "validate_reload_accepted", validate)
+    config.update(
+        schema=s.MILES_SCHEMA,
+        export=export_ref,
+        reload_acceptance=reload_ref,
+        model_id="chris-qwen-miles-update-v1",
+        display_name="Qwen Miles selected update",
+    )
+    config.pop("gpu_check")
+    config["staging"] = write(
+        Path(config["staging"]["path"]),
+        s._signed(
+            {
+                "schema": "cyber_inference_staging_check_v1",
+                "status": "passed",
+                **config["storage"],
+                "observer_pod_uid": "66666666-7777-8888-9999-aaaaaaaaaaaa",
+                "observed_mount_root": str(tmp_path / "cache"),
+                "catalog_root": "/models",
+                "destination_create_once": True,
+                "payload_rehashed": True,
+                "mount_evidence_sha256": "sha256:" + "8" * 64,
+                "export_receipt_sha256": export["sha256"],
+                "export_file_sha256": export_ref["sha256"],
+                "files_manifest_sha256": digest_json(files),
+            }
+        ),
+    )
+    directory = tmp_path / "miles-prepared"
+    s.prepare(config, directory)
+    plan = s.load(directory)
+    dev = s._signed(
+        {
+            "schema": s.DEV_SCHEMA,
+            "status": "passed",
+            "cluster": "dev",
+            "api_base_url": "https://api.ft.dev.flt.build",
+            "execution_contract_sha256": plan["execution_contract_sha256"],
+            "export_receipt_sha256": plan["export_receipt_sha256"],
+            "source_update_identity_sha256": plan["source_update_identity_sha256"],
+            "reload_acceptance_receipt_sha256": plan["reload_acceptance_receipt_sha256"],
+            "staged_manifest_sha256": plan["staged_manifest_sha256"],
+            "checks": {key: True for key in s.DEV_CHECKS},
+            "controller_uid": "11111111-2222-3333-4444-555555555555",
+            "pod_uid": "66666666-7777-8888-9999-aaaaaaaaaaaa",
+            "observed_at": "2026-09-13T00:00:00Z",
+            "runtime_image_id": "example/sglang@sha256:" + "c" * 64,
+            "evidence_manifest_sha256": "sha256:" + "9" * 64,
+        }
+    )
+    return config, directory, base, write(tmp_path / "miles-dev.json", dev), export, calls
+
+
 class FakeClient:
     def __init__(self, base):
         self.rows = [copy.deepcopy(base)]
@@ -202,6 +318,107 @@ def test_configurable_checkpoint_changes_only_identity(prepared):
     assert s.preview(directory, FakeClient(base))["server_dry_run"] is False
     with pytest.raises(FileExistsError):
         s.prepare(config, directory)
+
+
+def test_miles_export_binds_update_reload_and_staged_identity(miles_prepared):
+    config, directory, base, _, export, calls = miles_prepared
+    plan = s.load(directory)
+    update = plan["source_update_identity"]
+    assert plan["artifact_kind"] == "miles_rl"
+    assert "optimizer_step" not in plan
+    assert update == {
+        "schema": s.MILES_UPDATE_SCHEMA,
+        "source_plan_sha256": "sha256:" + "1" * 64,
+        "source_checkpoint_receipt_sha256": "sha256:" + "2" * 64,
+        "export_tensor_inventory_sha256": "sha256:" + "3" * 64,
+    }
+    assert plan["source_update_identity_sha256"] == digest_json(update)
+    assert plan["export_file_sha256"] == config["export"]["sha256"]
+    assert plan["export_receipt_sha256"] == export["sha256"]
+    assert plan["reload_acceptance_file_sha256"] == config["reload_acceptance"]["sha256"]
+    reload_receipt = json.loads(Path(config["reload_acceptance"]["path"]).read_text())
+    assert plan["reload_acceptance_receipt_sha256"] == reload_receipt["sha256"]
+    assert set(plan["reload_validation"]) == {
+        "export_receipt_sha256",
+        "prediction_sha256",
+        "reload_result_sha256",
+        "controller_terminal_sha256",
+        "external_release_sha256",
+    }
+    assert plan["registration"]["spec"]["model"]["revision"] == export["sha256"]
+    assert plan["staged_manifest_sha256"] == digest_json(export["files"])
+    assert s.execution_contract(plan["registration"]) == s.execution_contract(base)
+    assert s.summary(plan)["serving_ready"] is False
+    assert {call[0] for call in calls} == {"inspect_export", "validate_reload_accepted"}
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "source_update_identity_sha256",
+        "reload_acceptance_receipt_sha256",
+        "staged_manifest_sha256",
+    ],
+)
+def test_miles_execute_requires_exact_dev_serving_binding(miles_prepared, field):
+    _, directory, base, dev, _, _ = miles_prepared
+    path = Path(dev["path"])
+    proof = json.loads(path.read_text())
+    proof.pop("receipt_sha256")
+    proof[field] = "sha256:" + "f" * 64
+    dev = write(path, s._signed(proof))
+    client = FakeClient(base)
+    with pytest.raises(ValueError):
+        execute(directory, client, dev)
+    assert not any(method == "POST" for method, _ in client.calls)
+
+
+def test_miles_registration_stays_unready_after_dev_and_create(miles_prepared):
+    _, directory, base, dev, _, _ = miles_prepared
+    result = execute(directory, FakeClient(base), dev)
+    assert result["registered"] is True
+    assert result["serving_ready"] is False
+    assert result["live_parity_verified"] is False
+
+
+def test_miles_reload_must_bind_exact_raw_export(miles_prepared, monkeypatch):
+    _, directory, _, _, _, _ = miles_prepared
+    from training import miles_hf_export
+
+    monkeypatch.setattr(
+        miles_hf_export,
+        "validate_reload_accepted",
+        lambda _receipt, *, check_files: {
+            "export_receipt_sha256": "f" * 64,
+            "prediction_sha256": "4" * 64,
+            "reload_result_sha256": "5" * 64,
+            "controller_terminal_sha256": "6" * 64,
+            "external_release_sha256": "7" * 64,
+        },
+    )
+    with pytest.raises(ValueError, match="does not bind"):
+        s.load(directory)
+
+
+def test_miles_plan_cannot_relabel_export_zero_work_as_training_step(miles_prepared):
+    _, directory, _, _, _, _ = miles_prepared
+    path = directory / "plan.json"
+    plan = json.loads(path.read_text())
+    plan.pop("receipt_sha256")
+    plan["optimizer_step"] = 0
+    write(path, s._signed(plan))
+    with pytest.raises(ValueError, match="evidence mismatch"):
+        s.load(directory)
+
+
+def test_miles_prepare_requires_generic_staging_receipt(miles_prepared, tmp_path):
+    config, _, _, _, _, _ = miles_prepared
+    config = copy.deepcopy(config)
+    config.pop("staging")
+    output = tmp_path / "miles-without-staging"
+    with pytest.raises(ValueError):
+        s.prepare(config, output)
+    assert not output.exists()
 
 
 @pytest.mark.parametrize("defect", ["reference_symlink", "reference_extra", "storage_extra"])

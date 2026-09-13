@@ -27,7 +27,9 @@ API = "https://inference.flt.build/fleet/v1/models"
 ACCOUNT = "https://orchestrator.fleetai.com/v1/account"
 TEAM_ID = "a1025f0b-ad67-49fc-a023-51800ab43e84"
 SCHEMA = "cyber_exact_serving_registration_v2"
+MILES_SCHEMA = "cyber_exact_miles_serving_registration_v1"
 DEV_SCHEMA = "cyber_serving_dev_qualification_v1"
+MILES_UPDATE_SCHEMA = "cyber_miles_source_update_identity_v1"
 HEX = re.compile(r"[0-9a-f]{64}")
 MODEL_ID = re.compile(r"[a-z0-9][a-z0-9-]{1,61}[a-z0-9]")
 DEV_CHECKS = {
@@ -245,35 +247,8 @@ def execution_contract(registration: dict) -> dict:
     return _canonical_spec(value["spec"])
 
 
-def _export_and_stage(config: dict) -> tuple[dict, dict]:
-    export = _read(Path(config["export"]["path"]), config["export"]["sha256"], signed=True)
-    gpu = _read(Path(config["gpu_check"]["path"]), config["gpu_check"]["sha256"], signed=True)
-    if (
-        export.get("schema") != "cyber_native_checkpoint_hf_export_v1"
-        or export.get("model_repo") != "Qwen/Qwen3.8-27B"
-        or export.get("dtype") != "BF16"
-        or export.get("optimizer_steps_executed") != 0
-        or type(export.get("optimizer_step")) is not int
-        or export["optimizer_step"] < 1
-        or export.get("all_output_tensors_reopened_equal") is not True
-        or export.get("source_inventory_sizes_mtimes_unchanged") is not True
-    ):
-        raise ValueError("export is not a complete zero-step Qwen BF16 handoff")
-    for key in ("source_checkpoint_receipt_sha256", "source_plan_sha256"):
-        _sha(export.get(key))
-    if (
-        gpu.get("schema") != "cyber_hf_export_check_v1"
-        or gpu.get("status") != "passed"
-        or gpu.get("gpu_reload_verified") is not True
-        or gpu.get("gpus") != 1
-        or gpu.get("source_unchanged") is not True
-        or gpu.get("finite_logits") is not True
-        or gpu.get("optimizer_steps_executed") != 0
-        or gpu.get("synthetic_only") is not True
-        or _sha(gpu.get("export_sha256")) != _sha(config["export"]["sha256"])
-        or _sha(gpu.get("export_receipt_sha256")) != _sha(export["receipt_sha256"])
-    ):
-        raise ValueError("exact GPU export check is missing or inconsistent")
+def _stage(config: dict, export: dict, export_receipt_sha256: str) -> None:
+    """Reopen one generic HF payload at its measured inference-PVC destination."""
     storage = config["storage"]
     staging = _read(Path(config["staging"]["path"]), config["staging"]["sha256"], signed=True)
     if storage.get("namespace") != "inference" or not storage.get("pvc_name"):
@@ -293,7 +268,7 @@ def _export_and_stage(config: dict) -> tuple[dict, dict]:
         )
         or staging.get("destination_create_once") is not True
         or staging.get("payload_rehashed") is not True
-        or _sha(staging.get("export_receipt_sha256")) != _sha(export["receipt_sha256"])
+        or _sha(staging.get("export_receipt_sha256")) != _sha(export_receipt_sha256)
         or _sha(staging.get("export_file_sha256")) != _sha(config["export"]["sha256"])
         or _sha(staging.get("files_manifest_sha256")) != digest_json(export["files"])
     ):
@@ -339,10 +314,86 @@ def _export_and_stage(config: dict) -> tuple[dict, dict]:
         raise ValueError("staged tokenizer/runtime/index evidence is incomplete")
     if not any(name.endswith(".safetensors") for name in files):
         raise ValueError("staged weights are absent")
+
+
+def _export_and_stage(config: dict) -> tuple[dict, dict]:
+    export = _read(Path(config["export"]["path"]), config["export"]["sha256"], signed=True)
+    gpu = _read(Path(config["gpu_check"]["path"]), config["gpu_check"]["sha256"], signed=True)
+    if (
+        export.get("schema") != "cyber_native_checkpoint_hf_export_v1"
+        or export.get("model_repo") != "Qwen/Qwen3.8-27B"
+        or export.get("dtype") != "BF16"
+        or export.get("optimizer_steps_executed") != 0
+        or type(export.get("optimizer_step")) is not int
+        or export["optimizer_step"] < 1
+        or export.get("all_output_tensors_reopened_equal") is not True
+        or export.get("source_inventory_sizes_mtimes_unchanged") is not True
+    ):
+        raise ValueError("export is not a complete zero-step Qwen BF16 handoff")
+    for key in ("source_checkpoint_receipt_sha256", "source_plan_sha256"):
+        _sha(export.get(key))
+    if (
+        gpu.get("schema") != "cyber_hf_export_check_v1"
+        or gpu.get("status") != "passed"
+        or gpu.get("gpu_reload_verified") is not True
+        or gpu.get("gpus") != 1
+        or gpu.get("source_unchanged") is not True
+        or gpu.get("finite_logits") is not True
+        or gpu.get("optimizer_steps_executed") != 0
+        or gpu.get("synthetic_only") is not True
+        or _sha(gpu.get("export_sha256")) != _sha(config["export"]["sha256"])
+        or _sha(gpu.get("export_receipt_sha256")) != _sha(export["receipt_sha256"])
+    ):
+        raise ValueError("exact GPU export check is missing or inconsistent")
+    _stage(config, export, export["receipt_sha256"])
     return export, gpu
 
 
-def _candidate(config: dict, base: dict, export: dict) -> dict:
+def _miles_update_identity(export: dict) -> dict:
+    """Name the trained source without mislabeling export/reload zero-work as training."""
+    source = export.get("source")
+    checkpoint = source.get("checkpoint") if isinstance(source, dict) else None
+    if not isinstance(checkpoint, dict):
+        raise ValueError("validated Miles export has no source checkpoint identity")
+    return {
+        "schema": MILES_UPDATE_SCHEMA,
+        "source_plan_sha256": _sha(source.get("source_plan_sha256")),
+        "source_checkpoint_receipt_sha256": _sha(checkpoint.get("receipt_sha256")),
+        "export_tensor_inventory_sha256": _sha(export.get("tensor_inventory_sha256")),
+    }
+
+
+def _miles_export_and_stage(config: dict) -> tuple[dict, dict, dict, dict]:
+    """Reopen the public Miles export and accepted zero-update reload validators."""
+    from . import miles_hf_export
+
+    export_path = Path(config["export"]["path"])
+    export, _ = miles_hf_export.inspect_export(export_path, config["export"]["sha256"])
+    export_receipt_sha256 = _sha(export.get("sha256"))
+    reload_receipt = _read(
+        Path(config["reload_acceptance"]["path"]), config["reload_acceptance"]["sha256"]
+    )
+    reload_validation = {
+        key: _sha(value)
+        for key, value in miles_hf_export.validate_reload_accepted(
+            reload_receipt, check_files=True
+        ).items()
+    }
+    if (
+        reload_receipt.get("serving_qualified") is not False
+        or str(export_path) != reload_receipt.get("export_path")
+        or _sha(reload_receipt.get("export_file_sha256")) != _sha(config["export"]["sha256"])
+        or _sha(reload_receipt.get("export_receipt_sha256")) != export_receipt_sha256
+        or _sha(reload_validation.get("export_receipt_sha256")) != export_receipt_sha256
+        or _sha(reload_receipt.get("export_tensor_inventory_sha256"))
+        != _sha(export.get("tensor_inventory_sha256"))
+    ):
+        raise ValueError("accepted Miles zero-update reload does not bind this export")
+    _stage(config, export, export_receipt_sha256)
+    return export, reload_receipt, reload_validation, _miles_update_identity(export)
+
+
+def _candidate(config: dict, base: dict, export: dict, *, revision: str | None = None) -> dict:
     candidate = copy.deepcopy(base)
     if config["model_id"] == base["id"] or not MODEL_ID.fullmatch(config["model_id"]):
         raise ValueError("new safe model identity is required")
@@ -365,26 +416,44 @@ def _candidate(config: dict, base: dict, export: dict) -> dict:
     ]
     candidate["id"] = config["model_id"]
     candidate["spec"]["displayName"] = config["display_name"]
-    model.update(sourcePath=source, path=serving, revision=_sha(export["receipt_sha256"]))
+    model.update(
+        sourcePath=source,
+        path=serving,
+        revision=_sha(export["receipt_sha256"] if revision is None else revision),
+    )
     _registration(candidate)
     if execution_contract(base) != execution_contract(candidate):
         raise ValueError("non-checkpoint serving configuration drift")
     return candidate
 
 
-def prepare(config: dict, output: Path) -> dict:
-    if config.get("schema") != SCHEMA or set(config) != {
-        "schema",
-        "base_registration",
-        "export",
-        "gpu_check",
-        "staging",
-        "storage",
-        "model_id",
-        "display_name",
-    }:
+def _config(value: dict) -> dict:
+    schema = value.get("schema")
+    fields = {
+        SCHEMA: {
+            "schema",
+            "base_registration",
+            "export",
+            "gpu_check",
+            "staging",
+            "storage",
+            "model_id",
+            "display_name",
+        },
+        MILES_SCHEMA: {
+            "schema",
+            "base_registration",
+            "export",
+            "reload_acceptance",
+            "staging",
+            "storage",
+            "model_id",
+            "display_name",
+        },
+    }
+    if schema not in fields or set(value) != fields[schema]:
         raise ValueError("unexpected registration configuration schema/fields")
-    config = copy.deepcopy(config)
+    config = copy.deepcopy(value)
     if not isinstance(config["storage"], dict) or set(config["storage"]) != {
         "namespace",
         "pvc_name",
@@ -393,7 +462,9 @@ def prepare(config: dict, output: Path) -> dict:
         "source_path",
     }:
         raise ValueError("unexpected storage configuration fields")
-    for name in ("base_registration", "export", "gpu_check", "staging"):
+    references = {"base_registration", "export", "staging"}
+    references.add("gpu_check" if schema == SCHEMA else "reload_acceptance")
+    for name in references:
         ref = config[name]
         if not isinstance(ref, dict) or set(ref) != {"path", "sha256"}:
             raise ValueError("unexpected evidence reference fields")
@@ -402,24 +473,59 @@ def prepare(config: dict, output: Path) -> dict:
             raise ValueError("evidence reference must not traverse a symlink")
         ref["path"] = str(path)
         ref["sha256"] = _sha(ref["sha256"])
+    return config
+
+
+def _artifact(config: dict) -> tuple[dict, str, dict]:
+    if config["schema"] == SCHEMA:
+        export, _ = _export_and_stage(config)
+        receipt_sha256 = _sha(export["receipt_sha256"])
+        return (
+            export,
+            receipt_sha256,
+            {
+                "export_receipt_sha256": receipt_sha256,
+                "optimizer_step": export["optimizer_step"],
+                "staged_manifest_sha256": digest_json(export["files"]),
+            },
+        )
+    export, reload_receipt, reload_validation, update_identity = _miles_export_and_stage(config)
+    receipt_sha256 = _sha(export["sha256"])
+    return (
+        export,
+        receipt_sha256,
+        {
+            "artifact_kind": "miles_rl",
+            "export_file_sha256": _sha(config["export"]["sha256"]),
+            "export_receipt_sha256": receipt_sha256,
+            "reload_acceptance_file_sha256": _sha(config["reload_acceptance"]["sha256"]),
+            "reload_acceptance_receipt_sha256": _sha(reload_receipt["sha256"]),
+            "reload_validation": reload_validation,
+            "source_update_identity": update_identity,
+            "source_update_identity_sha256": digest_json(update_identity),
+            "staged_manifest_sha256": digest_json(export["files"]),
+        },
+    )
+
+
+def prepare(config: dict, output: Path) -> dict:
+    config = _config(config)
     base = _registration(
         _read(Path(config["base_registration"]["path"]), config["base_registration"]["sha256"])
     )
-    export, _ = _export_and_stage(config)
-    candidate = _candidate(config, base, export)
+    export, revision, artifact = _artifact(config)
+    candidate = _candidate(config, base, export, revision=revision)
     plan = _signed(
         {
-            "schema": SCHEMA,
+            "schema": config["schema"],
             "api": API,
             "config": config,
             "base_registration": base,
             "registration": candidate,
             "registration_sha256": digest_json(candidate),
             "execution_contract_sha256": digest_json(execution_contract(candidate)),
-            "export_receipt_sha256": _sha(export["receipt_sha256"]),
-            "optimizer_step": export["optimizer_step"],
-            "staged_manifest_sha256": digest_json(export["files"]),
-            "registration_code_sha256": _code(),
+            **artifact,
+            "registration_code_sha256": _code(config["schema"]),
             "created_at": datetime.now(UTC).isoformat(),
         }
     )
@@ -430,56 +536,77 @@ def prepare(config: dict, output: Path) -> dict:
 
 def load(directory: Path) -> dict:
     plan = _read(directory / "plan.json", signed=True)
+    schema = plan.get("schema")
     if (
-        plan.get("schema") != SCHEMA
+        schema not in {SCHEMA, MILES_SCHEMA}
         or plan.get("api") != API
-        or plan.get("registration_code_sha256") != _code()
+        or plan.get("registration_code_sha256") != _code(schema)
     ):
         raise ValueError("prepared registration schema/API/source drift")
-    config = plan["config"]
+    config = _config(plan["config"])
+    if config != plan["config"] or config["schema"] != schema:
+        raise ValueError("prepared registration configuration drift")
     base = _registration(
         _read(Path(config["base_registration"]["path"]), config["base_registration"]["sha256"])
     )
-    export, _ = _export_and_stage(config)
+    export, revision, artifact = _artifact(config)
     registration = _registration(plan["registration"])
+    common_fields = {
+        "schema",
+        "api",
+        "config",
+        "base_registration",
+        "registration",
+        "registration_sha256",
+        "execution_contract_sha256",
+        "registration_code_sha256",
+        "created_at",
+        "receipt_sha256",
+    }
     if (
-        base != plan["base_registration"]
-        or registration != _candidate(config, base, export)
+        (schema == MILES_SCHEMA and set(plan) != common_fields | set(artifact))
+        or base != plan["base_registration"]
+        or registration != _candidate(config, base, export, revision=revision)
         or digest_json(registration) != plan["registration_sha256"]
         or digest_json(execution_contract(registration)) != plan["execution_contract_sha256"]
         or execution_contract(base) != execution_contract(registration)
-        or _sha(export["receipt_sha256"]) != plan["export_receipt_sha256"]
-        or registration["spec"]["model"]["revision"] != plan["export_receipt_sha256"]
+        or registration["spec"]["model"]["revision"] != revision
         or registration["spec"]["model"]["sourcePath"] != config["storage"]["source_path"]
         or registration["id"] != config["model_id"]
-        or plan.get("optimizer_step") != export["optimizer_step"]
-        or digest_json(export["files"]) != plan["staged_manifest_sha256"]
+        or any(plan.get(key) != value for key, value in artifact.items())
     ):
         raise ValueError("prepared registration evidence mismatch")
     return plan
 
 
 def summary(plan: dict) -> dict:
-    return {
+    result = {
         "model_id": plan["registration"]["id"],
         "api": API,
         "plan_sha256": plan["receipt_sha256"],
         "registration_sha256": plan["registration_sha256"],
         "execution_contract_sha256": plan["execution_contract_sha256"],
-        "optimizer_step": plan["optimizer_step"],
         "serving_ready": False,
     }
-
-
-def _code() -> dict:
-    return {
-        name: file_sha256(Path(__file__).with_name(name))
-        for name in (
-            "serving_registration.py",
-            "register_post_sft.py",
-            "io.py",
+    if plan["schema"] == SCHEMA:
+        result["optimizer_step"] = plan["optimizer_step"]
+    else:
+        result.update(
+            artifact_kind="miles_rl",
+            source_update_identity_sha256=plan["source_update_identity_sha256"],
         )
-    }
+    return result
+
+
+def _code(schema: str = SCHEMA) -> dict:
+    names = [
+        "serving_registration.py",
+        "register_post_sft.py",
+        "io.py",
+    ]
+    if schema == MILES_SCHEMA:
+        names.append("miles_hf_export.py")
+    return {name: file_sha256(Path(__file__).with_name(name)) for name in names}
 
 
 def _overlap(left: str, right: str) -> bool:
@@ -626,6 +753,13 @@ def _qualification(plan: dict, path: Path, expected: str) -> dict:
         or not proof.get("observed_at")
     ):
         raise ValueError("reviewed exact dev serving qualification is required")
+    if plan["schema"] == MILES_SCHEMA and (
+        _sha(proof.get("source_update_identity_sha256")) != plan["source_update_identity_sha256"]
+        or _sha(proof.get("reload_acceptance_receipt_sha256"))
+        != plan["reload_acceptance_receipt_sha256"]
+        or _sha(proof.get("staged_manifest_sha256")) != plan["staged_manifest_sha256"]
+    ):
+        raise ValueError("Miles dev qualification does not bind the exact staged update")
     for key in ("controller_uid", "pod_uid"):
         if str(uuid.UUID(proof[key])) != proof[key]:
             raise ValueError("dev object UID is not canonical")

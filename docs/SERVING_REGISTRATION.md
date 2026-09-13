@@ -21,10 +21,13 @@ ConfigMap evidence without changing its frozen hashes.
   bounded GPU resources and one replica. Shell wrappers, alternate/abbreviated
   model-identity arguments, literal credentials, unknown spec fields and automatic
   replica expansion are rejected.
-- Export and real GPU-check receipts are file-hash and self-digest checked.
-  Every staged payload is independently rehashed, with exact inventory and no
-  symlinks. A staging receipt binds the PVC/observer/mount-to-catalog mapping,
-  not merely an unrelated directory containing identical bytes.
+- Export and qualification receipts are file-hash and self-digest checked. The
+  SFT path requires its real GPU check. The Miles path instead reopens both the
+  raw HF export and accepted zero-update HF reload/release through their public
+  validators. Every staged payload is independently rehashed, with exact
+  inventory and no symlinks. A staging receipt binds the
+  PVC/observer/mount-to-catalog mapping, not merely an unrelated directory
+  containing identical bytes.
 - Preview validates locally and performs authenticated **GETs**: correct Fleet
   team, unchanged baseline, and no existing candidate ID, checkpoint revision or
   overlapping cache/model path. Unknown/partial pagination schemas fail closed.
@@ -55,6 +58,26 @@ SHA-256 values are normalized.
 | `storage` | `namespace: inference`, exact `pvc_name`, canonical `pvc_uid`, absolute observed `staged_root`, exact `/models/...` `source_path` |
 | `model_id` | New DNS-label identity, distinct from retained/active catalog models |
 | `display_name` | Explicit descriptive label without private content |
+
+The existing SFT schema and fields above are unchanged. A Miles RL artifact uses
+schema `cyber_exact_miles_serving_registration_v1`, replaces `gpu_check` with
+`reload_acceptance`, and keeps every other field identical:
+
+| Miles field | Required value |
+| --- | --- |
+| `export` | `{path, sha256}` for the raw `cyber_miles_native_hf_export_v2` `EXPORT.json`; `inspect_export(...)` must reopen the exact source receipts, files, tensors, dtype and source-equivalence witness |
+| `reload_acceptance` | `{path, sha256}` for `cyber_miles_hf_reload_accepted_v1`; `validate_reload_accepted(..., check_files=True)` must reopen its plan, submission, result, controller terminal and external GPU-release evidence |
+
+The Miles plan records both file and self digests for the export and reload
+acceptance, the complete staged `files`-manifest digest, and all public reload
+validation digests. It derives `source_update_identity` only from the validated
+training-plan digest, source-checkpoint receipt digest and exported tensor
+inventory digest. It does **not** call the export/reload work an optimizer step:
+both stages execute zero optimizer updates, while the source-checkpoint receipt
+is the truthful identity of the selected trained update. The serving model
+revision remains the raw export self digest so different export bytes cannot
+collide under one checkpoint label. No `active_dev3`, `dev4`, or other mutable
+canary name is part of this serving contract.
 
 The staging receipt requires:
 
@@ -109,6 +132,12 @@ Its checks must establish all six of:
 
 - `exact_model_identity`, `full_model_reload`, `finite_forward`;
 - `structured_tool_call`, `context_continuation`, `cleanup_verified`.
+
+For a Miles plan, the same dev qualification must additionally bind the plan's
+exact `source_update_identity_sha256`, `reload_acceptance_receipt_sha256`, and
+`staged_manifest_sha256`. The accepted one-forward HF reload/release receipt is
+an artifact gate, not a serving canary and not serving readiness. Missing any
+generic staging or Miles dev-serving binding stops execution before a POST.
 
 The execution contract permits dev/prod identity/path/revision and placement
 differences; image, normalized runtime, resource shape, precision, parallelism,
