@@ -49,6 +49,13 @@ Use private JSON with schema `cyber_exact_serving_registration_v2` and exactly
 these fields. All evidence paths are absolute; bare or `sha256:`-prefixed file
 SHA-256 values are normalized.
 
+For the accepted stronger-teacher V5 optimizer-step-186 export, start from
+[`qwen38-teacher-sft-v5-step186-serving-prod-v1.template.json`](../configs/qualification/qwen38-teacher-sft-v5-step186-serving-prod-v1.template.json).
+It pins the accepted export and one-GPU reload file digests plus a proposed
+create-once model ID. Its `null` base path, staging, and storage fields are
+deliberate live-evidence gates, so the checked-in template is not a valid
+registration request and cannot be executed directly.
+
 | Field | Required value |
 | --- | --- |
 | `base_registration` | `{path, sha256}` for the exact observed base `{id, spec}` |

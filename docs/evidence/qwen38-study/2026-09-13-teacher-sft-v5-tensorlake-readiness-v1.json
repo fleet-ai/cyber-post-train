@@ -1,0 +1,216 @@
+{
+  "schema": "cyber_qwen38_teacher_sft_v5_tensorlake_readiness_v1",
+  "status": "blocked_nonlaunchable",
+  "observed_at": "2026-09-13T17:26:52Z",
+  "scope": {
+    "read_only": true,
+    "fleet_account_gets": 1,
+    "fleet_model_catalog_gets": 5,
+    "tensorlake_api_gets": 0,
+    "tensorlake_api_mutations": 0,
+    "fleet_api_mutations": 0,
+    "sandbox_creates": 0,
+    "benchmark_attempts": 0,
+    "scored_or_paid_work": 0,
+    "training_work": 0
+  },
+  "authentication": {
+    "fleet": {
+      "credential_present": true,
+      "authorized": true,
+      "http_status": 200,
+      "expected_team_matched": true,
+      "response_body_recorded": false
+    },
+    "tensorlake": {
+      "credential_present": false,
+      "authorized": false,
+      "http_status": null,
+      "category": "credential_missing_or_invalid",
+      "request_performed": false,
+      "response_body_recorded": false
+    }
+  },
+  "candidate": {
+    "treatment_kind": "teacher_sft",
+    "checkpoint_identity": "chris-cyber-q38-teacher-dense-v5@optimizer-step-186",
+    "acceptance_evidence": {
+      "path": "docs/evidence/qwen38-study/2026-09-13-sft-export-gpu-acceptance-v1.json",
+      "file_sha256": "sha256:70c2eaeaabce5c99d17a587eb6582f6523acdbc18f4e8a6f8666d330ec1a9d70",
+      "receipt_sha256": "sha256:13becbca46f8f503e2b84bef7b300986358caec4a86c6a31c34dd1e087a397b4"
+    },
+    "checkpoint": {
+      "optimizer_step": 186,
+      "manifest_file_sha256": "sha256:1b671c6ec4b39d1141e0d28c530243624f6a97a7922f9f222ffcbe20b8434d3e",
+      "receipt_sha256": "sha256:1d61918874d59421455577deca70c9784ce09f8f327a5031df9d39dfb5f3d7f2",
+      "source_plan_sha256": "sha256:b4543b9173e799bbe155ab416923db57c9796b8734186b834e5109c5be6330fc"
+    },
+    "export": {
+      "path": "/mnt/sfs/jobs/chris-cyber-q38-teacher-dense-v5/hf-export-v1/EXPORT.json",
+      "file_sha256": "sha256:96b3181e05c501343c97cfe803aada6884e406c7a112e0dc6c77461f090b8bab",
+      "receipt_sha256": "sha256:e6d59f5a58ce54b913d775cd71b81c64bd54637b53795df82baec0f71efefaf9",
+      "dtype": "BF16",
+      "tensor_count": 1199,
+      "tensor_bytes": 55562855904,
+      "optimizer_steps_executed": 0
+    },
+    "reload": {
+      "path": "/mnt/sfs/jobs/chris-q38-teacher-sft-hfcheck-v1/GPU_CHECK.json",
+      "file_sha256": "sha256:7fbfcfe16875722012cc2654d979545e22aa1fdca093987495dfff65173dfd8e",
+      "receipt_sha256": "sha256:9bd229e3c85a092ccc5fca8c3183f57554f1c8a72b2724221f5c7507718a3392",
+      "finite_logits": true,
+      "synthetic_only": true,
+      "optimizer_steps_executed": 0,
+      "source_unchanged": true,
+      "resources_released": true,
+      "serving_qualified": false
+    },
+    "serving_registration": {
+      "proposed_model_id": "chris-q38-teacher-sft-v5-step186-v1",
+      "model_revision_rule": "exact accepted export receipt self-digest",
+      "model_revision": "sha256:e6d59f5a58ce54b913d775cd71b81c64bd54637b53795df82baec0f71efefaf9",
+      "proposed_model_id_catalog_matches": 0,
+      "model_revision_catalog_matches": 0,
+      "template": {
+        "path": "configs/qualification/qwen38-teacher-sft-v5-step186-serving-prod-v1.template.json",
+        "file_sha256": "sha256:a568c4b680ef4f886449e7e92ffe07526447d119bcbf369f32d419c958aff3b1"
+      },
+      "registered": false,
+      "serving_ready": false,
+      "live_parity_verified": false
+    }
+  },
+  "base_route": {
+    "model_lock": {
+      "path": "configs/models/qwen38-27b-1d4bf0f2.lock.json",
+      "file_sha256": "sha256:f3926fe675263b25dc79c2b3881a9c463d6b7931e9d61aeb777d15efc61e35ac",
+      "repository": "Qwen/Qwen3.8-27B",
+      "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+      "weights_manifest_sha256": "sha256:06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352",
+      "tokenizer_manifest_sha256": "sha256:3938a9a8172f2738fed1be44efc11e2562059269d50d3721213f44802b53b4e1",
+      "chat_template_sha256": "sha256:c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041"
+    },
+    "registration_input": {
+      "path": "evals/fleet/serving/qwen38-27b-dedicated-v1.registration.json",
+      "file_sha256": "sha256:43e586e505887e00251362e580a8cf8f0fe8b4c303d6447f7d0839a134db35d0",
+      "served_model_id": "chris-cyber-qwen38-27b-dedicated-v1"
+    },
+    "live_catalog": {
+      "exact_id_matches": 1,
+      "catalog_phase": "paused",
+      "desired_state": "paused",
+      "ready_replicas": 0,
+      "routing_enabled": false,
+      "tracked_desired_spec_matches": false,
+      "model_revision_matches": true,
+      "model_paths_match": true,
+      "precision_matches": true,
+      "runtime_image_command_and_arguments_match": true,
+      "resource_shape_matches": false,
+      "tracked_spec_sha256": "sha256:26698c416eb5d41ac16c98d3b8c52d8fb5dbf4cb4faa31302076390280951d51",
+      "live_spec_sha256": "sha256:9703d5884f80b536c1d8be216e33f0b095209ba5c3794a93e99e2faa5f77373f"
+    },
+    "qualified_for_pairing": false
+  },
+  "tensorlake_runtime": {
+    "management_api_authorized": false,
+    "sandbox_inventory_observed": false,
+    "quota_or_runtime_capabilities_observed": false,
+    "qualified_snapshot_available": false,
+    "paired_projects_available": false,
+    "local_observation_only": {
+      "docker_client_and_server_version": "29.6.1",
+      "docker_daemon_available": true,
+      "running_container_count": 41,
+      "qualification_requires_quiescent_docker": true,
+      "pinned_agent_image_present": false,
+      "pinned_root_setup_image_present": false,
+      "cage_cli_present": false,
+      "tensorlake_cli_present": false
+    }
+  },
+  "paired_qualification": {
+    "fleet_teacher_sft_parent": {
+      "path": "configs/evaluation/qwen38-blackbox-fleet-final-teacher-sft-outcome-protocol-v1.json",
+      "file_sha256": "sha256:8d9bd82d0f256786765acfc7825b7238d5a28efcb5670dcccca54845770a559d",
+      "protocol_sha256": "sha256:87c38d7235078123e0e561ddc3042bd24fa2f5df96636b1d9d1b3d10a8f0bb67"
+    },
+    "tensorlake_paired_plan_template": {
+      "path": "configs/evaluation/qwen38-post-training-webexploitbench-tensorlake-paired-plan-v1.template.json",
+      "file_sha256": "sha256:642947a2407f3ee4f3513003909bf125471c58c23e78549c431ec1675fee7adf",
+      "template_sha256": "sha256:0eedd0007b878a2f16a74738caf91b83d1f4ea4e55973d16b39ae737ad2407d4",
+      "teacher_sft_supported": true,
+      "launchable": false
+    },
+    "required_shape": {
+      "target_count_per_arm": 15,
+      "pass_k_per_arm": 4,
+      "attempts_per_arm": 60,
+      "total_paired_attempts": 120,
+      "same_qualified_snapshot": true,
+      "separate_base_and_candidate_project_sets": true,
+      "same_target_indices": true,
+      "projects_differ_only_by_served_model_binding": true,
+      "fresh_result_roots_required": true,
+      "project_model_parity_receipt_required": true,
+      "three_key_duplicate_inventory_required": true,
+      "base_and_candidate_controller_previews_required": true
+    },
+    "unresolved_private_fields": [
+      "tensorlake_snapshot_id",
+      "snapshot_qualification_receipt_sha256",
+      "controller_qualification_receipt_sha256",
+      "paired_task_project_manifest_sha256",
+      "base_task_project_set_sha256",
+      "candidate_task_project_set_sha256",
+      "project_model_binding_parity_receipt",
+      "base_served_model_id",
+      "candidate_served_model_id"
+    ]
+  },
+  "selection_firewall": {
+    "benchmark_role": "sealed_external_evaluation_only",
+    "training_data_eligible": false,
+    "preference_data_eligible": false,
+    "reward_data_eligible": false,
+    "retrieval_prompt_or_skill_eligible": false,
+    "hyperparameter_selection_eligible": false,
+    "checkpoint_selection_eligible": false,
+    "stopping_tiebreaking_or_retry_signal_eligible": false,
+    "wandb_export_allowed": false,
+    "benchmark_payloads_read": false,
+    "benchmark_outcomes_read": false,
+    "failure_analysis_read": false
+  },
+  "gates": {
+    "completed": [
+      "accepted_step_186_checkpoint_seal",
+      "complete_zero_update_bf16_export",
+      "one_gpu_zero_update_synthetic_reload",
+      "source_unchanged_and_gpu_released",
+      "fleet_account_team_identity",
+      "candidate_model_id_and_export_revision_absent_from_catalog",
+      "teacher_sft_cross_surface_nonlaunchable_protocol_support"
+    ],
+    "blocked": [
+      "candidate_export_weight_tokenizer_and_chat_template_manifests_not_reopened_for_serving",
+      "dev_serving_qualification_missing",
+      "inference_staging_receipt_missing",
+      "candidate_registration_missing",
+      "dedicated_base_route_paused_and_current_exact_registration_receipt_missing",
+      "live_base_candidate_parity_missing",
+      "tensorlake_credential_missing",
+      "tensorlake_snapshot_and_paired_project_qualification_missing",
+      "fresh_duplicate_inventory_and_both_controller_previews_missing"
+    ],
+    "next_trigger": "After an authorized worker reopens the exact accepted export and reload, fill the serving template with a current serving-state base registration plus create-once staging evidence; run the bounded dev serving qualification, preview and explicitly register the candidate, then prove both routes Ready and live-parity matched. With a Tensorlake credential, GET inventory only, create or select one non-scored qualified snapshot containing distinct base/candidate project sets, run CAGE preflight-only for all 30 projects, prove fresh roots and Docker quiescence, and fill the paired project/parity receipts. Stop for review before any controller plan sealing or scored dispatch."
+  },
+  "privacy": {
+    "credentials_recorded": false,
+    "benchmark_prompts_tasks_or_payloads_read_or_recorded": false,
+    "benchmark_outputs_outcomes_scores_or_failure_analysis_read_or_recorded": false,
+    "training_prompts_traces_rewards_or_private_payloads_read_or_recorded": false,
+    "raw_api_response_bodies_recorded": false
+  },
+  "sha256": "sha256:73325b0b45488a7a06fbc03c3d997b7046bef4a8173c1e26750e6f334f9d485b"
+}

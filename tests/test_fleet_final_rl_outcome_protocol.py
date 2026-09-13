@@ -14,8 +14,9 @@ from evals.fleet import final_rl_outcome_protocol as protocol
 from training.io import canonical_json, digest_json
 
 ROOT = Path(__file__).parents[1]
-PARENT_PATH = (
-    ROOT / "configs/evaluation/qwen38-blackbox-fleet-final-rl-outcome-protocol-v1.json"
+PARENT_PATH = ROOT / "configs/evaluation/qwen38-blackbox-fleet-final-rl-outcome-protocol-v1.json"
+TEACHER_PARENT_PATH = (
+    ROOT / "configs/evaluation/qwen38-blackbox-fleet-final-teacher-sft-outcome-protocol-v1.json"
 )
 LEGACY_PARENT_PATH = (
     ROOT / "configs/evaluation/qwen38-blackbox-fleet-final-outcome-protocol-v1.json"
@@ -50,10 +51,10 @@ def _arm(prefix: str, *, candidate: bool) -> dict:
     return value
 
 
-def _bindings(tmp_path: Path) -> dict:
+def _bindings(tmp_path: Path, *, candidate_arm: str = "rl") -> dict:
     return {
         "schema": protocol.BINDINGS_SCHEMA,
-        "candidate_arm": "rl",
+        "candidate_arm": candidate_arm,
         "training_boundary": {
             "source_class": "fleet_blackbox_tasks_only",
             "training_arm_id": "chris-q38-miles-rl-prod1",
@@ -125,6 +126,25 @@ def test_parent_templates_are_complete_nulls_and_nonlaunchable() -> None:
     assert all(value is None for value in template["result_isolation"].values())
 
 
+def test_teacher_sft_parent_and_child_use_the_same_generic_sealed_contract(
+    tmp_path: Path,
+) -> None:
+    task_set = protocol.load_exact_task_set()
+    parent = _load(TEACHER_PARENT_PATH)
+    protocol.validate_parent(parent, task_set)
+    assert parent["candidate_arm"] == "teacher_sft"
+
+    child = protocol.build_child(
+        parent,
+        TEACHER_PARENT_PATH,
+        _bindings(tmp_path, candidate_arm="teacher_sft"),
+        task_set,
+    )
+    assert child["candidate_arm"] == "teacher_sft"
+    assert child["launchable"] is False
+    assert child["external_benchmark_isolation"]["training_input_eligible"] is False
+
+
 def test_materializes_create_once_receipt_complete_nonlaunchable_child(tmp_path: Path) -> None:
     bindings_path = tmp_path / "bindings.json"
     bindings_path.write_text(canonical_json(_bindings(tmp_path)) + "\n", encoding="utf-8")
@@ -162,9 +182,7 @@ def test_materializes_create_once_receipt_complete_nonlaunchable_child(tmp_path:
         "proxy_image",
     ],
 )
-def test_rejects_any_base_candidate_runtime_or_harness_drift(
-    tmp_path: Path, field: str
-) -> None:
+def test_rejects_any_base_candidate_runtime_or_harness_drift(tmp_path: Path, field: str) -> None:
     value = _bindings(tmp_path)
     value["arms"]["candidate"][field] = (
         "registry.example/drift@sha256:" + "a" * 64
@@ -218,9 +236,7 @@ def test_rejects_incomplete_or_nonintervention_bindings(
             "checkpoint_identity"
         ]
     else:
-        value["arms"]["candidate"]["served_model_id"] = value["arms"]["base"][
-            "served_model_id"
-        ]
+        value["arms"]["candidate"]["served_model_id"] = value["arms"]["base"]["served_model_id"]
     with pytest.raises(ValueError, match=message):
         protocol.validate_bindings(value, _load(PARENT_PATH), protocol.load_exact_task_set())
 

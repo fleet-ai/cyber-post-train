@@ -1,4 +1,4 @@
-"""Freeze and bind the exact Fleet final-test comparison for one RL arm.
+"""Freeze and bind the exact Fleet final-test comparison for one post-training arm.
 
 The checked-in parent is score-blind and non-launchable.  Child materialization
 is offline, create-once, and remains non-launchable: a later reviewed evaluator
@@ -26,14 +26,13 @@ PARENT_SCHEMA = "cyber_fleet_final_post_training_parent_v1"
 BINDINGS_SCHEMA = "cyber_fleet_final_post_training_bindings_v1"
 CHILD_SCHEMA = "cyber_fleet_final_post_training_child_v1"
 CANDIDATE_ARM = "rl"
+SUPPORTED_CANDIDATE_ARMS = ("teacher_sft", "self_sft", "rl", "sft_then_rl")
 
 EXACT_TASK_SET_SHA256 = "sha256:718936798883348fe16570561679e49d7725e174a1cee4fa0f7821225675548e"
 EXACT_TASK_SET_FILE_SHA256 = (
     "sha256:018e9a0fa3de5055b1f19a4ac4db94b5419359625fee5e638c9c306dfce510c7"
 )
-EXACT_FINAL_LOCK_SHA256 = (
-    "sha256:dc625115be8c775de8ecf476bc0d8e06e71b6c7f4160ed50b25eb0308b30d8d7"
-)
+EXACT_FINAL_LOCK_SHA256 = "sha256:dc625115be8c775de8ecf476bc0d8e06e71b6c7f4160ed50b25eb0308b30d8d7"
 
 ARM_FIELDS = (
     "checkpoint_identity",
@@ -181,13 +180,27 @@ def load_exact_task_set() -> dict[str, Any]:
     return task_set
 
 
-def _parent_body(task_set: dict[str, Any]) -> dict[str, Any]:
+def _candidate_label(candidate_arm: str) -> str:
+    labels = {
+        "teacher_sft": "teacher-SFT",
+        "self_sft": "self-SFT",
+        "rl": "RL",
+        "sft_then_rl": "SFT-then-RL",
+    }
+    try:
+        return labels[candidate_arm]
+    except KeyError as error:
+        raise ValueError("unsupported post-training candidate arm") from error
+
+
+def _parent_body(task_set: dict[str, Any], *, candidate_arm: str = CANDIDATE_ARM) -> dict[str, Any]:
+    label = _candidate_label(candidate_arm)
     empty_arm = {field: None for field in ARM_FIELDS}
     empty_boundary = {field: None for field in TRAINING_BOUNDARY_FIELDS}
     return {
         "schema": PARENT_SCHEMA,
-        "purpose": "Sealed Qwen3.8-27B base-versus-RL Fleet final capability comparison",
-        "candidate_arm": CANDIDATE_ARM,
+        "purpose": f"Sealed Qwen3.8-27B base-versus-{label} Fleet final capability comparison",
+        "candidate_arm": candidate_arm,
         "launchable": False,
         "paid_or_scored_work_authorized": False,
         "task_set": {
@@ -205,12 +218,12 @@ def _parent_body(task_set: dict[str, Any]) -> dict[str, Any]:
             "repository": final_set.MODEL_REPOSITORY,
             "base_revision": final_set.MODEL_REVISION,
             "tokenizer_revision": final_set.MODEL_REVISION,
-            "comparison": "matched base versus one frozen RL checkpoint",
+            "comparison": f"matched base versus one frozen {label} checkpoint",
             "only_intended_difference": "candidate weight manifest",
         },
         "binding_template": {
             "state": "unbound",
-            "candidate_arm": CANDIDATE_ARM,
+            "candidate_arm": candidate_arm,
             "training_boundary": empty_boundary,
             "arms": {"base": dict(empty_arm), "candidate": dict(empty_arm)},
             "result_isolation": {field: None for field in RESULT_ISOLATION_FIELDS},
@@ -249,9 +262,7 @@ def _parent_body(task_set: dict[str, Any]) -> dict[str, Any]:
             "provisioning_route_template": (
                 "/v1/rollout-rewards/{task_key}/versions/{task_version_id}/instances"
             ),
-            "scoring_route_template": (
-                "/v1/rollout-rewards/{task_key}/versions/{task_version_id}"
-            ),
+            "scoring_route_template": ("/v1/rollout-rewards/{task_key}/versions/{task_version_id}"),
             "valid_outcome_requires": [
                 "exact frozen task, environment, starting-data and verifier bindings",
                 "normal terminal OpenCode event stream without an unfinished final step",
@@ -332,21 +343,24 @@ def _parent_body(task_set: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def build_parent(task_set: dict[str, Any]) -> dict[str, Any]:
+def build_parent(task_set: dict[str, Any], *, candidate_arm: str = CANDIDATE_ARM) -> dict[str, Any]:
     final_set.validate_final_task_set(task_set)
     if (
         task_set.get("sha256") != EXACT_TASK_SET_SHA256
         or task_set.get("final_test_lock_sha256") != EXACT_FINAL_LOCK_SHA256
     ):
         raise ValueError("Fleet final task-set identity changed")
-    return _sealed(_parent_body(task_set))
+    return _sealed(_parent_body(task_set, candidate_arm=candidate_arm))
 
 
 def validate_parent(value: dict[str, Any], task_set: dict[str, Any]) -> None:
     _check_seal(value, PARENT_SCHEMA)
-    expected = build_parent(task_set)
+    candidate_arm = value.get("candidate_arm")
+    if candidate_arm not in SUPPORTED_CANDIDATE_ARMS:
+        raise ValueError("unsupported post-training candidate arm")
+    expected = build_parent(task_set, candidate_arm=candidate_arm)
     if value != expected:
-        raise ValueError("RL final parent differs from its exact frozen contract")
+        raise ValueError("post-training final parent differs from its exact frozen contract")
 
 
 def _validate_arm(value: object, label: str) -> dict[str, Any]:
@@ -370,14 +384,15 @@ def validate_bindings(
         {"schema", "candidate_arm", "training_boundary", "arms", "result_isolation"},
         "binding",
     )
-    if value.get("schema") != BINDINGS_SCHEMA or value.get("candidate_arm") != CANDIDATE_ARM:
-        raise ValueError("binding must select the exact RL candidate arm")
+    candidate_arm = parent["candidate_arm"]
+    if value.get("schema") != BINDINGS_SCHEMA or value.get("candidate_arm") != candidate_arm:
+        raise ValueError("binding must select the exact post-training candidate arm")
 
     boundary = _exact_keys(
         value.get("training_boundary"), TRAINING_BOUNDARY_FIELDS, "training boundary"
     )
     if boundary.get("source_class") != "fleet_blackbox_tasks_only":
-        raise ValueError("RL training source must remain Fleet blackbox only")
+        raise ValueError("post-training source must remain Fleet blackbox only")
     _immutable_id(boundary.get("training_arm_id"), "training arm")
     for field in TRAINING_BOUNDARY_FIELDS:
         if field.endswith("_sha256"):
@@ -392,15 +407,15 @@ def validate_bindings(
         if base[field] != candidate[field]:
             raise ValueError(f"matched arm field differs: {field}")
     if base["weights_manifest_sha256"] == candidate["weights_manifest_sha256"]:
-        raise ValueError("RL candidate must bind a distinct weight manifest")
+        raise ValueError("post-training candidate must bind a distinct weight manifest")
     if base["checkpoint_identity"] == candidate["checkpoint_identity"]:
-        raise ValueError("RL candidate must bind a distinct checkpoint identity")
+        raise ValueError("post-training candidate must bind a distinct checkpoint identity")
     if base["served_model_id"] == candidate["served_model_id"]:
-        raise ValueError("base and RL candidate require distinct served model identities")
+        raise ValueError(
+            "base and post-training candidate require distinct served model identities"
+        )
 
-    result = _exact_keys(
-        value.get("result_isolation"), RESULT_ISOLATION_FIELDS, "result isolation"
-    )
+    result = _exact_keys(value.get("result_isolation"), RESULT_ISOLATION_FIELDS, "result isolation")
     _immutable_id(result.get("campaign_id"), "campaign")
     prepared = _fresh_path(result.get("prepared_output_root"), "prepared output root")
     result_root = _fresh_path(result.get("result_root"), "result root")
@@ -480,7 +495,7 @@ def _build_child_unchecked(
     value = {
         "schema": CHILD_SCHEMA,
         "state": "bound_nonlaunchable",
-        "candidate_arm": CANDIDATE_ARM,
+        "candidate_arm": parent["candidate_arm"],
         "launchable": False,
         "paid_or_scored_work_authorized": False,
         "parent": _parent_reference(parent, parent_path),
