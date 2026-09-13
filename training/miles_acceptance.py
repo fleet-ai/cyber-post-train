@@ -52,6 +52,7 @@ _SUBMITTED_RUNTIME_FILES = (
     "training/miles_training.py",
     "training/miles.py",
     "training/miles_conversion.py",
+    "training/miles_promotion.py",
     "training/miles_rollout.py",
     "training/miles_text.py",
     "training/rl_episode.py",

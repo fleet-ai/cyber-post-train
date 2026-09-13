@@ -18,7 +18,7 @@ import pytest
 
 from cyber_post_train.jobs import API_URLS, digest
 from evals.fleet import opencode_self_hosted as fleet
-from training import miles, miles_reload_acceptance
+from training import miles, miles_reload_acceptance, miles_training
 from training import miles_acceptance as acceptance
 from training import miles_event_evidence as event_evidence
 from training import miles_policy_observer as observer
@@ -29,6 +29,10 @@ def _seal(value: dict) -> dict:
     value = {key: item for key, item in value.items() if key != "sha256"}
     value["sha256"] = "sha256:" + digest(value)
     return value
+
+
+def test_submission_runtime_file_contract_matches_training_bundle() -> None:
+    assert acceptance._SUBMITTED_RUNTIME_FILES == miles_training.RUNTIME_FILES
 
 
 def _write_json(path: Path, value: object) -> None:
