@@ -1,0 +1,216 @@
+{
+  "schema": "cyber_fleet_final_post_training_parent_v1",
+  "purpose": "Sealed Qwen3.8-27B base-versus-RL Fleet final capability comparison",
+  "candidate_arm": "rl",
+  "launchable": false,
+  "paid_or_scored_work_authorized": false,
+  "task_set": {
+    "path": "configs/evaluation/qwen38-blackbox-fleet-final-task-set-v1.json",
+    "sha256": "sha256:718936798883348fe16570561679e49d7725e174a1cee4fa0f7821225675548e",
+    "file_sha256": "sha256:018e9a0fa3de5055b1f19a4ac4db94b5419359625fee5e638c9c306dfce510c7",
+    "task_count": 10,
+    "selection_role": "fleet_final_test",
+    "final_test_lock_sha256": "sha256:dc625115be8c775de8ecf476bc0d8e06e71b6c7f4160ed50b25eb0308b30d8d7",
+    "training_data_eligible": false,
+    "hyperparameter_or_checkpoint_selection_eligible": false,
+    "exact_task_binding_required_at_preflight_and_execution": true
+  },
+  "model": {
+    "repository": "Qwen/Qwen3.8-27B",
+    "base_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "tokenizer_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "comparison": "matched base versus one frozen RL checkpoint",
+    "only_intended_difference": "candidate weight manifest"
+  },
+  "binding_template": {
+    "state": "unbound",
+    "candidate_arm": "rl",
+    "training_boundary": {
+      "source_class": null,
+      "training_arm_id": null,
+      "training_plan_sha256": null,
+      "training_terminal_acceptance_receipt_sha256": null,
+      "checkpoint_freeze_receipt_sha256": null,
+      "training_input_manifest_sha256": null,
+      "external_benchmark_inputs_used": null,
+      "external_benchmark_outputs_used": null,
+      "external_benchmark_outcomes_used": null,
+      "external_benchmark_derived_inputs_used": null
+    },
+    "arms": {
+      "base": {
+        "checkpoint_identity": null,
+        "checkpoint_acceptance_receipt_sha256": null,
+        "export_receipt_sha256": null,
+        "weights_manifest_sha256": null,
+        "tokenizer_manifest_sha256": null,
+        "chat_template_sha256": null,
+        "staging_receipt_sha256": null,
+        "serving_registration_receipt_sha256": null,
+        "served_model_id": null,
+        "serving_route_profile_sha256": null,
+        "serving_execution_contract_sha256": null,
+        "live_pair_parity_receipt_sha256": null,
+        "serving_image": null,
+        "agent_image": null,
+        "proxy_image": null
+      },
+      "candidate": {
+        "checkpoint_identity": null,
+        "checkpoint_acceptance_receipt_sha256": null,
+        "export_receipt_sha256": null,
+        "weights_manifest_sha256": null,
+        "tokenizer_manifest_sha256": null,
+        "chat_template_sha256": null,
+        "staging_receipt_sha256": null,
+        "serving_registration_receipt_sha256": null,
+        "served_model_id": null,
+        "serving_route_profile_sha256": null,
+        "serving_execution_contract_sha256": null,
+        "live_pair_parity_receipt_sha256": null,
+        "serving_image": null,
+        "agent_image": null,
+        "proxy_image": null
+      }
+    },
+    "result_isolation": {
+      "campaign_id": null,
+      "prepared_output_root": null,
+      "result_root": null,
+      "roots_absent": null
+    },
+    "binding_rule": "One immutable child must fill every null exactly once from accepted receipts, reference this exact parent, and remain non-launchable."
+  },
+  "harness": {
+    "harness": "opencode",
+    "harness_version": "1.18.27",
+    "release_asset_sha256": "sha256:4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702",
+    "provider_adapter": "@ai-sdk/openai-compatible",
+    "context_management": "opencode_1.18.27_native_compaction_autocontinue_v2",
+    "context_window_size": 262144,
+    "compaction_headroom_tokens": 20000,
+    "max_output_tokens": 32768,
+    "max_model_requests": 600,
+    "timeout_seconds": 28800,
+    "tools": [
+      "bash",
+      "submit_report"
+    ],
+    "tool_catalog_sha256": "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a"
+  },
+  "sampling": {
+    "temperature": 0.6,
+    "top_p": 0.95,
+    "base_seed": 42,
+    "attempt_seeds": [
+      42,
+      43,
+      44,
+      45
+    ],
+    "seed_rule": "attempt N uses base_seed + N - 1 modulo 2^31"
+  },
+  "pass_k": 4,
+  "concurrency_per_worker": 1,
+  "paired_execution": {
+    "pairing_unit": "exact task_version_id and attempt seed",
+    "same_tasks_and_attempt_seeds": true,
+    "same_retry_and_validity_policy": true,
+    "matched_arm_fields": [
+      "tokenizer_manifest_sha256",
+      "chat_template_sha256",
+      "serving_execution_contract_sha256",
+      "live_pair_parity_receipt_sha256",
+      "serving_image",
+      "agent_image",
+      "proxy_image"
+    ],
+    "scientific_difference_allowed": [
+      "weights_manifest_sha256"
+    ],
+    "nonsemantic_identity_differences_allowed": [
+      "checkpoint_identity",
+      "checkpoint_acceptance_receipt_sha256",
+      "export_receipt_sha256",
+      "staging_receipt_sha256",
+      "serving_registration_receipt_sha256",
+      "served_model_id",
+      "serving_route_profile_sha256"
+    ],
+    "hosted_and_dedicated_routes_may_not_be_pooled": true
+  },
+  "outcome_authority": {
+    "required_cyber_contract": {
+      "evidence_schema": "1.0.0",
+      "verifier_contract": "3.0.0",
+      "submission_protocol": "2.0.0"
+    },
+    "provisioning_route_template": "/v1/rollout-rewards/{task_key}/versions/{task_version_id}/instances",
+    "scoring_route_template": "/v1/rollout-rewards/{task_key}/versions/{task_version_id}",
+    "valid_outcome_requires": [
+      "exact frozen task, environment, starting-data and verifier bindings",
+      "normal terminal OpenCode event stream without an unfinished final step",
+      "authoritative version-bound grading",
+      "complete private local result evidence",
+      "challenge environment and all harness containers cleaned"
+    ]
+  },
+  "metrics": {
+    "primary_after_unsealing": {
+      "name": "fleet_final_paired_pass_at_1_delta",
+      "unit": "task_family",
+      "attempt": 1,
+      "seed": 42,
+      "definition": "Candidate minus base full-task solve rate across the exact paired task families using attempt 1 authoritative valid outcomes.",
+      "eligibility": "all paired attempt-1 outcomes must be valid"
+    },
+    "descriptive_after_unsealing": [
+      "base_and_candidate_fleet_final_pass_at_4",
+      "paired_task_level_outcomes",
+      "authoritative_fractional_reward_delta",
+      "valid_outcome_rate",
+      "infrastructure_invalid_count",
+      "report_submission_rate",
+      "model_requests_tokens_and_elapsed_time"
+    ],
+    "uncertainty": {
+      "method": "paired task-family bootstrap",
+      "resamples": 10000,
+      "seed": 20260911,
+      "interval": 0.95
+    },
+    "invalid_outcome_policy": "Never score infrastructure-invalid, interrupted, output-limited or unknown attempts as model failures; the affected comparison is incomplete."
+  },
+  "sealed_use_policy": {
+    "state": "sealed_during_training_and_checkpoint_selection",
+    "training_data_eligible": false,
+    "preference_or_reward_data_eligible": false,
+    "prompt_retrieval_or_skill_eligible": false,
+    "hyperparameter_selection_eligible": false,
+    "checkpoint_selection_eligible": false,
+    "failure_analysis_before_freeze": "forbidden",
+    "unseal_only_after": "The selected recipe and checkpoint identities are frozen in the exact checkpoint-freeze receipt bound by the child."
+  },
+  "external_benchmark_isolation": {
+    "webexploitbench_state": "sealed_external_evaluation_only",
+    "training_input_eligible": false,
+    "reward_input_eligible": false,
+    "checkpoint_or_hyperparameter_selection_eligible": false,
+    "retry_or_stopping_input_eligible": false,
+    "failure_analysis_before_checkpoint_freeze": "forbidden"
+  },
+  "retry_policy": {
+    "automatic_retry": false,
+    "valid_outcome_retry": "forbidden",
+    "ambiguous_or_invalid_attempt": "hold for evidence review",
+    "replacement_authority": "none in this parent protocol; a separately reviewed symmetric amendment is required before any replacement execution"
+  },
+  "launch_gate": {
+    "status": "nonlaunchable_binding_artifact_only",
+    "dev_first": true,
+    "prepare_must_reopen_all_bound_receipts": true,
+    "fresh_exact_task_and_route_preflight_required": true,
+    "paid_or_scored_work_authorized_by_this_file": false
+  },
+  "sha256": "sha256:9008e955b1b44a33e641552f10255aa352a05d9b363babbc10ee54e3d5ee87f6"
+}
