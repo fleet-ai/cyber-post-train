@@ -16,9 +16,14 @@ Production promotion requires this exact create-once chain:
    W&B identity, and externally verified GPU release. Validate
    `MILES_TERMINAL_ACCEPTED.json` with
    `training.miles_acceptance.validate_terminal(..., check_files=True)`.
-2. Restore that same checkpoint on all eight ranks without doing any work.
-   Validate `<reload-output>/RELOAD_ACCEPTED.json` with
+2. Run the single all-rank policy observer described in
+   `docs/QWEN38_MILES_POLICY_OBSERVER.md`. Its trained leg restores that same
+   checkpoint on all eight ranks without doing any work and also provides the
+   value-sensitive policy delta required by step 1. After the training terminal
+   receipt exists, perform the CPU-only evidence join and validate
+   `/mnt/sfs/jobs/chris-q38-miles-reload-dev3/RELOAD_ACCEPTED.json` with
    `training.miles_reload_acceptance.validate_accepted(..., check_files=True)`.
+   Do not launch a second eight-GPU reload job.
 3. Build the exact 59-train/20-dev Miles data manifest from
    `configs/runs/qwen38-miles-rl-filtered-study-a-prod-v1.data.json`. This gate
    is complete: the create-once manifest is at

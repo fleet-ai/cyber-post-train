@@ -17,8 +17,10 @@ import pytest
 
 from cyber_post_train.jobs import API_URLS, digest
 from evals.fleet import opencode_self_hosted as fleet
-from training import miles
+from training import miles, miles_reload_acceptance
 from training import miles_acceptance as acceptance
+from training import miles_event_evidence as event_evidence
+from training import miles_policy_observer as observer
 from training.miles_conversion import _hash
 
 
@@ -31,6 +33,54 @@ def _seal(value: dict) -> dict:
 def _write_json(path: Path, value: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(fleet.canonical_json(value))
+
+
+def _bundle_without_path_validation(
+    request: dict, files: dict[str, str], module: str, argv: list[str]
+) -> dict:
+    payload = json.dumps(
+        {"files": files, "module": module, "argv": argv}, sort_keys=True
+    ).encode()
+    blob = gzip.compress(payload, mtime=0)
+    encoded = base64.b64encode(blob).decode()
+    return {
+        **request,
+        "command": "python -c " + shlex.quote("assert " + repr(hashlib.sha256(blob).hexdigest())),
+        "env": {**request.get("env", {}), "CYBER_RUNTIME_BUNDLE": encoded},
+    }
+
+
+def _owner(kind: str, name: str, uid: str) -> list[dict]:
+    return [{"kind": kind, "name": name, "uid": uid, "controller": True}]
+
+
+def _kube_event(
+    kind: str,
+    name: str,
+    uid: str,
+    *,
+    version: int,
+    owner: list[dict] | None = None,
+    spec: dict | None = None,
+    status: dict | None = None,
+    event_type: str = "MODIFIED",
+) -> dict:
+    return {
+        "type": event_type,
+        "object": {
+            "kind": kind,
+            "metadata": {
+                "namespace": acceptance.NAMESPACE,
+                "name": name,
+                "uid": uid,
+                "resourceVersion": str(version),
+                "creationTimestamp": "2026-09-13T03:07:01Z",
+                "ownerReferences": owner or [],
+            },
+            "spec": spec or {},
+            "status": status or {},
+        },
+    }
 
 
 def _source_config(run_name: str, split: str, prompt: str, catalog_sha: str) -> dict:
@@ -218,8 +268,247 @@ def _replace_episode_file(path: Path, name: str, value: dict) -> None:
     _write_json(path / "ACCEPTED.json", _seal(accepted))
 
 
+def _policy_observer_evidence(
+    *,
+    plan: dict,
+    plan_path: Path,
+    source_submission: dict,
+    source_submission_path: Path,
+    checkpoint: dict,
+    checkpoint_path: Path,
+    tmp_path: Path,
+) -> tuple[Path, dict]:
+    output_root = tmp_path / "observer-output"
+    runtime = observer._runtime()
+    observer_plan = {
+        "schema": observer.PLAN_SCHEMA,
+        "run_name": "synthetic-policy-observer",
+        "output_root": str(output_root),
+        "source_plan": plan,
+        "source_plan_sha256": "sha256:" + digest(plan),
+        "source_plan_file_sha256": "sha256:" + _hash(plan_path),
+        "source_plan_path": str(plan_path),
+        "source_submission": {
+            "path": str(source_submission_path),
+            "file_sha256": "sha256:" + _hash(source_submission_path),
+            "receipt_sha256": source_submission["sha256"],
+        },
+        "trained_checkpoint": checkpoint,
+        "trained_checkpoint_reference": {
+            "path": str(checkpoint_path),
+            "file_sha256": "sha256:" + _hash(checkpoint_path),
+            "receipt_sha256": checkpoint["sha256"],
+        },
+        "base_checkpoint_receipt_sha256": plan["checkpoint"]["sha256"],
+        "world_size": 8,
+        "comparison_method": observer.COMPARISON_METHOD,
+        "rank_state_commitment_method": observer.RANK_STATE_COMMITMENT_METHOD,
+        "work_authorized": dict(observer._ZERO_WORK),
+        "runtime_sha256": digest(runtime),
+        "native_driver_sha256": observer.NATIVE_DRIVER_SHA256,
+        "deadline_seconds": observer.DEADLINE_SECONDS,
+        "execution": {
+            "cluster_target": "dev",
+            "image": miles.IMAGE,
+            "priority": "c1",
+            "resources": plan["execution"]["resources"],
+        },
+    }
+    observer_plan_path = tmp_path / "observer/plan.json"
+    _write_json(observer_plan_path, observer_plan)
+    request = observer.job_request(observer_plan)
+    request_path = tmp_path / "observer/request.json"
+    _write_json(request_path, request)
+    submission_path = tmp_path / "observer/SUBMITTED.json"
+    submission = observer.compile_submission_binding(
+        plan_path=observer_plan_path,
+        request_path=request_path,
+        source_commit=subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
+        api_run_id="11111111-1111-4111-8111-111111111111",
+        submitted_at="2026-09-13T03:07:00Z",
+        output=submission_path,
+    )
+    rows = [
+        {
+            "rank": rank,
+            "policy_tensor_count": 10,
+            "local_policy_numel": 100,
+            "base_policy_structure_sha256": "sha256:" + f"{rank + 1:064x}",
+            "trained_policy_structure_sha256": "sha256:" + f"{rank + 1:064x}",
+            "base_policy_value_sha256": "sha256:" + f"{rank + 20:064x}",
+            "trained_policy_value_sha256": "sha256:"
+            + f"{rank + (40 if rank == 0 else 20):064x}",
+            "trained_optimizer_value_sha256": "sha256:" + f"{rank + 60:064x}",
+            "trained_scheduler_value_sha256": "sha256:" + f"{rank + 80:064x}",
+            "trained_rng_value_sha256": "sha256:" + f"{rank + 100:064x}",
+            "policy_changed": rank == 0,
+        }
+        for rank in range(8)
+    ]
+    result = _seal(
+        {
+            "schema": observer.RESULT_SCHEMA,
+            "status": "observed",
+            "observer_plan_sha256": "sha256:" + digest(observer_plan),
+            "source_plan_sha256": observer_plan["source_plan_sha256"],
+            "base_checkpoint_receipt_sha256": plan["checkpoint"]["sha256"],
+            "trained_checkpoint_receipt_sha256": checkpoint["sha256"],
+            "world_size": 8,
+            "comparison_method": observer.COMPARISON_METHOD,
+            "ranks": rows,
+            "changed_policy_ranks": [0],
+            "restored_next_rollout_id": checkpoint["next_rollout_id"],
+            "checkpoint_state_commitment_method": observer.RANK_STATE_COMMITMENT_METHOD,
+            "state_stable_across_zero_updates": True,
+            "work_executed": dict(observer._ZERO_WORK),
+            "base_checkpoint_unchanged": True,
+            "trained_checkpoint_unchanged": True,
+            "completed_at": "2026-09-13T03:07:10Z",
+            "reward_values_included": False,
+            "task_content_included": False,
+            "tensor_values_included": False,
+        }
+    )
+    result_path = output_root / "POLICY_OBSERVER_RESULT.json"
+    _write_json(result_path, result)
+
+    watch = tmp_path / "observer/watch"
+    observer.start_capture(
+        observer_plan,
+        submission,
+        namespace_uid=acceptance.NAMESPACE_UID,
+        started_at="2026-09-13T03:07:00Z",
+        directory=watch,
+    )
+    api_name = submission["api"]["run_name"]
+    run_id = submission["api"]["run_id"]
+    rayjob_uid = "22222222-2222-4222-8222-222222222222"
+    workload_uid = "33333333-3333-4333-8333-333333333333"
+    raycluster_uid = "44444444-4444-4444-8444-444444444444"
+    pod_uid = "55555555-5555-4555-8555-555555555555"
+    cluster_name = "synthetic-observer-cluster"
+    rayjob = _kube_event(
+        "RayJob",
+        api_name,
+        rayjob_uid,
+        version=1,
+        event_type="ADDED",
+        spec={
+            "shutdownAfterJobFinishes": True,
+            "ttlSecondsAfterFinished": 0,
+            "rayClusterSpec": {
+                "headGroupSpec": {"template": {"spec": {"priorityClassName": "c1"}}}
+            },
+        },
+    )
+    rayjob["object"]["metadata"]["labels"] = {"fleet.ai/run-id": run_id}
+    workload = _kube_event(
+        "Workload",
+        "synthetic-observer-workload",
+        workload_uid,
+        version=2,
+        owner=_owner("RayJob", api_name, rayjob_uid),
+        status={
+            "conditions": [
+                {
+                    "type": "Admitted",
+                    "status": "True",
+                    "lastTransitionTime": "2026-09-13T03:07:02Z",
+                }
+            ]
+        },
+    )
+    cluster = _kube_event(
+        "RayCluster",
+        cluster_name,
+        raycluster_uid,
+        version=3,
+        owner=_owner("RayJob", api_name, rayjob_uid),
+        event_type="ADDED",
+    )
+    pod = _kube_event(
+        "Pod",
+        "synthetic-observer-pod",
+        pod_uid,
+        version=4,
+        owner=_owner("RayCluster", cluster_name, raycluster_uid),
+        spec={
+            "containers": [
+                {"name": "ray-head", "resources": {"limits": {"nvidia.com/gpu": "8"}}}
+            ]
+        },
+        status={
+            "phase": "Succeeded",
+            "containerStatuses": [
+                {
+                    "name": "ray-head",
+                    "imageID": "containerd://registry/image@" + miles.IMAGE.rsplit("@", 1)[1],
+                    "restartCount": 0,
+                    "state": {
+                        "terminated": {
+                            "exitCode": 0,
+                            "reason": "Completed",
+                            "finishedAt": "2026-09-13T03:07:11Z",
+                        }
+                    },
+                }
+            ],
+        },
+    )
+    terminal = copy.deepcopy(rayjob)
+    terminal["type"] = "DELETED"
+    terminal["object"]["metadata"]["resourceVersion"] = "5"
+    terminal["object"]["status"] = {
+        "jobStatus": "SUCCEEDED",
+        "rayClusterName": cluster_name,
+    }
+    for sequence, event in enumerate((rayjob, workload, cluster, pod, terminal)):
+        event_evidence.record_event(
+            watch,
+            event,
+            observed_at=f"2026-09-13T03:07:{sequence + 1:02d}Z",
+            sequence=sequence,
+        )
+    controller_path = tmp_path / "observer/CONTROLLER.json"
+    observer.compile_controller(
+        observer_plan,
+        submission,
+        directory=watch,
+        api_status="SUCCEEDED",
+        observed_at="2026-09-13T03:07:12Z",
+        output=controller_path,
+    )
+    release_path = tmp_path / "observer/RELEASE.json"
+    observer.compile_release(
+        observer_plan,
+        submission,
+        controller_path=controller_path,
+        absence={
+            "raycluster_present": False,
+            "rayjob_present": False,
+            "workload_present": False,
+            "quota_reservation_present": False,
+            "gpu_pods_present": False,
+            "active_gpus": 0,
+        },
+        observed_at="2026-09-13T03:07:13Z",
+        output=release_path,
+    )
+    policy_path = output_root / "POLICY_DELTA.json"
+    policy = observer.accept_policy_delta(
+        observer_plan,
+        submission_path=submission_path,
+        result_path=result_path,
+        controller_path=controller_path,
+        release_path=release_path,
+        output=policy_path,
+    )
+    return policy_path, policy
+
+
 @pytest.fixture
-def case(tmp_path: Path) -> dict:
+def case(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict:
+    monkeypatch.setattr(observer, "bundled_request", _bundle_without_path_validation)
     run_name = "synthetic-miles-reward-canary"
     root = tmp_path / "run"
     root.mkdir()
@@ -263,11 +552,16 @@ def case(tmp_path: Path) -> dict:
     )
     manifest_path = data_root / "manifest.json"
     _write_json(manifest_path, data)
+    base_root = tmp_path / "base-checkpoint"
+    (base_root / "release").mkdir(parents=True)
+    (base_root / "latest_checkpointed_iteration.txt").write_text("release\n")
+    (base_root / "release/.metadata").write_bytes(b"synthetic base metadata")
+    (base_root / "release/__0_0.distcp").write_bytes(b"synthetic base weights")
     arguments = {
         "name": run_name,
         "output_root": str(root),
         "model_root": "/mnt/sfs/models/synthetic-qwen",
-        "torch_dist_root": "/mnt/sfs/jobs/synthetic-base/checkpoint",
+        "torch_dist_root": str(base_root),
         "train_data": str(data_root / "train.jsonl"),
         "dev_data": str(data_root / "dev.jsonl"),
         "data_manifest": str(manifest_path),
@@ -297,9 +591,17 @@ def case(tmp_path: Path) -> dict:
         {
             "schema": "cyber_miles_checkpoint_v1",
             "image": miles.IMAGE,
-            "root": "/mnt/sfs/jobs/synthetic-base/checkpoint",
+            "root": str(base_root),
             "model": model,
-            "files": [{"path": "base", "size": 1, "sha256": "a" * 64}],
+            "files": [
+                {
+                    "path": str(path.relative_to(base_root)),
+                    "size": path.stat().st_size,
+                    "sha256": _hash(path),
+                }
+                for path in sorted(base_root.rglob("*"))
+                if path.is_file()
+            ],
             "optimizer_steps": 0,
         }
     )
@@ -505,43 +807,15 @@ def case(tmp_path: Path) -> dict:
     wandb_path = tmp_path / "evidence/WANDB.json"
     _write_json(wandb_path, wandb)
 
-    policy_delta = _seal(
-        {
-            "schema": acceptance.POLICY_DELTA_SCHEMA,
-            "source_plan_sha256": "sha256:" + digest(plan),
-            "base_checkpoint_receipt_sha256": base_checkpoint["sha256"],
-            "trained_checkpoint_receipt_sha256": checkpoint["sha256"],
-            "world_size": 8,
-            "comparison_method": "all_rank_named_policy_tensor_value_sha256_v1",
-            "ranks": [
-                {
-                    "rank": rank,
-                    "policy_tensor_count": 10,
-                    "local_policy_numel": 100,
-                    "base_policy_structure_sha256": "sha256:" + f"{rank + 1:064x}",
-                    "trained_policy_structure_sha256": "sha256:" + f"{rank + 1:064x}",
-                    "base_policy_value_sha256": "sha256:" + f"{rank + 20:064x}",
-                    "trained_policy_value_sha256": "sha256:"
-                    + f"{rank + (40 if rank == 0 else 20):064x}",
-                    "trained_optimizer_value_sha256": "sha256:" + f"{rank + 60:064x}",
-                    "trained_scheduler_value_sha256": "sha256:" + f"{rank + 80:064x}",
-                    "trained_rng_value_sha256": "sha256:" + f"{rank + 100:064x}",
-                    "policy_changed": rank == 0,
-                }
-                for rank in range(8)
-            ],
-            "changed_policy_ranks": [0],
-            "policy_structure_matches": True,
-            "optimizer_state_used_for_delta": False,
-            "scheduler_state_used_for_delta": False,
-            "rng_state_used_for_delta": False,
-            "metadata_used_for_delta": False,
-            "checkpoint_state_commitment_method": acceptance.RANK_STATE_COMMITMENT_METHOD,
-            "reward_values_included": False,
-        }
+    policy_delta_path, policy_delta = _policy_observer_evidence(
+        plan=plan,
+        plan_path=root / "plan.json",
+        source_submission=submission,
+        source_submission_path=submission_path,
+        checkpoint=checkpoint,
+        checkpoint_path=checkpoint_path,
+        tmp_path=tmp_path,
     )
-    policy_delta_path = tmp_path / "evidence/POLICY_DELTA.json"
-    _write_json(policy_delta_path, policy_delta)
 
     run_id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
     api_name = run_name + "-aaaaaaaa"
@@ -680,6 +954,136 @@ def test_terminal_acceptance_reopens_every_gate_without_reward_values(case: dict
     )
     with pytest.raises(FileExistsError):
         _accept(case)
+
+
+def test_single_observer_run_also_satisfies_native_reload(case: dict) -> None:
+    terminal = _accept(case)
+    terminal_path = case["root"] / "MILES_TERMINAL_ACCEPTED.json"
+    policy = json.loads(case["policy_delta"].read_bytes())
+    output = Path(policy["observer_result"]["path"]).parent / "RELOAD_ACCEPTED.json"
+
+    result = observer.accept_observer_reload(
+        terminal_path=terminal_path,
+        output=output,
+    )
+
+    assert result["source_terminal_acceptance_sha256"] == terminal["sha256"]
+    assert result["source_manifest_sha256"] == terminal["checkpoint_manifest"][
+        "receipt_sha256"
+    ]
+    assert result["observer_gpu_jobs"] == 1
+    assert result["additional_reload_gpu_jobs"] == 0
+    assert result["state_stable_across_zero_updates"] is True
+    assert result["external_gpu_release_verified"] is True
+    validated = miles_reload_acceptance.validate_accepted(result, check_files=True)
+    assert validated["source_terminal_acceptance_sha256"] == terminal["sha256"]
+    assert validated["source_manifest_sha256"] == terminal["checkpoint_manifest"][
+        "receipt_sha256"
+    ]
+    with pytest.raises(ValueError, match="reopening every referenced file"):
+        miles_reload_acceptance.validate_accepted(result, check_files=False)
+    with pytest.raises(FileExistsError):
+        observer.accept_observer_reload(terminal_path=terminal_path, output=output)
+
+
+def test_observer_reload_rejects_commitment_or_result_replacement(case: dict) -> None:
+    _accept(case)
+    terminal_path = case["root"] / "MILES_TERMINAL_ACCEPTED.json"
+    policy = json.loads(case["policy_delta"].read_bytes())
+    output = Path(policy["observer_result"]["path"]).parent / "RELOAD_ACCEPTED.json"
+    accepted = observer.accept_observer_reload(
+        terminal_path=terminal_path,
+        output=output,
+    )
+
+    forged = copy.deepcopy(accepted)
+    forged["rank_state_commitments_sha256"] = "sha256:" + "f" * 64
+    forged = _seal(forged)
+    with pytest.raises(ValueError, match="differs from rederived evidence"):
+        miles_reload_acceptance.validate_accepted(forged, check_files=True)
+
+    result_path = Path(policy["observer_result"]["path"])
+    result = json.loads(result_path.read_bytes())
+    result["ranks"][0]["trained_policy_value_sha256"] = "sha256:" + "e" * 64
+    _write_json(result_path, _seal(result))
+    with pytest.raises(
+        ValueError,
+        match="reference changed|differs from rederived observer evidence",
+    ):
+        miles_reload_acceptance.validate_accepted(accepted, check_files=True)
+
+
+def test_policy_observer_accepts_historical_bundle_after_current_code_changes(
+    case: dict,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    policy = json.loads(case["policy_delta"].read_bytes())
+    checkpoint = json.loads(case["checkpoint"].read_bytes())
+    before = observer.validate_policy_evidence(policy, case["plan"], checkpoint)
+    monkeypatch.setattr(observer, "_runtime", lambda: {"future.py": "changed"})
+
+    after = observer.validate_policy_evidence(policy, case["plan"], checkpoint)
+
+    assert before == after == 1
+
+
+def test_policy_observer_result_can_truthfully_report_no_delta_but_not_accept(
+    case: dict,
+) -> None:
+    policy = json.loads(case["policy_delta"].read_bytes())
+    submission_path = Path(policy["observer_submission"]["path"])
+    submission = json.loads(submission_path.read_bytes())
+    plan = json.loads(Path(submission["observer_plan_path"]).read_bytes())
+    result_path = Path(policy["observer_result"]["path"])
+    result = json.loads(result_path.read_bytes())
+    for row in result["ranks"]:
+        row["trained_policy_value_sha256"] = row["base_policy_value_sha256"]
+        row["policy_changed"] = False
+    result["changed_policy_ranks"] = []
+    _write_json(result_path, _seal(result))
+    assert observer.validate_result(plan, json.loads(result_path.read_bytes())) == []
+    case["policy_delta"].unlink()
+
+    with pytest.raises(ValueError, match="no independently observed policy tensor delta"):
+        observer.accept_policy_delta(
+            plan,
+            submission_path=submission_path,
+            result_path=result_path,
+            controller_path=Path(policy["observer_controller"]["path"]),
+            release_path=Path(policy["observer_release"]["path"]),
+            output=case["policy_delta"],
+        )
+    assert not case["policy_delta"].exists()
+
+
+def test_policy_observer_rejects_ttl_zero_event_replacement(case: dict) -> None:
+    policy = json.loads(case["policy_delta"].read_bytes())
+    controller = json.loads(Path(policy["observer_controller"]["path"]).read_bytes())
+    event_path = Path(controller["event_journal"]["events"][-1]["path"])
+    event = json.loads(event_path.read_bytes())
+    event["controller_status"] = "FAILED"
+    _write_json(event_path, _seal(event))
+    checkpoint = json.loads(case["checkpoint"].read_bytes())
+
+    with pytest.raises(ValueError, match="event journal|controller|journal missed terminal"):
+        observer.validate_policy_evidence(policy, case["plan"], checkpoint)
+
+
+def test_policy_observer_public_receipts_exclude_task_and_metric_values(case: dict) -> None:
+    terminal = _accept(case)
+    policy = json.loads(case["policy_delta"].read_bytes())
+    output = Path(policy["observer_result"]["path"]).parent / "RELOAD_ACCEPTED.json"
+    reload_accepted = observer.accept_observer_reload(
+        terminal_path=case["root"] / "MILES_TERMINAL_ACCEPTED.json",
+        output=output,
+    )
+
+    public = json.dumps([policy, terminal, reload_accepted], sort_keys=True)
+    assert "synthetic training task" not in public
+    assert "rollout/episode_raw_reward" not in public
+    assert "eval/heldout-cyber" not in public
+    assert policy["reward_values_included"] is False
+    assert reload_accepted["reward_values_included"] is False
 
 
 @pytest.mark.parametrize(
@@ -872,7 +1276,10 @@ def test_optimizer_metadata_delta_cannot_masquerade_as_policy_change(case: dict)
     value["changed_policy_ranks"] = []
     _write_json(case["policy_delta"], _seal(value))
 
-    with pytest.raises(ValueError, match="no independently observed policy tensor delta"):
+    with pytest.raises(
+        ValueError,
+        match="no independently observed policy tensor delta|differs from rederived observer",
+    ):
         _accept(case)
 
 

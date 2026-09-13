@@ -1,0 +1,15 @@
+{
+  "schema": "cyber_miles_policy_observer_config_v1",
+  "name": "chris-q38-miles-reload-dev3",
+  "output_root": "/mnt/sfs/jobs/chris-q38-miles-reload-dev3",
+  "source": {
+    "plan": "/mnt/sfs/jobs/chris-q38-miles-rlreward-dev3-evidence-v1/plan.json",
+    "submission_binding": "/mnt/sfs/jobs/chris-q38-miles-rlreward-dev3-evidence-v1/SUBMITTED_EXECUTION.json",
+    "trained_checkpoint_manifest": "/mnt/sfs/jobs/chris-q38-miles-rlreward-dev3-seal/MILES_TRAINING_CHECKPOINT.json"
+  },
+  "cluster": {
+    "target": "dev",
+    "priority": "c1",
+    "resources": {}
+  }
+}
