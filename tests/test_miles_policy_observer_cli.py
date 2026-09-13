@@ -232,7 +232,9 @@ def test_submit_opens_watch_before_exactly_one_post(monkeypatch, tmp_path):
     assert calls == ["intent", "watch", "post", "bind", "record", "close"]
 
 
-def test_lost_post_response_recovers_exact_run_without_a_second_post(tmp_path):
+def test_api_down_after_lost_post_recovers_exact_run_without_a_second_post(
+    tmp_path, monkeypatch
+):
     request = {
         "name": "miles-observer",
         "run_dir": "/mnt/sfs/jobs/chris-q38-miles-reload-dev3",
@@ -243,6 +245,8 @@ def test_lost_post_response_recovers_exact_run_without_a_second_post(tmp_path):
     calls: list[object] = []
 
     class LostResponseJobs:
+        list_attempts = 0
+
         def submit_once(self, observed, path):
             calls.append("post")
             path.write_text(
@@ -258,7 +262,10 @@ def test_lost_post_response_recovers_exact_run_without_a_second_post(tmp_path):
             raise ValueError("response lost after server accepted create")
 
         def all_runs(self):
-            calls.append("list")
+            self.list_attempts += 1
+            calls.append("list-down" if self.list_attempts == 1 else "list")
+            if self.list_attempts == 1:
+                raise ValueError("temporary API outage")
             return [{"name": run_name, "run_dir": request["run_dir"]}]
 
         def status(self, name):
@@ -272,10 +279,11 @@ def test_lost_post_response_recovers_exact_run_without_a_second_post(tmp_path):
                 "finished_at": None,
             }
 
+    monkeypatch.setattr(cli.time, "sleep", lambda _seconds: None)
     recovered = cli.submit_once_or_reconcile(LostResponseJobs(), request, journal)
 
     rows = [json.loads(line) for line in journal.read_text().splitlines()]
-    assert calls == ["post", "list", ("status", run_name)]
+    assert calls == ["post", "list-down", "list", ("status", run_name)]
     assert recovered == {key: value for key, value in rows[1].items() if key != "state"}
     assert [row["state"] for row in rows] == [
         "POST_INTENT_DO_NOT_RETRY",
@@ -314,6 +322,52 @@ def test_lost_post_response_rejects_name_match_with_different_output(tmp_path):
             timeout_seconds=0,
         )
     assert len(journal.read_text().splitlines()) == 1
+
+
+def test_final_recovery_timeout_preserves_sanitized_possible_leak(tmp_path):
+    request = {
+        "name": "miles-observer",
+        "run_dir": "/mnt/sfs/jobs/chris-q38-miles-reload-dev3",
+    }
+    journal = tmp_path / "submission.jsonl"
+    journal.write_text(
+        json.dumps(
+            {
+                "state": "POST_INTENT_DO_NOT_RETRY",
+                "api_base_url": cli.API_URLS["dev"],
+                "request_sha256": cli.digest(request),
+            }
+        )
+        + "\n"
+    )
+    run_name = "miles-observer-11111111"
+    rayjob_uid = "22222222-2222-4222-8222-222222222222"
+    watcher = cli.WatchBuffer()
+    candidate = _object(
+        "RayJob",
+        run_name,
+        rayjob_uid,
+        run_id="11111111-1111-4111-8111-111111111111",
+        status={"jobStatus": "RUNNING", "private": "must-not-be-saved"},
+    )
+    candidate["object"]["spec"] = {
+        "runtimeEnvYAML": "API_TOKEN=must-not-be-saved"
+    }
+    watcher.events.put((1.0, candidate))
+
+    receipt = watcher.preserve_ambiguous(
+        tmp_path / "watch",
+        request,
+        journal,
+        TimeoutError("private API error"),
+    )
+
+    saved = json.loads((tmp_path / "watch" / cli.AMBIGUOUS_SUBMISSION).read_text())
+    assert saved == receipt
+    assert saved["status"] == "possible_active_resource_leak"
+    assert saved["candidate_events"][0]["name"] == run_name
+    assert saved["failure_type"] == "TimeoutError"
+    assert "must-not-be-saved" not in json.dumps(saved)
 
 
 def test_preflight_finishes_source_checks_before_creating_outputs(monkeypatch, tmp_path):

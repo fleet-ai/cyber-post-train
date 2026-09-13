@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import queue
@@ -27,6 +28,7 @@ _RESOURCES = (
     "rayclusters.ray.io",
     "pods",
 )
+AMBIGUOUS_SUBMISSION = "AMBIGUOUS_SUBMISSION.json"
 
 
 def _append_recovered_response(journal: Path, response: dict[str, Any]) -> None:
@@ -63,14 +65,18 @@ def _recover_created_run(
         raise ValueError("ambiguous Jobs API POST has no exact dev intent to reconcile")
     if not isinstance(timeout_seconds, (int, float)) or isinstance(timeout_seconds, bool):
         raise ValueError("Jobs API recovery timeout must be numeric")
-    if timeout_seconds < 0 or timeout_seconds > 300:
-        raise ValueError("Jobs API recovery timeout must be between zero and five minutes")
+    if timeout_seconds < 0 or timeout_seconds > 43200:
+        raise ValueError("Jobs API recovery timeout must fit the configured watch deadline")
     expected_name = re.compile(re.escape(request["name"]) + r"-[a-f0-9]{8}")
     deadline = time.monotonic() + timeout_seconds
     while True:
+        try:
+            history = jobs.all_runs()
+        except Exception:
+            history = []
         candidates = [
             row
-            for row in jobs.all_runs()
+            for row in history
             if isinstance(row, dict)
             and row.get("run_dir") == request["run_dir"]
             and expected_name.fullmatch(str(row.get("name", ""))) is not None
@@ -79,7 +85,17 @@ def _recover_created_run(
             raise ValueError("ambiguous Jobs API POST matches multiple name/output records")
         if candidates:
             candidate_name = str(candidates[0]["name"])
-            observed = jobs.status(candidate_name)
+            try:
+                observed = jobs.status(candidate_name)
+            except Exception:
+                observed = None
+            if observed is None:
+                if time.monotonic() >= deadline:
+                    raise TimeoutError(
+                        "ambiguous Jobs API POST remained unreadable through watch deadline"
+                    ) from None
+                time.sleep(min(2.0, max(0.0, deadline - time.monotonic())))
+                continue
             run_id = str(observed.get("job_id", ""))
             try:
                 parsed_id = uuid.UUID(run_id)
@@ -122,14 +138,23 @@ def _recover_created_run(
 
 
 def submit_once_or_reconcile(
-    jobs: Jobs, request: dict[str, Any], journal: Path
+    jobs: Jobs,
+    request: dict[str, Any],
+    journal: Path,
+    *,
+    recovery_timeout_seconds: float = 60.0,
 ) -> dict[str, Any]:
     try:
         return jobs.submit_once(request, journal)
     except Exception:
         if not journal.is_file() or journal.is_symlink():
             raise
-        return _recover_created_run(jobs, request, journal)
+        return _recover_created_run(
+            jobs,
+            request,
+            journal,
+            timeout_seconds=recovery_timeout_seconds,
+        )
 
 
 def _json(path: Path) -> dict[str, Any]:
@@ -266,6 +291,113 @@ class WatchBuffer:
             isinstance(row, dict) and row.get("name") == name for row in statuses
         ) == 1
 
+    def preserve_ambiguous(
+        self,
+        directory: Path,
+        request: dict[str, Any],
+        journal: Path,
+        error: BaseException,
+    ) -> dict[str, Any]:
+        """Persist value-free candidate ownership if API identity never becomes readable."""
+
+        name_pattern = re.compile(re.escape(request["name"]) + r"-[a-f0-9]{8}")
+        with self.events.mutex:
+            buffered = list(self.events.queue)
+        raws = [
+            item[1]
+            for item in buffered
+            if isinstance(item, tuple) and len(item) == 2 and isinstance(item[1], dict)
+        ]
+        rayjobs: set[tuple[str, str]] = set()
+        for raw in raws:
+            obj = raw.get("object") or {}
+            metadata = obj.get("metadata") or {}
+            owner = self._owner(raw)
+            if obj.get("kind") == "RayJob" and name_pattern.fullmatch(
+                str(metadata.get("name", ""))
+            ):
+                rayjobs.add((str(metadata.get("name")), str(metadata.get("uid"))))
+            if owner and owner[0] == "RayJob" and name_pattern.fullmatch(owner[1]):
+                rayjobs.add((owner[1], owner[2]))
+        clusters = {
+            (str((raw.get("object") or {}).get("metadata", {}).get("name")),
+             str((raw.get("object") or {}).get("metadata", {}).get("uid")))
+            for raw in raws
+            if (raw.get("object") or {}).get("kind") == "RayCluster"
+            and self._owner(raw) is not None
+            and self._owner(raw)[0] == "RayJob"
+            and (self._owner(raw)[1], self._owner(raw)[2]) in rayjobs
+        }
+        projected: list[dict[str, Any]] = []
+        for raw in raws:
+            obj = raw.get("object") or {}
+            metadata = obj.get("metadata") or {}
+            kind, owner = obj.get("kind"), self._owner(raw)
+            accepted = (
+                kind == "RayJob"
+                and (str(metadata.get("name")), str(metadata.get("uid"))) in rayjobs
+            ) or (
+                kind in {"Workload", "RayCluster"}
+                and owner is not None
+                and owner[0] == "RayJob"
+                and (owner[1], owner[2]) in rayjobs
+            ) or (
+                kind == "Pod"
+                and owner is not None
+                and owner[0] == "RayCluster"
+                and (owner[1], owner[2]) in clusters
+            )
+            if not accepted:
+                continue
+            projected.append(
+                {
+                    "event_type": raw.get("type"),
+                    "kind": kind,
+                    "name": metadata.get("name"),
+                    "uid": metadata.get("uid"),
+                    "resource_version": metadata.get("resourceVersion"),
+                    "creation_timestamp": metadata.get("creationTimestamp"),
+                    "deletion_timestamp": metadata.get("deletionTimestamp"),
+                    "owner": None
+                    if owner is None
+                    else {"kind": owner[0], "name": owner[1], "uid": owner[2]},
+                    "controller_status": (obj.get("status") or {}).get("jobStatus")
+                    if kind == "RayJob"
+                    else None,
+                    "phase": (obj.get("status") or {}).get("phase")
+                    if kind == "Pod"
+                    else None,
+                }
+            )
+        try:
+            journal_sha256 = hashlib.sha256(journal.read_bytes()).hexdigest()
+        except OSError:
+            journal_sha256 = None
+        value = {
+            "schema": "cyber_miles_ambiguous_submission_v1",
+            "status": "possible_active_resource_leak",
+            "api_base_url": API_URLS["dev"],
+            "request_sha256": digest(request),
+            "request_name_prefix": request["name"],
+            "run_dir": request["run_dir"],
+            "submission_journal_sha256": journal_sha256,
+            "failure_type": type(error).__name__,
+            "watches_closed_after_deadline": True,
+            "candidate_events": projected,
+            "private_logs_included": False,
+            "environment_values_included": False,
+            "task_content_included": False,
+        }
+        value["sha256"] = digest(value)
+        directory.mkdir(parents=True, mode=0o700, exist_ok=True)
+        path = directory / AMBIGUOUS_SUBMISSION
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "w") as stream:
+            stream.write(json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        return value
+
     def record(self, directory: Path, submission: dict[str, Any], timeout: int = 43200) -> None:
         run = submission["api"]
         rayjob_uid = raycluster_identity = None
@@ -376,7 +508,22 @@ def submit(args: argparse.Namespace) -> None:
     try:
         watcher.start()
         with Jobs(token, base_url=API_URLS["dev"]) as jobs:
-            submit_once_or_reconcile(jobs, request, args.journal)
+            try:
+                submit_once_or_reconcile(
+                    jobs,
+                    request,
+                    args.journal,
+                    recovery_timeout_seconds=args.watch_timeout_seconds,
+                )
+            except Exception as error:
+                if args.journal.is_file() and not args.journal.is_symlink():
+                    watcher.preserve_ambiguous(
+                        args.watch_directory,
+                        request,
+                        args.journal,
+                        error,
+                    )
+                raise
         submission = observer.compile_submission_binding(
             plan_path=args.plan,
             request_path=args.request,
