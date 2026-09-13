@@ -551,28 +551,25 @@ cyber-post-train miles-rl-checkpoint-seal output/miles-dev-run \
   --output /mnt/sfs/jobs/<distinct-seal-dir>/MILES_TRAINING_CHECKPOINT.json
 ```
 
-Copy
-`configs/qualification/qwen38-miles-rl-reward-canary-reload-dev-v1.template.json`,
-replace its manifest path and SHA-256 with that exact create-once seal, then use
-the normal prepare rail:
+For the one-step Qwen3.8 dev3 canary, use
+`configs/qualification/qwen38-miles-policy-observer-dev3-v1.template.json` and
+the exact procedure in `QWEN38_MILES_POLICY_OBSERVER.md`. One dev-only `1x8`
+observer loads the exact base and trained checkpoint on all ranks. Its trained
+leg restores model, optimizer, scheduler and RNG state and probes the sanitized
+state twice. It creates no rollout engine, performs no forward/backward or
+optimizer update, writes no checkpoint, and has no Fleet or W&B secret.
 
-```sh
-cyber-post-train miles-rl-reload reload.json --output output/miles-reload
-cyber-post-train preflight output/miles-reload
-cyber-post-train preview output/miles-reload --cluster dev
-cyber-post-train submit output/miles-reload --cluster dev
-```
+After exact UID-bound terminal and release evidence exists, the offline gates
+derive `POLICY_DELTA.json`, the training `MILES_TERMINAL_ACCEPTED.json`, and then
+`RELOAD_ACCEPTED.json`. The last step performs no API call or GPU allocation:
+the same observer load is both the value-sensitive policy-delta observation and
+the native reload proof. Never launch a second eight-GPU dev3 reload job.
 
-This validator is dev-only and reuses the source run's exact native `1x8` or
-`2x8` topology and resource floor. The current canary template points to the
-fresh `1x8` dev3 source. It starts only Miles' Megatron training actors,
-loads the model plus optimizer, scheduler and RNG state on every rank, and
-checks the sanitized state twice. It creates no rollout engine, performs no
-forward/backward or optimizer update, writes no checkpoint, and has no Fleet or
-W&B secret. `RELOAD_VALIDATED.json` is necessary recovery evidence, not proof
-of reward quality or model lift. Promotion still requires independent terminal
-Job/Pod evidence that every validator GPU was released. Never reuse a partial
-seal, edit a prepared request, or retry a failed validator under the same name.
+The standalone `miles-rl-reload` rail remains available when a genuinely
+separate reload execution is required for another checkpoint. Its legacy dev3
+template is not the active dev3 promotion path. In either mode, never reuse a
+partial seal, edit a prepared request, or retry a failed validator under the
+same name.
 
 For **SkyRL**, use the same YAML and commands, with these differences:
 
