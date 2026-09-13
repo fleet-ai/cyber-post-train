@@ -149,6 +149,88 @@ def test_every_prod_miles_config_requires_the_exact_candidate_and_receipt() -> N
         miles_promotion.bind_production_promotion(generic, ROOT)
 
 
+def test_reward_canary_config_is_c1_without_an_override_reason() -> None:
+    path = ROOT / "configs/qualification/qwen38-miles-rl-reward-canary-prod-v1.json"
+    config = json.loads(path.read_text())
+    miles_promotion._exact_reward_canary_config(config)
+    assert config["cluster"]["priority"] == "c1"
+    assert "priority_reason" not in config["cluster"]
+
+    for changed_cluster in (
+        {**config["cluster"], "priority": "c0"},
+        {**config["cluster"], "priority_reason": "override"},
+    ):
+        changed = copy.deepcopy(config)
+        changed["cluster"] = changed_cluster
+        with pytest.raises(ValueError, match="exact one-update arm"):
+            miles_promotion._exact_reward_canary_config(changed)
+
+
+def test_reward_canary_preview_requires_c1_without_an_override_reason(monkeypatch) -> None:
+    from cyber_post_train import jobs
+
+    plan = {
+        "execution": {"production_promotion": {"mode": miles_promotion.PROD_REWARD_CANARY_MODE}}
+    }
+    request = {
+        "workers": 1,
+        "gpus_per_worker": 8,
+        "priority_class": "c1",
+        "requeueIfPreempted": False,
+        "resources": miles_promotion.PROD_REWARD_CANARY_RESOURCES,
+    }
+    monkeypatch.setattr(miles_promotion, "validate_embedded_promotion", lambda *_a, **_k: True)
+    monkeypatch.setattr(jobs, "validate_preview", lambda *_a, **_k: {"nodes": 1})
+    assert miles_promotion.validate_production_preview(plan, request, {}) == {
+        "production_reward_canary": "validated",
+        "rendered_nodes": 1,
+        "effective_priority_expected": 10000,
+    }
+
+    for changed_request in (
+        {**request, "priority_class": "c0"},
+        {**request, "priority_reason": "override"},
+    ):
+        with pytest.raises(JobsError, match="exact 1x8 c1/no-requeue"):
+            miles_promotion.validate_production_preview(plan, changed_request, {})
+
+
+def test_reward_canary_live_gate_reads_only_c1_priority(monkeypatch) -> None:
+    class Client:
+        @staticmethod
+        def all_runs():
+            return []
+
+    class Wandb:
+        @staticmethod
+        def run(_):
+            raise RuntimeError("Could not find run")
+
+    seen = []
+
+    def kubectl(*args):
+        seen.append(args)
+        if args[:2] == ("get", "namespace"):
+            return {"metadata": {"uid": miles_promotion.PROD_NAMESPACE_UID}}
+        if args[:2] == ("get", "priorityclass"):
+            return {
+                "metadata": {"name": "c1"},
+                "value": 10000,
+                "preemptionPolicy": "PreemptLowerPriority",
+            }
+        return {"items": []}
+
+    plan = {
+        "execution": {"production_promotion": {"mode": miles_promotion.PROD_REWARD_CANARY_MODE}}
+    }
+    monkeypatch.setattr(miles_promotion, "validate_embedded_promotion", lambda *_a, **_k: True)
+    monkeypatch.setattr(miles_promotion, "_kubectl_json", kubectl)
+    observed = miles_promotion.require_live_external(plan, Client(), wandb_api=Wandb())
+    assert observed["effective_priority"] == 10000
+    assert ("get", "priorityclass", "c1") in seen
+    assert all("c0" not in args for args in seen)
+
+
 def test_embedded_promotion_rechecks_the_complete_compiled_candidate() -> None:
     plan = _plan()
     assert miles_promotion.validate_embedded_promotion(plan, check_files=False) is True

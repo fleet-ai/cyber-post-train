@@ -26,9 +26,6 @@ PROD_REWARD_CANARY_WANDB = {
     "project": "cyber-post-train",
     "run_id": "chris-q38-miles-rl-prod1-canary-v1",
 }
-PROD_REWARD_CANARY_REASON = (
-    "Urgent cyber post-training reward canary authorized by Chris to maximize time-to-result."
-)
 PROD_REWARD_CANARY_RESOURCES = {
     "cpu_request": "32",
     "cpu_limit": "32",
@@ -303,8 +300,7 @@ def _exact_reward_canary_config(config: dict[str, Any]) -> None:
         or config.get("cluster")
         != {
             "target": "prod",
-            "priority": "c0",
-            "priority_reason": PROD_REWARD_CANARY_REASON,
+            "priority": "c1",
             "resources": PROD_REWARD_CANARY_RESOURCES,
         }
         or not _is_reward_canary_marker(config.get("production_promotion"))
@@ -653,8 +649,7 @@ def _exact_reward_canary_plan(plan: dict[str, Any]) -> None:
         or execution
         != {
             "image": miles.IMAGE,
-            "priority": "c0",
-            "priority_reason": PROD_REWARD_CANARY_REASON,
+            "priority": "c1",
             "resources": PROD_REWARD_CANARY_RESOURCES,
             "cluster_target": "prod",
             "production_promotion": {"mode": PROD_REWARD_CANARY_MODE},
@@ -703,16 +698,16 @@ def validate_production_preview(
         if (
             request.get("workers") != 1
             or request.get("gpus_per_worker") != 8
-            or request.get("priority_class") != "c0"
-            or request.get("priority_reason") != PROD_REWARD_CANARY_REASON
+            or request.get("priority_class") != "c1"
+            or "priority_reason" in request
             or request.get("requeueIfPreempted") is not False
             or request.get("resources") != PROD_REWARD_CANARY_RESOURCES
         ):
-            raise JobsError("Miles production reward canary preview is not exact 1x8 c0")
+            raise JobsError("Miles production reward canary preview is not exact 1x8 c1/no-requeue")
         return {
             "production_reward_canary": "validated",
             "rendered_nodes": rendered["nodes"],
-            "effective_priority_expected": 20000,
+            "effective_priority_expected": 10000,
         }
     if (
         request.get("workers") != 1
@@ -883,8 +878,8 @@ def require_live_external(plan: dict[str, Any], client, *, wandb_api=None) -> di
     namespace = _kubectl_json("get", "namespace", "fleet-train-jobs")
     if namespace.get("metadata", {}).get("uid") != PROD_NAMESPACE_UID:
         raise JobsError("production namespace identity changed")
-    priority_name = "c0" if reward_canary else "c1"
-    priority_value = 20000 if reward_canary else 10000
+    priority_name = "c1"
+    priority_value = 10000
     priority = _kubectl_json("get", "priorityclass", priority_name)
     if (
         priority.get("metadata", {}).get("name") != priority_name

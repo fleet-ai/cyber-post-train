@@ -36,8 +36,7 @@
   },
   "cluster": {
     "target": "prod",
-    "priority": "c0",
-    "priority_reason": "Urgent cyber post-training reward canary authorized by Chris to maximize time-to-result.",
+    "priority": "c1",
     "resources": {
       "cpu_request": "32",
       "cpu_limit": "32",
