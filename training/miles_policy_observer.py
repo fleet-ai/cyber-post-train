@@ -827,9 +827,11 @@ def _submission_journal(path: Path, request: Mapping[str, Any]) -> tuple[list[di
     ):
         raise ValueError("observer Jobs API submission journal is incomplete or mismatched")
     _uuid(response.get("job_id"), "observer API run ID")
-    _time(response.get("created_at"), "observer submission time")
-    if response.get("finished_at") is not None:
-        _time(response["finished_at"], "observer recovered terminal time")
+    created_at = _time(response.get("created_at"), "observer submission time")
+    if response.get("finished_at") is not None and _time(
+        response["finished_at"], "observer recovered terminal time"
+    ) < created_at:
+        raise ValueError("observer recovered terminal time predates submission")
     return rows, hashlib.sha256(payload).hexdigest()
 
 

@@ -30,6 +30,7 @@ CONTROLLER_SCHEMA = "cyber_miles_controller_terminal_observation_v1"
 RELEASE_SCHEMA = "cyber_miles_external_release_v1"
 NAMESPACE = "fleet-train-jobs"
 WORLD_SIZE = 8
+DEV_KUBE_CONTEXT = "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb"
 
 _UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}")
 

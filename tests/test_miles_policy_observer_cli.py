@@ -232,6 +232,90 @@ def test_submit_opens_watch_before_exactly_one_post(monkeypatch, tmp_path):
     assert calls == ["intent", "watch", "post", "bind", "record", "close"]
 
 
+def test_lost_post_response_recovers_exact_run_without_a_second_post(tmp_path):
+    request = {
+        "name": "miles-observer",
+        "run_dir": "/mnt/sfs/jobs/chris-q38-miles-reload-dev3",
+    }
+    journal = tmp_path / "submission.jsonl"
+    run_id = "11111111-1111-4111-8111-111111111111"
+    run_name = request["name"] + "-" + run_id[:8]
+    calls: list[object] = []
+
+    class LostResponseJobs:
+        def submit_once(self, observed, path):
+            calls.append("post")
+            path.write_text(
+                json.dumps(
+                    {
+                        "state": "POST_INTENT_DO_NOT_RETRY",
+                        "api_base_url": cli.API_URLS["dev"],
+                        "request_sha256": cli.digest(observed),
+                    }
+                )
+                + "\n"
+            )
+            raise ValueError("response lost after server accepted create")
+
+        def all_runs(self):
+            calls.append("list")
+            return [{"name": run_name, "run_dir": request["run_dir"]}]
+
+        def status(self, name):
+            calls.append(("status", name))
+            return {
+                "name": run_name,
+                "job_id": run_id,
+                "run_dir": request["run_dir"],
+                "status": "RUNNING",
+                "created_at": "2026-09-12T12:00:00Z",
+                "finished_at": None,
+            }
+
+    recovered = cli.submit_once_or_reconcile(LostResponseJobs(), request, journal)
+
+    rows = [json.loads(line) for line in journal.read_text().splitlines()]
+    assert calls == ["post", "list", ("status", run_name)]
+    assert recovered == {key: value for key, value in rows[1].items() if key != "state"}
+    assert [row["state"] for row in rows] == [
+        "POST_INTENT_DO_NOT_RETRY",
+        "POST_RESPONSE",
+    ]
+
+
+def test_lost_post_response_rejects_name_match_with_different_output(tmp_path):
+    request = {"name": "miles-observer", "run_dir": "/mnt/sfs/jobs/exact"}
+    journal = tmp_path / "submission.jsonl"
+    journal.write_text(
+        json.dumps(
+            {
+                "state": "POST_INTENT_DO_NOT_RETRY",
+                "api_base_url": cli.API_URLS["dev"],
+                "request_sha256": cli.digest(request),
+            }
+        )
+        + "\n"
+    )
+
+    class WrongOutputJobs:
+        def all_runs(self):
+            return [
+                {
+                    "name": "miles-observer-11111111",
+                    "run_dir": "/mnt/sfs/jobs/different",
+                }
+            ]
+
+    with pytest.raises(TimeoutError, match="not visible"):
+        cli._recover_created_run(
+            WrongOutputJobs(),
+            request,
+            journal,
+            timeout_seconds=0,
+        )
+    assert len(journal.read_text().splitlines()) == 1
+
+
 def test_preflight_finishes_source_checks_before_creating_outputs(monkeypatch, tmp_path):
     plan_path, request_path = tmp_path / "plan.json", tmp_path / "request.json"
     plan_path.write_text(json.dumps({"plan": True}))

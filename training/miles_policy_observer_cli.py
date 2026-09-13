@@ -6,13 +6,16 @@ import argparse
 import json
 import os
 import queue
+import re
 import subprocess
 import threading
 import time
+import uuid
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from cyber_post_train.jobs import API_URLS, Jobs
+from cyber_post_train.jobs import API_URLS, Jobs, digest
 
 from . import miles_event_evidence as events
 from . import miles_policy_observer as observer
@@ -24,6 +27,109 @@ _RESOURCES = (
     "rayclusters.ray.io",
     "pods",
 )
+
+
+def _append_recovered_response(journal: Path, response: dict[str, Any]) -> None:
+    flags = os.O_WRONLY | os.O_APPEND
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    fd = os.open(journal, flags)
+    with os.fdopen(fd, "w") as stream:
+        stream.write(json.dumps({"state": "POST_RESPONSE", **response}) + "\n")
+        stream.flush()
+        os.fsync(stream.fileno())
+
+
+def _recover_created_run(
+    jobs: Jobs,
+    request: dict[str, Any],
+    journal: Path,
+    *,
+    timeout_seconds: float = 60.0,
+) -> dict[str, Any]:
+    """Recover one lost create response by reads only; never issue another POST."""
+
+    try:
+        rows = [json.loads(line) for line in journal.read_bytes().splitlines()]
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ValueError("ambiguous Jobs API POST has no readable intent journal") from error
+    intent = rows[0] if len(rows) == 1 and isinstance(rows[0], dict) else None
+    if (
+        intent is None
+        or intent.get("state") != "POST_INTENT_DO_NOT_RETRY"
+        or intent.get("api_base_url") != API_URLS["dev"]
+        or intent.get("request_sha256") != digest(request)
+    ):
+        raise ValueError("ambiguous Jobs API POST has no exact dev intent to reconcile")
+    if not isinstance(timeout_seconds, (int, float)) or isinstance(timeout_seconds, bool):
+        raise ValueError("Jobs API recovery timeout must be numeric")
+    if timeout_seconds < 0 or timeout_seconds > 300:
+        raise ValueError("Jobs API recovery timeout must be between zero and five minutes")
+    expected_name = re.compile(re.escape(request["name"]) + r"-[a-f0-9]{8}")
+    deadline = time.monotonic() + timeout_seconds
+    while True:
+        candidates = [
+            row
+            for row in jobs.all_runs()
+            if isinstance(row, dict)
+            and row.get("run_dir") == request["run_dir"]
+            and expected_name.fullmatch(str(row.get("name", ""))) is not None
+        ]
+        if len(candidates) > 1:
+            raise ValueError("ambiguous Jobs API POST matches multiple name/output records")
+        if candidates:
+            candidate_name = str(candidates[0]["name"])
+            observed = jobs.status(candidate_name)
+            run_id = str(observed.get("job_id", ""))
+            try:
+                parsed_id = uuid.UUID(run_id)
+            except ValueError as error:
+                raise ValueError("recovered Jobs API run ID is not a UUID") from error
+            recovered_name = request["name"] + "-" + run_id[:8]
+            status = observed.get("status")
+            created_at, finished_at = observed.get("created_at"), observed.get("finished_at")
+            try:
+                created = datetime.fromisoformat(str(created_at).replace("Z", "+00:00"))
+                finished = (
+                    None
+                    if finished_at is None
+                    else datetime.fromisoformat(str(finished_at).replace("Z", "+00:00"))
+                )
+            except ValueError as error:
+                raise ValueError("recovered Jobs API timestamps are invalid") from error
+            if (
+                set(observed)
+                != {"name", "job_id", "run_dir", "status", "created_at", "finished_at"}
+                or str(parsed_id) != run_id
+                or observed.get("name") != candidate_name
+                or observed.get("name") != recovered_name
+                or observed.get("run_dir") != request["run_dir"]
+                or expected_name.fullmatch(recovered_name) is None
+                or created.tzinfo is None
+                or (finished is not None and finished.tzinfo is None)
+                or status
+                not in {"queued", "PENDING", "QUEUED", "RUNNING", "SUCCEEDED", "FAILED", "STOPPED"}
+                or (status in {"queued", "PENDING", "QUEUED", "RUNNING"} and finished is not None)
+                or (status in {"SUCCEEDED", "FAILED", "STOPPED"} and finished is None)
+                or (finished is not None and finished < created)
+            ):
+                raise ValueError("recovered Jobs API run differs from exact name/output")
+            _append_recovered_response(journal, observed)
+            return observed
+        if time.monotonic() >= deadline:
+            raise TimeoutError("ambiguous Jobs API POST was not visible during read-only recovery")
+        time.sleep(0.5)
+
+
+def submit_once_or_reconcile(
+    jobs: Jobs, request: dict[str, Any], journal: Path
+) -> dict[str, Any]:
+    try:
+        return jobs.submit_once(request, journal)
+    except Exception:
+        if not journal.is_file() or journal.is_symlink():
+            raise
+        return _recover_created_run(jobs, request, journal)
 
 
 def _json(path: Path) -> dict[str, Any]:
@@ -270,7 +376,7 @@ def submit(args: argparse.Namespace) -> None:
     try:
         watcher.start()
         with Jobs(token, base_url=API_URLS["dev"]) as jobs:
-            jobs.submit_once(request, args.journal)
+            submit_once_or_reconcile(jobs, request, args.journal)
         submission = observer.compile_submission_binding(
             plan_path=args.plan,
             request_path=args.request,
