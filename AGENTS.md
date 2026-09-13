@@ -79,7 +79,9 @@ Mutable names, tags, catalog `current` pointers, a Ready Pod, or a dashboard lab
 - Use meaningful ownership names and normal queues. Request supported pod priority
   (`c1` for authorized high-priority training, `c2` for backfill); the current API
   derives queue priority and rejects explicit queue-priority overrides. Recheck
-  live policy and effective Workload priority, not just labels. Never bypass
+  live policy and effective Workload priority, not just labels. `c1`/derived `q1`
+  (effective priority 10,000) is the project ceiling: never submit `c0`/`q0`.
+  Never bypass
   admission, unsuspend manually, cancel, directly preempt, or change peer workloads.
 - Designate one live rollout creator across humans and automations. Queued and
   initializing successors occupy slots; wait for UID-bound readiness and a matching

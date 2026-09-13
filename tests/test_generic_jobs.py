@@ -244,30 +244,16 @@ def test_resource_preview(nodes, priority):
     assert len(result["manifest_sha256"]) == 64
 
 
-def test_c0_requires_and_preserves_a_reason():
-    reason = "Urgent cyber post-training experiment authorized by Chris."
-    request = {**config(), "priority_class": "c0", "priority_reason": reason}
-    result = validate_preview(request, preview(manifest(request)))
-    assert result["gpus"] == 8
-    changed = manifest(request)
-    changed["metadata"]["annotations"]["fleet.ai/priority-reason"] += " changed"
-    with pytest.raises(JobsError, match="priority reason drift"):
-        validate_preview(request, preview(changed))
-
-
 @pytest.mark.parametrize(
     "priority,reason",
     [
         ("c0", None),
-        ("c0", "too short"),
-        ("c0", "urgent\ncyber post-training experiment"),
-        ("c0", "urgent  cyber post-training experiment"),
-        ("c0", "x" * 501),
+        ("c0", "Urgent cyber post-training experiment authorized by Chris."),
         ("c1", "unneeded reason"),
         ("c2", "unneeded reason"),
     ],
 )
-def test_priority_reason_is_exact_and_level_zero_only(priority, reason):
+def test_c0_and_priority_reasons_are_prohibited(priority, reason):
     value = {**config(), "priority_class": priority}
     if reason is not None:
         value["priority_reason"] = reason
@@ -755,6 +741,26 @@ def test_incomplete_history_blocks_submission(payload, tmp_path):
     with client(lambda req: httpx.Response(200, json=payload)) as api, pytest.raises(JobsError):
         api.submit_once(config(), tmp_path / "intent.jsonl")
     assert not (tmp_path / "intent.jsonl").exists()
+
+
+def test_c0_is_rejected_before_any_network_or_journal_write(tmp_path):
+    request = {
+        **config(),
+        "priority_class": "c0",
+        "priority_reason": "This reason is valid syntax but exceeds project authority.",
+    }
+    called = False
+
+    def handler(_request):
+        nonlocal called
+        called = True
+        raise AssertionError("c0 must fail before a network request")
+
+    journal = tmp_path / "intent.jsonl"
+    with client(handler) as api, pytest.raises(JobsError, match="c0/q0 is prohibited"):
+        api.submit_once(request, journal)
+    assert called is False
+    assert not journal.exists()
 
 
 @pytest.mark.parametrize(

@@ -154,18 +154,10 @@ def validate_request(config: dict) -> None:
         if type(config.get(key)) is not int or not 1 <= config[key] <= upper:
             raise JobsError(f"{key} must be a positive integer no greater than {upper}")
     priority = config.get("priority_class")
-    if priority not in {"c0", "c1", "c2"}:
-        raise JobsError("priority_class must be c0, c1, or c2")
-    reason = config.get("priority_reason")
-    if priority == "c0":
-        if (
-            not isinstance(reason, str)
-            or not 10 <= len(reason) <= 500
-            or reason != " ".join(reason.split())
-        ):
-            raise JobsError("c0 requires a single-line priority_reason of 10 to 500 characters")
-    elif reason is not None:
-        raise JobsError("priority_reason is reserved for c0 requests")
+    if priority not in {"c1", "c2"}:
+        raise JobsError("priority_class must be c1 or c2; c0/q0 is prohibited")
+    if config.get("priority_reason") is not None:
+        raise JobsError("priority_reason is prohibited because c0/q0 is prohibited")
     if config.get("queue_priority_class") is not None:
         raise JobsError("queue priority is derived by the platform; omit queue_priority_class")
     if config.get("requeueIfPreempted") is not False:
