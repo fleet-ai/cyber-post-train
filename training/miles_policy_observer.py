@@ -1338,6 +1338,8 @@ def _policy_body(
     release_path: Path,
 ) -> dict[str, Any]:
     """Reopen one complete observer run and derive its public policy proof."""
+    from .miles_acceptance import _time
+
     _validate_plan(plan, check_files=True, require_current_runtime=False)
     submission, submission_file_sha256 = _read(submission_path, SUBMISSION_SCHEMA)
     validate_submission_binding(submission, plan, check_files=True)
@@ -1358,7 +1360,8 @@ def _policy_body(
     if (
         Path(result_path) != Path(plan["output_root"]) / "POLICY_OBSERVER_RESULT.json"
         or Path(submission["observer_plan_path"]) == Path(plan["source_plan_path"])
-        or controller["observed_at"] < result["completed_at"]
+        or _time(controller["observed_at"], "policy observer controller")
+        < _time(result["completed_at"], "policy observer completion")
     ):
         raise ValueError("policy observer result or execution identity is not independent")
     from . import miles_acceptance
