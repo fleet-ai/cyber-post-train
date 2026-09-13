@@ -1,0 +1,72 @@
+{
+  "schema": "cyber_qwen_direct_self_trace_collection_request_v3",
+  "status": "blocked_external_bindings",
+  "predecessor": {
+    "path": "qwen38-self-trace-collection-request-v2.json",
+    "file_sha256": "sha256:7e9f96bd8c76df25bf78545cd941233282e8e5dfe2da2e386df69ec4b4bc5a1b",
+    "document_sha256": "sha256:2c3040c28f6fc474908841e3582fb47cb9a69a5ce6993f2f9bc33ad702c96c22"
+  },
+  "runtime": {
+    "collector_qualification": null,
+    "direct_route_certificate": null,
+    "synthetic_parity_receipt": {
+      "path": "../../docs/evidence/qwen38-study/2026-09-13-self-trace-recorder-dense-parity-v3.json",
+      "file_sha256": "sha256:b3a7a6815df678c68500bd2674cb34861437838e1397f8db4e8ff378d266b1ba",
+      "document_sha256": "sha256:9ccf6dcb6b38bc44dd7192b5cf6ba9545a5cc6ba3664042c8c5d236f9702d5c1"
+    }
+  },
+  "source_closure": {
+    "dense.py": {
+      "path": "../../training/dense.py",
+      "sha256": "sha256:712038f1abf4f461cf471afc50f7fbbfe90c9d2d7b9e0be1a81583378c933012"
+    },
+    "io.py": {
+      "path": "../../training/io.py",
+      "sha256": "sha256:7a0b734a4ab7fb8b702430094c58c72f19ac8fc7cc5e056eb8410267e6bfdfe3"
+    },
+    "qwen_tools.py": {
+      "path": "../../training/qwen_tools.py",
+      "sha256": "sha256:00e0c3f322d5416c0697d2bb4504766bfa32f1436b3b5122f6dd7326c7698fd9"
+    },
+    "rl_data.py": {
+      "path": "../../training/rl_data.py",
+      "sha256": "sha256:f0c327d2ecc464610a5fd86e11b112870d28feb43d9155d7507d8fedbd87632b"
+    },
+    "rl_episode.py": {
+      "path": "../../training/rl_episode.py",
+      "sha256": "sha256:bedd88e2ca45c74c2d4904f3767dce6aeccc358630c6f1f221fcc6ddd90c1d2a"
+    },
+    "self_trace_collection.py": {
+      "path": "../../training/self_trace_collection.py",
+      "sha256": "sha256:18d1d42a8524c1b34afdaa8128751e314058c37bec86e9948e6f9433d893c580"
+    },
+    "self_trace_corpus.py": {
+      "path": "../../training/self_trace_corpus.py",
+      "sha256": "sha256:6fd10fdf43e9f162035f0402008159715759fa575b03b118a7f8a284b3408c5f"
+    },
+    "skyrl_episode.py": {
+      "path": "../../training/skyrl_episode.py",
+      "sha256": "sha256:fb3a25b38f778b6f12932c271d2e6813f256ba213d179e967e6809b2653b3815"
+    },
+    "opencode_self_hosted.py": {
+      "path": "../../evals/fleet/opencode_self_hosted.py",
+      "sha256": "sha256:b28e267d02024ac979f4a0f39ee778e68331da490f5084c3e5a34136eff04707"
+    },
+    "self_trace_collection_v2.py": {
+      "path": "../../training/self_trace_collection_v2.py",
+      "sha256": "sha256:da6bae471f23063e0120ec16bfeacbde9c15794e62b800908de7063d5c8db53d"
+    },
+    "self_trace_collection_v3.py": {
+      "path": "../../training/self_trace_collection_v3.py",
+      "sha256": "sha256:00561d5ede5c8f51f8cf16ce893523f827c717850f82baa6abe9b3c0aea51a46"
+    }
+  },
+  "execution": {
+    "kind": "offline_qualification_not_a_launcher",
+    "launchable": false,
+    "cluster_or_api_mutations_performed": false,
+    "job_submission_performed": false,
+    "credentials_required": false
+  },
+  "sha256": "sha256:4d169f4f62ee1759e9288453e26fb2ad7720d9d30a2e434cd1045caeef2d777d"
+}

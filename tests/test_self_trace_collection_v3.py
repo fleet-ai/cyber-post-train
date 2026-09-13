@@ -1,4 +1,4 @@
-"""Focused synthetic checks for the user-only self-trace v2 gate."""
+"""Focused synthetic checks for the current-source user-only V3 gate."""
 
 from __future__ import annotations
 
@@ -15,11 +15,13 @@ from evals.fleet import opencode_self_hosted as fleet
 from training import dense, rl_data, skyrl_episode
 from training import self_trace_collection as v1
 from training import self_trace_collection_v2 as v2
+from training import self_trace_collection_v3 as v3
 from training.io import digest_json, file_sha256
 
 ROOT = Path(__file__).parents[1]
-REQUEST = ROOT / "configs/qualification/qwen38-self-trace-collection-request-v2.json"
-PARITY = ROOT / "docs/evidence/qwen38-study/2026-09-12-self-trace-recorder-dense-parity-v2.json"
+REQUEST = ROOT / "configs/qualification/qwen38-self-trace-collection-request-v3.json"
+V2_REQUEST = ROOT / "configs/qualification/qwen38-self-trace-collection-request-v2.json"
+PARITY = ROOT / "docs/evidence/qwen38-study/2026-09-13-self-trace-recorder-dense-parity-v3.json"
 CATALOG = ROOT / "configs/data/qwen38-rl-filtered-canary-tool-catalog-v1.json"
 PRIVATE = "SYNTHETIC_PRIVATE_USER_REQUEST_MUST_NOT_ESCAPE"
 
@@ -42,10 +44,19 @@ def bound(path: Path, value: dict) -> dict:
 
 
 def source_closure() -> dict[str, str]:
+    return {name: file_sha256(path) for name, path in v3.SOURCE_CLOSURE_PATHS.items()}
+
+
+def v2_source_closure() -> dict[str, str]:
     return {name: file_sha256(path) for name, path in v2.SOURCE_CLOSURE_PATHS.items()}
 
 
-def collector_receipt(request: dict) -> dict:
+def frozen_model() -> dict:
+    return json.loads(V2_REQUEST.read_text(encoding="utf-8"))["model"]
+
+
+def collector_receipt() -> dict:
+    model = frozen_model()
     image = "registry.example/fleet/skyrl-direct@sha256:" + "a" * 64
     receipt = {
         "schema": v2.COLLECTOR_QUALIFICATION_SCHEMA,
@@ -61,8 +72,8 @@ def collector_receipt(request: dict) -> dict:
             "source_closure_sha256": digest_json(source_closure()),
             "backend": "skyrl_direct",
             "native_helper_sha256": dense.NATIVE_HELPER_SHA,
-            "model_repo": request["model"]["repo"],
-            "model_revision": request["model"]["revision"],
+            "model_repo": model["repo"],
+            "model_revision": model["revision"],
             "runtime_chat_template_sha256": v2.CHAT_TEMPLATE_SHA256,
             "required_task_tools": ["bash", "submit_report"],
             "required_task_tool_catalog_sha256": v2.TOOL_CATALOG_SHA256,
@@ -91,7 +102,8 @@ def collector_receipt(request: dict) -> dict:
     return reseal(receipt)
 
 
-def route_receipt(request: dict, collector: dict) -> dict:
+def route_receipt(collector: dict) -> dict:
+    model = frozen_model()
     receipt = {
         "schema": v2.ROUTE_CERTIFICATE_SCHEMA,
         "status": "qualified",
@@ -105,9 +117,9 @@ def route_receipt(request: dict, collector: dict) -> dict:
             "ready_replicas": 1,
         },
         "model_artifact": {
-            "repo": request["model"]["repo"],
-            "revision": request["model"]["revision"],
-            "lock_file_sha256": request["model"]["lock_file_sha256"],
+            "repo": model["repo"],
+            "revision": model["revision"],
+            "lock_file_sha256": model["lock_file_sha256"],
             "weights_manifest_sha256": v2.WEIGHTS_MANIFEST_SHA256,
             "tokenizer_manifest_sha256": v2.TOKENIZER_MANIFEST_SHA256,
             "chat_template_sha256": v2.CHAT_TEMPLATE_SHA256,
@@ -143,10 +155,10 @@ def route_receipt(request: dict, collector: dict) -> dict:
 
 def qualified_request(tmp_path: Path) -> dict:
     request = read_request()
-    collector = collector_receipt(request)
+    collector = collector_receipt()
     collector_path = tmp_path / "collector.json"
     write(collector_path, collector)
-    route = route_receipt(request, collector)
+    route = route_receipt(collector)
     route_path = tmp_path / "route.json"
     write(route_path, route)
     request["runtime"]["collector_qualification"] = bound(collector_path, collector)
@@ -155,32 +167,38 @@ def qualified_request(tmp_path: Path) -> dict:
     return reseal(request)
 
 
-def test_checked_v2_request_preserves_v1_and_resolves_only_prompt_decision(capsys):
+def test_v3_preserves_v2_and_rebinds_only_current_source(capsys):
     request = read_request()
-    validated = v2.validate_request(request, relative_to=REQUEST.parent)
+    predecessor = json.loads(V2_REQUEST.read_text(encoding="utf-8"))
+    assert predecessor["sha256"] == v3.PREDECESSOR_SHA256
+    assert file_sha256(V2_REQUEST) == v3.PREDECESSOR_FILE_SHA256
+    with pytest.raises(v2.CollectionError, match="frozen v1"):
+        v2.validate_request(predecessor, relative_to=V2_REQUEST.parent)
+
+    validated = v3.validate_request(request, relative_to=REQUEST.parent)
     assert request["sha256"] == digest_json(
         {key: item for key, item in request.items() if key != "sha256"}
     )
     assert validated["base_request"]["schema"] == v1.REQUEST_SCHEMA
-    assert validated["base_request"]["sha256"] == request["base_request"]["document_sha256"]
+    assert validated["base_request"]["sha256"] == predecessor["base_request"]["document_sha256"]
     assert validated["blockers"] == [
         "missing_immutable_collector_qualification",
         "missing_exact_direct_route_certificate",
     ]
     assert len(validated["tasks"]) == 74
     assert len(validated["roster"]) == 296
-    assert request["interface"]["prompt_policy"] == v2.PROMPT_POLICY
-    assert request["interface"]["prompt_policy"]["roles"] == ["user"]
-    assert request["interface"]["prompt_policy"]["explicit_system_message"] == "absent"
-    assert request["study"]["document_sha256"] == validated["study"]["sha256"]
-    with pytest.raises(v2.CollectionError, match="not ready"):
-        v2.validate_request(request, relative_to=REQUEST.parent, require_ready=True)
+    assert validated["predecessor"] == predecessor
+    assert predecessor["interface"]["prompt_policy"] == v2.PROMPT_POLICY
+    assert request["execution"]["launchable"] is False
+    with pytest.raises(v3.CollectionError, match="not ready"):
+        v3.validate_request(request, relative_to=REQUEST.parent, require_ready=True)
 
-    assert v2.main(["--request", str(REQUEST)]) == 0
+    assert v3.main(["--request", str(REQUEST)]) == 0
     output = json.loads(capsys.readouterr().out)
     assert output["blockers"] == validated["blockers"]
     assert output["cluster_or_api_mutations_performed"] is False
     assert output["job_submission_performed"] is False
+    assert output["launchable"] is False
 
 
 @pytest.mark.parametrize(
@@ -194,8 +212,8 @@ def test_runtime_requires_self_digesting_cross_bound_artifacts(tmp_path, defect)
             "registry.example/collector@sha256:" + "a" * 64
         )
         reseal(request)
-        with pytest.raises(v2.CollectionError, match="artifact binding"):
-            v2.validate_request(request, relative_to=REQUEST.parent)
+        with pytest.raises(v3.CollectionError, match="artifact binding"):
+            v3.validate_request(request, relative_to=REQUEST.parent)
         return
 
     request = qualified_request(tmp_path)
@@ -215,23 +233,81 @@ def test_runtime_requires_self_digesting_cross_bound_artifacts(tmp_path, defect)
     key = "collector_qualification" if defect == "collector_policy" else "direct_route_certificate"
     request["runtime"][key] = bound(path, artifact)
     reseal(request)
-    with pytest.raises(v2.CollectionError, match="qualification|certificate"):
-        v2.validate_request(request, relative_to=REQUEST.parent)
+    with pytest.raises(v3.CollectionError, match="qualification|certificate"):
+        v3.validate_request(request, relative_to=REQUEST.parent)
 
 
 def test_synthetic_artifacts_close_only_the_two_external_runtime_slots(tmp_path):
     request = qualified_request(tmp_path)
-    validated = v2.validate_request(request, relative_to=REQUEST.parent, require_ready=True)
+    validated = v3.validate_request(request, relative_to=REQUEST.parent, require_ready=True)
     assert validated["blockers"] == []
     assert validated["collector_image"].endswith("@sha256:" + "a" * 64)
-    expectation = v2.source_expectation(validated, validated["roster"][0]["attempt_id"])
-    assert expectation["interface"] == v2.PARITY_INTERFACE
-    assert expectation["required_private_digests"] == v2.RENDERED_REQUEST_CONTRACT
-    assert expectation["runtime_artifacts"] == {
-        "collector_qualification_sha256": validated["collector_qualification"]["sha256"],
-        "collector_image": validated["collector_image"],
-        "direct_route_certificate_sha256": validated["route_certificate"]["sha256"],
+    assert request["execution"]["launchable"] is False
+    assert not hasattr(v3, "launch")
+
+
+def test_v2_source_projection_and_attempt_preparation_remain_covered(monkeypatch, tmp_path):
+    request = qualified_request(tmp_path)
+    current = v3.validate_request(request, relative_to=REQUEST.parent, require_ready=True)
+    validated = {
+        **current,
+        "request": current["predecessor"],
+        "source_closure": v2_source_closure(),
     }
+    attempt = validated["roster"][0]
+    expectation = v2.source_expectation(validated, attempt["attempt_id"])
+    v2._validate_expectation(expectation)
+    assert expectation["interface"] == v2.PARITY_INTERFACE
+    assert expectation["runtime_artifacts"] == {
+        "collector_qualification_sha256": current["collector_qualification"]["sha256"],
+        "collector_image": current["collector_image"],
+        "direct_route_certificate_sha256": current["route_certificate"]["sha256"],
+    }
+
+    row = validated["inventory"][(attempt["task_key"], attempt["task_version_id"])]
+    prompt_sha = fleet.sha256(PRIVATE.encode())
+    task_binding = {
+        "key": attempt["task_key"],
+        "version_id": attempt["task_version_id"],
+        "prompt_sha256": prompt_sha,
+        "env_variables_sha256": "sha256:" + "1" * 64,
+        "output_json_schema_sha256": "sha256:" + "2" * 64,
+        "cyber_contract": rl_data.AUTHORITY["required_cyber_contract"],
+    }
+    environment = {
+        **{key: v1._normalized_sha(value) for key, value in row["environment"].items()},
+        "ttl_seconds": validated["base_request"]["limits"]["ttl_seconds"],
+    }
+    verifier = {
+        **{key: v1._normalized_sha(value) for key, value in row["verifier"].items()},
+        "function_name": "verify",
+    }
+    monkeypatch.setattr(
+        v2.fleet,
+        "bind_task",
+        lambda task, selected: (task_binding, environment, verifier),
+    )
+    monkeypatch.setattr(
+        v2,
+        "prepare_private_request",
+        lambda **kwargs: {
+            "tools": [],
+            "rendered": "synthetic",
+            "tokens": [1],
+            "rendered_sha256": fleet.sha256(b"synthetic"),
+            "tokens_sha256": digest_json([1]),
+        },
+    )
+    prepared = v2.prepare_attempt(
+        validated,
+        attempt["attempt_id"],
+        task={"prompt": PRIVATE},
+        tokenizer=NS(chat_template="unused"),
+    )
+    assert prepared["request_messages"] is None
+    assert prepared["config"]["task"]["prompt_sha256"] == prompt_sha
+    assert prepared["config"]["initial_prompt_sha256"] == fleet.sha256(b"synthetic")
+    assert prepared["config"]["initial_prompt_tokens_sha256"] == digest_json([1])
 
 
 class Tokenizer:
@@ -385,7 +461,7 @@ async def test_user_only_native_recorder_matches_checked_dense_parity(monkeypatc
     sample = recorder.finalize(1.0, {"synthetic": True}, elapsed)[0]
     tokens = [1, 2, 3, 20, 9, 10, 11, 12, 30, 9, 10, 11, 12]
     mask = [0, 0, 0, 1, 1, 0, 0, 0, 1, 1, 0, 0, 0]
-    receipt = v2.recorder_dense_parity(
+    receipt = v3.recorder_dense_parity(
         sample,
         {"messages": messages},
         dense_reference_tokens=tokens,
@@ -403,56 +479,6 @@ async def test_user_only_native_recorder_matches_checked_dense_parity(monkeypatc
     assert receipt == json.loads(PARITY.read_text())
     assert PRIVATE not in json.dumps(receipt)
     assert receipt["interface"]["explicit_system_message"] == "absent"
-
-
-def test_prepare_attempt_signals_existing_user_only_collector_default(monkeypatch, tmp_path):
-    request = qualified_request(tmp_path)
-    validated = v2.validate_request(request, relative_to=REQUEST.parent, require_ready=True)
-    attempt = validated["roster"][0]
-    row = validated["inventory"][(attempt["task_key"], attempt["task_version_id"])]
-    prompt_sha = fleet.sha256(PRIVATE.encode())
-    task_binding = {
-        "key": attempt["task_key"],
-        "version_id": attempt["task_version_id"],
-        "prompt_sha256": prompt_sha,
-        "env_variables_sha256": "sha256:" + "1" * 64,
-        "output_json_schema_sha256": "sha256:" + "2" * 64,
-        "cyber_contract": rl_data.AUTHORITY["required_cyber_contract"],
-    }
-    environment = {
-        **{key: v1._normalized_sha(value) for key, value in row["environment"].items()},
-        "ttl_seconds": validated["base_request"]["limits"]["ttl_seconds"],
-    }
-    verifier = {
-        **{key: v1._normalized_sha(value) for key, value in row["verifier"].items()},
-        "function_name": "verify",
-    }
-    monkeypatch.setattr(
-        v2.fleet,
-        "bind_task",
-        lambda task, selected: (task_binding, environment, verifier),
-    )
-    monkeypatch.setattr(
-        v2,
-        "prepare_private_request",
-        lambda **kwargs: {
-            "tools": [],
-            "rendered": "synthetic",
-            "tokens": [1],
-            "rendered_sha256": fleet.sha256(b"synthetic"),
-            "tokens_sha256": digest_json([1]),
-        },
-    )
-    prepared = v2.prepare_attempt(
-        validated,
-        attempt["attempt_id"],
-        task={"prompt": PRIVATE},
-        tokenizer=NS(chat_template="unused"),
-    )
-    assert prepared["request_messages"] is None
-    assert prepared["config"]["task"]["prompt_sha256"] == prompt_sha
-    assert prepared["config"]["initial_prompt_sha256"] == fleet.sha256(b"synthetic")
-    assert prepared["config"]["initial_prompt_tokens_sha256"] == digest_json([1])
 
 
 def test_private_reviewer_accepts_user_only_and_emits_only_bound_digests(monkeypatch, tmp_path):
@@ -477,7 +503,7 @@ def test_private_reviewer_accepts_user_only_and_emits_only_bound_digests(monkeyp
         "runtime_binding": old["runtime_binding"],
         "limits": old["limits"],
         "sampling": old["sampling"],
-        "source_closure": source_closure(),
+        "source_closure": v2_source_closure(),
         "qualification": old["qualification"],
         "required_private_digests": copy.deepcopy(v2.RENDERED_REQUEST_CONTRACT),
     }

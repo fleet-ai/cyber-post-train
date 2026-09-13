@@ -1,12 +1,12 @@
 # Qwen3.8 self-trace SFT gate
 
-Status: **v2 is blocked before data creation on two external artifact
-bindings**. The conservative direct-interface prompt policy is resolved; the
-immutable direct collector qualification and collection-time base-route
-certificate do not yet exist. No self-trace collection or SFT job is ready to
-preview or submit, and this preparation performed no cluster, API, W&B, or
-registry mutation. The sealed v1 request remains unchanged and historically
-blocked on its original three fields.
+Status: **v3 is blocked before data creation on two external artifact
+bindings**. The conservative direct-interface prompt policy and current local
+recorder-to-dense closure are resolved; the immutable direct collector
+qualification and collection-time base-route certificate do not yet exist. No
+self-trace collection or SFT job is ready to preview or submit, and this
+preparation performed no cluster, API, task, model, scoring, W&B, or registry
+operation. The sealed v1 and v2 requests remain unchanged historical records.
 
 ## Compatibility decision
 
@@ -74,6 +74,34 @@ Consequently, no true human scientific choice remains for the baseline
 self-trace arm. A future explicit-system-message arm is possible, but it must be
 a separately named treatment; the GPT-derived candidate is not silently reused.
 
+## Current-source v3 successor
+
+The immutable
+[`qwen38-self-trace-collection-request-v3.json`](../configs/qualification/qwen38-self-trace-collection-request-v3.json)
+(file SHA-256
+`sha256:32f4163fe9f86b05eb9ca80e14635ff9b1ed1902d87a4530aa5d75ccbe29a8d6`,
+self-digest
+`sha256:4d169f4f62ee1759e9288453e26fb2ad7720d9d30a2e434cd1045caeef2d777d`)
+is the current offline gate. It binds the exact v2 predecessor bytes and
+self-digest, so the model, user-only prompt treatment, 74-task training roster,
+four attempts per task, limits, sampling, and 296-attempt roster cannot drift.
+It does not replay v2's stale source check. Instead it binds the current
+eleven-file source closure, including `training/rl_episode.py` after its sealed
+create/score-intent change and the new
+[`training/self_trace_collection_v3.py`](../training/self_trace_collection_v3.py)
+validator. The closure digest is
+`sha256:6f25bb2f2cca1b1d3d83bf928cb593089f40d091c9b025debc670b6e7def91d0`.
+
+The request has two explicit null slots: `collector_qualification` and
+`direct_route_certificate`. The public
+`validate_collector_qualification` and `validate_route_certificate` functions
+enforce the existing self-digesting, cross-bound schemas. A synthetic test may
+fill temporary copies to test those validators, but no real receipt is claimed
+or manufactured here. The checked-in request remains
+`blocked_external_bindings`, sets `execution.launchable=false`, and contains no
+launch function. Even after both receipts exist, they belong in a new immutable
+successor; receipt validation alone is not collection authorization.
+
 ## Offline recorder-to-dense parity
 
 The deterministic synthetic-only recorder-to-dense gate is closed by
@@ -106,6 +134,17 @@ and its self-digest is
 It changes the required conversation anchor from `system,user` to `user` and
 binds the v2 prompt-policy, template-invocation, and rendered-request contract
 digests. It remains synthetic and makes no collector-image or live-route claim.
+
+The current-source v3 fixture is
+[`2026-09-13-self-trace-recorder-dense-parity-v3.json`](evidence/qwen38-study/2026-09-13-self-trace-recorder-dense-parity-v3.json).
+Its file SHA-256 is
+`sha256:b3a7a6815df678c68500bd2674cb34861437838e1397f8db4e8ff378d266b1ba`
+and its self-digest is
+`sha256:9ccf6dcb6b38bc44dd7192b5cf6ba9545a5cc6ba3664042c8c5d236f9702d5c1`.
+It reruns the same two-turn synthetic recorder-to-dense proof against the v3
+source closure. It retains the exact token-ID, loss-mask, masked-observation,
+and assistant-target checks; it still loads no target model or private task
+material and makes no live request.
 
 The three external blockers below describe the frozen v1 request:
 
@@ -143,13 +182,14 @@ request fields yet:
   Qwen3.8 self-recollection treatment. Selecting it may be reasonable, but it
   is a scientific treatment decision, not a metadata recovery operation.
 
-V2 supersedes only that unresolved prompt treatment. It does not relabel either
-runtime component as qualified. V2 requires full immutable artifact references
+V2 superseded only that unresolved prompt treatment. V3 rebinds current source;
+neither version relabels a runtime component as qualified. V3 requires full
+immutable artifact references
 (`path`, file SHA-256, and self-digest), not a bare image regex match or a bare
 route-certificate hash:
 
 - The **collector qualification artifact** must bind a pullable linux/amd64
-  `repository@sha256` and matching runtime image ID to the exact v2 source
+  `repository@sha256` and matching runtime image ID to the exact v3 source
   closure, SkyRL native helper, model revision, template, prompt policy,
   template invocations, rendered-byte/token contract, and ordered tool catalog.
   It must record a successful local synthetic check and clean-pull zero-GPU dev
@@ -159,7 +199,7 @@ route-certificate hash:
 - The **direct-route certificate artifact** must cross-bind that qualification's
   self-digest and exact collector image. It must bind the exact model lock,
   rehashed weights/tokenizer/template, immutable serving runtime identity,
-  normalized arguments, ready route identity, and the same v2 interface. A
+  normalized arguments, ready route identity, and the same user-only interface. A
   fresh synthetic collector-to-route probe must prove the native
   `/inference/v1/generate` prompt-token-ID plus sampling-parameter request and
   response contract, including response token IDs and logprobs, without
@@ -169,18 +209,18 @@ No such artifacts are checked in. Null bindings remain fail-closed, so tests use
 synthetic temporary receipts only to verify the schema and cross-binding logic.
 Theseus [PR #31835](https://github.com/fleet-ai/theseus/pull/31835) concerns an
 OpenCode evaluation image. Even after merge and deployment, that image is not a
-SkyRL-direct collector qualification and cannot fill the v2 collector slot.
+SkyRL-direct collector qualification and cannot fill the v3 collector slot.
 
 The remaining path is consequently precise: build/publish and qualify the exact
 SkyRL-direct collector, then issue one self-digesting direct-route certificate
 from that qualification and a fresh route observation/probe. Populate those two
-artifact references only in a successor of the checked-in blocked v2 request;
-never rewrite v1 or claim the null-bearing v2 request is ready.
+artifact references only in a new successor of the checked-in blocked v3
+request; never rewrite v1/v2/v3 or claim a null-bearing request is ready.
 
 This offline closure does not add a live collector/index command:
-`training.self_trace_collection_v2` remains a validator and private
-preparation/review library. Resolving the two external artifacts therefore does
-not itself authorize execution. A separately reviewed create-once orchestration
+`training.self_trace_collection_v3` remains an offline validator. Resolving the
+two external artifacts therefore does not itself authorize execution. A
+separately reviewed create-once orchestration
 must call the prepared-attempt and source-review boundaries and bind every
 qualified source receipt into the downstream index before any collection can
 start.

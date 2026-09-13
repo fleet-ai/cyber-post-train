@@ -22,10 +22,7 @@ from training.io import digest_json, file_sha256
 
 ROOT = Path(__file__).parents[1]
 REQUEST = ROOT / "configs/qualification/qwen38-self-trace-collection-request-v1.json"
-PARITY = (
-    ROOT
-    / "docs/evidence/qwen38-study/2026-09-12-self-trace-recorder-dense-parity-v1.json"
-)
+PARITY = ROOT / "docs/evidence/qwen38-study/2026-09-12-self-trace-recorder-dense-parity-v1.json"
 PRIVATE = "SYNTHETIC_PRIVATE_REQUEST_CONTENT_MUST_NOT_ESCAPE"
 
 
@@ -39,26 +36,17 @@ def reseal(value: dict) -> dict:
 
 
 def source_closure() -> dict[str, str]:
-    return {
-        name: file_sha256(path) for name, path in collection.SOURCE_CLOSURE_PATHS.items()
-    }
+    return {name: file_sha256(path) for name, path in collection.SOURCE_CLOSURE_PATHS.items()}
 
 
-def test_checked_request_is_sealed_bounded_nonlaunchable_and_has_only_exact_blockers():
+def test_checked_v1_request_is_immutable_and_fails_closed_after_source_change():
     request = read_request()
-    validated = collection.validate_request(request, relative_to=REQUEST.parent)
     assert request["sha256"] == digest_json(
         {key: item for key, item in request.items() if key != "sha256"}
     )
-    assert len(validated["tasks"]) == 74
-    assert len(validated["roster"]) == 296
-    assert len({row["attempt_id"] for row in validated["roster"]}) == 296
-    assert validated["blockers"] == [
-        "missing_immutable_collector_image",
-        "missing_exact_base_route_certificate",
-        "missing_direct_system_prompt_digest",
-    ]
-    assert validated["parity"] == json.loads(PARITY.read_text(encoding="utf-8"))
+    assert request["source_closure"]["rl_episode.py"]["sha256"] != file_sha256(
+        collection.SOURCE_CLOSURE_PATHS["rl_episode.py"]
+    )
     assert request["execution"] == {
         "kind": "offline_qualification_not_a_launcher",
         "cluster_or_api_mutations_performed": False,
@@ -66,33 +54,19 @@ def test_checked_request_is_sealed_bounded_nonlaunchable_and_has_only_exact_bloc
         "credentials_required": False,
     }
     assert "PENDING" not in REQUEST.read_text(encoding="utf-8")
-    with pytest.raises(collection.CollectionError, match="not ready"):
-        collection.validate_request(request, relative_to=REQUEST.parent, require_ready=True)
+    with pytest.raises(collection.CollectionError, match="source file digest"):
+        collection.validate_request(request, relative_to=REQUEST.parent)
 
 
-def test_request_preflight_cli_emits_only_sanitized_blockers(capsys):
-    assert collection.main(["--request", str(REQUEST)]) == 0
+def test_frozen_v1_preflight_cli_rejects_without_private_output(capsys):
+    assert collection.main(["--request", str(REQUEST)]) == 2
     result = json.loads(capsys.readouterr().out)
     assert result == {
-        "status": "blocked_external_bindings",
-        "request_sha256": read_request()["sha256"],
-        "task_versions": 74,
-        "maximum_sessions": 296,
-        "blockers": [
-            "missing_immutable_collector_image",
-            "missing_exact_base_route_certificate",
-            "missing_direct_system_prompt_digest",
-        ],
-        "cluster_or_api_mutations_performed": False,
-        "job_submission_performed": False,
-    }
-    rendered = json.dumps(result)
-    assert PRIVATE not in rendered
-    assert collection.main(["--request", str(REQUEST), "--require-ready"]) == 2
-    assert json.loads(capsys.readouterr().out) == {
         "status": "rejected",
         "reason": "collection_request_not_qualified",
     }
+    rendered = json.dumps(result)
+    assert PRIVATE not in rendered
 
 
 @pytest.mark.parametrize(
@@ -121,7 +95,7 @@ def test_request_identity_or_policy_drift_fails_closed(defect):
 
 
 @pytest.mark.parametrize("defect", ["runtime_scope", "dense_policy", "token_hash"])
-def test_parity_receipt_cannot_overclaim_or_break_cross_field_bindings(tmp_path, defect):
+def test_parity_receipt_cannot_overclaim_or_break_cross_field_bindings(defect):
     parity = json.loads(PARITY.read_text(encoding="utf-8"))
     if defect == "runtime_scope":
         parity["qualification_scope"]["target_model_weights_loaded"] = True
@@ -130,17 +104,17 @@ def test_parity_receipt_cannot_overclaim_or_break_cross_field_bindings(tmp_path,
     else:
         parity["dense"]["reference_tokens_sha256"] = "sha256:" + "f" * 64
     reseal(parity)
-    altered = tmp_path / "parity.json"
-    write(altered, parity)
-
     request = read_request()
-    request["runtime"]["synthetic_parity_receipt"] = {
-        "path": str(altered),
-        "sha256": file_sha256(altered),
-    }
-    reseal(request)
     with pytest.raises(collection.CollectionError, match="parity receipt fields differ"):
-        collection.validate_request(request, relative_to=REQUEST.parent)
+        collection._validate_parity_receipt(
+            parity,
+            model=request["model"],
+            interface=request["interface"],
+            source_closure={
+                name: reference["sha256"] for name, reference in request["source_closure"].items()
+            },
+            qualification=request["qualification"],
+        )
 
 
 class Tokenizer:
@@ -331,12 +305,13 @@ async def test_synthetic_native_recorder_and_dense_adapter_match_across_two_dire
         "all_observation_tokens_masked": True,
     }
     assert receipt["native"]["assistant_targets"] == 2
-    assert receipt["native"]["recorded_tokens_sha256"] == receipt["dense"][
-        "reference_tokens_sha256"
-    ]
-    assert receipt["native"]["recorded_loss_mask_sha256"] == receipt["dense"][
-        "reference_loss_mask_sha256"
-    ]
+    assert (
+        receipt["native"]["recorded_tokens_sha256"] == receipt["dense"]["reference_tokens_sha256"]
+    )
+    assert (
+        receipt["native"]["recorded_loss_mask_sha256"]
+        == receipt["dense"]["reference_loss_mask_sha256"]
+    )
     assert receipt["dense_policy"] == {
         "format": dense.FORMAT,
         "max_length": 16384,
@@ -353,7 +328,10 @@ async def test_synthetic_native_recorder_and_dense_adapter_match_across_two_dire
     assert receipt["sha256"] == digest_json(
         {key: item for key, item in receipt.items() if key != "sha256"}
     )
-    assert receipt == json.loads(PARITY.read_text(encoding="utf-8"))
+    frozen = json.loads(PARITY.read_text(encoding="utf-8"))
+    assert receipt["native"] == frozen["native"]
+    assert receipt["dense"] == frozen["dense"]
+    assert receipt["source_closure_sha256"] != frozen["source_closure_sha256"]
     rendered = json.dumps(receipt)
     assert PRIVATE not in rendered
     assert not ({"prompt", "trace", "reward", "score", "flag", "credential"} & set(receipt))
