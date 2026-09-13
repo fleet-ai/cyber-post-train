@@ -470,6 +470,7 @@ checkpoint:
   sha256: <manifest-file-sha256>
 recipe:
   nodes: 1
+  gpus_per_node: 8
   steps: 1
   groups: 1
   samples_per_prompt: 2
@@ -496,6 +497,23 @@ Smaller reservations/limits are rejected; larger ones remain configurable via
 `cluster.resources`. These are conservative startup bounds, not a completed
 capacity proof. Check the node's allocatable RAM and normal admission before
 submitting. This change does not alter the model, task split or optimizer recipe.
+
+Miles accepts only the native FTI layouts: one whole eight-GPU node (`1x8`) or
+two whole eight-GPU nodes (`2x8`). A fragmented `2x4` allocation is not a
+qualified substitute: it changes the placement of the TP4/CP2 model-parallel
+groups across hosts and failed during the first distributed optimizer
+collective before any task, reward, batch, update, or checkpoint. Do not add
+NCCL environment guesses to revive that layout; acquire a whole dev node and
+qualify `1x8` first.
+
+The next create-once dev qualification uses the matching dev3 data and run
+configs under `configs/qualification/qwen38-miles-rl-reward-canary-*-dev-v3.json`.
+Its launch binding is
+`configs/qualification/qwen38-miles-rl-reward-canary-launch-dev-v3.json`; it
+records a fresh data root, prepared root, run/output identity, embedded cyber
+run ID, and W&B run ID. It is configuration only and does not authorize a
+submission until the data build, CPU preflight, dev preview, exact duplicate
+checks, and a topology-compatible whole eight-GPU dev node all pass.
 
 CPU preflight checks the native FTI argument builder and actual text-only data
 source, including template identity and train/dev row retention. Qwen's automatic
@@ -545,8 +563,9 @@ cyber-post-train preview output/miles-reload --cluster dev
 cyber-post-train submit output/miles-reload --cluster dev
 ```
 
-This validator is dev-only and reuses the source run's exact eight-rank
-topology and resource floor. It starts only Miles' Megatron training actors,
+This validator is dev-only and reuses the source run's exact native `1x8` or
+`2x8` topology and resource floor. The current canary template points to the
+fresh `1x8` dev3 source. It starts only Miles' Megatron training actors,
 loads the model plus optimizer, scheduler and RNG state on every rank, and
 checks the sanitized state twice. It creates no rollout engine, performs no
 forward/backward or optimizer update, writes no checkpoint, and has no Fleet or

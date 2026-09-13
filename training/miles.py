@@ -19,6 +19,7 @@ IMAGE = (
     "d1d37c584e2aafdd47df1e1f3492ff3343eb3b83a5f658cf7ce2432ee8d6ef33"
 )
 TEMPLATE_SHA256 = "38d42166599348d47ded69776c5389c89924045e6827089923a031379f8a3dfe"
+NATIVE_LAYOUTS = frozenset({(1, 8), (2, 8)})
 
 
 @dataclass(frozen=True)
@@ -95,7 +96,7 @@ class MilesConfig:
         ):
             if type(getattr(self, key)) is not int or getattr(self, key) < 1:
                 raise ValueError("Miles counts must be positive integers")
-        if (self.nodes, self.gpus_per_node) not in {(1, 8), (2, 4), (2, 8)}:
+        if (self.nodes, self.gpus_per_node) not in NATIVE_LAYOUTS:
             raise ValueError("unsupported Qwen Miles node/GPU layout")
         if self.samples_per_prompt < 2:
             raise ValueError("Qwen profile requires grouped GRPO samples")
@@ -129,17 +130,9 @@ def arguments(config: MilesConfig) -> list[str]:
     if profile.backend != "megatron" or profile.vision or profile.tito_model != "qwen35":
         raise ValueError("native Qwen profile changed")
     argv = shlex.split(load_model_args(profile.megatron_model_type))
-    layout = (config.nodes, config.gpus_per_node)
-    if layout == (2, 4):
-        one_by_eight = profile.parallel_args_by_shape.get((1, 8))
-        two_by_eight = profile.parallel_args_by_shape.get((2, 8))
-        if not isinstance(one_by_eight, str) or one_by_eight != two_by_eight:
-            raise ValueError("native profile does not qualify the fragmented eight-rank layout")
-        parallel_args = one_by_eight
-    else:
-        parallel_args = profile.parallel_args_by_shape.get(layout)
-        if not isinstance(parallel_args, str):
-            raise ValueError("native profile lacks the requested node/GPU layout")
+    parallel_args = profile.parallel_args_by_shape.get((config.nodes, config.gpus_per_node))
+    if not isinstance(parallel_args, str):
+        raise ValueError("native profile lacks the requested node/GPU layout")
     argv += shlex.split(parallel_args)
     argv += shlex.split(profile.extra_train_args + " " + profile.extra_sglang_args)
     batch = config.groups * config.samples_per_prompt

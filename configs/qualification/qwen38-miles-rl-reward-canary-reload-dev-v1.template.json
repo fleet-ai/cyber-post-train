@@ -1,9 +1,9 @@
 {
   "schema": "cyber_miles_rl_reload_config_v1",
-  "name": "chris-q38-miles-reload-dev2",
-  "output_root": "/mnt/sfs/jobs/chris-q38-miles-reload-dev2",
+  "name": "chris-q38-miles-reload-dev3",
+  "output_root": "/mnt/sfs/jobs/chris-q38-miles-reload-dev3",
   "checkpoint": {
-    "manifest": "/mnt/sfs/jobs/chris-q38-miles-rlreward-dev2-seal/MILES_TRAINING_CHECKPOINT.json",
+    "manifest": "/mnt/sfs/jobs/chris-q38-miles-rlreward-dev3-seal/MILES_TRAINING_CHECKPOINT.json",
     "sha256": "sha256:REPLACE_WITH_EXACT_MANIFEST_FILE_SHA256"
   },
   "cluster": {

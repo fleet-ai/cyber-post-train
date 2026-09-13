@@ -1,0 +1,15 @@
+{
+  "schema": "cyber_miles_dev_canary_launch_v1",
+  "status": "configuration_only_unsubmitted",
+  "cluster_target": "dev",
+  "data_config": "configs/qualification/qwen38-miles-rl-reward-canary-data-dev-v3.json",
+  "run_config": "configs/qualification/qwen38-miles-rl-reward-canary-dev-v3.json",
+  "identities": {
+    "run_name": "chris-q38-miles-rlreward-dev3",
+    "cyber_run_id": "chris-q38-miles-rlreward-dev3",
+    "data_root": "/mnt/sfs/jobs/chris-q38-miles-rlreward-inputs-dev3/data",
+    "prepared_root": "/mnt/sfs/jobs/chris-q38-miles-rlreward-inputs-dev3/prepared",
+    "output_root": "/mnt/sfs/jobs/chris-q38-miles-rlreward-dev3",
+    "wandb_run_id": "chris-q38-miles-rlreward-dev3"
+  }
+}

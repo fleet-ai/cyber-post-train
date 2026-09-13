@@ -129,13 +129,13 @@ def _validate_source_plan(plan: dict) -> tuple[int, int]:
     if (
         type(nodes) is not int
         or type(gpus) is not int
-        or nodes * gpus != 8
+        or (nodes, gpus) not in miles.NATIVE_LAYOUTS
         or args.get("steps") != 1
         or args.get("checkpoint_interval") != 1
         or plan.get("output_root") != args.get("output_root")
         or plan.get("native_driver_sha256") != NATIVE_DRIVER_SHA256
     ):
-        raise ValueError("reload qualification requires one saved update across eight ranks")
+        raise ValueError("reload qualification requires one saved update on a native Miles layout")
     return nodes, gpus
 
 
@@ -237,7 +237,13 @@ def compile_reload(config: dict, *, relative_to: Path) -> dict:
     sealed(manifest, CHECKPOINT_SCHEMA)
     if (
         manifest.get("image") != miles.IMAGE
-        or manifest.get("world_size") != 8
+        or (
+            manifest.get("topology", {}).get("nodes"),
+            manifest.get("topology", {}).get("gpus_per_node"),
+        )
+        not in miles.NATIVE_LAYOUTS
+        or manifest.get("world_size")
+        != manifest["topology"]["nodes"] * manifest["topology"]["gpus_per_node"]
         or manifest.get("next_rollout_id") != manifest.get("rollout_index") + 1
         or manifest.get("source_optimizer_update_claimed") is not False
         or manifest.get("gpu_reload_verified") is not False
@@ -416,7 +422,13 @@ def job_request(plan: dict) -> dict:
         or plan.get("execution", {}).get("cluster_target") != "dev"
         or plan["execution"].get("image") != miles.IMAGE
         or plan["execution"].get("priority") != "c1"
-        or manifest.get("world_size") != 8
+        or (
+            manifest.get("topology", {}).get("nodes"),
+            manifest.get("topology", {}).get("gpus_per_node"),
+        )
+        not in miles.NATIVE_LAYOUTS
+        or manifest.get("world_size")
+        != manifest["topology"]["nodes"] * manifest["topology"]["gpus_per_node"]
     ):
         raise ValueError("Miles reload runtime/plan drift")
     sealed(manifest, CHECKPOINT_SCHEMA)

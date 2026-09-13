@@ -139,23 +139,8 @@ def test_bounded_counts_and_native_optimizer(config, native_boundary):
     assert value(argv, "rollout-seed") == str(cfg.seed)
 
 
-def test_two_by_four_preserves_qualified_eight_rank_parallelism(config, native_boundary):
-    argv = miles.arguments(replace(config, nodes=2, gpus_per_node=4))
-
-    assert value(argv, "actor-num-nodes") == "2"
-    assert value(argv, "actor-num-gpus-per-node") == "4"
-    assert value(argv, "num-gpus-per-node") == "4"
-    assert value(argv, "tensor-model-parallel-size") == "4"
-    assert value(argv, "context-parallel-size") == "2"
-
-
-def test_two_by_four_rejects_native_parallel_profile_drift(config, native_boundary):
-    profile, _ = native_boundary
-    profile.parallel_args_by_shape[(2, 8)] = (
-        "--tensor-model-parallel-size 8 --context-parallel-size 2"
-    )
-
-    with pytest.raises(ValueError, match="fragmented eight-rank layout"):
+def test_two_by_four_is_rejected_even_when_native_shapes_share_arguments(config, native_boundary):
+    with pytest.raises(ValueError, match="unsupported Qwen Miles node/GPU layout"):
         miles.arguments(replace(config, nodes=2, gpus_per_node=4))
 
 

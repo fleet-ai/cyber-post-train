@@ -9,6 +9,9 @@ DATA = ROOT / "configs/qualification/qwen38-miles-rl-reward-canary-data-dev-v1.j
 RUN = ROOT / "configs/qualification/qwen38-miles-rl-reward-canary-dev-v1.json"
 DATA_V2 = ROOT / "configs/qualification/qwen38-miles-rl-reward-canary-data-dev-v2.json"
 RUN_V2 = ROOT / "configs/qualification/qwen38-miles-rl-reward-canary-dev-v2.json"
+DATA_V3 = ROOT / "configs/qualification/qwen38-miles-rl-reward-canary-data-dev-v3.json"
+RUN_V3 = ROOT / "configs/qualification/qwen38-miles-rl-reward-canary-dev-v3.json"
+LAUNCH_V3 = ROOT / "configs/qualification/qwen38-miles-rl-reward-canary-launch-dev-v3.json"
 TASK_SET = ROOT / "configs/data/qwen38-rl-reward-canary-task-set-v1.json"
 SPLIT = ROOT / "configs/data/qwen38-rl-reward-canary-split-v1.json"
 TOOLS = ROOT / "configs/data/qwen38-rl-filtered-canary-tool-catalog-v1.json"
@@ -80,20 +83,23 @@ def test_miles_reward_canary_keeps_full_horizon_and_no_retry_controls() -> None:
     assert "requeue" not in json.dumps(run).lower()
 
 
-def test_v2_changes_only_identity_and_dev_fit_topology() -> None:
-    data_v1, run_v1, data_v2, run_v2 = map(load, (DATA, RUN, DATA_V2, RUN_V2))
+def test_v3_is_a_fresh_native_one_by_eight_dev_canary() -> None:
+    data_v1, run_v1, data_v2, run_v2, data_v3, run_v3, launch = map(
+        load, (DATA, RUN, DATA_V2, RUN_V2, DATA_V3, RUN_V3, LAUNCH_V3)
+    )
 
-    assert data_v2["name"] == run_v2["name"] == run_v2["wandb"]["run_id"]
-    assert data_v2["name"] == "chris-q38-miles-rlreward-dev2"
-    assert data_v2["output"] == "/mnt/sfs/jobs/chris-q38-miles-rlreward-inputs-dev2/data"
-    assert run_v2["output_root"] == "/mnt/sfs/jobs/chris-q38-miles-rlreward-dev2"
-    assert run_v2["data"] == {
-        "manifest": data_v2["output"] + "/manifest.json",
-        "root": data_v2["output"],
+    assert run_v2["recipe"]["nodes"] == 2 and run_v2["recipe"]["gpus_per_node"] == 4
+    assert data_v3["name"] == run_v3["name"] == run_v3["wandb"]["run_id"]
+    assert data_v3["name"] == "chris-q38-miles-rlreward-dev3"
+    assert data_v3["output"] == "/mnt/sfs/jobs/chris-q38-miles-rlreward-inputs-dev3/data"
+    assert run_v3["output_root"] == "/mnt/sfs/jobs/chris-q38-miles-rlreward-dev3"
+    assert run_v3["data"] == {
+        "manifest": data_v3["output"] + "/manifest.json",
+        "root": data_v3["output"],
     }
-    assert run_v2["wandb"] == {
+    assert run_v3["wandb"] == {
         **run_v1["wandb"],
-        "run_id": "chris-q38-miles-rlreward-dev2",
+        "run_id": "chris-q38-miles-rlreward-dev3",
     }
 
     data_identity = (
@@ -106,12 +112,23 @@ def test_v2_changes_only_identity_and_dev_fit_topology() -> None:
         "limits",
     )
     for key in data_identity:
-        assert data_v2[key] == data_v1[key]
+        assert data_v3[key] == data_v1[key]
     for key in ("backend", "model", "checkpoint", "cluster"):
-        assert run_v2[key] == run_v1[key]
+        assert run_v3[key] == run_v1[key]
 
-    expected_recipe = {**run_v1["recipe"], "nodes": 2, "gpus_per_node": 4}
-    assert run_v2["recipe"] == expected_recipe
-    assert run_v2["recipe"]["nodes"] * run_v2["recipe"]["gpus_per_node"] == 8
-    assert run_v2["cluster"]["priority"] == "c1"
-    assert "webexploitbench" not in (DATA_V2.read_text() + RUN_V2.read_text()).lower()
+    assert run_v3["recipe"] == {**run_v1["recipe"], "gpus_per_node": 8}
+    assert run_v3["cluster"]["priority"] == "c1"
+    identities = launch["identities"]
+    assert launch["status"] == "configuration_only_unsubmitted"
+    assert launch["cluster_target"] == "dev"
+    assert identities["run_name"] == identities["cyber_run_id"] == data_v3["name"]
+    assert identities["data_root"] == data_v3["output"]
+    assert identities["prepared_root"] == (
+        "/mnt/sfs/jobs/chris-q38-miles-rlreward-inputs-dev3/prepared"
+    )
+    assert identities["output_root"] == run_v3["output_root"]
+    assert identities["wandb_run_id"] == run_v3["wandb"]["run_id"]
+    old = json.dumps([data_v1, run_v1, data_v2, run_v2])
+    for value in identities.values():
+        assert value not in old
+    assert "webexploitbench" not in (DATA_V3.read_text() + RUN_V3.read_text()).lower()

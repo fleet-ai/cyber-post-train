@@ -25,8 +25,8 @@ def _args(output: str = "/mnt/sfs/jobs/source-miles") -> miles.MilesConfig:
         wandb_entity="synthetic",
         wandb_project="synthetic",
         wandb_run_id="source-miles",
-        nodes=2,
-        gpus_per_node=4,
+        nodes=1,
+        gpus_per_node=8,
         steps=1,
         groups=1,
         samples_per_prompt=8,
@@ -95,7 +95,7 @@ def _manifest(tmp_path: Path) -> tuple[dict, Path]:
         "rollout_index": 0,
         "next_rollout_id": 1,
         "world_size": 8,
-        "topology": {"nodes": 2, "gpus_per_node": 4},
+        "topology": {"nodes": 1, "gpus_per_node": 8},
         "model": {"repo": "Qwen/Qwen3.8-27B", "revision": "synthetic"},
         "source": {
             "run_name": "source-miles",
@@ -165,7 +165,7 @@ def test_cpu_seal_binds_complete_all_rank_numeric_checkpoint(tmp_path, monkeypat
 
     assert result["schema"] == reload.CHECKPOINT_SCHEMA
     assert result["world_size"] == 8
-    assert result["topology"] == {"nodes": 2, "gpus_per_node": 4}
+    assert result["topology"] == {"nodes": 1, "gpus_per_node": 8}
     assert result["rollout_index"] == 0 and result["next_rollout_id"] == 1
     assert len(result["files"]) == 10
     assert result["gpu_reload_verified"] is False
@@ -207,7 +207,7 @@ def test_reload_plan_is_dev_only_exact_topology_and_secret_free(tmp_path):
     assert plan["source_manifest"] == manifest
     assert plan["optimizer_updates"] == plan["rollouts"] == 0
     assert plan["execution"]["cluster_target"] == "dev"
-    assert request["workers"] == 2 and request["gpus_per_worker"] == 4
+    assert request["workers"] == 1 and request["gpus_per_worker"] == 8
     assert request["priority_class"] == "c1"
     assert request["requeueIfPreempted"] is False
     assert request["secrets"] == []
@@ -217,7 +217,9 @@ def test_reload_plan_is_dev_only_exact_topology_and_secret_free(tmp_path):
     assert "WANDB_API_KEY" not in request["env"]
 
 
-@pytest.mark.parametrize("fault", ["prod", "c2", "digest", "world", "underreserve", "overlap"])
+@pytest.mark.parametrize(
+    "fault", ["prod", "c2", "digest", "world", "fragmented", "underreserve", "overlap"]
+)
 def test_reload_plan_rejects_unqualified_bindings(tmp_path, fault):
     manifest, path = _manifest(tmp_path)
     config = _config(path)
@@ -229,6 +231,12 @@ def test_reload_plan_rejects_unqualified_bindings(tmp_path, fault):
         config["checkpoint"]["sha256"] = "0" * 64
     elif fault == "world":
         manifest["world_size"] = 7
+        manifest["sha256"] = digest({k: v for k, v in manifest.items() if k != "sha256"})
+        path.write_text(json.dumps(manifest))
+        config["checkpoint"]["sha256"] = reload._hash(path)
+    elif fault == "fragmented":
+        manifest["topology"] = {"nodes": 2, "gpus_per_node": 4}
+        manifest["source"]["arguments"].update({"nodes": 2, "gpus_per_node": 4})
         manifest["sha256"] = digest({k: v for k, v in manifest.items() if k != "sha256"})
         path.write_text(json.dumps(manifest))
         config["checkpoint"]["sha256"] = reload._hash(path)
@@ -381,6 +389,11 @@ def test_template_is_intentionally_unmaterialized_dev_c1():
     path = root / "configs/qualification/qwen38-miles-rl-reward-canary-reload-dev-v1.template.json"
     value = json.loads(path.read_text())
     assert value["schema"] == reload.CONFIG_SCHEMA
+    assert value["name"] == "chris-q38-miles-reload-dev3"
+    assert value["output_root"] == "/mnt/sfs/jobs/chris-q38-miles-reload-dev3"
+    assert value["checkpoint"]["manifest"] == (
+        "/mnt/sfs/jobs/chris-q38-miles-rlreward-dev3-seal/MILES_TRAINING_CHECKPOINT.json"
+    )
     assert value["cluster"]["target"] == "dev"
     assert value["cluster"]["priority"] == "c1"
     assert "REPLACE_WITH" in value["checkpoint"]["sha256"]
