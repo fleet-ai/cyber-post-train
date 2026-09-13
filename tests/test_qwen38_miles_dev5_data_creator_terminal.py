@@ -22,7 +22,7 @@ def test_dev5_v4_creator_evidence_is_self_digested_and_sanitized() -> None:
     evidence, serialized = _load()
     unsigned = {key: value for key, value in evidence.items() if key != "sha256"}
     expected = "sha256:" + hashlib.sha256(
-        json.dumps(unsigned, sort_keys=True, separators=(",", ":")).encode() + b"\n"
+        json.dumps(unsigned, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
 
     assert evidence["sha256"] == expected
