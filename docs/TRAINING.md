@@ -450,6 +450,15 @@ inventory, then hashes the checkpoint without modifying it. This is a candidate
 checkpoint, not an RL optimizer or GPU reload qualification. Actual conversion
 and subsequent native reload remain required before using a new checkpoint in RL.
 
+To convert an accepted SFT policy instead of the frozen base, keep `model.root`
+at the SFT HF export and add `model.export` and `model.gpu_check` mappings with
+canonical `/mnt/sfs/...` runtime `path`, a local receipt `snapshot`, and the
+snapshot's exact `sha256`. Also declare `model.sft_source` with the reviewed
+source plan, checkpoint receipt, checkpoint-manifest file, exporter-code, and
+checker-code SHA-256 values. Local preparation reads only the receipt snapshots;
+run `preflight` on a zero-GPU host with SFS mounted so it validates every export
+payload before the eight-GPU conversion can be submitted.
+
 ### Native training integration
 
 After preparing the exact prompts and sealing the base conversion, use:

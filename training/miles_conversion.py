@@ -11,13 +11,14 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shlex
 import signal
 import subprocess
 import sys
 import time
 from contextlib import suppress
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from cyber_post_train.jobs import bundled_request, digest, quantity
 
@@ -26,6 +27,25 @@ from .miles import IMAGE
 SCHEMA = "cyber_miles_conversion_v1"
 CONVERTER_SHA256 = "0c2541d30073777a30344273a3773844a70ca1961287520c0496a1cec18d43f6"
 DEADLINE_SECONDS = 1800
+SFT_SOURCE_SCHEMA = "cyber_miles_sft_initial_policy_v1"
+
+
+def _sha256(value: object, label: str) -> str:
+    normalized = str(value).removeprefix("sha256:")
+    if re.fullmatch(r"[a-f0-9]{64}", normalized) is None:
+        raise ValueError(f"{label} is not a SHA-256 digest")
+    return normalized
+
+
+def _json_sha256(value: object) -> str:
+    payload = json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode()
+    return "sha256:" + hashlib.sha256(payload).hexdigest()
 
 
 def _hash(path: Path) -> str:
@@ -58,20 +78,317 @@ def _write(path: Path, value: dict) -> dict:
     return value
 
 
-def compile_conversion(config: dict, *, relative_to: Path) -> dict:
+def _runtime_path(value: object, label: str) -> Path:
+    if not isinstance(value, str):
+        raise ValueError(f"{label} path is invalid")
+    declared = PurePosixPath(value)
+    if (
+        declared.parts[:3] != ("/", "mnt", "sfs")
+        or len(declared.parts) < 6
+        or ".." in declared.parts
+        or str(declared) != value
+    ):
+        raise ValueError(f"{label} must be a cluster-visible immutable SFS file")
+    return Path(str(declared))
+
+
+def _signed_reference(value: dict, relative_to: Path, label: str) -> tuple[dict, dict]:
+    """Bind a local receipt snapshot to its exact cluster-visible runtime path."""
+    if not isinstance(value, dict) or set(value) != {"path", "snapshot", "sha256"}:
+        raise ValueError(f"{label} needs an SFS path, local snapshot and file digest")
+    runtime_path = _runtime_path(value["path"], label)
+    snapshot = Path(value["snapshot"])
+    if not snapshot.is_absolute():
+        snapshot = relative_to / snapshot
+    file_sha256 = _hash(snapshot)
+    if file_sha256 != _sha256(value["sha256"], f"{label} file digest"):
+        raise ValueError(f"{label} file digest mismatch")
+    receipt = json.loads(snapshot.read_text())
+    if not isinstance(receipt, dict):
+        raise ValueError(f"{label} must be a JSON object")
+    receipt_sha256 = _sha256(receipt.get("receipt_sha256"), f"{label} receipt digest")
+    if receipt_sha256 != digest({k: v for k, v in receipt.items() if k != "receipt_sha256"}):
+        raise ValueError(f"{label} self-digest mismatch")
+    return receipt, {
+        "path": str(runtime_path),
+        "file_sha256": file_sha256,
+        "receipt_sha256": receipt_sha256,
+    }
+
+
+def _reopen_reference(reference: dict, label: str) -> tuple[dict, dict]:
+    if set(reference) != {"path", "file_sha256", "receipt_sha256"}:
+        raise ValueError(f"{label} reference fields changed")
+    path = _runtime_path(reference["path"], label)
+    if _hash(path) != _sha256(reference["file_sha256"], f"{label} file digest"):
+        raise ValueError(f"{label} file digest mismatch")
+    receipt = json.loads(path.read_text())
+    if not isinstance(receipt, dict):
+        raise ValueError(f"{label} must be a JSON object")
+    self_sha256 = _sha256(receipt.get("receipt_sha256"), f"{label} receipt digest")
+    if (
+        self_sha256 != _sha256(reference["receipt_sha256"], f"{label} receipt digest")
+        or self_sha256 != digest({k: v for k, v in receipt.items() if k != "receipt_sha256"})
+    ):
+        raise ValueError(f"{label} self-digest mismatch")
+    return receipt, {**reference, "file_sha256": _sha256(reference["file_sha256"], label)}
+
+
+def _export_files(export: dict) -> list[dict]:
+    files = export.get("files")
+    if not isinstance(files, dict) or not files:
+        raise ValueError("SFT HF export file inventory is absent")
+    normalized = []
+    for name, item in sorted(files.items()):
+        if (
+            not isinstance(name, str)
+            or Path(name).name != name
+            or not isinstance(item, dict)
+            or set(item) != {"bytes", "sha256"}
+            or type(item["bytes"]) is not int
+            or item["bytes"] <= 0
+        ):
+            raise ValueError("SFT HF export file inventory is invalid")
+        normalized.append(
+            {
+                "path": name,
+                "size": item["bytes"],
+                "sha256": _sha256(item["sha256"], "SFT HF export payload digest"),
+            }
+        )
+    return normalized
+
+
+def _accepted_sft_model(
+    base: dict,
+    root: str,
+    export: dict,
+    export_reference: dict,
+    gpu_check_reference: dict,
+    expected_source: dict,
+) -> dict:
+    """Bind an already exported and independently reloaded SFT initial policy."""
+    from .post_sft_artifacts import QWEN36_EXACT_MTP_OMISSION_KEYS
+
+    if (
+        export.get("schema") != "cyber_native_checkpoint_hf_export_v1"
+        or export.get("model_repo") != base["repo"]
+        or export.get("model_revision") != base["revision"]
+        or export.get("output_root") != root
+        or export.get("dtype") != "BF16"
+        or export.get("optimizer_steps_executed") != 0
+        or type(export.get("optimizer_step")) is not int
+        or export["optimizer_step"] < 1
+        or export.get("gpu_reload_verified") is not False
+        or export.get("all_output_tensors_reopened_equal") is not True
+        or export.get("source_inventory_sizes_mtimes_unchanged") is not True
+        or set(export.get("restored_base_tensors", []))
+        != set(QWEN36_EXACT_MTP_OMISSION_KEYS)
+        or type(export.get("trained_tensors")) is not int
+        or export["trained_tensors"] < 1
+    ):
+        raise ValueError("SFT HF export is not a complete zero-update handoff")
+    normalized = _export_files(export)
+    names = {item["path"] for item in normalized}
+    weight_files = [item for item in normalized if item["path"].endswith(".safetensors")]
+    if not weight_files or "model.safetensors.index.json" not in names:
+        raise ValueError("SFT HF export lacks indexed safetensors")
+    expected_sidecars = {
+        item["path"]: _sha256(item["sha256"], "base sidecar digest")
+        for item in base["files"]
+        if not item["path"].endswith(".safetensors")
+        and item["path"] != "model.safetensors.index.json"
+    }
+    observed_sidecars = {
+        item["path"]: item["sha256"]
+        for item in normalized
+        if not item["path"].endswith(".safetensors")
+        and item["path"] != "model.safetensors.index.json"
+    }
+    if observed_sidecars != expected_sidecars:
+        raise ValueError("SFT HF export tokenizer/runtime sidecars differ from the model lock")
+    reported_sidecars = export.get("sidecars")
+    if not isinstance(reported_sidecars, dict) or {
+        name: _sha256(value, "SFT HF export sidecar digest")
+        for name, value in reported_sidecars.items()
+    } != expected_sidecars:
+        raise ValueError("SFT HF export sidecar receipt differs from the model lock")
+    export_receipt_sha256 = _sha256(
+        export_reference.get("receipt_sha256"), "SFT HF export receipt digest"
+    )
+    if export_receipt_sha256 != _sha256(
+        export.get("receipt_sha256"), "SFT HF export receipt digest"
+    ):
+        raise ValueError("SFT HF export reference changed")
+    expected = {
+        "source_checkpoint_receipt_sha256": _sha256(
+            expected_source.get("checkpoint_receipt_sha256"), "expected SFT checkpoint digest"
+        ),
+        "source_manifest_file_sha256": _sha256(
+            expected_source.get("checkpoint_manifest_sha256"),
+            "expected SFT checkpoint manifest digest",
+        ),
+        "source_plan_sha256": _sha256(
+            expected_source.get("plan_sha256"), "expected SFT plan digest"
+        ),
+    }
+    if any(
+        _sha256(export.get(key), f"SFT HF export {key}") != value
+        for key, value in expected.items()
+    ):
+        raise ValueError("SFT HF export differs from the selected source checkpoint or plan")
+    weight_manifest_sha256 = _json_sha256(weight_files)
+    if _json_sha256(export.get("code_sha256")) != expected_source["export_code_sha256"]:
+        raise ValueError("SFT HF export producer identity differs from the selected source")
+    if weight_manifest_sha256 == base["weight_manifest_sha256"]:
+        raise ValueError("SFT initial policy must not claim the frozen base weight inventory")
+    return {
+        "repo": base["repo"],
+        "revision": base["revision"],
+        "root": root,
+        "files": normalized,
+        "weight_manifest_sha256": weight_manifest_sha256,
+        "initial_policy": {
+            "schema": SFT_SOURCE_SCHEMA,
+            "kind": "sft_hf_export",
+            "base_weight_manifest_sha256": base["weight_manifest_sha256"],
+            "sft_optimizer_step": export["optimizer_step"],
+            "source_checkpoint_receipt_sha256": "sha256:"
+            + expected["source_checkpoint_receipt_sha256"],
+            "source_checkpoint_manifest_sha256": "sha256:"
+            + expected["source_manifest_file_sha256"],
+            "source_plan_sha256": "sha256:" + expected["source_plan_sha256"],
+            "export_code_sha256": expected_source["export_code_sha256"],
+            "checker_sha256": "sha256:" + expected_source["checker_sha256"],
+            "export": export_reference,
+            "gpu_check": gpu_check_reference,
+        },
+    }
+
+
+def bind_model_source(config: dict, *, relative_to: Path) -> dict:
+    """Bind either the exact frozen base or an accepted SFT HF export."""
     from .models import bound_model
-    from .sft import RESOURCES, _known, _sfs_root, read_mapping
+    from .sft import _known, _sfs_root, read_mapping
+
+    _known(
+        config,
+        {"lock", "weights", "root", "export", "gpu_check", "sft_source"},
+        "model",
+    )
+    root = _sfs_root(config["root"], "model root")
+    base = bound_model(
+        read_mapping(relative_to / config["lock"]),
+        read_mapping(relative_to / config["weights"]),
+        root,
+    )
+    references = (config.get("export"), config.get("gpu_check"), config.get("sft_source"))
+    if references == (None, None, None):
+        return base
+    if any(value is None for value in references):
+        raise ValueError("SFT initial policy requires export, GPU check, and source identity")
+    expected_source = config["sft_source"]
+    if not isinstance(expected_source, dict) or set(expected_source) != {
+        "plan_sha256",
+        "checkpoint_receipt_sha256",
+        "checkpoint_manifest_sha256",
+        "export_code_sha256",
+        "checker_sha256",
+    }:
+        raise ValueError("SFT source identity needs exact plan, checkpoint and producer digests")
+    expected_source = {
+        **expected_source,
+        "export_code_sha256": "sha256:"
+        + _sha256(expected_source["export_code_sha256"], "SFT exporter code digest"),
+        "checker_sha256": _sha256(expected_source["checker_sha256"], "SFT checker digest"),
+    }
+    export, export_reference = _signed_reference(config["export"], relative_to, "SFT export")
+    gpu_check, gpu_check_reference = _signed_reference(
+        config["gpu_check"], relative_to, "SFT GPU check"
+    )
+    export_path = Path(export_reference["path"])
+    if export_path != Path(root) / "EXPORT.json":
+        raise ValueError("SFT export receipt must be inside the selected model root")
+    from .export_check import validate_accepted_export_receipts
+
+    validate_accepted_export_receipts(
+        export,
+        gpu_check,
+        export_reference["file_sha256"],
+        expected_source["checker_sha256"],
+    )
+    return _accepted_sft_model(
+        base,
+        root,
+        export,
+        export_reference,
+        gpu_check_reference,
+        expected_source,
+    )
+
+
+def _reopen_initial_policy(model: dict, *, strict: bool = False) -> None:
+    source = model.get("initial_policy")
+    if source is None:
+        return
+    if (
+        not isinstance(source, dict)
+        or source.get("schema") != SFT_SOURCE_SCHEMA
+        or source.get("kind") != "sft_hf_export"
+        or source.get("base_weight_manifest_sha256") == model.get("weight_manifest_sha256")
+        or type(source.get("sft_optimizer_step")) is not int
+        or source["sft_optimizer_step"] < 1
+    ):
+        raise ValueError("SFT initial-policy binding is invalid")
+    export, export_reference = _reopen_reference(source["export"], "SFT export")
+    gpu, gpu_reference = _reopen_reference(source["gpu_check"], "SFT GPU check")
+    if strict:
+        from .export_check import inspect_accepted_export
+
+        strict_export, _, strict_gpu = inspect_accepted_export(
+            Path(export_reference["path"]),
+            export_reference["file_sha256"],
+            Path(gpu_reference["path"]),
+            gpu_reference["file_sha256"],
+            source["checker_sha256"],
+        )
+        if strict_export != export or strict_gpu != gpu:
+            raise ValueError("SFT acceptance evidence changed during validation")
+    if (
+        export_reference != source["export"]
+        or gpu_reference != source["gpu_check"]
+        or export.get("output_root") != model["root"]
+        or export.get("optimizer_step") != source["sft_optimizer_step"]
+        or _export_files(export) != model["files"]
+        or _sha256(export.get("source_checkpoint_receipt_sha256"), "SFT checkpoint digest")
+        != _sha256(source.get("source_checkpoint_receipt_sha256"), "SFT checkpoint digest")
+        or _sha256(export.get("source_manifest_file_sha256"), "SFT checkpoint manifest digest")
+        != _sha256(
+            source.get("source_checkpoint_manifest_sha256"),
+            "SFT checkpoint manifest digest",
+        )
+        or _sha256(export.get("source_plan_sha256"), "SFT plan digest")
+        != _sha256(source.get("source_plan_sha256"), "SFT plan digest")
+        or _json_sha256(export.get("code_sha256"))
+        != source.get("export_code_sha256")
+        or _sha256(gpu.get("checker_sha256"), "SFT checker digest")
+        != _sha256(source.get("checker_sha256"), "SFT checker digest")
+        or _sha256(gpu.get("export_sha256"), "GPU check export digest")
+        != export_reference["file_sha256"]
+        or _sha256(gpu.get("export_receipt_sha256"), "GPU check export receipt digest")
+        != export_reference["receipt_sha256"]
+    ):
+        raise ValueError("SFT initial-policy evidence changed")
+
+
+def compile_conversion(config: dict, *, relative_to: Path) -> dict:
+    from .sft import RESOURCES, _known, _sfs_root
 
     _known(config, {"name", "output_root", "model", "cluster"}, "Miles conversion")
     model = config["model"]
-    _known(model, {"lock", "weights", "root"}, "model")
     cluster = config.get("cluster", {})
     _known(cluster, {"priority", "resources"}, "cluster")
-    bound = bound_model(
-        read_mapping(relative_to / model["lock"]),
-        read_mapping(relative_to / model["weights"]),
-        _sfs_root(model["root"], "model root"),
-    )
+    bound = bind_model_source(model, relative_to=relative_to)
     output = _sfs_root(config["output_root"], "output root")
     if bound["repo"] != "Qwen/Qwen3.8-27B":
         raise ValueError("only the exact native Qwen3.8 text conversion is supported")
@@ -123,6 +440,11 @@ def job_request(plan: dict) -> dict:
         for name in (
             "training/miles_conversion.py",
             "training/miles.py",
+            "training/export_check.py",
+            "training/checkpoints.py",
+            "training/post_sft_artifacts.py",
+            "training/sft_runtime.py",
+            "training/io.py",
             "cyber_post_train/jobs.py",
         )
     }
@@ -157,9 +479,12 @@ def job_request(plan: dict) -> dict:
 
 def check_inputs(plan: dict) -> None:
     root = Path(plan["model"]["root"])
-    for item in plan["model"]["files"]:
-        if _hash(root / item["path"]) != item["sha256"].removeprefix("sha256:"):
-            raise ValueError("staged model differs from exact inventory")
+    if "initial_policy" in plan["model"]:
+        _reopen_initial_policy(plan["model"], strict=True)
+    else:
+        for item in plan["model"]["files"]:
+            if _hash(root / item["path"]) != item["sha256"].removeprefix("sha256:"):
+                raise ValueError("staged model differs from exact inventory")
     config = json.loads((root / "config.json").read_text())
     if config.get("auto_map") or config.get("text_config", {}).get("auto_map"):
         raise ValueError("native conversion must not resolve remote model code")

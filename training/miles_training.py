@@ -58,7 +58,6 @@ def _runtime():
 
 
 def compile_rl(config: dict, *, relative_to: Path) -> dict:
-    from .models import bound_model
     from .sft import _known, _sfs_root, read_mapping
 
     _known(
@@ -80,7 +79,11 @@ def compile_rl(config: dict, *, relative_to: Path) -> dict:
     if config["backend"] != "miles":
         raise ValueError("this RL path uses Miles; no silent backend substitution")
     model, data, checkpoint = (config[k] for k in ("model", "data", "checkpoint"))
-    _known(model, {"lock", "weights", "root"}, "model")
+    _known(
+        model,
+        {"lock", "weights", "root", "export", "gpu_check", "sft_source"},
+        "model",
+    )
     _known(data, {"manifest", "root"}, "data")
     _known(checkpoint, {"manifest", "sha256"}, "checkpoint")
     w, cluster = config["wandb"], config.get("cluster", {})
@@ -108,11 +111,9 @@ def compile_rl(config: dict, *, relative_to: Path) -> dict:
         },
         "Miles recipe",
     )
-    bound = bound_model(
-        read_mapping(relative_to / model["lock"]),
-        read_mapping(relative_to / model["weights"]),
-        _sfs_root(model["root"], "model root"),
-    )
+    from .miles_conversion import bind_model_source
+
+    bound = bind_model_source(model, relative_to=relative_to)
     metadata = read_mapping(relative_to / data["manifest"])
     _sealed(metadata, "cyber_miles_data_v1")
     cp_path = relative_to / checkpoint["manifest"]
@@ -121,7 +122,7 @@ def compile_rl(config: dict, *, relative_to: Path) -> dict:
     cp = read_mapping(cp_path)
     _sealed(cp, "cyber_miles_checkpoint_v1")
     if cp["model"] != bound or cp["image"] != miles.IMAGE or cp["optimizer_steps"] != 0:
-        raise ValueError("RL-from-base requires the exact native base conversion")
+        raise ValueError("RL requires an exact zero-step conversion of its initial policy")
     root = Path(_sfs_root(data["root"], "data root"))
     limits = metadata["limits"]
     args = miles.MilesConfig(

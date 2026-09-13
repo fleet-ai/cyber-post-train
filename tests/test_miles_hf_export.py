@@ -123,6 +123,7 @@ def case(tmp_path: Path, monkeypatch) -> dict:
         "root": str(base),
         "files": files,
         "weight_manifest_sha256": "sha256:" + "a" * 64,
+        "initial_policy": {"kind": "sft_hf_export", "sft_optimizer_step": 44},
     }
     checkpoint = _sealed(
         {

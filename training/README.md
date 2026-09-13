@@ -52,6 +52,28 @@ historical treatments, not the new dense policy.
   horizon and a canary that acquires genuine reward. An all-zero, truncated run
   is not proof of learning or model incapability.
 
+Miles may start from either the exact frozen base conversion or an accepted SFT
+BF16 export. For SFT→RL, add exact SFS `export.path` and `gpu_check.path`
+references, separately hash-bound local `snapshot` copies of both receipts, plus
+`sft_source.plan_sha256` and `sft_source.checkpoint_receipt_sha256` to the model
+mapping used by both conversion and RL, together with the exact
+`sft_source.checkpoint_manifest_sha256`,
+`sft_source.export_code_sha256` and `sft_source.checker_sha256` producer pins.
+Point `model.root` and the freshly
+prepared RL data at that export directory, then convert it to a new create-once
+native checkpoint. Local preparation validates the snapshots and pins only the
+SFS runtime paths into the plan. Run the zero-GPU preflight where SFS is mounted:
+it deeply reopens the export and requires its exact base revision, tensor layout
+and tokenizer/runtime sidecars, plus a matching one-GPU, zero-update reload
+receipt from the pinned checker. Submission requires that exact preflight, so an
+unavailable or changed runtime export is rejected before GPU allocation. Rebuild
+RL data because its private episode bindings include the initial-policy root and
+run ID.
+The existing production promoter remains deliberately bound to RL-from-base;
+an SFT→RL arm must first earn its own reward/update/reload dev evidence and then
+freeze a distinct production candidate. External benchmarks remain post-training
+only and cannot select the SFT export, RL recipe, checkpoint, or retry.
+
 Use [cluster operations](../docs/CLUSTER_ALERTS_AND_INFERENCE_SERVING.md) and the
 [training skill](../skills/cyber-train-operator/SKILL.md) before paid operations.
 Historical model-specific reports and immutable run configs remain provenance;

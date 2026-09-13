@@ -699,6 +699,7 @@ def case(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict:
         "repo": "Qwen/Qwen3.8-27B",
         "revision": "synthetic-revision",
         "root": arguments["model_root"],
+        "initial_policy": {"kind": "sft_hf_export", "sft_optimizer_step": 44},
     }
     base_checkpoint = _seal(
         {

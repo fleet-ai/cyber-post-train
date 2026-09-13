@@ -202,13 +202,32 @@ def test_gpu_orchestration_uses_actual_parameters_not_device_map(fixture, monkey
     monkeypatch.setattr(torch.cuda, "synchronize", lambda: None)
     monkeypatch.setattr(torch.cuda, "get_device_name", lambda *_: "synthetic GPU")
     monkeypatch.setattr(torch.cuda, "max_memory_allocated", lambda *_: 1)
-    monkeypatch.setattr(c, "model_contract", lambda *a, **k: {"unit_test_only": True})
+    monkeypatch.setattr(
+        c,
+        "model_contract",
+        lambda *a, **k: {"model_class": c.MODEL_CLASS, "parameter_values": 1},
+    )
     monkeypatch.setattr(c, "enable_native_patch", lambda *_: 1)
     monkeypatch.setattr(
         c, "synthetic_forward", lambda *a, **k: {"finite_logits": True, "generated_tokens": 2}
     )
     result = c.check(path, digest(path), output, gpu=True)
     assert result["gpu_reload_verified"] and called[0]["device_map"] == {"": "cuda:0"}
+    proof, layout, accepted = c.inspect_accepted_export(
+        path, digest(path), output, digest(output), result["checker_sha256"]
+    )
+    assert accepted == result and layout and proof["receipt_sha256"]
+
+    changed = json.loads(output.read_text())
+    changed.pop("receipt_sha256")
+    changed["checker_sha256"] = "0" * 64
+    output.unlink()
+    write_receipt(output, changed)
+    with pytest.raises(ValueError, match="one-GPU"):
+        c.inspect_accepted_export(
+            path, digest(path), output, digest(output), result["checker_sha256"]
+        )
+
     output.unlink()
     monkeypatch.setattr(
         AutoModelForImageTextToText,

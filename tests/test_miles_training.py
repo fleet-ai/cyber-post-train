@@ -436,6 +436,19 @@ def test_artifacts_are_read_only_and_return_both_splits(artifacts):
     assert before == {p: p.read_bytes() for p in before}
 
 
+def test_sft_initial_policy_survives_staged_rl_artifact_validation(artifacts):
+    plan, _, _ = artifacts
+    initial_policy = {"kind": "sft_hf_export", "sft_optimizer_step": 44}
+    plan["model"]["initial_policy"] = initial_policy
+    plan["checkpoint"]["model"] = plan["model"]
+    plan["checkpoint"]["sha256"] = digest(
+        {key: value for key, value in plan["checkpoint"].items() if key != "sha256"}
+    )
+    rows = train.check_artifacts(plan)
+    assert {key: len(value) for key, value in rows.items()} == {"train": 1, "dev": 1}
+    assert plan["checkpoint"]["model"]["initial_policy"] == initial_policy
+
+
 def test_training_checkpoint_cannot_masquerade_as_base(artifacts):
     plan, root, _ = artifacts
     (root / "latest_checkpointed_iteration.txt").write_text("1\n")

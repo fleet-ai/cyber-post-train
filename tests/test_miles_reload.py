@@ -80,7 +80,11 @@ def _source_plan(source: Path) -> dict:
         "schema": reload.SOURCE_SCHEMA,
         "run_name": "source-miles",
         "output_root": str(source),
-        "model": {"repo": "Qwen/Qwen3.8-27B", "revision": "synthetic"},
+        "model": {
+            "repo": "Qwen/Qwen3.8-27B",
+            "revision": "synthetic",
+            "initial_policy": {"kind": "sft_hf_export", "sft_optimizer_step": 44},
+        },
         "arguments": arguments,
         "native_driver_sha256": reload.NATIVE_DRIVER_SHA256,
         "execution": {

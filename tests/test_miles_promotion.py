@@ -164,6 +164,20 @@ def test_embedded_promotion_rechecks_the_complete_compiled_candidate() -> None:
             miles_promotion.validate_embedded_promotion(invalid, check_files=False)
 
 
+def test_existing_production_promoter_rejects_an_sft_seeded_policy() -> None:
+    plan = _plan()
+    sft_model = {
+        **plan["model"],
+        "root": "/mnt/sfs/jobs/synthetic-sft/hf-export",
+        "initial_policy": {"kind": "sft_hf_export", "sft_optimizer_step": 44},
+    }
+    plan["model"] = sft_model
+    plan["checkpoint"]["model"] = sft_model
+    plan["arguments"]["model_root"] = sft_model["root"]
+    with pytest.raises(ValueError, match="exact candidate"):
+        miles_promotion.validate_embedded_promotion(plan, check_files=False)
+
+
 def test_promotion_cannot_hide_external_benchmark_feedback() -> None:
     value = _promotion()
     miles_promotion.validate_promotion(value, check_files=False)

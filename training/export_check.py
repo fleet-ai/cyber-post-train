@@ -51,6 +51,57 @@ def inspect_export(path: Path, sha256: str) -> tuple[dict, dict]:
     return proof, layout
 
 
+def inspect_accepted_export(
+    path: Path,
+    sha256: str,
+    gpu_check_path: Path,
+    gpu_check_sha256: str,
+    checker_sha256: str,
+) -> tuple[dict, dict, dict]:
+    """Reopen one complete BF16 export and its exact zero-update GPU check."""
+    proof, layout = inspect_export(path, sha256)
+    _checked_file(gpu_check_path, gpu_check_sha256)
+    gpu = receipt(gpu_check_path)
+    validate_accepted_export_receipts(proof, gpu, sha256, checker_sha256)
+    return proof, layout, gpu
+
+
+def validate_accepted_export_receipts(
+    proof: dict,
+    gpu: dict,
+    export_sha256: str,
+    checker_sha256: str,
+) -> None:
+    """Validate exact accepted receipt bytes without requiring their payload tree."""
+    contract = gpu.get("loader_contract")
+    if (
+        gpu.get("schema") != "cyber_hf_export_check_v1"
+        or gpu.get("status") != "passed"
+        or gpu.get("checker_sha256", "").removeprefix("sha256:")
+        != checker_sha256.removeprefix("sha256:")
+        or gpu.get("export_sha256", "").removeprefix("sha256:")
+        != export_sha256.removeprefix("sha256:")
+        or gpu.get("export_receipt_sha256", "").removeprefix("sha256:")
+        != proof["receipt_sha256"].removeprefix("sha256:")
+        or gpu.get("gpus") != 1
+        or gpu.get("gpu_reload_verified") is not True
+        or gpu.get("source_unchanged") is not True
+        or gpu.get("finite_logits") is not True
+        or gpu.get("optimizer_steps_executed") != 0
+        or gpu.get("synthetic_only") is not True
+        or gpu.get("serving_qualified") is not False
+        or gpu.get("attention_implementation") != "eager"
+        or gpu.get("generated_tokens") != 2
+        or type(gpu.get("patched_linear_layers")) is not int
+        or gpu["patched_linear_layers"] < 1
+        or not isinstance(contract, dict)
+        or contract.get("model_class") != MODEL_CLASS
+        or type(contract.get("parameter_values")) is not int
+        or contract["parameter_values"] < 1
+    ):
+        raise ValueError("exact one-GPU zero-update export check is absent or inconsistent")
+
+
 def model_contract(model, layout: dict, restored: list[str], *, gpu: bool) -> dict:
     """Artifact-only MTP tensors are not missing runtime model parameters."""
     import torch
