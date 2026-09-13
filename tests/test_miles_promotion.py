@@ -157,6 +157,53 @@ def test_promotion_cannot_hide_external_benchmark_feedback() -> None:
         miles_promotion.validate_promotion(changed, check_files=False)
 
 
+def test_promotion_cross_binds_native_reload_to_the_dev_checkpoint(monkeypatch) -> None:
+    value = _promotion()
+    for index, name in enumerate(("reward_terminal", "native_reload", "production_data_manifest")):
+        value[name] = {
+            "path": (
+                miles_promotion.PROD_DATA_MANIFEST
+                if name == "production_data_manifest"
+                else f"/mnt/sfs/jobs/synthetic/{name}.json"
+            ),
+            "file_sha256": str(index + 4) * 64,
+            "receipt_sha256": str(index + 7) * 64,
+        }
+    value["sha256"] = digest({key: item for key, item in value.items() if key != "sha256"})
+    terminal = {
+        "sha256": "sha256:" + "a" * 64,
+        "checkpoint_manifest": {"receipt_sha256": "sha256:" + "b" * 64},
+    }
+    native = {
+        "source_terminal_acceptance_sha256": "sha256:" + "a" * 64,
+        "source_manifest_sha256": "sha256:" + "b" * 64,
+    }
+    data = {"schema": "synthetic"}
+    observed = {
+        value["reward_terminal"]["path"]: terminal,
+        value["native_reload"]["path"]: native,
+        value["production_data_manifest"]["path"]: data,
+    }
+    monkeypatch.setattr(
+        miles_promotion,
+        "_reopen",
+        lambda reference, *, check_files: observed[reference["path"]],
+    )
+    monkeypatch.setattr(miles_promotion, "_exact_dev3", lambda _: None)
+    monkeypatch.setattr(miles_promotion, "_exact_data", lambda _: None)
+    monkeypatch.setattr("training.miles_acceptance.validate_terminal", lambda *_args, **_kwargs: {})
+    monkeypatch.setattr(
+        "training.miles_reload_acceptance.validate_accepted", lambda *_args, **_kwargs: {}
+    )
+
+    result = miles_promotion.validate_promotion(value, check_files=True)
+    assert result["dev_checkpoint"] == terminal["checkpoint_manifest"]
+
+    native["source_manifest_sha256"] = "sha256:" + "c" * 64
+    with pytest.raises(ValueError, match="cross-bound"):
+        miles_promotion.validate_promotion(value, check_files=True)
+
+
 def test_live_gate_reopens_c1_value_and_counts_node_budget(monkeypatch) -> None:
     class Client:
         @staticmethod
@@ -183,9 +230,7 @@ def test_live_gate_reopens_c1_value_and_counts_node_budget(monkeypatch) -> None:
             "items": [
                 {
                     "status": {"phase": "Pending"},
-                    "spec": {
-                        "containers": [{"resources": {"limits": {"nvidia.com/gpu": "8"}}}]
-                    },
+                    "spec": {"containers": [{"resources": {"limits": {"nvidia.com/gpu": "8"}}}]},
                 }
                 for _ in range(7)
             ]

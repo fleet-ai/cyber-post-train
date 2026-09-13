@@ -263,11 +263,12 @@ def validate_promotion(value: dict[str, Any], *, check_files: bool) -> dict[str,
     miles_acceptance.validate_terminal(terminal, check_files=True)
     miles_reload_acceptance.validate_accepted(native_reload, check_files=True)
     _exact_dev3(terminal)
-    if (
-        native_reload.get("source_terminal_acceptance_sha256")
-        != terminal["sha256"].removeprefix("sha256:")
-        or native_reload.get("source_manifest_sha256")
-        != terminal["checkpoint_manifest"]["receipt_sha256"].removeprefix("sha256:")
+    if str(native_reload.get("source_terminal_acceptance_sha256", "")).removeprefix(
+        "sha256:"
+    ) != str(terminal["sha256"]).removeprefix("sha256:") or str(
+        native_reload.get("source_manifest_sha256", "")
+    ).removeprefix("sha256:") != terminal["checkpoint_manifest"]["receipt_sha256"].removeprefix(
+        "sha256:"
     ):
         raise ValueError("Miles reward and native-reload chain is not cross-bound")
     _exact_data(data)
@@ -313,9 +314,7 @@ def accept_promotion(
     return _write(output, value)
 
 
-def bind_production_promotion(
-    config: dict[str, Any], relative_to: Path
-) -> dict[str, Any] | None:
+def bind_production_promotion(config: dict[str, Any], relative_to: Path) -> dict[str, Any] | None:
     if not requires_production_promotion(config):
         if config.get("production_promotion") is not None:
             raise ValueError("Miles production promotion cannot attach to a dev run")
@@ -371,8 +370,7 @@ def _exact_plan(plan: dict[str, Any]) -> None:
         or checkpoint.get("schema") != "cyber_miles_checkpoint_v1"
         or checkpoint.get("optimizer_steps") != 0
         or checkpoint.get("root") != BASE_CHECKPOINT["root"]
-        or checkpoint.get("sha256", "").removeprefix("sha256:")
-        != BASE_CHECKPOINT["receipt_sha256"]
+        or checkpoint.get("sha256", "").removeprefix("sha256:") != BASE_CHECKPOINT["receipt_sha256"]
         or checkpoint.get("image") != miles.IMAGE
         or checkpoint.get("model") != plan.get("model")
         or digest(plan.get("model")) != PROD_MODEL_SHA256
@@ -387,9 +385,7 @@ def _exact_plan(plan: dict[str, Any]) -> None:
     _exact_data(plan.get("data"))
 
 
-def validate_embedded_promotion(
-    plan: dict[str, Any], *, check_files: bool = True
-) -> bool:
+def validate_embedded_promotion(plan: dict[str, Any], *, check_files: bool = True) -> bool:
     required = requires_production_promotion(plan)
     proof = plan.get("execution", {}).get("production_promotion")
     if not required:
@@ -404,10 +400,9 @@ def validate_embedded_promotion(
     observed = _reopen(reference, check_files=check_files)
     if observed is not None and observed != proof["receipt"]:
         raise ValueError("embedded Miles production promotion receipt changed")
-    if (
-        proof["receipt"].get("sha256", "").removeprefix("sha256:")
-        != proof["receipt_sha256"].removeprefix("sha256:")
-    ):
+    if proof["receipt"].get("sha256", "").removeprefix("sha256:") != proof[
+        "receipt_sha256"
+    ].removeprefix("sha256:"):
         raise ValueError("embedded Miles production promotion digest changed")
     validate_promotion(proof["receipt"], check_files=check_files)
     _exact_plan(plan)
