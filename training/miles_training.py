@@ -316,6 +316,8 @@ def native_args(plan):
             "num_steps_per_rollout": 1,
             "global_batch_size": plan["arguments"]["groups"]
             * plan["arguments"]["samples_per_prompt"],
+            "calculate_per_token_loss": True,
+            "grpo_std_normalization": False,
         }
         if any(getattr(args, k) != v for k, v in expected.items()):
             raise ValueError("native parsed training/load semantics changed")
