@@ -394,13 +394,73 @@ def validate_plan(
             receipt, _ = hf.inspect_export(
                 Path(export["path"]),
                 export["file_sha256"],
-                prepared_export=None if validate_historical else export,
+                prepared_export=export,
             )
             if (
                 receipt["sha256"].removeprefix("sha256:") != export["receipt_sha256"]
                 or receipt["tensor_inventory_sha256"] != export["tensor_inventory_sha256"]
             ):
                 raise ValueError("Miles HF reload source export changed")
+
+
+def _inspect_plan_bound_export(
+    plan: dict[str, Any], path: Path, expected_sha256: str
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Reopen a post-Job export without materializing its full DCP values.
+
+    The high-memory batch Job is the sole process that independently maps and
+    compares every DCP value. Later lifecycle steps revalidate the exact source
+    receipts and checkpoint file hashes through ``validate_plan``, then rehash
+    the immutable HF artifact and its value inventory. This preserves source
+    stability without moving a 27B DCP state dict into operator RAM.
+    """
+    from . import miles_hf_export as hf
+    from .miles_promotion import DEV3
+
+    if plan.get("stage") != "export":
+        raise ValueError("post-Job export inspection requires an export plan")
+    expected_path = Path(plan["artifact_path"]) / "EXPORT.json"
+    if path != expected_path:
+        raise ValueError("post-Job export path differs from its exact plan")
+    validate_plan(plan, check_files=True)
+    artifact, artifact_file_sha256 = hf._snapshot(path)
+    if artifact_file_sha256 != expected_sha256.removeprefix("sha256:"):
+        raise ValueError("post-Job export file digest changed")
+    prepared = {
+        "path": str(path),
+        "file_sha256": artifact_file_sha256,
+        "receipt_sha256": str(artifact.get("sha256", "")).removeprefix("sha256:"),
+        "tensor_inventory_sha256": artifact.get("tensor_inventory_sha256"),
+        "active_dev3": DEV3,
+    }
+    reopened, tensors = hf.inspect_export(
+        path,
+        artifact_file_sha256,
+        prepared_export=prepared,
+    )
+    checkpoint_reference = plan["source"]["checkpoint"]
+    checkpoint, _ = hf._snapshot_json(
+        Path(checkpoint_reference["path"]), checkpoint_reference["file_sha256"]
+    )
+    generation = Path(checkpoint["root"]) / f"iter_{checkpoint['rollout_index']:07d}"
+    equivalence = reopened["source_equivalence"]
+    expected_sidecars = hf._sidecar_names(checkpoint["model"])
+    source_files = {row["path"]: row for row in checkpoint["model"]["files"]}
+    if (
+        reopened != artifact
+        or reopened.get("source") != plan["source"]
+        or equivalence.get("converter_input") != str(generation)
+        or equivalence.get("common_pt_sha256") != hf._hash(generation / "common.pt")
+        or equivalence.get("dcp_metadata_sha256") != hf._hash(generation / ".metadata")
+        or set(reopened["sidecars"]) != expected_sidecars
+        or any(
+            source_files[name]["sha256"].removeprefix("sha256:")
+            != reopened["sidecars"][name]["sha256"]
+            for name in expected_sidecars
+        )
+    ):
+        raise ValueError("post-Job export differs from its plan-bound source evidence")
+    return reopened, tensors
 
 
 def _execution(stage: str) -> dict[str, Any]:
@@ -1313,7 +1373,7 @@ def controller_from_event_journal(
         pod_name, pod_uid = identities["Pod"]
         artifact_path = Path(plan["artifact_path"]) / "EXPORT.json"
         artifact, artifact_file_sha256 = hf._snapshot(artifact_path)
-        hf.inspect_export(artifact_path, artifact_file_sha256)
+        _inspect_plan_bound_export(plan, artifact_path, artifact_file_sha256)
         if observed_at < float(artifact["completed_at"]):
             raise ValueError("HF export artifact postdates its controller observation")
         return {
@@ -1462,7 +1522,7 @@ def _validate_export_controller(
     validate_hf_event_journal(plan, submission, value.get("event_journal"), value)
     artifact_path = Path(plan["artifact_path"]) / "EXPORT.json"
     artifact, artifact_file_sha256 = hf._snapshot(artifact_path)
-    hf.inspect_export(artifact_path, artifact_file_sha256)
+    _inspect_plan_bound_export(plan, artifact_path, artifact_file_sha256)
     api = value.get("api_run_id")
     pod_rows = value.get("pods")
     pod = pod_rows[0] if isinstance(pod_rows, list) and len(pod_rows) == 1 else None
@@ -1818,7 +1878,7 @@ def validate_export_accepted(value: dict[str, Any], *, check_files: bool = True)
         )
         artifact_path = Path(value["artifact_path"])
         reopened, artifact_file_sha256 = hf._snapshot(artifact_path)
-        hf.inspect_export(artifact_path, artifact_file_sha256)
+        _inspect_plan_bound_export(plan, artifact_path, artifact_file_sha256)
         if (
             plan_file_sha256 != value["export_plan_file_sha256"]
             or digest(plan) != value["export_plan_sha256"]

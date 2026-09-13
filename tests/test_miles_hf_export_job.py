@@ -467,6 +467,9 @@ def test_export_acceptance_is_create_once_and_reload_consumes_only_it(
     monkeypatch.setattr(job, "validate_submission_binding", lambda *_args, **_kwargs: {})
     monkeypatch.setattr(job, "_validate_export_controller", lambda *_args: artifact)
     monkeypatch.setattr(job, "_validate_export_release", lambda *_args: None)
+    monkeypatch.setattr(
+        job, "_inspect_plan_bound_export", lambda *_args, **_kwargs: (artifact, [])
+    )
     monkeypatch.setattr(hf, "inspect_export", lambda *_args, **_kwargs: (artifact, []))
     output = root / "HF_EXPORT_ACCEPTED.json"
     accepted = job.accept_export_job(
@@ -587,7 +590,9 @@ def test_zero_gpu_batch_watch_compiles_exact_job_controller(
     artifact_path.parent.mkdir(parents=True)
     artifact = {"completed_at": 1789214404.0, "sha256": "sha256:" + "a" * 64}
     artifact_path.write_text(json.dumps(artifact))
-    monkeypatch.setattr(hf, "inspect_export", lambda *_args, **_kwargs: (artifact, []))
+    monkeypatch.setattr(
+        job, "_inspect_plan_bound_export", lambda *_args, **_kwargs: (artifact, [])
+    )
     directory = tmp_path / "watch-export"
     miles_event_evidence.start_capture(
         plan,
@@ -840,7 +845,7 @@ def test_ttl_zero_watch_compiles_bound_hf_controller_and_release(
     monkeypatch.setattr(
         hf,
         "inspect_export",
-        lambda _path, _sha256: (
+        lambda _path, _sha256, **_kwargs: (
             {
                 "sha256": "sha256:" + result["export_receipt_sha256"],
                 "tensor_inventory_sha256": result["export_tensor_inventory_sha256"],

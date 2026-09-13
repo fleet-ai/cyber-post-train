@@ -15,6 +15,7 @@ from safetensors.torch import save_file
 from cyber_post_train.jobs import digest
 from training import miles
 from training import miles_hf_export as export
+from training import miles_hf_export_job as export_job
 from training.miles_promotion import DEV3
 
 
@@ -435,6 +436,70 @@ def test_export_runs_one_create_once_converter_pass(case: dict, monkeypatch) -> 
 
     assert calls == 1
     assert result["source_equivalence"]["all_trained_values_match_source"] is True
+
+
+def test_post_job_inspection_never_materializes_dcp_values(
+    case: dict, monkeypatch
+) -> None:
+    """Controller/export/reload acceptance must stay within operator RAM."""
+
+    result = _run(case)
+    artifact_path = case["output"] / "EXPORT.json"
+    artifact_file_sha256 = export._hash(artifact_path)
+    plan = {
+        "stage": "export",
+        "artifact_path": str(case["output"]),
+        "source": result["source"],
+    }
+    prepared_export = {
+        "path": str(artifact_path),
+        "file_sha256": artifact_file_sha256,
+        "receipt_sha256": result["sha256"],
+        "tensor_inventory_sha256": result["tensor_inventory_sha256"],
+        "active_dev3": DEV3,
+    }
+
+    def forbidden(_generation: Path) -> list[dict]:
+        raise AssertionError("post-Job validation materialized DCP values")
+
+    monkeypatch.setattr(export, "_source_value_inventory", forbidden)
+    monkeypatch.setattr(export_job, "validate_plan", lambda *_args, **_kwargs: None)
+    reopened, _ = export_job._inspect_plan_bound_export(
+        plan, artifact_path, artifact_file_sha256
+    )
+    assert reopened == result
+    changed_plan = {
+        **plan,
+        "source": {**plan["source"], "source_plan_sha256": "f" * 64},
+    }
+    with pytest.raises(ValueError, match="plan-bound source evidence"):
+        export_job._inspect_plan_bound_export(
+            changed_plan, artifact_path, artifact_file_sha256
+        )
+
+    monkeypatch.setattr(export, "_validate_reload_result", lambda _value: 1.0)
+    monkeypatch.setattr(export, "_validate_controller", lambda *_args: 2.0)
+    monkeypatch.setattr(export, "_validate_release", lambda *_args: None)
+    reload_result = {
+        "export_path": str(artifact_path),
+        "export_file_sha256": artifact_file_sha256,
+        "export_receipt_sha256": result["sha256"],
+        "export_tensor_inventory_sha256": result["tensor_inventory_sha256"],
+        "native_prediction_probe": result["source"]["prediction_probe"],
+        "hf_prediction_probe": result["source"]["prediction_probe"],
+    }
+    validated = export._validate_reload_evidence(
+        result=reload_result,
+        result_path=case["output"].parent / "reload" / "HF_RELOAD_VALIDATED.json",
+        result_file_sha256="b" * 64,
+        controller={},
+        controller_path=case["output"].parent / "reload" / "HF_RELOAD_CONTROLLER_TERMINAL.json",
+        controller_file_sha256="c" * 64,
+        release={},
+        plan={"source": {"export": prepared_export}},
+        submission={},
+    )
+    assert validated == result
 
 
 def test_export_rejects_values_that_do_not_match_independent_dcp_reload(

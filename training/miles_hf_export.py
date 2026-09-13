@@ -1794,7 +1794,14 @@ def _validate_reload_evidence(
         or result_path.resolve().is_relative_to(export_path.parent.resolve())
     ):
         raise ValueError("HF reload evidence/export paths are not disjoint absolute paths")
-    exported, _ = inspect_export(export_path, result["export_file_sha256"])
+    prepared_export = plan.get("source", {}).get("export")
+    if not isinstance(prepared_export, dict):
+        raise ValueError("HF reload plan has no exact accepted export binding")
+    exported, _ = inspect_export(
+        export_path,
+        result["export_file_sha256"],
+        prepared_export=prepared_export,
+    )
     if (
         exported["sha256"].removeprefix("sha256:") != result["export_receipt_sha256"]
         or exported["tensor_inventory_sha256"] != result["export_tensor_inventory_sha256"]
