@@ -1,0 +1,116 @@
+{
+  "schema_version": 1,
+  "observed_at": "2026-09-13T09:00:47Z",
+  "scope": "Read-only capacity and authority audit for the queued Qwen3.8-27B Miles dev canary",
+  "cluster": {
+    "kubernetes_context": "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb",
+    "cluster_id": "mk8scluster-e04p03enwk5c0va9tb",
+    "cluster_name": "fleetai-training-dev",
+    "project_id": "project-e04e4tz1bc00b2qxfzqsdx",
+    "region": "eu-west2"
+  },
+  "gpu_node_group": {
+    "id": "mk8snodegroup-e04wjmyvarh4xmetd6",
+    "name": "fleetai-training-ng-gpu",
+    "resource_version": "3",
+    "scaling_mode": "fixed",
+    "fixed_node_count": 2,
+    "autoscaling_min_node_count": null,
+    "autoscaling_max_node_count": null,
+    "status": {
+      "state": "RUNNING",
+      "node_count": 2,
+      "ready_node_count": 2,
+      "target_node_count": 2
+    },
+    "template": {
+      "platform": "gpu-b300-sxm",
+      "preset": "8gpu-192vcpu-2768gb",
+      "gpus_per_node": 8,
+      "preemptible": true,
+      "driver_preset": "cuda13.0"
+    },
+    "conclusion": "The development B300 group has no autoscaler. Its current ceiling is the manually configured fixed count of two, not an autoscaling maximum. A user with node-group update authority can request a larger fixed count, subject to cloud capacity."
+  },
+  "live_nodes": [
+    {
+      "name": "computeinstance-e04ab9szsam058qrxp",
+      "uid": "db5fdae2-93f2-4b21-a9ac-aaca07bffdbf",
+      "ready": true,
+      "allocatable_gpus": 8
+    },
+    {
+      "name": "computeinstance-e04vhewhxwax2j8vqq",
+      "uid": "88734b64-79ea-4cb3-907e-419a0814bb70",
+      "ready": true,
+      "allocatable_gpus": 8
+    }
+  ],
+  "fragmentation": {
+    "running_peer_allocations": [
+      {
+        "deployment": "fleet-train-jobs/tong-judge-vllm-b",
+        "deployment_uid": "98e2ecaa-b005-4c21-9de9-fc7bb406f873",
+        "requested_gpus": 2,
+        "pinned_node": "computeinstance-e04ab9szsam058qrxp"
+      },
+      {
+        "deployment": "fleet-train-jobs/tong-judge-vllm",
+        "deployment_uid": "376bd88b-5f8a-4c00-b554-ad2603f4163f",
+        "requested_gpus": 2,
+        "pinned_node": "computeinstance-e04vhewhxwax2j8vqq"
+      }
+    ],
+    "free_gpu_shape": [
+      6,
+      6
+    ],
+    "required_canary_shape": [
+      8
+    ],
+    "conclusion": "Aggregate free GPUs are sufficient, but neither node has one contiguous eight-GPU slot. The two peer Deployments use explicit hostname selectors and are not Kueue-managed workloads."
+  },
+  "kueue": {
+    "cluster_queue": "training-cq",
+    "cluster_queue_uid": "cbf59464-7c9e-4d48-b90f-c6d4fafbbab6",
+    "b300_nominal_gpu_quota": 16,
+    "reserved_gpus": 0,
+    "used_gpus": 0,
+    "pending_workloads": 1,
+    "queued_canary_workload": "fleet-train-jobs/rayjob-chris-q38-miles-rlreward-dev4-65a2598c-47e40",
+    "queued_canary_workload_uid": "85a96f37-218c-4f88-8aad-3bca0ef42ec1",
+    "queued_canary_priority": 10000,
+    "queued_canary_admission": null,
+    "conclusion": "The canary has no admission, RayCluster, training Pod, GPU reservation or GPU allocation. Adding a Ready third node would make one whole-node placement possible without increasing the existing unused 16-GPU Kueue quota for this single eight-GPU canary. Any durable pool expansion should reconcile quota from live allocatable values only after the node is Ready."
+  },
+  "cloud_capacity": {
+    "resource_advice_observation": "The tenant resource-advice response contained B300 entries only for uk-south1 and no gpu-b300-sxm entry for the cluster region eu-west2.",
+    "interpretation": "There is no positive read-only proof that another eu-west2 B300 node is presently launchable. A fixed-count update can still be attempted by an authorized infrastructure operator, but provisioning is not guaranteed by this audit."
+  },
+  "authority": {
+    "proved": [
+      "The named Nebius profile can read the exact cluster, node group, compute instances, quotas and capacity advice.",
+      "The CLI supports changing a fixed node count with node-group update.",
+      "A companion operator rendered the fixed-count 2-to-3 update and canceled it before application, proving request syntax but not permission or capacity."
+    ],
+    "not_proved": [
+      "Permission to update this shared node group",
+      "Physical capacity for another eight-B300 node in eu-west2"
+    ],
+    "access_check": "Listing the current user's IAM access permits returned PermissionDenied, and the node-group update command has no non-mutating authorization-only dry-run. Applying a change merely to test permission was intentionally not attempted."
+  },
+  "fastest_safe_paths": [
+    {
+      "rank": 1,
+      "action": "Ask Tong to pause one judge or, if its resource and serving constraints allow, consolidate both two-GPU judge Deployments onto one node.",
+      "why": "This immediately frees one existing whole eight-GPU node and avoids uncertain cloud provisioning. Only the peer owner or an explicitly authorized cluster administrator should make this change."
+    },
+    {
+      "rank": 2,
+      "action": "Ask an authorized Nebius infrastructure operator to raise mk8snodegroup-e04wjmyvarh4xmetd6 from fixed_node_count 2 to 3, preserving its existing template, then wait for a third Ready node.",
+      "suggested_command": "nebius mk8s node-group update --id mk8snodegroup-e04wjmyvarh4xmetd6 --resource-version 3 --fixed-node-count 3 --profile <authorized-profile>",
+      "why": "The existing queued canary can then be admitted unchanged if cloud provisioning succeeds. Do not duplicate or resubmit the canary."
+    }
+  ],
+  "mutations_performed": []
+}
