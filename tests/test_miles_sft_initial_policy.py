@@ -173,6 +173,128 @@ def test_conversion_binds_accepted_sft_export_without_changing_base_path(accepte
     miles_conversion._reopen_initial_policy(plan["model"], strict=True)
 
 
+def _stage(config, export_path, gpu_path, tmp_path):
+    export = json.loads(export_path.read_text())
+    gpu = json.loads(gpu_path.read_text())
+    runtime_root = "/mnt/sfs/jobs/synthetic-sft-stage/payload"
+    stage_path = tmp_path / "STAGE.json"
+    source_export = {
+        "path": config["export"]["path"],
+        "file_sha256": miles_conversion._hash(export_path),
+        "receipt_sha256": export["receipt_sha256"],
+    }
+    source_gpu = {
+        "path": config["gpu_check"]["path"],
+        "file_sha256": miles_conversion._hash(gpu_path),
+        "receipt_sha256": gpu["receipt_sha256"],
+    }
+    value = {
+        "schema": miles_conversion.SFT_STAGE_SCHEMA,
+        "status": "passed",
+        "source_root": config["root"],
+        "runtime_root": runtime_root,
+        "source_export": source_export,
+        "source_gpu_check": source_gpu,
+        "files": miles_conversion._export_files(export),
+        "export_copy": {
+            "path": "EXPORT.json",
+            "size": export_path.stat().st_size,
+            "sha256": miles_conversion._hash(export_path),
+        },
+        "source_stable": True,
+        "copied_equal": True,
+        "zero_gpus": 0,
+        "runtime_identity": {
+            "uid": 1000,
+            "gid": 2000,
+            "supplemental_groups": [100, 2000],
+        },
+        "permissions": {"directory_mode": "0750", "file_mode": "0640", "gid": 2000},
+    }
+    write_receipt(stage_path, value)
+    config["runtime_stage"] = {
+        "root": runtime_root,
+        "receipt": {
+            "path": "/mnt/sfs/jobs/synthetic-sft-stage/STAGE.json",
+            "snapshot": str(stage_path),
+            "sha256": miles_conversion._hash(stage_path),
+        },
+    }
+    return stage_path, value
+
+
+def test_conversion_separates_accepted_evidence_from_group_readable_runtime_copy(
+    accepted, tmp_path
+):
+    config, _, export_path, gpu_path = accepted
+    stage_path, _ = _stage(config, export_path, gpu_path, tmp_path)
+    plan = miles_conversion.compile_conversion(
+        {
+            "name": "synthetic-staged-sft-conversion",
+            "output_root": "/mnt/sfs/jobs/synthetic-staged-sft-conversion",
+            "model": config,
+        },
+        relative_to=tmp_path,
+    )
+    assert plan["model"]["root"] == config["runtime_stage"]["root"]
+    assert plan["model"]["initial_policy"]["accepted_root"] == config["root"]
+    assert plan["model"]["initial_policy"]["runtime_stage"] == {
+        "path": config["runtime_stage"]["receipt"]["path"],
+        "file_sha256": miles_conversion._hash(stage_path),
+        "receipt_sha256": json.loads(stage_path.read_text())["receipt_sha256"],
+    }
+    assert plan["model"]["initial_policy"]["export"]["path"] == config["export"]["path"]
+
+
+@pytest.mark.parametrize(
+    "defect",
+    (
+        "source",
+        "runtime",
+        "files",
+        "export_copy",
+        "identity",
+        "permissions",
+        "gpus",
+        "inside",
+        "base_only",
+    ),
+)
+def test_runtime_stage_rejects_unbound_or_unsafe_copy(accepted, tmp_path, defect):
+    config, _, export_path, gpu_path = accepted
+    stage_path, value = _stage(config, export_path, gpu_path, tmp_path)
+    if defect == "base_only":
+        base = {key: config[key] for key in ("lock", "weights", "root")}
+        base["runtime_stage"] = config["runtime_stage"]
+        with pytest.raises(ValueError, match="accepted SFT"):
+            miles_conversion.bind_model_source(base, relative_to=tmp_path)
+        return
+    value.pop("receipt_sha256", None)
+    if defect == "source":
+        value["source_root"] += "-other"
+    elif defect == "runtime":
+        value["runtime_root"] += "-other"
+    elif defect == "files":
+        value["files"][0]["sha256"] = "0" * 64
+    elif defect == "export_copy":
+        value["export_copy"]["sha256"] = "0" * 64
+    elif defect == "identity":
+        value["runtime_identity"]["uid"] = 0
+    elif defect == "permissions":
+        value["permissions"]["file_mode"] = "0600"
+    elif defect == "gpus":
+        value["zero_gpus"] = True
+    else:
+        config["runtime_stage"]["receipt"]["path"] = (
+            config["runtime_stage"]["root"] + "/STAGE.json"
+        )
+    stage_path.unlink()
+    write_receipt(stage_path, value)
+    config["runtime_stage"]["receipt"]["sha256"] = miles_conversion._hash(stage_path)
+    with pytest.raises(ValueError):
+        miles_conversion.bind_model_source(config, relative_to=tmp_path)
+
+
 @pytest.mark.parametrize(
     "defect",
     (

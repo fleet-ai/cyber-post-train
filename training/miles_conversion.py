@@ -14,6 +14,7 @@ import os
 import re
 import shlex
 import signal
+import stat
 import subprocess
 import sys
 import time
@@ -28,6 +29,7 @@ SCHEMA = "cyber_miles_conversion_v1"
 CONVERTER_SHA256 = "0c2541d30073777a30344273a3773844a70ca1961287520c0496a1cec18d43f6"
 DEADLINE_SECONDS = 1800
 SFT_SOURCE_SCHEMA = "cyber_miles_sft_initial_policy_v1"
+SFT_STAGE_SCHEMA = "cyber_sft_export_stage_v1"
 
 
 def _sha256(value: object, label: str) -> str:
@@ -159,13 +161,107 @@ def _export_files(export: dict) -> list[dict]:
     return normalized
 
 
+def _validate_runtime_stage(
+    value: dict,
+    *,
+    accepted_root: str,
+    runtime_root: str,
+    files: list[dict],
+    export_reference: dict,
+    gpu_check_reference: dict,
+    check_payload: bool,
+) -> None:
+    """Validate a byte-identical, group-readable copy without trusting it as new evidence."""
+    expected_keys = {
+        "schema",
+        "status",
+        "source_root",
+        "runtime_root",
+        "source_export",
+        "source_gpu_check",
+        "files",
+        "export_copy",
+        "source_stable",
+        "copied_equal",
+        "zero_gpus",
+        "runtime_identity",
+        "permissions",
+        "receipt_sha256",
+    }
+    if not isinstance(value, dict) or set(value) != expected_keys:
+        raise ValueError("SFT runtime-stage receipt fields changed")
+    if (
+        value.get("schema") != SFT_STAGE_SCHEMA
+        or value.get("status") != "passed"
+        or value.get("source_root") != accepted_root
+        or value.get("runtime_root") != runtime_root
+        or value.get("source_export") != export_reference
+        or value.get("source_gpu_check") != gpu_check_reference
+        or value.get("files") != files
+        or value.get("source_stable") is not True
+        or value.get("copied_equal") is not True
+        or type(value.get("zero_gpus")) is not int
+        or value.get("zero_gpus") != 0
+        or value.get("runtime_identity")
+        != {"uid": 1000, "gid": 2000, "supplemental_groups": [100, 2000]}
+        or value.get("permissions")
+        != {"directory_mode": "0750", "file_mode": "0640", "gid": 2000}
+    ):
+        raise ValueError("SFT runtime-stage receipt does not bind the accepted export")
+    source = Path(accepted_root)
+    runtime = Path(runtime_root)
+    if source == runtime or source in runtime.parents or runtime in source.parents:
+        raise ValueError("accepted and runtime SFT roots must not overlap")
+    copied_export = value.get("export_copy")
+    if (
+        not isinstance(copied_export, dict)
+        or set(copied_export) != {"path", "size", "sha256"}
+        or copied_export.get("path") != "EXPORT.json"
+        or type(copied_export.get("size")) is not int
+        or copied_export["size"] <= 0
+        or _sha256(copied_export.get("sha256"), "staged EXPORT digest")
+        != _sha256(export_reference.get("file_sha256"), "accepted EXPORT digest")
+    ):
+        raise ValueError("SFT runtime-stage EXPORT copy is invalid")
+    if not check_payload:
+        return
+    if runtime.is_symlink() or not runtime.is_dir():
+        raise ValueError("SFT runtime-stage payload root is absent or indirect")
+    root_stat = runtime.stat()
+    if stat.S_IMODE(root_stat.st_mode) != 0o750 or root_stat.st_gid != 2000:
+        raise ValueError("SFT runtime-stage directory permissions changed")
+    for item in [*files, copied_export]:
+        path = runtime / item["path"]
+        observed = path.stat()
+        if (
+            path.is_symlink()
+            or not path.is_file()
+            or observed.st_size != item["size"]
+            or stat.S_IMODE(observed.st_mode) != 0o640
+            or observed.st_gid != 2000
+            or _hash(path) != _sha256(item["sha256"], "staged SFT payload digest")
+        ):
+            raise ValueError("SFT runtime-stage payload differs from its accepted inventory")
+    copied = json.loads((runtime / "EXPORT.json").read_text())
+    if (
+        not isinstance(copied, dict)
+        or _sha256(copied.get("receipt_sha256"), "copied EXPORT receipt digest")
+        != _sha256(export_reference.get("receipt_sha256"), "accepted EXPORT receipt digest")
+        or copied.get("output_root") != accepted_root
+        or _export_files(copied) != files
+    ):
+        raise ValueError("staged EXPORT receipt differs from accepted evidence")
+
+
 def _accepted_sft_model(
     base: dict,
-    root: str,
+    accepted_root: str,
+    runtime_root: str,
     export: dict,
     export_reference: dict,
     gpu_check_reference: dict,
     expected_source: dict,
+    runtime_stage_reference: dict | None,
 ) -> dict:
     """Bind an already exported and independently reloaded SFT initial policy."""
     from .post_sft_artifacts import QWEN36_EXACT_MTP_OMISSION_KEYS
@@ -174,7 +270,7 @@ def _accepted_sft_model(
         export.get("schema") != "cyber_native_checkpoint_hf_export_v1"
         or export.get("model_repo") != base["repo"]
         or export.get("model_revision") != base["revision"]
-        or export.get("output_root") != root
+        or export.get("output_root") != accepted_root
         or export.get("dtype") != "BF16"
         or export.get("optimizer_steps_executed") != 0
         or type(export.get("optimizer_step")) is not int
@@ -245,7 +341,7 @@ def _accepted_sft_model(
     return {
         "repo": base["repo"],
         "revision": base["revision"],
-        "root": root,
+        "root": runtime_root,
         "files": normalized,
         "weight_manifest_sha256": weight_manifest_sha256,
         "initial_policy": {
@@ -260,8 +356,14 @@ def _accepted_sft_model(
             "source_plan_sha256": "sha256:" + expected["source_plan_sha256"],
             "export_code_sha256": expected_source["export_code_sha256"],
             "checker_sha256": "sha256:" + expected_source["checker_sha256"],
+            "accepted_root": accepted_root,
             "export": export_reference,
             "gpu_check": gpu_check_reference,
+            **(
+                {"runtime_stage": runtime_stage_reference}
+                if runtime_stage_reference is not None
+                else {}
+            ),
         },
     }
 
@@ -273,17 +375,27 @@ def bind_model_source(config: dict, *, relative_to: Path) -> dict:
 
     _known(
         config,
-        {"lock", "weights", "root", "export", "gpu_check", "sft_source"},
+        {
+            "lock",
+            "weights",
+            "root",
+            "export",
+            "gpu_check",
+            "sft_source",
+            "runtime_stage",
+        },
         "model",
     )
-    root = _sfs_root(config["root"], "model root")
+    accepted_root = _sfs_root(config["root"], "model root")
     base = bound_model(
         read_mapping(relative_to / config["lock"]),
         read_mapping(relative_to / config["weights"]),
-        root,
+        accepted_root,
     )
     references = (config.get("export"), config.get("gpu_check"), config.get("sft_source"))
     if references == (None, None, None):
+        if config.get("runtime_stage") is not None:
+            raise ValueError("a runtime stage is valid only for an accepted SFT initial policy")
         return base
     if any(value is None for value in references):
         raise ValueError("SFT initial policy requires export, GPU check, and source identity")
@@ -307,7 +419,7 @@ def bind_model_source(config: dict, *, relative_to: Path) -> dict:
         config["gpu_check"], relative_to, "SFT GPU check"
     )
     export_path = Path(export_reference["path"])
-    if export_path != Path(root) / "EXPORT.json":
+    if export_path != Path(accepted_root) / "EXPORT.json":
         raise ValueError("SFT export receipt must be inside the selected model root")
     from .export_check import validate_accepted_export_receipts
 
@@ -317,14 +429,41 @@ def bind_model_source(config: dict, *, relative_to: Path) -> dict:
         export_reference["file_sha256"],
         expected_source["checker_sha256"],
     )
-    return _accepted_sft_model(
+    accepted = _accepted_sft_model(
         base,
-        root,
+        accepted_root,
+        accepted_root,
         export,
         export_reference,
         gpu_check_reference,
         expected_source,
+        None,
     )
+    stage = config.get("runtime_stage")
+    if stage is None:
+        return accepted
+    if not isinstance(stage, dict) or set(stage) != {"root", "receipt"}:
+        raise ValueError("SFT runtime stage needs an exact root and signed receipt")
+    runtime_root = _sfs_root(stage["root"], "SFT runtime-stage root")
+    stage_receipt, stage_reference = _signed_reference(
+        stage["receipt"], relative_to, "SFT runtime stage"
+    )
+    receipt_path = Path(stage_reference["path"])
+    runtime_path = Path(runtime_root)
+    if receipt_path == runtime_path or runtime_path in receipt_path.parents:
+        raise ValueError("SFT runtime-stage receipt must be outside its payload root")
+    _validate_runtime_stage(
+        stage_receipt,
+        accepted_root=accepted_root,
+        runtime_root=runtime_root,
+        files=accepted["files"],
+        export_reference=export_reference,
+        gpu_check_reference=gpu_check_reference,
+        check_payload=False,
+    )
+    accepted["root"] = runtime_root
+    accepted["initial_policy"]["runtime_stage"] = stage_reference
+    return accepted
 
 
 def _reopen_initial_policy(model: dict, *, strict: bool = False) -> None:
@@ -340,6 +479,24 @@ def _reopen_initial_policy(model: dict, *, strict: bool = False) -> None:
         or source["sft_optimizer_step"] < 1
     ):
         raise ValueError("SFT initial-policy binding is invalid")
+    stage_reference = source.get("runtime_stage")
+    if stage_reference is not None:
+        accepted_root = source.get("accepted_root")
+        if not isinstance(accepted_root, str):
+            raise ValueError("SFT accepted evidence root is absent")
+        stage, reopened = _reopen_reference(stage_reference, "SFT runtime stage")
+        if reopened != stage_reference:
+            raise ValueError("SFT runtime-stage reference changed")
+        _validate_runtime_stage(
+            stage,
+            accepted_root=accepted_root,
+            runtime_root=model["root"],
+            files=model["files"],
+            export_reference=source["export"],
+            gpu_check_reference=source["gpu_check"],
+            check_payload=strict,
+        )
+        return
     export, export_reference = _reopen_reference(source["export"], "SFT export")
     gpu, gpu_reference = _reopen_reference(source["gpu_check"], "SFT GPU check")
     if strict:
@@ -357,7 +514,7 @@ def _reopen_initial_policy(model: dict, *, strict: bool = False) -> None:
     if (
         export_reference != source["export"]
         or gpu_reference != source["gpu_check"]
-        or export.get("output_root") != model["root"]
+        or export.get("output_root") != source.get("accepted_root", model["root"])
         or export.get("optimizer_step") != source["sft_optimizer_step"]
         or _export_files(export) != model["files"]
         or _sha256(export.get("source_checkpoint_receipt_sha256"), "SFT checkpoint digest")
@@ -392,12 +549,12 @@ def compile_conversion(config: dict, *, relative_to: Path) -> dict:
     output = _sfs_root(config["output_root"], "output root")
     if bound["repo"] != "Qwen/Qwen3.8-27B":
         raise ValueError("only the exact native Qwen3.8 text conversion is supported")
+    input_roots = {Path(bound["root"])}
+    if "initial_policy" in bound:
+        input_roots.add(Path(bound["initial_policy"]["accepted_root"]))
     if any(
-        a == b or a in b.parents
-        for a, b in (
-            (Path(output), Path(bound["root"])),
-            (Path(bound["root"]), Path(output)),
-        )
+        Path(output) == root or Path(output) in root.parents or root in Path(output).parents
+        for root in input_roots
     ):
         raise ValueError("model and output directories must not overlap")
     plan = {

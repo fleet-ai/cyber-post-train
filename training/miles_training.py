@@ -81,7 +81,15 @@ def compile_rl(config: dict, *, relative_to: Path) -> dict:
     model, data, checkpoint = (config[k] for k in ("model", "data", "checkpoint"))
     _known(
         model,
-        {"lock", "weights", "root", "export", "gpu_check", "sft_source"},
+        {
+            "lock",
+            "weights",
+            "root",
+            "export",
+            "gpu_check",
+            "sft_source",
+            "runtime_stage",
+        },
         "model",
     )
     _known(data, {"manifest", "root"}, "data")
