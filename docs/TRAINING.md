@@ -556,14 +556,20 @@ For the one-step Qwen3.8 dev3 canary, use
 the exact procedure in `QWEN38_MILES_POLICY_OBSERVER.md`. One dev-only `1x8`
 observer loads the exact base and trained checkpoint on all ranks. Its trained
 leg restores model, optimizer, scheduler and RNG state and probes the sanitized
-state twice. It creates no rollout engine, performs no forward/backward or
-optimizer update, writes no checkpoint, and has no Fleet or W&B secret.
+state twice. Three isolated restore groups (base, trained reference, trained
+reload) close circular self-comparison: distinct pre-load sentinels must be
+overwritten, both trained states must match, and policy, optimizer, and
+scheduler must differ from the exact base. RNG must reload exactly but need not
+differ for this no-dropout recipe. It creates no rollout engine, performs exactly
+one fixed task-free no-grad prediction forward and no backward/optimizer update,
+writes no checkpoint, and has no Fleet or W&B secret.
 
 After exact UID-bound terminal and release evidence exists, the offline gates
 derive `POLICY_DELTA.json`, the training `MILES_TERMINAL_ACCEPTED.json`, and then
 `RELOAD_ACCEPTED.json`. The last step performs no API call or GPU allocation:
 the same observer load is both the value-sensitive policy-delta observation and
-the native reload proof. Never launch a second eight-GPU dev3 reload job.
+the native reload proof. The prediction digest is the semantic source binding
+for the later HF reload. Never launch a second eight-GPU dev3 reload job.
 
 The standalone `miles-rl-reload` rail remains available when a genuinely
 separate reload execution is required for another checkpoint. Its legacy dev3

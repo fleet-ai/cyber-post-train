@@ -405,12 +405,20 @@ def _policy_observer_evidence(
             "live": copy.deepcopy(restored),
         }
 
+    def base_load(rank: int) -> dict:
+        value = load(observer.BASE_SENTINEL, 1000, 2000, rank)
+        for key in ("optimizer", "scheduler"):
+            value["restored"][key] = copy.deepcopy(value["preload"][key])
+        value["restored"]["rng_sha256"] = value["preload"]["rng_sha256"]
+        value["live"] = copy.deepcopy(value["restored"])
+        return value
+
     rows = [
         {
             "rank": rank,
             "policy_tensor_count": 10,
             "local_policy_numel": 100,
-            "base": load(observer.BASE_SENTINEL, 1000, 2000, rank),
+            "base": base_load(rank),
             "trained_reference": load(observer.REFERENCE_SENTINEL, 3000, 4000, rank),
             "trained_reload": load(observer.RELOAD_SENTINEL, 5000, 4000, rank),
             "policy_changed": True,
@@ -1042,6 +1050,14 @@ def _accept(case: dict) -> dict:
     )
 
 
+def _observer_files(case: dict) -> tuple[dict, Path, dict]:
+    policy = json.loads(case["policy_delta"].read_bytes())
+    submission = json.loads(Path(policy["observer_submission"]["path"]).read_bytes())
+    plan = json.loads(Path(submission["observer_plan_path"]).read_bytes())
+    result_path = Path(policy["observer_result"]["path"])
+    return plan, result_path, json.loads(result_path.read_bytes())
+
+
 def test_terminal_acceptance_reopens_every_gate_without_reward_values(case: dict) -> None:
     result = _accept(case)
 
@@ -1115,7 +1131,7 @@ def test_observer_reload_rejects_commitment_or_result_replacement(case: dict) ->
     _write_json(result_path, _seal(result))
     with pytest.raises(
         ValueError,
-        match="reference changed|differs from rederived observer evidence",
+        match="reference changed|differs from rederived observer evidence|restore commitments",
     ):
         miles_reload_acceptance.validate_accepted(accepted, check_files=True)
 
@@ -1150,11 +1166,11 @@ def test_policy_observer_result_can_truthfully_report_no_delta_but_not_accept(
         row["policy_changed"] = False
     result["changed_policy_ranks"] = []
     _write_json(result_path, _seal(result))
-    with pytest.raises(ValueError, match="changed-rank summary"):
+    with pytest.raises(ValueError, match="restore commitments|changed-rank summary"):
         observer.validate_result(plan, json.loads(result_path.read_bytes()))
     case["policy_delta"].unlink()
 
-    with pytest.raises(ValueError, match="changed-rank summary"):
+    with pytest.raises(ValueError, match="restore commitments|changed-rank summary"):
         observer.accept_policy_delta(
             plan,
             submission_path=submission_path,
@@ -1164,6 +1180,89 @@ def test_policy_observer_result_can_truthfully_report_no_delta_but_not_accept(
             output=case["policy_delta"],
         )
     assert not case["policy_delta"].exists()
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        "base_nonpolicy_changed",
+        "trained_preloads_collide",
+        "trained_restore_not_overwritten",
+        "trained_restores_disagree",
+        "live_state_changed",
+    ],
+)
+def test_policy_observer_rejects_circular_or_unstable_restore_evidence(
+    case: dict,
+    fault: str,
+) -> None:
+    plan, result_path, result = _observer_files(case)
+    row = result["ranks"][0]
+    if fault == "base_nonpolicy_changed":
+        row["base"]["restored"]["optimizer"]["value_sha256"] = "sha256:" + "a" * 64
+        row["base"]["live"] = copy.deepcopy(row["base"]["restored"])
+    elif fault == "trained_preloads_collide":
+        row["trained_reload"]["preload"]["model"]["value_sha256"] = row[
+            "trained_reference"
+        ]["preload"]["model"]["value_sha256"]
+    elif fault == "trained_restore_not_overwritten":
+        row["trained_reference"]["restored"]["optimizer"]["value_sha256"] = row[
+            "trained_reference"
+        ]["preload"]["optimizer"]["value_sha256"]
+        row["trained_reference"]["live"] = copy.deepcopy(
+            row["trained_reference"]["restored"]
+        )
+    elif fault == "trained_restores_disagree":
+        row["trained_reload"]["restored"]["rng_sha256"] = "sha256:" + "b" * 64
+        row["trained_reload"]["live"] = copy.deepcopy(row["trained_reload"]["restored"])
+    else:
+        row["trained_reload"]["live"]["model"]["value_sha256"] = "sha256:" + "c" * 64
+    _write_json(result_path, _seal(result))
+
+    with pytest.raises(ValueError, match="restore|load state|no-load|preload|zero-update"):
+        observer.validate_result(plan, json.loads(result_path.read_bytes()))
+
+
+def test_policy_observer_does_not_claim_an_unproven_rng_delta(case: dict) -> None:
+    plan, result_path, result = _observer_files(case)
+    for row in result["ranks"]:
+        base_rng = row["base"]["restored"]["rng_sha256"]
+        for label in ("trained_reference", "trained_reload"):
+            row[label]["restored"]["rng_sha256"] = base_rng
+            row[label]["live"]["rng_sha256"] = base_rng
+    _write_json(result_path, _seal(result))
+
+    assert observer.validate_result(plan, json.loads(result_path.read_bytes())) == list(
+        range(observer.WORLD_SIZE)
+    )
+
+
+def test_observer_submission_rejects_an_appended_post_journal_row(case: dict) -> None:
+    policy = json.loads(case["policy_delta"].read_bytes())
+    submission_path = Path(policy["observer_submission"]["path"])
+    submission = json.loads(submission_path.read_bytes())
+    plan = json.loads(Path(submission["observer_plan_path"]).read_bytes())
+    with Path(submission["submission_journal_path"]).open("a") as stream:
+        stream.write(json.dumps({"state": "POST_RESPONSE"}) + "\n")
+
+    with pytest.raises(ValueError, match="one intent and one response"):
+        observer.validate_submission_binding(submission, plan, check_files=True)
+
+
+def test_observer_release_rejects_a_still_present_exact_uid(case: dict) -> None:
+    policy = json.loads(case["policy_delta"].read_bytes())
+    release = json.loads(Path(policy["observer_release"]["path"]).read_bytes())
+    query_path = Path(release["release_query"]["path"])
+    query = json.loads(query_path.read_bytes())
+    query["kubernetes"]["objects"]["pod"]["present"] = True
+    query["kubernetes"]["objects"]["pod"]["observed_uid"] = query["kubernetes"][
+        "objects"
+    ]["pod"]["expected_uid"]
+    _write_json(query_path, _seal(query))
+    checkpoint = json.loads(case["checkpoint"].read_bytes())
+
+    with pytest.raises(ValueError, match="release query|exact absence|reference changed"):
+        observer.validate_policy_evidence(policy, case["plan"], checkpoint)
 
 
 def test_policy_observer_rejects_ttl_zero_event_replacement(case: dict) -> None:

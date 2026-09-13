@@ -19,17 +19,27 @@ Current source is never used to reconstruct those submitted bytes.
 
 ## What the one GPU run proves
 
-The runtime opens no task or verifier and creates no rollout engine. It first
-loads the exact base policy on all eight ranks, releases that actor group, then
-loads the exact CPU-sealed trained DCP on all eight ranks with optimizer,
-scheduler, and RNG restore enabled. It records only high-entropy state
-commitments and structural counts. It does not record weights, prompts,
-trajectories, rewards, scores, flags, answers, or metric values.
+The runtime opens no task or verifier and creates no rollout engine. It performs
+three sequential, isolated all-rank restores: exact base once, then the exact
+CPU-sealed trained DCP twice. The base leg sentinelizes and reloads the policy
+while proving its freshly initialized optimizer, scheduler, and RNG did not
+change under the intentional no-load flags. Each trained leg installs a
+different model/optimizer/scheduler/RNG sentinel immediately before Miles'
+actual checkpoint loader and proves that every component was overwritten.
+The two trained restore commitments must match exactly. Policy, optimizer, and
+scheduler must differ from the exact base state. RNG must be restored exactly
+and independently in both trained legs, but this no-dropout recipe does not
+claim that one update necessarily advances RNG.
 
-The trained leg probes model, optimizer, scheduler, and RNG state twice with no
-operation between probes. It fails if state changes. The runtime also requires
-the restored next-rollout index, zero rollout/verifier/forward/backward/update/
-save/W&B work, and byte-identical source checkpoints after the load.
+Every leg probes model, optimizer, scheduler, and RNG state twice with no update
+between probes and fails if the state changes. The second trained restore also
+runs exactly one fixed, non-task, no-grad prediction forward over token IDs
+1 through 32. It exposes only the input digest and the ordered top-16 prediction
+digest, and requires a 0.01 logit margin at the top-16 boundary. This lets the
+later HF reload prove semantic equivalence without exposing logits or text.
+The runtime requires the restored next-rollout index, zero rollout/verifier/
+backward/update/save/W&B work, exactly one forward, and byte-identical source
+checkpoints after all three loads.
 
 A successful process receipt is deliberately not scientific acceptance. A
 separate offline join reopens the exact runtime source and request, the
@@ -50,28 +60,58 @@ an honest observer result but cannot produce `POLICY_DELTA.json`.
    `configs/qualification/qwen38-miles-policy-observer-dev3-v1.template.json`
    to a private create-once config. Its three source paths must point to the
    exact staged plan, submission binding, and CPU-sealed checkpoint manifest.
-   Compile `compile_observer`, render `job_request`, preview against the dev
-   API, and bind the exact request bytes with `compile_submission_binding`.
-3. Before admission, call `start_capture` and continuously pass the full
-   sanitized RayJob, Workload, RayCluster, and Pod objects to
-   `training.miles_event_evidence.record_event`. The watcher must retain
-   owner UIDs, RayJob `priorityClassName`, shutdown/TTL fields, immutable Pod
-   image ID, restart count, timestamps, and Pod GPU limits. Never read logs or
-   environment values. Start capture before the Workload admission timestamp;
-   TTL-zero objects may disappear immediately after completion.
-4. Submit exactly once only after absence/duplicate checks. The request is dev
-   `c1`, one worker, eight GPUs, no secret, W&B disabled, and no requeue. An
-   ambiguous POST is reconciled, never repeated.
-5. After process success, compile `CONTROLLER.json` from the retained event
-   journal, then compile `RELEASE.json` only after every exact UID and GPU
-   allocation is absent. Create `POLICY_DELTA.json` with
-   `accept_policy_delta`.
-6. Create the training run's `MILES_TERMINAL_ACCEPTED.json` with
+   Compile `compile_observer` and render `job_request` into immutable `plan.json`
+   and `request.json` files.
+3. Use the dedicated create-once operator rail below. It completes all local
+   source/request/output checks, commits `CAPTURE_INTENT.json`, opens
+   resource-version Kubernetes watches for all four lifecycle kinds, and only
+   then calls the Jobs API's one-POST `submit_once` rail. It derives API identity
+   and submission time exclusively from the exact two-row journal, writes the
+   bound `STARTED.json`, and persists only sanitized UID-bound events. It drops
+   an early Pod event until the main container has a projectable status.
+
+   ```sh
+   cyber-miles-policy-observer submit \
+     --plan /absolute/prepared/plan.json \
+     --request /absolute/prepared/request.json \
+     --journal /absolute/evidence/SUBMISSION.jsonl \
+     --output /absolute/evidence/SUBMITTED_EXECUTION.json \
+     --watch-directory /absolute/evidence/watch \
+     --source-commit <exact-40-character-commit>
+   ```
+
+   The request is dev `c1`, one worker, eight GPUs, no secret, W&B disabled,
+   and no requeue. The watch may remain open for up to 12 hours while queued;
+   queued without allocation is not idle. An ambiguous POST is reconciled,
+   never repeated.
+4. After process success, derive terminal state and external release through
+   read-only API/Kubernetes queries:
+
+   ```sh
+   cyber-miles-policy-observer controller \
+     --plan /absolute/prepared/plan.json \
+     --submission /absolute/evidence/SUBMITTED_EXECUTION.json \
+     --watch-directory /absolute/evidence/watch \
+     --output /absolute/evidence/CONTROLLER.json
+
+   cyber-miles-policy-observer release \
+     --plan /absolute/prepared/plan.json \
+     --submission /absolute/evidence/SUBMITTED_EXECUTION.json \
+     --controller /absolute/evidence/CONTROLLER.json \
+     --query-output /absolute/evidence/RELEASE_QUERY.json \
+     --output /absolute/evidence/RELEASE.json
+   ```
+
+   Release acceptance requires the Jobs API to report exact success and live
+   queries to prove the exact RayJob, Workload, RayCluster, and Pod UIDs absent;
+   caller-supplied absence booleans are not accepted. Then create
+   `POLICY_DELTA.json` with `accept_policy_delta`.
+5. Create the training run's `MILES_TERMINAL_ACCEPTED.json` with
    `training.miles_acceptance.accept_terminal`. This binds the policy proof to
    genuine task interaction, authoritative verifier identities, private reward
    variance, exact W&B update-zero telemetry, exactly one optimizer update,
    checkpoint seal, controller success, and training-resource release.
-7. Finally call `accept_observer_reload` with that terminal receipt. It writes
+6. Finally call `accept_observer_reload` with that terminal receipt. It writes
    `/mnt/sfs/jobs/chris-q38-miles-reload-dev3/RELOAD_ACCEPTED.json`. This is a
    CPU-only evidence join: it performs no API call and allocates no GPU. The
    generic production gate reopens it with
@@ -87,7 +127,8 @@ training terminal + same observer evidence -> native reload acceptance
 The final reload receipt exposes the generic
 `source_manifest_sha256` and `source_terminal_acceptance_sha256` bindings used
 by promotion and export. It records `observer_gpu_jobs: 1` and
-`additional_reload_gpu_jobs: 0`.
+`additional_reload_gpu_jobs: 0`, and carries the fixed prediction-probe contract
+that the independently reloaded HF export must match.
 
 ## Promotion boundary
 

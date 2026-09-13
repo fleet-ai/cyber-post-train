@@ -1,5 +1,5 @@
 {
-  "schema": "cyber_miles_policy_observer_config_v1",
+  "schema": "cyber_miles_policy_observer_config_v2",
   "name": "chris-q38-miles-reload-dev3",
   "output_root": "/mnt/sfs/jobs/chris-q38-miles-reload-dev3",
   "source": {

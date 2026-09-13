@@ -1,11 +1,13 @@
 """Post-hoc, zero-update policy-state observation for one Miles canary.
 
 The training process is not trusted to attest its own update.  This module
-loads the exact base and CPU-sealed trained distributed checkpoints in two
-isolated all-rank Miles actor groups, compares named policy tensor values, and
-seals the trained optimizer, scheduler, and RNG commitments needed by the
-later reload gate.  It never creates rollout engines or calls forward,
-backward, optimizer, scheduler, save, evaluation, or W&B methods.
+loads the exact base once and the CPU-sealed trained distributed checkpoint
+twice in three isolated all-rank Miles actor groups, compares named policy
+tensor values, and seals independently reproduced optimizer, scheduler, and
+RNG commitments needed by the later reload gate.  It creates no rollout
+engine and performs one fixed, task-free forward prediction probe, zero
+backward passes or optimizer/scheduler updates, and no saves, evaluations, or
+W&B calls.
 """
 
 from __future__ import annotations
@@ -1732,11 +1734,19 @@ def _rng_sentinel(marker: int) -> None:
     torch.cuda.manual_seed_all(marker)
 
 
-def _install_sentinel(model: Any, optimizer: Any, scheduler: Any, marker: int) -> dict[str, Any]:
+def _install_sentinel(
+    model: Any,
+    optimizer: Any,
+    scheduler: Any,
+    marker: int,
+    *,
+    full_state: bool,
+) -> dict[str, Any]:
     import torch
 
-    _scheduler_sentinel(scheduler, marker)
-    _optimizer_sentinel(optimizer, marker)
+    if full_state:
+        _scheduler_sentinel(scheduler, marker)
+        _optimizer_sentinel(optimizer, marker)
     with torch.no_grad():
         tensors = 0
         for chunk in model:
@@ -1745,7 +1755,8 @@ def _install_sentinel(model: Any, optimizer: Any, scheduler: Any, marker: int) -
                 tensors += 1
     if tensors < 1:
         raise ValueError("model exposes no policy tensor sentinel")
-    _rng_sentinel(marker)
+    if full_state:
+        _rng_sentinel(marker)
     return _state_probe(model, optimizer, scheduler)
 
 
@@ -1760,7 +1771,13 @@ def _instrumented_init(self, *args: Any, **kwargs: Any) -> Any:
     def observed_load(model: Any, optimizer: Any, scheduler: Any, *a: Any, **kw: Any) -> Any:
         if observations:
             raise ValueError("Miles invoked checkpoint load more than once")
-        preload = _install_sentinel(model, optimizer, scheduler, marker)
+        preload = _install_sentinel(
+            model,
+            optimizer,
+            scheduler,
+            marker,
+            full_state=marker != BASE_SENTINEL,
+        )
         result = original_load(model, optimizer, scheduler, *a, **kw)
         observations.append(
             {
@@ -1786,21 +1803,39 @@ def _instrumented_init(self, *args: Any, **kwargs: Any) -> Any:
 def _prediction_probe(self) -> dict[str, Any]:
     """One fixed, task-free greedy-order probe over the restored native policy."""
     import torch
+    import torch.distributed as dist
     from megatron.core import parallel_state
     from megatron.core.tensor_parallel.mappings import (
         gather_from_tensor_model_parallel_region,
     )
+    from miles.backends.megatron_utils.parallel import get_packed_seq_params
+    from miles.backends.training_utils.cp_utils import slice_with_cp
 
     if len(self.model) != 1:
         raise ValueError("fixed prediction probe requires one local model chunk")
     model = self.model[0]
     previous_training = bool(model.training)
     model.eval()
-    tokens = torch.tensor(
-        [PREDICTION_INPUT_IDS],
+    full_tokens = torch.tensor(
+        PREDICTION_INPUT_IDS,
         dtype=torch.long,
         device=torch.cuda.current_device(),
     )
+    cp_size = parallel_state.get_context_parallel_world_size()
+    cp_rank = parallel_state.get_context_parallel_rank()
+    if cp_size != 2 or self.args.qkv_format != "thd":
+        raise ValueError("fixed prediction probe requires exact CP2/THD topology")
+    local_tokens = slice_with_cp(full_tokens, 0, self.args.qkv_format)
+    tokens = local_tokens.unsqueeze(0)
+    batch: dict[str, Any] = {
+        "cu_seqlens": torch.tensor(
+            [0, len(PREDICTION_INPUT_IDS)],
+            dtype=torch.int,
+            device=torch.cuda.current_device(),
+        ),
+        "max_seqlen": len(PREDICTION_INPUT_IDS),
+    }
+    packed = get_packed_seq_params(batch, self.args)
     try:
         with torch.no_grad():
             output = model(
@@ -1808,7 +1843,7 @@ def _prediction_probe(self) -> dict[str, Any]:
                 position_ids=None,
                 attention_mask=None,
                 labels=None,
-                packed_seq_params=None,
+                packed_seq_params=packed,
                 loss_mask=None,
                 fp32_output=True,
             )
@@ -1816,19 +1851,37 @@ def _prediction_probe(self) -> dict[str, Any]:
                 raise ValueError("native fixed prediction probe returned an unexpected shape")
             if parallel_state.get_tensor_model_parallel_world_size() > 1:
                 output = gather_from_tensor_model_parallel_region(output)
-            if output.shape[0] != 1 or output.shape[1] != len(PREDICTION_INPUT_IDS):
+            if output.shape[0] != 1 or output.shape[1] != local_tokens.numel():
                 raise ValueError("native fixed prediction probe batch/sequence shape changed")
-            values, indices = torch.topk(
-                output[0, -1].float(),
-                k=PREDICTION_TOP_K + 1,
-                largest=True,
-                sorted=True,
+            vocabulary_size = int(self.hf_config.vocab_size)
+            if not PREDICTION_TOP_K < vocabulary_size <= output.shape[-1]:
+                raise ValueError("native fixed prediction probe vocabulary changed")
+            prediction_ids = torch.full(
+                (PREDICTION_TOP_K,),
+                -1,
+                dtype=torch.long,
+                device=output.device,
             )
-            margin_satisfied = bool(
-                (values[PREDICTION_TOP_K - 1] - values[PREDICTION_TOP_K]).item()
-                >= PREDICTION_MARGIN
-            )
-            predictions = [int(item) for item in indices[:PREDICTION_TOP_K].cpu().tolist()]
+            margin = torch.zeros(1, dtype=torch.float32, device=output.device)
+            if cp_rank == 0 and parallel_state.get_tensor_model_parallel_rank() == 0:
+                if dist.get_rank() != 0:
+                    raise ValueError("fixed prediction probe source-rank mapping changed")
+                # CP2 uses zig-zag chunks.  For an exact 32-token sequence, CP rank
+                # zero owns tokens 0..7 and 24..31, so local index 15 is the
+                # next-token prediction corresponding to the full sequence.
+                target = len(PREDICTION_INPUT_IDS) // cp_size - 1
+                values, indices = torch.topk(
+                    output[0, target, :vocabulary_size].float(),
+                    k=PREDICTION_TOP_K + 1,
+                    largest=True,
+                    sorted=True,
+                )
+                prediction_ids.copy_(indices[:PREDICTION_TOP_K])
+                margin[0] = values[PREDICTION_TOP_K - 1] - values[PREDICTION_TOP_K]
+            dist.broadcast(prediction_ids, src=0)
+            dist.broadcast(margin, src=0)
+            margin_satisfied = bool(margin.item() >= PREDICTION_MARGIN)
+            predictions = [int(item) for item in prediction_ids.cpu().tolist()]
     finally:
         model.train(previous_training)
     if not margin_satisfied:
@@ -2106,12 +2159,19 @@ def validate_result(plan: dict[str, Any], value: dict[str, Any]) -> list[int]:
             raise ValueError(f"{label} load evidence is incomplete")
         preload = state(value.get("preload"), label + " preload")
         restored = state(value.get("restored"), label + " restored")
-        state(value.get("live"), label + " live")
+        live = state(value.get("live"), label + " live")
         keys = ("model", "optimizer", "scheduler") if all_components else ("model",)
         if any(preload[key]["value_sha256"] == restored[key]["value_sha256"] for key in keys):
             raise ValueError(f"{label} did not overwrite its preload sentinel")
         if all_components and preload["rng_sha256"] == restored["rng_sha256"]:
             raise ValueError(f"{label} did not restore RNG over its preload sentinel")
+        if live != restored:
+            raise ValueError(f"{label} changed after its zero-update restore")
+        if not all_components and (
+            any(preload[key] != restored[key] for key in ("optimizer", "scheduler"))
+            or preload["rng_sha256"] != restored["rng_sha256"]
+        ):
+            raise ValueError("base no-load state changed outside the policy checkpoint")
         return value
 
     def values(commitment: Mapping[str, Any]) -> tuple[str, str, str, str]:
@@ -2152,13 +2212,20 @@ def validate_result(plan: dict[str, Any], value: dict[str, Any]) -> list[int]:
         reference_restored = reference["restored"]
         reload_preload = reloaded["preload"]
         reload_restored = reloaded["restored"]
+        preload_values = (
+            values(base["preload"]),
+            values(reference_preload),
+            values(reload_preload),
+        )
         if (
-            values(reference_preload) == values(reload_preload)
-            or any(
-                before == after
-                for before, after in zip(
-                    values(reference_preload), values(reload_preload), strict=True
+            any(
+                first[index] == second[index]
+                for first, second in (
+                    (preload_values[0], preload_values[1]),
+                    (preload_values[0], preload_values[2]),
+                    (preload_values[1], preload_values[2]),
                 )
+                for index in range(len(first))
             )
             or reference_restored != reload_restored
             or base_restored["model"]["structure_sha256"]
@@ -2168,11 +2235,13 @@ def validate_result(plan: dict[str, Any], value: dict[str, Any]) -> list[int]:
             or reference_restored["optimizer"]["state_entries"] < 1
             or reference_restored["optimizer"]["parameter_groups"] < 1
             or reference_restored["scheduler"]["positive_progress_counters"] < 1
+            # This exact one-update recipe guarantees a policy, optimizer, and
+            # scheduler change.  It does not use stochastic model layers, so a
+            # byte-identical RNG state is permitted; RNG is still sentinel-
+            # overwrite checked and independently reproduced above.
             or any(
-                before == after
-                for before, after in zip(
-                    values(base_restored), values(reference_restored), strict=True
-                )
+                values(base_restored)[index] == values(reference_restored)[index]
+                for index in range(3)
             )
         ):
             raise ValueError("policy observer restore commitments are circular or unchanged")
