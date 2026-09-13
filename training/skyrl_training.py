@@ -263,6 +263,7 @@ NATIVE = {
 }
 RUNTIME_FILES = (
     "training/skyrl_training.py",
+    "training/skyrl_promotion.py",
     "training/skyrl.py",
     "training/skyrl_rollout.py",
     "training/skyrl_episode.py",

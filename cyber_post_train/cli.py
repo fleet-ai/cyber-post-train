@@ -258,6 +258,173 @@ def _validate_engine_diagnostic_preview(
     }
 
 
+def _reward_canary_default_user_evidence() -> dict:
+    """Reopen the exact clean-pull proof used only by the reward-canary fallback."""
+    qualified = _DEV9_ABSENT_RUNTIME_CONTEXT_QUALIFICATION
+    evidence_path = Path(__file__).resolve().parents[1] / qualified[
+        "default_user_evidence_path"
+    ]
+    try:
+        evidence_bytes = evidence_path.read_bytes()
+        evidence = json.loads(evidence_bytes)
+        unsigned_evidence = {
+            key: value for key, value in evidence.items() if key != "receipt_sha256"
+        }
+    except (OSError, TypeError, ValueError) as error:
+        raise JobsError(
+            "exact reward canary image default-user qualification is unavailable"
+        ) from error
+    runtime = evidence.get("runtime", {})
+    checks = evidence.get("checks", {})
+    qualification_scope = evidence.get("qualification_scope", {})
+    if (
+        hashlib.sha256(evidence_bytes).hexdigest()
+        != qualified["default_user_evidence_file_sha256"]
+        or evidence.get("receipt_sha256")
+        != hashlib.sha256(
+            json.dumps(
+                unsigned_evidence, sort_keys=True, separators=(",", ":"), allow_nan=False
+            ).encode()
+            + b"\n"
+        ).hexdigest()
+        or evidence.get("receipt_sha256")
+        != qualified["default_user_evidence_receipt_sha256"]
+        or evidence.get("status") != "qualified"
+        or evidence.get("requested_image") != qualified["image"]
+        or runtime.get("runtime_image_id") != qualified["image"]
+        or runtime.get("pod_uid") != qualified["default_user_probe_pod_uid"]
+        or (runtime.get("effective_uid"), runtime.get("effective_gid")) != (1000, 100)
+        or runtime.get("terminal_phase") != "Succeeded"
+        or runtime.get("exit_code") != 0
+        or runtime.get("restart_count") != 0
+        or runtime.get("pod_security_context") != {}
+        or runtime.get("container_security_context") is not None
+        or runtime.get("gpu_request") != 0
+        or runtime.get("service_account_token_mounted") is not False
+        or evidence.get("cleanup", {}).get("pod_absent_after_delete") is not True
+        or checks
+        != {
+            "container_security_context_absent": True,
+            "effective_gid_is_100": True,
+            "effective_uid_is_1000": True,
+            "exact_runtime_image_id": True,
+            "pod_security_context_has_no_identity_fields": True,
+            "zero_gpu_and_no_service_account": True,
+        }
+        or qualification_scope.get("explicit_conflicting_identity_remains_fatal") is not True
+        or qualification_scope.get("gpu_runtime_identity_recheck_remains_required") is not True
+        or qualification_scope.get("mutable_image_tags_are_not_qualified") is not True
+    ):
+        raise JobsError("absent reward canary runtime user requires the exact qualified image")
+    return evidence
+
+
+def _validate_reward_canary_preview(plan: dict, request: dict, preview_result: dict) -> dict:
+    """Accept absent identity only for the exact reward canary and qualified image."""
+    import yaml
+
+    from training.skyrl_training import (
+        DEV_KUBERNETES_NAMESPACE,
+        ENGINE_IMAGE_CPU_QUALIFICATION,
+        IMAGE,
+        REWARD_CANARY_ARGUMENTS,
+        REWARD_CANARY_RUNTIME_USER,
+        is_reward_canary,
+        validate_reward_canary_preview,
+    )
+
+    if not is_reward_canary(plan):
+        return validate_reward_canary_preview(plan, request, preview_result)
+    validated = None
+    context_error = None
+    try:
+        validated = validate_reward_canary_preview(plan, request, preview_result)
+    except JobsError as error:
+        if str(error) != "reward canary preview runtime user differs from 1000:100":
+            raise
+        context_error = error
+    qualified = _DEV9_ABSENT_RUNTIME_CONTEXT_QUALIFICATION
+    execution = plan.get("execution", {})
+    if (
+        plan.get("run_name") != REWARD_CANARY_ARGUMENTS["name"]
+        or plan.get("output_root") != REWARD_CANARY_ARGUMENTS["output_root"]
+        or execution.get("cluster_target") != "dev"
+        or execution.get("image") != qualified["image"]
+        or execution.get("image_cpu_qualification") != ENGINE_IMAGE_CPU_QUALIFICATION
+        or execution.get("runtime_user") != REWARD_CANARY_RUNTIME_USER
+        or request.get("image") != qualified["image"]
+        or request.get("workers") != 1
+        or request.get("gpus_per_worker") != 8
+        or request.get("env", {}).get("CYBER_EXPECTED_RUNTIME_UID") != "1000"
+        or request.get("env", {}).get("CYBER_EXPECTED_RUNTIME_GID") != "100"
+        or qualified["image"] != IMAGE
+        or ENGINE_IMAGE_CPU_QUALIFICATION.get("receipt_sha256")
+        != qualified["image_cpu_qualification_receipt_sha256"]
+    ):
+        if context_error is not None:
+            raise context_error
+        raise JobsError("reward canary preview request differs from its exact plan")
+
+    expected = {"runAsUser": 1000, "runAsGroup": 100, "runAsNonRoot": True}
+    try:
+        obj = yaml.safe_load(preview_result["manifest_yaml"])
+        cluster = obj["spec"]["rayClusterSpec"]
+        groups = [(1, cluster["headGroupSpec"]["template"])] + [
+            (group["replicas"], group["template"])
+            for group in cluster.get("workerGroupSpecs", [])
+        ]
+        pods = 0
+        omitted_fields = 0
+        for replicas, template in groups:
+            if type(replicas) is not int or replicas < 0:
+                raise JobsError("invalid reward canary preview replica count")
+            if replicas == 0:
+                continue
+            pod = template["spec"]
+            containers = pod["containers"]
+            if not isinstance(containers, list) or len(containers) != 1:
+                raise JobsError("reward canary preview must have one container per Pod")
+            pod_context = pod.get("securityContext", {})
+            container_context = containers[0].get("securityContext", {})
+            if not isinstance(pod_context, dict) or not isinstance(container_context, dict):
+                raise JobsError("malformed reward canary Jobs API preview")
+            for context in (pod_context, container_context):
+                for key, value in expected.items():
+                    if key in context and not (
+                        type(context[key]) is type(value) and context[key] == value
+                    ):
+                        raise JobsError(
+                            "reward canary preview contains an explicit runtime user conflict "
+                            "with required 1000:100"
+                        )
+            omitted_fields += sum(
+                key not in pod_context and key not in container_context for key in expected
+            )
+            pods += replicas
+        if obj["metadata"]["namespace"] != DEV_KUBERNETES_NAMESPACE or pods != 1:
+            raise JobsError("reward canary preview topology or runtime binding changed")
+    except JobsError:
+        raise
+    except (AttributeError, KeyError, TypeError, yaml.YAMLError) as error:
+        raise JobsError("malformed reward canary Jobs API preview") from error
+
+    if omitted_fields == 0:
+        if validated is None:
+            raise context_error
+        return validated
+    evidence = _reward_canary_default_user_evidence()
+    return {
+        "runtime_user": {"uid": 1000, "gid": 100},
+        "runtime_user_evidence": {
+            "mode": "qualified_image_default_with_gpu_entrypoint_recheck",
+            "qualification_receipt_sha256": evidence["receipt_sha256"],
+            "omitted_preview_fields": omitted_fields,
+            "explicit_conflicts_rejected": True,
+        },
+        "pods": pods,
+    }
+
+
 @app.command()
 def data(config: Path) -> None:
     """Prepare private dense SFT data from a frozen split. CPU only; no submission."""
@@ -623,9 +790,8 @@ def preview(
             and _skyrl_mode(plan, request) == "training"
         ):
             from training.skyrl_promotion import validate_production_preview
-            from training.skyrl_training import validate_reward_canary_preview
 
-            validated.update(validate_reward_canary_preview(plan, request, result))
+            validated.update(_validate_reward_canary_preview(plan, request, result))
             validated.update(validate_production_preview(plan, request, result))
         if plan.get("schema") == "cyber_skyrl_rl_reload_v1":
             from training.skyrl_rl_checkpoint import validate_reload_preview
@@ -707,10 +873,7 @@ def submit(
                     requires_production_promotion,
                     validate_production_preview,
                 )
-                from training.skyrl_training import (
-                    is_reward_canary,
-                    validate_reward_canary_preview,
-                )
+                from training.skyrl_training import is_reward_canary
 
                 reward_canary = is_reward_canary(plan)
                 production = requires_production_promotion(plan)
@@ -718,7 +881,7 @@ def submit(
                     preview_result = client.preview(request)
                     validate_preview(request, preview_result)
                     if reward_canary:
-                        validate_reward_canary_preview(plan, request, preview_result)
+                        _validate_reward_canary_preview(plan, request, preview_result)
                     if production:
                         validate_production_preview(plan, request, preview_result)
                         require_live_files(plan, directory)

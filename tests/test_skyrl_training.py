@@ -450,6 +450,7 @@ def test_engine_diagnostic_request_is_exact_image_no_secret_and_no_training(prep
         gzip.decompress(base64.b64decode("".join(request["env"][k] for k in keys)))
     )
     assert payload["argv"][-1] == "--engine-diagnostic"
+    assert "training/skyrl_promotion.py" in payload["files"]
 
 
 def test_engine_diagnostic_native_config_disables_tracking_and_gpu_monitor(prepared, monkeypatch):

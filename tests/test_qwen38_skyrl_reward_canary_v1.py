@@ -39,6 +39,11 @@ HORIZON_CONTRACT = ROOT / (
     "configs/runs/qwen38-27b-native-rl-reward-acquisition-canary.template.json"
 )
 HORIZON_AGGREGATE = ROOT / "docs/FLEET_NATIVE_HARNESS_PARITY.md"
+DEFAULT_USER_EVIDENCE = ROOT / (
+    "docs/evidence/qwen38-study/"
+    "2026-09-12-skyrl-worker-rpc-relay-image-default-user-qualification-v1.json"
+)
+_OMITTED = object()
 
 
 def load(path: Path) -> dict:
@@ -111,6 +116,29 @@ def reward_preview(*, uid: int = 1000, gid: int = 100, nonroot: bool = True) -> 
                 "spec": {
                     "rayClusterSpec": {
                         "headGroupSpec": {"template": pod},
+                        "workerGroupSpecs": [],
+                    }
+                },
+            }
+        )
+    }
+
+
+def reward_preview_with_contexts(
+    *, pod_context: object = _OMITTED, container_context: object = _OMITTED
+) -> dict:
+    pod_spec = {"containers": [{}]}
+    if pod_context is not _OMITTED:
+        pod_spec["securityContext"] = pod_context
+    if container_context is not _OMITTED:
+        pod_spec["containers"][0]["securityContext"] = container_context
+    return {
+        "manifest_yaml": yaml.safe_dump(
+            {
+                "metadata": {"namespace": skyrl_training.DEV_KUBERNETES_NAMESPACE},
+                "spec": {
+                    "rayClusterSpec": {
+                        "headGroupSpec": {"template": {"spec": pod_spec}},
                         "workerGroupSpecs": [],
                     }
                 },
@@ -1089,6 +1117,162 @@ def test_reward_canary_uses_cpu_qualified_worker_rpc_relay_image(skyrl_prepared)
     assert skyrl_training.ENGINE_IMAGE_CPU_QUALIFICATION["source_commit"] == (
         "8d62868d6dc00eee793d83efe5738dc21e42758d"
     )
+
+
+def test_reward_canary_default_user_fallback_binds_exact_image_and_receipt() -> None:
+    payload = DEFAULT_USER_EVIDENCE.read_bytes()
+    evidence = json.loads(payload)
+    unsigned = {key: value for key, value in evidence.items() if key != "receipt_sha256"}
+    qualification = cli._DEV9_ABSENT_RUNTIME_CONTEXT_QUALIFICATION
+
+    assert hashlib.sha256(payload).hexdigest() == qualification[
+        "default_user_evidence_file_sha256"
+    ]
+    assert (
+        hashlib.sha256(
+            json.dumps(unsigned, sort_keys=True, separators=(",", ":")).encode() + b"\n"
+        ).hexdigest()
+        == evidence["receipt_sha256"]
+        == qualification["default_user_evidence_receipt_sha256"]
+    )
+    assert qualification["image"] == skyrl_training.IMAGE
+    assert evidence["requested_image"] == skyrl_training.IMAGE
+    assert evidence["runtime"]["runtime_image_id"] == skyrl_training.IMAGE
+    assert evidence["runtime"]["pod_security_context"] == {}
+    assert evidence["runtime"]["container_security_context"] is None
+    assert (evidence["runtime"]["effective_uid"], evidence["runtime"]["effective_gid"]) == (
+        1000,
+        100,
+    )
+
+
+@pytest.mark.parametrize("missing", [None, "runAsUser", "runAsGroup", "runAsNonRoot"])
+def test_reward_canary_preview_accepts_only_absent_identity_fields(
+    skyrl_prepared, monkeypatch, missing: str | None
+) -> None:
+    plan = exact_reward_plan(skyrl_prepared)
+    allow_synthetic_reward_bindings(monkeypatch)
+    request = skyrl_training.job_request(plan)
+    expected = {"runAsUser": 1000, "runAsGroup": 100, "runAsNonRoot": True}
+    pod_context = (
+        _OMITTED
+        if missing is None
+        else {key: value for key, value in expected.items() if key != missing}
+    )
+
+    result = cli._validate_reward_canary_preview(
+        plan,
+        request,
+        reward_preview_with_contexts(pod_context=pod_context),
+    )
+
+    assert result["runtime_user"] == {"uid": 1000, "gid": 100}
+    assert result["pods"] == 1
+    assert result["runtime_user_evidence"] == {
+        "mode": "qualified_image_default_with_gpu_entrypoint_recheck",
+        "qualification_receipt_sha256": (
+            "d1080784334becc76edb698ce363ecc513e5c98f9fce6c9510de59136192129f"
+        ),
+        "omitted_preview_fields": 3 if missing is None else 1,
+        "explicit_conflicts_rejected": True,
+    }
+
+
+@pytest.mark.parametrize(
+    ("pod_context", "container_context"),
+    [
+        ({"runAsUser": 0}, _OMITTED),
+        (_OMITTED, {"runAsGroup": 0}),
+        ({"runAsNonRoot": False}, _OMITTED),
+        (_OMITTED, {"runAsUser": None}),
+        ({"runAsUser": True}, _OMITTED),
+        (_OMITTED, {"runAsNonRoot": 1}),
+        ({"runAsUser": 0}, {"runAsUser": 1000}),
+    ],
+)
+def test_reward_canary_default_user_fallback_rejects_every_explicit_conflict(
+    skyrl_prepared, monkeypatch, pod_context: object, container_context: object
+) -> None:
+    plan = exact_reward_plan(skyrl_prepared)
+    allow_synthetic_reward_bindings(monkeypatch)
+    request = skyrl_training.job_request(plan)
+
+    with pytest.raises(JobsError, match="explicit runtime user conflict"):
+        cli._validate_reward_canary_preview(
+            plan,
+            request,
+            reward_preview_with_contexts(
+                pod_context=pod_context,
+                container_context=container_context,
+            ),
+        )
+
+
+def test_reward_canary_absent_context_requires_its_exact_qualification(
+    skyrl_prepared, monkeypatch, tmp_path: Path
+) -> None:
+    plan = exact_reward_plan(skyrl_prepared)
+    allow_synthetic_reward_bindings(monkeypatch)
+    request = skyrl_training.job_request(plan)
+    changed = json.loads(DEFAULT_USER_EVIDENCE.read_bytes())
+    changed["requested_image"] = changed["requested_image"].replace("89758df2", "09758df2")
+    changed_path = tmp_path / "changed-default-user-evidence.json"
+    changed_path.write_text(json.dumps(changed))
+    monkeypatch.setitem(
+        cli._DEV9_ABSENT_RUNTIME_CONTEXT_QUALIFICATION,
+        "default_user_evidence_path",
+        str(changed_path),
+    )
+
+    with pytest.raises(JobsError, match="exact qualified image"):
+        cli._validate_reward_canary_preview(
+            plan,
+            request,
+            reward_preview_with_contexts(),
+        )
+
+
+def test_reward_canary_absent_context_does_not_waive_exact_request_image(
+    skyrl_prepared, monkeypatch
+) -> None:
+    plan = exact_reward_plan(skyrl_prepared)
+    allow_synthetic_reward_bindings(monkeypatch)
+    request = skyrl_training.job_request(plan)
+    request["image"] = request["image"].replace("89758df2", "09758df2")
+
+    with pytest.raises(JobsError, match="request differs from its exact plan"):
+        cli._validate_reward_canary_preview(
+            plan,
+            request,
+            reward_preview_with_contexts(),
+        )
+
+
+def test_reward_canary_explicit_context_does_not_use_default_user_fallback(
+    skyrl_prepared, monkeypatch, tmp_path: Path
+) -> None:
+    plan = exact_reward_plan(skyrl_prepared)
+    allow_synthetic_reward_bindings(monkeypatch)
+    request = skyrl_training.job_request(plan)
+    monkeypatch.setitem(
+        cli._DEV9_ABSENT_RUNTIME_CONTEXT_QUALIFICATION,
+        "default_user_evidence_path",
+        str(tmp_path / "absent.json"),
+    )
+
+    assert cli._validate_reward_canary_preview(
+        plan,
+        request,
+        reward_preview(),
+    ) == {"runtime_user": {"uid": 1000, "gid": 100}, "pods": 1}
+
+
+def test_reward_canary_default_user_fallback_is_not_global(skyrl_prepared) -> None:
+    assert cli._validate_reward_canary_preview(
+        skyrl_prepared.plan,
+        {},
+        reward_preview_with_contexts(),
+    ) == {}
 
 
 @pytest.mark.parametrize(
