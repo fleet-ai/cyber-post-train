@@ -581,6 +581,18 @@ def rl_data(config: Path) -> None:
         _fail(exc)
 
 
+@app.command("rl-data-derive")
+def rl_data_derive(config: Path) -> None:
+    """Create policy-specific Miles metadata from an accepted base data artifact."""
+    from training.rl_data_derive import derive
+    from training.sft import read_mapping
+
+    try:
+        _print(derive(read_mapping(config), relative_to=config.resolve().parent))
+    except Exception as exc:
+        _fail(exc)
+
+
 @app.command()
 def train(config: Path, output: Annotated[Path, typer.Option("--output")]) -> None:
     """Prepare an immutable SkyRL SFT launch from editable YAML. No network/GPU."""

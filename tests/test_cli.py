@@ -635,6 +635,25 @@ def test_rl_data_command_does_not_submit_or_expose_private_content(tmp_path, mon
     assert len(calls) == (1 if auth else 0)
 
 
+def test_rl_data_derive_command_is_offline_and_sanitized(tmp_path, monkeypatch):
+    from training import rl_data_derive
+
+    calls = []
+
+    def derive(config, *, relative_to):
+        calls.append((config, relative_to))
+        return {"submitted": False, "manifest_sha256": "sha256:" + "a" * 64}
+
+    monkeypatch.setattr(rl_data_derive, "derive", derive)
+    monkeypatch.setattr(cli, "_client", lambda: pytest.fail("RL derivation used network"))
+    config = tmp_path / "derive.yaml"
+    config.write_text("name: synthetic-sft-rl\n")
+    result = RUNNER.invoke(cli.app, ["rl-data-derive", str(config)])
+    assert result.exit_code == 0
+    assert "private" not in result.output
+    assert calls == [({"name": "synthetic-sft-rl"}, tmp_path)]
+
+
 @pytest.mark.parametrize("fails", [False, True])
 def test_sft_data_command_preserves_numeric_configuration(tmp_path, monkeypatch, fails):
     from training import corpus

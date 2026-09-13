@@ -661,6 +661,7 @@ def native(fixture, tmp_path, monkeypatch):
             cyber_output_root=str(tmp_path),
             partial_rollout=False,
             hf_checkpoint="/model",
+            fleet_policy_identity_root="/model",
             fleet_tito_model="qwen35",
             fleet_max_tokens_per_turn=4096,
             rollout_max_context_len=32768,
@@ -737,7 +738,7 @@ async def test_native_preflight_stops_before_environment(native, fixture, fault,
     elif fault == "path":
         native.args.cyber_output_root = "relative"
     elif fault == "model":
-        native.args.hf_checkpoint = "/other"
+        native.args.fleet_policy_identity_root = "/other"
     elif fault == "template":
         native.state.tokenizer.chat_template = "changed"
     elif fault == "dict":
@@ -824,6 +825,8 @@ def test_native_flags_are_required_and_typed():
             "/private/fixture",
             "--cyber-data-manifest",
             "/private/data/manifest.json",
+            "--fleet-policy-identity-root",
+            "/model",
             "--fleet-tito-model",
             "qwen35",
             "--fleet-max-tokens-per-turn",

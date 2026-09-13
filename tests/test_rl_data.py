@@ -12,6 +12,7 @@ import pytest
 from cyber_post_train.jobs import digest
 from evals.fleet import opencode_self_hosted as fleet
 from training import rl_data as data
+from training import rl_data_derive as derive_data
 
 NATIVE = data._native
 
@@ -140,8 +141,17 @@ def setup(tmp_path, monkeypatch):
                 values[0]["metadata"]["split"] = "test"
             super().__init__(NS(prompt=v["input"], metadata=v["metadata"]) for v in values)
 
+    tokenizer_identity = {
+        "repo": lock["repo"],
+        "revision": lock["revision"],
+        "files": [{"path": "tokenizer.json", "sha256": "d" * 64}],
+        "chat_template_sha256": "e" * 64,
+        "backend_sha256": "f" * 64,
+    }
     monkeypatch.setattr(
-        data, "_native", lambda lock, root: (Tokenizer(), Tokenizer(), Dataset, lock)
+        data,
+        "_native",
+        lambda lock, root: (Tokenizer(), Tokenizer(), Dataset, tokenizer_identity),
     )
 
     def handler(request):
@@ -168,6 +178,127 @@ def build(state):
         (state.tmp / name).write_text(json.dumps(value))
     with httpx.Client(transport=httpx.MockTransport(state.handler)) as client:
         return data.build(state.config, relative_to=state.tmp, client=client)
+
+
+def derivation_config(setup):
+    source = setup.tmp / "out/manifest.json"
+    manifest = json.loads(source.read_text())
+    return {
+        "source_manifest": str(source),
+        "source_manifest_file_sha256": fleet.sha256(source.read_bytes()),
+        "source_manifest_sha256": manifest["sha256"],
+        "source_policy_identity_root": setup.config["model_root"],
+        "expected_limits": manifest["limits"],
+        "name": "synthetic-sft-rl",
+        "policy_identity_root": "/mnt/sfs/jobs/synthetic-sft/hf-export",
+        "output": str(setup.tmp / "derived"),
+    }
+
+
+def test_metadata_only_derivation_reuses_exact_source_without_network_or_payload_output(setup):
+    build(setup)
+    source = setup.tmp / "out"
+    before = {path.name: path.read_bytes() for path in source.iterdir()}
+    config = derivation_config(setup)
+    result = derive_data.derive(config, relative_to=setup.tmp)
+
+    assert len(setup.calls) == 3  # The derivation itself made no request.
+    assert before == {path.name: path.read_bytes() for path in source.iterdir()}
+    assert "Private synthetic prompt" not in json.dumps(result)
+    assert result["submitted"] is False
+    target = setup.tmp / "derived"
+    manifest = json.loads((target / "manifest.json").read_text())
+    assert manifest["sha256"] == "sha256:" + digest(
+        {key: value for key, value in manifest.items() if key != "sha256"}
+    )
+    provenance = manifest["derivation"]
+    assert provenance["schema"] == derive_data.DERIVATION_SCHEMA
+    assert provenance["source_manifest_sha256"] == result["source_manifest_sha256"]
+    assert provenance["transformed_fields"] == derive_data._TRANSFORMED_FIELDS
+    assert (target / "task-set.json").read_bytes() == before["task-set.json"]
+    assert (target / "split.json").read_bytes() == before["split.json"]
+    for split in ("train", "dev"):
+        original = json.loads(before[split + ".jsonl"])
+        derived = json.loads((target / (split + ".jsonl")).read_text())
+        assert derived["input"] == original["input"]
+        source_config = original["metadata"]["cyber_config"]
+        target_config = derived["metadata"]["cyber_config"]
+        assert target_config["run_id"] == config["name"]
+        assert target_config["model"]["root"] == config["policy_identity_root"]
+        assert target_config["config_sha256"] == fleet.digest_without(
+            target_config, "config_sha256"
+        )
+        for value in (source_config, target_config):
+            value.pop("run_id")
+            value["model"].pop("root")
+            value.pop("config_sha256")
+        assert derived == original
+    with pytest.raises(FileExistsError):
+        derive_data.derive(config, relative_to=setup.tmp)
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        "manifest_file_digest",
+        "manifest_self_digest",
+        "source_policy",
+        "source_name",
+        "target_policy",
+        "target_limits",
+        "row_bytes",
+        "row_split_resigned",
+        "manifest_shape_resigned",
+        "source_symlink",
+        "overlap",
+    ],
+)
+def test_metadata_only_derivation_fails_closed_before_output(setup, fault):
+    build(setup)
+    config = derivation_config(setup)
+    source = Path(config["source_manifest"])
+    if fault == "manifest_file_digest":
+        config["source_manifest_file_sha256"] = "sha256:" + "0" * 64
+    elif fault == "manifest_self_digest":
+        config["source_manifest_sha256"] = "sha256:" + "0" * 64
+    elif fault == "source_policy":
+        config["source_policy_identity_root"] += "-other"
+    elif fault == "source_name":
+        config["name"] = setup.config["name"]
+    elif fault == "target_policy":
+        config["policy_identity_root"] = setup.config["model_root"]
+    elif fault == "target_limits":
+        config["expected_limits"]["max_turns"] = 80
+    elif fault == "row_bytes":
+        (source.parent / "train.jsonl").write_bytes(
+            (source.parent / "train.jsonl").read_bytes() + b"\n"
+        )
+    elif fault in {"row_split_resigned", "manifest_shape_resigned"}:
+        manifest = json.loads(source.read_text())
+        if fault == "row_split_resigned":
+            path = source.parent / "train.jsonl"
+            row = json.loads(path.read_text())
+            row["metadata"]["split"] = "dev"
+            payload = fleet.canonical_json(row) + b"\n"
+            path.write_bytes(payload)
+            manifest["files"]["train"]["sha256"] = fleet.sha256(payload)
+        else:
+            manifest["unexpected"] = True
+        manifest["sha256"] = "sha256:" + digest(
+            {key: value for key, value in manifest.items() if key != "sha256"}
+        )
+        source.write_bytes(fleet.canonical_json(manifest) + b"\n")
+        config["source_manifest_sha256"] = manifest["sha256"]
+        config["source_manifest_file_sha256"] = fleet.sha256(source.read_bytes())
+    elif fault == "source_symlink":
+        link = setup.tmp / "manifest.json"
+        link.symlink_to(source)
+        config["source_manifest"] = str(link)
+    else:
+        config["output"] = str(source.parent / "nested")
+    with pytest.raises((ValueError, FileExistsError)):
+        derive_data.derive(config, relative_to=setup.tmp)
+    assert not (setup.tmp / "derived").exists()
 
 
 @pytest.mark.parametrize("backend", ["miles", "skyrl"])

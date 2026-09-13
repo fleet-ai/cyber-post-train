@@ -642,7 +642,7 @@ async def generate(input):
     ):
         raise InvalidEpisode("native_input_prompt_drift")
     if (
-        args.hf_checkpoint != config["model"]["root"]
+        args.fleet_policy_identity_root != config["model"]["root"]
         or args.fleet_tito_model != config["model"]["tito_family"]
         or args.fleet_max_tokens_per_turn != config["rl"]["max_tokens_per_turn"]
         or args.rollout_max_context_len != config["rl"]["context_tokens"]
@@ -700,6 +700,7 @@ def _add_arguments(parser):
     parser.add_argument("--cyber-run-id", required=True)
     parser.add_argument("--cyber-output-root", required=True)
     parser.add_argument("--cyber-data-manifest", required=True)
+    parser.add_argument("--fleet-policy-identity-root", required=True)
     parser.add_argument("--fleet-tito-model", required=True)
     parser.add_argument("--fleet-max-tokens-per-turn", required=True, type=int)
 

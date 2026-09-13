@@ -67,6 +67,9 @@ def config():
         {"model_root": "/mnt/sfs/models/../source"},
         {"model_root": "/mnt/sfs/models/source/"},
         {"model_root": "/mnt/sfs/models/line\nbreak"},
+        {"policy_identity_root": "/"},
+        {"policy_identity_root": "/mnt/sfs/models/../accepted"},
+        {"policy_identity_root": "/mnt/sfs/models/accepted/"},
         {"dev_data": "/mnt/sfs/data/synthetic/train.jsonl"},
         {"output_root": "/mnt/sfs/jobs/data", "train_data": "/mnt/sfs/jobs/data/train"},
         {"train_data": "/mnt/sfs/jobs/data", "output_root": "/mnt/sfs/jobs/data/output"},
@@ -137,6 +140,7 @@ def test_bounded_counts_and_native_optimizer(config, native_boundary):
     assert value(argv, "load") == value(argv, "save") == cfg.output_root + "/checkpoints"
     assert value(argv, "ref-load") == cfg.torch_dist_root
     assert value(argv, "fleet-tito-model") == "qwen35"
+    assert value(argv, "fleet-policy-identity-root") == cfg.model_root
     assert value(argv, "rollout-max-prompt-len") == str(cfg.context_tokens - cfg.response_tokens)
     assert value(argv, "rollout-seed") == str(cfg.seed)
 
@@ -167,6 +171,13 @@ def test_native_drift_is_rejected(config, native_boundary, fault):
 def test_paths_remain_literal_argv(config, native_boundary):
     path = "/mnt/sfs/data/synthetic/a space.jsonl"
     assert value(miles.arguments(replace(config, train_data=path)), "prompt-data") == path
+
+
+def test_runtime_and_policy_identity_paths_are_distinct_native_arguments(config, native_boundary):
+    accepted = "/mnt/sfs/jobs/synthetic-sft/hf-export"
+    argv = miles.arguments(replace(config, policy_identity_root=accepted))
+    assert value(argv, "hf-checkpoint") == config.model_root
+    assert value(argv, "fleet-policy-identity-root") == accepted
 
 
 def test_unknown_configuration_fields_rejected(config):

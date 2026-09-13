@@ -34,6 +34,10 @@ class MilesConfig:
     wandb_entity: str
     wandb_project: str
     wandb_run_id: str
+    # The checkpoint used by the native runtime may be a byte-identical staged
+    # copy of an accepted SFT export.  Keep that runtime path separate from the
+    # scientific policy identity sealed into every episode row.
+    policy_identity_root: str | None = None
     model: str = "Qwen/Qwen3.8-27B"
     nodes: int = 1
     gpus_per_node: int = 8
@@ -74,6 +78,16 @@ class MilesConfig:
             ):
                 raise ValueError("Miles inputs/output require canonical staged SFS paths")
             paths.append(path)
+        policy_root = resolved_policy_identity_root(self)
+        policy_path = PurePosixPath(policy_root)
+        if (
+            policy_path.parts[:3] != ("/", "mnt", "sfs")
+            or len(policy_path.parts) < 5
+            or str(policy_path) != policy_root
+            or ".." in policy_path.parts
+            or any(ord(c) < 32 for c in policy_root)
+        ):
+            raise ValueError("policy identity requires a canonical staged SFS path")
         if any(
             a == b or a in b.parents or b in a.parents
             for i, a in enumerate(paths)
@@ -110,6 +124,11 @@ class MilesConfig:
             raise ValueError("learning rate must be finite and positive")
         if not self.tokens_per_turn <= self.response_tokens < self.context_tokens <= 98304:
             raise ValueError("generation budgets exceed the native Qwen context envelope")
+
+
+def resolved_policy_identity_root(config: MilesConfig) -> str:
+    """Resolve the scientific policy identity for legacy base-policy plans."""
+    return config.model_root if config.policy_identity_root is None else config.policy_identity_root
 
 
 def arguments(config: MilesConfig) -> list[str]:
@@ -165,6 +184,7 @@ def arguments(config: MilesConfig) -> list[str]:
         "cyber-run-id": config.name,
         "cyber-output-root": config.output_root + "/episodes",
         "cyber-data-manifest": config.data_manifest,
+        "fleet-policy-identity-root": resolved_policy_identity_root(config),
         "fleet-tito-model": profile.tito_model,
         "fleet-max-tokens-per-turn": config.tokens_per_turn,
         "chat-template-path": str(template),

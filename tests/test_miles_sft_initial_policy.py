@@ -424,6 +424,7 @@ def test_miles_rl_consumes_only_the_matching_zero_step_sft_conversion(accepted, 
     plan = miles_training.compile_rl(run, relative_to=tmp_path)
     assert plan["model"] == checkpoint["model"]
     assert plan["arguments"]["model_root"] == config["root"]
+    assert plan["arguments"]["policy_identity_root"] == config["root"]
     assert plan["execution"]["cluster_target"] == "dev"
     assert plan["arguments"]["wandb_run_id"] == data["name"]
     assert "webexploitbench" not in json.dumps(plan).lower()

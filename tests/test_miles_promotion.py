@@ -149,11 +149,15 @@ def test_every_prod_miles_config_requires_the_exact_candidate_and_receipt() -> N
 def test_embedded_promotion_rechecks_the_complete_compiled_candidate() -> None:
     plan = _plan()
     assert miles_promotion.validate_embedded_promotion(plan, check_files=False) is True
+    explicit = copy.deepcopy(plan)
+    explicit["arguments"]["policy_identity_root"] = explicit["arguments"]["model_root"]
+    assert miles_promotion.validate_embedded_promotion(explicit, check_files=False) is True
     for section, key, changed in (
         ("arguments", "steps", 1),
         ("arguments", "samples_per_prompt", 4),
         ("arguments", "lr", 2e-6),
         ("arguments", "data_manifest", "/mnt/sfs/jobs/other/manifest.json"),
+        ("arguments", "policy_identity_root", "/mnt/sfs/jobs/other/hf-export"),
         ("execution", "priority", "c2"),
         ("execution", "resources", {**miles_promotion.EXPECTED_RESOURCES, "cpu_request": "63"}),
         ("checkpoint", "root", "/mnt/sfs/jobs/other/torch-dist"),

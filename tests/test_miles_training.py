@@ -87,6 +87,8 @@ def test_compiler_and_portable_job_have_native_identity(plan):
     assert request["env"]["PYTHONPATH"] == "/root/Megatron-LM"
     assert request["priority_class"] == "c1" and request["requeueIfPreempted"] is False
     assert plan["arguments"]["steps"] == 2
+    assert plan["arguments"]["model_root"] == plan["model"]["root"]
+    assert plan["arguments"]["policy_identity_root"] == plan["model"]["root"]
     assert "FLEET_API_KEY" not in request["env"]
     assert "WANDB_API_KEY" not in request["env"]
 
@@ -489,6 +491,7 @@ def test_staged_sft_keeps_episode_identity_at_accepted_root(artifacts):
     assert {key: len(value) for key, value in rows.items()} == {"train": 1, "dev": 1}
     assert plan["arguments"]["model_root"] == plan["model"]["root"]
     assert plan["arguments"]["model_root"] != accepted_root
+    assert plan["arguments"]["policy_identity_root"] == accepted_root
     assert {
         row["metadata"]["cyber_config"]["model"]["root"]
         for values in rows.values()
@@ -501,6 +504,7 @@ def test_staged_sft_keeps_episode_identity_at_accepted_root(artifacts):
     [
         ("episode_uses_runtime", "episode identity changed"),
         ("runtime_argument", "runtime model identity changed"),
+        ("policy_argument", "policy identity changed"),
         ("missing_stage", "unstaged SFT runtime identity changed"),
     ],
 )
@@ -511,6 +515,8 @@ def test_sft_episode_and_runtime_root_mismatches_fail_closed(artifacts, fault, e
         _set_episode_model_root(plan, directory, plan["model"]["root"])
     elif fault == "runtime_argument":
         plan["arguments"]["model_root"] += "-other"
+    elif fault == "policy_argument":
+        plan["arguments"]["policy_identity_root"] = plan["model"]["root"]
     else:
         initial_policy.pop("runtime_stage")
         plan["checkpoint"]["sha256"] = digest(
@@ -590,6 +596,8 @@ def test_parsed_native_semantics_and_argv_restoration(plan, monkeypatch):
         start_rollout_id=0,
         load=plan["checkpoint"]["root"],
         ref_load=plan["checkpoint"]["root"],
+        hf_checkpoint=plan["model"]["root"],
+        fleet_policy_identity_root=plan["arguments"]["policy_identity_root"],
         num_rollout=2,
         num_steps_per_rollout=1,
         global_batch_size=2,

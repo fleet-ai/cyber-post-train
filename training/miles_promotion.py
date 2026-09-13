@@ -497,10 +497,16 @@ def _exact_plan(plan: dict[str, Any]) -> None:
         "response_tokens": 81920,
         "tokens_per_turn": 4096,
     }
+    # Historical base-policy plans predate the explicit scientific-policy
+    # identity.  Missing/None and the exact runtime root are equivalent only
+    # for this base-policy candidate; a distinct root remains a hard failure.
+    policy_identity_root = args.get("policy_identity_root")
+    comparable_args = {key: value for key, value in args.items() if key != "policy_identity_root"}
     if (
         plan.get("run_name") != PROD_NAME
         or plan.get("output_root") != PROD_OUTPUT
-        or args != expected_args
+        or comparable_args != expected_args
+        or policy_identity_root not in {None, expected_args["model_root"]}
         or checkpoint.get("schema") != "cyber_miles_checkpoint_v1"
         or checkpoint.get("optimizer_steps") != 0
         or checkpoint.get("root") != BASE_CHECKPOINT["root"]

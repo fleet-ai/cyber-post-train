@@ -122,6 +122,11 @@ def compile_rl(config: dict, *, relative_to: Path) -> dict:
     from .miles_conversion import bind_model_source
 
     bound = bind_model_source(model, relative_to=relative_to)
+    policy_identity_root = bound["root"]
+    if initial_policy := bound.get("initial_policy"):
+        policy_identity_root = initial_policy.get("accepted_root")
+        if not isinstance(policy_identity_root, str):
+            raise ValueError("accepted SFT policy identity is absent")
     metadata = read_mapping(relative_to / data["manifest"])
     _sealed(metadata, "cyber_miles_data_v1")
     cp_path = relative_to / checkpoint["manifest"]
@@ -138,6 +143,7 @@ def compile_rl(config: dict, *, relative_to: Path) -> dict:
         output_root=_sfs_root(config["output_root"], "output root"),
         model=bound["repo"],
         model_root=bound["root"],
+        policy_identity_root=policy_identity_root,
         torch_dist_root=cp["root"],
         train_data=str(root / metadata["files"]["train"]["path"]),
         dev_data=str(root / metadata["files"]["dev"]["path"]),
@@ -281,6 +287,9 @@ def check_artifacts(plan):
             raise ValueError("accepted SFT episode identity is absent")
         if "runtime_stage" not in initial_policy and runtime_model_root != episode_model_root:
             raise ValueError("unstaged SFT runtime identity changed")
+    policy_identity_root = args.get("policy_identity_root") or runtime_model_root
+    if policy_identity_root != episode_model_root:
+        raise ValueError("policy identity changed")
     selected = {"train": [], "dev": []}
     for split, item in data["files"].items():
         p = path.parent / item["path"]
@@ -298,7 +307,7 @@ def check_artifacts(plan):
                 or cfg["run_id"] != args["name"]
                 or cfg["model"]["repo"] != plan["model"]["repo"]
                 or cfg["model"]["revision"] != plan["model"]["revision"]
-                or cfg["model"]["root"] != episode_model_root
+                or cfg["model"]["root"] != policy_identity_root
                 or cfg["rl"] != {k: v for k, v in data["limits"].items() if k != "response_tokens"}
                 or cfg["execution"]["required_task_tool_catalog_sha256"]
                 != data["tool_catalog_sha256"]
@@ -333,6 +342,10 @@ def native_args(plan):
             "start_rollout_id": 0,
             "load": plan["checkpoint"]["root"],
             "ref_load": plan["checkpoint"]["root"],
+            "hf_checkpoint": plan["model"]["root"],
+            "fleet_policy_identity_root": miles.resolved_policy_identity_root(
+                miles.MilesConfig(**plan["arguments"])
+            ),
             "num_rollout": plan["arguments"]["steps"],
             "num_steps_per_rollout": 1,
             "global_batch_size": plan["arguments"]["groups"]
