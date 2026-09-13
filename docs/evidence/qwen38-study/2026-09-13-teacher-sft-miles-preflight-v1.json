@@ -1,0 +1,129 @@
+{
+  "schema": "cyber_qwen38_teacher_sft_miles_preflight_v1",
+  "status": "accepted_preflight_only",
+  "observed_at": "2026-09-13T16:51:30Z",
+  "scope": {
+    "cluster": "dev",
+    "namespace": "fleet-train-jobs",
+    "teacher_only": true,
+    "gpu_allocations": 0,
+    "training_submissions": 0,
+    "jobs_api_posts": 0,
+    "peer_workloads_touched": false
+  },
+  "source": {
+    "arm": "stronger_teacher_sft",
+    "optimizer_step": 186,
+    "accepted_export_evidence": "docs/evidence/qwen38-study/2026-09-13-sft-export-gpu-acceptance-v1.json",
+    "accepted_export_evidence_file_sha256": "sha256:70c2eaeaabce5c99d17a587eb6582f6523acdbc18f4e8a6f8666d330ec1a9d70",
+    "export_receipt_sha256": "sha256:e6d59f5a58ce54b913d775cd71b81c64bd54637b53795df82baec0f71efefaf9",
+    "gpu_check_receipt_sha256": "sha256:9bd229e3c85a092ccc5fca8c3183f57554f1c8a72b2724221f5c7507718a3392",
+    "source_unchanged": true
+  },
+  "stage_verifier": {
+    "workspace_commit": "7073ea32547e4887121fde0d61a3a0eda92a9bbd",
+    "source_bundle_manifest_sha256": "sha256:8bdc835c946764f473ccb5dea58c3a52047f4b9b623be6d80065418bfc027a0d",
+    "binding_sha256": "sha256:0be2214dbbecfd422c85a4d90d01f0fa8be5c4900e3bcab9b993cf62b424bda4",
+    "local_validation_self_sha256": "sha256:3014a7d9ffd2cee8da74975307cb10804b51d40d2cd39115e1093b2c65e6c09b",
+    "pod": {
+      "name": "chris-q38-teach-stage-verify-v2",
+      "uid": "2a00d1b2-983a-4c65-bf0d-7b8aa9556faa",
+      "phase": "Succeeded",
+      "started_at": "2026-09-13T16:46:07Z",
+      "finished_at": "2026-09-13T16:46:25Z",
+      "exit_code": 0,
+      "restart_count": 0,
+      "gpus": 0,
+      "runtime_image_digest": "sha256:d1d37c584e2aafdd47df1e1f3492ff3343eb3b83a5f658cf7ce2432ee8d6ef33",
+      "termination_message_file_sha256": "sha256:e80a0e198aa0b73dad200bedd0f1c289c12e050a6802aae8437c1ae0bbccebfa",
+      "termination_receipt_sha256": "sha256:092ac4ede3f3115a78c8f0d05a2e269c77106c2861ec05e252aa55849b2ac70e",
+      "deleted_after_capture": true
+    },
+    "gates": {
+      "local_tests_passed": 10,
+      "local_policy_passed": true,
+      "server_dry_run_passed": true,
+      "server_rendered_json_sha256": "sha256:1c8ec589280e72c96d5181770e73966185a47cdcf59bf654a069a55bce64f8d3",
+      "source_only_pinned_image_passed": true,
+      "teacher_stage_receipt_valid": true,
+      "teacher_stage_receipt_file_sha256": "sha256:0a2c14f92d16516f4c72aa1bc0aaab2a26cb0a5ffc6e357648221550a441f350",
+      "teacher_stage_receipt_sha256": "sha256:065f437d2d0556c6de08d5ec5c0a79db5fffee62966a9e504ab7c775e2ef4978",
+      "teacher_payload_manifest_sha256": "sha256:cde2c68b0cb40b48b28fe6dbe7291522bda5b9539ad2204aacfc3525ec88a0bc",
+      "teacher_payload_metadata_valid": true,
+      "teacher_source_stability_valid": true,
+      "create_once_destinations_absent": 3,
+      "model_shard_bytes_opened": false,
+      "self_arm_read": false,
+      "logs_read": false
+    }
+  },
+  "cpu_preflight": {
+    "conversion_source_commit": "e74756bbb6021392c8c164348b444d84d4c24574",
+    "source_bundle_manifest_sha256": "sha256:3c07d53b37bb3f9d0e9b2264c190fef234f0cdf43daccbaae7366cd4e91d4c33",
+    "binding_sha256": "sha256:8d982e1ec68e8d99b5e22a3b16513bb298d2a96be2a01b31b991bf3ef60a5d25",
+    "local_validation_self_sha256": "sha256:9cd41596413d9b469cc94f635bc9440fe2f159e44bd6386aca6876a9f01cab35",
+    "pod": {
+      "name": "chris-q38-teach-s186-preflight-v5",
+      "uid": "9693f44c-9cd1-47fd-9a64-2c31eee43f2f",
+      "phase": "Succeeded",
+      "started_at": "2026-09-13T16:46:53Z",
+      "finished_at": "2026-09-13T16:51:13Z",
+      "exit_code": 0,
+      "restart_count": 0,
+      "gpus": 0,
+      "runtime_image_digest": "sha256:d1d37c584e2aafdd47df1e1f3492ff3343eb3b83a5f658cf7ce2432ee8d6ef33",
+      "termination_message_file_sha256": "sha256:eef63fb91f3658ff31ff9989f6e9d5c3e694e7f68e015d6f67ac3b9d6f18dcc8",
+      "deleted_after_capture": true
+    },
+    "gates": {
+      "local_tests_passed": 7,
+      "local_policy_passed": true,
+      "server_dry_run_passed": true,
+      "server_rendered_json_sha256": "sha256:345a3de03fd1325ea3ef787c5fe3ca8a843a3064d880c1c58ac8e30d60bc5f1d",
+      "source_and_compilation_pinned_image_passed": true,
+      "source_stage_receipt_reopened": true,
+      "plan_sha256": "sha256:e87fdc4b4563295f198782fa25f2380ac13b12e3a79739b42f94d018bc3d6aec",
+      "request_sha256": "sha256:cc96cc43531ec046a473a9aacbaca2c6a430a31462fefea68cc78b572ee939ff",
+      "preflight_receipt_sha256": "sha256:1138d63167101aa30eb521c0bbcdfea490bbc015036aca0cdb76b4a0d464cef2",
+      "terminal_receipt_sha256": "sha256:bb4d0ff81b66587611d2e668bdccb83ea83f74d18fc44db0d9cddcccfd72237b",
+      "prepared_input_complete": true,
+      "conversion_output_absent": true,
+      "submission_journal_absent": true,
+      "conversion_optimizer_steps": 0,
+      "all_rank_reload_performed": false,
+      "self_arm_read": false,
+      "logs_read": false
+    }
+  },
+  "scheduling_decision": {
+    "conversion_prepared": true,
+    "conversion_queued": false,
+    "native_checkpoint_created": false,
+    "all_rank_reload_queued": false,
+    "training_queued": false,
+    "conversion_resources": {
+      "workers": 1,
+      "gpus_per_worker": 8,
+      "total_gpus": 8
+    },
+    "reason": "intentionally_not_queued_while_rl_from_base_is_the_critical_path",
+    "next_gate": "after_rl_from_base_releases_its_allocation_recheck_exact_duplicates_outputs_capacity_and_authority_before_one_create_once_conversion"
+  },
+  "interpretation": {
+    "classification": "operational_gate",
+    "sft_to_rl_native_input_ready": false,
+    "rl_training_ready": false,
+    "evaluation_ready": false,
+    "capability_claimed": false
+  },
+  "privacy": {
+    "private_paths_recorded": false,
+    "prompts_read_or_recorded": false,
+    "task_payloads_read_or_recorded": false,
+    "traces_read_or_recorded": false,
+    "flags_answers_rewards_or_scores_read_or_recorded": false,
+    "credentials_read_or_recorded": false,
+    "tensor_values_read_or_recorded": false
+  },
+  "sha256": "sha256:3c57af829cc98ee83a0292558b37d8d72ced9ab1d365d20fb05e11da073d0488"
+}

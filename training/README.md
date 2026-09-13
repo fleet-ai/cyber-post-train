@@ -74,6 +74,16 @@ an SFT→RL arm must first earn its own reward/update/reload dev evidence and th
 freeze a distinct production candidate. External benchmarks remain post-training
 only and cannot select the SFT export, RL recipe, checkpoint, or retry.
 
+Current teacher SFT→RL handoff (2026-09-13): the accepted step-186 stronger-
+teacher export passed a teacher-only stage verifier and the exact zero-GPU Miles
+CPU preflight. The compiled next operation is one create-once, one-worker,
+eight-GPU HF→Miles conversion; it is prepared but intentionally not queued while
+RL-from-base is the critical path. No native checkpoint, all-rank reload, RL
+training or evaluation has started for this arm. After RL-from-base releases its
+allocation, repeat the exact duplicate, output, capacity and authority gates
+before that single conversion. The sanitized immutable evidence is
+[`2026-09-13-teacher-sft-miles-preflight-v1.json`](../docs/evidence/qwen38-study/2026-09-13-teacher-sft-miles-preflight-v1.json).
+
 Use [cluster operations](../docs/CLUSTER_ALERTS_AND_INFERENCE_SERVING.md) and the
 [training skill](../skills/cyber-train-operator/SKILL.md) before paid operations.
 Historical model-specific reports and immutable run configs remain provenance;
