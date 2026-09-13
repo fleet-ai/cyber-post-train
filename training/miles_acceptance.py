@@ -10,11 +10,17 @@ copied into the acceptance receipt.
 
 from __future__ import annotations
 
+import base64
+import binascii
 import copy
+import gzip
+import hashlib
 import json
 import math
 import numbers
 import re
+import shlex
+import subprocess
 import uuid
 from collections.abc import Mapping
 from datetime import datetime
@@ -24,8 +30,7 @@ from typing import Any
 from cyber_post_train.jobs import API_URLS, digest
 from evals.fleet import opencode_self_hosted as fleet
 
-from . import miles
-from .miles_conversion import _hash, _write
+from .miles_conversion import _write
 from .miles_reload import CHECKPOINT_SCHEMA, _verify_checkpoint
 from .miles_training import SCHEMA as TRAINING_SCHEMA
 from .miles_training import job_request
@@ -33,13 +38,65 @@ from .rl_episode import _validate as validate_episode_config
 from .rl_runtime import sealed
 
 TERMINAL_SCHEMA = "cyber_miles_reward_canary_terminal_v1"
+SUBMISSION_SCHEMA = "cyber_miles_submitted_execution_binding_v1"
 EPISODE_AUDIT_SCHEMA = "cyber_miles_reward_canary_episode_audit_v1"
 WANDB_SCHEMA = "cyber_miles_wandb_scalar_observation_v1"
+POLICY_DELTA_SCHEMA = "cyber_miles_policy_tensor_delta_observation_v1"
 CONTROLLER_SCHEMA = "cyber_miles_controller_terminal_observation_v1"
 RELEASE_SCHEMA = "cyber_miles_external_release_v1"
 NAMESPACE = "fleet-train-jobs"
 NAMESPACE_UID = "10394b76-e1d4-40b1-a8e2-7575e95df216"
 WORLD_SIZE = 8
+
+_SUBMITTED_RUNTIME_FILES = (
+    "training/miles_training.py",
+    "training/miles.py",
+    "training/miles_conversion.py",
+    "training/miles_rollout.py",
+    "training/miles_text.py",
+    "training/rl_episode.py",
+    "training/rl_runtime.py",
+    "training/sft_runtime.py",
+    "evals/fleet/opencode_self_hosted.py",
+    "cyber_post_train/jobs.py",
+)
+_SUBMITTED_ENV = {
+    "PYTHONPATH": "/root/Megatron-LM",
+    "HF_HUB_OFFLINE": "1",
+    "TRANSFORMERS_OFFLINE": "1",
+    "TOKENIZERS_PARALLELISM": "false",
+    "CUDA_DEVICE_MAX_CONNECTIONS": "1",
+    "MILES_USE_LEGACY_ROLLOUT_V1": "0",
+    "WANDB_MODE": "online",
+    "WANDB_DISABLE_CODE": "true",
+    "WANDB_CONSOLE": "off",
+    "PYTHONUNBUFFERED": "1",
+}
+
+_MILES_UPDATE_METRICS = frozenset(
+    {
+        "train/step",
+        "train/grad_norm",
+        "train/loss",
+        "train/lr-pg_0",
+    }
+)
+
+
+def _sensitive_wandb_metric(name: str) -> bool:
+    """Return whether a metric can disclose a reward or model outcome.
+
+    Native Miles logs rollout rewards under ``rollout/`` and held-out outcomes
+    under ``eval/<dataset>``.  Keep this deliberately broader than those two
+    current spellings so a renamed score/pass/success field fails private and
+    never enters a public receipt or one of its digests.
+    """
+
+    lowered = name.lower()
+    return lowered.startswith(("rollout/", "eval/")) or any(
+        token in lowered for token in ("reward", "score", "success", "pass_rate", "outcome")
+    )
+
 
 _SHA = re.compile(r"(?:sha256:)?[a-f0-9]{64}")
 _UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}")
@@ -78,7 +135,13 @@ _EPISODE_AUDIT_FIELDS = frozenset(
     }
 )
 _UPDATE_PROOF_FIELDS = frozenset(
-    {"optimizer_updates", "basis", "checkpoint_payload_changed_from_base", "counter_only_claim"}
+    {
+        "optimizer_updates",
+        "basis",
+        "policy_tensor_payload_changed_from_base",
+        "changed_policy_ranks",
+        "counter_only_claim",
+    }
 )
 _TERMINAL_FIELDS = frozenset(
     {
@@ -87,11 +150,13 @@ _TERMINAL_FIELDS = frozenset(
         "source_run_name",
         "source_plan_sha256",
         "source_request_sha256",
+        "submission_binding",
         "native_completion",
         "episode_audit",
         "optimizer_update_proof",
         "wandb_scalar_observation",
         "checkpoint_manifest",
+        "policy_delta_observation",
         "controller_observation",
         "external_release",
         "external_gpu_release_verified",
@@ -101,23 +166,71 @@ _TERMINAL_FIELDS = frozenset(
         "sha256",
     }
 )
+_SUBMISSION_FIELDS = frozenset(
+    {
+        "schema",
+        "source_commit",
+        "source_plan_path",
+        "source_plan_sha256",
+        "source_plan_file_sha256",
+        "source_request_path",
+        "source_request_sha256",
+        "source_request_file_sha256",
+        "runtime_bundle_sha256",
+        "runtime_source_sha256",
+        "runtime_source_commit_match",
+        "api",
+        "request",
+        "jobs_api_post_count",
+        "submitted_at",
+        "secret_values_included",
+        "task_content_included",
+        "private_payload_included",
+        "sha256",
+    }
+)
+_SUBMISSION_REQUEST_FIELDS = frozenset(
+    {
+        "name",
+        "run_dir",
+        "image",
+        "workers",
+        "gpus_per_worker",
+        "resources",
+        "priority_class",
+        "automatic_requeue",
+        "secret_names",
+        "environment_names",
+        "runtime_module",
+        "runtime_argv",
+    }
+)
 
 
 def _unsigned(value: Mapping[str, Any]) -> dict[str, Any]:
     return {key: item for key, item in value.items() if key != "sha256"}
 
 
-def _read(path: Path, *, schema: str | None = None) -> tuple[dict[str, Any], str]:
+_STABLE_STAT_FIELDS = ("st_dev", "st_ino", "st_size", "st_mtime_ns", "st_ctime_ns")
+
+
+def _json_snapshot(path: Path) -> tuple[Any, str]:
     if path.is_symlink() or not path.is_file():
         raise ValueError("acceptance input must be a regular file")
     before = path.stat()
     payload = path.read_bytes()
-    if path.stat() != before:
+    after = path.stat()
+    if any(getattr(before, key) != getattr(after, key) for key in _STABLE_STAT_FIELDS):
         raise ValueError("acceptance input changed while reading")
     try:
         value = json.loads(payload)
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
         raise ValueError("acceptance input is not valid JSON") from error
+    return value, fleet.sha256(payload).removeprefix("sha256:")
+
+
+def _read(path: Path, *, schema: str | None = None) -> tuple[dict[str, Any], str]:
+    value, file_sha256 = _json_snapshot(path)
     if not isinstance(value, dict):
         raise ValueError("acceptance input must be a JSON object")
     if schema is None:
@@ -125,7 +238,7 @@ def _read(path: Path, *, schema: str | None = None) -> tuple[dict[str, Any], str
             raise ValueError("acceptance input self-digest mismatch")
     else:
         sealed(value, schema)
-    return value, _hash(path)
+    return value, file_sha256
 
 
 def _reference(path: Path, value: Mapping[str, Any], file_sha256: str) -> dict[str, str]:
@@ -173,11 +286,25 @@ def _image_digest(value: object) -> str:
     return match.group(1)
 
 
-def _canary(plan: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
-    request = job_request(plan)
+def _canary(plan: dict[str, Any]) -> dict[str, Any]:
+    """Validate scientific plan shape without reconstructing its old request.
+
+    A submitted plan remains valid evidence after launch code evolves.  Its
+    exact request and runtime bundle are checked through ``SUBMISSION_SCHEMA``;
+    calling today's ``job_request`` here would incorrectly judge history using
+    different source bytes.
+    """
+
     args = plan.get("arguments", {})
+    execution = plan.get("execution", {})
+    image = execution.get("image") if isinstance(execution, dict) else None
+    checkpoint = plan.get("checkpoint", {})
     if (
         plan.get("schema") != TRAINING_SCHEMA
+        or plan.get("run_name") != args.get("name")
+        or plan.get("output_root") != args.get("output_root")
+        or plan.get("model", {}).get("repo") != "Qwen/Qwen3.8-27B"
+        or args.get("model") != "Qwen/Qwen3.8-27B"
         or args.get("nodes") != 1
         or args.get("gpus_per_node") != WORLD_SIZE
         or args.get("steps") != 1
@@ -185,13 +312,12 @@ def _canary(plan: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
         or args.get("samples_per_prompt") != WORLD_SIZE
         or args.get("eval_interval") != 1
         or args.get("checkpoint_interval") != 1
-        or plan.get("execution", {}).get("image") != miles.IMAGE
-        or plan["execution"].get("priority") != "c1"
-        or request.get("workers") != 1
-        or request.get("gpus_per_worker") != WORLD_SIZE
-        or request.get("priority_class") != "c1"
-        or request.get("requeueIfPreempted") is not False
-        or request.get("secrets") != ["fleet-api", "wandb-api"]
+        or not isinstance(image, str)
+        or re.fullmatch(r"[^\s]+@sha256:[a-f0-9]{64}", image) is None
+        or checkpoint.get("image") != image
+        or execution.get("priority") != "c1"
+        or _SHA.fullmatch(str(plan.get("runtime_sha256"))) is None
+        or _SHA.fullmatch(str(plan.get("native_driver_sha256"))) is None
     ):
         raise ValueError("terminal acceptance requires the exact one-update Miles canary")
     files = plan.get("data", {}).get("files", {})
@@ -201,7 +327,285 @@ def _canary(plan: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
         or files["dev"].get("rows") != 1
     ):
         raise ValueError("reward canary requires one frozen train and dev task")
-    return args, request
+    return args
+
+
+def reconstruct_current_request(plan: dict[str, Any]) -> dict[str, Any]:
+    """Render today's request for a future launch, never for historical proof."""
+
+    _canary(plan)
+    return job_request(plan)
+
+
+def _transport_blob(request: Mapping[str, Any]) -> bytes:
+    env = request.get("env")
+    if not isinstance(env, Mapping) or any(
+        not isinstance(key, str) or not isinstance(value, str) for key, value in env.items()
+    ):
+        raise ValueError("submitted request environment is invalid")
+    direct = env.get("CYBER_RUNTIME_BUNDLE")
+    chunks = sorted(
+        (
+            (int(key.removeprefix("CYBER_RUNTIME_BUNDLE_")), value)
+            for key, value in env.items()
+            if re.fullmatch(r"CYBER_RUNTIME_BUNDLE_\d+", key)
+        ),
+        key=lambda item: item[0],
+    )
+    if direct is not None:
+        if chunks:
+            raise ValueError("submitted request has ambiguous runtime transport")
+        encoded = direct
+    else:
+        if not chunks or [index for index, _ in chunks] != list(range(len(chunks))):
+            raise ValueError("submitted runtime transport is absent or non-contiguous")
+        encoded = "".join(value for _, value in chunks)
+    try:
+        return base64.b64decode(encoded, validate=True)
+    except (ValueError, binascii.Error) as error:
+        raise ValueError("submitted runtime transport is not valid base64") from error
+
+
+def _git_source(commit: str, path: str, repo_root: Path) -> bytes:
+    result = subprocess.run(
+        ["git", "show", f"{commit}:{path}"],
+        cwd=repo_root,
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+    )
+    if result.returncode:
+        raise ValueError("submitted source commit or runtime file is unavailable")
+    return result.stdout
+
+
+def _submitted_request(
+    plan: dict[str, Any], request: dict[str, Any], source_commit: str, repo_root: Path
+) -> tuple[str, dict[str, Any]]:
+    """Reopen the exact historical request without invoking today's compiler."""
+
+    _canary(plan)
+    if re.fullmatch(r"[a-f0-9]{40}", source_commit) is None:
+        raise ValueError("submitted source commit is not a full Git SHA")
+    expected_keys = {
+        "name",
+        "title",
+        "run_dir",
+        "image",
+        "workers",
+        "gpus_per_worker",
+        "resources",
+        "priority_class",
+        "requeueIfPreempted",
+        "secrets",
+        "env",
+        "command",
+    }
+    args = plan["arguments"]
+    env = request.get("env")
+    if not isinstance(env, dict):
+        raise ValueError("submitted request environment is absent")
+    transport_names = {
+        key
+        for key in env
+        if key == "CYBER_RUNTIME_BUNDLE" or re.fullmatch(r"CYBER_RUNTIME_BUNDLE_\d+", key)
+    }
+    ordinary_env = {key: value for key, value in env.items() if key not in transport_names}
+    expected_env = {**_SUBMITTED_ENV, "WANDB_RUN_ID": args["wandb_run_id"]}
+    if (
+        set(request) != expected_keys
+        or request.get("name") != plan["run_name"]
+        or request.get("title") != plan["run_name"] + " native Miles RL"
+        or request.get("run_dir") != plan["output_root"]
+        or request.get("image") != plan["execution"]["image"]
+        or request.get("workers") != 1
+        or request.get("gpus_per_worker") != WORLD_SIZE
+        or request.get("resources") != plan["execution"]["resources"]
+        or request.get("priority_class") != "c1"
+        or request.get("requeueIfPreempted") is not False
+        or request.get("secrets") != ["fleet-api", "wandb-api"]
+        or ordinary_env != expected_env
+    ):
+        raise ValueError("submitted request differs from the reviewed one-update contract")
+    blob = _transport_blob(request)
+    blob_sha256 = hashlib.sha256(blob).hexdigest()
+    command = request.get("command")
+    try:
+        command_parts = shlex.split(command) if isinstance(command, str) else []
+    except ValueError as error:
+        raise ValueError("submitted request command is malformed") from error
+    if (
+        len(command_parts) != 3
+        or command_parts[:2] != ["python", "-c"]
+        or blob_sha256 not in command_parts[2]
+    ):
+        raise ValueError("submitted request command is not bound to its runtime bundle")
+    try:
+        payload = json.loads(gzip.decompress(blob))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ValueError("submitted runtime bundle is invalid") from error
+    if not isinstance(payload, dict) or set(payload) != {"files", "module", "argv"}:
+        raise ValueError("submitted runtime bundle fields changed")
+    files = payload.get("files")
+    if (
+        not isinstance(files, dict)
+        or any(
+            not isinstance(key, str) or not isinstance(value, str) for key, value in files.items()
+        )
+        or payload.get("module") != "training.miles_training"
+        or payload.get("argv") != ["--plan", "plan.json", "--sha256", digest(plan)]
+        or files.get("plan.json") != json.dumps(plan, sort_keys=True, separators=(",", ":"))
+        or not set(_SUBMITTED_RUNTIME_FILES).issubset(files)
+    ):
+        raise ValueError("submitted runtime bundle is not bound to the exact Miles plan")
+    source_files = {path: files[path] for path in _SUBMITTED_RUNTIME_FILES}
+    if digest(source_files) != plan["runtime_sha256"]:
+        raise ValueError("submitted runtime files differ from the exact plan")
+    for path, text in source_files.items():
+        if _git_source(source_commit, path, repo_root) != text.encode():
+            raise ValueError("submitted runtime bundle differs from its source commit")
+    return blob_sha256, {
+        "name": request["name"],
+        "run_dir": request["run_dir"],
+        "image": request["image"],
+        "workers": request["workers"],
+        "gpus_per_worker": request["gpus_per_worker"],
+        "resources": request["resources"],
+        "priority_class": request["priority_class"],
+        "automatic_requeue": request["requeueIfPreempted"],
+        "secret_names": request["secrets"],
+        "environment_names": sorted(ordinary_env),
+        "runtime_module": payload["module"],
+        "runtime_argv": payload["argv"],
+    }
+
+
+def compile_submission_binding(
+    *,
+    plan_path: Path,
+    request_path: Path,
+    source_commit: str,
+    api_run_id: str,
+    submitted_at: object,
+    output: Path,
+    repo_root: Path | None = None,
+) -> dict[str, Any]:
+    """Seal exact request/source provenance from immutable pre-submit files."""
+
+    plan, plan_file_sha256 = _json_snapshot(plan_path)
+    request, request_file_sha256 = _json_snapshot(request_path)
+    if not isinstance(plan, dict) or not isinstance(request, dict):
+        raise ValueError("submitted plan and request must be JSON objects")
+    bundle_sha256, projection = _submitted_request(
+        plan,
+        request,
+        source_commit,
+        repo_root or Path(__file__).resolve().parents[1],
+    )
+    run_id = _uuid(api_run_id, "API run ID")
+    _time(submitted_at, "submission time")
+    return _write(
+        output,
+        {
+            "schema": SUBMISSION_SCHEMA,
+            "source_commit": source_commit,
+            "source_plan_path": str(plan_path),
+            "source_plan_sha256": "sha256:" + digest(plan),
+            "source_plan_file_sha256": "sha256:" + plan_file_sha256,
+            "source_request_path": str(request_path),
+            "source_request_sha256": "sha256:" + digest(request),
+            "source_request_file_sha256": "sha256:" + request_file_sha256,
+            "runtime_bundle_sha256": "sha256:" + bundle_sha256,
+            "runtime_source_sha256": "sha256:" + plan["runtime_sha256"],
+            "runtime_source_commit_match": True,
+            "api": {
+                "base_url": API_URLS["dev"],
+                "run_id": run_id,
+                "run_name": plan["run_name"] + "-" + run_id[:8],
+            },
+            "request": projection,
+            "jobs_api_post_count": 1,
+            "submitted_at": submitted_at,
+            "secret_values_included": False,
+            "task_content_included": False,
+            "private_payload_included": False,
+        },
+    )
+
+
+def validate_submission_binding(
+    value: dict[str, Any], plan: dict[str, Any], *, check_files: bool = True
+) -> dict[str, Any]:
+    """Validate and optionally reopen the exact historical request/bundle."""
+
+    _canary(plan)
+    sealed(value, SUBMISSION_SCHEMA)
+    projection = value.get("request")
+    api = value.get("api")
+    if (
+        set(value) != _SUBMISSION_FIELDS
+        or re.fullmatch(r"[a-f0-9]{40}", str(value.get("source_commit"))) is None
+        or value.get("source_plan_sha256", "").removeprefix("sha256:") != digest(plan)
+        or value.get("runtime_source_sha256", "").removeprefix("sha256:")
+        != plan.get("runtime_sha256")
+        or value.get("runtime_source_commit_match") is not True
+        or not isinstance(projection, dict)
+        or set(projection) != _SUBMISSION_REQUEST_FIELDS
+        or projection.get("name") != plan["run_name"]
+        or projection.get("run_dir") != plan["output_root"]
+        or projection.get("image") != plan["execution"]["image"]
+        or projection.get("workers") != 1
+        or projection.get("gpus_per_worker") != WORLD_SIZE
+        or projection.get("resources") != plan["execution"]["resources"]
+        or projection.get("priority_class") != "c1"
+        or projection.get("automatic_requeue") is not False
+        or projection.get("secret_names") != ["fleet-api", "wandb-api"]
+        or projection.get("environment_names") != sorted({*_SUBMITTED_ENV, "WANDB_RUN_ID"})
+        or projection.get("runtime_module") != "training.miles_training"
+        or projection.get("runtime_argv") != ["--plan", "plan.json", "--sha256", digest(plan)]
+        or not isinstance(api, dict)
+        or set(api) != {"base_url", "run_id", "run_name"}
+        or api.get("base_url") != API_URLS["dev"]
+        or _UUID.fullmatch(str(api.get("run_id"))) is None
+        or api.get("run_name") != plan["run_name"] + "-" + str(api.get("run_id"))[:8]
+        or value.get("jobs_api_post_count") != 1
+        or value.get("secret_values_included") is not False
+        or value.get("task_content_included") is not False
+        or value.get("private_payload_included") is not False
+        or not isinstance(value.get("source_plan_path"), str)
+        or not value["source_plan_path"]
+        or not isinstance(value.get("source_request_path"), str)
+        or not value["source_request_path"]
+        or _SHA.fullmatch(str(value.get("source_plan_file_sha256"))) is None
+        or _SHA.fullmatch(str(value.get("source_request_sha256"))) is None
+        or _SHA.fullmatch(str(value.get("source_request_file_sha256"))) is None
+        or _SHA.fullmatch(str(value.get("runtime_bundle_sha256"))) is None
+    ):
+        raise ValueError("submitted execution binding is incomplete or mismatched")
+    _time(value.get("submitted_at"), "submission time")
+    if check_files:
+        reopened_plan, plan_file_sha256 = _json_snapshot(Path(value["source_plan_path"]))
+        reopened_request, request_file_sha256 = _json_snapshot(Path(value["source_request_path"]))
+        if (
+            reopened_plan != plan
+            or value["source_plan_file_sha256"].removeprefix("sha256:") != plan_file_sha256
+            or not isinstance(reopened_request, dict)
+            or value["source_request_sha256"].removeprefix("sha256:") != digest(reopened_request)
+            or value["source_request_file_sha256"].removeprefix("sha256:") != request_file_sha256
+        ):
+            raise ValueError("submitted plan or request file changed")
+        bundle_sha256, reopened_projection = _submitted_request(
+            plan,
+            reopened_request,
+            value["source_commit"],
+            Path(__file__).resolve().parents[1],
+        )
+        if (
+            value["runtime_bundle_sha256"].removeprefix("sha256:") != bundle_sha256
+            or reopened_projection != projection
+        ):
+            raise ValueError("submitted request bundle changed")
+    return {"request_sha256": value["source_request_sha256"], "api": api}
 
 
 def _source_configs(plan: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -213,11 +617,11 @@ def _source_configs(plan: dict[str, Any]) -> dict[str, dict[str, Any]]:
     for split in ("train", "dev"):
         item = manifest["files"][split]
         path = manifest_path.parent / item["path"]
-        if path != Path(plan["arguments"][split + "_data"]) or _hash(path) != str(
+        values, file_sha256 = _jsonl_snapshot(path)
+        if path != Path(plan["arguments"][split + "_data"]) or file_sha256 != str(
             item["sha256"]
         ).removeprefix("sha256:"):
             raise ValueError("staged Miles task row differs from the plan")
-        values = [json.loads(line) for line in path.read_bytes().splitlines()]
         if len(values) != 1 or not isinstance(values[0], dict):
             raise ValueError("reward canary task row cardinality changed")
         row = values[0]
@@ -241,6 +645,23 @@ def _source_configs(plan: dict[str, Any]) -> dict[str, dict[str, Any]]:
         validate_episode_config(config)
         result[split] = config
     return result
+
+
+def _jsonl_snapshot(path: Path) -> tuple[list[Any], str]:
+    """Read one JSONL file once without treating access-time changes as mutation."""
+
+    if path.is_symlink() or not path.is_file():
+        raise ValueError("acceptance input must be a regular file")
+    before = path.stat()
+    payload = path.read_bytes()
+    after = path.stat()
+    if any(getattr(before, key) != getattr(after, key) for key in _STABLE_STAT_FIELDS):
+        raise ValueError("acceptance input changed while reading")
+    try:
+        rows = [json.loads(line) for line in payload.splitlines()]
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ValueError("acceptance JSONL input is invalid") from error
+    return rows, fleet.sha256(payload).removeprefix("sha256:")
 
 
 def _dynamic_config(binding: dict[str, Any]) -> dict[str, Any]:
@@ -360,13 +781,10 @@ def _episode(path: Path, source: dict[str, Any], kind: str) -> dict[str, Any]:
     values = {}
     for name in _EPISODE_FILES:
         file_path = path / name
-        if (
-            file_path.is_symlink()
-            or not file_path.is_file()
-            or fleet.sha256(file_path.read_bytes()) != accepted["files"][name]
-        ):
+        item, item_sha256 = _json_snapshot(file_path)
+        if "sha256:" + item_sha256 != accepted["files"][name]:
             raise ValueError("Miles episode payload differs from its acceptance receipt")
-        values[name] = json.loads(file_path.read_bytes())
+        values[name] = item
     binding = values["binding.json"]
     validate_episode_config(binding)
     if (
@@ -588,8 +1006,11 @@ def episode_audit(plan: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def validate_wandb_observation(value: dict[str, Any], plan: dict[str, Any]) -> None:
+def validate_wandb_observation(
+    value: dict[str, Any], plan: dict[str, Any], submission: dict[str, Any]
+) -> None:
     sealed(value, WANDB_SCHEMA)
+    submitted = validate_submission_binding(submission, plan, check_files=False)
     args = plan["arguments"]
     expected_keys = {
         "schema",
@@ -598,26 +1019,27 @@ def validate_wandb_observation(value: dict[str, Any], plan: dict[str, Any]) -> N
         "identity",
         "state",
         "history_rows",
-        "remote_scalar_history_sha256",
-        "observed_optimizer_steps",
-        "step_one_metric_names",
-        "step_one_metrics",
+        "remote_non_sensitive_metric_schema",
+        "remote_metric_schema_sha256",
+        "observed_train_steps",
+        "optimizer_update_count",
+        "update_zero_metric_names",
         "positive_finite_gradient_observed",
-        "finite_policy_loss_observed",
+        "finite_train_loss_observed",
         "learning_rate_matches_plan",
+        "sensitive_metric_values_redacted",
         "logged_artifact_count",
         "rich_payload_count",
         "reward_values_included",
         "sha256",
     }
     identity = value.get("identity")
-    metrics = value.get("step_one_metric_names")
-    step_one = value.get("step_one_metrics")
+    metrics = value.get("update_zero_metric_names")
+    remote_schema = value.get("remote_non_sensitive_metric_schema")
     if (
         set(value) != expected_keys
         or value.get("source_plan_sha256", "").removeprefix("sha256:") != digest(plan)
-        or value.get("source_request_sha256", "").removeprefix("sha256:")
-        != digest(job_request(plan))
+        or value.get("source_request_sha256") != submitted["request_sha256"]
         or identity
         != {
             "entity": args["wandb_entity"],
@@ -628,49 +1050,48 @@ def validate_wandb_observation(value: dict[str, Any], plan: dict[str, Any]) -> N
         or value.get("state") != "finished"
         or type(value.get("history_rows")) is not int
         or not 1 <= value["history_rows"] <= 10000
-        or _SHA.fullmatch(str(value.get("remote_scalar_history_sha256"))) is None
-        or value.get("observed_optimizer_steps") != [0, 1]
+        or not isinstance(remote_schema, list)
+        or len(remote_schema) != value["history_rows"]
+        or any(
+            not isinstance(row, list)
+            or row != sorted(set(row))
+            or any(
+                not isinstance(name, str) or name.startswith("_") or _sensitive_wandb_metric(name)
+                for name in row
+            )
+            for row in remote_schema
+        )
+        or _SHA.fullmatch(str(value.get("remote_metric_schema_sha256"))) is None
+        or value["remote_metric_schema_sha256"].removeprefix("sha256:") != digest(remote_schema)
+        or value.get("observed_train_steps") != [0]
+        or value.get("optimizer_update_count") != 1
         or not isinstance(metrics, list)
-        or metrics != sorted(metrics)
-        or not {
-            "trainer/global_step",
-            "policy/grad_norm",
-            "policy/policy_loss",
-            "policy/policy_lr",
-        }
-        <= set(metrics)
-        or not isinstance(step_one, dict)
-        or set(step_one)
-        != {
-            "trainer/global_step",
-            "policy/grad_norm",
-            "policy/policy_loss",
-            "policy/policy_lr",
-        }
-        or step_one.get("trainer/global_step") != 1.0
-        or isinstance(step_one.get("policy/grad_norm"), bool)
-        or not isinstance(step_one.get("policy/grad_norm"), numbers.Real)
-        or not math.isfinite(step_one["policy/grad_norm"])
-        or step_one["policy/grad_norm"] <= 0
-        or isinstance(step_one.get("policy/policy_loss"), bool)
-        or not isinstance(step_one.get("policy/policy_loss"), numbers.Real)
-        or not math.isfinite(step_one["policy/policy_loss"])
-        or step_one.get("policy/policy_lr") != args["lr"]
+        or metrics != sorted(_MILES_UPDATE_METRICS)
         or value.get("positive_finite_gradient_observed") is not True
-        or value.get("finite_policy_loss_observed") is not True
+        or value.get("finite_train_loss_observed") is not True
         or value.get("learning_rate_matches_plan") is not True
+        or value.get("sensitive_metric_values_redacted") is not True
         or value.get("logged_artifact_count") != 0
         or value.get("rich_payload_count") != 0
         or value.get("reward_values_included") is not False
     ):
-        raise ValueError("W&B observation does not prove the exact scalar-only step-one run")
+        raise ValueError("W&B observation does not prove the exact value-free Miles update")
 
 
-def observe_wandb(plan: dict[str, Any], *, api: Any = None) -> dict[str, Any]:
-    """Read one exact W&B run and return a reward-value-free sealed observation."""
+def observe_wandb(
+    plan: dict[str, Any], submission: dict[str, Any], *, api: Any = None
+) -> dict[str, Any]:
+    """Read one exact W&B run and return a reward-value-free observation.
+
+    The public receipt records only identity, metric names/presence, and boolean
+    predicates computed from the private scalar stream.  It never copies or
+    hashes scalar values: even a digest of reward history is a low-entropy
+    reward commitment and is therefore not safe public evidence.
+    """
     from .skyrl_training import _finite_scalar_rows, _wandb_has_rich_payloads
 
     _canary(plan)
+    submitted = validate_submission_binding(submission, plan, check_files=False)
     args = plan["arguments"]
     if api is None:
         import wandb
@@ -692,43 +1113,42 @@ def observe_wandb(plan: dict[str, Any], *, api: Any = None) -> dict[str, Any]:
     rows = _finite_scalar_rows(run.scan_history(), label="W&B")
     if len(rows) > 10_000:
         raise ValueError("W&B scalar history exceeds its reviewed bound")
-    by_optimizer_step: dict[int, dict[str, float]] = {}
+    by_train_step: dict[int, dict[str, float]] = {}
+    public_schema_rows: list[list[str]] = []
     for row in rows:
-        raw_step = row.get("trainer/global_step")
+        names = sorted(
+            key for key in row if not key.startswith("_") and not _sensitive_wandb_metric(key)
+        )
+        public_schema_rows.append(names)
+        raw_step = row.get("train/step")
         if raw_step is None:
             continue
         if not float(raw_step).is_integer() or raw_step < 0:
-            raise ValueError("W&B optimizer step is not a nonnegative integer")
+            raise ValueError("W&B train/step is not a nonnegative integer")
         step = int(raw_step)
-        target = by_optimizer_step.setdefault(step, {})
+        target = by_train_step.setdefault(step, {})
         for key, item in row.items():
-            if key.startswith("_"):
+            if key.startswith("_") or _sensitive_wandb_metric(key):
                 continue
             if key in target and target[key] != item:
-                raise ValueError("W&B rewrites a metric within one optimizer step")
+                raise ValueError("W&B rewrites a metric within one train step")
             target[key] = item
-    if set(by_optimizer_step) != {0, 1}:
+    if set(by_train_step) != {0}:
         raise ValueError("W&B does not prove exactly one optimizer update")
-    one = by_optimizer_step[1]
-    required = {
-        "trainer/global_step",
-        "policy/grad_norm",
-        "policy/policy_loss",
-        "policy/policy_lr",
-    }
+    update = by_train_step[0]
     if (
-        not required <= set(one)
-        or one["trainer/global_step"] != 1.0
-        or not math.isfinite(one["policy/grad_norm"])
-        or one["policy/grad_norm"] <= 0
-        or not math.isfinite(one["policy/policy_loss"])
-        or one["policy/policy_lr"] != args["lr"]
+        not set(update) >= _MILES_UPDATE_METRICS
+        or update["train/step"] != 0.0
+        or not math.isfinite(update["train/grad_norm"])
+        or update["train/grad_norm"] <= 0
+        or not math.isfinite(update["train/loss"])
+        or update["train/lr-pg_0"] != args["lr"]
     ):
-        raise ValueError("W&B step one lacks finite optimizer telemetry")
+        raise ValueError("W&B update zero lacks finite native Miles telemetry")
     value = {
         "schema": WANDB_SCHEMA,
         "source_plan_sha256": "sha256:" + digest(plan),
-        "source_request_sha256": "sha256:" + digest(job_request(plan)),
+        "source_request_sha256": submitted["request_sha256"],
         "identity": {
             "entity": run.entity,
             "project": run.project,
@@ -737,25 +1157,123 @@ def observe_wandb(plan: dict[str, Any], *, api: Any = None) -> dict[str, Any]:
         },
         "state": run.state,
         "history_rows": len(rows),
-        "remote_scalar_history_sha256": "sha256:" + digest(rows),
-        "observed_optimizer_steps": [0, 1],
-        "step_one_metric_names": sorted(one),
-        "step_one_metrics": {key: one[key] for key in sorted(required)},
+        # Names and their per-row presence are safe to bind; values are not.
+        "remote_non_sensitive_metric_schema": public_schema_rows,
+        "remote_metric_schema_sha256": "sha256:" + digest(public_schema_rows),
+        "observed_train_steps": [0],
+        "optimizer_update_count": 1,
+        "update_zero_metric_names": sorted(_MILES_UPDATE_METRICS),
         "positive_finite_gradient_observed": True,
-        "finite_policy_loss_observed": True,
+        "finite_train_loss_observed": True,
         "learning_rate_matches_plan": True,
+        "sensitive_metric_values_redacted": True,
         "logged_artifact_count": 0,
         "rich_payload_count": 0,
         "reward_values_included": False,
     }
     value["sha256"] = "sha256:" + digest(value)
-    validate_wandb_observation(value, plan)
+    validate_wandb_observation(value, plan, submission)
     return value
 
 
-def validate_controller_observation(value: dict[str, Any], plan: dict[str, Any]) -> None:
+def validate_policy_delta_observation(
+    value: dict[str, Any], plan: dict[str, Any], checkpoint: dict[str, Any]
+) -> int:
+    """Validate a value-level policy comparison that excludes optimizer state.
+
+    Distributed-checkpoint files mix model tensors with optimizer, scheduler,
+    RNG, and metadata payloads.  A new filename or file digest therefore does
+    not prove a policy update.  The independent all-rank observer must hash
+    named policy tensor values before and after the update and bind those
+    high-entropy state digests to both exact checkpoint receipts.
+    """
+
+    sealed(value, POLICY_DELTA_SCHEMA)
+    expected_fields = {
+        "schema",
+        "source_plan_sha256",
+        "base_checkpoint_receipt_sha256",
+        "trained_checkpoint_receipt_sha256",
+        "world_size",
+        "comparison_method",
+        "ranks",
+        "changed_policy_ranks",
+        "policy_structure_matches",
+        "optimizer_state_used_for_delta",
+        "scheduler_state_used_for_delta",
+        "rng_state_used_for_delta",
+        "metadata_used_for_delta",
+        "reward_values_included",
+        "sha256",
+    }
+    rows = value.get("ranks")
+    if (
+        set(value) != expected_fields
+        or value.get("source_plan_sha256", "").removeprefix("sha256:") != digest(plan)
+        or value.get("base_checkpoint_receipt_sha256", "").removeprefix("sha256:")
+        != str(plan["checkpoint"].get("sha256", "")).removeprefix("sha256:")
+        or value.get("trained_checkpoint_receipt_sha256", "").removeprefix("sha256:")
+        != str(checkpoint.get("sha256", "")).removeprefix("sha256:")
+        or value.get("world_size") != WORLD_SIZE
+        or value.get("comparison_method") != "all_rank_named_policy_tensor_value_sha256_v1"
+        or not isinstance(rows, list)
+        or len(rows) != WORLD_SIZE
+        or value.get("policy_structure_matches") is not True
+        or value.get("optimizer_state_used_for_delta") is not False
+        or value.get("scheduler_state_used_for_delta") is not False
+        or value.get("rng_state_used_for_delta") is not False
+        or value.get("metadata_used_for_delta") is not False
+        or value.get("reward_values_included") is not False
+    ):
+        raise ValueError("policy delta observation is incomplete or not checkpoint-bound")
+    changed: list[int] = []
+    for rank, row in enumerate(rows):
+        if not isinstance(row, dict):
+            raise ValueError("policy delta rank observation is not an object")
+        fields = {
+            "rank",
+            "policy_tensor_count",
+            "local_policy_numel",
+            "base_policy_structure_sha256",
+            "trained_policy_structure_sha256",
+            "base_policy_value_sha256",
+            "trained_policy_value_sha256",
+            "policy_changed",
+        }
+        base_value = str(row.get("base_policy_value_sha256", "")).removeprefix("sha256:")
+        trained_value = str(row.get("trained_policy_value_sha256", "")).removeprefix("sha256:")
+        base_structure = str(row.get("base_policy_structure_sha256", "")).removeprefix("sha256:")
+        trained_structure = str(row.get("trained_policy_structure_sha256", "")).removeprefix(
+            "sha256:"
+        )
+        differs = base_value != trained_value
+        if (
+            set(row) != fields
+            or row.get("rank") != rank
+            or type(row.get("policy_tensor_count")) is not int
+            or row["policy_tensor_count"] < 1
+            or type(row.get("local_policy_numel")) is not int
+            or row["local_policy_numel"] < 1
+            or _SHA.fullmatch(base_structure) is None
+            or trained_structure != base_structure
+            or _SHA.fullmatch(base_value) is None
+            or _SHA.fullmatch(trained_value) is None
+            or row.get("policy_changed") is not differs
+        ):
+            raise ValueError("policy delta rank observation is invalid or counter-only")
+        if differs:
+            changed.append(rank)
+    if not changed or value.get("changed_policy_ranks") != changed:
+        raise ValueError("trained checkpoint has no independently observed policy tensor delta")
+    return len(changed)
+
+
+def validate_controller_observation(
+    value: dict[str, Any], plan: dict[str, Any], submission: dict[str, Any]
+) -> None:
     sealed(value, CONTROLLER_SCHEMA)
-    _, request = _canary(plan)
+    _canary(plan)
+    submitted = validate_submission_binding(submission, plan, check_files=False)
     api = value.get("api")
     kube = value.get("kubernetes")
     execution = value.get("execution")
@@ -764,7 +1282,7 @@ def validate_controller_observation(value: dict[str, Any], plan: dict[str, Any])
     workload = kube.get("workload") if isinstance(kube, dict) else None
     raycluster = kube.get("raycluster") if isinstance(kube, dict) else None
     api_name = api.get("run_name") if isinstance(api, dict) else None
-    expected_image = miles.IMAGE.rsplit("@sha256:", 1)[1]
+    expected_image = plan["execution"]["image"].rsplit("@sha256:", 1)[1]
     if (
         set(value)
         != {
@@ -780,13 +1298,14 @@ def validate_controller_observation(value: dict[str, Any], plan: dict[str, Any])
         }
         or value.get("status") != "succeeded"
         or value.get("source_plan_sha256", "").removeprefix("sha256:") != digest(plan)
-        or value.get("source_request_sha256", "").removeprefix("sha256:") != digest(request)
+        or value.get("source_request_sha256") != submitted["request_sha256"]
         or not isinstance(api, dict)
         or set(api) != {"base_url", "run_id", "run_name", "status"}
-        or api.get("base_url") != API_URLS["dev"]
+        or api.get("base_url") != submitted["api"]["base_url"]
         or _UUID.fullmatch(str(api.get("run_id"))) is None
         or not isinstance(api_name, str)
-        or api_name != plan["run_name"] + "-" + str(api.get("run_id"))[:8]
+        or api.get("run_id") != submitted["api"]["run_id"]
+        or api_name != submitted["api"]["run_name"]
         or api.get("status") != "SUCCEEDED"
         or not isinstance(kube, dict)
         or set(kube)
@@ -814,7 +1333,7 @@ def validate_controller_observation(value: dict[str, Any], plan: dict[str, Any])
         or not isinstance(execution, dict)
         or execution
         != {
-            "requested_image": miles.IMAGE,
+            "requested_image": plan["execution"]["image"],
             "priority_class": "c1",
             "effective_priority": 10000,
             "automatic_requeue": False,
@@ -835,8 +1354,6 @@ def validate_controller_observation(value: dict[str, Any], plan: dict[str, Any])
             "exit_code",
             "termination_reason",
             "runtime_image_id",
-            "runtime_uid",
-            "runtime_gid",
             "container_restarts",
             "gpus",
         }
@@ -846,8 +1363,6 @@ def validate_controller_observation(value: dict[str, Any], plan: dict[str, Any])
         or pod.get("exit_code") != 0
         or pod.get("termination_reason") != "Completed"
         or _image_digest(pod.get("runtime_image_id")) != expected_image
-        or pod.get("runtime_uid") != 1000
-        or pod.get("runtime_gid") != 100
         or pod.get("container_restarts") != 0
         or pod.get("gpus") != WORLD_SIZE
     ):
@@ -860,10 +1375,12 @@ def validate_release_observation(
     plan: dict[str, Any],
     controller: dict[str, Any],
     controller_file_sha256: str,
+    submission: dict[str, Any],
     *,
     not_before: float,
 ) -> None:
     sealed(value, RELEASE_SCHEMA)
+    submitted = validate_submission_binding(submission, plan, check_files=False)
     api = controller["api"]
     kube = controller["kubernetes"]
     identities = value.get("identities")
@@ -891,8 +1408,7 @@ def validate_release_observation(
         }
         or value.get("status") != "released"
         or value.get("source_plan_sha256", "").removeprefix("sha256:") != digest(plan)
-        or value.get("source_request_sha256", "").removeprefix("sha256:")
-        != digest(job_request(plan))
+        or value.get("source_request_sha256") != submitted["request_sha256"]
         or value.get("controller_observation_sha256", "").removeprefix("sha256:")
         != controller["sha256"].removeprefix("sha256:")
         or value.get("controller_observation_file_sha256", "").removeprefix("sha256:")
@@ -921,7 +1437,7 @@ def validate_release_observation(
         raise ValueError("external release observation is incomplete or mismatched")
 
 
-def _checkpoint(plan: dict[str, Any], path: Path) -> tuple[dict[str, Any], str, bool]:
+def _checkpoint(plan: dict[str, Any], path: Path) -> tuple[dict[str, Any], str]:
     manifest, file_sha256 = _read(path, schema=CHECKPOINT_SCHEMA)
     _verify_checkpoint(manifest, hashes=True)
     source = manifest.get("source", {})
@@ -944,28 +1460,22 @@ def _checkpoint(plan: dict[str, Any], path: Path) -> tuple[dict[str, Any], str, 
         or manifest.get("optimizer_update_during_reload") is not False
     ):
         raise ValueError("Miles checkpoint seal differs from the terminal source")
-    base_hashes = {
-        str(item.get("sha256", "")).removeprefix("sha256:")
-        for item in plan["checkpoint"].get("files", [])
-    }
-    trained_hashes = {
-        str(item.get("sha256", "")).removeprefix("sha256:") for item in manifest["files"]
-    }
-    changed = bool(trained_hashes - base_hashes)
-    if not changed:
-        raise ValueError("sealed Miles checkpoint has no payload delta from the base")
-    return manifest, file_sha256, changed
+    return manifest, file_sha256
 
 
 def _compile(
     plan: dict[str, Any],
     *,
+    submission_binding_path: Path,
     checkpoint_manifest_path: Path,
+    policy_delta_observation_path: Path,
     controller_observation_path: Path,
     release_observation_path: Path,
     wandb_observation_path: Path,
 ) -> dict[str, Any]:
-    _, request = _canary(plan)
+    _canary(plan)
+    submission, submission_file_sha256 = _read(submission_binding_path, schema=SUBMISSION_SCHEMA)
+    submitted = validate_submission_binding(submission, plan, check_files=True)
     root = Path(plan["output_root"])
     completion_path = root / "NATIVE_TRAINING_COMPLETE.json"
     completion, completion_file_sha256 = _read(completion_path)
@@ -1001,21 +1511,24 @@ def _compile(
         raise ValueError("Miles native completion is conflicting or incomplete")
     completed_at = _time(completion.get("completed_at"), "native completion")
     episodes = episode_audit(plan)
-    checkpoint, checkpoint_file_sha256, checkpoint_changed = _checkpoint(
-        plan, checkpoint_manifest_path
+    checkpoint, checkpoint_file_sha256 = _checkpoint(plan, checkpoint_manifest_path)
+    policy_delta, policy_delta_file_sha256 = _read(
+        policy_delta_observation_path, schema=POLICY_DELTA_SCHEMA
     )
+    changed_policy_ranks = validate_policy_delta_observation(policy_delta, plan, checkpoint)
     wandb, wandb_file_sha256 = _read(wandb_observation_path, schema=WANDB_SCHEMA)
-    validate_wandb_observation(wandb, plan)
+    validate_wandb_observation(wandb, plan, submission)
     controller, controller_file_sha256 = _read(
         controller_observation_path, schema=CONTROLLER_SCHEMA
     )
-    validate_controller_observation(controller, plan)
+    validate_controller_observation(controller, plan, submission)
     release, release_file_sha256 = _read(release_observation_path, schema=RELEASE_SCHEMA)
     validate_release_observation(
         release,
         plan,
         controller,
         controller_file_sha256,
+        submission,
         not_before=completed_at,
     )
     return {
@@ -1023,7 +1536,10 @@ def _compile(
         "status": "accepted",
         "source_run_name": plan["run_name"],
         "source_plan_sha256": "sha256:" + digest(plan),
-        "source_request_sha256": "sha256:" + digest(request),
+        "source_request_sha256": submitted["request_sha256"],
+        "submission_binding": _reference(
+            submission_binding_path, submission, submission_file_sha256
+        ),
         "native_completion": _reference(completion_path, completion, completion_file_sha256),
         "episode_audit": episodes,
         "optimizer_update_proof": {
@@ -1031,15 +1547,19 @@ def _compile(
             "basis": [
                 "one_native_rollout_with_one_step_per_rollout",
                 "eight_accepted_train_episodes_with_positive_reward_variance",
-                "positive_finite_gradient_and_finite_policy_loss_at_step_one",
-                "new_all_rank_checkpoint_payload_at_rollout_index_zero",
+                "positive_finite_gradient_and_finite_train_loss_at_update_zero",
+                "all_rank_named_policy_tensor_value_delta_from_exact_base",
             ],
-            "checkpoint_payload_changed_from_base": checkpoint_changed,
+            "policy_tensor_payload_changed_from_base": True,
+            "changed_policy_ranks": changed_policy_ranks,
             "counter_only_claim": False,
         },
         "wandb_scalar_observation": _reference(wandb_observation_path, wandb, wandb_file_sha256),
         "checkpoint_manifest": _reference(
             checkpoint_manifest_path, checkpoint, checkpoint_file_sha256
+        ),
+        "policy_delta_observation": _reference(
+            policy_delta_observation_path, policy_delta, policy_delta_file_sha256
         ),
         "controller_observation": _reference(
             controller_observation_path, controller, controller_file_sha256
@@ -1055,7 +1575,9 @@ def _compile(
 def accept_terminal(
     plan: dict[str, Any],
     *,
+    submission_binding_path: Path,
     checkpoint_manifest_path: Path,
+    policy_delta_observation_path: Path,
     controller_observation_path: Path,
     release_observation_path: Path,
     wandb_observation_path: Path,
@@ -1069,7 +1591,9 @@ def accept_terminal(
         raise FileExistsError("Miles terminal acceptance already exists")
     value = _compile(
         plan,
+        submission_binding_path=submission_binding_path,
         checkpoint_manifest_path=checkpoint_manifest_path,
+        policy_delta_observation_path=policy_delta_observation_path,
         controller_observation_path=controller_observation_path,
         release_observation_path=release_observation_path,
         wandb_observation_path=wandb_observation_path,
@@ -1079,15 +1603,19 @@ def accept_terminal(
 
 def validate_terminal(value: dict[str, Any], *, check_files: bool = True) -> dict[str, str]:
     """Reopen every terminal prerequisite for a later production promoter."""
+    if not check_files:
+        raise ValueError("Miles terminal promotion requires reopening all referenced evidence")
     sealed(value, TERMINAL_SCHEMA)
     episode = value.get("episode_audit")
     update = value.get("optimizer_update_proof")
     references = tuple(
         value.get(key)
         for key in (
+            "submission_binding",
             "native_completion",
             "wandb_scalar_observation",
             "checkpoint_manifest",
+            "policy_delta_observation",
             "controller_observation",
             "external_release",
         )
@@ -1115,7 +1643,9 @@ def validate_terminal(value: dict[str, Any], *, check_files: bool = True) -> dic
         or not isinstance(update, dict)
         or set(update) != _UPDATE_PROOF_FIELDS
         or update.get("optimizer_updates") != 1
-        or update.get("checkpoint_payload_changed_from_base") is not True
+        or update.get("policy_tensor_payload_changed_from_base") is not True
+        or type(update.get("changed_policy_ranks")) is not int
+        or not 1 <= update["changed_policy_ranks"] <= WORLD_SIZE
         or update.get("counter_only_claim") is not False
         or not all(
             isinstance(reference, dict) and set(reference) == _REFERENCE_FIELDS
@@ -1123,23 +1653,21 @@ def validate_terminal(value: dict[str, Any], *, check_files: bool = True) -> dic
         )
     ):
         raise ValueError("Miles terminal acceptance is not promotion-safe")
-    if not check_files:
-        return {
-            "source_plan_sha256": value["source_plan_sha256"],
-            "terminal_receipt_sha256": value["sha256"],
-        }
     checkpoint = value["checkpoint_manifest"]
+    submission = value["submission_binding"]
+    policy_delta = value["policy_delta_observation"]
     controller = value["controller_observation"]
     release = value["external_release"]
     wandb = value["wandb_scalar_observation"]
-    completion = value["native_completion"]
-    plan_path = Path(completion["path"]).parent / "plan.json"
-    if plan_path.is_symlink() or not plan_path.is_file():
-        raise ValueError("Miles terminal validation requires the exact source plan file")
-    plan = json.loads(plan_path.read_bytes())
+    submission_value, _ = _read(Path(submission["path"]), schema=SUBMISSION_SCHEMA)
+    plan, _ = _json_snapshot(Path(submission_value["source_plan_path"]))
+    if not isinstance(plan, dict):
+        raise ValueError("Miles terminal source plan is not an object")
     expected = _compile(
         plan,
+        submission_binding_path=Path(submission["path"]),
         checkpoint_manifest_path=Path(checkpoint["path"]),
+        policy_delta_observation_path=Path(policy_delta["path"]),
         controller_observation_path=Path(controller["path"]),
         release_observation_path=Path(release["path"]),
         wandb_observation_path=Path(wandb["path"]),

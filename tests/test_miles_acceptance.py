@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
+import base64
 import copy
+import gzip
+import hashlib
 import json
+import shlex
+import subprocess
 import uuid
 from pathlib import Path
 from types import SimpleNamespace
@@ -214,7 +219,7 @@ def _replace_episode_file(path: Path, name: str, value: dict) -> None:
 
 
 @pytest.fixture
-def case(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict:
+def case(tmp_path: Path) -> dict:
     run_name = "synthetic-miles-reward-canary"
     root = tmp_path / "run"
     root.mkdir()
@@ -288,35 +293,92 @@ def case(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict:
         "revision": "synthetic-revision",
         "root": arguments["model_root"],
     }
+    base_checkpoint = _seal(
+        {
+            "schema": "cyber_miles_checkpoint_v1",
+            "image": miles.IMAGE,
+            "root": "/mnt/sfs/jobs/synthetic-base/checkpoint",
+            "model": model,
+            "files": [{"path": "base", "size": 1, "sha256": "a" * 64}],
+            "optimizer_steps": 0,
+        }
+    )
     plan = {
         "schema": "cyber_miles_training_v1",
         "run_name": run_name,
         "output_root": str(root),
         "model": model,
         "data": data,
-        "checkpoint": {
-            "schema": "cyber_miles_checkpoint_v1",
-            "model": model,
-            "files": [{"path": "base", "size": 1, "sha256": "a" * 64}],
-        },
+        "checkpoint": base_checkpoint,
         "arguments": arguments,
         "runtime_sha256": "8" * 64,
         "native_driver_sha256": "9" * 64,
         "execution": {
             "image": miles.IMAGE,
             "priority": "c1",
-            "resources": {},
+            "resources": {
+                "cpu_request": "64",
+                "cpu_limit": "128",
+                "memory_request": "1536Gi",
+                "memory_limit": "2048Gi",
+            },
         },
     }
+    source_commit = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+    source_files = {
+        path: subprocess.check_output(["git", "show", f"{source_commit}:{path}"], text=True)
+        for path in acceptance._SUBMITTED_RUNTIME_FILES
+    }
+    plan["runtime_sha256"] = digest(source_files)
+    _write_json(root / "plan.json", plan)
+    bundle_files = {
+        **source_files,
+        "training/__init__.py": "",
+        "evals/__init__.py": "",
+        "evals/fleet/__init__.py": "",
+        "cyber_post_train/__init__.py": "",
+        "plan.json": json.dumps(plan, sort_keys=True, separators=(",", ":")),
+    }
+    payload = json.dumps(
+        {
+            "files": bundle_files,
+            "module": "training.miles_training",
+            "argv": ["--plan", "plan.json", "--sha256", digest(plan)],
+        },
+        sort_keys=True,
+    ).encode()
+    blob = gzip.compress(payload, mtime=0)
+    blob_sha256 = hashlib.sha256(blob).hexdigest()
     request = {
+        "name": run_name,
+        "title": run_name + " native Miles RL",
+        "run_dir": str(root),
+        "image": miles.IMAGE,
         "workers": 1,
         "gpus_per_worker": 8,
+        "resources": plan["execution"]["resources"],
         "priority_class": "c1",
         "requeueIfPreempted": False,
         "secrets": ["fleet-api", "wandb-api"],
+        "env": {
+            **acceptance._SUBMITTED_ENV,
+            "WANDB_RUN_ID": run_name,
+            "CYBER_RUNTIME_BUNDLE": base64.b64encode(blob).decode(),
+        },
+        "command": "python -c " + shlex.quote("assert " + repr(blob_sha256)),
     }
-    monkeypatch.setattr(acceptance, "job_request", lambda value: request)
-    _write_json(root / "plan.json", plan)
+    request_path = tmp_path / "prepared/request.json"
+    _write_json(request_path, request)
+    submission_path = tmp_path / "evidence/SUBMITTED_EXECUTION.json"
+    submission_path.parent.mkdir()
+    submission = acceptance.compile_submission_binding(
+        plan_path=root / "plan.json",
+        request_path=request_path,
+        source_commit=source_commit,
+        api_run_id="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        submitted_at="2026-09-13T03:06:15Z",
+        output=submission_path,
+    )
     completion = _seal(
         {
             "status": "native_loop_returned",
@@ -411,23 +473,29 @@ def case(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict:
             },
             "state": "finished",
             "history_rows": 2,
-            "remote_scalar_history_sha256": "sha256:" + "b" * 64,
-            "observed_optimizer_steps": [0, 1],
-            "step_one_metric_names": [
-                "policy/grad_norm",
-                "policy/policy_loss",
-                "policy/policy_lr",
-                "trainer/global_step",
+            "remote_non_sensitive_metric_schema": [
+                ["train/grad_norm", "train/loss", "train/lr-pg_0", "train/step"],
+                [],
             ],
-            "step_one_metrics": {
-                "policy/grad_norm": 1.25,
-                "policy/policy_loss": 0.5,
-                "policy/policy_lr": 1e-6,
-                "trainer/global_step": 1.0,
-            },
+            "remote_metric_schema_sha256": "sha256:"
+            + digest(
+                [
+                    ["train/grad_norm", "train/loss", "train/lr-pg_0", "train/step"],
+                    [],
+                ]
+            ),
+            "observed_train_steps": [0],
+            "optimizer_update_count": 1,
+            "update_zero_metric_names": [
+                "train/grad_norm",
+                "train/loss",
+                "train/lr-pg_0",
+                "train/step",
+            ],
             "positive_finite_gradient_observed": True,
-            "finite_policy_loss_observed": True,
+            "finite_train_loss_observed": True,
             "learning_rate_matches_plan": True,
+            "sensitive_metric_values_redacted": True,
             "logged_artifact_count": 0,
             "rich_payload_count": 0,
             "reward_values_included": False,
@@ -435,6 +503,40 @@ def case(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict:
     )
     wandb_path = tmp_path / "evidence/WANDB.json"
     _write_json(wandb_path, wandb)
+
+    policy_delta = _seal(
+        {
+            "schema": acceptance.POLICY_DELTA_SCHEMA,
+            "source_plan_sha256": "sha256:" + digest(plan),
+            "base_checkpoint_receipt_sha256": base_checkpoint["sha256"],
+            "trained_checkpoint_receipt_sha256": checkpoint["sha256"],
+            "world_size": 8,
+            "comparison_method": "all_rank_named_policy_tensor_value_sha256_v1",
+            "ranks": [
+                {
+                    "rank": rank,
+                    "policy_tensor_count": 10,
+                    "local_policy_numel": 100,
+                    "base_policy_structure_sha256": "sha256:" + f"{rank + 1:064x}",
+                    "trained_policy_structure_sha256": "sha256:" + f"{rank + 1:064x}",
+                    "base_policy_value_sha256": "sha256:" + f"{rank + 20:064x}",
+                    "trained_policy_value_sha256": "sha256:"
+                    + f"{rank + (40 if rank == 0 else 20):064x}",
+                    "policy_changed": rank == 0,
+                }
+                for rank in range(8)
+            ],
+            "changed_policy_ranks": [0],
+            "policy_structure_matches": True,
+            "optimizer_state_used_for_delta": False,
+            "scheduler_state_used_for_delta": False,
+            "rng_state_used_for_delta": False,
+            "metadata_used_for_delta": False,
+            "reward_values_included": False,
+        }
+    )
+    policy_delta_path = tmp_path / "evidence/POLICY_DELTA.json"
+    _write_json(policy_delta_path, policy_delta)
 
     run_id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
     api_name = run_name + "-aaaaaaaa"
@@ -479,8 +581,6 @@ def case(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict:
                         "termination_reason": "Completed",
                         "runtime_image_id": "containerd://image@sha256:"
                         + miles.IMAGE.rsplit("@sha256:", 1)[1],
-                        "runtime_uid": 1000,
-                        "runtime_gid": 100,
                         "container_restarts": 0,
                         "gpus": 8,
                     }
@@ -532,10 +632,14 @@ def case(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict:
     _write_json(release_path, release)
     return {
         "plan": plan,
+        "request": request,
+        "submission": submission,
+        "submission_path": submission_path,
         "root": root,
         "episodes": episodes,
         "checkpoint": checkpoint_path,
         "wandb": wandb_path,
+        "policy_delta": policy_delta_path,
         "controller": controller_path,
         "release": release_path,
     }
@@ -544,7 +648,9 @@ def case(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict:
 def _accept(case: dict) -> dict:
     return acceptance.accept_terminal(
         case["plan"],
+        submission_binding_path=case["submission_path"],
         checkpoint_manifest_path=case["checkpoint"],
+        policy_delta_observation_path=case["policy_delta"],
         controller_observation_path=case["controller"],
         release_observation_path=case["release"],
         wandb_observation_path=case["wandb"],
@@ -573,12 +679,14 @@ def test_terminal_acceptance_reopens_every_gate_without_reward_values(case: dict
     "fault",
     [
         "plan",
+        "submission",
         "completion",
         "conflict",
         "interaction",
         "reward_variance",
         "wandb",
         "checkpoint",
+        "policy_delta",
         "controller",
         "release",
     ],
@@ -588,6 +696,10 @@ def test_terminal_acceptance_fails_closed_on_each_scientific_or_release_gate(
 ) -> None:
     if fault == "plan":
         case["plan"]["arguments"]["steps"] = 2
+    elif fault == "submission":
+        value = json.loads(Path(case["submission"]["source_request_path"]).read_bytes())
+        value["requeueIfPreempted"] = True
+        _write_json(Path(case["submission"]["source_request_path"]), value)
     elif fault == "completion":
         value = json.loads((case["root"] / "NATIVE_TRAINING_COMPLETE.json").read_bytes())
         value["completed_batches"] = 2
@@ -607,10 +719,17 @@ def test_terminal_acceptance_fails_closed_on_each_scientific_or_release_gate(
             _replace_episode_file(path, "reward.json", value)
     elif fault == "wandb":
         value = json.loads(case["wandb"].read_bytes())
-        value["step_one_metrics"]["policy/grad_norm"] = 0.0
+        value["positive_finite_gradient_observed"] = False
         _write_json(case["wandb"], _seal(value))
     elif fault == "checkpoint":
         (case["root"] / "checkpoints/iter_0000000/__7_0.distcp").write_bytes(b"tampered")
+    elif fault == "policy_delta":
+        value = json.loads(case["policy_delta"].read_bytes())
+        for row in value["ranks"]:
+            row["trained_policy_value_sha256"] = row["base_policy_value_sha256"]
+            row["policy_changed"] = False
+        value["changed_policy_ranks"] = []
+        _write_json(case["policy_delta"], _seal(value))
     elif fault == "controller":
         value = json.loads(case["controller"].read_bytes())
         value["kubernetes"]["pods"][0]["container_restarts"] = 1
@@ -628,14 +747,14 @@ def test_wandb_observer_validates_remote_identity_and_omits_reward_values(
 ) -> None:
     plan = case["plan"]
     history = [
-        {"_step": 0, "trainer/global_step": 0.0},
         {
-            "_step": 1,
-            "trainer/global_step": 1.0,
-            "policy/grad_norm": 1.25,
-            "policy/policy_loss": 0.5,
-            "policy/policy_lr": 1e-6,
-            "reward/avg_raw_reward": 0.731,
+            "_step": 0,
+            "train/step": 0.0,
+            "train/grad_norm": 1.25,
+            "train/loss": 0.5,
+            "train/lr-pg_0": 1e-6,
+            "rollout/episode_raw_reward": 0.731,
+            "eval/heldout-cyber": 0.42,
         },
     ]
     run = SimpleNamespace(
@@ -644,22 +763,110 @@ def test_wandb_observer_validates_remote_identity_and_omits_reward_values(
         id=plan["run_name"],
         name=plan["run_name"],
         state="finished",
-        summary={"trainer/global_step": 1.0},
+        summary={"train/step": 0.0, "rollout/episode_raw_reward": 0.731},
         logged_artifacts=lambda: [],
         files=lambda: [],
         scan_history=lambda: copy.deepcopy(history),
     )
     api = SimpleNamespace(run=lambda path: run)
 
-    result = acceptance.observe_wandb(plan, api=api)
+    result = acceptance.observe_wandb(plan, case["submission"], api=api)
 
-    assert result["observed_optimizer_steps"] == [0, 1]
-    assert result["step_one_metrics"]["policy/grad_norm"] == 1.25
+    assert result["observed_train_steps"] == [0]
+    assert result["optimizer_update_count"] == 1
+    assert result["update_zero_metric_names"] == sorted(acceptance._MILES_UPDATE_METRICS)
     assert "0.731" not in json.dumps(result)
+    assert "0.42" not in json.dumps(result)
+    assert "episode_raw_reward" not in json.dumps(result)
+    first = copy.deepcopy(result)
+    history[0]["rollout/episode_raw_reward"] = 0.123
+    history[0]["eval/heldout-cyber"] = 0.99
+    run.summary = {"train/step": 0.0, "rollout/episode_raw_reward": 0.123}
+    assert acceptance.observe_wandb(plan, case["submission"], api=api) == first
     assert result["reward_values_included"] is False
-    history.append({"_step": 2, "trainer/global_step": 2.0})
+    history.append(
+        {
+            "_step": 1,
+            "train/step": 1.0,
+            "train/grad_norm": 1.0,
+            "train/loss": 0.4,
+            "train/lr-pg_0": 1e-6,
+        }
+    )
     with pytest.raises(ValueError, match="exactly one optimizer"):
-        acceptance.observe_wandb(plan, api=api)
+        acceptance.observe_wandb(plan, case["submission"], api=api)
+
+
+def test_historical_acceptance_never_reconstructs_request_with_current_code(
+    case: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        acceptance,
+        "job_request",
+        lambda plan: (_ for _ in ()).throw(AssertionError("current compiler must not run")),
+    )
+
+    result = _accept(case)
+
+    assert result["source_request_sha256"] == case["submission"]["source_request_sha256"]
+    assert result["submission_binding"]["receipt_sha256"].removeprefix("sha256:") == case[
+        "submission"
+    ]["sha256"].removeprefix("sha256:")
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        (lambda row: row.pop("train/loss"), "telemetry"),
+        (lambda row: row.__setitem__("train/grad_norm", 0.0), "telemetry"),
+        (lambda row: row.__setitem__("train/lr-pg_0", 2e-6), "telemetry"),
+        (lambda row: row.__setitem__("train/step", 1.0), "exactly one optimizer"),
+        (
+            lambda row: (row.pop("train/step"), row.__setitem__("trainer/global_step", 1.0)),
+            "exactly one optimizer",
+        ),
+    ],
+)
+def test_wandb_observer_rejects_missing_or_synthetic_update_telemetry(
+    case: dict, mutation, message: str
+) -> None:
+    row = {
+        "_step": 0,
+        "train/step": 0.0,
+        "train/grad_norm": 1.25,
+        "train/loss": 0.5,
+        "train/lr-pg_0": 1e-6,
+    }
+    mutation(row)
+    run = SimpleNamespace(
+        entity="synthetic",
+        project="synthetic",
+        id=case["plan"]["run_name"],
+        name=case["plan"]["run_name"],
+        state="finished",
+        summary={"train/step": 0.0},
+        logged_artifacts=lambda: [],
+        files=lambda: [],
+        scan_history=lambda: [row],
+    )
+    with pytest.raises(ValueError, match=message):
+        acceptance.observe_wandb(
+            case["plan"], case["submission"], api=SimpleNamespace(run=lambda path: run)
+        )
+
+
+def test_optimizer_metadata_delta_cannot_masquerade_as_policy_change(case: dict) -> None:
+    """The checkpoint already has different optimizer/metadata file hashes."""
+
+    value = json.loads(case["policy_delta"].read_bytes())
+    for row in value["ranks"]:
+        row["trained_policy_value_sha256"] = row["base_policy_value_sha256"]
+        row["policy_changed"] = False
+    value["changed_policy_ranks"] = []
+    _write_json(case["policy_delta"], _seal(value))
+
+    with pytest.raises(ValueError, match="no independently observed policy tensor delta"):
+        _accept(case)
 
 
 def test_episode_rejects_non_digest_authoritative_verifier(case: dict) -> None:
@@ -678,11 +885,13 @@ def test_episode_rejects_non_digest_authoritative_verifier(case: dict) -> None:
 
 def test_shallow_terminal_validation_still_rejects_extra_or_false_claims(case: dict) -> None:
     result = _accept(case)
+    with pytest.raises(ValueError, match="requires reopening"):
+        acceptance.validate_terminal(result, check_files=False)
     changed = copy.deepcopy(result)
     changed["private_reward"] = 1.0
     changed = _seal(changed)
-    with pytest.raises(ValueError, match="not promotion-safe"):
-        acceptance.validate_terminal(changed, check_files=False)
+    with pytest.raises(ValueError):
+        acceptance.validate_terminal(changed, check_files=True)
 
 
 def test_terminal_consumer_detects_later_evidence_substitution(case: dict) -> None:
