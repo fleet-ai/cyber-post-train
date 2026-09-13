@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import os
@@ -14,6 +15,27 @@ import typer
 from .jobs import API_URLS, Jobs, JobsError, digest, validate_preview, validate_request
 
 app = typer.Typer(no_args_is_help=True, pretty_exceptions_enable=False)
+
+_DEV9_ABSENT_RUNTIME_CONTEXT_QUALIFICATION = {
+    "image": (
+        "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:"
+        "89758df2b5f35cdb19efe948c7f6ef54f11e2e2ab47a45d600c25f36914e308f"
+    ),
+    "image_cpu_qualification_receipt_sha256": (
+        "28244d695896b8b9766df66caecd117a33fd5d9c2c5df35faba12bcc785d09f1"
+    ),
+    "default_user_evidence_path": (
+        "docs/evidence/qwen38-study/"
+        "2026-09-12-skyrl-worker-rpc-relay-image-default-user-qualification-v1.json"
+    ),
+    "default_user_evidence_file_sha256": (
+        "cf7841536034c599827a938666070075a2e300f777895c81aa40b6da63c1e3a5"
+    ),
+    "default_user_evidence_receipt_sha256": (
+        "d1080784334becc76edb698ce363ecc513e5c98f9fce6c9510de59136192129f"
+    ),
+    "default_user_probe_pod_uid": "367c7123-873d-43db-a2c7-e4407fd71996",
+}
 
 
 class Cluster(StrEnum):
@@ -71,6 +93,169 @@ def _fail(exc: Exception) -> None:
     message = str(exc) if isinstance(exc, JobsError) else type(exc).__name__
     typer.echo(f"Stopped: {message}. No automatic retry.", err=True)
     raise typer.Exit(2) from None
+
+
+def _validate_engine_diagnostic_preview(
+    plan: dict, request: dict, preview_result: dict
+) -> dict:
+    """Accept omitted Pod identity only for the exact qualified dev9 image.
+
+    The deployed dev Jobs API currently has no request field for a Pod security
+    context. An omitted field is distinct from an explicit conflict: omission
+    may use the exact image whose default 1000:100 user was proven by a bounded
+    dev Pod because the bundled GPU entrypoint rechecks its real uid/gid before
+    Ray initialization. Any explicit conflicting value remains fatal.
+    """
+    import yaml
+
+    from training.skyrl_training import (
+        DEV_KUBERNETES_NAMESPACE,
+        ENGINE_DIAGNOSTIC_GPUS_PER_WORKER,
+        ENGINE_DIAGNOSTIC_SUCCESSOR_CONFIG_NAME,
+        ENGINE_DIAGNOSTIC_SUCCESSOR_OUTPUT_ROOT,
+        ENGINE_DIAGNOSTIC_WORKERS,
+        ENGINE_IMAGE_CPU_QUALIFICATION,
+        IMAGE,
+        validate_engine_diagnostic_preview,
+    )
+
+    try:
+        return validate_engine_diagnostic_preview(plan, request, preview_result)
+    except JobsError as error:
+        if str(error) != "engine diagnostic preview runtime user differs from 1000:100":
+            raise
+        context_error = error
+
+    qualified = _DEV9_ABSENT_RUNTIME_CONTEXT_QUALIFICATION
+    execution = plan.get("execution", {})
+    if (
+        plan.get("run_name") != ENGINE_DIAGNOSTIC_SUCCESSOR_CONFIG_NAME
+        or plan.get("output_root") != ENGINE_DIAGNOSTIC_SUCCESSOR_OUTPUT_ROOT
+        or execution.get("cluster_target") != "dev"
+        or execution.get("image") != qualified["image"]
+        or execution.get("image_cpu_qualification") != ENGINE_IMAGE_CPU_QUALIFICATION
+        or request.get("image") != qualified["image"]
+        or request.get("workers") != ENGINE_DIAGNOSTIC_WORKERS
+        or request.get("gpus_per_worker") != ENGINE_DIAGNOSTIC_GPUS_PER_WORKER
+        or request.get("env", {}).get("CYBER_EXPECTED_RUNTIME_UID") != "1000"
+        or request.get("env", {}).get("CYBER_EXPECTED_RUNTIME_GID") != "100"
+    ):
+        raise context_error
+    evidence_path = Path(__file__).resolve().parents[1] / qualified[
+        "default_user_evidence_path"
+    ]
+    try:
+        evidence_bytes = evidence_path.read_bytes()
+        evidence = json.loads(evidence_bytes)
+        unsigned_evidence = {
+            key: value for key, value in evidence.items() if key != "receipt_sha256"
+        }
+    except (OSError, TypeError, ValueError) as error:
+        raise JobsError("exact dev9 image default-user qualification is unavailable") from error
+    runtime = evidence.get("runtime", {})
+    checks = evidence.get("checks", {})
+    qualification_scope = evidence.get("qualification_scope", {})
+    if (
+        hashlib.sha256(evidence_bytes).hexdigest()
+        != qualified["default_user_evidence_file_sha256"]
+        or evidence.get("receipt_sha256")
+        != hashlib.sha256(
+            json.dumps(
+                unsigned_evidence, sort_keys=True, separators=(",", ":"), allow_nan=False
+            ).encode()
+            + b"\n"
+        ).hexdigest()
+        or evidence.get("receipt_sha256")
+        != qualified["default_user_evidence_receipt_sha256"]
+        or evidence.get("status") != "qualified"
+        or evidence.get("requested_image") != qualified["image"]
+        or runtime.get("runtime_image_id") != qualified["image"]
+        or runtime.get("pod_uid") != qualified["default_user_probe_pod_uid"]
+        or (runtime.get("effective_uid"), runtime.get("effective_gid")) != (1000, 100)
+        or runtime.get("terminal_phase") != "Succeeded"
+        or runtime.get("exit_code") != 0
+        or runtime.get("restart_count") != 0
+        or runtime.get("pod_security_context") != {}
+        or runtime.get("container_security_context") is not None
+        or runtime.get("gpu_request") != 0
+        or runtime.get("service_account_token_mounted") is not False
+        or evidence.get("cleanup", {}).get("pod_absent_after_delete") is not True
+        or checks
+        != {
+            "container_security_context_absent": True,
+            "effective_gid_is_100": True,
+            "effective_uid_is_1000": True,
+            "exact_runtime_image_id": True,
+            "pod_security_context_has_no_identity_fields": True,
+            "zero_gpu_and_no_service_account": True,
+        }
+        or qualification_scope.get("explicit_conflicting_identity_remains_fatal") is not True
+        or qualification_scope.get("gpu_runtime_identity_recheck_remains_required") is not True
+        or qualification_scope.get("mutable_image_tags_are_not_qualified") is not True
+        or qualified["image"] != IMAGE
+        or ENGINE_IMAGE_CPU_QUALIFICATION.get("receipt_sha256")
+        != qualified["image_cpu_qualification_receipt_sha256"]
+    ):
+        raise JobsError(
+            "absent engine diagnostic runtime user requires the exact qualified dev9 image"
+        )
+
+    expected = {"runAsUser": 1000, "runAsGroup": 100, "runAsNonRoot": True}
+    try:
+        obj = yaml.safe_load(preview_result["manifest_yaml"])
+        cluster = obj["spec"]["rayClusterSpec"]
+        groups = [(1, cluster["headGroupSpec"]["template"])] + [
+            (group["replicas"], group["template"])
+            for group in cluster.get("workerGroupSpecs", [])
+        ]
+        pods = 0
+        omitted_fields = 0
+        for replicas, template in groups:
+            if type(replicas) is not int or replicas < 0:
+                raise JobsError("invalid engine diagnostic preview replica count")
+            if replicas == 0:
+                continue
+            pod = template["spec"]
+            containers = pod["containers"]
+            if not isinstance(containers, list) or len(containers) != 1:
+                raise JobsError("engine diagnostic preview must have one container per Pod")
+            pod_context = pod.get("securityContext", {})
+            container_context = containers[0].get("securityContext", {})
+            if not isinstance(pod_context, dict) or not isinstance(container_context, dict):
+                raise JobsError("malformed engine diagnostic Jobs API preview")
+            for context in (pod_context, container_context):
+                for key, value in expected.items():
+                    if key in context and not (
+                        type(context[key]) is type(value) and context[key] == value
+                    ):
+                        raise JobsError(
+                            "engine diagnostic preview contains an explicit runtime user conflict"
+                        )
+            omitted_fields += sum(
+                key not in pod_context and key not in container_context for key in expected
+            )
+            pods += replicas
+        if (
+            obj["metadata"]["namespace"] != DEV_KUBERNETES_NAMESPACE
+            or pods != ENGINE_DIAGNOSTIC_WORKERS
+            or omitted_fields == 0
+        ):
+            raise JobsError("engine diagnostic preview topology or runtime binding changed")
+    except JobsError:
+        raise
+    except (AttributeError, KeyError, TypeError, yaml.YAMLError) as error:
+        raise JobsError("malformed engine diagnostic Jobs API preview") from error
+
+    return {
+        "runtime_user": {"uid": 1000, "gid": 100},
+        "runtime_user_evidence": {
+            "mode": "qualified_image_default_with_gpu_entrypoint_recheck",
+            "qualification_receipt_sha256": evidence["receipt_sha256"],
+            "omitted_preview_fields": omitted_fields,
+            "explicit_conflicts_rejected": True,
+        },
+        "pods": pods,
+    }
 
 
 @app.command()
@@ -432,9 +617,7 @@ def preview(
             plan.get("schema") == "cyber_skyrl_training_v1"
             and _skyrl_mode(plan, request) == "engine_diagnostic"
         ):
-            from training.skyrl_training import validate_engine_diagnostic_preview
-
-            validated.update(validate_engine_diagnostic_preview(plan, request, result))
+            validated.update(_validate_engine_diagnostic_preview(plan, request, result))
         elif (
             plan.get("schema") == "cyber_skyrl_training_v1"
             and _skyrl_mode(plan, request) == "training"
@@ -514,11 +697,9 @@ def submit(
                 validate_preview(request, preview_result)
                 validate_reload_preview(request, preview_result)
             elif skyrl_mode == "engine_diagnostic":
-                from training.skyrl_training import validate_engine_diagnostic_preview
-
                 preview_result = client.preview(request)
                 validate_preview(request, preview_result)
-                validate_engine_diagnostic_preview(plan, request, preview_result)
+                _validate_engine_diagnostic_preview(plan, request, preview_result)
             elif skyrl_mode == "training":
                 from training.skyrl_promotion import (
                     require_live_external,

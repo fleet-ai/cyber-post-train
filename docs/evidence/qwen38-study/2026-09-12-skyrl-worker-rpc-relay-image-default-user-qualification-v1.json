@@ -1,0 +1,45 @@
+{
+  "checks": {
+    "container_security_context_absent": true,
+    "effective_gid_is_100": true,
+    "effective_uid_is_1000": true,
+    "exact_runtime_image_id": true,
+    "pod_security_context_has_no_identity_fields": true,
+    "zero_gpu_and_no_service_account": true
+  },
+  "classification": "operational_gate",
+  "cleanup": {
+    "pod_absent_after_delete": true,
+    "pod_deleted": true
+  },
+  "observed_at": "2026-09-13T00:02:41Z",
+  "qualification_scope": {
+    "allowed_inference": "For this exact image digest only, an API preview that omits Kubernetes user identity fields may rely on the image default before the allocated runtime independently rechecks UID:GID 1000:100.",
+    "explicit_conflicting_identity_remains_fatal": true,
+    "gpu_runtime_identity_recheck_remains_required": true,
+    "mutable_image_tags_are_not_qualified": true
+  },
+  "receipt_sha256": "d1080784334becc76edb698ce363ecc513e5c98f9fce6c9510de59136192129f",
+  "requested_image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:89758df2b5f35cdb19efe948c7f6ef54f11e2e2ab47a45d600c25f36914e308f",
+  "runtime": {
+    "container_security_context": null,
+    "effective_gid": 100,
+    "effective_uid": 1000,
+    "exit_code": 0,
+    "gpu_request": 0,
+    "kubernetes_context": "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb",
+    "namespace": "fleet-train-jobs",
+    "namespace_uid": "10394b76-e1d4-40b1-a8e2-7575e95df216",
+    "node": "computeinstance-e04sacc1ch7cqdvg57",
+    "pod_name": "chris-q38-dev9-image-user-v1",
+    "pod_security_context": {},
+    "pod_uid": "367c7123-873d-43db-a2c7-e4407fd71996",
+    "restart_count": 0,
+    "runtime_image_id": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:89758df2b5f35cdb19efe948c7f6ef54f11e2e2ab47a45d600c25f36914e308f",
+    "service_account_token_mounted": false,
+    "terminal_phase": "Succeeded",
+    "termination_reason": "Completed"
+  },
+  "schema": "cyber_q38_rl_image_default_user_qualification_v1",
+  "status": "qualified"
+}

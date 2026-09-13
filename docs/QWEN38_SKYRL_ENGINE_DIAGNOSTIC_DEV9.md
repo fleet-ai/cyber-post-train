@@ -49,9 +49,12 @@ Dev9 remains dev-cluster-only and requests `c1`, no automatic requeue, two
 workers with four GPUs each, and two TP4 engines. It carries no workload Secret,
 initializes no W&B run, reads no task row, creates no challenge environment, and
 performs no rollout, verifier call, optimizer update, or checkpoint write. The
-request binds expected UID/GID `1000:100`; preview must prove effective
-`runAsUser=1000`, `runAsGroup=100`, and `runAsNonRoot=true` for both Pods, and
-the allocated processes recheck UID/GID before Ray initialization. Startup and
+request binds expected UID/GID `1000:100`. Preview accepts either explicit
+`runAsUser=1000`, `runAsGroup=100`, and `runAsNonRoot=true`, or genuinely absent
+identity fields only for image digest `89758df2...` under the immutable
+default-user qualification receipt. Any explicit conflicting value remains
+fatal, every other image remains ineligible for the exception, and the GPU
+entrypoint rechecks its actual UID/GID before Ray initialization. Startup and
 owned-resource cleanup remain bounded at 1,800 and 300 seconds.
 
 Success still requires independent terminal evidence. It must cross-bind the
