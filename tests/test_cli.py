@@ -218,6 +218,22 @@ def test_targetless_skyrl_plan_cannot_be_routed_to_production() -> None:
     )
 
 
+def test_targetless_miles_plan_cannot_be_routed_to_production() -> None:
+    with pytest.raises(ValueError, match="explicit prod-cluster plan"):
+        cli._require_prepared_cluster(
+            {"schema": "cyber_miles_training_v1", "execution": {}},
+            cli.Cluster.prod,
+        )
+
+    cli._require_prepared_cluster(
+        {
+            "schema": "cyber_miles_training_v1",
+            "execution": {"cluster_target": "prod"},
+        },
+        cli.Cluster.prod,
+    )
+
+
 def test_module_entrypoint_exposes_public_help(monkeypatch, capsys):
     import runpy
     import sys

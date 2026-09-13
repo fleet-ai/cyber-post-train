@@ -91,6 +91,21 @@ def test_compiler_and_portable_job_have_native_identity(plan):
     assert "WANDB_API_KEY" not in request["env"]
 
 
+def test_miles_plan_can_bind_one_cluster(config, tmp_path):
+    config["cluster"] = {"target": "dev", "priority": "c1"}
+    plan = train.compile_rl(config, relative_to=tmp_path)
+    assert plan["execution"]["cluster_target"] == "dev"
+    cli._require_prepared_cluster(plan, cli.Cluster.dev)
+    with pytest.raises(ValueError, match="dev-cluster-only"):
+        cli._require_prepared_cluster(plan, cli.Cluster.prod)
+
+
+def test_miles_rejects_unknown_cluster_target(config, tmp_path):
+    config["cluster"] = {"target": "other"}
+    with pytest.raises(ValueError, match="cluster target"):
+        train.compile_rl(config, relative_to=tmp_path)
+
+
 def test_two_by_four_layout_is_rejected_before_request(config, tmp_path):
     config["recipe"].update({"nodes": 2, "gpus_per_node": 4})
     with pytest.raises(ValueError, match="unsupported Qwen Miles node/GPU layout"):

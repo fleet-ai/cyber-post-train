@@ -710,10 +710,10 @@ def _require_prepared_cluster(plan: dict, cluster: Cluster) -> None:
         raise JobsError(f"prepared plan is {target}-cluster-only")
     if (
         cluster == Cluster.prod
-        and plan.get("schema") == "cyber_skyrl_training_v1"
+        and plan.get("schema") in {"cyber_skyrl_training_v1", "cyber_miles_training_v1"}
         and target != Cluster.prod.value
     ):
-        raise JobsError("production SkyRL requires an explicit prod-cluster plan")
+        raise JobsError("production RL requires an explicit prod-cluster plan")
 
 
 @app.command()
@@ -1002,7 +1002,11 @@ def checkpoint_seal(
 
     try:
         plan, _ = _prepared(directory)
-        result = seal(plan, step, output, source_plan_file=source_plan_file)
+        result = (
+            seal(plan, step, output)
+            if source_plan_file is None
+            else seal(plan, step, output, source_plan_file=source_plan_file)
+        )
         _print({k: result[k] for k in ("optimizer_step", "total_bytes", "receipt_sha256")})
     except Exception as exc:
         _fail(exc)

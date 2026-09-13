@@ -83,7 +83,10 @@ def compile_rl(config: dict, *, relative_to: Path) -> dict:
     _known(checkpoint, {"manifest", "sha256"}, "checkpoint")
     w, cluster = config["wandb"], config.get("cluster", {})
     _known(w, {"entity", "project", "run_id"}, "W&B")
-    _known(cluster, {"priority", "resources"}, "cluster")
+    _known(cluster, {"priority", "resources", "target"}, "cluster")
+    target = cluster.get("target")
+    if target not in {None, "dev", "prod"}:
+        raise ValueError("Miles cluster target must be dev or prod")
     recipe = config.get("recipe", {})
     _known(
         recipe,
@@ -160,6 +163,7 @@ def compile_rl(config: dict, *, relative_to: Path) -> dict:
             "image": miles.IMAGE,
             "priority": cluster.get("priority", "c1"),
             "resources": {**RESOURCES, **cluster.get("resources", {})},
+            **({"cluster_target": target} if target is not None else {}),
         },
     }
     job_request(plan)
@@ -174,6 +178,7 @@ def job_request(plan):
         or plan["runtime_sha256"] != digest(_runtime())
         or plan["native_driver_sha256"] != NATIVE_DRIVER_SHA256
         or plan["execution"]["image"] != miles.IMAGE
+        or plan["execution"].get("cluster_target") not in {None, "dev", "prod"}
         or plan["run_name"] != args.name
         or plan["output_root"] != args.output_root
     ):
