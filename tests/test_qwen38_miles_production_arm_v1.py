@@ -101,7 +101,7 @@ def test_every_dev_proof_and_live_gate_starts_unbound() -> None:
     for gate in arm["qualification"].values():
         assert gate["file_sha256"] is None
         assert gate["receipt_sha256"] is None
-    assert len(arm["blocked_reasons"]) == 5
+    assert len(arm["blocked_reasons"]) == 4
     assert "active_production_experiment_nodes_plus_candidate_at_most_eight" in arm[
         "promotion_requirements"
     ]["live_immediately_before_one_post"]
@@ -118,8 +118,11 @@ def test_external_benchmark_is_only_a_sealed_post_training_handoff() -> None:
         sort_keys=True,
     ).lower()
     handoff = arm["post_training_handoff"]["external_web_benchmark"]
+    export = arm["post_training_handoff"]["concurrent_export_qualification"]
 
     assert "webexploitbench" not in training_payload
+    assert export["required_before_production_training"] is False
+    assert export["required_before_any_eval_or_serving"] is True
     assert handoff["provider"] == "tensorlake_sandbox"
     assert handoff["results_sealed_until_recipe_and_checkpoint_are_frozen"] is True
     assert handoff["checkpoint_or_hyperparameter_selection_allowed"] is False

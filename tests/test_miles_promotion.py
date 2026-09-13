@@ -59,7 +59,6 @@ def _promotion() -> dict:
         "active_dev3": miles_promotion.DEV3,
         "reward_terminal": reference,
         "native_reload": reference,
-        "hf_export": reference,
         "production_data_manifest": reference,
         "benchmark_isolation": miles_promotion.BENCHMARK_ISOLATION,
         "live_requirements": miles_promotion.LIVE_REQUIREMENTS,

@@ -19,15 +19,18 @@ Production promotion requires this exact create-once chain:
 2. Restore that same checkpoint on all eight ranks without doing any work.
    Validate `<reload-output>/RELOAD_ACCEPTED.json` with
    `training.miles_reload_acceptance.validate_accepted(..., check_files=True)`.
-3. Create the BF16 Hugging Face export once, from that checkpoint and those two
-   acceptances. Reopen every exported file and tensor through
-   `training.miles_hf_export.inspect_export(...)`.
-4. Build the exact 59-train/20-dev Miles data manifest from
+3. Build the exact 59-train/20-dev Miles data manifest from
    `configs/runs/qwen38-miles-rl-filtered-study-a-prod-v1.data.json`.
-5. Create a production-promotion receipt with
+4. Create a production-promotion receipt with
    `training.miles_promotion.accept_promotion`. Copy the inert candidate to a
    new run config and replace only `production_promotion` with that receipt's
    absolute path, file SHA-256, and receipt SHA-256.
+
+The create-once BF16 Hugging Face export and its independent model reload may
+run concurrently with production after the native reload passes. They are not a
+production-training prerequisite because production starts from the exact base
+checkpoint, not the dev export. Both remain mandatory before any checkpoint is
+served or evaluated.
 
 Compilation and request creation reopen the entire chain. The production CLI
 then repeats the warning-free preview, derived `q1` queue binding, live `c1`

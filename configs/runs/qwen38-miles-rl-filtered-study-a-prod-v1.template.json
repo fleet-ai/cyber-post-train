@@ -2,7 +2,7 @@
   "schema": "cyber_qwen38_miles_production_arm_template_v1",
   "status": "blocked_not_launchable",
   "launchable": false,
-  "purpose": "Exact Miles production candidate; materialize only after the active dev3 reward, reload and HF export chain is independently accepted.",
+  "purpose": "Exact Miles production candidate; materialize only after the active dev3 reward and native reload chain is independently accepted.",
   "source_files": {
     "task_set": {
       "path": "configs/data/qwen38-rl-filtered-study-a-task-set-v1.json",
@@ -57,13 +57,6 @@
       "file_sha256": null,
       "receipt_sha256": null,
       "validator": "training.miles_reload_acceptance.validate_accepted(check_files=True)"
-    },
-    "hf_export": {
-      "schema": "cyber_miles_native_hf_export_v1",
-      "path": null,
-      "file_sha256": null,
-      "receipt_sha256": null,
-      "validator": "training.miles_hf_export.inspect_export"
     },
     "production_data_manifest": {
       "schema": "cyber_miles_data_v1",
@@ -123,7 +116,6 @@
       "exact_active_dev3_source_plan_request_bundle_and_api_identity",
       "digest_valid_reward_terminal_with_authoritative_reward_and_one_policy_update",
       "digest_valid_all_rank_zero_update_native_reload",
-      "digest_valid_create_once_hf_export_cross_bound_to_the_same_dev_checkpoint",
       "exact_59_train_20_dev_manifest_with_zero_final_test_rows",
       "external_benchmarks_absent_from_training_reward_checkpoint_and_retry_decisions"
     ],
@@ -136,6 +128,12 @@
     ]
   },
   "post_training_handoff": {
+    "concurrent_export_qualification": {
+      "hf_export_acceptance": null,
+      "hf_reload_acceptance": null,
+      "required_before_any_eval_or_serving": true,
+      "required_before_production_training": false
+    },
     "selected_checkpoint": {
       "native_terminal_acceptance": null,
       "native_checkpoint_manifest": null,
@@ -166,9 +164,8 @@
   "blocked_reasons": [
     "The exact active dev3 run is queued and has no accepted reward/update terminal receipt.",
     "No accepted all-rank dev3 native reload is bound.",
-    "No accepted create-once dev3 HF export is bound.",
     "The create-once 59-train/20-dev production data manifest does not exist.",
     "Live production duplicate, W&B, preview and eight-node gates cannot be pre-certified."
   ],
-  "sha256": "sha256:b625d6b090e54d8c17af6f9322ae8d7ec9f82a5cc4d50762fe4eed77bb0ebe38"
+  "sha256": "sha256:a7ca04b9a59a0c65ed605d7d27960db10c90247b57ae705215fbdd9a75c91bcb"
 }

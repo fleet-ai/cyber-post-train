@@ -84,7 +84,6 @@ _FIELDS = {
     "active_dev3",
     "reward_terminal",
     "native_reload",
-    "hf_export",
     "production_data_manifest",
     "benchmark_isolation",
     "live_requirements",
@@ -238,7 +237,7 @@ def _exact_dev3(terminal: dict[str, Any]) -> None:
 
 
 def validate_promotion(value: dict[str, Any], *, check_files: bool) -> dict[str, Any]:
-    """Reopen the reward, reload, export and production-data chain."""
+    """Reopen the reward, native-reload and production-data chain."""
     _sealed(value, SCHEMA)
     if (
         set(value) != _FIELDS
@@ -251,53 +250,33 @@ def validate_promotion(value: dict[str, Any], *, check_files: bool) -> dict[str,
         raise ValueError("Miles production promotion invariant changed")
     references = {
         name: _reopen(value.get(name), check_files=check_files)
-        for name in ("reward_terminal", "native_reload", "hf_export", "production_data_manifest")
+        for name in ("reward_terminal", "native_reload", "production_data_manifest")
     }
     if not check_files:
         return {"candidate_run_sha256": EXPECTED_CANDIDATE_SHA256}
 
-    from . import miles_acceptance, miles_hf_export, miles_reload_acceptance
+    from . import miles_acceptance, miles_reload_acceptance
 
     terminal = references["reward_terminal"]
     native_reload = references["native_reload"]
-    exported = references["hf_export"]
     data = references["production_data_manifest"]
     miles_acceptance.validate_terminal(terminal, check_files=True)
     miles_reload_acceptance.validate_accepted(native_reload, check_files=True)
     _exact_dev3(terminal)
-    inspected, _ = miles_hf_export.inspect_export(
-        Path(value["hf_export"]["path"]), value["hf_export"]["file_sha256"]
-    )
-    if inspected != exported:
-        raise ValueError("Miles HF export changed after promotion binding")
-    source = exported.get("source", {})
-    rebound = miles_hf_export.bind_source(
-        checkpoint_path=Path(source.get("checkpoint", {}).get("path", "")),
-        checkpoint_sha256=source.get("checkpoint", {}).get("file_sha256", ""),
-        terminal_path=Path(source.get("terminal_acceptance", {}).get("path", "")),
-        terminal_sha256=source.get("terminal_acceptance", {}).get("file_sha256", ""),
-        native_reload_path=Path(source.get("native_reload_acceptance", {}).get("path", "")),
-        native_reload_sha256=source.get("native_reload_acceptance", {}).get(
-            "file_sha256", ""
-        ),
-    )
     if (
-        {key: item for key, item in rebound.items() if key != "checkpoint_manifest"} != source
-        or value["reward_terminal"] != source["terminal_acceptance"]
-        or value["native_reload"] != source["native_reload_acceptance"]
-        or exported.get("optimizer_updates_executed") != 0
-        or exported.get("source_checkpoint_unchanged") is not True
-        or exported.get("create_only") is not True
+        native_reload.get("source_terminal_acceptance_sha256")
+        != terminal["sha256"].removeprefix("sha256:")
+        or native_reload.get("source_manifest_sha256")
+        != terminal["checkpoint_manifest"]["receipt_sha256"].removeprefix("sha256:")
     ):
-        raise ValueError("Miles reward/reload/export chain is not cross-bound")
+        raise ValueError("Miles reward and native-reload chain is not cross-bound")
     _exact_data(data)
     if value["production_data_manifest"]["path"] != PROD_DATA_MANIFEST:
         raise ValueError("Miles production data path changed")
     return {
         "candidate_run_sha256": EXPECTED_CANDIDATE_SHA256,
         "dev_source_plan_sha256": DEV3["source_plan_sha256"],
-        "dev_checkpoint": source["checkpoint"],
-        "hf_export": value["hf_export"],
+        "dev_checkpoint": terminal["checkpoint_manifest"],
     }
 
 
@@ -305,7 +284,6 @@ def accept_promotion(
     *,
     reward_terminal: Path,
     native_reload: Path,
-    hf_export: Path,
     production_data_manifest: Path,
     output: Path,
 ) -> dict[str, Any]:
@@ -316,7 +294,6 @@ def accept_promotion(
     for name, path in {
         "reward_terminal": reward_terminal,
         "native_reload": native_reload,
-        "hf_export": hf_export,
         "production_data_manifest": production_data_manifest,
     }.items():
         refs[name], _ = _reference(path)
