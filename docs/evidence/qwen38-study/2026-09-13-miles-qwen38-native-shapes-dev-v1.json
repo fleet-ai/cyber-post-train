@@ -1,0 +1,39 @@
+{
+  "schema": "cyber_miles_native_shape_probe_v1",
+  "status": "accepted",
+  "observed_at": "2026-09-13T08:41:21Z",
+  "cluster": {
+    "target": "dev",
+    "kube_context": "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb",
+    "namespace": "fleet-train-jobs"
+  },
+  "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/miles-trainer@sha256:d1d37c584e2aafdd47df1e1f3492ff3343eb3b83a5f658cf7ce2432ee8d6ef33",
+  "probe": {
+    "pod_name": "chris-q38-miles-shape-audit-v2",
+    "pod_uid": "dd59d765-a63b-4719-a5ed-dda937f2fedd",
+    "node": "computeinstance-e04sacc1ch7cqdvg57",
+    "phase": "Succeeded",
+    "exit_code": 0,
+    "container_restarts": 0,
+    "gpus": 0,
+    "automount_service_account_token": false
+  },
+  "query": "fti.trainers.miles.run_fleet._RECIPES['qwen3.8-27b'].parallel_args_by_shape",
+  "supported_native_layouts": [
+    [
+      1,
+      8
+    ],
+    [
+      2,
+      8
+    ]
+  ],
+  "conclusion": "The pinned native Qwen3.8-27B Miles recipe has no one-node four-GPU or six-GPU layout. The corrected dev4 canary must retain its one-node eight-GPU topology; changing to a smaller topology would be an unqualified trainer change rather than a capacity workaround.",
+  "privacy": {
+    "credentials_included": false,
+    "task_content_included": false,
+    "reward_values_included": false,
+    "private_logs_included": false
+  }
+}
