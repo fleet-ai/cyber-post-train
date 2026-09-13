@@ -31,7 +31,7 @@ from cyber_post_train.jobs import API_URLS, digest
 from evals.fleet import opencode_self_hosted as fleet
 
 from .miles_conversion import _write
-from .miles_reload import CHECKPOINT_SCHEMA, RANK_STATE_COMMITMENT_METHOD, _verify_checkpoint
+from .miles_reload import CHECKPOINT_SCHEMA, _verify_checkpoint
 from .miles_training import SCHEMA as TRAINING_SCHEMA
 from .miles_training import job_request
 from .rl_episode import _validate as validate_episode_config
@@ -1211,99 +1211,9 @@ def validate_policy_delta_observation(
     process itself need not have emitted these observations.
     """
 
-    sealed(value, POLICY_DELTA_SCHEMA)
-    expected_fields = {
-        "schema",
-        "source_plan_sha256",
-        "base_checkpoint_receipt_sha256",
-        "trained_checkpoint_receipt_sha256",
-        "world_size",
-        "comparison_method",
-        "ranks",
-        "changed_policy_ranks",
-        "policy_structure_matches",
-        "optimizer_state_used_for_delta",
-        "scheduler_state_used_for_delta",
-        "rng_state_used_for_delta",
-        "metadata_used_for_delta",
-        "checkpoint_state_commitment_method",
-        "reward_values_included",
-        "sha256",
-    }
-    rows = value.get("ranks")
-    if (
-        set(value) != expected_fields
-        or value.get("source_plan_sha256", "").removeprefix("sha256:") != digest(plan)
-        or value.get("base_checkpoint_receipt_sha256", "").removeprefix("sha256:")
-        != str(plan["checkpoint"].get("sha256", "")).removeprefix("sha256:")
-        or value.get("trained_checkpoint_receipt_sha256", "").removeprefix("sha256:")
-        != str(checkpoint.get("sha256", "")).removeprefix("sha256:")
-        or value.get("world_size") != WORLD_SIZE
-        or value.get("comparison_method") != "all_rank_named_policy_tensor_value_sha256_v1"
-        or not isinstance(rows, list)
-        or len(rows) != WORLD_SIZE
-        or value.get("policy_structure_matches") is not True
-        or value.get("optimizer_state_used_for_delta") is not False
-        or value.get("scheduler_state_used_for_delta") is not False
-        or value.get("rng_state_used_for_delta") is not False
-        or value.get("metadata_used_for_delta") is not False
-        or value.get("checkpoint_state_commitment_method") != RANK_STATE_COMMITMENT_METHOD
-        or value.get("reward_values_included") is not False
-    ):
-        raise ValueError("policy delta observation is incomplete or not checkpoint-bound")
-    changed: list[int] = []
-    for rank, row in enumerate(rows):
-        if not isinstance(row, dict):
-            raise ValueError("policy delta rank observation is not an object")
-        fields = {
-            "rank",
-            "policy_tensor_count",
-            "local_policy_numel",
-            "base_policy_structure_sha256",
-            "trained_policy_structure_sha256",
-            "base_policy_value_sha256",
-            "trained_policy_value_sha256",
-            "trained_optimizer_value_sha256",
-            "trained_scheduler_value_sha256",
-            "trained_rng_value_sha256",
-            "policy_changed",
-        }
-        base_value = str(row.get("base_policy_value_sha256", "")).removeprefix("sha256:")
-        trained_value = str(row.get("trained_policy_value_sha256", "")).removeprefix("sha256:")
-        base_structure = str(row.get("base_policy_structure_sha256", "")).removeprefix("sha256:")
-        trained_structure = str(row.get("trained_policy_structure_sha256", "")).removeprefix(
-            "sha256:"
-        )
-        trained_optimizer = str(row.get("trained_optimizer_value_sha256", "")).removeprefix(
-            "sha256:"
-        )
-        trained_scheduler = str(row.get("trained_scheduler_value_sha256", "")).removeprefix(
-            "sha256:"
-        )
-        trained_rng = str(row.get("trained_rng_value_sha256", "")).removeprefix("sha256:")
-        differs = base_value != trained_value
-        if (
-            set(row) != fields
-            or row.get("rank") != rank
-            or type(row.get("policy_tensor_count")) is not int
-            or row["policy_tensor_count"] < 1
-            or type(row.get("local_policy_numel")) is not int
-            or row["local_policy_numel"] < 1
-            or _SHA.fullmatch(base_structure) is None
-            or trained_structure != base_structure
-            or _SHA.fullmatch(base_value) is None
-            or _SHA.fullmatch(trained_value) is None
-            or _SHA.fullmatch(trained_optimizer) is None
-            or _SHA.fullmatch(trained_scheduler) is None
-            or _SHA.fullmatch(trained_rng) is None
-            or row.get("policy_changed") is not differs
-        ):
-            raise ValueError("policy delta rank observation is invalid or counter-only")
-        if differs:
-            changed.append(rank)
-    if not changed or value.get("changed_policy_ranks") != changed:
-        raise ValueError("trained checkpoint has no independently observed policy tensor delta")
-    return len(changed)
+    from .miles_policy_observer import validate_policy_evidence
+
+    return validate_policy_evidence(value, plan, checkpoint)
 
 
 def validate_controller_observation(
