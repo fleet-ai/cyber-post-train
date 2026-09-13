@@ -97,7 +97,7 @@ def compile_rl(config: dict, *, relative_to: Path) -> dict:
     _known(checkpoint, {"manifest", "sha256"}, "checkpoint")
     w, cluster = config["wandb"], config.get("cluster", {})
     _known(w, {"entity", "project", "run_id"}, "W&B")
-    _known(cluster, {"priority", "priority_reason", "resources", "target"}, "cluster")
+    _known(cluster, {"priority", "resources", "target"}, "cluster")
     target = cluster.get("target")
     if target not in {None, "dev", "prod"}:
         raise ValueError("Miles cluster target must be dev or prod")
@@ -186,11 +186,6 @@ def compile_rl(config: dict, *, relative_to: Path) -> dict:
         "execution": {
             "image": miles.IMAGE,
             "priority": cluster.get("priority", "c1"),
-            **(
-                {"priority_reason": cluster["priority_reason"]}
-                if "priority_reason" in cluster
-                else {}
-            ),
             "resources": {**RESOURCES, **cluster.get("resources", {})},
             **({"cluster_target": target} if target is not None else {}),
             **(
@@ -215,6 +210,7 @@ def job_request(plan):
         or plan["runtime_sha256"] != digest(_runtime())
         or plan["native_driver_sha256"] != NATIVE_DRIVER_SHA256
         or plan["execution"]["image"] != miles.IMAGE
+        or "priority_reason" in plan["execution"]
         or plan["execution"].get("cluster_target") not in {None, "dev", "prod"}
         or plan["run_name"] != args.name
         or plan["output_root"] != args.output_root
@@ -242,11 +238,6 @@ def job_request(plan):
             "gpus_per_worker": args.gpus_per_node,
             "resources": resources,
             "priority_class": plan["execution"]["priority"],
-            **(
-                {"priority_reason": plan["execution"]["priority_reason"]}
-                if "priority_reason" in plan["execution"]
-                else {}
-            ),
             "requeueIfPreempted": False,
             "secrets": ["fleet-api", "wandb-api"],
             "env": {

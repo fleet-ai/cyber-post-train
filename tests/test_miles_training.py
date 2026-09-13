@@ -108,6 +108,18 @@ def test_miles_rejects_unknown_cluster_target(config, tmp_path):
         train.compile_rl(config, relative_to=tmp_path)
 
 
+def test_miles_rejects_priority_reason_at_config_and_plan_boundaries(config, tmp_path):
+    config["cluster"] = {"priority": "c1", "priority_reason": "override"}
+    with pytest.raises(ValueError, match="unknown fields in cluster"):
+        train.compile_rl(config, relative_to=tmp_path)
+
+    config["cluster"] = {"priority": "c1"}
+    compiled = train.compile_rl(config, relative_to=tmp_path)
+    compiled["execution"]["priority_reason"] = "override"
+    with pytest.raises(ValueError, match="Miles plan/runtime drift"):
+        train.job_request(compiled)
+
+
 def test_two_by_four_layout_is_rejected_before_request(config, tmp_path):
     config["recipe"].update({"nodes": 2, "gpus_per_node": 4})
     with pytest.raises(ValueError, match="unsupported Qwen Miles node/GPU layout"):
