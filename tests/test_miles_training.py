@@ -436,17 +436,89 @@ def test_artifacts_are_read_only_and_return_both_splits(artifacts):
     assert before == {p: p.read_bytes() for p in before}
 
 
-def test_sft_initial_policy_survives_staged_rl_artifact_validation(artifacts):
-    plan, _, _ = artifacts
-    initial_policy = {"kind": "sft_hf_export", "sft_optimizer_step": 44}
+def _bind_sft_initial_policy(plan, *, runtime_stage=False):
+    accepted_root = plan["model"]["root"]
+    initial_policy = {
+        "kind": "sft_hf_export",
+        "sft_optimizer_step": 44,
+        "accepted_root": accepted_root,
+    }
+    if runtime_stage:
+        runtime_root = "/mnt/sfs/jobs/synthetic-sft-runtime/payload"
+        initial_policy["runtime_stage"] = {"path": "/mnt/sfs/jobs/synthetic-sft-runtime/STAGE.json"}
+        plan["model"]["root"] = runtime_root
+        plan["arguments"]["model_root"] = runtime_root
     plan["model"]["initial_policy"] = initial_policy
     plan["checkpoint"]["model"] = plan["model"]
     plan["checkpoint"]["sha256"] = digest(
         {key: value for key, value in plan["checkpoint"].items() if key != "sha256"}
     )
+    return accepted_root, initial_policy
+
+
+def _set_episode_model_root(plan, directory, root):
+    for split in ("train", "dev"):
+        path = directory / f"{split}.jsonl"
+        row = json.loads(path.read_text())
+        config = row["metadata"]["cyber_config"]
+        config["model"]["root"] = root
+        from evals.fleet import opencode_self_hosted as fleet
+
+        config["config_sha256"] = fleet.digest_without(config, "config_sha256")
+        path.write_text(json.dumps(row) + "\n")
+        plan["data"]["files"][split]["sha256"] = "sha256:" + train._hash(path)
+    plan["data"]["sha256"] = "sha256:" + digest(
+        {key: value for key, value in plan["data"].items() if key != "sha256"}
+    )
+    (directory / "manifest.json").write_text(json.dumps(plan["data"]))
+
+
+def test_sft_initial_policy_without_runtime_stage_uses_accepted_root(artifacts):
+    plan, _, _ = artifacts
+    accepted_root, initial_policy = _bind_sft_initial_policy(plan)
     rows = train.check_artifacts(plan)
     assert {key: len(value) for key, value in rows.items()} == {"train": 1, "dev": 1}
     assert plan["checkpoint"]["model"]["initial_policy"] == initial_policy
+    assert plan["arguments"]["model_root"] == accepted_root
+
+
+def test_staged_sft_keeps_episode_identity_at_accepted_root(artifacts):
+    plan, _, _ = artifacts
+    accepted_root, _ = _bind_sft_initial_policy(plan, runtime_stage=True)
+    rows = train.check_artifacts(plan)
+    assert {key: len(value) for key, value in rows.items()} == {"train": 1, "dev": 1}
+    assert plan["arguments"]["model_root"] == plan["model"]["root"]
+    assert plan["arguments"]["model_root"] != accepted_root
+    assert {
+        row["metadata"]["cyber_config"]["model"]["root"]
+        for values in rows.values()
+        for row in values
+    } == {accepted_root}
+
+
+@pytest.mark.parametrize(
+    "fault,error",
+    [
+        ("episode_uses_runtime", "episode identity changed"),
+        ("runtime_argument", "runtime model identity changed"),
+        ("missing_stage", "unstaged SFT runtime identity changed"),
+    ],
+)
+def test_sft_episode_and_runtime_root_mismatches_fail_closed(artifacts, fault, error):
+    plan, _, directory = artifacts
+    accepted_root, initial_policy = _bind_sft_initial_policy(plan, runtime_stage=True)
+    if fault == "episode_uses_runtime":
+        _set_episode_model_root(plan, directory, plan["model"]["root"])
+    elif fault == "runtime_argument":
+        plan["arguments"]["model_root"] += "-other"
+    else:
+        initial_policy.pop("runtime_stage")
+        plan["checkpoint"]["sha256"] = digest(
+            {key: value for key, value in plan["checkpoint"].items() if key != "sha256"}
+        )
+    with pytest.raises(ValueError, match=error):
+        train.check_artifacts(plan)
+    assert accepted_root != plan["model"]["root"]
 
 
 def test_training_checkpoint_cannot_masquerade_as_base(artifacts):

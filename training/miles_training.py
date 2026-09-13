@@ -269,6 +269,18 @@ def check_artifacts(plan):
     data = json.loads(path.read_text())
     if data != plan["data"]:
         raise ValueError("staged data manifest changed")
+    runtime_model_root = plan["model"]["root"]
+    if args["model_root"] != runtime_model_root:
+        raise ValueError("runtime model identity changed")
+    initial_policy = plan["model"].get("initial_policy")
+    episode_model_root = runtime_model_root
+    if initial_policy is not None:
+        # A validated runtime stage changes byte location, not scientific policy identity.
+        episode_model_root = initial_policy.get("accepted_root")
+        if not isinstance(episode_model_root, str):
+            raise ValueError("accepted SFT episode identity is absent")
+        if "runtime_stage" not in initial_policy and runtime_model_root != episode_model_root:
+            raise ValueError("unstaged SFT runtime identity changed")
     selected = {"train": [], "dev": []}
     for split, item in data["files"].items():
         p = path.parent / item["path"]
@@ -286,7 +298,7 @@ def check_artifacts(plan):
                 or cfg["run_id"] != args["name"]
                 or cfg["model"]["repo"] != plan["model"]["repo"]
                 or cfg["model"]["revision"] != plan["model"]["revision"]
-                or cfg["model"]["root"] != args["model_root"]
+                or cfg["model"]["root"] != episode_model_root
                 or cfg["rl"] != {k: v for k, v in data["limits"].items() if k != "response_tokens"}
                 or cfg["execution"]["required_task_tool_catalog_sha256"]
                 != data["tool_catalog_sha256"]
