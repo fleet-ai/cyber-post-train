@@ -1,0 +1,19 @@
+{
+  "name": "chris-q38-miles-rlreward-dev7",
+  "backend": "miles",
+  "task_set": "../data/qwen38-rl-filtered-canary-task-set-v2.json",
+  "split": "../data/qwen38-rl-filtered-canary-split-v2.json",
+  "tool_catalog": "../data/qwen38-rl-filtered-canary-tool-catalog-v1.json",
+  "model_lock": "../models/qwen38-27b-1d4bf0f2.lock.json",
+  "model_root": "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2",
+  "output": "/mnt/sfs/jobs/chris-q38-miles-rlreward-inputs-dev7-v1/data",
+  "limits": {
+    "context_tokens": 98304,
+    "response_tokens": 81920,
+    "max_tokens_per_turn": 4096,
+    "max_turns": 600,
+    "episode_seconds": 2400,
+    "tool_seconds": 330,
+    "tool_result_chars": 4000
+  }
+}
