@@ -23,6 +23,8 @@ ALERT_SAFE_BACKOFF_LIMIT = 2_147_483_647
 CONCURRENCY_STAGE_ANNOTATION = "cyber-post-train.fleet.ai/concurrency-stage"
 WORKLOAD_PRIORITY_LABEL = "kueue.x-k8s.io/priority-class"
 WORKLOAD_PRIORITY_UID_ANNOTATION = "cyber-post-train.fleet.ai/workload-priority-class-uid"
+ALLOWED_WORKLOAD_PRIORITY_CLASSES = frozenset({"q1", "q2"})
+MAX_WORKLOAD_PRIORITY = 10_000
 
 RUNTIME_METADATA = {
     "creationTimestamp",
@@ -110,6 +112,9 @@ def clone_job(
     new_worker_id: str,
     refiller_id: str,
 ) -> dict[str, Any]:
+    source_pod = source.get("spec", {}).get("template", {}).get("spec", {})
+    if source_pod.get("priorityClassName") == "c0":
+        raise SuccessorError("source Pod c0 priority exceeds the project ceiling")
     result = _replace_strings(
         copy.deepcopy(source), ((source_name, new_name), (old_worker_id, new_worker_id))
     )
@@ -278,6 +283,11 @@ def render_live(
 ) -> dict[str, Any]:
     if bool(workload_priority_class) != bool(expected_priority_class_uid):
         raise SuccessorError("priority class and its expected UID must be supplied together")
+    if (
+        workload_priority_class is not None
+        and workload_priority_class not in ALLOWED_WORKLOAD_PRIORITY_CLASSES
+    ):
+        raise SuccessorError("workload priority class must be q1 or q2")
     if _kubectl_json(["-n", namespace, "get", "job", new_name, "-o", "json"], expect_absent=True):
         raise SuccessorError("new Job name already exists")
     if _kubectl_json(
@@ -326,8 +336,11 @@ def render_live(
             or priority.get("metadata", {}).get("uid") != expected_priority_class_uid
         ):
             raise SuccessorError("workload priority class identity changed")
-        if type(priority.get("value")) is not int:
+        priority_value = priority.get("value")
+        if type(priority_value) is not int:
             raise SuccessorError("workload priority class has no integer priority")
+        if priority_value > MAX_WORKLOAD_PRIORITY:
+            raise SuccessorError("workload priority class exceeds the project ceiling")
         # Explicit, reviewed opt-in only. Do not change Pod priority or admission.
         job["metadata"].setdefault("labels", {})[WORKLOAD_PRIORITY_LABEL] = workload_priority_class
         job["metadata"].setdefault("annotations", {})[WORKLOAD_PRIORITY_UID_ANNOTATION] = (

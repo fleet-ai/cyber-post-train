@@ -104,12 +104,16 @@ handled cell outcomes require truthful private results and sanitized terminal
 receipts. Do not hide defects behind unlimited restart loops or suppress alerts.
 
 Normal queue/default priority remains the default. A current, explicit priority
-exception can use `--workload-priority-class <name>` together with
-`--expected-priority-class-uid <uid>`. These change the Kueue Job label, not Pod
-priority, admission, or peer workloads. Verify the resulting Workload's effective
-priority and admission separately: a Job label alone is not queue readback.
-Higher priority may cause normal Kueue preemption depending on ClusterQueue policy;
-it is not a guarantee of immediate execution. Never manually unsuspend or set admission.
+exception can select only `q1` or `q2` with `--workload-priority-class`, together
+with `--expected-priority-class-uid <uid>`. The renderer verifies that exact UID
+and an integer effective value no greater than 10,000; it rejects `q0` and any
+other workload class. It also refuses to inherit Pod `priorityClassName: c0` while
+preserving other legacy Pod class names. These options change the Kueue Job label,
+not Pod priority, admission, or peer workloads. Verify the resulting Workload's
+effective priority and admission separately: a Job label alone is not queue
+readback. Higher priority may cause normal Kueue preemption depending on
+ClusterQueue policy; it is not a guarantee of immediate execution. Never manually
+unsuspend or set admission.
 
 Plan receipt accessibility before a campaign starts. A completed Pod cannot serve
 `exec`, and a shared filesystem mount may exist only on a specific node. Never

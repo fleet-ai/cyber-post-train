@@ -106,6 +106,20 @@ def test_clone_rejects_missing_clean_exit_wrapper() -> None:
         )
 
 
+def test_clone_rejects_inherited_c0_pod_priority() -> None:
+    source = _job()
+    source["spec"]["template"]["spec"]["priorityClassName"] = "c0"
+    with pytest.raises(rollout_successor.SuccessorError, match="c0 priority exceeds"):
+        rollout_successor.clone_job(
+            source,
+            source_name=SOURCE,
+            new_name=NEW,
+            old_worker_id=OLD_WORKER,
+            new_worker_id=NEW_WORKER,
+            refiller_id="test-refiller",
+        )
+
+
 def test_postgres_successor_injects_backend_and_secret_reference() -> None:
     config = _config()
     config["data"]["run.sh"] = """
@@ -165,18 +179,21 @@ def test_render_live_stamps_requested_concurrency_stage(monkeypatch: pytest.Monk
     assert job["metadata"]["annotations"][rollout_successor.CONCURRENCY_STAGE_ANNOTATION] == "32"
 
 
-@pytest.mark.parametrize("priority_class", [None, "q1"])
-def test_priority_opt_in_preserves_pod_policy(monkeypatch, priority_class) -> None:
+@pytest.mark.parametrize(
+    ("priority_class", "priority_value"),
+    [(None, None), ("q1", 10_000), ("q2", 5_000)],
+)
+def test_priority_opt_in_preserves_pod_policy(monkeypatch, priority_class, priority_value) -> None:
     source = _job()
     source["metadata"]["labels"][rollout_successor.WORKLOAD_PRIORITY_LABEL] = "q0"
     source["status"] = {"conditions": [{"type": "Complete", "status": "True"}]}
-    source["spec"]["template"]["spec"]["priorityClassName"] = "c2"
+    source["spec"]["template"]["spec"]["priorityClassName"] = "fleet-train-high"
 
     def read(arguments, *, expect_absent=False):
         if expect_absent:
             return None
         if arguments[0] == "get":
-            return {"metadata": {"uid": "q1-uid"}, "value": 10000}
+            return {"metadata": {"uid": priority_class + "-uid"}, "value": priority_value}
         return source if arguments[3] == "job" else _config()
 
     monkeypatch.setattr(rollout_successor, "_kubectl_json", read)
@@ -189,16 +206,71 @@ def test_priority_opt_in_preserves_pod_policy(monkeypatch, priority_class) -> No
         new_worker_id=NEW_WORKER,
         refiller_id="test",
         workload_priority_class=priority_class,
-        expected_priority_class_uid="q1-uid" if priority_class else None,
+        expected_priority_class_uid=priority_class + "-uid" if priority_class else None,
     )
     job = rendered["items"][1]
     assert (
         job["metadata"]["labels"].get(rollout_successor.WORKLOAD_PRIORITY_LABEL) == priority_class
     )
-    assert job["spec"]["template"]["spec"]["priorityClassName"] == "c2"
+    assert job["spec"]["template"]["spec"]["priorityClassName"] == "fleet-train-high"
     assert "priority" not in job["spec"]
     assert "admission" not in job["spec"]
     assert job["spec"]["backoffLimit"] == 2_147_483_647
+
+
+@pytest.mark.parametrize("priority_class", ["q0", "q3"])
+def test_priority_opt_in_rejects_classes_outside_project_ceiling(
+    monkeypatch, priority_class
+) -> None:
+    monkeypatch.setattr(
+        rollout_successor,
+        "_kubectl_json",
+        lambda *_args, **_kwargs: pytest.fail("invalid priority must fail before cluster reads"),
+    )
+    with pytest.raises(rollout_successor.SuccessorError, match="must be q1 or q2"):
+        rollout_successor.render_live(
+            namespace="test",
+            source_name=SOURCE,
+            expected_source_uid="source-uid",
+            new_name=NEW,
+            old_worker_id=OLD_WORKER,
+            new_worker_id=NEW_WORKER,
+            refiller_id="test",
+            workload_priority_class=priority_class,
+            expected_priority_class_uid=priority_class + "-uid",
+        )
+
+
+@pytest.mark.parametrize(
+    ("priority_value", "message"),
+    [(10_001, "exceeds the project ceiling"), ("10000", "no integer priority")],
+)
+def test_priority_opt_in_rejects_invalid_effective_value(
+    monkeypatch, priority_value, message
+) -> None:
+    source = _job()
+    source["status"] = {"conditions": [{"type": "Complete", "status": "True"}]}
+
+    def read(arguments, *, expect_absent=False):
+        if expect_absent:
+            return None
+        if arguments[0] == "get":
+            return {"metadata": {"uid": "q1-uid"}, "value": priority_value}
+        return source if arguments[3] == "job" else _config()
+
+    monkeypatch.setattr(rollout_successor, "_kubectl_json", read)
+    with pytest.raises(rollout_successor.SuccessorError, match=message):
+        rollout_successor.render_live(
+            namespace="test",
+            source_name=SOURCE,
+            expected_source_uid="source-uid",
+            new_name=NEW,
+            old_worker_id=OLD_WORKER,
+            new_worker_id=NEW_WORKER,
+            refiller_id="test",
+            workload_priority_class="q1",
+            expected_priority_class_uid="q1-uid",
+        )
 
 
 def test_priority_requires_immutable_uid() -> None:
