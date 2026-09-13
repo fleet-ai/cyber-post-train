@@ -37,6 +37,8 @@ def test_real_qwen_recipe_generates_a_bounded_argument_vector():
     assert "--check-weight-update-equal" in argv
     assert value("check-weight-update-skip-list") == "visual."
     assert "--sglang-disable-radix-cache" in argv
+    assert "--calculate-per-token-loss" in argv
+    assert "--disable-grpo-std-normalization" in argv
     assert value("sglang-attention-backend") == "triton"
     assert "--no-save-optim" not in argv and "--no-save-rng" not in argv
     assert "--dynamic-sampling-filter-path" not in argv

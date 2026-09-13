@@ -130,6 +130,8 @@ def test_bounded_counts_and_native_optimizer(config, native_boundary):
     )
     assert value(argv, "cyber-data-manifest") == cfg.data_manifest
     assert "--use-wandb" in argv and "--wandb-key" not in argv
+    assert "--calculate-per-token-loss" in argv
+    assert "--disable-grpo-std-normalization" in argv
     assert "--dynamic-sampling-filter-path" not in argv and "--use-fault-tolerance" not in argv
     assert "--no-save-optim" not in argv and "--no-save-rng" not in argv
     assert value(argv, "load") == value(argv, "save") == cfg.output_root + "/checkpoints"

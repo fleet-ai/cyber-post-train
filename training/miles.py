@@ -211,6 +211,8 @@ def arguments(config: MilesConfig) -> list[str]:
             "colocate",
             "rollout-shuffle",
             "use-dynamic-batch-size",
+            "calculate-per-token-loss",
+            "disable-grpo-std-normalization",
             "use-kl-loss",
             "use-wandb",
             "disable-wandb-random-suffix",

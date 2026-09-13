@@ -508,13 +508,22 @@ def test_parsed_native_semantics_and_argv_restoration(plan, monkeypatch):
         num_rollout=2,
         num_steps_per_rollout=1,
         global_batch_size=2,
+        calculate_per_token_loss=True,
+        grpo_std_normalization=False,
     )
     monkeypatch.setitem(sys.modules, "miles.utils.arguments", NS(parse_args=lambda: args))
     before = sys.argv
     assert train.native_args(plan) is args and sys.argv is before
-    args.start_rollout_id = 1
-    with pytest.raises(ValueError):
-        train.native_args(plan)
+    for key, value in (
+        ("start_rollout_id", 1),
+        ("calculate_per_token_loss", False),
+        ("grpo_std_normalization", True),
+    ):
+        original = getattr(args, key)
+        setattr(args, key, value)
+        with pytest.raises(ValueError):
+            train.native_args(plan)
+        setattr(args, key, original)
     assert sys.argv is before
 
 
@@ -811,6 +820,8 @@ def test_real_native_parser_from_pinned_image_uses_base_without_resuming():
     assert args.start_rollout_id == 0 and args.load == args.ref_load == checkpoint
     assert args.no_save_optim is False and args.no_save_rng is False
     assert args.num_rollout == args.num_steps_per_rollout == 1
+    assert args.calculate_per_token_loss is True
+    assert args.grpo_std_normalization is False
     assert args.custom_generate_function_path == "training.rl_episode.generate"
 
 
