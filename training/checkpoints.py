@@ -8,6 +8,7 @@ checkpoint metadata is pickle, not an untrusted interchange format.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import re
@@ -85,7 +86,48 @@ def _validate_names(names: set[str], world_size: int, *, adapter: bool = False) 
         raise ValueError("missing native model configuration")
 
 
-def _adapter_binding(plan: dict, step: int, root: Path, inventory: dict) -> None:
+def _source_plan_file_binding(plan: dict, path: Path) -> dict:
+    if path.is_symlink() or not path.is_file():
+        raise ValueError("source plan file must be a real file")
+    raw = path.read_bytes()
+    try:
+        value = json.loads(raw)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ValueError("source plan file is not valid JSON") from error
+    canonical = _unsigned_digest(plan)
+    if not isinstance(value, dict) or _unsigned_digest(value) != canonical:
+        raise ValueError("source plan file differs from the supplied plan")
+    return {
+        "path": str(path.resolve()),
+        "bytes": len(raw),
+        "sha256": hashlib.sha256(raw).hexdigest(),
+        "canonical_json_sha256": canonical,
+    }
+
+
+def _manifest_plan_sha256(manifest: dict, plan: dict, *, check_files: bool) -> str:
+    binding = manifest.get("source_plan_file")
+    canonical = _unsigned_digest(plan)
+    if binding is None:
+        return canonical
+    if (
+        not isinstance(binding, dict)
+        or set(binding) != {"path", "bytes", "sha256", "canonical_json_sha256"}
+        or not isinstance(binding["path"], str)
+        or not Path(binding["path"]).is_absolute()
+        or type(binding["bytes"]) is not int
+        or binding["bytes"] <= 0
+        or not isinstance(binding["sha256"], str)
+        or not re.fullmatch(r"[a-f0-9]{64}", binding["sha256"])
+        or binding["canonical_json_sha256"] != canonical
+    ):
+        raise ValueError("source plan file binding is invalid")
+    if check_files and _source_plan_file_binding(plan, Path(binding["path"])) != binding:
+        raise ValueError("source plan file changed after checkpoint sealing")
+    return binding["sha256"]
+
+
+def _adapter_binding(plan: dict, step: int, root: Path, inventory: dict, plan_sha256: str) -> None:
     from .glm_runtime import TARGETS, identity_from_plan
 
     inner = receipt(root / "policy/COMPLETE.json")
@@ -93,7 +135,7 @@ def _adapter_binding(plan: dict, step: int, root: Path, inventory: dict) -> None
     expected = {
         "schema": "glm53_lora_resumable_checkpoint_v1",
         "base": asdict(identity_from_plan(plan)),
-        "plan_sha256": _unsigned_digest(plan),
+        "plan_sha256": plan_sha256,
         "world_size": plan["recipe"]["nodes"] * plan["recipe"]["gpus_per_node"],
         "optimizer_step": step,
         "next_batch": (step - 1) % per_epoch + 1,
@@ -117,12 +159,25 @@ def _adapter_binding(plan: dict, step: int, root: Path, inventory: dict) -> None
         raise ValueError("adapter configuration differs from the plan")
 
 
-def seal(plan: dict, step: int, output: Path, *, progress=None) -> dict:
+def seal(
+    plan: dict,
+    step: int,
+    output: Path,
+    *,
+    source_plan_file: Path | None = None,
+    progress=None,
+) -> dict:
     import torch
 
     if torch.cuda.is_available():
         raise ValueError("checkpoint sealing does not need a GPU")
     validate_plan(plan, check_files=False)
+    plan_file_binding = (
+        _source_plan_file_binding(plan, source_plan_file) if source_plan_file is not None else None
+    )
+    source_plan_sha256 = (
+        plan_file_binding["sha256"] if plan_file_binding is not None else _unsigned_digest(plan)
+    )
     if type(step) is not int or not 0 < step <= plan["recipe"]["max_steps"]:
         raise ValueError("checkpoint step outside the frozen plan")
     run = Path(plan["output_root"])
@@ -133,7 +188,7 @@ def seal(plan: dict, step: int, output: Path, *, progress=None) -> dict:
         raise FileExistsError("checkpoint manifest already exists")
     saved = receipt(run / "checkpoint_receipts" / f"step-{step:06d}.json")
     expected = {
-        "plan_sha256": _unsigned_digest(plan),
+        "plan_sha256": source_plan_sha256,
         "optimizer_step": step,
         "checkpoint_path": str(root),
     }
@@ -162,15 +217,20 @@ def seal(plan: dict, step: int, output: Path, *, progress=None) -> dict:
         if progress:
             progress(len(inventory), total)
     if adapter:
-        _adapter_binding(plan, step, root, inventory)
+        _adapter_binding(plan, step, root, inventory, source_plan_sha256)
     after = checkpoint_files(root, size, adapter=adapter)
     if set(after) != set(files) or any(
         (p.stat().st_size, p.stat().st_mtime_ns) != before[name] for name, p in after.items()
     ):
         raise ValueError("checkpoint changed while sealing")
+    if (
+        source_plan_file is not None
+        and _source_plan_file_binding(plan, source_plan_file) != plan_file_binding
+    ):
+        raise ValueError("source plan file changed while sealing")
     result = {
         "schema": "cyber_skyrl_checkpoint_manifest_v1",
-        "source_plan_sha256": _unsigned_digest(plan),
+        "source_plan_sha256": source_plan_sha256,
         "source_plan": plan,
         "checkpoint_path": str(root),
         "optimizer_step": step,
@@ -181,6 +241,8 @@ def seal(plan: dict, step: int, output: Path, *, progress=None) -> dict:
         "gpu_reload_verified": False,
         **selection_evidence(plan),
     }
+    if plan_file_binding is not None:
+        result["source_plan_file"] = plan_file_binding
     if "training_progress" in saved:
         result["training_progress"] = saved["training_progress"]
         _validate_progress(result)
@@ -197,6 +259,7 @@ def verify(manifest: dict, *, check_files: bool = True) -> None:
         raise ValueError("checkpoint manifest digest/schema mismatch")
     plan = manifest["source_plan"]
     validate_plan(plan, check_files=False)
+    source_plan_sha256 = _manifest_plan_sha256(manifest, plan, check_files=check_files)
     if not uses_reference_ce(plan) and any(
         manifest.get(k) != v for k, v in selection_evidence(plan).items()
     ):
@@ -207,7 +270,7 @@ def verify(manifest: dict, *, check_files: bool = True) -> None:
     if (
         type(step) is not int
         or not 0 < step <= plan["recipe"]["max_steps"]
-        or manifest["source_plan_sha256"] != _unsigned_digest(plan)
+        or manifest["source_plan_sha256"] != source_plan_sha256
         or manifest["checkpoint_path"] != str(expected)
         or type(manifest["world_size"]) is not int
         or manifest["world_size"] != size
@@ -240,7 +303,7 @@ def verify(manifest: dict, *, check_files: bool = True) -> None:
             if path.stat().st_size != spec["bytes"] or digest(path) != spec["sha256"]:
                 raise ValueError("checkpoint file digest/size mismatch")
         if adapter:
-            _adapter_binding(plan, step, expected, manifest["files"])
+            _adapter_binding(plan, step, expected, manifest["files"], source_plan_sha256)
 
 
 def _validate_progress(manifest: dict) -> None:

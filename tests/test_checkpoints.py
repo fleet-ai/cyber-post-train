@@ -8,7 +8,7 @@ import torch
 from test_sft_runtime import plan
 
 from training import checkpoints as c
-from training.sft_runtime import _unsigned_digest, write_receipt
+from training.sft_runtime import _unsigned_digest, digest, write_receipt
 
 
 def adapter_fixture(tmp_path, defect=None):
@@ -123,6 +123,46 @@ def test_seal_is_complete_create_once_and_preserves_source(tmp_path):
     assert before == {str(x): x.read_bytes() for x in root.rglob("*") if x.is_file()}
     with pytest.raises(FileExistsError):
         c.seal(p, 2, out)
+
+
+def test_seal_accepts_exact_historical_plan_file_digest(tmp_path):
+    p, _, out = fixture(tmp_path)
+    plan_file = tmp_path / "historical-plan.json"
+    plan_file.write_text(json.dumps(p, indent=2, sort_keys=True) + "\n")
+    plan_file_sha256 = digest(plan_file)
+    assert plan_file_sha256 != _unsigned_digest(p)
+
+    saved_path = tmp_path / "checkpoint_receipts/step-000002.json"
+    saved = c.receipt(saved_path)
+    saved.pop("receipt_sha256")
+    saved["plan_sha256"] = plan_file_sha256
+    saved_path.unlink()
+    write_receipt(saved_path, saved)
+
+    with pytest.raises(ValueError, match="source plan/step/path"):
+        c.seal(p, 2, out)
+    result = c.seal(p, 2, out, source_plan_file=plan_file)
+    assert result["source_plan_sha256"] == plan_file_sha256
+    assert result["source_plan_file"] == {
+        "bytes": plan_file.stat().st_size,
+        "canonical_json_sha256": _unsigned_digest(p),
+        "path": str(plan_file.resolve()),
+        "sha256": plan_file_sha256,
+    }
+    c.verify(result)
+    c.verify(result, check_files=False)
+
+    broken = copy.deepcopy(result)
+    broken["source_plan_file"]["canonical_json_sha256"] = "0" * 64
+    broken["receipt_sha256"] = _unsigned_digest(
+        {k: v for k, v in broken.items() if k != "receipt_sha256"}
+    )
+    with pytest.raises(ValueError, match="source plan file"):
+        c.verify(broken, check_files=False)
+
+    plan_file.write_text(json.dumps({**p, "run_name": "different"}, sort_keys=True))
+    with pytest.raises(ValueError, match="source plan file"):
+        c.verify(result)
 
 
 @pytest.mark.parametrize(
@@ -276,12 +316,24 @@ def test_checkpoint_seal_public_cli(tmp_path, monkeypatch):
     from cyber_post_train import cli
 
     p, _, out = fixture(tmp_path)
+    source_plan_file = tmp_path / "exact-plan.json"
+    source_plan_file.write_text(json.dumps(p, sort_keys=True, separators=(",", ":")))
     monkeypatch.setattr(cli, "_prepared", lambda directory: (p, {}))
     result = CliRunner().invoke(
-        cli.app, ["checkpoint-seal", str(tmp_path), "2", "--output", str(out)]
+        cli.app,
+        [
+            "checkpoint-seal",
+            str(tmp_path),
+            "2",
+            "--output",
+            str(out),
+            "--source-plan-file",
+            str(source_plan_file),
+        ],
     )
     assert result.exit_code == 0, result.output
     assert set(json.loads(result.stdout)) == {"optimizer_step", "total_bytes", "receipt_sha256"}
+    assert c.receipt(out)["source_plan_file"]["path"] == str(source_plan_file.resolve())
     assert (
         CliRunner()
         .invoke(cli.app, ["checkpoint-seal", str(tmp_path), "2", "--output", str(out)])

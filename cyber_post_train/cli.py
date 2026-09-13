@@ -983,14 +983,26 @@ def status(
 
 @app.command("checkpoint-seal")
 def checkpoint_seal(
-    directory: Path, step: int, output: Annotated[Path, typer.Option("--output")]
+    directory: Path,
+    step: int,
+    output: Annotated[Path, typer.Option("--output")],
+    source_plan_file: Annotated[
+        Path | None,
+        typer.Option(
+            "--source-plan-file",
+            help=(
+                "Exact producer plan file when its byte SHA, rather than canonical JSON SHA, "
+                "was recorded."
+            ),
+        ),
+    ] = None,
 ) -> None:
     """CPU-only: hash a trusted run's native checkpoint for export/resume. No GPU reload."""
     from training.checkpoints import seal
 
     try:
         plan, _ = _prepared(directory)
-        result = seal(plan, step, output)
+        result = seal(plan, step, output, source_plan_file=source_plan_file)
         _print({k: result[k] for k in ("optimizer_step", "total_bytes", "receipt_sha256")})
     except Exception as exc:
         _fail(exc)
