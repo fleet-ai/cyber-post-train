@@ -36,6 +36,7 @@ RESOURCES = {
     "memory_request": "1536Gi",
     "memory_limit": "2048Gi",
 }
+MINIMUM_CPU_REQUEST = "32"
 NATIVE_DRIVER_SHA256 = "85dbfd31d41a84f9c2e79a2918583851fb53925630afa229e9cd0a154b170f46"
 RUNTIME_FILES = (
     "training/miles_training.py",
@@ -113,6 +114,9 @@ def compile_rl(config: dict, *, relative_to: Path) -> dict:
             "groups",
             "samples_per_prompt",
             "lr",
+            "temperature",
+            "kl_loss_coef",
+            "max_tokens_per_gpu",
             "eval_interval",
             "checkpoint_interval",
             "seed",
@@ -212,8 +216,9 @@ def job_request(plan):
     ):
         raise ValueError("Miles plan/runtime drift")
     resources = plan["execution"]["resources"]
+    minimums = {**RESOURCES, "cpu_request": MINIMUM_CPU_REQUEST}
     if any(
-        quantity(resources[key]) < quantity(RESOURCES[key])
+        quantity(resources[key]) < quantity(minimums[key])
         for key in ("cpu_request", "memory_request", "memory_limit")
     ):
         raise ValueError("native Qwen RL requires its reviewed colocated RAM reservation and limit")

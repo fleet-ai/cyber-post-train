@@ -58,6 +58,15 @@ def config():
         {"lr": float("nan")},
         {"lr": float("inf")},
         {"lr": True},
+        {"temperature": 0},
+        {"temperature": float("nan")},
+        {"temperature": True},
+        {"kl_loss_coef": -1},
+        {"kl_loss_coef": float("nan")},
+        {"kl_loss_coef": True},
+        {"max_tokens_per_gpu": 0},
+        {"max_tokens_per_gpu": True},
+        {"max_tokens_per_gpu": 100000},
         {"context_tokens": 100000},
         {"context_tokens": 81920},
         {"response_tokens": 1},
@@ -93,8 +102,16 @@ def native_boundary(tmp_path, monkeypatch):
         chat_template=template.name,
         megatron_model_type="qwen3.8-27B",
         parallel_args_by_shape={
-            (1, 8): "--tensor-model-parallel-size 4 --context-parallel-size 2",
-            (2, 8): "--tensor-model-parallel-size 4 --context-parallel-size 2",
+            (1, 8): (
+                "--tensor-model-parallel-size 4 --sequence-parallel "
+                "--pipeline-model-parallel-size 1 --context-parallel-size 2 "
+                "--expert-model-parallel-size 1 --expert-tensor-parallel-size 1"
+            ),
+            (2, 8): (
+                "--tensor-model-parallel-size 4 --sequence-parallel "
+                "--pipeline-model-parallel-size 1 --context-parallel-size 2 "
+                "--expert-model-parallel-size 1 --expert-tensor-parallel-size 1"
+            ),
         },
         extra_train_args="--offload-train-target cpu",
         extra_sglang_args="--sglang-disable-radix-cache",
@@ -117,13 +134,34 @@ def value(argv, flag):
 
 
 def test_bounded_counts_and_native_optimizer(config, native_boundary):
-    cfg = replace(config, nodes=2, steps=9, groups=4, samples_per_prompt=4, lr=3e-6)
+    cfg = replace(
+        config,
+        nodes=2,
+        steps=9,
+        groups=4,
+        samples_per_prompt=4,
+        lr=3e-6,
+        temperature=0.7,
+        kl_loss_coef=0.001,
+        max_tokens_per_gpu=8192,
+    )
     argv = miles.arguments(cfg)
     assert value(argv, "num-rollout") == "9"
     assert value(argv, "num-steps-per-rollout") == "1"
     assert value(argv, "rollout-batch-size") == value(argv, "over-sampling-batch-size") == "4"
     assert value(argv, "global-batch-size") == "16"
     assert value(argv, "lr") == "3e-06"
+    assert value(argv, "rollout-temperature") == "0.7"
+    assert value(argv, "kl-loss-coef") == "0.001"
+    assert value(argv, "max-tokens-per-gpu") == "8192"
+    assert value(argv, "log-probs-max-tokens-per-gpu") == "16384"
+    assert value(argv, "tensor-model-parallel-size") == "4"
+    assert value(argv, "pipeline-model-parallel-size") == "1"
+    assert value(argv, "context-parallel-size") == "2"
+    assert "--sequence-parallel" in argv
+    assert value(argv, "recompute-granularity") == "full"
+    assert value(argv, "recompute-method") == "uniform"
+    assert value(argv, "recompute-num-layers") == "1"
     assert value(argv, "eval-prompt-data") == "fleet-dev" and cfg.dev_data in argv
     assert value(argv, "custom-generate-function-path") == "training.rl_episode.generate"
     assert (

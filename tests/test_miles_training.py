@@ -131,7 +131,7 @@ def test_miles_has_independent_colocated_memory_defaults(plan):
         {"memory_request": "512Gi", "memory_limit": "768Gi"},
         {"memory_request": "512Gi"},
         {"memory_limit": "768Gi"},
-        {"cpu_request": "32"},
+        {"cpu_request": "31"},
     ],
 )
 def test_miles_rejects_underreserved_or_known_oom_shape(config, tmp_path, resources):
@@ -145,6 +145,19 @@ def test_miles_allows_larger_explicit_resources(config, tmp_path):
     request = train.job_request(train.compile_rl(config, relative_to=tmp_path))
     assert request["resources"]["memory_request"] == "2Ti"
     assert request["resources"]["memory_limit"] == "2304Gi"
+
+
+def test_miles_allows_peer_proven_cpu_and_memory_envelope(config, tmp_path):
+    config["cluster"] = {
+        "resources": {
+            "cpu_request": "32",
+            "cpu_limit": "32",
+            "memory_request": "1800Gi",
+            "memory_limit": "2400Gi",
+        }
+    }
+    request = train.job_request(train.compile_rl(config, relative_to=tmp_path))
+    assert request["resources"] == config["cluster"]["resources"]
 
 
 @pytest.mark.parametrize(

@@ -1,0 +1,117 @@
+{
+  "schema": "cyber_q38_policy_data_derivation_dev7_evidence_v1",
+  "status": "accepted",
+  "observed_at": "2026-09-13T13:35:57Z",
+  "scope": {
+    "cluster": "dev",
+    "kubernetes_context": "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb",
+    "namespace": "fleet-train-jobs",
+    "gpu_jobs_submitted": 0,
+    "gpus_used": 0,
+    "peer_workloads_touched": false
+  },
+  "source": {
+    "commit": "294a5f45ee7e23a4a96a66a96183a857b88697e3",
+    "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/miles-trainer@sha256:d1d37c584e2aafdd47df1e1f3492ff3343eb3b83a5f658cf7ce2432ee8d6ef33",
+    "bundle_sha256": "736b4aea88fd3b93cacebd7aa36e59f0d43d743bdf990e7a36535a110448f1bc",
+    "bundle_manifest_sha256": "sha256:493d9cf57b1e35683218c0a27e263f222d70b6ad98840bbac00b3ab4d96dca51",
+    "data_manifest_sha256": "sha256:990ce422805bb1c8dbc83fc81c6620ea9bc5f65d1a42e86a3fd6b7ce1e5861c9",
+    "data_manifest_file_sha256": "sha256:9951e92d8a673cfce25a931abbf16c2bc37357063bfe48c04f5c850e4d1a7ff2",
+    "max_turns": 600
+  },
+  "derivation": {
+    "configmap": {
+      "name": "chris-q38-sft-rl-data-derive-v7-code",
+      "uid": "0a9fde43-259c-483a-b376-e0cea3482c02"
+    },
+    "pod": {
+      "name": "chris-q38-sft-rl-data-derive-v7",
+      "uid": "55b119a5-d555-4059-b0dc-d68f833d12c1",
+      "phase": "Succeeded",
+      "exit_code": 0,
+      "restart_count": 0,
+      "gpus": 0
+    },
+    "terminal": {
+      "path": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/sft-rl-data-derive-dev7-v1/TERMINAL.json",
+      "reported_status": "accepted",
+      "receipt_sha256": "sha256:37a91abb7dbc40114487ca38d42424b36cb1cef20cfb475eb0817bf3be54ae6c",
+      "file_sha256": "sha256:ea657e20c5ff98ef3ea1f9c1aa4d22eff7441a0c20e1258f90b27815754bd04c",
+      "independently_verified": true
+    },
+    "outputs": {
+      "self": {
+        "root": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/q38-self-s44-rl-dev7-inputs/data",
+        "policy_identity_sha256": "sha256:2c380d316c74d370334cf0a4c47e08f07051e8b4206ad95318d43519eb363254",
+        "manifest_sha256": "sha256:bdeb21297ddf02c6f3e545178a3a2e68243356d8038ccfadbf160baf5b402126",
+        "manifest_file_sha256": "sha256:9cf94b6c39fabd8f120c096d415fcb715d0505f32a075a6a7f5649346d9cf780",
+        "rows": {
+          "train": 1,
+          "dev": 1
+        },
+        "manifest_independently_verified": true
+      },
+      "teacher": {
+        "root": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/q38-teach-s186-rl-dev7-inputs/data",
+        "policy_identity_sha256": "sha256:35c274ae5e6f8e4dac55e3ba7a283dde0b8abeeda2f92d82a98301c166717f24",
+        "manifest_sha256": "sha256:57e66487b7c54549c7afb068294176af09f36afd31dff5f8ba01381dad631271",
+        "manifest_file_sha256": "sha256:8660baada4184cd3889bd30349b020b0cdc15bcc3267d83932518c2c8740940c",
+        "rows": {
+          "train": 1,
+          "dev": 1
+        },
+        "manifest_independently_verified": true
+      }
+    }
+  },
+  "independent_verifier": {
+    "status": "accepted",
+    "operator_package": ".operator/sft-rl-policy-data-v7-verify-v1",
+    "configmap": {
+      "name": "chris-q38-sft-rl-data-v7-verify-code",
+      "uid": "5ea85907-081b-4646-b2cd-9fe8d83d0350"
+    },
+    "pod": {
+      "name": "chris-q38-sft-rl-data-v7-verify",
+      "uid": "e837fa9d-52aa-4693-b690-87757f066d9e",
+      "phase": "Succeeded",
+      "exit_code": 0,
+      "restart_count": 0,
+      "gpus": 0,
+      "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/miles-trainer@sha256:d1d37c584e2aafdd47df1e1f3492ff3343eb3b83a5f658cf7ce2432ee8d6ef33",
+      "started_at": "2026-09-13T13:35:57Z",
+      "finished_at": "2026-09-13T13:35:57Z"
+    },
+    "script_sha256": "1f912ea76d5301336613852ace6a8b1f339b68909a6c34fd588f5305b122f380",
+    "configmap_file_sha256": "f1fac2d43a0412cf6f29ce8830205457d32cc2fe2243565af051f4a47a9dfcf0",
+    "pod_file_sha256": "aba531412e2fc5576e82b74175f4d74f354af605efc393264cecec8356346e34",
+    "focused_tests_passed": 3,
+    "local_policy_passed": true,
+    "dev_server_dry_run_passed": true,
+    "cluster_objects_created": true,
+    "result": {
+      "status": "accepted",
+      "arms_verified": 2,
+      "max_turns": 600,
+      "gpus": 0,
+      "task_payloads_read": 0,
+      "source_manifest_sha256": "sha256:990ce422805bb1c8dbc83fc81c6620ea9bc5f65d1a42e86a3fd6b7ce1e5861c9",
+      "terminal_receipt_sha256": "sha256:37a91abb7dbc40114487ca38d42424b36cb1cef20cfb475eb0817bf3be54ae6c",
+      "terminal_file_sha256": "sha256:ea657e20c5ff98ef3ea1f9c1aa4d22eff7441a0c20e1258f90b27815754bd04c"
+    }
+  },
+  "privacy": {
+    "prompts_read": false,
+    "rows_read": false,
+    "traces_read": false,
+    "credentials_read": false,
+    "scores_read": false,
+    "task_payloads_exposed": false
+  },
+  "interpretation": {
+    "runtime_derivation_completed": true,
+    "receipt_and_manifests_accepted_for_training": true,
+    "next_gate": "bind the selected policy-specific manifest digest into the intended Miles training request"
+  },
+  "sha256": "sha256:e089a33a131e9575345b0ea2b6c9c236b49ef4175a79dc86511254ce0766ac75"
+}

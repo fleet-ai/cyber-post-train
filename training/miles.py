@@ -45,6 +45,9 @@ class MilesConfig:
     groups: int = 1
     samples_per_prompt: int = 2
     lr: float = 1e-6
+    temperature: float = 1.0
+    kl_loss_coef: float = 0.0
+    max_tokens_per_gpu: int | None = None
     eval_interval: int = 1
     checkpoint_interval: int = 1
     seed: int = 42
@@ -122,6 +125,24 @@ class MilesConfig:
             raise ValueError("seed must be a nonnegative integer")
         if type(self.lr) not in (int, float) or not math.isfinite(self.lr) or self.lr <= 0:
             raise ValueError("learning rate must be finite and positive")
+        if (
+            type(self.temperature) not in (int, float)
+            or not math.isfinite(self.temperature)
+            or self.temperature <= 0
+        ):
+            raise ValueError("rollout temperature must be finite and positive")
+        if (
+            type(self.kl_loss_coef) not in (int, float)
+            or not math.isfinite(self.kl_loss_coef)
+            or self.kl_loss_coef < 0
+        ):
+            raise ValueError("KL loss coefficient must be finite and nonnegative")
+        if self.max_tokens_per_gpu is not None and (
+            type(self.max_tokens_per_gpu) is not int
+            or self.max_tokens_per_gpu < 1
+            or self.max_tokens_per_gpu > self.context_tokens
+        ):
+            raise ValueError("dynamic token budget must fit the native Qwen context envelope")
         if not self.tokens_per_turn <= self.response_tokens < self.context_tokens <= 98304:
             raise ValueError("generation budgets exceed the native Qwen context envelope")
 
@@ -154,6 +175,13 @@ def arguments(config: MilesConfig) -> list[str]:
         raise ValueError("native profile lacks the requested node/GPU layout")
     argv += shlex.split(parallel_args)
     argv += shlex.split(profile.extra_train_args + " " + profile.extra_sglang_args)
+    max_tokens_per_gpu = (
+        profile.max_tokens_per_gpu
+        if config.max_tokens_per_gpu is None
+        else config.max_tokens_per_gpu
+    )
+    if type(max_tokens_per_gpu) is not int or max_tokens_per_gpu < 1:
+        raise ValueError("native Qwen profile has an invalid dynamic token budget")
     batch = config.groups * config.samples_per_prompt
     values = {
         "train-backend": "megatron",
@@ -175,7 +203,7 @@ def arguments(config: MilesConfig) -> list[str]:
         "rollout-max-context-len": config.context_tokens,
         "rollout-max-response-len": config.response_tokens,
         "rollout-max-prompt-len": config.context_tokens - config.response_tokens,
-        "rollout-temperature": 1,
+        "rollout-temperature": config.temperature,
         "seed": config.seed,
         "rollout-seed": config.seed,
         "custom-generate-function-path": "training.rl_episode.generate",
@@ -198,11 +226,11 @@ def arguments(config: MilesConfig) -> list[str]:
         "recompute-method": "uniform",
         "recompute-num-layers": 1,
         "micro-batch-size": 1,
-        "max-tokens-per-gpu": profile.max_tokens_per_gpu,
-        "log-probs-max-tokens-per-gpu": profile.max_tokens_per_gpu
+        "max-tokens-per-gpu": max_tokens_per_gpu,
+        "log-probs-max-tokens-per-gpu": max_tokens_per_gpu
         * profile.log_prob_pass_multiplier,
         "advantage-estimator": "grpo",
-        "kl-loss-coef": 0,
+        "kl-loss-coef": config.kl_loss_coef,
         "kl-loss-type": "low_var_kl",
         "entropy-coef": 0,
         "eps-clip": 0.2,
@@ -255,4 +283,19 @@ def arguments(config: MilesConfig) -> list[str]:
     }
     if forbidden.intersection(flags):
         raise ValueError("native profile enables forbidden retries, credentials or lost state")
+    options = {
+        flag: argv[index + 1]
+        for index, flag in enumerate(argv[:-1])
+        if flag.startswith("--") and not argv[index + 1].startswith("--")
+    }
+    if (
+        options.get("--tensor-model-parallel-size") != "4"
+        or options.get("--pipeline-model-parallel-size") != "1"
+        or options.get("--context-parallel-size") != "2"
+        or "--sequence-parallel" not in flags
+        or options.get("--recompute-granularity") != "full"
+        or options.get("--recompute-method") != "uniform"
+        or options.get("--recompute-num-layers") != "1"
+    ):
+        raise ValueError("native Qwen parallelism or full-recompute safety envelope changed")
     return argv

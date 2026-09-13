@@ -27,7 +27,9 @@ def test_real_qwen_recipe_generates_a_bounded_argument_vector():
         return argv[argv.index("--" + key) + 1]
 
     assert value("tensor-model-parallel-size") == "4"
+    assert value("pipeline-model-parallel-size") == "1"
     assert value("context-parallel-size") == "2"
+    assert "--sequence-parallel" in argv
     assert value("rollout-num-gpus-per-engine") == "1"
     assert value("rollout-max-context-len") == "98304"
     assert value("num-steps-per-rollout") == "1"
@@ -43,6 +45,42 @@ def test_real_qwen_recipe_generates_a_bounded_argument_vector():
     assert "--no-save-optim" not in argv and "--no-save-rng" not in argv
     assert "--dynamic-sampling-filter-path" not in argv
     assert "--use-fault-tolerance" not in argv
+
+
+def test_real_qwen_recipe_accepts_the_peer_proven_dev5_safety_arguments():
+    pytest.importorskip("fti.trainers.miles.run_fleet")
+    config = MilesConfig(
+        name="synthetic-miles-dev5",
+        output_root="/mnt/sfs/jobs/synthetic-miles-dev5",
+        model_root="/mnt/sfs/models/synthetic-hf",
+        torch_dist_root="/mnt/sfs/models/synthetic-dist",
+        train_data="/mnt/sfs/data/synthetic/train.jsonl",
+        dev_data="/mnt/sfs/data/synthetic/dev.jsonl",
+        data_manifest="/mnt/sfs/data/synthetic/manifest.json",
+        wandb_entity="synthetic",
+        wandb_project="synthetic",
+        wandb_run_id="synthetic-miles-dev5",
+        samples_per_prompt=8,
+        lr=2e-6,
+        temperature=0.7,
+        kl_loss_coef=0.001,
+        max_tokens_per_gpu=8192,
+    )
+    argv = arguments(config)
+
+    def value(key):
+        return argv[argv.index("--" + key) + 1]
+
+    assert value("num-rollout") == value("num-steps-per-rollout") == "1"
+    assert value("global-batch-size") == "8"
+    assert value("rollout-temperature") == "0.7"
+    assert value("lr") == "2e-06"
+    assert value("kl-loss-coef") == "0.001"
+    assert value("max-tokens-per-gpu") == "8192"
+    assert value("tensor-model-parallel-size") == "4"
+    assert value("pipeline-model-parallel-size") == "1"
+    assert value("context-parallel-size") == "2"
+    assert value("recompute-granularity") == "full"
 
 
 def test_native_wandb_primary_uses_environment_run_id_without_key(tmp_path, monkeypatch):

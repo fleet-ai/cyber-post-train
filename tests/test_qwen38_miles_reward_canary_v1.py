@@ -15,6 +15,8 @@ LAUNCH_V3 = ROOT / "configs/qualification/qwen38-miles-rl-reward-canary-launch-d
 DATA_V4 = ROOT / "configs/qualification/qwen38-miles-rl-reward-canary-data-dev-v4.json"
 RUN_V4 = ROOT / "configs/qualification/qwen38-miles-rl-reward-canary-dev-v4.json"
 LAUNCH_V4 = ROOT / "configs/qualification/qwen38-miles-rl-reward-canary-launch-dev-v4.json"
+RUN_V5 = ROOT / "configs/qualification/qwen38-miles-rl-reward-canary-dev-v5.json"
+LAUNCH_V5 = ROOT / "configs/qualification/qwen38-miles-rl-reward-canary-launch-dev-v5.json"
 DEV3_RETIRED = (
     ROOT
     / "docs/evidence/qwen38-study/2026-09-13-miles-rlreward-dev3-retired-v1.json"
@@ -193,6 +195,80 @@ def test_v4_preserves_science_but_uses_only_fresh_identities() -> None:
         },
     }
     assert "webexploitbench" not in (DATA_V4.read_text() + RUN_V4.read_text()).lower()
+
+
+def test_v5_reuses_accepted_dev4_data_but_has_fresh_run_identity() -> None:
+    data_v4, run_v4, run_v5, launch = map(load, (DATA_V4, RUN_V4, RUN_V5, LAUNCH_V5))
+
+    assert run_v5["name"] == run_v5["wandb"]["run_id"]
+    assert run_v5["name"] == "chris-q38-miles-rlreward-dev5"
+    assert run_v5["output_root"] == "/mnt/sfs/jobs/chris-q38-miles-rlreward-dev5"
+    assert run_v5["data"] == {
+        "manifest": data_v4["output"] + "/manifest.json",
+        "root": data_v4["output"],
+    }
+    for key in ("backend", "model", "checkpoint"):
+        assert run_v5[key] == run_v4[key]
+    assert run_v5["recipe"] == {
+        "nodes": 1,
+        "gpus_per_node": 8,
+        "steps": 1,
+        "groups": 1,
+        "samples_per_prompt": 8,
+        "lr": 2e-6,
+        "temperature": 0.7,
+        "kl_loss_coef": 0.001,
+        "max_tokens_per_gpu": 8192,
+        "eval_interval": 1,
+        "checkpoint_interval": 1,
+        "seed": 42,
+    }
+    assert run_v5["cluster"] == {
+        "target": "dev",
+        "priority": "c1",
+        "resources": {
+            "cpu_request": "32",
+            "cpu_limit": "32",
+            "memory_request": "1800Gi",
+            "memory_limit": "2400Gi",
+        },
+    }
+
+    assert launch["status"] == "configuration_only_unsubmitted"
+    assert launch["identities"] == {
+        "run_name": run_v5["name"],
+        "cyber_run_id": run_v5["name"],
+        "data_root": data_v4["output"],
+        "output_root": run_v5["output_root"],
+        "wandb_run_id": run_v5["wandb"]["run_id"],
+    }
+    assert launch["parity"]["optimizer_updates"] == 1
+    assert launch["parity"]["total_train_samples"] == 8
+    assert launch["parity"]["parallelism"] == {
+        "tensor": 4,
+        "pipeline": 1,
+        "context": 2,
+        "sequence_parallel": True,
+    }
+    assert launch["parity"]["recompute"]["granularity"] == "full"
+    api = launch["jobs_api_constraints"]
+    assert api["priority_request"] == "c1"
+    assert api["rendered_queue_priority"] == "q1"
+    assert api["effective_priority"] == 10000
+    assert api["requeue_if_preempted"] is False
+    assert api["requested_shared_memory"] == "128Gi"
+    assert api["expressible_shared_memory"] is False
+    assert api["current_rendered_shared_memory"] == "64Gi"
+    assert launch["supersedes"]["current_state"] == (
+        "operator_cancelled_once_delete_204_then_reconciled_absent"
+    )
+    assert launch["supersedes"]["jobs_api_delete_calls"] == 1
+    assert launch["supersedes"]["jobs_api_delete_status"] == 204
+    assert launch["supersedes"]["jobs_api_get_after_delete_status"] == 404
+    assert launch["supersedes"]["gpu_allocations"] == 0
+    assert launch["supersedes"]["optimizer_updates"] == 0
+    assert run_v5["name"] not in json.dumps([data_v4, run_v4])
+    assert "webexploitbench" not in (RUN_V5.read_text() + LAUNCH_V5.read_text()).lower()
 
 
 def test_dev3_retirement_is_append_only_and_proves_zero_execution() -> None:
