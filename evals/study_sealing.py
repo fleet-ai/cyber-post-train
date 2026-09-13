@@ -170,8 +170,10 @@ def _exact_fields(value: Any, fields: set[str] | tuple[str, ...], *, allow_null:
             if type(item) is not int or item < 1:
                 raise ValueError("checkpoint step must be a positive integer")
         elif key == "sandbox_resources":
-            if not isinstance(item, dict) or not item or any(
-                type(number) is not int or number <= 0 for number in item.values()
+            if (
+                not isinstance(item, dict)
+                or set(item) != web.SANDBOX_RESOURCE_KEYS
+                or any(type(number) is not int or number <= 0 for number in item.values())
             ):
                 raise ValueError("sandbox resources must be exact positive integers")
         elif key in {"tensor_parallel_size", "data_parallel_size", "context_length"}:

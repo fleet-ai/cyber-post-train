@@ -141,10 +141,10 @@ cannot compile or launch. Fill a private copy and run all three commands from a
 CPU environment on the dev cluster that mounts the exact dev SFS:
 
 ```bash
-uv run python -m cyber_post_train.cli serving-dev \
+uv run --extra train python -m cyber_post_train.cli serving-dev \
   <private-teacher-v5-dev-config.json> --output <new-prepared-directory>
-uv run python -m cyber_post_train.cli preflight <new-prepared-directory>
-uv run python -m cyber_post_train.cli preview \
+uv run --extra train python -m cyber_post_train.cli preflight <new-prepared-directory>
+uv run --extra train python -m cyber_post_train.cli preview \
   <new-prepared-directory> --cluster dev
 ```
 

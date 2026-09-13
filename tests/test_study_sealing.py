@@ -42,7 +42,7 @@ def exact(fields) -> dict:
         elif key == "checkpoint_step":
             values[key] = 1
         elif key == "sandbox_resources":
-            values[key] = {"cpu": 8, "memory_mb": 32768, "disk_size_mb": 102400}
+            values[key] = {"cpus": 8, "memory_mb": 32768, "disk_mb": 102400}
         elif key in {"evaluator_image", "agent_image", "netproxy_image"}:
             values[key] = f"registry/{key}@sha256:" + f"{index:064x}"[-64:]
         else:
@@ -177,6 +177,18 @@ def test_launchable_child_requires_an_existing_private_result_root(tmp_path):
     # ambient process policy.
     private_root.chmod(0o755)
     with pytest.raises(ValueError, match="private directory"):
+        sealing.validate_child(value, root=ROOT)
+
+
+def test_web_child_rejects_legacy_tensorlake_resource_keys(tmp_path):
+    value = child("webexploitbench_tensorlake", tmp_path / "private")
+    value["bindings"]["tensorlake_qualification"]["sandbox_resources"] = {
+        "cpu": 8,
+        "memory_mb": 32768,
+        "disk_size_mb": 102400,
+    }
+    value["sha256"] = digest_json({key: item for key, item in value.items() if key != "sha256"})
+    with pytest.raises(ValueError, match="sandbox resources"):
         sealing.validate_child(value, root=ROOT)
 
 
