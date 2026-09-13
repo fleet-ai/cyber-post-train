@@ -245,6 +245,8 @@ def _post_training_child_reference(
         "file_sha256",
     }:
         raise ValueError("an exact private post-training child reference is required")
+    if Path(value["path"]).is_symlink():
+        raise ValueError("post-training child must be a regular nonsymlink file")
     path = _private_path(value["path"], root)
     if path.is_symlink() or not path.is_file():
         raise ValueError("post-training child must be a regular nonsymlink file")
@@ -409,11 +411,11 @@ def validate_child(child: dict[str, Any], *, root: Path = ROOT) -> bool:
                 "generic post-training study child must remain non-launchable until exact "
                 "paired-plan, preview, and schedule evidence is bound"
             )
-        # The generic candidate child does not bind the mandatory matched base arm,
-        # Fleet-final paired child, duplicate inventory, project parity, both
-        # controller previews, or fixed schedule.  Until those artifacts have a
-        # checked schema here, complete candidate bindings are planning evidence
-        # only and must never open the study launch gate.
+        # The repository has no authoritative producers yet for two arm-specific
+        # snapshot qualifications, a fresh pair-level duplicate claim, a runtime
+        # projection derived from live serving evidence, or an executable paired
+        # Tensorlake scheduler.  Caller-authored digests or detached receipts may
+        # not stand in for those gates.
         complete = False
     result_root = _private_path(execution["private_results_root"], root)
     journal = _private_path(execution["claim_journal"], root)

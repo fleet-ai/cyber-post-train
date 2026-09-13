@@ -285,6 +285,14 @@ def test_generic_post_training_parent_and_child_validate_only_as_nonlaunchable_p
     with pytest.raises(ValueError, match="study and post-training child bindings differ"):
         sealing.validate_child(changed, root=ROOT)
 
+    linked = copy.deepcopy(value)
+    link = tmp_path / "post-training-child-link.json"
+    link.symlink_to(Path(value["post_training_child"]["path"]))
+    linked["post_training_child"]["path"] = str(link)
+    linked["sha256"] = digest_json({key: item for key, item in linked.items() if key != "sha256"})
+    with pytest.raises(ValueError, match="regular nonsymlink"):
+        sealing.validate_child(linked, root=ROOT)
+
 
 def test_generic_post_training_candidate_only_child_cannot_be_launchable(tmp_path):
     value = child(
@@ -295,6 +303,23 @@ def test_generic_post_training_candidate_only_child_cannot_be_launchable(tmp_pat
     )
     with pytest.raises(ValueError, match="must remain non-launchable until exact paired-plan"):
         sealing.validate_child(value, root=ROOT)
+
+    fabricated = child(
+        "webexploitbench_tensorlake",
+        tmp_path / "fabricated-private",
+        launchable=True,
+        generic_web=True,
+    )
+    fabricated["paired_launch_evidence"] = {
+        "path": str(tmp_path / "caller-authored-evidence.json"),
+        "file_sha256": "sha256:" + "a" * 64,
+        "evidence_sha256": "sha256:" + "b" * 64,
+    }
+    fabricated["sha256"] = digest_json(
+        {key: item for key, item in fabricated.items() if key != "sha256"}
+    )
+    with pytest.raises(ValueError, match="unknown or missing fields"):
+        sealing.validate_child(fabricated, root=ROOT)
 
 
 @pytest.mark.parametrize(

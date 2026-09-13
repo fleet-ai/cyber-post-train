@@ -36,12 +36,25 @@ matched-runtime fields, and a private result root are planning evidence only;
 `check-child` must still report `launchable: false` and completion sealing is
 forbidden until those paired artifacts have an exact checked schema here.
 
+Do not replace these gates with caller-authored digests or detached boolean
+receipts. The missing authoritative producers are concrete: two arm-specific
+snapshot qualification receipts and project manifests, a runtime projection
+derived from accepted registration and fresh live-parity evidence, a canonical
+pair-level claim coupled to a fresh complete duplicate scan, and a paired
+Tensorlake controller that consumes and journals the fixed counterbalanced
+schedule. Until all four exist and are revalidated here, no generic
+post-training WebExploitBench wrapper is launchable.
+
+Tensorlake itself has no Kubernetes priority field. Any separately authorized
+ancillary cluster job is capped at `c1`/derived `q1`; `c0`/`q0` is prohibited.
+
 The Fleet base and post-SFT arms must differ only in their weight identity.
 Tokenizer, template, harness images, serving runtime, and live parity must
 match. For launch-capable and legacy child schemas, an exact child marked
 nonlaunchable, or an incomplete child marked launchable, is rejected. The
 generic wrapper above is the explicit fail-closed exception: it must remain
-nonlaunchable until its paired-launch evidence has a checked schema.
+nonlaunchable until its paired-launch evidence has a checked schema and an
+enforcing controller.
 
 ```sh
 python -m evals.study_sealing check-child /private/path/child.json
