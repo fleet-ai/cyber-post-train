@@ -17,6 +17,8 @@ PROD_OUTPUT = "/mnt/sfs/jobs/chris-q38-miles-rl-prod1"
 PROD_DATA_ROOT = "/mnt/sfs/jobs/chris-q38-miles-rl-prod1-inputs/data"
 PROD_DATA_MANIFEST = PROD_DATA_ROOT + "/manifest.json"
 PROD_WANDB = {"entity": "thefleet", "project": "cyber-post-train", "run_id": PROD_NAME}
+EXPERIMENT_OWNER_PREFIX = "chris-"
+FLEET_RUN_NAME_LABEL = "fleet.ai/run-name"
 PROD_MODEL_SHA256 = "dcfdcd6ecb6661741cd3a4b24dc5af7259642c8a6824773e0de70d55d7501179"
 BASE_CHECKPOINT = {
     "root": "/mnt/sfs/jobs/chris-cpt-cleanup-q38-miles-base-v1/torch-dist",
@@ -494,6 +496,49 @@ def _kubectl_json(*arguments: str) -> dict[str, Any]:
     return value
 
 
+def _owned_experiment_pod(pod: dict[str, Any]) -> bool:
+    """Select Chris's experiment Pods without charging peer work to his node cap."""
+    metadata = pod.get("metadata")
+    if not isinstance(metadata, dict) or not isinstance(metadata.get("name"), str):
+        raise JobsError("production Pod identity is malformed")
+    labels = metadata.get("labels", {})
+    if not isinstance(labels, dict):
+        raise JobsError("production Pod labels are malformed")
+    run_name = labels.get(FLEET_RUN_NAME_LABEL)
+    if run_name is not None and not isinstance(run_name, str):
+        raise JobsError("production Pod run-name label is malformed")
+    return metadata["name"].startswith(EXPERIMENT_OWNER_PREFIX) or (
+        isinstance(run_name, str) and run_name.startswith(EXPERIMENT_OWNER_PREFIX)
+    )
+
+
+def _pod_gpu_count(pod: dict[str, Any]) -> int:
+    spec = pod.get("spec")
+    if not isinstance(spec, dict):
+        raise JobsError("production Pod specification is malformed")
+    containers = spec.get("containers")
+    if not isinstance(containers, list):
+        raise JobsError("production Pod container inventory is malformed")
+    total = 0
+    for container in containers:
+        if not isinstance(container, dict):
+            raise JobsError("production Pod container inventory is malformed")
+        resources = container.get("resources", {})
+        if not isinstance(resources, dict):
+            raise JobsError("production Pod GPU inventory is malformed")
+        observed = []
+        for field in ("requests", "limits"):
+            quantities = resources.get(field, {})
+            if not isinstance(quantities, dict):
+                raise JobsError("production Pod GPU inventory is malformed")
+            try:
+                observed.append(int(quantities.get("nvidia.com/gpu", 0)))
+            except (TypeError, ValueError) as error:
+                raise JobsError("production Pod GPU inventory is malformed") from error
+        total += max(observed)
+    return total
+
+
 def require_live_external(plan: dict[str, Any], client, *, wandb_api=None) -> dict[str, Any]:
     """Recheck Jobs, W&B and the eight-node ceiling immediately before POST."""
     if not validate_embedded_promotion(plan, check_files=True):
@@ -540,13 +585,9 @@ def require_live_external(plan: dict[str, Any], client, *, wandb_api=None) -> di
             raise JobsError("production Pod inventory is malformed")
         if pod.get("status", {}).get("phase") not in {"Pending", "Running"}:
             continue
-        try:
-            gpu = sum(
-                int(container.get("resources", {}).get("limits", {}).get("nvidia.com/gpu", 0))
-                for container in pod.get("spec", {}).get("containers", [])
-            )
-        except (AttributeError, TypeError, ValueError) as error:
-            raise JobsError("production Pod GPU inventory is malformed") from error
+        if not _owned_experiment_pod(pod):
+            continue
+        gpu = _pod_gpu_count(pod)
         if gpu:
             node = pod.get("spec", {}).get("nodeName")
             if node:

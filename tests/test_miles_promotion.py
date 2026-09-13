@@ -223,15 +223,32 @@ def test_live_gate_reopens_c1_value_and_counts_node_budget(monkeypatch) -> None:
                 "value": priority,
                 "preemptionPolicy": "PreemptLowerPriority",
             }
-        return {
-            "items": [
-                {
-                    "status": {"phase": "Pending"},
-                    "spec": {"containers": [{"resources": {"limits": {"nvidia.com/gpu": "8"}}}]},
-                }
-                for _ in range(7)
-            ]
-        }
+        owned = [
+            {
+                "metadata": {
+                    "name": f"ray-head-{index}",
+                    "labels": {"fleet.ai/run-name": f"chris-q38-cell-{index}"},
+                },
+                "status": {"phase": "Pending"},
+                "spec": {"containers": [{"resources": {"requests": {"nvidia.com/gpu": "8"}}}]},
+            }
+            for index in range(7)
+        ]
+        peers = [
+            {
+                "metadata": {
+                    "name": f"peer-ray-head-{index}",
+                    "labels": {"fleet.ai/run-name": f"peer-cell-{index}"},
+                },
+                "status": {"phase": "Running"},
+                "spec": {
+                    "nodeName": f"peer-node-{index}",
+                    "containers": [{"resources": {"limits": {"nvidia.com/gpu": "8"}}}],
+                },
+            }
+            for index in range(23)
+        ]
+        return {"items": [*owned, *peers]}
 
     monkeypatch.setattr(miles_promotion, "validate_embedded_promotion", lambda *_a, **_k: True)
     monkeypatch.setattr(miles_promotion, "_kubectl_json", kubectl)
@@ -246,4 +263,67 @@ def test_live_gate_reopens_c1_value_and_counts_node_budget(monkeypatch) -> None:
     }
     priority = 9999
     with pytest.raises(JobsError, match="effective priority"):
+        miles_promotion.require_live_external({}, Client(), wandb_api=Wandb())
+
+
+def test_live_gate_counts_owned_nodes_once_and_rejects_ninth(monkeypatch) -> None:
+    class Client:
+        @staticmethod
+        def all_runs():
+            return []
+
+    class Wandb:
+        @staticmethod
+        def run(_):
+            raise RuntimeError("Could not find run")
+
+    pods = [
+        {
+            "metadata": {
+                "name": f"chris-helper-{index}",
+                "labels": {},
+            },
+            "status": {"phase": "Running"},
+            "spec": {
+                "nodeName": "shared-owned-node" if index < 2 else f"owned-node-{index}",
+                "containers": [
+                    {
+                        "resources": {
+                            "requests": {"nvidia.com/gpu": "4"},
+                            "limits": {"nvidia.com/gpu": "4"},
+                        }
+                    }
+                ],
+            },
+        }
+        for index in range(8)
+    ]
+
+    def kubectl(*args):
+        if args[:2] == ("get", "namespace"):
+            return {"metadata": {"uid": miles_promotion.PROD_NAMESPACE_UID}}
+        if args[:2] == ("get", "priorityclass"):
+            return {
+                "metadata": {"name": "c1"},
+                "value": 10000,
+                "preemptionPolicy": "PreemptLowerPriority",
+            }
+        return {"items": pods}
+
+    monkeypatch.setattr(miles_promotion, "validate_embedded_promotion", lambda *_a, **_k: True)
+    monkeypatch.setattr(miles_promotion, "_kubectl_json", kubectl)
+    observed = miles_promotion.require_live_external({}, Client(), wandb_api=Wandb())
+    assert observed["active_experiment_nodes"] == 7
+
+    pods.append(
+        {
+            "metadata": {
+                "name": "ray-head-peer-looking-name",
+                "labels": {"fleet.ai/run-name": "chris-q38-eighth-node"},
+            },
+            "status": {"phase": "Pending"},
+            "spec": {"containers": [{"resources": {"limits": {"nvidia.com/gpu": "8"}}}]},
+        }
+    )
+    with pytest.raises(JobsError, match="exceed eight"):
         miles_promotion.require_live_external({}, Client(), wandb_api=Wandb())
