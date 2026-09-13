@@ -288,11 +288,17 @@ def test_terminal_binding_selects_exact_accepted_checkpoint_and_saved_state(
             {
                 "policy_tensor_count": expected["model_tensor_count"],
                 "local_policy_numel": expected["model_local_numel"],
-                "trained_policy_structure_sha256": expected["model_structure_sha256"],
-                "trained_policy_value_sha256": expected["model_value_sha256"],
-                "trained_optimizer_value_sha256": expected["optimizer_value_sha256"],
-                "trained_scheduler_value_sha256": expected["scheduler_value_sha256"],
-                "trained_rng_value_sha256": expected["rng_value_sha256"],
+                "trained_reload": {
+                    "restored": {
+                        "model": {
+                            "structure_sha256": expected["model_structure_sha256"],
+                            "value_sha256": expected["model_value_sha256"],
+                        },
+                        "optimizer": {"value_sha256": expected["optimizer_value_sha256"]},
+                        "scheduler": {"value_sha256": expected["scheduler_value_sha256"]},
+                        "rng_sha256": expected["rng_value_sha256"],
+                    }
+                },
             }
         )
     policy_body = {"schema": miles_acceptance.POLICY_DELTA_SCHEMA, "ranks": ranks}

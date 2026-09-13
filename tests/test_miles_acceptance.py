@@ -10,6 +10,7 @@ import json
 import shlex
 import subprocess
 import uuid
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -303,10 +304,16 @@ def _policy_observer_evidence(
         "world_size": 8,
         "comparison_method": observer.COMPARISON_METHOD,
         "rank_state_commitment_method": observer.RANK_STATE_COMMITMENT_METHOD,
-        "work_authorized": dict(observer._ZERO_WORK),
+        "work_authorized": dict(observer._OBSERVER_WORK),
         "runtime_sha256": digest(runtime),
         "native_driver_sha256": observer.NATIVE_DRIVER_SHA256,
         "deadline_seconds": observer.DEADLINE_SECONDS,
+        "restore_method": observer.RESTORE_METHOD,
+        "sentinel_markers": {
+            "base": observer.BASE_SENTINEL,
+            "trained_reference": observer.REFERENCE_SENTINEL,
+            "trained_reload": observer.RELOAD_SENTINEL,
+        },
         "execution": {
             "cluster_target": "dev",
             "image": miles.IMAGE,
@@ -319,29 +326,94 @@ def _policy_observer_evidence(
     request = observer.job_request(observer_plan)
     request_path = tmp_path / "observer/request.json"
     _write_json(request_path, request)
+    watch = tmp_path / "observer/watch"
+    observer.start_capture_intent(
+        observer_plan,
+        request,
+        namespace_uid=acceptance.NAMESPACE_UID,
+        started_at="2026-09-13T03:06:59Z",
+        directory=watch,
+        kube_context=event_evidence.DEV_KUBE_CONTEXT,
+    )
+    run_id = "11111111-1111-4111-8111-111111111111"
+    journal_path = tmp_path / "observer/SUBMISSION.jsonl"
+    journal_path.write_text(
+        "\n".join(
+            json.dumps(row)
+            for row in (
+                {
+                    "state": "POST_INTENT_DO_NOT_RETRY",
+                    "api_base_url": API_URLS["dev"],
+                    "request_sha256": digest(request),
+                    "manifest_sha256": "1" * 64,
+                    "nodes": 1,
+                    "gpus": 8,
+                    "image": miles.IMAGE,
+                },
+                {
+                    "state": "POST_RESPONSE",
+                    "name": observer_plan["run_name"] + "-" + run_id[:8],
+                    "job_id": run_id,
+                    "run_dir": observer_plan["output_root"],
+                    "status": "QUEUED",
+                    "created_at": "2026-09-13T03:07:00Z",
+                    "finished_at": None,
+                },
+            )
+        )
+        + "\n"
+    )
     submission_path = tmp_path / "observer/SUBMITTED.json"
     submission = observer.compile_submission_binding(
         plan_path=observer_plan_path,
         request_path=request_path,
         source_commit=subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
-        api_run_id="11111111-1111-4111-8111-111111111111",
-        submitted_at="2026-09-13T03:07:00Z",
+        submission_journal_path=journal_path,
         output=submission_path,
     )
+
+    def state(seed: int, rank: int, *, progress: int = 1) -> dict:
+        return {
+            "model": {
+                "tensors": 10,
+                "local_numel": 100,
+                "structure_sha256": "sha256:" + f"{rank + 1:064x}",
+                "value_sha256": "sha256:" + f"{seed + rank:064x}",
+            },
+            "optimizer": {
+                "objects": 1,
+                "state_entries": 2,
+                "parameter_groups": 1,
+                "structure_sha256": "sha256:" + f"{rank + 10:064x}",
+                "value_sha256": "sha256:" + f"{seed + rank + 100:064x}",
+            },
+            "scheduler": {
+                "positive_progress_counters": progress,
+                "structure_sha256": "sha256:" + f"{rank + 11:064x}",
+                "value_sha256": "sha256:" + f"{seed + rank + 200:064x}",
+            },
+            "rng_sha256": "sha256:" + f"{seed + rank + 300:064x}",
+        }
+
+    def load(marker: int, preload_seed: int, restored_seed: int, rank: int) -> dict:
+        restored = state(restored_seed, rank)
+        return {
+            "marker": marker,
+            "load_calls": 1,
+            "preload": state(preload_seed, rank),
+            "restored": restored,
+            "live": copy.deepcopy(restored),
+        }
+
     rows = [
         {
             "rank": rank,
             "policy_tensor_count": 10,
             "local_policy_numel": 100,
-            "base_policy_structure_sha256": "sha256:" + f"{rank + 1:064x}",
-            "trained_policy_structure_sha256": "sha256:" + f"{rank + 1:064x}",
-            "base_policy_value_sha256": "sha256:" + f"{rank + 20:064x}",
-            "trained_policy_value_sha256": "sha256:"
-            + f"{rank + (40 if rank == 0 else 20):064x}",
-            "trained_optimizer_value_sha256": "sha256:" + f"{rank + 60:064x}",
-            "trained_scheduler_value_sha256": "sha256:" + f"{rank + 80:064x}",
-            "trained_rng_value_sha256": "sha256:" + f"{rank + 100:064x}",
-            "policy_changed": rank == 0,
+            "base": load(observer.BASE_SENTINEL, 1000, 2000, rank),
+            "trained_reference": load(observer.REFERENCE_SENTINEL, 3000, 4000, rank),
+            "trained_reload": load(observer.RELOAD_SENTINEL, 5000, 4000, rank),
+            "policy_changed": True,
         }
         for rank in range(8)
     ]
@@ -356,11 +428,27 @@ def _policy_observer_evidence(
             "world_size": 8,
             "comparison_method": observer.COMPARISON_METHOD,
             "ranks": rows,
-            "changed_policy_ranks": [0],
+            "changed_policy_ranks": list(range(8)),
             "restored_next_rollout_id": checkpoint["next_rollout_id"],
             "checkpoint_state_commitment_method": observer.RANK_STATE_COMMITMENT_METHOD,
+            "restore_method": observer.RESTORE_METHOD,
+            "trained_restore_count": 2,
+            "prediction_probe": {
+                "schema": observer.PREDICTION_SCHEMA,
+                "probe_id": observer.PREDICTION_PROBE_ID,
+                "input_ids_sha256": "sha256:"
+                + digest(list(observer.PREDICTION_INPUT_IDS)),
+                "sequence_length": len(observer.PREDICTION_INPUT_IDS),
+                "top_k": observer.PREDICTION_TOP_K,
+                "selection_margin_threshold": observer.PREDICTION_MARGIN,
+                "selection_margin_satisfied": True,
+                "prediction_sha256": "sha256:" + "d" * 64,
+                "logits_included": False,
+                "task_content_included": False,
+                "benchmark_content_included": False,
+            },
             "state_stable_across_zero_updates": True,
-            "work_executed": dict(observer._ZERO_WORK),
+            "work_executed": dict(observer._OBSERVER_WORK),
             "base_checkpoint_unchanged": True,
             "trained_checkpoint_unchanged": True,
             "completed_at": "2026-09-13T03:07:10Z",
@@ -372,13 +460,10 @@ def _policy_observer_evidence(
     result_path = output_root / "POLICY_OBSERVER_RESULT.json"
     _write_json(result_path, result)
 
-    watch = tmp_path / "observer/watch"
     observer.start_capture(
         observer_plan,
         submission,
-        namespace_uid=acceptance.NAMESPACE_UID,
-        started_at="2026-09-13T03:07:00Z",
-        directory=watch,
+        intent_path=watch / "CAPTURE_INTENT.json",
     )
     api_name = submission["api"]["run_name"]
     run_id = submission["api"]["run_id"]
@@ -479,19 +564,39 @@ def _policy_observer_evidence(
         output=controller_path,
     )
     release_path = tmp_path / "observer/RELEASE.json"
+    query_path = tmp_path / "observer/RELEASE_QUERY.json"
+
+    class Jobs:
+        def status(self, name: str) -> dict:
+            return {
+                "name": name,
+                "job_id": run_id,
+                "run_dir": observer_plan["output_root"],
+                "status": "SUCCEEDED",
+                "created_at": "2026-09-13T03:07:00Z",
+                "finished_at": "2026-09-13T03:07:12Z",
+            }
+
+    def kubectl(command: list[str], **_: object) -> SimpleNamespace:
+        if command[4] == "namespace":
+            payload = {"metadata": {"uid": acceptance.NAMESPACE_UID}}
+            return SimpleNamespace(returncode=0, stdout=json.dumps(payload).encode())
+        return SimpleNamespace(returncode=0, stdout=b"")
+
+    observer.collect_release_query(
+        observer_plan,
+        submission,
+        controller_path=controller_path,
+        jobs=Jobs(),
+        output=query_path,
+        run_command=kubectl,
+        clock=lambda: datetime.fromisoformat("2026-09-13T03:07:13+00:00").timestamp(),
+    )
     observer.compile_release(
         observer_plan,
         submission,
         controller_path=controller_path,
-        absence={
-            "raycluster_present": False,
-            "rayjob_present": False,
-            "workload_present": False,
-            "quota_reservation_present": False,
-            "gpu_pods_present": False,
-            "active_gpus": 0,
-        },
-        observed_at="2026-09-13T03:07:13Z",
+        release_query_path=query_path,
         output=release_path,
     )
     policy_path = output_root / "POLICY_DELTA.json"
@@ -1004,7 +1109,9 @@ def test_observer_reload_rejects_commitment_or_result_replacement(case: dict) ->
 
     result_path = Path(policy["observer_result"]["path"])
     result = json.loads(result_path.read_bytes())
-    result["ranks"][0]["trained_policy_value_sha256"] = "sha256:" + "e" * 64
+    result["ranks"][0]["trained_reload"]["restored"]["model"]["value_sha256"] = (
+        "sha256:" + "e" * 64
+    )
     _write_json(result_path, _seal(result))
     with pytest.raises(
         ValueError,
@@ -1024,7 +1131,7 @@ def test_policy_observer_accepts_historical_bundle_after_current_code_changes(
 
     after = observer.validate_policy_evidence(policy, case["plan"], checkpoint)
 
-    assert before == after == 1
+    assert before == after == 8
 
 
 def test_policy_observer_result_can_truthfully_report_no_delta_but_not_accept(
@@ -1037,14 +1144,17 @@ def test_policy_observer_result_can_truthfully_report_no_delta_but_not_accept(
     result_path = Path(policy["observer_result"]["path"])
     result = json.loads(result_path.read_bytes())
     for row in result["ranks"]:
-        row["trained_policy_value_sha256"] = row["base_policy_value_sha256"]
+        value = row["base"]["restored"]["model"]["value_sha256"]
+        row["trained_reference"]["restored"]["model"]["value_sha256"] = value
+        row["trained_reload"]["restored"]["model"]["value_sha256"] = value
         row["policy_changed"] = False
     result["changed_policy_ranks"] = []
     _write_json(result_path, _seal(result))
-    assert observer.validate_result(plan, json.loads(result_path.read_bytes())) == []
+    with pytest.raises(ValueError, match="changed-rank summary"):
+        observer.validate_result(plan, json.loads(result_path.read_bytes()))
     case["policy_delta"].unlink()
 
-    with pytest.raises(ValueError, match="no independently observed policy tensor delta"):
+    with pytest.raises(ValueError, match="changed-rank summary"):
         observer.accept_policy_delta(
             plan,
             submission_path=submission_path,
@@ -1137,7 +1247,9 @@ def test_terminal_acceptance_fails_closed_on_each_scientific_or_release_gate(
     elif fault == "policy_delta":
         value = json.loads(case["policy_delta"].read_bytes())
         for row in value["ranks"]:
-            row["trained_policy_value_sha256"] = row["base_policy_value_sha256"]
+            base = row["base"]["restored"]["model"]["value_sha256"]
+            row["trained_reference"]["restored"]["model"]["value_sha256"] = base
+            row["trained_reload"]["restored"]["model"]["value_sha256"] = base
             row["policy_changed"] = False
         value["changed_policy_ranks"] = []
         _write_json(case["policy_delta"], _seal(value))
@@ -1271,7 +1383,9 @@ def test_optimizer_metadata_delta_cannot_masquerade_as_policy_change(case: dict)
 
     value = json.loads(case["policy_delta"].read_bytes())
     for row in value["ranks"]:
-        row["trained_policy_value_sha256"] = row["base_policy_value_sha256"]
+        base = row["base"]["restored"]["model"]["value_sha256"]
+        row["trained_reference"]["restored"]["model"]["value_sha256"] = base
+        row["trained_reload"]["restored"]["model"]["value_sha256"] = base
         row["policy_changed"] = False
     value["changed_policy_ranks"] = []
     _write_json(case["policy_delta"], _seal(value))

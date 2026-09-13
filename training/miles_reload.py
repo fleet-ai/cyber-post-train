@@ -302,25 +302,26 @@ def _terminal_binding(
         raise ValueError("accepted policy-state observation digest changed")
     commitments = []
     for rank, row in enumerate(policy["ranks"]):
+        restored = row["trained_reload"]["restored"]
         commitments.append(
             {
                 "rank": rank,
                 "model_tensor_count": row["policy_tensor_count"],
                 "model_local_numel": row["local_policy_numel"],
                 "model_structure_sha256": _sha256(
-                    row["trained_policy_structure_sha256"], "trained policy structure digest"
+                    restored["model"]["structure_sha256"], "trained policy structure digest"
                 ),
                 "model_value_sha256": _sha256(
-                    row["trained_policy_value_sha256"], "trained policy value digest"
+                    restored["model"]["value_sha256"], "trained policy value digest"
                 ),
                 "optimizer_value_sha256": _sha256(
-                    row["trained_optimizer_value_sha256"], "trained optimizer digest"
+                    restored["optimizer"]["value_sha256"], "trained optimizer digest"
                 ),
                 "scheduler_value_sha256": _sha256(
-                    row["trained_scheduler_value_sha256"], "trained scheduler digest"
+                    restored["scheduler"]["value_sha256"], "trained scheduler digest"
                 ),
                 "rng_value_sha256": _sha256(
-                    row["trained_rng_value_sha256"], "trained RNG digest"
+                    restored["rng_sha256"], "trained RNG digest"
                 ),
             }
         )

@@ -14,12 +14,14 @@ import argparse
 import asyncio
 import base64
 import binascii
+import copy
 import gzip
 import hashlib
 import json
 import math
 import numbers
 import os
+import random
 import re
 import shlex
 import signal
@@ -51,17 +53,28 @@ from .miles_reload import (
 )
 from .rl_runtime import sealed
 
-CONFIG_SCHEMA = "cyber_miles_policy_observer_config_v1"
-PLAN_SCHEMA = "cyber_miles_policy_observer_plan_v1"
-RESULT_SCHEMA = "cyber_miles_policy_observer_result_v1"
-SUBMISSION_SCHEMA = "cyber_miles_policy_observer_submission_v1"
-CONTROLLER_SCHEMA = "cyber_miles_policy_observer_controller_v1"
-RELEASE_SCHEMA = "cyber_miles_policy_observer_release_v1"
-POLICY_SCHEMA = "cyber_miles_policy_tensor_delta_observation_v1"
-RELOAD_ACCEPTED_SCHEMA = "cyber_miles_policy_observer_reload_accepted_v1"
+CONFIG_SCHEMA = "cyber_miles_policy_observer_config_v2"
+PLAN_SCHEMA = "cyber_miles_policy_observer_plan_v2"
+RESULT_SCHEMA = "cyber_miles_policy_observer_result_v2"
+SUBMISSION_SCHEMA = "cyber_miles_policy_observer_submission_v2"
+CAPTURE_INTENT_SCHEMA = "cyber_miles_policy_observer_capture_intent_v1"
+CONTROLLER_SCHEMA = "cyber_miles_policy_observer_controller_v2"
+RELEASE_QUERY_SCHEMA = "cyber_miles_policy_observer_release_query_v1"
+RELEASE_SCHEMA = "cyber_miles_policy_observer_release_v2"
+POLICY_SCHEMA = "cyber_miles_policy_tensor_delta_observation_v2"
+RELOAD_ACCEPTED_SCHEMA = "cyber_miles_policy_observer_reload_accepted_v2"
 WORLD_SIZE = 8
 DEADLINE_SECONDS = 1800
-COMPARISON_METHOD = "all_rank_named_policy_tensor_value_sha256_v1"
+COMPARISON_METHOD = "all_rank_named_policy_tensor_value_sha256_v2"
+RESTORE_METHOD = "independent_preload_sentinel_overwrite_and_reload_sha256_v1"
+PREDICTION_SCHEMA = "cyber_miles_non_task_prediction_probe_v1"
+PREDICTION_PROBE_ID = "qwen38-fixed-token-topk-v1"
+PREDICTION_INPUT_IDS = tuple(range(1, 33))
+PREDICTION_TOP_K = 16
+PREDICTION_MARGIN = 0.01
+BASE_SENTINEL = 101
+REFERENCE_SENTINEL = 202
+RELOAD_SENTINEL = 303
 RUNTIME_FILES = (
     "training/miles_policy_observer.py",
     "training/miles_reload.py",
@@ -92,6 +105,8 @@ _PLAN_FIELDS = {
     "runtime_sha256",
     "native_driver_sha256",
     "deadline_seconds",
+    "restore_method",
+    "sentinel_markers",
     "execution",
 }
 _RESULT_FIELDS = {
@@ -107,6 +122,9 @@ _RESULT_FIELDS = {
     "changed_policy_ranks",
     "restored_next_rollout_id",
     "checkpoint_state_commitment_method",
+    "restore_method",
+    "trained_restore_count",
+    "prediction_probe",
     "state_stable_across_zero_updates",
     "work_executed",
     "base_checkpoint_unchanged",
@@ -135,6 +153,7 @@ _RELOAD_ACCEPTED_FIELDS = {
     "restored_next_rollout_id",
     "rank_state_commitment_method",
     "rank_state_commitments_sha256",
+    "prediction_probe",
     "all_rank_model_loaded",
     "all_rank_optimizer_loaded",
     "all_rank_scheduler_loaded",
@@ -156,15 +175,13 @@ _RANK_FIELDS = {
     "rank",
     "policy_tensor_count",
     "local_policy_numel",
-    "base_policy_structure_sha256",
-    "trained_policy_structure_sha256",
-    "base_policy_value_sha256",
-    "trained_policy_value_sha256",
-    "trained_optimizer_value_sha256",
-    "trained_scheduler_value_sha256",
-    "trained_rng_value_sha256",
+    "base",
+    "trained_reference",
+    "trained_reload",
     "policy_changed",
 }
+_STATE_FIELDS = {"model", "optimizer", "scheduler", "rng_sha256"}
+_LOAD_FIELDS = {"marker", "load_calls", "preload", "restored", "live"}
 _SUBMISSION_FIELDS = {
     "schema",
     "source_commit",
@@ -174,6 +191,8 @@ _SUBMISSION_FIELDS = {
     "observer_request_path",
     "observer_request_sha256",
     "observer_request_file_sha256",
+    "submission_journal_path",
+    "submission_journal_file_sha256",
     "runtime_bundle_sha256",
     "api",
     "request",
@@ -182,6 +201,37 @@ _SUBMISSION_FIELDS = {
     "secret_values_included",
     "task_content_included",
     "metric_values_included",
+    "sha256",
+}
+_CAPTURE_INTENT_FIELDS = {
+    "schema",
+    "status",
+    "observer_plan_sha256",
+    "observer_request_sha256",
+    "requested_name",
+    "api_base_url",
+    "kube_context",
+    "namespace",
+    "namespace_uid",
+    "started_at",
+    "private_logs_included",
+    "metric_values_included",
+    "task_content_included",
+    "sha256",
+}
+_RELEASE_QUERY_FIELDS = {
+    "schema",
+    "status",
+    "observer_plan_sha256",
+    "observer_request_sha256",
+    "controller_observation_sha256",
+    "api",
+    "kubernetes",
+    "active_gpus",
+    "observed_at",
+    "private_logs_included",
+    "metric_values_included",
+    "task_content_included",
     "sha256",
 }
 _SUBMISSION_REQUEST_FIELDS = {
@@ -208,6 +258,7 @@ _ZERO_WORK = {
     "checkpoint_writes": 0,
     "wandb_events": 0,
 }
+_OBSERVER_WORK = {**_ZERO_WORK, "forward_passes": 1}
 _ENV = {
     "PYTHONPATH": "/root/Megatron-LM",
     "HF_HUB_OFFLINE": "1",
@@ -423,10 +474,16 @@ def compile_observer(config: dict[str, Any], *, relative_to: Path) -> dict[str, 
         "world_size": WORLD_SIZE,
         "comparison_method": COMPARISON_METHOD,
         "rank_state_commitment_method": RANK_STATE_COMMITMENT_METHOD,
-        "work_authorized": dict(_ZERO_WORK),
+        "work_authorized": dict(_OBSERVER_WORK),
         "runtime_sha256": digest(_runtime()),
         "native_driver_sha256": NATIVE_DRIVER_SHA256,
         "deadline_seconds": DEADLINE_SECONDS,
+        "restore_method": RESTORE_METHOD,
+        "sentinel_markers": {
+            "base": BASE_SENTINEL,
+            "trained_reference": REFERENCE_SENTINEL,
+            "trained_reload": RELOAD_SENTINEL,
+        },
         "execution": {
             "cluster_target": "dev",
             "image": miles.IMAGE,
@@ -457,10 +514,17 @@ def _validate_plan(
         or plan.get("world_size") != WORLD_SIZE
         or plan.get("comparison_method") != COMPARISON_METHOD
         or plan.get("rank_state_commitment_method") != RANK_STATE_COMMITMENT_METHOD
-        or plan.get("work_authorized") != _ZERO_WORK
+        or plan.get("work_authorized") != _OBSERVER_WORK
         or _SHA.fullmatch(str(plan.get("runtime_sha256"))) is None
         or plan.get("native_driver_sha256") != NATIVE_DRIVER_SHA256
         or plan.get("deadline_seconds") != DEADLINE_SECONDS
+        or plan.get("restore_method") != RESTORE_METHOD
+        or plan.get("sentinel_markers")
+        != {
+            "base": BASE_SENTINEL,
+            "trained_reference": REFERENCE_SENTINEL,
+            "trained_reload": RELOAD_SENTINEL,
+        }
         or plan.get("execution", {}).get("cluster_target") != "dev"
         or plan.get("execution", {}).get("image") != miles.IMAGE
         or plan.get("execution", {}).get("priority") != "c1"
@@ -664,8 +728,7 @@ def compile_submission_binding(
     plan_path: Path,
     request_path: Path,
     source_commit: str,
-    api_run_id: str,
-    submitted_at: object,
+    submission_journal_path: Path,
     output: Path,
     repo_root: Path | None = None,
 ) -> dict[str, Any]:
@@ -679,7 +742,9 @@ def compile_submission_binding(
     bundle_sha256, projection = _request_projection(
         plan, request, source_commit, repo_root or Path(__file__).resolve().parents[1]
     )
-    run_id = _uuid(api_run_id, "observer API run ID")
+    journal, journal_file_sha256 = _submission_journal(submission_journal_path, request)
+    run_id = _uuid(journal[1]["job_id"], "observer API run ID")
+    submitted_at = journal[1]["created_at"]
     _time(submitted_at, "observer submission time")
     return _write(
         output,
@@ -692,6 +757,8 @@ def compile_submission_binding(
             "observer_request_path": str(request_path),
             "observer_request_sha256": "sha256:" + digest(request),
             "observer_request_file_sha256": "sha256:" + request_file_sha256,
+            "submission_journal_path": str(submission_journal_path),
+            "submission_journal_file_sha256": "sha256:" + journal_file_sha256,
             "runtime_bundle_sha256": "sha256:" + bundle_sha256,
             "api": {
                 "base_url": API_URLS["dev"],
@@ -706,6 +773,52 @@ def compile_submission_binding(
             "metric_values_included": False,
         },
     )
+
+
+def _submission_journal(path: Path, request: Mapping[str, Any]) -> tuple[list[dict], str]:
+    from .miles_acceptance import _time, _uuid
+
+    if path.is_symlink() or not path.is_file():
+        raise ValueError("observer Jobs API submission journal is missing or indirect")
+    before = path.stat()
+    payload = path.read_bytes()
+    after = path.stat()
+    fields = ("st_dev", "st_ino", "st_size", "st_mtime_ns", "st_ctime_ns")
+    if any(getattr(before, field) != getattr(after, field) for field in fields):
+        raise ValueError("observer Jobs API submission journal changed while reading")
+    try:
+        rows = [json.loads(line) for line in payload.splitlines()]
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ValueError("observer Jobs API submission journal is invalid JSONL") from error
+    if len(rows) != 2 or any(not isinstance(row, dict) for row in rows):
+        raise ValueError("observer Jobs API journal must contain one intent and one response")
+    intent, response = rows
+    if (
+        set(intent)
+        != {
+            "state", "api_base_url", "request_sha256", "manifest_sha256",
+            "nodes", "gpus", "image",
+        }
+        or intent.get("state") != "POST_INTENT_DO_NOT_RETRY"
+        or intent.get("api_base_url") != API_URLS["dev"]
+        or intent.get("request_sha256") != digest(request)
+        or _SHA.fullmatch(str(intent.get("manifest_sha256"))) is None
+        or intent.get("nodes") != 1
+        or intent.get("gpus") != WORLD_SIZE
+        or intent.get("image") != miles.IMAGE
+        or set(response)
+        != {"state", "name", "job_id", "run_dir", "status", "created_at", "finished_at"}
+        or response.get("state") != "POST_RESPONSE"
+        or response.get("name")
+        != str(request["name"]) + "-" + str(response.get("job_id", ""))[:8]
+        or response.get("run_dir") != request["run_dir"]
+        or response.get("status") not in {"PENDING", "QUEUED", "RUNNING"}
+        or response.get("finished_at") is not None
+    ):
+        raise ValueError("observer Jobs API submission journal is incomplete or mismatched")
+    _uuid(response.get("job_id"), "observer API run ID")
+    _time(response.get("created_at"), "observer submission time")
+    return rows, hashlib.sha256(payload).hexdigest()
 
 
 def validate_submission_binding(
@@ -724,6 +837,8 @@ def validate_submission_binding(
         or _SHA.fullmatch(str(value.get("observer_plan_file_sha256"))) is None
         or _SHA.fullmatch(str(value.get("observer_request_sha256"))) is None
         or _SHA.fullmatch(str(value.get("observer_request_file_sha256"))) is None
+        or not Path(str(value.get("submission_journal_path", ""))).is_absolute()
+        or _SHA.fullmatch(str(value.get("submission_journal_file_sha256"))) is None
         or _SHA.fullmatch(str(value.get("runtime_bundle_sha256"))) is None
         or not isinstance(api, dict)
         or set(api) != {"base_url", "run_id", "run_name"}
@@ -765,31 +880,95 @@ def validate_submission_binding(
         bundle, projection = _request_projection(
             plan, reopened_request, value["source_commit"], Path(__file__).resolve().parents[1]
         )
+        journal, journal_file_sha256 = _submission_journal(
+            Path(value["submission_journal_path"]), reopened_request
+        )
         if (
             value["runtime_bundle_sha256"].removeprefix("sha256:") != bundle
             or projection != request
+            or value["submission_journal_file_sha256"].removeprefix("sha256:")
+            != journal_file_sha256
+            or journal[1]["job_id"] != api["run_id"]
+            or journal[1]["name"] != api["run_name"]
+            or journal[1]["created_at"] != value["submitted_at"]
         ):
             raise ValueError("observer runtime bundle changed")
     return {"request_sha256": value["observer_request_sha256"], "api": api}
+
+
+def start_capture_intent(
+    plan: dict[str, Any],
+    request: dict[str, Any],
+    *,
+    namespace_uid: str,
+    started_at: object,
+    directory: Path,
+    kube_context: str,
+) -> dict[str, Any]:
+    """Commit the exact watch target before the single Jobs API POST."""
+    from . import miles_event_evidence as events
+    from .miles_acceptance import NAMESPACE, NAMESPACE_UID, _time, _uuid
+
+    _validate_plan(plan, check_files=False, require_current_runtime=False)
+    if (
+        request != job_request(plan)
+        or kube_context != events.DEV_KUBE_CONTEXT
+        or namespace_uid != NAMESPACE_UID
+    ):
+        raise ValueError("observer capture intent differs from exact dev3 request")
+    _time(started_at, "observer capture-intent start")
+    namespace = _uuid(namespace_uid, "observer namespace UID")
+    directory.mkdir(parents=True, mode=0o700, exist_ok=False)
+    return _write(
+        directory / "CAPTURE_INTENT.json",
+        {
+            "schema": CAPTURE_INTENT_SCHEMA,
+            "status": "watch_starting_before_post",
+            "observer_plan_sha256": "sha256:" + digest(plan),
+            "observer_request_sha256": "sha256:" + digest(request),
+            "requested_name": plan["run_name"],
+            "api_base_url": API_URLS["dev"],
+            "kube_context": kube_context,
+            "namespace": NAMESPACE,
+            "namespace_uid": namespace,
+            "started_at": started_at,
+            "private_logs_included": False,
+            "metric_values_included": False,
+            "task_content_included": False,
+        },
+    )
 
 
 def start_capture(
     plan: dict[str, Any],
     submission: dict[str, Any],
     *,
-    namespace_uid: str,
-    started_at: object,
-    directory: Path,
+    intent_path: Path,
 ) -> dict[str, Any]:
-    """Start the UID event journal before observer admission."""
+    """Bind an already-running pre-POST watcher to the returned API identity."""
     from . import miles_event_evidence as events
-    from .miles_acceptance import _time, _uuid
+    from .miles_acceptance import _time
 
     _validate_plan(plan, check_files=False, require_current_runtime=False)
     submitted = validate_submission_binding(submission, plan, check_files=False)
-    _time(started_at, "observer capture start")
-    namespace = _uuid(namespace_uid, "observer namespace UID")
-    directory.mkdir(parents=True, mode=0o700, exist_ok=False)
+    intent, intent_file_sha256 = _read(intent_path, CAPTURE_INTENT_SCHEMA)
+    directory = intent_path.parent
+    if (
+        set(intent) != _CAPTURE_INTENT_FIELDS
+        or intent.get("status") != "watch_starting_before_post"
+        or intent.get("observer_plan_sha256", "").removeprefix("sha256:") != digest(plan)
+        or intent.get("observer_request_sha256") != submitted["request_sha256"]
+        or intent.get("requested_name") != plan["run_name"]
+        or intent.get("api_base_url") != submitted["api"]["base_url"]
+        or intent.get("kube_context") != events.DEV_KUBE_CONTEXT
+        or intent.get("namespace") != "fleet-train-jobs"
+        or intent.get("private_logs_included") is not False
+        or intent.get("metric_values_included") is not False
+        or intent.get("task_content_included") is not False
+        or _time(intent.get("started_at"), "observer capture start")
+        > _time(submission.get("submitted_at"), "observer submission time")
+    ):
+        raise ValueError("observer watcher was not committed before its Jobs API POST")
     return _write(
         directory / "STARTED.json",
         {
@@ -801,9 +980,11 @@ def start_capture(
             "api_run_id": submitted["api"]["run_id"],
             "api_run_name": submitted["api"]["run_name"],
             "cluster": "dev",
-            "namespace": "fleet-train-jobs",
-            "namespace_uid": namespace,
-            "started_at": started_at,
+            "kube_context": intent["kube_context"],
+            "namespace": intent["namespace"],
+            "namespace_uid": intent["namespace_uid"],
+            "started_at": intent["started_at"],
+            "capture_intent": _reference(intent_path, intent, intent_file_sha256),
             "private_logs_included": False,
             "metric_values_included": False,
             "task_content_included": False,
@@ -825,11 +1006,20 @@ def _controller_body(
     submitted = validate_submission_binding(submission, plan, check_files=True)
     start_path = directory / "STARTED.json"
     start, start_file_sha256 = events._read(start_path, events.START_SCHEMA)
+    intent_ref = start.get("capture_intent")
+    if not isinstance(intent_ref, dict) or set(intent_ref) != _REFERENCE_FIELDS:
+        raise ValueError("policy observer event capture omitted its pre-POST intent")
+    intent, intent_file_sha256 = _read(Path(intent_ref["path"]), CAPTURE_INTENT_SCHEMA)
     if (
         start["source_plan_sha256"].removeprefix("sha256:") != digest(plan)
         or start["source_request_sha256"] != submitted["request_sha256"]
         or start["api_run_id"] != submitted["api"]["run_id"]
         or start["api_run_name"] != submitted["api"]["run_name"]
+        or start.get("kube_context") != intent.get("kube_context")
+        or start.get("started_at") != intent.get("started_at")
+        or intent_file_sha256 != intent_ref["file_sha256"].removeprefix("sha256:")
+        or intent["sha256"].removeprefix("sha256:")
+        != intent_ref["receipt_sha256"].removeprefix("sha256:")
         or api_status != "SUCCEEDED"
     ):
         raise ValueError("policy observer event capture differs from its API run")
@@ -965,6 +1155,7 @@ def _controller_body(
             "total_gpus": WORLD_SIZE,
         },
         "event_journal": {
+            "intent": intent_ref,
             "start": _reference(start_path, start, start_file_sha256),
             "events": [
                 _reference(path, value, file_sha256)
@@ -1049,7 +1240,9 @@ def validate_controller_observation(
             "total_gpus": WORLD_SIZE,
         }
         or not isinstance(journal, dict)
-        or set(journal) != {"start", "events"}
+        or set(journal) != {"intent", "start", "events"}
+        or not isinstance(journal.get("intent"), dict)
+        or set(journal["intent"]) != _REFERENCE_FIELDS
         or not isinstance(journal.get("start"), dict)
         or set(journal["start"]) != _REFERENCE_FIELDS
         or not isinstance(journal.get("events"), list)
@@ -1117,6 +1310,180 @@ def compile_controller(
     return _write(output, body)
 
 
+def collect_release_query(
+    plan: dict[str, Any],
+    submission: dict[str, Any],
+    *,
+    controller_path: Path,
+    jobs: Any,
+    output: Path,
+    run_command: Any = subprocess.run,
+    clock: Any = time.time,
+) -> dict[str, Any]:
+    """Read exact dev/API identities after TTL cleanup; never trust booleans."""
+    from . import miles_event_evidence as events
+    from .miles_acceptance import NAMESPACE, NAMESPACE_UID
+
+    controller, _ = _read(controller_path, CONTROLLER_SCHEMA)
+    validate_controller_observation(controller, plan, submission)
+    submitted = validate_submission_binding(submission, plan, check_files=True)
+
+    def get(resource: str, name: str, *, namespace: bool = True) -> dict[str, Any] | None:
+        command = ["kubectl", "--context", events.DEV_KUBE_CONTEXT, "get", resource, name]
+        if namespace:
+            command.extend(("--namespace", NAMESPACE, "--ignore-not-found"))
+        command.extend(("--output", "json"))
+        process = run_command(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+        if process.returncode:
+            raise ValueError("exact dev Kubernetes release query failed")
+        payload = process.stdout
+        if not payload:
+            return None
+        try:
+            value = json.loads(payload)
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise ValueError("exact dev Kubernetes release query returned invalid JSON") from error
+        if not isinstance(value, dict):
+            raise ValueError("exact dev Kubernetes release query returned a non-object")
+        return value
+
+    namespace = get("namespace", NAMESPACE, namespace=False)
+    if (namespace or {}).get("metadata", {}).get("uid") != NAMESPACE_UID:
+        raise ValueError("release query is not bound to the exact dev3 namespace UID")
+    kube = controller["kubernetes"]
+    targets = {
+        "rayjob": ("rayjobs.ray.io", kube["rayjob"]["name"], kube["rayjob"]["uid"]),
+        "workload": (
+            "workloads.kueue.x-k8s.io",
+            kube["workload"]["name"],
+            kube["workload"]["uid"],
+        ),
+        "raycluster": (
+            "rayclusters.ray.io",
+            kube["raycluster"]["name"],
+            kube["raycluster"]["uid"],
+        ),
+        "pod": ("pods", kube["pods"][0]["name"], kube["pods"][0]["uid"]),
+    }
+    objects: dict[str, Any] = {}
+    for key, (resource, name, uid) in targets.items():
+        observed = get(resource, name)
+        metadata = observed.get("metadata", {}) if observed else {}
+        observed_uid = metadata.get("uid") if observed else None
+        if observed and (
+            metadata.get("namespace") != NAMESPACE
+            or metadata.get("name") != name
+            or observed_uid != uid
+        ):
+            raise ValueError("release query found a reused or mismatched lifecycle identity")
+        objects[key] = {
+            "resource": resource,
+            "name": name,
+            "expected_uid": uid,
+            "present": observed is not None,
+            "observed_uid": observed_uid,
+        }
+    api = jobs.status(submitted["api"]["run_name"])
+    if (
+        not isinstance(api, dict)
+        or api.get("name") != submitted["api"]["run_name"]
+        or api.get("job_id") != submitted["api"]["run_id"]
+        or api.get("status") != "SUCCEEDED"
+    ):
+        raise ValueError("Jobs API does not report exact observer success at release query")
+    if any(row["present"] for row in objects.values()):
+        raise ValueError("observer lifecycle allocation is still present")
+    return _write(
+        output,
+        {
+            "schema": RELEASE_QUERY_SCHEMA,
+            "status": "released",
+            "observer_plan_sha256": "sha256:" + digest(plan),
+            "observer_request_sha256": submitted["request_sha256"],
+            "controller_observation_sha256": controller["sha256"],
+            "api": {
+                "base_url": submitted["api"]["base_url"],
+                "run_id": api["job_id"],
+                "run_name": api["name"],
+                "status": api["status"],
+            },
+            "kubernetes": {
+                "context": events.DEV_KUBE_CONTEXT,
+                "namespace": NAMESPACE,
+                "namespace_uid": NAMESPACE_UID,
+                "objects": objects,
+                "quota_reservation_present": False,
+            },
+            "active_gpus": 0,
+            "observed_at": clock(),
+            "private_logs_included": False,
+            "metric_values_included": False,
+            "task_content_included": False,
+        },
+    )
+
+
+def validate_release_query(
+    value: dict[str, Any],
+    plan: dict[str, Any],
+    submission: dict[str, Any],
+    controller: dict[str, Any],
+) -> None:
+    from . import miles_event_evidence as events
+    from .miles_acceptance import NAMESPACE, NAMESPACE_UID, _time
+
+    sealed(value, RELEASE_QUERY_SCHEMA)
+    submitted = validate_submission_binding(submission, plan, check_files=False)
+    kube = value.get("kubernetes")
+    objects = kube.get("objects") if isinstance(kube, dict) else None
+    controller_kube = controller["kubernetes"]
+    expected = {
+        "rayjob": ("rayjobs.ray.io", controller_kube["rayjob"]),
+        "workload": ("workloads.kueue.x-k8s.io", controller_kube["workload"]),
+        "raycluster": ("rayclusters.ray.io", controller_kube["raycluster"]),
+        "pod": ("pods", controller_kube["pods"][0]),
+    }
+    if (
+        set(value) != _RELEASE_QUERY_FIELDS
+        or value.get("status") != "released"
+        or value.get("observer_plan_sha256", "").removeprefix("sha256:") != digest(plan)
+        or value.get("observer_request_sha256") != submitted["request_sha256"]
+        or value.get("controller_observation_sha256") != controller["sha256"]
+        or value.get("api")
+        != {**submitted["api"], "status": "SUCCEEDED"}
+        or not isinstance(kube, dict)
+        or set(kube)
+        != {"context", "namespace", "namespace_uid", "objects", "quota_reservation_present"}
+        or kube.get("context") != events.DEV_KUBE_CONTEXT
+        or kube.get("namespace") != NAMESPACE
+        or kube.get("namespace_uid") != NAMESPACE_UID
+        or kube.get("quota_reservation_present") is not False
+        or not isinstance(objects, dict)
+        or set(objects) != set(expected)
+        or value.get("active_gpus") != 0
+        or value.get("private_logs_included") is not False
+        or value.get("metric_values_included") is not False
+        or value.get("task_content_included") is not False
+        or _time(value.get("observed_at"), "policy observer release query")
+        < _time(controller["observed_at"], "policy observer terminal evidence")
+    ):
+        raise ValueError("policy observer release query is incomplete")
+    for key, (resource, identity) in expected.items():
+        if objects[key] != {
+            "resource": resource,
+            "name": identity["name"],
+            "expected_uid": identity["uid"],
+            "present": False,
+            "observed_uid": None,
+        }:
+            raise ValueError("policy observer release query did not prove exact absence")
+
+
 def validate_release_observation(
     value: dict[str, Any],
     plan: dict[str, Any],
@@ -1135,7 +1502,7 @@ def validate_release_observation(
         != {
             "schema", "status", "observer_plan_sha256", "observer_request_sha256",
             "controller_observation_sha256", "controller_observation_file_sha256",
-            "api_status", "controller_status", "identities", "raycluster_present",
+            "release_query", "api_status", "controller_status", "identities", "raycluster_present",
             "rayjob_present", "workload_present", "quota_reservation_present",
             "gpu_pods_present", "active_gpus", "gpu_release_proven", "observed_at", "sha256",
         }
@@ -1145,6 +1512,8 @@ def validate_release_observation(
         or value.get("controller_observation_sha256") != controller["sha256"]
         or value.get("controller_observation_file_sha256", "").removeprefix("sha256:")
         != controller_file_sha256.removeprefix("sha256:")
+        or not isinstance(value.get("release_query"), dict)
+        or set(value["release_query"]) != _REFERENCE_FIELDS
         or value.get("api_status") != "SUCCEEDED"
         or value.get("controller_status") != "SUCCEEDED"
         or value.get("identities")
@@ -1167,6 +1536,16 @@ def validate_release_observation(
         < _time(controller["observed_at"], "policy observer terminal evidence")
     ):
         raise ValueError("policy observer external release is incomplete")
+    query, query_file_sha256 = _read(
+        Path(value["release_query"]["path"]), RELEASE_QUERY_SCHEMA
+    )
+    if (
+        query_file_sha256 != value["release_query"]["file_sha256"].removeprefix("sha256:")
+        or query["sha256"].removeprefix("sha256:")
+        != value["release_query"]["receipt_sha256"].removeprefix("sha256:")
+    ):
+        raise ValueError("policy observer release query reference changed")
+    validate_release_query(query, plan, submission, controller)
 
 
 def compile_release(
@@ -1174,21 +1553,12 @@ def compile_release(
     submission: dict[str, Any],
     *,
     controller_path: Path,
-    absence: Mapping[str, Any],
-    observed_at: object,
+    release_query_path: Path,
     output: Path,
 ) -> dict[str, Any]:
     controller, controller_file_sha256 = _read(controller_path, CONTROLLER_SCHEMA)
-    expected_absence = {
-        "raycluster_present": False,
-        "rayjob_present": False,
-        "workload_present": False,
-        "quota_reservation_present": False,
-        "gpu_pods_present": False,
-        "active_gpus": 0,
-    }
-    if dict(absence) != expected_absence:
-        raise ValueError("policy observer Kubernetes absence is incomplete")
+    query, query_file_sha256 = _read(release_query_path, RELEASE_QUERY_SCHEMA)
+    validate_release_query(query, plan, submission, controller)
     kube, api = controller["kubernetes"], controller["api"]
     body = {
         "schema": RELEASE_SCHEMA,
@@ -1199,6 +1569,7 @@ def compile_release(
         )["request_sha256"],
         "controller_observation_sha256": controller["sha256"],
         "controller_observation_file_sha256": "sha256:" + controller_file_sha256,
+        "release_query": _reference(release_query_path, query, query_file_sha256),
         "api_status": "SUCCEEDED",
         "controller_status": "SUCCEEDED",
         "identities": {
@@ -1209,9 +1580,14 @@ def compile_release(
             "raycluster_uid": kube["raycluster"]["uid"],
             "pod_uids": [kube["pods"][0]["uid"]],
         },
-        **expected_absence,
+        "raycluster_present": False,
+        "rayjob_present": False,
+        "workload_present": False,
+        "quota_reservation_present": False,
+        "gpu_pods_present": False,
+        "active_gpus": 0,
         "gpu_release_proven": True,
-        "observed_at": observed_at,
+        "observed_at": query["observed_at"],
     }
     validate_release_observation(
         {**body, "sha256": digest(body)},
@@ -1265,53 +1641,289 @@ def native_args(plan: dict[str, Any], *, trained: bool):
     return _parse_args(source, root, trained=trained)
 
 
-def _base_probe(self) -> dict[str, Any]:
+def _state_probe(model: Any, optimizer: Any, scheduler: Any) -> dict[str, Any]:
+    return {
+        "model": _model_probe(model),
+        "optimizer": _optimizer_probe(optimizer),
+        "scheduler": _scheduler_probe(scheduler),
+        "rng_sha256": _rng_probe(),
+    }
+
+
+def _fill_tensors(value: Any, scalar: float, seen: set[int] | None = None) -> int:
+    """Overwrite tensor leaves in an optimizer state without changing its shape."""
+    import torch
+
+    seen = seen if seen is not None else set()
+    if torch.is_tensor(value):
+        with torch.no_grad():
+            value.fill_(scalar)
+        return 1
+    if value is None or isinstance(value, (bool, int, float, str, bytes)):
+        return 0
+    if id(value) in seen:
+        return 0
+    seen.add(id(value))
+    if isinstance(value, Mapping):
+        return sum(_fill_tensors(item, scalar, seen) for item in value.values())
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return sum(_fill_tensors(item, scalar, seen) for item in value)
+    return 0
+
+
+def _optimizer_sentinel(optimizer: Any, marker: int) -> None:
+    pending, seen, groups = [optimizer], set(), 0
+    scalar = marker / 1000.0
+    while pending:
+        current = pending.pop()
+        if current is None or id(current) in seen:
+            continue
+        seen.add(id(current))
+        _fill_tensors(getattr(current, "state", None), scalar)
+        param_groups = getattr(current, "param_groups", None)
+        if isinstance(param_groups, Sequence):
+            for group in param_groups:
+                if isinstance(group, dict) and "lr" in group:
+                    group["lr"] = scalar
+                    groups += 1
+        for attr in ("optimizer", "optimizers", "chained_optimizers"):
+            child = getattr(current, attr, None)
+            if isinstance(child, Sequence):
+                pending.extend(child)
+            elif child is not None:
+                pending.append(child)
+    if groups < 1:
+        raise ValueError("optimizer exposes no mutable parameter-group sentinel")
+
+
+def _scheduler_sentinel(scheduler: Any, marker: int) -> None:
+    state = copy.deepcopy(scheduler.state_dict())
+    changed = 0
+
+    def replace(value: Any, key: str = "") -> Any:
+        nonlocal changed
+        if isinstance(value, Mapping):
+            return {name: replace(item, str(name)) for name, item in value.items()}
+        if isinstance(value, list):
+            return [replace(item, key) for item in value]
+        if (
+            isinstance(value, numbers.Real)
+            and not isinstance(value, bool)
+            and any(token in key.lower() for token in ("step", "sample", "consum"))
+        ):
+            changed += 1
+            return type(value)(marker)
+        return value
+
+    scheduler.load_state_dict(replace(state))
+    if changed < 1:
+        raise ValueError("scheduler exposes no progress-counter sentinel")
+
+
+def _rng_sentinel(marker: int) -> None:
+    import torch
+
+    random.seed(marker)
+    with suppress(ImportError):
+        import numpy
+
+        numpy.random.seed(marker)
+    torch.manual_seed(marker)
+    torch.cuda.manual_seed_all(marker)
+
+
+def _install_sentinel(model: Any, optimizer: Any, scheduler: Any, marker: int) -> dict[str, Any]:
+    import torch
+
+    _scheduler_sentinel(scheduler, marker)
+    _optimizer_sentinel(optimizer, marker)
+    with torch.no_grad():
+        tensors = 0
+        for chunk in model:
+            for parameter in chunk.parameters():
+                parameter.fill_(marker / 1000.0)
+                tensors += 1
+    if tensors < 1:
+        raise ValueError("model exposes no policy tensor sentinel")
+    _rng_sentinel(marker)
+    return _state_probe(model, optimizer, scheduler)
+
+
+def _instrumented_init(self, *args: Any, **kwargs: Any) -> Any:
+    """Capture commitments immediately around Miles' actual checkpoint loader."""
+    from miles.backends.megatron_utils import model as model_module
+
+    marker = int(type(self)._cyber_sentinel_marker)
+    original_load = model_module.load_checkpoint
+    observations: list[dict[str, Any]] = []
+
+    def observed_load(model: Any, optimizer: Any, scheduler: Any, *a: Any, **kw: Any) -> Any:
+        if observations:
+            raise ValueError("Miles invoked checkpoint load more than once")
+        preload = _install_sentinel(model, optimizer, scheduler, marker)
+        result = original_load(model, optimizer, scheduler, *a, **kw)
+        observations.append(
+            {
+                "marker": marker,
+                "load_calls": 1,
+                "preload": preload,
+                "restored": _state_probe(model, optimizer, scheduler),
+            }
+        )
+        return result
+
+    model_module.load_checkpoint = observed_load
+    try:
+        result = super(type(self), self).init(*args, **kwargs)
+    finally:
+        model_module.load_checkpoint = original_load
+    if len(observations) != 1:
+        raise ValueError("Miles did not invoke exactly one instrumented checkpoint load")
+    self._cyber_restore_observation = observations[0]
+    return result
+
+
+def _prediction_probe(self) -> dict[str, Any]:
+    """One fixed, task-free greedy-order probe over the restored native policy."""
+    import torch
+    from megatron.core import parallel_state
+    from megatron.core.tensor_parallel.mappings import (
+        gather_from_tensor_model_parallel_region,
+    )
+
+    if len(self.model) != 1:
+        raise ValueError("fixed prediction probe requires one local model chunk")
+    model = self.model[0]
+    previous_training = bool(model.training)
+    model.eval()
+    tokens = torch.tensor(
+        [PREDICTION_INPUT_IDS],
+        dtype=torch.long,
+        device=torch.cuda.current_device(),
+    )
+    try:
+        with torch.no_grad():
+            output = model(
+                input_ids=tokens,
+                position_ids=None,
+                attention_mask=None,
+                labels=None,
+                packed_seq_params=None,
+                loss_mask=None,
+                fp32_output=True,
+            )
+            if not torch.is_tensor(output) or output.ndim != 3:
+                raise ValueError("native fixed prediction probe returned an unexpected shape")
+            if parallel_state.get_tensor_model_parallel_world_size() > 1:
+                output = gather_from_tensor_model_parallel_region(output)
+            if output.shape[0] != 1 or output.shape[1] != len(PREDICTION_INPUT_IDS):
+                raise ValueError("native fixed prediction probe batch/sequence shape changed")
+            values, indices = torch.topk(
+                output[0, -1].float(),
+                k=PREDICTION_TOP_K + 1,
+                largest=True,
+                sorted=True,
+            )
+            margin_satisfied = bool(
+                (values[PREDICTION_TOP_K - 1] - values[PREDICTION_TOP_K]).item()
+                >= PREDICTION_MARGIN
+            )
+            predictions = [int(item) for item in indices[:PREDICTION_TOP_K].cpu().tolist()]
+    finally:
+        model.train(previous_training)
+    if not margin_satisfied:
+        raise ValueError("native fixed prediction top-k boundary is not numerically robust")
+    return {
+        "schema": PREDICTION_SCHEMA,
+        "probe_id": PREDICTION_PROBE_ID,
+        "input_ids_sha256": "sha256:" + digest(list(PREDICTION_INPUT_IDS)),
+        "sequence_length": len(PREDICTION_INPUT_IDS),
+        "top_k": PREDICTION_TOP_K,
+        "selection_margin_threshold": PREDICTION_MARGIN,
+        "selection_margin_satisfied": True,
+        "prediction_sha256": "sha256:" + digest(predictions),
+        "logits_included": False,
+        "task_content_included": False,
+        "benchmark_content_included": False,
+    }
+
+
+def validate_prediction_probe(value: object) -> dict[str, Any]:
+    fields = {
+        "schema", "probe_id", "input_ids_sha256", "sequence_length", "top_k",
+        "selection_margin_threshold", "selection_margin_satisfied", "prediction_sha256",
+        "logits_included", "task_content_included", "benchmark_content_included",
+    }
+    if (
+        not isinstance(value, dict)
+        or set(value) != fields
+        or value.get("schema") != PREDICTION_SCHEMA
+        or value.get("probe_id") != PREDICTION_PROBE_ID
+        or value.get("input_ids_sha256")
+        != "sha256:" + digest(list(PREDICTION_INPUT_IDS))
+        or value.get("sequence_length") != len(PREDICTION_INPUT_IDS)
+        or value.get("top_k") != PREDICTION_TOP_K
+        or value.get("selection_margin_threshold") != PREDICTION_MARGIN
+        or value.get("selection_margin_satisfied") is not True
+        or _SHA.fullmatch(str(value.get("prediction_sha256"))) is None
+        or value.get("logits_included") is not False
+        or value.get("task_content_included") is not False
+        or value.get("benchmark_content_included") is not False
+    ):
+        raise ValueError("fixed non-task prediction probe is incomplete")
+    return value
+
+
+def _restore_probe(self) -> dict[str, Any]:
     import torch.distributed as dist
 
     dist.barrier()
+    first = _state_probe(self.model, self.optimizer, self.opt_param_scheduler)
+    second = _state_probe(self.model, self.optimizer, self.opt_param_scheduler)
+    if first != second:
+        raise ValueError("state changed during the zero-update observer")
+    prediction = None
+    if self._cyber_restore_observation["marker"] == RELOAD_SENTINEL:
+        prediction = _prediction_probe(self)
+        if first != _state_probe(self.model, self.optimizer, self.opt_param_scheduler):
+            raise ValueError("fixed prediction probe changed restored training state")
+    observation = {**self._cyber_restore_observation, "live": first}
     result = {
         "rank": dist.get_rank(),
         "world_size": dist.get_world_size(),
-        "model": _model_probe(self.model),
+        "load": observation,
+        "prediction_probe": prediction,
     }
     dist.barrier()
     return result
 
 
-def _trained_probe(self) -> dict[str, Any]:
-    import torch.distributed as dist
-
-    dist.barrier()
-    first = {
-        "rank": dist.get_rank(),
-        "world_size": dist.get_world_size(),
-        "model": _model_probe(self.model),
-        "optimizer": _optimizer_probe(self.optimizer),
-        "scheduler": _scheduler_probe(self.opt_param_scheduler),
-        "rng_sha256": _rng_probe(),
-    }
-    dist.barrier()
-    second = {
-        "rank": dist.get_rank(),
-        "world_size": dist.get_world_size(),
-        "model": _model_probe(self.model),
-        "optimizer": _optimizer_probe(self.optimizer),
-        "scheduler": _scheduler_probe(self.opt_param_scheduler),
-        "rng_sha256": _rng_probe(),
-    }
-    dist.barrier()
-    if first != second:
-        raise ValueError("trained state changed during the zero-update observer")
-    return first
+def _remove_group(ray: Any, placement_group: Any) -> None:
+    ray.util.remove_placement_group(placement_group)
+    deadline = time.monotonic() + 60
+    while time.monotonic() < deadline:
+        state = ray.util.placement_group_table(placement_group)
+        if not state or state.get("state") == "REMOVED":
+            return
+        time.sleep(0.25)
+    raise TimeoutError("Miles placement group did not release before the next restore")
 
 
-async def _probe_group(args, method_name: str, method) -> tuple[list[Any], list[dict[str, Any]]]:
+async def _probe_group(args, marker: int) -> tuple[list[Any], list[dict[str, Any]]]:
     import ray
     from miles.backends.megatron_utils import actor as actor_module
     from miles.ray.placement_group import allocate_train_group, create_placement_groups
 
     original = actor_module.MegatronTrainRayActor
-    actor = type("CyberMilesPolicyObserverActor", (original,), {method_name: method})
+    actor = type(
+        "CyberMilesPolicyObserverActor",
+        (original,),
+        {
+            "init": _instrumented_init,
+            "cyber_restore_probe": _restore_probe,
+            "_cyber_sentinel_marker": marker,
+        },
+    )
     pgs = group = None
     try:
         actor_module.MegatronTrainRayActor = actor
@@ -1327,7 +1939,7 @@ async def _probe_group(args, method_name: str, method) -> tuple[list[Any], list[
         )
         actor_module.MegatronTrainRayActor = original
         start_ids = await group.init()
-        rows = await group._broadcast(method_name)
+        rows = await group._broadcast("cyber_restore_probe")
         return list(start_ids), list(rows)
     finally:
         actor_module.MegatronTrainRayActor = original
@@ -1336,35 +1948,54 @@ async def _probe_group(args, method_name: str, method) -> tuple[list[Any], list[
                 with suppress(Exception):
                     ray.kill(handle, no_restart=True)
         if pgs is not None and pgs["actor"][0] is not None:
-            with suppress(Exception):
-                ray.util.remove_placement_group(pgs["actor"][0])
+            _remove_group(ray, pgs["actor"][0])
 
 
 def _rank_rows(
-    base: Sequence[dict[str, Any]], trained: Sequence[dict[str, Any]]
-) -> list[dict[str, Any]]:
-    if len(base) != WORLD_SIZE or len(trained) != WORLD_SIZE:
+    base: Sequence[dict[str, Any]],
+    trained_reference: Sequence[dict[str, Any]],
+    trained_reload: Sequence[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    if any(len(rows) != WORLD_SIZE for rows in (base, trained_reference, trained_reload)):
         raise ValueError("policy observer did not receive all ranks")
     base = sorted(base, key=lambda row: row["rank"])
-    trained = sorted(trained, key=lambda row: row["rank"])
-    if [row["rank"] for row in base] != list(range(WORLD_SIZE)) or [
-        row["rank"] for row in trained
-    ] != list(range(WORLD_SIZE)):
+    trained_reference = sorted(trained_reference, key=lambda row: row["rank"])
+    trained_reload = sorted(trained_reload, key=lambda row: row["rank"])
+    if any(
+        [row["rank"] for row in rows] != list(range(WORLD_SIZE))
+        for rows in (base, trained_reference, trained_reload)
+    ):
         raise ValueError("policy observer rank identity mismatch")
     result = []
-    for rank, (before, after) in enumerate(zip(base, trained, strict=True)):
-        base_model, trained_model = before["model"], after["model"]
+    predictions = []
+    for rank, (before, reference, reloaded) in enumerate(
+        zip(base, trained_reference, trained_reload, strict=True)
+    ):
+        base_load, reference_load, reload_load = (
+            before["load"],
+            reference["load"],
+            reloaded["load"],
+        )
+        if (
+            before.get("prediction_probe") is not None
+            or reference.get("prediction_probe") is not None
+        ):
+            raise ValueError("fixed prediction probe ran on more than one restore")
+        predictions.append(validate_prediction_probe(reloaded.get("prediction_probe")))
+        base_model = base_load["restored"]["model"]
+        trained_model = reference_load["restored"]["model"]
         if (
             before["world_size"] != WORLD_SIZE
-            or after["world_size"] != WORLD_SIZE
+            or reference["world_size"] != WORLD_SIZE
+            or reloaded["world_size"] != WORLD_SIZE
             or base_model["tensors"] < 1
             or base_model["local_numel"] < 1
             or trained_model["tensors"] != base_model["tensors"]
             or trained_model["local_numel"] != base_model["local_numel"]
             or trained_model["structure_sha256"] != base_model["structure_sha256"]
-            or after["optimizer"]["state_entries"] < 1
-            or after["optimizer"]["parameter_groups"] < 1
-            or after["scheduler"]["positive_progress_counters"] < 1
+            or reference_load["restored"]["optimizer"]["state_entries"] < 1
+            or reference_load["restored"]["optimizer"]["parameter_groups"] < 1
+            or reference_load["restored"]["scheduler"]["positive_progress_counters"] < 1
         ):
             raise ValueError("policy observer found incomplete or structurally different state")
         changed = base_model["value_sha256"] != trained_model["value_sha256"]
@@ -1373,17 +2004,15 @@ def _rank_rows(
                 "rank": rank,
                 "policy_tensor_count": base_model["tensors"],
                 "local_policy_numel": base_model["local_numel"],
-                "base_policy_structure_sha256": "sha256:" + base_model["structure_sha256"],
-                "trained_policy_structure_sha256": "sha256:" + trained_model["structure_sha256"],
-                "base_policy_value_sha256": "sha256:" + base_model["value_sha256"],
-                "trained_policy_value_sha256": "sha256:" + trained_model["value_sha256"],
-                "trained_optimizer_value_sha256": "sha256:" + after["optimizer"]["value_sha256"],
-                "trained_scheduler_value_sha256": "sha256:" + after["scheduler"]["value_sha256"],
-                "trained_rng_value_sha256": "sha256:" + after["rng_sha256"],
+                "base": base_load,
+                "trained_reference": reference_load,
+                "trained_reload": reload_load,
                 "policy_changed": changed,
             }
         )
-    return result
+    if any(value != predictions[0] for value in predictions[1:]):
+        raise ValueError("fixed prediction probe differs across native ranks")
+    return result, predictions[0]
 
 
 def validate_result(plan: dict[str, Any], value: dict[str, Any]) -> list[int]:
@@ -1403,8 +2032,12 @@ def validate_result(plan: dict[str, Any], value: dict[str, Any]) -> list[int]:
         or value.get("restored_next_rollout_id")
         != plan["trained_checkpoint"]["next_rollout_id"]
         or value.get("checkpoint_state_commitment_method") != RANK_STATE_COMMITMENT_METHOD
+        or value.get("restore_method") != RESTORE_METHOD
+        or value.get("trained_restore_count") != 2
+        or validate_prediction_probe(value.get("prediction_probe"))
+        != value.get("prediction_probe")
         or value.get("state_stable_across_zero_updates") is not True
-        or value.get("work_executed") != _ZERO_WORK
+        or value.get("work_executed") != _OBSERVER_WORK
         or value.get("base_checkpoint_unchanged") is not True
         or value.get("trained_checkpoint_unchanged") is not True
         or _time(value.get("completed_at"), "policy observer completion") <= 0
@@ -1415,6 +2048,80 @@ def validate_result(plan: dict[str, Any], value: dict[str, Any]) -> list[int]:
         or len(rows) != WORLD_SIZE
     ):
         raise ValueError("policy observer result is incomplete or mismatched")
+
+    def state(commitment: object, label: str) -> dict[str, Any]:
+        if not isinstance(commitment, dict) or set(commitment) != _STATE_FIELDS:
+            raise ValueError(f"{label} state fields changed")
+        model = commitment.get("model")
+        optimizer = commitment.get("optimizer")
+        scheduler = commitment.get("scheduler")
+        if (
+            not isinstance(model, dict)
+            or set(model)
+            != {"tensors", "local_numel", "structure_sha256", "value_sha256"}
+            or type(model.get("tensors")) is not int
+            or model["tensors"] < 1
+            or type(model.get("local_numel")) is not int
+            or model["local_numel"] < 1
+            or not isinstance(optimizer, dict)
+            or set(optimizer)
+            != {
+                "objects",
+                "state_entries",
+                "parameter_groups",
+                "structure_sha256",
+                "value_sha256",
+            }
+            or any(type(optimizer.get(key)) is not int or optimizer[key] < 0 for key in (
+                "objects", "state_entries", "parameter_groups"
+            ))
+            or not isinstance(scheduler, dict)
+            or set(scheduler)
+            != {"positive_progress_counters", "structure_sha256", "value_sha256"}
+            or type(scheduler.get("positive_progress_counters")) is not int
+            or scheduler["positive_progress_counters"] < 0
+            or any(
+                _SHA.fullmatch(str(item)) is None
+                for item in (
+                    model.get("structure_sha256"),
+                    model.get("value_sha256"),
+                    optimizer.get("structure_sha256"),
+                    optimizer.get("value_sha256"),
+                    scheduler.get("structure_sha256"),
+                    scheduler.get("value_sha256"),
+                    commitment.get("rng_sha256"),
+                )
+            )
+        ):
+            raise ValueError(f"{label} state commitment is incomplete")
+        return commitment
+
+    def load(value: object, marker: int, label: str, *, all_components: bool) -> dict[str, Any]:
+        if (
+            not isinstance(value, dict)
+            or set(value) != _LOAD_FIELDS
+            or value.get("marker") != marker
+            or value.get("load_calls") != 1
+        ):
+            raise ValueError(f"{label} load evidence is incomplete")
+        preload = state(value.get("preload"), label + " preload")
+        restored = state(value.get("restored"), label + " restored")
+        state(value.get("live"), label + " live")
+        keys = ("model", "optimizer", "scheduler") if all_components else ("model",)
+        if any(preload[key]["value_sha256"] == restored[key]["value_sha256"] for key in keys):
+            raise ValueError(f"{label} did not overwrite its preload sentinel")
+        if all_components and preload["rng_sha256"] == restored["rng_sha256"]:
+            raise ValueError(f"{label} did not restore RNG over its preload sentinel")
+        return value
+
+    def values(commitment: Mapping[str, Any]) -> tuple[str, str, str, str]:
+        return (
+            commitment["model"]["value_sha256"],
+            commitment["optimizer"]["value_sha256"],
+            commitment["scheduler"]["value_sha256"],
+            commitment["rng_sha256"],
+        )
+
     changed = []
     for rank, row in enumerate(rows):
         if (
@@ -1425,23 +2132,59 @@ def validate_result(plan: dict[str, Any], value: dict[str, Any]) -> list[int]:
             or row["policy_tensor_count"] < 1
             or type(row.get("local_policy_numel")) is not int
             or row["local_policy_numel"] < 1
-            or any(
-                _SHA.fullmatch(str(row.get(key))) is None
-                for key in (
-                    "base_policy_structure_sha256", "trained_policy_structure_sha256",
-                    "base_policy_value_sha256", "trained_policy_value_sha256",
-                    "trained_optimizer_value_sha256", "trained_scheduler_value_sha256",
-                    "trained_rng_value_sha256",
-                )
-            )
-            or row["base_policy_structure_sha256"] != row["trained_policy_structure_sha256"]
-            or row.get("policy_changed")
-            is not (row["base_policy_value_sha256"] != row["trained_policy_value_sha256"])
         ):
             raise ValueError("policy observer rank result is invalid")
+        base = load(row["base"], BASE_SENTINEL, "base", all_components=False)
+        reference = load(
+            row["trained_reference"],
+            REFERENCE_SENTINEL,
+            "trained reference",
+            all_components=True,
+        )
+        reloaded = load(
+            row["trained_reload"],
+            RELOAD_SENTINEL,
+            "trained reload",
+            all_components=True,
+        )
+        base_restored = base["restored"]
+        reference_preload = reference["preload"]
+        reference_restored = reference["restored"]
+        reload_preload = reloaded["preload"]
+        reload_restored = reloaded["restored"]
+        if (
+            values(reference_preload) == values(reload_preload)
+            or any(
+                before == after
+                for before, after in zip(
+                    values(reference_preload), values(reload_preload), strict=True
+                )
+            )
+            or reference_restored != reload_restored
+            or base_restored["model"]["structure_sha256"]
+            != reference_restored["model"]["structure_sha256"]
+            or reference_restored["model"]["tensors"] != row["policy_tensor_count"]
+            or reference_restored["model"]["local_numel"] != row["local_policy_numel"]
+            or reference_restored["optimizer"]["state_entries"] < 1
+            or reference_restored["optimizer"]["parameter_groups"] < 1
+            or reference_restored["scheduler"]["positive_progress_counters"] < 1
+            or any(
+                before == after
+                for before, after in zip(
+                    values(base_restored), values(reference_restored), strict=True
+                )
+            )
+        ):
+            raise ValueError("policy observer restore commitments are circular or unchanged")
+        policy_changed = (
+            base_restored["model"]["value_sha256"]
+            != reference_restored["model"]["value_sha256"]
+        )
+        if row.get("policy_changed") is not policy_changed:
+            raise ValueError("policy observer policy-delta marker is invalid")
         if row["policy_changed"]:
             changed.append(rank)
-    if value.get("changed_policy_ranks") != changed:
+    if value.get("changed_policy_ranks") != changed or changed != list(range(WORLD_SIZE)):
         raise ValueError("policy observer changed-rank summary mismatch")
     return changed
 
@@ -1510,6 +2253,7 @@ def _policy_body(
         "observer_release": _reference(release_path, release, release_file_sha256),
         "world_size": WORLD_SIZE,
         "comparison_method": COMPARISON_METHOD,
+        "prediction_probe": result["prediction_probe"],
         "ranks": result["ranks"],
         "changed_policy_ranks": changed,
         "policy_structure_matches": True,
@@ -1518,7 +2262,7 @@ def _policy_body(
         "rng_state_used_for_delta": False,
         "metadata_used_for_delta": False,
         "checkpoint_state_commitment_method": RANK_STATE_COMMITMENT_METHOD,
-        "observer_work": dict(_ZERO_WORK),
+        "observer_work": dict(_OBSERVER_WORK),
         "source_checkpoints_unchanged": True,
         "observer_external_gpu_release_verified": True,
         "reward_values_included": False,
@@ -1576,6 +2320,7 @@ def validate_policy_evidence(
         "trained_checkpoint_receipt_sha256", "observer_plan_sha256",
         "observer_submission", "observer_result", "observer_controller",
         "observer_release", "world_size", "comparison_method", "ranks",
+        "prediction_probe",
         "changed_policy_ranks", "policy_structure_matches",
         "optimizer_state_used_for_delta", "scheduler_state_used_for_delta",
         "rng_state_used_for_delta", "metadata_used_for_delta",
@@ -1593,6 +2338,8 @@ def validate_policy_evidence(
         or value.get("trained_checkpoint_receipt_sha256") != checkpoint.get("sha256")
         or value.get("world_size") != WORLD_SIZE
         or value.get("comparison_method") != COMPARISON_METHOD
+        or validate_prediction_probe(value.get("prediction_probe"))
+        != value.get("prediction_probe")
         or value.get("policy_structure_matches") is not True
         or value.get("optimizer_state_used_for_delta") is not False
         or value.get("scheduler_state_used_for_delta") is not False
@@ -1600,7 +2347,7 @@ def validate_policy_evidence(
         or value.get("metadata_used_for_delta") is not False
         or value.get("checkpoint_state_commitment_method")
         != RANK_STATE_COMMITMENT_METHOD
-        or value.get("observer_work") != _ZERO_WORK
+        or value.get("observer_work") != _OBSERVER_WORK
         or value.get("source_checkpoints_unchanged") is not True
         or value.get("observer_external_gpu_release_verified") is not True
         or value.get("reward_values_included") is not False
@@ -1665,19 +2412,22 @@ def _reopen_reference(
 
 
 def _trained_state_commitments(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
-    return [
-        {
-            "rank": rank,
-            "model_tensor_count": row["policy_tensor_count"],
-            "model_local_numel": row["local_policy_numel"],
-            "model_structure_sha256": row["trained_policy_structure_sha256"],
-            "model_value_sha256": row["trained_policy_value_sha256"],
-            "optimizer_value_sha256": row["trained_optimizer_value_sha256"],
-            "scheduler_value_sha256": row["trained_scheduler_value_sha256"],
-            "rng_value_sha256": row["trained_rng_value_sha256"],
-        }
-        for rank, row in enumerate(rows)
-    ]
+    result = []
+    for rank, row in enumerate(rows):
+        restored = row["trained_reload"]["restored"]
+        result.append(
+            {
+                "rank": rank,
+                "model_tensor_count": row["policy_tensor_count"],
+                "model_local_numel": row["local_policy_numel"],
+                "model_structure_sha256": restored["model"]["structure_sha256"],
+                "model_value_sha256": restored["model"]["value_sha256"],
+                "optimizer_value_sha256": restored["optimizer"]["value_sha256"],
+                "scheduler_value_sha256": restored["scheduler"]["value_sha256"],
+                "rng_value_sha256": restored["rng_sha256"],
+            }
+        )
+    return result
 
 
 def _observer_reload_body(terminal_path: Path) -> dict[str, Any]:
@@ -1775,6 +2525,7 @@ def _observer_reload_body(terminal_path: Path) -> dict[str, Any]:
         "restored_next_rollout_id": result["restored_next_rollout_id"],
         "rank_state_commitment_method": RANK_STATE_COMMITMENT_METHOD,
         "rank_state_commitments_sha256": "sha256:" + digest(commitments),
+        "prediction_probe": result["prediction_probe"],
         "all_rank_model_loaded": True,
         "all_rank_optimizer_loaded": True,
         "all_rank_scheduler_loaded": True,
@@ -1782,7 +2533,7 @@ def _observer_reload_body(terminal_path: Path) -> dict[str, Any]:
         "state_stable_across_zero_updates": True,
         "exact_checkpoint_payload_reopened_after_release": True,
         "source_checkpoint_unchanged_after_release": True,
-        "work_executed": dict(_ZERO_WORK),
+        "work_executed": dict(_OBSERVER_WORK),
         "observer_gpu_jobs": 1,
         "additional_reload_gpu_jobs": 0,
         "external_gpu_release_verified": True,
@@ -1821,6 +2572,8 @@ def validate_observer_reload_accepted(
         or value.get("world_size") != WORLD_SIZE
         or value.get("ranks") != list(range(WORLD_SIZE))
         or value.get("rank_state_commitment_method") != RANK_STATE_COMMITMENT_METHOD
+        or validate_prediction_probe(value.get("prediction_probe"))
+        != value.get("prediction_probe")
         or value.get("all_rank_model_loaded") is not True
         or value.get("all_rank_optimizer_loaded") is not True
         or value.get("all_rank_scheduler_loaded") is not True
@@ -1828,7 +2581,7 @@ def validate_observer_reload_accepted(
         or value.get("state_stable_across_zero_updates") is not True
         or value.get("exact_checkpoint_payload_reopened_after_release") is not True
         or value.get("source_checkpoint_unchanged_after_release") is not True
-        or value.get("work_executed") != _ZERO_WORK
+        or value.get("work_executed") != _OBSERVER_WORK
         or value.get("observer_gpu_jobs") != 1
         or value.get("additional_reload_gpu_jobs") != 0
         or value.get("external_gpu_release_verified") is not True
@@ -1861,6 +2614,7 @@ def validate_observer_reload_accepted(
         "rank_state_commitments_sha256": value[
             "rank_state_commitments_sha256"
         ],
+        "prediction_probe": value["prediction_probe"],
     }
 
 
@@ -1875,22 +2629,30 @@ def _native(plan: dict[str, Any]) -> dict[str, Any]:
         runtime_env={"env_vars": dict(_ENV)},
     )
     try:
-        _, base = asyncio.run(
-            _probe_group(native_args(plan, trained=False), "cyber_base_probe", _base_probe)
+        base_start, base = asyncio.run(
+            _probe_group(native_args(plan, trained=False), BASE_SENTINEL)
         )
-        trained_start, trained = asyncio.run(
-            _probe_group(native_args(plan, trained=True), "cyber_trained_probe", _trained_probe)
+        reference_start, trained_reference = asyncio.run(
+            _probe_group(native_args(plan, trained=True), REFERENCE_SENTINEL)
+        )
+        reload_start, trained_reload = asyncio.run(
+            _probe_group(native_args(plan, trained=True), RELOAD_SENTINEL)
         )
     finally:
         ray.shutdown()
-    if set(trained_start) != {plan["trained_checkpoint"]["next_rollout_id"]}:
+    if set(base_start) != {1}:
+        raise ValueError("base observer ranks restored the wrong rollout index")
+    if any(
+        set(start_ids) != {plan["trained_checkpoint"]["next_rollout_id"]}
+        for start_ids in (reference_start, reload_start)
+    ):
         raise ValueError("trained observer ranks restored the wrong rollout index")
     if (
         _verify_checkpoint(plan["trained_checkpoint"], hashes=True) != trained_before
         or _base_checkpoint(plan["source_plan"], hashes=True) != base_before
     ):
         raise ValueError("a source checkpoint changed during policy observation")
-    rows = _rank_rows(base, trained)
+    rows, prediction_probe = _rank_rows(base, trained_reference, trained_reload)
     return {
         "schema": RESULT_SCHEMA,
         "status": "observed",
@@ -1904,8 +2666,11 @@ def _native(plan: dict[str, Any]) -> dict[str, Any]:
         "changed_policy_ranks": [row["rank"] for row in rows if row["policy_changed"]],
         "restored_next_rollout_id": plan["trained_checkpoint"]["next_rollout_id"],
         "checkpoint_state_commitment_method": RANK_STATE_COMMITMENT_METHOD,
+        "restore_method": RESTORE_METHOD,
+        "trained_restore_count": 2,
+        "prediction_probe": prediction_probe,
         "state_stable_across_zero_updates": True,
-        "work_executed": dict(_ZERO_WORK),
+        "work_executed": dict(_OBSERVER_WORK),
         "base_checkpoint_unchanged": True,
         "trained_checkpoint_unchanged": True,
         "completed_at": time.time(),
@@ -1927,7 +2692,7 @@ def run(plan: dict[str, Any]) -> dict[str, Any]:
         {
             "schema": PLAN_SCHEMA,
             "observer_plan_sha256": "sha256:" + digest(plan),
-            "work_authorized": dict(_ZERO_WORK),
+            "work_authorized": dict(_OBSERVER_WORK),
             "started_at": time.time(),
         },
     )
