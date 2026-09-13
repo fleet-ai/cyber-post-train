@@ -1,0 +1,44 @@
+{
+  "backend": "miles",
+  "name": "chris-q38-miles-rlreward-dev4",
+  "output_root": "/mnt/sfs/jobs/chris-q38-miles-rlreward-dev4",
+  "model": {
+    "lock": "../models/qwen38-27b-1d4bf0f2.lock.json",
+    "weights": "../models/qwen38-27b-1d4bf0f2.weights.json",
+    "root": "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2"
+  },
+  "data": {
+    "manifest": "/mnt/sfs/jobs/chris-q38-miles-rlreward-inputs-dev4/data/manifest.json",
+    "root": "/mnt/sfs/jobs/chris-q38-miles-rlreward-inputs-dev4/data"
+  },
+  "checkpoint": {
+    "manifest": "/mnt/sfs/jobs/chris-cpt-cleanup-q38-miles-base-v1/NATIVE_CHECKPOINT.json",
+    "sha256": "sha256:b3d772de9121f442ea7b9a4c9a996f2a0a99cab8c49fe3083c148fe3eebd089c"
+  },
+  "recipe": {
+    "nodes": 1,
+    "gpus_per_node": 8,
+    "steps": 1,
+    "groups": 1,
+    "samples_per_prompt": 8,
+    "lr": 0.000001,
+    "eval_interval": 1,
+    "checkpoint_interval": 1,
+    "seed": 42
+  },
+  "wandb": {
+    "entity": "thefleet",
+    "project": "cyber-post-train",
+    "run_id": "chris-q38-miles-rlreward-dev4"
+  },
+  "cluster": {
+    "target": "dev",
+    "priority": "c1",
+    "resources": {
+      "cpu_request": "64",
+      "cpu_limit": "128",
+      "memory_request": "1536Gi",
+      "memory_limit": "2048Gi"
+    }
+  }
+}

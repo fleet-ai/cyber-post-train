@@ -1,0 +1,50 @@
+{
+  "schema": "cyber_qwen38_miles_rlreward_dev_retirement_v1",
+  "recorded_at": "2026-09-13T07:40:23Z",
+  "scope": "Qwen3.8-27B Miles one-update reward canary on the Fleet dev cluster",
+  "classification": "retired_before_allocation_due_to_missing_estimator_flags",
+  "run": {
+    "api_base_url": "https://api.ft.dev.flt.build",
+    "api_run_id": "6be68393-f032-40db-b640-d2d23473e85d",
+    "api_name": "chris-q38-miles-rlreward-dev3-6be68393",
+    "rayjob_uid": "803770c7-d830-4f47-8f1a-22d7e75362c3",
+    "workload": "rayjob-chris-q38-miles-rlreward-dev3-6be68393-c2609",
+    "workload_uid": "a20b093e-93cd-4c26-b81c-33586d3bf6d3",
+    "output_root": "/mnt/sfs/jobs/chris-q38-miles-rlreward-dev3",
+    "wandb_run_id": "chris-q38-miles-rlreward-dev3"
+  },
+  "retirement": {
+    "jobs_api_delete_requests": 1,
+    "jobs_api_delete_accepted": true,
+    "jobs_api_get_after_delete_http_status": 404,
+    "exact_rayjob_absent": true,
+    "exact_workload_absent": true,
+    "raycluster_ever_created": false,
+    "pod_ever_created": false,
+    "gpus_ever_allocated": 0,
+    "resource_release_uncertain": false
+  },
+  "scientific_accounting": {
+    "task_interactions": 0,
+    "verifier_calls": 0,
+    "reward_batches": 0,
+    "optimizer_updates": 0,
+    "checkpoint_files": 0,
+    "valid_model_outcome": false
+  },
+  "reason": {
+    "runtime_defect": "the immutable submitted argument vector omitted the Miles switches required for the reviewed estimator",
+    "required_native_parsed_arguments": {
+      "calculate_per_token_loss": true,
+      "grpo_std_normalization": false
+    },
+    "unchanged_resubmission_allowed": false,
+    "fresh_successor_required": true
+  },
+  "privacy": {
+    "task_prompts_or_traces_present": false,
+    "rewards_or_scores_present": false,
+    "credentials_present": false
+  },
+  "production_authorized_by_this_record": false
+}

@@ -12,6 +12,13 @@ RUN_V2 = ROOT / "configs/qualification/qwen38-miles-rl-reward-canary-dev-v2.json
 DATA_V3 = ROOT / "configs/qualification/qwen38-miles-rl-reward-canary-data-dev-v3.json"
 RUN_V3 = ROOT / "configs/qualification/qwen38-miles-rl-reward-canary-dev-v3.json"
 LAUNCH_V3 = ROOT / "configs/qualification/qwen38-miles-rl-reward-canary-launch-dev-v3.json"
+DATA_V4 = ROOT / "configs/qualification/qwen38-miles-rl-reward-canary-data-dev-v4.json"
+RUN_V4 = ROOT / "configs/qualification/qwen38-miles-rl-reward-canary-dev-v4.json"
+LAUNCH_V4 = ROOT / "configs/qualification/qwen38-miles-rl-reward-canary-launch-dev-v4.json"
+DEV3_RETIRED = (
+    ROOT
+    / "docs/evidence/qwen38-study/2026-09-13-miles-rlreward-dev3-retired-v1.json"
+)
 TASK_SET = ROOT / "configs/data/qwen38-rl-reward-canary-task-set-v1.json"
 SPLIT = ROOT / "configs/data/qwen38-rl-reward-canary-split-v1.json"
 TOOLS = ROOT / "configs/data/qwen38-rl-filtered-canary-tool-catalog-v1.json"
@@ -132,3 +139,91 @@ def test_v3_is_a_fresh_native_one_by_eight_dev_canary() -> None:
     for value in identities.values():
         assert value not in old
     assert "webexploitbench" not in (DATA_V3.read_text() + RUN_V3.read_text()).lower()
+
+
+def test_v4_preserves_science_but_uses_only_fresh_identities() -> None:
+    data_v3, run_v3, data_v4, run_v4, launch = map(
+        load, (DATA_V3, RUN_V3, DATA_V4, RUN_V4, LAUNCH_V4)
+    )
+
+    assert data_v4["name"] == run_v4["name"] == run_v4["wandb"]["run_id"]
+    assert data_v4["name"] == "chris-q38-miles-rlreward-dev4"
+    assert data_v4["output"] == "/mnt/sfs/jobs/chris-q38-miles-rlreward-inputs-dev4/data"
+    assert run_v4["output_root"] == "/mnt/sfs/jobs/chris-q38-miles-rlreward-dev4"
+    assert run_v4["data"] == {
+        "manifest": data_v4["output"] + "/manifest.json",
+        "root": data_v4["output"],
+    }
+    for key in (
+        "backend",
+        "task_set",
+        "split",
+        "tool_catalog",
+        "model_lock",
+        "model_root",
+        "limits",
+    ):
+        assert data_v4[key] == data_v3[key]
+    for key in ("backend", "model", "checkpoint", "recipe"):
+        assert run_v4[key] == run_v3[key]
+    assert run_v4["cluster"] == {**run_v3["cluster"], "target": "dev"}
+
+    identities = launch["identities"]
+    assert launch["status"] == "configuration_only_unsubmitted"
+    assert launch["cluster_target"] == "dev"
+    assert identities == {
+        "run_name": data_v4["name"],
+        "cyber_run_id": data_v4["name"],
+        "data_root": data_v4["output"],
+        "prepared_root": "/mnt/sfs/jobs/chris-q38-miles-rlreward-inputs-dev4/prepared",
+        "output_root": run_v4["output_root"],
+        "wandb_run_id": run_v4["wandb"]["run_id"],
+    }
+    old = json.dumps([data_v3, run_v3])
+    assert all(value not in old for value in identities.values())
+    assert launch["supersedes"]["run_name"] == data_v3["name"]
+    assert launch["required_runtime"] == {
+        "estimator_fix_commit": "652d1135dee0ae019c1255df8e734163bb6f5fd2",
+        "source_commit_policy": (
+            "the immutable bundle commit must equal or descend from estimator_fix_commit"
+        ),
+        "native_parsed_arguments": {
+            "calculate_per_token_loss": True,
+            "grpo_std_normalization": False,
+        },
+    }
+    assert "webexploitbench" not in (DATA_V4.read_text() + RUN_V4.read_text()).lower()
+
+
+def test_dev3_retirement_is_append_only_and_proves_zero_execution() -> None:
+    queued, retired = load(
+        ROOT / "docs/evidence/qwen38-study/2026-09-12-miles-rlreward-dev3-queued-v1.json"
+    ), load(DEV3_RETIRED)
+
+    assert retired["recorded_at"] == "2026-09-13T07:40:23Z"
+    assert retired["run"]["api_run_id"] == queued["run"]["api_run_id"]
+    assert retired["run"]["rayjob_uid"] == queued["run"]["rayjob_uid"]
+    assert retired["run"]["workload_uid"] == queued["run"]["workload_uid"]
+    assert retired["retirement"] == {
+        "jobs_api_delete_requests": 1,
+        "jobs_api_delete_accepted": True,
+        "jobs_api_get_after_delete_http_status": 404,
+        "exact_rayjob_absent": True,
+        "exact_workload_absent": True,
+        "raycluster_ever_created": False,
+        "pod_ever_created": False,
+        "gpus_ever_allocated": 0,
+        "resource_release_uncertain": False,
+    }
+    assert retired["scientific_accounting"] == {
+        "task_interactions": 0,
+        "verifier_calls": 0,
+        "reward_batches": 0,
+        "optimizer_updates": 0,
+        "checkpoint_files": 0,
+        "valid_model_outcome": False,
+    }
+    assert retired["reason"]["fresh_successor_required"] is True
+    assert retired["reason"]["unchanged_resubmission_allowed"] is False
+    assert not any(retired["privacy"].values())
+    assert retired["production_authorized_by_this_record"] is False

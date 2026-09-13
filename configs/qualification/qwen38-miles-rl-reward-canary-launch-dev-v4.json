@@ -1,0 +1,28 @@
+{
+  "schema": "cyber_miles_dev_canary_launch_v1",
+  "status": "configuration_only_unsubmitted",
+  "cluster_target": "dev",
+  "data_config": "configs/qualification/qwen38-miles-rl-reward-canary-data-dev-v4.json",
+  "run_config": "configs/qualification/qwen38-miles-rl-reward-canary-dev-v4.json",
+  "identities": {
+    "run_name": "chris-q38-miles-rlreward-dev4",
+    "cyber_run_id": "chris-q38-miles-rlreward-dev4",
+    "data_root": "/mnt/sfs/jobs/chris-q38-miles-rlreward-inputs-dev4/data",
+    "prepared_root": "/mnt/sfs/jobs/chris-q38-miles-rlreward-inputs-dev4/prepared",
+    "output_root": "/mnt/sfs/jobs/chris-q38-miles-rlreward-dev4",
+    "wandb_run_id": "chris-q38-miles-rlreward-dev4"
+  },
+  "supersedes": {
+    "run_name": "chris-q38-miles-rlreward-dev3",
+    "retirement_evidence": "docs/evidence/qwen38-study/2026-09-13-miles-rlreward-dev3-retired-v1.json",
+    "reason": "the submitted runtime omitted required per-token-loss and GRPO-normalization estimator switches"
+  },
+  "required_runtime": {
+    "estimator_fix_commit": "652d1135dee0ae019c1255df8e734163bb6f5fd2",
+    "source_commit_policy": "the immutable bundle commit must equal or descend from estimator_fix_commit",
+    "native_parsed_arguments": {
+      "calculate_per_token_loss": true,
+      "grpo_std_normalization": false
+    }
+  }
+}
