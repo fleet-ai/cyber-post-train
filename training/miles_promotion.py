@@ -49,6 +49,34 @@ EXPECTED_DATA = {
     "tool_catalog_sha256": (
         "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a"
     ),
+    "tokenizer": {
+        "repo": "Qwen/Qwen3.8-27B",
+        "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+        "backend_sha256": "ffb7a28b27dabcc333662fd3e0b0005d9e79a1c22e31453ab5a3017fbd5f25c0",
+        "chat_template_sha256": "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+        "files": [
+            {
+                "path": "tokenizer.json",
+                "sha256": "0997f410c57a1f4e53b09e4be8f4a172d90edd9564368fb0847030937229b9f3",
+            },
+            {
+                "path": "tokenizer_config.json",
+                "sha256": "b11349aafa7cdc6a320767cf7ceb29ed82f7eda5d65e8e0819e76f0ce947bf27",
+            },
+            {
+                "path": "chat_template.jinja",
+                "sha256": "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+            },
+            {
+                "path": "merges.txt",
+                "sha256": "a9d356d7bdf1ef4949e3e748e95b8e10ad9d4e2e838eddc38a0a7b6b94d1db8d",
+            },
+            {
+                "path": "vocab.json",
+                "sha256": "ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003",
+            },
+        ],
+    },
     "limits": {
         "context_tokens": 98304,
         "response_tokens": 81920,
@@ -167,11 +195,7 @@ def _exact_data(value: Any) -> None:
         or value.get("selection_sha256") != EXPECTED_DATA["selection_sha256"]
         or value.get("split_sha256") != EXPECTED_DATA["split_sha256"]
         or value.get("tool_catalog_sha256") != EXPECTED_DATA["tool_catalog_sha256"]
-        or value.get("tokenizer")
-        != {
-            "repo": "Qwen/Qwen3.8-27B",
-            "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
-        }
+        or value.get("tokenizer") != EXPECTED_DATA["tokenizer"]
         or value.get("template_sha256")
         != "sha256:38d42166599348d47ded69776c5389c89924045e6827089923a031379f8a3dfe"
         or value.get("limits") != EXPECTED_DATA["limits"]

@@ -1,0 +1,87 @@
+{
+  "schema": "cyber_q38_miles_prod1_data_preparation_evidence_v1",
+  "status": "accepted",
+  "observed_at": "2026-09-13T05:37:10Z",
+  "scope": {
+    "cluster": "dev",
+    "kubernetes_context": "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb",
+    "namespace": "fleet-train-jobs",
+    "namespace_uid": "10394b76-e1d4-40b1-a8e2-7575e95df216",
+    "gpu_jobs_submitted": 0,
+    "active_dev3_touched": false,
+    "shared_services_touched": false
+  },
+  "source": {
+    "commit": "1035646fbba97854183bd861690481aaae6e8288",
+    "bundle_sha256": "60376402839c1cad33c8769d5efea38bae724f5f772250ca8f37833346c94839",
+    "source_manifest_sha256": "d75a55778bf8134468af0a04b95e4f22ebe1452f8f2ddfaac86daf3ee76a6144",
+    "data_config": "configs/runs/qwen38-miles-rl-filtered-study-a-prod-v1.data.json",
+    "data_config_file_sha256": "60e58852325a6d7ca6a69a72ba8bc6325442e016677e04d1695a94d3e50faf03",
+    "contains_credentials": false
+  },
+  "data": {
+    "root": "/mnt/sfs/jobs/chris-q38-miles-rl-prod1-inputs/data",
+    "manifest_path": "/mnt/sfs/jobs/chris-q38-miles-rl-prod1-inputs/data/manifest.json",
+    "manifest_file_sha256": "6a74daf4ba3f8b491caba73de8036ef648c6805202fe22a937447c6e4bf86b25",
+    "manifest_receipt_sha256": "sha256:0ff63c73d74c47e1fb97865b8b101885236deaf5ee9b92582f544a28abf9d546",
+    "selection_sha256": "sha256:50d6052187ff2f5f085b9de402982d4421fba0c73bb1bd54fc4bc850516c5d68",
+    "split_sha256": "sha256:c8c0083e08df55179a5acbd10602dbce5178257484b471c5ba7f4cbb04bdb35c",
+    "tool_catalog_sha256": "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a",
+    "rows": {
+      "train": 59,
+      "dev": 20
+    },
+    "max_prompt_tokens": {
+      "train": 1706,
+      "dev": 1276
+    },
+    "gpus": 0,
+    "environment_creates": 0,
+    "private_directory_mode": "0700"
+  },
+  "receipt": {
+    "path": "/mnt/sfs/jobs/chris-q38-miles-rl-prod1-inputs/DATA_PREPARED.json",
+    "file_sha256": "7c1efec8a27dfddf5c459132595dec5fb9540a0362a726e5a267ceee2857f56e",
+    "receipt_sha256": "sha256:9f4b90f98c02a25674860658afeb963cd9752fe8e7b563109250a973df4a30aa",
+    "independently_verified": true,
+    "task_content_exposed": false,
+    "credentials_exposed": false
+  },
+  "runtime": {
+    "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/miles-trainer@sha256:d1d37c584e2aafdd47df1e1f3492ff3343eb3b83a5f658cf7ce2432ee8d6ef33",
+    "creator": {
+      "pod_uid": "782a4d87-e565-4471-85df-b3e3ff6483f8",
+      "restart_count": 0,
+      "gpus": 0,
+      "data_build_completed": true,
+      "terminal_stage": "validation",
+      "terminal_reason": "The original promotion gate expected only repo and revision, while the builder correctly emitted the full immutable tokenizer file identity."
+    },
+    "read_only_manifest_audit": {
+      "pod_uid": "f5bb488c-4e44-4574-a52d-50d32850b18e",
+      "phase": "Succeeded",
+      "restart_count": 0,
+      "gpus": 0
+    },
+    "sealer": {
+      "pod_uid": "001ce657-b378-4726-a8f8-afd1861bf870",
+      "phase": "Succeeded",
+      "restart_count": 0,
+      "gpus": 0,
+      "credentials_used": false
+    },
+    "independent_receipt_verifier": {
+      "pod_uid": "4f81e273-a0c5-4177-b9e7-627b27aaca91",
+      "phase": "Succeeded",
+      "restart_count": 0,
+      "gpus": 0,
+      "credentials_used": false
+    }
+  },
+  "cleanup": {
+    "exact_helper_pods_deleted": 4,
+    "exact_helper_configmaps_deleted": 4,
+    "all_helper_objects_absent_after_cleanup": true,
+    "data_and_receipt_preserved": true
+  }
+}

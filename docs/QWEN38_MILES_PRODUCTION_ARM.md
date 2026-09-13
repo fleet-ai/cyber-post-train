@@ -20,7 +20,12 @@ Production promotion requires this exact create-once chain:
    Validate `<reload-output>/RELOAD_ACCEPTED.json` with
    `training.miles_reload_acceptance.validate_accepted(..., check_files=True)`.
 3. Build the exact 59-train/20-dev Miles data manifest from
-   `configs/runs/qwen38-miles-rl-filtered-study-a-prod-v1.data.json`.
+   `configs/runs/qwen38-miles-rl-filtered-study-a-prod-v1.data.json`. This gate
+   is complete: the create-once manifest is at
+   `/mnt/sfs/jobs/chris-q38-miles-rl-prod1-inputs/data/manifest.json`, with its
+   sanitized preparation receipt at the parent `DATA_PREPARED.json`. The
+   tracked evidence is
+   `docs/evidence/qwen38-study/2026-09-13-miles-prod1-data-prepared-v1.json`.
 4. Create a production-promotion receipt with
    `training.miles_promotion.accept_promotion`. Copy the inert candidate to a
    new run config and replace only `production_promotion` with that receipt's

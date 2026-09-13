@@ -26,10 +26,7 @@ def _data() -> dict:
     value = {
         "schema": "cyber_miles_data_v1",
         "name": miles_promotion.PROD_NAME,
-        "tokenizer": {
-            "repo": "Qwen/Qwen3.8-27B",
-            "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
-        },
+        "tokenizer": copy.deepcopy(miles_promotion.EXPECTED_DATA["tokenizer"]),
         "template_sha256": "sha256:" + miles.TEMPLATE_SHA256,
         "selection_sha256": miles_promotion.EXPECTED_DATA["selection_sha256"],
         "split_sha256": miles_promotion.EXPECTED_DATA["split_sha256"],

@@ -98,13 +98,21 @@ def test_every_dev_proof_and_live_gate_starts_unbound() -> None:
     assert exact["runtime_bundle_sha256"] == (
         "sha256:0e3ff1646344abb1b4be13ea064143014e94c13bc22c6c7e8c1a552f8bbe32a6"
     )
-    for gate in arm["qualification"].values():
+    for gate in (arm["qualification"]["reward_terminal"], arm["qualification"]["native_reload"]):
         assert gate["file_sha256"] is None
         assert gate["receipt_sha256"] is None
-    assert len(arm["blocked_reasons"]) == 4
-    assert "active_production_experiment_nodes_plus_candidate_at_most_eight" in arm[
-        "promotion_requirements"
-    ]["live_immediately_before_one_post"]
+    data = arm["qualification"]["production_data_manifest"]
+    assert data["file_sha256"] == (
+        "sha256:6a74daf4ba3f8b491caba73de8036ef648c6805202fe22a937447c6e4bf86b25"
+    )
+    assert data["receipt_sha256"] == (
+        "sha256:0ff63c73d74c47e1fb97865b8b101885236deaf5ee9b92582f544a28abf9d546"
+    )
+    assert len(arm["blocked_reasons"]) == 3
+    assert (
+        "active_production_experiment_nodes_plus_candidate_at_most_eight"
+        in arm["promotion_requirements"]["live_immediately_before_one_post"]
+    )
 
 
 def test_external_benchmark_is_only_a_sealed_post_training_handoff() -> None:
@@ -127,6 +135,4 @@ def test_external_benchmark_is_only_a_sealed_post_training_handoff() -> None:
     assert handoff["results_sealed_until_recipe_and_checkpoint_are_frozen"] is True
     assert handoff["checkpoint_or_hyperparameter_selection_allowed"] is False
     assert handoff["training_reward_prompt_retry_or_checkpoint_input_allowed"] is False
-    assert handoff["parent_protocol_file_sha256"] == file_sha256(
-        ROOT / handoff["parent_protocol"]
-    )
+    assert handoff["parent_protocol_file_sha256"] == file_sha256(ROOT / handoff["parent_protocol"])

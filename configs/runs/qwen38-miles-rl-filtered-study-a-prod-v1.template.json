@@ -61,8 +61,8 @@
     "production_data_manifest": {
       "schema": "cyber_miles_data_v1",
       "path": "/mnt/sfs/jobs/chris-q38-miles-rl-prod1-inputs/data/manifest.json",
-      "file_sha256": null,
-      "receipt_sha256": null
+      "file_sha256": "sha256:6a74daf4ba3f8b491caba73de8036ef648c6805202fe22a937447c6e4bf86b25",
+      "receipt_sha256": "sha256:0ff63c73d74c47e1fb97865b8b101885236deaf5ee9b92582f544a28abf9d546"
     }
   },
   "candidate_run": {
@@ -164,8 +164,7 @@
   "blocked_reasons": [
     "The exact active dev3 run is queued and has no accepted reward/update terminal receipt.",
     "No accepted all-rank dev3 native reload is bound.",
-    "The create-once 59-train/20-dev production data manifest does not exist.",
     "Live production duplicate, W&B, preview and eight-node gates cannot be pre-certified."
   ],
-  "sha256": "sha256:a7ca04b9a59a0c65ed605d7d27960db10c90247b57ae705215fbdd9a75c91bcb"
+  "sha256": "sha256:d53a88c1f28e4b7f9ee4d02caa38e11cd00a58875a394a17ea356ff3beef5b4d"
 }
