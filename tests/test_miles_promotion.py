@@ -48,14 +48,16 @@ def _active_canary_binding() -> dict:
         "schema": miles_promotion.ACTIVE_CANARY_SCHEMA,
         "status": "accepted_dev_canary",
         "reward_terminal_receipt_sha256": "sha256:" + "a" * 64,
-        "source_run_name": "synthetic-q38-miles-dev9",
-        "source_commit": "b" * 40,
-        "source_plan_sha256": "sha256:" + "c" * 64,
-        "source_request_sha256": "sha256:" + "d" * 64,
+        "source_run_name": miles_promotion.EXPECTED_DEV_CANARY["source_run_name"],
+        "source_commit": miles_promotion.EXPECTED_DEV_CANARY["source_commit"],
+        "source_plan_sha256": miles_promotion.EXPECTED_DEV_CANARY["source_plan_sha256"],
+        "source_request_sha256": miles_promotion.EXPECTED_DEV_CANARY[
+            "source_request_sha256"
+        ],
         "runtime_bundle_sha256": "sha256:" + "e" * 64,
-        "api_base_url": miles_promotion.DEV_API_BASE_URL,
+        "api_base_url": miles_promotion.EXPECTED_DEV_CANARY["api_base_url"],
         "api_run_id": "11111111-1111-4111-8111-111111111111",
-        "api_run_name": "synthetic-q38-miles-dev9-11111111",
+        "api_run_name": "chris-q38-miles-rlreward-dev5-11111111",
         "rayjob_uid": "22222222-2222-4222-8222-222222222222",
         "workload_uid": "33333333-3333-4333-8333-333333333333",
     }
@@ -111,7 +113,10 @@ def _plan() -> dict:
         steps=59,
         groups=1,
         samples_per_prompt=8,
-        lr=1e-6,
+        lr=2e-6,
+        temperature=0.7,
+        kl_loss_coef=0.001,
+        max_tokens_per_gpu=8192,
         eval_interval=59,
         checkpoint_interval=10,
         seed=42,
@@ -155,7 +160,10 @@ def test_embedded_promotion_rechecks_the_complete_compiled_candidate() -> None:
     for section, key, changed in (
         ("arguments", "steps", 1),
         ("arguments", "samples_per_prompt", 4),
-        ("arguments", "lr", 2e-6),
+        ("arguments", "lr", 1e-6),
+        ("arguments", "temperature", 1.0),
+        ("arguments", "kl_loss_coef", 0.0),
+        ("arguments", "max_tokens_per_gpu", None),
         ("arguments", "data_manifest", "/mnt/sfs/jobs/other/manifest.json"),
         ("arguments", "policy_identity_root", "/mnt/sfs/jobs/other/hf-export"),
         ("execution", "priority", "c2"),
@@ -203,7 +211,7 @@ def test_promotion_rejects_unmaterialized_binding_or_terminal_digest(reference_n
         miles_promotion.validate_promotion(value, check_files=False)
 
 
-def test_active_canary_binding_is_identity_driven_not_generation_hard_coded(monkeypatch) -> None:
+def test_active_canary_binding_is_exactly_dev5_and_bound_to_terminal(monkeypatch) -> None:
     binding = _active_canary_binding()
     terminal = {
         "sha256": "sha256:" + "a" * 64,
@@ -249,6 +257,22 @@ def test_active_canary_binding_is_identity_driven_not_generation_hard_coded(monk
     changed["sha256"] = digest({key: item for key, item in changed.items() if key != "sha256"})
     with pytest.raises(ValueError, match="differs"):
         miles_promotion._exact_active_canary(terminal, changed)
+
+    for key, replacement in (
+        ("source_run_name", "chris-q38-miles-rlreward-dev6"),
+        ("source_commit", "f" * 40),
+        ("source_plan_sha256", "sha256:" + "f" * 64),
+        ("source_request_sha256", "sha256:" + "f" * 64),
+    ):
+        wrong_dev = copy.deepcopy(binding)
+        wrong_dev[key] = replacement
+        if key == "source_run_name":
+            wrong_dev["api_run_name"] = replacement + "-11111111"
+        wrong_dev["sha256"] = digest(
+            {name: item for name, item in wrong_dev.items() if name != "sha256"}
+        )
+        with pytest.raises(ValueError, match="exact dev5"):
+            miles_promotion._exact_active_canary(terminal, wrong_dev)
 
 
 def test_active_canary_binding_is_created_once_from_accepted_terminal(
@@ -336,7 +360,9 @@ def test_promotion_cross_binds_native_reload_to_the_dev_checkpoint(monkeypatch) 
 
     result = miles_promotion.validate_promotion(value, check_files=True)
     assert result["dev_checkpoint"] == terminal["checkpoint_manifest"]
-    assert result["dev_source_plan_sha256"] == "c" * 64
+    assert result["dev_source_plan_sha256"] == miles_promotion.EXPECTED_DEV_CANARY[
+        "source_plan_sha256"
+    ].removeprefix("sha256:")
 
     native["source_manifest_sha256"] = "sha256:" + "c" * 64
     with pytest.raises(ValueError, match="cross-bound"):

@@ -11,7 +11,7 @@ from typing import Any
 
 from cyber_post_train.jobs import API_URLS, JobsError, digest
 
-SCHEMA = "cyber_qwen38_miles_production_promotion_v2"
+SCHEMA = "cyber_qwen38_miles_production_promotion_v3"
 ACTIVE_CANARY_SCHEMA = "cyber_qwen38_miles_active_canary_binding_v1"
 PROD_NAME = "chris-q38-miles-rl-prod1"
 PROD_OUTPUT = "/mnt/sfs/jobs/chris-q38-miles-rl-prod1"
@@ -27,7 +27,17 @@ BASE_CHECKPOINT = {
 }
 PROD_KUBE_CONTEXT = "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6"
 PROD_NAMESPACE_UID = "fd6d2fcd-687a-4257-9dba-a034bb381e6b"
-EXPECTED_CANDIDATE_SHA256 = "007d60256013bc982c28f59a719b21bb3fc6afed5a123160a9c546959b2d2fce"
+DEV_API_BASE_URL = API_URLS["dev"]
+EXPECTED_CANDIDATE_SHA256 = "7ab7d6db7141c1236884cc873341b3c149d5caa4cec45a9ceb14fe40436f836b"
+EXPECTED_DEV_CANARY = {
+    "source_run_name": "chris-q38-miles-rlreward-dev5",
+    "source_commit": "0e6970c7f16f8199b2fa583cb19937aeecdfcfd9",
+    "source_plan_sha256": "sha256:4ccc8b10e473176993b3867e4bbe3b3f1e8717cdeab77615b7493fa4513866da",
+    "source_request_sha256": (
+        "sha256:e56a3c25c1789526747c74353cdb4bd7963e9084ae9bf6b180be79b53a691cfb"
+    ),
+    "api_base_url": DEV_API_BASE_URL,
+}
 EXPECTED_RESOURCES = {
     "cpu_request": "64",
     "cpu_limit": "128",
@@ -143,9 +153,6 @@ _HEX_SHA = re.compile(r"sha256:[a-f0-9]{64}")
 _GIT_SHA = re.compile(r"[a-f0-9]{40}")
 _UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}")
 _RUN_NAME = re.compile(r"[a-z0-9](?:[-a-z0-9]*[a-z0-9])?")
-DEV_API_BASE_URL = API_URLS["dev"]
-
-
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -333,6 +340,8 @@ def _exact_dev3(terminal: dict[str, Any]) -> None:
 
 def _exact_active_canary(terminal: dict[str, Any], binding: dict[str, Any]) -> None:
     validate_active_canary_binding(binding)
+    if any(binding.get(key) != expected for key, expected in EXPECTED_DEV_CANARY.items()):
+        raise ValueError("Miles production proof is not the exact dev5 canary")
     observed = {
         "schema": ACTIVE_CANARY_SCHEMA,
         "status": "accepted_dev_canary",
@@ -359,6 +368,8 @@ def accept_active_canary_binding(*, reward_terminal: Path, output: Path) -> dict
     }
     sealed = {**value, "sha256": digest(value)}
     validate_active_canary_binding(sealed)
+    if any(sealed.get(key) != expected for key, expected in EXPECTED_DEV_CANARY.items()):
+        raise ValueError("Miles active-canary binding is not the exact dev5 canary")
     from .miles_conversion import _write
 
     return _write(output, value)
@@ -489,10 +500,10 @@ def _exact_plan(plan: dict[str, Any]) -> None:
         "steps": 59,
         "groups": 1,
         "samples_per_prompt": 8,
-        "lr": 1e-6,
-        "temperature": 1.0,
-        "kl_loss_coef": 0.0,
-        "max_tokens_per_gpu": None,
+        "lr": 2e-6,
+        "temperature": 0.7,
+        "kl_loss_coef": 0.001,
+        "max_tokens_per_gpu": 8192,
         "eval_interval": 59,
         "checkpoint_interval": 10,
         "seed": 42,

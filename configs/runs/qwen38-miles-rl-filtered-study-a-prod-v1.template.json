@@ -1,8 +1,37 @@
 {
-  "schema": "cyber_qwen38_miles_production_arm_template_v2",
+  "schema": "cyber_qwen38_miles_production_arm_template_v3",
   "status": "blocked_not_launchable",
   "launchable": false,
-  "purpose": "Exact Miles production candidate; materialize only after an explicitly bound active dev canary reward and native reload chain is independently accepted.",
+  "purpose": "Exact full-data Miles production candidate; materialize only after the exact dev5 runtime/reward/update/checkpoint proof and its native reload chain are independently accepted.",
+  "dev5_to_production": {
+    "dev5_qualification_scope": {
+      "train_rows": 1,
+      "dev_rows": 1,
+      "optimizer_steps": 1
+    },
+    "production_scope": {
+      "train_rows": 59,
+      "dev_rows": 20,
+      "optimizer_steps": 59
+    },
+    "preserved_scientific_recipe": {
+      "initial_policy": "exact_qwen38_27b_base_native_checkpoint",
+      "topology": "one_node_eight_b300",
+      "samples_per_prompt": 8,
+      "lr": 0.000002,
+      "temperature": 0.7,
+      "kl_loss_coef": 0.001,
+      "max_tokens_per_gpu": 8192,
+      "native_parallelism_and_recompute": "unchanged"
+    },
+    "deliberate_scale_changes_only": [
+      "accepted_data_identity_1_train_1_dev_to_59_train_20_dev",
+      "optimizer_steps_1_to_59",
+      "checkpoint_interval_1_to_10",
+      "native_eval_interval_1_to_59",
+      "separately_reviewed_production_cpu_and_memory_envelope"
+    ]
+  },
   "source_files": {
     "task_set": {
       "path": "configs/data/qwen38-rl-filtered-study-a-task-set-v1.json",
@@ -33,7 +62,14 @@
       "path": null,
       "file_sha256": null,
       "receipt_sha256": null,
-      "builder": "training.miles_promotion.accept_active_canary_binding"
+      "builder": "training.miles_promotion.accept_active_canary_binding",
+      "required_identity": {
+        "source_run_name": "chris-q38-miles-rlreward-dev5",
+        "source_commit": "0e6970c7f16f8199b2fa583cb19937aeecdfcfd9",
+        "source_plan_sha256": "sha256:4ccc8b10e473176993b3867e4bbe3b3f1e8717cdeab77615b7493fa4513866da",
+        "source_request_sha256": "sha256:e56a3c25c1789526747c74353cdb4bd7963e9084ae9bf6b180be79b53a691cfb",
+        "api_base_url": "https://api.ft.dev.flt.build"
+      }
     },
     "reward_terminal": {
       "schema": "cyber_miles_reward_canary_terminal_v1",
@@ -79,7 +115,10 @@
       "steps": 59,
       "groups": 1,
       "samples_per_prompt": 8,
-      "lr": 0.000001,
+      "lr": 0.000002,
+      "temperature": 0.7,
+      "kl_loss_coef": 0.001,
+      "max_tokens_per_gpu": 8192,
       "eval_interval": 59,
       "checkpoint_interval": 10,
       "seed": 42
@@ -101,10 +140,10 @@
     },
     "production_promotion": null
   },
-  "candidate_run_sha256": "sha256:007d60256013bc982c28f59a719b21bb3fc6afed5a123160a9c546959b2d2fce",
+  "candidate_run_sha256": "sha256:7ab7d6db7141c1236884cc873341b3c149d5caa4cec45a9ceb14fe40436f836b",
   "promotion_requirements": {
     "immutable": [
-      "exact_digest_valid_active_dev_canary_source_plan_request_bundle_and_api_identity",
+      "exact_digest_valid_dev5_source_plan_request_bundle_and_api_identity",
       "digest_valid_reward_terminal_with_authoritative_reward_and_one_policy_update",
       "digest_valid_all_rank_zero_update_native_reload",
       "exact_59_train_20_dev_manifest_with_zero_final_test_rows",
@@ -144,6 +183,9 @@
     "external_web_benchmark": {
       "parent_protocol": "configs/evaluation/qwen38-post-training-webexploitbench-tensorlake-parent-v1.json",
       "parent_protocol_file_sha256": "sha256:c6f489d80fcab19148bb1c4be1933bf11b0608f4d6e0124c8c15f02efeed7481",
+      "paired_plan_template": "configs/evaluation/qwen38-post-training-webexploitbench-tensorlake-paired-plan-v1.template.json",
+      "paired_plan_template_file_sha256": "sha256:f552b2d9a90b284e0fda36a874d91218787d5948cb0b7a2476e3a89f558577de",
+      "paired_plan_template_sha256": "sha256:88a7c99c1bd9cf86bcfc12fe9732bc5997935bb951510fa9117aed4fba0009af",
       "provider": "tensorlake_sandbox",
       "child_protocol": null,
       "launch_plan": null,
@@ -153,9 +195,9 @@
     }
   },
   "blocked_reasons": [
-    "No digest-valid active-canary binding has been materialized from an accepted reward/update terminal receipt.",
+    "No digest-valid active-canary binding has been materialized from the exact accepted dev5 reward/update/checkpoint terminal receipt.",
     "No accepted all-rank native reload cross-bound to that canary terminal is bound.",
     "Live production duplicate, W&B, preview and eight-node gates cannot be pre-certified."
   ],
-  "sha256": "sha256:dfec911c749a9545d605e1bdcfa7943b50aee37aab63a965bd91a159560a2602"
+  "sha256": "sha256:efc4df7c3ccf53eeeab0ed6b3a7a5ec788845f0bc27a1a2873bea05060cbeaea"
 }

@@ -561,7 +561,8 @@ cyber-post-train miles-rl-checkpoint-seal output/miles-dev-run \
   --output /mnt/sfs/jobs/<distinct-seal-dir>/MILES_TRAINING_CHECKPOINT.json
 ```
 
-For the one-step Qwen3.8 dev4 canary, derive a fresh observer config from
+For the active one-step Qwen3.8 canary (the production arm currently requires
+the exact Dev5 identity), derive a fresh observer config from
 `configs/qualification/qwen38-miles-policy-observer-dev3-v1.template.json` and
 the exact procedure in `QWEN38_MILES_POLICY_OBSERVER.md`. One dev-only `1x8`
 observer loads the exact base and trained checkpoint on all ranks. Its trained
@@ -590,9 +591,9 @@ dev4 templates are
 `configs/qualification/qwen38-miles-hf-export-dev4-v1.template.json` and
 `configs/qualification/qwen38-miles-hf-reload-dev4-v1.template.json`. Their
 terminal-derived digests are intentionally `null`: compilation must fail until
-the exact accepted dev4 artifacts exist and those values are replaced. A queued
-API identity is not terminal or reload evidence and must never be used to fill
-those fields.
+the exact accepted active-canary artifacts exist and those values are replaced.
+A queued API identity is not terminal or reload evidence and must never be used
+to fill those fields.
 
 The standalone `miles-rl-reload` rail remains available when a genuinely
 separate reload execution is required for another checkpoint. Its legacy dev3

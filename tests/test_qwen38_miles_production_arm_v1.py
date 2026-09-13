@@ -4,8 +4,10 @@ import hashlib
 import json
 from pathlib import Path
 
+import pytest
+
 from cyber_post_train.jobs import digest
-from training import miles, rl_data
+from training import miles, miles_promotion, miles_training, rl_data
 
 ROOT = Path(__file__).resolve().parents[1]
 TASK_SET = ROOT / "configs/data/qwen38-rl-filtered-study-a-task-set-v1.json"
@@ -61,7 +63,10 @@ def test_candidate_is_exact_inert_miles_one_by_eight_production_plan() -> None:
         "steps": 59,
         "groups": 1,
         "samples_per_prompt": 8,
-        "lr": 1e-6,
+        "lr": 2e-6,
+        "temperature": 0.7,
+        "kl_loss_coef": 0.001,
+        "max_tokens_per_gpu": 8192,
         "eval_interval": 59,
         "checkpoint_interval": 10,
         "seed": 42,
@@ -85,11 +90,56 @@ def test_candidate_is_exact_inert_miles_one_by_eight_production_plan() -> None:
     config.validate()
 
 
+def test_dev5_is_runtime_qualification_while_production_uses_full_split() -> None:
+    transition = load(ARM)["dev5_to_production"]
+
+    assert transition["dev5_qualification_scope"] == {
+        "train_rows": 1,
+        "dev_rows": 1,
+        "optimizer_steps": 1,
+    }
+    assert transition["production_scope"] == {
+        "train_rows": 59,
+        "dev_rows": 20,
+        "optimizer_steps": 59,
+    }
+    assert transition["preserved_scientific_recipe"] == {
+        "initial_policy": "exact_qwen38_27b_base_native_checkpoint",
+        "topology": "one_node_eight_b300",
+        "samples_per_prompt": 8,
+        "lr": 2e-6,
+        "temperature": 0.7,
+        "kl_loss_coef": 0.001,
+        "max_tokens_per_gpu": 8192,
+        "native_parallelism_and_recompute": "unchanged",
+    }
+    assert transition["deliberate_scale_changes_only"] == [
+        "accepted_data_identity_1_train_1_dev_to_59_train_20_dev",
+        "optimizer_steps_1_to_59",
+        "checkpoint_interval_1_to_10",
+        "native_eval_interval_1_to_59",
+        "separately_reviewed_production_cpu_and_memory_envelope",
+    ]
+
+
 def test_every_dev_proof_and_live_gate_starts_unbound() -> None:
     arm = load(ARM)
     binding = arm["qualification"]["active_canary_binding"]
 
     assert binding["schema"] == "cyber_qwen38_miles_active_canary_binding_v1"
+    required_identity = {
+        "source_run_name": "chris-q38-miles-rlreward-dev5",
+        "source_commit": "0e6970c7f16f8199b2fa583cb19937aeecdfcfd9",
+        "source_plan_sha256": (
+            "sha256:4ccc8b10e473176993b3867e4bbe3b3f1e8717cdeab77615b7493fa4513866da"
+        ),
+        "source_request_sha256": (
+            "sha256:e56a3c25c1789526747c74353cdb4bd7963e9084ae9bf6b180be79b53a691cfb"
+        ),
+        "api_base_url": "https://api.ft.dev.flt.build",
+    }
+    assert binding["required_identity"] == required_identity
+    assert required_identity == miles_promotion.EXPECTED_DEV_CANARY
     for gate in (
         binding,
         arm["qualification"]["reward_terminal"],
@@ -107,10 +157,18 @@ def test_every_dev_proof_and_live_gate_starts_unbound() -> None:
     )
     assert len(arm["blocked_reasons"]) == 3
     assert "dev3" not in json.dumps(arm).lower()
+    assert "dev5" in json.dumps(arm).lower()
     assert (
         "active_production_experiment_nodes_plus_candidate_at_most_eight"
         in arm["promotion_requirements"]["live_immediately_before_one_post"]
     )
+
+
+def test_inert_candidate_cannot_compile_before_exact_dev5_promotion() -> None:
+    candidate = load(ARM)["candidate_run"]
+
+    with pytest.raises(ValueError, match="exact Miles production promotion receipt is required"):
+        miles_training.compile_rl(candidate, relative_to=ARM.parent)
 
 
 def test_external_benchmark_is_only_a_sealed_post_training_handoff() -> None:
@@ -134,3 +192,8 @@ def test_external_benchmark_is_only_a_sealed_post_training_handoff() -> None:
     assert handoff["checkpoint_or_hyperparameter_selection_allowed"] is False
     assert handoff["training_reward_prompt_retry_or_checkpoint_input_allowed"] is False
     assert handoff["parent_protocol_file_sha256"] == file_sha256(ROOT / handoff["parent_protocol"])
+    paired_template = load(ROOT / handoff["paired_plan_template"])
+    assert handoff["paired_plan_template_file_sha256"] == file_sha256(
+        ROOT / handoff["paired_plan_template"]
+    )
+    assert handoff["paired_plan_template_sha256"] == paired_template["sha256"]
