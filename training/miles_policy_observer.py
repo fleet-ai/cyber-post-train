@@ -719,7 +719,8 @@ def _controller_body(
     from . import miles_event_evidence as events
 
     submitted = validate_submission_binding(submission, plan, check_files=True)
-    start, _ = events._read(directory / "STARTED.json", events.START_SCHEMA)
+    start_path = directory / "STARTED.json"
+    start, start_file_sha256 = events._read(start_path, events.START_SCHEMA)
     if (
         start["source_plan_sha256"].removeprefix("sha256:") != digest(plan)
         or start["source_request_sha256"] != submitted["request_sha256"]
@@ -728,10 +729,9 @@ def _controller_body(
         or api_status != "SUCCEEDED"
     ):
         raise ValueError("policy observer event capture differs from its API run")
-    journal = [
-        events._read(path, events.EVENT_SCHEMA)[0]
-        for path in events._event_files(directory)
-    ]
+    event_paths = events._event_files(directory)
+    event_records = [events._read(path, events.EVENT_SCHEMA) for path in event_paths]
+    journal = [value for value, _ in event_records]
     if [row["sequence"] for row in journal] != list(range(len(journal))):
         raise ValueError("policy observer event sequence changed")
     for row in journal:
@@ -860,6 +860,15 @@ def _controller_body(
             "gpus_per_worker": WORLD_SIZE,
             "total_gpus": WORLD_SIZE,
         },
+        "event_journal": {
+            "start": _reference(start_path, start, start_file_sha256),
+            "events": [
+                _reference(path, value, file_sha256)
+                for path, (value, file_sha256) in zip(
+                    event_paths, event_records, strict=True
+                )
+            ],
+        },
         "observed_at": terminal_observed,
         "private_logs_included": False,
         "metric_values_included": False,
@@ -868,13 +877,18 @@ def _controller_body(
 
 
 def validate_controller_observation(
-    value: dict[str, Any], plan: dict[str, Any], submission: dict[str, Any]
+    value: dict[str, Any],
+    plan: dict[str, Any],
+    submission: dict[str, Any],
+    *,
+    check_files: bool = True,
 ) -> None:
     from .miles_acceptance import NAMESPACE, NAMESPACE_UID, _image_digest, _time, _uuid
 
     sealed(value, CONTROLLER_SCHEMA)
     submitted = validate_submission_binding(submission, plan, check_files=False)
     api, kube, execution = value.get("api"), value.get("kubernetes"), value.get("execution")
+    journal = value.get("event_journal")
     pods = kube.get("pods") if isinstance(kube, dict) else None
     rayjob = kube.get("rayjob") if isinstance(kube, dict) else None
     workload = kube.get("workload") if isinstance(kube, dict) else None
@@ -884,7 +898,7 @@ def validate_controller_observation(
         set(value)
         != {
             "schema", "status", "observer_plan_sha256", "observer_request_sha256",
-            "api", "kubernetes", "execution", "observed_at", "private_logs_included",
+            "api", "kubernetes", "execution", "event_journal", "observed_at", "private_logs_included",
             "metric_values_included", "task_content_included", "sha256",
         }
         or value.get("status") != "succeeded"
@@ -929,6 +943,16 @@ def validate_controller_observation(
             "gpus_per_worker": WORLD_SIZE,
             "total_gpus": WORLD_SIZE,
         }
+        or not isinstance(journal, dict)
+        or set(journal) != {"start", "events"}
+        or not isinstance(journal.get("start"), dict)
+        or set(journal["start"]) != _REFERENCE_FIELDS
+        or not isinstance(journal.get("events"), list)
+        or not journal["events"]
+        or not all(
+            isinstance(reference, dict) and set(reference) == _REFERENCE_FIELDS
+            for reference in journal["events"]
+        )
         or value.get("private_logs_included") is not False
         or value.get("metric_values_included") is not False
         or value.get("task_content_included") is not False
@@ -953,6 +977,19 @@ def validate_controller_observation(
     ):
         raise ValueError("policy observer Pod evidence is incomplete")
     _time(value.get("observed_at"), "policy observer controller observation")
+    if check_files:
+        start_path = Path(journal["start"]["path"])
+        if start_path.name != "STARTED.json":
+            raise ValueError("policy observer event-journal start path changed")
+        expected = _controller_body(
+            plan,
+            submission,
+            directory=start_path.parent,
+            api_status="SUCCEEDED",
+            observed_at=value["observed_at"],
+        )
+        if {key: item for key, item in value.items() if key != "sha256"} != expected:
+            raise ValueError("policy observer controller differs from its event journal")
 
 
 def compile_controller(
